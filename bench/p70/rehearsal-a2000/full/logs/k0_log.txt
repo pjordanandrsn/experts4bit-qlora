@@ -1,0 +1,15 @@
+[PASS] self-KL
+        expected: exactly 0.0
+        kl mean=0.000000e+00 median=0.000000e+00 p95=0.000000e+00 max=0.000000e+00
+        top1_agreement=1.0000  tokens=64  vocab=512
+[PASS] single-byte perturbation (one weight, one mantissa bit)
+        expected: KL > 0 and detected
+        kl mean=5.757222e-13 median=7.739484e-14 p95=3.464768e-12 max=4.809012e-12
+        top1_agreement=1.0000  tokens=64  vocab=512
+[PASS] known-nonzero (int8 blockwise, block=64, vs fp32 reference)
+        expected: KL agrees with 1/2*Var_p(delta-logit) to within 2x, and is non-trivial
+        kl mean=4.789315e-07 median=4.709823e-07 p95=7.624794e-07 max=9.721436e-07
+        top1_agreement=0.9844  tokens=64  vocab=512
+
+ALL CONTROLS PASSED (kl-fidelity/1.0.0, torch 2.8.0+cu128)
+receipt -> /root/p70/k0.json

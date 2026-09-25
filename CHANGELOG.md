@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### `E4B_ROUTER_EPI_CAST`: the fused router's weights in the model's dtype, as a switch; lane P70 registered (#726) (one default-off switch in the wheel; bench tooling)
+
+- **The discontinuity (P63's P7, confirmed from the pinned transformers 5.16.1 / 5.17.0 source).** With `E4B_FUSE_ROUTER_EPI=1`, a patched router returns the fused kernel's **fp32** routing weights at ≤ 64 rows (every decode and verify step) and the model's own router returns **bf16** above 64 rows (`router_top_value.to(router_logits.dtype)`): two functions of the same logits by row count.
+- **The switch.** `router_epilogue.CAST_WEIGHTS` (env `E4B_ROUTER_EPI_CAST=1`, **default off**, read on every call) makes the fused `softmax_topk` and `topk_softmax` branches return `w.to(logits.dtype)`. On `softmax_topk` (Qwen3-MoE, OLMoE, Mixtral) that is the upstream function to the bit, at every row count; on `topk_softmax` the dtype matches but not every bit. Five tests in `tests/test_router_epilogue.py`. Nothing moves a default.
+- **Lane P70 registered** (`bench/p70/P70-PREREG.md`): P64's served Qwen3 int4 stack and scorer (imported unchanged, pins equal to P64's), scored at B = 1 with the cast off and on, against a floor whose two samples keep the router function fixed in the prefill. A router-call census by row class and returned dtype proves what each pass ran. Disclosed: P64's `a8_pc64` floor sample straddled this very switch (a 64-row prefill runs the fused router); P70 measures that sample beside its own floor, informationally. Decision rule: INDISTINGUISHABLE or not material → the cast becomes the default for the `softmax_topk` kind in the next release; MATERIAL → the default stays and the > 64-row path is lifted to fp32 instead.
+
 ### Lane P69 read (for grouped-nf4-gemm#400): the link-efficiency factor is per host, not a 5090-class constant (docs only; nothing in the wheel changes)
 
 - `p69-5090-2` ran grouped-nf4-gemm's `bench/calibrate.py` (schema /2) twice on one gen 4 × 16 RTX 5090 (host EPYC 7663) for $0.0146: back-to-back 20.58 / 20.72 GB/s, single copy 17.97 / 19.90 → `link_eff` **0.873 / 0.960**. The registered [0.55, 0.75] (P66's other 5090 host: 0.638) is **REFUTED**; repeatability held at 9.7 %. The two hosts' difference is stated, not explained. Receipt and claim in grouped-nf4-gemm (`bench/cold-engine/calib-5090-p69/`, `gnf4.calib.link-efficiency.5090.2026-09-24`, PR #403); the read here: `bench/p69/RESULTS-p69.md`. No default moves.

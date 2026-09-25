@@ -1,0 +1,50 @@
+{
+ "pass": "ep32_rep",
+ "text": "c4val1",
+ "expert_a16": false,
+ "attn_a16": false,
+ "prefill_chunk": 128,
+ "prefix": 384,
+ "rows": 4,
+ "decode_steps": 512,
+ "toggle_state_during_pass": {
+  "DECODE_A16": false,
+  "GEMV_ROWS_MAX": 1,
+  "SMALLM_ROWS_MAX": 16,
+  "CAST_WEIGHTS": false
+ },
+ "counts": {
+  "attn_quant_decode": 32768,
+  "expert_dequant_prefill": 23232,
+  "expert_quant_decode": 16384,
+  "forwards_decode": 512,
+  "forwards_prefill": 12,
+  "router_gt64_bf16_prefill": 192,
+  "router_le64_fp32_decode": 8192
+ },
+ "expected_decode_counts": {
+  "expert_quant_decode": 16384,
+  "expert_dequant_decode": 0,
+  "attn_quant_decode": 32768,
+  "router_le64_fp32_decode": 8192,
+  "router_le64_fp32_prefill": 0,
+  "router_le64_bf16_decode": 0,
+  "router_le64_bf16_prefill": 0,
+  "router_gt64_fp32_decode": 0,
+  "router_gt64_fp32_prefill": 0,
+  "router_gt64_bf16_decode": 0,
+  "router_gt64_bf16_prefill": 192
+ },
+ "engaged_as_registered": true,
+ "wall_s": 30.7,
+ "s_per_decode_step_incl_prefill": 0.0599,
+ "prompts_sha256": "bed9add8f0b14369e189dc9531a55e1664891e780ed9386060e03a27b56e1bc9",
+ "stored_dtype": "torch.bfloat16",
+ "decode_logits_shape": [
+  4,
+  128,
+  50304
+ ],
+ "source": "allenai/c4 en/c4-validation.00001-of-00008 (first 2000 docs) via step_decomp._k8_window",
+ "attn_pack_sha256": "sha256:fc85934341c9ce34ae554a70bbd3e078bd2bea7efb15b74edc69b3b78059cfcf"
+}

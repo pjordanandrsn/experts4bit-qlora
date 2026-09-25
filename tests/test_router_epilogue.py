@@ -335,3 +335,103 @@ def test_first_slot_semantics_are_recorded_or_refused(monkeypatch):
     holder.gate = ProbsInLogitsSlotRouter()
     with pytest.raises(RuntimeError, match="failed the semantic probe"):
         fuse_router_epilogue(holder)
+
+
+# ------------------------------------------------ E4B_ROUTER_EPI_CAST (e4b#726, lane P70) --
+
+
+class Qwen3LikeRouter(torch.nn.Module):
+    """transformers 5.16/5.17 Qwen3MoeTopKRouter, verbatim in its math: fp32
+    softmax over all experts, top-k, renormalise, then CAST TO THE LOGITS'
+    DTYPE -- bf16 on a bf16 model."""
+
+    def __init__(self):
+        super().__init__()
+        self.weight = torch.nn.Parameter(torch.randn(E, HID, dtype=torch.bfloat16))
+        self.top_k, self.num_experts = K, E
+        self.norm_topk_prob, self.hidden_dim = True, HID
+
+    def forward(self, x):
+        x = x.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(x, self.weight)
+        probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        top, idx = torch.topk(probs, self.top_k, dim=-1)
+        top /= top.sum(dim=-1, keepdim=True)
+        return router_logits, top.to(router_logits.dtype), idx
+
+
+def _qwen3_pair(monkeypatch):
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    monkeypatch.setenv("E4B_FUSE_ROUTER_EPI", "1")
+    monkeypatch.setattr(re_mod, "CAST_WEIGHTS", [False])
+    calls = {"fused": 0}
+    _stub(monkeypatch, calls)
+    torch.manual_seed(11)
+    m = torch.nn.Module()
+    m.gate = Qwen3LikeRouter()
+    ref = Qwen3LikeRouter()
+    ref.load_state_dict(m.gate.state_dict())
+    assert fuse_router_epilogue(m) == 1
+    return re_mod, m.gate, ref, calls
+
+
+def test_the_cast_is_off_by_default_and_off_returns_the_kernels_fp32(monkeypatch):
+    """Today's behaviour, pinned: the fused path returns fp32 weights while
+    the upstream router returns bf16 -- the discontinuity #726 names."""
+    monkeypatch.delenv("E4B_ROUTER_EPI_CAST", raising=False)
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    assert re_mod._cast_default() is False
+    re_mod, gate, ref, calls = _qwen3_pair(monkeypatch)
+    x = torch.randn(8, HID, dtype=torch.bfloat16)
+    _, w, i = gate(x)
+    _, rw, ri = ref(x)
+    assert calls["fused"] == 1 and w.dtype == torch.float32 and rw.dtype == torch.bfloat16
+    assert torch.equal(i, ri)
+
+
+def test_cast_on_is_the_upstream_router_to_the_bit(monkeypatch):
+    """On a Qwen3-shaped bf16 router the cast makes the fused decode path
+    return exactly what the upstream router returns at the same rows:
+    same dtype, same bits, same experts."""
+    re_mod, gate, ref, calls = _qwen3_pair(monkeypatch)
+    re_mod.CAST_WEIGHTS[0] = True
+    x = torch.randn(8, HID, dtype=torch.bfloat16)
+    lg, w, i = gate(x)
+    rlg, rw, ri = ref(x)
+    assert calls["fused"] == 1
+    assert w.dtype == torch.bfloat16 and torch.equal(w, rw) and torch.equal(i, ri)
+    assert torch.equal(lg, rlg)                          # the raw-logits first slot, unchanged
+
+
+def test_cast_on_makes_every_row_count_one_function(monkeypatch):
+    """The point of #726: with the cast, a token's weights do not depend on
+    whether its forward had <= 64 rows (the fused path) or more (the
+    original forward)."""
+    re_mod, gate, ref, calls = _qwen3_pair(monkeypatch)
+    re_mod.CAST_WEIGHTS[0] = True
+    x = torch.randn(70, HID, dtype=torch.bfloat16)
+    _, w_big, i_big = gate(x)                            # 70 rows: the original forward
+    assert calls["fused"] == 0
+    _, w_small, i_small = gate(x[:8])                    # 8 rows: the fused path
+    assert calls["fused"] == 1
+    assert w_small.dtype == w_big.dtype == torch.bfloat16
+    assert torch.equal(w_small, w_big[:8]) and torch.equal(i_small, i_big[:8])
+
+
+def test_the_switch_is_read_on_every_call(monkeypatch):
+    """A harness flips it per pass without re-patching (P70's passes)."""
+    re_mod, gate, _, _ = _qwen3_pair(monkeypatch)
+    x = torch.randn(4, HID, dtype=torch.bfloat16)
+    assert gate(x)[1].dtype == torch.float32
+    re_mod.CAST_WEIGHTS[0] = True
+    assert gate(x)[1].dtype == torch.bfloat16
+    re_mod.CAST_WEIGHTS[0] = False
+    assert gate(x)[1].dtype == torch.float32
+
+
+def test_the_env_var_sets_the_default(monkeypatch):
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    monkeypatch.setenv("E4B_ROUTER_EPI_CAST", "1")
+    assert re_mod._cast_default() is True
+    monkeypatch.setenv("E4B_ROUTER_EPI_CAST", "0")
+    assert re_mod._cast_default() is False

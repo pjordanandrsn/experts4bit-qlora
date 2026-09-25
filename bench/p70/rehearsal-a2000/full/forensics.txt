@@ -1,0 +1,6 @@
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d
+power.limit,clocks.max.sm 70.00 W, 2100 MHz
+Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          68          45           0          12          55
+zpool1/zfs22    649G  428G  222G  66% /root/p70

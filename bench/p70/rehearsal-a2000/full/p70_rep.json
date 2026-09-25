@@ -1,0 +1,495 @@
+{
+ "rehearsal": true,
+ "pack": {
+  "fingerprint": "sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c",
+  "licensed_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "licensed": false
+ },
+ "build": {
+  "moe_layers": 16,
+  "top_k": 8,
+  "int4_expert_layers": 16,
+  "int4_attn_projections": 64,
+  "fuse_router_epilogue_n": 16,
+  "attn_pack_sha256": "sha256:fc85934341c9ce34ae554a70bbd3e078bd2bea7efb15b74edc69b3b78059cfcf"
+ },
+ "router_hooks": 16,
+ "texts": {
+  "wikitext": {
+   "passes": {
+    "ep32": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "wall_s": 29.6,
+     "rows": 4,
+     "prefill_chunk": 128,
+     "cast_during_pass": false
+    },
+    "ep16": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_bf16_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_bf16_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "wall_s": 30.3,
+     "rows": 4,
+     "prefill_chunk": 128,
+     "cast_during_pass": true
+    },
+    "ep32_rep": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "wall_s": 29.5,
+     "rows": 4,
+     "prefill_chunk": 128,
+     "cast_during_pass": false
+    },
+    "ep32_pc96": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 256
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 256
+     },
+     "wall_s": 33.8,
+     "rows": 4,
+     "prefill_chunk": 96,
+     "cast_during_pass": false
+    },
+    "ep32_pc384": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 64
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 64
+     },
+     "wall_s": 21.0,
+     "rows": 4,
+     "prefill_chunk": 384,
+     "cast_during_pass": false
+    },
+    "ep32_pc64": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_le64_fp32_prefill": 384
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_le64_fp32_prefill": 384
+     },
+     "wall_s": 42.8,
+     "rows": 4,
+     "prefill_chunk": 64,
+     "cast_during_pass": false
+    }
+   },
+   "pairs": {
+    "G": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.0013067341384590068,
+     "kl_median": 0.0006499364337310574,
+     "kl_p95": 0.005131639571568897,
+     "kl_max_per_token": 0.021471021021990694,
+     "top1_agreement": 0.994140625,
+     "exactly_zero": false
+    },
+    "F_pc96": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.0017736029647322665,
+     "kl_median": 0.000784812557688688,
+     "kl_p95": 0.006614932160709395,
+     "kl_max_per_token": 0.04428030516183126,
+     "top1_agreement": 0.9921875,
+     "exactly_zero": false
+    },
+    "F_pc384": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.0018645407964824811,
+     "kl_median": 0.0008025817191219956,
+     "kl_p95": 0.005524258758905863,
+     "kl_max_per_token": 0.147945981493051,
+     "top1_agreement": 0.9921875,
+     "exactly_zero": false
+    },
+    "P64_floor_pc64": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.0017496451360166135,
+     "kl_median": 0.0007787508530878136,
+     "kl_p95": 0.006446221375640426,
+     "kl_max_per_token": 0.0299019539553039,
+     "top1_agreement": 0.986328125,
+     "exactly_zero": false
+    },
+    "determinism": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    }
+   },
+   "nll": {
+    "ep32": 1.9537246839628408,
+    "ep16": 1.9571469999514177,
+    "ep32_rep": 1.9537246839628408,
+    "ep32_pc96": 1.9542831326309833,
+    "ep32_pc384": 1.9542340426728049,
+    "ep32_pc64": 1.9548834573685283
+   },
+   "prefill_last_identical": {
+    "ep16": true,
+    "ep32_rep": true
+   },
+   "floor": {
+    "F": 0.0018190718806073737,
+    "source": "in-lane (mean of the measured floor pairs)",
+    "samples": [
+     0.0017736029647322665,
+     0.0018645407964824811
+    ],
+    "F_NLL": 0.0005339036890532611
+   },
+   "stats": {
+    "G": 0.0013067341384590068,
+    "top1": 0.994140625,
+    "ratio_to_floor": 0.7183521181266892,
+    "class": "BELOW FLOOR",
+    "dNLL": 0.003422315988576785,
+    "dNLL_ci95": [
+     0.0017034952322218522,
+     0.00577825289514361
+    ],
+    "F_NLL": 0.0005339036890532611,
+    "material": false
+   },
+   "p64_floor_informational": {
+    "KL": 0.0017496451360166135,
+    "ratio_to_F": 0.9618339740551763
+   }
+  },
+  "c4val1": {
+   "passes": {
+    "ep32": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "wall_s": 31.2,
+     "rows": 4,
+     "prefill_chunk": 128,
+     "cast_during_pass": false
+    },
+    "ep16": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_bf16_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_bf16_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "wall_s": 30.3,
+     "rows": 4,
+     "prefill_chunk": 128,
+     "cast_during_pass": true
+    },
+    "ep32_rep": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 192
+     },
+     "wall_s": 30.7,
+     "rows": 4,
+     "prefill_chunk": 128,
+     "cast_during_pass": false
+    },
+    "ep32_pc96": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 256
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 256
+     },
+     "wall_s": 34.8,
+     "rows": 4,
+     "prefill_chunk": 96,
+     "cast_during_pass": false
+    },
+    "ep32_pc384": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 64
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_gt64_bf16_prefill": 64
+     },
+     "wall_s": 21.8,
+     "rows": 4,
+     "prefill_chunk": 384,
+     "cast_during_pass": false
+    },
+    "ep32_pc64": {
+     "engaged": true,
+     "counts": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_le64_fp32_prefill": 384
+     },
+     "expected_nonzero": {
+      "expert_quant_decode": 16384,
+      "attn_quant_decode": 32768,
+      "router_le64_fp32_decode": 8192,
+      "router_le64_fp32_prefill": 384
+     },
+     "wall_s": 41.2,
+     "rows": 4,
+     "prefill_chunk": 64,
+     "cast_during_pass": false
+    }
+   },
+   "pairs": {
+    "G": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.0017719800909138498,
+     "kl_median": 0.0009378952135439217,
+     "kl_p95": 0.006664769676131084,
+     "kl_max_per_token": 0.02169752505233353,
+     "top1_agreement": 0.978515625,
+     "exactly_zero": false
+    },
+    "F_pc96": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.0017299558657074931,
+     "kl_median": 0.0009479315422595749,
+     "kl_p95": 0.005708449655842479,
+     "kl_max_per_token": 0.03738456186336392,
+     "top1_agreement": 0.9765625,
+     "exactly_zero": false
+    },
+    "F_pc384": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.002125098282539163,
+     "kl_median": 0.00105897695201088,
+     "kl_p95": 0.00736600016549068,
+     "kl_max_per_token": 0.03872669377191986,
+     "top1_agreement": 0.9765625,
+     "exactly_zero": false
+    },
+    "P64_floor_pc64": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.0018345348340725832,
+     "kl_median": 0.0009431405108016357,
+     "kl_p95": 0.006454500170309034,
+     "kl_max_per_token": 0.02517491008666083,
+     "top1_agreement": 0.970703125,
+     "exactly_zero": false
+    },
+    "determinism": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 50304,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 4,
+     "n_tokens_scored": 512,
+     "kl_mean": 0.0,
+     "kl_median": 0.0,
+     "kl_p95": 0.0,
+     "kl_max_per_token": 0.0,
+     "top1_agreement": 1.0,
+     "exactly_zero": true
+    }
+   },
+   "nll": {
+    "ep32": 3.0241564508087353,
+    "ep16": 3.022706122761309,
+    "ep32_rep": 3.0241564508087353,
+    "ep32_pc96": 3.0245504049532266,
+    "ep32_pc384": 3.0234592087800842,
+    "ep32_pc64": 3.028149255308585
+   },
+   "prefill_last_identical": {
+    "ep16": true,
+    "ep32_rep": true
+   },
+   "floor": {
+    "F": 0.001927527074123328,
+    "source": "in-lane (mean of the measured floor pairs)",
+    "samples": [
+     0.0017299558657074931,
+     0.002125098282539163
+    ],
+    "F_NLL": 0.0005455980865711751
+   },
+   "stats": {
+    "G": 0.0017719800909138498,
+    "top1": 0.978515625,
+    "ratio_to_floor": 0.9193023095251601,
+    "class": "BELOW FLOOR",
+    "dNLL": -0.0014503280474265634,
+    "dNLL_ci95": [
+     -0.005425872416915278,
+     0.001075950584297547
+    ],
+    "F_NLL": 0.0005455980865711751,
+    "material": false
+   },
+   "p64_floor_informational": {
+    "KL": 0.0018345348340725832,
+    "ratio_to_F": 0.9517556763278984
+   }
+  }
+ },
+ "validity": {
+  "status": "VALID",
+  "determinism": true,
+  "prefill_last": true,
+  "engagement": true,
+  "same_prompts": true,
+  "router_hooks": true,
+  "problems": []
+ },
+ "verdict": "INDISTINGUISHABLE"
+}

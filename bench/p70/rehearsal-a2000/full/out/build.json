@@ -1,0 +1,44 @@
+{
+ "moe_layers": 16,
+ "experts": 64,
+ "top_k": 8,
+ "fuse_t1_glue_n": 65,
+ "fuse_t1_glue_r2_n": [
+  16,
+  0
+ ],
+ "fuse_router_epilogue_n": 16,
+ "int4_attn_projections": 64,
+ "int4_expert_layers": 16,
+ "int4_store_kinds": [
+  "int4_b32"
+ ],
+ "build_s": 93.3,
+ "env": {
+  "E4B_ACCUM_RECOMPILE_LIMIT": "64",
+  "E4B_MODEL_ID": "allenai/OLMoE-1B-7B-0924",
+  "GNF4_SHA": "5ca1897585f9f456f99ea504b2a1be0ea91db496",
+  "E4B_RECOMPILE_LIMIT": "64",
+  "E4B_SHA": "abb198d3e1261a67607b412bebeb4a2a5d66cade",
+  "E4B_INT4_GPTQ_DEVICE": "cuda",
+  "E4B_INT4_HESSIAN_BUDGET_GB": "2",
+  "E4B_SERVE_EXP_INT4": "1",
+  "E4B_SERVE_EXP_INT4_CALIB": "1",
+  "E4B_CALIB_NSEQ": "8",
+  "E4B_INT4_ARTIFACT_DIR": "/root/p70/artifact1",
+  "E4B_INT4_EXPECTED_FINGERPRINT": "sha256:0fc7bc44c1dd0b5d1471d4dfcbb5281cfc7885727f74d4b9a0592673c363752c",
+  "E4B_SERVE_ATTN_INT4_CALIB": "1",
+  "E4B_SERVE_ATTN_INT4": "0",
+  "E4B_CALIB_SOURCE": "c4",
+  "E4B_FUSE_T1_GLUE": "1",
+  "E4B_FUSE_T1_GLUE_R2": "1",
+  "E4B_FUSE_ROUTER_EPI": "1"
+ },
+ "attn_pack_sha256": "sha256:fc85934341c9ce34ae554a70bbd3e078bd2bea7efb15b74edc69b3b78059cfcf",
+ "counters": {
+  "expert_quant_counter": true,
+  "expert_dequant_counter": true,
+  "attn_int4linear_counted": 64,
+  "router_hooks": 16
+ }
+}

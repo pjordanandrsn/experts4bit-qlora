@@ -1,0 +1,27 @@
+{
+ "step": "start",
+ "load_s": 79.8,
+ "layers": 16,
+ "experts": 64,
+ "snapshot_gib": 3.38,
+ "snapshot_s": 11.6,
+ "bake_s": 3.7,
+ "arena": "/root/p70/work/nf4.arena",
+ "bake_info": {
+  "magic": "gnf4-nvme-arena",
+  "version": 1,
+  "snapshot": "/root/p70/work/nf4snap",
+  "prefix": "model.layers.{layer}.mlp.experts.{expert}.{kind}",
+  "align": 4096,
+  "row_bytes": 3538944,
+  "row_stride": 3538944,
+  "n_layers": 16,
+  "n_experts_per_layer": 64,
+  "segments": "[{'suffix': 'nf4.gate_up_blocks', 'seg_off': 0, 'length': 2097152, 'shape_per_expert': [2048, 1024], 'dtype': 'U8'}, {'suffix': 'nf4.gate_up_absmax', 'seg_off': 2097152, 'length': 262144, 'shape_per_e",
+  "rows": "[[0, 0, 0], [0, 1, 3538944], [0, 2, 7077888], [0, 3, 10616832], [0, 4, 14155776], [0, 5, 17694720], [0, 6, 21233664], [0, 7, 24772608], [0, 8, 28311552], [0, 9, 31850496], [0, 10, 35389440], [0, 11, 3",
+  "arena_bytes": 3623878656,
+  "bake_mode": "relocate-expert-tensors",
+  "moe_layers": "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]"
+ },
+ "status": "OK"
+}
