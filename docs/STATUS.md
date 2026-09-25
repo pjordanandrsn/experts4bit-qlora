@@ -844,6 +844,20 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     Nothing prices the int8 step at B = 16 either: P59's B = 16 KL, whose
     register row now says so, never ran it, because its scorer leaves
     `DEVICE_GROUPING` off.
+- **The fused router's weights can be cast to the model's dtype at no
+  measurable quality cost at B = 1 decode** (lane P70, `bench/p70/`,
+  2026-09-25, one RTX 5090, the licensed pack `0c9955a9…`).
+  - **What was compared.** `E4B_ROUTER_EPI_CAST=1` rounds the fused router's
+    fp32 top-k weights to bf16 at ≤ 64 rows, as the upstream router does above
+    64 ([#726](https://github.com/pjordanandrsn/experts4bit-qlora/issues/726)).
+    On the RTX 5090 the cast weights are bit-equal to upstream's at the same
+    row count. The experts match too. Only the slot order differs.
+  - **The result.** KL was 0.0033 / 0.0028 nats/token on wikitext / c4val1:
+    0.60× and 0.92× of the instrument's own floor. dNLL spans 0, so the cast
+    is **INDISTINGUISHABLE**
+    (`e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25`). By the
+    registered rule it becomes the default for the `softmax_topk` kind in the
+    next release. `topk_softmax` keeps fp32 until it is read.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

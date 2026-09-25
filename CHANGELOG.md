@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Lane P70 read (#726): the fused router's weights cast to bf16 is INDISTINGUISHABLE at B = 1 decode (docs and bench only; the default flips in a follow-up)
+
+- `p70-5090-2` ran on one RTX 5090 with the licensed pack `0c9955a9…` (build K8 ppl 6.36709) for $0.6925. The lane cost $0.8156 over six runs. Validity was VALID.
+- KL(cast off ‖ cast on) was **0.003309** nats/token on wikitext and **0.002806** on c4val1: 0.60× and 0.92× of the in-lane floor. dNLL was +0.00096 / +0.00216, and both intervals span 0. Verdict: **INDISTINGUISHABLE**.
+- P1–P4 and P6 held. P5 (|dNLL| ≤ F_NLL) **broke on c4val1**, 0.00216 against 0.00180. It moves no class.
+- Proof `p70-prove-4`, on the RTX 5090's kernel: cast-on weights were bit-equal to upstream's at matching row counts, with the same experts. Only the top-k slot order differs.
+- Register row: `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25`. The read is in `bench/p70/RESULTS-p70.md`.
+- By the registered rule, the cast becomes the default for the `softmax_topk` kind in the next release, with `E4B_ROUTER_EPI_CAST=0` restoring fp32 for one release.
+
 ### `E4B_ROUTER_EPI_CAST`: the fused router's weights in the model's dtype, as a switch; lane P70 registered (#726) (one default-off switch in the wheel; bench tooling)
 
 - **The discontinuity (P63's P7, confirmed from the pinned transformers 5.16.1 / 5.17.0 source).** With `E4B_FUSE_ROUTER_EPI=1`, a patched router returns the fused kernel's **fp32** routing weights at ≤ 64 rows (every decode and verify step) and the model's own router returns **bf16** above 64 rows (`router_top_value.to(router_logits.dtype)`): two functions of the same logits by row count.

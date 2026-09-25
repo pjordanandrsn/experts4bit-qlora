@@ -1,0 +1,13 @@
+KNOBS model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=5090 min_disk_gb=200 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048 build_via=step_decomp rows=16 skip_install=0
+e4b 0.37.4 @c77aab6dafb5f08d98a7387d1e986d141b20a2d3 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496 (int4_b32 from /opt/conda/lib/python3.11/site-packages/int4_b32.py)
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+self-test OK: one-row scoring == kl_fidelity's decode scorer for every chunk; phase census exact; NLL index right
+self-test OK (P70): P64's scorer self-test; the router census equals expected_counts for fused and original prefills, cast off and on; the cast leaves an original-router prefill bit-identical and changes decode
+K0 all_passed kl-fidelity/1.0.0
+PROVE -- the proving run: no model, no pack, no KL row
+PROVECAST {"gpu": "NVIDIA GeForce RTX 5090", "patched": 1, "amendment": 1, "gemm_varies_with_rows_64_vs_80": true, "gemm_varies_with_rows_1_vs_64": true, "off_dtype_le64": "torch.float32", "on_dtype_le64": "torch.bfloat16", "off_dtype_gt64": "torch.bfloat16", "on_dtype_gt64": "torch.bfloat16", "same_experts_as_upstream_64": true, "same_experts_as_upstream_1": true, "gt64_is_upstream_both_states": true, "on_bit_equal_to_upstream_fraction_64": 1.0, "on_bit_equal_to_upstream_fraction_1": 1.0, "off_minus_upstream_max_abs_64": 0.0004859119653701782, "slot_order_equals_upstream_64": false, "all_pass
+PROVE hf_cdn_mbps=40.3 bytes=52428800
