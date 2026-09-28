@@ -1,0 +1,23 @@
+[2026-09-28T21:41:00Z] start det1 (K3_DET=1 CUBLAS_WORKSPACE_CONFIG=:4096:8) free_vram=10632MiB
+[2026-09-28T21:47:09Z] end det1 rc=0
+[2026-09-28T21:47:09Z] start plain1 (K3_DET=0) free_vram=10632MiB
+[2026-09-28T21:53:06Z] end plain1 rc=0
+[2026-09-28T21:53:06Z] start det2 (K3_DET=1 CUBLAS_WORKSPACE_CONFIG=:4096:8) free_vram=10632MiB
+[2026-09-28T21:59:05Z] end det2 rc=0
+[2026-09-28T21:59:05Z] start plain2 (K3_DET=0) free_vram=10632MiB
+[2026-09-28T22:05:05Z] end plain2 rc=0
+[2026-09-28T22:05:05Z] start det3 (K3_DET=1 CUBLAS_WORKSPACE_CONFIG=:4096:8) free_vram=10632MiB
+[2026-09-28T22:11:05Z] end det3 rc=0
+[2026-09-28T22:11:05Z] start plain3 (K3_DET=0) free_vram=10632MiB
+[2026-09-28T22:17:01Z] end plain3 rc=0
+[2026-09-28T22:17:01Z] phase2 start: gnf4 PR tests
+[2026-09-28T22:17:09Z] gnf4 PR tests rc=0
+[2026-09-28T22:17:12Z] mustfail rc=0
+[2026-09-28T22:17:14Z] combine_pr rc=0
+[2026-09-28T22:17:14Z] start ord1 (K3_DET=0 K3_SHADOW=/workspace/k3-rel-20260928/v5-det/shadow) free_vram=10632MiB
+[2026-09-28T22:23:25Z] end ord1 rc=0
+[2026-09-28T22:23:25Z] start ord2 (K3_DET=0 K3_SHADOW=/workspace/k3-rel-20260928/v5-det/shadow) free_vram=10632MiB
+[2026-09-28T22:29:26Z] end ord2 rc=0
+[2026-09-28T22:29:26Z] start ord3 (K3_DET=0 K3_SHADOW=/workspace/k3-rel-20260928/v5-det/shadow) free_vram=10632MiB
+[2026-09-28T22:35:36Z] end ord3 rc=0
+[2026-09-28T22:35:36Z] ALL DONE

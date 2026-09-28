@@ -205,3 +205,79 @@ summation order can change between runs. At top-16 of 896 in bf16, one bit is
 enough to flip a near-tie downstream. Confirming it needs the same A/B under
 `torch.use_deterministic_algorithms(True)`. Until then, every probability above
 is one draw from this spread, and the register quotes the range.
+
+*Answered the same evening; see [§5](#5-the-drift-is-the-mxfp4-prefill-combine-and-a-fixed-order-removes-it).*
+
+### 5. The drift is the MXFP4 prefill combine, and a fixed order removes it
+
+Nine prefill-only processes ran on the same box and build, from 21:41 to 22:35Z. Each ran the
+reference set's driver, unmodified (sha256 `ea727400…`, copied into the receipt set), through a
+wrapper, `det_wrap.py`. The wrapper does three things. It sets torch's deterministic-algorithms
+switch from the environment. It can put a candidate `mxfp4_pipelined.py` ahead of the installed
+one on `sys.path`. It hashes every MoE engine call's input `x`, router ids, router weights and
+output into `moe_trace.json`, 92 calls per process. It only reads tensors; it computes nothing
+the forward uses. Every process ran with `TRITON_CACHE_AUTOTUNING=1` and
+`TRITON_PRINT_AUTOTUNING=1`, and no log shows a benchmark. The first six processes alternated
+det, plain, det, plain, det, plain; the three fix processes came last.
+
+| arm | processes | p(`' Paris'`) | prefill expert rows | MoE traces, process against process |
+|---|---|---|---|---|
+| shipped combine, `torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG=:4096:8` | 3 | 0.7144126892089844, all three | 6,118 | identical at all 92 calls |
+| shipped combine, default | 3 | 0.7119670510292053, all three | 6,130 | every pair differs, at 8, 5 and 3 of 92 calls |
+| [grouped-nf4-gemm#410](https://github.com/pjordanandrsn/grouped-nf4-gemm/pull/410)'s `mxfp4_pipelined.py`, default | 3 | 0.7144126892089844, all three | 6,118 | identical at all 92 calls, and identical to the deterministic arm |
+
+What the traces show:
+
+- **In the default arm, the engine returns different bits for identical inputs.** Every
+  differing call has the same `x`, ids and weights, and a different output
+  ([`calls_detail.txt`](receipts/2026-09-28-det-ab/calls_detail.txt)). No call inherited a
+  difference from upstream: each jitter was absorbed by the next bf16 residual add. That is why
+  all three default processes landed on the same p. It is the common draw: July's two processes
+  and determinism A and B (§4) gave the same 71.20 % and 6,130 rows. The warm-cache 71.59 % and
+  71.29 % in §4 are draws where a jitter was not absorbed and a top-16 near-tie flipped.
+- **Deterministic mode raised on no op** (`warn_only` off), so nothing in this forward lacks a
+  deterministic implementation. Against the default arm, its first difference is always an
+  engine output with identical inputs, at layer 9 or 11.
+- **The fixed combine alone, with deterministic mode off, reproduces the deterministic arm bit
+  for bit** at every call of every process. So in these nine processes the only run-to-run
+  difference was the combine's `index_add_`. Nothing else in the 93 layers moved: the fla KDA
+  kernels, the eager MLA attention, the grouped GEMMs, and the host-side `lm_head` all gave the
+  same bits.
+
+The kernel-level read is
+[grouped-nf4-gemm#408](https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/408). The
+combine was replayed at K3 geometry on this card: 50 identical calls gave 50 different fp32
+outputs. The fix, #410, gives each `index_add_` call unique rows, so each token's 16 terms add
+in ascending expert id, bitwise the sequential loop. In that replay, torch's deterministic
+`index_add_` equals the same sequential sum, which is why the two arms agree.
+
+**What this changes.** 71.44 % is not a more correct answer than 71.20 %. It is the result of
+one fixed summation order. Released-package runs keep drawing from the spread until a
+grouped-nf4-gemm release carrying #410 is installed. With it, a K3 probability on this path
+reproduces to the last bit on this box and build. Register row
+`e4b.parity.kimi-k3.prefill-drift-is-the-combine.a2000.2026-09-28`.
+
+**Receipts:** [`receipts/2026-09-28-det-ab/`](receipts/2026-09-28-det-ab/SHA256SUMS).
+
+- The nine run directories: `k3_gen_n1_pin0.json`, `k3_gen_prefill.log`, `moe_trace.json`.
+- `det_wrap.py`.
+- `run_v5.sh` and `phase2.sh`: the runner inside the container.
+- `orch_v5.sh`: the host side. It stops the sdxl sidecar to free the ~4.5 GiB of VRAM a run
+  needs, and starts it again after (`host.log`: down 21:40:58 to 22:35:36Z).
+- `compare_v5.py`, which writes `compare_all.txt`.
+- `calls_v5.py`, which writes `calls_detail.txt`.
+- `shadow/mxfp4_pipelined.py`: the file the fix processes imported (grouped-nf4-gemm
+  `f180045`, sha256 `a601d7d1…`).
+- The driver.
+
+`phase2.sh` also ran #410's GPU tests, a must-fail control and the kernel replay; those receipts
+are with grouped-nf4-gemm#410.
+
+Read two things with care:
+
+- **The `rc=` values in `status.log` are `date`'s exit status, not the runs'.** The runner
+  expands `$(date …)` after the command, in the same string, and that resets `$?`. The evidence
+  that a run completed is its own JSON and its `saved ->` line, present for all nine.
+- **The fix processes' JSON `provenance.packages` still says grouped-nf4-gemm 0.33.4**, because
+  that is the installed distribution. The module that actually ran is the one `moe_trace.json`
+  names by path and sha256.

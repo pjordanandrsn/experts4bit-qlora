@@ -1,0 +1,51 @@
+{
+ "mode": "gen",
+ "prompt": "The capital city of France is",
+ "generated": [
+  17374
+ ],
+ "text": " Paris",
+ "probs": [
+  0.7144126892089844
+ ],
+ "prefill_s": 185.5692641735077,
+ "prefill_repeat_s": null,
+ "prefill_counters": {
+  "disk_reads": 6118,
+  "claims": 92,
+  "dense_reads": 1251,
+  "dense_bytes": 108763639808
+ },
+ "per_step": [],
+ "control": null,
+ "vram_peak_gb": 3.61795328,
+ "pinned_gb": 0.0,
+ "disk_gb": 108.7586304,
+ "wall_s": 357.4664263725281,
+ "provenance": {
+  "utc": "2026-09-28T21:47:03Z",
+  "packages": {
+   "experts4bit-qlora": "0.37.5",
+   "grouped-nf4-gemm": "0.33.4",
+   "torch": "2.8.0+cu128",
+   "triton": "3.4.0",
+   "transformers": "4.57.6",
+   "tiktoken": "0.13.0",
+   "bitsandbytes": "0.50.2"
+  },
+  "python": "3.10.12",
+  "cuda": "12.8",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "driver_sha256": "ea727400804935a3e8c08a39b059d240df6da662c9aaf1d1dae898b23dc35617",
+  "arena": "/z531/k3-arena/k3.arena",
+  "dense": "/workspace/k3-dense",
+  "snapshot": "/z532/hf-models/moonshotai_Kimi-K3",
+  "env": {
+   "K3_DET": "1",
+   "K3_OUT": "/workspace/k3-rel-20260928/v5-det/det1",
+   "K3_MODE": "gen",
+   "K3_NEW_TOKENS": "1",
+   "K3_VERIFY_CACHE": "0"
+  }
+ }
+}
