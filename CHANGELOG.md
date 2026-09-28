@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Lane P80 read (#511): bucketed CUDA-graph decode is 2.32–2.34× the eager `PagedModelRunner` on a changing active set, NF4 Qwen3-30B-A3B (docs, register and bench only; nothing in the wheel changes)
+
+- `p80-5090-1` ran on one RTX 5090 for $0.157, teardown proven. The lane cost $0.2513: one proof NOT_RUN on bandwidth, one refused at $0 by my error, one proved.
+- Over the registered trace (16 → 8 → 4 → 2 → 1 active rows, 32 decode steps each), aggregate decode was A1 121.6, B1 284.5, B2 284.5 and A2 122.5 tok/s, with P (padded eager) at 162.1. B1/A1 = 2.340 and B2/A2 = 2.323, above the 1.03 bar; the self-pairs were 1.0076 and 1.0000. The graph streams equal the padded eager step's, bitwise. **CONFIRMED** (`e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28`).
+- Per step, eager ran 54.5 → 42.3 ms from 16 rows to one, and graphs 33.8 → 9.95 ms. P splits the gain: 1.33× from padding plus device grouping, 1.75× from the graph itself. The read is in `bench/p80/RESULTS-p80.md`.
+
 ### Lane P80 registered (#511): bucketed CUDA-graph decode against the eager `PagedModelRunner` on a changing active set, NF4 Qwen3-30B-A3B (bench only; nothing in the wheel changes)
 
 - `bench/p80/PREREG-p80.md` adopts the Q2 memo's registered experiment. The active set steps 16 → 8 → 4 → 2 → 1 (32 decode steps each). The arms run in the fixed order A1 → B1 → B2 → A2, plus P, the padded-eager oracle. The claim is confirmed only if B/A > 1.03 in both pairings. It departs from the memo in one place, with the reason given: the bitwise gate is graph ≡ padded eager, not graph ≡ unpadded eager (bf16 GEMMs vary with row count).

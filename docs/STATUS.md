@@ -874,6 +874,25 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     registered rule it is now the default for the `softmax_topk` kind
     (Unreleased). `E4B_ROUTER_EPI_CAST=0` restores fp32 for one release.
     `topk_softmax` keeps fp32 until it is read.
+- **Bucketed CUDA-graph decode is 2.3× the eager `PagedModelRunner` when the
+  active set changes** (lane P80, `bench/p80/`, 2026-09-28, one RTX 5090, NF4
+  Qwen3-30B-A3B).
+  - **What was compared.** `enable_decode_graphs` pads the active set to a
+    bucket and replays that bucket's graph (#757). The eager control is the
+    production runner. Over a forced trace where the active set runs
+    16 → 8 → 4 → 2 → 1, aggregate decode was 284.5 against 121.6 / 122.5
+    tok/s: B1/A1 = 2.340, B2/A2 = 2.323, with the self-pairs inside 1.03
+    (`e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28`).
+  - **Correctness.** The graph token streams equal the same padded step run
+    eagerly, bitwise. Against unpadded eager they first differ at row 0,
+    token 130: bf16 GEMMs round differently at other row counts, which the
+    lane registered as reported, not decisive.
+  - **Where it comes from.** Eager decode is host-bound: 54.5 ms per step at
+    16 rows and still 51.5 ms at 2. The graph step falls with the rows, to
+    9.95 ms at one (4.25×).
+  - **Still open.** It stays opt-in, and the HTTP shim does not use it. It
+    is not measured on the licensed int4 stack, on other families, or under
+    arrivals.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
