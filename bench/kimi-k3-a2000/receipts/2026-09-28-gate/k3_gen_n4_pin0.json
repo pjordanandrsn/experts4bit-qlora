@@ -1,0 +1,105 @@
+{
+ "mode": "gen",
+ "prompt": "The capital city of France is",
+ "generated": [
+  17374,
+  13,
+  1344,
+  387
+ ],
+ "text": " Paris. It is",
+ "probs": [
+  0.7159194350242615,
+  0.15786714851856232,
+  0.25900569558143616,
+  0.8676835298538208
+ ],
+ "prefill_s": 178.99626302719116,
+ "prefill_repeat_s": 176.87244510650635,
+ "prefill_counters": {
+  "disk_reads": 6126,
+  "claims": 92,
+  "dense_reads": 1251,
+  "dense_bytes": 108763639808
+ },
+ "per_step": [
+  {
+   "s": 90.38501143455505,
+   "disk_reads": 1467,
+   "claims": 92,
+   "dense_reads": 1251,
+   "dense_bytes": 108763639808
+  },
+  {
+   "s": 89.29018187522888,
+   "disk_reads": 1464,
+   "claims": 92,
+   "dense_reads": 1251,
+   "dense_bytes": 108763639808
+  },
+  {
+   "s": 91.27778506278992,
+   "disk_reads": 1469,
+   "claims": 92,
+   "dense_reads": 1251,
+   "dense_bytes": 108763639808
+  }
+ ],
+ "control": null,
+ "cache_gate": {
+  "free": {
+   "cos": 0.9986985921859741,
+   "rel": 0.04385964944958687,
+   "argmax_agrees": true,
+   "routing": {
+    "layers_differing": 90,
+    "substitutions": 386,
+    "rows_differing": 328,
+    "layers": 92
+   }
+  },
+  "replayed": {
+   "cos": 0.9999661445617676,
+   "rel": 0.004360465332865715,
+   "argmax_agrees": true,
+   "local_flips": {
+    "layers_differing": 62,
+    "substitutions": 94,
+    "rows_differing": 94,
+    "layers": 92
+   }
+  },
+  "threshold_cos": 0.9999,
+  "verdict": "PASS"
+ },
+ "vram_peak_gb": 4.073196032,
+ "pinned_gb": 0.0,
+ "disk_gb": 108.7586304,
+ "wall_s": 1213.758280992508,
+ "provenance": {
+  "utc": "2026-09-28T20:48:27Z",
+  "packages": {
+   "experts4bit-qlora": "0.37.5",
+   "grouped-nf4-gemm": "0.33.4",
+   "torch": "2.8.0+cu128",
+   "triton": "3.4.0",
+   "transformers": "4.57.6",
+   "tiktoken": "0.13.0",
+   "bitsandbytes": "0.50.2"
+  },
+  "python": "3.10.12",
+  "cuda": "12.8",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "driver_sha256": "30b837b06553b4b94c18d32f2f07c8043854b69eef4f350ad35a872cded91be2",
+  "arena": "/z531/k3-arena/k3.arena",
+  "dense": "/workspace/k3-dense",
+  "snapshot": "/z532/hf-models/moonshotai_Kimi-K3",
+  "env": {
+   "K3_PREFILL_REPEAT": "1",
+   "K3_NEW_TOKENS": "4",
+   "K3_VERIFY_FREE": "1",
+   "K3_MODE": "gen",
+   "K3_OUT": "/workspace/k3-rel-20260928/v2"
+  }
+ }
+}

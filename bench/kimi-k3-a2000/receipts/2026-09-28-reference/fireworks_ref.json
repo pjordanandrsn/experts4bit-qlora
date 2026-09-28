@@ -1,0 +1,7602 @@
+{
+ "model": "accounts/fireworks/models/kimi-k3",
+ "endpoint": "https://api.fireworks.ai/inference/v1/completions",
+ "utc": "2026-09-28T20:39:14Z",
+ "gen": {
+  "text": " Paris. It is",
+  "tokens": [
+   " Paris",
+   ".",
+   " It",
+   " is"
+  ],
+  "probs": [
+   0.6925933282259032,
+   0.18287224951518727,
+   0.2140675092336188,
+   0.8621489046701551
+  ],
+  "top": [
+   {
+    " Paris": -0.36731228,
+    " a": -3.80481219,
+    " ______": -3.86731219,
+    " one": -3.99231219,
+    " known": -4.42981243
+   },
+   {
+    ".": -1.69896746,
+    ",": -2.07396746,
+    ".\n": -2.32396746,
+    ".\",\n": -2.63646746,
+    ".\n\n": -2.69896746
+   },
+   {
+    " It": -1.54146385,
+    " Paris": -2.22896385,
+    " The": -2.22896385,
+    "\",\"": -2.47896385,
+    " Other": -3.22896385
+   },
+   {
+    " is": -0.14832728,
+    " has": -2.89832735,
+    "\u2019s": -3.64832735,
+    " was": -4.14832735,
+    " serves": -4.89832735
+   }
+  ]
+ },
+ "ppl": {
+  "prompt_tokens": 90,
+  "first_tokens": [
+   "The",
+   " capital",
+   " city"
+  ],
+  "predictions": 90,
+  "nll": 1.1346403704444443,
+  "perplexity": 3.110054874111873,
+  "per_token": [
+   [
+    "The",
+    0.0
+   ],
+   [
+    " capital",
+    -8.75
+   ],
+   [
+    " city",
+    -2.625
+   ],
+   [
+    " of",
+    -0.48632812
+   ],
+   [
+    " France",
+    -4.09375
+   ],
+   [
+    " is",
+    -0.859375
+   ],
+   [
+    " Paris",
+    -0.32421875
+   ],
+   [
+    ".",
+    -1.6796875
+   ],
+   [
+    " It",
+    -1.3671875
+   ],
+   [
+    " sits",
+    -6.28125
+   ],
+   [
+    " on",
+    -0.69921875
+   ],
+   [
+    " the",
+    -0.0255127
+   ],
+   [
+    " river",
+    -2.921875
+   ],
+   [
+    " Seine",
+    -0.08886719
+   ],
+   [
+    " and",
+    -1.6953125
+   ],
+   [
+    " has",
+    -1.03125
+   ],
+   [
+    " been",
+    -0.8125
+   ],
+   [
+    " the",
+    -0.7890625
+   ],
+   [
+    " political",
+    -1.3125
+   ],
+   [
+    " and",
+    -1.0546875
+   ],
+   [
+    " cultural",
+    -0.17871094
+   ],
+   [
+    " centre",
+    -2.015625
+   ],
+   [
+    " of",
+    -0.13769531
+   ],
+   [
+    " the",
+    -0.90625
+   ],
+   [
+    " country",
+    -0.20410156
+   ],
+   [
+    " for",
+    -0.08349609
+   ],
+   [
+    " centuries",
+    -0.2578125
+   ],
+   [
+    ".",
+    -0.37695312
+   ],
+   [
+    " The",
+    -1.9140625
+   ],
+   [
+    " city",
+    -0.671875
+   ],
+   [
+    " is",
+    -0.36914062
+   ],
+   [
+    " known",
+    -1.1796875
+   ],
+   [
+    " for",
+    -0.11279297
+   ],
+   [
+    " its",
+    -0.42773438
+   ],
+   [
+    " museums",
+    -2.109375
+   ],
+   [
+    ",",
+    -0.05273438
+   ],
+   [
+    " its",
+    -4.28125
+   ],
+   [
+    " bou",
+    -4.21875
+   ],
+   [
+    "lev",
+    -0.01385498
+   ],
+   [
+    "ards",
+    -3.386e-05
+   ],
+   [
+    ",",
+    -0.43945312
+   ],
+   [
+    " and",
+    -0.265625
+   ],
+   [
+    " the",
+    -2.015625
+   ],
+   [
+    " cathedral",
+    -7.375
+   ],
+   [
+    " of",
+    -0.09082031
+   ],
+   [
+    " Notre",
+    -0.00320435
+   ],
+   [
+    " Dame",
+    -1.4140625
+   ],
+   [
+    ",",
+    -1.90625
+   ],
+   [
+    " which",
+    -0.30078125
+   ],
+   [
+    " stands",
+    -2.234375
+   ],
+   [
+    " on",
+    -0.06347656
+   ],
+   [
+    " an",
+    -0.26367188
+   ],
+   [
+    " island",
+    -0.00037003
+   ],
+   [
+    " in",
+    -0.02038574
+   ],
+   [
+    " the",
+    -0.00106049
+   ],
+   [
+    " middle",
+    -0.32226562
+   ],
+   [
+    " of",
+    -0.00072861
+   ],
+   [
+    " the",
+    -0.00250244
+   ],
+   [
+    " river",
+    -0.06884766
+   ],
+   [
+    ".",
+    -0.88671875
+   ],
+   [
+    " Millions",
+    -3.390625
+   ],
+   [
+    " of",
+    -0.01361084
+   ],
+   [
+    " visitors",
+    -0.9296875
+   ],
+   [
+    " arrive",
+    -1.8515625
+   ],
+   [
+    " each",
+    -0.3828125
+   ],
+   [
+    " year",
+    -0.00105286
+   ],
+   [
+    " to",
+    -0.27148438
+   ],
+   [
+    " see",
+    -0.70703125
+   ],
+   [
+    " the",
+    -0.3046875
+   ],
+   [
+    " Lou",
+    -2.4375
+   ],
+   [
+    "vre",
+    -0.00021076
+   ],
+   [
+    " and",
+    -1.1640625
+   ],
+   [
+    " the",
+    -0.6328125
+   ],
+   [
+    " E",
+    -0.08789062
+   ],
+   [
+    "iffel",
+    -0.00023746
+   ],
+   [
+    " Tower",
+    -0.00289917
+   ],
+   [
+    ",",
+    -1.0
+   ],
+   [
+    " and",
+    -1.4921875
+   ],
+   [
+    " the",
+    -0.68359375
+   ],
+   [
+    " surrounding",
+    -4.8125
+   ],
+   [
+    " region",
+    -0.36132812
+   ],
+   [
+    " remains",
+    -2.875
+   ],
+   [
+    " the",
+    -0.19628906
+   ],
+   [
+    " most",
+    -0.3515625
+   ],
+   [
+    " densely",
+    -0.20214844
+   ],
+   [
+    " populated",
+    -0.00436401
+   ],
+   [
+    " part",
+    -0.07080078
+   ],
+   [
+    " of",
+    -0.00026131
+   ],
+   [
+    " France",
+    -2.703125
+   ],
+   [
+    ".",
+    -1.1015625
+   ]
+  ]
+ },
+ "compare": {
+  "gen": {
+   "ours_text": " Paris. It is",
+   "ref_text": " Paris. It is",
+   "text_agrees": true,
+   "ours_probs": null,
+   "ref_probs": [
+    0.6925933282259032,
+    0.18287224951518727,
+    0.2140675092336188,
+    0.8621489046701551
+   ]
+  },
+  "ppl": {
+   "ours": {
+    "tokens": 90,
+    "predictions": 89,
+    "nll": 1.1572903408093398,
+    "perplexity": 3.181301344175307
+   },
+   "ref": {
+    "prompt_tokens": 90,
+    "predictions": 90,
+    "nll": 1.1346403704444443,
+    "perplexity": 3.110054874111873
+   },
+   "same_token_count": true
+  }
+ },
+ "raw": {
+  "gen": {
+   "id": "cmpl-4fbe3711c7ff49c1accfc39e9aa32fd4",
+   "object": "text_completion",
+   "created": 1790627951,
+   "model": "accounts/fireworks/models/kimi-k3",
+   "choices": [
+    {
+     "index": 0,
+     "text": " Paris. It is",
+     "logprobs": {
+      "content": [
+       {
+        "token": " Paris",
+        "logprob": -0.36731228,
+        "sampling_logprob": -0.3164350986480713,
+        "bytes": [
+         32,
+         80,
+         97,
+         114,
+         105,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " Paris",
+          "logprob": -0.36731228,
+          "token_id": 17374,
+          "bytes": [
+           32,
+           80,
+           97,
+           114,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " a",
+          "logprob": -3.80481219,
+          "token_id": 261,
+          "bytes": [
+           32,
+           97
+          ]
+         },
+         {
+          "token": " ______",
+          "logprob": -3.86731219,
+          "token_id": 98937,
+          "bytes": [
+           32,
+           95,
+           95,
+           95,
+           95,
+           95,
+           95
+          ]
+         },
+         {
+          "token": " one",
+          "logprob": -3.99231219,
+          "token_id": 1101,
+          "bytes": [
+           32,
+           111,
+           110,
+           101
+          ]
+         },
+         {
+          "token": " known",
+          "logprob": -4.42981243,
+          "token_id": 5624,
+          "bytes": [
+           32,
+           107,
+           110,
+           111,
+           119,
+           110
+          ]
+         }
+        ],
+        "token_id": 17374,
+        "text_offset": 0
+       },
+       {
+        "token": ".",
+        "logprob": -1.69896746,
+        "sampling_logprob": -1.6504731178283691,
+        "bytes": [
+         46
+        ],
+        "top_logprobs": [
+         {
+          "token": ".",
+          "logprob": -1.69896746,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": ",",
+          "logprob": -2.07396746,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": ".\n",
+          "logprob": -2.32396746,
+          "token_id": 341,
+          "bytes": [
+           46,
+           10
+          ]
+         },
+         {
+          "token": ".\",\n",
+          "logprob": -2.63646746,
+          "token_id": 20829,
+          "bytes": [
+           46,
+           34,
+           44,
+           10
+          ]
+         },
+         {
+          "token": ".\n\n",
+          "logprob": -2.69896746,
+          "token_id": 1481,
+          "bytes": [
+           46,
+           10,
+           10
+          ]
+         }
+        ],
+        "token_id": 13,
+        "text_offset": 6
+       },
+       {
+        "token": " It",
+        "logprob": -1.54146385,
+        "sampling_logprob": -1.4902770519256592,
+        "bytes": [
+         32,
+         73,
+         116
+        ],
+        "top_logprobs": [
+         {
+          "token": " It",
+          "logprob": -1.54146385,
+          "token_id": 1344,
+          "bytes": [
+           32,
+           73,
+           116
+          ]
+         },
+         {
+          "token": " Paris",
+          "logprob": -2.22896385,
+          "token_id": 17374,
+          "bytes": [
+           32,
+           80,
+           97,
+           114,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " The",
+          "logprob": -2.22896385,
+          "token_id": 646,
+          "bytes": [
+           32,
+           84,
+           104,
+           101
+          ]
+         },
+         {
+          "token": "\",\"",
+          "logprob": -2.47896385,
+          "token_id": 3923,
+          "bytes": [
+           34,
+           44,
+           34
+          ]
+         },
+         {
+          "token": " Other",
+          "logprob": -3.22896385,
+          "token_id": 10595,
+          "bytes": [
+           32,
+           79,
+           116,
+           104,
+           101,
+           114
+          ]
+         }
+        ],
+        "token_id": 1344,
+        "text_offset": 7
+       },
+       {
+        "token": " is",
+        "logprob": -0.14832728,
+        "sampling_logprob": -0.10655666142702103,
+        "bytes": [
+         32,
+         105,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " is",
+          "logprob": -0.14832728,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " has",
+          "logprob": -2.89832735,
+          "token_id": 924,
+          "bytes": [
+           32,
+           104,
+           97,
+           115
+          ]
+         },
+         {
+          "token": "\u2019s",
+          "logprob": -3.64832735,
+          "token_id": 824,
+          "bytes": [
+           226,
+           128,
+           153,
+           115
+          ]
+         },
+         {
+          "token": " was",
+          "logprob": -4.14832735,
+          "token_id": 743,
+          "bytes": [
+           32,
+           119,
+           97,
+           115
+          ]
+         },
+         {
+          "token": " serves",
+          "logprob": -4.89832735,
+          "token_id": 18225,
+          "bytes": [
+           32,
+           115,
+           101,
+           114,
+           118,
+           101,
+           115
+          ]
+         }
+        ],
+        "token_id": 387,
+        "text_offset": 10
+       }
+      ]
+     },
+     "finish_reason": "length"
+    }
+   ],
+   "usage": {
+    "prompt_tokens": 6,
+    "total_tokens": 10,
+    "completion_tokens": 4,
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "_wall_s": 2.50710391998291
+  },
+  "ppl": {
+   "id": "cmpl-11ad73ab1be841838f68893d04ab8f85",
+   "object": "text_completion",
+   "created": 1790627953,
+   "model": "accounts/fireworks/models/kimi-k3",
+   "choices": [
+    {
+     "index": 0,
+     "text": "The capital city of France is Paris. It sits on the river Seine and has been the political and cultural centre of the country for centuries. The city is known for its museums, its boulevards, and the cathedral of Notre Dame, which stands on an island in the middle of the river. Millions of visitors arrive each year to see the Louvre and the Eiffel Tower, and the surrounding region remains the most densely populated part of France. The",
+     "logprobs": {
+      "content": [
+       {
+        "token": "The",
+        "logprob": 0.0,
+        "sampling_logprob": null,
+        "bytes": [
+         84,
+         104,
+         101
+        ],
+        "top_logprobs": [],
+        "token_id": 1008,
+        "text_offset": 0
+       },
+       {
+        "token": " capital",
+        "logprob": -8.75,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         99,
+         97,
+         112,
+         105,
+         116,
+         97,
+         108
+        ],
+        "top_logprobs": [
+         {
+          "token": " ",
+          "logprob": -4.1875,
+          "token_id": 220,
+          "bytes": [
+           32
+          ]
+         },
+         {
+          "token": " first",
+          "logprob": -4.75,
+          "token_id": 1701,
+          "bytes": [
+           32,
+           102,
+           105,
+           114,
+           115,
+           116
+          ]
+         },
+         {
+          "token": " following",
+          "logprob": -4.8125,
+          "token_id": 4111,
+          "bytes": [
+           32,
+           102,
+           111,
+           108,
+           108,
+           111,
+           119,
+           105,
+           110,
+           103
+          ]
+         },
+         {
+          "token": " most",
+          "logprob": -5.125,
+          "token_id": 1867,
+          "bytes": [
+           32,
+           109,
+           111,
+           115,
+           116
+          ]
+         },
+         {
+          "token": "\n",
+          "logprob": -5.28125,
+          "token_id": 198,
+          "bytes": [
+           10
+          ]
+         }
+        ],
+        "token_id": 10484,
+        "text_offset": 3
+       },
+       {
+        "token": " city",
+        "logprob": -2.625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         99,
+         105,
+         116,
+         121
+        ],
+        "top_logprobs": [
+         {
+          "token": " of",
+          "logprob": -1.5,
+          "token_id": 318,
+          "bytes": [
+           32,
+           111,
+           102
+          ]
+         },
+         {
+          "token": " city",
+          "logprob": -2.625,
+          "token_id": 5243,
+          "bytes": [
+           32,
+           99,
+           105,
+           116,
+           121
+          ]
+         },
+         {
+          "token": " structure",
+          "logprob": -3.0,
+          "token_id": 7828,
+          "bytes": [
+           32,
+           115,
+           116,
+           114,
+           117,
+           99,
+           116,
+           117,
+           114,
+           101
+          ]
+         },
+         {
+          "token": "ized",
+          "logprob": -3.0,
+          "token_id": 2361,
+          "bytes": [
+           105,
+           122,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " is",
+          "logprob": -3.75,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         }
+        ],
+        "token_id": 5243,
+        "text_offset": 11
+       },
+       {
+        "token": " of",
+        "logprob": -0.48632812,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         111,
+         102
+        ],
+        "top_logprobs": [
+         {
+          "token": " of",
+          "logprob": -0.48632812,
+          "token_id": 318,
+          "bytes": [
+           32,
+           111,
+           102
+          ]
+         },
+         {
+          "token": " is",
+          "logprob": -2.171875,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         },
+         {
+          "token": ",",
+          "logprob": -2.734375,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": " has",
+          "logprob": -3.734375,
+          "token_id": 924,
+          "bytes": [
+           32,
+           104,
+           97,
+           115
+          ]
+         },
+         {
+          "token": " was",
+          "logprob": -4.125,
+          "token_id": 743,
+          "bytes": [
+           32,
+           119,
+           97,
+           115
+          ]
+         }
+        ],
+        "token_id": 318,
+        "text_offset": 16
+       },
+       {
+        "token": " France",
+        "logprob": -4.09375,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         70,
+         114,
+         97,
+         110,
+         99,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -1.921875,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " France",
+          "logprob": -4.09375,
+          "token_id": 15383,
+          "bytes": [
+           32,
+           70,
+           114,
+           97,
+           110,
+           99,
+           101
+          ]
+         },
+         {
+          "token": " New",
+          "logprob": -4.21875,
+          "token_id": 2964,
+          "bytes": [
+           32,
+           78,
+           101,
+           119
+          ]
+         },
+         {
+          "token": " England",
+          "logprob": -4.28125,
+          "token_id": 14557,
+          "bytes": [
+           32,
+           69,
+           110,
+           103,
+           108,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " a",
+          "logprob": -4.40625,
+          "token_id": 261,
+          "bytes": [
+           32,
+           97
+          ]
+         }
+        ],
+        "token_id": 15383,
+        "text_offset": 19
+       },
+       {
+        "token": " is",
+        "logprob": -0.859375,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         105,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " is",
+          "logprob": -0.859375,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         },
+         {
+          "token": ",",
+          "logprob": -1.109375,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": " has",
+          "logprob": -3.671875,
+          "token_id": 924,
+          "bytes": [
+           32,
+           104,
+           97,
+           115
+          ]
+         },
+         {
+          "token": " and",
+          "logprob": -3.796875,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": ".",
+          "logprob": -3.859375,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         }
+        ],
+        "token_id": 387,
+        "text_offset": 26
+       },
+       {
+        "token": " Paris",
+        "logprob": -0.32421875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         80,
+         97,
+         114,
+         105,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " Paris",
+          "logprob": -0.32421875,
+          "token_id": 17374,
+          "bytes": [
+           32,
+           80,
+           97,
+           114,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " ______",
+          "logprob": -3.953125,
+          "token_id": 98937,
+          "bytes": [
+           32,
+           95,
+           95,
+           95,
+           95,
+           95,
+           95
+          ]
+         },
+         {
+          "token": " a",
+          "logprob": -3.953125,
+          "token_id": 261,
+          "bytes": [
+           32,
+           97
+          ]
+         },
+         {
+          "token": " one",
+          "logprob": -4.25,
+          "token_id": 1101,
+          "bytes": [
+           32,
+           111,
+           110,
+           101
+          ]
+         },
+         {
+          "token": " the",
+          "logprob": -4.6875,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         }
+        ],
+        "token_id": 17374,
+        "text_offset": 29
+       },
+       {
+        "token": ".",
+        "logprob": -1.6796875,
+        "sampling_logprob": null,
+        "bytes": [
+         46
+        ],
+        "top_logprobs": [
+         {
+          "token": ".",
+          "logprob": -1.6796875,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": ",",
+          "logprob": -1.8671875,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": ".\n",
+          "logprob": -2.375,
+          "token_id": 341,
+          "bytes": [
+           46,
+           10
+          ]
+         },
+         {
+          "token": ".\",\n",
+          "logprob": -2.75,
+          "token_id": 20829,
+          "bytes": [
+           46,
+           34,
+           44,
+           10
+          ]
+         },
+         {
+          "token": ".\n\n",
+          "logprob": -2.75,
+          "token_id": 1481,
+          "bytes": [
+           46,
+           10,
+           10
+          ]
+         }
+        ],
+        "token_id": 13,
+        "text_offset": 35
+       },
+       {
+        "token": " It",
+        "logprob": -1.3671875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         73,
+         116
+        ],
+        "top_logprobs": [
+         {
+          "token": " It",
+          "logprob": -1.3671875,
+          "token_id": 1344,
+          "bytes": [
+           32,
+           73,
+           116
+          ]
+         },
+         {
+          "token": " Paris",
+          "logprob": -2.234375,
+          "token_id": 17374,
+          "bytes": [
+           32,
+           80,
+           97,
+           114,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " The",
+          "logprob": -2.359375,
+          "token_id": 646,
+          "bytes": [
+           32,
+           84,
+           104,
+           101
+          ]
+         },
+         {
+          "token": "\",\"",
+          "logprob": -2.609375,
+          "token_id": 3923,
+          "bytes": [
+           34,
+           44,
+           34
+          ]
+         },
+         {
+          "token": " France",
+          "logprob": -3.296875,
+          "token_id": 15383,
+          "bytes": [
+           32,
+           70,
+           114,
+           97,
+           110,
+           99,
+           101
+          ]
+         }
+        ],
+        "token_id": 1344,
+        "text_offset": 36
+       },
+       {
+        "token": " sits",
+        "logprob": -6.28125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         115,
+         105,
+         116,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " is",
+          "logprob": -0.14355469,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " has",
+          "logprob": -3.015625,
+          "token_id": 924,
+          "bytes": [
+           32,
+           104,
+           97,
+           115
+          ]
+         },
+         {
+          "token": "\u2019s",
+          "logprob": -3.390625,
+          "token_id": 824,
+          "bytes": [
+           226,
+           128,
+           153,
+           115
+          ]
+         },
+         {
+          "token": " was",
+          "logprob": -4.40625,
+          "token_id": 743,
+          "bytes": [
+           32,
+           119,
+           97,
+           115
+          ]
+         },
+         {
+          "token": " serves",
+          "logprob": -4.53125,
+          "token_id": 18225,
+          "bytes": [
+           32,
+           115,
+           101,
+           114,
+           118,
+           101,
+           115
+          ]
+         }
+        ],
+        "token_id": 32818,
+        "text_offset": 39
+       },
+       {
+        "token": " on",
+        "logprob": -0.69921875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         111,
+         110
+        ],
+        "top_logprobs": [
+         {
+          "token": " on",
+          "logprob": -0.69921875,
+          "token_id": 418,
+          "bytes": [
+           32,
+           111,
+           110
+          ]
+         },
+         {
+          "token": " in",
+          "logprob": -1.578125,
+          "token_id": 306,
+          "bytes": [
+           32,
+           105,
+           110
+          ]
+         },
+         {
+          "token": " along",
+          "logprob": -1.703125,
+          "token_id": 4041,
+          "bytes": [
+           32,
+           97,
+           108,
+           111,
+           110,
+           103
+          ]
+         },
+         {
+          "token": " at",
+          "logprob": -3.453125,
+          "token_id": 623,
+          "bytes": [
+           32,
+           97,
+           116
+          ]
+         },
+         {
+          "token": " by",
+          "logprob": -4.3125,
+          "token_id": 673,
+          "bytes": [
+           32,
+           98,
+           121
+          ]
+         }
+        ],
+        "token_id": 418,
+        "text_offset": 44
+       },
+       {
+        "token": " the",
+        "logprob": -0.0255127,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -0.0255127,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " a",
+          "logprob": -5.03125,
+          "token_id": 261,
+          "bytes": [
+           32,
+           97
+          ]
+         },
+         {
+          "token": " both",
+          "logprob": -5.21875,
+          "token_id": 2957,
+          "bytes": [
+           32,
+           98,
+           111,
+           116,
+           104
+          ]
+         },
+         {
+          "token": " top",
+          "logprob": -6.71875,
+          "token_id": 2566,
+          "bytes": [
+           32,
+           116,
+           111,
+           112
+          ]
+         },
+         {
+          "token": " ",
+          "logprob": -6.90625,
+          "token_id": 220,
+          "bytes": [
+           32
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 47
+       },
+       {
+        "token": " river",
+        "logprob": -2.921875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         114,
+         105,
+         118,
+         101,
+         114
+        ],
+        "top_logprobs": [
+         {
+          "token": " banks",
+          "logprob": -1.0390625,
+          "token_id": 19503,
+          "bytes": [
+           32,
+           98,
+           97,
+           110,
+           107,
+           115
+          ]
+         },
+         {
+          "token": " Seine",
+          "logprob": -1.2890625,
+          "token_id": 163561,
+          "bytes": [
+           32,
+           83,
+           101,
+           105,
+           110,
+           101
+          ]
+         },
+         {
+          "token": " River",
+          "logprob": -1.2890625,
+          "token_id": 13334,
+          "bytes": [
+           32,
+           82,
+           105,
+           118,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " river",
+          "logprob": -2.921875,
+          "token_id": 18002,
+          "bytes": [
+           32,
+           114,
+           105,
+           118,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " bank",
+          "logprob": -5.03125,
+          "token_id": 8355,
+          "bytes": [
+           32,
+           98,
+           97,
+           110,
+           107
+          ]
+         }
+        ],
+        "token_id": 18002,
+        "text_offset": 51
+       },
+       {
+        "token": " Seine",
+        "logprob": -0.08886719,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         83,
+         101,
+         105,
+         110,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " Seine",
+          "logprob": -0.08886719,
+          "token_id": 163561,
+          "bytes": [
+           32,
+           83,
+           101,
+           105,
+           110,
+           101
+          ]
+         },
+         {
+          "token": " Si",
+          "logprob": -4.71875,
+          "token_id": 19833,
+          "bytes": [
+           32,
+           83,
+           105
+          ]
+         },
+         {
+          "token": " seine",
+          "logprob": -4.90625,
+          "token_id": 94511,
+          "bytes": [
+           32,
+           115,
+           101,
+           105,
+           110,
+           101
+          ]
+         },
+         {
+          "token": " called",
+          "logprob": -5.09375,
+          "token_id": 4387,
+          "bytes": [
+           32,
+           99,
+           97,
+           108,
+           108,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " La",
+          "logprob": -5.46875,
+          "token_id": 8768,
+          "bytes": [
+           32,
+           76,
+           97
+          ]
+         }
+        ],
+        "token_id": 163561,
+        "text_offset": 57
+       },
+       {
+        "token": " and",
+        "logprob": -1.6953125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         97,
+         110,
+         100
+        ],
+        "top_logprobs": [
+         {
+          "token": ",",
+          "logprob": -1.4453125,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": " in",
+          "logprob": -1.5703125,
+          "token_id": 306,
+          "bytes": [
+           32,
+           105,
+           110
+          ]
+         },
+         {
+          "token": ".",
+          "logprob": -1.5703125,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": " and",
+          "logprob": -1.6953125,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": ".\n",
+          "logprob": -3.578125,
+          "token_id": 341,
+          "bytes": [
+           46,
+           10
+          ]
+         }
+        ],
+        "token_id": 316,
+        "text_offset": 63
+       },
+       {
+        "token": " has",
+        "logprob": -1.03125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         104,
+         97,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " is",
+          "logprob": -0.78125,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " has",
+          "logprob": -1.03125,
+          "token_id": 924,
+          "bytes": [
+           32,
+           104,
+           97,
+           115
+          ]
+         },
+         {
+          "token": " it",
+          "logprob": -3.28125,
+          "token_id": 483,
+          "bytes": [
+           32,
+           105,
+           116
+          ]
+         },
+         {
+          "token": " had",
+          "logprob": -4.15625,
+          "token_id": 1688,
+          "bytes": [
+           32,
+           104,
+           97,
+           100
+          ]
+         },
+         {
+          "token": " the",
+          "logprob": -4.65625,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         }
+        ],
+        "token_id": 924,
+        "text_offset": 67
+       },
+       {
+        "token": " been",
+        "logprob": -0.8125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         98,
+         101,
+         101,
+         110
+        ],
+        "top_logprobs": [
+         {
+          "token": " been",
+          "logprob": -0.8125,
+          "token_id": 1479,
+          "bytes": [
+           32,
+           98,
+           101,
+           101,
+           110
+          ]
+         },
+         {
+          "token": " a",
+          "logprob": -1.3125,
+          "token_id": 261,
+          "bytes": [
+           32,
+           97
+          ]
+         },
+         {
+          "token": " about",
+          "logprob": -3.0625,
+          "token_id": 1215,
+          "bytes": [
+           32,
+           97,
+           98,
+           111,
+           117,
+           116
+          ]
+         },
+         {
+          "token": " many",
+          "logprob": -3.6875,
+          "token_id": 2133,
+          "bytes": [
+           32,
+           109,
+           97,
+           110,
+           121
+          ]
+         },
+         {
+          "token": " an",
+          "logprob": -3.8125,
+          "token_id": 519,
+          "bytes": [
+           32,
+           97,
+           110
+          ]
+         }
+        ],
+        "token_id": 1479,
+        "text_offset": 71
+       },
+       {
+        "token": " the",
+        "logprob": -0.7890625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -0.7890625,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " a",
+          "logprob": -1.1640625,
+          "token_id": 261,
+          "bytes": [
+           32,
+           97
+          ]
+         },
+         {
+          "token": " inhabited",
+          "logprob": -2.28125,
+          "token_id": 111223,
+          "bytes": [
+           32,
+           105,
+           110,
+           104,
+           97,
+           98,
+           105,
+           116,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " an",
+          "logprob": -3.03125,
+          "token_id": 519,
+          "bytes": [
+           32,
+           97,
+           110
+          ]
+         },
+         {
+          "token": " at",
+          "logprob": -4.90625,
+          "token_id": 623,
+          "bytes": [
+           32,
+           97,
+           116
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 76
+       },
+       {
+        "token": " political",
+        "logprob": -1.3125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         112,
+         111,
+         108,
+         105,
+         116,
+         105,
+         99,
+         97,
+         108
+        ],
+        "top_logprobs": [
+         {
+          "token": " political",
+          "logprob": -1.3125,
+          "token_id": 10583,
+          "bytes": [
+           32,
+           112,
+           111,
+           108,
+           105,
+           116,
+           105,
+           99,
+           97,
+           108
+          ]
+         },
+         {
+          "token": " capital",
+          "logprob": -1.5625,
+          "token_id": 10484,
+          "bytes": [
+           32,
+           99,
+           97,
+           112,
+           105,
+           116,
+           97,
+           108
+          ]
+         },
+         {
+          "token": " cultural",
+          "logprob": -2.0625,
+          "token_id": 15542,
+          "bytes": [
+           32,
+           99,
+           117,
+           108,
+           116,
+           117,
+           114,
+           97,
+           108
+          ]
+         },
+         {
+          "token": " country's",
+          "logprob": -2.5625,
+          "token_id": 63185,
+          "bytes": [
+           32,
+           99,
+           111,
+           117,
+           110,
+           116,
+           114,
+           121,
+           39,
+           115
+          ]
+         },
+         {
+          "token": " center",
+          "logprob": -3.0625,
+          "token_id": 5323,
+          "bytes": [
+           32,
+           99,
+           101,
+           110,
+           116,
+           101,
+           114
+          ]
+         }
+        ],
+        "token_id": 10583,
+        "text_offset": 80
+       },
+       {
+        "token": " and",
+        "logprob": -1.0546875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         97,
+         110,
+         100
+        ],
+        "top_logprobs": [
+         {
+          "token": ",",
+          "logprob": -0.8046875,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": " and",
+          "logprob": -1.0546875,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " center",
+          "logprob": -2.5625,
+          "token_id": 5323,
+          "bytes": [
+           32,
+           99,
+           101,
+           110,
+           116,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " centre",
+          "logprob": -3.0625,
+          "token_id": 14702,
+          "bytes": [
+           32,
+           99,
+           101,
+           110,
+           116,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " heart",
+          "logprob": -3.0625,
+          "token_id": 5905,
+          "bytes": [
+           32,
+           104,
+           101,
+           97,
+           114,
+           116
+          ]
+         }
+        ],
+        "token_id": 316,
+        "text_offset": 90
+       },
+       {
+        "token": " cultural",
+        "logprob": -0.17871094,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         99,
+         117,
+         108,
+         116,
+         117,
+         114,
+         97,
+         108
+        ],
+        "top_logprobs": [
+         {
+          "token": " cultural",
+          "logprob": -0.17871094,
+          "token_id": 15542,
+          "bytes": [
+           32,
+           99,
+           117,
+           108,
+           116,
+           117,
+           114,
+           97,
+           108
+          ]
+         },
+         {
+          "token": " economic",
+          "logprob": -2.296875,
+          "token_id": 10984,
+          "bytes": [
+           32,
+           101,
+           99,
+           111,
+           110,
+           111,
+           109,
+           105,
+           99
+          ]
+         },
+         {
+          "token": " administrative",
+          "logprob": -3.421875,
+          "token_id": 28543,
+          "bytes": [
+           32,
+           97,
+           100,
+           109,
+           105,
+           110,
+           105,
+           115,
+           116,
+           114,
+           97,
+           116,
+           105,
+           118,
+           101
+          ]
+         },
+         {
+          "token": " artistic",
+          "logprob": -4.6875,
+          "token_id": 30279,
+          "bytes": [
+           32,
+           97,
+           114,
+           116,
+           105,
+           115,
+           116,
+           105,
+           99
+          ]
+         },
+         {
+          "token": " intellectual",
+          "logprob": -4.9375,
+          "token_id": 26336,
+          "bytes": [
+           32,
+           105,
+           110,
+           116,
+           101,
+           108,
+           108,
+           101,
+           99,
+           116,
+           117,
+           97,
+           108
+          ]
+         }
+        ],
+        "token_id": 15542,
+        "text_offset": 94
+       },
+       {
+        "token": " centre",
+        "logprob": -2.015625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         99,
+         101,
+         110,
+         116,
+         114,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " heart",
+          "logprob": -0.89453125,
+          "token_id": 5905,
+          "bytes": [
+           32,
+           104,
+           101,
+           97,
+           114,
+           116
+          ]
+         },
+         {
+          "token": " center",
+          "logprob": -0.89453125,
+          "token_id": 5323,
+          "bytes": [
+           32,
+           99,
+           101,
+           110,
+           116,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " centre",
+          "logprob": -2.015625,
+          "token_id": 14702,
+          "bytes": [
+           32,
+           99,
+           101,
+           110,
+           116,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " hub",
+          "logprob": -3.640625,
+          "token_id": 25293,
+          "bytes": [
+           32,
+           104,
+           117,
+           98
+          ]
+         },
+         {
+          "token": " capital",
+          "logprob": -4.28125,
+          "token_id": 10484,
+          "bytes": [
+           32,
+           99,
+           97,
+           112,
+           105,
+           116,
+           97,
+           108
+          ]
+         }
+        ],
+        "token_id": 14702,
+        "text_offset": 103
+       },
+       {
+        "token": " of",
+        "logprob": -0.13769531,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         111,
+         102
+        ],
+        "top_logprobs": [
+         {
+          "token": " of",
+          "logprob": -0.13769531,
+          "token_id": 318,
+          "bytes": [
+           32,
+           111,
+           102
+          ]
+         },
+         {
+          "token": " for",
+          "logprob": -2.390625,
+          "token_id": 395,
+          "bytes": [
+           32,
+           102,
+           111,
+           114
+          ]
+         },
+         {
+          "token": " since",
+          "logprob": -3.390625,
+          "token_id": 3675,
+          "bytes": [
+           32,
+           115,
+           105,
+           110,
+           99,
+           101
+          ]
+         },
+         {
+          "token": "\n",
+          "logprob": -8.125,
+          "token_id": 198,
+          "bytes": [
+           10
+          ]
+         },
+         {
+          "token": " ever",
+          "logprob": -8.4375,
+          "token_id": 5237,
+          "bytes": [
+           32,
+           101,
+           118,
+           101,
+           114
+          ]
+         }
+        ],
+        "token_id": 318,
+        "text_offset": 110
+       },
+       {
+        "token": " the",
+        "logprob": -0.90625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " France",
+          "logprob": -0.53125,
+          "token_id": 15383,
+          "bytes": [
+           32,
+           70,
+           114,
+           97,
+           110,
+           99,
+           101
+          ]
+         },
+         {
+          "token": " the",
+          "logprob": -0.90625,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " French",
+          "logprob": -5.78125,
+          "token_id": 12516,
+          "bytes": [
+           32,
+           70,
+           114,
+           101,
+           110,
+           99,
+           104
+          ]
+         },
+         {
+          "token": " Europe",
+          "logprob": -6.40625,
+          "token_id": 6715,
+          "bytes": [
+           32,
+           69,
+           117,
+           114,
+           111,
+           112,
+           101
+          ]
+         },
+         {
+          "token": "\n",
+          "logprob": -7.78125,
+          "token_id": 198,
+          "bytes": [
+           10
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 113
+       },
+       {
+        "token": " country",
+        "logprob": -0.20410156,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         99,
+         111,
+         117,
+         110,
+         116,
+         114,
+         121
+        ],
+        "top_logprobs": [
+         {
+          "token": " country",
+          "logprob": -0.20410156,
+          "token_id": 5141,
+          "bytes": [
+           32,
+           99,
+           111,
+           117,
+           110,
+           116,
+           114,
+           121
+          ]
+         },
+         {
+          "token": " nation",
+          "logprob": -1.828125,
+          "token_id": 11278,
+          "bytes": [
+           32,
+           110,
+           97,
+           116,
+           105,
+           111,
+           110
+          ]
+         },
+         {
+          "token": " French",
+          "logprob": -4.46875,
+          "token_id": 12516,
+          "bytes": [
+           32,
+           70,
+           114,
+           101,
+           110,
+           99,
+           104
+          ]
+         },
+         {
+          "token": " region",
+          "logprob": -5.46875,
+          "token_id": 7604,
+          "bytes": [
+           32,
+           114,
+           101,
+           103,
+           105,
+           111,
+           110
+          ]
+         },
+         {
+          "token": " Republic",
+          "logprob": -6.59375,
+          "token_id": 14163,
+          "bytes": [
+           32,
+           82,
+           101,
+           112,
+           117,
+           98,
+           108,
+           105,
+           99
+          ]
+         }
+        ],
+        "token_id": 5141,
+        "text_offset": 117
+       },
+       {
+        "token": " for",
+        "logprob": -0.08349609,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         102,
+         111,
+         114
+        ],
+        "top_logprobs": [
+         {
+          "token": " for",
+          "logprob": -0.08349609,
+          "token_id": 395,
+          "bytes": [
+           32,
+           102,
+           111,
+           114
+          ]
+         },
+         {
+          "token": " since",
+          "logprob": -2.578125,
+          "token_id": 3675,
+          "bytes": [
+           32,
+           115,
+           105,
+           110,
+           99,
+           101
+          ]
+         },
+         {
+          "token": ".",
+          "logprob": -6.84375,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": " ever",
+          "logprob": -7.71875,
+          "token_id": 5237,
+          "bytes": [
+           32,
+           101,
+           118,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " throughout",
+          "logprob": -8.0625,
+          "token_id": 7236,
+          "bytes": [
+           32,
+           116,
+           104,
+           114,
+           111,
+           117,
+           103,
+           104,
+           111,
+           117,
+           116
+          ]
+         }
+        ],
+        "token_id": 395,
+        "text_offset": 125
+       },
+       {
+        "token": " centuries",
+        "logprob": -0.2578125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         99,
+         101,
+         110,
+         116,
+         117,
+         114,
+         105,
+         101,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " centuries",
+          "logprob": -0.2578125,
+          "token_id": 35388,
+          "bytes": [
+           32,
+           99,
+           101,
+           110,
+           116,
+           117,
+           114,
+           105,
+           101,
+           115
+          ]
+         },
+         {
+          "token": " many",
+          "logprob": -2.015625,
+          "token_id": 2133,
+          "bytes": [
+           32,
+           109,
+           97,
+           110,
+           121
+          ]
+         },
+         {
+          "token": " over",
+          "logprob": -3.390625,
+          "token_id": 1312,
+          "bytes": [
+           32,
+           111,
+           118,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " more",
+          "logprob": -3.765625,
+          "token_id": 1070,
+          "bytes": [
+           32,
+           109,
+           111,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " hundreds",
+          "logprob": -4.25,
+          "token_id": 17024,
+          "bytes": [
+           32,
+           104,
+           117,
+           110,
+           100,
+           114,
+           101,
+           100,
+           115
+          ]
+         }
+        ],
+        "token_id": 35388,
+        "text_offset": 129
+       },
+       {
+        "token": ".",
+        "logprob": -0.37695312,
+        "sampling_logprob": null,
+        "bytes": [
+         46
+        ],
+        "top_logprobs": [
+         {
+          "token": ".",
+          "logprob": -0.37695312,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": ".\n\n",
+          "logprob": -1.875,
+          "token_id": 1481,
+          "bytes": [
+           46,
+           10,
+           10
+          ]
+         },
+         {
+          "token": ".\n",
+          "logprob": -2.375,
+          "token_id": 341,
+          "bytes": [
+           46,
+           10
+          ]
+         },
+         {
+          "token": ",",
+          "logprob": -3.625,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": ".\",\n",
+          "logprob": -4.375,
+          "token_id": 20829,
+          "bytes": [
+           46,
+           34,
+           44,
+           10
+          ]
+         }
+        ],
+        "token_id": 13,
+        "text_offset": 139
+       },
+       {
+        "token": " The",
+        "logprob": -1.9140625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         84,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " Paris",
+          "logprob": -0.9140625,
+          "token_id": 17374,
+          "bytes": [
+           32,
+           80,
+           97,
+           114,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " The",
+          "logprob": -1.9140625,
+          "token_id": 646,
+          "bytes": [
+           32,
+           84,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " France",
+          "logprob": -3.15625,
+          "token_id": 15383,
+          "bytes": [
+           32,
+           70,
+           114,
+           97,
+           110,
+           99,
+           101
+          ]
+         },
+         {
+          "token": " Known",
+          "logprob": -3.65625,
+          "token_id": 64141,
+          "bytes": [
+           32,
+           75,
+           110,
+           111,
+           119,
+           110
+          ]
+         },
+         {
+          "token": " It",
+          "logprob": -3.65625,
+          "token_id": 1344,
+          "bytes": [
+           32,
+           73,
+           116
+          ]
+         }
+        ],
+        "token_id": 646,
+        "text_offset": 140
+       },
+       {
+        "token": " city",
+        "logprob": -0.671875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         99,
+         105,
+         116,
+         121
+        ],
+        "top_logprobs": [
+         {
+          "token": " city",
+          "logprob": -0.671875,
+          "token_id": 5243,
+          "bytes": [
+           32,
+           99,
+           105,
+           116,
+           121
+          ]
+         },
+         {
+          "token": " E",
+          "logprob": -2.546875,
+          "token_id": 606,
+          "bytes": [
+           32,
+           69
+          ]
+         },
+         {
+          "token": " French",
+          "logprob": -3.296875,
+          "token_id": 12516,
+          "bytes": [
+           32,
+           70,
+           114,
+           101,
+           110,
+           99,
+           104
+          ]
+         },
+         {
+          "token": " population",
+          "logprob": -3.671875,
+          "token_id": 12259,
+          "bytes": [
+           32,
+           112,
+           111,
+           112,
+           117,
+           108,
+           97,
+           116,
+           105,
+           111,
+           110
+          ]
+         },
+         {
+          "token": " city's",
+          "logprob": -3.921875,
+          "token_id": 72736,
+          "bytes": [
+           32,
+           99,
+           105,
+           116,
+           121,
+           39,
+           115
+          ]
+         }
+        ],
+        "token_id": 5243,
+        "text_offset": 144
+       },
+       {
+        "token": " is",
+        "logprob": -0.36914062,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         105,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " is",
+          "logprob": -0.36914062,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         },
+         {
+          "token": "\u2019s",
+          "logprob": -2.875,
+          "token_id": 824,
+          "bytes": [
+           226,
+           128,
+           153,
+           115
+          ]
+         },
+         {
+          "token": " has",
+          "logprob": -3.25,
+          "token_id": 924,
+          "bytes": [
+           32,
+           104,
+           97,
+           115
+          ]
+         },
+         {
+          "token": " covers",
+          "logprob": -3.375,
+          "token_id": 15810,
+          "bytes": [
+           32,
+           99,
+           111,
+           118,
+           101,
+           114,
+           115
+          ]
+         },
+         {
+          "token": " hosts",
+          "logprob": -3.625,
+          "token_id": 24302,
+          "bytes": [
+           32,
+           104,
+           111,
+           115,
+           116,
+           115
+          ]
+         }
+        ],
+        "token_id": 387,
+        "text_offset": 149
+       },
+       {
+        "token": " known",
+        "logprob": -1.1796875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         107,
+         110,
+         111,
+         119,
+         110
+        ],
+        "top_logprobs": [
+         {
+          "token": " known",
+          "logprob": -1.1796875,
+          "token_id": 5624,
+          "bytes": [
+           32,
+           107,
+           110,
+           111,
+           119,
+           110
+          ]
+         },
+         {
+          "token": " famous",
+          "logprob": -1.3046875,
+          "token_id": 13430,
+          "bytes": [
+           32,
+           102,
+           97,
+           109,
+           111,
+           117,
+           115
+          ]
+         },
+         {
+          "token": " home",
+          "logprob": -1.6796875,
+          "token_id": 2445,
+          "bytes": [
+           32,
+           104,
+           111,
+           109,
+           101
+          ]
+         },
+         {
+          "token": " divided",
+          "logprob": -3.1875,
+          "token_id": 26166,
+          "bytes": [
+           32,
+           100,
+           105,
+           118,
+           105,
+           100,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " also",
+          "logprob": -3.1875,
+          "token_id": 1280,
+          "bytes": [
+           32,
+           97,
+           108,
+           115,
+           111
+          ]
+         }
+        ],
+        "token_id": 5624,
+        "text_offset": 152
+       },
+       {
+        "token": " for",
+        "logprob": -0.11279297,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         102,
+         111,
+         114
+        ],
+        "top_logprobs": [
+         {
+          "token": " for",
+          "logprob": -0.11279297,
+          "token_id": 395,
+          "bytes": [
+           32,
+           102,
+           111,
+           114
+          ]
+         },
+         {
+          "token": " worldwide",
+          "logprob": -2.609375,
+          "token_id": 18049,
+          "bytes": [
+           32,
+           119,
+           111,
+           114,
+           108,
+           100,
+           119,
+           105,
+           100,
+           101
+          ]
+         },
+         {
+          "token": " around",
+          "logprob": -3.859375,
+          "token_id": 2955,
+          "bytes": [
+           32,
+           97,
+           114,
+           111,
+           117,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " globally",
+          "logprob": -5.75,
+          "token_id": 35483,
+          "bytes": [
+           32,
+           103,
+           108,
+           111,
+           98,
+           97,
+           108,
+           108,
+           121
+          ]
+         },
+         {
+          "token": " as",
+          "logprob": -6.25,
+          "token_id": 559,
+          "bytes": [
+           32,
+           97,
+           115
+          ]
+         }
+        ],
+        "token_id": 395,
+        "text_offset": 158
+       },
+       {
+        "token": " its",
+        "logprob": -0.42773438,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         105,
+         116,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " its",
+          "logprob": -0.42773438,
+          "token_id": 1682,
+          "bytes": [
+           32,
+           105,
+           116,
+           115
+          ]
+         },
+         {
+          "token": " landmarks",
+          "logprob": -1.4296875,
+          "token_id": 75762,
+          "bytes": [
+           32,
+           108,
+           97,
+           110,
+           100,
+           109,
+           97,
+           114,
+           107,
+           115
+          ]
+         },
+         {
+          "token": " iconic",
+          "logprob": -3.296875,
+          "token_id": 33281,
+          "bytes": [
+           32,
+           105,
+           99,
+           111,
+           110,
+           105,
+           99
+          ]
+         },
+         {
+          "token": " the",
+          "logprob": -3.921875,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " art",
+          "logprob": -4.6875,
+          "token_id": 2718,
+          "bytes": [
+           32,
+           97,
+           114,
+           116
+          ]
+         }
+        ],
+        "token_id": 1682,
+        "text_offset": 162
+       },
+       {
+        "token": " museums",
+        "logprob": -2.109375,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         109,
+         117,
+         115,
+         101,
+         117,
+         109,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " art",
+          "logprob": -1.859375,
+          "token_id": 2718,
+          "bytes": [
+           32,
+           97,
+           114,
+           116
+          ]
+         },
+         {
+          "token": " museums",
+          "logprob": -2.109375,
+          "token_id": 46990,
+          "bytes": [
+           32,
+           109,
+           117,
+           115,
+           101,
+           117,
+           109,
+           115
+          ]
+         },
+         {
+          "token": " architecture",
+          "logprob": -2.109375,
+          "token_id": 17583,
+          "bytes": [
+           32,
+           97,
+           114,
+           99,
+           104,
+           105,
+           116,
+           101,
+           99,
+           116,
+           117,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " landmarks",
+          "logprob": -2.109375,
+          "token_id": 75762,
+          "bytes": [
+           32,
+           108,
+           97,
+           110,
+           100,
+           109,
+           97,
+           114,
+           107,
+           115
+          ]
+         },
+         {
+          "token": " historic",
+          "logprob": -2.109375,
+          "token_id": 20567,
+          "bytes": [
+           32,
+           104,
+           105,
+           115,
+           116,
+           111,
+           114,
+           105,
+           99
+          ]
+         }
+        ],
+        "token_id": 46990,
+        "text_offset": 166
+       },
+       {
+        "token": ",",
+        "logprob": -0.05273438,
+        "sampling_logprob": null,
+        "bytes": [
+         44
+        ],
+        "top_logprobs": [
+         {
+          "token": ",",
+          "logprob": -0.05273438,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": " and",
+          "logprob": -3.921875,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " like",
+          "logprob": -4.4375,
+          "token_id": 1517,
+          "bytes": [
+           32,
+           108,
+           105,
+           107,
+           101
+          ]
+         },
+         {
+          "token": " such",
+          "logprob": -4.5625,
+          "token_id": 2266,
+          "bytes": [
+           32,
+           115,
+           117,
+           99,
+           104
+          ]
+         },
+         {
+          "token": " (",
+          "logprob": -6.5,
+          "token_id": 347,
+          "bytes": [
+           32,
+           40
+          ]
+         }
+        ],
+        "token_id": 11,
+        "text_offset": 174
+       },
+       {
+        "token": " its",
+        "logprob": -4.28125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         105,
+         116,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " architecture",
+          "logprob": -1.53125,
+          "token_id": 17583,
+          "bytes": [
+           32,
+           97,
+           114,
+           99,
+           104,
+           105,
+           116,
+           101,
+           99,
+           116,
+           117,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " historic",
+          "logprob": -1.65625,
+          "token_id": 20567,
+          "bytes": [
+           32,
+           104,
+           105,
+           115,
+           116,
+           111,
+           114,
+           105,
+           99
+          ]
+         },
+         {
+          "token": " fashion",
+          "logprob": -2.28125,
+          "token_id": 12760,
+          "bytes": [
+           32,
+           102,
+           97,
+           115,
+           104,
+           105,
+           111,
+           110
+          ]
+         },
+         {
+          "token": " caf",
+          "logprob": -2.40625,
+          "token_id": 34484,
+          "bytes": [
+           32,
+           99,
+           97,
+           102
+          ]
+         },
+         {
+          "token": " cafes",
+          "logprob": -3.03125,
+          "token_id": 73123,
+          "bytes": [
+           32,
+           99,
+           97,
+           102,
+           101,
+           115
+          ]
+         }
+        ],
+        "token_id": 1682,
+        "text_offset": 175
+       },
+       {
+        "token": " bou",
+        "logprob": -4.21875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         98,
+         111,
+         117
+        ],
+        "top_logprobs": [
+         {
+          "token": " architecture",
+          "logprob": -1.078125,
+          "token_id": 17583,
+          "bytes": [
+           32,
+           97,
+           114,
+           99,
+           104,
+           105,
+           116,
+           101,
+           99,
+           116,
+           117,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " food",
+          "logprob": -2.328125,
+          "token_id": 4167,
+          "bytes": [
+           32,
+           102,
+           111,
+           111,
+           100
+          ]
+         },
+         {
+          "token": " historic",
+          "logprob": -2.578125,
+          "token_id": 20567,
+          "bytes": [
+           32,
+           104,
+           105,
+           115,
+           116,
+           111,
+           114,
+           105,
+           99
+          ]
+         },
+         {
+          "token": " caf",
+          "logprob": -2.953125,
+          "token_id": 34484,
+          "bytes": [
+           32,
+           99,
+           97,
+           102
+          ]
+         },
+         {
+          "token": " cafes",
+          "logprob": -3.078125,
+          "token_id": 73123,
+          "bytes": [
+           32,
+           99,
+           97,
+           102,
+           101,
+           115
+          ]
+         }
+        ],
+        "token_id": 42119,
+        "text_offset": 179
+       },
+       {
+        "token": "lev",
+        "logprob": -0.01385498,
+        "sampling_logprob": null,
+        "bytes": [
+         108,
+         101,
+         118
+        ],
+        "top_logprobs": [
+         {
+          "token": "lev",
+          "logprob": -0.01385498,
+          "token_id": 17185,
+          "bytes": [
+           108,
+           101,
+           118
+          ]
+         },
+         {
+          "token": "levard",
+          "logprob": -4.5625,
+          "token_id": 65057,
+          "bytes": [
+           108,
+           101,
+           118,
+           97,
+           114,
+           100
+          ]
+         },
+         {
+          "token": "le",
+          "logprob": -7.25,
+          "token_id": 281,
+          "bytes": [
+           108,
+           101
+          ]
+         },
+         {
+          "token": "gain",
+          "logprob": -8.875,
+          "token_id": 80174,
+          "bytes": [
+           103,
+           97,
+           105,
+           110
+          ]
+         },
+         {
+          "token": "\u00ad",
+          "logprob": -9.125,
+          "token_id": 10028,
+          "bytes": [
+           194,
+           173
+          ]
+         }
+        ],
+        "token_id": 17185,
+        "text_offset": 183
+       },
+       {
+        "token": "ards",
+        "logprob": -3.386e-05,
+        "sampling_logprob": null,
+        "bytes": [
+         97,
+         114,
+         100,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": "ards",
+          "logprob": -3.386e-05,
+          "token_id": 3824,
+          "bytes": [
+           97,
+           114,
+           100,
+           115
+          ]
+         },
+         {
+          "token": "arded",
+          "logprob": -12.25,
+          "token_id": 34276,
+          "bytes": [
+           97,
+           114,
+           100,
+           101,
+           100
+          ]
+         },
+         {
+          "token": "arts",
+          "logprob": -12.8125,
+          "token_id": 8740,
+          "bytes": [
+           97,
+           114,
+           116,
+           115
+          ]
+         },
+         {
+          "token": "ard",
+          "logprob": -13.25,
+          "token_id": 709,
+          "bytes": [
+           97,
+           114,
+           100
+          ]
+         },
+         {
+          "token": "ads",
+          "logprob": -13.625,
+          "token_id": 11269,
+          "bytes": [
+           97,
+           100,
+           115
+          ]
+         }
+        ],
+        "token_id": 3824,
+        "text_offset": 186
+       },
+       {
+        "token": ",",
+        "logprob": -0.43945312,
+        "sampling_logprob": null,
+        "bytes": [
+         44
+        ],
+        "top_logprobs": [
+         {
+          "token": ",",
+          "logprob": -0.43945312,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": " and",
+          "logprob": -1.0625,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " lined",
+          "logprob": -5.8125,
+          "token_id": 38560,
+          "bytes": [
+           32,
+           108,
+           105,
+           110,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " designed",
+          "logprob": -5.9375,
+          "token_id": 6499,
+          "bytes": [
+           32,
+           100,
+           101,
+           115,
+           105,
+           103,
+           110,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " laid",
+          "logprob": -6.5625,
+          "token_id": 25353,
+          "bytes": [
+           32,
+           108,
+           97,
+           105,
+           100
+          ]
+         }
+        ],
+        "token_id": 11,
+        "text_offset": 190
+       },
+       {
+        "token": " and",
+        "logprob": -0.265625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         97,
+         110,
+         100
+        ],
+        "top_logprobs": [
+         {
+          "token": " and",
+          "logprob": -0.265625,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " its",
+          "logprob": -1.515625,
+          "token_id": 1682,
+          "bytes": [
+           32,
+           105,
+           116,
+           115
+          ]
+         },
+         {
+          "token": " the",
+          "logprob": -4.53125,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " caf",
+          "logprob": -6.65625,
+          "token_id": 34484,
+          "bytes": [
+           32,
+           99,
+           97,
+           102
+          ]
+         },
+         {
+          "token": " cafes",
+          "logprob": -7.78125,
+          "token_id": 73123,
+          "bytes": [
+           32,
+           99,
+           97,
+           102,
+           101,
+           115
+          ]
+         }
+        ],
+        "token_id": 316,
+        "text_offset": 191
+       },
+       {
+        "token": " the",
+        "logprob": -2.015625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " its",
+          "logprob": -0.26171875,
+          "token_id": 1682,
+          "bytes": [
+           32,
+           105,
+           116,
+           115
+          ]
+         },
+         {
+          "token": " the",
+          "logprob": -2.015625,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " a",
+          "logprob": -3.515625,
+          "token_id": 261,
+          "bytes": [
+           32,
+           97
+          ]
+         },
+         {
+          "token": " landmarks",
+          "logprob": -4.125,
+          "token_id": 75762,
+          "bytes": [
+           32,
+           108,
+           97,
+           110,
+           100,
+           109,
+           97,
+           114,
+           107,
+           115
+          ]
+         },
+         {
+          "token": " for",
+          "logprob": -4.25,
+          "token_id": 395,
+          "bytes": [
+           32,
+           102,
+           111,
+           114
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 195
+       },
+       {
+        "token": " cathedral",
+        "logprob": -7.375,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         99,
+         97,
+         116,
+         104,
+         101,
+         100,
+         114,
+         97,
+         108
+        ],
+        "top_logprobs": [
+         {
+          "token": " way",
+          "logprob": -1.3203125,
+          "token_id": 2189,
+          "bytes": [
+           32,
+           119,
+           97,
+           121
+          ]
+         },
+         {
+          "token": " E",
+          "logprob": -1.5703125,
+          "token_id": 606,
+          "bytes": [
+           32,
+           69
+          ]
+         },
+         {
+          "token": " role",
+          "logprob": -3.3125,
+          "token_id": 6244,
+          "bytes": [
+           32,
+           114,
+           111,
+           108,
+           101
+          ]
+         },
+         {
+          "token": " many",
+          "logprob": -3.4375,
+          "token_id": 2133,
+          "bytes": [
+           32,
+           109,
+           97,
+           110,
+           121
+          ]
+         },
+         {
+          "token": " fact",
+          "logprob": -3.8125,
+          "token_id": 3303,
+          "bytes": [
+           32,
+           102,
+           97,
+           99,
+           116
+          ]
+         }
+        ],
+        "token_id": 88978,
+        "text_offset": 199
+       },
+       {
+        "token": " of",
+        "logprob": -0.09082031,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         111,
+         102
+        ],
+        "top_logprobs": [
+         {
+          "token": " of",
+          "logprob": -0.09082031,
+          "token_id": 318,
+          "bytes": [
+           32,
+           111,
+           102
+          ]
+         },
+         {
+          "token": " Notre",
+          "logprob": -3.09375,
+          "token_id": 84394,
+          "bytes": [
+           32,
+           78,
+           111,
+           116,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " that",
+          "logprob": -4.34375,
+          "token_id": 473,
+          "bytes": [
+           32,
+           116,
+           104,
+           97,
+           116
+          ]
+         },
+         {
+          "token": " at",
+          "logprob": -4.46875,
+          "token_id": 623,
+          "bytes": [
+           32,
+           97,
+           116
+          ]
+         },
+         {
+          "token": " on",
+          "logprob": -4.84375,
+          "token_id": 418,
+          "bytes": [
+           32,
+           111,
+           110
+          ]
+         }
+        ],
+        "token_id": 318,
+        "text_offset": 209
+       },
+       {
+        "token": " Notre",
+        "logprob": -0.00320435,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         78,
+         111,
+         116,
+         114,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " Notre",
+          "logprob": -0.00320435,
+          "token_id": 84394,
+          "bytes": [
+           32,
+           78,
+           111,
+           116,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " N",
+          "logprob": -7.625,
+          "token_id": 575,
+          "bytes": [
+           32,
+           78
+          ]
+         },
+         {
+          "token": " Not",
+          "logprob": -8.25,
+          "token_id": 5283,
+          "bytes": [
+           32,
+           78,
+           111,
+           116
+          ]
+         },
+         {
+          "token": " the",
+          "logprob": -8.375,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " Saint",
+          "logprob": -8.625,
+          "token_id": 25489,
+          "bytes": [
+           32,
+           83,
+           97,
+           105,
+           110,
+           116
+          ]
+         }
+        ],
+        "token_id": 84394,
+        "text_offset": 212
+       },
+       {
+        "token": " Dame",
+        "logprob": -1.4140625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         68,
+         97,
+         109,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": "-D",
+          "logprob": -0.4140625,
+          "token_id": 12460,
+          "bytes": [
+           45,
+           68
+          ]
+         },
+         {
+          "token": " Dame",
+          "logprob": -1.4140625,
+          "token_id": 74530,
+          "bytes": [
+           32,
+           68,
+           97,
+           109,
+           101
+          ]
+         },
+         {
+          "token": "\u2011",
+          "logprob": -2.40625,
+          "token_id": 95609,
+          "bytes": [
+           226,
+           128,
+           145
+          ]
+         },
+         {
+          "token": "D",
+          "logprob": -6.78125,
+          "token_id": 35,
+          "bytes": [
+           68
+          ]
+         },
+         {
+          "token": " -",
+          "logprob": -7.65625,
+          "token_id": 635,
+          "bytes": [
+           32,
+           45
+          ]
+         }
+        ],
+        "token_id": 74530,
+        "text_offset": 218
+       },
+       {
+        "token": ",",
+        "logprob": -1.90625,
+        "sampling_logprob": null,
+        "bytes": [
+         44
+        ],
+        "top_logprobs": [
+         {
+          "token": ".",
+          "logprob": -0.78125,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": ".\n\n",
+          "logprob": -1.65625,
+          "token_id": 1481,
+          "bytes": [
+           46,
+           10,
+           10
+          ]
+         },
+         {
+          "token": ",",
+          "logprob": -1.90625,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": ".\n",
+          "logprob": -3.03125,
+          "token_id": 341,
+          "bytes": [
+           46,
+           10
+          ]
+         },
+         {
+          "token": ".\",\n",
+          "logprob": -3.40625,
+          "token_id": 20829,
+          "bytes": [
+           46,
+           34,
+           44,
+           10
+          ]
+         }
+        ],
+        "token_id": 11,
+        "text_offset": 223
+       },
+       {
+        "token": " which",
+        "logprob": -0.30078125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         119,
+         104,
+         105,
+         99,
+         104
+        ],
+        "top_logprobs": [
+         {
+          "token": " which",
+          "logprob": -0.30078125,
+          "token_id": 1155,
+          "bytes": [
+           32,
+           119,
+           104,
+           105,
+           99,
+           104
+          ]
+         },
+         {
+          "token": " and",
+          "logprob": -2.546875,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " among",
+          "logprob": -3.171875,
+          "token_id": 6396,
+          "bytes": [
+           32,
+           97,
+           109,
+           111,
+           110,
+           103
+          ]
+         },
+         {
+          "token": " though",
+          "logprob": -3.421875,
+          "token_id": 5494,
+          "bytes": [
+           32,
+           116,
+           104,
+           111,
+           117,
+           103,
+           104
+          ]
+         },
+         {
+          "token": " whose",
+          "logprob": -3.671875,
+          "token_id": 11085,
+          "bytes": [
+           32,
+           119,
+           104,
+           111,
+           115,
+           101
+          ]
+         }
+        ],
+        "token_id": 1155,
+        "text_offset": 224
+       },
+       {
+        "token": " stands",
+        "logprob": -2.234375,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         115,
+         116,
+         97,
+         110,
+         100,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " was",
+          "logprob": -1.234375,
+          "token_id": 743,
+          "bytes": [
+           32,
+           119,
+           97,
+           115
+          ]
+         },
+         {
+          "token": " stands",
+          "logprob": -2.234375,
+          "token_id": 19207,
+          "bytes": [
+           32,
+           115,
+           116,
+           97,
+           110,
+           100,
+           115
+          ]
+         },
+         {
+          "token": " has",
+          "logprob": -2.359375,
+          "token_id": 924,
+          "bytes": [
+           32,
+           104,
+           97,
+           115
+          ]
+         },
+         {
+          "token": " is",
+          "logprob": -2.609375,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " reopened",
+          "logprob": -2.734375,
+          "token_id": 135673,
+          "bytes": [
+           32,
+           114,
+           101,
+           111,
+           112,
+           101,
+           110,
+           101,
+           100
+          ]
+         }
+        ],
+        "token_id": 19207,
+        "text_offset": 230
+       },
+       {
+        "token": " on",
+        "logprob": -0.06347656,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         111,
+         110
+        ],
+        "top_logprobs": [
+         {
+          "token": " on",
+          "logprob": -0.06347656,
+          "token_id": 418,
+          "bytes": [
+           32,
+           111,
+           110
+          ]
+         },
+         {
+          "token": " at",
+          "logprob": -3.4375,
+          "token_id": 623,
+          "bytes": [
+           32,
+           97,
+           116
+          ]
+         },
+         {
+          "token": " as",
+          "logprob": -4.5625,
+          "token_id": 559,
+          "bytes": [
+           32,
+           97,
+           115
+          ]
+         },
+         {
+          "token": " in",
+          "logprob": -5.0625,
+          "token_id": 306,
+          "bytes": [
+           32,
+           105,
+           110
+          ]
+         },
+         {
+          "token": " near",
+          "logprob": -5.3125,
+          "token_id": 4890,
+          "bytes": [
+           32,
+           110,
+           101,
+           97,
+           114
+          ]
+         }
+        ],
+        "token_id": 418,
+        "text_offset": 237
+       },
+       {
+        "token": " an",
+        "logprob": -0.26367188,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         97,
+         110
+        ],
+        "top_logprobs": [
+         {
+          "token": " an",
+          "logprob": -0.26367188,
+          "token_id": 519,
+          "bytes": [
+           32,
+           97,
+           110
+          ]
+         },
+         {
+          "token": " a",
+          "logprob": -2.015625,
+          "token_id": 261,
+          "bytes": [
+           32,
+           97
+          ]
+         },
+         {
+          "token": " the",
+          "logprob": -2.390625,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " one",
+          "logprob": -5.125,
+          "token_id": 1101,
+          "bytes": [
+           32,
+           111,
+           110,
+           101
+          ]
+         },
+         {
+          "token": " its",
+          "logprob": -7.75,
+          "token_id": 1682,
+          "bytes": [
+           32,
+           105,
+           116,
+           115
+          ]
+         }
+        ],
+        "token_id": 519,
+        "text_offset": 240
+       },
+       {
+        "token": " island",
+        "logprob": -0.00037003,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         105,
+         115,
+         108,
+         97,
+         110,
+         100
+        ],
+        "top_logprobs": [
+         {
+          "token": " island",
+          "logprob": -0.00037003,
+          "token_id": 15458,
+          "bytes": [
+           32,
+           105,
+           115,
+           108,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " is",
+          "logprob": -9.75,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " small",
+          "logprob": -10.125,
+          "token_id": 3307,
+          "bytes": [
+           32,
+           115,
+           109,
+           97,
+           108,
+           108
+          ]
+         },
+         {
+          "token": " Island",
+          "logprob": -10.5,
+          "token_id": 14116,
+          "bytes": [
+           32,
+           73,
+           115,
+           108,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": "\n",
+          "logprob": -10.875,
+          "token_id": 198,
+          "bytes": [
+           10
+          ]
+         }
+        ],
+        "token_id": 15458,
+        "text_offset": 243
+       },
+       {
+        "token": " in",
+        "logprob": -0.02038574,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         105,
+         110
+        ],
+        "top_logprobs": [
+         {
+          "token": " in",
+          "logprob": -0.02038574,
+          "token_id": 306,
+          "bytes": [
+           32,
+           105,
+           110
+          ]
+         },
+         {
+          "token": " at",
+          "logprob": -4.15625,
+          "token_id": 623,
+          "bytes": [
+           32,
+           97,
+           116
+          ]
+         },
+         {
+          "token": " where",
+          "logprob": -6.78125,
+          "token_id": 2009,
+          "bytes": [
+           32,
+           119,
+           104,
+           101,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " called",
+          "logprob": -6.90625,
+          "token_id": 4387,
+          "bytes": [
+           32,
+           99,
+           97,
+           108,
+           108,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " near",
+          "logprob": -7.53125,
+          "token_id": 4890,
+          "bytes": [
+           32,
+           110,
+           101,
+           97,
+           114
+          ]
+         }
+        ],
+        "token_id": 306,
+        "text_offset": 250
+       },
+       {
+        "token": " the",
+        "logprob": -0.00106049,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -0.00106049,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " its",
+          "logprob": -7.625,
+          "token_id": 1682,
+          "bytes": [
+           32,
+           105,
+           116,
+           115
+          ]
+         },
+         {
+          "token": " that",
+          "logprob": -8.375,
+          "token_id": 473,
+          "bytes": [
+           32,
+           116,
+           104,
+           97,
+           116
+          ]
+         },
+         {
+          "token": "\n\n",
+          "logprob": -10.125,
+          "token_id": 382,
+          "bytes": [
+           10,
+           10
+          ]
+         },
+         {
+          "token": "\n",
+          "logprob": -10.375,
+          "token_id": 198,
+          "bytes": [
+           10
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 253
+       },
+       {
+        "token": " middle",
+        "logprob": -0.32226562,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         109,
+         105,
+         100,
+         100,
+         108,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " middle",
+          "logprob": -0.32226562,
+          "token_id": 9947,
+          "bytes": [
+           32,
+           109,
+           105,
+           100,
+           100,
+           108,
+           101
+          ]
+         },
+         {
+          "token": " river",
+          "logprob": -1.5703125,
+          "token_id": 18002,
+          "bytes": [
+           32,
+           114,
+           105,
+           118,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " heart",
+          "logprob": -3.578125,
+          "token_id": 5905,
+          "bytes": [
+           32,
+           104,
+           101,
+           97,
+           114,
+           116
+          ]
+         },
+         {
+          "token": " Seine",
+          "logprob": -3.828125,
+          "token_id": 163561,
+          "bytes": [
+           32,
+           83,
+           101,
+           105,
+           110,
+           101
+          ]
+         },
+         {
+          "token": " centre",
+          "logprob": -4.4375,
+          "token_id": 14702,
+          "bytes": [
+           32,
+           99,
+           101,
+           110,
+           116,
+           114,
+           101
+          ]
+         }
+        ],
+        "token_id": 9947,
+        "text_offset": 257
+       },
+       {
+        "token": " of",
+        "logprob": -0.00072861,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         111,
+         102
+        ],
+        "top_logprobs": [
+         {
+          "token": " of",
+          "logprob": -0.00072861,
+          "token_id": 318,
+          "bytes": [
+           32,
+           111,
+           102
+          ]
+         },
+         {
+          "token": "...\n\n",
+          "logprob": -9.375,
+          "token_id": 77871,
+          "bytes": [
+           46,
+           46,
+           46,
+           10,
+           10
+          ]
+         },
+         {
+          "token": "\n\n",
+          "logprob": -9.375,
+          "token_id": 382,
+          "bytes": [
+           10,
+           10
+          ]
+         },
+         {
+          "token": "...",
+          "logprob": -9.625,
+          "token_id": 1614,
+          "bytes": [
+           46,
+           46,
+           46
+          ]
+         },
+         {
+          "token": ".",
+          "logprob": -9.875,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         }
+        ],
+        "token_id": 318,
+        "text_offset": 264
+       },
+       {
+        "token": " the",
+        "logprob": -0.00250244,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -0.00250244,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " that",
+          "logprob": -6.875,
+          "token_id": 473,
+          "bytes": [
+           32,
+           116,
+           104,
+           97,
+           116
+          ]
+         },
+         {
+          "token": " town",
+          "logprob": -7.625,
+          "token_id": 7874,
+          "bytes": [
+           32,
+           116,
+           111,
+           119,
+           110
+          ]
+         },
+         {
+          "token": " its",
+          "logprob": -8.25,
+          "token_id": 1682,
+          "bytes": [
+           32,
+           105,
+           116,
+           115
+          ]
+         },
+         {
+          "token": " it",
+          "logprob": -8.25,
+          "token_id": 483,
+          "bytes": [
+           32,
+           105,
+           116
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 267
+       },
+       {
+        "token": " river",
+        "logprob": -0.06884766,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         114,
+         105,
+         118,
+         101,
+         114
+        ],
+        "top_logprobs": [
+         {
+          "token": " river",
+          "logprob": -0.06884766,
+          "token_id": 18002,
+          "bytes": [
+           32,
+           114,
+           105,
+           118,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " Seine",
+          "logprob": -3.0625,
+          "token_id": 163561,
+          "bytes": [
+           32,
+           83,
+           101,
+           105,
+           110,
+           101
+          ]
+         },
+         {
+          "token": " city",
+          "logprob": -4.0625,
+          "token_id": 5243,
+          "bytes": [
+           32,
+           99,
+           105,
+           116,
+           121
+          ]
+         },
+         {
+          "token": " water",
+          "logprob": -7.25,
+          "token_id": 3431,
+          "bytes": [
+           32,
+           119,
+           97,
+           116,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " old",
+          "logprob": -7.6875,
+          "token_id": 3410,
+          "bytes": [
+           32,
+           111,
+           108,
+           100
+          ]
+         }
+        ],
+        "token_id": 18002,
+        "text_offset": 271
+       },
+       {
+        "token": ".",
+        "logprob": -0.88671875,
+        "sampling_logprob": null,
+        "bytes": [
+         46
+        ],
+        "top_logprobs": [
+         {
+          "token": ".",
+          "logprob": -0.88671875,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": ".\n\n",
+          "logprob": -1.1328125,
+          "token_id": 1481,
+          "bytes": [
+           46,
+           10,
+           10
+          ]
+         },
+         {
+          "token": ".\",\n",
+          "logprob": -2.390625,
+          "token_id": 20829,
+          "bytes": [
+           46,
+           34,
+           44,
+           10
+          ]
+         },
+         {
+          "token": ".\n",
+          "logprob": -2.640625,
+          "token_id": 341,
+          "bytes": [
+           46,
+           10
+          ]
+         },
+         {
+          "token": ".\",",
+          "logprob": -3.890625,
+          "token_id": 21593,
+          "bytes": [
+           46,
+           34,
+           44
+          ]
+         }
+        ],
+        "token_id": 13,
+        "text_offset": 277
+       },
+       {
+        "token": " Millions",
+        "logprob": -3.390625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         77,
+         105,
+         108,
+         108,
+         105,
+         111,
+         110,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " Paris",
+          "logprob": -1.1328125,
+          "token_id": 17374,
+          "bytes": [
+           32,
+           80,
+           97,
+           114,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " The",
+          "logprob": -2.015625,
+          "token_id": 646,
+          "bytes": [
+           32,
+           84,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " France",
+          "logprob": -3.015625,
+          "token_id": 15383,
+          "bytes": [
+           32,
+           70,
+           114,
+           97,
+           110,
+           99,
+           101
+          ]
+         },
+         {
+          "token": " It",
+          "logprob": -3.265625,
+          "token_id": 1344,
+          "bytes": [
+           32,
+           73,
+           116
+          ]
+         },
+         {
+          "token": " Millions",
+          "logprob": -3.390625,
+          "token_id": 137237,
+          "bytes": [
+           32,
+           77,
+           105,
+           108,
+           108,
+           105,
+           111,
+           110,
+           115
+          ]
+         }
+        ],
+        "token_id": 137237,
+        "text_offset": 278
+       },
+       {
+        "token": " of",
+        "logprob": -0.01361084,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         111,
+         102
+        ],
+        "top_logprobs": [
+         {
+          "token": " of",
+          "logprob": -0.01361084,
+          "token_id": 318,
+          "bytes": [
+           32,
+           111,
+           102
+          ]
+         },
+         {
+          "token": " visit",
+          "logprob": -4.5,
+          "token_id": 4086,
+          "bytes": [
+           32,
+           118,
+           105,
+           115,
+           105,
+           116
+          ]
+         },
+         {
+          "token": " travel",
+          "logprob": -7.0,
+          "token_id": 6462,
+          "bytes": [
+           32,
+           116,
+           114,
+           97,
+           118,
+           101,
+           108
+          ]
+         },
+         {
+          "token": " come",
+          "logprob": -7.25,
+          "token_id": 3566,
+          "bytes": [
+           32,
+           99,
+           111,
+           109,
+           101
+          ]
+         },
+         {
+          "token": " live",
+          "logprob": -8.5,
+          "token_id": 5107,
+          "bytes": [
+           32,
+           108,
+           105,
+           118,
+           101
+          ]
+         }
+        ],
+        "token_id": 318,
+        "text_offset": 287
+       },
+       {
+        "token": " visitors",
+        "logprob": -0.9296875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         118,
+         105,
+         115,
+         105,
+         116,
+         111,
+         114,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " people",
+          "logprob": -0.8046875,
+          "token_id": 1873,
+          "bytes": [
+           32,
+           112,
+           101,
+           111,
+           112,
+           108,
+           101
+          ]
+         },
+         {
+          "token": " visitors",
+          "logprob": -0.9296875,
+          "token_id": 13375,
+          "bytes": [
+           32,
+           118,
+           105,
+           115,
+           105,
+           116,
+           111,
+           114,
+           115
+          ]
+         },
+         {
+          "token": " tourists",
+          "logprob": -1.9296875,
+          "token_id": 34529,
+          "bytes": [
+           32,
+           116,
+           111,
+           117,
+           114,
+           105,
+           115,
+           116,
+           115
+          ]
+         },
+         {
+          "token": " travellers",
+          "logprob": -4.8125,
+          "token_id": 67194,
+          "bytes": [
+           32,
+           116,
+           114,
+           97,
+           118,
+           101,
+           108,
+           108,
+           101,
+           114,
+           115
+          ]
+         },
+         {
+          "token": " students",
+          "logprob": -6.5625,
+          "token_id": 4298,
+          "bytes": [
+           32,
+           115,
+           116,
+           117,
+           100,
+           101,
+           110,
+           116,
+           115
+          ]
+         }
+        ],
+        "token_id": 13375,
+        "text_offset": 290
+       },
+       {
+        "token": " arrive",
+        "logprob": -1.8515625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         97,
+         114,
+         114,
+         105,
+         118,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " come",
+          "logprob": -0.34765625,
+          "token_id": 3566,
+          "bytes": [
+           32,
+           99,
+           111,
+           109,
+           101
+          ]
+         },
+         {
+          "token": " arrive",
+          "logprob": -1.8515625,
+          "token_id": 20461,
+          "bytes": [
+           32,
+           97,
+           114,
+           114,
+           105,
+           118,
+           101
+          ]
+         },
+         {
+          "token": " travel",
+          "logprob": -2.34375,
+          "token_id": 6462,
+          "bytes": [
+           32,
+           116,
+           114,
+           97,
+           118,
+           101,
+           108
+          ]
+         },
+         {
+          "token": " walk",
+          "logprob": -4.09375,
+          "token_id": 5335,
+          "bytes": [
+           32,
+           119,
+           97,
+           108,
+           107
+          ]
+         },
+         {
+          "token": " go",
+          "logprob": -5.09375,
+          "token_id": 970,
+          "bytes": [
+           32,
+           103,
+           111
+          ]
+         }
+        ],
+        "token_id": 20461,
+        "text_offset": 299
+       },
+       {
+        "token": " each",
+        "logprob": -0.3828125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         101,
+         97,
+         99,
+         104
+        ],
+        "top_logprobs": [
+         {
+          "token": " each",
+          "logprob": -0.3828125,
+          "token_id": 2458,
+          "bytes": [
+           32,
+           101,
+           97,
+           99,
+           104
+          ]
+         },
+         {
+          "token": " every",
+          "logprob": -1.3828125,
+          "token_id": 1922,
+          "bytes": [
+           32,
+           101,
+           118,
+           101,
+           114,
+           121
+          ]
+         },
+         {
+          "token": " in",
+          "logprob": -3.0,
+          "token_id": 306,
+          "bytes": [
+           32,
+           105,
+           110
+          ]
+         },
+         {
+          "token": " there",
+          "logprob": -4.5,
+          "token_id": 1459,
+          "bytes": [
+           32,
+           116,
+           104,
+           101,
+           114,
+           101
+          ]
+         },
+         {
+          "token": " here",
+          "logprob": -5.625,
+          "token_id": 2397,
+          "bytes": [
+           32,
+           104,
+           101,
+           114,
+           101
+          ]
+         }
+        ],
+        "token_id": 2458,
+        "text_offset": 306
+       },
+       {
+        "token": " year",
+        "logprob": -0.00105286,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         121,
+         101,
+         97,
+         114
+        ],
+        "top_logprobs": [
+         {
+          "token": " year",
+          "logprob": -0.00105286,
+          "token_id": 1389,
+          "bytes": [
+           32,
+           121,
+           101,
+           97,
+           114
+          ]
+         },
+         {
+          "token": " summer",
+          "logprob": -7.875,
+          "token_id": 8398,
+          "bytes": [
+           32,
+           115,
+           117,
+           109,
+           109,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " spring",
+          "logprob": -9.3125,
+          "token_id": 12435,
+          "bytes": [
+           32,
+           115,
+           112,
+           114,
+           105,
+           110,
+           103
+          ]
+         },
+         {
+          "token": " month",
+          "logprob": -9.5,
+          "token_id": 3335,
+          "bytes": [
+           32,
+           109,
+           111,
+           110,
+           116,
+           104
+          ]
+         },
+         {
+          "token": " day",
+          "logprob": -10.0,
+          "token_id": 2422,
+          "bytes": [
+           32,
+           100,
+           97,
+           121
+          ]
+         }
+        ],
+        "token_id": 1389,
+        "text_offset": 311
+       },
+       {
+        "token": " to",
+        "logprob": -0.27148438,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         111
+        ],
+        "top_logprobs": [
+         {
+          "token": " to",
+          "logprob": -0.27148438,
+          "token_id": 308,
+          "bytes": [
+           32,
+           116,
+           111
+          ]
+         },
+         {
+          "token": ",",
+          "logprob": -1.7734375,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": ".",
+          "logprob": -3.640625,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": ".\n\n",
+          "logprob": -4.28125,
+          "token_id": 1481,
+          "bytes": [
+           46,
+           10,
+           10
+          ]
+         },
+         {
+          "token": " from",
+          "logprob": -4.28125,
+          "token_id": 658,
+          "bytes": [
+           32,
+           102,
+           114,
+           111,
+           109
+          ]
+         }
+        ],
+        "token_id": 308,
+        "text_offset": 316
+       },
+       {
+        "token": " see",
+        "logprob": -0.70703125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         115,
+         101,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " see",
+          "logprob": -0.70703125,
+          "token_id": 2050,
+          "bytes": [
+           32,
+           115,
+           101,
+           101
+          ]
+         },
+         {
+          "token": " walk",
+          "logprob": -0.70703125,
+          "token_id": 5335,
+          "bytes": [
+           32,
+           119,
+           97,
+           108,
+           107
+          ]
+         },
+         {
+          "token": " climb",
+          "logprob": -4.84375,
+          "token_id": 21743,
+          "bytes": [
+           32,
+           99,
+           108,
+           105,
+           109,
+           98
+          ]
+         },
+         {
+          "token": " experience",
+          "logprob": -6.34375,
+          "token_id": 3418,
+          "bytes": [
+           32,
+           101,
+           120,
+           112,
+           101,
+           114,
+           105,
+           101,
+           110,
+           99,
+           101
+          ]
+         },
+         {
+          "token": " admire",
+          "logprob": -6.71875,
+          "token_id": 58358,
+          "bytes": [
+           32,
+           97,
+           100,
+           109,
+           105,
+           114,
+           101
+          ]
+         }
+        ],
+        "token_id": 2050,
+        "text_offset": 319
+       },
+       {
+        "token": " the",
+        "logprob": -0.3046875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -0.3046875,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " its",
+          "logprob": -1.6796875,
+          "token_id": 1682,
+          "bytes": [
+           32,
+           105,
+           116,
+           115
+          ]
+         },
+         {
+          "token": " these",
+          "logprob": -3.1875,
+          "token_id": 1946,
+          "bytes": [
+           32,
+           116,
+           104,
+           101,
+           115,
+           101
+          ]
+         },
+         {
+          "token": " landmarks",
+          "logprob": -4.1875,
+          "token_id": 75762,
+          "bytes": [
+           32,
+           108,
+           97,
+           110,
+           100,
+           109,
+           97,
+           114,
+           107,
+           115
+          ]
+         },
+         {
+          "token": " it",
+          "logprob": -4.8125,
+          "token_id": 483,
+          "bytes": [
+           32,
+           105,
+           116
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 323
+       },
+       {
+        "token": " Lou",
+        "logprob": -2.4375,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         76,
+         111,
+         117
+        ],
+        "top_logprobs": [
+         {
+          "token": " E",
+          "logprob": -0.31445312,
+          "token_id": 606,
+          "bytes": [
+           32,
+           69
+          ]
+         },
+         {
+          "token": " Lou",
+          "logprob": -2.4375,
+          "token_id": 14715,
+          "bytes": [
+           32,
+           76,
+           111,
+           117
+          ]
+         },
+         {
+          "token": " art",
+          "logprob": -3.0625,
+          "token_id": 2718,
+          "bytes": [
+           32,
+           97,
+           114,
+           116
+          ]
+         },
+         {
+          "token": " tower",
+          "logprob": -3.8125,
+          "token_id": 32096,
+          "bytes": [
+           32,
+           116,
+           111,
+           119,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " monuments",
+          "logprob": -3.9375,
+          "token_id": 76662,
+          "bytes": [
+           32,
+           109,
+           111,
+           110,
+           117,
+           109,
+           101,
+           110,
+           116,
+           115
+          ]
+         }
+        ],
+        "token_id": 14715,
+        "text_offset": 327
+       },
+       {
+        "token": "vre",
+        "logprob": -0.00021076,
+        "sampling_logprob": null,
+        "bytes": [
+         118,
+         114,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": "vre",
+          "logprob": -0.00021076,
+          "token_id": 91527,
+          "bytes": [
+           118,
+           114,
+           101
+          ]
+         },
+         {
+          "token": "v",
+          "logprob": -9.625,
+          "token_id": 85,
+          "bytes": [
+           118
+          ]
+         },
+         {
+          "token": "ver",
+          "logprob": -10.125,
+          "token_id": 399,
+          "bytes": [
+           118,
+           101,
+           114
+          ]
+         },
+         {
+          "token": "ve",
+          "logprob": -10.25,
+          "token_id": 367,
+          "bytes": [
+           118,
+           101
+          ]
+         },
+         {
+          "token": "vr",
+          "logprob": -11.0625,
+          "token_id": 16978,
+          "bytes": [
+           118,
+           114
+          ]
+         }
+        ],
+        "token_id": 91527,
+        "text_offset": 331
+       },
+       {
+        "token": " and",
+        "logprob": -1.1640625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         97,
+         110,
+         100
+        ],
+        "top_logprobs": [
+         {
+          "token": ",",
+          "logprob": -0.41796875,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": " and",
+          "logprob": -1.1640625,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " museum",
+          "logprob": -4.15625,
+          "token_id": 24220,
+          "bytes": [
+           32,
+           109,
+           117,
+           115,
+           101,
+           117,
+           109
+          ]
+         },
+         {
+          "token": " Museum",
+          "logprob": -5.15625,
+          "token_id": 16575,
+          "bytes": [
+           32,
+           77,
+           117,
+           115,
+           101,
+           117,
+           109
+          ]
+         },
+         {
+          "token": " or",
+          "logprob": -6.40625,
+          "token_id": 528,
+          "bytes": [
+           32,
+           111,
+           114
+          ]
+         }
+        ],
+        "token_id": 316,
+        "text_offset": 334
+       },
+       {
+        "token": " the",
+        "logprob": -0.6328125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -0.6328125,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " to",
+          "logprob": -1.5078125,
+          "token_id": 308,
+          "bytes": [
+           32,
+           116,
+           111
+          ]
+         },
+         {
+          "token": " walk",
+          "logprob": -2.0,
+          "token_id": 5335,
+          "bytes": [
+           32,
+           119,
+           97,
+           108,
+           107
+          ]
+         },
+         {
+          "token": " climb",
+          "logprob": -2.25,
+          "token_id": 21743,
+          "bytes": [
+           32,
+           99,
+           108,
+           105,
+           109,
+           98
+          ]
+         },
+         {
+          "token": " other",
+          "logprob": -5.75,
+          "token_id": 1356,
+          "bytes": [
+           32,
+           111,
+           116,
+           104,
+           101,
+           114
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 338
+       },
+       {
+        "token": " E",
+        "logprob": -0.08789062,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         69
+        ],
+        "top_logprobs": [
+         {
+          "token": " E",
+          "logprob": -0.08789062,
+          "token_id": 606,
+          "bytes": [
+           32,
+           69
+          ]
+         },
+         {
+          "token": " tower",
+          "logprob": -3.09375,
+          "token_id": 32096,
+          "bytes": [
+           32,
+           116,
+           111,
+           119,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " Arc",
+          "logprob": -4.84375,
+          "token_id": 27915,
+          "bytes": [
+           32,
+           65,
+           114,
+           99
+          ]
+         },
+         {
+          "token": " palace",
+          "logprob": -5.59375,
+          "token_id": 66438,
+          "bytes": [
+           32,
+           112,
+           97,
+           108,
+           97,
+           99,
+           101
+          ]
+         },
+         {
+          "token": " iron",
+          "logprob": -6.34375,
+          "token_id": 18157,
+          "bytes": [
+           32,
+           105,
+           114,
+           111,
+           110
+          ]
+         }
+        ],
+        "token_id": 606,
+        "text_offset": 342
+       },
+       {
+        "token": "iffel",
+        "logprob": -0.00023746,
+        "sampling_logprob": null,
+        "bytes": [
+         105,
+         102,
+         102,
+         101,
+         108
+        ],
+        "top_logprobs": [
+         {
+          "token": "iffel",
+          "logprob": -0.00023746,
+          "token_id": 142957,
+          "bytes": [
+           105,
+           102,
+           102,
+           101,
+           108
+          ]
+         },
+         {
+          "token": "if",
+          "logprob": -8.8125,
+          "token_id": 361,
+          "bytes": [
+           105,
+           102
+          ]
+         },
+         {
+          "token": "iff",
+          "logprob": -10.375,
+          "token_id": 3758,
+          "bytes": [
+           105,
+           102,
+           102
+          ]
+         },
+         {
+          "token": "iffe",
+          "logprob": -10.75,
+          "token_id": 76850,
+          "bytes": [
+           105,
+           102,
+           102,
+           101
+          ]
+         },
+         {
+          "token": "iffer",
+          "logprob": -12.1875,
+          "token_id": 17928,
+          "bytes": [
+           105,
+           102,
+           102,
+           101,
+           114
+          ]
+         }
+        ],
+        "token_id": 142957,
+        "text_offset": 344
+       },
+       {
+        "token": " Tower",
+        "logprob": -0.00289917,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         84,
+         111,
+         119,
+         101,
+         114
+        ],
+        "top_logprobs": [
+         {
+          "token": " Tower",
+          "logprob": -0.00289917,
+          "token_id": 37092,
+          "bytes": [
+           32,
+           84,
+           111,
+           119,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " tower",
+          "logprob": -6.0,
+          "token_id": 32096,
+          "bytes": [
+           32,
+           116,
+           111,
+           119,
+           101,
+           114
+          ]
+         },
+         {
+          "token": "Tower",
+          "logprob": -9.8125,
+          "token_id": 65984,
+          "bytes": [
+           84,
+           111,
+           119,
+           101,
+           114
+          ]
+         },
+         {
+          "token": " structure",
+          "logprob": -10.125,
+          "token_id": 7828,
+          "bytes": [
+           32,
+           115,
+           116,
+           114,
+           117,
+           99,
+           116,
+           117,
+           114,
+           101
+          ]
+         },
+         {
+          "token": ".\n\n",
+          "logprob": -10.75,
+          "token_id": 1481,
+          "bytes": [
+           46,
+           10,
+           10
+          ]
+         }
+        ],
+        "token_id": 37092,
+        "text_offset": 349
+       },
+       {
+        "token": ",",
+        "logprob": -1.0,
+        "sampling_logprob": null,
+        "bytes": [
+         44
+        ],
+        "top_logprobs": [
+         {
+          "token": ",",
+          "logprob": -1.0,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": ".\n\n",
+          "logprob": -1.375,
+          "token_id": 1481,
+          "bytes": [
+           46,
+           10,
+           10
+          ]
+         },
+         {
+          "token": ".",
+          "logprob": -1.375,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": ".\",\n",
+          "logprob": -3.375,
+          "token_id": 20829,
+          "bytes": [
+           46,
+           34,
+           44,
+           10
+          ]
+         },
+         {
+          "token": ".\n",
+          "logprob": -3.375,
+          "token_id": 341,
+          "bytes": [
+           46,
+           10
+          ]
+         }
+        ],
+        "token_id": 11,
+        "text_offset": 355
+       },
+       {
+        "token": " and",
+        "logprob": -1.4921875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         97,
+         110,
+         100
+        ],
+        "top_logprobs": [
+         {
+          "token": " but",
+          "logprob": -1.1171875,
+          "token_id": 996,
+          "bytes": [
+           32,
+           98,
+           117,
+           116
+          ]
+         },
+         {
+          "token": " and",
+          "logprob": -1.4921875,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " though",
+          "logprob": -2.234375,
+          "token_id": 5494,
+          "bytes": [
+           32,
+           116,
+           104,
+           111,
+           117,
+           103,
+           104
+          ]
+         },
+         {
+          "token": " which",
+          "logprob": -2.359375,
+          "token_id": 1155,
+          "bytes": [
+           32,
+           119,
+           104,
+           105,
+           99,
+           104
+          ]
+         },
+         {
+          "token": " making",
+          "logprob": -2.609375,
+          "token_id": 4244,
+          "bytes": [
+           32,
+           109,
+           97,
+           107,
+           105,
+           110,
+           103
+          ]
+         }
+        ],
+        "token_id": 316,
+        "text_offset": 356
+       },
+       {
+        "token": " the",
+        "logprob": -0.68359375,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -0.68359375,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " to",
+          "logprob": -1.6796875,
+          "token_id": 308,
+          "bytes": [
+           32,
+           116,
+           111
+          ]
+         },
+         {
+          "token": " many",
+          "logprob": -1.8046875,
+          "token_id": 2133,
+          "bytes": [
+           32,
+           109,
+           97,
+           110,
+           121
+          ]
+         },
+         {
+          "token": " Paris",
+          "logprob": -2.6875,
+          "token_id": 17374,
+          "bytes": [
+           32,
+           80,
+           97,
+           114,
+           105,
+           115
+          ]
+         },
+         {
+          "token": " they",
+          "logprob": -4.3125,
+          "token_id": 1129,
+          "bytes": [
+           32,
+           116,
+           104,
+           101,
+           121
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 360
+       },
+       {
+        "token": " surrounding",
+        "logprob": -4.8125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         115,
+         117,
+         114,
+         114,
+         111,
+         117,
+         110,
+         100,
+         105,
+         110,
+         103
+        ],
+        "top_logprobs": [
+         {
+          "token": " city",
+          "logprob": -0.3125,
+          "token_id": 5243,
+          "bytes": [
+           32,
+           99,
+           105,
+           116,
+           121
+          ]
+         },
+         {
+          "token": " streets",
+          "logprob": -3.0625,
+          "token_id": 22345,
+          "bytes": [
+           32,
+           115,
+           116,
+           114,
+           101,
+           101,
+           116,
+           115
+          ]
+         },
+         {
+          "token": " metro",
+          "logprob": -3.5625,
+          "token_id": 36294,
+          "bytes": [
+           32,
+           109,
+           101,
+           116,
+           114,
+           111
+          ]
+         },
+         {
+          "token": " city's",
+          "logprob": -3.6875,
+          "token_id": 72736,
+          "bytes": [
+           32,
+           99,
+           105,
+           116,
+           121,
+           39,
+           115
+          ]
+         },
+         {
+          "token": " caf",
+          "logprob": -3.8125,
+          "token_id": 34484,
+          "bytes": [
+           32,
+           99,
+           97,
+           102
+          ]
+         }
+        ],
+        "token_id": 16699,
+        "text_offset": 364
+       },
+       {
+        "token": " region",
+        "logprob": -0.36132812,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         114,
+         101,
+         103,
+         105,
+         111,
+         110
+        ],
+        "top_logprobs": [
+         {
+          "token": " region",
+          "logprob": -0.36132812,
+          "token_id": 7604,
+          "bytes": [
+           32,
+           114,
+           101,
+           103,
+           105,
+           111,
+           110
+          ]
+         },
+         {
+          "token": " suburbs",
+          "logprob": -1.859375,
+          "token_id": 69271,
+          "bytes": [
+           32,
+           115,
+           117,
+           98,
+           117,
+           114,
+           98,
+           115
+          ]
+         },
+         {
+          "token": " metropolitan",
+          "logprob": -3.734375,
+          "token_id": 77602,
+          "bytes": [
+           32,
+           109,
+           101,
+           116,
+           114,
+           111,
+           112,
+           111,
+           108,
+           105,
+           116,
+           97,
+           110
+          ]
+         },
+         {
+          "token": " \u00ce",
+          "logprob": -3.859375,
+          "token_id": 99635,
+          "bytes": [
+           32,
+           195,
+           142
+          ]
+         },
+         {
+          "token": " area",
+          "logprob": -4.125,
+          "token_id": 3602,
+          "bytes": [
+           32,
+           97,
+           114,
+           101,
+           97
+          ]
+         }
+        ],
+        "token_id": 7604,
+        "text_offset": 376
+       },
+       {
+        "token": " remains",
+        "logprob": -2.875,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         114,
+         101,
+         109,
+         97,
+         105,
+         110,
+         115
+        ],
+        "top_logprobs": [
+         {
+          "token": " is",
+          "logprob": -1.125,
+          "token_id": 387,
+          "bytes": [
+           32,
+           105,
+           115
+          ]
+         },
+         {
+          "token": ",",
+          "logprob": -1.75,
+          "token_id": 11,
+          "bytes": [
+           44
+          ]
+         },
+         {
+          "token": " produces",
+          "logprob": -1.875,
+          "token_id": 25015,
+          "bytes": [
+           32,
+           112,
+           114,
+           111,
+           100,
+           117,
+           99,
+           101,
+           115
+          ]
+         },
+         {
+          "token": " of",
+          "logprob": -1.875,
+          "token_id": 318,
+          "bytes": [
+           32,
+           111,
+           102
+          ]
+         },
+         {
+          "token": " contains",
+          "logprob": -2.875,
+          "token_id": 7730,
+          "bytes": [
+           32,
+           99,
+           111,
+           110,
+           116,
+           97,
+           105,
+           110,
+           115
+          ]
+         }
+        ],
+        "token_id": 13508,
+        "text_offset": 383
+       },
+       {
+        "token": " the",
+        "logprob": -0.19628906,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         116,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -0.19628906,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " one",
+          "logprob": -1.9453125,
+          "token_id": 1101,
+          "bytes": [
+           32,
+           111,
+           110,
+           101
+          ]
+         },
+         {
+          "token": " a",
+          "logprob": -4.4375,
+          "token_id": 261,
+          "bytes": [
+           32,
+           97
+          ]
+         },
+         {
+          "token": " home",
+          "logprob": -4.6875,
+          "token_id": 2445,
+          "bytes": [
+           32,
+           104,
+           111,
+           109,
+           101
+          ]
+         },
+         {
+          "token": " densely",
+          "logprob": -4.9375,
+          "token_id": 142860,
+          "bytes": [
+           32,
+           100,
+           101,
+           110,
+           115,
+           101,
+           108,
+           121
+          ]
+         }
+        ],
+        "token_id": 276,
+        "text_offset": 391
+       },
+       {
+        "token": " most",
+        "logprob": -0.3515625,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         109,
+         111,
+         115,
+         116
+        ],
+        "top_logprobs": [
+         {
+          "token": " most",
+          "logprob": -0.3515625,
+          "token_id": 1867,
+          "bytes": [
+           32,
+           109,
+           111,
+           115,
+           116
+          ]
+         },
+         {
+          "token": " economic",
+          "logprob": -1.8515625,
+          "token_id": 10984,
+          "bytes": [
+           32,
+           101,
+           99,
+           111,
+           110,
+           111,
+           109,
+           105,
+           99
+          ]
+         },
+         {
+          "token": " largest",
+          "logprob": -2.84375,
+          "token_id": 10604,
+          "bytes": [
+           32,
+           108,
+           97,
+           114,
+           103,
+           101,
+           115,
+           116
+          ]
+         },
+         {
+          "token": " heart",
+          "logprob": -3.71875,
+          "token_id": 5905,
+          "bytes": [
+           32,
+           104,
+           101,
+           97,
+           114,
+           116
+          ]
+         },
+         {
+          "token": " centre",
+          "logprob": -4.46875,
+          "token_id": 14702,
+          "bytes": [
+           32,
+           99,
+           101,
+           110,
+           116,
+           114,
+           101
+          ]
+         }
+        ],
+        "token_id": 1867,
+        "text_offset": 395
+       },
+       {
+        "token": " densely",
+        "logprob": -0.20214844,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         100,
+         101,
+         110,
+         115,
+         101,
+         108,
+         121
+        ],
+        "top_logprobs": [
+         {
+          "token": " densely",
+          "logprob": -0.20214844,
+          "token_id": 142860,
+          "bytes": [
+           32,
+           100,
+           101,
+           110,
+           115,
+           101,
+           108,
+           121
+          ]
+         },
+         {
+          "token": " populated",
+          "logprob": -2.703125,
+          "token_id": 49679,
+          "bytes": [
+           32,
+           112,
+           111,
+           112,
+           117,
+           108,
+           97,
+           116,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " pop",
+          "logprob": -2.828125,
+          "token_id": 3636,
+          "bytes": [
+           32,
+           112,
+           111,
+           112
+          ]
+         },
+         {
+          "token": " visited",
+          "logprob": -3.203125,
+          "token_id": 18204,
+          "bytes": [
+           32,
+           118,
+           105,
+           115,
+           105,
+           116,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " economically",
+          "logprob": -5.1875,
+          "token_id": 71790,
+          "bytes": [
+           32,
+           101,
+           99,
+           111,
+           110,
+           111,
+           109,
+           105,
+           99,
+           97,
+           108,
+           108,
+           121
+          ]
+         }
+        ],
+        "token_id": 142860,
+        "text_offset": 400
+       },
+       {
+        "token": " populated",
+        "logprob": -0.00436401,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         112,
+         111,
+         112,
+         117,
+         108,
+         97,
+         116,
+         101,
+         100
+        ],
+        "top_logprobs": [
+         {
+          "token": " populated",
+          "logprob": -0.00436401,
+          "token_id": 49679,
+          "bytes": [
+           32,
+           112,
+           111,
+           112,
+           117,
+           108,
+           97,
+           116,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " settled",
+          "logprob": -6.25,
+          "token_id": 31563,
+          "bytes": [
+           32,
+           115,
+           101,
+           116,
+           116,
+           108,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " inhabited",
+          "logprob": -7.0,
+          "token_id": 111223,
+          "bytes": [
+           32,
+           105,
+           110,
+           104,
+           97,
+           98,
+           105,
+           116,
+           101,
+           100
+          ]
+         },
+         {
+          "token": " urban",
+          "logprob": -7.75,
+          "token_id": 19771,
+          "bytes": [
+           32,
+           117,
+           114,
+           98,
+           97,
+           110
+          ]
+         },
+         {
+          "token": " pe",
+          "logprob": -7.875,
+          "token_id": 1557,
+          "bytes": [
+           32,
+           112,
+           101
+          ]
+         }
+        ],
+        "token_id": 49679,
+        "text_offset": 408
+       },
+       {
+        "token": " part",
+        "logprob": -0.07080078,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         112,
+         97,
+         114,
+         116
+        ],
+        "top_logprobs": [
+         {
+          "token": " part",
+          "logprob": -0.07080078,
+          "token_id": 1258,
+          "bytes": [
+           32,
+           112,
+           97,
+           114,
+           116
+          ]
+         },
+         {
+          "token": " area",
+          "logprob": -3.203125,
+          "token_id": 3602,
+          "bytes": [
+           32,
+           97,
+           114,
+           101,
+           97
+          ]
+         },
+         {
+          "token": " in",
+          "logprob": -3.703125,
+          "token_id": 306,
+          "bytes": [
+           32,
+           105,
+           110
+          ]
+         },
+         {
+          "token": " and",
+          "logprob": -6.4375,
+          "token_id": 316,
+          "bytes": [
+           32,
+           97,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " of",
+          "logprob": -7.9375,
+          "token_id": 318,
+          "bytes": [
+           32,
+           111,
+           102
+          ]
+         }
+        ],
+        "token_id": 1258,
+        "text_offset": 418
+       },
+       {
+        "token": " of",
+        "logprob": -0.00026131,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         111,
+         102
+        ],
+        "top_logprobs": [
+         {
+          "token": " of",
+          "logprob": -0.00026131,
+          "token_id": 318,
+          "bytes": [
+           32,
+           111,
+           102
+          ]
+         },
+         {
+          "token": "\n\n",
+          "logprob": -10.125,
+          "token_id": 382,
+          "bytes": [
+           10,
+           10
+          ]
+         },
+         {
+          "token": "[EOS]",
+          "logprob": -10.1875,
+          "token_id": 163585,
+          "bytes": [
+           91,
+           69,
+           79,
+           83,
+           93
+          ]
+         },
+         {
+          "token": "...\n\n",
+          "logprob": -10.6875,
+          "token_id": 77871,
+          "bytes": [
+           46,
+           46,
+           46,
+           10,
+           10
+          ]
+         },
+         {
+          "token": "...",
+          "logprob": -11.0625,
+          "token_id": 1614,
+          "bytes": [
+           46,
+           46,
+           46
+          ]
+         }
+        ],
+        "token_id": 318,
+        "text_offset": 423
+       },
+       {
+        "token": " France",
+        "logprob": -2.703125,
+        "sampling_logprob": null,
+        "bytes": [
+         32,
+         70,
+         114,
+         97,
+         110,
+         99,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " the",
+          "logprob": -0.08203125,
+          "token_id": 276,
+          "bytes": [
+           32,
+           116,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " France",
+          "logprob": -2.703125,
+          "token_id": 15383,
+          "bytes": [
+           32,
+           70,
+           114,
+           97,
+           110,
+           99,
+           101
+          ]
+         },
+         {
+          "token": " Europe",
+          "logprob": -5.09375,
+          "token_id": 6715,
+          "bytes": [
+           32,
+           69,
+           117,
+           114,
+           111,
+           112,
+           101
+          ]
+         },
+         {
+          "token": " western",
+          "logprob": -5.71875,
+          "token_id": 27793,
+          "bytes": [
+           32,
+           119,
+           101,
+           115,
+           116,
+           101,
+           114,
+           110
+          ]
+         },
+         {
+          "token": " Western",
+          "logprob": -6.71875,
+          "token_id": 17353,
+          "bytes": [
+           32,
+           87,
+           101,
+           115,
+           116,
+           101,
+           114,
+           110
+          ]
+         }
+        ],
+        "token_id": 15383,
+        "text_offset": 426
+       },
+       {
+        "token": ".",
+        "logprob": -1.1015625,
+        "sampling_logprob": null,
+        "bytes": [
+         46
+        ],
+        "top_logprobs": [
+         {
+          "token": ".\n\n",
+          "logprob": -0.98046875,
+          "token_id": 1481,
+          "bytes": [
+           46,
+           10,
+           10
+          ]
+         },
+         {
+          "token": ".",
+          "logprob": -1.1015625,
+          "token_id": 13,
+          "bytes": [
+           46
+          ]
+         },
+         {
+          "token": ".\",\n",
+          "logprob": -2.484375,
+          "token_id": 20829,
+          "bytes": [
+           46,
+           34,
+           44,
+           10
+          ]
+         },
+         {
+          "token": ".\n",
+          "logprob": -2.484375,
+          "token_id": 341,
+          "bytes": [
+           46,
+           10
+          ]
+         },
+         {
+          "token": ".',\n",
+          "logprob": -3.734375,
+          "token_id": 22516,
+          "bytes": [
+           46,
+           39,
+           44,
+           10
+          ]
+         }
+        ],
+        "token_id": 13,
+        "text_offset": 433
+       },
+       {
+        "token": " The",
+        "logprob": -1.35599387,
+        "sampling_logprob": -1.305100440979004,
+        "bytes": [
+         32,
+         84,
+         104,
+         101
+        ],
+        "top_logprobs": [
+         {
+          "token": " The",
+          "logprob": -1.35599387,
+          "token_id": 646,
+          "bytes": [
+           32,
+           84,
+           104,
+           101
+          ]
+         },
+         {
+          "token": " Paris",
+          "logprob": -1.48099387,
+          "token_id": 17374,
+          "bytes": [
+           32,
+           80,
+           97,
+           114,
+           105,
+           115
+          ]
+         },
+         {
+          "token": "[EOS]",
+          "logprob": -3.10599375,
+          "token_id": 163585,
+          "bytes": [
+           91,
+           69,
+           79,
+           83,
+           93
+          ]
+         },
+         {
+          "token": " Beyond",
+          "logprob": -3.60599375,
+          "token_id": 49124,
+          "bytes": [
+           32,
+           66,
+           101,
+           121,
+           111,
+           110,
+           100
+          ]
+         },
+         {
+          "token": " It",
+          "logprob": -3.98099375,
+          "token_id": 1344,
+          "bytes": [
+           32,
+           73,
+           116
+          ]
+         }
+        ],
+        "token_id": 646,
+        "text_offset": 434
+       }
+      ]
+     },
+     "finish_reason": "length"
+    }
+   ],
+   "usage": {
+    "prompt_tokens": 90,
+    "total_tokens": 91,
+    "completion_tokens": 1,
+    "prompt_tokens_details": {
+     "cached_tokens": 0
+    }
+   },
+   "_wall_s": 1.0714640617370605
+  }
+ }
+}

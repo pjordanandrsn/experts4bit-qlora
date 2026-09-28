@@ -31,15 +31,22 @@ and completes on the arena.
 
 **Kimi-K3 runs at full depth on a 12 GB card** (2026-09-28, the released
 0.37.5 / 0.33.4; **measured** — [`bench/kimi-k3-a2000/`](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md),
-`e4b.offload.kimi-k3.full-depth.a2000.2026-09-28`). All 93 layers run on
-one RTX A2000 at 4.32 GB peak VRAM. The MXFP4 experts stream from a
-1.446 TB SSD arena, and the 108.76 GB dense side is served from the
-checkpoint's byte offsets, with 0 bytes pinned in host RAM. The model
-completes "The capital city of France is" as " Paris. It is" at a median
-92.4 s per decode token. The step time is the SSD's, and this is not a
-quality claim, because no reference could run: Moonshot's API refuses
-logprobs for K3. A custom driver wires the engines, so this is not the
-`load_moe_4bit_streaming` path.
+`e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28`). All 93 layers
+run on one RTX A2000 at 4.07 GB peak VRAM once Triton's cache is warm. The
+MXFP4 experts stream from a 1.446 TB SSD arena, and the 108.76 GB dense
+side is served from the checkpoint's byte offsets, with 0 bytes pinned in
+host RAM. In five processes the model completed "The capital city of France
+is" as " Paris. It is", at 90–92 s per decode token; the step time is the
+SSD's. Against Fireworks' kimi-k3 on the same raw paragraph, the per-token
+NLL correlates at r = 0.9965
+(`e4b.quality.kimi-k3.vs-fireworks.per-token.a2000.2026-09-28`), and a
+routing-replayed cache gate passes the real cache at cos 0.999966 and fails
+a cache with its KDA state zeroed at 0.877523
+(`e4b.parity.kimi-k3.cache-gate.replayed-routing.a2000.2026-09-28`). **The
+forward is not reproducible run to run:** p(" Paris") ranged 68.90–71.59 %
+over the five processes. Autotuning is ruled out; the MXFP4 prefill combine's
+atomic `index_add_` is suspected, not confirmed. A custom driver wires the
+engines, so this is not the `load_moe_4bit_streaming` path.
 
 **The fused training path is faster at equal loss.** Across two 30B-class
 MoEs, five datasets each, 200 steps per cell: 1.52–1.81× per step at

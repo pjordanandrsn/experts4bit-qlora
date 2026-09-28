@@ -447,7 +447,7 @@
       "hardware": "RTX A2000 12 GB (sm_86, driver 575.64.05) in the NAS host's PCIe 3.0 x8 slot, Xeon W-1250, 128 GB RAM; arena and dense extract on a SATA-SSD ZFS pool; card and pool shared with the host's own services",
       "conditions": "moonshotai/Kimi-K3 @ f831ab66 (config.json sha256 9710e121...), text path only; experts4bit-qlora 0.37.5 and grouped-nf4-gemm 0.33.4 from PyPI, torch 2.8.0+cu128, triton 3.4.0, transformers 4.57.6, fla-core 0.5.2, tiktoken 0.13.0, Python 3.10.12; driver bench/kimi-k3-a2000/k3_run_rel.py (sha256 55f5c33e...), eager attention, greedy; experts: the 2026-07-30 MXFP4 arena (1,446,456,066,048 B, 92 x 896 rows of 17,547,264 B, index sha256 e7040142...), k_slots 16, one shared SlotStore, one pinned ColdTier of 48 hot rows; dense: 1,251 tensors / 108.76 GB via enable_dense_offload(pin=False, source=DenseDiskSource), 0 pinned, lm_head (2.35 GB) on the host CPU; loader._fit narrows 69 KDA A_log 128 -> 96; one 6-token prefill then 3 cached decode steps",
       "measured_on": "2026-09-28",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "evidence": [
         "bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md",
@@ -459,7 +459,81 @@
         "bench/kimi-k3-a2000/receipts/2026-09-28/versions.txt",
         "bench/kimi-k3-a2000/receipts/2026-09-28/inputs.sha256"
       ],
-      "notes": "Perplexity 3.181 on one 90-token paragraph (a sanity band, not a benchmark). Routing: cached decode vs fresh prefill select a different expert set in 45 of 92 MoE layers (50 of 1,472 slots), so the cache check's cos 0.999408 (argmax agrees) is discrete routing flips, not accumulation; the driver's uncalibrated cos < 0.9999 warning in k3_gen.log is not a finding, and bit-identity across prefill and decode is not claimed. A 2026-07-30 run of the same driver on an unrecorded pre-0.9.0 e4b and a loose kernel copy gave the identical token ids at p(' Paris') 71.20 %, 93.5 s/token, 4.07 GB, perplexity 3.191 (bench/kimi-k3-a2000/receipts/2026-07-30/); it is history, not a claim. Not a quality claim (no reference ran: Moonshot's API refuses logprobs for kimi-k3), not a speed claim beyond this host (SSD dense reads dominate the step), and not the load_moe_4bit_streaming path (the driver builds the model on meta and wires the engines itself). Prefill 270.5 s vs July's 178.3 s, not investigated."
+      "notes": "Perplexity 3.181 on one 90-token paragraph (a sanity band, not a benchmark). Routing: cached decode vs fresh prefill select a different expert set in 45 of 92 MoE layers (50 of 1,472 slots), so the cache check's cos 0.999408 (argmax agrees) is discrete routing flips, not accumulation; the driver's uncalibrated cos < 0.9999 warning in k3_gen.log is not a finding, and bit-identity across prefill and decode is not claimed. A 2026-07-30 run of the same driver on an unrecorded pre-0.9.0 e4b and a loose kernel copy gave the identical token ids at p(' Paris') 71.20 %, 93.5 s/token, 4.07 GB, perplexity 3.191 (bench/kimi-k3-a2000/receipts/2026-07-30/); it is history, not a claim. Not a quality claim (no reference ran: Moonshot's API refuses logprobs for kimi-k3), not a speed claim beyond this host (SSD dense reads dominate the step), and not the load_moe_4bit_streaming path (the driver builds the model on meta and wires the engines itself). Prefill 270.5 s vs July's 178.3 s, not investigated. SUPERSEDED the same day by e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28: the single-run p(' Paris') 68.90 % and the 4.32 GB peak were one draw each -- five processes of this build gave 68.90-71.59 %, and 4.32 GB was the first run in a fresh Triton cache (4.07 GB warm). The measurement stands as made.",
+      "superseded_by": "e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28"
+    },
+    {
+      "id": "e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28",
+      "package": "experts4bit-qlora",
+      "area": "offload",
+      "model": "moonshotai/Kimi-K3",
+      "claim": "Kimi-K3 runs at full depth (all 93 layers, real weights) on one 12 GB RTX A2000 at 4.07 GB peak VRAM once Triton's cache is warm (4.32 GB on the first process in a fresh cache) with 0 dense bytes resident in host RAM -- MXFP4 experts streamed from a 1.446 TB SSD arena through 92 engines sharing one 281 MB slot store, the 108.76 GB dense side served from safetensors byte offsets -- and greedily completes 'The capital city of France is' as ' Paris. It is' in every one of five processes, at 90.4-92.4 s per decode token (median per run) after a 175-179 s warm prefill, with p(' Paris') ranging 68.90-71.59 % from run to run.",
+      "value": 4.32,
+      "unit": "GB peak VRAM, highest of five processes (4.07 GB once Triton's cache is warm)",
+      "hardware": "RTX A2000 12 GB (sm_86, driver 575.64.05) in the NAS host's PCIe 3.0 x8 slot, Xeon W-1250, 128 GB RAM; arena and dense extract on a SATA-SSD ZFS pool; card and pool shared with the host's own services",
+      "conditions": "moonshotai/Kimi-K3 @ f831ab66 (config.json sha256 9710e121...), text path only; experts4bit-qlora 0.37.5 and grouped-nf4-gemm 0.33.4 from PyPI, torch 2.8.0+cu128, triton 3.4.0, transformers 4.57.6, fla-core 0.5.2, tiktoken 0.13.0, Python 3.10.12; drivers bench/kimi-k3-a2000/k3_run_rel.py (55f5c33e...) and the gate/reference copies (30b837b0..., ea727400...), identical forward; eager attention, greedy; arena 1,446,456,066,048 B, k_slots 16, shared SlotStore, pinned ColdTier of 48 hot rows; dense via enable_dense_offload(pin=False, source=DenseDiskSource), 0 pinned; 6-token prompt; five processes 2026-09-28 18:58-21:24Z",
+      "measured_on": "2026-09-28",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md#follow-up-the-same-day",
+        "bench/kimi-k3-a2000/receipts/2026-09-28/k3_gen_n4_pin0.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-gate/k3_gen_n4_pin0.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-gate/k3_gen_main.log",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-gate/k3_gen_n2_pin0_drop_state.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-determinism/A/k3_gen_n1_pin0.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-determinism/B/k3_gen_n1_pin0.json"
+      ],
+      "supersedes": [
+        "e4b.offload.kimi-k3.full-depth.a2000.2026-09-28"
+      ],
+      "notes": "p(' Paris') per process: 68.90 % (6,115 prefill expert rows; first run, fresh Triton cache), 71.59 % (6,126), 71.29 % (6,131), 71.20 % (6,130) twice with TRITON_CACHE_AUTOTUNING=1; both 2026-07-30 processes on an unrecorded stack also gave 71.20 % / 6,130. Autotuning is ruled out after the first run (the ten autotuned fla kernels persisted their choices at 19:01-19:05Z; a run with TRITON_PRINT_AUTOTUNING=1 benchmarked nothing). Suspected, NOT confirmed: the MXFP4 prefill combine's out.index_add_ (grouped-nf4-gemm mxfp4_pipelined.py), whose float atomics can reorder across runs and flip top-16-of-896 near-ties. The first run's 270.5 s prefill was one-time Triton compilation (183 kernels compiled inside it). Perplexity 3.181 and 3.196 in two processes on one 90-token paragraph. Not a speed claim beyond this host (SSD dense reads dominate each step) and not the load_moe_4bit_streaming path."
+    },
+    {
+      "id": "e4b.parity.kimi-k3.cache-gate.replayed-routing.a2000.2026-09-28",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "model": "moonshotai/Kimi-K3",
+      "claim": "With routing replayed (every MoE layer handed the cached path's own expert ids and weights), K3's cached decode path matches a fresh cache-free prefill of the same 9 tokens at cos 0.999966 (rel 4.36e-3, argmax agrees) on the A2000 run, while a cache whose 69 KDA recurrent states are zeroed reads cos 0.877523 -- so the gate (cos >= 0.9999 and argmax agrees, fixed before either number) passes the correct cache and fails the broken one; with free routing the same comparison reads 0.998699 because 90 of 92 layers route differently somewhere in the 9 positions.",
+      "value": 0.999966,
+      "unit": "cos, cached decode vs fresh prefill logits under replayed routing (control: 0.877523)",
+      "hardware": "RTX A2000 12 GB (sm_86, driver 575.64.05) in the NAS host's PCIe 3.0 x8 slot, Xeon W-1250, 128 GB RAM; arena and dense extract on a SATA-SSD ZFS pool; card and pool shared with the host's own services",
+      "conditions": "as e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28; driver bench/kimi-k3-a2000/receipts/2026-09-28-gate/k3_run_rel.py (30b837b0...); gate run: 4 generated tokens, fresh prefill of prompt + 3 generated; control: 2 generated tokens, every cache.recurrent_states[i] zeroed before the last decode step (K3_CONTROL=drop_state); routing recorded at moe_infer(x, topk_ids, topk_weight) and replayed at every position",
+      "measured_on": "2026-09-28",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md#1-a-cache-gate-that-can-fail-routing-first-then-logits",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-gate/k3_gen_n4_pin0.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-gate/k3_gen_main.log",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-gate/k3_gen_n2_pin0_drop_state.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-gate/k3_gen_control.log",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-gate/k3_run_rel.py"
+      ],
+      "notes": "Replay overrode 94 local near-tie flips in 62 of 92 layers. The control also agrees on argmax ('.'), which is why an argmax-only check cannot be the gate. The old free-routing cos < 0.9999 warning in the 2026-09-28 and 2026-07-30 logs was uncalibrated and is not a finding. Bit-identity across prefill and decode is still not claimed: the replayed gap (rel 4.36e-3) is kernel precision (chunked vs recurrent KDA, GEMM vs GEMV) over 93 bf16 layers."
+    },
+    {
+      "id": "e4b.quality.kimi-k3.vs-fireworks.per-token.a2000.2026-09-28",
+      "package": "experts4bit-qlora",
+      "area": "quality",
+      "model": "moonshotai/Kimi-K3",
+      "claim": "On one raw 90-token paragraph, the A2000 run's per-token NLL tracks Fireworks' serverless kimi-k3 (native MXFP4 weights, MXFP8 activations) at Pearson r = 0.9965 over the same 89 predictions (median |delta| 0.038 nats; perplexity 3.196 vs 3.150), and both greedily complete 'The capital city of France is' as ' Paris. It is' (p(' Paris') 68.90-71.59 % across five A2000 processes vs 69.26 %).",
+      "value": 0.9965,
+      "unit": "Pearson r, per-token NLL, A2000 vs Fireworks, 89 positions",
+      "hardware": "RTX A2000 12 GB (sm_86, driver 575.64.05) in the NAS host's PCIe 3.0 x8 slot, Xeon W-1250, 128 GB RAM; arena and dense extract on a SATA-SSD ZFS pool; card and pool shared with the host's own services; reference: Fireworks serverless accounts/fireworks/models/kimi-k3, completions endpoint",
+      "conditions": "same raw text on both sides, no chat template, identical 90-token tokenization checked by string; A2000: driver bench/kimi-k3-a2000/receipts/2026-09-28-reference/k3_run_rel.py (ea727400..., ppl mode with per-token NLL); reference: fireworks_ref.py, completions with echo=true, logprobs=true, top_logprobs=5, temperature 0; position 0 unscored on both sides (Fireworks returns 0.0 there); compare_per_token.py",
+      "measured_on": "2026-09-28",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md#3-a-reference-fireworks-kimi-k3-per-token",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-reference/per_token_compare.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-reference/fireworks_ref.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-reference/fireworks_ref.py",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-reference/k3_ppl_n0_pin0.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-reference/compare_per_token.py"
+      ],
+      "notes": "Neither side is ground truth: Fireworks runs MXFP8 activations where the A2000 path runs bf16, and it reports logprobs at reduced precision (e.g. -6.28125). 52 of 89 positions within 0.05 nats, 76 within 0.2; the largest gap is ' sits' (5.66 vs 6.28 nats). One paragraph, so a sanity check of two implementations, not a benchmark. The A2000 perplexity itself moves between processes (3.181, 3.196) with the run-to-run drift recorded on e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28."
     },
     {
       "id": "e4b.train.fast-train-dgrad",
