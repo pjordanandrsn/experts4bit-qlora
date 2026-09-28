@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### `requires-python` is `>=3.10`, which is what the package already needed (packaging metadata; a floor changes)
+
+- **The defect.** The wheel declared `>=3.9`, but `util.py` and `formats/fp8_blocks.py` use `X | None` annotations without `from __future__ import annotations`, which raise `TypeError` at import on 3.9. `util.py` loads with the package, so on 3.9 the package failed at import. The `[train]` and `[serve]` extras need `transformers>=5.0`, which itself requires Python 3.10, and current bitsandbytes does too. Found in the 2026-09-24 documentation review (#749, "left for the maintainer").
+- **The change.** `requires-python = ">=3.10"`. On 3.9, pip now refuses the install up front, where before the import failed. Every module in `experts4bit_qlora/` parses under the 3.10 grammar (`ast.parse(..., feature_version=(3, 10))`, 66 of 66). CI runs 3.11 only, so 3.10 is the declared floor, not a tested one.
+
 ### The fused gpt-oss router adds its bias inside the GEMM, as upstream does; bf16 routers are licensed before fusing (a routing fix under `E4B_FUSE_ROUTER_EPI=1`)
 
 - **The defect.** On the `topk_softmax` kind, the fused path and the probe's reference both computed the logits as a bf16 GEMM **without** the bias, then added the bias in fp32. `GptOssTopKRouter` (transformers 5.16.1) calls `F.linear(x, weight, bias)`, so its logits round to bf16 **with** the bias already added. At bf16 those are different functions. They can select a different expert **set** on a near-tie.
