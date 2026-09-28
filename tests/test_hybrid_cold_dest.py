@@ -28,6 +28,12 @@ from experts4bit_qlora.engines import hybrid as hy  # noqa: E402
 from experts4bit_qlora.engines.nvme_experts import NF4_SEGMENTS  # noqa: E402
 
 E, INTER, H, K = 8, 64, 128, 2
+# A geometry whose four NF4 segment lengths ARE multiples of the arena's
+# 4096-byte align, so the cold CPU view can take the direct (preadv-scatter)
+# landing. E/INTER/H above cannot: its arena always falls back to the copy
+# landing, which is how the direct landing went untested end to end and how
+# #178 (enable raised on exactly the arenas that scatter) stayed invisible.
+SCATTER_INTER, SCATTER_H = 256, 512
 
 needs_stack = pytest.mark.skipif(
     not hy.hybrid_available(), reason="needs CUDA + gnf4_native CPU kernels"
@@ -181,18 +187,18 @@ def test_cold_stats_forwards_the_reuse_ratio_s_own_denominator():
 # ------------------------------------------------ the equivalence, on a box --
 
 class _Router(torch.nn.Module):
-    def __init__(self, seed):
+    def __init__(self, seed, h=H):
         super().__init__()
-        self.top_k, self.num_experts, self.hidden_dim = K, E, H
+        self.top_k, self.num_experts, self.hidden_dim = K, E, h
         self.norm_topk_prob = False
         g = torch.Generator().manual_seed(seed)
-        self.weight = torch.nn.Parameter(torch.randn(E, H, generator=g) * 0.3)
+        self.weight = torch.nn.Parameter(torch.randn(E, h, generator=g) * 0.3)
 
 
 class _Block(torch.nn.Module):
-    def __init__(self, experts, seed):
+    def __init__(self, experts, seed, h=H):
         super().__init__()
-        self.router = _Router(seed)
+        self.router = _Router(seed, h)
         self.experts = experts
 
 
@@ -207,10 +213,10 @@ def _st_bytes(tensors):
     return struct.pack("<Q", len(hj)) + hj + b"".join(blobs)
 
 
-def _module(seed):
+def _module(seed, inter=INTER, h=H):
     g = torch.Generator().manual_seed(seed)
-    gate_up = torch.randn(E, 2 * INTER, H, generator=g) * 0.05
-    down = torch.randn(E, H, INTER, generator=g) * 0.05
+    gate_up = torch.randn(E, 2 * inter, h, generator=g) * 0.05
+    down = torch.randn(E, h, inter, generator=g) * 0.05
     return Experts4bit.from_float(gate_up.to(torch.bfloat16),
                                   down.to(torch.bfloat16), has_gate=True,
                                   activation=torch.nn.functional.silu,
@@ -218,9 +224,10 @@ def _module(seed):
                                   compute_dtype=torch.bfloat16)
 
 
-@pytest.fixture()
-def one_layer(tmp_path):
-    mod = _module(11)
+def _bake_one_layer(tmp_path, inter, h):
+    """One quantised MoE layer and its arena, baked at align=4096. CPU only;
+    the caller moves the module to CUDA if it needs to."""
+    mod = _module(11, inter, h)
     dt = {torch.uint8: "U8", torch.float32: "F32"}
     n1, k1 = mod._gate_up_shape
     n2, k2 = mod._down_shape
@@ -244,8 +251,25 @@ def one_layer(tmp_path):
         str(snap), arena_path,
         name_template="model.layers.{layer}.mlp.experts.{expert}.{kind}",
         kinds=tuple(NF4_SEGMENTS.values()), align=4096, log=lambda *a: None)
+    return mod, arena_path, load_index(arena_path)
+
+
+@pytest.fixture()
+def one_layer(tmp_path):
+    mod, arena_path, index = _bake_one_layer(tmp_path, INTER, H)
     model = torch.nn.ModuleList([_Block(mod.to("cuda"), seed=21)])
-    return model, arena_path, load_index(arena_path)
+    return model, arena_path, index
+
+
+@pytest.fixture()
+def scattering_layer(tmp_path):
+    """The same layer at a geometry whose arena CAN take the direct landing
+    (#178). The real models this landing was built for scatter too: OLMoE,
+    Qwen3-30B-A3B and a Kimi-K3 shape do; gpt-oss-120b does not."""
+    mod, arena_path, index = _bake_one_layer(tmp_path, SCATTER_INTER, SCATTER_H)
+    model = torch.nn.ModuleList([_Block(mod.to("cuda"), seed=21,
+                                        h=SCATTER_H)])
+    return model, arena_path, index
 
 
 def _manifest(spec):
@@ -291,9 +315,78 @@ def test_cold_on_cpu_is_bit_identical_to_the_same_expert_placed_in_dram(one_laye
     hy.disable_hybrid_tier(model)
 
     assert st["cold_rows_cpu"] == 2 and st["cold_rows_gpu"] == 0
+    # This geometry cannot scatter, so the default cold_direct=True lands on
+    # the copy path. Said out loud so the test cannot be read as covering
+    # the direct landing; the scattering fixture below covers that one.
+    assert st["cold_landing"] == "copy", st
     assert torch.equal(cold, warm), (
         "a cold expert computed on the CPU must equal the same expert "
         "computed on the CPU from DRAM — same kernel, same bytes")
+
+
+@needs_view
+def test_the_scattering_fixture_selects_the_direct_landing(tmp_path):
+    """Calibrates the fixture below: if its arena stopped scattering (a bake
+    change, a new align), the GPU test would quietly fall back to the copy
+    landing and pass while covering nothing new. Runs without a GPU."""
+    _, _, index = _bake_one_layer(tmp_path, SCATTER_INTER, SCATTER_H)
+    lengths = {s["suffix"]: s["length"] for s in index["segments"]}
+    assert all(n % index["align"] == 0 for n in lengths.values()), lengths
+    v = hy.build_cold_view(_FakeTier(), index, direct=True)
+    assert getattr(v, "e4b_fallback_reason", None) is None, (
+        "the scattering fixture fell back: %s" % v.e4b_fallback_reason)
+    assert v.e4b_path == "direct-scatter"
+    # and the old fixture does NOT scatter, which is why it cannot stand in
+    (tmp_path / "small").mkdir()
+    _, _, small = _bake_one_layer(tmp_path / "small", INTER, H)
+    assert hy.build_cold_view(_FakeTier(), small, direct=True).e4b_path == "copy"
+
+
+@needs_stack
+@needs_view
+def test_direct_cold_landing_is_bit_identical_to_copy_and_to_dram(
+        scattering_layer):
+    """#178: on an arena whose geometry scatters, enable_hybrid_tier(
+    cold_dest="cpu") used to RAISE at enable -- the hot partition and the DRAM
+    stacks were read through tier.row(), which a tier with an external
+    landing refuses. #177 moved those setup reads onto their own tier; this
+    is the end-to-end check that it holds, and that the direct landing moves
+    the same bytes as the copy landing and as a DRAM placement.
+
+    BITWISE for the same reason as the test above: same kernel, same bytes,
+    only their provenance differs."""
+    model, path, _ = scattering_layer
+    torch.manual_seed(3)
+    hidden = torch.randn(1, SCATTER_H, dtype=torch.bfloat16, device="cuda")
+    wts = torch.rand(1, K, device="cuda", dtype=torch.bfloat16)
+    idx = torch.tensor([[2, 3]], device="cuda")
+    cold_placement = _manifest(
+        {"vram": [0], "dram": [], "nvme": [1, 2, 3, 4, 5, 6, 7]})
+
+    hy.enable_hybrid_tier(model, path, _manifest(
+        {"vram": [0], "dram": [2, 3], "nvme": [1, 4, 5, 6, 7]}), hot_rows=E)
+    warm = _run(model, idx, wts, hidden)
+    hy.disable_hybrid_tier(model)
+
+    out, st = {}, {}
+    for direct in (True, False):
+        hy.enable_hybrid_tier(model, path, cold_placement, hot_rows=E,
+                              cold_dest="cpu", cold_direct=direct)
+        out[direct] = _run(model, idx, wts, hidden)
+        st[direct] = hy.cold_stats(model)
+        hy.disable_hybrid_tier(model)
+
+    assert st[True]["cold_landing"] == "direct-scatter", st[True]
+    assert st[True]["cold_landing_fallback"] is None, st[True]
+    assert st[False]["cold_landing"] == "copy", st[False]
+    for direct in (True, False):
+        assert st[direct]["cold_rows_cpu"] == 2, st[direct]
+        assert st[direct]["cold_rows_gpu"] == 0, st[direct]
+    assert torch.equal(out[True], out[False]), (
+        "the direct landing must move the same bytes as the copy landing")
+    assert torch.equal(out[True], warm), (
+        "a cold expert through the direct landing must equal the same "
+        "expert computed on the CPU from DRAM")
 
 
 @needs_stack
