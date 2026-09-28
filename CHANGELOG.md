@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Lane P80 registered (#511): bucketed CUDA-graph decode against the eager `PagedModelRunner` on a changing active set, NF4 Qwen3-30B-A3B (bench only; nothing in the wheel changes)
+
+- `bench/p80/PREREG-p80.md` adopts the Q2 memo's registered experiment. The active set steps 16 → 8 → 4 → 2 → 1 (32 decode steps each). The arms run in the fixed order A1 → B1 → B2 → A2, plus P, the padded-eager oracle. The claim is confirmed only if B/A > 1.03 in both pairings. It departs from the memo in one place, with the reason given: the bitwise gate is graph ≡ padded eager, not graph ≡ unpadded eager (bf16 GEMMs vary with row count).
+- `bench/p80/step_decomp.py` is a lane copy of the harness plus the `--dynb-mode` stage (closed lanes pin the live file). A test asserts the copy removes no live line except the `Fp8PagedKV` call it extends. `p80_reduce.py` computes the verdict; its nine-case self-test runs in CI and on the box. The runner and driver are derived from P70's. The proving path was rehearsed on the A2000; the arms need sm_89+.
+
 ### Bucketed CUDA-graph decode in `PagedModelRunner`, opt-in (#511; new API, default behaviour unchanged)
 
 - **What.** `PagedModelRunner.enable_decode_graphs(buckets=(1, 2, 4, 8, 16))` captures one decode graph per batch bucket. Each decode step pads its active set to the next bucket, replays that bucket's graph and discards the padded rows. An active set larger than the largest bucket runs as several chunks. `Fp8PagedKV(..., scratch_slots=N)` adds N padding slots with one KV block each, which the scheduler must never be given (`bind` refuses them). A bucket's device tensors (slot ids, attention selector) persist and are rewritten in place each step, so a replay reads the current active set rather than the one present at capture.
