@@ -49,7 +49,12 @@ def test_graphs_refuse_too_few_scratch_slots():
 
 # --------------------------------------------------------------- on a GPU --
 
-needs_cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+# The fp8 paged KV quantises to e4m3 (Triton ``fp8e4nv``), which compiles only on
+# sm_89+. On an sm_86 card (the A2000) the kernel refuses to build; that is a
+# fact about the card, so it skips by name rather than failing as a compile error.
+needs_fp8 = pytest.mark.skipif(
+    not torch.cuda.is_available() or torch.cuda.get_device_capability() < (8, 9),
+    reason="the fp8 paged KV needs native e4m3 (sm_89+)")
 
 # different prompt lengths and generation lengths: the active set shrinks
 # 4 -> 3 -> 2 -> 1 (buckets 4, 4 padded, 2, 1), and a fifth request is admitted
@@ -90,7 +95,7 @@ def _run(mode, buckets=(1, 2, 4)):
     return [out[r] for r in rids], status, getattr(runner, "graph_stats", None)
 
 
-@needs_cuda
+@needs_fp8
 def test_a_bucket_replay_decodes_exactly_as_the_padded_eager_step():
     graph, status, stats = _run("graph")
     assert status == {1: "graph", 2: "graph", 4: "graph"}, status
