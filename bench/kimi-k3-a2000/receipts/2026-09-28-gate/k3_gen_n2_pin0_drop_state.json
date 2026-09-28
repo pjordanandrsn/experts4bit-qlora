@@ -1,0 +1,76 @@
+{
+ "mode": "gen",
+ "prompt": "The capital city of France is",
+ "generated": [
+  17374,
+  13
+ ],
+ "text": " Paris.",
+ "probs": [
+  0.7129005193710327,
+  0.2536925971508026
+ ],
+ "prefill_s": 176.95353960990906,
+ "prefill_repeat_s": null,
+ "prefill_counters": {
+  "disk_reads": 6131,
+  "claims": 92,
+  "dense_reads": 1251,
+  "dense_bytes": 108763639808
+ },
+ "per_step": [
+  {
+   "s": 90.12137627601624,
+   "disk_reads": 1469,
+   "claims": 92,
+   "dense_reads": 1251,
+   "dense_bytes": 108763639808
+  }
+ ],
+ "control": "drop_state",
+ "cache_gate": {
+  "replayed": {
+   "cos": 0.8775230646133423,
+   "rel": 0.43273091316223145,
+   "argmax_agrees": true,
+   "local_flips": {
+    "layers_differing": 92,
+    "substitutions": 823,
+    "rows_differing": 159,
+    "layers": 92
+   }
+  },
+  "threshold_cos": 0.9999,
+  "verdict": "FAIL"
+ },
+ "vram_peak_gb": 4.06881536,
+ "pinned_gb": 0.0,
+ "disk_gb": 108.7586304,
+ "wall_s": 641.3559763431549,
+ "provenance": {
+  "utc": "2026-09-28T20:59:22Z",
+  "packages": {
+   "experts4bit-qlora": "0.37.5",
+   "grouped-nf4-gemm": "0.33.4",
+   "torch": "2.8.0+cu128",
+   "triton": "3.4.0",
+   "transformers": "4.57.6",
+   "tiktoken": "0.13.0",
+   "bitsandbytes": "0.50.2"
+  },
+  "python": "3.10.12",
+  "cuda": "12.8",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "driver_sha256": "30b837b06553b4b94c18d32f2f07c8043854b69eef4f350ad35a872cded91be2",
+  "arena": "/z531/k3-arena/k3.arena",
+  "dense": "/workspace/k3-dense",
+  "snapshot": "/z532/hf-models/moonshotai_Kimi-K3",
+  "env": {
+   "K3_CONTROL": "drop_state",
+   "K3_NEW_TOKENS": "2",
+   "K3_VERIFY_FREE": "0",
+   "K3_MODE": "gen",
+   "K3_OUT": "/workspace/k3-rel-20260928/v2"
+  }
+ }
+}

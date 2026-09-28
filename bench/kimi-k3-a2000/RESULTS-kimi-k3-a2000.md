@@ -41,12 +41,17 @@ the prefill time are printed in `k3_gen.log`, not stored in the JSON.
   against July's 6,130, so the two builds route at least some tokens to
   different experts. At top-16 of 896 in bf16 a near-tie can flip, and that
   alone moves the output distribution (the routing row shows it). Neither run
-  is a reference for the other.
-- **The prefill took 270.5 s against 178.3 s.** This was not investigated.
+  is a reference for the other. **Corrected the same day:** the gap is not
+  attributable to the build. Later runs of this same build gave p(' Paris')
+  71.20 % with 6,130 rows, exactly July's, and others did not; the forward
+  drifts from run to run ([follow-up](#follow-up-the-same-day)).
+- **The prefill took 270.5 s against 178.3 s.** Found the same day: one-time
+  Triton compilation in a fresh cache, about 91 s ([follow-up](#follow-up-the-same-day)).
   Decode steps agree within 1.2 %, and each one reads the same 108.8 GB of dense
   weights, so the gap is not in the dense path's steady state.
 - **VRAM peak rose 0.25 GB** on the generation pass (4.07 → 4.32 GB) and did
-  not move on the perplexity or routing passes. This was not investigated.
+  not move on the perplexity or routing passes. Warm runs peak at 4.07 GB, so
+  the extra 0.25 GB belongs to the first run in a fresh Triton cache.
 
 ## The cache check prints a warning that is not a finding
 
@@ -108,8 +113,95 @@ compares logits only where routing agrees.
 - It is not a quality claim. No reference implementation of K3 was run against
   it: Moonshot's API refuses `logprobs` for `kimi-k3`, and nothing else on this
   host can hold the model. The perplexity is one 90-token paragraph, a sanity
-  band and not a benchmark.
+  band and not a benchmark. (A reference ran the same day: Fireworks, see the
+  [follow-up](#follow-up-the-same-day).)
 - It is not a speed claim beyond this host. Dense bytes from the SSD dominate
   each decode step, so the step time belongs to the pool and not to the kernels.
 - It is not an e4b load path. The driver builds the model on `meta` and wires the
   engines itself. `load_moe_4bit_streaming` is not involved.
+
+## Follow-up the same day
+
+Four questions the first run left open, answered on the same host and stack, from
+2026-09-28T20:28Z. Each receipt set carries the driver that produced it, and every
+JSON's `provenance.driver_sha256` matches the driver file next to it.
+
+| receipts | driver | what |
+|---|---|---|
+| [`receipts/2026-09-28-gate/`](receipts/2026-09-28-gate/SHA256SUMS) | `k3_run_rel.py` there (sha256 `30b837b0…`) | routing-replayed cache gate, warm prefill repeat, negative control |
+| [`receipts/2026-09-28-reference/`](receipts/2026-09-28-reference/SHA256SUMS) | `k3_run_rel.py` there (`ea727400…`; adds per-token NLL to `ppl`) | perplexity with per-token NLL, Fireworks reference, per-token comparison |
+| [`receipts/2026-09-28-determinism/`](receipts/2026-09-28-determinism/SHA256SUMS) | the reference set's driver | two prefill-only processes with Triton autotune caching on |
+
+### 1. A cache gate that can fail: routing first, then logits
+
+The gate now records every MoE call's (expert ids, weights) along the cached path
+and **replays** them into the fresh, cache-free prefill, so routing is identical by
+construction and the logits comparison measures only the kernels and the cache. The
+threshold, cos ≥ 0.9999 with argmax agreeing, was fixed in the driver before any
+replayed number existed.
+
+| run | free routing | **replayed routing** | gate |
+|---|---|---|---|
+| correct cache, 4 tokens | cos 0.998699, 90 of 92 layers route differently somewhere in 9 positions (386 substitutions) | **cos 0.999966**, rel 4.36e-3, argmax agrees | **PASS** |
+| negative control: all 69 KDA recurrent states zeroed before the last step | — | **cos 0.877523**, rel 0.433, argmax agrees | **FAIL** |
+
+The control is what makes the gate evidence: a broken cache that still picks the
+right next token is caught by the replayed cosine, which an argmax check would pass.
+Under replay, 94 local near-tie flips were overridden (62 of 92 layers), the flips
+that made the free comparison unusable as a gate.
+
+### 2. The slow prefill was one-time Triton compilation
+
+The first run was the first process in a fresh venv. Triton's cache gained 183
+compiled kernels at 19:01–19:02Z, inside that run's prefill, and 28 more at 19:05Z,
+inside its first decode step (97.0 s against 92.1–92.4 s for the others). With the
+cache warm the prefill takes **179.0 s**, and a second prefill in the same process
+**176.9 s**, against July's 178.3 s. The extra 0.25 GB of VRAM belonged to the same
+cold run: warm runs peak at 4.07 GB.
+
+### 3. A reference: Fireworks' kimi-k3, per token
+
+[`fireworks_ref.py`](receipts/2026-09-28-reference/fireworks_ref.py) scores the same
+raw text (no chat template) on Fireworks' serverless `kimi-k3`, which serves the
+native MXFP4 expert weights with MXFP8 activations, through its completions endpoint
+with `echo` for prompt logprobs. Both tokenize the paragraph into the same 90 tokens
+(checked by string), and position 0 has no prediction on either side, so 89 positions
+compare.
+
+| | A2000, e4b 0.37.5 (bf16 activations) | Fireworks (MXFP8 activations) |
+|---|---|---|
+| greedy completion | `' Paris. It is'` | `' Paris. It is'` |
+| p(`' Paris'`) | 68.90–71.59 % over 5 processes (below) | 69.26 % |
+| perplexity, 89 predictions | 3.181 and 3.196 (two processes) | 3.150 |
+| per-token NLL vs the reference | **Pearson r = 0.9965**, median \|Δ\| 0.038 nats, mean \|Δ\| 0.082, 52 of 89 within 0.05, 76 within 0.2 | — |
+| largest per-token gap | `' sits'`, 5.66 vs 6.28 nats | |
+
+Fireworks returns its logprobs at reduced precision (values like -6.28125), and its
+MXFP8 activations make it a second implementation, not ground truth. What the table
+supports: two independent MXFP4 implementations of K3 agree token by token, and
+agree on the greedy text. It is still one paragraph.
+
+### 4. The forward drifts from run to run, and autotuning is not why
+
+Five processes on this build ran the same 6-token prefill:
+
+| process | p(`' Paris'`) | prefill expert rows |
+|---|---|---|
+| first run (fresh Triton cache) | 68.90 % | 6,115 |
+| gate run | 71.59 % | 6,126 |
+| negative control (its prefill precedes the zeroing) | 71.29 % | 6,131 |
+| determinism A (`TRITON_CACHE_AUTOTUNING=1`) | 71.20 % | 6,130 |
+| determinism B (same) | 71.20 % | 6,130 |
+
+Both July processes also gave 71.20 % and 6,130 rows. So the output is not a
+function of the build alone. **Autotuning is ruled out** as the source after the
+first run: the path's ten autotuned kernels (fla's KDA, gated-delta, short-conv
+and norm kernels) persisted their choices to Triton's cache during that run (19:01–19:05Z),
+and run A, with `TRITON_PRINT_AUTOTUNING=1`, benchmarked nothing. The prime suspect
+is not confirmed: grouped-nf4-gemm's MXFP4 prefill combine folds each token's 16
+expert outputs with `out.index_add_(0, rows, ...)` (`mxfp4_pipelined.py`), which
+on CUDA accumulates floats with atomics when destination rows repeat, so its
+summation order can change between runs. At top-16 of 896 in bf16, one bit is
+enough to flip a near-tie downstream. Confirming it needs the same A/B under
+`torch.use_deterministic_algorithms(True)`. Until then, every probability above
+is one draw from this spread, and the register quotes the range.

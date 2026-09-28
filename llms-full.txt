@@ -1967,15 +1967,22 @@ and completes on the arena.
 
 **Kimi-K3 runs at full depth on a 12 GB card** (2026-09-28, the released
 0.37.5 / 0.33.4; **measured** — [`bench/kimi-k3-a2000/`](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md),
-`e4b.offload.kimi-k3.full-depth.a2000.2026-09-28`). All 93 layers run on
-one RTX A2000 at 4.32 GB peak VRAM. The MXFP4 experts stream from a
-1.446 TB SSD arena, and the 108.76 GB dense side is served from the
-checkpoint's byte offsets, with 0 bytes pinned in host RAM. The model
-completes "The capital city of France is" as " Paris. It is" at a median
-92.4 s per decode token. The step time is the SSD's, and this is not a
-quality claim, because no reference could run: Moonshot's API refuses
-logprobs for K3. A custom driver wires the engines, so this is not the
-`load_moe_4bit_streaming` path.
+`e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28`). All 93 layers
+run on one RTX A2000 at 4.07 GB peak VRAM once Triton's cache is warm. The
+MXFP4 experts stream from a 1.446 TB SSD arena, and the 108.76 GB dense
+side is served from the checkpoint's byte offsets, with 0 bytes pinned in
+host RAM. In five processes the model completed "The capital city of France
+is" as " Paris. It is", at 90–92 s per decode token; the step time is the
+SSD's. Against Fireworks' kimi-k3 on the same raw paragraph, the per-token
+NLL correlates at r = 0.9965
+(`e4b.quality.kimi-k3.vs-fireworks.per-token.a2000.2026-09-28`), and a
+routing-replayed cache gate passes the real cache at cos 0.999966 and fails
+a cache with its KDA state zeroed at 0.877523
+(`e4b.parity.kimi-k3.cache-gate.replayed-routing.a2000.2026-09-28`). **The
+forward is not reproducible run to run:** p(" Paris") ranged 68.90–71.59 %
+over the five processes. Autotuning is ruled out; the MXFP4 prefill combine's
+atomic `index_add_` is suspected, not confirmed. A custom driver wires the
+engines, so this is not the `load_moe_4bit_streaming` path.
 
 **The fused training path is faster at equal loss.** Across two 30B-class
 MoEs, five datasets each, 200 steps per cell: 1.52–1.81× per step at
@@ -3205,7 +3212,9 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.ablation [measured]: Adapter placement: experts+attention is the best eval (1.0268) and attention-only is the efficiency pick, reaching 92% of the achievable reduction at 2.1 M trainable params (3.5%); training the router hurts.
 - e4b.offload.fits-30b-class [measured]: With OFFLOAD_EXPERTS=1 the frozen experts stream from pinned CPU RAM one layer at a time, so a fused MoE whose 4-bit experts exceed the card still QLoRA-trains on 12 GB: Qwen3-30B-A3B peaks at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both of which OOM without offload. Cost is about +11% s/step at OLMoE scale.
 - e4b.offload.arena-vs-host-ram [measured]: Against a descending host-RAM cap the arena path completes where the host-RAM path does not: OLMoE 2.56x, Gemma-4 3.80x, Qwen3-30B 6.40x lower host-RAM requirement; at an 8.59 GB cap Qwen3-30B is OOM-killed on host RAM and trains to completion on the arena.
-- e4b.offload.kimi-k3.full-depth.a2000.2026-09-28 [measured]: Kimi-K3 runs at full depth (all 93 layers, real weights) on one 12 GB RTX A2000 at 4.32 GB peak VRAM with 0 dense bytes resident in host RAM -- the MXFP4 experts stream from a 1.446 TB SSD arena through 92 Mxfp4NvmeResidencyK3 engines sharing one 281 MB slot store, and the 108.76 GB dense side is served from safetensors byte offsets by enable_dense_offload -- and greedily completes 'The capital city of France is' as ' Paris. It is' (p(' Paris') = 68.90 %) at a median 92.4 s per decode token.
+- e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28 [measured]: Kimi-K3 runs at full depth (all 93 layers, real weights) on one 12 GB RTX A2000 at 4.07 GB peak VRAM once Triton's cache is warm (4.32 GB on the first process in a fresh cache) with 0 dense bytes resident in host RAM -- MXFP4 experts streamed from a 1.446 TB SSD arena through 92 engines sharing one 281 MB slot store, the 108.76 GB dense side served from safetensors byte offsets -- and greedily completes 'The capital city of France is' as ' Paris. It is' in every one of five processes, at 90.4-92.4 s per decode token (median per run) after a 175-179 s warm prefill, with p(' Paris') ranging 68.90-71.59 % from run to run.
+- e4b.parity.kimi-k3.cache-gate.replayed-routing.a2000.2026-09-28 [measured]: With routing replayed (every MoE layer handed the cached path's own expert ids and weights), K3's cached decode path matches a fresh cache-free prefill of the same 9 tokens at cos 0.999966 (rel 4.36e-3, argmax agrees) on the A2000 run, while a cache whose 69 KDA recurrent states are zeroed reads cos 0.877523 -- so the gate (cos >= 0.9999 and argmax agrees, fixed before either number) passes the correct cache and fails the broken one; with free routing the same comparison reads 0.998699 because 90 of 92 layers route differently somewhere in the 9 positions.
+- e4b.quality.kimi-k3.vs-fireworks.per-token.a2000.2026-09-28 [measured]: On one raw 90-token paragraph, the A2000 run's per-token NLL tracks Fireworks' serverless kimi-k3 (native MXFP4 weights, MXFP8 activations) at Pearson r = 0.9965 over the same 89 predictions (median |delta| 0.038 nats; perplexity 3.196 vs 3.150), and both greedily complete 'The capital city of France is' as ' Paris. It is' (p(' Paris') 68.90-71.59 % across five A2000 processes vs 69.26 %).
 - e4b.train.fast-train-dgrad [measured]: enable_fast_train(model, dgrad=True) is the fastest training lane at real width (2.52x on Qwen3-30B, 48 layers, A6000) while enable_batched_train wins only the toy microbench (24.01x at hidden 512) and gives no speedup at real width (1.05x) with the highest peak memory.
 - e4b.train.flagship-matrix [measured]: Across two 30B-class MoEs (Qwen3-30B-A3B and Gemma-4-26B-A4B), five datasets each, 200 steps per cell: the fused training path runs 1.52-1.81x faster per step at 0.75-0.81x peak VRAM and 0.86-0.92x energy per step, with loss parity on both registered criteria (worst cell 0.03653 against a 0.05 band) and the frozen 4-bit stack verified bit-identical over 16.31 GB hashed.
 - e4b.serve.informed-hot-sets [measured]: Choosing resident experts from a routing histogram rather than by index buys +56% (K=4) and +120% (K=8) decode on gpt-oss-20b at identical VRAM, +44% on Gemma-4-26B and +37.1% on DeepSeek-V4-Flash, where index-ordered was statistically indistinguishable from pure streaming.
@@ -3453,4 +3462,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(256 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(258 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
