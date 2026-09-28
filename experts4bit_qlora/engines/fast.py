@@ -97,12 +97,33 @@ def _eligible(mod) -> Optional[str]:
     return None
 
 
+def _refuse_under_capture(hidden_states) -> None:
+    """Refuse by name inside a CUDA-graph capture (#527).
+
+    The grouped path sizes its launch grid from host-side per-expert counts
+    (``counts[active].tolist()``): a host sync AND a data-dependent launch, so
+    it cannot be captured by construction, and neither can the reference path
+    it falls back to (its dequantize synchronizes). Without this the failure
+    is ``operation not permitted when stream is capturing`` from inside
+    ``torch.bincount``, three frames down. The capturable engine is
+    ``enable_pipelined_residency``: its expert ids never leave the device.
+    """
+    if hidden_states.is_cuda and torch.cuda.is_current_stream_capturing():
+        raise RuntimeError(
+            "enable_fast's grouped expert path cannot run under CUDA-graph "
+            "capture: it sizes its launch from host-side per-expert counts "
+            "(a host sync and a data-dependent launch). Capture the decode "
+            "step with enable_pipelined_residency instead, whose expert ids "
+            "stay on the device (#527).")
+
+
 def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
     """Fused inference forward with the reference signature and semantics.
 
     Falls back to the module's reference forward whenever grad is required
     (training) or the input dtype isn't a kernel epilogue dtype.
     """
+    _refuse_under_capture(hidden_states)
     if torch.is_grad_enabled() and (
         hidden_states.requires_grad or any(p.requires_grad for p in mod.parameters())
     ):
@@ -179,6 +200,7 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
     shape mismatch from inside the kernel.
     """
     base = mod.base
+    _refuse_under_capture(hidden_states)
     if torch.is_grad_enabled() and (
         hidden_states.requires_grad or any(p.requires_grad for p in mod.parameters())
     ):
