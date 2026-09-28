@@ -1,0 +1,4 @@
+# Names as the BOX sees them after staging (flat in $W). The box runs `sha256sum -c` on this file and the
+# controller resolves each name to its source (this directory) and compares.
+6fa45d85a73754b5577bffa4f32b1215d4e3a6df6a35f2a8f9a7759b5346ed2f  b511_run.sh
+344e339bbac33f8cec67fe693c1379b64c95ec1c53d6f9c87504939c66ae88aa  mut_b511.py
