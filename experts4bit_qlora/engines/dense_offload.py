@@ -186,8 +186,9 @@ class _DenseOffload:
                     self.bytes += nbytes
         # A DiskHome is not a tensor and is never "pinned" in this sense; report on
         # the host-resident homes only, so `all_pinned` keeps meaning what it says.
+        # A layer with none has no pinning to report: None, not a vacuous True.
         _ram = [h for _m, _a, _p, h in self.slots if isinstance(h, torch.Tensor)]
-        self.pinned = all(_is_pinned(h) for h in _ram) if _ram else True
+        self.pinned = all(_is_pinned(h) for h in _ram) if _ram else None
         self._install_state_dict_hook()
         self.evict()                      # start evicted: the GPU copies just went away
 
@@ -535,11 +536,18 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
 
 
 def dense_offload_report(handles) -> dict:
-    """What is pinned, and what a token costs at a given link rate."""
+    """What is pinned, and what a token costs at a given link rate.
+
+    ``all_pinned`` is asked of the host-resident layers only: ``True`` or
+    ``False`` when ``host_resident_layers > 0``, and ``None`` when there are none
+    (every dense home served from disk, or no handles), since nothing is pinned
+    or could have failed to pin.
+    """
     total = sum(h.bytes for h in handles)
     per_layer = total / len(handles) if handles else 0
     host = sum(h.host_bytes for h in handles)
     disk = sum(h.disk_bytes for h in handles)
+    host_resident = [h for h in handles if h.host_bytes]
     return {
         "layers": len(handles),
         "tensors": sum(len(h.slots) for h in handles),
@@ -553,8 +561,10 @@ def dense_offload_report(handles) -> dict:
         # Pinning is a property of HOST-resident homes. Asking it of a disk-served
         # handle is a category error, and `all(...)` over an empty set of them
         # answered True -- reporting "all_pinned" about a path that pins nothing.
-        "host_resident_layers": sum(1 for h in handles if h.host_bytes),
-        "all_pinned": all(h.pinned for h in handles if h.host_bytes),
+        # With no host-resident layer the question has no answer: None.
+        "host_resident_layers": len(host_resident),
+        "all_pinned": (all(h.pinned for h in host_resident)
+                       if host_resident else None),
         "staged_now": sum(len(v) for v in _DenseOffload._staged_now.values()),
         # s/token at the measured 19 GB/s host->device rate -- HOST bytes only. Disk
         # homes do not ride PCIe from pinned RAM; they are bounded by the device the

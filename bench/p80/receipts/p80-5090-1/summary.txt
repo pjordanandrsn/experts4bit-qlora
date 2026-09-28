@@ -1,0 +1,27 @@
+KNOBS model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=130 seg=32 skip_install=0
+p80_reduce self-test OK (9 cases)
+e4b 0.37.6 @39f6bc7c47a0c5952532df22b6d3bd8f0e7b6561 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.5 @fb15cf5f5b9f2fb107fa1a39218fd9d910b34d94
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+BAKE OK
+arm A1 rc=0 P80_DYNB arm=A1 mode=eager agg=121.6 tok/s decode_wall=8161.0 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=18.97 GiB warm==timed=True
+
+arm B1 rc=0 P80_DYNB arm=B1 mode=graph agg=284.5 tok/s decode_wall=3487.3 ms steps=160 tokens=992 status={1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} eager_steps=0 peak_alloc=19.01 GiB warm==timed=True
+
+arm B2 rc=0 P80_DYNB arm=B2 mode=graph agg=284.5 tok/s decode_wall=3487.4 ms steps=160 tokens=992 status={1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} eager_steps=0 peak_alloc=19.01 GiB warm==timed=True
+
+arm A2 rc=0 P80_DYNB arm=A2 mode=eager agg=122.5 tok/s decode_wall=8099.4 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=18.97 GiB warm==timed=True
+
+arm P rc=0 P80_DYNB arm=P mode=padded agg=162.1 tok/s decode_wall=6117.9 ms steps=160 tokens=992 status={1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} eager_steps=320 peak_alloc=18.97 GiB warm==timed=True
+
+P80_VERDICT CONFIRMED both pairings exceed 1.03: B1/A1 2.3402, B2/A2 2.3225
+  A2/A1 = 1.0076
+  B2/B1 = 1.0000
+  B1/A1 = 2.3402
+  B2/A2 = 2.3225
+  P/A1 = 1.3339
+  B1/P = 1.7544

@@ -1,6 +1,6 @@
 {
   "package": "experts4bit-qlora",
-  "generated": "2026-09-24",
+  "generated": "2026-09-28",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "verified": "reproduced under stated conditions with a public receipt",
@@ -7101,6 +7101,37 @@
         "receipts/experts4bit-qlora/2026-09-24/p67-gemma4-floor-1/ (receipt.json, teardown-proof.json, the fetched tp4/ tree); the proof p67-prove-1 beside it; the consistency sessions receipts/experts4bit-qlora/2026-09-19/tp4-c-parity-2 and 2026-09-22/p56-gemma4-ladder-3"
       ],
       "notes": "Pre-registered #718. Q5: D_final HELD ([0.03, 0.08]), D_med REFUTED ([0.05, 0.11], by 0.002). This row does NOT license the shipped batched_train default (limit 4), by the registration's own line; gemma4_text.batched_train stays as tp1 left it (void: the fallback took every layer on some steps at the default)."
+    },
+    {
+      "id": "e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P80: on NF4 Qwen3-30B-A3B over a forced changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 32 decode steps each, 992 decode tokens), PagedModelRunner.enable_decode_graphs (CUDA-graph buckets 1/2/4/8/16, active set padded with scratch KV slots) decodes 284.5 tok/s against the eager PagedModelRunner's 121.6 / 122.5 -- B1/A1 = 2.340 and B2/A2 = 2.323, both above the registered 1.03 with the self-pairs inside it -- and its token streams equal the same padded step run eagerly, bitwise: CONFIRMED. Per-step: 54.5 -> 33.8 ms at 16 rows, 42.3 -> 9.95 ms at one.",
+      "value": 2.323,
+      "unit": "x aggregate decode tok/s, bucketed graphs over the eager PagedModelRunner, the smaller of the two registered pairings (B2/A2)",
+      "hardware": "RTX 5090 (sm_120, 575 W power limit, driver 580.119.02), one rented Vast.ai verified/secure host (instance 53262053, AMD EPYC 9755, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777, NF4 arena baked by P39's k8_bake.py, nothing int4, no folds, no fused router, bf16 attention, fp8 paged KV, hybrid engine all-VRAM, --no-fuse-qkv; the 16 rows of step_decomp._k8_window at B = 16 (wikitext-2, prompts sha256 f67e7e4d, p37's), prefilled together in one step; bench/p80/step_decomp.py --dynb-mode, arms A1 eager -> B1 graph -> B2 graph -> A2 eager -> P padded eager, one process each; per arm a warm pass then a timed pass over the same trace, timing = decode-only scheduler-step walls including the token read-back; B and P use capture-safe device grouping, A the default T > 1 grouping; verdict by bench/p80/p80_reduce.py; e4b 0.37.6 at 39f6bc7, grouped-nf4-gemm 0.33.5 at fb15cf5, torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1",
+      "measured_on": "2026-09-28",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p80/RESULTS-p80.md",
+        "bench/p80/PREREG-p80.md",
+        "bench/p80/p80_reduce.py",
+        "bench/p80/step_decomp.py",
+        "bench/p80/receipts/p80-5090-1/verdict.json",
+        "bench/p80/receipts/p80-5090-1/p80_A1.json",
+        "bench/p80/receipts/p80-5090-1/p80_B1.json",
+        "bench/p80/receipts/p80-5090-1/p80_B2.json",
+        "bench/p80/receipts/p80-5090-1/p80_A2.json",
+        "bench/p80/receipts/p80-5090-1/p80_P.json",
+        "bench/p80/receipts/p80-5090-1/summary.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-28/p80-5090-1/ (receipt.json, teardown-proof.json, the fetched run); the proof p80-prove-3 and the refused / not-run p80-prove-1..2 beside it"
+      ],
+      "notes": "Pre-registered in #762 (adopts the Q2 memo's claim and criteria; departs in one stated place: the bitwise gate is graph == padded eager, since unpadded eager runs other row counts through bf16 GEMMs -- graph vs unpadded eager first differs at row 0 token 130, reported not decisive). P1, P2, P3 HELD. Decomposition: P/A1 = 1.334 (padding + device grouping), B1/P = 1.754 (the graph). NF4 only: no licensed int4 ratio is implied. enable_decode_graphs stays opt-in."
     }
   ]
 }

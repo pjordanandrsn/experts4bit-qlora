@@ -365,6 +365,29 @@ def test_the_report_does_not_call_disk_bytes_pinned(tmp_path):
         src.close()
 
 
+def test_all_pinned_has_no_answer_when_nothing_is_host_resident(tmp_path):
+    """`all_pinned` over zero host-resident layers is None, never a vacuous True.
+
+    The 2026-09-28 Kimi K3 receipt (bench/kimi-k3-a2000/receipts/2026-09-28/
+    k3_gen.log) printed `"host_bytes": 0, "host_resident_layers": 0,
+    "all_pinned": true`: `all()` over an empty generator, reported as a fact about
+    pinning. Not False either -- nothing was pinned, and nothing failed to pin.
+    """
+    m = _model()
+    src = DenseDiskSource(str(_snapshot(tmp_path, m)))
+    try:
+        hs = enable_dense_offload(m, "cpu", pin=False, prefetch=False, source=src)
+        rep = dense_offload_report(hs)
+        assert rep["host_bytes"] == 0 and rep["host_resident_layers"] == 0, rep
+        assert rep["all_pinned"] is None, rep
+        assert json.loads(json.dumps(rep))["all_pinned"] is None   # receipt: null
+        # the per-layer flag the report and the repr read makes the same claim
+        assert all(h.pinned is None for h in hs), [h.pinned for h in hs]
+    finally:
+        src.close()
+    assert dense_offload_report([])["all_pinned"] is None
+
+
 def test_the_report_still_says_pinned_when_it_really_is(tmp_path):
     """The host path is unchanged: same key, same meaning, and the PCIe estimate
     still applies because those bytes really do ride PCIe from pinned RAM."""
@@ -374,5 +397,7 @@ def test_the_report_still_says_pinned_when_it_really_is(tmp_path):
     rep = dense_offload_report(hs)
     assert rep["host_bytes"] > 0 and rep["disk_bytes"] == 0, rep
     assert rep["host_resident_layers"] == len(hs)
+    # pin=False: pageable homes, so a real answer -- False, not None
+    assert rep["all_pinned"] is False, rep
     assert rep["seconds_per_token_at_19GBs"] > 0
     assert "pinned on the host" in " ".join(lines)
