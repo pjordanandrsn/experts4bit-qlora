@@ -1,11 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.37.5 — 2026-09-28 — a routing fix and a default change under the opt-in fused router epilogue (`E4B_FUSE_ROUTER_EPI=1`): the gpt-oss router now adds its bias inside the GEMM as upstream does (on real bf16 gpt-oss-20b weights the old path licensed 16 of 24 layers and could pick a different expert set), and `softmax_topk` routers (Qwen3-MoE, OLMoE, Mixtral) return the model's dtype by default (lane P70 read the cast INDISTINGUISHABLE; `E4B_ROUTER_EPI_CAST=0` restores fp32 for one release). `requires-python` is raised to `>=3.10`, which is what the package already needed. Lanes P69 and P70 read; the direct cold landing is tested end to end (#178 closed); documentation corrections; trove classifiers
 
 ### `requires-python` is `>=3.10`, which is what the package already needed (packaging metadata; a floor changes)
 
 - **The defect.** The wheel declared `>=3.9`, but `util.py` and `formats/fp8_blocks.py` use `X | None` annotations without `from __future__ import annotations`, which raise `TypeError` at import on 3.9. `util.py` loads with the package, so on 3.9 the package failed at import. The `[train]` and `[serve]` extras need `transformers>=5.0`, which itself requires Python 3.10, and current bitsandbytes does too. Found in the 2026-09-24 documentation review (#749, "left for the maintainer").
-- **The change.** `requires-python = ">=3.10"`. On 3.9, pip now refuses the install up front, where before the import failed. Every module in `experts4bit_qlora/` parses under the 3.10 grammar (`ast.parse(..., feature_version=(3, 10))`, 66 of 66). CI runs 3.11 only, so 3.10 is the declared floor, not a tested one.
+- **The change.** `requires-python = ">=3.10"`. On 3.9, pip now refuses the install up front, where before the import failed. Every module in `experts4bit_qlora/` parses under the 3.10 grammar (`ast.parse(..., feature_version=(3, 10))`, 66 of 66). CI runs 3.11 only, so 3.10 is the declared floor, not a tested one. `docs/capabilities.json` and one solution page state the new floor. (#751)
 
 ### The fused gpt-oss router adds its bias inside the GEMM, as upstream does; bf16 routers are licensed before fusing (a routing fix under `E4B_FUSE_ROUTER_EPI=1`)
 
@@ -14,7 +14,18 @@
 - **The fix.** `_topk_softmax_logits` forms the logits as `F.linear(rows, weight, bias)` in the module's dtype, in both the fused forward and the probe's reference. The kernel is called with no bias. After the fix, both families pass 1200 of 1200 at bf16 and fp32, and all 24 gpt-oss layers are licensed. The probe's `rtol=2**-8` is unchanged: it is bf16's half-ulp, and the upstream k-softmax rounded to bf16 falls inside it by construction. The expert set and order are still required to match exactly. The probe's "raw" first slot now means exactly what the fused path returns. So a biased router that returned the *un*biased projection would be refused, not handed biased logits. No family does this.
 - **Unchanged.** `E4B_ROUTER_EPI_CAST`, `CAST_WEIGHTS` and `_cast_for` are unchanged. `topk_softmax` still returns fp32 weights by default, pending its read. The `softmax_topk` and Gemma-4 branches are unchanged.
 - **Tests** (`tests/test_router_epilogue.py`). The toy routers and the pinned transformers' own `GptOssTopKRouter` and `GraniteMoeTopKRouter` are built in bf16 **before** fusing. Each must be licensed and must select exactly the module's own experts on 32 draws of 64 decode rows. The existing default-cast test now fuses in bf16, where it used to fuse in fp32 to dodge the probe. One test pins the late-bias mechanism; another pins the first-slot refusal. The new tests fail on both mutations: the old module, and a late-bias fused path behind the fixed probe.
-- **Receipts** (`bench/router-probe-bf16/`). `probe_real.py` runs the probe over the real router weights. `extract_router.py` pulls those tensors from the checkpoints using only the stdlib. `before.txt` and `after.txt` hold the counts above.
+- **Receipts** (`bench/router-probe-bf16/`). `probe_real.py` runs the probe over the real router weights. `extract_router.py` pulls those tensors from the checkpoints using only the stdlib. `before.txt` and `after.txt` hold the counts above. (#748)
+
+### The direct cold landing is tested end to end; #178 closed (tests only, no library change)
+
+- `tests/test_hybrid_cold_dest.py`'s only end-to-end fixture (`INTER=64, H=128`) cannot scatter at `align=4096`, so every cold-CPU equivalence test ran the copy landing and the direct (preadv-scatter) landing never moved a byte in a test. #178 (`enable_hybrid_tier(cold_dest="cpu")` raised at enable on arenas that scatter) had been fixed by #177's separate setup tier, with nothing to hold the fix.
+- A second fixture at `INTER=256, H=512` scatters. A CPU test calibrates it: the selector picks `direct-scatter` there and `copy` on the old geometry. A GPU test enables `cold_dest="cpu"` with `cold_direct` True and False, and asserts the landing names and **bitwise** equality with each other and with a DRAM placement. The old equivalence test now asserts that its own landing is `copy`.
+- RTX A2000 (sm_86): 37 passed, 0 skipped. With the setup reads routed back through the serving tier (the #178 condition), the new test fails with #178's exact `RuntimeError`, while the old fixture's test still passes. (#750)
+
+### Documentation corrections from the 2026-09-24 cross-document review (docs, `capabilities.json` prose, one docstring; no library behaviour change)
+
+- #743 applied 85 verified findings across README, STATUS, CHOOSING, AGENTS, SECURITY, CONTRIBUTING, INDEX and 20 other pages: terms defined on first use, the quickstart names `[train]`, the vLLM bullet describes P58, dead links and pins fixed. No claim value, status or unit moved.
+- #749 applied the rest. The "no shipped tool bakes the training arena" wording was false: grouped-nf4-gemm's `nvme_bake_nf4` writes exactly the four segments `enable_nvme_train_residency` stages. The offload, MXFP4 and training pages, README, STATUS and `capabilities.json` now describe the bake. The training page records Gemma-4's attention-4-bit support (lane P67) and the 4.490× tp4 position.
 
 ### Package metadata: trove classifiers (no library change)
 
