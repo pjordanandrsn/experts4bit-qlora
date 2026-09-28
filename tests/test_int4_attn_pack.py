@@ -230,3 +230,37 @@ def test_enable_from_env_dumps_loads_and_refuses_by_name(monkeypatch, tmp_path):
     monkeypatch.delenv("E4B_SERVE_ATTN_INT4_CALIB")
     with pytest.raises(RuntimeError, match="no E4B_SERVE"):
         ac.enable_from_env(_model(seed=1), ids)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+def test_real_kernels_a_loaded_pack_serves_the_calibrated_function_bitwise(tmp_path):
+    """No stubs: grouped-nf4-gemm's own GPTQ packer and int4 kernels. A model loaded
+    from the pack must serve exactly what the calibrated model served, at decode
+    (1 row, the GEMV) and above it (several rows)."""
+    pytest.importorskip("gptq_pack", reason="needs grouped-nf4-gemm with gptq_pack")
+    pytest.importorskip("int4_b32", reason="needs grouped-nf4-gemm with int4_b32")
+    from experts4bit_qlora.engines import int4_attn_calib as ac
+
+    src = _model(seed=0).cuda()
+    torch.manual_seed(11)
+    calib = [torch.randint(0, 50, (2, 16), device="cuda") for _ in range(4)]
+    hs = ac.calibrate_attention_hessians(src, calib)
+    assert ac.enable_serve_attn_int4_calib(src, hs) == 2
+    man = ac.dump_attn_int4_artifact(src, str(tmp_path / "p"))
+
+    dst = _model(seed=7).cuda()          # different bf16 weights underneath
+    ac.enable_serve_attn_int4_from_artifact(dst, str(tmp_path / "p"),
+                                           expected_fingerprint=man["pack_fingerprint"])
+    for n_rows in (1, 4, 24):
+        ids = torch.randint(0, 50, (1, n_rows), device="cuda")
+        # the embedding is not part of the pack; feed both the source's embedding
+        x = src.emb(ids).to(torch.bfloat16)
+        with torch.no_grad():
+            want, got = src.attn(x), dst.attn(x)
+        assert torch.equal(want, got), f"{n_rows} row(s): the loaded pack serves a different function"
+    # and it is not trivially equal: RTN of the same weights gives different bytes
+    rtn = _model(seed=0).cuda()
+    from experts4bit_qlora.engines.int4_attn import Int4Linear
+    rtn_q = Int4Linear(rtn.attn.qkv_proj)
+    assert not torch.equal(rtn_q.packed, src.attn.qkv_proj.packed), \
+        "calibrated and RTN bytes coincide; this fixture cannot tell the two apart"
