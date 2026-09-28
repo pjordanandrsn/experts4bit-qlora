@@ -447,6 +447,77 @@ def load_payload_tensors(artifact_dir: str | os.PathLike,
     return out
 
 
+# ------------------------------------------------------------------------------------------
+# Stores keyed by MODULE NAME (#674): the calibrated int4 attention projections (and, opted
+# in, the output head and dense MLPs). A sibling artifact with its own layout, so an expert
+# pack and an attention pack can never be confused for each other at verify time, while the
+# hashing, identity payload and verify path are the expert pack's own.
+# ------------------------------------------------------------------------------------------
+
+ATTN_LAYOUT = "int4_b32.attn.v1"
+ATTN_PAYLOAD_DIR = f"{PAYLOAD_DIR}/attn"
+ATTN_KINDS = ("packed", "scales", "bias")
+ATTN_PROVENANCE_ATTR = "_e4b_attn_pack_provenance"
+_MODULE_NAME_RE = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$")
+_ATTN_PAYLOAD_RE = re.compile(
+    r"^" + re.escape(ATTN_PAYLOAD_DIR) + r"/([A-Za-z0-9_.]+)\.(packed|scales|bias)\.bin$")
+
+
+def write_named_artifact(artifact_dir: str | os.PathLike, *,
+                         tensors: Mapping[tuple[str, str], Any],
+                         meta: Mapping[str, Any],
+                         layout: str = ATTN_LAYOUT) -> dict:
+    """Write payload files + manifest for stores keyed ``(qualified_module_name, kind)``,
+    ``kind`` in :data:`ATTN_KINDS`. The payload path carries the name, so the root
+    fingerprint covers WHICH module each set of bytes belongs to."""
+    for name, kind in tensors:
+        # validated BEFORE any filesystem write: a refusal must not leave half an artifact
+        if not isinstance(name, str) or not _MODULE_NAME_RE.fullmatch(name):
+            raise PackManifestError(f"not a qualified module name: {name!r}")
+        if kind not in ATTN_KINDS:
+            raise PackManifestError(f"{name}: payload kind {kind!r} is not one of {ATTN_KINDS}")
+    root = Path(artifact_dir)
+    (root / ATTN_PAYLOAD_DIR).mkdir(parents=True, exist_ok=True)
+    payloads = []
+    for name, kind in sorted(tensors):
+        rel = f"{ATTN_PAYLOAD_DIR}/{name}.{kind}.bin"
+        data = tensor_payload_bytes(tensors[(name, kind)])
+        (root / rel).write_bytes(data)
+        payloads.append(payload_entry(rel, data))
+    head = {"schema_version": SCHEMA_VERSION, "layout": layout,
+            **{k: v for k, v in meta.items() if v is not None}}
+    ident = identity_payload_bytes(head)
+    (root / IDENTITY_PATH).write_bytes(ident)
+    payloads.append(payload_entry(IDENTITY_PATH, ident))
+    man = {
+        "schema_version": SCHEMA_VERSION,
+        "layout": layout,
+        "pack_fingerprint": compute_pack_fingerprint(payloads),
+        "payloads": payloads,
+        **{k: v for k, v in meta.items() if v is not None},
+    }
+    write_json(root / MANIFEST_NAME, man)
+    return man
+
+
+def load_named_payload_tensors(artifact_dir: str | os.PathLike,
+                               manifest: Mapping[str, Any]) -> dict[tuple[str, str], Any]:
+    """The tensors of a :func:`write_named_artifact` pack, keyed ``(name, kind)``. Call it on a
+    manifest :func:`verify_artifact` returned: this reads bytes, it does not re-check them."""
+    root = Path(artifact_dir)
+    out = {}
+    for p in manifest["payloads"]:
+        rel = p["path"]
+        if rel == IDENTITY_PATH:
+            continue
+        m = _ATTN_PAYLOAD_RE.fullmatch(rel)
+        if not m:
+            raise PackManifestError(
+                f"payload is not {ATTN_PAYLOAD_DIR}/<module>.{{packed,scales,bias}}.bin: {rel}")
+        out[(m.group(1), m.group(2))] = tensor_from_payload_bytes((root / rel).read_bytes())
+    return out
+
+
 def method_map_hash(entries: Sequence[Mapping]) -> str:
     return hash_canonical(canonical_method_map(entries))
 
@@ -530,6 +601,13 @@ def merge_provenance_into_receipt(rep: dict, model) -> dict:
     rec = provenance_from_model(model)
     if rec:
         for k, v in rec.items():
+            if k not in rep:
+                rep[k] = v
+    # The attention pack's identity rides beside the expert pack's under its own keys
+    # (attn_pack_fingerprint, ...), so a receipt names BOTH halves of the stack (#674).
+    attn = getattr(model, ATTN_PROVENANCE_ATTR, None)
+    if attn:
+        for k, v in dict(attn).items():
             if k not in rep:
                 rep[k] = v
     return rep

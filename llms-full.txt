@@ -927,6 +927,7 @@ Single-stream decode is bandwidth-bound: each token reads the routed experts plu
 | NF4 experts on the grouped GEMM | `enable_fast(model)` | — |
 | int4-b32 experts (single-stream, all-VRAM path) | `engines.int4_experts.enable_serve_experts_int4(model, source_dir)` | — |
 | calibrated int4 attention (opt-in: output head, dense MLP) | `calibrate_attention_hessians` + `enable_serve_attn_int4_calib` | `E4B_SERVE_ATTN_INT4_CALIB=1` via `enable_from_env` |
+| the same, from a hash-pinned pack (no calibration at load) | `dump_attn_int4_artifact` / `enable_serve_attn_int4_from_artifact` | `E4B_SERVE_ATTN_INT4_DUMP=<dir>` writes one; `E4B_SERVE_ATTN_INT4_ARTIFACT=<dir>` + `E4B_SERVE_ATTN_INT4_FINGERPRINT=sha256:…` load one, via `enable_from_env` |
 | fused glue round 1 (RMSNorm) | `engines.glue_fuse.fuse_t1_glue` | `E4B_FUSE_T1_GLUE=1` |
 | fused glue round 2 (residual+norm, norm+rotary, rotary-only) | `engines.glue_r2.fuse_t1_glue_r2` | `E4B_FUSE_T1_GLUE_R2=1` |
 | router epilogue | `engines.router_epilogue.fuse_router_epilogue` | `E4B_FUSE_ROUTER_EPI=1` |

@@ -125,7 +125,11 @@ class Int4Linear(nn.Module):
         packed = torch.cat([m.packed for m in mods], dim=1)
         scales = torch.cat([m.scales for m in mods], dim=1)
         bias = torch.cat([m.bias for m in mods]) if all(biased) else None
-        return cls.from_packed(packed, scales, sum(m.N for m in mods), K, bias=bias, smallm=smallm)
+        fused = cls.from_packed(packed, scales, sum(m.N for m in mods), K, bias=bias, smallm=smallm)
+        # Marked so an attention pack is never dumped from fused modules: their names do not
+        # exist on the unfused model a licensed load installs onto (#674). Fuse after loading.
+        fused._e4b_fused_parts = len(mods)
+        return fused
 
     def _install(self, packed, scales, N, K, bias, dev, smallm):
         gemv, qx, dref, _pack = _kernels()
