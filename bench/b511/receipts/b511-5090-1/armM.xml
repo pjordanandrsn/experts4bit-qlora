@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="7.365" timestamp="2026-09-28T20:36:14.480722+00:00" hostname="5987b9c23e24"><testcase classname="tests.test_decode_graph_buckets" name="test_a_bucket_replay_decodes_exactly_as_the_padded_eager_step" time="3.390"><failure message="AssertionError: replay != padded eager:&#10;    graph=[[231, 0, 0, 141, 0, 0, 141, 141, 141, 141, 0, 56, 102, 47], [110, 0, 0, 0, 0, 0, 0, 0, 0, 0], [118, 0, 0, 0, 0, 0], [215, 0, 0], [103, 0, 0, 0, 0, 0, 0, 0]]&#10;    eager=[[231, 77, 175, 77, 175, 77, 175, 34, 77, 160, 231, 77, 160, 77], [110, 48, 43, 250, 178, 184, 221, 153, 224, 174], [118, 43, 18, 77, 146, 43], [215, 215, 215], [103, 139, 124, 40, 28, 167, 4, 124]]&#10;assert [[231, 0, 0, ...0, 0, 0, ...]] == [[231, 77, 17...28, 167, ...]]&#10;  &#10;  At index 0 diff: [231, 0, 0, 141, 0, 0, 141, 141, 141, 141, 0, 56, 102, 47] != [231, 77, 175, 77, 175, 77, 175, 34, 77, 160, 231, 77, 160, 77]&#10;  &#10;  Full diff:&#10;    [&#10;        [&#10;            231,...&#10;  &#10;  ...Full output truncated (128 lines hidden), use '-vv' to show">@needs_fp8
+    def test_a_bucket_replay_decodes_exactly_as_the_padded_eager_step():
+        graph, status, stats = _run("graph")
+        assert status == {1: "graph", 2: "graph", 4: "graph"}, status
+        eager, _, estats = _run("padded-eager")
+&gt;       assert graph == eager, f"replay != padded eager:\n  graph={graph}\n  eager={eager}"
+E       AssertionError: replay != padded eager:
+E           graph=[[231, 0, 0, 141, 0, 0, 141, 141, 141, 141, 0, 56, 102, 47], [110, 0, 0, 0, 0, 0, 0, 0, 0, 0], [118, 0, 0, 0, 0, 0], [215, 0, 0], [103, 0, 0, 0, 0, 0, 0, 0]]
+E           eager=[[231, 77, 175, 77, 175, 77, 175, 34, 77, 160, 231, 77, 160, 77], [110, 48, 43, 250, 178, 184, 221, 153, 224, 174], [118, 43, 18, 77, 146, 43], [215, 215, 215], [103, 139, 124, 40, 28, 167, 4, 124]]
+E       assert [[231, 0, 0, ...0, 0, 0, ...]] == [[231, 77, 17...28, 167, ...]]
+E         
+E         At index 0 diff: [231, 0, 0, 141, 0, 0, 141, 141, 141, 141, 0, 56, 102, 47] != [231, 77, 175, 77, 175, 77, 175, 34, 77, 160, 231, 77, 160, 77]
+E         
+E         Full diff:
+E           [
+E               [
+E                   231,...
+E         
+E         ...Full output truncated (128 lines hidden), use '-vv' to show
+
+tests/test_decode_graph_buckets.py:103: AssertionError</failure></testcase></testsuite></testsuites>
