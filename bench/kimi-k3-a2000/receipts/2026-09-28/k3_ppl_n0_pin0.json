@@ -1,0 +1,36 @@
+{
+ "mode": "ppl",
+ "tokens": 90,
+ "predictions": 89,
+ "nll": 1.1572903408093398,
+ "perplexity": 3.181301344175307,
+ "vram_peak_gb": 3.665165824,
+ "pinned_gb": 0.0,
+ "disk_gb": 108.7586304,
+ "wall_s": 776.8328700065613,
+ "provenance": {
+  "utc": "2026-09-28T19:27:04Z",
+  "packages": {
+   "experts4bit-qlora": "0.37.5",
+   "grouped-nf4-gemm": "0.33.4",
+   "torch": "2.8.0+cu128",
+   "triton": "3.4.0",
+   "transformers": "4.57.6",
+   "tiktoken": "0.13.0",
+   "bitsandbytes": "0.50.2"
+  },
+  "python": "3.10.12",
+  "cuda": "12.8",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "driver_sha256": "55f5c33e4a1c14b0e744320194dd4daf7e3bd63caa125cff987793c71ac2fa7a",
+  "arena": "/z531/k3-arena/k3.arena",
+  "dense": "/workspace/k3-dense",
+  "snapshot": "/z532/hf-models/moonshotai_Kimi-K3",
+  "env": {
+   "K3_NEW_TOKENS": "0",
+   "K3_PPL_TOKENS": "128",
+   "K3_MODE": "ppl",
+   "K3_OUT": "/workspace/k3-rel-20260928"
+  }
+ }
+}

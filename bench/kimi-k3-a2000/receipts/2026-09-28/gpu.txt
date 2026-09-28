@@ -1,0 +1,2 @@
+name, driver_version, memory.total [MiB], pcie.link.gen.max, pcie.link.width.max
+NVIDIA RTX A2000 12GB, 575.64.05, 12282 MiB, 3, 16

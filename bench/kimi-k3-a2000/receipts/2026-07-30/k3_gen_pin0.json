@@ -1,0 +1,27 @@
+{
+ "mode": "gen",
+ "prompt": "The capital city of France is",
+ "generated": [
+  17374,
+  13
+ ],
+ "text": " Paris.",
+ "per_step": [
+  {
+   "s": 89.48318099975586,
+   "disk_reads": 1467,
+   "claims": 92,
+   "dense_reads": 1251,
+   "dense_bytes": 108763639808
+  }
+ ],
+ "cache_check": {
+  "cos": 0.9995750784873962,
+  "rel": 0.03815260902047157,
+  "argmax_agrees": true
+ },
+ "vram_peak_gb": 4.068814848,
+ "pinned_gb": 0.0,
+ "disk_gb": 108.7586304,
+ "wall_s": 626.0628492832184
+}

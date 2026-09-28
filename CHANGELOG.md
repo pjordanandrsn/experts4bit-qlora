@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Kimi-K3 at full depth on one 12 GB RTX A2000, on the released packages (bench and docs only; no library change)
+
+- **The receipt.** `bench/kimi-k3-a2000/` re-runs the 2026-07-30 full-depth driver on 0.37.5 and grouped-nf4-gemm 0.33.4 from PyPI. All 93 layers run on real weights, on the NAS's RTX A2000, at 4.32 GB peak VRAM. The MXFP4 experts stream from the 1.446 TB SSD arena through 92 `Mxfp4NvmeResidencyK3` engines that share one 281 MB slot store. `enable_dense_offload` serves the 108.76 GB dense side from safetensors byte offsets, with 0 bytes pinned in host RAM. The model greedily completes "The capital city of France is" as " Paris. It is", with p(" Paris") = 68.90 %, at a median 92.4 s per decode token. Perplexity is 3.181 on one 90-token paragraph. Register row `e4b.offload.kimi-k3.full-depth.a2000.2026-09-28`.
+- **Why a re-run.** The July run used a pre-0.9.0 e4b at an unrecorded commit and a loose, non-git copy of the kernel files. Its JSONs carry no provenance, and a later 1-step run overwrote its 4-token JSON. The new driver differs only in import paths, output path and a `provenance` block (package versions, driver sha256). The third-party stack is pinned to July's: torch 2.8.0, transformers 4.57.6, fla-core 0.5.2. The token ids are identical to July's, and the probabilities moved by up to 2.3 points. The prefill read 6,115 expert rows against July's 6,130, so the two builds route differently at near-ties. The July driver, logs and JSONs are kept under `receipts/2026-07-30/` as history.
+- **The cache warning in the log is not a finding.** Cached decode and a fresh prefill of the same sequence select a different expert set in 45 of 92 layers (50 of 1,472 slots). So the cache check's cos 0.999408, with argmax agreeing, comes from discrete routing flips. The driver's `cos < 0.9999` gate was never calibrated.
+
 ## 0.37.6 — 2026-09-28 — the calibrated int4 attention can be pinned by bytes: `dump_attn_int4_artifact` writes a hash-pinned attention pack and `enable_serve_attn_int4_from_artifact` installs one by fingerprint without recalibrating (#674; new functions and `E4B_SERVE_ATTN_INT4_{DUMP,ARTIFACT,FINGERPRINT}`, default behaviour unchanged); `enable_fast` refuses CUDA-graph capture by name, and capture is tested on a quantised MoE for both engines (#527)
 
 ### The calibrated int4 attention can be pinned by bytes: a hash-pinned attention pack (#674; new functions and env switches, default behaviour unchanged)
