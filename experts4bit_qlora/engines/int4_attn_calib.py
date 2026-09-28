@@ -363,7 +363,9 @@ def enable_serve_attn_int4_from_artifact(model, artifact_dir: str, *,
     except ImportError as e:
         raise RuntimeError(f"attention-pack load needs grouped-nf4-gemm with int4_b32 (missing: {e})") from e
     smallm = resolve_smallm(None)
-    n = 0
+    # Validate EVERY projection before swapping ANY: a refusal on the last one must not leave
+    # the model half-installed from the pack and half on its own bf16 weights.
+    staged = []
     for name, lin in targets.items():
         try:
             packed, scales = tensors[(name, "packed")], tensors[(name, "scales")]
@@ -380,6 +382,9 @@ def enable_serve_attn_int4_from_artifact(model, artifact_dir: str, *,
         bias = tensors.get((name, "bias"))
         if (bias is not None) != (lin.bias is not None) or (bias is not None) != bool(row["bias"]):
             raise PackManifestError(f"{name}: the artifact and the live projection disagree on a bias")
+        staged.append((name, lin, packed, scales, bias, N, K, row))
+    n = 0
+    for name, lin, packed, scales, bias, N, K, row in staged:
         dev = lin.weight.device
         new = Int4Linear.from_packed(packed.to(dev), scales.to(dev), N, K,
                                      bias=None if bias is None else bias.to(dev), smallm=smallm)
@@ -432,7 +437,9 @@ def enable_from_env(model, batches: Iterable[torch.Tensor]) -> int:
         return enable_serve_attn_int4_from_artifact(
             model, artifact, expected_fingerprint=fp, include_attention=attn,
             include_head=head, include_dense_mlp=dense)
-    batches = list(batches)
+    dump = os.environ.get(_DUMP_ENV)
+    if dump:
+        batches = list(batches)        # read twice: calibration, then the token-stream hash
     hess = calibrate_attention_hessians(model, batches,
                                         include_attention=attn,
                                         include_head=head,
@@ -441,7 +448,6 @@ def enable_from_env(model, batches: Iterable[torch.Tensor]) -> int:
                                      include_attention=attn,
                                      include_head=head,
                                      include_dense_mlp=dense)
-    dump = os.environ.get(_DUMP_ENV)
     if dump:
         from .pack_manifest import token_stream_sha
         dump_attn_int4_artifact(model, dump, calibration_token_stream_sha=token_stream_sha(batches))

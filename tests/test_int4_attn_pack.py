@@ -190,10 +190,13 @@ def test_a_projection_bias_rides_in_the_pack(monkeypatch, tmp_path):
     ac.enable_serve_attn_int4_from_artifact(dst, str(tmp_path / "p"),
                                            expected_fingerprint=man["pack_fingerprint"])
     assert torch.equal(dst.attn.o_proj.bias, src.attn.o_proj.bias)
-    # and a live projection WITHOUT the bias the pack carries is refused, not silently biased
+    # and a live projection WITHOUT the bias the pack carries is refused, not silently biased.
+    # o_proj is validated after qkv_proj, which passes: nothing may be swapped even so.
+    unbiased = _model(seed=9)
     with pytest.raises(PackManifestError, match="bias"):
-        ac.enable_serve_attn_int4_from_artifact(_model(seed=9), str(tmp_path / "p"),
+        ac.enable_serve_attn_int4_from_artifact(unbiased, str(tmp_path / "p"),
                                                expected_fingerprint=man["pack_fingerprint"])
+    assert _stores(unbiased) == {}, "a refusal on the second projection left the first one swapped"
 
 
 def test_enable_from_env_dumps_loads_and_refuses_by_name(monkeypatch, tmp_path):
