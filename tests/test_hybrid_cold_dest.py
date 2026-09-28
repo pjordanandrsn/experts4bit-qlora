@@ -337,6 +337,7 @@ def test_the_scattering_fixture_selects_the_direct_landing(tmp_path):
         "the scattering fixture fell back: %s" % v.e4b_fallback_reason)
     assert v.e4b_path == "direct-scatter"
     # and the old fixture does NOT scatter, which is why it cannot stand in
+    (tmp_path / "small").mkdir()
     _, _, small = _bake_one_layer(tmp_path / "small", INTER, H)
     assert hy.build_cold_view(_FakeTier(), small, direct=True).e4b_path == "copy"
 
