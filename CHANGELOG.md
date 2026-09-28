@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.37.7 — 2026-09-28 — bucketed CUDA-graph decode in `PagedModelRunner` (`enable_decode_graphs`, opt-in; #511): each step pads the active set to a bucket with scratch KV slots and replays that bucket's graph. It is verified bitwise against the padded eager step on an RTX 5090 (lane B511) and measured at 2.32–2.34× the eager runner on NF4 Qwen3-30B-A3B over a changing active set (lane P80). `dense_offload_report`'s `all_pinned` is `None`, not a vacuous `True`, when no layer is host-resident (#759). Kimi-K3 at full depth on one A2000 re-run on released packages
 
 ### Lane P80 read (#511): bucketed CUDA-graph decode is 2.32–2.34× the eager `PagedModelRunner` on a changing active set, NF4 Qwen3-30B-A3B (docs, register and bench only; nothing in the wheel changes)
 
