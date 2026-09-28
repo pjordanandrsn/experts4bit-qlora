@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### `enable_fast` refuses CUDA-graph capture by name; capture is tested on a quantised MoE for both engines (#527; a clearer error, no numeric change)
+
+- **The refusal.** `enable_fast`'s grouped expert path sizes its launch from host-side per-expert counts (`counts[active].tolist()`), which is a host sync and a data-dependent launch, so it cannot be captured. The reference path it falls back to cannot be captured either. Under capture, both grouped inference forwards (`fused_experts_forward`, `fused_experts_lora_forward`) now raise a `RuntimeError` that names `enable_pipelined_residency` as the capturable engine. Before, the failure was `operation failed due to a previous error during capture` from inside `torch.bincount`. Outside capture, nothing changes.
+- **The tests** (`tests/test_capture_quantized_moe.py`). `test_capture.py` built every GPU case from a dense tiny Llama, so no capture test had exercised a quantised MoE or either engine. A random 2-layer Qwen3-MoE is loaded through `load_moe_4bit_streaming`. Under `enable_pipelined_residency` (K = 0), `probe_capture` must capture and replay token-for-token as eager. Under `enable_fast` it must refuse by name and still decode eagerly. Two CPU tests pin the refusal's decision and its placement ahead of every fallback in both forwards.
+- **RTX A2000 (sm_86)**: the new file plus `test_capture.py` and `test_fast_lora.py`, 19 passed. With the refusal calls removed, the named-refusal test fails on the old CUDA error and the placement test fails, while the pipelined capture still passes.
+
 ## 0.37.5 — 2026-09-28 — a routing fix and a default change under the opt-in fused router epilogue (`E4B_FUSE_ROUTER_EPI=1`): the gpt-oss router now adds its bias inside the GEMM as upstream does (on real bf16 gpt-oss-20b weights the old path licensed 16 of 24 layers and could pick a different expert set), and `softmax_topk` routers (Qwen3-MoE, OLMoE, Mixtral) return the model's dtype by default (lane P70 read the cast INDISTINGUISHABLE; `E4B_ROUTER_EPI_CAST=0` restores fp32 for one release). `requires-python` is raised to `>=3.10`, which is what the package already needed. Lanes P69 and P70 read; the direct cold landing is tested end to end (#178 closed); documentation corrections; trove classifiers
 
 ### `requires-python` is `>=3.10`, which is what the package already needed (packaging metadata; a floor changes)
