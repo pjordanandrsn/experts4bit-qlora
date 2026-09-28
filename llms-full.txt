@@ -855,7 +855,7 @@ Or from the CLI: `MODEL=Qwen/Qwen3-30B-A3B OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 py
 
 ## Expected result
 
-`verify_moe_4bit(model, strict=True)` returns without raising, and `torch.cuda.max_memory_allocated()` during a forward stays near one layer's experts plus the dense side rather than the whole model. `enable_dense_offload` returns a non-empty list of per-layer handles, described by `dense_offload_report(handles)`. Every `enable_*` returns a count or a non-empty handle list, or raises — assert it.
+`verify_moe_4bit(model, strict=True)` returns without raising, and `torch.cuda.max_memory_allocated()` during a forward stays near one layer's experts plus the dense side rather than the whole model. `enable_dense_offload` returns a non-empty list of per-layer handles, described by `dense_offload_report(handles)`; its `all_pinned` covers host-resident layers only, and is `None` when every dense home is served from disk. Every `enable_*` returns a count or a non-empty handle list, or raises — assert it.
 
 ## Supported scope
 
