@@ -1,0 +1,11 @@
+{
+ "mode": "ppl",
+ "tokens": 90,
+ "predictions": 89,
+ "nll": 1.1603181388940704,
+ "perplexity": 3.1909482794082584,
+ "vram_peak_gb": 3.665165824,
+ "pinned_gb": 0.0,
+ "disk_gb": 108.7586304,
+ "wall_s": 785.2293522357941
+}

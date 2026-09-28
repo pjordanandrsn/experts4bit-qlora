@@ -29,6 +29,18 @@ host-RAM cap the on-disk arena needs 2.56× to 6.40× less host RAM than
 the pinned-RAM path, and at 8.59 GB Qwen3-30B is OOM-killed on host RAM
 and completes on the arena.
 
+**Kimi-K3 runs at full depth on a 12 GB card** (2026-09-28, the released
+0.37.5 / 0.33.4; **measured** — [`bench/kimi-k3-a2000/`](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md),
+`e4b.offload.kimi-k3.full-depth.a2000.2026-09-28`). All 93 layers run on
+one RTX A2000 at 4.32 GB peak VRAM. The MXFP4 experts stream from a
+1.446 TB SSD arena, and the 108.76 GB dense side is served from the
+checkpoint's byte offsets, with 0 bytes pinned in host RAM. The model
+completes "The capital city of France is" as " Paris. It is" at a median
+92.4 s per decode token. The step time is the SSD's, and this is not a
+quality claim, because no reference could run: Moonshot's API refuses
+logprobs for K3. A custom driver wires the engines, so this is not the
+`load_moe_4bit_streaming` path.
+
 **The fused training path is faster at equal loss.** Across two 30B-class
 MoEs, five datasets each, 200 steps per cell: 1.52–1.81× per step at
 0.75–0.81× peak VRAM and 0.86–0.92× energy, with loss parity on both

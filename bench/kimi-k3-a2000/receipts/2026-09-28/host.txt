@@ -1,0 +1,3 @@
+Linux gpu-dev 6.6.32-qnap #1 SMP PREEMPT_DYNAMIC Wed Aug 19 00:24:38 CST 2026 x86_64 x86_64 x86_64 GNU/Linux
+model name	: Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+MemTotal:       131757372 kB

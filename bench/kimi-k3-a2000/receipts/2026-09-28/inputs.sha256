@@ -1,0 +1,16 @@
+fb92836e4958b71c5143b4cd0f199d02abdb05eca698e016134a7f2bce95ae33  /share/gpu-dev/k3-dense/model.safetensors.index.json
+e70401429497f416a36d2bc79c9938e0a066f0db2fc00c2a9f806e52bed9de83  /share/ZFS531_DATA/k3-arena/k3.arena.index.json
+cdb9442e11dc09b81db1896e2cfdfacf52f65a1d6144dce56bb17766c6af9fb4  /share/ZFS531_DATA/k3-arena/k3.arena.manifest.json
+9710e121a58d03ac92c8d6da287a19541994319afbbe6d6202af001ffd379213  /share/ZFS532_DATA/hf-models/moonshotai_Kimi-K3/config.json
+735eb9ebe593e17d231e08e1df7f7be9b5ee0e079f511aa201f9572077b416ae  /share/gpu-dev/k3-tokenizer/configuration_kimi_k3.py
+b9cb7ae100fed34b9337f80dacee5abbf7e261fe9b74bc0e76366701d46f5333  /share/gpu-dev/k3-tokenizer/encoding_k3.py
+ec9f7e86d2ab0eee07a8e7e7c037046e77ac3c25a710ad1298ec13be3b585b54  /share/gpu-dev/k3-tokenizer/kimi_k3_processor.py
+d122b30bfd3a51a6f05d4bfcfda1e657827322b1353f7caefeebc2835d7736b5  /share/gpu-dev/k3-tokenizer/kimi_k3_vision_processing.py
+78403540328f9847d6b7ebc5c44eb2e6a752863de0afb7d0710728bb161dc60d  /share/gpu-dev/k3-tokenizer/media_utils.py
+b9171c96726eda55234c92ac8dfae7e24c512fda68968ae8f2c3782b42665ea2  /share/gpu-dev/k3-tokenizer/modeling_kimi_k3.py
+9e3564c70ac21854ce5a090cc946c5dc76b70d1050ef50840449181a20fff44a  /share/gpu-dev/k3-tokenizer/modeling_kimi_linear.py
+f28ea66e2d862a2a5814970b2ce40c2f7d8296ff09aed90a7e7def689b906944  /share/gpu-dev/k3-tokenizer/tokenization_kimi.py
+b6c497a7469b33ced9c38afb1ad6e47f03f5e5dc05f15930799210ec050c5103  /share/gpu-dev/k3-tokenizer/tiktoken.model
+9e3564c70ac21854ce5a090cc946c5dc76b70d1050ef50840449181a20fff44a  /share/gpu-dev/hf/modules/transformers_modules/moonshotai_Kimi_hyphen_K3/bc28055d10f4f1b1/modeling_kimi_linear.py
+b9171c96726eda55234c92ac8dfae7e24c512fda68968ae8f2c3782b42665ea2  /share/gpu-dev/hf/modules/transformers_modules/moonshotai_Kimi_hyphen_K3/bc28055d10f4f1b1/modeling_kimi_k3.py
+1446456066048 /share/ZFS531_DATA/k3-arena/k3.arena

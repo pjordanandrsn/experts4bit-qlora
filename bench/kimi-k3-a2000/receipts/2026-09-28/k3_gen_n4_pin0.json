@@ -1,0 +1,68 @@
+{
+ "mode": "gen",
+ "prompt": "The capital city of France is",
+ "generated": [
+  17374,
+  13,
+  1344,
+  387
+ ],
+ "text": " Paris. It is",
+ "per_step": [
+  {
+   "s": 97.04117894172668,
+   "disk_reads": 1467,
+   "claims": 92,
+   "dense_reads": 1251,
+   "dense_bytes": 108763639808
+  },
+  {
+   "s": 92.4147744178772,
+   "disk_reads": 1466,
+   "claims": 92,
+   "dense_reads": 1251,
+   "dense_bytes": 108763639808
+  },
+  {
+   "s": 92.10112810134888,
+   "disk_reads": 1467,
+   "claims": 92,
+   "dense_reads": 1251,
+   "dense_bytes": 108763639808
+  }
+ ],
+ "cache_check": {
+  "cos": 0.999407947063446,
+  "rel": 0.024205202236771584,
+  "argmax_agrees": true
+ },
+ "vram_peak_gb": 4.3160192,
+ "pinned_gb": 0.0,
+ "disk_gb": 108.7586304,
+ "wall_s": 937.362434387207,
+ "provenance": {
+  "utc": "2026-09-28T19:13:51Z",
+  "packages": {
+   "experts4bit-qlora": "0.37.5",
+   "grouped-nf4-gemm": "0.33.4",
+   "torch": "2.8.0+cu128",
+   "triton": "3.4.0",
+   "transformers": "4.57.6",
+   "tiktoken": "0.13.0",
+   "bitsandbytes": "0.50.2"
+  },
+  "python": "3.10.12",
+  "cuda": "12.8",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "driver_sha256": "55f5c33e4a1c14b0e744320194dd4daf7e3bd63caa125cff987793c71ac2fa7a",
+  "arena": "/z531/k3-arena/k3.arena",
+  "dense": "/workspace/k3-dense",
+  "snapshot": "/z532/hf-models/moonshotai_Kimi-K3",
+  "env": {
+   "K3_NEW_TOKENS": "4",
+   "K3_PPL_TOKENS": "128",
+   "K3_MODE": "gen",
+   "K3_OUT": "/workspace/k3-rel-20260928"
+  }
+ }
+}

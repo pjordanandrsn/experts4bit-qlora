@@ -437,6 +437,31 @@
       "measured_on": "2026-08-13"
     },
     {
+      "id": "e4b.offload.kimi-k3.full-depth.a2000.2026-09-28",
+      "package": "experts4bit-qlora",
+      "area": "offload",
+      "model": "moonshotai/Kimi-K3",
+      "claim": "Kimi-K3 runs at full depth (all 93 layers, real weights) on one 12 GB RTX A2000 at 4.32 GB peak VRAM with 0 dense bytes resident in host RAM -- the MXFP4 experts stream from a 1.446 TB SSD arena through 92 Mxfp4NvmeResidencyK3 engines sharing one 281 MB slot store, and the 108.76 GB dense side is served from safetensors byte offsets by enable_dense_offload -- and greedily completes 'The capital city of France is' as ' Paris. It is' (p(' Paris') = 68.90 %) at a median 92.4 s per decode token.",
+      "value": 4.32,
+      "unit": "GB peak VRAM, generation pass (92.4 s per decode token, median of 3)",
+      "hardware": "RTX A2000 12 GB (sm_86, driver 575.64.05) in the NAS host's PCIe 3.0 x8 slot, Xeon W-1250, 128 GB RAM; arena and dense extract on a SATA-SSD ZFS pool; card and pool shared with the host's own services",
+      "conditions": "moonshotai/Kimi-K3 @ f831ab66 (config.json sha256 9710e121...), text path only; experts4bit-qlora 0.37.5 and grouped-nf4-gemm 0.33.4 from PyPI, torch 2.8.0+cu128, triton 3.4.0, transformers 4.57.6, fla-core 0.5.2, tiktoken 0.13.0, Python 3.10.12; driver bench/kimi-k3-a2000/k3_run_rel.py (sha256 55f5c33e...), eager attention, greedy; experts: the 2026-07-30 MXFP4 arena (1,446,456,066,048 B, 92 x 896 rows of 17,547,264 B, index sha256 e7040142...), k_slots 16, one shared SlotStore, one pinned ColdTier of 48 hot rows; dense: 1,251 tensors / 108.76 GB via enable_dense_offload(pin=False, source=DenseDiskSource), 0 pinned, lm_head (2.35 GB) on the host CPU; loader._fit narrows 69 KDA A_log 128 -> 96; one 6-token prefill then 3 cached decode steps",
+      "measured_on": "2026-09-28",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md",
+        "bench/kimi-k3-a2000/k3_run_rel.py",
+        "bench/kimi-k3-a2000/receipts/2026-09-28/k3_gen_n4_pin0.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28/k3_gen.log",
+        "bench/kimi-k3-a2000/receipts/2026-09-28/k3_ppl_n0_pin0.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28/k3_route_n0_pin0.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-28/versions.txt",
+        "bench/kimi-k3-a2000/receipts/2026-09-28/inputs.sha256"
+      ],
+      "notes": "Perplexity 3.181 on one 90-token paragraph (a sanity band, not a benchmark). Routing: cached decode vs fresh prefill select a different expert set in 45 of 92 MoE layers (50 of 1,472 slots), so the cache check's cos 0.999408 (argmax agrees) is discrete routing flips, not accumulation; the driver's uncalibrated cos < 0.9999 warning in k3_gen.log is not a finding, and bit-identity across prefill and decode is not claimed. A 2026-07-30 run of the same driver on an unrecorded pre-0.9.0 e4b and a loose kernel copy gave the identical token ids at p(' Paris') 71.20 %, 93.5 s/token, 4.07 GB, perplexity 3.191 (bench/kimi-k3-a2000/receipts/2026-07-30/); it is history, not a claim. Not a quality claim (no reference ran: Moonshot's API refuses logprobs for kimi-k3), not a speed claim beyond this host (SSD dense reads dominate the step), and not the load_moe_4bit_streaming path (the driver builds the model on meta and wires the engines itself). Prefill 270.5 s vs July's 178.3 s, not investigated."
+    },
+    {
       "id": "e4b.train.fast-train-dgrad",
       "area": "train",
       "claim": "enable_fast_train(model, dgrad=True) is the fastest training lane at real width (2.52x on Qwen3-30B, 48 layers, A6000) while enable_batched_train wins only the toy microbench (24.01x at hidden 512) and gives no speedup at real width (1.05x) with the highest peak memory.",
