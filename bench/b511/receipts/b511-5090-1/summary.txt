@@ -1,0 +1,19 @@
+[2026-09-28T20:35:10Z] b511: image torch 2.8.0+cu128 triton 3.4.0 (pinned by constraints.txt)
+[2026-09-28T20:35:10Z] b511: install gnf4 @fb15cf5f5b9f2fb107fa1a39218fd9d910b34d94
+[2026-09-28T20:35:16Z] b511: clone e4b @95983b5071a07446433fe28fc29a4f1161a98496
+e4b /root/b511/e4b/experts4bit_qlora/__init__.py
+gnf4 0.33.5
+torch 2.8.0+cu128 triton 3.4.0 transformers 5.17.0 bitsandbytes 0.50.2
+cc (12, 0)
+[2026-09-28T20:35:45Z] b511: arm A: tests/test_decode_graph_buckets.py tests/test_capture_quantized_moe.py tests/test_int4_attn_pack.py tests/test_hybrid_cold_dest.py tests/test_capture.py tests/test_fast_lora.py tests/test_router_epilogue.py
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+------------------- generated xml file: /root/b511/armA.xml --------------------
+====================== 102 passed, 11 warnings in 26.08s =======================
+[2026-09-28T20:36:14Z] b511: arm A pytest rc=0
+[2026-09-28T20:36:14Z] b511: arm M: the registered mutation, then the replay-vs-padded-eager test alone
+mutated experts4bit_qlora/engines/fp8_paged_kv.py
+tests/test_decode_graph_buckets.py:103: AssertionError
+------------------- generated xml file: /root/b511/armM.xml --------------------
+======================= 1 failed, 4 deselected in 7.36s ========================
+[2026-09-28T20:36:24Z] b511: arm M pytest rc=1 (the registered reading is a FAIL here)
+[2026-09-28T20:36:24Z] b511: TP_DONE rc=0
