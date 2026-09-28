@@ -56,7 +56,7 @@ Register row: `e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28`.
 RTX 5090 (compute capability 12.0, 575 W power limit, driver 580.119.02, 32 607 MiB) on an AMD EPYC 9755 host. Vast
 verified/secure, instance `53262053`, `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`, 320 GB disk. Versions: e4b 0.37.6 at
 `39f6bc7`, grouped-nf4-gemm 0.33.5 (`fb15cf5`), torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1, bitsandbytes
-0.50.1. Qwen3-30B-A3B @ `ad44e777`, fetched in about 5 min and baked in about 1 min. Prompts sha256 `f67e7e4d…`, p37's
+0.50.1. Qwen3-30B-A3B @ `ad44e777`; the fetch and the NF4 bake together took about 6 min (tripwire 22:08:57Z, `BAKE OK` 22:15:13Z). Prompts sha256 `f67e7e4d…`, p37's
 B = 16 rows. Peak allocated VRAM 18.97 GiB for eager and 19.01 GiB with graphs.
 
 **Cost $0.157** for the reading (954 s lifetime, estimate $1.125), teardown proven. Lane total **$0.2513**:
