@@ -159,7 +159,15 @@ class Fp8PagedKV:
     def __init__(self, n_layers: int, n_kv_heads: int, head_dim: int, *,
                  batch: int, max_tokens_per_seq: int,
                  k_groups: int | None = None,
-                 batched_append: bool = True, device: str = "cuda"):
+                 batched_append: bool = True, device: str = "cuda",
+                 scratch_slots: int = 0):
+        """``scratch_slots`` (#511) adds that many slots AFTER the ``batch``
+        real ones (ids ``batch .. batch + scratch_slots - 1``), each backed
+        by ONE block rather than a full sequence's worth. They exist for the
+        bucketed decode graphs (``PagedModelRunner.enable_decode_graphs``):
+        a bucket is captured on scratch slots only, so warm-up forwards never
+        advance a live sequence, and at replay they are the padding rows. A
+        scheduler must never be given them (``kv_slots = batch``)."""
         from fp8_kv import kv_block_bytes
         from row_pool import RowPool
 
@@ -196,6 +204,11 @@ class Fp8PagedKV:
         self.H = max(Hs)          # the largest geometry (row sizing)
         self.D = max(Ds)
         self.B = batch
+        self.n_scratch = int(scratch_slots)
+        if self.n_scratch < 0:
+            raise ValueError(f"scratch_slots must be >= 0, got {scratch_slots}")
+        self.scratch = list(range(batch, batch + self.n_scratch))
+        slots_total = batch + self.n_scratch
         self.bt = BLOCK_TOKENS
         self.kgs = kgs
         # the uniform value when there is one (what callers used to read);
@@ -214,7 +227,8 @@ class Fp8PagedKV:
         self.v_rows = [kv_block_bytes(self.bt, h, d) for h, d in zip(Hs, Ds)]
         self.k_row = max(self.k_rows)
         self.v_row = max(self.v_rows)
-        rows = batch * self.blocks_per_seq
+        rows = batch * self.blocks_per_seq + self.n_scratch
+        self._n_rows = rows
         self.kp = RowPool(n_layers, rows, 0, self.k_row, device=device)
         self.vp = RowPool(n_layers, rows, 0, self.v_row, device=device)
         self.device = self.kp.device
@@ -246,12 +260,12 @@ class Fp8PagedKV:
         # block tables live on-device and are written IN PLACE when a block
         # opens (one scalar copy per 16 tokens) — rebuilding [B, blocks]
         # tables per decode step would be an H2D per layer per step
-        self.block_table = [torch.zeros(batch, self.blocks_per_seq,
+        self.block_table = [torch.zeros(slots_total, self.blocks_per_seq,
                                         dtype=torch.int32, device=self.device)
                             for _ in range(n_layers)]
-        self.seq_lens = torch.zeros(n_layers, batch, dtype=torch.int32,
+        self.seq_lens = torch.zeros(n_layers, slots_total, dtype=torch.int32,
                                     device=self.device)
-        self._seen = [[0] * batch for _ in range(n_layers)]
+        self._seen = [[0] * slots_total for _ in range(n_layers)]
         # Block rows a (layer, slot) currently owns, so a finished
         # sequence can hand them back. A serving loop recycles slots
         # continuously; without this the pool is a one-shot arena and the
@@ -275,6 +289,16 @@ class Fp8PagedKV:
             for _ in range(rows):
                 self.kp.append(layer)
                 self.vp.append(layer)
+        # each scratch slot owns exactly one block for its whole life; its
+        # length is reset to 0 before every padded step, so it never grows
+        for s_ in self.scratch:
+            for layer in range(n_layers):
+                self._ensure_blocks(layer, s_, 0)
+        self._scratch_idx = (torch.tensor(self.scratch, dtype=torch.long,
+                                          device=self.device)
+                             if self.scratch else None)
+        self._g_sel = None           # a bound decode-graph bucket's selector
+        self._g_buckets: dict[int, dict] = {}
 
     # ---------------------------------------------------------------- write --
     def _quant_bytes(self, x, groups):
@@ -636,7 +660,7 @@ class Fp8PagedKV:
         views are stable for the life of the pool."""
         for pool in (self.kp, self.vp):
             assert all(h == 0 for h in pool.head) and \
-                all(t == self.B * self.blocks_per_seq for t in pool.tail), \
+                all(t == self._n_rows for t in pool.tail), \
                 "graph mode needs the up-front-claimed KV arena"
         upto = (self.blocks_per_seq * self.bt if upto_tokens is None
                 else upto_tokens)
@@ -702,6 +726,68 @@ class Fp8PagedKV:
         self._g_kflat[layer].scatter_(0, ksb + self._g_ar_sk[layer], ks.reshape(-1))
         self.seq_lens[layer].narrow(0, seq, 1).add_(1)
 
+    # ---------------------------------------- bucketed decode graphs (#511) --
+    def graph_bucket(self, b: int) -> dict:
+        """Persistent device tensors for one decode-graph bucket of ``b``
+        rows: the slot ids the fused batch append writes through, the
+        selector attention reads through, and the lens increment. Created
+        once; a captured graph holds their addresses, and every step
+        rewrites their CONTENTS (:meth:`graph_bucket_load`)."""
+        st = self._g_buckets.get(b)
+        if st is None:
+            dev = self.device
+            st = {"b": b,
+                  "slot_idx": torch.zeros(b, dtype=torch.int32, device=dev),
+                  "slot_l": torch.zeros(b, dtype=torch.int64, device=dev),
+                  "ones": torch.ones(b, dtype=torch.int32, device=dev),
+                  "host": torch.zeros(b, dtype=torch.int64).pin_memory()
+                  if torch.device(dev).type == "cuda" else torch.zeros(b, dtype=torch.int64)}
+            self._g_buckets[b] = st
+        return st
+
+    def graph_bucket_bind(self, st: dict, slots) -> None:
+        """Route the graph-mode batch append and attention through bucket
+        ``st``. ``slots`` is the Python list the paged-attention shim checks
+        against ``ctx.slots`` at trace time; at replay only the device
+        tensors are read. Needs the fused one-launch batch append: its
+        per-slot fallback addresses slots from Python ints, which a graph
+        would bake."""
+        if not getattr(self, "graph_t1", False):
+            raise RuntimeError("graph_bucket_bind: call graph_mode_init first")
+        try:
+            from fp8_kv import fp8_kv_append_bt1  # noqa: F401
+        except ImportError as e:
+            raise RuntimeError(
+                "bucketed decode graphs need grouped-nf4-gemm's fused batch KV "
+                f"append (fp8_kv.fp8_kv_append_bt1): {e}") from e
+        if not self._fused_append:
+            raise RuntimeError("bucketed decode graphs need the fused KV append "
+                               "(E4B_FUSED_KV_APPEND is off)")
+        if len(slots) != st["b"]:
+            raise ValueError(f"bucket of {st['b']} rows bound to {len(slots)} slots")
+        self._g_slots = list(slots)
+        self._bt1_append = self._fused_append
+        self._g_slot_idx, self._g_slot_l = st["slot_idx"], st["slot_l"]
+        self._g_slot_ones, self._g_sel = st["ones"], st["slot_l"]
+
+    def graph_bucket_unbind(self) -> None:
+        self._g_sel = None
+
+    def graph_bucket_load(self, st: dict, slots) -> None:
+        """Write this step's slot ids into the bucket's device tensors
+        (one pinned H2D copy, async) and zero the scratch slots' lengths,
+        so a padding row always writes and reads its scratch slot's first
+        position and never walks off its single block."""
+        host = st["host"]
+        host.copy_(torch.as_tensor(list(slots), dtype=torch.int64))
+        st["slot_l"].copy_(host, non_blocking=True)
+        st["slot_idx"].copy_(st["slot_l"])
+        self.reset_scratch_lens()
+
+    def reset_scratch_lens(self) -> None:
+        if self._scratch_idx is not None:
+            self.seq_lens.index_fill_(1, self._scratch_idx, 0)
+
     def kernel_args(self, layer: int, slots=None):
         """What the fused kernel consumes: flat pool bytes, block table,
         per-sequence lengths.
@@ -715,7 +801,19 @@ class Fp8PagedKV:
         silently attends one sequence over another's KV, and it reads as
         a model that starts coherent and degenerates."""
         tbl, lens = self.block_table[layer], self.seq_lens[layer]
-        if slots is not None:
+        if slots is None and self.n_scratch:
+            # scratch slots trail the real ones; the no-slots form keeps
+            # meaning "the batch", exactly as before they existed
+            tbl, lens = tbl[:self.B], lens[:self.B]
+        elif slots is not None and self._g_sel is not None \
+                and len(slots) == self._g_sel.numel():
+            # a bound decode-graph bucket (#511): the selector is ONE
+            # persistent device tensor rewritten in place before each step,
+            # so a captured graph reads the current active set -- a cached
+            # per-tuple tensor would bake the capture-time set into it
+            tbl, lens = (tbl.index_select(0, self._g_sel),
+                         lens.index_select(0, self._g_sel))
+        elif slots is not None:
             # the selector is CACHED per active-set: building it fresh is a
             # pageable H2D copy, and torch's non_blocking=False copy ends
             # in a full stream synchronize — one per LAYER per step, which
