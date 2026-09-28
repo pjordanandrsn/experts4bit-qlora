@@ -36,7 +36,8 @@ from typing import Dict, Iterable
 import torch
 from torch import nn
 
-__all__ = ["calibrate_attention_hessians", "enable_serve_attn_int4_calib"]
+__all__ = ["calibrate_attention_hessians", "enable_serve_attn_int4_calib",
+           "dump_attn_int4_artifact", "enable_serve_attn_int4_from_artifact"]
 
 
 def _attention_linears(model) -> Dict[str, nn.Linear]:
@@ -227,7 +228,9 @@ def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor],
 
         def packer(w, _H=H):
             return gptq_pack_int4_b32(w, _H)
-        setattr(parent, child, Int4Linear(lin, packer=packer, smallm=smallm))
+        new = Int4Linear(lin, packer=packer, smallm=smallm)
+        new._e4b_calibrated = True     # recorded per projection by dump_attn_int4_artifact
+        setattr(parent, child, new)
         hessians[name] = None          # free the 16-64 MB as we go
         n += 1
     if n == 0:
@@ -236,23 +239,210 @@ def enable_serve_attn_int4_calib(model, hessians: Dict[str, torch.Tensor],
     return n
 
 
+def _group_of(model, name: str, mod) -> str:
+    """Which enable group a live int4 projection belongs to, from the module tree: the
+    same structural rules :func:`_int4_targets` selects by."""
+    # _output_head() only finds an nn.Linear, and a packed head is an Int4Linear by now
+    get = getattr(model, "get_output_embeddings", None)
+    try:
+        head = get() if callable(get) else None
+    except Exception:
+        head = None
+    if mod is head or mod is getattr(model, "lm_head", None):
+        return "head"
+    parent = model.get_submodule(name.rsplit(".", 1)[0]) if "." in name else model
+    kind = type(parent).__name__
+    if kind.endswith("Attention"):
+        return "attention"
+    if kind.endswith("MLP"):
+        return "dense_mlp"
+    raise RuntimeError(f"{name}: an int4 projection under {kind!r} belongs to no enable group")
+
+
+def dump_attn_int4_artifact(model, artifact_dir: str, *,
+                            allow_unknown_revision: bool = False,
+                            calibration_token_stream_sha: str | None = None) -> dict:
+    """Serialise the live int4 attention stores (and the head / dense MLPs, when packed)
+    as a hash-pinned artifact, the attention counterpart of the expert pack (#674).
+
+    Until this existed the calibrated attention was re-derived from a Hessian pass on
+    every load, so a ``pack_fingerprint`` identified only the expert half of the served
+    stack -- and P55x measured the attention half as the one carrying the quality.
+
+    Call it AFTER the calibrated enable and BEFORE ``qkv_fuse``: fused modules are
+    refused, because their names do not exist on the model a licensed load installs
+    onto (fuse after loading; the fused bytes are the parts' bytes concatenated).
+    Refuses an unknown checkpoint revision unless ``allow_unknown_revision`` (or
+    ``E4B_INT4_DUMP_ALLOW_UNKNOWN_REVISION=1``), exactly as the expert dump does. The
+    returned manifest's ``pack_fingerprint`` is also attached to the model, so a
+    receipt of the calibrating run names the bytes it served."""
+    from .int4_attn import Int4Linear
+    from .pack_manifest import (
+        ATTN_LAYOUT, ATTN_PROVENANCE_ATTR, provenance_from_model, require_model_revision,
+        toolchain_record, write_named_artifact,
+    )
+    mods = sorted((n, m) for n, m in model.named_modules() if isinstance(m, Int4Linear))
+    if not mods:
+        raise RuntimeError("dump_attn_int4_artifact: no int4 projections on the model")
+    fused = [n for n, m in mods if getattr(m, "_e4b_fused_parts", None)]
+    if fused:
+        raise RuntimeError(
+            f"dump_attn_int4_artifact: {len(fused)} projection(s) are fused (first: {fused[0]}); "
+            "dump before qkv_fuse -- a licensed load installs onto the unfused module names")
+    tensors, rows = {}, []
+    for name, m in mods:
+        tensors[(name, "packed")] = m.packed.reshape(m.N, m.K // 2)
+        tensors[(name, "scales")] = m.scales.reshape(m.N, m.K // 32)
+        if m.bias is not None:
+            tensors[(name, "bias")] = m.bias
+        rows.append({"name": name, "group": _group_of(model, name, m),
+                     "N": int(m.N), "K": int(m.K), "bias": m.bias is not None,
+                     "calibrated": bool(getattr(m, "_e4b_calibrated", False))})
+    cfg = getattr(model, "config", None)
+    rec = provenance_from_model(model) or {}
+    allow = allow_unknown_revision or os.environ.get("E4B_INT4_DUMP_ALLOW_UNKNOWN_REVISION", "0") == "1"
+    revision, missing = require_model_revision(
+        rec.get("model_revision") or getattr(cfg, "_commit_hash", None), allow_unknown=allow)
+    meta = {
+        "model_id": rec.get("model") or getattr(cfg, "_name_or_path", None),
+        "model_revision": revision,
+        "model_revision_missing": True if missing else None,
+        "layers": rows,
+        "groups": sorted({r["group"] for r in rows}),
+        "calibration_token_stream_sha": calibration_token_stream_sha,
+        # informative, NOT identity: the expert pack this attention was calibrated beside
+        "expert_pack_fingerprint": rec.get("pack_fingerprint"),
+        "toolchain": toolchain_record(),
+    }
+    man = write_named_artifact(artifact_dir, tensors=tensors, meta=meta, layout=ATTN_LAYOUT)
+    setattr(model, ATTN_PROVENANCE_ATTR, {
+        "attn_pack_fingerprint": man["pack_fingerprint"], "attn_pack_layout": ATTN_LAYOUT,
+        "attn_pack_source": "calibrated-and-dumped", "attn_pack_projections": len(rows)})
+    return man
+
+
+def enable_serve_attn_int4_from_artifact(model, artifact_dir: str, *,
+                                         expected_fingerprint: str,
+                                         include_attention: bool = True,
+                                         include_head: bool = False,
+                                         include_dense_mlp: bool = False) -> int:
+    """Install a hash-pinned attention pack. Nothing is calibrated or re-quantised: every
+    projection is built from the artifact's bytes (``Int4Linear.from_packed``), so two
+    loads of one fingerprint serve the same function on any box.
+
+    Refuses -- never falls back to calibrating -- on a fingerprint, layout or checkpoint
+    revision mismatch, a corrupt payload, a live model without ``config._commit_hash``,
+    or a projection set that differs from the one the enable flags select on this model
+    (a partial licensed load is not a licensed load)."""
+    from .int4_attn import Int4Linear, _kernels, resolve_smallm
+    from .pack_manifest import (
+        ATTN_LAYOUT, ATTN_PROVENANCE_ATTR, PackManifestError, int4_store_dims,
+        load_named_payload_tensors, parse_fingerprint, verify_artifact,
+    )
+    parse_fingerprint(expected_fingerprint)
+    if not artifact_dir:
+        raise PackManifestError("expected_fingerprint is set but artifact_dir is empty -- refusing")
+    live_rev = getattr(getattr(model, "config", None), "_commit_hash", None)
+    if not live_rev:
+        raise PackManifestError(
+            "licensed attention-pack load requires config._commit_hash on the live model "
+            "(the commit the loader recorded) -- refusing")
+    man = verify_artifact(artifact_dir, expected_fingerprint=expected_fingerprint,
+                          expected_model_revision=live_rev, expected_layout=ATTN_LAYOUT)
+    tensors = load_named_payload_tensors(artifact_dir, man)
+    rows = {r["name"]: r for r in (man.get("layers") or [])}
+    targets = _int4_targets(model, include_attention, include_head, include_dense_mlp)
+    if set(rows) != set(targets):
+        extra, absent = sorted(set(rows) - set(targets)), sorted(set(targets) - set(rows))
+        raise PackManifestError(
+            f"the artifact's projections are not the set this enable selects on this model "
+            f"({len(absent)} not in the artifact, first {absent[:1]}; {len(extra)} not on the "
+            f"model or not selected, first {extra[:1]}) -- refusing a partial licensed load")
+    try:
+        _kernels()
+    except ImportError as e:
+        raise RuntimeError(f"attention-pack load needs grouped-nf4-gemm with int4_b32 (missing: {e})") from e
+    smallm = resolve_smallm(None)
+    n = 0
+    for name, lin in targets.items():
+        try:
+            packed, scales = tensors[(name, "packed")], tensors[(name, "scales")]
+        except KeyError as e:
+            raise PackManifestError(f"{name}: the artifact is missing a store tensor {e}") from e
+        if packed.dtype != torch.uint8:
+            raise PackManifestError(f"{name}: packed payload is {packed.dtype}, not uint8")
+        N, K = int4_store_dims(packed, scales)
+        row = rows[name]
+        if (N, K) != (lin.out_features, lin.in_features) or (N, K) != (row["N"], row["K"]):
+            raise PackManifestError(
+                f"{name}: the bytes are an [{N}, {K}] store; the live projection is "
+                f"[{lin.out_features}, {lin.in_features}] and the manifest says [{row['N']}, {row['K']}]")
+        bias = tensors.get((name, "bias"))
+        if (bias is not None) != (lin.bias is not None) or (bias is not None) != bool(row["bias"]):
+            raise PackManifestError(f"{name}: the artifact and the live projection disagree on a bias")
+        dev = lin.weight.device
+        new = Int4Linear.from_packed(packed.to(dev), scales.to(dev), N, K,
+                                     bias=None if bias is None else bias.to(dev), smallm=smallm)
+        new._e4b_calibrated = bool(row.get("calibrated"))
+        if "." in name:
+            parent_name, child = name.rsplit(".", 1)
+            setattr(model.get_submodule(parent_name), child, new)
+        else:
+            setattr(model, name, new)
+        n += 1
+    setattr(model, ATTN_PROVENANCE_ATTR, {
+        "attn_pack_fingerprint": man["pack_fingerprint"], "attn_pack_layout": ATTN_LAYOUT,
+        "attn_pack_source": "artifact", "attn_pack_projections": n})
+    return n
+
+
+_ARTIFACT_ENV = "E4B_SERVE_ATTN_INT4_ARTIFACT"
+_FINGERPRINT_ENV = "E4B_SERVE_ATTN_INT4_FINGERPRINT"
+_DUMP_ENV = "E4B_SERVE_ATTN_INT4_DUMP"
+
+
 def enable_from_env(model, batches: Iterable[torch.Tensor]) -> int:
     """Harness convenience: calibrate then enable when the flags are set.
     ``E4B_SERVE_ATTN_INT4_CALIB=1`` packs the attention projections;
     ``E4B_SERVE_LMHEAD_INT4_CALIB=1`` packs the output head and
     ``E4B_SERVE_DENSE_INT4_CALIB=1`` the dense MLP beside a routed block
     (each alone, or beside attention). All off is a no-op; any flag alone
-    is an enable of that set, never a silent ignore."""
+    is an enable of that set, never a silent ignore.
+
+    ``E4B_SERVE_ATTN_INT4_ARTIFACT=<dir>`` with ``E4B_SERVE_ATTN_INT4_FINGERPRINT=sha256:...``
+    installs those groups from a hash-pinned pack instead of calibrating (#674); an
+    artifact without a fingerprint, or without a flag naming its groups, refuses.
+    ``E4B_SERVE_ATTN_INT4_DUMP=<dir>`` writes the pack after a calibrated enable."""
     attn = os.environ.get("E4B_SERVE_ATTN_INT4_CALIB", "0") == "1"
     head = os.environ.get(_LM_HEAD_ENV, "0") == "1"
     dense = os.environ.get(_DENSE_MLP_ENV, "0") == "1"
+    artifact = os.environ.get(_ARTIFACT_ENV)
     if not attn and not head and not dense:
+        if artifact:
+            raise RuntimeError(
+                f"{_ARTIFACT_ENV} is set but no E4B_SERVE_*_INT4_CALIB flag names the groups "
+                "it should install -- refusing a silent no-op")
         return 0
+    if artifact:
+        fp = os.environ.get(_FINGERPRINT_ENV)
+        if not fp:
+            raise RuntimeError(
+                f"{_ARTIFACT_ENV} is set without {_FINGERPRINT_ENV}: a pack is loaded only "
+                "against the fingerprint it was licensed under -- refusing")
+        return enable_serve_attn_int4_from_artifact(
+            model, artifact, expected_fingerprint=fp, include_attention=attn,
+            include_head=head, include_dense_mlp=dense)
+    batches = list(batches)
     hess = calibrate_attention_hessians(model, batches,
                                         include_attention=attn,
                                         include_head=head,
                                         include_dense_mlp=dense)
-    return enable_serve_attn_int4_calib(model, hess,
-                                        include_attention=attn,
-                                        include_head=head,
-                                        include_dense_mlp=dense)
+    n = enable_serve_attn_int4_calib(model, hess,
+                                     include_attention=attn,
+                                     include_head=head,
+                                     include_dense_mlp=dense)
+    dump = os.environ.get(_DUMP_ENV)
+    if dump:
+        from .pack_manifest import token_stream_sha
+        dump_attn_int4_artifact(model, dump, calibration_token_stream_sha=token_stream_sha(batches))
+    return n
