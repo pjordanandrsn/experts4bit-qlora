@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Lane P81 read (#511, #674): on the int4 serving recipe, bucketed CUDA-graph decode is 13.95–14.29× the eager `PagedModelRunner` on one host whose eager step is host-bound; the recipe's first attention pack loads by fingerprint (docs, register and bench only; nothing in the wheel changes)
+
+- `p81-5090-2` ran on one RTX 5090 (AMD EPYC 7K62 host) for $1.1349, teardown proven. The lane cost $1.2057: the proof, one NOT_RUN on the launcher's bandwidth pre-flight, and the reading.
+- Aggregate decode was A1 47.8, B1 683.6, B2 679.3 and A2 48.7 tok/s, with P (the bucket step, eager) at 57.7. B1/A1 = 14.29 and B2/A2 = 13.95; the self-pairs were 1.0175 and 0.9937. The graph streams equal P's bitwise, and every bucket captured. **CONFIRMED** (`e4b.serve.p81.qwen3.licensed-int4.dynb.graph-buckets.5090.2026-09-29`).
+- The ratio is host cost. Eager decode took 125–139 ms per step at every row count, and this host's CPU is slow (the build's first calibration chunk ran 3.1× slower than P70's). Graphs took 16.9 ms at 16 rows and 5.4 ms at one. The ratio is not portable to another host.
+- #674: both packs of one build (expert `0c9955a9…`, the licensed one; attention `d7cfa1f4…`, 192 projections) loaded by fingerprint in all five arms. The build's K8 read 6.33015 against the licensed build's 6.36709 on the same window, so the attention pack is the recipe's on e4b 0.37.7, not a byte-identification of P55x's. The cause is not isolated. The read is in `bench/p81/RESULTS-p81.md`.
+
+### Correction: P80's read misattributed two things to padding (docs and register only)
+
+- P80's trace pads no rows: its active sizes are exactly the bucket sizes, and `pad_rows` is 0 in every bucket of its receipts. Two statements depended on padding that never happened.
+  - The first explained the graph-vs-eager token divergence by "other row counts" through bf16 GEMMs. A and P ran the same rows. They differ in the grouping and in the step path (KV append), and P81 found them differing even with the grouping held equal.
+  - The second attributed P/A1 = 1.33 to "padding plus device grouping". It is device grouping plus the bucket step's path.
+- Corrected in `bench/p80/RESULTS-p80.md`, `docs/STATUS.md` and the P80 row's notes. P80's verdict is unchanged: its gate was graph ≡ P, which held. The 0.37.7 section below keeps the text as released.
+
 ### Lane P81 registered (#511, #674): bucketed CUDA-graph decode on the licensed int4 stack, and the licensed attention pack by fingerprint (bench only; nothing in the wheel changes)
 
 - `bench/p81/PREREG-p81.md` runs P80's trace, arms and rule on the configuration actually quoted for serving: calibrated int4 experts and attention, the T=1 folds and the fused router epilogue, on Qwen3-30B-A3B. P80 read NF4 only, and named licensed int4 as the case it could not speak to.

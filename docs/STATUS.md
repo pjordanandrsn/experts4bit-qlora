@@ -894,16 +894,44 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     16 → 8 → 4 → 2 → 1, aggregate decode was 284.5 against 121.6 / 122.5
     tok/s: B1/A1 = 2.340, B2/A2 = 2.323, with the self-pairs inside 1.03
     (`e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28`).
-  - **Correctness.** The graph token streams equal the same padded step run
-    eagerly, bitwise. Against unpadded eager they first differ at row 0,
-    token 130: bf16 GEMMs round differently at other row counts, which the
-    lane registered as reported, not decisive.
+  - **Correctness.** The graph token streams equal the same bucket step run
+    eagerly, bitwise. Against the eager runner they first differ at row 0,
+    token 130, which the lane registered as reported, not decisive. *(Corrected
+    2026-09-29: this first blamed "other row counts"; the trace pads no rows.
+    The eager and bucket steps differ in grouping and step path; P81 found
+    them differing even with the grouping held equal.)*
   - **Where it comes from.** Eager decode is host-bound: 54.5 ms per step at
     16 rows and still 51.5 ms at 2. The graph step falls with the rows, to
     9.95 ms at one (4.25×).
   - **Still open.** It stays opt-in, and the HTTP shim does not use it. It
-    is not measured on the licensed int4 stack, on other families, or under
-    arrivals.
+    is not measured on other families or under arrivals. P81 (next item)
+    measured it on the int4 serving recipe.
+- **On the int4 serving recipe, the eager runner is host-bound and the
+  graphs remove it** (lane P81, `bench/p81/`, 2026-09-29, one RTX 5090 on an
+  AMD EPYC 7K62 host, Qwen3-30B-A3B).
+  - **What was compared.** P80's trace, arms and rule, on P55x's recipe:
+    calibrated int4 experts and attention, the T=1 folds and the fused
+    router epilogue. Both packs came from one build and were installed by
+    fingerprint in every arm. The eager control ran the device grouping
+    too; with it off, the int4 store decodes T > 1 through its prefill
+    branch. Aggregate decode was 683.6 / 679.3 tok/s against 47.8 / 48.7:
+    B1/A1 = 14.29, B2/A2 = 13.95, bitwise equal to the bucket step run
+    eagerly (`e4b.serve.p81.qwen3.licensed-int4.dynb.graph-buckets.5090.2026-09-29`).
+  - **What the ratio is.** Eager decode took 125–139 ms per step at every
+    row count from 16 to 1, so it is host cost, and this host's CPU is
+    slow (its calibration ran 3.1× slower than P70's). The graphs took
+    16.9 ms at 16 rows and 5.4 ms at one. The ratio does not travel to
+    another host. What does travel: eager serving of this stack leaves
+    most of the throughput unused, so graphs by default is the next lever.
+  - **#674.** The build dumped the first attention pack of the recipe
+    (`sha256:d7cfa1f4…`, 192 projections). The expert pack was the licensed
+    `0c9955a9…`, but the build's K8 read 6.33015 against the licensed
+    build's 6.36709 on the same window. So this attention pack is the
+    recipe's on e4b 0.37.7, not a byte-identification of the attention
+    P55x licensed. The cause of the difference is not isolated.
+  - **Reported, not decisive.** The eager step and the bucket step
+    disagree on 91 of 1,008 tokens at identical rows and grouping; they
+    append K/V by different paths. Not isolated.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

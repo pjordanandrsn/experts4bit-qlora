@@ -1,6 +1,6 @@
 {
   "package": "experts4bit-qlora",
-  "generated": "2026-09-28",
+  "generated": "2026-09-29",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "verified": "reproduced under stated conditions with a public receipt",
@@ -7160,7 +7160,41 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-28/p80-5090-1/ (receipt.json, teardown-proof.json, the fetched run); the proof p80-prove-3 and the refused / not-run p80-prove-1..2 beside it"
       ],
-      "notes": "Pre-registered in #762 (adopts the Q2 memo's claim and criteria; departs in one stated place: the bitwise gate is graph == padded eager, since unpadded eager runs other row counts through bf16 GEMMs -- graph vs unpadded eager first differs at row 0 token 130, reported not decisive). P1, P2, P3 HELD. Decomposition: P/A1 = 1.334 (padding + device grouping), B1/P = 1.754 (the graph). NF4 only: no licensed int4 ratio is implied. enable_decode_graphs stays opt-in."
+      "notes": "Pre-registered in #762 (adopts the Q2 memo's claim and criteria; departs in one stated place: the bitwise gate is graph == padded eager -- graph vs the eager runner first differs at row 0 token 130, reported not decisive). P1, P2, P3 HELD. Decomposition: P/A1 = 1.334 (device grouping + the bucket step's path), B1/P = 1.754 (the graph). CORRECTED 2026-09-29 (P81's read): these notes first attributed the A-vs-graph divergence to 'other row counts through bf16 GEMMs' and P/A1 to 'padding'; the trace pads no rows (pad_rows 0 in every bucket), so neither holds -- A differs from P in grouping and step path, not isolated. NF4 only: no licensed int4 ratio is implied. enable_decode_graphs stays opt-in."
+    },
+    {
+      "id": "e4b.serve.p81.qwen3.licensed-int4.dynb.graph-buckets.5090.2026-09-29",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P81: on Qwen3-30B-A3B served with P55x's int4 recipe (GPTQ-calibrated int4 experts, pack sha256:0c9955a9..., and calibrated int4 attention, pack sha256:d7cfa1f4..., both installed by fingerprint in every arm; T=1 folds and the fused router epilogue), over P80's forced changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 32 decode steps each, 992 decode tokens), PagedModelRunner.enable_decode_graphs decodes 683.6 / 679.3 tok/s against the eager PagedModelRunner's 47.8 / 48.7 -- B1/A1 = 14.29 and B2/A2 = 13.95, both above the registered 1.03 with the self-pairs inside it -- and its token streams equal the same bucket step run eagerly, bitwise: CONFIRMED. The ratio is this host's eager host cost: A takes 125-139 ms per step at every row count (host-bound, on an AMD EPYC 7K62), the graphs 16.9 ms at 16 rows and 5.4 ms at one.",
+      "value": 13.953,
+      "unit": "x aggregate decode tok/s, bucketed graphs over the eager PagedModelRunner, the smaller of the two registered pairings (B2/A2), on one host whose eager step is host-bound",
+      "hardware": "RTX 5090 (sm_120, 450 W power limit, driver 570.153.02), one rented Vast.ai verified/secure host (instance 53286231, AMD EPYC 7K62 (Zen 2), 251 GiB, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777, NF4 arena baked by P39's k8_bake.py, then ONE build with P70's recipe (streamed GPTQ-calibrated int4 experts, C4 128 x 512, 10 layers per pass; calibrated int4 attention; E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI) dumping the expert pack (sha256:0c9955a9..., = P55x's licensed pack) and the attention pack (sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422, int4_b32.attn.v1, 192 projections); every arm installs both from their artifacts by fingerprint; fp8 paged KV, hybrid engine all-VRAM, --no-fuse-qkv; the 16 rows of step_decomp._k8_window at B = 16 (prompts sha256 f67e7e4d, p37's), prefilled together in one step; bench/p81/step_decomp.py --dynb-mode --dynb-grouping device, arms A1 eager -> B1 graph -> B2 graph -> A2 eager -> P bucket step eager, one process each, ALL with capture-safe device grouping; the trace pads no rows; per arm a warm pass then a timed pass, timing = decode-only scheduler-step walls including the token read-back; verdict by bench/p81/p81_reduce.py; e4b 0.37.7 at fa65132, grouped-nf4-gemm 0.33.5 at fb15cf5, torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1",
+      "measured_on": "2026-09-29",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p81/RESULTS-p81.md",
+        "bench/p81/PREREG-p81.md",
+        "bench/p81/p81_reduce.py",
+        "bench/p81/step_decomp.py",
+        "bench/p81/receipts/p81-5090-2/verdict.json",
+        "bench/p81/receipts/p81-5090-2/p81_A1.json.gz",
+        "bench/p81/receipts/p81-5090-2/p81_B1.json.gz",
+        "bench/p81/receipts/p81-5090-2/p81_B2.json.gz",
+        "bench/p81/receipts/p81-5090-2/p81_A2.json.gz",
+        "bench/p81/receipts/p81-5090-2/p81_P.json.gz",
+        "bench/p81/receipts/p81-5090-2/summary.txt",
+        "bench/p81/receipts/p81-5090-2/packs.json",
+        "bench/p81/receipts/p81-5090-2/attn1/manifest.json",
+        "bench/p81/receipts/p81-5090-2/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-29/p81-5090-2/ (receipt.json, teardown-proof.json, the fetched run with logs/); the proof p81-prove-1 and the bandwidth NOT_RUN p81-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #767 (P80's trace, arms and rule on the licensed stack; departs from P80 in one stated place: the eager control also runs the device grouping, because with the int4 store and the grouping off a T > 1 decode takes _fused_over_stack's prefill dequant-and-matmul branch). P1, P2, P3 HELD; the pack gate held in all five arms. Decomposition: P/A1 = 1.206 (the bucket step's path; grouping equal, no padding), B1/P = 11.84 (the graph). NOT portable: the eager step is host-bound and this host's CPU is slow (the build's first calibration chunk took 1,121 s vs P70's 360 s), so the ratio is not comparable to P80's 2.32 or to another host. Reported, not decisive: A != P at identical rows and grouping (14/16 rows, 917/1008 tokens; the step paths differ in KV append and bound state). #674: the build's K8 reads 6.33015 on the licensed window (sha 9ef10d760ad9) vs 6.36709 in P55x/P64/P70 through the same expert bytes, so d7cfa1f4 is the licensed RECIPE's attention on e4b 0.37.7, not a byte-identification of P55x's (never-dumped) attention; the cause of the -0.03694 is not isolated. enable_decode_graphs stays opt-in."
     }
   ]
 }
