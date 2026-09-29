@@ -319,7 +319,9 @@ def test_repeated_calls_are_bitwise_identical_forward_and_backward():
     float atomics, so identical inputs could give different sums call to call. It needs
     k >= 3 to show at all (with two terms from a zero start, a + b == b + a exactly), so
     this uses top-k 8 over 16 experts rather than the fixture's k = 2. Output, dL/dx and
-    both LoRA gradients must be bit-identical across repeats."""
+    both LoRA gradients must be bit-identical across repeats. Two atomic sites, each
+    pinned by its own mutation on the A2000: the forward combine (output) and
+    index_select's backward over the repeated token rows (dL/dx)."""
     n_exp, k, hid, inter, n_tok = 16, 8, 256, 256, 512
     torch.manual_seed(0)
     gate_up = (torch.randn(n_exp, 2 * inter, hid) * 0.1).to(DEVICE)
@@ -332,7 +334,11 @@ def test_repeated_calls_are_bitwise_identical_forward_and_backward():
             p.normal_(0, 0.02)
     assert enable_batched_train(mod) == 1
     torch.manual_seed(1)
-    hs0 = torch.randn(n_tok, hid, dtype=torch.bfloat16, device=DEVICE)
+    # fp32 hidden states, so the output stays fp32: the experts still compute in bf16,
+    # but a bf16 OUTPUT rounds away the low bits where a reordered fp32 sum differs --
+    # with bf16 in, the atomic combine passed this test on an A2000 while the same
+    # index_add_ at this geometry, fp32 out, gave 20 distinct results in 20 calls
+    hs0 = torch.randn(n_tok, hid, dtype=torch.float32, device=DEVICE)
     idx = torch.rand(n_tok, n_exp, device=DEVICE).argsort(-1)[:, :k].contiguous()
     wts = torch.rand(n_tok, k, dtype=torch.bfloat16, device=DEVICE)
     g = torch.randn(n_tok, hid, device=DEVICE)
