@@ -903,9 +903,10 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   - **Where it comes from.** Eager decode is host-bound: 54.5 ms per step at
     16 rows and still 51.5 ms at 2. The graph step falls with the rows, to
     9.95 ms at one (4.25×).
-  - **Still open.** It stays opt-in, and the HTTP shim does not use it. It
-    is not measured on other families or under arrivals. P81 (next item)
-    measured it on the int4 serving recipe.
+  - **Still open.** It stays opt-in. The HTTP shim and `infer` decode with
+    transformers' `generate`, not with `PagedModelRunner`, so neither is
+    affected either way. It is not measured on other families or under
+    arrivals. P81 (next item) measured it on the int4 serving recipe.
 - **On the int4 serving recipe, the eager runner is host-bound and the
   graphs remove it** (lane P81, `bench/p81/`, 2026-09-29, one RTX 5090 on an
   AMD EPYC 7K62 host, Qwen3-30B-A3B).
@@ -921,8 +922,11 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     row count from 16 to 1, so it is host cost, and this host's CPU is
     slow (its calibration ran 3.1× slower than P70's). The graphs took
     16.9 ms at 16 rows and 5.4 ms at one. The ratio does not travel to
-    another host. What does travel: eager serving of this stack leaves
-    most of the throughput unused, so graphs by default is the next lever.
+    another host. What does travel: a `PagedModelRunner` caller on this
+    stack that does not enable graphs leaves most of the throughput unused.
+    *(Corrected 2026-09-29: this first said "eager serving of this stack";
+    the package's serving entry points use transformers' `generate`, not
+    the paged runner, and P81 measured nothing about them.)*
   - **#674.** The build dumped the first attention pack of the recipe
     (`sha256:d7cfa1f4…`, 192 projections). The expert pack was the licensed
     `0c9955a9…`, but the build's K8 read 6.33015 against the licensed

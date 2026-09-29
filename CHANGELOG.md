@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Correction: the package's serving entry points do not use `PagedModelRunner` (docs only)
+
+- P81's read (#769) and STATUS said the HTTP shim and `infer` serve the int4 stack eagerly and so leave the graphs' throughput unused. Neither uses `PagedModelRunner`: `serve.py` and `infer.py` both decode with transformers' `generate`. In the shipped package only the bench harnesses drive the paged runner and scheduler.
+- So P81's ratio says nothing about those entry points. Graphs-by-default (#770) is a question about `PagedModelRunner`'s own default. Corrected in `bench/p81/RESULTS-p81.md` and `docs/STATUS.md`, each marked.
+
 ### A calibrate-and-dump build now records the expert artifact's root fingerprint on its provenance (#772)
 
 - **What was wrong.** `dump_calibrated_artifact` wrote the artifact but left the model's provenance at the live stores' fingerprint, which hashes the tensor payloads only. The artifact's root also covers the identity and assignment payloads, so the two never match. `dump_attn_int4_artifact` then copied the live value into its informative `expert_pack_fingerprint`: P81's attention pack names `c221ab32…`, which no artifact carries (its expert artifact is `0c9955a9…`).
