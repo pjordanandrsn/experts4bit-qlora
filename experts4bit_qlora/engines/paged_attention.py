@@ -172,7 +172,18 @@ def paged_attention_forward(module, query, key, value, attention_mask,
             # graph_mode_init_batch to MATCH ctx.slots -- silently
             # appending rows to the init-time slots while attention
             # reads ctx.slots would cross sequences.
-            if key.shape[0] > 1 or len(ctx.slots) > 1:
+            #
+            # A BOUND decode-graph bucket (#511; ``_g_sel`` set by graph_bucket_bind)
+            # takes the batch form even for one row. The single-slot form writes to
+            # ``_g_seq``, the slot graph_mode_init was given -- for the buckets that
+            # is a SCRATCH slot, baked into a captured graph as a Python int -- while
+            # attention reads the row's own slot through the bucket selector. Bucket 1
+            # (exactly one active row) therefore appended every new token to scratch
+            # and never advanced the row's own length: the row decoded without the
+            # tokens of its one-row phase (lane B771; the P80/P81 "eager vs graph"
+            # divergence). The batch form addresses the bound slot on device.
+            if (key.shape[0] > 1 or len(ctx.slots) > 1
+                    or getattr(ctx.kv, "_g_sel", None) is not None):
                 gslots = getattr(ctx.kv, "_g_slots", None)
                 if gslots != list(ctx.slots):
                     raise RuntimeError(

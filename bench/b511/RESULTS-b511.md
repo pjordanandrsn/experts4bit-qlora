@@ -18,6 +18,14 @@ asserts that bucket 4 carried padding, and that the replayed streams equal the p
 The active set shrinks 4 → 3 → 2 → 1 as requests finish, and a fifth request lands in a recycled slot. The printed
 unpadded-eager agreement is captured by pytest (no `-s`), so it is not in the log. It was never part of the rule.
 
+**Corrected 2026-09-29 (lane B771).** The replay does equal the padded eager step, as read here. The padded step was
+itself wrong at bucket 1. With exactly one active row, it appended the row's K/V to a scratch slot (the one
+`enable_decode_graphs` passes to `graph_mode_init`), so the row's own length stopped advancing and it decoded without
+its new tokens. This test's trace ends in a one-row phase, but its gate compares two paths that share the shim, so it
+could not see the bug. The unpadded-eager comparison that could was only printed. The fix routes a bound bucket through
+the batch append. `tests/test_decode_graph_buckets.py::test_every_bucket_step_advances_its_rows_own_kv_length` checks
+the invariant directly on sm_89+, and `tests/test_bucket1_append_routing.py` pins the routing on any machine.
+
 P2's mutation removes `Fp8PagedKV.kernel_args`'s bound-bucket selector. Attention then reads the per-tuple cache,
 which a captured graph bakes at capture time (on the scratch slots). The replay diverges from the oracle, so the test
 catches the defect the design exists to prevent.

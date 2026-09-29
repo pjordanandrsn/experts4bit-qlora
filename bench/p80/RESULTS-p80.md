@@ -27,6 +27,15 @@ Register row: `e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28`.
     device) and in the step path (the eager step's `append_many` vs the bucket step's `append_graph_bt1` over bound
     bucket state). P81 held the grouping equal and A still differed from P, so the grouping alone does not explain it.
     Which part of the step path moves the tokens is not isolated.
+  - **Corrected again 2026-09-29 (lane B771): it is a bug, not rounding.** At bucket 1 (exactly one active row) the bucket
+    step appended the row's K/V through the single-slot form, which writes to `graph_mode_init`'s slot, a **scratch**
+    slot; the row's own length stopped advancing while attention kept reading it through the bucket selector. So in the
+    trace's one-row phase (decode steps 128–159, tokens ≥ 129) row 0 decoded **without its own new tokens**, in B and in
+    P alike, which is why B ≡ P held. Row 0 at token 130 is inside that phase. B771, with every other difference removed,
+    found the eager and bucket steps equal everywhere except from the first one-row step on. Fixed in the paged-attention
+    shim (a bound bucket always takes the batch append). The ratios here were measured on the buggy path: in the one-row
+    phase its attention read a context frozen at the phase start (at most 32 tokens short), so it did slightly less
+    attention work there. They are superseded when the fixed path is re-measured.
 
 ## Where the gain comes from (mean ms per decode step, timed pass)
 

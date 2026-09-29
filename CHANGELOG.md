@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Bucketed decode graphs: a bucket of one row now appends to its own slot (a correctness fix to 0.37.7's opt-in `enable_decode_graphs`)
+
+- **The bug.** `enable_decode_graphs` (#757, 0.37.7) initialises graph mode on a scratch slot (`graph_mode_init(seq=scratch[0])`) and binds each bucket's real slots on device. The paged-attention shim sent every single-row decode to `append_graph_t1`, which writes to that init-time slot.
+  - So at **bucket 1, whenever exactly one row was active**, each new token's K/V landed in the scratch slot, and the row's own length stopped advancing.
+  - Attention reads the row's slot through the bucket selector, so it ran without the tokens generated since the one-row phase began.
+  - A captured bucket-1 graph baked the scratch slot in. Replay and the padded eager step shared the bug.
+- **Found by lane B771** (#771, RTX 5090, $0.1515). With grouped-nf4-gemm#413's append fix in place, the eager step and the bucket step decoded identical tokens in all 16 rows through the 16-, 8-, 4- and 2-row phases, and left each other at the first one-row step (row 0, token 129) and nowhere else.
+  - B771's registered question, whether the fused append was the whole cause, reads **REFUTED**. The append fix holds at the byte level on the hardware cast: 21 differing bytes of 5.4×10⁸ before, 0 after.
+- **The fix.** A bound bucket takes the batch append (`append_graph_bt1`, which addresses the bound slot on device) whatever its size. An unbound single-sequence graph keeps `append_graph_t1`, whose `_g_seq` is the sequence.
+- **Tests.**
+  - `tests/test_bucket1_append_routing.py` pins the routing through the real shim on any machine.
+  - `tests/test_decode_graph_buckets.py::test_every_bucket_step_advances_its_rows_own_kv_length` checks, after every bucketed step, that each stepped row's device length equals the host count (sm_89+). The existing replay test could not see this: both of its sides share the shim.
+- **Corrections, each marked in place.**
+  - B511's read: replay ≡ padded eager holds, but the padded step was wrong at bucket 1.
+  - P80's and P81's reads, STATUS and register notes: their "reported, not decisive" divergence was this bug, plus, in P81, the append's.
+  - P80's and P81's ratios were measured on the buggy path and are to be superseded by a re-measurement of the fixed one.
+
 ### The batched training path gives identical bits call to call on CUDA (#765)
 
 - **What was wrong.** `enable_batched_train`'s forward (`engines/batched.py`) went through CUDA float atomics at two sites, so identical inputs could give different results call to call. Same class as grouped-nf4-gemm#408.
