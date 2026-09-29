@@ -23,7 +23,7 @@ permalink is posted on #771 before the launch.
 `bench/b771b/b771b_run.sh` on the box, staged by `b771b_drive.sh` and pinned by `staged.sha256`
 (`tests/test_b771b_staged_pin.py`). One RTX 5090, image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`.
 - **Install (B511's pattern).**
-  - grouped-nf4-gemm at **`efc5677ea959fa1ce246c0732845c57b09ce3f38`** (main: #413 and #414).
+  - grouped-nf4-gemm at **`9407d499a4d1e0fe8c22b050878a9f869b385b45`** (the v0.33.7 release: #413 and #414).
   - experts4bit-qlora cloned at the launch commit (a `main` containing #777 and this page) and installed editable
     under a constraints file that holds the image's torch and triton. transformers 5.16.1 and bitsandbytes 0.50.1,
     P80's pins.
