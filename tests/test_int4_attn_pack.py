@@ -89,6 +89,20 @@ def test_the_receipt_names_the_attention_pack(monkeypatch, tmp_path):
     assert rep["attn_pack_fingerprint"] == fp and rep["attn_pack_source"] == "artifact"
 
 
+def test_the_manifest_names_the_expert_artifact_not_the_live_hash(monkeypatch, tmp_path):
+    """#772: after a calibrate-and-dump build the expert provenance carries both the live
+    stores' hash and the artifact's root; the attention manifest names the root. After a
+    licensed load there is only ``pack_fingerprint`` (the root), and it names that."""
+    from experts4bit_qlora.engines import int4_attn_calib as ac
+    from experts4bit_qlora.engines.pack_manifest import attach_provenance
+    live, root = "sha256:" + "c" * 64, "sha256:" + "0" * 64
+    m = _calibrated(monkeypatch)
+    attach_provenance(m, {"pack_fingerprint": live, "pack_artifact_fingerprint": root, "model_revision": REV})
+    assert ac.dump_attn_int4_artifact(m, str(tmp_path / "a"))["expert_pack_fingerprint"] == root
+    attach_provenance(m, {"pack_fingerprint": root, "model_revision": REV})
+    assert ac.dump_attn_int4_artifact(m, str(tmp_path / "b"))["expert_pack_fingerprint"] == root
+
+
 def _flip_a_payload_byte(root):
     p = next((root / "payloads" / "attn").glob("*.packed.bin"))
     b = bytearray(p.read_bytes())

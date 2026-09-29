@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### A calibrate-and-dump build now records the expert artifact's root fingerprint on its provenance (#772)
+
+- **What was wrong.** `dump_calibrated_artifact` wrote the artifact but left the model's provenance at the live stores' fingerprint, which hashes the tensor payloads only. The artifact's root also covers the identity and assignment payloads, so the two never match. `dump_attn_int4_artifact` then copied the live value into its informative `expert_pack_fingerprint`: P81's attention pack names `c221ab32…`, which no artifact carries (its expert artifact is `0c9955a9…`).
+- **What changed.** The dump now attaches `pack_artifact_fingerprint` (the root) beside the unchanged `pack_fingerprint`, so reducers that compare a calibrating run's `pack_fingerprint` keep their meaning. Receipts that merge provenance carry it, and the attention dump prefers it. After a licensed load, `pack_fingerprint` is already the root.
+- **Tests.** `test_a_dump_records_the_artifact_root_beside_the_live_fingerprint` and `test_the_manifest_names_the_expert_artifact_not_the_live_hash`. On the A2000 container both pass, CPU-only as well, and both fail with the fix reverted. The pack P81 already wrote is not rewritten: it is a distributed artifact, and its field is informative.
+
 ### Lane P81 read (#511, #674): on the int4 serving recipe, bucketed CUDA-graph decode is 13.95–14.29× the eager `PagedModelRunner` on one host whose eager step is host-bound; the recipe's first attention pack loads by fingerprint (docs, register and bench only; nothing in the wheel changes)
 
 - `p81-5090-2` ran on one RTX 5090 (AMD EPYC 7K62 host) for $1.1349, teardown proven. The lane cost $1.2057: the proof, one NOT_RUN on the launcher's bandwidth pre-flight, and the reading.

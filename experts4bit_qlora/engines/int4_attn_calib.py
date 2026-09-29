@@ -310,8 +310,10 @@ def dump_attn_int4_artifact(model, artifact_dir: str, *,
         "layers": rows,
         "groups": sorted({r["group"] for r in rows}),
         "calibration_token_stream_sha": calibration_token_stream_sha,
-        # informative, NOT identity: the expert pack this attention was calibrated beside
-        "expert_pack_fingerprint": rec.get("pack_fingerprint"),
+        # informative, NOT identity: the expert pack this attention was calibrated beside --
+        # its ARTIFACT's root when the build dumped one (#772), else the provenance's own
+        # (the artifact's root after a licensed load; the live stores' hash otherwise)
+        "expert_pack_fingerprint": rec.get("pack_artifact_fingerprint") or rec.get("pack_fingerprint"),
         "toolchain": toolchain_record(),
     }
     man = write_named_artifact(artifact_dir, tensors=tensors, meta=meta, layout=ATTN_LAYOUT)
