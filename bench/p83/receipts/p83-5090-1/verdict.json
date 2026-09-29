@@ -1,0 +1,35 @@
+{
+ "lane": "P83",
+ "reasons": [
+  "O 6.36709 vs N 6.36396 (-0.00049 nats): the software moved K8 on this box"
+ ],
+ "verdict": "DIFFERENT",
+ "ppl": {
+  "O_build": 6.367086902514706,
+  "O_rep": 6.367086902514706,
+  "N_build": 6.363959680597435,
+  "N_rep": 6.363959680597435
+ },
+ "mean_nll": {
+  "O_build": 1.8511420498367808,
+  "O_rep": 1.8511420498367808,
+  "N_build": 1.8506507749113845,
+  "N_rep": 1.8506507749113845
+ },
+ "delta_nats_N_minus_O": -0.0004912749253962456,
+ "reported": {
+  "O_reproduces_licensed_5dp": true,
+  "N_reproduces_p82_box_5dp": true,
+  "O_minus_licensed_nats": -4.864837859219762e-07,
+  "N_minus_p82_box_nats": -5.0189280287327165e-08,
+  "O_expert_is_licensed": true,
+  "N_expert_is_licensed": true,
+  "N_attention_equals_p81_p82": true,
+  "packs": {
+   "O_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+   "N_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+   "N_attention": "sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422",
+   "licensed_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"
+  }
+ }
+}

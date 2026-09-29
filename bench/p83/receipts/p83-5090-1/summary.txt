@@ -1,0 +1,48 @@
+KNOBS router_epi_cast=0 O=e4b@c77aab6dafb5f08d98a7387d1e986d141b20a2d3+gnf4@5ca1897585f9f456f99ea504b2a1be0ea91db496 N=e4b@4019b96b6e0e7cdd8e6648e63f3e675902afcc86+gnf4@9407d499a4d1e0fe8c22b050878a9f869b385b45 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=5090 min_disk_gb=200 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048
+p83_reduce self-test OK (13 cases)
+stack O
+e4b 0.37.4 @c77aab6dafb5f08d98a7387d1e986d141b20a2d3 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+router_epi_cast_weights False
+hook /root/p83/o/hook/usercustomize.py
+STAMP O {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'e4b': '0.37.4', 'gnf4': '0.33.0', 'expected_expert_fingerprint': None, 'expected_attention_fingerprint': None}
+O BAKE OK
+K8 O_build rc=0 K8_PPL steps=2048 nll=1.85114 ppl=6.36709 compute=fp8 sha=9ef10d760ad9 out=/root/p83/k8_O_build.json
+
+PACK O experts sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 (= the licensed pack)
+K8 O_rep rc=0 K8_PPL steps=2048 nll=1.85114 ppl=6.36709 compute=fp8 sha=9ef10d760ad9 out=/root/p83/k8_O_rep.json
+
+stack N
+e4b 0.37.8 @4019b96b6e0e7cdd8e6648e63f3e675902afcc86 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.7 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+router_epi_cast_weights False
+hook /root/p83/n/hook/usercustomize.py
+STAMP N {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'e4b': '0.37.8', 'gnf4': '0.33.7', 'expected_expert_fingerprint': None, 'expected_attention_fingerprint': None}
+N BAKE OK
+K8 N_build rc=0 K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p83/k8_N_build.json
+
+PACK N experts sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 (= the licensed pack); attention sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422
+K8 N_rep rc=0 K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p83/k8_N_rep.json
+
+P83_VERDICT DIFFERENT O 6.36709 vs N 6.36396 (-0.00049 nats): the software moved K8 on this box
+  K8 O_build = 6.36709 (6.367086902514706)
+  K8 O_rep = 6.36709 (6.367086902514706)
+  K8 N_build = 6.36396 (6.363959680597435)
+  K8 N_rep = 6.36396 (6.363959680597435)
+  O_reproduces_licensed_5dp = True
+  N_reproduces_p82_box_5dp = True
+  O_minus_licensed_nats = -4.864837859219762e-07
+  N_minus_p82_box_nats = -5.0189280287327165e-08
+  O_expert_is_licensed = True
+  N_expert_is_licensed = True
+  N_attention_equals_p81_p82 = True
