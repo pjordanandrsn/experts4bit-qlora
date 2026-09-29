@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Lane P81 registered (#511, #674): bucketed CUDA-graph decode on the licensed int4 stack, and the licensed attention pack by fingerprint (bench only; nothing in the wheel changes)
+
+- `bench/p81/PREREG-p81.md` runs P80's trace, arms and rule on the configuration actually quoted for serving: calibrated int4 experts and attention, the T=1 folds and the fused router epilogue, on Qwen3-30B-A3B. P80 read NF4 only, and named licensed int4 as the case it could not speak to.
+- One build (P70's recipe) dumps both packs: the experts (#405) and, for the first time on the licensed stack, the calibrated attention (#754). Every arm then installs both by fingerprint, and a reducer gate voids the read unless all five arms served the same two packs from their artifacts. The expert pack's equality with the licensed `0c9955a9…` and the build's K8 against 6.36709 are recorded, not decided.
+- One departure from P80, with the reason: the eager control also runs the device grouping. With the int4 store and the grouping off, a T > 1 decode takes `_fused_over_stack`'s prefill branch (dequantise and matmul per routed expert), which is not how the licensed stack serves a batch.
+- The lane copy of `step_decomp.py` is P80's plus the receipt provenance and `--dynb-grouping`. `tests/test_p81_staged_pin.py` pins the staged files, the copy's diff against P80's, both packs in the arms' load env, the trace and the reducer's 13-case rule.
+
 ### Kimi-K3's run-to-run drift is the MXFP4 prefill combine's atomics (bench and docs only; no library change)
 
 - **The A/B ran.** Nine prefill-only processes ran on the A2000 through a wrapper that sets torch's deterministic-algorithms switch and hashes every MoE call's input, router ids, router weights and output. The driver is unmodified. With `torch.use_deterministic_algorithms(True)`, three processes are bit-identical at all 92 MoE calls: p(" Paris") 0.7144126892089844, 6,118 prefill expert rows. Without it, three processes all give 0.7119670510292053 and 6,130 rows, yet every pair differs at 3 to 8 of the 92 calls, each time with the engine returning different bits for identical inputs. With grouped-nf4-gemm#410's ordered combine alone, deterministic mode off, three processes reproduce the deterministic ones bit for bit. So the drift recorded in #761 is grouped-nf4-gemm's `out.index_add_` float atomics; in these nine processes nothing else in the forward moved. Row `e4b.parity.kimi-k3.prefill-drift-is-the-combine.a2000.2026-09-28`. The five-runs row's notes and `docs/STATUS.md` now say measured, not suspected. RESULTS §5; receipts `bench/kimi-k3-a2000/receipts/2026-09-28-det-ab/`.
