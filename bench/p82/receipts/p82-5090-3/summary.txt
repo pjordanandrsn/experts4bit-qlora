@@ -1,0 +1,48 @@
+KNOBS router_epi_cast=0 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=5090 min_disk_gb=200 seg=32 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048 skip_install=0
+p82_reduce self-test OK (21 cases)
+e4b 0.37.8 @06c115bb28179b968983a73b1568952884058189 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.7 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+router_epi_cast_weights False
+BAKE OK
+BUILD K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p82/build_ppl_wikitext.json
+PACK experts sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 (= the licensed pack (P55x))
+PACK attention sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422 (layout int4_b32.attn.v1; 192 projections ['attention'])
+arm A1 rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=A1 mode=eager agg=67.6 tok/s decode_wall=14668.9 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=19.59 GiB warm==timed=True
+
+arm B1 rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=B1 mode=graph agg=811.9 tok/s decode_wall=1221.8 ms steps=160 tokens=992 status={1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} eager_steps=0 peak_alloc=19.64 GiB warm==timed=True
+
+arm B2 rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=B2 mode=graph agg=814.2 tok/s decode_wall=1218.3 ms steps=160 tokens=992 status={1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} eager_steps=0 peak_alloc=19.64 GiB warm==timed=True
+
+arm A2 rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=A2 mode=eager agg=65.9 tok/s decode_wall=15055.7 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=19.59 GiB warm==timed=True
+
+arm P rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=P mode=padded agg=81.3 tok/s decode_wall=12195.4 ms steps=160 tokens=992 status={1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} eager_steps=320 peak_alloc=19.59 GiB warm==timed=True
+
+P82_VERDICT CONFIRMED licensed=True both pairings exceed 1.03: B1/A1 12.0063, B2/A2 12.3577
+  K8 build (e4b#674, reported): 6.36396 on window 9ef10d760ad9, router cast env '0'; licensed 6.36709 (-0.00313), P81 6.33015 (+0.03381)
+  K8 reading: INCOMPLETE: a K8 reading is missing or off the registered window; attention pack = P81's: True
+  A2/A1 = 0.9743
+  B2/B1 = 1.0028
+  B1/A1 = 12.0063
+  B2/A2 = 12.3577
+  P/A1 = 1.2028
+  B1/P = 9.9818
+arm K32 rc=0 K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p82/k8_K32.json
+
+arm K16 rc=0 K8_PPL steps=2048 nll=1.84342 ppl=6.31811 compute=fp8 sha=9ef10d760ad9 out=/root/p82/k8_K16.json
+
+P82_VERDICT CONFIRMED licensed=True both pairings exceed 1.03: B1/A1 12.0063, B2/A2 12.3577
+  K8 build (e4b#674, reported): 6.36396 on window 9ef10d760ad9, router cast env '0'; licensed 6.36709 (-0.00313), P81 6.33015 (+0.03381)
+  K8 K32 (e4b#674, reported): 6.36396 on window 9ef10d760ad9, router cast env '0'; licensed 6.36709 (-0.00313), P81 6.33015 (+0.03381)
+  K8 K16 (e4b#674, reported): 6.31811 on window 9ef10d760ad9, router cast env None; licensed 6.36709 (-0.04898), P81 6.33015 (-0.01204)
+  K8 reading: THE CAST IS NOT THE WHOLE GAP: the fp32 router does not read the licensed 6.36709; attention pack = P81's: True
+  A2/A1 = 0.9743
+  B2/B1 = 1.0028
+  B1/A1 = 12.0063
+  B2/A2 = 12.3577
+  P/A1 = 1.2028
+  B1/P = 9.9818

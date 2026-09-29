@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Lane P82 read (#511, #674, #777): on the licensed int4 stack the fixed graph path decodes exactly as the eager runner and is 12.0–12.4× faster on this host (CONFIRMED); for #674 the attention pack reproduces across boxes but K8 does not (bench, docs and register only)
+
+- `p82-5090-3` ran on one RTX 5090 (AMD EPYC 7R13) for $0.851, teardown proven. The lane cost $2.0438 across five rentals: two proof attempts, two host failures and the reading.
+- **Decode.** P80's trace on P55x's recipe (calibrated int4 experts and attention, T=1 folds, fused router at fp32 weights), both packs loaded by fingerprint, all arms on the device grouping.
+  - The eager runner, its bucket step and both graph arms decode identical tokens in every row (A1 ≡ P ≡ B1 ≡ B2). In P81 they did not.
+  - B1/A1 = 12.006 and B2/A2 = 12.358; the self-pairs are 0.974 and 1.003. **CONFIRMED.**
+  - The eager step is host-bound: 88–102 ms at every row count, against 13.6 ms for the graph step at 16 rows and 4.4 ms at one.
+- New row `e4b.serve.p82.qwen3.licensed-int4-fp32router.dynb.graph-buckets.fixed-path.5090.2026-09-29` supersedes P81's. STATUS's P81 entry is rewritten around it. The read is in `bench/p82/RESULTS-p82.md`.
+- **#674 (reported).**
+  - The attention pack `d7cfa1f4…` is byte-identical to P81's, on a second box and release.
+  - On one box, wikitext K8 reads 6.36396 with the fp32 router (the build and a pack-loading process alike) and 6.31811 with the cast. The cast moves K8 by −0.0072 nats but is not the whole 6.36709 → 6.33015 gap.
+  - With identical packs and router setting, P81's box read 6.33015. So on this stack K8 does not reproduce across boxes to five decimals, which the registered table had assumed.
+- Also filed: #784. A lane driver cannot tell a dead box from a silent one, and waited out the whole guard on one.
+
 ### Lane P82 registered (#511, #674, #777): P81 re-measured on the fixed graph path with the licensed build's fp32 router, and whether the router cast accounts for #674's K8 gap (bench only; nothing in the wheel changes)
 
 - `bench/p82/PREREG-p82.md`. One RTX 5090. P81's build and five arms (the licensed int4 stack, both packs loaded by fingerprint, the device grouping), on grouped-nf4-gemm 0.33.7 and an e4b containing #777.

@@ -904,41 +904,35 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     Zen 2 host than on P80's Zen 5 one, so the ratio does not travel.
   - **Still open.** It stays opt-in. The HTTP shim and `infer` use
     transformers' `generate`, not `PagedModelRunner`. It is not measured on
-    other families or under arrivals. P81 (next item) awaits a re-measure.
-- **On the int4 serving recipe, the eager runner is host-bound and the
-  graphs remove it** (lane P81, `bench/p81/`, 2026-09-29, one RTX 5090 on an
-  AMD EPYC 7K62 host, Qwen3-30B-A3B).
-  - **What was compared.** P80's trace, arms and rule, on P55x's recipe:
-    calibrated int4 experts and attention, the T=1 folds and the fused
-    router epilogue. Both packs came from one build and were installed by
-    fingerprint in every arm. The eager control ran the device grouping
-    too; with it off, the int4 store decodes T > 1 through its prefill
-    branch. Aggregate decode was 683.6 / 679.3 tok/s against 47.8 / 48.7:
-    B1/A1 = 14.29, B2/A2 = 13.95, bitwise equal to the bucket step run
-    eagerly (`e4b.serve.p81.qwen3.licensed-int4.dynb.graph-buckets.5090.2026-09-29`).
-  - **What the ratio is.** Eager decode took 125–139 ms per step at every
-    row count from 16 to 1, so it is host cost, and this host's CPU is
-    slow (its calibration ran 3.1× slower than P70's). The graphs took
-    16.9 ms at 16 rows and 5.4 ms at one. The ratio does not travel to
-    another host. What does travel: a `PagedModelRunner` caller on this
-    stack that does not enable graphs leaves most of the throughput unused.
-    *(Corrected 2026-09-29: this first said "eager serving of this stack";
-    the package's serving entry points use transformers' `generate`, not
-    the paged runner, and P81 measured nothing about them.)*
-  - **#674.** The build dumped the first attention pack of the recipe
-    (`sha256:d7cfa1f4…`, 192 projections). The expert pack was the licensed
-    `0c9955a9…`, but the build's K8 read 6.33015 against the licensed
-    build's 6.36709 on the same window. So this attention pack is the
-    recipe's on e4b 0.37.7, not a byte-identification of the attention
-    P55x licensed. The cause of the difference is not isolated.
-  - **The eager-vs-bucket divergence was two bugs, both now fixed** (lane
-    B771, 2026-09-29). gnf4's fused fp8 append divided non-IEEE (~6e-8 of
-    stored bytes; grouped-nf4-gemm#413). And at bucket 1, with exactly one
-    active row, the bucket step appended that row's K/V to a scratch slot,
-    so it decoded the one-row phase without its own new tokens, in P80's
-    and P81's graph arms alike. Fixed in the paged-attention shim. P80's
-    ratio is superseded by B771b's re-measure of the fixed path; P81's
-    awaits one.
+    other families or under arrivals. P82 (next item) re-measured the int4
+    stack.
+- **On the int4 serving recipe, the graph path decodes exactly as the eager
+  runner and is 12× faster on a host-bound host** (lane P82, `bench/p82/`,
+  2026-09-29, one RTX 5090 on an AMD EPYC 7R13 host, Qwen3-30B-A3B). It
+  supersedes P81's 14×, which was measured on the path with the two bugs below.
+  - **What was compared.** P80's trace and rule, on P55x's recipe: calibrated
+    int4 experts and attention, the T=1 folds, and the fused router epilogue
+    at fp32 weights. Both packs came from one build and were installed by
+    fingerprint in every arm, all with the device grouping. Aggregate decode
+    was 811.9 / 814.2 tok/s against 67.6 / 65.9: B1/A1 = 12.01, B2/A2 = 12.36
+    (`e4b.serve.p82.qwen3.licensed-int4-fp32router.dynb.graph-buckets.fixed-path.5090.2026-09-29`).
+  - **Correctness.** The eager runner, its bucket step and both graph arms
+    decode identical tokens in every row. In P81 they did not. There were two
+    causes, both now fixed: grouped-nf4-gemm#413's fp8 append, and #777's
+    bucket-1 append to a scratch slot.
+  - **What the ratio is.** Eager decode takes 88–102 ms per step at every row
+    count, so it is host cost. The graphs take 13.6 ms at 16 rows and 4.4 ms
+    at one. The ratio does not travel to another host. A `PagedModelRunner`
+    caller on this stack that does not enable graphs leaves most of the
+    throughput unused. The package's serving entry points use transformers'
+    `generate`, not the paged runner.
+  - **#674.** The attention pack (`sha256:d7cfa1f4…`) reproduced
+    byte-for-byte on a second box and release. The expert pack is the
+    licensed `0c9955a9…`. On one box the build's K8 reads 6.36396 with the
+    fp32 router and 6.31811 with the cast; the licensed builds read 6.36709.
+    With identical packs and router setting, P81's box read 6.33015. So on
+    this stack K8 does not reproduce across boxes to five decimals. The
+    cause is not isolated.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

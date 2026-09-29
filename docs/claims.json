@@ -7204,7 +7204,8 @@
       "hardware": "RTX 5090 (sm_120, 450 W power limit, driver 570.153.02), one rented Vast.ai verified/secure host (instance 53286231, AMD EPYC 7K62 (Zen 2), 251 GiB, not shared)",
       "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777, NF4 arena baked by P39's k8_bake.py, then ONE build with P70's recipe (streamed GPTQ-calibrated int4 experts, C4 128 x 512, 10 layers per pass; calibrated int4 attention; E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI) dumping the expert pack (sha256:0c9955a9..., = P55x's licensed pack) and the attention pack (sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422, int4_b32.attn.v1, 192 projections); every arm installs both from their artifacts by fingerprint; fp8 paged KV, hybrid engine all-VRAM, --no-fuse-qkv; the 16 rows of step_decomp._k8_window at B = 16 (prompts sha256 f67e7e4d, p37's), prefilled together in one step; bench/p81/step_decomp.py --dynb-mode --dynb-grouping device, arms A1 eager -> B1 graph -> B2 graph -> A2 eager -> P bucket step eager, one process each, ALL with capture-safe device grouping; the trace pads no rows; per arm a warm pass then a timed pass, timing = decode-only scheduler-step walls including the token read-back; verdict by bench/p81/p81_reduce.py; e4b 0.37.7 at fa65132, grouped-nf4-gemm 0.33.5 at fb15cf5, torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1",
       "measured_on": "2026-09-29",
-      "status": "measured",
+      "status": "superseded",
+      "superseded_by": "e4b.serve.p82.qwen3.licensed-int4-fp32router.dynb.graph-buckets.fixed-path.5090.2026-09-29",
       "tier": "measured",
       "evidence": [
         "bench/p81/RESULTS-p81.md",
@@ -7262,6 +7263,41 @@
         "e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28"
       ],
       "notes": "Pre-registered in #779. Supersedes P80's row, which was measured on the buggy path (the bucket-1 append to a scratch slot, fixed in #777). The ratio is host-bound and not portable: the graph step is within 4-10% of P80's at every row count while the eager step is 2.15-2.34x slower on this Zen 2 host than on P80's Zen 5 one. Reported, not decisive: A1 (default grouping) vs Ad (device grouping) first differ at row 2 token 66 -- different kernel sets. P81's int4 row stays corrected, not superseded, until that stack is re-measured. enable_decode_graphs stays opt-in."
+    },
+    {
+      "id": "e4b.serve.p82.qwen3.licensed-int4-fp32router.dynb.graph-buckets.fixed-path.5090.2026-09-29",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P82: on Qwen3-30B-A3B served with P55x's int4 recipe (GPTQ-calibrated int4 experts, pack sha256:0c9955a9..., calibrated int4 attention, pack sha256:d7cfa1f4..., both installed by fingerprint; T=1 folds; the fused router epilogue at fp32 routing weights, E4B_ROUTER_EPI_CAST=0 in every arm, as in P55x's, P64's and P70's builds), over P80's forced changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 32 decode steps each, 992 decode tokens), PagedModelRunner.enable_decode_graphs with the bucket-1 fix (#777) and grouped-nf4-gemm 0.33.7 decodes 811.9 / 814.2 tok/s against the eager PagedModelRunner's 67.6 / 65.9 -- B1/A1 = 12.006 and B2/A2 = 12.358, both above the registered 1.03 with the self-pairs inside it -- and the eager runner, its bucket step and both graph arms decode identical tokens in every row (A1 == P == B1 == B2): CONFIRMED.",
+      "value": 12.006,
+      "unit": "x aggregate decode tok/s, bucketed graphs over the eager PagedModelRunner, the smaller of the two registered pairings (B1/A1), on one host whose eager step is host-bound",
+      "hardware": "RTX 5090 (sm_120, 500 W power limit, driver 595.71.05), one rented Vast.ai verified/secure host (instance 53373593, AMD EPYC 7R13, 818 GiB, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777, NF4 arena baked by P39's k8_bake.py, then ONE build with P70's recipe (streamed GPTQ-calibrated int4 experts, C4 128 x 512, 10 layers per pass; calibrated int4 attention; E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI; E4B_ROUTER_EPI_CAST=0 exported for every process) dumping both packs; every arm installs both by fingerprint and runs the device grouping; the 16 rows of step_decomp._k8_window at B = 16 (prompts sha256 f67e7e4d, p37's), prefilled together; bench/p81/step_decomp.py --dynb-mode, arms A1 eager -> B1 graph -> B2 graph -> A2 eager -> P bucket step eager, one process each; per arm a warm pass then a timed pass, timing = decode-only scheduler-step walls including the token read-back; the router value each process read is stamped beside its receipt; verdict by bench/p82/p82_reduce.py; e4b 0.37.8 at 06c115b, grouped-nf4-gemm 0.33.7 at 9407d49, torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1, bitsandbytes 0.50.1",
+      "measured_on": "2026-09-29",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p82/RESULTS-p82.md",
+        "bench/p82/PREREG-p82.md",
+        "bench/p82/p82_reduce.py",
+        "bench/p82/receipts/p82-5090-3/verdict.json",
+        "bench/p82/receipts/p82-5090-3/p82_A1.json.gz",
+        "bench/p82/receipts/p82-5090-3/p82_B1.json.gz",
+        "bench/p82/receipts/p82-5090-3/p82_B2.json.gz",
+        "bench/p82/receipts/p82-5090-3/p82_A2.json.gz",
+        "bench/p82/receipts/p82-5090-3/p82_P.json.gz",
+        "bench/p82/receipts/p82-5090-3/packs.json",
+        "bench/p82/receipts/p82-5090-3/summary.txt",
+        "bench/p82/receipts/p82-5090-3/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-29/p82-5090-3/ (receipt.json, teardown-proof.json, the fetched run with logs/); the proofs p82-prove-1 (bandwidth NOT_RUN) and p82-prove-2, and the failed p82-5090-1 (stuck loading) and p82-5090-2 (box died) beside it"
+      ],
+      "supersedes": [
+        "e4b.serve.p81.qwen3.licensed-int4.dynb.graph-buckets.5090.2026-09-29"
+      ],
+      "notes": "Pre-registered in #783. Supersedes P81's row, measured on the buggy path (#413's append, #777's bucket-1 slot); here the eager runner's identity to its bucket step (A1 == P) was registered as decisive and held. P/A1 = 1.203 (the bucket step's path), B1/P = 9.98 (the graph). NOT portable: eager decode is host-bound (88-102 ms per step at every row count on this EPYC 7R13; 125-139 on P81's EPYC 7K62) and the graph step is 0.81-0.88x P81's. Reported for #674: the build's attention pack is byte-identical to P81's d7cfa1f4 (a second box and release); wikitext K8 (window 9ef10d760ad9) reads 6.36396 in the build and in a process loading both packs (fp32 router) and 6.31811 with the shipped cast, so the cast moves K8 by -0.0072 nats on one box but is not the whole 6.36709 -> 6.33015 gap; and with identical packs and router setting P81's box read 6.33015 where this one reads 6.31811, so K8 on this stack does not reproduce across boxes to five decimals (cause not isolated). enable_decode_graphs stays opt-in (#770)."
     }
   ]
 }
