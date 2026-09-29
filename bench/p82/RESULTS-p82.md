@@ -105,16 +105,17 @@ This read supersedes P81's register row with
   **−0.0072 nats**. That is under the family's 0.0095 K8 floor, as P70's INDISTINGUISHABLE read predicts.
 - **The finding that matters more: K8 does not reproduce across boxes on this stack.**
   - P81's build and this lane's K16 served **byte-identical packs with the same router setting**.
-  - Their code on K8's path is the same. e4b 0.37.7 → 0.37.8 changes only graph-mode, training and dump-provenance code
-    (#777, #765, #772). grouped-nf4-gemm 0.33.5 → 0.33.7 refactors `quantize_kv_fp8` into the same operations and changes only
-    the graph-mode append and the MXFP4 prefill.
+  - Their code on K8's path is the same. e4b 0.37.7 → 0.37.8 changes only graph-mode, training and
+    dump-provenance code (#777, #765, #772). grouped-nf4-gemm 0.33.5 → 0.33.7 refactors `quantize_kv_fp8` into the
+    same operations and otherwise changes only the graph-mode append and the MXFP4 prefill.
   - They read 6.33015 and 6.31811. The spread is 0.012 ppl, 0.0019 nats.
   - So a five-decimal match to 6.36709 is **not** an identity test across boxes. The registered table assumed it was.
 - **What that means for the fp32 residual.** The fp32 reading here is 0.0031 below the licensed 6.36709. That is
   smaller than the cross-box spread just measured, so it cannot be attributed to software.
   - The licensed reading itself came from two machines: P55x's and P70's host is one Ryzen 7950X on driver 575.57.08,
     and P64's is an EPYC 7C13 on **595.71.05, this box's driver**. P64 is on older software.
-  - So a driver version alone does not explain the residual. Software from before 0.37.5, or the machine, might.
+  - So a driver version alone does not explain the residual. The software between P64's release and this one might,
+    or the machine might.
 - **Not isolated:** why K8 moves between these boxes (the driver, Triton's timing-based autotune, or something else).
   The registration's next step, a software bisect, assumed K8 was box-invariant. The discriminating test is a
   **same-box A/B**: P70's software (e4b 0.37.4, gnf4 0.33.0) against 0.37.8 / 0.33.7, both builds with the fp32
@@ -126,7 +127,7 @@ This read supersedes P81's register row with
   weights), `enable_decode_graphs` with #777 on grouped-nf4-gemm 0.33.7 decodes bit-identically to the eager
   `PagedModelRunner` with the device grouping, over a trace that includes a one-row phase.
   - On this host the graphs are 12.0–12.4× faster.
-  - This supersedes P81's corrected row and completes #511's measurements on NF4 (B771b) and int4 (here).
+  - This supersedes P81's corrected row. With B771b (NF4), both of #511's stacks are now measured on the fixed path.
 - The calibrated attention pack `d7cfa1f4…` reproduces byte-for-byte on a second box and a second release.
 - On one box and identical packs, the router cast moves K8 by −0.0072 nats.
 
