@@ -1,0 +1,30 @@
+KNOBS model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=5090 min_disk_gb=200 seg=32 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048 skip_install=0
+p81_reduce self-test OK (13 cases)
+e4b 0.37.7 @fa65132b201d5746b33cc523293647cabb62468d (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.5 @fb15cf5f5b9f2fb107fa1a39218fd9d910b34d94
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+BAKE OK
+BUILD K8_PPL steps=2048 nll=1.84532 ppl=6.33015 compute=fp8 sha=9ef10d760ad9 out=/root/p81/build_ppl_wikitext.json
+PACK experts sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 (= the licensed pack (P55x))
+PACK attention sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422 (layout int4_b32.attn.v1; 192 projections ['attention'])
+arm A1 rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=A1 mode=eager agg=47.8 tok/s decode_wall=20735.4 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=19.59 GiB warm==timed=True
+
+arm B1 rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=B1 mode=graph agg=683.6 tok/s decode_wall=1451.2 ms steps=160 tokens=992 status={1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} eager_steps=0 peak_alloc=19.64 GiB warm==timed=True
+
+arm B2 rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=B2 mode=graph agg=679.3 tok/s decode_wall=1460.4 ms steps=160 tokens=992 status={1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} eager_steps=0 peak_alloc=19.64 GiB warm==timed=True
+
+arm A2 rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=A2 mode=eager agg=48.7 tok/s decode_wall=20378.0 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=19.59 GiB warm==timed=True
+
+arm P rc=0 P81_DYNB pack=sha256:0c9955a9f06d attn=sha256:d7cfa1f496d7 arm=P mode=padded agg=57.7 tok/s decode_wall=17187.5 ms steps=160 tokens=992 status={1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} eager_steps=320 peak_alloc=19.59 GiB warm==timed=True
+
+P81_VERDICT CONFIRMED licensed=True both pairings exceed 1.03: B1/A1 14.2885, B2/A2 13.9534
+  A2/A1 = 1.0175
+  B2/B1 = 0.9937
+  B1/A1 = 14.2885
+  B2/A2 = 13.9534
+  P/A1 = 1.2064
+  B1/P = 11.8436

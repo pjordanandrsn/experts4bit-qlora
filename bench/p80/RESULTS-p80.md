@@ -20,8 +20,13 @@ Register row: `e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28`.
 - **Engagement.** All five buckets captured (4.8 s), no candidate step ran eagerly, and every arm ran the registered trace
   in both passes, with the warm pass's tokens equal to the timed pass's.
 - **Reported, not decisive** (the pre-registered departure from the memo). Graph vs unpadded eager first differs at row
-  0, token 130, near the end of the longest row. A runs other row counts through the default T > 1 grouping, and bf16
-  GEMMs round differently at a different row count. The gate that isolates the graph is B ≡ P, and it held.
+  0, token 130, near the end of the longest row. The gate that isolates the graph is B ≡ P, and it held.
+  - **Corrected 2026-09-29 (P81's read).** This line first explained the divergence as A running "other row counts"
+    through bf16 GEMMs. **The trace pads no rows**: its active sizes are exactly the bucket sizes, and every bucket's
+    `pad_rows` is 0 in these receipts. So A ran the same row counts as P. It differs in the grouping (default vs
+    device) and in the step path (the eager step's `append_many` vs the bucket step's `append_graph_bt1` over bound
+    bucket state). P81 held the grouping equal and A still differed from P, so the grouping alone does not explain it.
+    Which part of the step path moves the tokens is not isolated.
 
 ## Where the gain comes from (mean ms per decode step, timed pass)
 
@@ -36,8 +41,10 @@ Register row: `e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28`.
 - **Eager decode is host-bound across the whole trace.** A1's step barely moves between 16 rows and 2 (54.5 → 51.5 ms);
   it is paying per-launch host cost, not per-row work. The graph step falls with the row count, and falls most where
   there is least GPU work. That is the stated expectation, and it held.
-- **P splits the ratio.** P/A1 = 1.33: padding plus capture-safe device grouping is itself faster than the default T > 1
-  grouping, whose host sync it removes. B1/P = 1.75 is the graph's own effect on the same padded function.
+- **P splits the ratio.** P/A1 = 1.33: capture-safe device grouping plus the bucket step's own path (no rows are padded
+  on this trace) is itself faster than the default T > 1 grouping, whose host sync it removes. B1/P = 1.75 is the
+  graph's own effect on the same function. *(Corrected 2026-09-29: this line first said "padding plus device grouping";
+  `pad_rows` is 0 in every bucket.)*
 
 ## What this does and does not establish
 

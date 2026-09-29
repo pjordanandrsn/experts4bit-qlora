@@ -1,0 +1,15 @@
+# sha256 of every file here as the run wrote it (the arm receipts uncompressed; they are stored gzipped, gzip -9 -n).
+# The same bytes are in the adertha receipt store: receipts/experts4bit-qlora/2026-09-29/p81-5090-2/p81/ (commit 7a791f8).
+fe134f66fe8269ee9ef2ca7df533d41b79f60603968658fbeebfe83d31d738e8  p81_A1.json
+d0f43988f79156db2207565ba1fb76bbe2d8f7b3531be7d693b0fe44f38363f7  p81_B1.json
+e19452bfe0d95d61eb401eea81eafdab1c79e5346213af1b1eebcb3a58c7619d  p81_B2.json
+671b9d46df270d28c4a28fd0056d111941e0ceb6cba7dbf709b19a4177dadf43  p81_A2.json
+c2d7027d62b8786853a83ec8360b0f76b37153dfabd97211cfb8bf7a5003b4f2  p81_P.json
+1e958a036fc61e3cc50f165fe6154a94fb06cf58bae941078c4e26f6ead97ece  verdict.json
+53ad4346864473022f02fe1d8301eac9901ffd3774448b3fbec77d6f610e9839  summary.txt
+816e35f08c6c24aae9b7ef60c4eded5af604fc8c4fe21bec817356260873d605  versions.txt
+c7a209c7db5404408f92a23920f61006bc4c032764aee747b988280ff96f1a94  forensics.txt
+663acd94d40e235465335490ce46fd72730a34fdefceb0ce4ec1278a0cc78f4d  packs.json
+4da75e4976ad4aa854af179ffa18723732d7b840a3ef2e2fa9a1d2e046db1d51  build_ppl_wikitext.json
+cb45ba308f6afd2da806270aa741a33e92db4e3599de39b8e7594f8565edf61d  artifact1/manifest.json
+512e9dddc44b75dc6476b64c3c00a073ce14303f5fa4d759f70b37b687d10de0  attn1/manifest.json

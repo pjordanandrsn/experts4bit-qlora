@@ -1,0 +1,11 @@
+KNOBS model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=5090 min_disk_gb=200 seg=32 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048 skip_install=0
+p81_reduce self-test OK (13 cases)
+e4b 0.37.7 @fa65132b201d5746b33cc523293647cabb62468d (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.5 @fb15cf5f5b9f2fb107fa1a39218fd9d910b34d94
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+PROVE -- the proving run: no model, no arm
+PROVE hf_cdn_mbps=20.3 bytes=52428800
