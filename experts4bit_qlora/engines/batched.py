@@ -201,6 +201,31 @@ def _fallback(mod, reason: str, reference, *args):
     return reference(*args)
 
 
+class _GatherTokenRows(torch.autograd.Function):
+    """``hs.index_select(0, order // k)`` -- every token copied to each of its k expert
+    rows, in expert-sorted order -- with a deterministic backward (#765).
+
+    ``index_select``'s own backward scatters the k gradient copies back into each token
+    row with ``index_add_``, i.e. CUDA float atomics, so dL/dx differed call to call on
+    identical inputs. ``order`` is a permutation of the flat (token, slot) cells, so the
+    backward instead assigns each row's gradient to its own cell and sums the k cells of
+    a token along a fixed axis. The forward is unchanged (one gather)."""
+
+    @staticmethod
+    def forward(ctx, hs, order, k):
+        ctx.save_for_backward(order)
+        ctx.k = k
+        ctx.tokens = hs.shape[0]
+        return hs.index_select(0, torch.div(order, k, rounding_mode="floor"))
+
+    @staticmethod
+    def backward(ctx, grad):
+        (order,) = ctx.saved_tensors
+        buf = grad.new_zeros(ctx.tokens * ctx.k, grad.shape[1])
+        buf[order] = grad
+        return buf.view(ctx.tokens, ctx.k, grad.shape[1]).sum(1), None, None
+
+
 def batched_experts_train_forward(mod, hidden_states, top_k_index, top_k_weights):
     """Batched replacement for ``ExpertsLoRA.forward``. Falls back to the reference
     forward — not to a slower version of itself — whenever the batched shape would be
@@ -251,7 +276,7 @@ def batched_experts_train_forward(mod, hidden_states, top_k_index, top_k_weights
     # None means "all experts, in order" — see _FrozenGroupedProj.forward.
     eids = None if (n_grp == n_exp) else active
 
-    a_cat = hs.index_select(0, token_rows)
+    a_cat = _GatherTokenRows.apply(hs, order, k)   # hs.index_select(0, token_rows), deterministic backward
     x_pad = a_cat.new_zeros(n_grp, widest, hidden)
     x_pad[grp, slot] = a_cat
 
