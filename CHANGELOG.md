@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Kimi-K3's run-to-run drift is the MXFP4 prefill combine's atomics (bench and docs only; no library change)
+
+- **The A/B ran.** Nine prefill-only processes ran on the A2000 through a wrapper that sets torch's deterministic-algorithms switch and hashes every MoE call's input, router ids, router weights and output. The driver is unmodified. With `torch.use_deterministic_algorithms(True)`, three processes are bit-identical at all 92 MoE calls: p(" Paris") 0.7144126892089844, 6,118 prefill expert rows. Without it, three processes all give 0.7119670510292053 and 6,130 rows, yet every pair differs at 3 to 8 of the 92 calls, each time with the engine returning different bits for identical inputs. With grouped-nf4-gemm#410's ordered combine alone, deterministic mode off, three processes reproduce the deterministic ones bit for bit. So the drift recorded in #761 is grouped-nf4-gemm's `out.index_add_` float atomics; in these nine processes nothing else in the forward moved. Row `e4b.parity.kimi-k3.prefill-drift-is-the-combine.a2000.2026-09-28`. The five-runs row's notes and `docs/STATUS.md` now say measured, not suspected. RESULTS §5; receipts `bench/kimi-k3-a2000/receipts/2026-09-28-det-ab/`.
+- **Same pattern elsewhere, not changed here.** `engines/batched.py`'s batched-training combine still uses `index_add_` over repeated token rows (#765). The NF4 serving paths (`fast.py`, `hot_residency.py`, `nvme_experts.py`) already land unique (token, slot) cells and sum once.
+
 ### Kimi-K3 on the A2000, same day: an armed cache gate, a Fireworks reference, and run-to-run drift (bench and docs only; no library change)
 
 - **The cache gate replays routing.** Each MoE call's (expert ids, weights) is recorded along the cached path and replayed into the fresh cache-free prefill, so the logits comparison measures only the kernels and the cache. Under replay, the real cache reads cos 0.999966 (PASS against cos ≥ 0.9999 and argmax agreeing, fixed before the run). A cache with all 69 KDA recurrent states zeroed reads 0.877523 (FAIL), with argmax still agreeing, so an argmax-only check would have passed it. With free routing the same comparison reads 0.998699: 90 of 92 layers route differently somewhere in the 9 positions. Row `e4b.parity.kimi-k3.cache-gate.replayed-routing.a2000.2026-09-28`.

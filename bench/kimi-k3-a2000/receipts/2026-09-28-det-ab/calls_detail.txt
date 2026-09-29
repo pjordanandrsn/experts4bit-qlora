@@ -1,0 +1,105 @@
+== plain1 vs plain2
+  call  8 layer  9: out            fresh (inputs equal)
+  call 22 layer 23: out            fresh (inputs equal)
+  call 24 layer 25: out            fresh (inputs equal)
+  call 26 layer 27: out            fresh (inputs equal)
+  call 45 layer 46: out            fresh (inputs equal)
+  call 48 layer 49: out            fresh (inputs equal)
+  call 59 layer 60: out            fresh (inputs equal)
+  call 87 layer 88: out            fresh (inputs equal)
+plain1 vs plain2: 8 fresh engine-level differences, 0 calls with differing inputs
+== plain1 vs plain3
+  call 22 layer 23: out            fresh (inputs equal)
+  call 24 layer 25: out            fresh (inputs equal)
+  call 26 layer 27: out            fresh (inputs equal)
+  call 45 layer 46: out            fresh (inputs equal)
+  call 48 layer 49: out            fresh (inputs equal)
+plain1 vs plain3: 5 fresh engine-level differences, 0 calls with differing inputs
+== plain2 vs plain3
+  call  8 layer  9: out            fresh (inputs equal)
+  call 59 layer 60: out            fresh (inputs equal)
+  call 87 layer 88: out            fresh (inputs equal)
+plain2 vs plain3: 3 fresh engine-level differences, 0 calls with differing inputs
+== det1 vs plain1
+  call 10 layer 11: out            fresh (inputs equal)
+  call 12 layer 13: out            fresh (inputs equal)
+  call 13 layer 14: x,w,out        inherited
+  call 14 layer 15: x,w,out        inherited
+  call 15 layer 16: x,ids,w,out    inherited
+  call 16 layer 17: x,ids,w,out    inherited
+  call 17 layer 18: x,ids,w,out    inherited
+  call 18 layer 19: x,w,out        inherited
+  call 19 layer 20: x,w,out        inherited
+  call 20 layer 21: x,ids,w,out    inherited
+  call 21 layer 22: x,ids,w,out    inherited
+  call 22 layer 23: x,ids,w,out    inherited
+  call 23 layer 24: x,w,out        inherited
+  call 24 layer 25: x,ids,w,out    inherited
+  call 25 layer 26: x,ids,w,out    inherited
+  call 26 layer 27: x,ids,w,out    inherited
+  call 27 layer 28: x,ids,w,out    inherited
+  call 28 layer 29: x,ids,w,out    inherited
+  call 29 layer 30: x,ids,w,out    inherited
+  call 30 layer 31: x,ids,w,out    inherited
+  call 31 layer 32: x,ids,w,out    inherited
+  call 32 layer 33: x,ids,w,out    inherited
+  call 33 layer 34: x,ids,w,out    inherited
+  call 34 layer 35: x,ids,w,out    inherited
+  call 35 layer 36: x,ids,w,out    inherited
+  call 36 layer 37: x,ids,w,out    inherited
+  call 37 layer 38: x,ids,w,out    inherited
+  call 38 layer 39: x,ids,w,out    inherited
+  call 39 layer 40: x,ids,w,out    inherited
+  call 40 layer 41: x,ids,w,out    inherited
+  call 41 layer 42: x,ids,w,out    inherited
+  call 42 layer 43: x,ids,w,out    inherited
+  call 43 layer 44: x,ids,w,out    inherited
+  call 44 layer 45: x,ids,w,out    inherited
+  call 45 layer 46: x,ids,w,out    inherited
+  call 46 layer 47: x,ids,w,out    inherited
+  call 47 layer 48: x,ids,w,out    inherited
+  call 48 layer 49: x,ids,w,out    inherited
+  call 49 layer 50: x,ids,w,out    inherited
+  call 50 layer 51: x,ids,w,out    inherited
+  call 51 layer 52: x,ids,w,out    inherited
+  call 52 layer 53: x,ids,w,out    inherited
+  call 53 layer 54: x,ids,w,out    inherited
+  call 54 layer 55: x,ids,w,out    inherited
+  call 55 layer 56: x,ids,w,out    inherited
+  call 56 layer 57: x,ids,w,out    inherited
+  call 57 layer 58: x,ids,w,out    inherited
+  call 58 layer 59: x,ids,w,out    inherited
+  call 59 layer 60: x,ids,w,out    inherited
+  call 60 layer 61: x,ids,w,out    inherited
+  call 61 layer 62: x,ids,w,out    inherited
+  call 62 layer 63: x,ids,w,out    inherited
+  call 63 layer 64: x,ids,w,out    inherited
+  call 64 layer 65: x,ids,w,out    inherited
+  call 65 layer 66: x,ids,w,out    inherited
+  call 66 layer 67: x,ids,w,out    inherited
+  call 67 layer 68: x,ids,w,out    inherited
+  call 68 layer 69: x,ids,w,out    inherited
+  call 69 layer 70: x,ids,w,out    inherited
+  call 70 layer 71: x,ids,w,out    inherited
+  call 71 layer 72: x,ids,w,out    inherited
+  call 72 layer 73: x,ids,w,out    inherited
+  call 73 layer 74: x,ids,w,out    inherited
+  call 74 layer 75: x,ids,w,out    inherited
+  call 75 layer 76: x,ids,w,out    inherited
+  call 76 layer 77: x,ids,w,out    inherited
+  call 77 layer 78: x,ids,w,out    inherited
+  call 78 layer 79: x,ids,w,out    inherited
+  call 79 layer 80: x,ids,w,out    inherited
+  call 80 layer 81: x,ids,w,out    inherited
+  call 81 layer 82: x,ids,w,out    inherited
+  call 82 layer 83: x,ids,w,out    inherited
+  call 83 layer 84: x,ids,w,out    inherited
+  call 84 layer 85: x,ids,w,out    inherited
+  call 85 layer 86: x,ids,w,out    inherited
+  call 86 layer 87: x,ids,w,out    inherited
+  call 87 layer 88: x,ids,w,out    inherited
+  call 88 layer 89: x,ids,w,out    inherited
+  call 89 layer 90: x,ids,w,out    inherited
+  call 90 layer 91: x,ids,w,out    inherited
+  call 91 layer 92: x,ids,w,out    inherited
+det1 vs plain1: 2 fresh engine-level differences, 79 calls with differing inputs

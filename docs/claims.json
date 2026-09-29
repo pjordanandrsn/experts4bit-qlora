@@ -487,7 +487,36 @@
       "supersedes": [
         "e4b.offload.kimi-k3.full-depth.a2000.2026-09-28"
       ],
-      "notes": "p(' Paris') per process: 68.90 % (6,115 prefill expert rows; first run, fresh Triton cache), 71.59 % (6,126), 71.29 % (6,131), 71.20 % (6,130) twice with TRITON_CACHE_AUTOTUNING=1; both 2026-07-30 processes on an unrecorded stack also gave 71.20 % / 6,130. Autotuning is ruled out after the first run (the ten autotuned fla kernels persisted their choices at 19:01-19:05Z; a run with TRITON_PRINT_AUTOTUNING=1 benchmarked nothing). Suspected, NOT confirmed: the MXFP4 prefill combine's out.index_add_ (grouped-nf4-gemm mxfp4_pipelined.py), whose float atomics can reorder across runs and flip top-16-of-896 near-ties. The first run's 270.5 s prefill was one-time Triton compilation (183 kernels compiled inside it). Perplexity 3.181 and 3.196 in two processes on one 90-token paragraph. Not a speed claim beyond this host (SSD dense reads dominate each step) and not the load_moe_4bit_streaming path."
+      "notes": "p(' Paris') per process: 68.90 % (6,115 prefill expert rows; first run, fresh Triton cache), 71.59 % (6,126), 71.29 % (6,131), 71.20 % (6,130) twice with TRITON_CACHE_AUTOTUNING=1; both 2026-07-30 processes on an unrecorded stack also gave 71.20 % / 6,130. Autotuning is ruled out after the first run (the ten autotuned fla kernels persisted their choices at 19:01-19:05Z; a run with TRITON_PRINT_AUTOTUNING=1 benchmarked nothing). The source was suspected here and is now measured: it is the MXFP4 prefill combine's out.index_add_ (grouped-nf4-gemm mxfp4_pipelined.py), whose float atomics reorder a token's terms from run to run and can flip top-16-of-896 near-ties. See e4b.parity.kimi-k3.prefill-drift-is-the-combine.a2000.2026-09-28. The first run's 270.5 s prefill was one-time Triton compilation (183 kernels compiled inside it). Perplexity 3.181 and 3.196 in two processes on one 90-token paragraph. Not a speed claim beyond this host (SSD dense reads dominate each step) and not the load_moe_4bit_streaming path."
+    },
+    {
+      "id": "e4b.parity.kimi-k3.prefill-drift-is-the-combine.a2000.2026-09-28",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "model": "moonshotai/Kimi-K3",
+      "claim": "Kimi-K3's run-to-run drift on the A2000 is grouped-nf4-gemm's MXFP4 prefill combine (out.index_add_, float atomics). With torch.use_deterministic_algorithms(True), three prefill processes are bit-identical at all 92 MoE calls (p(' Paris') 0.7144126892089844, 6,118 prefill expert rows). Without it, every pair of three processes differs at 3 to 8 of the 92 calls, each time with identical inputs. Replacing only that combine with grouped-nf4-gemm#410's ordered add, deterministic mode off, reproduces the deterministic processes bit for bit in three of three.",
+      "value": 3,
+      "unit": "processes bit-identical to the deterministic arm at all 92 MoE calls, with only the ordered combine (of 3)",
+      "hardware": "RTX A2000 12 GB (sm_86, driver 575.64.05) in the NAS host's PCIe 3.0 x8 slot, Xeon W-1250, 128 GB RAM; arena and dense extract on a SATA-SSD ZFS pool; card and pool shared with the host's own services",
+      "conditions": "moonshotai/Kimi-K3 @ f831ab66, text path; experts4bit-qlora 0.37.5 and grouped-nf4-gemm 0.33.4 from PyPI (fix arm: kernel/mxfp4_pipelined.py of grouped-nf4-gemm f180045, sha256 a601d7d1..., first on sys.path), torch 2.8.0+cu128, triton 3.4.0, transformers 4.57.6, fla-core 0.5.2; the reference set's driver (ea727400...) run unmodified through det_wrap.py, which sets the switch and hashes each MoE call's x, router ids, router weights and output; 6-token prompt, prefill only (K3_MODE=gen, K3_NEW_TOKENS=1, K3_VERIFY_CACHE=0); TRITON_CACHE_AUTOTUNING=1 and TRITON_PRINT_AUTOTUNING=1, no benchmark logged; nine processes, det/plain interleaved, 2026-09-28 21:41-22:35Z",
+      "measured_on": "2026-09-28",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md#5-the-drift-is-the-mxfp4-prefill-combine-and-a-fixed-order-removes-it",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-det-ab/compare_all.txt",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-det-ab/calls_detail.txt",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-det-ab/det_wrap.py",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-det-ab/SHA256SUMS",
+        "bench/kimi-k3-a2000/receipts/2026-09-28-det-ab/shadow/mxfp4_pipelined.py",
+        {
+          "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/issues/408"
+        },
+        {
+          "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/pull/410"
+        }
+      ],
+      "notes": "The default arm's three processes all gave 0.7119670510292053 and 6,130 rows. Each engine jitter was absorbed by the next bf16 residual add, so this sample shows no spread in p; the warm-cache 71.59 % and 71.29 % of e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28 are draws where one was not. 0.7144 is one fixed summation order (each token's terms in ascending expert id), not a more correct answer. Deterministic mode raised on no op (warn_only off). Released-package runs keep drifting until a grouped-nf4-gemm release carrying #410 is installed. The rc= values in status.log are date's exit status (a runner bug), not the runs'; each run's JSON and its saved -> line show completion."
     },
     {
       "id": "e4b.parity.kimi-k3.cache-gate.replayed-routing.a2000.2026-09-28",

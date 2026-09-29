@@ -1,0 +1,47 @@
+run      p(Paris) repr           rows   det shadow calls  mxfp4_pipelined sha256[:12]  prefill_s
+det1     0.7144126892089844      6118  True     no    92  3b7a717e8a7e                 185.6
+det2     0.7144126892089844      6118  True     no    92  3b7a717e8a7e                 178.5
+det3     0.7144126892089844      6118  True     no    92  3b7a717e8a7e                 181.1
+plain1   0.7119670510292053      6130 False     no    92  3b7a717e8a7e                 178.6
+plain2   0.7119670510292053      6130 False     no    92  3b7a717e8a7e                 174.9
+plain3   0.7119670510292053      6130 False     no    92  3b7a717e8a7e                 179.0
+ord1     0.7144126892089844      6118 False    yes    92  a601d7d16abb                 180.5
+ord2     0.7144126892089844      6118 False    yes    92  a601d7d16abb                 180.0
+ord3     0.7144126892089844      6118 False    yes    92  a601d7d16abb                 184.3
+
+   det1 vs det2    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det1 vs det3    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det1 vs plain1  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   det1 vs plain2  p !=  rows !=  first diff at call 8 (layer 9): out -> ENGINE: identical x/ids/w, different out; outputs differ at 82/92 calls
+   det1 vs plain3  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   det1 vs ord1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det1 vs ord2    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det1 vs ord3    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det2 vs det3    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det2 vs plain1  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   det2 vs plain2  p !=  rows !=  first diff at call 8 (layer 9): out -> ENGINE: identical x/ids/w, different out; outputs differ at 82/92 calls
+   det2 vs plain3  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   det2 vs ord1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det2 vs ord2    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det2 vs ord3    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det3 vs plain1  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   det3 vs plain2  p !=  rows !=  first diff at call 8 (layer 9): out -> ENGINE: identical x/ids/w, different out; outputs differ at 82/92 calls
+   det3 vs plain3  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   det3 vs ord1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det3 vs ord2    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det3 vs ord3    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+ plain1 vs plain2  p ==  rows ==  first diff at call 8 (layer 9): out -> ENGINE: identical x/ids/w, different out; outputs differ at 8/92 calls
+ plain1 vs plain3  p ==  rows ==  first diff at call 22 (layer 23): out -> ENGINE: identical x/ids/w, different out; outputs differ at 5/92 calls
+ plain1 vs ord1    p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+ plain1 vs ord2    p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+ plain1 vs ord3    p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+ plain2 vs plain3  p ==  rows ==  first diff at call 8 (layer 9): out -> ENGINE: identical x/ids/w, different out; outputs differ at 3/92 calls
+ plain2 vs ord1    p !=  rows !=  first diff at call 8 (layer 9): out -> ENGINE: identical x/ids/w, different out; outputs differ at 82/92 calls
+ plain2 vs ord2    p !=  rows !=  first diff at call 8 (layer 9): out -> ENGINE: identical x/ids/w, different out; outputs differ at 82/92 calls
+ plain2 vs ord3    p !=  rows !=  first diff at call 8 (layer 9): out -> ENGINE: identical x/ids/w, different out; outputs differ at 82/92 calls
+ plain3 vs ord1    p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+ plain3 vs ord2    p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+ plain3 vs ord3    p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   ord1 vs ord2    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   ord1 vs ord3    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   ord2 vs ord3    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
