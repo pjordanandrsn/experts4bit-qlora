@@ -516,7 +516,37 @@
           "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/pull/410"
         }
       ],
-      "notes": "The default arm's three processes all gave 0.7119670510292053 and 6,130 rows. Each engine jitter was absorbed by the next bf16 residual add, so this sample shows no spread in p; the warm-cache 71.59 % and 71.29 % of e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28 are draws where one was not. 0.7144 is one fixed summation order (each token's terms in ascending expert id), not a more correct answer. Deterministic mode raised on no op (warn_only off). Released-package runs keep drifting until a grouped-nf4-gemm release carrying #410 is installed. The rc= values in status.log are date's exit status (a runner bug), not the runs'; each run's JSON and its saved -> line show completion."
+      "notes": "The default arm's three processes all gave 0.7119670510292053 and 6,130 rows. Each engine jitter was absorbed by the next bf16 residual add, so this sample shows no spread in p; the warm-cache 71.59 % and 71.29 % of e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28 are draws where one was not. 0.7144 is one fixed summation order (each token's terms in ascending expert id), not a more correct answer. Deterministic mode raised on no op (warn_only off). grouped-nf4-gemm 0.33.6 (2026-09-29) carries #410, and on it three released-package processes reproduce bit for bit: e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29. The rc= values in status.log are date's exit status (a runner bug), not the runs'; each run's JSON and its saved -> line show completion."
+    },
+    {
+      "id": "e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "model": "moonshotai/Kimi-K3",
+      "claim": "On the released packages (experts4bit-qlora 0.37.5 and grouped-nf4-gemm 0.33.6 from PyPI), Kimi-K3's prefill on the A2000 reproduces from process to process. Three processes with torch's deterministic algorithms off give p(' Paris') 0.7144126892089844 and 6,118 prefill expert rows, and they are bit-identical at all 92 MoE calls to each other and to the 2026-09-28 deterministic-mode and ordered-combine runs.",
+      "value": 3,
+      "unit": "processes bit-identical at all 92 MoE calls (of 3), released grouped-nf4-gemm 0.33.6, deterministic mode off",
+      "hardware": "RTX A2000 12 GB (sm_86, driver 575.64.05) in the NAS host's PCIe 3.0 x8 slot, Xeon W-1250, 128 GB RAM; arena and dense extract on a SATA-SSD ZFS pool; card and pool shared with the host's own services",
+      "conditions": "moonshotai/Kimi-K3 @ f831ab66, text path; venv-k3rel is the 2026-09-28 environment with only grouped-nf4-gemm upgraded 0.33.4 -> 0.33.6 (pip --no-deps; the installed mxfp4_pipelined.py, sha256 05c760e4..., is the v0.33.6 tag's), torch 2.8.0+cu128, triton 3.4.0, transformers 4.57.6, fla-core 0.5.2; the reference set's driver (ea727400...) run unmodified through det_wrap.py, K3_DET=0, nothing shadowed; 6-token prompt, prefill only (K3_MODE=gen, K3_NEW_TOKENS=1, K3_VERIFY_CACHE=0); TRITON_CACHE_AUTOTUNING=1 and TRITON_PRINT_AUTOTUNING=1, no benchmark logged; three processes, 2026-09-29 01:33-01:51Z",
+      "measured_on": "2026-09-29",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md#6-on-the-released-grouped-nf4-gemm-0336-the-forward-reproduces",
+        "bench/kimi-k3-a2000/receipts/2026-09-29-rel0336/compare_v6.txt",
+        "bench/kimi-k3-a2000/receipts/2026-09-29-rel0336/venv-k3rel.freeze.diff",
+        "bench/kimi-k3-a2000/receipts/2026-09-29-rel0336/SHA256SUMS",
+        "bench/kimi-k3-a2000/receipts/2026-09-29-rel0336/rel1/k3_gen_n1_pin0.json",
+        "bench/kimi-k3-a2000/receipts/2026-09-29-rel0336/rel1/moe_trace.json",
+        {
+          "repository": "grouped-nf4-gemm",
+          "path": "kernel/mxfp4_pipelined.py"
+        },
+        {
+          "url": "https://github.com/pjordanandrsn/grouped-nf4-gemm/pull/410"
+        }
+      ],
+      "notes": "Three processes on one box: reproducibility on this build, not across GPUs, drivers or torch versions. p moved from the 0.33.4 draws (68.90-71.59 %) to 71.44 % because the summation order is now fixed, not because it is more correct. The sdxl sidecar was stopped for the run and started again after it (host.log)."
     },
     {
       "id": "e4b.parity.kimi-k3.cache-gate.replayed-routing.a2000.2026-09-28",

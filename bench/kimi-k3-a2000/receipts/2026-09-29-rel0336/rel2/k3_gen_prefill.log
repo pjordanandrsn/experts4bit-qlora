@@ -1,0 +1,38 @@
+[det_wrap] deterministic=False fill_uninitialized_memory=False CUBLAS_WORKSPACE_CONFIG=None mxfp4_pipelined=/workspace/venv-k3rel/lib/python3.10/site-packages/mxfp4_pipelined.py sha256=05c760e4f3a3b7f467a8606ce931de24e7e82f0da9d93cf7bf6267d9aa259329
+host RAM available: 54.8 GB
+instantiating ALL 93 layers on meta ...
+Current Python version 3.10 is below the recommended 3.11 version. It is recommended to upgrade to Python 3.11 or higher for the best experience.
+Ignoring the provided attention implementation eager
+Using flash_attention_2 backend instead.
+attn -> eager on 82899 module configs
+layer census: {'Delta+dense': 1, 'Delta+moe': 68, 'MLA+moe': 24}
+DenseDiskSource('/workspace/k3-dense', 2628 tensors, 114.4 GB, direct=True)
+tensors: 249925 total, 247296 expert, 2629 dense
+materialized in 6s: 1251 placeholders, 1377 real (69 narrowed by the shape gate), 1 absent
+  NOT IN CHECKPOINT (1, all vision_tower, left on meta -- the vision tower is NOT exercised by this forward): ['vision_tower.patch_embed.pos_emb.time_weight']
+host RAM available after materialize: 43.8 GB
+dense policy: 0 layer(s) PINNED in host RAM (0.0 GB locked), 93 served from disk
+  dense offload: 93 layers, 1251 tensors, 108.76 GB served from disk (0 resident) (1169 MB/layer)
+dense offload: {"layers": 93, "tensors": 1251, "host_bytes": 0, "disk_bytes": 108758630400, "verified_bit_exact": 0, "per_layer_bytes": 1169447638, "host_resident_layers": 0, "all_pinned": true, "staged_now": 0, "seconds_per_token_at_19GBs": 0.0, "disk_bytes_per_token": 108758630400}
+  gate: 1251 homes, 108.76 GB from disk + 0.00 GB pinned
+host RAM available after evict: 43.8 GB
+92 MoE engines in 10s, sharing SlotStore(k=16, row_bytes=17547264, 281 MB, users=92, claims=92)
+  slots: 0.281 GB shared, vs 25.8 GB if each had its own
+VRAM after setup: 1.23 GB
+contract: k_slots==top_k==16; 69 KDA layers carry A_log(96,) + dt_bias(12288,) -- the shape gate's 69 narrows, verified
+
+prompt 'The capital city of France is' -> 6 tokens [1008, 10484, 5243, 318, 15383, 387]
+prefill 6 tokens in 180.4s   cache seq_len 6   counters {"disk_reads": 6118, "claims": 92, "dense_reads": 1251, "dense_bytes": 108763639808}
+  token 1/1: ' Paris' (p=71.44%) -- free from prefill
+
+==================================================================
+GENERATED: ' Paris'
+==================================================================
+  ids [17374]
+
+  VRAM peak 3.59 GB
+  dense policy: 0.00 GB pinned + 108.76 GB disk
+  host RAM available: 42.6 GB
+  total wall 350s
+  saved -> /workspace/k3-rel-20260928/v6-rel0336/rel2/k3_gen_n1_pin0.json
+[det_wrap] 92 MoE calls traced -> /workspace/k3-rel-20260928/v6-rel0336/rel2/moe_trace.json

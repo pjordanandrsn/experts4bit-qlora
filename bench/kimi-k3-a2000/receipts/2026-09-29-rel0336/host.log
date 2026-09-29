@@ -1,0 +1,8 @@
+[2026-09-29T01:25:11Z] waiting for sdxl-sidecar to be idle 30 min
+[2026-09-29T01:32:15Z] gated wait cancelled (Jordan: run now)
+[2026-09-29T01:32:23Z] immediate run requested; waiting out any burst in flight (max 10 min)
+[2026-09-29T01:33:24Z] stop sdxl-sidecar
+sdxl-sidecar
+[2026-09-29T01:51:32Z] runner rc=0; start sdxl-sidecar
+sdxl-sidecar
+[2026-09-29T01:51:33Z] done

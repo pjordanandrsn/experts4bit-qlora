@@ -1,0 +1,23 @@
+run      p(Paris) repr           rows   det shadow calls  mxfp4_pipelined sha256[:12]  prefill_s
+rel1     0.7144126892089844      6118 False     no    92  05c760e4f3a3                 180.5
+rel2     0.7144126892089844      6118 False     no    92  05c760e4f3a3                 180.4
+rel3     0.7144126892089844      6118 False     no    92  05c760e4f3a3                 182.7
+det1     0.7144126892089844      6118  True     no    92  3b7a717e8a7e                 185.6
+ord1     0.7144126892089844      6118 False    yes    92  a601d7d16abb                 180.5
+plain1   0.7119670510292053      6130 False     no    92  3b7a717e8a7e                 178.6
+
+   rel1 vs rel2    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   rel1 vs rel3    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   rel1 vs det1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   rel1 vs ord1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   rel1 vs plain1  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   rel2 vs rel3    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   rel2 vs det1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   rel2 vs ord1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   rel2 vs plain1  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   rel3 vs det1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   rel3 vs ord1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   rel3 vs plain1  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   det1 vs ord1    p ==  rows ==  IDENTICAL: every call's x, ids, w and out
+   det1 vs plain1  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
+   ord1 vs plain1  p !=  rows !=  first diff at call 10 (layer 11): out -> ENGINE: identical x/ids/w, different out; outputs differ at 81/92 calls
