@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### The batched training path gives identical bits call to call on CUDA (#765)
+
+- **What was wrong.** `enable_batched_train`'s forward (`engines/batched.py`) went through CUDA float atomics at two sites, so identical inputs could give different results call to call. Same class as grouped-nf4-gemm#408.
+  - The combine summed each token's k expert rows with `index_add_`.
+  - The token gather's backward (`index_select` over rows repeated k times) scattered the k gradient copies with `index_add_`.
+- **What changed.** Both now write each (token, slot) cell once and reduce over k along a fixed axis, the pattern of `fast.py`'s `_scatter_combine`, kept torch-only because this path must work without grouped-nf4-gemm.
+  - The combine scatters by assignment.
+  - A small `autograd.Function` keeps the gather's forward (one `index_select`) and makes its backward deterministic.
+  - Cost: one `[tokens·k, hidden]` fp32 transient in the forward.
+- **Test.** `test_repeated_calls_are_bitwise_identical_forward_and_backward[bf16|fp32]` (CUDA; skips by name on CPU, where `index_add_` is sequential). Top-k 8 over 16 experts, 512 tokens; output, dL/dx and both LoRA gradients bit-identical over 8 repeats.
+  - It needs k ≥ 3, since two terms from zero sum the same either way.
+  - It needs both compute dtypes, because each hides one site. Under bf16 compute the combine's rows carry 8 significant bits and sum exactly in fp32 whatever the order; fp32 compute exposes the combine.
+  - On the A2000: 32 passed with the fix. Restoring the atomic combine fails the fp32 case on the output; restoring `index_select` fails both on dL/dx.
+
 ### Lane B771 registered (#771): is the fused fp8 KV append's non-IEEE quotient the whole cause of the eager-vs-bucket-step divergence? (bench only; nothing in the wheel changes)
 
 - `bench/b771/PREREG-b771.md`. One RTX 5090 and two grouped-nf4-gemm cuts in one process tree: the fused append as shipped (v0.33.5) and grouped-nf4-gemm#413's IEEE-rounded quotient.

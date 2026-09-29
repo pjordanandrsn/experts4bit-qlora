@@ -310,3 +310,57 @@ def test_batched_path_keeps_the_v4_clamps():
     got.float().sum().backward()
     assert mod.gate_up_lora_A.grad is not None
     disable_batched_train(mod)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(),
+                    reason="the nondeterminism is CUDA float atomics; on CPU index_add_ is sequential")
+@pytest.mark.parametrize("compute", [torch.bfloat16, torch.float32], ids=["bf16", "fp32"])
+def test_repeated_calls_are_bitwise_identical_forward_and_backward(compute):
+    """#765: the combine summed each token's k expert rows with ``index_add_``, i.e. CUDA
+    float atomics, so identical inputs could give different sums call to call. It needs
+    k >= 3 to show at all (with two terms from a zero start, a + b == b + a exactly), so
+    this uses top-k 8 over 16 experts rather than the fixture's k = 2. Output, dL/dx and
+    both LoRA gradients must be bit-identical across repeats. Two atomic sites, each
+    pinned by its own mutation on the A2000: the forward combine (output) and
+    index_select's backward over the repeated token rows (dL/dx).
+
+    Both compute dtypes, because each hides one site. Under bf16 compute (the shipped
+    configuration) the rows the combine adds carry 8 significant bits, and eight of them
+    sum EXACTLY in fp32 whatever the order -- the atomic combine passed this test there
+    -- while the backward's bf16 atomics vary. Under fp32 compute the rows are full
+    precision, so a reordered combine shows in the output."""
+    n_exp, k, hid, inter, n_tok = 16, 8, 256, 256, 512
+    torch.manual_seed(0)
+    gate_up = (torch.randn(n_exp, 2 * inter, hid) * 0.1).to(DEVICE)
+    down = (torch.randn(n_exp, hid, inter) * 0.1).to(DEVICE)
+    require_quantize(DEVICE, "nf4")
+    base = Experts4bit.from_float(gate_up, down, quant_type="nf4", compute_dtype=compute)
+    mod = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32).to(DEVICE).train()
+    with torch.no_grad():
+        for p in (mod.gate_up_lora_B, mod.down_lora_B):
+            p.normal_(0, 0.02)
+    assert enable_batched_train(mod) == 1
+    torch.manual_seed(1)
+    # fp32 hidden states, so the output stays fp32 (a bf16 output would round away the
+    # low bits where a reordered fp32 sum differs)
+    hs0 = torch.randn(n_tok, hid, dtype=torch.float32, device=DEVICE)
+    idx = torch.rand(n_tok, n_exp, device=DEVICE).argsort(-1)[:, :k].contiguous()
+    wts = torch.rand(n_tok, k, dtype=torch.bfloat16, device=DEVICE)
+    g = torch.randn(n_tok, hid, device=DEVICE)
+    lora = [mod.gate_up_lora_A, mod.gate_up_lora_B, mod.down_lora_A, mod.down_lora_B]
+
+    def once():
+        for p in lora:
+            p.grad = None
+        hs = hs0.clone().requires_grad_(True)
+        out = mod(hs, idx, wts)
+        (out.float() * g).sum().backward()
+        return [out.detach().clone(), hs.grad.clone()] + [p.grad.clone() for p in lora]
+
+    first = once()
+    assert mod._e4b_batched_stats["batched"] >= 1, "the batched path did not run; the test would prove nothing"
+    names = ["out", "dL/dx", "gate_up_A", "gate_up_B", "down_A", "down_B"]
+    for rep in range(1, 8):
+        again = once()
+        diff = [n for n, a, b in zip(names, first, again) if not torch.equal(a, b)]
+        assert not diff, f"repeat {rep} differs bitwise from the first call in {diff}"

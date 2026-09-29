@@ -201,6 +201,31 @@ def _fallback(mod, reason: str, reference, *args):
     return reference(*args)
 
 
+class _GatherTokenRows(torch.autograd.Function):
+    """``hs.index_select(0, order // k)`` -- every token copied to each of its k expert
+    rows, in expert-sorted order -- with a deterministic backward (#765).
+
+    ``index_select``'s own backward scatters the k gradient copies back into each token
+    row with ``index_add_``, i.e. CUDA float atomics, so dL/dx differed call to call on
+    identical inputs. ``order`` is a permutation of the flat (token, slot) cells, so the
+    backward instead assigns each row's gradient to its own cell and sums the k cells of
+    a token along a fixed axis. The forward is unchanged (one gather)."""
+
+    @staticmethod
+    def forward(ctx, hs, order, k):
+        ctx.save_for_backward(order)
+        ctx.k = k
+        ctx.tokens = hs.shape[0]
+        return hs.index_select(0, torch.div(order, k, rounding_mode="floor"))
+
+    @staticmethod
+    def backward(ctx, grad):
+        (order,) = ctx.saved_tensors
+        buf = grad.new_zeros(ctx.tokens * ctx.k, grad.shape[1])
+        buf[order] = grad
+        return buf.view(ctx.tokens, ctx.k, grad.shape[1]).sum(1), None, None
+
+
 def batched_experts_train_forward(mod, hidden_states, top_k_index, top_k_weights):
     """Batched replacement for ``ExpertsLoRA.forward``. Falls back to the reference
     forward — not to a slower version of itself — whenever the batched shape would be
@@ -251,7 +276,7 @@ def batched_experts_train_forward(mod, hidden_states, top_k_index, top_k_weights
     # None means "all experts, in order" — see _FrozenGroupedProj.forward.
     eids = None if (n_grp == n_exp) else active
 
-    a_cat = hs.index_select(0, token_rows)
+    a_cat = _GatherTokenRows.apply(hs, order, k)   # hs.index_select(0, token_rows), deterministic backward
     x_pad = a_cat.new_zeros(n_grp, widest, hidden)
     x_pad[grp, slot] = a_cat
 
@@ -273,10 +298,17 @@ def batched_experts_train_forward(mod, hidden_states, top_k_index, top_k_weights
 
     rows = out_pad[grp, slot] * top_k_weights[token_rows, top_pos, None]
     # fp32 accumulation, same as the reference: bf16 routing weights over many
-    # contributions is where a plain sum loses digits.
-    final = torch.zeros(tokens, hidden, dtype=torch.float32, device=dev)
-    final.index_add_(0, token_rows, rows.float())
-    return final.to(input_dtype)
+    # contributions is where a plain sum loses digits. NOT index_add_ (#765): each
+    # token's k rows would land through CUDA float atomics in whatever order the
+    # threads win, so identical inputs give different sums call to call once k >= 3
+    # (grouped-nf4-gemm#408 measured it). ``order`` is a permutation of the flat
+    # (token, slot) cells, so scattering by assignment writes each cell once and the
+    # per-token reduction becomes a fixed-axis sum -- fast.py's _scatter_combine,
+    # kept torch-only here because this path must work without grouped-nf4-gemm.
+    # Costs one [tokens*k, hidden] fp32 transient; the backward is a gather.
+    final = torch.zeros(tokens * k, hidden, dtype=torch.float32, device=dev)
+    final[order] = rows.float()
+    return final.view(tokens, k, hidden).sum(1).to(input_dtype)
 
 
 def batched_train_available() -> bool:
