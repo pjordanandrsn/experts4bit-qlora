@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Lane B771 read (#771): the fused fp8 append is fixed at the byte level, but it was not the whole cause (REFUTED); the rest is a bucket-1 append bug (bench only)
+
+- `b771-5090-1` ran on one RTX 5090 for $0.1515, teardown proven.
+- **Byte stage.** Under the shipped kernel, 21 of 5.4×10⁸ stored bytes differed from `quantize_kv_fp8`, on the hardware e4m3 cast. Under grouped-nf4-gemm#413's, 0.
+- **Decode stage.** P80's NF4 trace, all arms with the device grouping.
+  - The eager control held across the gnf4 swap.
+  - With the fixed append, the bucket step still left the eager step, but only in row 0 and only from its first one-row step (token 129). **REFUTED** as registered.
+  - That position is what exposed the bucket-1 append bug, fixed separately.
+- The read is in `bench/b771/RESULTS-b771.md`, with receipts byte-identical to the store's. One deviation is recorded: the old byte stage ran after the bake, not before any model load.
+
 ### Bucketed decode graphs: a bucket of one row now appends to its own slot (a correctness fix to 0.37.7's opt-in `enable_decode_graphs`)
 
 - **The bug.** `enable_decode_graphs` (#757, 0.37.7) initialises graph mode on a scratch slot (`graph_mode_init(seq=scratch[0])`) and binds each bucket's real slots on device. The paged-attention shim sent every single-row decode to `append_graph_t1`, which writes to that init-time slot.

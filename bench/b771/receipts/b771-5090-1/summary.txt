@@ -1,0 +1,24 @@
+KNOBS model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=130 seg=32 skip_install=0
+b771_reduce self-test OK (9 cases)
+e4b 0.37.7 @b67d47119df3adc8edde4d0c4a046d068fee000f (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.5 @fb15cf5f5b9f2fb107fa1a39218fd9d910b34d94
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+BAKE OK
+bytes old rc=0 B771_BYTES gnf4=0.33.5 e4m3_group=False values=536870912 payload_bytes_differing=21 scales_differing=0
+
+arm A_old rc=0 P81_DYNB pack=- attn=- arm=A_old mode=eager agg=54.6 tok/s decode_wall=18179.1 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=18.97 GiB warm==timed=True
+
+arm P_old rc=0 P81_DYNB pack=- attn=- arm=P_old mode=padded agg=83.8 tok/s decode_wall=11832.0 ms steps=160 tokens=992 status={1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} eager_steps=320 peak_alloc=18.97 GiB warm==timed=True
+
+gnf4 new 0.33.6
+bytes new rc=0 B771_BYTES gnf4=0.33.6 e4m3_group=True values=536870912 payload_bytes_differing=0 scales_differing=0
+
+arm P_new rc=0 P81_DYNB pack=- attn=- arm=P_new mode=padded agg=82.6 tok/s decode_wall=12009.6 ms steps=160 tokens=992 status={1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} eager_steps=320 peak_alloc=18.97 GiB warm==timed=True
+
+arm A_new rc=0 P81_DYNB pack=- attn=- arm=A_new mode=eager agg=55.3 tok/s decode_wall=17943.6 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=18.97 GiB warm==timed=True
+
+B771_VERDICT REFUTED with the fix the bucket step still differs from the eager step at {'row': 0, 'token_index': 129}: the fused append is not the whole cause
