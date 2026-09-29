@@ -12,4 +12,4 @@ the summary says REHEARSAL). The staged files are the registered ones, byte-for-
 | M3 | e4b `619c719`, gnf4 `fb15cf5` (0.33.5, before #413) | none | **9** | `gnf4 cut lacks #413's append (quantize_kv_fp8's bytes; >= 0.33.7)` |
 
 Each gate the registration adds fails on the change it guards against. The A2000 cannot run the fp8 paged KV, so no
-arm, build or K8 was rehearsed here. `rehearse.log` and the per-arm `outer_*.log` are as the container wrote them.
+arm, build or K8 was rehearsed here. `rehearse_log.txt` and the per-arm `outer_*_log.txt` are the container's logs, renamed from `.log` (ignored here).
