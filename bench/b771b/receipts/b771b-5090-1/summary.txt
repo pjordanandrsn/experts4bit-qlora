@@ -1,0 +1,32 @@
+KNOBS model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=130 seg=32
+b771b_reduce self-test OK (11 cases)
+e4b 0.37.7 /root/b771b/e4b/experts4bit_qlora/__init__.py
+gnf4 0.33.7
+torch 2.8.0+cu128 triton 3.4.0 transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+arm T e4b: ============================= 10 passed in 12.55s ==============================
+arm T gnf4: ============================== 19 passed in 5.18s ==============================
+mut_b771b: bound single-row buckets route to append_graph_t1 again
+arm M: ======================= 2 failed, 5 deselected in 8.10s ========================
+BAKE OK
+arm A1 rc=0 P81_DYNB pack=- attn=- arm=A1 mode=eager agg=55.6 tok/s decode_wall=17852.6 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=18.97 GiB warm==timed=True
+
+arm B1 rc=0 P81_DYNB pack=- attn=- arm=B1 mode=graph agg=267.5 tok/s decode_wall=3707.9 ms steps=160 tokens=992 status={1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} eager_steps=0 peak_alloc=19.01 GiB warm==timed=True
+
+arm B2 rc=0 P81_DYNB pack=- attn=- arm=B2 mode=graph agg=267.5 tok/s decode_wall=3708.1 ms steps=160 tokens=992 status={1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} eager_steps=0 peak_alloc=19.01 GiB warm==timed=True
+
+arm A2 rc=0 P81_DYNB pack=- attn=- arm=A2 mode=eager agg=55.8 tok/s decode_wall=17767.3 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=18.97 GiB warm==timed=True
+
+arm P rc=0 P81_DYNB pack=- attn=- arm=P mode=padded agg=67.4 tok/s decode_wall=14723.9 ms steps=160 tokens=992 status={1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} eager_steps=320 peak_alloc=18.97 GiB warm==timed=True
+
+arm Ad rc=0 P81_DYNB pack=- attn=- arm=Ad mode=eager agg=59.3 tok/s decode_wall=16740.0 ms steps=160 tokens=992 status=None eager_steps=0 peak_alloc=18.97 GiB warm==timed=True
+
+B771B_VERDICT CONFIRMED tests hold, the mutation is caught, Ad == P == B1 == B2 bitwise, and both pairings exceed 1.03: B1/A1 4.8148, B2/A2 4.7914
+  A2/A1 = 1.0048
+  B2/B1 = 0.9999
+  B1/A1 = 4.8148
+  B2/A2 = 4.7914
+  P/A1 = 1.2125
+  B1/P = 3.9710
+  Ad/A1 = 1.0665

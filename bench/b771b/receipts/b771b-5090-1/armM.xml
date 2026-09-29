@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="8.101" timestamp="2026-09-29T06:26:56.519528+00:00" hostname="45cb89c2a6d6"><testcase classname="tests.test_decode_graph_buckets" name="test_every_bucket_step_advances_its_rows_own_kv_length[graph]" time="4.021"><failure message="AssertionError: after a 1-row bucket step, slot 0 layer 0: device length 19 != host count 20 -- the row's K/V went somewhere else&#10;assert 19 == 20">mode = 'graph'
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f024be11a90&gt;
+
+    @needs_fp8
+    @pytest.mark.parametrize("mode", ["graph", "padded-eager"])
+    def test_every_bucket_step_advances_its_rows_own_kv_length(mode, monkeypatch):
+        """Lane B771: bucket 1 appended through the single-slot form, which writes to graph_mode_init's
+        slot -- a scratch slot -- so the one active row's own length stopped advancing while the runner's
+        host mirror kept counting. The replay-vs-padded-eager test above cannot see that (both share the
+        shim), so this checks the invariant itself after every bucketed step, in every layer: each stepped
+        row's device length equals the host count. The trace below ends in a one-row phase."""
+        from experts4bit_qlora.engines import paged_runner as pr
+    
+        seen_one_row = {"n": 0}
+        real = pr.PagedModelRunner._run_decode_bucketed
+    
+        def checked(self, rids):
+            got = real(self, rids)
+            if len(rids) == 1:
+                seen_one_row["n"] += 1
+            torch.cuda.synchronize()
+            for r in rids:
+                slot = self.slot_of[r]
+                for layer in range(self.kv.L):
+                    dev_len = int(self.kv.seq_lens[layer, slot].item())
+                    host_len = self.kv._seen[layer][slot]
+                    assert dev_len == host_len, (
+                        f"after a {len(rids)}-row bucket step, slot {slot} layer {layer}: device length "
+                        f"{dev_len} != host count {host_len} -- the row's K/V went somewhere else")
+            return got
+    
+        monkeypatch.setattr(pr.PagedModelRunner, "_run_decode_bucketed", checked)
+&gt;       _run(mode)
+
+tests/test_decode_graph_buckets.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_decode_graph_buckets.py:93: in _run
+    sched.run_until_idle(max_steps=500)
+experts4bit_qlora/engines/scheduler.py:265: in run_until_idle
+    if self.step().is_empty:
+       ^^^^^^^^^^^
+experts4bit_qlora/engines/scheduler.py:238: in step
+    for rid, tok in self.runner.run_decode(plan.decode).items():
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/conda/lib/python3.11/site-packages/torch/utils/_contextlib.py:120: in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+experts4bit_qlora/engines/paged_runner.py:136: in run_decode
+    return self._run_decode_bucketed(rids)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;experts4bit_qlora.engines.paged_runner.PagedModelRunner object at 0x7f024a8a7a10&gt;
+rids = [0]
+
+    def checked(self, rids):
+        got = real(self, rids)
+        if len(rids) == 1:
+            seen_one_row["n"] += 1
+        torch.cuda.synchronize()
+        for r in rids:
+            slot = self.slot_of[r]
+            for layer in range(self.kv.L):
+                dev_len = int(self.kv.seq_lens[layer, slot].item())
+                host_len = self.kv._seen[layer][slot]
+&gt;               assert dev_len == host_len, (
+                    f"after a {len(rids)}-row bucket step, slot {slot} layer {layer}: device length "
+                    f"{dev_len} != host count {host_len} -- the row's K/V went somewhere else")
+E               AssertionError: after a 1-row bucket step, slot 0 layer 0: device length 19 != host count 20 -- the row's K/V went somewhere else
+E               assert 19 == 20
+
+tests/test_decode_graph_buckets.py:139: AssertionError</failure></testcase><testcase classname="tests.test_decode_graph_buckets" name="test_every_bucket_step_advances_its_rows_own_kv_length[padded-eager]" time="0.090"><failure message="AssertionError: after a 1-row bucket step, slot 0 layer 0: device length 19 != host count 20 -- the row's K/V went somewhere else&#10;assert 19 == 20">mode = 'padded-eager'
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f0204212fd0&gt;
+
+    @needs_fp8
+    @pytest.mark.parametrize("mode", ["graph", "padded-eager"])
+    def test_every_bucket_step_advances_its_rows_own_kv_length(mode, monkeypatch):
+        """Lane B771: bucket 1 appended through the single-slot form, which writes to graph_mode_init's
+        slot -- a scratch slot -- so the one active row's own length stopped advancing while the runner's
+        host mirror kept counting. The replay-vs-padded-eager test above cannot see that (both share the
+        shim), so this checks the invariant itself after every bucketed step, in every layer: each stepped
+        row's device length equals the host count. The trace below ends in a one-row phase."""
+        from experts4bit_qlora.engines import paged_runner as pr
+    
+        seen_one_row = {"n": 0}
+        real = pr.PagedModelRunner._run_decode_bucketed
+    
+        def checked(self, rids):
+            got = real(self, rids)
+            if len(rids) == 1:
+                seen_one_row["n"] += 1
+            torch.cuda.synchronize()
+            for r in rids:
+                slot = self.slot_of[r]
+                for layer in range(self.kv.L):
+                    dev_len = int(self.kv.seq_lens[layer, slot].item())
+                    host_len = self.kv._seen[layer][slot]
+                    assert dev_len == host_len, (
+                        f"after a {len(rids)}-row bucket step, slot {slot} layer {layer}: device length "
+                        f"{dev_len} != host count {host_len} -- the row's K/V went somewhere else")
+            return got
+    
+        monkeypatch.setattr(pr.PagedModelRunner, "_run_decode_bucketed", checked)
+&gt;       _run(mode)
+
+tests/test_decode_graph_buckets.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_decode_graph_buckets.py:93: in _run
+    sched.run_until_idle(max_steps=500)
+experts4bit_qlora/engines/scheduler.py:265: in run_until_idle
+    if self.step().is_empty:
+       ^^^^^^^^^^^
+experts4bit_qlora/engines/scheduler.py:238: in step
+    for rid, tok in self.runner.run_decode(plan.decode).items():
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/conda/lib/python3.11/site-packages/torch/utils/_contextlib.py:120: in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+experts4bit_qlora/engines/paged_runner.py:136: in run_decode
+    return self._run_decode_bucketed(rids)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;experts4bit_qlora.engines.paged_runner.PagedModelRunner object at 0x7f025545fbd0&gt;
+rids = [0]
+
+    def checked(self, rids):
+        got = real(self, rids)
+        if len(rids) == 1:
+            seen_one_row["n"] += 1
+        torch.cuda.synchronize()
+        for r in rids:
+            slot = self.slot_of[r]
+            for layer in range(self.kv.L):
+                dev_len = int(self.kv.seq_lens[layer, slot].item())
+                host_len = self.kv._seen[layer][slot]
+&gt;               assert dev_len == host_len, (
+                    f"after a {len(rids)}-row bucket step, slot {slot} layer {layer}: device length "
+                    f"{dev_len} != host count {host_len} -- the row's K/V went somewhere else")
+E               AssertionError: after a 1-row bucket step, slot 0 layer 0: device length 19 != host count 20 -- the row's K/V went somewhere else
+E               assert 19 == 20
+
+tests/test_decode_graph_buckets.py:139: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,5 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 0 MiB, 100 %, 570.169, GPU-957a5917-1674-f825-1c49-669bd55306af, 12.0
+Model name:                           AMD EPYC 7K62 48-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             251           7          74           0         170         242
+overlay         320G  6.1M  320G   1% /

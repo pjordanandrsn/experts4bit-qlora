@@ -887,33 +887,24 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     registered rule it is now the default for the `softmax_topk` kind
     (Unreleased). `E4B_ROUTER_EPI_CAST=0` restores fp32 for one release.
     `topk_softmax` keeps fp32 until it is read.
-- **Bucketed CUDA-graph decode is 2.3× the eager `PagedModelRunner` when the
-  active set changes** (lane P80, `bench/p80/`, 2026-09-28, one RTX 5090, NF4
-  Qwen3-30B-A3B).
-  - **What was compared.** `enable_decode_graphs` pads the active set to a
-    bucket and replays that bucket's graph (#757). The eager control is the
-    production runner. Over a forced trace where the active set runs
-    16 → 8 → 4 → 2 → 1, aggregate decode was 284.5 against 121.6 / 122.5
-    tok/s: B1/A1 = 2.340, B2/A2 = 2.323, with the self-pairs inside 1.03
-    (`e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28`).
-  - **Correctness.** The graph token streams equal the same bucket step run
-    eagerly, bitwise. Against the eager runner they first differ at row 0,
-    token 130, which the lane registered as reported, not decisive. *(Corrected
-    2026-09-29: this first blamed "other row counts"; the trace pads no rows.
-    The eager and bucket steps differ in grouping and step path; P81 found
-    them differing even with the grouping held equal.)* *(Corrected again
-    2026-09-29, lane B771: it is a bug. At bucket 1 the bucket step appended
-    the one active row's K/V to a scratch slot, so row 0 decoded its
-    one-row phase, tokens 129 on, without its own new tokens, in the graph
-    arms and P alike. Fixed; this ratio is to be superseded by a
-    re-measurement of the fixed path.)*
-  - **Where it comes from.** Eager decode is host-bound: 54.5 ms per step at
-    16 rows and still 51.5 ms at 2. The graph step falls with the rows, to
-    9.95 ms at one (4.25×).
-  - **Still open.** It stays opt-in. The HTTP shim and `infer` decode with
-    transformers' `generate`, not with `PagedModelRunner`, so neither is
-    affected either way. It is not measured on other families or under
-    arrivals. P81 (next item) measured it on the int4 serving recipe.
+- **Bucketed CUDA-graph decode decodes exactly as the eager runner and is
+  4.8× faster on a host-bound host** (lane B771b, `bench/b771b/`,
+  2026-09-29, one RTX 5090, NF4 Qwen3-30B-A3B). It supersedes P80's 2.3×.
+  - **What was fixed first.** P80 measured a path with a bug. With one active
+    row, bucket 1 appended its K/V to a scratch slot, so the row decoded that
+    phase without its own new tokens (#777). grouped-nf4-gemm 0.33.7 also
+    made the fused fp8 append write the eager quantize's bytes.
+  - **Now.** Over P80's trace (16 → 8 → 4 → 2 → 1 active rows), the graphs,
+    the bucket step and the eager runner with the same grouping decode
+    identical tokens in every row. Aggregate decode is 267.5 against 55.6 /
+    55.8 tok/s: B1/A1 = 4.815 and B2/A2 = 4.791
+    (`e4b.serve.b771b.qwen3.dynb.graph-buckets.fixed-path.5090.2026-09-29`).
+  - **Where it comes from.** The graph step is within 4–10% of P80's at every
+    row count. The eager step is host-bound and 2.15–2.34× slower on this
+    Zen 2 host than on P80's Zen 5 one, so the ratio does not travel.
+  - **Still open.** It stays opt-in. The HTTP shim and `infer` use
+    transformers' `generate`, not `PagedModelRunner`. It is not measured on
+    other families or under arrivals. P81 (next item) awaits a re-measure.
 - **On the int4 serving recipe, the eager runner is host-bound and the
   graphs remove it** (lane P81, `bench/p81/`, 2026-09-29, one RTX 5090 on an
   AMD EPYC 7K62 host, Qwen3-30B-A3B).
@@ -946,8 +937,8 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     active row, the bucket step appended that row's K/V to a scratch slot,
     so it decoded the one-row phase without its own new tokens, in P80's
     and P81's graph arms alike. Fixed in the paged-attention shim. P80's
-    and P81's ratios were measured on that path and are to be superseded by
-    a re-measurement of the fixed one.
+    ratio is superseded by B771b's re-measure of the fixed path; P81's
+    awaits one.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
