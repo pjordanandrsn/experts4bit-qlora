@@ -927,12 +927,18 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     throughput unused. The package's serving entry points use transformers'
     `generate`, not the paged runner.
   - **#674.** The attention pack (`sha256:d7cfa1f4…`) reproduced
-    byte-for-byte on a second box and release. The expert pack is the
-    licensed `0c9955a9…`. On one box the build's K8 reads 6.36396 with the
-    fp32 router and 6.31811 with the cast; the licensed builds read 6.36709.
-    With identical packs and router setting, P81's box read 6.33015. So on
-    this stack K8 does not reproduce across boxes to five decimals. The
-    cause is not isolated.
+    byte-for-byte on a second box and release, and on a third in P83. The
+    expert pack is the licensed `0c9955a9…`. The build's K8 reads 6.36396
+    with the fp32 router and 6.31811 with the cast; the licensed builds read
+    6.36709.
+  - **K8 is box-invariant; the software moved it** (lane P83, `bench/p83/`).
+    On one box, P70's build (e4b 0.37.4, gnf4 0.33.0) reads 6.36709 and
+    P82's (0.37.8, 0.33.7) reads 6.36396, each the same float it gave on
+    other machines (three and two). That is −0.00049 nats, far inside the
+    floor (`e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29`).
+    Which change moved it is not isolated. *(Corrects P82, which inferred
+    from one cast-arm pair — P81's box 6.33015, P82's 6.31811, still
+    unexplained — that K8 does not reproduce across boxes.)*
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

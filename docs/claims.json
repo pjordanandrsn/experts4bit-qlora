@@ -7297,7 +7297,38 @@
       "supersedes": [
         "e4b.serve.p81.qwen3.licensed-int4.dynb.graph-buckets.5090.2026-09-29"
       ],
-      "notes": "Pre-registered in #783. Supersedes P81's row, measured on the buggy path (#413's append, #777's bucket-1 slot); here the eager runner's identity to its bucket step (A1 == P) was registered as decisive and held. P/A1 = 1.203 (the bucket step's path), B1/P = 9.98 (the graph). NOT portable: eager decode is host-bound (88-102 ms per step at every row count on this EPYC 7R13; 125-139 on P81's EPYC 7K62) and the graph step is 0.81-0.88x P81's. Reported for #674: the build's attention pack is byte-identical to P81's d7cfa1f4 (a second box and release); wikitext K8 (window 9ef10d760ad9) reads 6.36396 in the build and in a process loading both packs (fp32 router) and 6.31811 with the shipped cast, so the cast moves K8 by -0.0072 nats on one box but is not the whole 6.36709 -> 6.33015 gap; and with identical packs and router setting P81's box read 6.33015 where this one reads 6.31811, so K8 on this stack does not reproduce across boxes to five decimals (cause not isolated). enable_decode_graphs stays opt-in (#770)."
+      "notes": "Pre-registered in #783. Supersedes P81's row, measured on the buggy path (#413's append, #777's bucket-1 slot); here the eager runner's identity to its bucket step (A1 == P) was registered as decisive and held. P/A1 = 1.203 (the bucket step's path), B1/P = 9.98 (the graph). NOT portable: eager decode is host-bound (88-102 ms per step at every row count on this EPYC 7R13; 125-139 on P81's EPYC 7K62) and the graph step is 0.81-0.88x P81's. Reported for #674: the build's attention pack is byte-identical to P81's d7cfa1f4 (a second box and release); wikitext K8 (window 9ef10d760ad9) reads 6.36396 in the build and in a process loading both packs (fp32 router) and 6.31811 with the shipped cast, so the cast moves K8 by -0.0072 nats on one box but is not the whole 6.36709 -> 6.33015 gap; and with identical packs and router setting P81's box read 6.33015 where this one reads 6.31811, so K8 on this stack does not reproduce across boxes to five decimals (cause not isolated). enable_decode_graphs stays opt-in (#770). CORRECTED 2026-09-29 (lane P83, e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29): the cross-box claim is wrong for the fp32 router -- on one box P70's software reads 6.36709 and P82's 6.36396, each bit-identical to its earlier readings on other machines; K8 is box-invariant for a fixed software stack and the software moved it. The P81-vs-K16 cast pair (6.33015 vs 6.31811) stays unexplained."
+    },
+    {
+      "id": "e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P83: on ONE RTX 5090, P55x's calibrated int4 recipe built as P70 built it (e4b 0.37.4 @c77aab6, grouped-nf4-gemm 0.33.0) reads wikitext K8 6.36709 (mean NLL 1.8511420498367808) and as P82 built it (e4b 0.37.8, grouped-nf4-gemm 0.33.7) reads 6.36396 (1.8506507749113845), both with fp32 routing weights (E4B_ROUTER_EPI_CAST=0), each repeated bit for bit on the box: DIFFERENT, -0.00049 nats. Each value is the same float its software gave on other machines (P70's on three, P82's on two), so this K8 is box-invariant for a fixed software stack and the software between the two builds moved it.",
+      "value": -0.00049,
+      "unit": "nats, wikitext K8 mean NLL (2,048 steps), P82's build minus P70's build on one box",
+      "hardware": "RTX 5090 (sm_120, 575 W power limit, driver 580.119.02), one rented Vast.ai verified/secure host (instance 53395582, AMD EPYC 9755, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; per stack its own NF4 bake (P39's k8_bake.py) and its lane's build as it ran: stack O = P70's (bench/p39/step_decomp.py, bench/p42/hook, P70's env; the expert pack dumped) then P55x's lic arm (expert pack loaded by fingerprint, attention calibrated live); stack N = P82's (bench/p81/step_decomp.py, hook v7; both packs dumped) then K32 (both packs loaded by fingerprint); N installed over O with --force-reinstall --no-deps; K8 teacher-forced through the paged decode path at B = 1, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, all-VRAM, window 9ef10d760ad9; every K8 process stamped fp32 with its stack's versions; verdict by bench/p83/p83_reduce.py; torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1, bitsandbytes 0.50.1",
+      "measured_on": "2026-09-29",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p83/RESULTS-p83.md",
+        "bench/p83/PREREG-p83.md",
+        "bench/p83/p83_reduce.py",
+        "bench/p83/receipts/p83-5090-1/verdict.json",
+        "bench/p83/receipts/p83-5090-1/k8_O_build.json",
+        "bench/p83/receipts/p83-5090-1/k8_O_rep.json",
+        "bench/p83/receipts/p83-5090-1/k8_N_build.json",
+        "bench/p83/receipts/p83-5090-1/k8_N_rep.json",
+        "bench/p83/receipts/p83-5090-1/packs.json",
+        "bench/p83/receipts/p83-5090-1/summary.txt",
+        "bench/p83/receipts/p83-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-29/p83-5090-1/ (receipt.json, teardown-proof.json, the fetched run with logs/); the proof p83-prove-1 beside it"
+      ],
+      "notes": "Pre-registered in #786 (stated expectation DIFFERENT with O reading 6.36709: both held). Both builds produced expert pack 0c9955a9 (identical manifests); N's attention pack is d7cfa1f4 (a third box); O's attention cannot be dumped on 0.37.4, so the change is not yet split between the attention calibration and the decode path. The move is a function change far inside the 0.0095 K8 floor, both readings below NF4's 6.41984. Corrects P82's read, which had inferred from one cast-arm pair that K8 does not reproduce across boxes. Not isolated: which change (e4b 0.37.4 -> 0.37.8, hook v6 -> v7, the step_decomp copies, grouped-nf4-gemm 0.33.0 -> 0.33.7) moves it -- a one-box bisect, not started."
     }
   ]
 }

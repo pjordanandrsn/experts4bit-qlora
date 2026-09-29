@@ -1,5 +1,9 @@
 # P82 — results: on the licensed int4 stack with the fp32 router, the fixed graph path decodes **exactly** the eager runner's function and is 12.0–12.4× faster on this host (**CONFIRMED**); for #674, the attention pack reproduces across boxes but the K8 reading does not, and the router cast is not the whole gap
 
+*(Corrected 2026-09-29, lane P83: the title's "the K8 reading does not" [reproduce across boxes] is wrong for
+the fp32 router. K8 is bit-reproducible across machines for a fixed software stack; the software moved it. See
+`bench/p83/RESULTS-p83.md`.)*
+
 Read 2026-09-29 from `p82-5090-3`. Registration: `bench/p82/PREREG-p82.md` (#783, `06c115b`). Issues: #511, #674,
 #777. Verdict by `p82_reduce.py` from the five arm receipts and their router stamps: **CONFIRMED**. P1–P4 held.
 
@@ -103,20 +107,28 @@ This read supersedes P81's register row with
 - **The registered table reads "THE CAST IS NOT THE WHOLE GAP"**, because the fp32 router reads 6.36396, not
   6.36709. On one box and one set of packs, the cast moves K8 by −0.0458 ppl, which is ln(6.31811 / 6.36396) =
   **−0.0072 nats**. That is under the family's 0.0095 K8 floor, as P70's INDISTINGUISHABLE read predicts.
-- **The finding that matters more: K8 does not reproduce across boxes on this stack.**
+- **The finding that matters more: K8 does not reproduce across boxes on this stack.** *(Corrected 2026-09-29, lane
+  P83: wrong for the fp32 router. On one box, P70's software read 6.36709 and P82's read 6.36396, each bit-identical
+  to its earlier readings on other machines (P70's on three, P82's on two). K8 does not depend on the box; the software
+  moved it. The pair below is the only cross-box discrepancy, it is a cast-arm pair, and it is still unexplained.
+  See `bench/p83/RESULTS-p83.md`.)*
   - P81's build and this lane's K16 served **byte-identical packs with the same router setting**.
   - Their code on K8's path is the same. e4b 0.37.7 → 0.37.8 changes only graph-mode, training and
     dump-provenance code (#777, #765, #772). grouped-nf4-gemm 0.33.5 → 0.33.7 refactors `quantize_kv_fp8` into the
     same operations and otherwise changes only the graph-mode append and the MXFP4 prefill.
   - They read 6.33015 and 6.31811. The spread is 0.012 ppl, 0.0019 nats.
   - So a five-decimal match to 6.36709 is **not** an identity test across boxes. The registered table assumed it was.
+    *(Corrected 2026-09-29, lane P83: for a fixed software stack it is one, to the last bit of the mean NLL.)*
 - **What that means for the fp32 residual.** The fp32 reading here is 0.0031 below the licensed 6.36709. That is
-  smaller than the cross-box spread just measured, so it cannot be attributed to software.
+  smaller than the cross-box spread just measured, so it cannot be attributed to software. *(Corrected 2026-09-29, lane
+  P83: it is the software. On one box P70's build reads 6.36709 and P82's 6.36396.)*
   - The licensed reading itself came from two machines: P55x's and P70's host is one Ryzen 7950X on driver 575.57.08,
     and P64's is an EPYC 7C13 on **595.71.05, this box's driver**. P64 is on older software.
   - So a driver version alone does not explain the residual. The software between P64's release and this one might,
     or the machine might.
 - **Not isolated:** why K8 moves between these boxes (the driver, Triton's timing-based autotune, or something else).
+  *(Resolved 2026-09-29 by P83: for fp32 it does not move between boxes. The software moved it; the same-box A/B
+  proposed below read DIFFERENT.)*
   The registration's next step, a software bisect, assumed K8 was box-invariant. The discriminating test is a
   **same-box A/B**: P70's software (e4b 0.37.4, gnf4 0.33.0) against 0.37.8 / 0.33.7, both builds with the fp32
   router. If they agree, K8 depends on the box. If they differ, it depends on the software.
@@ -134,7 +146,8 @@ This read supersedes P81's register row with
 **Not established.**
 - Any ratio for another host.
 - Other families, arrivals, or prefill.
-- Whether the licensed K8 6.36709 is reproducible on current software, and why K8 moves between boxes.
+- Whether the licensed K8 6.36709 is reproducible on current software, and why K8 moves between boxes. *(P83: it is
+  not reproducible on current software, which reads 6.36396 on any box; K8 does not move between boxes for fp32.)*
 - Which attention P55x licensed: its attention was never dumped.
 - Any quality beyond these three K8 readings.
 - `enable_decode_graphs` stays opt-in. #770 is where making it the default is decided.

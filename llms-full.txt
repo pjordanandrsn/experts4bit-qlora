@@ -2863,12 +2863,18 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     throughput unused. The package's serving entry points use transformers'
     `generate`, not the paged runner.
   - **#674.** The attention pack (`sha256:d7cfa1f4…`) reproduced
-    byte-for-byte on a second box and release. The expert pack is the
-    licensed `0c9955a9…`. On one box the build's K8 reads 6.36396 with the
-    fp32 router and 6.31811 with the cast; the licensed builds read 6.36709.
-    With identical packs and router setting, P81's box read 6.33015. So on
-    this stack K8 does not reproduce across boxes to five decimals. The
-    cause is not isolated.
+    byte-for-byte on a second box and release, and on a third in P83. The
+    expert pack is the licensed `0c9955a9…`. The build's K8 reads 6.36396
+    with the fp32 router and 6.31811 with the cast; the licensed builds read
+    6.36709.
+  - **K8 is box-invariant; the software moved it** (lane P83, `bench/p83/`).
+    On one box, P70's build (e4b 0.37.4, gnf4 0.33.0) reads 6.36709 and
+    P82's (0.37.8, 0.33.7) reads 6.36396, each the same float it gave on
+    other machines (three and two). That is −0.00049 nats, far inside the
+    floor (`e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29`).
+    Which change moved it is not isolated. *(Corrects P82, which inferred
+    from one cast-arm pair — P81's box 6.33015, P82's 6.31811, still
+    unexplained — that K8 does not reproduce across boxes.)*
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
@@ -3491,6 +3497,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.p67.gemma4.batched-attn4.floor-band.5090.2026-09-24 [measured]: Lane P67: e4b's kernel-free batched path in the attention-4-bit configuration (batched_attn4: enable_batched_train at pad_waste_limit 64 -- 7,680 of 7,680 calls batched, 0 fallbacks; 30 modules patched) PASSES Gemma-4-26B-A4B-it's registered floor band -- D_final 0.03694 and D_med 0.04803 nats against 0.363 / 0.383 -- carried by the tolerance and not detectable (D / F_hi 0.30, 0.38); held-out delta 0.038; step-0 delta 0.065; P56's batched pair (0.054 / 0.085) PASSES the same band.
 - e4b.serve.b771b.qwen3.dynb.graph-buckets.fixed-path.5090.2026-09-29 [measured]: Lane B771b: on NF4 Qwen3-30B-A3B over P80's forced changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 32 decode steps each, 992 decode tokens), PagedModelRunner.enable_decode_graphs with the bucket-1 fix (#777) and grouped-nf4-gemm 0.33.7's fused fp8 append decodes 267.5 tok/s against the eager PagedModelRunner's 55.6 / 55.8 -- B1/A1 = 4.815 and B2/A2 = 4.791, both above the registered 1.03 with the self-pairs inside it -- and decodes bit-identically to the eager runner with the same (device) grouping in all 16 rows (Ad == P == B1 == B2): CONFIRMED. #777's invariant test and the replay and routing tests pass on sm_120, and fail under the registered mutation.
 - e4b.serve.p82.qwen3.licensed-int4-fp32router.dynb.graph-buckets.fixed-path.5090.2026-09-29 [measured]: Lane P82: on Qwen3-30B-A3B served with P55x's int4 recipe (GPTQ-calibrated int4 experts, pack sha256:0c9955a9..., calibrated int4 attention, pack sha256:d7cfa1f4..., both installed by fingerprint; T=1 folds; the fused router epilogue at fp32 routing weights, E4B_ROUTER_EPI_CAST=0 in every arm, as in P55x's, P64's and P70's builds), over P80's forced changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 32 decode steps each, 992 decode tokens), PagedModelRunner.enable_decode_graphs with the bucket-1 fix (#777) and grouped-nf4-gemm 0.33.7 decodes 811.9 / 814.2 tok/s against the eager PagedModelRunner's 67.6 / 65.9 -- B1/A1 = 12.006 and B2/A2 = 12.358, both above the registered 1.03 with the self-pairs inside it -- and the eager runner, its bucket step and both graph arms decode identical tokens in every row (A1 == P == B1 == B2): CONFIRMED.
+- e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29 [measured]: Lane P83: on ONE RTX 5090, P55x's calibrated int4 recipe built as P70 built it (e4b 0.37.4 @c77aab6, grouped-nf4-gemm 0.33.0) reads wikitext K8 6.36709 (mean NLL 1.8511420498367808) and as P82 built it (e4b 0.37.8, grouped-nf4-gemm 0.33.7) reads 6.36396 (1.8506507749113845), both with fp32 routing weights (E4B_ROUTER_EPI_CAST=0), each repeated bit for bit on the box: DIFFERENT, -0.00049 nats. Each value is the same float its software gave on other machines (P70's on three, P82's on two), so this K8 is box-invariant for a fixed software stack and the software between the two builds moved it.
 
 Open items (no evidence either way):
 
@@ -3498,4 +3505,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(261 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(262 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

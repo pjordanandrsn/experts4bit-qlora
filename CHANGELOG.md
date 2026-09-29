@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Lane P83 read (#674): on one box the software moved the recipe's K8 (DIFFERENT, −0.00049 nats), and each value reproduces bit for bit across machines; this corrects P82's read (bench, docs and register only)
+
+- `p83-5090-1` ran on one RTX 5090 (AMD EPYC 9755) for $0.7671, teardown proven. The lane cost $0.8179 with its proof.
+- **The reading.** Both builds used the fp32 router. P70's build (e4b 0.37.4, grouped-nf4-gemm 0.33.0) read wikitext K8 **6.36709**, and P82's (0.37.8, 0.33.7) read **6.36396**. Each repeated itself bit for bit, and both produced the licensed expert pack.
+- **Bit-reproducible across machines.** Each mean NLL is the same float its software gave elsewhere: P70's on P70's and P64's machines, P82's on P82's. So this K8 does not depend on the box, and the software moved it. Which change is not isolated: the attention calibration (O's bytes cannot be dumped on 0.37.4) or the decode path.
+- **Correction.** P82's read said K8 "does not reproduce across boxes" and that the fp32 residual "cannot be attributed to software". Both are wrong for the fp32 router, and are corrected in place in `RESULTS-p82.md`, P82's register row, STATUS and on #674. The one pair that prompted them, P81's and P82's cast-router readings, stays unexplained.
+- New row `e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29`. The read is in `bench/p83/RESULTS-p83.md`.
+
 ### Lane P83 registered (#674): on one box, do P70's build (e4b 0.37.4, grouped-nf4-gemm 0.33.0) and P82's build (0.37.8, 0.33.7) read the same K8 with the fp32 router? (bench only; nothing in the wheel changes)
 
 - `bench/p83/PREREG-p83.md`. P82 found that the licensed recipe's K8 does not reproduce across boxes. This lane separates box from software by running both builds on ONE RTX 5090, each exactly as its lane ran it: pins, harness copy, hook and env.
