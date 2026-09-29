@@ -1,0 +1,11 @@
+--- venv-k3rel.freeze-pre-0.33.6.txt
++++ venv-k3rel.freeze-post-0.33.6.txt
+@@ -14,7 +14,7 @@
+ filelock==3.32.3
+ fla-core==0.5.2
+ fsspec==2026.7.0
+-grouped-nf4-gemm==0.33.4
++grouped-nf4-gemm==0.33.6
+ h11==0.16.0
+ hf-xet==1.6.0
+ httpcore==1.0.9

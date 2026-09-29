@@ -281,3 +281,35 @@ Read two things with care:
 - **The fix processes' JSON `provenance.packages` still says grouped-nf4-gemm 0.33.4**, because
   that is the installed distribution. The module that actually ran is the one `moe_trace.json`
   names by path and sha256.
+
+*On the release, the next day: see [§6](#6-on-the-released-grouped-nf4-gemm-0336-the-forward-reproduces).*
+
+### 6. On the released grouped-nf4-gemm 0.33.6, the forward reproduces
+
+grouped-nf4-gemm 0.33.6, published to PyPI on 2026-09-29, ships #410. `venv-k3rel` was upgraded
+to it with `pip --no-deps` at 01:25Z. The freeze diff shows that as the only change
+([`venv-k3rel.freeze.diff`](receipts/2026-09-29-rel0336/venv-k3rel.freeze.diff)), and the
+installed `mxfp4_pipelined.py` is byte-identical to the `v0.33.6` tag's (sha256 `05c760e4…`).
+
+Three prefill-only processes then ran, from 01:33 to 01:51Z, with deterministic mode off and
+nothing shadowed. They used the same wrapper and driver as §5; both files are byte-identical to
+that set's.
+
+| processes | p(`' Paris'`) | prefill expert rows | MoE traces |
+|---|---|---|---|
+| rel1, rel2, rel3 | 0.7144126892089844, all three | 6,118 | identical at all 92 calls, to each other and to §5's deterministic and fix runs |
+
+A released-package run on this box and build now gives one answer. The spread in §4 was the
+0.33.4 combine. Register row `e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29`.
+
+**Receipts:** [`receipts/2026-09-29-rel0336/`](receipts/2026-09-29-rel0336/SHA256SUMS).
+
+- The three run directories.
+- `run_v6.sh`. This runner captures `rc` before it logs, so the `rc=` values in its `status.log`
+  are the runs' own.
+- The host side. `orch_v6.sh` waited for the sdxl sidecar to go idle: it was serving image
+  generations in bursts. `orch_v6_now.sh` replaced it when the wait was called off. `host.log`
+  shows the sidecar down from 01:33:24 to 01:51:32Z.
+- `compare_v6.txt`.
+- The freeze and its diff.
+- The wrapper, the comparison script and the driver.

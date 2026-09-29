@@ -48,8 +48,10 @@ over the five processes. Autotuning is ruled out. The source is the MXFP4
 prefill combine's atomic `index_add_`: with torch's deterministic algorithms on,
 three processes are bit-identical at all 92 MoE calls. grouped-nf4-gemm#410's
 ordered combine alone, with deterministic mode off, reproduces them bit for bit
-(`e4b.parity.kimi-k3.prefill-drift-is-the-combine.a2000.2026-09-28`). Released
-packages keep drifting until a grouped-nf4-gemm release carries it. A custom
+(`e4b.parity.kimi-k3.prefill-drift-is-the-combine.a2000.2026-09-28`).
+grouped-nf4-gemm 0.33.6 ships the fix. On it, three released-package processes
+are bit-identical with deterministic mode off
+(`e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29`). A custom
 driver wires the engines, so this is not the `load_moe_4bit_streaming` path.
 
 **The fused training path is faster at equal loss.** Across two 30B-class
