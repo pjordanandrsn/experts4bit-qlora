@@ -111,3 +111,36 @@ def test_a_bucket_replay_decodes_exactly_as_the_padded_eager_step():
     # reported, not asserted: unpadded eager runs a different row count per GEMM
     print("unpadded-eager agreement:",
           sum(a == b for x, y in zip(graph, plain) for a, b in zip(x, y)), "/", sum(MAX_NEW))
+
+
+@needs_fp8
+@pytest.mark.parametrize("mode", ["graph", "padded-eager"])
+def test_every_bucket_step_advances_its_rows_own_kv_length(mode, monkeypatch):
+    """Lane B771: bucket 1 appended through the single-slot form, which writes to graph_mode_init's
+    slot -- a scratch slot -- so the one active row's own length stopped advancing while the runner's
+    host mirror kept counting. The replay-vs-padded-eager test above cannot see that (both share the
+    shim), so this checks the invariant itself after every bucketed step, in every layer: each stepped
+    row's device length equals the host count. The trace below ends in a one-row phase."""
+    from experts4bit_qlora.engines import paged_runner as pr
+
+    seen_one_row = {"n": 0}
+    real = pr.PagedModelRunner._run_decode_bucketed
+
+    def checked(self, rids):
+        got = real(self, rids)
+        if len(rids) == 1:
+            seen_one_row["n"] += 1
+        torch.cuda.synchronize()
+        for r in rids:
+            slot = self.slot_of[r]
+            for layer in range(self.kv.L):
+                dev_len = int(self.kv.seq_lens[layer, slot].item())
+                host_len = self.kv._seen[layer][slot]
+                assert dev_len == host_len, (
+                    f"after a {len(rids)}-row bucket step, slot {slot} layer {layer}: device length "
+                    f"{dev_len} != host count {host_len} -- the row's K/V went somewhere else")
+        return got
+
+    monkeypatch.setattr(pr.PagedModelRunner, "_run_decode_bucketed", checked)
+    _run(mode)
+    assert seen_one_row["n"] > 0, "the trace never reached a one-row step; the test would prove nothing"

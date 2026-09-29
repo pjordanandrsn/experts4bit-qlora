@@ -88,6 +88,16 @@ Mean ms per decode step, timed pass:
   - Its 1.33× is device grouping plus the bucket step's path, with no padding.
   - Those documents are corrected in this PR. P80's verdict does not change, because its gate was B ≡ P, which held.
 
+- **Corrected 2026-09-29 (lane B771): two causes, both bugs, both now fixed.**
+  - Row 1's divergence (token 67, in the four-row phase) fits the first: gnf4's fused fp8 append divided non-IEEE and
+    wrote ~6e-8 of its bytes differently from the eager quantize (grouped-nf4-gemm#413). That fit is inferred, not
+    measured on this stack.
+  - Row 0's (token 129, the first step of the one-row phase) is the second: at bucket 1 the bucket step appended the row's
+    K/V to a scratch slot, so the row decoded its one-row phase without its own new tokens, in B and P alike.
+  - B771 isolated both on NF4 Qwen3: with #413 in place, eager and bucket steps agreed everywhere except from the first
+    one-row step on. The ratios here were measured on the buggy path. They are superseded when the fixed path is
+    re-measured.
+
 ## #674: the packs (reported)
 
 - **The expert pack is the licensed one.** `artifact1/manifest.json` records `sha256:0c9955a9…`, equal to P55x's

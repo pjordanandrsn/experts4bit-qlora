@@ -2837,7 +2837,12 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     token 130, which the lane registered as reported, not decisive. *(Corrected
     2026-09-29: this first blamed "other row counts"; the trace pads no rows.
     The eager and bucket steps differ in grouping and step path; P81 found
-    them differing even with the grouping held equal.)*
+    them differing even with the grouping held equal.)* *(Corrected again
+    2026-09-29, lane B771: it is a bug. At bucket 1 the bucket step appended
+    the one active row's K/V to a scratch slot, so row 0 decoded its
+    one-row phase, tokens 129 on, without its own new tokens, in the graph
+    arms and P alike. Fixed; this ratio is to be superseded by a
+    re-measurement of the fixed path.)*
   - **Where it comes from.** Eager decode is host-bound: 54.5 ms per step at
     16 rows and still 51.5 ms at 2. The graph step falls with the rows, to
     9.95 ms at one (4.25×).
@@ -2871,9 +2876,14 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     build's 6.36709 on the same window. So this attention pack is the
     recipe's on e4b 0.37.7, not a byte-identification of the attention
     P55x licensed. The cause of the difference is not isolated.
-  - **Reported, not decisive.** The eager step and the bucket step
-    disagree on 91 of 1,008 tokens at identical rows and grouping; they
-    append K/V by different paths. Not isolated.
+  - **The eager-vs-bucket divergence was two bugs, both now fixed** (lane
+    B771, 2026-09-29). gnf4's fused fp8 append divided non-IEEE (~6e-8 of
+    stored bytes; grouped-nf4-gemm#413). And at bucket 1, with exactly one
+    active row, the bucket step appended that row's K/V to a scratch slot,
+    so it decoded the one-row phase without its own new tokens, in P80's
+    and P81's graph arms alike. Fixed in the paged-attention shim. P80's
+    and P81's ratios were measured on that path and are to be superseded by
+    a re-measurement of the fixed one.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
@@ -3503,4 +3513,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(260 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(261 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
