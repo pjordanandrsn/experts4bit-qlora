@@ -7,9 +7,14 @@ found the eager runner, the bucket step and the graph replay bit-identical. This
 
 It also isolates one difference for #674. P81's build read wikitext K8 **6.33015**, and P55x, P64 and P70 read
 **6.36709**. The one arithmetic change known to sit on the recipe's decode path between those builds is 0.37.5's
-router-epilogue default: `E4B_FUSE_ROUTER_EPI=1` now rounds `softmax_topk` routing weights to bf16 (P70's read). So
-every process in this lane runs the licensed builds' fp32 router (`E4B_ROUTER_EPI_CAST=0`). Two K8 arms then read the
-same packs with and without the cast, on one box.
+router-epilogue default: `E4B_FUSE_ROUTER_EPI=1` now rounds `softmax_topk` routing weights to bf16 (P70's read).
+- The rest of e4b 0.37.4 → 0.37.8 is off this path or default-off: 0.37.6's attention pack dump/load, 0.37.7's
+  opt-in graphs, and 0.37.8's graph-only #777.
+- grouped-nf4-gemm moved 0.33.0 (P70) → 0.33.5 (P81) → 0.33.7 (here). Its changelog records no arithmetic change on
+  this path. 0.33.7's append is the graph path's; the eager K8 appends through `quantize_kv_fp8`.
+
+So every process in this lane runs the licensed builds' fp32 router (`E4B_ROUTER_EPI_CAST=0`). Two K8 arms then read
+the same packs with and without the cast, on one box.
 
 Rule: the owner's standing no-ask tier for a single run under $15 (2026-09-26), with the usual mechanics: this page
 merged before the launch, a proving rental before a guard over 1 h, receipts and ledger rows, proven teardown. The
@@ -131,8 +136,8 @@ Also reported: `K32_equals_build_exactly`, `cast_effect_K16_minus_K32`, and `att
   its data.
   - The cast's −0.037 ppl is ln(6.33015 / 6.36709) = −0.0058 nats. That is under the family's 0.0095 K8 floor, as
     P70's INDISTINGUISHABLE read predicts. So the cast is not a quality regression, but it is a different function.
-- **Otherwise:** the gap is somewhere else, and the next lane bisects the software between 0.37.4 and 0.37.8 on the
-  build.
+- **Otherwise:** the gap is somewhere else, and the next lane bisects the software on the build: e4b 0.37.4 → 0.37.8
+  and grouped-nf4-gemm 0.33.0 → 0.33.7.
 
 ## Box and cost
 
