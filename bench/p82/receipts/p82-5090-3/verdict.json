@@ -1,0 +1,112 @@
+{
+ "lane": "P82",
+ "band": 1.03,
+ "reasons": [
+  "both pairings exceed 1.03: B1/A1 12.0063, B2/A2 12.3577"
+ ],
+ "verdict": "CONFIRMED",
+ "packs": {
+  "expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "attention": "sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422"
+ },
+ "identity": {
+  "B1_vs_P": null,
+  "B2_vs_P": null,
+  "B1_vs_B2": null,
+  "A1_vs_A2": null,
+  "A1_vs_P": null
+ },
+ "agg_tok_s": {
+  "A1": 67.62611931980675,
+  "B1": 811.9409084990821,
+  "B2": 814.2314718946612,
+  "A2": 65.88858359193758,
+  "P": 81.34207043610462
+ },
+ "ratios": {
+  "A2/A1": 0.9743067361347131,
+  "B2/B1": 1.0028210961802793,
+  "B1/A1": 12.006321176872202,
+  "B2/A2": 12.35770185829726,
+  "P/A1": 1.2028203193419182,
+  "B1/P": 9.981807742856429
+ },
+ "step_ms_by_active": {
+  "A1": {
+   "16": 91.09097287499999,
+   "8": 88.04713765625002,
+   "4": 87.86556818749997,
+   "2": 89.24677128124999,
+   "1": 102.15231378125
+  },
+  "B1": {
+   "16": 13.599353656249999,
+   "8": 8.061858656250001,
+   "4": 6.643245156250001,
+   "2": 5.490625468749999,
+   "1": 4.385035437499999
+  },
+  "B2": {
+   "16": 13.495989937500003,
+   "8": 8.06386728125,
+   "4": 6.641651062499999,
+   "2": 5.487543000000001,
+   "1": 4.3836603125
+  },
+  "A2": {
+   "16": 99.33644090625,
+   "8": 92.52342281249999,
+   "4": 90.33146440624999,
+   "2": 89.80150803125002,
+   "1": 98.49838265625002
+  },
+  "P": {
+   "16": 82.02434684375,
+   "8": 73.783945875,
+   "4": 72.11047687499999,
+   "2": 72.036730375,
+   "1": 81.15110125000001
+  }
+ },
+ "expert_pack_is_licensed": true,
+ "k8_report": {
+  "build": {
+   "ppl": 6.363959680597435,
+   "ppl_5dp": 6.36396,
+   "text_sha": "9ef10d760ad9f9eaafaedfc320702ad341cabfb141ef511eb5c71e3da94f833b",
+   "same_window": true,
+   "delta_vs_licensed": -0.0031303194025653625,
+   "delta_vs_p81": 0.033809680597435054,
+   "router_epi_cast_env": "0",
+   "router_epi_cast_weights": false,
+   "router_epi_casts_softmax_topk": false
+  },
+  "K32": {
+   "ppl": 6.363959680597435,
+   "ppl_5dp": 6.36396,
+   "text_sha": "9ef10d760ad9f9eaafaedfc320702ad341cabfb141ef511eb5c71e3da94f833b",
+   "same_window": true,
+   "delta_vs_licensed": -0.0031303194025653625,
+   "delta_vs_p81": 0.033809680597435054,
+   "router_epi_cast_env": "0",
+   "router_epi_cast_weights": false,
+   "router_epi_casts_softmax_topk": false
+  },
+  "K16": {
+   "ppl": 6.318111057123151,
+   "ppl_5dp": 6.31811,
+   "text_sha": "9ef10d760ad9f9eaafaedfc320702ad341cabfb141ef511eb5c71e3da94f833b",
+   "same_window": true,
+   "delta_vs_licensed": -0.04897894287684945,
+   "delta_vs_p81": -0.012038942876849035,
+   "router_epi_cast_env": null,
+   "router_epi_cast_weights": null,
+   "router_epi_casts_softmax_topk": true
+  },
+  "reading": "THE CAST IS NOT THE WHOLE GAP: the fp32 router does not read the licensed 6.36709",
+  "K32_equals_build_exactly": true,
+  "cast_effect_K16_minus_K32": -0.04584862347428409,
+  "attention_pack": "sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422",
+  "attention_pack_equals_p81": true
+ }
+}

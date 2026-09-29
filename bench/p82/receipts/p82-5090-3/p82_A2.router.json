@@ -1,0 +1,1 @@
+{"router_epi_cast_env": "0", "router_epi_cast_weights": false, "router_epi_casts_softmax_topk": false, "expected_expert_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42", "expected_attention_fingerprint": "sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422"}

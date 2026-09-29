@@ -1,0 +1,8 @@
+e4b 0.37.8 @06c115bb28179b968983a73b1568952884058189 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.7 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+router_epi_cast_weights False
