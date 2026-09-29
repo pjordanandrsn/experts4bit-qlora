@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.37.8 — 2026-09-29 — a correctness fix to 0.37.7's opt-in bucketed decode graphs: a bucket of one row appends to its own KV slot (#777), and with grouped-nf4-gemm ≥ 0.33.7 the graph path decodes bit-identically to the eager runner (lane B771b); the batched training path is bit-reproducible on CUDA (#765, #776); a calibrate-and-dump build names the dumped expert artifact on its provenance (#772, #773); corrections to the B511, P80 and P81 reads and to the serving-path description (#774)
+
+**0.37.8.** If you call `PagedModelRunner.enable_decode_graphs` (new in 0.37.7), upgrade.
+- **The bug.** Whenever exactly one request was active, 0.37.7's graph path appended that request's new K/V to a scratch slot, so the request decoded without the tokens it produced while alone.
+- **Who it did not affect.** The package's own serving entry points (`serve.py`, `infer.py`) decode with transformers' `generate` and never used the graph path.
+- **Verified.** On an RTX 5090 (lane B771b), with grouped-nf4-gemm ≥ 0.33.7, the graph path now decodes exactly the eager runner's function: identical tokens in all 16 rows of P80's trace, at 4.79–4.81× the eager runner on that host. With an older grouped-nf4-gemm, the fused KV append can still flip about one stored byte in 25 million.
+- **Also.** `enable_batched_train` is now bit-reproducible on CUDA (two float-atomic sites fixed). And a calibrate-and-dump build records the dumped expert artifact's root fingerprint beside the live one.
+- **Corrections.** P80's and P81's reads attributed their graph-vs-eager divergence to rounding and to the KV append. It was this bug, together with grouped-nf4-gemm 0.33.7's append fix.
 
 ### Lane B771b read (#771, #777): the fixed bucketed-graph path decodes exactly as the eager runner and is 4.79–4.81× faster on this host (CONFIRMED); it supersedes P80's row (bench, docs and register only)
 
