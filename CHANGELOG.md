@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Lane B771 registered (#771): is the fused fp8 KV append's non-IEEE quotient the whole cause of the eager-vs-bucket-step divergence? (bench only; nothing in the wheel changes)
+
+- `bench/b771/PREREG-b771.md`. One RTX 5090 and two grouped-nf4-gemm cuts in one process tree: the fused append as shipped (v0.33.5) and grouped-nf4-gemm#413's IEEE-rounded quotient.
+- **Byte stage.** Under each cut, 5.4×10⁸ values through `fp8_kv_append_bt1` are compared byte for byte with `quantize_kv_fp8`, with the hardware e4m3 cast.
+- **Decode stage.** P80's NF4 Qwen3-30B-A3B setup and trace. The eager step and the bucket step run under each cut, all four arms with the device grouping.
+- **Confirmed only if all hold:** the fixed kernel writes the reference's bytes; the shipped one does not; the eager arms agree across the swap; the bucket step differs from the eager step under the old cut and equals it under the new.
+- The byte harness's layout math is pinned in CI (`tests/test_b771_bytes_harness.py`); the files, rule and arm order in `tests/test_b771_staged_pin.py`.
+
 ### Correction: the package's serving entry points do not use `PagedModelRunner` (docs only)
 
 - P81's read (#769) and STATUS said the HTTP shim and `infer` serve the int4 stack eagerly and so leave the graphs' throughput unused. Neither uses `PagedModelRunner`: `serve.py` and `infer.py` both decode with transformers' `generate`. In the shipped package only the bench harnesses drive the paged runner and scheduler.
