@@ -950,7 +950,15 @@ def dump_calibrated_artifact(model, source_dir: str, artifact_dir: str, *,
     assignment = None
     if rec.get("method_map"):
         assignment = {"method_map": rec["method_map"], "row_counts": rec.get("row_counts") or []}
-    return write_artifact(artifact_dir, tensors=tensors, meta=meta, assignment=assignment)
+    man = write_artifact(artifact_dir, tensors=tensors, meta=meta, assignment=assignment)
+    # #772: the provenance's ``pack_fingerprint`` is the LIVE stores' (tensor payloads only);
+    # the artifact's root also covers the identity and assignment payloads, so the two never
+    # match. Record the root beside it -- ``pack_fingerprint`` keeps its meaning -- so an
+    # attention dump and a receipt of this run can name the artifact that actually exists.
+    if rec:
+        from .pack_manifest import attach_provenance
+        attach_provenance(model, dict(rec, pack_artifact_fingerprint=man["pack_fingerprint"]))
+    return man
 
 
 def enable_serve_experts_int4_from_artifact(model, source_dir: str, artifact_dir: str, *,

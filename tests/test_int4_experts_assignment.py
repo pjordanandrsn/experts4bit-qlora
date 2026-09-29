@@ -287,6 +287,31 @@ def test_dump_persists_the_decision_and_a_licensed_load_carries_it_back(tmp_path
     assert man2["pack_fingerprint"] == man["pack_fingerprint"], "round trip changed the licensed bytes"
 
 
+def test_a_dump_records_the_artifact_root_beside_the_live_fingerprint(tmp_path, stubs, monkeypatch):
+    """#772: the live provenance hashes the tensor payloads only, the artifact's root also covers
+    identity + assignment, so they never match. P81's attention manifest named the live one
+    (c221ab32...), which no artifact carries. After a dump the provenance names the root too,
+    and ``pack_fingerprint`` keeps its meaning."""
+    monkeypatch.setenv("E4B_INT4_KEEP_NF4", "1")
+    ck, names, wrap = _family_case("qwen3_moe")
+    (tmp_path / "ck").mkdir()
+    src = _write_ckpt(tmp_path / "ck", ck)
+    live, _st = _live_model(wrap, "qwen3_moe")
+    live.config._commit_hash = "ad44e777" + "0" * 32
+    live.config._name_or_path = "Qwen/Qwen3-30B-A3B"
+    monkeypatch.setattr(ie, "_meta_twin", lambda m: _PlanTree(names))
+    enable_serve_experts_int4(live, src, model_type="qwen3_moe", plan_model=_PlanTree(names),
+                              expert_hessians=_hess({0: 500, 1: 3}))
+    live_fp = provenance_from_model(live)["pack_fingerprint"]
+    man = dump_calibrated_artifact(live, src, str(tmp_path / "art"), model_type="qwen3_moe")
+    prov = provenance_from_model(live)
+    assert man["pack_fingerprint"] != live_fp, "the two hash domains coincided; this test no longer shows #772"
+    assert prov["pack_artifact_fingerprint"] == man["pack_fingerprint"]
+    assert prov["pack_fingerprint"] == live_fp
+    from experts4bit_qlora.engines.pack_manifest import merge_provenance_into_receipt
+    assert merge_provenance_into_receipt({}, live)["pack_artifact_fingerprint"] == man["pack_fingerprint"]
+
+
 def test_calibrated_entry_resolves_the_assignment_from_env(tmp_path, monkeypatch):
     """A lane hook pins the licensed split with E4B_INT4_ASSIGNMENT (file or artifact dir);
     the streamed enable hands the READ record to every chunk's pack."""
