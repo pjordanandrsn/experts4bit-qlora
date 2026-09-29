@@ -66,4 +66,4 @@ def test_a_bound_bucket_of_several_rows_still_takes_the_batch_form():
 def test_an_unbound_single_sequence_graph_keeps_the_single_slot_form():
     """The b1d path: graph_mode_init(seq=<the sequence>) and no bucket bound -- its _g_seq is right."""
     calls = _decode(_RecordingKV([0], bound=False), [0])
-    assert calls == [("t1", 3, (2, 1, 16))], calls
+    assert calls == [("t1", 3, (1, 2, 16))], calls   # key[0].permute(1, 0, 2): [T, H, D]
