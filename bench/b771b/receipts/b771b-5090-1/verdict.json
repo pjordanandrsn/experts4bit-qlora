@@ -1,0 +1,100 @@
+{
+ "lane": "B771b",
+ "band": 1.03,
+ "reasons": [
+  "tests hold, the mutation is caught, Ad == P == B1 == B2 bitwise, and both pairings exceed 1.03: B1/A1 4.8148, B2/A2 4.7914"
+ ],
+ "verdict": "CONFIRMED",
+ "tests": {
+  "test_every_bucket_step_advances_its_rows_own_kv_length[graph]": "passed",
+  "test_every_bucket_step_advances_its_rows_own_kv_length[padded-eager]": "passed",
+  "test_a_bucket_replay_decodes_exactly_as_the_padded_eager_step": "passed",
+  "test_a_bound_bucket_of_one_row_appends_through_the_bucket_slot": "passed",
+  "test_bitwise_against_eager_path[0-1]": "passed",
+  "test_bitwise_against_eager_path[0-2]": "passed",
+  "test_bitwise_against_eager_path[0-4]": "passed",
+  "test_bitwise_against_eager_path[1-1]": "passed",
+  "test_bitwise_against_eager_path[1-2]": "passed",
+  "test_bitwise_against_eager_path[1-4]": "passed",
+  "test_bitwise_against_eager_path[7-1]": "passed",
+  "test_bitwise_against_eager_path[7-2]": "passed",
+  "test_bitwise_against_eager_path[7-4]": "passed",
+  "test_bt1_bitwise_against_t1_loop[1]": "passed",
+  "test_bt1_bitwise_against_t1_loop[4]": "passed"
+ },
+ "mutation": {
+  "test_every_bucket_step_advances_its_rows_own_kv_length[graph]": "failed",
+  "test_every_bucket_step_advances_its_rows_own_kv_length[padded-eager]": "failed"
+ },
+ "identity": {
+  "Ad_vs_P": null,
+  "B1_vs_P": null,
+  "B2_vs_P": null,
+  "A1_vs_A2": null,
+  "A1_vs_Ad": {
+   "row": 2,
+   "token_index": 66
+  }
+ },
+ "agg_tok_s": {
+  "A1": 55.56608823579093,
+  "B1": 267.5381934760625,
+  "B2": 267.5208944666389,
+  "A2": 55.833014095083186,
+  "P": 67.3735871037252,
+  "Ad": 59.25921580958095
+ },
+ "ratios": {
+  "A2/A1": 1.0048037547318354,
+  "B2/B1": 0.9999353400380004,
+  "B1/A1": 4.814774657895339,
+  "B2/A2": 4.7914464014257385,
+  "P/A1": 1.2124946931270373,
+  "B1/P": 3.970965551591802,
+  "Ad/A1": 1.0664636955928675
+ },
+ "step_ms_by_active": {
+  "A1": {
+   "16": 117.38655809375001,
+   "8": 115.32323299999999,
+   "4": 114.21243890624999,
+   "2": 111.97501562500001,
+   "1": 98.99698418749998
+  },
+  "B1": {
+   "16": 37.215019125000005,
+   "8": 27.02619428125,
+   "4": 21.460763375,
+   "2": 19.65409403125,
+   "1": 10.515235625
+  },
+  "B2": {
+   "16": 37.22664096875001,
+   "8": 27.0263525,
+   "4": 21.455558187499996,
+   "2": 19.6514358125,
+   "1": 10.518811687500005
+  },
+  "A2": {
+   "16": 116.6364706875,
+   "8": 115.15965806250003,
+   "4": 113.96600034375001,
+   "2": 111.68780281249997,
+   "1": 97.77712331249998
+  },
+  "P": {
+   "16": 97.37997262500001,
+   "8": 95.44322256250003,
+   "4": 93.84432153124999,
+   "2": 91.06062559375002,
+   "1": 82.39282396875
+  },
+  "Ad": {
+   "16": 107.76510890625,
+   "8": 106.86181653125,
+   "4": 106.68747274999998,
+   "2": 105.13493878125,
+   "1": 96.67604659375003
+  }
+ }
+}

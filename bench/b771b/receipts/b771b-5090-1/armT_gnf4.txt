@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.13, pytest-9.1.1, pluggy-1.6.0 -- /opt/conda/bin/python
+hypothesis profile 'default'
+rootdir: /root/b771b/gnf4
+configfile: pyproject.toml
+plugins: hypothesis-6.137.1, anyio-4.15.1
+collecting ... collected 19 items
+
+test_fp8_kv_append.py::test_group_math_is_the_reference_fp32_math[128] PASSED [  5%]
+test_fp8_kv_append.py::test_group_math_is_the_reference_fp32_math[64] PASSED [ 10%]
+test_fp8_kv_append.py::test_group_math_is_the_reference_fp32_math[32] PASSED [ 15%]
+test_fp8_kv_append.py::test_bitwise_against_eager_path[0-1] PASSED       [ 21%]
+test_fp8_kv_append.py::test_bitwise_against_eager_path[0-2] PASSED       [ 26%]
+test_fp8_kv_append.py::test_bitwise_against_eager_path[0-4] PASSED       [ 31%]
+test_fp8_kv_append.py::test_bitwise_against_eager_path[1-1] PASSED       [ 36%]
+test_fp8_kv_append.py::test_bitwise_against_eager_path[1-2] PASSED       [ 42%]
+test_fp8_kv_append.py::test_bitwise_against_eager_path[1-4] PASSED       [ 47%]
+test_fp8_kv_append.py::test_bitwise_against_eager_path[7-1] PASSED       [ 52%]
+test_fp8_kv_append.py::test_bitwise_against_eager_path[7-2] PASSED       [ 57%]
+test_fp8_kv_append.py::test_bitwise_against_eager_path[7-4] PASSED       [ 63%]
+test_fp8_kv_append.py::test_untouched_bytes_stay_untouched PASSED        [ 68%]
+test_fp8_kv_append.py::test_alignment_and_shape_refusals PASSED          [ 73%]
+test_fp8_kv_append.py::test_fp8_dtype_is_e4m3fn PASSED                   [ 78%]
+test_fp8_kv_append.py::test_no_triton_is_a_clear_refusal PASSED          [ 84%]
+test_fp8_kv_append.py::test_cpu_tensors_refuse_cleanly PASSED            [ 89%]
+test_fp8_kv_append.py::test_bt1_bitwise_against_t1_loop[1] PASSED        [ 94%]
+test_fp8_kv_append.py::test_bt1_bitwise_against_t1_loop[4] PASSED        [100%]
+
+---------------- generated xml file: /root/b771b/armT_gnf4.xml -----------------
+============================== 19 passed in 5.18s ==============================

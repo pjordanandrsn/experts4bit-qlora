@@ -1,0 +1,5 @@
+e4b 0.37.7 /root/b771b/e4b/experts4bit_qlora/__init__.py
+gnf4 0.33.7
+torch 2.8.0+cu128 triton 3.4.0 transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)

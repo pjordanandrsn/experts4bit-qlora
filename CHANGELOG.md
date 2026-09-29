@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Lane B771b read (#771, #777): the fixed bucketed-graph path decodes exactly as the eager runner and is 4.79–4.81× faster on this host (CONFIRMED); it supersedes P80's row (bench, docs and register only)
+
+- `b771b-5090-1` ran on one RTX 5090 (AMD EPYC 7K62 host) for $0.2475, teardown proven.
+- **Tests on sm_120.** e4b's graph tests passed, 10 of them, including #777's invariant test, which checks after every bucketed step that each row's device KV length equals the host count. gnf4 0.33.7's fused-append byte gates passed, 19. The registered mutation, the old single-row routing, failed the invariant test in both modes.
+- **Decode.** Over P80's trace, the eager runner with the device grouping, the bucket step and both graph arms decode identical tokens in all 16 rows. B1/A1 = 4.815 and B2/A2 = 4.791; the self-pairs are 1.0048 and 0.9999. **CONFIRMED**, and #771 is answered: two causes, both fixed.
+- The ratio is host-bound. The graph step is within 4–10% of P80's, while eager is 2.15–2.34× slower on this Zen 2 host.
+- New row `e4b.serve.b771b.qwen3.dynb.graph-buckets.fixed-path.5090.2026-09-29` supersedes P80's. STATUS's P80 entry is rewritten around it. The read is in `bench/b771b/RESULTS-b771b.md`.
+
 ### Lane B771b registered (#771, #777): does the fixed bucketed-graph path decode exactly as the eager runner, and what is P80's ratio on it? (bench only; nothing in the wheel changes)
 
 - `bench/b771b/PREREG-b771b.md`. One RTX 5090, grouped-nf4-gemm 0.33.7, e4b at a `main` containing #777.

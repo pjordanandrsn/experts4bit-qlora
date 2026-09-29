@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.13, pytest-9.1.1, pluggy-1.6.0 -- /opt/conda/bin/python
+hypothesis profile 'default'
+rootdir: /root/b771b/e4b
+configfile: pyproject.toml
+plugins: hypothesis-6.137.1, anyio-4.15.1
+collecting ... collected 10 items
+
+tests/test_decode_graph_buckets.py::test_bucket_for_picks_the_smallest_bucket_that_holds_the_rows PASSED [ 10%]
+tests/test_decode_graph_buckets.py::test_chunk_rows_splits_an_oversized_active_set PASSED [ 20%]
+tests/test_decode_graph_buckets.py::test_bind_refuses_a_scratch_slot PASSED [ 30%]
+tests/test_decode_graph_buckets.py::test_graphs_refuse_too_few_scratch_slots PASSED [ 40%]
+tests/test_decode_graph_buckets.py::test_a_bucket_replay_decodes_exactly_as_the_padded_eager_step PASSED [ 50%]
+tests/test_decode_graph_buckets.py::test_every_bucket_step_advances_its_rows_own_kv_length[graph] PASSED [ 60%]
+tests/test_decode_graph_buckets.py::test_every_bucket_step_advances_its_rows_own_kv_length[padded-eager] PASSED [ 70%]
+tests/test_bucket1_append_routing.py::test_a_bound_bucket_of_one_row_appends_through_the_bucket_slot PASSED [ 80%]
+tests/test_bucket1_append_routing.py::test_a_bound_bucket_of_several_rows_still_takes_the_batch_form PASSED [ 90%]
+tests/test_bucket1_append_routing.py::test_an_unbound_single_sequence_graph_keeps_the_single_slot_form PASSED [100%]
+
+----------------- generated xml file: /root/b771b/armT_e4b.xml -----------------
+============================= 10 passed in 12.55s ==============================

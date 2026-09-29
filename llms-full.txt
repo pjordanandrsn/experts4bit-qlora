@@ -2823,33 +2823,24 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     registered rule it is now the default for the `softmax_topk` kind
     (Unreleased). `E4B_ROUTER_EPI_CAST=0` restores fp32 for one release.
     `topk_softmax` keeps fp32 until it is read.
-- **Bucketed CUDA-graph decode is 2.3× the eager `PagedModelRunner` when the
-  active set changes** (lane P80, `bench/p80/`, 2026-09-28, one RTX 5090, NF4
-  Qwen3-30B-A3B).
-  - **What was compared.** `enable_decode_graphs` pads the active set to a
-    bucket and replays that bucket's graph (#757). The eager control is the
-    production runner. Over a forced trace where the active set runs
-    16 → 8 → 4 → 2 → 1, aggregate decode was 284.5 against 121.6 / 122.5
-    tok/s: B1/A1 = 2.340, B2/A2 = 2.323, with the self-pairs inside 1.03
-    (`e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28`).
-  - **Correctness.** The graph token streams equal the same bucket step run
-    eagerly, bitwise. Against the eager runner they first differ at row 0,
-    token 130, which the lane registered as reported, not decisive. *(Corrected
-    2026-09-29: this first blamed "other row counts"; the trace pads no rows.
-    The eager and bucket steps differ in grouping and step path; P81 found
-    them differing even with the grouping held equal.)* *(Corrected again
-    2026-09-29, lane B771: it is a bug. At bucket 1 the bucket step appended
-    the one active row's K/V to a scratch slot, so row 0 decoded its
-    one-row phase, tokens 129 on, without its own new tokens, in the graph
-    arms and P alike. Fixed; this ratio is to be superseded by a
-    re-measurement of the fixed path.)*
-  - **Where it comes from.** Eager decode is host-bound: 54.5 ms per step at
-    16 rows and still 51.5 ms at 2. The graph step falls with the rows, to
-    9.95 ms at one (4.25×).
-  - **Still open.** It stays opt-in. The HTTP shim and `infer` decode with
-    transformers' `generate`, not with `PagedModelRunner`, so neither is
-    affected either way. It is not measured on other families or under
-    arrivals. P81 (next item) measured it on the int4 serving recipe.
+- **Bucketed CUDA-graph decode decodes exactly as the eager runner and is
+  4.8× faster on a host-bound host** (lane B771b, `bench/b771b/`,
+  2026-09-29, one RTX 5090, NF4 Qwen3-30B-A3B). It supersedes P80's 2.3×.
+  - **What was fixed first.** P80 measured a path with a bug. With one active
+    row, bucket 1 appended its K/V to a scratch slot, so the row decoded that
+    phase without its own new tokens (#777). grouped-nf4-gemm 0.33.7 also
+    made the fused fp8 append write the eager quantize's bytes.
+  - **Now.** Over P80's trace (16 → 8 → 4 → 2 → 1 active rows), the graphs,
+    the bucket step and the eager runner with the same grouping decode
+    identical tokens in every row. Aggregate decode is 267.5 against 55.6 /
+    55.8 tok/s: B1/A1 = 4.815 and B2/A2 = 4.791
+    (`e4b.serve.b771b.qwen3.dynb.graph-buckets.fixed-path.5090.2026-09-29`).
+  - **Where it comes from.** The graph step is within 4–10% of P80's at every
+    row count. The eager step is host-bound and 2.15–2.34× slower on this
+    Zen 2 host than on P80's Zen 5 one, so the ratio does not travel.
+  - **Still open.** It stays opt-in. The HTTP shim and `infer` use
+    transformers' `generate`, not `PagedModelRunner`. It is not measured on
+    other families or under arrivals. P81 (next item) awaits a re-measure.
 - **On the int4 serving recipe, the eager runner is host-bound and the
   graphs remove it** (lane P81, `bench/p81/`, 2026-09-29, one RTX 5090 on an
   AMD EPYC 7K62 host, Qwen3-30B-A3B).
@@ -2882,8 +2873,8 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     active row, the bucket step appended that row's K/V to a scratch slot,
     so it decoded the one-row phase without its own new tokens, in P80's
     and P81's graph arms alike. Fixed in the paged-attention shim. P80's
-    and P81's ratios were measured on that path and are to be superseded by
-    a re-measurement of the fixed one.
+    ratio is superseded by B771b's re-measure of the fixed path; P81's
+    awaits one.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
@@ -3504,8 +3495,8 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24 [measured]: Lane P67: Gemma-4-26B-A4B-it's training-parity FLOOR at tp4's field fixture, measured as the reference path against ITSELF -- the same ExpertsLoRA per-expert loop, same session, same init_sha and tokens, with the hit experts visited in a fixed permuted order (E4B_REFERENCE_EXPERT_ORDER=perm:1..4, exact in real arithmetic) and one plain repeat -- is F_hi(final) = 0.121 nats and F_hi(med) = 0.1275 over five admissible draws (final 0.011-0.121, med 0.045-0.128; the plain repeat 0.022 / 0.045, not bit-identical, diverging at step 2), giving the registered bands max(0.05, 3 F_hi) = 0.363 / 0.383; at step 0 the reorderings move the train loss by 0.052-0.217, more than the fused kernels' 0.034.
 - e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24 [measured]: Lane P67: e4b's fused expert path in the attention-4-bit configuration (fused_attn4: enable_fast_train + TRAIN_ATTN_4BIT, 30 modules patched, 115 NF4 attention projections) PASSES Gemma-4-26B-A4B-it's registered floor band on both quantities -- D_final 0.01331 and D_med 0.03565 nats against bands 0.363 / 0.383 (max(0.05, 3 F_hi)) -- carried by the tolerance (inside tp1's constant 0.05 on its own in this session) and not detectable against the reference's own reordering floor (D / F_hi 0.11, 0.28); held-out delta 0.011; step-0 delta 0.034; the two earlier sessions' fused pairs (0.083 / 0.124, 0.102 / 0.106) PASS the same band, so the reading is not MIXED. The registered decision: fast_train and reference_train in the attention-4-bit configuration are supported on gemma4_text.
 - e4b.train.p67.gemma4.batched-attn4.floor-band.5090.2026-09-24 [measured]: Lane P67: e4b's kernel-free batched path in the attention-4-bit configuration (batched_attn4: enable_batched_train at pad_waste_limit 64 -- 7,680 of 7,680 calls batched, 0 fallbacks; 30 modules patched) PASSES Gemma-4-26B-A4B-it's registered floor band -- D_final 0.03694 and D_med 0.04803 nats against 0.363 / 0.383 -- carried by the tolerance and not detectable (D / F_hi 0.30, 0.38); held-out delta 0.038; step-0 delta 0.065; P56's batched pair (0.054 / 0.085) PASSES the same band.
-- e4b.serve.p80.qwen3.dynb.graph-buckets.5090.2026-09-28 [measured]: Lane P80: on NF4 Qwen3-30B-A3B over a forced changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 32 decode steps each, 992 decode tokens), PagedModelRunner.enable_decode_graphs (CUDA-graph buckets 1/2/4/8/16, active set padded with scratch KV slots) decodes 284.5 tok/s against the eager PagedModelRunner's 121.6 / 122.5 -- B1/A1 = 2.340 and B2/A2 = 2.323, both above the registered 1.03 with the self-pairs inside it -- and its token streams equal the same padded step run eagerly, bitwise: CONFIRMED. Per-step: 54.5 -> 33.8 ms at 16 rows, 42.3 -> 9.95 ms at one.
 - e4b.serve.p81.qwen3.licensed-int4.dynb.graph-buckets.5090.2026-09-29 [measured]: Lane P81: on Qwen3-30B-A3B served with P55x's int4 recipe (GPTQ-calibrated int4 experts, pack sha256:0c9955a9..., and calibrated int4 attention, pack sha256:d7cfa1f4..., both installed by fingerprint in every arm; T=1 folds and the fused router epilogue), over P80's forced changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 32 decode steps each, 992 decode tokens), PagedModelRunner.enable_decode_graphs decodes 683.6 / 679.3 tok/s against the eager PagedModelRunner's 47.8 / 48.7 -- B1/A1 = 14.29 and B2/A2 = 13.95, both above the registered 1.03 with the self-pairs inside it -- and its token streams equal the same bucket step run eagerly, bitwise: CONFIRMED. The ratio is this host's eager host cost: A takes 125-139 ms per step at every row count (host-bound, on an AMD EPYC 7K62), the graphs 16.9 ms at 16 rows and 5.4 ms at one.
+- e4b.serve.b771b.qwen3.dynb.graph-buckets.fixed-path.5090.2026-09-29 [measured]: Lane B771b: on NF4 Qwen3-30B-A3B over P80's forced changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 32 decode steps each, 992 decode tokens), PagedModelRunner.enable_decode_graphs with the bucket-1 fix (#777) and grouped-nf4-gemm 0.33.7's fused fp8 append decodes 267.5 tok/s against the eager PagedModelRunner's 55.6 / 55.8 -- B1/A1 = 4.815 and B2/A2 = 4.791, both above the registered 1.03 with the self-pairs inside it -- and decodes bit-identically to the eager runner with the same (device) grouping in all 16 rows (Ad == P == B1 == B2): CONFIRMED. #777's invariant test and the replay and routing tests pass on sm_120, and fail under the registered mutation.
 
 Open items (no evidence either way):
 
