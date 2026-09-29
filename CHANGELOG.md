@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Lane B771b registered (#771, #777): does the fixed bucketed-graph path decode exactly as the eager runner, and what is P80's ratio on it? (bench only; nothing in the wheel changes)
+
+- `bench/b771b/PREREG-b771b.md`. One RTX 5090, grouped-nf4-gemm 0.33.7, e4b at a `main` containing #777.
+- **Arm T.** The GPU tests on sm_89+: #777's invariant test (never run before), the replay and routing tests, and gnf4's fused-append byte gates. **Arm M.** The registered mutation restores the old single-row routing; the invariant test must then fail.
+- **Decode.** P80's NF4 Qwen3-30B-A3B trace and five arms, plus Ad, the eager runner with the device grouping.
+- **Confirmed only if all hold:** every registered test passes and none is skipped; the mutation is caught; Ad ≡ P ≡ B1 ≡ B2 bitwise in every row; and B/A > 1.03 in both pairings. A confirmed read supersedes P80's register row.
+- `tests/test_b771b_staged_pin.py` pins the staged files, the 11-case rule, the arm order, and the mutation's target in the shipped shim.
+
 ### Lane B771 read (#771): the fused fp8 append is fixed at the byte level, but it was not the whole cause (REFUTED); the rest is a bucket-1 append bug (bench only)
 
 - `b771-5090-1` ran on one RTX 5090 for $0.1515, teardown proven.
