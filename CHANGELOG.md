@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Lane P83 registered (#674): on one box, do P70's build (e4b 0.37.4, grouped-nf4-gemm 0.33.0) and P82's build (0.37.8, 0.33.7) read the same K8 with the fp32 router? (bench only; nothing in the wheel changes)
+
+- `bench/p83/PREREG-p83.md`. P82 found that the licensed recipe's K8 does not reproduce across boxes. This lane separates box from software by running both builds on ONE RTX 5090, each exactly as its lane ran it: pins, harness copy, hook and env.
+- **Stack O.** P70's build, then its within-box repeat: P55x's "lic" arm, with the expert pack loaded by fingerprint and the attention calibrated live. **Stack N.** P82's build, then its repeat, K32, with both packs loaded by fingerprint. O is installed first, and N over it with `--force-reinstall --no-deps`.
+- **The rule.** VOID if either stack does not repeat its own K8 bit for bit, or if a reading is off-window, not fp32, or from the wrong stack. SAME if O's and N's builds read bit-identical K8, meaning the spread between boxes is the box. DIFFERENT otherwise, meaning the software moved it.
+- **Reported:** whether O reads the licensed 6.36709 and N reads P82's 6.36396, and the pack fingerprints.
+- **A2000 rehearsal.** PROVE rc 0: both installs, both tripwires, and both router stamps, including 0.37.4's router module. A mutation with the router export deleted was refused. A transient `git` failure (exit 128) in the first install led to a single pip retry.
+- `tests/test_p83_staged_pin.py` pins:
+  - the staged files, with O's harness equal to `bench/p70`'s pins and N's to `bench/p82`'s;
+  - O's commits, the 13-case rule, the fp32 export, and the step order;
+  - each step's harness and env;
+  - the driver's dry run, which catches an apostrophe in `${VAR:?...}` that had swallowed the rest of the script.
+
 ### Lane P82 read (#511, #674, #777): on the licensed int4 stack the fixed graph path decodes exactly as the eager runner and is 12.0–12.4× faster on this host (CONFIRMED); for #674 the attention pack reproduces across boxes but K8 does not (bench, docs and register only)
 
 - `p82-5090-3` ran on one RTX 5090 (AMD EPYC 7R13) for $0.851, teardown proven. The lane cost $2.0438 across five rentals: two proof attempts, two host failures and the reading.

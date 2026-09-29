@@ -1,0 +1,10 @@
+# Names as the BOX sees them after staging ($W; stack O's harness under o/, stack N's under n/). The box runs
+# `sha256sum -c` on this file and the controller resolves each name to its source (p83_drive.sh's case) and compares.
+3dd5f241af7157eb4e9e1d5ddec111e754633bf394d244482516539376e4b73b  p83_run.sh
+df279ad5fe89ce7d0901466f3886aa689016d02aeeb65580ada8de26ba990854  p83_reduce.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  o/step_decomp.py
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  o/hook/usercustomize.py
+5c0ab9d846f48c241efc46efa70ee0d03cc588c283182b1d6c205a96fa6560fb  n/step_decomp.py
+369a85a6c31d62d5c586280e9ff6d51e46d88431e23a0f07782667611ae008b0  n/hook/usercustomize.py
