@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Lane P82 registered (#511, #674, #777): P81 re-measured on the fixed graph path with the licensed build's fp32 router, and whether the router cast accounts for #674's K8 gap (bench only; nothing in the wheel changes)
+
+- `bench/p82/PREREG-p82.md`. One RTX 5090. P81's build and five arms (the licensed int4 stack, both packs loaded by fingerprint, the device grouping), on grouped-nf4-gemm 0.33.7 and an e4b containing #777.
+- **The router.** Every process runs `E4B_ROUTER_EPI_CAST=0`, the fp32 routing weights of the builds that read the licensed K8 6.36709. The tripwire refuses a box where the module reads otherwise. The runner stamps what `router_epilogue` read under each process's env into a sidecar beside its receipt.
+- **Decisive, new:** the eager runner must decode exactly as its bucket step (A1 ≡ P), alongside B1 ≡ B2 ≡ P. P81 had reported A ≠ P as not decisive, and that divergence hid #413's append and #777's bucket-1 bug. An arm not on the fp32 router voids the read.
+- **Confirmed only if all hold:** the four streams are identical in every row, every bucket captures, and B/A > 1.03 in both pairings. A confirmed read supersedes P81's register row.
+- **Reported for #674.** After the verdict, two K8 arms read wikitext through both packs loaded by fingerprint: K32 with the fp32 router, K16 with the shipped cast. The registered table reads whether the cast is the whole 6.36709 → 6.33015 gap. The attention pack's fingerprint is compared with P81's `d7cfa1f4…`.
+- `tests/test_p82_staged_pin.py` pins the staged files (P81's harness and hook, referenced unchanged), the 21-case rule and K8 table, the router export and the soundness of its stamp, the tripwire markers for #777 and #413, and the reduction's place before the K8 arms.
+
 ## 0.37.8 — 2026-09-29 — a correctness fix to 0.37.7's opt-in bucketed decode graphs: a bucket of one row appends to its own KV slot (#777), and with grouped-nf4-gemm ≥ 0.33.7 the graph path decodes bit-identically to the eager runner (lane B771b); the batched training path is bit-reproducible on CUDA (#765, #776); a calibrate-and-dump build names the dumped expert artifact on its provenance (#772, #773); corrections to the B511, P80 and P81 reads and to the serving-path description (#774)
 
 **0.37.8.** If you call `PagedModelRunner.enable_decode_graphs` (new in 0.37.7), upgrade.

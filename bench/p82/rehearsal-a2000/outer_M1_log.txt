@@ -1,0 +1,15 @@
+p82_run.sh: line 43: E4B_ROUTER_EPI_CAST: unbound variable
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+p82_reduce self-test OK (21 cases)
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d, 8.6
+power.limit,clocks.max.sm 70.00 W, 2100 MHz
+Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          98          16           0          10          23
+overlay         598G  195G  398G  33% /
+[2026-09-29T12:13:51Z] p82: install e4b @619c7193c245f01fe15e41eb7ce8b0eb80fd4012 (image python; P37 pins) + gnf4 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+Traceback (most recent call last):
+  File "<stdin>", line 16, in <module>
+AssertionError: the router is not at the licensed fp32 weights (env None, CAST_WEIGHTS None)
+[2026-09-29T12:14:17Z] p82: TRIPWIRE FAIL
+[2026-09-29T12:14:17Z] p82: TP_DONE rc=9

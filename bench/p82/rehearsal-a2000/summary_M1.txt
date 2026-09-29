@@ -1,0 +1,2 @@
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+p82_reduce self-test OK (21 cases)

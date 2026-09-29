@@ -1,0 +1,23 @@
+KNOBS router_epi_cast=0 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=A2000 min_disk_gb=1 seg=32 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048 skip_install=0
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+p82_reduce self-test OK (21 cases)
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d, 8.6
+power.limit,clocks.max.sm 70.00 W, 2100 MHz
+Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          98          18           0           9          24
+overlay         598G  195G  398G  33% /
+[2026-09-29T12:12:55Z] p82: install e4b @619c7193c245f01fe15e41eb7ce8b0eb80fd4012 (image python; P37 pins) + gnf4 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+tripwire OK: e4b 0.37.8 gnf4 0.33.7 torch 2.8.0+cu128 triton 3.4.0
+e4b 0.37.8 @619c7193c245f01fe15e41eb7ce8b0eb80fd4012 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.7 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (8, 6)
+router_epi_cast_weights False
+PROVE -- the proving run: no model, no arm
+[2026-09-29T12:13:47Z] p82: PROVE: HF CDN egress probe (50 MB range, 20 s cap; recorded, not a refusal)
+PROVE hf_cdn_mbps=54.6 bytes=52428800
+[2026-09-29T12:13:48Z] p82: TP_DONE rc=0

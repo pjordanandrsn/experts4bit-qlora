@@ -1,0 +1,7 @@
+== card before:
+0 %, 1374 MiB
+ARM R rc=0
+ARM M1 rc=9
+ARM M2 rc=9
+ARM M3 rc=9
+P82R_DONE
