@@ -1,0 +1,36 @@
+{
+ "lane": "B771",
+ "reasons": [
+  "with the fix the bucket step still differs from the eager step at {'row': 0, 'token_index': 129}: the fused append is not the whole cause"
+ ],
+ "verdict": "REFUTED",
+ "bytes": {
+  "old": {
+   "gnf4": "0.33.5",
+   "values": 536870912,
+   "payload_bytes_differing": 21,
+   "scales_differing": 0
+  },
+  "new": {
+   "gnf4": "0.33.6",
+   "values": 536870912,
+   "payload_bytes_differing": 0,
+   "scales_differing": 0
+  }
+ },
+ "identity": {
+  "A_old_vs_A_new": null,
+  "P_old_vs_A_old": {
+   "row": 0,
+   "token_index": 130
+  },
+  "P_new_vs_A_new": {
+   "row": 0,
+   "token_index": 129
+  },
+  "P_old_vs_P_new": {
+   "row": 0,
+   "token_index": 129
+  }
+ }
+}

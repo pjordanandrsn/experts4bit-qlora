@@ -1,0 +1,49 @@
+{
+ "lane": "B771",
+ "stage": "bytes",
+ "gnf4": "0.33.5",
+ "gnf4_has_e4m3_group": false,
+ "device": "NVIDIA GeForce RTX 5090",
+ "cc": [
+  12,
+  0
+ ],
+ "rows": [
+  {
+   "groups": 1,
+   "mul": 1.0,
+   "values": 134217728,
+   "scales": 1048576,
+   "payload_bytes_differing": 7,
+   "scales_differing": 0
+  },
+  {
+   "groups": 4,
+   "mul": 1.0,
+   "values": 134217728,
+   "scales": 4194304,
+   "payload_bytes_differing": 4,
+   "scales_differing": 0
+  },
+  {
+   "groups": 1,
+   "mul": 30.0,
+   "values": 134217728,
+   "scales": 1048576,
+   "payload_bytes_differing": 7,
+   "scales_differing": 0
+  },
+  {
+   "groups": 4,
+   "mul": 30.0,
+   "values": 134217728,
+   "scales": 4194304,
+   "payload_bytes_differing": 3,
+   "scales_differing": 0
+  }
+ ],
+ "values": 536870912,
+ "payload_bytes_differing": 21,
+ "scales_differing": 0,
+ "seconds": 1.4448387622833252
+}
