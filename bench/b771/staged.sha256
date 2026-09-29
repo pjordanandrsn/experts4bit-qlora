@@ -1,0 +1,8 @@
+# Names as the BOX sees them after staging (flat in $W). The box runs `sha256sum -c` on this file and the
+# controller resolves each name to its source (b771_drive.sh's case) and compares. step_decomp.py is bench/p81's.
+085e934e4bf37d63e862f1c628f93bbc0619b21a0c768d070c135148ce342079  b771_run.sh
+f18aa6db1efb7404aca72509427830866771124802b749cb5f5d008d4c499dfb  b771_reduce.py
+c93041bbe81b4ff735758b0f95e7d9a72b69e7cee1e012ee81568f6d5249c531  b771_bytes.py
+5c0ab9d846f48c241efc46efa70ee0d03cc588c283182b1d6c205a96fa6560fb  step_decomp.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
