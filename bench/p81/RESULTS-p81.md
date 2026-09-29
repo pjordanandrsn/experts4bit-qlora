@@ -61,9 +61,12 @@ Mean ms per decode step, timed pass:
   too: its first calibration chunk took **1,121 s here against P70's 360 s** on the same recipe. So ×14 is this host's
   number. It is not comparable to P80's ×2.3 (another stack, another host), and it is not a portable speedup.
 - **What it does say.** On the licensed stack, the eager `PagedModelRunner` spends 112–134 ms per decode step more than
-  the graphs on this host (A1 minus B1, by row count), and the graphs remove nearly all of the step. Serving the licensed stack eagerly (the HTTP shim
-  and `infer` do not enable graphs) leaves most of the throughput on the table. #511's follow-up, graphs by default, is
-  now the larger lever.
+  the graphs on this host (A1 minus B1, by row count), and the graphs remove nearly all of the step. A caller that
+  drives `PagedModelRunner` on this stack without `enable_decode_graphs` leaves most of that throughput unused.
+  - *(Corrected 2026-09-29.)* This line first said the HTTP shim and `infer` serve this stack eagerly. They do not
+    use `PagedModelRunner` at all: both decode with transformers' `generate`. In the shipped package only the bench
+    harnesses drive the paged runner. So P81 says nothing about those entry points' throughput, and "graphs by
+    default" (#770) is a question about `PagedModelRunner`'s own default, not about the shim.
 - **P splits the ratio, differently from P80.** Here A and P both run the device grouping, and the trace pads no rows
   (`pad_rows` is 0 in every bucket). So P/A1 = **1.21** is the bucket step's own path, and B1/P = **11.84** is the
   graph.
