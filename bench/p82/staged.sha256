@@ -1,0 +1,8 @@
+# Names as the BOX sees them after staging ($W, the hook under hook/). The box runs `sha256sum -c` on this file and the
+# controller resolves each name to its source (p82_drive.sh's case) and compares. step_decomp.py and the hook are bench/p81's.
+2b1137e6dbe49a6b4cd2fb2125fd6134ac1b805d10bd7b3bdb5650e34b5bd780  p82_run.sh
+d05738399869cf664c90fa06a270477a16d706c7f7134c902554ef0cc0835694  p82_reduce.py
+5c0ab9d846f48c241efc46efa70ee0d03cc588c283182b1d6c205a96fa6560fb  step_decomp.py
+369a85a6c31d62d5c586280e9ff6d51e46d88431e23a0f07782667611ae008b0  hook/usercustomize.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
