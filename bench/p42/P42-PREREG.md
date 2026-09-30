@@ -4,10 +4,10 @@ Registered 2026-09-11, before any rental. One box, one RTX 5090
 (`vast:verified-secure`, the class P37 and P39 measured on), launched from the mini
 through `adertha-agents/tools/pod-launch.sh`.
 
-**Owner authorisation.** Jordan, working session 2026-09-10, approving five decisions,
+**Owner authorisation.** Working session 2026-09-10, approving five decisions,
 the fifth of which was: *the B=16 levers before an MXFP4-specific plan.* That is the
 top of the approval band and it does not waive this document or the STOP rules below.
-Written down by the agent, not by Jordan.
+Written down by the agent, not by the owner.
 
 ## Why this lane exists, and what it is not
 

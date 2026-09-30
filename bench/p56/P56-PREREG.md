@@ -276,7 +276,7 @@ The go/no-go on the registered draw is a reading of the printed number. Both bra
 of that reading were driven on CPU against synthetic 188 / 64 / 30 GiB boxes before
 this merged.
 Authorization: the owner's standing directive for the training/throughput campaign
-(adertha-agents#110), under "use pods as needed" within the caps.
+(adertha-agents#110), which covers rented pods within the caps.
 
 Teardown proven by the launcher; receipts under
 `receipts/experts4bit-qlora/2026-09-21/<run-id>/`, read by `bench/p56/p56_reduce.py`

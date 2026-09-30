@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Owner quotes and name credits removed from the documents (docs only)
+
+- Verbatim chat quotes and name credits are removed from pre-registrations, RESULTS pages, planning documents, the CI workflow comment and one CHANGELOG line. Directives are paraphrased or reduced to their date and record; no criterion, band, measurement or date moved.
+- Four OpenTimestamps-anchored documents were edited: `PROVENANCE.md`, `docs/NULL_LADDER_1024_AMENDMENT.md`, `docs/POST_AUDIT_WORK_QUEUE.md` and `docs/SPECULATIVE_LANES_PLAN.md`. Each now ends with a note that its `.ots` anchors the version before the edit, which git history keeps.
+
 ### Lane P83 read (#674): on one box the software moved the recipe's K8 (DIFFERENT, −0.00049 nats), and each value reproduces bit for bit across machines; this corrects P82's read (bench, docs and register only)
 
 - `p83-5090-1` ran on one RTX 5090 (AMD EPYC 9755) for $0.7671, teardown proven. The lane cost $0.8179 with its proof.
@@ -1469,7 +1474,7 @@ Code and register contract; no gate, threshold, floor, `min_rows`, damping, or e
 
 ### Serving census rows name the comparator (#418)
 
-Register wording only; no value, status, gate, threshold or floor moved. Jordan's ruling: the Qwen3 licensed 238.1 / 1327.5 rows stay.
+Register wording only; no value, status, gate, threshold or floor moved. The owner's ruling: the Qwen3 licensed 238.1 / 1327.5 rows stay.
 
 - Every `e4b.serve.census.bo7.*` speed row's `unit` and `claim` name the comparator as **vs e4b's own NF4 control on the same box**, never a bare ×N speedup. Granite, OLMoE, gpt-oss, Gemma-4 and Mixtral notes carry **no field comparator measured**. Qwen3 names the P37 vLLM 0.28.0 GPTQ-Int4 / MarlinExperts comparator (footprint not recorded) and scopes the licensed position to the bo6c pack artifact (11512 gptq / 776 rtn); #405 is a notes reproduction item, not a licence withdrawal. The P37 root row is bounded to graph decode at B=1 and B=16 on one box and one prompt set.
 - No structured `comparator` field (the register validator does not check one). `docs/STATUS.md` and `docs/SERVING-THROUGHPUT.md` hand-edited; README results table updated to the same wording.

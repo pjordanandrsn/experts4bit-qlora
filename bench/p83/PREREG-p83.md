@@ -9,7 +9,7 @@ e4b ≤ 0.37.4 on two machines.
 So a difference in K8 between two runs could come from the box, from the software, or from both. P82 could not tell
 which. This lane runs both software stacks on **one** box. Rule: the owner's standing no-ask tier for a single run
 under $15 (2026-09-26), with the usual mechanics: this page merged before the launch, a proving rental before a guard
-over 1 h, receipts and ledger rows, proven teardown. The owner's go ("go ahead with P83") is relayed on #674 before the
+over 1 h, receipts and ledger rows, proven teardown. The owner's go-ahead is relayed on #674 before the
 launch.
 
 ## Question

@@ -2,7 +2,7 @@
 
 Written before any P55x data exists. Record: [#405](https://github.com/pjordanandrsn/experts4bit-qlora/issues/405)
 (the open item this lane closes or narrows) and [#530](https://github.com/pjordanandrsn/experts4bit-qlora/issues/530)
-(why the recipe cannot carry a licence). Owner directive (Jordan, 2026-09-21, chat): build the pack with the
+(why the recipe cannot carry a licence). Owner directive (2026-09-21): build the pack with the
 streamed recipe dumping the artifact, K8 it, publish it if it passes, put `pack_fingerprint` on the licence rows
 and supersede the fingerprint-less ones, and test same-box determinism — at or under $8.
 

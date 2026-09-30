@@ -1,7 +1,7 @@
 # P64 — what the int4 serve lane's int8 activation step costs at decode: a decode-scored KL A/B over the same int4 bytes (registered 2026-09-23, before the run)
 
 Record: [#709](https://github.com/pjordanandrsn/experts4bit-qlora/issues/709). Owner authorization: the work and a
-later rental (Jordan, 2026-09-23, chat), within the standing caps. The rental is not part of this change.
+later rental (2026-09-23), within the standing caps. The rental is not part of this change.
 
 ## Question
 

@@ -1,6 +1,6 @@
 # P54 — qkv fusion on the int4 attention store: one launch per layer where the int4 lanes paid three
 
-Written before any P54 data exists. Owner directive (Jordan, 2026-09-21): *"main thing needed is throughput work."* Record: [#652](https://github.com/pjordanandrsn/experts4bit-qlora/issues/652). Code under test: [#651](https://github.com/pjordanandrsn/experts4bit-qlora/pull/651) (`Int4Linear.fuse`; `fuse_qkv` takes the int4 store).
+Written before any P54 data exists. Owner directive (2026-09-21): throughput work first. Record: [#652](https://github.com/pjordanandrsn/experts4bit-qlora/issues/652). Code under test: [#651](https://github.com/pjordanandrsn/experts4bit-qlora/pull/651) (`Int4Linear.fuse`; `fuse_qkv` takes the int4 store).
 
 ## The question
 

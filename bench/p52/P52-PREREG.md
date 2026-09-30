@@ -1,6 +1,6 @@
 # P52 — THE GEMMA-4 GATE, RUN PROPERLY: the bar fixed first, measured on held-out prompts (pre-registered 2026-09-19 ~14:50Z, before any box is rented)
 
-Work item: adertha-agents#110. Owner instruction, 2026-09-19: *"run the gate properly."*
+Work item: adertha-agents#110. Owner instruction, 2026-09-19: re-run the gate without the two contaminations below.
 
 ## Why this lane exists
 

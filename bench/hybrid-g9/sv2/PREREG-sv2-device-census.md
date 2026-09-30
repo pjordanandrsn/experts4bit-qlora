@@ -1,7 +1,7 @@
 # PREREG — SV2: the graphed-step device census (the 250 frame)
 
 Registered 2026-08-26, before measurement. Target under test
-(Jordan; set after 275's refutation): **~250 tok/s single-stream** =
+(the owner's; set after 275's refutation): **~250 tok/s single-stream** =
 4.00 ms/step — a ~1.6× DEVICE-COMPUTE cut from the certified knob
 point (6.48 ms). No orchestration lever can reach it (SV1 addendum:
 the host is already evicted); the question is whether kernel-level

@@ -1,8 +1,8 @@
 # P70 — what rounding the fused router's decode weights to the model's dtype costs: a decode-scored KL A/B (registered 2026-09-25, before the run)
 
 Record: [#726](https://github.com/pjordanandrsn/experts4bit-qlora/issues/726), filed under lane P63's decision rule
-("P7 held"). Owner authorization for the rental: "go ahead with the P67 rental (all rentals approved)" (Jordan,
-2026-09-24, chat), relayed on #726 before any launch. The rental is not part of this change.
+("P7 held"). Owner authorization for the rental: the approval of every pending rental
+(2026-09-24), relayed on #726 before any launch. The rental is not part of this change.
 
 ## Question
 
