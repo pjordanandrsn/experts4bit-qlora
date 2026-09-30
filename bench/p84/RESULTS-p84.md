@@ -75,6 +75,8 @@ Reading the cut release by release first narrows that to one release. The next s
 
 ## Which change in the kernel cut: one is on K8's path (read from the code, not measured)
 
+*(Measured 2026-09-30 by lane P85, CONFIRMED: P70's stack with `E4B_FUSED_KV_APPEND=0` reads N's float bit for bit, and grouped-nf4-gemm 0.33.6 reads O's. #413 is the whole KERNEL step. See `bench/p85/RESULTS-p85.md`.)*
+
 What each release changed in shipped modules, 0.33.0 → 0.33.7, and whether K8 runs it:
 
 | release | shipped-module change | on K8's path? |

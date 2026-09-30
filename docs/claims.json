@@ -7362,7 +7362,41 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-30/p84-5090-3/ (receipt.json, teardown-proof.json, the fetched run with logs/ and both harness copies); the VOID reading p84-5090-2, the proofs p84-prove-1..3 and the NOT_RUN p84-5090-1 beside it"
       ],
-      "notes": "Pre-registered in #792 with amendment 1 in #795 (non-AuthenticAMD hosts refused: reading 1, p84-5090-2, was VOID on an Intel i9-14900K whose attention calibration differs). Stated expectation PACKAGE alone: wrong. Every expert pack 0c9955a9 (licensed); C's attention d7cfa1f4 (a fourth AMD host). Which change inside grouped-nf4-gemm 0.33.0 -> 0.33.7 is NOT measured. Read from the code, the one arithmetic change in that cut on K8's path is grouped-nf4-gemm#413 (0.33.7): the fused fp8 KV append's quotient IEEE-rounded (div_rn), which B771 measured changing 21 of 536,870,912 written bytes; K8's eager loop calls graph_mode_init, so every scored token's K/V goes through that append (0.33.1-0.33.3 change no code; 0.33.4 cold_deadline, 0.33.5 int4_smallm annotations and 0.33.6 MXFP4 are off this path). This corrects PREREG-p82's and PREREG-p84's statement that the eager K8 does not run the graph-mode append. Proposed test (P85, not started): P70's build with E4B_FUSED_KV_APPEND=0 should read N's float bit for bit. Cost $1.8328 for the lane ($1.0928 this reading)."
+      "notes": "Pre-registered in #792 with amendment 1 in #795 (non-AuthenticAMD hosts refused: reading 1, p84-5090-2, was VOID on an Intel i9-14900K whose attention calibration differs). Stated expectation PACKAGE alone: wrong. Every expert pack 0c9955a9 (licensed); C's attention d7cfa1f4 (a fourth AMD host). Which change inside grouped-nf4-gemm 0.33.0 -> 0.33.7 is NOT measured. Read from the code, the one arithmetic change in that cut on K8's path is grouped-nf4-gemm#413 (0.33.7): the fused fp8 KV append's quotient IEEE-rounded (div_rn), which B771 measured changing 21 of 536,870,912 written bytes; K8's eager loop calls graph_mode_init, so every scored token's K/V goes through that append (0.33.1-0.33.3 change no code; 0.33.4 cold_deadline, 0.33.5 int4_smallm annotations and 0.33.6 MXFP4 are off this path). This corrects PREREG-p82's and PREREG-p84's statement that the eager K8 does not run the graph-mode append. Proposed test (P85, not started): P70's build with E4B_FUSED_KV_APPEND=0 should read N's float bit for bit. Cost $1.8328 for the lane ($1.0928 this reading). MEASURED 2026-09-30 by P85 (e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30): CONFIRMED, #413 is the whole step."
+    },
+    {
+      "id": "e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P85, one RTX 5090 (P70's card): P70's build of the int4 recipe (e4b 0.37.4, grouped-nf4-gemm 0.33.0, fp32 router) reads K8 mean NLL 1.8511420498367808; with the fused fp8 KV append off it reads the 0.33.7 builds' 1.8506507749113845 bit for bit, and on 0.33.6 it reads 1.8511420498367808 bit for bit: CONFIRMED, grouped-nf4-gemm#413 is the whole K8 step.",
+      "value": -0.000491,
+      "unit": "nats, wikitext K8 mean NLL (2,048 steps), P70's stack with the fused fp8 KV append off minus on; equal to the grouped-nf4-gemm 0.33.0 -> 0.33.7 step",
+      "hardware": "RTX 5090 (sm_120, 600 W power limit, driver 575.57.08, GPU 7a6634c6 = P55x's, P70's and P84's card), one rented Vast.ai verified/secure host (instance 53591715, machine 37958, AMD Ryzen 9 7950X, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; every reading through P70's harness (bench/p39/step_decomp.py, bench/p42 hook v6, P70's env), E4B_ROUTER_EPI_CAST=0, e4b c77aab6 (0.37.4); stack O = + grouped-nf4-gemm 5ca1897 (v0.33.0), stack S = + f879761 (v0.33.6, --no-deps over O); O_build = P70's build (expert pack dumped); the other five = P55x's lic arm (that pack by fingerprint), F with E4B_FUSED_KV_APPEND=0; K8 teacher-forced paged decode, B = 1, fp8 KV, all-VRAM, window 9ef10d760ad9; every process stamped (router, versions, pre-#413 fp8_kv, append resolution); verdict by bench/p85/p85_reduce.py; torch 2.8.0+cu128, triton 3.4.0",
+      "measured_on": "2026-09-30",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p85/RESULTS-p85.md",
+        "bench/p85/PREREG-p85.md",
+        "bench/p85/p85_reduce.py",
+        "bench/p85/receipts/p85-5090-4/verdict.json",
+        "bench/p85/receipts/p85-5090-4/k8_O_build.json",
+        "bench/p85/receipts/p85-5090-4/k8_O_rep.json",
+        "bench/p85/receipts/p85-5090-4/k8_F_1.json",
+        "bench/p85/receipts/p85-5090-4/k8_F_2.json",
+        "bench/p85/receipts/p85-5090-4/k8_S_1.json",
+        "bench/p85/receipts/p85-5090-4/k8_S_2.json",
+        "bench/p85/receipts/p85-5090-4/packs.json",
+        "bench/p85/receipts/p85-5090-4/summary.txt",
+        "bench/p85/receipts/p85-5090-4/forensics.txt",
+        "bench/p85/receipts/p85-5090-4/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-30/p85-5090-4/ (receipt.json, teardown-proof.json, the fetched run with logs/ and the harness copy); the proof p85-prove-1, the refusals p85-5090-1/-2 and the unarmed-guard p85-5090-3 beside it"
+      ],
+      "notes": "Pre-registered in #797, amendment 1 in #798 (watchdog 1,500 s, guard 4.0 h). Stated expectation CONFIRMED held exactly. Two attempts were refused on Intel hosts (rc 16, no data), one lost its guard to a Vast HTTP 429. Measures what P84 inferred from the code. 6.36396 is the reference quantizer's KV bytes; which value the licensed row names is the owner's decision. Not measured: the P81/P82 cast pair, the Intel-host attention calibration. Lane cost $0.7362."
     }
   ]
 }
