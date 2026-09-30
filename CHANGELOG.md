@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Lane P85 read (#674): CONFIRMED -- grouped-nf4-gemm#413 (the fused fp8 KV append's IEEE-rounded quotient) is the whole step that moved the recipe's fp32 K8 from 6.36709 to 6.36396 (bench, docs and register only)
+
+- `p85-5090-4` ran on one RTX 5090 on P70's own Ryzen 7950X card for $0.6386, teardown proven. The lane cost $0.7362: a proof, two Intel-host refusals at preflight (rc 16), and one attempt whose deadline guard did not arm on a Vast HTTP 429.
+- **The readings.** Every reading used P70's harness and e4b 0.37.4, and every pair repeated bit for bit. The control, P70's build, read O's known `1.8511420498367808`. The same stack with `E4B_FUSED_KV_APPEND=0` read `1.8506507749113845`, the gnf4 0.33.7 builds' float, bit for bit. gnf4 0.33.6 with the append on read O's float bit for bit.
+- **So #413 is the whole KERNEL step P84 found.** P84 had inferred it from the code; this reading measures it. The newer 6.36396 is the reading with the reference quantizer's KV bytes. Whether the licensed row names its software is the owner's decision.
+- **Not measured here:** the P81/P82 cast pair (#413 is its leading explanation) and the Intel-host attention calibration.
+- New row `e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30`. P84's row and `RESULTS-p84.md` are noted as measured. The read is in `bench/p85/RESULTS-p85.md`.
+
 ### Lane P85 amendment 1 (#674): the first-chunk watchdog admits a Zen 2 host (1,500 s), the guard is 4.0 h, the ceiling $4.00 (bench only; nothing in the wheel changes)
 
 - `p85-prove-1` PROVED on an AMD EPYC 9655 host ($0.0573). The first reading, `p85-5090-1`, landed on an Intel Core Ultra 9 285K, which the runner refused at preflight with rc 16 before any install ($0.0251). No data exists.

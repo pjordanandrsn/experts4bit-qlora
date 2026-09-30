@@ -931,24 +931,19 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     expert pack is the licensed `0c9955a9…`. The build's K8 reads 6.36396
     with the fp32 router and 6.31811 with the cast; the licensed builds read
     6.36709.
-  - **K8 is box-invariant on AMD hosts; the software moved it** (lane P83,
-    `bench/p83/`).
-    On one box, P70's build (e4b 0.37.4, gnf4 0.33.0) reads 6.36709 and
-    P82's (0.37.8, 0.33.7) reads 6.36396, each the same float it gave on
-    other machines (three and two). That is −0.00049 nats, far inside the
-    floor (`e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29`).
-    On an Intel i9-14900K, P82's build calibrated a different attention
-    pack (`45b4cc5a…`) and read 6.36276 (P84, reading 1, VOID), so the
-    recipe reproduces on the AMD hosts tested, not everywhere. *(Corrects
-    P82, which inferred from one cast-arm pair — P81's box 6.33015, P82's
-    6.31811 — that K8 does not reproduce across boxes.)*
-  - **It was grouped-nf4-gemm 0.33.0 → 0.33.7** (P84, KERNEL). On P70's
-    machine, e4b 0.37.4 on gnf4 0.33.7 reads 6.36396; e4b's release and
-    the harness move K8 by zero
-    (`e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30`).
-    The commit is not measured. From the code, the one change on K8's
-    path is gnf4#413's fused fp8 KV append, which K8's eager loop runs
-    (P82's and P84's registrations said it did not).
+  - **K8 is box-invariant on AMD hosts; the software moved it** (P83).
+    On one box P70's build reads 6.36709 and P82's 6.36396, each the float
+    it gave on other machines: −0.00049 nats, far inside the floor
+    (`e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29`).
+    On an Intel i9-14900K the attention calibrated differently
+    (`45b4cc5a…`, 6.36276; P84 reading 1, VOID). *(Corrects P82's
+    cross-box inference from one cast-arm pair.)*
+  - **It is gnf4#413, the fused fp8 KV append's rounding** (P84 KERNEL,
+    then P85 CONFIRMED, both on P70's machine). e4b's release and the
+    harness move K8 by zero. P70's build with the fused append off reads
+    6.36396 bit for bit, and gnf4 0.33.6 reads 6.36709
+    (`e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30`).
+    The newer number is the reference quantizer's KV bytes.
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

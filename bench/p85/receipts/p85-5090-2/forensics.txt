@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-d4ee98c7-2f85-5a22-e97c-40ec3f32bfd9, 12.0
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+Model name:                              Intel(R) Xeon(R) CPU E5-2698 v4 @ 2.20GHz
+               total        used        free      shared  buff/cache   available
+Mem:             251          10          90           0         151         239
+overlay         320G   55M  320G   1% /
+cpu_vendor GenuineIntel
