@@ -21,7 +21,7 @@ So the P84 KERNEL step is exactly #413. P84 inferred it from the code; this read
 |---|---|---:|
 | `p85-prove-1` | **PROVED**, lane rc 0 on an AMD EPYC 9655: both stacks installed with a pre-#413 `fp8_kv`; the append stamps read on by default and off under the knob | $0.0573 |
 | `p85-5090-1` | **refused**, rc 16, before any install: an Intel Core Ultra 9 285K (machine 56343). No data | $0.0251 |
-| `p85-5090-2` | **refused**, rc 16, before any install: an Intel Xeon E5-2698 v4 (machine 96642), after the cheapest AMD offer was taken ahead of the launch. No data | $0.0148 |
+| `p85-5090-2` | **refused**, rc 16, before any install: an Intel Xeon E5-2698 v4 (machine 96642), when the cheapest offer a minute earlier (an AMD 7950X) was no longer listed. No data | $0.0148 |
 | `p85-5090-3` | **not run**: the launcher's deadline guard did not arm, because Vast answered its auth probe with HTTP 429 (rate-limited). The box (machine 37958) was destroyed before the command ran | $0.0004 |
 | `p85-5090-4` | **the reading: CONFIRMED** | $0.6386 |
 | **total** | | **$0.7362** of the $4.00 ceiling |
