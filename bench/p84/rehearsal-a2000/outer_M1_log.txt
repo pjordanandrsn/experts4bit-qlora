@@ -1,0 +1,15 @@
+p84_run.sh: line 50: E4B_ROUTER_EPI_CAST: unbound variable
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+p84_reduce self-test OK (15 cases)
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d, 8.6
+power.limit,clocks.max.sm 70.00 W, 2100 MHz
+Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          97          19           0           8          26
+overlay         598G  194G  399G  33% /
+[2026-09-30T16:29:11Z] p84: install stack B: e4b @a83937a12897d9369cb81701121d7ac6d2a3c123 + gnf4 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+Traceback (most recent call last):
+  File "<stdin>", line 14, in <module>
+AssertionError: B: the router is not at fp32 (env None, CAST_WEIGHTS None)
+[2026-09-30T16:30:20Z] p84: TRIPWIRE FAIL (B)
+[2026-09-30T16:30:20Z] p84: TP_DONE rc=9
