@@ -15,7 +15,7 @@
 # on every exit and P84_SUCCESS.<nonce> only when the reducer ran.
 #
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
-# P84_MODEL P84_REVISION P84_LICENSED_FP P84_GPU_CLASS P84_MIN_DISK_GB P84_CALIB_NSEQ P84_HESSIAN_BUDGET_GB
+# P84_MODEL P84_REVISION P84_LICENSED_FP P84_GPU_CLASS P84_CPU_VENDOR P84_MIN_DISK_GB P84_CALIB_NSEQ P84_HESSIAN_BUDGET_GB
 # P84_BUILD_PPL_STEPS P84_FIRST_CHUNK_S P84_REHEARSAL.
 # P84_PROVE=1 is the PROVING RUN: refusals, BOTH installs at their pins with their tripwires (each harness importing
 # under its stack) and stamps, and an egress probe -- no model; exit 0.
@@ -36,6 +36,9 @@ A_E4B=c77aab6dafb5f08d98a7387d1e986d141b20a2d3; A_GNF4=$GNF4_SHA
 D_MODEL=Qwen/Qwen3-30B-A3B; D_REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
 D_FP=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42     # P55x's licensed expert pack
 MID=${P84_MODEL:-$D_MODEL}; REV=${P84_REVISION:-$D_REV}; LIC_FP=${P84_LICENSED_FP:-$D_FP}; GPU_CLASS=${P84_GPU_CLASS:-5090}
+# amendment 1 (PREREG-p84): the known floats were read on AMD hosts only; on an Intel i9-14900K (p84-5090-2) P82's own
+# build calibrated a different attention pack and read another K8, so the chain is read on AMD hosts
+CPU_VENDOR=${P84_CPU_VENDOR:-AuthenticAMD}
 MIN_DISK_GB=${P84_MIN_DISK_GB:-200}; NSEQ=${P84_CALIB_NSEQ:-128}; HBUDGET=${P84_HESSIAN_BUDGET_GB:-24}
 BUILD_STEPS=${P84_BUILD_PPL_STEPS:-2048}; REHEARSAL=${P84_REHEARSAL:-0}
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false E4B_MODEL_ID=$MID
@@ -48,8 +51,8 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_LMHEAD_INT4_CALIB E
 # fp32 routing weights in every process of both stacks: 0.37.4 reads "0" (and unset) as fp32; 0.37.8 reads "0" as fp32
 export E4B_ROUTER_EPI_CAST=0
 : > summary.txt; echo "$P84_INSTANCE_ID" > INSTANCE_ID
-echo "KNOBS router_epi_cast=$E4B_ROUTER_EPI_CAST B=e4b@$B_E4B+gnf4@$B_GNF4 A=e4b@$A_E4B+gnf4@$A_GNF4 model=$MID rev=$REV licensed_fp=$LIC_FP gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB calib_nseq=$NSEQ hessian_budget_gb=$HBUDGET build_ppl_steps=$BUILD_STEPS" | tee -a summary.txt
-if [ "$REHEARSAL" != 0 ] || [ "$MID" != "$D_MODEL" ] || [ "$REV" != "$D_REV" ] || [ "$LIC_FP" != "$D_FP" ] || [ "$GPU_CLASS" != 5090 ] \
+echo "KNOBS router_epi_cast=$E4B_ROUTER_EPI_CAST B=e4b@$B_E4B+gnf4@$B_GNF4 A=e4b@$A_E4B+gnf4@$A_GNF4 model=$MID rev=$REV licensed_fp=$LIC_FP gpu_class=$GPU_CLASS cpu_vendor=$CPU_VENDOR min_disk_gb=$MIN_DISK_GB calib_nseq=$NSEQ hessian_budget_gb=$HBUDGET build_ppl_steps=$BUILD_STEPS" | tee -a summary.txt
+if [ "$REHEARSAL" != 0 ] || [ "$MID" != "$D_MODEL" ] || [ "$REV" != "$D_REV" ] || [ "$LIC_FP" != "$D_FP" ] || [ "$GPU_CLASS" != 5090 ] || [ "$CPU_VENDOR" != AuthenticAMD ] \
    || [ "$NSEQ" != 128 ] || [ "$HBUDGET" != 24 ] || [ "$BUILD_STEPS" != 2048 ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
@@ -65,6 +68,9 @@ nvidia-smi --query-gpu=power.limit,clocks.max.sm --format=csv,noheader | sed "s/
 lscpu | grep -E "Model name" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the lane registers the RTX $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac
+HOST_VENDOR=$(lscpu | awk -F: '/^Vendor ID/{gsub(/ /, "", $2); print $2; exit}')
+echo "cpu_vendor $HOST_VENDOR" | tee -a forensics.txt
+[ "$HOST_VENDOR" = "$CPU_VENDOR" ] || { say "REFUSED: host CPU vendor is '${HOST_VENDOR:-unknown}', the lane registers $CPU_VENDOR (amendment 1)"; echo "refused: cpu vendor ${HOST_VENDOR:-unknown}" > REFUSAL; finish 16; }
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (the bf16 checkpoint + two NF4 arenas and packs; overlay is not machine disk)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
 # ---- deadline guard (P54's): never start a step that cannot finish 10 min before teardown

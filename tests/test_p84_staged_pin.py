@@ -148,3 +148,14 @@ def test_the_driver_runs_to_its_dry_run(tmp_path):
     assert out.returncode == 0, out.stdout + out.stderr
     assert out.stdout.startswith("DRYRUN stage -> root@h:/root/p84") and "P84_PROVE=1" in out.stdout, out.stdout
     assert not out.stderr.strip(), out.stderr
+
+
+def test_amendment_1_refuses_a_host_cpu_other_than_the_registered_vendor_before_any_fetch():
+    """Amendment 1: the chain's known floats hold on AMD hosts; an Intel host (p84-5090-2) calibrated another attention
+    pack. The vendor check refuses (rc 16) before the install and the fetch, and a knob off AuthenticAMD is a REHEARSAL."""
+    run = (LANE / "p84_run.sh").read_text()
+    assert "CPU_VENDOR=${P84_CPU_VENDOR:-AuthenticAMD}" in run
+    assert '|| [ "$CPU_VENDOR" != AuthenticAMD ]' in run
+    refuse = run.index("finish 16; }")
+    assert refuse < run.index("\ninstall_stack B ") < run.index('say "fetch $MID @ $REV"')
+    assert "'/^Vendor ID/" in run
