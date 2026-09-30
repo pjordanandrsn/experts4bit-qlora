@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Lane P84, reading 1 VOID and amendment 1 (#674): on an Intel host the recipe's attention calibration does not reproduce the AMD hosts' pack; P84 is restricted to AMD hosts; P83's cross-machine claim qualified (bench, docs and register only)
+
+- `p84-5090-2` ran on one RTX 5090 on an Intel Core i9-14900K host for $0.5356, teardown proven. The lane has spent $0.7042 so far: two proof attempts and two reading attempts.
+- **The control failed, so the reading is VOID.** P82's own build read K8 **6.36276** (mean NLL `1.8504622130569988`), not N's known 6.36396. Its repeat was bit-identical. The lane stopped before H1 and H2, as registered.
+- **The attention pack is different: `45b4cc5a…`, not `d7cfa1f4…`.** 342 of 384 tensor payloads differ, in all 48 layers, with the same calibration token stream and toolchain. The expert pack is the licensed `0c9955a9…` again. The mechanism is not isolated: CPU vendor and driver both differ from every earlier host.
+- **Amendment 1.** The runner refuses a CPU vendor other than `AuthenticAMD` before the install and the fetch (rc 16), because the known floats were read on AMD hosts. On the A2000 (an Intel Xeon) the default refuses with rc 16, and the knob lifted proves.
+- **Qualified.** P83's "K8 is bit-reproducible across machines" becomes: on the AMD hosts tested. Changed in `RESULTS-p83.md`, the P82 and P83 register rows, and STATUS. The read so far is in `bench/p84/RESULTS-p84.md`.
+
 ### Lane P84 registered (#674): which factor moved the recipe's fp32 K8 from P70's 6.36709 to P82's 6.36396 -- the kernels, the package, or the harness? (bench only; nothing in the wheel changes)
 
 - `bench/p84/PREREG-p84.md`. P83 showed the two K8 values are bit-reproducible across machines, so their known floats anchor a chain of one-factor steps built on one RTX 5090. From O (known), a new gnf4 alone gives H2 (KERNEL). A new e4b on top gives H1 (PACKAGE). P82's harness on top gives C (HARNESS), and C = N.

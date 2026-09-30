@@ -1,0 +1,24 @@
+{
+ "lane": "P84",
+ "reasons": [
+  "CONTROL: C_build 1.8504622130569988 != N's known 1.8506507749113845 -- this box does not reproduce P82's build, so no comparison with a known float holds"
+ ],
+ "verdict": "VOID",
+ "known": {
+  "O": 1.8511420498367808,
+  "N": 1.8506507749113845
+ },
+ "mean_nll": {
+  "C_build": 1.8504622130569988,
+  "C_rep": 1.8504622130569988
+ },
+ "ppl": {
+  "C_build": 6.362759793688831,
+  "C_rep": 6.362759793688831
+ },
+ "packs": {
+  "C_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "C_attention": "sha256:45b4cc5af379c3481a2193be11aa2b075c740f7bb3d37bccb9dfbb80781dfb9b",
+  "licensed_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"
+ }
+}
