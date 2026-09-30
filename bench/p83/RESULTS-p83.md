@@ -65,9 +65,13 @@ Each stack's mean NLL is **the same float** that its software gave on other mach
   cast arm K16 read 6.31811 on P82's box, with byte-identical packs. From that one pair, P82 inferred a box effect.
 - **What stays unexplained.** That cast pair itself. P83 did not run the cast. Given that the fp32 reading is
   bit-stable across machines, the first suspects are a difference between the two runs that P82's diff reading missed,
-  or the cast path specifically, before the box.
+  or the cast path specifically, before the box. *(2026-09-30, lane P84: the diff reading missed one. P81 ran
+  grouped-nf4-gemm 0.33.5 and P82 ran 0.33.7, and 0.33.7's fused fp8 KV append change (#413) is on K8's path; not
+  measured for this pair. See `bench/p84/RESULTS-p84.md`.)*
 
 ## What moved it: not isolated
+
+*(Answered 2026-09-30 by lane P84, KERNEL: on one box, grouped-nf4-gemm 0.33.0 → 0.33.7 is the whole −0.00049 nats; e4b 0.37.4 → 0.37.8 and the harness move nothing. The one change in that cut on K8's path, read from the code, is #413's fused fp8 KV append. See `bench/p84/RESULTS-p84.md`.)*
 
 O and N differ in the package (e4b 0.37.4 → 0.37.8), the harness (`bench/p39/step_decomp.py` → `bench/p81`'s copy,
 hook v6 → v7) and the kernels (grouped-nf4-gemm 0.33.0 → 0.33.7).

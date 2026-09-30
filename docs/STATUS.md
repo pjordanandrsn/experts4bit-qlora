@@ -937,12 +937,18 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     P82's (0.37.8, 0.33.7) reads 6.36396, each the same float it gave on
     other machines (three and two). That is −0.00049 nats, far inside the
     floor (`e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29`).
-    Which change moved it is not isolated. On an Intel i9-14900K, P82's
-    build calibrated a different attention pack (`45b4cc5a…`) and read
-    6.36276 (P84, VOID), so the recipe reproduces on the AMD hosts tested,
-    not everywhere. *(Corrects P82, which inferred
-    from one cast-arm pair — P81's box 6.33015, P82's 6.31811, still
-    unexplained — that K8 does not reproduce across boxes.)*
+    On an Intel i9-14900K, P82's build calibrated a different attention
+    pack (`45b4cc5a…`) and read 6.36276 (P84, reading 1, VOID), so the
+    recipe reproduces on the AMD hosts tested, not everywhere. *(Corrects
+    P82, which inferred from one cast-arm pair — P81's box 6.33015, P82's
+    6.31811 — that K8 does not reproduce across boxes.)*
+  - **It was grouped-nf4-gemm 0.33.0 → 0.33.7** (P84, KERNEL). On P70's
+    machine, e4b 0.37.4 on gnf4 0.33.7 reads 6.36396; e4b's release and
+    the harness move K8 by zero
+    (`e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30`).
+    The commit is not measured. From the code, the one change on K8's
+    path is gnf4#413's fused fp8 KV append, which K8's eager loop runs
+    (P82's and P84's registrations said it did not).
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
