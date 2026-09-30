@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Correction: the flagship matrix's energy range and frozen-byte figure each described one model (docs and register only)
+
+- `e4b.train.flagship-matrix` covers Qwen3-30B-A3B and Gemma-4-26B-A4B, but its "0.86–0.92× energy" was Gemma-4's range alone (`bench/flagship-matrix-model2/RESULTS-flagship-matrix-model2.md`, C3: 0.860–0.922×). Qwen3's is 0.797–0.846× (`bench/flagship-matrix/RESULTS-flagship-matrix.md`, B3). The two-model range is **0.80–0.92×**, recomputed from the twenty per-cell receipts.
+- Its "bit-identical over 16.31 GB hashed" is the fused-train gate's figure, from one Qwen3 run outside the matrix. The ten Gemma-4 cells' own check hashed 12.85 GB each. The sentence now names both, and the worst parity cell (0.03653) is labelled as Gemma-4 finance's.
+- The speed (1.52–1.81×) and VRAM (0.75–0.81×) ranges already spanned both models, and the row's value and status are unchanged. Corrected in `docs/claims.json` (the row's notes keep the old wording, and the model-2 receipt joins its evidence), `docs/STATUS.md` (marked), `README.md` and `docs/solutions/qlora-fused-moe-experts.md`.
+
 ### Lane P83 read (#674): on one box the software moved the recipe's K8 (DIFFERENT, −0.00049 nats), and each value reproduces bit for bit across machines; this corrects P82's read (bench, docs and register only)
 
 - `p83-5090-1` ran on one RTX 5090 (AMD EPYC 9755) for $0.7671, teardown proven. The lane cost $0.8179 with its proof.
