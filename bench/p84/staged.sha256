@@ -1,6 +1,6 @@
 # Names as the BOX sees them after staging ($W; P70's harness under o/, P82's under n/). The box runs `sha256sum -c`
 # on this file and the controller resolves each name to its source (p84_drive.sh's case) and compares.
-d7ea784d01852f70249fbf870cb20a765a7f9050eea38f6d2e0c2e794411e6fe  p84_run.sh
+9ddb0fdff3a005b9ab6032dcd772d5f39f76ca54a45a4b187cad2548da2257d9  p84_run.sh
 a02fcf37c71232806bfe3db83d9e15c4bceac8458e1292163ae03e06a52dbd99  p84_reduce.py
 e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
 15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
