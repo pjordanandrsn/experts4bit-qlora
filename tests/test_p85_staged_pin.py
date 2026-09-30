@@ -126,6 +126,8 @@ def test_the_steps_run_in_the_registered_order_and_the_control_gates_the_rest():
     assert run.index("\ninstall_stack O ") < run.index('if [ "${P85_PROVE:-0}" = 1 ]; then') < run.index("\ninstall_stack S ")
     gate = run[run.index("\nif ! python $W/p85_reduce.py --control-ok"):run.index("\nlic O_rep")]
     assert "finish 0" in gate and "p85_reduce.py --dir $W --out $W/verdict.json" in gate
+    # a build that crashed or left no pack is BUILD FAILED (rc 20), never a failed control: the pack is verified first
+    assert run.index("\nrun_k8 O_build") < run.index("\nverifies $W/artifact_o || {") < run.index("\nif ! python $W/p85_reduce.py --control-ok")
 
 
 def test_each_reading_runs_p70s_harness_and_env():

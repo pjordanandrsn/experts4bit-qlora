@@ -233,6 +233,10 @@ rm -rf $W/artifact_o
 run_k8 O_build o work_o watch E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64 \
   E4B_SERVE_EXP_INT4_CALIB=1 E4B_CALIB_NSEQ=$NSEQ E4B_CALIB_LAYERS_PER_PASS=10 E4B_INT4_DUMP_ARTIFACT_DIR=$W/artifact_o \
   E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=1 E4B_SERVE_ATTN_INT4=0 E4B_CALIB_SOURCE=c4 $FOLDS
+verifies $W/artifact_o || { say "O_build left no expert pack that verifies"; echo "BUILD FAILED (O experts)" >> summary.txt; finish 20; }
+FP_O=$(fp_of $W/artifact_o); [ -n "$FP_O" ] || { say "O_build's pack has no fingerprint"; finish 20; }
+mkdir -p $W/manifests && cp $W/artifact_o/manifest.json $W/manifests/O_build_experts.json   # the pack is deleted at the end
+echo "PACK O_build experts $FP_O ($([ "$FP_O" = "$LIC_FP" ] && echo "= the licensed pack" || echo "!= the licensed $LIC_FP"))" | tee -a summary.txt
 # the control gates the rest: if this box does not give O's known float, no comparison with a known float holds
 if ! python $W/p85_reduce.py --control-ok $W/k8_O_build.json | tee -a summary.txt; then
   say "CONTROL: this box does not reproduce O's known K8 -- VOID; stopping before the remaining readings"
@@ -240,10 +244,6 @@ if ! python $W/p85_reduce.py --control-ok $W/k8_O_build.json | tee -a summary.tx
   [ -s $W/verdict.json ] || { say "REDUCER wrote no verdict"; finish 22; }
   finish 0
 fi
-verifies $W/artifact_o || { say "O_build left no expert pack that verifies"; echo "BUILD FAILED (O experts)" >> summary.txt; finish 20; }
-FP_O=$(fp_of $W/artifact_o); [ -n "$FP_O" ] || { say "O_build's pack has no fingerprint"; finish 20; }
-mkdir -p $W/manifests && cp $W/artifact_o/manifest.json $W/manifests/O_build_experts.json   # the pack is deleted at the end
-echo "PACK O_build experts $FP_O ($([ "$FP_O" = "$LIC_FP" ] && echo "= the licensed pack" || echo "!= the licensed $LIC_FP"))" | tee -a summary.txt
 lic O_rep work_o
 # F: the same stack and pack, every KV append through quantize_kv_fp8 (the fused append resolved off)
 lic F_1 work_o E4B_FUSED_KV_APPEND=0
