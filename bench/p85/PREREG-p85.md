@@ -157,3 +157,43 @@ The rehearsal also includes the driver's dry run and the CI tests (`tests/test_p
 - the tripwire and the stamp;
 - the order, and the stop on a failed control;
 - each reading's env, the vendor refusal, and the driver's dry run.
+
+## Amendment 1 (2026-09-30, before any reading)
+
+**What happened.**
+- `p85-prove-1` PROVED on an AMD EPYC 9655 host ($0.0573, teardown proven).
+- The first reading, `p85-5090-1`, landed on an Intel Core Ultra 9 285K (machine 56343). The runner refused it at
+  preflight, rc 16, before any install or fetch ($0.0251, teardown proven). No data exists.
+
+**Why the rental rules change.** Re-rolling showed a gap:
+- The launcher excludes a machine only on ssh-readiness failures or on a lane exit of 13, 14 or 17 (disk, egress,
+  power cap).
+- A lane's rc 16 (CPU vendor) or rc 30 (the first-chunk watchdog) cannot exclude one. So a refusal on the cheapest
+  offer is followed by a re-roll onto the same offer.
+- Right after the refusal, the cheapest verified 5090 was an AMD **EPYC 7K62** (Zen 2, machine 34181, $0.509/h).
+  That CPU class took **1,121 s** to its first calibration chunk in P81 (machine 37675). The 900 s watchdog would kill
+  it (rc 30), and every re-roll would buy it again.
+
+The first-chunk times of every rented build with a recorded chunk (from the receipt store) track the CPU generation:
+
+| CPU (generation) | first chunk |
+|---|---|
+| Ryzen 9 7950X (Zen 4) | 360 s (P55x, P70, P84) |
+| EPYC 9755 (Zen 5) | 340–360 s (P83) |
+| Intel i9-14900K | 360 s (P84, VOID on its attention pack) |
+| EPYC 7C13 / 7R13 (Zen 3) | 760 s (P64) / 740 s (P82) |
+| EPYC 7K62 (Zen 2) | 1,121 s (P81) |
+
+**Changes** (made before any reading, so no data can inform them):
+1. **The first-chunk watchdog is 1,500 s**, P83's budget, which admits a Zen 2 host. `P85_FIRST_CHUNK_S` still
+   overrides it for a rehearsal.
+2. **The reading's guard is 4.0 h at ≤ $0.75/h (≤ $3.00).** On a Zen 2 host (P81: a 97 min build), one build and five
+   lic-arm readings take about 3.1 h. Billing is by runtime, so a fast host still costs about 1.4 h.
+3. **Lane ceiling $4.00; hard stop $5.00**, both under the $35 per-run cap.
+4. **Vendor refusals are bounded.** Each costs about $0.03 and measures nothing. After three rc-16 refusals in a row,
+   the lane stops and is reported rather than re-rolled.
+
+**Unchanged:** the question, the readings, the rule, the predictions, the AMD-host requirement and the stacks.
+
+**The proof stands.** `p85-prove-1`'s path (refusals, both installs, tripwires, stamps) is unchanged: the watchdog runs
+only after the proving run's exit. The A2000 rehearsal ran that path, and the CI tests pin the new default.

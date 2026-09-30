@@ -141,7 +141,7 @@ def test_each_reading_runs_p70s_harness_and_env():
     assert "run_k8 $NAME o $WK nowatch E4B_RECOMPILE_LIMIT=64" in lic
     assert "E4B_INT4_EXPECTED_FINGERPRINT=$FP_O" in lic and lic.rstrip().endswith('$FOLDS "$@"; }')
     assert run.index("cp $W/artifact_o/manifest.json $W/manifests/O_build_experts.json") < run.index("rm -rf $W/artifact_o $W/work_s")
-    assert "budget=${P85_FIRST_CHUNK_S:-900}" in run
+    assert "budget=${P85_FIRST_CHUNK_S:-1500}" in run   # amendment 1 (was 900)
 
 
 def test_a_host_cpu_other_than_the_registered_vendor_is_refused_before_any_fetch():

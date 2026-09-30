@@ -191,7 +191,9 @@ say "fetch $MID @ $REV"
 perl -e "alarm $(arm_alarm); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MID', revision='$REV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=4))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
 fp_of(){ python -c "import json; print(json.load(open('$1/manifest.json'))['pack_fingerprint'])" 2>/dev/null; }
 verifies(){ python -c "from experts4bit_qlora.engines.pack_manifest import verify_artifact as v; v('$1', expected_model_revision='$REV')" > logs/verify_$(basename $1).log 2>&1; }
-first_chunk_watchdog(){ local pid=$1 log=$2 budget=${P85_FIRST_CHUNK_S:-900} t0; t0=$(date +%s)
+# amendment 1 (PREREG-p85): 1,500 s, P83's budget, so a Zen 2 host (P81's EPYC 7K62: 1,121 s) builds rather than being
+# killed -- the launcher cannot exclude a machine on the lane's rc 30, so a fail-fast kill would re-buy the same box
+first_chunk_watchdog(){ local pid=$1 log=$2 budget=${P85_FIRST_CHUNK_S:-1500} t0; t0=$(date +%s)
   while kill -0 "$pid" 2>/dev/null; do
     grep -qa "INT4EXP calibrated experts" "$log" 2>/dev/null && { say "build: calibration chunk 1 in $(( $(date +%s) - t0 ))s"; return 0; }
     if [ $(( $(date +%s) - t0 )) -ge "$budget" ]; then
