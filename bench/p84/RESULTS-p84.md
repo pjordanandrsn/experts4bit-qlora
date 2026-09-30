@@ -79,7 +79,7 @@ What each release changed in shipped modules, 0.33.0 → 0.33.7, and whether K8 
 
 | release | shipped-module change | on K8's path? |
 |---|---|---|
-| 0.33.1–0.33.3 | none in code (`int4_b32` docstrings only) | — |
+| 0.33.1–0.33.3 | none in shipped code (`int4_b32` docstrings; a receipt script outside the wheel) | — |
 | 0.33.4 | `cold_deadline`: the cold-expert CPU-offload cost model | no: e4b reaches it only for experts not resident in VRAM (`_cold_to_cpu_deadline`), and K8 runs all-VRAM |
 | 0.33.5 | `int4_smallm` postpones its annotations (#406); a `gnf4_native` docstring | no: the K16 route serves 2–16 rows, and K8's decode is 1 row, its prefill 512 |
 | 0.33.6 | MXFP4 prefill combine order (#410) | no: gpt-oss's MXFP4 path, not Qwen3's int4 |
@@ -115,12 +115,13 @@ first suspect for that pair as well; not measured either.
 ## Corrections: my reading of the diff, in three places
 
 - **PREREG-p82** (registration, left as registered) said grouped-nf4-gemm "records no arithmetic change on this path.
-  0.33.7's append is the graph path's; the eager K8 appends through `quantize_kv_fp8`." **The second sentence is
-  wrong.** The eager K8 loop enters graph mode for its appends, as above, so 0.33.7's append is on its path.
+  0.33.7's append is the graph path's; the eager K8 appends through `quantize_kv_fp8`." **Both sentences are wrong.**
+  0.33.7's changelog does record an arithmetic change, the append's quotient. And the eager K8 loop enters graph mode
+  for its appends, as above, so that append is on its path.
 - **PREREG-p84's stated expectation** (left as registered) repeated it: the graph-mode fp8 append was among changes
   "none of which the eager all-VRAM K8 runs".
 - **RESULTS-p82** said P81's and P82's "code on K8's path is the same", and **RESULTS-p83** listed "a difference between
-  the two runs that P82's diff reading missed" as the first suspect for the cast pair. Both are annotated in place.
+  the two runs that P82's diff reading missed" among the first suspects for the cast pair. Both are annotated in place.
 
 The P82 and P83 register rows carry the same note.
 
