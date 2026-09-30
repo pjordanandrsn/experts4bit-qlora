@@ -35,6 +35,7 @@ from ..formats.compressed_int import dequantize_compressed_int
 from ..formats.nvfp4 import dequantize_nvfp4
 from ..formats.mxfp4 import dequantize_mxfp4
 from .moe_conventions import MoEConventionError, fuse_experts, stack_experts
+from .moe_plan import CT_GLOBAL_SCALE_SUFFIX, MODELOPT_SCALE2_SUFFIX
 
 
 def _assign(model: torch.nn.Module, name: str, tensor: torch.Tensor) -> None:
@@ -156,9 +157,22 @@ def make_plan_reader(plan, read_tensor, dtype: torch.dtype, *, param_shape=None)
                 qzeros = read_tensor(extra_key)
                 t = dequantize_awq(primary, qzeros, scale, dtype=dtype)
             elif kind == "nvfp4":
-                # NVFP4: E2M1 packed + per-group scale + per-tensor global scale.
+                # NVFP4: E2M1 packed + per-group scale + per-tensor scale. The
+                # per-tensor scale is a DIVISOR in compressed-tensors and a
+                # MULTIPLIER in ModelOpt, and only the key the planner matched
+                # says which (#788).
+                if extra_key.endswith(CT_GLOBAL_SCALE_SUFFIX):
+                    convention = "compressed-tensors"
+                elif extra_key.endswith(MODELOPT_SCALE2_SUFFIX):
+                    convention = "modelopt"
+                else:
+                    raise MoEConventionError(
+                        f"{key}: nvfp4 per-tensor scale {extra_key!r} is neither "
+                        f"{CT_GLOBAL_SCALE_SUFFIX!r} nor {MODELOPT_SCALE2_SUFFIX!r}"
+                        f" — refusing to guess whether it multiplies or divides")
                 gscale = read_tensor(extra_key)
-                t = dequantize_nvfp4(primary, scale, gscale, dtype=dtype)
+                t = dequantize_nvfp4(primary, scale, gscale,
+                                     convention=convention, dtype=dtype)
             elif kind == "fp8":
                 want = fp8_block_scale_shape(tuple(primary.shape))
                 if tuple(scale.shape) != tuple(want):
