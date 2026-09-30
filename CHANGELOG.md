@@ -8,6 +8,20 @@
 - Its "bit-identical over 16.31 GB hashed" is the fused-train gate's figure, from one Qwen3 run outside the matrix. The ten Gemma-4 cells' own check hashed 12.85 GB each. The sentence now names both, and the worst parity cell (0.03653) is labelled as Gemma-4 finance's.
 - The speed (1.52–1.81×) and VRAM (0.75–0.81×) ranges already spanned both models, and the row's value and status are unchanged. Corrected in `docs/claims.json` (the row's notes keep the old wording, and the model-2 receipt joins its evidence), `docs/STATUS.md` (marked), `README.md` and `docs/solutions/qlora-fused-moe-experts.md`.
 
+### Lane P84 registered (#674): which factor moved the recipe's fp32 K8 from P70's 6.36709 to P82's 6.36396 -- the kernels, the package, or the harness? (bench only; nothing in the wheel changes)
+
+- `bench/p84/PREREG-p84.md`. P83 showed the two K8 values are bit-reproducible across machines, so their known floats anchor a chain of one-factor steps built on one RTX 5090. From O (known), a new gnf4 alone gives H2 (KERNEL). A new e4b on top gives H1 (PACKAGE). P82's harness on top gives C (HARNESS), and C = N.
+- **The control runs first.** C is P82's build, and it must read N's known mean NLL `1.8506507749113845` bit for bit. If it doesn't, the lane is VOID and stops before the other builds.
+- **Every build repeats itself within the box.** C's repeat is K32. H1 and H2 use P55x's lic arm.
+- **The verdict names every step whose ends differ** (some of KERNEL, PACKAGE, HARNESS), with each step's nats; the steps sum to N - O. Stated expectation: PACKAGE alone.
+- **The first-calibration-chunk watchdog is now 900 s**, so a slow host fails fast rather than outrunning a three-build guard.
+- **A2000 rehearsal.** PROVE rc 0: both stacks installed, with e4b 0.37.4 on gnf4 0.33.7 and P70's harness importing on both. A mutation with the router export deleted was refused.
+- `tests/test_p84_staged_pin.py` pins:
+  - the files, and the known floats against P83's receipts;
+  - the control gate on P83's N and O receipts;
+  - the order and the stop on a failed control;
+  - each build's harness and env, the manifests, the watchdog, and the driver's dry run.
+
 ### Lane P83 read (#674): on one box the software moved the recipe's K8 (DIFFERENT, −0.00049 nats), and each value reproduces bit for bit across machines; this corrects P82's read (bench, docs and register only)
 
 - `p83-5090-1` ran on one RTX 5090 (AMD EPYC 9755) for $0.7671, teardown proven. The lane cost $0.8179 with its proof.
