@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Lane P85 amendment 1 (#674): the first-chunk watchdog admits a Zen 2 host (1,500 s), the guard is 4.0 h, the ceiling $4.00 (bench only; nothing in the wheel changes)
+
+- `p85-prove-1` PROVED on an AMD EPYC 9655 host ($0.0573). The first reading, `p85-5090-1`, landed on an Intel Core Ultra 9 285K, which the runner refused at preflight with rc 16 before any install ($0.0251). No data exists.
+- **Why.** The launcher excludes a machine only on ssh-readiness failures or a lane exit of 13, 14 or 17. A refusal on rc 16 or rc 30 re-rolls onto the same cheapest offer. That offer was then an EPYC 7K62, the Zen 2 class that took 1,121 s to its first calibration chunk in P81, past the 900 s watchdog.
+- **Changes, before any reading:** watchdog 900 → 1,500 s (P83's); guard 3.0 → 4.0 h at ≤ $0.75/h; lane ceiling $3.00 → $4.00; at most three vendor refusals in a row. The question, readings, rule and predictions are unchanged, and `p85-prove-1` stands as the lane's proof.
+
 ### Lane P85 registered (#674): is grouped-nf4-gemm#413 (the fused fp8 KV append's IEEE-rounded quotient) the whole step that moved the recipe's fp32 K8 from 6.36709 to 6.36396? (bench only; nothing in the wheel changes)
 
 - `bench/p85/PREREG-p85.md`. P84 localized the move to grouped-nf4-gemm 0.33.0 → 0.33.7 and read #413 from the code as the one change on K8's path. This lane measures it on one AMD-host RTX 5090, through P70's harness and env throughout.
