@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Lane P85 registered (#674): is grouped-nf4-gemm#413 (the fused fp8 KV append's IEEE-rounded quotient) the whole step that moved the recipe's fp32 K8 from 6.36709 to 6.36396? (bench only; nothing in the wheel changes)
+
+- `bench/p85/PREREG-p85.md`. P84 localized the move to grouped-nf4-gemm 0.33.0 → 0.33.7 and read #413 from the code as the one change on K8's path. This lane measures it on one AMD-host RTX 5090, through P70's harness and env throughout.
+- **The control runs first.** `O_build` is P70's build (e4b 0.37.4 + gnf4 0.33.0), and it must read O's known mean NLL `1.8511420498367808` bit for bit. If it doesn't, the lane is VOID and stops.
+- **F:** the same stack with `E4B_FUSED_KV_APPEND=0`, so every append goes through `quantize_kv_fp8`, whose bytes 0.33.7's fused kernel writes exactly. Predicted: N's float, `1.8506507749113845`. **S:** e4b 0.37.4 on gnf4 0.33.6, the append on. Predicted: O's float. Each is read twice with the O build's expert pack loaded by fingerprint.
+- **The rule:** VOID, then PATH-REFUTED (F = O: the append is not on the path), CONFIRMED (F = N and S = O), MIXED (F = N, S ≠ O), REFUTED (otherwise). Stated expectation: CONFIRMED.
+- **Tripwires and stamps.** Each stack must carry a pre-#413 `fp8_kv`, and 0.37.4's resolver must turn the append on by default and off under the knob. Every K8 process is stamped with the resolver's answer under its own env.
+- **A2000 rehearsal.** R rc 0: both stacks installed, and the stamps read the append on and off. M1 (a 0.33.7 kernel posing as S) was refused by the pre-#413 tripwire, rc 9. M2 (the knob leaking into every process) was refused by the stamp check, rc 9. V (the default vendor on the Intel host) was refused with rc 16 before any install.
+- Guard 3.0 h at ≤ $0.75/h after a 0.4 h proof; lane ceiling $3.00. `tests/test_p85_staged_pin.py` pins the staged bytes, the stacks, the known floats, the order and the control gate, each reading's env, the tripwire and the stamp, and the driver's dry run.
+
 ### Lane P84 read (#674): KERNEL. grouped-nf4-gemm 0.33.0 → 0.33.7 moved the recipe's fp32 K8 (−0.000491 nats); e4b 0.37.4 → 0.37.8 and the harness move it by exactly zero (bench, docs and register only)
 
 - `p84-5090-3` ran on one RTX 5090 on the AMD Ryzen 7950X host that read P55x's and P70's 6.36709 (same GPU) for $1.0928, teardown proven. The lane cost $1.8328 of its $4.00 ceiling over six rentals.

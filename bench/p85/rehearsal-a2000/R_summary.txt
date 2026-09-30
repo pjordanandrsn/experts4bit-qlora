@@ -1,0 +1,31 @@
+KNOBS router_epi_cast=0 launch=e4b@9617516247a1f07b084212fae4e29e71db678eec O=e4b@c77aab6dafb5f08d98a7387d1e986d141b20a2d3+gnf4@5ca1897585f9f456f99ea504b2a1be0ea91db496 S=e4b@c77aab6dafb5f08d98a7387d1e986d141b20a2d3+gnf4@f879761501fedcac027de81f4083fab924194b8d model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=A2000 cpu_vendor=GenuineIntel min_disk_gb=1 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+p85_reduce self-test OK (20 cases)
+stack O
+e4b 0.37.4 @c77aab6dafb5f08d98a7387d1e986d141b20a2d3 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (8, 6)
+router_epi_cast_weights False
+fp8_kv_has_413 False
+hook /root/p85/o/hook/usercustomize.py
+STAMP O {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'fused_kv_append_env': None, 'fused_kv_append_resolved': True, 'fp8_kv_has_413': False, 'e4b': '0.37.4', 'gnf4': '0.33.0', 'expected_expert_fingerprint': None}
+STAMP O append off {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'fused_kv_append_env': '0', 'fused_kv_append_resolved': False, 'fp8_kv_has_413': False, 'e4b': '0.37.4', 'gnf4': '0.33.0', 'expected_expert_fingerprint': None}
+stack S
+e4b 0.37.4 @c77aab6dafb5f08d98a7387d1e986d141b20a2d3 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.6 @f879761501fedcac027de81f4083fab924194b8d
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (8, 6)
+router_epi_cast_weights False
+fp8_kv_has_413 False
+hook /root/p85/o/hook/usercustomize.py
+STAMP S {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'fused_kv_append_env': None, 'fused_kv_append_resolved': True, 'fp8_kv_has_413': False, 'e4b': '0.37.4', 'gnf4': '0.33.6', 'expected_expert_fingerprint': None}
+STAMP S append off {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'fused_kv_append_env': '0', 'fused_kv_append_resolved': False, 'fp8_kv_has_413': False, 'e4b': '0.37.4', 'gnf4': '0.33.6', 'expected_expert_fingerprint': None}
+PROVE -- the proving run: both stacks installed and tripwired, no model
+PROVE hf_cdn_mbps=54.1 bytes=52428800
