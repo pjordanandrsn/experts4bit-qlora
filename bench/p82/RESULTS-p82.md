@@ -116,6 +116,10 @@ This read supersedes P81's register row with
   - Their code on K8's path is the same. e4b 0.37.7 → 0.37.8 changes only graph-mode, training and
     dump-provenance code (#777, #765, #772). grouped-nf4-gemm 0.33.5 → 0.33.7 refactors `quantize_kv_fp8` into the
     same operations and otherwise changes only the graph-mode append and the MXFP4 prefill.
+    *(Corrected 2026-09-30, lane P84: the graph-mode append IS on K8's path. K8's eager loop calls `graph_mode_init`,
+    so every scored step appends through the fused kernel that 0.33.7 changed (grouped-nf4-gemm#413). The two runs'
+    code on K8's path therefore differs, and #413 is the first suspect for this pair; not measured. See
+    `bench/p84/RESULTS-p84.md`.)*
   - They read 6.33015 and 6.31811. The spread is 0.012 ppl, 0.0019 nats.
   - So a five-decimal match to 6.36709 is **not** an identity test across boxes. The registered table assumed it was.
     *(Corrected 2026-09-29, lane P83: for a fixed software stack it is one, to the last bit of the mean NLL.)*

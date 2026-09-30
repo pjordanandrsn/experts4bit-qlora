@@ -1,0 +1,45 @@
+{
+ "lane": "P84",
+ "reasons": [
+  "moved by: KERNEL -0.000491 nats; the steps sum to N - O = -0.000491 nats"
+ ],
+ "verdict": "KERNEL",
+ "known": {
+  "O": 1.8511420498367808,
+  "N": 1.8506507749113845
+ },
+ "mean_nll": {
+  "C_build": 1.8506507749113845,
+  "C_rep": 1.8506507749113845,
+  "H1_build": 1.8506507749113845,
+  "H1_rep": 1.8506507749113845,
+  "H2_build": 1.8506507749113845,
+  "H2_rep": 1.8506507749113845
+ },
+ "ppl": {
+  "C_build": 6.363959680597435,
+  "C_rep": 6.363959680597435,
+  "H1_build": 6.363959680597435,
+  "H1_rep": 6.363959680597435,
+  "H2_build": 6.363959680597435,
+  "H2_rep": 6.363959680597435
+ },
+ "packs": {
+  "C_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "C_attention": "sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422",
+  "H1_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "H2_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "licensed_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"
+ },
+ "step_nats": {
+  "KERNEL": -0.0004912749253962456,
+  "PACKAGE": 0.0,
+  "HARNESS": 0.0
+ },
+ "reported": {
+  "C_expert_is_licensed": true,
+  "H1_expert_is_licensed": true,
+  "H2_expert_is_licensed": true,
+  "C_attention_equals_d7cfa1f4": true
+ }
+}

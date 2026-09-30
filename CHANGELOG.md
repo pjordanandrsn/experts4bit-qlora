@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Lane P84 read (#674): KERNEL. grouped-nf4-gemm 0.33.0 → 0.33.7 moved the recipe's fp32 K8 (−0.000491 nats); e4b 0.37.4 → 0.37.8 and the harness move it by exactly zero (bench, docs and register only)
+
+- `p84-5090-3` ran on one RTX 5090 on the AMD Ryzen 7950X host that read P55x's and P70's 6.36709 (same GPU) for $1.0928, teardown proven. The lane cost $1.8328 of its $4.00 ceiling over six rentals.
+- **The chain.** The control C (P82's build) read N's known float `1.8506507749113845` bit for bit. H1 (e4b 0.37.8, P70's harness) and H2 (e4b 0.37.4, P70's harness), both on gnf4 0.33.7, read the same float. Every build repeated itself, and every expert pack was the licensed `0c9955a9…`. So KERNEL (O → H2) is the whole −0.000491 nats, and PACKAGE and HARNESS are 0.0. The stated expectation, PACKAGE alone, was wrong.
+- **Which commit is not measured.** Read from the code, the one change in the cut on K8's path is gnf4#413 (0.33.7), which IEEE-rounds the fused fp8 KV append's quotient (B771: the old kernel wrote a different byte in 3.9e-8 of values). K8's eager loop calls `graph_mode_init`, so every scored token appends through that kernel. 0.33.1–0.33.3 change no code, and 0.33.4 (`cold_deadline`), 0.33.5 (`int4_smallm` annotations) and 0.33.6 (MXFP4) are off this path.
+- **Correction.** PREREG-p82 and PREREG-p84 said the eager K8 does not run the graph-mode append. It does. Noted in `RESULTS-p82.md`, `RESULTS-p83.md`, the P82 and P83 register rows and STATUS; the registrations stay as registered. #413 is also the first suspect for the P81/P82 cast pair (gnf4 0.33.5 vs 0.33.7), not measured.
+- **Proposed (P85, not started):** P70's build with `E4B_FUSED_KV_APPEND=0` should read N's float bit for bit if #413 is the whole step.
+- New row `e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30`. The read is in `bench/p84/RESULTS-p84.md`; receipts in `bench/p84/receipts/p84-5090-3/`.
+
 ### Lane P84, reading 1 VOID and amendment 1 (#674): on an Intel host the recipe's attention calibration does not reproduce the AMD hosts' pack; P84 is restricted to AMD hosts; P83's cross-machine claim qualified (bench, docs and register only)
 
 - `p84-5090-2` ran on one RTX 5090 on an Intel Core i9-14900K host for $0.5356, teardown proven. The lane has spent $0.7042 so far: two proof attempts and two reading attempts.
