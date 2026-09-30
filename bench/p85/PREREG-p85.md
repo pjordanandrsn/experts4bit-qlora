@@ -28,7 +28,8 @@ The owner was told by email (2026-09-30) that this lane would be registered next
 Two readings, each predicted to equal one exact known float:
 - **F.** Take P70's build (e4b 0.37.4 + gnf4 0.33.0) and turn the fused append off (`E4B_FUSED_KV_APPEND=0`).
   - Every KV append then goes through `quantize_kv_fp8`. Lane B771 measured 0.33.7's fused kernel writing exactly
-    `quantize_kv_fp8`'s bytes, and 0.33.0's differing in 21 of 536,870,912 values.
+    `quantize_kv_fp8`'s bytes, and the pre-#413 kernel (0.33.5's, identical to 0.33.0's) differing in 21 of 536,870,912
+    values.
   - **If #413 is the whole step, F reads N's float.**
 - **S.** Take e4b 0.37.4 on gnf4 **0.33.6** (every release of the cut except #413's), with the fused append on.
   - **If nothing else in the cut moves K8, S reads O's float.**

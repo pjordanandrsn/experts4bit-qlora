@@ -13,4 +13,7 @@ under test.
 | M2 | `E4B_FUSED_KV_APPEND=0` exported to every process | **9** | Refused by O's stamp check (`STAMP FAIL (O)`): the default stamp read the append resolved off. Without the check, O's control and S would have run with the append off. |
 | V | the vendor knob left at its default | **16** | `REFUSED: host CPU vendor is 'GenuineIntel', the lane registers AuthenticAMD (P84 amendment 1)`, before any install (the log has no install line) |
 
+The arms ran the runner as of `c6c6e31`. The one later runner change (`5afe9c3`: O_build's pack is verified before the
+control gate) moves steps after the proving run's exit, which `P85_PROVE=1` never reaches.
+
 No build or K8 can run here: the A2000 has 12 GB of memory, and the fp8 paged KV needs sm_89+.
