@@ -1,0 +1,9 @@
+KNOBS e4b=b5f18b9c9d32245ea6d8ea43b8ed17ee332145cb gnf4=9407d499a4d1e0fe8c22b050878a9f869b385b45 vllm=0.30.0 gpu_class=5090 min_driver=580 min_disk_gb=200
+p86_reduce self-test OK (13 cases)
+pip(vllm 0.30.0) rc=0
+tripwire OK (vllm): 0.30.0 2.13.0+cu130
+PROVE -- the proving run: both installs tripwired; the census arm on vLLM 0.30.0 with a small model
+PROVE census rc=1 
+Traceback (most recent call last):
+  File "<stdin>", line 2, in <module>
+FileNotFoundError: [Errno 2] No such file or directory: '/root/p86/vllm_census_prove.json'

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Lane P86 read (#564): READ -- vLLM's B=16 lead is the expert kernel; Marlin MoE runs the experts in 4.78 ms per step against e4b's int4 GEMV 6.98 (2.86 of the 3.32 ms gap) (bench, docs and register only)
+
+- `p86-5090-3` ran on one RTX 5090 for $0.5170, teardown proven, with the same prompts as P58. The lane cost $0.8561: three proofs (a bandwidth NOT_RUN, the attempt that caught the CUDA 12.8 image, and a pass), an ssh NOT_RUN, and the reading.
+- **Steps.** B=16: e4b 12.06 ms vs vLLM 0.30.0 8.75 (1.38x; P58 1.40x). B=1: 4.27 vs 4.00 (1.07x). Both censuses reconcile to their own step.
+- **B=16 by role (e4b / vLLM / gap):** quantized linear 8.61 / 5.75 / +2.86, of which experts 6.98 + reduce 0.39 + quantize 0.35 against Marlin MoE 4.78 (the attention projections are at parity, 0.89 vs 0.97); routing glue 1.07 / 0.45 / +0.62; other +0.44; attention + KV write 0.96 / 1.35, **e4b faster**. Stated expectation held.
+- **Against #564's byte floor** the e4b GEMV runs about 70 % and Marlin MoE about 94 % of its own.
+- **Next (proposed):** a kernel lane on the B=16 expert matmul, benchmarked against Marlin MoE's 4.78 ms, starting with a $0 A2000 microbench of both kernels on a recorded routing.
+- New row `e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01`. STATUS adds P86 beside P58's comparison and condenses the #674 bullets now that P85 answered it. The read is in `bench/p86/RESULTS-p86.md`.
+
 ### Lane P86 amendment 1 (#564): the vLLM image needs a >= 12.9 CUDA toolkit; the runner refuses an older one before any install (bench only; nothing in the wheel changes)
 
 - `p86-prove-2` caught a defect. vLLM 0.30.0 installed and imported, but its warmup died in FlashInfer's JIT (`requires GPUs with sm75 or higher`) on the sm_120 card. The lane's image was `2.8.0-cuda12.8-devel`, carried over from P84/P85; P58's registration names `2.8.0-cuda12.9-devel` for vLLM on sm_120. `p86-prove-1` was a launcher NOT_RUN (bandwidth). Together $0.1156; no reading attempted.
