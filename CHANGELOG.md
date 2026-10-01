@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Lane P89 registered (#564): does K23's lean glue make Qwen3-30B-A3B's B=16 int4 decode faster with the same bits? (bench and tests only)
+
+- **The question.** P88 LICENSED K19 for T > 1 int4 decode rows. K23 (`E4B_INT4_LEAN_GLUE=1`, #814 over
+  grouped-nf4-gemm #427) folds the launches around K19 into the kernels that bracket it, bit-identical by
+  construction. P89 asks whether that is faster on an RTX 5090.
+- **The lane.** `bench/p89/` is P88's speed instrument, with OFF / ON differing only in `E4B_INT4_LEAN_GLUE`. K19 is at
+  its licensed `auto` in both arms. B=16, two draws each, the first censused.
+  - There is no K8: it scores through the T == 1 loop, where the lean route never engages, so it would be inert as a
+    gate.
+  - The quality gates are the on-card premise, run before any fetch: `tests/test_k19_row_exact_gpu.py` +
+    `tests/test_k23_lean_glue_gpu.py`, 6 passed and none skipped. Then token equality in all 16 rows of both draw
+    pairs.
+  - Engagement is read from the census: at least 48 fewer `index_select` launches per step (the expansion) and at least
+    192 fewer launches per step overall.
+  - The rule: LICENSED at ON/OFF <= 0.97, otherwise NOT_FASTER, IDENTITY_FAIL or VOID.
+- `tests/test_p89_staged_pin.py` pins:
+  - the staged bytes (P88's harness, the two premise tests);
+  - that the gnf4 pin is a real sha;
+  - the refusal, premise and proof order;
+  - the arms and their settings;
+  - the reducer's 14-case self-test;
+  - the driver's dry run.
+
 ### `E4B_INT4_LEAN_GLUE=1` (lane K23, opt-in): K19's grouping glue folds into the builder and K19's store
 
 - **Why.** P88 censused Qwen3-30B-A3B's B=16 step on an RTX 5090 (8 graph replays per arm).
