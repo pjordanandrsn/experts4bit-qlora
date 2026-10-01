@@ -52,6 +52,35 @@ the selftest scaffolding. What is new, named so the files can be diffed:
       The tiny selftest models now carry the two REAL adapter layouts (e4b's and PEFT 0.21.2's) over one seeded frozen
       base, so the T20 selftest can assert identical step-0 losses and measure the matched trajectories' agreement.
 
+  P2-1 Unsloth knobs and engagement (phase 2): --unsloth-moe-backend default|grouped_mm|unsloth_triton|native_torch sets
+      UNSLOTH_MOE_BACKEND in THIS process before `import unsloth` (select_moe_backend() reads it once, lru_cached:
+      unsloth_zoo moe_utils.py:1061-1085, UPSTREAM-NOTES "Unsloth"); --unsloth-speed-tilt 1 sets UNSLOTH_MOE_RECOMPUTE=0
+      UNSLOTH_MOE_GC_REPLAY_PIN=1 (moe_utils.py:751/689/717); both recorded under `unsloth_knobs` and `env.unsloth_env`.
+      Engagement: the three backends behind select_moe_backend() -- forward_native_grouped_mm (moe_utils.py:3790),
+      forward_triton_grouped_gemm (:4153), forward_native_moe_loop (:4357) -- and the bnb-4bit entry point
+      forward_moe_backend_bnb4bit (moe_utils_bnb4bit.py:354-414) are wrapped with call counters (an absent name is
+      recorded, never a crash); per step min/max in `unsloth_backend_calls_per_step_min/_max`, plus `moe_backend_selected`
+      from select_moe_backend() after load. --unsloth-double-quant off|default: when FastLanguageModel.from_pretrained
+      NAMES `bnb_4bit_use_double_quant` (or `quantization_config`) in its signature, read at runtime, the matched arms
+      pass double-quant OFF; what the loaded expert Params4bit's quant_state says (`nested`) is recorded either way
+      (`unsloth_double_quant`), else `how: unknown-default`.
+  P2-2 --framework axolotl (phase 2, axolotl-arm-spec.md): load_axolotl builds the axolotl 0.20.0 config dict for the arm
+      (axolotl_config_dict, pure), finds the attention projections and the expert stacks BY STRUCTURE on a meta-device
+      skeleton of the checkpoint (hf_targets, #542), runs `load_cfg(DictDefault(...))` (cli/config.py:227-318: validation,
+      prepare_plugins -> the KernelsPlugin registers when listed), `load_tokenizer(cfg)` and `ModelLoader(cfg, tok).load()`
+      -- which IS the sequence axolotl.train.train uses up to the trainer (loaders/model.py:305-378: PLUGIN_MANAGER
+      pre_model_load, apply_post_plugin_pre_model_load_patches -> _apply_moe_expert_quantization_patch, _build_model,
+      apply_post_model_build_patches -> _finalize_moe_expert_quantization (patch_manager.py:1075), the PEFT wrap through
+      load_adapter, post_model_load) -- and hands the model to run_arm's own loop. Receipt `axolotl`: version + its
+      torch/transformers/peft/bitsandbytes, the config dict, quantized_moe_experts_n (get_moe_quantized_count, moe_quant.py)
+      and the parametrization census (axolotl_expert_census: Bnb4bitParametrization entries by class name,
+      n_bnb4bit_unwrapped = experts modules whose innermost base carries a bnb parametrization on every stack),
+      experts_implementation (cfg and config._experts_implementation), expert_backend / plugins. --axolotl-best 1 adds
+      plugins [KernelsPlugin], expert_backend scattermoe, moe_bnb_fast true (args.py:38/55; plugin.py:134-163 runs inside
+      ModelLoader.load() through PLUGIN_MANAGER.pre_model_load). The matched init and the frozen-base probe read a
+      parametrized stack's logical shape and quant_state from its Bnb4bitParametrization (bitsandbytes/nn/parametrize.py:
+      the packed original is a plain uint8 [N, 1] Parameter; the quant_state lives on the parametrization module).
+
 Exit codes added: 18 matched init impossible (a LoRA B is not zero after construction).
 
 ----- the tp4 docstring, unmodified -----
@@ -172,6 +201,8 @@ import faulthandler
 import gc
 import glob
 import hashlib
+import importlib
+import inspect
 import io
 import json
 import math
@@ -192,7 +223,8 @@ PREREG = "tc1/TC1-PREREG.md"   # selftest-only: real runs must pass --prereg (ma
 HARNESS = ("tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: "
            "--lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, "
            "matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a "
-           "byte-flip control; + T22: TC1_ environment names, /root/tc1)")   # a receipt must say WHICH harness produced it
+           "byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs "
+           "and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader)")   # a receipt must say WHICH harness produced it
 EXPERT_ATTRS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
 EXPERT_PARAM_RE = re.compile(r"experts\.(?:.*\.)?(gate_up_proj|down_proj|gate_proj|up_proj|w[123]|input_linear|output_linear)$")
 FMT = "### Instruction:\n{instruction}\n\n### Response:\n{output}"
@@ -203,6 +235,132 @@ ALPACA_PROMPT = ("Below is an instruction that describes a task, paired with an 
                  "### Instruction:\n{}\n\n### Input:\n{}\n\n### Response:\n{}")
 UNSLOTH_TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 BANNER = "Enabling LoRA on MoE parameters"
+UNSLOTH_BACKENDS = ("default", "grouped_mm", "unsloth_triton", "native_torch")   # select_moe_backend()'s three + default = the loader's own choice
+# unsloth_zoo 2026.9.9, read from source (UPSTREAM-NOTES "Unsloth"): (module, function, counter key)
+UNSLOTH_BACKEND_FUNCS = (("unsloth_zoo.temporary_patches.moe_utils", "forward_native_grouped_mm", "unsloth_grouped_mm"),      # moe_utils.py:3790
+                         ("unsloth_zoo.temporary_patches.moe_utils", "forward_triton_grouped_gemm", "unsloth_triton"),       # moe_utils.py:4153
+                         ("unsloth_zoo.temporary_patches.moe_utils", "forward_native_moe_loop", "unsloth_loop"),             # moe_utils.py:4357
+                         ("unsloth_zoo.temporary_patches.moe_utils_bnb4bit", "forward_moe_backend_bnb4bit", "moe_bnb4bit_backend"))   # moe_utils_bnb4bit.py:354
+UNSLOTH_BACKEND_KEYS = {"grouped_mm": "unsloth_grouped_mm", "unsloth_triton": "unsloth_triton", "native_torch": "unsloth_loop"}
+
+
+def apply_unsloth_knobs(a):
+    """P2-1: the Unsloth knobs go into THIS process's environment before `import unsloth`. Returns the receipt block
+    {moe_backend_requested, speed_tilt, double_quant_requested, env_set}; `default` leaves the environment alone so what
+    the loader chooses on its own is what runs -- and is recorded by select_moe_backend() after load."""
+    out = {"moe_backend_requested": getattr(a, "unsloth_moe_backend", "default") or "default",
+           "speed_tilt": bool(int(getattr(a, "unsloth_speed_tilt", 0) or 0)),
+           "double_quant_requested": getattr(a, "unsloth_double_quant", "off") or "off", "env_set": {}}
+    if getattr(a, "framework", None) != "unsloth":
+        return out
+    if out["moe_backend_requested"] != "default":
+        os.environ["UNSLOTH_MOE_BACKEND"] = out["moe_backend_requested"]           # moe_utils.py:1061-1085
+        out["env_set"]["UNSLOTH_MOE_BACKEND"] = out["moe_backend_requested"]
+    if out["speed_tilt"]:
+        os.environ["UNSLOTH_MOE_RECOMPUTE"] = "0"                                  # moe_utils.py:751 (_moe_recompute_enabled)
+        os.environ["UNSLOTH_MOE_GC_REPLAY_PIN"] = "1"                              # moe_utils.py:717 (_momentary_pin_fits)
+        out["env_set"].update({"UNSLOTH_MOE_RECOMPUTE": "0", "UNSLOTH_MOE_GC_REPLAY_PIN": "1"})
+    return out
+
+
+def unsloth_double_quant_kwargs(from_pretrained_fn, want_off):
+    """P2-1: the from_pretrained kwargs that turn double-quant OFF, decided from the signature READ AT RUNTIME: only a
+    parameter the signature NAMES is passed (`bnb_4bit_use_double_quant`, else `quantization_config` with a
+    BitsAndBytesConfig); otherwise nothing is passed and the receipt says `unknown-default`. Pure: testable without unsloth."""
+    dq = {"requested": None, "how": "unknown-default", "loaded_nested": None}
+    kw = {}
+    if not want_off:
+        dq["how"] = "loader default (not requested)"
+        return kw, dq
+    try:
+        params = inspect.signature(from_pretrained_fn).parameters
+    except (TypeError, ValueError) as e:
+        dq["how"] = f"unknown-default: signature unreadable ({type(e).__name__})"
+        return kw, dq
+    if "bnb_4bit_use_double_quant" in params:
+        kw["bnb_4bit_use_double_quant"] = False
+        dq.update({"requested": False, "how": "from_pretrained(bnb_4bit_use_double_quant=False)"})
+    elif "quantization_config" in params:
+        from transformers import BitsAndBytesConfig
+        kw["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_use_double_quant=False)
+        dq.update({"requested": False, "how": "from_pretrained(quantization_config=BitsAndBytesConfig(nf4, bf16 compute, double_quant=False))"})
+    else:
+        dq["how"] = "unknown-default: from_pretrained names neither bnb_4bit_use_double_quant nor quantization_config"
+    return kw, dq
+
+
+def unsloth_backend_selected():
+    """select_moe_backend() after load (lru_cached, so it is the value the model's forward will use); never raises."""
+    try:
+        from unsloth_zoo.temporary_patches.moe_utils import select_moe_backend
+        return str(select_moe_backend())
+    except Exception as e:
+        return f"unavailable: {type(e).__name__}: {str(e)[:120]}"
+
+
+def loaded_expert_double_quant(model):
+    """What the loaded expert Params4bit's quant_state says about double quantisation (`nested`): True / False, or None
+    when no expert Params4bit with a quant_state is found."""
+    for name, p in model.named_parameters():
+        if type(p).__name__ == "Params4bit" and EXPERT_PARAM_RE.search(name) and getattr(p, "quant_state", None) is not None:
+            return bool(getattr(p.quant_state, "nested", False))
+    return None
+
+
+# ----------------------------------------------------------------------------- P2-2: axolotl helpers (pure; no axolotl import)
+def axolotl_config_dict(a, base_model, mods, params, best=False, double_quant=False, dataset_path=None, output_dir=None):
+    """The axolotl 0.20.0 config for ONE arm as the dict `load_cfg` accepts (axolotl-arm-spec.md "Config keys"; keys read in
+    utils/schemas/config.py, utils/schemas/model.py, loaders/model.py, monkeypatch/moe_quant.py). The trainer-side keys
+    (micro_batch_size, gradient_accumulation_steps, max_steps, learning_rate, ...) are set to the fixture even though THIS
+    harness runs the loop, so the dict describes the run a user would launch. `datasets` must be present
+    (utils/schemas/validation.py:276 "either datasets or pretraining_dataset is required"): it names the registered Alpaca
+    subset file; nothing in load_cfg reads it. Double-quant: moe_quant.py:134-136 reads cfg.bnb_4bit_use_double_quant
+    (None -> True) for the expert stacks; the Linear path hard-codes True and takes bnb_config_kwargs on top
+    (loaders/model.py:1057, 1066). There is no router_aux_loss_coef config key in 0.20.0 (grep of the schemas); the
+    model's value is recorded in the receipt instead."""
+    cfg = {
+        "base_model": base_model,
+        "load_in_4bit": True, "adapter": "qlora", "quantize_moe_experts": True,                           # schema 955-964; moe_quant.py:150-181
+        "bnb_4bit_use_double_quant": bool(double_quant),
+        "bnb_config_kwargs": {"bnb_4bit_use_double_quant": bool(double_quant)},
+        "lora_r": int(a.r), "lora_alpha": int(a.alpha), "lora_dropout": 0.0,                              # dropout 0 is forced with target_parameters
+        "lora_target_modules": list(mods), "lora_target_parameters": list(params),                      # loaders/adapter.py:176-195 -> LoraConfig
+        "gradient_checkpointing": True, "gradient_checkpointing_kwargs": {"use_reentrant": False},       # loaders/model.py:628-631
+        "bf16": True, "sequence_len": int(a.seq), "seed": int(a.seed),
+        "micro_batch_size": int(getattr(a, "micro_batch", 1) or 1), "gradient_accumulation_steps": int(a.accum), "max_steps": int(a.steps), "num_epochs": 1,
+        "learning_rate": float(a.lr), "weight_decay": float(getattr(a, "weight_decay", 0.0)), "warmup_steps": int(getattr(a, "warmup_steps", 0) or 0),
+        "lr_scheduler": "linear", "optimizer": "adamw_bnb_8bit",
+        "datasets": [{"path": dataset_path or "/root/tc1/data/ds_alpaca.json", "type": "alpaca"}],
+        "output_dir": output_dir or "/root/tc1/axolotl-out",
+    }
+    if best:                                                                                                # integrations/kernels/args.py:38, 55; plugin.py:134-163
+        cfg.update({"plugins": ["axolotl.integrations.kernels.KernelsPlugin"], "expert_backend": "scattermoe", "moe_bnb_fast": True})
+    return cfg
+
+
+def axolotl_expert_census(model):
+    """The parametrization census: how many parameters carry a bitsandbytes Bnb4bitParametrization (by class name --
+    bitsandbytes/nn/parametrize.py), how many experts modules have EVERY stack so parametrized (n_bnb4bit_unwrapped, read on
+    the innermost base under the PEFT wrappers), and the experts-module count. Pure structure; no axolotl import."""
+    n_quant, n_entries, n_mods, n_mods_4bit, samples = 0, 0, 0, 0, []
+    for name, m in model.named_modules():
+        pz = getattr(m, "parametrizations", None)
+        if pz is None or not hasattr(pz, "items"):
+            continue
+        for pname, plist in pz.items():
+            n_entries += 1
+            if any(type(x).__name__ == "Bnb4bitParametrization" for x in plist):
+                n_quant += 1
+                if len(samples) < 4:
+                    samples.append(f"{name}.{pname}")
+    for name, m in model.named_modules():
+        if is_experts_module(name):
+            n_mods += 1
+            inner = innermost_experts(m)
+            pz = getattr(inner, "parametrizations", None)
+            if pz is not None and hasattr(pz, "items") and len(pz) >= 2 and all(any(type(x).__name__ == "Bnb4bitParametrization" for x in plist) for _, plist in pz.items()):
+                n_mods_4bit += 1
+    return {"quantized_moe_experts_n": n_quant, "parametrized_params": n_entries, "n_experts_modules": n_mods, "n_bnb4bit_unwrapped": n_mods_4bit, "samples": samples}
 DEV = "cuda"
 # #548: the share of an arm's own alarm the prologue may consume before the arm refuses itself (see phase_budget_for)
 PROLOGUE_BUDGET_SHARE = 0.35
@@ -797,7 +955,7 @@ def collate(rows, pad_id):
 class Counters:
     def __init__(self):
         self.counts = {"fused_grouped_lora": 0, "experts_forward": 0, "moe_bnb4bit_backend": 0}
-        self._restore, self._hooks = [], []
+        self._restore, self._hooks, self.absent = [], [], []
 
     def install_e4b(self):
         try:
@@ -823,28 +981,40 @@ class Counters:
         self.install_experts_hooks(model)
 
     def install_unsloth(self, model):
+        """P2-1: the bnb-4bit entry point AND the three backends behind select_moe_backend() (UNSLOTH_BACKEND_FUNCS) are
+        wrapped with counters. A name the installed zoo lacks is recorded in `absent`, never a crash. Every module already
+        imported under `unsloth*` / `transformers*` that holds the original function object (a `from ... import` alias,
+        transformers' ALL_EXPERTS_FUNCTIONS table) gets the wrapper too, so a backend called through an alias still counts."""
         self.install_experts_hooks(model)
-        try:
-            from unsloth_zoo.temporary_patches import moe_utils_bnb4bit as M
-            orig = M.forward_moe_backend_bnb4bit
+        for modname, fname, key in UNSLOTH_BACKEND_FUNCS:
+            try:
+                M = importlib.import_module(modname)
+                orig = getattr(M, fname)
+            except Exception as e:
+                self.absent.append(f"{modname}.{fname}: {type(e).__name__}")
+                continue
+            self.counts.setdefault(key, 0)
 
-            def w(*a, _orig=orig, **k):
-                self.counts["moe_bnb4bit_backend"] += 1
+            def w(*a, _orig=orig, _key=key, **k):
+                self.counts[_key] += 1
                 return _orig(*a, **k)
-            M.forward_moe_backend_bnb4bit = w
-            self._restore.append((M, "forward_moe_backend_bnb4bit", orig))
-            try:   # transformers' dispatcher may hold the function object; swap it there too when it does
-                from transformers.integrations import moe as TM
-                tab = getattr(TM, "ALL_EXPERTS_FUNCTIONS", None)
-                if tab is not None:
-                    for k, v in list(tab.items()):
-                        if v is orig:
-                            tab[k] = w
-                            self._restore.append((tab, k, orig))
-            except Exception:
-                pass
-        except Exception:
-            pass
+            setattr(M, fname, w)
+            self._restore.append((M, fname, orig))
+            for mn, mod in list(sys.modules.items()):
+                if mod is None or mod is M or not (mn.startswith("unsloth") or mn.startswith("transformers")):
+                    continue
+                try:
+                    for attr, val in list(vars(mod).items()):
+                        if val is orig:
+                            setattr(mod, attr, w)
+                            self._restore.append((mod, attr, orig))
+                        elif isinstance(val, dict) and attr == "ALL_EXPERTS_FUNCTIONS":
+                            for k2, v2 in list(val.items()):
+                                if v2 is orig:
+                                    val[k2] = w
+                                    self._restore.append((val, k2, orig))
+                except Exception:
+                    pass
 
     def snapshot(self):
         d = dict(self.counts)
@@ -1017,10 +1187,15 @@ def load_unsloth(a):
         local = _cand if os.path.isdir(_cand) else snapshot_download(a.model, revision=a.revision)
     x["snapshot_dir"] = local
 
+    dq = {"requested": None, "how": "unknown-default", "loaded_nested": None}
+    want_dq_off = (getattr(a, "unsloth_double_quant", "off") or "off") == "off"
+
     def _load(ldr):
+        kw, dq_ = unsloth_double_quant_kwargs(ldr.from_pretrained, want_dq_off)   # P2-1: only a NAMED parameter is passed
+        dq.update(dq_)
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            model, tokenizer_obj = ldr.from_pretrained(model_name=local, max_seq_length=a.seq, dtype=torch.bfloat16, load_in_4bit=True)
+            model, tokenizer_obj = ldr.from_pretrained(model_name=local, max_seq_length=a.seq, dtype=torch.bfloat16, load_in_4bit=True, **kw)
             model = ldr.get_peft_model(
                 model, r=a.r, lora_alpha=a.alpha, lora_dropout=0.0, bias="none", target_modules=list(x["unsloth_targets"]),
                 use_gradient_checkpointing=("unsloth" if a.grad_ckpt == "unsloth" else True), random_state=a.seed)
@@ -1035,10 +1210,13 @@ def load_unsloth(a):
                 model, tokenizer_obj, out = _load(unsloth.FastModel)
             else:
                 raise
-    x["banner_lines"] = [l for l in out.splitlines() if re.search(r"MoE|Params4bit|4.?bit|LoRA on", l)][:12]
+    x["banner_lines"] = [l for l in out.splitlines() if re.search(r"MoE|Params4bit|4.?bit|LoRA on|backend", l, re.I)][:16]
     print("\n".join(out.splitlines()[-40:]), flush=True)
     if not any(BANNER in l for l in x["banner_lines"]):
         x["banner_lines"].append(f"NO '{BANNER}' banner on stdout (the census below decides)")
+    dq["loaded_nested"] = loaded_expert_double_quant(model)            # P2-1: what the loaded expert Params4bit says (None = none found)
+    x["unsloth_double_quant"] = dq
+    x["moe_backend_selected"] = unsloth_backend_selected()             # P2-1: select_moe_backend() after load (lru_cached)
     x["verify"] = {"n_quantized": None, "n_unquantized": None}
     x["n_layers"], x["model_type"] = n_layers_of(model.config)
     model.config.use_cache = False
@@ -1210,6 +1388,75 @@ def load_hf(a):
     return model, x
 
 
+def load_axolotl(a):
+    """P2-2: axolotl 0.20.0's own model stack under this harness's loop (axolotl-arm-spec.md). Everything axolotl.train.train
+    does up to the trainer is `load_cfg` + `load_tokenizer` + `ModelLoader(cfg, tok).load()` (loaders/model.py:305-378 runs
+    the plugin hooks, the MoE quantization patch, the build, the finalize, the PEFT wrap and post_model_load in order), so
+    that is what runs here. The targets are found BY STRUCTURE on a meta-device skeleton of the checkpoint (no weights),
+    with the HF arm's rule (#542). A loader exception is classified by run_arm exactly as the HF arm's."""
+    import importlib.metadata as md
+    from huggingface_hub import snapshot_download
+    from transformers import AutoConfig, AutoModelForCausalLM
+    x = {"n_attn4": 0, "n_patched": 0, "reason": "", "banner_lines": [], "probes": {}, "attn4_probe": None,
+         "structural_expected_n_attn4": None, "detector_version": None, "loader_used": "axolotl ModelLoader.load()"}
+    with PH("snapshot"):
+        _cand = snapshot_dir_for(a.model, a.revision)
+        local = _cand if os.path.isdir(_cand) else snapshot_download(a.model, revision=a.revision)
+    x["snapshot_dir"] = local
+    with PH("targets"):                                                                  # structure first, on a weightless skeleton
+        cfg0 = AutoConfig.from_pretrained(local)
+        x["n_layers"], x["model_type"] = n_layers_of(cfg0)
+        with torch.device("meta"):
+            skel = AutoModelForCausalLM.from_config(cfg0)
+        mods, params, expert_diag = hf_targets(skel, x["n_layers"], x["model_type"])    # #542: refuses rather than an empty list
+        if not mods:
+            raise NotImplementedError("axolotl arm: no attention projection found by structure (q_proj/k_proj/o_proj); refusing rather than guessing")
+        del skel
+    best = bool(int(getattr(a, "axolotl_best", 0) or 0))
+    cfg_dict = axolotl_config_dict(a, local, mods, params, best=best, double_quant=False,
+                                   dataset_path=getattr(a, "axolotl_dataset", None), output_dir=os.path.join(a.out, "axolotl-out"))
+    import axolotl
+    from axolotl.cli.config import load_cfg
+    from axolotl.loaders import ModelLoader, load_tokenizer
+    from axolotl.utils.dict import DictDefault
+    with PH("load_weights"):
+        cfg = load_cfg(DictDefault(cfg_dict))                   # cli/config.py:227-318 (validate, prepare_plugins, normalize)
+        tokenizer_obj = load_tokenizer(cfg)                     # train.py:73
+        model, lora_config = ModelLoader(cfg, tokenizer_obj).load()   # train.py:83-84 -> loaders/model.py:305-378
+    try:
+        from axolotl.monkeypatch.moe_quant import get_moe_quantized_count
+        n_quant_log = int(get_moe_quantized_count())            # what _finalize_moe_expert_quantization logged (patch_manager.py:1075-1093)
+    except Exception as e:
+        n_quant_log = f"unavailable: {type(e).__name__}"
+    census = axolotl_expert_census(model)
+    mcfg = getattr(getattr(model, "config", None), "to_dict", lambda: {})()
+    x["axolotl"] = {"version": getattr(axolotl, "__version__", None), "torch": torch.__version__,
+                    "transformers": md.version("transformers"), "peft": md.version("peft"), "bitsandbytes": md.version("bitsandbytes"),
+                    "config": cfg_dict, "best": best, "plugins": cfg_dict.get("plugins"), "expert_backend": cfg_dict.get("expert_backend"),
+                    "cfg_experts_implementation": cfg.get("experts_implementation"), "cfg_use_scattermoe": cfg.get("use_scattermoe"),
+                    "config_experts_implementation": getattr(getattr(model, "config", None), "_experts_implementation", None),
+                    "router_aux_loss_coef": mcfg.get("router_aux_loss_coef"),
+                    "quantized_moe_experts_n": n_quant_log, "census": census,
+                    "moe_experts_quantized_flag": getattr(getattr(model, "base_model", None), "model", None) is not None and getattr(getattr(model.base_model, "model", None), "_moe_experts_quantized", None),
+                    "lora_config": {"r": getattr(lora_config, "r", None), "lora_alpha": getattr(lora_config, "lora_alpha", None),
+                                    "n_target_modules": len(mods), "n_target_parameters": len(params), "init_lora_weights": getattr(lora_config, "init_lora_weights", None)}}
+    x["hf_targets"] = {"peft": md.version("peft"), "n_target_modules": len(mods), "target_modules_sample": mods[:4],
+                       "n_target_parameters": len(params), "target_parameters": params[:8] + (["..."] if len(params) > 8 else []),
+                       "expert_selection": expert_diag, "bnb": {"load_in_4bit": True, "quant_type": "nf4", "compute_dtype": "bfloat16", "double_quant": False, "quantize_moe_experts": True}}
+    x["axolotl_targets"] = x["hf_targets"]
+    x["axolotl_bnb4bit_modules"] = census
+    x["banner_lines"] = [f"axolotl {x['axolotl']['version']}: quantized_moe_experts_n={n_quant_log} parametrized={census['parametrized_params']} "
+                         f"n_bnb4bit_unwrapped={census['n_bnb4bit_unwrapped']} experts_implementation cfg={cfg.get('experts_implementation')} "
+                         f"config={x['axolotl']['config_experts_implementation']} plugins={cfg_dict.get('plugins')}"]
+    x["verify"] = {"n_quantized": None, "n_unquantized": None}
+    x["ckpt_mode"] = f"axolotl cfg gradient_checkpointing={cfg.get('gradient_checkpointing')} kwargs={cfg.get('gradient_checkpointing_kwargs')}"
+    model.config.use_cache = False
+    x["tokenizer_obj"] = tokenizer_obj
+    x["hashes"] = hashes_unsloth                                  # Params4bit + the uint8 packed originals under `experts.parametrizations.*.original`
+    x["fwd_kwargs"] = lambda t: {"attention_mask": torch.ones_like(t)}
+    return model, x
+
+
 def u8_bnb4bit(model):
     """U8 as amended (amendment 4): the predicate on the module named experts AND on the innermost module."""
     try:
@@ -1320,21 +1567,51 @@ def _raw_param(owner, name):
     return getattr(owner, name, None)
 
 
+def quant_state_of(owner, name, p=None):
+    """The bitsandbytes quant_state that describes `owner.<name>`: on the Params4bit itself (Unsloth, Linear4bit), else on
+    the Bnb4bitParametrization registered for it (axolotl's quantize_moe_experts: the packed original is a plain uint8
+    [N, 1] Parameter and the state lives on the parametrization module -- bitsandbytes/nn/parametrize.py). None otherwise."""
+    p = _raw_param(owner, name) if p is None else p
+    qs = getattr(p, "quant_state", None)
+    if qs is not None:
+        return qs
+    pz = getattr(owner, "parametrizations", None)
+    if pz is not None and name in pz:
+        for mod in pz[name]:
+            qs = getattr(mod, "quant_state", None)
+            if qs is not None:
+                return qs
+    return None
+
+
+def logical_stack_shape(owner, name):
+    """The logical (E, d1, d2) of an expert stack whatever its storage: Unsloth's packed Params4bit carries `_original_shape`
+    (moe_utils_bnb4bit.py:245/734 -- UNVERIFIED locally, read from the inspection note) and a quant_state; a parametrized
+    stack's quant_state.shape; a plain tensor's own shape. None when no 3-D shape is found."""
+    p = _raw_param(owner, name)
+    if p is None:
+        return None
+    cands = [getattr(p, "_original_shape", None)]
+    qs = quant_state_of(owner, name, p)
+    cands.append(getattr(qs, "shape", None) if qs is not None else None)
+    cands.append(tuple(p.shape))
+    for c in cands:
+        if c is not None and len(tuple(c)) == 3:
+            return tuple(int(v) for v in c)
+    return None
+
+
 def expert_stack_shape(wrapper, parameter_name):
-    """(E, out, in) of the 3-D expert stack a PEFT ParamWrapper adapts, read from the innermost base: a Params4bit's logical
-    shape is its quant_state.shape; a base flagged `is_transposed` (transformers' grouped-GEMM convention) stores
-    [E, in, out] and is reported swapped. None when the attribute is not a 3-D stack."""
+    """(E, out, in) of the 3-D expert stack a PEFT ParamWrapper adapts, read from the innermost base (logical_stack_shape);
+    a base flagged `is_transposed` (transformers' grouped-GEMM convention) stores [E, in, out] and is reported swapped.
+    None when the attribute is not a 3-D stack."""
     inner = wrapper
     while hasattr(inner, "base_layer"):
         inner = inner.base_layer
-    p = _raw_param(inner, parameter_name)
-    if p is None:
+    shape = logical_stack_shape(inner, parameter_name)
+    if shape is None:
         return None
-    qs = getattr(p, "quant_state", None)
-    shape = tuple(qs.shape) if (qs is not None and getattr(qs, "shape", None) is not None) else tuple(p.shape)
-    if len(shape) != 3:
-        return None
-    E, d1, d2 = (int(v) for v in shape)
+    E, d1, d2 = shape
     return (E, d2, d1) if getattr(inner, "is_transposed", False) else (E, d1, d2)
 
 
@@ -1534,7 +1811,7 @@ def _probe_stack_param(p, inner, attr):
     no quant_state (the selftest's stand-in) is raw bytes, labelled so."""
     import bitsandbytes.functional as BF
     from bitsandbytes.functional import QuantState
-    qs = getattr(p, "quant_state", None)
+    qs = quant_state_of(inner, attr, p)
     transposed = bool(getattr(inner, "is_transposed", False))
     if qs is not None:
         E, d1, d2 = (int(v) for v in qs.shape)
@@ -1610,7 +1887,7 @@ def frozen_base_probe(model, framework):
                     for attr in cands:
                         p = _raw_param(inner, attr)
                         shp = expert_stack_shape(inner, attr)
-                        if p is None or shp is None:
+                        if p is None or shp is None or (p.ndim != 3 and quant_state_of(inner, attr, p) is None and getattr(p, "_original_shape", None) is None):
                             continue
                         kind, rule = expert_kind(shp, hidden, attr)
                         if kind is None or kind in out["slots"]:
@@ -1711,6 +1988,7 @@ def run_arm(a, load_fn, sampler=True):
     # #548: the window opens HERE, not at LOAD OK -- so the receipt accounts for the whole process, not a chosen slice.
     PH.reset()
     PH.begin(PROC_T0 if _FIRST_ARM[0] else time.perf_counter())
+    unsloth_knobs = apply_unsloth_knobs(a)         # P2-1: into the environment BEFORE `import unsloth` (and before `env` is snapshotted)
     if a.framework == "e4b":                        # P67: the switch's counter is per ARM (the selftest runs many in one process)
         try:
             from experts4bit_qlora.lora import reset_reference_order_stats
@@ -1757,6 +2035,8 @@ def run_arm(a, load_fn, sampler=True):
         st, code = classify_load_exception(e)
         stub(a, st, f"{type(e).__name__}: {str(e)[:700]}", {"phase": "load"}, code=code)
     load_s = time.perf_counter() - t_load
+    if a.framework == "unsloth" and not x.get("moe_backend_selected"):   # P2-1: select_moe_backend() after load, on every Unsloth arm
+        x["moe_backend_selected"] = unsloth_backend_selected()
     n_attn4, n_patched, reason, banner_lines = x["n_attn4"], x["n_patched"], x["reason"], x["banner_lines"]
     hashes, fwd_kwargs, tokenizer_obj = x["hashes"], x["fwd_kwargs"], x.get("tokenizer_obj")
 
@@ -1825,7 +2105,7 @@ def run_arm(a, load_fn, sampler=True):
         counter = Counters()
         if a.framework == "e4b":
             counter.install_e4b()
-        elif a.framework == "hf":
+        elif a.framework in ("hf", "axolotl"):
             counter.install_hf(model)
         else:
             counter.install_unsloth(model)
@@ -2027,9 +2307,12 @@ def run_arm(a, load_fn, sampler=True):
         except Exception:                         # an e4b without the switch: say so rather than guess (the reducer refuses it)
             reference_order["calls"] = None
             reference_order["order"] = None
-    key = {"e4b": "fused_grouped_lora", "unsloth": "moe_bnb4bit_backend", "hf": "experts_forward"}[a.framework]
+    key = {"e4b": "fused_grouped_lora", "unsloth": "moe_bnb4bit_backend", "hf": "experts_forward", "axolotl": "experts_forward"}[a.framework]
     kps = [k[key] for k in kcalls]
     efw = [k["experts_forward"] for k in kcalls]
+    ub_keys = [k for _, _, k in UNSLOTH_BACKEND_FUNCS]            # P2-1: per-step min/max of every Unsloth backend counter
+    ub_min = {k: min(c.get(k, 0) for c in kcalls) for k in ub_keys} if (a.framework == "unsloth" and kcalls) else None
+    ub_max = {k: max(c.get(k, 0) for c in kcalls) for k in ub_keys} if (a.framework == "unsloth" and kcalls) else None
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -2040,7 +2323,11 @@ def run_arm(a, load_fn, sampler=True):
         "grad_ckpt": x["ckpt_mode"], "attn_4bit": bool(a.attn_4bit), "n_attn4": n_attn4, "attn4_probe": x.get("attn4_probe"),
         "structural_expected_n_attn4": x.get("structural_expected_n_attn4"), "detector_version": x.get("detector_version"),
         "loader_used": x.get("loader_used"), "loader_fallback_reason": x.get("loader_fallback_reason"), "unsloth_targets": x.get("unsloth_targets"),
-        "hf_targets": x.get("hf_targets"),
+        "hf_targets": x.get("hf_targets"), "axolotl_targets": x.get("axolotl_targets"), "axolotl": x.get("axolotl"),      # P2-2
+        "axolotl_bnb4bit_modules": x.get("axolotl_bnb4bit_modules"),
+        "unsloth_knobs": unsloth_knobs, "moe_backend_selected": x.get("moe_backend_selected"),                            # P2-1
+        "unsloth_double_quant": x.get("unsloth_double_quant"),
+        "unsloth_backend_calls_per_step_min": ub_min, "unsloth_backend_calls_per_step_max": ub_max, "unsloth_backend_absent": counter.absent,
         "tokens": {"path": os.path.basename(a.tokens), "sha256": tk["sha256"], "n_train": len(train), "eval_rows_used": len(ev), "tokenizer_agree": tokenizer_agree,
                    "pad_id": pad_id},
         "prereg": a.prereg, "harness": HARNESS, "env": env, "load_s": round(load_s, 1),
@@ -2163,6 +2450,16 @@ class _TinyStack(nn.Module):
         super().__init__()
         self.E, self.H, self.inter, self.mode, self.num_experts = E, H, inter, mode, E
         g = torch.Generator().manual_seed(7)
+        if mode == "axolotl":
+            # P2-2: what quantize_moe_experts leaves behind (moe_quant.py:150-181 -> bitsandbytes replace_parameter_4bit): bf16
+            # stacks become a plain uint8 [N, 1] `parametrizations.<name>.original` with the quant_state on the
+            # Bnb4bitParametrization; reading `self.gate_up_proj` dequantises. Real bnb, on CPU.
+            from bitsandbytes.nn.parametrize import replace_parameter_4bit
+            self.gate_up_proj = nn.Parameter(_seeded_randn((E, 2 * inter, H), _BASE_SEED + 700, 0.05).to(torch.bfloat16))
+            self.down_proj = nn.Parameter(_seeded_randn((E, H, inter), _BASE_SEED + 701, 0.05).to(torch.bfloat16))
+            for n in ("gate_up_proj", "down_proj"):
+                replace_parameter_4bit(self, n, compress_statistics=False, quant_type="nf4", blocksize=64)
+            return
         self.gate_up_proj = param_cls(torch.randint(0, 255, (E, 2 * inter, H), generator=g, dtype=torch.uint8))
         self.down_proj = param_cls(torch.randint(0, 255, (E, H, inter), generator=g, dtype=torch.uint8))
         if mode == "e4b":
@@ -2182,7 +2479,10 @@ class _TinyStack(nn.Module):
         """act(W1 x + s*B1 A1 x), then W2 h + s*B2 A2 h, every expert on every token, mean over experts (a dense stand-in
         for routing). A1 [E, r, H], B1 [E, 2I, r], A2 [E, r, inter], B2 [E, H, r] -- the e4b orientation, which the peft
         layout is VIEWED into, so both tiny models compute the same function from the same slot tensors."""
-        w1, w2 = self._deq(self.gate_up_proj), self._deq(self.down_proj)
+        if self.mode == "axolotl":
+            w1, w2 = self.gate_up_proj.float(), self.down_proj.float()     # the parametrization dequantises on access
+        else:
+            w1, w2 = self._deq(self.gate_up_proj), self._deq(self.down_proj)
         h = torch.einsum("bth,eih->beti", x, w1)
         h = h + scaling * torch.einsum("betr,eir->beti", torch.einsum("bth,erh->betr", x.to(A1.dtype), A1), B1).to(h.dtype)
         gate, up = h.chunk(2, dim=-1)
@@ -2278,8 +2578,8 @@ class _Layer(nn.Module):
             self.mlp.experts = _TinyExpertsE4b(stack, r, alpha, 6000 + i, torch.bfloat16)      # the streaming loader's bf16 expert adapters
         else:
             stack = _TinyStack(E, H, inter, mode, Params4bit)
-            inner = _ParamWrapper(stack, "gate_up_proj", E, H, 2 * inter, r, alpha, 7000 + i, torch.bfloat16, mode)
-            self.mlp.experts = _ParamWrapper(inner, "down_proj", E, inter, H, r, alpha, 7100 + i, torch.bfloat16, mode)
+            inner = _ParamWrapper(stack, "gate_up_proj", E, H, 2 * inter, r, alpha, 7000 + i, torch.bfloat16, "unsloth" if mode == "unsloth" else "hf")
+            self.mlp.experts = _ParamWrapper(inner, "down_proj", E, inter, H, r, alpha, 7100 + i, torch.bfloat16, "unsloth" if mode == "unsloth" else "hf")
             if extra_lora:                    # a LoRA on a module no slot census expects: the mapping must report the arm incomplete
                 dense = nn.Linear(H, H, bias=False)
                 dense.weight.requires_grad_(False)
@@ -2332,12 +2632,22 @@ def _install_fake_modules():
     sys.modules["nf4_qlora"] = nf4
     zoo = types.ModuleType("unsloth_zoo")
     tp = types.ModuleType("unsloth_zoo.temporary_patches")
+    mu = types.ModuleType("unsloth_zoo.temporary_patches.moe_utils")       # P2-1: the three backends behind select_moe_backend()
+    mu.forward_native_grouped_mm = lambda mod, x: mod._reference(x)
+    mu.forward_triton_grouped_gemm = lambda mod, x: mod._reference(x)
+    mu.forward_native_moe_loop = lambda mod, x: mod._reference(x)
+    mu.select_moe_backend = lambda: os.environ.get("UNSLOTH_MOE_BACKEND") or "grouped_mm"
     mb = types.ModuleType("unsloth_zoo.temporary_patches.moe_utils_bnb4bit")
-    mb.forward_moe_backend_bnb4bit = lambda mod, x: mod._reference(x)
+
+    def _bnb4bit(mod, x):                 # the real entry point dispatches on select_moe_backend() (moe_utils_bnb4bit.py:354-414); looked up at call time
+        fn = {"grouped_mm": "forward_native_grouped_mm", "unsloth_triton": "forward_triton_grouped_gemm", "native_torch": "forward_native_moe_loop"}[mu.select_moe_backend()]
+        return getattr(mu, fn)(mod, x)
+    mb.forward_moe_backend_bnb4bit = _bnb4bit
     mb._moe_uses_bnb4bit_expert_weights = lambda m: type(getattr(m, "gate_up_proj", None)).__name__ == "Params4bit"
-    sys.modules["unsloth_zoo"], sys.modules["unsloth_zoo.temporary_patches"], sys.modules["unsloth_zoo.temporary_patches.moe_utils_bnb4bit"] = zoo, tp, mb
+    sys.modules["unsloth_zoo"], sys.modules["unsloth_zoo.temporary_patches"] = zoo, tp
+    sys.modules["unsloth_zoo.temporary_patches.moe_utils"], sys.modules["unsloth_zoo.temporary_patches.moe_utils_bnb4bit"] = mu, mb
     zoo.temporary_patches = tp
-    tp.moe_utils_bnb4bit = mb
+    tp.moe_utils, tp.moe_utils_bnb4bit = mu, mb
 
 
 def _selftest_load_e4b(a):
@@ -2392,6 +2702,150 @@ def _selftest_load_unsloth(a):
          "tokenizer_obj": _FakeTok(), "snapshot_dir": "/selftest/snapshots/deadbeef",
          "structural_expected_n_attn4": None, "detector_version": None}
     return m, x
+
+
+def _selftest_load_axolotl(a):
+    """P2-2: the axolotl arm's bookkeeping on the tiny PEFT-shaped model over REAL bnb-parametrized stacks (what
+    quantize_moe_experts produces), with the config dict and the census the real loader records."""
+    with PH("load_weights"):
+        m = _TinyLM("axolotl")
+    mods = [f"model.layers.{i}.self_attn.{p}" for i in range(2) for p in ("q_proj", "k_proj", "v_proj", "o_proj")]
+    params = [f"model.layers.{i}.mlp.experts.{n}" for i in range(2) for n in ("gate_up_proj", "down_proj")]
+    best = bool(int(getattr(a, "axolotl_best", 0) or 0))
+    cfg_dict = axolotl_config_dict(a, "selftest/tiny", mods, params, best=best, double_quant=False, dataset_path="/selftest/ds_alpaca.json", output_dir="/selftest/out")
+    census = axolotl_expert_census(m)
+    x = {"n_attn4": 0, "n_patched": 0, "reason": "", "banner_lines": [f"axolotl selftest: quantized_moe_experts_n={census['quantized_moe_experts_n']}"],
+         "probes": {}, "n_layers": 2, "model_type": "tiny_axolotl", "verify": {"n_quantized": None, "n_unquantized": None},
+         "ckpt_mode": "axolotl cfg gradient_checkpointing=True kwargs={'use_reentrant': False}", "hashes": hashes_unsloth,
+         "fwd_kwargs": lambda t: {"attention_mask": torch.ones_like(t)}, "tokenizer_obj": _FakeTok(), "snapshot_dir": "/selftest/snapshots/deadbeef",
+         "structural_expected_n_attn4": None, "detector_version": None, "loader_used": "axolotl ModelLoader.load() (selftest stand-in)",
+         "hf_targets": {"peft": "selftest", "n_target_modules": 8, "n_target_parameters": 4},
+         "axolotl": {"version": "selftest", "torch": torch.__version__, "config": cfg_dict, "best": best, "plugins": cfg_dict.get("plugins"),
+                     "expert_backend": cfg_dict.get("expert_backend"), "quantized_moe_experts_n": census["quantized_moe_experts_n"], "census": census,
+                     "cfg_experts_implementation": "scattermoe" if best else None, "config_experts_implementation": None},
+         "axolotl_bnb4bit_modules": census}
+    x["axolotl_targets"] = x["hf_targets"]
+    return m, x
+
+
+def _selftest_unsloth_backend_and_axolotl(a, d, rec, e_ref):
+    """P2-1 / P2-2 end to end on the tiny models: the backend knobs reach the environment and the counters, the absent-name
+    path records instead of crashing, the double-quant kwarg decision follows the signature, and the axolotl arm runs through
+    run_arm with its census, its matched init over parametrized stacks and its probe."""
+    out = {}
+    a.fam, a.model, a.tokens, a.tokens_sha = "tiny", "selftest/tiny", os.path.join(d, "tokens_tiny.json"), rec["sha256"]
+    a.framework, a.arm, a.attn_4bit, a.expect_trainable, a.lora_init, a.adapter_dtype = "unsloth", "unsloth", 0, None, "native", "fp32"
+    env_keys = ("UNSLOTH_MOE_BACKEND", "UNSLOTH_MOE_RECOMPUTE", "UNSLOTH_MOE_GC_REPLAY_PIN")
+    saved = {k: os.environ.get(k) for k in env_keys}
+    try:
+        for backend, tag, want_key in (("grouped_mm", "ckpt_unsloth_gmm", "unsloth_grouped_mm"), ("native_torch", "ckpt_unsloth_loop", "unsloth_loop"), ("unsloth_triton", "ckpt_unsloth_tri", "unsloth_triton")):
+            for k in env_keys:
+                os.environ.pop(k, None)                   # one arm per process in a real run; here they share one
+            a.tag, a.unsloth_moe_backend, a.unsloth_speed_tilt = tag, backend, int(backend == "grouped_mm")
+            r = run_arm(a, _selftest_load_unsloth, sampler=False)
+            assert r["status"] == "ok" and r["unsloth_knobs"]["moe_backend_requested"] == backend and r["moe_backend_selected"] == backend, (tag, r["unsloth_knobs"], r["moe_backend_selected"])
+            assert r["unsloth_knobs"]["env_set"]["UNSLOTH_MOE_BACKEND"] == backend and r["env"]["unsloth_env"].get("UNSLOTH_MOE_BACKEND") == backend, (tag, r["env"]["unsloth_env"])
+            mins = r["unsloth_backend_calls_per_step_min"]
+            assert mins[want_key] == 2 * a.accum and mins["moe_bnb4bit_backend"] == 2 * a.accum and sum(v for k, v in mins.items() if k not in (want_key, "moe_bnb4bit_backend")) == 0, (tag, mins)
+            assert r["unsloth_backend_calls_per_step_max"][want_key] == 2 * a.accum and r["unsloth_backend_absent"] == [], (tag, r["unsloth_backend_absent"])
+            if backend == "grouped_mm":
+                assert r["unsloth_knobs"]["speed_tilt"] is True and r["unsloth_knobs"]["env_set"]["UNSLOTH_MOE_RECOMPUTE"] == "0" and r["env"]["unsloth_env"]["UNSLOTH_MOE_GC_REPLAY_PIN"] == "1", r["unsloth_knobs"]
+            else:
+                assert r["unsloth_knobs"]["speed_tilt"] is False and "UNSLOTH_MOE_RECOMPUTE" not in r["env"]["unsloth_env"], r["unsloth_knobs"]
+            out[tag] = {k: v for k, v in mins.items()}
+        # `default` leaves the environment alone: the loader's own choice is what runs and is recorded
+        for k in env_keys:
+            os.environ.pop(k, None)
+        a.tag, a.unsloth_moe_backend, a.unsloth_speed_tilt = "ckpt_unsloth_default", "default", 0
+        r = run_arm(a, _selftest_load_unsloth, sampler=False)
+        assert r["unsloth_knobs"]["env_set"] == {} and r["moe_backend_selected"] == "grouped_mm" and r["unsloth_backend_calls_per_step_min"]["unsloth_grouped_mm"] == 2 * a.accum, r["unsloth_knobs"]
+        # an absent backend name is recorded, never a crash
+        mu = sys.modules["unsloth_zoo.temporary_patches.moe_utils"]
+        tri = mu.forward_triton_grouped_gemm
+        del mu.forward_triton_grouped_gemm
+        try:
+            a.tag = "ckpt_unsloth_absent"
+            r = run_arm(a, _selftest_load_unsloth, sampler=False)
+            assert r["status"] == "ok" and r["unsloth_backend_absent"] == ["unsloth_zoo.temporary_patches.moe_utils.forward_triton_grouped_gemm: AttributeError"], r["unsloth_backend_absent"]
+            assert r["unsloth_backend_calls_per_step_min"]["unsloth_triton"] == 0
+        finally:
+            mu.forward_triton_grouped_gemm = tri
+    finally:
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+    # the double-quant kwarg decision follows the signature READ AT RUNTIME
+    def fp_named(model_name, max_seq_length, dtype, load_in_4bit, bnb_4bit_use_double_quant=True):
+        pass
+
+    def fp_qc(model_name, max_seq_length, dtype, load_in_4bit, quantization_config=None):
+        pass
+
+    def fp_neither(model_name, max_seq_length, dtype, load_in_4bit, **kwargs):
+        pass
+    kw, dq = unsloth_double_quant_kwargs(fp_named, True)
+    assert kw == {"bnb_4bit_use_double_quant": False} and dq["requested"] is False and dq["how"].startswith("from_pretrained(bnb_4bit_use_double_quant=False)"), dq
+    kw, dq = unsloth_double_quant_kwargs(fp_neither, True)
+    assert kw == {} and dq["requested"] is None and dq["how"].startswith("unknown-default"), dq
+    kw, dq = unsloth_double_quant_kwargs(fp_named, False)
+    assert kw == {} and "not requested" in dq["how"], dq
+    try:
+        kw, dq = unsloth_double_quant_kwargs(fp_qc, True)
+        assert "quantization_config" in kw and kw["quantization_config"].bnb_4bit_use_double_quant is False, dq
+        out["dq_via_quantization_config"] = True
+    except ImportError as e:                       # transformers absent here: the branch cannot be exercised, said so
+        out["dq_via_quantization_config"] = f"skipped: {e}"
+    # loaded_expert_double_quant reads the expert Params4bit's quant_state.nested (real bnb, CPU) or None
+    import bitsandbytes as bnb
+    probe = nn.Module()
+    probe.layers = nn.ModuleList([nn.Module()])
+    probe.layers[0].mlp = nn.Module()
+    probe.layers[0].mlp.experts = nn.Module()
+    for nested in (False, True):
+        w = bnb.nn.Params4bit(torch.randn(4, 24, 64, dtype=torch.bfloat16), requires_grad=False, quant_type="nf4", compress_statistics=nested, blocksize=64).to("cpu")
+        if getattr(w, "quant_state", None) is None:
+            out["loaded_dq"] = "skipped: Params4bit.to('cpu') did not quantise here"
+            break
+        probe.layers[0].mlp.experts.gate_up_proj = w
+        assert loaded_expert_double_quant(probe) is nested, (nested, w.quant_state.nested)
+        out["loaded_dq"] = "ok"
+    assert loaded_expert_double_quant(_TinyLM("hf")) is None            # no quant_state on the fake Params4bit
+    # ---- the axolotl arm end to end (real bnb parametrized stacks on CPU)
+    try:
+        _TinyLM("axolotl")
+    except Exception as e:
+        out["axolotl"] = {"skipped": f"bnb replace_parameter_4bit unavailable on CPU here: {type(e).__name__}: {str(e)[:120]}"}
+        return out
+    a.framework, a.arm, a.attn_4bit, a.expect_trainable = "axolotl", "axolotl", 0, None
+    a.lora_init, a.adapter_dtype, a.axolotl_best = "matched:3407", "fp32", 0
+    a.tag = "ckpt_axolotl_m"
+    ax = run_arm(a, _selftest_load_axolotl, sampler=False)
+    assert ax["status"] == "ok" and ax["kernel_counter_key"] == "experts_forward" and ax["kernel_calls_per_step_min"] == 2 * a.accum, (ax["status"], ax.get("reason"))
+    c = ax["axolotl"]["census"]
+    assert c["quantized_moe_experts_n"] == 4 and c["n_bnb4bit_unwrapped"] == 2 and c["n_experts_modules"] == 2 and c["parametrized_params"] == 4, c
+    assert ax["axolotl_bnb4bit_modules"]["n_bnb4bit_unwrapped"] == 2 and ax["axolotl_targets"]["n_target_parameters"] == 4
+    cfgd = ax["axolotl"]["config"]
+    assert cfgd["quantize_moe_experts"] is True and cfgd["load_in_4bit"] is True and cfgd["adapter"] == "qlora" and cfgd["bnb_4bit_use_double_quant"] is False
+    assert len(cfgd["lora_target_parameters"]) == 4 and len(cfgd["lora_target_modules"]) == 8 and cfgd["lora_dropout"] == 0.0 and cfgd["datasets"] and "plugins" not in cfgd
+    assert cfgd["gradient_checkpointing"] is True and cfgd["gradient_checkpointing_kwargs"] == {"use_reentrant": False} and cfgd["optimizer"] == "adamw_bnb_8bit" and cfgd["lr_scheduler"] == "linear"
+    assert cfgd["max_steps"] == a.steps and cfgd["gradient_accumulation_steps"] == a.accum and cfgd["lora_r"] == a.r and cfgd["seed"] == a.seed
+    mi = ax["matched_init"]
+    assert mi["complete"] is True and mi["n_slots_set"] == mi["n_slots_expected"] == 24 and all("structure" in v for k, v in mi["mapping_rules"].items() if "experts" in k), mi
+    assert list(ax["adapter_dtypes_after"]) == ["torch.float32"]
+    fp = ax["frozen_base_probe"]
+    assert fp["slots"]["gate_up"]["regime"] == "nf4/64" and fp["slots"]["down"]["regime"] == "nf4/64" and fp["control_detects_flip"] is True and not fp["errors"], fp
+    assert "expert-0 blocks" in fp["slots"]["gate_up"]["method"], fp["slots"]["gate_up"]["method"]
+    assert ax["C1_bit_exact"] and ax["C1_bytes_hashed"] > 0 and ax["C1_tensors_hashed"] == 4, (ax["C1_bytes_hashed"], ax["C1_tensors_hashed"])   # the 4 packed originals
+    assert ax["census"]["Params4bit_expert_stacks"] == 0, "a parametrized stack is a plain uint8 Parameter, not a Params4bit"
+    a.tag, a.axolotl_best, a.lora_init, a.adapter_dtype = "ckpt_axolotl_best", 1, "native", "fp32"
+    axb = run_arm(a, _selftest_load_axolotl, sampler=False)
+    assert axb["status"] == "ok" and axb["axolotl"]["config"]["plugins"] == ["axolotl.integrations.kernels.KernelsPlugin"] and axb["axolotl"]["config"]["expert_backend"] == "scattermoe" and axb["axolotl"]["config"]["moe_bnb_fast"] is True
+    assert axb["matched_init"] is None and axb["axolotl"]["best"] is True
+    a.axolotl_best = 0
+    out["axolotl"] = {"quantized_moe_experts_n": c["quantized_moe_experts_n"], "n_bnb4bit_unwrapped": c["n_bnb4bit_unwrapped"], "slots": mi["n_slots_set"], "probe": {k: v["regime"] for k, v in fp["slots"].items()},
+                      "eval_loss_step0": ax["eval_loss_step0"]}
+    return out
 
 
 def _selftest_frozen_probe_real():
@@ -2903,12 +3357,15 @@ def selftest(a):
             pass
     # ---- T21 on genuine storage (real e4b Experts4bit / ExpertsLoRA, real bnb Params4bit + Linear4bit, CPU)
     probe_real = _selftest_frozen_probe_real()
+    # ---- P2-1 / P2-2: the Unsloth backend knobs and counters, the double-quant decision, the axolotl arm
+    p2 = _selftest_unsloth_backend_and_axolotl(a, d, rec, e_ref)
+    a.framework, a.arm, a.tag, a.lora_init, a.adapter_dtype = "e4b", "fused", "fused_attn4", "native", "fp32"
 
     print(f"SELFTEST OK dir={d} receipts={sorted(R)} e4b ref/fused loss_last {e_ref['loss_last']}/{e_fu['loss_last']} unsloth {u1['loss_last']} "
           f"hf {hfr['loss_last']} accum={a.accum} autocast={a.autocast} kcalls fused={e_fu['kernel_calls_per_step_min']} unsloth={u1['kernel_calls_per_step_min']} "
           f"hf={hfr['kernel_calls_per_step_min']} mb2_pads={ {k: v['tokens_padded_total'] for k, v in mb.items()} } detector_dryruns={det} "
           f"expert_selection_dryruns={sel} matched_step0={s0} matched_tolerance={tol} matched_slots={n_slots} "
-          f"frozen_probe_real={probe_real}")
+          f"frozen_probe_real={probe_real} phase2={p2}")
     return d
 
 
@@ -2917,8 +3374,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--prepare", action="store_true")
     ap.add_argument("--selftest", action="store_true", help="T8: CPU, tiny synthetic model, both branches, mocked kernels; + T10 detector dry-runs (#434)")
-    ap.add_argument("--framework", choices=["e4b", "unsloth", "hf"], default="e4b")
-    ap.add_argument("--arm", choices=["reference", "fused", "batched", "attn_only", "unsloth", "hf"], default="fused",
+    ap.add_argument("--framework", choices=["e4b", "unsloth", "hf", "axolotl"], default="e4b")
+    ap.add_argument("--arm", choices=["reference", "fused", "batched", "attn_only", "unsloth", "hf", "axolotl"], default="fused",
                     help="P56: `batched` is enable_batched_train -- e4b's KERNEL-FREE group-sorted path. It computes the "
                          "same function as `reference` with the same arithmetic REORDERING as `fused`, but through torch "
                          "+ bitsandbytes rather than grouped-nf4-gemm, so a parity pair against `reference` separates a "
@@ -2930,6 +3387,15 @@ def main():
     ap.add_argument("--lr-schedule", choices=["constant", "linear"], default="constant", help="T14: linear = transformers' linear-with-warmup formula")
     ap.add_argument("--warmup-steps", type=int, default=0)
     ap.add_argument("--unsloth-targets", default=",".join(UNSLOTH_TARGETS), help="T15: Unsloth get_peft_model target_modules (comma list; the notebooks' seven)")
+    ap.add_argument("--unsloth-moe-backend", choices=list(UNSLOTH_BACKENDS), default="default",
+                    help="P2-1 (TC1): sets UNSLOTH_MOE_BACKEND in this process before `import unsloth` (select_moe_backend(), moe_utils.py:1061-1085); "
+                         "default = leave the loader's own choice, recorded after load")
+    ap.add_argument("--unsloth-speed-tilt", type=int, default=0, help="P2-1 (TC1): 1 = UNSLOTH_MOE_RECOMPUTE=0 UNSLOTH_MOE_GC_REPLAY_PIN=1 (recorded)")
+    ap.add_argument("--unsloth-double-quant", choices=["off", "default"], default="off",
+                    help="P2-1 (TC1): off = pass double-quant OFF through a from_pretrained parameter the signature names (read at runtime), "
+                         "else the loader's default; the loaded expert Params4bit's quant_state.nested is recorded either way")
+    ap.add_argument("--axolotl-best", type=int, default=0, help="P2-2 (TC1): 1 = plugins [KernelsPlugin], expert_backend scattermoe, moe_bnb_fast true")
+    ap.add_argument("--axolotl-dataset", default=None, help="P2-2 (TC1): the registered Alpaca subset file named in the axolotl config's `datasets` (validation needs one; nothing reads it here)")
     ap.add_argument("--adapter-dtype", choices=["fp32", "native"], default="fp32",
                     help="T19 (TC1): fp32 = cast EVERY framework's trainable adapters to fp32 after construction (e4b included; tp4 cast only "
                          "the non-e4b arms); native = leave them as the loader built them (e4b: bf16 expert adapters -- the `shipped` arm)")
@@ -3001,9 +3467,7 @@ def main():
              f"{a.framework}/{a.arm}; it is a reference-arm switch only (bench/p67/P67-PREREG.md)", {"phase": "preamble"}, code=19)
     if not torch.cuda.is_available():
         stub(a, "harness_error", "torch.cuda.is_available() is False on a GPU lane", code=10)
-    # TODO(TC1 follow-up): `--framework axolotl` (load_axolotl, TC1-PREREG arm 6 / 6b) lands with the upstream inspection
-    # (bench/tc1/UPSTREAM-NOTES.md); until then tc1_run.sh writes its rows as `not_run` stubs and this table has no entry.
-    loader = {"e4b": load_e4b, "unsloth": load_unsloth, "hf": load_hf}[a.framework]
+    loader = {"e4b": load_e4b, "unsloth": load_unsloth, "hf": load_hf, "axolotl": load_axolotl}[a.framework]
     return run_arm(a, loader, sampler=not a.no_sampler)
 
 
