@@ -128,9 +128,9 @@ def _k25_mode_env() -> str:
     """``E4B_NF4_GROUPED_SMALLM`` (K25, grouped-nf4-gemm#429): serves the NF4 store's device-grouped decode rows through
     K25 -- K19's grouped small-M tensor-core GEMM with the NF4 codebook dequant, over the 16-row device tile table --
     instead of the served NF4 M-tile GEMM (``gemm_4bit_grouped_captured``, TF32 on fp32-dequantised weights). Lane P91
-    sized it: that GEMM is 62 % (Granite) and 72 % (OLMoE) of B=16 decode kernel time on an RTX 5090. K25's weight
-    operand is the bf16 dequant, not TF32, so no lane has licensed it yet and ``0`` is the default (also when unset):
-    today's NF4 routes. ``auto`` takes K25 for rows above T == 1 when the kernel package carries it and keeps today's
+    sized it: that GEMM is 62 % (Granite) and 72 % (OLMoE) of B=16 decode kernel time on an RTX 5090. The route runs
+    K25 at the served precision (:data:`_K25_PLAN`); lane P92 read its earlier bf16 arithmetic (Granite LICENSED, OLMoE
+    QUALITY_FAIL), and no lane has read this one yet, so ``0`` is the default (also when unset): today's NF4 routes. ``auto`` takes K25 for rows above T == 1 when the kernel package carries it and keeps today's
     routes when it does not; ``1`` requires K25 (absent is a refusal) and routes T == 1 to it too
     (:func:`_collapsed_grouping`), which is what lets the decode-shaped K8 instrument read the kernel. Anything else is
     refused."""
@@ -140,12 +140,14 @@ def _k25_mode_env() -> str:
     return v
 
 
-#: K25's plan on this route: its kernel default (BLOCK_N 32, KC 256, 4 warps, 2 stages) with the select-tree codebook
-#: decode. Lane K26 (grouped-nf4-gemm#432, RTX 5090) read the per-nibble lookup as about 80 % of K25's time and the
-#: exact select tree as bit-identical to it at 0.37-0.38 of the time, so the tree is the decode here. A kernel package
-#: that predates the tree decode gets the paired lookup (:func:`_k25_plan`): the same outputs, bit for bit. Lane P92's
-#: reading of K25 (paired decode) therefore applies to both. No lane has swept the plan.
-_K25_PLAN = {"block_n": 32, "kc": 256, "warps": 4, "stages": 2, "lut": "tree"}
+#: K25's plan on this route: the select-tree codebook decode at the served kernel's weight precision -- fp32 weights
+#: through TF32 MMA (``dot_bf16=False``) -- at lane K27's best TF32 plan (BLOCK_N 32, KC 64, 4 warps, 3 stages).
+#: grouped-nf4-gemm's K26 read the codebook lookup as about 80 % of K25's time and the exact tree as its fix; K27 (RTX
+#: 5090, NF4 families' B=16 shapes) read this arithmetic at 0.448 / 0.502 of the served NF4 GEMM's time with the served
+#: kernel's error (ratio 1.000). Lane P92 read K25 in bf16, and OLMoE's K8 failed there; this route is the served
+#: precision class, which a lane reads before any default. A kernel package without the tree decode gets the paired
+#: lookup (:func:`_k25_plan`), the same fp32 weights.
+_K25_PLAN = {"block_n": 32, "kc": 64, "warps": 4, "stages": 3, "lut": "tree", "dot_bf16": False}
 
 
 def _k25_plan(nf4_smallm_mod) -> dict:

@@ -125,8 +125,9 @@ def _install_stubs(monkeypatch, with_k25=True, k23=False, tree=False):
     sm = types.ModuleType("nf4_smallm")
     if with_k25:
         def gemm_nf4_grouped_smallm(x, packed, absmax, t_row0, t_rows, t_group, order=None, *, scatter=None,
-                                    gather_div=1, block_n=32, kc=256, warps=4, stages=2, lut="pair"):
-            calls["k25_plan"].append({"block_n": block_n, "kc": kc, "warps": warps, "stages": stages, "lut": lut})
+                                    gather_div=1, block_n=32, kc=256, warps=4, stages=2, lut="pair", dot_bf16=None):
+            calls["k25_plan"].append({"block_n": block_n, "kc": kc, "warps": warps, "stages": stages, "lut": lut,
+                                      "dot_bf16": dot_bf16})
             if gather_div != 1:                                  # token rows: expand, as the kernel's order // k reads
                 calls["k25"].append(f"tokens/{gather_div}")
                 x = x.repeat_interleave(gather_div, 0)
@@ -184,7 +185,7 @@ def test_opted_in_batched_rows_go_through_k25_and_match_the_oracle(monkeypatch, 
     calls = _install_stubs(monkeypatch, tree=tree)
     out, ref = _run(24, gptoss=_gptoss() if gptoss else None)
     want = _K25_PLAN if tree else dict(_K25_PLAN, lut="pair")
-    assert _K25_PLAN["lut"] == "tree"
+    assert _K25_PLAN["lut"] == "tree" and _K25_PLAN["dot_bf16"] is False          # the served precision (lane K27)
     assert calls["k25"] == ["gather", "sorted"], calls                      # gate_up gathers in-kernel; down is sorted
     assert calls["k25_plan"] == [want, want], calls                         # the registered plan, both projections
     assert calls["captured"] == [] and calls["host"] == 0 and calls["tiles"] == [16], calls
