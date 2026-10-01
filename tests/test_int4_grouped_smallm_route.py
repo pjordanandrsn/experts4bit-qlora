@@ -337,3 +337,36 @@ def test_fused_over_stack_needs_rows_or_tokens(monkeypatch):
     _install_stubs(monkeypatch, k23=True)
     with pytest.raises(ValueError, match="needs x_rows or x_tokens"):
         _fused_over_stack(None, torch.zeros(4, dtype=torch.long), None, None, None, None, (1, 1, 1, 1), True, F.silu)
+
+
+@pytest.mark.parametrize("env", [None, "auto", "AUTO", ""], ids=["unset", "auto", "AUTO", "empty"])
+def test_the_lean_glue_is_the_default_since_p89(monkeypatch, env):
+    """P89 LICENSED it on K19's rows: unset / auto takes K23's builder and the down scatter when the kernel side
+    carries them, with the same bits as 0."""
+    monkeypatch.delenv("E4B_INT4_GROUPED_SMALLM", raising=False)
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "0")
+    _install_stubs(monkeypatch, k23=True)
+    off, _ = _run(24, monkeypatch, seed=7)
+    if env is None:
+        monkeypatch.delenv("E4B_INT4_LEAN_GLUE", raising=False)
+    else:
+        monkeypatch.setenv("E4B_INT4_LEAN_GLUE", env)
+    calls = _install_stubs(monkeypatch, k23=True)
+    on, _ = _run(24, monkeypatch, seed=7)
+    assert calls["fused"] == [(16, True, True)] and calls["k19"] == ["gather", "sorted+scatter"], calls
+    assert torch.equal(on, off)
+
+
+def test_the_default_on_a_kernel_side_without_k23_keeps_the_separate_launches(monkeypatch):
+    """auto on a kernel package that predates K23 is the old route, silently -- not a refusal (1 refuses)."""
+    monkeypatch.delenv("E4B_INT4_GROUPED_SMALLM", raising=False)
+    monkeypatch.delenv("E4B_INT4_LEAN_GLUE", raising=False)
+    calls = _install_stubs(monkeypatch, k23=True)
+    import int4_smallm
+    k19 = int4_smallm.gemm_int4_b32_grouped_smallm
+    monkeypatch.setattr(int4_smallm, "gemm_int4_b32_grouped_smallm",
+                        lambda x, packed, scales, t_row0, t_rows, t_group, order=None: k19(
+                            x, packed, scales, t_row0, t_rows, t_group, order))   # pre-K23 K19: no scatter=
+    out, ref = _run(24, monkeypatch)
+    assert calls["fused"] == [(16, False, False)] and calls["k19"] == ["gather", "sorted"], calls
+    assert (out.float() - ref).abs().max() / ref.abs().max() < 0.05
