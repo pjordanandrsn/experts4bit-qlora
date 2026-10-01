@@ -89,6 +89,20 @@ def test_tc1_arm_selftest():
     if "'axolotl': {'skipped'" in p2:
         pytest.skip("the axolotl tiny arm skipped: " + p2[p2.index("'axolotl'"):][:200])
     assert "'quantized_moe_experts_n': 4, 'n_bnb4bit_unwrapped': 2, 'slots': 24, 'probe': {'gate_up': 'nf4/64', 'down': 'nf4/64'" in p2, p2[-600:]
+    # phase 3: the controls that could not fail now have a failing case each, printed by the selftest, and the receipts carry the new fields
+    for needle in ("FAILING-CASE A:", "FAILING-CASE B:", "FAILING-CASE D:", "'blind_hasher_detects': False", "'control_tensor': 'model.layers.0.mlp.experts.base.down_absmax'"):
+        assert needle in p.stdout, needle
+    fu = json.loads((d / "tiny_e4b_fused_attn4.json").read_text())
+    assert fu["C1_control_tensor"] and fu["C1_control_detects_flipped_byte"] is True and fu["C1_regime_by_tensor"] == {"u8-packed": 4, "fp32": 4}
+    assert fu["lora_path_present"] is True and fu["lora_path_loop_steps"] == [] and fu["matched_init_sha"] and fu["matched_init_sha_slots"] == 24 and fu["loss_step2"] == fu["losses"][2]
+    assert set(fu["dynamo_counters"]) == {"step10", "step12"} and len(fu["eval_rows"]) == len(fu["eval_curve"]) and len(fu["microbatch_padded_len"]) == fu["steps"]
+    assert fu["arm_facts"]["torch_num_threads"] >= 1 and fu["arm_facts"]["lora_delta_dtype"].startswith("A.dtype")
+    lp = json.loads((d / "tiny_e4b_fused_attn4_loop.json").read_text())
+    assert lp["lora_path_loop_steps"] == list(range(1, lp["steps"] + 1))
+    gm = json.loads((d / "tiny_unsloth_ckpt_unsloth_gmm.json").read_text())
+    assert gm["unsloth_grouped_mm_calls_per_step_min"] == 6 * 2 * 4 and gm["unsloth_manual_grouped_mm_calls_per_step_max"] == 0
+    hf = json.loads((d / "tiny_hf_hf_peft.json").read_text())
+    assert hf["hf_double_quant"] == {"requested": True, "loaded_attention_nested": None}   # the HF arm's default: double-quant ON, matching e4b's attention
     # T17 (P43) still holds: every step printed, every micro-batch timed, the CELL line never carries the per-step lists
     assert ref["log_every"] == 1 and ref["microbatch_timing"] is True
     assert '"microbatch_ms"' not in "".join(line for line in p.stdout.splitlines() if line.startswith("CELL "))
@@ -269,32 +283,56 @@ def test_tc1_run_sh_tells_the_arm_the_alarm_it_runs_under():
 
 
 def test_tc1_run_sh_runs_the_registered_arm_order_with_the_matched_flags():
-    """TC1-PREREG 'Arms, in this order': the box script's invocations, in order, with the matched / native flags and the
-    draw2 + TODO hooks exactly where the registration puts them."""
+    """Phase 3 I [F4]: the judged family's invocations, in order, with the matched / profiled flags; the labelled rows live in
+    tc1_native_family (its own box, its own e4b fused_m first) with the venv selectors and flags the instruction names."""
     body = RUN_SH.read_text()
-    fam = body[body.index("tc1_family(){"):body.index("# ---------------------------------------------------------------- the plan")]
+    fam = body[body.index("tc1_family(){"):body.index("# tc1_native_family")]
+    nat = body[body.index("tc1_native_family(){"):body.index("# ---------------------------------------------------------------- the plan")]
     calls = re.findall(r"(?:arm|draw2|todo_arm)\s+\$FAM\s+(e4b|unsloth|hf|axolotl)\s+(\S+)", fam)
-    want = [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("hf", "hf_peft_m"),
-            ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("unsloth", "ckpt_unsloth_best"), ("unsloth", "ckpt_unsloth_t28"), ("unsloth", "ckpt_unsloth_triton"),
-            ("e4b", "fused_attn4_shipped"), ("e4b", "reference_attn4_m"), ("unsloth", "ckpt_unsloth_prof"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m_mb1"), ("hf", "hf_peft_m_mb1")]
+    want = [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "reference_attn4_m"), ("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"),
+            ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m"), ("e4b", "fused_attn4_m_prof"), ("unsloth", "ckpt_unsloth_prof"),
+            ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m_mb1"), ("hf", "hf_peft_m_mb1")]
     assert calls == want, calls
-    assert fam.count("draw2 $FAM") == 2 and fam.count("todo_arm $FAM") == 0      # phase 2: every registered arm is implemented
-    assert 'MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"' in fam and 'NATIVE="--adapter-dtype native --lora-init native"' in fam
-    assert re.search(r"fused_attn4_shipped fused .* \$NATIVE", fam) and re.search(r"reference_attn4_m reference .* \$MATCH", fam)
-    assert 'draw2(){ local FAM=$1 FW=$2 TAG=$3; shift 3; arm "$FAM" "$FW" "${TAG}_d2" "$@"; }' in body
-    assert "--profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM" in fam and "dmon_start" in fam
-    # phase 2: the Unsloth venv/backend/tilt knobs and the axolotl flags sit on the arms the instruction names
+    assert fam.count("draw2 $FAM") == 2 and "todo_arm $FAM" not in fam
+    assert 'MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"' in fam and re.search(r"reference_attn4_m reference .* \$MATCH", fam)
     assert re.search(r"ckpt_unsloth_m unsloth .* --unsloth-moe-backend grouped_mm \$MATCH", fam)
-    assert re.search(r"UNS_VENV=t28 arm \$FAM unsloth ckpt_unsloth_t28 unsloth .* --unsloth-moe-backend default \$MATCH", fam)
-    assert re.search(r"ckpt_unsloth_best unsloth .* --unsloth-moe-backend grouped_mm --unsloth-speed-tilt 1 --adapter-dtype fp32 --lora-init native", fam)
-    assert re.search(r"ckpt_unsloth_triton unsloth .* --unsloth-moe-backend unsloth_triton \$MATCH", fam)
-    assert re.search(r"ckpt_unsloth_prof unsloth .* --unsloth-moe-backend grouped_mm \$MATCH .*--profile-steps", fam)
-    assert re.search(r"ckpt_axolotl_m axolotl \$AAL .* --axolotl-dataset \$W/data/ds_alpaca.json \$MATCH", fam)
-    assert re.search(r"ckpt_axolotl_best axolotl \$AAL .* --axolotl-best 1 --adapter-dtype fp32 --lora-init native", fam)
+    assert re.search(r"fused_attn4_m_prof fused \$PAL .* \$MATCH \$PROF", fam) and re.search(r"ckpt_unsloth_prof unsloth \$PAL .* --unsloth-moe-backend grouped_mm \$MATCH \$PROF", fam)
+    assert fam.count("dmon_start") == 2 and 'PROF="--log-every 1 --microbatch-timing 1 --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM"' in fam
+    ncalls = re.findall(r"(?:arm|draw2)\s+\$FAM\s+(e4b|unsloth|hf|axolotl)\s+(\S+)", nat)
+    assert ncalls == [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_best"), ("unsloth", "ckpt_unsloth_t28"), ("unsloth", "ckpt_unsloth_triton"), ("e4b", "fused_attn4_shipped"),
+                      ("e4b", "fused_attn4_m_nodgrad"), ("e4b", "fused_attn4_m_t212"), ("axolotl", "ckpt_axolotl_best"), ("hf", "hf_peft_m_mb1_t214")], ncalls
+    assert re.search(r"UNS_VENV=t28 arm \$FAM unsloth ckpt_unsloth_t28 unsloth .* --unsloth-moe-backend default \$MATCH", nat)
+    assert re.search(r"ckpt_unsloth_best unsloth .* --unsloth-moe-backend grouped_mm --unsloth-speed-tilt 1 --adapter-dtype fp32 --lora-init native", nat)
+    assert re.search(r"ckpt_unsloth_triton unsloth .* --unsloth-moe-backend unsloth_triton \$MATCH", nat)
+    assert re.search(r"fused_attn4_shipped fused .* \$NATIVE", nat) and re.search(r"fused_attn4_m_nodgrad fused .* --dgrad 0 \$MATCH", nat)
+    assert re.search(r"E4B_VENV=t212 arm \$FAM e4b fused_attn4_m_t212 fused .* \$MATCH", nat)
+    assert re.search(r"ckpt_axolotl_best axolotl \$AAL .* --axolotl-best 1 --adapter-dtype fp32 --lora-init native", nat)
+    assert re.search(r"HF_VENV=t214 arm \$FAM hf hf_peft_m_mb1_t214 hf .* mb1 .* --hf-experts-implementation grouped_mm \$MATCH", nat) and 'status_of qwen3 hf hf_peft_m' in nat
+    assert 'draw2(){ local FAM=$1 FW=$2 TAG=$3; shift 3; arm "$FAM" "$FW" "${TAG}_d2" "$@"; }' in body
+    assert 'qwen3native) tc1_native_family qwen3native' in body and 'qwen3)       tc1_family        qwen3' in body
     # the driver >= 580 gate precedes every cu130 install and the gated arms refuse by name, never fall back to the t28 venv
     assert '[ "$DRIVER_MAJOR" -ge 580 ]' in body and body.index("CU130_OK=1; case") < body.index("venv-unsloth-t28:") < body.index("uv venv --python 3.12")
     assert 'refused "$CU130_REASON"' in body and "unsloth[cu130-torch2121]" in body and "unsloth[cu128-torch280]" in body
     assert '--extra-index-url https://download.pytorch.org/whl/cu130' in body and '"axolotl==$AX_VER"' in body
+    # J: the t212 install into venv-unsloth has its own tripwire and its own rows; F: OMP_NUM_THREADS = the physical core count on every arm
+    assert "pip_e4b_t212.log" in body and 'T212_OK=1' in body and "OMP_NUM_THREADS=$PHYS" in body and "lscpu -p=CORE,SOCKET" in body
+
+
+def test_gpu_class_check_accepts_h100_spellings_and_labels_the_box():
+    """K: TC1_GPU_CLASS=H100 must pass the class check for every H100 spelling (lane TC1c), 5090 still passes, a 4090 is refused,
+    and the recorded box class is 'RTX <n>' for a numeric class and the class string otherwise."""
+    body = RUN_SH.read_text()
+    check = re.search(r'^case "\$GPU_NAME" in \*"\$GPU_CLASS"\*\) ;; \*\) .*?;; esac$', body, re.M)
+    label = re.search(r'^case "\$GPU_CLASS" in \[0-9\]\*\) BOX_CLASS="RTX \$GPU_CLASS";; \*\) BOX_CLASS="\$GPU_CLASS";; esac$', body, re.M)
+    assert check and label, "the class check / label lines are not in the shape this test drives"
+    for name, cls, ok, want_label in (("NVIDIA H100 NVL", "H100", True, "H100"), ("NVIDIA H100 80GB HBM3", "H100", True, "H100"), ("NVIDIA H100 PCIe", "H100", True, "H100"),
+                                      ("NVIDIA GeForce RTX 5090", "5090", True, "RTX 5090"), ("NVIDIA GeForce RTX 4090", "5090", False, None)):
+        script = "\n".join(['say(){ echo "$*"; }; finish(){ echo "FINISH $1"; exit $1; }', f'GPU_NAME="{name}"; GPU_CLASS="{cls}"', check.group(0), label.group(0), 'echo "PASS label=$BOX_CLASS"'])
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        if ok:
+            assert r.returncode == 0 and f"PASS label={want_label}" in r.stdout, (name, cls, r.stdout, r.stderr)
+        else:
+            assert r.returncode == 12 and "BOX REFUSED" in r.stdout, (name, cls, r.stdout)
 
 
 def test_every_env_knob_the_box_reads_is_forwarded_by_the_driver():
@@ -458,10 +496,11 @@ def test_arm_env_prefix_actually_executes():
         script = f"""
         ARM={arm}; GPU_CLASS=5090; A=3600
         ARM_ENV=""; [ "$ARM" = batched ] && ARM_ENV="E4B_BATCHED_PAD_WASTE_LIMIT=64"
-        {prefix} /bin/sh -c 'echo RAN box="$TC1_BOX_CLASS" alarm="$TC1_ARM_ALARM_S" pad="$E4B_BATCHED_PAD_WASTE_LIMIT"'
+        PHYS=4; BOX_CLASS="RTX 5090"
+        {prefix} /bin/sh -c 'echo RAN box="$TC1_BOX_CLASS" alarm="$TC1_ARM_ALARM_S" pad="$E4B_BATCHED_PAD_WASTE_LIMIT" omp="$OMP_NUM_THREADS"'
         """
         r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
-        assert r.returncode == 0 and "RAN" in r.stdout and 'box=RTX 5090' in r.stdout and "alarm=3600" in r.stdout and f"pad={want}" in r.stdout, (arm, r.stdout, r.stderr)
+        assert r.returncode == 0 and "RAN" in r.stdout and 'box=RTX 5090' in r.stdout and "alarm=3600" in r.stdout and f"pad={want}" in r.stdout and "omp=4" in r.stdout, (arm, r.stdout, r.stderr)
 
 
 def test_run_and_drive_scripts_parse():
