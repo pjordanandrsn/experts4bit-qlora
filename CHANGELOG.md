@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Lane P94 registered (#564): K8 against the arithmetic a T > 1 route replaces -- K25 against the served NF4 M-tile kernel at T == 1 (bench and tests only)
+
+- **Why.** P92 and P93 compared K25 at T == 1 against the scalar fp32 decode GEMV. The `auto` default changes only rows
+  above T == 1, where the route it replaces is the served M-tile kernel (TF32). That was a design error in both lanes;
+  their verdicts stand under their own rules. P93's OLMoE c4val1 swing (+0.155, after P92's −0.107) is why the right
+  baseline matters.
+- **What it reads.** K8 at T == 1 under three arithmetics per family (Granite `r12epi`, OLMoE `nf4`):
+  - g, the scalar GEMV;
+  - m, the served M-tile through `E4B_NF4_T1_DEVICE_GROUPING=1` (#838);
+  - t, K25.
+  The premise covers row-exactness for t and m, plus K25's contract.
+- **The rule.** LICENSED if the uncalibrated K8 gate passes with base m and candidate t in both families. With P93's
+  speed, the T > 1 default then moves to `auto`. Otherwise QUALITY_FAIL. m − g is reported, not gated.
+- `tests/test_p94_staged_pin.py` pins:
+  - the staged bytes and the families' envs;
+  - the three arms and the route's plan;
+  - the premise before the fetch, and the order;
+  - the exit codes;
+  - the reducer's 10-case self-test;
+  - the driver's dry run.
+
 ### `E4B_NF4_T1_DEVICE_GROUPING=1`: an instrument that reads the served NF4 M-tile kernel at T == 1 (off by default; lane P94)
 
 - **Why.** K8 is decode-shaped, so it reads T == 1. The NF4 store's T == 1 rows run the scalar fp32 decode GEMV, while its
