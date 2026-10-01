@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.38.0 — 2026-10-01 — batched decode on grouped small-M tensor-core GEMMs (grouped-nf4-gemm 0.34.0): K19 is the default for int4 decode rows above T == 1 (lane P88, B=16 ×0.905), its lean glue is the default (P89, ×0.950), and K21 is the default for the MXFP4 store's batched rows (P90, gpt-oss-20b B=16 ×0.581, KL lower); K25 serves the NF4 store's batched rows opt-in (`E4B_NF4_GROUPED_SMALLM`; P92); lanes P82–P92 read
+
+**0.38.0.** Three defaults change, each licensed by a pre-registered lane on an RTX 5090 and each reversible by its environment variable:
+- `E4B_INT4_GROUPED_SMALLM` is `auto` (K19), lane P88;
+- `E4B_INT4_LEAN_GLUE` is `auto`, lane P89;
+- `E4B_MXFP4_GROUPED_SMALLM` is `auto` (K21, rows above T == 1), lane P90.
+
+Each takes effect when the installed grouped-nf4-gemm carries its kernel (0.34.0 does); with an older kernel package the previous routes run, silently. The `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`, and a fresh install resolves to 0.34.0. One route is new and opt-in: `E4B_NF4_GROUPED_SMALLM` (K25) for the NF4 store's batched rows. Lane P92 measured it on Granite (B=16 ×0.937) and read OLMoE QUALITY_FAIL, so its default stays `0`. CI installs grouped-nf4-gemm from the v0.34.0 release commit. Both repositories' `docs/system-manifest.json` still say the CI pin is v0.33.0. That `consumer_ci_pin` text moves with the next grouped-nf4-gemm release, kernel first, because the manifest is byte-identical across the two.
 
 ### Lane K26's runner (#564): the NF4 decode ablation's box side (bench and tests only)
 
