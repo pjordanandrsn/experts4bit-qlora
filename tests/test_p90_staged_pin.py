@@ -6,7 +6,7 @@ runs on the CONTROLLER after a box is rented; this test runs the same comparison
 It mirrors the driver's staging `case`: P58's harness pieces (bench/p39, bench/p42's hook), P42's census parser, the
 premise test (tests/test_k21_row_exact_gpu.py) and P44's KL instrument (bench/p44, bench/kl_*.py), all referenced
 unchanged. It also:
-- runs the reducer's self-test (18 cases);
+- runs the reducer's self-test (22 cases);
 - pins the parts of the runner the registration depends on: the gnf4 pin (a real sha), the refusals, the premise and the
   K0 controls before any fetch, the proof, and the arms with their order and settings.
 """
@@ -90,7 +90,7 @@ def test_the_harness_is_p88s_pinned_bytes_and_the_instrument_p44s():
 def test_the_reducer_applies_the_registered_rule():
     out = subprocess.run([sys.executable, str(LANE / "p90_reduce.py"), "--self-test"], capture_output=True, text=True)
     assert out.returncode == 0, out.stdout + out.stderr
-    assert "self-test OK (18 cases)" in out.stdout
+    assert "self-test OK (22 cases)" in out.stdout
 
 
 def test_the_gnf4_pin_is_a_real_sha():
@@ -120,14 +120,25 @@ def test_the_proof_compiles_k21s_contract_on_the_card_and_fetches_no_model():
     assert "git -C $W/gnf4 checkout -q $GNF4_SHA" in block
     assert "TRITON_INTERPRET=0" in block and "test_mxfp4_grouped_smallm_interp.py test_int4_smallm_interp.py" in block
     assert "finish 23" in block and ": > PROVED; finish 0" in block
-    assert "for v in P90_PROVE; do" in (LANE / "p90_drive.sh").read_text()
+    assert "for v in P90_PROVE P90_ARMS; do" in (LANE / "p90_drive.sh").read_text()
+
+
+def test_amendment_1_splits_the_reading_into_a_speed_run_and_a_quality_run():
+    """Amendment 1: P90_ARMS picks the run's half and its card class; anything else is refused before any install."""
+    assert 'case "$ARMS" in speed) CLASS_REG=5090;; quality) CLASS_REG="H100 NVL";;' in RUN
+    assert RUN.index('refusing: P90_ARMS must be speed or quality') < RUN.index('say "install e4b @')
+    assert 'GPU_CLASS=${P90_GPU_CLASS:-$CLASS_REG}' in RUN and '[ "$GPU_CLASS" != "$CLASS_REG" ]' in RUN
+    arms = RUN[RUN.index('if [ "$ARMS" = speed ]; then'):RUN.index('say "reduce ($ARMS part)"')]
+    assert arms.index("speed 0 $B") < arms.index("else") < arms.index("kl 0;")                # speed only, or KL only
+    assert "python $W/p90_reduce.py --part $ARMS --dir $W --out $W/part_$ARMS.json" in RUN
+    assert "for v in P90_PROVE P90_ARMS; do" in (LANE / "p90_drive.sh").read_text()
 
 
 def test_the_arms_run_in_the_registered_order_with_their_settings():
     steps = ('can_run 900 b${B}_off && { speed 0 $B "" 1;', 'can_run 900 b${B}_on && { speed 1 $B "" 1;',
-             "can_run 3000 kl_off && { kl 0;", "can_run 1800 kl_on && { kl 1;",
              'can_run 900 b${B}_on_r2 && { speed 1 $B _r2 "";', 'can_run 900 b${B}_off_r2 && { speed 0 $B _r2 "";',
-             "python $W/p90_reduce.py --dir $W --out $W/verdict.json")
+             "can_run 3000 kl_off && { kl 0;", "can_run 1800 kl_on && { kl 1;",
+             "python $W/p90_reduce.py --part $ARMS --dir $W --out $W/part_$ARMS.json")
     assert all(RUN.count(s) == 1 for s in steps), [s for s in steps if RUN.count(s) != 1]
     order = [RUN.index(s) for s in steps]
     assert order == sorted(order), order

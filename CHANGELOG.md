@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Lane P90, amendment 1: the KL arms move to an H100 NVL; one reading is a speed run and a quality run (bench and tests only)
+
+- `p90-5090-1` read VOID: gpt-oss-20b's bf16 dequant reference (about 40 GB) does not fit a 32 GB RTX 5090. The KL
+  arms died offloading it. P44-b scored that reference on an H100 NVL.
+- `P90_ARMS=speed` runs the registered speed arms on the 5090. `P90_ARMS=quality` runs the registered KL arms on an
+  H100 NVL. Both hold the premise and K0.
+- `p90_reduce.py --speed-dir A --quality-dir B` gives the verdict under the registered rule.
+- `p90-5090-1`'s speed numbers are recorded descriptively only: B=16 ×0.584, B=1 ×1.074.
+
 ### Lane P89, amendment 1: the engagement clause counts launches, not an inferred kernel name (bench and tests only)
 
 - `p89-5090-3` read VOID on "at least 48 fewer `indexSelect` launches per step". That clause named the token-row
