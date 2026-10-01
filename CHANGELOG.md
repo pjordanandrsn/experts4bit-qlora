@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Lane K24 runner (#564): K22 re-read on gpt-oss-20b with per-layer weight stores and K21's masked-tail plans (bench and tests only)
+
+- **Why.** K22 read VOID: its bench's served NF4 kernel was 17 % under the in-model census. Descriptively, gpt-oss's B=16 step is 79 % that kernel. K24's prereg and bench live in grouped-nf4-gemm (`kernel/PREREG-k24-gptoss-per-layer.md`).
+- **`bench/k24/` is K22's runner minus the prompts and routing-record phases:**
+  1. census the served B=16 step;
+  2. run `k24_bench.py` on K22's recorded routing, read from the gnf4 clone's receipts at the registered commit.
+  Failures use rc 31 / 34.
+- `tests/test_k24_staged_pin.py` pins the staged bytes, the order, the env, the instrument wiring, the codes and the dry run.
+
 ### Lane K22 runner (#564): gpt-oss-20b at B=16 on an RTX 5090 -- census, recorded routing, and K21 against the served expert route (bench and tests only)
 
 - **Why.** The first lane of the throughput push to other model families. gpt-oss's licensed MXFP4 store has no batched kernel, so at B=16 (64 rows) the experts fall back to the kept NF4 stacks; bo7 timed that step at 21.65 ms. The prereg, the bench and the rule live in grouped-nf4-gemm (`kernel/PREREG-k22-gptoss-mxfp4-b16.md`). This repo carries the runner.
