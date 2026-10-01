@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### The lean glue is the default on K19's rows (`E4B_INT4_LEAN_GLUE` now defaults to `auto`), as lane P89 licensed
+
+- **P89** (`e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, RTX 5090): Qwen3-30B-A3B's B=16 int4 step
+  went from 10.321 to 9.805 ms (×0.950). Tokens were identical in all 16 rows, and there were 336 fewer launches per
+  step.
+- **The modes:**
+  - `auto` (the default, also when unset) folds K19's grouping glue when the kernel package carries grouped-nf4-gemm
+    K23's options, and keeps the separate launches when it predates them;
+  - `1` requires K23 (absent is a refusal);
+  - `0` is the old path;
+  - anything else is refused.
+- **Scope.** It applies to K19's rows only, so gpt-oss's epilogue and the MXFP4 store are untouched. The collapse now
+  hands over its token rows whenever the mode is not `0`; a route that is not lean expands them inside, with the same
+  launches as before.
+- **Tests:**
+  - the route tests add the default (unset / auto / AUTO / empty) taking the lean path with the same bits as `0`, and
+    `auto` on a pre-K23 kernel side keeping the old launches without refusing;
+  - `tests/test_k23_lean_glue_gpu.py` sets `0` for its OFF side and adds a default-is-lean check;
+  - `bench/p89/staged.sha256` follows that file. P89 is read, and its receipts keep the bytes that ran.
+
 ### P89 read: LICENSED. K23's lean glue takes Qwen3-30B-A3B's B=16 int4 step to 0.950×, with identical tokens (bench, docs and register)
 
 - `p89-5090-4` (RTX 5090): B=16 went from 10.321 to 9.805 ms/step. Tokens were identical in all 16 rows of both draw

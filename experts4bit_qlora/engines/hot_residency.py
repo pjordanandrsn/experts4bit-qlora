@@ -58,18 +58,26 @@ def _k19_mode_env() -> str:
     return v
 
 
+def _lean_glue_mode_env() -> str:
+    """``E4B_INT4_LEAN_GLUE`` (lane K23): ``auto`` (the default, also when unset) folds the grouping glue around K19 into
+    the two kernels that bracket it when the kernel package carries K23's options, and keeps the separate launches when
+    it predates them; ``1`` requires K23 (absent is a refusal); ``0`` keeps the separate launches. Lane P89 LICENSED it
+    on K19's rows (see :func:`_lean_glue_env`). Anything else is refused."""
+    v = os.environ.get("E4B_INT4_LEAN_GLUE", "auto").strip().lower() or "auto"
+    if v not in ("auto", "0", "1"):
+        raise ValueError(f"E4B_INT4_LEAN_GLUE={v!r}: expected 'auto', '0' or '1'")
+    return v
+
+
 def _lean_glue_env() -> bool:
-    """``E4B_INT4_LEAN_GLUE`` (lane K23, opt-in): ``1`` folds the grouping glue around K19 into the two kernels that
-    bracket it. The tile table is built in ONE launch: no host int32 cast, no pre-zero fills, and the sorted ids from
+    """Whether the lean glue is wanted at all (``auto`` or ``1``; see :func:`_lean_glue_mode_env`). The glue folds
+    around K19 into the two kernels that bracket it. The tile table is built in ONE launch: no host int32 cast, no pre-zero fills, and the sorted ids from
     the same launch instead of an index_select. gate_up reads the all-resident collapse's token rows directly
     (``gather_div``), so the ``[T * top_k, H]`` expansion is never made. The down projection is stored straight into
-    the caller's row order, with no index_copy_ unsort. Bit-identical by construction (grouped-nf4-gemm's K23 contract tests). It applies to
-    K19's rows only, and not to gpt-oss's epilogue, which reads the sorted down output. ``0`` (the default, also when
-    unset) keeps the separate launches; anything else is refused."""
-    v = os.environ.get("E4B_INT4_LEAN_GLUE", "0").strip() or "0"
-    if v not in ("0", "1"):
-        raise ValueError(f"E4B_INT4_LEAN_GLUE={v!r}: expected '0' or '1'")
-    return v == "1"
+    the caller's row order, with no index_copy_ unsort. Bit-identical by construction (grouped-nf4-gemm's K23 contract
+    tests; lane P89: tokens identical in all 16 rows of a B=16 step). It applies to K19's rows only, and not to
+    gpt-oss's epilogue, which reads the sorted down output."""
+    return _lean_glue_mode_env() != "0"
 
 
 _LEAN_GLUE_SUPPORT: dict = {}
@@ -323,7 +331,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     # (x1.103), which is why auto leaves T == 1 on the singleton GEMV.
     _k19 = None
     _k19_mode = _k19_mode_env()
-    _lean_want = _lean_glue_env()         # read (and refused if malformed) on every call, like the K19 mode
+    _lean_mode = _lean_glue_mode_env()    # read (and refused if malformed) on every call, like the K19 mode
     _lean = False
     if _int4_gemv_decode and _k19_mode != "0":
         try:
@@ -337,17 +345,20 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         if _k19 is not None:
             _int4_gemv_decode = False     # take the device-grouping branch: it builds the 16-row tile table
     _fused_tiles = None
-    if _lean_want and _k19 is not None and gptoss is None:
+    if _lean_mode != "0" and _k19 is not None and gptoss is None:
         try:
             from int4_b32 import build_group_tiles_fused as _fused_tiles
         except ImportError:
             _fused_tiles = None
-        if _fused_tiles is None or not _lean_glue_supported(_fused_tiles, _k19):
+        if _fused_tiles is not None and _lean_glue_supported(_fused_tiles, _k19):
+            _lean = True
+        elif _lean_mode == "1":
             raise RuntimeError(
                 "E4B_INT4_LEAN_GLUE=1 needs grouped-nf4-gemm with K23 "
                 "(build_group_tiles_fused lean=/sorted_ids=, "
                 "gemm_int4_b32_grouped_smallm scatter=/gather_div=)")
-        _lean = True
+        else:
+            _fused_tiles = None           # auto: the kernel package predates K23 -> the separate launches, as before
     _tok = None
     if x_rows is None:
         x_t, row_token, top_k = x_tokens
@@ -972,8 +983,8 @@ class _HotResidency:
             rt = c[1]
         gptoss = ((self.h_gu_b, self.h_dn_b, self.alpha, self.limit)
                   if self.gptoss else None)
-        # K23 (E4B_INT4_LEAN_GLUE=1): hand over the token rows; the (token, slot) expansion is made inside only for a
-        # route that reads it (the lean K19 route gathers token rows itself)
+        # K23 (E4B_INT4_LEAN_GLUE auto / 1): hand over the token rows; the (token, slot) expansion is made inside only
+        # for a route that reads it (the lean K19 route gathers token rows itself)
         if _lean_glue_env():
             xr, xtok = None, (x, rt, k)
         else:

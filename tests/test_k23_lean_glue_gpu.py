@@ -13,8 +13,8 @@ This file holds the route to it on the card it runs on, eager and inside a CUDA 
 because the lean table is allocated with ``torch.empty``, so a padding slot left unwritten would read garbage from
 the graph's pool.
 
-Also pinned: the route really takes K23's builder options and K19's scatter (a spy on both), and the default
-(unset) does not.
+Also pinned: the route really takes K23's builder options and K19's scatter (a spy on both), and ``0`` does not.
+Since lane P89 the default (unset / ``auto``) takes the lean route whenever the kernel package carries K23.
 
 Random weights at Qwen3-30B-A3B's expert shapes, 128 experts, top-8, B = 16. Skipped when the installed kernel
 package predates K23.
@@ -106,7 +106,7 @@ def test_lean_glue_is_bit_equal_to_the_default_at_b16(monkeypatch):
     monkeypatch.setattr(b32, "build_group_tiles_fused", spy_tiles)
     for seed in (1, 2):
         xr, ids = _step(seed)
-        monkeypatch.delenv("E4B_INT4_LEAN_GLUE", raising=False)
+        monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "0")
         off = _call(hr, stores, xr, ids)
         monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "1")
         on = _call(hr, stores, xr, ids)
@@ -137,7 +137,7 @@ def test_lean_glue_captures_and_replays_bit_equal_to_the_eager_default(monkeypat
     g = torch.cuda.CUDAGraph()
     with torch.cuda.graph(g):
         out_s = _call(hr, stores, x_s, id_s)
-    monkeypatch.delenv("E4B_INT4_LEAN_GLUE", raising=False)
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "0")
     for seed in (4, 5):
         xn, idn = _step(seed)
         x_s.copy_(xn)
@@ -164,7 +164,7 @@ def test_lean_token_rows_are_bit_equal_to_the_expanded_default(monkeypatch):
         return k19(*a, scatter=scatter, gather_div=gather_div, **kw)
     monkeypatch.setattr(sm, "gemm_int4_b32_grouped_smallm", spy_k19)
     xt, ids = _step(6, tokens=True)
-    monkeypatch.delenv("E4B_INT4_LEAN_GLUE", raising=False)
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "0")
     off = _call(hr, stores, xt.repeat_interleave(TOP_K, 0), ids)
     monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "1")
     seen.clear()
@@ -182,7 +182,7 @@ def test_lean_token_rows_are_bit_equal_to_the_expanded_default(monkeypatch):
     g = torch.cuda.CUDAGraph()
     with torch.cuda.graph(g):
         out_s = _call(hr, stores, x_s, id_s, tokens=True)
-    monkeypatch.delenv("E4B_INT4_LEAN_GLUE", raising=False)
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "0")
     for seed in (7, 8):
         xn, idn = _step(seed, tokens=True)
         x_s.copy_(xn)
@@ -192,3 +192,27 @@ def test_lean_token_rows_are_bit_equal_to_the_expanded_default(monkeypatch):
         eager = _call(hr, stores, xn.repeat_interleave(TOP_K, 0), idn)
         torch.cuda.synchronize()
         assert torch.equal(out_s, eager), f"seed {seed}: the captured token-row route differs from the eager default"
+
+
+@needs_cuda
+def test_the_default_is_the_lean_route_since_p89(monkeypatch):
+    """P89 LICENSED the lean glue (e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01): unset / auto takes it
+    when the kernel package carries K23, with the same bits as 0."""
+    sm, b32 = _k23()
+    hr = _setup(monkeypatch)
+    stores = _stores()
+    seen = []
+    tiles = b32.build_group_tiles_fused
+
+    def spy_tiles(*a, lean=False, sorted_ids=False, **kw):
+        seen.append((lean, sorted_ids))
+        return tiles(*a, lean=lean, sorted_ids=sorted_ids, **kw)
+    monkeypatch.setattr(b32, "build_group_tiles_fused", spy_tiles)
+    xr, ids = _step(9)
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "0")
+    off = _call(hr, stores, xr, ids)
+    monkeypatch.delenv("E4B_INT4_LEAN_GLUE", raising=False)
+    dflt = _call(hr, stores, xr, ids)
+    torch.cuda.synchronize()
+    assert seen == [(False, False), (True, True)], seen
+    assert torch.equal(dflt, off)
