@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### `E4B_INT4_GROUPED_SMALLM=1`: int4 decode rows through grouped-nf4-gemm's K19 grouped tensor-core GEMM (opt-in; no default changes)
+
+- **What it routes.** At decode shapes (≤ 256 routed rows) on the int4 expert store, today's route is the split-K GEMV, the row P86 measured at 6.98 ms/step against Marlin MoE's 4.78 at B=16 (#564). The opt-in sends those rows through K19 (`int4_smallm.gemm_int4_b32_grouped_smallm`, grouped-nf4-gemm#419) instead, using the existing device-grouping branch:
+  - the 16-row tile table is built once per layer;
+  - gate_up runs as K19 with its gather folded in (`order`);
+  - down runs as K19 on the already-sorted epilogue output;
+  - the existing unsort and combine are unchanged.
+- **Why it is opt-in.** K19 multiplies bf16 activations instead of int8-quantised ones, a different arithmetic, so it stays opt-in until a registered quality read licenses it.
+- **Asked for and absent is refused.** If the kernel side lacks K19, the opt-in raises a `RuntimeError` naming the requirement; it never falls back to the GEMV silently. Prefill rows (> 256) are untouched.
+- `tests/test_int4_grouped_smallm_route.py` (Linux CI, stubbed kernels) pins:
+  - the route (gate_up with the gather, down without);
+  - no GEMV, and 16-row tiles;
+  - the per-row oracle in the caller's row order;
+  - the default route unchanged;
+  - the refusal, and prefill untouched.
+
 ### Lane P86 read (#564): READ -- vLLM's B=16 lead is the expert kernel; Marlin MoE runs the experts in 4.78 ms per step against e4b's int4 GEMV 6.98 (2.86 of the 3.32 ms gap) (bench, docs and register only)
 
 - `p86-5090-3` ran on one RTX 5090 for $0.5170, teardown proven, with the same prompts as P58. The lane cost $0.8561: three proofs (a bandwidth NOT_RUN, the attempt that caught the CUDA 12.8 image, and a pass), an ssh NOT_RUN, and the reading.
