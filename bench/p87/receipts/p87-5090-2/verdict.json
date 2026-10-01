@@ -1,0 +1,8 @@
+{
+ "lane": "P87",
+ "verdict": "VOID",
+ "reasons": [
+  "K8 off: missing or failed"
+ ],
+ "speed": {}
+}

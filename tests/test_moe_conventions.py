@@ -322,6 +322,10 @@ _KNOWN_UNCLAIMED = {
     # "not convention"; that standard cannot be met from a converter
     # mapping alone.
     "glm5_next",
+    # Appeared in transformers 5.18.0 (2026-09-30): the text tower of the
+    # glm5_next composite (Glm5NextTextConfig), mapped to glm5_next's
+    # converter. Unclaimed for the same reason as glm5_next.
+    "glm5_next_text",
 }
 
 

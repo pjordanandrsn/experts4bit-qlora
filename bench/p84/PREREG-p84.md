@@ -142,3 +142,30 @@ It is not a reading.
   - `logs/` and the `work_*/bake.json`.
 
 The read lands as `bench/p84/RESULTS-p84.md` with the small receipts.
+
+## Amendment 1 (2026-09-30, after `p84-5090-2`, before any further reading)
+
+**What happened.** `p84-5090-2` ran on an **Intel** host (Core i9-14900K, driver 595.84). The control C (P82's build,
+bit for bit) read mean NLL `1.8504622130569988` (6.36276), not N's known `1.8506507749113845`. Its repeat matched, so the
+box was deterministic. The rule read **VOID**, and the lane stopped before H1 and H2, as registered.
+- C's expert pack was the licensed `0c9955a9…`.
+- C's attention pack was `45b4cc5a…`, not `d7cfa1f4…`. 342 of its 384 tensor payloads differ from P82's (all 192 scale
+  tensors, 151 packed), in all 48 layers, with the same calibration token stream and the same recorded toolchain.
+- The attention calibration therefore does not reproduce on this host. The mechanism is not isolated.
+
+**Every earlier reading behind the known floats ran on AMD hosts:**
+- O's float on a Ryzen 7950X, an EPYC 7C13 and an EPYC 9755;
+- N's on an EPYC 7R13 and an EPYC 9755;
+- `d7cfa1f4…` calibrated on an EPYC 7K62, a 7R13 and a 9755.
+
+**The amendment.** The runner refuses a host whose CPU vendor (lscpu's `Vendor ID`) is not `AuthenticAMD`, with
+**rc 16**. It does so before the install and the fetch, so a wrong host costs minutes, not a build. The vendor is a knob
+(`P84_CPU_VENDOR`); any other value marks the run a REHEARSAL.
+
+**Unchanged:** the question, the chain, the rule, the control and its early stop, the pins, the guard and the ceilings.
+**Cost so far:** p84-prove-1 $0.0927 (NOT_RUN), p84-prove-2 $0.0382 (PROVED), p84-5090-1 $0.0377 (NOT_RUN, ssh; its
+machine is now excluded), p84-5090-2 $0.5356 (VOID). That is $0.7042, leaving $3.30 under the $4.00 ceiling.
+
+A re-roll can land on the same Intel machine again. The launcher accepts only ssh-readiness failures as machine
+exclusions, so the rc 16 refusal is the protection. The Intel reading itself is a finding for #674, reported in
+`RESULTS-p84.md`, not a P84 result.

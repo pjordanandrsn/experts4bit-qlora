@@ -48,6 +48,21 @@ FORCE_SINGLETON_GROUPS = [False]
 DEVICE_GROUPING = [False]
 
 
+def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
+    """``(singleton_groups, device_grouping)`` for the all-resident collapse at ``T`` tokens.
+
+    T == 1 takes singleton groups and T > 1 takes device grouping under :data:`DEVICE_GROUPING` -- except that
+    K19's opt-in (``E4B_INT4_GROUPED_SMALLM=1`` with a uniform-int4 store) names every int4 DECODE row, T == 1
+    included, so T == 1 takes the device tile table too (capture-legal, no host sync) and its rows reach K19.
+    Without that the singleton GEMV would keep T == 1, and K8, which scores through the T == 1 loop, would read
+    the GEMV instead of the kernel it gates (lane P87)."""
+    k19_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
+              and os.environ.get("E4B_INT4_GROUPED_SMALLM", "0") == "1")
+    if k19_t1:
+        return False, True
+    return (T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])), (DEVICE_GROUPING[0] and T > 1)
+
+
 def _decode_a16_default() -> bool:
     """``E4B_INT4_DECODE_A16=1`` (lane P64, e4b#709): the default of
     :data:`DECODE_A16`, read once at import."""
@@ -210,6 +225,20 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         _mxfp4_store = False
     _int4_gemv_decode = (not _mxfp4_store and device_grouping
                          and int4_stores is not None and x_rows.shape[0] <= 256)
+    # K19 (opt-in, E4B_INT4_GROUPED_SMALLM=1; grouped-nf4-gemm#419): the same decode rows through the grouped
+    # small-M tensor-core GEMM instead of the split-K GEMV -- K16's arithmetic (bf16 activations, in-register int4
+    # dequant, bf16 MMA) over the device tile table, gate_up's gather folded into the kernel. It changes the
+    # arithmetic (bf16 activations, no int8 quantise), so it is opt-in until a registered quality read licenses it.
+    # Asked for and absent is a refusal, never a silent fallback to the GEMV.
+    _k19 = None
+    if _int4_gemv_decode and os.environ.get("E4B_INT4_GROUPED_SMALLM", "0") == "1":
+        try:
+            from int4_smallm import gemm_int4_b32_grouped_smallm as _k19
+        except ImportError as e:
+            raise RuntimeError(
+                "E4B_INT4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K19 "
+                "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
+        _int4_gemv_decode = False         # take the device-grouping branch: it builds the 16-row tile table
     if _mxfp4_store:
         singleton_groups = True
         device_grouping = False
@@ -389,6 +418,14 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 xq, xs = quant_x_rows(xr)
                 return gemv_int4_b32(xq, xs, st["packed"], st["scales"],
                                      e32d, st["N"], st["K"])
+        elif device_grouping and _k19 is not None:
+            # K19 (opt-in): the grouped small-M tensor-core GEMM against the SAME 16-row device tiles. The first
+            # call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is
+            # already in sorted order. bf16 activations, no quantise; outputs in sorted order, as K14's.
+            def _mm(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                return _k19(xr.to(torch.bfloat16), st["packed"], st["scales"], t_row0, t_rows, t_grp,
+                            order if xr is x_rows else None)
         elif device_grouping:
             # batched decode (bv3): the grouped int4-b32 GEMM against
             # the SAME prebuilt device tiles the NF4 captured path uses
@@ -797,15 +834,13 @@ class _HotResidency:
         gptoss = ((self.h_gu_b, self.h_dn_b, self.alpha, self.limit)
                   if self.gptoss else None)
         xr = x.index_select(0, rt)
+        singleton, grouped = _collapsed_grouping(T, getattr(self, "_int4_stores", None))
         dn = _fused_over_stack(xr, flat, self.h_gu_p, self.h_gu_a,
                                self.h_dn_p, self.h_dn_a, self.shapes,
                                self.has_gate, self.act_fn, gptoss=gptoss,
                                clamp_limit=self.clamp_limit,
-                               singleton_groups=(T == 1 or
-                                                 (FORCE_SINGLETON_GROUPS[0]
-                                                  and not DEVICE_GROUPING[0])),
-                               device_grouping=(DEVICE_GROUPING[0]
-                                                and T > 1),
+                               singleton_groups=singleton,
+                               device_grouping=grouped,
                                int4_stores=getattr(self, "_int4_stores",
                                                    None))
         w = top_k_weights.reshape(-1).to(torch.float32)

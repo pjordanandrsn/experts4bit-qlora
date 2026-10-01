@@ -1,0 +1,9 @@
+KNOBS e4b=db527f97bd367128bcc8a6637d9b5d8de5825f68 gnf4=9407d499a4d1e0fe8c22b050878a9f869b385b45 vllm=0.30.0 gpu_class=5090 min_driver=580 min_disk_gb=200
+p86_reduce self-test OK (13 cases)
+pip(vllm 0.30.0) rc=0
+tripwire OK (vllm): 0.30.0 2.13.0+cu130
+PROVE -- the proving run: both installs tripwired; the census arm on vLLM 0.30.0 with a small model
+PROVE census rc=0 P86VLLMCENSUS {"batch": 4, "vllm_version": "0.30.0", "decode_steps": 16, "kernel_ms_per_step": 1.9833, "kernel_ms_short": 16.751, "kernel_ms_long": 48.483, "in_process": true}
+
+PROVE census OK: in_process=True decode kernels=33 per-layer=7 decode ms/step=1.983 cudagraph=FULL_AND_PIECEWISE
+PROVE hf_cdn_mbps=39.0 bytes=52428800

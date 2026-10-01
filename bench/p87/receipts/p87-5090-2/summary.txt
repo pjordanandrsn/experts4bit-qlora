@@ -1,0 +1,29 @@
+KNOBS e4b=9b5654e9f916b763998fec03b77b6fa31e4f7d9a gnf4=3351c9d70e54a8ace33fa29ee7754f616332189f model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=200 calib_nseq=128
+p87_reduce self-test OK (17 cases)
+e4b 0.37.8 @9b5654e9f916b763998fec03b77b6fa31e4f7d9a
+gnf4 0.33.8 @3351c9d70e54a8ace33fa29ee7754f616332189f
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+PREMISE row-exact rc=0: 3 passed in 26.00s
+speed off B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=12.03ms agg=1329.9tok/s recompiles=0 out=/root/p87/e4b_b16_off.json
+
+speed on B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.67ms agg=1371.4tok/s recompiles=0 out=/root/p87/e4b_b16_on.json
+
+speed off B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.28ms compile=None recompiles=0 out=/root/p87/e4b_b1_off.json
+
+speed on B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=5.28ms compile=None recompiles=0 out=/root/p87/e4b_b1_on.json
+
+K8 build rc=142 
+BUILD FAILED (experts)
+speed on B=16_r2 rc=0 BV3_GRAPH batch=16 steps=70 step=11.67ms agg=1371.3tok/s recompiles=0 out=/root/p87/e4b_b16_on_r2.json
+
+speed off B=16_r2 rc=0 BV3_GRAPH batch=16 steps=70 step=12.00ms agg=1333.8tok/s recompiles=0 out=/root/p87/e4b_b16_off_r2.json
+
+speed on B=1_r2 rc=0 B1D_TIMED_GRAPH steps=127 step=5.29ms compile=None recompiles=0 out=/root/p87/e4b_b1_on_r2.json
+
+speed off B=1_r2 rc=0 B1D_TIMED_GRAPH steps=127 step=4.28ms compile=None recompiles=0 out=/root/p87/e4b_b1_off_r2.json
+
+P87_VERDICT VOID K8 off: missing or failed

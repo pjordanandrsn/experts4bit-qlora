@@ -1,0 +1,39 @@
+{
+ "lane": "P85",
+ "reasons": [
+  "F equals N's known float and S equals O's: #413 is the whole KERNEL step"
+ ],
+ "verdict": "CONFIRMED",
+ "known": {
+  "O": 1.8511420498367808,
+  "N": 1.8506507749113845
+ },
+ "mean_nll": {
+  "O_build": 1.8511420498367808,
+  "O_rep": 1.8511420498367808,
+  "F_1": 1.8506507749113845,
+  "F_2": 1.8506507749113845,
+  "S_1": 1.8511420498367808,
+  "S_2": 1.8511420498367808
+ },
+ "ppl": {
+  "O_build": 6.367086902514706,
+  "O_rep": 6.367086902514706,
+  "F_1": 6.363959680597435,
+  "F_2": 6.363959680597435,
+  "S_1": 6.367086902514706,
+  "S_2": 6.367086902514706
+ },
+ "packs": {
+  "O_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42",
+  "licensed_expert": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"
+ },
+ "nats": {
+  "F_minus_O": -0.0004912749253962456,
+  "F_minus_N": 0.0,
+  "S_minus_O": 0.0
+ },
+ "reported": {
+  "O_expert_is_licensed": true
+ }
+}
