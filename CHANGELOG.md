@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### The K25 route runs at the served precision: the select tree through TF32 MMA at K27's plan (opt-in; P93 reads it)
+
+- **Why.** P92 read K25 in bf16 QUALITY_FAIL on OLMoE: bf16 weight rounding. grouped-nf4-gemm's K27 (RTX 5090) read
+  K25 with the select tree at the served kernel's weight precision at 0.448 / 0.502 of the served NF4 GEMM's time
+  (Granite / OLMoE B=16 shapes), with the served kernel's error (ratio 1.000). TF32_PATH by its rule.
+- **What.** `_K25_PLAN = {block_n 32, kc 64, warps 4, stages 3, lut "tree", dot_bf16 False}`: fp32 weights through
+  TF32 MMA, K27's best TF32 plan. A kernel package without the tree gets the paired lookup at the same precision.
+  `E4B_NF4_GROUPED_SMALLM` still defaults to `0`. P92's reading was of the bf16 arithmetic; lane P93 reads this one.
+- **Tests.** The route test's stub records `dot_bf16`, and the test pins the served-precision plan. NAS RTX A2000 at
+  grouped-nf4-gemm main (`908a2ca`): the plan resolves as above; GPU 11/11 (K25 row-exactness, the oracle, the lean
+  bits and graph capture, with K19's and K23's files); CPU routes and pins pass, except a driver dry run that needs
+  `/usr/bin/python3`, which the container lacks.
+
 ### Lane K27's runner (#564): the K25-tree precision bench's box side (bench and tests only)
 
 - **What.** `bench/k27/` drives grouped-nf4-gemm's K27 (`kernel/PREREG-k27-nf4-tree-precision.md`). It is K26's runner
