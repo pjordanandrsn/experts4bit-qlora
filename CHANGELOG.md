@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### `E4B_INT4_GROUPED_SMALLM=1` now covers T == 1 decode too (opt-in; no default changes)
+
+- **The gap.** The route above engaged only where device grouping was already on: T > 1 under the batched harness's `DEVICE_GROUPING`. T == 1 (B=1 decode) kept the singleton int4 GEMV. K8 scores through the T == 1 loop, so a K8 read of the opt-in would have measured the GEMV it meant to replace, and the quality gate would have been inert. This was found while writing lane P87's reducer, before anything ran.
+- **The change.** `_collapsed_grouping(T, int4_stores)` decides the all-resident collapse's grouping. With the opt-in and a uniform-int4 store (not MXFP4), T == 1 takes the device tile table (capture-legal, no host sync), and its 8 routed rows reach K19. Without the opt-in, the decisions are what they were.
+- `tests/test_int4_grouped_smallm_route.py` adds:
+  - the decision table for both T and both settings, plus MXFP4 and no store;
+  - an end-to-end T == 1 call (one row per expert) through K19 against the oracle.
+- `tests/test_k19_row_exact_gpu.py` (GPU; skips without CUDA or K19), on the real kernel at Qwen3-30B-A3B's expert shapes:
+  - a token's rows come out bit-equal whether it decodes alone (T == 1) or inside a B=16 step, so a T == 1 instrument such as K8 stands for the batched rows;
+  - K19 runs at T == 1 and matches an fp32 dequant oracle;
+  - the default T == 1 route is untouched;
+  - the T == 1 route captures in a CUDA graph, as the B=1 decode loop does, and a replay on new inputs equals eager to the bit.
+  - On an RTX A2000 (sm_86), tokens 0, 5 and 15 were bit-equal, and the captured replays matched eager. Relative error against the oracle: K19 0.0048, the GEMV 0.0131.
+
 ### `E4B_INT4_GROUPED_SMALLM=1`: int4 decode rows through grouped-nf4-gemm's K19 grouped tensor-core GEMM (opt-in; no default changes)
 
 - **What it routes.** At decode shapes (≤ 256 routed rows) on the int4 expert store, today's route is the split-K GEMV, the row P86 measured at 6.98 ms/step against Marlin MoE's 4.78 at B=16 (#564). The opt-in sends those rows through K19 (`int4_smallm.gemm_int4_b32_grouped_smallm`, grouped-nf4-gemm#419) instead, using the existing device-grouping branch:
