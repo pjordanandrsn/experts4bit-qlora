@@ -291,3 +291,24 @@ def test_token_rows_under_the_lean_glue_have_the_expanded_calls_bits(monkeypatch
         assert calls["fused"] == [(16, True, True)], calls
     else:
         assert calls["k25"] == ["gather", "sorted"], calls
+
+
+def test_the_t1_instrument_routes_t1_through_the_served_m_tile(monkeypatch):
+    """E4B_NF4_T1_DEVICE_GROUPING=1 (lane P94's instrument): with K25 off, T == 1 on the NF4 store takes the device table
+    and the served M-tile GEMM, so K8 can read the B=16 production arithmetic at T == 1. Off (the default) it is the
+    singleton route; it never moves another store's T == 1; anything but 0/1 is refused."""
+    from experts4bit_qlora.engines import hot_residency as hr
+    monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "0")
+    monkeypatch.delenv("E4B_NF4_T1_DEVICE_GROUPING", raising=False)
+    assert hr._collapsed_grouping(1, None) == (True, False)
+    monkeypatch.setenv("E4B_NF4_T1_DEVICE_GROUPING", "1")
+    assert hr._collapsed_grouping(1, None) == (False, True)
+    monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "0")
+    assert hr._collapsed_grouping(1, {"kind": "int4"}) == (True, False)
+    calls = _install_stubs(monkeypatch)
+    out, ref = _run(8, T1=True)
+    assert calls["captured"] == ["sorted", "sorted"] and calls["k25"] == [] and calls["host"] == 0, calls
+    assert _close(out, ref)
+    monkeypatch.setenv("E4B_NF4_T1_DEVICE_GROUPING", "yes")
+    with pytest.raises(ValueError, match="E4B_NF4_T1_DEVICE_GROUPING='yes'"):
+        hr._collapsed_grouping(1, None)

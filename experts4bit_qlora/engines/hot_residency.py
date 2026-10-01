@@ -171,9 +171,23 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     k21_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") == "mxfp4"
               and _k21_mode_env() == "1")
     k25_t1 = T == 1 and int4_stores is None and _k25_mode_env() == "1"
-    if k19_t1 or k21_t1 or k25_t1:
+    nf4_t1 = T == 1 and int4_stores is None and _nf4_t1_device_grouping_env()
+    if k19_t1 or k21_t1 or k25_t1 or nf4_t1:
         return False, True
     return (T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])), (DEVICE_GROUPING[0] and T > 1)
+
+
+def _nf4_t1_device_grouping_env() -> bool:
+    """``E4B_NF4_T1_DEVICE_GROUPING=1`` (an instrument; off by default, also when unset): the NF4 store's T == 1 decode
+    rows take the device tile table, as batched rows do, instead of the singleton decode GEMV. With
+    ``E4B_NF4_GROUPED_SMALLM`` at ``0`` they then run the served NF4 M-tile GEMM (``gemm_4bit_grouped_captured``, TF32 on
+    the fp32 dequant) -- the arithmetic B=16 decode serves today -- so the decode-shaped K8 can read it at T == 1. It
+    exists for lane P94's calibration (how far the production path's own arithmetic variants move K8, on OLMoE in
+    particular; lanes P92/P93) and changes no default route. Anything other than ``0``/``1`` is refused."""
+    v = os.environ.get("E4B_NF4_T1_DEVICE_GROUPING", "0").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"E4B_NF4_T1_DEVICE_GROUPING={v!r}: expected '0' or '1'")
+    return v == "1"
 
 
 def _decode_a16_default() -> bool:
