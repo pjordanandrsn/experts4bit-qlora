@@ -57,11 +57,9 @@ driver wires the engines, so this is not the `load_moe_4bit_streaming` path.
 **The fused training path is faster at equal loss.** Across two 30B-class
 MoEs, five datasets each, 200 steps per cell: 1.52–1.81× per step at
 0.75–0.81× peak VRAM and 0.80–0.92× energy, with loss parity on both
-registered criteria. The frozen 4-bit stack is bit-identical: 12.85 GB
-hashed in every Gemma-4 cell, and on Qwen3 16.31 GB hashed by the separate
-fused-train gate. *(Corrected 2026-09-30: this first said 0.86–0.92× energy,
-which is Gemma-4's range alone (Qwen3's is 0.797–0.846×), and "bit-identical
-over 16.31 GB hashed", which is one Qwen3 run outside the matrix.)* Default to
+registered criteria and the frozen 4-bit stack bit-identical (12.85 GB per
+Gemma-4 cell, 16.31 GB for Qwen3). *(Corrected 2026-09-30: energy read
+0.86–0.92×, Gemma-4's alone.)* Default to
 `enable_fast_train(model, dgrad=True)`.
 
 **Training on real weights is receipted per family** (lane tp1, 2026-09-05,

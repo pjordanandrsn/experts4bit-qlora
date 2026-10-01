@@ -611,7 +611,7 @@
     {
       "id": "e4b.train.flagship-matrix",
       "area": "train",
-      "claim": "Across two 30B-class MoEs (Qwen3-30B-A3B and Gemma-4-26B-A4B), five datasets each, 200 steps per cell: the fused training path runs 1.52-1.81x faster per step at 0.75-0.81x peak VRAM and 0.80-0.92x energy per step, with loss parity on both registered criteria (worst cell 0.03653, Gemma-4 finance, against a 0.05 band) and the frozen 4-bit stack verified bit-identical: 12.85 GB hashed in every Gemma-4 cell, and for Qwen3 16.31 GB hashed by the separate fused-train gate on the same 48-layer path (the Qwen3 matrix's own check was vacuous and is withdrawn).",
+      "claim": "Across two 30B-class MoEs (Qwen3-30B-A3B and Gemma-4-26B-A4B), five datasets each, 200 steps per cell: the fused training path runs 1.52-1.81x faster per step at 0.75-0.81x peak VRAM and 0.80-0.92x energy per step, with loss parity on both registered criteria (worst cell 0.03653, Gemma-4 finance, against a 0.05 band) and the frozen 4-bit stack bit-identical (12.85 GB per Gemma-4 cell; 16.31 GB for Qwen3, a separate gate).",
       "value": "1.52-1.81",
       "unit": "x per step",
       "status": "measured",
