@@ -89,7 +89,7 @@ def _tiles_matmul(calls, tag, x, packed, absmax, t_row0, t_rows, t_group, order)
     return out
 
 
-def _install_stubs(monkeypatch, with_k25=True, k23=False):
+def _install_stubs(monkeypatch, with_k25=True, k23=False, tree=False):
     calls = {"k25": [], "k25_plan": [], "captured": [], "host": 0, "tiles": [], "fused": []}
     b32 = types.ModuleType("int4_b32")
     monkeypatch.setitem(sys.modules, "int4_b32", b32)
@@ -136,6 +136,8 @@ def _install_stubs(monkeypatch, with_k25=True, k23=False):
                 return torch.empty_like(y).index_copy_(0, scatter, y)
             return y
         sm.gemm_nf4_grouped_smallm = gemm_nf4_grouped_smallm
+        if tree:                                                 # a kernel package that carries the select tree (K26)
+            sm._LUT_MODES = {"load": 0, "pair": 2, "tree": 3}
     monkeypatch.setitem(sys.modules, "nf4_smallm", sm)
     return calls
 
@@ -173,13 +175,18 @@ def test_the_default_is_todays_route(monkeypatch, env):
 
 
 @pytest.mark.parametrize("gptoss", [None, "gptoss"], ids=["silu-glu", "gptoss-epilogue"])
-def test_opted_in_batched_rows_go_through_k25_and_match_the_oracle(monkeypatch, gptoss):
+@pytest.mark.parametrize("tree", [True, False], ids=["kernel-with-tree", "kernel-without-tree"])
+def test_opted_in_batched_rows_go_through_k25_and_match_the_oracle(monkeypatch, gptoss, tree):
+    """The plan is _K25_PLAN with the select-tree decode when the kernel package carries it, and the paired lookup
+    (bit-identical, lane K26) when it does not."""
     from experts4bit_qlora.engines.hot_residency import _K25_PLAN
     monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "1")
-    calls = _install_stubs(monkeypatch)
+    calls = _install_stubs(monkeypatch, tree=tree)
     out, ref = _run(24, gptoss=_gptoss() if gptoss else None)
+    want = _K25_PLAN if tree else dict(_K25_PLAN, lut="pair")
+    assert _K25_PLAN["lut"] == "tree"
     assert calls["k25"] == ["gather", "sorted"], calls                      # gate_up gathers in-kernel; down is sorted
-    assert calls["k25_plan"] == [_K25_PLAN, _K25_PLAN], calls               # the registered plan, both projections
+    assert calls["k25_plan"] == [want, want], calls                         # the registered plan, both projections
     assert calls["captured"] == [] and calls["host"] == 0 and calls["tiles"] == [16], calls
     assert _close(out, ref)
 

@@ -94,7 +94,7 @@ def test_a_tokens_rows_are_bit_equal_alone_and_inside_a_b16_step(monkeypatch):
     monkeypatch.setattr(sm, "gemm_nf4_grouped_smallm", lambda *a, **kw: (seen.append(kw), k25(*a, **kw))[1])
     alone0, dec1 = _call(hr, st, 1, xr[:TOP_K], ids[:TOP_K])
     assert dec1 == (False, True) and len(seen) == 2, (dec1, len(seen))       # K25 ran at T == 1: gate_up + down
-    assert all(kw == hr._K25_PLAN for kw in seen), seen
+    assert all(kw == hr._k25_plan(sm) for kw in seen), seen
     full, dec16 = _call(hr, st, B, xr, ids)
     assert dec16 == (False, True)
     torch.cuda.synchronize()
