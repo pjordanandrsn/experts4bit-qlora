@@ -7,12 +7,17 @@
 # the box refusals (GPU class, overlay disk), the deadline-derived alarms, the venv installs + tripwires, the pinned Alpaca
 # fixture, fetch (unpinned + the proof main == pin, e4b#404), tokenise, the `arm` wrapper (one process, one JSON, one alarm,
 # the arm told its own alarm for the #548 watchdog), stubw, free_family. Removed: tp4's other boxes and plans (the anchor pair,
-# the P43 diagnosis, the P45 profile, the P46 LoRA-path and the P56/P67 opt-ins), the clinical dataset. Added: `draw2`
+# the P43 diagnosis, the P45 profile, the P46 LoRA-path and the P56/P67 opt-ins), the clinical dataset -- lane TC1b brings the
+# anchor pair and the clinical dataset back under its own `qwen3curve` token (tc1_curve_family). Added: `draw2`
 # (the second draw of an arm: the same invocation, a fresh process, tag <tag>_d2), `todo_arm` (a not_run row for an arm this
 # cut does not implement), and `tc1_family`, which runs TC1-PREREG's arm set IN ITS REGISTERED ORDER with the matched flags
 # (`--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED`) on the matched set and the native flags on the native rows.
 #
 #   TC1_BOX=A  qwen3 (Qwen3-30B-A3B @ the pin) -- one RTX 5090, the only registered box
+#   TC1_FAMILIES=qwen3curve  lane TC1b (bench/tc1/TC1B-PREREG.md, the PI's; drafted in TC1b-PREREG-draft): the same pin on one RTX 5090 --
+#              the matched pair at N 200 (eval every 40 on 16 held-out rows), the as-shipped e4b curve beside it, the tp2/P38 anchor pair
+#              (tp4_run.sh's `anchor_pair` fixture and clinical text, byte-for-byte, plus the t28 variant that IS tp4's arm), the
+#              tokens-per-step pair (`_t1`: micro-batch 1 x accum 1) and the rank pair (`_r64`); `tc1_curve_family` below
 #
 # Frameworks: e4b (GitHub main @ E4B_SHA + grouped-nf4-gemm @ GNF4_SHA, venv-e4b: transformers 5.18.0 / bitsandbytes 0.50.2 /
 # peft 0.21.2), plain HF+PEFT+bnb (venv-e4b), Unsloth at the REGISTERED versions (unsloth 2026.9.14 + unsloth_zoo 2026.9.9) in
@@ -42,15 +47,33 @@ EVAL_EVERY=${TC1_EVAL_EVERY:-20}; EVAL_N=${TC1_EVAL_N:-8}; AUTOCAST=${TC1_AUTOCA
 MATCHED_SEED=${TC1_MATCHED_SEED:-3407}            # --lora-init matched:<seed> on every matched arm (TC1-PREREG "Arms"); its own knob, distinct from the fixture seed
 DS_ALPACA_SHA=${TC1_DS_ALPACA_SHA:-5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb}   # tp4_alpaca.py output, registered
 TF_VER=${TC1_TRANSFORMERS_VER:-5.18.0}; BNB_VER=${TC1_BNB_VER:-0.50.2}; PEFT_VER=${TC1_PEFT_VER:-0.21.2}   # TC1-PREREG "Environments"
+# ---------------------------------------------------------------- TC1b (the qwen3curve token; TC1B-PREREG "Fixture" / "Arms"): the curve instrument over the SAME field recipe
+# (N 200, eval every 40 on the first 16 held-out rows, the linear schedule's decay running to step 200 with the 5 warm-up steps --
+# tc1_arm.py's _lam(step, N=a.steps) is transformers' formula), the `_t1` sub-fixture (micro-batch 1 x accum 1, N 20, 8 rows at 0 and N)
+# and the `_r64` sub-fixture (r 64 / alpha 64, everything else the field recipe). Every knob here is forwarded by tc1_drive.sh.
+CURVE_STEPS=${TC1_CURVE_STEPS:-200}; CURVE_EVAL_EVERY=${TC1_CURVE_EVAL_EVERY:-40}; CURVE_EVAL_N=${TC1_CURVE_EVAL_N:-16}
+T1_MB=${TC1_T1_MB:-1}; T1_ACCUM=${TC1_T1_ACCUM:-1}; R64_R=${TC1_R64_R:-64}; R64_ALPHA=${TC1_R64_ALPHA:-64}
+# the anchor pair's fixture = tp2/P38 as tp4 RAN it (bench/tp4/tp4_run.sh A_*, TP4-PREREG "Anchor"): clinical text, seq 512, batch 1 x accum 1,
+# r 8 / alpha 16, lr 1e-4, torch AdamW wd 0.01, constant, seed 0, N 60. Literals, as tp4's: the pair is byte-for-byte tp4's arms, not a knob.
+A_STEPS=60; A_SEQ=512; A_MB=1; A_ACCUM=1; A_R=8; A_ALPHA=16; A_LR=1e-4; A_WD=0.01; A_WARMUP=0; A_SCHED=constant; A_OPTIM=adamw_torch; A_SEED=0; A_TEMPLATE=clinical
+# 8 held-out rows at 0 and N: what tp4's anchor RAN (TP4-PREREG amendment 3's erratum: 8 rows, the first 8 of tp2's 48, a prefix) and what
+# TC1b registers; bench/tp4/tp4_run.sh now carries A_EVAL_N=48 as the post-erratum fix (e4b#545), so this is NOT tp4_run.sh's current literal.
+A_EVAL_N=8; A_EVAL_EVERY=20
 SKIP=${TC1_SKIP:-}; PIN_FALLBACK=${TC1_PIN_FALLBACK:-0}; GPU_CLASS=${TC1_GPU_CLASS:-5090}
 case "$TC1_BOX" in
   A) FAMILIES=${TC1_FAMILIES:-"qwen3"};;          # the judged family; TC1_FAMILIES=qwen3native for the labelled / native-best box (phase 3 I)
 esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
-echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RUN_ID instance $TC1_INSTANCE_ID deadline $TC1_DEADLINE_EPOCH" | tee -a summary.txt
+case " $FAMILIES " in *" qwen3curve "*)
+  echo "FIXTURE curve (TC1b): steps=$CURVE_STEPS eval_every=$CURVE_EVAL_EVERY eval_n=$CURVE_EVAL_N; t1: micro_batch=$T1_MB accum=$T1_ACCUM; r64: r=$R64_R alpha=$R64_ALPHA" | tee -a summary.txt
+  echo "FIXTURE anchor (tp4's A_*): template=$A_TEMPLATE steps=$A_STEPS seq=$A_SEQ micro_batch=$A_MB accum=$A_ACCUM r=$A_R alpha=$A_ALPHA lr=$A_LR wd=$A_WD warmup=$A_WARMUP sched=$A_SCHED optim=$A_OPTIM seed=$A_SEED eval_every=$A_EVAL_EVERY eval_n=$A_EVAL_N" | tee -a summary.txt
+  [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC1B-PREREG.md     # TC1b: the curve token is governed by its own registration (the PI's); TC1_PREREG still overrides
+  ;;
+esac
+echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RUN_ID instance $TC1_INSTANCE_ID deadline $TC1_DEADLINE_EPOCH; prereg $PREREG" | tee -a summary.txt
 # ---------------------------------------------------------------- staged pieces, box class, forensics
-for f in tc1_arm.py tc1_reduce.py tp4_alpaca.py; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
+for f in tc1_arm.py tc1_reduce.py tp4_alpaca.py n9_datasets.py ds_manifest.json; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done   # TC1b: + the clinical builder and its manifest (tc1_drive.sh's STAGE)
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "BOX REFUSED: gpu '$GPU_NAME' is not the registered class ($GPU_CLASS)"; echo "BOX_REFUSED gpu=$GPU_NAME" >> summary.txt; finish 12;; esac
 # K: the class label the arm records (TC1_BOX_CLASS): "RTX <n>" for a numeric class, the class string itself otherwise (H100 NVL / SXM / PCIE pass the substring check above)
@@ -242,6 +265,13 @@ say "dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, se
 tail -1 logs/dataset_alpaca.log
 GOT=$(sha256sum $W/data/ds_alpaca.json | awk '{print $1}'); [ "$GOT" = "$DS_ALPACA_SHA" ] || { say "DATASET MISMATCH alpaca: $GOT != $DS_ALPACA_SHA"; finish 13; }
 echo "DATASET alpaca sha=$DS_ALPACA_SHA" | tee -a summary.txt
+case " $FAMILIES " in *" qwen3curve "*)      # TC1b: the anchor pair's text, built and sha-verified exactly as tp4_run.sh does it (ds_manifest.json's clinical sha)
+  say "dataset clinical (n9_datasets.py, sha-verified against ds_manifest.json) for the anchor pair"
+  (cd $W/data && $PY_E4B $W/n9_datasets.py $W/data > $W/logs/dataset_clinical.log 2>&1); tail -1 logs/dataset_clinical.log
+  CLIN_SHA=$($PY_E4B -c "import json; print(json.load(open('$W/ds_manifest.json'))['clinical']['sha256'])")
+  GOT=$(sha256sum $W/data/ds_clinical.json | awk '{print $1}'); [ "$GOT" = "$CLIN_SHA" ] || { say "DATASET MISMATCH clinical: $GOT != $CLIN_SHA"; finish 13; }
+  echo "DATASET clinical sha=$CLIN_SHA" | tee -a summary.txt;;
+esac
 # ---------------------------------------------------------------- helpers
 vram_start(){ ( while :; do echo "$(date -u +%s) $(nvidia-smi --query-gpu=memory.used,utilization.gpu,power.draw --format=csv,noheader,nounits)"; sleep 1; done ) > $W/vram_$1.txt 2>/dev/null & echo $!; }
 vram_stop(){ kill $1 2>/dev/null; wait $1 2>/dev/null; }
@@ -302,7 +332,7 @@ for t in (tag, "reference_attn4_m"):
             print(r["trainable_params"]); break
 PYE
 }
-# arm FAM FW TAG ARM ALARM MID REV OFFLOAD RECIPE(field|anchor|mb1) TOK TOK_SHA [extra args...]: one process, one JSON, one alarm
+# arm FAM FW TAG ARM ALARM MID REV OFFLOAD RECIPE(field|mb1|curve|anchor|t1|r64) TOK TOK_SHA [extra args...]: one process, one JSON, one alarm
 arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK=${10} TOK_SHA=${11}; shift 11
   { skip $FAM || skip $FAM/$FW/$TAG; } && { say "skip $FAM/$FW/$TAG"; stubw $FAM $FW $TAG $ARM not_run "skipped by TC1_SKIP"; return 0; }
   # phase 2: the interpreter per framework; UNS_VENV=t28 (a prefix assignment on the call) selects tp4's torch-2.8 venv for an
@@ -329,6 +359,11 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   local s=$STEPS q=$SEQ m=$MB ac=$ACCUM r=$R al=$ALPHA lr=$LR wd=$WD wu=$WARMUP sc=$SCHED op=$OPTIM sd=$SEED en=$EVAL_N ee=$EVAL_EVERY ex_tag=fused_attn4_m
   case "$RECIPE" in
     mb1)    m=1; ac=$(( MB * ACCUM )); ex_tag=fused_attn4_m_mb1;;
+    # TC1b sub-fixtures: each names its OWN e4b arm as the trainable reference (expect_of), as tp4's anchor did
+    curve)  s=$CURVE_STEPS; en=$CURVE_EVAL_N; ee=$CURVE_EVAL_EVERY; ex_tag=fused_attn4_m_200;;
+    anchor) s=$A_STEPS; q=$A_SEQ; m=$A_MB; ac=$A_ACCUM; r=$A_R; al=$A_ALPHA; lr=$A_LR; wd=$A_WD; wu=$A_WARMUP; sc=$A_SCHED; op=$A_OPTIM; sd=$A_SEED; en=$A_EVAL_N; ee=$A_EVAL_EVERY; ex_tag=fused_attn4_p38;;
+    t1)     m=$T1_MB; ac=$T1_ACCUM; ex_tag=fused_attn4_m_t1;;
+    r64)    r=$R64_R; al=$R64_ALPHA; ex_tag=fused_attn4_m_r64;;
   esac
   local EXP EXPARG=""; [ "$FW" != e4b ] && { EXP=$(expect_of $FAM $ex_tag); [ -n "$EXP" ] && EXPARG="--expect-trainable $EXP"; }
   local A; A=$(alarm_for $AL)
@@ -370,6 +405,10 @@ tokenise(){ local FAM=$1 MID=$2 REV=$3 TEMPLATE_=$4 SEQ_=$5 DATA=$6 DATA_SHA=$7 
   HF_HUB_OFFLINE=1 $PY_E4B $W/tc1_arm.py --prepare --fam $FAM --model "$MID" --revision $REV --data $DATA --data-sha $DATA_SHA --seq $SEQ_ --eval-n $EVAL_N_ --template $TEMPLATE_ --tokens $TOK > logs/prepare_${FAM}_$TEMPLATE_.log 2>&1 || return 1
   tail -1 logs/prepare_${FAM}_$TEMPLATE_.log; return 0; }
 tok_sha(){ $PY_E4B -c "import json; print(json.load(open('$1'))['sha256'])"; }
+# TC1b: the tokens file's sha256 covers {train, eval[:eval_n]} (tc1_arm.py prepare), so a file tokenised with 16 held-out rows cannot carry
+# TC1's qwen3 sha (8 rows) even though its TRAIN rows are byte-identical. The train-only sha -- sha256 of json.dumps(train, separators=(',', ':'))
+# -- is printed beside it so the registration can assert the training bytes against TC1's file (TP4-PREREG amendment 3's reading).
+train_sha(){ $PY_E4B -c "import json, hashlib; print(hashlib.sha256(json.dumps(json.load(open('$1'))['train'], separators=(',', ':')).encode()).hexdigest())"; }
 # ---------------------------------------------------------------- the TC1 arm set (TC1-PREREG "Arms, in this order")
 dmon_start(){ ( nvidia-smi dmon -s ut -d 1 -o T > $W/logs/dmon_$1.txt 2>/dev/null ) & echo $!; }
 dmon_stop(){ kill $1 2>/dev/null; wait $1 2>/dev/null; }
@@ -381,18 +420,59 @@ todo_arm(){ stubw "$1" "$2" "$3" "$4" not_run "arm not yet implemented (TC1 foll
 UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"     # the notebooks' seven targets (TC1-PREREG arm 2)
 PROFILE_STEPS=${TC1_PROFILE_STEPS:-3}; PROFILE_WARM=${TC1_PROFILE_WARM:-3}   # arm 10: P45's instrument, 3 warm + 3 profiled
 # tc1_fetch_tokenise FAM MID REV FETCH_AL STUBLIST: fetch + tokenise, or stub every arm in STUBLIST (fw:tag:arm words); sets TOK / TS
-tc1_prepare(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5
+tc1_prepare(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5 EVN=${6:-$EVAL_N}      # EVN: held-out rows written into the tokens file (TC1b: CURVE_EVAL_N; every arm takes its own --eval-n prefix)
   stub_all(){ local st=$1 why=$2 t fw tag arm; for t in $ALL; do IFS=: read -r fw tag arm <<< "$t"; stubw $FAM $fw $tag $arm $st "$why"; done; }
   if skip $FAM; then say "skip family $FAM (TC1_SKIP)"; stub_all not_run "family skipped by TC1_SKIP"; return 1; fi
   FETCH_REASON=""; fetch $FAM $MID $REV $FAL; local frc=$?
   if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault; stub_all $st "$FETCH_REASON"; free_family $FAM ${MID//\//--}; return 1; fi
   TOK=$W/tokens_$FAM.json
-  if ! tokenise $FAM "$MID" $REV alpaca $SEQ $W/data/ds_alpaca.json $DS_ALPACA_SHA $TOK; then
+  if ! tokenise $FAM "$MID" $REV alpaca $SEQ $W/data/ds_alpaca.json $DS_ALPACA_SHA $TOK $EVN; then
     tail -3 logs/prepare_${FAM}_alpaca.log; echo "$FAM: TOKENS FAIL" | tee -a summary.txt
     local why; why="tokenise failed (logs/prepare_${FAM}_alpaca.log): $(tail -1 logs/prepare_${FAM}_alpaca.log | cut -c1-200)"
     stub_all harness_error "$why"; free_family $FAM ${MID//\//--}; return 1
   fi
-  TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS" | tee -a summary.txt; return 0; }
+  TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS eval_n=$EVN train_only_sha=$(train_sha $TOK)" | tee -a summary.txt; return 0; }
+# tc1_curve_family FAM MID REV FETCH_AL E4B_AL UNS_AL ANCHOR_AL SCALE_AL -- lane TC1b (TC1B-PREREG "Arms, in this order"), one process per arm:
+#   1 e4b/fused_attn4_m_200  2 unsloth/ckpt_unsloth_m_200 (the matched pair at N 200: fp32 adapters, matched init, grouped_mm in venv-unsloth)
+#   3 e4b/fused_attn4_shipped_200 (as the loader builds it: --adapter-dtype native --lora-init native)
+#   4 e4b/fused_attn4_p38 + unsloth/ckpt_unsloth_p38 (tp4's anchor pair at tp2/P38's fixture, clinical tokens) + unsloth/ckpt_unsloth_p38_t28
+#   5 e4b/fused_attn4_m_t1 + unsloth/ckpt_unsloth_m_t1 (micro-batch 1 x accum 1)   6 e4b/fused_attn4_m_r64 + unsloth/ckpt_unsloth_m_r64 (r 64 / alpha 64)
+# The matched pair runs first so a deadline cannot eat it; the family's tokens file carries CURVE_EVAL_N held-out rows (arms 5-6 take the first 8).
+tc1_curve_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SAL=$8
+  local ALL="e4b:fused_attn4_m_200:fused unsloth:ckpt_unsloth_m_200:unsloth e4b:fused_attn4_shipped_200:fused e4b:fused_attn4_p38:fused unsloth:ckpt_unsloth_p38:unsloth unsloth:ckpt_unsloth_p38_t28:unsloth e4b:fused_attn4_m_t1:fused unsloth:ckpt_unsloth_m_t1:unsloth e4b:fused_attn4_m_r64:fused unsloth:ckpt_unsloth_m_r64:unsloth"
+  say "===== CURVE family $FAM (TC1b; $MID @ $REV; matched seed $MATCHED_SEED; N $CURVE_STEPS eval every $CURVE_EVAL_EVERY on $CURVE_EVAL_N rows; alarms e4b $EAL unsloth $UAL anchor $AAL t1/r64 $SAL)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $CURVE_EVAL_N || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"      # the matched arms (1, 2, 5, 6)
+  local NATIVE="--adapter-dtype native --lora-init native"                 # arm 3: as load_moe_4bit_streaming + add_attention_lora build it
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"                   # the notebooks' recipe (tp4's arm); double-quant OFF is the arm's default on the matched arms
+  # tp4's anchor arms byte-for-byte (bench/tp4/tp4_run.sh anchor_pair + tp4_arm.py @ 10ce711d): tp4_arm.py cast every NON-e4b arm's adapters to fp32 and
+  # left e4b's as the loader built them (bf16 expert adapters), native init on both, no double-quant knob (Unsloth's loader default), dgrad=1 on both drivers.
+  # The one per-arm environment difference from tp4_run.sh is OMP_NUM_THREADS=$PHYS (phase 3 F19, set on every TC1 arm); tp4 left it unset. Recorded in arm_facts.
+  local ANCHOR_E4B="--adapter-dtype native --lora-init native" ANCHOR_UNS="--adapter-dtype fp32 --lora-init native --unsloth-double-quant default"
+  can_run 600 $FAM/e4b/m_200        && arm $FAM e4b fused_attn4_m_200 fused $EAL "$MID" $REV 0 curve $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m_200    && arm $FAM unsloth ckpt_unsloth_m_200 unsloth $UAL "$MID" $REV 0 curve $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 600 $FAM/e4b/shipped_200  && arm $FAM e4b fused_attn4_shipped_200 fused $EAL "$MID" $REV 0 curve $TOK $TS --attn-4bit 1 $NATIVE
+  # the anchor pair: tp2's text, tokenised as tp4 did (clinical template, seq 512, the first A_EVAL_N held-out rows)
+  local ATOK=$W/tokens_${FAM}_p38.json ATS CLIN_SHA; CLIN_SHA=$($PY_E4B -c "import json; print(json.load(open('$W/ds_manifest.json'))['clinical']['sha256'])")
+  if tokenise $FAM "$MID" $REV clinical $A_SEQ $W/data/ds_clinical.json $CLIN_SHA $ATOK $A_EVAL_N; then
+    ATS=$(tok_sha $ATOK); echo "TOKENS ${FAM}_p38 clinical sha=$ATS train_only_sha=$(train_sha $ATOK) (tp2's tokens_qwen3 / tp4's tokens_qwen3_p38 sha for the cross-check: their receipts record it)" | tee -a summary.txt
+    can_run 600 $FAM/e4b/p38         && arm $FAM e4b fused_attn4_p38 fused $AAL "$MID" $REV 0 anchor $ATOK $ATS --attn-4bit 1 $ANCHOR_E4B
+    can_run 600 $FAM/unsloth/p38     && arm $FAM unsloth ckpt_unsloth_p38 unsloth $AAL "$MID" $REV 0 anchor $ATOK $ATS $UNS --unsloth-moe-backend grouped_mm $ANCHOR_UNS \
+      --note "tp4's anchor arm EXCEPT the venv: venv-unsloth (unsloth[cu130-torch2121], torch 2.12.1+cu130) with UNSLOTH_MOE_BACKEND=grouped_mm; tp4 ran venv-unsloth-t28 (torch 2.8.0+cu128) with the loader-default backend -- ckpt_unsloth_p38_t28 is that arm"
+    can_run 600 $FAM/unsloth/p38_t28 && UNS_VENV=t28 arm $FAM unsloth ckpt_unsloth_p38_t28 unsloth $AAL "$MID" $REV 0 anchor $ATOK $ATS $UNS --unsloth-moe-backend default $ANCHOR_UNS \
+      --note "byte-for-byte tp4's anchor arm: venv-unsloth-t28 (unsloth[cu128-torch280] on the image's torch 2.8.0), the loader-default MoE backend"
+  else
+    tail -3 logs/prepare_${FAM}_clinical.log; echo "${FAM}_p38: TOKENS FAIL" | tee -a summary.txt
+    local why="tokenise failed (logs/prepare_${FAM}_clinical.log): $(tail -1 logs/prepare_${FAM}_clinical.log | cut -c1-200)"
+    stubw $FAM e4b fused_attn4_p38 fused harness_error "$why"; stubw $FAM unsloth ckpt_unsloth_p38 unsloth harness_error "$why"; stubw $FAM unsloth ckpt_unsloth_p38_t28 unsloth harness_error "$why"
+  fi
+  # the tokens-per-step scaling pair (micro-batch 1 x accum 1) and the rank pair (r 64 / alpha 64): the field recipe otherwise, 8 rows at 0 and N
+  can_run 600 $FAM/e4b/m_t1         && arm $FAM e4b fused_attn4_m_t1 fused $SAL "$MID" $REV 0 t1 $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m_t1     && arm $FAM unsloth ckpt_unsloth_m_t1 unsloth $SAL "$MID" $REV 0 t1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 600 $FAM/e4b/m_r64        && arm $FAM e4b fused_attn4_m_r64 fused $SAL "$MID" $REV 0 r64 $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m_r64    && arm $FAM unsloth ckpt_unsloth_m_r64 unsloth $SAL "$MID" $REV 0 r64 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_family FAM MID REV FETCH_AL E4B_AL UNS_AL HF_AL AX_AL REF_AL PROF_AL -- the JUDGED family (phase 3 I [F4]), one process per arm, in this order:
 #   1 e4b/fused_attn4_m  2 unsloth/ckpt_unsloth_m  3 e4b/reference_attn4_m (THIRD: the e4b-side control sits beside the pair it controls)
 #   4 e4b/fused_attn4_m_d2  5 unsloth/ckpt_unsloth_m_d2  6 hf/hf_peft_m  7 axolotl/ckpt_axolotl_m
@@ -463,6 +543,8 @@ tc1_native_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=
 for FAM in $FAMILIES; do case "$FAM" in
   qwen3)       tc1_family        qwen3       Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700 5400 2400;;
   qwen3native) tc1_native_family qwen3native Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700;;
+  #                                                                                                        FETCH E4B  UNS  ANCH SCALE   (TC1b alarms: e4b 200-step 4800, Unsloth 200-step 9000, anchor 1800 each, t1/r64 3600)
+  qwen3curve)  tc1_curve_family  qwen3curve  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 9000 1800 3600;;
   *) say "unknown family token $FAM"; echo "UNKNOWN $FAM" >> summary.txt;;
 esac; done
 # ---------------------------------------------------------------- reduce, summarise, mark

@@ -918,7 +918,8 @@ def _phase_alarm_action(a, ctx):
 def stub(a, status, reason, extra=None, code=None, fw=None, tag=None, arm=None):
     rec = {"framework": fw or a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "arm": arm or a.arm,
            "tag": tag or a.tag, "status": status, "reason": str(reason)[:800], "steps": a.steps, "seq": a.seq,
-           "accum": a.accum, "micro_batch": int(getattr(a, "micro_batch", 1) or 1), "offload": bool(a.offload), "prereg": a.prereg, "harness": HARNESS}
+           "accum": a.accum, "micro_batch": int(getattr(a, "micro_batch", 1) or 1), "offload": bool(a.offload), "prereg": a.prereg, "harness": HARNESS,
+           "note": getattr(a, "note", None)}                                                                              # TC1b: --note on every row
     ph, cur, _ = PH.snapshot()                      # #548: a REFUSED / OOM / alarmed row says where its time went too --
     if PH.started():                                # that is the row the issue was raised about, and it had no numbers at all.
         # Emitted even when EMPTY, so "this arm died before anything was timed" is distinguishable from
@@ -2555,6 +2556,7 @@ def run_arm(a, load_fn, sampler=True):
         "sampler": bool(sampler), "joules_per_step": round(net_w * (train_wall / a.steps), 2) if net_w else None,
         "adapter": adapter, "losses": losses,
         "profile": profile_summary, "profile_steps": int(a.profile_steps), "profile_warm": int(a.profile_warm),
+        "note": getattr(a, "note", None),                                                                                  # TC1b: --note, verbatim
     }
     write_json(receipt_path(a), cell)
     print(("CELL OK " if c1_ok else "CELL C1_FAILED ") + json.dumps(
@@ -3422,6 +3424,7 @@ def selftest(a):
     for fw, arm, tag, kw in (("e4b", "reference", "reference_attn4", {"attn_4bit": 1}), ("e4b", "fused", "fused_attn4", {"attn_4bit": 1}),
                              ("unsloth", "unsloth", "ckpt_unsloth", {"attn_4bit": 0}), ("unsloth", "unsloth", "ckpt_hf", {"attn_4bit": 0, "grad_ckpt": "hf"})):
         a.framework, a.arm, a.tag, a.attn_4bit, a.grad_ckpt = fw, arm, tag, kw["attn_4bit"], kw.get("grad_ckpt", "unsloth")
+        a.note = "selftest note (TC1b --note)" if tag == "reference_attn4" else None     # TC1b: the note lands on exactly the arm it was given to
         a.expect_trainable = got.get("e4b_reference_attn4", {}).get("trainable_params") if fw == "unsloth" else None
         got[f"{fw}_{tag}"] = run_arm(a, _selftest_load_e4b if fw == "e4b" else _selftest_load_unsloth, sampler=False)
     # gpt-oss shape (its own family, its own tokens file): attn_only over bare experts (expert LoRA frozen), with the
@@ -3481,6 +3484,7 @@ def selftest(a):
         assert all(s["sha"] != s["control_sha"] and s["n_bytes"] > 0 for s in fp["slots"].values()), (k, fp)
     e_ref, e_fu, u1, u2, ao = R["tiny_e4b_reference_attn4"], R["tiny_e4b_fused_attn4"], R["tiny_unsloth_ckpt_unsloth"], R["tiny_unsloth_ckpt_hf"], R["tinygo_e4b_attn_only"]
     assert e_ref["init_sha"] == e_fu["init_sha"], "e4b arms did not start bit-identical"
+    assert e_ref["note"] == "selftest note (TC1b --note)" and e_fu["note"] is None, (e_ref.get("note"), e_fu.get("note"))   # TC1b
     assert e_ref["n_attn4"] == 8 and e_fu["n_attn4"] == 8 and e_fu["n_patched"] == 2 and e_ref["n_patched"] == 0
     assert e_ref["structural_expected_n_attn4"] == 8 and e_fu["structural_expected_n_attn4"] == 8 and e_ref["detector_version"] == "selftest"
     assert u1["structural_expected_n_attn4"] is None and u1["detector_version"] is None and ao["detector_version"] is None
@@ -3734,6 +3738,8 @@ def main():
                     help="#548: refuse the arm (status phase_alarm, exit 16) while still inside a prologue phase once the whole "
                          f"prologue passes this many seconds. Default: TC1_PHASE_BUDGET_S, else {PROLOGUE_BUDGET_SHARE:g} x TC1_ARM_ALARM_S "
                          "(what tc1_run.sh gave perl's alarm), else off. phase_seconds is recorded either way")
+    ap.add_argument("--note", default=None,
+                    help="TC1b: a free-text provenance note recorded verbatim in the receipt (and in any stub) -- e.g. how an anchor arm differs from the lane it anchors to (the p38 Unsloth arm in venv-unsloth: cu130 torch 2.12.1 + grouped_mm, where tp4 ran the t28 venv with the loader-default backend)")
     ap.add_argument("--out", default="/root/tc1")
     ap.add_argument("--adapter-dir", default="/root/tc1/adapters")
     a = ap.parse_args()
