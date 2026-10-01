@@ -66,6 +66,11 @@ if [ "${FREE_GB:-0}" -lt "$MIN_DISK_GB" ]; then say "BOX REFUSED: ${FREE_GB:-?} 
 DRIVER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d ' '); DRIVER_MAJOR=${DRIVER%%.*}
 CU130_OK=1; case "$DRIVER_MAJOR" in ''|*[!0-9]*) CU130_OK=0;; *) [ "$DRIVER_MAJOR" -ge 580 ] || CU130_OK=0;; esac
 CU130_REASON="cu130 wheels need driver >= 580; host has ${DRIVER:-unknown}"
+# TC1-PREREG amendment 1 (2026-10-01): both TC1 family tokens need the cu130 venvs (the comparator and axolotl), so a host
+# below the driver floor cannot produce the lane's readings. It is a REGISTERED HOST FLOOR -- rent.py's lane-refusal class
+# 18 (P86's driver refusal, machine 37958 at 575.57 on tc1-5090-3) -- so the box refuses here, before any install or
+# fetch, and the receipt names the machine for exclusion on the next draw instead of running four hours of refused rows.
+if [ "$CU130_OK" != 1 ]; then say "REFUSED: $CU130_REASON (registered host floor; TC1-PREREG amendment 1)"; echo "refused: driver ${DRIVER:-unknown} < 580" > REFUSAL; echo "BOX_REFUSED driver=${DRIVER:-unknown} floor=580" | tee -a summary.txt; finish 18; fi
 [ "$CU130_OK" = 1 ] && say "driver $DRIVER: cu130 venvs (venv-unsloth, venv-axolotl) will be built" || say "driver ${DRIVER:-unknown}: $CU130_REASON -- venv-unsloth (cu130) and venv-axolotl are NOT built; their arms are refused rows"
 echo "DRIVER $DRIVER cu130_ok=$CU130_OK" | tee -a summary.txt
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,power.limit,clocks.max.sm --format=csv,noheader | tee forensics.txt
