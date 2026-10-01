@@ -44,7 +44,7 @@ DS_ALPACA_SHA=${TC1_DS_ALPACA_SHA:-5324987afa4042556953026289e8dbdbe8a936b32832e
 TF_VER=${TC1_TRANSFORMERS_VER:-5.18.0}; BNB_VER=${TC1_BNB_VER:-0.50.2}; PEFT_VER=${TC1_PEFT_VER:-0.21.2}   # TC1-PREREG "Environments"
 SKIP=${TC1_SKIP:-}; PIN_FALLBACK=${TC1_PIN_FALLBACK:-0}; GPU_CLASS=${TC1_GPU_CLASS:-5090}
 case "$TC1_BOX" in
-  A) FAMILIES=${TC1_FAMILIES:-"qwen3"};;
+  A) FAMILIES=${TC1_FAMILIES:-"qwen3"};;          # the judged family; TC1_FAMILIES=qwen3native for the labelled / native-best box (phase 3 I)
 esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
@@ -53,6 +53,11 @@ echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RU
 for f in tc1_arm.py tc1_reduce.py tp4_alpaca.py; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "BOX REFUSED: gpu '$GPU_NAME' is not the registered class ($GPU_CLASS)"; echo "BOX_REFUSED gpu=$GPU_NAME" >> summary.txt; finish 12;; esac
+# K: the class label the arm records (TC1_BOX_CLASS): "RTX <n>" for a numeric class, the class string itself otherwise (H100 NVL / SXM / PCIE pass the substring check above)
+case "$GPU_CLASS" in [0-9]*) BOX_CLASS="RTX $GPU_CLASS";; *) BOX_CLASS="$GPU_CLASS";; esac
+# F [F19]: every arm runs with OMP_NUM_THREADS = the box's PHYSICAL core count (recorded in the receipt's arm_facts)
+PHYS=$(lscpu -p=CORE,SOCKET 2>/dev/null | grep -v '^#' | sort -u | wc -l | tr -d ' '); case "$PHYS" in ''|0|*[!0-9]*) PHYS=$(nproc);; esac
+echo "OMP_NUM_THREADS=$PHYS (physical cores) box_class=$BOX_CLASS" | tee -a summary.txt
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
 MIN_DISK_GB=${TC1_MIN_DISK_GB:-200}; FREE_GB=$(df -BG --output=avail /root 2>/dev/null | tail -1 | tr -dc 0-9)
@@ -169,6 +174,35 @@ tripwire_unsloth(){ local TAG=$1 PY=$2 ok=1
   tail -1 logs/tripwire_$TAG.log; return $(( 1 - ok )); }
 [ "$UNS_T28_OK" = 1 ] && { tripwire_unsloth unsloth-t28 $PY_UNS_T28 || UNS_T28_OK=0; }
 [ "$UNS_OK" = 1 ] && { tripwire_unsloth unsloth $PY_UNS || UNS_OK=0; }
+# J [F7]: e4b + grouped-nf4-gemm at the same pins into venv-unsloth (torch 2.12.1+cu130) for the `fused_attn4_m_t212` row; a failed install
+# or tripwire is a row (install_failed), the cu130 gate a refused row
+T212_OK=0; T212_REASON=""
+if [ "$UNS_OK" = 1 ]; then
+  say "venv-unsloth + e4b @$E4B_SHA + gnf4 @$GNF4_SHA (the t212 row)"
+  perl -e 'alarm 2400; exec @ARGV' $PY_UNS -m pip install -q --no-input --prefer-binary \
+    "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" > logs/pip_e4b_t212.log 2>&1
+  rc=$?; echo "pip(e4b-t212) rc=$rc"
+  if [ $rc -ne 0 ]; then tail -6 logs/pip_e4b_t212.log; T212_REASON="e4b/gnf4 install into venv-unsloth failed rc=$rc (logs/pip_e4b_t212.log): $(tail -3 logs/pip_e4b_t212.log | tr '\n' ' ' | cut -c1-300)"
+  else
+    E4B_SHA="$E4B_SHA" GNF4_SHA="$GNF4_SHA" $PY_UNS - <<'PYT2' > logs/tripwire_e4b_t212.log 2>&1; trc=$?
+import importlib.metadata as md, inspect, json, os
+import experts4bit_qlora as e, torch
+from experts4bit_qlora import enable_fast_train, load_moe_4bit_streaming
+from nf4_qlora import fused_grouped_lora, LORA_PATH_STATS
+assert "dgrad_kernel" in inspect.signature(fused_grouped_lora).parameters
+def commit(dist):
+    d = md.distribution(dist); du = d.read_text("direct_url.json")
+    return (json.loads(du).get("vcs_info") or {}).get("commit_id") if du else None
+assert commit("experts4bit-qlora") == os.environ["E4B_SHA"] and commit("grouped-nf4-gemm") == os.environ["GNF4_SHA"], (commit("experts4bit-qlora"), commit("grouped-nf4-gemm"))
+assert torch.cuda.is_available()
+print("tc1 tripwire OK (e4b-t212):", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__)
+open("/root/tc1/versions.txt", "a").write(f"e4b(t212) {e.__version__} @{commit('experts4bit-qlora')}\ngnf4(t212) {md.version('grouped-nf4-gemm')} @{commit('grouped-nf4-gemm')}\ntorch(e4b-t212) {torch.__version__}\n")
+PYT2
+    if [ $trc -ne 0 ]; then tail -4 logs/tripwire_e4b_t212.log; T212_REASON="e4b-t212 tripwire failed (logs/tripwire_e4b_t212.log): $(tail -2 logs/tripwire_e4b_t212.log | tr '\n' ' ' | cut -c1-300)"; else T212_OK=1; tail -1 logs/tripwire_e4b_t212.log; fi
+  fi
+else
+  T212_REASON="venv-unsloth (cu130) unavailable: ${CU130_REASON}"
+fi
 # ---------------------------------------------------------------- axolotl 0.20.0 (phase 2, axolotl-arm-spec.md): its own venv, uv, CPython 3.12, torch cu130
 # Pins (wheel METADATA): python >= 3.12, torch >= 2.13.0 <= 2.14.0, transformers == 5.17.0, peft == 0.21.0, bitsandbytes == 0.50.2.
 # torch >= 2.13 Linux cp312 wheels exist only under /whl/cu130 (verified 2026-10-01 by the coordinator), so the driver gate above applies.
@@ -270,7 +304,13 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   # Unsloth arm, else the cu130 venv. A cu130 venv the driver gate refused -> `refused` rows naming the driver; a venv that
   # did not install/import -> `install_failed` rows. Never a silent fallback to the other venv.
   local PY=$PY_E4B
-  if [ "$FW" = unsloth ]; then
+  if [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = t212 ]; then PY=$PY_UNS          # J: e4b on torch 2.12.1+cu130
+    [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-unsloth (cu130-torch2121) + e4b"}'; return 0; }
+    [ "$T212_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$T212_REASON"; return 0; }
+  elif [ "$FW" = hf ] && [ "${HF_VENV:-}" = t214 ]; then PY=$PY_AX              # J: the HF arm on the axolotl venv's torch 2.14
+    [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-axolotl (torch cu130)"}'; return 0; }
+    [ "$AX_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$AX_REASON"; return 0; }
+  elif [ "$FW" = unsloth ]; then
     if [ "${UNS_VENV:-cu130}" = t28 ]; then PY=$PY_UNS_T28
       [ "$UNS_T28_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "venv-unsloth-t28 did not install/import (logs/pip_unsloth_t28.log, logs/tripwire_unsloth-t28.log)"; return 0; }
     else PY=$PY_UNS
@@ -306,7 +346,7 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   # fails whether the variable is empty or set. As an argument to `env` the expansion is
   # an ordinary word and an empty one simply vanishes.
   local ARM_ENV=""; [ "$ARM" = batched ] && ARM_ENV="E4B_BATCHED_PAD_WASTE_LIMIT=${TC1_BATCHED_PAD_WASTE_LIMIT:-64}"
-  env $ARM_ENV HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 TC1_BOX_CLASS="RTX $GPU_CLASS" TC1_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tc1_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
+  env $ARM_ENV HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 OMP_NUM_THREADS=$PHYS TC1_BOX_CLASS="$BOX_CLASS" TC1_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tc1_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
       --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF \
       --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu \
       --tokens $TOK --tokens-sha $TOK_SHA --eval-every $ee --eval-n $en --unsloth-loader FastLanguageModel $EXPARG \
@@ -335,50 +375,43 @@ draw2(){ local FAM=$1 FW=$2 TAG=$3; shift 3; arm "$FAM" "$FW" "${TAG}_d2" "$@"; 
 todo_arm(){ stubw "$1" "$2" "$3" "$4" not_run "arm not yet implemented (TC1 follow-up)"; }
 UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"     # the notebooks' seven targets (TC1-PREREG arm 2)
 PROFILE_STEPS=${TC1_PROFILE_STEPS:-3}; PROFILE_WARM=${TC1_PROFILE_WARM:-3}   # arm 10: P45's instrument, 3 warm + 3 profiled
-# tc1_family FAM MID REV FETCH_AL E4B_AL UNS_AL HF_AL AX_AL REF_AL PROF_AL -- the registered order, one process per arm:
-#   1 e4b/fused_attn4_m  2 unsloth/ckpt_unsloth_m  3 e4b/fused_attn4_m_d2  4 unsloth/ckpt_unsloth_m_d2  5 hf/hf_peft_m
-#   6 axolotl/ckpt_axolotl_m (+6b ckpt_axolotl_best)  7 unsloth/ckpt_unsloth_best  8 e4b/fused_attn4_shipped
-#   9 e4b/reference_attn4_m  10 unsloth/ckpt_unsloth_prof  then the _mb1 secondary pair when a primary matched arm OOMed.
-tc1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8 RAL=$9 PAL=${TC1_PROF_ALARM:-${10}}
-  local ALL="e4b:fused_attn4_m:fused unsloth:ckpt_unsloth_m:unsloth e4b:fused_attn4_m_d2:fused unsloth:ckpt_unsloth_m_d2:unsloth hf:hf_peft_m:hf axolotl:ckpt_axolotl_m:axolotl axolotl:ckpt_axolotl_best:axolotl unsloth:ckpt_unsloth_best:unsloth unsloth:ckpt_unsloth_t28:unsloth unsloth:ckpt_unsloth_triton:unsloth e4b:fused_attn4_shipped:fused e4b:reference_attn4_m:reference unsloth:ckpt_unsloth_prof:unsloth"
+# tc1_fetch_tokenise FAM MID REV FETCH_AL STUBLIST: fetch + tokenise, or stub every arm in STUBLIST (fw:tag:arm words); sets TOK / TS
+tc1_prepare(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5
   stub_all(){ local st=$1 why=$2 t fw tag arm; for t in $ALL; do IFS=: read -r fw tag arm <<< "$t"; stubw $FAM $fw $tag $arm $st "$why"; done; }
-  if skip $FAM; then say "skip family $FAM (TC1_SKIP)"; stub_all not_run "family skipped by TC1_SKIP"; return 0; fi
-  say "===== family $FAM ($MID @ $REV; matched seed $MATCHED_SEED; alarms e4b $EAL unsloth $UAL hf $HAL axolotl $AAL reference $RAL prof $PAL)"
+  if skip $FAM; then say "skip family $FAM (TC1_SKIP)"; stub_all not_run "family skipped by TC1_SKIP"; return 1; fi
   FETCH_REASON=""; fetch $FAM $MID $REV $FAL; local frc=$?
-  if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault; stub_all $st "$FETCH_REASON"; free_family $FAM ${MID//\//--}; return 0; fi
-  local TOK=$W/tokens_$FAM.json
+  if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault; stub_all $st "$FETCH_REASON"; free_family $FAM ${MID//\//--}; return 1; fi
+  TOK=$W/tokens_$FAM.json
   if ! tokenise $FAM "$MID" $REV alpaca $SEQ $W/data/ds_alpaca.json $DS_ALPACA_SHA $TOK; then
     tail -3 logs/prepare_${FAM}_alpaca.log; echo "$FAM: TOKENS FAIL" | tee -a summary.txt
     local why; why="tokenise failed (logs/prepare_${FAM}_alpaca.log): $(tail -1 logs/prepare_${FAM}_alpaca.log | cut -c1-200)"
-    stub_all harness_error "$why"; free_family $FAM ${MID//\//--}; return 0
+    stub_all harness_error "$why"; free_family $FAM ${MID//\//--}; return 1
   fi
-  local TS; TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS" | tee -a summary.txt
-  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"      # the matched set (TC1-PREREG "Arms" 1-6, 9, 10)
-  local NATIVE="--adapter-dtype native --lora-init native"                 # the native-best rows (7, 8)
+  TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS" | tee -a summary.txt; return 0; }
+# tc1_family FAM MID REV FETCH_AL E4B_AL UNS_AL HF_AL AX_AL REF_AL PROF_AL -- the JUDGED family (phase 3 I [F4]), one process per arm, in this order:
+#   1 e4b/fused_attn4_m  2 unsloth/ckpt_unsloth_m  3 e4b/reference_attn4_m (THIRD: the e4b-side control sits beside the pair it controls)
+#   4 e4b/fused_attn4_m_d2  5 unsloth/ckpt_unsloth_m_d2  6 hf/hf_peft_m  7 axolotl/ckpt_axolotl_m
+#   8 e4b/fused_attn4_m_prof  9 unsloth/ckpt_unsloth_prof (3 warm + 3 profiled, dmon beside each)  then the _mb1 pair when a primary matched arm OOMed.
+# The labelled / native-best rows run under the `qwen3native` token (tc1_native_family) on their own box.
+tc1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8 RAL=$9 PAL=${TC1_PROF_ALARM:-${10}}
+  local ALL="e4b:fused_attn4_m:fused unsloth:ckpt_unsloth_m:unsloth e4b:reference_attn4_m:reference e4b:fused_attn4_m_d2:fused unsloth:ckpt_unsloth_m_d2:unsloth hf:hf_peft_m:hf axolotl:ckpt_axolotl_m:axolotl e4b:fused_attn4_m_prof:fused unsloth:ckpt_unsloth_prof:unsloth"
+  say "===== family $FAM ($MID @ $REV; matched seed $MATCHED_SEED; alarms e4b $EAL unsloth $UAL hf $HAL axolotl $AAL reference $RAL prof $PAL)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"      # the matched set
   local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"                   # the notebooks' recipe (tp4's arm); double-quant OFF is the arm's default
-  # 1-4: the matched primary pair, INTERLEAVED draws (e4b d1, Unsloth d1, e4b d2, Unsloth d2); Unsloth on the cu130 venv with the grouped_mm backend requested
-  can_run 600 $FAM/e4b/fused_m    && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
-  can_run 600 $FAM/unsloth/m      && arm   $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
-  can_run 600 $FAM/e4b/fused_m_d2 && draw2 $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
-  can_run 600 $FAM/unsloth/m_d2   && draw2 $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
-  # 5: plain HF+PEFT+bnb, matched
-  can_run 600 $FAM/hf/m           && arm   $FAM hf hf_peft_m hf $HAL "$MID" $REV 0 field $TOK $TS $MATCH
-  # 6 / 6b: axolotl 0.20.0 under this loop (axolotl-arm-spec.md): plain quantize_moe_experts, matched; then KernelsPlugin + scattermoe + moe_bnb_fast, native init
-  can_run 600 $FAM/axolotl/m      && arm   $FAM axolotl ckpt_axolotl_m axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json $MATCH
-  can_run 600 $FAM/axolotl/best   && arm   $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native
-  # 7: Unsloth native-best (cu130 venv, grouped_mm, speed tilt: UNSLOTH_MOE_RECOMPUTE=0 UNSLOTH_MOE_GC_REPLAY_PIN=1), native init, fp32 adapters as tp4 cast them
-  can_run 600 $FAM/unsloth/best   && arm   $FAM unsloth ckpt_unsloth_best unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm --unsloth-speed-tilt 1 --adapter-dtype fp32 --lora-init native
-  # 7b: the field-image row -- tp4's venv (torch 2.8.0+cu128), the loader's default backend, matched init, fp32 (labelled, never the quoted position)
-  can_run 600 $FAM/unsloth/t28    && UNS_VENV=t28 arm $FAM unsloth ckpt_unsloth_t28 unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend default $MATCH
-  # 7c: the Triton grouped-GEMM backend requested (labelled; if its counters show no Triton calls the receipt stands as what ran)
-  can_run 600 $FAM/unsloth/triton && arm   $FAM unsloth ckpt_unsloth_triton unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend unsloth_triton $MATCH
-  # 8: e4b exactly as load_moe_4bit_streaming builds it (bf16 expert adapters, N(0, 1/r) init): tp4's arm, native
-  can_run 600 $FAM/e4b/shipped    && arm   $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
-  # 9: the per-expert reference, matched: the parity control AND the equivalence anchor
-  can_run 900 $FAM/e4b/reference_m && arm  $FAM e4b reference_attn4_m reference $RAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
-  # 10: the matched Unsloth arm profiled (P45's instrument) with `nvidia-smi dmon` beside it; `arm` writes the install_failed row itself when the venv is absent
-  local dp; dp=$(dmon_start ${FAM}_unsloth_ckpt_unsloth_prof)
-  can_run 600 $FAM/unsloth/prof   && arm   $FAM unsloth ckpt_unsloth_prof unsloth $PAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH --log-every 1 --microbatch-timing 1 --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM
+  local PROF="--log-every 1 --microbatch-timing 1 --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM"
+  can_run 600 $FAM/e4b/fused_m     && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m       && arm   $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 900 $FAM/e4b/reference_m && arm   $FAM e4b reference_attn4_m reference $RAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/fused_m_d2  && draw2 $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m_d2    && draw2 $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 600 $FAM/hf/m            && arm   $FAM hf hf_peft_m hf $HAL "$MID" $REV 0 field $TOK $TS $MATCH
+  can_run 600 $FAM/axolotl/m       && arm   $FAM axolotl ckpt_axolotl_m axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json $MATCH
+  local dp; dp=$(dmon_start ${FAM}_e4b_fused_attn4_m_prof)
+  can_run 600 $FAM/e4b/prof        && arm   $FAM e4b fused_attn4_m_prof fused $PAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  dmon_stop $dp
+  dp=$(dmon_start ${FAM}_unsloth_ckpt_unsloth_prof)
+  can_run 600 $FAM/unsloth/prof    && arm   $FAM unsloth ckpt_unsloth_prof unsloth $PAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $PROF
   dmon_stop $dp
   for f in $W/logs/dmon_*.txt; do [ -s "$f" ] && echo "DMON $(basename $f) $(wc -l < $f) samples" >> summary.txt; done
   # the secondary pair (TC1-PREREG "Arms"): micro-batch 1 x accum 8 -- same tokens per step -- for any framework whose primary matched arm OOMed, as tp4
@@ -391,10 +424,40 @@ tc1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8 RAL=
   fi
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_native_family FAM MID REV FETCH_AL E4B_AL UNS_AL HF_AL AX_AL -- the LABELLED / native-best rows on their own box (phase 3 I/J), each a position
+# within this box against the e4b fused_m it runs first:
+#   e4b/fused_attn4_m (once)  unsloth/ckpt_unsloth_best  unsloth/ckpt_unsloth_t28  unsloth/ckpt_unsloth_triton  e4b/fused_attn4_shipped
+#   e4b/fused_attn4_m_nodgrad (--dgrad 0: enable_fast_train's default)  e4b/fused_attn4_m_t212 (e4b + gnf4 on torch 2.12.1+cu130)
+#   axolotl/ckpt_axolotl_best  hf/hf_peft_m_mb1_t214 (the HF arm on the axolotl venv's torch 2.14, experts_implementation=grouped_mm; only when
+#   the judged family's hf_peft_m on THIS box OOMed -- otherwise a not_run row saying the gate could not be read)
+tc1_native_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8
+  local ALL="e4b:fused_attn4_m:fused unsloth:ckpt_unsloth_best:unsloth unsloth:ckpt_unsloth_t28:unsloth unsloth:ckpt_unsloth_triton:unsloth e4b:fused_attn4_shipped:fused e4b:fused_attn4_m_nodgrad:fused e4b:fused_attn4_m_t212:fused axolotl:ckpt_axolotl_best:axolotl hf:hf_peft_m_mb1_t214:hf"
+  say "===== NATIVE family $FAM ($MID @ $REV; the labelled rows, each against this box's own e4b fused_m)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
+  can_run 600 $FAM/e4b/fused_m     && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/best    && arm   $FAM unsloth ckpt_unsloth_best unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm --unsloth-speed-tilt 1 --adapter-dtype fp32 --lora-init native
+  can_run 600 $FAM/unsloth/t28     && UNS_VENV=t28 arm $FAM unsloth ckpt_unsloth_t28 unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend default $MATCH
+  can_run 600 $FAM/unsloth/triton  && arm   $FAM unsloth ckpt_unsloth_triton unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend unsloth_triton $MATCH
+  can_run 600 $FAM/e4b/shipped     && arm   $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/nodgrad     && arm   $FAM e4b fused_attn4_m_nodgrad fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 --dgrad 0 $MATCH
+  can_run 600 $FAM/e4b/t212        && E4B_VENV=t212 arm $FAM e4b fused_attn4_m_t212 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/axolotl/best    && arm   $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native
+  local sh; sh=$(status_of qwen3 hf hf_peft_m)
+  if [ "$sh" = oom ]; then
+    can_run 600 $FAM/hf/mb1_t214   && HF_VENV=t214 arm $FAM hf hf_peft_m_mb1_t214 hf $HAL "$MID" $REV 0 mb1 $TOK $TS --hf-experts-implementation grouped_mm $MATCH
+  else
+    stubw $FAM hf hf_peft_m_mb1_t214 hf not_run "runs only when the judged family's hf/hf_peft_m on this box OOMed; its status here is '$sh'"
+  fi
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # ---------------------------------------------------------------- the plan (TC1-PREREG "Model", "Alarms": e4b 3600, Unsloth 3600, HF 1800, axolotl 2700, reference 5400, profiled 2400; fetch as tp4's qwen3)
 #      FAM    MID                 REV                                       FETCH E4B  UNS  HF   AX   REF  PROF
 for FAM in $FAMILIES; do case "$FAM" in
-  qwen3) tc1_family qwen3 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700 5400 2400;;
+  qwen3)       tc1_family        qwen3       Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700 5400 2400;;
+  qwen3native) tc1_native_family qwen3native Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700;;
   *) say "unknown family token $FAM"; echo "UNKNOWN $FAM" >> summary.txt;;
 esac; done
 # ---------------------------------------------------------------- reduce, summarise, mark
