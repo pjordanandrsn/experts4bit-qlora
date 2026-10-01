@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Lane K20 runner (#564): K19's plan space on an RTX 5090, replaying P60's recorded B=16 routing (bench and tests only)
+
+- The prereg, the bench and the rule live in grouped-nf4-gemm (`kernel/PREREG-k20-k19-plan-sweep-5090.md`, grouped-nf4-gemm#420). This repo carries the runner, `bench/k20/`, in K18's pattern:
+  - install gnf4 at the registration's merge, then a tripwire that the installed module is the pinned cut, with K19 and the tile builder present;
+  - K19's contracts, under the interpreter and then compiled on the card, before any timing (rc 21 / 22);
+  - the rule's self-test, then the bench on P60's committed ids.
+- `tests/test_k20_staged_pin.py` pins the staged bytes (the routing is K18's, byte-identical) and the order: contracts, then self-test, then bench.
 ### Lane P87 read (#564): VOID by the rule; the speed arms show K19 at 0.971× the GEMV step at B=16 and 1.236× at B=1 on an RTX 5090 (bench and docs only)
 
 - **Why VOID.** The calibrated K8 build ran on an Intel Xeon E5-2698 v4. It needed 1,120 s for its first chunk (P85's AMD host: 360 s), hit its 3,600 s arm alarm after 3 of 5 chunks and dumped no pack, so K8 OFF/ON never ran. No register row.
