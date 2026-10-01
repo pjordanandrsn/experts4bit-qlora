@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### The K25 route takes the select-tree codebook decode when the kernel package carries it (bit-identical; lane K26)
+
+- **Why.** grouped-nf4-gemm's lane K26 (RTX 5090) read the per-nibble codebook lookup as about 80 % of K25's time. An exact
+  select-tree decode over the 16 fp32 codebook values gives bit-identical outputs at 0.373 / 0.383 of the time (Granite /
+  OLMoE B=16 shapes). That is about 0.39× the served NF4 GEMM, where the paired lookup ran at about 1.0×.
+- **What.** `_K25_PLAN`'s decode is `"tree"`. `_k25_plan` resolves it against the installed `nf4_smallm`: `"tree"` when
+  its `_LUT_MODES` names it, else `"pair"`. The two give the same bits, so lane P92's reading applies to both:
+  Granite's K8 inside the gate, OLMoE QUALITY_FAIL. `E4B_NF4_GROUPED_SMALLM` still defaults to `0`.
+- **P92's pins.** Its runner and its pin test name the paired decode it registered, so that closed lane's runner refuses
+  today's e4b by design. Its `staged.sha256` re-pins the edited GPU test, as P89's did in #822.
+- **Tests.**
+  - The route test runs against a kernel stub with and without the tree.
+  - The GPU file compares against the resolved plan.
+  - NAS RTX A2000:
+    - with grouped-nf4-gemm carrying the tree: the plan resolves to `tree`, GPU 11/11 (with K19's and K23's files);
+    - with v0.34.0: it resolves to `pair`, and the GPU file passes 4/4;
+    - the CPU routes and pins pass, except two driver dry runs that need `/usr/bin/python3`, which the container lacks
+      and CI has.
+
 ## 0.38.0 — 2026-10-01 — batched decode on grouped small-M tensor-core GEMMs (grouped-nf4-gemm 0.34.0): K19 is the default for int4 decode rows above T == 1 (lane P88, B=16 ×0.905), its lean glue is the default (P89, ×0.950), and K21 is the default for the MXFP4 store's batched rows (P90, gpt-oss-20b B=16 ×0.581, KL lower); K25 serves the NF4 store's batched rows opt-in (`E4B_NF4_GROUPED_SMALLM`; P92); lanes P82–P92 read
 
 **0.38.0.** Three defaults change, each licensed by a pre-registered lane on an RTX 5090 and each reversible by its environment variable:

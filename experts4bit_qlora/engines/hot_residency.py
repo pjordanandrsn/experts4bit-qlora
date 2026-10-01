@@ -140,10 +140,19 @@ def _k25_mode_env() -> str:
     return v
 
 
-#: K25's plan on this route: its kernel default (BLOCK_N 32, KC 256, 4 warps, 2 stages, the paired codebook decode).
-#: No lane has swept it. Every K25 plan and decode compared on the A2000 was bit-identical (grouped-nf4-gemm#429), so
-#: the plan moves no output bit; it is the treatment an end-to-end lane measures.
-_K25_PLAN = {"block_n": 32, "kc": 256, "warps": 4, "stages": 2, "lut": "pair"}
+#: K25's plan on this route: its kernel default (BLOCK_N 32, KC 256, 4 warps, 2 stages) with the select-tree codebook
+#: decode. Lane K26 (grouped-nf4-gemm#432, RTX 5090) read the per-nibble lookup as about 80 % of K25's time and the
+#: exact select tree as bit-identical to it at 0.37-0.38 of the time, so the tree is the decode here. A kernel package
+#: that predates the tree decode gets the paired lookup (:func:`_k25_plan`): the same outputs, bit for bit. Lane P92's
+#: reading of K25 (paired decode) therefore applies to both. No lane has swept the plan.
+_K25_PLAN = {"block_n": 32, "kc": 256, "warps": 4, "stages": 2, "lut": "tree"}
+
+
+def _k25_plan(nf4_smallm_mod) -> dict:
+    """:data:`_K25_PLAN`, with the codebook decode the installed kernel package carries: ``"tree"`` when its
+    ``_LUT_MODES`` names it, else ``"pair"`` (bit-identical; lane K26)."""
+    modes = getattr(nf4_smallm_mod, "_LUT_MODES", None) or {}
+    return _K25_PLAN if "tree" in modes else dict(_K25_PLAN, lut="pair")
 
 
 def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
@@ -385,8 +394,10 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     if (int4_stores is None and device_grouping and R_rows <= 256 and _k25_mode != "0"
             and _CALIB_SINK is None):
         try:
-            from nf4_smallm import gemm_nf4_grouped_smallm as _k25
-        except ImportError as e:
+            import nf4_smallm as _k25_mod
+            _k25 = _k25_mod.gemm_nf4_grouped_smallm
+            _k25_kw = _k25_plan(_k25_mod)
+        except (ImportError, AttributeError) as e:
             if _k25_mode == "1":
                 raise RuntimeError(
                     "E4B_NF4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K25 "
@@ -553,10 +564,10 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "int4_stores did not reach _fused_over_stack")
             if pk is gu_p and _tok is not None:
                 return _k25(_tok[0].to(torch.bfloat16), pk, am, t_row0, t_rows, t_grp, order,
-                            gather_div=_tok[1], **_K25_PLAN)
+                            gather_div=_tok[1], **_k25_kw)
             kw = {"scatter": order} if (_lean and pk is dn_p) else {}
             return _k25(xr.to(torch.bfloat16), pk, am, t_row0, t_rows, t_grp,
-                        order if xr is x_rows else None, **kw, **_K25_PLAN)
+                        order if xr is x_rows else None, **kw, **_k25_kw)
     elif device_grouping and int4_stores is None:
         def _mm(xr, pk, am):
             if pk is not None and pk.numel() == 0:

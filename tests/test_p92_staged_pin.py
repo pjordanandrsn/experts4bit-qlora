@@ -84,9 +84,10 @@ def test_the_kernel_pin_and_the_arms_are_registered():
     assert re.search(r"^GNF4_SHA=[0-9a-f]{40}\b", RUN, re.M), "the gnf4 pin must be a real 40-char sha, not a placeholder"
     assert 'ARM_OFF="E4B_NF4_GROUPED_SMALLM=0"; ARM_ON="E4B_NF4_GROUPED_SMALLM=1"' in RUN
     assert "E4B_NF4_GROUPED_SMALLM E4B_CALIB_SOURCE" in RUN                     # the lever starts unset
-    from experts4bit_qlora.engines.hot_residency import _K25_PLAN
     plan = ast.literal_eval(re.search(r"assert _K25_PLAN == (\{[^}]*\})", RUN).group(1))
-    assert plan == _K25_PLAN, (plan, _K25_PLAN)                                 # the tripwire checks the route's plan
+    # P92's registered treatment (the paired decode). The route has since moved to the bit-identical select tree
+    # (lane K26), so this lane's runner refuses today's e4b by design: it is a closed lane's pin, not the live plan.
+    assert plan == {"block_n": 32, "kc": 256, "warps": 4, "stages": 2, "lut": "pair"}, plan
 
 
 def test_the_premise_precedes_the_fetch_and_the_arms_are_in_the_registered_order():
