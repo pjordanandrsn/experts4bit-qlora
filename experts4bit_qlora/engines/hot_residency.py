@@ -94,17 +94,20 @@ def _lean_glue_supported(builder, k19) -> bool:
     return _LEAN_GLUE_SUPPORT[key]
 
 
-def _k21_mode_env() -> bool:
-    """``E4B_MXFP4_GROUPED_SMALLM`` (K21, grouped-nf4-gemm#422, opt-in): ``1`` serves the native MXFP4 store's decode
+def _k21_mode_env() -> str:
+    """``E4B_MXFP4_GROUPED_SMALLM`` (K21, grouped-nf4-gemm#422): serves the native MXFP4 store's device-grouped decode
     rows through K21 -- K19's grouped small-M tensor-core GEMM on the store's own bytes, over the 16-row device tile
-    table -- where today batched rows (above :data:`_MXFP4_GEMV_ROWS`) fall back to the kept NF4 stacks and single rows
-    take the split-K GEMV. T == 1 goes to K21 too (:func:`_collapsed_grouping`), so the store's decode-shaped KL
-    instrument (P44) reads the kernel it gates. ``0`` (the default, also when unset) keeps today's routes; anything else
-    is refused."""
-    v = os.environ.get("E4B_MXFP4_GROUPED_SMALLM", "0").strip() or "0"
-    if v not in ("0", "1"):
-        raise ValueError(f"E4B_MXFP4_GROUPED_SMALLM={v!r}: expected '0' or '1'")
-    return v == "1"
+    table -- instead of the kept NF4 stacks (batched rows above :data:`_MXFP4_GEMV_ROWS`). Lane P90 LICENSED it
+    (e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01: gpt-oss-20b B=16 x0.581 on an RTX 5090, the store's KL from
+    the reference 0.00192 -> 0.00147), with B=1 SLOWER (x1.075). So ``auto`` (the default, also when unset) takes K21
+    for rows above T == 1 when the kernel package carries it with its masked K tail, and keeps today's routes when it
+    does not; T == 1 stays on the split-K GEMV. ``1`` requires K21 (absent is a refusal) and routes T == 1 to it too
+    (:func:`_collapsed_grouping`), which is what lets the decode-shaped KL instrument read the kernel. ``0`` keeps
+    today's routes. Anything else is refused."""
+    v = os.environ.get("E4B_MXFP4_GROUPED_SMALLM", "auto").strip().lower() or "auto"
+    if v not in ("auto", "0", "1"):
+        raise ValueError(f"E4B_MXFP4_GROUPED_SMALLM={v!r}: expected 'auto', '0' or '1'")
+    return v
 
 
 #: K21's plan on this route: grouped-nf4-gemm K24's best on gpt-oss-20b's recorded B=16 routing (RTX 5090; BLOCK_N 32,
@@ -132,7 +135,7 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     k19_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
               and _k19_mode_env() == "1")
     k21_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") == "mxfp4"
-              and _k21_mode_env())
+              and _k21_mode_env() == "1")
     if k19_t1 or k21_t1:
         return False, True
     return (T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])), (DEVICE_GROUPING[0] and T > 1)
@@ -295,21 +298,27 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         raise ValueError("_fused_over_stack needs x_rows or x_tokens")
     R_rows = x_rows.shape[0] if x_rows is not None else local_ids.numel()
     _mxfp4_store = int4_stores is not None and int4_stores.get("kind") == "mxfp4"
-    # K21 (opt-in, E4B_MXFP4_GROUPED_SMALLM=1): the store's device-grouped decode rows through the grouped small-M
-    # MXFP4 GEMM, at every row count up to the decode bound -- no NF4 fallback, no split-K GEMV
+    # K21 (E4B_MXFP4_GROUPED_SMALLM, auto since P90): the store's device-grouped decode rows through the grouped
+    # small-M MXFP4 GEMM, at every row count up to the decode bound -- no NF4 fallback. Under auto only rows above
+    # T == 1 are device-grouped on this store (T == 1 stays on the GEMV, see _collapsed_grouping); "1" adds T == 1.
     _k21 = None
-    if _mxfp4_store and device_grouping and R_rows <= 256 and _k21_mode_env():
+    _k21_mode = _k21_mode_env()
+    if _mxfp4_store and device_grouping and R_rows <= 256 and _k21_mode != "0":
         try:
             import mxfp4_grouped as _mx
             _k21 = _mx.gemm_mxfp4_grouped_smallm
         except (ImportError, AttributeError) as e:
-            raise RuntimeError(
-                "E4B_MXFP4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K21 "
-                "(mxfp4_grouped.gemm_mxfp4_grouped_smallm, grouped-nf4-gemm#422)") from e
-        if not _k21_has_masked_tail(_mx):
-            raise RuntimeError(
-                "E4B_MXFP4_GROUPED_SMALLM=1 needs K21's masked K tail (grouped-nf4-gemm#425): "
-                f"the route's plan runs KC {_K21_PLAN['kc']} on K that it need not divide")
+            if _k21_mode == "1":
+                raise RuntimeError(
+                    "E4B_MXFP4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K21 "
+                    "(mxfp4_grouped.gemm_mxfp4_grouped_smallm, grouped-nf4-gemm#422)") from e
+            _mx = None                    # auto: the kernel package predates K21 -> today's route
+        if _mx is not None and not _k21_has_masked_tail(_mx):
+            if _k21_mode == "1":
+                raise RuntimeError(
+                    "E4B_MXFP4_GROUPED_SMALLM=1 needs K21's masked K tail (grouped-nf4-gemm#425): "
+                    f"the route's plan runs KC {_K21_PLAN['kc']} on K that it need not divide")
+            _k21 = None                   # auto: K21 without the masked tail would be lowered -> today's route
     if (_mxfp4_store and _k21 is None and R_rows > _MXFP4_GEMV_ROWS
             and gu_p is not None and gu_p.numel() > 0):
         # Batched rows on the MXFP4 store: the decode GEMV re-streams the
