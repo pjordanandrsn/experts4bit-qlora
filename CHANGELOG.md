@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+### `E4B_NF4_GROUPED_SMALLM` (K25, opt-in): the NF4 store's batched decode rows through the grouped small-M tensor-core GEMM
+
+- **Why.** Lane P91 read the NF4 families' B=16 decode steps on an RTX 5090. The served NF4 M-tile GEMM
+  (`gemm_4bit_grouped_captured`) is 61.7 % of kernel time on Granite (`r12epi`) and 71.9 % on OLMoE (`nf4`). Its
+  registered decision named an NF4 grouped small-M kernel. grouped-nf4-gemm #429 is that kernel, K25: K19's kernel
+  with the NF4 codebook dequant.
+- **What.** Under `auto` (rows above T == 1) or `1`, `_fused_over_stack` serves the NF4 store's device-grouped decode
+  rows (up to 256) with `nf4_smallm.gemm_nf4_grouped_smallm`:
+  - over the 16-row device tile table, with gate_up's gather folded into the kernel, so the `[R, H]` `index_select`
+    is gone;
+  - under K23's lean glue (the default), gate_up reads the step's token rows (`gather_div`) and down stores into the
+    caller's row order (`scatter`), as on K19's rows;
+  - at K25's kernel default (`_K25_PLAN`: BLOCK_N 32, KC 256, 4 warps, 2 stages, the paired codebook decode). No lane
+    has swept it; every K25 plan compared on the A2000 was bit-identical.
+
+  gpt-oss's NF4 fallback rows keep their biases by the sorted ids, and a calibration sink keeps today's route.
+- **Not the served arithmetic.** K25's weight operand is the bf16 dequant (`dequant_ref(...).to(bf16)`). The served
+  GEMM multiplies TF32 on the fp32 dequant, which rounds the weight less. So the default is **`0`, today's routes**,
+  until a lane reads speed and quality per family.
+- **The quality instrument reads the kernel.** Under `1`, `_collapsed_grouping` also sends T == 1 on the NF4 store to
+  the device tile table and K25, so the decode-shaped K8 instrument reads the kernel it gates. It never moves an int4
+  or MXFP4 store's T == 1.
+- **Refusals.** `1` on a kernel package without K25 is a RuntimeError, and `auto` there keeps today's route silently.
+  Anything else is refused.
+- **Tests:**
+  - `tests/test_nf4_grouped_smallm_route.py` (stubs with an NF4 dequant oracle): the default, the opt-in and `auto`
+    routes, the plan, the gpt-oss epilogue, the T == 1 decisions, the refusals, prefill and the calibration sink
+    untouched, and lean token rows with the expanded call's bits.
+  - `tests/test_k25_row_exact_gpu.py` (real kernel, Granite's expert shapes: 40 experts, top-8, H 1536, I 512):
+    - a token's rows are bit-equal alone (T = 1) and inside B=16;
+    - the T = 1 output matches the fp32 dequant oracle;
+    - lean token rows are bit-equal to the expanded rows;
+    - the T = 1 route captures and replays bit-equal.
+  - NAS RTX A2000 with grouped-nf4-gemm at #429's head, correctness only:
+    - GPU 14/14 with K19's, K21's and K23's files;
+    - CPU routes 64 passed;
+    - two mutations each fail both the GPU file and the stubbed route tests: T == 1 never moving under `1`, and the
+      lean down call without its scatter.
+
 ### P91 read: READ. The NF4 grouped expert GEMM is 62 % (Granite) and 72 % (OLMoE) of B=16 decode kernel time; the next family lane is an NF4 grouped small-M kernel (bench, docs and register)
 
 - **`p91-5090-1`** (RTX 5090, $0.08), on the licensed configs:
