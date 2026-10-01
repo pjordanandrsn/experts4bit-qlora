@@ -109,3 +109,36 @@ grouped-nf4-gemm `3990dbc`. The staged bytes are pinned by `staged.sha256` and a
 No model was fetched and no time is quoted (the A2000 is correctness-only).
 
 Amendments, dated, go below this line before any data is read.
+
+### Amendment 1 (2026-10-01, after `p89-5090-3` read VOID; before the next reading's data)
+
+**What happened.** `p89-5090-3` read **VOID** on the engagement clause "at least 48 fewer `indexSelect` launches per
+step".
+- That clause named the token-row expansion's kernel **by inference**: P88's census had a 9.6 µs `indexSelect` at 48
+  calls per step, and I took it to be the expansion.
+- On this torch (2.8.0) the expansion dispatches as `vectorized_gather_kernel<16, long>`. The `indexSelect` rows are
+  other sites, present in both arms.
+- The route itself engaged fully. ON launched **336 fewer kernels per step**, exactly 7 per layer, and those are the
+  seven launches K23 removes:
+  - `vectorized_gather_kernel` −48 (the expansion);
+  - `vectorized_elementwise` −144 (the three fills);
+  - `unrolled_elementwise` −48 (the id cast);
+  - `_scatter_gather_elementwise` −48 and `index_elementwise` −48 (the sorted-id gather and the unsort).
+
+**The amendment.**
+- The `indexSelect` clause is removed. Kernel names are reported, not gated.
+- The total-launch floor rises from 192 to **288 fewer launches per step** (6 of the 7 per layer), with K19 at 96 and
+  the tile builder at 48 in both arms, as registered.
+- Everything else is unchanged: the premise, token equality in all 16 rows of both draw pairs, the 3 % draw band, and
+  LICENSED at ≤ 0.97.
+
+**`p89-5090-3` is not re-read under this amendment.** Its numbers are recorded descriptively only:
+- B=16 10.422 → 9.913 ms/step (×0.951);
+- tokens identical in all 16 rows of both draw pairs;
+- premise 6 passed;
+- $0.170, destroyed 13:37:23Z, absent.
+
+The verdict comes from a fresh reading, `p89-5090-4`, at this amendment's merge.
+
+**The proof stands.** `p89-prove-4` (PROVED, 13:18Z) certified the box path: install, tripwire, premise and contracts.
+This amendment changes only the reducer, whose self-test runs at the head of every run.

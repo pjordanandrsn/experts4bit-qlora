@@ -11,9 +11,13 @@ Reads, from the run directory:
 
   VOID           the premise did not hold, did not run, or skipped a test; a timed draw is missing or failed; a census
                  is missing; two draws of one arm differ by more than 3 %; K19 is not at its 96 calls per step in both
-                 arms or the tile builder not at its 48; ON did not engage (the expansion's index_select is not gone --
-                 at least 48 fewer index_select calls per step -- or ON does not launch at least 192 fewer kernels per
-                 step, 4 per layer, than OFF)
+                 arms or the tile builder not at its 48; ON did not engage: it does not launch at least 288 fewer
+                 kernels per step than OFF, 6 per layer of the 7 the lean route removes (the token-row expansion, three
+                 fills, the id cast, the sorted-id gather, the unsort). Amendment 1 (2026-10-01): the registered clause
+                 also required 48 fewer `indexSelect` launches, naming the expansion's kernel by INFERENCE; on torch
+                 2.8 the expansion is `vectorized_gather_kernel` and the `indexSelect` rows are other sites, so that
+                 clause VOIDed p89-5090-3 with the route fully engaged (336 fewer launches). Kernel names are reported,
+                 not gated.
   IDENTITY_FAIL  any row's tokens differ between OFF and ON in either draw pair: the route moved an output, so it stays
                  opt-in whatever its speed (it is bit-identical by construction; this is the in-model check of that)
   LICENSED       identical tokens and B=16 is FASTER (median ON / median OFF <= 0.97)
@@ -39,8 +43,7 @@ LAYERS = 48
 K19_KERNEL = "_gemm_int4_b32_grouped_smallm"
 TILE_KERNEL = "_tile_table_r1"
 SELECT = "indexSelect"              # P88's census names it 'void at::native::(anonymous namespace)::indexSelectS...'
-MIN_SELECTS_GONE = LAYERS           # the (token, slot) expansion: one index_select per layer
-MIN_LAUNCHES_GONE = 4 * LAYERS      # the expansion + at least three of the glue launches, per layer
+MIN_LAUNCHES_GONE = 6 * LAYERS      # amendment 1: at least 6 of the 7 launches per layer the lean route removes
 PREMISE_PASSED = "6 passed"         # 3 + 3 tests in the two staged (sha-pinned) files
 
 
@@ -132,9 +135,6 @@ def reduce(data: dict) -> dict:
     names = set(off["per_step"]) | set(on["per_step"])
     v["per_kernel_delta"] = {n: on["per_step"].get(n, 0) - off["per_step"].get(n, 0) for n in sorted(names)
                              if abs(on["per_step"].get(n, 0) - off["per_step"].get(n, 0)) > 0.5}
-    if sel_gone < MIN_SELECTS_GONE - 0.5:
-        return _void(v, f"ON removed {sel_gone:g} index_select launches per step, not >= {MIN_SELECTS_GONE} (the "
-                        f"token-row expansion was still made: the lean route did not engage)")
     if launches["off"] - launches["on"] < MIN_LAUNCHES_GONE - 0.5:
         return _void(v, f"ON launched {launches['on']:g} kernels per step vs OFF {launches['off']:g}: fewer than "
                         f"{MIN_LAUNCHES_GONE} gone (the glue was not folded)")
@@ -187,8 +187,9 @@ def self_test() -> None:
     assert reduce(s)["verdict"] == "VOID"
     assert reduce(_synthetic(k19=(96.0, 0.0)))["verdict"] == "VOID"                          # ON left K19
     assert reduce(_synthetic(tiles=(0.0, 48.0)))["verdict"] == "VOID"                        # OFF is not K19's route
-    assert reduce(_synthetic(sel_gone=0.0, launches_gone=288.0))["verdict"] == "VOID"        # expansion still made
-    assert reduce(_synthetic(launches_gone=96.0))["verdict"] == "VOID"                       # glue not folded
+    got = reduce(_synthetic(sel_gone=0.0, launches_gone=336.0))                              # amendment 1: names are
+    assert got["verdict"] == "LICENSED" and got["index_select_gone_per_step"] == 0.0, got    # reported, not gated
+    assert reduce(_synthetic(launches_gone=240.0))["verdict"] == "VOID"                      # 5 per layer: not folded
     s = _synthetic()
     s["speed"]["on"][1]["tokens"] = dict(s["speed"]["on"][1]["tokens"], **{"7": [1, 2, 4, 7]})
     got = reduce(s)

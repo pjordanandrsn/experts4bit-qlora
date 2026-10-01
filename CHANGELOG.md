@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Lane P89, amendment 1: the engagement clause counts launches, not an inferred kernel name (bench and tests only)
+
+- `p89-5090-3` read VOID on "at least 48 fewer `indexSelect` launches per step". That clause named the token-row
+  expansion's kernel by inference. On torch 2.8 the expansion is `vectorized_gather_kernel`, and the route removed
+  all 7 launches per layer it targets (336 per step).
+- The clause is removed, the total-launch floor is now 288 per step (6 per layer), and kernel names are reported, not
+  gated.
+- `p89-5090-3` is recorded descriptively only (B=16 ×0.951, tokens identical); a fresh reading gives the verdict.
+
 ### Lane P90 registered (#564): does K21 make gpt-oss-20b's B=16 decode faster without moving the MXFP4 store's quality? (bench and tests only)
 
 - **The question.** gpt-oss-20b's licensed MXFP4 store falls back to NF4 above 16 rows, and that NF4 GEMM is 79 % of
