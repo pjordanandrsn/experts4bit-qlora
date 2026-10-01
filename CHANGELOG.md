@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Lane K22 runner (#564): gpt-oss-20b at B=16 on an RTX 5090 -- census, recorded routing, and K21 against the served expert route (bench and tests only)
+
+- **Why.** The first lane of the throughput push to other model families. gpt-oss's licensed MXFP4 store has no batched kernel, so at B=16 (64 rows) the experts fall back to the kept NF4 stacks; bo7 timed that step at 21.65 ms. The prereg, the bench and the rule live in grouped-nf4-gemm (`kernel/PREREG-k22-gptoss-mxfp4-b16.md`). This repo carries the runner.
+- **`bench/k22/`, one box, three phases:**
+  1. census the served B=16 step (bo7's `store_r12`) with P42's replay census;
+  2. tokenize 16 wikitext rows with gpt-oss's own tokenizer (`step_decomp._k8_window`, as P37) and record 128 teacher-forced B=16 steps of routing with `bench/families/record_eids.py`;
+  3. run grouped-nf4-gemm's `k22_bench.py` on that routing. Its instrument is phase 1's own `_gemm_nf4_grouped` row.
+- **Codes and proof.** Lane failures use rc 31–33, never the launcher's machine-exclusion codes. The proof (`K22_PROVE=1`) compiles K21's and K16's contracts on the card and fetches no model.
+- `tests/test_k22_staged_pin.py` pins:
+  - the staged bytes (P86's harness, the family recorder, P44's served-model builder);
+  - the refusal and proof order;
+  - the phase order and bo7's env;
+  - the instrument wiring;
+  - the exit codes;
+  - the driver's dry run.
+
 ### K19 is the default for batched int4 decode rows (`E4B_INT4_GROUPED_SMALLM` now defaults to `auto`), as lane P88 licensed
 
 - **What changes.** In the device-grouping configuration, the one every B=16 register row is measured in, int4 decode rows above T == 1 (≤ 256 rows) now run grouped-nf4-gemm's K19 when the installed kernel package carries it. Before, they ran the split-K GEMV.
