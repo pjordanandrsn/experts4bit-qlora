@@ -119,3 +119,17 @@ driver is below 580; the receipt names the machine; the next draw passes it as a
 fixture, the arms, the predicates or the bands changes. The four receipts above stay in the ledger as what they are.
 The registered stop rule now reads: a driver below 580 is a code-18 refusal and one redraw with the machine excluded;
 a second refusal in the same day ends the lane's attempts for the day.
+
+### Amendment 2 (2026-10-01T23:47Z, before any arm has produced a row): the cu130 Unsloth venv needs PyTorch's cu130 index
+
+**What the first good-host draws showed.** `tc1-5090-7` (the native box, driver 595.91) and `tc1-5090-12` (the matched box,
+driver 580.126) both reached the venv builds; on `-7` the `venv-unsloth` pip ran 30 minutes at 99 % CPU with no network
+socket and a 25 MB venv: the `unsloth[cu130-torch2121]` extra pins `torch==2.12.1+cu130` and `torchvision` `+cu130`, which
+exist only on PyTorch's cu130 index, so pip's resolver backtracked through every candidate it had until its 2,700 s alarm
+would have made the comparator INSTALL_FAILED on both boxes. Both were stopped by the operator at 23:46Z
+(rc 143; ≈ $0.30 and ≈ $0.10, teardown proven).
+
+**The amendment.** `tc1_run.sh` passes `--extra-index-url https://download.pytorch.org/whl/cu130` on the `venv-unsloth`
+install and on the e4b/grouped-nf4-gemm install into it (the `t212` row), exactly as the axolotl venv already did. The
+box-side venv builds are otherwise unchanged; the registered torch for the comparator stays 2.12.1+cu130; nothing in the
+fixture, the arms, the predicates or the bands moves.

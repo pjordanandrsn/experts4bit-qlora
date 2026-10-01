@@ -159,7 +159,9 @@ rc=$?; echo "pip(unsloth-t28) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unslo
 UNS_OK=0
 if [ "$CU130_OK" = 1 ]; then
   UNS_OK=1; say "venv-unsloth: unsloth[cu130-torch2121]==$UNS_VER unsloth_zoo==$ZOO_VER (torch 2.12.1+cu130)"
-  python -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir \
+  # TC1-PREREG amendment 2 (2026-10-01): the cu130 extra pins torch==2.12.1+cu130 / torchvision+cu130, which live on PyTorch's cu130
+  # index, not PyPI -- without the index pip's resolver backtracks for the whole 2,700 s alarm (tc1-5090-7, 30 min at 99 % CPU, 0 sockets).
+  python -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu130 \
     "unsloth[cu130-torch2121]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth.log 2>&1
   rc=$?; echo "pip(unsloth) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth.log; echo "PIP FAIL (unsloth cu130) -- its rows = install_failed"; UNS_OK=0; }
 else
@@ -207,7 +209,7 @@ tripwire_unsloth(){ local TAG=$1 PY=$2 ok=1
 T212_OK=0; T212_REASON=""
 if [ "$UNS_OK" = 1 ]; then
   say "venv-unsloth + e4b @$E4B_SHA + gnf4 @$GNF4_SHA (the t212 row)"
-  perl -e 'alarm 2400; exec @ARGV' $PY_UNS -m pip install -q --no-input --prefer-binary \
+  perl -e 'alarm 2400; exec @ARGV' $PY_UNS -m pip install -q --no-input --prefer-binary --extra-index-url https://download.pytorch.org/whl/cu130 \
     "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" > logs/pip_e4b_t212.log 2>&1
   rc=$?; echo "pip(e4b-t212) rc=$rc"
   if [ $rc -ne 0 ]; then tail -6 logs/pip_e4b_t212.log; T212_REASON="e4b/gnf4 install into venv-unsloth failed rc=$rc (logs/pip_e4b_t212.log): $(tail -3 logs/pip_e4b_t212.log | tr '\n' ' ' | cut -c1-300)"
