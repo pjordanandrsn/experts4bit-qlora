@@ -107,4 +107,22 @@ Rule: the owner's standing no-ask tier for a single run under $15 (2026-09-26), 
   - four K8 arms at about 1.6 each (P44-a's OLMoE `nf4` arms).
 - **Lane ceiling $1.50; hard stop $2.00.**
 
+## Rehearsal
+
+The whole runner ran on the NAS RTX A2000 (sm_86) from e4b `967b1d6`, this branch before this section, with
+grouped-nf4-gemm at the pin. It ran with `P92_GPU_CLASS=A2000 P92_MIN_DISK_GB=20`, so it was marked REHEARSAL.
+- **Two earlier attempts each found a fault, fixed before this page:**
+  - the reducer's self-test ran before the install, but the reducer applies the installed `k8_gate` (rc 21); it now
+    runs after the tripwire;
+  - a commit that had not reached the remote could not be installed (rc 9).
+- **Up to the arms, it held:**
+  - install and tripwire (K25 present, `_K25_PLAN` as registered);
+  - the reducer's self-test (14 cases);
+  - the premise: the row-exact test 4/4 and K25's contract compiled 28/28;
+  - both families fetched at their pins and baked.
+- **Every arm stopped** at the fp8 paged-KV append (`fp8e4nv`), which sm_86 cannot compile, as in P91's rehearsal.
+  That is the rehearsal card's limit, not the runner's.
+- **The reducer** then read VOID for both families, with every arm missing, as it must.
+- No time is quoted (the A2000 is correctness-only).
+
 Amendments, dated, go below this line before any data is read.

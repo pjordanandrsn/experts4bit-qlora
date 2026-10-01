@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Lane P92 registered (#564): does K25 make the NF4 families' B=16 decode faster on an RTX 5090 without moving their K8? (bench and tests only)
+
+- **What it is.** The end-to-end read of K25 (grouped-nf4-gemm #429, pinned at its merge `8cc3510`), which P91's
+  decision named, through `E4B_NF4_GROUPED_SMALLM`. Granite-3.1-3B-A800M (`r12epi`) and OLMoE-1B-7B (`nf4`) each run
+  OFF (`0`) and ON (`1`) on one RTX 5090:
+  - the premise first, on the card: the K25 row-exact test (rc 25) and K25's contract compiled (rc 23);
+  - B=16 OFF/ON/OFF/ON (first draw censused) and B=1 OFF/ON (censused), P91's harness;
+  - K8 OFF/ON on wikitext and c4val1 (P44-a's arm).
+- **The rule, per family.**
+  - VOID on missing arms, B=16 draws more than 3 % apart, failed engagement, or K8 ON bit-equal to OFF;
+  - QUALITY_FAIL if the uncalibrated K8 gate fails;
+  - LICENSED if B=16 ON/OFF ≤ 0.95;
+  - NOT_FASTER otherwise.
+
+  Both families LICENSED moves the default to `auto`.
+- **Rehearsed on the A2000** through install, the premise (4/4 and 28/28), and both families' fetch and bake. Every arm
+  stopped at the fp8 KV append, which sm_86 cannot compile.
+- `tests/test_p92_staged_pin.py` pins:
+  - the staged bytes, P91's harness bytes;
+  - the families' envs;
+  - the gnf4 pin as a real SHA;
+  - the arms and the tripwire's `_K25_PLAN`;
+  - the premise before the fetch and the arm order;
+  - the exit codes;
+  - the reducer's 14-case self-test;
+  - the driver's dry run.
+
 ### `E4B_NF4_GROUPED_SMALLM` (K25, opt-in): the NF4 store's batched decode rows through the grouped small-M tensor-core GEMM
 
 - **Why.** Lane P91 read the NF4 families' B=16 decode steps on an RTX 5090. The served NF4 M-tile GEMM
