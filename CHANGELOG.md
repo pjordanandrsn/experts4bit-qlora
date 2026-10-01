@@ -12,8 +12,9 @@
 - `tests/test_k19_row_exact_gpu.py` (GPU; skips without CUDA or K19), on the real kernel at Qwen3-30B-A3B's expert shapes:
   - a token's rows come out bit-equal whether it decodes alone (T == 1) or inside a B=16 step, so a T == 1 instrument such as K8 stands for the batched rows;
   - K19 runs at T == 1 and matches an fp32 dequant oracle;
-  - the default T == 1 route is untouched.
-  - On an RTX A2000 (sm_86), tokens 0, 5 and 15 were bit-equal. Relative error against the oracle: K19 0.0048, the GEMV 0.0131.
+  - the default T == 1 route is untouched;
+  - the T == 1 route captures in a CUDA graph, as the B=1 decode loop does, and a replay on new inputs equals eager to the bit.
+  - On an RTX A2000 (sm_86), tokens 0, 5 and 15 were bit-equal, and the captured replays matched eager. Relative error against the oracle: K19 0.0048, the GEMV 0.0131.
 
 ### `E4B_INT4_GROUPED_SMALLM=1`: int4 decode rows through grouped-nf4-gemm's K19 grouped tensor-core GEMM (opt-in; no default changes)
 

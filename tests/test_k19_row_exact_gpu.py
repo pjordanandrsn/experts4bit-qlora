@@ -108,3 +108,41 @@ def test_t1_k19_matches_the_dequant_oracle_and_the_default_stays_singleton(monke
         ref[i] = (F.silu(g_) * u_) @ wd.t()
     rel = float((out.float().cpu() - ref).abs().max() / ref.abs().max())
     assert rel < 0.02, rel
+
+
+@needs_cuda
+def test_the_t1_route_captures_in_a_cuda_graph_and_replays_bit_equal(monkeypatch):
+    """The B=1 decode loop is a captured graph: T == 1 under the opt-in (the device tile table + K19) must capture
+    with no host sync, and a replay on NEW inputs must equal the eager call on those inputs to the bit."""
+    _k19()
+    from experts4bit_qlora.engines import hot_residency as hr
+    monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "1")
+    stores = _stores()
+    xr, ids = _step()
+    x_s, id_s = xr[:TOP_K].clone(), ids[:TOP_K].clone()          # the graph's static inputs: token 0
+    side = torch.cuda.Stream()
+    side.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(side):                                # warm-up off the default stream (compiles K19)
+        for _ in range(2):
+            _run(hr, stores, 1, x_s, id_s)
+    torch.cuda.current_stream().wait_stream(side)
+    g = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(g):
+        out_s, _ = _capture_run(hr, stores, x_s, id_s)
+    for t in (3, 11):                                            # replay on other tokens' rows
+        x_s.copy_(xr[t * TOP_K:(t + 1) * TOP_K])
+        id_s.copy_(ids[t * TOP_K:(t + 1) * TOP_K])
+        g.replay()
+        torch.cuda.synchronize()
+        eager, _ = _run(hr, stores, 1, xr[t * TOP_K:(t + 1) * TOP_K], ids[t * TOP_K:(t + 1) * TOP_K])
+        assert torch.equal(out_s, eager), f"token {t}: the captured T == 1 route differs from eager"
+
+
+def _capture_run(hr, stores, xr, ids):
+    """`_run` without its synchronize, which is illegal inside capture."""
+    s, gr = hr._collapsed_grouping(1, stores)
+    fg = torch.empty(0, 0, 0, dtype=torch.uint8, device=DEV)
+    fd = torch.empty(0, 0, 0, dtype=torch.uint8, device=DEV)
+    fa = torch.empty(0, 0, 0, device=DEV)
+    return hr._fused_over_stack(xr, ids, fg, fa, fd, fa, (2 * INTER, H, H, INTER), True, F.silu,
+                                singleton_groups=s, device_grouping=gr, int4_stores=stores), (s, gr)
