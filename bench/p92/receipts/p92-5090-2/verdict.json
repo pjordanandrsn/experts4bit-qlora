@@ -1,0 +1,142 @@
+{
+ "lane": "P92",
+ "families": [
+  {
+   "family": "granite",
+   "verdict": "LICENSED",
+   "reasons": [
+    "B=16 ON/OFF 0.937 <= 0.95; K8 passed"
+   ],
+   "b16_off_ms": 10.529056471428571,
+   "b16_on_ms": 9.864774164285713,
+   "b16_ratio": 0.9369096073379944,
+   "b1_off_ms": 3.8604362362204725,
+   "b1_on_ms": 3.7535432755905513,
+   "b1_ratio": 0.9723106524524353,
+   "draw_spread": {
+    "off": 0.001804141337187648,
+    "on": 0.0008372459052918835
+   },
+   "census": {
+    "off_b16": {
+     "k25_ms": 0.0,
+     "k25_calls": 0,
+     "served_ms": 6.60225,
+     "served_calls": 64.0,
+     "gemv_calls": 0,
+     "kernel_ms": 10.56408725
+    },
+    "off_b1": {
+     "k25_ms": 0.0,
+     "k25_calls": 0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 64.0,
+     "kernel_ms": 3.8663566249999994
+    },
+    "on_b16": {
+     "k25_ms": 6.46425,
+     "k25_calls": 64.0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 0,
+     "kernel_ms": 10.077545749999999
+    },
+    "on_b1": {
+     "k25_ms": 2.0245,
+     "k25_calls": 64.0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 0,
+     "kernel_ms": 3.7894684999999995
+    }
+   },
+   "k8": {
+    "wikitext": {
+     "off": 5.360589284186573,
+     "on": 5.337249477101878,
+     "delta": -0.023339807084695074
+    },
+    "c4val1": {
+     "off": 11.574771456022221,
+     "on": 11.591057330916911,
+     "delta": 0.01628587489468991
+    }
+   },
+   "k8_lines": [
+    "K8 wikitext: base=5.36059 cand=5.33725 delta=-0.02334 sha=5281b7c3df28 steps=2048",
+    "K8 c4val1: base=11.57477 cand=11.59106 delta=+0.01629 sha=549ca209af16 steps=2048",
+    "K8 VERDICT PASS (uncalibrated: |delta| <= 0.05 on every text)"
+   ]
+  },
+  {
+   "family": "olmoe",
+   "verdict": "QUALITY_FAIL",
+   "reasons": [
+    "K8 (uncalibrated, |delta| <= 0.05 ppl on every text) failed"
+   ],
+   "b16_off_ms": 14.354904099999999,
+   "b16_on_ms": 14.693847035714287,
+   "b16_ratio": 1.0236116475145443,
+   "b1_off_ms": 4.232079960629921,
+   "b1_on_ms": 4.512440362204725,
+   "b1_ratio": 1.0662464802609906,
+   "draw_spread": {
+    "off": 0.00021561108775225435,
+    "on": 5.37207519016869e-05
+   },
+   "census": {
+    "off_b16": {
+     "k25_ms": 0.0,
+     "k25_calls": 0,
+     "served_ms": 10.387875,
+     "served_calls": 32.0,
+     "gemv_calls": 0,
+     "kernel_ms": 14.244542875000004
+    },
+    "off_b1": {
+     "k25_ms": 0.0,
+     "k25_calls": 0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 32.0,
+     "kernel_ms": 4.254786624999999
+    },
+    "on_b16": {
+     "k25_ms": 10.85225,
+     "k25_calls": 32.0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 0,
+     "kernel_ms": 14.539265625
+    },
+    "on_b1": {
+     "k25_ms": 2.336,
+     "k25_calls": 32.0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 0,
+     "kernel_ms": 4.548357749999999
+    }
+   },
+   "k8": {
+    "wikitext": {
+     "off": 6.911773633695096,
+     "on": 6.928897416032813,
+     "delta": 0.017123782337717053
+    },
+    "c4val1": {
+     "off": 18.90599688236447,
+     "on": 18.798889745719933,
+     "delta": -0.10710713664453664
+    }
+   },
+   "k8_lines": [
+    "K8 wikitext: base=6.91177 cand=6.92890 delta=+0.01712 sha=2d22dfc7e0b1 steps=2048",
+    "K8 c4val1: base=18.90600 cand=18.79889 delta=-0.10711 sha=932b86d7a513 steps=2048",
+    "K8 VERDICT FAIL (uncalibrated: |delta| <= 0.05 on every text)"
+   ]
+  }
+ ],
+ "verdict": "granite=LICENSED olmoe=QUALITY_FAIL"
+}

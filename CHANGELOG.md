@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### P92 read (#564): Granite LICENSED (B=16 ×0.937, K8 inside the gate), OLMoE QUALITY_FAIL (c4val1 K8 −0.107 ppl, step ×1.024); `E4B_NF4_GROUPED_SMALLM` stays `0` (bench, docs and register)
+
+- **`p92-5090-2`** (RTX 5090, $0.33; `p92-5090-1` was NOT_RUN, ssh refused, $0.03), OFF = `0`, ON = `1`:
+  - Granite `r12epi`: B=16 10.529 → 9.865 ms (×0.937), B=1 ×0.972; K8 wikitext −0.023, c4val1 +0.016 ppl.
+  - OLMoE `nf4`: B=16 14.355 → 14.694 ms (×1.024), B=1 ×1.066; K8 wikitext +0.017, c4val1 **−0.107** ppl. The
+    uncalibrated K8 rule is two-sided (|Δ| ≤ 0.05).
+  - The premise held on the card (K25 row-exact; K25's contract compiled on sm_120, 28/28), and engagement held in
+    every census.
+- **Where the time goes.** K25's own GEMM is within 4 % of the served NF4 GEMM (Granite 6.464 vs 6.602 ms, OLMoE 10.852
+  vs 10.388). Granite's gain is the glue the lean route folds away. The NF4 codebook decode, shared by both kernels, is
+  the likely bottleneck (inferred, not profiled).
+- **Consequence (registered):** the default moves only when both families read LICENSED, so it stays `0`. `auto` is a
+  measured opt-in for Granite `r12epi`.
+- **Register:** `e4b.serve.p92.nf4-families.k25-b16.5090.2026-10-01`.
+
 ### Lane P92 registered (#564): does K25 make the NF4 families' B=16 decode faster on an RTX 5090 without moving their K8? (bench and tests only)
 
 - **What it is.** The end-to-end read of K25 (grouped-nf4-gemm #429, pinned at its merge `8cc3510`), which P91's
