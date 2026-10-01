@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Lane K26's runner (#564): the NF4 decode ablation's box side (bench and tests only)
+
+- **What.** `bench/k26/` drives grouped-nf4-gemm's K26 (`kernel/PREREG-k26-nf4-decode-ablation.md`): a kernel microbench
+  on one RTX 5090 with no model.
+  - **Install:** grouped-nf4-gemm at the manifest's `GNF4_SHA`, plus pytest.
+  - **Premise:** K25's contract compiled on the card (rc 23).
+  - **Run:** the bench from the gnf4 clone at that pin.
+- **Rehearsed** on the NAS A2000 (marked REHEARSAL, correctness only): install, tripwire, the rule's self-test
+  (16 cases), the premise (28/28) and the bench all ran to rc 0.
+- `tests/test_k26_staged_pin.py` pins:
+  - the runner's bytes;
+  - the refusals before the install, and the premise before the bench;
+  - that no model is fetched;
+  - the exit codes;
+  - the driver's dry run.
+
 ### P92 read (#564): Granite LICENSED (B=16 ×0.937, K8 inside the gate), OLMoE QUALITY_FAIL (c4val1 K8 −0.107 ppl, step ×1.024); `E4B_NF4_GROUPED_SMALLM` stays `0` (bench, docs and register)
 
 - **`p92-5090-2`** (RTX 5090, $0.33; `p92-5090-1` was NOT_RUN, ssh refused, $0.03), OFF = `0`, ON = `1`:

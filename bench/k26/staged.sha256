@@ -1,0 +1,3 @@
+# Names as the BOX sees them after staging ($W). The box runs `sha256sum -c` on this file and the controller resolves
+# each name to its source (k26_drive.sh's case) and compares.
+73a4a24190ee56811922fc7a9f71b025b18f012d58df749ce868074599abab39  k26_run.sh
