@@ -1,0 +1,9 @@
+== card before:
+0 %, 1374 MiB
+prompts ok
+pip_rc=0
+vllm 0.11.0 torch 2.8.0+cu128
+CENSUS B=1 rc=0
+CENSUS B=4 rc=0
+CENSUS EAGER B=4 rc=0
+P86R_DONE

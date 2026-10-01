@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Lane P86 registered (#564): where do e4b's and vLLM's decode steps go, kernel by kernel, on one box? (bench only; nothing in the wheel changes)
+
+- `bench/p86/PREREG-p86.md`. P58 measured vLLM 0.30.0 at 1.087x (B=1) and 1.396x (B=16) e4b's int4 stack end to end. e4b's B=16 step has a census (P57); vLLM's never had one, so the 3.3 ms gap could not be assigned. This lane censuses both engines on one RTX 5090 with the same prompt token ids.
+- **e4b:** the current release's int4 stack through P58's exact harness, fused q/k/v at both batches, timed by the graph-replay window and censused by P42's replay profiler. **vLLM 0.30.0** (P58's comparator, the GPTQ-Int4 checkpoint on Marlin): timed by P37's slope arm, unchanged, and censused by the new `p86_vllm_census.py`. The census runs the engine in-process under `torch.profiler` and applies the same 32 -> 128-token slope to each kernel. Only kernels that gain calls in the long run count as decode.
+- **The rule:** kernels sorted into registered families, families into roles present in both engines, plus host and launch (step minus kernels). VOID on a missing arm, the wrong vLLM, or a census exceeding its own step by 10 %. NOT_READ if over 10 % of either engine's B=16 kernel time is unmapped. Otherwise the largest B=16 gap names the next lane. Stated expectation: quantized linear (the expert GEMV against Marlin MoE).
+- **Refusals before any install:** the card class, the disk, and a driver below 580 (vLLM 0.30.0's wheels are CUDA 13.0; rc 18).
+- **A2000 rehearsal of the method** (vLLM 0.11.0, Qwen3-0.6B): graph replays are recorded, each decode kernel once per layer per step. The graph arm read 5.79 ms/step of decode kernels against the eager control's 7.40.
+- Guard 1.0 h at <= $0.75/h; lane ceiling $1.50. `tests/test_p86_staged_pin.py` (16) pins the staged bytes, P58's harness and comparator bytes, the comparator, the refusals' order, the arms and the census settings.
+
 ### Lane P85 read (#674): CONFIRMED -- grouped-nf4-gemm#413 (the fused fp8 KV append's IEEE-rounded quotient) is the whole step that moved the recipe's fp32 K8 from 6.36709 to 6.36396 (bench, docs and register only)
 
 - `p85-5090-4` ran on one RTX 5090 on P70's own Ryzen 7950X card for $0.6386, teardown proven. The lane cost $0.7362: a proof, two Intel-host refusals at preflight (rc 16), and one attempt whose deadline guard did not arm on a Vast HTTP 429.
