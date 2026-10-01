@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### `E4B_NF4_T1_DEVICE_GROUPING=1`: an instrument that reads the served NF4 M-tile kernel at T == 1 (off by default; lane P94)
+
+- **Why.** K8 is decode-shaped, so it reads T == 1. The NF4 store's T == 1 rows run the scalar fp32 decode GEMV, while its
+  batched rows run the served M-tile kernel (TF32 on the fp32 dequant). Lanes P92 and P93 compared K25 at T == 1
+  against the GEMV, not against the M-tile arithmetic a T > 1 route actually replaces.
+- **What.** With the knob set and K25 off (`E4B_NF4_GROUPED_SMALLM=0`), `_collapsed_grouping` sends the NF4 store's
+  T == 1 rows to the device tile table and the served M-tile kernel. Off (the default, also when unset), nothing
+  changes. Other stores are untouched, and anything but `0`/`1` is refused. Like `E4B_INT4_DECODE_A16`, it is a
+  quality instrument, not a serving route.
+- **Tests.**
+  - The stubbed route test: the decision, the served kernel at T == 1, the refusal.
+  - `tests/test_nf4_t1_device_grouping_gpu.py`: a token's rows are bit-equal alone and inside B=16 on the served
+    kernel, and the T == 1 output matches the fp32 oracle.
+  - NAS RTX A2000: GPU 6/6 (with K25's file), CPU routes 59 passed; a mutation that ignores the knob fails both.
+
 ### P93 read (#564): Granite LICENSED (B=16 ×0.594, B=1 ×0.854, K8 inside the gate), OLMoE QUALITY_FAIL (c4val1 K8 +0.155 ppl, the other sign from P92's); `E4B_NF4_GROUPED_SMALLM` stays `0` (bench, docs and register)
 
 - **`p93-5090-1`** (RTX 5090, $0.33), P92's design on the served-precision route (#834):
