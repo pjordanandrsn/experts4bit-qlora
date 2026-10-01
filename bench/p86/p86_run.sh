@@ -16,7 +16,7 @@
 # Each timed arm is drawn twice (A/A); each census once. The reducer applies the pre-registered reading.
 #
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
-# P86_GPU_CLASS P86_MIN_DRIVER P86_VLLM P86_MIN_DISK_GB P86_REHEARSAL.
+# P86_GPU_CLASS P86_MIN_DRIVER P86_MIN_TOOLKIT P86_VLLM P86_MIN_DISK_GB P86_REHEARSAL.
 # P86_PROVE=1 is the PROVING RUN: the refusals, both installs with their tripwires, the reducer self-test, an egress
 # probe, and the vLLM census arm itself on vLLM 0.30.0 with a small model (Qwen/Qwen3-0.6B, B=4, an 8 -> 24-token
 # slope), so the in-process profiler is proven on this build, driver and card before the reading; no 30B model.
@@ -39,7 +39,7 @@ MIN_DISK_GB=${P86_MIN_DISK_GB:-200}; REHEARSAL=${P86_REHEARSAL:-0}
 export P37_INSTANCE_ID=$P86_INSTANCE_ID    # p37_vllm.py (staged byte-identical) records the instance under P37's env name
 : > summary.txt; echo "$P86_INSTANCE_ID" > INSTANCE_ID
 echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA vllm=$VLLM_VER gpu_class=$GPU_CLASS min_driver=$MIN_DRIVER min_disk_gb=$MIN_DISK_GB" | tee -a summary.txt
-if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DRIVER" != 580 ] || [ "$VLLM_VER" != 0.30.0 ] || [ "$MIN_DISK_GB" != 200 ]; then
+if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DRIVER" != 580 ] || [ "$VLLM_VER" != 0.30.0 ] || [ "$MIN_DISK_GB" != 200 ] || [ "${P86_MIN_TOOLKIT:-12.9}" != 12.9 ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
 # ---- staged pieces, byte-for-byte
@@ -58,6 +58,13 @@ DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1); DR
 [ "${DRV_MAJOR:-0}" -ge "$MIN_DRIVER" ] 2>/dev/null || { say "REFUSED: driver $DRV < $MIN_DRIVER (vLLM $VLLM_VER's wheels are CUDA 13.0)"; echo "refused: driver $DRV" > REFUSAL; finish 18; }
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
+# amendment 1 (PREREG-p86): vLLM on sm_120 needs a >= 12.9 CUDA toolkit in the container (P37, P58); on the 12.8 image
+# vLLM 0.30.0's warmup died in FlashInfer's JIT (p86-prove-2). The image's CUDA_VERSION says which toolkit it carries;
+# refuse before any install (rc 24 -- deliberately not one of the launcher's machine-exclusion codes 13/14/17).
+MIN_TOOLKIT=${P86_MIN_TOOLKIT:-12.9}
+echo "image CUDA_VERSION ${CUDA_VERSION:-unset}" | tee -a forensics.txt
+python3 -c "import sys; v=tuple(int(x) for x in '${CUDA_VERSION:-0}'.split('.')[:2]); m=tuple(int(x) for x in '$MIN_TOOLKIT'.split('.')); sys.exit(0 if v >= m else 1)" 2>/dev/null \
+  || { say "REFUSED: the image's CUDA toolkit is '${CUDA_VERSION:-unset}', vLLM on sm_120 needs >= $MIN_TOOLKIT (amendment 1)"; echo "refused: toolkit ${CUDA_VERSION:-unset}" > REFUSAL; finish 24; }
 # ---- deadline guard + per-arm alarm (P54's): never start an arm that cannot finish 10 min before teardown
 can_run(){ local need=$1 now; now=$(date +%s); [ $((now + need + 600)) -le "$P86_DEADLINE_EPOCH" ] || { say "STOP-2: $2 needs ${need}s, only $((P86_DEADLINE_EPOCH - now))s left -- skipped (host-limited)"; echo "SKIPPED $2 host-limited deadline" >> summary.txt; return 1; }; }
 arm_alarm(){ local cap=$1 left=$(( P86_DEADLINE_EPOCH - $(date +%s) - 600 )); [ "$left" -gt "$cap" ] && left=$cap; [ "$left" -lt 600 ] && left=600; echo "$left"; }

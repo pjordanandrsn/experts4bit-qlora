@@ -164,3 +164,28 @@ Also: the driver's dry run, and the CI tests (`tests/test_p86_staged_pin.py`), w
 - the refusals coming before any install;
 - the arm order and settings;
 - the census's in-process engine and P37's settings.
+
+## Amendment 1 (2026-10-01, before any reading)
+
+**What happened.**
+- `p86-prove-1` was **NOT_RUN** at the launcher's pre-flight: download bandwidth 38.0 MB/s, under its 40 MB/s floor
+  ($0.0221). Machine 37675 had reappeared as the cheapest offer between the read-only readiness check and the launch.
+  It runs driver 570, so P86's runner would have refused it anyway (rc 18).
+- `p86-prove-2` (Intel Xeon E5-2698 v4, driver 595.71) **caught a real defect**, as a proof should ($0.0935).
+  - Both installs and tripwires passed: e4b, and vLLM 0.30.0 on torch 2.13.0+cu130.
+  - The census arm died in vLLM's warmup, in FlashInfer's JIT for the sampling kernel: `FlashInfer requires GPUs
+    with sm75 or higher` on the sm_120 card. The proof failed with rc 23, and no reading was attempted.
+- **The cause is this registration's image.** It names `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`, carried over
+  from P84's and P85's manifests. P58, whose vLLM 0.30.0 arms ran, used `2.8.0-cuda12.9-cudnn9-devel`. P58's
+  registration says why: "vLLM on sm_120 needs a ≥ 12.9 toolkit in the container", from P37.
+
+**Changes** (before any reading, so no data can inform them):
+1. **The image is `pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel`**, P58's.
+2. **The runner refuses a container toolkit below 12.9 before any install** (the image's `CUDA_VERSION`; rc 24).
+   A wrong image then fails at about $0.02 instead of after the installs. 24 is deliberately not one of the
+   launcher's machine-exclusion codes (13, 14, 17).
+3. **The proof.** Two attempts are spent: one launcher NOT_RUN and one that found the defect. Up to two more are
+   registered under the corrected image, and the reading still waits for a proof that returns rc 0.
+
+**Unchanged:** the question, the arms, the rule, the predictions, the guard (2.0 h) and the ceiling ($2.50). The lane
+has spent $0.1156 so far.

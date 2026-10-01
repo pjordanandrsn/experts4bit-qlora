@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Lane P86 amendment 1 (#564): the vLLM image needs a >= 12.9 CUDA toolkit; the runner refuses an older one before any install (bench only; nothing in the wheel changes)
+
+- `p86-prove-2` caught a defect. vLLM 0.30.0 installed and imported, but its warmup died in FlashInfer's JIT (`requires GPUs with sm75 or higher`) on the sm_120 card. The lane's image was `2.8.0-cuda12.8-devel`, carried over from P84/P85; P58's registration names `2.8.0-cuda12.9-devel` for vLLM on sm_120. `p86-prove-1` was a launcher NOT_RUN (bandwidth). Together $0.1156; no reading attempted.
+- **Changes, before any reading:** the image is P58's; the runner refuses a container toolkit below 12.9 with rc 24, before any install; up to two more proof attempts under the corrected image. The question, the arms, the rule and the ceiling are unchanged.
+
 ### Lane P86 registered (#564): where do e4b's and vLLM's decode steps go, kernel by kernel, on one box? (bench only; nothing in the wheel changes)
 
 - `bench/p86/PREREG-p86.md`. P58 measured vLLM 0.30.0 at 1.087x (B=1) and 1.396x (B=16) e4b's int4 stack end to end. e4b's B=16 step has a census (P57); vLLM's never had one, so the 3.3 ms gap could not be assigned. This lane censuses both engines on one RTX 5090 with the same prompt token ids.

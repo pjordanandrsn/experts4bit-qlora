@@ -81,9 +81,10 @@ def test_the_comparator_and_the_refusals_are_registered_before_any_install():
     assert "GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441" in run
     assert "GNF4_SHA=9407d499a4d1e0fe8c22b050878a9f869b385b45" in run
     install = run.index('say "install e4b @')
-    for refusal in ("finish 15;", "finish 18;", "finish 13;"):        # class, driver, disk
+    for refusal in ("finish 15;", "finish 18;", "finish 13;", "finish 24;"):   # class, driver, disk, toolkit (amendment 1)
         assert run.index(refusal) < install, refusal
     assert "MIN_DRIVER=${P86_MIN_DRIVER:-580}" in run
+    assert "MIN_TOOLKIT=${P86_MIN_TOOLKIT:-12.9}" in run      # amendment 1: vLLM on sm_120 needs the >= 12.9 image
 
 
 def test_the_proof_runs_the_census_on_a_small_model_before_any_30b_fetch():
