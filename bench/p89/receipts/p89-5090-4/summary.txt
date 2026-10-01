@@ -1,0 +1,26 @@
+KNOBS e4b=2a623fdf5ab917a5178dce475be47f86d8078fa6 gnf4=3990dbc43ee1729a761f5ed423b503f1e09a180f model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150
+p89_reduce self-test OK (14 cases)
+e4b 0.37.8 @2a623fdf5ab917a5178dce475be47f86d8078fa6
+gnf4 0.33.8 @3990dbc43ee1729a761f5ed423b503f1e09a180f
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+PREMISE k19 row-exact + k23 bit-equal rc=0: 6 passed in 18.87s
+speed off B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=10.32ms agg=1550.7tok/s recompiles=0 out=/root/p89/e4b_b16_off.json
+
+speed on B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=9.81ms agg=1631.8tok/s recompiles=0 out=/root/p89/e4b_b16_on.json
+
+speed on B=16_r2 rc=0 BV3_GRAPH batch=16 steps=70 step=9.81ms agg=1631.7tok/s recompiles=0 out=/root/p89/e4b_b16_on_r2.json
+
+speed off B=16_r2 rc=0 BV3_GRAPH batch=16 steps=70 step=10.32ms agg=1549.9tok/s recompiles=0 out=/root/p89/e4b_b16_off_r2.json
+
+P89_VERDICT LICENSED B=16 9.805 vs 10.321 ms (x0.950); tokens identical in both draw pairs; 336 fewer launches per step
+  B=16: off 10.321 ms, on 9.805 ms, ratio 0.950
+  launches/step: off 1652.4, on 1316.4; index_select gone 0.0
+       -48.0  void at::native::_scatter_gather_elementwise_kernel<...
+       -48.0  void at::native::index_elementwise_kernel<128, 4, at...
+       -48.0  void at::native::unrolled_elementwise_kernel<at::nat...
+      -144.0  void at::native::vectorized_elementwise_kernel<4, at...
+       -48.0  void at::native::vectorized_gather_kernel<16, long>(...

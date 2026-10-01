@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### P89 read: LICENSED. K23's lean glue takes Qwen3-30B-A3B's B=16 int4 step to 0.950×, with identical tokens (bench, docs and register)
+
+- `p89-5090-4` (RTX 5090): B=16 went from 10.321 to 9.805 ms/step. Tokens were identical in all 16 rows of both draw
+  pairs, and there were 336 fewer launches per step (the 7 per layer K23 removes).
+- Register: `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`.
+- `p89-5090-3` read VOID on an engagement clause that named the expansion's kernel by inference (amendment 1, #818).
+  It is recorded descriptively.
+- To fit the new row under the bundle's cap, P82's and P83's claim texts are stated more tightly. No number moved.
+
 ### Lane P90, amendment 1: the KL arms move to an H100 NVL; one reading is a speed run and a quality run (bench and tests only)
 
 - `p90-5090-1` read VOID: gpt-oss-20b's bf16 dequant reference (about 40 GB) does not fit a 32 GB RTX 5090. The KL
