@@ -78,11 +78,17 @@ def test_tc1_arm_selftest():
         fp = r["frozen_base_probe"]
         assert set(fp["slots"]) == {"gate_up", "down", "q_proj"} and fp["control_detects_flip"] is True and not fp["errors"], (name, fp)
     # T21 on genuine storage ran (a skip is reported, never silent)
-    m = re.search(r"frozen_probe_real=(\{.*?\})\s*$", p.stdout, re.S)
+    m = re.search(r"frozen_probe_real=(\{.*?\}) phase2=", p.stdout, re.S)
     assert m, p.stdout[-800:]
     if "'skipped'" in m.group(1):
         pytest.skip("the real-storage probe skipped: " + m.group(1))
     assert "'expert_slots_same_bytes': {'gate_up': True, 'down': True}" in m.group(1) and "'attention_dq_on_e4b': True" in m.group(1), m.group(1)
+    # phase 2: the backend counters route by the requested backend and the axolotl arm ran its census, slot map and probe
+    p2 = re.search(r"phase2=(\{.*)$", p.stdout, re.S).group(1)
+    assert "'ckpt_unsloth_gmm': {'unsloth_grouped_mm': 8, 'unsloth_triton': 0, 'unsloth_loop': 0, 'moe_bnb4bit_backend': 8}" in p2 and "'ckpt_unsloth_loop': {'unsloth_grouped_mm': 0, 'unsloth_triton': 0, 'unsloth_loop': 8" in p2, p2[:600]
+    if "'axolotl': {'skipped'" in p2:
+        pytest.skip("the axolotl tiny arm skipped: " + p2[p2.index("'axolotl'"):][:200])
+    assert "'quantized_moe_experts_n': 4, 'n_bnb4bit_unwrapped': 2, 'slots': 24, 'probe': {'gate_up': 'nf4/64', 'down': 'nf4/64'" in p2, p2[-600:]
     # T17 (P43) still holds: every step printed, every micro-batch timed, the CELL line never carries the per-step lists
     assert ref["log_every"] == 1 and ref["microbatch_timing"] is True
     assert '"microbatch_ms"' not in "".join(line for line in p.stdout.splitlines() if line.startswith("CELL "))
@@ -269,15 +275,26 @@ def test_tc1_run_sh_runs_the_registered_arm_order_with_the_matched_flags():
     fam = body[body.index("tc1_family(){"):body.index("# ---------------------------------------------------------------- the plan")]
     calls = re.findall(r"(?:arm|draw2|todo_arm)\s+\$FAM\s+(e4b|unsloth|hf|axolotl)\s+(\S+)", fam)
     want = [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("hf", "hf_peft_m"),
-            ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("unsloth", "ckpt_unsloth_best"), ("e4b", "fused_attn4_shipped"),
-            ("e4b", "reference_attn4_m"), ("unsloth", "ckpt_unsloth_prof"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m_mb1"), ("hf", "hf_peft_m_mb1")]
+            ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("unsloth", "ckpt_unsloth_best"), ("unsloth", "ckpt_unsloth_t28"), ("unsloth", "ckpt_unsloth_triton"),
+            ("e4b", "fused_attn4_shipped"), ("e4b", "reference_attn4_m"), ("unsloth", "ckpt_unsloth_prof"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m_mb1"), ("hf", "hf_peft_m_mb1")]
     assert calls == want, calls
-    assert fam.count("draw2 $FAM") == 2 and fam.count("todo_arm $FAM") == 3
+    assert fam.count("draw2 $FAM") == 2 and fam.count("todo_arm $FAM") == 0      # phase 2: every registered arm is implemented
     assert 'MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"' in fam and 'NATIVE="--adapter-dtype native --lora-init native"' in fam
     assert re.search(r"fused_attn4_shipped fused .* \$NATIVE", fam) and re.search(r"reference_attn4_m reference .* \$MATCH", fam)
     assert 'draw2(){ local FAM=$1 FW=$2 TAG=$3; shift 3; arm "$FAM" "$FW" "${TAG}_d2" "$@"; }' in body
-    assert 'not_run "arm not yet implemented (TC1 follow-up)"' in body
     assert "--profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM" in fam and "dmon_start" in fam
+    # phase 2: the Unsloth venv/backend/tilt knobs and the axolotl flags sit on the arms the instruction names
+    assert re.search(r"ckpt_unsloth_m unsloth .* --unsloth-moe-backend grouped_mm \$MATCH", fam)
+    assert re.search(r"UNS_VENV=t28 arm \$FAM unsloth ckpt_unsloth_t28 unsloth .* --unsloth-moe-backend default \$MATCH", fam)
+    assert re.search(r"ckpt_unsloth_best unsloth .* --unsloth-moe-backend grouped_mm --unsloth-speed-tilt 1 --adapter-dtype fp32 --lora-init native", fam)
+    assert re.search(r"ckpt_unsloth_triton unsloth .* --unsloth-moe-backend unsloth_triton \$MATCH", fam)
+    assert re.search(r"ckpt_unsloth_prof unsloth .* --unsloth-moe-backend grouped_mm \$MATCH .*--profile-steps", fam)
+    assert re.search(r"ckpt_axolotl_m axolotl \$AAL .* --axolotl-dataset \$W/data/ds_alpaca.json \$MATCH", fam)
+    assert re.search(r"ckpt_axolotl_best axolotl \$AAL .* --axolotl-best 1 --adapter-dtype fp32 --lora-init native", fam)
+    # the driver >= 580 gate precedes every cu130 install and the gated arms refuse by name, never fall back to the t28 venv
+    assert '[ "$DRIVER_MAJOR" -ge 580 ]' in body and body.index("CU130_OK=1; case") < body.index("venv-unsloth-t28:") < body.index("uv venv --python 3.12")
+    assert 'refused "$CU130_REASON"' in body and "unsloth[cu130-torch2121]" in body and "unsloth[cu128-torch280]" in body
+    assert '--extra-index-url https://download.pytorch.org/whl/cu130' in body and '"axolotl==$AX_VER"' in body
 
 
 def test_every_env_knob_the_box_reads_is_forwarded_by_the_driver():
@@ -293,6 +310,79 @@ def test_every_env_knob_the_box_reads_is_forwarded_by_the_driver():
     assert not missing, f"read by the box/arm but never forwarded by tc1_drive.sh: {missing}"
     for must in ("TC1_STEPS", "TC1_EVAL_N", "TC1_EVAL_EVERY", "TC1_MATCHED_SEED", "TC1_PHASE_BUDGET_S", "TC1_PROFILE_STEPS"):
         assert must in forwarded, must
+
+
+def test_unsloth_knobs_and_double_quant_decision(monkeypatch):
+    """P2-1: the knobs reach the environment only for an Unsloth arm, `default` leaves it alone, and the double-quant kwarg
+    follows the from_pretrained signature read at runtime."""
+    import types
+    arm = _load_arm_module()
+    for k in ("UNSLOTH_MOE_BACKEND", "UNSLOTH_MOE_RECOMPUTE", "UNSLOTH_MOE_GC_REPLAY_PIN"):
+        monkeypatch.delenv(k, raising=False)
+    out = arm.apply_unsloth_knobs(types.SimpleNamespace(framework="unsloth", unsloth_moe_backend="unsloth_triton", unsloth_speed_tilt=1, unsloth_double_quant="off"))
+    assert os.environ["UNSLOTH_MOE_BACKEND"] == "unsloth_triton" and os.environ["UNSLOTH_MOE_RECOMPUTE"] == "0" and os.environ["UNSLOTH_MOE_GC_REPLAY_PIN"] == "1"
+    assert out["env_set"] == {"UNSLOTH_MOE_BACKEND": "unsloth_triton", "UNSLOTH_MOE_RECOMPUTE": "0", "UNSLOTH_MOE_GC_REPLAY_PIN": "1"} and out["speed_tilt"] is True
+    for k in ("UNSLOTH_MOE_BACKEND", "UNSLOTH_MOE_RECOMPUTE", "UNSLOTH_MOE_GC_REPLAY_PIN"):
+        monkeypatch.delenv(k, raising=False)
+    out = arm.apply_unsloth_knobs(types.SimpleNamespace(framework="unsloth", unsloth_moe_backend="default", unsloth_speed_tilt=0, unsloth_double_quant="off"))
+    assert out["env_set"] == {} and "UNSLOTH_MOE_BACKEND" not in os.environ
+    out = arm.apply_unsloth_knobs(types.SimpleNamespace(framework="e4b", unsloth_moe_backend="grouped_mm", unsloth_speed_tilt=1))
+    assert out["env_set"] == {} and "UNSLOTH_MOE_BACKEND" not in os.environ                 # not an Unsloth arm: nothing touched
+
+    def named(model_name, max_seq_length, dtype, load_in_4bit, bnb_4bit_use_double_quant=True):
+        pass
+
+    def neither(model_name, **kwargs):
+        pass
+    kw, dq = arm.unsloth_double_quant_kwargs(named, True)
+    assert kw == {"bnb_4bit_use_double_quant": False} and dq["requested"] is False
+    kw, dq = arm.unsloth_double_quant_kwargs(neither, True)
+    assert kw == {} and dq["how"].startswith("unknown-default")
+    assert arm.unsloth_double_quant_kwargs(named, False)[0] == {}
+
+
+def test_axolotl_config_dict_and_census():
+    """P2-2: the config builder is pure and carries the spec's keys; the census counts real bnb parametrizations (CPU)."""
+    import types
+
+    import torch
+    import torch.nn as nn
+    pytest.importorskip("bitsandbytes")
+    arm = _load_arm_module()
+    a = types.SimpleNamespace(r=16, alpha=16, seq=2048, seed=3407, micro_batch=2, accum=4, steps=20, lr=2e-4, weight_decay=0.001, warmup_steps=5)
+    mods = ["model.layers.0.self_attn.q_proj"]
+    params = ["model.layers.0.mlp.experts.gate_up_proj", "model.layers.0.mlp.experts.down_proj"]
+    c = arm.axolotl_config_dict(a, "/snap/qwen3", mods, params, best=False, double_quant=False, dataset_path="/root/tc1/data/ds_alpaca.json")
+    for k, v in (("load_in_4bit", True), ("adapter", "qlora"), ("quantize_moe_experts", True), ("bnb_4bit_use_double_quant", False), ("lora_r", 16), ("lora_alpha", 16),
+                 ("lora_dropout", 0.0), ("gradient_checkpointing", True), ("bf16", True), ("optimizer", "adamw_bnb_8bit"), ("lr_scheduler", "linear"),
+                 ("micro_batch_size", 2), ("gradient_accumulation_steps", 4), ("max_steps", 20), ("learning_rate", 2e-4), ("weight_decay", 0.001), ("warmup_steps", 5), ("seed", 3407), ("sequence_len", 2048)):
+        assert c[k] == v, (k, c.get(k))
+    assert c["lora_target_modules"] == mods and c["lora_target_parameters"] == params and c["datasets"][0]["path"] == "/root/tc1/data/ds_alpaca.json" and "plugins" not in c
+    assert c["gradient_checkpointing_kwargs"] == {"use_reentrant": False} and c["bnb_config_kwargs"] == {"bnb_4bit_use_double_quant": False}
+    b = arm.axolotl_config_dict(a, "/snap/qwen3", mods, params, best=True)
+    assert b["plugins"] == ["axolotl.integrations.kernels.KernelsPlugin"] and b["expert_backend"] == "scattermoe" and b["moe_bnb_fast"] is True
+    from bitsandbytes.nn.parametrize import replace_parameter_4bit
+
+    class Stack(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.gate_up_proj = nn.Parameter(torch.randn(4, 24, 16, dtype=torch.bfloat16))
+            self.down_proj = nn.Parameter(torch.randn(4, 16, 12, dtype=torch.bfloat16))
+    m = nn.Module()
+    m.layers = nn.ModuleList([nn.Module(), nn.Module()])
+    for i, blk in enumerate(m.layers):
+        blk.mlp = nn.Module()
+        blk.mlp.experts = Stack()
+        try:
+            replace_parameter_4bit(blk.mlp.experts, "gate_up_proj", compress_statistics=False, quant_type="nf4", blocksize=64)
+        except Exception as e:
+            pytest.skip(f"bnb replace_parameter_4bit unavailable on CPU here: {e}")
+        if i == 0:
+            replace_parameter_4bit(blk.mlp.experts, "down_proj", compress_statistics=False, quant_type="nf4", blocksize=64)
+    c = arm.axolotl_expert_census(m)
+    assert c == {"quantized_moe_experts_n": 3, "parametrized_params": 3, "n_experts_modules": 2, "n_bnb4bit_unwrapped": 1, "samples": ["layers.0.mlp.experts.gate_up_proj", "layers.0.mlp.experts.down_proj", "layers.1.mlp.experts.gate_up_proj"]}, c
+    assert arm.logical_stack_shape(m.layers[0].mlp.experts, "gate_up_proj") == (4, 24, 16)      # from the parametrization's quant_state
+    assert arm.quant_state_of(m.layers[0].mlp.experts, "gate_up_proj").blocksize == 64
 
 
 def test_load_e4b_records_its_own_phases(monkeypatch):

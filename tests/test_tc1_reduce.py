@@ -48,7 +48,10 @@ def test_registered_arm_order_and_matched_set():
     R = _mod()
     assert R.EXPECTED["qwen3"] == [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "fused_attn4_m_d2"), ("unsloth", "ckpt_unsloth_m_d2"),
                                    ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("unsloth", "ckpt_unsloth_best"),
+                                   ("unsloth", "ckpt_unsloth_t28"), ("unsloth", "ckpt_unsloth_triton"),
                                    ("e4b", "fused_attn4_shipped"), ("e4b", "reference_attn4_m"), ("unsloth", "ckpt_unsloth_prof")]
+    assert set(R.LABELLED) == {("unsloth", "ckpt_unsloth_t28"), ("unsloth", "ckpt_unsloth_triton"), ("unsloth", "ckpt_unsloth_best"), ("axolotl", "ckpt_axolotl_best")}
+    assert R.PRIMARY["unsloth"] == "ckpt_unsloth_m" and R.P8_BUSY_MIN == 0.5 and R.TP4_T28_S_PER_STEP == 29.05
     assert "fused_attn4_shipped" not in R.MATCHED and "ckpt_unsloth_best" not in R.MATCHED and "reference_attn4_m" in R.MATCHED
     assert R.STABILITY == {"e4b": 0.05} and R.STABILITY_OTHER == 0.10 and R.EQUIV == 0.02 and R.COMPARABLE == 0.05 and R.STEP0_TOL == 0.005 and R.READ == 0.05
 
