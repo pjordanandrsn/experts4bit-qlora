@@ -1,0 +1,14 @@
+KNOBS e4b=fe5cbaa9357075ef58fe53be42371ba931af3d88 gnf4=7b7e6b15c8628586727b037b201f4d252016ad20 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=A2000 cpu_vendor=GenuineIntel min_disk_gb=20 calib_nseq=128
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+p88_reduce self-test OK (17 cases)
+e4b 0.37.8 @fe5cbaa9357075ef58fe53be42371ba931af3d88
+gnf4 0.33.8 @7b7e6b15c8628586727b037b201f4d252016ad20
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (8, 6)
+PREMISE row-exact rc=0: 3 passed in 33.04s
+PROVE -- the proving run: install tripwired; premise held; K19 + K16 contract tests compiled on this card
+PROVE K19+K16 contract compiled rc=0: 22 passed in 14.76s
+PROVE hf_cdn_mbps=54.4 bytes=52428800

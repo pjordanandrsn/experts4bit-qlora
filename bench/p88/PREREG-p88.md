@@ -77,7 +77,9 @@ Rule: the owner's standing no-ask tier for a single run under $15 (2026-09-26), 
 
 ## Rehearsal
 
-The runner differs from P87's in the CPU floor, the tripwire's plan check, the build alarm and the pin. P87's A2000
+The runner differs from P87's in the CPU floor, the tripwire's plan check, the build alarm and the pin. Both new refusal
+paths ran on the A2000 ([`rehearsal-a2000/`](rehearsal-a2000/)): the vendor refusal (rc 18) and the full proving path
+under a vendor knob (rc 0, `PROVED`, contracts 22 passed). P87's A2000
 rehearsal of the proving path stands for the rest. That path ran again on two 5090s in P87 (`p87-prove-1`, and the
 reading's premise).
 
