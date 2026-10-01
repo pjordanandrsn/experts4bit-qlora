@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### `E4B_INT4_LEAN_GLUE=1` (lane K23, opt-in): K19's grouping glue folds into the builder and K19's store
+
+- **Why.** P88 censused Qwen3-30B-A3B's B=16 step on an RTX 5090 (8 graph replays per arm).
+  - Its K19 arm, against its GEMV arm, adds 0.685 ms/step of launches: the tile builder 0.430, three fills 0.096, an
+    index kernel 0.094 (by its count, the unsort) and a scatter/gather kernel 0.065.
+  - Both arms also pay an `index_select` of 0.46 ms/step. By its call count and per-call time it is inferred to be the
+    collapse's `[T * top_k, H]` expansion of the token rows.
+- **What.** On K19's rows, `_fused_over_stack` uses grouped-nf4-gemm K23 (#427):
+  - it builds the table with `build_group_tiles_fused(..., lean=True, sorted_ids=True)`, one launch;
+  - gate_up reads the collapse's token rows through `gather_div=top_k`, because `_forward_collapsed` now hands over
+    `(x, row_token, top_k)` and the expansion is made inside only for routes that read it;
+  - the down projection is stored with `scatter=order` straight into the caller's row order, so the unsort is skipped.
+  - gpt-oss's epilogue reads the sorted down output, so it is excluded.
+  - `0` (the default) keeps the separate launches. Anything else is refused, and `1` on a kernel package without
+    K23's options is a RuntimeError, not a silent fallback.
+- **No speed claim yet.** Lane P89 reads it end to end.
+- **Tests:**
+  - `tests/test_int4_grouped_smallm_route.py` (stubs):
+    - the route takes K23's builder and the down scatter with the same bits as `0`;
+    - token rows are read through `gather_div` under `1` and expanded inside under `0`, both bit-equal to the
+      expanded call;
+    - the refusals;
+    - off K19's rows nothing changes.
+  - `tests/test_k23_lean_glue_gpu.py` (real kernels): bit-equal to the default at B=16 from expanded rows and from token
+    rows, eager, and captured in a CUDA graph and replayed on new inputs. It skips when the installed kernel package
+    predates K23.
+  - On the NAS RTX A2000 (correctness only), against K23's commit:
+    - GPU 6/6 (with K19's row-exact file) and CPU route 24/24;
+    - a mutation that drops the down scatter but still skips the unsort fails all three K23 GPU tests.
+
 ### Lane K24 runner (#564): K22 re-read on gpt-oss-20b with per-layer weight stores and K21's masked-tail plans (bench and tests only)
 
 - **Why.** K22 read VOID: its bench's served NF4 kernel was 17 % under the in-model census. Descriptively, gpt-oss's B=16 step is 79 % that kernel. K24's prereg and bench live in grouped-nf4-gemm (`kernel/PREREG-k24-gptoss-per-layer.md`).

@@ -13,6 +13,10 @@ contract (sorted rows out; `order` given = gather the unsorted input, None = inp
   - an unknown value: refused;
   - T == 1 takes K19 only under "1" (the default leaves it on the singleton GEMV: P88 read B=1 SLOWER);
   - prefill rows (R > 256): K19 is not taken (it is a decode route).
+E4B_INT4_LEAN_GLUE (lane K23, opt-in) on K19's rows: "1" builds the table with ``lean=True, sorted_ids=True`` and
+stores the down projection through ``scatter=order`` (no unsort), with the same bits as "0"; handed the collapse's
+TOKEN rows (``x_tokens``), gate_up reads them through ``gather_div`` and the (token, slot) expansion is never made;
+"1" on a kernel side without K23's options is refused; an unknown value is refused; off K19's rows it changes nothing.
 Like test_int4_device_grouping.py, these run wherever the NF4 grouping helpers import (linux CI).
 """
 import os
@@ -57,8 +61,8 @@ def _oracle(x, ids, stores):
     return ref
 
 
-def _install_stubs(monkeypatch, with_k19=True):
-    calls = {"k19": [], "gemv": 0, "tiles": []}
+def _install_stubs(monkeypatch, with_k19=True, k23=False):
+    calls = {"k19": [], "gemv": 0, "tiles": [], "fused": []}
     b32 = types.ModuleType("int4_b32")
 
     def quant_x_rows(x):
@@ -82,30 +86,52 @@ def _install_stubs(monkeypatch, with_k19=True):
         calls["tiles"].append(block_m)
         return real_builder(ids, n_exp, block_m)
     monkeypatch.setattr(nf4_grouped, "build_group_tiles_device", recording_builder)
+    if k23:
+        # K23's builder: the chained table, plus ids[order] as a sixth output when asked
+        def build_group_tiles_fused(ids, n_exp, block_m, tiles_budget=None, *, lean=False, sorted_ids=False, warps=4):
+            calls["fused"].append((block_m, lean, sorted_ids))
+            out = real_builder(ids, n_exp, block_m)
+            return out + (ids.index_select(0, out[3]),) if sorted_ids else out
+        b32.build_group_tiles_fused = build_group_tiles_fused
 
     sm = types.ModuleType("int4_smallm")
-    if with_k19:
+    if with_k19 and k23:
+        def gemm_int4_b32_grouped_smallm(x, packed, scales, t_row0, t_rows, t_group, order=None, *, scatter=None,
+                                         gather_div=1, **kw):
+            if gather_div != 1:                                  # token rows: expand, as the kernel's order // k reads
+                calls["k19"].append(f"tokens/{gather_div}")
+                x = x.repeat_interleave(gather_div, 0)
+            y = _k19_stub(calls, x, packed, scales, t_row0, t_rows, t_group, order, scatter is not None)
+            return y if scatter is None else torch.empty_like(y).index_copy_(0, scatter, y)
+        sm.gemm_int4_b32_grouped_smallm = gemm_int4_b32_grouped_smallm
+    elif with_k19:
         def gemm_int4_b32_grouped_smallm(x, packed, scales, t_row0, t_rows, t_group, order=None, **kw):
-            calls["k19"].append("gather" if order is not None else "sorted")
-            E_, N_, kh = packed.shape
-            xs = x.index_select(0, order) if order is not None else x
-            out = torch.zeros(x.shape[0], N_, dtype=torch.bfloat16)
-            for g in range(t_row0.numel()):
-                rows = int(t_rows[g])
-                if rows == 0:
-                    continue
-                assert rows <= 16, "K19 serves 16-row tiles"
-                r0, e = int(t_row0[g]), int(t_group[g])
-                w = dequant_int4_ref(packed[e], scales[e], N_, kh * 2)
-                out[r0:r0 + rows] = (xs[r0:r0 + rows].float() @ w.t()).to(torch.bfloat16)
-            return out
+            return _k19_stub(calls, x, packed, scales, t_row0, t_rows, t_group, order, False)
         sm.gemm_int4_b32_grouped_smallm = gemm_int4_b32_grouped_smallm
     monkeypatch.setitem(sys.modules, "int4_smallm", sm)
     return calls
 
 
-def _run(R, monkeypatch):
+def _k19_stub(calls, x, packed, scales, t_row0, t_rows, t_group, order, scatter):
+    calls["k19"].append(("gather" if order is not None else "sorted") + ("+scatter" if scatter else ""))
+    E_, N_, kh = packed.shape
+    xs = x.index_select(0, order) if order is not None else x
+    out = torch.zeros(x.shape[0], N_, dtype=torch.bfloat16)
+    for g in range(t_row0.numel()):
+        rows = int(t_rows[g])
+        if rows == 0:
+            continue
+        assert rows <= 16, "K19 serves 16-row tiles"
+        r0, e = int(t_row0[g]), int(t_group[g])
+        w = dequant_int4_ref(packed[e], scales[e], N_, kh * 2)
+        out[r0:r0 + rows] = (xs[r0:r0 + rows].float() @ w.t()).to(torch.bfloat16)
+    return out
+
+
+def _run(R, monkeypatch, seed=None):
     from experts4bit_qlora.engines.hot_residency import _fused_over_stack
+    if seed is not None:
+        torch.manual_seed(seed)
     stores = _stores()
     freed_gu = torch.empty(0, 0, 0, dtype=torch.uint8)
     freed_dn = torch.empty(0, 0, 0, dtype=torch.uint8)
@@ -231,3 +257,83 @@ def test_opted_in_t1_rows_go_through_k19(monkeypatch):
     assert calls["k19"] == ["gather", "sorted"] and calls["gemv"] == 0 and calls["tiles"] == [16], calls
     ref = _oracle(x, ids, stores)
     assert (out.float() - ref).abs().max() / ref.abs().max() < 0.05
+
+
+def test_lean_glue_takes_k23s_builder_and_scatter_with_the_same_bits(monkeypatch):
+    monkeypatch.delenv("E4B_INT4_GROUPED_SMALLM", raising=False)
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "0")
+    calls = _install_stubs(monkeypatch, k23=True)
+    off, ref = _run(24, monkeypatch, seed=5)
+    assert calls["fused"] == [(16, False, False)] and calls["k19"] == ["gather", "sorted"], calls
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "1")
+    calls = _install_stubs(monkeypatch, k23=True)
+    on, _ = _run(24, monkeypatch, seed=5)
+    assert calls["fused"] == [(16, True, True)], calls             # one launch: the table and the sorted ids
+    assert calls["k19"] == ["gather", "sorted+scatter"], calls     # down stores straight into the caller's order
+    assert torch.equal(on, off), "K23's route moved an output bit"
+    assert (on.float() - ref).abs().max() / ref.abs().max() < 0.05
+
+
+def test_lean_glue_on_a_kernel_side_without_k23_is_refused(monkeypatch):
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "1")
+    calls = _install_stubs(monkeypatch, k23=True)
+    import int4_smallm
+    k19 = int4_smallm.gemm_int4_b32_grouped_smallm
+    monkeypatch.setattr(int4_smallm, "gemm_int4_b32_grouped_smallm",
+                        lambda x, packed, scales, t_row0, t_rows, t_group, order=None: k19(
+                            x, packed, scales, t_row0, t_rows, t_group, order))   # pre-K23 K19: no scatter=
+    with pytest.raises(RuntimeError, match="needs grouped-nf4-gemm with K23"):
+        _run(24, monkeypatch)
+    assert calls["k19"] == []
+
+
+def test_lean_glue_unknown_value_is_refused(monkeypatch):
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "yes")
+    _install_stubs(monkeypatch, k23=True)
+    with pytest.raises(ValueError, match="E4B_INT4_LEAN_GLUE='yes'"):
+        _run(24, monkeypatch)
+
+
+def test_lean_glue_off_k19s_rows_changes_nothing(monkeypatch):
+    """With K19 off ("0"), the GEMV route builds no tile table; the opt-in has nothing to fold and must not refuse."""
+    monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "0")
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "1")
+    calls = _install_stubs(monkeypatch, k23=True)
+    out, ref = _run(24, monkeypatch)
+    assert calls["k19"] == [] and calls["gemv"] == 2 and calls["fused"] == [], calls
+    assert (out.float() - ref).abs().max() / ref.abs().max() < 0.05
+
+
+@pytest.mark.parametrize("lean", ["0", "1"])
+def test_token_rows_are_read_without_the_expansion_under_lean_glue(monkeypatch, lean):
+    """The collapse hands (x, row_token, top_k) with x_rows=None. Under "1" gate_up reads the token rows through
+    gather_div (no expansion); under "0" the rows are expanded inside, as the caller used to. Same bits either way,
+    and the same bits as the expanded call."""
+    from experts4bit_qlora.engines.hot_residency import _fused_over_stack
+    monkeypatch.delenv("E4B_INT4_GROUPED_SMALLM", raising=False)
+    T, k = 6, 4
+    torch.manual_seed(31)
+    stores = _stores()
+    xt = torch.randn(T, K1, dtype=torch.bfloat16) * 0.2
+    ids = torch.randint(0, E, (T * k,))
+    rt = torch.arange(T * k) // k
+    freed = (torch.empty(0, 0, 0, dtype=torch.uint8), torch.empty(0, 0, 0), torch.empty(0, 0, 0, dtype=torch.uint8))
+    args = (freed[0], freed[1], freed[2], freed[1], (2 * INTER, K1, K1, INTER), True, F.silu)
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", "0")
+    _install_stubs(monkeypatch, k23=True)
+    want = _fused_over_stack(xt.index_select(0, rt), ids, *args, device_grouping=True, int4_stores=stores)
+    monkeypatch.setenv("E4B_INT4_LEAN_GLUE", lean)
+    calls = _install_stubs(monkeypatch, k23=True)
+    got = _fused_over_stack(None, ids, *args, device_grouping=True, int4_stores=stores, x_tokens=(xt, rt, k))
+    assert torch.equal(got, want)
+    if lean == "1":
+        assert calls["k19"] == [f"tokens/{k}", "gather", "sorted+scatter"], calls
+    else:
+        assert calls["k19"] == ["gather", "sorted"], calls
+
+
+def test_fused_over_stack_needs_rows_or_tokens(monkeypatch):
+    from experts4bit_qlora.engines.hot_residency import _fused_over_stack
+    _install_stubs(monkeypatch, k23=True)
+    with pytest.raises(ValueError, match="needs x_rows or x_tokens"):
+        _fused_over_stack(None, torch.zeros(4, dtype=torch.long), None, None, None, None, (1, 1, 1, 1), True, F.silu)
