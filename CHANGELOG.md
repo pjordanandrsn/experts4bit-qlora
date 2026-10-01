@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### K19 is the default for batched int4 decode rows (`E4B_INT4_GROUPED_SMALLM` now defaults to `auto`), as lane P88 licensed
+
+- **What changes.** In the device-grouping configuration, the one every B=16 register row is measured in, int4 decode rows above T == 1 (≤ 256 rows) now run grouped-nf4-gemm's K19 when the installed kernel package carries it. Before, they ran the split-K GEMV.
+- **Why.** P88 (`e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`): B=16 step 0.905× on an RTX 5090, K8 +0.0062 nats (floor 0.0095).
+- **What doesn't change:**
+  - **T == 1** stays on the singleton GEMV (P88 read B=1 1.103× slower);
+  - the library's default batched path with `DEVICE_GROUPING` off;
+  - prefill rows;
+  - a kernel package without K19 (released grouped-nf4-gemm ≤ 0.33.7): auto falls back to the GEMV silently.
+- **Values:**
+  - `auto` (default, also unset or empty);
+  - `0`: the split-K GEMV everywhere;
+  - `1`: requires K19, refuses if absent, and also routes T == 1 (the quality instrument's setting);
+  - anything else is refused.
+- `tests/test_int4_grouped_smallm_route.py` pins each value's route, the silent fallback, the refusal, and T == 1 under each. `int4_experts.py`'s Scope note says the same.
+- Three tests whose subject is the split-K GEMV route now select it explicitly (`=0`): `test_int4_device_grouping.py::test_int4_decode_routes_to_gemv`, P63's `test_int4_device_grouping_gemv_is_row_exact` and `test_int4_decode_a16.py::test_on_does_not_cover_the_device_grouped_decode_gemv`. K19's own row invariance is `tests/test_k19_row_exact_gpu.py`. With the real kernel (grouped-nf4-gemm `7b7e6b1`) on an RTX A2000, the 9 dispatch and route files pass: 62 passed.
 ### Lane P88 read (#564): LICENSED. K19 takes the RTX 5090's B=16 int4 decode step to 0.905×, K8 +0.0062 nats; B=1 is 1.10× slower (bench, docs and register only)
 
 - **Run:** `p88-5090-4` on an RTX 5090 with an AMD EPYC 9334 host, e4b `b848089` + grouped-nf4-gemm `7b7e6b1` (K19's plan 32/256). $0.5538. The lane cost $0.6582, including a proof and three pre-flight NOT_RUNs.

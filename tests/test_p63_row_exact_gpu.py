@@ -121,7 +121,10 @@ def test_int4_singleton_route_is_row_exact(big_part, T):
 
 @needs_cuda
 @pytest.mark.parametrize("T", [16, 17])                                # 128 / 136 routed rows: <= 256
-def test_int4_device_grouping_gemv_is_row_exact(big_part, T):
+def test_int4_device_grouping_gemv_is_row_exact(big_part, T, monkeypatch):
+    # P63's subject is the split-K GEMV route; since lane P88 the default sends these rows to K19 (whose own
+    # row-count invariance is tests/test_k19_row_exact_gpu.py), so the GEMV is selected explicitly here.
+    monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "0")
     stores, (gu_p, gu_a, dn_p, dn_a) = _int4_stores()
     _assert_rows_match_t1((gu_p, gu_a, dn_p, dn_a, stores), T,
                           dict(singleton_groups=False, device_grouping=True), f"int4 device GEMV at T={T}")

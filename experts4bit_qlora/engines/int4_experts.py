@@ -26,9 +26,12 @@ is decided by ``hot_residency.DEVICE_GROUPING``:
 * ``T == 1`` -- the int4-b32 grouped GEMV described above.
 * ``T > 1`` **with DEVICE_GROUPING on** -- the grouped captured
   int4-b32 GEMM against the same prebuilt device tiles the NF4 captured
-  path uses (``hot_residency.py`` ~line 330), or the split-K GEMV when
-  ``x_rows <= 256`` (~line 165). So batched decode does NOT keep the NF4
-  M-tile path in that configuration.
+  path uses (``hot_residency.py`` ~line 330), or, when
+  ``x_rows <= 256``, grouped-nf4-gemm's K19 over those tiles when the
+  kernel package carries it (``E4B_INT4_GROUPED_SMALLM`` unset/``auto``;
+  lane P88 licensed it, ``e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01``)
+  and the split-K GEMV otherwise or under ``=0``. So batched decode does
+  NOT keep the NF4 M-tile path in that configuration.
 * ``T > 1`` with DEVICE_GROUPING off -- the NF4 grouped path, which is
   the library default: ``DEVICE_GROUPING = [False]`` and nothing in the
   package ever assigns it.
