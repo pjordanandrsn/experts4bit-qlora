@@ -1,6 +1,6 @@
 # SPEC — the 40 ms step (400+ tok/s aggregate at B=16, Qwen3-30B-A3B)
 
-Owner directive 2026-08-24: "we're chasing 400+". At B=16 that is a
+Owner directive 2026-08-24: a target of 400+ tok/s aggregate. At B=16 that is a
 **40 ms decode step**. Baseline, frozen from the kvappend receipts
 (EPYC 9655 + RTX 5090, the reference class): step 131.3 ms = 122 tok/s.
 

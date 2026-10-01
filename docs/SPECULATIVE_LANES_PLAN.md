@@ -7,7 +7,7 @@ status:    exploratory program — SECOND-CLASS to the confirmatory queue by con
 cites:     PREREG_AMENDMENT_LADDER_REPIN_n1024.md (telemetry + branch table)
            AGENT_HANDOFF_POST_AUDIT_20260705.md (queue, quarantine)
            D1/D2 n=64 report (SD-clustering, fp8 null, bitwise D2)
-owner:     Jordan        executor: coding agent
+owner:     maintainer    executor: coding agent
 two-stage rule: the n=1024 set is CONFIRMATION for the one preregistered primary and
            EXPLORATION for everything below. Any lane that graduates gets its own
            preregistered follow-up on a fresh set before a confirmatory claim ships.
@@ -245,3 +245,7 @@ against the n=1024 SEs from the amendment's power table.
 - Anchor file: `SPECULATIVE_LANES_PLAN.md.ots`
 - Calendars: a.pool.opentimestamps.org, b.pool.opentimestamps.org, a.pool.eternitywall.com, ots.btc.catallaxy.com
 - **Provenance posture (load-bearing):** the **OTS proof timestamp** above is the legal anchoring time for the visible document — that is what the calendars witnessed. The **disclosed pre-footer content hash** is *not* anchored by the current `.ots` file; it is *disclosed inside* the OTS-anchored visible document as a human-readable historical record of what the file's bytes hashed to immediately before this footer was appended. A reviewer verifying the visible file runs `ots verify` against the on-disk bytes; a reviewer wanting to confirm the disclosed pre-footer hash recomputes `SHA-256` of the file with everything from `<!-- ots-attestation-footer -->` onward stripped. Both checks are independent; neither replaces the other.
+
+---
+
+*Edited 2026-09-30, after this anchor: one attribution above was reworded; no measurement, criterion or date changed. `SPECULATIVE_LANES_PLAN.md.ots` anchors the version before that edit, which git history keeps.*

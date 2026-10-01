@@ -1,7 +1,7 @@
 # PREREG — SV1: current-stack decode census + dot-pad×F2 composition
 
 Registered 2026-08-25, before measurement. Target claim under test
-(Jordan; raised from 200 to **275** before any SV1 measurement):
+(the owner's; raised from 200 to **275** before any SV1 measurement):
 >275 tok/s single-stream on the reference class. Arithmetic frame:
 275 tok/s = 3.64 ms/step; certified points today are 7.16 ms
 (0.15.1/0.21.0 defaults, from RESULTS-f2-tail's ratio on the anchor)

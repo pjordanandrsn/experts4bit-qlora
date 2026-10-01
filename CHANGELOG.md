@@ -372,6 +372,11 @@
   - With identical packs and router setting, P81's box read 6.33015. So on this stack K8 does not reproduce across boxes to five decimals, which the registered table had assumed.
 - Also filed: #784. A lane driver cannot tell a dead box from a silent one, and waited out the whole guard on one.
 
+### Owner quotes and name credits removed from the documents (docs only)
+
+- Verbatim chat quotes and name credits are removed from pre-registrations, RESULTS pages, planning documents, the CI workflow comment and one CHANGELOG line. Directives are paraphrased or reduced to their date and record; no criterion, band, measurement or date moved.
+- Four OpenTimestamps-anchored documents were edited: `PROVENANCE.md`, `docs/NULL_LADDER_1024_AMENDMENT.md`, `docs/POST_AUDIT_WORK_QUEUE.md` and `docs/SPECULATIVE_LANES_PLAN.md`. Each now ends with a note that its `.ots` anchors the version before the edit, which git history keeps.
+
 ### Lane P82 registered (#511, #674, #777): P81 re-measured on the fixed graph path with the licensed build's fp32 router, and whether the router cast accounts for #674's K8 gap (bench only; nothing in the wheel changes)
 
 - `bench/p82/PREREG-p82.md`. One RTX 5090. P81's build and five arms (the licensed int4 stack, both packs loaded by fingerprint, the device grouping), on grouped-nf4-gemm 0.33.7 and an e4b containing #777.
@@ -1810,7 +1815,7 @@ Code and register contract; no gate, threshold, floor, `min_rows`, damping, or e
 
 ### Serving census rows name the comparator (#418)
 
-Register wording only; no value, status, gate, threshold or floor moved. Jordan's ruling: the Qwen3 licensed 238.1 / 1327.5 rows stay.
+Register wording only; no value, status, gate, threshold or floor moved. The owner's ruling: the Qwen3 licensed 238.1 / 1327.5 rows stay.
 
 - Every `e4b.serve.census.bo7.*` speed row's `unit` and `claim` name the comparator as **vs e4b's own NF4 control on the same box**, never a bare ×N speedup. Granite, OLMoE, gpt-oss, Gemma-4 and Mixtral notes carry **no field comparator measured**. Qwen3 names the P37 vLLM 0.28.0 GPTQ-Int4 / MarlinExperts comparator (footprint not recorded) and scopes the licensed position to the bo6c pack artifact (11512 gptq / 776 rtn); #405 is a notes reproduction item, not a licence withdrawal. The P37 root row is bounded to graph decode at B=1 and B=16 on one box and one prompt set.
 - No structured `comparator` field (the register validator does not check one). `docs/STATUS.md` and `docs/SERVING-THROUGHPUT.md` hand-edited; README results table updated to the same wording.

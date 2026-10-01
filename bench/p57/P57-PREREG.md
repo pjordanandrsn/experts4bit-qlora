@@ -1,6 +1,6 @@
 # P57 — K17's fused reduce read in the consumer; P54's B=16 divergence split in two; the distinct-expert count measured (registered 2026-09-21, before the run)
 
-Owner directive (Jordan, 2026-09-21): *"main thing needed is throughput work."* Record: [#652](https://github.com/pjordanandrsn/experts4bit-qlora/issues/652). Predecessors: P54 ([`bench/p54/RESULTS-p54.md`](../p54/RESULTS-p54.md)), K17 (grouped-nf4-gemm `kernel/PREREG-k17-fused-splitk-gemv.md`, #372; kernel + pilot on its `lane/k17-fused-splitk-kernel`). P55 and P56 are other lanes' numbers (#660, #662).
+Owner directive (2026-09-21): throughput work first. Record: [#652](https://github.com/pjordanandrsn/experts4bit-qlora/issues/652). Predecessors: P54 ([`bench/p54/RESULTS-p54.md`](../p54/RESULTS-p54.md)), K17 (grouped-nf4-gemm `kernel/PREREG-k17-fused-splitk-gemv.md`, #372; kernel + pilot on its `lane/k17-fused-splitk-kernel`). P55 and P56 are other lanes' numbers (#660, #662).
 
 ## The rule applied before anything else — every arm here was dry-run against what runs it
 

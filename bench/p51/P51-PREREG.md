@@ -1,6 +1,6 @@
 # P51 — A GRADED STORE MAP FOR GEMMA-4: keep the sensitive layers high-precision, crush the rest (pre-registered 2026-09-19 ~12:10Z, before any box is rented)
 
-Work item: adertha-agents#110; [#597](https://github.com/pjordanandrsn/experts4bit-qlora/issues/597) (closed as explained). **Owner directive, 2026-09-19:** *"gemma: Keep the first N expert layers high precision, crush the rest."* P50 recommended shipping no Gemma-4 default; the owner's call is to ship the hybrid, so this lane picks its shape with numbers rather than assuming one.
+Work item: adertha-agents#110; [#597](https://github.com/pjordanandrsn/experts4bit-qlora/issues/597) (closed as explained). **Owner directive, 2026-09-19:** for Gemma-4, keep the first N expert layers at high precision and quantise the rest as hard as possible. P50 recommended shipping no Gemma-4 default; the owner's call is to ship the hybrid, so this lane picks its shape with numbers rather than assuming one.
 
 Lineage, all measured this morning on the same instrument: e4b's Gemma-4 modelling is faithful (P48: 0.0056 nats with 29 of 30 expert stacks bf16); per-layer sensitivity spans **159×** (P48: NF4 on layer 0 alone 0.892, on layer 27 alone 0.0056); **no store rescues layer 0** (P49: int8 0.693, fp8 0.774, NF4 0.892, FP4 1.051) because the sensitivity is positional, not magnitudinal; and a uniform bf16 head reaches the 0.05 fidelity floor only at N = 20, costing 32.35 GB of expert store against 12.0 GB all-NF4 and 42.5 GB all-bf16 (P50).
 
@@ -26,7 +26,7 @@ Proof of execution per row: `verify_moe_4bit`'s per-stack store and block must e
 - **M2 (a uniform int8 head fails):** `int8_20` **≥ 0.50**. P49 measured int8 on layer 0 *alone* at 0.693 and P50's curve is monotone in how much is quantised, so a head containing layer 0 at int8 cannot do better. Refuted below 0.30 → single-layer rows do not compose and the head question reopens with its own lane.
 - **M3 (grading works):** `graded_10_10` **≤ 0.10** — int8 on layers 10..19 costs little because those layers are 5–50× less sensitive than layer 0. Refuted at **≥ 0.30**; in between, reported and not shipped.
 - **M4 (grading saves bytes):** `graded_10_10`'s expert store ≤ **0.85×** the anchor's.
-- **M5 (the tail is not where the bytes are):** `graded_10_10_crush`'s store is within **5 %** of `graded_10_10`'s and its KL within **1.3×** — i.e. "crush the rest" is the cheap half of the directive and the head is where the memory lives. Refuted → crushing does pay and the tail store belongs in the default.
+- **M5 (the tail is not where the bytes are):** `graded_10_10_crush`'s store is within **5 %** of `graded_10_10`'s and its KL within **1.3×** — i.e. quantising the tail hard is the cheap half of the directive and the head is where the memory lives. Refuted → crushing does pay and the tail store belongs in the default.
 
 ## Decision rules
 

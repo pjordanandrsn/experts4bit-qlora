@@ -1,6 +1,6 @@
 # TP4 — SAME-BOX TRAINING HEAD-TO-HEAD: e4b (GitHub `main`) vs Unsloth vs plain HF+PEFT+bnb, EVERY SUPPORTED MoE FAMILY, THE FIELD'S RECIPE, THREE BOXES IN PARALLEL (pre-registered 2026-09-10, before any box is rented)
 
-**Owner directive (Jordan, 2026-09-10, chat, verbatim):** *"set up and run a same box training comparison between my packages (get the latest from gh) and the rest of the field to we have concrete numbers on the most heavily benchmarked examples that are run in the exact same way on the same box. true 1:1 on every supported model. run multiple boxes in parallel to save time."*
+**Owner directive (2026-09-10):** a same-box training comparison between this project's packages (the latest from GitHub) and the rest of the field, giving concrete numbers on the most heavily benchmarked examples run in exactly the same way on the same box — true 1:1 on every supported model, with several boxes run in parallel to save time.
 
 Lineage: tp1 (P36, internal parity, six families) → P38 (Qwen3 vs Unsloth) → tp2 (P40, six families vs Unsloth, one box, tp2's fixture) → **tp4**. tp3 (`bench/tp3/tp3_arm.py`) is the harness lineage (tp2 + the structural attention census, e4b#434/#435). tp4 changes three things at once and says so: (1) **e4b comes from GitHub `main`**, not the shipped PyPI cut; (2) **the fixture is the field's most-run recipe** — the Unsloth notebooks' Alpaca recipe — not tp2's clinical seq-512 fixture; (3) **a third framework**, the plain Hugging Face stack (transformers + bitsandbytes 4-bit + PEFT), the thing every other trainer (LLaMA-Factory, Axolotl's default path) reduces to. Because the fixture changed, **one pair is repeated at tp2's fixture** (the Qwen3 anchor, below) so this lane's boxes are tied to the two earlier lanes' numbers.
 
@@ -256,7 +256,7 @@ coverage limit of the framework under test. Either outcome is a row.
 
 ### Amendment 6 (2026-09-19 20:30Z, BEFORE any axolotl arm has been run): axolotl joins the comparison as a fourth framework
 
-**Owner's directive, 2026-09-19:** *"add axolotl to the comparisons from now on."* Registered here before any axolotl data exists.
+**Owner's directive, 2026-09-19:** include axolotl in every comparison from here on. Registered here before any axolotl data exists.
 
 **The arm.** `axolotl/ckpt_axolotl`, one per family, at the same field fixture as every other arm: alpaca template, seq 2048, micro-batch 2 x accum 4, r16 / alpha16, AdamW-8bit, seed 3407, N = 20, the same `tp4_alpaca.py` tokens and the registered `DS_ALPACA_SHA`. It joins `EXPECTED` after `hf/hf_peft` and before `e4b/reference_attn4`, so **the reference arm stays last and internal parity keeps its place** (amendment 5's point: the parity pair must not be charged behind arms that do not bear on it).
 

@@ -1,6 +1,6 @@
 # P43 — TRAINING CORRECTNESS, TWO LANES: the Qwen3 field-recipe step-degradation DIAGNOSIS (T1) and the Gemma-4 fused/reference LAYER-1 ADJUDICATION with the bf16 oracle resident (T2) — pre-registered 2026-09-18, before any box is rented
 
-Work item: adertha-agents#110 (owner directive 2026-09-18: "time to go on the throughput and training work for all models supported"). Lineage: tp4 (`bench/tp4/TP4-PREREG.md`, 2026-09-10) left two OPEN correctness items on the training side, both of which block any training claim for their family. Nothing here is an optimisation; the phase rule (2026-09-05: correctness before optimisation) puts these first.
+Work item: adertha-agents#110 (owner directive 2026-09-18: start the throughput and training work for every supported model). Lineage: tp4 (`bench/tp4/TP4-PREREG.md`, 2026-09-10) left two OPEN correctness items on the training side, both of which block any training claim for their family. Nothing here is an optimisation; the phase rule (2026-09-05: correctness before optimisation) puts these first.
 
 ## Claim under test
 

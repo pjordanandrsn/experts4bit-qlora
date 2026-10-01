@@ -87,7 +87,7 @@ the green result recorded above.
 | fork PR branch carries the ExpertsNbit generalization + backward re-dequant this package vendors | `feature/experts-4bit-training` @ `13e74f7` (2026-07-03) | pjordanandrsn/bitsandbytes |
 | `tests/test_experts4bit.py` (incl. #1849 regression + shapes) *(2026-07-02 stack)* | **38 passed** CPU + CUDA | run against bitsandbytes 0.49.2 |
 
-Drafts for posting/pushing (Jordan): `outputs/1965_pr_description.md`, `outputs/1965_add_tests.patch`,
+Drafts for the maintainer to post or push: `outputs/1965_pr_description.md`, `outputs/1965_add_tests.patch`,
 `outputs/1849_comment.md` (on the measurement host).
 
 ## Falsification audit — unsloth-zoo MoE 4-bit fix (2026-07-02)
@@ -138,3 +138,7 @@ outside their `<2.11` pin, disclosed in the filings). Artifact paths below are r
 - Anchor file: `PROVENANCE.md.ots`
 - Calendars: a.pool.opentimestamps.org, b.pool.opentimestamps.org, a.pool.eternitywall.com, ots.btc.catallaxy.com
 - **Provenance posture (load-bearing):** the **OTS proof timestamp** above is the legal anchoring time for the visible document — that is what the calendars witnessed. The **disclosed pre-footer content hash** is *not* anchored by the current `.ots` file; it is *disclosed inside* the OTS-anchored visible document as a human-readable historical record of what the file's bytes hashed to immediately before this footer was appended. A reviewer verifying the visible file runs `ots verify` against the on-disk bytes; a reviewer wanting to confirm the disclosed pre-footer hash recomputes `SHA-256` of the file with everything from `<!-- ots-attestation-footer -->` onward stripped. Both checks are independent; neither replaces the other.
+
+---
+
+*Edited 2026-09-30, after this anchor: one attribution above was reworded; no measurement, criterion or date changed. `PROVENANCE.md.ots` anchors the version before that edit, which git history keeps.*

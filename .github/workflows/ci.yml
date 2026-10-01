@@ -2,7 +2,7 @@ name: CI
 
 # CI runs on `main` and on a pull request ONLY when the gate holder applies the
 # `ready-to-merge` label (or the PR leaves draft) -- never on every push
-# (Jordan, 2026-09-06). A head with no CI run is not green: remove and re-apply
+# (since 2026-09-06). A head with no CI run is not green: remove and re-apply
 # the label after a new push. `workflow_dispatch` is the manual escape hatch.
 on:
   push:

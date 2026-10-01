@@ -9,7 +9,7 @@ This lane finds which of the three things that differ between those builds moved
 
 Rule: the owner's standing no-ask tier for a single run under $15 (2026-09-26), with the usual mechanics: this page
 merged before the launch, a proving rental before a guard over 1 h, receipts and ledger rows, proven teardown. The
-owner's go ("approved", after "continue") is relayed on #674 before the launch.
+owner's go-ahead is relayed on #674 before the launch.
 
 ## Question
 
