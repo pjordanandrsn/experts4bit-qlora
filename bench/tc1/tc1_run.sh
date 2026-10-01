@@ -15,8 +15,12 @@
 #   TC1_BOX=A  qwen3 (Qwen3-30B-A3B @ the pin) -- one RTX 5090, the only registered box
 #
 # Frameworks: e4b (GitHub main @ E4B_SHA + grouped-nf4-gemm @ GNF4_SHA, venv-e4b: transformers 5.18.0 / bitsandbytes 0.50.2 /
-# peft 0.21.2), Unsloth (the REGISTERED versions, not PyPI-latest: unsloth[cu128-torch280]==2026.9.14 + unsloth_zoo==2026.9.9,
-# venv-unsloth), plain HF+PEFT+bnb (venv-e4b). axolotl and Unsloth native-best: TODO hooks (see tc1_family).
+# peft 0.21.2), plain HF+PEFT+bnb (venv-e4b), Unsloth at the REGISTERED versions (unsloth 2026.9.14 + unsloth_zoo 2026.9.9) in
+# TWO venvs -- venv-unsloth-t28 = tp4's install on the image's torch 2.8.0+cu128, venv-unsloth = unsloth[cu130-torch2121]
+# (torch 2.12.1+cu130, the route its installer names for Blackwell; UPSTREAM-NOTES "Unsloth") -- and axolotl 0.20.0 in
+# venv-axolotl (uv, CPython 3.12, torch 2.14.1+cu130: torch >= 2.13 Linux wheels exist only under cu130). Every cu130 venv
+# is gated on the host driver >= 580 (checked BEFORE any install); below it the arms that need one are `refused` rows that
+# name the driver -- never a silent fallback to the t28 venv.
 set -uo pipefail
 LANE=tc1; W=/root/$LANE; mkdir -p $W/logs $W/adapters $W/data; cd $W || exit 9
 say(){ echo "[$(date -u +%FT%TZ)] tc1/box${TC1_BOX:-?}: $*"; }
@@ -53,6 +57,12 @@ case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "BOX REFUSED: gpu '$GPU_NAME' is n
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
 MIN_DISK_GB=${TC1_MIN_DISK_GB:-200}; FREE_GB=$(df -BG --output=avail /root 2>/dev/null | tail -1 | tr -dc 0-9)
 if [ "${FREE_GB:-0}" -lt "$MIN_DISK_GB" ]; then say "BOX REFUSED: ${FREE_GB:-?} GB free on /root < ${MIN_DISK_GB} GB (instance overlay too small for the checkpoints -- host-limited)"; echo "BOX_REFUSED disk=${FREE_GB:-?}GB" >> summary.txt; finish 13; fi
+# cu130 wheels (torch 2.12.1 / 2.14.1) need an NVIDIA driver >= 580: checked here, before any install; recorded in summary.txt
+DRIVER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d ' '); DRIVER_MAJOR=${DRIVER%%.*}
+CU130_OK=1; case "$DRIVER_MAJOR" in ''|*[!0-9]*) CU130_OK=0;; *) [ "$DRIVER_MAJOR" -ge 580 ] || CU130_OK=0;; esac
+CU130_REASON="cu130 wheels need driver >= 580; host has ${DRIVER:-unknown}"
+[ "$CU130_OK" = 1 ] && say "driver $DRIVER: cu130 venvs (venv-unsloth, venv-axolotl) will be built" || say "driver ${DRIVER:-unknown}: $CU130_REASON -- venv-unsloth (cu130) and venv-axolotl are NOT built; their arms are refused rows"
+echo "DRIVER $DRIVER cu130_ok=$CU130_OK" | tee -a summary.txt
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,power.limit,clocks.max.sm --format=csv,noheader | tee forensics.txt
 lscpu | grep -E "Model name|^CPU\(s\)" | tee -a forensics.txt; grep MemTotal /proc/meminfo | tee -a forensics.txt; cat /sys/fs/cgroup/memory.max 2>/dev/null | sed "s/^/cgroup memory.max /" | tee -a forensics.txt; df -h /root | tail -1 | tee -a forensics.txt
 python3 - "$TC1_BOX" "$TC1_RUN_ID" "$TC1_INSTANCE_ID" "$GPU_NAME" <<'PYB' > box.json
@@ -72,7 +82,7 @@ alarm_for(){ local want=$1 l; l=$(( $(left) - 900 )); [ "$l" -lt "$want" ] && wa
 can_run(){ local need=$1 name=$2; [ $(( $(left) - 900 )) -ge "$need" ] && return 0; say "STOP-DEADLINE: $name needs ${need}s, $(left)s left -- skipped (host-limited)"; echo "SKIPPED $name host-limited deadline" >> summary.txt; return 1; }
 # ---------------------------------------------------------------- installs
 export DEBIAN_FRONTEND=noninteractive
-PY_E4B=$W/venv-e4b/bin/python; PY_UNS=$W/venv-unsloth/bin/python
+PY_E4B=$W/venv-e4b/bin/python; PY_UNS=$W/venv-unsloth/bin/python; PY_UNS_T28=$W/venv-unsloth-t28/bin/python; PY_AX=$W/venv-axolotl/bin/python
 say "venv-e4b (system torch): e4b @$E4B_SHA + gnf4 @$GNF4_SHA + transformers==$TF_VER bitsandbytes==$BNB_VER peft==$PEFT_VER"
 python -m venv --system-site-packages $W/venv-e4b || { say "VENV FAIL (e4b)"; finish 9; }
 perl -e 'alarm 2400; exec @ARGV' $PY_E4B -m pip install -q --no-input --prefer-binary \
@@ -102,16 +112,28 @@ open("/root/tc1/versions.txt", "a").write(f"e4b {e.__version__} @{ce} (GitHub ma
                                           f"transformers(e4b/hf) {transformers.__version__}\nbitsandbytes(e4b/hf) {bitsandbytes.__version__}\npeft(hf) {peft.__version__}\n")
 PYT
 tail -1 logs/tripwire_e4b.log
-# Unsloth: the REGISTERED versions (TC1-PREREG "Environments": unsloth[cu128-torch280]==2026.9.14 + unsloth_zoo==2026.9.9), its own venv,
-# NO transformers/bnb/peft pins from us (P38 amendment 1); torchao removed on the ScalingType tripwire (P38 amendment 2)
+# Unsloth: the REGISTERED versions (TC1-PREREG "Environments": unsloth 2026.9.14 + unsloth_zoo 2026.9.9), NO transformers/bnb/peft
+# pins from us (P38 amendment 1); torchao removed on the ScalingType tripwire (P38 amendment 2). TWO venvs (phase 2):
+#   venv-unsloth-t28  unsloth[cu128-torch280]  -- tp4's install on the image's torch 2.8.0+cu128 (the field-image row, `ckpt_unsloth_t28`)
+#   venv-unsloth      unsloth[cu130-torch2121] -- torch 2.12.1+cu130 (needs driver >= 580; UPSTREAM-NOTES "Unsloth": _auto_install.py:44),
+#                     where torch._grouped_mm runs on sm_120 and the grouped_mm backend can engage (moe_utils.py:374-378)
 UNS_VER=${TC1_UNSLOTH_VERSION:-2026.9.14}; ZOO_VER=${TC1_UNSLOTH_ZOO_VERSION:-2026.9.9}
-UNS_OK=1
-say "venv-unsloth: unsloth[cu128-torch280]==$UNS_VER unsloth_zoo==$ZOO_VER"
-python -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir \
-  "unsloth[cu128-torch280]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth.log 2>&1
-rc=$?; echo "pip(unsloth) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth.log; echo "PIP FAIL (unsloth) -- other arms still run; Unsloth rows = install_failed"; UNS_OK=0; }
+UNS_T28_OK=1
+say "venv-unsloth-t28: unsloth[cu128-torch280]==$UNS_VER unsloth_zoo==$ZOO_VER (the image's torch 2.8.0+cu128)"
+python -m venv $W/venv-unsloth-t28 && perl -e 'alarm 2700; exec @ARGV' $PY_UNS_T28 -m pip install -q --no-input --no-cache-dir \
+  "unsloth[cu128-torch280]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth_t28.log 2>&1
+rc=$?; echo "pip(unsloth-t28) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth_t28.log; echo "PIP FAIL (unsloth-t28) -- its rows = install_failed"; UNS_T28_OK=0; }
+UNS_OK=0
+if [ "$CU130_OK" = 1 ]; then
+  UNS_OK=1; say "venv-unsloth: unsloth[cu130-torch2121]==$UNS_VER unsloth_zoo==$ZOO_VER (torch 2.12.1+cu130)"
+  python -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir \
+    "unsloth[cu130-torch2121]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth.log 2>&1
+  rc=$?; echo "pip(unsloth) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth.log; echo "PIP FAIL (unsloth cu130) -- its rows = install_failed"; UNS_OK=0; }
+else
+  say "venv-unsloth (cu130) SKIPPED: $CU130_REASON"
+fi
 cat > $W/tripwire_unsloth.py <<'PYU'
-import importlib.metadata as md, torch, transformers, bitsandbytes, peft
+import importlib.metadata as md, os, torch, transformers, bitsandbytes, peft
 import unsloth, unsloth_zoo
 from unsloth import FastLanguageModel
 from unsloth_zoo.temporary_patches.common import is_transformers_v5_moe_quantization_available
@@ -128,21 +150,52 @@ try:
     tao = md.version("torchao")
 except Exception: pass
 fm = hasattr(unsloth, "FastModel")
-print("tc1 tripwire OK (unsloth):", unsloth.__version__, "zoo", unsloth_zoo.__version__, "torch", torch.__version__, "triton", tri, "transformers", transformers.__version__,
+tag = os.environ.get("TC1_VENV_TAG", "unsloth")          # phase 2: one tripwire per Unsloth venv, lines suffixed with the venv
+print(f"tc1 tripwire OK ({tag}):", unsloth.__version__, "zoo", unsloth_zoo.__version__, "torch", torch.__version__, "triton", tri, "transformers", transformers.__version__,
       "bnb", bitsandbytes.__version__, "peft", peft.__version__, "torchao", tao, "moe_backend", select_moe_backend(), "separated_lora", _should_use_separated_lora(), "FastModel", fm)
-open("/root/tc1/versions.txt", "a").write(f"unsloth {unsloth.__version__}\nunsloth_zoo {unsloth_zoo.__version__}\ntorch(unsloth) {torch.__version__}\ntriton(unsloth) {tri}\n"
-                                          f"transformers(unsloth) {transformers.__version__}\nbitsandbytes(unsloth) {bitsandbytes.__version__}\npeft(unsloth) {peft.__version__}\ntorchao {tao}\nmoe_backend {select_moe_backend()}\n")
+open("/root/tc1/versions.txt", "a").write(f"unsloth({tag}) {unsloth.__version__}\nunsloth_zoo({tag}) {unsloth_zoo.__version__}\ntorch({tag}) {torch.__version__}\ntriton({tag}) {tri}\n"
+                                          f"transformers({tag}) {transformers.__version__}\nbitsandbytes({tag}) {bitsandbytes.__version__}\npeft({tag}) {peft.__version__}\ntorchao({tag}) {tao}\nmoe_backend({tag}) {select_moe_backend()}\n")
 PYU
-if [ "$UNS_OK" = 1 ]; then
-  $PY_UNS $W/tripwire_unsloth.py > logs/tripwire_unsloth.log 2>&1; trc=$?
-  if [ $trc -ne 0 ] && grep -q "ScalingType" logs/tripwire_unsloth.log; then
-    say "tripwire(unsloth) failed on ScalingType -> removing torchao (P38 amendment 2)"; cp logs/tripwire_unsloth.log logs/tripwire_unsloth.attempt1.log
-    $PY_UNS -m pip uninstall -y -q torchao > logs/pip_unsloth_torchao_removed.log 2>&1
-    echo "AMENDMENT-CLASS (P38 amendment 2): torchao removed from venv-unsloth after the tripwire failed on ScalingType" | tee -a summary.txt
-    $PY_UNS $W/tripwire_unsloth.py > logs/tripwire_unsloth.log 2>&1; trc=$?
+# tripwire_unsloth VENV_TAG PY OK_VAR: the import tripwire for one Unsloth venv (torchao removed once on ScalingType, P38 amendment 2)
+tripwire_unsloth(){ local TAG=$1 PY=$2 ok=1
+  TC1_VENV_TAG=$TAG $PY $W/tripwire_unsloth.py > logs/tripwire_$TAG.log 2>&1; local trc=$?
+  if [ $trc -ne 0 ] && grep -q "ScalingType" logs/tripwire_$TAG.log; then
+    say "tripwire($TAG) failed on ScalingType -> removing torchao (P38 amendment 2)"; cp logs/tripwire_$TAG.log logs/tripwire_$TAG.attempt1.log
+    $PY -m pip uninstall -y -q torchao > logs/pip_${TAG}_torchao_removed.log 2>&1
+    echo "AMENDMENT-CLASS (P38 amendment 2): torchao removed from $TAG after the tripwire failed on ScalingType" | tee -a summary.txt
+    TC1_VENV_TAG=$TAG $PY $W/tripwire_unsloth.py > logs/tripwire_$TAG.log 2>&1; trc=$?
   fi
-  [ $trc -ne 0 ] && { echo "TRIPWIRE FAIL (unsloth) -- other arms still run; Unsloth rows = install_failed"; tail -5 logs/tripwire_unsloth.log; UNS_OK=0; }
-  tail -1 logs/tripwire_unsloth.log
+  [ $trc -ne 0 ] && { echo "TRIPWIRE FAIL ($TAG) -- other arms still run; its Unsloth rows = install_failed"; tail -5 logs/tripwire_$TAG.log; ok=0; }
+  tail -1 logs/tripwire_$TAG.log; return $(( 1 - ok )); }
+[ "$UNS_T28_OK" = 1 ] && { tripwire_unsloth unsloth-t28 $PY_UNS_T28 || UNS_T28_OK=0; }
+[ "$UNS_OK" = 1 ] && { tripwire_unsloth unsloth $PY_UNS || UNS_OK=0; }
+# ---------------------------------------------------------------- axolotl 0.20.0 (phase 2, axolotl-arm-spec.md): its own venv, uv, CPython 3.12, torch cu130
+# Pins (wheel METADATA): python >= 3.12, torch >= 2.13.0 <= 2.14.0, transformers == 5.17.0, peft == 0.21.0, bitsandbytes == 0.50.2.
+# torch >= 2.13 Linux cp312 wheels exist only under /whl/cu130 (verified 2026-10-01 by the coordinator), so the driver gate above applies.
+AX_VER=${TC1_AXOLOTL_VERSION:-0.20.0}; AX_OK=0; AX_REASON=""
+if [ "$CU130_OK" != 1 ]; then
+  AX_REASON="$CU130_REASON"; say "venv-axolotl SKIPPED: $AX_REASON -- its arms are refused rows"
+else
+  say "venv-axolotl: uv venv --python 3.12 + axolotl==$AX_VER --extra-index-url https://download.pytorch.org/whl/cu130 (alarm 2700 s)"
+  python -m pip install -q --no-input uv > logs/pip_uv.log 2>&1 && python -m uv venv --python 3.12 $W/venv-axolotl > logs/uv_venv_axolotl.log 2>&1 \
+    && perl -e 'alarm 2700; exec @ARGV' python -m uv pip install --python $PY_AX "axolotl==$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 > logs/pip_axolotl.log 2>&1
+  rc=$?; echo "pip(axolotl) rc=$rc"
+  if [ $rc -ne 0 ]; then tail -6 logs/pip_axolotl.log; AX_REASON="axolotl venv install failed rc=$rc (logs/pip_axolotl.log): $(tail -3 logs/pip_axolotl.log 2>/dev/null | tr '\n' ' ' | cut -c1-300)"; echo "PIP FAIL (axolotl) -- its rows = install_failed"
+  else
+    $PY_AX - <<'PYA' > logs/tripwire_axolotl.log 2>&1; trc=$?
+import importlib.metadata as md, torch, transformers, peft, bitsandbytes
+import axolotl
+from axolotl.cli.config import load_cfg
+from axolotl.loaders import ModelLoader, load_tokenizer
+from axolotl.monkeypatch.moe_quant import get_moe_quantized_count, patch_moe_quantization_on_load
+from axolotl.integrations.base import PluginManager
+from bitsandbytes.nn.parametrize import replace_parameter_4bit
+assert torch.cuda.is_available(), "no CUDA in venv-axolotl"
+print("tc1 tripwire OK (axolotl):", md.version("axolotl"), "torch", torch.__version__, "transformers", transformers.__version__, "peft", peft.__version__, "bnb", bitsandbytes.__version__, "python", __import__("sys").version.split()[0])
+open("/root/tc1/versions.txt", "a").write(f"axolotl {md.version('axolotl')}\ntorch(axolotl) {torch.__version__}\ntransformers(axolotl) {transformers.__version__}\npeft(axolotl) {peft.__version__}\nbitsandbytes(axolotl) {bitsandbytes.__version__}\npython(axolotl) {__import__('sys').version.split()[0]}\n")
+PYA
+    if [ $trc -ne 0 ]; then tail -5 logs/tripwire_axolotl.log; AX_REASON="axolotl tripwire failed (logs/tripwire_axolotl.log): $(tail -2 logs/tripwire_axolotl.log | tr '\n' ' ' | cut -c1-300)"; echo "TRIPWIRE FAIL (axolotl) -- its rows = install_failed"; else AX_OK=1; tail -1 logs/tripwire_axolotl.log; fi
+  fi
 fi
 # ---------------------------------------------------------------- the fixed texts: Alpaca (field recipe) + clinical (the anchor pair only)
 say "dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)"
@@ -213,8 +266,21 @@ PYE
 # arm FAM FW TAG ARM ALARM MID REV OFFLOAD RECIPE(field|anchor|mb1) TOK TOK_SHA [extra args...]: one process, one JSON, one alarm
 arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK=${10} TOK_SHA=${11}; shift 11
   { skip $FAM || skip $FAM/$FW/$TAG; } && { say "skip $FAM/$FW/$TAG"; stubw $FAM $FW $TAG $ARM not_run "skipped by TC1_SKIP"; return 0; }
-  local PY=$PY_E4B; [ "$FW" = unsloth ] && PY=$PY_UNS
-  if [ "$FW" = unsloth ] && [ "$UNS_OK" != 1 ]; then stubw $FAM $FW $TAG $ARM install_failed "unsloth venv did not install/import (logs/pip_unsloth.log, logs/tripwire_unsloth.log)"; return 0; fi
+  # phase 2: the interpreter per framework; UNS_VENV=t28 (a prefix assignment on the call) selects tp4's torch-2.8 venv for an
+  # Unsloth arm, else the cu130 venv. A cu130 venv the driver gate refused -> `refused` rows naming the driver; a venv that
+  # did not install/import -> `install_failed` rows. Never a silent fallback to the other venv.
+  local PY=$PY_E4B
+  if [ "$FW" = unsloth ]; then
+    if [ "${UNS_VENV:-cu130}" = t28 ]; then PY=$PY_UNS_T28
+      [ "$UNS_T28_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "venv-unsloth-t28 did not install/import (logs/pip_unsloth_t28.log, logs/tripwire_unsloth-t28.log)"; return 0; }
+    else PY=$PY_UNS
+      [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-unsloth (cu130-torch2121)"}'; return 0; }
+      [ "$UNS_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "venv-unsloth (cu130) did not install/import (logs/pip_unsloth.log, logs/tripwire_unsloth.log)"; return 0; }
+    fi
+  elif [ "$FW" = axolotl ]; then PY=$PY_AX
+    [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-axolotl (torch cu130)"}'; return 0; }
+    [ "$AX_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$AX_REASON"; return 0; }
+  fi
   local s=$STEPS q=$SEQ m=$MB ac=$ACCUM r=$R al=$ALPHA lr=$LR wd=$WD wu=$WARMUP sc=$SCHED op=$OPTIM sd=$SEED en=$EVAL_N ee=$EVAL_EVERY ex_tag=fused_attn4_m
   case "$RECIPE" in
     mb1)    m=1; ac=$(( MB * ACCUM )); ex_tag=fused_attn4_m_mb1;;
@@ -265,7 +331,7 @@ dmon_stop(){ kill $1 2>/dev/null; wait $1 2>/dev/null; }
 # draw2 FAM FW TAG ARM ...: the SECOND draw of an arm -- the same invocation, the same everything, a fresh process, tag <TAG>_d2.
 # The reducer reads the pair as one arm with two draws (median over both; STABILITY = |d1-d2|/mean <= 5 % e4b / 10 % others).
 draw2(){ local FAM=$1 FW=$2 TAG=$3; shift 3; arm "$FAM" "$FW" "${TAG}_d2" "$@"; }
-# todo_arm FAM FW TAG ARM: an arm this harness cut does not implement yet -- a not_run row with the reason, never a silent omission.
+# todo_arm FAM FW TAG ARM: an arm this harness cut does not implement yet -- a not_run row with the reason, never a silent omission (unused since phase 2; kept for the next cut).
 todo_arm(){ stubw "$1" "$2" "$3" "$4" not_run "arm not yet implemented (TC1 follow-up)"; }
 UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"     # the notebooks' seven targets (TC1-PREREG arm 2)
 PROFILE_STEPS=${TC1_PROFILE_STEPS:-3}; PROFILE_WARM=${TC1_PROFILE_WARM:-3}   # arm 10: P45's instrument, 3 warm + 3 profiled
@@ -274,7 +340,7 @@ PROFILE_STEPS=${TC1_PROFILE_STEPS:-3}; PROFILE_WARM=${TC1_PROFILE_WARM:-3}   # a
 #   6 axolotl/ckpt_axolotl_m (+6b ckpt_axolotl_best)  7 unsloth/ckpt_unsloth_best  8 e4b/fused_attn4_shipped
 #   9 e4b/reference_attn4_m  10 unsloth/ckpt_unsloth_prof  then the _mb1 secondary pair when a primary matched arm OOMed.
 tc1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8 RAL=$9 PAL=${TC1_PROF_ALARM:-${10}}
-  local ALL="e4b:fused_attn4_m:fused unsloth:ckpt_unsloth_m:unsloth e4b:fused_attn4_m_d2:fused unsloth:ckpt_unsloth_m_d2:unsloth hf:hf_peft_m:hf axolotl:ckpt_axolotl_m:axolotl axolotl:ckpt_axolotl_best:axolotl unsloth:ckpt_unsloth_best:unsloth e4b:fused_attn4_shipped:fused e4b:reference_attn4_m:reference unsloth:ckpt_unsloth_prof:unsloth"
+  local ALL="e4b:fused_attn4_m:fused unsloth:ckpt_unsloth_m:unsloth e4b:fused_attn4_m_d2:fused unsloth:ckpt_unsloth_m_d2:unsloth hf:hf_peft_m:hf axolotl:ckpt_axolotl_m:axolotl axolotl:ckpt_axolotl_best:axolotl unsloth:ckpt_unsloth_best:unsloth unsloth:ckpt_unsloth_t28:unsloth unsloth:ckpt_unsloth_triton:unsloth e4b:fused_attn4_shipped:fused e4b:reference_attn4_m:reference unsloth:ckpt_unsloth_prof:unsloth"
   stub_all(){ local st=$1 why=$2 t fw tag arm; for t in $ALL; do IFS=: read -r fw tag arm <<< "$t"; stubw $FAM $fw $tag $arm $st "$why"; done; }
   if skip $FAM; then say "skip family $FAM (TC1_SKIP)"; stub_all not_run "family skipped by TC1_SKIP"; return 0; fi
   say "===== family $FAM ($MID @ $REV; matched seed $MATCHED_SEED; alarms e4b $EAL unsloth $UAL hf $HAL axolotl $AAL reference $RAL prof $PAL)"
@@ -289,26 +355,30 @@ tc1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8 RAL=
   local TS; TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS" | tee -a summary.txt
   local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"      # the matched set (TC1-PREREG "Arms" 1-6, 9, 10)
   local NATIVE="--adapter-dtype native --lora-init native"                 # the native-best rows (7, 8)
-  # 1-4: the matched primary pair, INTERLEAVED draws (e4b d1, Unsloth d1, e4b d2, Unsloth d2)
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"                   # the notebooks' recipe (tp4's arm); double-quant OFF is the arm's default
+  # 1-4: the matched primary pair, INTERLEAVED draws (e4b d1, Unsloth d1, e4b d2, Unsloth d2); Unsloth on the cu130 venv with the grouped_mm backend requested
   can_run 600 $FAM/e4b/fused_m    && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
-  can_run 600 $FAM/unsloth/m      && arm   $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS --grad-ckpt unsloth --unsloth-targets "$UT7" $MATCH
+  can_run 600 $FAM/unsloth/m      && arm   $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
   can_run 600 $FAM/e4b/fused_m_d2 && draw2 $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
-  can_run 600 $FAM/unsloth/m_d2   && draw2 $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS --grad-ckpt unsloth --unsloth-targets "$UT7" $MATCH
+  can_run 600 $FAM/unsloth/m_d2   && draw2 $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
   # 5: plain HF+PEFT+bnb, matched
   can_run 600 $FAM/hf/m           && arm   $FAM hf hf_peft_m hf $HAL "$MID" $REV 0 field $TOK $TS $MATCH
-  # 6 / 6b: axolotl -- TODO(TC1 follow-up): `--framework axolotl` (load_axolotl, its uv-built venv, alarm $AAL) lands with the
-  # upstream inspection (bench/tc1/UPSTREAM-NOTES.md); until then each is a not_run row so the table never silently lacks it.
-  todo_arm $FAM axolotl ckpt_axolotl_m axolotl
-  todo_arm $FAM axolotl ckpt_axolotl_best axolotl
-  # 7: Unsloth native-best -- TODO(TC1 follow-up): its backend / checkpoint knobs come from UPSTREAM-NOTES.md (TC1-PREREG arm 7).
-  todo_arm $FAM unsloth ckpt_unsloth_best unsloth
+  # 6 / 6b: axolotl 0.20.0 under this loop (axolotl-arm-spec.md): plain quantize_moe_experts, matched; then KernelsPlugin + scattermoe + moe_bnb_fast, native init
+  can_run 600 $FAM/axolotl/m      && arm   $FAM axolotl ckpt_axolotl_m axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json $MATCH
+  can_run 600 $FAM/axolotl/best   && arm   $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native
+  # 7: Unsloth native-best (cu130 venv, grouped_mm, speed tilt: UNSLOTH_MOE_RECOMPUTE=0 UNSLOTH_MOE_GC_REPLAY_PIN=1), native init, fp32 adapters as tp4 cast them
+  can_run 600 $FAM/unsloth/best   && arm   $FAM unsloth ckpt_unsloth_best unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm --unsloth-speed-tilt 1 --adapter-dtype fp32 --lora-init native
+  # 7b: the field-image row -- tp4's venv (torch 2.8.0+cu128), the loader's default backend, matched init, fp32 (labelled, never the quoted position)
+  can_run 600 $FAM/unsloth/t28    && UNS_VENV=t28 arm $FAM unsloth ckpt_unsloth_t28 unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend default $MATCH
+  # 7c: the Triton grouped-GEMM backend requested (labelled; if its counters show no Triton calls the receipt stands as what ran)
+  can_run 600 $FAM/unsloth/triton && arm   $FAM unsloth ckpt_unsloth_triton unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend unsloth_triton $MATCH
   # 8: e4b exactly as load_moe_4bit_streaming builds it (bf16 expert adapters, N(0, 1/r) init): tp4's arm, native
   can_run 600 $FAM/e4b/shipped    && arm   $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   # 9: the per-expert reference, matched: the parity control AND the equivalence anchor
   can_run 900 $FAM/e4b/reference_m && arm  $FAM e4b reference_attn4_m reference $RAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
   # 10: the matched Unsloth arm profiled (P45's instrument) with `nvidia-smi dmon` beside it; `arm` writes the install_failed row itself when the venv is absent
   local dp; dp=$(dmon_start ${FAM}_unsloth_ckpt_unsloth_prof)
-  can_run 600 $FAM/unsloth/prof   && arm   $FAM unsloth ckpt_unsloth_prof unsloth $PAL "$MID" $REV 0 field $TOK $TS --grad-ckpt unsloth --unsloth-targets "$UT7" $MATCH --log-every 1 --microbatch-timing 1 --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM
+  can_run 600 $FAM/unsloth/prof   && arm   $FAM unsloth ckpt_unsloth_prof unsloth $PAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH --log-every 1 --microbatch-timing 1 --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM
   dmon_stop $dp
   for f in $W/logs/dmon_*.txt; do [ -s "$f" ] && echo "DMON $(basename $f) $(wc -l < $f) samples" >> summary.txt; done
   # the secondary pair (TC1-PREREG "Arms"): micro-batch 1 x accum 8 -- same tokens per step -- for any framework whose primary matched arm OOMed, as tp4
@@ -316,7 +386,7 @@ tc1_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8 RAL=
   if [ "$se" = oom ] || [ "$su" = oom ] || [ "$sh" = oom ]; then
     echo "SECONDARY $FAM: a primary matched arm OOMed (e4b=$se unsloth=$su hf=$sh) -> mb1 pair" | tee -a summary.txt
     can_run 600 $FAM/e4b/fused_m_mb1 && arm $FAM e4b fused_attn4_m_mb1 fused $EAL "$MID" $REV 0 mb1 $TOK $TS --attn-4bit 1 $MATCH
-    can_run 600 $FAM/unsloth/m_mb1   && arm $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS --grad-ckpt unsloth --unsloth-targets "$UT7" $MATCH
+    can_run 600 $FAM/unsloth/m_mb1   && arm $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
     [ "$sh" = oom ] && can_run 600 $FAM/hf/m_mb1 && arm $FAM hf hf_peft_m_mb1 hf $HAL "$MID" $REV 0 mb1 $TOK $TS $MATCH
   fi
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
@@ -331,5 +401,7 @@ esac; done
 say "reduce"
 $PY_E4B $W/tc1_reduce.py $W --md $W/RESULTS-tc1.md --steps $STEPS > RESULTS.txt 2>&1; tail -40 RESULTS.txt
 echo "----- summary.txt -----"; cat summary.txt; echo "----- versions.txt -----"; cat versions.txt
-[ "$UNS_OK" = 1 ] || echo "NO UNSLOTH COMPARATOR on this box: the Unsloth side did not install/import (rows = install_failed)" | tee -a summary.txt
+[ "$UNS_OK" = 1 ] || echo "NO cu130 UNSLOTH COMPARATOR on this box (venv-unsloth: ${CU130_OK:-?} driver gate, install ok=$UNS_OK): its rows are refused/install_failed" | tee -a summary.txt
+[ "$UNS_T28_OK" = 1 ] || echo "NO torch-2.8 UNSLOTH ROW on this box (venv-unsloth-t28 did not install/import)" | tee -a summary.txt
+[ "$AX_OK" = 1 ] || echo "NO AXOLOTL on this box: $AX_REASON" | tee -a summary.txt
 finish 0
