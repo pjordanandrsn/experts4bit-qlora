@@ -7542,6 +7542,35 @@
         "receipts/experts4bit-qlora/2026-10-01/p91-5090-1/ (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #825; descriptive census, READ. Its registered decision names the NF4 grouped small-M kernel (share >= 40 % in either family). Predictions: Granite 40-60 % (61.7, just above), OLMoE 50-70 % (71.9, just above), B=1 30-50 % (50.7 / 45.7), censuses within 5 % (three of four; OLMoE B=1 -8.7 %, inside the registered 10 %). Lane cost $0.0801."
+    },
+    {
+      "id": "e4b.serve.p92.nf4-families.k25-b16.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P92, one RTX 5090: K25 (E4B_NF4_GROUPED_SMALLM=1) takes Granite r12epi's B=16 step 10.529 -> 9.865 ms (0.937x; bar 0.95) with K8 -0.023 / +0.016 ppl (wikitext / c4val1; bar |0.05|), but OLMoE nf4's 14.355 -> 14.694 ms (1.024x) with its c4val1 K8 moved -0.107 ppl (QUALITY_FAIL); K25's own GEMM runs within 4 % of the served NF4 GEMM, so the default stays 0.",
+      "value": 0.937,
+      "unit": "ON/OFF B=16 step ratio, Granite (mean of two draws)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05, 575 W), one rented Vast.ai verified/secure host (instance 53730237, Intel Xeon E5-2698 v4), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b 0.37.8 @a626ae3 + grouped-nf4-gemm @8cc3510 (K25); Granite @a0278068 with r12epi, OLMoE @7f1c97f4 with nf4, envs = bench/p44/serve_stack.py arm_env; OFF E4B_NF4_GROUPED_SMALLM=0, ON =1 (T == 1 included) with the lean glue at auto; P91's harness (bench/p39/step_decomp.py + bench/p42 hook), graph-window timing, prompt 512, 128 tokens, B=16 two draws per arm (draw 1 censused), B=1 one draw (censused); K8 = P44-a's arm, 2048 steps, eager B=1 loop, wikitext and c4val1, k8_gate uncalibrated (|d| <= 0.05 ppl); on-card premise (K25 row-exact 4 passed, K25 contract compiled 28 passed); engagement held in every census; verdict by bench/p92/p92_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p92/RESULTS-p92.md",
+        "bench/p92/PREREG-p92.md",
+        "bench/p92/p92_reduce.py",
+        "bench/p92/receipts/p92-5090-2/verdict.json",
+        "bench/p92/receipts/p92-5090-2/logs/census_granite_off_b16_d1.txt",
+        "bench/p92/receipts/p92-5090-2/logs/census_granite_on_b16_d1.txt",
+        "bench/p92/receipts/p92-5090-2/logs/census_olmoe_off_b16_d1.txt",
+        "bench/p92/receipts/p92-5090-2/logs/census_olmoe_on_b16_d1.txt",
+        "bench/p92/receipts/p92-5090-2/olmoe_k8_on_c4val1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p92-5090-2/ (receipt.json, teardown-proof.json); the NOT_RUN p92-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #828. Verdict granite=LICENSED olmoe=QUALITY_FAIL; the registered consequence moves the default only when both families read LICENSED, so E4B_NF4_GROUPED_SMALLM stays 0 (auto is an opt-in measured on Granite r12epi). Census: Granite's gain is the glue the lean route folds away (about 0.35 ms/step); K25 6.464 vs the served 6.602 ms on Granite, 10.852 vs 10.388 on OLMoE. This host read OFF about 15 % slower than P91's; ratios are within one box."
     }
   ]
 }

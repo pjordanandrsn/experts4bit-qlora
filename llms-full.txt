@@ -2474,6 +2474,9 @@ row's label predates the two-text clause; its calibrated attention is refused
 on this family); on both families' position configs the NF4 grouped expert GEMM is 61.7 % (Granite) and 71.9 %
 (OLMoE) of B=16 decode kernel time (P91, descriptive, licenses nothing;
 `e4b.serve.p91.nf4-families.kernel-census.5090.2026-10-01`), so the next family lane is an NF4 grouped small-M kernel;
+that kernel (K25, `E4B_NF4_GROUPED_SMALLM`, default `0`) reads ×0.937 at B=16 on Granite with K8 inside the gate, and
+QUALITY_FAIL on OLMoE (c4val1 K8 −0.107 ppl, step ×1.024); its own GEMM runs within 4 % of the served one (P92,
+`e4b.serve.p92.nf4-families.k25-b16.5090.2026-10-01`);
 **gpt-oss's quoted best is its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970; with K21 serving the store's batched rows, its B=16 step reads
 ×0.581 against the NF4 fallback, at a lower KL from the reference (0.00147 vs 0.00192;
@@ -3508,6 +3511,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01 [measured]: Lane P89, one RTX 5090: K23's lean glue (E4B_INT4_LEAN_GLUE=1) takes the int4 B=16 step 10.321 -> 9.805 ms (0.950x; bar 0.97), tokens identical in all 16 rows of both draw pairs, 336 fewer launches per step.
 - e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01 [measured]: Lane P90: K21 on gpt-oss-20b's native MXFP4 store (E4B_MXFP4_GROUPED_SMALLM=1) takes the B=16 step on an RTX 5090 22.511 -> 13.086 ms (0.581x; bar 0.90); the store's KL from the dequant reference 0.00192 -> 0.00147 nats, top-1 0.9814 -> 0.9840 (H100 NVL); B=1 1.075x slower, so T > 1 only.
 - e4b.serve.p91.nf4-families.kernel-census.5090.2026-10-01 [measured]: Lane P91, one RTX 5090, each family's position config: the NF4 grouped expert GEMM is 61.7 % (Granite r12epi, 5.48 of 8.87 ms) and 71.9 % (OLMoE nf4, 8.61 of 11.98 ms) of B=16 decode kernel time; the NF4 decode GEMV 50.7 % / 45.7 % at B=1.
+- e4b.serve.p92.nf4-families.k25-b16.5090.2026-10-01 [measured]: Lane P92, one RTX 5090: K25 (E4B_NF4_GROUPED_SMALLM=1) takes Granite r12epi's B=16 step 10.529 -> 9.865 ms (0.937x; bar 0.95) with K8 -0.023 / +0.016 ppl (wikitext / c4val1; bar |0.05|), but OLMoE nf4's 14.355 -> 14.694 ms (1.024x) with its c4val1 K8 moved -0.107 ppl (QUALITY_FAIL); K25's own GEMM runs within 4 % of the served NF4 GEMM, so the default stays 0.
 
 Open items (no evidence either way):
 
@@ -3515,4 +3519,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(269 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(270 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
