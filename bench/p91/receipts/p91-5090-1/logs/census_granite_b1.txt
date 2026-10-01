@@ -1,0 +1,44 @@
+profiled replay steps: 8 (active window: 8/8)
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                      _gemv_nf4_grouped         0.00%       0.000us         0.00%       0.000us       0.000us      13.500ms        50.71%      13.500ms      26.367us           512  
+std::enable_if<!(false), void>::type internal::gemvx...         0.00%       0.000us         0.00%       0.000us       0.000us       2.881ms        10.82%       2.881ms       3.712us           776  
+std::enable_if<!(false), void>::type internal::gemvx...         0.00%       0.000us         0.00%       0.000us       0.000us       2.811ms        10.56%       2.811ms       5.490us           512  
+                                _fp8_paged_decode_split         0.00%       0.000us         0.00%       0.000us       0.000us       2.059ms         7.73%       2.059ms       8.044us           256  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     737.635us         2.77%     737.635us       2.794us           264  
+                                    _fp8_append_t1_side         0.00%       0.000us         0.00%       0.000us       0.000us     684.503us         2.57%     684.503us       1.337us           512  
+                                       _router_epilogue         0.00%       0.000us         0.00%       0.000us       0.000us     619.517us         2.33%     619.517us       2.420us           256  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     422.361us         1.59%     422.361us       0.825us           512  
+                                            _rope_heads         0.00%       0.000us         0.00%       0.000us       0.000us     357.926us         1.34%     357.926us       0.699us           512  
+                                    _rmsnorm_resid_rows         0.00%       0.000us         0.00%       0.000us       0.000us     342.999us         1.29%     342.999us       1.340us           256  
+                                          _rmsnorm_rows         0.00%       0.000us         0.00%       0.000us       0.000us     339.360us         1.27%     339.360us       1.285us           264  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     326.172us         1.23%     326.172us       1.274us           256  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us     266.272us         1.00%     266.272us       1.009us           264  
+void at::native::(anonymous namespace)::indexSelectS...         0.00%       0.000us         0.00%       0.000us       0.000us     254.743us         0.96%     254.743us       0.995us           256  
+                                          _combine_rows         0.00%       0.000us         0.00%       0.000us       0.000us     254.737us         0.96%     254.737us       0.995us           256  
+                                           _swiglu_rows         0.00%       0.000us         0.00%       0.000us       0.000us     195.716us         0.74%     195.716us       0.765us           256  
+                                 _scaled_resid_add_rows         0.00%       0.000us         0.00%       0.000us       0.000us     194.214us         0.73%     194.214us       0.759us           256  
+void at::native::unrolled_elementwise_kernel<at::nat...         0.00%       0.000us         0.00%       0.000us       0.000us      99.607us         0.37%      99.607us       0.778us           128  
+void at::native::reduce_kernel<512, 1, at::native::R...         0.00%       0.000us         0.00%       0.000us       0.000us      74.816us         0.28%      74.816us       9.352us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      52.004us         0.20%      52.004us       0.813us            64  
+void at::native::vectorized_elementwise_kernel<2, at...         0.00%       0.000us         0.00%       0.000us       0.000us      51.648us         0.19%      51.648us       0.807us            64  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      13.379us         0.05%      13.379us       0.836us            16  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us      12.768us         0.05%      12.768us       0.798us            16  
+void gemmk1_kernel<int, float, 256, 5, true, false, ...         0.00%       0.000us         0.00%       0.000us       0.000us       9.887us         0.04%       9.887us       1.236us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       9.569us         0.04%       9.569us       1.196us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       9.569us         0.04%       9.569us       1.196us             8  
+void at::native::vectorized_elementwise_kernel<2, at...         0.00%       0.000us         0.00%       0.000us       0.000us       9.538us         0.04%       9.538us       1.192us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       7.711us         0.03%       7.711us       0.964us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       7.648us         0.03%       7.648us       0.956us             8  
+void at::native::(anonymous namespace)::CatArrayBatc...         0.00%       0.000us         0.00%       0.000us       0.000us       6.464us         0.02%       6.464us       0.808us             8  
+                                          memcpy32_post         0.00%       0.000us         0.00%       0.000us       0.000us       5.634us         0.02%       5.634us       0.704us             8  
+void at::native::vectorized_elementwise_kernel<4, at...         0.00%       0.000us         0.00%       0.000us       0.000us       5.602us         0.02%       5.602us       0.700us             8  
+                                  cudaStreamIsCapturing         0.03%       7.462us         0.03%       7.462us       0.933us       0.000us         0.00%       0.000us       0.000us             8  
+                                Activity Buffer Request         2.31%     656.784us         2.31%     656.784us     656.784us       0.000us         0.00%       0.000us       0.000us             1  
+                                        cudaGraphLaunch        13.35%       3.801ms        13.35%       3.801ms     475.180us       0.000us         0.00%       0.000us       0.000us             8  
+                                   cudaDriverGetVersion         0.00%       0.381us         0.00%       0.381us       0.048us       0.000us         0.00%       0.000us       0.000us             8  
+                                  cudaDeviceSynchronize        84.32%      24.017ms        84.32%      24.017ms      12.009ms       0.000us         0.00%       0.000us       0.000us             2  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 28.483ms
+Self CUDA time total: 26.622ms

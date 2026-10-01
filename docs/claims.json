@@ -7516,6 +7516,32 @@
         "receipts/experts4bit-qlora/2026-10-01/p90-5090-2/ and p90-h100-1/ (receipt.json, teardown-proof.json); the proofs p90-prove-1 and p90-h100-prove-1 and the VOID p90-5090-1 beside them"
       ],
       "notes": "Pre-registered in #817; amendment 1 (#820) moved the KL arms to an H100 NVL after p90-5090-1 read VOID (the ~40 GB bf16 reference does not fit a 5090; speed descriptive x0.584). Predictions: B=16 0.55-0.70 held (0.581); B=1 SLOWER held (1.075); KL(ON) <= KL(OFF) held, top-1 +0.0026 beyond the expected +-0.001 in the good direction. Lane cost $0.9503."
+    },
+    {
+      "id": "e4b.serve.p91.nf4-families.kernel-census.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P91, one RTX 5090, each family's position config: the NF4 grouped expert GEMM is 61.7 % (Granite r12epi, 5.48 of 8.87 ms) and 71.9 % (OLMoE nf4, 8.61 of 11.98 ms) of B=16 decode kernel time; the NF4 decode GEMV 50.7 % / 45.7 % at B=1.",
+      "value": 0.719,
+      "unit": "largest NF4-family share of B=16 kernel time held by _gemm_nf4_grouped (OLMoE)",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02, 475 W), one rented Vast.ai verified/secure host (instance 53718598, machine 150710, AMD EPYC 9655), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b 0.37.8 @facf8da + grouped-nf4-gemm @4cc831c; Granite @a0278068 with r12epi (NF4 experts + round-1/2 folds + router epilogue), OLMoE @7f1c97f4 with nf4, envs = bench/p44/serve_stack.py arm_env; P88's harness (bench/p39/step_decomp.py + bench/p42 hook), graph-window timing, prompt 512, 128 tokens, P42 replay census, one draw per arm; every census within 10 % of its step; descriptive (no change tested); verdict by bench/p91/p91_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p91/RESULTS-p91.md",
+        "bench/p91/PREREG-p91.md",
+        "bench/p91/p91_reduce.py",
+        "bench/p91/receipts/p91-5090-1/verdict.json",
+        "bench/p91/receipts/p91-5090-1/logs/census_granite_b16.txt",
+        "bench/p91/receipts/p91-5090-1/logs/census_olmoe_b16.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p91-5090-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #825; descriptive census, READ. Its registered decision names the NF4 grouped small-M kernel (share >= 40 % in either family). Predictions: Granite 40-60 % (61.7, just above), OLMoE 50-70 % (71.9, just above), B=1 30-50 % (50.7 / 45.7), censuses within 5 % (three of four; OLMoE B=1 -8.7 %, inside the registered 10 %). Lane cost $0.0801."
     }
   ]
 }
