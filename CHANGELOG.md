@@ -372,6 +372,11 @@
   - With identical packs and router setting, P81's box read 6.33015. So on this stack K8 does not reproduce across boxes to five decimals, which the registered table had assumed.
 - Also filed: #784. A lane driver cannot tell a dead box from a silent one, and waited out the whole guard on one.
 
+### `docs/claims.json` is back to two-space indentation, and a test keeps it there; the llms bundle cap is 500,000 bytes (register formatting, tests and bundle config; no row changes)
+
+- #810 re-wrote the register at indent 1. The rows were unchanged, but every line moved, so any open pull request that touched the register conflicted on all of it. It is re-serialised as `json.dumps(indent=2, ensure_ascii=False)` plus a newline, the form it had before #810, with identical content. `tests/test_claims_json_format.py` fails on any other serialisation.
+- `docs/llms-bundle.json`'s `max_bytes` goes from 400,000 to 500,000. The bundle had reached 399,974 bytes, and lanes were shortening register sentences to fit it (#810 did). It has grown by roughly 3–4 KB a day.
+
 ### Owner quotes and name credits removed from the documents (docs only)
 
 - Verbatim chat quotes and name credits are removed from pre-registrations, RESULTS pages, planning documents, the CI workflow comment and one CHANGELOG line. Directives are paraphrased or reduced to their date and record; no criterion, band, measurement or date moved.
