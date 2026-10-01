@@ -47,7 +47,6 @@ fi
 for f in step_decomp.py k8_bake.py calib.json hook/usercustomize.py p92_reduce.py p42_reduce.py test_k25_row_exact_gpu.py staged.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p92/staged.sha256"; finish 9; }
-python $W/p92_reduce.py --self-test | tee -a summary.txt || { say "REDUCER SELF-TEST FAILED"; finish 21; }
 # ---- refusals before anything is installed or fetched: the card class, the disk
 python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null || { say "DUD BOX"; finish 10; }
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,compute_cap --format=csv,noheader | tee forensics.txt
@@ -86,6 +85,8 @@ open("/root/p92/versions.txt", "a").write(f"e4b {e.__version__} @{os.environ['WA
 print("tripwire OK:", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__)
 PYT
 cat versions.txt | tee -a summary.txt
+# the reducer's self-test runs on the INSTALLED experts4bit_qlora.k8_gate, the rule the reduction applies
+python $W/p92_reduce.py --self-test | tee -a summary.txt || { say "REDUCER SELF-TEST FAILED"; finish 21; }
 # ---- the premise, on THIS card, before anything is fetched. (1) e4b's route: a token's K25 rows are bit-equal alone
 # (T == 1) and inside a B=16 step -- without it the B=1 K8 does not stand for the B=16 rows (rc 25). (2) K25's own
 # contract compiled on this card's architecture (sm_120 has never run it; the A2000 is sm_86) (rc 23).
