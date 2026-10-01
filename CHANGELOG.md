@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Lane K27's runner (#564): the K25-tree precision bench's box side (bench and tests only)
+
+- **What.** `bench/k27/` drives grouped-nf4-gemm's K27 (`kernel/PREREG-k27-nf4-tree-precision.md`). It is K26's runner
+  with the bench renamed, plus a tripwire that refuses a kernel package without K25's select-tree decode.
+- **Rehearsed** on the NAS A2000 (marked REHEARSAL): rc 0 through the self-test (9 cases), the premise (30/30) and the
+  bench.
+- `tests/test_k27_staged_pin.py` pins the runner's bytes and shape, the exit codes and the driver's dry run.
+
 ### The K25 route takes the select-tree codebook decode when the kernel package carries it (bit-identical; lane K26)
 
 - **Why.** grouped-nf4-gemm's lane K26 (RTX 5090) read the per-nibble codebook lookup as about 80 % of K25's time. An exact
