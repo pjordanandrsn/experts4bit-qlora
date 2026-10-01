@@ -25,7 +25,7 @@ trap 'finish 130' INT TERM
 for v in P92_RUN_ID P92_DEADLINE_EPOCH P92_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
-GNF4_SHA=fd1474d854d9753836dea30ed6b304154ad8e08a   # grouped-nf4-gemm main at K25's merge (#429); a registered constant
+GNF4_SHA=8cc3510085f329763459d128b3a3b09a822c9951   # grouped-nf4-gemm main at K25's merge (#429); a registered constant
 GR=ibm-granite/granite-3.1-3b-a800m-instruct; GR_REV=a02780686e08a03fe0d2679a293b5c74a90efa89
 OL=allenai/OLMoE-1B-7B-0924-Instruct; OL_REV=7f1c97f440f06ce36705e4f2b843edb5925f4498
 GPU_CLASS=${P92_GPU_CLASS:-5090}; MIN_DISK_GB=${P92_MIN_DISK_GB:-100}; REHEARSAL=${P92_REHEARSAL:-0}
