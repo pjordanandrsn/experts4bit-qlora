@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Lane P91 registered (#564): where do the NF4 families' decode steps go? (bench and tests only)
+
+- **What it is.** A descriptive kernel census of Granite-3.1-3B-A800M (`r12epi`) and OLMoE-1B-7B (`nf4`), each on its
+  licensed NF4 configuration, at B=16 and B=1 on one RTX 5090. P88's harness, P42's replay census.
+- **The rule.** READ if every census reconciles with its step within 10 %. If the NF4 grouped GEMM is at least 40 % of
+  B=16 kernel time in either family, the next lane is an NF4 grouped small-M kernel; otherwise it is the largest
+  non-NF4 kernel family.
+- `tests/test_p91_staged_pin.py` pins:
+  - the staged bytes;
+  - that the families' envs equal `serve_stack.arm_env` at P44's revisions;
+  - the arms;
+  - the exit codes;
+  - the reducer's 8-case self-test;
+  - the driver's dry run.
+
 ### K21 is the default for the MXFP4 store's batched decode rows (`E4B_MXFP4_GROUPED_SMALLM` now defaults to `auto`), as lane P90 licensed
 
 - **P90** (`e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`): gpt-oss-20b's B=16 step went from 22.511 to
