@@ -100,4 +100,22 @@ Unsloth's and axolotl's own trainer loops with packing/padding-free (a different
 
 ## Amendments
 
-(none yet)
+### Amendment 1 (2026-10-01T23:02Z, before any arm has produced a row): the driver floor is a lane refusal and a redraw, not four hours of refused rows
+
+**What the first draws showed.** `tc1-5090-1` / `-2` (22:52Z) were refused by `tc1_drive.sh` before any work: the launch
+command lacked `TC1_BOX=A` (a launch defect, not a harness one; $0.0201 + $0.0120). `tc1-5090-3` (22:55Z, the matched
+box) drew machine 37958 at driver 575.57, the host P86 had already met below the cu130 floor; the run script's gate
+correctly marked `cu130_ok=0` and then continued into the fetch, which under the registration would have produced
+refused rows for the comparator (`ckpt_unsloth_m`), its second draw and both axolotl arms -- a box with no position. It
+was stopped by the operator at 22:58Z ($0.0297, rc 143, teardown proven). `tc1-5090-4` (the native box) failed its
+pre-flight on download bandwidth (19.7 MB/s on machine 147733, $0.0154, teardown proven after a provider 429).
+
+**What was wrong.** The registration's stop rule read "a cu130 driver gate failure is rows, not a relaunch". That is the
+right rule for an arm, and the wrong rule for a floor every judged arm depends on: the launcher already classifies a
+lane's registered host floor (RAM, driver, CPU vendor) as refusal code 18 and excludes that machine on the next draw.
+
+**The amendment.** `tc1_run.sh` refuses with code 18 at the driver gate, before any install or fetch, when the host's
+driver is below 580; the receipt names the machine; the next draw passes it as a lane-refusal exclusion. Nothing in the
+fixture, the arms, the predicates or the bands changes. The four receipts above stay in the ledger as what they are.
+The registered stop rule now reads: a driver below 580 is a code-18 refusal and one redraw with the machine excluded;
+a second refusal in the same day ends the lane's attempts for the day.
