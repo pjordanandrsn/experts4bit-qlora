@@ -124,6 +124,28 @@ def _k21_has_masked_tail(mod) -> bool:
     return "EVEN_K" in (getattr(kern, "arg_names", None) or ())
 
 
+def _k25_mode_env() -> str:
+    """``E4B_NF4_GROUPED_SMALLM`` (K25, grouped-nf4-gemm#429): serves the NF4 store's device-grouped decode rows through
+    K25 -- K19's grouped small-M tensor-core GEMM with the NF4 codebook dequant, over the 16-row device tile table --
+    instead of the served NF4 M-tile GEMM (``gemm_4bit_grouped_captured``, TF32 on fp32-dequantised weights). Lane P91
+    sized it: that GEMM is 62 % (Granite) and 72 % (OLMoE) of B=16 decode kernel time on an RTX 5090. K25's weight
+    operand is the bf16 dequant, not TF32, so no lane has licensed it yet and ``0`` is the default (also when unset):
+    today's NF4 routes. ``auto`` takes K25 for rows above T == 1 when the kernel package carries it and keeps today's
+    routes when it does not; ``1`` requires K25 (absent is a refusal) and routes T == 1 to it too
+    (:func:`_collapsed_grouping`), which is what lets the decode-shaped K8 instrument read the kernel. Anything else is
+    refused."""
+    v = os.environ.get("E4B_NF4_GROUPED_SMALLM", "0").strip().lower() or "0"
+    if v not in ("auto", "0", "1"):
+        raise ValueError(f"E4B_NF4_GROUPED_SMALLM={v!r}: expected 'auto', '0' or '1'")
+    return v
+
+
+#: K25's plan on this route: its kernel default (BLOCK_N 32, KC 256, 4 warps, 2 stages, the paired codebook decode).
+#: No lane has swept it. Every K25 plan and decode compared on the A2000 was bit-identical (grouped-nf4-gemm#429), so
+#: the plan moves no output bit; it is the treatment an end-to-end lane measures.
+_K25_PLAN = {"block_n": 32, "kc": 256, "warps": 4, "stages": 2, "lut": "pair"}
+
+
 def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     """``(singleton_groups, device_grouping)`` for the all-resident collapse at ``T`` tokens.
 
@@ -131,12 +153,14 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     K19's opt-in (``E4B_INT4_GROUPED_SMALLM=1`` with a uniform-int4 store) names every int4 DECODE row, T == 1
     included, so T == 1 takes the device tile table too (capture-legal, no host sync) and its rows reach K19.
     Without that the singleton GEMV would keep T == 1, and K8, which scores through the T == 1 loop, would read
-    the GEMV instead of the kernel it gates (lane P87)."""
+    the GEMV instead of the kernel it gates (lane P87). K21's opt-in does the same on the MXFP4 store, and K25's
+    (``E4B_NF4_GROUPED_SMALLM=1``) on the NF4 store."""
     k19_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
               and _k19_mode_env() == "1")
     k21_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") == "mxfp4"
               and _k21_mode_env() == "1")
-    if k19_t1 or k21_t1:
+    k25_t1 = T == 1 and int4_stores is None and _k25_mode_env() == "1"
+    if k19_t1 or k21_t1 or k25_t1:
         return False, True
     return (T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])), (DEVICE_GROUPING[0] and T > 1)
 
@@ -353,13 +377,29 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             _k19 = None                   # auto: the kernel package predates K19 -> the split-K GEMV, as before
         if _k19 is not None:
             _int4_gemv_decode = False     # take the device-grouping branch: it builds the 16-row tile table
+    # K25 (E4B_NF4_GROUPED_SMALLM, opt-in): the NF4 store's device-grouped decode rows through the grouped small-M
+    # tensor-core GEMM with the NF4 dequant, instead of the served M-tile GEMM. Not under a calibration sink: the sink
+    # reads x_sorted beside sorted_ids, and K25 gathers inside the kernel.
+    _k25 = None
+    _k25_mode = _k25_mode_env()
+    if (int4_stores is None and device_grouping and R_rows <= 256 and _k25_mode != "0"
+            and _CALIB_SINK is None):
+        try:
+            from nf4_smallm import gemm_nf4_grouped_smallm as _k25
+        except ImportError as e:
+            if _k25_mode == "1":
+                raise RuntimeError(
+                    "E4B_NF4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K25 "
+                    "(nf4_smallm.gemm_nf4_grouped_smallm, grouped-nf4-gemm#429)") from e
+            _k25 = None                   # auto: the kernel package predates K25 -> today's NF4 route
+    _small = _k19 if _k19 is not None else _k25
     _fused_tiles = None
-    if _lean_mode != "0" and _k19 is not None and gptoss is None:
+    if _lean_mode != "0" and _small is not None and gptoss is None:
         try:
             from int4_b32 import build_group_tiles_fused as _fused_tiles
         except ImportError:
             _fused_tiles = None
-        if _fused_tiles is not None and _lean_glue_supported(_fused_tiles, _k19):
+        if _fused_tiles is not None and _lean_glue_supported(_fused_tiles, _small):
             _lean = True
         elif _lean_mode == "1":
             raise RuntimeError(
@@ -372,7 +412,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     if x_rows is None:
         x_t, row_token, top_k = x_tokens
         if _lean and _CALIB_SINK is None:
-            _tok = (x_t, top_k)           # K23: K19's gate_up reads the token rows itself (gather_div)
+            _tok = (x_t, top_k)           # K23: K19's (or K25's) gate_up reads the token rows itself (gather_div)
         else:
             x_rows = x_t.index_select(0, row_token)
     if _mxfp4_store and _k21 is None:
@@ -434,10 +474,11 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 build_group_tiles_device(local_ids, _n_exp, 16)
         if not _lean:
             sorted_ids = local_ids.index_select(0, order)
-        if int4_stores is not None:
+        if int4_stores is not None or _k25 is not None:
             # the int4 _mm quantises with the gather FOLDED IN (or takes
-            # the already-sorted epilogue output); the [R, K] gather
-            # here would be pure waste on that branch
+            # the already-sorted epilogue output), and K25 gathers in its
+            # activation load; the [R, K] gather here would be pure waste
+            # on those branches
             x_sorted = x_rows
         else:
             x_sorted = x_rows.index_select(0, order).contiguous()
@@ -498,7 +539,25 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # Measured at B=16 decode: this plus gnf4's tile-build memo took
         # to_device_i32 traffic /4 and the step 1.206x, tokens identical.
         eids = uniq
-    if device_grouping and int4_stores is None:
+    if device_grouping and int4_stores is None and _k25 is not None:
+        # K25 (opt-in): the grouped small-M tensor-core GEMM on the NF4 stacks against the SAME 16-row device tiles. The
+        # first call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is already
+        # in sorted order. Outputs in sorted order, so gpt-oss's per-expert biases index by `sorted_ids` and the unsort
+        # at the end applies unchanged. Under K23 (_lean) gate_up reads the token rows (gather_div) and down stores into
+        # the caller's row order (scatter=order), and the unsort is skipped -- K19's glue, on K25.
+        def _mm(xr, pk, am):
+            if pk is not None and pk.numel() == 0:
+                raise RuntimeError(
+                    "expert stacks are freed (int4 serve lane active) "
+                    "but the NF4 K25 path was selected -- "
+                    "int4_stores did not reach _fused_over_stack")
+            if pk is gu_p and _tok is not None:
+                return _k25(_tok[0].to(torch.bfloat16), pk, am, t_row0, t_rows, t_grp, order,
+                            gather_div=_tok[1], **_K25_PLAN)
+            kw = {"scatter": order} if (_lean and pk is dn_p) else {}
+            return _k25(xr.to(torch.bfloat16), pk, am, t_row0, t_rows, t_grp,
+                        order if xr is x_rows else None, **kw, **_K25_PLAN)
+    elif device_grouping and int4_stores is None:
         def _mm(xr, pk, am):
             if pk is not None and pk.numel() == 0:
                 # freed int4-lane stacks reaching the NF4 captured path
@@ -711,7 +770,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         dn = _mm(h.contiguous(), dn_p, dn_a)
     if order is None:                  # singleton path: input order kept
         return dn
-    if _lean:                          # K23: K19's down already stored each row at order[i]
+    if _lean:                          # K23: K19's (or K25's) down already stored each row at order[i]
         return dn
     out = torch.empty_like(dn)
     out.index_copy_(0, order, dn)  # unsort back to caller's row order
