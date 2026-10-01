@@ -1,7 +1,7 @@
 # Names as the BOX sees them after staging ($W; P42's hook under hook/). The box runs `sha256sum -c` on this file and
 # the controller resolves each name to its source (p90_drive.sh's case) and compares.
-3921c0f6d66b4002de27701653279ee3e7ac0e8c80c14546177496778301795e  p90_run.sh
-c6fc41e677842fe6cbf295e492d767693b6573b66dbcb107c7f00e2c069d9bc1  p90_reduce.py
+f67b18d44566b1d144b30bf21b46b4e78a9289d4993815fb92512a7dfb8b9c72  p90_run.sh
+b01b7df56704d99eba7d0485212ed193e466bfcd24ae57100f9e80d4e76100d7  p90_reduce.py
 d8f86573c90afc9d337b7f83ef4496fbc6c790779f110884f230d302571f788a  p42_reduce.py
 bf732dd7760978d1326e8ef1643f95c6afadb4ec184c8de3306f7d27b59acf6d  test_k21_row_exact_gpu.py
 034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py

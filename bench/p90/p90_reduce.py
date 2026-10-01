@@ -89,10 +89,10 @@ def _kl_row(rec):
     return None
 
 
-def load(d: Path) -> dict:
+def _load_dir(d: Path) -> dict:
     p42 = _p42()
     k0 = _json(d / "k0.json")
-    data = {"premise": _json(d / "premise.json"), "k0": bool(isinstance(k0, dict) and k0.get("all_passed")),
+    data = {"premises": [_json(d / "premise.json")], "k0": [bool(isinstance(k0, dict) and k0.get("all_passed"))],
             "speed": {}, "census": {}, "kl": {}}
     for B in BATCHES:
         for tag in ("off", "on"):
@@ -110,69 +110,117 @@ def load(d: Path) -> dict:
     return data
 
 
+def load(d: Path) -> dict:
+    """One run directory holding every arm (the registration's single-box shape)."""
+    return _load_dir(d)
+
+
+def load_split(speed_dir: Path, quality_dir: Path) -> dict:
+    """Amendment 1: the speed run (RTX 5090) and the quality run (H100 NVL). Both premises and both K0s must pass;
+    the speed arms and censuses come from the first, the KL rows from the second."""
+    s, q = _load_dir(speed_dir), _load_dir(quality_dir)
+    return {"premises": s["premises"] + q["premises"], "k0": s["k0"] + q["k0"],
+            "speed": s["speed"], "census": s["census"], "kl": q["kl"]}
+
+
 def _void(v, why):
     v["verdict"] = "VOID"
     v["reasons"].append(why)
     return v
 
 
-def reduce(data: dict) -> dict:
-    v: dict = {"lane": "P90", "verdict": None, "reasons": [], "speed": {}}
-    pr = data.get("premise")
-    last = " ".join(pr.get("last") or []) if isinstance(pr, dict) else ""
-    if not isinstance(pr, dict) or pr.get("rc") != 0 or PREMISE_PASSED not in last or "skipped" in last:
-        return _void(v, f"the on-box premise (K21 rows bit-equal alone and inside B=16, {PREMISE_PASSED}) did not hold, "
-                        f"did not run, or skipped a test: {pr}")
-    if not data.get("k0"):
-        return _void(v, "the KL instrument's K0 controls did not pass on this host")
+def _common(v, data):
+    """The premise(s) and K0(s): every run of the reading must have held them. Returns False when it voided."""
+    for pr in data.get("premises") or [None]:
+        last = " ".join(pr.get("last") or []) if isinstance(pr, dict) else ""
+        if not isinstance(pr, dict) or pr.get("rc") != 0 or PREMISE_PASSED not in last or "skipped" in last:
+            _void(v, f"the on-box premise (K21 rows bit-equal alone and inside B=16, {PREMISE_PASSED}) did not hold, "
+                     f"did not run, or skipped a test: {pr}")
+            return False
+    if not data.get("k0") or not all(data["k0"]):
+        _void(v, "the KL instrument's K0 controls did not pass on every host of the reading")
+        return False
+    return True
+
+
+def _speed(v, data):
+    """The speed half: draws, censuses, registered routes; fills v["speed"]. Returns False when it voided."""
     for B in BATCHES:
         for tag in ("off", "on"):
             draws = data["speed"].get((B, tag))
             if not draws or None in draws:
-                return _void(v, f"B={B} {tag}: a timed draw is missing or failed")
+                _void(v, f"B={B} {tag}: a timed draw is missing or failed")
+                return False
             if (max(draws) - min(draws)) / min(draws) > DRAW_SPREAD:
-                return _void(v, f"B={B} {tag}: draws {draws} differ by more than {DRAW_SPREAD:.0%}")
+                _void(v, f"B={B} {tag}: draws {draws} differ by more than {DRAW_SPREAD:.0%}")
+                return False
             c = data["census"].get((B, tag))
             if not c or not c.get("replays"):
-                return _void(v, f"B={B} {tag}: the first draw's census is missing")
+                _void(v, f"B={B} {tag}: the first draw's census is missing")
+                return False
             for kern, want in ROUTES[(B, tag)].items():
                 got = c["per_step"].get(kern, 0)
                 if abs(got - want) > 0.5:
-                    return _void(v, f"B={B} {tag}: {kern} ran {got:g} times per step, not {want} -- not the registered route")
-    off, on = data["kl"].get("off"), data["kl"].get("on")
-    for tag, r in (("off", off), ("on", on)):
-        if not isinstance(r, dict) or "kl_mean" not in r:
-            return _void(v, f"KL {tag}: the store_r12 row is missing or failed")
-        if r.get("scorer") != "decode":
-            return _void(v, f"KL {tag}: scored {r.get('scorer')!r}, not decode-shaped -- at T == 1 is where the opt-in "
-                            f"routes K21, so another shape would not read the kernel")
-    if off.get("n_tokens_scored") != on.get("n_tokens_scored") or not off.get("n_tokens_scored"):
-        return _void(v, f"KL: the rows scored different token counts ({off.get('n_tokens_scored')} vs "
-                        f"{on.get('n_tokens_scored')})")
-    k_off, k_on = float(off["kl_mean"]), float(on["kl_mean"])
-    if abs(k_off - P44_STORE_KL) > INSTRUMENT_BAND:
-        return _void(v, f"KL off {k_off:.5f} does not reproduce P44's licensed store row {P44_STORE_KL} within "
-                        f"{INSTRUMENT_BAND}: the instrument is not reading as registered")
+                    _void(v, f"B={B} {tag}: {kern} ran {got:g} times per step, not {want} -- not the registered route")
+                    return False
     for B in BATCHES:
         m_off, m_on = statistics.median(data["speed"][(B, "off")]), statistics.median(data["speed"][(B, "on")])
         v["speed"][B] = {"off_ms": m_off, "on_ms": m_on, "ratio": m_on / m_off}
+    r1 = v["speed"][1]["ratio"]
+    v["b1"] = "FASTER" if r1 <= B1_FASTER else ("SLOWER" if r1 >= B1_SLOWER else "NEUTRAL")
+    return True
+
+
+def _quality(v, data):
+    """The quality half: both KL rows, decode-shaped, same tokens, OFF on P44's row; fills v["kl"]."""
+    off, on = data["kl"].get("off"), data["kl"].get("on")
+    for tag, r in (("off", off), ("on", on)):
+        if not isinstance(r, dict) or "kl_mean" not in r:
+            _void(v, f"KL {tag}: the store_r12 row is missing or failed")
+            return False
+        if r.get("scorer") != "decode":
+            _void(v, f"KL {tag}: scored {r.get('scorer')!r}, not decode-shaped -- at T == 1 is where the opt-in "
+                     f"routes K21, so another shape would not read the kernel")
+            return False
+    if off.get("n_tokens_scored") != on.get("n_tokens_scored") or not off.get("n_tokens_scored"):
+        _void(v, f"KL: the rows scored different token counts ({off.get('n_tokens_scored')} vs {on.get('n_tokens_scored')})")
+        return False
+    k_off, k_on = float(off["kl_mean"]), float(on["kl_mean"])
+    if abs(k_off - P44_STORE_KL) > INSTRUMENT_BAND:
+        _void(v, f"KL off {k_off:.5f} does not reproduce P44's licensed store row {P44_STORE_KL} within "
+                 f"{INSTRUMENT_BAND}: the instrument is not reading as registered")
+        return False
     t_off, t_on = float(off.get("top1_agreement", 0.0)), float(on.get("top1_agreement", 0.0))
     v["kl"] = {"off": k_off, "on": k_on, "delta_nats": k_on - k_off, "top1_off": t_off, "top1_on": t_on,
                "tokens": off.get("n_tokens_scored")}
-    r1 = v["speed"][1]["ratio"]
-    v["b1"] = "FASTER" if r1 <= B1_FASTER else ("SLOWER" if r1 >= B1_SLOWER else "NEUTRAL")
-    r16 = v["speed"][16]["ratio"]
-    if k_on - k_off > KL_FLOOR or t_on < t_off - TOP1_DROP:
+    return True
+
+
+def reduce(data: dict) -> dict:
+    v: dict = {"lane": "P90", "verdict": None, "reasons": [], "speed": {}}
+    if not (_common(v, data) and _speed(v, data) and _quality(v, data)):
+        return v
+    k, r1, r16 = v["kl"], v["speed"][1]["ratio"], v["speed"][16]["ratio"]
+    if k["on"] - k["off"] > KL_FLOOR or k["top1_on"] < k["top1_off"] - TOP1_DROP:
         v["verdict"] = "QUALITY_FAIL"
-        v["reasons"].append(f"KL {k_off:.5f} -> {k_on:.5f} ({k_on - k_off:+.5f} nats; floor {KL_FLOOR}), top-1 "
-                            f"{t_off:.4f} -> {t_on:.4f}: K21 stays opt-in")
+        v["reasons"].append(f"KL {k['off']:.5f} -> {k['on']:.5f} ({k['delta_nats']:+.5f} nats; floor {KL_FLOOR}), top-1 "
+                            f"{k['top1_off']:.4f} -> {k['top1_on']:.4f}: K21 stays opt-in")
     elif r16 <= B16_FASTER:
         v["verdict"] = "LICENSED"
         v["reasons"].append(f"B=16 {v['speed'][16]['on_ms']:.3f} vs {v['speed'][16]['off_ms']:.3f} ms (x{r16:.3f}); "
-                            f"KL {k_off:.5f} -> {k_on:.5f}; B=1 {v['b1']} (x{r1:.3f})")
+                            f"KL {k['off']:.5f} -> {k['on']:.5f}; B=1 {v['b1']} (x{r1:.3f})")
     else:
         v["verdict"] = "NOT_FASTER"
-        v["reasons"].append(f"B=16 ratio {r16:.3f} > {B16_FASTER}; KL {k_off:.5f} -> {k_on:.5f}; B=1 {v['b1']} (x{r1:.3f})")
+        v["reasons"].append(f"B=16 ratio {r16:.3f} > {B16_FASTER}; KL {k['off']:.5f} -> {k['on']:.5f}; B=1 {v['b1']} (x{r1:.3f})")
+    return v
+
+
+def reduce_part(data: dict, part: str) -> dict:
+    """Amendment 1: one run's half -- its premise and K0, then its own arms. PART_OK carries the half's numbers; the
+    verdict is the combined reduction's, never a part's."""
+    v: dict = {"lane": "P90", "part": part, "verdict": None, "reasons": [], "speed": {}}
+    if _common(v, data) and (_speed(v, data) if part == "speed" else _quality(v, data)):
+        v["verdict"] = "PART_OK"
     return v
 
 
@@ -182,7 +230,7 @@ def _synthetic(off16=22.5, on16=14.0, off1=5.35, on1=5.6, kl_off=0.0019, kl_on=0
     for (B, tag), want in ROUTES.items():
         cen[(B, tag)] = {"replays": 8, "per_step": {k: float(n) for k, n in want.items() if n}}
     row = lambda k, t, s, n: {"arm": "store_r12", "kl_mean": k, "top1_agreement": t, "scorer": s, "n_tokens_scored": n}  # noqa: E731
-    return {"premise": {"rc": premise, "last": [last]}, "k0": k0,
+    return {"premises": [{"rc": premise, "last": [last]}, {"rc": 0, "last": ["3 passed in 30.0s"]}], "k0": [k0, True],
             "speed": {(16, "off"): [off16, off16], (16, "on"): [on16, on16], (1, "off"): [off1, off1], (1, "on"): [on1, on1]},
             "census": cen, "kl": {"off": row(kl_off, top1_off, "decode", tokens[0]), "on": row(kl_on, top1_on, scorer, tokens[1])}}
 
@@ -219,21 +267,51 @@ def self_test() -> None:
     s = _synthetic()
     del s["census"][(1, "off")]
     assert reduce(s)["verdict"] == "VOID"
-    print("p90_reduce self-test OK (18 cases)")
+    s = _synthetic()
+    s["premises"][1] = {"rc": 1, "last": ["1 failed, 2 passed"]}                            # amendment 1: the quality
+    assert reduce(s)["verdict"] == "VOID"                                                    # box's premise counts too
+    s = _synthetic()
+    s["k0"] = [True, False]                                                                  # ... and its K0
+    assert reduce(s)["verdict"] == "VOID"
+    s = _synthetic(kl_off=0.0031, kl_on=0.0031)                                              # a part reads its half only
+    assert reduce_part(s, "speed")["verdict"] == "PART_OK" and reduce_part(s, "quality")["verdict"] == "VOID"
+    s = _synthetic()
+    s["census"][(16, "on")]["per_step"][NF4_KERNEL] = 48.0
+    assert reduce_part(s, "quality")["verdict"] == "PART_OK" and reduce_part(s, "speed")["verdict"] == "VOID"
+    print("p90_reduce self-test OK (22 cases)")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dir")
+    ap.add_argument("--dir", help="one run directory (with --part: that run's half)")
+    ap.add_argument("--part", choices=["speed", "quality"], help="amendment 1: report one run's half")
+    ap.add_argument("--speed-dir", help="amendment 1: the speed run's directory (RTX 5090)")
+    ap.add_argument("--quality-dir", help="amendment 1: the quality run's directory (H100 NVL)")
     ap.add_argument("--out")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args()
     if a.self_test:
         self_test()
         return 0
-    if not a.dir or not a.out:
-        ap.error("--dir and --out are required")
-    v = reduce(load(Path(a.dir)))
+    if not a.out:
+        ap.error("--out is required")
+    if a.part:
+        if not a.dir:
+            ap.error("--part needs --dir")
+        v = reduce_part(load(Path(a.dir)), a.part)
+        Path(a.out).write_text(json.dumps(v, indent=1, default=str))
+        print(f"P90_PART {a.part} {v['verdict']} " + " | ".join(v["reasons"]))
+        for B, s in v.get("speed", {}).items():
+            print(f"  B={B}: off {s['off_ms']:.3f} ms, on {s['on_ms']:.3f} ms, ratio {s['ratio']:.3f}")
+        if "kl" in v:
+            print(f"  KL: off {v['kl']['off']:.6f}, on {v['kl']['on']:.6f}, top-1 {v['kl']['top1_off']:.4f} -> {v['kl']['top1_on']:.4f}")
+        return 0
+    if a.speed_dir and a.quality_dir:
+        v = reduce(load_split(Path(a.speed_dir), Path(a.quality_dir)))
+    elif a.dir:
+        v = reduce(load(Path(a.dir)))
+    else:
+        ap.error("--dir, or --speed-dir with --quality-dir, is required")
     Path(a.out).write_text(json.dumps(v, indent=1, default=str))
     print(f"P90_VERDICT {v['verdict']} " + " | ".join(v["reasons"]))
     for B, s in v.get("speed", {}).items():
