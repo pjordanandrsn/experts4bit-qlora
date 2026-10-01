@@ -742,7 +742,7 @@ STEPS=150 R=8 TRAIN_EXPERTS=1 OFFLOAD_EXPERTS=1 OUT=./out python -m experts4bit_
 
 ## Measured result
 
-Claim `e4b.train.flagship-matrix` (measured, receipts in this repository): across two 30B-class MoEs — Qwen3-30B-A3B and Gemma-4-26B-A4B — five datasets each, 200 steps per cell, the fused training path runs 1.52–1.81× faster per step at 0.75–0.81× peak VRAM and 0.86–0.92× energy per step, with parity on both registered **training-loss** criteria: absolute final training-loss delta and median absolute step-wise training-loss delta, each at most 0.05. These are not held-out evaluation criteria. That ratio is fused-vs-reference with the same offload and checkpointing in both arms. A per-step multiple quoted against the per-expert Python loop on a smaller model (the OLMoE per-expert-loop comparison) has a different denominator and different models; it is not this number, and the two do not compose.
+Claim `e4b.train.flagship-matrix` (measured, receipts in this repository): across two 30B-class MoEs — Qwen3-30B-A3B and Gemma-4-26B-A4B — five datasets each, 200 steps per cell, the fused training path runs 1.52–1.81× faster per step at 0.75–0.81× peak VRAM and 0.80–0.92× energy per step, with parity on both registered **training-loss** criteria: absolute final training-loss delta and median absolute step-wise training-loss delta, each at most 0.05. These are not held-out evaluation criteria. That ratio is fused-vs-reference with the same offload and checkpointing in both arms. A per-step multiple quoted against the per-expert Python loop on a smaller model (the OLMoE per-expert-loop comparison) has a different denominator and different models; it is not this number, and the two do not compose.
 
 The frozen-byte result is a separate piece of evidence. The [Qwen3 matrix receipt](../../bench/flagship-matrix/RESULTS-flagship-matrix.md) withdraws its B1 check: it compared empty placeholders, so it did not establish byte preservation in those cells. The independent [fused-train gate](../../bench/fused-train-gate/RESULTS-fused-train-gate.md) hashed 16.31 GB, skipped no empty tensors and detected a deliberate byte flip; that result belongs to that run. The second model's [C1 protocol](../PREREG-flagship-matrix-model2.md) explicitly requires the corrected checks. The matrix's speed, memory, energy and training-loss measurements stand; the invalid B1 does not become valid because another run checked the bytes.
 
@@ -1992,9 +1992,11 @@ driver wires the engines, so this is not the `load_moe_4bit_streaming` path.
 
 **The fused training path is faster at equal loss.** Across two 30B-class
 MoEs, five datasets each, 200 steps per cell: 1.52–1.81× per step at
-0.75–0.81× peak VRAM and 0.86–0.92× energy, with loss parity on both
-registered criteria and the frozen 4-bit stack bit-identical over
-16.31 GB hashed. Default to `enable_fast_train(model, dgrad=True)`.
+0.75–0.81× peak VRAM and 0.80–0.92× energy, with loss parity on both
+registered criteria and the frozen 4-bit stack bit-identical (12.85 GB per
+Gemma-4 cell, 16.31 GB for Qwen3). *(Corrected 2026-09-30: energy read
+0.86–0.92×, Gemma-4's alone.)* Default to
+`enable_fast_train(model, dgrad=True)`.
 
 **Training on real weights is receipted per family** (lane tp1, 2026-09-05,
 one rented RTX 5090 under the shipped 0.35.0 / 0.30.0 code; **measured** —
@@ -3253,7 +3255,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.parity.kimi-k3.cache-gate.replayed-routing.a2000.2026-09-28 [measured]: With routing replayed (every MoE layer handed the cached path's own expert ids and weights), K3's cached decode path matches a fresh cache-free prefill of the same 9 tokens at cos 0.999966 (rel 4.36e-3, argmax agrees) on the A2000 run, while a cache whose 69 KDA recurrent states are zeroed reads cos 0.877523 -- so the gate (cos >= 0.9999 and argmax agrees, fixed before either number) passes the correct cache and fails the broken one; with free routing the same comparison reads 0.998699 because 90 of 92 layers route differently somewhere in the 9 positions.
 - e4b.quality.kimi-k3.vs-fireworks.per-token.a2000.2026-09-28 [measured]: On one raw 90-token paragraph, the A2000 run's per-token NLL tracks Fireworks' serverless kimi-k3 (native MXFP4 weights, MXFP8 activations) at Pearson r = 0.9965 over the same 89 predictions (median |delta| 0.038 nats; perplexity 3.196 vs 3.150), and both greedily complete 'The capital city of France is' as ' Paris. It is' (p(' Paris') 68.90-71.59 % across five A2000 processes vs 69.26 %).
 - e4b.train.fast-train-dgrad [measured]: enable_fast_train(model, dgrad=True) is the fastest training lane at real width (2.52x on Qwen3-30B, 48 layers, A6000) while enable_batched_train wins only the toy microbench (24.01x at hidden 512) and gives no speedup at real width (1.05x) with the highest peak memory.
-- e4b.train.flagship-matrix [measured]: Across two 30B-class MoEs (Qwen3-30B-A3B and Gemma-4-26B-A4B), five datasets each, 200 steps per cell: the fused training path runs 1.52-1.81x faster per step at 0.75-0.81x peak VRAM and 0.86-0.92x energy per step, with loss parity on both registered criteria (worst cell 0.03653 against a 0.05 band) and the frozen 4-bit stack verified bit-identical over 16.31 GB hashed.
+- e4b.train.flagship-matrix [measured]: Across two 30B-class MoEs (Qwen3-30B-A3B and Gemma-4-26B-A4B), five datasets each, 200 steps per cell: the fused training path runs 1.52-1.81x faster per step at 0.75-0.81x peak VRAM and 0.80-0.92x energy per step, with loss parity on both registered criteria (worst cell 0.03653, Gemma-4 finance, against a 0.05 band) and the frozen 4-bit stack bit-identical (12.85 GB per Gemma-4 cell; 16.31 GB for Qwen3, a separate gate).
 - e4b.serve.informed-hot-sets [measured]: Choosing resident experts from a routing histogram rather than by index buys +56% (K=4) and +120% (K=8) decode on gpt-oss-20b at identical VRAM, +44% on Gemma-4-26B and +37.1% on DeepSeek-V4-Flash, where index-ordered was statistically indistinguishable from pure streaming.
 - e4b.serve.deepseek-v4 [measured]: DeepSeek-V4-Flash (43 layers x 256 experts, 284B) loads in about 10 s at 8.74 GiB peak VRAM and generates, with 147 GB of experts served from an on-disk arena.
 - e4b.serve.cuda-graph-capture [measured]: capture_decode replays a decode step as one CUDA graph: 4.4-5.6x on 2-layer fixtures, 1.11x on real OLMoE weights and 1.04x on Qwen3-30B — the gain is inversely proportional to real GPU work per step. Both real-weight models replay bit-identical to eager.
