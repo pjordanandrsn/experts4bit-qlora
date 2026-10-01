@@ -17,6 +17,9 @@
 #
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
 # P86_GPU_CLASS P86_MIN_DRIVER P86_VLLM P86_MIN_DISK_GB P86_REHEARSAL.
+# P86_PROVE=1 is the PROVING RUN: the refusals, both installs with their tripwires, the reducer self-test, an egress
+# probe, and the vLLM census arm itself on vLLM 0.30.0 with a small model (Qwen/Qwen3-0.6B, B=4, an 8 -> 24-token
+# slope), so the in-process profiler is proven on this build, driver and card before the reading; no 30B model.
 set -uo pipefail
 W=/root/p86; mkdir -p $W/logs; cd $W || exit 78
 say(){ echo "[$(date -u +%FT%TZ)] p86: $*"; }
@@ -92,6 +95,43 @@ if [ $VOK = 1 ]; then
   [ $VOK = 1 ] && tail -1 logs/tripwire_vllm.log | tee -a summary.txt
 fi
 [ $VOK = 1 ] || { say "no vLLM comparator: the lane cannot answer its question"; echo "NO COMPARATOR" >> summary.txt; finish 19; }
+if [ "${P86_PROVE:-0}" = 1 ]; then
+  echo "PROVE -- the proving run: both installs tripwired; the census arm on vLLM $VLLM_VER with a small model" | tee -a summary.txt
+  python - <<'PYP'
+import json, hashlib, random
+random.seed(0)
+prompts = [[random.randrange(1000, 30000) for _ in range(64)] for _ in range(4)]
+json.dump({"batch": 4, "prompts": prompts, "prompts_sha256": hashlib.sha256(json.dumps(prompts).encode()).hexdigest()},
+          open("/root/p86/prompts_prove.json", "w"))
+PYP
+  env P86_BATCH=4 P86_PROMPTS=$W/prompts_prove.json P86_MODEL=Qwen/Qwen3-0.6B P86_REV=main P86_OUT=$W/vllm_census_prove.json \
+      P86_SHORT=8 P86_LONG=24 P86_MAX_LEN=512 perl -e 'alarm 1200; exec @ARGV' $W/venv-vllm/bin/python $W/p86_vllm_census.py > logs/run_vllm_census_prove.log 2>&1
+  rc=$?; { echo -n "PROVE census rc=$rc "; grep -a "P86VLLMCENSUS" logs/run_vllm_census_prove.log | tail -1 | cut -c1-240; echo; } | tee -a summary.txt
+  python - <<'PYC' 2>&1 | tee -a summary.txt
+import json
+d = json.load(open("/root/p86/vllm_census_prove.json"))
+dec = [k for k in d["kernels"] if k["calls_long"] > k["calls_short"]]
+per_layer = [k for k in dec if abs(k["calls_per_step"] - 28) < 0.5]     # Qwen3-0.6B has 28 layers
+ok = d["in_process"] and d["decode_steps"] == 16 and len(dec) >= 10 and len(per_layer) >= 3 and sum(k["us_per_step"] for k in dec) > 0
+print(f"PROVE census {'OK' if ok else 'FAILED'}: in_process={d['in_process']} decode kernels={len(dec)} per-layer={len(per_layer)} "
+      f"decode ms/step={sum(k['us_per_step'] for k in dec) / 1e3:.3f} cudagraph={d.get('cudagraph_mode')}")
+raise SystemExit(0 if ok else 1)
+PYC
+  [ "${PIPESTATUS[0]}" = 0 ] && [ "$rc" = 0 ] || { say "PROVE: the census arm did not prove"; finish 23; }
+  say "PROVE: HF CDN egress probe (50 MB range, 20 s cap; recorded, not a refusal)"
+  python - <<'PYE' 2>&1 | tail -1 | tee -a summary.txt forensics.txt
+import time, urllib.request
+t = time.time()
+try:
+    r = urllib.request.urlopen(urllib.request.Request("https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors",
+                                                      headers={"Range": "bytes=0-52428799"}), timeout=20)
+    n = len(r.read())
+    print(f"PROVE hf_cdn_mbps={n / (time.time() - t) / 1e6:.1f} bytes={n}")
+except Exception as e:
+    print(f"PROVE hf_cdn_probe_failed {type(e).__name__}: {str(e)[:120]}")
+PYE
+  : > PROVED; finish 0
+fi
 # ---- fetch (pinned), bake (P39's k8_bake.py), prompts (step_decomp's own window, identical ids for both engines) -- P58's
 say "fetch $MID @ $REV"
 perl -e 'alarm 4800; exec @ARGV' python -c "from huggingface_hub import snapshot_download as s; print(s('$MID', revision='$REV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=4))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL (bf16)"; finish 11; }

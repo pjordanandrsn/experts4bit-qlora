@@ -9,7 +9,7 @@
 - **The rule:** kernels sorted into registered families, families into roles present in both engines, plus host and launch (step minus kernels). VOID on a missing arm, the wrong vLLM, or a census exceeding its own step by 10 %. NOT_READ if over 10 % of either engine's B=16 kernel time is unmapped. Otherwise the largest B=16 gap names the next lane. Stated expectation: quantized linear (the expert GEMV against Marlin MoE).
 - **Refusals before any install:** the card class, the disk, and a driver below 580 (vLLM 0.30.0's wheels are CUDA 13.0; rc 18).
 - **A2000 rehearsal of the method** (vLLM 0.11.0, Qwen3-0.6B): graph replays are recorded, each decode kernel once per layer per step. The graph arm read 5.79 ms/step of decode kernels against the eager control's 7.40.
-- Guard 1.0 h at <= $0.75/h; lane ceiling $1.50. `tests/test_p86_staged_pin.py` (16) pins the staged bytes, P58's harness and comparator bytes, the comparator, the refusals' order, the arms and the census settings.
+- **A proving rental first** (0.5 h, no 30B model). It runs the census arm itself on vLLM 0.30.0 with Qwen3-0.6B, proving the profiler on this build, driver and card, which the A2000 cannot. Then the reading: guard 2.0 h at <= $0.75/h (P58 registered 3.0 h for its 18 arms); lane ceiling $2.50. `tests/test_p86_staged_pin.py` (17) pins the staged bytes, P58's harness and comparator bytes, the comparator, the refusals' order, the proof, the arms and the census settings.
 
 ### Lane P85 read (#674): CONFIRMED -- grouped-nf4-gemm#413 (the fused fp8 KV append's IEEE-rounded quotient) is the whole step that moved the recipe's fp32 K8 from 6.36709 to 6.36396 (bench, docs and register only)
 

@@ -52,8 +52,8 @@ NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "ref
 PASS="P86_RUN_ID=$RUN_ID P86_RUN_NONCE=$NONCE P86_DEADLINE_EPOCH=$DEADLINE P86_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
 # Only host-limit knobs and the proving-run switch travel: a rental is the registered run, so the knobs that change WHAT
 # is measured (model, pack, rows, calibration) are not forwarded -- a rehearsal sets them on its own box and the runner
-# marks it REHEARSAL. (P86 registers no proving rental: its guard is 1.0 h.)
-for v in P86_NONE; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
+# marks it REHEARSAL. P86_PROVE=1 is the proving rental the pre-registration names (no 30B model).
+for v in P86_PROVE; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
 if [ "${P86_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p86_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p86"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p86; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }

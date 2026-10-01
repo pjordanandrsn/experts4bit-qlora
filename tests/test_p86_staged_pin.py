@@ -86,6 +86,16 @@ def test_the_comparator_and_the_refusals_are_registered_before_any_install():
     assert "MIN_DRIVER=${P86_MIN_DRIVER:-580}" in run
 
 
+def test_the_proof_runs_the_census_on_a_small_model_before_any_30b_fetch():
+    run = (LANE / "p86_run.sh").read_text()
+    prove = run.index('if [ "${P86_PROVE:-0}" = 1 ]; then')
+    assert run.index('say "install vllm==') < prove < run.index('say "fetch $MID @ $REV"')
+    block = run[prove:run.index('say "fetch $MID @ $REV"')]
+    assert "P86_MODEL=Qwen/Qwen3-0.6B" in block and "P86_SHORT=8 P86_LONG=24" in block and "p86_vllm_census.py" in block
+    assert "finish 23" in block and ": > PROVED; finish 0" in block
+    assert "for v in P86_PROVE; do" in (LANE / "p86_drive.sh").read_text()
+
+
 def test_the_arms_run_in_the_registered_order_with_their_settings():
     run = (LANE / "p86_run.sh").read_text()
     steps = ('for B in 16 1; do can_run 900 e4b_b$B && { e4b_arm "" $B 1;',

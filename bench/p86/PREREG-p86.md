@@ -19,10 +19,11 @@ which. This lane answers that, descriptively.
 
 Rule: the owner's standing no-ask tier for a single run under $15 (2026-09-26), with the usual mechanics:
 - this page merged before the launch;
+- a proving rental before a guard over 1 h;
 - receipts and ledger rows;
 - proven teardown.
 
-The guard is 1.0 h, so no proving rental is required. The owner asked to push ahead on throughput (2026-09-30).
+The owner asked to push ahead on throughput (2026-09-30).
 
 ## Question
 
@@ -109,10 +110,24 @@ the names.
 
 ## Box and cost
 
-- **`p86-5090-<n>`**: guard **1.0 h at ≤ $0.75/h (≤ $0.75)**.
-  - P58 ran 18 arms with fetches in 42 minutes on a fast host. This lane runs 10 arms.
-  - The deadline guard skips any arm that cannot finish 10 minutes before teardown, and the reducer then reads VOID.
-- **Lane ceiling $1.50; hard stop $2.00** (a second attempt allowed); both under the $35 per-run cap.
+Two rentals, in order. The guard exceeds one hour, so the compute rule requires a proving rental first.
+
+1. **`p86-prove-<n>`**: one RTX 5090, **0.5 h guard at ≤ $0.75/h (≤ $0.375)**. `P86_PROVE=1` runs:
+   - the refusals;
+   - both installs (e4b with its tripwire; vLLM 0.30.0 in its venv);
+   - the reducer self-test and an egress probe;
+   - **the census arm itself on this build**: `p86_vllm_census.py` on vLLM 0.30.0 with `Qwen/Qwen3-0.6B`, B=4, an
+     8 → 24-token slope.
+
+   The proof passes only if the census ran in-process, covered 16 decode steps, and recorded at least 10 decode
+   kernels, at least 3 of them once per layer per step (28 layers). This proves the profiler on vLLM 0.30 / CUDA 13 /
+   sm_120, which the A2000 cannot. No 30B model is fetched. At most three attempts.
+2. **`p86-5090-<n>`**: only after a proof returns rc 0 with its receipts fetched. **Guard 2.0 h at ≤ $0.75/h
+   (≤ $1.50).**
+   - P58 registered 3.0 h for 18 arms and ran in 42 minutes on a fast host. This lane runs 10 arms.
+   - The deadline guard skips any arm that cannot finish 10 minutes before teardown (P58's 15-minute admission per arm),
+     and a skipped arm reads VOID.
+- **Lane ceiling $2.50; hard stop $3.00**; both under the $35 per-run cap.
 - **Launch only when the cheapest eligible offers have a driver ≥ 580.** The launcher cannot exclude a machine on the
   lane's own refusal, so the offer list is checked read-only first, as for P85.
 
