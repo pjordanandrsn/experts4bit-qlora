@@ -48,6 +48,16 @@ FORCE_SINGLETON_GROUPS = [False]
 DEVICE_GROUPING = [False]
 
 
+def _k19_mode_env() -> str:
+    """``E4B_INT4_GROUPED_SMALLM``: ``auto`` (the default, also when unset) uses K19 for int4 decode rows above
+    T == 1 when the kernel package carries it; ``1`` requires it and routes T == 1 to it too; ``0`` keeps the split-K
+    GEMV. Anything else is refused rather than read as one of these."""
+    v = os.environ.get("E4B_INT4_GROUPED_SMALLM", "auto").strip().lower() or "auto"
+    if v not in ("auto", "0", "1"):
+        raise ValueError(f"E4B_INT4_GROUPED_SMALLM={v!r}: expected 'auto', '0' or '1'")
+    return v
+
+
 def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     """``(singleton_groups, device_grouping)`` for the all-resident collapse at ``T`` tokens.
 
@@ -57,7 +67,7 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     Without that the singleton GEMV would keep T == 1, and K8, which scores through the T == 1 loop, would read
     the GEMV instead of the kernel it gates (lane P87)."""
     k19_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
-              and os.environ.get("E4B_INT4_GROUPED_SMALLM", "0") == "1")
+              and _k19_mode_env() == "1")
     if k19_t1:
         return False, True
     return (T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])), (DEVICE_GROUPING[0] and T > 1)
@@ -225,20 +235,26 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         _mxfp4_store = False
     _int4_gemv_decode = (not _mxfp4_store and device_grouping
                          and int4_stores is not None and x_rows.shape[0] <= 256)
-    # K19 (opt-in, E4B_INT4_GROUPED_SMALLM=1; grouped-nf4-gemm#419): the same decode rows through the grouped
-    # small-M tensor-core GEMM instead of the split-K GEMV -- K16's arithmetic (bf16 activations, in-register int4
-    # dequant, bf16 MMA) over the device tile table, gate_up's gather folded into the kernel. It changes the
-    # arithmetic (bf16 activations, no int8 quantise), so it is opt-in until a registered quality read licenses it.
-    # Asked for and absent is a refusal, never a silent fallback to the GEMV.
+    # K19 (grouped-nf4-gemm#419): the same decode rows through the grouped small-M tensor-core GEMM instead of the
+    # split-K GEMV -- K16's arithmetic (bf16 activations, in-register int4 dequant, bf16 MMA) over the device tile
+    # table, gate_up's gather folded into the kernel. Lane P88 LICENSED it for these rows on an RTX 5090
+    # (e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01: B=16 step 0.905x, K8 +0.0062 nats), so it is the DEFAULT
+    # here when the kernel package carries it (E4B_INT4_GROUPED_SMALLM unset or "auto"). "0" keeps the split-K GEMV;
+    # "1" requires K19 (absent is a refusal) and also routes T == 1 to it (see _collapsed_grouping). B=1 read SLOWER
+    # (x1.103), which is why auto leaves T == 1 on the singleton GEMV.
     _k19 = None
-    if _int4_gemv_decode and os.environ.get("E4B_INT4_GROUPED_SMALLM", "0") == "1":
+    _k19_mode = _k19_mode_env()
+    if _int4_gemv_decode and _k19_mode != "0":
         try:
             from int4_smallm import gemm_int4_b32_grouped_smallm as _k19
         except ImportError as e:
-            raise RuntimeError(
-                "E4B_INT4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K19 "
-                "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
-        _int4_gemv_decode = False         # take the device-grouping branch: it builds the 16-row tile table
+            if _k19_mode == "1":
+                raise RuntimeError(
+                    "E4B_INT4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K19 "
+                    "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
+            _k19 = None                   # auto: the kernel package predates K19 -> the split-K GEMV, as before
+        if _k19 is not None:
+            _int4_gemv_decode = False     # take the device-grouping branch: it builds the 16-row tile table
     if _mxfp4_store:
         singleton_groups = True
         device_grouping = False

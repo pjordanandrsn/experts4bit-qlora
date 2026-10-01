@@ -150,11 +150,13 @@ def test_int4_device_grouping_with_fused_tail(monkeypatch):
 
 
 def test_int4_decode_routes_to_gemv(monkeypatch):
-    """At decode shapes (R <= 256) the int4 store must take the GEMV
-    path -- rows in INPUT order, no tile table, no gather (P7: the
-    M-tile pads ~90% of its MMA lanes at ~1-2 rows/expert). The stub's
-    tile builder RECORDS calls so the skip is asserted, not assumed."""
+    """At decode shapes (R <= 256), with K19 switched off (E4B_INT4_GROUPED_SMALLM=0; also the route on a kernel
+    package without K19), the int4 store must take the GEMV path -- rows in INPUT order, no tile table, no gather
+    (P7: the M-tile pads ~90% of its MMA lanes at ~1-2 rows/expert). The default routes these rows to K19 instead
+    (lane P88; tests/test_int4_grouped_smallm_route.py). The stub's tile builder RECORDS calls so the skip is
+    asserted, not assumed."""
     from experts4bit_qlora.engines import hot_residency as hr
+    monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "0")
     stub = _stub_int4_b32(monkeypatch)
     calls = {"gemv": 0, "tiles": 0}
 
