@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Lane P90 registered (#564): does K21 make gpt-oss-20b's B=16 decode faster without moving the MXFP4 store's quality? (bench and tests only)
+
+- **The question.** gpt-oss-20b's licensed MXFP4 store falls back to NF4 above 16 rows, and that NF4 GEMM is 79 % of
+  the B=16 step. With `E4B_MXFP4_GROUPED_SMALLM=1` (#816), K21 serves those rows from the store's own bytes. P90 asks
+  whether that is faster on an RTX 5090 without moving the store's quality.
+- **Speed.** bo7's `store_r12`, OFF vs ON, at B=16 and B=1, two draws each, the first censused (K22's command line).
+  Engagement is read from the censuses: K21 replaces the NF4 grouped GEMM at B=16 and the GEMV at B=1, 48 calls per
+  step.
+- **Quality.** P44's KL-from-reference instrument, unchanged, on arm `store_r12`, OFF then ON. It is decode-shaped,
+  and under ON T == 1 reads K21. Two checks run first, before any fetch: the premise
+  (`tests/test_k21_row_exact_gpu.py`: rows bit-equal alone and inside B=16) and the instrument's K0 controls.
+- **The rule:**
+  - QUALITY_FAIL if KL rises more than 0.0005 nats or top-1 drops more than 0.002;
+  - LICENSED at B=16 ON/OFF <= 0.90;
+  - VOID if OFF's KL does not reproduce P44's 0.0019 within 0.001, among other checks.
+- `tests/test_p90_staged_pin.py` pins:
+  - the staged bytes (P88's harness, P44's KL modules, the premise);
+  - that the gnf4 pin is a real sha;
+  - the refusal, premise, K0 and proof order;
+  - the arms and their settings;
+  - the exit codes;
+  - the reducer's 18-case self-test;
+  - the driver's dry run.
+
 ### `E4B_MXFP4_GROUPED_SMALLM=1` (K21, opt-in): the native MXFP4 store's decode rows go through K21 instead of falling back to NF4
 
 - **Why.** gpt-oss-20b's licensed MXFP4 store has no batched kernel here. Above 16 rows (B=16 is 64) its experts fall
