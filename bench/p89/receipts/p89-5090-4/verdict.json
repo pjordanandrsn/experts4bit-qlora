@@ -1,0 +1,24 @@
+{
+ "lane": "P89",
+ "verdict": "LICENSED",
+ "reasons": [
+  "B=16 9.805 vs 10.321 ms (x0.950); tokens identical in both draw pairs; 336 fewer launches per step"
+ ],
+ "launches_per_step": {
+  "off": 1652.375,
+  "on": 1316.375
+ },
+ "index_select_gone_per_step": 0.0,
+ "per_kernel_delta": {
+  "void at::native::_scatter_gather_elementwise_kernel<...": -48.0,
+  "void at::native::index_elementwise_kernel<128, 4, at...": -48.0,
+  "void at::native::unrolled_elementwise_kernel<at::nat...": -48.0,
+  "void at::native::vectorized_elementwise_kernel<4, at...": -144.0,
+  "void at::native::vectorized_gather_kernel<16, long>(...": -48.0
+ },
+ "speed": {
+  "off_ms": 10.320868121428571,
+  "on_ms": 9.805434550000001,
+  "ratio": 0.9500590875336923
+ }
+}

@@ -435,7 +435,8 @@ equated; footprint and TTFT not compared. The 2026-09-05 comparison below
 stays as measured history. **B=16 gap (P86, same box, both censused):** the experts (int4 GEMV 6.98 ms vs Marlin MoE
 4.78; 2.86 of 3.32 ms), glue +0.62, our attention faster (0.96 vs 1.35)
 (`e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01`); K19 now takes the step to
-0.905× (`e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`).
+0.905× (`e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`), K23's lean glue a further 0.950×
+(`e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`).
 
 **Against vLLM 0.28.0 (history, lane p37, 2026-09-05;** one RTX 5090 box, Vast
 49975016; **measured** — [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
