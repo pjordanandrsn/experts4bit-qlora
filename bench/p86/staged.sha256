@@ -1,0 +1,11 @@
+# Names as the BOX sees them after staging ($W; P42's hook under hook/). The box runs `sha256sum -c` on this file and
+# the controller resolves each name to its source (p86_drive.sh's case) and compares.
+0ae7e39e25bb6a5d98028103c671d650695e1c1fab97f8c2fcd1dc6836982413  p86_run.sh
+cd978cfe9c7d75c3f20d91b057cd56bff96910aa85365913330832a64c3b0924  p86_reduce.py
+3a29f28bb593a61e2c44c15c0305af4bd0296981e1aab3c986a02deaec0cf4e9  p86_vllm_census.py
+d8f86573c90afc9d337b7f83ef4496fbc6c790779f110884f230d302571f788a  p42_reduce.py
+8252c8e750d3b35e8a9807f38339177e3eecee46a8fdd935fdb641e040194a91  p37_vllm.py
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  hook/usercustomize.py
