@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### K21 is the default for the MXFP4 store's batched decode rows (`E4B_MXFP4_GROUPED_SMALLM` now defaults to `auto`), as lane P90 licensed
+
+- **P90** (`e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`): gpt-oss-20b's B=16 step went from 22.511 to
+  13.086 ms on an RTX 5090 (×0.581). The store's KL from the reference fell from 0.00192 to 0.00147 nats on an
+  H100 NVL. B=1 read 1.075× slower.
+- **The modes:**
+  - `auto` (the default, also when unset) sends the store's device-grouped decode rows above T == 1 to K21 when the
+    kernel package carries it with its masked K tail, and keeps today's route (the NF4 fallback) when it does not;
+    T == 1 stays on the split-K GEMV;
+  - `1` requires K21 and its masked tail, and adds T == 1;
+  - `0` is today's route;
+  - anything else is refused.
+- **Tests.** `tests/test_mxfp4_grouped_smallm_route.py`:
+  - the default takes K21 at the registered plan for batched rows, with gpt-oss's epilogue, and keeps T == 1 on the
+    GEMV;
+  - on a kernel side without K21, or without its masked tail, the default is today's route, silently;
+  - `0` is today's route.
+- **P90's runner** asserts the pre-default boolean switch in its tripwire. It ran at its registered commit and is
+  read, so the pinned bytes stay as they ran.
+
 ### P90 read: LICENSED. K21 takes gpt-oss-20b's B=16 decode step to 0.581× on an RTX 5090, and the MXFP4 store's KL falls (bench, docs and register)
 
 - **Speed** (`p90-5090-2`, RTX 5090): B=16 went from 22.511 to 13.086 ms/step (710 → 1,223 tok/s). B=1 read 1.075×

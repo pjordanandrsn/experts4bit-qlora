@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""E4B_MXFP4_GROUPED_SMALLM=1 routes the native MXFP4 store's device-grouped decode rows through K21
-(grouped-nf4-gemm#422, `mxfp4_grouped.gemm_mxfp4_grouped_smallm`), opt-in.
+"""E4B_MXFP4_GROUPED_SMALLM routes the native MXFP4 store's device-grouped decode rows through K21
+(grouped-nf4-gemm#422, `mxfp4_grouped.gemm_mxfp4_grouped_smallm`): by default (auto) above T == 1 when the kernel
+package carries it with its masked tail, as lane P90 licensed; "1" requires it and adds T == 1; "0" is today's route.
 
 K21 is K19's kernel on the MXFP4 bytes: the 16-row device tile table, gate_up's gather folded into the kernel,
 outputs in sorted order. These tests stub it with a pure-torch MXFP4 dequant oracle obeying that contract, and pin:
@@ -8,8 +9,10 @@ outputs in sorted order. These tests stub it with a pure-torch MXFP4 dequant ora
     route's registered plan, neither the GEMV nor the v1 grouped GEMM runs, the tile table is 16-row, and the output
     equals the per-row dequant oracle in the caller's row order -- with gpt-oss's per-expert biases and clamped GLU too;
   - "1" moves T == 1 on an MXFP4 store to the device tile table (so the decode-shaped KL instrument reads K21);
-  - the default ("0" / unset) is today's route: the GEMV at <= 16 rows, the v1 grouped GEMM above when the NF4 stacks
-    are freed; K21 is never called;
+  - "0" is today's route: the GEMV at <= 16 rows, the v1 grouped GEMM above when the NF4 stacks are freed; K21 is
+    never called;
+  - the default (unset / auto) takes K21 for batched rows and keeps T == 1 on the GEMV; on a kernel side without K21
+    or its masked tail it is today's route, silently;
   - "1" on a kernel side without K21, or without its masked K tail (#425), is a RuntimeError naming the requirement;
   - an unknown value is refused;
   - prefill rows (R > 256) do not take K21.
@@ -163,12 +166,8 @@ def test_opted_in_t1_rows_take_the_device_table_and_k21(monkeypatch):
     assert _close(out, ref)
 
 
-@pytest.mark.parametrize("env", [None, "0", ""], ids=["unset", "zero", "empty"])
-def test_the_default_keeps_todays_routes(monkeypatch, env):
-    if env is None:
-        monkeypatch.delenv("E4B_MXFP4_GROUPED_SMALLM", raising=False)
-    else:
-        monkeypatch.setenv("E4B_MXFP4_GROUPED_SMALLM", env)
+def test_zero_keeps_todays_routes(monkeypatch):
+    monkeypatch.setenv("E4B_MXFP4_GROUPED_SMALLM", "0")
     calls = _install_stubs(monkeypatch)
     out, ref = _run(8, T1=True)                                             # T == 1 shape: the split-K GEMV
     assert calls["gemv"] == 2 and calls["k21"] == [] and calls["tiles"] == [], calls
@@ -221,3 +220,31 @@ def test_collapsed_grouping_moves_only_mxfp4_t1(monkeypatch, opt_in):
     assert hr._collapsed_grouping(1, {"kind": "mxfp4"}) == ((False, True) if opt_in else (True, False))
     assert hr._collapsed_grouping(1, {"gu": {}, "dn": {}}) == (True, False)       # the int4 store is K19's switch
     assert hr._collapsed_grouping(16, {"kind": "mxfp4"}) == (False, True)
+
+
+@pytest.mark.parametrize("env", [None, "auto", "AUTO", ""], ids=["unset", "auto", "AUTO", "empty"])
+def test_the_default_takes_k21_above_t1_and_keeps_t1_on_the_gemv(monkeypatch, env):
+    """P90 LICENSED K21 for batched rows (B=16 x0.581, the store's KL lower) and read B=1 SLOWER: the default routes
+    rows above T == 1 through K21 and leaves T == 1 on the split-K GEMV."""
+    from experts4bit_qlora.engines.hot_residency import _K21_PLAN
+    if env is None:
+        monkeypatch.delenv("E4B_MXFP4_GROUPED_SMALLM", raising=False)
+    else:
+        monkeypatch.setenv("E4B_MXFP4_GROUPED_SMALLM", env)
+    calls = _install_stubs(monkeypatch)
+    out, ref = _run(24, gptoss=_gptoss())
+    assert [c[0] for c in calls["k21"]] == ["gather", "sorted"] and all(c[1] == _K21_PLAN for c in calls["k21"]), calls
+    assert calls["gemv"] == 0 and calls["v1"] == 0 and _close(out, ref), calls
+    calls = _install_stubs(monkeypatch)
+    out, ref = _run(4, T1=True)
+    assert calls["k21"] == [] and calls["gemv"] == 2 and _close(out, ref), calls
+
+
+@pytest.mark.parametrize("masked_tail,with_k21", [(True, False), (False, True)], ids=["no-k21", "no-masked-tail"])
+def test_the_default_on_a_kernel_side_without_k21_keeps_todays_route(monkeypatch, masked_tail, with_k21):
+    """auto on a kernel package without K21, or with K21 but not its masked tail, is today's route -- not a refusal."""
+    monkeypatch.delenv("E4B_MXFP4_GROUPED_SMALLM", raising=False)
+    calls = _install_stubs(monkeypatch, with_k21=with_k21, masked_tail=masked_tail)
+    out, ref = _run(24)
+    assert calls["k21"] == [] and calls["v1"] == 2, calls
+    assert _close(out, ref)
