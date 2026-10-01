@@ -112,3 +112,38 @@ fit a 12 GB card, so the reading is their first run. A failure there reads VOID:
 VOID case. No time is quoted (the A2000 is correctness-only).
 
 Amendments, dated, go below this line before any data is read.
+
+### Amendment 1 (2026-10-01, after `p90-5090-1` read VOID; before the next reading's data)
+
+**What happened.** `p90-5090-1` (RTX 5090, $0.118) read **VOID**: both KL arms exited rc 1, so there is no quality
+row.
+- The failure was the **reference**, not the route. gpt-oss-20b's bf16 dequant reference is about 40 GB and does not
+  fit a 32 GB card.
+- transformers offloaded part of it to the CPU, and its grouped-MM fallback then raised a device mismatch
+  (`logs/kl_off.log`).
+- P44-b scored this reference on an **H100 NVL** (94 GB). This registration put the KL arms on a 5090 without checking
+  the reference's size. That was my design error.
+
+**The amendment.** One reading is now **two runs**, selected by a new registered knob, `P90_ARMS`:
+
+| | `speed` | `quality` |
+|---|---|---|
+| card | RTX 5090 (as registered) | H100 NVL, P44-b's card class for the licensed row |
+| arms | the registered speed arms, unchanged | the registered KL arms, OFF then ON, unchanged |
+| guard | 1.0 h at ≤ $0.75/h, so no proving rental under the rule | 1.5 h at ≤ $3.10/h (≤ $4.65), with a proving rental first (`P90_PROVE=1 P90_ARMS=quality`, 0.5 h, ≤ $1.55) |
+
+- Both runs hold the premise and K0 on their own card. Each writes `part_<arms>.json` via `p90_reduce.py --part`.
+- **The verdict** comes from `p90_reduce.py --speed-dir <speed run> --quality-dir <quality run>`. It is the registered
+  rule unchanged, except that every run's premise and K0 must pass.
+- **The quality claim is K21's arithmetic on the H100.** P44's licence of the store (the GEMV arithmetic) was read on
+  the same card class and applied to 5090 serving, so this follows that precedent. The premise holds row-exactness on
+  each card.
+- **The lane ceiling rises** from $3.00 to **$8.00** (hard stop $9.00), still under the $15 single-run tier.
+
+**`p90-5090-1` is not re-read.** Its speed numbers are recorded descriptively only:
+- B=16 22.432 → 13.097 ms/step (×0.584), draws within 0.3 %;
+- B=1 5.796 → 6.226 (×1.074);
+- the census routes as registered: per decode step, K21 48 and NF4 0 at B=16 ON, NF4 48 at OFF; K21 48 and GEMV 0 at
+  B=1 ON, GEMV 48 at OFF.
+
+The verdict comes from fresh runs at this amendment's merge.

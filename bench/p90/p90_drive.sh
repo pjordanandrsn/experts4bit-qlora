@@ -54,8 +54,9 @@ NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "ref
 PASS="P90_RUN_ID=$RUN_ID P90_RUN_NONCE=$NONCE P90_DEADLINE_EPOCH=$DEADLINE P90_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
 # Only host-limit knobs and the proving-run switch travel: a rental is the registered run, so the knobs that change WHAT
 # is measured (model, rows) are not forwarded -- a rehearsal sets them on its own box and the runner marks it
-# REHEARSAL. P90_PROVE=1 is the proving rental the pre-registration names (no model).
-for v in P90_PROVE; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
+# REHEARSAL. P90_PROVE=1 is the proving rental the pre-registration names (no model). P90_ARMS (speed | quality,
+# amendment 1) picks the run's half of the reading; the box refuses any other value.
+for v in P90_PROVE P90_ARMS; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
 if [ "${P90_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p90_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p90"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; launch e4b $E4B_SHA (from $REPO); stacks are the runner's constants; receipts -> $RUN_DIR/p90; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }

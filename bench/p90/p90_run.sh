@@ -17,6 +17,11 @@
 #            the reference scored once and cached.
 # The reducer applies the pre-registered rule.
 #
+# AMENDMENT 1 (2026-10-01): one reading is TWO runs. P90_ARMS=speed (an RTX 5090: the premise, K0, the speed arms) and
+# P90_ARMS=quality (an H100 NVL, P44-b's card class: the premise, K0, the KL arms) -- the bf16 dequant reference of
+# gpt-oss-20b (~40 GB) does not fit a 32 GB 5090 (p90-5090-1's KL arms died offloading it). Each run writes
+# part_<arms>.json; the verdict combines both parts (`p90_reduce.py --speed-dir A --quality-dir B`).
+#
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
 # P90_GPU_CLASS P90_MIN_DISK_GB P90_KL_LIMIT P90_REHEARSAL.
 # P90_PROVE=1 is the PROVING RUN: the refusals, the install with its tripwire, the reducer self-test, the premise, the
@@ -32,7 +37,9 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
 GNF4_SHA=4cc831cfa55076f5fe6a23991b88b1c10ca38d87   # grouped-nf4-gemm main (K21 #422 + its masked tail #425 + K24 read #428); a registered constant
 MID=openai/gpt-oss-20b; REV=6cee5e81ee83917806bbde320786a8fb61efebee
-GPU_CLASS=${P90_GPU_CLASS:-5090}; MIN_DISK_GB=${P90_MIN_DISK_GB:-150}; KL_LIMIT=${P90_KL_LIMIT:-0}; REHEARSAL=${P90_REHEARSAL:-0}
+ARMS=${P90_ARMS:-}
+case "$ARMS" in speed) CLASS_REG=5090;; quality) CLASS_REG="H100 NVL";; *) say "refusing: P90_ARMS must be speed or quality (amendment 1), got '$ARMS'"; finish 78;; esac
+GPU_CLASS=${P90_GPU_CLASS:-$CLASS_REG}; MIN_DISK_GB=${P90_MIN_DISK_GB:-150}; KL_LIMIT=${P90_KL_LIMIT:-0}; REHEARSAL=${P90_REHEARSAL:-0}
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false E4B_MODEL_ID=$MID
 export PYTHONPATH=$W/hook E4B_RECOMPILE_LIMIT=64 E4B_ACCUM_RECOMPILE_LIMIT=64
 # every lever is unset; each arm sets its own switches (E4B_MXFP4_GROUPED_SMALLM explicitly, OFF 0 or ON 1)
@@ -40,8 +47,8 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       E4B_FUSE_ROUTER_EPI E4B_INT4_KEEP_NF4 E4B_INT4_GROUPED_SMALLM E4B_INT4_LEAN_GLUE E4B_INT4_DECODE_A16 E4B_ROUTER_EPI_CAST \
       E4B_FUSED_KV_APPEND E4B_MXFP4_GEMV E4B_MXFP4_GROUPED_SMALLM E4B_CALIB_SOURCE E4B_CALIB_NSEQ
 : > summary.txt; echo "$P90_INSTANCE_ID" > INSTANCE_ID
-echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MID rev=$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB kl_limit=$KL_LIMIT" | tee -a summary.txt
-if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 150 ] || [ "$KL_LIMIT" != 0 ]; then
+echo "KNOBS arms=$ARMS e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MID rev=$REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB kl_limit=$KL_LIMIT" | tee -a summary.txt
+if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != "$CLASS_REG" ] || [ "$MIN_DISK_GB" != 150 ] || [ "$KL_LIMIT" != 0 ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
 # ---- staged pieces, byte-for-byte
@@ -56,7 +63,7 @@ nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,compute_cap --forma
 nvidia-smi --query-gpu=power.limit,clocks.max.sm --format=csv,noheader | sed "s/^/power.limit,clocks.max.sm /" | tee -a forensics.txt
 lscpu | grep -E "Model name|^Vendor ID" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
-case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the lane registers the RTX $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac
+case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the $ARMS run registers the $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (the checkpoint, an NF4 arena, the KL reference cache)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
 # ---- deadline guard + per-arm alarm (P54's): never start an arm that cannot finish 10 min before teardown
@@ -159,18 +166,21 @@ kl(){ local K=$1 TAG; TAG=$([ "$K" = 1 ] && echo on || echo off); local AL; AL=$
   { echo -n "kl $TAG rc=$rc "; grep -aE "^== " logs/kl_$TAG.log | tail -1 | cut -c1-200; echo; } >> summary.txt
   return $rc; }
 rc_any=0; rec(){ local r=$1; [ "$r" = 0 ] || [ "$rc_any" != 0 ] || rc_any=$r; }
-# the registered order: speed first draws interleaved OFF/ON (censused); KL OFF (scores and caches the reference), KL ON;
-# speed second draws ON/OFF
-for B in 16 1; do
-  can_run 900 b${B}_off && { speed 0 $B "" 1; rec $?; }
-  can_run 900 b${B}_on && { speed 1 $B "" 1; rec $?; }
-done
-can_run 3000 kl_off && { kl 0; rec $?; }
-can_run 1800 kl_on && { kl 1; rec $?; }
-for B in 16 1; do
-  can_run 900 b${B}_on_r2 && { speed 1 $B _r2 ""; rec $?; }
-  can_run 900 b${B}_off_r2 && { speed 0 $B _r2 ""; rec $?; }
-done
-say "reduce"; python $W/p90_reduce.py --dir $W --out $W/verdict.json 2>&1 | tee -a summary.txt
-[ -s $W/verdict.json ] || { say "REDUCER wrote no verdict"; finish 22; }
+# the registered order. speed (5090): first draws interleaved OFF/ON (censused), then second draws ON/OFF. quality (H100
+# NVL): KL OFF (scores and caches the reference), then KL ON.
+if [ "$ARMS" = speed ]; then
+  for B in 16 1; do
+    can_run 900 b${B}_off && { speed 0 $B "" 1; rec $?; }
+    can_run 900 b${B}_on && { speed 1 $B "" 1; rec $?; }
+  done
+  for B in 16 1; do
+    can_run 900 b${B}_on_r2 && { speed 1 $B _r2 ""; rec $?; }
+    can_run 900 b${B}_off_r2 && { speed 0 $B _r2 ""; rec $?; }
+  done
+else
+  can_run 3000 kl_off && { kl 0; rec $?; }
+  can_run 1800 kl_on && { kl 1; rec $?; }
+fi
+say "reduce ($ARMS part)"; python $W/p90_reduce.py --part $ARMS --dir $W --out $W/part_$ARMS.json 2>&1 | tee -a summary.txt
+[ -s $W/part_$ARMS.json ] || { say "REDUCER wrote no part report"; finish 22; }
 finish "$rc_any"
