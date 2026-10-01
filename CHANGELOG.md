@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### P93 read (#564): Granite LICENSED (B=16 ×0.594, B=1 ×0.854, K8 inside the gate), OLMoE QUALITY_FAIL (c4val1 K8 +0.155 ppl, the other sign from P92's); `E4B_NF4_GROUPED_SMALLM` stays `0` (bench, docs and register)
+
+- **`p93-5090-1`** (RTX 5090, $0.33), P92's design on the served-precision route (#834):
+  - Granite `r12epi`: B=16 10.535 → 6.258 ms (×0.594), B=1 ×0.854; K8 −0.026 / +0.024 ppl.
+  - OLMoE `nf4`: B=16 14.352 → 8.585 ms (×0.598), B=1 ×0.859; K8 +0.011 / **+0.155** ppl.
+  - In-model the TF32 tree GEMM runs at 0.41× / 0.48× of the served NF4 kernel.
+- **OLMoE's failure is not the weight rounding.** P92 (bf16) moved its c4val1 K8 −0.107. P93 changed exactly the
+  rounding, and it moved +0.155. Granite moved about as much at TF32 as at bf16. The next lane measures the
+  instrument's spread under the production path's own arithmetic on that text, before any instrument changes.
+- **Register:** `e4b.serve.p93.nf4-families.k25-tree-tf32-b16.5090.2026-10-01`.
+
 ### Lane P93 registered (#564): P92's design on the route at the served precision -- does K25-tree in TF32 make the NF4 families' B=16 decode faster without moving their K8? (bench and tests only)
 
 - **What it is.** P92's lane, unchanged except the treatment and the pin.

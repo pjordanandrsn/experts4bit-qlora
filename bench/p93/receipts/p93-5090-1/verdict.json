@@ -1,0 +1,142 @@
+{
+ "lane": "P93",
+ "families": [
+  {
+   "family": "granite",
+   "verdict": "LICENSED",
+   "reasons": [
+    "B=16 ON/OFF 0.594 <= 0.95; K8 passed"
+   ],
+   "b16_off_ms": 10.535088907142857,
+   "b16_on_ms": 6.257829121428571,
+   "b16_ratio": 0.5939987005886322,
+   "b1_off_ms": 3.861896448818898,
+   "b1_on_ms": 3.298901976377953,
+   "b1_ratio": 0.8542181335252714,
+   "draw_spread": {
+    "off": 0.0004977212502417228,
+    "on": 0.00039546175572002795
+   },
+   "census": {
+    "off_b16": {
+     "k25_ms": 0.0,
+     "k25_calls": 0,
+     "served_ms": 6.606125,
+     "served_calls": 64.0,
+     "gemv_calls": 0,
+     "kernel_ms": 10.566480875000002
+    },
+    "off_b1": {
+     "k25_ms": 0.0,
+     "k25_calls": 0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 64.0,
+     "kernel_ms": 3.869112625
+    },
+    "on_b16": {
+     "k25_ms": 2.700125,
+     "k25_calls": 64.0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 0,
+     "kernel_ms": 6.302371625
+    },
+    "on_b1": {
+     "k25_ms": 1.564,
+     "k25_calls": 64.0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 0,
+     "kernel_ms": 3.3277038749999996
+    }
+   },
+   "k8": {
+    "wikitext": {
+     "off": 5.360589284186573,
+     "on": 5.335070006919709,
+     "delta": -0.02551927726686376
+    },
+    "c4val1": {
+     "off": 11.574771456022221,
+     "on": 11.598306171186659,
+     "delta": 0.023534715164437614
+    }
+   },
+   "k8_lines": [
+    "K8 wikitext: base=5.36059 cand=5.33507 delta=-0.02552 sha=5281b7c3df28 steps=2048",
+    "K8 c4val1: base=11.57477 cand=11.59831 delta=+0.02353 sha=549ca209af16 steps=2048",
+    "K8 VERDICT PASS (uncalibrated: |delta| <= 0.05 on every text)"
+   ]
+  },
+  {
+   "family": "olmoe",
+   "verdict": "QUALITY_FAIL",
+   "reasons": [
+    "K8 (uncalibrated, |delta| <= 0.05 ppl on every text) failed"
+   ],
+   "b16_off_ms": 14.351962707142857,
+   "b16_on_ms": 8.585026135714287,
+   "b16_ratio": 0.5981778458385757,
+   "b1_off_ms": 4.231117976377953,
+   "b1_on_ms": 3.635591244094488,
+   "b1_ratio": 0.8592507380772054,
+   "draw_spread": {
+    "off": 0.000465325843651776,
+    "on": 0.001776722577380152
+   },
+   "census": {
+    "off_b16": {
+     "k25_ms": 0.0,
+     "k25_calls": 0,
+     "served_ms": 10.38925,
+     "served_calls": 32.0,
+     "gemv_calls": 0,
+     "kernel_ms": 14.251868375
+    },
+    "off_b1": {
+     "k25_ms": 0.0,
+     "k25_calls": 0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 32.0,
+     "kernel_ms": 4.252386249999998
+    },
+    "on_b16": {
+     "k25_ms": 4.95375,
+     "k25_calls": 32.0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 0,
+     "kernel_ms": 8.629549999999998
+    },
+    "on_b1": {
+     "k25_ms": 1.432625,
+     "k25_calls": 32.0,
+     "served_ms": 0.0,
+     "served_calls": 0,
+     "gemv_calls": 0,
+     "kernel_ms": 3.643371875000001
+    }
+   },
+   "k8": {
+    "wikitext": {
+     "off": 6.911773633695096,
+     "on": 6.923153898394636,
+     "delta": 0.011380264699540454
+    },
+    "c4val1": {
+     "off": 18.90599688236447,
+     "on": 19.060634936525183,
+     "delta": 0.15463805416071352
+    }
+   },
+   "k8_lines": [
+    "K8 wikitext: base=6.91177 cand=6.92315 delta=+0.01138 sha=2d22dfc7e0b1 steps=2048",
+    "K8 c4val1: base=18.90600 cand=19.06063 delta=+0.15464 sha=932b86d7a513 steps=2048",
+    "K8 VERDICT FAIL (uncalibrated: |delta| <= 0.05 on every text)"
+   ]
+  }
+ ],
+ "verdict": "granite=LICENSED olmoe=QUALITY_FAIL"
+}
