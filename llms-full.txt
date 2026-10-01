@@ -2366,7 +2366,11 @@ that build). Same-box e4b int4 / NF4: ×2.356 / ×2.851. **Bounded:** one box,
 one prompt set, B=1/B=16 only; vLLM's number includes its serving loop and
 e4b's does not, so the engine advantage is understated; quality quoted, never
 equated; footprint and TTFT not compared. The 2026-09-05 comparison below
-stays as measured history.
+stays as measured history. **Where the B=16 gap is (P86, 2026-10-01, same box,
+both engines censused):** the experts, e4b's int4 GEMV 6.98 ms against vLLM's
+Marlin MoE 4.78 (2.86 of the 3.32 ms gap); routing glue +0.62; e4b's attention
+is faster (0.96 vs 1.35)
+(`e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01`).
 
 **Against vLLM 0.28.0 (history, lane p37, 2026-09-05;** one RTX 5090 box, Vast
 49975016; **measured** — [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
@@ -2862,24 +2866,12 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     caller on this stack that does not enable graphs leaves most of the
     throughput unused. The package's serving entry points use transformers'
     `generate`, not the paged runner.
-  - **#674.** The attention pack (`sha256:d7cfa1f4…`) reproduced
-    byte-for-byte on a second box and release, and on a third in P83. The
-    expert pack is the licensed `0c9955a9…`. The build's K8 reads 6.36396
-    with the fp32 router and 6.31811 with the cast; the licensed builds read
-    6.36709.
-  - **K8 is box-invariant on AMD hosts; the software moved it** (P83).
-    On one box P70's build reads 6.36709 and P82's 6.36396, each the float
-    it gave on other machines: −0.00049 nats, far inside the floor
-    (`e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29`).
-    On an Intel i9-14900K the attention calibrated differently
-    (`45b4cc5a…`, 6.36276; P84 reading 1, VOID). *(Corrects P82's
-    cross-box inference from one cast-arm pair.)*
-  - **It is gnf4#413, the fused fp8 KV append's rounding** (P84 KERNEL,
-    then P85 CONFIRMED, both on P70's machine). e4b's release and the
-    harness move K8 by zero. P70's build with the fused append off reads
-    6.36396 bit for bit, and gnf4 0.33.6 reads 6.36709
-    (`e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30`).
-    The newer number is the reference quantizer's KV bytes.
+  - **#674: answered.** The licensed int4 recipe's fp32 K8 moved from
+    6.36709 to 6.36396 because of one change, gnf4#413 (the fused fp8 KV
+    append's rounding). P70's build with that append off reads 6.36396 bit
+    for bit (P85, `e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30`;
+    P83/P84 isolated it). Box-invariant on AMD hosts; an Intel host's
+    attention calibrated differently (P84).
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16
@@ -3505,6 +3497,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29 [measured]: Lane P83: on ONE RTX 5090, P55x's calibrated int4 recipe built as P70 built it (e4b 0.37.4 @c77aab6, grouped-nf4-gemm 0.33.0) reads wikitext K8 6.36709 (mean NLL 1.8511420498367808) and as P82 built it (e4b 0.37.8, grouped-nf4-gemm 0.33.7) reads 6.36396 (1.8506507749113845), both with fp32 routing weights (E4B_ROUTER_EPI_CAST=0), each repeated bit for bit on the box: DIFFERENT, -0.00049 nats. Each value is the same float its software gave on other machines (P70's on three, P82's on two), so this K8 is box-invariant for a fixed software stack and the software between the two builds moved it.
 - e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30 [measured]: Lane P84: on ONE RTX 5090 (the Ryzen 7950X host on which P55x and P70 read 6.36709), P55x's calibrated int4 recipe with fp32 routing weights (E4B_ROUTER_EPI_CAST=0) reads wikitext K8 mean NLL 1.8506507749113845 (6.36396) in all three builds on grouped-nf4-gemm 0.33.7 -- e4b 0.37.4 through P70's harness (H2), e4b 0.37.8 through P70's harness (H1), and e4b 0.37.8 through P82's harness (C, the control, = N's known float) -- each repeated bit for bit, against P70's build's known 1.8511420498367808 (e4b 0.37.4, grouped-nf4-gemm 0.33.0): KERNEL. grouped-nf4-gemm 0.33.0 -> 0.33.7 is the whole -0.000491 nats; the e4b release and the harness move K8 by exactly zero.
 - e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30 [measured]: Lane P85, one RTX 5090 (P70's card): P70's build of the int4 recipe (e4b 0.37.4, grouped-nf4-gemm 0.33.0, fp32 router) reads K8 mean NLL 1.8511420498367808; with the fused fp8 KV append off it reads the 0.33.7 builds' 1.8506507749113845 bit for bit, and on 0.33.6 it reads 1.8511420498367808 bit for bit: CONFIRMED, grouped-nf4-gemm#413 is the whole K8 step.
+- e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01 [measured]: Lane P86, one RTX 5090, same prompts: at B=16 e4b's int4 step is 12.06 ms and vLLM 0.30.0's 8.75 ms (1.38x); by kernel census the gap is the experts (e4b's int4 GEMV 6.98 ms vs Marlin MoE 4.78), 2.86 of 3.32 ms, then routing glue (+0.62).
 
 Open items (no evidence either way):
 
@@ -3512,4 +3505,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(264 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(265 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
