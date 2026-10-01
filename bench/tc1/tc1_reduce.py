@@ -26,6 +26,12 @@ kept. What TC1 adds, named so the files can be diffed:
   R6 PREDICTIONS P1-P10 (TC1-PREREG "Predictions") scored HELD / FALSIFIED / UNTESTED, mechanically.
   R7 `--selftest`: hand-built receipts (a complete OK receipt per arm with every field this file reads), >= 16 cases,
      including one receipt per validity predicate that MUST read VOID, one QUALITY_FAIL, one UNSTABLE, one DIVERGENT.
+  R8 (phase 2) LABELLED rows: `ckpt_unsloth_t28` (tp4's torch-2.8 venv, the loader's default backend), `ckpt_unsloth_triton`,
+     `ckpt_unsloth_best` and `ckpt_axolotl_best` get positions against e4b/fused_attn4_m under their own label, never the
+     quoted matched position. Unsloth engagement validity: an arm that REQUESTED a backend must show that backend's counter
+     >= L*A per step, and a grouped_mm request must show zero per-expert-loop calls, else VOID with the reason; axolotl with
+     quantize_moe_experts must show n_bnb4bit_unwrapped >= L. P1b: the t28 row within 15 % of 29.05 s/step; P8 is now
+     "device busy fraction >= 0.5 on the profiled grouped_mm arm".
 
 It licenses nothing and quotes no cross-box number. stdlib only.  Usage: tc1_reduce.py <dir> [--md out.md] [--steps N] | --selftest
 """
@@ -44,6 +50,9 @@ EQUIV, COMPARABLE = 0.02, 0.05    # R4: equivalence bands on BOTH the median per
 STEP0_TOL = 0.005                 # R3: the matched set agrees on step-0 held-out loss to 0.005 nats, by construction
 STABILITY = {"e4b": 0.05}         # R1: |d1 - d2| / mean; every other framework 0.10
 STABILITY_OTHER = 0.10
+TP4_T28_S_PER_STEP = 29.05        # P1b: the Unsloth s/step the phase-2 instruction quotes for this family on the torch-2.8 image; UNVERIFIED by me against the tp4 receipt
+P8_BUSY_MIN = 0.5                 # P8 (phase 2): device busy fraction >= 0.5 on the profiled grouped_mm arm
+UNSLOTH_BACKEND_KEYS = {"grouped_mm": "unsloth_grouped_mm", "unsloth_triton": "unsloth_triton", "native_torch": "unsloth_loop"}   # tc1_arm.py's counter keys
 
 FAMS = ["qwen3"]
 NAMES = {"qwen3": "Qwen3-30B-A3B"}
@@ -56,13 +65,20 @@ SECONDARY = {fw: PRIMARY[fw] + "_mb1" for fw in PRIMARY}
 DRAW2 = {("e4b", "fused_attn4_m"): ("e4b", "fused_attn4_m_d2"), ("unsloth", "ckpt_unsloth_m"): ("unsloth", "ckpt_unsloth_m_d2")}
 NATIVE = {"e4b": "fused_attn4_shipped", "unsloth": "ckpt_unsloth_best", "axolotl": "ckpt_axolotl_best"}
 PROF = ("unsloth", "ckpt_unsloth_prof")
-# TC1-PREREG "Arms, in this order": the registered arm set, in the registered order (the support table's row order)
+# R8: labelled rows -- a position against e4b/fused_attn4_m under this label, never the quoted matched position
+LABELLED = {("unsloth", "ckpt_unsloth_t28"): "unsloth t28 (field image: tp4's torch-2.8 venv, loader-default backend)",
+            ("unsloth", "ckpt_unsloth_triton"): "unsloth triton backend",
+            ("unsloth", "ckpt_unsloth_best"): "unsloth native-best (grouped_mm + speed tilt, native init)",
+            ("axolotl", "ckpt_axolotl_best"): "axolotl native-best (KernelsPlugin scattermoe)"}
+# TC1-PREREG "Arms, in this order" + the phase-2 labelled rows: the support table's row order
 EXPECTED = {"qwen3": [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "fused_attn4_m_d2"), ("unsloth", "ckpt_unsloth_m_d2"),
                       ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("unsloth", "ckpt_unsloth_best"),
+                      ("unsloth", "ckpt_unsloth_t28"), ("unsloth", "ckpt_unsloth_triton"),
                       ("e4b", "fused_attn4_shipped"), ("e4b", "reference_attn4_m"), ("unsloth", "ckpt_unsloth_prof")]}
 # the arms registered MATCHED (fp32 adapters, --lora-init matched:<seed>): R3 applies to these, native rows carry no R3
 MATCHED = {"fused_attn4_m", "fused_attn4_m_d2", "ckpt_unsloth_m", "ckpt_unsloth_m_d2", "hf_peft_m", "ckpt_axolotl_m",
-           "reference_attn4_m", "ckpt_unsloth_prof", "fused_attn4_m_mb1", "ckpt_unsloth_m_mb1", "hf_peft_m_mb1", "ckpt_axolotl_m_mb1"}
+           "reference_attn4_m", "ckpt_unsloth_prof", "ckpt_unsloth_t28", "ckpt_unsloth_triton",
+           "fused_attn4_m_mb1", "ckpt_unsloth_m_mb1", "hf_peft_m_mb1", "ckpt_axolotl_m_mb1"}
 VOCAB = ("OK", "REFUSED", "OOM", "INSTALL_FAILED", "LOAD_FAULT", "HARNESS_ERROR", "ALARM", "NOT_RUN")
 VERDICTS = ("VALID", "VOID", "QUALITY_FAIL", "OOM", "UNSUPPORTED", "HARNESS_ERROR", "ALARM", "NOT_RUN")
 STATUS_MAP = {"ok": "OK", "c1_failed": "OK", "refused": "REFUSED", "oom": "OOM", "install_failed": "INSTALL_FAILED",
@@ -230,12 +246,28 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(f"bnb4bit expert modules (innermost) {nb} < {L} (silent fallback?)")
         if not any("Enabling LoRA on MoE parameters" in s for s in r.get("engagement_banners", []) or []):
             why.append("no 'Enabling LoRA on MoE parameters' banner")
+        kn = r.get("unsloth_knobs") or {}                # R8: the REQUESTED backend must be the one that ran
+        req = kn.get("moe_backend_requested")
+        if req and req != "default":
+            mins, maxs = r.get("unsloth_backend_calls_per_step_min"), r.get("unsloth_backend_calls_per_step_max") or {}
+            key = UNSLOTH_BACKEND_KEYS.get(req)
+            if not isinstance(mins, dict) or key is None:
+                why.append(f"backend {req} requested but the receipt carries no backend counters")
+            else:
+                if mins.get(key, 0) < L * A:
+                    why.append(f"requested backend {req}: {key} engaged {mins.get(key, 0)} < {L}*accum {A} per step (moe_backend_selected {r.get('moe_backend_selected')})")
+                if req == "grouped_mm" and (mins.get("unsloth_loop", 0) or maxs.get("unsloth_loop", 0)):
+                    why.append(f"grouped_mm requested but the per-expert loop ran (unsloth_loop min {mins.get('unsloth_loop')} max {maxs.get('unsloth_loop')})")
     elif fw in ("hf", "axolotl"):
         if r.get("experts_forward_calls_per_step_min", 0) < L * A:
             why.append(f"experts forward calls/step min {r.get('experts_forward_calls_per_step_min')} < {L}*accum {A}")
         key = "hf_targets" if fw == "hf" else "axolotl_targets"
         if not (r.get(key) or r.get("hf_targets") or {}).get("n_target_parameters"):
             why.append("adapted no expert parameter (target_parameters empty) -- attention-only, not the registered adapter set")
+        if fw == "axolotl" and ((r.get("axolotl") or {}).get("config") or {}).get("quantize_moe_experts"):   # R8: the 4-bit expert path engaged
+            nb = (r.get("axolotl_bnb4bit_modules") or {}).get("n_bnb4bit_unwrapped")
+            if nb is None or nb < L:
+                why.append(f"quantize_moe_experts set but bnb-parametrized experts modules (innermost) {nb} < {L}")
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
         seed = matched_seed_of(r)
         if seed is None:
@@ -463,6 +495,12 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
         k2 = (other, SECONDARY[other])
         if e2 or recs.get(k2):
             secondary[other] = position(e2 or {"usable": False, "why": "no receipt"}, draws.get(k2, {"usable": False, "why": "no receipt"}), other + " (mb1)")
+    labelled = {}                                       # R8: labelled rows against e4b/fused_attn4_m
+    for k, label in LABELLED.items():
+        if recs.get(k) is not None:
+            labelled[k] = position(e_d, draws.get(k, {"usable": False, "why": "no receipt"}), label)
+            if labelled[k].get("quoted"):
+                labelled[k]["other_regime"] = regime_of(fam, recs[k])
     native = {}
     sh = draws.get(("e4b", NATIVE["e4b"]), {"usable": False, "why": "no receipt"})
     for other in ("unsloth", "axolotl"):
@@ -485,7 +523,8 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
     prof = recs.get(PROF)
     profile = (prof.get("profile") or None) if is_ok(prof) else None
     return {"fam": fam, "rows": rows, "V": V, "verdicts": verdicts, "parity": par, "draws": draws, "positions": positions, "secondary": secondary,
-            "native": native, "equivalence": equiv, "frozen": frozen, "anchor_probe": anchor_probe, "profile": profile,
+            "native": native, "labelled": labelled, "equivalence": equiv, "frozen": frozen, "anchor_probe": anchor_probe, "profile": profile,
+            "prof_knobs": (prof.get("unsloth_knobs") or {}) if is_ok(prof) else {},
             "tokens_sha": tokens_sha, "e4b_trainable": e4b_trainable, "N": N, "e": e_anchor, "ref": ref,
             "u": recs.get(("unsloth", PRIMARY["unsloth"])), "h": recs.get(("hf", PRIMARY["hf"])), "ax": recs.get(("axolotl", PRIMARY["axolotl"]))}
 
@@ -511,6 +550,13 @@ def score_predictions(F):
                     f"matched unsloth/e4b {r:.3f} vs [2.0, 5.0]" + ("" if held else ("; BELOW 1.5: the standing position is refuted and superseded" if r < 1.5 else "; outside the band"))))
     else:
         out.append(("P1", "qwen3", "UNTESTED", "no quoted matched position: " + pu.get("why", "no pair")))
+    # P1b (phase 2): the field-image row (tp4's torch-2.8 venv, loader-default backend) within 15 % of the quoted tp4 s/step
+    t = dr.get(("unsloth", "ckpt_unsloth_t28"), {})
+    if t.get("usable"):
+        dev = t["s"] / TP4_T28_S_PER_STEP - 1
+        out.append(("P1b", "qwen3", "HELD" if abs(dev) <= 0.15 else "FALSIFIED", f"t28 {t['s']:.3f} s/step vs {TP4_T28_S_PER_STEP} ({dev:+.1%}; within 15 % predicted); backend selected {R['rows'][[i for i, x in enumerate(R['rows']) if (x['fw'], x['tag']) == ('unsloth', 'ckpt_unsloth_t28')][0]]['r'].get('moe_backend_selected')}"))
+    else:
+        out.append(("P1b", "qwen3", "UNTESTED", f"ckpt_unsloth_t28 {vof('unsloth', 'ckpt_unsloth_t28')}: " + t.get("why", "no receipt")))
     # P2 draws agree within 5 % (e4b) / 10 % (Unsloth)
     ev = []
     for k in (QUALITY_ANCHOR, ("unsloth", PRIMARY["unsloth"])):
@@ -568,10 +614,13 @@ def score_predictions(F):
         out.append(("P7", "qwen3", "HELD" if (gain_x <= 1.5 and e_x >= 2.0) else "FALSIFIED", f"unsloth_m/unsloth_best {gain_x:.3f} (<= 1.5 predicted); unsloth_best/e4b_m {e_x:.3f} (>= 2 predicted)"))
     else:
         out.append(("P7", "qwen3", "UNTESTED", f"unsloth_best {vof('unsloth', NATIVE['unsloth'])} / unsloth_m {vof('unsloth', PRIMARY['unsloth'])} / e4b_m {vof(*QUALITY_ANCHOR)}: all three must be VALID"))
-    # P8 the profiled Unsloth arm is host-bound: device busy fraction < 0.4
+    # P8 (phase 2): device busy fraction >= 0.5 on the profiled grouped_mm arm
     pr = R.get("profile")
-    if pr and pr.get("device_busy_fraction") is not None:
-        out.append(("P8", "qwen3", "HELD" if pr["device_busy_fraction"] < 0.4 else "FALSIFIED", f"device_busy_fraction {pr['device_busy_fraction']:.3f} (< 0.4 predicted); device events/step {pr.get('device_events_per_step')}"))
+    req = (R.get("prof_knobs") or {}).get("moe_backend_requested")
+    if pr and pr.get("device_busy_fraction") is not None and req == "grouped_mm":
+        out.append(("P8", "qwen3", "HELD" if pr["device_busy_fraction"] >= P8_BUSY_MIN else "FALSIFIED", f"device_busy_fraction {pr['device_busy_fraction']:.3f} (>= {P8_BUSY_MIN} predicted on the grouped_mm arm); device events/step {pr.get('device_events_per_step')}"))
+    elif pr and pr.get("device_busy_fraction") is not None:
+        out.append(("P8", "qwen3", "UNTESTED", f"the profiled arm requested backend {req!r}, not grouped_mm (device_busy_fraction {pr['device_busy_fraction']:.3f} recorded)"))
     else:
         out.append(("P8", "qwen3", "UNTESTED", f"ckpt_unsloth_prof {vof(*PROF)} carries no profile summary"))
     # P9 e4b internal parity PASS
@@ -667,6 +716,8 @@ def family_block(R):
         lines += pos_lines(sp, R["N"], prefix="SECONDARY POSITION (mb1 × accum 8, run because a primary arm OOMed)")
     for other, np_ in R["native"].items():
         lines += pos_lines(np_, R["N"], prefix="NATIVE-BEST (reported beside, never instead of, the matched position)")
+    for k, lp in R["labelled"].items():
+        lines += pos_lines(lp, R["N"], prefix=f"LABELLED ROW {k[1]} vs e4b/fused_attn4_m (never the quoted position)")
     if R["equivalence"]:
         lines.append("- equivalence vs `e4b/reference_attn4_m` (R4; EQUIVALENT ≤ 0.02 / COMPARABLE ≤ 0.05 on both the median per-step |Δ train| and |Δ held-out at N|): "
                      + "; ".join(f"`{k[0]}/{k[1]}` **{e['reading']}**" + (f" (median {f(e.get('med_train'), 4)}, held-out {f(e.get('d_heldout'), 4)}, step-0 {f(e.get('d_step0'), 4)})" if e.get("med_train") is not None else "") + (f" — {e['why']}" if e.get("why") else "")
@@ -690,7 +741,7 @@ def render(F, d):
            f"fp32 adapters, step-0 held-out within {STEP0_TOL} of e4b/reference_attn4_m); VERDICT exactly one of {' / '.join(VERDICTS)} (QUALITY_FAIL = held-out |Δ| at N > {READ} "
            f"vs e4b/fused_attn4_m); positions = s/step ratios other/e4b from the medians over both draws (stability |d1-d2|/mean ≤ 5 % e4b / 10 % others, else UNSTABLE), quoted only "
            f"when both arms are VALID; equivalence vs e4b/reference_attn4_m EQUIVALENT ≤ {EQUIV} / COMPARABLE ≤ {COMPARABLE} / else DIVERGENT; frozen base SAME-BYTES / DIFFERENT / N-A per slot; "
-           f"predictions P1–P10 scored HELD / FALSIFIED / UNTESTED. VOID never enters a ratio or an equivalence reading. Nothing is licensed; no cross-box number is divided into these."]
+           f"predictions P1–P10 (+ P1b) scored HELD / FALSIFIED / UNTESTED. VOID never enters a ratio or an equivalence reading. Nothing is licensed; no cross-box number is divided into these."]
     for fn in ("versions.txt", "box.json"):
         vp = os.path.join(d, fn)
         if os.path.exists(vp):
@@ -705,7 +756,7 @@ def render(F, d):
             continue
         for x in R["rows"]:
             out.append(f"| {fam} | {x['fw']}/{x['tag']} | **{x['verdict']}** | {x['validity']} | {f(x.get('quality_delta'), 4) if x.get('quality_delta') is not None else (x.get('quality') or '—')} | {(x['why'] or x['reason'])[:160]} |")
-    out += ["\n## Predictions P1–P10 (TC1-PREREG.md, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+    out += ["\n## Predictions P1–P10 (+ P1b) (TC1-PREREG.md + phase 2, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
     for pid, fam, v, ev in score_predictions(F):
         out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     return "\n".join(out)
@@ -717,9 +768,12 @@ def reduce_dir(d, n_steps=None):
 
 
 # ----------------------------------------------------------------------------- R7: the selftest (hand-built receipts)
-def _receipt(fw, tag, arm, steps=20, s=1.0, heldout0=2.0000, heldout_n=1.8000, losses=None, matched=True, seed=3407, **over):
+def _receipt(fw, tag, arm, steps=20, s=1.0, heldout0=2.0000, heldout_n=1.8000, losses=None, matched=True, seed=3407, backend="grouped_mm", **over):
     """A complete OK receipt carrying every field this reducer reads, valid by every predicate for qwen3 (L=48, accum 4)."""
     L, A = 48, 4
+    bkey = UNSLOTH_BACKEND_KEYS.get(backend, "unsloth_grouped_mm")
+    ub = {"unsloth_grouped_mm": 0, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": L * A}
+    ub[bkey] = L * A
     losses = losses if losses is not None else [round(2.0 - 0.01 * i, 5) for i in range(steps)]
     r = {"framework": fw, "fam": "qwen3", "arm": arm, "tag": tag, "status": "ok", "steps": steps, "seq": 2048, "accum": A, "micro_batch": 2,
          "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "n_layers": L, "r": 16, "alpha": 16, "lr": 2e-4, "autocast": False,
@@ -743,7 +797,13 @@ def _receipt(fw, tag, arm, steps=20, s=1.0, heldout0=2.0000, heldout_n=1.8000, l
                                          "down": {"sha": "d" * 64, "regime": "nf4/64", "control_detects_flip": True},
                                          "q_proj": {"sha": ("q" if fw == "e4b" else "u") * 64, "regime": "nf4/64+dq" if fw == "e4b" else "nf4/64", "control_detects_flip": True}},
                                "control_detects_flip": True, "errors": []},
-         "adapter": {"bytes": 1, "dtypes": ["torch.float32"]}, "profile": None}
+         "adapter": {"bytes": 1, "dtypes": ["torch.float32"]}, "profile": None,
+         "unsloth_knobs": ({"moe_backend_requested": backend, "speed_tilt": False, "double_quant_requested": "off", "env_set": ({} if backend == "default" else {"UNSLOTH_MOE_BACKEND": backend})} if fw == "unsloth" else None),
+         "moe_backend_selected": (backend if backend != "default" else "grouped_mm") if fw == "unsloth" else None,
+         "unsloth_backend_calls_per_step_min": dict(ub) if fw == "unsloth" else None, "unsloth_backend_calls_per_step_max": dict(ub) if fw == "unsloth" else None,
+         "unsloth_double_quant": {"requested": False, "how": "from_pretrained(bnb_4bit_use_double_quant=False)", "loaded_nested": False} if fw == "unsloth" else None,
+         "axolotl": ({"version": "0.20.0", "config": {"quantize_moe_experts": True, "plugins": (["axolotl.integrations.kernels.KernelsPlugin"] if tag.endswith("_best") else None)}, "census": {"n_bnb4bit_unwrapped": L}} if fw == "axolotl" else None),
+         "axolotl_bnb4bit_modules": {"n_bnb4bit_unwrapped": L, "quantized_moe_experts_n": 2 * L} if fw == "axolotl" else None}
     for k, v in over.items():
         if isinstance(v, dict) and isinstance(r.get(k), dict) and not k.startswith("="):
             r[k] = {**r[k], **v}
@@ -768,9 +828,11 @@ def _good_set():
     R[("axolotl", "ckpt_axolotl_m")] = _stub("axolotl", "ckpt_axolotl_m", "axolotl", "install_failed", "pip rc=1")
     R[("axolotl", "ckpt_axolotl_best")] = _stub("axolotl", "ckpt_axolotl_best", "axolotl", "install_failed", "pip rc=1")
     R[("unsloth", "ckpt_unsloth_best")] = _receipt("unsloth", "ckpt_unsloth_best", "unsloth", s=2.40, heldout_n=1.8300, matched=False)
+    R[("unsloth", "ckpt_unsloth_t28")] = _receipt("unsloth", "ckpt_unsloth_t28", "unsloth", s=29.0, heldout_n=1.8100, backend="default")
+    R[("unsloth", "ckpt_unsloth_triton")] = _receipt("unsloth", "ckpt_unsloth_triton", "unsloth", s=4.0, heldout_n=1.8100, backend="unsloth_triton")
     R[("e4b", "fused_attn4_shipped")] = _receipt("e4b", "fused_attn4_shipped", "fused", s=0.85, heldout_n=1.7800, matched=False)
     R[("e4b", "reference_attn4_m")] = _receipt("e4b", "reference_attn4_m", "reference", s=2.00, heldout_n=1.8050)
-    R[("unsloth", "ckpt_unsloth_prof")] = _receipt("unsloth", "ckpt_unsloth_prof", "unsloth", s=3.30, heldout_n=1.8100, profile={"device_busy_fraction": 0.31, "device_events_per_step": 5000, "cpu_ops_per_step": 90000, "cpu_self_by_family_fraction": {"routing": 0.4}})
+    R[("unsloth", "ckpt_unsloth_prof")] = _receipt("unsloth", "ckpt_unsloth_prof", "unsloth", s=3.30, heldout_n=1.8100, profile={"device_busy_fraction": 0.55, "device_events_per_step": 5000, "cpu_ops_per_step": 90000, "cpu_self_by_family_fraction": {"routing": 0.4}})
     return R
 
 
@@ -798,7 +860,9 @@ def selftest():
     assert F["native"]["unsloth"]["quoted"] and abs(F["native"]["unsloth"]["ratio"] - 2.40 / 0.85) < 1e-9
     assert F["parity"]["verdict"] == "PASS"
     P = {p: v for p, _, v, _ in score_predictions({"qwen3": F})}
-    assert P == {f"P{i}": "HELD" for i in range(1, 11)}, P
+    assert P == {**{f"P{i}": "HELD" for i in range(1, 11)}, "P1b": "HELD"}, P
+    assert set(F["labelled"]) == set(LABELLED) and F["labelled"][("unsloth", "ckpt_unsloth_t28")]["quoted"] and not F["labelled"][("axolotl", "ckpt_axolotl_best")]["quoted"], F["labelled"].keys()
+    assert abs(F["labelled"][("unsloth", "ckpt_unsloth_t28")]["ratio"] - 29.0 / 1.01) < 1e-9 and F["positions"]["unsloth"]["ratio"] != F["labelled"][("unsloth", "ckpt_unsloth_t28")]["ratio"]
     cases += 1
     # 2-7. one receipt per R3 predicate that MUST read VOID (the matched-set predicates)
     for name, over in (("incomplete", {"matched_init": {"complete": False, "n_slots_set": 100, "n_slots_expected": 192, "unmapped": ["x"]}}),
@@ -917,8 +981,6 @@ def selftest():
     R[("unsloth", "ckpt_unsloth_best")]["s_per_step_median_11plus"] = 1.5
     assert {p: v for p, _, v, _ in score_predictions({"qwen3": run(R)})}["P7"] == "FALSIFIED"
     R = _good_set()
-    R[("unsloth", "ckpt_unsloth_prof")]["profile"]["device_busy_fraction"] = 0.6
-    assert {p: v for p, _, v, _ in score_predictions({"qwen3": run(R)})}["P8"] == "FALSIFIED"
     cases += 1
     # 21. axolotl trains: P6 reads the ratio; the mb1 secondary pair when the primary OOMed
     R = _good_set()
@@ -943,6 +1005,49 @@ def selftest():
     for needle in ("**VALID**", "**OOM**", "**UNSUPPORTED**", "MATCHED POSITION: s/step ratio unsloth/e4b = 3.000", "EQUIVALENT", "SAME-BYTES", "NATIVE-BEST", "| P10 | qwen3 | **HELD** |", "draws (R1)"):
         assert needle in text, needle
     assert "qwen3/hf/hf_peft_m rc=5" not in text   # the summary line feeds status_of only when the receipt is missing
+    cases += 1
+    # 24. R8: a grouped_mm request whose per-expert loop ran, or whose counter is short, or no counters at all -> VOID
+    for name, over in (("loop", {"unsloth_backend_calls_per_step_max": {"unsloth_grouped_mm": 192, "unsloth_triton": 0, "unsloth_loop": 1, "moe_bnb4bit_backend": 192}}),
+                       ("short", {"unsloth_backend_calls_per_step_min": {"unsloth_grouped_mm": 100, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 192}}),
+                       ("nocounters", {"unsloth_backend_calls_per_step_min": None})):
+        R = _good_set()
+        R[("unsloth", "ckpt_unsloth_m")] = {**R[("unsloth", "ckpt_unsloth_m")], **over}
+        F = run(R)
+        x = row(F, "unsloth", "ckpt_unsloth_m")
+        assert x["verdict"] == "VOID" and ("grouped_mm" in x["why"] or "counters" in x["why"]), (name, x["why"])
+        assert not F["positions"]["unsloth"]["quoted"], name
+    # the triton row requested unsloth_triton but no Triton call ran -> VOID with the reason (the receipt stands as what ran)
+    R = _good_set()
+    R[("unsloth", "ckpt_unsloth_triton")] = _receipt("unsloth", "ckpt_unsloth_triton", "unsloth", s=4.0, heldout_n=1.81, backend="unsloth_triton",
+                                                      unsloth_backend_calls_per_step_min={"unsloth_grouped_mm": 192, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 192})
+    F = run(R)
+    assert row(F, "unsloth", "ckpt_unsloth_triton")["verdict"] == "VOID" and "unsloth_triton engaged 0" in row(F, "unsloth", "ckpt_unsloth_triton")["why"]
+    assert not F["labelled"][("unsloth", "ckpt_unsloth_triton")]["quoted"] and F["positions"]["unsloth"]["quoted"]   # the matched position is untouched
+    # the t28 row requested `default`: no engagement predicate, the selected backend is recorded
+    assert row(run(_good_set()), "unsloth", "ckpt_unsloth_t28")["verdict"] == "VALID"
+    cases += 1
+    # 25. R8: axolotl with quantize_moe_experts but fewer bnb-parametrized experts modules than layers -> VOID
+    R = _good_set()
+    R[("axolotl", "ckpt_axolotl_m")] = _receipt("axolotl", "ckpt_axolotl_m", "axolotl", s=4.0, heldout_n=1.81, axolotl_bnb4bit_modules={"n_bnb4bit_unwrapped": 10})
+    F = run(R)
+    assert row(F, "axolotl", "ckpt_axolotl_m")["verdict"] == "VOID" and "bnb-parametrized" in row(F, "axolotl", "ckpt_axolotl_m")["why"]
+    R[("axolotl", "ckpt_axolotl_m")] = _receipt("axolotl", "ckpt_axolotl_m", "axolotl", s=4.0, heldout_n=1.81)
+    assert row(run(R), "axolotl", "ckpt_axolotl_m")["verdict"] == "VALID"
+    cases += 1
+    # 26. P1b and the phase-2 P8: t28 off by 20 % -> FALSIFIED; the profiled arm below 0.5 busy -> FALSIFIED; a non-grouped_mm profiled arm -> UNTESTED
+    R = _good_set()
+    R[("unsloth", "ckpt_unsloth_t28")]["s_per_step_median_11plus"] = 29.05 * 1.2
+    assert {p: v for p, _, v, _ in score_predictions({"qwen3": run(R)})}["P1b"] == "FALSIFIED"
+    R = _good_set()
+    del R[("unsloth", "ckpt_unsloth_t28")]
+    assert {p: v for p, _, v, _ in score_predictions({"qwen3": run(R)})}["P1b"] == "UNTESTED"
+    R = _good_set()
+    R[("unsloth", "ckpt_unsloth_prof")]["profile"]["device_busy_fraction"] = 0.3
+    assert {p: v for p, _, v, _ in score_predictions({"qwen3": run(R)})}["P8"] == "FALSIFIED"
+    R = _good_set()
+    R[("unsloth", "ckpt_unsloth_prof")]["unsloth_knobs"]["moe_backend_requested"] = "native_torch"
+    R[("unsloth", "ckpt_unsloth_prof")]["unsloth_backend_calls_per_step_min"] = {"unsloth_grouped_mm": 0, "unsloth_triton": 0, "unsloth_loop": 192, "moe_bnb4bit_backend": 192}
+    assert {p: v for p, _, v, _ in score_predictions({"qwen3": run(R)})}["P8"] == "UNTESTED"
     cases += 1
     # 23. the registered arm order is the support table's row order
     F = run(_good_set())
