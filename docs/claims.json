@@ -7571,6 +7571,33 @@
         "receipts/experts4bit-qlora/2026-10-01/p92-5090-2/ (receipt.json, teardown-proof.json); the NOT_RUN p92-5090-1 beside it"
       ],
       "notes": "Pre-registered in #828. Verdict granite=LICENSED olmoe=QUALITY_FAIL; the registered consequence moves the default only when both families read LICENSED, so E4B_NF4_GROUPED_SMALLM stays 0 (auto is an opt-in measured on Granite r12epi). Census: Granite's gain is the glue the lean route folds away (about 0.35 ms/step); K25 6.464 vs the served 6.602 ms on Granite, 10.852 vs 10.388 on OLMoE. This host read OFF about 15 % slower than P91's; ratios are within one box."
+    },
+    {
+      "id": "e4b.serve.p93.nf4-families.k25-tree-tf32-b16.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P93, one RTX 5090: the K25 route at the served precision (select tree through TF32 MMA, E4B_NF4_GROUPED_SMALLM=1) takes Granite r12epi's B=16 step 10.535 -> 6.258 ms (0.594x; bar 0.95) and B=1 3.862 -> 3.299 (0.854x) with K8 -0.026 / +0.024 ppl (wikitext / c4val1; bar |0.05|), and OLMoE nf4's B=16 14.352 -> 8.585 ms (0.598x) with its c4val1 K8 moved +0.155 ppl (QUALITY_FAIL; P92's bf16 route moved it -0.107), so the default stays 0.",
+      "value": 0.594,
+      "unit": "ON/OFF B=16 step ratio, Granite (mean of two draws)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05, 575 W), one rented Vast.ai verified/secure host (instance 53756773, Intel Xeon), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @2c7fec2 (route #834: _K25_PLAN {32, 64, 4, 3, tree, dot_bf16 False}) + grouped-nf4-gemm @908a2ca; Granite @a0278068 r12epi, OLMoE @7f1c97f4 nf4, envs = bench/p44/serve_stack.py arm_env; OFF E4B_NF4_GROUPED_SMALLM=0, ON =1 (T == 1 included), lean glue auto; P92's harness and order (B=16 two draws, draw 1 censused; B=1 censused; K8 2048 steps, eager B=1, wikitext and c4val1, k8_gate uncalibrated); on-card premise (row-exact 4, K25 contract compiled 30); engagement held in every census; verdict by bench/p93/p93_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p93/RESULTS-p93.md",
+        "bench/p93/PREREG-p93.md",
+        "bench/p93/p93_reduce.py",
+        "bench/p93/receipts/p93-5090-1/verdict.json",
+        "bench/p93/receipts/p93-5090-1/logs/census_granite_on_b16_d1.txt",
+        "bench/p93/receipts/p93-5090-1/logs/census_olmoe_on_b16_d1.txt",
+        "bench/p93/receipts/p93-5090-1/olmoe_k8_on_c4val1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p93-5090-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #836. Verdict granite=LICENSED olmoe=QUALITY_FAIL; the default moves only on two LICENSED families, so E4B_NF4_GROUPED_SMALLM stays 0. In-model K25 (TF32 tree) 2.700 vs the served 6.606 ms/step (Granite), 4.954 vs 10.389 (OLMoE). P92 attributed OLMoE's c4val1 K8 move to bf16 weight rounding; P93 changed exactly that and the move flipped sign and grew (+0.155 against -0.107), so the attribution is refuted. The open question is the instrument's spread under the production path's own arithmetic variants."
     }
   ]
 }
