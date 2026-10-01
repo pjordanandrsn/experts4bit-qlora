@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Lane P87 read (#564): VOID by the rule; the speed arms show K19 at 0.971× the GEMV step at B=16 and 1.236× at B=1 on an RTX 5090 (bench and docs only)
+
+- **Why VOID.** The calibrated K8 build ran on an Intel Xeon E5-2698 v4. It needed 1,120 s for its first chunk (P85's AMD host: 360 s), hit its 3,600 s arm alarm after 3 of 5 chunks and dumped no pack, so K8 OFF/ON never ran. No register row.
+- **The speed arms passed every check of their own:** the premise (K19 rows bit-equal alone and inside B=16; 3 passed on both 5090s), the 3 % draw spread, and engagement (96 K19 calls per step ON, the experts' 96 GEMV calls gone, none OFF).
+- **Steps (median of two draws):**
+  - B=16: 12.013 → 11.667 ms (0.971; the bar was 0.95, I predicted 0.75–0.85);
+  - B=1: 4.277 → 5.286 (1.236).
+- **The census.** Kernel for kernel, K19 is 1.08× the GEMV (6.50 vs 7.00 ms per step): about 75 % of the int4-b32 byte floor, against the GEMV's 70 % and Marlin MoE's 94 %. Grouping adds about 0.8 ms per step (tile build 0.50, glue 0.30), nearly cancelling the 0.73 ms of reduce and quantize removed. At B=1, one-row tiles make K19 1.91× the GEMV's expert time.
+- **Why the prediction failed.** It rested on an A2000 timing (K19 1.89×), but the A2000's GEMV runs far below its own floor (11.4× slower than the 5090's). A timing on that card says nothing about the 5090.
+- **What follows.** K19 stays opt-in; P87 is not re-run. Next: a 5090 kernel microbench on P60's recorded routing (K19's plan space, Marlin MoE, the tile build) before any end-to-end lane.
+- Spend: $0.9851 of the $3.00 ceiling (proof $0.0329, a $0 refusal, the reading $0.9522).
+
 ### Lane P87 registered (#564): does K19 make e4b's int4 decode faster on an RTX 5090 without moving its quality? (bench and tests only)
 
 - **The question.** On one RTX 5090, with `E4B_INT4_GROUPED_SMALLM` on against off:
