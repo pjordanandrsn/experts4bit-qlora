@@ -537,7 +537,9 @@ register — its full stack is ×2.070 / ×2.289 measured, not licensed (the tp
 row's label predates the two-text clause; its calibrated attention is refused
 on this family);
 **gpt-oss's quoted best is its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
-store under the route rule reads ×1.293 / ×0.970;
+store under the route rule reads ×1.293 / ×0.970; with K21 serving the store's batched rows, its B=16 step reads
+×0.581 against the NF4 fallback, at a lower KL from the reference (0.00147 vs 0.00192;
+`e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`);
 **Qwen3's licensed stack** — the streamed 64k calibrated pack artifact bo6c
 licensed on both texts (11512 gptq / 776 rtn), run under the lane's amendment
 2: **×2.067 at B=1 (238.1 tok/s; anchor-class projection ≈ 329 tok/s, from an
