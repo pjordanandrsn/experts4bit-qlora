@@ -158,3 +158,43 @@ def test_prefill_rows_do_not_take_k19(monkeypatch):
     out, ref = _run(300, monkeypatch)
     assert calls["k19"] == [], calls
     assert (out.float() - ref).abs().max() / ref.abs().max() < 0.05
+
+
+@pytest.mark.parametrize("opt_in", [False, True])
+def test_collapsed_grouping_decisions(monkeypatch, opt_in):
+    """The all-resident collapse's grouping. The opt-in moves only T == 1 on a uniform-int4 store, from singleton
+    groups to the device tile table; T > 1 still follows DEVICE_GROUPING, and MXFP4 / no store keep T == 1 singleton."""
+    from experts4bit_qlora.engines import hot_residency as hr
+    if opt_in:
+        monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "1")
+    else:
+        monkeypatch.delenv("E4B_INT4_GROUPED_SMALLM", raising=False)
+    monkeypatch.setattr(hr, "DEVICE_GROUPING", [True])
+    monkeypatch.setattr(hr, "FORCE_SINGLETON_GROUPS", [False])
+    int4 = {"gu": {}, "dn": {}}
+    assert hr._collapsed_grouping(1, int4) == ((False, True) if opt_in else (True, False))
+    assert hr._collapsed_grouping(16, int4) == (False, True)
+    assert hr._collapsed_grouping(1, {"kind": "mxfp4"}) == (True, False)
+    assert hr._collapsed_grouping(1, None) == (True, False)
+    monkeypatch.setattr(hr, "DEVICE_GROUPING", [False])
+    assert hr._collapsed_grouping(16, int4) == (False, False)
+
+
+def test_opted_in_t1_rows_go_through_k19(monkeypatch):
+    """T == 1: one token's top-k ids are distinct, one row per expert. With the opt-in the collapse's decision reaches K19 (one 1-row tile
+    per expert), not the singleton GEMV, and the output matches the oracle."""
+    from experts4bit_qlora.engines import hot_residency as hr
+    monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "1")
+    calls = _install_stubs(monkeypatch)
+    stores = _stores()
+    singleton, grouped = hr._collapsed_grouping(1, stores)
+    freed_gu = torch.empty(0, 0, 0, dtype=torch.uint8)       # distinct objects: _mm tells the slots apart by identity
+    freed_dn = torch.empty(0, 0, 0, dtype=torch.uint8)
+    x = torch.randn(E, K1, dtype=torch.bfloat16) * 0.2
+    ids = torch.randperm(E)                                   # one token's top-k ids are distinct
+    out = hr._fused_over_stack(x, ids, freed_gu, torch.empty(0, 0, 0), freed_dn, torch.empty(0, 0, 0),
+                               (2 * INTER, K1, K1, INTER), True, F.silu,
+                               singleton_groups=singleton, device_grouping=grouped, int4_stores=stores)
+    assert calls["k19"] == ["gather", "sorted"] and calls["gemv"] == 0 and calls["tiles"] == [16], calls
+    ref = _oracle(x, ids, stores)
+    assert (out.float() - ref).abs().max() / ref.abs().max() < 0.05

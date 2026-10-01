@@ -48,6 +48,21 @@ FORCE_SINGLETON_GROUPS = [False]
 DEVICE_GROUPING = [False]
 
 
+def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
+    """``(singleton_groups, device_grouping)`` for the all-resident collapse at ``T`` tokens.
+
+    T == 1 takes singleton groups and T > 1 takes device grouping under :data:`DEVICE_GROUPING` -- except that
+    K19's opt-in (``E4B_INT4_GROUPED_SMALLM=1`` with a uniform-int4 store) names every int4 DECODE row, T == 1
+    included, so T == 1 takes the device tile table too (capture-legal, no host sync) and its rows reach K19.
+    Without that the singleton GEMV would keep T == 1, and K8, which scores through the T == 1 loop, would read
+    the GEMV instead of the kernel it gates (lane P87)."""
+    k19_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
+              and os.environ.get("E4B_INT4_GROUPED_SMALLM", "0") == "1")
+    if k19_t1:
+        return False, True
+    return (T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])), (DEVICE_GROUPING[0] and T > 1)
+
+
 def _decode_a16_default() -> bool:
     """``E4B_INT4_DECODE_A16=1`` (lane P64, e4b#709): the default of
     :data:`DECODE_A16`, read once at import."""
@@ -819,15 +834,13 @@ class _HotResidency:
         gptoss = ((self.h_gu_b, self.h_dn_b, self.alpha, self.limit)
                   if self.gptoss else None)
         xr = x.index_select(0, rt)
+        singleton, grouped = _collapsed_grouping(T, getattr(self, "_int4_stores", None))
         dn = _fused_over_stack(xr, flat, self.h_gu_p, self.h_gu_a,
                                self.h_dn_p, self.h_dn_a, self.shapes,
                                self.has_gate, self.act_fn, gptoss=gptoss,
                                clamp_limit=self.clamp_limit,
-                               singleton_groups=(T == 1 or
-                                                 (FORCE_SINGLETON_GROUPS[0]
-                                                  and not DEVICE_GROUPING[0])),
-                               device_grouping=(DEVICE_GROUPING[0]
-                                                and T > 1),
+                               singleton_groups=singleton,
+                               device_grouping=grouped,
                                int4_stores=getattr(self, "_int4_stores",
                                                    None))
         w = top_k_weights.reshape(-1).to(torch.float32)
