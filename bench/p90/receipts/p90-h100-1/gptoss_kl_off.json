@@ -1,0 +1,212 @@
+{
+ "lane": "P44-b",
+ "metric_version": "kl-fidelity/1.0.0",
+ "k0_gate": {
+  "receipt": "/root/p90/k0.json",
+  "all_passed": true,
+  "torch_at_control": "2.8.0+cu128"
+ },
+ "torch": "2.8.0+cu128",
+ "device": "cuda",
+ "gpu": "NVIDIA H100 NVL",
+ "family": "gptoss",
+ "model": "openai/gpt-oss-20b",
+ "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+ "reference": "dequant-to-bf16 of the SAME shipped MXFP4 bytes (Mxfp4Config(dequantize=True)) -- there is no bf16 original of gpt-oss (kl_paths.py's rule)",
+ "scorer": {
+  "name": "auto",
+  "both_sides": true,
+  "note": "control (i) picks the scorer per family: decode when the reference agrees with itself to < 1e-2 nats, prefill otherwise (amendment 5)",
+  "used": "decode"
+ },
+ "prompt_set": {
+  "name": "kl_prompts",
+  "sha256": "eaa7792260b3f10dc2a55c9d214a09fe68332799d9ec999708e2e828c011e02d",
+  "n_registered": 200,
+  "n_scored": 200,
+  "limit": 0,
+  "strata": {
+   "general": 72,
+   "technical": 55,
+   "code": 55,
+   "longctx": 18
+  },
+  "max_len": 320
+ },
+ "aggregation": "token-weighted (see kl_prompts docstring: longctx ~58% of tokens)",
+ "hook": "/root/p90/hook/usercustomize.py",
+ "arms_requested": [
+  "store_r12"
+ ],
+ "rows": [
+  {
+   "metric_version": "kl-fidelity/1.0.0",
+   "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+   "aggregation": "token-weighted",
+   "vocab_size": 201088,
+   "truncation": "none (full vocabulary)",
+   "n_prompts": 200,
+   "n_tokens_scored": 5757,
+   "kl_mean": 0.0019218996144235792,
+   "kl_median": 0.0007456452082699738,
+   "kl_p95": 0.006784209125939831,
+   "kl_max_per_token": 0.09594122907581508,
+   "top1_agreement": 0.9814139308667709,
+   "exactly_zero": false,
+   "per_stratum": {
+    "general": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 201088,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 72,
+     "n_tokens_scored": 700,
+     "kl_mean": 0.0016283368613156885,
+     "kl_median": 0.00047194231028034074,
+     "kl_p95": 0.00626089028181398,
+     "kl_max_per_token": 0.06099881353130901,
+     "top1_agreement": 0.9885714285714285,
+     "exactly_zero": false
+    },
+    "technical": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 201088,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 636,
+     "kl_mean": 0.001403836963954976,
+     "kl_median": 0.00043819588928122673,
+     "kl_p95": 0.004568649094612284,
+     "kl_max_per_token": 0.08554183575723258,
+     "top1_agreement": 0.9811320754716981,
+     "exactly_zero": false
+    },
+    "code": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 201088,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 55,
+     "n_tokens_scored": 1489,
+     "kl_mean": 0.001410655350813228,
+     "kl_median": 0.00022960276339159118,
+     "kl_p95": 0.00436342530853689,
+     "kl_max_per_token": 0.09594122907581508,
+     "top1_agreement": 0.9872397582269979,
+     "exactly_zero": false
+    },
+    "longctx": {
+     "metric_version": "kl-fidelity/1.0.0",
+     "metric": "KL(P_ref||P_test), teacher-forced, full vocab, fp64",
+     "aggregation": "token-weighted",
+     "vocab_size": 201088,
+     "truncation": "none (full vocabulary)",
+     "n_prompts": 18,
+     "n_tokens_scored": 2932,
+     "kl_mean": 0.0023639952765618357,
+     "kl_median": 0.0012747443309557589,
+     "kl_p95": 0.007704639988910893,
+     "kl_max_per_token": 0.09156386827559651,
+     "top1_agreement": 0.9768076398362893,
+     "exactly_zero": false
+    }
+   },
+   "tokens_min": 5,
+   "tokens_max": 196,
+   "tokens_total": 5757,
+   "arm": "store_r12",
+   "builder": "served",
+   "row": "gptoss/store_r12 vs the family's reference",
+   "env": {
+    "E4B_SERVE_EXP_INT4": "1",
+    "E4B_SERVE_ATTN_INT4_CALIB": "0",
+    "E4B_CALIB_SOURCE": "c4",
+    "E4B_FUSE_T1_GLUE": "1",
+    "E4B_FUSE_T1_GLUE_R2": "1",
+    "E4B_FUSE_ROUTER_EPI": "0",
+    "E4B_MODEL_ID": "openai/gpt-oss-20b",
+    "E4B_RECOMPILE_LIMIT": "64",
+    "E4B_ACCUM_RECOMPILE_LIMIT": "64",
+    "E4B_INT4_KEEP_NF4": "1"
+   },
+   "engagement": {
+    "moe_layers": 24,
+    "experts": 32,
+    "top_k": 4,
+    "fuse_t1_glue_n": 49,
+    "fuse_t1_glue_r2_n": [
+     24,
+     0
+    ],
+    "fuse_router_epilogue_n": 0,
+    "int4_attn_projections": 0,
+    "int4_expert_layers": 24,
+    "int4_store_kinds": [
+     "mxfp4"
+    ],
+    "builder": "served",
+    "hook_loaded": "/root/p90/hook/usercustomize.py"
+   },
+   "reference": "dequant-to-bf16 of the SAME shipped MXFP4 bytes (Mxfp4Config(dequantize=True)) -- there is no bf16 original of gpt-oss (kl_paths.py's rule)",
+   "scorer": "decode",
+   "wall_s": 165.5
+  }
+ ],
+ "not_measured": {},
+ "reference_pass": {
+  "requested_scorer": "auto",
+  "load_s": 2.3,
+  "self_consistency": {
+   "n_prompts": 40,
+   "kl_mean": 0.0005141489504215291,
+   "kl_max": 0.011585871425208201,
+   "top1": 0.9944289693593314,
+   "tokens": 359,
+   "threshold": 0.01,
+   "passes": true,
+   "wall_s": 11.3
+  },
+  "scorer_selected_by_control": "decode",
+  "cache_dir": "/root/p90/refcache_gptoss.committed.decode",
+  "scorer": "decode",
+  "n_cached_before": 0,
+  "n_computed": 200,
+  "reference_class": "GptOssForCausalLM",
+  "reference_dtype": "torch.bfloat16",
+  "score_s": 159.0,
+  "logits_dtype": "torch.bfloat16",
+  "wall_s": 172.8
+ },
+ "controls": {
+  "n_prompts": 40,
+  "reference_decode_vs_prefill": {
+   "n_prompts": 40,
+   "kl_mean": 0.0005141489504215291,
+   "kl_max": 0.011585871425208201,
+   "top1": 0.9944289693593314,
+   "tokens": 359,
+   "threshold": 0.01,
+   "passes": true,
+   "wall_s": 11.1
+  },
+  "control_arm_other_shape": {
+   "arm": "nf4_r12",
+   "arm_scorer": "prefill",
+   "reference_scorer": "decode",
+   "kl_mean": 0.023021618069504566,
+   "kl_p95": 0.06699758383970511,
+   "top1": 0.9498607242339833,
+   "tokens": 359,
+   "per_stratum": {
+    "general": 0.023021618069504566
+   },
+   "note": "the control arm under the OTHER forward shape vs the cached reference: includes the reference's own shape gap (i)",
+   "wall_s": 17.0
+  }
+ },
+ "wall_s_total": 375.8
+}

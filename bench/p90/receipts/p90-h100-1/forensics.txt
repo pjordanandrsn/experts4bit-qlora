@@ -1,0 +1,7 @@
+NVIDIA H100 NVL, 95830 MiB, 595.71.05, GPU-073eaf7d-e720-9bec-254c-f3111e02858e, 9.0
+power.limit,clocks.max.sm 400.00 W, 1785 MHz
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 9V84 96-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             314          10         219           0          85         302
+overlay         320G  1.6M  320G   1% /

@@ -1,0 +1,42 @@
+{
+ "lane": "P44-b",
+ "metric_version": "kl-fidelity/1.0.0",
+ "k0_gate": {
+  "receipt": "/root/p90/k0.json",
+  "all_passed": true,
+  "torch_at_control": "2.8.0+cu128"
+ },
+ "torch": "2.8.0+cu128",
+ "device": "cuda",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "family": "gptoss",
+ "model": "openai/gpt-oss-20b",
+ "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+ "reference": "dequant-to-bf16 of the SAME shipped MXFP4 bytes (Mxfp4Config(dequantize=True)) -- there is no bf16 original of gpt-oss (kl_paths.py's rule)",
+ "scorer": {
+  "name": "decode",
+  "both_sides": true,
+  "note": "decode-shaped teacher forcing on BOTH sides (one token per forward, KV cache): the serving levers engage only at T == 1"
+ },
+ "prompt_set": {
+  "name": "kl_prompts",
+  "sha256": "eaa7792260b3f10dc2a55c9d214a09fe68332799d9ec999708e2e828c011e02d",
+  "n_registered": 200,
+  "n_scored": 200,
+  "limit": 0,
+  "strata": {
+   "general": 72,
+   "technical": 55,
+   "code": 55,
+   "longctx": 18
+  },
+  "max_len": 320
+ },
+ "aggregation": "token-weighted (see kl_prompts docstring: longctx ~58% of tokens)",
+ "hook": "/root/p90/hook/usercustomize.py",
+ "arms_requested": [
+  "store_r12"
+ ],
+ "rows": [],
+ "not_measured": {}
+}

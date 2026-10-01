@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### P90 read: LICENSED. K21 takes gpt-oss-20b's B=16 decode step to 0.581× on an RTX 5090, and the MXFP4 store's KL falls (bench, docs and register)
+
+- **Speed** (`p90-5090-2`, RTX 5090): B=16 went from 22.511 to 13.086 ms/step (710 → 1,223 tok/s). B=1 read 1.075×
+  slower, so a default covers T > 1 only.
+- **Quality** (`p90-h100-1`, H100 NVL, P44's instrument): KL from the reference went from 0.001922 to 0.001466 nats,
+  top-1 from 0.9814 to 0.9840. OFF reproduces P44's licensed 0.0019.
+- **Register:** `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, with a STATUS mention beside the store's
+  licence.
+- `p90-5090-1` read VOID on the KL reference not fitting a 5090 (amendment 1, #820). Its speed is recorded
+  descriptively.
+
 ### The lean glue is the default on K19's rows (`E4B_INT4_LEAN_GLUE` now defaults to `auto`), as lane P89 licensed
 
 - **P89** (`e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, RTX 5090): Qwen3-30B-A3B's B=16 int4 step
