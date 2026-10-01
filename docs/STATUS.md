@@ -535,7 +535,9 @@ box, never a field engine, and only Qwen3 has a field comparator measured:
 (282.5 / 1347.5, ×1.000; `e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05` / `e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05`) because nothing above it is licensed on this
 register — its full stack is ×2.070 / ×2.289 measured, not licensed (the tp
 row's label predates the two-text clause; its calibrated attention is refused
-on this family);
+on this family); on both families' position configs the NF4 grouped expert GEMM is 61.7 % (Granite) and 71.9 %
+(OLMoE) of B=16 decode kernel time (P91, descriptive, licenses nothing;
+`e4b.serve.p91.nf4-families.kernel-census.5090.2026-10-01`), so the next family lane is an NF4 grouped small-M kernel;
 **gpt-oss's quoted best is its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970; with K21 serving the store's batched rows, its B=16 step reads
 ×0.581 against the NF4 fallback, at a lower KL from the reference (0.00147 vs 0.00192;

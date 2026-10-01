@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### P91 read: READ. The NF4 grouped expert GEMM is 62 % (Granite) and 72 % (OLMoE) of B=16 decode kernel time; the next family lane is an NF4 grouped small-M kernel (bench, docs and register)
+
+- **`p91-5090-1`** (RTX 5090, $0.08), on the licensed configs:
+  - Granite `r12epi`: B=16 9.19 ms/step, with `_gemm_nf4_grouped` at 5.48 ms (61.7 %); B=1 3.34 ms, with the NF4 GEMV at
+    50.7 %;
+  - OLMoE `nf4`: B=16 12.47 ms, with the NF4 GEMM at 8.61 ms (71.9 %); B=1 3.96 ms, at 45.7 %.
+  - Every census reconciles within 10 %.
+- **Register:** `e4b.serve.p91.nf4-families.kernel-census.5090.2026-10-01` (descriptive).
+
 ### Lane P91 registered (#564): where do the NF4 families' decode steps go? (bench and tests only)
 
 - **What it is.** A descriptive kernel census of Granite-3.1-3B-A800M (`r12epi`) and OLMoE-1B-7B (`nf4`), each on its
