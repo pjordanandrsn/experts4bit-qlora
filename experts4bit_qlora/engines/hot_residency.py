@@ -86,6 +86,33 @@ def _lean_glue_supported(builder, k19) -> bool:
     return _LEAN_GLUE_SUPPORT[key]
 
 
+def _k21_mode_env() -> bool:
+    """``E4B_MXFP4_GROUPED_SMALLM`` (K21, grouped-nf4-gemm#422, opt-in): ``1`` serves the native MXFP4 store's decode
+    rows through K21 -- K19's grouped small-M tensor-core GEMM on the store's own bytes, over the 16-row device tile
+    table -- where today batched rows (above :data:`_MXFP4_GEMV_ROWS`) fall back to the kept NF4 stacks and single rows
+    take the split-K GEMV. T == 1 goes to K21 too (:func:`_collapsed_grouping`), so the store's decode-shaped KL
+    instrument (P44) reads the kernel it gates. ``0`` (the default, also when unset) keeps today's routes; anything else
+    is refused."""
+    v = os.environ.get("E4B_MXFP4_GROUPED_SMALLM", "0").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"E4B_MXFP4_GROUPED_SMALLM={v!r}: expected '0' or '1'")
+    return v == "1"
+
+
+#: K21's plan on this route: grouped-nf4-gemm K24's best on gpt-oss-20b's recorded B=16 routing (RTX 5090; BLOCK_N 32,
+#: KC 128 with the masked K tail, 4 warps, 3 stages: 7.62 ms/step against the served NF4 route's 15.18). K24 read VOID
+#: by its instrument, so this is the treatment an end-to-end lane measures, not a licensed number. Every K24 plan was
+#: bit-identical to K21's default, so the plan moves no output bit.
+_K21_PLAN = {"block_n": 32, "kc": 128, "warps": 4, "stages": 3}
+
+
+def _k21_has_masked_tail(mod) -> bool:
+    """K21 with the masked K tail (grouped-nf4-gemm#425): KC 128 on gpt-oss's K = 2880 runs as planned instead of being
+    lowered or refused."""
+    kern = getattr(mod, "_gemm_mxfp4_grouped_smallm", None)
+    return "EVEN_K" in (getattr(kern, "arg_names", None) or ())
+
+
 def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     """``(singleton_groups, device_grouping)`` for the all-resident collapse at ``T`` tokens.
 
@@ -96,7 +123,9 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     the GEMV instead of the kernel it gates (lane P87)."""
     k19_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
               and _k19_mode_env() == "1")
-    if k19_t1:
+    k21_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") == "mxfp4"
+              and _k21_mode_env())
+    if k19_t1 or k21_t1:
         return False, True
     return (T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])), (DEVICE_GROUPING[0] and T > 1)
 
@@ -258,7 +287,22 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         raise ValueError("_fused_over_stack needs x_rows or x_tokens")
     R_rows = x_rows.shape[0] if x_rows is not None else local_ids.numel()
     _mxfp4_store = int4_stores is not None and int4_stores.get("kind") == "mxfp4"
-    if (_mxfp4_store and R_rows > _MXFP4_GEMV_ROWS
+    # K21 (opt-in, E4B_MXFP4_GROUPED_SMALLM=1): the store's device-grouped decode rows through the grouped small-M
+    # MXFP4 GEMM, at every row count up to the decode bound -- no NF4 fallback, no split-K GEMV
+    _k21 = None
+    if _mxfp4_store and device_grouping and R_rows <= 256 and _k21_mode_env():
+        try:
+            import mxfp4_grouped as _mx
+            _k21 = _mx.gemm_mxfp4_grouped_smallm
+        except (ImportError, AttributeError) as e:
+            raise RuntimeError(
+                "E4B_MXFP4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K21 "
+                "(mxfp4_grouped.gemm_mxfp4_grouped_smallm, grouped-nf4-gemm#422)") from e
+        if not _k21_has_masked_tail(_mx):
+            raise RuntimeError(
+                "E4B_MXFP4_GROUPED_SMALLM=1 needs K21's masked K tail (grouped-nf4-gemm#425): "
+                f"the route's plan runs KC {_K21_PLAN['kc']} on K that it need not divide")
+    if (_mxfp4_store and _k21 is None and R_rows > _MXFP4_GEMV_ROWS
             and gu_p is not None and gu_p.numel() > 0):
         # Batched rows on the MXFP4 store: the decode GEMV re-streams the
         # weights per row and loses to NF4 above a handful of rows
@@ -311,7 +355,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             _tok = (x_t, top_k)           # K23: K19's gate_up reads the token rows itself (gather_div)
         else:
             x_rows = x_t.index_select(0, row_token)
-    if _mxfp4_store:
+    if _mxfp4_store and _k21 is None:
         singleton_groups = True
         device_grouping = False
     if _int4_gemv_decode:
@@ -347,7 +391,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 "expert stacks are freed (int4 serve lane active) but the "
                 "device-grouping path carries no int4_stores -- a 0-expert "
                 "tile table would detonate deep in the builder")
-        _n_exp = (int4_stores["gu"]["packed"].shape[0]
+        _n_exp = ((int4_stores["gu"]["blocks"] if _k21 is not None else int4_stores["gu"]["packed"]).shape[0]
                   if int4_stores is not None else gu_p.shape[0])
         # ONE-launch tile table on decode shapes when the kernel side
         # ships it (census: the chained builder is ~10 launches/layer,
@@ -447,6 +491,15 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "int4_stores did not reach _fused_over_stack")
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
                                               t_grp, 16)
+    elif _mxfp4_store and _k21 is not None:
+        # K21 (opt-in): the store's own e2m1/e8m0 bytes, dequantised exactly to bf16 in registers, bf16 MMA over the
+        # SAME 16-row device tiles; the first call gathers the unsorted rows through `order`, the epilogue output is
+        # already sorted. Outputs in sorted order, so gpt-oss's per-expert biases index by `sorted_ids` and the unsort
+        # at the end applies unchanged.
+        def _mm(xr, pk, am):
+            st = int4_stores["gu" if pk is gu_p else "dn"]
+            return _k21(xr.to(torch.bfloat16), st["blocks"], st["scales"], t_row0, t_rows, t_grp,
+                        order if xr is x_rows else None, **_K21_PLAN)
     elif _mxfp4_store:
         import mxfp4_grouped
         _sizes_mx = [1] * x_rows.shape[0]           # host constant: capture-safe

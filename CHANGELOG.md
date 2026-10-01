@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### `E4B_MXFP4_GROUPED_SMALLM=1` (K21, opt-in): the native MXFP4 store's decode rows go through K21 instead of falling back to NF4
+
+- **Why.** gpt-oss-20b's licensed MXFP4 store has no batched kernel here. Above 16 rows (B=16 is 64) its experts fall
+  back to the kept NF4 stacks, which are a requant that P44 read at 0.0222 nats against the store's 0.0019. That NF4
+  grouped GEMM is 79 % of the B=16 step (grouped-nf4-gemm K22/K24 censuses, 17.9 of 22.5 ms).
+  - On gpt-oss's recorded B=16 routing, K21 (#422, with #425's masked K tail) read 7.62 ms/step against the served
+    route's 15.18 (K24, #428).
+  - That read was VOID by its instrument and is descriptive only, so this route is opt-in, the treatment an
+    end-to-end lane measures.
+- **What.** Under `1`, `_fused_over_stack` keeps the MXFP4 store for every device-grouped decode row (up to 256) and
+  serves both projections with `mxfp4_grouped.gemm_mxfp4_grouped_smallm`:
+  - over the 16-row device tile table, with gate_up's gather folded in;
+  - at K24's best plan (`_K21_PLAN`: BLOCK_N 32, KC 128, 4 warps, 3 stages; every K24 plan was bit-identical).
+
+  gpt-oss's biases index by the sorted ids, and the unsort applies as before.
+- **The quality instrument reads the kernel.** Under `1`, `_collapsed_grouping` also sends T == 1 on the MXFP4 store to
+  the device tile table and K21, so P44's decode-shaped KL instrument reads the kernel it gates.
+- **Default unchanged.** `0` (the default) keeps today's routes, and anything else is refused. `1` on a kernel package
+  without K21, or without its masked tail, is a RuntimeError.
+- **Tests:**
+  - `tests/test_mxfp4_grouped_smallm_route.py` (stubs with an MXFP4 dequant oracle): the routes, the plan, the
+    gpt-oss epilogue, the refusals, prefill untouched, the grouping decisions.
+  - `tests/test_k21_row_exact_gpu.py` (real kernel, gpt-oss shapes, K = 2880 so the masked tail runs): a token's rows
+    are bit-equal alone (T = 1) and inside B=16; the T = 1 output matches the fp32 dequant oracle through gpt-oss's
+    epilogue; the T = 1 route captures and replays bit-equal.
+  - NAS RTX A2000, correctness only:
+    - GPU 9/9 with K19's and K23's files;
+    - CPU route and MXFP4 neighbours 81 passed;
+    - a mutation that drops gate_up's gather fails the B=16 row-exactness test and the stubbed route tests.
+
 ### Lane P89 registered (#564): does K23's lean glue make Qwen3-30B-A3B's B=16 int4 decode faster with the same bits? (bench and tests only)
 
 - **The question.** P88 LICENSED K19 for T > 1 int4 decode rows. K23 (`E4B_INT4_LEAN_GLUE=1`, #814 over
