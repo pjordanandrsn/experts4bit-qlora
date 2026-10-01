@@ -81,6 +81,28 @@ the selftest scaffolding. What is new, named so the files can be diffed:
       parametrized stack's logical shape and quant_state from its Bnb4bitParametrization (bitsandbytes/nn/parametrize.py:
       the packed original is a plain uint8 [N, 1] Parameter; the quant_state lives on the parametrization module).
 
+  P3 (phase 3, harness-phase3.md -- controls the design review found could not fail):
+      A [F1] every step's grouped-nf4-gemm LoRA-path counters are read back: `lora_path_present`, `lora_loop_share` per step
+        (loop / all delta calls) and `lora_path_loop_steps` (the steps where the per-expert loop ran); the reducer VOIDs an
+        e4b fused arm with any loop call, naming the step.
+      B [F3] `matched_init_sha`: a NAME-FREE sha256 over every LoRA A in canonical slot order (layer, kind, expert), each as
+        fp32 [r, in] bytes, computed AFTER the overwrite in every arm (native-init arms too); `loss_step2` (the first
+        init-sensitive step: lr is 0 at steps 0-1 under the 5-step warm-up) is recorded beside it.
+      D [F14] C1 hashes EVERY frozen expert / 4-bit tensor whatever its dtype (hashes_frozen: Experts4bit stacks + absmax,
+        bnb Params4bit, bf16 stacks, parametrized packed originals), records `C1_regime_by_tensor`, and its positive control
+        acts on REAL storage: one hashed tensor is copied, one byte of the COPY is flipped, the SAME hasher runs with the copy
+        substituted for that name, and `C1_control_detects_flipped_byte` is that comparison (`C1_control_tensor` names it).
+        The digest-string flip tp4 used (control_flip_fires) is no longer on the path.
+      E [F15] torch-level engagement on Unsloth arms: `torch._grouped_mm` (which torch.nn.functional.grouped_mm calls at the
+        Python level -- torch 2.13/2.14 source) and unsloth_zoo's `_ManualGroupedMM.apply` (the per-group matmul fallback,
+        moe_utils.py:489 per UPSTREAM-NOTES) are counted per step: `unsloth_grouped_mm_calls_per_step_min/_max`,
+        `unsloth_manual_grouped_mm_calls_per_step_max`; the profiled arms keep their top-40 device and CPU op lists in the
+        receipt (`profile.top_device`, `profile.top_cpu`).
+      F [F6, F9, F16, F19, F20] `arm_facts`: config._attn_implementation, output_router_logits, the loss class, the thread
+        count and OMP_NUM_THREADS, the host CPU model, the dtype the LoRA delta GEMM runs in (cited per framework),
+        `dynamo_counters` snapshots at step 10 and step N, `microbatch_padded_len` per step.
+      G [F13] `eval_rows`: the per-row held-out losses at every eval step (and `row_losses` on each eval_curve entry).
+
 Exit codes added: 18 matched init impossible (a LoRA B is not zero after construction).
 
 ----- the tp4 docstring, unmodified -----
@@ -296,6 +318,14 @@ def unsloth_backend_selected():
         return str(select_moe_backend())
     except Exception as e:
         return f"unavailable: {type(e).__name__}: {str(e)[:120]}"
+
+
+def loaded_attention_double_quant(model):
+    """What the loaded attention Params4bit (a q_proj's Linear4bit weight) says about double quantisation: True / False / None."""
+    for name, p in model.named_parameters():
+        if type(p).__name__ == "Params4bit" and ".q_proj." in f".{name}" and getattr(p, "quant_state", None) is not None:
+            return bool(getattr(p.quant_state, "nested", False))
+    return None
 
 
 def loaded_expert_double_quant(model):
@@ -636,15 +666,15 @@ def host_fingerprint(instance_env="TC1_INSTANCE_ID"):
 
 @torch.no_grad()
 def eval_loss(model, rows, fwd_kwargs, autocast):
+    """(mean held-out loss, the per-row losses) -- [F13] the rows travel into the receipt (eval_rows)."""
     model.eval()
-    tot = n = 0
+    per_row = []
     for ids in rows:
         x = torch.tensor(ids, dtype=torch.long).unsqueeze(0).to(DEV)
         with autocast_ctx(autocast):
-            tot += float(model(input_ids=x, labels=x, **fwd_kwargs(x)).loss)
-        n += 1
+            per_row.append(round(float(model(input_ids=x, labels=x, **fwd_kwargs(x)).loss), 5))
     model.train()
-    return tot / max(n, 1)
+    return (sum(per_row) / max(len(per_row), 1)), per_row
 
 
 def control_flip_fires(h):
@@ -720,6 +750,62 @@ def hashes_unsloth(model):
         nbytes += len(b)
         h[name] = sha_bytes(b)
     return h, nbytes, empties
+
+
+def _regime_label(t):
+    qs = getattr(t, "quant_state", None)
+    if qs is not None:
+        return f"{qs.quant_type}/{qs.blocksize}" + ("+dq" if bool(getattr(qs, "nested", False)) else "")
+    return "u8-packed" if t.dtype == torch.uint8 else _dtype_label(t.dtype)
+
+
+def frozen_tensors(model):
+    """[F14] every FROZEN expert / 4-bit tensor, whatever its dtype: a bnb Params4bit anywhere (expert stacks, Linear4bit
+    attention weights), and any non-trainable parameter or buffer that sits under an `experts` path component, matches
+    EXPERT_PARAM_RE, or is one of Experts4bit's stack/absmax attributes (so bf16 stacks, the uint8 packed originals under
+    `parametrizations.*.original`, and e4b's absmax buffers are all hashed). LoRA tensors and trainables are never hashed."""
+    out, seen = [], set()
+    for name, t in list(model.named_parameters()) + list(model.named_buffers()):
+        if name in seen or t is None:
+            continue
+        seen.add(name)
+        if bool(getattr(t, "requires_grad", False)) or "lora" in name.lower():
+            continue
+        parts = name.split(".")
+        if type(t).__name__ == "Params4bit" or "experts" in parts or EXPERT_PARAM_RE.search(name) or parts[-1] in EXPERT_ATTRS:
+            out.append((name, t, _regime_label(t)))
+    return out
+
+
+def hashes_frozen(model, override=None):
+    """(sha by name, bytes, empties, regime counts) over frozen_tensors(model); `override` substitutes a tensor for a name --
+    the control's way of running the SAME hasher on tampered storage."""
+    h, nbytes, empties, regimes = {}, 0, 0, {}
+    for name, t, reg in frozen_tensors(model):
+        src = override[name] if (override and name in override) else t
+        b = tensor_bytes(src.data if hasattr(src, "data") else src)
+        if not b:
+            empties += 1
+            continue
+        nbytes += len(b)
+        h[name] = sha_bytes(b)
+        regimes[reg] = regimes.get(reg, 0) + 1
+    return h, nbytes, empties, regimes
+
+
+def c1_control(model, h_before, hasher=hashes_frozen):
+    """[F14] the positive control on REAL storage: the first hashed tensor (sorted name) is copied, one byte of the COPY is
+    flipped, the same hasher runs with the copy substituted, and the digest for that name must differ while every other
+    digest stays -- never a digest-string flip, never a hard-coded True."""
+    if not h_before:
+        return {"tensor": None, "detects": False, "why": "nothing hashed"}
+    name = sorted(h_before)[0]
+    tensors = dict(list(model.named_parameters()) + list(model.named_buffers()))
+    t = tensors[name]
+    h_t, _, _, _ = hasher(model, override={name: flip_first_byte(t.data)})
+    changed = h_t.get(name) != h_before[name]
+    others_same = all(h_t.get(k) == v for k, v in h_before.items() if k != name)
+    return {"tensor": name, "detects": bool(changed and others_same), "changed": bool(changed), "others_same": bool(others_same)}
 
 
 def is_experts_module(name):
@@ -1000,21 +1086,55 @@ class Counters:
                 return _orig(*a, **k)
             setattr(M, fname, w)
             self._restore.append((M, fname, orig))
-            for mn, mod in list(sys.modules.items()):
-                if mod is None or mod is M or not (mn.startswith("unsloth") or mn.startswith("transformers")):
-                    continue
-                try:
-                    for attr, val in list(vars(mod).items()):
-                        if val is orig:
-                            setattr(mod, attr, w)
-                            self._restore.append((mod, attr, orig))
-                        elif isinstance(val, dict) and attr == "ALL_EXPERTS_FUNCTIONS":
-                            for k2, v2 in list(val.items()):
-                                if v2 is orig:
-                                    val[k2] = w
-                                    self._restore.append((val, k2, orig))
-                except Exception:
-                    pass
+            self._alias_scan(orig, w)
+        # [F15] the torch op every grouped-GEMM route ends in (F.grouped_mm calls torch._grouped_mm at the Python level: torch 2.13/2.14
+        # source), and the zoo's per-group matmul fallback; an absent name is recorded
+        for owner_name, owner, fname, key in (("torch", torch, "_grouped_mm", "torch_grouped_mm"),
+                                              ("torch.nn.functional", torch.nn.functional, "grouped_mm", "torch_F_grouped_mm")):
+            orig = getattr(owner, fname, None)
+            if orig is None:
+                self.absent.append(f"{owner_name}.{fname}: absent")
+                continue
+            self.counts.setdefault(key, 0)
+
+            def w2(*a, _orig=orig, _key=key, **k):
+                self.counts[_key] += 1
+                return _orig(*a, **k)
+            setattr(owner, fname, w2)
+            self._restore.append((owner, fname, orig))
+            self._alias_scan(orig, w2)
+        try:
+            M = importlib.import_module("unsloth_zoo.temporary_patches.moe_utils")
+            cls = getattr(M, "_ManualGroupedMM")
+            orig_apply = cls.apply
+            self.counts.setdefault("manual_grouped_mm", 0)
+
+            def w3(*a, _orig=orig_apply, **k):
+                self.counts["manual_grouped_mm"] += 1
+                return _orig(*a, **k)
+            cls.apply = w3
+            self._restore.append((cls, "apply", orig_apply))
+        except Exception as e:
+            self.absent.append(f"unsloth_zoo.temporary_patches.moe_utils._ManualGroupedMM.apply: {type(e).__name__}")
+
+    def _alias_scan(self, orig, w):
+        """Re-point every alias of `orig` held by an already-imported unsloth* / transformers* module (a `from ... import`,
+        transformers' ALL_EXPERTS_FUNCTIONS table) at the wrapper, so a call through an alias still counts."""
+        for mn, mod in list(sys.modules.items()):
+            if mod is None or not (mn.startswith("unsloth") or mn.startswith("transformers")):
+                continue
+            try:
+                for attr, val in list(vars(mod).items()):
+                    if val is orig:
+                        setattr(mod, attr, w)
+                        self._restore.append((mod, attr, orig))
+                    elif isinstance(val, dict) and attr == "ALL_EXPERTS_FUNCTIONS":
+                        for k2, v2 in list(val.items()):
+                            if v2 is orig:
+                                val[k2] = w
+                                self._restore.append((val, k2, orig))
+            except Exception:
+                pass
 
     def snapshot(self):
         d = dict(self.counts)
@@ -1029,7 +1149,7 @@ class Counters:
     def uninstall(self):
         for h in self._hooks:
             h.remove()
-        for mod, name, orig in self._restore:
+        for mod, name, orig in reversed(self._restore):
             if isinstance(mod, dict):
                 mod[name] = orig
             else:
@@ -1357,11 +1477,21 @@ def load_hf(a):
         _cand = snapshot_dir_for(a.model, a.revision)
         local = _cand if os.path.isdir(_cand) else snapshot_download(a.model, revision=a.revision)
     x["snapshot_dir"] = local
+    # phase 3 (coordinator decision): the HF arm quantises attention only, so its double-quant follows e4b's ATTENTION (bnb's Params4bit
+    # default, compress_statistics=True -> `nf4/64+dq`); --hf-double-quant 0 turns it off. Unsloth and axolotl keep it OFF (one config
+    # governs their experts and attention; the expert bytes are the ones compared). What loaded is read back from the q_proj Params4bit.
+    hf_dq = bool(int(getattr(a, "hf_double_quant", 1) if getattr(a, "hf_double_quant", None) is not None else 1))
     bnb_cfg = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16,
-                                 bnb_4bit_use_double_quant=False)
+                                 bnb_4bit_use_double_quant=hf_dq)
+    impl = getattr(a, "hf_experts_implementation", "default") or "default"
+    # J [F22]: transformers' experts implementation (grouped_mm / batched_mm / eager ...) is a from_pretrained kwarg
+    # (modeling_utils.py:2081-2135 per UPSTREAM-NOTES; UNVERIFIED on the axolotl venv's transformers 5.17.0 -- a TypeError is a refused row)
+    impl_kw = {} if impl == "default" else {"experts_implementation": impl}
     with PH("load_weights"):                                                             # #548
-        model = AutoModelForCausalLM.from_pretrained(local, quantization_config=bnb_cfg, dtype=torch.bfloat16, device_map={"": 0})
+        model = AutoModelForCausalLM.from_pretrained(local, quantization_config=bnb_cfg, dtype=torch.bfloat16, device_map={"": 0}, **impl_kw)
     x["n_layers"], x["model_type"] = n_layers_of(model.config)
+    x["hf_experts_implementation"] = {"requested": impl, "config": getattr(model.config, "_experts_implementation", None)}
+    x["hf_double_quant"] = {"requested": hf_dq, "loaded_attention_nested": loaded_attention_double_quant(model)}
     with PH("attn4"):                                                                    # #548: the probe only (the HF arm converts nothing)
         x["attn4_probe"] = attn4_bias_probe(model)
     with PH("lora"):                                                                     # #548
@@ -1377,8 +1507,8 @@ def load_hf(a):
     x["hf_targets"] = {"peft": peft.__version__, "n_target_modules": len(mods), "target_modules_sample": mods[:4],
                        "n_target_parameters": len(params), "target_parameters": params[:8] + (["..."] if len(params) > 8 else []),
                        "expert_selection": expert_diag,      # #542: the structural rule + what the old substring would have taken
-                       "bnb": {"load_in_4bit": True, "quant_type": "nf4", "compute_dtype": "bfloat16", "double_quant": False}}
-    x["banner_lines"] = [f"PEFT {peft.__version__}: target_modules={len(mods)} target_parameters={len(params)}"]
+                       "bnb": {"load_in_4bit": True, "quant_type": "nf4", "compute_dtype": "bfloat16", "double_quant": hf_dq}}
+    x["banner_lines"] = [f"PEFT {peft.__version__}: target_modules={len(mods)} target_parameters={len(params)} double_quant={hf_dq}"]
     x["verify"] = {"n_quantized": None, "n_unquantized": None}
     with PH("tokenizer"):                                                                # #548
         x["tokenizer_obj"] = AutoTokenizer.from_pretrained(local)
@@ -1757,6 +1887,39 @@ def apply_matched_init(model, spec, n_layers=None, cfg=None):
             "mapping_rules": dict(list(rules.items())[:12]), "n_mapping_rules": len(rules), "distribution": MATCHED_DISTRIBUTION}
 
 
+def lora_slots_sha(model):
+    """[F3] a NAME-FREE sha256 over every LoRA A in canonical slot order (layer, kind, expert), each slot as fp32 [r, in]
+    bytes -- so two frameworks holding the same slot tensors in different layouts and under different names hash alike.
+    {sha, n_slots, n_unmapped}; computed after the matched overwrite (and in native arms too)."""
+    hidden, _ = hidden_size_of(model)
+    slots, unmapped, _ = lora_slots(model, hidden)
+    h, n = hashlib.sha256(), 0
+    for s_ in sorted(slots, key=lambda s_: (s_["key"][0], s_["key"][1], s_["key"][2])):
+        sel, A = s_["sel"], s_["A"].data
+        v = A[sel[1]:sel[2]] if sel[0] == "rows" else (A[sel[1]] if sel[0] == "index" else A)
+        h.update(v.detach().to("cpu", torch.float32).contiguous().numpy().tobytes())
+        n += 1
+    return {"sha": h.hexdigest(), "n_slots": n, "n_unmapped": len(unmapped)}
+
+
+LORA_DELTA_DTYPE = {   # [F20] what the code does, cited; UNVERIFIED where marked (read from the inspection note, not installed source)
+    "e4b": "A.dtype: experts4bit_qlora/lora.py ExpertsLoRA._lora and LoRALinear.forward cast x to A.dtype; grouped-nf4-gemm v0.34.0 kernel/nf4_qlora.py lora_delta_grouped casts to A.dtype on all three paths (lines 307-308, 340, 363)",
+    "hf": "the base weight's dtype: PEFT 0.21.2 folds the delta weight-side, get_delta_factors casts lhs/rhs .to(param.dtype) (peft/tuners/lora/layer.py:2534-2541)",
+    "axolotl": "the base weight's dtype (PEFT's weight-side fold, peft layer.py:2534-2541; axolotl's moe_quant.py patches keep the fold and evict the parametrize cache)",
+    "unsloth": "the activation dtype: unsloth_zoo moe_utils.py:3875 casts the fp32 factors to the activation dtype per forward (UPSTREAM-NOTES; UNVERIFIED against installed source)",
+}
+
+
+def dynamo_snapshot():
+    """[F16] torch._dynamo.utils.counters (a defaultdict of Counters) as plain dicts, plus the recompile total; never raises."""
+    try:
+        import torch._dynamo.utils as du
+        c = {k: dict(v) for k, v in du.counters.items()}
+        return {"counters": c, "recompiles_total": int(sum(c.get("recompiles", {}).values()))}
+    except Exception as e:
+        return {"counters": None, "recompiles_total": None, "error": f"{type(e).__name__}: {str(e)[:120]}"}
+
+
 # ----------------------------------------------------------------------------- T21 (TC1): the frozen-base probe (registered slots, dequantised the framework's own way)
 def _dtype_label(dt):
     return {torch.bfloat16: "bf16", torch.float16: "fp16", torch.float32: "fp32", torch.uint8: "u8"}.get(dt, str(dt))
@@ -1980,6 +2143,7 @@ def summarize_profile(prof, wall_s: float, n_steps: int, out_path: str) -> dict:
     top_dev = sorted([r for r in rows if r["device"]], key=lambda r: -r["self_device_ms"])[:80]
     write_json(out_path, {"summary": summ, "top_cpu": top_cpu, "top_device": top_dev, "families": [f for f, _ in PROFILE_FAMILIES]})
     summ["path"] = os.path.basename(out_path)
+    summ["top_device"], summ["top_cpu"] = top_dev[:40], top_cpu[:40]        # [F15] the top-kernel lists travel in the receipt
     return summ
 
 
@@ -2038,7 +2202,7 @@ def run_arm(a, load_fn, sampler=True):
     if a.framework == "unsloth" and not x.get("moe_backend_selected"):   # P2-1: select_moe_backend() after load, on every Unsloth arm
         x["moe_backend_selected"] = unsloth_backend_selected()
     n_attn4, n_patched, reason, banner_lines = x["n_attn4"], x["n_patched"], x["reason"], x["banner_lines"]
-    hashes, fwd_kwargs, tokenizer_obj = x["hashes"], x["fwd_kwargs"], x.get("tokenizer_obj")
+    fwd_kwargs, tokenizer_obj = x["fwd_kwargs"], x.get("tokenizer_obj")      # [F14] x["hashes"] (tp4's per-framework hashers) is superseded by hashes_frozen
 
     alarm_ctx.update({"n_layers": x.get("n_layers"), "model_type": x.get("model_type"), "load_s": round(load_s, 1)})
     # U5: adapters fp32 (Unsloth: cast if needed, recorded), the censuses, U3/T6: the trainable count
@@ -2062,6 +2226,7 @@ def run_arm(a, load_fn, sampler=True):
                  {"phase": "census", "matched_init": matched, "adapter_dtype": adapter_dtype, "lora_init": lora_init,
                   "n_layers": x.get("n_layers"), "model_type": x.get("model_type")}, code=18)
     tr, n_trainable, dtypes_after, non_adapter, groups = trainable_census(model)
+    slots_sha = lora_slots_sha(model)             # [F3] name-free, canonical slot order, after the overwrite; native arms too
     census = quant_census(model)
     if pad_id is None and tokenizer_obj is not None:
         pad_id = getattr(tokenizer_obj, "pad_token_id", None)
@@ -2101,6 +2266,13 @@ def run_arm(a, load_fn, sampler=True):
     with PH("trainable_sha"):                       # #548: every trainable parameter cast to CPU fp32 purely to be hashed
         init_sha = trainable_sha(tr)
 
+    mcfg = getattr(model, "config", None)
+    arm_facts = {"attn_implementation": getattr(mcfg, "_attn_implementation", None), "output_router_logits": getattr(mcfg, "output_router_logits", None),
+                 "loss_class": "model.forward(input_ids, labels[, attention_mask]).loss -- the model's own loss; the harness computes none",
+                 "torch_num_threads": int(torch.get_num_threads()), "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
+                 "cpu_model": (env.get("host") or {}).get("cpu"), "lora_delta_dtype": LORA_DELTA_DTYPE.get(a.framework),
+                 "unsloth_zoo": env.get("unsloth_zoo") if a.framework == "unsloth" else None,
+                 "unsloth_zoo_note": ("unsloth_zoo main's #1529 is not in the 2026.9.9 release (phase-3 instruction; not verified here)" if a.framework == "unsloth" else None)}
     with PH("counters"):
         counter = Counters()
         if a.framework == "e4b":
@@ -2111,14 +2283,15 @@ def run_arm(a, load_fn, sampler=True):
             counter.install_unsloth(model)
 
     with PH("c1_before"):                           # #548: the frozen expert bytes, copied to CPU and sha256'd (C1_bytes_hashed says how many)
-        h_before, bytes_before, empties_before = hashes(model)
+        h_before, bytes_before, empties_before, c1_regimes = hashes_frozen(model)     # [F14] every frozen expert/4-bit tensor, any dtype
         assert bytes_before > 0, "C1 hashed ZERO bytes -- gate is vacuous"
         assert empties_before == 0, f"C1 saw {empties_before} empty frozen tensors"
-        assert control_flip_fires(h_before), "C1 positive control did not fire -- the check cannot fail"
+        c1_ctl = c1_control(model, h_before)        # [F14] a real byte of a real tensor's COPY, the same hasher
+        assert c1_ctl["detects"], f"C1 positive control did not fire -- the check cannot fail ({c1_ctl})"
 
     with PH("eval0"):                               # #548: also the first forward -- any JIT / autotune on the forward path lands here
-        ev0 = eval_loss(model, ev, fwd_kwargs, a.autocast)
-    curve = [{"step": 0, "heldout_loss": round(ev0, 5), "train_wall_s": 0.0}]
+        ev0, rows0 = eval_loss(model, ev, fwd_kwargs, a.autocast)
+    curve = [{"step": 0, "heldout_loss": round(ev0, 5), "train_wall_s": 0.0, "row_losses": rows0}]
     _opt_phase = PH("optimizer")                    # #548
     _opt_phase.__enter__()
     params = [p for _, p in tr]
@@ -2147,6 +2320,7 @@ def run_arm(a, load_fn, sampler=True):
     _opt_phase.__exit__(None, None, None)
 
     losses, step_ms, tokens_per_step, tokens_padded_per_step, lr_per_step, kcalls = [], [], [], [], [], []
+    mb_padded_len, dyn = [], {}                                        # [F19] padded length per micro-batch; [F16] dynamo snapshots
     profile_summary = None                                              # P45
     microbatch_ms = []                                                # T17: per step, one entry per micro-batch (only with --microbatch-timing)
     train_wall, steps_done = 0.0, 0
@@ -2171,7 +2345,7 @@ def run_arm(a, load_fn, sampler=True):
                 before = counter.snapshot()
                 ts = time.perf_counter()
                 loss_sum, ntok, npad = 0.0, 0, 0
-                mb_ms = []
+                mb_ms, mb_len = [], []
                 lr_per_step.append(float(opt.param_groups[0]["lr"]))
                 for j in range(a.accum):                                    # T5/T13: accum micro-batches of M rows, rows in fixed order
                     tm = time.perf_counter() if a.microbatch_timing else None
@@ -2182,6 +2356,7 @@ def run_arm(a, load_fn, sampler=True):
                         rows = [train[((i * a.accum + j) * M + k) % len(train)] for k in range(M)]
                         ids, mask, labels = collate(rows, pad_id)
                         kw, nreal = {"attention_mask": mask}, sum(len(r) for r in rows)
+                    mb_len.append(int(ids.shape[1]))
                     with autocast_ctx(a.autocast):
                         out = model(input_ids=ids, labels=labels, **kw)
                         loss = out.loss / a.accum
@@ -2212,15 +2387,18 @@ def run_arm(a, load_fn, sampler=True):
                 tokens_padded_per_step.append(npad)
                 if a.microbatch_timing:
                     microbatch_ms.append(mb_ms)
+                mb_padded_len.append(mb_len)
                 after = counter.snapshot()
                 kcalls.append({k: after[k] - before[k] for k in after})
                 steps_done = i + 1
                 if steps_done % max(1, int(a.log_every)) == 0:
                     mb = f" mb_ms {mb_ms}" if a.microbatch_timing else ""
                     print(f"    step {steps_done}/{a.steps} loss {losses[-1]} {step_ms[-1]} ms{mb} kcalls {kcalls[-1]}", flush=True)
+                if steps_done in (10, a.steps):
+                    dyn[f"step{steps_done}"] = dynamo_snapshot()       # [F16]
                 if steps_done % a.eval_every == 0:
-                    e = eval_loss(model, ev, fwd_kwargs, a.autocast)
-                    curve.append({"step": steps_done, "heldout_loss": round(e, 5), "train_wall_s": round(train_wall, 2)})
+                    e, rows_e = eval_loss(model, ev, fwd_kwargs, a.autocast)
+                    curve.append({"step": steps_done, "heldout_loss": round(e, 5), "train_wall_s": round(train_wall, 2), "row_losses": rows_e})
                     print(f"    eval@{steps_done} heldout {e:.5f} train_wall {train_wall:.1f}s", flush=True)
             cuda_sync()
             wall = time.perf_counter() - t0
@@ -2235,11 +2413,11 @@ def run_arm(a, load_fn, sampler=True):
 
     if curve[-1]["step"] != steps_done:
         with PH("eval_final"):                      # #548
-            e = eval_loss(model, ev, fwd_kwargs, a.autocast)
-        curve.append({"step": steps_done, "heldout_loss": round(e, 5), "train_wall_s": round(train_wall, 2)})
+            e, rows_e = eval_loss(model, ev, fwd_kwargs, a.autocast)
+        curve.append({"step": steps_done, "heldout_loss": round(e, 5), "train_wall_s": round(train_wall, 2), "row_losses": rows_e})
     ev1 = curve[-1]["heldout_loss"]
     with PH("c1_after"):                            # #548: the SECOND full pass over the frozen expert bytes
-        h_after, bytes_after, empties_after = hashes(model)
+        h_after, bytes_after, empties_after, _ = hashes_frozen(model)
     changed = [k for k in h_before if h_before[k] != h_after.get(k)]
     c1_ok = (not changed) and bytes_after == bytes_before and empties_after == 0
 
@@ -2313,6 +2491,16 @@ def run_arm(a, load_fn, sampler=True):
     ub_keys = [k for _, _, k in UNSLOTH_BACKEND_FUNCS]            # P2-1: per-step min/max of every Unsloth backend counter
     ub_min = {k: min(c.get(k, 0) for c in kcalls) for k in ub_keys} if (a.framework == "unsloth" and kcalls) else None
     ub_max = {k: max(c.get(k, 0) for c in kcalls) for k in ub_keys} if (a.framework == "unsloth" and kcalls) else None
+    gmm_min = min(c.get("torch_grouped_mm", 0) for c in kcalls) if (a.framework == "unsloth" and kcalls) else None   # [F15]
+    gmm_max = max(c.get("torch_grouped_mm", 0) for c in kcalls) if (a.framework == "unsloth" and kcalls) else None
+    manual_max = max(c.get("manual_grouped_mm", 0) for c in kcalls) if (a.framework == "unsloth" and kcalls) else None
+    # [F1] grouped-nf4-gemm's per-path counters per step (P46 LORA_PATH_STATS deltas; absent on a kernel without them)
+    lora_path_present = bool(kcalls) and all(c.get("lora_path_loop") is not None for c in kcalls)
+    lora_loop_share, lora_path_loop_steps = None, None
+    if lora_path_present:
+        tot = [c.get("lora_path_loop", 0) + c.get("lora_path_padded", 0) + c.get("lora_path_grouped_mm", 0) for c in kcalls]
+        lora_loop_share = [round(c.get("lora_path_loop", 0) / t, 4) if t else None for c, t in zip(kcalls, tot)]
+        lora_path_loop_steps = [i + 1 for i, c in enumerate(kcalls) if c.get("lora_path_loop", 0)]
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -2324,6 +2512,8 @@ def run_arm(a, load_fn, sampler=True):
         "structural_expected_n_attn4": x.get("structural_expected_n_attn4"), "detector_version": x.get("detector_version"),
         "loader_used": x.get("loader_used"), "loader_fallback_reason": x.get("loader_fallback_reason"), "unsloth_targets": x.get("unsloth_targets"),
         "hf_targets": x.get("hf_targets"), "axolotl_targets": x.get("axolotl_targets"), "axolotl": x.get("axolotl"),      # P2-2
+        "hf_experts_implementation": x.get("hf_experts_implementation"),                                                   # J [F22]
+        "hf_double_quant": x.get("hf_double_quant"),                                                                       # phase 3: the HF arm's double-quant, requested and loaded
         "axolotl_bnb4bit_modules": x.get("axolotl_bnb4bit_modules"),
         "unsloth_knobs": unsloth_knobs, "moe_backend_selected": x.get("moe_backend_selected"),                            # P2-1
         "unsloth_double_quant": x.get("unsloth_double_quant"),
@@ -2345,9 +2535,18 @@ def run_arm(a, load_fn, sampler=True):
         "kernel_counter_key": key, "kernel_calls_per_step": kps, "kernel_calls_per_step_min": (min(kps) if kps else 0),
         "experts_forward_calls_per_step_min": (min(efw) if efw else 0), "kernel_calls_all": kcalls,
         "C1_tensors_hashed": len(h_before), "C1_bytes_hashed": bytes_before, "C1_empties_skipped": empties_before,
-        "C1_control_detects_flipped_byte": True, "C1_experts_changed": len(changed), "C1_bit_exact": c1_ok, "C1_changed_sample": changed[:3],
+        "C1_control_detects_flipped_byte": bool(c1_ctl["detects"]), "C1_control_tensor": c1_ctl["tensor"],          # [F14] computed, never hard-coded
+        "C1_regime_by_tensor": c1_regimes, "C1_hasher": "hashes_frozen: every frozen expert / 4-bit tensor, any dtype (params + buffers)",
+        "C1_experts_changed": len(changed), "C1_bit_exact": c1_ok, "C1_changed_sample": changed[:3],
         "loss_first": losses[0], "loss_last": losses[-1], "loss_mean_last20": round(statistics.mean(losses[-20:]), 5),
+        "loss_step2": (losses[2] if len(losses) > 2 else None),                                                      # [F3]
         "eval_loss_step0": round(ev0, 5), "eval_loss_final": ev1, "eval_curve": curve,
+        "eval_rows": [{"step": c["step"], "losses": c.get("row_losses")} for c in curve],                              # [F13]
+        "matched_init_sha": slots_sha["sha"], "matched_init_sha_slots": slots_sha["n_slots"], "matched_init_sha_unmapped": slots_sha["n_unmapped"],   # [F3]
+        "lora_path_present": lora_path_present, "lora_loop_share": lora_loop_share, "lora_path_loop_steps": lora_path_loop_steps,   # [F1]
+        "unsloth_grouped_mm_calls_per_step_min": gmm_min, "unsloth_grouped_mm_calls_per_step_max": gmm_max,            # [F15]
+        "unsloth_manual_grouped_mm_calls_per_step_max": manual_max,
+        "arm_facts": arm_facts, "dynamo_counters": dyn, "microbatch_padded_len": mb_padded_len,                        # [F6/F9/F16/F19/F20]
         "s_per_step": round(wall / a.steps, 4), "s_per_step_median_11plus": round(statistics.median(steady) / 1e3, 4), "step_ms": step_ms, "microbatch_ms": microbatch_ms, "log_every": int(a.log_every), "microbatch_timing": bool(a.microbatch_timing),
         "train_wall_s": round(train_wall, 2), "window_wall_s": round(wall, 2),
         "tokens_per_step": tokens_per_step, "tokens_total": sum(tokens_per_step), "tokens_per_s": round(sum(tokens_per_step) / train_wall, 1) if train_wall else None,
@@ -2360,7 +2559,7 @@ def run_arm(a, load_fn, sampler=True):
     write_json(receipt_path(a), cell)
     print(("CELL OK " if c1_ok else "CELL C1_FAILED ") + json.dumps(
         {k: v for k, v in cell.items() if k not in ("losses", "step_ms", "microbatch_ms", "tokens_per_step", "tokens_padded_per_step", "lr_per_step", "kernel_calls_all",
-                                                   "env", "census", "eval_curve", "kernel_calls_per_step")}), flush=True)
+                                                   "env", "census", "eval_curve", "kernel_calls_per_step", "eval_rows", "microbatch_padded_len", "dynamo_counters", "lora_loop_share")}), flush=True)
     if not c1_ok:
         sys.exit(4)
     return cell
@@ -2628,14 +2827,35 @@ class _TinyLM(nn.Module):
 
 def _install_fake_modules():
     nf4 = types.ModuleType("nf4_qlora")
-    nf4.fused_grouped_lora = lambda mod, x: mod._reference(x)
+    nf4.LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0}        # [F1] the P46 per-path counters the real kernel keeps (v0.34.0 line 41)
+
+    def _fused(mod, x):
+        nf4.LORA_PATH_STATS["loop" if getattr(mod, "_selftest_force_loop", False) else "grouped_mm"] += 1
+        return mod._reference(x)
+    nf4.fused_grouped_lora = _fused
     sys.modules["nf4_qlora"] = nf4
     zoo = types.ModuleType("unsloth_zoo")
     tp = types.ModuleType("unsloth_zoo.temporary_patches")
     mu = types.ModuleType("unsloth_zoo.temporary_patches.moe_utils")       # P2-1: the three backends behind select_moe_backend()
-    mu.forward_native_grouped_mm = lambda mod, x: mod._reference(x)
+    class _ManualGroupedMM:                       # [F15] the zoo's per-group matmul fallback (moe_utils.py:489), as a shape
+        @staticmethod
+        def apply(*a):
+            return None
+    mu._ManualGroupedMM = _ManualGroupedMM
+
+    def _gmm(mod, x):                             # the grouped_mm backend: base + 2 LoRA GEMMs per projection = 6 torch._grouped_mm calls
+        a_ = torch.zeros(2, 16, dtype=torch.bfloat16)
+        b_ = torch.zeros(1, 16, 8, dtype=torch.bfloat16)
+        for _ in range(6):
+            torch._grouped_mm(a_, b_, offs=torch.tensor([2], dtype=torch.int32))
+        return mod._reference(x)
+
+    def _loop(mod, x):                            # the per-expert loop: one manual fallback apply per call
+        mu._ManualGroupedMM.apply(None)
+        return mod._reference(x)
+    mu.forward_native_grouped_mm = _gmm
     mu.forward_triton_grouped_gemm = lambda mod, x: mod._reference(x)
-    mu.forward_native_moe_loop = lambda mod, x: mod._reference(x)
+    mu.forward_native_moe_loop = _loop
     mu.select_moe_backend = lambda: os.environ.get("UNSLOTH_MOE_BACKEND") or "grouped_mm"
     mb = types.ModuleType("unsloth_zoo.temporary_patches.moe_utils_bnb4bit")
 
@@ -2668,6 +2888,8 @@ def _selftest_load_e4b(a):
     if a.arm == "fused":
         for l in m.model.layers:
             l.mlp.experts.patched = True
+            if a.model == "selftest/loop":          # [F1] the kernel takes its per-expert loop on every call
+                l.mlp.experts._selftest_force_loop = True
         x["n_patched"], x["reason"] = 2, "[selftest] fused on 2 module(s)"
     elif a.arm == "attn_only":
         for n, p in m.named_parameters():
@@ -2686,7 +2908,9 @@ def _selftest_load_hf(a):
          "probes": {}, "n_layers": 2, "model_type": "tiny_hf", "verify": {"n_quantized": None, "n_unquantized": None},
          "ckpt_mode": "hf:use_reentrant=False", "hashes": hashes_unsloth, "fwd_kwargs": lambda t: {"attention_mask": torch.ones_like(t)},
          "tokenizer_obj": _FakeTok(), "snapshot_dir": "/selftest/snapshots/deadbeef", "structural_expected_n_attn4": None, "detector_version": None,
-         "loader_used": "AutoModelForCausalLM", "hf_targets": {"peft": "selftest", "n_target_modules": 8, "n_target_parameters": 4}}
+         "loader_used": "AutoModelForCausalLM", "hf_targets": {"peft": "selftest", "n_target_modules": 8, "n_target_parameters": 4},
+         "hf_experts_implementation": {"requested": getattr(a, "hf_experts_implementation", "default") or "default", "config": None},
+         "hf_double_quant": {"requested": bool(int(getattr(a, "hf_double_quant", 1) or 0)), "loaded_attention_nested": None}}
     return m, x
 
 
@@ -2747,6 +2971,12 @@ def _selftest_unsloth_backend_and_axolotl(a, d, rec, e_ref):
             assert r["unsloth_knobs"]["env_set"]["UNSLOTH_MOE_BACKEND"] == backend and r["env"]["unsloth_env"].get("UNSLOTH_MOE_BACKEND") == backend, (tag, r["env"]["unsloth_env"])
             mins = r["unsloth_backend_calls_per_step_min"]
             assert mins[want_key] == 2 * a.accum and mins["moe_bnb4bit_backend"] == 2 * a.accum and sum(v for k, v in mins.items() if k not in (want_key, "moe_bnb4bit_backend")) == 0, (tag, mins)
+            # [F15] torch-level: 6 torch._grouped_mm per backend call on grouped_mm (= 6*L*A per step), the manual fallback on the loop
+            if backend == "grouped_mm":
+                assert r["unsloth_grouped_mm_calls_per_step_min"] == 6 * 2 * a.accum and r["unsloth_manual_grouped_mm_calls_per_step_max"] == 0, (r["unsloth_grouped_mm_calls_per_step_min"], r["unsloth_manual_grouped_mm_calls_per_step_max"])
+            elif backend == "native_torch":
+                assert r["unsloth_grouped_mm_calls_per_step_min"] == 0 and r["unsloth_manual_grouped_mm_calls_per_step_max"] == 2 * a.accum, (r["unsloth_grouped_mm_calls_per_step_min"], r["unsloth_manual_grouped_mm_calls_per_step_max"])
+            assert "torch._grouped_mm: absent" not in r["unsloth_backend_absent"] and r["arm_facts"]["unsloth_zoo_note"], r["unsloth_backend_absent"]
             assert r["unsloth_backend_calls_per_step_max"][want_key] == 2 * a.accum and r["unsloth_backend_absent"] == [], (tag, r["unsloth_backend_absent"])
             if backend == "grouped_mm":
                 assert r["unsloth_knobs"]["speed_tilt"] is True and r["unsloth_knobs"]["env_set"]["UNSLOTH_MOE_RECOMPUTE"] == "0" and r["env"]["unsloth_env"]["UNSLOTH_MOE_GC_REPLAY_PIN"] == "1", r["unsloth_knobs"]
@@ -2845,6 +3075,60 @@ def _selftest_unsloth_backend_and_axolotl(a, d, rec, e_ref):
     a.axolotl_best = 0
     out["axolotl"] = {"quantized_moe_experts_n": c["quantized_moe_experts_n"], "n_bnb4bit_unwrapped": c["n_bnb4bit_unwrapped"], "slots": mi["n_slots_set"], "probe": {k: v["regime"] for k, v in fp["slots"].items()},
                       "eval_loss_step0": ax["eval_loss_step0"]}
+    return out
+
+
+def _selftest_phase3(a, d, rec, R, M, N, e_fu, hfr):
+    """Phase 3 on the tiny models, each control with its FAILING case run and printed (`FAILING-CASE <id>: ...`)."""
+    out = {}
+    # [F14] C1 hashes every frozen expert/4-bit tensor whatever its dtype, and the control is a real byte on real storage
+    assert e_fu["C1_control_tensor"] == "model.layers.0.mlp.experts.base.down_absmax" and e_fu["C1_control_detects_flipped_byte"] is True, (e_fu["C1_control_tensor"], e_fu["C1_control_detects_flipped_byte"])
+    assert e_fu["C1_regime_by_tensor"] == {"u8-packed": 4, "fp32": 4} and e_fu["C1_tensors_hashed"] == 8, (e_fu["C1_regime_by_tensor"], e_fu["C1_tensors_hashed"])   # 2 stacks + 2 absmax x 2 layers
+    assert hfr["C1_regime_by_tensor"] == {"u8-packed": 4} and hfr["C1_control_tensor"] == "model.layers.0.mlp.experts.base_layer.base_layer.down_proj", (hfr["C1_regime_by_tensor"], hfr["C1_control_tensor"])
+    # a bf16 stack (the HF regime) is hashed too, with its regime named
+    bf = nn.Module()
+    bf.layers = nn.ModuleList([nn.Module()])
+    bf.layers[0].mlp = nn.Module()
+    bf.layers[0].mlp.experts = nn.Module()
+    bf.layers[0].mlp.experts.gate_up_proj = nn.Parameter(torch.randn(4, 12, 16, dtype=torch.bfloat16), requires_grad=False)
+    bf.layers[0].mlp.experts.lora_A = nn.Parameter(torch.randn(4, 2, 16))           # trainable, named lora: never hashed
+    h, nb, emp, reg = hashes_frozen(bf)
+    assert list(h) == ["layers.0.mlp.experts.gate_up_proj"] and reg == {"bf16": 1} and nb == 4 * 12 * 16 * 2 and emp == 0, (h, reg, nb)
+    ctl = c1_control(bf, h)
+    assert ctl["detects"] and ctl["tensor"] == "layers.0.mlp.experts.gate_up_proj", ctl
+    # FAILING CASE D: a hasher that ignores the substituted copy cannot see the flip -> the control reports False and run_arm would refuse
+    def _blind_hasher(model, override=None):
+        return hashes_frozen(model, override=None)
+    bad = c1_control(bf, h, hasher=_blind_hasher)
+    assert bad["detects"] is False and bad["changed"] is False, bad
+    print(f"FAILING-CASE D: c1_control with a hasher that does not see the tampered copy -> {bad} (run_arm asserts on detects=False: 'C1 positive control did not fire')", flush=True)
+    out["D"] = {"control_tensor": e_fu["C1_control_tensor"], "regimes_e4b": e_fu["C1_regime_by_tensor"], "blind_hasher_detects": bad["detects"]}
+    # [F3] the name-free slot sha: identical across the matched four, different for native and between e4b-native and hf-native
+    shas = {t: r["matched_init_sha"] for t, r in M.items()}
+    assert len(set(shas.values())) == 1 and all(r["matched_init_sha_slots"] == 24 and r["matched_init_sha_unmapped"] == 0 for r in M.values()), shas
+    nshas = {t: r["matched_init_sha"] for t, r in N.items()}
+    assert nshas["fused_attn4_m"] == nshas["reference_attn4_m"] and nshas["hf_peft_m"] != nshas["fused_attn4_m"] and nshas["fused_attn4_m"] != shas["fused_attn4_m"], nshas
+    assert all(r["loss_step2"] == r["losses"][2] for r in M.values())
+    print(f"FAILING-CASE B: native-init arms carry matched_init_sha e4b {nshas['fused_attn4_m'][:12]} != hf {nshas['hf_peft_m'][:12]} (the reducer VOIDs a matched arm whose sha differs from the anchor's)", flush=True)
+    out["B"] = {"matched_sha": shas["fused_attn4_m"][:16], "native_e4b": nshas["fused_attn4_m"][:16], "native_hf": nshas["hf_peft_m"][:16]}
+    # [F1] the kernel's per-path counters: the fused arm ran the grouped path on every step; a forced loop is named per step
+    assert e_fu["lora_path_present"] is True and e_fu["lora_path_loop_steps"] == [] and all(v == 0.0 for v in e_fu["lora_loop_share"]), (e_fu["lora_path_loop_steps"], e_fu["lora_loop_share"])
+    assert e_fu["kernel_calls_all"][0]["lora_path_grouped_mm"] == 2 * a.accum
+    a.fam, a.model, a.tokens, a.tokens_sha = "tiny", "selftest/loop", os.path.join(d, "tokens_tiny.json"), rec["sha256"]
+    a.framework, a.arm, a.tag, a.attn_4bit, a.expect_trainable, a.lora_init, a.adapter_dtype = "e4b", "fused", "fused_attn4_loop", 1, None, "native", "fp32"
+    lp = run_arm(a, _selftest_load_e4b, sampler=False)
+    assert lp["lora_path_loop_steps"] == list(range(1, a.steps + 1)) and all(v == 1.0 for v in lp["lora_loop_share"]), (lp["lora_path_loop_steps"], lp["lora_loop_share"])
+    print(f"FAILING-CASE A: fused arm whose kernel took the per-expert loop: lora_path_loop_steps={lp['lora_path_loop_steps']} lora_loop_share[0]={lp['lora_loop_share'][0]} (the reducer VOIDs it, naming the steps)", flush=True)
+    out["A"] = {"loop_steps_ok_arm": e_fu["lora_path_loop_steps"], "loop_steps_bad_arm": lp["lora_path_loop_steps"][:3]}
+    a.model = "selftest/tiny"
+    # [F13] per-row held-out losses, [F16] dynamo snapshots at step 10 and N, [F19] padded lengths, [F6/F9/F20] facts
+    assert [e["step"] for e in e_fu["eval_rows"]] == [c["step"] for c in e_fu["eval_curve"]] and all(len(e["losses"]) == a.eval_n for e in e_fu["eval_rows"]), e_fu["eval_rows"][0]
+    assert abs(statistics.mean(e_fu["eval_rows"][0]["losses"]) - e_fu["eval_loss_step0"]) < 1e-4
+    assert set(e_fu["dynamo_counters"]) == {"step10", f"step{a.steps}"} and e_fu["dynamo_counters"]["step10"]["recompiles_total"] == 0, e_fu["dynamo_counters"]
+    assert len(e_fu["microbatch_padded_len"]) == a.steps and all(len(m) == a.accum for m in e_fu["microbatch_padded_len"])
+    f = e_fu["arm_facts"]
+    assert isinstance(f["torch_num_threads"], int) and f["lora_delta_dtype"].startswith("A.dtype") and hfr["arm_facts"]["lora_delta_dtype"].startswith("the base weight") and "loss" in f["loss_class"]
+    out["F"] = {"threads": f["torch_num_threads"], "dynamo_keys": sorted(e_fu["dynamo_counters"])}
     return out
 
 
@@ -3360,12 +3644,13 @@ def selftest(a):
     # ---- P2-1 / P2-2: the Unsloth backend knobs and counters, the double-quant decision, the axolotl arm
     p2 = _selftest_unsloth_backend_and_axolotl(a, d, rec, e_ref)
     a.framework, a.arm, a.tag, a.lora_init, a.adapter_dtype = "e4b", "fused", "fused_attn4", "native", "fp32"
+    p3 = _selftest_phase3(a, d, rec, R, M, N, e_fu, hfr)
 
     print(f"SELFTEST OK dir={d} receipts={sorted(R)} e4b ref/fused loss_last {e_ref['loss_last']}/{e_fu['loss_last']} unsloth {u1['loss_last']} "
           f"hf {hfr['loss_last']} accum={a.accum} autocast={a.autocast} kcalls fused={e_fu['kernel_calls_per_step_min']} unsloth={u1['kernel_calls_per_step_min']} "
           f"hf={hfr['kernel_calls_per_step_min']} mb2_pads={ {k: v['tokens_padded_total'] for k, v in mb.items()} } detector_dryruns={det} "
           f"expert_selection_dryruns={sel} matched_step0={s0} matched_tolerance={tol} matched_slots={n_slots} "
-          f"frozen_probe_real={probe_real} phase2={p2}")
+          f"frozen_probe_real={probe_real} phase2={p2} phase3={p3}")
     return d
 
 
@@ -3396,6 +3681,10 @@ def main():
                          "else the loader's default; the loaded expert Params4bit's quant_state.nested is recorded either way")
     ap.add_argument("--axolotl-best", type=int, default=0, help="P2-2 (TC1): 1 = plugins [KernelsPlugin], expert_backend scattermoe, moe_bnb_fast true")
     ap.add_argument("--axolotl-dataset", default=None, help="P2-2 (TC1): the registered Alpaca subset file named in the axolotl config's `datasets` (validation needs one; nothing reads it here)")
+    ap.add_argument("--hf-double-quant", type=int, default=1,
+                    help="phase 3 (TC1): the HF arm's bnb_4bit_use_double_quant (default 1, matching e4b's double-quantised ATTENTION Params4bit; experts are not quantised on this arm); recorded as hf_double_quant")
+    ap.add_argument("--hf-experts-implementation", default="default",
+                    help="J [F22] (TC1): the HF arm's transformers experts implementation passed to from_pretrained (default = the library's own choice, recorded); the t214 row asks for grouped_mm")
     ap.add_argument("--adapter-dtype", choices=["fp32", "native"], default="fp32",
                     help="T19 (TC1): fp32 = cast EVERY framework's trainable adapters to fp32 after construction (e4b included; tp4 cast only "
                          "the non-e4b arms); native = leave them as the loader built them (e4b: bf16 expert adapters -- the `shipped` arm)")
