@@ -1,0 +1,13 @@
+KNOBS e4b=b8480894e6ddc5d2f534110eeeb4be4e200898e5 gnf4=7b7e6b15c8628586727b037b201f4d252016ad20 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 cpu_vendor=AuthenticAMD min_disk_gb=200 calib_nseq=128
+p88_reduce self-test OK (17 cases)
+e4b 0.37.8 @b8480894e6ddc5d2f534110eeeb4be4e200898e5
+gnf4 0.33.8 @7b7e6b15c8628586727b037b201f4d252016ad20
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+PREMISE row-exact rc=0: 3 passed in 12.75s
+PROVE -- the proving run: install tripwired; premise held; K19 + K16 contract tests compiled on this card
+PROVE K19+K16 contract compiled rc=0: 22 passed in 6.94s
+PROVE hf_cdn_mbps=19.6 bytes=52428800

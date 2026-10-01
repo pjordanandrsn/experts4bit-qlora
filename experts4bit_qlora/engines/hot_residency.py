@@ -48,6 +48,44 @@ FORCE_SINGLETON_GROUPS = [False]
 DEVICE_GROUPING = [False]
 
 
+def _k19_mode_env() -> str:
+    """``E4B_INT4_GROUPED_SMALLM``: ``auto`` (the default, also when unset) uses K19 for int4 decode rows above
+    T == 1 when the kernel package carries it; ``1`` requires it and routes T == 1 to it too; ``0`` keeps the split-K
+    GEMV. Anything else is refused rather than read as one of these."""
+    v = os.environ.get("E4B_INT4_GROUPED_SMALLM", "auto").strip().lower() or "auto"
+    if v not in ("auto", "0", "1"):
+        raise ValueError(f"E4B_INT4_GROUPED_SMALLM={v!r}: expected 'auto', '0' or '1'")
+    return v
+
+
+def _lean_glue_env() -> bool:
+    """``E4B_INT4_LEAN_GLUE`` (lane K23, opt-in): ``1`` folds the grouping glue around K19 into the two kernels that
+    bracket it. The tile table is built in ONE launch: no host int32 cast, no pre-zero fills, and the sorted ids from
+    the same launch instead of an index_select. gate_up reads the all-resident collapse's token rows directly
+    (``gather_div``), so the ``[T * top_k, H]`` expansion is never made. The down projection is stored straight into
+    the caller's row order, with no index_copy_ unsort. Bit-identical by construction (grouped-nf4-gemm's K23 contract tests). It applies to
+    K19's rows only, and not to gpt-oss's epilogue, which reads the sorted down output. ``0`` (the default, also when
+    unset) keeps the separate launches; anything else is refused."""
+    v = os.environ.get("E4B_INT4_LEAN_GLUE", "0").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"E4B_INT4_LEAN_GLUE={v!r}: expected '0' or '1'")
+    return v == "1"
+
+
+_LEAN_GLUE_SUPPORT: dict = {}
+
+
+def _lean_glue_supported(builder, k19) -> bool:
+    """Whether the installed kernel package carries K23's options (``lean=`` / ``sorted_ids=`` on the builder,
+    ``scatter=`` / ``gather_div=`` on K19). Read once per function pair, not per call."""
+    key = (builder, k19)
+    if key not in _LEAN_GLUE_SUPPORT:
+        import inspect
+        _LEAN_GLUE_SUPPORT[key] = ({"lean", "sorted_ids"} <= set(inspect.signature(builder).parameters)
+                                   and {"scatter", "gather_div"} <= set(inspect.signature(k19).parameters))
+    return _LEAN_GLUE_SUPPORT[key]
+
+
 def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     """``(singleton_groups, device_grouping)`` for the all-resident collapse at ``T`` tokens.
 
@@ -57,7 +95,7 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     Without that the singleton GEMV would keep T == 1, and K8, which scores through the T == 1 loop, would read
     the GEMV instead of the kernel it gates (lane P87)."""
     k19_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
-              and os.environ.get("E4B_INT4_GROUPED_SMALLM", "0") == "1")
+              and _k19_mode_env() == "1")
     if k19_t1:
         return False, True
     return (T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])), (DEVICE_GROUPING[0] and T > 1)
@@ -182,7 +220,7 @@ _CALIB_SINK = None
 def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gate,
                       act_fn, gptoss=None, clamp_limit=None,
                       singleton_groups=False, device_grouping=False,
-                      int4_stores=None):
+                      int4_stores=None, x_tokens=None):
     """Down-projection outputs for each (token,slot) row, computed on the device
     the packed stack lives on. ``local_ids`` index into the G-expert stack
     (``gu_p`` is ``[G, n1, k1//2]`` etc.). Returns ``[R, H]`` in the input row
@@ -203,7 +241,11 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     ``gptoss`` — same clamps, different combination — and mirrors
     ``_DeepseekV4ForwardMixin.forward`` in both structure and precision. Threading it
     matters: an expert module whose forward is allowlisted for patching but whose
-    epilogue this function does not reproduce gets silently served plain SwiGLU."""
+    epilogue this function does not reproduce gets silently served plain SwiGLU.
+
+    ``x_tokens``, when given with ``x_rows=None``, is ``(x, row_token, top_k)``: the step's TOKEN rows and the
+    (token, slot) -> token map, from the all-resident collapse. K23's lean K19 route reads the token rows directly
+    (``gather_div=top_k``); every other route gets ``x.index_select(0, row_token)``, the rows it has always been given."""
     from nf4_grouped import gemm_4bit_grouped
 
     n1, k1, n2, k2 = shapes
@@ -212,8 +254,11 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
     # group, ids as a device tensor): no int4-b32 kernels, no tile table,
     # no unsort. The mxfp4 kernel has no captured M-tile variant yet, so
     # the device-grouping branch is not taken for this store kind.
+    if x_rows is None and x_tokens is None:
+        raise ValueError("_fused_over_stack needs x_rows or x_tokens")
+    R_rows = x_rows.shape[0] if x_rows is not None else local_ids.numel()
     _mxfp4_store = int4_stores is not None and int4_stores.get("kind") == "mxfp4"
-    if (_mxfp4_store and x_rows.shape[0] > _MXFP4_GEMV_ROWS
+    if (_mxfp4_store and R_rows > _MXFP4_GEMV_ROWS
             and gu_p is not None and gu_p.numel() > 0):
         # Batched rows on the MXFP4 store: the decode GEMV re-streams the
         # weights per row and loses to NF4 above a handful of rows
@@ -224,21 +269,48 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         int4_stores = None
         _mxfp4_store = False
     _int4_gemv_decode = (not _mxfp4_store and device_grouping
-                         and int4_stores is not None and x_rows.shape[0] <= 256)
-    # K19 (opt-in, E4B_INT4_GROUPED_SMALLM=1; grouped-nf4-gemm#419): the same decode rows through the grouped
-    # small-M tensor-core GEMM instead of the split-K GEMV -- K16's arithmetic (bf16 activations, in-register int4
-    # dequant, bf16 MMA) over the device tile table, gate_up's gather folded into the kernel. It changes the
-    # arithmetic (bf16 activations, no int8 quantise), so it is opt-in until a registered quality read licenses it.
-    # Asked for and absent is a refusal, never a silent fallback to the GEMV.
+                         and int4_stores is not None and R_rows <= 256)
+    # K19 (grouped-nf4-gemm#419): the same decode rows through the grouped small-M tensor-core GEMM instead of the
+    # split-K GEMV -- K16's arithmetic (bf16 activations, in-register int4 dequant, bf16 MMA) over the device tile
+    # table, gate_up's gather folded into the kernel. Lane P88 LICENSED it for these rows on an RTX 5090
+    # (e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01: B=16 step 0.905x, K8 +0.0062 nats), so it is the DEFAULT
+    # here when the kernel package carries it (E4B_INT4_GROUPED_SMALLM unset or "auto"). "0" keeps the split-K GEMV;
+    # "1" requires K19 (absent is a refusal) and also routes T == 1 to it (see _collapsed_grouping). B=1 read SLOWER
+    # (x1.103), which is why auto leaves T == 1 on the singleton GEMV.
     _k19 = None
-    if _int4_gemv_decode and os.environ.get("E4B_INT4_GROUPED_SMALLM", "0") == "1":
+    _k19_mode = _k19_mode_env()
+    _lean_want = _lean_glue_env()         # read (and refused if malformed) on every call, like the K19 mode
+    _lean = False
+    if _int4_gemv_decode and _k19_mode != "0":
         try:
             from int4_smallm import gemm_int4_b32_grouped_smallm as _k19
         except ImportError as e:
+            if _k19_mode == "1":
+                raise RuntimeError(
+                    "E4B_INT4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K19 "
+                    "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
+            _k19 = None                   # auto: the kernel package predates K19 -> the split-K GEMV, as before
+        if _k19 is not None:
+            _int4_gemv_decode = False     # take the device-grouping branch: it builds the 16-row tile table
+    _fused_tiles = None
+    if _lean_want and _k19 is not None and gptoss is None:
+        try:
+            from int4_b32 import build_group_tiles_fused as _fused_tiles
+        except ImportError:
+            _fused_tiles = None
+        if _fused_tiles is None or not _lean_glue_supported(_fused_tiles, _k19):
             raise RuntimeError(
-                "E4B_INT4_GROUPED_SMALLM=1 needs grouped-nf4-gemm with K19 "
-                "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
-        _int4_gemv_decode = False         # take the device-grouping branch: it builds the 16-row tile table
+                "E4B_INT4_LEAN_GLUE=1 needs grouped-nf4-gemm with K23 "
+                "(build_group_tiles_fused lean=/sorted_ids=, "
+                "gemm_int4_b32_grouped_smallm scatter=/gather_div=)")
+        _lean = True
+    _tok = None
+    if x_rows is None:
+        x_t, row_token, top_k = x_tokens
+        if _lean and _CALIB_SINK is None:
+            _tok = (x_t, top_k)           # K23: K19's gate_up reads the token rows itself (gather_div)
+        else:
+            x_rows = x_t.index_select(0, row_token)
     if _mxfp4_store:
         singleton_groups = True
         device_grouping = False
@@ -281,19 +353,23 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # ships it (census: the chained builder is ~10 launches/layer,
         # 48 radix sorts per B=16 step); chained builder otherwise and
         # for prefill chunks, where launches amortize.
-        _fused_tiles = None
-        if local_ids.numel() <= 256:
+        if not _lean and local_ids.numel() <= 256:      # (under _lean the builder was resolved above)
             try:
                 from int4_b32 import build_group_tiles_fused as _fused_tiles
             except ImportError:
                 _fused_tiles = None
-        if _fused_tiles is not None:
+        if _lean:
+            # K23: one launch for the table AND the sorted ids
+            t_row0, t_rows, t_grp, order, _counts, sorted_ids = _fused_tiles(
+                local_ids, _n_exp, 16, lean=True, sorted_ids=True)
+        elif _fused_tiles is not None:
             t_row0, t_rows, t_grp, order, _counts = _fused_tiles(
                 local_ids, _n_exp, 16)
         else:
             t_row0, t_rows, t_grp, order, _counts = \
                 build_group_tiles_device(local_ids, _n_exp, 16)
-        sorted_ids = local_ids.index_select(0, order)
+        if not _lean:
+            sorted_ids = local_ids.index_select(0, order)
         if int4_stores is not None:
             # the int4 _mm quantises with the gather FOLDED IN (or takes
             # the already-sorted epilogue output); the [R, K] gather
@@ -422,10 +498,18 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             # K19 (opt-in): the grouped small-M tensor-core GEMM against the SAME 16-row device tiles. The first
             # call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is
             # already in sorted order. bf16 activations, no quantise; outputs in sorted order, as K14's.
+            # Under K23 (_lean) the down call stores into the caller's row order (scatter=order), and the unsort at
+            # the end is skipped.
             def _mm(xr, pk, am):
-                st = int4_stores["gu" if pk is gu_p else "dn"]
+                slot = "gu" if pk is gu_p else "dn"
+                st = int4_stores[slot]
+                if slot == "gu" and _tok is not None:
+                    # K23: sorted row i reads token row order[i] // top_k, no [T * top_k, H] expansion
+                    return _k19(_tok[0].to(torch.bfloat16), st["packed"], st["scales"], t_row0, t_rows, t_grp,
+                                order, gather_div=_tok[1])
+                kw = {"scatter": order} if (_lean and slot == "dn") else {}
                 return _k19(xr.to(torch.bfloat16), st["packed"], st["scales"], t_row0, t_rows, t_grp,
-                            order if xr is x_rows else None)
+                            order if xr is x_rows else None, **kw)
         elif device_grouping:
             # batched decode (bv3): the grouped int4-b32 GEMM against
             # the SAME prebuilt device tiles the NF4 captured path uses
@@ -553,6 +637,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             _CALIB_SINK(gu_p, sorted_ids, x_sorted, h)
         dn = _mm(h.contiguous(), dn_p, dn_a)
     if order is None:                  # singleton path: input order kept
+        return dn
+    if _lean:                          # K23: K19's down already stored each row at order[i]
         return dn
     out = torch.empty_like(dn)
     out.index_copy_(0, order, dn)  # unsort back to caller's row order
@@ -833,7 +919,12 @@ class _HotResidency:
             rt = c[1]
         gptoss = ((self.h_gu_b, self.h_dn_b, self.alpha, self.limit)
                   if self.gptoss else None)
-        xr = x.index_select(0, rt)
+        # K23 (E4B_INT4_LEAN_GLUE=1): hand over the token rows; the (token, slot) expansion is made inside only for a
+        # route that reads it (the lean K19 route gathers token rows itself)
+        if _lean_glue_env():
+            xr, xtok = None, (x, rt, k)
+        else:
+            xr, xtok = x.index_select(0, rt), None
         singleton, grouped = _collapsed_grouping(T, getattr(self, "_int4_stores", None))
         dn = _fused_over_stack(xr, flat, self.h_gu_p, self.h_gu_a,
                                self.h_dn_p, self.h_dn_a, self.shapes,
@@ -842,7 +933,8 @@ class _HotResidency:
                                singleton_groups=singleton,
                                device_grouping=grouped,
                                int4_stores=getattr(self, "_int4_stores",
-                                                   None))
+                                                   None),
+                               x_tokens=xtok)
         w = top_k_weights.reshape(-1).to(torch.float32)
         ck = _combine_kernel()
         if (ck is not None and dn.is_cuda and dn.dtype == torch.bfloat16

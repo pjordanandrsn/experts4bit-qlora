@@ -2,11 +2,105 @@
 
 ## Unreleased
 
-### Correction: the flagship matrix's energy range and frozen-byte figure each described one model (docs and register only)
+### `E4B_INT4_LEAN_GLUE=1` (lane K23, opt-in): K19's grouping glue folds into the builder and K19's store
 
-- `e4b.train.flagship-matrix` covers Qwen3-30B-A3B and Gemma-4-26B-A4B, but its "0.86–0.92× energy" was Gemma-4's range alone (`bench/flagship-matrix-model2/RESULTS-flagship-matrix-model2.md`, C3: 0.860–0.922×). Qwen3's is 0.797–0.846× (`bench/flagship-matrix/RESULTS-flagship-matrix.md`, B3). The two-model range is **0.80–0.92×**, recomputed from the twenty per-cell receipts.
-- Its "bit-identical over 16.31 GB hashed" is the fused-train gate's figure, from one Qwen3 run outside the matrix. The ten Gemma-4 cells' own check hashed 12.85 GB each. The sentence now names both, and the worst parity cell (0.03653) is labelled as Gemma-4 finance's.
-- The speed (1.52–1.81×) and VRAM (0.75–0.81×) ranges already spanned both models, and the row's value and status are unchanged. Corrected in `docs/claims.json` (the row's notes keep the old wording, and the model-2 receipt joins its evidence), `docs/STATUS.md` (marked), `README.md` and `docs/solutions/qlora-fused-moe-experts.md`.
+- **Why.** P88 censused Qwen3-30B-A3B's B=16 step on an RTX 5090 (8 graph replays per arm).
+  - Its K19 arm, against its GEMV arm, adds 0.685 ms/step of launches: the tile builder 0.430, three fills 0.096, an
+    index kernel 0.094 (by its count, the unsort) and a scatter/gather kernel 0.065.
+  - Both arms also pay an `index_select` of 0.46 ms/step. By its call count and per-call time it is inferred to be the
+    collapse's `[T * top_k, H]` expansion of the token rows.
+- **What.** On K19's rows, `_fused_over_stack` uses grouped-nf4-gemm K23 (#427):
+  - it builds the table with `build_group_tiles_fused(..., lean=True, sorted_ids=True)`, one launch;
+  - gate_up reads the collapse's token rows through `gather_div=top_k`, because `_forward_collapsed` now hands over
+    `(x, row_token, top_k)` and the expansion is made inside only for routes that read it;
+  - the down projection is stored with `scatter=order` straight into the caller's row order, so the unsort is skipped.
+  - gpt-oss's epilogue reads the sorted down output, so it is excluded.
+  - `0` (the default) keeps the separate launches. Anything else is refused, and `1` on a kernel package without
+    K23's options is a RuntimeError, not a silent fallback.
+- **No speed claim yet.** Lane P89 reads it end to end.
+- **Tests:**
+  - `tests/test_int4_grouped_smallm_route.py` (stubs):
+    - the route takes K23's builder and the down scatter with the same bits as `0`;
+    - token rows are read through `gather_div` under `1` and expanded inside under `0`, both bit-equal to the
+      expanded call;
+    - the refusals;
+    - off K19's rows nothing changes.
+  - `tests/test_k23_lean_glue_gpu.py` (real kernels): bit-equal to the default at B=16 from expanded rows and from token
+    rows, eager, and captured in a CUDA graph and replayed on new inputs. It skips when the installed kernel package
+    predates K23.
+  - On the NAS RTX A2000 (correctness only), against K23's commit:
+    - GPU 6/6 (with K19's row-exact file) and CPU route 24/24;
+    - a mutation that drops the down scatter but still skips the unsort fails all three K23 GPU tests.
+
+### Lane K24 runner (#564): K22 re-read on gpt-oss-20b with per-layer weight stores and K21's masked-tail plans (bench and tests only)
+
+- **Why.** K22 read VOID: its bench's served NF4 kernel was 17 % under the in-model census. Descriptively, gpt-oss's B=16 step is 79 % that kernel. K24's prereg and bench live in grouped-nf4-gemm (`kernel/PREREG-k24-gptoss-per-layer.md`).
+- **`bench/k24/` is K22's runner minus the prompts and routing-record phases:**
+  1. census the served B=16 step;
+  2. run `k24_bench.py` on K22's recorded routing, read from the gnf4 clone's receipts at the registered commit.
+  Failures use rc 31 / 34.
+- `tests/test_k24_staged_pin.py` pins the staged bytes, the order, the env, the instrument wiring, the codes and the dry run.
+
+### Lane K22 runner (#564): gpt-oss-20b at B=16 on an RTX 5090 -- census, recorded routing, and K21 against the served expert route (bench and tests only)
+
+- **Why.** The first lane of the throughput push to other model families. gpt-oss's licensed MXFP4 store has no batched kernel, so at B=16 (64 rows) the experts fall back to the kept NF4 stacks; bo7 timed that step at 21.65 ms. The prereg, the bench and the rule live in grouped-nf4-gemm (`kernel/PREREG-k22-gptoss-mxfp4-b16.md`). This repo carries the runner.
+- **`bench/k22/`, one box, three phases:**
+  1. census the served B=16 step (bo7's `store_r12`) with P42's replay census;
+  2. tokenize 16 wikitext rows with gpt-oss's own tokenizer (`step_decomp._k8_window`, as P37) and record 128 teacher-forced B=16 steps of routing with `bench/families/record_eids.py`;
+  3. run grouped-nf4-gemm's `k22_bench.py` on that routing. Its instrument is phase 1's own `_gemm_nf4_grouped` row.
+- **Codes and proof.** Lane failures use rc 31–33, never the launcher's machine-exclusion codes. The proof (`K22_PROVE=1`) compiles K21's and K16's contracts on the card and fetches no model.
+- `tests/test_k22_staged_pin.py` pins:
+  - the staged bytes (P86's harness, the family recorder, P44's served-model builder);
+  - the refusal and proof order;
+  - the phase order and bo7's env;
+  - the instrument wiring;
+  - the exit codes;
+  - the driver's dry run.
+
+### K19 is the default for batched int4 decode rows (`E4B_INT4_GROUPED_SMALLM` now defaults to `auto`), as lane P88 licensed
+
+- **What changes.** In the device-grouping configuration, the one every B=16 register row is measured in, int4 decode rows above T == 1 (≤ 256 rows) now run grouped-nf4-gemm's K19 when the installed kernel package carries it. Before, they ran the split-K GEMV.
+- **Why.** P88 (`e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`): B=16 step 0.905× on an RTX 5090, K8 +0.0062 nats (floor 0.0095).
+- **What doesn't change:**
+  - **T == 1** stays on the singleton GEMV (P88 read B=1 1.103× slower);
+  - the library's default batched path with `DEVICE_GROUPING` off;
+  - prefill rows;
+  - a kernel package without K19 (released grouped-nf4-gemm ≤ 0.33.7): auto falls back to the GEMV silently.
+- **Values:**
+  - `auto` (default, also unset or empty);
+  - `0`: the split-K GEMV everywhere;
+  - `1`: requires K19, refuses if absent, and also routes T == 1 (the quality instrument's setting);
+  - anything else is refused.
+- `tests/test_int4_grouped_smallm_route.py` pins each value's route, the silent fallback, the refusal, and T == 1 under each. `int4_experts.py`'s Scope note says the same.
+- Three tests whose subject is the split-K GEMV route now select it explicitly (`=0`): `test_int4_device_grouping.py::test_int4_decode_routes_to_gemv`, P63's `test_int4_device_grouping_gemv_is_row_exact` and `test_int4_decode_a16.py::test_on_does_not_cover_the_device_grouped_decode_gemv`. K19's own row invariance is `tests/test_k19_row_exact_gpu.py`. With the real kernel (grouped-nf4-gemm `7b7e6b1`) on an RTX A2000, the 9 dispatch and route files pass: 62 passed.
+### Lane P88 read (#564): LICENSED. K19 takes the RTX 5090's B=16 int4 decode step to 0.905×, K8 +0.0062 nats; B=1 is 1.10× slower (bench, docs and register only)
+
+- **Run:** `p88-5090-4` on an RTX 5090 with an AMD EPYC 9334 host, e4b `b848089` + grouped-nf4-gemm `7b7e6b1` (K19's plan 32/256). $0.5538. The lane cost $0.6582, including a proof and three pre-flight NOT_RUNs.
+- **Steps (medians of two draws):**
+  - B=16 11.200 → 10.140 ms (0.905, bar 0.95);
+  - B=1 4.325 → 4.771 (1.103, SLOWER).
+- **K8 on the licensed recipe:** OFF 1.8434202801176407, ON 1.8496547109991661: **+0.00623 nats** (floor 0.0095). The build equals OFF bit for bit, and the pack it dumped carries the licensed fingerprint `sha256:0c9955a9`.
+- **Census at B=16:** GEMV 6.34 → K19 5.05 ms per step. Grouping adds 0.69 (tile build 0.43 + glue 0.26) against 0.60 of quantise and reduce removed.
+- **Predictions:** B=16 0.78–0.86 refuted (0.905); B=1 slower held; |ΔK8| < 0.003 refuted (+0.0062, inside the floor).
+- **Register:** `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`. STATUS's P86 sentence is condensed and now cites it. P84's and P86's register sentences are tightened, with their figures unchanged, to keep the bundle under its cap.
+- **What follows:** K19 by default for int4 decode rows above T == 1, a separate PR.
+
+### `bench/families/record_eids.py`: P60's routing recorder, generalised to every MoE family (bench and tests only)
+
+- P60's recorder (`bench/p60/record_eids.py`, a registered lane's staged file, left byte-identical) hooked `.gate` on classes named `*SparseMoeBlock` and parsed Qwen's router output, so it missed gpt-oss, Granite and Gemma-4, whose routers are named `router`.
+- The new copy pre-hooks each block's `experts` call and reads its `top_k_index` argument. Every admitted family calls `experts(hidden, top_k_index, top_k_weights)` in transformers 5.x, and e4b's served wrapper keeps that signature. It refuses a model with no experts module, a call shaped otherwise, and a `top_k` mismatch.
+- `tests/test_record_eids_families.py` covers tiny Qwen3-MoE, OLMoE, Granite-MoE and gpt-oss models. On each, the recorded ids must equal the family's own router indices, call for call; the routers return `(logits, w, idx)`, `(idx, w, logits)` and `(logits, scores, idx)`. Groundwork for per-family routing replays (the K20 method, other families).
+
+### Lane P88 registered (#564): P87's instrument on K19's new plan, with a CPU floor (bench and tests only)
+
+- **Why.** grouped-nf4-gemm's K20 (#421) found K19's plan on the 5090: BLOCK_N 32 / KC 256 serves recorded B=16 routing at 0.736× the int8 GEMV route, with outputs bit-identical across plans. P87's read was VOID because its calibrated K8 build ran out of its alarm on a Broadwell host.
+- **P88 is P87's arms, reducer and rule**, pinned to gnf4 `7b7e6b1`. It adds:
+  - a tripwire on K19's default plan;
+  - a host CPU-vendor floor (AMD; **rc 18**, which the launcher excludes the machine on, adertha#131) before any install;
+  - a 5,400 s build alarm and a 3.0 h guard.
+- **Predictions:** B=16 0.78–0.86; B=1 SLOWER (1.03–1.20, so a default would cover T > 1 only); |ΔK8| < 0.003.
+- **Cost:** a proof (0.5 h), then the reading (3.0 h). Lane ceiling $3.50.
+- `tests/test_p88_staged_pin.py` adds the vendor refusal, the plan tripwire and the alarm to P87's pins.
 
 ### Lane K20 runner (#564): K19's plan space on an RTX 5090, replaying P60's recorded B=16 routing (bench and tests only)
 
@@ -200,6 +294,12 @@
 - **Confirmed only if all hold:** the four streams are identical in every row, every bucket captures, and B/A > 1.03 in both pairings. A confirmed read supersedes P81's register row.
 - **Reported for #674.** After the verdict, two K8 arms read wikitext through both packs loaded by fingerprint: K32 with the fp32 router, K16 with the shipped cast. The registered table reads whether the cast is the whole 6.36709 → 6.33015 gap. The attention pack's fingerprint is compared with P81's `d7cfa1f4…`.
 - `tests/test_p82_staged_pin.py` pins the staged files (P81's harness and hook, referenced unchanged), the 21-case rule and K8 table, the router export and the soundness of its stamp, the tripwire markers for #777 and #413, and the reduction's place before the K8 arms.
+
+### Correction: the flagship matrix's energy range and frozen-byte figure each described one model (docs and register only)
+
+- `e4b.train.flagship-matrix` covers Qwen3-30B-A3B and Gemma-4-26B-A4B, but its "0.86–0.92× energy" was Gemma-4's range alone (`bench/flagship-matrix-model2/RESULTS-flagship-matrix-model2.md`, C3: 0.860–0.922×). Qwen3's is 0.797–0.846× (`bench/flagship-matrix/RESULTS-flagship-matrix.md`, B3). The two-model range is **0.80–0.92×**, recomputed from the twenty per-cell receipts.
+- Its "bit-identical over 16.31 GB hashed" is the fused-train gate's figure, from one Qwen3 run outside the matrix. The ten Gemma-4 cells' own check hashed 12.85 GB each. The sentence now names both, and the worst parity cell (0.03653) is labelled as Gemma-4 finance's.
+- The speed (1.52–1.81×) and VRAM (0.75–0.81×) ranges already spanned both models, and the row's value and status are unchanged. Corrected in `docs/claims.json` (the row's notes keep the old wording, and the model-2 receipt joins its evidence), `docs/STATUS.md` (marked), `README.md` and `docs/solutions/qlora-fused-moe-experts.md`.
 
 ## 0.37.8 — 2026-09-29 — a correctness fix to 0.37.7's opt-in bucketed decode graphs: a bucket of one row appends to its own KV slot (#777), and with grouped-nf4-gemm ≥ 0.33.7 the graph path decodes bit-identically to the eager runner (lane B771b); the batched training path is bit-reproducible on CUDA (#765, #776); a calibrate-and-dump build names the dumped expert artifact on its provenance (#772, #773); corrections to the B511, P80 and P81 reads and to the serving-path description (#774)
 

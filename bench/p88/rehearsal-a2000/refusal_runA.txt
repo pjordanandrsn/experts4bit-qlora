@@ -1,0 +1,5 @@
+KNOBS e4b=fe5cbaa9357075ef58fe53be42371ba931af3d88 gnf4=7b7e6b15c8628586727b037b201f4d252016ad20 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=A2000 cpu_vendor=AuthenticAMD min_disk_gb=20 calib_nseq=128
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+cpu_vendor GenuineIntel
+[2026-10-01T07:30:51Z] p88: REFUSED: host CPU vendor is 'GenuineIntel', the lane registers AuthenticAMD (the calibration build is CPU-bound; P87)
+[2026-10-01T07:30:51Z] p88: TP_DONE rc=18

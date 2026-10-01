@@ -1,0 +1,10 @@
+# Names as the BOX sees them after staging ($W; P42's hook under hook/). The box runs `sha256sum -c` on this file and
+# the controller resolves each name to its source (p88_drive.sh's case) and compares.
+67a0ff3e1b0adc070644ecd6da039fc05e611992ca0f83248421ec9a85e7f756  p88_run.sh
+a8bee089ca5180c079775b6aa84940d13f6be0953442fe50be2112554ed00de8  p88_reduce.py
+d8f86573c90afc9d337b7f83ef4496fbc6c790779f110884f230d302571f788a  p42_reduce.py
+14167e744ac3d4fe8ef66719d1d948817998f62efc500e4cde29528fa8877919  test_k19_row_exact_gpu.py
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  hook/usercustomize.py
