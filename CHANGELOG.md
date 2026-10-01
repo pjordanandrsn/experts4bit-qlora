@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Lane P88 read (#564): LICENSED. K19 takes the RTX 5090's B=16 int4 decode step to 0.905×, K8 +0.0062 nats; B=1 is 1.10× slower (bench, docs and register only)
+
+- **Run:** `p88-5090-4` on an RTX 5090 with an AMD EPYC 9334 host, e4b `b848089` + grouped-nf4-gemm `7b7e6b1` (K19's plan 32/256). $0.5538. The lane cost $0.6582, including a proof and three pre-flight NOT_RUNs.
+- **Steps (medians of two draws):**
+  - B=16 11.200 → 10.140 ms (0.905, bar 0.95);
+  - B=1 4.325 → 4.771 (1.103, SLOWER).
+- **K8 on the licensed recipe:** OFF 1.8434202801176407, ON 1.8496547109991661: **+0.00623 nats** (floor 0.0095). The build equals OFF bit for bit, and the pack it dumped carries the licensed fingerprint `sha256:0c9955a9`.
+- **Census at B=16:** GEMV 6.34 → K19 5.05 ms per step. Grouping adds 0.69 (tile build 0.43 + glue 0.26) against 0.60 of quantise and reduce removed.
+- **Predictions:** B=16 0.78–0.86 refuted (0.905); B=1 slower held; |ΔK8| < 0.003 refuted (+0.0062, inside the floor).
+- **Register:** `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`. STATUS's P86 sentence is condensed and now cites it. P84's and P86's register sentences are tightened, with their figures unchanged, to keep the bundle under its cap.
+- **What follows:** K19 by default for int4 decode rows above T == 1, a separate PR.
+
 ### `bench/families/record_eids.py`: P60's routing recorder, generalised to every MoE family (bench and tests only)
 
 - P60's recorder (`bench/p60/record_eids.py`, a registered lane's staged file, left byte-identical) hooked `.gate` on classes named `*SparseMoeBlock` and parsed Qwen's router output, so it missed gpt-oss, Granite and Gemma-4, whose routers are named `router`.

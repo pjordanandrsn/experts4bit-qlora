@@ -1,0 +1,37 @@
+KNOBS e4b=b8480894e6ddc5d2f534110eeeb4be4e200898e5 gnf4=7b7e6b15c8628586727b037b201f4d252016ad20 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 cpu_vendor=AuthenticAMD min_disk_gb=200 calib_nseq=128
+p88_reduce self-test OK (17 cases)
+e4b 0.37.8 @b8480894e6ddc5d2f534110eeeb4be4e200898e5
+gnf4 0.33.8 @7b7e6b15c8628586727b037b201f4d252016ad20
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+PREMISE row-exact rc=0: 3 passed in 16.70s
+speed off B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.21ms agg=1427.9tok/s recompiles=0 out=/root/p88/e4b_b16_off.json
+
+speed on B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=10.14ms agg=1577.5tok/s recompiles=0 out=/root/p88/e4b_b16_on.json
+
+speed off B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.33ms compile=None recompiles=0 out=/root/p88/e4b_b1_off.json
+
+speed on B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.77ms compile=None recompiles=0 out=/root/p88/e4b_b1_on.json
+
+K8 build rc=0 K8_PPL steps=2048 nll=1.84342 ppl=6.31811 compute=fp8 sha=9ef10d760ad9 out=/root/p88/k8_build.json
+
+PACK sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42
+K8 off rc=0 K8_PPL steps=2048 nll=1.84342 ppl=6.31811 compute=fp8 sha=9ef10d760ad9 out=/root/p88/k8_off.json
+
+K8 on rc=0 K8_PPL steps=2048 nll=1.84965 ppl=6.35762 compute=fp8 sha=9ef10d760ad9 out=/root/p88/k8_on.json
+
+speed on B=16_r2 rc=0 BV3_GRAPH batch=16 steps=70 step=10.14ms agg=1578.2tok/s recompiles=0 out=/root/p88/e4b_b16_on_r2.json
+
+speed off B=16_r2 rc=0 BV3_GRAPH batch=16 steps=70 step=11.19ms agg=1429.3tok/s recompiles=0 out=/root/p88/e4b_b16_off_r2.json
+
+speed on B=1_r2 rc=0 B1D_TIMED_GRAPH steps=127 step=4.77ms compile=None recompiles=0 out=/root/p88/e4b_b1_on_r2.json
+
+speed off B=1_r2 rc=0 B1D_TIMED_GRAPH steps=127 step=4.32ms compile=None recompiles=0 out=/root/p88/e4b_b1_off_r2.json
+
+P88_VERDICT LICENSED B=16 10.140 vs 11.200 ms (x0.905); K8 +0.00623 nats; B=1 SLOWER (x1.103)
+  B=16: off 11.200 ms, on 10.140 ms, ratio 0.905
+  B=1: off 4.325 ms, on 4.771 ms, ratio 1.103
+  K8: off 1.8434202801176407, on 1.8496547109991661, delta +0.00623 nats; build 1.8434202801176407 (equals off: True); B=1 SLOWER
