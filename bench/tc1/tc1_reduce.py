@@ -43,6 +43,20 @@ kept. What TC1 adds, named so the files can be diffed:
      every framework, EQUIVALENT iff both deltas <= max(0.005, 3 x the in-draw fused-vs-reference |delta|) -- COMPARABLE or
      DIVERGENT only when the reference did not run; I equivalence across frameworks is against e4b/fused_attn4_m, the
      fused-vs-reference pair is the e4b-side control, the labelled rows live in the `qwen3native` family token.
+  R10 (lane TC1b, the `qwen3curve` family token; TC1B-PREREG.md, drafted in TC1b-PREREG-draft.md): the same model and tokens on one
+     box, read per SUB-FIXTURE -- each of {200, p38, t1, r64} has its OWN e4b arm as the trainable / tokens-sha / step-0 / matched-sha
+     reference (as tp4's anchor pair had), N per arm (200 / 60 / 20 / 20), the registered trainable counts on arms 1-3 and the anchor
+     arms. Readings: (a) the CURVE TABLE -- at every eval step the paired held-out mean +- SE over the 16 rows for the matched pair and
+     the as-shipped e4b arm and the paired |delta| (2 vs 1, 3 vs 1); the curve reading = the largest |delta(1,2)| over the evals and its
+     sign at step 200, EQUIVALENT-AT-EVERY-EVAL iff every paired |delta| <= 0.02 (the DRAFT's band; the registration may tie it to the
+     TC1 floor -- said in the output), else DIVERGENT with the first divergent step; (b) the PLATEAU test, held-out(3) - held-out(1) at
+     200 and at 40, REPRODUCES-P38 iff >= +0.01 at 200 and <= 0 at 40; (c) TIME TO TARGET = the matched pair's step-200 held-out + 0.02,
+     per arm from its own eval grid (the first eval at or below); (d) s/step medians over steps 11..200 beside TC1's 11..20 medians
+     when `--tc1-dir` names a qwen3 receipt dir (within 10 % = TRAVELS), with the in-receipt 11..20 window as a same-draw check;
+     (e) the anchor pair's ratio vs tp2 1.457 / P38 1.413 (+-10 %), the t28 variant (tp4's arm byte-for-byte) read separately;
+     (f) the t1 and r64 pairs as SCALING POINTS (never a position) under the matched set's predicates, listed. P1-P4 of the draft
+     scored HELD / FALSIFIED / UNTESTED; the selftest adds a DIVERGENT curve, a REPRODUCES-P38 plateau and its refutations, a
+     failing anchor, a VOID r64 pair, a DOES-NOT-TRAVEL speed row and a target never reached.
 
 It licenses nothing and quotes no cross-box number. stdlib only.  Usage: tc1_reduce.py <dir> [--md out.md] [--steps N] | --selftest
 """
@@ -109,6 +123,39 @@ STATUS_MAP = {"ok": "OK", "c1_failed": "OK", "refused": "REFUSED", "oom": "OOM",
               "tokens_mismatch": "HARNESS_ERROR", "void_trainable": "HARNESS_ERROR", "void_attn4": "HARNESS_ERROR",
               "harness_error": "HARNESS_ERROR", "unreadable": "HARNESS_ERROR"}
 FW_RE = "|".join(FW)
+
+# ----------------------------------------------------------------------------- R10: lane TC1b (the qwen3curve token)
+CURVE_FAM = "qwen3curve"
+CURVE_BAND = 0.02         # (a): paired held-out |delta| <= 0.02 at every eval -- the DRAFT's band (TC1b-PREREG-draft "Readings"); the registration may tie it to the TC1 floor
+CURVE_BAND_NOTE = "the draft's band, kept fixed by the registration (0.02 nats at every eval: this lane has no in-draw reference arm); TC1's floor is quoted beside it"
+PLATEAU_GAP, PLATEAU_EARLY_STEP = 0.01, 40   # (b): as-shipped minus matched held-out >= +0.01 at step 200 AND <= 0 at step 40 reproduces P38's shape
+TARGET_MARGIN = 0.02      # (c): time to the matched pair's step-200 held-out + 0.02, read from each arm's eval grid
+TRAVEL_TOL = 0.10         # (d) / P3: TC1's 11..20 median and TC1b's 11..200 median within 10 % per arm = TRAVELS
+ANCHOR_TOL = 0.10         # (e) / P4: the p38 pair's ratio within +-10 % of tp2's 1.457 / P38's 1.413 (TP4-PREREG "Cross-lane anchor")
+TP2_ANCHOR, P38_ANCHOR = 1.457, 1.413   # tp2 (2026-09-06) and P38 (2026-09-05), RTX 5090, the same fixture (bench/tp4/tp4_reduce.py, TP4-PREREG)
+TP4_ANCHOR_RATIO = None   # UNVERIFIED: tp4's own anchor row is NOT in this tree (bench/p67/reread-existing/reread.json names its qwen3_e4b_fused_attn4_p38.json
+#                           receipts by sha only; no RESULTS file carries the pair) -- the draft's P4 names it. Set it when the PI supplies the number;
+#                           until then P4 reads against tp2's 1.457 (the number tp4 itself registered against) and SAYS so in its evidence.
+CURVE_N = {"fused_attn4_m_200": 200, "ckpt_unsloth_m_200": 200, "fused_attn4_shipped_200": 200,
+           "fused_attn4_p38": 60, "ckpt_unsloth_p38": 60, "ckpt_unsloth_p38_t28": 60,
+           "fused_attn4_m_t1": 20, "ckpt_unsloth_m_t1": 20, "fused_attn4_m_r64": 20, "ckpt_unsloth_m_r64": 20}
+CURVE_GROUP = {"fused_attn4_m_200": "200", "ckpt_unsloth_m_200": "200", "fused_attn4_shipped_200": "200",
+               "fused_attn4_p38": "p38", "ckpt_unsloth_p38": "p38", "ckpt_unsloth_p38_t28": "p38",
+               "fused_attn4_m_t1": "t1", "ckpt_unsloth_m_t1": "t1", "fused_attn4_m_r64": "r64", "ckpt_unsloth_m_r64": "r64"}
+CURVE_GROUPS = {"200": ("e4b", "fused_attn4_m_200"), "p38": ("e4b", "fused_attn4_p38"), "t1": ("e4b", "fused_attn4_m_t1"), "r64": ("e4b", "fused_attn4_m_r64")}   # each sub-fixture's own e4b arm
+CURVE_TRAINABLE = {"200": 642514944, "p38": 321257472}   # TC1b-PREREG-draft "Validity": arms 1-3 (the field recipe, r 16) and the anchor arms (r 8); t1 inherits the field count, r64 is asserted equal BETWEEN its two arms only
+CURVE_ARMS = [("e4b", "fused_attn4_m_200"), ("unsloth", "ckpt_unsloth_m_200"), ("e4b", "fused_attn4_shipped_200")]   # arms 1, 2, 3 of the registration
+CURVE_ANCHOR = {"e4b": ("e4b", "fused_attn4_p38"), "unsloth": ("unsloth", "ckpt_unsloth_p38"), "t28": ("unsloth", "ckpt_unsloth_p38_t28")}
+CURVE_SCALING = {"t1": "tokens-per-step scaling point (seq 2048, micro-batch 1 x accum 1, N 20)", "r64": "rank scaling point (r 64 / alpha 64, N 20)"}
+CURVE_TC1_COUNTERPART = {("e4b", "fused_attn4_m_200"): ("qwen3", ("e4b", "fused_attn4_m")), ("unsloth", "ckpt_unsloth_m_200"): ("qwen3", ("unsloth", "ckpt_unsloth_m")),
+                         ("e4b", "fused_attn4_shipped_200"): ("qwen3native", ("e4b", "fused_attn4_shipped"))}   # (d): TC1's 11..20 median for each curve arm
+EXPECTED[CURVE_FAM] = [("e4b", "fused_attn4_m_200"), ("unsloth", "ckpt_unsloth_m_200"), ("e4b", "fused_attn4_shipped_200"),
+                       ("e4b", "fused_attn4_p38"), ("unsloth", "ckpt_unsloth_p38"), ("unsloth", "ckpt_unsloth_p38_t28"),
+                       ("e4b", "fused_attn4_m_t1"), ("unsloth", "ckpt_unsloth_m_t1"), ("e4b", "fused_attn4_m_r64"), ("unsloth", "ckpt_unsloth_m_r64")]
+MATCHED |= {"fused_attn4_m_200", "ckpt_unsloth_m_200", "fused_attn4_m_t1", "ckpt_unsloth_m_t1", "fused_attn4_m_r64", "ckpt_unsloth_m_r64"}   # the shipped and p38 arms are native rows
+FAMS.append(CURVE_FAM)
+NAMES[CURVE_FAM] = "Qwen3-30B-A3B (lane TC1b: the 200-step curve box, the anchor pair, the t1 and r64 scaling pairs)"
+N_LAYERS[CURVE_FAM] = 48
 
 
 # ----------------------------------------------------------------------------- inputs
@@ -776,6 +823,283 @@ def score_predictions(F):
     return out
 
 
+
+# ----------------------------------------------------------------------------- R10: the TC1b readings (the qwen3curve family)
+def rows_at(r, step):
+    """The per-row held-out losses an arm recorded at `step` (eval_rows), or None."""
+    e = next((e for e in ((r or {}).get("eval_rows") or []) if e.get("step") == step), None)
+    return list(e["losses"]) if e and e.get("losses") else None
+
+
+def mean_se(v):
+    n = len(v)
+    return statistics.mean(v), ((statistics.stdev(v) / (n ** 0.5)) if n > 1 else None)
+
+
+def paired_delta(a, b):
+    """Paired per-row differences a - b: {n, mean, se, abs, favouring_a, favouring_b}; None unless both sides carry the same row count."""
+    if not a or not b or len(a) != len(b):
+        return None
+    d = [x - y for x, y in zip(a, b)]
+    m, se = mean_se(d)
+    return {"n": len(d), "mean": m, "se": se, "abs": abs(m), "favouring_a": sum(1 for v in d if v < 0), "favouring_b": sum(1 for v in d if v > 0)}
+
+
+def curve_table(recs, V):
+    """(a): at every eval step of the first VALID curve arm's grid, mean +- SE over the rows for each VALID arm 1-3 and the paired
+    deltas (2 - 1) and (3 - 1). A non-VALID arm's cells are None (VOID never enters a reading)."""
+    k1, k2, k3 = CURVE_ARMS
+    ok = {k: V.get(k) == "VALID" for k in CURVE_ARMS}
+    src = next((recs[k] for k in CURVE_ARMS if ok[k]), None)
+    if src is None:
+        return []
+    out = []
+    for step in [c["step"] for c in src.get("eval_curve") or []]:
+        rows = {k: (rows_at(recs.get(k), step) if ok[k] else None) for k in CURVE_ARMS}
+        row = {"step": step, "arms": {k: (mean_se(rows[k]) if rows[k] else None) for k in CURVE_ARMS},
+               "d12": paired_delta(rows[k2], rows[k1]), "d31": paired_delta(rows[k3], rows[k1])}
+        out.append(row)
+    return out
+
+
+def curve_reading(table, V, tc1=None):
+    """The curve reading for the matched pair: the largest paired |delta(1,2)| over the evals and its sign at step N;
+    EQUIVALENT-AT-EVERY-EVAL iff every |delta| <= CURVE_BAND, else DIVERGENT with the first divergent step. Sign: + = Unsloth's held-out ABOVE e4b's.
+    TC1's floor (EQUIV_FLOOR, and TC1's measured held-out band when `tc1` is a reduced TC1 dir) rides beside the fixed band, never replaces it."""
+    k1, k2, _ = CURVE_ARMS
+    tb = ((tc1 or {}).get("qwen3") or {}).get("equiv_band") if tc1 else None
+    floor = {"equiv_floor": EQUIV_FLOOR, "tc1_heldout_band": (tb or {}).get("heldout") if tb else None,
+             "text": f"TC1's floor max({EQUIV_FLOOR}, 3 × fused-vs-reference |Δ|)" + (f" = {tb['heldout']:.4f} held-out from --tc1-dir" if tb else (" (no --tc1-dir: the measured band is not to hand)" if tc1 is None else " (the TC1 dir carries no reference arm: band unset)"))}
+    v1, v2 = V.get(k1), V.get(k2)
+    if v1 != "VALID" or v2 != "VALID":
+        return {"reading": "N-A", "why": f"e4b/{k1[1]} {v1 or 'missing'} / unsloth/{k2[1]} {v2 or 'missing'}: both must be VALID"}
+    ds = [(row["step"], row["d12"]) for row in table]
+    if not ds:
+        return {"reading": "N-A", "why": "no eval grid"}
+    missing = [st for st, d in ds if d is None]
+    if missing:
+        return {"reading": "N-A", "why": f"paired rows missing or unequal in count at step(s) {missing[:4]}"}
+    if ds[-1][0] != CURVE_N[k1[1]]:
+        return {"reading": "N-A", "why": f"the eval grid ends at step {ds[-1][0]}, not {CURVE_N[k1[1]]}"}
+    mx_step, mx = max(ds, key=lambda t: t[1]["abs"])
+    at_n = ds[-1][1]["mean"]
+    first = next((st for st, d in ds if d["abs"] > CURVE_BAND), None)
+    return {"reading": "EQUIVALENT-AT-EVERY-EVAL" if first is None else "DIVERGENT", "max_abs": mx["abs"], "max_step": mx_step,
+            "delta_at_N": at_n, "sign_at_N": "+" if at_n > 0 else ("-" if at_n < 0 else "0"), "first_divergent_step": first,
+            "n_evals": len(ds), "band": CURVE_BAND, "band_note": CURVE_BAND_NOTE, "tc1_floor": floor, "why": ""}
+
+
+def plateau_test(recs, V):
+    """(b): held-out(as-shipped) - held-out(matched e4b) at step 200 and at step 40; REPRODUCES-P38 iff >= +0.01 at 200 and <= 0 at 40."""
+    k1, _, k3 = CURVE_ARMS
+    v1, v3 = V.get(k1), V.get(k3)
+    if v1 != "VALID" or v3 != "VALID":
+        return {"reading": "N-A", "why": f"e4b/{k1[1]} {v1 or 'missing'} / e4b/{k3[1]} {v3 or 'missing'}: both must be VALID"}
+    N = CURVE_N[k1[1]]
+    r1, r3 = recs[k1], recs[k3]
+    hN, h40 = (curve_at(r3, N), curve_at(r1, N)), (curve_at(r3, PLATEAU_EARLY_STEP), curve_at(r1, PLATEAU_EARLY_STEP))
+    if None in hN or None in h40:
+        return {"reading": "N-A", "why": f"no held-out at step {N} or {PLATEAU_EARLY_STEP} on one side"}
+    gN, g40 = hN[0] - hN[1], h40[0] - h40[1]
+    ok = gN >= PLATEAU_GAP and g40 <= 0
+    why = "" if ok else (f"as-shipped ends {gN:+.4f} vs the matched arm at {N}: within {PLATEAU_GAP} or below (no plateau above)" if gN < PLATEAU_GAP
+                         else f"as-shipped is {g40:+.4f} ABOVE the matched arm at step {PLATEAU_EARLY_STEP} too: no early lead, not P38's shape")
+    return {"reading": "REPRODUCES-P38" if ok else "NOT-P38-SHAPE", "gap_N": gN, "gap_early": g40, "N": N, "early": PLATEAU_EARLY_STEP,
+            "paired_N": paired_delta(rows_at(r3, N), rows_at(r1, N)), "paired_early": paired_delta(rows_at(r3, PLATEAU_EARLY_STEP), rows_at(r1, PLATEAU_EARLY_STEP)), "why": why}
+
+
+def time_to_target(recs, V):
+    """(c): the target = the matched pair's step-200 held-out (mean over the VALID matched arms) + TARGET_MARGIN; per arm 1-3 the first
+    eval at or below it (step, train_wall_s), or not reached."""
+    k1, k2, _ = CURVE_ARMS
+    have = [(k, heldout_at_N(recs[k])) for k in (k1, k2) if V.get(k) == "VALID" and heldout_at_N(recs.get(k)) is not None]
+    if not have:
+        return {"target": None, "why": "no VALID matched arm with a held-out at step 200", "arms": {}}
+    target = statistics.mean([h for _, h in have]) + TARGET_MARGIN
+    basis = ("mean of the matched pair's step-200 held-out" if len(have) == 2 else f"the one VALID matched arm's step-200 held-out ({have[0][0][0]}/{have[0][0][1]})") + f" + {TARGET_MARGIN}"
+    arms = {}
+    for k in CURVE_ARMS:
+        if V.get(k) != "VALID":
+            arms[k] = {"reached": None, "why": f"{V.get(k) or 'missing'}"}
+            continue
+        hit = next((c for c in (recs[k].get("eval_curve") or []) if c.get("heldout_loss") is not None and c["heldout_loss"] <= target), None)
+        arms[k] = {"reached": hit is not None, "step": hit["step"] if hit else None, "train_wall_s": hit.get("train_wall_s") if hit else None,
+                   "heldout": hit["heldout_loss"] if hit else None,
+                   "why": "" if hit else f"not reached by step {recs[k].get('steps')} (final held-out {f(heldout_at_N(recs[k]), 4)})"}
+    return {"target": target, "basis": basis, "arms": arms}
+
+
+def speed_travel(recs, V, draws, tc1=None):
+    """(d): each curve arm's 11..200 median (the receipt's s_per_step_median_11plus: steady = step_ms[10:]) beside the in-receipt 11..20
+    window and, when `tc1` (a reduced TC1 dir) is given, TC1's quoted 11..20 median for its counterpart; TRAVELS iff within TRAVEL_TOL."""
+    out = {}
+    for k in CURVE_ARMS:
+        r, d = recs.get(k), draws.get(k, {})
+        e = {"verdict": V.get(k), "usable": bool(d.get("usable")), "s_200": r.get("s_per_step_median_11plus") if is_ok(r) else None, "reading": "UNTESTED"}
+        sm = (r.get("step_ms") if is_ok(r) else None) or []
+        e["s_11_20_in_receipt"] = (statistics.median(sm[10:20]) / 1e3) if len(sm) >= 20 else None
+        if e["s_11_20_in_receipt"] and e["s_200"]:
+            e["in_receipt_dev"] = e["s_200"] / e["s_11_20_in_receipt"] - 1
+        fam, key = CURVE_TC1_COUNTERPART[k]
+        if tc1 is None:
+            e["tc1_why"] = "no --tc1-dir given"
+        else:
+            TF = tc1.get(fam)
+            td = (TF or {}).get("draws", {}).get(key, {})
+            if td.get("usable"):
+                e.update({"tc1_s": td["s"], "tc1_draws": td.get("draws"), "tc1_key": (fam, key)})
+            else:
+                e["tc1_why"] = f"{fam} {key[0]}/{key[1]}: " + ((td.get("why") or td.get("verdict") or "no receipt") if TF else f"no {fam} receipts in --tc1-dir")
+        if e["usable"] and e.get("tc1_s"):
+            e["dev"] = e["s_200"] / e["tc1_s"] - 1
+            e["reading"] = "TRAVELS" if abs(e["dev"]) <= TRAVEL_TOL else "DOES-NOT-TRAVEL"
+        elif not e["usable"]:
+            e["why"] = d.get("why") or f"{V.get(k) or 'missing'}"
+        out[k] = e
+    return out
+
+
+def anchor_reading(draws):
+    """(e): the p38 pair's s/step ratio unsloth/e4b vs tp2's 1.457 and P38's 1.413 (+-ANCHOR_TOL), the cu130/grouped_mm arm and the t28
+    arm (tp4's, byte-for-byte) read separately against the same e4b p38 arm; the tp4 leg only when TP4_ANCHOR_RATIO is set."""
+    e = draws.get(CURVE_ANCHOR["e4b"], {"usable": False, "why": "no e4b/fused_attn4_p38 receipt"})
+
+    def one(key, label):
+        pos = position(e, draws.get(key, {"usable": False, "why": "no receipt"}), label)
+        pos["kind"] = "anchor"
+        if pos.get("quoted"):
+            r = pos["ratio"]
+            pos.update({"tp2": TP2_ANCHOR, "p38": P38_ANCHOR, "dev_tp2": r / TP2_ANCHOR - 1, "dev_p38": r / P38_ANCHOR - 1})
+            pos["agrees_tp2"], pos["agrees_p38"] = abs(pos["dev_tp2"]) <= ANCHOR_TOL, abs(pos["dev_p38"]) <= ANCHOR_TOL
+            if TP4_ANCHOR_RATIO:
+                pos["tp4"], pos["dev_tp4"] = TP4_ANCHOR_RATIO, r / TP4_ANCHOR_RATIO - 1
+                pos["agrees_tp4"] = abs(pos["dev_tp4"]) <= ANCHOR_TOL
+            pos["reading"] = "AGREES" if pos["agrees_tp2"] else ("AGREES-P38-ONLY" if pos["agrees_p38"] else "FINDING")
+        return pos
+    return {"grouped_mm": one(CURVE_ANCHOR["unsloth"], "unsloth p38 (venv-unsloth cu130 torch 2.12.1, grouped_mm: tp4's arm EXCEPT the venv)"),
+            "t28": one(CURVE_ANCHOR["t28"], "unsloth p38_t28 (venv-unsloth-t28, loader-default backend: tp4's arm byte-for-byte)")}
+
+
+def scaling_point(group, recs, V, draws):
+    """(f): the t1 / r64 pair's s/step ratio under the matched set's predicates, every one listed: both arms VALID, the same trainable count
+    WITHIN the pair, lora_path_loop == 0 on every e4b step, the Unsloth backend counters. Labelled a scaling point, never a position."""
+    ke, ku = CURVE_GROUPS[group], ("unsloth", f"ckpt_unsloth_m_{group}")
+    pos = position(draws.get(ke, {"usable": False, "why": "no receipt"}), draws.get(ku, {"usable": False, "why": "no receipt"}), CURVE_SCALING[group])
+    pos["kind"] = "scaling point"
+    re_, ru = recs.get(ke) or {}, recs.get(ku) or {}
+    L, A = N_LAYERS[CURVE_FAM], int(ru.get("accum") or 1)
+    te, tu = re_.get("trainable_params"), ru.get("trainable_params")
+    g, m = ru.get("unsloth_grouped_mm_calls_per_step_min"), ru.get("unsloth_manual_grouped_mm_calls_per_step_max")
+    preds = [("both arms VALID", V.get(ke) == "VALID" and V.get(ku) == "VALID", f"e4b {V.get(ke) or 'missing'} / unsloth {V.get(ku) or 'missing'}"),
+             ("same trainable count within the pair", te is not None and te == tu, f"{te} / {tu}"),
+             ("lora_path_loop == 0 on every e4b step", bool(re_.get("lora_path_present")) and not re_.get("lora_path_loop_steps"), f"loop steps {re_.get('lora_path_loop_steps')}"),
+             (f"Unsloth backend counters: torch._grouped_mm >= {GMM_FACTOR}*L*A per step, manual fallback 0",
+              g is not None and m is not None and g >= GMM_FACTOR * L * A and m == 0, f"grouped_mm min {g} (>= {GMM_FACTOR * L * A}), manual max {m}")]
+    pos["predicates"] = preds
+    failed = [name for name, ok, _ in preds if not ok]
+    if failed and pos.get("quoted"):
+        pos["quoted"], pos["why"] = False, "not quoted: " + "; ".join(f"{n} FAILS ({ev})" for n, ok, ev in preds if not ok)
+    elif failed:
+        pos["why"] = (pos.get("why") or "not quoted") + "; predicates failing: " + ", ".join(failed)
+    return pos
+
+
+def reduce_curve_family(fam, recs, rcs_all, tc1=None):
+    """R10: the qwen3curve family, validity per sub-fixture, then readings (a)-(f)."""
+    exp = list(EXPECTED[CURVE_FAM])
+    keys = exp + [k for k in recs if k not in exp]
+    rows, V, groups = [], {}, {}
+    for g, ak in CURVE_GROUPS.items():
+        ga = recs.get(ak)
+        groups[g] = {"anchor": ak, "anchor_ok": is_ok(ga), "tokens_sha": (ga.get("tokens") or {}).get("sha256") if is_ok(ga) else None,
+                     "trainable": ga.get("trainable_params") if is_ok(ga) else None, "step0": ga.get("eval_loss_step0") if is_ok(ga) else None,
+                     "seed": matched_seed_of(ga) if is_ok(ga) else None,
+                     "sha": (ga.get("matched_init_sha") or None) if (is_ok(ga) and matched_seed_of(ga) is not None) else None}
+    for fw, tag in keys:
+        r = recs.get((fw, tag))
+        g = CURVE_GROUP.get(tag)
+        G = groups.get(g) or {}
+        matched = tag in MATCHED
+        st, reason = status_of(r, rcs_all.get((fam, fw, tag)))
+        v, why = validity(fam, r, G.get("tokens_sha"), (G.get("trainable") if fw != "e4b" else None), CURVE_N.get(tag),
+                          matched=matched, ref_step0=(G.get("step0") if matched else None), anchor_seed=G.get("seed"),
+                          is_ref=((fw, tag) == G.get("anchor")), anchor_sha=G.get("sha"))
+        if is_ok(r) and g in ("200", "p38", "t1"):                    # the registered counts (draft "Validity"); r64 only within its pair
+            want = CURVE_TRAINABLE["200" if g == "t1" else g]
+            if r.get("trainable_params") != want:
+                v, why = "VOID", (why + "; " if why else "") + f"trainable {r.get('trainable_params')} != the registered {want} for the {g} sub-fixture (TC1B draft 'Validity')"
+        d0 = abs(r["eval_loss_step0"] - G["step0"]) if (is_ok(r) and matched and G.get("step0") is not None and r.get("eval_loss_step0") is not None) else None
+        rows.append({"fw": fw, "tag": tag, "status": st, "reason": reason, "validity": v, "why": why, "r": r, "group": g,
+                     "regime": regime_of(fam, r) if (r and st == "OK") else None, "matched": matched, "step0_delta": d0, "step0_class": step0_class(d0)})
+        V[(fw, tag)] = v
+    verdicts = {}
+    for x in rows:                                     # quality against the sub-fixture's own e4b arm (VALID by predicates), then the verdict
+        r, G = x["r"], groups.get(x["group"]) or {}
+        ak = G.get("anchor")
+        ha = heldout_at_N(recs.get(ak)) if (ak and V.get(ak) == "VALID") else None
+        q = (heldout_at_N(r) - ha) if (x["status"] == "OK" and ha is not None and heldout_at_N(r) is not None and (x["fw"], x["tag"]) != ak) else None
+        x["quality_delta"] = q
+        x["quality"] = ("COMPARABLE" if abs(q) <= READ else "FLAGGED") if q is not None else (("anchor of its sub-fixture" if (x["fw"], x["tag"]) == ak else "N-A (its e4b arm " + ("VOID" if (ak and is_ok(recs.get(ak))) else "missing") + ")") if x["status"] == "OK" else None)
+        x["verdict"] = verdict_of(x["status"], x["validity"], q)
+        assert x["verdict"] in VERDICTS
+        verdicts[(x["fw"], x["tag"])] = x["verdict"]
+    draws = {k: draws_of(recs, verdicts, k, expected=exp) for k in keys}
+    table = curve_table(recs, V)
+    equiv = {}                                         # TC1's R4 reading at N on each matched pair, informational (no reference arm here: COMPARABLE is the ceiling)
+    for g in ("200", "t1", "r64"):
+        ke, ku = CURVE_GROUPS[g], ("unsloth", f"ckpt_unsloth_m_{g}")
+        if recs.get(ku) is not None:
+            equiv[ku] = equivalence(recs.get(ke), recs[ku], V.get(ke), V.get(ku), band=None, noise_floor=None)
+    src = next((recs[k] for k in keys if is_ok(recs.get(k))), None) or next((recs[k] for k in keys if recs.get(k)), None)
+    return {"fam": fam, "rows": rows, "V": V, "verdicts": verdicts, "draws": draws, "groups": groups, "curve_table": table,
+            "curve": curve_reading(table, V, tc1=tc1), "plateau": plateau_test(recs, V), "ttt": time_to_target(recs, V),
+            "speed": speed_travel(recs, V, draws, tc1=tc1), "anchor": anchor_reading(draws),
+            "scaling": {g: scaling_point(g, recs, V, draws) for g in ("t1", "r64")}, "equivalence": equiv,
+            "tc1_given": tc1 is not None, "src": src, "N": None, "e4b_trainable": groups["200"].get("trainable"), "tokens_sha": groups["200"].get("tokens_sha")}
+
+
+def score_curve_predictions(F):
+    """TC1b-PREREG-draft "Predictions" P1-P4, scored mechanically on the qwen3curve family."""
+    R = F.get(CURVE_FAM)
+    if not R:
+        return [(f"P{i}", CURVE_FAM, "UNTESTED", "no qwen3curve receipts") for i in range(1, 5)]
+    out = []
+    c = R["curve"]
+    if c["reading"] == "EQUIVALENT-AT-EVERY-EVAL":
+        out.append(("P1", CURVE_FAM, "HELD", f"max paired |Δ(1,2)| {c['max_abs']:.4f} at step {c['max_step']} over {c['n_evals']} evals (<= {CURVE_BAND}: {CURVE_BAND_NOTE}); Δ at 200 {c['delta_at_N']:+.4f} (sign {c['sign_at_N']}, + = Unsloth above)"))
+    elif c["reading"] == "DIVERGENT":
+        out.append(("P1", CURVE_FAM, "FALSIFIED", f"DIVERGENT: first paired |Δ(1,2)| > {CURVE_BAND} at step {c['first_divergent_step']}; max {c['max_abs']:.4f} at step {c['max_step']}; sign at 200 {c['sign_at_N']} (Δ {c['delta_at_N']:+.4f}, + = Unsloth above); no training position on this family until TC4 explains it (decision rule)"))
+    else:
+        out.append(("P1", CURVE_FAM, "UNTESTED", c.get("why", "")))
+    pl = R["plateau"]
+    if pl["reading"] == "REPRODUCES-P38":
+        out.append(("P2", CURVE_FAM, "HELD", f"as-shipped − matched held-out {pl['gap_N']:+.4f} at {pl['N']} (>= {PLATEAU_GAP}) and {pl['gap_early']:+.4f} at {pl['early']} (<= 0): P38's shape, with init scale / bf16 adapters now isolated on e4b's side; load_moe_4bit_streaming's adapter defaults become an open item (decision rule)"))
+    elif pl["reading"] == "NOT-P38-SHAPE":
+        out.append(("P2", CURVE_FAM, "FALSIFIED", f"gap at {pl['N']} {pl['gap_N']:+.4f}, at {pl['early']} {pl['gap_early']:+.4f}: {pl['why']}"))
+    else:
+        out.append(("P2", CURVE_FAM, "UNTESTED", pl.get("why", "")))
+    sp = R["speed"]
+    tested = {k: e for k, e in sp.items() if e["reading"] in ("TRAVELS", "DOES-NOT-TRAVEL")}
+    if not tested:
+        out.append(("P3", CURVE_FAM, "UNTESTED", "; ".join(f"{k[0]}/{k[1]}: {e.get('tc1_why') or e.get('why') or e['reading']}" for k, e in sp.items())))
+    else:
+        bad = [k for k, e in tested.items() if e["reading"] == "DOES-NOT-TRAVEL"]
+        ev = "; ".join(f"{k[0]}/{k[1]} 11..200 {e['s_200']:.3f} vs TC1 11..20 {e['tc1_s']:.3f} ({e['dev']:+.1%}) {e['reading']}" for k, e in tested.items())
+        un = [k for k in sp if k not in tested]
+        out.append(("P3", CURVE_FAM, "FALSIFIED" if bad else "HELD", ev + (f"; untested: {', '.join(k[1] for k in un)}" if un else "")))
+    an = R["anchor"]["grouped_mm"]
+    if an.get("quoted"):
+        if TP4_ANCHOR_RATIO:
+            out.append(("P4", CURVE_FAM, "HELD" if an["agrees_tp4"] else "FALSIFIED", f"p38 unsloth/e4b {an['ratio']:.3f} vs tp4's anchor row {TP4_ANCHOR_RATIO} ({an['dev_tp4']:+.1%}; +-{ANCHOR_TOL:.0%}); tp2 {TP2_ANCHOR} ({an['dev_tp2']:+.1%}), P38 {P38_ANCHOR} ({an['dev_p38']:+.1%})"))
+        else:
+            out.append(("P4", CURVE_FAM, "HELD" if an["agrees_tp2"] else "FALSIFIED",
+                        f"p38 unsloth/e4b {an['ratio']:.3f} vs tp2 {TP2_ANCHOR} ({an['dev_tp2']:+.1%}) and P38 {P38_ANCHOR} ({an['dev_p38']:+.1%}), +-{ANCHOR_TOL:.0%}; tp4's own anchor row is NOT in this tree (TP4_ANCHOR_RATIO unset, UNVERIFIED) -- scored against tp2's 1.457, the number tp4 registered against"
+                        + (f"; t28 variant {R['anchor']['t28']['ratio']:.3f} ({R['anchor']['t28']['dev_tp2']:+.1%} vs tp2)" if R["anchor"]["t28"].get("quoted") else "; t28 variant not quoted")))
+    else:
+        out.append(("P4", CURVE_FAM, "UNTESTED", an.get("why", "no anchor pair")))
+    return out
+
+
 # ----------------------------------------------------------------------------- the printer
 def pos_lines(pos, N, prefix="POSITION"):
     if not pos.get("quoted"):
@@ -788,6 +1112,113 @@ def pos_lines(pos, N, prefix="POSITION"):
              f"tok/s {who} {f(pos['tok_other'], 1)} vs e4b {f(pos['tok_e4b'], 1)}" + (f"; {who} regime: {pos['other_regime']}" if pos.get("other_regime") else "")]
     lines.append(f"- quality reading at N={N} ({who}): held-out e4b {f(pos['heldout_e4b'], 4)} / {who} {f(pos['heldout_other'], 4)} (Δ {f(pos['heldout_delta'], 4)}) → **{pos['quality']}** "
                  f"(|Δ| ≤ {READ} reads COMPARABLE)" + (f"; step-0 Δ {pos['step0_delta']:+.4f}" if pos.get("step0_delta") is not None else ""))
+    return lines
+
+
+def support_table(rows):
+    """The per-attempt support table (one shape for every family token)."""
+    lines = ["| framework | arm | status | validity | **VERDICT** | matched | init / dtype | step-0 class | N | s/step med(11+) | tok/s | peak GB | J/step | train first→last | held-out 0→final | quality Δ | engagement | trainable | regime | reason / why |",
+             "|" + "---|" * 20]
+    for x in rows:
+        r = x["r"] or {}
+        b = r.get("unsloth_bnb4bit_modules")
+        if x["fw"] == "e4b":
+            eng = f"patched {r.get('n_patched', '—')} / kcalls {r.get('kernel_calls_per_step_min', '—')}"
+        elif x["fw"] == "unsloth":
+            eng = f"stacks {(r.get('census') or {}).get('Params4bit_expert_stacks', '—')} / fwd {r.get('experts_forward_calls_per_step_min', '—')} / u8 {b.get('n_bnb4bit_unwrapped') if isinstance(b, dict) else '—'}"
+        else:
+            ht = r.get("hf_targets") or r.get("axolotl_targets") or {}
+            eng = f"peft mods {ht.get('n_target_modules', '—')} / params {ht.get('n_target_parameters', '—')} / fwd {r.get('experts_forward_calls_per_step_min', '—')}"
+        mi = r.get("matched_init") or {}
+        init = f"{r.get('lora_init', '—')}" + (f" ({'complete' if mi.get('complete') else 'INCOMPLETE'} {mi.get('n_slots_set')}/{mi.get('n_slots_expected')})" if mi else "") \
+            + f" / {','.join(sorted(k.replace('torch.', '') for k in (r.get('adapter_dtypes_after') or {}))) or '—'}"
+        note = " — ".join(s for s in (x["reason"], x["why"]) if s)
+        s0 = f"{x['step0_class']} ({x['step0_delta']:.4f})" if x.get("step0_class") else "—"
+        lines.append(f"| {x['fw']} | {x['tag']} | **{x['status']}** | {x['validity']} | **{x['verdict']}** | {'yes' if x['matched'] else 'native'} | {init} | {s0} | {r.get('steps', '—')} | "
+                     f"{f(r.get('s_per_step_median_11plus'))} | {f(r.get('tokens_per_s'), 1)} | {f(r.get('peak_vram_gb'))} | {f(r.get('joules_per_step'), 1)} | "
+                     f"{f(r.get('loss_first'), 4)}→{f(r.get('loss_last'), 4)} | {f(r.get('eval_loss_step0'), 4)}→{f(r.get('eval_loss_final'), 4)} | "
+                     f"{f(x.get('quality_delta'), 4) if x.get('quality_delta') is not None else (x.get('quality') or '—')} | {eng} | {r.get('trainable_params', '—')} | {x['regime'] or '—'} | {note} |")
+    return lines
+
+
+def _ms(t):
+    return f"{t[0]:.4f} ± {f(t[1], 4)}" if t else "—"
+
+
+def _pd(d):
+    return f"{d['mean']:+.4f} ± {f(d['se'], 4)} (|Δ| {d['abs']:.4f}; rows favouring {d['favouring_a']}/{d['favouring_b']})" if d else "—"
+
+
+def curve_block(R):
+    """R10: the TC1b family's block -- the support table, then readings (a)-(f) in the registration's words."""
+    fam = R["fam"]
+    k1, k2, k3 = CURVE_ARMS
+    lines = [f"\n### {NAMES.get(fam, fam)} (`{fam}`, registered n_layers {N_LAYERS.get(fam, '?')})"]
+    src = R.get("src")
+    if src:
+        env = src.get("env", {}) or {}
+        lines.append(f"- model `{src.get('model')}` @ `{str(src.get('revision', ''))[:12]}`; sub-fixtures (each with its OWN e4b arm as the trainable / tokens / step-0 / sha reference): "
+                     + "; ".join(f"`{g}` anchor `{G['anchor'][0]}/{G['anchor'][1]}` {'OK' if G['anchor_ok'] else 'not OK'} tokens `{str(G.get('tokens_sha') or '')[:12]}` trainable {G.get('trainable')}" for g, G in R["groups"].items())
+                     + f"; box_class {env.get('box_class')} gpu {env.get('gpu')}")
+    lines += support_table(R["rows"])
+    for line in prologue_lines(R["rows"]):
+        lines.append(line)
+    # (a) the curve table and reading
+    lines.append(f"- **(a) curve table** (paired held-out mean ± SE over the rows at every eval; Δ(2−1) = `{k2[1]}` − `{k1[1]}`, Δ(3−1) = `{k3[1]}` − `{k1[1]}`; a non-VALID arm's column reads —):")
+    lines.append(f"| eval step | e4b `{k1[1]}` | unsloth `{k2[1]}` | e4b `{k3[1]}` | paired Δ(2−1) ± SE | paired Δ(3−1) ± SE |")
+    lines.append("|---|---|---|---|---|---|")
+    for row in R["curve_table"]:
+        lines.append(f"| {row['step']} | {_ms(row['arms'][k1])} | {_ms(row['arms'][k2])} | {_ms(row['arms'][k3])} | {_pd(row['d12'])} | {_pd(row['d31'])} |")
+    c = R["curve"]
+    if c["reading"] in ("EQUIVALENT-AT-EVERY-EVAL", "DIVERGENT"):
+        lines.append(f"- **CURVE READING (arms 1 vs 2): {c['reading']}** — largest paired |Δ(1,2)| {c['max_abs']:.4f} at step {c['max_step']} over {c['n_evals']} evals; Δ at step 200 {c['delta_at_N']:+.4f} (sign {c['sign_at_N']}; + = Unsloth's held-out above e4b's)"
+                     + (f"; first divergent step {c['first_divergent_step']}" if c["first_divergent_step"] is not None else "") + f"; band {c['band']} = {c['band_note']}: {c['tc1_floor']['text']}")
+    else:
+        lines.append(f"- **CURVE READING: {c['reading']}** — {c.get('why', '')}")
+    # (b) plateau
+    pl = R["plateau"]
+    if pl["reading"] in ("REPRODUCES-P38", "NOT-P38-SHAPE"):
+        lines.append(f"- **(b) PLATEAU TEST (arm 3 − arm 1): {pl['reading']}** — held-out gap at {pl['N']} {pl['gap_N']:+.4f} (paired {_pd(pl['paired_N'])}), at {pl['early']} {pl['gap_early']:+.4f} (paired {_pd(pl['paired_early'])}); "
+                     f"REPRODUCES-P38 iff >= +{PLATEAU_GAP} at {pl['N']} and <= 0 at {pl['early']}" + (f" — {pl['why']}" if pl.get("why") else ""))
+    else:
+        lines.append(f"- **(b) PLATEAU TEST: {pl['reading']}** — {pl.get('why', '')}")
+    # (c) time to target
+    t = R["ttt"]
+    if t.get("target") is not None:
+        lines.append(f"- **(c) time to target** (target {t['target']:.4f} = {t['basis']}; the first eval at or below it, informational): "
+                     + "; ".join(f"`{k[0]}/{k[1]}` " + (f"step {a['step']} at {a['train_wall_s']} s train wall (held-out {f(a['heldout'], 4)})" if a.get("reached") else (a.get("why") or "—")) for k, a in t["arms"].items()))
+    else:
+        lines.append(f"- **(c) time to target**: {t.get('why', '')}")
+    # (d) speed
+    lines.append(f"- **(d) s/step medians over steps 11..200** (not a position: TC1 owns positions; TRAVELS iff within {TRAVEL_TOL:.0%} of TC1's 11..20 median when `--tc1-dir` is given"
+                 + (", given" if R.get("tc1_given") else ", NOT given: UNTESTED") + "; the in-receipt 11..20 window is a same-draw check): "
+                 + "; ".join(f"`{k[0]}/{k[1]}` {f(e.get('s_200'))} s/step (in-receipt 11..20 {f(e.get('s_11_20_in_receipt'))}" + (f", {e['in_receipt_dev']:+.1%}" if e.get("in_receipt_dev") is not None else "") + ")"
+                             + (f" vs TC1 {e['tc1_s']:.3f} over {e.get('tc1_draws')} draw(s) ({e['dev']:+.1%}) **{e['reading']}**" if e.get("tc1_s") and e["reading"] != "UNTESTED" else f" **{e['reading']}** ({e.get('tc1_why') or e.get('why') or ''})")
+                             for k, e in R["speed"].items()))
+    # (e) anchor
+    for key, an in R["anchor"].items():
+        if an.get("quoted"):
+            lines.append(f"- **(e) ANCHOR {key}: s/step ratio unsloth/e4b = {an['ratio']:.3f} → {an['reading']}** ({an['label']}; {an['other_s']:.3f} vs {an['e4b_s']:.3f} s; tp2 {TP2_ANCHOR} {an['dev_tp2']:+.1%} {'AGREES' if an['agrees_tp2'] else 'outside'}, P38 {P38_ANCHOR} {an['dev_p38']:+.1%} {'AGREES' if an['agrees_p38'] else 'outside'}"
+                         + (f", tp4 {an['tp4']} {an['dev_tp4']:+.1%} {'AGREES' if an['agrees_tp4'] else 'outside'}" if an.get("tp4") else ", tp4's anchor row not in this tree (UNVERIFIED)")
+                         + f"; ±{ANCHOR_TOL:.0%}); quality Δ {f(an.get('heldout_delta'), 4)} {an.get('quality')}; peak Δ {an['peak_delta']:+.2f} GB")
+        else:
+            lines.append(f"- **(e) ANCHOR {key}: NOT QUOTED** ({an['label']}) — {an['why']}")
+    # (f) scaling points
+    for g, spt in R["scaling"].items():
+        preds = "; ".join(f"{n} {'ok' if ok else 'FAILS'} ({ev})" for n, ok, ev in spt["predicates"])
+        if spt.get("quoted"):
+            lines.append(f"- **(f) SCALING POINT `{g}` (never a position): s/step ratio unsloth/e4b = {spt['ratio']:.3f}** ({spt['label']}; {spt['other_s']:.3f} vs {spt['e4b_s']:.3f} s, single draws; "
+                         f"peak Δ {spt['peak_delta']:+.2f} GB; held-out Δ {f(spt.get('heldout_delta'), 4)} {spt.get('quality')}); predicates: {preds}")
+        else:
+            lines.append(f"- **(f) SCALING POINT `{g}`: NOT QUOTED** — {spt['why']}; predicates: {preds}")
+    if R["equivalence"]:
+        lines.append("- TC1's equivalence reading at N per matched pair (informational; no reference arm in this family, so COMPARABLE is the ceiling): "
+                     + "; ".join(f"`{k[0]}/{k[1]}` **{e['reading']}**" + (f" (median step |Δ| {f(e.get('med_train'), 4)}, |Δ held-out at N| {f(e.get('d_heldout'), 4)}, step-0 {f(e.get('d_step0'), 4)} {e.get('step0_class') or ''})" if e.get("med_train") is not None else f" ({e.get('why', '')})")
+                                 for k, e in R["equivalence"].items()))
+    shas = [f"`{g}` anchor `{str(G['sha'])[:16]}`: " + ", ".join(f"{x['fw']}/{x['tag']} {'same' if (x['r'] or {}).get('matched_init_sha') == G['sha'] else 'DIFFERS'}" for x in R["rows"] if x["group"] == g and x["matched"] and x["status"] == "OK" and (x["fw"], x["tag"]) != G["anchor"])
+            for g, G in R["groups"].items() if G.get("sha")]
+    if shas:
+        lines.append("- matched_init_sha per sub-fixture (B, name-free): " + "; ".join(shas))
     return lines
 
 
@@ -807,27 +1238,7 @@ def family_block(R):
         lines.append(f"- model `{src.get('model')}` @ `{str(src.get('revision', ''))[:12]}`; tokens sha `{str(R['tokens_sha'] or '')[:12]}`; N={R['N']}; "
                      f"fixture template {src.get('template')} seq {src.get('seq')} micro-batch {src.get('micro_batch')} × accum {src.get('accum')} lr {src.get('lr')} r {src.get('r')} α {src.get('alpha')} "
                      f"optimizer {src.get('optimizer')} autocast {src.get('autocast')}; e4b trainable {R['e4b_trainable']}; box_class {env.get('box_class')} gpu {env.get('gpu')}")
-    lines.append("| framework | arm | status | validity | **VERDICT** | matched | init / dtype | step-0 class | N | s/step med(11+) | tok/s | peak GB | J/step | train first→last | held-out 0→final | quality Δ | engagement | trainable | regime | reason / why |")
-    lines.append("|" + "---|" * 20)
-    for x in R["rows"]:
-        r = x["r"] or {}
-        b = r.get("unsloth_bnb4bit_modules")
-        if x["fw"] == "e4b":
-            eng = f"patched {r.get('n_patched', '—')} / kcalls {r.get('kernel_calls_per_step_min', '—')}"
-        elif x["fw"] == "unsloth":
-            eng = f"stacks {(r.get('census') or {}).get('Params4bit_expert_stacks', '—')} / fwd {r.get('experts_forward_calls_per_step_min', '—')} / u8 {b.get('n_bnb4bit_unwrapped') if isinstance(b, dict) else '—'}"
-        else:
-            ht = r.get("hf_targets") or r.get("axolotl_targets") or {}
-            eng = f"peft mods {ht.get('n_target_modules', '—')} / params {ht.get('n_target_parameters', '—')} / fwd {r.get('experts_forward_calls_per_step_min', '—')}"
-        mi = r.get("matched_init") or {}
-        init = f"{r.get('lora_init', '—')}" + (f" ({'complete' if mi.get('complete') else 'INCOMPLETE'} {mi.get('n_slots_set')}/{mi.get('n_slots_expected')})" if mi else "") \
-            + f" / {','.join(sorted(k.replace('torch.', '') for k in (r.get('adapter_dtypes_after') or {}))) or '—'}"
-        note = " — ".join(s for s in (x["reason"], x["why"]) if s)
-        s0 = f"{x['step0_class']} ({x['step0_delta']:.4f})" if x.get("step0_class") else "—"
-        lines.append(f"| {x['fw']} | {x['tag']} | **{x['status']}** | {x['validity']} | **{x['verdict']}** | {'yes' if x['matched'] else 'native'} | {init} | {s0} | {r.get('steps', '—')} | "
-                     f"{f(r.get('s_per_step_median_11plus'))} | {f(r.get('tokens_per_s'), 1)} | {f(r.get('peak_vram_gb'))} | {f(r.get('joules_per_step'), 1)} | "
-                     f"{f(r.get('loss_first'), 4)}→{f(r.get('loss_last'), 4)} | {f(r.get('eval_loss_step0'), 4)}→{f(r.get('eval_loss_final'), 4)} | "
-                     f"{f(x.get('quality_delta'), 4) if x.get('quality_delta') is not None else (x.get('quality') or '—')} | {eng} | {r.get('trainable_params', '—')} | {x['regime'] or '—'} | {note} |")
+    lines += support_table(R["rows"])
     for line in prologue_lines(R["rows"]):
         lines.append(line)
     lines.append("- draws (R1): " + "; ".join(
@@ -882,9 +1293,13 @@ def render(F, d):
         vp = os.path.join(d, fn)
         if os.path.exists(vp):
             out.append(f"`{fn}`\n```\n" + open(vp).read().strip() + "\n```")
+    if CURVE_FAM in F:
+        out.append(f"Lane TC1b (`{CURVE_FAM}`, TC1B-PREREG.md): validity per sub-fixture against its own e4b arm; the curve reading EQUIVALENT-AT-EVERY-EVAL iff every paired held-out |Δ| <= {CURVE_BAND} "
+                   f"({CURVE_BAND_NOTE}), else DIVERGENT with the first divergent step; plateau REPRODUCES-P38 iff >= +{PLATEAU_GAP} at 200 and <= 0 at {PLATEAU_EARLY_STEP}; time to target = the matched pair's step-200 held-out + {TARGET_MARGIN}; "
+                   f"s/step 11..200 vs TC1's 11..20 within {TRAVEL_TOL:.0%} = TRAVELS; anchor within ±{ANCHOR_TOL:.0%} of tp2 {TP2_ANCHOR} / P38 {P38_ANCHOR}; the t1 and r64 pairs are SCALING POINTS, never positions; P1–P4 of the draft scored HELD / FALSIFIED / UNTESTED.")
     for fam in list(FAMS) + sorted(set(F) - set(FAMS)):
         if fam in F:
-            out += family_block(F[fam])
+            out += curve_block(F[fam]) if fam == CURVE_FAM else family_block(F[fam])
     out += ["\n## Verdicts", "| family | arm | VERDICT | validity | quality | note |", "|---|---|---|---|---|---|"]
     for fam in list(FAMS) + sorted(set(F) - set(FAMS)):
         R = F.get(fam)
@@ -892,15 +1307,24 @@ def render(F, d):
             continue
         for x in R["rows"]:
             out.append(f"| {fam} | {x['fw']}/{x['tag']} | **{x['verdict']}** | {x['validity']} | {f(x.get('quality_delta'), 4) if x.get('quality_delta') is not None else (x.get('quality') or '—')} | {(x['why'] or x['reason'])[:160]} |")
-    out += ["\n## Predictions P1–P10 (+ P1b) (TC1-PREREG.md + phase 2, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
-    for pid, fam, v, ev in score_predictions(F):
-        out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if any(fam in F for fam in ("qwen3", "qwen3native")):
+        out += ["\n## Predictions P1–P10 (+ P1b) (TC1-PREREG.md + phase 2, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_predictions(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if CURVE_FAM in F:
+        out += ["\n## TC1b predictions P1–P4 (TC1b-PREREG-draft, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_curve_predictions(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     return "\n".join(out)
 
 
-def reduce_dir(d, n_steps=None):
+def reduce_dir(d, n_steps=None, tc1_dir=None):
+    """Every family token in the dir; the qwen3curve token through R10 (its N is per arm, `--steps` does not apply to it), with TC1's
+    receipts reduced first when `tc1_dir` names them (the (d) speed reading reads their quoted draws)."""
     recs, rcs = load(d), load_summary(d)
-    return {fam: reduce_family(fam, recs[fam], rcs, n_steps) for fam in list(FAMS) + sorted(set(recs) - set(FAMS)) if fam in recs}
+    tc1 = reduce_dir(tc1_dir, None) if tc1_dir else None
+    return {fam: (reduce_curve_family(fam, recs[fam], rcs, tc1=tc1) if fam == CURVE_FAM else reduce_family(fam, recs[fam], rcs, n_steps))
+            for fam in list(FAMS) + sorted(set(recs) - set(FAMS)) if fam in recs}
 
 
 # ----------------------------------------------------------------------------- R7: the selftest (hand-built receipts)
@@ -992,6 +1416,73 @@ def _native_set():
     R[("hf", "hf_peft_m_mb1_t214")] = _stub("hf", "hf_peft_m_mb1_t214", "hf", "not_run", "runs only when hf_peft_m OOMed on this box")
     for r in R.values():
         r["fam"] = "qwen3native"
+    return R
+
+
+def _curve_receipt(fw, tag, arm, s=1.0, heldouts=None, row_shift=0.0, native=False, backend="grouped_mm", **over):
+    """R10: a complete OK receipt for one qwen3curve arm from `_receipt`, with the sub-fixture's N / accum / r / tokens / trainable count,
+    an eval grid with `train_wall_s`, `eval_rows` with 16 (the 200 group) or 8 rows, per-step lists of length N and counters consistent
+    with its accum. `heldouts` = the held-out means at the grid's steps; each row i = mean + 0.001*(i - (n-1)/2) + row_shift."""
+    g, N = CURVE_GROUP[tag], CURVE_N[tag]
+    L = 48
+    accum = 1 if g in ("p38", "t1") else 4
+    mb = 1 if g in ("p38", "t1") else 2
+    r_, alpha, seq, template = (8, 16, 512, "clinical") if g == "p38" else ((64, 64, 2048, "alpaca") if g == "r64" else (16, 16, 2048, "alpaca"))
+    trainable = {"200": 642514944, "t1": 642514944, "p38": 321257472, "r64": 4 * 642514944}[g]
+    every = {"200": 40, "p38": 20, "t1": 20, "r64": 20}[g]
+    grid = list(range(0, N + 1, every))
+    if heldouts is None:
+        heldouts = [round(2.0 - 0.21 * (1 - (0.5 ** (st / max(every, 1)))), 5) for st in grid]
+    assert len(heldouts) == len(grid), (tag, len(heldouts), grid)
+    n_rows = 16 if g == "200" else 8
+    curve = [{"step": st, "heldout_loss": h, "train_wall_s": round(st * s, 2)} for st, h in zip(grid, heldouts)]
+    rows = [{"step": st, "losses": [round(h + 0.001 * (i - (n_rows - 1) / 2) + row_shift, 5) for i in range(n_rows)]} for st, h in zip(grid, heldouts)]
+    losses = [round(2.0 - 0.002 * i, 5) for i in range(N)]
+    ub = {"unsloth_grouped_mm": 0, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": L * accum}
+    ub[UNSLOTH_BACKEND_KEYS.get(backend, "unsloth_grouped_mm")] = L * accum
+    base = dict(steps=N, s=s, heldout0=heldouts[0], heldout_n=heldouts[-1], losses=losses, matched=not native, backend=backend,
+                sha=("s" * 60 + g).ljust(64, "s") if not native else None)
+    r = _receipt(fw, tag, arm, **base)
+    r.update({"fam": CURVE_FAM, "accum": accum, "micro_batch": mb, "r": r_, "alpha": alpha, "seq": seq, "template": template,
+              "tokens": {"sha256": (("c" if g == "p38" else "t") * 64)}, "trainable_params": trainable,
+              "eval_curve": curve, "eval_rows": rows, "eval_loss_step0": heldouts[0], "eval_loss_final": heldouts[-1],
+              "step_ms": [round(s * 1e3, 1)] * N, "lora_loop_share": ([0.0] * N if arm == "fused" else None), "lora_path_loop_steps": ([] if arm == "fused" else None),
+              "dynamo_counters": {"step10": {"recompiles_total": 0}, f"step{N}": {"recompiles_total": 0}},
+              "kernel_calls_per_step_min": 2 * L * accum if arm == "fused" else 0, "experts_forward_calls_per_step_min": L * accum if fw != "e4b" else 0,
+              "optimizer": ("adamw_torch(lr=0.0001, weight_decay=0.01) schedule=constant warmup_steps=0" if g == "p38" else "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5")})
+    if fw == "unsloth":
+        r.update({"unsloth_backend_calls_per_step_min": dict(ub), "unsloth_backend_calls_per_step_max": dict(ub),
+                  "unsloth_grouped_mm_calls_per_step_min": GMM_FACTOR * L * accum if backend == "grouped_mm" else 0,
+                  "unsloth_grouped_mm_calls_per_step_max": GMM_FACTOR * L * accum if backend == "grouped_mm" else 0})
+    if native and fw == "unsloth":                     # tp4's anchor arm: fp32 adapters by tp4's cast, native init, the loader's double-quant
+        r.update({"adapter_dtype": "fp32", "adapter_dtypes_after": {"torch.float32": 576}, "lora_init": "native", "matched_init": None, "matched_init_sha": "n" * 64,
+                  "unsloth_double_quant": {"requested": True, "how": "loader default", "loaded_nested": True}})
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(r.get(k), dict):
+            r[k] = {**r[k], **v}
+        else:
+            r[k] = v
+    return r
+
+
+def _curve_set():
+    """The TC1b family, baseline: the matched pair EQUIVALENT at every eval (rows +0.005), the as-shipped arm below at 40 and +0.015 above
+    at 200 (P38's shape), the anchor pair at 1.450 (tp2's 1.457 within 10 %), the t28 variant at 1.425, the t1 pair at 2.0, the r64 pair at 3.25."""
+    H1 = [2.0, 1.90, 1.85, 1.82, 1.80, 1.79]
+    H3 = [2.0, 1.89, 1.84, 1.815, 1.808, 1.805]
+    R = {}
+    R[("e4b", "fused_attn4_m_200")] = _curve_receipt("e4b", "fused_attn4_m_200", "fused", s=1.00, heldouts=H1)
+    R[("unsloth", "ckpt_unsloth_m_200")] = _curve_receipt("unsloth", "ckpt_unsloth_m_200", "unsloth", s=3.00, heldouts=[round(h + 0.005, 5) for h in H1], row_shift=0.0)
+    R[("e4b", "fused_attn4_shipped_200")] = _curve_receipt("e4b", "fused_attn4_shipped_200", "fused", s=0.85, heldouts=H3, native=True)
+    R[("e4b", "fused_attn4_p38")] = _curve_receipt("e4b", "fused_attn4_p38", "fused", s=4.00, native=True)
+    R[("unsloth", "ckpt_unsloth_p38")] = _curve_receipt("unsloth", "ckpt_unsloth_p38", "unsloth", s=5.80, native=True)
+    R[("unsloth", "ckpt_unsloth_p38_t28")] = _curve_receipt("unsloth", "ckpt_unsloth_p38_t28", "unsloth", s=5.70, native=True, backend="default")
+    R[("e4b", "fused_attn4_m_t1")] = _curve_receipt("e4b", "fused_attn4_m_t1", "fused", s=0.50)
+    R[("unsloth", "ckpt_unsloth_m_t1")] = _curve_receipt("unsloth", "ckpt_unsloth_m_t1", "unsloth", s=1.00)
+    R[("e4b", "fused_attn4_m_r64")] = _curve_receipt("e4b", "fused_attn4_m_r64", "fused", s=1.20)
+    R[("unsloth", "ckpt_unsloth_m_r64")] = _curve_receipt("unsloth", "ckpt_unsloth_m_r64", "unsloth", s=3.90)
+    # the native-init Unsloth p38 arms carry their own matched_init_sha (not the matched set's); the shipped arm its loader's
+    R[("e4b", "fused_attn4_shipped_200")]["matched_init_sha"] = "e" * 64
     return R
 
 
@@ -1291,6 +1782,168 @@ def selftest():
     assert F["equiv_band"] is None and e["reading"] == "COMPARABLE" and "no reference arm" in e["why"] and P({"qwen3": F})["P3"] == "UNTESTED", (e, P({"qwen3": F})["P3"])
     print("FAILING-CASE H (reducer): no reference arm ->", e["reading"], "--", e["why"])
     cases += 1
+    # ----------------------------------------------------------------------- R10: lane TC1b (the qwen3curve token)
+    def crun(R, tc1=None):
+        return reduce_curve_family(CURVE_FAM, R, {}, tc1=tc1)
+
+    def CP(F):
+        return {p_: v for p_, _, v, _ in score_curve_predictions(F)}
+    # 34. baseline: every arm VALID in its sub-fixture, the curve EQUIVALENT-AT-EVERY-EVAL, the plateau REPRODUCES-P38, the target reached by every arm,
+    #     the anchor AGREES with tp2 (and P38), the t28 variant read separately, both scaling points quoted, P1/P2/P4 HELD and P3 UNTESTED without --tc1-dir
+    C = crun(_curve_set())
+    assert [(x["fw"], x["tag"]) for x in C["rows"]] == EXPECTED[CURVE_FAM]
+    assert all(v == "VALID" for v in C["verdicts"].values()), C["verdicts"]
+    assert C["groups"]["p38"]["trainable"] == 321257472 and C["groups"]["200"]["trainable"] == 642514944 and C["groups"]["r64"]["sha"] == ("s" * 60 + "r64").ljust(64, "s")
+    assert row(C, "unsloth", "ckpt_unsloth_m_r64")["step0_class"] == "SAME-BYTES-CLASS" and row(C, "unsloth", "ckpt_unsloth_p38")["step0_class"] is None   # native rows carry no R3
+    assert row(C, "e4b", "fused_attn4_shipped_200")["quality_delta"] is not None and abs(row(C, "e4b", "fused_attn4_shipped_200")["quality_delta"] - 0.015) < 1e-9
+    tb = C["curve_table"]
+    assert [row_["step"] for row_ in tb] == [0, 40, 80, 120, 160, 200] and all(row_["d12"]["n"] == 16 and abs(row_["d12"]["mean"] - 0.005) < 1e-9 for row_ in tb), tb[1]["d12"]
+    assert abs(tb[1]["arms"][("e4b", "fused_attn4_m_200")][0] - 1.90) < 1e-9 and tb[1]["arms"][("e4b", "fused_attn4_m_200")][1] is not None and tb[1]["arms"][("e4b", "fused_attn4_m_200")][1] > 0
+    c = C["curve"]
+    assert c["reading"] == "EQUIVALENT-AT-EVERY-EVAL" and abs(c["max_abs"] - 0.005) < 1e-9 and c["sign_at_N"] == "+" and c["first_divergent_step"] is None and c["band"] == CURVE_BAND and "draft" in c["band_note"], c
+    pl = C["plateau"]
+    assert pl["reading"] == "REPRODUCES-P38" and abs(pl["gap_N"] - 0.015) < 1e-9 and abs(pl["gap_early"] + 0.01) < 1e-9 and pl["paired_N"]["n"] == 16, pl
+    t = C["ttt"]
+    assert abs(t["target"] - (statistics.mean([1.79, 1.795]) + 0.02)) < 1e-9 and all(a["reached"] for a in t["arms"].values())
+    assert t["arms"][("e4b", "fused_attn4_m_200")]["step"] == 160 and t["arms"][("e4b", "fused_attn4_m_200")]["train_wall_s"] == 160.0 and t["arms"][("e4b", "fused_attn4_shipped_200")]["step"] == 160, t["arms"]
+    sp = C["speed"]
+    assert all(e["reading"] == "UNTESTED" and e["tc1_why"] == "no --tc1-dir given" for e in sp.values()) and abs(sp[("unsloth", "ckpt_unsloth_m_200")]["s_11_20_in_receipt"] - 3.0) < 1e-9 and sp[("unsloth", "ckpt_unsloth_m_200")]["in_receipt_dev"] == 0.0
+    an = C["anchor"]
+    assert an["grouped_mm"]["quoted"] and abs(an["grouped_mm"]["ratio"] - 1.45) < 1e-9 and an["grouped_mm"]["reading"] == "AGREES" and an["grouped_mm"]["agrees_p38"] and an["grouped_mm"]["kind"] == "anchor", an["grouped_mm"]
+    assert an["t28"]["quoted"] and abs(an["t28"]["ratio"] - 1.425) < 1e-9 and an["t28"]["reading"] == "AGREES" and "tp4's arm byte-for-byte" in an["t28"]["label"]
+    assert "tp4" not in an["grouped_mm"] or TP4_ANCHOR_RATIO            # the tp4 leg appears only when the number is supplied
+    sc = C["scaling"]
+    assert sc["t1"]["quoted"] and abs(sc["t1"]["ratio"] - 2.0) < 1e-9 and sc["t1"]["kind"] == "scaling point" and all(ok for _, ok, _ in sc["t1"]["predicates"]) and len(sc["t1"]["predicates"]) == 4
+    assert sc["r64"]["quoted"] and abs(sc["r64"]["ratio"] - 3.25) < 1e-9 and "position" not in sc["r64"]["label"]
+    assert C["equivalence"][("unsloth", "ckpt_unsloth_m_200")]["reading"] == "COMPARABLE" and "no reference arm" in C["equivalence"][("unsloth", "ckpt_unsloth_m_200")]["why"]
+    assert CP({CURVE_FAM: C}) == {"P1": "HELD", "P2": "HELD", "P3": "UNTESTED", "P4": "HELD"}, CP({CURVE_FAM: C})
+    assert c["tc1_floor"]["equiv_floor"] == EQUIV_FLOOR and c["tc1_floor"]["tc1_heldout_band"] is None and "no --tc1-dir" in c["tc1_floor"]["text"]
+    p4 = next(x for x in score_curve_predictions({CURVE_FAM: C}) if x[0] == "P4")
+    assert "NOT in this tree" in p4[3] and "t28 variant 1.425" in p4[3], p4
+    cases += 1
+    # 35. a DIVERGENT curve: Unsloth's rows sit +0.03 above e4b's from step 120 on -> DIVERGENT, first divergent step 120, sign + at 200, P1 FALSIFIED
+    R = _curve_set()
+    H1 = [2.0, 1.90, 1.85, 1.82, 1.80, 1.79]
+    R[("unsloth", "ckpt_unsloth_m_200")] = _curve_receipt("unsloth", "ckpt_unsloth_m_200", "unsloth", s=3.00, heldouts=[round(h + (0.03 if i >= 3 else 0.005), 5) for i, h in enumerate(H1)])
+    C = crun(R)
+    c = C["curve"]
+    assert c["reading"] == "DIVERGENT" and c["first_divergent_step"] == 120 and c["sign_at_N"] == "+" and abs(c["max_abs"] - 0.03) < 1e-9 and c["max_step"] in (120, 160, 200), c
+    assert CP({CURVE_FAM: C})["P1"] == "FALSIFIED" and "step 120" in next(x for x in score_curve_predictions({CURVE_FAM: C}) if x[0] == "P1")[3]
+    print(f"FAILING-CASE TC1b-P1 (reducer): curve {c['reading']} -- first paired |delta| > {CURVE_BAND} at step {c['first_divergent_step']}, max {c['max_abs']:.4f} at step {c['max_step']}, sign at 200 {c['sign_at_N']}")
+    R2 = _curve_set()                                   # the sign reads the other way too
+    R2[("unsloth", "ckpt_unsloth_m_200")] = _curve_receipt("unsloth", "ckpt_unsloth_m_200", "unsloth", s=3.00, heldouts=[round(h - 0.025, 5) for h in H1])
+    assert crun(R2)["curve"]["sign_at_N"] == "-" and crun(R2)["curve"]["first_divergent_step"] == 0
+    cases += 1
+    # 36. the plateau refuted both ways: as-shipped within 0.01 at 200 -> NOT-P38-SHAPE; as-shipped above at 40 as well -> NOT-P38-SHAPE (no early lead); P2 FALSIFIED
+    R = _curve_set()
+    R[("e4b", "fused_attn4_shipped_200")] = _curve_receipt("e4b", "fused_attn4_shipped_200", "fused", s=0.85, heldouts=[2.0, 1.89, 1.84, 1.815, 1.80, 1.795], native=True)
+    C = crun(R)
+    assert C["plateau"]["reading"] == "NOT-P38-SHAPE" and "within" in C["plateau"]["why"] and CP({CURVE_FAM: C})["P2"] == "FALSIFIED", C["plateau"]
+    print("FAILING-CASE TC1b-P2 (reducer):", C["plateau"]["reading"], "--", C["plateau"]["why"])
+    R[("e4b", "fused_attn4_shipped_200")] = _curve_receipt("e4b", "fused_attn4_shipped_200", "fused", s=0.85, heldouts=[2.0, 1.91, 1.86, 1.83, 1.81, 1.805], native=True)
+    C = crun(R)
+    assert C["plateau"]["reading"] == "NOT-P38-SHAPE" and "ABOVE" in C["plateau"]["why"] and CP({CURVE_FAM: C})["P2"] == "FALSIFIED", C["plateau"]
+    cases += 1
+    # 37. a failing anchor: the p38 pair at 1.85 (outside +-10 % of both tp2 and P38) -> FINDING, P4 FALSIFIED; the t28 variant is read on its own
+    R = _curve_set()
+    R[("unsloth", "ckpt_unsloth_p38")]["s_per_step_median_11plus"] = 7.4
+    C = crun(R)
+    an = C["anchor"]
+    assert an["grouped_mm"]["quoted"] and abs(an["grouped_mm"]["ratio"] - 1.85) < 1e-9 and an["grouped_mm"]["reading"] == "FINDING" and not an["grouped_mm"]["agrees_p38"]
+    assert an["t28"]["reading"] == "AGREES" and CP({CURVE_FAM: C})["P4"] == "FALSIFIED"
+    print(f"FAILING-CASE TC1b-P4 (reducer): anchor unsloth/e4b {an['grouped_mm']['ratio']:.3f} -> {an['grouped_mm']['reading']} (tp2 {an['grouped_mm']['dev_tp2']:+.1%}, P38 {an['grouped_mm']['dev_p38']:+.1%}; +-{ANCHOR_TOL:.0%})")
+    R = _curve_set()
+    R[("e4b", "fused_attn4_p38")] = _stub("e4b", "fused_attn4_p38", "fused", "oom")
+    C = crun(R)
+    assert not C["anchor"]["grouped_mm"]["quoted"] and not C["anchor"]["t28"]["quoted"] and CP({CURVE_FAM: C})["P4"] == "UNTESTED" and row(C, "unsloth", "ckpt_unsloth_p38")["verdict"] == "VALID"
+    cases += 1
+    # 38. a VOID r64 pair: the two r64 arms' trainable counts differ -> the Unsloth arm VOID, the scaling point not quoted with the predicate named; the t1 pair unaffected
+    R = _curve_set()
+    R[("unsloth", "ckpt_unsloth_m_r64")]["trainable_params"] = 4 * 642514944 + 1
+    C = crun(R)
+    x = row(C, "unsloth", "ckpt_unsloth_m_r64")
+    assert x["verdict"] == "VOID" and "trainable" in x["why"] and not C["scaling"]["r64"]["quoted"] and C["scaling"]["t1"]["quoted"], (x["why"], C["scaling"]["r64"]["why"])
+    assert [ok for _, ok, _ in C["scaling"]["r64"]["predicates"]][:2] == [False, False]
+    print("FAILING-CASE TC1b-r64 (reducer):", x["why"], "->", C["scaling"]["r64"]["why"])
+    R = _curve_set()                                    # the e4b r64 arm's kernel took the loop on one step -> VOID, the scaling point names the predicate
+    R[("e4b", "fused_attn4_m_r64")].update({"lora_path_loop_steps": [7], "lora_loop_share": [0.0] * 6 + [0.5] + [0.0] * 13})
+    C = crun(R)
+    assert row(C, "e4b", "fused_attn4_m_r64")["verdict"] == "VOID" and not C["scaling"]["r64"]["quoted"] and "lora_path_loop" in C["scaling"]["r64"]["why"]
+    R = _curve_set()                                    # the Unsloth t1 arm's manual grouped-mm fallback ran -> VOID, the scaling point not quoted
+    R[("unsloth", "ckpt_unsloth_m_t1")]["unsloth_manual_grouped_mm_calls_per_step_max"] = 3
+    C = crun(R)
+    assert row(C, "unsloth", "ckpt_unsloth_m_t1")["verdict"] == "VOID" and not C["scaling"]["t1"]["quoted"]
+    cases += 1
+    # 39. the registered trainable counts: an arm-1 count off by one VOIDs it (and the curve reading with it); the anchor arms read against r 8's count
+    R = _curve_set()
+    R[("e4b", "fused_attn4_m_200")]["trainable_params"] = 642514945
+    C = crun(R)
+    assert row(C, "e4b", "fused_attn4_m_200")["verdict"] == "VOID" and "registered 642514944" in row(C, "e4b", "fused_attn4_m_200")["why"]
+    assert C["curve"]["reading"] == "N-A" and CP({CURVE_FAM: C})["P1"] == "UNTESTED" and C["plateau"]["reading"] == "N-A"
+    R = _curve_set()
+    R[("e4b", "fused_attn4_p38")]["trainable_params"] = 642514944
+    C = crun(R)
+    assert row(C, "e4b", "fused_attn4_p38")["verdict"] == "VOID" and "registered 321257472" in row(C, "e4b", "fused_attn4_p38")["why"]
+    cases += 1
+    # 40. (d) with --tc1-dir: the curve arms read beside TC1's quoted draws -- TRAVELS at 1.00 vs 1.01 / 3.00 vs 3.03 / 0.85 vs 0.85; a 3.5 s/step Unsloth curve arm DOES-NOT-TRAVEL, P3 FALSIFIED
+    tc1 = {"qwen3": run(_good_set()), "qwen3native": run(_native_set(), fam="qwen3native")}
+    C = crun(_curve_set(), tc1=tc1)
+    sp = C["speed"]
+    assert all(e["reading"] == "TRAVELS" for e in sp.values()) and abs(sp[("unsloth", "ckpt_unsloth_m_200")]["tc1_s"] - 3.03) < 1e-9 and sp[("unsloth", "ckpt_unsloth_m_200")]["tc1_draws"] == 2, sp
+    assert abs(sp[("e4b", "fused_attn4_shipped_200")]["tc1_s"] - 0.85) < 1e-9 and sp[("e4b", "fused_attn4_shipped_200")]["tc1_key"][0] == "qwen3native"
+    assert CP({CURVE_FAM: C})["P3"] == "HELD"
+    assert abs(C["curve"]["tc1_floor"]["tc1_heldout_band"] - 0.015) < 1e-9 and "from --tc1-dir" in C["curve"]["tc1_floor"]["text"]   # TC1's measured band quoted beside the fixed 0.02
+    R = _curve_set()
+    R[("unsloth", "ckpt_unsloth_m_200")]["s_per_step_median_11plus"] = 3.5
+    C = crun(R, tc1=tc1)
+    assert C["speed"][("unsloth", "ckpt_unsloth_m_200")]["reading"] == "DOES-NOT-TRAVEL" and CP({CURVE_FAM: C})["P3"] == "FALSIFIED"
+    print(f"FAILING-CASE TC1b-P3 (reducer): unsloth 11..200 median {C['speed'][('unsloth', 'ckpt_unsloth_m_200')]['s_200']:.3f} vs TC1's 11..20 {C['speed'][('unsloth', 'ckpt_unsloth_m_200')]['tc1_s']:.3f} ({C['speed'][('unsloth', 'ckpt_unsloth_m_200')]['dev']:+.1%}) -> DOES-NOT-TRAVEL")
+    C = crun(_curve_set(), tc1={"qwen3": run(_good_set())})          # no native box in the TC1 dir: the shipped arm UNTESTED, the pair still read
+    assert C["speed"][("e4b", "fused_attn4_shipped_200")]["reading"] == "UNTESTED" and "no qwen3native receipts" in C["speed"][("e4b", "fused_attn4_shipped_200")]["tc1_why"] and CP({CURVE_FAM: C})["P3"] == "HELD"
+    cases += 1
+    # 41. (c) a target never reached: the as-shipped arm ends above the matched pair's step-200 held-out + 0.02 -> "not reached"; a single VALID matched arm sets the target alone
+    R = _curve_set()
+    R[("e4b", "fused_attn4_shipped_200")] = _curve_receipt("e4b", "fused_attn4_shipped_200", "fused", s=0.85, heldouts=[2.0, 1.95, 1.90, 1.86, 1.84, 1.83], native=True)
+    C = crun(R)
+    a3 = C["ttt"]["arms"][("e4b", "fused_attn4_shipped_200")]
+    assert a3["reached"] is False and "not reached by step 200" in a3["why"], a3
+    R[("unsloth", "ckpt_unsloth_m_200")] = _stub("unsloth", "ckpt_unsloth_m_200", "unsloth", "alarm")
+    C = crun(R)
+    assert "one VALID matched arm" in C["ttt"]["basis"] and abs(C["ttt"]["target"] - 1.81) < 1e-9 and C["curve"]["reading"] == "N-A" and CP({CURVE_FAM: C})["P1"] == "UNTESTED"
+    cases += 1
+    # 42. a matched Unsloth 200 arm whose sha differs from its sub-fixture's e4b arm -> VOID; the curve N-A; a grid that stops short of 200 -> N-A
+    R = _curve_set()
+    R[("unsloth", "ckpt_unsloth_m_200")]["matched_init_sha"] = "x" * 64
+    C = crun(R)
+    assert row(C, "unsloth", "ckpt_unsloth_m_200")["verdict"] == "VOID" and C["curve"]["reading"] == "N-A"
+    R = _curve_set()
+    R[("unsloth", "ckpt_unsloth_m_200")]["eval_rows"] = R[("unsloth", "ckpt_unsloth_m_200")]["eval_rows"][:-1]
+    C = crun(R)
+    assert C["curve"]["reading"] == "N-A" and "200" in C["curve"]["why"], C["curve"]
+    cases += 1
+    # 43. end to end through the files: the qwen3curve token alone renders its block and the TC1b table (and NOT TC1's P1-P10 table); with a --tc1-dir the (d) row reads TRAVELS
+    cd = tempfile.mkdtemp(prefix="tc1b_reduce_selftest_")
+    for (fw, tag), r in _curve_set().items():
+        json.dump(r, open(os.path.join(cd, f"{CURVE_FAM}_{fw}_{tag}.json"), "w"))
+    F = reduce_dir(cd, 20)
+    assert set(F) == {CURVE_FAM} and [(x["fw"], x["tag"]) for x in F[CURVE_FAM]["rows"]] == EXPECTED[CURVE_FAM]
+    text = render(F, cd)
+    for needle in ("Lane TC1b", "**(a) curve table**", "| 200 |", "CURVE READING (arms 1 vs 2): EQUIVALENT-AT-EVERY-EVAL", "the draft's band", "PLATEAU TEST (arm 3 − arm 1): REPRODUCES-P38",
+                   "(c) time to target", "step 160 at 160.0 s train wall", "(d) s/step medians over steps 11..200", "NOT given: UNTESTED", "ANCHOR grouped_mm: s/step ratio unsloth/e4b = 1.450 → AGREES",
+                   "ANCHOR t28: s/step ratio unsloth/e4b = 1.425 → AGREES", "SCALING POINT `t1` (never a position): s/step ratio unsloth/e4b = 2.000", "SCALING POINT `r64` (never a position): s/step ratio unsloth/e4b = 3.250",
+                   "| P1 | qwen3curve | **HELD** |", "| P2 | qwen3curve | **HELD** |", "| P3 | qwen3curve | **UNTESTED** |", "| P4 | qwen3curve | **HELD** |", "matched_init_sha per sub-fixture"):
+        assert needle in text, needle
+    assert "## Predictions P1–P10" not in text and "MATCHED POSITION" not in text and "POSITION:" not in text
+    for (fw, tag), r in _good_set().items():
+        json.dump(r, open(os.path.join(d, f"qwen3_{fw}_{tag}.json"), "w"))
+    F = reduce_dir(cd, 20, tc1_dir=d)
+    text = render(F, cd)
+    assert "**TRAVELS**" in text and "| P3 | qwen3curve | **HELD** |" in text and F[CURVE_FAM]["tc1_given"]
+    for (fw, tag), r in _curve_set().items():                      # the two tokens side by side: both tables, both blocks
+        json.dump(r, open(os.path.join(d, f"{CURVE_FAM}_{fw}_{tag}.json"), "w"))
+    text = render(reduce_dir(d, 20), d)
+    assert "## Predictions P1–P10" in text and "## TC1b predictions P1–P4" in text and "Lane TC1b" in text
+    cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
 
@@ -1301,13 +1954,14 @@ def main():
     ap.add_argument("--md", default=None)
     ap.add_argument("--steps", type=int, default=None, help="registered N (default: read from the receipts)")
     ap.add_argument("--selftest", action="store_true", help="R7: hand-built receipts through every reading; exit 0 iff every case reads as registered")
+    ap.add_argument("--tc1-dir", default=None, help="R10 (d): a TC1 receipt dir (qwen3 / qwen3native tokens) whose quoted 11..20 s/step medians the qwen3curve arms are read beside (TRAVELS within 10 %%)")
     a = ap.parse_args()
     if a.selftest:
         selftest()
         return
     if not a.dir:
         ap.error("dir is required (or --selftest)")
-    F = reduce_dir(a.dir, a.steps)
+    F = reduce_dir(a.dir, a.steps, tc1_dir=a.tc1_dir)
     text = render(F, a.dir)
     print(text)
     if a.md:
