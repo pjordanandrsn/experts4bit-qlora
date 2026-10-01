@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/pack_manifest.py", line 191, in verify_artifact
+    man = load_manifest(root)
+          ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/pack_manifest.py", line 175, in load_manifest
+    raise PackManifestError(f"missing {MANIFEST_NAME} under {root}")
+experts4bit_qlora.engines.pack_manifest.PackManifestError: missing manifest.json under /root/p87/artifact
