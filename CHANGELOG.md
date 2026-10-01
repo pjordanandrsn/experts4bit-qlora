@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### `docs/system-manifest.json` follows grouped-nf4-gemm v0.34.1 (byte-identical)
+
+- The `consumer_ci_pin` prose names v0.34.0, the release whose commit this CI installs (846b512); it still named v0.33.0. The kernel repository changed it in its 0.34.1 release, and this CI compares the manifest byte-for-byte against the kernel's latest tag. No floor, range or ownership changes.
+
 ### Lane P94 registered (#564): K8 against the arithmetic a T > 1 route replaces -- K25 against the served NF4 M-tile kernel at T == 1 (bench and tests only)
 
 - **Why.** P92 and P93 compared K25 at T == 1 against the scalar fp32 decode GEMV. The `auto` default changes only rows
