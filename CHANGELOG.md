@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Lane P87 registered (#564): does K19 make e4b's int4 decode faster on an RTX 5090 without moving its quality? (bench and tests only)
+
+- **The question.** On one RTX 5090, with `E4B_INT4_GROUPED_SMALLM` on against off:
+  - **Speed:** B=16 and B=1 step times. P86's harness, RTN env and command line, two draws each, the first censused.
+  - **Quality:** K8 on the licensed recipe (calibrated experts and int4 attention, P85's env and K8 arguments). One build dumps the pack, then OFF and ON load it by fingerprint.
+  - grouped-nf4-gemm is pinned at K19's merge, `3351c9d`.
+- **The premise, on the card.** `tests/test_k19_row_exact_gpu.py` runs before anything is fetched: a token's K19 rows are bit-equal alone and inside a B=16 step, which lets the B=1 K8 stand for the batched rows. If it fails, the lane stops (rc 25).
+- **The rule** (`p87_reduce.py`, 17-case self-test):
+  - **VOID** on a failed premise; on failed engagement (96 K19 calls per step ON, the experts' 96 GEMV calls gone, none OFF); or on a bit-equal K8 ON/OFF.
+  - **QUALITY_FAIL** if |ΔK8| > 0.0095 nats.
+  - **LICENSED** if B=16 ON/OFF ≤ 0.95.
+  - **NOT_FASTER** otherwise.
+  - B=1 is read as FASTER, NEUTRAL or SLOWER beside the verdict, and decides the scope of a proposed default.
+- **Cost.** A proof (0.5 h: K19's contract tests and the premise compiled on sm_120, no model), then a 2.5 h reading. Lane ceiling $3.00.
+- `tests/test_p87_staged_pin.py` pins:
+  - the staged bytes, which are P86's harness bytes;
+  - the gnf4 pin;
+  - the refusals and the premise coming before any fetch;
+  - the proof;
+  - the arm order and settings;
+  - the driver's dry run.
+
 ### `E4B_INT4_GROUPED_SMALLM=1` now covers T == 1 decode too (opt-in; no default changes)
 
 - **The gap.** The route above engaged only where device grouping was already on: T > 1 under the batched harness's `DEVICE_GROUPING`. T == 1 (B=1 decode) kept the singleton int4 GEMV. K8 scores through the T == 1 loop, so a K8 read of the opt-in would have measured the GEMV it meant to replace, and the quality gate would have been inert. This was found while writing lane P87's reducer, before anything ran.
