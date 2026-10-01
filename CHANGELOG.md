@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Lane P88 registered (#564): P87's instrument on K19's new plan, with a CPU floor (bench and tests only)
+
+- **Why.** grouped-nf4-gemm's K20 (#421) found K19's plan on the 5090: BLOCK_N 32 / KC 256 serves recorded B=16 routing at 0.736× the int8 GEMV route, with outputs bit-identical across plans. P87's read was VOID because its calibrated K8 build ran out of its alarm on a Broadwell host.
+- **P88 is P87's arms, reducer and rule**, pinned to gnf4 `7b7e6b1`. It adds:
+  - a tripwire on K19's default plan;
+  - a host CPU-vendor floor (AMD; **rc 18**, which the launcher excludes the machine on, adertha#131) before any install;
+  - a 5,400 s build alarm and a 3.0 h guard.
+- **Predictions:** B=16 0.78–0.86; B=1 SLOWER (1.03–1.20, so a default would cover T > 1 only); |ΔK8| < 0.003.
+- **Cost:** a proof (0.5 h), then the reading (3.0 h). Lane ceiling $3.50.
+- `tests/test_p88_staged_pin.py` adds the vendor refusal, the plan tripwire and the alarm to P87's pins.
+
 ### Lane K20 runner (#564): K19's plan space on an RTX 5090, replaying P60's recorded B=16 routing (bench and tests only)
 
 - The prereg, the bench and the rule live in grouped-nf4-gemm (`kernel/PREREG-k20-k19-plan-sweep-5090.md`, grouped-nf4-gemm#420). This repo carries the runner, `bench/k20/`, in K18's pattern:
