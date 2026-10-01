@@ -31,3 +31,43 @@ The axolotl arms and the Unsloth native-best / t28 / triton rows landed in phase
 `UPSTREAM-NOTES`); phase 3 moved the labelled rows to the `qwen3native` token and added the controls the design review asked for.
 The grouped-nf4-gemm pin is the v0.34.0 COMMIT `846b512b905468c08f5748943d08769b572affa2`; the HF arm's double-quant defaults ON to
 match e4b's attention Params4bit (Unsloth and axolotl keep it OFF; the probe labels every slot's regime).
+
+## Lane TC1b — the `qwen3curve` family token (TC1B-PREREG.md, the PI's; drafted in `TC1b-PREREG-draft.md`)
+
+The same files, extended (no parallel copy of the arm driver); the token runs on its own RTX 5090 box with `TC1_FAMILIES=qwen3curve`
+(the box then defaults `PREREG` to `tc1/TC1B-PREREG.md` unless `TC1_PREREG` says otherwise). `tc1_run.sh`'s `tc1_curve_family` runs, in
+THIS order, one process per arm: `e4b/fused_attn4_m_200` · `unsloth/ckpt_unsloth_m_200` (the matched pair: `--adapter-dtype fp32
+--lora-init matched:$MATCHED_SEED`, venv-unsloth + `--unsloth-moe-backend grouped_mm`; recipe `curve` = N 200, eval every 40 on the first 16
+held-out rows, the linear schedule decaying to step 200 with 5 warm-up steps — `tc1_arm.py`'s `_lam(step, N=a.steps)`; alarms 4,800 / 9,000 s)
+· `e4b/fused_attn4_shipped_200` (`--adapter-dtype native --lora-init native`, recipe `curve`, 4,800 s) · the anchor pair at tp2/P38's fixture
+(recipe `anchor` = tp4_run.sh's `A_*` literals, clinical text built and sha-verified by `n9_datasets.py` + `ds_manifest.json` exactly as
+`tp4_run.sh` did, tokenised with the `clinical` template at seq 512 and 8 held-out rows — what tp4's anchor RAN, TP4-PREREG amendment 3;
+`e4b/fused_attn4_p38` with native precision and init, `unsloth/ckpt_unsloth_p38` with tp4's fp32 cast, native init, the loader's double-quant,
+tp4's seven targets and `FastLanguageModel`, EXCEPT that it runs in venv-unsloth (cu130 torch 2.12.1, grouped_mm) — recorded by `--note` in its
+receipt — and `unsloth/ckpt_unsloth_p38_t28` in venv-unsloth-t28 with the loader-default backend, which IS tp4's arm byte-for-byte; 1,800 s
+each) · the tokens-per-step pair `e4b/fused_attn4_m_t1` + `unsloth/ckpt_unsloth_m_t1` (recipe `t1`: micro-batch 1 × accum 1, N 20, 8 rows at 0
+and N; 3,600 s) · the rank pair `e4b/fused_attn4_m_r64` + `unsloth/ckpt_unsloth_m_r64` (recipe `r64`: r 64 / alpha 64; 3,600 s). Every
+sub-fixture names its OWN e4b arm for `--expect-trainable` (`expect_of`), as tp4's anchor did.
+
+Knobs (all forwarded by `tc1_drive.sh`, asserted by `tests/test_tc1_arm.py`): `TC1_CURVE_STEPS` (200), `TC1_CURVE_EVAL_EVERY` (40),
+`TC1_CURVE_EVAL_N` (16), `TC1_T1_MB` (1), `TC1_T1_ACCUM` (1), `TC1_R64_R` (64), `TC1_R64_ALPHA` (64). The anchor fixture is literals, not knobs.
+`tc1_drive.sh` stages `bench/flagship-matrix/drivers/n9_datasets.py` and `bench/flagship-matrix/ds_manifest.json` beside the TC1 pieces
+(referenced, never copied). `tc1_arm.py` gains `--note` (verbatim into every receipt and stub).
+
+**Tokens.** The tokens file's sha256 covers `{train, eval[:eval_n]}` (`prepare`), so the curve family's file, tokenised with 16 held-out rows,
+cannot carry TC1's `qwen3` sha (8 rows) although its TRAIN rows are byte-identical; `summary.txt`'s `TOKENS` line prints a train-only sha
+(sha256 of `json.dumps(train, separators=(",", ":"))`) beside the file sha for the assertion the registration should make. The t1 / r64 arms
+take the first 8 of the 16 rows (a prefix), paired with TC1's 8.
+
+**Reducer** (`tc1_reduce.py`, R10): validity per sub-fixture against its own e4b arm (tokens sha, trainable count, step-0 band, name-free
+matched sha, N per arm; the registered counts 642,514,944 on arms 1-3 / t1 and 321,257,472 on the anchor arms; r64 asserted equal between its
+two arms only), then (a) the curve table (paired mean ± SE over the 16 rows per eval for arms 1-3, paired |Δ| 2 vs 1 and 3 vs 1) and the curve
+reading — EQUIVALENT-AT-EVERY-EVAL iff every paired |Δ| ≤ 0.02 (the DRAFT's band; the registration may tie it to the TC1 floor — said in the
+output), else DIVERGENT with the first divergent step and the sign at 200; (b) the plateau test (REPRODUCES-P38 iff ≥ +0.01 at 200 and ≤ 0 at
+40); (c) time to the matched pair's step-200 held-out + 0.02 per arm; (d) 11..200 s/step medians beside TC1's 11..20 medians when `--tc1-dir`
+names a TC1 receipt dir (TRAVELS within 10 %; the in-receipt 11..20 window is printed as a same-draw check); (e) the anchor ratio vs tp2 1.457 /
+P38 1.413 ± 10 %, the t28 variant separately (tp4's own anchor row is NOT in this tree: `TP4_ANCHOR_RATIO = None`, P4 says so and reads
+against tp2); (f) the t1 and r64 pairs as SCALING POINTS under the matched set's predicates, listed, never a position. P1–P4 of the draft
+scored HELD / FALSIFIED / UNTESTED. The selftest adds 10 cases (44 in all): a DIVERGENT curve, a REPRODUCES-P38 plateau and both refutations,
+a failing anchor, a VOID r64 pair (trainable count, the LoRA loop, the manual grouped-mm fallback), the registered-count VOIDs, TRAVELS /
+DOES-NOT-TRAVEL, a target never reached, and the curve token rendered alone (no TC1 P1–P10 table) and beside TC1's tokens.

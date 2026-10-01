@@ -57,6 +57,8 @@ def test_tc1_arm_selftest():
     # receipts name THIS lane's pre-registration
     ref = json.loads((d / "tiny_e4b_reference_attn4.json").read_text())
     assert ref["prereg"] == "tc1/TC1-PREREG.md" and ref["harness"].startswith("tc1_arm.py (copy of tp4_arm.py @ 10ce711d")
+    # TC1b: --note lands verbatim on exactly the arm it was given to (the p38 anchor arms record how they differ from tp4's)
+    assert ref["note"] == "selftest note (TC1b --note)" and json.loads((d / "tiny_e4b_fused_attn4.json").read_text())["note"] is None
     # T19: the default cast reaches e4b's expert adapters (bf16 as the loader builds them -> fp32), recorded
     assert ref["adapter_dtype"] == "fp32" and list(ref["adapter_dtypes_after"]) == ["torch.float32"] and ref["lora_cast_to_fp32"] > 0, ref["adapter_dtypes_before"]
     sh = json.loads((d / "tiny_e4b_fused_attn4_shipped.json").read_text())
@@ -350,6 +352,95 @@ def test_every_env_knob_the_box_reads_is_forwarded_by_the_driver():
         assert must in forwarded, must
 
 
+TC1B_KNOBS = ("TC1_CURVE_STEPS", "TC1_CURVE_EVAL_EVERY", "TC1_CURVE_EVAL_N", "TC1_T1_MB", "TC1_T1_ACCUM", "TC1_R64_R", "TC1_R64_ALPHA")
+
+
+def test_tc1b_knobs_are_read_by_the_box_and_forwarded_by_the_driver():
+    """TC1b: every knob the curve / t1 / r64 sub-fixtures read from the environment is in tc1_drive.sh's forwarded list (the grep the
+    instruction asks for), and the box script reads each one with its registered default."""
+    run, drive = RUN_SH.read_text(), DRIVE_SH.read_text()
+    forwarded_block = drive[drive.index("for v in TC1_FAMILIES"):drive.index("; do", drive.index("for v in TC1_FAMILIES"))]
+    for knob, default in zip(TC1B_KNOBS, ("200", "40", "16", "1", "1", "64", "64")):
+        assert re.search(rf"\${{{knob}:-{default}}}", run), (knob, default, "the box script does not read it with the registered default")
+        assert knob in forwarded_block.split(), (knob, "read by tc1_run.sh but not forwarded by tc1_drive.sh")
+    # the anchor fixture is tp4's literals (byte-for-byte), not knobs; its eval instrument is what tp4 RAN (8 rows), stated in the script
+    assert "A_STEPS=60; A_SEQ=512; A_MB=1; A_ACCUM=1; A_R=8; A_ALPHA=16; A_LR=1e-4; A_WD=0.01; A_WARMUP=0; A_SCHED=constant; A_OPTIM=adamw_torch; A_SEED=0; A_TEMPLATE=clinical" in run
+    assert "A_EVAL_N=8; A_EVAL_EVERY=20" in run and "amendment 3" in run
+    assert not re.search(r"\$\{TC1_A_", run), "the anchor literals must not become knobs"
+
+
+def test_tc1_drive_stages_the_clinical_builder_and_manifest_for_tc1b():
+    """TC1b: tc1_drive.sh's STAGE list carries n9_datasets.py and ds_manifest.json from bench/flagship-matrix (referenced, never copied into
+    bench/tc1), and tc1_run.sh refuses to start without them and builds/verifies the clinical dataset exactly as tp4_run.sh did."""
+    drive, run, tp4 = DRIVE_SH.read_text(), RUN_SH.read_text(), (REPO / "bench" / "tp4" / "tp4_run.sh").read_text()
+    stage = re.search(r'^STAGE="(.*)"$', drive, re.M).group(1).split()
+    assert "$REPO/bench/flagship-matrix/drivers/n9_datasets.py" in stage and "$REPO/bench/flagship-matrix/ds_manifest.json" in stage, stage
+    assert "$REPO/bench/tp4/tp4_alpaca.py" in stage and not (REPO / "bench" / "tc1" / "n9_datasets.py").exists() and not (REPO / "bench" / "tc1" / "ds_manifest.json").exists()
+    assert (REPO / "bench" / "flagship-matrix" / "drivers" / "n9_datasets.py").is_file() and (REPO / "bench" / "flagship-matrix" / "ds_manifest.json").is_file()
+    assert "for f in tc1_arm.py tc1_reduce.py tp4_alpaca.py n9_datasets.py ds_manifest.json; do [ -s $W/$f ]" in run
+    # the clinical build + sha check are tp4_run.sh's lines, gated on the qwen3curve token
+    for line in ("(cd $W/data && $PY_E4B $W/n9_datasets.py $W/data > $W/logs/dataset_clinical.log 2>&1); tail -1 logs/dataset_clinical.log",
+                 "CLIN_SHA=$($PY_E4B -c \"import json; print(json.load(open('$W/ds_manifest.json'))['clinical']['sha256'])\")",
+                 "GOT=$(sha256sum $W/data/ds_clinical.json | awk '{print $1}'); [ \"$GOT\" = \"$CLIN_SHA\" ] || { say \"DATASET MISMATCH clinical: $GOT != $CLIN_SHA\"; finish 13; }"):
+        assert line in run and line in tp4, line
+    gate = run[run.index('case " $FAMILIES " in *" qwen3curve "*)      # TC1b: the anchor pair'):]
+    assert gate.index("n9_datasets.py $W/data") < gate.index("esac")
+
+
+def test_tc1_run_sh_runs_the_curve_family_in_the_registered_order():
+    """TC1b (TC1B-PREREG 'Arms, in this order'): tc1_curve_family's invocations in order with the registered recipes, flags, venvs and
+    alarms; the matched pair first; the anchor pair byte-for-byte tp4's arms (native e4b precision, tp4's fp32 cast on Unsloth, native
+    init, the loader's double-quant, tp4's targets and loader) with the venv difference recorded by --note; the plan line's alarms."""
+    body = RUN_SH.read_text()
+    cf = body[body.index("tc1_curve_family(){"):body.index("# tc1_family FAM MID REV")]
+    calls = re.findall(r"(?:arm|draw2|todo_arm)\s+\$FAM\s+(e4b|unsloth|hf|axolotl)\s+(\S+)", cf)
+    assert calls == [("e4b", "fused_attn4_m_200"), ("unsloth", "ckpt_unsloth_m_200"), ("e4b", "fused_attn4_shipped_200"),
+                     ("e4b", "fused_attn4_p38"), ("unsloth", "ckpt_unsloth_p38"), ("unsloth", "ckpt_unsloth_p38_t28"),
+                     ("e4b", "fused_attn4_m_t1"), ("unsloth", "ckpt_unsloth_m_t1"), ("e4b", "fused_attn4_m_r64"), ("unsloth", "ckpt_unsloth_m_r64")], calls
+    assert "draw2 $FAM" not in cf and "todo_arm $FAM" not in cf
+    assert 'tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $CURVE_EVAL_N' in cf          # the family's tokens file carries the 16 held-out rows
+    assert 'MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"' in cf and 'NATIVE="--adapter-dtype native --lora-init native"' in cf
+    assert 'ANCHOR_E4B="--adapter-dtype native --lora-init native" ANCHOR_UNS="--adapter-dtype fp32 --lora-init native --unsloth-double-quant default"' in cf
+    assert re.search(r"fused_attn4_m_200 fused \$EAL .* 0 curve \$TOK \$TS --attn-4bit 1 \$MATCH$", cf, re.M)
+    assert re.search(r"ckpt_unsloth_m_200 unsloth \$UAL .* 0 curve \$TOK \$TS \$UNS --unsloth-moe-backend grouped_mm \$MATCH$", cf, re.M)
+    assert re.search(r"fused_attn4_shipped_200 fused \$EAL .* 0 curve \$TOK \$TS --attn-4bit 1 \$NATIVE$", cf, re.M)
+    assert re.search(r"fused_attn4_p38 fused \$AAL .* 0 anchor \$ATOK \$ATS --attn-4bit 1 \$ANCHOR_E4B$", cf, re.M)
+    assert re.search(r"ckpt_unsloth_p38 unsloth \$AAL .* 0 anchor \$ATOK \$ATS \$UNS --unsloth-moe-backend grouped_mm \$ANCHOR_UNS \\\n\s+--note \"tp4's anchor arm EXCEPT the venv", cf)
+    assert re.search(r"UNS_VENV=t28 arm \$FAM unsloth ckpt_unsloth_p38_t28 unsloth \$AAL .* 0 anchor \$ATOK \$ATS \$UNS --unsloth-moe-backend default \$ANCHOR_UNS \\\n\s+--note \"byte-for-byte tp4's anchor arm", cf)
+    assert re.search(r"fused_attn4_m_t1 fused \$SAL .* 0 t1 \$TOK \$TS --attn-4bit 1 \$MATCH$", cf, re.M) and re.search(r"ckpt_unsloth_m_t1 unsloth \$SAL .* 0 t1 .* --unsloth-moe-backend grouped_mm \$MATCH$", cf, re.M)
+    assert re.search(r"fused_attn4_m_r64 fused \$SAL .* 0 r64 \$TOK \$TS --attn-4bit 1 \$MATCH$", cf, re.M) and re.search(r"ckpt_unsloth_m_r64 unsloth \$SAL .* 0 r64 .* --unsloth-moe-backend grouped_mm \$MATCH$", cf, re.M)
+    # the anchor's tokens: tp2's text through tp4's tokenise call (clinical, A_SEQ, A_EVAL_N rows), harness_error stubs for all three if it fails
+    assert 'tokenise $FAM "$MID" $REV clinical $A_SEQ $W/data/ds_clinical.json $CLIN_SHA $ATOK $A_EVAL_N' in cf
+    assert cf.count("harness_error") == 3 and "ckpt_unsloth_p38_t28 unsloth harness_error" in cf
+    # the plan line: the token, the pin, and the registered alarms (fetch 5400, e4b 200-step 4800, Unsloth 200-step 9000, anchor 1800, t1/r64 3600)
+    assert "qwen3curve)  tc1_curve_family  qwen3curve  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 9000 1800 3600;;" in body
+    assert "PREREG=tc1/TC1B-PREREG.md" in body and 'TC1_PREREG:-}" ] || PREREG=tc1/TC1B-PREREG.md' in body
+    # the existing families' slices are untouched by the new function (it sits before tc1_family's comment block)
+    assert body.index("tc1_curve_family(){") < body.index("# tc1_family FAM MID REV") < body.index("tc1_family(){") < body.index("tc1_native_family(){")
+
+
+def test_curve_recipe_overrides_execute_through_bash():
+    """The RECIPE case lines out of the real file, executed: each sub-fixture overrides exactly the knobs the registration names and
+    names its own e4b arm for --expect-trainable (a fixture-scoped override that does not cover a knob is not a fixture: tp4 amendment 3)."""
+    body = RUN_SH.read_text()
+    fx = body[body.index("STEPS=${TC1_STEPS:-20}"):body.index("A_EVAL_N=8; A_EVAL_EVERY=20\n") + len("A_EVAL_N=8; A_EVAL_EVERY=20\n")]
+    fx = "\n".join(ln for ln in fx.splitlines() if ln and not ln.startswith("#"))
+    init = re.search(r"^\s*local (s=\$STEPS q=\$SEQ .*ex_tag=fused_attn4_m)$", body, re.M).group(1)
+    case = body[body.index('  case "$RECIPE" in'):]
+    case = case[:case.index("  esac\n") + len("  esac\n")]
+    want = {"field": "s=20 q=2048 m=2 ac=4 r=16 al=16 lr=2e-4 wd=0.001 wu=5 sc=linear op=adamw_8bit sd=3407 en=8 ee=20 ex_tag=fused_attn4_m",
+            "curve": "s=200 q=2048 m=2 ac=4 r=16 al=16 lr=2e-4 wd=0.001 wu=5 sc=linear op=adamw_8bit sd=3407 en=16 ee=40 ex_tag=fused_attn4_m_200",
+            "anchor": "s=60 q=512 m=1 ac=1 r=8 al=16 lr=1e-4 wd=0.01 wu=0 sc=constant op=adamw_torch sd=0 en=8 ee=20 ex_tag=fused_attn4_p38",
+            "t1": "s=20 q=2048 m=1 ac=1 r=16 al=16 lr=2e-4 wd=0.001 wu=5 sc=linear op=adamw_8bit sd=3407 en=8 ee=20 ex_tag=fused_attn4_m_t1",
+            "r64": "s=20 q=2048 m=2 ac=4 r=64 al=64 lr=2e-4 wd=0.001 wu=5 sc=linear op=adamw_8bit sd=3407 en=8 ee=20 ex_tag=fused_attn4_m_r64",
+            "mb1": "s=20 q=2048 m=1 ac=8 r=16 al=16 lr=2e-4 wd=0.001 wu=5 sc=linear op=adamw_8bit sd=3407 en=8 ee=20 ex_tag=fused_attn4_m_mb1"}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("TC1_")}
+    for recipe, exp in want.items():
+        script = "\n".join([fx, f"RECIPE={recipe}", init, case, 'echo "s=$s q=$q m=$m ac=$ac r=$r al=$al lr=$lr wd=$wd wu=$wu sc=$sc op=$op sd=$sd en=$en ee=$ee ex_tag=$ex_tag"'])
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+        assert r.returncode == 0 and r.stdout.strip() == exp, (recipe, r.stdout, r.stderr)
+
+
 def test_unsloth_knobs_and_double_quant_decision(monkeypatch):
     """P2-1: the knobs reach the environment only for an Unsloth arm, `default` leaves it alone, and the double-quant kwarg
     follows the from_pretrained signature read at runtime."""
@@ -509,4 +600,5 @@ def test_run_and_drive_scripts_parse():
         assert r.returncode == 0, (sh, r.stderr)
     drive = DRIVE_SH.read_text()
     assert "GNF4_SHA=${GNF4_SHA:-846b512b905468c08f5748943d08769b572affa2}" in drive      # the v0.34.0 COMMIT, not the tag object
-    assert '$REPO/bench/tp4/tp4_alpaca.py' in drive and "n9_datasets" not in drive     # tp4's Alpaca builder is referenced, not copied
+    assert '$REPO/bench/tp4/tp4_alpaca.py' in drive                                     # tp4's Alpaca builder is referenced, not copied
+    assert "$REPO/bench/flagship-matrix/drivers/n9_datasets.py" in drive and "$HERE/n9_datasets.py" not in drive   # TC1b: the clinical builder likewise (referenced)
