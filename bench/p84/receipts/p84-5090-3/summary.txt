@@ -1,0 +1,53 @@
+KNOBS router_epi_cast=0 B=e4b@33d0f2f3ec188e2e0f3426cc21d3b386cb69ab7d+gnf4@9407d499a4d1e0fe8c22b050878a9f869b385b45 A=e4b@c77aab6dafb5f08d98a7387d1e986d141b20a2d3+gnf4@9407d499a4d1e0fe8c22b050878a9f869b385b45 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=5090 cpu_vendor=AuthenticAMD min_disk_gb=200 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048
+p84_reduce self-test OK (15 cases)
+stack B
+e4b 0.37.8 @33d0f2f3ec188e2e0f3426cc21d3b386cb69ab7d (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.7 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+router_epi_cast_weights False
+hook /root/p84/o/hook/usercustomize.py
+tripwire OK (B, P82 harness)
+STAMP B {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'e4b': '0.37.8', 'gnf4': '0.33.7', 'expected_expert_fingerprint': None, 'expected_attention_fingerprint': None}
+work_b BAKE OK
+K8 C_build rc=0 K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p84/k8_C_build.json
+
+PACK C_build experts sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 (= the licensed pack); attention sha256:d7cfa1f496d75120ef50b72fae0a31928b6ffb04ac0c5ec49c522a673068a422
+K8 C_rep rc=0 K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p84/k8_C_rep.json
+
+P84_CONTROL OK: C_build vs N's known mean NLL 1.8506507749113845
+K8 H1_build rc=0 K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p84/k8_H1_build.json
+
+PACK H1_build experts sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 (= the licensed pack)
+K8 H1_rep rc=0 K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p84/k8_H1_rep.json
+
+stack A
+e4b 0.37.4 @c77aab6dafb5f08d98a7387d1e986d141b20a2d3 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.7 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+router_epi_cast_weights False
+hook /root/p84/o/hook/usercustomize.py
+STAMP A {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'e4b': '0.37.4', 'gnf4': '0.33.7', 'expected_expert_fingerprint': None, 'expected_attention_fingerprint': None}
+work_a BAKE OK
+K8 H2_build rc=0 K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p84/k8_H2_build.json
+
+PACK H2_build experts sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 (= the licensed pack)
+K8 H2_rep rc=0 K8_PPL steps=2048 nll=1.85065 ppl=6.36396 compute=fp8 sha=9ef10d760ad9 out=/root/p84/k8_H2_rep.json
+
+P84_VERDICT KERNEL moved by: KERNEL -0.000491 nats; the steps sum to N - O = -0.000491 nats
+  K8 C_build = 6.36396 (1.8506507749113845)
+  K8 C_rep = 6.36396 (1.8506507749113845)
+  K8 H1_build = 6.36396 (1.8506507749113845)
+  K8 H1_rep = 6.36396 (1.8506507749113845)
+  K8 H2_build = 6.36396 (1.8506507749113845)
+  K8 H2_rep = 6.36396 (1.8506507749113845)
+  step KERNEL = -0.000491 nats
+  step PACKAGE = +0.000000 nats
+  step HARNESS = +0.000000 nats

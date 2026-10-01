@@ -1,6 +1,6 @@
 {
   "package": "experts4bit-qlora",
-  "generated": "2026-09-30",
+  "generated": "2026-10-01",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "verified": "reproduced under stated conditions with a public receipt",
@@ -7298,7 +7298,7 @@
       "supersedes": [
         "e4b.serve.p81.qwen3.licensed-int4.dynb.graph-buckets.5090.2026-09-29"
       ],
-      "notes": "Pre-registered in #783. Supersedes P81's row, measured on the buggy path (#413's append, #777's bucket-1 slot); here the eager runner's identity to its bucket step (A1 == P) was registered as decisive and held. P/A1 = 1.203 (the bucket step's path), B1/P = 9.98 (the graph). NOT portable: eager decode is host-bound (88-102 ms per step at every row count on this EPYC 7R13; 125-139 on P81's EPYC 7K62) and the graph step is 0.81-0.88x P81's. Reported for #674: the build's attention pack is byte-identical to P81's d7cfa1f4 (a second box and release); wikitext K8 (window 9ef10d760ad9) reads 6.36396 in the build and in a process loading both packs (fp32 router) and 6.31811 with the shipped cast, so the cast moves K8 by -0.0072 nats on one box but is not the whole 6.36709 -> 6.33015 gap; and with identical packs and router setting P81's box read 6.33015 where this one reads 6.31811, so K8 on this stack does not reproduce across boxes to five decimals (cause not isolated). enable_decode_graphs stays opt-in (#770). CORRECTED 2026-09-29 (lane P83, e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29): the cross-box claim is wrong for the fp32 router -- on one box P70's software reads 6.36709 and P82's 6.36396, each bit-identical to its earlier readings on other machines; K8 is box-invariant for a fixed software stack and the software moved it. The P81-vs-K16 cast pair (6.33015 vs 6.31811) stays unexplained. QUALIFIED 2026-09-30 (lane P84, bench/p84/RESULTS-p84.md): box-invariant on the AMD hosts tested (Ryzen 7950X, EPYC 7C13 / 7R13 / 9755); on an Intel Core i9-14900K, P82's own build calibrated a different attention pack (45b4cc5a, not d7cfa1f4; expert pack 0c9955a9 unchanged) and read K8 6.36276, so the recipe's calibrated attention does not reproduce there."
+      "notes": "Pre-registered in #783. Supersedes P81's row, measured on the buggy path (#413's append, #777's bucket-1 slot); here the eager runner's identity to its bucket step (A1 == P) was registered as decisive and held. P/A1 = 1.203 (the bucket step's path), B1/P = 9.98 (the graph). NOT portable: eager decode is host-bound (88-102 ms per step at every row count on this EPYC 7R13; 125-139 on P81's EPYC 7K62) and the graph step is 0.81-0.88x P81's. Reported for #674: the build's attention pack is byte-identical to P81's d7cfa1f4 (a second box and release); wikitext K8 (window 9ef10d760ad9) reads 6.36396 in the build and in a process loading both packs (fp32 router) and 6.31811 with the shipped cast, so the cast moves K8 by -0.0072 nats on one box but is not the whole 6.36709 -> 6.33015 gap; and with identical packs and router setting P81's box read 6.33015 where this one reads 6.31811, so K8 on this stack does not reproduce across boxes to five decimals (cause not isolated). enable_decode_graphs stays opt-in (#770). CORRECTED 2026-09-29 (lane P83, e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29): the cross-box claim is wrong for the fp32 router -- on one box P70's software reads 6.36709 and P82's 6.36396, each bit-identical to its earlier readings on other machines; K8 is box-invariant for a fixed software stack and the software moved it. The P81-vs-K16 cast pair (6.33015 vs 6.31811) stays unexplained. QUALIFIED 2026-09-30 (lane P84, bench/p84/RESULTS-p84.md): box-invariant on the AMD hosts tested (Ryzen 7950X, EPYC 7C13 / 7R13 / 9755); on an Intel Core i9-14900K, P82's own build calibrated a different attention pack (45b4cc5a, not d7cfa1f4; expert pack 0c9955a9 unchanged) and read K8 6.36276, so the recipe's calibrated attention does not reproduce there. CORRECTED 2026-09-30 (lane P84, e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30): the registration's reading that the eager K8 appends through quantize_kv_fp8 was wrong -- K8's eager loop calls graph_mode_init, so it runs the fused fp8 KV append that grouped-nf4-gemm 0.33.7 changed (#413); P81 ran 0.33.5, so #413 lies between P81's and this lane's cast readings and is the first suspect for that pair (not measured)."
     },
     {
       "id": "e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29",
@@ -7329,7 +7329,108 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-29/p83-5090-1/ (receipt.json, teardown-proof.json, the fetched run with logs/); the proof p83-prove-1 beside it"
       ],
-      "notes": "Pre-registered in #786 (stated expectation DIFFERENT with O reading 6.36709: both held). Both builds produced expert pack 0c9955a9 (identical manifests); N's attention pack is d7cfa1f4 (a third box); O's attention cannot be dumped on 0.37.4, so the change is not yet split between the attention calibration and the decode path. The move is a function change far inside the 0.0095 K8 floor, both readings below NF4's 6.41984. Corrects P82's read, which had inferred from one cast-arm pair that K8 does not reproduce across boxes. Not isolated: which change (e4b 0.37.4 -> 0.37.8, hook v6 -> v7, the step_decomp copies, grouped-nf4-gemm 0.33.0 -> 0.33.7) moves it -- a one-box bisect, not started. QUALIFIED 2026-09-30 (lane P84, bench/p84/RESULTS-p84.md): box-invariant on the AMD hosts tested (Ryzen 7950X, EPYC 7C13 / 7R13 / 9755); on an Intel Core i9-14900K, P82's own build calibrated a different attention pack (45b4cc5a, not d7cfa1f4; expert pack 0c9955a9 unchanged) and read K8 6.36276, so the recipe's calibrated attention does not reproduce there."
+      "notes": "Pre-registered in #786 (stated expectation DIFFERENT with O reading 6.36709: both held). Both builds produced expert pack 0c9955a9 (identical manifests); N's attention pack is d7cfa1f4 (a third box); O's attention cannot be dumped on 0.37.4, so the change is not yet split between the attention calibration and the decode path. The move is a function change far inside the 0.0095 K8 floor, both readings below NF4's 6.41984. Corrects P82's read, which had inferred from one cast-arm pair that K8 does not reproduce across boxes. Not isolated: which change (e4b 0.37.4 -> 0.37.8, hook v6 -> v7, the step_decomp copies, grouped-nf4-gemm 0.33.0 -> 0.33.7) moves it -- a one-box bisect, not started. QUALIFIED 2026-09-30 (lane P84, bench/p84/RESULTS-p84.md): box-invariant on the AMD hosts tested (Ryzen 7950X, EPYC 7C13 / 7R13 / 9755); on an Intel Core i9-14900K, P82's own build calibrated a different attention pack (45b4cc5a, not d7cfa1f4; expert pack 0c9955a9 unchanged) and read K8 6.36276, so the recipe's calibrated attention does not reproduce there. ANSWERED 2026-09-30 (lane P84, e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30): on one box grouped-nf4-gemm 0.33.0 -> 0.33.7 is the whole -0.00049 nats; e4b 0.37.4 -> 0.37.8 and the harness move it by zero. The one change in that cut on K8's path, read from the code (not measured), is #413's fused fp8 KV append, which K8's eager loop runs."
+    },
+    {
+      "id": "e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P84: on ONE RTX 5090 (the Ryzen 7950X host on which P55x and P70 read 6.36709), P55x's calibrated int4 recipe with fp32 routing weights (E4B_ROUTER_EPI_CAST=0) reads wikitext K8 mean NLL 1.8506507749113845 (6.36396) in all three builds on grouped-nf4-gemm 0.33.7 -- e4b 0.37.4 through P70's harness (H2), e4b 0.37.8 through P70's harness (H1), and e4b 0.37.8 through P82's harness (C, the control, = N's known float) -- each repeated bit for bit, against P70's build's known 1.8511420498367808 (e4b 0.37.4, grouped-nf4-gemm 0.33.0): KERNEL. grouped-nf4-gemm 0.33.0 -> 0.33.7 is the whole -0.000491 nats; the e4b release and the harness move K8 by exactly zero.",
+      "value": -0.000491,
+      "unit": "nats, wikitext K8 mean NLL (2,048 steps), the KERNEL step (grouped-nf4-gemm 0.33.0 -> 0.33.7 on e4b 0.37.4, P70's harness); the PACKAGE and HARNESS steps are 0.0",
+      "hardware": "RTX 5090 (sm_120, 600 W power limit, driver 575.57.08, GPU 7a6634c6 = P55x's and P70's card), one rented Vast.ai verified/secure host (instance 53567449, AMD Ryzen 9 7950X, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; stack B = e4b 33d0f2f (0.37.8) + grouped-nf4-gemm 9407d49 (0.33.7); stack A = e4b c77aab6 (0.37.4) installed over B with --force-reinstall --no-deps; per stack its own NF4 bake (P39's k8_bake.py); C = P82's build (bench/p81/step_decomp.py, hook v7, both packs dumped) then K32 (both packs loaded by fingerprint); H1/H2 = P70's build (bench/p39/step_decomp.py, bench/p42 hook, the expert pack dumped) then P55x's lic arm (expert pack loaded by fingerprint, attention calibrated live); K8 teacher-forced through the paged decode path at B = 1, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, all-VRAM, window 9ef10d760ad9; the control gates the chain; every K8 process stamped fp32 with its stack's versions; AMD hosts only (amendment 1); verdict by bench/p84/p84_reduce.py; torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1, bitsandbytes 0.50.1",
+      "measured_on": "2026-09-30",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p84/RESULTS-p84.md",
+        "bench/p84/PREREG-p84.md",
+        "bench/p84/p84_reduce.py",
+        "bench/p84/receipts/p84-5090-3/verdict.json",
+        "bench/p84/receipts/p84-5090-3/k8_C_build.json",
+        "bench/p84/receipts/p84-5090-3/k8_C_rep.json",
+        "bench/p84/receipts/p84-5090-3/k8_H1_build.json",
+        "bench/p84/receipts/p84-5090-3/k8_H1_rep.json",
+        "bench/p84/receipts/p84-5090-3/k8_H2_build.json",
+        "bench/p84/receipts/p84-5090-3/k8_H2_rep.json",
+        "bench/p84/receipts/p84-5090-3/packs.json",
+        "bench/p84/receipts/p84-5090-3/summary.txt",
+        "bench/p84/receipts/p84-5090-3/forensics.txt",
+        "bench/p84/receipts/p84-5090-3/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-30/p84-5090-3/ (receipt.json, teardown-proof.json, the fetched run with logs/ and both harness copies); the VOID reading p84-5090-2, the proofs p84-prove-1..3 and the NOT_RUN p84-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #792 with amendment 1 in #795 (non-AuthenticAMD hosts refused: reading 1, p84-5090-2, was VOID on an Intel i9-14900K whose attention calibration differs). Stated expectation PACKAGE alone: wrong. Every expert pack 0c9955a9 (licensed); C's attention d7cfa1f4 (a fourth AMD host). Which change inside grouped-nf4-gemm 0.33.0 -> 0.33.7 is NOT measured. Read from the code, the one arithmetic change in that cut on K8's path is grouped-nf4-gemm#413 (0.33.7): the fused fp8 KV append's quotient IEEE-rounded (div_rn), which B771 measured changing 21 of 536,870,912 written bytes; K8's eager loop calls graph_mode_init, so every scored token's K/V goes through that append (0.33.1-0.33.3 change no code; 0.33.4 cold_deadline, 0.33.5 int4_smallm annotations and 0.33.6 MXFP4 are off this path). This corrects PREREG-p82's and PREREG-p84's statement that the eager K8 does not run the graph-mode append. Proposed test (P85, not started): P70's build with E4B_FUSED_KV_APPEND=0 should read N's float bit for bit. Cost $1.8328 for the lane ($1.0928 this reading). MEASURED 2026-09-30 by P85 (e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30): CONFIRMED, #413 is the whole step."
+    },
+    {
+      "id": "e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P85, one RTX 5090 (P70's card): P70's build of the int4 recipe (e4b 0.37.4, grouped-nf4-gemm 0.33.0, fp32 router) reads K8 mean NLL 1.8511420498367808; with the fused fp8 KV append off it reads the 0.33.7 builds' 1.8506507749113845 bit for bit, and on 0.33.6 it reads 1.8511420498367808 bit for bit: CONFIRMED, grouped-nf4-gemm#413 is the whole K8 step.",
+      "value": -0.000491,
+      "unit": "nats, wikitext K8 mean NLL (2,048 steps), P70's stack with the fused fp8 KV append off minus on; equal to the grouped-nf4-gemm 0.33.0 -> 0.33.7 step",
+      "hardware": "RTX 5090 (sm_120, 600 W power limit, driver 575.57.08, GPU 7a6634c6 = P55x's, P70's and P84's card), one rented Vast.ai verified/secure host (instance 53591715, machine 37958, AMD Ryzen 9 7950X, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; every reading through P70's harness (bench/p39/step_decomp.py, bench/p42 hook v6, P70's env), E4B_ROUTER_EPI_CAST=0, e4b c77aab6 (0.37.4); stack O = + grouped-nf4-gemm 5ca1897 (v0.33.0), stack S = + f879761 (v0.33.6, --no-deps over O); O_build = P70's build (expert pack dumped); the other five = P55x's lic arm (that pack by fingerprint), F with E4B_FUSED_KV_APPEND=0; K8 teacher-forced paged decode, B = 1, fp8 KV, all-VRAM, window 9ef10d760ad9; every process stamped (router, versions, pre-#413 fp8_kv, append resolution); verdict by bench/p85/p85_reduce.py; torch 2.8.0+cu128, triton 3.4.0",
+      "measured_on": "2026-09-30",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p85/RESULTS-p85.md",
+        "bench/p85/PREREG-p85.md",
+        "bench/p85/p85_reduce.py",
+        "bench/p85/receipts/p85-5090-4/verdict.json",
+        "bench/p85/receipts/p85-5090-4/k8_O_build.json",
+        "bench/p85/receipts/p85-5090-4/k8_O_rep.json",
+        "bench/p85/receipts/p85-5090-4/k8_F_1.json",
+        "bench/p85/receipts/p85-5090-4/k8_F_2.json",
+        "bench/p85/receipts/p85-5090-4/k8_S_1.json",
+        "bench/p85/receipts/p85-5090-4/k8_S_2.json",
+        "bench/p85/receipts/p85-5090-4/packs.json",
+        "bench/p85/receipts/p85-5090-4/summary.txt",
+        "bench/p85/receipts/p85-5090-4/forensics.txt",
+        "bench/p85/receipts/p85-5090-4/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-30/p85-5090-4/ (receipt.json, teardown-proof.json, the fetched run with logs/ and the harness copy); the proof p85-prove-1, the refusals p85-5090-1/-2 and the unarmed-guard p85-5090-3 beside it"
+      ],
+      "notes": "Pre-registered in #797, amendment 1 in #798 (watchdog 1,500 s, guard 4.0 h). Stated expectation CONFIRMED held exactly. Two attempts were refused on Intel hosts (rc 16, no data), one lost its guard to a Vast HTTP 429. Measures what P84 inferred from the code. 6.36396 is the reference quantizer's KV bytes; which value the licensed row names is the owner's decision. Not measured: the P81/P82 cast pair, the Intel-host attention calibration. Lane cost $0.7362."
+    },
+    {
+      "id": "e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P86, one RTX 5090, same prompts: at B=16 e4b's int4 step is 12.06 ms and vLLM 0.30.0's 8.75 ms (1.38x); by kernel census the gap is the experts (e4b's int4 GEMV 6.98 ms vs Marlin MoE 4.78), 2.86 of 3.32 ms, then routing glue (+0.62).",
+      "value": 2.855,
+      "unit": "ms/step, the quantized-linear role's e4b - vLLM gap at B=16 (the largest of seven roles)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05), one rented Vast.ai verified/secure host (instance 53626105, machine 96642, Intel Xeon E5-2698 v4, not shared), image pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel",
+      "conditions": "e4b 0.37.8 @db527f9 + grouped-nf4-gemm 0.33.7, P58's int4 env and harness (bench/p39/step_decomp.py + bench/p42 hook), fused q/k/v at both batches, graph-window timing + P42 replay census; vLLM 0.30.0 (torch 2.13.0+cu130) on Qwen/Qwen3-30B-A3B-GPTQ-Int4 @9b534e43 (Marlin), P37's slope timing + p86_vllm_census.py (in-process torch.profiler, per-kernel 32->128-token slope, decode kernels only); prompts digest f67e7e4d (P58's); each step the median of two draws; verdict by bench/p86/p86_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p86/RESULTS-p86.md",
+        "bench/p86/PREREG-p86.md",
+        "bench/p86/p86_reduce.py",
+        "bench/p86/receipts/p86-5090-3/verdict.json",
+        "bench/p86/receipts/p86-5090-3/vllm_census_b16.json",
+        "bench/p86/receipts/p86-5090-3/vllm_census_b1.json",
+        "bench/p86/receipts/p86-5090-3/logs/census_e4b_b16.txt",
+        "bench/p86/receipts/p86-5090-3/logs/census_e4b_b1.txt",
+        "bench/p86/receipts/p86-5090-3/e4b_b16_int4.json",
+        "bench/p86/receipts/p86-5090-3/vllm_graph_b16.json",
+        "bench/p86/receipts/p86-5090-3/summary.txt",
+        "bench/p86/receipts/p86-5090-3/forensics.txt",
+        "bench/p86/receipts/p86-5090-3/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p86-5090-3/ (receipt.json, teardown-proof.json, logs/); the proofs p86-prove-1..3 and the NOT_RUN p86-5090-2 beside it"
+      ],
+      "notes": "Pre-registered in #800, amendment 1 in #801 (the CUDA 12.9 image; p86-prove-2 had caught vLLM 0.30.0's warmup failing under 12.8). Stated expectation (quantized linear first, glue second) held. Both censuses reconcile to their own step (vLLM 8.733 of 8.746 ms; e4b 12.372 of 12.064, profiler excess, inside the 10 % slack). e4b's attention + KV write is faster (0.96 vs 1.35 ms) and its K16 attention projections are at parity (0.89 vs 0.97). B=1: 4.27 vs 4.00 ms (1.07x), largest gap 'other' (+0.34). Against #564's byte floor at 58.7 distinct experts the e4b GEMV runs ~70 %, Marlin MoE ~94 % of its own (g128: ~8 % fewer bytes; assumes the same distinct-expert count). Next: a kernel lane on the B=16 expert matmul (proposed). Lane cost $0.8561."
     }
   ]
 }

@@ -1,0 +1,30 @@
+== B=16: kernel total off 12.377 ms/step, on 11.874 (delta -0.503)
+  _gemv_int4_b32                                       off   7.000 (   96/step)  on   0.000 (    0/step)  d  -7.000
+  _gemm_int4_b32_grouped_smallm                        off   0.000 (    0/step)  on   6.495 (   96/step)  d  +6.495
+  _tile_table_r1                                       off   0.000 (    0/step)  on   0.498 (   48/step)  d  +0.498
+  _reduce_partials                                     off   0.384 (   96/step)  on   0.000 (    0/step)  d  -0.384
+  _quant_x_rows                                        off   0.345 (   96/step)  on   0.000 (    0/step)  d  -0.345
+  void at::native::index_elementwise_kernel<128, 4, at off   0.000 (    0/step)  on   0.114 (   48/step)  d  +0.114
+  void at::native::vectorized_elementwise_kernel<4, at off   0.117 (  103/step)  on   0.226 (  247/step)  d  +0.109
+  void at::native::_scatter_gather_elementwise_kernel< off   0.000 (    0/step)  on   0.075 (   48/step)  d  +0.075
+  _gemm_int4_b32_smallm                                off   0.893 (   96/step)  on   0.869 (   96/step)  d  -0.024
+  _fp8_paged_decode_split_f8dot                        off   0.767 (   48/step)  on   0.759 (   48/step)  d  -0.008
+  void at::native::indexFuncSmallIndex<int, long, unsi off   0.234 (   48/step)  on   0.227 (   48/step)  d  -0.008
+  void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_ off   0.548 (   49/step)  on   0.541 (   49/step)  d  -0.007
+  _combine_rows                                        off   0.068 (   48/step)  on   0.061 (   48/step)  d  -0.007
+  _rmsnorm_rows                                        off   0.081 (   49/step)  on   0.075 (   49/step)  d  -0.006
+== B=1: kernel total off 4.284 ms/step, on 5.256 (delta +0.972)
+  _gemm_int4_b32_grouped_smallm                        off   0.000 (    0/step)  on   1.773 (   96/step)  d  +1.773
+  _gemv_int4_b32                                       off   1.538 (  192/step)  on   0.610 (   96/step)  d  -0.928
+  _reduce_partials                                     off   0.362 (  192/step)  on   0.178 (   96/step)  d  -0.184
+  void at::native::vectorized_elementwise_kernel<4, at off   0.107 (  115/step)  on   0.221 (  259/step)  d  +0.114
+  void at::native::(anonymous namespace)::indexSelectS off   0.287 (  145/step)  on   0.399 (  193/step)  d  +0.112
+  void at::native::index_elementwise_kernel<128, 4, at off   0.000 (    0/step)  on   0.111 (   48/step)  d  +0.111
+  _quant_x_rows                                        off   0.183 (  192/step)  on   0.090 (   96/step)  d  -0.093
+  _tile_table_r1                                       off   0.000 (    0/step)  on   0.069 (   48/step)  d  +0.069
+  std::enable_if<!(false), void>::type internal::gemvx off   0.519 (   49/step)  on   0.516 (   49/step)  d  -0.003
+  void at::native::unrolled_elementwise_kernel<at::nat off   0.186 (  169/step)  on   0.187 (  169/step)  d  +0.001
+  _fp8_paged_decode_split_f8dot                        off   0.401 (   48/step)  on   0.400 (   48/step)  d  -0.001
+  _rmsnorm_rows                                        off   0.072 (   49/step)  on   0.072 (   49/step)  d  -0.001
+  _combine_rows                                        off   0.057 (   48/step)  on   0.056 (   48/step)  d  -0.001
+  _rmsnorm_resid_rows                                  off   0.075 (   48/step)  on   0.075 (   48/step)  d  +0.000

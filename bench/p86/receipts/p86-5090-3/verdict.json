@@ -1,0 +1,635 @@
+{
+ "lane": "P86",
+ "verdict": "READ",
+ "reasons": [
+  "B=16 step 12.064 vs 8.746 ms (1.379x); the largest gap is 'quantized linear (experts + attention projections)' at +2.855 ms/step"
+ ],
+ "batches": {
+  "16": {
+   "e4b_step_ms": 12.063710685714288,
+   "vllm_step_ms": 8.7462,
+   "ratio": 1.3793088067634274,
+   "e4b_steps": [
+    12.0688726,
+    12.058548771428573
+   ],
+   "vllm_steps": [
+    8.7367,
+    8.7557
+   ],
+   "e4b_kernel_ms": 12.371887749999999,
+   "vllm_kernel_ms": 8.732828843750292,
+   "e4b_families": {
+    "k16 small-M GEMM": 0.891375,
+    "int4 GEMV": 6.9795,
+    "bf16 GEMM (cutlass/cublas)": 0.608868375,
+    "fp8 paged decode": 0.77,
+    "fp8 KV append": 0.190875,
+    "index / gather / scatter": 1.072479875,
+    "activation quant": 0.34475,
+    "split-K reduce": 0.389670875,
+    "rope/norm folds": 0.34911799999999993,
+    "other": 0.7752506250000001
+   },
+   "vllm_families": {
+    "Marlin MoE": 4.78284517708337,
+    "Marlin dense": 0.9676637604166299,
+    "MoE routing": 0.45391700000016083,
+    "attention": 1.3452345833334058,
+    "norm/rope/act": 0.18682852083342488,
+    "torch.compile (triton)": 0.0713854270833818,
+    "bf16 GEMM (cutlass/cublas)": 0.5907063958332177,
+    "other": 0.33424797916670035
+   },
+   "e4b_top": {
+    "k16 small-M GEMM": [
+     [
+      0.891375,
+      "_gemm_int4_b32_smallm"
+     ]
+    ],
+    "int4 GEMV": [
+     [
+      6.9795,
+      "_gemv_int4_b32"
+     ]
+    ],
+    "bf16 GEMM (cutlass/cublas)": [
+     [
+      0.401625,
+      "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_..."
+     ],
+     [
+      0.146375,
+      "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_..."
+     ],
+     [
+      0.060868375,
+      "void cublasLt::splitKreduce_kernel<32, 16, int, __nv..."
+     ]
+    ],
+    "fp8 paged decode": [
+     [
+      0.77,
+      "_fp8_paged_decode_split_f8dot"
+     ]
+    ],
+    "fp8 KV append": [
+     [
+      0.190875,
+      "_fp8_append_bt1_side"
+     ]
+    ],
+    "index / gather / scatter": [
+     [
+      0.506375,
+      "void at::native::(anonymous namespace)::indexSelectS..."
+     ],
+     [
+      0.242625,
+      "void at::native::indexFuncSmallIndex<int, long, unsi..."
+     ],
+     [
+      0.177,
+      "void at::native::(anonymous namespace)::indexSelectS..."
+     ],
+     [
+      0.067048125,
+      "void at::native::vectorized_gather_kernel<16, long>(..."
+     ]
+    ],
+    "activation quant": [
+     [
+      0.34475,
+      "_quant_x_rows"
+     ]
+    ],
+    "split-K reduce": [
+     [
+      0.381875,
+      "_reduce_partials"
+     ],
+     [
+      0.007795875,
+      "void at::native::reduce_kernel<512, 1, at::native::R..."
+     ]
+    ],
+    "rope/norm folds": [
+     [
+      0.141875,
+      "_rope_norm_heads"
+     ],
+     [
+      0.079861,
+      "_rmsnorm_rows"
+     ],
+     [
+      0.07645874999999999,
+      "_rmsnorm_resid_rows"
+     ],
+     [
+      0.05092325,
+      "_swiglu_rows"
+     ]
+    ],
+    "other": [
+     [
+      0.2535,
+      "void at::native::elementwise_kernel<128, 4, at::nati..."
+     ],
+     [
+      0.186,
+      "void at::native::unrolled_elementwise_kernel<at::nat..."
+     ],
+     [
+      0.160875,
+      "_router_epilogue"
+     ],
+     [
+      0.066089,
+      "void at::native::vectorized_elementwise_kernel<4, at..."
+     ]
+    ]
+   },
+   "vllm_top": {
+    "Marlin MoE": [
+     [
+      4.78284517708337,
+      "void marlin_moe_wna16::Marlin<1125899906910725l, 1125899907892224l, 1125899906910725l, 1125899906910725l, 128, 1, 8, 4, true, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, float const*, int4 const*, float const*, int4 const*, int const*, int const*, int const*, float const*, int, bool, int, int, int, int*, bool, bool, bool)"
+     ]
+    ],
+    "Marlin dense": [
+     [
+      0.8442231041665987,
+      "void marlin::Marlin<1125899906910725l, 1125899907892224l, 1125899906910725l, 1125899906910725l, 128, 1, 4, 8, false, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, float const*, int4 const*, float const*, int4 const*, int, int, int, int, int*, bool, bool, bool, int)"
+     ],
+     [
+      0.12023397916669849,
+      "triton_red_fused_fused_add_rms_norm_marlin_gemm_1"
+     ],
+     [
+      0.0032066770833326357,
+      "triton_red_fused__to_copy_embedding_marlin_gemm_rms_norm_0"
+     ]
+    ],
+    "MoE routing": [
+     [
+      0.16771235416671945,
+      "void vllm::moe::topkGating<8, 128, 4, 16, 32, int, __half, (vllm::moe::ScoringFunc)0>(__half const*, bool const*, float*, int, int*, int*, int, int, int, bool, float const*, double, bool const*)"
+     ],
+     [
+      0.14324997916673235,
+      "void vllm::moe::moe_align_block_size_kernel<int>(int const*, int*, int*, int*, int*, int, int, int, int, unsigned long, int*, int, int, bool)"
+     ],
+     [
+      0.07831708333340776,
+      "void vllm::moe::moe_sum_vec_kernel<c10::Half, int, 8, false>(c10::Half*, c10::Half const*, long, int, long, long, int const*, int const*, long, long)"
+     ],
+     [
+      0.05232206249996883,
+      "void vllm::moe::count_and_sort_expert_tokens_kernel<int>(int const*, int*, int*, int*, unsigned long, int, int, int, bool)"
+     ]
+    ],
+    "attention": [
+     [
+      1.068340052083331,
+      "void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 64, 128, 4, false, false, cutlass::half_t, Flash_kernel_traits<128, 64, 128, 4, cutlass::half_t> >, false, false, false, false, true, false, true, false>(flash::Flash_fwd_params)"
+     ],
+     [
+      0.1827624479167292,
+      "void flash::flash_fwd_splitkv_combine_kernel<Flash_fwd_kernel_traits<128, 64, 128, 4, false, false, cutlass::half_t, Flash_kernel_traits<128, 64, 128, 4, cutlass::half_t> >, 4, 2, true>(flash::Flash_fwd_params)"
+     ],
+     [
+      0.09413208333334573,
+      "void vllm::reshape_and_cache_flash_kernel<unsigned short, unsigned short, (vllm::Fp8KVCacheDataType)0>(unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long const*, long, long, long, long, long, int, int, int, float const*, float const*, int)"
+     ]
+    ],
+    "norm/rope/act": [
+     [
+      0.11832283333337303,
+      "triton_red_fused_fused_add_rms_norm_moe_forward_0"
+     ],
+     [
+      0.06614043750005294,
+      "void vllm::act_and_mul_kernel<c10::Half, __half2, &(c10::Half vllm::silu_kernel<c10::Half>(c10::Half const&, float)), &(__half2 vllm::packed_silu_kernel<__half2>(__half2 const&, float)), true, true, false, false>(c10::Half*, c10::Half const*, int, float, float, float)"
+     ],
+     [
+      0.0023652499999989233,
+      "triton_red_fused_fused_add_rms_norm_1"
+     ]
+    ],
+    "torch.compile (triton)": [
+     [
+      0.06959139583337765,
+      "triton_red_fused_2"
+     ],
+     [
+      0.0017940312500041575,
+      "triton_red_fused_1"
+     ]
+    ],
+    "bf16 GEMM (cutlass/cublas)": [
+     [
+      0.39423231249999907,
+      "void cutlass::Kernel2<cutlass_80_wmma_tensorop_f16_s161616gemm_f16_16x16_128x1_tn_align8>(cutlass_80_wmma_tensorop_f16_s161616gemm_f16_16x16_128x1_tn_align8::Params)"
+     ],
+     [
+      0.13374929166660454,
+      "void cutlass::Kernel2<cutlass_80_wmma_tensorop_f16_s161616gemm_f16_16x16_128x2_tn_align8>(cutlass_80_wmma_tensorop_f16_s161616gemm_f16_16x16_128x2_tn_align8::Params)"
+     ],
+     [
+      0.06272479166661409,
+      "void cublasLt::splitKreduce_kernel<32, 16, int, __half, __half, float, __half, false, __half, __half, __half, true, false, false, false>(cublasLt::cublasSplitKParams<float>, __half const*, __half const*, __half*, __half*, float const*, float const*, __half const*, __half const*, __half*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)"
+     ]
+    ],
+    "other": [
+     [
+      0.20429816666671347,
+      "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#10}::operator()() const::{lambda(c10::Half)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#10}::operator()() const::{lambda(c10::Half)#1} const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#10}::operator()() const::{lambda(c10::Half)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#10}::operator()() const::{lambda(c10::Half)#1} const&)::{lambda(int)#1})"
+     ],
+     [
+      0.04392001041669124,
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)"
+     ],
+     [
+      0.04257554166666038,
+      "_gumbel_sample_kernel"
+     ],
+     [
+      0.011784385416680379,
+      "_bias_kernel"
+     ]
+    ]
+   },
+   "roles": [
+    {
+     "role": "quantized linear (experts + attention projections)",
+     "e4b_ms": 8.605295875,
+     "vllm_ms": 5.7505089375,
+     "gap_ms": 2.8547869374999992
+    },
+    {
+     "role": "routing / gather glue",
+     "e4b_ms": 1.072479875,
+     "vllm_ms": 0.45391700000016083,
+     "gap_ms": 0.6185628749998391
+    },
+    {
+     "role": "attention + KV write",
+     "e4b_ms": 0.960875,
+     "vllm_ms": 1.3452345833334058,
+     "gap_ms": -0.3843595833334058
+    },
+    {
+     "role": "norm / rope / activation",
+     "e4b_ms": 0.34911799999999993,
+     "vllm_ms": 0.2582139479168067,
+     "gap_ms": 0.09090405208319324
+    },
+    {
+     "role": "dense bf16 GEMM (output head)",
+     "e4b_ms": 0.608868375,
+     "vllm_ms": 0.5907063958332177,
+     "gap_ms": 0.018161979166782305
+    },
+    {
+     "role": "other kernels",
+     "e4b_ms": 0.7752506250000001,
+     "vllm_ms": 0.33424797916670035,
+     "gap_ms": 0.44100264583329973
+    },
+    {
+     "role": "host and launch (step - kernels)",
+     "e4b_ms": -0.30817706428571157,
+     "vllm_ms": 0.013371156249707639,
+     "gap_ms": -0.3215482205354192
+    }
+   ],
+   "vllm_prefill_noise_ms": -0.0008614687500028897,
+   "e4b_other_share": 0.06266227439704988,
+   "vllm_other_share": 0.03827488035631285
+  },
+  "1": {
+   "e4b_step_ms": 4.2737885748031506,
+   "vllm_step_ms": 3.998,
+   "ratio": 1.0689816345180465,
+   "e4b_steps": [
+    4.273811984251969,
+    4.273765165354331
+   ],
+   "vllm_steps": [
+    3.9989,
+    3.9971
+   ],
+   "e4b_kernel_ms": 4.2790105,
+   "vllm_kernel_ms": 3.9898364166665723,
+   "e4b_families": {
+    "k16 small-M GEMM": 0.0,
+    "int4 GEMV": 1.538375,
+    "bf16 GEMM (cutlass/cublas)": 0.518375,
+    "fp8 paged decode": 0.40025,
+    "fp8 KV append": 0.149625,
+    "index / gather / scatter": 0.340144875,
+    "activation quant": 0.182125,
+    "split-K reduce": 0.36730074999999995,
+    "rope/norm folds": 0.315755375,
+    "other": 0.46705950000000007
+   },
+   "vllm_families": {
+    "Marlin MoE": 1.1661747291666695,
+    "Marlin dense": 0.8414997708333171,
+    "MoE routing": 0.4407232708333691,
+    "attention": 0.7079587083333072,
+    "norm/rope/act": 0.13947351041662182,
+    "torch.compile (triton)": 0.06305962500000213,
+    "bf16 GEMM (cutlass/cublas)": 0.5056591249999747,
+    "other": 0.12528767708331087
+   },
+   "e4b_top": {
+    "k16 small-M GEMM": [],
+    "int4 GEMV": [
+     [
+      1.538375,
+      "_gemv_int4_b32"
+     ]
+    ],
+    "bf16 GEMM (cutlass/cublas)": [
+     [
+      0.389,
+      "std::enable_if<!(false), void>::type internal::gemvx..."
+     ],
+     [
+      0.129375,
+      "std::enable_if<!(false), void>::type internal::gemvx..."
+     ]
+    ],
+    "fp8 paged decode": [
+     [
+      0.40025,
+      "_fp8_paged_decode_split_f8dot"
+     ]
+    ],
+    "fp8 KV append": [
+     [
+      0.149625,
+      "_fp8_append_t1_side"
+     ]
+    ],
+    "index / gather / scatter": [
+     [
+      0.1595,
+      "void at::native::(anonymous namespace)::indexSelectS..."
+     ],
+     [
+      0.06770462499999999,
+      "void at::native::(anonymous namespace)::indexSelectS..."
+     ],
+     [
+      0.0565405,
+      "void at::native::(anonymous namespace)::indexSelectS..."
+     ],
+     [
+      0.05639975,
+      "_combine_rows"
+     ]
+    ],
+    "activation quant": [
+     [
+      0.182125,
+      "_quant_x_rows"
+     ]
+    ],
+    "split-K reduce": [
+     [
+      0.361625,
+      "_reduce_partials"
+     ],
+     [
+      0.00567575,
+      "void at::native::reduce_kernel<512, 1, at::native::R..."
+     ]
+    ],
+    "rope/norm folds": [
+     [
+      0.124064875,
+      "_rope_norm_heads"
+     ],
+     [
+      0.074552875,
+      "_rmsnorm_resid_rows"
+     ],
+     [
+      0.07215475,
+      "_rmsnorm_rows"
+     ],
+     [
+      0.044982875,
+      "_swiglu_rows"
+     ]
+    ],
+    "other": [
+     [
+      0.1585,
+      "_router_epilogue"
+     ],
+     [
+      0.114354,
+      "void at::native::unrolled_elementwise_kernel<at::nat..."
+     ],
+     [
+      0.049345125000000004,
+      "void at::native::unrolled_elementwise_kernel<at::nat..."
+     ],
+     [
+      0.046419625000000006,
+      "void at::native::vectorized_elementwise_kernel<4, at..."
+     ]
+    ]
+   },
+   "vllm_top": {
+    "Marlin MoE": [
+     [
+      1.1661747291666695,
+      "void marlin_moe_wna16::Marlin<1125899906910725l, 1125899907892224l, 1125899906910725l, 1125899906910725l, 128, 1, 8, 4, true, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, float const*, int4 const*, float const*, int4 const*, int const*, int const*, int const*, float const*, int, bool, int, int, int, int*, bool, bool, bool)"
+     ]
+    ],
+    "Marlin dense": [
+     [
+      0.7522970937499839,
+      "void marlin::Marlin<1125899906910725l, 1125899907892224l, 1125899906910725l, 1125899906910725l, 128, 1, 4, 8, true, 4, 8, false>(int4 const*, int4 const*, int4*, int4*, int4 const*, float const*, int4 const*, float const*, int4 const*, int, int, int, int, int*, bool, bool, bool, int)"
+     ],
+     [
+      0.08665006249999817,
+      "triton_red_fused_fused_add_rms_norm_marlin_gemm_1"
+     ],
+     [
+      0.002552614583335052,
+      "triton_red_fused__to_copy_embedding_marlin_gemm_rms_norm_0"
+     ]
+    ],
+    "MoE routing": [
+     [
+      0.1579295520833099,
+      "void vllm::moe::topkGating<8, 128, 4, 16, 32, int, __half, (vllm::moe::ScoringFunc)0>(__half const*, bool const*, float*, int, int*, int*, int, int, int, bool, float const*, double, bool const*)"
+     ],
+     [
+      0.14116340625003454,
+      "void vllm::moe::moe_align_block_size_kernel<int>(int const*, int*, int*, int*, int*, int, int, int, int, unsigned long, int*, int, int, bool)"
+     ],
+     [
+      0.07484583333333822,
+      "void vllm::moe::moe_sum_vec_kernel<c10::Half, int, 8, false>(c10::Half*, c10::Half const*, long, int, long, long, int const*, int const*, long, long)"
+     ],
+     [
+      0.05126392708334737,
+      "void vllm::moe::count_and_sort_expert_tokens_kernel<int>(int const*, int*, int*, int*, unsigned long, int, int, int, bool)"
+     ]
+    ],
+    "attention": [
+     [
+      0.35577114583332653,
+      "void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 64, 128, 4, false, false, cutlass::half_t, Flash_kernel_traits<128, 64, 128, 4, cutlass::half_t> >, false, false, false, false, true, false, true, false>(flash::Flash_fwd_params)"
+     ],
+     [
+      0.2714105729166651,
+      "void flash::flash_fwd_splitkv_combine_kernel<Flash_fwd_kernel_traits<128, 64, 128, 4, false, false, cutlass::half_t, Flash_kernel_traits<128, 64, 128, 4, cutlass::half_t> >, 4, 4, true>(flash::Flash_fwd_params)"
+     ],
+     [
+      0.08077698958331553,
+      "void vllm::reshape_and_cache_flash_kernel<unsigned short, unsigned short, (vllm::Fp8KVCacheDataType)0>(unsigned short const*, unsigned short const*, unsigned short*, unsigned short*, long const*, long, long, long, long, long, int, int, int, float const*, float const*, int)"
+     ]
+    ],
+    "norm/rope/act": [
+     [
+      0.07654357291665802,
+      "triton_red_fused_fused_add_rms_norm_moe_forward_0"
+     ],
+     [
+      0.061213927083297905,
+      "void vllm::act_and_mul_kernel<c10::Half, __half2, &(c10::Half vllm::silu_kernel<c10::Half>(c10::Half const&, float)), &(__half2 vllm::packed_silu_kernel<__half2>(__half2 const&, float)), true, true, false, false>(c10::Half*, c10::Half const*, int, float, float, float)"
+     ],
+     [
+      0.001716010416665881,
+      "triton_red_fused_fused_add_rms_norm_1"
+     ]
+    ],
+    "torch.compile (triton)": [
+     [
+      0.061603989583333296,
+      "triton_red_fused_2"
+     ],
+     [
+      0.0014556354166688408,
+      "triton_red_fused_1"
+     ]
+    ],
+    "bf16 GEMM (cutlass/cublas)": [
+     [
+      0.39002466666666513,
+      "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __half, __half, __half, float, false, true, true, false, 6, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__half const>, cublasGemvTensorStridedBatched<__half const>, cublasGemvTensorStridedBatched<__half>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__half const>, cublasGemvTensorStridedBatched<__half const>, cublasGemvTensorStridedBatched<__half>, float>)"
+     ],
+     [
+      0.1156344583333095,
+      "std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __half, __half, __half, float, false, true, true, false, 7, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__half const>, cublasGemvTensorStridedBatched<__half const>, cublasGemvTensorStridedBatched<__half>, float> >(cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__half const>, cublasGemvTensorStridedBatched<__half const>, cublasGemvTensorStridedBatched<__half>, float>)"
+     ]
+    ],
+    "other": [
+     [
+      0.044173125000000875,
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<int>, std::array<char*, 1ul> >(int, at::native::FillFunctor<int>, std::array<char*, 1ul>)"
+     ],
+     [
+      0.04074631249997371,
+      "memcpy32_post"
+     ],
+     [
+      0.010240927083333644,
+      "_gumbel_sample_kernel"
+     ],
+     [
+      0.009578958333333882,
+      "_bias_kernel"
+     ]
+    ]
+   },
+   "roles": [
+    {
+     "role": "quantized linear (experts + attention projections)",
+     "e4b_ms": 2.08780075,
+     "vllm_ms": 2.0076744999999865,
+     "gap_ms": 0.0801262500000135
+    },
+    {
+     "role": "routing / gather glue",
+     "e4b_ms": 0.340144875,
+     "vllm_ms": 0.4407232708333691,
+     "gap_ms": -0.10057839583336908
+    },
+    {
+     "role": "attention + KV write",
+     "e4b_ms": 0.549875,
+     "vllm_ms": 0.7079587083333072,
+     "gap_ms": -0.1580837083333072
+    },
+    {
+     "role": "norm / rope / activation",
+     "e4b_ms": 0.315755375,
+     "vllm_ms": 0.20253313541662393,
+     "gap_ms": 0.11322223958337607
+    },
+    {
+     "role": "dense bf16 GEMM (output head)",
+     "e4b_ms": 0.518375,
+     "vllm_ms": 0.5056591249999747,
+     "gap_ms": 0.012715875000025356
+    },
+    {
+     "role": "other kernels",
+     "e4b_ms": 0.46705950000000007,
+     "vllm_ms": 0.12528767708331087,
+     "gap_ms": 0.34177182291668917
+    },
+    {
+     "role": "host and launch (step - kernels)",
+     "e4b_ms": -0.005221925196849497,
+     "vllm_ms": 0.008163583333427926,
+     "gap_ms": -0.013385508530277423
+    }
+   ],
+   "vllm_prefill_noise_ms": -9.972916666678106e-05,
+   "e4b_other_share": 0.10915128626115782,
+   "vllm_other_share": 0.0314017077391825
+  }
+ },
+ "ranked_b16": [
+  [
+   "quantized linear (experts + attention projections)",
+   2.8548
+  ],
+  [
+   "routing / gather glue",
+   0.6186
+  ],
+  [
+   "other kernels",
+   0.441
+  ],
+  [
+   "norm / rope / activation",
+   0.0909
+  ],
+  [
+   "dense bf16 GEMM (output head)",
+   0.0182
+  ],
+  [
+   "host and launch (step - kernels)",
+   -0.3215
+  ],
+  [
+   "attention + KV write",
+   -0.3844
+  ]
+ ],
+ "next_lane_role": "quantized linear (experts + attention projections)"
+}

@@ -434,7 +434,12 @@ that build). Same-box e4b int4 / NF4: ×2.356 / ×2.851. **Bounded:** one box,
 one prompt set, B=1/B=16 only; vLLM's number includes its serving loop and
 e4b's does not, so the engine advantage is understated; quality quoted, never
 equated; footprint and TTFT not compared. The 2026-09-05 comparison below
-stays as measured history.
+stays as measured history. **Where the B=16 gap is (P86, 2026-10-01, same box,
+both engines censused):** the experts, e4b's int4 GEMV 6.98 ms against vLLM's
+Marlin MoE 4.78 (2.86 of the 3.32 ms gap); routing glue +0.62; e4b's attention
+is faster (0.96 vs 1.35)
+(`e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01`). K19 (opt-in) is 1.08× the GEMV
+there (P87, VOID).
 
 **Against vLLM 0.28.0 (history, lane p37, 2026-09-05;** one RTX 5090 box, Vast
 49975016; **measured** — [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
@@ -930,23 +935,12 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     caller on this stack that does not enable graphs leaves most of the
     throughput unused. The package's serving entry points use transformers'
     `generate`, not the paged runner.
-  - **#674.** The attention pack (`sha256:d7cfa1f4…`) reproduced
-    byte-for-byte on a second box and release, and on a third in P83. The
-    expert pack is the licensed `0c9955a9…`. The build's K8 reads 6.36396
-    with the fp32 router and 6.31811 with the cast; the licensed builds read
-    6.36709.
-  - **K8 is box-invariant on AMD hosts; the software moved it** (lane P83,
-    `bench/p83/`).
-    On one box, P70's build (e4b 0.37.4, gnf4 0.33.0) reads 6.36709 and
-    P82's (0.37.8, 0.33.7) reads 6.36396, each the same float it gave on
-    other machines (three and two). That is −0.00049 nats, far inside the
-    floor (`e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29`).
-    Which change moved it is not isolated. On an Intel i9-14900K, P82's
-    build calibrated a different attention pack (`45b4cc5a…`) and read
-    6.36276 (P84, VOID), so the recipe reproduces on the AMD hosts tested,
-    not everywhere. *(Corrects P82, which inferred
-    from one cast-arm pair — P81's box 6.33015, P82's 6.31811, still
-    unexplained — that K8 does not reproduce across boxes.)*
+  - **#674: answered.** The licensed int4 recipe's fp32 K8 moved from
+    6.36709 to 6.36396 because of one change, gnf4#413 (the fused fp8 KV
+    append's rounding). P70's build with that append off reads 6.36396 bit
+    for bit (P85, `e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30`;
+    P83/P84 isolated it). Box-invariant on AMD hosts; an Intel host's
+    attention calibrated differently (P84).
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

@@ -1,0 +1,2 @@
+KNOBS router_epi_cast=0 launch=e4b@cbd33ea6c378bae8022b0b063c3da3b2df962a90 O=e4b@c77aab6dafb5f08d98a7387d1e986d141b20a2d3+gnf4@5ca1897585f9f456f99ea504b2a1be0ea91db496 S=e4b@c77aab6dafb5f08d98a7387d1e986d141b20a2d3+gnf4@f879761501fedcac027de81f4083fab924194b8d model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=5090 cpu_vendor=AuthenticAMD min_disk_gb=200 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048
+p85_reduce self-test OK (20 cases)

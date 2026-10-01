@@ -8,6 +8,133 @@
 - Its "bit-identical over 16.31 GB hashed" is the fused-train gate's figure, from one Qwen3 run outside the matrix. The ten Gemma-4 cells' own check hashed 12.85 GB each. The sentence now names both, and the worst parity cell (0.03653) is labelled as Gemma-4 finance's.
 - The speed (1.52–1.81×) and VRAM (0.75–0.81×) ranges already spanned both models, and the row's value and status are unchanged. Corrected in `docs/claims.json` (the row's notes keep the old wording, and the model-2 receipt joins its evidence), `docs/STATUS.md` (marked), `README.md` and `docs/solutions/qlora-fused-moe-experts.md`.
 
+### Lane K20 runner (#564): K19's plan space on an RTX 5090, replaying P60's recorded B=16 routing (bench and tests only)
+
+- The prereg, the bench and the rule live in grouped-nf4-gemm (`kernel/PREREG-k20-k19-plan-sweep-5090.md`, grouped-nf4-gemm#420). This repo carries the runner, `bench/k20/`, in K18's pattern:
+  - install gnf4 at the registration's merge, then a tripwire that the installed module is the pinned cut, with K19 and the tile builder present;
+  - K19's contracts, under the interpreter and then compiled on the card, before any timing (rc 21 / 22);
+  - the rule's self-test, then the bench on P60's committed ids.
+- `tests/test_k20_staged_pin.py` pins the staged bytes (the routing is K18's, byte-identical) and the order: contracts, then self-test, then bench.
+### Lane P87 read (#564): VOID by the rule; the speed arms show K19 at 0.971× the GEMV step at B=16 and 1.236× at B=1 on an RTX 5090 (bench and docs only)
+
+- **Why VOID.** The calibrated K8 build ran on an Intel Xeon E5-2698 v4. It needed 1,120 s for its first chunk (P85's AMD host: 360 s), hit its 3,600 s arm alarm after 3 of 5 chunks and dumped no pack, so K8 OFF/ON never ran. No register row.
+- **The speed arms passed every check of their own:** the premise (K19 rows bit-equal alone and inside B=16; 3 passed on both 5090s), the 3 % draw spread, and engagement (96 K19 calls per step ON, the experts' 96 GEMV calls gone, none OFF).
+- **Steps (median of two draws):**
+  - B=16: 12.013 → 11.667 ms (0.971; the bar was 0.95, I predicted 0.75–0.85);
+  - B=1: 4.277 → 5.286 (1.236).
+- **The census.** Kernel for kernel, K19 is 1.08× the GEMV (6.50 vs 7.00 ms per step): about 75 % of the int4-b32 byte floor, against the GEMV's 70 % and Marlin MoE's 94 %. Grouping adds about 0.8 ms per step (tile build 0.50, glue 0.30), nearly cancelling the 0.73 ms of reduce and quantize removed. At B=1, one-row tiles make K19 1.91× the GEMV's expert time.
+- **Why the prediction failed.** It rested on an A2000 timing (K19 1.89×), but the A2000's GEMV runs far below its own floor (11.4× slower than the 5090's). A timing on that card says nothing about the 5090.
+- **What follows.** K19 stays opt-in; P87 is not re-run. Next: a 5090 kernel microbench on P60's recorded routing (K19's plan space, Marlin MoE, the tile build) before any end-to-end lane.
+- Spend: $0.9851 of the $3.00 ceiling (proof $0.0329, a $0 refusal, the reading $0.9522).
+
+### Lane P87 registered (#564): does K19 make e4b's int4 decode faster on an RTX 5090 without moving its quality? (bench and tests only)
+
+- **The question.** On one RTX 5090, with `E4B_INT4_GROUPED_SMALLM` on against off:
+  - **Speed:** B=16 and B=1 step times. P86's harness, RTN env and command line, two draws each, the first censused.
+  - **Quality:** K8 on the licensed recipe (calibrated experts and int4 attention, P85's env and K8 arguments). One build dumps the pack, then OFF and ON load it by fingerprint.
+  - grouped-nf4-gemm is pinned at K19's merge, `3351c9d`.
+- **The premise, on the card.** `tests/test_k19_row_exact_gpu.py` runs before anything is fetched: a token's K19 rows are bit-equal alone and inside a B=16 step, which lets the B=1 K8 stand for the batched rows. If it fails, the lane stops (rc 25).
+- **The rule** (`p87_reduce.py`, 17-case self-test):
+  - **VOID** on a failed premise; on failed engagement (96 K19 calls per step ON, the experts' 96 GEMV calls gone, none OFF); or on a bit-equal K8 ON/OFF.
+  - **QUALITY_FAIL** if |ΔK8| > 0.0095 nats.
+  - **LICENSED** if B=16 ON/OFF ≤ 0.95.
+  - **NOT_FASTER** otherwise.
+  - B=1 is read as FASTER, NEUTRAL or SLOWER beside the verdict, and decides the scope of a proposed default.
+- **Cost.** A proof (0.5 h: K19's contract tests and the premise compiled on sm_120, no model), then a 2.5 h reading. Lane ceiling $3.00.
+- `tests/test_p87_staged_pin.py` pins:
+  - the staged bytes, which are P86's harness bytes;
+  - the gnf4 pin;
+  - the refusals and the premise coming before any fetch;
+  - the proof;
+  - the arm order and settings;
+  - the driver's dry run.
+
+### `E4B_INT4_GROUPED_SMALLM=1` now covers T == 1 decode too (opt-in; no default changes)
+
+- **The gap.** The route above engaged only where device grouping was already on: T > 1 under the batched harness's `DEVICE_GROUPING`. T == 1 (B=1 decode) kept the singleton int4 GEMV. K8 scores through the T == 1 loop, so a K8 read of the opt-in would have measured the GEMV it meant to replace, and the quality gate would have been inert. This was found while writing lane P87's reducer, before anything ran.
+- **The change.** `_collapsed_grouping(T, int4_stores)` decides the all-resident collapse's grouping. With the opt-in and a uniform-int4 store (not MXFP4), T == 1 takes the device tile table (capture-legal, no host sync), and its 8 routed rows reach K19. Without the opt-in, the decisions are what they were.
+- `tests/test_int4_grouped_smallm_route.py` adds:
+  - the decision table for both T and both settings, plus MXFP4 and no store;
+  - an end-to-end T == 1 call (one row per expert) through K19 against the oracle.
+- `tests/test_k19_row_exact_gpu.py` (GPU; skips without CUDA or K19), on the real kernel at Qwen3-30B-A3B's expert shapes:
+  - a token's rows come out bit-equal whether it decodes alone (T == 1) or inside a B=16 step, so a T == 1 instrument such as K8 stands for the batched rows;
+  - K19 runs at T == 1 and matches an fp32 dequant oracle;
+  - the default T == 1 route is untouched;
+  - the T == 1 route captures in a CUDA graph, as the B=1 decode loop does, and a replay on new inputs equals eager to the bit.
+  - On an RTX A2000 (sm_86), tokens 0, 5 and 15 were bit-equal, and the captured replays matched eager. Relative error against the oracle: K19 0.0048, the GEMV 0.0131.
+
+### `E4B_INT4_GROUPED_SMALLM=1`: int4 decode rows through grouped-nf4-gemm's K19 grouped tensor-core GEMM (opt-in; no default changes)
+
+- **What it routes.** At decode shapes (≤ 256 routed rows) on the int4 expert store, today's route is the split-K GEMV, the row P86 measured at 6.98 ms/step against Marlin MoE's 4.78 at B=16 (#564). The opt-in sends those rows through K19 (`int4_smallm.gemm_int4_b32_grouped_smallm`, grouped-nf4-gemm#419) instead, using the existing device-grouping branch:
+  - the 16-row tile table is built once per layer;
+  - gate_up runs as K19 with its gather folded in (`order`);
+  - down runs as K19 on the already-sorted epilogue output;
+  - the existing unsort and combine are unchanged.
+- **Why it is opt-in.** K19 multiplies bf16 activations instead of int8-quantised ones, a different arithmetic, so it stays opt-in until a registered quality read licenses it.
+- **Asked for and absent is refused.** If the kernel side lacks K19, the opt-in raises a `RuntimeError` naming the requirement; it never falls back to the GEMV silently. Prefill rows (> 256) are untouched.
+- `tests/test_int4_grouped_smallm_route.py` (Linux CI, stubbed kernels) pins:
+  - the route (gate_up with the gather, down without);
+  - no GEMV, and 16-row tiles;
+  - the per-row oracle in the caller's row order;
+  - the default route unchanged;
+  - the refusal, and prefill untouched.
+
+### Lane P86 read (#564): READ -- vLLM's B=16 lead is the expert kernel; Marlin MoE runs the experts in 4.78 ms per step against e4b's int4 GEMV 6.98 (2.86 of the 3.32 ms gap) (bench, docs and register only)
+
+- `p86-5090-3` ran on one RTX 5090 for $0.5170, teardown proven, with the same prompts as P58. The lane cost $0.8561: three proofs (a bandwidth NOT_RUN, the attempt that caught the CUDA 12.8 image, and a pass), an ssh NOT_RUN, and the reading.
+- **Steps.** B=16: e4b 12.06 ms vs vLLM 0.30.0 8.75 (1.38x; P58 1.40x). B=1: 4.27 vs 4.00 (1.07x). Both censuses reconcile to their own step.
+- **B=16 by role (e4b / vLLM / gap):** quantized linear 8.61 / 5.75 / +2.86, of which experts 6.98 + reduce 0.39 + quantize 0.35 against Marlin MoE 4.78 (the attention projections are at parity, 0.89 vs 0.97); routing glue 1.07 / 0.45 / +0.62; other +0.44; attention + KV write 0.96 / 1.35, **e4b faster**. Stated expectation held.
+- **Against #564's byte floor** the e4b GEMV runs about 70 % and Marlin MoE about 94 % of its own.
+- **Next (proposed):** a kernel lane on the B=16 expert matmul, benchmarked against Marlin MoE's 4.78 ms, starting with a $0 A2000 microbench of both kernels on a recorded routing.
+- New row `e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01`. STATUS adds P86 beside P58's comparison and condenses the #674 bullets now that P85 answered it. The read is in `bench/p86/RESULTS-p86.md`.
+
+### Lane P86 amendment 1 (#564): the vLLM image needs a >= 12.9 CUDA toolkit; the runner refuses an older one before any install (bench only; nothing in the wheel changes)
+
+- `p86-prove-2` caught a defect. vLLM 0.30.0 installed and imported, but its warmup died in FlashInfer's JIT (`requires GPUs with sm75 or higher`) on the sm_120 card. The lane's image was `2.8.0-cuda12.8-devel`, carried over from P84/P85; P58's registration names `2.8.0-cuda12.9-devel` for vLLM on sm_120. `p86-prove-1` was a launcher NOT_RUN (bandwidth). Together $0.1156; no reading attempted.
+- **Changes, before any reading:** the image is P58's; the runner refuses a container toolkit below 12.9 with rc 24, before any install; up to two more proof attempts under the corrected image. The question, the arms, the rule and the ceiling are unchanged.
+
+### Lane P86 registered (#564): where do e4b's and vLLM's decode steps go, kernel by kernel, on one box? (bench only; nothing in the wheel changes)
+
+- `bench/p86/PREREG-p86.md`. P58 measured vLLM 0.30.0 at 1.087x (B=1) and 1.396x (B=16) e4b's int4 stack end to end. e4b's B=16 step has a census (P57); vLLM's never had one, so the 3.3 ms gap could not be assigned. This lane censuses both engines on one RTX 5090 with the same prompt token ids.
+- **e4b:** the current release's int4 stack through P58's exact harness, fused q/k/v at both batches, timed by the graph-replay window and censused by P42's replay profiler. **vLLM 0.30.0** (P58's comparator, the GPTQ-Int4 checkpoint on Marlin): timed by P37's slope arm, unchanged, and censused by the new `p86_vllm_census.py`. The census runs the engine in-process under `torch.profiler` and applies the same 32 -> 128-token slope to each kernel. Only kernels that gain calls in the long run count as decode.
+- **The rule:** kernels sorted into registered families, families into roles present in both engines, plus host and launch (step minus kernels). VOID on a missing arm, the wrong vLLM, or a census exceeding its own step by 10 %. NOT_READ if over 10 % of either engine's B=16 kernel time is unmapped. Otherwise the largest B=16 gap names the next lane. Stated expectation: quantized linear (the expert GEMV against Marlin MoE).
+- **Refusals before any install:** the card class, the disk, and a driver below 580 (vLLM 0.30.0's wheels are CUDA 13.0; rc 18).
+- **A2000 rehearsal of the method** (vLLM 0.11.0, Qwen3-0.6B): graph replays are recorded, each decode kernel once per layer per step. The graph arm read 5.79 ms/step of decode kernels against the eager control's 7.40.
+- **A proving rental first** (0.5 h, no 30B model). It runs the census arm itself on vLLM 0.30.0 with Qwen3-0.6B, proving the profiler on this build, driver and card, which the A2000 cannot. Then the reading: guard 2.0 h at <= $0.75/h (P58 registered 3.0 h for its 18 arms); lane ceiling $2.50. `tests/test_p86_staged_pin.py` (17) pins the staged bytes, P58's harness and comparator bytes, the comparator, the refusals' order, the proof, the arms and the census settings.
+
+### Lane P85 read (#674): CONFIRMED -- grouped-nf4-gemm#413 (the fused fp8 KV append's IEEE-rounded quotient) is the whole step that moved the recipe's fp32 K8 from 6.36709 to 6.36396 (bench, docs and register only)
+
+- `p85-5090-4` ran on one RTX 5090 on P70's own Ryzen 7950X card for $0.6386, teardown proven. The lane cost $0.7362: a proof, two Intel-host refusals at preflight (rc 16), and one attempt whose deadline guard did not arm on a Vast HTTP 429.
+- **The readings.** Every reading used P70's harness and e4b 0.37.4, and every pair repeated bit for bit. The control, P70's build, read O's known `1.8511420498367808`. The same stack with `E4B_FUSED_KV_APPEND=0` read `1.8506507749113845`, the gnf4 0.33.7 builds' float, bit for bit. gnf4 0.33.6 with the append on read O's float bit for bit.
+- **So #413 is the whole KERNEL step P84 found.** P84 had inferred it from the code; this reading measures it. The newer 6.36396 is the reading with the reference quantizer's KV bytes. Whether the licensed row names its software is the owner's decision.
+- **Not measured here:** the P81/P82 cast pair (#413 is its leading explanation) and the Intel-host attention calibration.
+- New row `e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30`. P84's row and `RESULTS-p84.md` are noted as measured. The read is in `bench/p85/RESULTS-p85.md`.
+
+### Lane P85 amendment 1 (#674): the first-chunk watchdog admits a Zen 2 host (1,500 s), the guard is 4.0 h, the ceiling $4.00 (bench only; nothing in the wheel changes)
+
+- `p85-prove-1` PROVED on an AMD EPYC 9655 host ($0.0573). The first reading, `p85-5090-1`, landed on an Intel Core Ultra 9 285K, which the runner refused at preflight with rc 16 before any install ($0.0251). No data exists.
+- **Why.** The launcher excludes a machine only on ssh-readiness failures or a lane exit of 13, 14 or 17. A refusal on rc 16 or rc 30 re-rolls onto the same cheapest offer. That offer was then an EPYC 7K62, the Zen 2 class that took 1,121 s to its first calibration chunk in P81, past the 900 s watchdog.
+- **Changes, before any reading:** watchdog 900 → 1,500 s (P83's); guard 3.0 → 4.0 h at ≤ $0.75/h; lane ceiling $3.00 → $4.00; at most three vendor refusals in a row. The question, readings, rule and predictions are unchanged, and `p85-prove-1` stands as the lane's proof.
+
+### Lane P85 registered (#674): is grouped-nf4-gemm#413 (the fused fp8 KV append's IEEE-rounded quotient) the whole step that moved the recipe's fp32 K8 from 6.36709 to 6.36396? (bench only; nothing in the wheel changes)
+
+- `bench/p85/PREREG-p85.md`. P84 localized the move to grouped-nf4-gemm 0.33.0 → 0.33.7 and read #413 from the code as the one change on K8's path. This lane measures it on one AMD-host RTX 5090, through P70's harness and env throughout.
+- **The control runs first.** `O_build` is P70's build (e4b 0.37.4 + gnf4 0.33.0), and it must read O's known mean NLL `1.8511420498367808` bit for bit. If it doesn't, the lane is VOID and stops.
+- **F:** the same stack with `E4B_FUSED_KV_APPEND=0`, so every append goes through `quantize_kv_fp8`, whose bytes 0.33.7's fused kernel writes exactly. Predicted: N's float, `1.8506507749113845`. **S:** e4b 0.37.4 on gnf4 0.33.6, the append on. Predicted: O's float. Each is read twice with the O build's expert pack loaded by fingerprint.
+- **The rule:** VOID, then PATH-REFUTED (F = O: the append is not on the path), CONFIRMED (F = N and S = O), MIXED (F = N, S ≠ O), REFUTED (otherwise). Stated expectation: CONFIRMED.
+- **Tripwires and stamps.** Each stack must carry a pre-#413 `fp8_kv`, and 0.37.4's resolver must turn the append on by default and off under the knob. Every K8 process is stamped with the resolver's answer under its own env.
+- **A2000 rehearsal.** R rc 0: both stacks installed, and the stamps read the append on and off. M1 (a 0.33.7 kernel posing as S) was refused by the pre-#413 tripwire, rc 9. M2 (the knob leaking into every process) was refused by the stamp check, rc 9. V (the default vendor on the Intel host) was refused with rc 16 before any install.
+- Guard 3.0 h at ≤ $0.75/h after a 0.4 h proof; lane ceiling $3.00. `tests/test_p85_staged_pin.py` pins the staged bytes, the stacks, the known floats, the order and the control gate, each reading's env, the tripwire and the stamp, and the driver's dry run.
+
+### Lane P84 read (#674): KERNEL. grouped-nf4-gemm 0.33.0 → 0.33.7 moved the recipe's fp32 K8 (−0.000491 nats); e4b 0.37.4 → 0.37.8 and the harness move it by exactly zero (bench, docs and register only)
+
+- `p84-5090-3` ran on one RTX 5090 on the AMD Ryzen 7950X host that read P55x's and P70's 6.36709 (same GPU) for $1.0928, teardown proven. The lane cost $1.8328 of its $4.00 ceiling over six rentals.
+- **The chain.** The control C (P82's build) read N's known float `1.8506507749113845` bit for bit. H1 (e4b 0.37.8, P70's harness) and H2 (e4b 0.37.4, P70's harness), both on gnf4 0.33.7, read the same float. Every build repeated itself, and every expert pack was the licensed `0c9955a9…`. So KERNEL (O → H2) is the whole −0.000491 nats, and PACKAGE and HARNESS are 0.0. The stated expectation, PACKAGE alone, was wrong.
+- **Which commit is not measured.** Read from the code, the one change in the cut on K8's path is gnf4#413 (0.33.7), which IEEE-rounds the fused fp8 KV append's quotient (B771: the old kernel wrote a different byte in 3.9e-8 of values). K8's eager loop calls `graph_mode_init`, so every scored token appends through that kernel. 0.33.1–0.33.3 change no code, and 0.33.4 (`cold_deadline`), 0.33.5 (`int4_smallm` annotations) and 0.33.6 (MXFP4) are off this path.
+- **Correction.** PREREG-p82 and PREREG-p84 said the eager K8 does not run the graph-mode append. It does. Noted in `RESULTS-p82.md`, `RESULTS-p83.md`, the P82 and P83 register rows and STATUS; the registrations stay as registered. #413 is also the first suspect for the P81/P82 cast pair (gnf4 0.33.5 vs 0.33.7), not measured.
+- **Proposed (P85, not started):** P70's build with `E4B_FUSED_KV_APPEND=0` should read N's float bit for bit if #413 is the whole step.
+- New row `e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30`. The read is in `bench/p84/RESULTS-p84.md`; receipts in `bench/p84/receipts/p84-5090-3/`.
+
 ### Lane P84, reading 1 VOID and amendment 1 (#674): on an Intel host the recipe's attention calibration does not reproduce the AMD hosts' pack; P84 is restricted to AMD hosts; P83's cross-machine claim qualified (bench, docs and register only)
 
 - `p84-5090-2` ran on one RTX 5090 on an Intel Core i9-14900K host for $0.5356, teardown proven. The lane has spent $0.7042 so far: two proof attempts and two reading attempts.
