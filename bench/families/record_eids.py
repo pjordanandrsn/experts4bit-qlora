@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""record_eids.py -- P60: record the expert ids Qwen3-30B-A3B's routers choose at B=16 decode, per layer per step.
+"""bench/families/record_eids.py -- record the expert ids a MoE model's routers choose at B=16 decode, per layer per
+step, for ANY family the loader admits. Derived from P60's Qwen3-pinned recorder (`bench/p60/record_eids.py`, left
+byte-identical: it is a registered lane's staged file); only the router hook differs.
+
 
 The replay bench (`replay_gemv.py`) must replay the workload's real routing, never a synthetic one: the R=128 GEMV
 sweep of P23 picked configs on UNIFORM expert ids and they lost 0.892x in serving, because real routing is skewed
@@ -7,8 +10,12 @@ sweep of P23 picked configs on UNIFORM expert ids and they lost 0.892x in servin
 same 16 wikitext rows every B=16 lane decoded (P54/P57/P58/P59 `prompts_b16.json`): prefill 384 tokens per row in
 8-token-per-row chunks (128 rows per forward, the harness's step), then decode 128 positions one token per forward at
 B=16 with the ground-truth token fed back (teacher forcing -- the routing of the model on these tokens, with no
-sampling in it). A forward hook on every MoE router records the routed ids of every 16-row call, host-side (this
-path captures no CUDA graph, so the host read is legal). `E4B_FUSE_ROUTER_EPI=0` so the router module is called.
+sampling in it). A forward PRE-hook on every MoE block's ``experts`` module records the routed ids of every 16-row
+call, host-side (this path captures no CUDA graph, so the host read is legal). Every family the loader admits calls
+``experts(hidden, top_k_index, top_k_weights)`` -- Qwen3-MoE, OLMoE, Granite-MoE, gpt-oss and Gemma-4 in transformers
+5.x, and e4b's served wrapper keeps that signature -- so one hook reads every family whatever its router is named
+(``gate``, ``router``) or returns. `E4B_FUSE_ROUTER_EPI=0` is still required (the recording's routing must be the
+unfolded router's).
 
     python record_eids.py --arena ... --calib ... --prompts prompts_b16.json --out eids_b16.pt     # on the box
     python record_eids.py --self-test                                                            # CPU, tiny Qwen3-MoE
@@ -28,31 +35,40 @@ import time
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-for cand in (HERE, os.path.join(HERE, ".."), os.path.join(HERE, "..", "p44")):
+for cand in (HERE, os.path.join(HERE, ".."), os.path.join(HERE, "..", "p44"), os.path.join(HERE, "..", "p60")):
     if cand not in sys.path:
         sys.path.insert(0, cand)
 
 
-class RouterRecorder:
-    """Records routed ids of every call with exactly ``batch`` rows on every ``*SparseMoeBlock.gate``."""
+def expert_modules(model):
+    """``(name, module)`` for every MoE block's experts container, in layer order: modules whose last dotted name
+    component is ``experts`` (``mlp.experts``, ``block_sparse_moe.experts``, Gemma-4's ``experts``). Per-expert
+    children (``experts.0``) do not match, so each block is counted once."""
+    return [(n, m) for n, m in model.named_modules() if n.split(".")[-1] == "experts"]
 
-    def __init__(self, model, top_k: int, batch: int, block_suffix: str = "SparseMoeBlock"):
+
+class RouterRecorder:
+    """Records the routed ids of every call with exactly ``batch`` rows, read from the ``top_k_index`` argument of
+    every MoE block's ``experts`` call (a forward pre-hook), so the router's name and return shape do not matter."""
+
+    def __init__(self, model, top_k: int, batch: int):
         self.top_k, self.batch = top_k, batch
-        blocks = [m for _, m in model.named_modules() if type(m).__name__.endswith(block_suffix)]
+        blocks = expert_modules(model)
         if not blocks:
-            raise RuntimeError(f"no module whose class name ends in {block_suffix!r}")
+            raise RuntimeError("no MoE experts module (a module named '*.experts') in this model")
+        self.names = [n for n, _ in blocks]
         self.calls = [[] for _ in blocks]
         self.other = [0] * len(blocks)
-        self.handles = [blk.gate.register_forward_hook(self._hook(i)) for i, blk in enumerate(blocks)]
+        self.handles = [m.register_forward_pre_hook(self._hook(i), with_kwargs=True) for i, (_, m) in enumerate(blocks)]
 
     def _hook(self, li):
-        def hook(_mod, _inp, out):
-            if isinstance(out, tuple) and len(out) == 3 and not torch.is_floating_point(out[2]):
-                ids = out[2]
-            else:
-                logits = out[0] if isinstance(out, tuple) else out
-                ids = torch.topk(logits.reshape(-1, logits.shape[-1]), self.top_k, dim=-1).indices
+        def hook(_mod, args, kwargs):
+            ids = args[1] if len(args) > 1 else kwargs.get("top_k_index")
+            if ids is None or torch.is_floating_point(ids):
+                raise RuntimeError(f"{self.names[li]}: experts was not called as (hidden, top_k_index, top_k_weights)")
             ids = ids.reshape(-1, ids.shape[-1])
+            if ids.shape[-1] != self.top_k:
+                raise RuntimeError(f"{self.names[li]}: top_k_index has {ids.shape[-1]} columns, expected top_k={self.top_k}")
             if ids.shape[0] == self.batch:
                 self.calls[li].append(ids.to(torch.int16).cpu())
             else:

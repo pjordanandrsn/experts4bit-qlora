@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""bench/p60/record_eids.py records routed expert ids for every MoE family, not only Qwen3.
+"""bench/families/record_eids.py records routed expert ids for every MoE family, not only Qwen3 (P60's pinned
+recorder, bench/p60/record_eids.py, stays byte-identical).
 
 The recorder hooks each block's ``experts`` call and reads its ``top_k_index`` argument, so it needs no knowledge of
 the router's name (``gate`` or ``router``) or of its return shape. That shape differs by family:
@@ -19,7 +20,7 @@ import torch
 pytest.importorskip("transformers")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-_spec = importlib.util.spec_from_file_location("record_eids", os.path.join(HERE, "..", "bench", "p60", "record_eids.py"))
+_spec = importlib.util.spec_from_file_location("record_eids", os.path.join(HERE, "..", "bench", "families", "record_eids.py"))
 record_eids = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(record_eids)
 

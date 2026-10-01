@@ -2,10 +2,10 @@
 
 ## Unreleased
 
-### `bench/p60/record_eids.py` records routed expert ids for every MoE family, not only Qwen3 (bench and tests only)
+### `bench/families/record_eids.py`: P60's routing recorder, generalised to every MoE family (bench and tests only)
 
-- **Before:** the recorder hooked `.gate` on classes named `*SparseMoeBlock` and parsed Qwen's router output, so it missed gpt-oss, Granite and Gemma-4, whose routers are named `router`.
-- **Now:** it pre-hooks each block's `experts` call and reads its `top_k_index` argument. Every admitted family calls `experts(hidden, top_k_index, top_k_weights)` in transformers 5.x, and e4b's served wrapper keeps that signature. It refuses a model with no experts module, a call shaped otherwise, and a `top_k` mismatch.
+- P60's recorder (`bench/p60/record_eids.py`, a registered lane's staged file, left byte-identical) hooked `.gate` on classes named `*SparseMoeBlock` and parsed Qwen's router output, so it missed gpt-oss, Granite and Gemma-4, whose routers are named `router`.
+- The new copy pre-hooks each block's `experts` call and reads its `top_k_index` argument. Every admitted family calls `experts(hidden, top_k_index, top_k_weights)` in transformers 5.x, and e4b's served wrapper keeps that signature. It refuses a model with no experts module, a call shaped otherwise, and a `top_k` mismatch.
 - `tests/test_record_eids_families.py` covers tiny Qwen3-MoE, OLMoE, Granite-MoE and gpt-oss models. On each, the recorded ids must equal the family's own router indices, call for call; the routers return `(logits, w, idx)`, `(idx, w, logits)` and `(logits, scores, idx)`. Groundwork for per-family routing replays (the K20 method, other families).
 
 ### Lane P88 registered (#564): P87's instrument on K19's new plan, with a CPU floor (bench and tests only)
