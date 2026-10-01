@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Lane P93 registered (#564): P92's design on the route at the served precision -- does K25-tree in TF32 make the NF4 families' B=16 decode faster without moving their K8? (bench and tests only)
+
+- **What it is.** P92's lane, unchanged except the treatment and the pin.
+  - **Treatment:** the K25 route now runs the select tree through TF32 MMA at K27's plan (#834).
+  - **Pin:** grouped-nf4-gemm `908a2ca`, which carries the tree.
+  - **Scope:** Granite `r12epi` and OLMoE `nf4`, OFF vs ON, on one RTX 5090. Per family: B=16 and B=1 speed, two-text
+    K8, and P92's reducer and rule.
+- **The registered consequence:** both families LICENSED moves `E4B_NF4_GROUPED_SMALLM` to `auto`.
+- **Rehearsed on the A2000** through install, the new tripwire, the reducer's self-test, the premise (4/4, 30/30) and
+  fetch/bake. Every arm stopped at the fp8 KV append, as P92's did.
+- `tests/test_p93_staged_pin.py` is P92's pin test, plus the runner's tripwire plan equal to the live `_K25_PLAN`.
+
 ### The K25 route runs at the served precision: the select tree through TF32 MMA at K27's plan (opt-in; P93 reads it)
 
 - **Why.** P92 read K25 in bf16 QUALITY_FAIL on OLMoE: bf16 weight rounding. grouped-nf4-gemm's K27 (RTX 5090) read
