@@ -42,8 +42,10 @@ s/step**, its trajectory EQUIVALENT-TO-RESIDENT against the 5090 reading
 more than the card has (OOM at 24.45 GB at both recipes and at step 18 as
 shipped). **Unsloth 2026.9.14 trains the same set resident on the 24 GB
 card** (24.22 GB peak, 10.03 s/step, the same loss) — the lane predicted it
-would not, and that row is the finding; HF neither fits nor offloads there,
-and axolotl's three levers are three refusals. On the 12 GB card e4b trains
+would not, and that row is the finding; HF neither fits nor offloads there.
+axolotl's three rows there are not readings of axolotl: its plain arm failed
+on this harness's no-autocast loop (TC1 amendment 4, corrected 2026-10-02)
+and is re-asked. On the 12 GB card e4b trains
 the set under offload at micro-batch 1 (10.46 GB peak, 69.9 s/step on an
 A2000 behind a 6-core Xeon, held-out 0.8483 beside the 5090's 0.8516 /
 0.8487); Unsloth's loader dispatches modules to the CPU there and refuses,
@@ -216,14 +218,15 @@ path at both micro-batches and in its reference loop (32.5 GB peak on a
 them at 30.47 GB and 10.59 s/step; e4b fits only as shipped (bf16 adapters,
 32.48 GB, 5.09 s/step — a labelled row, not a comparison). An e4b loss,
 said as such; e4b under expert offload on this family is the next row.
-On Mixtral-8x7B (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-02`) e4b under
-expert offload trains the matched set at 7.15 GB and 15.8 s/step against
-Unsloth resident at 31.95 GB; once compiled, Unsloth steps in 6.2 / 7.0 s,
-but its two draws differ by 12 %, so no position is quoted (P5 UNTESTED).
-Unsloth 2026.9.14 spends its first six steps compiling kernels on this
-family — 76 to 89 minutes on the box, against e4b's 5.5-minute 20-step
-run (`.compile-warmup`); that compile phase's 95 GB host-RAM high-water is
-what stopped box B's host.
+**Nothing is quoted for Unsloth on Mixtral-8x7B.** The Mixtral rows
+registered on 2026-10-02 are retired (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-02`,
+retired, and `.compile-warmup`): their Unsloth readings — the 76–89-minute
+compile phase, the 6.2 / 7.0 s/step, the 12 % draw spread — came from this
+harness's engagement counters inside Unsloth's compiled MoE block (a guard
+that failed on every call, 743 graph breaks, the 1024 recompile limit hit),
+not from Unsloth (TC2 amendment 5). The counters are trace-safe now and the
+Mixtral pair is being re-measured; e4b under offload trained the set at
+7.15 GB and 15.8 s/step, unaffected.
 
 
 **Against Unsloth, end-to-end, on one identical training problem** (lane

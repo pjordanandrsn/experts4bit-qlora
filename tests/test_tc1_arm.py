@@ -1001,3 +1001,101 @@ def test_tc2_amendment_4_qwen35_offload_token():
     assert 'tc2qwen35off) tc2_qwen35_offload;;' in run
     assert "TC2_UNS_TARGET_PARAMS" not in run.split("tc2_qwen35_offload(){")[0].split("tc2_big_family(){")[0], "no other token sets it"
 
+
+def test_tc1_amendment_4_axolotl_router_recast_is_what_autocast_computes():
+    """TC1 amendment 4: axolotl's loader leaves frozen `.gate` routers in fp32 and its trainer autocasts them to bf16 per call;
+    the harness runs no autocast, so it casts them once after load. Only frozen fp32 `.gate` weights move; a trainable one, a
+    non-gate module and a quantised (non-fp32) one are left alone; the bf16 result equals autocast's per-call cast; an fp32
+    value that is not a bf16 round trip is still cast (autocast would round it the same way) and is counted, not refused."""
+    torch = pytest.importorskip("torch")
+    arm = _load_arm_module()
+
+    class Router(torch.nn.Module):
+        def __init__(self, w):
+            super().__init__()
+            self.weight = torch.nn.Parameter(w, requires_grad=False)
+
+    class Block(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.gate = Router(torch.randn(4, 8).to(torch.bfloat16).to(torch.float32))       # an upcast of a bf16 load
+            self.up = torch.nn.Linear(8, 8).to(torch.float32)                                 # not a gate
+            self.other = torch.nn.Module()
+            self.other.gate = Router(torch.tensor([[1.0 + 2 ** -12] * 8]))                    # not a bf16 round trip
+            self.trained = torch.nn.Module()
+            self.trained.gate = torch.nn.Linear(8, 2)                                         # trainable: left alone
+
+    m = torch.nn.Module()
+    m.layers = torch.nn.ModuleList([Block(), Block()])
+    x = torch.randn(3, 8).to(torch.bfloat16)
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        want = torch.nn.functional.linear(x, m.layers[0].gate.weight)                        # what axolotl's trainer computes
+    rep = arm.axolotl_router_recast(m)
+    assert rep["n_recast"] == 4 and rep["n_not_exact_round_trip"] == 2 and rep["to"] == "bfloat16", rep
+    assert m.layers[0].gate.weight.dtype == torch.bfloat16 and m.layers[0].other.gate.weight.dtype == torch.bfloat16
+    assert m.layers[0].up.weight.dtype == torch.float32 and m.layers[0].trained.gate.weight.dtype == torch.float32
+    got = torch.nn.functional.linear(x, m.layers[0].gate.weight)                              # the harness: no autocast
+    assert torch.equal(got, want)
+
+
+def test_tc1_amendment_4_only_the_scattermoe_arm_reaches_the_hub():
+    """TC1 amendment 4: every arm runs with HF_HUB_OFFLINE=1 except axolotl's scattermoe native-best (its KernelsPlugin fetches
+    kernels-community kernels at load), and that arm records the kernel commits it fetched; the receipt carries both records."""
+    run = RUN_SH.read_text()
+    assert 'local OFFL=1; [ "$FW/$TAG" = axolotl/ckpt_axolotl_best ] && OFFL=0' in run
+    assert "env $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1" in run and "HF_HUB_OFFLINE=1 UNSLOTH" not in run
+    src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
+    assert 'x["axolotl_router_recast"] = axolotl_router_recast(model)' in src
+    assert '"axolotl_router_recast": x.get("axolotl_router_recast"), "hub_kernels_cached": x.get("hub_kernels_cached")' in src
+
+
+_TC2_AM5 = {}   # module global, as the harness's wrappers are reached through a module attribute (torch._grouped_mm, Unsloth's backends)
+
+
+def test_tc2_amendment_5_traced_counts_are_exact_and_free_under_torch_compile():
+    """TC2 amendment 5: a counter bumped by a harness-style wrapper inside compiled code -- an autograd.Function under activation
+    checkpointing, the shape of Unsloth's compiled Mixtral MoE path -- counts every call (the checkpoint replay included, as an eager
+    run does), breaks no graph and recompiles nothing as the count grows. Eager calls keep the plain increment; dict() and
+    setdefault behave as on a dict."""
+    torch = pytest.importorskip("torch")
+    from torch._dynamo.utils import counters as dyn
+    arm = _load_arm_module()
+    c = arm.TracedCounts(("calls",))
+    c.setdefault("other", 0)
+
+    def wrapped_mm(a, b, _slot=c.slot("calls"), _bump=arm._tc1_bump):     # the harness's wrapper shape: an int slot by default
+        _bump(_slot)
+        return torch.mm(a, b)
+    _TC2_AM5["mm"] = wrapped_mm
+
+    class F(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx, a, b):
+            ctx.save_for_backward(a, b)
+            return _TC2_AM5["mm"](a, b)
+
+        @staticmethod
+        def backward(ctx, g):
+            a, b = ctx.saved_tensors
+            return g @ b.t(), a.t() @ g
+
+    def model(x, w):
+        return torch.utils.checkpoint.checkpoint(lambda x_, w_: torch.nn.functional.silu(F.apply(x_, w_)), x, w, use_reentrant=False)
+
+    torch._dynamo.reset()
+    dyn.clear()
+    f = torch.compile(model, backend="aot_eager")
+    w = torch.randn(16, 16, requires_grad=True)
+    for i in range(9):
+        f(torch.randn(4 + 4 * (i % 3), 16), w).sum().backward()
+    # 9 real forwards; whether the checkpoint's recomputed forward re-runs the counter's side effect is torch's policy, not the counter's
+    # (torch 2.8 replays it: 18; newer torch skips side effects in the recomputed backward: 9). The reducer's engagement floors are
+    # forward-only minimums (L*A experts calls, 6*L*A grouped_mm calls per step), so either count clears them; what matters is that
+    # every executed call counts, with no graph break and no per-call recompile.
+    assert c["calls"] in (9, 18), dict(c)
+    assert sum(dyn["graph_break"].values()) == 0, dict(dyn["graph_break"])
+    assert dyn["frames"]["total"] <= 6, dict(dyn["frames"])  # a handful of compiles for three shapes, never one per call
+    c.bump("other")                                       # eager: the plain increment
+    n = c["calls"]
+    assert dict(c) == {"calls": n, "other": 1} and len(c) == 2
+

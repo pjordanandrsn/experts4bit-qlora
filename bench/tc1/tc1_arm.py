@@ -246,6 +246,7 @@ Exit codes: 0 ok; 3 refused; 4 C1 failed (receipt written, arm void); 5 OOM; 6 l
 13 dataset/tokens mismatch; 15 void_trainable (non-adapter trainable); 18 matched init impossible (TC1, see above).
 """
 import argparse
+import collections.abc
 import contextlib
 import faulthandler
 import gc
@@ -1226,9 +1227,88 @@ def collate(rows, pad_id):
 
 
 # ----------------------------------------------------------------------------- U8: engagement counters
+# ----------------------------------------------------------------------------- TC2 amendment 5: engagement counters that torch.compile can trace
+# The counters below were plain Python dict increments. Inside code Dynamo traces -- Unsloth compiles Mixtral's MoE block (it leaves
+# Qwen3's uncompiled) -- such an increment is a side effect: Dynamo either breaks the graph on it (inside a higher-order op such as an
+# autograd.Function or activation checkpointing: "Mutating a variable not in the current scope") or freezes the counter's current value
+# into a guard, so every call fails the guard and recompiles. On tc1-5090-26 that cost Unsloth's Mixtral arm 76-89 minutes of
+# recompiles, 743 graph breaks and two hits of the 1024 recompile limit, after which frames ran eagerly. A traced call now bumps a
+# registered custom op on a CPU counter tensor instead: an ordinary op to Dynamo (no guard on its value, no graph break, kept because it
+# mutates its argument), executed on every run of the compiled graph. An eager call keeps the plain increment, so uncompiled paths
+# (e4b's, Qwen3's MoE block) pay nothing new. A snapshot sums both stores.
+def _tc1_bump_op():
+    if hasattr(torch.ops, "tc1") and hasattr(torch.ops.tc1, "bump"):
+        return torch.ops.tc1.bump
+    @torch.library.custom_op("tc1::bump", mutates_args=("counter",))
+    def bump(counter: torch.Tensor, slot: int) -> None:
+        counter[slot] += 1
+
+    @bump.register_fake
+    def _(counter, slot):
+        return None
+    return torch.ops.tc1.bump
+
+
+# Module globals on purpose: Dynamo wraps a module-global tensor and function with a source (a graph input and an ordinary call), where
+# the same tensor reached through a closure or a user object is a graph break ("SourcelessBuilder ... does not know how to wrap").
+_TC1_SLOTS = 4096
+_TC1_COUNT_T = torch.zeros(_TC1_SLOTS, dtype=torch.int64)      # traced calls
+_TC1_COUNT_PY = [0] * _TC1_SLOTS                               # eager calls
+_TC1_NEXT_SLOT = [0]
+_TC1_BUMP = _tc1_bump_op()
+
+
+def _tc1_bump(slot):
+    """Count one call in `slot`: a custom op on the global tensor when Dynamo is tracing, a plain increment otherwise."""
+    if torch.compiler.is_compiling():
+        _TC1_BUMP(_TC1_COUNT_T, slot)
+    else:
+        _TC1_COUNT_PY[slot] += 1
+
+
+class TracedCounts(collections.abc.Mapping):
+    """A name -> int mapping over global counter slots whose increments are safe inside torch.compile (see above). A wrapper holds
+    `slot(name)` as an int default argument and calls `_tc1_bump(slot)`; reads, `dict()` and `setdefault(name, 0)` behave as on the
+    dict it replaces."""
+
+    def __init__(self, names=()):
+        self._slot = {}
+        for n in names:
+            self.setdefault(n, 0)
+
+    def slot(self, key):
+        if key not in self._slot:
+            s = _TC1_NEXT_SLOT[0]
+            if s >= _TC1_SLOTS:
+                raise RuntimeError(f"TracedCounts: more than {_TC1_SLOTS} counter slots in one process")
+            _TC1_NEXT_SLOT[0] += 1
+            _TC1_COUNT_PY[s], self._slot[key] = 0, s
+            _TC1_COUNT_T[s] = 0
+        return self._slot[key]
+
+    def setdefault(self, key, default=0):
+        s = self.slot(key)
+        if default:
+            _TC1_COUNT_PY[s] += int(default)
+        return self[key]
+
+    def bump(self, key):
+        _tc1_bump(self.slot(key))
+
+    def __getitem__(self, key):
+        s = self._slot[key]
+        return _TC1_COUNT_PY[s] + int(_TC1_COUNT_T[s])
+
+    def __iter__(self):
+        return iter(self._slot)
+
+    def __len__(self):
+        return len(self._slot)
+
+
 class Counters:
     def __init__(self):
-        self.counts = {"fused_grouped_lora": 0, "experts_forward": 0, "moe_bnb4bit_backend": 0}
+        self.counts = TracedCounts(("fused_grouped_lora", "experts_forward", "moe_bnb4bit_backend"))   # TC2 amendment 5
         self._restore, self._hooks, self.absent = [], [], []
 
     def install_e4b(self):
@@ -1236,8 +1316,8 @@ class Counters:
             import nf4_qlora
             orig = nf4_qlora.fused_grouped_lora
 
-            def w(*a, _orig=orig, **k):
-                self.counts["fused_grouped_lora"] += 1
+            def w(*a, _orig=orig, _slot=self.counts.slot("fused_grouped_lora"), **k):
+                _tc1_bump(_slot)
                 return _orig(*a, **k)
             nf4_qlora.fused_grouped_lora = w
             self._restore.append((nf4_qlora, "fused_grouped_lora", orig))
@@ -1249,7 +1329,7 @@ class Counters:
         the second counter Unsloth's validity rule reads)."""
         for name, m in model.named_modules():
             if is_experts_module(name):
-                self._hooks.append(m.register_forward_pre_hook(lambda mod, inp: self.counts.__setitem__("experts_forward", self.counts["experts_forward"] + 1)))
+                self._hooks.append(m.register_forward_pre_hook(lambda mod, inp, _slot=self.counts.slot("experts_forward"): _tc1_bump(_slot)))
 
     def install_hf(self, model):
         self.install_experts_hooks(model)
@@ -1266,8 +1346,8 @@ class Counters:
                 continue
             self.counts.setdefault(key, 0)
 
-            def w2(*a, _orig=orig, _key=key, **k):
-                self.counts[_key] += 1
+            def w2(*a, _orig=orig, _key=key, _slot=self.counts.slot(key), **k):
+                _tc1_bump(_slot)
                 return _orig(*a, **k)
             setattr(owner, fname, w2)
             self._restore.append((owner, fname, orig))
@@ -1288,8 +1368,8 @@ class Counters:
                 continue
             self.counts.setdefault(key, 0)
 
-            def w(*a, _orig=orig, _key=key, **k):
-                self.counts[_key] += 1
+            def w(*a, _orig=orig, _key=key, _slot=self.counts.slot(key), **k):
+                _tc1_bump(_slot)
                 return _orig(*a, **k)
             setattr(M, fname, w)
             self._restore.append((M, fname, orig))
@@ -1302,8 +1382,8 @@ class Counters:
             orig_apply = cls.apply
             self.counts.setdefault("manual_grouped_mm", 0)
 
-            def w3(*a, _orig=orig_apply, **k):
-                self.counts["manual_grouped_mm"] += 1
+            def w3(*a, _orig=orig_apply, _slot=self.counts.slot("manual_grouped_mm"), **k):
+                _tc1_bump(_slot)
                 return _orig(*a, **k)
             cls.apply = w3
             self._restore.append((cls, "apply", orig_apply))
@@ -1319,8 +1399,8 @@ class Counters:
                 continue
             self.counts.setdefault(key, 0)
 
-            def w4(*a, _orig=orig_p, _key=key, **k):
-                self.counts[_key] += 1
+            def w4(*a, _orig=orig_p, _key=key, _slot=self.counts.slot(key), **k):
+                _tc1_bump(_slot)
                 return _orig(*a, **k)
             setattr(cls, fname, w4)
             self._restore.append((cls, fname, orig_p))
@@ -1834,6 +1914,48 @@ def load_hf(a):
     return model, x
 
 
+def axolotl_router_recast(model, dtype=None):
+    """TC1 amendment 4 (2026-10-02). axolotl 0.20.0's ModelLoader upcasts every module whose name ends in `.gate` to fp32
+    (loaders/model.py:611-616 -> _convert_embedding_modules_dtype :1449-1451, before_kbit_train_or_finetune=True) and leaves it
+    there; its own trainer then runs every forward under accelerate's bf16 autocast (TrainingArguments.bf16 -> mixed_precision
+    "bf16" -> accelerate wraps model.forward in torch.autocast), which casts that fp32 weight to bf16 inside F.linear on every
+    call. This harness drives the forward itself with no autocast (TC1-PREREG: "bf16 compute, no autocast"), so a transformers-5
+    router held as a raw nn.Parameter (Qwen3MoeTopKRouter: F.linear(hidden_states, self.weight)) met bf16 activations with an fp32
+    weight and raised -- the harness's doing, not axolotl's. Casting the frozen fp32 `.gate` weights to bf16 once, after load,
+    computes exactly what autocast computes per call. Whether the cast is also an exact round trip of the bf16 checkpoint is
+    recorded (it should be: the upcast is of a bf16 load), never required. Quantised gates (uint8 Params4bit) and trainable ones
+    are left alone. Returns the report the receipt carries."""
+    dtype = dtype or torch.bfloat16
+    done, inexact = [], []
+    for name, mod in model.named_modules():
+        if not name.endswith(".gate"):
+            continue
+        w = getattr(mod, "weight", None)
+        if not isinstance(w, torch.nn.Parameter) or w.dtype != torch.float32 or w.requires_grad:
+            continue
+        if not torch.equal(w.data, w.data.to(dtype).to(torch.float32)):
+            inexact.append(name)
+        mod.to(dtype)
+        done.append(name)
+    return {"n_recast": len(done), "names_sample": done[:3], "to": str(dtype).replace("torch.", ""),
+            "n_not_exact_round_trip": len(inexact), "not_exact_sample": inexact[:3],
+            "why": "axolotl loaders/model.py:611-616,1449-1451 upcast .gate to fp32; axolotl's trainer autocasts it to bf16 per call; this harness runs no autocast"}
+
+
+def hub_kernels_cached():
+    """TC1 amendment 4: the kernels-community repos (and the commit each resolved to) in the HF cache after an arm that was let
+    reach the Hub -- what the scattermoe native-best arm fetched, so the row names the kernel bytes it ran."""
+    try:
+        from huggingface_hub import scan_cache_dir
+        out = []
+        for repo in scan_cache_dir().repos:
+            if repo.repo_id.startswith("kernels-community/"):
+                out.append({"repo": repo.repo_id, "revisions": sorted(r.commit_hash[:12] for r in repo.revisions)})
+        return sorted(out, key=lambda d: d["repo"])
+    except Exception as e:                                  # informational: a scan failure never fails the arm
+        return [{"error": f"{type(e).__name__}: {str(e)[:120]}"}]
+
+
 def load_axolotl(a):
     """P2-2: axolotl 0.20.0's own model stack under this harness's loop (axolotl-arm-spec.md). Everything axolotl.train.train
     does up to the trainer is `load_cfg` + `load_tokenizer` + `ModelLoader(cfg, tok).load()` (loaders/model.py:305-378 runs
@@ -1895,6 +2017,10 @@ def load_axolotl(a):
         cfg = load_cfg(DictDefault(cfg_dict))                   # cli/config.py:227-318 (validate, prepare_plugins, normalize)
         tokenizer_obj = load_tokenizer(cfg)                     # train.py:73
         model, lora_config = ModelLoader(cfg, tokenizer_obj).load()   # train.py:83-84 -> loaders/model.py:305-378
+    with PH("router_recast"):                                  # TC1 amendment 4: what axolotl's trainer autocast does per call, once
+        x["axolotl_router_recast"] = axolotl_router_recast(model)
+    if os.environ.get("HF_HUB_OFFLINE", "1") != "1":            # TC1 amendment 4: only the scattermoe arm is let reach the Hub
+        x["hub_kernels_cached"] = hub_kernels_cached()
     x["axolotl_layer_offload"] = None
     if lo:
         # TC3 arm 9 (`ckpt_axolotl_m_layeroffload`): the lever is a TRAINER mixin -- core/trainers/mixins/layer_offloading.py:280-305, LayerOffloadingMixin.__init__
@@ -2300,7 +2426,14 @@ def dynamo_snapshot():
     try:
         import torch._dynamo.utils as du
         c = {k: dict(v) for k, v in du.counters.items()}
-        return {"counters": c, "recompiles_total": int(sum(c.get("recompiles", {}).values()))}
+        # TC2 amendment 5: torch 2.12 never fills counters["recompiles"], so recompiles_total read 0 on tc1-5090-26's Unsloth Mixtral arm
+        # while ~3,500 frames were recompiled. The counts that do exist are recorded beside it: frames converted, unique graphs, graph
+        # breaks, and how many "recompile limit" messages Dynamo logged (a hit means later calls of that frame ran eagerly).
+        return {"counters": c, "recompiles_total": int(sum(c.get("recompiles", {}).values())),
+                "frames_total": int((c.get("frames") or {}).get("total", 0)),
+                "unique_graphs": int((c.get("stats") or {}).get("unique_graphs", 0)),
+                "graph_breaks_total": int(sum((c.get("graph_break") or {}).values())),
+                "recompile_limit_hits": json.dumps(c, default=str).count("recompile limit")}
     except Exception as e:
         return {"counters": None, "recompiles_total": None, "error": f"{type(e).__name__}: {str(e)[:120]}"}
 
@@ -2943,6 +3076,7 @@ def run_arm(a, load_fn, sampler=True):
         "structural_expected_n_attn4": x.get("structural_expected_n_attn4"), "detector_version": x.get("detector_version"),
         "loader_used": x.get("loader_used"), "loader_fallback_reason": x.get("loader_fallback_reason"), "unsloth_targets": x.get("unsloth_targets"),
         "hf_targets": x.get("hf_targets"), "axolotl_targets": x.get("axolotl_targets"), "axolotl": x.get("axolotl"),      # P2-2
+        "axolotl_router_recast": x.get("axolotl_router_recast"), "hub_kernels_cached": x.get("hub_kernels_cached"),   # TC1 amendment 4
         "hf_experts_implementation": x.get("hf_experts_implementation"),                                                   # J [F22]
         "hf_double_quant": x.get("hf_double_quant"),                                                                       # phase 3: the HF arm's double-quant, requested and loaded
         "axolotl_bnb4bit_modules": x.get("axolotl_bnb4bit_modules"),

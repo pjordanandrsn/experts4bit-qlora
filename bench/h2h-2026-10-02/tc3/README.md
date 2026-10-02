@@ -17,6 +17,12 @@ Between `tc3-4090-1` and `-8` six draws of the verified-secure RTX 4090 pool wer
 24 and 12 MB/s, two hosts that never answered ssh, one of each again, one driver 570.86 under the 580 floor): $0.14 in total, every one a
 receipt, the machines excluded by those receipts as the launcher's rules allow.
 
+> **Correction (2026-10-02, TC1 amendment 4).** The axolotl plain-arm failures in both tables below was this harness's, not axolotl's. axolotl's loader keeps every
+> `*.gate` router in fp32 on purpose (`loaders/model.py:611-616, 1449-1451`) because its own trainer runs the forward under bf16 autocast;
+> this harness runs no autocast, so the fp32 router met bf16 activations. The receipts show the router in float32 on every failing axolotl
+> arm and in bfloat16 on the HF and e4b arms. `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported` is retired, and the arm is
+> re-asked with the routers cast to bf16 after load (what autocast computes per call).
+
 ## The 24 GB card: e4b trains the matched set under expert offload at half the card; Unsloth trains it resident (register `e4b.train.frontier.qwen3.4090-24gb.2026-10-02`)
 
 The complete box, `tc3-4090-8` (every row one draw; the fit table as registered — a fit table, not a position):

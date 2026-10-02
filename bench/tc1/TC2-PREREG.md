@@ -154,3 +154,38 @@ P10 from the equivalence line and the e4b internal-parity line):
 registers the offload fit; a stable P9 pair is a position on this family, quoted with its footprint and with "e4b under offload" in its
 name. P8 refuted -> the e4b loss on this family stands, now with the lever tried. Budget: one RTX 5090, ceiling $0.69/h (the pool's
 cheapest verified host was $0.57/h at the box B re-run), 4.5 h, estimate under $3.20; the standing no-ask tier.
+
+### Amendment 5 (2026-10-02T17:49Z, a correction, before any re-run): the Mixtral Unsloth readings were this harness's counters inside Unsloth's compiled MoE block
+
+**What was published.** The box B re-run read (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-02` and its `.compile-warmup` row) reported
+that Unsloth 2026.9.14 spends its first six Mixtral steps compiling kernels (76-89 minutes, about 5,000 compile batches per arm), then
+steps in 6.2 / 7.0 s at about 32 GB with its two draws 12 % apart, and offered a cause only as a candidate.
+
+**What the receipts and the source say** (unsloth 2026.9.14, unsloth_zoo 2026.9.9, transformers 5.5.0 in the Unsloth venv, torch 2.12.1,
+read 2026-10-02). The harness's engagement counters were Python dict increments wrapped around `torch._grouped_mm` and Unsloth's MoE
+backend functions. Unsloth compiles Mixtral's `MixtralSparseMoeBlock` (it wraps Qwen3's MoE block in
+`torch_compiler_disable_unless_decode`, `unsloth_zoo/temporary_patches/qwen3_moe.py:92`, so Qwen3's runs uncompiled) and raises Dynamo's
+recompile limit from 8 to 1024 (`unsloth_zoo/patching_utils.py:262-263`). Inside the compiled block each counter is a side effect:
+Dynamo froze its current value into a guard, so every call failed the guard and recompiled, and inside Unsloth's
+`_GroupedMMRecompute` autograd function the increment was a graph break. The receipts carry it: 3,547 unique graphs, 743 graph breaks
+"HOP: Unsafe side effect ... Attempted to mutate ConstDictVariable()", two "recompile limit exceeded (1024)" messages, inductor
+`fxgraph_cache_hit` 4,988 against 36 misses (the same graphs re-traced), on both draws; after the limit the affected frames ran eagerly.
+Unsloth documents the same failure for its own call counter (`moe_utils.py:1153-1157`, off by default). Every other Unsloth arm of the
+campaign is clean on the same counters: Qwen3-30B-A3B on the 5090, H100 and 4090 boxes and in TC1b 4 frames and 20 graphs with no graph
+break; Qwen3.6 6 frames; OLMoE 29 frames with 2 breaks of Unsloth's own `compiler.disable` and no growth from step 10 to 60; gpt-oss 39.
+**The Mixtral Unsloth numbers are the harness's, not Unsloth's**: both Mixtral rows are retired, P7 (decided by Unsloth's second Mixtral
+draw) is withdrawn to UNTESTED, and P5 stays UNTESTED. e4b's Mixtral offload readings were not affected (its path is not compiled) and
+are restated by the re-run below.
+
+**The fix** (`bench/tc1/tc1_arm.py`, `TracedCounts`). A counted call bumps a registered custom op (`tc1::bump`) on a module-global CPU
+counter tensor when Dynamo is tracing, and a plain integer otherwise; each wrapper holds only an int slot. To Dynamo the op is an ordinary
+mutating op: no guard on the count, no graph break, executed on every run of the compiled graph. Tested under `torch.compile` with an
+autograd.Function inside activation checkpointing (the shape of Unsloth's path): exact counts including the checkpoint replay, zero
+graph breaks, no per-call recompile, where the dict counter graph-breaks. Eager paths (e4b's, Qwen3's MoE block) keep the plain
+increment. Every Dynamo snapshot now also records frames, unique graphs, graph breaks and recompile-limit hits: torch 2.12 never fills
+the `recompiles` key the receipt's `recompiles_total` read, which is why it said 0.
+
+**The re-run.** Amendment 2's `tc2mixtral` token from this amendment's merge, on a host with at least 192 GB of RAM (amendment 3): e4b
+`fused_attn4_m` under offload x2, Unsloth `ckpt_unsloth_m` x2, the e4b reference under offload. P5, P6 and P7 are scored on it as
+registered. A Mixtral Unsloth arm that still recompiles per call, with the counters inert, is the finding and is quoted with its frame
+counts. Budget: one RTX 5090, ceiling $0.69/h, 6 h (the launcher's cap), under $4.20; the standing no-ask tier.

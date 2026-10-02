@@ -532,7 +532,11 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   # fails whether the variable is empty or set. As an argument to `env` the expansion is
   # an ordinary word and an empty one simply vanishes.
   local ARM_ENV=""; [ "$ARM" = batched ] && ARM_ENV="E4B_BATCHED_PAD_WASTE_LIMIT=${TC1_BATCHED_PAD_WASTE_LIMIT:-64}"
-  env $ARM_ENV HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 OMP_NUM_THREADS=$PHYS TC1_BOX_CLASS="$BOX_CLASS" TC1_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tc1_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
+  # TC1 amendment 4: every arm runs with the Hub offline (the pinned snapshot is the only model bytes) except axolotl's scattermoe
+  # native-best, whose KernelsPlugin fetches kernels-community kernels by version at load, as an axolotl user's run does; the
+  # arm records the kernel commits it fetched (hub_kernels_cached), and the model revision stays pinned by sha.
+  local OFFL=1; [ "$FW/$TAG" = axolotl/ckpt_axolotl_best ] && OFFL=0
+  env $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1 OMP_NUM_THREADS=$PHYS TC1_BOX_CLASS="$BOX_CLASS" TC1_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tc1_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
       --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF \
       --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu \
       --tokens $TOK --tokens-sha $TOK_SHA --eval-every $ee --eval-n $en --unsloth-loader FastLanguageModel $EXPARG \

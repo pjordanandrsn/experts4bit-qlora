@@ -89,6 +89,12 @@ HF + PEFT (transformers 5.18.0, bf16 expert stacks, `target_parameters`) OOMs on
 (31.34 GB in use at a 20 MiB allocation), and so does the torch-2.14 `experts_implementation="grouped_mm"` variant at micro-batch 1 on the
 re-ask box: P5 HELD. No HF position exists on this card at this recipe.
 
+> **Correction (2026-10-02, TC1 amendment 4).** The axolotl failure below was this harness's, not axolotl's. axolotl's loader keeps every
+> `*.gate` router in fp32 on purpose (`loaders/model.py:611-616, 1449-1451`) because its own trainer runs the forward under bf16 autocast;
+> this harness runs no autocast, so the fp32 router met bf16 activations. The receipts show the router in float32 on every failing axolotl
+> arm and in bfloat16 on the HF and e4b arms. `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported` is retired, and the arm is
+> re-asked with the routers cast to bf16 after load (what autocast computes per call).
+
 **axolotl 0.20.0 on Qwen3-30B-A3B at its pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0) does not train** (box `tc1-5090-20`,
 with the venv installing after amendment 3): both matched draws loaded (`quantize_moe_experts` packed all 96 stacks, PEFT's
 `target_parameters` on the expert stacks, the attention projections by module) and died in the first forward inside transformers'
