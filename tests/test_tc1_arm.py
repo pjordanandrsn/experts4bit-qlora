@@ -864,7 +864,7 @@ def test_amendment_3_axolotl_family_uv_index_strategy_and_no_unsloth_venv_on_tha
     # the uv install reads PyPI past the cu130 index: uv's first-index strategy left axolotl's packaging==26.0 unsatisfiable on both TC1 boxes
     assert re.search(r'uv pip install --python \$PY_AX "axolotl==\$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log', body)
     # the token alone builds no Unsloth venv; every other token still builds both, behind the same driver gate
-    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl ") NEED_UNSLOTH=0;; esac' in body
+    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 ") NEED_UNSLOTH=0;; esac' in body   # amendment 8 adds its token
     assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then' in body
     assert body.index("NEED_UNSLOTH=1; case") < body.index("venv-unsloth-t28:") and body.count("runs no Unsloth arm (TC1-PREREG amendment 3)") == 2
 
@@ -1042,7 +1042,7 @@ def test_tc1_amendment_4_only_the_scattermoe_arm_reaches_the_hub():
     """TC1 amendment 4: every arm runs with HF_HUB_OFFLINE=1 except axolotl's scattermoe native-best (its KernelsPlugin fetches
     kernels-community kernels at load), and that arm records the kernel commits it fetched; the receipt carries both records."""
     run = RUN_SH.read_text()
-    assert 'local OFFL=1; case "$FW/$TAG" in axolotl/ckpt_axolotl_best|axolotl/ckpt_axolotl_best_d2) OFFL=0;; esac' in run
+    assert 'local OFFL=1; case "$FW/$TAG" in axolotl/ckpt_axolotl_best*) OFFL=0;; esac' in run      # amendments 6 and 8: every scattermoe tag
     assert "env $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1" in run and "HF_HUB_OFFLINE=1 UNSLOTH" not in run
     src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
     assert 'x["axolotl_router_recast"] = axolotl_router_recast(model)' in src
@@ -1133,3 +1133,26 @@ def test_tc1_amendment_5_native_best_token():
     assert 'local NATIVE="--adapter-dtype native --lora-init native"' in body
     assert "qwen3nativebest) tc1_nativebest_family qwen3nativebest Qwen/Qwen3-30B-A3B" in run
 
+
+def test_tc1_amendment_8_native_best_200_token():
+    """TC1 amendment 8: `qwen3nativebest200` runs e4b as shipped and axolotl's scattermoe native-best over the 200-step curve recipe,
+    two interleaved draws each, then e4b's matched fused arm over the same 200 steps; every scattermoe tag reaches the Hub (a prefix
+    rule), and the box skips the Unsloth install it has no arm for."""
+    import subprocess
+    run = RUN_SH.read_text()
+    m = re.search(r"^tc1_nativebest200_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE)
+    assert m, "tc1_nativebest200_family is gone"
+    body = m.group(0)
+    order = re.findall(r"&& (?:arm|draw2) +\$FAM (e4b|axolotl|unsloth) (\S+)", body)
+    assert order == [("e4b", "fused_attn4_shipped_200"), ("axolotl", "ckpt_axolotl_best_200"), ("e4b", "fused_attn4_shipped_200"),
+                     ("axolotl", "ckpt_axolotl_best_200"), ("e4b", "fused_attn4_m_200")], order
+    assert body.count("draw2") == 2 and body.count(" curve $TOK $TS") == 5 and "--axolotl-best 1" in body and "tc1_prepare $FAM \"$MID\" $REV $FAL \"$ALL\" $CURVE_EVAL_N" in body
+    assert "qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in run
+    assert 'case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 ") NEED_UNSLOTH=0;; esac' in run
+    rule = re.search(r'^  local OFFL=1; case .*?esac$', run, re.MULTILINE).group(0)
+    for tag, want in (("ckpt_axolotl_best", "0"), ("ckpt_axolotl_best_d2", "0"), ("ckpt_axolotl_best_200", "0"), ("ckpt_axolotl_best_200_d2", "0"),
+                      ("ckpt_axolotl_m", "1"), ("ckpt_axolotl_m_d2", "1")):
+        got = subprocess.run(["bash", "-c", f'f(){{ FW=axolotl; TAG={tag}\n{rule}\necho $OFFL; }}; f'], capture_output=True, text=True, check=True).stdout.strip()   # `local` needs a function
+        assert got == want, (tag, got)
+    got = subprocess.run(["bash", "-c", f'f(){{ FW=e4b; TAG=ckpt_axolotl_best\n{rule}\necho $OFFL; }}; f'], capture_output=True, text=True, check=True).stdout.strip()
+    assert got == "1"

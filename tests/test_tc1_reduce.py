@@ -304,3 +304,15 @@ def test_amendment_7_registers_the_native_best_token():
     NB = R.reduce_family(R.NB_FAM, R._nb_set(e4b_s=(4.306, 4.578), ax_s=(5.128, 5.20), un_s=(7.938, 7.897)), {}, 20)
     assert NB["verdicts"][("e4b", "fused_attn4_m")] == "VALID"          # tc1-5090-33 read it VOID: no registered n_layers for the token
     assert {p: v for p, _, v, _ in R.score_p13({R.NB_FAM: NB})}["P13"] == "UNTESTED"   # e4b shipped's 6.1 % pair, as on tc1-5090-33
+
+
+def test_amendment_8_registers_the_200_step_native_best_token():
+    R = _mod()
+    assert R.NB200_FAM == "qwen3nativebest200" and R.NB200_FAM in R.FAMS and R.N_LAYERS[R.NB200_FAM] == 48 and R.ATTN_CENSUS[R.NB200_FAM] == 192
+    assert R.EXPECTED[R.NB200_FAM] == [("e4b", "fused_attn4_shipped_200"), ("axolotl", "ckpt_axolotl_best_200"), ("e4b", "fused_attn4_shipped_200_d2"),
+                                       ("axolotl", "ckpt_axolotl_best_200_d2"), ("e4b", "fused_attn4_m_200")]
+    assert R.anchor_of(R.NB200_FAM) == ("e4b", "fused_attn4_m_200") and R.LATE_FROM == 101 and R.P14_BAND == (0.90, 1.10)
+    F = {R.NB200_FAM: R.reduce_family(R.NB200_FAM, R._nb200_set(), {}, None)}
+    assert [(p, v) for p, _, v, _ in R.score_p14(F)] == [("P14", "HELD")]
+    assert R.score_p14({}) == [] and R.NATIVE["e4b"] == "fused_attn4_shipped"          # the 20-step tokens keep their native arms
+
