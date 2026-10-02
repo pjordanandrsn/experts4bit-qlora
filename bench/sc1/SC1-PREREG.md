@@ -162,3 +162,16 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
   - The one `step_decomp.py` call without `ROUTEENV` is box B's bf16 oracle (`--ppl-oracle upstream`). Its quantity is the
     transformers bf16 forward, and its e4b side runs at T == 1, where `auto` does not route; K25 takes only rows above T == 1.
   The cross-box reading states both commits. The receipts record each box's e4b sha.
+- **A4 (2026-10-02T07:14Z; the box-A reading `sc1a-5090-1`, running at `0a2a0c8`).** Box A's Phase-0 smoke `smoke_qwen3_fused_b1` failed. It
+  was the first run of the int4 levers through `serve_paged` on Qwen3. The P42 harness hook, which the box's e4b environment
+  loads via `PYTHONPATH=$W/hook`, applies the int4 levers right after the tier is built. `serve_paged.build_engine` then applies
+  the same levers at the same point; its `_apply_levers` is the hook's `_apply_lanes`. The second application refused:
+  "E4B_SERVE_ATTN_INT4=1 matched no attention projections -- refusing a vacuous enable". Every scheduler-in-the-loop arm with int4
+  levers on fails the same way, on every box. The Granite proofs passed because their levers are off. Fix: every
+  `sc1_e4b_sched.py` invocation clears `PYTHONPATH`, so the server applies each lever once, as it does for a real user. The
+  harness's `step_decomp.py` arms keep the hook. `sc1_e4b_sched.py` refuses up front, naming the cause, if the hook is loaded
+  anyway. One shape test and three self-test checks pin it, and the shape test fails on the registered script. Consequence for
+  `sc1a-5090-1`: its scheduler arms (`lic_sched`, sched SAMEPROMPT, sched TTFT and energy) are HARNESS_ERROR rows by this defect.
+  Its other arms are a valid first draw, recorded as such. Box A is re-proved and re-run at A4's merge, with boxes B and C, so the
+  registered scheduler-slope ratio is measured on one box with its vLLM anchor. Stopping the running box was not possible from
+  this session.
