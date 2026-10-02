@@ -80,6 +80,10 @@ def main():
         "k8": "ppl", "mode": mode, "kv_cache_dtype_requested": kw["kv_cache_dtype"], "model": model, "revision": rev,
         "prompt_len": P, "steps": S, "status": "ok", **winfo, "logprobs_mode_requested": lp_req,
         "scored_index_range": [P + 1, P + S],
+        "generation": {"temperature": 0.0, "max_tokens": 1, "greedy": True, "detokenize": False,
+                       "note": "a quality instrument, untimed: detokenize=False so a full-vocab logprobs request does not "
+                               "detokenise ~152k ids per step (output_processor.py:234-242 drops the tokenizer); the "
+                               "scored distribution is unaffected"},
         "k8_equivalence": f"K8 scores cont[t+1] = ids[{P + 1}+t] for t in 0..{S - 1} given ids[:{P + 1}+t]; this scorer reads the same "
                           f"{S} conditionals from vLLM's own forward (prefill: prompt_logprobs slots; served: the generated position)",
     })
