@@ -117,3 +117,19 @@ Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 on torch 2.12.1+cu130 (TC1's comparator
 torch 2.8.0+cu128 for HF; axolotl 0.20.0 in its own uv venv (CPython 3.12, torch 2.14.0+cu130 by axolotl's pin, transformers 5.17.0, peft 0.21.0,
 bnb 0.50.2; TC1 amendment 3's `--index-strategy unsafe-best-match`). 12 GB: the venvs built from the `gpu-dev` k3rel interpreter under the hand
 run (`TC1_LOCAL_PYTHON`); versions recorded in `versions.txt` as on every box.
+
+
+## Amendments
+
+### Amendment 1 (2026-10-02T04:20Z, after the first 12 GB hand run died in its venv build, before any arm on either box): every venv the box script makes upgrades pip first
+
+**What the hand run showed.** The first `qwen3frontier12` run (gpu-dev, run id `local-20261002T041406Z`, 04:14Z) built `venv-e4b` from the
+k3rel interpreter with `python -m venv`, whose ensurepip bundles pip 22.0.2 on that Ubuntu-22.04 image; that pip cannot read the
+`setuptools>=77` (PEP 621) metadata of experts4bit-qlora and grouped-nf4-gemm and reported both as `unknown 0.0.0 ... ResolutionImpossible`
+(`logs/pip_e4b.log`), so the script stopped at rc 9 (`PIP FAIL (e4b)`) with no arm run and nothing to read. The rented images carry a current
+pip, which is why no TC1 / TC2 box met it.
+
+**The amendment.** `tc1_run.sh` upgrades pip in each venv it makes with `python -m venv` (`venv-e4b`, `venv-unsloth-t28`, `venv-unsloth`)
+before the install that needs it — logged to `logs/pip_upgrade_<venv>.log`, never fatal (a pip that cannot move leaves the install that
+follows to fail or succeed on its own). The axolotl venv is uv's and is not touched. Nothing in the arms, the alarms, the predicates or the
+readings moves; the 12 GB run restarts from this amendment's merge with the same registered snapshot and knobs.
