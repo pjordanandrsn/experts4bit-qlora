@@ -1,6 +1,6 @@
 #!/bin/bash
 # bench/sc1/sc1_sampler.sh -- the per-arm VRAM / power / PCIe sampler and a host sampler (lane SC1, experts4bit-qlora#846;
-# the notes/SC1-PREREG-draft-v3.md "Phase EN" sampler line, run around EVERY arm so the resource columns come from the
+# the SC1-PREREG.md "Phase EN" sampler line, run around EVERY arm so the resource columns come from the
 # same instrument as the energy windows).
 #
 #   sc1_sampler.sh start <tag>   nvidia-smi --query-gpu=timestamp,memory.used,utilization.gpu,clocks.sm,power.draw.instant,

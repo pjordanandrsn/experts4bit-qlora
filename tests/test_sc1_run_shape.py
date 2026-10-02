@@ -1,5 +1,5 @@
 """The shape of the SC1 box script and its controller, pinned in CI (lane SC1, experts4bit-qlora#846; the registration's
-`notes/SC1-PREREG-draft-v3.md` is the spec):
+`bench/sc1/SC1-PREREG.md` is the spec):
 
 - every shell file parses;
 - the refusals (class, disk, driver, box A's host vendor) come before the e4b install, and the lane's failure codes use the

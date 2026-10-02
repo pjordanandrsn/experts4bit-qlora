@@ -1,5 +1,5 @@
 #!/bin/bash
-# bench/sc1/sc1_drive.sh -- lane SC1, CONTROLLER side: the launcher's --command (notes/SC1-PREREG-draft-v3.md; e4b#846).
+# bench/sc1/sc1_drive.sh -- lane SC1, CONTROLLER side: the launcher's --command (SC1-PREREG.md; e4b#846).
 # From bench/p58/p58_drive.sh (staging map, nonce start, heartbeat / liveness / stall reporting, fetch) with
 # bench/tc1/tc1_drive.sh's forwarded-knob list and %q quoting. Stages sc1_run.sh, sc1_e4b_sched.py, sc1_prompts.py,
 # sc1_sampler.sh, sc1_reduce.py (when it exists), the comparator driver directories bench/sc1/{vllm,sglang,llamacpp,

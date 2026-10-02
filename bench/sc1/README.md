@@ -1,6 +1,6 @@
 # SC1 — Qwen3-30B-A3B serving head-to-head on RTX 5090s: e4b vs vLLM / SGLang / llama.cpp / ExLlamaV3 / LMDeploy (orchestration)
 
-Pre-registration: `SC1-PREREG.md` (the PI's; drafted as `notes/SC1-PREREG-draft-v3.md` — the box script follows its three boxes and
+Pre-registration: `SC1-PREREG.md` (the PI's; registered as draft v3 plus the round-3 patches — the box script follows its three boxes and
 their phases IN THAT ORDER). Upstream facts: `UPSTREAM-NOTES.md`. Issue: experts4bit-qlora#846.
 Lineage: `bench/p88/p88_run.sh` (the NF4 bake, the licensed pack build with `LICENV`/`SPEEDENV`/`K8ARGS`, the first-chunk watchdog, the
 K8 rows, the premise test), `bench/p58/p58_run.sh` + `p58_drive.sh` (nonce handshake, `can_run`/`arm_alarm`, the prompt dump, the

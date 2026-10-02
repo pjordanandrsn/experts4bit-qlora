@@ -2,7 +2,7 @@
 """sc1_e4b_sched.py -- e4b timed THROUGH its scheduler (lane SC1, experts4bit-qlora#846): the `lic_sched` / `int4_sched`
 arms, the e4b TTFT rows, the e4b energy windows, the SAMEPROMPT control on the e4b side, and the proving rental's smoke.
 
-Why this file exists (SC1-PREREG-draft-v3 "Why this lane" 3): the register's e4b number is `step_decomp.py --b1d-loop
+Why this file exists (SC1-PREREG.md "Why this lane" 3): the register's e4b number is `step_decomp.py --b1d-loop
 graph --b1d-timed`, a bare `g.replay()` window with no scheduler step, no per-step H2D of ids/pos, no host readback;
 vLLM's number is its whole serving loop. The ratios SC1 quotes are taken on THIS arm, which drives
 `experts4bit_qlora.serve_paged.build_engine` (the same construction the shipped server uses) through

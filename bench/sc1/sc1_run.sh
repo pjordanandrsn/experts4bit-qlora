@@ -1,5 +1,5 @@
 #!/bin/bash
-# bench/sc1/sc1_run.sh -- lane SC1, BOX side (notes/SC1-PREREG-draft-v3.md; experts4bit-qlora#846). Started detached by
+# bench/sc1/sc1_run.sh -- lane SC1, BOX side (SC1-PREREG.md; experts4bit-qlora#846). Started detached by
 # sc1_drive.sh with the run's nonce; SC1_RUN_NONCE first, then SC1_EXIT_CODE.<nonce> + TP_DONE.<nonce> on every exit and
 # SC1_SUCCESS.<nonce> only on a clean lane.
 #

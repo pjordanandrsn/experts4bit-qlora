@@ -285,7 +285,7 @@ def build_parser():
     p.add_argument("--prompt-len", type=int, default=None, help="default: the window file's prompt_len, else 512")
     p.add_argument("--steps", type=int, default=None, help="default: the window file's steps, else 2048")
     p.add_argument("--top-logprobs", type=int, default=1, help="prefill mode: top_logprobs_num for top-1 agreement (0 = off)")
-    p.add_argument("--no-flush", action="store_true", help="do not POST /flush_cache before scoring")
+    p.add_argument("--no-flush", action="store_true", help="skip the /flush_cache call before scoring")
     p.add_argument("--server-info", default=None, help="<log>.server_info.json from server.sh (else fetched live)")
     p.add_argument("--engagement", default=None)
     p.add_argument("--timeout", type=float, default=900.0)

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Lane SC1 registered (#846): Qwen3-30B-A3B serving head-to-head on RTX 5090s against vLLM 0.30.0, SGLang 0.5.20, llama.cpp b11327, ExLlamaV3 1.5.3 and LMDeploy 0.18.0 (bench and tests only)
+
+- `bench/sc1/`: the pre-registration (three boxes with minute budgets; matched work on identical token ids; e4b's licensed
+  pack built and K8-gated on the box at both arithmetics it serves; quality on every arm in the served and the prefill
+  shape, in nats, vs the bf16 checkpoint and vs the ratioed arm; the e4b ratio taken on a scheduler-in-the-loop slope with
+  the graph window as the kernel ceiling; TTFT, resources, energy; controls), `UPSTREAM-NOTES.md` (read from source at
+  the pinned tags), `DESIGN-REVIEW.md` (three adversarial rounds with dispositions), the comparator drivers and their
+  teacher-forced NLL scorers, the orchestration, the reducer with its self-test, the staged pin. Nothing outside `bench/`
+  and `tests/` changes; no default, gate, licence or claim moves.
+
 ### serve_paged correction: `fuse_qkv` applies the env-gated folds itself -- the server no longer refuses the registered fused stack
 
 - #853 described `--fuse-qkv` and the three fold flags as the harness's exclusive branches and refused

@@ -45,7 +45,7 @@ def staged_names() -> set:
     the premise test, and every file under each comparator directory that exists."""
     names = set(OWN) | set(P39) | {"hook/usercustomize.py", "test_k19_row_exact_gpu.py"}
     if (LANE / "sc1_reduce.py").is_file() and any(n == "sc1_reduce.py" for _w, n in _entries()):
-        names.add("sc1_reduce.py")            # the reducer's line is integration's (SC1_PIN_REDUCER=1 make_pin.sh); staged by path either way
+        names.add("sc1_reduce.py")            # pinned by default when present (make_pin.sh); staged by path either way
     for d in COMP_DIRS:
         if (LANE / d).is_dir():
             for p in (LANE / d).rglob("*"):
@@ -66,7 +66,7 @@ def test_staged_file_matches_its_pin(want, name):
 def test_pinned_names_equal_the_staged_set():
     pinned = {n for _w, n in _entries()}
     assert pinned == staged_names(), {"pinned_not_staged": sorted(pinned - staged_names()), "staged_not_pinned": sorted(staged_names() - pinned)}
-    assert "# sc1_reduce.py: pinned at integration" in PIN.read_text()      # the integration note survives until the reducer is pinned
+    assert "# sc1_reduce.py is pinned whenever it is present" in PIN.read_text()      # the reducer is pinned by default since integration
 
 
 def test_every_pinned_name_is_staged_by_the_driver_and_resolves_the_same_way():
