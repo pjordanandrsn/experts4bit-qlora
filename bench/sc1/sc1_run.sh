@@ -25,10 +25,10 @@
 # CPU-bound, P87/P88). rc 13 / 18 are the launcher's machine-exclusion codes BY DESIGN; nothing else here uses 13/14/17/18.
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
 # SC1_GPU_CLASS SC1_MIN_DISK_GB SC1_MIN_DRIVER SC1_CPU_VENDOR SC1_CALIB_NSEQ SC1_REHEARSAL SC1_QUIESCE_S SC1_VLLM_WHEEL.
-# SC1_PROVE=1 is the PROVING RENTAL (one per box image, <= 10 min): pre-flight, every install + tripwire for the box, the
-# e4b paged engine end to end on Granite (fetch @ P94's GR_REV, NF4 bake, sc1_e4b_sched.py --smoke at B=1 and 16 with
-# graphs, census printed), optionally SGLang's Marlin MoE JIT + /health against SC1_PROVE_SGLANG_MODEL=<repo@rev> (box C;
-# unset = skipped, stated) -- NO Qwen3 fetch in the proof.
+# SC1_PROVE=1 is the PROVING RENTAL (one per box image; guards per Amendments A1/A2): pre-flight, every install + tripwire
+# for the box, the e4b paged engine end to end on Granite (fetch @ P94's GR_REV, NF4 bake, sc1_e4b_sched.py --smoke at B=1
+# and 16 with graphs, census printed), and on box C SGLang's Marlin MoE JIT + /health against SC1_PROVE_SGLANG_MODEL=<repo@rev>
+# (REQUIRED on box C) -- NO Qwen3 fetch in the proof. PROVED is written only when every one of those RAN and passed (A2).
 set -uo pipefail
 W=/root/sc1; mkdir -p $W/logs $W/samples; cd $W || exit 78
 say(){ echo "[$(date -u +%FT%TZ)] sc1: $*"; }
@@ -104,7 +104,7 @@ declare -A OK; have(){ [ "${OK[$1]:-0}" = 1 ]; }
 # ---- quiescence gate (v3 Phase 0 / "Validity"): no install / build / JIT process and loadavg < nproc/2, waited for (<= SC1_QUIESCE_S) and RECORDED
 quiesce(){ local TAG=$1 t0 np half busy load1 ok=no waited; t0=$(date +%s); np=$(nproc); half=$(( np / 2 )); [ "$half" -lt 1 ] && half=1
   while :; do
-    busy=$(pgrep -fc -- 'pip install|cmake|ninja|nvcc|git clone' 2>/dev/null || echo 0); load1=$(cut -d' ' -f1 /proc/loadavg)
+    busy=$(pgrep -f -- 'pip install|cmake|ninja|nvcc|git clone' 2>/dev/null | wc -l | tr -d ' '); load1=$(cut -d' ' -f1 /proc/loadavg)   # NOT `pgrep -c` with an echo-0 fallback: on no match procps prints 0 AND exits 1, giving two zeros (A2)
     if [ "$busy" = 0 ] && awk -v l="$load1" -v h="$half" 'BEGIN{exit !(l < h)}'; then ok=yes; break; fi
     waited=$(( $(date +%s) - t0 )); [ "$waited" -ge "$QUIESCE_S" ] && break; sleep 15
   done
@@ -513,19 +513,25 @@ reduce(){ if [ -s $W/sc1_reduce.py ]; then say "reduce"; "$PY" $W/sc1_reduce.py 
 # ============================================================================ the PROVING RENTAL (SC1_PROVE=1): no Qwen3 fetch
 if [ "$PROVE" = 1 ]; then
   echo "PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite" | tee -a summary.txt
+  case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3 lmdeploy";; C) PROVE_NEEDS="vllm exl3 sglang";; esac   # = the install dispatch's sets
+  for E in $PROVE_NEEDS; do have $E || { say "PROVE: $E did not install -- NOT PROVED"; rec 23; }; done
   quiesce prove
   if fetch granite "$GR" "$GR_REV" 900 && bake granite "$GR" 1500; then
     GA=$W/work_granite/nf4.arena
-    for B in 1 16; do can_run 600 smoke_granite_b$B && { sched_smoke granite_b$B $B "$GR_ENV" 0 "$GR" "$GR_REV" "$GA"; rec $?; }; done
+    for B in 1 16; do if can_run 600 smoke_granite_b$B; then sched_smoke granite_b$B $B "$GR_ENV" 0 "$GR" "$GR_REV" "$GA"; rec $?; else say "PROVE: smoke_granite_b$B NOT RUN (deadline) -- a skipped smoke is not a proof (A2)"; rec 23; fi; done
   else rec 12; fi
-  if [ "$BOX" = C ] && have sglang; then
-    if [ -n "${SC1_PROVE_SGLANG_MODEL:-}" ]; then   # <repo@rev>: a small GPTQ MoE checkpoint the proof may fetch (never the lane's 30B); the JIT + /health answer is the box-C proof's purpose
+  if [ "$BOX" = C ]; then
+    if [ -z "${SC1_PROVE_SGLANG_MODEL:-}" ]; then say "PROVE: box C needs SC1_PROVE_SGLANG_MODEL=<repo@rev> -- NOT PROVED (A2)"; rec 23
+    elif ! have sglang; then rec 23
+    elif ! can_run 900 prove_sglang_jit; then say "PROVE: the sglang JIT + /health NOT RUN (deadline) -- NOT PROVED (A2)"; rec 23
+    else   # <repo@rev>: a small GPTQ MoE checkpoint the proof may fetch (never the lane's 30B); the JIT + /health answer is the box-C proof's purpose
       PM=${SC1_PROVE_SGLANG_MODEL%@*}; PR=${SC1_PROVE_SGLANG_MODEL#*@}; say "PROVE: sglang Marlin MoE JIT + /health on $PM @ $PR"
       t0=$(date +%s); sglang_server_start "$PM" "$PR" 30000 "$W/logs/sglang_server_prove.log" matched > logs/sglang_start_prove.log 2>&1; rc=$?
       line "PROVE sglang jit+health rc=$rc startup_s=$(( $(date +%s) - t0 )) $(grep -a 'SGLANG_ENGAGEMENT {' logs/sglang_start_prove.log | tail -1 | cut -c1-200)"; sglang_server_stop; rec $rc
-    else echo "PROVE sglang JIT+/health SKIPPED: SC1_PROVE_SGLANG_MODEL unset (the proof fetches no 30B checkpoint; set <repo@rev> of a small GPTQ MoE to exercise the JIT)" | tee -a summary.txt; fi
+    fi
   fi
-  [ "$rc_any" = 0 ] || { say "PROVE: a smoke failed (rc_any=$rc_any)"; finish 23; }
+  [ "$rc_any" = 0 ] || { say "PROVE: NOT PROVED (rc_any=$rc_any)"; finish 23; }
+  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')" | tee -a summary.txt
   : > PROVED; finish 0
 fi
 # ============================================================================ the REAL lane: common Phase 0 pieces

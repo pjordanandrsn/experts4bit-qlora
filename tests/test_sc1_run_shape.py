@@ -289,3 +289,62 @@ def test_g2_droppables_in_the_registered_order_and_no_awq_arm():
     assert not re.search(r"(?i)awq", RUN.replace("the AWQ arm is CUT from SC1 -- v4 Phase C", "")), "the AWQ arm is cut (v4 Phase C)"
     assert "awq" not in DRIVE.lower()
 
+
+
+def _bash(script: str) -> str:
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=ENV, check=False).stdout
+
+
+def test_quiesce_busy_count_reads_0_when_nothing_matches():
+    """sc1a-prove-3 (Amendment A2): `pgrep -fc ... || echo 0` read "0\\n0" on procps -- `pgrep -c` prints 0 AND exits 1 when
+    nothing matches -- so quiesce could never succeed and every call burned SC1_QUIESCE_S. Run the script's OWN expression on
+    a pattern that matches nothing (the [p] keeps the probe from matching its own `bash -c` command line) and require "0"."""
+    m = re.search(r"busy=\$\((.*?)\); load1=", RUN)
+    assert m, "quiesce's busy= expression moved"
+    expr = m.group(1)
+    assert "'pip install|cmake|ninja|nvcc|git clone'" in expr
+    probe = expr.replace("'pip install|cmake|ninja|nvcc|git clone'", "'sc1-no-such-[p]rocess-7f3a9c'")
+    assert _bash(f"set -uo pipefail; x=$({probe}); printf '%s' \"$x\"") == "0"
+    # positive control for the trap itself: a counter that prints 0 AND exits 1 (procps pgrep -c on no match) under `|| echo 0`
+    assert _bash("x=$( (echo 0; exit 1) || echo 0); printf '%s' \"$x\"") == "0\n0"
+    for text in (RUN, DRIVE, SAMPLER):
+        assert "|| echo 0" not in text
+
+
+def _prove_block() -> str:
+    return RUN[RUN.index('if [ "$PROVE" = 1 ]; then'):RUN.index(": > PROVED; finish 0")]
+
+
+def _rec() -> str:
+    m = re.search(r"rc_any=0; rec\(\)\{.*?\}", RUN)
+    assert m, "rec() moved"
+    return m.group(0)
+
+
+def _run_prove_line(marker: str, stubs: str) -> str:
+    line = next(ln for ln in _prove_block().splitlines() if marker in ln)
+    return _bash(f"{_rec()}\nsay(){{ :; }}\n{stubs}\n{line}\nprintf '%s' \"$rc_any\"")
+
+
+def test_the_proof_is_not_proved_when_a_smoke_is_skipped_or_fails():
+    """sc1a-prove-3 (Amendment A2): both Granite smokes were skipped by can_run, rec was never called, rc_any stayed 0 and
+    PROVED was written. The smoke loop, run with stubs: admitted + passing -> 0; a failing smoke keeps its rc; skipped -> 23."""
+    loop = "for B in 1 16; do"
+    base = 'GR_ENV=x GR=x GR_REV=x GA=x'
+    assert _run_prove_line(loop, f"{base}; can_run(){{ return 0; }}; sched_smoke(){{ return 0; }}") == "0"
+    assert _run_prove_line(loop, f"{base}; can_run(){{ return 0; }}; sched_smoke(){{ return 7; }}") == "7"
+    assert _run_prove_line(loop, f"{base}; can_run(){{ return 1; }}; sched_smoke(){{ return 0; }}") == "23"
+
+
+def test_the_proof_needs_every_comparator_the_box_installs_and_box_c_needs_the_jit():
+    needs = "for E in $PROVE_NEEDS; do"
+    have = 'have(){ case $1 in vllm) return 0;; *) return 1;; esac; }'
+    assert _run_prove_line(needs, f"{have}; PROVE_NEEDS='vllm'") == "0"
+    assert _run_prove_line(needs, f"{have}; PROVE_NEEDS='vllm exl3'") == "23"
+    block = _prove_block()
+    assert 'A) PROVE_NEEDS="vllm";;' in block and 'B) PROVE_NEEDS="vllm llamacpp exl3 lmdeploy";;' in block
+    assert 'C) PROVE_NEEDS="vllm exl3 sglang";;' in block
+    # the install dispatch installs exactly those sets (box C's SGLang only in the proof)
+    assert "A) install_vllm ;;" in RUN and "B) install_vllm; install_llamacpp; install_exl3 cu128; install_lmdeploy ;;" in RUN
+    assert 'C) install_vllm; install_exl3 cu132; [ "$PROVE" = 1 ] && install_sglang ;;' in RUN
+    assert "can_run 900 prove_sglang_jit" in block and 'if [ -z "${SC1_PROVE_SGLANG_MODEL:-}" ]' in block
