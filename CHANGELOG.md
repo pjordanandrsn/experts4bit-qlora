@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fix: `serve_paged` with batched decode graphs failed to capture every bucket above 1 (the batched lane's device grouping was never switched on)
+
+- `experts4bit_qlora/serve_paged.py`: the first GPU run of the server (lane SC1 proof `sc1a-prove-7`, RTX 5090, Granite-3.1-3B
+  NF4) captured bucket 1 and failed buckets 2 / 4 / 8 / 16 with "operation failed due to a previous error during capture". A
+  `[b, 1]` step with `b > 1` routes `T = b` MoE rows, and the library's default at `T > 1` is eager grouping, whose host-size sync
+  invalidates a capture. `bench/p39/step_decomp.py`'s batched lane sets `hot_residency.DEVICE_GROUPING` and clears
+  `FORCE_SINGLETON_GROUPS` before it captures; `build_engine` did not. `_batched_graph_grouping` now does the same when graphs are
+  on and `max_seqs > 1`, refuses batched graphs off the all-resident placement (as the harness asserts), leaves B=1 and eager
+  servers at the defaults, and reports both flags in the census (`grouping`). Four CPU tests; the GPU check is the next SC1 proof.
+- `docs/SERVING.md`: the GPU-status paragraph records the first GPU run and this fix.
+
 ### Lane P96 registered (#564): K25's default asked again with P95's windowed K8 gate -- K25 against the served NF4 M-tile at T == 1 on fresh windows (bench and tests only)
 
 - **Why.**

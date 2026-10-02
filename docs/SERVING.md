@@ -116,7 +116,10 @@ reader needs (EOS handling, the per-sequence window, prefill chunking, graphs). 
 GPU seam is tested on CPU with a fake runner (`tests/test_serve_paged.py`); `build_engine` needs a
 CUDA box.
 
-**GPU status (as of 0.39.0): `build_engine` has not yet run on a GPU.** It reproduces the harness's construction
-(`bench/p39/step_decomp.py`) step for step, but no measurement of this server exists. Its first GPU exercise is lane
-SC1's proving rental (experts4bit-qlora#846): Granite-3.1-3B through `build_engine` at B=1 and B=16 with graphs and the
-lever census on an RTX 5090. This paragraph is updated with that receipt. Until then, treat the server as CPU-tested only.
+**GPU status.** 0.39.0 shipped this server CPU-tested only. Its first GPU run was lane SC1's proof `sc1a-prove-7`
+(experts4bit-qlora#846; 2026-10-02, RTX 5090, Granite-3.1-3B with NF4 experts). `build_engine` built the stack, the lever
+census was clean, and at B=1 the decode graph captured and the smoke passed. At B=16 the graph for bucket 2 and every
+bucket above it failed to capture, and those buckets ran eagerly. The cause: the server never switched on the batched lane's
+sync-free device grouping (`hot_residency.DEVICE_GROUPING`), which `bench/p39/step_decomp.py`'s batched lane sets before
+capturing. A T > 1 step therefore took the eager grouping's host sync inside the capture. Fixed on main after 0.39.0. The
+batched path's first successful GPU run is the next SC1 proof, and this paragraph is updated with it.

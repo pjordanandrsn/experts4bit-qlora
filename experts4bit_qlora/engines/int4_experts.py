@@ -33,8 +33,11 @@ is decided by ``hot_residency.DEVICE_GROUPING``:
   and the split-K GEMV otherwise or under ``=0``. So batched decode does
   NOT keep the NF4 M-tile path in that configuration.
 * ``T > 1`` with DEVICE_GROUPING off -- the NF4 grouped path, which is
-  the library default: ``DEVICE_GROUPING = [False]`` and nothing in the
-  package ever assigns it.
+  the library default: ``DEVICE_GROUPING = [False]``. Inside the package
+  exactly one place assigns it: ``serve_paged._batched_graph_grouping``,
+  which turns it on when the server captures decode graphs with
+  ``max_seqs > 1`` (the harness's batched lane does the same before it
+  captures). Every other library path keeps the default.
 
 The flag is set by ``bench/hybrid-g9/step_decomp.py`` and by
 ``tests/test_s2_verify_mechanics.py``, which is the configuration the

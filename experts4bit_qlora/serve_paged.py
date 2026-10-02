@@ -32,7 +32,8 @@ registered B=1 fused stack (P54 / P58 / P88) is ``--fuse-qkv`` WITH those flags 
 three folds called directly. The census reports what each fold returned either way (in the fused
 branch the fold functions are wrapped on their modules for the duration of the ``fuse_qkv`` call,
 which imports them inside its body) -> ``Fp8PagedKV(batch=max_seqs, scratch_slots=max(buckets))`` ->
-``PagedModelRunner`` -> ``enable_decode_graphs`` when ``E4B_PAGED_GRAPHS=1`` -> the scheduler. A
+``PagedModelRunner`` -> ``enable_decode_graphs`` when ``E4B_PAGED_GRAPHS=1`` (with more than one sequence, after the batched
+lane's sync-free device grouping is switched on, as ``_bv3_stage`` does) -> the scheduler. A
 lever that is set and patches nothing RAISES at startup (the lanes' ``_lever_check`` rule); the
 census -- how many modules each lever patched -- is reported at ``GET /health`` so a reader can
 tell which stack answered.
@@ -704,6 +705,26 @@ def _eos_ids(model, tok, cfg: PagedServeConfig) -> frozenset:
     return frozenset(ids)
 
 
+def _batched_graph_grouping(cfg: PagedServeConfig) -> dict:
+    """The batched lane's capture-safety switches, as ``bench/p39/step_decomp.py``'s ``_bv3_stage`` sets them.
+
+    A ``[b, 1]`` decode step with ``b > 1`` routes ``T = b`` MoE rows, and the library's default at ``T > 1`` is EAGER
+    grouping, whose host-size sync invalidates a CUDA-graph capture. The harness's batched lane therefore sets
+    ``hot_residency.DEVICE_GROUPING`` (sync-free device grouping) and clears ``FORCE_SINGLETON_GROUPS`` before it
+    captures. Its B=1 lane and its eager runs leave both at their defaults. Mirrored here: the switches move only when
+    graphs are on and more than one sequence can decode, on the all-resident placement the harness asserts. Without
+    this, the first GPU run (lane SC1 proof ``sc1a-prove-7``) captured bucket 1 and failed every bucket above it.
+    Returns the two flags as set, for the census."""
+    from .engines import hot_residency as _hr
+    if cfg.graphs and cfg.max_seqs > 1 and max(cfg.buckets) > 1:
+        if cfg.placement != "all-vram":
+            raise ValueError("batched decode graphs bind to the all-resident point (step_decomp's batched lane asserts "
+                             f"placement all-vram); got E4B_PAGED_PLACEMENT={cfg.placement!r} with max_seqs={cfg.max_seqs}")
+        _hr.DEVICE_GROUPING[0] = True
+        _hr.FORCE_SINGLETON_GROUPS[0] = False
+    return {"device_grouping": bool(_hr.DEVICE_GROUPING[0]), "force_singleton_groups": bool(_hr.FORCE_SINGLETON_GROUPS[0])}
+
+
 def build_engine(cfg: PagedServeConfig) -> EngineParts:
     """The harness's construction, in its order (see the module docstring). GPU only."""
     cfg.validate()
@@ -776,6 +797,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch)
     runner = PagedModelRunner(model, kv, device=cfg.device)
+    grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
                                 chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget)
@@ -783,7 +805,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
                    "blocks_per_seq": getattr(kv, "blocks_per_seq", None)},
-            "graph_status": graph_status, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
+            "graph_status": graph_status, "grouping": grouping, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
     info.update(levers)
     info.update(fusions)
     log(f"ready: {json.dumps(info, default=str)}")
