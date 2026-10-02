@@ -23,6 +23,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from experts4bit_qlora.engines.scheduler import ContinuousScheduler  # noqa: E402
 from experts4bit_qlora.serve_paged import (  # noqa: E402
+    _batched_graph_grouping,
+    build_engine,
     EngineParts,
     IncrementalDetokenizer,
     PagedEngine,
@@ -669,3 +671,46 @@ def test_unfused_branch_calls_the_folds_directly_and_reports_them(monkeypatch):
     assert out == {"fuse_qkv_n": 0, "fuse_t1_glue_n": 3, "fuse_t1_glue_r2_n": [2, 1], "fuse_router_epilogue_n": 4}
     assert calls == ["glue", "r2", "epi"]
 
+
+
+# --- batched decode graphs take the harness's capture-safe grouping (lane SC1 proof sc1a-prove-7) -----------------------
+
+def _grouping_flags(monkeypatch, dg=False, fs=True):
+    from experts4bit_qlora.engines import hot_residency as hr
+    monkeypatch.setattr(hr, "DEVICE_GROUPING", [dg])
+    monkeypatch.setattr(hr, "FORCE_SINGLETON_GROUPS", [fs])
+    return hr
+
+
+def test_batched_graphs_take_the_harness_capture_safe_grouping(monkeypatch):
+    """sc1a-prove-7: B=16 bucket 2 failed to capture because the T > 1 MoE step took the EAGER grouping's host-size sync;
+    step_decomp's batched lane sets DEVICE_GROUPING and clears FORCE_SINGLETON_GROUPS before capturing."""
+    hr = _grouping_flags(monkeypatch)
+    out = _batched_graph_grouping(PagedServeConfig(model="m", graphs=True, max_seqs=16, buckets=(1, 2, 4, 8, 16)))
+    assert out == {"device_grouping": True, "force_singleton_groups": False}
+    assert hr.DEVICE_GROUPING == [True] and hr.FORCE_SINGLETON_GROUPS == [False]
+
+
+def test_b1_and_eager_servers_leave_grouping_at_its_defaults(monkeypatch):
+    """The harness's B=1 lane (b1d) and every eager run keep the library defaults; so does the server."""
+    hr = _grouping_flags(monkeypatch, dg=False, fs=True)
+    out = _batched_graph_grouping(PagedServeConfig(model="m", graphs=True, max_seqs=1, buckets=(1,)))
+    assert out == {"device_grouping": False, "force_singleton_groups": True}
+    out = _batched_graph_grouping(PagedServeConfig(model="m", graphs=False, max_seqs=16))
+    assert out == {"device_grouping": False, "force_singleton_groups": True}
+    assert hr.DEVICE_GROUPING == [False] and hr.FORCE_SINGLETON_GROUPS == [True]
+
+
+def test_batched_graphs_refuse_the_solver_placement(monkeypatch):
+    hr = _grouping_flags(monkeypatch)
+    with pytest.raises(ValueError, match="all-resident"):
+        _batched_graph_grouping(PagedServeConfig(model="m", graphs=True, max_seqs=16, placement="solver"))
+    assert hr.DEVICE_GROUPING == [False]
+
+
+def test_build_engine_sets_grouping_before_it_captures():
+    import inspect
+    src = inspect.getsource(build_engine)
+    assert "_batched_graph_grouping(cfg)" in src
+    assert src.index("_batched_graph_grouping(cfg)") < src.index("runner.enable_decode_graphs(")
+    assert '"grouping": grouping' in src            # the census reports what was set

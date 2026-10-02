@@ -75,8 +75,10 @@ def test_the_default_is_stated_and_is_still_the_default():
     """The docstring says the flag defaults off; dispatch must agree.
 
     This is the pair that made the original sentence half-true and therefore
-    hard to spot: NF4 IS what batched decode uses by default, because nothing
-    in the package ever turns the flag on.
+    hard to spot: NF4 IS what batched decode uses by default. Inside the package
+    exactly one function turns the flag on -- ``serve_paged._batched_graph_grouping``
+    (the server's batched decode graphs, as the harness's batched lane does) --
+    and the docstring must name it; an assignment anywhere else is new drift.
     """
     assert re.search(r"DEVICE_GROUPING\s*=\s*\[\s*False\s*\]", HOT_RES),         "DEVICE_GROUPING's default changed — update int4_experts.py's Scope note"
     pkg = Path(__file__).resolve().parents[1] / "experts4bit_qlora"
@@ -86,9 +88,19 @@ def test_the_default_is_stated_and_is_still_the_default():
         for i, line in enumerate(p.read_text().splitlines(), 1)
         if re.search(r"DEVICE_GROUPING\s*\[\s*0\s*\]\s*=", line)
     ]
-    assert not assigns, (
-        f"the package now assigns DEVICE_GROUPING[0] at {assigns} — the "
-        f"docstring's claim that nothing in the package sets it is stale (#496)"
+    assert {a.split(":")[0] for a in assigns} == {"serve_paged.py"}, (
+        f"the package assigns DEVICE_GROUPING[0] at {assigns} — the docstring "
+        f"says only serve_paged._batched_graph_grouping does (#496)"
+    )
+    sp = (pkg / "serve_paged.py").read_text()
+    m = re.search(r"\ndef _batched_graph_grouping\(.*?(?=\ndef )", sp, re.S)
+    assert m, "serve_paged._batched_graph_grouping is gone — update int4_experts.py's Scope note"
+    in_fn = len(re.findall(r"DEVICE_GROUPING\s*\[\s*0\s*\]\s*=", m.group(0)))
+    assert in_fn == len(assigns) == 1, (
+        f"serve_paged assigns DEVICE_GROUPING[0] outside _batched_graph_grouping ({assigns}) (#496)"
+    )
+    assert "serve_paged._batched_graph_grouping" in re.sub(r"\s+", " ", _docstring(INT4_DOC)), (
+        "int4_experts.py's Scope note no longer names the one place that sets the flag (#496)"
     )
 
 
