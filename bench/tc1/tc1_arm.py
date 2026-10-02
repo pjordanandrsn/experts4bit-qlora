@@ -105,6 +105,34 @@ the selftest scaffolding. What is new, named so the files can be diffed:
 
 Exit codes added: 18 matched init impossible (a LoRA B is not zero after construction).
 
+  TC2 (lane TC2, the `tc2small` / `tc2big` family tokens of tc1_run.sh; TC2-PREREG-draft) -- no new framework, the same run_arm:
+      T23 --unsloth-load-in-4bit 0|1 (default 1): 0 = FastLanguageModel.from_pretrained(load_in_4bit=False), the 16-bit load on which
+          the zoo keeps gpt-oss's MXFP4 expert stacks PACKED (`Mxfp4ExpertParam`, mxfp4_dequant.py:294; conditions mxfp4.py:141-164 incl.
+          select_moe_backend() == grouped_mm -- UPSTREAM-NOTES "Unsloth", read from the note, UNVERIFIED by execution here) and trains LoRA
+          on them through the fused MXFP4 grouped GEMM `Mxfp4GroupedMM` (mxfp4_gemm.py:518). The double-quant kwarg is not passed on a
+          16-bit load (recorded `not applicable`). Receipt: `unsloth_load_in_4bit`; the census gains `expert_param_classes` (the CLASS of
+          every frozen expert parameter, e.g. {"Mxfp4ExpertParam": 48} / {"Params4bit": 96} / {"Parameter": ...}) and
+          `Params4bit_expert_linears` (bnb Params4bit under an `experts` container that are NOT 3-D stacks: gpt-oss's bnb-4bit
+          `GptOssExpertsBnb4bit` per-expert Linear4bit, gpt_oss.py:1020); `Mxfp4GroupedMM.apply` is counted per step like
+          `_ManualGroupedMM.apply` (`unsloth_packed_calls_per_step_min/_max`, an absent name recorded in `unsloth_backend_absent`).
+      T24 --unsloth-target-parameters a,b (comma list; default none): PEFT `target_parameters` named EXPLICITLY on get_peft_model
+          (unsloth llama.py:3491-3513 names `target_parameters=None`; the qwen3_5 `_experts` arm names `mlp.experts.gate_up_proj,
+          mlp.experts.down_proj` beside q/k/v/o), passed only when get_peft_model's signature names it (read at runtime) -- else the arm
+          REFUSES (the registered expert targets cannot be dropped silently). Receipt: `unsloth_target_parameters` {requested, passed, how}.
+      T25 attn_only arms carry the lane's tag suffix: `--arm attn_only --tag attn_only_m` probes and refreshes `fused_attn4_m` /
+          `reference_attn4_m` (attn_only_stub_tags; a `_d2` draw refreshes the SAME stubs); tp4's bare `attn_only` keeps `fused_attn4` /
+          `reference_attn4`. Matched init on an attn_only arm maps the TRAINABLE slots only and expects n_attention_projections
+          (expert adapters frozen or, on gpt-oss, absent: `expected_parts.experts` says so), and the name-free matched_init_sha covers
+          the same trainable slots -- so two attn_only draws share it and the reducer's R3 reads the arm on its own adapter set.
+      T26 the HF arm's `experts_implementation` is passed through from_pretrained IF the installed transformers accepts it: a TypeError that
+          names the kwarg reloads without it and records accepted=False (hf_from_pretrained_experts_impl); torch.{_grouped_mm,
+          nn.functional.grouped_mm} are counted on HF / axolotl arms too, so `hf_experts_dispatch` {requested, accepted, config,
+          torch_grouped_mm_calls_per_step_min, torch_F_grouped_mm_calls_per_step_min, reached_grouped_mm} says what DISPATCHED
+          (the reducer records a t214 arm whose dispatch did not reach grouped_mm; it never VOIDs it).
+      T27 the frozen-base probe decodes a packed expert parameter that carries a callable `dequantize()` (Unsloth's Mxfp4ExpertParam,
+          mxfp4_dequant.py:316 -- signature UNVERIFIED here) for expert 0, regime `<class>-packed/dequantize()`; its control flips one
+          byte of the REAL storage in place, decodes again and restores the byte exactly; a failing decode falls back to raw bytes, saying so.
+
 ----- the tp4 docstring, unmodified -----
 
 tp4_arm.py -- lane tp4 (TP4-PREREG.md) per-arm driver, THREE frameworks: e4b, Unsloth, plain HF+PEFT+bnb.
@@ -246,7 +274,9 @@ HARNESS = ("tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp3
            "--lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, "
            "matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a "
            "byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs "
-           "and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader)")   # a receipt must say WHICH harness produced it
+           "and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, "
+           "--unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance "
+           "and grouped_mm dispatch counters, the packed-parameter probe)")   # a receipt must say WHICH harness produced it
 EXPERT_ATTRS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
 EXPERT_PARAM_RE = re.compile(r"experts\.(?:.*\.)?(gate_up_proj|down_proj|gate_proj|up_proj|w[123]|input_linear|output_linear)$")
 FMT = "### Instruction:\n{instruction}\n\n### Response:\n{output}"
@@ -264,6 +294,13 @@ UNSLOTH_BACKEND_FUNCS = (("unsloth_zoo.temporary_patches.moe_utils", "forward_na
                          ("unsloth_zoo.temporary_patches.moe_utils", "forward_native_moe_loop", "unsloth_loop"),             # moe_utils.py:4357
                          ("unsloth_zoo.temporary_patches.moe_utils_bnb4bit", "forward_moe_backend_bnb4bit", "moe_bnb4bit_backend"))   # moe_utils_bnb4bit.py:354
 UNSLOTH_BACKEND_KEYS = {"grouped_mm": "unsloth_grouped_mm", "unsloth_triton": "unsloth_triton", "native_torch": "unsloth_loop"}
+# TC2 (T23; UPSTREAM-NOTES "Unsloth", read from the inspection note -- UNVERIFIED by execution here): the 16-bit gpt-oss load keeps the MXFP4
+# expert stacks packed (`Mxfp4ExpertParam`, unsloth_zoo mxfp4_dequant.py:294) and runs them through the fused MXFP4 grouped GEMM
+# `Mxfp4GroupedMM` (mxfp4_gemm.py:518; an autograd Function -- saves (counts, blocks, scales), bwd = dX only). Its `.apply` is counted per
+# step exactly as `_ManualGroupedMM.apply` is; an absent name is recorded in `unsloth_backend_absent`, never a crash.
+UNSLOTH_PACKED_FUNCS = (("unsloth_zoo.mxfp4_gemm", "Mxfp4GroupedMM", "apply", "unsloth_mxfp4_grouped_mm"),)
+UNSLOTH_PACKED_KEYS = [k for _, _, _, k in UNSLOTH_PACKED_FUNCS]
+UNSLOTH_BANNER_PER_EXPERT = "Detected MoE model with per-expert Linear experts"   # unsloth llama.py:3888-3896 (the gpt-oss bnb-4bit class, per UPSTREAM-NOTES); recorded by the MoE line filter below
 
 
 def apply_unsloth_knobs(a):
@@ -272,7 +309,9 @@ def apply_unsloth_knobs(a):
     the loader chooses on its own is what runs -- and is recorded by select_moe_backend() after load."""
     out = {"moe_backend_requested": getattr(a, "unsloth_moe_backend", "default") or "default",
            "speed_tilt": bool(int(getattr(a, "unsloth_speed_tilt", 0) or 0)),
-           "double_quant_requested": getattr(a, "unsloth_double_quant", "off") or "off", "env_set": {}}
+           "double_quant_requested": getattr(a, "unsloth_double_quant", "off") or "off", "env_set": {},
+           "load_in_4bit_requested": unsloth_load_in_4bit_of(a),                                   # TC2 T23
+           "target_parameters_requested": unsloth_target_parameters_of(a)}                          # TC2 T24
     if getattr(a, "framework", None) != "unsloth":
         return out
     if out["moe_backend_requested"] != "default":
@@ -822,7 +861,9 @@ def quant_census(model):
     """U5 / T7: what is 4-bit and what is not, by class; the expert stacks, the attention projections, the router, lm_head."""
     c = {"Params4bit_expert_stacks": 0, "Params4bit_other": 0, "Linear4bit": 0, "Linear_bf16": 0, "Linear_fp32": 0,
          "Experts4bit": 0, "ExpertsLoRA": 0, "LoRALinear": 0, "experts_modules": 0, "experts_module_classes": {},
-         "router_gate": [], "lm_head": None, "samples": []}
+         "router_gate": [], "lm_head": None, "samples": [],
+         "Params4bit_expert_linears": 0,    # TC2: bnb Params4bit under an `experts` container that are NOT 3-D stacks (gpt-oss bnb-4bit: experts.gate_up_projs.<i>.weight)
+         "expert_param_classes": {}}        # TC2: the CLASS of every frozen expert parameter (Params4bit / Mxfp4ExpertParam / Parameter ...), counted
     for name, m in model.named_modules():
         cls = type(m).__name__
         if cls in ("Experts4bit", "ExpertsNbit", "GptOssExperts4bit"):
@@ -850,11 +891,15 @@ def quant_census(model):
         if name.endswith("lm_head"):
             c["lm_head"] = {"cls": cls, "dtype": str(getattr(getattr(m, "weight", None), "dtype", None))}
     for name, p in model.named_parameters():
+        parts = name.split(".")
         if type(p).__name__ == "Params4bit":
-            key = "Params4bit_expert_stacks" if EXPERT_PARAM_RE.search(name) else "Params4bit_other"
+            key = "Params4bit_expert_stacks" if EXPERT_PARAM_RE.search(name) else ("Params4bit_expert_linears" if "experts" in parts else "Params4bit_other")
             c[key] += 1
             if len(c["samples"]) < 4 and key == "Params4bit_expert_stacks":
                 c["samples"].append({"name": name, "dtype": str(p.dtype), "shape": list(p.shape)})
+        if "lora" not in name.lower() and ("experts" in parts or EXPERT_PARAM_RE.search(name)):   # TC2: what CLASS the frozen expert parameters are
+            cls = type(p).__name__
+            c["expert_param_classes"][cls] = c["expert_param_classes"].get(cls, 0) + 1
     return c
 
 
@@ -1066,6 +1111,25 @@ class Counters:
 
     def install_hf(self, model):
         self.install_experts_hooks(model)
+        self._install_torch_grouped_mm()          # TC2 T26: what the HF arm's experts implementation DISPATCHES is read from the same torch counters
+
+    def _install_torch_grouped_mm(self):
+        """[F15] the torch op every grouped-GEMM route ends in (F.grouped_mm calls torch._grouped_mm at the Python level: torch 2.13/2.14
+        source); an absent name is recorded."""
+        for owner_name, owner, fname, key in (("torch", torch, "_grouped_mm", "torch_grouped_mm"),
+                                              ("torch.nn.functional", torch.nn.functional, "grouped_mm", "torch_F_grouped_mm")):
+            orig = getattr(owner, fname, None)
+            if orig is None:
+                self.absent.append(f"{owner_name}.{fname}: absent")
+                continue
+            self.counts.setdefault(key, 0)
+
+            def w2(*a, _orig=orig, _key=key, **k):
+                self.counts[_key] += 1
+                return _orig(*a, **k)
+            setattr(owner, fname, w2)
+            self._restore.append((owner, fname, orig))
+            self._alias_scan(orig, w2)
 
     def install_unsloth(self, model):
         """P2-1: the bnb-4bit entry point AND the three backends behind select_moe_backend() (UNSLOTH_BACKEND_FUNCS) are
@@ -1088,22 +1152,8 @@ class Counters:
             setattr(M, fname, w)
             self._restore.append((M, fname, orig))
             self._alias_scan(orig, w)
-        # [F15] the torch op every grouped-GEMM route ends in (F.grouped_mm calls torch._grouped_mm at the Python level: torch 2.13/2.14
-        # source), and the zoo's per-group matmul fallback; an absent name is recorded
-        for owner_name, owner, fname, key in (("torch", torch, "_grouped_mm", "torch_grouped_mm"),
-                                              ("torch.nn.functional", torch.nn.functional, "grouped_mm", "torch_F_grouped_mm")):
-            orig = getattr(owner, fname, None)
-            if orig is None:
-                self.absent.append(f"{owner_name}.{fname}: absent")
-                continue
-            self.counts.setdefault(key, 0)
-
-            def w2(*a, _orig=orig, _key=key, **k):
-                self.counts[_key] += 1
-                return _orig(*a, **k)
-            setattr(owner, fname, w2)
-            self._restore.append((owner, fname, orig))
-            self._alias_scan(orig, w2)
+        # [F15] the torch op every grouped-GEMM route ends in, and the zoo's per-group matmul fallback; an absent name is recorded
+        self._install_torch_grouped_mm()
         try:
             M = importlib.import_module("unsloth_zoo.temporary_patches.moe_utils")
             cls = getattr(M, "_ManualGroupedMM")
@@ -1117,6 +1167,21 @@ class Counters:
             self._restore.append((cls, "apply", orig_apply))
         except Exception as e:
             self.absent.append(f"unsloth_zoo.temporary_patches.moe_utils._ManualGroupedMM.apply: {type(e).__name__}")
+        for modname, cname, fname, key in UNSLOTH_PACKED_FUNCS:         # TC2 T23: the packed-MXFP4 grouped GEMM entry point, counted the same way
+            try:
+                M = importlib.import_module(modname)
+                cls = getattr(M, cname)
+                orig_p = getattr(cls, fname)
+            except Exception as e:
+                self.absent.append(f"{modname}.{cname}.{fname}: {type(e).__name__}")
+                continue
+            self.counts.setdefault(key, 0)
+
+            def w4(*a, _orig=orig_p, _key=key, **k):
+                self.counts[_key] += 1
+                return _orig(*a, **k)
+            setattr(cls, fname, w4)
+            self._restore.append((cls, fname, orig_p))
 
     def _alias_scan(self, orig, w):
         """Re-point every alias of `orig` held by an already-imported unsloth* / transformers* module (a `from ... import`,
@@ -1251,10 +1316,11 @@ def load_e4b(a):
             disable_batched_train(model)
             x["probes"] = {"fused": {"n_patched": nf, "reason": why_f}, "batched": {"n_patched": nb, "reason": why_b}}
             common = {"model_type": x["model_type"], "n_layers": x["n_layers"], "probed_by": "attn_only", "n_patched": 0}
+            fused_tag, ref_tag = attn_only_stub_tags(a.tag)                 # TC2 T25: attn_only_m -> fused_attn4_m / reference_attn4_m
             if nf == 0:
-                refresh_stub(a, "fused_attn4", "fused", "refused", f"enable_fast_train(dgrad=True) patched 0 modules on this box: {why_f}", dict(common, probe_n_patched=nf))
+                refresh_stub(a, fused_tag, "fused", "refused", f"enable_fast_train(dgrad=True) patched 0 modules on this box: {why_f}", dict(common, probe_n_patched=nf))
             if x["attn4_probe"]["would_refuse"]:
-                refresh_stub(a, "reference_attn4", "reference", "refused",
+                refresh_stub(a, ref_tag, "reference", "refused",
                              f"TRAIN_ATTN_4BIT would refuse: {x['attn4_probe']['n_biased']} of {x['attn4_probe']['n_projections']} attention projections carry a bias "
                              f"(quantize_attention_projections_4bit raises SystemExit on a bias; e.g. {x['attn4_probe']['sample']})", dict(common, attn4_probe=x["attn4_probe"]))
         elif a.arm == "fused":
@@ -1296,6 +1362,74 @@ def unsloth_targets_of(a):
     return [t.strip() for t in raw.split(",") if t.strip()]
 
 
+def unsloth_target_parameters_of(a):
+    """TC2 T24: the PEFT `target_parameters` the arm names explicitly (comma list), [] when none."""
+    raw = getattr(a, "unsloth_target_parameters", None) or ""
+    return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+def unsloth_load_in_4bit_of(a):
+    """TC2 T23: --unsloth-load-in-4bit as a bool (default True = the bnb-4bit load every earlier lane ran)."""
+    v = getattr(a, "unsloth_load_in_4bit", None)
+    return True if v is None else bool(int(v))
+
+
+def unsloth_target_parameters_kwargs(get_peft_model_fn, params):
+    """TC2 T24: the get_peft_model kwargs that name the expert stacks explicitly as PEFT `target_parameters`, decided from the signature
+    READ AT RUNTIME (unsloth llama.py:3491-3513 names `target_parameters=None` per UPSTREAM-NOTES; not verified here): passed only when
+    the signature names it, else nothing is passed and the CALLER refuses -- the registered arm cannot run with its expert targets
+    silently dropped. Pure: testable without unsloth. Returns (kwargs, {requested, passed, how})."""
+    info = {"requested": list(params or []), "passed": False, "how": "not requested"}
+    if not params:
+        return {}, info
+    try:
+        names = inspect.signature(get_peft_model_fn).parameters
+    except (TypeError, ValueError) as e:
+        info["how"] = f"signature unreadable ({type(e).__name__}): not passed"
+        return {}, info
+    if "target_parameters" in names:
+        info.update({"passed": True, "how": "get_peft_model(target_parameters=[...])"})
+        return {"target_parameters": list(params)}, info
+    info["how"] = "get_peft_model does not name target_parameters: not passed"
+    return {}, info
+
+
+def hf_from_pretrained_experts_impl(from_pretrained, impl, *args, **kw):
+    """TC2 T26: pass `experts_implementation=<impl>` to from_pretrained IF the installed transformers accepts it: a TypeError that NAMES
+    the kwarg (a transformers without it) reloads WITHOUT it and records accepted=False -- the row then says which implementation
+    dispatched (config._experts_implementation + the torch grouped_mm counters), never a refusal for a kwarg. Any other exception
+    propagates unchanged. Pure. Returns (model, {requested, accepted, error})."""
+    info = {"requested": impl, "accepted": None, "error": None}
+    if impl == "default":
+        info["accepted"] = "not requested (the library's own choice)"
+        return from_pretrained(*args, **kw), info
+    try:
+        model = from_pretrained(*args, experts_implementation=impl, **kw)
+        info["accepted"] = True
+        return model, info
+    except TypeError as e:
+        if "experts_implementation" not in str(e):
+            raise
+        info.update({"accepted": False, "error": str(e)[:300]})
+        return from_pretrained(*args, **kw), info
+
+
+def self_decoding(p):
+    """TC2 T27: does the parameter's CLASS define its own `dequantize()` (Unsloth's Mxfp4ExpertParam does; bnb's Params4bit does not)?
+    Every torch.Tensor carries Tensor.dequantize() -- a plain uint8 tensor's returns float32 -- so `callable(p.dequantize)` says nothing;
+    the override is what marks a self-decoding packed parameter."""
+    return getattr(type(p), "dequantize", None) is not getattr(torch.Tensor, "dequantize", None)
+
+
+def attn_only_stub_tags(tag):
+    """TC2 T25: the fused / reference stubs an attn_only arm probes and refreshes carry the arm's own suffix (`attn_only_m` ->
+    `fused_attn4_m` / `reference_attn4_m`), a second draw (`_d2`) refreshing the SAME stubs; tp4's bare `attn_only` keeps
+    `fused_attn4` / `reference_attn4`."""
+    suffix = tag[len("attn_only"):] if (tag or "").startswith("attn_only") else ""
+    suffix = re.sub(r"_d2$", "", suffix)
+    return "fused_attn4" + suffix, "reference_attn4" + suffix
+
+
 def load_unsloth(a):
     import unsloth
     loader = getattr(unsloth, a.unsloth_loader)
@@ -1310,16 +1444,29 @@ def load_unsloth(a):
 
     dq = {"requested": None, "how": "unknown-default", "loaded_nested": None}
     want_dq_off = (getattr(a, "unsloth_double_quant", "off") or "off") == "off"
+    li4 = unsloth_load_in_4bit_of(a)                                                     # TC2 T23
+    x["unsloth_load_in_4bit"] = li4
+    tparams = unsloth_target_parameters_of(a)                                            # TC2 T24
+    tp_info = {"requested": tparams, "passed": False, "how": "not requested"}
+    x["unsloth_target_parameters"] = tp_info
 
     def _load(ldr):
-        kw, dq_ = unsloth_double_quant_kwargs(ldr.from_pretrained, want_dq_off)   # P2-1: only a NAMED parameter is passed
+        if li4:
+            kw, dq_ = unsloth_double_quant_kwargs(ldr.from_pretrained, want_dq_off)   # P2-1: only a NAMED parameter is passed
+        else:                                                                         # TC2 T23: a 16-bit load quantises nothing with bnb
+            kw, dq_ = {}, {"requested": None, "loaded_nested": None,
+                           "how": "not applicable: load_in_4bit=False (16-bit load; the MXFP4 expert stacks stay packed when the zoo's conditions hold, mxfp4.py:141-164)"}
         dq.update(dq_)
+        pkw, tp_ = unsloth_target_parameters_kwargs(ldr.get_peft_model, tparams)     # TC2 T24: only a NAMED parameter is passed
+        tp_info.update(tp_)
+        if tparams and not pkw:
+            raise NotImplementedError(f"--unsloth-target-parameters {','.join(tparams)}: {tp_['how']} (the registered expert targets cannot be dropped silently)")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            model, tokenizer_obj = ldr.from_pretrained(model_name=local, max_seq_length=a.seq, dtype=torch.bfloat16, load_in_4bit=True, **kw)
+            model, tokenizer_obj = ldr.from_pretrained(model_name=local, max_seq_length=a.seq, dtype=torch.bfloat16, load_in_4bit=li4, **kw)
             model = ldr.get_peft_model(
                 model, r=a.r, lora_alpha=a.alpha, lora_dropout=0.0, bias="none", target_modules=list(x["unsloth_targets"]),
-                use_gradient_checkpointing=("unsloth" if a.grad_ckpt == "unsloth" else True), random_state=a.seed)
+                use_gradient_checkpointing=("unsloth" if a.grad_ckpt == "unsloth" else True), random_state=a.seed, **pkw)
         return model, tokenizer_obj, buf.getvalue()
     with PH("load_weights"):                                                             # #548: from_pretrained + get_peft_model
         try:
@@ -1487,11 +1634,11 @@ def load_hf(a):
     impl = getattr(a, "hf_experts_implementation", "default") or "default"
     # J [F22]: transformers' experts implementation (grouped_mm / batched_mm / eager ...) is a from_pretrained kwarg
     # (modeling_utils.py:2081-2135 per UPSTREAM-NOTES; UNVERIFIED on the axolotl venv's transformers 5.17.0 -- a TypeError is a refused row)
-    impl_kw = {} if impl == "default" else {"experts_implementation": impl}
-    with PH("load_weights"):                                                             # #548
-        model = AutoModelForCausalLM.from_pretrained(local, quantization_config=bnb_cfg, dtype=torch.bfloat16, device_map={"": 0}, **impl_kw)
+    with PH("load_weights"):                                                             # #548; TC2 T26: the kwarg only if the installed transformers accepts it
+        model, impl_info = hf_from_pretrained_experts_impl(AutoModelForCausalLM.from_pretrained, impl, local,
+                                                           quantization_config=bnb_cfg, dtype=torch.bfloat16, device_map={"": 0})
     x["n_layers"], x["model_type"] = n_layers_of(model.config)
-    x["hf_experts_implementation"] = {"requested": impl, "config": getattr(model.config, "_experts_implementation", None)}
+    x["hf_experts_implementation"] = {**impl_info, "config": getattr(model.config, "_experts_implementation", None)}
     x["hf_double_quant"] = {"requested": hf_dq, "loaded_attention_nested": loaded_attention_double_quant(model)}
     with PH("attn4"):                                                                    # #548: the probe only (the HF arm converts nothing)
         x["attn4_probe"] = attn4_bias_probe(model)
@@ -1729,6 +1876,13 @@ def logical_stack_shape(owner, name):
     for c in cands:
         if c is not None and len(tuple(c)) == 3:
             return tuple(int(v) for v in c)
+    if self_decoding(p):                           # TC2 T27: a packed parameter that decodes itself (Unsloth's Mxfp4ExpertParam: 4-D uint8 blocks; the
+        try:                                       # logical shape is what it decodes to; signature UNVERIFIED here -- a failure means no shape, as before)
+            w = p.dequantize()
+            if hasattr(w, "ndim") and w.ndim == 3:
+                return tuple(int(v) for v in w.shape)
+        except Exception:
+            pass
     return None
 
 
@@ -1765,7 +1919,7 @@ def expert_kind(shape3, hidden, hint):
     return None, f"unmapped: shape {shape3}, hidden {hidden}, name {hint!r}"
 
 
-def lora_slots(model, hidden=None):
+def lora_slots(model, hidden=None, trainable_only=False):
     """Every LoRA slot on `model` -> (layer, kind, expert) plus where its A lives and which B belongs to it. By
     STRUCTURE and tensor shape, three layouts (the slot key is the same whichever framework produced it):
 
@@ -1830,21 +1984,24 @@ def lora_slots(model, hidden=None):
             rules[f"{name}.{pn}"] = f"{kind} by {rule}"
             for e in range(E):
                 slots.append({"key": (L, kind, e), "r": r, "fan_in": inn, "A": A, "sel": ("index", e), "B": B, "module": f"{name}.{pn}", "B_name": f"{name}.{pn[:-1]}B"})
+    if trainable_only:                                                         # TC2 T25: an attn_only arm's adapter set is its TRAINABLE slots
+        slots = [s_ for s_ in slots if bool(getattr(s_["A"], "requires_grad", False))]
     return slots, unmapped, rules
 
 
-def apply_matched_init(model, spec, n_layers=None, cfg=None):
+def apply_matched_init(model, spec, n_layers=None, cfg=None, attn_only=False):
     """T20: overwrite every LoRA A with its slot's deterministic tensor (fp32 on CPU, copied into the parameter's own
     orientation, dtype and device) and check every LoRA B is zero. Returns the `matched_init` receipt block:
     {seed, n_slots_set, n_slots_expected, expected_parts, unmapped, complete, kinds, b_nonzero, hidden, mapping_rules,
     distribution}. `complete` is False whenever a slot could not be mapped, a slot was set twice, the count does not
     equal the structural expectation (n_attention_projections + 2 * n_layers * n_experts) or a B is not zero -- the
-    reducer VOIDs such an arm for the matched set; nothing is silently left native."""
+    reducer VOIDs such an arm for the matched set; nothing is silently left native. TC2 T25: on an attn_only arm the TRAINABLE
+    slots alone are mapped and the expectation is n_attention_projections (the expert adapters are frozen or absent)."""
     seed = parse_lora_init(spec)
     if seed is None:
         return None
     hidden, hidden_rule = hidden_size_of(model)
-    slots, unmapped, rules = lora_slots(model, hidden)
+    slots, unmapped, rules = lora_slots(model, hidden, trainable_only=attn_only)
     n_set, kinds, seen, b_checked, b_nonzero, max_E = 0, {}, set(), set(), [], 0
     with torch.no_grad():
         for s in slots:
@@ -1880,20 +2037,25 @@ def apply_matched_init(model, spec, n_layers=None, cfg=None):
     if n_experts is None:
         n_experts = max_E or None
     expected = (n_attn + 2 * int(n_layers) * int(n_experts)) if (n_layers and n_experts) else None
+    parts = {"n_attention_projections": n_attn, "n_layers": n_layers, "n_experts": n_experts}
+    if attn_only:                                                          # TC2 T25: the arm's adapter set is attention only
+        expected = n_attn
+        parts["experts"] = "excluded: attn_only arm (expert adapters frozen or absent; trainable slots only)"
     complete = bool(expected is not None and n_set == expected and not unmapped and not b_nonzero)
     return {"seed": seed, "n_slots_set": n_set, "n_slots_expected": expected,
-            "expected_parts": {"n_attention_projections": n_attn, "n_layers": n_layers, "n_experts": n_experts},
+            "expected_parts": parts,
             "unmapped": unmapped[:24], "n_unmapped": len(unmapped), "complete": complete, "kinds": kinds, "b_nonzero": b_nonzero[:8],
             "hidden": {"value": hidden, "rule": hidden_rule},
             "mapping_rules": dict(list(rules.items())[:12]), "n_mapping_rules": len(rules), "distribution": MATCHED_DISTRIBUTION}
 
 
-def lora_slots_sha(model):
+def lora_slots_sha(model, trainable_only=False):
     """[F3] a NAME-FREE sha256 over every LoRA A in canonical slot order (layer, kind, expert), each slot as fp32 [r, in]
     bytes -- so two frameworks holding the same slot tensors in different layouts and under different names hash alike.
-    {sha, n_slots, n_unmapped}; computed after the matched overwrite (and in native arms too)."""
+    {sha, n_slots, n_unmapped}; computed after the matched overwrite (and in native arms too). TC2 T25: an attn_only arm
+    hashes its TRAINABLE slots only (its adapter set), so two attn_only draws share it."""
     hidden, _ = hidden_size_of(model)
-    slots, unmapped, _ = lora_slots(model, hidden)
+    slots, unmapped, _ = lora_slots(model, hidden, trainable_only=trainable_only)
     h, n = hashlib.sha256(), 0
     for s_ in sorted(slots, key=lambda s_: (s_["key"][0], s_["key"][1], s_["key"][2])):
         sel, A = s_["sel"], s_["A"].data
@@ -1996,6 +2158,25 @@ def _probe_stack_param(p, inner, attr):
             w = BF.dequantize_4bit(packed, quant_state=qs)[0].to(torch.bfloat16)
             return w.t().contiguous() if transposed else w
         return _slot_record(deq_whole(p.data), regime, "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16", f"{attr}[0]", deq_whole(flip_first_byte(p.data)))
+    if qs is None and self_decoding(p):      # TC2 T27: a packed parameter that decodes itself (Unsloth's Mxfp4ExpertParam.dequantize(), mxfp4_dequant.py:316; signature UNVERIFIED here)
+        try:
+            def deq_packed():
+                w_ = p.dequantize()
+                w_ = w_[0] if (hasattr(w_, "ndim") and w_.ndim >= 3) else w_
+                w_ = w_.detach().to(torch.bfloat16)
+                return w_.t().contiguous() if transposed else w_
+            w1 = deq_packed()
+            orig = p.data.clone()               # the control: one byte of the REAL storage flipped in place, decoded again, the byte restored exactly
+            p.data.copy_(flip_first_byte(p.data))
+            try:
+                w2 = deq_packed()
+            finally:
+                p.data.copy_(orig)
+            return _slot_record(w1, f"{type(p).__name__}-packed/dequantize()",
+                                "the parameter's own dequantize() (expert 0) -> bf16; control = one byte of the real storage flipped in place, decoded, restored", f"{attr}[0]", w2)
+        except Exception as e:
+            w = p.data.reshape(p.data.shape[0], -1)[0] if p.data.ndim >= 2 else p.data
+            return _slot_record(w, f"{_dtype_label(w.dtype)}-raw (dequantize() failed)", f"raw bytes: dequantize() failed ({type(e).__name__}: {str(e)[:120]})", f"{attr}[0]", flip_first_byte(w))
     if p.is_floating_point():
         w = p.data[0]
         w = w.t().contiguous() if transposed else w
@@ -2051,7 +2232,8 @@ def frozen_base_probe(model, framework):
                     for attr in cands:
                         p = _raw_param(inner, attr)
                         shp = expert_stack_shape(inner, attr)
-                        if p is None or shp is None or (p.ndim != 3 and quant_state_of(inner, attr, p) is None and getattr(p, "_original_shape", None) is None):
+                        if p is None or shp is None or (p.ndim != 3 and quant_state_of(inner, attr, p) is None and getattr(p, "_original_shape", None) is None
+                                                        and not self_decoding(p)):     # TC2 T27: a self-decoding packed parameter is probed
                             continue
                         kind, rule = expert_kind(shp, hidden, attr)
                         if kind is None or kind in out["slots"]:
@@ -2219,15 +2401,16 @@ def run_arm(a, load_fn, sampler=True):
                 cast += 1
     lora_init = getattr(a, "lora_init", "native") or "native"
     matched = None
+    attn_only_arm = (a.framework == "e4b" and a.arm == "attn_only")   # TC2 T25: the adapter set is the trainable (attention) slots
     if parse_lora_init(lora_init) is not None:    # T20 (TC1): the per-slot deterministic A, after the adapters exist and after the cast
-        matched = apply_matched_init(model, lora_init, x.get("n_layers"), getattr(model, "config", None))
+        matched = apply_matched_init(model, lora_init, x.get("n_layers"), getattr(model, "config", None), attn_only=attn_only_arm)
         if matched["b_nonzero"]:
             stub(a, "harness_error", f"matched init: {len(matched['b_nonzero'])} LoRA B tensor(s) are not zero after construction "
                  f"(e.g. {matched['b_nonzero'][:2]}); a matched start is impossible on this arm",
                  {"phase": "census", "matched_init": matched, "adapter_dtype": adapter_dtype, "lora_init": lora_init,
                   "n_layers": x.get("n_layers"), "model_type": x.get("model_type")}, code=18)
     tr, n_trainable, dtypes_after, non_adapter, groups = trainable_census(model)
-    slots_sha = lora_slots_sha(model)             # [F3] name-free, canonical slot order, after the overwrite; native arms too
+    slots_sha = lora_slots_sha(model, trainable_only=attn_only_arm)   # [F3] name-free, canonical slot order, after the overwrite; native arms too
     census = quant_census(model)
     if pad_id is None and tokenizer_obj is not None:
         pad_id = getattr(tokenizer_obj, "pad_token_id", None)
@@ -2495,6 +2678,13 @@ def run_arm(a, load_fn, sampler=True):
     gmm_min = min(c.get("torch_grouped_mm", 0) for c in kcalls) if (a.framework == "unsloth" and kcalls) else None   # [F15]
     gmm_max = max(c.get("torch_grouped_mm", 0) for c in kcalls) if (a.framework == "unsloth" and kcalls) else None
     manual_max = max(c.get("manual_grouped_mm", 0) for c in kcalls) if (a.framework == "unsloth" and kcalls) else None
+    pk_min = {k: min(c.get(k, 0) for c in kcalls) for k in UNSLOTH_PACKED_KEYS} if (a.framework == "unsloth" and kcalls) else None   # TC2 T23
+    pk_max = {k: max(c.get(k, 0) for c in kcalls) for k in UNSLOTH_PACKED_KEYS} if (a.framework == "unsloth" and kcalls) else None
+    hf_dispatch = None                                                                                                      # TC2 T26
+    if a.framework in ("hf", "axolotl") and kcalls:
+        g1, g2 = min(c.get("torch_grouped_mm", 0) for c in kcalls), min(c.get("torch_F_grouped_mm", 0) for c in kcalls)
+        hf_dispatch = {**(x.get("hf_experts_implementation") or {}), "torch_grouped_mm_calls_per_step_min": g1,
+                       "torch_F_grouped_mm_calls_per_step_min": g2, "reached_grouped_mm": bool(g1 > 0 or g2 > 0)}
     # [F1] grouped-nf4-gemm's per-path counters per step (P46 LORA_PATH_STATS deltas; absent on a kernel without them)
     lora_path_present = bool(kcalls) and all(c.get("lora_path_loop") is not None for c in kcalls)
     lora_loop_share, lora_path_loop_steps = None, None
@@ -2518,6 +2708,9 @@ def run_arm(a, load_fn, sampler=True):
         "axolotl_bnb4bit_modules": x.get("axolotl_bnb4bit_modules"),
         "unsloth_knobs": unsloth_knobs, "moe_backend_selected": x.get("moe_backend_selected"),                            # P2-1
         "unsloth_double_quant": x.get("unsloth_double_quant"),
+        "unsloth_load_in_4bit": x.get("unsloth_load_in_4bit"), "unsloth_target_parameters": x.get("unsloth_target_parameters"),   # TC2 T23 / T24
+        "unsloth_packed_calls_per_step_min": pk_min, "unsloth_packed_calls_per_step_max": pk_max,                               # TC2 T23
+        "hf_experts_dispatch": hf_dispatch,                                                                                      # TC2 T26
         "unsloth_backend_calls_per_step_min": ub_min, "unsloth_backend_calls_per_step_max": ub_max, "unsloth_backend_absent": counter.absent,
         "tokens": {"path": os.path.basename(a.tokens), "sha256": tk["sha256"], "n_train": len(train), "eval_rows_used": len(ev), "tokenizer_agree": tokenizer_agree,
                    "pad_id": pad_id},
@@ -2587,6 +2780,17 @@ class Params4bit(nn.Parameter):
     """A uint8 parameter whose class NAME is what the census and hashers key on (bitsandbytes' Params4bit)."""
     def __new__(cls, data):
         return super().__new__(cls, data, requires_grad=False)
+
+
+class Mxfp4ExpertParam(nn.Parameter):
+    """TC2: a uint8 parameter whose class NAME is what the census keys on for Unsloth's packed MXFP4 expert stacks (unsloth_zoo
+    mxfp4_dequant.py:294) and which decodes itself through `dequantize()` as the real one does (its signature UNVERIFIED here: the
+    stand-in takes no arguments and decodes with the tiny stack's own rule)."""
+    def __new__(cls, data):
+        return super().__new__(cls, data, requires_grad=False)
+
+    def dequantize(self):
+        return _TinyStack._deq(self.data)
 
 
 _BASE_SEED = 1000       # every frozen base tensor of the tiny models: the same bytes in both layouts (SAME-BASE by construction)
@@ -2755,6 +2959,9 @@ class _ParamWrapper(nn.Module):
         if self.flavour == "unsloth":
             from unsloth_zoo.temporary_patches import moe_utils_bnb4bit as M
             return M.forward_moe_backend_bnb4bit(self, x)
+        if self.flavour == "unsloth_mxfp4":          # TC2: the packed path's fused grouped GEMM entry point (the counter wraps its .apply)
+            from unsloth_zoo import mxfp4_gemm as G
+            return G.Mxfp4GroupedMM.apply(self, x)
         return self._reference(x)
 
 
@@ -2778,9 +2985,10 @@ class _Layer(nn.Module):
             stack = _TinyStack(E, H, inter, "e4b", lambda t: nn.Parameter(t, requires_grad=False))
             self.mlp.experts = _TinyExpertsE4b(stack, r, alpha, 6000 + i, torch.bfloat16)      # the streaming loader's bf16 expert adapters
         else:
-            stack = _TinyStack(E, H, inter, mode, Params4bit)
-            inner = _ParamWrapper(stack, "gate_up_proj", E, H, 2 * inter, r, alpha, 7000 + i, torch.bfloat16, "unsloth" if mode == "unsloth" else "hf")
-            self.mlp.experts = _ParamWrapper(inner, "down_proj", E, inter, H, r, alpha, 7100 + i, torch.bfloat16, "unsloth" if mode == "unsloth" else "hf")
+            stack = _TinyStack(E, H, inter, mode, Mxfp4ExpertParam if mode == "unsloth_mxfp4" else Params4bit)   # TC2: the packed-expert class name
+            flavour = mode if mode in ("unsloth", "unsloth_mxfp4") else "hf"
+            inner = _ParamWrapper(stack, "gate_up_proj", E, H, 2 * inter, r, alpha, 7000 + i, torch.bfloat16, flavour)
+            self.mlp.experts = _ParamWrapper(inner, "down_proj", E, inter, H, r, alpha, 7100 + i, torch.bfloat16, flavour)
             if extra_lora:                    # a LoRA on a module no slot census expects: the mapping must report the arm incomplete
                 dense = nn.Linear(H, H, bias=False)
                 dense.weight.requires_grad_(False)
@@ -2870,6 +3078,15 @@ def _install_fake_modules():
     sys.modules["unsloth_zoo.temporary_patches.moe_utils"], sys.modules["unsloth_zoo.temporary_patches.moe_utils_bnb4bit"] = mu, mb
     zoo.temporary_patches = tp
     tp.moe_utils, tp.moe_utils_bnb4bit = mu, mb
+    mg = types.ModuleType("unsloth_zoo.mxfp4_gemm")   # TC2: the packed-MXFP4 grouped GEMM entry point (mxfp4_gemm.py:518), as a shape
+
+    class Mxfp4GroupedMM:
+        @staticmethod
+        def apply(mod, x):
+            return mod._reference(x)
+    mg.Mxfp4GroupedMM = Mxfp4GroupedMM
+    sys.modules["unsloth_zoo.mxfp4_gemm"] = mg
+    zoo.mxfp4_gemm = mg
 
 
 def _selftest_load_e4b(a):
@@ -2898,7 +3115,8 @@ def _selftest_load_e4b(a):
             if "lora" in n and "experts" in n:
                 p.requires_grad_(False)
         x["probes"] = {"fused": {"n_patched": 0, "reason": "[selftest] 0 ExpertsLoRA"}, "batched": {"n_patched": 0, "reason": "[selftest] 0"}}
-        refresh_stub(a, "fused_attn4", "fused", "refused", "enable_fast_train(dgrad=True) patched 0 modules on this box: [selftest]", {"probed_by": "attn_only", "n_patched": 0, "n_layers": 2})
+        fused_tag, _ = attn_only_stub_tags(a.tag)                                      # TC2 T25: attn_only_m -> fused_attn4_m
+        refresh_stub(a, fused_tag, "fused", "refused", "enable_fast_train(dgrad=True) patched 0 modules on this box: [selftest]", {"probed_by": "attn_only", "n_patched": 0, "n_layers": 2})
     return m, x
 
 
@@ -2911,7 +3129,7 @@ def _selftest_load_hf(a):
          "ckpt_mode": "hf:use_reentrant=False", "hashes": hashes_unsloth, "fwd_kwargs": lambda t: {"attention_mask": torch.ones_like(t)},
          "tokenizer_obj": _FakeTok(), "snapshot_dir": "/selftest/snapshots/deadbeef", "structural_expected_n_attn4": None, "detector_version": None,
          "loader_used": "AutoModelForCausalLM", "hf_targets": {"peft": "selftest", "n_target_modules": 8, "n_target_parameters": 4},
-         "hf_experts_implementation": {"requested": getattr(a, "hf_experts_implementation", "default") or "default", "config": None},
+         "hf_experts_implementation": {"requested": getattr(a, "hf_experts_implementation", "default") or "default", "accepted": "selftest stand-in", "error": None, "config": None},
          "hf_double_quant": {"requested": bool(int(getattr(a, "hf_double_quant", 1) or 0)), "loaded_attention_nested": None}}
     return m, x
 
@@ -2919,10 +3137,14 @@ def _selftest_load_hf(a):
 def _selftest_load_unsloth(a):
     if a.model == "selftest/refuse":
         raise NotImplementedError("selftest: loader refuses this family")
+    li4 = unsloth_load_in_4bit_of(a)
     with PH("load_weights"):
-        m = _TinyLM("unsloth")
+        m = _TinyLM("unsloth" if li4 else "unsloth_mxfp4")           # TC2 T23: the 16-bit load's packed-expert class
     x = {"n_attn4": 0, "n_patched": 0, "reason": "", "banner_lines": [f"Unsloth: Detected MoE model. {BANNER}: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']"],
-         "probes": {}, "n_layers": 2, "model_type": "tiny_unsloth", "verify": {"n_quantized": None, "n_unquantized": None},
+         "probes": {}, "n_layers": 2, "model_type": "tiny_unsloth" if li4 else "tiny_unsloth_mxfp4", "verify": {"n_quantized": None, "n_unquantized": None},
+         "unsloth_load_in_4bit": li4,                                                                                         # TC2 T23
+         "unsloth_double_quant": (None if li4 else {"requested": None, "loaded_nested": None, "how": "not applicable: load_in_4bit=False (16-bit load; selftest stand-in records what load_unsloth records)"}),
+         "unsloth_target_parameters": {"requested": unsloth_target_parameters_of(a), "passed": None, "how": "selftest stand-in (no loader to pass it to)"},   # TC2 T24
          "ckpt_mode": "unsloth" if a.grad_ckpt == "unsloth" else "hf:True (via get_peft_model)", "hashes": hashes_unsloth,
          "fwd_kwargs": lambda t: {"attention_mask": torch.ones_like(t)},
          "tokenizer_obj": _FakeTok(), "snapshot_dir": "/selftest/snapshots/deadbeef",
@@ -3077,6 +3299,130 @@ def _selftest_unsloth_backend_and_axolotl(a, d, rec, e_ref):
     a.axolotl_best = 0
     out["axolotl"] = {"quantized_moe_experts_n": c["quantized_moe_experts_n"], "n_bnb4bit_unwrapped": c["n_bnb4bit_unwrapped"], "slots": mi["n_slots_set"], "probe": {k: v["regime"] for k, v in fp["slots"].items()},
                       "eval_loss_step0": ax["eval_loss_step0"]}
+    return out
+
+
+def _selftest_tc2(a, d, rec, e_ref):
+    """TC2 (T23-T27) on the tiny models: the 16-bit Unsloth load's packed-expert census and counter, the target_parameters and
+    experts_implementation decisions (pure helpers), the suffixed attn_only stubs with a matched init over the trainable slots, the HF
+    arm's dispatch record, and the per-expert Linear4bit census."""
+    out = {}
+    env_keys = ("UNSLOTH_MOE_BACKEND", "UNSLOTH_MOE_RECOMPUTE", "UNSLOTH_MOE_GC_REPLAY_PIN")
+    saved = {k: os.environ.get(k) for k in env_keys}
+    try:
+        for k in env_keys:
+            os.environ.pop(k, None)
+        # ---- T23: --unsloth-load-in-4bit 0 -> the packed-expert class recorded, the MXFP4 grouped GEMM counted, backend selected recorded, double-quant n/a, the probe decodes expert 0
+        a.fam, a.model, a.tokens, a.tokens_sha = "tiny", "selftest/tiny", os.path.join(d, "tokens_tiny.json"), rec["sha256"]
+        a.framework, a.arm, a.tag, a.attn_4bit, a.expect_trainable = "unsloth", "unsloth", "ckpt_unsloth_mxfp4", 0, None
+        a.lora_init, a.adapter_dtype, a.unsloth_moe_backend, a.unsloth_speed_tilt, a.unsloth_double_quant, a.unsloth_load_in_4bit = "matched:3407", "fp32", "grouped_mm", 0, "off", 0
+        r = run_arm(a, _selftest_load_unsloth, sampler=False)
+        assert r["status"] == "ok" and r["unsloth_load_in_4bit"] is False and r["unsloth_knobs"]["load_in_4bit_requested"] is False, (r["status"], r.get("reason"))
+        assert r["census"]["expert_param_classes"] == {"Mxfp4ExpertParam": 4} and r["census"]["Params4bit_expert_stacks"] == 0 and r["census"]["Params4bit_expert_linears"] == 0, r["census"]
+        assert r["unsloth_packed_calls_per_step_min"] == {"unsloth_mxfp4_grouped_mm": 2 * a.accum} and r["unsloth_packed_calls_per_step_max"] == {"unsloth_mxfp4_grouped_mm": 2 * a.accum}, r["unsloth_packed_calls_per_step_min"]
+        assert r["unsloth_backend_calls_per_step_min"]["moe_bnb4bit_backend"] == 0 and r["moe_backend_selected"] == "grouped_mm" and r["unsloth_backend_absent"] == [], (r["unsloth_backend_calls_per_step_min"], r["unsloth_backend_absent"])
+        assert r["unsloth_double_quant"]["how"].startswith("not applicable") and r["unsloth_bnb4bit_modules"]["n_bnb4bit_unwrapped"] == 0, r["unsloth_double_quant"]
+        fp = r["frozen_base_probe"]
+        assert fp["slots"]["gate_up"]["regime"] == "Mxfp4ExpertParam-packed/dequantize()" and fp["slots"]["down"]["regime"] == "Mxfp4ExpertParam-packed/dequantize()", fp
+        assert fp["control_detects_flip"] is True and not fp["errors"] and "flipped in place" in fp["slots"]["gate_up"]["method"], fp
+        assert r["matched_init"]["complete"] is True and r["eval_loss_step0"] == e_ref["eval_loss_step0"] and r["C1_bit_exact"], (r["matched_init"], r["eval_loss_step0"])
+        assert r["C1_regime_by_tensor"] == {"u8-packed": 4}, r["C1_regime_by_tensor"]
+        out["mxfp4"] = {"classes": r["census"]["expert_param_classes"], "packed_calls": r["unsloth_packed_calls_per_step_min"], "probe": fp["slots"]["gate_up"]["regime"]}
+        a.unsloth_load_in_4bit = 1
+        # ---- T24: the target_parameters kwarg follows get_peft_model's signature, read at runtime; the request lands on the receipt
+        def gpm_with(model, r=16, target_modules=None, target_parameters=None):
+            pass
+
+        def gpm_without(model, r=16, target_modules=None):
+            pass
+        want = ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"]
+        kw, info = unsloth_target_parameters_kwargs(gpm_with, want)
+        assert kw == {"target_parameters": want} and info["passed"] is True and info["requested"] == want, info
+        kw, info = unsloth_target_parameters_kwargs(gpm_without, want)
+        assert kw == {} and info["passed"] is False and "does not name target_parameters" in info["how"], info
+        kw, info = unsloth_target_parameters_kwargs(gpm_without, [])
+        assert kw == {} and info["how"] == "not requested", info
+        print("FAILING-CASE TC2-T24 (arm): get_peft_model without target_parameters ->", info["how"] if False else "not passed; load_unsloth refuses the arm rather than drop the registered expert targets")
+        a.tag, a.unsloth_target_parameters = "ckpt_unsloth_m_experts", ",".join(want)
+        r2 = run_arm(a, _selftest_load_unsloth, sampler=False)
+        assert r2["unsloth_target_parameters"]["requested"] == want and r2["unsloth_knobs"]["target_parameters_requested"] == want and r2["unsloth_load_in_4bit"] is True, r2["unsloth_target_parameters"]
+        a.unsloth_target_parameters = None
+        # ---- T25: attn_only_m -> the suffixed stubs, matched init complete on the attention slots alone, the second draw refreshes the SAME stubs and shares the sha
+        assert attn_only_stub_tags("attn_only") == ("fused_attn4", "reference_attn4") and attn_only_stub_tags("attn_only_m") == ("fused_attn4_m", "reference_attn4_m")
+        assert attn_only_stub_tags("attn_only_m_d2") == ("fused_attn4_m", "reference_attn4_m") and attn_only_stub_tags("fused_attn4_m") == ("fused_attn4", "reference_attn4")
+        a.fam, a.tokens = "tinygo", os.path.join(d, "tokens_tinygo.json")
+        a.tokens_sha = json.load(open(a.tokens))["sha256"]
+        a.framework, a.arm, a.attn_4bit, a.expect_trainable, a.lora_init, a.adapter_dtype = "e4b", "attn_only", 0, None, "matched:3407", "fp32"
+        a.tag = "attn_only_m"
+        stub(a, "refused", "SKIPPED as REFUSED: tp1 (P36) + tp2 (P40) rows cited (selftest)", {"cited": "tp1,tp2"}, fw="e4b", tag="fused_attn4_m", arm="fused")
+        stub(a, "refused", "SKIPPED as REFUSED: tp4's bias rule (selftest)", {"cited": "tp4"}, fw="e4b", tag="reference_attn4_m", arm="reference")
+        shas = []
+        for tag in ("attn_only_m", "attn_only_m_d2"):
+            a.tag = tag
+            r = run_arm(a, _selftest_load_e4b, sampler=False)
+            mi = r["matched_init"]
+            assert r["status"] == "ok" and mi["complete"] is True and mi["n_slots_set"] == mi["n_slots_expected"] == 8 and not mi["unmapped"], (tag, mi)
+            assert mi["kinds"] == {"q": 2, "k": 2, "v": 2, "o": 2} and mi["expected_parts"]["experts"].startswith("excluded"), (tag, mi)
+            assert r["matched_init_sha_slots"] == 8 and r["trainable_by_group"]["experts"] == 0, (tag, r["matched_init_sha_slots"])
+            shas.append(r["matched_init_sha"])
+        assert shas[0] == shas[1], "two attn_only draws must share the name-free sha over their trainable slots"
+        st = json.load(open(os.path.join(d, "tinygo_e4b_fused_attn4_m.json")))
+        assert st["status"] == "refused" and st["cited"] == "tp1,tp2" and st["probed_by"] == "attn_only" and "patched 0 modules" in st["probe_reason"], st
+        rs = json.load(open(os.path.join(d, "tinygo_e4b_reference_attn4_m.json")))
+        assert rs["status"] == "refused" and rs["cited"] == "tp4" and "probed_by" not in rs, rs      # no bias on the tiny attention: the citation stands, no probe lands
+        assert not os.path.exists(os.path.join(d, "tinygo_e4b_fused_attn4_m_d2.json")), "the second draw refreshes the same stubs, never a _d2 stub"
+        out["attn_only_m"] = {"slots": 8, "sha_shared": True, "stub": st["probed_by"]}
+        # ---- T26: the experts_implementation acceptance helper, and the HF arm's dispatch record (the tiny forward reaches no grouped_mm)
+        def fp_accepts(path, **kw):
+            return ("model", kw)
+
+        def fp_rejects(path, **kw):
+            if "experts_implementation" in kw:
+                raise TypeError("__init__() got an unexpected keyword argument 'experts_implementation'")
+            return ("model", kw)
+
+        def fp_other(path, **kw):
+            raise TypeError("something else entirely")
+        m, info = hf_from_pretrained_experts_impl(fp_accepts, "grouped_mm", "p", dtype=1)
+        assert info["accepted"] is True and m[1] == {"dtype": 1, "experts_implementation": "grouped_mm"}, (info, m)
+        m, info_rej = hf_from_pretrained_experts_impl(fp_rejects, "grouped_mm", "p")
+        assert info_rej["accepted"] is False and "experts_implementation" in info_rej["error"] and m[1] == {}, (info_rej, m)
+        m, info = hf_from_pretrained_experts_impl(fp_rejects, "default", "p")
+        assert info["accepted"].startswith("not requested") and m[1] == {}, info
+        try:
+            hf_from_pretrained_experts_impl(fp_other, "grouped_mm", "p")
+            raise AssertionError("a TypeError that does not name the kwarg must propagate")
+        except TypeError as e:
+            assert "something else" in str(e)
+        print("FAILING-CASE TC2-T26 (arm): a transformers whose from_pretrained rejects experts_implementation -> accepted False, reloaded without it:", info_rej)
+        a.fam, a.model, a.tokens, a.tokens_sha = "tiny", "selftest/tiny", os.path.join(d, "tokens_tiny.json"), rec["sha256"]
+        a.framework, a.arm, a.tag, a.attn_4bit, a.expect_trainable, a.hf_experts_implementation = "hf", "hf", "hf_peft_m_t214", 0, None, "grouped_mm"
+        r = run_arm(a, _selftest_load_hf, sampler=False)
+        dp = r["hf_experts_dispatch"]
+        assert r["status"] == "ok" and dp["requested"] == "grouped_mm" and dp["reached_grouped_mm"] is False and dp["torch_grouped_mm_calls_per_step_min"] == 0 and dp["torch_F_grouped_mm_calls_per_step_min"] == 0, dp
+        print("FAILING-CASE TC2-dispatch (arm): hf_peft_m_t214 requested grouped_mm; torch grouped_mm calls/step 0 -> reached_grouped_mm False (recorded on the receipt; the reducer records it, never VOIDs it)")
+        a.hf_experts_implementation = "default"
+        out["hf_dispatch"] = dp["reached_grouped_mm"]
+        # ---- T23: the census counts per-expert Linear4bit under an experts container (gpt-oss bnb-4bit's shape), apart from the stacks
+        pe = nn.Module()
+        pe.layers = nn.ModuleList([nn.Module()])
+        pe.layers[0].mlp = nn.Module()
+        pe.layers[0].mlp.experts = nn.Module()
+        pe.layers[0].mlp.experts.gate_up_projs = nn.ModuleList([nn.Module(), nn.Module()])
+        for mm in pe.layers[0].mlp.experts.gate_up_projs:
+            mm.weight = Params4bit(torch.zeros(4, 1, dtype=torch.uint8))
+        pe.layers[0].self_attn = nn.Module()
+        pe.layers[0].self_attn.q_proj = nn.Module()
+        pe.layers[0].self_attn.q_proj.weight = Params4bit(torch.zeros(4, 1, dtype=torch.uint8))
+        c = quant_census(pe)
+        assert c["Params4bit_expert_linears"] == 2 and c["Params4bit_expert_stacks"] == 0 and c["Params4bit_other"] == 1 and c["expert_param_classes"] == {"Params4bit": 2}, c
+        out["per_expert_linears"] = c["Params4bit_expert_linears"]
+    finally:
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+    a.framework, a.arm, a.tag, a.lora_init, a.adapter_dtype, a.unsloth_moe_backend, a.unsloth_load_in_4bit = "e4b", "fused", "fused_attn4", "native", "fp32", "default", 1
     return out
 
 
@@ -3649,12 +3995,13 @@ def selftest(a):
     p2 = _selftest_unsloth_backend_and_axolotl(a, d, rec, e_ref)
     a.framework, a.arm, a.tag, a.lora_init, a.adapter_dtype = "e4b", "fused", "fused_attn4", "native", "fp32"
     p3 = _selftest_phase3(a, d, rec, R, M, N, e_fu, hfr)
+    tc2 = _selftest_tc2(a, d, rec, e_ref)       # TC2: T23-T27 on the tiny models
 
     print(f"SELFTEST OK dir={d} receipts={sorted(R)} e4b ref/fused loss_last {e_ref['loss_last']}/{e_fu['loss_last']} unsloth {u1['loss_last']} "
           f"hf {hfr['loss_last']} accum={a.accum} autocast={a.autocast} kcalls fused={e_fu['kernel_calls_per_step_min']} unsloth={u1['kernel_calls_per_step_min']} "
           f"hf={hfr['kernel_calls_per_step_min']} mb2_pads={ {k: v['tokens_padded_total'] for k, v in mb.items()} } detector_dryruns={det} "
           f"expert_selection_dryruns={sel} matched_step0={s0} matched_tolerance={tol} matched_slots={n_slots} "
-          f"frozen_probe_real={probe_real} phase2={p2} phase3={p3}")
+          f"frozen_probe_real={probe_real} phase2={p2} phase3={p3} tc2={tc2}")
     return d
 
 
@@ -3688,7 +4035,14 @@ def main():
     ap.add_argument("--hf-double-quant", type=int, default=1,
                     help="phase 3 (TC1): the HF arm's bnb_4bit_use_double_quant (default 1, matching e4b's double-quantised ATTENTION Params4bit; experts are not quantised on this arm); recorded as hf_double_quant")
     ap.add_argument("--hf-experts-implementation", default="default",
-                    help="J [F22] (TC1): the HF arm's transformers experts implementation passed to from_pretrained (default = the library's own choice, recorded); the t214 row asks for grouped_mm")
+                    help="J [F22] (TC1): the HF arm's transformers experts implementation passed to from_pretrained (default = the library's own choice, recorded); the t214 row asks for grouped_mm; "
+                         "TC2 T26: passed only if the installed transformers accepts the kwarg (a TypeError naming it reloads without it, accepted=False recorded), and what dispatched is recorded")
+    ap.add_argument("--unsloth-load-in-4bit", type=int, default=1,
+                    help="TC2 T23: FastLanguageModel.from_pretrained(load_in_4bit=...); 0 = the 16-bit load (gpt-oss: the zoo keeps the MXFP4 expert stacks packed and trains LoRA "
+                         "through its fused MXFP4 grouped GEMM -- UPSTREAM-NOTES); the double-quant kwarg is then not passed; recorded as unsloth_load_in_4bit")
+    ap.add_argument("--unsloth-target-parameters", default=None,
+                    help="TC2 T24: PEFT target_parameters named EXPLICITLY on get_peft_model (comma list, e.g. mlp.experts.gate_up_proj,mlp.experts.down_proj beside q/k/v/o in "
+                         "--unsloth-targets); passed only when get_peft_model's signature names it (read at runtime), else the arm refuses; recorded as unsloth_target_parameters")
     ap.add_argument("--adapter-dtype", choices=["fp32", "native"], default="fp32",
                     help="T19 (TC1): fp32 = cast EVERY framework's trainable adapters to fp32 after construction (e4b included; tp4 cast only "
                          "the non-e4b arms); native = leave them as the loader built them (e4b: bf16 expert adapters -- the `shipped` arm)")

@@ -7,13 +7,14 @@
 # PROVENANCE: copied from bench/tp4/tp4_drive.sh @ e4b main 10ce711d with TC1 names; the forwarded-knob list below covers
 # EVERY TC1_* the box script and the arm read from the environment (tests/test_tc1_arm.py asserts it against tc1_run.sh).
 # TC1b (TC1_FAMILIES=qwen3curve) stages the same pieces plus bench/flagship-matrix's n9_datasets.py + ds_manifest.json (the anchor pair's text).
-# TC1_BOX=A (required; the only registered box).   Nothing here creates, destroys or approves compute.
+# TC2 (TC1_FAMILIES=tc2small on TC1_BOX=A; TC1_BOX=B defaults to tc2big) stages the same pieces and forwards the TC1_SMALL_* instrument knobs.
+# TC1_BOX=A (required; TC1's only registered box) or B (lane TC2's box B).   Nothing here creates, destroys or approves compute.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [tc1_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID TC1_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$TC1_BOX" in A) ;; *) say "refusing: TC1_BOX must be A (one RTX 5090, the only registered box)"; exit 78;; esac
+case "$TC1_BOX" in A|B) ;; *) say "refusing: TC1_BOX must be A (TC1's one RTX 5090) or B (lane TC2's box B, tc2big)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 # TC1b (the qwen3curve token): + the clinical builder and its manifest, referenced where tp4_drive.sh references them (never copied into bench/tc1)
 STAGE="$HERE/tc1_run.sh $HERE/tc1_arm.py $HERE/tc1_reduce.py $REPO/bench/tp4/tp4_alpaca.py $REPO/bench/flagship-matrix/drivers/n9_datasets.py $REPO/bench/flagship-matrix/ds_manifest.json"
@@ -51,7 +52,8 @@ for v in TC1_FAMILIES TC1_SKIP TC1_UNSLOTH_VERSION TC1_UNSLOTH_ZOO_VERSION TC1_P
          TC1_EVAL_N TC1_EVAL_EVERY TC1_SEQ TC1_MB TC1_ACCUM TC1_R TC1_ALPHA TC1_LR TC1_WD TC1_OPTIM TC1_SCHED TC1_WARMUP TC1_SEED \
          TC1_MATCHED_SEED TC1_AUTOCAST TC1_DS_ALPACA_SHA TC1_TRANSFORMERS_VER TC1_BNB_VER TC1_PEFT_VER TC1_GPU_CLASS TC1_MIN_DISK_GB \
          TC1_PREREG TC1_BATCHED_PAD_WASTE_LIMIT TC1_PHASE_BUDGET_S TC1_ANCHOR_JSON TC1_AXOLOTL_VERSION \
-         TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs)
+         TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA \
+         TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument)
   # Quoted: run tp4-b-p46cut-3 passed TC1_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tc1_run.sh` saw the second
   # word as the COMMAND -- rc=127 before the nonce was bound, a HARNESS_ERROR row. %q survives the remote shell's re-parse.
   [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"
