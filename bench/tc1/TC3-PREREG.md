@@ -163,3 +163,18 @@ the 32 GB card in TC1) fits a 24 GB card resident.
 FIT row after the mb1 resident arm (alarm 1200 as the resident arm's): never a position, outside P1, reported in the FIT TABLE and
 beside the matched arms (the 12 GB token already carries its offloaded counterpart). The reducer registers the row (`EXPECTED`,
 `FRONTIER_LEVER`); nothing in the predictions, bands or decision rules moves.
+
+### Amendment 4 (2026-10-02T05:25Z, before the 24 GB redraw): an exception anywhere after load is a row, never a missing receipt
+
+**What the boxes showed.** On `tc3-4090-1` the plain axolotl arm died after load in transformers 5.17.0's Qwen3-MoE router
+(`F.linear(hidden_states, self.weight)`: `expected mat1 and mat2 to have the same dtype, but got: c10::BFloat16 != float`) and left
+no receipt, so the reducer could only print "rc=1 and no receipt"; the first 12 GB arm's C1 assertion (amendment 2) had done the same.
+The loader's exceptions and the loop's OOM were already rows; a non-OOM exception in the prologue or the loop was a row only on a
+lever arm.
+
+**The amendment.** `tc1_arm.py` runs every arm through `run_arm_or_row`: any exception after the preamble becomes a row with the
+phase it landed in, the exception type and the traceback tail -- classified as the loader's exceptions are (a framework's
+RuntimeError / NotImplementedError / ValueError -> `refused` -> UNSUPPORTED; an OOM -> `oom`), a harness AssertionError or a CUDA fault
+after load -> `harness_error`. A stub's own exit propagates unchanged. The axolotl row on the redraw therefore reads UNSUPPORTED with
+transformers' message, which is what it is: axolotl 0.20.0's Qwen3-MoE path at its pins. Nothing in the arms, alarms, predicates or
+readings moves.
