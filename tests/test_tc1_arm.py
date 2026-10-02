@@ -632,7 +632,7 @@ def test_tc1_run_sh_runs_the_frontier_families_in_the_registered_order():
     ff = body[body.index("tc1_frontier_family(){"):body.index("# tc1_frontier12_family FAM MID REV")]
     f12 = body[body.index("tc1_frontier12_family(){"):body.index("# tc2_small_family FAM MID REV")]
     pat = r"(?:arm|draw2|todo_arm)\s+\$FAM\s+(e4b|unsloth|hf|axolotl)\s+(\S+)"
-    assert re.findall(pat, ff) == [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
+    assert re.findall(pat, ff) == [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("e4b", "fused_attn4_shipped"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
                                    ("hf", "hf_peft_m"), ("hf", "hf_peft_m_offload"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_m_layeroffload"),
                                    ("axolotl", "ckpt_axolotl_m_zero3"), ("e4b", "reference_attn4_m_offload")], re.findall(pat, ff)
     assert "draw2 $FAM" not in ff and "todo_arm" not in ff and 'MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"' in ff
