@@ -266,13 +266,75 @@ def test_unsupported_state_carrying_layers_are_refused():
     assert layer_plan(plain, 3, 2) == ([0, 1, 2], None)
 
 
-def test_decode_graphs_are_refused_for_a_model_with_linear_layers():
-    model = _model([LIN, ATT])
-    kv = types.SimpleNamespace(L=2, B=2, scratch=[2, 3])
+def _decode_step(model, pool, ctx, tok, pos):
+    prev = paged_attention.set_context(ctx)
+    try:
+        out = model(input_ids=torch.tensor([[t] for t in tok]), position_ids=torch.tensor([[p] for p in pos]),
+                    use_cache=False, attention_mask=NOMASK)
+    finally:
+        paged_attention.set_context(prev)
+    return out.logits[:, -1]
+
+
+def test_a_decode_graph_bucket_selector_addresses_the_same_rows_as_the_slot_list():
+    """A captured decode graph cannot read ``ctx.slots`` (a Python list baked at capture); the wrapper gathers and
+    scatters through the bound bucket's device selector instead. On the same rows it must be bit-identical."""
+    prompts = {0: [5, 9, 2, 7, 1], 1: [3, 3, 8], 2: [11, 4, 6, 6], 5: [2, 2]}   # 5: a padding row's scratch slot
+    runs = {}
+    for name in ("list", "selector"):
+        model = _model([LIN] * 3)
+        pool = linear_state.install(model, n_slots=6)
+        with torch.no_grad():
+            for slot, p in prompts.items():
+                prev = paged_attention.set_context(_bound([slot]))
+                try:
+                    model(input_ids=torch.tensor([p]), position_ids=torch.arange(len(p))[None], use_cache=False,
+                          attention_mask=NOMASK)
+                finally:
+                    paged_attention.set_context(prev)
+                pool.mark([slot])
+            rows = [2, 0, 1, 5]                                    # three live rows and a padding row
+            got = []
+            for step in range(3):
+                ctx = _bound(rows)
+                if name == "selector":
+                    ctx.kv = types.SimpleNamespace(_g_sel=torch.tensor(rows))   # the bound bucket's slot ids
+                assert (linear_state._bucket_selector(ctx) is not None) is (name == "selector")
+                got.append(_decode_step(model, pool, ctx, [7 + step] * 4,
+                                        [len(prompts[r]) + step for r in rows]))
+        runs[name] = (got, {k: (v.clone(), pool.rec[k].clone()) for k, v in pool.conv.items()})
+    (lg_a, st_a), (lg_b, st_b) = runs["list"], runs["selector"]
+    for a, b in zip(lg_a, lg_b):
+        assert torch.equal(a, b)                                    # every row: bit-identical
+    for k in st_a:
+        assert torch.equal(st_a[k][0], st_b[k][0]) and torch.equal(st_a[k][1], st_b[k][1])
+
+
+def test_the_runner_warms_the_pool_before_a_capture_and_a_frozen_pool_does_not_grow():
+    pytest.importorskip("row_pool", reason="needs grouped-nf4-gemm N-series")
+    pytest.importorskip("fp8_kv", reason="needs grouped-nf4-gemm N-series")
+    from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
+    model = _model([LIN, ATT, LIN])
+    paged_attention.register(model)
+    kv = Fp8PagedKV(1, model.config.num_key_value_heads, model.config.head_dim, batch=2, max_tokens_per_seq=32,
+                    device="cpu", scratch_slots=2)
     runner = PagedModelRunner(model, kv, device="cpu")
-    assert runner.linear_state is not None and runner.attn_layers == [1]
-    with pytest.raises(NotImplementedError, match="not captured yet"):
-        runner.enable_decode_graphs(buckets=(1, 2))
+    pool = runner.linear_state
+    assert runner.pool_layers == [0] and not pool.allocated([0, 2])
+    scratch = list(kv.scratch)
+    runner._warm_linear_state(scratch[0])
+    assert pool.allocated([0, 2]) and not pool.has[scratch[0]]      # allocated; the scratch slot carries nothing
+    assert not runner.ctx.staging and runner.ctx.mode == "decode"   # its staged K/V discarded
+    pool.frozen = True
+    with pytest.raises(RuntimeError, match="captured decode graph holds"):
+        linear_state.install(model, n_slots=8)
+    assert linear_state.install(model, n_slots=3) is pool           # within its size: no growth, no refusal
+
+
+def test_a_selector_step_refuses_a_layer_the_pool_has_not_allocated():
+    pool = linear_state.LinearStatePool(4)
+    with pytest.raises(RuntimeError, match="warm the pool"):
+        pool.view(0, [0, 1], sel=torch.tensor([0, 1]))
 
 
 def test_a_compact_kv_pool_matches_one_layer_per_index_bit_for_bit():
