@@ -917,12 +917,34 @@ def _regime_label(t):
     return "u8-packed" if t.dtype == torch.uint8 else _dtype_label(t.dtype)
 
 
+def offload_homes(model):
+    """TC3 amendment 2: {qualified tensor name: home tensor} for every expert module under e4b's expert offload. The handle
+    (`experts_lora._offload`, experts4bit_qlora/engines/offload.py) owns the pinned-CPU HOME copies of the base's packed
+    projections and absmax scales, and the base's own parameters / buffers hold 0-element GPU placeholders while evicted --
+    so the frozen bytes to hash are the handle's `home`, keyed by the base module's qualified name. The first 12 GB hand run
+    (2026-10-02T04:52Z) counted those placeholders as 97 empty frozen tensors and refused itself."""
+    homes = {}
+    by_id = {id(m): n for n, m in model.named_modules()}
+    for _, m in model.named_modules():
+        h = getattr(m, "_offload", None)
+        home, base = getattr(h, "home", None), getattr(h, "base", None)
+        if not isinstance(home, dict) or base is None or id(base) not in by_id:
+            continue
+        for k, t in home.items():
+            if t is not None:
+                homes[f"{by_id[id(base)]}.{k}"] = t
+    return homes
+
+
 def frozen_tensors(model):
     """[F14] every FROZEN expert / 4-bit tensor, whatever its dtype: a bnb Params4bit anywhere (expert stacks, Linear4bit
     attention weights), and any non-trainable parameter or buffer that sits under an `experts` path component, matches
     EXPERT_PARAM_RE, or is one of Experts4bit's stack/absmax attributes (so bf16 stacks, the uint8 packed originals under
-    `parametrizations.*.original`, and e4b's absmax buffers are all hashed). LoRA tensors and trainables are never hashed."""
+    `parametrizations.*.original`, and e4b's absmax buffers are all hashed). LoRA tensors and trainables are never hashed.
+    Under e4b's expert offload the tensor yielded for an evicted stack / absmax is the handle's pinned-CPU home copy
+    (offload_homes), never the GPU placeholder (TC3 amendment 2)."""
     out, seen = [], set()
+    homes = offload_homes(model)
     for name, t in list(model.named_parameters()) + list(model.named_buffers()):
         if name in seen or t is None:
             continue
@@ -931,7 +953,8 @@ def frozen_tensors(model):
             continue
         parts = name.split(".")
         if type(t).__name__ == "Params4bit" or "experts" in parts or EXPERT_PARAM_RE.search(name) or parts[-1] in EXPERT_ATTRS:
-            out.append((name, t, _regime_label(t)))
+            src = homes.get(name, t)
+            out.append((name, src, _regime_label(src)))
     return out
 
 
@@ -958,7 +981,7 @@ def c1_control(model, h_before, hasher=hashes_frozen):
     if not h_before:
         return {"tensor": None, "detects": False, "why": "nothing hashed"}
     name = sorted(h_before)[0]
-    tensors = dict(list(model.named_parameters()) + list(model.named_buffers()))
+    tensors = {n: t for n, t, _ in frozen_tensors(model)}     # the storage the hasher read (the offload home, not a placeholder)
     t = tensors[name]
     h_t, _, _, _ = hasher(model, override={name: flip_first_byte(t.data)})
     changed = h_t.get(name) != h_before[name]
@@ -2671,8 +2694,9 @@ def run_arm(a, load_fn, sampler=True):
 
     with PH("c1_before"):                           # #548: the frozen expert bytes, copied to CPU and sha256'd (C1_bytes_hashed says how many)
         h_before, bytes_before, empties_before, c1_regimes = hashes_frozen(model)     # [F14] every frozen expert/4-bit tensor, any dtype
+        c1_homes = len(offload_homes(model))                                            # TC3 amendment 2: tensors read from the offload home
         assert bytes_before > 0, "C1 hashed ZERO bytes -- gate is vacuous"
-        assert empties_before == 0, f"C1 saw {empties_before} empty frozen tensors"
+        assert empties_before == 0, f"C1 saw {empties_before} empty frozen tensors (offload homes mapped: {c1_homes})"
         c1_ctl = c1_control(model, h_before)        # [F14] a real byte of a real tensor's COPY, the same hasher
         assert c1_ctl["detects"], f"C1 positive control did not fire -- the check cannot fail ({c1_ctl})"
 
@@ -2946,7 +2970,8 @@ def run_arm(a, load_fn, sampler=True):
         "experts_forward_calls_per_step_min": (min(efw) if efw else 0), "kernel_calls_all": kcalls,
         "C1_tensors_hashed": len(h_before), "C1_bytes_hashed": bytes_before, "C1_empties_skipped": empties_before,
         "C1_control_detects_flipped_byte": bool(c1_ctl["detects"]), "C1_control_tensor": c1_ctl["tensor"],          # [F14] computed, never hard-coded
-        "C1_regime_by_tensor": c1_regimes, "C1_hasher": "hashes_frozen: every frozen expert / 4-bit tensor, any dtype (params + buffers)",
+        "C1_regime_by_tensor": c1_regimes, "C1_hasher": "hashes_frozen: every frozen expert / 4-bit tensor, any dtype (params + buffers; an offloaded stack from its pinned-CPU home)",
+        "C1_offloaded_homes": c1_homes,                        # TC3 amendment 2: how many hashed tensors came from e4b's offload home (0 when resident)
         "C1_experts_changed": len(changed), "C1_bit_exact": c1_ok, "C1_changed_sample": changed[:3],
         "loss_first": losses[0], "loss_last": losses[-1], "loss_mean_last20": round(statistics.mean(losses[-20:]), 5),
         "loss_step2": (losses[2] if len(losses) > 2 else None),                                                      # [F3]

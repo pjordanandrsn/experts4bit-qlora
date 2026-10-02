@@ -133,3 +133,20 @@ pip, which is why no TC1 / TC2 box met it.
 before the install that needs it — logged to `logs/pip_upgrade_<venv>.log`, never fatal (a pip that cannot move leaves the install that
 follows to fail or succeed on its own). The axolotl venv is uv's and is not touched. Nothing in the arms, the alarms, the predicates or the
 readings moves; the 12 GB run restarts from this amendment's merge with the same registered snapshot and knobs.
+
+### Amendment 2 (2026-10-02T04:59Z, after the first 12 GB arm refused itself in the harness; before any e4b offload row on either box): C1 hashes the offload home, not the GPU placeholder
+
+**What the hand run showed.** The restarted 12 GB run (`local-20261002T042928Z`) loaded the model under offload in 991 s and then
+refused its first arm in the harness: `AssertionError: C1 saw 97 empty frozen tensors`. Under e4b's expert offload the base's packed
+`gate_up_proj` / `down_proj` and the `*_absmax` buffers are 0-element GPU placeholders while evicted; the bytes live in the handle's
+pinned-CPU `home` (`experts_lora._offload`, `engines/offload.py`). TC1's phase-3 hasher hashes every frozen tensor it can see and
+asserts no empties, so every offloaded arm of this lane (both TC3 boxes) and TC2's Mixtral offload arms (box B, not yet launched)
+would refuse themselves the same way. The rented 24 GB box `tc3-4090-1`, already running on the pre-amendment harness, carries that
+refusal on its e4b offload rows; its other rows stand.
+
+**The amendment.** `tc1_arm.py` maps each offload handle's `home` tensors to the base module's qualified names
+(`offload_homes`); `frozen_tensors` yields the home copy for those names (the placeholder is never hashed), `hashes_frozen` counts no
+empties, the positive control flips a byte of the home copy, and the receipt records `C1_offloaded_homes` (0 when resident). The
+resident regime is byte-for-byte as before (same hasher, same names). The 12 GB run restarts from this merge; the 24 GB token is
+redrawn once (`tc3-4090-2`) so its e4b offload rows are measured, with `tc3-4090-1`'s non-e4b rows reported beside as a second draw.
+TC2's box B launches from this merge (TC2-PREREG amendment 1). Nothing in the arms, the alarms, the predicates or the readings moves.

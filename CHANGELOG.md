@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Docs: `serve_paged`'s GPU construction has not yet run on a GPU (stated plainly)
+
+- `docs/SERVING.md`: 0.39.0 shipped `experts4bit_qlora.serve_paged` CPU-tested only. Its `build_engine` (the GPU construction)
+  has never executed on hardware, and the docs said so only obliquely ("written from the harness rather than measured here").
+  A GPU-status paragraph now says so plainly and names the first GPU exercise: lane SC1's proving rental (#846). No code change.
+
 ## 0.39.0 — 2026-10-02 — an opt-in OpenAI-compatible server over the continuous-batching engine (`serve_paged`) with a per-request stop set in the scheduler; foreign-format loader correctness (compressed-tensors NVFP4 decoded global_scale² too large, fixed; zero points and GPTQ `gptq_v2` refused); lane P95 reads K8's window spread
 
 **0.39.0.** No default changes.
