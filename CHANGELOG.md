@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Lane P96 registered (#564): K25's default asked again with P95's windowed K8 gate -- K25 against the served NF4 M-tile at T == 1 on fresh windows (bench and tests only)
+
+- **Why.**
+  - P93 measured the route at B=16 ×0.594 / ×0.598.
+  - P94 failed it on one window per text.
+  - P95 measured that one window cannot resolve 0.05 on these families, and named the windowed gate.
+- **What it reads.** K8 of K25 (t) and the served M-tile (m) at T == 1, on both families, on fresh windows: c4val1
+  9–16 and wikitext 9–12, disjoint from P94's and P95's. It also reads engagement censuses for both arms.
+- **The rule** (`bench/p96/p96_reduce.py`, 12-case self-test).
+  - **LICENSED** if |mean(t − m)| ≤ 0.05 over the windows on every text in both families. `E4B_NF4_GROUPED_SMALLM`
+    then defaults to `auto` (rows above T == 1).
+  - **QUALITY_FAIL** otherwise.
+  - **VOID** below P95's window minimums (5 and 2), or on failed engagement.
+- **Rentals.** A proving rental (0.5 h), then the reading (1.5 h guard, ≤ $1.125). Lane ceiling $2.50.
+- `tests/test_p96_staged_pin.py` pins:
+  - the windows: fresh, at least P95's minimums, and read by the reducer;
+  - the reducer's minimums and σ against P95's receipts;
+  - the arms, the order and the proving switch.
+
 ### Docs: `serve_paged`'s GPU construction has not yet run on a GPU (stated plainly)
 
 - `docs/SERVING.md`: 0.39.0 shipped `experts4bit_qlora.serve_paged` CPU-tested only. Its `build_engine` (the GPU construction)
