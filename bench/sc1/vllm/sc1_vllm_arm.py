@@ -2,11 +2,14 @@
 EXTENDED. Receipt keys, the slope method and the prompt-file contract are byte-compatible with P37/P58 (so
 `p58_reduce.py`'s logic reads these receipts unchanged); everything SC1 adds is an extra key.
 
-Arms (SC1_ARM; P37_ARM accepted):
+Arms (SC1_ARM; P37_ARM accepted). The MATCHED arms keep vLLM's shipped `detokenize=True` -- a comparator's serving
+loop is never trimmed to e4b's omission (registered text, F7); the asymmetry is MEASURED by the `nodetok` pair at both
+batch sizes. The registered capacity rule on every matched arm: `max_num_seqs=B` (16 on B=16, 1 on B=1) and
+`max_model_len=2048`.
   graph_r1 | graph_r2  default -O2 graphs (FULL_AND_PIECEWISE), kv_cache_dtype auto, prefix caching OFF, seed 0,
-                       max_num_seqs=B (capture list [1,2,4,8,16,24,32] at B=16 -- recorded), max_num_batched_tokens
-                       covering the 512-token prompts in one chunk, attention FLASH_ATTN + moe_backend marlin PINNED,
-                       detokenize=False (F7)                                                   -- PRIMARY, two draws
+                       max_num_seqs=B (capture list [1,2,4,8,16,24,32] at B=16 -- recorded), max_model_len 2048,
+                       max_num_batched_tokens covering the 512-token prompts in one chunk, attention FLASH_ATTN +
+                       moe_backend marlin PINNED, detokenize=True                             -- PRIMARY, two draws
   eager                enforce_eager=True (no graphs), otherwise as graph
   fp8kv                kv_cache_dtype="fp8", attention FLASHINFER pinned (FA2 on sm_120 cannot take fp8 KV); the receipt
                        carries the k_scale/v_scale provenance: 1.0 when the checkpoint ships none (F9)
@@ -14,7 +17,8 @@ Arms (SC1_ARM; P37_ARM accepted):
                        rows are identical and carries the FILE's digest
   native               the shipped defaults: ONLY model/revision/seed are passed (prefix caching stays ON, 0.92 util,
                        tier defaults for max_num_seqs / max_num_batched_tokens, detokenizer on); every knob read back
-  detok                the graph config with detokenize=True (F7: the incremental detokeniser's cost, measured)
+  nodetok              the graph config with detokenize=False -- the F7 pair: run at B=1 AND B=16 beside graph_r1 so the
+                       incremental detokeniser's share of vLLM's step is a measured number
 
 Env (SC1_* first, P37_* fallback): ARM, BATCH, PROMPTS, OUT  [MODEL, REV, LOG, INSTANCE_ID, GPU_UTIL=0.90, MAX_LEN=2048,
 SHORT=32, LONG=128, REPS=3, ATTN_BACKEND, MOE_BACKEND=marlin, INPROC=0]. With SC1_LOG set, fd 1/2 are tee'd into that

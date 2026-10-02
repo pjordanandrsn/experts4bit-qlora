@@ -52,6 +52,7 @@ def main():
     assert max_len >= plen + 1, f"max_model_len {max_len} cannot hold prompt {plen} + 1"
     max_batched = C.env_int("MAX_BATCHED", max(8192, plen))
     chunked = C.env("CHUNKED", "1") == "1"
+    detok = C.env("DETOKENIZE", "1") == "1"          # shipped default kept: a comparator's loop is never trimmed (F7)
 
     kw = C.build_llm_kwargs(arm, 1, model, rev, gpu_util=gpu_util, max_len=max_len, prompt_len=plen,
                             attn=C.env("ATTN_BACKEND"), moe=C.env("MOE_BACKEND", "marlin"))
@@ -59,15 +60,18 @@ def main():
     kw["enable_chunked_prefill"] = chunked
     rec = C.base_receipt("ttft", arm, kw, {
         "model": model, "revision": rev, "batch": 1, "prompt_len": plen, "status": "ok", **pinfo,
-        "method": "TTFT = wall of LLM.generate([{prompt_token_ids}], SamplingParams(max_tokens=1, temperature=0, "
-                  "detokenize=False), use_tqdm=False) at the Python entry; warm engine (one untimed call first); prefix "
-                  "caching OFF so nothing is cached between repeats; median of REPS (F18)",
+        "method": "TTFT = wall of LLM.generate([{prompt_token_ids}], SamplingParams(max_tokens=1, temperature=0), "
+                  "use_tqdm=False) at the Python entry; warm engine (one untimed call first); prefix caching OFF so "
+                  "nothing is cached between repeats; median of REPS (F18)",
+        "generation": {"temperature": 0.0, "max_tokens": 1, "greedy": True, "detokenize": detok,
+                       "note": "detokenize stays at vLLM's shipped default (True) unless SC1_DETOKENIZE=0: the comparator's "
+                               "loop is never trimmed; one token's detokenisation is inside the TTFT by design"},
         "engine_timer": "none: the offline LLM exposes no request-level TTFT (RequestOutput.metrics is None with "
                         "disable_log_stats=True); prefill tok/s below is derived from the wall, not an engine timer",
         "chunks_expected": math.ceil(plen / max_batched) if chunked else 1, "reps": reps,
     })
     try:
-        _run(rec, row, plen, kw, reps, log, out_path)
+        _run(rec, row, plen, kw, reps, log, out_path, detok)
     except BaseException as e:  # noqa: BLE001
         rec["status"] = "harness_error"
         rec["error"] = repr(e)[:400]
@@ -77,7 +81,7 @@ def main():
         raise
 
 
-def _run(rec, row, plen, kw, reps, log, out_path):
+def _run(rec, row, plen, kw, reps, log, out_path, detok=True):
     t0 = time.perf_counter()
     llm = LLM(**kw)
     rec["load_s"] = round(time.perf_counter() - t0, 1)
@@ -86,7 +90,7 @@ def _run(rec, row, plen, kw, reps, log, out_path):
     rec["engagement"] = C.grep_engagement(log)
     rec["mem_after_load"] = C.mem_snapshot(llm, kw.get("gpu_memory_utilization"))
 
-    sp = SamplingParams(max_tokens=1, temperature=0.0, detokenize=False)
+    sp = SamplingParams(max_tokens=1, temperature=0.0, detokenize=detok)
     req = [{"prompt_token_ids": row}]
 
     def one():

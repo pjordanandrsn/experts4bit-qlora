@@ -62,7 +62,7 @@ TAG = "v0.30.0"
 TAG_COMMIT = "ced6857afa0ea7b2e3f0846a62e1394e90f15607"
 MODEL_DEFAULT = "Qwen/Qwen3-30B-A3B-GPTQ-Int4"
 REV_DEFAULT = "9b534e4318b7ebc3c961a839f13eb18b1833f441"
-ARMS = ("graph_r1", "graph_r2", "eager", "fp8kv", "sameprompt", "native", "detok")
+ARMS = ("graph_r1", "graph_r2", "eager", "fp8kv", "sameprompt", "native", "nodetok")
 PROMPT_LEN = 512
 SHORT, LONG = 32, 128
 DEFAULT_BLOCK_SIZE = 16          # vllm/config/cache.py:71
@@ -244,9 +244,10 @@ def build_llm_kwargs(arm, batch, model=MODEL_DEFAULT, rev=REV_DEFAULT, gpu_util=
     """The exact `LLM(**kw)` per arm. `native` = the shipped defaults (prefix caching ON, O2 graphs, async scheduling,
     max_num_seqs/max_num_batched_tokens by tier, gpu_memory_utilization 0.92) -- only the model identity and the seed
     are passed; every resolved knob is read back by `resolved_config`. All other arms pin: no prefix caching, seed 0,
-    `max_num_seqs=B` (capture list [1,2,4,8,16,24,32] at B=16), `max_num_batched_tokens` covering the prompts in one
-    chunk, the attention backend (FLASH_ATTN for bf16/fp16 KV; FLASHINFER for fp8 KV -- FA2 on sm_120 cannot take fp8 KV,
-    fa_utils.py:282-308), `moe_backend="marlin"`."""
+    the REGISTERED CAPACITY RULE `max_num_seqs=B` (16 on the B=16 arms, 1 on the B=1 arms; capture list
+    [1,2,4,8,16,24,32] at B=16) and `max_model_len=2048`, `max_num_batched_tokens` covering the prompts in one chunk,
+    the attention backend (FLASH_ATTN for bf16/fp16 KV; FLASHINFER for fp8 KV -- FA2 on sm_120 cannot take fp8 KV,
+    fa_utils.py:282-308), `moe_backend="marlin"`. `nodetok` takes the graph kwargs; it differs only in SamplingParams."""
     assert arm in ARMS, f"unknown arm {arm!r}; arms: {ARMS}"
     if arm == "native":
         return dict(model=model, revision=rev, tokenizer_revision=rev, seed=0)
@@ -259,10 +260,11 @@ def build_llm_kwargs(arm, batch, model=MODEL_DEFAULT, rev=REV_DEFAULT, gpu_util=
 
 
 def sampling_kwargs(arm, n_tokens):
-    """Greedy, fixed length, no EOS stop. `detokenize=False` on the MATCHED arms (F7: e4b's loop has no detokeniser);
-    `detok` and `native` leave the incremental detokeniser on so its cost is measured."""
+    """Greedy, fixed length, no EOS stop. The MATCHED arms keep `detokenize=True` (vLLM's shipped default: a
+    comparator's serving loop is never trimmed to e4b's omission -- registered text, F7); the `nodetok` pair at both
+    batch sizes runs `detokenize=False` so the incremental detokeniser's cost is MEASURED, not assumed."""
     return dict(temperature=0.0, max_tokens=n_tokens, ignore_eos=True, min_tokens=n_tokens,
-                detokenize=(arm in ("native", "detok")))
+                detokenize=(arm != "nodetok"))
 
 
 def expected_capture_sizes(max_num_seqs):

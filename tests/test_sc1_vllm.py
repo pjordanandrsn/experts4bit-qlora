@@ -188,7 +188,7 @@ def test_llm_kwargs_per_arm(mods):
     assert g["attention_backend"] == "FLASH_ATTN" and g["moe_backend"] == "marlin" and g["seed"] == 0
     assert g["max_num_seqs"] == 16 and g["max_num_batched_tokens"] == 8192 and g["max_model_len"] == 2048
     assert g["gpu_memory_utilization"] == 0.90 and g["tensor_parallel_size"] == 1
-    assert C.build_llm_kwargs("graph_r2", 16) == g == C.build_llm_kwargs("sameprompt", 16) == C.build_llm_kwargs("detok", 16)
+    assert C.build_llm_kwargs("graph_r2", 16) == g == C.build_llm_kwargs("sameprompt", 16) == C.build_llm_kwargs("nodetok", 16)
     assert C.build_llm_kwargs("graph_r1", 1)["max_num_seqs"] == 1
     e = C.build_llm_kwargs("eager", 1)
     assert e["enforce_eager"] is True and {k: v for k, v in e.items() if k != "enforce_eager"} == \
@@ -204,11 +204,24 @@ def test_llm_kwargs_per_arm(mods):
 
 
 def test_sampling_kwargs_detokenize_rule(mods):
+    """Registered text: the MATCHED arms keep vLLM's shipped detokenize=True (a comparator's loop is never trimmed);
+    only the `nodetok` pair runs detokenize=False, so the detokeniser's cost is measured, not assumed."""
     C = mods.C
-    for arm in ("graph_r1", "graph_r2", "eager", "fp8kv", "sameprompt"):
+    for arm in ("graph_r1", "graph_r2", "eager", "fp8kv", "sameprompt", "native"):
         s = C.sampling_kwargs(arm, 128)
-        assert s == {"temperature": 0.0, "max_tokens": 128, "ignore_eos": True, "min_tokens": 128, "detokenize": False}
-    assert C.sampling_kwargs("detok", 32)["detokenize"] is True and C.sampling_kwargs("native", 32)["detokenize"] is True
+        assert s == {"temperature": 0.0, "max_tokens": 128, "ignore_eos": True, "min_tokens": 128, "detokenize": True}
+    assert C.sampling_kwargs("nodetok", 32) == {"temperature": 0.0, "max_tokens": 32, "ignore_eos": True, "min_tokens": 32,
+                                                "detokenize": False}
+
+
+def test_registered_capacity_rule_on_matched_arms(mods):
+    """max_num_seqs=B (16 on the B=16 arms, 1 on the B=1 arms) and max_model_len=2048 on every matched arm."""
+    C = mods.C
+    for arm in ("graph_r1", "graph_r2", "eager", "fp8kv", "sameprompt", "nodetok"):
+        for b in (1, 16):
+            kw = C.build_llm_kwargs(arm, b)
+            assert kw["max_num_seqs"] == b and kw["max_model_len"] == 2048, (arm, b)
+    assert "max_num_seqs" not in C.build_llm_kwargs("native", 16) and "max_model_len" not in C.build_llm_kwargs("native", 16)
 
 
 def test_expected_capture_sizes(mods):
@@ -453,7 +466,8 @@ def test_drivers_import_without_side_effects_and_expose_main(mods):
         assert callable(m.main)
     assert mods.ttft.TTFT_ARMS == ("graph_r1", "eager", "fp8kv") and mods.nll.MODES == ("prefill", "served")
     assert "calculate_kv_scales" in mods.arm.KV_SCALE_PROVENANCE
-    assert set(mods.C.ARMS) == {"graph_r1", "graph_r2", "eager", "fp8kv", "sameprompt", "native", "detok"}
+    assert set(mods.C.ARMS) == {"graph_r1", "graph_r2", "eager", "fp8kv", "sameprompt", "native", "nodetok"}
+    assert "detok" not in mods.C.ARMS
 
 
 def test_ttft_one_row_loader(mods, tmp_path):
