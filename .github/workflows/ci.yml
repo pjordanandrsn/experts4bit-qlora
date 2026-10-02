@@ -50,6 +50,11 @@ jobs:
         # if the pin above regresses to a pre-int4 build — or a raised floor
         # lets a pre-int4 wheel clobber it — this step fails loudly instead.
         run: python -c "import int4_b32, int4_pack_ref, nf4_grouped, gptq_pack"
+      - name: compressed-tensors oracle present (tripwire)
+        # The foreign-format tests importorskip compressed-tensors, their oracle.
+        # Skipped, they passed over an NVFP4 decoder that multiplied by a
+        # divisor (#788). Import unguarded so a missing oracle fails here.
+        run: python -c "import compressed_tensors.compressors.nvfp4.base, compressed_tensors.compressors.pack_quantized.helpers"
       - name: Lint
         run: ruff check experts4bit_qlora tests scripts tools
       - name: Test

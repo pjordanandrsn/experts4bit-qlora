@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### compressed-tensors NVFP4 decoded global_scale² too large: the global scale is a divisor (#788)
+
+- **The bug.** `dequantize_nvfp4` multiplied by the per-tensor scale for both formats that reach it. ModelOpt's `weight_scale_2` (`amax / (6 · 448)`) is a multiplier; compressed-tensors' `weight_global_scale` (`448 · 6 / amax`) is a divisor. Every compressed-tensors NVFP4 tensor was decoded `global_scale²` too large and still loaded clean. On `RedHatAI/Qwen3-30B-A3B-NVFP4`, layer 0 expert 0 `down_proj` ships `7264.0`, so that tensor came out about 5.3e7× too large. No registered claim uses NVFP4; ModelOpt FP4 loads were right.
+- **The fix.** `dequantize_nvfp4(..., convention=)` is now required: `"compressed-tensors"` divides, `"modelopt"` multiplies. It refuses a non-finite per-tensor scale, and a zero divisor. The executor takes the convention from the companion key the planner matched, and refuses any other key.
+- **Why the tests passed.** The NVFP4, ModelOpt, compressed-tensors int and AWQ tests compared the decoder with itself, and the compressed-tensors ones `importorskip`ped a package `[test]` did not install, so CI skipped them. Every scale they used was positive.
+  - They now check against independent references: compressed-tensors' own compress/decompress for NVFP4, `q · scale` over compressed-tensors' own `pack_to_int32` (2/4/8 bit, plus `unpack_from_int32`), an autoawq-order packer for AWQ, and hand-built bytes for ModelOpt and for an NVFP4 case that needs no compressed-tensors.
+  - Scales are half negative, with 0, -0 and fp32 subnormals. Negative scales are legal, and AutoRound's symmetric export ships them.
+  - Each test fails on a mutant: the old multiply, or `abs()` on the scale.
+- **CI.** `compressed-tensors==0.18.0` is in `[test]`, and an unguarded import tripwire keeps those tests from skipping.
+- **Not in this change** (#789): `gptq_v2` checkpoints and compressed-tensors `weight_zero_point` both change the math, and the loader reads neither.
+
 ### Lane SC1 amendment A1 (#846): proving-rental guards 0.75 / 0.75 / 1.0 h (bench text only)
 
 - `bench/sc1/SC1-PREREG.md`: the per-proof budget as first registered (≤ 10 min, ≤ $0.15) did not count instance acquisition

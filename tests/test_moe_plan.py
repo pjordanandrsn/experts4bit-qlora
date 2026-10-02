@@ -537,7 +537,6 @@ def test_compressed_int_triple_is_paired_dequantized_and_synthesized():
     tensor compressed_tensors would — placing the packed int32 as if dense would
     load clean and compute garbage."""
     ct = pytest.importorskip("compressed_tensors.compressors.pack_quantized.helpers")
-    from experts4bit_qlora.formats.compressed_int import dequantize_compressed_int
 
     class M(torch.nn.Module):
         def __init__(self):
@@ -549,8 +548,12 @@ def test_compressed_int_triple_is_paired_dequantized_and_synthesized():
     m = M()
     torch.manual_seed(0)
     q = torch.randint(-8, 8, (8, 64), dtype=torch.int8)
+    q[0, 0], q[0, 1] = -8, 7                                  # both extreme codes
     packed = ct.pack_to_int32(q, 4, packed_dim=1)
-    scale = (torch.rand(8, 64 // 32) * 0.1 + 0.01)          # group_size 32
+    # group_size 32; half the scales NEGATIVE, as AutoRound's symmetric export
+    # ships them (vllm#59403) — legal in the format, and the sign must survive.
+    scale = (torch.rand(8, 64 // 32) * 0.1 + 0.01)
+    scale[0::2] = -scale[0::2]
     shape = torch.tensor([8, 64])
     store = {"proj.weight_packed": packed, "proj.weight_scale": scale,
              "proj.weight_shape": shape}
@@ -564,18 +567,53 @@ def test_compressed_int_triple_is_paired_dequantized_and_synthesized():
     rep = execute_moe_plan(plan, m, store.__getitem__, device="cpu",
                            dtype=torch.float32)
     assert rep["compressed_int_dequantized"] == 1
-    expected = dequantize_compressed_int(packed, scale, shape, dtype=torch.float32)
+    # Independent reference: the integers compressed-tensors packed, times the
+    # group scale — not the decoder under test compared with itself.
+    expected = q.float() * scale.repeat_interleave(32, dim=-1)
     assert torch.equal(m.proj.weight, expected)
-    assert not torch.equal(m.proj.weight, packed.to(torch.float32))   # really decoded
+
+
+def test_compressed_int_matches_compressed_tensors_at_2_4_8_bits_with_signed_edge_scales():
+    """The unpack must invert compressed-tensors' OWN pack_to_int32 layout at
+    every bit width e4b decodes, and the group scale must be applied with its
+    sign: half negative, plus 0, -0 and fp32 subnormals. Checked against
+    compressed-tensors' unpack_from_int32 and against q * scale, never against
+    the decoder itself (#788)."""
+    ct = pytest.importorskip("compressed_tensors.compressors.pack_quantized.helpers")
+    from experts4bit_qlora.formats.compressed_int import dequantize_compressed_int
+
+    torch.manual_seed(0)
+    shape = torch.tensor([8, 64])
+    for bits in (2, 4, 8):
+        lo, hi = -(2 ** (bits - 1)), 2 ** (bits - 1) - 1
+        q = torch.randint(lo, hi + 1, (8, 64), dtype=torch.int8)
+        q[0, 0], q[0, 1] = lo, hi
+        packed = ct.pack_to_int32(q, bits, packed_dim=1)
+
+        ones = dequantize_compressed_int(packed, torch.ones(8, 2), shape,
+                                         dtype=torch.float32)
+        assert torch.equal(ones, ct.unpack_from_int32(packed, bits, torch.Size([8, 64])).float())
+
+        scale = torch.rand(8, 2) * 0.05 + 0.01
+        scale[0::2] = -scale[0::2]
+        scale[1, 0], scale[3, 0] = 0.0, -0.0
+        scale[5, 0], scale[7, 0] = 1e-40, -1e-40              # fp32 subnormals
+        got = dequantize_compressed_int(packed, scale, shape, dtype=torch.float32)
+        assert torch.equal(got, q.float() * scale.repeat_interleave(32, dim=-1)), bits
 
 
 def test_nvfp4_triple_is_distinguished_from_int4_and_dequantized():
     """NVFP4 and int pack-quantized SHARE weight_packed + weight_scale; only the
     third companion differs (weight_global_scale vs weight_shape). The planner
     must route each to the right decoder — an fp4-as-int4 mixup would be a silent
-    wrong load — and the executor must match compressed_tensors' nvfp4 output."""
-    nv = pytest.importorskip("compressed_tensors.compressors.nvfp4.helpers")
-    from experts4bit_qlora.formats.nvfp4 import dequantize_nvfp4
+    wrong load — and the executor must match compressed_tensors' own
+    decompress of a checkpoint compressed-tensors itself wrote. That oracle is
+    what catches the global scale's direction: it is a DIVISOR here, and
+    multiplying by it decoded every weight global_scale**2 too large (#788)."""
+    pytest.importorskip("compressed_tensors.compressors.nvfp4.helpers")
+    from compressed_tensors.compressors.nvfp4.base import NVFP4PackedCompressor
+    from compressed_tensors.quantization import QuantizationArgs, QuantizationScheme
+    from compressed_tensors.quantization.utils import calculate_qparams, generate_gparam
 
     class M(torch.nn.Module):
         def __init__(self):
@@ -586,22 +624,69 @@ def test_nvfp4_triple_is_distinguished_from_int4_and_dequantized():
 
     m = M()
     torch.manual_seed(0)
-    cb = torch.tensor([0., .5, 1., 1.5, 2., 3., 4., 6.])
-    vals = (cb[torch.randint(0, 8, (8, 64))]
-            * (torch.randint(0, 2, (8, 64)) * 2 - 1)).to(torch.bfloat16)
-    packed = nv.pack_fp4_to_uint8(vals)
-    scale = (torch.rand(8, 64 // 16) + 0.5).to(torch.float32)     # group 16
-    gscale = torch.tensor(0.03125)
-    store = {"proj.weight_packed": packed, "proj.weight_scale": scale,
-             "proj.weight_global_scale": gscale}
+    w = torch.randn(8, 64) * 0.02
+    args = QuantizationArgs(num_bits=4, type="float", strategy="tensor_group",
+                            group_size=16, symmetric=True)
+    scheme = QuantizationScheme(targets=["Linear"], weights=args)
+    amax = w.abs().amax().reshape(1)
+    gscale = generate_gparam(-amax, amax)                      # 448 * 6 / amax
+    groups = w.view(8, 4, 16)
+    scale, _zp = calculate_qparams(groups.amin(-1), groups.amax(-1), args,
+                                   global_scale=gscale)
+    ct = NVFP4PackedCompressor.compress(
+        {"weight": w, "weight_scale": scale, "weight_global_scale": gscale}, scheme)
+    store = {"proj." + k: v for k, v in ct.items()}
+    assert set(store) == {"proj.weight_packed", "proj.weight_scale",
+                          "proj.weight_global_scale"}
 
     plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
     assert plan.scales["proj.weight"][0] == "nvfp4"           # NOT compressed_int
     rep = execute_moe_plan(plan, m, store.__getitem__, device="cpu",
-                           dtype=torch.float32)
+                           dtype=torch.bfloat16)
     assert rep["nvfp4_dequantized"] == 1
-    expected = dequantize_nvfp4(packed, scale, gscale, dtype=torch.float32)
+    expected = NVFP4PackedCompressor.decompress(ct, scheme)["weight"]
+    assert expected.dtype == torch.bfloat16
     assert torch.equal(m.proj.weight, expected)
+    # and it is the weight compressed-tensors quantized, to fp4 precision
+    assert (m.proj.weight.float() - w).abs().max() < 0.25 * w.abs().max()
+
+
+def test_nvfp4_per_tensor_scale_divides_for_compressed_tensors_and_multiplies_for_modelopt():
+    """Hand-built bytes, no compressed-tensors install needed, so this runs
+    everywhere. 0x07 is (+6.0, +0.0); 0xF1 is (+0.5, -6.0). With an e4m3 group
+    scale of 56 and the per-tensor scale RedHatAI/Qwen3-30B-A3B-NVFP4 ships on
+    layer 0's first expert down_proj (7264.0), compressed-tensors means
+    6 * 56 / 7264; ModelOpt's reciprocal weight_scale_2 means the same weights."""
+    from experts4bit_qlora.formats.nvfp4 import dequantize_nvfp4
+
+    packed = torch.tensor([[0x07, 0xF1] * 8], dtype=torch.uint8)       # [1, 16]
+    scale = torch.full((1, 2), 56.0).to(torch.float8_e4m3fn)          # group 16
+    e2m1 = torch.tensor([6.0, 0.0, 0.5, -6.0] * 8)
+    gs = torch.tensor([7264.0])
+
+    ct = dequantize_nvfp4(packed, scale, gs, convention="compressed-tensors",
+                          dtype=torch.float32)
+    assert torch.equal(ct[0], e2m1 * (torch.tensor(56.0) / gs))
+    assert ct.abs().max() < 0.05                  # multiplying gave 2.4e6
+    mo = dequantize_nvfp4(packed, scale, 1.0 / gs, convention="modelopt",
+                          dtype=torch.float32)
+    assert torch.equal(mo[0], e2m1 * torch.tensor(56.0) * (1.0 / gs))
+    torch.testing.assert_close(mo, ct, rtol=1e-6, atol=0)
+
+    with pytest.raises(TypeError):                # the convention is required
+        dequantize_nvfp4(packed, scale, gs, dtype=torch.float32)
+    with pytest.raises(ValueError, match="convention"):
+        dequantize_nvfp4(packed, scale, gs, convention="nvidia")
+    for conv in ("compressed-tensors", "modelopt"):
+        for bad in (float("inf"), float("nan")):
+            with pytest.raises(ValueError, match="finite"):
+                dequantize_nvfp4(packed, scale, torch.tensor([bad]), convention=conv)
+    with pytest.raises(ValueError, match="non-zero"):      # a zero DIVISOR
+        dequantize_nvfp4(packed, scale, torch.tensor([0.0]),
+                         convention="compressed-tensors")
+    # a zero MULTIPLIER is legal: ModelOpt's amax / 2688 of an all-zero tensor
+    assert not dequantize_nvfp4(packed, scale, torch.tensor([0.0]),
+                                convention="modelopt").any()
 
 
 def test_modelopt_fp4_is_recognized_and_reuses_the_nvfp4_decoder():
@@ -610,8 +695,8 @@ def test_modelopt_fp4_is_recognized_and_reuses_the_nvfp4_decoder():
     bytes sit under the ordinary `weight` name, with weight_scale (per group)
     and weight_scale_2 (per tensor). input_scale is an ACTIVATION scale and must
     not be mistaken for part of the weight. Verified bit-exact against
-    modelopt's own NVFP4QTensor.dequantize, so it reuses that decoder."""
-    from experts4bit_qlora.formats.nvfp4 import dequantize_nvfp4
+    modelopt's own NVFP4QTensor.dequantize, so it reuses that decoder — with
+    the MULTIPLYING convention, which compressed-tensors' key does not get."""
 
     class M(torch.nn.Module):
         def __init__(self):
@@ -639,8 +724,12 @@ def test_modelopt_fp4_is_recognized_and_reuses_the_nvfp4_decoder():
     rep = execute_moe_plan(plan, m, store.__getitem__, device="cpu",
                            dtype=torch.float32)
     assert rep["nvfp4_dequantized"] == 1
-    assert torch.equal(m.proj.weight,
-                       dequantize_nvfp4(packed, scale, scale2, dtype=torch.float32))
+    # ModelOpt's weight_scale_2 MULTIPLIES (amax / (6 * 448); the reciprocal of
+    # compressed-tensors' global scale). Reference built from the nibbles.
+    e2m1 = torch.tensor([0., .5, 1., 1.5, 2., 3., 4., 6.])
+    vals = e2m1[(nib & 7).long()] * torch.where((nib & 8).bool(), -1.0, 1.0)
+    expected = vals * scale.repeat_interleave(16, dim=-1) * scale2
+    assert torch.equal(m.proj.weight, expected)
 
 
 def test_awq_triple_is_recognized_and_uses_the_asymmetric_decoder():
@@ -658,11 +747,26 @@ def test_awq_triple_is_recognized_and_uses_the_asymmetric_decoder():
                                           num_hidden_layers=1)
             self.proj = torch.nn.Linear(256, 64, bias=False)   # [out=64, in=256]
 
+    def awq_pack(x):
+        """autoawq's packer, written out: along OUT, 8 nibbles per int32, in
+        AWQ_ORDER [0, 2, 4, 6, 1, 3, 5, 7] (the inverse of the reverse order)."""
+        order = [0, 2, 4, 6, 1, 3, 5, 7]
+        out = torch.zeros(x.shape[0], x.shape[1] // 8, dtype=torch.int32)
+        for col in range(x.shape[1] // 8):
+            for i in range(8):
+                out[:, col] |= x[:, col * 8 + order[i]] << (i * 4)
+        return out
+
     m = M()
     torch.manual_seed(0)
-    qw = torch.randint(-(2**31), 2**31 - 1, (256, 8), dtype=torch.int32)
-    qz = torch.randint(-(2**31), 2**31 - 1, (2, 8), dtype=torch.int32)
+    iw = torch.randint(0, 16, (256, 64), dtype=torch.int32)   # [in, out]
+    iw[0, 0], iw[0, 1] = 0, 15
+    iz = torch.randint(0, 16, (2, 64), dtype=torch.int32)     # [groups, out]
+    qw, qz = awq_pack(iw), awq_pack(iz)
+    # half the scales negative, plus 0 and -0: legal, and the sign must survive
     sc = (torch.rand(2, 64) * 0.05 + 0.01)
+    sc[:, 0::2] = -sc[:, 0::2]
+    sc[0, 1], sc[1, 3] = 0.0, -0.0
     store = {"proj.qweight": qw, "proj.qzeros": qz, "proj.scales": sc}
 
     plan = plan_moe_checkpoint(list(store), m, "llama", dense_ok=True)
@@ -676,8 +780,11 @@ def test_awq_triple_is_recognized_and_uses_the_asymmetric_decoder():
     assert rep["awq_dequantized"] == 1
     # dequant yields [out, in] — the orientation a Linear declares
     assert tuple(m.proj.weight.shape) == (64, 256)
-    assert torch.equal(m.proj.weight,
-                       dequantize_awq(qw, qz, sc, dtype=torch.float32))
+    # Independent reference from the packed integers: (w - z) * s, no +1 offset.
+    expected = ((iw.float() - iz.float().repeat_interleave(128, dim=0))
+                * sc.repeat_interleave(128, dim=0)).t()
+    assert torch.equal(m.proj.weight, expected)
+    assert torch.equal(dequantize_awq(qw, qz, sc, dtype=torch.float32), expected)
 
 
 def test_gptq_and_awq_are_told_apart_by_g_idx():
@@ -711,7 +818,11 @@ def test_gptq_dequant_matches_gptqmodel_including_desc_act():
     shifts = torch.arange(0, 32, BITS, dtype=torch.int32)
     qw = (iw.view(IN // PER, PER, OUT) << shifts.view(1, PER, 1)).sum(1).to(torch.int32)
     qz = (iz.view(groups, OUT // PER, PER) << shifts.view(1, 1, PER)).sum(-1).to(torch.int32)
+    # half the scales negative, plus 0, -0 and an fp32 subnormal: all legal in
+    # GPTQ's scales[g] * (w - z), and the decoder must not fold or drop a sign
     scales = torch.rand(groups, OUT) * 0.05 + 0.01
+    scales[:, 0::2] = -scales[:, 0::2]
+    scales[0, 1], scales[1, 3], scales[0, 5] = 0.0, -0.0, -1e-40
 
     for g_idx in (torch.arange(IN, dtype=torch.int32) // G,          # plain
                   torch.randperm(groups).repeat_interleave(G).to(torch.int32)):  # desc_act
