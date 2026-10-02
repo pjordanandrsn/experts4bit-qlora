@@ -167,7 +167,13 @@ per-expert loop — the same loop still reads 6.565 × e4b on a torch-2.8 instal
 (device-busy 0.48 e4b vs 0.23 Unsloth; the fused path records 4.3 × fewer
 device events and 9.9 × fewer CPU-side ops per step), and absolute s/step does not travel between hosts (the same e4b
 arm: 3.2 / 5.7 / 9.3 s on three hosts, `.host-variance`) while the within-box
-ratio does. **On an H100 NVL the sign reverses** (lane TC1c, the same
+ratio does. **axolotl 0.20.0 trains it too** (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-02`,
+re-run once the harness stopped breaking its fp32 routers, TC1 amendment 4):
+**axolotl/e4b 1.416 [1.398, 1.435]** at the same matched work, e4b faster per
+step, axolotl 0.93 GB lower at peak and ×2.31 the energy; its scattermoe
+native-best arm steps 7 % faster than e4b's matched path (0.929, one draw,
+its own init — `.scattermoe-native`, a labelled row; the native-vs-native
+comparison on one box is open). **On an H100 NVL the sign reverses** (lane TC1c, the same
 matched set, one rented box, [`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md);
 register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`): Unsloth takes 2.546
 s/step against e4b's 4.097 — **Unsloth/e4b 0.621 [0.615, 0.628]**, Unsloth
@@ -193,12 +199,14 @@ register `e4b.train.h2h.hf.granite.5090.2026-10-02`,
 `e4b.train.h2h.axolotl.granite.5090.2026-10-02`,
 `e4b.train.h2h.unsloth.olmoe.5090.2026-10-02`,
 `e4b.train.h2h.hf.olmoe.5090.2026-10-02` and their companions). **The 5090
-per-step edge does not generalise to small experts.** On Granite-3.1-3B-A800M,
-whose `ParallelExperts` no other framework quantises, HF + PEFT with bf16
-experts reads **HF/e4b 0.971 [0.965, 0.978]** and axolotl 0.903 — both
-faster per step than e4b's fused 4-bit experts, which train at 0.53 × HF's
-VRAM (4.54 vs 8.50 GB) with COMPARABLE / EQUIVALENT loss: a footprint
-position, not a speed one (TC2 P1 FALSIFIED). On OLMoE-1B-7B, Unsloth
+per-step edge does not generalise to small experts.** On Granite-3.1-3B-A800M
+HF + PEFT with bf16 experts reads **HF/e4b 0.971 [0.965, 0.978]**, faster per
+step than e4b's fused 4-bit experts, which train at 0.53 × HF's VRAM (4.54
+vs 8.50 GB) — a footprint position against HF. **axolotl's 4-bit path beats
+e4b's on Granite** at 0.903 [0.901, 0.905] and a lower peak (4.08 GB): its
+`quantize_moe_experts` packs all 64 expert stacks as NF4 (corrected
+2026-10-02 — first read as bf16 because the census does not see parametrized
+storage). TC2 P1 FALSIFIED. On OLMoE-1B-7B, Unsloth
 2026.9.14 with its grouped path engaged reads **Unsloth/e4b 1.201 [1.199,
 1.204]** (e4b faster per step) at 2.21 GB less peak VRAM and ×0.71 the
 energy in Unsloth's favour, with the same loss — the first Unsloth position
@@ -216,8 +224,14 @@ the matched 926,187,520 fp32 adapters over 20,520 slots OOM e4b's fused
 path at both micro-batches and in its reference loop (32.5 GB peak on a
 31.4 GiB card), while Unsloth, given the family's own expert names, trains
 them at 30.47 GB and 10.59 s/step; e4b fits only as shipped (bf16 adapters,
-32.48 GB, 5.09 s/step — a labelled row, not a comparison). An e4b loss,
-said as such; e4b under expert offload on this family is the next row.
+32.48 GB, 5.09 s/step — a labelled row, not a comparison). That loss is
+**resident only: under expert offload e4b trains the matched set at 19.35 GB**
+(`.e4b-offload`, 12.4 / 13.8 s/step, parity PASS). No ratio is quoted: e4b's
+offload draws are 11 % apart, and the frameworks do not start from the same
+base — e4b keeps the 30 linear-attention layers' projections and the 40
+shared experts in bf16 (about 1.14 B parameters) where Unsloth stores them in
+4-bit, worth about 1.6 GB of the resident footprint and a 0.05-nat step-0
+gap that VOIDs the same-box pair by rule.
 **Nothing is quoted for Unsloth on Mixtral-8x7B.** The Mixtral rows
 registered on 2026-10-02 are retired (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-02`,
 retired, and `.compile-warmup`): their Unsloth readings — the 76–89-minute

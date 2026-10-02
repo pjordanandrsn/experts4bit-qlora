@@ -425,6 +425,18 @@ def regime_of(fam, r):
         if reg == "per-expert-linear4bit":
             return (f"per-expert Linear4bit experts ({c.get('Params4bit_expert_linears')} Params4bit under the experts container, no fused stack: the per-expert LoRA loop) + "
                     f"{'bnb-4bit' if attn4 else 'bf16'} attention (Linear4bit {attn4})")
+    if r.get("framework") == "axolotl":
+        # Corrected 2026-10-02: axolotl's quantize_moe_experts stores each expert stack as a torch parametrization whose original
+        # is the 4-bit tensor, so the census's Params4bit_expert_stacks reads 0 and this label said "bf16 experts" for arms whose
+        # experts were NF4 (Granite: 64 stacks; Qwen3-30B-A3B: 96, at a 26.9 GB peak bf16 experts could not fit). The arm's own
+        # record of what axolotl quantized is the evidence, with the frozen-base probe's dequantisation regime beside it.
+        ab = r.get("axolotl_bnb4bit_modules") or {}
+        n_q = int(ab.get("quantized_moe_experts_n") or 0)
+        if L and n_q >= 2 * L:
+            probe = ((r.get("frozen_base_probe") or {}).get("slots") or {})
+            reg = next((s.get("regime") for s in probe.values() if isinstance(s, dict) and s.get("regime")), None)
+            return (f"4-bit expert stacks (axolotl quantize_moe_experts: {n_q} parametrized stacks{', ' + reg if reg else ''}) + "
+                    f"{'bnb-4bit' if attn4 else 'bf16'} attention (Linear4bit {attn4})")
     exp = "4-bit expert stacks" if L and stacks >= 2 * L else ("PARTIAL 4-bit experts" if stacks else "bf16 experts (NOT the 4-bit MoE regime)")
     out = f"{exp} + {'bnb-4bit' if attn4 else 'bf16'} attention (Params4bit stacks {stacks}, Linear4bit {attn4})"
     d = r.get("hf_experts_dispatch")

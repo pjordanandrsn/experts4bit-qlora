@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Lane TC1 / TC2 reads, axolotl re-run and Qwen3.6 offload (#835): axolotl/e4b 1.416 on Qwen3-30B-A3B; e4b fits Qwen3.6's matched set on 32 GB under offload; Granite's axolotl regime corrected to 4-bit (bench, reducer, docs and register)
+
+- `bench/h2h-2026-10-02/tc1/receipts/tc1-5090-30/`: with the harness no longer breaking axolotl's fp32 routers (TC1 amendment 4), axolotl trains the
+  matched set: **axolotl/e4b 1.416 [1.398, 1.435]** over two stable draws each, e4b faster per step, axolotl 0.93 GB lower at peak and x2.31 the
+  energy, held-out COMPARABLE. TC1 P6 FALSIFIED (predicted [1.5, 6]). axolotl's scattermoe native-best trains too, at **0.929 x e4b's matched step**
+  (one draw, its own init: a labelled row, the first arm to step faster than e4b's matched path on the 5090). `e4b.train.h2h.axolotl.qwen3.5090.2026-10-02`
+  (superseding the retired `.axolotl-unsupported`) and `.scattermoe-native`.
+- `bench/tc1/tc1_reduce.py`: the regime label reads axolotl's own record of its quantized expert stacks; the census's stack count misses
+  parametrized storage, so axolotl's NF4 experts were labelled bf16. **Corrected:** `e4b.train.h2h.axolotl.granite.5090.2026-10-02` -- axolotl's Granite
+  experts were 4-bit (64 stacks), so its 0.903 is a 4-bit-against-4-bit result in axolotl's favour, not a footprint position; the box is re-reduced
+  beside its receipts.
+- `bench/h2h-2026-10-02/tc2/receipts/tc1-5090-29/` (TC2 amendment 4): **under expert offload e4b trains Qwen3.6-35B-A3B's matched set on 32 GB**
+  at 19.35 GB (TC2 P8 HELD; parity PASS), where it OOMed resident. No ratio: e4b's offload draws are 11 % apart, and Unsloth's arms are VOID by the
+  step-0 rule because the frameworks quantise different module sets on this family (e4b keeps about 1.14 B linear-attention and shared-expert
+  parameters in bf16, Unsloth 4-bits them). `.e4b-offload` registered; the earlier Qwen3.6 row is qualified as a resident-only loss.
+- `docs/STATUS.md`, the solution page and the capability list follow. No code outside the bench harness, no gate, default or licence moves.
+
 ### Corrections (#835): two published head-to-head results were this harness's artifacts -- axolotl "does not train" Qwen3-MoE, and Unsloth's Mixtral numbers (bench, tests, docs and register)
 
 - **axolotl** (TC1 amendment 4). axolotl 0.20.0's loader keeps every `*.gate` router in fp32 on purpose and its own trainer runs the forward

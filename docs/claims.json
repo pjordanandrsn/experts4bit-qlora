@@ -8221,7 +8221,8 @@
       ],
       "notes": "On these boxes the harness wrote no receipt for the crash (it died after load, outside the loader's handler; TC3 amendment 4 makes such a crash a row), so the mechanical verdict is HARNESS_ERROR and TC1's P6 reads UNTESTED; the logs are the evidence. Retired the day it was registered; the receipts stay public so the retraction can be checked.",
       "retired_on": "2026-10-02",
-      "retired_reason": "The failure was this harness's, not axolotl's (TC1 amendment 4, bench/tc1/TC1-PREREG.md). axolotl 0.20.0's ModelLoader upcasts every module named *.gate to fp32 on purpose (loaders/model.py:611-616 -> :1449-1451) and its own trainer runs every forward under accelerate's bf16 autocast, which casts that weight to bf16 inside F.linear; this harness drives the forward itself with no autocast, so the fp32 Qwen3MoeTopKRouter weight met bf16 activations. The receipts show it: the failing axolotl arms record the router in float32, the HF and e4b arms in bfloat16. The arm is re-asked with the routers cast to bf16 after load (what autocast computes per call)."
+      "retired_reason": "The failure was this harness's, not axolotl's (TC1 amendment 4, bench/tc1/TC1-PREREG.md). axolotl 0.20.0's ModelLoader upcasts every module named *.gate to fp32 on purpose (loaders/model.py:611-616 -> :1449-1451) and its own trainer runs every forward under accelerate's bf16 autocast, which casts that weight to bf16 inside F.linear; this harness drives the forward itself with no autocast, so the fp32 Qwen3MoeTopKRouter weight met bf16 activations. The receipts show it: the failing axolotl arms record the router in float32, the HF and e4b arms in bfloat16. The arm is re-asked with the routers cast to bf16 after load (what autocast computes per call).",
+      "superseded_by": "e4b.train.h2h.axolotl.qwen3.5090.2026-10-02"
     },
     {
       "id": "e4b.train.frontier.qwen3.4090-24gb.2026-10-02",
@@ -8389,7 +8390,7 @@
       "package": "experts4bit-qlora",
       "area": "train",
       "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
-      "claim": "Lane TC2, 2026-10-02, the same box and matched set: axolotl 0.20.0 at its own pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0; load_in_4bit + quantize_moe_experts) takes 1.340 s/step against e4b's 1.484: axolotl/e4b 0.903 [0.901, 0.905] (one axolotl draw against e4b's two) -- axolotl faster per step at 4.08 GB peak against e4b's 4.54 and 351.1 vs 343.8 J/step, held-out at N=60 0.8295 vs 0.8311 (EQUIVALENT, |delta| 0.0016). Its experts are bf16 too: quantize_moe_experts found no stack to pack on this family (Params4bit stacks 0), so this is the same regime as the HF row under axolotl's trainer. Its scattermoe native-best arm refused at load (the KernelsPlugin fetches kernels-community/rotary and the harness runs arms with the Hub offline -- a harness limit, open).",
+      "claim": "Lane TC2, 2026-10-02, the same box and matched set: axolotl 0.20.0 at its own pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0; load_in_4bit + quantize_moe_experts) takes 1.340 s/step against e4b's 1.484: axolotl/e4b 0.903 [0.901, 0.905] (one axolotl draw against e4b's two) -- axolotl faster per step at 4.08 GB peak against e4b's 4.54 and 351.1 vs 343.8 J/step, held-out at N=60 0.8295 vs 0.8311 (EQUIVALENT, |delta| 0.0016). Its experts are 4-bit: quantize_moe_experts packed all 64 Granite expert stacks as parametrized NF4 with double-quantised statistics (the arm's own record; corrected 2026-10-02 -- this row first said bf16, misled by a census that does not see parametrized storage), so axolotl's 4-bit path steps 10 % faster than e4b's fused 4-bit path on this family at a lower peak. Its scattermoe native-best arm refused at load (the KernelsPlugin fetches kernels-community/rotary and the harness runs arms with the Hub offline -- a harness limit, open).",
       "value": 0.903,
       "unit": "ratio s/step axolotl/e4b (medians of steps 11..60; one axolotl draw, two e4b draws; < 1 = axolotl faster per step); cross-draw interval [0.901, 0.905]",
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-17: instance 53800083, AMD EPYC 9755, driver 580.119.02); e4b 0.38.1 @ 09b0f6a + grouped-nf4-gemm 0.34.0 @ 846b512 on torch 2.8.0+cu128, Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 on torch 2.12.1+cu130 (UNSLOTH_MOE_BACKEND=grouped_mm), HF transformers 5.18.0 + PEFT 0.21.2 + bitsandbytes 0.50.2 on torch 2.8.0+cu128, axolotl 0.20.0 at its own pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0)",
@@ -8401,12 +8402,13 @@
         "bench/h2h-2026-10-02/tc2/README.md",
         "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-17/RESULTS-tc1.md",
         "bench/tc1/TC2-PREREG.md",
-        "bench/tc1/tc1_reduce.py"
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc2/RESULTS-tc1-5090-17-rereduced-2026-10-02.md"
       ],
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-17/tc1/"
       ],
-      "notes": "Recorded 2026-10-02 (TC1 amendment 4): axolotl auto-enables its LoRA kernels, which keep fp32 adapter weights but compute the attention adapters in bf16, where the HF arm computes them in fp32; the matched-work predicates (trainable count, init, adapter dtype) hold, the attention compute precision differs. Granite's router is named block_sparse_moe.router, so axolotl's .gate upcast never touched it."
+      "notes": "Recorded 2026-10-02 (TC1 amendment 4): axolotl auto-enables its LoRA kernels, which keep fp32 adapter weights but compute the attention adapters in bf16, where the HF arm computes them in fp32; the matched-work predicates (trainable count, init, adapter dtype) hold, the attention compute precision differs. Granite's router is named block_sparse_moe.router, so axolotl's .gate upcast never touched it. Regime corrected 2026-10-02: axolotl's experts were NF4 (64 parametrized stacks), not bf16; bench/h2h-2026-10-02/tc2/RESULTS-tc1-5090-17-rereduced-2026-10-02.md is the box re-reduced with the corrected label."
     },
     {
       "id": "e4b.train.h2h.unsloth.granite.5090.2026-10-02.coverage",
@@ -8531,7 +8533,7 @@
       "package": "experts4bit-qlora",
       "area": "train",
       "model": "Qwen/Qwen3.6-35B-A3B @ 995ad96eacd9",
-      "claim": "Lane TC2 (#835), 2026-10-02, one rented RTX 5090 (32 GB): Qwen3.6-35B-A3B at the field recipe with the work MATCHED -- 926,187,520 trainable parameters over 20,520 adapter slots (40 layers, 256 routed experts), one per-slot init, fp32 adapters, the same tokens. e4b's fused path does NOT fit this set on the card: OOM at step 1 at 32.52 GB peak (both draws; 30.86 GiB in use at a 606 MiB allocation), at step 2 at micro-batch 1 (32.54 GB) and at step 2 in its reference loop (32.84 GB). Unsloth 2026.9.14, given the family's own expert names as targets, TRAINS the same 926,187,520 parameters resident: 10.593 s/step, 143.1 tokens/s, 30.469 GB peak, 1604 J/step, held-out 1.1940 -> 0.6880 at N=20 (one draw, VALID; matched init complete over 20,520 slots; 80 4-bit expert stacks, 320 grouped_mm calls per step). Unsloth's registered target list (q,k,v,o,gate,up,down) adapts the attention only on this family (3,440,640 trainable, 40 of 20,520 slots: VOID, tp4's reading reproduced on the current release). HF + PEFT OOMs at load at both micro-batches; axolotl 0.20.0's plain arm refused (NoMatchingPeftModuleError) because this harness enumerated its target names on an AutoModelForCausalLM skeleton while axolotl's loader built the vision-language class (is_multimodal: true), whose language layers sit under a different module path -- a harness defect, not an axolotl reading (TC1 amendment 4, corrected 2026-10-02) and its scattermoe arm fetches a kernel with the Hub offline. An e4b LOSS on this family, said as such: no ratio exists because e4b's anchor never stepped; TC2 P4 FALSIFIED (its clause that e4b's matched arm lands within 15 % of tp4's 6.33 s/step assumed tp4's bf16 adapters). e4b under expert offload on this family was not registered for this box and is the obvious next row. The first box B (tc1-5090-22) had read the same statuses before its host stopped it; its receipts were lost (TC2 amendment 3).",
+      "claim": "Lane TC2 (#835), 2026-10-02, one rented RTX 5090 (32 GB): Qwen3.6-35B-A3B at the field recipe with the work MATCHED -- 926,187,520 trainable parameters over 20,520 adapter slots (40 layers, 256 routed experts), one per-slot init, fp32 adapters, the same tokens. e4b's fused path does NOT fit this set on the card: OOM at step 1 at 32.52 GB peak (both draws; 30.86 GiB in use at a 606 MiB allocation), at step 2 at micro-batch 1 (32.54 GB) and at step 2 in its reference loop (32.84 GB). Unsloth 2026.9.14, given the family's own expert names as targets, TRAINS the same 926,187,520 parameters resident: 10.593 s/step, 143.1 tokens/s, 30.469 GB peak, 1604 J/step, held-out 1.1940 -> 0.6880 at N=20 (one draw, VALID; matched init complete over 20,520 slots; 80 4-bit expert stacks, 320 grouped_mm calls per step). Unsloth's registered target list (q,k,v,o,gate,up,down) adapts the attention only on this family (3,440,640 trainable, 40 of 20,520 slots: VOID, tp4's reading reproduced on the current release). HF + PEFT OOMs at load at both micro-batches; axolotl 0.20.0's plain arm refused (NoMatchingPeftModuleError) because this harness enumerated its target names on an AutoModelForCausalLM skeleton while axolotl's loader built the vision-language class (is_multimodal: true), whose language layers sit under a different module path -- a harness defect, not an axolotl reading (TC1 amendment 4, corrected 2026-10-02) and its scattermoe arm fetches a kernel with the Hub offline. An e4b LOSS on this family, said as such: no ratio exists because e4b's anchor never stepped; TC2 P4 FALSIFIED (its clause that e4b's matched arm lands within 15 % of tp4's 6.33 s/step assumed tp4's bf16 adapters). e4b under expert offload on this family was not registered for this box and is the obvious next row. The first box B (tc1-5090-22) had read the same statuses before its host stopped it; its receipts were lost (TC2 amendment 3). Qualified 2026-10-02 (TC2 amendment 4, tc1-5090-29): the loss is RESIDENT only -- under expert offload e4b trains this matched set at 19.35 GB (.e4b-offload) -- and the two frameworks quantise different module sets on this family (e4b keeps 311 linear-attention and shared-expert projections, about 1.14 B parameters, in bf16; Unsloth stores them in 4-bit), which is about 1.6 GB of the resident footprint and the 0.05-nat step-0 gap that VOIDs a same-box comparison.",
       "value": 0,
       "unit": "count of e4b matched arms that completed on the 32 GB card at this recipe (of 4: two field-recipe draws, micro-batch 1, the reference loop); Unsloth's matched arm completed at 30.469 GB",
       "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-27: instance 53859323, AMD EPYC 7663, driver 580.95.05, 792 GB host RAM); e4b 0.39.0 @ 0933d4e + grouped-nf4-gemm 0.34.0 @ 846b512 on torch 2.8.0+cu128, Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 on torch 2.12.1+cu130 (UNSLOTH_MOE_BACKEND=grouped_mm), HF transformers 5.18.0 + PEFT 0.21.2 + bitsandbytes 0.50.2, axolotl 0.20.0 at its own pins",
@@ -8543,12 +8545,13 @@
         "bench/h2h-2026-10-02/tc2/README.md",
         "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-27/RESULTS-tc1.md",
         "bench/tc1/TC2-PREREG.md",
-        "bench/tc1/tc1_reduce.py"
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-29/RESULTS-tc1.md"
       ],
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-27/tc1/"
       ],
-      "notes": "Corrected 2026-10-02 (TC1 amendment 4): the axolotl refusal on this family was the harness's target naming."
+      "notes": "Corrected 2026-10-02 (TC1 amendment 4): the axolotl refusal on this family was the harness's target naming. Qualified 2026-10-02 by tc1-5090-29 (.e4b-offload)."
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02.shipped-labelled",
@@ -8625,6 +8628,81 @@
       "notes": "Retired the day it was registered; the receipts stay public so the retraction can be checked.",
       "retired_on": "2026-10-02",
       "retired_reason": "The Unsloth Mixtral readings were this harness's engagement counters inside Unsloth's compiled MoE block, not Unsloth (TC2 amendment 5, bench/tc1/TC2-PREREG.md): Python dict increments wrapped around torch._grouped_mm and Unsloth's MoE backend functions became Dynamo guards that failed on every call (3,547 unique graphs, 743 'HOP: Unsafe side effect' graph breaks, two hits of the 1024 recompile limit, after which the frames ran eagerly), on both draws. Unsloth compiles Mixtral's MoE block and leaves Qwen3's uncompiled, which is why no other family's Unsloth arm shows it. The counters are now trace-safe and the Mixtral pair is re-run (amendment 5); e4b's offload readings were unaffected and are restated there."
+    },
+    {
+      "id": "e4b.train.h2h.axolotl.qwen3.5090.2026-10-02",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1 (#835), re-run 2026-10-02 under TC1 amendment 4, one rented RTX 5090: axolotl 0.20.0 TRAINS Qwen3-30B-A3B at the field recipe with the work matched (642,514,944 fp32 adapters, one per-slot init, the same tokens), now that the harness casts axolotl's frozen fp32 .gate routers to bf16 after load -- what axolotl's own trainer's autocast computes per call (48 routers, every cast an exact bf16 round trip). axolotl takes 7.759 / 7.642 s/step against e4b's fused path at 5.408 / 5.464 (both pairs STABLE, 1.5 % and 1.0 %): axolotl/e4b 1.416 [1.398, 1.435] -- e4b faster per step; peak VRAM 26.88 vs 27.81 GB (axolotl 0.93 GB lower) and 2,936 vs 1,270 J/step (x2.31 on axolotl's side); held-out at N=20 0.857 / 0.858 vs 0.847 / 0.852 (COMPARABLE, |delta| about 0.01). axolotl's experts are 4-bit (quantize_moe_experts: 96 parametrized NF4 stacks with double-quantised statistics, read from the arm's own record; the census's stack count misses parametrized storage, corrected in the reducer), and its step-0 held-out loss sits 0.026 above e4b's, the two quantisers' bytes differing. A recorded difference that remains: axolotl's auto-enabled LoRA kernels compute the attention adapters in bf16 from fp32 weights. TC1 P6 (axolotl plain UNSUPPORTED/OOM or axolotl/e4b in [1.5, 6]) is FALSIFIED: axolotl trains and is faster than predicted. Beside TC1's Unsloth position on the same card class (1.437), e4b's matched step leads both comparators by a similar factor on the 5090.",
+      "value": 1.416,
+      "unit": "ratio s/step axolotl/e4b (medians of steps 11..20 over two draws each; > 1 = e4b faster per step); cross-draw interval [1.398, 1.435]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-30); e4b 0.39.0 @ 3e41f0f + grouped-nf4-gemm 0.34.0 @ 846b512 on torch 2.8.0+cu128; axolotl 0.20.0 at its own pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0, bitsandbytes 0.50.2) driven through its ModelLoader with the frozen fp32 .gate routers cast to bf16 after load (TC1 amendment 4)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters, one per-slot LoRA A init (matched:3407, 12480/12480 slots), fp32 adapters, the same tokens; s/step = median of steps 11..20; positions quoted only when both arms are VALID over two draws within 5 %; token qwen3axolotl (TC1 amendment 3), re-run under TC1 amendment 4; validity, equivalence and scoring by bench/tc1/tc1_reduce.py (regime detection corrected 2026-10-02 to read axolotl's parametrized 4-bit expert stacks)",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-5090-30-axolotl.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-30/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-30/tc1/"
+      ],
+      "notes": "Restates the question the retired e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported row answered wrongly (a harness defect, TC1 amendment 4).",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported"
+      ]
+    },
+    {
+      "id": "e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.scattermoe-native",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02, the same box: axolotl 0.20.0's native-best arm -- its scattermoe expert backend (KernelsPlugin, axolotl's own scattermoe LoRA kernels; the arm was let reach the Hub under TC1 amendment 4 and recorded no kernels-community repo in the HF cache) with axolotl's native LoRA init and fp32 adapters -- trains Qwen3-30B-A3B at 5.049 s/step against e4b's matched fused path at 5.436 (medians, one scattermoe draw): 0.929 [0.924, 0.934], axolotl native-best FASTER per step by 7 %, at 25.84 vs 27.81 GB peak; held-out at N=20 0.0191 below e4b's anchor. A LABELLED row, never a position: a different init from the matched set and one draw. It is the first arm in the campaign to step faster than e4b's matched fused path on the RTX 5090; e4b as shipped (bf16 adapters, its own native configuration) read 0.671 x its matched step on another 5090 host (TC1 .shipped-vs-matched), so a native-vs-native comparison on one box is the open next row.",
+      "value": 0.929,
+      "unit": "ratio s/step axolotl scattermoe native-best / e4b fused matched (medians of steps 11..20; one axolotl draw, two e4b draws; < 1 = axolotl faster)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-30); e4b 0.39.0 @ 3e41f0f + grouped-nf4-gemm 0.34.0 @ 846b512 on torch 2.8.0+cu128; axolotl 0.20.0 at its own pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0, bitsandbytes 0.50.2) driven through its ModelLoader with the frozen fp32 .gate routers cast to bf16 after load (TC1 amendment 4)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters, one per-slot LoRA A init (matched:3407, 12480/12480 slots), fp32 adapters, the same tokens; s/step = median of steps 11..20; positions quoted only when both arms are VALID over two draws within 5 %; token qwen3axolotl (TC1 amendment 3), re-run under TC1 amendment 4; validity, equivalence and scoring by bench/tc1/tc1_reduce.py (regime detection corrected 2026-10-02 to read axolotl's parametrized 4-bit expert stacks)",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-5090-30-axolotl.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-30/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-30/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02.e4b-offload",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3.6-35B-A3B @ 995ad96eacd9",
+      "claim": "Lane TC2 amendment 4 (#835), 2026-10-02, one rented RTX 5090: e4b's fused path UNDER EXPERT OFFLOAD trains Qwen3.6-35B-A3B's matched set (926,187,520 fp32 adapters over 20,520 slots) on the 32 GB card where it OOMed resident: 12.372 / 13.846 s/step at 19.35 GB peak (two VALID draws, 11.2 % apart -- UNSTABLE, the offload path being bound by the host link), held-out 1.1433 -> 0.6834 / 0.6831 at N=20. TC2 P8 HELD (a fit under 24 GB). e4b's parity control under offload PASSES (reference loop 110.57 s/step at 21.18 GB, |delta| final 0.00133; the fused path x8.94 the reference's speed on this family's 256 small experts). No position is quoted (P9 UNTESTED): e4b's draws are unstable, and Unsloth's two resident draws (10.107 / 10.618 s/step at 30.47 GB, with the expert targets) are VOID by the step-0 rule (held-out at step 0 1.1935 / 1.1962 against e4b's 1.1433: |delta| 0.050 / 0.053) -- the two frameworks do not quantise the same module set on this family: e4b holds the 30 linear-attention layers' projections and the 40 shared experts in bf16 (311 Linear, about 1.14 B parameters, about 2.3 GB) where Unsloth stores them in 4-bit (498 Linear4bit). At N=20 the two reach 0.683 vs 0.687 / 0.690. P10: parity PASS; equivalence N-A (Unsloth VOID).",
+      "value": 19.347,
+      "unit": "GB peak VRAM of e4b's fused path under expert offload on Qwen3.6-35B-A3B's matched set (first draw; second 19.327)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host with >= 192 GB RAM (tc1-5090-29); e4b 0.39.0 @ baa536b + grouped-nf4-gemm 0.34.0 @ 846b512 on torch 2.8.0+cu128 under expert offload; Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 on torch 2.12.1+cu130 resident with the family's expert target parameters",
+      "conditions": "bench/tc1 TC2 amendment 4 token tc2qwen35off: the field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407, N=20, 8 held-out rows at 0 and N); MATCHED WORK: 926,187,520 trainable parameters over 20,520 slots, one per-slot init (matched:3407), fp32 adapters, the same tokens; every e4b arm under expert offload (--offload 1); Unsloth resident with TC2_UNS_TARGET_PARAMS = the expert target parameters on both draws; P8-P10 read off the reducer's verdict, position, equivalence and parity lines",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc2/README.md",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-29/RESULTS-tc1.md",
+        "bench/tc1/TC2-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-29/tc1/"
+      ],
+      "notes": ""
     }
   ]
 }

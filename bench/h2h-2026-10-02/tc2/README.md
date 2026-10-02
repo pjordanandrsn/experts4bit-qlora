@@ -21,14 +21,15 @@ against bf16 experts and loses it against Unsloth's 4-bit stacks on OLMoE.
 | arm | s/step | ratio vs e4b `fused_attn4_m` (1.484 s, two draws) | peak VRAM | J/step | held-out at N = 60 (e4b 0.8311) | regime |
 |---|---|---|---|---|---|---|
 | HF + PEFT (`target_parameters`, two draws) | 1.441 | **0.971 [0.965, 0.978]** (HF faster) | 8.50 GB (e4b 4.54) | 334.9 (e4b 343.8) | 0.8286 (Δ −0.0024, COMPARABLE) | **bf16 experts** — bitsandbytes' Linear-only quantizer leaves `ParallelExperts` unquantised |
-| axolotl 0.20.0 (`quantize_moe_experts`) | 1.340 | **0.903 [0.901, 0.905]** (axolotl faster; one draw) | 4.08 GB | 351.1 | 0.8295 (Δ −0.0016, EQUIVALENT) | bf16 experts too: its parametrisation found no stack to pack on this family (`Params4bit stacks 0`) |
+| axolotl 0.20.0 (`quantize_moe_experts`) | 1.340 | **0.903 [0.901, 0.905]** (axolotl faster; one draw) | 4.08 GB | 351.1 | 0.8295 (Δ −0.0016, EQUIVALENT) | **4-bit experts** (corrected 2026-10-02: `quantize_moe_experts` packed all 64 stacks as parametrized NF4, which the census's `Params4bit stacks 0` does not see; `RESULTS-tc1-5090-17-rereduced-2026-10-02.md`) |
 | Unsloth 2026.9.14 (both target lists) | — | VOID | — | — | — | attention-only: 5,242,880 trainable vs e4b's 99,614,720 — it adapts no expert parameter (as registered; `coverage` row of tp4 stands) |
 | HF on torch 2.14 + `experts_implementation="grouped_mm"` | 1.347 | 0.908 (labelled) | — | — | 0.8278 | the same bf16 experts, a different dispatch |
 | e4b as shipped (bf16 expert adapters, N(0, 1/r)) | 1.247 | 0.840 (labelled) | 3.78 GB | — | 0.8329 (Δ +0.0018) | |
 
 e4b's parity control PASSES (Δ final 0.00153, median 0.00168; ×5.81 vs its reference at ×1.09 the peak). Read: on an 800 M-active MoE
 whose experts nobody else quantises, e4b's fused 4-bit experts train at 0.90–0.97 × the speed of bf16-expert training and at 0.5 × its
-VRAM (4.54 vs 8.50 GB) — a footprint position, not a speed position. TC2 P1 (HF/e4b in [1.1, 1.6]) is FALSIFIED.
+VRAM (4.54 vs 8.50 GB) — a footprint position, not a speed position. TC2 P1 (HF/e4b in [1.1, 1.6]) is FALSIFIED. (Corrected 2026-10-02: that reading holds against HF; axolotl's
+0.903 is 4-bit against 4-bit — its experts are NF4 — so on Granite axolotl's 4-bit path steps faster than e4b's at a lower peak.)
 
 ### OLMoE-1B-7B (16 layers, 64 experts)
 
@@ -101,6 +102,26 @@ tp4 arm ran bf16 adapters. **TC2 P4 FALSIFIED.** e4b under expert offload on thi
 for this box. HF OOMs resident. axolotl's refusal here is the harness's too: it enumerated target names on an
 `AutoModelForCausalLM` skeleton while axolotl's loader built the vision-language class (`is_multimodal: true`), whose language layers sit
 under a different module path (TC1 amendment 4, corrected 2026-10-02; not yet fixed).
+
+## Qwen3.6-35B-A3B with e4b under expert offload (`tc1-5090-29`, TC2 amendment 4, $0.82)
+
+The row the box B re-run named. Every e4b arm under `--offload 1`; Unsloth resident with the family's expert target parameters on
+both draws, so the pair is the reducer's ordinary matched pair. Register `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02.e4b-offload`.
+
+| arm | verdict | s/step | peak VRAM | held-out 0 → 20 | note |
+|---|---|---|---|---|---|
+| e4b `fused_attn4_m` (offload) ×2 | **VALID** | 12.372 / 13.846 | **19.35 GB** | 1.1433 → 0.6834 / 0.6831 | draws 11.2 % apart: UNSTABLE |
+| e4b `reference_attn4_m` (offload) | VALID | 110.57 | 21.18 GB | 1.1381 → 0.6822 | parity PASS (final Δ 0.00133); fused ×8.94 its speed |
+| Unsloth `ckpt_unsloth_m` ×2 (expert targets, resident) | **VOID** (step-0) | 10.107 / 10.618 | 30.47 GB | 1.1935 / 1.1962 → 0.6868 / 0.6904 | step-0 |Δ| 0.050 / 0.053 against e4b's anchor |
+
+**Read.** **TC2 P8 HELD**: e4b trains Qwen3.6's 926 M-parameter matched set on the 32 GB card under expert offload, at 19.35 GB,
+where it OOMed resident. **P9 UNTESTED** and **P10 parity PASS, equivalence N-A**: e4b's offload draws are unstable, and Unsloth's
+arms are VOID by the step-0 rule because the two frameworks do not quantise the same module set on this family. e4b's census holds
+40 expert stacks and the 40 full-attention projections in 4-bit and 311 Linear in bf16 (the 30 linear-attention layers' five
+projections each, the 40 shared experts' four, `lm_head`), about 1.14 B parameters; Unsloth's holds 498 Linear4bit and 3 bf16. The
+base model each trains from therefore differs by 0.05 nats at step 0 (e4b's is closer to bf16), and that difference also accounts
+for about 1.6 GB of the resident footprint gap above. By step 20 the two reach 0.683 and 0.687 / 0.690. That e4b leaves this family's
+linear-attention and shared-expert projections in bf16 is an e4b coverage gap worth closing, recorded here, not a comparison.
 
 ## Box B re-run, Mixtral-8x7B-Instruct-v0.1 (`tc1-5090-26`, TC2 amendment 2's token on a host with 1 TB of RAM: instance 53859501, AMD EPYC 7C13, 1.06 TB RAM, driver 595.71.05)
 
