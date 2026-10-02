@@ -1,0 +1,27 @@
+{
+ "framework": "axolotl",
+ "fam": "olmoe",
+ "model": "allenai/OLMoE-1B-7B-0924-Instruct",
+ "revision": "7f1c97f440f06ce36705e4f2b843edb5925f4498",
+ "arm": "axolotl",
+ "tag": "ckpt_axolotl_m",
+ "status": "refused",
+ "reason": "AssertionError: Original QKV code not found",
+ "steps": 60,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "offload": false,
+ "prereg": "tc1/TC2-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe)",
+ "note": null,
+ "phase_seconds": {
+  "preamble": 1.729,
+  "snapshot": 0.0,
+  "targets": 0.487,
+  "load_weights": 1.533
+ },
+ "phase_in_flight": null,
+ "phase_budget_s": 1155.0,
+ "phase": "load"
+}

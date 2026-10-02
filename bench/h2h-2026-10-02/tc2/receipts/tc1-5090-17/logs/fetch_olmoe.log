@@ -1,0 +1,10 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files:  11%|█         | 1/9 [00:00<00:00,  8.19it/s]Fetching 9 files:  33%|███▎      | 3/9 [00:00<00:00,  9.97it/s]Fetching 9 files:  44%|████▍     | 4/9 [00:00<00:00,  7.47it/s]Fetching 9 files:  56%|█████▌    | 5/9 [00:00<00:00,  6.40it/s]Fetching 9 files:  67%|██████▋   | 6/9 [00:00<00:00,  6.52it/s]Fetching 9 files:  78%|███████▊  | 7/9 [01:29<00:55, 27.91s/it]Fetching 9 files:  89%|████████▉ | 8/9 [01:35<00:21, 21.11s/it]Fetching 9 files: 100%|██████████| 9/9 [01:50<00:00, 19.44s/it]Fetching 9 files: 100%|██████████| 9/9 [01:50<00:00, 12.33s/it]
+staged in 1.9 min at /root/.cache/huggingface/hub/models--allenai--OLMoE-1B-7B-0924-Instruct/snapshots/7f1c97f440f06ce36705e4f2b843edb5925f4498
+STAGED 7f1c97f440f06ce36705e4f2b843edb5925f4498

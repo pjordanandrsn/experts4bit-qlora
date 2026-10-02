@@ -1,0 +1,10 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files:   9%|▉         | 1/11 [00:00<00:01,  9.97it/s]Fetching 11 files:  45%|████▌     | 5/11 [00:00<00:00, 26.77it/s]Fetching 11 files:  73%|███████▎  | 8/11 [00:00<00:00, 25.80it/s]Fetching 11 files:  91%|█████████ | 10/11 [00:19<00:00, 25.80it/s]Fetching 11 files: 100%|██████████| 11/11 [01:01<00:00,  8.29s/it]Fetching 11 files: 100%|██████████| 11/11 [01:01<00:00,  5.59s/it]
+staged in 1.0 min at /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+STAGED a02780686e08a03fe0d2679a293b5c74a90efa89

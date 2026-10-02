@@ -1,0 +1,17 @@
+{
+ "box": "A",
+ "run_id": "local-20261002T052229Z",
+ "instance_id": "local:gpu-dev",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "driver": "575.64.05",
+ "cpu": "Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz",
+ "nproc": 12,
+ "mem_total_kb": "131757372",
+ "cgroup_memory_max": "",
+ "disk_root": "overlay         598G  197G  396G  34% /",
+ "hostname": "gpu-dev",
+ "registered_gpu_class": "RTX A2000",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": "1",
+ "local_snapshot": "/models/Qwen3-30B-A3B"
+}

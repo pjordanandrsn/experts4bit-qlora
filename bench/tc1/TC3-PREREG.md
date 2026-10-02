@@ -178,3 +178,20 @@ RuntimeError / NotImplementedError / ValueError -> `refused` -> UNSUPPORTED; an 
 after load -> `harness_error`. A stub's own exit propagates unchanged. The axolotl row on the redraw therefore reads UNSUPPORTED with
 transformers' message, which is what it is: axolotl 0.20.0's Qwen3-MoE path at its pins. Nothing in the arms, alarms, predicates or
 readings moves.
+
+### Amendment 5 (2026-10-02T10:14Z, after the 12 GB hand run's first pass, before the arm re-runs): the 12 GB HF arm gets the budget the e4b arms had
+**What the hand run showed.** On the owned RTX A2000 host (a 6-core Xeon W-1250 reading the 61 GB checkpoint at tens of MB/s with the
+card's sidecars active) the `hf/hf_peft_m_mb1` arm refused itself inside `load_weights` at 621 s against the 630 s prologue budget
+that its registered 1,800 s alarm implies (amendment-4 phase accounting; 35 % of the alarm). The e4b offload arms on the same host ran
+under 7,200 s alarms (2,520 s of prologue) and needed 1,872 s of nf4 quantisation before step 1; the HF arm was still materialising
+tensors from safetensors when its budget ran out. That ALARM makes TC3 P2 UNTESTED by its own rule, which is what the first pass records
+(`bench/h2h-2026-10-02/tc3/receipts/local-20261002T052229Z/`). The 1,800 s was set for rented hosts; on this one it measures the disk,
+not the framework.
+
+**The amendment.** The HF micro-batch-1 arm re-runs once on the same host, from the same staged harness, venv, snapshot, tokens and init,
+with its alarm raised to 7,200 s (the prologue budget therefore 2,520 s, the budget every e4b arm on this host had) and nothing else
+changed; its receipt ships beside the first pass, labelled as the re-run, and P2 is scored on it: OOM or UNSUPPORTED -> P2 HELD (given
+the Unsloth and axolotl rows already UNSUPPORTED, said as "not an OOM reading"); a completed HF arm -> P2 FALSIFIED, the row quoted;
+a second ALARM -> P2 stays UNTESTED and the host is named as the reason. Unsloth's row (its loader dispatching modules to the CPU on this
+card, no expert-offload lever) and axolotl's (its cu130 wheels need driver >= 580; this host has 575.64) are not re-run: neither is a
+budget reading. Nothing in the 24 GB token moves. Cost $0 (the owned card).

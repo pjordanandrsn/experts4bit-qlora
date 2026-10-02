@@ -1,0 +1,13 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Using Python 3.12.15 environment at: venv-axolotl
+Resolved 4 packages in 281ms
+Prepared 1 package in 65ms
+Installed 2 packages in 11ms
+ + ninja==1.13.2
+ + wheel==0.48.0

@@ -1,0 +1,17 @@
+{
+ "box": "A",
+ "run_id": "tc3-4090-1",
+ "instance_id": "53804549",
+ "gpu": "NVIDIA GeForce RTX 4090",
+ "driver": "595.84",
+ "cpu": "AMD EPYC 7B13 64-Core Processor",
+ "nproc": 128,
+ "mem_total_kb": "527974204",
+ "cgroup_memory_max": "259508928512",
+ "disk_root": "overlay         320G  1.9M  320G   1% /",
+ "hostname": "c4d8dd892048",
+ "registered_gpu_class": "4090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}
