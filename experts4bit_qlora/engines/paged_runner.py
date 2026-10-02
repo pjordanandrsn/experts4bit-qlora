@@ -32,11 +32,34 @@ from __future__ import annotations
 
 import torch
 
+from . import linear_state
 from .paged_attention import PagedAttentionContext, set_context
 from .scheduler import StepRunner
 
 
 DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
+
+#: ``config.layer_types`` values whose layers own K/V in the paged pool, and values that carry no per-sequence state
+ATTENTION_LAYER_TYPES = frozenset({"full_attention", "sliding_attention", "attention"})
+STATELESS_LAYER_TYPES = frozenset({"mlp", "moe"})
+
+
+def layer_plan(model, n_layers: int, n_slots: int):
+    """``(attention layer indices, linear-state pool or None)`` for ``model``.
+
+    A model without ``layer_types`` is all attention (every layer flushes K/V). A hybrid model's linear-attention
+    layers keep per-slot state in :mod:`.linear_state` (installed here); any other state-carrying layer type is
+    refused rather than run without its state."""
+    types = linear_state.layer_types(getattr(model, "config", None))
+    if not types:
+        return list(range(n_layers)), None
+    known = ATTENTION_LAYER_TYPES | STATELESS_LAYER_TYPES | {linear_state.LINEAR_LAYER_TYPE}
+    unknown = sorted(set(types) - known)
+    if unknown:
+        raise NotImplementedError(f"layer types {unknown} carry state the paged runner does not keep; refusing")
+    attn = [i for i, t in enumerate(types) if t in ATTENTION_LAYER_TYPES]
+    pool = linear_state.install(model, n_slots) if linear_state.LINEAR_LAYER_TYPE in types else None
+    return attn, pool
 
 
 def bucket_for(n: int, buckets) -> int:
@@ -69,6 +92,9 @@ class PagedModelRunner(StepRunner):
                       if hasattr(m, "_hot_residency")
                       and hasattr(m._hot_residency, "prefill_gpu_only")]
         self.n_layers = kv.L
+        # the layers whose K/V the pool holds, and the per-slot linear-attention state of a hybrid model
+        n_slots = int(getattr(kv, "B", 0)) + len(getattr(kv, "scratch", ()) or ())
+        self.attn_layers, self.linear_state = layer_plan(model, self.n_layers, n_slots)
         self._graphs = None          # bucket -> CUDAGraph | None (eager); see enable_decode_graphs
 
     # ------------------------------------------------------------ intake --
@@ -80,6 +106,8 @@ class PagedModelRunner(StepRunner):
         self.pos_of[rid] = 0
         self.tokens[rid] = list(prompt)
         self.kv.reset(slot)          # a recycled slot carries no history
+        if self.linear_state is not None:
+            self.linear_state.reset(slot)
 
     def _mode(self, prefill: bool) -> None:
         if self.gpu_only_prefill:
@@ -105,11 +133,13 @@ class PagedModelRunner(StepRunner):
                                      position_ids=pos[None], use_cache=False)
                 finally:
                     set_context(prev)
+                if self.linear_state is not None:
+                    self.linear_state.mark([slot])     # its linear layers now carry this prompt's state
                 self.pos_of[rid] = start + take
                 if start + take >= len(self.tokens[rid]):
                     # prompt complete: the staged bf16 K/V become the
-                    # sequence's FP8 residency, once, here
-                    for layer in range(self.n_layers):
+                    # sequence's FP8 residency, once, here (attention layers only)
+                    for layer in self.attn_layers:
                         staged = self.ctx.flush(layer, slot)
                         if staged is None:
                             raise RuntimeError(
@@ -171,6 +201,9 @@ class PagedModelRunner(StepRunner):
         ``capture=False`` runs every bucket eagerly on the same padded layout:
         the bitwise oracle for the replays. Returns ``{bucket: "graph" |
         "eager: <reason>"}``."""
+        if self.linear_state is not None:
+            raise NotImplementedError("decode graphs for a model with linear-attention layers: the per-slot state "
+                                      "gather / scatter (engines/linear_state.py) is not captured yet; run eagerly")
         buckets = tuple(sorted({int(b) for b in buckets}))
         if not buckets or buckets[0] < 1:
             raise ValueError(f"buckets must be positive, got {buckets}")
@@ -319,3 +352,5 @@ class PagedModelRunner(StepRunner):
         if slot is not None:
             self.ctx.drop(slot)      # any staging from an aborted prefill
             self.kv.reset(slot)
+            if self.linear_state is not None:
+                self.linear_state.reset(slot)
