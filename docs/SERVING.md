@@ -121,5 +121,8 @@ CUDA box.
 census was clean, and at B=1 the decode graph captured and the smoke passed. At B=16 the graph for bucket 2 and every
 bucket above it failed to capture, and those buckets ran eagerly. The cause: the server never switched on the batched lane's
 sync-free device grouping (`hot_residency.DEVICE_GROUPING`), which `bench/p39/step_decomp.py`'s batched lane sets before
-capturing. A T > 1 step therefore took the eager grouping's host sync inside the capture. Fixed on main after 0.39.0. The
-batched path's first successful GPU run is the next SC1 proof, and this paragraph is updated with it.
+capturing. A T > 1 step therefore took the eager grouping's host sync inside the capture. Fixed on main after 0.39.0
+(#874). The fix's GPU run is SC1 proof `sc1a-prove-8` (2026-10-02, RTX 5090, e4b `0a2a0c8`; adertha-receipts `bbfbb31`).
+At B=16 all five decode-graph buckets (1/2/4/8/16) captured and the smoke passed. The census reports
+`grouping: {device_grouping: true}` at B=16 and the library defaults at B=1. Scope of that evidence: Granite-3.1-3B with
+NF4 experts and the unfused fold set. Qwen3-30B-A3B with int4 experts and `fuse_qkv` first runs in SC1's box-A reading.
