@@ -214,6 +214,20 @@ TC2_LABELLED = {("unsloth", "ckpt_unsloth_m_experts"): "unsloth with the family'
                 ("hf", "hf_peft_m_t214"): "hf on torch 2.14 (venv-axolotl) with experts_implementation=grouped_mm (what dispatched is recorded)",
                 ("unsloth", "ckpt_unsloth_mxfp4"): "unsloth 16-bit load (load_in_4bit=False): the MXFP4 experts kept packed, grouped_mm"}
 ALL_LABELLED = {**LABELLED, **TC2_LABELLED}            # LABELLED stays TC1's registered set; reduce_family iterates the union
+
+# ----------------------------------------------------------------------------- TC1 amendment 8: e4b shipped vs axolotl scattermoe over 200 steps (the qwen3nativebest200 token)
+NB200_FAM = "qwen3nativebest200"  # tc1-5090-34: the scattermoe arm's per-process warm-up spikes fall inside 11..20, so P13's axolotl half is re-asked on a late window
+LATE_FROM = 101                   # P14's window: the median s/step over steps 101..200 (each draw's own step_ms), its stability per side within 5 %
+P14_BAND = (0.90, 1.10)           # P14: axolotl scattermoe native-best / e4b shipped over the late window, within 10 % of parity
+FAMS.append(NB200_FAM)
+NAMES[NB200_FAM] = "Qwen3-30B-A3B (amendment 8: e4b shipped vs axolotl scattermoe over 200 steps, two draws each)"
+N_LAYERS[NB200_FAM] = 48
+ATTN_CENSUS[NB200_FAM] = 192
+FAM_ANCHOR = {NB200_FAM: ("e4b", "fused_attn4_m_200")}   # the box's matched anchor runs the same 200 steps (validity, trainable count, quality)
+NATIVE_BY_FAM = {NB200_FAM: {"e4b": "fused_attn4_shipped_200", "axolotl": "ckpt_axolotl_best_200"}}
+EXPECTED[NB200_FAM] = [("e4b", "fused_attn4_shipped_200"), ("axolotl", "ckpt_axolotl_best_200"), ("e4b", "fused_attn4_shipped_200_d2"),
+                       ("axolotl", "ckpt_axolotl_best_200_d2"), ("e4b", "fused_attn4_m_200")]
+DRAW2.update({("e4b", "fused_attn4_shipped_200"): ("e4b", "fused_attn4_shipped_200_d2"), ("axolotl", "ckpt_axolotl_best_200"): ("axolotl", "ckpt_axolotl_best_200_d2")})
 EXPECTED["granite"] = [("e4b", "fused_attn4_m"), ("hf", "hf_peft_m"), ("e4b", "reference_attn4_m"), ("e4b", "fused_attn4_m_d2"), ("hf", "hf_peft_m_d2"),
                        ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_experts"), ("hf", "hf_peft_m_t214"),
                        ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("e4b", "fused_attn4_shipped")]
@@ -245,7 +259,7 @@ TP2_MIXTRAL = {"ratio_unsloth_over_e4b": 0.361, "peak_unsloth_gb": 29.16, "peak_
 
 def anchor_of(fam):
     """R11: the family's e4b anchor arm -- fused_attn4_m everywhere but gpt-oss, where e4b trains attention only (attn_only_m)."""
-    return TC2_ANCHOR.get(fam, QUALITY_ANCHOR)
+    return TC2_ANCHOR.get(fam) or FAM_ANCHOR.get(fam, QUALITY_ANCHOR)
 
 
 def registered_draw2(fam, key):
@@ -956,10 +970,13 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
             if labelled[k].get("quoted"):
                 labelled[k]["other_regime"] = regime_of(fam, recs[k])
     native = {}
-    sh = draws.get(("e4b", NATIVE["e4b"]), {"usable": False, "why": "no receipt"})
+    nat = NATIVE_BY_FAM.get(fam, NATIVE)                # amendment 8: the 200-step token names its own native arms
+    sh = draws.get(("e4b", nat["e4b"]), {"usable": False, "why": "no receipt"})
     for other in ("unsloth", "axolotl"):
-        k = (other, NATIVE[other])
-        if recs.get(k) or recs.get(("e4b", NATIVE["e4b"])):
+        if other not in nat:
+            continue
+        k = (other, nat[other])
+        if recs.get(k) or recs.get(("e4b", nat["e4b"])):
             native[other] = position(sh, draws.get(k, {"usable": False, "why": "no receipt"}), f"{other} native-best vs e4b shipped")
             if native[other].get("quoted"):
                 native[other]["other_regime"] = regime_of(fam, recs[k])
@@ -1034,6 +1051,48 @@ def score_p13(F):
     overall = "FALSIFIED" if "FALSIFIED" in vs else ("HELD" if all(v == "HELD" for v in vs) else "UNTESTED")
     out.append(("P13", NB_FAM, overall, "; ".join(f"{pid.split('(')[1].rstrip(')')} {v}" for pid, _, v, _ in out)))
     return out
+
+
+def late_median(r, lo=LATE_FROM):
+    """Amendment 8: the median s/step over steps lo..N from the arm's own step_ms (None when the arm did not record steps lo..N)."""
+    ms = (r or {}).get("step_ms") or []
+    return statistics.median(ms[lo - 1:]) / 1e3 if len(ms) >= lo else None
+
+
+def score_p14(F):
+    """TC1-PREREG amendment 8's P14, on the qwen3nativebest200 box: over steps 101..200, axolotl scattermoe native-best / e4b shipped lies
+    within P14_BAND. Each side needs two VALID draws whose late medians agree within 5 %; the ratio is of the per-side medians of the late
+    medians, with the interval over the four cross-draw ratios. Outside the band FALSIFIED, an unstable / missing / non-VALID side UNTESTED.
+    The ordering reading rides along: the whole interval above 1.0 = e4b shipped faster, below 1.0 = axolotl faster, else no ordering."""
+    R = F.get(NB200_FAM)
+    if not R:
+        return []
+    nat = NATIVE_BY_FAM[NB200_FAM]
+    recs = {(x["fw"], x["tag"]): x["r"] for x in R["rows"]}
+    sides = {}
+    for fw in ("e4b", "axolotl"):
+        k = (fw, nat[fw])
+        k2 = DRAW2[k]
+        vs = [R["verdicts"].get(k, "missing"), R["verdicts"].get(k2, "missing")]
+        if vs != ["VALID", "VALID"]:
+            return [("P14", NB200_FAM, "UNTESTED", f"{fw} draws {k[1]} {vs[0]} / {k2[1]} {vs[1]}: two VALID draws a side are registered")]
+        late = [late_median(recs[k]), late_median(recs[k2])]
+        if None in late:
+            return [("P14", NB200_FAM, "UNTESTED", f"{fw} draws carry no step_ms over steps {LATE_FROM}..N")]
+        stab = abs(late[0] - late[1]) / statistics.mean(late)
+        sides[fw] = {"late": late, "stab": stab, "s": statistics.median(late)}
+        if stab > STABILITY.get(fw, STABILITY_OTHER):
+            return [("P14", NB200_FAM, "UNTESTED", f"{fw} late-window draws {late[0]:.3f} / {late[1]:.3f} s/step differ by {100 * stab:.1f}% > 5% (UNSTABLE)")]
+    e, a = sides["e4b"], sides["axolotl"]
+    r = a["s"] / e["s"]
+    cross = [x / y for x in a["late"] for y in e["late"]]
+    lo, hi = min(cross), max(cross)
+    order = "e4b shipped faster" if lo > 1.0 else ("axolotl scattermoe faster" if hi < 1.0 else "no ordering at this resolution (the interval spans 1.0)")
+    held = P14_BAND[0] <= r <= P14_BAND[1]
+    return [("P14", NB200_FAM, "HELD" if held else "FALSIFIED",
+             f"axolotl scattermoe / e4b shipped over steps {LATE_FROM}..200 {r:.3f} [{lo:.3f}, {hi:.3f} over 4 cross-draw ratios] vs {list(P14_BAND)}; "
+             f"late medians e4b {e['late'][0]:.3f} / {e['late'][1]:.3f} (within {100 * e['stab']:.1f}%), axolotl {a['late'][0]:.3f} / {a['late'][1]:.3f} "
+             f"(within {100 * a['stab']:.1f}%); ordering: {order}")]
 
 
 # ----------------------------------------------------------------------------- R6: predictions (TC1-PREREG.md, scored mechanically)
@@ -2159,6 +2218,11 @@ def render(F, d):
         out += ["\n## Predictions P1–P10 (+ P1b) (TC1-PREREG.md + phase 2, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_predictions(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if NB200_FAM in F:
+        out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_p14(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB_FAM in F:
         out += ["\n## Prediction P13 (TC1-PREREG amendment 5: native-best against native-best, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -2306,6 +2370,23 @@ def _nb_set(e4b_s=(1.00, 1.02), ax_s=(1.20, 1.21), un_s=(1.80, 1.82)):
     R[("e4b", "fused_attn4_m")] = _receipt("e4b", "fused_attn4_m", "fused", s=1.25)
     for r in R.values():
         r["fam"] = NB_FAM
+    return R
+
+
+def _nb200_set(e4b_late=(3.00, 3.03), ax_late=(3.10, 3.12)):
+    """Amendment 8: the 200-step native-best box -- e4b shipped and axolotl scattermoe x2 each, then e4b fused_m_200. axolotl's steps 1..30
+    carry tc1-5090-34's warm-up shape (a 216 s first step, spikes to ~80 s), its later steps sit at its late value; e4b is flat."""
+    R = {}
+    for i, sfx in enumerate(("", "_d2")):
+        e_ms = [5000.0] + [e4b_late[i] * 1e3] * 199
+        a_ms = [216000.0, 32000.0, 61000.0, 4500.0, 11000.0, 81000.0] + [7000.0 if j % 3 == 0 else 3300.0 for j in range(24)] + [ax_late[i] * 1e3] * 170
+        R[("e4b", "fused_attn4_shipped_200" + sfx)] = _receipt("e4b", "fused_attn4_shipped_200" + sfx, "fused", steps=200, s=statistics.median(e_ms[10:]) / 1e3,
+                                                               heldout_n=0.7945, matched=False, step_ms=e_ms)
+        R[("axolotl", "ckpt_axolotl_best_200" + sfx)] = _receipt("axolotl", "ckpt_axolotl_best_200" + sfx, "axolotl", steps=200, s=statistics.median(a_ms[10:]) / 1e3,
+                                                                 heldout_n=0.7800, matched=False, step_ms=a_ms)
+    R[("e4b", "fused_attn4_m_200")] = _receipt("e4b", "fused_attn4_m_200", "fused", steps=200, s=4.0, heldout_n=0.7687, step_ms=[4000.0] * 200)
+    for r in R.values():
+        r["fam"] = NB200_FAM
     return R
 
 
@@ -3214,6 +3295,33 @@ def selftest():
     assert p13(R) == {"P13 (axolotl half)": "UNTESTED", "P13 (Unsloth half)": "HELD", "P13": "UNTESTED"}
     assert registered_draw2("qwen3native", ("e4b", "fused_attn4_shipped")) is None and run(_native_set(), fam="qwen3native")["draws"][("e4b", "fused_attn4_shipped")]["verdict"] == "SINGLE"
     assert score_p13({"qwen3": run(_good_set())}) == []
+    cases += 1
+    # 55. amendment 8: the 200-step native-best box -- every arm VALID against the 200-step matched anchor, P14 read on steps 101..200 (the
+    #     warm-up spikes of steps 1..30 move the 11..200 median, never the late window), parity HELD, a faster axolotl FALSIFIED, an unstable side UNTESTED
+    bd = tempfile.mkdtemp(prefix="tc1_nativebest200_selftest_")
+    for (fw, tag), r in _nb200_set().items():
+        json.dump(r, open(os.path.join(bd, f"{NB200_FAM}_{fw}_{tag}.json"), "w"))
+    F = reduce_dir(bd, None)
+    NB2 = F[NB200_FAM]
+    assert set(F) == {NB200_FAM} and [(x["fw"], x["tag"]) for x in NB2["rows"]] == EXPECTED[NB200_FAM], [(x["fw"], x["tag"]) for x in NB2["rows"]]
+    assert all(x["verdict"] == "VALID" for x in NB2["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in NB2["rows"]]
+    assert NB2["anchor_key"] == ("e4b", "fused_attn4_m_200") and NB2["N"] == 200 and NB2["native"]["axolotl"]["quoted"] and "unsloth" not in NB2["native"]
+    P14 = score_p14(F)
+    assert [(p, v) for p, _, v, _ in P14] == [("P14", "HELD")] and "1.032 [1.023, 1.040 over 4 cross-draw ratios]" in P14[0][3] and "ordering: e4b shipped faster" in P14[0][3], P14
+    text = render(F, bd)
+    for needle in ("## Prediction P14", "| P14 | qwen3nativebest200 | **HELD** |", "NATIVE-BEST (reported beside, never instead of, the matched position): s/step ratio axolotl native-best vs e4b shipped/e4b"):
+        assert needle in text, needle
+    assert "## Prediction P13" not in text and "## Predictions P1–P10" not in text
+
+    def p14(**kw):
+        return [(p, v) for p, _, v, _ in score_p14({NB200_FAM: reduce_family(NB200_FAM, _nb200_set(**kw), {}, None)})]
+    assert p14(ax_late=(2.50, 2.52)) == [("P14", "FALSIFIED")]
+    assert "ordering: axolotl scattermoe faster" in score_p14({NB200_FAM: reduce_family(NB200_FAM, _nb200_set(ax_late=(2.50, 2.52)), {}, None)})[0][3]
+    assert p14(ax_late=(3.00, 3.40)) == [("P14", "UNTESTED")]
+    assert late_median({"step_ms": [1000.0] * 50}) is None and abs(late_median({"step_ms": [9e5] * 100 + [3000.0] * 100}) - 3.0) < 1e-12
+    R = _nb200_set(); R.pop(("axolotl", "ckpt_axolotl_best_200_d2"))
+    assert p14() == [("P14", "HELD")] and [(p, v) for p, _, v, _ in score_p14({NB200_FAM: reduce_family(NB200_FAM, R, {}, None)})] == [("P14", "UNTESTED")]
+    assert registered_draw2(NB200_FAM, ("e4b", "fused_attn4_shipped_200")) == ("e4b", "fused_attn4_shipped_200_d2") and registered_draw2(CURVE_FAM, ("e4b", "fused_attn4_shipped_200")) is None
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 
