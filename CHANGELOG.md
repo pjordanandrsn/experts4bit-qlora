@@ -11,7 +11,14 @@
   - Confirmed on an RTX 5090: buckets 1–16 capture (lane SC1's proof `sc1a-prove-8`, Granite NF4 at B=1 and B=16).
   - B=1 and eager servers were unaffected.
 - **Dependencies:** CI still installs grouped-nf4-gemm at the v0.34.1 commit; the `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
-- **The rest is evidence and bench:** lane P96 (registration, read, receipts, register row), lane TC3's amendments, lane SC1's amendment A3, and serve_paged's GPU-status docs.
+- **The rest is evidence and bench:** lane P96 (registration, read, receipts, register row), lane TC3's amendments, lane SC1's amendment A3 and its erratum, and serve_paged's GPU-status docs.
+
+
+### Lane SC1 A3 erratum (#846): the e4b package is NOT identical between box A's and boxes B/C's commits (#878 landed between) -- the arms' arithmetic is, because SC1 pins the route knob (text only)
+
+- `bench/sc1/SC1-PREREG.md`: A3 claimed `experts4bit_qlora/` was byte-identical between `0a2a0c8` and A3's merge. #878 (the NF4
+  grouped small-M default `0` -> `auto`) merged first. Every SC1 e4b arm sets `E4B_NF4_GROUPED_SMALLM=0` explicitly, so the
+  routes match. The bf16 oracle, the one call without it, reads the transformers forward at T == 1. Recorded as an erratum.
 
 ### Lane SC1 amendment A3 (#846): box B's proof found three bugs in SC1's own drivers (llama.cpp version check, two in the ExLlamaV3 tripwire) -- fixed, with tests that fail on the registered drivers (bench + tests)
 
