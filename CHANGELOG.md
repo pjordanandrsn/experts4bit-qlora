@@ -1,6 +1,31 @@
 # Changelog
 
 ## Unreleased
+### `experts4bit_qlora.serve_paged`: an OpenAI-compatible server over the continuous-batching engine (opt-in, v1)
+
+- **Why.** Request-level serving benchmarks (TTFT, ITL and throughput under Poisson arrivals, as `vllm bench serve`
+  and `sglang.bench_serving` drive them) need an HTTP endpoint over the engine the serving campaign measures --
+  `ContinuousScheduler` + `PagedModelRunner` + `Fp8PagedKV` -- not over HF `generate`. `serve.py` is the shared-GPU
+  availability deployment and stays as it is.
+- **What.** `python -m experts4bit_qlora.serve_paged` (127.0.0.1:8778): `/health`, `/stats`, `/v1/models`,
+  `/v1/completions` (streaming SSE and non-streaming), `/v1/chat/completions` when the tokenizer has a template. One
+  engine thread owns the GPU and steps the scheduler; requests arrive through a thread-safe queue with
+  `Request.arrival` stamped at HTTP arrival, so the scheduler's TTFT includes queue wait. `build_engine` reproduces
+  the harness's construction in its order (arena load, placement, all-VRAM override, hybrid tier, the lane hook's
+  int4 levers from the same env names, amortisation off, paged attention, `fuse_qkv` OR the env-gated folds, KV with
+  scratch slots, decode graphs, scheduler); a set lever that patches nothing refuses at startup and `/health` reports
+  the census. Greedy only, stated: nonzero `temperature`, `logprobs`, `echo`, `n > 1`, stop strings and penalties are
+  400s; `ignore_eos`, `min_tokens`, `stop_token_ids` and token-id prompts are honoured. Streaming emits one chunk per
+  token through a windowed incremental detokenizer (a code point split across byte-fallback tokens is held, never
+  emitted in pieces), `finish_reason` on the last token's chunk, a usage chunk under `stream_options.include_usage`,
+  `[DONE]`. `E4B_PAGED_TRACE` appends a per-request JSONL (arrival / admitted / first token / finished clocks).
+- **Scheduler.** Uses the stop set, `min_tokens`, `finish_reason` and `abort()` the scheduler gained in #848 (its own entry below); `ignore_eos` maps to no stop set, the engine's original contract.
+- **Tests.** `tests/test_serve_paged.py` (CPU, a scripted runner and a byte-fallback stub tokenizer, the real engine
+  thread): the vLLM v0.30.0 client payload verbatim, the SSE sequence, EOS vs `ignore_eos`, `min_tokens`, the
+  per-sequence window refusal, TTFT in the trace, concurrent requests sharing a decode step, capacity waits without
+  eviction, abort mid-generation; `tests/test_scheduler.py` gains the stop-set and abort cases.
+- Docs: `docs/SERVING.md` "Continuous-batching server (opt-in, v1)".
+
 ### Scheduler: an optional per-request stop set, `min_tokens`, `finish_reason` and `abort()` (additive)
 
 - **Why.** The continuous-batching engine stopped a sequence only at `max_new_tokens`: `PagedModelRunner` stores
