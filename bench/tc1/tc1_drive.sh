@@ -108,8 +108,18 @@ tc1_lane_dead() {  # live_now live_prev  -> "dead" when both are a definite 0
   [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead
 }
 
+# e4b#835, box B (tc1-5090-22): the host stopped the container 4 h 40 min into the run and every finished arm's receipt
+# died with its disk, because receipts were fetched once, at the end. Each time the box's summary line changes (an arm
+# finished), copy what exists into $RUN_DIR/tc1.partial. Best-effort and bounded (rsync's own I/O timeout): a failure
+# here is said and never stops the poll. The final fetch below falls back to this copy and removes it when it succeeds.
+TC1_RSYNC_EXCLUDES=(--exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' --exclude 'unsloth_compiled_cache' --exclude 'hf-cache')
+tc1_partial_fetch() {  # dest_dir -> rc of rsync; never exits the caller
+  mkdir -p "$1" || return 1
+  rsync -az --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$1/" >/dev/null 2>&1
+}
+
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on)"
-LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; LANE_DEAD=0
+LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; LANE_DEAD=0; PARTIAL_AT=""
 while :; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
@@ -118,7 +128,13 @@ while :; do
   line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
   dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
   live=$(echo "$hb" | sed -n 's/.*| live \([0-9]*\).*/\1/p')
-  if [ "$line" != "$LAST" ]; then LAST=$line; LAST_CHANGE=$now; fi
+  if [ "$line" != "$LAST" ]; then
+    LAST=$line; LAST_CHANGE=$now
+    if [ -n "$line" ]; then
+      if tc1_partial_fetch "$RUN_DIR/tc1.partial"; then PARTIAL_AT=$(date -u +%FT%TZ)
+      else say "partial fetch failed (rc $?) -- the poll goes on; the last good copy is from ${PARTIAL_AT:-never}"; fi
+    fi
+  fi
   if [ -n "$(tc1_lane_dead "$live" "$LAST_LIVE")" ]; then
     say "LANE DEAD: no 'bash tc1_run.sh' on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
     LANE_DEAD=1; break
@@ -135,7 +151,20 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/tc1" && mkdir -p "$RUN_DIR/tc1" || { say "fetch failed: local dir"; exit 22; }
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' "root@$HOST:$W/" "$RUN_DIR/tc1/" || { say "fetch failed: rsync"; exit 22; }
+if ! rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$RUN_DIR/tc1/"; then
+  if [ -n "$(ls -A "$RUN_DIR/tc1.partial" 2>/dev/null)" ]; then
+    # keep whatever the final rsync did bring, and add the partial copy's files it did not (-n never overwrites). cp -n's
+    # exit status on a skipped file differs between BSD and GNU cp, so the merge is checked file by file instead.
+    cp -R -n "$RUN_DIR/tc1.partial/." "$RUN_DIR/tc1/" 2>/dev/null
+    unmerged=$(cd "$RUN_DIR/tc1.partial" && find . -type f | while IFS= read -r f; do [ -e "$RUN_DIR/tc1/$f" ] || echo "$f"; done | wc -l | tr -d ' ')
+    if [ "$unmerged" = 0 ]; then rm -rf "$RUN_DIR/tc1.partial"; keep=""; else keep="; $unmerged file(s) could not be merged, tc1.partial/ kept beside it"; fi
+    say "fetch failed: rsync -- kept the incremental copy from $PARTIAL_AT as tc1/ ($(ls "$RUN_DIR/tc1" | wc -l | tr -d ' ') entries$keep); the run did not finish here"
+  else
+    say "fetch failed: rsync (no incremental copy to keep)"
+  fi
+  exit 22
+fi
+rm -rf "$RUN_DIR/tc1.partial"
 say "fetched $(ls "$RUN_DIR/tc1" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/tc1/TC1_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/tc1/TP_DONE.$NONCE" ] || {
