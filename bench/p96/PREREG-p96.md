@@ -90,6 +90,19 @@ Rule: the owner's standing no-ask tier for a single run under $15 (2026-09-26), 
 
 ## Rehearsal
 
-To be written from the A2000 rehearsal before this page merges.
+Run on the NAS RTX A2000 (sm_86) from e4b `386d46b`, this branch before this section, with grouped-nf4-gemm at the pin.
+It used `P96_GPU_CLASS=A2000 P96_MIN_DISK_GB=20`, so it was marked REHEARSAL. No time is quoted.
+- **The proving run** (`P96_PROVE=1`) held end to end, rc 0:
+  - install and the tripwire;
+  - the reducer's self-test (12 cases);
+  - the premise: row-exact 6/6, K25's contract compiled 30/30;
+  - the HF CDN probe;
+  - `PROVED`.
+- **The windows, checked directly** through `step_decomp._k8_window` on both families' tokenizers. Every window holds
+  the 2,561 tokens it needs (2,600-token slices), and the 24 scored-window digests are distinct.
+- **The full arm path** (fetch, bake, censuses, the window-major K8 loop) is P95's.
+  - It was rehearsed there, and it ran for real in `p95-5090-1`.
+  - P96 changes three things in it: the arm list (m, t), the window lists, and a second engagement census.
+    `tests/test_p96_staged_pin.py` pins all three.
 
 Amendments, dated, go below this line before any data is read.
