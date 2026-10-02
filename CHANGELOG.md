@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+
+### Lane SC1 amendment A2 (#846): the box script's quiesce could never succeed, and a proof could pass with its smokes skipped (bench + tests)
+
+- `bench/sc1/sc1_run.sh`: `quiesce` counted busy processes with `pgrep -fc … || echo 0`, which reads `0\n0` on procps when
+  nothing matches (`pgrep -c` prints 0 and exits 1), so every quiesce waited its full 900 s — 30–45 min of each box's guard. Now
+  `pgrep -f … | wc -l`. The PROVE block wrote `PROVED` with both Granite smokes skipped by the deadline guard (`sc1a-prove-3`);
+  it is now NOT PROVED (rc 23) when a smoke is skipped or fails, when a comparator its box installs did not install, or when box
+  C's SGLang JIT is unset or not admitted. Box B's proof guard 0.75 → 1.0 h. Pin regenerated; three CPU tests in
+  `tests/test_sc1_run_shape.py` pin both fixes and fail on the registered script.
 ### `E4B_ROUTER_EPI_CAST=0` stays, with a stated end condition: until #674's K8 question is measured (#782)
 
 - 0.37.5 said `=0` (fp32 router top-k weights) would be kept "for one release", and it survived 0.37.6–0.38.1.
