@@ -1042,7 +1042,7 @@ def test_tc1_amendment_4_only_the_scattermoe_arm_reaches_the_hub():
     """TC1 amendment 4: every arm runs with HF_HUB_OFFLINE=1 except axolotl's scattermoe native-best (its KernelsPlugin fetches
     kernels-community kernels at load), and that arm records the kernel commits it fetched; the receipt carries both records."""
     run = RUN_SH.read_text()
-    assert 'local OFFL=1; [ "$FW/$TAG" = axolotl/ckpt_axolotl_best ] && OFFL=0' in run
+    assert 'local OFFL=1; case "$FW/$TAG" in axolotl/ckpt_axolotl_best|axolotl/ckpt_axolotl_best_d2) OFFL=0;; esac' in run
     assert "env $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1" in run and "HF_HUB_OFFLINE=1 UNSLOTH" not in run
     src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
     assert 'x["axolotl_router_recast"] = axolotl_router_recast(model)' in src
