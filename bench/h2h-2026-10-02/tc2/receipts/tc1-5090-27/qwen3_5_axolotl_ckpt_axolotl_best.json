@@ -1,0 +1,40 @@
+{
+ "framework": "axolotl",
+ "fam": "qwen3_5",
+ "model": "Qwen/Qwen3.6-35B-A3B",
+ "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+ "arm": "axolotl",
+ "tag": "ckpt_axolotl_best",
+ "status": "refused",
+ "reason": "ValueError: Version 1 of 'kernels-community/activation' is not available in the local cache and Hugging Face Hub is in offline mode. Download the kernel while online first, or pass an explicit `revision=<commit>`.",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "offload": false,
+ "prereg": "tc1/TC2-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe)",
+ "note": null,
+ "phase_seconds": {
+  "preamble": 2.352,
+  "snapshot": 0.0,
+  "targets": 2.058,
+  "load_weights": 23.317
+ },
+ "phase_in_flight": null,
+ "phase_budget_s": 945.0,
+ "phase": "load",
+ "memory_lever": null,
+ "host_ram": {
+  "rss_hwm_gb": 71.76,
+  "ru_maxrss_gb": 71.76,
+  "cgroup_peak_gb": null,
+  "cgroup_peak_source": null,
+  "cgroup_peak_before_gb": null,
+  "cgroup_peak_rose_during_arm": null,
+  "cgroup_limit_gb": 294.413,
+  "total_gb": 811.403,
+  "high_water_gb": 71.76
+ },
+ "exception_type": "ValueError"
+}

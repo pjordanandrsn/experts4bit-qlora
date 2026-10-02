@@ -1,0 +1,14 @@
+{
+ "framework": "unsloth",
+ "fam": "mixtral",
+ "arm": "unsloth",
+ "tag": "ckpt_unsloth_m",
+ "status": "not_run",
+ "reason": "family skipped by TC1_SKIP",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "written_by": "tc1_run.sh",
+ "prereg": "tc1/TC2-PREREG.md"
+}

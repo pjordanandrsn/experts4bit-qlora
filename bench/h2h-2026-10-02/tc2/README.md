@@ -68,14 +68,79 @@ offload OK (both draws and at micro-batch 1), e4b as shipped OK, **both Unsloth 
 taken** (still loading at about 30 GB on the card), HF OOM, axolotl's scattermoe arm refused. Two amendments follow from it:
 amendment 2 (`tc2mixtral`, merged as `31cb04d`) re-asks Mixtral's P5 pair with the Unsloth alarm at 7,200 s, and amendment 3 (merged as
 `0933d4e`) re-runs the Qwen3.6 half on its own box and gives the Mixtral box a 192 GB host-RAM floor, because Unsloth's loader
-materialises the 93 GB bf16 checkpoint in host memory before it quantises. Both boxes (`tc1-5090-23`, `-24`) launch after this read;
-their rows, P4, P5 and the Mixtral P6/P7 are a follow-up read. In this read P4 and P5 are **UNTESTED**.
+materialises the 93 GB bf16 checkpoint in host memory before it quantises. Three launches of those boxes were refused at $0 by the
+launcher's own rules (`tc1-5090-23`: an 8 h guard over the 6 h teardown cap; `-24` and `-25`: the pool's cheapest verified RTX 5090 had
+moved above the lane's $0.54/h, with or without the RAM floor), and the boxes ran as `tc1-5090-27` (Qwen3.6, below) and `tc1-5090-26`
+(Mixtral, below) at the $0.69/h ceiling box B itself had run at — the lane's budget line says $0.54/h, and the receipts say $0.69/h.
+
+## Box B re-run, Qwen3.6-35B-A3B (`tc1-5090-27`: instance 53859323, AMD EPYC 7663, driver 580.95.05, $0.54 actual)
+
+40 layers, 256 routed experts, 20,520 adapter slots: the matched set is **926,187,520** trainable parameters (fp32 adapters, one per-slot init,
+TC1's rules). Register `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02` and its `.shipped-labelled` row.
+
+| arm | status | s/step | tok/s | peak VRAM | J/step | held-out 0 → 20 | trainable | note |
+|---|---|---|---|---|---|---|---|---|
+| e4b `fused_attn4_m` (×2) | **OOM at step 1** | — | — | 32.52 GB | — | — | 926,187,520 | 30.86 GiB in use at a 606 MiB allocation, both draws |
+| e4b `fused_attn4_m_mb1` | OOM at step 2 | — | — | 32.54 GB | — | — | 926,187,520 | the micro-batch-1 secondary |
+| e4b `reference_attn4_m` | OOM at step 2 | — | — | 32.84 GB | — | — | 926,187,520 | the reference loop |
+| **Unsloth `ckpt_unsloth_m_experts`** (the family's own expert names) | **OK · VALID** | 10.593 | 143.1 | **30.47 GB** | 1603.5 | 1.1940 → 0.6880 | 926,187,520 | one draw; matched init complete (20,520 slots); 4-bit expert stacks (80), `grouped_mm` 320 calls/step |
+| Unsloth `ckpt_unsloth_m` / `_d2` / `_mb1` (the registered target list) | OK · **VOID** | 4.87 / 4.89 / 8.86 | — | 21.08 GB | — | 1.1940 → 0.8355 | 3,440,640 | attention-only on this family: 40 of 20,520 slots set — tp4's VOID reproduced on 2026.9.14 |
+| e4b `fused_attn4_shipped` (bf16 expert adapters, N(0, 1/r)) | OK · VALID | 5.088 | 314.6 | 32.48 GB | 1200.0 | 1.1433 → 0.6729 | 926,187,520 | a fit row, never a position: different adapter precision and init from every matched arm |
+| HF + PEFT `hf_peft_m` / `_mb1` | OOM at load | — | — | — | — | — | — | 31.33 GB in use at a 512 MiB allocation |
+| axolotl `ckpt_axolotl_m` | UNSUPPORTED | — | — | — | — | — | — | `NoMatchingPeftModuleError`: its target-module names do not match this family's modules |
+| axolotl `ckpt_axolotl_best` | UNSUPPORTED | — | — | — | — | — | — | the scattermoe KernelsPlugin fetches `kernels-community/activation` with the Hub offline |
+
+**Read: on Qwen3.6-35B-A3B at matched work, Unsloth trains the set resident on 32 GB and e4b does not.** e4b's fused path with the matched fp32
+adapters and their AdamW-8bit state over 20,520 slots needs more than the card has at both micro-batches and in its reference loop; Unsloth,
+given the family's own expert names, trains the same 926 M parameters at 30.47 GB and 10.59 s/step. An e4b loss, said as such: no ratio
+exists (its anchor never stepped), and the as-shipped e4b arm that does fit (bf16 expert adapters at 32.48 GB, 5.09 s/step, a lower
+held-out loss) is a different adapter precision and init — the confound TC1 identified — so it is a labelled fit row beside Unsloth's
+matched row, never a comparison. Unsloth's registered target list still adapts the attention only on this family (tp4's VOID, on the
+current release); the lane's prediction that e4b's matched arm would land within 15 % of tp4's 6.33 s/step was wrong because that
+tp4 arm ran bf16 adapters. **TC2 P4 FALSIFIED.** e4b under expert offload on this family is the obvious next row and was not registered
+for this box. HF OOMs resident; axolotl's PEFT target names do not resolve on this family.
+
+## Box B re-run, Mixtral-8x7B-Instruct-v0.1 (`tc1-5090-26`, TC2 amendment 2's token on a host with 1 TB of RAM: instance 53859501, AMD EPYC 7C13, 1.06 TB RAM, driver 595.71.05)
+
+32 layers, 8 experts, 640 adapter slots: the matched set is **223,346,688** trainable parameters. (The two Unsloth arm logs ship gzipped, `logs/*.log.gz`: 5.7 MB
+each of kernel-compile progress bars; `gunzip -c` returns the box's bytes.) e4b runs under expert offload (the registered
+lever on this family), Unsloth resident with the Unsloth alarm raised to 7,200 s.
+
+| arm | status | s/step (median 11–20) | tok/s | peak VRAM | J/step | held-out 0 → 20 | train wall, 20 steps |
+|---|---|---|---|---|---|---|---|
+| e4b `fused_attn4_m` (offload) | OK · VALID | **15.891** | 105.2 | **7.151 GB** | 2,984 | 1.4297 → 0.7142 | 337 s |
+| e4b `fused_attn4_m_d2` (offload) | OK · VALID | **15.719** | 107.8 | 7.143 GB | 2,968 | 1.4297 → 0.7132 | 329 s |
+| Unsloth `ckpt_unsloth_m` (resident) | OK · VALID | **6.213** | 6.6 (whole run) | **31.951 GB** | 11,564 (whole run) | 1.4326 → 0.7107 | 5,413 s |
+| Unsloth `ckpt_unsloth_m_d2` (resident) | OK · VALID | **7.011** | 7.6 (whole run) | 32.239 GB | 10,218 (whole run) | 1.4326 → 0.7089 | 4,673 s |
+| e4b `reference_attn4_m` (offload, the parity control) | OK · VALID | 16.079 | 109.4 | 10.595 GB | 2,414 | 1.4259 → 0.7134 | — |
+| HF, both axolotl arms, e4b as shipped | `not_run` stubs (amendment 2: box B holds those rows — and box B's receipts were lost; its heartbeats read HF OOM, axolotl scattermoe refused, e4b as shipped OK) | | | | | | |
+
+**What box B's two alarms were.** Unsloth's load of the 93 GB checkpoint is not the problem: on this host it took 40 s. The first training steps
+are: Unsloth 2026.9.14 compiles `MixtralSparseMoeBlock` ("without fullgraph since output capture hooks run inside it", its own log line) and
+then spends the first six steps compiling Triton kernels — 864, 882, 983, 1,032, 819 and 741 s for steps 1 to 6 (89 minutes), the GPU idle and
+one core pinned, 5,016 "Compiling kernels" batches over the arm — before settling to 6 to 7 s/step from step 7 on. The arm's host-RAM high-water is 95 GB, which
+is what stopped box B's 98 GB host; the 192 GB floor amendment 3 asked for was right for the compile phase, not for the load. On the previous
+Unsloth release tp2 ran this arm at 0.858 s/step (`e4b.train.h2h.unsloth.mixtral.5090.2026-09-06.footprint`); the compiled MoE path of
+2026.9.14 on Mixtral's per-expert block is the difference, with the harness's output-capture hooks (which force the partial graph) a candidate
+factor, not established here — the same hooks sit inside Qwen3-30B-A3B's stacked-expert block, where Unsloth took 8 s/step from step 1.
+**Read.** e4b's draws are STABLE (1.1 %); Unsloth's steady-state medians differ by 12.1 % (6.213 vs 7.011 s/step), outside the registered 5 %,
+so **no position is quoted and TC2 P5 is UNTESTED by its own rule**. Said beside it, not scored: the steady-state ratios Unsloth/e4b
+(0.391 and 0.446) sit inside P5's band [0.3, 0.5], and the footprint ratio (×4.47 / ×4.51 lower peak on e4b) does not reach P5's 8× clause.
+Held-out at N = 20 is within 0.005 nats across all four draws. The registered metric is the steady-state median, and that is Unsloth's
+advantage here — about 2.3–2.5× faster per step once compiled. The wall-clock is the other way round on this host: 337 / 329 s for e4b's
+20 steps against 5,413 / 4,673 s for Unsloth's, and — arithmetic on these receipts, not a run — the two cumulative curves cross between steps
+519 and 544. A one-time compile on one host is not a property of the comparison; it is recorded because it decides which framework
+finishes a short fine-tune first on this card, and because it is what lost box B.
+e4b's parity control PASSES (fused vs reference under offload: final Δ 0.00195, median step 0.00166; **P6 HELD**). Under offload the fused path is
+only ×1.01 faster per step than the reference loop on this host, at ×0.675 its peak: Mixtral's step under expert offload is bound by the stream of
+expert bytes, not the expert GEMM. **P7 FALSIFIED**: Unsloth's first draw is EQUIVALENT to e4b's anchor (held-out |Δ| 0.0035), its second
+COMPARABLE (0.0053, just outside the 0.005 band).
 
 ## Predictions scored (box A)
 
 P1 granite FALSIFIED; P2 olmoe FALSIFIED; P3 gptoss FALSIFIED; P6 (e4b parity on every family with a reference) HELD; P7 (matched sets
 EQUIVALENT where two frameworks train one adapter set) FALSIFIED on the HF rows (COMPARABLE, inside 0.006 nats, outside the 0.005 band) and
-held on the axolotl (granite) and Unsloth (olmoe) rows. P4 / P5 are UNTESTED here (box B lost; the re-runs above).
+held on the axolotl (granite) and Unsloth (olmoe) rows. P4 FALSIFIED on the Qwen3.6 re-run (above); P5 UNTESTED on the Mixtral re-run (Unsloth's draws unstable, above).
 
 ## Harness notes from this box
 
