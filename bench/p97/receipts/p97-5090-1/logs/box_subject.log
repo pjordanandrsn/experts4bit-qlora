@@ -1,0 +1,13 @@
+Fetching 36 files:   0%|          | 0/36 [00:00<?, ?it/s]Fetching 36 files: 100%|██████████| 36/36 [00:00<00:00, 2005.91it/s]
+[22:02:01]   checkpoint: Qwen/Qwen3.6-35B-A3B @ 995ad96eacd98c81ed38be0c5b274b04031597b0 (requested 995ad96eacd98c81ed38be0c5b274b04031597b0)
+[22:02:01]   untied output head recovered from 'lm_head.weight' (outside the 'model.language_model.' text-tower prefix, which would otherwise drop it)
+[22:02:01]   fusing + quantizing experts (up to 40x256) to nf4 (streaming)...
+[22:02:23]   quantized experts on 40/40 MoE layers (256 experts each)
+[22:02:23]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (297053 > 262144). Running this sequence through the model will result in indexing errors
+[transformers] `causal_conv1d_fn` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `chunk_gated_delta_rule` is falling back to its reference PyTorch implementation because `flash-linear-attention` is not installed. This is correct but much slower; install `flash-linear-attention` for the optimized kernel.
+[transformers] `causal_conv1d_update` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `fused_recurrent_gated_delta_rule` is falling back to its reference PyTorch implementation because `flash-linear-attention` is not installed. This is correct but much slower; install `flash-linear-attention` for the optimized kernel.
+P97_MODEL subject: steps 1024 mean_kl 4.432e-03 max_kl 1.521e-01 agree 0.9717 d_nll +0.0065 | attn 10 kv 10 kernel 2550/2550 linear 30 stores 8130/8130 | decode 829.5 ms/step x4 | mem 23.05 GB
+P97_MUTANT subject: mean_kl 4.052e+00 agree 0.1855 d_nll +3.8159

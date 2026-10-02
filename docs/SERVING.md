@@ -127,7 +127,7 @@ At B=16 all five decode-graph buckets (1/2/4/8/16) captured and the smoke passed
 `grouping: {device_grouping: true}` at B=16 and the library defaults at B=1. Scope of that evidence: Granite-3.1-3B with
 NF4 experts and the unfused fold set. Qwen3-30B-A3B with int4 experts and `fuse_qkv` first runs in SC1's box-A reading.
 
-**Hybrid models (linear attention; engine side, CPU-tested only).** `PagedModelRunner` now serves models whose
+**Hybrid models (linear attention; read on an RTX 5090 in lane P97).** `PagedModelRunner` serves models whose
 `config.layer_types` mixes `full_attention` with Gated DeltaNet `linear_attention` layers: Qwen3.5 / Qwen3.6 MoE and
 Qwen3-Next.
 - **The state.** Each sequence's linear-attention state (the causal-conv window and the recurrent state) lives in a
@@ -142,4 +142,16 @@ Qwen3-Next.
 - **`build_engine` for a hybrid checkpoint.** The fp8 KV pool is sized to the attention layers only (paged attention
   maps model layer to pool layer; on Qwen3.6, 10 of 40 layers), and the KV geometry comes from a composite config's
   `text_config`. A CPU test pins the compact pool against a one-layer-per-index pool, bit for bit.
-- **Not yet done:** this path has not run on a GPU, and decode graphs are refused for hybrid models.
+- **On the card (lane P97, [`bench/p97/RESULTS-p97.md`](../bench/p97/RESULTS-p97.md), SUPPORTED).** One RTX 5090,
+  through gnf4's fp8 decode kernel, Qwen3.6-35B-A3B, 4 sequences interleaved over 512-token prompts and 255 batched
+  decode steps:
+  - each sequence's pooled state stays transformers' own: 7.7e-3 relative error at the layers before the first
+    attention layer, which see the same tokens on both paths;
+  - the whole model tracks transformers' forward at 4.43e-3 nats, argmax agreement 0.972 (OLMoE through the same
+    harness: 7.15e-3, 0.974);
+  - a slot-mapping mutant reads 4.05 nats.
+- **Not yet done:**
+  - decode graphs are refused for hybrid models, so decode is eager;
+  - the Gated DeltaNet layers run whatever kernels transformers finds (`fla` / `causal_conv1d`), or its torch path.
+    P97 read the torch path, at 830 ms per 4-row step: not a serving speed.
+  - Only Qwen3.6 has been read on a GPU.
