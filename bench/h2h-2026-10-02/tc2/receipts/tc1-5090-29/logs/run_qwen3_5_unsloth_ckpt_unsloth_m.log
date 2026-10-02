@@ -1,0 +1,717 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+[unsloth.import_fixes|INFO]Unsloth: ROCm detection did not match any known hints.
+[unsloth.import_fixes|INFO]Unsloth: Patching protobuf.MessageFactory.GetPrototype
+[unsloth.import_fixes|INFO]Unsloth: torch==2.12.1+cu130 and torchvision==0.27.1+cu130 are compatible.
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+[fla.utils._device|INFO]Blackwell detected: registering default global_scratch allocator.
+[unsloth_zoo.log|INFO]Unsloth: aliased recurrent_gated_delta_rule onto fla.ops.gated_delta_rule so the Triton decode kernel is reachable.
+W1002 18:16:34.164000 8186 venv-unsloth/lib/python3.11/site-packages/torch/utils/_pytree.py:630] <enum 'KernelPreference'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+W1002 18:16:34.196000 8186 venv-unsloth/lib/python3.11/site-packages/torch/utils/_pytree.py:630] <enum 'ScaleCalculationMode'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+[unsloth.import_fixes|INFO]Unsloth: Patched transformers config classes to accept legacy 4.x value types.
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `PretrainedConfig.__init_subclass__` so vLLM config classes with bare annotations still import
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `sdpa_mask` so a left-padded row that attends to nothing cannot return NaN (unsloth #9708)
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `get_model_conversion_mapping` so a pre-quantized multimodal checkpoint keeps its bitsandbytes quant_state (transformers PR #45567)
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `rope_scaling` so replacing it keeps the RoPE base frequency (unsloth #2405)
+[unsloth.import_fixes|INFO]Unsloth: Patched transformers `validate_rope` to accept the 5.0 `ignore_keys` argument.
+[unsloth.import_fixes|INFO]Unsloth: LongcatCausalLM configs without a model_type load on transformers' longcat_flash.
+[unsloth.import_fixes|INFO]Unsloth: Restored transformers `is_torch_fx_available` for remote modeling code written against 4.x.
+[unsloth.import_fixes|INFO]Unsloth: Remote modeling code written for transformers 4.x gets the 5.x model API shims.
+[unsloth.import_fixes|INFO]Unsloth: Patched triton CompiledKernel with num_ctas/cluster_dims for torch.compile compatibility.
+[unsloth.import_fixes|INFO]Unsloth: Patched torch config modules so dynamo/inductor settings (e.g. recompile_limit) apply across threads on torch >= 2.12.
+[unsloth.import_fixes|INFO]Unsloth: Patched torch.nn.init.trunc_normal_ for fp16/bf16 stability.
+[unsloth.import_fixes|INFO]Unsloth: Patched enable_input_require_grads for vision model compatibility
+[datasets|INFO]Disabling Tensorflow because USE_TORCH is set
+[unsloth_zoo.log|INFO]Unsloth: set VIDEO_TOTAL_PIXELS: 90316800
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Processor.__call__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3RMSNorm.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Attention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched AutoHfQuantizer.merge_quantization_configs.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmDepthDecoderForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration._merge_input_ids_with_input_values.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.predict.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.correct.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.scale_corrected_output.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nModel.get_placeholder_mask.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextMLP.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4MultimodalEmbedder.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched PreTrainedModel.get_correct_experts_implementation.
+[unsloth_zoo.log|INFO]Unsloth: registered the 'unsloth' experts implementation as transformers' default
+[unsloth_zoo.log|WARNING]Unsloth: triton_kernels is not installed. MXFP4 GPT OSS will NOT be patched for LoRA.
+To train GPT OSS with LoRA, either:
+  1. Install triton_kernels from OpenAI (for native MXFP4), OR
+  2. Use Mxfp4Config(dequantize=True) when loading (dequantizes to bf16), OR
+  3. Use the BF16 model: 'unsloth/gpt-oss-20b-BF16'
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteMoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE Lite for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE (standard) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepseekV3NaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepseekV3MoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepSeekV3 MoE for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepseekV3ForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepSeekV3ForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4ForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4ForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4 MoE (current layout) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Lfm2MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched LFM2 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched MixtralExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Mixtral MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Llama4TextMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Llama4TextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Llama-4 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched bitsandbytes quantize_4bit / dequantize_4bit for tensors with 2^31 elements or more.
+[unsloth_zoo.log|INFO]Unsloth: Patched Ernie4_5_MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Ernie4_5_VLMoeMoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched ERNIE 4.5 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralModel.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.convert_moe_packed_tensors.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.dequantize_convertops.
+[unsloth_zoo.log|INFO]Unsloth: Successfully added convert_moe_packed_tensors_cpu function.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4bitQuantize.convert.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4bitQuantize.convert for MoE expert parameter support
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.param_needs_quantization.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.param_needs_quantization for MoE expert parameters
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer._process_model_before_weight_loading.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.get_weight_conversions.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.preprocess_model.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer._process_model_after_weight_loading.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers WeightConverter.__init__ to ignore unknown kwargs (peft 0.19 forward-compat)
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.get_param.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.merge.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.unmerge.
+[unsloth_zoo.log|INFO]Unsloth: routed transformers ALL_FP8_EXPERTS_FUNCTIONS through forward_moe_backend_fp8
+[unsloth_zoo.log|INFO]Unsloth: relaxed HF validate_quantization_for_training for FP8+LoRA
+[unsloth_zoo.log|INFO]Unsloth: ParamWrapper.get_param exposes the logical shape of FP4-packed experts
+🦥 Unsloth Zoo will now patch everything to make training faster!
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:6234: FutureWarning: torch._dynamo.config.inline_inbuilt_nn_modules is deprecated and does not do anything, inline_inbuilt_nn_modules is always True. It will be removed in a future version of PyTorch.
+  original_setattr(self, name, value)
+[unsloth_zoo.log|INFO]Unsloth: Could not find fbgemm_gpu.experimental.gemm.triton_gemm.fp8_gemm.triton_quantize_fp8_block
+[unsloth_zoo.log|INFO]Unsloth: Could not find torchao.prototype.blockwise_fp8_inference.blockwise_quantization.blockwise_fp8_gemm
+[unsloth_zoo.log|INFO]Unsloth: Patching trl openenv with function: openenv_vllm_reload_weights
+[unsloth_zoo.log|INFO]Unsloth: Patching trl VLLMGeneration with function: vllm_generation_init_patch
+The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[huggingface_hub._login|INFO]The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[unsloth_zoo.log|INFO]Failed to login to huggingface using token with error: Cannot reach https://huggingface.co/api/whoami-v2: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.
+The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[huggingface_hub._login|INFO]The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[unsloth_zoo.log|INFO]Failed to login to huggingface using token with error: Cannot reach https://huggingface.co/api/whoami-v2: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.
+[unsloth_zoo.log|INFO]Unsloth: transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.l2norm now reduces in float32 (pure-torch gated delta, float16 safe).
+[unsloth_zoo.log|INFO]Unsloth: transformers.models.qwen3_next.modeling_qwen3_next.l2norm now reduces in float32 (pure-torch gated delta, float16 safe).
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Processor.__call__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3RMSNorm.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Attention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmDepthDecoderForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration._merge_input_ids_with_input_values.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.predict.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.correct.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.scale_corrected_output.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nModel.get_placeholder_mask.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextMLP.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4MultimodalEmbedder.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteMoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE Lite for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE (standard) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4 MoE (current layout) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched ERNIE 4.5 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralModel.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.convert_moe_packed_tensors.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.dequantize_convertops.
+[unsloth_zoo.log|INFO]Unsloth: Successfully added convert_moe_packed_tensors_cpu function.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.get_param.
+[unsloth_zoo.log|INFO]Unsloth: ParamWrapper.get_param exposes the logical shape of FP4-packed experts
+[unsloth_zoo.log|INFO]Unsloth: Patched 62 FLA autotune caches: fla.modules.fused_norm_gate.layer_norm_gated_bwd_kernel, fla.modules.fused_norm_gate.layer_norm_gated_bwd_kernel1, fla.modules.fused_norm_gate.layer_norm_gated_fwd_kernel, fla.modules.fused_norm_gate.layer_norm_gated_fwd_kernel1, fla.modules.l2norm.l2norm_bwd_kernel, fla.modules.l2norm.l2norm_bwd_kernel1, fla.modules.l2norm.l2norm_fwd_kernel, fla.modules.l2norm.l2norm_fwd_kernel1, fla.ops.common.chunk_delta_h.chunk_gated_delta_rule_bwd_kernel_dhu_blockdim64, fla.ops.common.chunk_delta_h.chunk_gated_delta_rule_fwd_kernel_h_blockdim64, fla.ops.common.chunk_h.chunk_bwd_kernel_dh, fla.ops.common.chunk_h.chunk_fwd_kernel_h, fla.ops.common.chunk_o.chunk_bwd_kernel_dqkwg, fla.ops.common.chunk_o.chunk_bwd_kernel_dv, fla.ops.common.chunk_o.chunk_bwd_kernel_dv_local, fla.ops.common.chunk_o.chunk_fwd_kernel_o, fla.ops.common.fused_recurrent.fused_recurrent_bwd_kernel, fla.ops.common.fused_recurrent.fused_recurrent_fwd_kernel, fla.ops.cp.chunk_delta_h.merge_fwd_bwd_kernel, fla.ops.cp.chunk_delta_h.pre_process_bwd_kernel_merged, fla.ops.cp.chunk_delta_h.pre_process_fwd_kernel_merged, fla.ops.gated_delta_rule.chunk_fwd.chunk_gated_delta_rule_fwd_kkt_solve_kernel, fla.ops.gated_delta_rule.gate.gdn_gate_bwd_kernel, fla.ops.gated_delta_rule.gate.gdn_gate_chunk_cumsum_scalar_kernel, fla.ops.gated_delta_rule.gate.gdn_gate_fwd_kernel, fla.ops.gated_delta_rule.wy_fast.prepare_wy_repr_bwd_kernel, fla.ops.gated_delta_rule.wy_fast.recompute_w_u_fwd_kernel, fla.ops.gla.chunk.chunk_gla_bwd_kernel_dA, fla.ops.gla.chunk.chunk_gla_bwd_kernel_dv, fla.ops.gla.chunk.chunk_gla_bwd_kernel_inter, fla.ops.gla.chunk.chunk_gla_bwd_kernel_intra, fla.ops.gla.chunk.chunk_gla_fwd_A_kernel_intra_sub_inter, fla.ops.gla.chunk.chunk_gla_fwd_A_kernel_intra_sub_intra, fla.ops.gla.chunk.chunk_gla_fwd_A_kernel_intra_sub_intra_merge, fla.ops.gla.chunk.chunk_gla_fwd_A_kernel_intra_sub_intra_split, fla.ops.gla.chunk.chunk_gla_fwd_kernel_o, fla.ops.kda.chunk_bwd.chunk_kda_bwd_kernel_dAv, fla.ops.kda.chunk_bwd.chunk_kda_bwd_kernel_wy_dqkg_fused, fla.ops.kda.chunk_intra.chunk_kda_bwd_kernel_intra, fla.ops.kda.chunk_intra.chunk_kda_fwd_kernel_inter_solve_fused, fla.ops.kda.chunk_intra.chunk_kda_fwd_kernel_intra_sub_chunk, fla.ops.kda.chunk_intra_token_parallel.chunk_kda_fwd_kernel_intra_token_parallel, fla.ops.kda.gate.kda_gate_bwd_kernel, fla.ops.kda.gate.kda_gate_chunk_cumsum_vector_kernel, fla.ops.kda.gate.kda_gate_fwd_kernel, fla.ops.kda.wy_fast.prepare_wy_repr_bwd_kda_kernel, fla.ops.kda.wy_fast.recompute_w_u_fwd_kda_kernel, fla.ops.utils.cumsum.chunk_global_cumsum_scalar_kernel, fla.ops.utils.cumsum.chunk_global_cumsum_vector_kernel, fla.ops.utils.cumsum.chunk_local_cumsum_scalar_kernel, fla.ops.utils.cumsum.chunk_local_cumsum_vector_kernel, fla.ops.utils.index.prepare_position_ids_kernel, fla.ops.utils.logsumexp.logsumexp_fwd_kernel, fla.ops.utils.matmul.matmul_kernel, fla.ops.utils.pack.packunpack_sequence_kernel, fla.ops.utils.pooling.mean_pooling_bwd_kernel, fla.ops.utils.pooling.mean_pooling_fwd_kernel, fla.ops.utils.softmax.softmax_bwd_kernel, fla.ops.utils.softmax.softmax_fwd_kernel, fla.ops.utils.solve_tril.merge_16x16_to_32x32_inverse_kernel, fla.ops.utils.solve_tril.merge_16x16_to_64x64_inverse_kernel, fla.ops.utils.solve_tril.solve_tril_16x16_kernel
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Processor.__call__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3RMSNorm.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Attention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmDepthDecoderForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration._merge_input_ids_with_input_values.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.predict.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.correct.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.scale_corrected_output.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nModel.get_placeholder_mask.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextMLP.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4MultimodalEmbedder.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteMoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE Lite for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE (standard) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4 MoE (current layout) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched ERNIE 4.5 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralModel.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.convert_moe_packed_tensors.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.dequantize_convertops.
+[unsloth_zoo.log|INFO]Unsloth: Successfully added convert_moe_packed_tensors_cpu function.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.get_param.
+[unsloth_zoo.log|INFO]Unsloth: ParamWrapper.get_param exposes the logical shape of FP4-packed experts
+The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[huggingface_hub._login|INFO]The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[unsloth_zoo.log|INFO]Failed to login to huggingface using token with error: Cannot reach https://huggingface.co/api/whoami-v2: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.
+The fast path is not available because one of the required library is not installed. Falling back to torch implementation. To install follow https://github.com/fla-org/flash-linear-attention#installation and https://github.com/Dao-AILab/causal-conv1d
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.0.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.1.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.2.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.3.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.4.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.5.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.6.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.7.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.8.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.9.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.10.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.11.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.12.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.13.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.14.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.15.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.16.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.17.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.18.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.19.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.20.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.21.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.22.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.23.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.24.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.25.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.26.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.27.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.28.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.29.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.30.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.31.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.32.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.33.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.34.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.35.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.36.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.37.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.38.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.language_model.layers.39.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([256, 1024, 2048]), torch.Size([256, 2048, 512]))
+[unsloth.import_fixes|INFO]Unsloth: re-scoped 1 and dropped 0 checkpoint renaming(s) that transformers merged into Qwen3_5MoeForConditionalGeneration's conversion mapping from a submodule, where they rewrite the model's own weight names into names it does not have (transformers PR #45567, released in 5.6.0)
+Loading weights:   0%|          | 0/1026 [00:00<?, ?it/s]Loading weights:   0%|          | 1/1026 [00:00<03:04,  5.54it/s]Loading weights:   0%|          | 2/1026 [00:00<02:56,  5.81it/s]Loading weights:   1%|▏         | 13/1026 [00:00<00:28, 35.88it/s]Loading weights:   2%|▏         | 18/1026 [00:00<00:32, 30.73it/s]Loading weights:   3%|▎         | 31/1026 [00:00<00:18, 53.61it/s]Loading weights:   4%|▎         | 38/1026 [00:00<00:20, 47.78it/s]Loading weights:   5%|▍         | 49/1026 [00:01<00:16, 59.98it/s]Loading weights:   5%|▌         | 56/1026 [00:01<00:19, 51.03it/s]Loading weights:   6%|▌         | 62/1026 [00:01<00:27, 34.60it/s]Loading weights:   8%|▊         | 82/1026 [00:01<00:15, 60.26it/s]Loading weights:   9%|▉         | 91/1026 [00:01<00:16, 56.11it/s]Loading weights:  10%|▉         | 100/1026 [00:02<00:15, 61.65it/s]Loading weights:  11%|█         | 108/1026 [00:02<00:17, 53.92it/s]Loading weights:  12%|█▏        | 118/1026 [00:02<00:14, 61.85it/s]Loading weights:  12%|█▏        | 126/1026 [00:02<00:16, 54.64it/s]Loading weights:  13%|█▎        | 133/1026 [00:02<00:21, 42.36it/s]Loading weights:  15%|█▍        | 151/1026 [00:02<00:13, 64.65it/s]Loading weights:  16%|█▌        | 160/1026 [00:03<00:14, 60.28it/s]Loading weights:  16%|█▋        | 169/1026 [00:03<00:13, 65.07it/s]Loading weights:  17%|█▋        | 177/1026 [00:03<00:14, 57.48it/s]Loading weights:  18%|█▊        | 187/1026 [00:03<00:12, 65.80it/s]Loading weights:  19%|█▉        | 195/1026 [00:03<00:14, 57.43it/s]Loading weights:  20%|█▉        | 202/1026 [00:04<00:19, 43.20it/s]Loading weights:  21%|██▏       | 220/1026 [00:04<00:13, 60.73it/s]Loading weights:  22%|██▏       | 228/1026 [00:04<00:14, 55.23it/s]Loading weights:  23%|██▎       | 238/1026 [00:04<00:12, 62.78it/s]Loading weights:  24%|██▍       | 246/1026 [00:04<00:14, 55.60it/s]Loading weights:  25%|██▍       | 256/1026 [00:04<00:12, 63.91it/s]Loading weights:  26%|██▌       | 264/1026 [00:04<00:13, 56.66it/s]Loading weights:  26%|██▋       | 271/1026 [00:05<00:17, 43.73it/s]Loading weights:  28%|██▊       | 289/1026 [00:05<00:11, 65.83it/s]Loading weights:  29%|██▉       | 298/1026 [00:05<00:11, 61.26it/s]Loading weights:  30%|██▉       | 307/1026 [00:05<00:10, 66.03it/s]Loading weights:  31%|███       | 315/1026 [00:05<00:15, 46.09it/s]Loading weights:  32%|███▏      | 325/1026 [00:06<00:16, 41.73it/s]Loading weights:  32%|███▏      | 331/1026 [00:06<00:17, 39.30it/s]Loading weights:  33%|███▎      | 336/1026 [00:06<00:21, 32.19it/s]Loading weights:  35%|███▍      | 358/1026 [00:06<00:11, 58.86it/s]Loading weights:  36%|███▌      | 366/1026 [00:07<00:12, 51.57it/s]Loading weights:  37%|███▋      | 376/1026 [00:07<00:13, 48.69it/s]Loading weights:  37%|███▋      | 382/1026 [00:07<00:14, 44.09it/s]Loading weights:  38%|███▊      | 394/1026 [00:07<00:11, 56.77it/s]Loading weights:  39%|███▉      | 402/1026 [00:07<00:11, 52.04it/s]Loading weights:  40%|███▉      | 409/1026 [00:08<00:14, 41.41it/s]Loading weights:  42%|████▏     | 427/1026 [00:08<00:09, 62.20it/s]Loading weights:  42%|████▏     | 435/1026 [00:08<00:10, 55.37it/s]Loading weights:  43%|████▎     | 445/1026 [00:08<00:09, 62.30it/s]Loading weights:  44%|████▍     | 453/1026 [00:08<00:10, 53.21it/s]Loading weights:  45%|████▌     | 463/1026 [00:08<00:09, 60.48it/s]Loading weights:  46%|████▌     | 471/1026 [00:09<00:10, 53.30it/s]Loading weights:  47%|████▋     | 478/1026 [00:09<00:13, 41.11it/s]Loading weights:  48%|████▊     | 496/1026 [00:09<00:08, 62.36it/s]Loading weights:  49%|████▉     | 504/1026 [00:09<00:09, 55.57it/s]Loading weights:  50%|█████     | 514/1026 [00:09<00:08, 62.80it/s]Loading weights:  51%|█████     | 522/1026 [00:09<00:09, 54.56it/s]Loading weights:  52%|█████▏    | 532/1026 [00:10<00:07, 62.69it/s]Loading weights:  53%|█████▎    | 540/1026 [00:10<00:08, 55.65it/s]Loading weights:  53%|█████▎    | 547/1026 [00:10<00:11, 42.67it/s]Loading weights:  55%|█████▌    | 565/1026 [00:10<00:07, 64.95it/s]Loading weights:  56%|█████▌    | 574/1026 [00:10<00:07, 58.56it/s]Loading weights:  57%|█████▋    | 583/1026 [00:10<00:07, 62.99it/s]Loading weights:  58%|█████▊    | 591/1026 [00:11<00:07, 55.69it/s]Loading weights:  59%|█████▊    | 601/1026 [00:11<00:06, 63.27it/s]Loading weights:  59%|█████▉    | 609/1026 [00:11<00:07, 55.10it/s]Loading weights:  60%|██████    | 616/1026 [00:11<00:10, 38.23it/s]Loading weights:  62%|██████▏   | 634/1026 [00:11<00:06, 58.95it/s]Loading weights:  63%|██████▎   | 642/1026 [00:12<00:07, 53.53it/s]Loading weights:  64%|██████▎   | 652/1026 [00:12<00:06, 59.67it/s]Loading weights:  64%|██████▍   | 660/1026 [00:12<00:06, 54.33it/s]Loading weights:  65%|██████▌   | 670/1026 [00:12<00:05, 61.91it/s]Loading weights:  66%|██████▌   | 678/1026 [00:12<00:06, 54.69it/s]Loading weights:  67%|██████▋   | 685/1026 [00:13<00:08, 41.82it/s]Loading weights:  79%|███████▉  | 809/1026 [00:13<00:00, 249.11it/s]Loading weights:  94%|█████████▍| 963/1026 [00:13<00:00, 504.97it/s]Loading weights: 100%|██████████| 1026/1026 [00:13<00:00, 77.39it/s]
+[unsloth.import_fixes|INFO]Unsloth: re-scoped 1 and dropped 0 checkpoint renaming(s) that transformers merged into Qwen3_5MoeForConditionalGeneration's conversion mapping from a submodule, where they rewrite the model's own weight names into names it does not have (transformers PR #45567, released in 5.6.0)
+[unsloth_zoo.log|INFO]Unsloth: Making `model.base_model.model.model.language_model` require gradients
+[unsloth_zoo.log|INFO]Unsloth: Registered output gradient hook on `model.base_model.model.model.language_model` input embeddings.
+**********
+
+Unsloth: Failed compiling function Qwen3_5MoeGatedDeltaNet since there is padding done.
+Unsloth: Disabling compile for Qwen3_5MoeGatedDeltaNet since it's marked for disabling.
+Unsloth: Compiled module Qwen3_5MoeVisionRotaryEmbedding.
+Unsloth: Compiled module Qwen3_5MoeTextRotaryEmbedding.
+Unsloth: Compiled module Qwen3_5MoeRMSNormGated.
+Unsloth: Compiled module Qwen3_5MoeMLP.
+Unsloth: Compiled module Qwen3_5MoeExperts.
+Unsloth: Compiled module Qwen3_5MoeTopKRouter.
+Unsloth: Compiled module Qwen3_5MoeSparseMoeBlock.
+Unsloth: Compiled module Qwen3_5MoeRMSNorm.
+Unsloth: Compiled module Qwen3_5MoeVisionMLP.
+Unsloth: Compiled module Qwen3_5MoeVisionPatchEmbed.
+Unsloth: Compiled module Qwen3_5MoeVisionPatchMerger.
+Unsloth: Fast Attention patch for Qwen3_5MoeAttention.
+Unsloth: Fast Attention patch for Qwen3_5MoeVisionAttention.
+(4) Unsloth skipping patching fast linear cross entropy for Qwen3_5MoeForCausalLM
+(1) Unsloth skipping patching fast linear cross entropy for Qwen3_5MoeForCausalLM
+(4) Unsloth skipping patching fast linear cross entropy for Qwen3_5MoeForCausalLM
+(2) Unsloth skipping patching fast linear cross entropy for Qwen3_5MoeForConditionalGeneration
+[2/3 pattern] Successfully patched fast linear cross entropy for Qwen3_5MoeForConditionalGeneration
+Unsloth: Fast fused linear cross entropy patch for Qwen3_5MoeForConditionalGeneration.
+Unsloth: Cannot compile function apply_mask_to_padding_states since disabled keyword is in it.
+Unsloth: Compiled function torch_causal_conv1d_update.
+Unsloth: Compiled function l2norm.
+Unsloth: Compiled function torch_chunk_gated_delta_rule.
+Unsloth: Compiled function torch_recurrent_gated_delta_rule.
+Unsloth: Compiled function rotate_half.
+Unsloth: Compiled function apply_rotary_pos_emb.
+Unsloth: Compiled function repeat_kv.
+Unsloth: Compiled function eager_attention_forward.
+Unsloth: Compiled function apply_rotary_pos_emb_vision.
+Unsloth: Compiled function load_balancing_loss_func.
+==((====))==  Unsloth 2026.9.14: Fast Qwen3_5_MoE patching. Transformers: 5.5.0.
+   \\   /|    NVIDIA GeForce RTX 5090. Num GPUs = 1. Max memory: 31.357 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.12.1+cu130. CUDA: 12.0. CUDA Toolkit: 13.0. Triton: 3.7.1
+\        /    Bfloat16 = TRUE. FA [Xformers = 0.0.35. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Explicit target_modules are constrained by the finetune_(vision|language|attention|mlp) filters; adapters attach only where both select.
+LOAD OK {"fam": "qwen3_5", "framework": "unsloth", "arm": "unsloth", "model_type": "qwen3_5_moe", "n_layers": 40, "load_s": 51.2, "verify": {"n_quantized": null, "n_unquantized": null}, "n_attn4": 0, "n_patched": 0, "structural_expected_n_attn4": null, "detector_version": null, "trainable_params": 926187520, "trainable_tensors": 240, "trainable_by_group": {"attention": 3440640, "experts": 922746880, "other": 0}, "trainable_mismatch": null, "dtypes_before": {"torch.float32": 240}, "dtypes_after": {"torch.float32": 240}, "lora_cast_to_fp32": 0, "adapter_dtype": "fp32", "lora_init": "matched:3407", "matched_init": {"seed": 3407, "n_slots_set": 20520, "n_slots_expected": 20520, "expected_parts": {"n_attention_projections": 40, "n_layers": 40, "n_experts": 256}, "unmapped": [], "n_unmapped": 0, "complete": true, "kinds": {"down": 10240, "gate_up": 10240, "q": 10, "k": 10, "v": 10, "o": 10}, "b_nonzero": [], "hidden": {"value": 2048, "rule": "config.hidden_size"}, "mapping_rules": {"base_model.model.model.language_model.layers.0.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.language_model.layers.0.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden", "base_model.model.model.language_model.layers.1.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.language_model.layers.1.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden", "base_model.model.model.language_model.layers.2.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.language_model.layers.2.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden", "base_model.model.model.language_model.layers.3.self_attn.q_proj": "q by name (attention)", "base_model.model.model.language_model.layers.3.self_attn.k_proj": "k by name (attention)", "base_model.model.model.language_model.layers.3.self_attn.v_proj": "v by name (attention)", "base_model.model.model.language_model.layers.3.self_attn.o_proj": "o by name (attention)", "base_model.model.model.language_model.layers.3.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.language_model.layers.3.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden"}, "n_mapping_rules": 120, "distribution": "A[slot] ~ U(-b, b), b = 1/sqrt(fan_in), fan_in = in-width of the [r, in] slot = PEFT's kaiming_uniform(a=sqrt(5)) on a [r, in] weight; drawn in fp32 on CPU from torch.Generator().manual_seed(int.from_bytes(sha256('<seed>|<layer>|<kind>|<expert>')[:8], 'big')); B left as built and asserted zero"}, "frozen_base_probe": {"slots": {"gate_up": {"sha": "c798a2390c7a87d5", "regime": "nf4/64+dq", "control_detects_flip": true}, "down": {"sha": "20146c64832c579e", "regime": "nf4/64+dq", "control_detects_flip": true}, "q_proj": {"sha": "b44f6f9750532910", "regime": "nf4/64+dq", "control_detects_flip": true}}, "control_detects_flip": true, "errors": []}, "non_adapter_trainable": [], "census": {"Params4bit_expert_stacks": 80, "Params4bit_other": 458, "Linear4bit": 498, "Linear_bf16": 3, "Linear_fp32": 0, "Experts4bit": 0, "ExpertsLoRA": 0, "LoRALinear": 0, "experts_modules": 40, "experts_module_classes": {"Qwen3_5MoeExperts": 40}, "router_gate": [{"name": "base_model.model.model.language_model.layers.0.mlp.gate", "cls": "Qwen3_5MoeTopKRouter", "dtype": "torch.bfloat16"}, {"name": "base_model.model.model.language_model.layers.1.mlp.gate", "cls": "Qwen3_5MoeTopKRouter", "dtype": "torch.bfloat16"}], "lm_head": {"cls": "Linear", "dtype": "torch.bfloat16"}, "Params4bit_expert_linears": 0, "expert_param_classes": {"Params4bit": 80}}, "tokenizer_agree": "unchecked: Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\nGenerate a sentence that starts with \"We all wish\".\n\n### Input:\n\n\n### Response:\nWe all wish to live a fulfilling and contented life filled with joy, love and success.<|im_end|>. Failed with Invalid base64-encoded string: number of data characters (269) cannot be 1 more than a multiple of 4", "ckpt": "unsloth", "probes": {}, "attn4_probe": null}
+ENGAGE Unsloth: Failed compiling function Qwen3_5MoeGatedDeltaNet since there is padding done.
+ENGAGE Unsloth: Disabling compile for Qwen3_5MoeGatedDeltaNet since it's marked for disabling.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeVisionRotaryEmbedding.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeTextRotaryEmbedding.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeRMSNormGated.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeMLP.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeExperts.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeTopKRouter.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeSparseMoeBlock.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeRMSNorm.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeVisionMLP.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeVisionPatchEmbed.
+ENGAGE Unsloth: Compiled module Qwen3_5MoeVisionPatchMerger.
+ENGAGE Unsloth: Fast Attention patch for Qwen3_5MoeAttention.
+ENGAGE Unsloth: Fast Attention patch for Qwen3_5MoeVisionAttention.
+ENGAGE (4) Unsloth skipping patching fast linear cross entropy for Qwen3_5MoeForCausalLM
+ENGAGE NO 'Enabling LoRA on MoE parameters' banner on stdout (the census below decides)
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:5429: UserWarning: 'has_cuda' is deprecated, please use 'torch.backends.cuda.is_built()'
+  return original(name)
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:5429: UserWarning: 'has_cudnn' is deprecated, please use 'torch.backends.cudnn.is_available()'
+  return original(name)
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:5429: UserWarning: 'has_mps' is deprecated, please use 'torch.backends.mps.is_built()'
+  return original(name)
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:5429: UserWarning: 'has_mkldnn' is deprecated, please use 'torch.backends.mkldnn.is_available()'
+  return original(name)
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused__to_copy_bmm_expand_select_slice_transpose_unsqueeze_view_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:01<00:01,  1.04s/it, triton_poi_fused__to_copy_bmm_expand_select_slice_transpose_unsqueeze_view_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:01<00:01,  1.04s/it, triton_poi_fused__to_copy_bmm_cat_cos_expand_select_sin_slice_transpose_unsqueeze_view_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:01<00:00,  1.92it/s, triton_poi_fused__to_copy_bmm_cat_cos_expand_select_sin_slice_transpose_unsqueeze_view_1]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.83it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.83it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Autotuning kernel l2norm_fwd_kernel with config BT: 8, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 16, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 32, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 64, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 128, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 8, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 16, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 32, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 64, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 128, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 8, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 16, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 32, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 64, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 128, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 8, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 16, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 32, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 64, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 128, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 8, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 16, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 32, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 64, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_fwd_kernel with config BT: 128, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Triton autotuning for function l2norm_fwd_kernel,
+with key as (128, 1, 'torch.bfloat16', 'torch.bfloat16', 'torch.float32'),
+finished after 7.59s,
+best config selected: BT: 64, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None;
+Autotuning kernel chunk_local_cumsum_scalar_kernel with config num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_local_cumsum_scalar_kernel with config num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_local_cumsum_scalar_kernel with config num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_local_cumsum_scalar_kernel with config num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Triton autotuning for function chunk_local_cumsum_scalar_kernel,
+with key as (1, 32, 64, False, False, 'torch.float32', 'torch.float32'),
+finished after 0.63s,
+best config selected: num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None;
+Autotuning kernel chunk_gated_delta_rule_fwd_kkt_solve_kernel with config BK: 32, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_fwd_kkt_solve_kernel with config BK: 32, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_fwd_kkt_solve_kernel with config BK: 32, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_fwd_kkt_solve_kernel with config BK: 64, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_fwd_kkt_solve_kernel with config BK: 64, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_fwd_kkt_solve_kernel with config BK: 64, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Triton autotuning for function chunk_gated_delta_rule_fwd_kkt_solve_kernel,
+with key as (32, 32, 128, 16, 'torch.bfloat16', 'torch.float32', 'torch.bfloat16', 'torch.bfloat16'),
+finished after 7.29s,
+best config selected: BK: 64, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None;
+Autotuning kernel recompute_w_u_fwd_kernel with config num_warps: 2, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel recompute_w_u_fwd_kernel with config num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel recompute_w_u_fwd_kernel with config num_warps: 2, num_ctas: 1, num_stages: 4, maxnreg: None
+Autotuning kernel recompute_w_u_fwd_kernel with config num_warps: 4, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel recompute_w_u_fwd_kernel with config num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel recompute_w_u_fwd_kernel with config num_warps: 4, num_ctas: 1, num_stages: 4, maxnreg: None
+Autotuning kernel recompute_w_u_fwd_kernel with config num_warps: 8, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel recompute_w_u_fwd_kernel with config num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel recompute_w_u_fwd_kernel with config num_warps: 8, num_ctas: 1, num_stages: 4, maxnreg: None
+Triton autotuning for function recompute_w_u_fwd_kernel,
+with key as (32, 32, 128, 128, 64, 64, 64, False, 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32'),
+finished after 4.55s,
+best config selected: num_warps: 4, num_ctas: 1, num_stages: 4, maxnreg: None;
+Autotuning kernel chunk_gated_delta_rule_fwd_kernel_h_blockdim64 with config BV: 32, num_warps: 2, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_fwd_kernel_h_blockdim64 with config BV: 64, num_warps: 2, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_fwd_kernel_h_blockdim64 with config BV: 32, num_warps: 2, num_ctas: 1, num_stages: 1, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_fwd_kernel_h_blockdim64 with config BV: 64, num_warps: 2, num_ctas: 1, num_stages: 1, maxnreg: None
+Triton autotuning for function chunk_gated_delta_rule_fwd_kernel_h_blockdim64,
+with key as (32, 32, 128, 128, 64, False, 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32', 'torch.bfloat16'),
+finished after 3.19s,
+best config selected: BV: 32, num_warps: 2, num_ctas: 1, num_stages: 2, maxnreg: None;
+Autotuning kernel chunk_fwd_kernel_o with config BK: 128, BV: 128, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_fwd_kernel_o with config BK: 64, BV: 64, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_fwd_kernel_o with config BK: 32, BV: 32, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Triton autotuning for function chunk_fwd_kernel_o,
+with key as (32, 32, 128, 128, 64, False, 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32', 'torch.bfloat16'),
+finished after 1.69s,
+best config selected: BK: 32, BV: 32, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None;
+Autotuning kernel layer_norm_gated_fwd_kernel with config BT: 16, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_fwd_kernel with config BT: 16, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_fwd_kernel with config BT: 16, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_fwd_kernel with config BT: 32, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_fwd_kernel with config BT: 32, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_fwd_kernel with config BT: 32, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_fwd_kernel with config BT: 64, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_fwd_kernel with config BT: 64, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_fwd_kernel with config BT: 64, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Triton autotuning for function layer_norm_gated_fwd_kernel,
+with key as (128, 1, True, False, False, True, 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32', 'torch.float32'),
+finished after 2.47s,
+best config selected: BT: 16, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None;
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 1534.69it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_poi_fused_gemm_4bit_mul_silu_t_view_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.89it/s, triton_poi_fused_gemm_4bit_mul_silu_t_view_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.89it/s, triton_poi_fused_gemm_4bit_mul_silu_t_view_0]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_per_fused__softmax__to_copy_prepare_softmax_online_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  7.88it/s, triton_per_fused__softmax__to_copy_prepare_softmax_online_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  7.88it/s, triton_red_fused_div_sum_1]                                 Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 11.37it/s, triton_red_fused_div_sum_1]
+[unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  4.12it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  4.12it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  5.37it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  5.37it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  3.43it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  3.43it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00,  6.23it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 1177.84it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 1357.38it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=76][vocab_size=248320][n_chunks=1]
+Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s, triton_red_fused__to_copy_prepare_softmax_online_0]Unsloth: Compiling kernels:  14%|█▍        | 1/7 [00:00<00:00, 21.81it/s, triton_per_fused__to_copy_prepare_softmax_online_1]Unsloth: Compiling kernels:  29%|██▊       | 2/7 [00:00<00:00,  8.07it/s, triton_per_fused__to_copy_prepare_softmax_online_1]Unsloth: Compiling kernels:  29%|██▊       | 2/7 [00:00<00:00,  8.07it/s, triton_red_fused__to_copy_prepare_softmax_online_2]Unsloth: Compiling kernels:  43%|████▎     | 3/7 [00:00<00:00,  8.07it/s, triton_per_fused__to_copy_prepare_softmax_online_3]Unsloth: Compiling kernels:  57%|█████▋    | 4/7 [00:00<00:00,  8.07it/s, triton_red_fused__log_softmax__to_copy_add_copy__div_nll_loss_forward_4]Unsloth: Compiling kernels:  71%|███████▏  | 5/7 [00:00<00:00,  8.07it/s, triton_red_fused__log_softmax__log_softmax_backward_data__to_copy_arange_div_eq_expand_nll_loss_backward_ones_like_scalar_tensor_view_5]Unsloth: Compiling kernels:  86%|████████▌ | 6/7 [00:00<00:00,  8.07it/s, triton_poi_fused_copy__6]                                                                                                               Unsloth: Compiling kernels: 100%|██████████| 7/7 [00:00<00:00, 22.35it/s, triton_poi_fused_copy__6]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=243][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=128][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=422][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=77][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=248320][n_chunks=1]
+PROLOGUE {"phase_seconds": {"preamble": 2.571, "snapshot": 0.0, "load_weights": 41.413, "census": 4.027, "frozen_probe": 0.139, "trainable_sha": 5.095, "counters": 0.092, "c1_before": 58.033, "eval0": 46.254, "optimizer": 0.444}, "phase_budget_s": 1260.0, "prologue_s": 167.84, "prologue_unattributed_s": 9.774}
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused__to_copy_bmm_expand_select_slice_transpose_unsqueeze_view_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  5.99it/s, triton_poi_fused__to_copy_bmm_expand_select_slice_transpose_unsqueeze_view_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  5.99it/s, triton_poi_fused__to_copy_bmm_cat_cos_expand_select_sin_slice_transpose_unsqueeze_view_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00,  5.91it/s, triton_poi_fused__to_copy_bmm_cat_cos_expand_select_sin_slice_transpose_unsqueeze_view_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00,  5.92it/s, triton_poi_fused__to_copy_bmm_cat_cos_expand_select_sin_slice_transpose_unsqueeze_view_1]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  4.01it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  4.00it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 1804.00it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.99it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.98it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  5.35it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  5.35it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  3.35it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  3.35it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00,  4.67it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00,  4.40it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  4.02it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  4.02it/s, triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_add_div_expand_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.94it/s, triton_red_fused__to_copy_add_div_expand_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.94it/s, triton_red_fused__to_copy_add_div_expand_mul_pow_sum_0]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=72][vocab_size=248320][n_chunks=1]
+Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s, triton_red_fused__to_copy_prepare_softmax_online_0]Unsloth: Compiling kernels:  14%|█▍        | 1/7 [00:00<00:00, 20.89it/s, triton_per_fused__to_copy_prepare_softmax_online_1]Unsloth: Compiling kernels:  29%|██▊       | 2/7 [00:00<00:00, 10.13it/s, triton_per_fused__to_copy_prepare_softmax_online_1]Unsloth: Compiling kernels:  29%|██▊       | 2/7 [00:00<00:00, 10.13it/s, triton_red_fused__to_copy_prepare_softmax_online_2]Unsloth: Compiling kernels:  43%|████▎     | 3/7 [00:00<00:00, 10.13it/s, triton_per_fused__to_copy_prepare_softmax_online_3]Unsloth: Compiling kernels:  57%|█████▋    | 4/7 [00:00<00:00, 10.13it/s, triton_red_fused__log_softmax__to_copy_add_copy__div_nll_loss_forward_4]Unsloth: Compiling kernels:  71%|███████▏  | 5/7 [00:00<00:00, 10.13it/s, triton_red_fused__log_softmax__log_softmax_backward_data__to_copy_arange_div_eq_expand_nll_loss_backward_ones_like_scalar_tensor_view_5]Unsloth: Compiling kernels:  86%|████████▌ | 6/7 [00:00<00:00, 10.13it/s, triton_poi_fused_copy__6]                                                                                                               Unsloth: Compiling kernels: 100%|██████████| 7/7 [00:00<00:00, 31.07it/s, triton_poi_fused_copy__6]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  6.58it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  6.58it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_div_expand_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  6.56it/s, triton_per_fused__to_copy_add_div_expand_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  6.55it/s, triton_per_fused__to_copy_add_div_expand_mul_pow_sum_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  9.91it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  9.90it/s, triton_per_fused__to_copy_add_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_div_expand_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 12.93it/s, triton_per_fused__to_copy_add_div_expand_mul_pow_sum_0]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  3.58it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  3.58it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00,  5.67it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_mul_neg_slice_slice_backward_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  4.30it/s, triton_poi_fused_add_mul_neg_slice_slice_backward_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  4.30it/s, triton_poi_fused_add_mul_neg_slice_slice_backward_unsqueeze_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00,  6.46it/s, triton_poi_fused_add_mul_neg_slice_slice_backward_unsqueeze_1]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_poi_fused_gemm_4bit_mul_silu_t_view_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  5.52it/s, triton_poi_fused_gemm_4bit_mul_silu_t_view_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  5.52it/s, triton_poi_fused_gemm_4bit_mul_silu_t_view_0]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_dequantize_4bit_t_view_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 20.64it/s, triton_poi_fused_mul_silu_silu_backward_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 10.64it/s, triton_poi_fused_mul_silu_silu_backward_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 10.64it/s, triton_poi_fused_mul_silu_silu_backward_1]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_per_fused__softmax__to_copy_prepare_softmax_online_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 19.02it/s, triton_red_fused_div_sum_1]                         Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 21.54it/s, triton_red_fused_div_sum_1]
+Unsloth: Compiling kernels:   0%|          | 0/3 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/3 [00:00<?, ?it/s, triton_poi_fused_add_div_expand_new_zeros_scatter_0]Unsloth: Compiling kernels:  33%|███▎      | 1/3 [00:00<00:00, 28.00it/s, triton_red_fused_add_div_expand_mul_neg_new_zeros_scatter_sum_1]Unsloth: Compiling kernels:  67%|██████▋   | 2/3 [00:00<00:00, 16.24it/s, triton_red_fused_add_div_expand_mul_neg_new_zeros_scatter_sum_1]Unsloth: Compiling kernels:  67%|██████▋   | 2/3 [00:00<00:00, 16.24it/s, triton_per_fused__softmax_backward_data__to_copy_add_2]         Unsloth: Compiling kernels: 100%|██████████| 3/3 [00:00<00:00, 24.13it/s, triton_per_fused__softmax_backward_data__to_copy_add_2]
+Autotuning kernel layer_norm_gated_bwd_kernel with config BT: 16, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_bwd_kernel with config BT: 16, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_bwd_kernel with config BT: 16, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_bwd_kernel with config BT: 32, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_bwd_kernel with config BT: 32, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_bwd_kernel with config BT: 32, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_bwd_kernel with config BT: 64, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_bwd_kernel with config BT: 64, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel layer_norm_gated_bwd_kernel with config BT: 64, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Triton autotuning for function layer_norm_gated_bwd_kernel,
+with key as (128, 1, True, False, True, 'torch.bfloat16', 'torch.bfloat16', 'torch.float32', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32', 'torch.float32'),
+finished after 3.26s,
+best config selected: BT: 16, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None;
+Autotuning kernel chunk_bwd_kernel_dv_local with config num_warps: 2, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dv_local with config num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dv_local with config num_warps: 2, num_ctas: 1, num_stages: 4, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dv_local with config num_warps: 4, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dv_local with config num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dv_local with config num_warps: 4, num_ctas: 1, num_stages: 4, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dv_local with config num_warps: 8, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dv_local with config num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dv_local with config num_warps: 8, num_ctas: 1, num_stages: 4, maxnreg: None
+Triton autotuning for function chunk_bwd_kernel_dv_local,
+with key as (32, 32, 128, 128, 64, 64, 64, True, 'torch.bfloat16', 'torch.bfloat16', 'torch.float32', 'torch.bfloat16', 'torch.bfloat16'),
+finished after 4.48s,
+best config selected: num_warps: 2, num_ctas: 1, num_stages: 4, maxnreg: None;
+Autotuning kernel chunk_gated_delta_rule_bwd_kernel_dhu_blockdim64 with config BV: 32, num_warps: 2, num_ctas: 1, num_stages: 1, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_bwd_kernel_dhu_blockdim64 with config BV: 64, num_warps: 2, num_ctas: 1, num_stages: 1, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_bwd_kernel_dhu_blockdim64 with config BV: 32, num_warps: 4, num_ctas: 1, num_stages: 1, maxnreg: None
+Autotuning kernel chunk_gated_delta_rule_bwd_kernel_dhu_blockdim64 with config BV: 64, num_warps: 4, num_ctas: 1, num_stages: 1, maxnreg: None
+Triton autotuning for function chunk_gated_delta_rule_bwd_kernel_dhu_blockdim64,
+with key as (32, 32, 128, 128, 64, True, False, 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16'),
+finished after 3.80s,
+best config selected: BV: 32, num_warps: 4, num_ctas: 1, num_stages: 1, maxnreg: None;
+Autotuning kernel chunk_bwd_kernel_dqkwg with config num_warps: 2, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dqkwg with config num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dqkwg with config num_warps: 2, num_ctas: 1, num_stages: 4, maxnreg: None
+Autotuning failed with out of resource: shared memory, Required: 122884, Hardware limit: 101376. Reducing block sizes or `num_stages` may help.
+Autotuning kernel chunk_bwd_kernel_dqkwg with config num_warps: 4, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dqkwg with config num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dqkwg with config num_warps: 4, num_ctas: 1, num_stages: 4, maxnreg: None
+Autotuning failed with out of resource: shared memory, Required: 122888, Hardware limit: 101376. Reducing block sizes or `num_stages` may help.
+Autotuning kernel chunk_bwd_kernel_dqkwg with config num_warps: 8, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dqkwg with config num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel chunk_bwd_kernel_dqkwg with config num_warps: 8, num_ctas: 1, num_stages: 4, maxnreg: None
+Autotuning failed with out of resource: shared memory, Required: 122896, Hardware limit: 101376. Reducing block sizes or `num_stages` may help.
+Triton autotuning for function chunk_bwd_kernel_dqkwg,
+with key as (32, 32, 128, 128, 64, 64, 64, True, False, True, False, 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32'),
+finished after 9.84s,
+best config selected: num_warps: 4, num_ctas: 1, num_stages: 2, maxnreg: None;
+Autotuning kernel prepare_wy_repr_bwd_kernel with config num_warps: 2, num_ctas: 1, num_stages: 2, maxnreg: None
+Autotuning kernel prepare_wy_repr_bwd_kernel with config num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel prepare_wy_repr_bwd_kernel with config num_warps: 2, num_ctas: 1, num_stages: 4, maxnreg: None
+Triton autotuning for function prepare_wy_repr_bwd_kernel,
+with key as (32, 32, 128, 128, 64, 32, 32, False, 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.bfloat16', 'torch.float32'),
+finished after 4.60s,
+best config selected: num_warps: 2, num_ctas: 1, num_stages: 4, maxnreg: None;
+Autotuning kernel l2norm_bwd_kernel with config BT: 8, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 16, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 32, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 64, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 128, num_warps: 1, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 8, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 16, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 32, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 64, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 128, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 8, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 16, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 32, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 64, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 128, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 8, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 16, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 32, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 64, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 128, num_warps: 8, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 8, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 16, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 32, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 64, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Autotuning kernel l2norm_bwd_kernel with config BT: 128, num_warps: 16, num_ctas: 1, num_stages: 3, maxnreg: None
+Triton autotuning for function l2norm_bwd_kernel,
+with key as (128, 1, 'torch.bfloat16', 'torch.float32', 'torch.bfloat16', 'torch.bfloat16'),
+finished after 9.44s,
+best config selected: BT: 32, num_warps: 2, num_ctas: 1, num_stages: 3, maxnreg: None;
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=138][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+Unsloth: Double buffering enabled (parallel H2D + compute) for backward pass.
+Unsloth: Will smartly offload gradients to save VRAM!
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=340][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=85][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=393][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=463][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=187][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=79][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=252][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=74][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=297][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=99][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=368][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=263][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=128][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=268][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=315][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=157][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=372][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=307][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=75][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=182][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=407][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=528][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=122][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=406][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=401][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=81][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=208][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=111][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=399][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=139][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=370][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=148][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=364][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=141][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=78][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=402][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=235][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=181][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+    step 10/20 loss 0.76597 10181.2 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 320, 'moe_bnb4bit_backend': 320, 'unsloth_grouped_mm': 320, 'unsloth_triton': 0, 'unsloth_loop': 0, 'torch_grouped_mm': 2240, 'torch_F_grouped_mm': 0, 'manual_grouped_mm': 0, 'unsloth_mxfp4_grouped_mm': 0, 'lora_path_loop': 0, 'lora_path_padded': 0, 'lora_path_grouped_mm': 0}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=490][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=133][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=77][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=216][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=227][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=283][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=399][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=250][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=337][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=174][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=431][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=181][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=436][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=145][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=110][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=315][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=187][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=81][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=326][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=303][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=123][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=182][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=275][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=278][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=390][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=316][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=436][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=302][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=410][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=247][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=583][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=345][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=300][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=230][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=467][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=349][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=367][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=493][vocab_size=248320][n_chunks=8]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=324][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=2][qlen=325][vocab_size=248320][n_chunks=4]
+[unsloth_zoo.log|INFO]Fused losses grad_output scaled by 0.25 (got 0.25, expected 1.0)
+    step 20/20 loss 0.69746 10906.8 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 320, 'moe_bnb4bit_backend': 320, 'unsloth_grouped_mm': 320, 'unsloth_triton': 0, 'unsloth_loop': 0, 'torch_grouped_mm': 2240, 'torch_F_grouped_mm': 0, 'manual_grouped_mm': 0, 'unsloth_mxfp4_grouped_mm': 0, 'lora_path_loop': 0, 'lora_path_padded': 0, 'lora_path_grouped_mm': 0}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=76][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=243][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=128][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=422][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=77][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=248320][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=248320][n_chunks=1]
+    eval@20 heldout 0.68684 train_wall 259.1s
+CELL OK {"framework": "unsloth", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "model_type": "qwen3_5_moe", "n_layers": 40, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "unsloth", "tag": "ckpt_unsloth_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": false, "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5", "template": "alpaca", "grad_ckpt": "unsloth", "attn_4bit": false, "n_attn4": 0, "attn4_probe": null, "structural_expected_n_attn4": null, "detector_version": null, "loader_used": "FastLanguageModel", "loader_fallback_reason": null, "unsloth_targets": ["q_proj", "k_proj", "v_proj", "o_proj"], "hf_targets": null, "axolotl_targets": null, "axolotl": null, "hf_experts_implementation": null, "hf_double_quant": null, "axolotl_bnb4bit_modules": null, "unsloth_knobs": {"moe_backend_requested": "grouped_mm", "speed_tilt": false, "double_quant_requested": "off", "env_set": {"UNSLOTH_MOE_BACKEND": "grouped_mm"}, "load_in_4bit_requested": true, "target_parameters_requested": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"]}, "moe_backend_selected": "grouped_mm", "unsloth_double_quant": {"requested": null, "how": "unknown-default: from_pretrained names neither bnb_4bit_use_double_quant nor quantization_config", "loaded_nested": true}, "unsloth_load_in_4bit": true, "unsloth_target_parameters": {"requested": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"], "passed": true, "how": "get_peft_model(target_parameters=[...])"}, "unsloth_packed_calls_per_step_min": {"unsloth_mxfp4_grouped_mm": 0}, "unsloth_packed_calls_per_step_max": {"unsloth_mxfp4_grouped_mm": 0}, "hf_experts_dispatch": null, "unsloth_backend_calls_per_step_min": {"unsloth_grouped_mm": 320, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 320}, "unsloth_backend_calls_per_step_max": {"unsloth_grouped_mm": 320, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 320}, "unsloth_backend_absent": [], "tokens": {"path": "tokens_qwen3_5.json", "sha256": "0d94e9b8893645edda2c1ba7e90d34b41374164b37f72d4d72422af79896e866", "n_train": 1200, "eval_rows_used": 8, "tokenizer_agree": "unchecked: Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\nGenerate a sentence that starts with \"We all wish\".\n\n### Input:\n\n\n### Response:\nWe all wish to live a fulfilling and contented life filled with joy, love and success.<|im_end|>. Failed with Invalid base64-encoded string: number of data characters (269) cannot be 1 more than a multiple of 4", "pad_id": 248044}, "prereg": "tc1/TC2-PREREG.md", "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe)", "load_s": 51.2, "phase_seconds": {"preamble": 2.571, "snapshot": 0.0, "load_weights": 41.413, "census": 4.027, "frozen_probe": 0.139, "trainable_sha": 5.095, "counters": 0.092, "c1_before": 58.033, "eval0": 46.254, "optimizer": 0.444, "c1_after": 32.913, "adapter_save": 4.252}, "phase_budget_s": 1260.0, "prologue_s": 167.84, "prologue_unattributed_s": 9.774, "verify": {"n_quantized": null, "n_unquantized": null}, "engagement_banners": ["Unsloth: Failed compiling function Qwen3_5MoeGatedDeltaNet since there is padding done.", "Unsloth: Disabling compile for Qwen3_5MoeGatedDeltaNet since it's marked for disabling.", "Unsloth: Compiled module Qwen3_5MoeVisionRotaryEmbedding.", "Unsloth: Compiled module Qwen3_5MoeTextRotaryEmbedding.", "Unsloth: Compiled module Qwen3_5MoeRMSNormGated.", "Unsloth: Compiled module Qwen3_5MoeMLP.", "Unsloth: Compiled module Qwen3_5MoeExperts.", "Unsloth: Compiled module Qwen3_5MoeTopKRouter.", "Unsloth: Compiled module Qwen3_5MoeSparseMoeBlock.", "Unsloth: Compiled module Qwen3_5MoeRMSNorm.", "Unsloth: Compiled module Qwen3_5MoeVisionMLP.", "Unsloth: Compiled module Qwen3_5MoeVisionPatchEmbed.", "Unsloth: Compiled module Qwen3_5MoeVisionPatchMerger.", "Unsloth: Fast Attention patch for Qwen3_5MoeAttention.", "Unsloth: Fast Attention patch for Qwen3_5MoeVisionAttention.", "(4) Unsloth skipping patching fast linear cross entropy for Qwen3_5MoeForCausalLM", "NO 'Enabling LoRA on MoE parameters' banner on stdout (the census below decides)"], "unsloth_bnb4bit_modules": {"n_experts_modules": 40, "n_bnb4bit": 0, "n_bnb4bit_unwrapped": 40, "inner_param_types": ["Params4bit"], "wrap_depth": 2}, "trainable_params": 926187520, "trainable_tensors": 240, "trainable_by_group": {"attention": 3440640, "experts": 922746880, "other": 0}, "expect_trainable": 926187520, "trainable_mismatch": null, "adapter_dtypes_before": {"torch.float32": 240}, "adapter_dtypes_after": {"torch.float32": 240}, "lora_cast_to_fp32": 0, "init_sha": "9e0f9b59a6ca329203b7928e72bb4d12a8d0e42610da0606f05eea114beaf714", "n_patched": 0, "enable_reason": "", "probes": {}, "adapter_dtype": "fp32", "lora_init": "matched:3407", "matched_init": {"seed": 3407, "n_slots_set": 20520, "n_slots_expected": 20520, "expected_parts": {"n_attention_projections": 40, "n_layers": 40, "n_experts": 256}, "unmapped": [], "n_unmapped": 0, "complete": true, "kinds": {"down": 10240, "gate_up": 10240, "q": 10, "k": 10, "v": 10, "o": 10}, "b_nonzero": [], "hidden": {"value": 2048, "rule": "config.hidden_size"}, "mapping_rules": {"base_model.model.model.language_model.layers.0.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.language_model.layers.0.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden", "base_model.model.model.language_model.layers.1.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.language_model.layers.1.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden", "base_model.model.model.language_model.layers.2.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.language_model.layers.2.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden", "base_model.model.model.language_model.layers.3.self_attn.q_proj": "q by name (attention)", "base_model.model.model.language_model.layers.3.self_attn.k_proj": "k by name (attention)", "base_model.model.model.language_model.layers.3.self_attn.v_proj": "v by name (attention)", "base_model.model.model.language_model.layers.3.self_attn.o_proj": "o by name (attention)", "base_model.model.model.language_model.layers.3.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.language_model.layers.3.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden"}, "n_mapping_rules": 120, "distribution": "A[slot] ~ U(-b, b), b = 1/sqrt(fan_in), fan_in = in-width of the [r, in] slot = PEFT's kaiming_uniform(a=sqrt(5)) on a [r, in] weight; drawn in fp32 on CPU from torch.Generator().manual_seed(int.from_bytes(sha256('<seed>|<layer>|<kind>|<expert>')[:8], 'big')); B left as built and asserted zero"}, "frozen_base_probe": {"slots": {"gate_up": {"sha": "c798a2390c7a87d552a4db8288e737233f40f24adffc0c255b3187d18b5f89c6", "regime": "nf4/64+dq", "n_bytes": 4194304, "shape": [1024, 2048], "dtype": "bf16", "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16", "source": "gate_up_proj[0]", "control_sha": "7cb6576b44882e2cdc974fddcbb661faa25cb805d627f33dec24dbc329bc773d", "control_detects_flip": true, "mapped_by": "structure: in == hidden"}, "down": {"sha": "20146c64832c579ebd098ceccc905aef5734051a899b0c15f29ac808f13c286a", "regime": "nf4/64+dq", "n_bytes": 2097152, "shape": [2048, 512], "dtype": "bf16", "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16", "source": "down_proj[0]", "control_sha": "cef6d7d9b2de3acb9fcb700840dcdde3db243f786ad99c43acb761a7976e6fce", "control_detects_flip": true, "mapped_by": "structure: out == hidden"}, "q_proj": {"sha": "b44f6f9750532910d05fda825111716f0e87f651c3417882f63f78956efacec3", "regime": "nf4/64+dq", "n_bytes": 33554432, "shape": [8192, 2048], "dtype": "bf16", "method": "bnb dequantize_4bit(weight, own quant_state) -> bf16", "source": "q_proj.weight", "control_sha": "443f236507c4094339609e7b28cdb3e323821dcffaf18c7c729242d3ba4fef2e", "control_detects_flip": true}}, "control_detects_flip": true, "experts_module": "base_model.model.model.language_model.layers.0.mlp.experts", "attention_module": "base_model.model.model.language_model.layers.3.self_attn", "errors": []}, "batched_stats": null, "reference_order": null, "dgrad": null, "kernel_counter_key": "moe_bnb4bit_backend", "kernel_calls_per_step_min": 320, "experts_forward_calls_per_step_min": 320, "C1_tensors_hashed": 538, "C1_bytes_hashed": 17016215552, "C1_empties_skipped": 0, "C1_control_detects_flipped_byte": true, "C1_control_tensor": "base_model.model.model.language_model.layers.0.linear_attn.in_proj_a.weight", "C1_regime_by_tensor": {"nf4/64+dq": 538}, "C1_hasher": "hashes_frozen: every frozen expert / 4-bit tensor, any dtype (params + buffers; an offloaded stack from its pinned-CPU home)", "C1_offloaded_homes": 0, "C1_experts_changed": 0, "C1_bit_exact": true, "C1_changed_sample": [], "loss_first": 1.1925, "loss_last": 0.69746, "loss_mean_last20": 0.92272, "loss_step2": 1.29643, "eval_loss_step0": 1.19346, "eval_loss_final": 0.68684, "matched_init_sha": "4b90bf05bd02baf35c65b1497896e93660a10f95442daefc3bcf95e2c90e3b98", "matched_init_sha_slots": 20520, "matched_init_sha_unmapped": 0, "lora_path_present": true, "lora_path_loop_steps": [], "unsloth_grouped_mm_calls_per_step_min": 2240, "unsloth_grouped_mm_calls_per_step_max": 2240, "unsloth_manual_grouped_mm_calls_per_step_max": 0, "arm_facts": {"attn_implementation": "sdpa", "output_router_logits": null, "loss_class": "model.forward(input_ids, labels[, attention_mask]).loss -- the model's own loss; the harness computes none", "torch_num_threads": 112, "omp_num_threads": "112", "cpu_model": "AMD EPYC 7663 56-Core Processor", "lora_delta_dtype": "the activation dtype: unsloth_zoo moe_utils.py:3875 casts the fp32 factors to the activation dtype per forward (UPSTREAM-NOTES; UNVERIFIED against installed source)", "unsloth_zoo": "2026.9.9", "unsloth_zoo_note": "unsloth_zoo main's #1529 is not in the 2026.9.9 release (phase-3 instruction; not verified here)"}, "s_per_step": 13.1961, "s_per_step_median_11plus": 10.1069, "log_every": 10, "microbatch_timing": false, "train_wall_s": 259.05, "window_wall_s": 263.92, "tokens_total": 31573, "tokens_per_s": 121.9, "tokens_padded_total": 11383, "peak_vram_gb": 30.469, "idle_w": 30.6, "mean_w": 163.2, "power_samples": 1049, "memory_lever": null, "memory_lever_label": null, "host_ram": {"rss_hwm_gb": 72.115, "ru_maxrss_gb": 72.115, "cgroup_peak_gb": null, "cgroup_peak_source": null, "cgroup_peak_before_gb": null, "cgroup_peak_rose_during_arm": null, "cgroup_limit_gb": 294.413, "total_gb": 811.403, "high_water_gb": 72.115}, "host_ram_high_water_gb": 72.115, "host_ram_total_gb": 811.403, "hf_offload": null, "axolotl_layer_offload": null, "sampler": true, "joules_per_step": 1717.53, "adapter": {"path": "/root/tc1/adapters/qwen3_5_ckpt_unsloth_m", "bytes": 3704794668, "files": ["README.md", "adapter_config.json", "adapter_model.safetensors"], "tensors": 240, "params": 926187520, "dtypes": ["F32"]}, "profile": null, "profile_steps": 0, "profile_warm": 3, "note": null}
+Unsloth: Mega-cache saved bundle for key d536f4e112f17ad0f8e72d9a357d06e0 (15718885 bytes)

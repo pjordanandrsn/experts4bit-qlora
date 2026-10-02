@@ -95,6 +95,13 @@ re-ask box: P5 HELD. No HF position exists on this card at this recipe.
 > arm and in bfloat16 on the HF and e4b arms. `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported` is retired, and the arm is
 > re-asked with the routers cast to bf16 after load (what autocast computes per call).
 
+> **The re-run (`tc1-5090-30`, 2026-10-02, $0.43; `RESULTS-tc1-5090-30-axolotl.md`).** With the routers cast, axolotl trains the matched set:
+> 7.759 / 7.642 s/step against e4b's 5.408 / 5.464 — **axolotl/e4b 1.416 [1.398, 1.435]**, both pairs stable, e4b faster per step; axolotl's peak
+> 26.88 GB against 27.81 and its energy ×2.31; held-out COMPARABLE (about 0.01 nats). Its 96 expert stacks are NF4 (axolotl's parametrized
+> `quantize_moe_experts`, double-quantised statistics), and its step-0 loss sits 0.026 above e4b's: the two quantisers' bytes differ. axolotl's
+> scattermoe native-best trains too, at **0.929 × e4b's matched step** and 25.84 GB (one draw, its own init — a labelled row). TC1 P6 FALSIFIED:
+> axolotl trains, faster than the [1.5, 6] band. Register `e4b.train.h2h.axolotl.qwen3.5090.2026-10-02` and `.scattermoe-native`.
+
 **axolotl 0.20.0 on Qwen3-30B-A3B at its pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0) does not train** (box `tc1-5090-20`,
 with the venv installing after amendment 3): both matched draws loaded (`quantize_moe_experts` packed all 96 stacks, PEFT's
 `target_parameters` on the expert stacks, the attention projections by module) and died in the first forward inside transformers'

@@ -1099,3 +1099,20 @@ def test_tc2_amendment_5_traced_counts_are_exact_and_free_under_torch_compile():
     n = c["calls"]
     assert dict(c) == {"calls": n, "other": 1} and len(c) == 2
 
+
+
+def test_reducer_regime_sees_axolotls_parametrized_4bit_experts():
+    """Corrected 2026-10-02: axolotl's quantize_moe_experts keeps expert stacks as parametrizations, invisible to the census's
+    Params4bit_expert_stacks; the reducer read them as bf16. The real Qwen3 (96 stacks) and Granite (64) receipts are NF4."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("tc1_reduce_regime", REPO / "bench" / "tc1" / "tc1_reduce.py")
+    red = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(red)
+    base = {"framework": "axolotl", "census": {"Params4bit_expert_stacks": 0, "Linear4bit": 384},
+            "frozen_base_probe": {"slots": {"down": {"regime": "nf4/64+dq"}}}}
+    q = dict(base, axolotl_bnb4bit_modules={"quantized_moe_experts_n": 96})
+    assert red.regime_of("qwen3", q).startswith("4-bit expert stacks (axolotl quantize_moe_experts: 96 parametrized stacks, nf4/64+dq)")
+    g = dict(base, n_layers=32, axolotl_bnb4bit_modules={"quantized_moe_experts_n": 64})
+    assert red.regime_of("granite", g).startswith("4-bit expert stacks")
+    none = dict(base, axolotl_bnb4bit_modules={"quantized_moe_experts_n": 0})
+    assert "NOT the 4-bit MoE regime" in red.regime_of("qwen3", none)
