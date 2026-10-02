@@ -137,3 +137,17 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
   Box B's proof guard rises to 1.0 h (it builds llama.cpp before its smokes, and each smoke needs 20 min left to be admitted).
   Every proof guard stays ≤ 1 h. The receipt's launcher status reads OK / pass because the lane exited 0. The lane's reading is
   NOT PROVED, and it counts toward the lane's spend ($0.2343). The tests that pin both fixes fail on the registered script.
+- **A3 (2026-10-02T06:46Z, before any box B or C ran; receipt `sc1b-prove-5`, adertha-receipts `9b44903`).** Box B's proof was NOT
+  PROVED, correctly. It found three defects in SC1's own driver scripts, not in the engines. All three are fixed here: the two
+  drivers, the pin and three CPU tests change, and every new test fails on the registered drivers.
+  1. llama.cpp b11327 **built** in 2 min 15 s; then `llamacpp_box.sh` refused it, grepping the 8-character commit `552f18f9`
+     where `llama-server --version` prints git's 7-character `commit 552f18f`. Now the printed abbreviation (7+ hex) must be a
+     prefix of the pinned commit.
+  2. The ExLlamaV3 tripwire read `exllamav3.version.__version__`. v1.5.3 keeps `__version__` in `exllamav3/version.py` and its
+     `__init__` does not import that module (AttributeError, rc 13). Now the tripwire imports `exllamav3.version`.
+  3. Found by reading v1.5.3's `bindings.cpp` while fixing 2, before any box hit it: the tripwire required the extension symbol
+     `exl3_gemv_int8`, which v1.5.3 does not bind. The int8 GEMV's binding is `exl3_gemv_int8_max_k`; the list is corrected.
+  `UPSTREAM-NOTES.md` carries the corrected symbol list. Box A's reading (`sc1a-5090-1`) runs at `0a2a0c8`, the commit its proof
+  `sc1a-prove-8` ran on; it installs vLLM only, so none of these drivers is on its path. Boxes B and C run at A3's merge, after
+  their own proofs there. The e4b package (`experts4bit_qlora/`) is byte-identical between the two commits. The reducer's
+  `--cross-box` reads each box's receipts at its own commit.

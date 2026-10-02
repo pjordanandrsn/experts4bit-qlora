@@ -296,3 +296,42 @@ def test_driver_selftest_runs(name):
                        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
     assert r.returncode == 0, r.stdout + r.stderr
     assert "SELFTEST OK" in r.stdout
+
+
+# --- A3 (sc1b-prove-5): the ExLlamaV3 tripwire reads the version module and the real v1.5.3 binding names -----------------
+
+EXL3_SYMBOLS = {   # m.def / py::class_ names at exllamav3 v1.5.3 (exllamav3/exllamav3_ext/bindings.cpp:160-272; libtorch/*_bc.h)
+    "exl3_gemm", "exl3_mgemm", "exl3_moe", "exl3_gemv", "exl3_gemv_int8_max_k",
+    "BC_LinearEXL3", "BC_BlockSparseMLP", "BC_Attention",
+}
+
+
+def test_exl3_tripwire_reads_the_version_module(tmp_path):
+    """sc1b-prove-5: v1.5.3 keeps `__version__` in exllamav3/version.py and its __init__ does not import it, so
+    `exllamav3.version.__version__` raised AttributeError and the install read rc 13. Run the tripwire's own version lines
+    against a stand-in package laid out like v1.5.3."""
+    src = (REPO / "bench" / "sc1" / "exl3" / "install.sh").read_text()
+    lines = [ln for ln in src.splitlines() if ln.startswith(("import exllamav3", "ver = "))]
+    assert any(ln.startswith("import exllamav3.version") for ln in lines), lines
+    pkg = tmp_path / "exllamav3"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "version.py").write_text('__version__ = "1.5.3"\n')
+    code = "\n".join(lines + ['assert ver == "1.5.3", ver', 'print("ok")'])
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=tmp_path,
+                       env={**os.environ, "PYTHONPATH": str(tmp_path)})
+    assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr
+    # positive control: the registered line, on the same package, is the AttributeError the box hit
+    old = 'import exllamav3\nver = getattr(exllamav3, "__version__", None) or exllamav3.version.__version__\n'
+    r = subprocess.run([sys.executable, "-c", old], capture_output=True, text=True, cwd=tmp_path,
+                       env={**os.environ, "PYTHONPATH": str(tmp_path)})
+    assert r.returncode != 0 and "AttributeError" in r.stderr
+
+
+def test_exl3_tripwire_requires_only_symbols_that_exist_in_v1_5_3():
+    import re
+    src = (REPO / "bench" / "sc1" / "exl3" / "install.sh").read_text()
+    m = re.search(r"caps = \{k: hasattr\(E, k\) for k in \((.*?)\)\}", src, re.S)
+    assert m, "the tripwire's symbol tuple moved"
+    got = set(re.findall(r'"([A-Za-z0-9_]+)"', m.group(1)))
+    assert got == EXL3_SYMBOLS, got ^ EXL3_SYMBOLS
