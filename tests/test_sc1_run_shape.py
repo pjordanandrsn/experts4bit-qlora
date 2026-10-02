@@ -368,3 +368,29 @@ def test_the_sched_arms_run_without_the_harness_hook():
             ctx = lines[i - 1] + ln
             assert "PYTHONPATH=" not in ctx, ln
     assert "harness_hook_loaded()" in SCHED and "REFUSED: the P42 harness hook is loaded" in SCHED
+
+
+def test_the_tripwire_requires_each_route_knob_read_not_its_default():
+    """sc1b-prove-8 (Amendment A6): release 0.40.0 (#878) moved E4B_NF4_GROUPED_SMALLM's default 0 -> auto and the box
+    tripwire, which asserted each knob's DEFAULT, refused. Every e4b arm pins all four knobs explicitly (ROUTEENV), so what
+    the arms need is that the library READS each knob from the environment; the default is logged, not asserted. Run the
+    tripwire's own knob loop on stand-in library sources."""
+    lines = RUN.splitlines()
+    a = next(i for i, ln in enumerate(lines) if ln.startswith("for knob in (") and "E4B_NF4_GROUPED_SMALLM" in ln)
+    b = a + 1
+    while b < len(lines) and lines[b].startswith("    "):
+        b += 1
+    loop = "\n".join(lines[a:b])
+    def run(src):
+        g = {"re": __import__("re"), "src": src}
+        exec(loop, g)
+    knobs = ("E4B_INT4_GROUPED_SMALLM", "E4B_INT4_LEAN_GLUE", "E4B_MXFP4_GROUPED_SMALLM", "E4B_NF4_GROUPED_SMALLM")
+    today = "\n".join(f'v = os.environ.get("{k}", "{"auto"}")' for k in knobs)              # main after #878
+    before = today.replace('"E4B_NF4_GROUPED_SMALLM", "auto"', '"E4B_NF4_GROUPED_SMALLM", "0"')  # 0a2a0c8
+    run(today)
+    run(before)
+    import pytest
+    with pytest.raises(AssertionError):
+        run(today.replace("E4B_NF4_GROUPED_SMALLM", "E4B_NF4_SOMETHING_ELSE"))             # a knob no longer read: refuse
+    for k in knobs:
+        assert f"{k}=" in RUN.split("ROUTEENV=", 1)[1].split("\n", 1)[0], k                 # ... and the arms pin all four

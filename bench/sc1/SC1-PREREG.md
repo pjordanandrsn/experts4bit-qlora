@@ -195,3 +195,11 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
   predicted). P12 HOLDS (lic / rtn within 0.2 % at both B). P14 is REFUTED (vLLM nodetok / matched 0.968 at B=16, 3.2 %
   against 1 %). The degraded control PASSES (×1.181, K19 absent). The re-run of all three boxes reads these again at the A5
   merge.
+- **A6 (2026-10-02T13:39Z; receipt `sc1b-prove-8`, adertha-receipts `c9ba997`).** Box B's proof at e4b `0d66170` refused at its e4b
+  tripwire: "E4B_NF4_GROUPED_SMALLM is not read with the registered default '0'". Release 0.40.0 (#878) had moved that default to
+  `auto`. The check worked as designed, but it guarded the wrong property. Every e4b arm pins all four route knobs explicitly
+  through `ROUTEENV`, and `E4B_NF4_GROUPED_SMALLM=0` is registered there (the A3 erratum explains why the arms' arithmetic is
+  unaffected). What the arms need is that the library reads each knob from the environment. The tripwire now asserts that read
+  and logs each observed default as a `ROUTE_DEFAULT` line, so drift is recorded instead of refused. A shape test runs the
+  tripwire's own loop on stand-in sources: main's, `0a2a0c8`'s, and one where a knob is no longer read. It fails on the
+  registered loop.
