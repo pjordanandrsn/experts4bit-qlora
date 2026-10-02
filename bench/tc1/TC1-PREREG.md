@@ -231,3 +231,15 @@ fastest of the three on this card, said so. An unstable pair leaves that half UN
 family, beside (never replacing) the matched positions; refuted -> the faster framework's native row is the finding, and no "fastest"
 statement is made for e4b on this card. Nothing here moves a matched position. Budget: one RTX 5090, ceiling $0.69/h, 4.5 h, under
 $3.20; the standing no-ask tier.
+
+### Amendment 6 (2026-10-02T21:27Z, after `tc1-5090-33`'s first five arms, before any re-run): the scattermoe arm's second draw reaches the Hub too
+
+**What happened.** Amendment 4 let `axolotl/ckpt_axolotl_best` reach the Hub for its kernels by matching that tag exactly. Amendment 5's
+second draw of the same arm is tagged `ckpt_axolotl_best_d2`, so it ran with the Hub offline and refused at load (`Version 2 of
+'kernels-community/rotary' is not available in the local cache`). A harness defect: the arm is the same configuration, and its first
+draw on the same box trained (5.128 s/step). With one draw, P13's axolotl half is UNTESTED by its own rule.
+
+**The amendment.** The Hub rule covers both draws (`ckpt_axolotl_best` and `ckpt_axolotl_best_d2`). The axolotl half of P13 is re-asked
+on one box with the amendment-5 token minus the Unsloth arms and the matched anchor (`TC1_SKIP`): e4b `fused_attn4_shipped` x2 and axolotl
+`ckpt_axolotl_best` x2, interleaved as registered. P13's Unsloth half is scored on `tc1-5090-33`, which holds both Unsloth draws. Budget:
+one RTX 5090, $0.69/h, 4.5 h, under $3.20; the standing no-ask tier.
