@@ -228,6 +228,31 @@ def test_a_recycled_slot_starts_from_zero():
         assert torch.equal(run(0), fresh)                          # after reset it is a fresh sequence again
 
 
+def test_a_second_runner_with_more_slots_grows_the_pool():
+    model = _model([LIN] * 2)
+    small = linear_state.install(model, n_slots=2)
+    ids = torch.tensor([[5, 9, 2, 7]])
+    with torch.no_grad():
+        def run(pool, slot):
+            prev = paged_attention.set_context(_bound([slot]))
+            try:
+                out = model(input_ids=ids, position_ids=torch.arange(4)[None], use_cache=False, attention_mask=NOMASK)
+            finally:
+                paged_attention.set_context(prev)
+            pool.mark([slot])
+            return out.logits[0, -1]
+        fresh = run(small, 1)
+        kept = {layer: (small.conv[layer][1].clone(), small.rec[layer][1].clone()) for layer in small.conv}
+        big = linear_state.install(model, n_slots=4)               # a second runner, a larger batch, the same model
+        assert big is small and big.n_slots == 4 and len(big.has) == 4
+        assert all(t.shape[0] == 4 for d in (big.conv, big.rec) for t in d.values())
+        assert all(torch.equal(big.conv[layer][1], c) and torch.equal(big.rec[layer][1], r)
+                   for layer, (c, r) in kept.items())               # the grown pool keeps every slot's state
+        assert big.has[1] and not big.has[3]
+        assert torch.equal(run(big, 3), fresh)                     # a new slot starts from zero
+        assert linear_state.install(model, n_slots=3) is big and big.n_slots == 4   # never shrinks
+
+
 def test_unsupported_state_carrying_layers_are_refused():
     mamba_like = torch.nn.Linear(2, 2)                             # a linear_attention label with no Gated DeltaNet
     mamba_like.config = types.SimpleNamespace(layer_types=[LIN, ATT])

@@ -106,6 +106,20 @@ class LinearStatePool:
         for s in slots:
             self.has[s] = True
 
+    def ensure_slots(self, n_slots: int) -> None:
+        """Grow to at least ``n_slots`` slots, keeping every existing slot's state; never shrinks. A second runner on
+        the same model with a larger batch shares this pool (``install`` returns it), and must not index past it."""
+        n_slots = int(n_slots)
+        if n_slots <= self.n_slots:
+            return
+        for d in (self.conv, self.rec):
+            for layer, t in d.items():
+                grown = torch.zeros((n_slots, *t.shape[1:]), dtype=t.dtype, device=t.device)
+                grown[: self.n_slots].copy_(t)
+                d[layer] = grown
+        self.has += [False] * (n_slots - self.n_slots)
+        self.n_slots = n_slots
+
     def reset(self, slot: int) -> None:
         """A recycled slot carries no history: its next forward starts every linear layer from zero."""
         if 0 <= slot < self.n_slots:
@@ -141,6 +155,7 @@ def install(model, n_slots: int) -> LinearStatePool | None:
         return None
     existing = getattr(model, "_e4b_linear_state", None)
     if existing is not None:
+        existing.ensure_slots(n_slots)                 # a later runner may bind more slots than the first did
         return existing
     try:
         from transformers.cache_utils import LinearAttentionLayer  # noqa: F401  (the state carrier this pool fills)
