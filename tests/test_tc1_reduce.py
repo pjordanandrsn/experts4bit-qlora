@@ -233,3 +233,60 @@ def test_amendment_3_profile_sidecars_are_not_receipts_and_the_axolotl_token_is_
     AXR = R.reduce_family(R.AX_FAM, R._ax_set(), {}, 20)
     assert AXR["positions"]["axolotl"]["quoted"] and abs(AXR["positions"]["axolotl"]["ratio"] - 1.990) < 1e-3
     assert {p: v for p, _, v, _ in R.score_predictions({R.AX_FAM: AXR})}["P6"] == "HELD"
+# ----------------------------------------------------------------------------- lane TC3 (the frontier tokens `qwen3frontier` / `qwen3frontier12`)
+def test_tc3_registration_constants_and_arm_order():
+    R = _mod()
+    assert R.FRONTIER_FAM == "qwen3frontier" and R.FRONTIER12_FAM == "qwen3frontier12" and set(R.FRONTIER_FAMS) <= set(R.FAMS)
+    assert R.EXPECTED["qwen3frontier"] == [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
+                                           ("hf", "hf_peft_m"), ("hf", "hf_peft_m_offload"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_m_layeroffload"),
+                                           ("axolotl", "ckpt_axolotl_m_zero3"), ("e4b", "reference_attn4_m_offload")]
+    assert R.EXPECTED["qwen3frontier12"] == [("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_offload_d2"), ("e4b", "reference_attn4_m_offload"), ("e4b", "fused_attn4_m"),
+                                             ("unsloth", "ckpt_unsloth_m_mb1"), ("hf", "hf_peft_m_mb1"), ("axolotl", "ckpt_axolotl_m")]
+    assert R.FRONTIER_ANCHOR == ("e4b", "fused_attn4_m_offload") and R.FRONTIER_REF == ("e4b", "reference_attn4_m_offload") and R.RESIDENT_BAND == 0.02 and R.RESIDENT_KEY == ("qwen3", ("e4b", "fused_attn4_m"))
+    assert R.DRAW2[("e4b", "fused_attn4_m_offload")] == ("e4b", "fused_attn4_m_offload_d2") and R.N_LAYERS["qwen3frontier"] == R.N_LAYERS["qwen3frontier12"] == 48
+    for t in ("fused_attn4_m_offload", "fused_attn4_m_offload_d2", "reference_attn4_m_offload", "hf_peft_m_offload", "ckpt_axolotl_m_layeroffload", "ckpt_axolotl_m_zero3"):
+        assert t in R.MATCHED, t
+    assert R.P1_HF_SLOWER == 20.0 and R.P1_Z3_SLOWER == 5.0 and R.P1_Z3_HOST_GB == 60.0 and R.P4_FACTOR == 2.0
+    assert set(R.FRONTIER_LEVER) >= {t for _, t in R.EXPECTED["qwen3frontier"]} | {t for _, t in R.EXPECTED["qwen3frontier12"]}
+    # TC1 and TC1b untouched by the addition
+    assert R.EXPECTED["qwen3"][0] == ("e4b", "fused_attn4_m") and R.EQUIV_ANCHOR == ("e4b", "fused_attn4_m") and R.CURVE_ARMS == R.EXPECTED["qwen3curve"][:3] and "fused_attn4_shipped" not in R.MATCHED
+
+
+def test_tc3_selftest_cases_and_failing_lines():
+    p = subprocess.run([sys.executable, str(REDUCE), "--selftest"], capture_output=True, text=True, timeout=300, cwd=REPO)
+    assert p.returncode == 0, (p.stdout + p.stderr)[-3000:]
+    assert int(re.search(r"REDUCE SELFTEST OK cases=(\d+)", p.stdout).group(1)) >= 50, p.stdout[-300:]
+    for needle in ("FAILING-CASE TC3-fit (reducer): unsloth -> NO ARM COMPLETED on this box: `ckpt_unsloth_m` OOM, `ckpt_unsloth_m_mb1` OOM",
+                   "FAILING-CASE TC3-hf-offload (reducer): UNSUPPORTED -- hf_offload: NotImplementedError at step 1: Cannot copy out of meta tensor",
+                   "FAILING-CASE TC3-zero3 (reducer): UNSUPPORTED -- axolotl ZeRO-3 parameter offload cannot be driven outside axolotl's trainer",
+                   "FAILING-CASE TC3-equiv (reducer): offload anchor VOID -> N-A", "FAILING-CASE TC3-P3 (reducer): median per-step |delta| vs TC1's resident 0.0300 > 0.02 -> DIVERGENT-FROM-RESIDENT",
+                   "FAILING-CASE TC3-P2 (reducer):"):
+        assert needle in p.stdout, needle
+
+
+def test_tc3_readings_on_hand_built_receipts():
+    import json
+    import tempfile
+    R = _mod()
+    F = R.reduce_frontier_family(R.FRONTIER_FAM, R._frontier_set(), {}, 20)
+    assert F["fit"]["unsloth"]["fits"] is False and F["fit"]["e4b"]["completed"] == ["fused_attn4_m_offload", "fused_attn4_m_mb1", "reference_attn4_m_offload"] and F["fit"]["hf"]["fits"] is False
+    assert F["equivalence"][R.FRONTIER_REF]["reading"] == "EQUIVALENT" and F["parity"]["verdict"] == "PASS" and F["resident"]["reading"] == "UNTESTED"
+    assert F["verdicts"][("hf", "hf_peft_m_offload")] == "UNSUPPORTED" and F["verdicts"][("axolotl", "ckpt_axolotl_m_zero3")] == "UNSUPPORTED"
+    assert {p: v for p, _, v, _ in R.score_frontier_predictions({R.FRONTIER_FAM: F})} == {"P1": "HELD", "P3": "UNTESTED", "P4": "UNTESTED"}
+    # with a TC1 dir: the resident reading and P4 as two measurements
+    tc1 = {"qwen3": R.reduce_family("qwen3", R._good_set(), {}, 20)}
+    F = R.reduce_frontier_family(R.FRONTIER_FAM, R._frontier_set(), {}, 20, tc1=tc1)
+    assert F["resident"]["reading"] == "EQUIVALENT-TO-RESIDENT" and abs(F["resident"]["tc1_s"] - 1.01) < 1e-9
+    sc = {p: (v, ev) for p, _, v, ev in R.score_frontier_predictions({R.FRONTIER_FAM: F})}
+    assert sc["P3"][0] == "HELD" and sc["P4"][0] == "HELD" and "no cross-box ratio formed" in sc["P4"][1]
+    # the 12 GB token: P2 reads frameworks; the receipt file names of both tokens parse and render their own table only
+    F12 = R.reduce_frontier_family(R.FRONTIER12_FAM, R._frontier12_set(), {}, 20)
+    assert F12["draws"][R.FRONTIER_ANCHOR]["verdict"] == "STABLE" and {p: v for p, _, v, _ in R.score_frontier_predictions({R.FRONTIER12_FAM: F12})} == {"P2": "HELD", "P3": "UNTESTED"}
+    d = tempfile.mkdtemp()
+    for fam, S in ((R.FRONTIER_FAM, R._frontier_set()), (R.FRONTIER12_FAM, R._frontier12_set())):
+        for (fw, tag), r in S.items():
+            json.dump(r, open(f"{d}/{fam}_{fw}_{tag}.json", "w"))
+    recs = R.load(d)
+    assert set(recs) == set(R.FRONTIER_FAMS) and set(recs["qwen3frontier"]) == set(R.EXPECTED["qwen3frontier"])
+    text = R.render(R.reduce_dir(d, 20), d)
+    assert "## TC3 predictions P1–P4" in text and "**(a) FIT TABLE**" in text and "## Predictions P1–P10" not in text and "MATCHED POSITION" not in text

@@ -377,7 +377,8 @@ def loaded_expert_double_quant(model):
 
 
 # ----------------------------------------------------------------------------- P2-2: axolotl helpers (pure; no axolotl import)
-def axolotl_config_dict(a, base_model, mods, params, best=False, double_quant=False, dataset_path=None, output_dir=None):
+def axolotl_config_dict(a, base_model, mods, params, best=False, double_quant=False, dataset_path=None, output_dir=None,
+                        quantize_moe_experts=True, layer_offload=False, deepspeed=None):
     """The axolotl 0.20.0 config for ONE arm as the dict `load_cfg` accepts (axolotl-arm-spec.md "Config keys"; keys read in
     utils/schemas/config.py, utils/schemas/model.py, loaders/model.py, monkeypatch/moe_quant.py). The trainer-side keys
     (micro_batch_size, gradient_accumulation_steps, max_steps, learning_rate, ...) are set to the fixture even though THIS
@@ -389,7 +390,7 @@ def axolotl_config_dict(a, base_model, mods, params, best=False, double_quant=Fa
     model's value is recorded in the receipt instead."""
     cfg = {
         "base_model": base_model,
-        "load_in_4bit": True, "adapter": "qlora", "quantize_moe_experts": True,                           # schema 955-964; moe_quant.py:150-181
+        "load_in_4bit": True, "adapter": "qlora", "quantize_moe_experts": bool(quantize_moe_experts),     # schema 955-964; moe_quant.py:150-181 (TC3 zero3: False -> bf16 experts)
         "bnb_4bit_use_double_quant": bool(double_quant),
         "bnb_config_kwargs": {"bnb_4bit_use_double_quant": bool(double_quant)},
         "lora_r": int(a.r), "lora_alpha": int(a.alpha), "lora_dropout": 0.0,                              # dropout 0 is forced with target_parameters
@@ -404,6 +405,10 @@ def axolotl_config_dict(a, base_model, mods, params, best=False, double_quant=Fa
     }
     if best:                                                                                                # integrations/kernels/args.py:38, 55; plugin.py:134-163
         cfg.update({"plugins": ["axolotl.integrations.kernels.KernelsPlugin"], "expert_backend": "scattermoe", "moe_bnb_fast": True})
+    if layer_offload:          # TC3 arm 9: utils/schemas/config.py:653 `layer_offloading: bool | None` (default False); a TRAINER lever -- see load_axolotl for how it is driven here
+        cfg["layer_offloading"] = True
+    if deepspeed is not None:  # TC3 arm 10: utils/schemas/config.py:1070 `deepspeed: str | dict | None`; the engine is the trainer's -- see load_axolotl (a refused row)
+        cfg["deepspeed"] = deepspeed
     return cfg
 
 
@@ -430,6 +435,120 @@ def axolotl_expert_census(model):
             if pz is not None and hasattr(pz, "items") and len(pz) >= 2 and all(any(type(x).__name__ == "Bnb4bitParametrization" for x in plist) for _, plist in pz.items()):
                 n_mods_4bit += 1
     return {"quantized_moe_experts_n": n_quant, "parametrized_params": n_entries, "n_experts_modules": n_mods, "n_bnb4bit_unwrapped": n_mods_4bit, "samples": samples}
+
+
+# ----------------------------------------------------------------------------- lane TC3 (the memory frontier; TC3-PREREG-draft, registered as bench/tc1/TC3-PREREG.md by the PI)
+# The levers and the host-RAM accounting. Every helper here is pure or read-only so the selftest drives it on CPU. UNVERIFIED on a GPU: nothing in
+# this block has run on a box; axolotl 0.20.0 / DeepSpeed were READ (file:line below), not run.
+LEVER_LABELS = {"e4b_offload": "e4b expert offload (load_moe_4bit_streaming(offload=True): frozen 4-bit experts in pinned host RAM, one layer GPU-resident at a time)",
+                "hf_offload": "HF accelerate offload (device_map='auto' + max_memory: the modules the GPU cap cannot hold land on the CPU, the bf16 expert stacks included)",
+                "axolotl_layer_offload": "axolotl layer_offloading (LayerOffloadManager: every decoder layer's frozen params to pinned CPU, streamed back per layer on a prefetch stream)",
+                "axolotl_zero3": "axolotl + DeepSpeed ZeRO-3 parameter offload (bf16 experts in host RAM) -- NOT drivable outside axolotl's trainer: a refused row"}
+
+
+def lever_of(a):
+    """The memory lever this arm ENGAGES (a LEVER_LABELS key), or None for a resident arm -- read from the flags, never from the outcome."""
+    fw = getattr(a, "framework", None)
+    if fw == "e4b" and int(getattr(a, "offload", 0) or 0):
+        return "e4b_offload"
+    if fw == "hf" and int(getattr(a, "hf_offload", 0) or 0):
+        return "hf_offload"
+    if fw == "axolotl" and int(getattr(a, "axolotl_zero3", 0) or 0):
+        return "axolotl_zero3"
+    if fw == "axolotl" and int(getattr(a, "axolotl_layer_offload", 0) or 0):
+        return "axolotl_layer_offload"
+    return None
+
+
+def hf_max_memory(gpu_total_bytes, host_total_bytes, gpu_margin_gib=2):
+    """The HF offload arm's `max_memory` (TC3-PREREG-draft arm 8): {0: "<GPU GiB - margin>GiB", "cpu": "<host RAM GiB>GiB"}, integer GiB floored, the GPU
+    cap never below 1 GiB. transformers' bnb quantizer then scales every entry by 0.90 for its own buffers (quantizer_bnb_4bit.py:97-100)."""
+    gpu_gib = max(1, int(gpu_total_bytes // (1 << 30)) - int(gpu_margin_gib))
+    cpu_gib = max(1, int(host_total_bytes // (1 << 30)))
+    return {0: f"{gpu_gib}GiB", "cpu": f"{cpu_gib}GiB"}
+
+
+def device_map_summary(hf_device_map):
+    """What accelerate's auto device map put where (model.hf_device_map after from_pretrained): entries per device, the expert-stack entries per device,
+    a sample of the CPU/disk-resident names. Pure; None when the model carries no hf_device_map (a single-device load)."""
+    if not isinstance(hf_device_map, dict):
+        return None
+    by_dev, experts_by_dev, sample = {}, {}, []
+    for name, dev in hf_device_map.items():
+        d = f"cuda:{dev}" if isinstance(dev, int) else str(dev)
+        by_dev[d] = by_dev.get(d, 0) + 1
+        if "experts" in name:
+            experts_by_dev[d] = experts_by_dev.get(d, 0) + 1
+        if d in ("cpu", "disk") and len(sample) < 6:
+            sample.append(name)
+    return {"n_entries": len(hf_device_map), "by_device": by_dev, "experts_entries_by_device": experts_by_dev, "cpu_or_disk_sample": sample,
+            "any_cpu_or_disk": any(d in ("cpu", "disk") for d in by_dev)}
+
+
+def _read_int_file(path):
+    try:
+        with open(path) as fh:
+            s = fh.read().strip()
+        return None if s in ("", "max") else int(s)
+    except Exception:
+        return None
+
+
+def host_ram_report(before=None):
+    """Host-RAM accounting for one arm (TC3-PREREG-draft 'Readings': the high-water from /proc and the arm's own accounting). Read-only. The process peak RSS
+    from /proc/self/status VmHWM and getrusage ru_maxrss -- the kernel's own high-water marks, so with one process per arm they ARE the max over the arm
+    (pinned host buffers are resident by definition); the cgroup v2 memory.peak (v1 memory.max_usage_in_bytes) when readable -- a CONTAINER-lifetime number
+    that includes page cache, so it enters the high-water only when it ROSE during this arm (`before` = the report taken at the arm's start); the host total
+    (MemTotal) and the cgroup limit. `high_water_gb` = max(process peak RSS, the cgroup peak when it rose during the arm). GB = 1e9 bytes, as peak_vram_gb."""
+    out = {"rss_hwm_gb": None, "ru_maxrss_gb": None, "cgroup_peak_gb": None, "cgroup_peak_source": None, "cgroup_peak_before_gb": None,
+           "cgroup_peak_rose_during_arm": None, "cgroup_limit_gb": None, "total_gb": None, "high_water_gb": None}
+    try:
+        with open("/proc/self/status") as fh:
+            for ln in fh:
+                if ln.startswith("VmHWM:"):
+                    out["rss_hwm_gb"] = round(int(ln.split()[1]) * 1024 / 1e9, 3)
+    except Exception:
+        pass
+    try:
+        import resource
+        ru = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        out["ru_maxrss_gb"] = round((ru if sys.platform == "darwin" else ru * 1024) / 1e9, 3)   # macOS reports bytes, Linux kB
+    except Exception:
+        pass
+    for path, src in (("/sys/fs/cgroup/memory.peak", "cgroup-v2 memory.peak"), ("/sys/fs/cgroup/memory/memory.max_usage_in_bytes", "cgroup-v1 memory.max_usage_in_bytes")):
+        v = _read_int_file(path)
+        if v is not None:
+            out["cgroup_peak_gb"], out["cgroup_peak_source"] = round(v / 1e9, 3), src
+            break
+    lim = _read_int_file("/sys/fs/cgroup/memory.max")
+    if lim is None:
+        lim = _read_int_file("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+    if lim is not None and lim < (1 << 60):
+        out["cgroup_limit_gb"] = round(lim / 1e9, 3)
+    try:
+        with open("/proc/meminfo") as fh:
+            out["total_gb"] = round(int(fh.readline().split()[1]) * 1024 / 1e9, 3)
+    except Exception:
+        pass
+    if before is not None:
+        out["cgroup_peak_before_gb"] = before.get("cgroup_peak_gb")
+        if out["cgroup_peak_gb"] is not None and before.get("cgroup_peak_gb") is not None:
+            out["cgroup_peak_rose_during_arm"] = out["cgroup_peak_gb"] > before["cgroup_peak_gb"]
+    cands = [v for v in (out["rss_hwm_gb"], out["ru_maxrss_gb"]) if v is not None]
+    if out["cgroup_peak_gb"] is not None and (before is None or out["cgroup_peak_rose_during_arm"]):
+        cands.append(out["cgroup_peak_gb"])
+    out["high_water_gb"] = max(cands) if cands else None
+    return out
+
+
+def axolotl_zero3_config(a):
+    """The DeepSpeed config dict the ZeRO-3 arm WOULD hand axolotl (`deepspeed:` takes a path or a dict -- utils/schemas/config.py:1070-1075,
+    utils/config/__init__.py:239-243): stage 3 with parameter AND optimizer offload to pinned CPU, bf16, the fixture's batch keys. Recorded on the refused row,
+    never run (see load_axolotl: the engine that would consume it is the trainer's)."""
+    return {"zero_optimization": {"stage": 3, "offload_param": {"device": "cpu", "pin_memory": True}, "offload_optimizer": {"device": "cpu", "pin_memory": True}},
+            "bf16": {"enabled": True}, "train_micro_batch_size_per_gpu": int(getattr(a, "micro_batch", 1) or 1), "gradient_accumulation_steps": int(a.accum)}
+
+
 DEV = "cuda"
 # #548: the share of an arm's own alarm the prologue may consume before the arm refuses itself (see phase_budget_for)
 PROLOGUE_BUDGET_SHARE = 0.35
@@ -1634,10 +1753,36 @@ def load_hf(a):
     impl = getattr(a, "hf_experts_implementation", "default") or "default"
     # J [F22]: transformers' experts implementation (grouped_mm / batched_mm / eager ...) is a from_pretrained kwarg
     # (modeling_utils.py:2081-2135 per UPSTREAM-NOTES; UNVERIFIED on the axolotl venv's transformers 5.17.0 -- a TypeError is a refused row)
+    # TC3 arm 8 (`hf_peft_m_offload`): device_map="auto" under a max_memory cap, so accelerate spills what the GPU cap cannot hold to host RAM -- the bf16
+    # expert stacks included (transformers' bnb quantizer never converts them). `llm_int8_enable_fp32_cpu_offload=True` is the switch transformers' own
+    # ValueError names for a 4-bit load whose device_map carries CPU entries (quantizer_bnb_4bit.py:70-80; with it the CPU-resident modules are left
+    # UNquantised, :133-136) -- recorded, so a reader knows an attention projection that landed on the CPU is not 4-bit there. What landed where is read
+    # back from model.hf_device_map. Whether training over the offloaded weights runs at all is the arm's finding: a non-OOM exception inside the
+    # loop is a `refused` row carrying the exception text (run_arm). UNVERIFIED on a GPU (read in transformers 5.18.0, not run).
+    hf_off = bool(int(getattr(a, "hf_offload", 0) or 0))
+    x["hf_offload"] = None
+    if hf_off:
+        gpu_total = torch.cuda.get_device_properties(0).total_memory
+        host0 = host_ram_report()
+        host_total = int((host0.get("cgroup_limit_gb") or host0.get("total_gb") or 0) * 1e9)
+        if host_total <= 0:
+            raise NotImplementedError("HF offload arm: the host RAM total is unreadable (/proc/meminfo, cgroup memory.max) -- the max_memory cap cannot be set")
+        mm = hf_max_memory(gpu_total, host_total, getattr(a, "hf_offload_gpu_margin_gib", 2))
+        fp32_cpu = bool(int(getattr(a, "hf_offload_fp32_cpu", 1) if getattr(a, "hf_offload_fp32_cpu", None) is not None else 1))
+        bnb_cfg = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16,
+                                     bnb_4bit_use_double_quant=hf_dq, llm_int8_enable_fp32_cpu_offload=fp32_cpu)
+        dev_kw = {"device_map": "auto", "max_memory": mm}
+        x["hf_offload"] = {"requested": True, "max_memory": {str(k): v for k, v in mm.items()}, "gpu_total_gb": round(gpu_total / 1e9, 3),
+                           "host_total_gb_used_for_cap": round(host_total / 1e9, 3), "llm_int8_enable_fp32_cpu_offload": fp32_cpu, "device_map_summary": None}
+    else:
+        dev_kw = {"device_map": {"": 0}}
     with PH("load_weights"):                                                             # #548; TC2 T26: the kwarg only if the installed transformers accepts it
         model, impl_info = hf_from_pretrained_experts_impl(AutoModelForCausalLM.from_pretrained, impl, local,
-                                                           quantization_config=bnb_cfg, dtype=torch.bfloat16, device_map={"": 0})
+                                                           quantization_config=bnb_cfg, dtype=torch.bfloat16, **dev_kw)
     x["n_layers"], x["model_type"] = n_layers_of(model.config)
+    if hf_off:
+        x["hf_offload"]["device_map_summary"] = device_map_summary(getattr(model, "hf_device_map", None))
+        x["hf_offload"]["host_ram_after_load"] = host_ram_report(host0)
     x["hf_experts_implementation"] = {**impl_info, "config": getattr(model.config, "_experts_implementation", None)}
     x["hf_double_quant"] = {"requested": hf_dq, "loaded_attention_nested": loaded_attention_double_quant(model)}
     with PH("attn4"):                                                                    # #548: the probe only (the HF arm converts nothing)
@@ -1691,16 +1836,70 @@ def load_axolotl(a):
             raise NotImplementedError("axolotl arm: no attention projection found by structure (q_proj/k_proj/o_proj); refusing rather than guessing")
         del skel
     best = bool(int(getattr(a, "axolotl_best", 0) or 0))
+    lo = bool(int(getattr(a, "axolotl_layer_offload", 0) or 0))          # TC3 arm 9
+    z3 = bool(int(getattr(a, "axolotl_zero3", 0) or 0))                  # TC3 arm 10
+    ds_cfg = axolotl_zero3_config(a) if z3 else None
     cfg_dict = axolotl_config_dict(a, local, mods, params, best=best, double_quant=False,
-                                   dataset_path=getattr(a, "axolotl_dataset", None), output_dir=os.path.join(a.out, "axolotl-out"))
+                                   dataset_path=getattr(a, "axolotl_dataset", None), output_dir=os.path.join(a.out, "axolotl-out"),
+                                   quantize_moe_experts=not z3, layer_offload=lo, deepspeed=ds_cfg)
     import axolotl
     from axolotl.cli.config import load_cfg
     from axolotl.loaders import ModelLoader, load_tokenizer
     from axolotl.utils.dict import DictDefault
+    if z3:
+        # TC3 arm 10 (`ckpt_axolotl_m_zero3`): REFUSED, not faked. Read in axolotl 0.20.0 + transformers 5.17.0 (not run): ModelLoader reads cfg.deepspeed only
+        # to (a) build HfTrainerDeepSpeedConfig when the LAUNCHER's ACCELERATE_DEEPSPEED_ZERO_STAGE == "3" (loaders/model.py:1152-1189), which makes
+        # from_pretrained partition the weights under zero.init() (modeling_utils.py:1440 -- and never for a bnb-quantised load), (b) set_z3_leaf_modules
+        # (:1380-1393), (c) a dtype / kbit-prepare skip (:371-375, :1405-1416). The DeepSpeed ENGINE that gathers partitioned parameters for every
+        # forward/backward and runs the CPU parameter/optimizer offload is `deepspeed.initialize`, called by transformers' Trainer (`deepspeed_init`,
+        # trainer.py:1701, then `self.accelerator.prepare`, :1721-1730) inside `axolotl.train.train` -- after ModelLoader, inside the trainer this harness
+        # does not run. A model ModelLoader builds under a deepspeed config has no engine: its forward cannot run. So: a refused row, the config it would
+        # have used recorded, the installed deepspeed version recorded (the venv carries axolotl[deepspeed] under the qwen3frontier token).
+        try:
+            ds_ver = md.version("deepspeed")
+        except Exception as e:
+            ds_ver = f"not installed: {type(e).__name__}"
+        stub(a, "refused", "axolotl ZeRO-3 parameter offload cannot be driven outside axolotl's trainer: ModelLoader.load() reads cfg.deepspeed only for "
+             "zero.init() partitioning (loaders/model.py:1152-1189, gated on the launcher's ACCELERATE_DEEPSPEED_ZERO_STAGE; modeling_utils.py:1440) and "
+             "set_z3_leaf_modules (:1380); the engine that gathers partitioned parameters per forward/backward and performs the CPU offload is "
+             "deepspeed.initialize, created by transformers' Trainer (deepspeed_init, trainer.py:1701 -> accelerator.prepare :1721-1730) inside "
+             "axolotl.train.train, not by the loader. Not faked: no model was built.",
+             {"phase": "load", "memory_lever": "axolotl_zero3", "axolotl_zero3": {"deepspeed_version": ds_ver, "axolotl_version": getattr(axolotl, "__version__", None),
+                                                                                "config_not_run": cfg_dict, "deepspeed_config_not_run": ds_cfg, "quantize_moe_experts": False,
+                                                                                "read_not_run": "axolotl 0.20.0 loaders/model.py + transformers 5.17.0 trainer.py, read 2026-10-01"},
+              "host_ram": host_ram_report()}, code=3)
     with PH("load_weights"):
         cfg = load_cfg(DictDefault(cfg_dict))                   # cli/config.py:227-318 (validate, prepare_plugins, normalize)
         tokenizer_obj = load_tokenizer(cfg)                     # train.py:73
         model, lora_config = ModelLoader(cfg, tokenizer_obj).load()   # train.py:83-84 -> loaders/model.py:305-378
+    x["axolotl_layer_offload"] = None
+    if lo:
+        # TC3 arm 9 (`ckpt_axolotl_m_layeroffload`): the lever is a TRAINER mixin -- core/trainers/mixins/layer_offloading.py:280-305, LayerOffloadingMixin.__init__
+        # builds LayerOffloadManager(model=self.model, num_prefetch=1) + setup_hooks(), and training_step runs under _LayerOffloadContext(manager)
+        # (pre_step / post_step). Both are plain classes over the model with no trainer state (:52-116 finds the decoder ModuleList, offloads every layer's
+        # frozen params to pinned CPU buffers, :177-235 installs forward/backward pre/post hooks per layer), so this harness drives them the way the mixin
+        # does: the manager right after the loader, the context around every micro-batch's forward+backward (run_arm's step_ctx). The config key is
+        # accepted by load_cfg (utils/schemas/config.py:653) but ModelLoader never reads it (core/builders/base.py:623 and the mixin are its only readers).
+        # Under quantize_moe_experts the frozen params streamed are the packed uint8 `parametrizations.*.original` stacks (the quant_state stays put).
+        # UNVERIFIED on a GPU; an import that fails or a manager that did not engage is a refused row, never a silent resident arm.
+        try:
+            from axolotl.core.trainers.mixins.layer_offloading import LayerOffloadManager, _LayerOffloadContext
+        except Exception as e:
+            stub(a, "refused", f"layer_offloading: axolotl.core.trainers.mixins.layer_offloading.LayerOffloadManager/_LayerOffloadContext not importable "
+                 f"({type(e).__name__}: {str(e)[:300]}); the lever cannot be driven outside the trainer", {"phase": "load", "memory_lever": "axolotl_layer_offload"}, code=3)
+        with PH("layer_offload"):
+            vram_before = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
+            mgr = LayerOffloadManager(model=model, num_prefetch=1)
+            if not getattr(mgr, "enabled", False):
+                stub(a, "refused", "layer_offloading: LayerOffloadManager.enabled is False (no decoder-layer ModuleList found, or no CUDA parameter): the lever did not engage",
+                     {"phase": "load", "memory_lever": "axolotl_layer_offload"}, code=3)
+            mgr.setup_hooks()
+            vram_after = torch.cuda.memory_allocated() if torch.cuda.is_available() else 0
+        x["axolotl_layer_offload"] = {"engaged": True, "n_layers": getattr(mgr, "n_layers", None), "n_frozen_params_managed": sum(len(v) for v in getattr(mgr, "_frozen_params", [])),
+                                      "n_hooks": len(getattr(mgr, "_hooks", [])), "cfg_layer_offloading": cfg.get("layer_offloading"),
+                                      "vram_allocated_before_gb": round(vram_before / 1e9, 3), "vram_allocated_after_gb": round(vram_after / 1e9, 3),
+                                      "driven_by": "the harness: LayerOffloadManager + _LayerOffloadContext around every micro-batch (what LayerOffloadingMixin.training_step does)"}
+        x["step_ctx"] = lambda: _LayerOffloadContext(mgr)
     try:
         from axolotl.monkeypatch.moe_quant import get_moe_quantized_count
         n_quant_log = int(get_moe_quantized_count())            # what _finalize_moe_expert_quantization logged (patch_manager.py:1075-1093)
@@ -2367,6 +2566,8 @@ def run_arm(a, load_fn, sampler=True):
             env[pkg] = None
 
     idle_w = idle_power() if sampler else 0.0
+    host_ram0 = host_ram_report()                   # TC3: the cgroup peak BEFORE this arm, so a container-lifetime number is never credited to it
+    lever = lever_of(a)                             # TC3: the memory lever this arm engages (None = resident), on every row it writes
     torch.manual_seed(a.seed)
     t_load = time.perf_counter()
     PH.mark("preamble", t_load - PH._t0)            # #548: argv, the tokens file, the version census, the idle-power probe
@@ -2377,11 +2578,13 @@ def run_arm(a, load_fn, sampler=True):
     except SystemExit as e:                      # a stub already written (int code) propagates; a framework's SystemExit(message) is a refusal row
         if isinstance(e.code, int) or e.code is None:
             raise
-        stub(a, "refused", f"SystemExit: {str(e.code)[:700]}", {"phase": "load"}, code=3)
+        stub(a, "refused", f"SystemExit: {str(e.code)[:700]}", {"phase": "load", "memory_lever": lever, "host_ram": host_ram_report(host_ram0)}, code=3)
     except Exception as e:
         st, code = classify_load_exception(e)
-        stub(a, st, f"{type(e).__name__}: {str(e)[:700]}", {"phase": "load"}, code=code)
+        stub(a, st, f"{type(e).__name__}: {str(e)[:700]}", {"phase": "load", "memory_lever": lever, "host_ram": host_ram_report(host_ram0),
+                                                             "exception_type": type(e).__name__}, code=code)
     load_s = time.perf_counter() - t_load
+    step_ctx = x.get("step_ctx") or contextlib.nullcontext     # TC3: a lever's per-micro-batch context (axolotl layer offload: pre_step / post_step), else nothing
     if a.framework == "unsloth" and not x.get("moe_backend_selected"):   # P2-1: select_moe_backend() after load, on every Unsloth arm
         x["moe_backend_selected"] = unsloth_backend_selected()
     n_attn4, n_patched, reason, banner_lines = x["n_attn4"], x["n_patched"], x["reason"], x["banner_lines"]
@@ -2541,10 +2744,11 @@ def run_arm(a, load_fn, sampler=True):
                         ids, mask, labels = collate(rows, pad_id)
                         kw, nreal = {"attention_mask": mask}, sum(len(r) for r in rows)
                     mb_len.append(int(ids.shape[1]))
-                    with autocast_ctx(a.autocast):
-                        out = model(input_ids=ids, labels=labels, **kw)
-                        loss = out.loss / a.accum
-                    loss.backward()
+                    with step_ctx():                                        # TC3: the lever's context around ONE micro-batch's forward+backward (as the mixin's training_step)
+                        with autocast_ctx(a.autocast):
+                            out = model(input_ids=ids, labels=labels, **kw)
+                            loss = out.loss / a.accum
+                        loss.backward()
                     if tm is not None:                                      # T17: a sync per micro-batch, so the number is the micro-batch's
                         cuda_sync()
                         mb_ms.append(round((time.perf_counter() - tm) * 1e3, 1))
@@ -2588,12 +2792,24 @@ def run_arm(a, load_fn, sampler=True):
             wall = time.perf_counter() - t0
     except Exception as e:
         counter.uninstall()
+        hr = host_ram_report(host_ram0)             # TC3: the host-RAM high-water on the OOM / refused row too
+        lever_fields = {"memory_lever": lever, "host_ram": hr, "host_ram_high_water_gb": hr["high_water_gb"], "host_ram_total_gb": hr["total_gb"],
+                        "hf_offload": x.get("hf_offload"), "axolotl_layer_offload": x.get("axolotl_layer_offload")}
         if is_oom(e):
             stub(a, "oom", f"OOM at step {steps_done + 1}: {str(e)[:200]}",
-                 dict(common_stub(), phase="train", steps_done=steps_done, losses=losses, step_ms=step_ms, microbatch_ms=microbatch_ms, peak_vram_gb=peak_gb()), code=5)
+                 dict(common_stub(), phase="train", steps_done=steps_done, losses=losses, step_ms=step_ms, microbatch_ms=microbatch_ms, peak_vram_gb=peak_gb(), **lever_fields), code=5)
+        if lever is not None:
+            # TC3 (TC3-PREREG-draft arm 8): a memory lever whose training loop raises something other than an OOM -- accelerate's offloaded-weight
+            # NotImplementedError / RuntimeError, a hook that cannot run backward -- is the arm's FINDING: a `refused` row carrying the exception text,
+            # where it died and the lever's own record, never a bare traceback with no receipt (which the reducer would read as NOT_RUN).
+            import traceback
+            stub(a, "refused", f"{lever}: {type(e).__name__} at step {steps_done + 1}: {str(e)[:600]}",
+                 dict(common_stub(), phase="train", steps_done=steps_done, losses=losses, step_ms=step_ms, peak_vram_gb=peak_gb(), exception_type=type(e).__name__,
+                      traceback_tail=traceback.format_exc()[-1500:], **lever_fields), code=3)
         raise
     counter.uninstall()
     peak = peak_gb()
+    host_ram = host_ram_report(host_ram0)           # TC3: every arm records host_ram_high_water_gb (max over the arm of the process RSS and the cgroup peak when it rose) and the host total
 
     if curve[-1]["step"] != steps_done:
         with PH("eval_final"):                      # #548
@@ -2746,6 +2962,9 @@ def run_arm(a, load_fn, sampler=True):
         "tokens_per_step": tokens_per_step, "tokens_total": sum(tokens_per_step), "tokens_per_s": round(sum(tokens_per_step) / train_wall, 1) if train_wall else None,
         "tokens_padded_per_step": tokens_padded_per_step, "tokens_padded_total": sum(tokens_padded_per_step),
         "peak_vram_gb": peak, "idle_w": round(idle_w, 1), "mean_w": round(mean_w, 1) if mean_w else None, "power_samples": len(ps.samples),
+        "memory_lever": lever, "memory_lever_label": LEVER_LABELS.get(lever),                                           # TC3: the lever this arm engaged (None = resident)
+        "host_ram": host_ram, "host_ram_high_water_gb": host_ram["high_water_gb"], "host_ram_total_gb": host_ram["total_gb"],   # TC3: host-RAM accounting (see host_ram_report)
+        "hf_offload": x.get("hf_offload"), "axolotl_layer_offload": x.get("axolotl_layer_offload"),                        # TC3: what the HF / axolotl levers recorded
         "sampler": bool(sampler), "joules_per_step": round(net_w * (train_wall / a.steps), 2) if net_w else None,
         "adapter": adapter, "losses": losses,
         "profile": profile_summary, "profile_steps": int(a.profile_steps), "profile_warm": int(a.profile_warm),
@@ -3746,6 +3965,116 @@ def _selftest_hf_expert_selection():
     return out
 
 
+def _selftest_tc3(a, d, rec):
+    """TC3 on CPU: the pure helpers (the max_memory cap, the device-map summary, the config dict's lever keys, the ZeRO-3 dict, lever_of), the host-RAM
+    report's shape and its before/after rule, the per-micro-batch step context (entered exactly steps x accum times, never around an eval forward), and
+    the FAILING case: a lever arm whose loop raises a non-OOM exception writes a `refused` row (exit 3) carrying the exception text, the lever, the host RAM
+    and the device-map summary -- never a bare traceback. Nothing here touches a GPU, axolotl or accelerate."""
+    out = {}
+    # the max_memory cap: integer GiB, floored, the GPU minus the margin, never below 1 GiB
+    assert hf_max_memory(24 * (1 << 30), 125 * (1 << 30), 2) == {0: "22GiB", "cpu": "125GiB"}
+    assert hf_max_memory(12 * (1 << 30) - 1, 2 * (1 << 30) + 5, 2) == {0: "9GiB", "cpu": "2GiB"}
+    assert hf_max_memory(1 << 30, 1 << 29, 2) == {0: "1GiB", "cpu": "1GiB"}
+    dm = device_map_summary({"model.embed_tokens": 0, "model.layers.0": 0, "model.layers.1.mlp.experts": "cpu", "model.layers.2": "cpu", "lm_head": 0})
+    assert dm == {"n_entries": 5, "by_device": {"cuda:0": 3, "cpu": 2}, "experts_entries_by_device": {"cpu": 1}, "cpu_or_disk_sample": ["model.layers.1.mlp.experts", "model.layers.2"], "any_cpu_or_disk": True}, dm
+    assert device_map_summary(None) is None and device_map_summary({"": 0}) == {"n_entries": 1, "by_device": {"cuda:0": 1}, "experts_entries_by_device": {}, "cpu_or_disk_sample": [], "any_cpu_or_disk": False}
+    # the config dict's lever keys (axolotl 0.20.0's schema names) and the ZeRO-3 dict the refused row records
+    mods, params = ["model.layers.0.self_attn.q_proj"], ["model.layers.0.mlp.experts.gate_up_proj"]
+    c0 = axolotl_config_dict(a, "/snap", mods, params)
+    assert "layer_offloading" not in c0 and "deepspeed" not in c0 and c0["quantize_moe_experts"] is True
+    c1 = axolotl_config_dict(a, "/snap", mods, params, layer_offload=True)
+    assert c1["layer_offloading"] is True and c1["quantize_moe_experts"] is True and "deepspeed" not in c1
+    z = axolotl_zero3_config(a)
+    assert z["zero_optimization"]["stage"] == 3 and z["zero_optimization"]["offload_param"] == {"device": "cpu", "pin_memory": True} and z["bf16"] == {"enabled": True}
+    assert z["train_micro_batch_size_per_gpu"] == int(a.micro_batch) and z["gradient_accumulation_steps"] == a.accum
+    c2 = axolotl_config_dict(a, "/snap", mods, params, quantize_moe_experts=False, deepspeed=z)
+    assert c2["quantize_moe_experts"] is False and c2["deepspeed"] is z and c2["load_in_4bit"] is True
+    # lever_of reads the flags, never the outcome
+    ns = types.SimpleNamespace
+    assert lever_of(ns(framework="e4b", offload=1)) == "e4b_offload" and lever_of(ns(framework="e4b", offload=0)) is None
+    assert lever_of(ns(framework="hf", hf_offload=1)) == "hf_offload" and lever_of(ns(framework="hf")) is None
+    assert lever_of(ns(framework="axolotl", axolotl_layer_offload=1)) == "axolotl_layer_offload" and lever_of(ns(framework="axolotl", axolotl_zero3=1, axolotl_layer_offload=1)) == "axolotl_zero3"
+    assert lever_of(ns(framework="unsloth", offload=1, hf_offload=1)) is None
+    assert set(LEVER_LABELS) == {"e4b_offload", "hf_offload", "axolotl_layer_offload", "axolotl_zero3"}
+    # the host-RAM report: the kernel's own high-water marks; the cgroup peak enters only when it rose during the arm
+    h0 = host_ram_report()
+    assert set(h0) == {"rss_hwm_gb", "ru_maxrss_gb", "cgroup_peak_gb", "cgroup_peak_source", "cgroup_peak_before_gb", "cgroup_peak_rose_during_arm", "cgroup_limit_gb", "total_gb", "high_water_gb"}
+    assert h0["ru_maxrss_gb"] is not None and h0["ru_maxrss_gb"] > 0 and h0["high_water_gb"] >= h0["ru_maxrss_gb"], h0
+    h1 = host_ram_report({"cgroup_peak_gb": 1e9})          # a cgroup peak that did NOT rise during the arm (the fake "before" is above any reading) stays out of the high-water
+    if h1["cgroup_peak_gb"] is not None:
+        assert h1["cgroup_peak_rose_during_arm"] is False and h1["high_water_gb"] == max(v for v in (h1["rss_hwm_gb"], h1["ru_maxrss_gb"]) if v is not None), h1
+    h2 = host_ram_report({"cgroup_peak_gb": 0.0})
+    if h2["cgroup_peak_gb"] is not None:
+        assert h2["cgroup_peak_rose_during_arm"] is True and h2["high_water_gb"] >= h2["cgroup_peak_gb"], h2
+    out["host_ram"] = {"rss_hwm": h0["rss_hwm_gb"], "ru_maxrss": h0["ru_maxrss_gb"], "cgroup": h0["cgroup_peak_source"], "total": h0["total_gb"]}
+    # the per-micro-batch step context: entered exactly steps x accum times (never around an eval forward); the lever and its record on the receipt
+    a.fam, a.model, a.tokens, a.tokens_sha = "tiny", "selftest/tiny", os.path.join(d, "tokens_tiny.json"), rec["sha256"]
+    a.framework, a.arm, a.attn_4bit, a.expect_trainable, a.lora_init, a.adapter_dtype = "axolotl", "axolotl", 0, None, "matched:3407", "fp32"
+    try:
+        _TinyLM("axolotl")
+        have_ax = True
+    except Exception as e:
+        have_ax = False
+        out["step_ctx"] = f"skipped: bnb replace_parameter_4bit unavailable on CPU here: {type(e).__name__}"
+    if have_ax:
+        entered = []
+
+        class _Ctx:
+            def __enter__(self):
+                entered.append("in")
+
+            def __exit__(self, *x):
+                entered.append("out")
+
+        def _load_lo(a_):
+            m, x = _selftest_load_axolotl(a_)
+            x["axolotl"]["config"] = axolotl_config_dict(a_, "selftest/tiny", [], [], layer_offload=True)
+            x["step_ctx"] = _Ctx
+            x["axolotl_layer_offload"] = {"engaged": True, "n_layers": 2, "n_frozen_params_managed": 4, "n_hooks": 8, "driven_by": "selftest stand-in"}
+            return m, x
+        a.tag, a.axolotl_layer_offload = "ckpt_axolotl_m_layeroffload", 1
+        r = run_arm(a, _load_lo, sampler=False)
+        assert r["status"] == "ok" and entered.count("in") == entered.count("out") == a.steps * a.accum, (entered.count("in"), entered.count("out"), a.steps * a.accum)
+        assert r["memory_lever"] == "axolotl_layer_offload" and r["axolotl_layer_offload"]["engaged"] is True and r["axolotl"]["config"]["layer_offloading"] is True
+        assert r["host_ram_high_water_gb"] is not None and r["host_ram_high_water_gb"] > 0 and "high_water_gb" in r["host_ram"], r["host_ram"]
+        a.axolotl_layer_offload = 0
+        out["step_ctx"] = {"entered": entered.count("in"), "steps_x_accum": a.steps * a.accum}
+    # a resident arm records no lever and no HF offload block; the host total lands on every row
+    a.framework, a.arm, a.tag, a.attn_4bit, a.lora_init = "hf", "hf", "hf_peft_resident", 0, "native"
+    r = run_arm(a, _selftest_load_hf, sampler=False)
+    assert r["memory_lever"] is None and r["memory_lever_label"] is None and r["hf_offload"] is None and r["host_ram_total_gb"] == h0["total_gb"], (r["memory_lever"], r["host_ram_total_gb"])
+    # FAILING CASE: the lever arm whose loop raises a non-OOM exception -> a refused row with the exception text, exit 3 (a bare traceback would read NOT_RUN)
+
+    def _load_breaking(a_):
+        m, x = _selftest_load_hf(a_)
+        orig = m.forward
+
+        def fwd(*args, **kw):
+            if m.training:
+                raise NotImplementedError("Cannot copy out of meta tensor; no data! (selftest stand-in for accelerate's offloaded-weight failure)")
+            return orig(*args, **kw)
+        m.forward = fwd
+        x["hf_offload"] = {"requested": True, "max_memory": {"0": "22GiB", "cpu": "125GiB"}, "llm_int8_enable_fp32_cpu_offload": True,
+                           "device_map_summary": device_map_summary({"model.layers.0": 0, "model.layers.1.mlp.experts": "cpu"})}
+        return m, x
+    a.tag, a.hf_offload = "hf_peft_m_offload", 1
+    try:
+        run_arm(a, _load_breaking, sampler=False)
+        raise AssertionError("a lever arm whose loop raised did not refuse")
+    except SystemExit as e:
+        assert e.code == 3, e.code
+    a.hf_offload = 0
+    rf = json.load(open(os.path.join(d, "tiny_hf_hf_peft_m_offload.json")))
+    assert rf["status"] == "refused" and rf["phase"] == "train" and rf["steps_done"] == 0 and rf["memory_lever"] == "hf_offload", (rf["status"], rf.get("reason"))
+    assert rf["reason"].startswith("hf_offload: NotImplementedError at step 1: Cannot copy out of meta tensor") and rf["exception_type"] == "NotImplementedError", rf["reason"]
+    assert rf["hf_offload"]["device_map_summary"]["any_cpu_or_disk"] is True and rf["host_ram_high_water_gb"] is not None and "traceback_tail" in rf and rf["peak_vram_gb"] == 0.0
+    print(f"FAILING-CASE TC3-lever: {rf['reason'][:120]} -> status {rf['status']} (exit 3; device map {rf['hf_offload']['device_map_summary']['by_device']}, "
+          f"host RAM high-water {rf['host_ram_high_water_gb']} GB)")
+    out["lever_refusal"] = rf["exception_type"]
+    a.framework, a.arm, a.tag, a.lora_init, a.adapter_dtype = "e4b", "fused", "fused_attn4", "native", "fp32"
+    return out
+
+
 def selftest(a):
     global DEV
     DEV = "cpu"
@@ -3996,12 +4325,13 @@ def selftest(a):
     a.framework, a.arm, a.tag, a.lora_init, a.adapter_dtype = "e4b", "fused", "fused_attn4", "native", "fp32"
     p3 = _selftest_phase3(a, d, rec, R, M, N, e_fu, hfr)
     tc2 = _selftest_tc2(a, d, rec, e_ref)       # TC2: T23-T27 on the tiny models
+    tc3 = _selftest_tc3(a, d, rec)                 # TC3: the levers' helpers, the step context, the host-RAM report, the lever refusal
 
     print(f"SELFTEST OK dir={d} receipts={sorted(R)} e4b ref/fused loss_last {e_ref['loss_last']}/{e_fu['loss_last']} unsloth {u1['loss_last']} "
           f"hf {hfr['loss_last']} accum={a.accum} autocast={a.autocast} kcalls fused={e_fu['kernel_calls_per_step_min']} unsloth={u1['kernel_calls_per_step_min']} "
           f"hf={hfr['kernel_calls_per_step_min']} mb2_pads={ {k: v['tokens_padded_total'] for k, v in mb.items()} } detector_dryruns={det} "
           f"expert_selection_dryruns={sel} matched_step0={s0} matched_tolerance={tol} matched_slots={n_slots} "
-          f"frozen_probe_real={probe_real} phase2={p2} phase3={p3} tc2={tc2}")
+          f"frozen_probe_real={probe_real} phase2={p2} phase3={p3} tc2={tc2} tc3={tc3}")
     return d
 
 
@@ -4043,6 +4373,19 @@ def main():
     ap.add_argument("--unsloth-target-parameters", default=None,
                     help="TC2 T24: PEFT target_parameters named EXPLICITLY on get_peft_model (comma list, e.g. mlp.experts.gate_up_proj,mlp.experts.down_proj beside q/k/v/o in "
                          "--unsloth-targets); passed only when get_peft_model's signature names it (read at runtime), else the arm refuses; recorded as unsloth_target_parameters")
+    ap.add_argument("--hf-offload", type=int, default=0,
+                    help="TC3 (arm 8, hf_peft_m_offload): 1 = device_map='auto' under max_memory {0: '<GPU GiB - margin>GiB', 'cpu': '<host RAM GiB>GiB'} so accelerate spills what "
+                         "does not fit (the bf16 expert stacks) to host RAM; model.hf_device_map is summarised on the receipt; a non-OOM exception in the loop is a refused row with the exception text")
+    ap.add_argument("--hf-offload-gpu-margin-gib", type=int, default=2, help="TC3: the GiB kept free under the GPU cap of --hf-offload (the draft's GPU_GB-2)")
+    ap.add_argument("--hf-offload-fp32-cpu", type=int, default=1,
+                    help="TC3: BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=...) on the offload arm -- the switch transformers' own ValueError names for a 4-bit "
+                         "device_map with CPU entries (quantizer_bnb_4bit.py:70-80; the CPU-resident modules stay unquantised); recorded under hf_offload")
+    ap.add_argument("--axolotl-layer-offload", type=int, default=0,
+                    help="TC3 (arm 9, ckpt_axolotl_m_layeroffload): 1 = layer_offloading: true in the config dict (utils/schemas/config.py:653) and the LayerOffloadManager + "
+                         "_LayerOffloadContext the trainer mixin would run, driven by this harness around every micro-batch; recorded under axolotl_layer_offload")
+    ap.add_argument("--axolotl-zero3", type=int, default=0,
+                    help="TC3 (arm 10, ckpt_axolotl_m_zero3): 1 = the DeepSpeed ZeRO-3 parameter-offload arm WITHOUT quantize_moe_experts -- a refused row naming why it cannot be "
+                         "driven outside axolotl's trainer (the engine is the Trainer's); the config it would have used is recorded, nothing is faked")
     ap.add_argument("--adapter-dtype", choices=["fp32", "native"], default="fp32",
                     help="T19 (TC1): fp32 = cast EVERY framework's trainable adapters to fp32 after construction (e4b included; tp4 cast only "
                          "the non-e4b arms); native = leave them as the loader built them (e4b: bf16 expert adapters -- the `shipped` arm)")

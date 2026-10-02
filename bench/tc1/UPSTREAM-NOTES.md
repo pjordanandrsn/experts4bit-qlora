@@ -106,3 +106,23 @@ ZeRO++ int8 comm quant); AnswerDotAI/fsdp_qlora (Linear-only). None is an arm; e
 - Claims in its README ("Train MoE LLMs 12x faster with 35% less VRAM") have no in-repo benchmark; the only in-repo
   numbers are kernel microbenchmarks on B200/H100 and one Qwen3-30B-A3B step time (0.664 -> 0.622 s/step, hardware
   and fixture unstated).
+
+## TC3 addendum (2026-10-02, read, not run): what the memory levers are at the versions TC3 drives
+
+- axolotl `layer_offloading` (`utils/schemas/config.py:653`, `bool | None`, default False) is a TRAINER lever: `core/builders/base.py:623` copies it into
+  the TrainingArguments and `core/trainers/mixins/layer_offloading.py:280-305` (`LayerOffloadingMixin.__init__`) builds `LayerOffloadManager(model, num_prefetch=1)`
+  + `setup_hooks()` and wraps each `training_step` in `_LayerOffloadContext(manager)` (`pre_step` / `post_step`). `ModelLoader` never reads the key. The manager
+  (`:52-116`) finds the decoder `ModuleList`, moves every layer's frozen (`requires_grad=False`) params to pinned CPU buffers (`param.data = cpu_buf`, `:130-147`)
+  and installs forward/backward pre/post hooks per layer (`:177-235`) that load layer N and prefetch N+1 on a transfer stream; trainable params stay on the GPU.
+  Both classes are plain and trainer-free, so `tc1_arm.py --axolotl-layer-offload 1` drives them exactly as the mixin does, around every micro-batch.
+- axolotl + DeepSpeed ZeRO-3: `ModelLoader` reads `cfg.deepspeed` only for `HfTrainerDeepSpeedConfig` under the launcher's `ACCELERATE_DEEPSPEED_ZERO_STAGE == "3"`
+  (`loaders/model.py:1152-1189`; it makes `from_pretrained` partition under `zero.init()`, `modeling_utils.py:1440`, never for a bnb-quantised load),
+  `set_z3_leaf_modules` (`:1380-1393`) and a kbit-prepare skip (`:1405-1416`). The engine that gathers partitioned parameters per forward/backward and performs the
+  CPU parameter/optimizer offload is `deepspeed.initialize`, created by transformers' `Trainer` (`deepspeed_init`, `trainer.py:1701`, then `accelerator.prepare`
+  `:1721-1730`) inside `axolotl.train.train`. It cannot be driven through `ModelLoader` alone: TC3's `ckpt_axolotl_m_zero3` is a refused row.
+- HF offload: transformers 5.18.0's bnb-4bit quantizer raises on a device_map dict with CPU/disk entries unless `llm_int8_enable_fp32_cpu_offload=True`
+  (`quantizers/quantizer_bnb_4bit.py:70-80`); with it the CPU-resident modules are left unquantised (`:133-136`) and `max_memory` is scaled by 0.90 (`:97-100`).
+  Whether PEFT `target_parameters` on an accelerate-offloaded bf16 expert stack can train is UNVERIFIED: the arm records the exception text if it cannot.
+- axolotl 0.20.0 pins `packaging==26.0` (wheel METADATA line 12) and `torch<=2.14.0,>=2.13.0` (line 11); the `deepspeed` extra is `deepspeed>=0.18.6,<0.20.0` +
+  `deepspeed-kernels` (lines 80-81). The PyTorch cu130 index mirrors `packaging` at an older version, so uv's default first-index strategy with that extra index
+  makes axolotl unsatisfiable (both TC1 boxes, 2026-10-01); `tc1_run.sh` now installs torch from that index alone and axolotl under `--index-strategy unsafe-best-match`.
