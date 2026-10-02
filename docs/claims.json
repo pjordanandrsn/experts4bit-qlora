@@ -7692,6 +7692,34 @@
       "notes": "Pre-registered in #870 under the windowed gate P95 (#866) named. Six of the 24 single windows exceed 0.05 (up to -0.150 on an OLMoE c4val1 window at ppl 29.5, -0.5 % relative), so a single-window gate would have failed this change; the windowed means are near zero (95 % intervals +-0.033 / +-0.064 / +-0.064 / +-0.021). P94's single-window QUALITY_FAIL stands under its own rule; this lane is the default's licence."
     },
     {
+      "id": "e4b.serve.p97.qwen36-hybrid-paged-state.5090.2026-10-02",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3.6-35B-A3B; allenai/OLMoE-1B-7B-0924-Instruct (control)",
+      "claim": "Lane P97, one RTX 5090: on Qwen3.6-35B-A3B (30 Gated DeltaNet + 10 attention layers), PagedModelRunner through gnf4's fp8 decode kernel keeps each sequence's per-slot linear state at transformers' own (max relative error 7.67e-3 at the layers before the first attention layer, bar 5e-2) and tracks transformers' forward at mean KL 4.43e-3 nats with argmax agreement 0.9717 (bar 0.05 / 0.85; OLMoE control 7.15e-3 / 0.9736) over 4 interleaved sequences, 512-token prompts and 255 batched decode steps; a slot-rotation mutant reads 4.05 nats / 0.186 / state 0.879. SUPPORTED.",
+      "value": 0.0076722633093595505,
+      "unit": "max relative Frobenius error of the pooled conv / recurrent state against transformers' cache, linear layers 0-2, worst of 4 windows (bar 5e-2)",
+      "hardware": "RTX 5090 (sm_120, driver 580.95.05, 32607 MiB), one rented Vast.ai verified host (machine 142284, instance 53924396, AMD EPYC 7663), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @980d056 + grouped-nf4-gemm @34da93d (v0.34.1); transformers 5.17.0, bitsandbytes 0.50.2, no fla / causal_conv1d (Gated DeltaNet on transformers' torch path); Qwen3.6 @995ad96, OLMoE @7f1c97f, NF4 experts resident via load_moe_4bit_streaming; reference = transformers' forward with a DynamicCache, one window at a time; paged = PagedModelRunner, fp8 pool sized by kv_layers() (10 of 40 layers on Qwen3.6), 128-token prefill chunks, 4 rows decoded together, eager (decode graphs refused for hybrids); teacher-forced over 4 wikitext-2 test windows at token k*4096 (512 + 256); KL on fp32 log-probs; engagement exact (2,550 / 4,080 kernel calls, 8,130 linear-state stores); premise tests/test_linear_state_gpu.py passed on the card; verdict by bench/p97/p97_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p97/RESULTS-p97.md",
+        "bench/p97/PREREG-p97.md",
+        "bench/p97/p97_reduce.py",
+        "bench/p97/receipts/p97-5090-1/verdict.json",
+        "bench/p97/receipts/p97-5090-1/p97_subject.json",
+        "bench/p97/receipts/p97-5090-1/p97_control.json",
+        "bench/p97/receipts/p97-5090-1/logs/premise.log"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/p97-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-02/p97-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #903. A correctness reading, not a speed one: decode is eager and the Gated DeltaNet layers ran the torch path (830 ms per 4-row step). The rule gates on the state where both paths see the same tokens, not on a cross-model KL ratio: the rehearsal read the subject at 1.78x the control, the reading at 0.62x, so the ratio swings with shape and model sensitivity (prefill-step KL, no fp8 read: 2.66e-3 subject against 9.94e-4 control). Only Qwen3.6 has been read on a GPU."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02",
       "package": "experts4bit-qlora",
       "area": "train",

@@ -360,6 +360,13 @@ measured cost is the fp8 cache and dot: 0.046 nats, concentrated on the
 five 512-dim layers, 0.017 with 32-wide K groups. Method: METHODOLOGY
 §13.2; numbers: SERVING-PARITY.
 
+**Hybrid linear-attention models serve paged on the card** (lane P97, 2026-10-02, one rented RTX 5090; **measured** —
+[`bench/p97/RESULTS-p97.md`](../bench/p97/RESULTS-p97.md), `e4b.serve.p97.qwen36-hybrid-paged-state.5090.2026-10-02`).
+On Qwen3.6-35B-A3B (30 Gated DeltaNet + 10 attention layers), the paged runner keeps each sequence's linear state at
+transformers' own (7.7e-3 relative error where both paths see the same tokens) and tracks transformers' forward at
+4.43e-3 nats, argmax agreement 0.972, through gnf4's fp8 kernel on a 10-layer pool. A slot-mapping mutant reads 4.05
+nats. Decode is eager (graphs are refused for hybrids), so this is a correctness reading, not a speed one.
+
 **Quality measured from the checkpoint, not from e4b's own reference
 (P44, 2026-09-19).** A second instrument scores each served stack
 against the family's bf16 checkpoint (full-vocabulary KL, 200 committed

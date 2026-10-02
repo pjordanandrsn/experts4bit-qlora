@@ -1,0 +1,9 @@
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]Fetching 9 files: 100%|██████████| 9/9 [00:00<00:00, 1491.40it/s]
+[21:58:53]   checkpoint: allenai/OLMoE-1B-7B-0924-Instruct @ 7f1c97f440f06ce36705e4f2b843edb5925f4498 (requested 7f1c97f440f06ce36705e4f2b843edb5925f4498)
+[21:58:53]   fusing + quantizing experts (up to 16x64) to nf4 (streaming)...
+[21:58:57]   quantized experts on 16/16 MoE layers (64 experts each)
+[21:58:57]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 368531.16 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 990127.77 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 639002.55 examples/s]
+P97_MODEL control: steps 1024 mean_kl 7.150e-03 max_kl 9.966e-02 agree 0.9736 d_nll +0.0003 | attn 16 kv 16 kernel 4080/4080 linear 0 stores 0/0 | decode 282.0 ms/step x4 | mem 5.26 GB

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### P97 read (RTX 5090): SUPPORTED -- the paged runner keeps each sequence's Gated DeltaNet state at transformers' own and tracks transformers' forward on Qwen3.6-35B-A3B at 4.43e-3 nats (bench, docs and register)
+
+- `bench/p97/receipts/p97-5090-1/`, `bench/p97/RESULTS-p97.md`. One RTX 5090 through gnf4's fp8 kernel: 4 sequences
+  interleaved, 512-token prompts and 255 batched decode steps.
+  - **G1:** the pooled state at the layers before the first attention layer sits at 7.67e-3 relative error from
+    transformers' cache (bar 5e-2).
+  - **G2:** the whole model tracks transformers' forward at mean KL 4.43e-3 nats, argmax agreement 0.9717 (bars 0.05 /
+    0.85). The OLMoE control reads 7.15e-3 / 0.9736 through the same harness.
+  - **The mutant** (decode write-back rotated by one slot) reads 4.05 nats / 0.186 / state 0.879.
+  - **Engagement exact:** 2,550 / 4,080 kernel calls, 8,130 linear-state stores.
+  - **Cost:** $0.2489, plus the $0.0221 proving rental.
+- One prediction FALSIFIED: the subject reads 0.62x the control's KL, not 1-3x. A cross-model ratio swings with the
+  shape (1.78x in the rehearsal), which is why the rule does not gate on it.
+- `e4b.serve.p97.qwen36-hybrid-paged-state.5090.2026-10-02` registered. `docs/SERVING.md`'s hybrid paragraph and
+  `docs/STATUS.md` follow.
+- This is a correctness reading: decode is eager (graphs are refused for hybrids), and the Gated DeltaNet layers ran
+  transformers' torch path. No code, gate or default moves.
+
 ### The per-slot linear-state pool grows when a second runner on the same model binds more slots
 
 - **Why.** `linear_state.install()` keeps one pool per model and returned an existing one unchanged. A second

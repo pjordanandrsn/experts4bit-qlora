@@ -1,0 +1,21 @@
+KNOBS e4b=980d0564b2faf12cfeaca649096141e52675e4f3 gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 subject=Qwen/Qwen3.6-35B-A3B@995ad96eacd98c81ed38be0c5b274b04031597b0 control=allenai/OLMoE-1B-7B-0924-Instruct@7f1c97f440f06ce36705e4f2b843edb5925f4498 gpu_class=5090 min_disk_gb=130 prove=0 model_dir=hub box_extra='' allow_skip=0
+e4b 0.40.0 @980d0564b2faf12cfeaca649096141e52675e4f3
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+gated-deltanet kernel modules {'fla': False, 'causal_conv1d': False, 'kernels': False}
+self-test OK (26 cases)
+premise hybrid-on-the-kernel rc=0: control worst 2.027e-02 tokens True | hybrid worst 2.632e-02 tokens True 1 passed in 9.48s
+/root/.cache/huggingface/hub/models--allenai--OLMoE-1B-7B-0924-Instruct/snapshots/7f1c97f440f06ce36705e4f2b843edb5925f4498
+/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0
+box control rc=0 P97_MODEL control: steps 1024 mean_kl 7.150e-03 max_kl 9.966e-02 agree 0.9736 d_nll +0.0003 | attn 16 kv 16 kernel 4080/4080 linear 0 stores 0/0 | decode 282.0 ms/step x4 | mem 5.26 GB 
+
+box subject rc=0 P97_MODEL subject: steps 1024 mean_kl 4.432e-03 max_kl 1.521e-01 agree 0.9717 d_nll +0.0065 | attn 10 kv 10 kernel 2550/2550 linear 30 stores 8130/8130 | decode 829.5 ms/step x4 | mem 23.05 GB P97_MUTANT subject: mean_kl 4.052e+00 agree 0.1855 d_nll +3.8159 
+
+P97 VERDICT SUPPORTED
+  G1 True: pre-attention state rel err 0.0076722633093595505 (tol 0.05); all linear 0.09071982651948929
+  G2 True: subject mean KL 4.432e-03 (ceil 0.05) agree 0.9717 (min 0.85) | control mean KL 7.150e-03 agree 0.9736 | subject/control 0.6199587229531848
+  mutant: mean KL 4.051734652008342 agree 0.185546875 pre-attention state rel err 0.879170835018158

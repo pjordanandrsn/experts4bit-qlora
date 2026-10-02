@@ -1,0 +1,46 @@
+{
+ "why": [],
+ "g1": true,
+ "g2": true,
+ "state_tol": 0.05,
+ "kl_ceil": 0.05,
+ "agree_min": 0.85,
+ "subject": {
+  "mean_kl": 0.004432426166443237,
+  "max_kl": 0.15214715898036957,
+  "prefill_step_mean_kl": 0.0026557838427834213,
+  "argmax_agree": 0.9716796875,
+  "mean_d_nll": 0.006514260057466359,
+  "max_abs_d_nll": 0.8416147232055664,
+  "prefill_max_abs_logprob_diff": 1.2199935913085938,
+  "paged_decode_step_ms": 829.55
+ },
+ "control": {
+  "mean_kl": 0.007149550449632024,
+  "max_kl": 0.09966204315423965,
+  "prefill_step_mean_kl": 0.0009936954747900018,
+  "argmax_agree": 0.9736328125,
+  "mean_d_nll": 0.0002534634229585109,
+  "max_abs_d_nll": 1.4891440868377686,
+  "prefill_max_abs_logprob_diff": 0.8280544281005859,
+  "paged_decode_step_ms": 282.03
+ },
+ "subject_state": {
+  "pre_attention_max_rel_err": 0.0076722633093595505,
+  "all_linear_max_rel_err": 0.09071982651948929
+ },
+ "mutant": {
+  "mean_kl": 4.051734652008342,
+  "argmax_agree": 0.185546875,
+  "mean_d_nll": 3.8159432711306636,
+  "pre_attention_max_rel_err": 0.879170835018158
+ },
+ "subject_kl_over_control": 0.6199587229531848,
+ "kernel_modules": {
+  "fla": false,
+  "causal_conv1d": false,
+  "kernels": false
+ },
+ "linear_state_mb": 247.5,
+ "verdict": "SUPPORTED"
+}
