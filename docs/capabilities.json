@@ -228,7 +228,13 @@
     "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.quality-n20",
     "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.e4b-internal-parity",
     "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile",
-    "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported"
+    "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported",
+    "e4b.train.frontier.qwen3.4090-24gb.2026-10-02",
+    "e4b.train.frontier.qwen3.4090-24gb.2026-10-02.unsloth-resident",
+    "e4b.train.frontier.qwen3.4090-24gb.2026-10-02.e4b-resident-oom",
+    "e4b.train.frontier.qwen3.4090-24gb.2026-10-02.hf-axolotl",
+    "e4b.train.frontier.qwen3.4090-24gb.2026-10-02.offload-keeps-trajectory",
+    "e4b.train.frontier.qwen3.a2000-12gb.2026-10-02"
    ],
    "limitations": [
     "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",

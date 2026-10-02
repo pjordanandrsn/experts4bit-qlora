@@ -1,0 +1,8 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+CELL REFUSED {"framework": "hf", "fam": "gptoss", "model": "openai/gpt-oss-20b", "revision": "6cee5e81ee83917806bbde320786a8fb61efebee", "arm": "hf", "tag": "hf_peft_m", "status": "refused", "reason": "ValueError: The model is quantized with Mxfp4Config but you are passing a BitsAndBytesConfig config. Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes.", "steps": 60, "seq": 2048, "accum": 4, "micro_batch": 2, "offload": false, "prereg": "tc1/TC2-PREREG.md", "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe)", "note": null, "phase_seconds": {"preamble": 1.769, "snapshot": 0.0, "load_weights": 0.011}, "phase_in_flight": null, "phase_budget_s": 840.0, "phase": "load"}

@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Lanes TC2 and TC3 read (#835): the other families at matched work on the current cuts, and the memory frontier on 24 GB and 12 GB cards (bench, docs and register only)
+
+- `bench/h2h-2026-10-02/tc3/`: Qwen3-30B-A3B at TC1's matched set on a rented 24 GB RTX 4090 and on the owned 12 GB RTX A2000, every framework with
+  its own memory lever. **e4b trains the set on 24 GB under expert offload at 11.88 GB peak and 10.52 s/step** with the trajectory EQUIVALENT-TO-RESIDENT
+  against TC1's 5090 reading (median per-step |Δ| 0.0025; TC3 P3 and P4 HELD); resident e4b OOMs at 24.45 GB. **Unsloth 2026.9.14 trains the same set
+  resident on the 24 GB card** (24.22 GB peak, 10.03 s/step) -- the lane predicted an OOM; P1's clause (ii) is FALSIFIED and that row is the finding.
+  HF OOMs resident and its accelerate offload arm refuses on a meta tensor; axolotl's plain, `layer_offloading` and ZeRO-3 levers are three refusals.
+  On the 12 GB card e4b trains the set under offload at micro-batch 1 (10.46 GB peak, 69.9 s/step on an A2000, held-out 0.8483 beside the 5090's
+  0.8516 / 0.8487); Unsloth's loader dispatches modules to the CPU there and refuses, axolotl's cu130 wheels need a newer driver than the host has,
+  and HF OOMs at load once given the budget to reach the card (amendment 5: 11.04 GiB in use at a 20 MiB allocation after 761 s of loading) -- TC3 P2 HELD.
+  A fit table, one draw per row -- no position moves.
+- `docs/claims.json`: `e4b.train.frontier.qwen3.4090-24gb.2026-10-02` with its `.unsloth-resident`, `.e4b-resident-oom`, `.hf-axolotl` and
+  `.offload-keeps-trajectory` rows; `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02` (the owned card, a hand run, labelled so).
+- `bench/h2h-2026-10-02/tc2/`: the other families at matched work on the current cuts, two rented RTX 5090 boxes. Granite-3.1-3B-A800M: HF + PEFT
+  (bf16 experts) **HF/e4b 0.971 [0.965, 0.978]** and axolotl 0.903 -- both faster per step than e4b's fused 4-bit experts, which train at half HF's
+  VRAM with COMPARABLE / EQUIVALENT loss (a footprint position; TC2 P1 FALSIFIED); Unsloth adapts no expert parameter on either target list.
+  OLMoE-1B-7B: **Unsloth/e4b 1.201 [1.199, 1.204]** with Unsloth's grouped path engaged (e4b faster per step; Unsloth 2.21 GB lower peak and
+  x0.71 the energy, the same loss) and HF/e4b 1.255 [1.253, 1.258] at twice e4b's VRAM. gpt-oss-20b: no common adapter set (e4b attention-only;
+  Unsloth's packed-MXFP4 arm VOID by the step-0 rule, its bnb load a silent bf16 fallback; HF and axolotl refuse the MXFP4 checkpoint).
+  e4b's parity control PASSES on every family with a reference. Box B (Qwen3.6-35B-A3B, Mixtral-8x7B) was lost with its instance -- stopped by its host at 85 % memory during the Mixtral Unsloth load, its receipts unfetched -- and nothing from it is registered; TC2 amendments 2 and 3 (#883, #884) register the re-runs (the Qwen3.6 half on its own box; the Mixtral pair with the Unsloth alarm at 7,200 s on a host with at least 192 GB of RAM), read in a follow-up. P4 and P5 UNTESTED here.
+- `docs/claims.json`: `e4b.train.h2h.hf.granite.5090.2026-10-02`, `e4b.train.h2h.axolotl.granite.5090.2026-10-02`,
+  `e4b.train.h2h.unsloth.granite.5090.2026-10-02.coverage`, `e4b.train.h2h.unsloth.olmoe.5090.2026-10-02`, `e4b.train.h2h.hf.olmoe.5090.2026-10-02`,
+  `e4b.train.h2h.unsloth.gptoss.5090.2026-10-02.no-common-set`.
+- `bench/tc1/TC3-PREREG.md` amendment 5: the 12 GB HF arm re-run once with the budget the e4b arms had (its 1,800 s alarm measured the host's disk).
+- `docs/STATUS.md`, `docs/solutions/qlora-fused-moe-experts.md`, `docs/capabilities.json`: the paragraphs and the claim lists follow. No code, gate,
+  default or licence moves. The TC1 read entry below merged after the v0.40.0 tag and is filed here, where it belongs.
+
 ### Lane SC1 amendment A5 (#846): box A's first draw exposed three instrument defects -- vLLM's B=1 token budget, the energy reader, the SAMEPROMPT check (bench + tests)
 
 - `bench/sc1/vllm/`: every B=1 vLLM arm died at engine init (illegal memory access) with `max_num_batched_tokens` 8192 >
@@ -15,20 +42,6 @@
   tier, so the second enable refused on Qwen3 (box-A reading `sc1a-5090-1`). Both `sc1_e4b_sched.py` invocations clear
   `PYTHONPATH`; the harness `step_decomp.py` arms keep the hook. `bench/sc1/sc1_e4b_sched.py` refuses if the hook is loaded.
   A shape test and three self-test checks; the pin is regenerated; `SC1-PREREG.md` gains A4.
-
-## 0.40.0 — 2026-10-02 — the NF4 store's batched decode rows take K25 by default (`E4B_NF4_GROUPED_SMALLM=auto`, lane P96: B=16 about 40 % faster on Granite and OLMoE); `serve_paged`'s batched decode graphs fixed and confirmed on a GPU
-
-**0.40.0.** One default changes:
-- **`E4B_NF4_GROUPED_SMALLM` is `auto`.** With the variable unset, the NF4 store's batched decode rows (T > 1) take K25, the grouped small-M tensor-core GEMM with the select-tree decode through TF32, instead of the served NF4 M-tile GEMM.
-  - **The licence.** Lane P93 measured the speed: B=16 ×0.594 (Granite) and ×0.598 (OLMoE) on an RTX 5090. Lane P96 licensed the quality under lane P95's windowed K8 gate.
-  - **Unchanged:** T == 1 stays on the decode GEMV. `=0` restores the previous route.
-  - **Kernel versions:** K25 needs grouped-nf4-gemm 0.34.0 or newer; 0.34.1 adds the select tree, which is bit-identical. With an older kernel package the previous route runs, silently.
-- **Fixed: `serve_paged` with batched decode graphs** (`E4B_PAGED_GRAPHS=1`, `E4B_PAGED_MAX_SEQS>1`). In 0.39.0 only bucket 1 captured; every batch above 1 ran eagerly, and `graph_status` showed it (#874).
-  - Confirmed on an RTX 5090: buckets 1–16 capture (lane SC1's proof `sc1a-prove-8`, Granite NF4 at B=1 and B=16).
-  - B=1 and eager servers were unaffected.
-- **Dependencies:** CI still installs grouped-nf4-gemm at the v0.34.1 commit; the `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
-- **The rest is evidence and bench:** lane P96 (registration, read, receipts, register row), lane TC3's amendments, lane SC1's amendment A3 and its erratum, and serve_paged's GPU-status docs.
-
 
 ### Lane TC1 read (#835): the field-recipe position against Unsloth at matched work is 1.437, not 4.490 (bench, docs and register only)
 
@@ -49,6 +62,20 @@
 - `docs/STATUS.md`, `docs/solutions/qlora-fused-moe-experts.md`, `docs/capabilities.json`: the position paragraph and the claim list
   follow. No code, gate, default or licence moves. axolotl 0.20.0 at its pins does not train this family (its loader hands over an
   fp32 router against bf16 activations; five attempts on three cards, `.axolotl-unsupported`); no axolotl position is quoted.
+
+## 0.40.0 — 2026-10-02 — the NF4 store's batched decode rows take K25 by default (`E4B_NF4_GROUPED_SMALLM=auto`, lane P96: B=16 about 40 % faster on Granite and OLMoE); `serve_paged`'s batched decode graphs fixed and confirmed on a GPU
+
+**0.40.0.** One default changes:
+- **`E4B_NF4_GROUPED_SMALLM` is `auto`.** With the variable unset, the NF4 store's batched decode rows (T > 1) take K25, the grouped small-M tensor-core GEMM with the select-tree decode through TF32, instead of the served NF4 M-tile GEMM.
+  - **The licence.** Lane P93 measured the speed: B=16 ×0.594 (Granite) and ×0.598 (OLMoE) on an RTX 5090. Lane P96 licensed the quality under lane P95's windowed K8 gate.
+  - **Unchanged:** T == 1 stays on the decode GEMV. `=0` restores the previous route.
+  - **Kernel versions:** K25 needs grouped-nf4-gemm 0.34.0 or newer; 0.34.1 adds the select tree, which is bit-identical. With an older kernel package the previous route runs, silently.
+- **Fixed: `serve_paged` with batched decode graphs** (`E4B_PAGED_GRAPHS=1`, `E4B_PAGED_MAX_SEQS>1`). In 0.39.0 only bucket 1 captured; every batch above 1 ran eagerly, and `graph_status` showed it (#874).
+  - Confirmed on an RTX 5090: buckets 1–16 capture (lane SC1's proof `sc1a-prove-8`, Granite NF4 at B=1 and B=16).
+  - B=1 and eager servers were unaffected.
+- **Dependencies:** CI still installs grouped-nf4-gemm at the v0.34.1 commit; the `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
+- **The rest is evidence and bench:** lane P96 (registration, read, receipts, register row), lane TC3's amendments, lane SC1's amendment A3 and its erratum, and serve_paged's GPU-status docs.
+
 
 ### Lane SC1 A3 erratum (#846): the e4b package is NOT identical between box A's and boxes B/C's commits (#878 landed between) -- the arms' arithmetic is, because SC1 pins the route knob (text only)
 

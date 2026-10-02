@@ -1,0 +1,27 @@
+{
+ "framework": "e4b",
+ "fam": "qwen3frontier12",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "arm": "fused",
+ "tag": "fused_attn4_m",
+ "status": "phase_alarm",
+ "reason": "prologue phase 'load_weights' has run 413.2s and the prologue is 420.2s in, past its 420.0s budget; refusing now so this row can name the phase (#548)",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "offload": false,
+ "prereg": "tc1/TC3-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe)",
+ "note": "TC1_LOCAL_BOX hand run: snapshot /models/Qwen3-30B-A3B (pin_proof: config.json sha == hub@ad44e777bcd1 and 16 safetensors (61066575648 bytes) match the Hub listing)",
+ "phase_seconds": {
+  "preamble": 5.288,
+  "load_weights (in flight)": 413.157
+ },
+ "phase_in_flight": "load_weights",
+ "phase_budget_s": 420.0,
+ "phase": "load_weights",
+ "phase_elapsed_s": 413.2,
+ "prologue_s": 420.2
+}

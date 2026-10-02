@@ -1,0 +1,23 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Using Python 3.12.15 environment at: venv-axolotl
+Resolved 250 packages in 2.34s
+   Building deepspeed==0.19.7
+Downloading deepspeed-kernels (42.5MiB)
+Downloading cmake (28.8MiB)
+ Downloaded cmake
+ Downloaded deepspeed-kernels
+      Built deepspeed==0.19.7
+Prepared 6 packages in 6.52s
+Installed 6 packages in 570ms
+ + cmake==4.4.3
+ + deepspeed==0.19.7
+ + deepspeed-kernels==0.0.1.dev1698255861
+ + hjson==3.1.0
+ + msgpack==1.2.3
+ + py-cpuinfo==9.0.0

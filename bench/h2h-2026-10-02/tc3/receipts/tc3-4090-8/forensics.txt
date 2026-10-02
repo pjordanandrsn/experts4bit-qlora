@@ -1,0 +1,5 @@
+NVIDIA GeForce RTX 4090, 24564 MiB, 595.58.03, GPU-e9db7c46-c1c4-28dc-59b2-09ef4dbd04b4, 420.00 W, 3165 MHz
+CPU(s):                                  96
+Model name:                              AMD EPYC 7642 48-Core Processor
+MemTotal:       527991836 kB
+overlay         320G   76M  320G   1% /

@@ -1,0 +1,12 @@
+{
+ "snapshot": "/models/Qwen3-30B-A3B",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "config_sha256_local": "2850ddb3bf7aecad20b611e2d44f3077fc8193f4827c93beddd4c02ad63c2297",
+ "n_safetensors_local": 16,
+ "bytes_safetensors_local": 61066575648,
+ "config_sha256_hub": "2850ddb3bf7aecad20b611e2d44f3077fc8193f4827c93beddd4c02ad63c2297",
+ "pin_proof": "config.json sha == hub@ad44e777bcd1 and 16 safetensors (61066575648 bytes) match the Hub listing",
+ "n_safetensors_hub": 16,
+ "bytes_safetensors_hub": 61066575648
+}

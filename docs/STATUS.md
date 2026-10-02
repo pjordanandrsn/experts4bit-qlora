@@ -29,6 +29,28 @@ host-RAM cap the on-disk arena needs 2.56× to 6.40× less host RAM than
 the pinned-RAM path, and at 8.59 GB Qwen3-30B is OOM-killed on host RAM
 and completes on the arena.
 
+**At the field recipe, on the cards people own** (lane TC3, 2026-10-02, one
+rented RTX 4090 and the owned RTX A2000,
+[`bench/h2h-2026-10-02/tc3/`](../bench/h2h-2026-10-02/tc3/README.md); register
+`e4b.train.frontier.qwen3.4090-24gb.2026-10-02` with its `.unsloth-resident`,
+`.e4b-resident-oom`, `.hf-axolotl` and `.offload-keeps-trajectory` rows, and
+`e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`). Qwen3-30B-A3B at TC1's
+matched set — the same 642,514,944 fp32 adapters, init and tokens — **trains
+on a 24 GB card under e4b's expert offload at 11.88 GB peak and 10.52
+s/step**, its trajectory EQUIVALENT-TO-RESIDENT against the 5090 reading
+(median per-step |Δ| 0.0025, held-out |Δ| 0.0032), while resident e4b needs
+more than the card has (OOM at 24.45 GB at both recipes and at step 18 as
+shipped). **Unsloth 2026.9.14 trains the same set resident on the 24 GB
+card** (24.22 GB peak, 10.03 s/step, the same loss) — the lane predicted it
+would not, and that row is the finding; HF neither fits nor offloads there,
+and axolotl's three levers are three refusals. On the 12 GB card e4b trains
+the set under offload at micro-batch 1 (10.46 GB peak, 69.9 s/step on an
+A2000 behind a 6-core Xeon, held-out 0.8483 beside the 5090's 0.8516 /
+0.8487); Unsloth's loader dispatches modules to the CPU there and refuses,
+axolotl's cu130 wheels need a newer driver than the host has, and HF, given the
+budget to reach the card, OOMs at load (TC3 P2 HELD).
+A fit table, one draw per row — no position; the 32 GB position is TC1's.
+
 **Kimi-K3 runs at full depth on a 12 GB card** (2026-09-28, the released
 0.37.5 / 0.33.4; **measured** — [`bench/kimi-k3-a2000/`](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md),
 `e4b.offload.kimi-k3.full-depth.a2000.five-runs.2026-09-28`). All 93 layers
@@ -160,8 +182,35 @@ tp4's other-family rows stand as measured on the 2026-09-19 cut — Granite
 2.853 → 2.366 (×1.21) and OLMoE 2.739 → 1.395 (×1.96), both with parity
 passing; **nothing is quoted against Unsloth on Granite or Qwen3.6** (its arm
 trains the attention only there, VOID by tp4's regime rule) **nor on OLMoE**
-(`e4b.train.h2h.unsloth.coverage.5090.2026-09-19`) — and lane TC2 re-asks
-them on the current cuts.
+(`e4b.train.h2h.unsloth.coverage.5090.2026-09-19`) — lane TC2 re-asked
+them on the current cuts; the next paragraph is what it found.
+
+**The other families at matched work** (lane TC2, 2026-10-02, two rented
+RTX 5090 hosts, [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md);
+register `e4b.train.h2h.hf.granite.5090.2026-10-02`,
+`e4b.train.h2h.axolotl.granite.5090.2026-10-02`,
+`e4b.train.h2h.unsloth.olmoe.5090.2026-10-02`,
+`e4b.train.h2h.hf.olmoe.5090.2026-10-02` and their companions). **The 5090
+per-step edge does not generalise to small experts.** On Granite-3.1-3B-A800M,
+whose `ParallelExperts` no other framework quantises, HF + PEFT with bf16
+experts reads **HF/e4b 0.971 [0.965, 0.978]** and axolotl 0.903 — both
+faster per step than e4b's fused 4-bit experts, which train at 0.53 × HF's
+VRAM (4.54 vs 8.50 GB) with COMPARABLE / EQUIVALENT loss: a footprint
+position, not a speed one (TC2 P1 FALSIFIED). On OLMoE-1B-7B, Unsloth
+2026.9.14 with its grouped path engaged reads **Unsloth/e4b 1.201 [1.199,
+1.204]** (e4b faster per step) at 2.21 GB less peak VRAM and ×0.71 the
+energy in Unsloth's favour, with the same loss — the first Unsloth position
+on this family; HF reads 1.255 [1.253, 1.258] at twice e4b's VRAM (P2's
+HF band FALSIFIED). Unsloth still adapts no expert parameter of Granite on
+either target list (`e4b.train.h2h.unsloth.granite.5090.2026-10-02.coverage`),
+and gpt-oss-20b has no common adapter set across frameworks — e4b trains its
+attention only there, an e4b limitation beside the wins
+(`e4b.train.h2h.unsloth.gptoss.5090.2026-10-02.no-common-set`). e4b's parity
+control PASSES on every family with a reference (P6 HELD). Qwen3.6-35B-A3B and
+Mixtral-8x7B (box B) were lost with their instance — stopped by its host
+during Unsloth's Mixtral load, the receipts unfetched — and nothing from
+that box is registered; their re-runs are registered (TC2 amendments 2 and
+3) and read next.
 
 
 **Against Unsloth, end-to-end, on one identical training problem** (lane

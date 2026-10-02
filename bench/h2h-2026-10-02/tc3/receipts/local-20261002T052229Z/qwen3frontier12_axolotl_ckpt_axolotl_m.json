@@ -1,0 +1,15 @@
+{
+ "framework": "axolotl",
+ "fam": "qwen3frontier12",
+ "arm": "axolotl",
+ "tag": "ckpt_axolotl_m",
+ "status": "refused",
+ "reason": "cu130 wheels need driver >= 580; host has 575.64.05",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "written_by": "tc1_run.sh",
+ "prereg": "tc1/TC3-PREREG.md",
+ "venv": "venv-axolotl (torch cu130)"
+}

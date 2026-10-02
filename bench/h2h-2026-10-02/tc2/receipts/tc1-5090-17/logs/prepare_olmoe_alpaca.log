@@ -1,0 +1,1 @@
+TOKENS fam=olmoe template=alpaca n_train=1200 n_eval=48 train_tokens=252559 mean=210.5 pad_id=50280 sha=de1b303bff2eec2b86857d821b2b776701b0c0a87afb102d13f8371f99e3f8ca

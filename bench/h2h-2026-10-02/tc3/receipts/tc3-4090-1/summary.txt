@@ -1,0 +1,34 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+FIXTURE frontier (TC3): the field recipe, matched init, fp32 adapters on a memory-frontier box (class 4090); levers: e4b --offload 1, hf --hf-offload 1 (device_map auto + max_memory), axolotl --axolotl-layer-offload 1 / --axolotl-zero3 1; local_box=0 snapshot=<fetched>
+BOX A families: qwen3frontier; e4b ff1af2dca1ad03814db5513d586aadf5cd6adba2 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc3-4090-1 instance 53804549 deadline 1790933719; prereg tc1/TC3-PREREG.md
+OMP_NUM_THREADS=64 (physical cores) box_class=RTX 4090
+DRIVER 595.84 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3frontier staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3frontier alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3frontier/e4b/fused_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.05, "load_weights": 22.284, "verify": 0.001, "attn4": 5.638, "lora": 0.028, "enable": 0.005, "tokenizer": 0.427, "census": 2.609, "frozen_probe": 0.074, "trainable_sha": 2.298, "counters": 0.0, "c1_before": 56.94, "eval0": 14.642, "optimizer": 0.183}, "phase_budget_s": 420.0, "prologue_s": 110.356, "prologue_unattributed_s": 1.177}
+qwen3frontier/e4b/fused_attn4_m rc=5 CELL OOM {"framework": "e4b", "fam": "qwen3frontier", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "fused", "tag": "fused_attn4_m", "status": "oom", "reason": "OOM at step 1: CUDA out of memory. Tried to allocate 284.00 MiB. GPU 0 has a total capacity of 23.52 GiB of which 271.00 MiB is free. Including non-PyTorch memory, this process has 23.23 GiB 
+
+qwen3frontier/e4b/fused_attn4_m_offload rc=1 
+qwen3frontier/e4b/fused_attn4_m_mb1 PROLOGUE {"phase_seconds": {"preamble": 4.097, "load_weights": 22.162, "verify": 0.001, "attn4": 5.556, "lora": 0.024, "enable": 0.005, "tokenizer": 0.411, "census": 2.602, "frozen_probe": 0.071, "trainable_sha": 2.303, "counters": 0.0, "c1_before": 56.448, "eval0": 2.656, "optimizer": 0.176}, "phase_budget_s": 1260.0, "prologue_s": 97.712, "prologue_unattributed_s": 1.201}
+qwen3frontier/e4b/fused_attn4_m_mb1 rc=5 CELL OOM {"framework": "e4b", "fam": "qwen3frontier", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "fused", "tag": "fused_attn4_m_mb1", "status": "oom", "reason": "OOM at step 1: CUDA out of memory. Tried to allocate 230.00 MiB. GPU 0 has a total capacity of 23.52 GiB of which 249.00 MiB is free. Including non-PyTorch memory, this process has 23.25 
+
+qwen3frontier/unsloth/ckpt_unsloth_m PROLOGUE {"phase_seconds": {"preamble": 2.124, "snapshot": 0.0, "load_weights": 25.204, "census": 2.589, "frozen_probe": 0.08, "trainable_sha": 2.438, "counters": 0.089, "c1_before": 50.62, "eval0": 14.966, "optimizer": 0.384}, "phase_budget_s": 1260.0, "prologue_s": 107.789, "prologue_unattributed_s": 9.297}
+qwen3frontier/unsloth/ckpt_unsloth_m rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3frontier", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m", "status": "ok", "steps": 20, "seq": 2048, "
+
+qwen3frontier/unsloth/ckpt_unsloth_m_mb1 PROLOGUE {"phase_seconds": {"preamble": 2.118, "snapshot": 0.0, "load_weights": 25.334, "census": 2.612, "frozen_probe": 0.078, "trainable_sha": 2.365, "counters": 0.088, "c1_before": 50.679, "eval0": 9.312, "optimizer": 0.341}, "phase_budget_s": 1260.0, "prologue_s": 102.219, "prologue_unattributed_s": 9.291}
+qwen3frontier/unsloth/ckpt_unsloth_m_mb1 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3frontier", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_mb1", "status": "ok", "steps": 20, "seq": 204
+
+qwen3frontier/hf/hf_peft_m rc=5 CELL OOM {"framework": "hf", "fam": "qwen3frontier", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "hf", "tag": "hf_peft_m", "status": "oom", "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 23.52 GiB of which 35.00 MiB is free. Including non-PyTorch memory, this process has 23.46 GiB memory 
+
+qwen3frontier/hf/hf_peft_m_offload rc=3 CELL REFUSED {"framework": "hf", "fam": "qwen3frontier", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "hf", "tag": "hf_peft_m_offload", "status": "refused", "reason": "RuntimeError: Tensor.item() cannot be called on meta tensors", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "offload": false, "prereg": "tc1/TC3-PREREG.md", "harness": "tc1
+
+qwen3frontier/axolotl/ckpt_axolotl_m rc=1 
+qwen3frontier/axolotl/ckpt_axolotl_m_layeroffload rc=3 CELL REFUSED {"framework": "axolotl", "fam": "qwen3frontier", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "axolotl", "tag": "ckpt_axolotl_m_layeroffload", "status": "refused", "reason": "RuntimeError: invalid argument to getCurrentStream", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "offload": false, "prereg": "tc1/TC3-PREREG.md", "harn
+
+qwen3frontier/axolotl/ckpt_axolotl_m_zero3 rc=3 CELL REFUSED {"framework": "axolotl", "fam": "qwen3frontier", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "axolotl", "tag": "ckpt_axolotl_m_zero3", "status": "refused", "reason": "axolotl ZeRO-3 parameter offload cannot be driven outside axolotl's trainer: ModelLoader.load() reads cfg.deepspeed only for zero.init() partitioning (loaders/model.py:11
+
+qwen3frontier/e4b/reference_attn4_m_offload rc=1 
+QWEN3FRONTIER DONE
+AXOLOTL[deepspeed] extra installed=1 (TC3 arm 10 is a refused row either way; its stub records the deepspeed version)

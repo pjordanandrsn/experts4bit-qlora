@@ -1,0 +1,39 @@
+{
+ "framework": "hf",
+ "fam": "qwen3frontier",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "arm": "hf",
+ "tag": "hf_peft_m_offload",
+ "status": "refused",
+ "reason": "RuntimeError: Tensor.item() cannot be called on meta tensors",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "offload": false,
+ "prereg": "tc1/TC3-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe)",
+ "note": null,
+ "phase_seconds": {
+  "preamble": 2.103,
+  "snapshot": 0.0,
+  "load_weights": 27.64
+ },
+ "phase_in_flight": null,
+ "phase_budget_s": 1260.0,
+ "phase": "load",
+ "memory_lever": "hf_offload",
+ "host_ram": {
+  "rss_hwm_gb": 102.692,
+  "ru_maxrss_gb": 102.692,
+  "cgroup_peak_gb": 128.861,
+  "cgroup_peak_source": "cgroup-v1 memory.max_usage_in_bytes",
+  "cgroup_peak_before_gb": 119.918,
+  "cgroup_peak_rose_during_arm": true,
+  "cgroup_limit_gb": 259.518,
+  "total_gb": 540.664,
+  "high_water_gb": 128.861
+ },
+ "exception_type": "RuntimeError"
+}
