@@ -1,0 +1,120 @@
+KNOBS e4b=c46f72aa77336ad2eb2b4d6b830be43a4006c00e gnf4=908a2ca94bfe6bc5f02092423381b1a10ccb59b9 granite=ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 olmoe=allenai/OLMoE-1B-7B-0924-Instruct@7f1c97f440f06ce36705e4f2b843edb5925f4498 gpu_class=5090 min_disk_gb=100 prove=0
+e4b 0.39.0 @c46f72aa77336ad2eb2b4d6b830be43a4006c00e
+gnf4 0.34.0 @908a2ca94bfe6bc5f02092423381b1a10ccb59b9
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+p96_reduce self-test OK (12 cases)
+premise row-exact rc=0: 6 passed in 13.98s
+premise K25 contract compiled rc=0: 30 passed in 25.41s
+speed granite_m_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=6.66ms compile=None recompiles=0 out=/root/p96/e4b_granite_m_b1_d1.json
+
+speed granite_t_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=2.80ms compile=None recompiles=0 out=/root/p96/e4b_granite_t_b1_d1.json
+
+speed olmoe_m_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=5.46ms compile=None recompiles=0 out=/root/p96/e4b_olmoe_m_b1_d1.json
+
+speed olmoe_t_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=3.11ms compile=None recompiles=0 out=/root/p96/e4b_olmoe_t_b1_d1.json
+
+k8 granite_k8_m_c4val1_w9 rc=0 K8_PPL steps=2048 nll=2.37571 ppl=10.75860 compute=f32 sha=c8c3944b04a6 out=/root/p96/granite_k8_m_c4val1_w9.json
+
+k8 granite_k8_t_c4val1_w9 rc=0 K8_PPL steps=2048 nll=2.37257 ppl=10.72491 compute=f32 sha=c8c3944b04a6 out=/root/p96/granite_k8_t_c4val1_w9.json
+
+k8 granite_k8_m_wikitext_w9 rc=0 K8_PPL steps=2048 nll=2.29412 ppl=9.91566 compute=f32 sha=5504e4ba7eea out=/root/p96/granite_k8_m_wikitext_w9.json
+
+k8 granite_k8_t_wikitext_w9 rc=0 K8_PPL steps=2048 nll=2.28660 ppl=9.84140 compute=f32 sha=5504e4ba7eea out=/root/p96/granite_k8_t_wikitext_w9.json
+
+k8 olmoe_k8_m_c4val1_w9 rc=0 K8_PPL steps=2048 nll=2.98611 ppl=19.80839 compute=fp8 sha=74438c2c0745 out=/root/p96/olmoe_k8_m_c4val1_w9.json
+
+k8 olmoe_k8_t_c4val1_w9 rc=0 K8_PPL steps=2048 nll=2.98670 ppl=19.82023 compute=fp8 sha=74438c2c0745 out=/root/p96/olmoe_k8_t_c4val1_w9.json
+
+k8 olmoe_k8_m_wikitext_w9 rc=0 K8_PPL steps=2048 nll=1.99289 ppl=7.33671 compute=fp8 sha=4a2a0d9fd8f5 out=/root/p96/olmoe_k8_m_wikitext_w9.json
+
+k8 olmoe_k8_t_wikitext_w9 rc=0 K8_PPL steps=2048 nll=1.99416 ppl=7.34599 compute=fp8 sha=4a2a0d9fd8f5 out=/root/p96/olmoe_k8_t_wikitext_w9.json
+
+k8 granite_k8_m_c4val1_w10 rc=0 K8_PPL steps=2048 nll=2.11543 ppl=8.29315 compute=f32 sha=3d3cc5f18ca9 out=/root/p96/granite_k8_m_c4val1_w10.json
+
+k8 granite_k8_t_c4val1_w10 rc=0 K8_PPL steps=2048 nll=2.11508 ppl=8.29028 compute=f32 sha=3d3cc5f18ca9 out=/root/p96/granite_k8_t_c4val1_w10.json
+
+k8 granite_k8_m_wikitext_w10 rc=0 K8_PPL steps=2048 nll=2.04516 ppl=7.73037 compute=f32 sha=fa4654730c51 out=/root/p96/granite_k8_m_wikitext_w10.json
+
+k8 granite_k8_t_wikitext_w10 rc=0 K8_PPL steps=2048 nll=2.04628 ppl=7.73908 compute=f32 sha=fa4654730c51 out=/root/p96/granite_k8_t_wikitext_w10.json
+
+k8 olmoe_k8_m_c4val1_w10 rc=0 K8_PPL steps=2048 nll=2.95689 ppl=19.23804 compute=fp8 sha=33addcaae19b out=/root/p96/olmoe_k8_m_c4val1_w10.json
+
+k8 olmoe_k8_t_c4val1_w10 rc=0 K8_PPL steps=2048 nll=2.95507 ppl=19.20304 compute=fp8 sha=33addcaae19b out=/root/p96/olmoe_k8_t_c4val1_w10.json
+
+k8 olmoe_k8_m_wikitext_w10 rc=0 K8_PPL steps=2048 nll=2.04528 ppl=7.73129 compute=fp8 sha=8780063f9809 out=/root/p96/olmoe_k8_m_wikitext_w10.json
+
+k8 olmoe_k8_t_wikitext_w10 rc=0 K8_PPL steps=2048 nll=2.04393 ppl=7.72092 compute=fp8 sha=8780063f9809 out=/root/p96/olmoe_k8_t_wikitext_w10.json
+
+k8 granite_k8_m_c4val1_w11 rc=0 K8_PPL steps=2048 nll=2.48377 ppl=11.98638 compute=f32 sha=8106ab2cfa0e out=/root/p96/granite_k8_m_c4val1_w11.json
+
+k8 granite_k8_t_c4val1_w11 rc=0 K8_PPL steps=2048 nll=2.49067 ppl=12.06938 compute=f32 sha=8106ab2cfa0e out=/root/p96/granite_k8_t_c4val1_w11.json
+
+k8 granite_k8_m_wikitext_w11 rc=0 K8_PPL steps=2048 nll=1.60696 ppl=4.98764 compute=f32 sha=89485f557702 out=/root/p96/granite_k8_m_wikitext_w11.json
+
+k8 granite_k8_t_wikitext_w11 rc=0 K8_PPL steps=2048 nll=1.60644 ppl=4.98503 compute=f32 sha=89485f557702 out=/root/p96/granite_k8_t_wikitext_w11.json
+
+k8 olmoe_k8_m_c4val1_w11 rc=0 K8_PPL steps=2048 nll=2.59775 ppl=13.43343 compute=fp8 sha=5cf105bde285 out=/root/p96/olmoe_k8_m_c4val1_w11.json
+
+k8 olmoe_k8_t_c4val1_w11 rc=0 K8_PPL steps=2048 nll=2.60433 ppl=13.52214 compute=fp8 sha=5cf105bde285 out=/root/p96/olmoe_k8_t_c4val1_w11.json
+
+k8 olmoe_k8_m_wikitext_w11 rc=0 K8_PPL steps=2048 nll=2.14062 ppl=8.50468 compute=fp8 sha=7d3301041019 out=/root/p96/olmoe_k8_m_wikitext_w11.json
+
+k8 olmoe_k8_t_wikitext_w11 rc=0 K8_PPL steps=2048 nll=2.13838 ppl=8.48568 compute=fp8 sha=7d3301041019 out=/root/p96/olmoe_k8_t_wikitext_w11.json
+
+k8 granite_k8_m_c4val1_w12 rc=0 K8_PPL steps=2048 nll=2.45102 ppl=11.60022 compute=f32 sha=949af9a7866b out=/root/p96/granite_k8_m_c4val1_w12.json
+
+k8 granite_k8_t_c4val1_w12 rc=0 K8_PPL steps=2048 nll=2.45151 ppl=11.60583 compute=f32 sha=949af9a7866b out=/root/p96/granite_k8_t_c4val1_w12.json
+
+k8 granite_k8_m_wikitext_w12 rc=0 K8_PPL steps=2048 nll=1.98860 ppl=7.30532 compute=f32 sha=0358d64bd180 out=/root/p96/granite_k8_m_wikitext_w12.json
+
+k8 granite_k8_t_wikitext_w12 rc=0 K8_PPL steps=2048 nll=1.98994 ppl=7.31511 compute=f32 sha=0358d64bd180 out=/root/p96/granite_k8_t_wikitext_w12.json
+
+k8 olmoe_k8_m_c4val1_w12 rc=0 K8_PPL steps=2048 nll=2.64003 ppl=14.01362 compute=fp8 sha=1ee0d28cf2ae out=/root/p96/olmoe_k8_m_c4val1_w12.json
+
+k8 olmoe_k8_t_c4val1_w12 rc=0 K8_PPL steps=2048 nll=2.63363 ppl=13.92417 compute=fp8 sha=1ee0d28cf2ae out=/root/p96/olmoe_k8_t_c4val1_w12.json
+
+k8 olmoe_k8_m_wikitext_w12 rc=0 K8_PPL steps=2048 nll=2.18901 ppl=8.92635 compute=fp8 sha=824b14211e24 out=/root/p96/olmoe_k8_m_wikitext_w12.json
+
+k8 olmoe_k8_t_wikitext_w12 rc=0 K8_PPL steps=2048 nll=2.18948 ppl=8.93055 compute=fp8 sha=824b14211e24 out=/root/p96/olmoe_k8_t_wikitext_w12.json
+
+k8 granite_k8_m_c4val1_w13 rc=0 K8_PPL steps=2048 nll=2.39364 ppl=10.95330 compute=f32 sha=284504614a31 out=/root/p96/granite_k8_m_c4val1_w13.json
+
+k8 granite_k8_t_c4val1_w13 rc=0 K8_PPL steps=2048 nll=2.38874 ppl=10.89975 compute=f32 sha=284504614a31 out=/root/p96/granite_k8_t_c4val1_w13.json
+
+k8 olmoe_k8_m_c4val1_w13 rc=0 K8_PPL steps=2048 nll=2.34237 ppl=10.40589 compute=fp8 sha=1962e388e8d6 out=/root/p96/olmoe_k8_m_c4val1_w13.json
+
+k8 olmoe_k8_t_c4val1_w13 rc=0 K8_PPL steps=2048 nll=2.34599 ppl=10.44356 compute=fp8 sha=1962e388e8d6 out=/root/p96/olmoe_k8_t_c4val1_w13.json
+
+k8 granite_k8_m_c4val1_w14 rc=0 K8_PPL steps=2048 nll=2.38567 ppl=10.86637 compute=f32 sha=d81cd4184e34 out=/root/p96/granite_k8_m_c4val1_w14.json
+
+k8 granite_k8_t_c4val1_w14 rc=0 K8_PPL steps=2048 nll=2.38606 ppl=10.87056 compute=f32 sha=d81cd4184e34 out=/root/p96/granite_k8_t_c4val1_w14.json
+
+k8 olmoe_k8_m_c4val1_w14 rc=0 K8_PPL steps=2048 nll=1.91583 ppl=6.79257 compute=fp8 sha=0f81ec167e54 out=/root/p96/olmoe_k8_m_c4val1_w14.json
+
+k8 olmoe_k8_t_c4val1_w14 rc=0 K8_PPL steps=2048 nll=1.91159 ppl=6.76383 compute=fp8 sha=0f81ec167e54 out=/root/p96/olmoe_k8_t_c4val1_w14.json
+
+k8 granite_k8_m_c4val1_w15 rc=0 K8_PPL steps=2048 nll=2.31640 ppl=10.13913 compute=f32 sha=35e85e8de93f out=/root/p96/granite_k8_m_c4val1_w15.json
+
+k8 granite_k8_t_c4val1_w15 rc=0 K8_PPL steps=2048 nll=2.31582 ppl=10.13320 compute=f32 sha=35e85e8de93f out=/root/p96/granite_k8_t_c4val1_w15.json
+
+k8 olmoe_k8_m_c4val1_w15 rc=0 K8_PPL steps=2048 nll=2.42835 ppl=11.34011 compute=fp8 sha=ea417516bfd2 out=/root/p96/olmoe_k8_m_c4val1_w15.json
+
+k8 olmoe_k8_t_c4val1_w15 rc=0 K8_PPL steps=2048 nll=2.43174 ppl=11.37868 compute=fp8 sha=ea417516bfd2 out=/root/p96/olmoe_k8_t_c4val1_w15.json
+
+k8 granite_k8_m_c4val1_w16 rc=0 K8_PPL steps=2048 nll=1.45879 ppl=4.30076 compute=f32 sha=e6880f6ecc38 out=/root/p96/granite_k8_m_c4val1_w16.json
+
+k8 granite_k8_t_c4val1_w16 rc=0 K8_PPL steps=2048 nll=1.45792 ppl=4.29701 compute=f32 sha=e6880f6ecc38 out=/root/p96/granite_k8_t_c4val1_w16.json
+
+k8 olmoe_k8_m_c4val1_w16 rc=0 K8_PPL steps=2048 nll=3.38542 ppl=29.53053 compute=fp8 sha=839124cdb3cb out=/root/p96/olmoe_k8_m_c4val1_w16.json
+
+k8 olmoe_k8_t_c4val1_w16 rc=0 K8_PPL steps=2048 nll=3.38033 ppl=29.38061 compute=fp8 sha=839124cdb3cb out=/root/p96/olmoe_k8_t_c4val1_w16.json
+
+P96_VERDICT LICENSED | |mean t - m| <= 0.05 over the windows on every text in both families; with P93's speed, the T > 1 default moves to auto
+  granite c4val1: n=8 mean t-m -0.0009 sd 0.0396 se 0.0140 (P95 sigma 0.0535) pass | -0.034 -0.003 +0.083 +0.006 -0.054 +0.004 -0.006 -0.004
+  granite wikitext: n=4 mean t-m -0.0146 sd 0.0402 se 0.0201 (P95 sigma 0.0258) pass | -0.074 +0.009 -0.003 +0.010
+  olmoe c4val1: n=8 mean t-m -0.0158 sd 0.0770 se 0.0272 (P95 sigma 0.0546) pass | +0.012 -0.035 +0.089 -0.089 +0.038 -0.029 +0.039 -0.150
+  olmoe wikitext: n=4 mean t-m -0.0040 sd 0.0130 se 0.0065 (P95 sigma 0.0303) pass | +0.009 -0.010 -0.019 +0.004

@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-1038a52e-6a90-bf2d-1206-1f2e831e76d9, 12.0
+power.limit,clocks.max.sm 500.00 W, 3105 MHz
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD Ryzen 9 3900X 12-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             125           1          74           0          49         122
+overlay         320G  1.5M  320G   1% /

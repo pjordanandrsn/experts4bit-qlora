@@ -552,6 +552,9 @@ on disjoint windows, K8's own spread across those equal-error arithmetics is 0.0
 0.026 / 0.030 on wikitext, so a single-window 0.05 gate cannot resolve these families; a windowed gate needs
 W >= 5 / 2 windows, and P94's window was an outlier for K25 (P95, UNDER_RESOLVED,
 `e4b.serve.p95.nf4-families.k8-window-spread.5090.2026-10-02`);
+under that windowed gate, on fresh windows, K25 against the M-tile reads mean t − m −0.001 / −0.015 (Granite) and
+−0.016 / −0.004 (OLMoE), LICENSED, so `E4B_NF4_GROUPED_SMALLM` defaults to `auto` for rows above T == 1 (P96,
+`e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`);
 **gpt-oss's quoted best is its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970; with K21 serving the store's batched rows, its B=16 step reads
 ×0.581 against the NF4 fallback, at a lower KL from the reference (0.00147 vs 0.00192;

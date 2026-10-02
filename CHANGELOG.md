@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Lane P96 read (#564, one RTX 5090): LICENSED -- under P95's windowed K8 gate, K25 against the served NF4 M-tile reads mean t − m −0.001 / −0.015 (Granite) and −0.016 / −0.004 (OLMoE), so `E4B_NF4_GROUPED_SMALLM` defaults to `auto` (`e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`)
+
+- **What it read.** K8 of K25 (t) and the served M-tile (m) at T == 1 on fresh windows (c4val1 9–16, wikitext 9–12),
+  on both families. All 48 arms ran. Engagement was 64 / 32 calls per step for each arm's kernel.
+- **The gate.** |mean(t − m)| ≤ 0.05 on every text in both families: Granite −0.0009 / −0.0146, OLMoE −0.0158 /
+  −0.0040 (c4val1 / wikitext).
+- **Single windows still swing by up to 0.15.** Six of 24 exceed 0.05, and the largest (−0.150) is on a ppl-29.5
+  window. A single-window gate would have failed this change, as it failed P94's.
+- **Consequence.** The default moves to `auto` (rows above T == 1), in its own PR.
+- `bench/p96/RESULTS-p96.md`, `bench/p96/receipts/p96-5090-1/` ($0.5799; lane $0.6425).
+
 ### Docs: `serve_paged`'s batched decode graphs confirmed on a GPU after the #874 fix
 
 - `docs/SERVING.md`: lane SC1's proof `sc1a-prove-8` (RTX 5090, e4b `0a2a0c8`) captured all five decode-graph buckets at B=16, with

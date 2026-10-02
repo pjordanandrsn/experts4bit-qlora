@@ -7654,6 +7654,35 @@
         "receipts/experts4bit-qlora/2026-10-02/p95-prove-4/ (receipt.json, the proving run)"
       ],
       "notes": "Pre-registered in #855. Verdict UNDER_RESOLVED on all four family-texts (W = 5 / 2 / 5 / 2). Production's own GEMV and M-tile differ by more than 0.05 on 1 of 8 (Granite) and 2 of 8 (OLMoE) fresh c4val1 windows. Over the fresh windows K25 shows no consistent shift against the M-tile (c4val1 t - m -0.019 / +0.028, SE 0.019); P94's window-0 t - m (+0.102 / +0.168) sits 2.3 / 2.7 SD above the fresh mean. P94's verdict stands; a later lane asking K25's default again uses the windowed gate on windows k >= 9. Window 0 reproduced P94 bit for bit on a third host."
+    },
+    {
+      "id": "e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P96, one RTX 5090: under P95's windowed K8 gate, K25 (select tree through TF32) against the served NF4 M-tile it replaces above T == 1 reads mean t - m -0.0009 / -0.0146 ppl on Granite r12epi (c4val1 over 8 fresh windows / wikitext over 4) and -0.0158 / -0.0040 on OLMoE nf4 (bar |0.05|), LICENSED in both families, so with P93's speed (B=16 x0.594 / x0.598) E4B_NF4_GROUPED_SMALLM defaults to auto (rows above T == 1).",
+      "value": -0.0158,
+      "unit": "mean K8 ppl delta t - m over the fresh windows, OLMoE c4val1 (the largest |mean|; bar 0.05)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05, 500 W), one rented Vast.ai verified host (machine 45501, instance 53810470, AMD Ryzen 9 3900X), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @c46f72a + grouped-nf4-gemm @908a2ca; Granite @a0278068 r12epi, OLMoE @7f1c97f4 nf4, envs = bench/p44/serve_stack.py arm_env; arms m (E4B_NF4_GROUPED_SMALLM=0, E4B_NF4_T1_DEVICE_GROUPING=1) and t (E4B_NF4_GROUPED_SMALLM=1); K8 2048 steps, eager B=1, --no-fuse-qkv, fresh windows at token k*4096 (c4val1 9-16, wikitext 9-12; disjoint from P94's and P95's); engagement censuses m _gemm_nf4_grouped and t _gemm_nf4_grouped_smallm 64 / 32 per step; all 48 arms ran; verdict by bench/p96/p96_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "licensed_by": "e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02",
+      "evidence": [
+        "bench/p96/RESULTS-p96.md",
+        "bench/p96/PREREG-p96.md",
+        "bench/p96/p96_reduce.py",
+        "bench/p96/receipts/p96-5090-1/verdict.json",
+        "bench/p96/receipts/p96-5090-1/olmoe_k8_t_c4val1_w16.json",
+        "bench/p96/receipts/p96-5090-1/olmoe_k8_m_c4val1_w16.json",
+        "bench/p96/receipts/p96-5090-1/logs/census_olmoe_t_b1_d1.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/p96-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-02/p96-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #870 under the windowed gate P95 (#866) named. Six of the 24 single windows exceed 0.05 (up to -0.150 on an OLMoE c4val1 window at ppl 29.5, -0.5 % relative), so a single-window gate would have failed this change; the windowed means are near zero (95 % intervals +-0.033 / +-0.064 / +-0.064 / +-0.021). P94's single-window QUALITY_FAIL stands under its own rule; this lane is the default's licence."
     }
   ]
 }
