@@ -1,6 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.39.0 — 2026-10-02 — an opt-in OpenAI-compatible server over the continuous-batching engine (`serve_paged`) with a per-request stop set in the scheduler; foreign-format loader correctness (compressed-tensors NVFP4 decoded global_scale² too large, fixed; zero points and GPTQ `gptq_v2` refused); lane P95 reads K8's window spread
+
+**0.39.0.** No default changes.
+- **New, opt-in: `python -m experts4bit_qlora.serve_paged`.** An OpenAI-compatible HTTP server over `ContinuousScheduler` + `PagedModelRunner` + `Fp8PagedKV`, for request-level serving benchmarks. Greedy only, as stated in its entry.
+  - The scheduler gains an optional per-request stop set, `min_tokens`, `finish_reason` and `abort()`.
+  - With no stop set, every existing caller behaves as before.
+- **Fixed: compressed-tensors NVFP4 loads (#788).** The per-tensor `weight_global_scale` is a divisor, and every earlier release multiplied by it.
+  - Those tensors loaded clean but `global_scale²` too large, about 5e7 on a real Qwen3-30B-A3B tensor.
+  - ModelOpt FP4 was right, and no registered claim uses NVFP4.
+  - If you loaded a compressed-tensors NVFP4 checkpoint with an earlier release, reload it.
+- **Refused instead of mis-decoded (#789):**
+  - compressed-tensors asymmetric weights (`weight_zero_point`);
+  - GPTQ checkpoints whose config names `checkpoint_format: gptq_v2`.
+- **Tests:** `compressed-tensors==0.18.0` joins `[test]` as the foreign-format oracle, and CI fails if it is missing.
+- **Evidence:** lane P95 measured K8's per-window spread on the NF4 families. A single-window 0.05 gate cannot resolve them (UNDER_RESOLVED); a windowed gate needs ≥ 5 c4val1 windows and ≥ 2 wikitext windows.
+- **Dependencies:** CI still installs grouped-nf4-gemm at the v0.34.1 commit; the `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
+- **The rest is bench, docs and tooling:**
+  - lanes SC1 (serving head-to-head) and TC1/TC3 (training head-to-head): registrations and amendments;
+  - the `E4B_ROUTER_EPI_CAST=0` policy text (#782);
+  - a conflict-marker guard in CI.
+
 ### Lane P95 read (#564, one RTX 5090): UNDER_RESOLVED -- K8's per-window spread across equal-error arithmetics is 0.054 / 0.055 ppl on c4val1 and 0.026 / 0.030 on wikitext, so a single-window 0.05 gate cannot resolve the NF4 families (`e4b.serve.p95.nf4-families.k8-window-spread.5090.2026-10-02`)
 
 - **What it read.** P94's three arithmetics (GEMV, served M-tile, K25 TF32) on 9 c4val1 windows and 5 wikitext
