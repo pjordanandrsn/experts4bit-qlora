@@ -1,6 +1,14 @@
 # Changelog
 
 ## Unreleased
+
+### Lane SC1 amendment A5 (#846): box A's first draw exposed three instrument defects -- vLLM's B=1 token budget, the energy reader, the SAMEPROMPT check (bench + tests)
+
+- `bench/sc1/vllm/`: every B=1 vLLM arm died at engine init (illegal memory access) with `max_num_batched_tokens` 8192 >
+  `max_num_seqs * max_model_len` 2048, which vLLM itself warns about; the budget is capped at that product and checked before
+  `LLM(**kw)` (B=16 unchanged at 8192). `bench/sc1/sc1_reduce.py`: energy now reads the sampler's headerless CSV through the
+  recorded `sampler_fields`; SAMEPROMPT compares the arm's effective rows with `prompts_b16_same.json`. Three CPU tests that fail
+  on the registered code; pin regenerated; `SC1-PREREG.md` gains A5 with the first draw's registered outcomes.
 ### Lane SC1 amendment A4 (#846): the scheduler arms applied the int4 levers twice (harness hook + serve_paged) -- they now run with the hook off (bench + tests)
 
 - `bench/sc1/sc1_run.sh`: the P42 hook on `PYTHONPATH` and `serve_paged.build_engine` both apply the int4 levers right after the

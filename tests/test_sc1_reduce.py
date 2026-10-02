@@ -192,3 +192,40 @@ def test_census_parse_and_kernel_lookup(tmp_path):
     assert R.census_kernels({}, str(tmp_path), "nothing") is None                                   # missing is None, never empty
     assert R.census_kernels({"census": {"k19_engaged": True, "k23_engaged": False}}, str(tmp_path), "x") == {R.K19_KERNEL}
     assert R.census_kernels({"census": {"kernels": ["a", "b"]}}, str(tmp_path), "x") == {"a", "b"}
+
+
+# --- A5 (sc1a-5090-1): energy from the sampler's headerless CSV; SAMEPROMPT checks its effective rows -------------------
+
+def test_energy_reads_a_headerless_sampler_csv_with_its_field_list():
+    """sc1a-5090-1: every energy row read "no power.draw column" -- the sampler writes `--format=csv,noheader,nounits` and
+    records the field list in the receipt (`sampler_fields`); the reducer looked for a header row."""
+    import calendar
+    import time
+    m = _mod()
+    fields = "timestamp,memory.used,utilization.gpu,clocks.sm,power.draw.instant,pcie.link.gen.current"
+    t0 = calendar.timegm(time.strptime("2026/10/02 11:22:00", "%Y/%m/%d %H:%M:%S"))
+    lines = [time.strftime("%Y/%m/%d %H:%M:%S", time.gmtime(t0 + i // 2)) + (".500" if i % 2 else ".000")
+             + ", 28000, 99, 2542, 300.00, 4" for i in range(21)]                          # 10 s at 300 W, 0.5 s apart
+    csv_text = "\n".join(lines) + "\n"
+    e = m.energy_integral(csv_text, t0, t0 + 10.0, 50, None, fields=fields)
+    assert e["basis"] == "csv timestamps" and e["n_samples"] == 21, e
+    assert e["joules"] == pytest.approx(3000.0, rel=1e-3) and e["mean_w"] == pytest.approx(300.0, rel=1e-3)
+    assert m.energy_integral(csv_text, t0, t0 + 10.0, 50, None)["basis"] == "no power.draw column"   # the registered reading
+    assert m.energy_integral("power.draw.instant [W]\n300 W\n300 W\n", t0, t0 + 1.0, 50, t0)["joules"] is not None  # header form
+
+
+def test_sameprompt_arm_checks_its_effective_rows_against_the_same_file():
+    """sc1a-5090-1: vLLM's SAMEPROMPT arms read VOID "prompts_sha differs" -- the reducer compared the DISTINCT file's sha the
+    arm recorded (`file_prompts_sha256`) with prompts_b16_same.json's; the arm's EFFECTIVE rows (`effective_prompts_sha256`)
+    are what that file holds."""
+    m = _mod()
+    distinct, same = "f67e" * 16, "1e45" * 16
+    pf_same = {"prompts_sha256": same, "batch": 16}
+    sp = {"source_row": 0, "rows_identical": True, "copies": 16, "file_prompts_sha256": distinct, "effective_prompts_sha256": same}
+    vllm_rec = {"prompts_sha256": distinct, "sameprompt": sp, "prompt_tokens": [512] * 16}          # the vLLM driver's shape
+    e4b_rec = {"prompts_sha256": same, "sameprompt": sp, "prompt_tokens": [512] * 16}               # sc1_e4b_sched's shape
+    for rec in (vllm_rec, e4b_rec):
+        why = m.check_prompts(rec, pf_same, 16, same=True)
+        assert not any("prompts_sha differs" in w for w in why), why
+    bad = dict(vllm_rec, sameprompt=dict(sp, effective_prompts_sha256="dead" * 16))
+    assert any("prompts_sha differs" in w for w in m.check_prompts(bad, pf_same, 16, same=True))   # still refuses a wrong file

@@ -98,6 +98,7 @@ def main():
 
 def _run(rec, arm, batch, prompts, kw, short, long_, reps, log, out_path):
     t0 = time.perf_counter()
+    C.check_budget(kw)
     llm = LLM(**kw)
     rec["load_s"] = round(time.perf_counter() - t0, 1)
     rec.update(C.resolved_config(llm, kw))

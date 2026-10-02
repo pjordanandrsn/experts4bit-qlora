@@ -175,3 +175,23 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
   Its other arms are a valid first draw, recorded as such. Box A is re-proved and re-run at A4's merge, with boxes B and C, so the
   registered scheduler-slope ratio is measured on one box with its vLLM anchor. Stopping the running box was not possible from
   this session.
+- **A5 (2026-10-02T12:31Z; the box-A first draw `sc1a-5090-1`, adertha-receipts `636c321`).** The first draw ran every phase and exposed
+  three instrument defects. All three are fixed here, each with a CPU test that fails on the registered code.
+  1. **Every vLLM arm at B=1 died at engine initialisation** (matched, fp8-KV, nodetok, the NLL scorer, TTFT) with an illegal
+     memory access, after vLLM 0.30's own warning "max_num_batched_tokens (8192) exceeds max_num_seqs * max_model_len
+     (2048)". Its kernel warm-up runs a step of that many tokens. B=16 was unaffected, because 16 × 2048 ≥ 8192. The budget is
+     now capped at `max_num_seqs × max_model_len`: 2048 at B=1, 2576 for the scorer's 2561-token window, 4104 for TTFT-4096.
+     That keeps every prompt in one chunk, as registered; B=16 stays 8192. Each driver checks the budget before starting the
+     engine.
+  2. **Every energy row read "no power.draw column".** The sampler writes `--format=csv,noheader` and records its field list in
+     the receipt (`sampler_fields`); the reducer looked for a header row. The reducer now reads the recorded field list. The
+     box's timestamps are UTC and match the receipts' epochs.
+  3. **vLLM's SAMEPROMPT arms read VOID "prompts_sha differs".** The reducer compared the distinct file's sha the arm recorded
+     with `prompts_b16_same.json`. The arm's effective rows (`effective_prompts_sha256`) are what that file holds, and the
+     e4b scheduler arm records the same field. The check now uses the effective rows, and still refuses a wrong file.
+  Also recorded from the first draw, unchanged by A5 because they are registered outcomes: the licence reads
+  **QUALITY_FAIL** at both arithmetics (wikitext −0.014 / −0.011 ppl, c4val1 +0.056 / +0.040 ppl vs the NF4 base, under the
+  registered single-window calibrated gate). P6 is REFUTED (e4b served − prefill +0.0048 / +0.0025 nats, under the 0.005
+  predicted). P12 HOLDS (lic / rtn within 0.2 % at both B). P14 is REFUTED (vLLM nodetok / matched 0.968 at B=16, 3.2 %
+  against 1 %). The degraded control PASSES (×1.181, K19 absent). The re-run of all three boxes reads these again at the A5
+  merge.

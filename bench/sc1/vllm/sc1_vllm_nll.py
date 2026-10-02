@@ -66,7 +66,7 @@ def main():
     kw = C.build_llm_kwargs(base_arm, 1, model, rev, gpu_util=C.env_float("GPU_UTIL", 0.90), max_len=P + S + 16,
                             prompt_len=P + S + 1, attn=C.env("ATTN_BACKEND"), moe=C.env("MOE_BACKEND", "marlin"))
     kw["max_num_seqs"] = 1
-    kw["max_num_batched_tokens"] = max(8192, P + S + 1)
+    kw["max_num_batched_tokens"] = C.capped_batched_tokens(1, kw["max_model_len"], max(8192, P + S + 1))   # A5
     if mode == "served":
         kw["enable_prefix_caching"] = True
         if lp_req in ("auto", "full"):
@@ -100,6 +100,7 @@ def main():
 
 def _run(rec, mode, ids, P, S, kw, lp_req, log, out_path):
     t0 = time.perf_counter()
+    C.check_budget(kw)
     llm = LLM(**kw)
     rec["load_s"] = round(time.perf_counter() - t0, 1)
     rec.update(C.resolved_config(llm, kw))
