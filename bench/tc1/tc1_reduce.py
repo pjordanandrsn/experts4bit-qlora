@@ -98,16 +98,18 @@ TP4_T28_S_PER_STEP = 29.05        # P1b: the Unsloth s/step the phase-2 instruct
 P8_BUSY_MIN = 0.5                 # P8 (phase 2): device busy fraction >= 0.5 on the profiled grouped_mm arm
 UNSLOTH_BACKEND_KEYS = {"grouped_mm": "unsloth_grouped_mm", "unsloth_triton": "unsloth_triton", "native_torch": "unsloth_loop"}   # tc1_arm.py's counter keys
 
-FAMS = ["qwen3", "qwen3native"]
-NAMES = {"qwen3": "Qwen3-30B-A3B", "qwen3native": "Qwen3-30B-A3B (the labelled / native-best box)"}
-N_LAYERS = {"qwen3": 48, "qwen3native": 48}
+AX_FAM = "qwen3axolotl"           # TC1-PREREG amendment 3 (2026-10-02): the axolotl rows re-asked on their own box (two draws of the matched pair)
+FAMS = ["qwen3", "qwen3native", AX_FAM]
+NAMES = {"qwen3": "Qwen3-30B-A3B", "qwen3native": "Qwen3-30B-A3B (the labelled / native-best box)", AX_FAM: "Qwen3-30B-A3B (amendment 3: the axolotl box)"}
+N_LAYERS = {"qwen3": 48, "qwen3native": 48, AX_FAM: 48}
 FW = ("e4b", "unsloth", "hf", "axolotl")
 QUALITY_ANCHOR = ("e4b", "fused_attn4_m")        # the quality reading's anchor and the matched position's e4b side
 EQUIV_ANCHOR = ("e4b", "fused_attn4_m")          # I: equivalence across frameworks is against fused_m; fused-vs-reference is the e4b-side control
 REFERENCE = ("e4b", "reference_attn4_m")
 PRIMARY = {"e4b": "fused_attn4_m", "unsloth": "ckpt_unsloth_m", "hf": "hf_peft_m", "axolotl": "ckpt_axolotl_m"}
 SECONDARY = {fw: PRIMARY[fw] + "_mb1" for fw in PRIMARY}
-DRAW2 = {("e4b", "fused_attn4_m"): ("e4b", "fused_attn4_m_d2"), ("unsloth", "ckpt_unsloth_m"): ("unsloth", "ckpt_unsloth_m_d2")}
+DRAW2 = {("e4b", "fused_attn4_m"): ("e4b", "fused_attn4_m_d2"), ("unsloth", "ckpt_unsloth_m"): ("unsloth", "ckpt_unsloth_m_d2"),
+         ("axolotl", "ckpt_axolotl_m"): ("axolotl", "ckpt_axolotl_m_d2")}      # the axolotl second draw is registered on the amendment-3 box only
 NATIVE = {"e4b": "fused_attn4_shipped", "unsloth": "ckpt_unsloth_best", "axolotl": "ckpt_axolotl_best"}
 PROF = ("unsloth", "ckpt_unsloth_prof")
 # R8: labelled rows -- a position against e4b/fused_attn4_m under this label, never the quoted matched position
@@ -125,12 +127,14 @@ EXPECTED = {"qwen3": [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), (
                       ("e4b", "fused_attn4_m_prof"), ("unsloth", "ckpt_unsloth_prof")],
             "qwen3native": [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_best"), ("unsloth", "ckpt_unsloth_t28"), ("unsloth", "ckpt_unsloth_triton"),
                             ("e4b", "fused_attn4_shipped"), ("e4b", "fused_attn4_m_nodgrad"), ("e4b", "fused_attn4_m_t212"),
-                            ("axolotl", "ckpt_axolotl_best"), ("hf", "hf_peft_m_mb1_t214")]}
+                            ("axolotl", "ckpt_axolotl_best"), ("hf", "hf_peft_m_mb1_t214")],
+            AX_FAM: [("e4b", "fused_attn4_m"), ("axolotl", "ckpt_axolotl_m"), ("e4b", "fused_attn4_m_d2"), ("axolotl", "ckpt_axolotl_m_d2"),
+                     ("axolotl", "ckpt_axolotl_best"), ("hf", "hf_peft_m_mb1_t214")]}
 # the arms registered MATCHED (fp32 adapters, --lora-init matched:<seed>): R3 applies to these, native rows carry no R3
 MATCHED = {"fused_attn4_m", "fused_attn4_m_d2", "ckpt_unsloth_m", "ckpt_unsloth_m_d2", "hf_peft_m", "ckpt_axolotl_m",
            "reference_attn4_m", "ckpt_unsloth_prof", "fused_attn4_m_prof", "ckpt_unsloth_t28", "ckpt_unsloth_triton",
            "fused_attn4_m_nodgrad", "fused_attn4_m_t212", "hf_peft_m_mb1_t214",
-           "fused_attn4_m_mb1", "ckpt_unsloth_m_mb1", "hf_peft_m_mb1", "ckpt_axolotl_m_mb1"}
+           "fused_attn4_m_mb1", "ckpt_unsloth_m_mb1", "hf_peft_m_mb1", "ckpt_axolotl_m_mb1", "ckpt_axolotl_m_d2"}
 VOCAB = ("OK", "REFUSED", "OOM", "INSTALL_FAILED", "LOAD_FAULT", "HARNESS_ERROR", "ALARM", "NOT_RUN")
 VERDICTS = ("VALID", "VOID", "QUALITY_FAIL", "OOM", "UNSUPPORTED", "HARNESS_ERROR", "ALARM", "NOT_RUN")
 STATUS_MAP = {"ok": "OK", "c1_failed": "OK", "refused": "REFUSED", "oom": "OOM", "install_failed": "INSTALL_FAILED",
@@ -190,7 +194,7 @@ N_LAYERS.update({fam: v[2] for fam, v in TC2_MODELS.items()})
 # gpt-oss is REFUSED on the bias rule -- its attention is never converted; Gemma-4 is out of scope). None = not registered here: the receipt's own
 # structural_expected_n_attn4 governs (qwen3_5: linear-attention layers, no committed census in this tree -- UNVERIFIED). A receipt whose census
 # disagrees with a registered value is VOID (R11).
-ATTN_CENSUS = {"qwen3": 192, "qwen3native": 192, CURVE_FAM: 192, "granite": 128, "olmoe": 64, "mixtral": 128, "gptoss": None, "qwen3_5": None}
+ATTN_CENSUS = {"qwen3": 192, "qwen3native": 192, AX_FAM: 192, CURVE_FAM: 192, "granite": 128, "olmoe": 64, "mixtral": 128, "gptoss": None, "qwen3_5": None}
 TC2_ANCHOR = {"gptoss": ("e4b", "attn_only_m")}      # the family's e4b anchor arm (quality, draws, step-0, sha): attention-only on gpt-oss (bare experts, tp1/tp2)
 NO_COMMON_SET = {"gptoss": "e4b adapts attention only on this family (experts built bare, no ExpertsLoRA: tp1/tp2 cited) while Unsloth / HF / axolotl adapt the experts -- "
                            "no ratio is quoted across different adapter sets (TC2-PREREG-draft 'Arms per family')"}
@@ -281,6 +285,8 @@ def load(d):
     out = {}
     for p in sorted(glob.glob(os.path.join(d, "*_*_*.json"))):
         base = os.path.basename(p)[:-5]
+        if base.endswith("_profile"):         # the profiled arm's kernel-table sidecar (<arm>_prof_profile.json), not a receipt (amendment 3)
+            continue
         m = re.match(rf"^([a-z0-9_]+?)_({FW_RE})_(.+)$", base)
         if not m:
             continue
@@ -928,12 +934,32 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
             "u": recs.get(("unsloth", PRIMARY["unsloth"])), "h": recs.get(("hf", PRIMARY["hf"])), "ax": recs.get(("axolotl", PRIMARY["axolotl"]))}
 
 
+def _score_p6(fam, vd, pos, nvd):
+    """P6 axolotl: INSTALL_FAILED/UNSUPPORTED/OOM, or trains with axolotl/e4b in [1.5, 6] -- read on `fam`: the judged box, or amendment 3's
+    axolotl box (AX_FAM) when it ran, since the judged boxes' INSTALL_FAILED was the harness's own uv index strategy, not a reading on axolotl."""
+    av = vd.get(("axolotl", PRIMARY["axolotl"]), "missing")
+    pa = pos.get("axolotl", {})
+    if av == "missing" and nvd.get(("axolotl", NATIVE["axolotl"]), "missing") != "missing":     # only the native-best axolotl row ran
+        av = nvd.get(("axolotl", NATIVE["axolotl"]))
+    if av in ("UNSUPPORTED", "OOM"):
+        return ("P6", fam, "HELD", f"axolotl {av}")
+    if av in ("VALID", "QUALITY_FAIL", "VOID"):
+        if pa.get("quoted"):
+            return ("P6", fam, "HELD" if 1.5 <= pa["ratio"] <= 6 else "FALSIFIED", f"axolotl trained; axolotl/e4b {pa['ratio']:.3f} vs [1.5, 6]")
+        return ("P6", fam, "UNTESTED", f"axolotl {av} but no quoted position: {pa.get('why')}")
+    return ("P6", fam, "UNTESTED", f"axolotl {av} (NOT_RUN / HARNESS_ERROR / ALARM is not a reading)")
+
+
 # ----------------------------------------------------------------------------- R6: predictions (TC1-PREREG.md, scored mechanically)
 def score_predictions(F):
     R = F.get("qwen3")
+    AX = F.get(AX_FAM)                               # amendment 3: P6 reads the axolotl box when it ran
     out = []
     if not R:
-        return [(f"P{i}", "qwen3", "UNTESTED", "no receipts") for i in range(1, 11)]
+        base = [(f"P{i}", "qwen3", "UNTESTED", "no receipts") for i in range(1, 11)]
+        if AX:
+            base[5] = _score_p6(AX_FAM, AX["verdicts"], AX["positions"], AX["verdicts"])
+        return base
     vd = R["verdicts"]
     pos = R["positions"]
     dr = R["draws"]
@@ -1003,20 +1029,8 @@ def score_predictions(F):
         out.append(("P5", "qwen3", "FALSIFIED", f"hf_peft_m {hp}, hf_peft_m_mb1 {hm}: HF trained at least one recipe"))
     else:
         out.append(("P5", "qwen3", "UNTESTED", f"hf_peft_m {hp}, hf_peft_m_mb1 {hm}: neither an OOM pair nor a trained arm"))
-    # P6 axolotl: INSTALL_FAILED/UNSUPPORTED/OOM, or trains with axolotl/e4b in [1.5, 6]
-    av = vof("axolotl", PRIMARY["axolotl"])
-    pa = pos.get("axolotl", {})
-    if av == "missing" and nvof("axolotl", NATIVE["axolotl"]) != "missing":     # only the native-best axolotl row ran
-        av = nvof("axolotl", NATIVE["axolotl"])
-    if av in ("UNSUPPORTED", "OOM"):
-        out.append(("P6", "qwen3", "HELD", f"axolotl {av}"))
-    elif av in ("VALID", "QUALITY_FAIL", "VOID"):
-        if pa.get("quoted"):
-            out.append(("P6", "qwen3", "HELD" if 1.5 <= pa["ratio"] <= 6 else "FALSIFIED", f"axolotl trained; axolotl/e4b {pa['ratio']:.3f} vs [1.5, 6]"))
-        else:
-            out.append(("P6", "qwen3", "UNTESTED", f"axolotl {av} but no quoted position: {pa.get('why')}"))
-    else:
-        out.append(("P6", "qwen3", "UNTESTED", f"axolotl {av} (NOT_RUN / HARNESS_ERROR / ALARM is not a reading)"))
+    # P6 axolotl (amendment 3: read on the axolotl box when it ran; the judged box otherwise)
+    out.append(_score_p6(AX_FAM, AX["verdicts"], AX["positions"], AX["verdicts"]) if AX else _score_p6("qwen3", vd, pos, nvd))
     # P7 unsloth_best at most 1.5x faster than unsloth_m, and e4b_m >= 2x faster than unsloth_best (best and e4b_m from the native box; unsloth_m from the judged box)
     ub, um, em = ndr.get(("unsloth", NATIVE["unsloth"]), {}), dr.get(("unsloth", PRIMARY["unsloth"]), {}), ndr.get(QUALITY_ANCHOR, {})
     if ub.get("usable") and um.get("usable") and em.get("usable"):
@@ -1736,7 +1750,7 @@ def render(F, d):
             continue
         for x in R["rows"]:
             out.append(f"| {fam} | {x['fw']}/{x['tag']} | **{x['verdict']}** | {x['validity']} | {f(x.get('quality_delta'), 4) if x.get('quality_delta') is not None else (x.get('quality') or '—')} | {(x['why'] or x['reason'])[:160]} |")
-    if any(fam in F for fam in ("qwen3", "qwen3native")):
+    if any(fam in F for fam in ("qwen3", "qwen3native", AX_FAM)):
         out += ["\n## Predictions P1–P10 (+ P1b) (TC1-PREREG.md + phase 2, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_predictions(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
@@ -1849,6 +1863,20 @@ def _native_set():
     R[("hf", "hf_peft_m_mb1_t214")] = _stub("hf", "hf_peft_m_mb1_t214", "hf", "not_run", "runs only when hf_peft_m OOMed on this box")
     for r in R.values():
         r["fam"] = "qwen3native"
+    return R
+
+
+def _ax_set(ax_s=(2.00, 2.02)):
+    """Amendment 3: the axolotl box -- its own e4b fused_m x2, the matched axolotl arm x2 (quoted at ax_s / 1.01), scattermoe native-best, the HF t214 mb1 row."""
+    R = {}
+    R[("e4b", "fused_attn4_m")] = _receipt("e4b", "fused_attn4_m", "fused", s=1.00)
+    R[("axolotl", "ckpt_axolotl_m")] = _receipt("axolotl", "ckpt_axolotl_m", "axolotl", s=ax_s[0], heldout_n=1.8020)
+    R[("e4b", "fused_attn4_m_d2")] = _receipt("e4b", "fused_attn4_m_d2", "fused", s=1.02)
+    R[("axolotl", "ckpt_axolotl_m_d2")] = _receipt("axolotl", "ckpt_axolotl_m_d2", "axolotl", s=ax_s[1], heldout_n=1.8030)
+    R[("axolotl", "ckpt_axolotl_best")] = _receipt("axolotl", "ckpt_axolotl_best", "axolotl", s=1.50, heldout_n=1.8100, matched=False)
+    R[("hf", "hf_peft_m_mb1_t214")] = _receipt("hf", "hf_peft_m_mb1_t214", "hf", s=3.00, heldout_n=1.8050, accum=8, micro_batch=1, experts_forward_calls_per_step_min=48 * 8)
+    for r in R.values():
+        r["fam"] = AX_FAM
     return R
 
 
@@ -2657,6 +2685,23 @@ def selftest():
         assert needle in text, needle
     assert "## Predictions P1–P10" not in text and "## TC1b predictions" not in text
     assert text.index("- **FOOTPRINT") < text.index("| framework |", text.index("### Mixtral"))
+    cases += 1
+    # 53. amendment 3: the axolotl box -- the matched axolotl position carries its cross-draw interval, the labelled rows read, P6 is scored
+    #     from this family alone (no judged-box receipts), the profiled arm's sidecar is not a row, and a 1.2x axolotl refutes P6
+    ad = tempfile.mkdtemp(prefix="tc1_axolotl_selftest_")
+    for (fw, tag), r in _ax_set().items():
+        json.dump(r, open(os.path.join(ad, f"{AX_FAM}_{fw}_{tag}.json"), "w"))
+    json.dump({"top_kernels": []}, open(os.path.join(ad, f"{AX_FAM}_e4b_fused_attn4_m_prof_profile.json"), "w"))
+    F = reduce_dir(ad, 20)
+    assert set(F) == {AX_FAM} and [(x["fw"], x["tag"]) for x in F[AX_FAM]["rows"]] == EXPECTED[AX_FAM], [(x["fw"], x["tag"]) for x in F[AX_FAM]["rows"]]
+    text = render(F, ad)
+    for needle in ("MATCHED POSITION: s/step ratio axolotl/e4b = 1.990** [1.961, 2.020 over 4 cross-draw ratios]", "LABELLED ROW ckpt_axolotl_best",
+                   "LABELLED ROW hf_peft_m_mb1_t214", "| P6 | qwen3axolotl | **HELD** | axolotl trained; axolotl/e4b 1.990 vs [1.5, 6] |", "| P1 | qwen3 | **UNTESTED** |"):
+        assert needle in text, needle
+    assert "prof_profile" not in text
+    AXR = reduce_family(AX_FAM, _ax_set((1.20, 1.21)), {}, 20)
+    assert {p: v for p, _, v, _ in score_predictions({AX_FAM: AXR})}["P6"] == "FALSIFIED"
+    assert {p: v for p, _, v, _ in score_predictions({"qwen3": run(_good_set()), AX_FAM: AXR})}["P6"] == "FALSIFIED"      # the axolotl box outranks the judged box's install defect
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

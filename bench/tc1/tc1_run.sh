@@ -24,6 +24,9 @@
 #              the matched pair at N 200 (eval every 40 on 16 held-out rows), the as-shipped e4b curve beside it, the tp2/P38 anchor pair
 #              (tp4_run.sh's `anchor_pair` fixture and clinical text, byte-for-byte, plus the t28 variant that IS tp4's arm), the
 #              tokens-per-step pair (`_t1`: micro-batch 1 x accum 1) and the rank pair (`_r64`); `tc1_curve_family` below
+#   TC1_FAMILIES=qwen3axolotl  TC1-PREREG amendment 3 (2026-10-02): the axolotl rows re-asked on their own box after both TC1 boxes' axolotl venv
+#              failed to install (uv's first-index strategy stopped at PyTorch's cu130 index): e4b fused_m x2, axolotl matched x2, axolotl native-best
+#              (scattermoe) and the HF torch-2.14 grouped_mm mb1 row, each against this box's own e4b fused_m; no Unsloth venv is built; `tc1_axolotl_family` below
 #
 # Frameworks: e4b (GitHub main @ E4B_SHA + grouped-nf4-gemm @ GNF4_SHA, venv-e4b: transformers 5.18.0 / bitsandbytes 0.50.2 /
 # peft 0.21.2), plain HF+PEFT+bnb (venv-e4b), Unsloth at the REGISTERED versions (unsloth 2026.9.14 + unsloth_zoo 2026.9.9) in
@@ -74,6 +77,9 @@ case "$TC1_BOX" in
   A) FAMILIES=${TC1_FAMILIES:-"qwen3"};;          # the judged family; TC1_FAMILIES=qwen3native for the labelled / native-best box (phase 3 I); TC1_FAMILIES=tc2small for lane TC2's box A
   B) FAMILIES=${TC1_FAMILIES:-"tc2big"};;         # lane TC2's box B (qwen3_5 + mixtral); TC1_FAMILIES overrides as on A
 esac
+# TC1-PREREG amendment 3 (2026-10-02): the qwen3axolotl token runs no Unsloth arm, so it builds neither Unsloth venv (~15 min of box time
+# on the TC1 boxes); every other token builds both as before.
+NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl ") NEED_UNSLOTH=0;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
@@ -167,19 +173,26 @@ tail -1 logs/tripwire_e4b.log
 #   venv-unsloth      unsloth[cu130-torch2121] -- torch 2.12.1+cu130 (needs driver >= 580; UPSTREAM-NOTES "Unsloth": _auto_install.py:44),
 #                     where torch._grouped_mm runs on sm_120 and the grouped_mm backend can engage (moe_utils.py:374-378)
 UNS_VER=${TC1_UNSLOTH_VERSION:-2026.9.14}; ZOO_VER=${TC1_UNSLOTH_ZOO_VERSION:-2026.9.9}
+UNS_T28_OK=0
+if [ "$NEED_UNSLOTH" = 1 ]; then
 UNS_T28_OK=1
 say "venv-unsloth-t28: unsloth[cu128-torch280]==$UNS_VER unsloth_zoo==$ZOO_VER (the image's torch 2.8.0+cu128)"
 python -m venv $W/venv-unsloth-t28 && perl -e 'alarm 2700; exec @ARGV' $PY_UNS_T28 -m pip install -q --no-input --no-cache-dir \
   "unsloth[cu128-torch280]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth_t28.log 2>&1
 rc=$?; echo "pip(unsloth-t28) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth_t28.log; echo "PIP FAIL (unsloth-t28) -- its rows = install_failed"; UNS_T28_OK=0; }
+else
+  say "venv-unsloth-t28 SKIPPED: the $FAMILIES token runs no Unsloth arm (TC1-PREREG amendment 3)"
+fi
 UNS_OK=0
-if [ "$CU130_OK" = 1 ]; then
+if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then
   UNS_OK=1; say "venv-unsloth: unsloth[cu130-torch2121]==$UNS_VER unsloth_zoo==$ZOO_VER (torch 2.12.1+cu130)"
   # TC1-PREREG amendment 2 (2026-10-01): the cu130 extra pins torch==2.12.1+cu130 / torchvision+cu130, which live on PyTorch's cu130
   # index, not PyPI -- without the index pip's resolver backtracks for the whole 2,700 s alarm (tc1-5090-7, 30 min at 99 % CPU, 0 sockets).
   python -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu130 \
     "unsloth[cu130-torch2121]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth.log 2>&1
   rc=$?; echo "pip(unsloth) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth.log; echo "PIP FAIL (unsloth cu130) -- its rows = install_failed"; UNS_OK=0; }
+elif [ "$NEED_UNSLOTH" != 1 ]; then
+  say "venv-unsloth (cu130) SKIPPED: the $FAMILIES token runs no Unsloth arm (TC1-PREREG amendment 3)"
 else
   say "venv-unsloth (cu130) SKIPPED: $CU130_REASON"
 fi
@@ -256,9 +269,13 @@ AX_VER=${TC1_AXOLOTL_VERSION:-0.20.0}; AX_OK=0; AX_REASON=""
 if [ "$CU130_OK" != 1 ]; then
   AX_REASON="$CU130_REASON"; say "venv-axolotl SKIPPED: $AX_REASON -- its arms are refused rows"
 else
-  say "venv-axolotl: uv venv --python 3.12 + axolotl==$AX_VER --extra-index-url https://download.pytorch.org/whl/cu130 (alarm 2700 s)"
+  # TC1-PREREG amendment 3 (2026-10-02): uv's default first-index strategy takes `packaging` (and anything else PyTorch's index carries) from the
+  # cu130 index alone, where axolotl's packaging==26.0 does not exist -> "No solution found" on both TC1 boxes (tc1-5090-14, -16: INSTALL_FAILED).
+  # unsafe-best-match reads PyPI for the rest while the cu130 wheels still win on version (torch 2.14.0+cu130, torchao 0.18.0+cu130, triton 3.8.0;
+  # dry-resolved for x86_64-manylinux_2_28 / cp312 with uv 0.12.22 before the amendment: axolotl 0.20.0, transformers 5.17.0, peft 0.21.0, bnb 0.50.2).
+  say "venv-axolotl: uv venv --python 3.12 + axolotl==$AX_VER --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match (alarm 2700 s)"
   python -m pip install -q --no-input uv > logs/pip_uv.log 2>&1 && python -m uv venv --python 3.12 $W/venv-axolotl > logs/uv_venv_axolotl.log 2>&1 \
-    && perl -e 'alarm 2700; exec @ARGV' python -m uv pip install --python $PY_AX "axolotl==$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 > logs/pip_axolotl.log 2>&1
+    && perl -e 'alarm 2700; exec @ARGV' python -m uv pip install --python $PY_AX "axolotl==$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log 2>&1
   rc=$?; echo "pip(axolotl) rc=$rc"
   if [ $rc -ne 0 ]; then tail -6 logs/pip_axolotl.log; AX_REASON="axolotl venv install failed rc=$rc (logs/pip_axolotl.log): $(tail -3 logs/pip_axolotl.log 2>/dev/null | tr '\n' ' ' | cut -c1-300)"; echo "PIP FAIL (axolotl) -- its rows = install_failed"
   else
@@ -557,6 +574,24 @@ tc2_big_box(){
   tc2_big_family   qwen3_5  Qwen/Qwen3.6-35B-A3B                      995ad96eacd98c81ed38be0c5b274b04031597b0 6000 3600 3600 1800 2700 5400 0 "$UT4" "$UT4" "$UP_QWEN3_5"
   tc2_big_family   mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 5400 2400 1800 2700 6000 1 "$UT7" ""     ""
 }
+# tc1_axolotl_family FAM MID REV FETCH_AL E4B_AL HF_AL AX_AL -- TC1-PREREG amendment 3 (2026-10-02): the axolotl rows re-asked on their own box, each a
+# position within this box against the e4b fused_m it runs first; two draws of the matched pair so the matched position carries its cross-draw interval:
+#   e4b/fused_attn4_m  axolotl/ckpt_axolotl_m  e4b/fused_attn4_m_d2  axolotl/ckpt_axolotl_m_d2  axolotl/ckpt_axolotl_best (scattermoe, native init)
+#   hf/hf_peft_m_mb1_t214 (the HF arm on the axolotl venv's torch 2.14 at mb1 x accum 8, experts_implementation=grouped_mm; its gate -- the judged
+#   family's hf/hf_peft_m OOMed -- is TC1's registered record (tc1-5090-16: OOM at mb2 and at mb1), so it runs here unconditionally)
+tc1_axolotl_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 HAL=$6 AAL=$7
+  local ALL="e4b:fused_attn4_m:fused axolotl:ckpt_axolotl_m:axolotl e4b:fused_attn4_m_d2:fused axolotl:ckpt_axolotl_m_d2:axolotl axolotl:ckpt_axolotl_best:axolotl hf:hf_peft_m_mb1_t214:hf"
+  say "===== AXOLOTL family $FAM ($MID @ $REV; TC1-PREREG amendment 3: the axolotl rows, two draws, against this box's own e4b fused_m; alarms e4b $EAL hf $HAL axolotl $AAL)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  can_run 600 $FAM/e4b/fused_m     && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/axolotl/m       && arm   $FAM axolotl ckpt_axolotl_m axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json $MATCH
+  can_run 600 $FAM/e4b/fused_m_d2  && draw2 $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/axolotl/m_d2    && draw2 $FAM axolotl ckpt_axolotl_m axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json $MATCH
+  can_run 600 $FAM/axolotl/best    && arm   $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native
+  can_run 600 $FAM/hf/mb1_t214     && HF_VENV=t214 arm $FAM hf hf_peft_m_mb1_t214 hf $HAL "$MID" $REV 0 mb1 $TOK $TS --hf-experts-implementation grouped_mm $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_curve_family FAM MID REV FETCH_AL E4B_AL UNS_AL ANCHOR_AL SCALE_AL -- lane TC1b (TC1B-PREREG "Arms, in this order"), one process per arm:
 #   1 e4b/fused_attn4_m_200  2 unsloth/ckpt_unsloth_m_200 (the matched pair at N 200: fp32 adapters, matched init, grouped_mm in venv-unsloth)
 #   3 e4b/fused_attn4_shipped_200 (as the loader builds it: --adapter-dtype native --lora-init native)
@@ -668,6 +703,8 @@ tc1_native_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=
 for FAM in $FAMILIES; do case "$FAM" in
   qwen3)       tc1_family        qwen3       Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700 5400 2400;;
   qwen3native) tc1_native_family qwen3native Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700;;
+  #                                                                                                        FETCH E4B  HF   AX     (amendment 3: the axolotl box)
+  qwen3axolotl) tc1_axolotl_family qwen3axolotl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 1800 2700;;
   #                                                                                                        FETCH E4B  UNS  ANCH SCALE   (TC1b alarms: e4b 200-step 4800, Unsloth 200-step 9000, anchor 1800 each, t1/r64 3600)
   qwen3curve)  tc1_curve_family  qwen3curve  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 9000 1800 3600;;
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
@@ -680,7 +717,7 @@ say "reduce"
 case " $FAMILIES " in *" tc2small "*) REDUCE_STEPS="";; *) REDUCE_STEPS="--steps $STEPS";; esac
 $PY_E4B $W/tc1_reduce.py $W --md $W/RESULTS-tc1.md $REDUCE_STEPS > RESULTS.txt 2>&1; tail -40 RESULTS.txt
 echo "----- summary.txt -----"; cat summary.txt; echo "----- versions.txt -----"; cat versions.txt
-[ "$UNS_OK" = 1 ] || echo "NO cu130 UNSLOTH COMPARATOR on this box (venv-unsloth: ${CU130_OK:-?} driver gate, install ok=$UNS_OK): its rows are refused/install_failed" | tee -a summary.txt
-[ "$UNS_T28_OK" = 1 ] || echo "NO torch-2.8 UNSLOTH ROW on this box (venv-unsloth-t28 did not install/import)" | tee -a summary.txt
+[ "$NEED_UNSLOTH" != 1 ] || [ "$UNS_OK" = 1 ] || echo "NO cu130 UNSLOTH COMPARATOR on this box (venv-unsloth: ${CU130_OK:-?} driver gate, install ok=$UNS_OK): its rows are refused/install_failed" | tee -a summary.txt
+[ "$NEED_UNSLOTH" != 1 ] || [ "$UNS_T28_OK" = 1 ] || echo "NO torch-2.8 UNSLOTH ROW on this box (venv-unsloth-t28 did not install/import)" | tee -a summary.txt
 [ "$AX_OK" = 1 ] || echo "NO AXOLOTL on this box: $AX_REASON" | tee -a summary.txt
 finish 0

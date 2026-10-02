@@ -732,3 +732,25 @@ def test_tc2_pure_helpers_and_knobs():
     assert "unsloth_mxfp4_grouped_mm" in arm.UNSLOTH_PACKED_KEYS and arm.UNSLOTH_PACKED_FUNCS[0][:3] == ("unsloth_zoo.mxfp4_gemm", "Mxfp4GroupedMM", "apply")
     p = _run("--help")
     assert "--unsloth-load-in-4bit" in p.stdout and "--unsloth-target-parameters" in p.stdout
+
+
+def test_amendment_3_axolotl_family_uv_index_strategy_and_no_unsloth_venv_on_that_token():
+    """TC1-PREREG amendment 3: the axolotl rows re-asked on their own box (two draws of the matched pair, the native-best row, the HF t214 mb1
+    row unconditionally), the uv install that reads PyPI past the cu130 index, and the Unsloth venvs skipped on that token alone."""
+    body = RUN_SH.read_text()
+    ax = body[body.index("tc1_axolotl_family(){"):body.index("# tc1_curve_family FAM MID REV")]
+    calls = re.findall(r"(?:arm|draw2)\s+\$FAM\s+(e4b|unsloth|hf|axolotl)\s+(\S+)", ax)
+    assert calls == [("e4b", "fused_attn4_m"), ("axolotl", "ckpt_axolotl_m"), ("e4b", "fused_attn4_m"), ("axolotl", "ckpt_axolotl_m"),
+                     ("axolotl", "ckpt_axolotl_best"), ("hf", "hf_peft_m_mb1_t214")], calls
+    assert ax.count("draw2 $FAM") == 2 and re.search(r"ckpt_axolotl_m axolotl \$AAL .* --axolotl-dataset \$W/data/ds_alpaca.json \$MATCH", ax)
+    assert re.search(r"ckpt_axolotl_best axolotl \$AAL .* --axolotl-best 1 --adapter-dtype fp32 --lora-init native", ax)
+    assert re.search(r"HF_VENV=t214 arm \$FAM hf hf_peft_m_mb1_t214 hf .* mb1 .* --hf-experts-implementation grouped_mm \$MATCH", ax) and "status_of" not in ax
+    assert "qwen3axolotl) tc1_axolotl_family qwen3axolotl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 1800 2700;;" in body
+    # the curve, matched and native families keep their registered call lists: the new function sits between the TC2 box tables and the curve family, outside every test slice
+    assert body.index("tc2_big_box(){") < body.index("tc1_axolotl_family(){") < body.index("tc1_curve_family(){") < body.index("tc1_family(){") < body.index("tc1_native_family(){")
+    # the uv install reads PyPI past the cu130 index: uv's first-index strategy left axolotl's packaging==26.0 unsatisfiable on both TC1 boxes
+    assert re.search(r'uv pip install --python \$PY_AX "axolotl==\$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log', body)
+    # the token alone builds no Unsloth venv; every other token still builds both, behind the same driver gate
+    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl ") NEED_UNSLOTH=0;; esac' in body
+    assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then' in body
+    assert body.index("NEED_UNSLOTH=1; case") < body.index("venv-unsloth-t28:") and body.count("runs no Unsloth arm (TC1-PREREG amendment 3)") == 2

@@ -213,3 +213,23 @@ def test_tc2_readings_on_hand_built_receipts():
     assert set(recs) == set(R.TC2_FAMS) and set(recs["qwen3_5"]) == set(R.EXPECTED["qwen3_5"]) and set(recs["gptoss"]) == set(R.EXPECTED["gptoss"])
     text = R.render(R.reduce_dir(d, None), d)
     assert "## TC2 predictions P1–P7" in text and "## Predictions P1–P10" not in text and "MATCHED POSITION: s/step ratio HF (bf16 experts) / e4b = 1.292**" in text
+
+
+# ----------------------------------------------------------------------------- TC1-PREREG amendment 3 (the qwen3axolotl token)
+def test_amendment_3_profile_sidecars_are_not_receipts_and_the_axolotl_token_is_registered():
+    R = _mod()
+    import json
+    import tempfile
+    d = tempfile.mkdtemp()
+    json.dump(R._receipt("e4b", "fused_attn4_m", "fused"), open(f"{d}/qwen3_e4b_fused_attn4_m.json", "w"))
+    json.dump({"top_kernels": []}, open(f"{d}/qwen3_e4b_fused_attn4_m_prof_profile.json", "w"))      # box -16 read this sidecar as a HARNESS_ERROR row
+    assert set(R.load(d)["qwen3"]) == {("e4b", "fused_attn4_m")}
+    assert R.AX_FAM == "qwen3axolotl" and R.AX_FAM in R.FAMS and R.N_LAYERS[R.AX_FAM] == 48 and R.ATTN_CENSUS[R.AX_FAM] == 192
+    assert R.EXPECTED[R.AX_FAM] == [("e4b", "fused_attn4_m"), ("axolotl", "ckpt_axolotl_m"), ("e4b", "fused_attn4_m_d2"), ("axolotl", "ckpt_axolotl_m_d2"),
+                                    ("axolotl", "ckpt_axolotl_best"), ("hf", "hf_peft_m_mb1_t214")]
+    assert R.DRAW2[("axolotl", "ckpt_axolotl_m")] == ("axolotl", "ckpt_axolotl_m_d2") and "ckpt_axolotl_m_d2" in R.MATCHED
+    assert R.registered_draw2(R.AX_FAM, ("axolotl", "ckpt_axolotl_m")) == ("axolotl", "ckpt_axolotl_m_d2")
+    assert R.registered_draw2("qwen3", ("axolotl", "ckpt_axolotl_m")) is None       # the judged box registers one axolotl draw, as before
+    AXR = R.reduce_family(R.AX_FAM, R._ax_set(), {}, 20)
+    assert AXR["positions"]["axolotl"]["quoted"] and abs(AXR["positions"]["axolotl"]["ratio"] - 1.990) < 1e-3
+    assert {p: v for p, _, v, _ in R.score_predictions({R.AX_FAM: AXR})}["P6"] == "HELD"
