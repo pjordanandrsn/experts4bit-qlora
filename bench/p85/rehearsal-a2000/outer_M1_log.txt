@@ -1,0 +1,31 @@
+KNOBS router_epi_cast=0 launch=e4b@9617516247a1f07b084212fae4e29e71db678eec O=e4b@c77aab6dafb5f08d98a7387d1e986d141b20a2d3+gnf4@5ca1897585f9f456f99ea504b2a1be0ea91db496 S=e4b@c77aab6dafb5f08d98a7387d1e986d141b20a2d3+gnf4@9407d499a4d1e0fe8c22b050878a9f869b385b45 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 licensed_fp=sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42 gpu_class=A2000 cpu_vendor=GenuineIntel min_disk_gb=1 calib_nseq=128 hessian_budget_gb=24 build_ppl_steps=2048
+REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)
+p85_reduce self-test OK (20 cases)
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05, GPU-01aa94f1-4004-9932-0b37-2051081a2a9d, 8.6
+power.limit,clocks.max.sm 70.00 W, 2100 MHz
+Model name:                           Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+               total        used        free      shared  buff/cache   available
+Mem:             125          71          41           0          12          52
+overlay         598G  194G  399G  33% /
+cpu_vendor GenuineIntel
+[2026-09-30T20:47:54Z] p85: install stack O: e4b @c77aab6dafb5f08d98a7387d1e986d141b20a2d3 + gnf4 @5ca1897585f9f456f99ea504b2a1be0ea91db496
+tripwire OK (O): e4b 0.37.4 gnf4 0.33.0 router fp32, pre-#413 fp8_kv, append resolver on/off
+stack O
+e4b 0.37.4 @c77aab6dafb5f08d98a7387d1e986d141b20a2d3 (from /opt/conda/lib/python3.11/site-packages/experts4bit_qlora)
+gnf4 0.33.0 @5ca1897585f9f456f99ea504b2a1be0ea91db496
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (8, 6)
+router_epi_cast_weights False
+fp8_kv_has_413 False
+hook /root/p85/o/hook/usercustomize.py
+STAMP O {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'fused_kv_append_env': None, 'fused_kv_append_resolved': True, 'fp8_kv_has_413': False, 'e4b': '0.37.4', 'gnf4': '0.33.0', 'expected_expert_fingerprint': None}
+STAMP O append off {'router_epi_cast_env': '0', 'router_epi_cast_weights': False, 'router_epi_casts_softmax_topk': False, 'fused_kv_append_env': '0', 'fused_kv_append_resolved': False, 'fp8_kv_has_413': False, 'e4b': '0.37.4', 'gnf4': '0.33.0', 'expected_expert_fingerprint': None}
+[2026-09-30T20:48:58Z] p85: install stack S: e4b @c77aab6dafb5f08d98a7387d1e986d141b20a2d3 + gnf4 @9407d499a4d1e0fe8c22b050878a9f869b385b45
+Traceback (most recent call last):
+  File "<stdin>", line 20, in <module>
+AssertionError: S: fp8_kv carries #413 (_quantize_kv_fp32) -- not a pre-0.33.7 kernel
+[2026-09-30T20:49:12Z] p85: TRIPWIRE FAIL (S)
+[2026-09-30T20:49:12Z] p85: TP_DONE rc=9

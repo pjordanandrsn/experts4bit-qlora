@@ -1,0 +1,148 @@
+#!/bin/bash
+# bench/tc1/tc1_drive.sh -- lane TC1, CONTROLLER side: the launcher's --command (adertha-agents tools/pod-launch.sh ->
+# adertha.compute.rent). Reads the box from the launcher's environment (E4B_RENT_SSH_HOST/_PORT, _RUN_DIR, _RUN_ID,
+# _DEADLINE_EPOCH, _INSTANCE_ID), stages the tc1 pieces + tp4's Alpaca builder + the HF token, starts tc1_run.sh detached
+# under a fresh nonce, polls TP_DONE.<nonce> with a per-poll HEARTBEAT line (box summary tail + GPU util/mem + workdir size;
+# a stall is REPORTED, never acted on), fetches receipts (never the venvs, caches or adapters).
+# PROVENANCE: copied from bench/tp4/tp4_drive.sh @ e4b main 10ce711d with TC1 names; the forwarded-knob list below covers
+# EVERY TC1_* the box script and the arm read from the environment (tests/test_tc1_arm.py asserts it against tc1_run.sh).
+# TC1b (TC1_FAMILIES=qwen3curve) stages the same pieces plus bench/flagship-matrix's n9_datasets.py + ds_manifest.json (the anchor pair's text).
+# TC2 (TC1_FAMILIES=tc2small on TC1_BOX=A; TC1_BOX=B defaults to tc2big) stages the same pieces and forwards the TC1_SMALL_* instrument knobs.
+# TC1_BOX=A (required; TC1's only registered box) or B (lane TC2's box B).   Nothing here creates, destroys or approves compute.
+set -uo pipefail
+say(){ echo "[$(date -u +%FT%TZ)] [tc1_drive] $*"; }
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID TC1_BOX; do
+  [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
+done
+case "$TC1_BOX" in A|B) ;; *) say "refusing: TC1_BOX must be A (TC1's one RTX 5090) or B (lane TC2's box B, tc2big)"; exit 78;; esac
+HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
+# TC1b (the qwen3curve token): + the clinical builder and its manifest, referenced where tp4_drive.sh references them (never copied into bench/tc1)
+STAGE="$HERE/tc1_run.sh $HERE/tc1_arm.py $HERE/tc1_reduce.py $REPO/bench/tp4/tp4_alpaca.py $REPO/bench/flagship-matrix/drivers/n9_datasets.py $REPO/bench/flagship-matrix/ds_manifest.json"
+# A lane that governs its own draw through tp4's machinery (P67: bench/p67/p67_drive.sh) stages its box-side
+# guard beside these and has the box start THAT, which checks its pins and registered knobs and then execs
+# tc1_run.sh. Both default to tp4's own behaviour; the runner must be one of the staged files.
+STAGE="$STAGE ${TC1_EXTRA_STAGE:-}"; RUNNER=${TC1_RUNNER:-tc1_run.sh}
+case " $STAGE " in *"/$RUNNER "*) ;; *) say "refusing: TC1_RUNNER=$RUNNER is not a staged file"; exit 78;; esac
+for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
+# The e4b the BOX installs is the e4b this driver ships from: the launcher has proven this checkout is the manifest's heads.e4b
+# (pod-launch.sh check_tree). Derived, never a literal; refused if the tree is dirty (p39-box1b-3's lesson).
+if [ -z "${E4B_SHA:-}" ]; then
+  E4B_SHA=$(git -C "$REPO" rev-parse HEAD 2>/dev/null) || { say "refusing: cannot read HEAD of $REPO"; exit 78; }
+  [ -z "$(git -C "$REPO" status --porcelain 2>/dev/null)" ] || { say "refusing: $REPO is dirty -- the box would install a commit that does not describe this tree"; exit 78; }
+fi
+case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78;; esac
+[ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char hex sha ($E4B_SHA)"; exit 78; }
+# grouped-nf4-gemm at the v0.34.0 release (TC1-PREREG "Environments"). This is the COMMIT the tag points to (`git rev-parse
+# v0.34.0^{commit}` in the sibling checkout, 2026-10-01; also CI's pin): the draft names bdcd6ad3d1d21ecaa56d339dbf554650dcd4c33b,
+# which is the annotated TAG OBJECT, not the commit -- the box tripwire compares pip's recorded commit_id with this value and
+# would fail against the tag object's id.
+GNF4_SHA=${GNF4_SHA:-846b512b905468c08f5748943d08769b572affa2}
+[ ${#GNF4_SHA} -eq 40 ] || { say "refusing: GNF4_SHA is not a 40-char hex sha ($GNF4_SHA)"; exit 78; }
+HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
+SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
+SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
+POLL=${TC1_POLL_S:-60}; STALL_S=${TC1_STALL_S:-900}; W=/root/tc1
+HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
+NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
+PASS="TC1_BOX=$TC1_BOX TC1_RUN_ID=$RUN_ID TC1_RUN_NONCE=$NONCE TC1_DEADLINE_EPOCH=$DEADLINE TC1_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA ${TC1_PROF_ALARM:+TC1_PROF_ALARM=$TC1_PROF_ALARM }${TC1_PROFILE_STEPS:+TC1_PROFILE_STEPS=$TC1_PROFILE_STEPS }${TC1_PROFILE_WARM:+TC1_PROFILE_WARM=$TC1_PROFILE_WARM }"
+# Every knob the box-side script reads from the environment must be forwardable, or an amendment that changes one
+# of them silently does not reach the box: tp4's lesson: TP4-PREREG amendment 2 cut the eval instrument for the large families
+# and TC1_EVAL_N / TC1_EVAL_EVERY were absent from this list, so box C would have run the pre-amendment eval.
+for v in TC1_FAMILIES TC1_SKIP TC1_UNSLOTH_VERSION TC1_UNSLOTH_ZOO_VERSION TC1_PIN_FALLBACK TC1_STEPS \
+         TC1_EVAL_N TC1_EVAL_EVERY TC1_SEQ TC1_MB TC1_ACCUM TC1_R TC1_ALPHA TC1_LR TC1_WD TC1_OPTIM TC1_SCHED TC1_WARMUP TC1_SEED \
+         TC1_MATCHED_SEED TC1_AUTOCAST TC1_DS_ALPACA_SHA TC1_TRANSFORMERS_VER TC1_BNB_VER TC1_PEFT_VER TC1_GPU_CLASS TC1_MIN_DISK_GB \
+         TC1_PREREG TC1_BATCHED_PAD_WASTE_LIMIT TC1_PHASE_BUDGET_S TC1_ANCHOR_JSON TC1_AXOLOTL_VERSION \
+         TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA \
+         TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument)
+  # Quoted: run tp4-b-p46cut-3 passed TC1_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tc1_run.sh` saw the second
+  # word as the COMMAND -- rc=127 before the nonce was bound, a HARNESS_ERROR row. %q survives the remote shell's re-parse.
+  [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"
+done
+if [ "${TC1_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage [$(for f in $STAGE; do printf '%s ' "${f##*/}"; done)] -> root@$HOST:$W ; start: env $PASS bash $RUNNER ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/tc1"; exit 0; fi
+say "run $RUN_ID box $TC1_BOX nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); gnf4 $GNF4_SHA; receipts -> $RUN_DIR/tc1; deadline $DEADLINE"
+$SSH "rm -rf -- $W && mkdir -p $W/logs $W/data /root/.cache/huggingface" || { say "stage failed: remote cleanup"; exit 20; }
+$SCP $STAGE "root@$HOST:$W/" || { say "stage failed: scp"; exit 20; }
+if [ -s "$HF_TOKEN_FILE" ]; then   # HF pulls run authenticated (unauthenticated shards throttle to 400-1100 s); the token never appears in a command line
+  $SCP "$HF_TOKEN_FILE" "root@$HOST:/root/.cache/huggingface/token" && $SSH "chmod 600 /root/.cache/huggingface/token" || { say "stage failed: hf token"; exit 20; }
+  say "hf token staged"
+else
+  say "no hf token file at $HF_TOKEN_FILE -- pulls run unauthenticated (every registered checkpoint is ungated)"
+fi
+$SSH "cd $W || exit 20; nohup env $PASS bash $RUNNER > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s)+30)); while [ \$(date +%s) -lt \$end ]; do [ \"\$(cat TC1_RUN_NONCE 2>/dev/null)\" = '$NONCE' ] && { echo started:\$child; exit 0; }; kill -0 \$child 2>/dev/null || { wait \$child; echo child-exited-early:rc=\$? >&2; exit 125; }; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the nonce"; exit 21; }
+# Pure decision function, extracted so it can be tested without renting a box.
+# Args: idle_s stall_s util dfk_now dfk_prev du_now du_prev
+# Echoes "" (healthy) | "fetching:<delta>" | "stall:<idle_s>".
+# A lane fetching a checkpoint has an idle GPU and an unchanged summary BY
+# DEFINITION, so those two conditions alone cannot tell a fetch from a hang.
+# The HF cache lives OUTSIDE $W, so `du` stays flat through a model fetch and
+# only free-disk movement sees it; `du` still catches in-tree writes.
+# Progress must be BIG ENOUGH to be work, not just nonzero (e4b#634).
+# tp4-c-parity-1 died on the box at ~20:36 and the controller polled it for 53
+# more minutes, because the heartbeat kept logging `fetching (-0M on disk)`: a
+# sub-megabyte write -- a log line -- read as a fetch and silenced a stall alarm
+# that had correctly fired six times. A threshold of "any byte" is not a
+# threshold. A checkpoint shard moves hundreds of MB per minute; nothing real
+# moves 200 KB and stops.
+TC1_MIN_PROGRESS_MB=${TC1_MIN_PROGRESS_MB:-16}
+tc1_progress_verdict() {
+  idle_s=$1; stall_s=$2; util=$3; dfk_now=$4; dfk_prev=$5; du_now=$6; du_prev=$7
+  min_mb=${8:-$TC1_MIN_PROGRESS_MB}
+  consumed=0; grew=0
+  if [ -n "$dfk_now" ] && [ -n "$dfk_prev" ] && [ "$dfk_now" -lt "$dfk_prev" ] 2>/dev/null; then consumed=$(( (dfk_prev - dfk_now) / 1024 )); fi
+  if [ -n "$du_now" ] && [ -n "$du_prev" ] && [ "$du_now" -gt "$du_prev" ] 2>/dev/null; then grew=$((du_now - du_prev)); fi
+  if [ "$consumed" -ge "$min_mb" ] || [ "$grew" -ge "$min_mb" ]; then
+    if [ "$consumed" -ge "$grew" ]; then echo "fetching:-${consumed}M on disk"
+    else echo "fetching:+${grew}M in tree"; fi
+    return 0
+  fi
+  if [ "$idle_s" -ge "$stall_s" ] && [ "${util:-0}" -eq 0 ] 2>/dev/null; then echo "stall:$idle_s"; fi
+}
+
+# A lane that DIED is not a lane that is slow (e4b#634). tp4-c-parity-1's remote
+# process was killed without writing TC1_EXIT_CODE or TP_DONE -- no OOM, 123 GB
+# free -- so every marker the controller polls for was simply absent forever,
+# which is indistinguishable from "still working" to a poller. The box itself
+# answers the question: is the lane's own process still there?
+# Two consecutive absences, so one flaky ssh or pgrep does not end a good run.
+tc1_lane_dead() {  # live_now live_prev  -> "dead" when both are a definite 0
+  [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead
+}
+
+say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on)"
+LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; LANE_DEAD=0
+while :; do
+  now=$(date +%s)
+  $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
+  [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
+  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}') | live \$(pgrep -f 'bash tc1_run.sh' | wc -l | tr -d ' ')\"" 2>/dev/null)
+  line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
+  dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
+  live=$(echo "$hb" | sed -n 's/.*| live \([0-9]*\).*/\1/p')
+  if [ "$line" != "$LAST" ]; then LAST=$line; LAST_CHANGE=$now; fi
+  if [ -n "$(tc1_lane_dead "$live" "$LAST_LIVE")" ]; then
+    say "LANE DEAD: no 'bash tc1_run.sh' on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
+    LANE_DEAD=1; break
+  fi
+  LAST_LIVE=$live
+  verdict=$(tc1_progress_verdict "$((now - LAST_CHANGE))" "$STALL_S" "${util:-0}" "$dfk" "$LAST_DFK" "$duM" "$LAST_DU")
+  LAST_DFK=$dfk; LAST_DU=$duM
+  case "$verdict" in
+    fetching:*) stall=" fetching (${verdict#fetching:} since last hb)" ;;
+    stall:*)    stall=" STALL? (no summary change for ${verdict#stall:}s, GPU idle and no disk movement -- LOOK, do not kill)" ;;
+    *)          stall="" ;;
+  esac
+  say "hb: ${hb:-<no answer>} | left $((DEADLINE - now))s$stall"
+  sleep "$POLL"
+done
+rm -rf "$RUN_DIR/tc1" && mkdir -p "$RUN_DIR/tc1" || { say "fetch failed: local dir"; exit 22; }
+rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' "root@$HOST:$W/" "$RUN_DIR/tc1/" || { say "fetch failed: rsync"; exit 22; }
+say "fetched $(ls "$RUN_DIR/tc1" | wc -l | tr -d ' ') entries"
+[ "$(cat "$RUN_DIR/tc1/TC1_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
+[ -f "$RUN_DIR/tc1/TP_DONE.$NONCE" ] || {
+  # A lane the box killed is a different fact from a lane that ran out of clock,
+  # and the receipt should not flatten them (e4b#634).
+  [ "${LANE_DEAD:-0}" = 1 ] && { say "lane DIED on the box: its process was gone with no TC1_EXIT_CODE and no TP_DONE -- artifacts fetched, nothing measured"; exit 25; }
+  say "lane did not finish (no TP_DONE for this run)"; exit 23; }
+RC=$(cat "$RUN_DIR/tc1/TC1_EXIT_CODE.$NONCE" 2>/dev/null); case "$RC" in ''|*[!0-9]*) say "malformed exit code"; exit 24;; esac
+[ -f "$RUN_DIR/tc1/TC1_SUCCESS.$NONCE" ] && [ "$RC" = 0 ] || { say "lane exit rc=$RC without success marker"; exit "$RC"; }
+say "box $TC1_BOX complete rc=0"; exit 0

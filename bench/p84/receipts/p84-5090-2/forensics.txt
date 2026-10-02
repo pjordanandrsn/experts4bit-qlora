@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-19ff3e8f-95ef-b8b8-9cc4-38a7fb46920b, 12.0
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+Model name:                              Intel(R) Core(TM) i9-14900K
+               total        used        free      shared  buff/cache   available
+Mem:             125           1          71           0          51         122
+overlay         320G  1.6M  320G   1% /

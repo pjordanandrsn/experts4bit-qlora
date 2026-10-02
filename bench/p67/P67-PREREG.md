@@ -466,7 +466,7 @@ Amendments, dated, go below this line before any data is read.
 then the verified-5090 floor on Vast moved between $0.66 and $0.81/h within one day (2026-09-24), and P66 lost three
 proof launches to provider refusals at $0.65/h before amending (P66-PREREG Amendment 1). A ceiling the market floor
 crosses gives a refusal, not a measurement, and burns a run id each time. The owner authorised this lane's rental on
-2026-09-24 ("go ahead with the P67 rental (all rentals approved)", chat), relayed on #713.
+2026-09-24, together with every pending rental, relayed on #713.
 
 **Amended (rates and dollar lines only).**
 - **The proving rental:** ≤ **$0.75/h** with its registered **600 s** guard, so ≤ **$0.125** per attempt; the

@@ -2,12 +2,12 @@
 
 Registered 2026-09-10, before any rental. Two boxes, one RTX 5090 each
 (`vast:verified-secure`, the class P37 measured on), launched from the mini through
-`adertha-agents/tools/pod-launch.sh`. Owner authorisation: Jordan, in the working
-session on 2026-09-10 — "go" (three times, the last two in reply to exactly this plan:
-*"the step-level B=16 effect of #357, and the #530 second-box gate. ~$3–5 each … I'd
-pre-register both first"*). That authorisation is the top of the approval band, not a
+`adertha-agents/tools/pod-launch.sh`. Owner authorisation: the working session on
+2026-09-10, given three times, the last two in reply to exactly this plan: the step-level
+B=16 effect of #357 and the #530 second-box gate, ~$3–5 each, both pre-registered first.
+That authorisation is the top of the approval band, not a
 waiver of this document or of the STOP rules. **Written down by the agent, not by
-Jordan**; the launcher needs a citable permalink, so the work issue that carries this
+the owner**; the launcher needs a citable permalink, so the work issue that carries this
 text is what the manifests cite, and it says the same thing.
 
 ## What is already settled, and therefore NOT in scope

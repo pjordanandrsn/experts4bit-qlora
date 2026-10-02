@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-09-29, version 0.37.8** (the version of record is
+**As of 2026-10-02, version 0.38.1** (the version of record is
 `pyproject.toml`'s). One page. The README argues the case; this page
 states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
@@ -56,9 +56,11 @@ driver wires the engines, so this is not the `load_moe_4bit_streaming` path.
 
 **The fused training path is faster at equal loss.** Across two 30B-class
 MoEs, five datasets each, 200 steps per cell: 1.52–1.81× per step at
-0.75–0.81× peak VRAM and 0.86–0.92× energy, with loss parity on both
-registered criteria and the frozen 4-bit stack bit-identical over
-16.31 GB hashed. Default to `enable_fast_train(model, dgrad=True)`.
+0.75–0.81× peak VRAM and 0.80–0.92× energy, with loss parity on both
+registered criteria and the frozen 4-bit stack bit-identical (12.85 GB per
+Gemma-4 cell, 16.31 GB for Qwen3). *(Corrected 2026-09-30: energy read
+0.86–0.92×, Gemma-4's alone.)* Default to
+`enable_fast_train(model, dgrad=True)`.
 
 **Training on real weights is receipted per family** (lane tp1, 2026-09-05,
 one rented RTX 5090 under the shipped 0.35.0 / 0.30.0 code; **measured** —
@@ -430,7 +432,11 @@ that build). Same-box e4b int4 / NF4: ×2.356 / ×2.851. **Bounded:** one box,
 one prompt set, B=1/B=16 only; vLLM's number includes its serving loop and
 e4b's does not, so the engine advantage is understated; quality quoted, never
 equated; footprint and TTFT not compared. The 2026-09-05 comparison below
-stays as measured history.
+stays as measured history. **B=16 gap (P86, same box, both censused):** the experts (int4 GEMV 6.98 ms vs Marlin MoE
+4.78; 2.86 of 3.32 ms), glue +0.62, our attention faster (0.96 vs 1.35)
+(`e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01`); K19 now takes the step to
+0.905× (`e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`), K23's lean glue a further 0.950×
+(`e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`).
 
 **Against vLLM 0.28.0 (history, lane p37, 2026-09-05;** one RTX 5090 box, Vast
 49975016; **measured** — [`RESULTS-p37.md`](../bench/h2h-20260905/p37/RESULTS-p37.md),
@@ -529,9 +535,23 @@ box, never a field engine, and only Qwen3 has a field comparator measured:
 (282.5 / 1347.5, ×1.000; `e4b.serve.census.bo7.olmoe.b1.5090.2026-09-05` / `e4b.serve.census.bo7.olmoe.b16.5090.2026-09-05`) because nothing above it is licensed on this
 register — its full stack is ×2.070 / ×2.289 measured, not licensed (the tp
 row's label predates the two-text clause; its calibrated attention is refused
-on this family);
+on this family); on both families' position configs the NF4 grouped expert GEMM is 61.7 % (Granite) and 71.9 %
+(OLMoE) of B=16 decode kernel time (P91, descriptive, licenses nothing;
+`e4b.serve.p91.nf4-families.kernel-census.5090.2026-10-01`), so the next family lane is an NF4 grouped small-M kernel;
+that kernel (K25, `E4B_NF4_GROUPED_SMALLM`, default `0`) reads ×0.937 at B=16 on Granite with K8 inside the gate, and
+QUALITY_FAIL on OLMoE (c4val1 K8 −0.107 ppl, step ×1.024); its own GEMM runs within 4 % of the served one (P92,
+`e4b.serve.p92.nf4-families.k25-b16.5090.2026-10-01`);
+at the served precision (the select tree through TF32 MMA, P93) the route takes Granite's B=16 step to ×0.594 (B=1
+×0.854, K8 inside the gate) and OLMoE's to ×0.598, but OLMoE's c4val1 K8 moved +0.155 ppl, the other sign from P92's
+−0.107, so the default stays `0` (`e4b.serve.p93.nf4-families.k25-tree-tf32-b16.5090.2026-10-01`);
+against the arithmetic it would replace above T == 1 (the served M-tile), K25 reads QUALITY_FAIL in both families
+(c4val1 K8 +0.102 Granite, +0.168 OLMoE; wikitext inside), and the served M-tile itself sits −0.078 from the GEMV on
+Granite c4val1, so the default stays `0` and c4val1's spread is the next question
+(P94, `e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01`);
 **gpt-oss's quoted best is its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
-store under the route rule reads ×1.293 / ×0.970;
+store under the route rule reads ×1.293 / ×0.970; with K21 serving the store's batched rows, its B=16 step reads
+×0.581 against the NF4 fallback, at a lower KL from the reference (0.00147 vs 0.00192;
+`e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`);
 **Qwen3's licensed stack** — the streamed 64k calibrated pack artifact bo6c
 licensed on both texts (11512 gptq / 776 rtn), run under the lane's amendment
 2: **×2.067 at B=1 (238.1 tok/s; anchor-class projection ≈ 329 tok/s, from an
@@ -926,19 +946,12 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     caller on this stack that does not enable graphs leaves most of the
     throughput unused. The package's serving entry points use transformers'
     `generate`, not the paged runner.
-  - **#674.** The attention pack (`sha256:d7cfa1f4…`) reproduced
-    byte-for-byte on a second box and release, and on a third in P83. The
-    expert pack is the licensed `0c9955a9…`. The build's K8 reads 6.36396
-    with the fp32 router and 6.31811 with the cast; the licensed builds read
-    6.36709.
-  - **K8 is box-invariant; the software moved it** (lane P83, `bench/p83/`).
-    On one box, P70's build (e4b 0.37.4, gnf4 0.33.0) reads 6.36709 and
-    P82's (0.37.8, 0.33.7) reads 6.36396, each the same float it gave on
-    other machines (three and two). That is −0.00049 nats, far inside the
-    floor (`e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29`).
-    Which change moved it is not isolated. *(Corrects P82, which inferred
-    from one cast-arm pair — P81's box 6.33015, P82's 6.31811, still
-    unexplained — that K8 does not reproduce across boxes.)*
+  - **#674: answered.** The licensed int4 recipe's fp32 K8 moved from
+    6.36709 to 6.36396 because of one change, gnf4#413 (the fused fp8 KV
+    append's rounding). P70's build with that append off reads 6.36396 bit
+    for bit (P85, `e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30`;
+    P83/P84 isolated it). Box-invariant on AMD hosts; an Intel host's
+    attention calibrated differently (P84).
 - **Several older documents carry open debts of their own**, and say so:
   `POST_AUDIT_WORK_QUEUE.md` (quarantines Q1–Q4 in force),
   `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10 — one same-host bf16

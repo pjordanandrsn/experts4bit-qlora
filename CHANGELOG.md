@@ -13,6 +13,728 @@
 - **CI.** `compressed-tensors==0.18.0` is in `[test]`, and an unguarded import tripwire keeps those tests from skipping.
 - **Not in this change** (#789): `gptq_v2` checkpoints and compressed-tensors `weight_zero_point` both change the math, and the loader reads neither.
 
+### serve_paged correction: `fuse_qkv` applies the env-gated folds itself -- the server no longer refuses the registered fused stack
+
+- #853 described `--fuse-qkv` and the three fold flags as the harness's exclusive branches and refused
+  `E4B_PAGED_FUSE_QKV=1` together with `E4B_FUSE_T1_GLUE` / `E4B_FUSE_T1_GLUE_R2` / `E4B_FUSE_ROUTER_EPI`. That was
+  wrong: `qkv_fuse.fuse_qkv` imports and calls the three folds after fusing (one serve assembly point), so the
+  registered B=1 fused stack (P54 / P58 / P88: `--fuse-qkv` WITH the fold flags) is exactly that combination. The
+  refusal is removed; the fused branch now reports `fuse_t1_glue_n` / `fuse_t1_glue_r2_n` / `fuse_router_epilogue_n`
+  from what the folds returned inside `fuse_qkv` (captured by wrapping them on their modules for the call, restored
+  after), never a literal 0, and a `fuse_qkv` that returns without calling them refuses. `/health`, the module
+  docstring and `docs/SERVING.md` say so.
+- Tests: the real `fuse_qkv` on a CPU stand-in attention module with fake folds and the flags set reports the counts
+  and no longer raises; the fold functions are restored after the call, including when `fuse_qkv` raises; a
+  `fuse_qkv` that skips the folds refuses; the unfused branch reports the folds it called directly.
+### `experts4bit_qlora.serve_paged`: an OpenAI-compatible server over the continuous-batching engine (opt-in, v1)
+
+- **Why.** Request-level serving benchmarks (TTFT, ITL and throughput under Poisson arrivals, as `vllm bench serve`
+  and `sglang.bench_serving` drive them) need an HTTP endpoint over the engine the serving campaign measures --
+  `ContinuousScheduler` + `PagedModelRunner` + `Fp8PagedKV` -- not over HF `generate`. `serve.py` is the shared-GPU
+  availability deployment and stays as it is.
+- **What.** `python -m experts4bit_qlora.serve_paged` (127.0.0.1:8778): `/health`, `/stats`, `/v1/models`,
+  `/v1/completions` (streaming SSE and non-streaming), `/v1/chat/completions` when the tokenizer has a template. One
+  engine thread owns the GPU and steps the scheduler; requests arrive through a thread-safe queue with
+  `Request.arrival` stamped at HTTP arrival, so the scheduler's TTFT includes queue wait. `build_engine` reproduces
+  the harness's construction in its order (arena load, placement, all-VRAM override, hybrid tier, the lane hook's
+  int4 levers from the same env names, amortisation off, paged attention, `fuse_qkv` OR the env-gated folds, KV with
+  scratch slots, decode graphs, scheduler); a set lever that patches nothing refuses at startup and `/health` reports
+  the census. Greedy only, stated: nonzero `temperature`, `logprobs`, `echo`, `n > 1`, stop strings and penalties are
+  400s; `ignore_eos`, `min_tokens`, `stop_token_ids` and token-id prompts are honoured. Streaming emits one chunk per
+  token through a windowed incremental detokenizer (a code point split across byte-fallback tokens is held, never
+  emitted in pieces), `finish_reason` on the last token's chunk, a usage chunk under `stream_options.include_usage`,
+  `[DONE]`. `E4B_PAGED_TRACE` appends a per-request JSONL (arrival / admitted / first token / finished clocks).
+- **Scheduler.** Uses the stop set, `min_tokens`, `finish_reason` and `abort()` the scheduler gained in #848 (its own entry below); `ignore_eos` maps to no stop set, the engine's original contract.
+- **Tests.** `tests/test_serve_paged.py` (CPU, a scripted runner and a byte-fallback stub tokenizer, the real engine
+  thread): the vLLM v0.30.0 client payload verbatim, the SSE sequence, EOS vs `ignore_eos`, `min_tokens`, the
+  per-sequence window refusal, TTFT in the trace, concurrent requests sharing a decode step, capacity waits without
+  eviction, abort mid-generation; `tests/test_scheduler.py` gains the stop-set and abort cases.
+- Docs: `docs/SERVING.md` "Continuous-batching server (opt-in, v1)".
+
+### Scheduler: an optional per-request stop set, `min_tokens`, `finish_reason` and `abort()` (additive)
+
+- **Why.** The continuous-batching engine stopped a sequence only at `max_new_tokens`: `PagedModelRunner` stores
+  `eos_id` and never consults it, and `ContinuousScheduler._emit` knew no stop set. That is how every registered
+  serving measurement ran (fixed output length, `ignore_eos` semantics) and it stays the default. A serving layer
+  needs EOS to end a request in the step that produced it; otherwise the slot keeps decoding wasted tokens to
+  `max_tokens` and the throughput a benchmark reads is partly waste.
+- **What.** `add_request(..., stop_ids=, min_tokens=)`: a token in the set ends the sequence once `min_tokens` are
+  out; the stop token is kept in `out` (computed, counted); a stop at the length boundary reports `stop`, as vLLM
+  does. `Request.finish_reason` is `length` / `stop` / `abort`. `abort(rid)` drops a queued request before it takes a
+  slot or frees an active one's slot now; aborted requests go to `aborted`, never `done`, so a disconnected client
+  cannot move the gate's percentiles; `stats()` gains `aborted`. With `stop_ids=None` (the default, and every
+  caller in `bench/`) behaviour is unchanged.
+- **Tests.** `tests/test_scheduler.py`: the default contract without a stop set; a stop frees the slot in that step;
+  `min_tokens` defers the stop; a boundary stop reports `stop`; abort of queued and active requests.
+
+## 0.38.1 — 2026-10-02 — the K25 route for the NF4 store's batched decode rows runs at the served precision (select tree through TF32 MMA; opt-in, lanes P93 and P94), an instrument for the served M-tile kernel at T == 1, and CI on grouped-nf4-gemm 0.34.1
+
+**0.38.1.** No default changes.
+- **`E4B_NF4_GROUPED_SMALLM` (K25, opt-in) runs at the served kernel's precision:** the select-tree codebook decode through TF32 MMA at lane K27's plan.
+  - It takes the tree when the installed grouped-nf4-gemm carries it (0.34.1 does). With 0.34.0 it uses the paired lookup, which gives bit-identical outputs.
+  - Lane P93 measured the route on an RTX 5090 at B=16 ×0.594 (Granite) and ×0.598 (OLMoE).
+  - Lane P94 read its K8 against the served M-tile kernel it would replace: QUALITY_FAIL in both families (c4val1 +0.102 / +0.168 ppl). So it stays opt-in.
+- **New: `E4B_NF4_T1_DEVICE_GROUPING=1`.** An off-by-default instrument that serves T == 1 NF4 rows through the served M-tile kernel (lane P94's m arm).
+- **Dependencies:** CI installs grouped-nf4-gemm at the v0.34.1 commit. The `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
+- **The rest is bench and evidence:**
+  - lanes K26 and K27's runners;
+  - lanes P93 and P94: registrations, reads, receipts and register rows;
+  - the training campaign's lane TC1: its registration and amendments, bench only.
+
+### Lane P94 read (#564, one RTX 5090): QUALITY_FAIL in both families. K25 against the served NF4 M-tile kernel it would replace moves c4val1 K8 +0.102 (Granite) and +0.168 (OLMoE); `E4B_NF4_GROUPED_SMALLM` stays `0` (`e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01`)
+
+- **K8 at T == 1, three arithmetics:** g = the scalar GEMV, m = the served M-tile through #838's instrument, t = K25
+  TF32 tree. Gated on t − m:
+  - Granite: −0.020 (wikitext) / **+0.102** (c4val1);
+  - OLMoE: −0.005 / **+0.168**.
+- **The baseline:**
+  - On Granite c4val1 the M-tile itself reads −0.078 from the GEMV (`BASELINE_SHIFT`).
+  - On OLMoE it reads within 0.017 of the GEMV, so P93's OLMoE swing is not the GEMV-to-tile difference that
+    production carries.
+- **Reproduction:** g and t reproduce P93's OFF and ON exactly, on a different host.
+- **Spread:** on wikitext every pair is within 0.026; on c4val1 the pairs range from 0.013 to 0.168.
+- **Next:** a lane that calibrates c4val1's K8 spread across equal-error arithmetics, registered before any noise-aware
+  gate.
+- `bench/p94/RESULTS-p94.md`, `bench/p94/receipts/p94-5090-2/` (`p94-5090-2` $0.1373, plus `p94-5090-1` NOT_RUN at the
+  bandwidth pre-flight, $0.0164).
+
+### `docs/system-manifest.json` follows grouped-nf4-gemm v0.34.1 (byte-identical)
+
+- The `consumer_ci_pin` prose names v0.34.0, the release whose commit this CI installs (846b512); it still named v0.33.0. The kernel repository changed it in its 0.34.1 release, and this CI compares the manifest byte-for-byte against the kernel's latest tag. No floor, range or ownership changes.
+
+### Lane P94 registered (#564): K8 against the arithmetic a T > 1 route replaces -- K25 against the served NF4 M-tile kernel at T == 1 (bench and tests only)
+
+- **Why.** P92 and P93 compared K25 at T == 1 against the scalar fp32 decode GEMV. The `auto` default changes only rows
+  above T == 1, where the route it replaces is the served M-tile kernel (TF32). That was a design error in both lanes;
+  their verdicts stand under their own rules. P93's OLMoE c4val1 swing (+0.155, after P92's −0.107) is why the right
+  baseline matters.
+- **What it reads.** K8 at T == 1 under three arithmetics per family (Granite `r12epi`, OLMoE `nf4`):
+  - g, the scalar GEMV;
+  - m, the served M-tile through `E4B_NF4_T1_DEVICE_GROUPING=1` (#838);
+  - t, K25.
+  The premise covers row-exactness for t and m, plus K25's contract.
+- **The rule.** LICENSED if the uncalibrated K8 gate passes with base m and candidate t in both families. With P93's
+  speed, the T > 1 default then moves to `auto`. Otherwise QUALITY_FAIL. m − g is reported, not gated.
+- `tests/test_p94_staged_pin.py` pins:
+  - the staged bytes and the families' envs;
+  - the three arms and the route's plan;
+  - the premise before the fetch, and the order;
+  - the exit codes;
+  - the reducer's 10-case self-test;
+  - the driver's dry run.
+
+### `E4B_NF4_T1_DEVICE_GROUPING=1`: an instrument that reads the served NF4 M-tile kernel at T == 1 (off by default; lane P94)
+
+- **Why.** K8 is decode-shaped, so it reads T == 1. The NF4 store's T == 1 rows run the scalar fp32 decode GEMV, while its
+  batched rows run the served M-tile kernel (TF32 on the fp32 dequant). Lanes P92 and P93 compared K25 at T == 1
+  against the GEMV, not against the M-tile arithmetic a T > 1 route actually replaces.
+- **What.** With the knob set and K25 off (`E4B_NF4_GROUPED_SMALLM=0`), `_collapsed_grouping` sends the NF4 store's
+  T == 1 rows to the device tile table and the served M-tile kernel. Off (the default, also when unset), nothing
+  changes. Other stores are untouched, and anything but `0`/`1` is refused. Like `E4B_INT4_DECODE_A16`, it is a
+  quality instrument, not a serving route.
+- **Tests.**
+  - The stubbed route test: the decision, the served kernel at T == 1, the refusal.
+  - `tests/test_nf4_t1_device_grouping_gpu.py`: a token's rows are bit-equal alone and inside B=16 on the served
+    kernel, and the T == 1 output matches the fp32 oracle.
+  - NAS RTX A2000: GPU 6/6 (with K25's file), CPU routes 59 passed; a mutation that ignores the knob fails both.
+
+### P93 read (#564): Granite LICENSED (B=16 ×0.594, B=1 ×0.854, K8 inside the gate), OLMoE QUALITY_FAIL (c4val1 K8 +0.155 ppl, the other sign from P92's); `E4B_NF4_GROUPED_SMALLM` stays `0` (bench, docs and register)
+
+- **`p93-5090-1`** (RTX 5090, $0.33), P92's design on the served-precision route (#834):
+  - Granite `r12epi`: B=16 10.535 → 6.258 ms (×0.594), B=1 ×0.854; K8 −0.026 / +0.024 ppl.
+  - OLMoE `nf4`: B=16 14.352 → 8.585 ms (×0.598), B=1 ×0.859; K8 +0.011 / **+0.155** ppl.
+  - In-model the TF32 tree GEMM runs at 0.41× / 0.48× of the served NF4 kernel.
+- **OLMoE's failure is not the weight rounding.** P92 (bf16) moved its c4val1 K8 −0.107. P93 changed exactly the
+  rounding, and it moved +0.155. Granite moved about as much at TF32 as at bf16. The next lane measures the
+  instrument's spread under the production path's own arithmetic on that text, before any instrument changes.
+- **Register:** `e4b.serve.p93.nf4-families.k25-tree-tf32-b16.5090.2026-10-01`.
+
+### Lane P93 registered (#564): P92's design on the route at the served precision -- does K25-tree in TF32 make the NF4 families' B=16 decode faster without moving their K8? (bench and tests only)
+
+- **What it is.** P92's lane, unchanged except the treatment and the pin.
+  - **Treatment:** the K25 route now runs the select tree through TF32 MMA at K27's plan (#834).
+  - **Pin:** grouped-nf4-gemm `908a2ca`, which carries the tree.
+  - **Scope:** Granite `r12epi` and OLMoE `nf4`, OFF vs ON, on one RTX 5090. Per family: B=16 and B=1 speed, two-text
+    K8, and P92's reducer and rule.
+- **The registered consequence:** both families LICENSED moves `E4B_NF4_GROUPED_SMALLM` to `auto`.
+- **Rehearsed on the A2000** through install, the new tripwire, the reducer's self-test, the premise (4/4, 30/30) and
+  fetch/bake. Every arm stopped at the fp8 KV append, as P92's did.
+- `tests/test_p93_staged_pin.py` is P92's pin test, plus the runner's tripwire plan equal to the live `_K25_PLAN`.
+
+### The K25 route runs at the served precision: the select tree through TF32 MMA at K27's plan (opt-in; P93 reads it)
+
+- **Why.** P92 read K25 in bf16 QUALITY_FAIL on OLMoE: bf16 weight rounding. grouped-nf4-gemm's K27 (RTX 5090) read
+  K25 with the select tree at the served kernel's weight precision at 0.448 / 0.502 of the served NF4 GEMM's time
+  (Granite / OLMoE B=16 shapes), with the served kernel's error (ratio 1.000). TF32_PATH by its rule.
+- **What.** `_K25_PLAN = {block_n 32, kc 64, warps 4, stages 3, lut "tree", dot_bf16 False}`: fp32 weights through
+  TF32 MMA, K27's best TF32 plan. A kernel package without the tree gets the paired lookup at the same precision.
+  `E4B_NF4_GROUPED_SMALLM` still defaults to `0`. P92's reading was of the bf16 arithmetic; lane P93 reads this one.
+- **Tests.** The route test's stub records `dot_bf16`, and the test pins the served-precision plan. NAS RTX A2000 at
+  grouped-nf4-gemm main (`908a2ca`): the plan resolves as above; GPU 11/11 (K25 row-exactness, the oracle, the lean
+  bits and graph capture, with K19's and K23's files); CPU routes and pins pass, except a driver dry run that needs
+  `/usr/bin/python3`, which the container lacks.
+
+### Lane K27's runner (#564): the K25-tree precision bench's box side (bench and tests only)
+
+- **What.** `bench/k27/` drives grouped-nf4-gemm's K27 (`kernel/PREREG-k27-nf4-tree-precision.md`). It is K26's runner
+  with the bench renamed, plus a tripwire that refuses a kernel package without K25's select-tree decode.
+- **Rehearsed** on the NAS A2000 (marked REHEARSAL): rc 0 through the self-test (9 cases), the premise (30/30) and the
+  bench.
+- `tests/test_k27_staged_pin.py` pins the runner's bytes and shape, the exit codes and the driver's dry run.
+
+### The K25 route takes the select-tree codebook decode when the kernel package carries it (bit-identical; lane K26)
+
+- **Why.** grouped-nf4-gemm's lane K26 (RTX 5090) read the per-nibble codebook lookup as about 80 % of K25's time. An exact
+  select-tree decode over the 16 fp32 codebook values gives bit-identical outputs at 0.373 / 0.383 of the time (Granite /
+  OLMoE B=16 shapes). That is about 0.39× the served NF4 GEMM, where the paired lookup ran at about 1.0×.
+- **What.** `_K25_PLAN`'s decode is `"tree"`. `_k25_plan` resolves it against the installed `nf4_smallm`: `"tree"` when
+  its `_LUT_MODES` names it, else `"pair"`. The two give the same bits, so lane P92's reading applies to both:
+  Granite's K8 inside the gate, OLMoE QUALITY_FAIL. `E4B_NF4_GROUPED_SMALLM` still defaults to `0`.
+- **P92's pins.** Its runner and its pin test name the paired decode it registered, so that closed lane's runner refuses
+  today's e4b by design. Its `staged.sha256` re-pins the edited GPU test, as P89's did in #822.
+- **Tests.**
+  - The route test runs against a kernel stub with and without the tree.
+  - The GPU file compares against the resolved plan.
+  - NAS RTX A2000:
+    - with grouped-nf4-gemm carrying the tree: the plan resolves to `tree`, GPU 11/11 (with K19's and K23's files);
+    - with v0.34.0: it resolves to `pair`, and the GPU file passes 4/4;
+    - the CPU routes and pins pass, except two driver dry runs that need `/usr/bin/python3`, which the container lacks
+      and CI has.
+
+## 0.38.0 — 2026-10-01 — batched decode on grouped small-M tensor-core GEMMs (grouped-nf4-gemm 0.34.0): K19 is the default for int4 decode rows above T == 1 (lane P88, B=16 ×0.905), its lean glue is the default (P89, ×0.950), and K21 is the default for the MXFP4 store's batched rows (P90, gpt-oss-20b B=16 ×0.581, KL lower); K25 serves the NF4 store's batched rows opt-in (`E4B_NF4_GROUPED_SMALLM`; P92); lanes P82–P92 read
+
+**0.38.0.** Three defaults change, each licensed by a pre-registered lane on an RTX 5090 and each reversible by its environment variable:
+- `E4B_INT4_GROUPED_SMALLM` is `auto` (K19), lane P88;
+- `E4B_INT4_LEAN_GLUE` is `auto`, lane P89;
+- `E4B_MXFP4_GROUPED_SMALLM` is `auto` (K21, rows above T == 1), lane P90.
+
+Each takes effect when the installed grouped-nf4-gemm carries its kernel (0.34.0 does); with an older kernel package the previous routes run, silently. The `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`, and a fresh install resolves to 0.34.0. One route is new and opt-in: `E4B_NF4_GROUPED_SMALLM` (K25) for the NF4 store's batched rows. Lane P92 measured it on Granite (B=16 ×0.937) and read OLMoE QUALITY_FAIL, so its default stays `0`. CI installs grouped-nf4-gemm from the v0.34.0 release commit. Both repositories' `docs/system-manifest.json` still say the CI pin is v0.33.0. That `consumer_ci_pin` text moves with the next grouped-nf4-gemm release, kernel first, because the manifest is byte-identical across the two.
+
+### Lane K26's runner (#564): the NF4 decode ablation's box side (bench and tests only)
+
+- **What.** `bench/k26/` drives grouped-nf4-gemm's K26 (`kernel/PREREG-k26-nf4-decode-ablation.md`): a kernel microbench
+  on one RTX 5090 with no model.
+  - **Install:** grouped-nf4-gemm at the manifest's `GNF4_SHA`, plus pytest.
+  - **Premise:** K25's contract compiled on the card (rc 23).
+  - **Run:** the bench from the gnf4 clone at that pin.
+- **Rehearsed** on the NAS A2000 (marked REHEARSAL, correctness only): install, tripwire, the rule's self-test
+  (16 cases), the premise (28/28) and the bench all ran to rc 0.
+- `tests/test_k26_staged_pin.py` pins:
+  - the runner's bytes;
+  - the refusals before the install, and the premise before the bench;
+  - that no model is fetched;
+  - the exit codes;
+  - the driver's dry run.
+
+### P92 read (#564): Granite LICENSED (B=16 ×0.937, K8 inside the gate), OLMoE QUALITY_FAIL (c4val1 K8 −0.107 ppl, step ×1.024); `E4B_NF4_GROUPED_SMALLM` stays `0` (bench, docs and register)
+
+- **`p92-5090-2`** (RTX 5090, $0.33; `p92-5090-1` was NOT_RUN, ssh refused, $0.03), OFF = `0`, ON = `1`:
+  - Granite `r12epi`: B=16 10.529 → 9.865 ms (×0.937), B=1 ×0.972; K8 wikitext −0.023, c4val1 +0.016 ppl.
+  - OLMoE `nf4`: B=16 14.355 → 14.694 ms (×1.024), B=1 ×1.066; K8 wikitext +0.017, c4val1 **−0.107** ppl. The
+    uncalibrated K8 rule is two-sided (|Δ| ≤ 0.05).
+  - The premise held on the card (K25 row-exact; K25's contract compiled on sm_120, 28/28), and engagement held in
+    every census.
+- **Where the time goes.** K25's own GEMM is within 4 % of the served NF4 GEMM (Granite 6.464 vs 6.602 ms, OLMoE 10.852
+  vs 10.388). Granite's gain is the glue the lean route folds away. The NF4 codebook decode, shared by both kernels, is
+  the likely bottleneck (inferred, not profiled).
+- **Consequence (registered):** the default moves only when both families read LICENSED, so it stays `0`. `auto` is a
+  measured opt-in for Granite `r12epi`.
+- **Register:** `e4b.serve.p92.nf4-families.k25-b16.5090.2026-10-01`.
+
+### Lane P92 registered (#564): does K25 make the NF4 families' B=16 decode faster on an RTX 5090 without moving their K8? (bench and tests only)
+
+- **What it is.** The end-to-end read of K25 (grouped-nf4-gemm #429, pinned at its merge `8cc3510`), which P91's
+  decision named, through `E4B_NF4_GROUPED_SMALLM`. Granite-3.1-3B-A800M (`r12epi`) and OLMoE-1B-7B (`nf4`) each run
+  OFF (`0`) and ON (`1`) on one RTX 5090:
+  - the premise first, on the card: the K25 row-exact test (rc 25) and K25's contract compiled (rc 23);
+  - B=16 OFF/ON/OFF/ON (first draw censused) and B=1 OFF/ON (censused), P91's harness;
+  - K8 OFF/ON on wikitext and c4val1 (P44-a's arm).
+- **The rule, per family.**
+  - VOID on missing arms, B=16 draws more than 3 % apart, failed engagement, or K8 ON bit-equal to OFF;
+  - QUALITY_FAIL if the uncalibrated K8 gate fails;
+  - LICENSED if B=16 ON/OFF ≤ 0.95;
+  - NOT_FASTER otherwise.
+
+  Both families LICENSED moves the default to `auto`.
+- **Rehearsed on the A2000** through install, the premise (4/4 and 28/28), and both families' fetch and bake. Every arm
+  stopped at the fp8 KV append, which sm_86 cannot compile.
+- `tests/test_p92_staged_pin.py` pins:
+  - the staged bytes, P91's harness bytes;
+  - the families' envs;
+  - the gnf4 pin as a real SHA;
+  - the arms and the tripwire's `_K25_PLAN`;
+  - the premise before the fetch and the arm order;
+  - the exit codes;
+  - the reducer's 14-case self-test;
+  - the driver's dry run.
+
+### `E4B_NF4_GROUPED_SMALLM` (K25, opt-in): the NF4 store's batched decode rows through the grouped small-M tensor-core GEMM
+
+- **Why.** Lane P91 read the NF4 families' B=16 decode steps on an RTX 5090. The served NF4 M-tile GEMM
+  (`gemm_4bit_grouped_captured`) is 61.7 % of kernel time on Granite (`r12epi`) and 71.9 % on OLMoE (`nf4`). Its
+  registered decision named an NF4 grouped small-M kernel. grouped-nf4-gemm #429 is that kernel, K25: K19's kernel
+  with the NF4 codebook dequant.
+- **What.** Under `auto` (rows above T == 1) or `1`, `_fused_over_stack` serves the NF4 store's device-grouped decode
+  rows (up to 256) with `nf4_smallm.gemm_nf4_grouped_smallm`:
+  - over the 16-row device tile table, with gate_up's gather folded into the kernel, so the `[R, H]` `index_select`
+    is gone;
+  - under K23's lean glue (the default), gate_up reads the step's token rows (`gather_div`) and down stores into the
+    caller's row order (`scatter`), as on K19's rows;
+  - at K25's kernel default (`_K25_PLAN`: BLOCK_N 32, KC 256, 4 warps, 2 stages, the paired codebook decode). No lane
+    has swept it; every K25 plan compared on the A2000 was bit-identical.
+
+  gpt-oss's NF4 fallback rows keep their biases by the sorted ids, and a calibration sink keeps today's route.
+- **Not the served arithmetic.** K25's weight operand is the bf16 dequant (`dequant_ref(...).to(bf16)`). The served
+  GEMM multiplies TF32 on the fp32 dequant, which rounds the weight less. So the default is **`0`, today's routes**,
+  until a lane reads speed and quality per family.
+- **The quality instrument reads the kernel.** Under `1`, `_collapsed_grouping` also sends T == 1 on the NF4 store to
+  the device tile table and K25, so the decode-shaped K8 instrument reads the kernel it gates. It never moves an int4
+  or MXFP4 store's T == 1.
+- **Refusals.** `1` on a kernel package without K25 is a RuntimeError, and `auto` there keeps today's route silently.
+  Anything else is refused.
+- **Tests:**
+  - `tests/test_nf4_grouped_smallm_route.py` (stubs with an NF4 dequant oracle): the default, the opt-in and `auto`
+    routes, the plan, the gpt-oss epilogue, the T == 1 decisions, the refusals, prefill and the calibration sink
+    untouched, and lean token rows with the expanded call's bits.
+  - `tests/test_k25_row_exact_gpu.py` (real kernel, Granite's expert shapes: 40 experts, top-8, H 1536, I 512):
+    - a token's rows are bit-equal alone (T = 1) and inside B=16;
+    - the T = 1 output matches the fp32 dequant oracle;
+    - lean token rows are bit-equal to the expanded rows;
+    - the T = 1 route captures and replays bit-equal.
+  - NAS RTX A2000 with grouped-nf4-gemm at #429's head, correctness only:
+    - GPU 14/14 with K19's, K21's and K23's files;
+    - CPU routes 64 passed;
+    - two mutations each fail both the GPU file and the stubbed route tests: T == 1 never moving under `1`, and the
+      lean down call without its scatter.
+
+### P91 read: READ. The NF4 grouped expert GEMM is 62 % (Granite) and 72 % (OLMoE) of B=16 decode kernel time; the next family lane is an NF4 grouped small-M kernel (bench, docs and register)
+
+- **`p91-5090-1`** (RTX 5090, $0.08), on the licensed configs:
+  - Granite `r12epi`: B=16 9.19 ms/step, with `_gemm_nf4_grouped` at 5.48 ms (61.7 %); B=1 3.34 ms, with the NF4 GEMV at
+    50.7 %;
+  - OLMoE `nf4`: B=16 12.47 ms, with the NF4 GEMM at 8.61 ms (71.9 %); B=1 3.96 ms, at 45.7 %.
+  - Every census reconciles within 10 %.
+- **Register:** `e4b.serve.p91.nf4-families.kernel-census.5090.2026-10-01` (descriptive).
+
+### Lane P91 registered (#564): where do the NF4 families' decode steps go? (bench and tests only)
+
+- **What it is.** A descriptive kernel census of Granite-3.1-3B-A800M (`r12epi`) and OLMoE-1B-7B (`nf4`), each on its
+  licensed NF4 configuration, at B=16 and B=1 on one RTX 5090. P88's harness, P42's replay census.
+- **The rule.** READ if every census reconciles with its step within 10 %. If the NF4 grouped GEMM is at least 40 % of
+  B=16 kernel time in either family, the next lane is an NF4 grouped small-M kernel; otherwise it is the largest
+  non-NF4 kernel family.
+- `tests/test_p91_staged_pin.py` pins:
+  - the staged bytes;
+  - that the families' envs equal `serve_stack.arm_env` at P44's revisions;
+  - the arms;
+  - the exit codes;
+  - the reducer's 8-case self-test;
+  - the driver's dry run.
+
+### K21 is the default for the MXFP4 store's batched decode rows (`E4B_MXFP4_GROUPED_SMALLM` now defaults to `auto`), as lane P90 licensed
+
+- **P90** (`e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`): gpt-oss-20b's B=16 step went from 22.511 to
+  13.086 ms on an RTX 5090 (×0.581). The store's KL from the reference fell from 0.00192 to 0.00147 nats on an
+  H100 NVL. B=1 read 1.075× slower.
+- **The modes:**
+  - `auto` (the default, also when unset) sends the store's device-grouped decode rows above T == 1 to K21 when the
+    kernel package carries it with its masked K tail, and keeps today's route (the NF4 fallback) when it does not;
+    T == 1 stays on the split-K GEMV;
+  - `1` requires K21 and its masked tail, and adds T == 1;
+  - `0` is today's route;
+  - anything else is refused.
+- **Tests.** `tests/test_mxfp4_grouped_smallm_route.py`:
+  - the default takes K21 at the registered plan for batched rows, with gpt-oss's epilogue, and keeps T == 1 on the
+    GEMV;
+  - on a kernel side without K21, or without its masked tail, the default is today's route, silently;
+  - `0` is today's route.
+- **P90's runner** asserts the pre-default boolean switch in its tripwire. It ran at its registered commit and is
+  read, so the pinned bytes stay as they ran.
+
+### P90 read: LICENSED. K21 takes gpt-oss-20b's B=16 decode step to 0.581× on an RTX 5090, and the MXFP4 store's KL falls (bench, docs and register)
+
+- **Speed** (`p90-5090-2`, RTX 5090): B=16 went from 22.511 to 13.086 ms/step (710 → 1,223 tok/s). B=1 read 1.075×
+  slower, so a default covers T > 1 only.
+- **Quality** (`p90-h100-1`, H100 NVL, P44's instrument): KL from the reference went from 0.001922 to 0.001466 nats,
+  top-1 from 0.9814 to 0.9840. OFF reproduces P44's licensed 0.0019.
+- **Register:** `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, with a STATUS mention beside the store's
+  licence.
+- `p90-5090-1` read VOID on the KL reference not fitting a 5090 (amendment 1, #820). Its speed is recorded
+  descriptively.
+
+### The lean glue is the default on K19's rows (`E4B_INT4_LEAN_GLUE` now defaults to `auto`), as lane P89 licensed
+
+- **P89** (`e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, RTX 5090): Qwen3-30B-A3B's B=16 int4 step
+  went from 10.321 to 9.805 ms (×0.950). Tokens were identical in all 16 rows, and there were 336 fewer launches per
+  step.
+- **The modes:**
+  - `auto` (the default, also when unset) folds K19's grouping glue when the kernel package carries grouped-nf4-gemm
+    K23's options, and keeps the separate launches when it predates them;
+  - `1` requires K23 (absent is a refusal);
+  - `0` is the old path;
+  - anything else is refused.
+- **Scope.** It applies to K19's rows only, so gpt-oss's epilogue and the MXFP4 store are untouched. The collapse now
+  hands over its token rows whenever the mode is not `0`; a route that is not lean expands them inside, with the same
+  launches as before.
+- **Tests:**
+  - the route tests add the default (unset / auto / AUTO / empty) taking the lean path with the same bits as `0`, and
+    `auto` on a pre-K23 kernel side keeping the old launches without refusing;
+  - `tests/test_k23_lean_glue_gpu.py` sets `0` for its OFF side and adds a default-is-lean check;
+  - `bench/p89/staged.sha256` follows that file. P89 is read, and its receipts keep the bytes that ran.
+
+### P89 read: LICENSED. K23's lean glue takes Qwen3-30B-A3B's B=16 int4 step to 0.950×, with identical tokens (bench, docs and register)
+
+- `p89-5090-4` (RTX 5090): B=16 went from 10.321 to 9.805 ms/step. Tokens were identical in all 16 rows of both draw
+  pairs, and there were 336 fewer launches per step (the 7 per layer K23 removes).
+- Register: `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`.
+- `p89-5090-3` read VOID on an engagement clause that named the expansion's kernel by inference (amendment 1, #818).
+  It is recorded descriptively.
+- To fit the new row under the bundle's cap, P82's and P83's claim texts are stated more tightly. No number moved.
+
+### Lane P90, amendment 1: the KL arms move to an H100 NVL; one reading is a speed run and a quality run (bench and tests only)
+
+- `p90-5090-1` read VOID: gpt-oss-20b's bf16 dequant reference (about 40 GB) does not fit a 32 GB RTX 5090. The KL
+  arms died offloading it. P44-b scored that reference on an H100 NVL.
+- `P90_ARMS=speed` runs the registered speed arms on the 5090. `P90_ARMS=quality` runs the registered KL arms on an
+  H100 NVL. Both hold the premise and K0.
+- `p90_reduce.py --speed-dir A --quality-dir B` gives the verdict under the registered rule.
+- `p90-5090-1`'s speed numbers are recorded descriptively only: B=16 ×0.584, B=1 ×1.074.
+
+### Lane P89, amendment 1: the engagement clause counts launches, not an inferred kernel name (bench and tests only)
+
+- `p89-5090-3` read VOID on "at least 48 fewer `indexSelect` launches per step". That clause named the token-row
+  expansion's kernel by inference. On torch 2.8 the expansion is `vectorized_gather_kernel`, and the route removed
+  all 7 launches per layer it targets (336 per step).
+- The clause is removed, the total-launch floor is now 288 per step (6 per layer), and kernel names are reported, not
+  gated.
+- `p89-5090-3` is recorded descriptively only (B=16 ×0.951, tokens identical); a fresh reading gives the verdict.
+
+### Lane P90 registered (#564): does K21 make gpt-oss-20b's B=16 decode faster without moving the MXFP4 store's quality? (bench and tests only)
+
+- **The question.** gpt-oss-20b's licensed MXFP4 store falls back to NF4 above 16 rows, and that NF4 GEMM is 79 % of
+  the B=16 step. With `E4B_MXFP4_GROUPED_SMALLM=1` (#816), K21 serves those rows from the store's own bytes. P90 asks
+  whether that is faster on an RTX 5090 without moving the store's quality.
+- **Speed.** bo7's `store_r12`, OFF vs ON, at B=16 and B=1, two draws each, the first censused (K22's command line).
+  Engagement is read from the censuses: K21 replaces the NF4 grouped GEMM at B=16 and the GEMV at B=1, 48 calls per
+  step.
+- **Quality.** P44's KL-from-reference instrument, unchanged, on arm `store_r12`, OFF then ON. It is decode-shaped,
+  and under ON T == 1 reads K21. Two checks run first, before any fetch: the premise
+  (`tests/test_k21_row_exact_gpu.py`: rows bit-equal alone and inside B=16) and the instrument's K0 controls.
+- **The rule:**
+  - QUALITY_FAIL if KL rises more than 0.0005 nats or top-1 drops more than 0.002;
+  - LICENSED at B=16 ON/OFF <= 0.90;
+  - VOID if OFF's KL does not reproduce P44's 0.0019 within 0.001, among other checks.
+- `tests/test_p90_staged_pin.py` pins:
+  - the staged bytes (P88's harness, P44's KL modules, the premise);
+  - that the gnf4 pin is a real sha;
+  - the refusal, premise, K0 and proof order;
+  - the arms and their settings;
+  - the exit codes;
+  - the reducer's 18-case self-test;
+  - the driver's dry run.
+
+### `E4B_MXFP4_GROUPED_SMALLM=1` (K21, opt-in): the native MXFP4 store's decode rows go through K21 instead of falling back to NF4
+
+- **Why.** gpt-oss-20b's licensed MXFP4 store has no batched kernel here. Above 16 rows (B=16 is 64) its experts fall
+  back to the kept NF4 stacks, which are a requant that P44 read at 0.0222 nats against the store's 0.0019. That NF4
+  grouped GEMM is 79 % of the B=16 step (grouped-nf4-gemm K22/K24 censuses, 17.9 of 22.5 ms).
+  - On gpt-oss's recorded B=16 routing, K21 (#422, with #425's masked K tail) read 7.62 ms/step against the served
+    route's 15.18 (K24, #428).
+  - That read was VOID by its instrument and is descriptive only, so this route is opt-in, the treatment an
+    end-to-end lane measures.
+- **What.** Under `1`, `_fused_over_stack` keeps the MXFP4 store for every device-grouped decode row (up to 256) and
+  serves both projections with `mxfp4_grouped.gemm_mxfp4_grouped_smallm`:
+  - over the 16-row device tile table, with gate_up's gather folded in;
+  - at K24's best plan (`_K21_PLAN`: BLOCK_N 32, KC 128, 4 warps, 3 stages; every K24 plan was bit-identical).
+
+  gpt-oss's biases index by the sorted ids, and the unsort applies as before.
+- **The quality instrument reads the kernel.** Under `1`, `_collapsed_grouping` also sends T == 1 on the MXFP4 store to
+  the device tile table and K21, so P44's decode-shaped KL instrument reads the kernel it gates.
+- **Default unchanged.** `0` (the default) keeps today's routes, and anything else is refused. `1` on a kernel package
+  without K21, or without its masked tail, is a RuntimeError.
+- **Tests:**
+  - `tests/test_mxfp4_grouped_smallm_route.py` (stubs with an MXFP4 dequant oracle): the routes, the plan, the
+    gpt-oss epilogue, the refusals, prefill untouched, the grouping decisions.
+  - `tests/test_k21_row_exact_gpu.py` (real kernel, gpt-oss shapes, K = 2880 so the masked tail runs): a token's rows
+    are bit-equal alone (T = 1) and inside B=16; the T = 1 output matches the fp32 dequant oracle through gpt-oss's
+    epilogue; the T = 1 route captures and replays bit-equal.
+  - NAS RTX A2000, correctness only:
+    - GPU 9/9 with K19's and K23's files;
+    - CPU route and MXFP4 neighbours 81 passed;
+    - a mutation that drops gate_up's gather fails the B=16 row-exactness test and the stubbed route tests.
+
+### Lane P89 registered (#564): does K23's lean glue make Qwen3-30B-A3B's B=16 int4 decode faster with the same bits? (bench and tests only)
+
+- **The question.** P88 LICENSED K19 for T > 1 int4 decode rows. K23 (`E4B_INT4_LEAN_GLUE=1`, #814 over
+  grouped-nf4-gemm #427) folds the launches around K19 into the kernels that bracket it, bit-identical by
+  construction. P89 asks whether that is faster on an RTX 5090.
+- **The lane.** `bench/p89/` is P88's speed instrument, with OFF / ON differing only in `E4B_INT4_LEAN_GLUE`. K19 is at
+  its licensed `auto` in both arms. B=16, two draws each, the first censused.
+  - There is no K8: it scores through the T == 1 loop, where the lean route never engages, so it would be inert as a
+    gate.
+  - The quality gates are the on-card premise, run before any fetch: `tests/test_k19_row_exact_gpu.py` +
+    `tests/test_k23_lean_glue_gpu.py`, 6 passed and none skipped. Then token equality in all 16 rows of both draw
+    pairs.
+  - Engagement is read from the census: at least 48 fewer `index_select` launches per step (the expansion) and at least
+    192 fewer launches per step overall.
+  - The rule: LICENSED at ON/OFF <= 0.97, otherwise NOT_FASTER, IDENTITY_FAIL or VOID.
+- `tests/test_p89_staged_pin.py` pins:
+  - the staged bytes (P88's harness, the two premise tests);
+  - that the gnf4 pin is a real sha;
+  - the refusal, premise and proof order;
+  - the arms and their settings;
+  - the reducer's 14-case self-test;
+  - the driver's dry run.
+
+### `E4B_INT4_LEAN_GLUE=1` (lane K23, opt-in): K19's grouping glue folds into the builder and K19's store
+
+- **Why.** P88 censused Qwen3-30B-A3B's B=16 step on an RTX 5090 (8 graph replays per arm).
+  - Its K19 arm, against its GEMV arm, adds 0.685 ms/step of launches: the tile builder 0.430, three fills 0.096, an
+    index kernel 0.094 (by its count, the unsort) and a scatter/gather kernel 0.065.
+  - Both arms also pay an `index_select` of 0.46 ms/step. By its call count and per-call time it is inferred to be the
+    collapse's `[T * top_k, H]` expansion of the token rows.
+- **What.** On K19's rows, `_fused_over_stack` uses grouped-nf4-gemm K23 (#427):
+  - it builds the table with `build_group_tiles_fused(..., lean=True, sorted_ids=True)`, one launch;
+  - gate_up reads the collapse's token rows through `gather_div=top_k`, because `_forward_collapsed` now hands over
+    `(x, row_token, top_k)` and the expansion is made inside only for routes that read it;
+  - the down projection is stored with `scatter=order` straight into the caller's row order, so the unsort is skipped.
+  - gpt-oss's epilogue reads the sorted down output, so it is excluded.
+  - `0` (the default) keeps the separate launches. Anything else is refused, and `1` on a kernel package without
+    K23's options is a RuntimeError, not a silent fallback.
+- **No speed claim yet.** Lane P89 reads it end to end.
+- **Tests:**
+  - `tests/test_int4_grouped_smallm_route.py` (stubs):
+    - the route takes K23's builder and the down scatter with the same bits as `0`;
+    - token rows are read through `gather_div` under `1` and expanded inside under `0`, both bit-equal to the
+      expanded call;
+    - the refusals;
+    - off K19's rows nothing changes.
+  - `tests/test_k23_lean_glue_gpu.py` (real kernels): bit-equal to the default at B=16 from expanded rows and from token
+    rows, eager, and captured in a CUDA graph and replayed on new inputs. It skips when the installed kernel package
+    predates K23.
+  - On the NAS RTX A2000 (correctness only), against K23's commit:
+    - GPU 6/6 (with K19's row-exact file) and CPU route 24/24;
+    - a mutation that drops the down scatter but still skips the unsort fails all three K23 GPU tests.
+
+### Lane K24 runner (#564): K22 re-read on gpt-oss-20b with per-layer weight stores and K21's masked-tail plans (bench and tests only)
+
+- **Why.** K22 read VOID: its bench's served NF4 kernel was 17 % under the in-model census. Descriptively, gpt-oss's B=16 step is 79 % that kernel. K24's prereg and bench live in grouped-nf4-gemm (`kernel/PREREG-k24-gptoss-per-layer.md`).
+- **`bench/k24/` is K22's runner minus the prompts and routing-record phases:**
+  1. census the served B=16 step;
+  2. run `k24_bench.py` on K22's recorded routing, read from the gnf4 clone's receipts at the registered commit.
+  Failures use rc 31 / 34.
+- `tests/test_k24_staged_pin.py` pins the staged bytes, the order, the env, the instrument wiring, the codes and the dry run.
+
+### Lane K22 runner (#564): gpt-oss-20b at B=16 on an RTX 5090 -- census, recorded routing, and K21 against the served expert route (bench and tests only)
+
+- **Why.** The first lane of the throughput push to other model families. gpt-oss's licensed MXFP4 store has no batched kernel, so at B=16 (64 rows) the experts fall back to the kept NF4 stacks; bo7 timed that step at 21.65 ms. The prereg, the bench and the rule live in grouped-nf4-gemm (`kernel/PREREG-k22-gptoss-mxfp4-b16.md`). This repo carries the runner.
+- **`bench/k22/`, one box, three phases:**
+  1. census the served B=16 step (bo7's `store_r12`) with P42's replay census;
+  2. tokenize 16 wikitext rows with gpt-oss's own tokenizer (`step_decomp._k8_window`, as P37) and record 128 teacher-forced B=16 steps of routing with `bench/families/record_eids.py`;
+  3. run grouped-nf4-gemm's `k22_bench.py` on that routing. Its instrument is phase 1's own `_gemm_nf4_grouped` row.
+- **Codes and proof.** Lane failures use rc 31–33, never the launcher's machine-exclusion codes. The proof (`K22_PROVE=1`) compiles K21's and K16's contracts on the card and fetches no model.
+- `tests/test_k22_staged_pin.py` pins:
+  - the staged bytes (P86's harness, the family recorder, P44's served-model builder);
+  - the refusal and proof order;
+  - the phase order and bo7's env;
+  - the instrument wiring;
+  - the exit codes;
+  - the driver's dry run.
+
+### K19 is the default for batched int4 decode rows (`E4B_INT4_GROUPED_SMALLM` now defaults to `auto`), as lane P88 licensed
+
+- **What changes.** In the device-grouping configuration, the one every B=16 register row is measured in, int4 decode rows above T == 1 (≤ 256 rows) now run grouped-nf4-gemm's K19 when the installed kernel package carries it. Before, they ran the split-K GEMV.
+- **Why.** P88 (`e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`): B=16 step 0.905× on an RTX 5090, K8 +0.0062 nats (floor 0.0095).
+- **What doesn't change:**
+  - **T == 1** stays on the singleton GEMV (P88 read B=1 1.103× slower);
+  - the library's default batched path with `DEVICE_GROUPING` off;
+  - prefill rows;
+  - a kernel package without K19 (released grouped-nf4-gemm ≤ 0.33.7): auto falls back to the GEMV silently.
+- **Values:**
+  - `auto` (default, also unset or empty);
+  - `0`: the split-K GEMV everywhere;
+  - `1`: requires K19, refuses if absent, and also routes T == 1 (the quality instrument's setting);
+  - anything else is refused.
+- `tests/test_int4_grouped_smallm_route.py` pins each value's route, the silent fallback, the refusal, and T == 1 under each. `int4_experts.py`'s Scope note says the same.
+- Three tests whose subject is the split-K GEMV route now select it explicitly (`=0`): `test_int4_device_grouping.py::test_int4_decode_routes_to_gemv`, P63's `test_int4_device_grouping_gemv_is_row_exact` and `test_int4_decode_a16.py::test_on_does_not_cover_the_device_grouped_decode_gemv`. K19's own row invariance is `tests/test_k19_row_exact_gpu.py`. With the real kernel (grouped-nf4-gemm `7b7e6b1`) on an RTX A2000, the 9 dispatch and route files pass: 62 passed.
+### Lane P88 read (#564): LICENSED. K19 takes the RTX 5090's B=16 int4 decode step to 0.905×, K8 +0.0062 nats; B=1 is 1.10× slower (bench, docs and register only)
+
+- **Run:** `p88-5090-4` on an RTX 5090 with an AMD EPYC 9334 host, e4b `b848089` + grouped-nf4-gemm `7b7e6b1` (K19's plan 32/256). $0.5538. The lane cost $0.6582, including a proof and three pre-flight NOT_RUNs.
+- **Steps (medians of two draws):**
+  - B=16 11.200 → 10.140 ms (0.905, bar 0.95);
+  - B=1 4.325 → 4.771 (1.103, SLOWER).
+- **K8 on the licensed recipe:** OFF 1.8434202801176407, ON 1.8496547109991661: **+0.00623 nats** (floor 0.0095). The build equals OFF bit for bit, and the pack it dumped carries the licensed fingerprint `sha256:0c9955a9`.
+- **Census at B=16:** GEMV 6.34 → K19 5.05 ms per step. Grouping adds 0.69 (tile build 0.43 + glue 0.26) against 0.60 of quantise and reduce removed.
+- **Predictions:** B=16 0.78–0.86 refuted (0.905); B=1 slower held; |ΔK8| < 0.003 refuted (+0.0062, inside the floor).
+- **Register:** `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`. STATUS's P86 sentence is condensed and now cites it. P84's and P86's register sentences are tightened, with their figures unchanged, to keep the bundle under its cap.
+- **What follows:** K19 by default for int4 decode rows above T == 1, a separate PR.
+
+### `bench/families/record_eids.py`: P60's routing recorder, generalised to every MoE family (bench and tests only)
+
+- P60's recorder (`bench/p60/record_eids.py`, a registered lane's staged file, left byte-identical) hooked `.gate` on classes named `*SparseMoeBlock` and parsed Qwen's router output, so it missed gpt-oss, Granite and Gemma-4, whose routers are named `router`.
+- The new copy pre-hooks each block's `experts` call and reads its `top_k_index` argument. Every admitted family calls `experts(hidden, top_k_index, top_k_weights)` in transformers 5.x, and e4b's served wrapper keeps that signature. It refuses a model with no experts module, a call shaped otherwise, and a `top_k` mismatch.
+- `tests/test_record_eids_families.py` covers tiny Qwen3-MoE, OLMoE, Granite-MoE and gpt-oss models. On each, the recorded ids must equal the family's own router indices, call for call; the routers return `(logits, w, idx)`, `(idx, w, logits)` and `(logits, scores, idx)`. Groundwork for per-family routing replays (the K20 method, other families).
+
+### Lane P88 registered (#564): P87's instrument on K19's new plan, with a CPU floor (bench and tests only)
+
+- **Why.** grouped-nf4-gemm's K20 (#421) found K19's plan on the 5090: BLOCK_N 32 / KC 256 serves recorded B=16 routing at 0.736× the int8 GEMV route, with outputs bit-identical across plans. P87's read was VOID because its calibrated K8 build ran out of its alarm on a Broadwell host.
+- **P88 is P87's arms, reducer and rule**, pinned to gnf4 `7b7e6b1`. It adds:
+  - a tripwire on K19's default plan;
+  - a host CPU-vendor floor (AMD; **rc 18**, which the launcher excludes the machine on, adertha#131) before any install;
+  - a 5,400 s build alarm and a 3.0 h guard.
+- **Predictions:** B=16 0.78–0.86; B=1 SLOWER (1.03–1.20, so a default would cover T > 1 only); |ΔK8| < 0.003.
+- **Cost:** a proof (0.5 h), then the reading (3.0 h). Lane ceiling $3.50.
+- `tests/test_p88_staged_pin.py` adds the vendor refusal, the plan tripwire and the alarm to P87's pins.
+
+### Lane K20 runner (#564): K19's plan space on an RTX 5090, replaying P60's recorded B=16 routing (bench and tests only)
+
+- The prereg, the bench and the rule live in grouped-nf4-gemm (`kernel/PREREG-k20-k19-plan-sweep-5090.md`, grouped-nf4-gemm#420). This repo carries the runner, `bench/k20/`, in K18's pattern:
+  - install gnf4 at the registration's merge, then a tripwire that the installed module is the pinned cut, with K19 and the tile builder present;
+  - K19's contracts, under the interpreter and then compiled on the card, before any timing (rc 21 / 22);
+  - the rule's self-test, then the bench on P60's committed ids.
+- `tests/test_k20_staged_pin.py` pins the staged bytes (the routing is K18's, byte-identical) and the order: contracts, then self-test, then bench.
+### Lane P87 read (#564): VOID by the rule; the speed arms show K19 at 0.971× the GEMV step at B=16 and 1.236× at B=1 on an RTX 5090 (bench and docs only)
+
+- **Why VOID.** The calibrated K8 build ran on an Intel Xeon E5-2698 v4. It needed 1,120 s for its first chunk (P85's AMD host: 360 s), hit its 3,600 s arm alarm after 3 of 5 chunks and dumped no pack, so K8 OFF/ON never ran. No register row.
+- **The speed arms passed every check of their own:** the premise (K19 rows bit-equal alone and inside B=16; 3 passed on both 5090s), the 3 % draw spread, and engagement (96 K19 calls per step ON, the experts' 96 GEMV calls gone, none OFF).
+- **Steps (median of two draws):**
+  - B=16: 12.013 → 11.667 ms (0.971; the bar was 0.95, I predicted 0.75–0.85);
+  - B=1: 4.277 → 5.286 (1.236).
+- **The census.** Kernel for kernel, K19 is 1.08× the GEMV (6.50 vs 7.00 ms per step): about 75 % of the int4-b32 byte floor, against the GEMV's 70 % and Marlin MoE's 94 %. Grouping adds about 0.8 ms per step (tile build 0.50, glue 0.30), nearly cancelling the 0.73 ms of reduce and quantize removed. At B=1, one-row tiles make K19 1.91× the GEMV's expert time.
+- **Why the prediction failed.** It rested on an A2000 timing (K19 1.89×), but the A2000's GEMV runs far below its own floor (11.4× slower than the 5090's). A timing on that card says nothing about the 5090.
+- **What follows.** K19 stays opt-in; P87 is not re-run. Next: a 5090 kernel microbench on P60's recorded routing (K19's plan space, Marlin MoE, the tile build) before any end-to-end lane.
+- Spend: $0.9851 of the $3.00 ceiling (proof $0.0329, a $0 refusal, the reading $0.9522).
+
+### Lane P87 registered (#564): does K19 make e4b's int4 decode faster on an RTX 5090 without moving its quality? (bench and tests only)
+
+- **The question.** On one RTX 5090, with `E4B_INT4_GROUPED_SMALLM` on against off:
+  - **Speed:** B=16 and B=1 step times. P86's harness, RTN env and command line, two draws each, the first censused.
+  - **Quality:** K8 on the licensed recipe (calibrated experts and int4 attention, P85's env and K8 arguments). One build dumps the pack, then OFF and ON load it by fingerprint.
+  - grouped-nf4-gemm is pinned at K19's merge, `3351c9d`.
+- **The premise, on the card.** `tests/test_k19_row_exact_gpu.py` runs before anything is fetched: a token's K19 rows are bit-equal alone and inside a B=16 step, which lets the B=1 K8 stand for the batched rows. If it fails, the lane stops (rc 25).
+- **The rule** (`p87_reduce.py`, 17-case self-test):
+  - **VOID** on a failed premise; on failed engagement (96 K19 calls per step ON, the experts' 96 GEMV calls gone, none OFF); or on a bit-equal K8 ON/OFF.
+  - **QUALITY_FAIL** if |ΔK8| > 0.0095 nats.
+  - **LICENSED** if B=16 ON/OFF ≤ 0.95.
+  - **NOT_FASTER** otherwise.
+  - B=1 is read as FASTER, NEUTRAL or SLOWER beside the verdict, and decides the scope of a proposed default.
+- **Cost.** A proof (0.5 h: K19's contract tests and the premise compiled on sm_120, no model), then a 2.5 h reading. Lane ceiling $3.00.
+- `tests/test_p87_staged_pin.py` pins:
+  - the staged bytes, which are P86's harness bytes;
+  - the gnf4 pin;
+  - the refusals and the premise coming before any fetch;
+  - the proof;
+  - the arm order and settings;
+  - the driver's dry run.
+
+### `E4B_INT4_GROUPED_SMALLM=1` now covers T == 1 decode too (opt-in; no default changes)
+
+- **The gap.** The route above engaged only where device grouping was already on: T > 1 under the batched harness's `DEVICE_GROUPING`. T == 1 (B=1 decode) kept the singleton int4 GEMV. K8 scores through the T == 1 loop, so a K8 read of the opt-in would have measured the GEMV it meant to replace, and the quality gate would have been inert. This was found while writing lane P87's reducer, before anything ran.
+- **The change.** `_collapsed_grouping(T, int4_stores)` decides the all-resident collapse's grouping. With the opt-in and a uniform-int4 store (not MXFP4), T == 1 takes the device tile table (capture-legal, no host sync), and its 8 routed rows reach K19. Without the opt-in, the decisions are what they were.
+- `tests/test_int4_grouped_smallm_route.py` adds:
+  - the decision table for both T and both settings, plus MXFP4 and no store;
+  - an end-to-end T == 1 call (one row per expert) through K19 against the oracle.
+- `tests/test_k19_row_exact_gpu.py` (GPU; skips without CUDA or K19), on the real kernel at Qwen3-30B-A3B's expert shapes:
+  - a token's rows come out bit-equal whether it decodes alone (T == 1) or inside a B=16 step, so a T == 1 instrument such as K8 stands for the batched rows;
+  - K19 runs at T == 1 and matches an fp32 dequant oracle;
+  - the default T == 1 route is untouched;
+  - the T == 1 route captures in a CUDA graph, as the B=1 decode loop does, and a replay on new inputs equals eager to the bit.
+  - On an RTX A2000 (sm_86), tokens 0, 5 and 15 were bit-equal, and the captured replays matched eager. Relative error against the oracle: K19 0.0048, the GEMV 0.0131.
+
+### `E4B_INT4_GROUPED_SMALLM=1`: int4 decode rows through grouped-nf4-gemm's K19 grouped tensor-core GEMM (opt-in; no default changes)
+
+- **What it routes.** At decode shapes (≤ 256 routed rows) on the int4 expert store, today's route is the split-K GEMV, the row P86 measured at 6.98 ms/step against Marlin MoE's 4.78 at B=16 (#564). The opt-in sends those rows through K19 (`int4_smallm.gemm_int4_b32_grouped_smallm`, grouped-nf4-gemm#419) instead, using the existing device-grouping branch:
+  - the 16-row tile table is built once per layer;
+  - gate_up runs as K19 with its gather folded in (`order`);
+  - down runs as K19 on the already-sorted epilogue output;
+  - the existing unsort and combine are unchanged.
+- **Why it is opt-in.** K19 multiplies bf16 activations instead of int8-quantised ones, a different arithmetic, so it stays opt-in until a registered quality read licenses it.
+- **Asked for and absent is refused.** If the kernel side lacks K19, the opt-in raises a `RuntimeError` naming the requirement; it never falls back to the GEMV silently. Prefill rows (> 256) are untouched.
+- `tests/test_int4_grouped_smallm_route.py` (Linux CI, stubbed kernels) pins:
+  - the route (gate_up with the gather, down without);
+  - no GEMV, and 16-row tiles;
+  - the per-row oracle in the caller's row order;
+  - the default route unchanged;
+  - the refusal, and prefill untouched.
+
+### Lane P86 read (#564): READ -- vLLM's B=16 lead is the expert kernel; Marlin MoE runs the experts in 4.78 ms per step against e4b's int4 GEMV 6.98 (2.86 of the 3.32 ms gap) (bench, docs and register only)
+
+- `p86-5090-3` ran on one RTX 5090 for $0.5170, teardown proven, with the same prompts as P58. The lane cost $0.8561: three proofs (a bandwidth NOT_RUN, the attempt that caught the CUDA 12.8 image, and a pass), an ssh NOT_RUN, and the reading.
+- **Steps.** B=16: e4b 12.06 ms vs vLLM 0.30.0 8.75 (1.38x; P58 1.40x). B=1: 4.27 vs 4.00 (1.07x). Both censuses reconcile to their own step.
+- **B=16 by role (e4b / vLLM / gap):** quantized linear 8.61 / 5.75 / +2.86, of which experts 6.98 + reduce 0.39 + quantize 0.35 against Marlin MoE 4.78 (the attention projections are at parity, 0.89 vs 0.97); routing glue 1.07 / 0.45 / +0.62; other +0.44; attention + KV write 0.96 / 1.35, **e4b faster**. Stated expectation held.
+- **Against #564's byte floor** the e4b GEMV runs about 70 % and Marlin MoE about 94 % of its own.
+- **Next (proposed):** a kernel lane on the B=16 expert matmul, benchmarked against Marlin MoE's 4.78 ms, starting with a $0 A2000 microbench of both kernels on a recorded routing.
+- New row `e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01`. STATUS adds P86 beside P58's comparison and condenses the #674 bullets now that P85 answered it. The read is in `bench/p86/RESULTS-p86.md`.
+
+### Lane P86 amendment 1 (#564): the vLLM image needs a >= 12.9 CUDA toolkit; the runner refuses an older one before any install (bench only; nothing in the wheel changes)
+
+- `p86-prove-2` caught a defect. vLLM 0.30.0 installed and imported, but its warmup died in FlashInfer's JIT (`requires GPUs with sm75 or higher`) on the sm_120 card. The lane's image was `2.8.0-cuda12.8-devel`, carried over from P84/P85; P58's registration names `2.8.0-cuda12.9-devel` for vLLM on sm_120. `p86-prove-1` was a launcher NOT_RUN (bandwidth). Together $0.1156; no reading attempted.
+- **Changes, before any reading:** the image is P58's; the runner refuses a container toolkit below 12.9 with rc 24, before any install; up to two more proof attempts under the corrected image. The question, the arms, the rule and the ceiling are unchanged.
+
+### Lane P86 registered (#564): where do e4b's and vLLM's decode steps go, kernel by kernel, on one box? (bench only; nothing in the wheel changes)
+
+- `bench/p86/PREREG-p86.md`. P58 measured vLLM 0.30.0 at 1.087x (B=1) and 1.396x (B=16) e4b's int4 stack end to end. e4b's B=16 step has a census (P57); vLLM's never had one, so the 3.3 ms gap could not be assigned. This lane censuses both engines on one RTX 5090 with the same prompt token ids.
+- **e4b:** the current release's int4 stack through P58's exact harness, fused q/k/v at both batches, timed by the graph-replay window and censused by P42's replay profiler. **vLLM 0.30.0** (P58's comparator, the GPTQ-Int4 checkpoint on Marlin): timed by P37's slope arm, unchanged, and censused by the new `p86_vllm_census.py`. The census runs the engine in-process under `torch.profiler` and applies the same 32 -> 128-token slope to each kernel. Only kernels that gain calls in the long run count as decode.
+- **The rule:** kernels sorted into registered families, families into roles present in both engines, plus host and launch (step minus kernels). VOID on a missing arm, the wrong vLLM, or a census exceeding its own step by 10 %. NOT_READ if over 10 % of either engine's B=16 kernel time is unmapped. Otherwise the largest B=16 gap names the next lane. Stated expectation: quantized linear (the expert GEMV against Marlin MoE).
+- **Refusals before any install:** the card class, the disk, and a driver below 580 (vLLM 0.30.0's wheels are CUDA 13.0; rc 18).
+- **A2000 rehearsal of the method** (vLLM 0.11.0, Qwen3-0.6B): graph replays are recorded, each decode kernel once per layer per step. The graph arm read 5.79 ms/step of decode kernels against the eager control's 7.40.
+- **A proving rental first** (0.5 h, no 30B model). It runs the census arm itself on vLLM 0.30.0 with Qwen3-0.6B, proving the profiler on this build, driver and card, which the A2000 cannot. Then the reading: guard 2.0 h at <= $0.75/h (P58 registered 3.0 h for its 18 arms); lane ceiling $2.50. `tests/test_p86_staged_pin.py` (17) pins the staged bytes, P58's harness and comparator bytes, the comparator, the refusals' order, the proof, the arms and the census settings.
+
+### Lane P85 read (#674): CONFIRMED -- grouped-nf4-gemm#413 (the fused fp8 KV append's IEEE-rounded quotient) is the whole step that moved the recipe's fp32 K8 from 6.36709 to 6.36396 (bench, docs and register only)
+
+- `p85-5090-4` ran on one RTX 5090 on P70's own Ryzen 7950X card for $0.6386, teardown proven. The lane cost $0.7362: a proof, two Intel-host refusals at preflight (rc 16), and one attempt whose deadline guard did not arm on a Vast HTTP 429.
+- **The readings.** Every reading used P70's harness and e4b 0.37.4, and every pair repeated bit for bit. The control, P70's build, read O's known `1.8511420498367808`. The same stack with `E4B_FUSED_KV_APPEND=0` read `1.8506507749113845`, the gnf4 0.33.7 builds' float, bit for bit. gnf4 0.33.6 with the append on read O's float bit for bit.
+- **So #413 is the whole KERNEL step P84 found.** P84 had inferred it from the code; this reading measures it. The newer 6.36396 is the reading with the reference quantizer's KV bytes. Whether the licensed row names its software is the owner's decision.
+- **Not measured here:** the P81/P82 cast pair (#413 is its leading explanation) and the Intel-host attention calibration.
+- New row `e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30`. P84's row and `RESULTS-p84.md` are noted as measured. The read is in `bench/p85/RESULTS-p85.md`.
+
+### Lane P85 amendment 1 (#674): the first-chunk watchdog admits a Zen 2 host (1,500 s), the guard is 4.0 h, the ceiling $4.00 (bench only; nothing in the wheel changes)
+
+- `p85-prove-1` PROVED on an AMD EPYC 9655 host ($0.0573). The first reading, `p85-5090-1`, landed on an Intel Core Ultra 9 285K, which the runner refused at preflight with rc 16 before any install ($0.0251). No data exists.
+- **Why.** The launcher excludes a machine only on ssh-readiness failures or a lane exit of 13, 14 or 17. A refusal on rc 16 or rc 30 re-rolls onto the same cheapest offer. That offer was then an EPYC 7K62, the Zen 2 class that took 1,121 s to its first calibration chunk in P81, past the 900 s watchdog.
+- **Changes, before any reading:** watchdog 900 → 1,500 s (P83's); guard 3.0 → 4.0 h at ≤ $0.75/h; lane ceiling $3.00 → $4.00; at most three vendor refusals in a row. The question, readings, rule and predictions are unchanged, and `p85-prove-1` stands as the lane's proof.
+
+### Lane P85 registered (#674): is grouped-nf4-gemm#413 (the fused fp8 KV append's IEEE-rounded quotient) the whole step that moved the recipe's fp32 K8 from 6.36709 to 6.36396? (bench only; nothing in the wheel changes)
+
+- `bench/p85/PREREG-p85.md`. P84 localized the move to grouped-nf4-gemm 0.33.0 → 0.33.7 and read #413 from the code as the one change on K8's path. This lane measures it on one AMD-host RTX 5090, through P70's harness and env throughout.
+- **The control runs first.** `O_build` is P70's build (e4b 0.37.4 + gnf4 0.33.0), and it must read O's known mean NLL `1.8511420498367808` bit for bit. If it doesn't, the lane is VOID and stops.
+- **F:** the same stack with `E4B_FUSED_KV_APPEND=0`, so every append goes through `quantize_kv_fp8`, whose bytes 0.33.7's fused kernel writes exactly. Predicted: N's float, `1.8506507749113845`. **S:** e4b 0.37.4 on gnf4 0.33.6, the append on. Predicted: O's float. Each is read twice with the O build's expert pack loaded by fingerprint.
+- **The rule:** VOID, then PATH-REFUTED (F = O: the append is not on the path), CONFIRMED (F = N and S = O), MIXED (F = N, S ≠ O), REFUTED (otherwise). Stated expectation: CONFIRMED.
+- **Tripwires and stamps.** Each stack must carry a pre-#413 `fp8_kv`, and 0.37.4's resolver must turn the append on by default and off under the knob. Every K8 process is stamped with the resolver's answer under its own env.
+- **A2000 rehearsal.** R rc 0: both stacks installed, and the stamps read the append on and off. M1 (a 0.33.7 kernel posing as S) was refused by the pre-#413 tripwire, rc 9. M2 (the knob leaking into every process) was refused by the stamp check, rc 9. V (the default vendor on the Intel host) was refused with rc 16 before any install.
+- Guard 3.0 h at ≤ $0.75/h after a 0.4 h proof; lane ceiling $3.00. `tests/test_p85_staged_pin.py` pins the staged bytes, the stacks, the known floats, the order and the control gate, each reading's env, the tripwire and the stamp, and the driver's dry run.
+
+### Lane P84 read (#674): KERNEL. grouped-nf4-gemm 0.33.0 → 0.33.7 moved the recipe's fp32 K8 (−0.000491 nats); e4b 0.37.4 → 0.37.8 and the harness move it by exactly zero (bench, docs and register only)
+
+- `p84-5090-3` ran on one RTX 5090 on the AMD Ryzen 7950X host that read P55x's and P70's 6.36709 (same GPU) for $1.0928, teardown proven. The lane cost $1.8328 of its $4.00 ceiling over six rentals.
+- **The chain.** The control C (P82's build) read N's known float `1.8506507749113845` bit for bit. H1 (e4b 0.37.8, P70's harness) and H2 (e4b 0.37.4, P70's harness), both on gnf4 0.33.7, read the same float. Every build repeated itself, and every expert pack was the licensed `0c9955a9…`. So KERNEL (O → H2) is the whole −0.000491 nats, and PACKAGE and HARNESS are 0.0. The stated expectation, PACKAGE alone, was wrong.
+- **Which commit is not measured.** Read from the code, the one change in the cut on K8's path is gnf4#413 (0.33.7), which IEEE-rounds the fused fp8 KV append's quotient (B771: the old kernel wrote a different byte in 3.9e-8 of values). K8's eager loop calls `graph_mode_init`, so every scored token appends through that kernel. 0.33.1–0.33.3 change no code, and 0.33.4 (`cold_deadline`), 0.33.5 (`int4_smallm` annotations) and 0.33.6 (MXFP4) are off this path.
+- **Correction.** PREREG-p82 and PREREG-p84 said the eager K8 does not run the graph-mode append. It does. Noted in `RESULTS-p82.md`, `RESULTS-p83.md`, the P82 and P83 register rows and STATUS; the registrations stay as registered. #413 is also the first suspect for the P81/P82 cast pair (gnf4 0.33.5 vs 0.33.7), not measured.
+- **Proposed (P85, not started):** P70's build with `E4B_FUSED_KV_APPEND=0` should read N's float bit for bit if #413 is the whole step.
+- New row `e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30`. The read is in `bench/p84/RESULTS-p84.md`; receipts in `bench/p84/receipts/p84-5090-3/`.
+
+### Lane P84, reading 1 VOID and amendment 1 (#674): on an Intel host the recipe's attention calibration does not reproduce the AMD hosts' pack; P84 is restricted to AMD hosts; P83's cross-machine claim qualified (bench, docs and register only)
+
+- `p84-5090-2` ran on one RTX 5090 on an Intel Core i9-14900K host for $0.5356, teardown proven. The lane has spent $0.7042 so far: two proof attempts and two reading attempts.
+- **The control failed, so the reading is VOID.** P82's own build read K8 **6.36276** (mean NLL `1.8504622130569988`), not N's known 6.36396. Its repeat was bit-identical. The lane stopped before H1 and H2, as registered.
+- **The attention pack is different: `45b4cc5a…`, not `d7cfa1f4…`.** 342 of 384 tensor payloads differ, in all 48 layers, with the same calibration token stream and toolchain. The expert pack is the licensed `0c9955a9…` again. The mechanism is not isolated: CPU vendor and driver both differ from every earlier host.
+- **Amendment 1.** The runner refuses a CPU vendor other than `AuthenticAMD` before the install and the fetch (rc 16), because the known floats were read on AMD hosts. On the A2000 (an Intel Xeon) the default refuses with rc 16, and the knob lifted proves.
+- **Qualified.** P83's "K8 is bit-reproducible across machines" becomes: on the AMD hosts tested. Changed in `RESULTS-p83.md`, the P82 and P83 register rows, and STATUS. The read so far is in `bench/p84/RESULTS-p84.md`.
+
+### Lane P84 registered (#674): which factor moved the recipe's fp32 K8 from P70's 6.36709 to P82's 6.36396 -- the kernels, the package, or the harness? (bench only; nothing in the wheel changes)
+
+- `bench/p84/PREREG-p84.md`. P83 showed the two K8 values are bit-reproducible across machines, so their known floats anchor a chain of one-factor steps built on one RTX 5090. From O (known), a new gnf4 alone gives H2 (KERNEL). A new e4b on top gives H1 (PACKAGE). P82's harness on top gives C (HARNESS), and C = N.
+- **The control runs first.** C is P82's build, and it must read N's known mean NLL `1.8506507749113845` bit for bit. If it doesn't, the lane is VOID and stops before the other builds.
+- **Every build repeats itself within the box.** C's repeat is K32. H1 and H2 use P55x's lic arm.
+- **The verdict names every step whose ends differ** (some of KERNEL, PACKAGE, HARNESS), with each step's nats; the steps sum to N - O. Stated expectation: PACKAGE alone.
+- **The first-calibration-chunk watchdog is now 900 s**, so a slow host fails fast rather than outrunning a three-build guard.
+- **A2000 rehearsal.** PROVE rc 0: both stacks installed, with e4b 0.37.4 on gnf4 0.33.7 and P70's harness importing on both. A mutation with the router export deleted was refused.
+- `tests/test_p84_staged_pin.py` pins:
+  - the files, and the known floats against P83's receipts;
+  - the control gate on P83's N and O receipts;
+  - the order and the stop on a failed control;
+  - each build's harness and env, the manifests, the watchdog, and the driver's dry run.
+
 ### Lane P83 read (#674): on one box the software moved the recipe's K8 (DIFFERENT, −0.00049 nats), and each value reproduces bit for bit across machines; this corrects P82's read (bench, docs and register only)
 
 - `p83-5090-1` ran on one RTX 5090 (AMD EPYC 9755) for $0.7671, teardown proven. The lane cost $0.8179 with its proof.
@@ -48,6 +770,16 @@
   - With identical packs and router setting, P81's box read 6.33015. So on this stack K8 does not reproduce across boxes to five decimals, which the registered table had assumed.
 - Also filed: #784. A lane driver cannot tell a dead box from a silent one, and waited out the whole guard on one.
 
+### `docs/claims.json` is back to two-space indentation, and a test keeps it there; the llms bundle cap is 500,000 bytes (register formatting, tests and bundle config; no row changes)
+
+- #810 re-wrote the register at indent 1. The rows were unchanged, but every line moved, so any open pull request that touched the register conflicted on all of it. It is re-serialised as `json.dumps(indent=2, ensure_ascii=False)` plus a newline, the form it had before #810, with identical content. `tests/test_claims_json_format.py` fails on any other serialisation.
+- `docs/llms-bundle.json`'s `max_bytes` goes from 400,000 to 500,000. The bundle had reached 399,974 bytes, and lanes were shortening register sentences to fit it (#810 did). It has grown by roughly 3–4 KB a day.
+
+### Owner quotes and name credits removed from the documents (docs only)
+
+- Verbatim chat quotes and name credits are removed from pre-registrations, RESULTS pages, planning documents, the CI workflow comment and one CHANGELOG line. Directives are paraphrased or reduced to their date and record; no criterion, band, measurement or date moved.
+- Four OpenTimestamps-anchored documents were edited: `PROVENANCE.md`, `docs/NULL_LADDER_1024_AMENDMENT.md`, `docs/POST_AUDIT_WORK_QUEUE.md` and `docs/SPECULATIVE_LANES_PLAN.md`. Each now ends with a note that its `.ots` anchors the version before the edit, which git history keeps.
+
 ### Lane P82 registered (#511, #674, #777): P81 re-measured on the fixed graph path with the licensed build's fp32 router, and whether the router cast accounts for #674's K8 gap (bench only; nothing in the wheel changes)
 
 - `bench/p82/PREREG-p82.md`. One RTX 5090. P81's build and five arms (the licensed int4 stack, both packs loaded by fingerprint, the device grouping), on grouped-nf4-gemm 0.33.7 and an e4b containing #777.
@@ -56,6 +788,12 @@
 - **Confirmed only if all hold:** the four streams are identical in every row, every bucket captures, and B/A > 1.03 in both pairings. A confirmed read supersedes P81's register row.
 - **Reported for #674.** After the verdict, two K8 arms read wikitext through both packs loaded by fingerprint: K32 with the fp32 router, K16 with the shipped cast. The registered table reads whether the cast is the whole 6.36709 → 6.33015 gap. The attention pack's fingerprint is compared with P81's `d7cfa1f4…`.
 - `tests/test_p82_staged_pin.py` pins the staged files (P81's harness and hook, referenced unchanged), the 21-case rule and K8 table, the router export and the soundness of its stamp, the tripwire markers for #777 and #413, and the reduction's place before the K8 arms.
+
+### Correction: the flagship matrix's energy range and frozen-byte figure each described one model (docs and register only)
+
+- `e4b.train.flagship-matrix` covers Qwen3-30B-A3B and Gemma-4-26B-A4B, but its "0.86–0.92× energy" was Gemma-4's range alone (`bench/flagship-matrix-model2/RESULTS-flagship-matrix-model2.md`, C3: 0.860–0.922×). Qwen3's is 0.797–0.846× (`bench/flagship-matrix/RESULTS-flagship-matrix.md`, B3). The two-model range is **0.80–0.92×**, recomputed from the twenty per-cell receipts.
+- Its "bit-identical over 16.31 GB hashed" is the fused-train gate's figure, from one Qwen3 run outside the matrix. The ten Gemma-4 cells' own check hashed 12.85 GB each. The sentence now names both, and the worst parity cell (0.03653) is labelled as Gemma-4 finance's.
+- The speed (1.52–1.81×) and VRAM (0.75–0.81×) ranges already spanned both models, and the row's value and status are unchanged. Corrected in `docs/claims.json` (the row's notes keep the old wording, and the model-2 receipt joins its evidence), `docs/STATUS.md` (marked), `README.md` and `docs/solutions/qlora-fused-moe-experts.md`.
 
 ## 0.37.8 — 2026-09-29 — a correctness fix to 0.37.7's opt-in bucketed decode graphs: a bucket of one row appends to its own KV slot (#777), and with grouped-nf4-gemm ≥ 0.33.7 the graph path decodes bit-identically to the eager runner (lane B771b); the batched training path is bit-reproducible on CUDA (#765, #776); a calibrate-and-dump build names the dumped expert artifact on its provenance (#772, #773); corrections to the B511, P80 and P81 reads and to the serving-path description (#774)
 
@@ -1480,7 +2218,7 @@ Code and register contract; no gate, threshold, floor, `min_rows`, damping, or e
 
 ### Serving census rows name the comparator (#418)
 
-Register wording only; no value, status, gate, threshold or floor moved. Jordan's ruling: the Qwen3 licensed 238.1 / 1327.5 rows stay.
+Register wording only; no value, status, gate, threshold or floor moved. The owner's ruling: the Qwen3 licensed 238.1 / 1327.5 rows stay.
 
 - Every `e4b.serve.census.bo7.*` speed row's `unit` and `claim` name the comparator as **vs e4b's own NF4 control on the same box**, never a bare ×N speedup. Granite, OLMoE, gpt-oss, Gemma-4 and Mixtral notes carry **no field comparator measured**. Qwen3 names the P37 vLLM 0.28.0 GPTQ-Int4 / MarlinExperts comparator (footprint not recorded) and scopes the licensed position to the bo6c pack artifact (11512 gptq / 776 rtn); #405 is a notes reproduction item, not a licence withdrawal. The P37 root row is bounded to graph decode at B=1 and B=16 on one box and one prompt set.
 - No structured `comparator` field (the register validator does not check one). `docs/STATUS.md` and `docs/SERVING-THROUGHPUT.md` hand-edited; README results table updated to the same wording.

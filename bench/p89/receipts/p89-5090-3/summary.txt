@@ -1,0 +1,25 @@
+KNOBS e4b=8a85200737bdd444ee32508400ba63e97925fa5e gnf4=3990dbc43ee1729a761f5ed423b503f1e09a180f model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150
+p89_reduce self-test OK (14 cases)
+e4b 0.37.8 @8a85200737bdd444ee32508400ba63e97925fa5e
+gnf4 0.33.8 @3990dbc43ee1729a761f5ed423b503f1e09a180f
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+PREMISE k19 row-exact + k23 bit-equal rc=0: 6 passed in 19.30s
+speed off B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=10.42ms agg=1534.9tok/s recompiles=0 out=/root/p89/e4b_b16_off.json
+
+speed on B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=9.91ms agg=1614.1tok/s recompiles=0 out=/root/p89/e4b_b16_on.json
+
+speed on B=16_r2 rc=0 BV3_GRAPH batch=16 steps=70 step=9.91ms agg=1614.1tok/s recompiles=0 out=/root/p89/e4b_b16_on_r2.json
+
+speed off B=16_r2 rc=0 BV3_GRAPH batch=16 steps=70 step=10.42ms agg=1535.6tok/s recompiles=0 out=/root/p89/e4b_b16_off_r2.json
+
+P89_VERDICT VOID ON removed 0 index_select launches per step, not >= 48 (the token-row expansion was still made: the lean route did not engage)
+  launches/step: off 1652.4, on 1316.4; index_select gone 0.0
+       -48.0  void at::native::_scatter_gather_elementwise_kernel<...
+       -48.0  void at::native::index_elementwise_kernel<128, 4, at...
+       -48.0  void at::native::unrolled_elementwise_kernel<at::nat...
+      -144.0  void at::native::vectorized_elementwise_kernel<4, at...
+       -48.0  void at::native::vectorized_gather_kernel<16, long>(...

@@ -1,7 +1,7 @@
 # Pre-registration — architecture support, the part that needs a GPU
 
 Registered 2026-09-09, before any rental. Owner authorisation for rented compute
-is on record ("use pods as needed", 2026-09-09) and is the **top of the approval
+is on record (2026-09-09) and is the **top of the approval
 band, not a waiver** of this document or of the STOP rules below.
 
 ## What is already settled, and therefore NOT in scope

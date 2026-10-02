@@ -202,7 +202,10 @@ def test_on_leaves_prefill_untouched(kernels, monkeypatch):
 
 def test_on_does_not_cover_the_device_grouped_decode_gemv(kernels, monkeypatch):
     """The batched-decode GEMV (device grouping, <= 256 rows, hot_residency's
-    `_int4_gemv_decode`) keeps its int8 activations: the flag is T == 1's only."""
+    `_int4_gemv_decode`) keeps its int8 activations: the flag is T == 1's only.
+    Since lane P88 the default sends these rows to K19; the GEMV is selected
+    explicitly (E4B_INT4_GROUPED_SMALLM=0), as this test is about that route."""
+    monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "0")
     stores = _stores()
     x = (torch.randn(8, H) * 0.5).to(torch.bfloat16)
     ids = torch.randint(0, E, (8,))

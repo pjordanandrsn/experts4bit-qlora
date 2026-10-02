@@ -1,0 +1,15 @@
+# Names as the BOX sees them after staging ($W; P42's hook under hook/). The box runs `sha256sum -c` on this file and
+# the controller resolves each name to its source (p90_drive.sh's case) and compares.
+f67b18d44566b1d144b30bf21b46b4e78a9289d4993815fb92512a7dfb8b9c72  p90_run.sh
+b01b7df56704d99eba7d0485212ed193e466bfcd24ae57100f9e80d4e76100d7  p90_reduce.py
+d8f86573c90afc9d337b7f83ef4496fbc6c790779f110884f230d302571f788a  p42_reduce.py
+bf732dd7760978d1326e8ef1643f95c6afadb4ec184c8de3306f7d27b59acf6d  test_k21_row_exact_gpu.py
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+713d8c7f6e1538790e7e2bf27698ad67ebf95c3c7efac2af51553e3b50bf5f73  serve_stack.py
+f5e3b9b0f259060f49e61304c3093f698a10b8f3d87f566a0eb39dfb5eb2d366  kl_serve.py
+b2a9668a62659455d70e6010813f0c6ac54caeeb9d36a269009c574e9ab51cce  kl_fidelity.py
+f1380821949df0fa27321dfbf3049f0f0b8f0067bf7e19a19ed312b1c4de8a01  kl_paths.py
+ea3e29864f090c44faf56e288a5c327ff56474904cc965b6756b36348839009d  kl_prompts.py
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  hook/usercustomize.py

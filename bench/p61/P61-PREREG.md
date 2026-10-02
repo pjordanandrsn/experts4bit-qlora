@@ -1,6 +1,6 @@
 # P61 — what bounds the served expert GEMV at B=16: per-row work or per-expert bytes (registered 2026-09-22, before the run)
 
-Owner directive (Jordan, 2026-09-22): *"proceed"*, answering my proposal after K18 to separate the served GEMV's per-row cost from its per-expert load cost before building another lever.
+Owner directive (2026-09-22): proceed with my proposal after K18 to separate the served GEMV's per-row cost from its per-expert load cost before building another lever.
 
 **Predecessors:**
 - **P60** (`bench/p60/RESULTS-p60.md`): on Qwen3-30B-A3B's recorded B=16 routing on an RTX 5090, one row per distinct expert instead of one per routed row ran **0.92 ms/step** faster, and sorting rows by expert changed nothing (L2 already serves the repeats).

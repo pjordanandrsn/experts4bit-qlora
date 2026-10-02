@@ -1,0 +1,60 @@
+KNOBS e4b=a626ae33a23cfc03570da71a66ccfc0cbf397c11 gnf4=8cc3510085f329763459d128b3a3b09a822c9951 granite=ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 olmoe=allenai/OLMoE-1B-7B-0924-Instruct@7f1c97f440f06ce36705e4f2b843edb5925f4498 gpu_class=5090 min_disk_gb=100
+e4b 0.37.8 @a626ae33a23cfc03570da71a66ccfc0cbf397c11
+gnf4 0.33.8 @8cc3510085f329763459d128b3a3b09a822c9951
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+p92_reduce self-test OK (14 cases)
+premise row-exact rc=0: 4 passed in 15.42s
+premise K25 contract compiled rc=0: 28 passed in 30.68s
+speed granite_off_b16_d1 rc=0 BV3_GRAPH batch=16 steps=70 step=10.52ms agg=1521.0tok/s recompiles=0 out=/root/p92/e4b_granite_off_b16_d1.json
+
+speed granite_on_b16_d1 rc=0 BV3_GRAPH batch=16 steps=70 step=9.87ms agg=1621.3tok/s recompiles=0 out=/root/p92/e4b_granite_on_b16_d1.json
+
+speed granite_off_b16_d2 rc=0 BV3_GRAPH batch=16 steps=70 step=10.54ms agg=1518.2tok/s recompiles=0 out=/root/p92/e4b_granite_off_b16_d2.json
+
+speed granite_on_b16_d2 rc=0 BV3_GRAPH batch=16 steps=70 step=9.86ms agg=1622.6tok/s recompiles=0 out=/root/p92/e4b_granite_on_b16_d2.json
+
+speed granite_off_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=3.86ms compile=None recompiles=0 out=/root/p92/e4b_granite_off_b1_d1.json
+
+speed granite_on_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=3.75ms compile=None recompiles=0 out=/root/p92/e4b_granite_on_b1_d1.json
+
+k8 granite_k8_off_wikitext rc=0 K8_PPL steps=2048 nll=1.67907 ppl=5.36059 compute=f32 sha=5281b7c3df28 out=/root/p92/granite_k8_off_wikitext.json
+
+k8 granite_k8_on_wikitext rc=0 K8_PPL steps=2048 nll=1.67471 ppl=5.33725 compute=f32 sha=5281b7c3df28 out=/root/p92/granite_k8_on_wikitext.json
+
+k8 granite_k8_off_c4val1 rc=0 K8_PPL steps=2048 nll=2.44883 ppl=11.57477 compute=f32 sha=549ca209af16 out=/root/p92/granite_k8_off_c4val1.json
+
+k8 granite_k8_on_c4val1 rc=0 K8_PPL steps=2048 nll=2.45023 ppl=11.59106 compute=f32 sha=549ca209af16 out=/root/p92/granite_k8_on_c4val1.json
+
+speed olmoe_off_b16_d1 rc=0 BV3_GRAPH batch=16 steps=70 step=14.36ms agg=1114.5tok/s recompiles=0 out=/root/p92/e4b_olmoe_off_b16_d1.json
+
+speed olmoe_on_b16_d1 rc=0 BV3_GRAPH batch=16 steps=70 step=14.69ms agg=1088.9tok/s recompiles=0 out=/root/p92/e4b_olmoe_on_b16_d1.json
+
+speed olmoe_off_b16_d2 rc=0 BV3_GRAPH batch=16 steps=70 step=14.35ms agg=1114.7tok/s recompiles=0 out=/root/p92/e4b_olmoe_off_b16_d2.json
+
+speed olmoe_on_b16_d2 rc=0 BV3_GRAPH batch=16 steps=70 step=14.69ms agg=1088.9tok/s recompiles=0 out=/root/p92/e4b_olmoe_on_b16_d2.json
+
+speed olmoe_off_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.23ms compile=None recompiles=0 out=/root/p92/e4b_olmoe_off_b1_d1.json
+
+speed olmoe_on_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.51ms compile=None recompiles=0 out=/root/p92/e4b_olmoe_on_b1_d1.json
+
+k8 olmoe_k8_off_wikitext rc=0 K8_PPL steps=2048 nll=1.93323 ppl=6.91177 compute=fp8 sha=2d22dfc7e0b1 out=/root/p92/olmoe_k8_off_wikitext.json
+
+k8 olmoe_k8_on_wikitext rc=0 K8_PPL steps=2048 nll=1.93570 ppl=6.92890 compute=fp8 sha=2d22dfc7e0b1 out=/root/p92/olmoe_k8_on_wikitext.json
+
+k8 olmoe_k8_off_c4val1 rc=0 K8_PPL steps=2048 nll=2.93948 ppl=18.90600 compute=fp8 sha=932b86d7a513 out=/root/p92/olmoe_k8_off_c4val1.json
+
+k8 olmoe_k8_on_c4val1 rc=0 K8_PPL steps=2048 nll=2.93380 ppl=18.79889 compute=fp8 sha=932b86d7a513 out=/root/p92/olmoe_k8_on_c4val1.json
+
+P92_VERDICT granite=LICENSED olmoe=QUALITY_FAIL
+  granite: LICENSED | B=16 ON/OFF 0.937 <= 0.95; K8 passed
+    B=16 OFF 10.529 ON 9.865 ms (x0.937); B=1 OFF 3.860 ON 3.754 (x0.972)
+    K8 wikitext: OFF 5.36059 ON 5.33725 (delta -0.02334)
+    K8 c4val1: OFF 11.57477 ON 11.59106 (delta +0.01629)
+  olmoe: QUALITY_FAIL | K8 (uncalibrated, |delta| <= 0.05 ppl on every text) failed
+    B=16 OFF 14.355 ON 14.694 ms (x1.024); B=1 OFF 4.232 ON 4.512 (x1.066)
+    K8 wikitext: OFF 6.91177 ON 6.92890 (delta +0.01712)
+    K8 c4val1: OFF 18.90600 ON 18.79889 (delta -0.10711)

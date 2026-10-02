@@ -1,0 +1,1 @@
+{"router_epi_cast_env": "0", "router_epi_cast_weights": false, "router_epi_casts_softmax_topk": false, "fused_kv_append_env": "0", "fused_kv_append_resolved": false, "fp8_kv_has_413": false, "e4b": "0.37.4", "gnf4": "0.33.0", "expected_expert_fingerprint": "sha256:0c9955a9f06d83269050d1fc64571a2a0e78abd48b288fd422e4eef72ccbcd42"}

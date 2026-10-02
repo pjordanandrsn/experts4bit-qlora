@@ -1,0 +1,79 @@
+{
+ "lane": "P94",
+ "families": [
+  {
+   "family": "granite",
+   "reasons": [],
+   "ppl": {
+    "wikitext": {
+     "g": 5.360589284186573,
+     "m": 5.355145053681511,
+     "t": 5.335070006919709
+    },
+    "c4val1": {
+     "g": 11.574771456022221,
+     "m": 11.496632496339386,
+     "t": 11.598306171186659
+    }
+   },
+   "delta": {
+    "wikitext": {
+     "m-g": -0.005444230505061931,
+     "t-g": -0.02551927726686376,
+     "t-m": -0.02007504676180183
+    },
+    "c4val1": {
+     "m-g": -0.07813895968283546,
+     "t-g": 0.023534715164437614,
+     "t-m": 0.10167367484727308
+    }
+   },
+   "baseline_shift": true,
+   "gate_lines": [
+    "K8 wikitext: base=5.35515 cand=5.33507 delta=-0.02008 sha=5281b7c3df28 steps=2048",
+    "K8 c4val1: base=11.49663 cand=11.59831 delta=+0.10167 sha=549ca209af16 steps=2048",
+    "K8 VERDICT FAIL (uncalibrated: |delta| <= 0.05 on every text)"
+   ],
+   "verdict": "FAIL"
+  },
+  {
+   "family": "olmoe",
+   "reasons": [],
+   "ppl": {
+    "wikitext": {
+     "g": 6.911773633695096,
+     "m": 6.928269119690631,
+     "t": 6.923153898394636
+    },
+    "c4val1": {
+     "g": 18.90599688236447,
+     "m": 18.89284998429518,
+     "t": 19.060634936525183
+    }
+   },
+   "delta": {
+    "wikitext": {
+     "m-g": 0.016495485995535297,
+     "t-g": 0.011380264699540454,
+     "t-m": -0.005115221295994843
+    },
+    "c4val1": {
+     "m-g": -0.013146898069290813,
+     "t-g": 0.15463805416071352,
+     "t-m": 0.16778495223000434
+    }
+   },
+   "baseline_shift": false,
+   "gate_lines": [
+    "K8 wikitext: base=6.92827 cand=6.92315 delta=-0.00512 sha=2d22dfc7e0b1 steps=2048",
+    "K8 c4val1: base=18.89285 cand=19.06063 delta=+0.16778 sha=932b86d7a513 steps=2048",
+    "K8 VERDICT FAIL (uncalibrated: |delta| <= 0.05 on every text)"
+   ],
+   "verdict": "FAIL"
+  }
+ ],
+ "verdict": "QUALITY_FAIL",
+ "reasons": [
+  "K8 of t against m outside the gate in: granite, olmoe"
+ ]
+}

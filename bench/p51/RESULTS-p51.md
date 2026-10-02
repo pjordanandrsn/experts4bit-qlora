@@ -1,6 +1,6 @@
 # Results — P51: a graded store map for Gemma-4 (H100 NVL, 2026-09-19)
 
-Pre-registration: [`P51-PREREG.md`](P51-PREREG.md) (+ amendments 1 and 2). Owner directive, 2026-09-19: *"gemma: Keep the first N expert layers high precision, crush the rest."* Runs `p51-gemma4mix` (four arms lost to a harness fault of this lane's — amendment 1), `p51-gemma4mix-2` (four arms read) and **`p51-gemma4mix-3`** (all five, the matched-bytes control). Same instrument as every other #597 lane: `bench/p44/kl_serve.py`, prefill scorer chosen by control (i), the same cached bf16 reference and 200 committed prompts. Every row carries the per-store stack census its tier spec names, so a map that collapsed to one store refuses rather than producing a wrong row. Read by `bench/p51/p51_reduce.py`.
+Pre-registration: [`P51-PREREG.md`](P51-PREREG.md) (+ amendments 1 and 2). Owner directive, 2026-09-19: for Gemma-4, keep the first N expert layers at high precision and quantise the rest as hard as possible. Runs `p51-gemma4mix` (four arms lost to a harness fault of this lane's — amendment 1), `p51-gemma4mix-2` (four arms read) and **`p51-gemma4mix-3`** (all five, the matched-bytes control). Same instrument as every other #597 lane: `bench/p44/kl_serve.py`, prefill scorer chosen by control (i), the same cached bf16 reference and 200 committed prompts. Every row carries the per-store stack census its tier spec names, so a map that collapsed to one store refuses rather than producing a wrong row. Read by `bench/p51/p51_reduce.py`.
 
 ## The rows
 
@@ -17,10 +17,10 @@ For scale, from the neighbouring lanes: all-NF4 is 1.0837 nats at 12.0 GB, all-b
 ## Verdicts
 
 - **M1 (the anchor) — HOLDS.** `bf16_20` reads 0.0469 at 32.35 GB: P50's `keep_20` to four digits **and to the byte**, rebuilt through entirely different machinery (a per-layer store map rather than a layer set). The map is sound.
-- **M2 (a uniform int8 head fails) — HOLDS.** 0.7369, against a registered ≥ 0.50. P49 measured int8 *on layer 0 alone* at 0.693 and this composes as that implied: **the first layers must be bf16**, and the directive's "high precision" cannot be read as 8-bit.
+- **M2 (a uniform int8 head fails) — HOLDS.** 0.7369, against a registered ≥ 0.50. P49 measured int8 *on layer 0 alone* at 0.693 and this composes as that implied: **the first layers must be bf16**, and the directive's high precision cannot be read as 8-bit.
 - **M3 (grading ships at ≤ 0.10) — INCONCLUSIVE.** 0.1695 sits between the registered 0.10 and 0.30. On its own this decided nothing, which is why amendment 2 added the control below.
 - **M4 (grading saves bytes) — HOLDS.** 25.70 GB against the anchor's 32.35, a saving of 6.65 GB (0.79×).
-- **M5 (crushing the tail) — RETIRED as unmeasurable on this model, not refuted.** Gemma-4's `moe_intermediate_size` is **704 = 64 × 11**, so no block larger than 64 divides it and the stack refuses; NF4 at block 64 is already the smallest store e4b ships. **Every configuration here already has a maximally crushed tail** — on this architecture the "crush the rest" half of the directive has no remaining freedom, and the whole design question is where the high-precision boundary sits.
+- **M5 (crushing the tail) — RETIRED as unmeasurable on this model, not refuted.** Gemma-4's `moe_intermediate_size` is **704 = 64 × 11**, so no block larger than 64 divides it and the stack refuses; NF4 at block 64 is already the smallest store e4b ships. **Every configuration here already has a maximally crushed tail** — on this architecture the quantise-the-rest half of the directive has no remaining freedom, and the whole design question is where the high-precision boundary sits.
 - **M6 (the matched-bytes control) — REFUTED, and the refutation is the answer.** At essentially the same expert store, the graded map is **1.44× better than a plain uniform head**: `bf16_13` reads 0.2448 at 25.21 GB against `graded_10_10`'s 0.1695 at 25.70 GB (2 % more bytes, 31 % less divergence, top-1 0.855 vs 0.827). M6 was registered so that "uniform at least as good" would retire the idea; it is not, by a wide margin.
 
 ## Decision: ship the graded map

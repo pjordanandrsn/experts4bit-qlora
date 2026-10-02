@@ -1,5 +1,10 @@
 # P83 — results: on one box, P70's build and P82's build read different K8 (**DIFFERENT**, −0.00049 nats), and each reading is bit-identical to its own earlier readings on other machines, so K8 is box-invariant and the software moved it (this corrects P82's read)
 
+*(Qualified 2026-09-30, lane P84: "across machines" below means the AMD hosts it covered: Ryzen 7950X, EPYC 7C13,
+7R13 and 9755. On an Intel Core i9-14900K, P82's own build calibrated a different attention pack (`45b4cc5a…`, not
+`d7cfa1f4…`) and read K8 6.36276, so the recipe's calibrated attention, and the K8 with it, does not reproduce there.
+See `bench/p84/RESULTS-p84.md`.)*
+
 Read 2026-09-29 from `p83-5090-1`. Registration: `bench/p83/PREREG-p83.md` (#786, `4019b96`). Issue: #674. Verdict by
 `p83_reduce.py` from the four K8 receipts and their router stamps: **DIFFERENT**. Both stated expectations held:
 DIFFERENT, and stack O reading the licensed 6.36709.
@@ -47,7 +52,8 @@ Each stack's mean NLL is **the same float** that its software gave on other mach
 | P70's (0.37.4 / 0.33.0) | `1.8511420498367808` | P70: Ryzen 7950X, 575.57.08. P64: EPYC 7C13, 595.71.05 |
 | P82's (0.37.8 / 0.33.7) | `1.8506507749113845` | P82: EPYC 7R13, 595.71.05 |
 
-- On this recipe, for a fixed software stack, the fp32 K8 does not depend on the machine: three machines for one stack,
+- On this recipe, for a fixed software stack, the fp32 K8 does not depend on the machine *(on the AMD hosts tested; not on an
+  Intel host, P84)*: three machines for one stack,
   two for the other, three drivers.
 - Why the licensed 6.36709 stopped reproducing is the software. P70's software gives it anywhere; P82's gives 6.36396
   anywhere.
@@ -59,9 +65,13 @@ Each stack's mean NLL is **the same float** that its software gave on other mach
   cast arm K16 read 6.31811 on P82's box, with byte-identical packs. From that one pair, P82 inferred a box effect.
 - **What stays unexplained.** That cast pair itself. P83 did not run the cast. Given that the fp32 reading is
   bit-stable across machines, the first suspects are a difference between the two runs that P82's diff reading missed,
-  or the cast path specifically, before the box.
+  or the cast path specifically, before the box. *(2026-09-30, lane P84: the diff reading missed one. P81 ran
+  grouped-nf4-gemm 0.33.5 and P82 ran 0.33.7, and 0.33.7's fused fp8 KV append change (#413) is on K8's path; not
+  measured for this pair. See `bench/p84/RESULTS-p84.md`.)*
 
 ## What moved it: not isolated
+
+*(Answered 2026-09-30 by lane P84, KERNEL: on one box, grouped-nf4-gemm 0.33.0 → 0.33.7 is the whole −0.00049 nats; e4b 0.37.4 → 0.37.8 and the harness move nothing. The one change in that cut on K8's path, read from the code, is #413's fused fp8 KV append. See `bench/p84/RESULTS-p84.md`.)*
 
 O and N differ in the package (e4b 0.37.4 → 0.37.8), the harness (`bench/p39/step_decomp.py` → `bench/p81`'s copy,
 hook v6 → v7) and the kernels (grouped-nf4-gemm 0.33.0 → 0.33.7).
@@ -76,7 +86,7 @@ hook v6 → v7) and the kernels (grouped-nf4-gemm 0.33.0 → 0.33.7).
 
 ## What this establishes
 
-- The calibrated int4 recipe's fp32-router wikitext K8 is **bit-reproducible across machines** for a fixed software
+- The calibrated int4 recipe's fp32-router wikitext K8 is **bit-reproducible across machines** *(the AMD hosts tested; P84)* for a fixed software
   stack. P70's reads 6.36709 on three; P82's reads 6.36396 on two.
 - On one box, the software between those two stacks moves it by −0.00049 nats. The licensed 6.36709 is a property of
   P70's software.

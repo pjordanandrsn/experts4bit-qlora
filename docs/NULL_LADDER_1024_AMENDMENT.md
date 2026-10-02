@@ -6,7 +6,7 @@ trigger:  S9 fired. G_int8 = +0.0094 ± 0.0076 at n=64 (|t| = 1.24); MDE(3σ) = 
           exceeded |G|. The instrument was under-resolved; the phenomenon is undecided.
 cites:    AGENT_HANDOFF_POST_AUDIT_20260705.md (S9), D1/D2 report <commit>,
           MEASUREMENT_AUDIT_olmoe-qlora-grid-20260705-1351.md, plan-routed-v3 R-rules
-owner:    Jordan        executor: coding agent
+owner:    maintainer    executor: coding agent
 ```
 
 ## 1. Design
@@ -128,3 +128,7 @@ No significance forecasts without the instrument's n in hand. The prior forecast
 - Anchor file: `NULL_LADDER_1024_AMENDMENT.md.ots`
 - Calendars: a.pool.opentimestamps.org, b.pool.opentimestamps.org, a.pool.eternitywall.com, ots.btc.catallaxy.com
 - **Provenance posture (load-bearing):** the **OTS proof timestamp** above is the legal anchoring time for the visible document — that is what the calendars witnessed. The **disclosed pre-footer content hash** is *not* anchored by the current `.ots` file; it is *disclosed inside* the OTS-anchored visible document as a human-readable historical record of what the file's bytes hashed to immediately before this footer was appended. A reviewer verifying the visible file runs `ots verify` against the on-disk bytes; a reviewer wanting to confirm the disclosed pre-footer hash recomputes `SHA-256` of the file with everything from `<!-- ots-attestation-footer -->` onward stripped. Both checks are independent; neither replaces the other.
+
+---
+
+*Edited 2026-09-30, after this anchor: one attribution above was reworded; no measurement, criterion or date changed. `NULL_LADDER_1024_AMENDMENT.md.ots` anchors the version before that edit, which git history keeps.*

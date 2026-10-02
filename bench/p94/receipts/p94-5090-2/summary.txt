@@ -1,0 +1,46 @@
+KNOBS e4b=966a95eb8e0f3113eefaa212980df30beb606ae1 gnf4=908a2ca94bfe6bc5f02092423381b1a10ccb59b9 granite=ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 olmoe=allenai/OLMoE-1B-7B-0924-Instruct@7f1c97f440f06ce36705e4f2b843edb5925f4498 gpu_class=5090 min_disk_gb=100
+e4b 0.38.0 @966a95eb8e0f3113eefaa212980df30beb606ae1
+gnf4 0.34.0 @908a2ca94bfe6bc5f02092423381b1a10ccb59b9
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+p94_reduce self-test OK (10 cases)
+premise row-exact rc=0: 6 passed in 9.20s
+premise K25 contract compiled rc=0: 30 passed in 15.03s
+speed granite_m_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=6.93ms compile=None recompiles=0 out=/root/p94/e4b_granite_m_b1_d1.json
+
+k8 granite_k8_g_wikitext rc=0 K8_PPL steps=2048 nll=1.67907 ppl=5.36059 compute=f32 sha=5281b7c3df28 out=/root/p94/granite_k8_g_wikitext.json
+
+k8 granite_k8_m_wikitext rc=0 K8_PPL steps=2048 nll=1.67806 ppl=5.35515 compute=f32 sha=5281b7c3df28 out=/root/p94/granite_k8_m_wikitext.json
+
+k8 granite_k8_t_wikitext rc=0 K8_PPL steps=2048 nll=1.67430 ppl=5.33507 compute=f32 sha=5281b7c3df28 out=/root/p94/granite_k8_t_wikitext.json
+
+k8 granite_k8_g_c4val1 rc=0 K8_PPL steps=2048 nll=2.44883 ppl=11.57477 compute=f32 sha=549ca209af16 out=/root/p94/granite_k8_g_c4val1.json
+
+k8 granite_k8_m_c4val1 rc=0 K8_PPL steps=2048 nll=2.44205 ppl=11.49663 compute=f32 sha=549ca209af16 out=/root/p94/granite_k8_m_c4val1.json
+
+k8 granite_k8_t_c4val1 rc=0 K8_PPL steps=2048 nll=2.45086 ppl=11.59831 compute=f32 sha=549ca209af16 out=/root/p94/granite_k8_t_c4val1.json
+
+speed olmoe_m_b1_d1 rc=0 B1D_TIMED_GRAPH steps=127 step=5.77ms compile=None recompiles=0 out=/root/p94/e4b_olmoe_m_b1_d1.json
+
+k8 olmoe_k8_g_wikitext rc=0 K8_PPL steps=2048 nll=1.93323 ppl=6.91177 compute=fp8 sha=2d22dfc7e0b1 out=/root/p94/olmoe_k8_g_wikitext.json
+
+k8 olmoe_k8_m_wikitext rc=0 K8_PPL steps=2048 nll=1.93561 ppl=6.92827 compute=fp8 sha=2d22dfc7e0b1 out=/root/p94/olmoe_k8_m_wikitext.json
+
+k8 olmoe_k8_t_wikitext rc=0 K8_PPL steps=2048 nll=1.93487 ppl=6.92315 compute=fp8 sha=2d22dfc7e0b1 out=/root/p94/olmoe_k8_t_wikitext.json
+
+k8 olmoe_k8_g_c4val1 rc=0 K8_PPL steps=2048 nll=2.93948 ppl=18.90600 compute=fp8 sha=932b86d7a513 out=/root/p94/olmoe_k8_g_c4val1.json
+
+k8 olmoe_k8_m_c4val1 rc=0 K8_PPL steps=2048 nll=2.93878 ppl=18.89285 compute=fp8 sha=932b86d7a513 out=/root/p94/olmoe_k8_m_c4val1.json
+
+k8 olmoe_k8_t_c4val1 rc=0 K8_PPL steps=2048 nll=2.94763 ppl=19.06063 compute=fp8 sha=932b86d7a513 out=/root/p94/olmoe_k8_t_c4val1.json
+
+P94_VERDICT QUALITY_FAIL | K8 of t against m outside the gate in: granite, olmoe
+  granite: FAIL
+    wikitext: g 5.36059 m 5.35515 t 5.33507 | m-g -0.00544 t-g -0.02552 t-m -0.02008
+    c4val1: g 11.57477 m 11.49663 t 11.59831 | m-g -0.07814 t-g +0.02353 t-m +0.10167
+  olmoe: FAIL
+    wikitext: g 6.91177 m 6.92827 t 6.92315 | m-g +0.01650 t-g +0.01138 t-m -0.00512
+    c4val1: g 18.90600 m 18.89285 t 19.06063 | m-g -0.01315 t-g +0.15464 t-m +0.16778

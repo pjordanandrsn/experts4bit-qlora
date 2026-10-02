@@ -1,0 +1,214 @@
+{
+ "lane": "P91",
+ "verdict": "READ",
+ "reasons": [
+  "NF4 grouped share at B=16: granite 61.7%, olmoe 71.9% (>= 40% in at least one family)"
+ ],
+ "arms": [
+  {
+   "family": "granite",
+   "batch": 16,
+   "step_ms": 9.192312242857144,
+   "kernel_ms": 8.872311,
+   "reconcile": -0.03481183345417793,
+   "nf4_expert_ms": 5.4785,
+   "nf4_expert_share": 0.617482863258513,
+   "top": [
+    {
+     "kernel": "_gemm_nf4_grouped",
+     "ms": 5.4785,
+     "share": 0.617482863258513
+    },
+    {
+     "kernel": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_...",
+     "ms": 1.088875,
+     "share": 0.12272732549614188
+    },
+    {
+     "kernel": "_fp8_paged_decode_split",
+     "ms": 0.5675,
+     "share": 0.06396304187263048
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::indexSelectS...",
+     "ms": 0.386269625,
+     "share": 0.043536528983260395
+    },
+    {
+     "kernel": "void gemmSN_TN_kernel<float, 128, 16, 2, 4, 8, 9, fa...",
+     "ms": 0.272375,
+     "share": 0.030699442343714054
+    },
+    {
+     "kernel": "_tile_table_r1",
+     "ms": 0.13375,
+     "share": 0.015074990044871062
+    },
+    {
+     "kernel": "_fp8_append_bt1_side",
+     "ms": 0.10410425,
+     "share": 0.011733611457037519
+    },
+    {
+     "kernel": "void at::native::indexFuncSmallIndex<int, long, unsi...",
+     "ms": 0.097816,
+     "share": 0.011024861504516693
+    }
+   ]
+  },
+  {
+   "family": "granite",
+   "batch": 1,
+   "step_ms": 3.338290220472441,
+   "kernel_ms": 3.3278748749999996,
+   "reconcile": -0.003119964048831969,
+   "nf4_expert_ms": 1.6875,
+   "nf4_expert_share": 0.5070803631101065,
+   "top": [
+    {
+     "kernel": "_gemv_nf4_grouped",
+     "ms": 1.6875,
+     "share": 0.5070803631101065
+    },
+    {
+     "kernel": "std::enable_if<!(false), void>::type internal::gemvx...",
+     "ms": 0.7115,
+     "share": 0.2138001056905723
+    },
+    {
+     "kernel": "_fp8_paged_decode_split",
+     "ms": 0.257375,
+     "share": 0.07733914575138588
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::indexSelectS...",
+     "ms": 0.16481875,
+     "share": 0.049526726872506
+    },
+    {
+     "kernel": "void at::native::unrolled_elementwise_kernel<at::nat...",
+     "ms": 0.09853,
+     "share": 0.029607483364289658
+    },
+    {
+     "kernel": "_fp8_append_t1_side",
+     "ms": 0.08556287500000001,
+     "share": 0.025710965169626464
+    },
+    {
+     "kernel": "_router_epilogue",
+     "ms": 0.07743962500000001,
+     "share": 0.023269992986139548
+    },
+    {
+     "kernel": "_rope_heads",
+     "ms": 0.04474075,
+     "share": 0.013444240447892443
+    }
+   ]
+  },
+  {
+   "family": "olmoe",
+   "batch": 16,
+   "step_ms": 12.471082142857142,
+   "kernel_ms": 11.97497925,
+   "reconcile": -0.03978026021914116,
+   "nf4_expert_ms": 8.6065,
+   "nf4_expert_share": 0.7187068821016955,
+   "top": [
+    {
+     "kernel": "_gemm_nf4_grouped",
+     "ms": 8.6065,
+     "share": 0.7187068821016955
+    },
+    {
+     "kernel": "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_...",
+     "ms": 0.9385,
+     "share": 0.07837174331638194
+    },
+    {
+     "kernel": "_fp8_paged_decode_split_f8dot",
+     "ms": 0.545375,
+     "share": 0.04554287641041215
+    },
+    {
+     "kernel": "void at::native::vectorized_elementwise_kernel<4, at...",
+     "ms": 0.321457125,
+     "share": 0.02684406530391274
+    },
+    {
+     "kernel": "void at::native::elementwise_kernel<128, 4, at::nati...",
+     "ms": 0.29688325,
+     "share": 0.02479196362699334
+    },
+    {
+     "kernel": "void at::native::reduce_kernel<512, 1, at::native::R...",
+     "ms": 0.255682,
+     "share": 0.021351352237207428
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::indexSelectS...",
+     "ms": 0.209481625,
+     "share": 0.01749327665849609
+    },
+    {
+     "kernel": "void at::native::unrolled_elementwise_kernel<at::nat...",
+     "ms": 0.18886,
+     "share": 0.01577121730711976
+    }
+   ]
+  },
+  {
+   "family": "olmoe",
+   "batch": 1,
+   "step_ms": 3.956474866141732,
+   "kernel_ms": 3.612127875,
+   "reconcile": -0.08703378709379539,
+   "nf4_expert_ms": 1.651,
+   "nf4_expert_share": 0.45707130454233985,
+   "top": [
+    {
+     "kernel": "_gemv_nf4_grouped",
+     "ms": 1.651,
+     "share": 0.45707130454233985
+    },
+    {
+     "kernel": "std::enable_if<!(false), void>::type internal::gemvx...",
+     "ms": 0.628056375,
+     "share": 0.17387434684880862
+    },
+    {
+     "kernel": "void at::native::vectorized_elementwise_kernel<4, at...",
+     "ms": 0.35328387499999997,
+     "share": 0.0978049192126123
+    },
+    {
+     "kernel": "void at::native::unrolled_elementwise_kernel<at::nat...",
+     "ms": 0.181644625,
+     "share": 0.050287429262176934
+    },
+    {
+     "kernel": "_fp8_paged_decode_split_f8dot",
+     "ms": 0.15275,
+     "share": 0.042288093136791285
+    },
+    {
+     "kernel": "void at::native::elementwise_kernel<128, 4, at::nati...",
+     "ms": 0.13917775000000002,
+     "share": 0.03853068186297253
+    },
+    {
+     "kernel": "void at::native::reduce_kernel<512, 1, at::native::R...",
+     "ms": 0.11038587500000001,
+     "share": 0.03055979157437775
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::indexSelectS...",
+     "ms": 0.08391925,
+     "share": 0.023232635417150063
+    }
+   ]
+  }
+ ],
+ "next_lane": "nf4-grouped-small-m-kernel"
+}

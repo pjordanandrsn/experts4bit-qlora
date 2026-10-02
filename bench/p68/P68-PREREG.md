@@ -2,8 +2,8 @@
 
 Record: [#725](https://github.com/pjordanandrsn/experts4bit-qlora/issues/725), filed under lane P63's decision rule.
 Predecessor: P63 ([`../p63/RESULTS-p63.md`](../p63/RESULTS-p63.md), #708, merged in #727). Authorization: the work,
-and a later rental within the standing caps, is the maintainer's standing assignment from the owner ("continue as
-maintainer", 2026-09-23, relayed for P63–P66). The rental needs its own relayed owner comment on #725 before it
+and a later rental within the standing caps, is the maintainer's standing assignment from the owner (2026-09-23,
+relayed for P63–P66). The rental needs its own relayed owner comment on #725 before it
 launches; that comment is not part of this change.
 
 ## Question

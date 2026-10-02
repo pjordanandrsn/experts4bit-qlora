@@ -1,6 +1,6 @@
 {
   "package": "experts4bit-qlora",
-  "generated": "2026-09-29",
+  "generated": "2026-10-01",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "verified": "reproduced under stated conditions with a public receipt",
@@ -611,18 +611,19 @@
     {
       "id": "e4b.train.flagship-matrix",
       "area": "train",
-      "claim": "Across two 30B-class MoEs (Qwen3-30B-A3B and Gemma-4-26B-A4B), five datasets each, 200 steps per cell: the fused training path runs 1.52-1.81x faster per step at 0.75-0.81x peak VRAM and 0.86-0.92x energy per step, with loss parity on both registered criteria (worst cell 0.03653 against a 0.05 band) and the frozen 4-bit stack verified bit-identical over 16.31 GB hashed.",
+      "claim": "Across two 30B-class MoEs (Qwen3-30B-A3B and Gemma-4-26B-A4B), five datasets each, 200 steps per cell: the fused training path runs 1.52-1.81x faster per step at 0.75-0.81x peak VRAM and 0.80-0.92x energy per step, with loss parity on both registered criteria (worst cell 0.03653, Gemma-4 finance, against a 0.05 band) and the frozen 4-bit stack bit-identical (12.85 GB per Gemma-4 cell; 16.31 GB for Qwen3, a separate gate).",
       "value": "1.52-1.81",
       "unit": "x per step",
       "status": "measured",
       "tier": "measured",
       "evidence": [
         "bench/flagship-matrix/RESULTS-flagship-matrix.md",
+        "bench/flagship-matrix-model2/RESULTS-flagship-matrix-model2.md",
         "bench/fused-train-gate/RESULTS-fused-train-gate.md",
         "docs/PREREG-flagship-matrix.md",
         "docs/PREREG-flagship-matrix-model2.md"
       ],
-      "notes": "The first prereg is unanchored, so its ten cells are `measured`, not `confirmed`; the model2 prereg says so explicitly and was stamped pre-data AND pre-hardware. Single same-process A/B per cell: ratios are indicative, not variance-bounded. NOTE at the tp1 bundle (2026-09-05): the fused-vs-reference parity criteria this entry applies (B2/C2) were applied by lane tp1 to the other serving families on real weights under the shipped 0.35.0 / 0.30.0 code, resident on one RTX 5090, 60 steps on the clinical text: OLMoE-1B-7B-Instruct fused PASS (0.01327 / 0.01249), Granite-3.1-3B batched PASS (0.01553 / 0.01681), OLMoE batched VOID, gpt-oss REFUSED; and, measured at the same lane's final snapshot, fused PASS on Qwen3-30B-A3B resident on one 5090 (0.01315 / 0.01050, e4b.train.parity.tp1.qwen3.fused.2026-09-05), Gemma-4-26B-A4B-it (0.02385 / 0.04742, e4b.train.parity.tp1.gemma4.fused.2026-09-05), Mixtral-8x7B-Instruct under offload (0.00953 / 0.00945, e4b.train.parity.tp1.mixtral.fused.2026-09-05) and Granite on its corrected-counter re-run (0.01329 / 0.01270, e4b.train.parity.tp1.granite.fused.2026-09-05) -- every row of that family is measured. tp1's Qwen3 and Gemma-4 rows sit beside this entry's 4090 offload=True cells and are never divided into them. This entry's value and status are unchanged. MEASURED_ON (added 2026-09-05): the receipt's own date -- bench/flagship-matrix/RESULTS-flagship-matrix.md (2026-07-29/30) and the model-2 pre-registration (2026-07-30).",
+      "notes": "The first prereg is unanchored, so its ten cells are `measured`, not `confirmed`; the model2 prereg says so explicitly and was stamped pre-data AND pre-hardware. Single same-process A/B per cell: ratios are indicative, not variance-bounded. NOTE at the tp1 bundle (2026-09-05): the fused-vs-reference parity criteria this entry applies (B2/C2) were applied by lane tp1 to the other serving families on real weights under the shipped 0.35.0 / 0.30.0 code, resident on one RTX 5090, 60 steps on the clinical text: OLMoE-1B-7B-Instruct fused PASS (0.01327 / 0.01249), Granite-3.1-3B batched PASS (0.01553 / 0.01681), OLMoE batched VOID, gpt-oss REFUSED; and, measured at the same lane's final snapshot, fused PASS on Qwen3-30B-A3B resident on one 5090 (0.01315 / 0.01050, e4b.train.parity.tp1.qwen3.fused.2026-09-05), Gemma-4-26B-A4B-it (0.02385 / 0.04742, e4b.train.parity.tp1.gemma4.fused.2026-09-05), Mixtral-8x7B-Instruct under offload (0.00953 / 0.00945, e4b.train.parity.tp1.mixtral.fused.2026-09-05) and Granite on its corrected-counter re-run (0.01329 / 0.01270, e4b.train.parity.tp1.granite.fused.2026-09-05) -- every row of that family is measured. tp1's Qwen3 and Gemma-4 rows sit beside this entry's 4090 offload=True cells and are never divided into them. This entry's value and status are unchanged. MEASURED_ON (added 2026-09-05): the receipt's own date -- bench/flagship-matrix/RESULTS-flagship-matrix.md (2026-07-29/30) and the model-2 pre-registration (2026-07-30). CORRECTED 2026-09-30: this sentence first read '0.86-0.92x energy per step' and 'the frozen 4-bit stack verified bit-identical over 16.31 GB hashed', and each described one model while the sentence covers two. The energy range was Gemma-4-26B-A4B's alone (0.860-0.922x, bench/flagship-matrix-model2/RESULTS-flagship-matrix-model2.md, C3); Qwen3-30B-A3B's is 0.797-0.846x (bench/flagship-matrix/RESULTS-flagship-matrix.md, B3), so the two-model range is 0.797-0.922x, recomputed from the twenty per-cell receipts. The 16.31 GB is the fused-train gate's, one Qwen3 run outside the matrix, because the Qwen3 matrix's B1 hashed 0-element placeholders and is withdrawn; the ten Gemma-4 cells' own C1 hashed 12.85 GB each, with the byte-flip control firing. The worst parity cell, 0.03653, is Gemma-4 finance's |delta final train loss|, and Qwen3's worst is 0.01651 (clinical). It was already the worst across both models and is now labelled. The speed (Qwen3 1.75-1.81x, Gemma-4 1.52-1.58x) and VRAM (0.754-0.755x, 0.810-0.813x) ranges already spanned both models. Energy is a within-host ratio: Gemma-4's clinical pair, re-run on a second RTX 4090, read 0.964x against the matrix host's 0.860x, and the idle baselines subtracted differed 3.4x (8.9 W vs 30.5 W), so no cross-host energy figure is implied. The model-2 receipt joins `evidence`. This entry's value and status are unchanged.",
       "measured_on": "2026-07-30"
     },
     {
@@ -7269,7 +7270,7 @@
       "package": "experts4bit-qlora",
       "area": "serve",
       "model": "Qwen/Qwen3-30B-A3B",
-      "claim": "Lane P82: on Qwen3-30B-A3B served with P55x's int4 recipe (GPTQ-calibrated int4 experts, pack sha256:0c9955a9..., calibrated int4 attention, pack sha256:d7cfa1f4..., both installed by fingerprint; T=1 folds; the fused router epilogue at fp32 routing weights, E4B_ROUTER_EPI_CAST=0 in every arm, as in P55x's, P64's and P70's builds), over P80's forced changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 32 decode steps each, 992 decode tokens), PagedModelRunner.enable_decode_graphs with the bucket-1 fix (#777) and grouped-nf4-gemm 0.33.7 decodes 811.9 / 814.2 tok/s against the eager PagedModelRunner's 67.6 / 65.9 -- B1/A1 = 12.006 and B2/A2 = 12.358, both above the registered 1.03 with the self-pairs inside it -- and the eager runner, its bucket step and both graph arms decode identical tokens in every row (A1 == P == B1 == B2): CONFIRMED.",
+      "claim": "Lane P82: Qwen3-30B-A3B on P55x's int4 recipe (expert pack sha256:0c9955a9..., attention pack sha256:d7cfa1f4..., by fingerprint; T=1 folds; fp32 router epilogue, E4B_ROUTER_EPI_CAST=0), over P80's changing active set (16 -> 8 -> 4 -> 2 -> 1 rows, 992 decode tokens): PagedModelRunner decode graphs with the bucket-1 fix (#777, grouped-nf4-gemm 0.33.7) decode 811.9 / 814.2 tok/s vs eager 67.6 / 65.9 (x12.006 / x12.358; bar 1.03, self-pairs inside), tokens identical in every row (A1 == P == B1 == B2): CONFIRMED.",
       "value": 12.006,
       "unit": "x aggregate decode tok/s, bucketed graphs over the eager PagedModelRunner, the smaller of the two registered pairings (B1/A1), on one host whose eager step is host-bound",
       "hardware": "RTX 5090 (sm_120, 500 W power limit, driver 595.71.05), one rented Vast.ai verified/secure host (instance 53373593, AMD EPYC 7R13, 818 GiB, not shared)",
@@ -7297,14 +7298,14 @@
       "supersedes": [
         "e4b.serve.p81.qwen3.licensed-int4.dynb.graph-buckets.5090.2026-09-29"
       ],
-      "notes": "Pre-registered in #783. Supersedes P81's row, measured on the buggy path (#413's append, #777's bucket-1 slot); here the eager runner's identity to its bucket step (A1 == P) was registered as decisive and held. P/A1 = 1.203 (the bucket step's path), B1/P = 9.98 (the graph). NOT portable: eager decode is host-bound (88-102 ms per step at every row count on this EPYC 7R13; 125-139 on P81's EPYC 7K62) and the graph step is 0.81-0.88x P81's. Reported for #674: the build's attention pack is byte-identical to P81's d7cfa1f4 (a second box and release); wikitext K8 (window 9ef10d760ad9) reads 6.36396 in the build and in a process loading both packs (fp32 router) and 6.31811 with the shipped cast, so the cast moves K8 by -0.0072 nats on one box but is not the whole 6.36709 -> 6.33015 gap; and with identical packs and router setting P81's box read 6.33015 where this one reads 6.31811, so K8 on this stack does not reproduce across boxes to five decimals (cause not isolated). enable_decode_graphs stays opt-in (#770). CORRECTED 2026-09-29 (lane P83, e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29): the cross-box claim is wrong for the fp32 router -- on one box P70's software reads 6.36709 and P82's 6.36396, each bit-identical to its earlier readings on other machines; K8 is box-invariant for a fixed software stack and the software moved it. The P81-vs-K16 cast pair (6.33015 vs 6.31811) stays unexplained."
+      "notes": "Pre-registered in #783. Supersedes P81's row, measured on the buggy path (#413's append, #777's bucket-1 slot); here the eager runner's identity to its bucket step (A1 == P) was registered as decisive and held. P/A1 = 1.203 (the bucket step's path), B1/P = 9.98 (the graph). NOT portable: eager decode is host-bound (88-102 ms per step at every row count on this EPYC 7R13; 125-139 on P81's EPYC 7K62) and the graph step is 0.81-0.88x P81's. Reported for #674: the build's attention pack is byte-identical to P81's d7cfa1f4 (a second box and release); wikitext K8 (window 9ef10d760ad9) reads 6.36396 in the build and in a process loading both packs (fp32 router) and 6.31811 with the shipped cast, so the cast moves K8 by -0.0072 nats on one box but is not the whole 6.36709 -> 6.33015 gap; and with identical packs and router setting P81's box read 6.33015 where this one reads 6.31811, so K8 on this stack does not reproduce across boxes to five decimals (cause not isolated). enable_decode_graphs stays opt-in (#770). CORRECTED 2026-09-29 (lane P83, e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29): the cross-box claim is wrong for the fp32 router -- on one box P70's software reads 6.36709 and P82's 6.36396, each bit-identical to its earlier readings on other machines; K8 is box-invariant for a fixed software stack and the software moved it. The P81-vs-K16 cast pair (6.33015 vs 6.31811) stays unexplained. QUALIFIED 2026-09-30 (lane P84, bench/p84/RESULTS-p84.md): box-invariant on the AMD hosts tested (Ryzen 7950X, EPYC 7C13 / 7R13 / 9755); on an Intel Core i9-14900K, P82's own build calibrated a different attention pack (45b4cc5a, not d7cfa1f4; expert pack 0c9955a9 unchanged) and read K8 6.36276, so the recipe's calibrated attention does not reproduce there. CORRECTED 2026-09-30 (lane P84, e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30): the registration's reading that the eager K8 appends through quantize_kv_fp8 was wrong -- K8's eager loop calls graph_mode_init, so it runs the fused fp8 KV append that grouped-nf4-gemm 0.33.7 changed (#413); P81 ran 0.33.5, so #413 lies between P81's and this lane's cast readings and is the first suspect for that pair (not measured)."
     },
     {
       "id": "e4b.serve.p83.qwen3.int4-recipe.k8.software-ab.5090.2026-09-29",
       "package": "experts4bit-qlora",
       "area": "serve",
       "model": "Qwen/Qwen3-30B-A3B",
-      "claim": "Lane P83: on ONE RTX 5090, P55x's calibrated int4 recipe built as P70 built it (e4b 0.37.4 @c77aab6, grouped-nf4-gemm 0.33.0) reads wikitext K8 6.36709 (mean NLL 1.8511420498367808) and as P82 built it (e4b 0.37.8, grouped-nf4-gemm 0.33.7) reads 6.36396 (1.8506507749113845), both with fp32 routing weights (E4B_ROUTER_EPI_CAST=0), each repeated bit for bit on the box: DIFFERENT, -0.00049 nats. Each value is the same float its software gave on other machines (P70's on three, P82's on two), so this K8 is box-invariant for a fixed software stack and the software between the two builds moved it.",
+      "claim": "Lane P83, one RTX 5090: P55x's calibrated int4 recipe built as P70 built it (e4b 0.37.4 @c77aab6, grouped-nf4-gemm 0.33.0) reads wikitext K8 6.36709 (NLL 1.8511420498367808), as P82 built it (e4b 0.37.8, grouped-nf4-gemm 0.33.7) 6.36396 (1.8506507749113845), fp32 routing weights, each repeated bit for bit: DIFFERENT, -0.00049 nats. Each matches its software's value on other machines (P70's three, P82's two): box-invariant for fixed software, and the software moved it.",
       "value": -0.00049,
       "unit": "nats, wikitext K8 mean NLL (2,048 steps), P82's build minus P70's build on one box",
       "hardware": "RTX 5090 (sm_120, 575 W power limit, driver 580.119.02), one rented Vast.ai verified/secure host (instance 53395582, AMD EPYC 9755, not shared)",
@@ -7328,7 +7329,303 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-29/p83-5090-1/ (receipt.json, teardown-proof.json, the fetched run with logs/); the proof p83-prove-1 beside it"
       ],
-      "notes": "Pre-registered in #786 (stated expectation DIFFERENT with O reading 6.36709: both held). Both builds produced expert pack 0c9955a9 (identical manifests); N's attention pack is d7cfa1f4 (a third box); O's attention cannot be dumped on 0.37.4, so the change is not yet split between the attention calibration and the decode path. The move is a function change far inside the 0.0095 K8 floor, both readings below NF4's 6.41984. Corrects P82's read, which had inferred from one cast-arm pair that K8 does not reproduce across boxes. Not isolated: which change (e4b 0.37.4 -> 0.37.8, hook v6 -> v7, the step_decomp copies, grouped-nf4-gemm 0.33.0 -> 0.33.7) moves it -- a one-box bisect, not started."
+      "notes": "Pre-registered in #786 (stated expectation DIFFERENT with O reading 6.36709: both held). Both builds produced expert pack 0c9955a9 (identical manifests); N's attention pack is d7cfa1f4 (a third box); O's attention cannot be dumped on 0.37.4, so the change is not yet split between the attention calibration and the decode path. The move is a function change far inside the 0.0095 K8 floor, both readings below NF4's 6.41984. Corrects P82's read, which had inferred from one cast-arm pair that K8 does not reproduce across boxes. Not isolated: which change (e4b 0.37.4 -> 0.37.8, hook v6 -> v7, the step_decomp copies, grouped-nf4-gemm 0.33.0 -> 0.33.7) moves it -- a one-box bisect, not started. QUALIFIED 2026-09-30 (lane P84, bench/p84/RESULTS-p84.md): box-invariant on the AMD hosts tested (Ryzen 7950X, EPYC 7C13 / 7R13 / 9755); on an Intel Core i9-14900K, P82's own build calibrated a different attention pack (45b4cc5a, not d7cfa1f4; expert pack 0c9955a9 unchanged) and read K8 6.36276, so the recipe's calibrated attention does not reproduce there. ANSWERED 2026-09-30 (lane P84, e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30): on one box grouped-nf4-gemm 0.33.0 -> 0.33.7 is the whole -0.00049 nats; e4b 0.37.4 -> 0.37.8 and the harness move it by zero. The one change in that cut on K8's path, read from the code (not measured), is #413's fused fp8 KV append, which K8's eager loop runs."
+    },
+    {
+      "id": "e4b.serve.p84.qwen3.int4-recipe.k8.factor-chain.5090.2026-09-30",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P84: on ONE RTX 5090 (the Ryzen 7950X host of P55x/P70), the calibrated int4 recipe with fp32 routing weights (E4B_ROUTER_EPI_CAST=0) reads wikitext K8 1.8506507749113845 in all three builds on grouped-nf4-gemm 0.33.7 (e4b 0.37.4 or 0.37.8; P70's or P82's harness), each bit for bit, against P70's 1.8511420498367808 (0.33.0): KERNEL. grouped-nf4-gemm 0.33.0 -> 0.33.7 is the whole -0.000491 nats; e4b and the harness move K8 by zero.",
+      "value": -0.000491,
+      "unit": "nats, wikitext K8 mean NLL (2,048 steps), the KERNEL step (grouped-nf4-gemm 0.33.0 -> 0.33.7 on e4b 0.37.4, P70's harness); the PACKAGE and HARNESS steps are 0.0",
+      "hardware": "RTX 5090 (sm_120, 600 W power limit, driver 575.57.08, GPU 7a6634c6 = P55x's and P70's card), one rented Vast.ai verified/secure host (instance 53567449, AMD Ryzen 9 7950X, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; stack B = e4b 33d0f2f (0.37.8) + grouped-nf4-gemm 9407d49 (0.33.7); stack A = e4b c77aab6 (0.37.4) installed over B with --force-reinstall --no-deps; per stack its own NF4 bake (P39's k8_bake.py); C = P82's build (bench/p81/step_decomp.py, hook v7, both packs dumped) then K32 (both packs loaded by fingerprint); H1/H2 = P70's build (bench/p39/step_decomp.py, bench/p42 hook, the expert pack dumped) then P55x's lic arm (expert pack loaded by fingerprint, attention calibrated live); K8 teacher-forced through the paged decode path at B = 1, 512-token prompt, --b1d-loop eager, --no-fuse-qkv, fp8 paged KV, all-VRAM, window 9ef10d760ad9; the control gates the chain; every K8 process stamped fp32 with its stack's versions; AMD hosts only (amendment 1); verdict by bench/p84/p84_reduce.py; torch 2.8.0+cu128, triton 3.4.0, transformers 5.16.1, bitsandbytes 0.50.1",
+      "measured_on": "2026-09-30",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p84/RESULTS-p84.md",
+        "bench/p84/PREREG-p84.md",
+        "bench/p84/p84_reduce.py",
+        "bench/p84/receipts/p84-5090-3/verdict.json",
+        "bench/p84/receipts/p84-5090-3/k8_C_build.json",
+        "bench/p84/receipts/p84-5090-3/k8_C_rep.json",
+        "bench/p84/receipts/p84-5090-3/k8_H1_build.json",
+        "bench/p84/receipts/p84-5090-3/k8_H1_rep.json",
+        "bench/p84/receipts/p84-5090-3/k8_H2_build.json",
+        "bench/p84/receipts/p84-5090-3/k8_H2_rep.json",
+        "bench/p84/receipts/p84-5090-3/packs.json",
+        "bench/p84/receipts/p84-5090-3/summary.txt",
+        "bench/p84/receipts/p84-5090-3/forensics.txt",
+        "bench/p84/receipts/p84-5090-3/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-30/p84-5090-3/ (receipt.json, teardown-proof.json, the fetched run with logs/ and both harness copies); the VOID reading p84-5090-2, the proofs p84-prove-1..3 and the NOT_RUN p84-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #792 with amendment 1 in #795 (non-AuthenticAMD hosts refused: reading 1, p84-5090-2, was VOID on an Intel i9-14900K whose attention calibration differs). Stated expectation PACKAGE alone: wrong. Every expert pack 0c9955a9 (licensed); C's attention d7cfa1f4 (a fourth AMD host). Which change inside grouped-nf4-gemm 0.33.0 -> 0.33.7 is NOT measured. Read from the code, the one arithmetic change in that cut on K8's path is grouped-nf4-gemm#413 (0.33.7): the fused fp8 KV append's quotient IEEE-rounded (div_rn), which B771 measured changing 21 of 536,870,912 written bytes; K8's eager loop calls graph_mode_init, so every scored token's K/V goes through that append (0.33.1-0.33.3 change no code; 0.33.4 cold_deadline, 0.33.5 int4_smallm annotations and 0.33.6 MXFP4 are off this path). This corrects PREREG-p82's and PREREG-p84's statement that the eager K8 does not run the graph-mode append. Proposed test (P85, not started): P70's build with E4B_FUSED_KV_APPEND=0 should read N's float bit for bit. Cost $1.8328 for the lane ($1.0928 this reading). MEASURED 2026-09-30 by P85 (e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30): CONFIRMED, #413 is the whole step."
+    },
+    {
+      "id": "e4b.serve.p85.qwen3.int4-recipe.k8.fused-append-413.5090.2026-09-30",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P85, one RTX 5090 (P70's card): P70's build of the int4 recipe (e4b 0.37.4, grouped-nf4-gemm 0.33.0, fp32 router) reads K8 mean NLL 1.8511420498367808; with the fused fp8 KV append off it reads the 0.33.7 builds' 1.8506507749113845 bit for bit, and on 0.33.6 it reads 1.8511420498367808 bit for bit: CONFIRMED, grouped-nf4-gemm#413 is the whole K8 step.",
+      "value": -0.000491,
+      "unit": "nats, wikitext K8 mean NLL (2,048 steps), P70's stack with the fused fp8 KV append off minus on; equal to the grouped-nf4-gemm 0.33.0 -> 0.33.7 step",
+      "hardware": "RTX 5090 (sm_120, 600 W power limit, driver 575.57.08, GPU 7a6634c6 = P55x's, P70's and P84's card), one rented Vast.ai verified/secure host (instance 53591715, machine 37958, AMD Ryzen 9 7950X, not shared)",
+      "conditions": "Qwen/Qwen3-30B-A3B @ ad44e777; every reading through P70's harness (bench/p39/step_decomp.py, bench/p42 hook v6, P70's env), E4B_ROUTER_EPI_CAST=0, e4b c77aab6 (0.37.4); stack O = + grouped-nf4-gemm 5ca1897 (v0.33.0), stack S = + f879761 (v0.33.6, --no-deps over O); O_build = P70's build (expert pack dumped); the other five = P55x's lic arm (that pack by fingerprint), F with E4B_FUSED_KV_APPEND=0; K8 teacher-forced paged decode, B = 1, fp8 KV, all-VRAM, window 9ef10d760ad9; every process stamped (router, versions, pre-#413 fp8_kv, append resolution); verdict by bench/p85/p85_reduce.py; torch 2.8.0+cu128, triton 3.4.0",
+      "measured_on": "2026-09-30",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p85/RESULTS-p85.md",
+        "bench/p85/PREREG-p85.md",
+        "bench/p85/p85_reduce.py",
+        "bench/p85/receipts/p85-5090-4/verdict.json",
+        "bench/p85/receipts/p85-5090-4/k8_O_build.json",
+        "bench/p85/receipts/p85-5090-4/k8_O_rep.json",
+        "bench/p85/receipts/p85-5090-4/k8_F_1.json",
+        "bench/p85/receipts/p85-5090-4/k8_F_2.json",
+        "bench/p85/receipts/p85-5090-4/k8_S_1.json",
+        "bench/p85/receipts/p85-5090-4/k8_S_2.json",
+        "bench/p85/receipts/p85-5090-4/packs.json",
+        "bench/p85/receipts/p85-5090-4/summary.txt",
+        "bench/p85/receipts/p85-5090-4/forensics.txt",
+        "bench/p85/receipts/p85-5090-4/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-09-30/p85-5090-4/ (receipt.json, teardown-proof.json, the fetched run with logs/ and the harness copy); the proof p85-prove-1, the refusals p85-5090-1/-2 and the unarmed-guard p85-5090-3 beside it"
+      ],
+      "notes": "Pre-registered in #797, amendment 1 in #798 (watchdog 1,500 s, guard 4.0 h). Stated expectation CONFIRMED held exactly. Two attempts were refused on Intel hosts (rc 16, no data), one lost its guard to a Vast HTTP 429. Measures what P84 inferred from the code. 6.36396 is the reference quantizer's KV bytes; which value the licensed row names is the owner's decision. Not measured: the P81/P82 cast pair, the Intel-host attention calibration. Lane cost $0.7362."
+    },
+    {
+      "id": "e4b.serve.p86.qwen3.b16.kernel-census-vs-vllm-0.30.0.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P86, one RTX 5090, same prompts: B=16 step e4b int4 12.06 ms vs vLLM 0.30.0 8.75 (1.38x); by kernel census the gap is the experts (int4 GEMV 6.98 vs Marlin MoE 4.78; 2.86 of 3.32 ms), then routing glue (+0.62).",
+      "value": 2.855,
+      "unit": "ms/step, the quantized-linear role's e4b - vLLM gap at B=16 (largest of seven roles)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05), one rented Vast.ai verified/secure host (instance 53626105, machine 96642, Intel Xeon E5-2698 v4, not shared), image pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel",
+      "conditions": "e4b 0.37.8 @db527f9 + grouped-nf4-gemm 0.33.7, P58's int4 env and harness (bench/p39/step_decomp.py + bench/p42 hook), fused q/k/v at both batches, graph-window timing + P42 replay census; vLLM 0.30.0 (torch 2.13.0+cu130) on Qwen/Qwen3-30B-A3B-GPTQ-Int4 @9b534e43 (Marlin), P37's slope timing + p86_vllm_census.py (in-process torch.profiler, per-kernel 32->128-token slope, decode kernels only); prompts digest f67e7e4d (P58's); each step the median of two draws; verdict by bench/p86/p86_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p86/RESULTS-p86.md",
+        "bench/p86/PREREG-p86.md",
+        "bench/p86/p86_reduce.py",
+        "bench/p86/receipts/p86-5090-3/verdict.json",
+        "bench/p86/receipts/p86-5090-3/vllm_census_b16.json",
+        "bench/p86/receipts/p86-5090-3/vllm_census_b1.json",
+        "bench/p86/receipts/p86-5090-3/logs/census_e4b_b16.txt",
+        "bench/p86/receipts/p86-5090-3/logs/census_e4b_b1.txt",
+        "bench/p86/receipts/p86-5090-3/e4b_b16_int4.json",
+        "bench/p86/receipts/p86-5090-3/vllm_graph_b16.json",
+        "bench/p86/receipts/p86-5090-3/summary.txt",
+        "bench/p86/receipts/p86-5090-3/forensics.txt",
+        "bench/p86/receipts/p86-5090-3/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p86-5090-3/ (receipt.json, teardown-proof.json, logs/); the proofs p86-prove-1..3 and the NOT_RUN p86-5090-2 beside it"
+      ],
+      "notes": "Pre-registered in #800, amendment 1 in #801 (the CUDA 12.9 image; p86-prove-2 had caught vLLM 0.30.0's warmup failing under 12.8). Stated expectation (quantized linear first, glue second) held. Both censuses reconcile to their own step (vLLM 8.733 of 8.746 ms; e4b 12.372 of 12.064, profiler excess, inside the 10 % slack). e4b's attention + KV write is faster (0.96 vs 1.35 ms) and its K16 attention projections are at parity (0.89 vs 0.97). B=1: 4.27 vs 4.00 ms (1.07x), largest gap 'other' (+0.34). Against #564's byte floor at 58.7 distinct experts the e4b GEMV runs ~70 %, Marlin MoE ~94 % of its own (g128: ~8 % fewer bytes; assumes the same distinct-expert count). Next: a kernel lane on the B=16 expert matmul (proposed). Lane cost $0.8561."
+    },
+    {
+      "id": "e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P88, one RTX 5090: K19 (E4B_INT4_GROUPED_SMALLM=1, plan 32/256) takes the int4 B=16 step 11.200 -> 10.140 ms (0.905x; bar 0.95); K8 +0.00623 nats (floor 0.0095); B=1 1.103x slower, so T > 1 only.",
+      "value": 0.905,
+      "unit": "ON/OFF B=16 step ratio (medians of two draws)",
+      "hardware": "RTX 5090 (sm_120, driver 590.48.01, 600 W), one rented Vast.ai verified/secure host (instance 53662837, machine 41531, AMD EPYC 9334, not shared), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b 0.37.8 @b848089 + grouped-nf4-gemm @7b7e6b1 (K19 default plan 32/256); speed: P86's harness (bench/p39/step_decomp.py + bench/p42 hook), RTN int4 experts + uncalibrated int4 attention + folds, graph-window timing, P42 replay census, two draws; quality: K8 (wikitext 9ef10d760ad9, 2048 steps, B=1 eager, --no-fuse-qkv) on the licensed recipe, the expert pack built once (fingerprint sha256:0c9955a9, the licensed pack) and loaded by fingerprint for OFF and ON; on-card premise test passed; verdict by bench/p88/p88_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p88/RESULTS-p88.md",
+        "bench/p88/PREREG-p88.md",
+        "bench/p88/p88_reduce.py",
+        "bench/p88/receipts/p88-5090-4/verdict.json",
+        "bench/p88/receipts/p88-5090-4/k8_off.json",
+        "bench/p88/receipts/p88-5090-4/k8_on.json",
+        "bench/p88/receipts/p88-5090-4/logs/census_b16_on.txt",
+        "bench/p88/receipts/p88-5090-4/logs/census_b16_off.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p88-5090-4/ (receipt.json, teardown-proof.json); the proof p88-prove-1 and the NOT_RUNs p88-5090-1..3 beside it"
+      ],
+      "notes": "Pre-registered in #808 (P87's instrument on K20's plan plus an AMD host floor). Predictions: B=16 0.78-0.86 refuted (0.905; grouping glue 0.69 ms/step in-model), B=1 SLOWER held (1.103), |dK8| < 0.003 refuted (+0.00623, inside the floor), build == OFF bit-equal held. OFF's K8 (1.84342) is not P85's licensed float (1.85114): P88 runs the launch commit's defaults, P85 ran P70's env. Lane cost $0.6582 (proof $0.0406, three pre-flight NOT_RUNs $0.0638, reading $0.5538)."
+    },
+    {
+      "id": "e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P89, one RTX 5090: K23's lean glue (E4B_INT4_LEAN_GLUE=1) takes the int4 B=16 step 10.321 -> 9.805 ms (0.950x; bar 0.97), tokens identical in all 16 rows of both draw pairs, 336 fewer launches per step.",
+      "value": 0.95,
+      "unit": "ON/OFF B=16 step ratio (medians of two draws)",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02, power.limit 475 W), one rented Vast.ai verified/secure host (instance 53703470, machine 150710, AMD EPYC 9655, not shared), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b 0.37.8 @2a623fd + grouped-nf4-gemm @3990dbc (K23); P88's harness (bench/p39/step_decomp.py + bench/p42 hook), RTN int4 experts + uncalibrated int4 attention + folds, K19 at its licensed auto in both arms, graph-window timing, P42 replay census, two draws; gates: on-card premise (K19 row-exact + K23 bit-equal, 6 passed) and token equality OFF vs ON; verdict by bench/p89/p89_reduce.py under amendment 1",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p89/RESULTS-p89.md",
+        "bench/p89/PREREG-p89.md",
+        "bench/p89/p89_reduce.py",
+        "bench/p89/receipts/p89-5090-4/verdict.json",
+        "bench/p89/receipts/p89-5090-4/e4b_b16_off.json",
+        "bench/p89/receipts/p89-5090-4/e4b_b16_on.json",
+        "bench/p89/receipts/p89-5090-4/logs/census_b16_off.txt",
+        "bench/p89/receipts/p89-5090-4/logs/census_b16_on.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p89-5090-4/ (receipt.json, teardown-proof.json); the proof p89-prove-4, the attempts p89-prove-1..3 and the VOID p89-5090-3 beside it"
+      ],
+      "notes": "Pre-registered in #815; amendment 1 (#818) replaced an engagement clause that named the token-row expansion's kernel by inference (indexSelect; on torch 2.8 it is vectorized_gather_kernel) with a total-launch floor, after p89-5090-3 read VOID on it with the route fully engaged (x0.951, tokens identical; descriptive only). Predictions: 0.91-0.95 held (0.950); ~288 fewer launches (336); tokens identical held. Lane cost $0.4835."
+    },
+    {
+      "id": "e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "openai/gpt-oss-20b",
+      "claim": "Lane P90: K21 on gpt-oss-20b's native MXFP4 store (E4B_MXFP4_GROUPED_SMALLM=1) takes the B=16 step on an RTX 5090 22.511 -> 13.086 ms (0.581x; bar 0.90); the store's KL from the dequant reference 0.00192 -> 0.00147 nats, top-1 0.9814 -> 0.9840 (H100 NVL); B=1 1.075x slower, so T > 1 only.",
+      "value": 0.581,
+      "unit": "ON/OFF B=16 step ratio (medians of two draws)",
+      "hardware": "speed: RTX 5090 (sm_120, driver 580.173.02, 575 W), one rented Vast.ai verified/secure host (instance 53706763, machine 149299, Intel Xeon E5-2680 v4); quality: H100 NVL (sm_90, driver 595.71.05), one rented Vast.ai verified/secure host (instance 53710345, machine 145679, AMD EPYC 9V84); image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b 0.37.8 @147a9c6 + grouped-nf4-gemm @4cc831c (K21 + masked K tail); bo7's store_r12 (MXFP4 store, NF4 kept for batched rows, folds r1/r2), K22's harness command line (graph-window timing, --no-fuse-qkv), P42 replay census, two draws; quality: P44's kl_serve.py on store_r12, the dequant reference, decode-shaped both sides (control (i) 0.00051), 200 committed prompts, 5757 tokens; on-card premise (K21 rows bit-equal alone and inside B=16) and K0 on both hosts; verdict by bench/p90/p90_reduce.py --speed-dir/--quality-dir under amendment 1",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p90/RESULTS-p90.md",
+        "bench/p90/PREREG-p90.md",
+        "bench/p90/p90_reduce.py",
+        "bench/p90/receipts/verdict-p90-5090-2+p90-h100-1.json",
+        "bench/p90/receipts/p90-5090-2/e4b_b16_off.json",
+        "bench/p90/receipts/p90-5090-2/e4b_b16_on.json",
+        "bench/p90/receipts/p90-5090-2/logs/census_b16_on.txt",
+        "bench/p90/receipts/p90-h100-1/gptoss_kl_off.json",
+        "bench/p90/receipts/p90-h100-1/gptoss_kl_on.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p90-5090-2/ and p90-h100-1/ (receipt.json, teardown-proof.json); the proofs p90-prove-1 and p90-h100-prove-1 and the VOID p90-5090-1 beside them"
+      ],
+      "notes": "Pre-registered in #817; amendment 1 (#820) moved the KL arms to an H100 NVL after p90-5090-1 read VOID (the ~40 GB bf16 reference does not fit a 5090; speed descriptive x0.584). Predictions: B=16 0.55-0.70 held (0.581); B=1 SLOWER held (1.075); KL(ON) <= KL(OFF) held, top-1 +0.0026 beyond the expected +-0.001 in the good direction. Lane cost $0.9503."
+    },
+    {
+      "id": "e4b.serve.p91.nf4-families.kernel-census.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P91, one RTX 5090, each family's position config: the NF4 grouped expert GEMM is 61.7 % (Granite r12epi, 5.48 of 8.87 ms) and 71.9 % (OLMoE nf4, 8.61 of 11.98 ms) of B=16 decode kernel time; the NF4 decode GEMV 50.7 % / 45.7 % at B=1.",
+      "value": 0.719,
+      "unit": "largest NF4-family share of B=16 kernel time held by _gemm_nf4_grouped (OLMoE)",
+      "hardware": "RTX 5090 (sm_120, driver 580.119.02, 475 W), one rented Vast.ai verified/secure host (instance 53718598, machine 150710, AMD EPYC 9655), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b 0.37.8 @facf8da + grouped-nf4-gemm @4cc831c; Granite @a0278068 with r12epi (NF4 experts + round-1/2 folds + router epilogue), OLMoE @7f1c97f4 with nf4, envs = bench/p44/serve_stack.py arm_env; P88's harness (bench/p39/step_decomp.py + bench/p42 hook), graph-window timing, prompt 512, 128 tokens, P42 replay census, one draw per arm; every census within 10 % of its step; descriptive (no change tested); verdict by bench/p91/p91_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p91/RESULTS-p91.md",
+        "bench/p91/PREREG-p91.md",
+        "bench/p91/p91_reduce.py",
+        "bench/p91/receipts/p91-5090-1/verdict.json",
+        "bench/p91/receipts/p91-5090-1/logs/census_granite_b16.txt",
+        "bench/p91/receipts/p91-5090-1/logs/census_olmoe_b16.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p91-5090-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #825; descriptive census, READ. Its registered decision names the NF4 grouped small-M kernel (share >= 40 % in either family). Predictions: Granite 40-60 % (61.7, just above), OLMoE 50-70 % (71.9, just above), B=1 30-50 % (50.7 / 45.7), censuses within 5 % (three of four; OLMoE B=1 -8.7 %, inside the registered 10 %). Lane cost $0.0801."
+    },
+    {
+      "id": "e4b.serve.p92.nf4-families.k25-b16.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P92, one RTX 5090: K25 (E4B_NF4_GROUPED_SMALLM=1) takes Granite r12epi's B=16 step 10.529 -> 9.865 ms (0.937x; bar 0.95) with K8 -0.023 / +0.016 ppl (wikitext / c4val1; bar |0.05|), but OLMoE nf4's 14.355 -> 14.694 ms (1.024x) with its c4val1 K8 moved -0.107 ppl (QUALITY_FAIL); K25's own GEMM runs within 4 % of the served NF4 GEMM, so the default stays 0.",
+      "value": 0.937,
+      "unit": "ON/OFF B=16 step ratio, Granite (mean of two draws)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05, 575 W), one rented Vast.ai verified/secure host (instance 53730237, Intel Xeon E5-2698 v4), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b 0.37.8 @a626ae3 + grouped-nf4-gemm @8cc3510 (K25); Granite @a0278068 with r12epi, OLMoE @7f1c97f4 with nf4, envs = bench/p44/serve_stack.py arm_env; OFF E4B_NF4_GROUPED_SMALLM=0, ON =1 (T == 1 included) with the lean glue at auto; P91's harness (bench/p39/step_decomp.py + bench/p42 hook), graph-window timing, prompt 512, 128 tokens, B=16 two draws per arm (draw 1 censused), B=1 one draw (censused); K8 = P44-a's arm, 2048 steps, eager B=1 loop, wikitext and c4val1, k8_gate uncalibrated (|d| <= 0.05 ppl); on-card premise (K25 row-exact 4 passed, K25 contract compiled 28 passed); engagement held in every census; verdict by bench/p92/p92_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p92/RESULTS-p92.md",
+        "bench/p92/PREREG-p92.md",
+        "bench/p92/p92_reduce.py",
+        "bench/p92/receipts/p92-5090-2/verdict.json",
+        "bench/p92/receipts/p92-5090-2/logs/census_granite_off_b16_d1.txt",
+        "bench/p92/receipts/p92-5090-2/logs/census_granite_on_b16_d1.txt",
+        "bench/p92/receipts/p92-5090-2/logs/census_olmoe_off_b16_d1.txt",
+        "bench/p92/receipts/p92-5090-2/logs/census_olmoe_on_b16_d1.txt",
+        "bench/p92/receipts/p92-5090-2/olmoe_k8_on_c4val1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p92-5090-2/ (receipt.json, teardown-proof.json); the NOT_RUN p92-5090-1 beside it"
+      ],
+      "notes": "Pre-registered in #828. Verdict granite=LICENSED olmoe=QUALITY_FAIL; the registered consequence moves the default only when both families read LICENSED, so E4B_NF4_GROUPED_SMALLM stays 0 (auto is an opt-in measured on Granite r12epi). Census: Granite's gain is the glue the lean route folds away (about 0.35 ms/step); K25 6.464 vs the served 6.602 ms on Granite, 10.852 vs 10.388 on OLMoE. This host read OFF about 15 % slower than P91's; ratios are within one box."
+    },
+    {
+      "id": "e4b.serve.p93.nf4-families.k25-tree-tf32-b16.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P93, one RTX 5090: the K25 route at the served precision (select tree through TF32 MMA, E4B_NF4_GROUPED_SMALLM=1) takes Granite r12epi's B=16 step 10.535 -> 6.258 ms (0.594x; bar 0.95) and B=1 3.862 -> 3.299 (0.854x) with K8 -0.026 / +0.024 ppl (wikitext / c4val1; bar |0.05|), and OLMoE nf4's B=16 14.352 -> 8.585 ms (0.598x) with its c4val1 K8 moved +0.155 ppl (QUALITY_FAIL; P92's bf16 route moved it -0.107), so the default stays 0.",
+      "value": 0.594,
+      "unit": "ON/OFF B=16 step ratio, Granite (mean of two draws)",
+      "hardware": "RTX 5090 (sm_120, driver 595.71.05, 575 W), one rented Vast.ai verified/secure host (instance 53756773, Intel Xeon), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @2c7fec2 (route #834: _K25_PLAN {32, 64, 4, 3, tree, dot_bf16 False}) + grouped-nf4-gemm @908a2ca; Granite @a0278068 r12epi, OLMoE @7f1c97f4 nf4, envs = bench/p44/serve_stack.py arm_env; OFF E4B_NF4_GROUPED_SMALLM=0, ON =1 (T == 1 included), lean glue auto; P92's harness and order (B=16 two draws, draw 1 censused; B=1 censused; K8 2048 steps, eager B=1, wikitext and c4val1, k8_gate uncalibrated); on-card premise (row-exact 4, K25 contract compiled 30); engagement held in every census; verdict by bench/p93/p93_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p93/RESULTS-p93.md",
+        "bench/p93/PREREG-p93.md",
+        "bench/p93/p93_reduce.py",
+        "bench/p93/receipts/p93-5090-1/verdict.json",
+        "bench/p93/receipts/p93-5090-1/logs/census_granite_on_b16_d1.txt",
+        "bench/p93/receipts/p93-5090-1/logs/census_olmoe_on_b16_d1.txt",
+        "bench/p93/receipts/p93-5090-1/olmoe_k8_on_c4val1.json"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p93-5090-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #836. Verdict granite=LICENSED olmoe=QUALITY_FAIL; the default moves only on two LICENSED families, so E4B_NF4_GROUPED_SMALLM stays 0. In-model K25 (TF32 tree) 2.700 vs the served 6.606 ms/step (Granite), 4.954 vs 10.389 (OLMoE). P92 attributed OLMoE's c4val1 K8 move to bf16 weight rounding; P93 changed exactly that and the move flipped sign and grew (+0.155 against -0.107), so the attribution is refuted. The open question is the instrument's spread under the production path's own arithmetic variants."
+    },
+    {
+      "id": "e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P94, one RTX 5090: K8 at T == 1 of K25 (select tree through TF32 MMA) against the served NF4 M-tile kernel it would replace above T == 1 moves c4val1 +0.102 ppl on Granite r12epi and +0.168 on OLMoE nf4 (wikitext -0.020 / -0.005; bar |0.05|), QUALITY_FAIL in both families, so E4B_NF4_GROUPED_SMALLM stays 0; the served M-tile itself reads -0.078 from the scalar GEMV on Granite c4val1 and within 0.017 of it on OLMoE.",
+      "value": 0.16778,
+      "unit": "K8 ppl delta, K25 (t) minus the served M-tile (m), OLMoE c4val1 (the largest |delta|; bar 0.05)",
+      "hardware": "RTX 5090 (sm_120, driver 575.57.08, 600 W), one rented Vast.ai verified host (machine 37958, instance 53772194, AMD Ryzen 9 7950X), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @966a95e (instrument #838: E4B_NF4_T1_DEVICE_GROUPING) + grouped-nf4-gemm @908a2ca; Granite @a0278068 r12epi, OLMoE @7f1c97f4 nf4, envs = bench/p44/serve_stack.py arm_env; arms g (E4B_NF4_GROUPED_SMALLM=0, E4B_NF4_T1_DEVICE_GROUPING=0), m (0, 1), t (1, 0); K8 2048 steps, eager B=1, --no-fuse-qkv, wikitext and c4val1, k8_gate uncalibrated with base m and candidate t; m engaged (B=1 census: _gemm_nf4_grouped 64 / 32 per step, no NF4 GEMV); on-card premise (row-exact 6, K25 contract compiled 30); verdict by bench/p94/p94_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p94/RESULTS-p94.md",
+        "bench/p94/PREREG-p94.md",
+        "bench/p94/p94_reduce.py",
+        "bench/p94/receipts/p94-5090-2/verdict.json",
+        "bench/p94/receipts/p94-5090-2/olmoe_k8_t_c4val1.json",
+        "bench/p94/receipts/p94-5090-2/olmoe_k8_m_c4val1.json",
+        "bench/p94/receipts/p94-5090-2/granite_k8_m_c4val1.json",
+        "bench/p94/receipts/p94-5090-2/logs/census_granite_m_b1_d1.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p94-5090-2/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #841. Verdict QUALITY_FAIL (granite FAIL, olmoe FAIL); BASELINE_SHIFT on Granite only. g and t reproduce P93's OFF and ON exactly on all four texts, on a different host. Predictions refuted: |t - m| < 0.01, and OLMoE c4val1 m - g near +0.10 to +0.20 (it is -0.013), so P93's OLMoE swing is not the GEMV-to-tile difference production carries. On wikitext every pair of the three arithmetics is within 0.026; on c4val1 the pairs range 0.013 to 0.168, with equal per-GEMM rms error (grouped-nf4-gemm K27). One draw per arithmetic cannot separate a c4val1 realization spread from a K25-specific bias on OLMoE; that is the next lane's calibration."
     }
   ]
 }
