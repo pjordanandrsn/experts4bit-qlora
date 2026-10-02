@@ -99,6 +99,7 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
         for k in (
             "E4B_RENT_SSH_HOST",
             "E4B_RENT_SSH_PORT",
+            "E4B_RENT_SSH_OPTS",
             "E4B_RENT_RUN_DIR",
             "E4B_RENT_RUN_ID",
             "E4B_RENT_DEADLINE_EPOCH",
@@ -112,6 +113,7 @@ def test_driver_refuses_without_the_launcher_environment_and_stages_only_the_har
     env = {
         "E4B_RENT_SSH_HOST": "ssh5.vast.ai",
         "E4B_RENT_SSH_PORT": "12345",
+        "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts",
         "E4B_RENT_RUN_DIR": "/tmp/run",
         "E4B_RENT_RUN_ID": "p41-r1-granite",
         "E4B_RENT_DEADLINE_EPOCH": "1788800000",
@@ -325,6 +327,7 @@ cp -R "$FAKE_REMOTE"/. "$dest"/
         "FAKE_NONCE_CAPTURE": str(nonce_capture),
         "E4B_RENT_SSH_HOST": "fake.vast.invalid",
         "E4B_RENT_SSH_PORT": "12345",
+        "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts",
         "E4B_RENT_RUN_DIR": str(run_dir),
         "E4B_RENT_RUN_ID": "p41-no-gpu-regression",
         "E4B_RENT_DEADLINE_EPOCH": str(int(time.time()) + deadline_s),

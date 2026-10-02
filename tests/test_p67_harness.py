@@ -176,7 +176,7 @@ def test_the_guard_refuses_a_staged_file_that_is_not_the_pinned_one(tmp_path, vi
 # ----------------------------------------------------------------------------- p67_drive.sh -> tp4_drive.sh
 def _drive(extra=None):
     env = {k: v for k, v in os.environ.items() if not k.startswith(("TP4_", "E4B_", "GNF4_"))}
-    env.update({"E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "22", "E4B_RENT_RUN_DIR": "/tmp/x", "E4B_RENT_RUN_ID": "p67-test-1",
+    env.update({"E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "22", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts", "E4B_RENT_RUN_DIR": "/tmp/x", "E4B_RENT_RUN_ID": "p67-test-1",
                 "E4B_RENT_DEADLINE_EPOCH": "9999999999", "E4B_RENT_INSTANCE_ID": "1", "E4B_SHA": "a" * 40, "TP4_DRIVE_DRYRUN": "1"})
     env.update(extra or {})
     return subprocess.run([BASH, str(LANE / "p67_drive.sh")], capture_output=True, text=True, env=env, timeout=60)
@@ -201,7 +201,7 @@ def test_the_driver_refuses_an_override_before_staging():
 
 def test_tp4_drive_refuses_a_runner_it_did_not_stage():
     env = {k: v for k, v in os.environ.items() if not k.startswith(("TP4_", "E4B_", "GNF4_"))}
-    env.update({"E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "22", "E4B_RENT_RUN_DIR": "/tmp/x", "E4B_RENT_RUN_ID": "r",
+    env.update({"E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "22", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts", "E4B_RENT_RUN_DIR": "/tmp/x", "E4B_RENT_RUN_ID": "r",
                 "E4B_RENT_DEADLINE_EPOCH": "9999999999", "E4B_RENT_INSTANCE_ID": "1", "E4B_SHA": "a" * 40, "TP4_BOX": "C",
                 "TP4_DRIVE_DRYRUN": "1", "TP4_RUNNER": "nowhere.sh"})
     r = subprocess.run([BASH, str(TP4 / "tp4_drive.sh")], capture_output=True, text=True, env=env, timeout=60)
@@ -210,7 +210,7 @@ def test_tp4_drive_refuses_a_runner_it_did_not_stage():
 
 def test_tp4_drive_default_runner_is_unchanged():
     env = {k: v for k, v in os.environ.items() if not k.startswith(("TP4_", "E4B_", "GNF4_"))}
-    env.update({"E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "22", "E4B_RENT_RUN_DIR": "/tmp/x", "E4B_RENT_RUN_ID": "r",
+    env.update({"E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "22", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts", "E4B_RENT_RUN_DIR": "/tmp/x", "E4B_RENT_RUN_ID": "r",
                 "E4B_RENT_DEADLINE_EPOCH": "9999999999", "E4B_RENT_INSTANCE_ID": "1", "E4B_SHA": "a" * 40, "TP4_BOX": "C",
                 "TP4_DRIVE_DRYRUN": "1"})
     r = subprocess.run([BASH, str(TP4 / "tp4_drive.sh")], capture_output=True, text=True, env=env, timeout=60)

@@ -154,7 +154,7 @@ def test_a_host_cpu_other_than_the_registered_vendor_is_refused_before_any_fetch
 def test_the_driver_runs_to_its_dry_run(tmp_path):
     """The whole controller script parses and reaches its dry run (P83's apostrophe lesson)."""
     env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path),
-           "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "p85-dry",
+           "E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts", "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "p85-dry",
            "E4B_RENT_DEADLINE_EPOCH": "1", "E4B_RENT_INSTANCE_ID": "0", "E4B_SHA": "0" * 40,
            "P85_PROVE": "1", "P85_DRIVE_DRYRUN": "1"}
     out = subprocess.run(["bash", str(LANE / "p85_drive.sh")], capture_output=True, text=True, env=env)

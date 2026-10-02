@@ -10,7 +10,7 @@
 #                    must end rc 0 with P66_PROVED.<nonce> before the reading rental (P66_MODE=full, the default) runs.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p66_drive] $*"; }
-for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID; do
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
@@ -43,8 +43,8 @@ case "$GNF4_SHA" in *[!0-9a-f]*|"") say "refusing: GNF4_SHA is not hex"; exit 78
 [ ${#GNF4_SHA} -eq 40 ] || { say "refusing: GNF4_SHA is not a 40-char hex sha ($GNF4_SHA)"; exit 78; }
 MODE=${P66_MODE:-full}; case "$MODE" in full|prove) ;; *) say "refusing: P66_MODE must be full or prove ($MODE)"; exit 78;; esac
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
-SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
-SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
+SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
+SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${P66_POLL_S:-60}; STALL_S=${P66_STALL_S:-900}; W=/root/p66
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
@@ -80,7 +80,7 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/p66" && mkdir -p "$RUN_DIR/p66" || { say "fetch failed: local dir"; exit 22; }
-rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude src --exclude 'venv*' --exclude '.cache' \
+rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude src --exclude 'venv*' --exclude '.cache' \
   --exclude 'work_qwen3' --exclude '*.arena' --exclude '*.dat' "root@$HOST:$W/" "$RUN_DIR/p66/" || { say "fetch failed: rsync"; exit 22; }
 # the arena INDEX is a receipt (geometry, row bytes); the arena itself is not
 $SSH "cat $W/work_qwen3/nf4.arena.index.json" > "$RUN_DIR/p66/qwen3.nf4.arena.index.json" 2>/dev/null || true
