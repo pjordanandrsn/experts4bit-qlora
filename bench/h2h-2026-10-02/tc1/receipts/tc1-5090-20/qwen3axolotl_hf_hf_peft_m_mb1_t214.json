@@ -1,0 +1,26 @@
+{
+ "framework": "hf",
+ "fam": "qwen3axolotl",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "arm": "hf",
+ "tag": "hf_peft_m_mb1_t214",
+ "status": "oom",
+ "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 3.75 MiB is free. Including non-PyTorch memory, this process has 31.35 GiB memory in use. Of the allocated memory 30.74 GiB is allocated by PyTorch, and 10.12 MiB is reserved by PyTorch but unallocated.",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 8,
+ "micro_batch": 1,
+ "offload": false,
+ "prereg": "tc1/TC1-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe)",
+ "note": null,
+ "phase_seconds": {
+  "preamble": 1.989,
+  "snapshot": 0.0,
+  "load_weights": 6.409
+ },
+ "phase_in_flight": null,
+ "phase_budget_s": 630.0,
+ "phase": "load"
+}

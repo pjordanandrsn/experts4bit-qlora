@@ -1,0 +1,157 @@
+# TC1 — Qwen3-30B-A3B on one RTX 5090: e4b vs Unsloth vs HF+PEFT vs axolotl at matched work, matched init and matched adapter precision (lanes TC1 and TC1b of #835; 2026-10-01/02)
+
+Pre-registrations, read first: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md) (with its three dated amendments) and
+[`../../tc1/TC1B-PREREG.md`](../../tc1/TC1B-PREREG.md). The harness is `bench/tc1/` at e4b `079a422` (0.38.0; the boxes'
+`versions.txt`), grouped-nf4-gemm `846b512` (0.34.0). Upstream facts read from source: [`../../tc1/UPSTREAM-NOTES.md`](../../tc1/UPSTREAM-NOTES.md).
+Design review and its disposition: [`../../tc1/DESIGN-REVIEW.md`](../../tc1/DESIGN-REVIEW.md). Receipts landed privately first (the
+adertha receipt store, `receipts/experts4bit-qlora/2026-10-0{1,2}/<run id>/tc1/`) and are copied here under `receipts/<run id>/`
+(the per-arm JSONs, `box.json`, `summary.txt`, `versions.txt`, the box-side `RESULTS-tc1.md`, `outer.log`, `logs/`; the tokenised
+fixtures and the Unsloth compile cache are left in the private store).
+
+| box | token | host (Vast verified-secure) | what | cost |
+|---|---|---|---|---|
+| `tc1-5090-16` | `qwen3` | instance 53773622, AMD Threadripper PRO 3975WX, driver 580.178.04 | the matched set, two interleaved draws, HF, the profiled pair, the mb1 secondary | $1.27 |
+| `tc1-5090-14` | `qwen3native` | instance 53773863, Xeon E5-2698 v4, driver 595.71.05 | the labelled / native-best rows against the box's own e4b matched arm | $0.93 |
+| `tc1-5090-15` | `qwen3curve` (TC1b) | instance 53772765, i9-13900, driver 595.91.07 | the 200-step matched curves, the as-shipped curve, the tp2/P38 anchor pair, the t1 and r64 scaling pairs | $0.56 |
+| `tc1-5090-20` | `qwen3axolotl` (amendment 3) | instance 53812706, AMD EPYC 7663 56-Core Processor, driver 595.71.05 | the axolotl rows re-asked on their own box with a working venv, plus the HF torch-2.14 grouped_mm row at micro-batch 1 | $0.32 |
+
+Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
+race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
+lost at 12 minutes when its controller was killed on the operator's side (the launcher's guard destroyed the instance on heartbeat
+loss; about $0.14, no receipt); every one is a receipt or a guard record in the private store and none is quoted. Verdicts, validity, positions, equivalence bands and the prediction scoring are the reducer's
+([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
+[`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
+[`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## The position (register `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02`)
+
+On one RTX 5090 at the tp4 field recipe — alpaca, seq 2048, micro-batch 2 × accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear
+warm-up 5, N = 20 — with **the same 642,514,944 trainable parameters, the same per-slot LoRA A init (`matched:3407`, name-free
+sha `f7832488926eda91` in every matched arm, 12,480 / 12,480 slots), fp32 adapters in both frameworks, the same tokens
+(sha `bfc742f67e37`)**, and Unsloth 2026.9.14 on the route its installer names for Blackwell (torch 2.12.1+cu130, the `grouped_mm`
+backend engaged on every step: 384 `torch._grouped_mm` calls per step, 0 loop calls):
+
+| | e4b `fused_attn4_m` | Unsloth `ckpt_unsloth_m` | reading |
+|---|---|---|---|
+| s/step, median of steps 11..20, two draws | 5.692 / 5.683 (**5.688**) | 8.160 / 8.183 (**8.171**) | **Unsloth/e4b 1.437 [1.434, 1.440]** over the four cross-draw ratios; both STABLE (0.2 % / 0.3 %) |
+| tokens/s | 265.2 | 176.4 | |
+| peak VRAM | 27.83 GB | **24.27 GB** | Unsloth lower by 3.57 GB |
+| energy per step (dmon) | 921.3 J | **660.7 J** | Unsloth ×0.72 |
+| held-out loss at N = 20 (8 rows) | 1.9505 → 0.8516 / 0.8487 | 1.9583 → 0.8482 / 0.8476 | Δ −0.0034 ± 0.0028 SE: **EQUIVALENT** (band 0.0123 = 3 × the in-draw fused-vs-reference Δ; draw-noise floor 0.0030); step-0 Δ 0.0078 SAME-BYTES-CLASS |
+| frozen base | C1 bit-exact, the real-storage flip control detects | C1 bit-exact, control detects | attention projections SAME-BYTES (nf4/64 + double-quant); expert stacks N-A (e4b nf4/64, Unsloth nf4/64 + dq: its loader exposes no double-quant knob) |
+
+e4b's fused path against its own per-expert reference on the same box: Δ final train loss 0.00041, median step |Δ| 0.00141 — PASS;
+×10.39 faster per step than the reference (5.692 vs 59.171 s) at ×1.03 its peak. The secondary pair (micro-batch 1 × accum 8, run
+because HF OOMed) reads 1.725 the same way (15.021 vs 8.706 s, single draws).
+
+**The standing position is refuted and superseded.** `e4b.train.h2h.unsloth.qwen3.5090.2026-09-19` quoted 4.490 (6.47 vs 29.05 s/step)
+at this recipe. That Unsloth arm ran on the field image's torch 2.8.0+cu128, where `torch._grouped_mm` is sm_90-only and Unsloth's
+loader silently selects its `native_torch` per-expert loop; the comparison was e4b's fused kernel against Unsloth's fallback. TC1's
+registered prediction P1 put the matched ratio in [2.0, 5.0] with "below 1.5 refutes the standing position": it reads **1.437,
+FALSIFIED**, and this bundle's row supersedes the 2026-09-19 row (its `.quality-n20`, `.e4b-internal-parity` and `.secondary-mb1`
+rows likewise). The loop is still what a torch-2.8 user gets: on the native box the same Unsloth install on torch 2.8 (`ckpt_unsloth_t28`,
+backend `native_torch`, 96 loop calls per step) takes 61.3 s/step, 6.565 × e4b's matched arm on that host.
+
+## What the ratio measures, and what it does not
+
+- **Both steps are host-bound on a 5090, and e4b's is the less host-bound of the two.** The profiled matched arms on the same box:
+  e4b device-busy 0.480, 141 k device events and 753 k CPU-side ops per step; Unsloth device-busy 0.234, 612 k device events and
+  7.43 M CPU-side ops per step (P8, which predicted ≥ 0.5 on the grouped_mm arm, is FALSIFIED). The fused path records 4.3 × fewer
+  device events and 9.9 × fewer CPU-side ops per step than the dequant-then-dense-grouped-GEMM path, and that dispatch cost — not the
+  GEMM — is where the gap is on this card.
+- **Absolute s/step does not travel between hosts; the ratio does.** The same e4b matched arm takes 3.16 s/step on the i9-13900 host,
+  5.69 on the Threadripper host and 9.34 on the Xeon E5-2698 v4 host (same card class, same code, 0 recompiles); the Unsloth matched
+  arm tracks it (4.50 / 8.17). TC1b's P3 ("the 200-step and 20-step medians agree within 10 %") is FALSIFIED mechanically because the
+  reducer compares across those two hosts (−44 %); within one draw the 11..20 and 11..200 windows agree within 3.5 %. Nothing on this
+  page divides numbers from different boxes; every ratio is within one box.
+- **e4b on the cu130 torch is 14 % faster per step** (`fused_attn4_m_t212`: e4b + grouped-nf4-gemm installed into the comparator's
+  torch 2.12.1+cu130 venv, 8.069 vs 9.336 s on the native box; VALID, EQUIVALENT-class quality). The position above is e4b on the
+  field image's torch 2.8; a position with both frameworks on cu130 is not quoted here (one draw, one host).
+- **Unsloth's footprint rows are in its favour** (peak VRAM −3.57 GB, energy ×0.72 per step at the matched configuration). The
+  matched configuration carries fp32 expert adapters on e4b's side by design; e4b as shipped (bf16 expert adapters) peaks at 24.58 GB
+  and 843 J/step on the native box — the same footprint as Unsloth's — so the gap is the matched set's precision choice, not the kernel.
+  Peak VRAM and J/step are quoted beside the ratio wherever it is quoted.
+
+## The native and labelled rows (box `tc1-5090-14`, each against the box's own e4b matched arm, single draws)
+
+| row | s/step | vs e4b matched (9.336) | held-out at N (e4b matched 0.8481) | note |
+|---|---|---|---|---|
+| Unsloth native-best (grouped_mm, speed tilt, native init, fp32) | 15.245 | 1.633 | 0.8467 | vs e4b as shipped (6.267): **2.433** — the "both at their own defaults" row, never the position; P7 (≥ 2 vs e4b matched) FALSIFIED |
+| Unsloth torch-2.8 (`native_torch` loop, tp4's venv) | 61.295 | 6.565 | 0.8471 | 23.9 tok/s, 3885 J/step; P1b (within 15 % of tp4's 29.05) FALSIFIED on this slower host |
+| Unsloth `unsloth_triton` backend | 14.754 | VOID | — | requested backend never engaged (`moe_backend_selected grouped_mm`, 0 triton calls): a row, not a position |
+| e4b as shipped (bf16 expert adapters, N(0, 1/r) init) | 6.267 | **0.671** | **0.8108** | 1.49 × faster than the matched e4b arm and 0.037 nats LOWER held-out at N = 20; P4 (1.05–1.3 × and ≥ 0.01 lower) FALSIFIED on the speed half |
+| e4b `dgrad=False` (`enable_fast_train`'s default) | 9.248 | 0.991 | 0.8512 | the dgrad kernel is not where the step goes at this shape |
+| e4b on torch 2.12.1+cu130 | 8.069 | 0.864 | 0.8506 | see above |
+| axolotl native-best (scattermoe) | — | — | — | INSTALL_FAILED here (the harness's uv index strategy, amendment 3); on the re-ask box REFUSED at load: the KernelsPlugin fetches `kernels-community/rotary` and the harness runs arms with the Hub offline — a harness limit, not a reading |
+| HF on torch 2.14 + `grouped_mm` at mb1 | — | — | — | NOT_RUN here (its gate reads the matched box's OOM); on the re-ask box OOM at load (31.35 GB in use): bf16 expert stacks do not fit the 32 GB card under any experts implementation |
+
+HF + PEFT (transformers 5.18.0, bf16 expert stacks, `target_parameters`) OOMs on the 32 GB card at micro-batch 2 and at micro-batch 1
+(31.34 GB in use at a 20 MiB allocation), and so does the torch-2.14 `experts_implementation="grouped_mm"` variant at micro-batch 1 on the
+re-ask box: P5 HELD. No HF position exists on this card at this recipe.
+
+**axolotl 0.20.0 on Qwen3-30B-A3B at its pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0) does not train** (box `tc1-5090-20`,
+with the venv installing after amendment 3): both matched draws loaded (`quantize_moe_experts` packed all 96 stacks, PEFT's
+`target_parameters` on the expert stacks, the attention projections by module) and died in the first forward inside transformers'
+`Qwen3MoeTopKRouter` — `F.linear(hidden_states, self.weight)`: bf16 activations against an fp32 router weight — the same exception on
+the 24 GB and H100 boxes (five attempts, three cards). The router was not a target; the HF arm's own loader (transformers 5.18.0, the
+same model, the same quantizer) builds a bf16 router and trains; the router code is identical in 5.17.0 and 5.18.0, so the fp32 weight
+is a property of the model axolotl's `ModelLoader` hands over — whether its post-quantisation conversion or 5.17.0's bnb path leaves it,
+this bundle does not establish. On those boxes the harness wrote no receipt for the crash (it died after load, outside the loader's
+own handler — TC3 amendment 4 makes such a crash a row), so the mechanical verdict is HARNESS_ERROR and P6 reads UNTESTED; by the
+logs the row is UNSUPPORTED, and no axolotl position is quoted on this family. axolotl trains Granite's 4-bit path in lane TC2 (its
+own bundle), so this is the family, not the framework.
+
+## TC1b — the long curve re-asked with matched init and precision (box `tc1-5090-15`)
+
+200 steps, 16 held-out rows every 40 steps, paired by row:
+
+| eval step | e4b matched | Unsloth matched | e4b as shipped | Δ Unsloth − e4b | Δ shipped − matched |
+|---|---|---|---|---|---|
+| 0 | 1.9607 | 1.9604 | 1.9607 | −0.0004 | 0 |
+| 40 | 0.7880 | 0.7885 | 0.7894 | +0.0005 | +0.0014 |
+| 80 | 0.7709 | 0.7724 | 0.7741 | +0.0015 | +0.0032 |
+| 120 | 0.7665 | 0.7669 | 0.7674 | +0.0004 | +0.0009 |
+| 160 | 0.7626 | 0.7646 | 0.7671 | +0.0020 | +0.0045 |
+| 200 | 0.7687 | 0.7688 | 0.7945 | +0.0001 | **+0.0258** |
+
+- **EQUIVALENT at every eval** (largest paired |Δ| 0.0020, at step 160; TC1b P1 HELD): with init, precision, tokens and schedule matched,
+  the two 4-bit MoE training paths produce the same curve to 200 steps. s/step over steps 11..200: 3.162 vs 4.505 (1.425 within this
+  box, consistent with the position's 1.437).
+- **The as-shipped e4b curve ends 0.0258 nats above the matched one at step 200** while being faster per step (2.527 s, 1.25 ×) — the
+  direction P38 reported against e4b, now reproduced on e4b's own side with the comparator out of the picture: the loader's defaults
+  (bf16 expert adapters, N(0, 1/r) init) are the cause, not the kernel. It is NOT P38's shape (TC1b P2 FALSIFIED): the shipped curve
+  is above the matched one at step 40 too (+0.0014), with no early lead; on the N = 20 instrument (8 rows) it reads 0.037 LOWER.
+  The two instruments disagree at step 20–40 and agree from 80 on; an open item for `load_moe_4bit_streaming`'s adapter defaults.
+- **The tp2/P38 anchor pair does not reproduce** (TC1b P4 FALSIFIED): at that fixture (clinical text, seq 512, 1 × 1, r 8, N 60) the ratio
+  is 2.428 with Unsloth on cu130 grouped_mm (1.095 vs 0.451 s/step) and 5.147 with Unsloth on torch 2.8 (2.322 s/step) against
+  tp2's 1.457 and P38's 1.413 (e4b 0.35.0 / grouped-nf4-gemm 0.30.0 vs Unsloth 2026.9.2). Both frameworks moved between those
+  cuts and these; the old anchors stand as dated measurements on their cuts and are not repeated as current.
+- Scaling points, never positions: at seq 2048 × micro-batch 1 × accum 1 the matched ratio is 1.918 (1.073 vs 0.559 s); at r 64 /
+  alpha 64 both frameworks OOM at step 1 on the 32 GB card (31.9 / 32.4 GB).
+
+## Predictions, scored mechanically
+
+TC1 (`RESULTS-tc1-combined.md`): P1 FALSIFIED (1.437, below 1.5), P1b FALSIFIED (host), P2 HELD (draws), P3 HELD (equivalence), P4
+FALSIFIED (shipped 1.49 ×, not 1.05–1.3 ×; the quality half held), P5 HELD (HF OOM, both implementations), P6 **UNTESTED** (on the matched and native boxes the
+INSTALL_FAILED was this harness's own install line; on the axolotl box the framework's crash left no receipt — UNSUPPORTED by the logs,
+not a mechanical reading), P7 FALSIFIED (1.633 < 2 within its box), P8 FALSIFIED (device-busy 0.234), P9 HELD (parity),
+P10 UNTESTED (the expert slots are different regimes by construction). TC1b: P1 HELD, P2 FALSIFIED, P3 FALSIFIED (cross-host),
+P4 FALSIFIED.
+
+## Harness defects found by the boxes (fixed in amendment 3, `../../tc1/TC1-PREREG.md`)
+
+1. The axolotl venv never installed: uv's first-index strategy took `packaging` from PyTorch's cu130 index, where axolotl's
+   `packaging==26.0` does not exist. Reproduced off-box and fixed with `--index-strategy unsafe-best-match` (dry-resolved: axolotl 0.20.0,
+   torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0). The axolotl rows are re-asked on their own box (`qwen3axolotl`); this bundle
+   quotes no axolotl row.
+2. The reducer read the profiled arms' kernel-table sidecars as HARNESS_ERROR rows (cosmetic; skipped now).
+3. The native box's HF torch-2.14 row's gate could not be read on that box (re-asked with the axolotl rows: OOM).
+4. Found by the re-ask box and fixed after it (TC3 amendment 4): an exception after load left no receipt; the scattermoe row needs the
+   KernelsPlugin's kernels fetched before the Hub goes offline (open).
+
+## Not claimed here
+
+No position on any other family (lane TC2) or under a memory budget (lane TC3) — each has its own registration and bundle; no axolotl
+position on this family (it does not train it at its pins, above). No cross-box ratio. **The H100 NVL reading is the opposite sign** — Unsloth/e4b 0.621, Unsloth faster — see
+[`../tc1c/README.md`](../tc1c/README.md): the position above is a 5090 position, where both paths are launch-bound and Unsloth's grouped
+GEMM is not one launch per call.

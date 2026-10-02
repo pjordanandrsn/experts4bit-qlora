@@ -1,0 +1,10 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files:   4%|▍         | 1/23 [00:00<00:05,  3.71it/s]Fetching 23 files:  13%|█▎        | 3/23 [00:00<00:02,  9.15it/s]Fetching 23 files:  13%|█▎        | 3/23 [00:20<00:02,  9.15it/s]Fetching 23 files:  17%|█▋        | 4/23 [03:05<20:17, 64.07s/it]Fetching 23 files:  26%|██▌       | 6/23 [03:10<09:28, 33.46s/it]Fetching 23 files:  30%|███       | 7/23 [03:15<06:55, 25.97s/it]Fetching 23 files:  35%|███▍      | 8/23 [05:59<15:55, 63.73s/it]Fetching 23 files:  39%|███▉      | 9/23 [06:02<10:52, 46.58s/it]Fetching 23 files:  43%|████▎     | 10/23 [06:03<07:18, 33.74s/it]Fetching 23 files:  48%|████▊     | 11/23 [06:09<05:07, 25.64s/it]Fetching 23 files:  52%|█████▏    | 12/23 [11:42<21:11, 115.57s/it]Fetching 23 files:  57%|█████▋    | 13/23 [11:52<14:04, 84.49s/it] Fetching 23 files:  61%|██████    | 14/23 [11:57<09:07, 60.81s/it]Fetching 23 files:  65%|██████▌   | 15/23 [12:25<06:49, 51.18s/it]Fetching 23 files:  70%|██████▉   | 16/23 [14:35<08:42, 74.67s/it]Fetching 23 files:  74%|███████▍  | 17/23 [14:40<05:23, 53.95s/it]Fetching 23 files:  78%|███████▊  | 18/23 [14:43<03:12, 38.51s/it]Fetching 23 files:  83%|████████▎ | 19/23 [14:43<01:48, 27.08s/it]Fetching 23 files:  87%|████████▋ | 20/23 [14:44<00:57, 19.14s/it]Fetching 23 files:  91%|█████████▏| 21/23 [19:23<03:14, 97.19s/it]Fetching 23 files:  96%|█████████▌| 22/23 [19:27<01:09, 69.11s/it]Fetching 23 files: 100%|██████████| 23/23 [20:08<00:00, 60.75s/it]Fetching 23 files: 100%|██████████| 23/23 [20:08<00:00, 52.55s/it]
+staged in 20.2 min at /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+STAGED ad44e777bcd18fa416d9da3bd8f70d33ebb85d39

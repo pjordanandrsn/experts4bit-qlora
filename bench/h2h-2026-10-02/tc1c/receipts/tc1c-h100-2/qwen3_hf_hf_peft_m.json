@@ -1,0 +1,14 @@
+{
+ "framework": "hf",
+ "fam": "qwen3",
+ "arm": "hf",
+ "tag": "hf_peft_m",
+ "status": "alarm",
+ "reason": "arm alarm 1800 s (SIGALRM; the process could not write its own stub)",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "written_by": "tc1_run.sh",
+ "prereg": "tc1/TC1-PREREG.md"
+}

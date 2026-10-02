@@ -1,0 +1,15 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-16",
+ "instance_id": "53773622",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "580.178.04",
+ "cpu": "AMD Ryzen Threadripper PRO 3975WX 32-Cores",
+ "nproc": 64,
+ "mem_total_kb": "263745776",
+ "cgroup_memory_max": "183333027840",
+ "disk_root": "overlay         320G  1.7M  320G   1% /",
+ "hostname": "ad355743cef9",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md"
+}

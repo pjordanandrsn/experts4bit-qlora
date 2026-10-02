@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Lane TC1 read (#835): the field-recipe position against Unsloth at matched work is 1.437, not 4.490 (bench, docs and register only)
+
+- `bench/h2h-2026-10-02/tc1/`: the curated receipts of the three TC1 / TC1b boxes (2026-10-01/02, rented RTX 5090s) and the read.
+  With the work matched (the same 642,514,944 parameters, one per-slot LoRA init and fp32 adapters in both frameworks) and Unsloth
+  2026.9.14 on torch 2.12.1+cu130 with its `grouped_mm` backend engaged on every step, Qwen3-30B-A3B at the notebooks' recipe
+  reads **Unsloth/e4b 1.437 [1.434, 1.440]** (5.688 vs 8.171 s/step, two draws each), held-out EQUIVALENT at N = 20 and at every
+  eval over 200 steps, e4b's parity control PASSING; Unsloth's peak VRAM is 3.57 GB lower and its energy ×0.72 at that configuration.
+- `docs/claims.json`: `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02` and thirteen rows beside it (quality, parity, the mb1 secondary,
+  the torch-2.8 loop row 6.565 ×, native-best 2.433, shipped-vs-matched 0.671, e4b on cu130 0.864, HF OOM, host variance, the 200-step
+  curve, the shipped plateau +0.0258, the tp2/P38 anchor pair 2.428 / 5.147, the scaling points); the 2026-09-19 position (4.490) and
+  its `.quality-n20`, `.e4b-internal-parity` and `.secondary-mb1` rows are **superseded** — that Unsloth arm ran on torch 2.8, where
+  `torch._grouped_mm` is sm_90-only and Unsloth's loader silently takes its per-expert loop.
+- `bench/h2h-2026-10-02/tc1c/`: the same matched set on one rented H100 NVL (lane TC1c): **Unsloth/e4b 0.621 [0.615, 0.628]** — Unsloth faster
+  by 1.61 × at lower VRAM and energy with the same loss; `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02` with its `.quality-n20`,
+  `.e4b-internal-parity` and `.dispatch-profile` rows (e4b issues the same ~139 k device events per step on both cards, Unsloth 612 k on
+  the 5090 and 82 k on the H100). The 5090 position is card-specific; no "e4b faster" position is quoted for the H100 class.
+- `docs/STATUS.md`, `docs/solutions/qlora-fused-moe-experts.md`, `docs/capabilities.json`: the position paragraph and the claim list
+  follow. No code, gate, default or licence moves. axolotl 0.20.0 at its pins does not train this family (its loader hands over an
+  fp32 router against bf16 activations; five attempts on three cards, `.axolotl-unsupported`); no axolotl position is quoted.
+
 ### Lane SC1 A3 erratum (#846): the e4b package is NOT identical between box A's and boxes B/C's commits (#878 landed between) -- the arms' arithmetic is, because SC1 pins the route knob (text only)
 
 - `bench/sc1/SC1-PREREG.md`: A3 claimed `experts4bit_qlora/` was byte-identical between `0a2a0c8` and A3's merge. #878 (the NF4

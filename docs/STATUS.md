@@ -119,31 +119,49 @@ README. The same reading, per family and per path:
 
 Each cell is one of `supported` (completed under the registered protocol with a PASS/OK receipt), `refused` (with the reason), `void` (ran, unreadable), `harness_error`, `not_tested`, `experimental`, `n/a` — per path, never a flat flag; the machine-readable form, with the claim id behind every `supported` / `void` / `refused` cell, is `training_support` in [`capabilities.json`](capabilities.json), validated by `scripts/check_capabilities.py`, and `model_families` is exactly the families whose `fast_train` is `supported`.
 
-**The field-recipe position, on the 2026-09-19 kernel cut** (lane tp4
-re-run, `bench/tp4/RESULTS-tp4-p46cut.md`; ordered by P46's decision rule
-and extended to the second box by its amendment 2; register
-`e4b.train.h2h.unsloth.qwen3.5090.2026-09-19` with its `.quality-n20`,
-`.e4b-internal-parity`, `.secondary-mb1`, per-arm and `.coverage` rows).
-One rule changed in the kernel package: the grouped-LoRA delta's `auto`
-path now pads unless the padded block would not fit, where it used to send
-any call past a 4× padding-waste ratio to a per-expert Python loop
-(grouped-nf4-gemm 0.32.1). On **Qwen3-30B-A3B at the Unsloth notebooks'
-own recipe** — alpaca, seq 2048, micro-batch 2 × accum 4, r 16, AdamW-8bit,
-one RTX 5090, both frameworks training the same 642,514,944 parameters —
-**e4b takes 6.4707 s/step against Unsloth's 29.0547: a ratio of 4.490**,
-at the same peak VRAM and a held-out gap of 0.0283 nats (COMPARABLE); on the
-previous cut this arm did not finish at all. e4b's fused path passes its own
-parity control on the same box at **0.00140 nats** from its dense reference,
-and on every family measured — the registered condition that would otherwise
-have stopped the release. The gain is
-family-dependent and smaller elsewhere, as pre-registered: Granite 2.853 →
-2.366 (×1.21) and OLMoE 2.739 → 1.395 (×1.96), both with parity passing.
-**Nothing is quoted against Unsloth on Granite or Qwen3.6** (its arm
+**The field-recipe position, at matched work with the comparator's grouped
+path engaged** (lane TC1, 2026-10-02, three rented RTX 5090 hosts,
+[`bench/h2h-2026-10-02/tc1/`](../bench/h2h-2026-10-02/tc1/README.md); register
+`e4b.train.h2h.unsloth.qwen3.5090.2026-10-02` with its `.quality-n20`,
+`.e4b-internal-parity`, `.secondary-mb1`, `.curve-n200` and labelled rows). On
+**Qwen3-30B-A3B at the Unsloth notebooks' own recipe** — alpaca, seq 2048,
+micro-batch 2 × accum 4, r 16, AdamW-8bit — with the work matched (the same
+642,514,944 parameters, one per-slot LoRA init and fp32 adapters in both
+frameworks, the same tokens) and Unsloth 2026.9.14 on torch 2.12.1+cu130
+with its `grouped_mm` backend engaged on every step, **e4b takes 5.688 s/step
+against Unsloth's 8.171: a ratio of 1.437 [1.434, 1.440]** over two draws
+each, at 265 vs 176 tokens/s. Quoted beside it, in Unsloth's favour: peak VRAM
+3.57 GB lower and energy per step ×0.72 at that configuration (the fp32
+adapters are the matched set's choice; e4b as shipped matches Unsloth's
+footprint). Held-out loss is EQUIVALENT at N = 20 and the 200-step curves are
+EQUIVALENT at every eval (`.curve-n200`, largest paired |Δ| 0.0020); e4b's
+parity control PASSES on the same box at **0.00041 nats**. **This supersedes
+the 2026-09-19 position (4.490)**: that Unsloth arm ran on torch 2.8, where
+`torch._grouped_mm` is sm_90-only and Unsloth's loader silently takes its
+per-expert loop — the same loop still reads 6.565 × e4b on a torch-2.8 install
+(`.loop-fallback-t28`). Both steps are host-launch-bound on this card
+(device-busy 0.48 e4b vs 0.23 Unsloth; the fused path records 4.3 × fewer
+device events and 9.9 × fewer CPU-side ops per step), and absolute s/step does not travel between hosts (the same e4b
+arm: 3.2 / 5.7 / 9.3 s on three hosts, `.host-variance`) while the within-box
+ratio does. **On an H100 NVL the sign reverses** (lane TC1c, the same
+matched set, one rented box, [`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md);
+register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`): Unsloth takes 2.546
+s/step against e4b's 4.097 — **Unsloth/e4b 0.621 [0.615, 0.628]**, Unsloth
+faster by 1.61 × at 3.59 GB less peak VRAM and ×0.63 the energy, with the
+same loss (EQUIVALENT). The profiles say why (`.dispatch-profile`): e4b
+issues ~139 k device events per step on both cards, Unsloth 612 k on the
+5090 and 82 k on the H100 — the grouped GEMM its path routes through is one
+launch per call on Hopper and not on Blackwell. The 1.437 is therefore a
+5090 position; by TC1c's registered decision rule no "e4b faster" position
+is quoted for the H100 class. The clinical-fixture positions (1.413 p38, 1.457 tp2/P40) are
+dated measurements on earlier cuts and do not reproduce on the current ones
+(`.anchor-p38-fixture`: 2.428 with Unsloth's grouped path, 5.147 on its loop).
+tp4's other-family rows stand as measured on the 2026-09-19 cut — Granite
+2.853 → 2.366 (×1.21) and OLMoE 2.739 → 1.395 (×1.96), both with parity
+passing; **nothing is quoted against Unsloth on Granite or Qwen3.6** (its arm
 trains the attention only there, VOID by tp4's regime rule) **nor on OLMoE**
-(its arm died before its first step; `e4b.train.h2h.unsloth.coverage.5090.2026-09-19`). The three Qwen3-30B-A3B positions against Unsloth on
-this page — 1.413 (p38) and 1.457 (tp2/P40) at the clinical fixture,
-4.490 here at the notebooks' recipe — are two workloads on different
-cuts and boxes, and none supersedes another.
+(`e4b.train.h2h.unsloth.coverage.5090.2026-09-19`) — and lane TC2 re-asks
+them on the current cuts.
 
 
 **Against Unsloth, end-to-end, on one identical training problem** (lane

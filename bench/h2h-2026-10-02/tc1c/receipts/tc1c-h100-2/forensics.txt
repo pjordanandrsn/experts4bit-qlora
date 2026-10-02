@@ -1,0 +1,5 @@
+NVIDIA H100 NVL, 95830 MiB, 595.71.05, GPU-e2a9293b-4960-bcb1-cd47-fdd8e41159cd, 370.00 W, 1785 MHz
+CPU(s):                               224
+Model name:                           AMD EPYC 9534 64-Core Processor
+MemTotal:       1584958328 kB
+overlay         320G   77M  320G   1% /

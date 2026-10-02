@@ -1,0 +1,218 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: qwen3; e4b 079a4220b4b334903b0e77725eb94a0f58848018 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-16 instance 53773622 deadline 1790915628; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=32 (physical cores) box_class=RTX 5090
+[2026-10-02T00:09:18Z] tc1/boxA: driver 580.178.04: cu130 venvs (venv-unsloth, venv-axolotl) will be built
+DRIVER 580.178.04 cu130_ok=1
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.178.04, GPU-c655fe82-312f-65e6-b949-3e225f1ec587, 575.00 W, 3090 MHz
+CPU(s):                                  64
+Model name:                              AMD Ryzen Threadripper PRO 3975WX 32-Cores
+MemTotal:       263745776 kB
+cgroup memory.max 183333027840
+overlay         320G  1.7M  320G   1% /
+[2026-10-02T00:09:18Z] tc1/boxA: venv-e4b (system torch): e4b @079a4220b4b334903b0e77725eb94a0f58848018 + gnf4 @846b512b905468c08f5748943d08769b572affa2 + transformers==5.18.0 bitsandbytes==0.50.2 peft==0.21.2
+pip(e4b) rc=0
+tc1 tripwire OK (e4b): 0.38.0 @ 079a4220b4b3 gnf4 0.34.0 @ 846b512b9054 torch 2.8.0+cu128 triton 3.4.0 transformers 5.18.0 bnb 0.50.2 peft 0.21.2
+[2026-10-02T00:09:55Z] tc1/boxA: venv-unsloth-t28: unsloth[cu128-torch280]==2026.9.14 unsloth_zoo==2026.9.9 (the image's torch 2.8.0+cu128)
+pip(unsloth-t28) rc=0
+[2026-10-02T00:14:26Z] tc1/boxA: venv-unsloth: unsloth[cu130-torch2121]==2026.9.14 unsloth_zoo==2026.9.9 (torch 2.12.1+cu130)
+pip(unsloth) rc=0
+[2026-10-02T00:16:49Z] tc1/boxA: tripwire(unsloth-t28) failed on ScalingType -> removing torchao (P38 amendment 2)
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+tc1 tripwire OK (unsloth-t28): 2026.9.14 zoo 2026.9.9 torch 2.8.0+cu128 triton 3.4.0 transformers 5.5.0 bnb 0.50.2 peft 0.21.2 torchao None moe_backend native_torch separated_lora True FastModel True
+tc1 tripwire OK (unsloth): 2026.9.14 zoo 2026.9.9 torch 2.12.1+cu130 triton 3.7.1 transformers 5.5.0 bnb 0.50.2 peft 0.21.2 torchao 0.18.0+cu130 moe_backend grouped_mm separated_lora True FastModel True
+[2026-10-02T00:17:15Z] tc1/boxA: venv-unsloth + e4b @079a4220b4b334903b0e77725eb94a0f58848018 + gnf4 @846b512b905468c08f5748943d08769b572affa2 (the t212 row)
+pip(e4b-t212) rc=0
+tc1 tripwire OK (e4b-t212): 0.38.0 gnf4 0.34.0 torch 2.12.1+cu130
+[2026-10-02T00:17:41Z] tc1/boxA: venv-axolotl: uv venv --python 3.12 + axolotl==0.20.0 --extra-index-url https://download.pytorch.org/whl/cu130 (alarm 2700 s)
+pip(axolotl) rc=1
+Using Python 3.12.14 environment at: venv-axolotl
+error: No solution found when resolving dependencies
+  cause: Because there is no version of packaging==26.0 and axolotl>=0.20.0 depends on packaging==26.0, we can conclude that axolotl>=0.20.0 cannot be used.
+         And because you require axolotl==0.20.0, we can conclude that your requirements are unsatisfiable.
+
+hint: `packaging` was found on https://download.pytorch.org/whl/cu130, but not at the requested version (packaging==26.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+PIP FAIL (axolotl) -- its rows = install_failed
+[2026-10-02T00:17:46Z] tc1/boxA: dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)
+DS alpaca n_train=1200 n_eval=48 seed=3407 sha256=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb -> /root/tc1/data/ds_alpaca.json
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+[2026-10-02T00:17:47Z] tc1/boxA: ===== family qwen3 (Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39; matched seed 3407; alarms e4b 3600 unsloth 3600 hf 1800 axolotl 2700 reference 5400 prof 2400)
+[2026-10-02T00:17:47Z] tc1/boxA: fetch qwen3 (Qwen/Qwen3-30B-A3B, unpinned; pin ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+staged in 10.1 min at /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+PIN OK qwen3 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+overlay         320G   72G  249G  23% /
+[2026-10-02T00:27:56Z] tc1/boxA: tokenise qwen3 (alpaca, seq 2048) -> tokens_qwen3.json
+TOKENS fam=qwen3 template=alpaca n_train=1200 n_eval=8 train_tokens=235852 mean=196.5 pad_id=151643 sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac
+TOKENS qwen3 alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+[2026-10-02T00:28:02Z] tc1/boxA: arm qwen3/e4b/fused_attn4_m (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 70.6, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainable_pa
+    PROLOGUE {"phase_seconds": {"preamble": 4.182, "load_weights": 63.197, "verify": 0.001, "attn4": 5.691, "lora": 0.023, "enable": 0.009, "tokenizer": 0.435, "census": 2.583, "frozen_probe": 0.053, "trainable_sha": 1.641, "counters": 0.0, "c1_before": 56.051, "eval0": 14.443, "optimizer": 0.161}, "pha
+    CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_ba
+2 MiB
+[2026-10-02T00:33:07Z] tc1/boxA: arm qwen3/unsloth/ckpt_unsloth_m (arm=unsloth recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=642514944 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --adapter-dtype fp32 --lora-init matched:3407)
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+    PROLOGUE {"phase_seconds": {"preamble": 1.934, "snapshot": 0.0, "load_weights": 23.638, "census": 2.449, "frozen_probe": 0.08, "trainable_sha": 1.661, "counters": 0.028, "c1_before": 49.763, "eval0": 15.167, "optimizer": 0.32}, "phase_budget_s": 1260.0, "prologue_s": 104.712, "prologue_unattributed_
+    CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85
+2 MiB
+[2026-10-02T00:38:27Z] tc1/boxA: arm qwen3/e4b/reference_attn4_m (arm=reference recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=5400 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3", "framework": "e4b", "arm": "reference", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 27.0, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 0, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainable
+    PROLOGUE {"phase_seconds": {"preamble": 3.682, "load_weights": 19.451, "verify": 0.001, "attn4": 5.975, "lora": 0.027, "enable": 0.003, "tokenizer": 0.437, "census": 2.561, "frozen_probe": 0.054, "trainable_sha": 1.626, "counters": 0.0, "c1_before": 53.548, "eval0": 21.471, "optimizer": 0.152}, "pha
+    CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "
+2 MiB
+[2026-10-02T01:01:11Z] tc1/boxA: arm qwen3/e4b/fused_attn4_m_d2 (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 26.9, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainable_pa
+    PROLOGUE {"phase_seconds": {"preamble": 3.688, "load_weights": 19.758, "verify": 0.001, "attn4": 5.544, "lora": 0.024, "enable": 0.004, "tokenizer": 0.432, "census": 2.563, "frozen_probe": 0.053, "trainable_sha": 2.944, "counters": 0.0, "c1_before": 55.335, "eval0": 2.735, "optimizer": 0.151}, "phas
+    CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_d2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro
+2 MiB
+[2026-10-02T01:05:17Z] tc1/boxA: arm qwen3/unsloth/ckpt_unsloth_m_d2 (arm=unsloth recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=642514944 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --adapter-dtype fp32 --lora-init matched:3407)
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+    PROLOGUE {"phase_seconds": {"preamble": 1.917, "snapshot": 0.0, "load_weights": 23.396, "census": 2.426, "frozen_probe": 0.071, "trainable_sha": 1.629, "counters": 0.027, "c1_before": 49.399, "eval0": 9.06, "optimizer": 0.279}, "phase_budget_s": 1260.0, "prologue_s": 96.986, "prologue_unattributed_s
+    CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85
+2 MiB
+[2026-10-02T01:10:19Z] tc1/boxA: arm qwen3/hf/hf_peft_m (arm=hf recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=1800 expect_trainable=642514944 --adapter-dtype fp32 --lora-init matched:3407)
+    CELL OOM {"framework": "hf", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "hf", "tag": "hf_peft_m", "status": "oom", "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 31.36 GiB 
+2 MiB
+STUB INSTALL_FAILED qwen3/axolotl/ckpt_axolotl_m: axolotl venv install failed rc=1 (logs/pip_axolotl.log):          And because you require axolotl==0.20.0, we can conclude that your requirements are unsatisfia
+[2026-10-02T01:10:36Z] tc1/boxA: arm qwen3/e4b/fused_attn4_m_prof (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2400 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407 --log-every 1 --microbatch-timing 1 --profile-steps 3 --profile-warm 3)
+    LOAD OK {"fam": "qwen3", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 27.2, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainable_pa
+    PROLOGUE {"phase_seconds": {"preamble": 3.715, "load_weights": 19.795, "verify": 0.001, "attn4": 5.847, "lora": 0.024, "enable": 0.004, "tokenizer": 0.434, "census": 2.56, "frozen_probe": 0.052, "trainable_sha": 1.638, "counters": 0.0, "c1_before": 54.896, "eval0": 2.711, "optimizer": 0.153}, "phase
+    CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_prof", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "mic
+2 MiB
+[2026-10-02T01:17:49Z] tc1/boxA: arm qwen3/unsloth/ckpt_unsloth_prof (arm=unsloth recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2400 expect_trainable=642514944 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --adapter-dtype fp32 --lora-init matched:3407 --log-every 1 --microbatch-timing 1 --profile-steps 3 --profile-warm 3)
+tc1_run.sh: line 338: 37104 Alarm clock             env $ARM_ENV HF_HUB_OFFLINE=1 UNSLOTH_ENABLE_LOGGING=1 OMP_NUM_THREADS=$PHYS TC1_BOX_CLASS="$BOX_CLASS" TC1_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tc1_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu --tokens $TOK --tokens-sha $TOK_SHA --eval-every $ee --eval-n $en --unsloth-loader FastLanguageModel $EXPARG --prereg $PREREG --out $W --adapter-dir $W/adapters "$@" > logs/run_${FAM}_${FW}_$TAG.log 2>&1
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+    PROLOGUE {"phase_seconds": {"preamble": 1.914, "snapshot": 0.0, "load_weights": 23.409, "census": 2.434, "frozen_probe": 0.07, "trainable_sha": 1.714, "counters": 0.03, "c1_before": 50.328, "eval0": 9.083, "optimizer": 0.279}, "phase_budget_s": 840.0, "prologue_s": 97.953, "prologue_unattributed_s":
+    CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85
+2 MiB
+SECONDARY qwen3: a primary matched arm OOMed (e4b=ok unsloth=ok hf=oom) -> mb1 pair
+[2026-10-02T01:58:02Z] tc1/boxA: arm qwen3/e4b/fused_attn4_m_mb1 (arm=fused recipe=mb1 steps=20 seq=2048 mb=1 accum=8 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 29.1, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainable_pa
+    PROLOGUE {"phase_seconds": {"preamble": 3.694, "load_weights": 21.322, "verify": 0.001, "attn4": 6.094, "lora": 0.024, "enable": 0.005, "tokenizer": 0.445, "census": 2.661, "frozen_probe": 0.054, "trainable_sha": 3.316, "counters": 0.0, "c1_before": 54.838, "eval0": 2.746, "optimizer": 0.152}, "phas
+    CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_mb1", "status": "ok", "steps": 20, "seq": 2048, "accum": 8, "micr
+2 MiB
+[2026-10-02T02:03:09Z] tc1/boxA: arm qwen3/unsloth/ckpt_unsloth_m_mb1 (arm=unsloth recipe=mb1 steps=20 seq=2048 mb=1 accum=8 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=642514944 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --adapter-dtype fp32 --lora-init matched:3407)
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+    PROLOGUE {"phase_seconds": {"preamble": 1.917, "snapshot": 0.0, "load_weights": 23.452, "census": 2.413, "frozen_probe": 0.072, "trainable_sha": 1.646, "counters": 0.027, "c1_before": 49.511, "eval0": 9.052, "optimizer": 0.28}, "phase_budget_s": 1260.0, "prologue_s": 96.979, "prologue_unattributed_s
+    CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85
+2 MiB
+[2026-10-02T02:10:30Z] tc1/boxA: arm qwen3/hf/hf_peft_m_mb1 (arm=hf recipe=mb1 steps=20 seq=2048 mb=1 accum=8 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=1800 expect_trainable=642514944 --adapter-dtype fp32 --lora-init matched:3407)
+    CELL OOM {"framework": "hf", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "hf", "tag": "hf_peft_m_mb1", "status": "oom", "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 31.36 
+2 MiB
+QWEN3 DONE
+[2026-10-02T02:10:49Z] tc1/boxA: freed qwen3 (disk: 306G free)
+[2026-10-02T02:10:49Z] tc1/boxA: reduce
+- frozen base `e4b/fused_attn4_m_d2`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `unsloth/ckpt_unsloth_m_d2`: gate_up **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, down **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `e4b/fused_attn4_m_prof`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `unsloth/ckpt_unsloth_prof`: gate_up **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, down **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `e4b/fused_attn4_m_mb1`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `unsloth/ckpt_unsloth_m_mb1`: gate_up **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, down **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- where Unsloth's step goes (`unsloth/ckpt_unsloth_prof`, descriptive): device busy fraction 0.234, device events/step 612179, CPU ops/step 7430931, CPU self by family {'other': 0.2907, 'matmul': 0.2565, 'norm_act': 0.1707, 'fused_kernel': 0.1576, 'autograd': 0.0665, 'memcpy': 0.0509, 'routing': 0.0054, 'optimizer': 0.0017}
+
+## Verdicts
+| family | arm | VERDICT | validity | quality | note |
+|---|---|---|---|---|---|
+| qwen3 | e4b/fused_attn4_m | **VALID** | VALID | 0.0000 |  |
+| qwen3 | unsloth/ckpt_unsloth_m | **VALID** | VALID | -0.0034 |  |
+| qwen3 | e4b/reference_attn4_m | **VALID** | VALID | -0.0041 |  |
+| qwen3 | e4b/fused_attn4_m_d2 | **VALID** | VALID | -0.0030 |  |
+| qwen3 | unsloth/ckpt_unsloth_m_d2 | **VALID** | VALID | -0.0040 |  |
+| qwen3 | hf/hf_peft_m | **OOM** | — | — | OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 11.75 MiB is free. Including non-PyTorch mem |
+| qwen3 | axolotl/ckpt_axolotl_m | **UNSUPPORTED** | — | — | axolotl venv install failed rc=1 (logs/pip_axolotl.log):          And because you require axolotl==0.20.0, we can conclude that your requirements are unsatisfia |
+| qwen3 | e4b/fused_attn4_m_prof | **VALID** | VALID | 0.0002 |  |
+| qwen3 | unsloth/ckpt_unsloth_prof | **VALID** | VALID | -0.0014 |  |
+| qwen3 | e4b/fused_attn4_m_mb1 | **VALID** | VALID | -0.0031 |  |
+| qwen3 | e4b/fused_attn4_m_prof_profile | **HARNESS_ERROR** | — | — |  |
+| qwen3 | hf/hf_peft_m_mb1 | **OOM** | — | — | OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 11.75 MiB is free. Including non-PyTorch mem |
+| qwen3 | unsloth/ckpt_unsloth_m_mb1 | **VALID** | VALID | -0.0085 |  |
+| qwen3 | unsloth/ckpt_unsloth_prof_profile | **HARNESS_ERROR** | — | — |  |
+
+## Predictions P1–P10 (+ P1b) (TC1-PREREG.md + phase 2, scored mechanically)
+| prediction | family | verdict | evidence |
+|---|---|---|---|
+| P1 | qwen3 | **FALSIFIED** | matched unsloth/e4b 1.437 vs [2.0, 5.0]; BELOW 1.5: the standing position is refuted and superseded |
+| P1b | qwen3 | **UNTESTED** | ckpt_unsloth_t28 missing: no receipt |
+| P2 | qwen3 | **HELD** | e4b |d1-d2|/mean 0.2% vs 5% -> STABLE; unsloth |d1-d2|/mean 0.3% vs 5% -> STABLE |
+| P3 | qwen3 | **HELD** | e4b/reference_attn4_m EQUIVALENT (median step |Δ| 0.0014, |Δ held-out at N| 0.0041, band {'train': 0.005, 'heldout': 0.012299999999999978}); unsloth/ckpt_unsloth_m EQUIVALENT (median step |Δ| 0.0011, |Δ held-out at N| 0.0034, band {'train': 0.005, 'heldout': 0.012299999999999978}); draw-noise floor 0.0030 |
+| P4 | qwen3 | **UNTESTED** | shipped missing / fused_m VALID: both must be VALID on the same box |
+| P5 | qwen3 | **HELD** | hf_peft_m OOM and hf_peft_m_mb1 OOM |
+| P6 | qwen3 | **HELD** | axolotl UNSUPPORTED |
+| P7 | qwen3 | **UNTESTED** | unsloth_best missing / unsloth_m VALID / e4b_m VALID: all three must be VALID |
+| P8 | qwen3 | **FALSIFIED** | device_busy_fraction 0.234 (>= 0.5 predicted on the grouped_mm arm); device events/step 612179 |
+| P9 | qwen3 | **HELD** | fused_m vs reference_m PASS (Δfinal 0.00041, median 0.00141) |
+| P10 | qwen3 | **UNTESTED** | C1 bit-exact; expert slots ['N-A', 'N-A'] (regime differs: anchor nf4/64 vs nf4/64+dq); attention SAME-BYTES |
+----- summary.txt -----
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: qwen3; e4b 079a4220b4b334903b0e77725eb94a0f58848018 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-16 instance 53773622 deadline 1790915628; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=32 (physical cores) box_class=RTX 5090
+DRIVER 580.178.04 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3 alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3/e4b/fused_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.182, "load_weights": 63.197, "verify": 0.001, "attn4": 5.691, "lora": 0.023, "enable": 0.009, "tokenizer": 0.435, "census": 2.583, "frozen_probe": 0.053, "trainable_sha": 1.641, "counters": 0.0, "c1_before": 56.051, "eval0": 14.443, "optimizer": 0.161}, "phase_budget_s": 1260.0, "prologue_s": 149.693, "prologue_unattributed_s": 1.225}
+qwen3/e4b/fused_attn4_m rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": false, "opt
+
+qwen3/unsloth/ckpt_unsloth_m PROLOGUE {"phase_seconds": {"preamble": 1.934, "snapshot": 0.0, "load_weights": 23.638, "census": 2.449, "frozen_probe": 0.08, "trainable_sha": 1.661, "counters": 0.028, "c1_before": 49.763, "eval0": 15.167, "optimizer": 0.32}, "phase_budget_s": 1260.0, "prologue_s": 104.712, "prologue_unattributed_s": 9.672}
+qwen3/unsloth/ckpt_unsloth_m rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 
+
+qwen3/e4b/reference_attn4_m PROLOGUE {"phase_seconds": {"preamble": 3.682, "load_weights": 19.451, "verify": 0.001, "attn4": 5.975, "lora": 0.027, "enable": 0.003, "tokenizer": 0.437, "census": 2.561, "frozen_probe": 0.054, "trainable_sha": 1.626, "counters": 0.0, "c1_before": 53.548, "eval0": 21.471, "optimizer": 0.152}, "phase_budget_s": 1890.0, "prologue_s": 110.067, "prologue_unattributed_s": 1.08}
+qwen3/e4b/reference_attn4_m rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": fal
+
+qwen3/e4b/fused_attn4_m_d2 PROLOGUE {"phase_seconds": {"preamble": 3.688, "load_weights": 19.758, "verify": 0.001, "attn4": 5.544, "lora": 0.024, "enable": 0.004, "tokenizer": 0.432, "census": 2.563, "frozen_probe": 0.053, "trainable_sha": 2.944, "counters": 0.0, "c1_before": 55.335, "eval0": 2.735, "optimizer": 0.151}, "phase_budget_s": 1260.0, "prologue_s": 94.323, "prologue_unattributed_s": 1.09}
+qwen3/e4b/fused_attn4_m_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_d2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": false, "
+
+qwen3/unsloth/ckpt_unsloth_m_d2 PROLOGUE {"phase_seconds": {"preamble": 1.917, "snapshot": 0.0, "load_weights": 23.396, "census": 2.426, "frozen_probe": 0.071, "trainable_sha": 1.629, "counters": 0.027, "c1_before": 49.399, "eval0": 9.06, "optimizer": 0.279}, "phase_budget_s": 1260.0, "prologue_s": 96.986, "prologue_unattributed_s": 8.781}
+qwen3/unsloth/ckpt_unsloth_m_d2 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_d2", "status": "ok", "steps": 20, "seq": 2048, "accum
+
+qwen3/hf/hf_peft_m rc=5 CELL OOM {"framework": "hf", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "hf", "tag": "hf_peft_m", "status": "oom", "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 11.75 MiB is free. Including non-PyTorch memory, this process has 31.34 GiB memory in use. 
+
+qwen3/axolotl/ckpt_axolotl_m STUB install_failed: axolotl venv install failed rc=1 (logs/pip_axolotl.log):          And because you require axolotl==0.20.0, we can conclude that your requirements are unsatisfiable.  hint: `packaging` was found on https://download.pytorch.org/whl/cu130, but not at th
+qwen3/e4b/fused_attn4_m_prof PROLOGUE {"phase_seconds": {"preamble": 3.715, "load_weights": 19.795, "verify": 0.001, "attn4": 5.847, "lora": 0.024, "enable": 0.004, "tokenizer": 0.434, "census": 2.56, "frozen_probe": 0.052, "trainable_sha": 1.638, "counters": 0.0, "c1_before": 54.896, "eval0": 2.711, "optimizer": 0.153}, "phase_budget_s": 840.0, "prologue_s": 92.947, "prologue_unattributed_s": 1.116}
+qwen3/e4b/fused_attn4_m_prof rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_prof", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": false,
+
+qwen3/unsloth/ckpt_unsloth_prof PROLOGUE {"phase_seconds": {"preamble": 1.914, "snapshot": 0.0, "load_weights": 23.409, "census": 2.434, "frozen_probe": 0.07, "trainable_sha": 1.714, "counters": 0.03, "c1_before": 50.328, "eval0": 9.083, "optimizer": 0.279}, "phase_budget_s": 840.0, "prologue_s": 97.953, "prologue_unattributed_s": 8.691}
+qwen3/unsloth/ckpt_unsloth_prof rc=142 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_prof", "status": "ok", "steps": 20, "seq": 2048, "accum
+
+DMON dmon_qwen3_e4b_fused_attn4_m_prof.txt 433 samples
+DMON dmon_qwen3_unsloth_ckpt_unsloth_prof.txt 2404 samples
+SECONDARY qwen3: a primary matched arm OOMed (e4b=ok unsloth=ok hf=oom) -> mb1 pair
+qwen3/e4b/fused_attn4_m_mb1 PROLOGUE {"phase_seconds": {"preamble": 3.694, "load_weights": 21.322, "verify": 0.001, "attn4": 6.094, "lora": 0.024, "enable": 0.005, "tokenizer": 0.445, "census": 2.661, "frozen_probe": 0.054, "trainable_sha": 3.316, "counters": 0.0, "c1_before": 54.838, "eval0": 2.746, "optimizer": 0.152}, "phase_budget_s": 1260.0, "prologue_s": 96.573, "prologue_unattributed_s": 1.223}
+qwen3/e4b/fused_attn4_m_mb1 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_mb1", "status": "ok", "steps": 20, "seq": 2048, "accum": 8, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": false, 
+
+qwen3/unsloth/ckpt_unsloth_m_mb1 PROLOGUE {"phase_seconds": {"preamble": 1.917, "snapshot": 0.0, "load_weights": 23.452, "census": 2.413, "frozen_probe": 0.072, "trainable_sha": 1.646, "counters": 0.027, "c1_before": 49.511, "eval0": 9.052, "optimizer": 0.28}, "phase_budget_s": 1260.0, "prologue_s": 96.979, "prologue_unattributed_s": 8.608}
+qwen3/unsloth/ckpt_unsloth_m_mb1 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_mb1", "status": "ok", "steps": 20, "seq": 2048, "accu
+
+qwen3/hf/hf_peft_m_mb1 rc=5 CELL OOM {"framework": "hf", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "hf", "tag": "hf_peft_m_mb1", "status": "oom", "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 11.75 MiB is free. Including non-PyTorch memory, this process has 31.34 GiB memory in u
+
+QWEN3 DONE
+----- versions.txt -----
+e4b 0.38.0 @079a4220b4b334903b0e77725eb94a0f58848018 (GitHub main)
+gnf4 0.34.0 @846b512b905468c08f5748943d08769b572affa2 (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.18.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.21.2
+unsloth(unsloth-t28) 2026.9.14
+unsloth_zoo(unsloth-t28) 2026.9.9
+torch(unsloth-t28) 2.8.0+cu128
+triton(unsloth-t28) 3.4.0
+transformers(unsloth-t28) 5.5.0
+bitsandbytes(unsloth-t28) 0.50.2
+peft(unsloth-t28) 0.21.2
+torchao(unsloth-t28) None
+moe_backend(unsloth-t28) native_torch
+unsloth(unsloth) 2026.9.14
+unsloth_zoo(unsloth) 2026.9.9
+torch(unsloth) 2.12.1+cu130
+triton(unsloth) 3.7.1
+transformers(unsloth) 5.5.0
+bitsandbytes(unsloth) 0.50.2
+peft(unsloth) 0.21.2
+torchao(unsloth) 0.18.0+cu130
+moe_backend(unsloth) grouped_mm
+e4b(t212) 0.38.0 @079a4220b4b334903b0e77725eb94a0f58848018
+gnf4(t212) 0.34.0 @846b512b905468c08f5748943d08769b572affa2
+torch(e4b-t212) 2.12.1+cu130
+NO AXOLOTL on this box: axolotl venv install failed rc=1 (logs/pip_axolotl.log):          And because you require axolotl==0.20.0, we can conclude that your requirements are unsatisfiable.  hint: `packaging` was found on https://download.pytorch.org/whl/cu130, but not at the requested version (packaging==26.0). A compatible version may be available on a subsequent index (e.g., h
+[2026-10-02T02:10:49Z] tc1/boxA: TP_DONE rc=0
