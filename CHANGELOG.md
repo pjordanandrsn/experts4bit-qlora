@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Lane SC1 amendment A1 (#846): proving-rental guards 0.75 / 0.75 / 1.0 h (bench text only)
+
+- `bench/sc1/SC1-PREREG.md`: the per-proof budget as first registered (≤ 10 min, ≤ $0.15) did not count instance acquisition
+  (6.4 min measured) or the box script's `can_run` admission tail, so `sc1a-prove-2` hit the deadline after the installs with
+  nothing measured. Guards move to A 0.75 h / B 0.75 h / C 1.0 h; an `## Amendments` section records it with the receipts; the
+  fourth proof's model revision is spelled out in full. No script, pin, gate or claim changes.
+
 ### CI: `conflict-marker-guard` refuses merge-conflict markers in tracked text (tooling only; mirror of grouped-nf4-gemm#437)
 
 - New workflow on push and pull_request: a positive control plants a two-sided conflict and asserts both marker lines are
