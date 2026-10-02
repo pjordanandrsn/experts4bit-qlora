@@ -79,5 +79,5 @@ The reducer is called as `sc1_reduce.py $W --box <A|B|C> --out-dir $W` when stag
 - **The e4b venv uses `--system-site-packages`**: a plain venv sets `site.ENABLE_USER_SITE=False` and the P42 hook (`usercustomize` on
   `PYTHONPATH`) silently never loads; the tripwire asserts both.
 - **Box C's proof** installs SGLang and runs its tripwire; the Marlin MoE JIT + `/health` against `SC1_PROVE_SGLANG_MODEL=<repo@rev>`
-  (a small GPTQ MoE checkpoint; the proof fetches no Qwen3) is REQUIRED. Every proof writes `PROVED` only when each install its box
+  (since A7 the lane's own `Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e43…`, 17 GB -- the checkpoint box C serves; the proof fetches no bf16 Qwen3) is REQUIRED. Every proof writes `PROVED` only when each install its box
   needs succeeded and each smoke (and box C's JIT) RAN and passed; a skipped smoke is rc 23, NOT PROVED (Amendment A2).

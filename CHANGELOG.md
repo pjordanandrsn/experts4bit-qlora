@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Lane SC1 amendment A7 (#846): box C's image lacked Python.h (Triton could not build its driver); box C's SGLang JIT proof now loads the lane's own GPTQ checkpoint (bench + tests)
+
+- `bench/sc1/sc1_run.sh`: `python3-dev` joins box C's apt line (both Granite smokes died on gcc "Python.h: No such file or
+  directory"). The SGLang JIT proof's checkpoint moves from Qwen1.5-MoE GPTQ (4320 expert bias tensors SGLang's loader rejects)
+  to the lane's `Qwen3-30B-A3B-GPTQ-Int4` (none). A shape test that fails on the registered line; pin regenerated; `SC1-PREREG.md` A7.
+
 ### Lane SC1 amendment A6 (#846): the box's e4b tripwire asserted each route knob's DEFAULT (0.40.0 moved one); it now asserts each knob is READ -- the arms pin all four (bench + tests)
 
 - `bench/sc1/sc1_run.sh`: box B's proof refused because `E4B_NF4_GROUPED_SMALLM`'s default moved `0` -> `auto` (#878). Every e4b
