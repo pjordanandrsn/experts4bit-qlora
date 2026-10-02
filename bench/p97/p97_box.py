@@ -28,9 +28,15 @@ reducer refuses a record that set either one:
 - ``--offload`` streams experts from host RAM;
 - ``--stand-in-attention`` replaces the fp8 kernel with SDPA over the pool's own dequantized fp8 bytes.
 
-A hybrid model also runs a MUTANT paged pass: the linear-state write-back dropped (stores counted, not applied), so
-each window reads whatever state its slot last held. Its KL is recorded beside the real pass; the reducer voids a
-reading whose mutant would have passed the rule, because then the rule could not see broken state.
+The linear state is compared directly. After the last step, each window's pooled conv window and recurrent state are
+held against transformers' own cache for that window, layer by layer (relative Frobenius error). The linear layers
+before the first attention layer see the same tokens on both paths, so their state must agree up to bf16 arithmetic
+whatever the fp8 KV does downstream; that is the model-independent check.
+
+A hybrid model also runs a MUTANT paged pass: each decode step writes a row's state back to the NEXT row's slot
+(rotated by one), a slot-mapping bug. Prefill is unaffected, so each window starts right and then reads another's
+state. Its numbers are recorded beside the real pass; the reducer voids a reading whose mutant would have passed
+either gate, because then that gate could not see broken state.
 
 ``measure()`` is the whole comparison, separate from loading, so ``tests/test_p97_box.py`` runs it on CPU on a tiny
 hybrid model (stand-in attention) in CI.
@@ -66,11 +72,12 @@ def _sync(device):
         torch.cuda.synchronize()
 
 
-def _paged_pass(model, windows, *, P, C, chunk, device, stand_in_attention, drop_store):
+def _paged_pass(model, windows, *, P, C, chunk, device, stand_in_attention, mutant):
     """One paged pass: every window on its own slot, chunked prefill, decode together, teacher-forced. Returns the
-    per-window next-token log-probs, the counted engagement, the runner and the decode step time. ``drop_store``
-    is the MUTANT arm: the pool's write-back is skipped (counted, not applied), so each window reads whatever state its
-    slot last held -- the instrument must see that."""
+    per-window next-token log-probs, the counted engagement, each window's pooled linear state after the last step,
+    the runner and the decode step time. ``mutant`` is the MUTANT arm: a decode step writes each row's state back to
+    the NEXT row's slot (rotated by one), a slot-mapping bug. Prefill (one row) is unaffected, so every window starts
+    right and then reads another's state -- the instrument must see that."""
     from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
     from experts4bit_qlora.engines.paged_runner import PagedModelRunner, kv_layers
     from experts4bit_qlora.serve_paged import _kv_geometry
@@ -115,8 +122,9 @@ def _paged_pass(model, windows, *, P, C, chunk, device, stand_in_attention, drop
         def counted_store(layer, slots, lal):
             calls["store"] += 1
             calls["store_layers"].add(int(layer))
-            if drop_store and layer in pool.conv:
-                return None
+            slots = list(slots)
+            if mutant and len(slots) > 1:
+                slots = slots[1:] + slots[:1]                   # row k's state lands in row k+1's slot
             return store(layer, slots, lal)
 
         pool.store = counted_store
@@ -142,13 +150,40 @@ def _paged_pass(model, windows, *, P, C, chunk, device, stand_in_attention, drop
                     runner.tokens[i][-1] = windows[i][P + t + 1]
             _sync(device)
             step_ms = (time.time() - t1) * 1000 / max(C - 1, 1)
+        states = ([{li: (pool.conv[li][i].float().cpu(), pool.rec[li][i].float().cpu()) for li in pool.conv}
+                   for i in range(len(windows))] if pool is not None else None)
     finally:
         model.forward = inner
         if pool is not None:
             del pool.store                                          # the class method again
         for i in range(len(windows)):
             runner.free_slot(i)
-    return [torch.stack(x) for x in lps], calls, runner, step_ms
+    return [torch.stack(x) for x in lps], calls, states, runner, step_ms
+
+
+def _cache_states(cache, layers):
+    """Each linear layer's conv window and recurrent state from transformers' own ``DynamicCache`` (batch row 0)."""
+    out = {}
+    for li in layers:
+        lay = cache.layers[li]
+        out[li] = (lay.conv_states[0][0].float().cpu(), lay.recurrent_states[0][0].float().cpu())
+    return out
+
+
+def _state_errors(got, ref, pre):
+    """Per linear layer, the largest relative Frobenius error over windows of the pooled conv / recurrent state against
+    transformers' cache; and the largest over the layers before the first attention layer (``pre``), whose inputs are
+    the same tokens on both paths."""
+    if got is None:
+        return None
+    per = {}
+    for li in ref[0]:
+        c = max(float((g[li][0] - r[li][0]).norm() / r[li][0].norm().clamp_min(1e-30)) for g, r in zip(got, ref))
+        h = max(float((g[li][1] - r[li][1]).norm() / r[li][1].norm().clamp_min(1e-30)) for g, r in zip(got, ref))
+        per[str(li)] = {"conv": c, "rec": h}
+    return {"pre_attention_linear_layers": pre, "rel_err": per,
+            "pre_attention_max_rel_err": max((max(per[str(li)].values()) for li in pre), default=None),
+            "all_linear_max_rel_err": max(max(v.values()) for v in per.values())}
 
 
 def _compare(ref_lp, pg_lp, windows, P, C):
@@ -165,7 +200,8 @@ def _compare(ref_lp, pg_lp, windows, P, C):
         agree += int((r.argmax(-1) == p.argmax(-1)).sum())
         first.append(float((p[0] - r[0]).abs().max()))           # the prefill step: no fp8 KV read yet
     n = len(kls)
-    return {"steps": n, "mean_kl": sum(kls) / n, "max_kl": max(kls), "argmax_agree": agree / n,
+    first_kl = kls[::C]                                              # step 0 of each window: chunked prefill only
+    return {"steps": n, "prefill_step_mean_kl": sum(first_kl) / len(first_kl), "mean_kl": sum(kls) / n, "max_kl": max(kls), "argmax_agree": agree / n,
             "ref_mean_nll": sum(ref_nll) / n, "paged_mean_nll": sum(pg_nll) / n, "mean_d_nll": sum(d_nll) / n,
             "max_abs_d_nll": max(abs(x) for x in d_nll), "prefill_max_abs_logprob_diff": max(first)}
 
@@ -188,7 +224,8 @@ def measure(model, windows, *, prompt, cont, chunk, device, stand_in_attention=F
 
     # ---- the reference: transformers' forward, no paged context, one window at a time. Log-probs are kept in fp32:
     # bf16 rounding (~2e-3 at log-prob -0.5) would be the size of the fp8 effect this measures
-    ref_lp = []
+    lin = list(linear_state.linear_layers(cfg))
+    ref_lp, ref_states = [], []
     with torch.no_grad():
         for w in windows:
             cache = DynamicCache(config=text_cfg)
@@ -199,14 +236,15 @@ def measure(model, windows, *, prompt, cont, chunk, device, stand_in_attention=F
                             use_cache=True)
                 rows.append(out.logits[0, -1].float().log_softmax(-1))
             ref_lp.append(torch.stack(rows).cpu())
+            ref_states.append(_cache_states(cache, lin))
             del cache
     _sync(device)
 
     kw = dict(P=P, C=C, chunk=chunk, device=device, stand_in_attention=stand_in_attention)
-    pg_lp, calls, runner, step_ms = _paged_pass(model, windows, drop_store=False, **kw)
+    pg_lp, calls, pg_states, runner, step_ms = _paged_pass(model, windows, mutant=False, **kw)
     pool = runner.linear_state
-    lin = list(linear_state.linear_layers(cfg))
     n_chunks = -(-P // chunk)
+    pre = [li for li in lin if li < min(runner.attn_layers)] if lin and runner.attn_layers else list(lin)
     # transformers 5.17 takes each Gated DeltaNet kernel from fla / causal_conv1d (or the hub, through ``kernels``)
     # when importable, else its torch reference; which one ran is part of what was measured
     kmods = {m: importlib.util.find_spec(m) is not None for m in ("fla", "causal_conv1d", "kernels")}
@@ -230,15 +268,17 @@ def measure(model, windows, *, prompt, cont, chunk, device, stand_in_attention=F
             "expected_linear_state_stores": len(lin) * (len(windows) * n_chunks + C - 1),
         },
         **_compare(ref_lp, pg_lp, windows, P, C),
+        "state": _state_errors(pg_states, ref_states, pre) if lin else None,
         "paged_decode_step_ms": round(step_ms, 2), "paged_decode_rows": len(windows),
         "mutant": None,
     }
     if mutant and pool is not None:
         del runner, pg_lp
-        m_lp, m_calls, _m_runner, _ = _paged_pass(model, windows, drop_store=True, **kw)
-        rec["mutant"] = {"arm": "linear-state write-back dropped (stores counted, not applied)",
+        m_lp, m_calls, m_states, _m_runner, _ = _paged_pass(model, windows, mutant=True, **kw)
+        rec["mutant"] = {"arm": "decode write-back rotated by one slot (row k's state into row k+1's slot)",
                          "linear_state_stores": m_calls["store"], "decode_attention_calls": m_calls["attention"],
-                         **_compare(ref_lp, m_lp, windows, P, C)}
+                         **_compare(ref_lp, m_lp, windows, P, C),
+                         "state": _state_errors(m_states, ref_states, pre)}
     return rec
 
 

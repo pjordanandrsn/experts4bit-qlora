@@ -1,7 +1,7 @@
 """The p97 lane's staged-file pin must match the repo (the e4b#642 check, mirrored for P97).
 
 `bench/p97/p97_drive.sh` refuses to run when a staged file's sha256 differs from `bench/p97/staged.sha256`; this test runs
-the same comparison in CI. It also runs the reducer's self-test (20 cases) and pins the runner's registration: the
+the same comparison in CI. It also runs the reducer's self-test (26 cases) and pins the runner's registration: the
 kernel pin (e4b CI's grouped-nf4-gemm), transformers 5.17.0, the two models at their revisions, the reducer reading the
 same models, shape and layer plans, the premise and the proving run before the fetch, the order (control, then
 subject), the measurement at its registered defaults, and the exit codes.
@@ -65,7 +65,7 @@ def test_every_pinned_name_is_staged_by_the_driver():
 
 def test_the_reducer_applies_the_registered_rule():
     out = subprocess.run([sys.executable, str(LANE / "p97_reduce.py"), "--self-test"], capture_output=True, text=True)
-    assert out.returncode == 0 and "self-test OK (20 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (26 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_stack_is_e4b_cis_kernel_pin_on_transformers_5_17():
@@ -89,8 +89,9 @@ def test_the_runner_and_the_reducer_name_the_same_models_and_shape():
     assert shape == {"windows": 4, "prompt": 512, "cont": 256, "chunk": 128}
     for flag, key in (("--windows", "windows"), ("--prompt", "prompt"), ("--cont", "cont"), ("--chunk", "chunk")):
         assert f'ap.add_argument("{flag}", type=int, default={shape[key]})' in BOX, flag
-    assert _const(REDUCE, "KL_FACTOR") == 2.0 and _const(REDUCE, "KL_FLOOR") == 1e-3
-    assert _const(REDUCE, "AGREE_MARGIN") == 0.02
+    assert subj["pre_attention"] == [0, 1, 2]                                  # Qwen3.6's first attention layer is 3
+    assert _const(REDUCE, "STATE_TOL") == 5e-2
+    assert _const(REDUCE, "KL_CEIL") == 0.05 and _const(REDUCE, "AGREE_MIN") == 0.85
 
 
 def test_the_registered_run_passes_no_measurement_flags():

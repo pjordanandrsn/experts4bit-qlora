@@ -2,25 +2,29 @@
 
 ## Unreleased
 
-### P97 registered (#564): hybrid paged serving on the card -- the paged runner against transformers' own forward on Qwen3.6-35B-A3B, held to an all-attention control (bench and tests only)
+### P97 registered (#564): hybrid paged serving on the card -- the paged runner's per-slot linear state against transformers' own cache, and its whole-model error, on Qwen3.6-35B-A3B (bench and tests only)
 
 - **Why.** #889 and #897 (per-slot Gated DeltaNet state, compact fp8 pool) are tested on CPU only, with a stand-in for
   gnf4's fp8 decode kernel (sm_89+). This lane is their first GPU reading.
-- **What.** `bench/p97/`: the pre-registration, the box measurement `p97_box.py`, the reducer `p97_reduce.py` (20-case
+- **What.** `bench/p97/`: the pre-registration, the box measurement `p97_box.py`, the reducer `p97_reduce.py` (26-case
   self-test), the runner and driver, and the staged pin.
   - On one RTX 5090, each model is measured on the same in-process weights: transformers' forward with a
     `DynamicCache` against `PagedModelRunner` (fp8 pool, 128-token prefill chunks, 4 rows decoded together),
     teacher-forced over 4 wikitext windows (512 + 256 tokens). Per step: KL(reference || paged) on fp32 log-probs,
-    Δnll and argmax agreement.
+    Δnll and argmax agreement. After the last step, each window's pooled linear state is held against transformers'
+    own cache, layer by layer.
   - Subject Qwen3.6-35B-A3B (30 linear + 10 attention layers on a 10-layer pool); control OLMoE-1B-7B (16 attention
-    layers). The subject also runs a mutant pass with the state write-back dropped, which must fail the rule.
-  - SUPPORTED if the subject's mean KL <= 2 x max(control's, 1e-3) and its agreement >= control's - 0.02; VOID on any
-    engagement count off its expected value, a rehearsal knob, or a mutant that would pass.
+    layers).
+  - **G1:** the linear layers before the first attention layer see the same tokens on both paths, so their state must
+    match transformers' within 5e-2 relative error. **G2:** mean KL <= 0.05 nats and agreement >= 0.85, a bound the
+    control must also pass. Both are set from an A2000 rehearsal of the real model: the working path read 6.0e-3 /
+    3.0e-3 nats / 0.94, a slot-rotation mutant 0.73 / 2.95 nats / 0.34.
+  - The subject also runs a mutant pass, with each decode write-back rotated by one slot, which must fail both gates.
   - The premise, on the card before any fetch: `tests/test_linear_state_gpu.py` (new) must pass, not skip. It takes
     tiny hybrid and all-attention models through the real kernel.
-- **Tests.** `tests/test_p97_box.py` runs the whole measurement on CPU in CI, with the stand-in kernel. The hybrid's
-  KL must stay within 2x its control's; the counts must match; the mutant must fail (on CPU it reads 480x the hybrid's
-  KL). `tests/test_p97_staged_pin.py` pins the registration.
+- **Tests.** `tests/test_p97_box.py` runs the whole measurement on CPU in CI, with the stand-in kernel. The counts must
+  match; the pre-attention state must match transformers' cache (1e-7 on CPU); the mutant must fail the state check
+  (1.4). A pool that drops its write-backs reads 1.5 there. `tests/test_p97_staged_pin.py` pins the registration.
 
 ### `serve_paged` builds a hybrid checkpoint: the fp8 KV pool holds the attention layers only, and the KV geometry reads a composite config's `text_config`
 

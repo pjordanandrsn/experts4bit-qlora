@@ -12,11 +12,20 @@ VOID when any of these holds:
   attention layers, no linear state);
 - an engagement count is off: decode-kernel calls != (cont - 1) x attention layers, or not over pool layers 0..L-1;
   linear-state stores != linear layers x (windows x prompt chunks + cont - 1), or not over every linear layer;
+- the subject's state record does not cover every linear layer, or its pre-attention layers are not 0, 1, 2;
 - the control's mean KL is zero (the harness compared the reference with itself);
-- the subject's mutant pass (state write-back dropped) is missing, or would itself pass the rule.
+- the control fails G2 (the whole-model bound sits below the fp8 KV's own error on an all-attention model);
+- the subject's mutant pass (decode write-back rotated by one slot) is missing, or passes G1 or G2 (that gate could
+  not see broken state).
 
-SUPPORTED when the subject's mean KL(ref || paged) <= 2 x max(control's, 1e-3) AND its argmax agreement >= the
-control's - 0.02. NOT_SUPPORTED otherwise.
+The gates, on the subject:
+- G1, the state: every linear layer before the first attention layer (0, 1, 2 -- same tokens on both paths) holds a
+  pooled conv window and recurrent state within STATE_TOL relative Frobenius error of transformers' own cache, for
+  every window, after the last step;
+- G2, the whole model: mean KL(ref || paged) <= KL_CEIL nats and argmax agreement >= AGREE_MIN.
+
+SUPPORTED when both hold; NOT_SUPPORTED otherwise. The subject's KL as a multiple of the control's, its prefill-step
+KL and every linear layer's state error are reported, not gated.
 
     python p97_reduce.py --dir RUN_DIR --out verdict.json
     python p97_reduce.py --self-test
@@ -30,11 +39,14 @@ import sys
 from pathlib import Path
 
 SUBJECT = {"model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
-           "n_layers": 40, "attn": 10, "linear": 30}
+           "n_layers": 40, "attn": 10, "linear": 30, "pre_attention": [0, 1, 2]}
 CONTROL = {"model": "allenai/OLMoE-1B-7B-0924-Instruct", "revision": "7f1c97f440f06ce36705e4f2b843edb5925f4498",
            "n_layers": 16, "attn": 16, "linear": 0}
 SHAPE = {"windows": 4, "prompt": 512, "cont": 256, "chunk": 128}
-KL_FACTOR, KL_FLOOR, AGREE_MARGIN = 2.0, 1e-3, 0.02
+# Set from the A2000 rehearsal (PREREG-p97.md): the working path read 6.0e-3 / 3.0e-3 nats / 0.94, the rotation
+# mutant 0.73 / 2.95 nats / 0.34.
+STATE_TOL = 5e-2                 # G1: relative state error at the pre-attention linear layers
+KL_CEIL, AGREE_MIN = 0.05, 0.85  # G2: the whole-model bound
 
 
 def _engagement(rec, want, name, shape=SHAPE):
@@ -75,9 +87,14 @@ def _engagement(rec, want, name, shape=SHAPE):
     return why
 
 
-def _passes(kl, agree, control):
-    bound = KL_FACTOR * max(control["mean_kl"], KL_FLOOR)
-    return kl <= bound and agree >= control["argmax_agree"] - AGREE_MARGIN, bound
+def _g1(rec):
+    st = rec.get("state") or {}
+    v = st.get("pre_attention_max_rel_err")
+    return v is not None and v <= STATE_TOL
+
+
+def _g2(rec):
+    return rec.get("mean_kl", float("inf")) <= KL_CEIL and rec.get("argmax_agree", 0.0) >= AGREE_MIN
 
 
 def reduce(subject, control, shape=SHAPE):
@@ -90,44 +107,61 @@ def reduce(subject, control, shape=SHAPE):
         return {"verdict": "VOID", "why": why}
     why += _engagement(control, CONTROL, "control", shape)
     why += _engagement(subject, SUBJECT, "subject", shape)
+    st = subject.get("state") or {}
+    lin = [str(i) for i in subject.get("engagement", {}).get("linear_layers", [])]
+    if sorted(st.get("rel_err", {}), key=int) != lin or st.get("pre_attention_linear_layers") != SUBJECT["pre_attention"]:
+        why.append(f"subject state record covers {sorted(st.get('rel_err', {}), key=int)} with pre-attention layers "
+                   f"{st.get('pre_attention_linear_layers')}, not every linear layer with {SUBJECT['pre_attention']}")
     if not control.get("mean_kl", 0) > 0:
         why.append("control mean KL is zero: the paged path read the reference's own numbers")
-    if control.get("mutant") is not None:
-        why.append("control ran a mutant pass it has no linear state for")
+    if control.get("mutant") is not None or control.get("state") is not None:
+        why.append("control ran a mutant pass or a state comparison it has no linear state for")
+    if "mean_kl" in control and not _g2(control):
+        why.append(f"control fails G2 (mean KL {control['mean_kl']:.3e}, agree {control.get('argmax_agree')}): the "
+                   "whole-model bound is below the fp8 KV's own error on an all-attention model")
     m = subject.get("mutant")
     if not m:
-        why.append("subject mutant pass missing: the rule's sensitivity is unshown")
+        why.append("subject mutant pass missing: the gates' sensitivity is unshown")
     else:
         if m.get("steps") != shape["windows"] * shape["cont"]:
             why.append(f"subject mutant scored {m.get('steps')} steps")
-        if "mean_kl" in control and _passes(m.get("mean_kl", 0), m.get("argmax_agree", 1), control)[0]:
-            why.append(f"subject mutant (write-back dropped) passes the rule: mean KL {m.get('mean_kl'):.3e}, agree "
-                       f"{m.get('argmax_agree')} -- the rule cannot see broken state")
+        if _g1(m):
+            why.append(f"subject mutant (write-back rotated) passes G1: pre-attention state error "
+                       f"{(m.get('state') or {}).get('pre_attention_max_rel_err')} -- G1 cannot see broken state")
+        if _g2(m):
+            why.append(f"subject mutant (write-back rotated) passes G2: mean KL {m.get('mean_kl')}, agree "
+                       f"{m.get('argmax_agree')} -- G2 cannot see broken state")
     out = {"why": why}
     if "mean_kl" in control and "mean_kl" in subject:
-        ok, bound = _passes(subject["mean_kl"], subject["argmax_agree"], control)
+        keys = ("mean_kl", "max_kl", "prefill_step_mean_kl", "argmax_agree", "mean_d_nll", "max_abs_d_nll",
+                "prefill_max_abs_logprob_diff", "paged_decode_step_ms")
         out.update({
-            "kl_bound": bound, "agree_floor": control["argmax_agree"] - AGREE_MARGIN,
-            "subject": {k: subject.get(k) for k in ("mean_kl", "max_kl", "argmax_agree", "mean_d_nll", "max_abs_d_nll",
-                                                    "prefill_max_abs_logprob_diff", "paged_decode_step_ms")},
-            "control": {k: control.get(k) for k in ("mean_kl", "max_kl", "argmax_agree", "mean_d_nll", "max_abs_d_nll",
-                                                    "prefill_max_abs_logprob_diff", "paged_decode_step_ms")},
-            "mutant": {k: (m or {}).get(k) for k in ("mean_kl", "argmax_agree", "mean_d_nll")},
+            "g1": _g1(subject), "g2": _g2(subject), "state_tol": STATE_TOL, "kl_ceil": KL_CEIL, "agree_min": AGREE_MIN,
+            "subject": {k: subject.get(k) for k in keys}, "control": {k: control.get(k) for k in keys},
+            "subject_state": {k: st.get(k) for k in ("pre_attention_max_rel_err", "all_linear_max_rel_err")},
+            "mutant": {**{k: (m or {}).get(k) for k in ("mean_kl", "argmax_agree", "mean_d_nll")},
+                       "pre_attention_max_rel_err": ((m or {}).get("state") or {}).get("pre_attention_max_rel_err")},
             "subject_kl_over_control": subject["mean_kl"] / control["mean_kl"] if control["mean_kl"] else None,
             "kernel_modules": subject.get("engagement", {}).get("gated_deltanet_kernel_modules"),
             "linear_state_mb": subject.get("engagement", {}).get("linear_state_mb"),
         })
         if not why:
-            out["verdict"] = "SUPPORTED" if ok else "NOT_SUPPORTED"
+            out["verdict"] = "SUPPORTED" if _g1(subject) and _g2(subject) else "NOT_SUPPORTED"
     out.setdefault("verdict", "VOID")
     return out
 
 
 def _fixture():
-    def rec(want, kl, agree, mutant):
+    def state(pre_err, post_err, lin):
+        per = {str(i): {"conv": pre_err if i in SUBJECT["pre_attention"] else post_err,
+                        "rec": pre_err if i in SUBJECT["pre_attention"] else post_err} for i in lin}
+        return {"pre_attention_linear_layers": list(SUBJECT["pre_attention"]), "rel_err": per,
+                "pre_attention_max_rel_err": pre_err, "all_linear_max_rel_err": max(pre_err, post_err)}
+
+    def rec(want, kl, agree, mutant, st):
         chunks = -(-SHAPE["prompt"] // SHAPE["chunk"])
-        lin = list(range(want["linear"]))
-        attn = list(range(want["linear"], want["linear"] + want["attn"]))
+        lin = [i for i in range(want["n_layers"]) if want["linear"] and i % 4 != 3]
+        attn = [i for i in range(want["n_layers"]) if i not in lin]
         return {
             "model": want["model"], "revision": want["revision"], "loaded_commit": want["revision"], **SHAPE,
             "rehearsal": {"offload": False, "stand_in_attention": False},
@@ -140,12 +174,15 @@ def _fixture():
                 "linear_state_stores": want["linear"] * (SHAPE["windows"] * chunks + SHAPE["cont"] - 1),
                 "expected_linear_state_stores": want["linear"] * (SHAPE["windows"] * chunks + SHAPE["cont"] - 1),
             },
-            "steps": SHAPE["windows"] * SHAPE["cont"], "mean_kl": kl, "max_kl": 10 * kl, "argmax_agree": agree,
-            "mean_d_nll": 0.0, "max_abs_d_nll": 0.0, "prefill_max_abs_logprob_diff": 0.0, "paged_decode_step_ms": 1.0,
-            "mutant": mutant,
+            "steps": SHAPE["windows"] * SHAPE["cont"], "mean_kl": kl, "max_kl": 10 * kl, "prefill_step_mean_kl": kl / 2,
+            "argmax_agree": agree, "mean_d_nll": 0.0, "max_abs_d_nll": 0.0, "prefill_max_abs_logprob_diff": 0.0,
+            "paged_decode_step_ms": 1.0, "mutant": mutant, "state": st(lin) if st else None,
         }
-    mut = {"steps": SHAPE["windows"] * SHAPE["cont"], "mean_kl": 2.0, "argmax_agree": 0.4, "mean_d_nll": 1.5}
-    return rec(SUBJECT, 2e-3, 0.98, mut), rec(CONTROL, 3e-3, 0.97, None)
+    lin_s = [i for i in range(SUBJECT["n_layers"]) if i % 4 != 3]
+    mut = {"steps": SHAPE["windows"] * SHAPE["cont"], "mean_kl": 2.0, "argmax_agree": 0.4, "mean_d_nll": 1.5,
+           "state": state(1.3, 1.5, lin_s)}
+    return (rec(SUBJECT, 3e-3, 0.97, mut, lambda lin: state(1e-3, 3e-2, lin)),
+            rec(CONTROL, 2e-3, 0.97, None, None))
 
 
 def self_test():
@@ -168,14 +205,14 @@ def self_test():
         return edit
 
     case("registered fixture", "SUPPORTED")
-    case("subject KL over 2x control", "NOT_SUPPORTED", put(("s", "mean_kl"), 6.1e-3))
-    case("subject KL at the floor bound", "SUPPORTED",
-         lambda s, c: (c.update(mean_kl=1e-4), s.update(mean_kl=2e-3)))
-    case("subject KL over the floor bound", "NOT_SUPPORTED",
-         lambda s, c: (c.update(mean_kl=1e-4), s.update(mean_kl=2.1e-3)))
-    case("agreement below control - 0.02", "NOT_SUPPORTED", put(("s", "argmax_agree"), 0.945))
-    case("subject missing", "VOID", lambda s, c: None)
-    cases[-1] = ("subject missing", "VOID", reduce(None, c0)["verdict"], None)
+    case("G1 at the tolerance", "SUPPORTED", put(("s", "state", "pre_attention_max_rel_err"), STATE_TOL))
+    case("G1 over the tolerance", "NOT_SUPPORTED", put(("s", "state", "pre_attention_max_rel_err"), 1.01 * STATE_TOL))
+    case("post-attention state error is reported, not gated", "SUPPORTED",
+         put(("s", "state", "all_linear_max_rel_err"), 0.5))
+    case("G2 KL over the ceiling", "NOT_SUPPORTED", put(("s", "mean_kl"), 1.01 * KL_CEIL))
+    case("G2 agreement under the floor", "NOT_SUPPORTED", put(("s", "argmax_agree"), AGREE_MIN - 0.001))
+    case("subject KL many times the control's is reported, not gated", "SUPPORTED", put(("c", "mean_kl"), 1e-4))
+    cases.append(("subject missing", "VOID", reduce(None, c0)["verdict"], None))
     case("stand-in attention", "VOID", put(("s", "rehearsal", "stand_in_attention"), True))
     case("offload", "VOID", put(("c", "rehearsal", "offload"), True))
     case("short continuation", "VOID", put(("s", "cont"), 16))
@@ -186,11 +223,16 @@ def self_test():
     case("full-size pool on the subject", "VOID", put(("s", "engagement", "kv_pool_layers"), 40))
     case("linear stores zero", "VOID", put(("s", "engagement", "linear_state_stores"), 0))
     case("a linear layer never stored", "VOID", put(("s", "engagement", "linear_state_store_layers"), list(range(29))))
+    case("state record missing a layer", "VOID", lambda s, c: s["state"]["rel_err"].pop("0"))
+    case("state record names other pre-attention layers", "VOID",
+         put(("s", "state", "pre_attention_linear_layers"), [0, 1]))
+    case("subject state record missing", "VOID", put(("s", "state"), None))
     case("control with linear state", "VOID", put(("c", "engagement", "linear_state"), True))
     case("control KL zero", "VOID", put(("c", "mean_kl"), 0.0))
+    case("control fails G2", "VOID", put(("c", "mean_kl"), 1.01 * KL_CEIL))
     case("mutant missing", "VOID", put(("s", "mutant"), None))
-    case("mutant passes the rule", "VOID", lambda s, c: s["mutant"].update(mean_kl=1e-3, argmax_agree=0.97))
-    case("mutant fails on agreement alone", "SUPPORTED", lambda s, c: s["mutant"].update(mean_kl=1e-3))
+    case("mutant passes G1", "VOID", put(("s", "mutant", "state", "pre_attention_max_rel_err"), 1e-3))
+    case("mutant passes G2", "VOID", lambda s, c: s["mutant"].update(mean_kl=1e-3, argmax_agree=0.97))
     bad = [(n, w, g, why) for n, w, g, why in cases if w != g]
     for n, w, g, why in bad:
         print(f"SELF-TEST FAIL {n}: want {w}, got {g} ({why})")
@@ -220,10 +262,14 @@ def main() -> int:
     for w in v.get("why", []):
         print(f"  void: {w}")
     if "subject" in v:
-        s, c, m = v["subject"], v["control"], v["mutant"]
-        print(f"  subject mean KL {s['mean_kl']:.3e} (bound {v['kl_bound']:.3e}) agree {s['argmax_agree']:.4f} (floor "
-              f"{v['agree_floor']:.4f}) | control mean KL {c['mean_kl']:.3e} agree {c['argmax_agree']:.4f} | mutant "
-              f"mean KL {m['mean_kl']} agree {m['argmax_agree']}")
+        s, c, m, st = v["subject"], v["control"], v["mutant"], v["subject_state"]
+        print(f"  G1 {v['g1']}: pre-attention state rel err {st['pre_attention_max_rel_err']} (tol {v['state_tol']}); "
+              f"all linear {st['all_linear_max_rel_err']}")
+        print(f"  G2 {v['g2']}: subject mean KL {s['mean_kl']:.3e} (ceil {v['kl_ceil']}) agree {s['argmax_agree']:.4f} "
+              f"(min {v['agree_min']}) | control mean KL {c['mean_kl']:.3e} agree {c['argmax_agree']:.4f} | subject/control "
+              f"{v['subject_kl_over_control']}")
+        print(f"  mutant: mean KL {m['mean_kl']} agree {m['argmax_agree']} pre-attention state rel err "
+              f"{m['pre_attention_max_rel_err']}")
     return 0
 
 

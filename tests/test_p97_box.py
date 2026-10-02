@@ -5,9 +5,10 @@ rehearsal stand-in for the fp8 decode kernel.
 
 A hybrid ([linear, attention, linear, linear]) and an all-attention control go through ``measure()``. Each must count
 exactly the kernel calls and linear-state stores its shape implies -- the counts the reducer holds a reading to --
-and the hybrid's KL against transformers must stay within 2x the control's, the lane's own rule in miniature. A
-count that came back zero, or a harness that compared the reference with itself (a control KL of zero), fails here;
-so does a mutant pass (the state write-back dropped) that the same rule would have let through.
+the hybrid's pooled state at the layer before its first attention layer must match transformers' own cache (the
+lane's state gate, in miniature), and its KL must stay within 2x the control's. A count that came back zero, a harness
+that compared the reference with itself (a control KL of zero), or a mutant pass (decode write-back rotated by one
+slot) that the state gate would have let through fails here.
 """
 import importlib.util
 from pathlib import Path
@@ -77,8 +78,15 @@ def test_the_p97_measurement_counts_its_engagement_and_holds_the_hybrid_to_its_c
     assert h["prefill_max_abs_logprob_diff"] < 1e-4      # chunked prefill with carried state vs one shot, no fp8 read
     # tiny random models sit near argmax ties, so agreement is held loosely; the lane's rule holds it to the control
     assert h["argmax_agree"] >= 0.8 and c["argmax_agree"] >= 0.8
-    # the mutant (write-back dropped) must FAIL the same rule -- else the rule cannot see broken state
-    assert c["mutant"] is None and h["mutant"] is not None
+    # G1's quantity: the linear layer before the first attention layer sees the same tokens on both paths, so its pooled
+    # state matches transformers' cache to arithmetic precision; layers after attention carry the fp8 KV's effect
+    assert c["state"] is None and c["mutant"] is None
+    st = h["state"]
+    assert st["pre_attention_linear_layers"] == [0] and sorted(st["rel_err"], key=int) == ["0", "2", "3"]
+    assert st["pre_attention_max_rel_err"] < 1e-5, st
+    assert st["all_linear_max_rel_err"] > st["pre_attention_max_rel_err"]
+    # the mutant (decode write-back rotated by one slot) must fail the state gate and move the model
     m = h["mutant"]
     assert m["linear_state_stores"] == h["engagement"]["linear_state_stores"] and m["steps"] == h["steps"]
-    assert m["mean_kl"] > 2 * c["mean_kl"] and m["mean_kl"] > 10 * h["mean_kl"], (m["mean_kl"], h["mean_kl"])
+    assert m["state"]["pre_attention_max_rel_err"] > 0.5, m["state"]
+    assert m["mean_kl"] > 10 * h["mean_kl"], (m["mean_kl"], h["mean_kl"])
