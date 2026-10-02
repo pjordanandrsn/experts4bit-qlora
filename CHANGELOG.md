@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Docs: `serve_paged`'s batched decode graphs confirmed on a GPU after the #874 fix
+
+- `docs/SERVING.md`: lane SC1's proof `sc1a-prove-8` (RTX 5090, e4b `0a2a0c8`) captured all five decode-graph buckets at B=16, with
+  device grouping on at B=16 and the defaults at B=1. The GPU-status paragraph now cites the receipt and states the evidence's
+  scope (Granite NF4, unfused set). No code change.
+
 ### Fix: `serve_paged` with batched decode graphs failed to capture every bucket above 1 (the batched lane's device grouping was never switched on)
 
 - `experts4bit_qlora/serve_paged.py`: the first GPU run of the server (lane SC1 proof `sc1a-prove-7`, RTX 5090, Granite-3.1-3B
