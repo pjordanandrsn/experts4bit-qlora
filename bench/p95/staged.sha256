@@ -1,0 +1,11 @@
+# Names as the BOX sees them after staging ($W; P42's hook under hook/). The box runs `sha256sum -c` on this file and
+# the controller resolves each name to its source (p95_drive.sh's case) and compares.
+1bfb0114158346674f4bbf0e108832c1b4610eb1d720e12b077dd6720668a495  p95_run.sh
+70e9511c61d26d1b897787f3bb88dfd774fd005c7a554a8672fa8bece79327dd  p95_reduce.py
+d8f86573c90afc9d337b7f83ef4496fbc6c790779f110884f230d302571f788a  p42_reduce.py
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  hook/usercustomize.py
+1d870355f17db464633db7fedcc432faf82e8152582ffc0aa5f6fc593ebc91c2  test_k25_row_exact_gpu.py
+559ffdff573e47a43cc45b00f9193d8f78c4233ef718896b19e3523b7f77ead1  test_nf4_t1_device_grouping_gpu.py
