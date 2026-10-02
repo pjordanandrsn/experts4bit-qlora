@@ -15,7 +15,11 @@ and scores cont[t+1] with fp32 log_softmax; mean over S steps; ppl = exp(mean). 
                    this exact loop; the attention runs the decode kernels, BC_Attention graphs by default). T == 1 at
                    every scored step: ExLlamaV3's cache is token-granular.
 
-Receipt: {mean_nll, ppl, steps, prompt_len, mode, mode_available, text_sha, engine, version, logits_dtype, wall_s, ...}.
+Capacity: the scorer sets its OWN cache independently of the arm defaults -- decode mode needs >= roundup256(P+S+1) =
+2816 tokens for one sequence; SC1_EXL3_CACHE_TOKENS may raise it (multiple of 256, never below 2816 -> REFUSED) and the
+value + source are recorded under receipt["capacity"]; prefill mode uses no cache (flash_attn_nc) and records that.
+
+Receipt: {mean_nll, ppl, steps, prompt_len, mode, mode_available, text_sha, engine, version, logits_dtype, wall_s, capacity, ...}.
 Env: SC1_WINDOW (path), SC1_OUT, SC1_MODEL / SC1_REV / SC1_MODEL_DIR as the arm; SC1_NLL_MODE = prefill|decode (or --mode).
 """
 from __future__ import annotations
@@ -39,6 +43,22 @@ DEFAULT_REV = "0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef"
 
 class Refusal(SystemExit):
     pass
+
+
+NLL_CACHE_TOKENS_MIN = ((PROMPT_LEN + STEPS + 1 + PAGE_SIZE - 1) // PAGE_SIZE) * PAGE_SIZE     # 2816
+
+
+def nll_cache_tokens(env=None) -> tuple[int, str]:
+    """The scorer's own capacity: >= 2816 tokens (one sequence of P+S+1 = 2561, page-rounded), independent of the arm's
+    B x 2048 rule. SC1_EXL3_CACHE_TOKENS may raise it; below the floor or off-page -> REFUSED."""
+    env = os.environ if env is None else env
+    ov = env.get("SC1_EXL3_CACHE_TOKENS")
+    if ov:
+        v = int(ov)
+        if v % PAGE_SIZE or v < NLL_CACHE_TOKENS_MIN:
+            raise Refusal(f"REFUSED: SC1_EXL3_CACHE_TOKENS={v} below the scorer floor {NLL_CACHE_TOKENS_MIN} or not a multiple of {PAGE_SIZE}")
+        return v, "env:SC1_EXL3_CACHE_TOKENS"
+    return NLL_CACHE_TOKENS_MIN, "default:roundup256(P+S+1)"
 
 
 def text_sha(ids, prompt_len: int = PROMPT_LEN, steps: int = STEPS) -> str:
@@ -77,7 +97,7 @@ def receipt(mode: str, mean_nll: float, sha: str, wall_s: float, extra: dict | N
 
 
 RECEIPT_KEYS = ("mean_nll", "ppl", "steps", "prompt_len", "mode", "mode_available", "text_sha", "engine", "version",
-                "logits_dtype", "wall_s")
+                "logits_dtype", "wall_s", "capacity")
 
 
 # ------------------------------------------------------------------------------------------------ engine side
@@ -140,7 +160,7 @@ def main(argv=None) -> int:
     t0 = time.perf_counter()
     config = Config.from_directory(model_dir)
     model = Model.from_config(config)
-    L = ((PROMPT_LEN + STEPS + 1 + PAGE_SIZE - 1) // PAGE_SIZE) * PAGE_SIZE
+    L, cap_src = nll_cache_tokens()
     cache = Cache(model, max_num_tokens=L, layer_type=CacheLayer_fp16) if a.mode == "decode" else None
     model.load(progressbar=False)
     if os.environ.get("SC1_EXL3_NO_WARMUP", "0") == "0":
@@ -156,6 +176,8 @@ def main(argv=None) -> int:
         "version": getattr(exllamav3, "__version__", None) or exllamav3.version.__version__, "torch": torch.__version__,
         "torch_cuda": torch.version.cuda, "logits_dtype": dtype, "load_s": round(load_s, 1), "model": model_id, "revision": rev,
         "model_dir": model_dir, "vocab_size_scored": int(config.vocab_size), "cache_tokens": L if cache else None,
+        "capacity": {"cache_tokens": L if cache else None, "cache_tokens_source": cap_src if cache else "prefill: no cache (flash_attn_nc)",
+                     "floor": NLL_CACHE_TOKENS_MIN, "independent_of_arm_defaults": True, "batch_shape": [1, L] if cache else None},
         "cache_granularity_tokens": 1, "env_knobs": {k: os.environ.get(k) for k in ("EXL3_BC_ATTN", "EXL3_GEMV", "EXL3_INT8_GEMV")},
         "device": torch.cuda.get_device_name(0), "capability": list(torch.cuda.get_device_capability(0))})
     json.dump(rec, open(os.environ["SC1_OUT"], "w"), indent=1)
@@ -180,7 +202,15 @@ def selftest() -> int:
     V = 1000
     nll = nll_from_rows(lambda t, tgt: -math.log(V), ids[PROMPT_LEN + 1:PROMPT_LEN + STEPS + 1])   # uniform -> ln V
     assert abs(nll - math.log(V)) < 1e-9
-    r = receipt("prefill", nll, w["text_sha"], 0.1, {"version": "fake", "logits_dtype": "torch.float16"})
+    assert nll_cache_tokens({}) == (2816, "default:roundup256(P+S+1)") and nll_cache_tokens({"SC1_EXL3_CACHE_TOKENS": "3072"})[0] == 3072
+    for bad in ("2560", "3000"):
+        try:
+            nll_cache_tokens({"SC1_EXL3_CACHE_TOKENS": bad})
+            raise AssertionError("bad capacity passed")
+        except Refusal:
+            pass
+    r = receipt("prefill", nll, w["text_sha"], 0.1, {"version": "fake", "logits_dtype": "torch.float16",
+                                                      "capacity": {"cache_tokens": None, "floor": NLL_CACHE_TOKENS_MIN}})
     missing = [k for k in RECEIPT_KEYS if k not in r]
     assert not missing and abs(r["ppl"] - V) < 1e-6, (missing, r["ppl"])
     print("SELFTEST OK sc1_exl3_nll")

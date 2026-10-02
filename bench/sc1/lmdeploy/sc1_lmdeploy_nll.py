@@ -21,6 +21,12 @@ What TurboMind exposes (file:line in InternLM/lmdeploy @ v0.18.0, 110965c7):
     request k sends ids[:P+1+k] with output_logits='generation', max_new_tokens=1 -> the one logits row predicts
     ids[P+1+k]; `cached_tokens` per request gives the recomputed suffix). It is NOT T == 1 and the receipt says so.
 
+Capacity: the scorer sets its OWN session_len independently of the arm defaults -- the prefill request is 2561 input
+tokens + 1 generated, and TurboMind refuses input_len >= session_len (serve/core/async_engine.py:542-546) and sizes the
+request by session_len (engine/model_request.cc:58-63), so the floor is P+S+2 = 2562; the default is 2816 (the same
+figure as the EXL3 scorer's cache). SC1_LMDEPLOY_SESSION_LEN may raise it (below 2562 -> REFUSED); max_batch_size = 1;
+cache_max_entry_count stays at the engine default unless SC1_LMD_CACHE_FRAC is set; all recorded under receipt["capacity"].
+
 Env: SC1_WINDOW, SC1_OUT, SC1_MODEL / SC1_REV / SC1_MODEL_DIR / SC1_LMD_FORMAT / SC1_LMD_DTYPE / SC1_LMD_QUANT_POLICY as the
 arm; SC1_NLL_MODE or --mode = prefill (default) | decode_prefix.
 """
@@ -47,6 +53,22 @@ DEFAULT_REV = "9b534e4318b7ebc3c961a839f13eb18b1833f441"
 
 class Refusal(SystemExit):
     pass
+
+
+NLL_SESSION_LEN_MIN = PROMPT_LEN + STEPS + 2       # 2562: 2561 input tokens + 1 generated must fit
+NLL_SESSION_LEN_DEFAULT = 2816
+
+
+def nll_session_len(env=None) -> tuple[int, str]:
+    """The scorer's own session_len (>= 2562), independent of the arm's 2048 rule. SC1_LMDEPLOY_SESSION_LEN may raise it."""
+    env = os.environ if env is None else env
+    ov = env.get("SC1_LMDEPLOY_SESSION_LEN")
+    if ov:
+        v = int(ov)
+        if v < NLL_SESSION_LEN_MIN:
+            raise Refusal(f"REFUSED: SC1_LMDEPLOY_SESSION_LEN={v} below the scorer floor {NLL_SESSION_LEN_MIN} (P+S+2)")
+        return v, "env:SC1_LMDEPLOY_SESSION_LEN"
+    return NLL_SESSION_LEN_DEFAULT, "default:2816 (>= P+S+2)"
 
 
 def text_sha(ids, prompt_len: int = PROMPT_LEN, steps: int = STEPS) -> str:
@@ -89,7 +111,7 @@ def receipt(mode: str, mean_nll: float, sha: str, wall_s: float, extra: dict | N
 
 
 RECEIPT_KEYS = ("mean_nll", "ppl", "steps", "prompt_len", "mode", "mode_available", "text_sha", "engine", "version",
-                "logits_dtype", "wall_s")
+                "logits_dtype", "wall_s", "capacity")
 
 
 # ------------------------------------------------------------------------------------------------ engine side
@@ -111,9 +133,10 @@ class TM:
             raise Refusal(f"REFUSED/UNSUPPORTED: lmdeploy.turbomind binding not importable: {_import_error!r}")
         from lmdeploy.turbomind import TurboMind
         self.kwargs = dict(model_format=os.environ.get("SC1_LMD_FORMAT") or None, session_len=session_len, max_batch_size=1,
-                           cache_max_entry_count=float(os.environ.get("SC1_LMD_CACHE_FRAC") or 0.8),
                            enable_prefix_caching=prefix_caching, quant_policy=int(os.environ.get("SC1_LMD_QUANT_POLICY") or 0),
                            dtype=os.environ.get("SC1_LMD_DTYPE") or "auto", tp=1, enable_metrics=True)
+        if os.environ.get("SC1_LMD_CACHE_FRAC"):               # unset = the engine's own default, recorded from the resolved config
+            self.kwargs["cache_max_entry_count"] = float(os.environ["SC1_LMD_CACHE_FRAC"])
         self.tm = TurboMind.from_pretrained(model_dir, engine_config=TurbomindEngineConfig(**self.kwargs))
         self.serial = 0
 
@@ -185,7 +208,8 @@ def main(argv=None) -> int:
     import torch
     import lmdeploy
     t0 = time.perf_counter()
-    tm = TM(model_dir, session_len=PROMPT_LEN + STEPS + 8, prefix_caching=(a.mode == "decode_prefix"))
+    sl, cap_src = nll_session_len()
+    tm = TM(model_dir, session_len=sl, prefix_caching=(a.mode == "decode_prefix"))
     load_s = time.perf_counter() - t0
     t1 = time.perf_counter()
     extra = {}
@@ -204,6 +228,8 @@ def main(argv=None) -> int:
         "engine_config": {"model_format": str(ec.model_format), "dtype": str(ec.dtype), "quant_policy": int(ec.quant_policy),
                           "session_len": ec.session_len, "enable_prefix_caching": ec.enable_prefix_caching,
                           "cache_block_seq_len": ec.cache_block_seq_len, "cache_max_entry_count": ec.cache_max_entry_count},
+        "capacity": {"session_len": sl, "session_len_source": cap_src, "floor": NLL_SESSION_LEN_MIN, "max_batch_size": 1,
+                     "cache_max_entry_count_resolved": ec.cache_max_entry_count, "independent_of_arm_defaults": True},
         "device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None, **extra})
     json.dump(rec, open(os.environ["SC1_OUT"], "w"), indent=1)
     print(f"SC1LMD_NLL mode={mode} nll={nll:.5f} ppl={rec['ppl']:.5f} dtype={dtype} sha={win['text_sha'][:12]}", flush=True)
@@ -233,7 +259,14 @@ def selftest() -> int:
         dtype = "torch.float32"
     except ImportError:
         nll, dtype = math.log(1000), "n/a"
-    r = receipt("prefill", nll, w["text_sha"], 0.1, {"version": "fake", "logits_dtype": dtype})
+    assert nll_session_len({}) == (2816, "default:2816 (>= P+S+2)") and nll_session_len({"SC1_LMDEPLOY_SESSION_LEN": "2562"})[0] == 2562
+    try:
+        nll_session_len({"SC1_LMDEPLOY_SESSION_LEN": "2561"})
+        raise AssertionError("below-floor session_len passed")
+    except Refusal:
+        pass
+    r = receipt("prefill", nll, w["text_sha"], 0.1, {"version": "fake", "logits_dtype": dtype,
+                                                      "capacity": {"session_len": 2816, "floor": NLL_SESSION_LEN_MIN}})
     missing = [k for k in RECEIPT_KEYS if k not in r]
     assert not missing and "decode_note" in r, missing
     print("SELFTEST OK sc1_lmdeploy_nll")

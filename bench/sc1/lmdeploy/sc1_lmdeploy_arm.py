@@ -21,6 +21,9 @@ LMDeploy 0.18.0 facts the arm is built on (file:line in InternLM/lmdeploy @ v0.1
   * no prefix caching (`enable_prefix_caching=False` default, messages.py:401), no speculative decoding (none given),
   * no CUDA graphs: `grep cudaGraph src/turbomind` is empty at v0.18.0.
   * KV: `quant_policy` 0 | 4 (int4) | 8 (int8); fp8 is REFUSED (messages.py:431-438). cache_block_seq_len=64.
+  * REGISTERED CAPACITY RULE: every engine holds B sequences x 2048 tokens on its timed arms -> `session_len=2048`,
+    `max_batch_size=B`, `cache_max_entry_count` left at the engine's default (0.8 of FREE memory, messages.py:398) and
+    RECORDED from the resolved config; the TTFT-4096 arm is a single sequence with `session_len=4104` (4096+8).
   * W4A16 on sm_120: "SM12.x (e.g. sm_120): no native kernels; falls back to the SM80 s16816 family"
     (src/turbomind/kernels/gemm/arch.h:38-41,53); families u4_d_128 / u4_g_128 (kernel/sm80_16816_4.cu:40-44); the
     PyPI wheel is built with CUDA 12.8 (builder/manywheel/build_all_wheel.sh:7) which appends 120a-real
@@ -32,7 +35,9 @@ LMDeploy 0.18.0 facts the arm is built on (file:line in InternLM/lmdeploy @ v0.1
 Env: SC1_ARM, SC1_BATCH, SC1_PROMPTS, SC1_MODEL (default Qwen/Qwen3-30B-A3B-GPTQ-Int4), SC1_REV (default
 9b534e4318b7ebc3c961a839f13eb18b1833f441), SC1_OUT, SC1_INSTANCE_ID. Optional: SC1_MODEL_DIR, SC1_LMD_FORMAT (gptq|awq;
 default auto), SC1_LMD_QUANT_POLICY (0|4|8), SC1_LMD_DTYPE (auto|float16|bfloat16), SC1_LMD_MAX_BATCH (default = B),
-SC1_LMD_CACHE_FRAC (cache_max_entry_count, default 0.8), SC1_LMD_SESSION_LEN. Modes: slope (default), --ttft, --selftest.
+SC1_LMD_CACHE_FRAC (cache_max_entry_count; unset = the engine's default, recorded), SC1_LMDEPLOY_SESSION_LEN (override of
+the capacity rule; must hold prompt + max_new + 1; value and source recorded under receipt["capacity"]). Modes: slope
+(default), --ttft, --selftest.
 The AWQ row: SC1_MODEL=QuixiAI/Qwen3-30B-A3B-AWQ SC1_REV=1ba5586ace54cc9de85addac384eb88576f94598 (version=gemm, g128).
 """
 from __future__ import annotations
@@ -158,7 +163,7 @@ def base_receipt(arm: str, batch: int, pf: dict, model: str, rev: str, mode: str
 RECEIPT_KEYS_SLOPE = ("engine", "arm", "mode", "model", "revision", "batch", "prompts_sha256", "rows_sha256", "load_s",
                       "decode_tok_s", "decode_ms_per_step", "decode_tok_s_median", "decode_ms_per_step_median",
                       "end_to_end_tok_s_long", "walls_short_s", "walls_long_s", "tokens", "resolved", "versions",
-                      "vram_peak_bytes")
+                      "vram_peak_bytes", "capacity")
 
 
 # ------------------------------------------------------------------------------------------------ engine side
@@ -180,6 +185,35 @@ def eos_ids_from(model_dir: str) -> list:
         return []
 
 
+SLOPE_SESSION_LEN = 2048            # the registered rule: B sequences x 2048 tokens held on every timed arm
+
+
+def session_len_for(prompt_len: int, max_new: int, env=None) -> tuple[int, str]:
+    """Registered capacity rule -> (session_len, source). Slope arms: 2048 (held B times via max_batch_size = B).
+    TTFT-4096 (prompt + 8 > 2048): prompt + max_new = 4104. SC1_LMDEPLOY_SESSION_LEN overrides; it must hold
+    prompt + max_new + 1 (TurboMind sizes the sequence by session_len and the engine refuses input_len >= session_len)."""
+    env = os.environ if env is None else env
+    need = prompt_len + max_new
+    ov = env.get("SC1_LMDEPLOY_SESSION_LEN")
+    if ov:
+        v = int(ov)
+        if v < need + 1:
+            raise Refusal(f"REFUSED: SC1_LMDEPLOY_SESSION_LEN={v} cannot hold prompt {prompt_len} + {max_new} new tokens")
+        return v, "env:SC1_LMDEPLOY_SESSION_LEN"
+    if need <= SLOPE_SESSION_LEN:
+        return SLOPE_SESSION_LEN, "default:2048"
+    return need, "default:ttft:prompt+max_new"
+
+
+def capacity_block(batch: int, prompt_len: int, max_new: int, session_len: int, source: str, resolved=None) -> dict:
+    b = {"rule": "B sequences x 2048 tokens on timed arms (session_len 2048, max_batch_size B); TTFT-4096 = session_len 4104",
+         "session_len": session_len, "session_len_source": source, "max_batch_size": batch,
+         "kv_tokens_held_target": batch * session_len, "workload_tokens_per_seq": prompt_len + max_new}
+    if resolved:
+        b.update(resolved)
+    return b
+
+
 def nvidia_smi_mem() -> int | None:
     try:
         out = subprocess.check_output(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"], text=True)
@@ -192,7 +226,7 @@ class TurboMindEngine:
     """Raw TurboMind instance route (profile_throughput.py's). TurboMind allocates outside torch's caching allocator,
     so VRAM is read from torch.cuda.mem_get_info() deltas and nvidia-smi, not max_memory_allocated."""
 
-    def __init__(self, model_dir: str, batch: int, prompt_len: int, max_new: int):
+    def __init__(self, model_dir: str, batch: int, prompt_len: int, max_new: int, session_len: int):
         import torch
         import lmdeploy
         from lmdeploy import TurbomindEngineConfig
@@ -207,12 +241,13 @@ class TurboMindEngine:
         self.smi0 = nvidia_smi_mem()
         self.smi_max = self.smi0 or 0
         fmt = os.environ.get("SC1_LMD_FORMAT") or None
-        session_len = int(os.environ.get("SC1_LMD_SESSION_LEN") or (prompt_len + max_new + 64))
+        self.session_len = session_len                        # from session_len_for (the registered rule or the override)
         self.engine_kwargs = dict(model_format=fmt, session_len=session_len,
                                   max_batch_size=int(os.environ.get("SC1_LMD_MAX_BATCH") or batch),
-                                  cache_max_entry_count=float(os.environ.get("SC1_LMD_CACHE_FRAC") or 0.8),
                                   enable_prefix_caching=False, quant_policy=int(os.environ.get("SC1_LMD_QUANT_POLICY") or 0),
                                   dtype=os.environ.get("SC1_LMD_DTYPE") or "auto", tp=1, enable_metrics=True)
+        if os.environ.get("SC1_LMD_CACHE_FRAC"):               # unset = the engine's own default, recorded from the resolved config
+            self.engine_kwargs["cache_max_entry_count"] = float(os.environ["SC1_LMD_CACHE_FRAC"])
         t0 = time.perf_counter()
         self.tm = TurboMind.from_pretrained(model_dir, engine_config=TurbomindEngineConfig(**self.engine_kwargs))
         self.load_s = round(time.perf_counter() - t0, 1)
@@ -315,14 +350,19 @@ class TurboMindEngine:
             v["driver"] = None
         return v
 
+    def capacity_resolved(self) -> dict:
+        ec = self.tm.engine_config
+        return {"cache_max_entry_count_resolved": ec.cache_max_entry_count, "cache_block_seq_len": ec.cache_block_seq_len,
+                "session_len_resolved": ec.session_len, "max_batch_size_resolved": ec.max_batch_size}
+
     def vram_peak_bytes(self):
         return {"mem_get_info_drop_bytes": int(self.free0 - self.min_free), "nvidia_smi_used_max_bytes": int(self.smi_max),
                 "nvidia_smi_used_before_load_bytes": self.smi0,
                 "note": "TurboMind allocates outside torch's allocator; torch.cuda.max_memory_allocated does not see it"}
 
 
-def make_engine(model_dir: str, batch: int, prompt_len: int, max_new: int):
-    return TurboMindEngine(model_dir, batch, prompt_len, max_new)
+def make_engine(model_dir: str, batch: int, prompt_len: int, max_new: int, session_len: int):
+    return TurboMindEngine(model_dir, batch, prompt_len, max_new, session_len)
 
 
 # ------------------------------------------------------------------------------------------------ selftest
@@ -378,9 +418,17 @@ def selftest() -> int:
         raise AssertionError("short row passed")
     except Refusal:
         pass
+    assert session_len_for(512, 128, {}) == (2048, "default:2048") and session_len_for(512, 8, {})[0] == 2048
+    assert session_len_for(4096, 8, {}) == (4104, "default:ttft:prompt+max_new")
+    assert session_len_for(512, 128, {"SC1_LMDEPLOY_SESSION_LEN": "3000"}) == (3000, "env:SC1_LMDEPLOY_SESSION_LEN")
+    try:
+        session_len_for(512, 128, {"SC1_LMDEPLOY_SESSION_LEN": "600"})
+        raise AssertionError("bad override passed")
+    except Refusal:
+        pass
     rec = base_receipt("selftest", 2, loaded, DEFAULT_MODEL, DEFAULT_REV, "slope")
     rec.update(r)
-    rec.update(load_s=0.0, resolved={}, versions={}, vram_peak_bytes={})
+    rec.update(load_s=0.0, resolved={}, versions={}, vram_peak_bytes={}, capacity=capacity_block(2, 512, 128, 2048, "default:2048"))
     missing = [k for k in RECEIPT_KEYS_SLOPE if k not in rec]
     assert not missing, missing
     assert run_ttft(FakeEngine(), rows[0])["tokens_generated"] == [8, 8, 8]
@@ -402,7 +450,11 @@ def main(argv=None) -> int:
     rec = base_receipt(arm, batch, pf, model, rev, mode)
     model_dir = resolve_model_dir(model, rev)
     rec["model_dir"] = model_dir
-    engine = make_engine(model_dir, batch, max(pf["prompt_tokens"]), 8 if a.ttft else LONG)
+    max_new = 8 if a.ttft else LONG
+    sl, src = session_len_for(max(pf["prompt_tokens"]), max_new)
+    engine = make_engine(model_dir, batch, max(pf["prompt_tokens"]), max_new, sl)
+    rec["capacity"] = capacity_block(batch, max(pf["prompt_tokens"]), max_new, sl, src,
+                                     engine.capacity_resolved() if hasattr(engine, "capacity_resolved") else None)
     rec["load_s"] = engine.load_s
     if a.ttft:
         rec.update(run_ttft(engine, pf["prompts"][0]))
