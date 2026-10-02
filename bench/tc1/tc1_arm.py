@@ -4485,7 +4485,31 @@ def main():
     if not torch.cuda.is_available():
         stub(a, "harness_error", "torch.cuda.is_available() is False on a GPU lane", code=10)
     loader = {"e4b": load_e4b, "unsloth": load_unsloth, "hf": load_hf, "axolotl": load_axolotl}[a.framework]
-    return run_arm(a, loader, sampler=not a.no_sampler)
+    return run_arm_or_row(a, loader, sampler=not a.no_sampler)
+
+
+def run_arm_or_row(a, loader, sampler=True, run=None):
+    """TC3 amendment 4: an exception ANYWHERE after the preamble is a ROW, never a missing receipt. tc3-4090-1's axolotl arm died in
+    transformers' Qwen3-MoE router (a bf16 / fp32 dtype mismatch in forward, after load) and the first 12 GB arm in the C1 assertion;
+    both left no receipt and read "rc=1 and no receipt". The loader's own exceptions were already rows (run_arm); the training loop's
+    OOM too; this catches the rest: classified as the loader's are (a framework's RuntimeError / NotImplementedError / ValueError ->
+    `refused`; an OOM -> `oom`), a harness AssertionError or a CUDA fault after load -> `harness_error` -- with the phase it landed
+    in, the exception type and the traceback tail on the row. A stub's own SystemExit propagates unchanged."""
+    import traceback as _tb
+    try:
+        return (run or run_arm)(a, loader, sampler=sampler)
+    except SystemExit:
+        raise
+    except Exception as e:
+        phase = PH.current or ("after-prologue" if PH.started() else "preamble")
+        if isinstance(e, AssertionError):
+            st, code = "harness_error", 10
+        else:
+            st, code = classify_load_exception(e)
+            if st == "load_fault":
+                st, code = "harness_error", 10
+        stub(a, st, f"{type(e).__name__} in phase {phase}: {str(e)[:600]}",
+             {"phase": phase, "exception_type": type(e).__name__, "traceback_tail": _tb.format_exc()[-1500:]}, code=code)
 
 
 if __name__ == "__main__":

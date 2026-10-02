@@ -936,3 +936,47 @@ def test_tc3_amendment_2_c1_hashes_the_offload_home_not_the_placeholder():
     # an evicted model WITHOUT a handle is what the first hand run saw: every placeholder counts as an empty (the assertion in run_arm fires)
     _, _, empties3, _ = arm.hashes_frozen(Model(empty=True, offload=False))
     assert empties3 == 8
+
+
+def test_tc3_amendment_4_an_exception_after_load_is_a_row():
+    """TC3 amendment 4: a framework exception after load (tc3-4090-1's axolotl arm: a dtype mismatch in transformers' Qwen3-MoE router) is a
+    `refused` row with its phase and traceback; a harness AssertionError (the first 12 GB arm's C1) is a `harness_error` row; a stub's own
+    SystemExit propagates; nothing ever reads "rc=1 and no receipt" again."""
+    import argparse
+    import json
+    import tempfile
+    arm = _load_arm_module()
+    d = tempfile.mkdtemp()
+    a = argparse.Namespace(framework="axolotl", fam="qwen3frontier", model="Qwen/Qwen3-30B-A3B", revision="ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+                           arm="axolotl", tag="ckpt_axolotl_m", steps=20, seq=2048, accum=4, micro_batch=2, offload=0, prereg="tc1/TC3-PREREG.md", out=d, note=None)
+
+    def boom(a_, loader, sampler=True):
+        raise RuntimeError("expected mat1 and mat2 to have the same dtype, but got: c10::BFloat16 != float")
+    with pytest.raises(SystemExit) as ex:
+        arm.run_arm_or_row(a, None, run=boom)
+    assert ex.value.code == 3
+    r = json.load(open(f"{d}/qwen3frontier_axolotl_ckpt_axolotl_m.json"))
+    assert r["status"] == "refused" and r["exception_type"] == "RuntimeError" and "same dtype" in r["reason"] and "in phase" in r["reason"] and "boom" in r["traceback_tail"], r
+
+    def c1(a_, loader, sampler=True):
+        raise AssertionError("C1 saw 97 empty frozen tensors")
+    a.framework, a.tag, a.arm = "e4b", "fused_attn4_m_offload", "fused"
+    with pytest.raises(SystemExit) as ex:
+        arm.run_arm_or_row(a, None, run=c1)
+    assert ex.value.code == 10
+    r = json.load(open(f"{d}/qwen3frontier_e4b_fused_attn4_m_offload.json"))
+    assert r["status"] == "harness_error" and r["exception_type"] == "AssertionError" and "97 empty" in r["reason"], r
+
+    def oom(a_, loader, sampler=True):
+        raise RuntimeError("CUDA out of memory. Tried to allocate 20.00 MiB")
+    a.tag = "fused_attn4_m"
+    with pytest.raises(SystemExit) as ex:
+        arm.run_arm_or_row(a, None, run=oom)
+    assert ex.value.code == 5 and json.load(open(f"{d}/qwen3frontier_e4b_fused_attn4_m.json"))["status"] == "oom"
+
+    def done(a_, loader, sampler=True):
+        raise SystemExit(7)
+    with pytest.raises(SystemExit) as ex:
+        arm.run_arm_or_row(a, None, run=done)
+    assert ex.value.code == 7
+    assert arm.run_arm_or_row(a, None, run=lambda a_, loader_, sampler=True: "ok") == "ok"
