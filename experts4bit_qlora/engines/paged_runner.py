@@ -116,6 +116,8 @@ class PagedModelRunner(StepRunner):
         self.attn_layers, self.linear_state = layer_plan(model, self.n_layers, n_slots)
         # a hybrid model's pool may hold its attention layers only: paged attention maps model layer -> pool layer
         self.ctx.layer_map = kv_layer_map(self.attn_layers, self.n_layers)
+        # the pool layers attention appends to (all of them, unless a hybrid's pool keeps a row per model layer)
+        self.pool_layers = [self.ctx.layer_map.get(a, a) for a in self.attn_layers]
         self._graphs = None          # bucket -> CUDAGraph | None (eager); see enable_decode_graphs
 
     # ------------------------------------------------------------ intake --
@@ -160,7 +162,7 @@ class PagedModelRunner(StepRunner):
                 if start + take >= len(self.tokens[rid]):
                     # prompt complete: the staged bf16 K/V become the
                     # sequence's FP8 residency, once, here (attention layers only)
-                    for layer in (self.ctx.layer_map.get(a, a) for a in self.attn_layers):
+                    for layer in self.pool_layers:
                         staged = self.ctx.flush(layer, slot)
                         if staged is None:
                             raise RuntimeError(
@@ -222,9 +224,6 @@ class PagedModelRunner(StepRunner):
         ``capture=False`` runs every bucket eagerly on the same padded layout:
         the bitwise oracle for the replays. Returns ``{bucket: "graph" |
         "eager: <reason>"}``."""
-        if self.linear_state is not None:
-            raise NotImplementedError("decode graphs for a model with linear-attention layers: the per-slot state "
-                                      "gather / scatter (engines/linear_state.py) is not captured yet; run eagerly")
         buckets = tuple(sorted({int(b) for b in buckets}))
         if not buckets or buckets[0] < 1:
             raise ValueError(f"buckets must be positive, got {buckets}")
@@ -235,6 +234,11 @@ class PagedModelRunner(StepRunner):
                 f"the KV cache has {len(scratch)} -- build Fp8PagedKV(..., scratch_slots="
                 f"{buckets[-1]})")
         kv, dev = self.kv, self.device
+        if self.linear_state is not None:
+            # a hybrid's per-slot linear state is gathered and scattered through the bucket's device selector
+            # (linear_state._bucket_selector); a graph cannot allocate the pool, so warm it first, then freeze it
+            self._warm_linear_state(scratch[0])
+            self.linear_state.frozen = True
         kv.graph_mode_init(seq=scratch[0], upto_tokens=kv.bt)
         self._buckets = buckets
         self._bufs, self._graphs, self.graph_status = {}, {}, {}
@@ -264,6 +268,31 @@ class PagedModelRunner(StepRunner):
                       flush=True)
         kv.reset_scratch_lens()
         return dict(self.graph_status)
+
+    @torch.no_grad()
+    def _warm_linear_state(self, slot: int) -> None:
+        """Allocate every linear layer's pooled state before a graph is captured, by one eager one-token prefill on a
+        scratch slot; its staged K/V and its state are discarded."""
+        from experts4bit_qlora.engines.linear_state import linear_layers
+        pool = self.linear_state
+        want = linear_layers(self.model.config)
+        if pool.allocated(want):
+            return
+        self._mode(True)
+        self.ctx.mode, self.ctx.slots = "prefill", [slot]
+        prev = set_context(self.ctx)
+        try:
+            self.model(input_ids=torch.zeros(1, 1, dtype=torch.long, device=self.device),
+                       position_ids=torch.zeros(1, 1, dtype=torch.long, device=self.device), use_cache=False)
+        finally:
+            set_context(prev)
+            self.ctx.drop(slot)
+            self.ctx.mode, self.ctx.slots = "decode", []
+            self._mode(False)
+        pool.reset(slot)
+        if not pool.allocated(want):
+            raise RuntimeError(f"warming the linear-state pool left layers {sorted(set(want) - set(pool.conv))} "
+                               "unallocated")
 
     def disable_decode_graphs(self) -> None:
         self._graphs = None
@@ -315,7 +344,7 @@ class PagedModelRunner(StepRunner):
         if slot in self._graph_ready:
             return
         last = self.kv.blocks_per_seq - 1
-        for layer in range(self.n_layers):
+        for layer in self.pool_layers:
             self.kv._ensure_blocks(layer, slot, last)
         self._graph_ready.add(slot)
 
@@ -357,7 +386,7 @@ class PagedModelRunner(StepRunner):
                 got[rid] = int(tok)
                 self.tokens[rid].append(int(tok))
                 self.pos_of[rid] += 1
-                for layer in range(self.n_layers):
+                for layer in self.pool_layers:
                     kv._seen[layer][slot] += 1     # the host mirror of the device append
         ctrl = getattr(self, "slot_controller", None)
         if ctrl is not None:

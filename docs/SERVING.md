@@ -138,7 +138,7 @@ Qwen3-Next.
   across chunked prefill and batched decode; and a hybrid model through the runner stays within its all-attention
   control's fp8 error, with greedy tokens equal.
 - **Refused:** Mamba-style layers, which transformers also labels `linear_attention` (granite-4.0-h, Nemotron-H, Jamba,
-  Bamba); other state-carrying layer types; and decode graphs for a model with linear layers.
+  Bamba); and other state-carrying layer types.
 - **`build_engine` for a hybrid checkpoint.** The fp8 KV pool is sized to the attention layers only (paged attention
   maps model layer to pool layer; on Qwen3.6, 10 of 40 layers), and the KV geometry comes from a composite config's
   `text_config`. A CPU test pins the compact pool against a one-layer-per-index pool, bit for bit.
@@ -151,7 +151,10 @@ Qwen3-Next.
     harness: 7.15e-3, 0.974);
   - a slot-mapping mutant reads 4.05 nats.
 - **Not yet done:**
-  - decode graphs are refused for hybrid models, so decode is eager;
+  - decode graphs for hybrid models are now captured, but not yet read on a GPU. The per-slot state is gathered
+    and scattered through the bound bucket's device selector, and the pool is warmed and frozen before capture.
+    `tests/test_hybrid_decode_graphs_gpu.py` pins replay against the padded eager step bit for bit, on an sm_89+
+    card. P97 ran eagerly;
   - the Gated DeltaNet layers run whatever kernels transformers finds (`fla` / `causal_conv1d`), or its torch path.
     P97 read the torch path, at 830 ms per 4-row step: not a serving speed.
   - Only Qwen3.6 has been read on a GPU.

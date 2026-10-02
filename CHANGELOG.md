@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Decode graphs capture a hybrid model's per-slot linear state (opt-in `E4B_PAGED_GRAPHS=1`; not yet read on a GPU)
+
+- **Why.** `enable_decode_graphs` refused models with Gated DeltaNet layers. The per-slot state was gathered and
+  scattered through `ctx.slots`, a Python list that a captured graph would bake at capture time (the scratch slots).
+  Hybrid decode was therefore eager only: 830 ms per 4-row step on Qwen3.6 in P97.
+- **What.**
+  - On a bucketed decode step, the linear-attention wrapper gathers and scatters through the bound bucket's device
+    selector (`linear_state._bucket_selector`: the KV's `_g_sel`, rewritten with the step's slot ids before every
+    replay), and takes every row as carrying state.
+  - `enable_decode_graphs` warms the pool before capture (one eager one-token prefill on a scratch slot, its staged K/V
+    and state discarded), then freezes it. `ensure_slots` refuses to move tensors a captured graph holds.
+  - The runner's block-claim and host-length loops walk the pool layers attention appends to (`pool_layers`).
+  - `view` / `store` take `sel` only on a graph step, so a caller wrapping them with their original signatures keeps
+    working.
+- **Tests.**
+  - CPU (`tests/test_linear_state.py`): the selector path is bit-identical to the slot-list path, every row and every
+    pooled state; the runner's warm-up allocates every layer and leaves the scratch slot clean; a frozen pool refuses to
+    grow; a selector step refuses an unallocated layer.
+  - GPU (`tests/test_hybrid_decode_graphs_gpu.py`, sm_89+): on a dense Qwen3.5 hybrid with a compact pool, under the
+    continuous scheduler, replay decodes exactly as the padded eager step. Every bucket captured and replayed, with
+    padding rows and a recycled slot. It skips in CI; the lane that reads hybrid decode speed runs it as its premise.
+
 ### P97 read (RTX 5090): SUPPORTED -- the paged runner keeps each sequence's Gated DeltaNet state at transformers' own and tracks transformers' forward on Qwen3.6-35B-A3B at 4.43e-3 nats (bench, docs and register)
 
 - `bench/p97/receipts/p97-5090-1/`, `bench/p97/RESULTS-p97.md`. One RTX 5090 through gnf4's fp8 kernel: 4 sequences
