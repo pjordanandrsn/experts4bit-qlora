@@ -1,5 +1,6 @@
 # Changelog
 
+<<<<<<< HEAD
 ## 0.38.1 — 2026-10-02 — the K25 route for the NF4 store's batched decode rows runs at the served precision (select tree through TF32 MMA; opt-in, lanes P93 and P94), an instrument for the served M-tile kernel at T == 1, and CI on grouped-nf4-gemm 0.34.1
 
 **0.38.1.** No default changes.
@@ -13,6 +14,25 @@
   - lanes K26 and K27's runners;
   - lanes P93 and P94: registrations, reads, receipts and register rows;
   - the training campaign's lane TC1: its registration and amendments, bench only.
+=======
+## Unreleased
+### Scheduler: an optional per-request stop set, `min_tokens`, `finish_reason` and `abort()` (additive)
+
+- **Why.** The continuous-batching engine stopped a sequence only at `max_new_tokens`: `PagedModelRunner` stores
+  `eos_id` and never consults it, and `ContinuousScheduler._emit` knew no stop set. That is how every registered
+  serving measurement ran (fixed output length, `ignore_eos` semantics) and it stays the default. A serving layer
+  needs EOS to end a request in the step that produced it; otherwise the slot keeps decoding wasted tokens to
+  `max_tokens` and the throughput a benchmark reads is partly waste.
+- **What.** `add_request(..., stop_ids=, min_tokens=)`: a token in the set ends the sequence once `min_tokens` are
+  out; the stop token is kept in `out` (computed, counted); a stop at the length boundary reports `stop`, as vLLM
+  does. `Request.finish_reason` is `length` / `stop` / `abort`. `abort(rid)` drops a queued request before it takes a
+  slot or frees an active one's slot now; aborted requests go to `aborted`, never `done`, so a disconnected client
+  cannot move the gate's percentiles; `stats()` gains `aborted`. With `stop_ids=None` (the default, and every
+  caller in `bench/`) behaviour is unchanged.
+- **Tests.** `tests/test_scheduler.py`: the default contract without a stop set; a stop frees the slot in that step;
+  `min_tokens` defers the stop; a boundary stop reports `stop`; abort of queued and active requests.
+
+>>>>>>> 2a2e5b7 (CHANGELOG: the scheduler's optional stop set, min_tokens, finish_reason and abort())
 
 ### Lane P94 read (#564, one RTX 5090): QUALITY_FAIL in both families. K25 against the served NF4 M-tile kernel it would replace moves c4val1 K8 +0.102 (Granite) and +0.168 (OLMoE); `E4B_NF4_GROUPED_SMALLM` stays `0` (`e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01`)
 

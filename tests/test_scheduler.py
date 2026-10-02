@@ -221,3 +221,80 @@ def test_runner_is_told_which_slot_a_sequence_was_admitted_to():
     assert [b[0] for b in r.bound] == [0, 1]
     assert r.bound[0][1] == r.bound[1][1] == 0, "slot was not recycled"
     assert r.bound[0][2] == [7, 8] and r.bound[1][2] == [9]
+
+
+# ------------------------------------------------------- stop set / abort --
+
+def test_default_contract_unchanged_without_a_stop_set():
+    """No stop_ids: the sequence runs to max_new_tokens whatever the runner emits (every registered
+    serving measurement ran this way)."""
+    class EosHappy(FakeRunner):
+        def run_decode(self, rids):
+            super().run_decode(rids)
+            return {rid: 2 for rid in rids}            # "EOS" every step
+
+    s = ContinuousScheduler(runner=EosHappy(), max_seqs=2, chunk_tokens=8)
+    s.add_request([1, 2], max_new_tokens=4)
+    s.run_until_idle()
+    assert len(s.done[0].out) == 4 and s.done[0].finish_reason == "length"
+
+
+def test_stop_ids_end_the_sequence_and_free_the_slot_that_step():
+    class Scripted(FakeRunner):
+        def run_decode(self, rids):
+            super().run_decode(rids)                     # records the call and bumps counts
+            return {rid: [5, 2, 6, 7][self.counts[rid] - 1] for rid in rids}
+
+    r = Scripted()
+    s = ContinuousScheduler(runner=r, max_seqs=2, kv_slots=1, chunk_tokens=8)
+    a = s.add_request([1, 2], max_new_tokens=8, stop_ids={2})
+    b = s.add_request([3], max_new_tokens=1)
+    s.run_until_idle()
+    req_a = next(q for q in s.done if q.rid == a)
+    assert req_a.out == [1000, 5, 2], "the stop token is kept in out (computed, counted)"
+    assert req_a.finish_reason == "stop"
+    assert r.freed[0] == a and len(s.done) == 2, "slot recycled to the waiting request"
+    assert next(q for q in s.done if q.rid == b).finish_reason == "length"
+
+
+def test_min_tokens_defers_the_stop():
+    class Scripted(FakeRunner):
+        def run_decode(self, rids):
+            super().run_decode(rids)
+            return {rid: [2, 2, 9, 2][self.counts[rid] - 1] for rid in rids}
+
+    s = ContinuousScheduler(runner=Scripted(), max_seqs=1, chunk_tokens=8)
+    s.add_request([1], max_new_tokens=8, stop_ids={2}, min_tokens=4)
+    s.run_until_idle()
+    assert s.done[0].out == [1000, 2, 2, 9, 2] and s.done[0].finish_reason == "stop"
+
+
+def test_stop_at_the_length_boundary_reports_stop():
+    class Scripted(FakeRunner):
+        def run_decode(self, rids):
+            super().run_decode(rids)
+            return {rid: 2 for rid in rids}
+
+    s = ContinuousScheduler(runner=Scripted(), max_seqs=1, chunk_tokens=8)
+    s.add_request([1], max_new_tokens=2, stop_ids={2})
+    s.run_until_idle()
+    assert s.done[0].finish_reason == "stop"
+
+
+def test_abort_queued_and_active_requests():
+    s, r = _sched(max_seqs=8, kv_slots=1, chunk_tokens=4)
+    a = s.add_request([1, 2], max_new_tokens=5)
+    b = s.add_request([3], max_new_tokens=5)
+    c = s.add_request([4], max_new_tokens=5)
+    s.step()                                  # a admitted (its prompt done, first token out); b, c wait
+    assert s.abort(b) is True                 # queued: never takes a slot
+    assert [q.rid for q in s.queue] == [c]
+    assert s.abort(a) is True                 # active: slot freed NOW
+    assert r.freed == [a] and s.stats()["kv_slots_free"] == 1
+    assert s.abort(a) is False and s.abort(999) is False
+    s.run_until_idle()
+    assert [q.rid for q in s.done] == [c], "aborted requests never reach done"
+    assert [q.rid for q in s.aborted] == [b, a]
+    assert all(q.finish_reason == "abort" for q in s.aborted)
+    st = s.stats()
+    assert st["completed"] == 1 and st["aborted"] == 2
