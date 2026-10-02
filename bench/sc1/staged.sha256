@@ -3,7 +3,7 @@
 # resolve each name to its source and compare. Regenerate with bench/sc1/make_pin.sh after editing any staged file.
 # sc1_reduce.py: pinned at integration (the reducer is another agent's file; SC1_PIN_REDUCER=1 make_pin.sh adds its line then;
 # until then the driver stages it by path unpinned and the box's sha256sum -c does not cover it).
-da4e9a7797d1b594ce97cb73f589fbca3dc6f45314c103d52c436b58974ae3f3  sc1_run.sh
+479d9cb143e64f1cd62eb861173ada37bd5584422612f6f90f28df8cf8c3fe1b  sc1_run.sh
 cd593712412bb8180980efdef7bda5a9921ff2be62b888c02d109f87e18d4ca6  sc1_e4b_sched.py
 eae98f666da1337bc1c2bd14b6b19f6c8c6103e9492c025b8d905f197024b1cd  sc1_prompts.py
 e8a495e1a2aae51da9910129e503dbbaeef934864a9857c1c79f3a39d47228c8  sc1_sampler.sh

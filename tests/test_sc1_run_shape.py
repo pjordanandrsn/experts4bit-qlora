@@ -82,7 +82,7 @@ def test_the_proof_fetches_no_qwen3():
     assert "def lever_census" in SCHED and 'return 0 if ok else 1' in SCHED
 
 
-BOX_A = ['phase 0 ', 'fetch_common || finish 11', 'fetch awq', 'bake_qwen3 || finish 12', 'prompts || finish 19',
+BOX_A = ['phase 0 ', 'fetch_common || finish 11', 'bake_qwen3 || finish 12', 'prompts || finish 19',
          'sched_smoke qwen3_fused_b$B $B "$SPEEDENV" 1', 'sched_smoke qwen3_folds_b$B $B "$SPEEDENV" 0', 'quiesce build',
          'can_run 5400 k8_build && e4b_build', '\n  premise\n',
          'phase A ', 'quiesce arms', 'arm_lic_window r1 16', 'arm_vllm_gptq r1 16', 'arm_lic_window r1 1;', 'arm_vllm_gptq r1 1;',
@@ -91,13 +91,13 @@ BOX_A = ['phase 0 ', 'fetch_common || finish 11', 'fetch awq', 'bake_qwen3 || fi
          'E4B_INT4_GROUPED_SMALLM=1 E4B_INT4_LEAN_GLUE=auto" $SRC', 'e4b_k8 nf4_$SRC "$NF4ENV" $SRC',
          'phase D-vLLM ', 'vllm_nll prefill $SRC', 'vllm_nll served $SRC;', 'e4b_k8 nll_e4b_prefill_$SRC "$LICENV $PACKENV" $SRC --ppl-oracle eager',
          'phase G1 ', 'arm_lic_window r2 16', 'arm_vllm_gptq r2 16', 'arm_lic_window r2 1;', 'arm_vllm_gptq r2 1;', 'arm_lic_sched r2 16', 'arm_lic_sched r2 1;',
-         'phase C ', 'arm_vllm_fp8kv r1 $B', 'arm_rtn r1 $B', 'arm_nf4 r1 $B', 'arm_vllm_awq r1 $B',
+         'phase C ', 'arm_vllm_fp8kv r1 $B', 'arm_rtn r1 $B', 'arm_nf4 r1 $B',
          'phase F ', 'arm_vllm_sameprompt r1', 'arm_sched_sameprompt r1', 'arm_degraded r1',
          'phase E ', 'ttft_sched 512; ttft_sched 4096; ttft_vllm 512; ttft_vllm 4096',
          'phase EN ', 'energy_sched 1; energy_sched 16; energy_vllm 1; energy_vllm 16',
-         'phase G2 ', 'arm_vllm_fp8kv r2 $B', 'arm_rtn r2 $B', 'arm_vllm_awq r2 $B', 'arm_vllm_sameprompt r2', 'arm_sched_sameprompt r2', 'arm_degraded r2',
+         'phase G2 ', 'arm_vllm_fp8kv r2 $B', 'arm_rtn r2 $B', 'arm_vllm_sameprompt r2', 'arm_sched_sameprompt r2', 'arm_degraded r2',
          'third e4b lic_b$B arm_lic_window $B', 'third e4bsched lic_sched_b$B arm_lic_sched $B', 'third vllm gptq_graph_b$B arm_vllm_gptq $B',
-         'third vllm gptq_fp8kv_b$B', 'third e4b rtn_b$B', 'third vllm awq_graph_b$B', 'arm_vllm_nodetok $B', 'arm_nf4 r2 $B',
+         'third vllm gptq_fp8kv_b$B', 'third e4b rtn_b$B', 'arm_vllm_nodetok $B', 'arm_nf4 r2 $B',
          'vllm_nll served $SRC fp8', 'reduce; }']
 BOX_B = ['phase 0 ', 'fetch_common || finish 11', 'fetch_ggufs', 'fetch_exl3', 'bake_qwen3 || finish 12', 'prompts || finish 19', 'quiesce arms',
          'phase AN ', 'arm_int4_window r1 $B', 'arm_int4_sched r1 $B', 'arm_vllm_gptq r1 $B',
@@ -164,7 +164,7 @@ def test_every_env_knob_the_box_reads_is_forwarded_by_the_driver():
 
 V3_ARMS = (  # the receipt stems v3's phases name, in the reducer's vocabulary (B loops over 16 1; D over r1 r2 r3)
     "lic_b${B}_$D", "lic_sched_b${B}_$D", "gptq_graph_b${B}_$D", "gptq_fp8kv_b${B}_$D", "rtn_b${B}_$D", "nf4_ctrl_b${B}_$D",
-    "awq_graph_b${B}_$D", "gptq_graph_sameprompt_b16_$D", "lic_sched_sameprompt_b16_$D", "lic_degraded_b16_$D",
+    "gptq_graph_sameprompt_b16_$D", "lic_sched_sameprompt_b16_$D", "lic_degraded_b16_$D",
     "gptq_graph_nodetok_b${B}_r1",                                  # the F7 pair (detokenize=False beside the matched detokenize=True arms, both B)
     "int4_b${B}_$D", "int4_sched_b${B}_$D", "q4km_b${B}_$D", "iq4xs_b1_r1", "4bpw_b${B}_$D", "w4a16_b${B}_$D",
     "gptq_matched_b${B}_$D", "gptq_native_b${B}_$D", "4bpw_cu13_b${B}_r1",
@@ -254,14 +254,14 @@ def test_receipt_names_match_the_reducers_vocabulary():
     spec.loader.exec_module(red)
     timed = ["e4b_lic_b16_r1.json", "e4b_lic_degraded_b16_r1.json", "e4b_nf4_ctrl_b1_r2.json", "e4b_rtn_b16_r3.json", "e4b_int4_b1_r1.json",
              "e4bsched_lic_sched_b1_r1.json", "e4bsched_lic_sched_sameprompt_b16_r1.json", "e4bsched_int4_sched_b16_r2.json",
-             "vllm_gptq_graph_b16_r1.json", "vllm_gptq_fp8kv_b1_r2.json", "vllm_awq_graph_b16_r1.json", "vllm_gptq_graph_nodetok_b1_r1.json",
+             "vllm_gptq_graph_b16_r1.json", "vllm_gptq_fp8kv_b1_r2.json", "vllm_gptq_graph_nodetok_b1_r1.json",
              "vllm_gptq_graph_sameprompt_b16_r1.json", "sglang_gptq_matched_b16_r1.json", "sglang_gptq_native_b1_r1.json",
              "llamacpp_q4km_b16_r1.json", "llamacpp_iq4xs_b1_r1.json", "exl3_4bpw_b1_r1.json", "exl3_4bpw_cu13_b16_r1.json", "lmdeploy_w4a16_b16_r2.json"]
     for name in timed:
         m = red.ARM_RE.match(name)
         assert m, name
         engine, arm = m.group(1), m.group(2)
-        assert engine in ("e4b", "e4bsched") or arm in set(red.MATCHED_ARMS.values()) | {"gptq_fp8kv", "awq_graph", "gptq_graph_nodetok", "gptq_graph_sameprompt", "iq4xs"} \
+        assert engine in ("e4b", "e4bsched") or arm in set(red.MATCHED_ARMS.values()) | {"gptq_fp8kv", "gptq_graph_nodetok", "gptq_graph_sameprompt", "iq4xs"} \
             | set().union(*red.NATIVE_ARMS.values()), (engine, arm)
     for name in ("smoke_qwen3_fused_b1.json", "e4b_k19census_b1.json", "e4bsched_energy_b1.json", "vllm_energy_b16.json", "llamacpp_energy_q4km_b1.json"):
         assert not red.ARM_RE.match(name), name                     # not timed rows
@@ -276,4 +276,16 @@ def test_receipt_names_match_the_reducers_vocabulary():
     assert 'e4b_k8 lic_auto_$SRC' in RUN and "k8_{name}" in (LANE / "sc1_reduce.py").read_text()   # k8_<name>: the runner writes k8_lic_auto_<src> etc.
     assert 'sc1_reduce.py $W --box $BOX --out-dir $W' in RUN           # its CLI
     assert '"SC1_BOX": "%s"' in RUN                                    # box.json
+
+
+def test_g2_droppables_in_the_registered_order_and_no_awq_arm():
+    """v4 Phase C cuts the AWQ arm; G2's droppables run nodetok (both B) first, nf4_ctrl r2 second, the fp8-KV served rows last."""
+    g2 = _body("box_a", "box_b")
+    g2 = g2[g2.index('phase G2 '):]
+    nodetok = g2.index('for B in 1 16; do can_run 900 vllm_gptq_graph_nodetok_b${B}_r1 && { arm_vllm_nodetok $B; rec $?; }; done')
+    nf4 = g2.index('for B in 16 1; do can_run 900 e4b_nf4_ctrl_b${B}_r2 && { arm_nf4 r2 $B; rec $?; }; done')
+    fp8q = g2.index('vllm_nll served $SRC fp8')
+    assert g2.index('third e4b rtn_b$B') < nodetok < nf4 < fp8q < g2.index('reduce; }')
+    assert not re.search(r"(?i)awq", RUN.replace("the AWQ arm is CUT from SC1 -- v4 Phase C", "")), "the AWQ arm is cut (v4 Phase C)"
+    assert "awq" not in DRIVE.lower()
 

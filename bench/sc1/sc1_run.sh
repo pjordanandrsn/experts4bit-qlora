@@ -5,7 +5,7 @@
 #
 # One script, three boxes (SC1_BOX=A|B|C), each its OWN draw with its OWN anchors, every ratio within its box:
 #   A  AMD host, pytorch 2.8 cu12.9 image: e4b NF4 control / LICENSED pack (built + gated HERE) / RTN (labelled) / the
-#      scheduler-slope arms / controls / energy; vLLM 0.30.0 (gptq graph, fp8 KV, AWQ, SAMEPROMPT, the nodetok pair); vLLM
+#      scheduler-slope arms / controls / energy; vLLM 0.30.0 (gptq graph, fp8 KV, SAMEPROMPT, the nodetok pair); vLLM
 #      quality; the e4b prefill-shaped rows.
 #   B  same image: the anchors re-measured (e4b RTN window + sched, vLLM gptq, two draws), the bf16 upstream oracle on both
 #      windows, llama.cpp b11327 / ExLlamaV3 1.5.3 (cu128) / LMDeploy 0.18.0 at B=1/16 + their quality, TTFT on every
@@ -48,7 +48,6 @@ BOX=$SC1_BOX; case "$BOX" in A|B|C) ;; *) say "refusing: SC1_BOX must be A, B or
 GNF4_SHA=34da93d6fe8d2a401b7001705658ce00b2b18213   # grouped-nf4-gemm v0.34.1 -- the COMMIT the tag points to (`git rev-parse v0.34.1^{commit}`; the tag OBJECT is e7ae8e2e)
 MID=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
 GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441
-AWQ_MID=QuixiAI/Qwen3-30B-A3B-AWQ; AWQ_REV=1ba5586ace54cc9de85addac384eb88576f94598              # the only AWQ of the BASE model (lmdeploy driver docstring, HF 2026-10-01)
 GGUF_REPO=unsloth/Qwen3-30B-A3B-GGUF; GGUF_REV=d5b1d57bd0b504ac62ae6c725904e96ef228dc74
 GGUF_Q4KM=Qwen3-30B-A3B-Q4_K_M.gguf; GGUF_IQ4XS=Qwen3-30B-A3B-IQ4_XS.gguf
 EXL3_MID=turboderp/Qwen3-30B-A3B-exl3; EXL3_REV=0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef           # branch 4.0bpw (head_bits 6)
@@ -549,7 +548,6 @@ arm_degraded(){ local D=$1; lic_ready e4b_lic_degraded_b16_$D e4b 16 || return 0
 arm_sched_sameprompt(){ local D=$1; lic_ready e4bsched_lic_sched_sameprompt_b16_$D e4bsched 16 || return 0; sched_arm lic_sched_sameprompt_b16_$D 16 "$LICENV $PACKENV" 2048 1 $W/prompts_b16.json --sameprompt; }
 arm_vllm_gptq(){ local D=$1 B=$2; vllm_arm gptq_graph_b${B}_$D "$([ "$D" = r2 ] && echo graph_r2 || echo graph_r1)" $B "$GPTQ_MID" "$GPTQ_REV"; }
 arm_vllm_fp8kv(){ local D=$1 B=$2; vllm_arm gptq_fp8kv_b${B}_$D fp8kv $B "$GPTQ_MID" "$GPTQ_REV"; }
-arm_vllm_awq(){ local D=$1 B=$2; vllm_arm awq_graph_b${B}_$D "$([ "$D" = r2 ] && echo graph_r2 || echo graph_r1)" $B "$AWQ_MID" "$AWQ_REV"; }
 arm_vllm_sameprompt(){ local D=$1; vllm_arm gptq_graph_sameprompt_b16_$D sameprompt 16 "$GPTQ_MID" "$GPTQ_REV"; }
 arm_vllm_nodetok(){ local B=$1; vllm_arm gptq_graph_nodetok_b${B}_r1 nodetok $B "$GPTQ_MID" "$GPTQ_REV"; }   # the F7 pair: the matched vLLM arms keep detokenize=True (a comparator's loop is never trimmed to e4b's omission); this runs detokenize=False at both B
 arm_llamacpp_q4km(){ local D=$1 B=$2; llamacpp_up $W/gguf/$GGUF_Q4KM $B && { llamacpp_arm q4km_b${B}_$D $B; local rc=$?; llamacpp_down; return $rc; }; llamacpp_arm q4km_b${B}_$D $B; }
@@ -583,8 +581,8 @@ energy_exl3(){ can_run 900 energy_exl3_b1 && { energy exl3_b1 exl3 1 $W/exl3_ene
 energy_lmdeploy(){ can_run 900 energy_lmdeploy_b1 && { energy lmdeploy_b1 lmdeploy 1 $W/lmdeploy_energy_w4a16_b1.json lmdeploy_arm energy_w4a16_b1 1; rec $?; }; }
 # ============================================================================ the per-box phase lists (v3 "Arms and their order", in that order)
 box_a(){ SCHED_NAME=lic; SCHED_STACK="$LICENV $PACKENV"
-  phase 0 "fetch bf16 + comparator checkpoints, bake, prompts, build_engine smoke (both fusion sets), quiesce, the licensed pack build, the premise"
-  fetch_common || finish 11; have vllm && { fetch awq "$AWQ_MID" "$AWQ_REV" 1800 || OK[awq]=0; }
+  phase 0 "fetch bf16 + the GPTQ checkpoint, bake, prompts, build_engine smoke (both fusion sets), quiesce, the licensed pack build, the premise"
+  fetch_common || finish 11
   bake_qwen3 || finish 12; prompts || finish 19
   for B in 1 16; do   # the fused sched path first meets the GPU HERE, before the pack build spends 35 min (the proof's Granite cannot exercise fuse_qkv)
     can_run 600 smoke_qwen3_fused_b$B && { sched_smoke qwen3_fused_b$B $B "$SPEEDENV" 1; rec $?; }
@@ -619,11 +617,10 @@ box_a(){ SCHED_NAME=lic; SCHED_STACK="$LICENV $PACKENV"
   can_run 900 vllm_gptq_graph_b1_r2 && { arm_vllm_gptq r2 1; rec $?; }
   can_run 900 e4bsched_lic_sched_b16_r2 && { arm_lic_sched r2 16; rec $?; }
   can_run 900 e4bsched_lic_sched_b1_r2 && { arm_lic_sched r2 1; rec $?; }
-  phase C "vllm/gptq_fp8kv_b{16,1}, e4b/rtn_b{16,1}, e4b/nf4_ctrl_b{16,1}, vllm/awq_graph_b{16,1} (first draws; AWQ last: a third party's checkpoint)"
+  phase C "vllm/gptq_fp8kv_b{16,1}, e4b/rtn_b{16,1}, e4b/nf4_ctrl_b{16,1} (first draws; the AWQ arm is CUT from SC1 -- v4 Phase C)"
   for B in 16 1; do can_run 900 vllm_gptq_fp8kv_b${B}_r1 && { arm_vllm_fp8kv r1 $B; rec $?; }; done
   for B in 16 1; do can_run 900 e4b_rtn_b${B}_r1 && { arm_rtn r1 $B; rec $?; }; done
   for B in 16 1; do can_run 900 e4b_nf4_ctrl_b${B}_r1 && { arm_nf4 r1 $B; rec $?; }; done
-  for B in 16 1; do [ "${OK[awq]:-1}" = 1 ] && can_run 900 vllm_awq_graph_b${B}_r1 && { arm_vllm_awq r1 $B; rec $?; }; done
   phase F "controls: vllm/gptq_graph_sameprompt_b16, e4bsched/lic_sched_sameprompt_b16, e4b/lic_degraded_b16 (E4B_INT4_GROUPED_SMALLM=0)"
   can_run 900 vllm_gptq_graph_sameprompt_b16_r1 && { arm_vllm_sameprompt r1; rec $?; }
   can_run 900 e4bsched_lic_sched_sameprompt_b16_r1 && { arm_sched_sameprompt r1; rec $?; }
@@ -632,15 +629,14 @@ box_a(){ SCHED_NAME=lic; SCHED_STACK="$LICENV $PACKENV"
   ttft_sched 512; ttft_sched 4096; ttft_vllm 512; ttft_vllm 4096
   phase EN "energy windows: e4b_b1, e4b_b16 (the sched engine), vllm_b1, vllm_b16 (1024 decoded tokens under the sampler)"
   energy_sched 1; energy_sched 16; energy_vllm 1; energy_vllm 16
-  phase G2 "second draws of C and the controls; third draws where r1/r2 disagree > 3 %; the nodetok pair; nf4_ctrl r2; the fp8-KV served quality rows (the designated droppables last)"
+  phase G2 "second draws of C and the controls; third draws where r1/r2 disagree > 3 %; then the designated droppables in order: the nodetok pair (both B), nf4_ctrl r2, the fp8-KV served quality rows"
   for B in 16 1; do can_run 900 vllm_gptq_fp8kv_b${B}_r2 && { arm_vllm_fp8kv r2 $B; rec $?; }; done
   for B in 16 1; do can_run 900 e4b_rtn_b${B}_r2 && { arm_rtn r2 $B; rec $?; }; done
-  for B in 16 1; do [ "${OK[awq]:-1}" = 1 ] && can_run 900 vllm_awq_graph_b${B}_r2 && { arm_vllm_awq r2 $B; rec $?; }; done
   can_run 900 vllm_gptq_graph_sameprompt_b16_r2 && { arm_vllm_sameprompt r2; rec $?; }
   can_run 900 e4bsched_lic_sched_sameprompt_b16_r2 && { arm_sched_sameprompt r2; rec $?; }
   can_run 900 e4b_lic_degraded_b16_r2 && { arm_degraded r2; rec $?; }
   for B in 16 1; do third e4b lic_b$B arm_lic_window $B; third e4bsched lic_sched_b$B arm_lic_sched $B; third vllm gptq_graph_b$B arm_vllm_gptq $B
-                   third vllm gptq_fp8kv_b$B arm_vllm_fp8kv $B; third e4b rtn_b$B arm_rtn $B; third vllm awq_graph_b$B arm_vllm_awq $B; done
+                   third vllm gptq_fp8kv_b$B arm_vllm_fp8kv $B; third e4b rtn_b$B arm_rtn $B; done
   for B in 1 16; do can_run 900 vllm_gptq_graph_nodetok_b${B}_r1 && { arm_vllm_nodetok $B; rec $?; }; done
   for B in 16 1; do can_run 900 e4b_nf4_ctrl_b${B}_r2 && { arm_nf4 r2 $B; rec $?; }; done
   for SRC in wikitext c4val1; do can_run 1500 nll_vllm_fp8kv_served_$SRC && { vllm_nll served $SRC fp8; rec $?; }; done   # P8's quality clause (v3 Environments: the fp8-KV hazard is SCORED); not in v3's phase list, so last

@@ -21,13 +21,13 @@ window arm, K8, the upstream oracle), `experts4bit_qlora/serve_paged.py` (`build
 
 ## The three boxes (each its own draw; every ratio within its box)
 
-- **A** (AMD host, `pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel`): Phase 0 (fetch bf16 + GPTQ + AWQ, bake, prompts, `build_engine` smoke
+- **A** (AMD host, `pytorch/pytorch:2.8.0-cuda12.9-cudnn9-devel`): Phase 0 (fetch bf16 + GPTQ, bake, prompts, `build_engine` smoke
   fused/unfused at B=1/16, quiesce, the licensed pack build, premise) → A (`e4b/lic_b16_r1`, `vllm/gptq_graph_b16_r1`, `e4b/lic_b1_r1`,
   `vllm/gptq_graph_b1_r1`) → A2 (`e4b/lic_sched_b{16,1}_r1`) → B (K8 lic `auto` + `=1`, wikitext + c4val1; NF4 control both texts) →
   D-vLLM (vLLM prefill + served quality both windows; e4b `--ppl-oracle eager` rows) → G1 (second draws of A, A2) → C (`fp8kv`, `rtn`,
-  `nf4_ctrl`, `awq`) → F (`vllm/gptq_graph_b16_SAMEPROMPT`, `e4b/lic_sched_b16_SAMEPROMPT`, `e4b/lic_b16_degraded`) → E (TTFT 512/4096
+  `nf4_ctrl`; the AWQ arm is CUT, v4 Phase C) → F (`vllm/gptq_graph_b16_SAMEPROMPT`, `e4b/lic_sched_b16_SAMEPROMPT`, `e4b/lic_b16_degraded`) → E (TTFT 512/4096
   e4b-sched + vLLM) → EN (energy `lic_sched_b{1,16}`, `vllm_b{1,16}`) → G2 (second draws of C + controls, third draws on > 3 % disagreement,
-  the detokenisation pair, `nf4_ctrl` r2 last).
+  the nodetok pair at both B as the first droppable, `nf4_ctrl` r2 as the second, the fp8-KV served quality rows last).
 - **B** (same image): Phase 0 (fetches incl. two GGUFs + EXL3, bake, prompts; llama.cpp build + ExLlamaV3 cu128 + LMDeploy venvs) → anchors
   `e4b/int4_b{16,1}` + `e4b/int4_sched_b{16,1}` + `vllm/gptq_graph_b{16,1}` → the bf16 upstream oracle (both windows) → `llamacpp/q4km`,
   `exl3/4bpw`, `lmdeploy/w4a16` at B=16/1, `llamacpp/iq4xs_b1` → their quality (prefill + served shape; LMDeploy's served shape is
@@ -44,7 +44,7 @@ never starts an arm that cannot finish 10 min before the deadline; a skipped arm
 
 Timed arms `<engine>_<arm>_b<B>_r<n>.json`, engine `e4b` (window) | `e4bsched` (scheduler) | `vllm` | `sglang` | `llamacpp` | `exl3` | `lmdeploy`:
 `e4b_lic_b16_r1`, `e4b_rtn_b1_r2`, `e4b_nf4_ctrl_b16_r1`, `e4b_int4_b1_r1`, `e4b_lic_degraded_b16_r1`, `e4bsched_lic_sched_b16_r1`,
-`e4bsched_int4_sched_b1_r2`, `e4bsched_lic_sched_sameprompt_b16_r1`, `vllm_gptq_graph_b16_r1`, `vllm_gptq_fp8kv_b1_r1`, `vllm_awq_graph_b16_r1`,
+`e4bsched_int4_sched_b1_r2`, `e4bsched_lic_sched_sameprompt_b16_r1`, `vllm_gptq_graph_b16_r1`, `vllm_gptq_fp8kv_b1_r1`,
 `vllm_gptq_graph_sameprompt_b16_r1`, `vllm_gptq_graph_nodetok_b{1,16}_r1`, `sglang_gptq_matched_b16_r1`, `sglang_gptq_native_b1_r1`,
 `llamacpp_q4km_b16_r1`, `llamacpp_iq4xs_b1_r1`, `exl3_4bpw_b16_r1`, `exl3_4bpw_cu13_b16_r1`, `lmdeploy_w4a16_b1_r1`; a third draw is `_r3`.
 Quality: `k8_build_wikitext`, `k8_lic_{auto,1}_{wikitext,c4val1}` (+ `logs/census_k8_lic_1_<src>.txt` from the `e4b_k19census_b1` arm),
