@@ -25,10 +25,13 @@ names (``E4B_SERVE_EXP_INT4``, ``E4B_SERVE_EXP_INT4_CALIB``, ``E4B_SERVE_ATTN_IN
 ``E4B_CALIB_NSEQ``, ``E4B_CALIB_SOURCE``, ``E4B_INT4_ARTIFACT_DIR``, ``E4B_INT4_EXPECTED_FINGERPRINT``,
 ``E4B_INT4_DUMP_ARTIFACT_DIR``, ``E4B_CALIB_LAYERS_PER_PASS``; ``E4B_INT4_ASSIGNMENT`` is read by the
 library itself) -> amortisation counters off (``--amort off``, the production shape) -> the paged
-attention registered -> the fusions: either ``fuse_qkv`` (``E4B_PAGED_FUSE_QKV=1``; lane P54) OR the
-three env-gated folds (``E4B_FUSE_T1_GLUE``, ``E4B_FUSE_T1_GLUE_R2``, ``E4B_FUSE_ROUTER_EPI``), which
-is how the harness has them -- two exclusive branches; asking for both is refused because no lane
-has measured the combination -> ``Fp8PagedKV(batch=max_seqs, scratch_slots=max(buckets))`` ->
+attention registered -> the fusions, at ONE assembly point as the harness has them: with
+``E4B_PAGED_FUSE_QKV=1``, ``fuse_qkv`` (lane P54), which applies the three env-gated folds
+(``E4B_FUSE_T1_GLUE``, ``E4B_FUSE_T1_GLUE_R2``, ``E4B_FUSE_ROUTER_EPI``) ITSELF after fusing -- the
+registered B=1 fused stack (P54 / P58 / P88) is ``--fuse-qkv`` WITH those flags set; without it, the
+three folds called directly. The census reports what each fold returned either way (in the fused
+branch the fold functions are wrapped on their modules for the duration of the ``fuse_qkv`` call,
+which imports them inside its body) -> ``Fp8PagedKV(batch=max_seqs, scratch_slots=max(buckets))`` ->
 ``PagedModelRunner`` -> ``enable_decode_graphs`` when ``E4B_PAGED_GRAPHS=1`` -> the scheduler. A
 lever that is set and patches nothing RAISES at startup (the lanes' ``_lever_check`` rule); the
 census -- how many modules each lever patched -- is reported at ``GET /health`` so a reader can
@@ -141,7 +144,7 @@ class PagedServeConfig:
     dram_gb: float = 6.0                 # E4B_PAGED_DRAM_GB
     hot_rows: int = 64                   # E4B_PAGED_HOT_ROWS
     kv_groups: str = "auto"              # E4B_PAGED_KV_GROUPS: auto | <int>
-    fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV=1 (exclusive with the env-gated folds)
+    fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV=1 (fuse_qkv applies the env-gated folds itself)
     torch_threads: int = 8               # E4B_PAGED_TORCH_THREADS
     max_tokens_cap: int = 0              # E4B_PAGED_MAX_TOKENS: 0 -> max_tokens_per_seq - 1 (refuses, never clamps)
     max_queue: int = 0                   # E4B_PAGED_MAX_QUEUE: in-flight cap, 0 = unbounded
@@ -635,27 +638,52 @@ def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
     return out
 
 
+def _count(v):
+    return [int(x) for x in v] if isinstance(v, (tuple, list)) else int(v)
+
+
 def _apply_fusions(model, cfg: PagedServeConfig) -> dict:
-    """The harness's two EXCLUSIVE branches: ``--fuse-qkv`` alone, or the three env-gated folds."""
+    """One assembly point, as the harness: ``qkv_fuse.fuse_qkv`` imports and calls ``fuse_t1_glue``,
+    ``fuse_t1_glue_r2`` and ``fuse_router_epilogue`` itself after fusing (so the env flags are live on the
+    fused path -- the registered B=1 stack is ``--fuse-qkv`` WITH the fold flags set); the unfused branch
+    calls the three directly. The census carries what each fold RETURNED, never a literal 0: in the fused
+    branch the fold functions are wrapped on their modules for the duration of the call -- ``fuse_qkv``
+    imports them inside its body, so the wrapper is what it calls -- and restored afterwards."""
+    from .engines import glue_fuse, glue_r2, router_epilogue
     set_folds = [k for k in FUSION_ENV if os.environ.get(k, "0") == "1"]
+    folds = ((glue_fuse, "fuse_t1_glue", "fuse_t1_glue_n"),
+             (glue_r2, "fuse_t1_glue_r2", "fuse_t1_glue_r2_n"),
+             (router_epilogue, "fuse_router_epilogue", "fuse_router_epilogue_n"))
     if cfg.fuse_qkv:
-        if set_folds:
-            raise RuntimeError(
-                f"E4B_PAGED_FUSE_QKV=1 together with {set_folds}: step_decomp applies --fuse-qkv and the env-gated "
-                "glue/router folds in exclusive branches and no lane has measured the combination -- unset one")
         from .engines.qkv_fuse import fuse_qkv
-        n = fuse_qkv(model)
+        captured: dict = {}
+        saved = []
+        for mod, fname, key in folds:
+            orig = getattr(mod, fname)
+
+            def _recording(*a, _orig=orig, _key=key, **k):
+                r = _orig(*a, **k)
+                captured[_key] = r
+                return r
+
+            saved.append((mod, fname, orig))
+            setattr(mod, fname, _recording)
+        try:
+            n = fuse_qkv(model)
+        finally:
+            for mod, fname, orig in saved:
+                setattr(mod, fname, orig)
         if n == 0:
             raise RuntimeError("E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion")
-        log(f"fuse_qkv: {n} attention modules")
-        return {"fuse_qkv_n": int(n), "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}
-    from .engines.glue_fuse import fuse_t1_glue
-    from .engines.glue_r2 import fuse_t1_glue_r2
-    from .engines.router_epilogue import fuse_router_epilogue
-    out = {"fuse_qkv_n": 0, "fuse_t1_glue_n": int(fuse_t1_glue(model)),
-           "fuse_t1_glue_r2_n": [int(x) for x in fuse_t1_glue_r2(model)],
-           "fuse_router_epilogue_n": int(fuse_router_epilogue(model))}
-    log(f"fusions: {out}")
+        missing = [key for _, _, key in folds if key not in captured]
+        if missing:
+            raise RuntimeError(
+                f"fuse_qkv returned without calling {missing}: qkv_fuse no longer applies the folds at its assembly "
+                "point, so this census cannot be reported -- update _apply_fusions rather than guessing")
+        out = {"fuse_qkv_n": int(n), **{key: _count(captured[key]) for _, _, key in folds}}
+    else:
+        out = {"fuse_qkv_n": 0, **{key: _count(getattr(mod, fname)(model)) for mod, fname, key in folds}}
+    log(f"fusions (fold flags set: {set_folds or 'none'}): {out}")
     return out
 
 

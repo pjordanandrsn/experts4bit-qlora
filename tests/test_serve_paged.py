@@ -13,6 +13,7 @@ import asyncio
 import json
 import threading
 import time
+import types
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -27,6 +28,7 @@ from experts4bit_qlora.serve_paged import (  # noqa: E402
     PagedEngine,
     PagedServeConfig,
     PagedStream,
+    _apply_fusions,
     create_app,
     stream_events,
 )
@@ -574,3 +576,96 @@ def test_config_from_env_and_defaults(monkeypatch):
     monkeypatch.setenv("E4B_PAGED_PLACEMENT", "nvme")
     with pytest.raises(ValueError, match="all-vram or solver"):
         PagedServeConfig.from_env()
+
+
+# ---------------------------------------------------------------- fusions --
+
+FOLD_FLAGS = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
+
+
+def _fake_attention_model():
+    """A CPU stand-in the REAL qkv_fuse.fuse_qkv accepts: a module whose class is named Qwen3MoeAttention with
+    unbiased dense q/k/v projections (the dense branch of the fusion), so the test exercises fuse_qkv's own
+    function-body imports of the folds rather than a stand-in for fuse_qkv."""
+    torch = pytest.importorskip("torch")
+
+    class Qwen3MoeAttention(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.q_proj = torch.nn.Linear(8, 8, bias=False)
+            self.k_proj = torch.nn.Linear(8, 4, bias=False)
+            self.v_proj = torch.nn.Linear(8, 4, bias=False)
+            self.q_norm = torch.nn.Identity()
+            self.k_norm = torch.nn.Identity()
+            self.head_dim = 4
+            self.config = types.SimpleNamespace()
+
+    return torch.nn.Sequential(Qwen3MoeAttention())
+
+
+def _fake_folds(monkeypatch):
+    """Fold functions that need no kernel: each records its call and returns a distinct count."""
+    from experts4bit_qlora.engines import glue_fuse, glue_r2, router_epilogue
+    calls = []
+    monkeypatch.setattr(glue_fuse, "fuse_t1_glue", lambda model: calls.append("glue") or 3)
+    monkeypatch.setattr(glue_r2, "fuse_t1_glue_r2", lambda model: calls.append("r2") or (2, 1))
+    monkeypatch.setattr(router_epilogue, "fuse_router_epilogue", lambda model: calls.append("epi") or 4)
+    return calls
+
+
+def _fold_functions():
+    from experts4bit_qlora.engines import glue_fuse, glue_r2, router_epilogue
+    return (glue_fuse.fuse_t1_glue, glue_r2.fuse_t1_glue_r2, router_epilogue.fuse_router_epilogue)
+
+
+def test_fused_branch_with_fold_flags_reports_the_folds_fuse_qkv_applied(monkeypatch):
+    """The registered B=1 stack is --fuse-qkv WITH the fold flags set: fuse_qkv calls the folds itself, the
+    server must not refuse the combination, and the census must carry what the folds returned -- captured through
+    fuse_qkv's own function-body imports, not re-run and not a literal 0."""
+    for k in FOLD_FLAGS:
+        monkeypatch.setenv(k, "1")
+    calls = _fake_folds(monkeypatch)
+    before = _fold_functions()
+    out = _apply_fusions(_fake_attention_model(), PagedServeConfig(model="x", fuse_qkv=True))
+    assert out == {"fuse_qkv_n": 1, "fuse_t1_glue_n": 3, "fuse_t1_glue_r2_n": [2, 1], "fuse_router_epilogue_n": 4}
+    assert calls == ["glue", "r2", "epi"], "each fold called once, by fuse_qkv, in its order"
+    assert _fold_functions() == before, "the recording wrappers were not restored"
+
+
+def test_fused_branch_restores_the_fold_functions_when_fuse_qkv_raises(monkeypatch):
+    from experts4bit_qlora.engines import qkv_fuse
+    _fake_folds(monkeypatch)
+    before = _fold_functions()
+
+    def boom(model):
+        raise RuntimeError("biased q/k/v projections")
+
+    monkeypatch.setattr(qkv_fuse, "fuse_qkv", boom)
+    with pytest.raises(RuntimeError, match="biased"):
+        _apply_fusions(_fake_attention_model(), PagedServeConfig(model="x", fuse_qkv=True))
+    assert _fold_functions() == before
+
+
+def test_fused_branch_refuses_a_fuse_qkv_that_skips_the_folds(monkeypatch):
+    """If qkv_fuse ever stops applying the folds at its assembly point, the census cannot be reported from it
+    and the server must say so rather than print zeros."""
+    from experts4bit_qlora.engines import qkv_fuse
+    _fake_folds(monkeypatch)
+    monkeypatch.setattr(qkv_fuse, "fuse_qkv", lambda model: 1)
+    with pytest.raises(RuntimeError, match="without calling"):
+        _apply_fusions(_fake_attention_model(), PagedServeConfig(model="x", fuse_qkv=True))
+
+
+def test_fused_branch_refuses_a_vacuous_fusion(monkeypatch):
+    torch = pytest.importorskip("torch")
+    _fake_folds(monkeypatch)
+    with pytest.raises(RuntimeError, match="matched no attention module"):
+        _apply_fusions(torch.nn.Sequential(torch.nn.Linear(2, 2)), PagedServeConfig(model="x", fuse_qkv=True))
+
+
+def test_unfused_branch_calls_the_folds_directly_and_reports_them(monkeypatch):
+    calls = _fake_folds(monkeypatch)
+    out = _apply_fusions(object(), PagedServeConfig(model="x", fuse_qkv=False))
+    assert out == {"fuse_qkv_n": 0, "fuse_t1_glue_n": 3, "fuse_t1_glue_r2_n": [2, 1], "fuse_router_epilogue_n": 4}
+    assert calls == ["glue", "r2", "epi"]
+

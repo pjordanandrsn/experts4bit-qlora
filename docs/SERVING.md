@@ -91,9 +91,10 @@ The served stack is the harness's stack, built in the harness's order (`bench/p3
 in VRAM (`E4B_PAGED_PLACEMENT=all-vram`, the point every certified serving number was measured at),
 the hybrid tier, then the int4 levers read from the **same environment names the lane hook uses**
 (`E4B_SERVE_EXP_INT4`, `E4B_SERVE_ATTN_INT4`, `E4B_SERVE_ATTN_INT4_CALIB`, ...), amortisation off,
-the paged attention, and either `fuse_qkv` (`E4B_PAGED_FUSE_QKV=1`) or the env-gated folds
-(`E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2`, `E4B_FUSE_ROUTER_EPI`) -- the harness's two exclusive
-branches; asking for both is refused. A set lever that patches nothing refuses at startup, and
+the paged attention, and the fusions at one assembly point as the harness: `fuse_qkv`
+(`E4B_PAGED_FUSE_QKV=1`), which applies the env-gated folds (`E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2`,
+`E4B_FUSE_ROUTER_EPI`) itself -- the registered B=1 fused stack is `--fuse-qkv` with those flags set -- or,
+without it, the three folds called directly. A set lever that patches nothing refuses at startup, and
 `GET /health` reports the census (int4 expert layers, int4 attention projections, modules each fusion
 patched, decode-graph status per bucket) so a reader can tell which stack answered.
 

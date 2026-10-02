@@ -1,6 +1,20 @@
 # Changelog
 
 ## Unreleased
+
+### serve_paged correction: `fuse_qkv` applies the env-gated folds itself -- the server no longer refuses the registered fused stack
+
+- #853 described `--fuse-qkv` and the three fold flags as the harness's exclusive branches and refused
+  `E4B_PAGED_FUSE_QKV=1` together with `E4B_FUSE_T1_GLUE` / `E4B_FUSE_T1_GLUE_R2` / `E4B_FUSE_ROUTER_EPI`. That was
+  wrong: `qkv_fuse.fuse_qkv` imports and calls the three folds after fusing (one serve assembly point), so the
+  registered B=1 fused stack (P54 / P58 / P88: `--fuse-qkv` WITH the fold flags) is exactly that combination. The
+  refusal is removed; the fused branch now reports `fuse_t1_glue_n` / `fuse_t1_glue_r2_n` / `fuse_router_epilogue_n`
+  from what the folds returned inside `fuse_qkv` (captured by wrapping them on their modules for the call, restored
+  after), never a literal 0, and a `fuse_qkv` that returns without calling them refuses. `/health`, the module
+  docstring and `docs/SERVING.md` say so.
+- Tests: the real `fuse_qkv` on a CPU stand-in attention module with fake folds and the flags set reports the counts
+  and no longer raises; the fold functions are restored after the call, including when `fuse_qkv` raises; a
+  `fuse_qkv` that skips the folds refuses; the unfused branch reports the folds it called directly.
 ### `experts4bit_qlora.serve_paged`: an OpenAI-compatible server over the continuous-batching engine (opt-in, v1)
 
 - **Why.** Request-level serving benchmarks (TTFT, ITL and throughput under Poisson arrivals, as `vllm bench serve`
