@@ -115,3 +115,8 @@ can cap in-flight requests with a 503. The module docstring records the engine f
 reader needs (EOS handling, the per-sequence window, prefill chunking, graphs). Everything above the
 GPU seam is tested on CPU with a fake runner (`tests/test_serve_paged.py`); `build_engine` needs a
 CUDA box.
+
+**GPU status (as of 0.39.0): `build_engine` has not yet run on a GPU.** It reproduces the harness's construction
+(`bench/p39/step_decomp.py`) step for step, but no measurement of this server exists. Its first GPU exercise is lane
+SC1's proving rental (experts4bit-qlora#846): Granite-3.1-3B through `build_engine` at B=1 and B=16 with graphs and the
+lever census on an RTX 5090. This paragraph is updated with that receipt. Until then, treat the server as CPU-tested only.
