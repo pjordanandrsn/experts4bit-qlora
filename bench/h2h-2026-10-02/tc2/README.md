@@ -98,9 +98,20 @@ held-out loss) is a different adapter precision and init — the confound TC1 id
 matched row, never a comparison. Unsloth's registered target list still adapts the attention only on this family (tp4's VOID, on the
 current release); the lane's prediction that e4b's matched arm would land within 15 % of tp4's 6.33 s/step was wrong because that
 tp4 arm ran bf16 adapters. **TC2 P4 FALSIFIED.** e4b under expert offload on this family is the obvious next row and was not registered
-for this box. HF OOMs resident; axolotl's PEFT target names do not resolve on this family.
+for this box. HF OOMs resident. axolotl's refusal here is the harness's too: it enumerated target names on an
+`AutoModelForCausalLM` skeleton while axolotl's loader built the vision-language class (`is_multimodal: true`), whose language layers sit
+under a different module path (TC1 amendment 4, corrected 2026-10-02; not yet fixed).
 
 ## Box B re-run, Mixtral-8x7B-Instruct-v0.1 (`tc1-5090-26`, TC2 amendment 2's token on a host with 1 TB of RAM: instance 53859501, AMD EPYC 7C13, 1.06 TB RAM, driver 595.71.05)
+
+> **Correction (2026-10-02, TC2 amendment 5): this section's Unsloth readings are retired.** The 76–89-minute compile phase, the 6.2 / 7.0
+> s/step, the 12 % draw spread and the peak were produced by this harness's engagement counters inside Unsloth's compiled Mixtral MoE block:
+> Python dict increments wrapped around `torch._grouped_mm` and Unsloth's backend functions became Dynamo guards that failed on every call
+> (3,547 unique graphs, 743 "HOP: Unsafe side effect" graph breaks, two hits of the 1024 recompile limit, after which frames ran eagerly).
+> Unsloth compiles Mixtral's MoE block and leaves Qwen3's uncompiled, which is why no other family's Unsloth arm shows it (each is clean on
+> the same counters). The candidate named below ("the harness's output-capture hooks") was the wrong mechanism. e4b's offload rows stand;
+> the counters are now trace-safe and the pair is re-measured. `e4b.train.h2h.unsloth.mixtral.5090.2026-10-02` and `.compile-warmup` are retired.
+> P7's FALSIFIED below, decided by Unsloth's second Mixtral draw, is withdrawn to UNTESTED; P5 stays UNTESTED; P6 (e4b's parity) stands.
 
 32 layers, 8 experts, 640 adapter slots: the matched set is **223,346,688** trainable parameters. (The two Unsloth arm logs ship gzipped, `logs/*.log.gz`: 5.7 MB
 each of kernel-compile progress bars; `gunzip -c` returns the box's bytes.) e4b runs under expert offload (the registered

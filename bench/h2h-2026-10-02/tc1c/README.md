@@ -44,7 +44,7 @@ Stated as what the profiles show; which torch code path sm_120 takes is not esta
 - HF + PEFT (bf16 experts, `target_parameters`, double-quant on the attention): loaded in 23.5 s at 62 GB resident — it fits on 80 GB,
   as TC1c predicted — then produced no training step inside its registered 1,800 s alarm: **ALARM, not measured** (P4 UNTESTED; the
   alarm was sized for the 5090's OOM, not for bf16 experts training through PEFT's weight-side fold). No HF position on this card.
-- axolotl 0.20.0: its venv installed (amendment 3) and the arm died after load in transformers 5.17.0's Qwen3-MoE router
+- axolotl 0.20.0: its venv installed (amendment 3) and the arm died after load in transformers 5.17.0's Qwen3-MoE router **Corrected 2026-10-02 (TC1 amendment 4): the harness's no-autocast loop met axolotl's fp32 `.gate` router; not an axolotl result.**
   (`F.linear(hidden_states, self.weight)`: bf16 vs fp32) before writing a receipt — HARNESS_ERROR here, an UNSUPPORTED row with that
   message once TC3 amendment 4's wrapper is on the box. The same crash on the 24 GB box (`tc3-4090-1`).
 - The mb1 secondary pair did not run (HF did not OOM); the native rows and the torch-2.8 row are not part of this token.

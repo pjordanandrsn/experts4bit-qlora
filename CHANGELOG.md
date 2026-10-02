@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Corrections (#835): two published head-to-head results were this harness's artifacts -- axolotl "does not train" Qwen3-MoE, and Unsloth's Mixtral numbers (bench, tests, docs and register)
+
+- **axolotl** (TC1 amendment 4). axolotl 0.20.0's loader keeps every `*.gate` router in fp32 on purpose and its own trainer runs the forward
+  under bf16 autocast; this harness drives the forward with no autocast, so on Qwen3-30B-A3B the fp32 router met bf16 activations and every
+  axolotl arm died in its first forward. The receipts show the router in float32 on the axolotl arms and in bfloat16 on the HF and e4b arms.
+  `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported` is **retired**; the TC3 24 GB row and the Qwen3.6 row are corrected (the
+  Qwen3.6 refusal was the harness's target naming against axolotl's vision-language model class). `bench/tc1/tc1_arm.py` now casts axolotl's
+  frozen fp32 routers to bf16 after load -- what autocast computes per call -- and records it; axolotl's scattermoe arm may reach the Hub for
+  its kernels and records the kernel commits it fetched.
+- **Unsloth on Mixtral** (TC2 amendment 5). The harness's engagement counters were Python dict increments; inside Unsloth's compiled Mixtral
+  MoE block each became a Dynamo guard that failed on every call (3,547 graphs, 743 graph breaks, the 1024 recompile limit hit twice). The
+  76-89-minute "compile phase", the 6.2 / 7.0 s/step and the 12 % draw spread were the harness's. `e4b.train.h2h.unsloth.mixtral.5090.2026-10-02`
+  and `.compile-warmup` are **retired**; P7 is withdrawn to UNTESTED. Every other Unsloth arm of the campaign is clean on the same counters
+  (Unsloth leaves Qwen3's MoE block uncompiled), so the Qwen3, Qwen3.6, OLMoE and gpt-oss readings stand. The counters are now trace-safe
+  (a registered custom op under tracing, a plain increment otherwise; tested under `torch.compile` with checkpointing), and every Dynamo
+  snapshot records frames, graphs, graph breaks and recompile-limit hits (`recompiles_total` read a key torch 2.12 never fills).
+- Both re-runs are registered in the amendments and run from this merge. `docs/STATUS.md`, the solution page, the capability list and the
+  TC1, TC1c, TC2 and TC3 READMEs carry the corrections in place, dated.
+
 ### Lane SC1 amendment A9 (#846): SGLang runs `--dtype float16`, the GPTQ checkpoint's scales dtype (its Marlin MoE asserted on bf16 activations) (bench + tests)
 
 - `bench/sc1/sglang/server.sh`, `one_batch.sh`: `--dtype float16` instead of `bfloat16`. Box C's re-proof `sc1c-prove-14` got past
