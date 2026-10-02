@@ -274,3 +274,46 @@ so it cannot say whether the card or the host slowed.
    no third box runs under this amendment.
 
 Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20 (`tc1-5090-33` cost $0.51); the standing no-ask tier.
+
+### Amendment 8 (2026-10-02T23:23Z, after `tc1-5090-34`'s read, before any box): e4b shipped against axolotl's scattermoe over 200 steps
+
+**What `tc1-5090-34` showed.** All seven arms of amendment 5's token are VALID. P13 is scored there and is final:
+
+- **The Unsloth half HELD.** Unsloth native-best / e4b shipped is 1.794 [1.790, 1.797]. e4b's draws are 3.277 and 3.279 s/step, and
+  Unsloth's are 5.869 and 5.889.
+- **The axolotl half is UNTESTED.** The scattermoe draws ran 4.574 and 4.107 s/step, 10.8 % apart.
+- **P13 is UNTESTED.** No third box runs for it.
+
+The scattermoe arm's spread has a visible shape. In both draws, steps 1, 3 and 6 took 216, 61-65 and 76-81 s, and later spikes fall on
+the same steps in both draws. Dynamo recorded no recompile and no graph break, so the cost sits outside torch.compile. On steps 14-16,
+the arm ran 2.98-3.46 s against e4b shipped's 3.02-3.20 s on the same tokens, a ratio of 0.94-0.99 when each side takes its faster draw.
+This is consistent with a per-process kernel warm-up keyed on batch shape, such as Triton autotuning in the scattermoe kernels. That
+cause is not measured. A 20-step window cannot separate such a warm-up from the steady step, and a user's run is longer than 20 steps.
+
+**The token** `qwen3nativebest200` (TC1_BOX=A) runs these arms in order:
+
+1. e4b `fused_attn4_shipped_200`;
+2. axolotl `ckpt_axolotl_best_200`;
+3. the second draw of each;
+4. e4b `fused_attn4_m_200` as the box's matched anchor.
+
+Every arm uses TC1b's curve recipe: the field recipe for 200 steps, with held-out loss every 40 steps on 16 rows. Each framework keeps
+its own init and adapter precision, as in amendment 5. The Hub rule becomes a prefix (`ckpt_axolotl_best*`), so every scattermoe tag
+reaches the Hub. The box installs no Unsloth venv, because it has no Unsloth arm.
+
+**The reducer** registers the token with `n_layers` 48, census 192 and the 200-step matched arm as its anchor. That anchor serves the
+validity predicates, the trainable count and the 0.05-nat quality gate. TC1b measured e4b shipped 0.026 above matched at step 200.
+
+**Prediction P14** (a new question; P13 is not re-scored): over steps 101..200, axolotl scattermoe native-best / e4b shipped lies in
+[0.90, 1.10]. Each side needs two VALID draws whose late-window medians agree within 5 %. The ratio is taken over the per-side medians,
+and its interval over the four cross-draw ratios. Outside the band P14 is FALSIFIED. An unstable, missing or non-VALID side leaves it
+UNTESTED.
+
+**The ordering reading.** If the whole interval lies above 1.0, e4b shipped steps faster at steady state. If it lies below 1.0, axolotl's
+scattermoe does. Otherwise there is no ordering at this resolution. The 11..200 medians are reported beside the late window.
+
+**Decision rules.** Whatever P14 reads, no "fastest" statement is made for e4b, because P13 is UNTESTED. The ordering reading becomes a
+labelled native-best row for steady state over 200 steps on this card, beside and never instead of the matched positions. If axolotl is
+faster, that is the finding, and the claims register and the solution page say so.
+
+Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20 (about 2 h of box time estimated); the standing no-ask tier.

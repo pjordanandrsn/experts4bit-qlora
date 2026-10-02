@@ -98,7 +98,7 @@ case "$TC1_BOX" in
 esac
 # TC1-PREREG amendment 3 (2026-10-02): the qwen3axolotl token runs no Unsloth arm, so it builds neither Unsloth venv (~15 min of box time
 # on the TC1 boxes); every other token builds both as before.
-NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl ") NEED_UNSLOTH=0;; esac
+NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 ") NEED_UNSLOTH=0;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
@@ -544,7 +544,8 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   # native-best, whose KernelsPlugin fetches kernels-community kernels by version at load, as an axolotl user's run does; the
   # arm records the kernel commits it fetched (hub_kernels_cached), and the model revision stays pinned by sha.
   # TC1 amendment 6: both draws (ckpt_axolotl_best and its _d2) -- the exact match left the second draw offline (tc1-5090-33)
-  local OFFL=1; case "$FW/$TAG" in axolotl/ckpt_axolotl_best|axolotl/ckpt_axolotl_best_d2) OFFL=0;; esac
+  # TC1 amendment 8: every scattermoe tag (ckpt_axolotl_best, _d2, _200, _200_d2) -- a prefix, so a new suffix cannot fall offline again
+  local OFFL=1; case "$FW/$TAG" in axolotl/ckpt_axolotl_best*) OFFL=0;; esac
   env $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1 OMP_NUM_THREADS=$PHYS TC1_BOX_CLASS="$BOX_CLASS" TC1_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tc1_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
       --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF \
       --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu \
@@ -808,6 +809,25 @@ tc1_nativebest_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7
   can_run 600 $FAM/e4b/fused_m      && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_nativebest200_family FAM MID REV FETCH_AL E4B_AL AX_AL ANCH_AL -- TC1 amendment 8 (2026-10-02): e4b as shipped against axolotl's
+# scattermoe native-best over 200 steps of the field recipe (the TC1b curve recipe: held-out every 40 steps on 16 rows), two interleaved
+# draws each, then e4b's matched fused arm over the same 200 steps as the box's anchor. tc1-5090-34 found the scattermoe arm paying large
+# per-process warm-up costs (216 s at step 1, 61-81 s at steps 3 and 6, spikes up to step 20) that its 11..20 window cannot separate from
+# its steady step; P14 reads steps 101..200. Unsloth is not installed on this box (no Unsloth arm).
+tc1_nativebest200_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 AAL=$6 MAL=$7
+  local ALL="e4b:fused_attn4_shipped_200:fused axolotl:ckpt_axolotl_best_200:axolotl e4b:fused_attn4_shipped_200_d2:fused axolotl:ckpt_axolotl_best_200_d2:axolotl e4b:fused_attn4_m_200:fused"
+  say "===== NATIVE-BEST 200 family $FAM ($MID @ $REV; e4b shipped vs axolotl scattermoe over $CURVE_STEPS steps, two draws each; e4b fused_m_200 the anchor)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $CURVE_EVAL_N || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local AXB="--axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native"
+  can_run 900 $FAM/e4b/shipped_200     && arm   $FAM e4b fused_attn4_shipped_200 fused $EAL "$MID" $REV 0 curve $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 900 $FAM/axolotl/best_200    && arm   $FAM axolotl ckpt_axolotl_best_200 axolotl $AAL "$MID" $REV 0 curve $TOK $TS $AXB
+  can_run 900 $FAM/e4b/shipped_200_d2  && draw2 $FAM e4b fused_attn4_shipped_200 fused $EAL "$MID" $REV 0 curve $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 900 $FAM/axolotl/best_200_d2 && draw2 $FAM axolotl ckpt_axolotl_best_200 axolotl $AAL "$MID" $REV 0 curve $TOK $TS $AXB
+  can_run 900 $FAM/e4b/m_200           && arm   $FAM e4b fused_attn4_m_200 fused $MAL "$MID" $REV 0 curve $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_axolotl_family FAM MID REV FETCH_AL E4B_AL HF_AL AX_AL -- TC1-PREREG amendment 3 (2026-10-02): the axolotl rows re-asked on their own box, each a
 # position within this box against the e4b fused_m it runs first; two draws of the matched pair so the matched position carries its cross-draw interval:
 #   e4b/fused_attn4_m  axolotl/ckpt_axolotl_m  e4b/fused_attn4_m_d2  axolotl/ckpt_axolotl_m_d2  axolotl/ckpt_axolotl_best (scattermoe, native init)
@@ -939,6 +959,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3native) tc1_native_family qwen3native Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700;;
   #                                                                                                        FETCH E4B  UNS  AX     (TC1 amendment 5: native-best vs native-best)
   qwen3nativebest) tc1_nativebest_family qwen3nativebest Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 2700;;
+  qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 5400 4800;;   # TC1 amendment 8
   #                                                                                                        FETCH E4B  HF   AX     (amendment 3: the axolotl box)
   qwen3axolotl) tc1_axolotl_family qwen3axolotl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 1800 2700;;
   #                                                                                                        FETCH E4B  UNS  ANCH SCALE   (TC1b alarms: e4b 200-step 4800, Unsloth 200-step 9000, anchor 1800 each, t1/r64 3600)
