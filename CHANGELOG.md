@@ -1,6 +1,14 @@
 # Changelog
 
 ## Unreleased
+
+### CI: `conflict-marker-guard` refuses merge-conflict markers in tracked text (tooling only; mirror of grouped-nf4-gemm#437)
+
+- New workflow on push and pull_request: a positive control plants a two-sided conflict and asserts both marker lines are
+  flagged, then `git grep` refuses any tracked line beginning `<<<<<<< ` or `>>>>>>> ` (the lone `=======` is a legitimate
+  setext underline and is not matched; a conflict always carries the other two). `guard-allow` on the line exempts a
+  deliberate quotation. Motivated by this repository's two CHANGELOG races in one hour (#848's rebase staged an unresolved
+  file; hotfix #852). No package code changes.
 ### Lane P95 registered (#564): K8's spread across arithmetics of equal per-GEMM error -- P94's three arithmetics at T == 1 on disjoint windows of each text (bench and tests only)
 
 - **Why.** P94 read K8 on one window per text. On c4val1 its pairs differed by 0.013 to 0.168 ppl, and production's own
