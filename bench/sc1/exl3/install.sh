@@ -34,12 +34,13 @@ perl -e "alarm 900; exec @ARGV" "$V" - <<'PY' || exit 13
 import json, sys, subprocess
 import torch
 import exllamav3
+import exllamav3.version as _exl3_version    # v1.5.3 keeps __version__ there and __init__ does not import it (A3)
 from exllamav3 import ext as exl_ext
 from exllamav3.ext import exllamav3_ext as E          # JIT-builds here if no prebuilt extension (minutes); the wheel has one
 cc = torch.cuda.get_device_capability(0)
 archs = torch.cuda.get_arch_list()
-ver = getattr(exllamav3, "__version__", None) or exllamav3.version.__version__
-caps = {k: hasattr(E, k) for k in ("exl3_gemm", "exl3_mgemm", "exl3_moe", "exl3_gemv", "exl3_gemv_int8",
+ver = getattr(exllamav3, "__version__", None) or _exl3_version.__version__
+caps = {k: hasattr(E, k) for k in ("exl3_gemm", "exl3_mgemm", "exl3_moe", "exl3_gemv", "exl3_gemv_int8_max_k",
                                    "BC_LinearEXL3", "BC_BlockSparseMLP", "BC_Attention")}
 try:
     import triton; tv = triton.__version__

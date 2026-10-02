@@ -512,3 +512,32 @@ def test_arm_ttft_refuses_batch_above_one(tmp_path):
         assert rc == 3 and json.load(open(out))["verdict"] == "VOID"
     finally:
         srv.close()
+
+
+# --- A3 (sc1b-prove-5): the version check accepts git's abbreviation as a prefix of the pinned commit ---------------------
+
+def _version_check(version_text: str, commit: str) -> int:
+    src = (REPO / "bench" / "sc1" / "llamacpp" / "llamacpp_box.sh").read_text()
+    a = src.index("llamacpp_version_names_commit() {")
+    b = src.index("\n}\n", a) + 3
+    with __import__("tempfile").NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
+        f.write(version_text)
+    try:
+        return subprocess.run(["bash", "-c", src[a:b] + f'\nllamacpp_version_names_commit "{f.name}" "{commit}"'],
+                              capture_output=True, text=True).returncode
+    finally:
+        os.unlink(f.name)
+
+
+def test_llamacpp_version_check_takes_the_printed_abbreviation_as_a_prefix():
+    """sc1b-prove-5: llama.cpp b11327 BUILT, then the box refused it -- it grepped the 8-char commit 552f18f9 while
+    `llama-server --version` prints git's 7-char abbreviation ("commit 552f18f")."""
+    pin = "552f18f912a32ea86edf82e2b76431cb7131538d"
+    real = "version: 0.5.0-dev (build 1, commit 552f18f)\nbuilt with GNU 11.4.0 for Linux x86_64\n"
+    assert _version_check(real, pin) == 0                                                   # the box's actual output
+    assert _version_check(real.replace("552f18f)", "552f18f9)"), pin) == 0                   # a longer abbreviation
+    assert _version_check(real, "0" * 40) != 0                                              # a different commit
+    assert _version_check(real.replace("552f18f)", "552f18)"), pin) != 0                    # 6 chars names nothing
+    assert _version_check("version: 0.5.0-dev (build 1)\n", pin) != 0                       # no commit at all
+    # the registered check, for the record: an 8-char grep cannot match the 7-char output
+    assert "552f18f9" not in real
