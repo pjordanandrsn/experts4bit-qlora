@@ -546,6 +546,8 @@ def _kv_geometry(cfg):
         heads = getattr(c, "num_key_value_heads")
         hd = getattr(c, "head_dim", None) or (c.hidden_size // getattr(c, "num_attention_heads"))
         return int(heads), int(hd)
+    if getattr(cfg, "num_key_value_heads", None) is None and getattr(cfg, "text_config", None) is not None:
+        cfg = cfg.text_config            # a composite (vision-language) config, e.g. Qwen3.5 / Qwen3.6 MoE
     try:
         return _one(cfg)
     except Exception as e:  # noqa: BLE001  (transformers' AmbiguousGlobalPerLayerAttributeError)
@@ -743,7 +745,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     from .engines.hot_residency import target_modules
     from .engines.hybrid import enable_hybrid_tier
     from .engines.paged_attention import register
-    from .engines.paged_runner import PagedModelRunner
+    from .engines.paged_runner import PagedModelRunner, kv_layers
     from .engines.placement import solve_placement
 
     torch.manual_seed(1689)
@@ -793,7 +795,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
 
     hkv, hd = _kv_geometry(model.config)
     scratch = max(cfg.buckets) if cfg.graphs else 0
-    kv = Fp8PagedKV(L, hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
+    # a hybrid model's linear-attention layers keep no K/V: the pool holds its attention layers only
+    kv = Fp8PagedKV(kv_layers(model, L), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch)
     runner = PagedModelRunner(model, kv, device=cfg.device)

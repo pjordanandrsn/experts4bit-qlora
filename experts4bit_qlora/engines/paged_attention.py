@@ -58,6 +58,8 @@ class PagedAttentionContext:
     mode: str = "decode"                        # "decode" | "prefill"
     # staging[(layer, slot)] -> [k_list, v_list] of [T, H, D] bf16 chunks
     staging: dict = field(default_factory=dict)
+    # model layer index -> KV pool layer, for a pool sized to a hybrid model's attention layers only (empty: identity)
+    layer_map: dict = field(default_factory=dict)
 
     def stage(self, layer: int, slot: int, k, v):
         buf = self.staging.setdefault((layer, slot), ([], []))
@@ -154,6 +156,7 @@ def paged_attention_forward(module, query, key, value, attention_mask,
                      scaling, is_causal, **kwargs)
 
     layer = int(getattr(module, "layer_idx", 0))
+    layer = ctx.layer_map.get(layer, layer)
     B, hq, T, D = query.shape
     if len(ctx.slots) != B:
         raise ValueError(f"paged context binds {len(ctx.slots)} slots but "

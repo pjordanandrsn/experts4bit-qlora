@@ -62,6 +62,25 @@ def layer_plan(model, n_layers: int, n_slots: int):
     return attn, pool
 
 
+def kv_layers(model, n_layers: int) -> int:
+    """How many layers a paged KV pool needs for ``model``: its attention layers when ``config.layer_types`` names
+    them (a hybrid model's linear layers keep no K/V), else ``n_layers``."""
+    types = linear_state.layer_types(getattr(model, "config", None))
+    attn = [t for t in types if t in ATTENTION_LAYER_TYPES]
+    return len(attn) if types and len(attn) < len(types) else n_layers
+
+
+def kv_layer_map(attn_layers, pool_layers: int) -> dict:
+    """``{model attention layer: KV pool layer}``. Empty (identity) when the pool has a layer for every index up to
+    the last attention layer; compact when the pool holds exactly the attention layers; refused otherwise."""
+    if not attn_layers or pool_layers > max(attn_layers):
+        return {}
+    if pool_layers == len(attn_layers):
+        return {a: i for i, a in enumerate(attn_layers)}
+    raise ValueError(f"the KV pool has {pool_layers} layers; the model's attention layers are {list(attn_layers)}: size "
+                     f"it to {len(attn_layers)} (compact) or to at least {max(attn_layers) + 1} (one per layer index)")
+
+
 def bucket_for(n: int, buckets) -> int:
     """The smallest bucket that holds ``n`` rows (``n`` <= the largest)."""
     for b in buckets:
@@ -95,6 +114,8 @@ class PagedModelRunner(StepRunner):
         # the layers whose K/V the pool holds, and the per-slot linear-attention state of a hybrid model
         n_slots = int(getattr(kv, "B", 0)) + len(getattr(kv, "scratch", ()) or ())
         self.attn_layers, self.linear_state = layer_plan(model, self.n_layers, n_slots)
+        # a hybrid model's pool may hold its attention layers only: paged attention maps model layer -> pool layer
+        self.ctx.layer_map = kv_layer_map(self.attn_layers, self.n_layers)
         self._graphs = None          # bucket -> CUDAGraph | None (eager); see enable_decode_graphs
 
     # ------------------------------------------------------------ intake --
@@ -139,7 +160,7 @@ class PagedModelRunner(StepRunner):
                 if start + take >= len(self.tokens[rid]):
                     # prompt complete: the staged bf16 K/V become the
                     # sequence's FP8 residency, once, here (attention layers only)
-                    for layer in self.attn_layers:
+                    for layer in (self.ctx.layer_map.get(a, a) for a in self.attn_layers):
                         staged = self.ctx.flush(layer, slot)
                         if staged is None:
                             raise RuntimeError(
