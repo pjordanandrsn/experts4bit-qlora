@@ -68,3 +68,50 @@ Bind note (0.6.3+): the compose sets `E4B_HOST=0.0.0.0` **inside** the container
 container-loopback bind is unreachable through the port map — the container's network namespace
 is the isolation boundary) and publishes on the **host loopback** (`127.0.0.1:8777:8777`) by
 default. To reach it from the LAN, widen the host publish to `8777:8777` and set `E4B_TOKEN`.
+
+## Continuous-batching server (opt-in, v1)
+
+`experts4bit_qlora.serve_paged` is a second, separate server: an OpenAI-compatible `/v1/completions`
+(and `/v1/chat/completions` when the tokenizer has a chat template) over the **continuous-batching
+engine** -- `ContinuousScheduler` driving `PagedModelRunner` over the FP8 paged KV -- rather than
+over HF `generate`. It exists so that request-level serving benchmarks (TTFT, inter-token latency
+and throughput under Poisson arrivals, as `vllm bench serve` and `sglang.bench_serving` drive them)
+can be run against e4b exactly as they are run against vLLM, SGLang and llama.cpp. **It is the
+server the serving campaign benchmarks against**; it is not the shared-GPU availability deployment
+above, and it serves no adapters.
+
+```bash
+pip install "experts4bit-qlora[serve,fast]"
+E4B_PAGED_MODEL=Qwen/Qwen3-30B-A3B E4B_PAGED_ARENA=/arenas/qwen3-30b.nf4 E4B_PAGED_CALIB=/calib/placement.json \
+  python -m experts4bit_qlora.serve_paged          # 127.0.0.1:8778; /health says "loading" until the stack is built
+```
+
+The served stack is the harness's stack, built in the harness's order (`bench/p39/step_decomp.py`,
+`bench/p44/serve_stack.build_served_model`): NF4 through the arena, placement solved then every expert
+in VRAM (`E4B_PAGED_PLACEMENT=all-vram`, the point every certified serving number was measured at),
+the hybrid tier, then the int4 levers read from the **same environment names the lane hook uses**
+(`E4B_SERVE_EXP_INT4`, `E4B_SERVE_ATTN_INT4`, `E4B_SERVE_ATTN_INT4_CALIB`, ...), amortisation off,
+the paged attention, and the fusions at one assembly point as the harness: `fuse_qkv`
+(`E4B_PAGED_FUSE_QKV=1`), which applies the env-gated folds (`E4B_FUSE_T1_GLUE`, `E4B_FUSE_T1_GLUE_R2`,
+`E4B_FUSE_ROUTER_EPI`) itself -- the registered B=1 fused stack is `--fuse-qkv` with those flags set -- or,
+without it, the three folds called directly. A set lever that patches nothing refuses at startup, and
+`GET /health` reports the census (int4 expert layers, int4 attention projections, modules each fusion
+patched, decode-graph status per bucket) so a reader can tell which stack answered.
+
+Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
+prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
+(512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS=1` +
+`E4B_PAGED_BUCKETS` (`1,2,4,8,16`; bucketed CUDA-graph decode on scratch slots), `E4B_PAGED_TRACE=<path>`
+(one JSON line per finished request: arrival, admitted_at, first_token_at, finished_at, prompt_len,
+out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_HOST` / `E4B_PORT` / `E4B_TOKEN`
+as above. `GET /stats` returns the scheduler's `stats()` (TTFT p50/p99 **from arrival**, queue wait,
+per-stream rate) and the runner's graph statistics.
+
+**Limits, stated:** greedy only (`temperature` must be 0 or absent -- a nonzero value is a 400, not
+ignored); no `logprobs`, `echo`, `n > 1`, stop strings or penalties (400s); `ignore_eos`,
+`min_tokens`, `stop_token_ids`, `max_tokens` and token-id prompts are honoured. Requests past
+capacity wait in the scheduler's FIFO queue (no eviction exists in the engine); `E4B_PAGED_MAX_QUEUE`
+can cap in-flight requests with a 503. The module docstring records the engine facts a benchmark
+reader needs (EOS handling, the per-sequence window, prefill chunking, graphs). Everything above the
+GPU seam is tested on CPU with a fake runner (`tests/test_serve_paged.py`); `build_engine` needs a
+CUDA box.

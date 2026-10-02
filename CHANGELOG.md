@@ -1,5 +1,61 @@
 # Changelog
 
+## Unreleased
+
+### serve_paged correction: `fuse_qkv` applies the env-gated folds itself -- the server no longer refuses the registered fused stack
+
+- #853 described `--fuse-qkv` and the three fold flags as the harness's exclusive branches and refused
+  `E4B_PAGED_FUSE_QKV=1` together with `E4B_FUSE_T1_GLUE` / `E4B_FUSE_T1_GLUE_R2` / `E4B_FUSE_ROUTER_EPI`. That was
+  wrong: `qkv_fuse.fuse_qkv` imports and calls the three folds after fusing (one serve assembly point), so the
+  registered B=1 fused stack (P54 / P58 / P88: `--fuse-qkv` WITH the fold flags) is exactly that combination. The
+  refusal is removed; the fused branch now reports `fuse_t1_glue_n` / `fuse_t1_glue_r2_n` / `fuse_router_epilogue_n`
+  from what the folds returned inside `fuse_qkv` (captured by wrapping them on their modules for the call, restored
+  after), never a literal 0, and a `fuse_qkv` that returns without calling them refuses. `/health`, the module
+  docstring and `docs/SERVING.md` say so.
+- Tests: the real `fuse_qkv` on a CPU stand-in attention module with fake folds and the flags set reports the counts
+  and no longer raises; the fold functions are restored after the call, including when `fuse_qkv` raises; a
+  `fuse_qkv` that skips the folds refuses; the unfused branch reports the folds it called directly.
+### `experts4bit_qlora.serve_paged`: an OpenAI-compatible server over the continuous-batching engine (opt-in, v1)
+
+- **Why.** Request-level serving benchmarks (TTFT, ITL and throughput under Poisson arrivals, as `vllm bench serve`
+  and `sglang.bench_serving` drive them) need an HTTP endpoint over the engine the serving campaign measures --
+  `ContinuousScheduler` + `PagedModelRunner` + `Fp8PagedKV` -- not over HF `generate`. `serve.py` is the shared-GPU
+  availability deployment and stays as it is.
+- **What.** `python -m experts4bit_qlora.serve_paged` (127.0.0.1:8778): `/health`, `/stats`, `/v1/models`,
+  `/v1/completions` (streaming SSE and non-streaming), `/v1/chat/completions` when the tokenizer has a template. One
+  engine thread owns the GPU and steps the scheduler; requests arrive through a thread-safe queue with
+  `Request.arrival` stamped at HTTP arrival, so the scheduler's TTFT includes queue wait. `build_engine` reproduces
+  the harness's construction in its order (arena load, placement, all-VRAM override, hybrid tier, the lane hook's
+  int4 levers from the same env names, amortisation off, paged attention, `fuse_qkv` OR the env-gated folds, KV with
+  scratch slots, decode graphs, scheduler); a set lever that patches nothing refuses at startup and `/health` reports
+  the census. Greedy only, stated: nonzero `temperature`, `logprobs`, `echo`, `n > 1`, stop strings and penalties are
+  400s; `ignore_eos`, `min_tokens`, `stop_token_ids` and token-id prompts are honoured. Streaming emits one chunk per
+  token through a windowed incremental detokenizer (a code point split across byte-fallback tokens is held, never
+  emitted in pieces), `finish_reason` on the last token's chunk, a usage chunk under `stream_options.include_usage`,
+  `[DONE]`. `E4B_PAGED_TRACE` appends a per-request JSONL (arrival / admitted / first token / finished clocks).
+- **Scheduler.** Uses the stop set, `min_tokens`, `finish_reason` and `abort()` the scheduler gained in #848 (its own entry below); `ignore_eos` maps to no stop set, the engine's original contract.
+- **Tests.** `tests/test_serve_paged.py` (CPU, a scripted runner and a byte-fallback stub tokenizer, the real engine
+  thread): the vLLM v0.30.0 client payload verbatim, the SSE sequence, EOS vs `ignore_eos`, `min_tokens`, the
+  per-sequence window refusal, TTFT in the trace, concurrent requests sharing a decode step, capacity waits without
+  eviction, abort mid-generation; `tests/test_scheduler.py` gains the stop-set and abort cases.
+- Docs: `docs/SERVING.md` "Continuous-batching server (opt-in, v1)".
+
+### Scheduler: an optional per-request stop set, `min_tokens`, `finish_reason` and `abort()` (additive)
+
+- **Why.** The continuous-batching engine stopped a sequence only at `max_new_tokens`: `PagedModelRunner` stores
+  `eos_id` and never consults it, and `ContinuousScheduler._emit` knew no stop set. That is how every registered
+  serving measurement ran (fixed output length, `ignore_eos` semantics) and it stays the default. A serving layer
+  needs EOS to end a request in the step that produced it; otherwise the slot keeps decoding wasted tokens to
+  `max_tokens` and the throughput a benchmark reads is partly waste.
+- **What.** `add_request(..., stop_ids=, min_tokens=)`: a token in the set ends the sequence once `min_tokens` are
+  out; the stop token is kept in `out` (computed, counted); a stop at the length boundary reports `stop`, as vLLM
+  does. `Request.finish_reason` is `length` / `stop` / `abort`. `abort(rid)` drops a queued request before it takes a
+  slot or frees an active one's slot now; aborted requests go to `aborted`, never `done`, so a disconnected client
+  cannot move the gate's percentiles; `stats()` gains `aborted`. With `stop_ids=None` (the default, and every
+  caller in `bench/`) behaviour is unchanged.
+- **Tests.** `tests/test_scheduler.py`: the default contract without a stop set; a stop frees the slot in that step;
+  `min_tokens` defers the stop; a boundary stop reports `stop`; abort of queued and active requests.
+
 ## 0.38.1 — 2026-10-02 — the K25 route for the NF4 store's batched decode rows runs at the served precision (select tree through TF32 MMA; opt-in, lanes P93 and P94), an instrument for the served M-tile kernel at T == 1, and CI on grouped-nf4-gemm 0.34.1
 
 **0.38.1.** No default changes.

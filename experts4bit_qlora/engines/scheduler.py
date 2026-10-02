@@ -63,6 +63,15 @@ class Request:
     first_token_at: float | None = None
     finished_at: float | None = None
     admitted_at: float | None = None
+    # Optional stop set (the serving layer's EOS ids). ``None`` keeps the
+    # original contract -- the sequence runs to ``max_new_tokens`` -- which
+    # is what every registered serving measurement did. A token in the set
+    # ends the sequence ONLY once ``min_tokens`` have been emitted; the stop
+    # token itself is kept in ``out`` (it was computed and it counts), its
+    # text is the caller's business.
+    stop_ids: frozenset | None = None
+    min_tokens: int = 0
+    finish_reason: str | None = None    # "length" | "stop" | "abort" once DONE
 
     @property
     def prompt_len(self) -> int:
@@ -156,6 +165,7 @@ class ContinuousScheduler:
         self.queue: list[Request] = []          # arrived, not yet admitted
         self.active: dict[int, Request] = {}
         self.done: list[Request] = []
+        self.aborted: list[Request] = []        # see abort(); kept out of done
         self._free_slots = list(range(self.kv_slots))
         self.steps = 0
         self.tokens_emitted = 0
@@ -163,16 +173,46 @@ class ContinuousScheduler:
 
     # ------------------------------------------------------------ intake --
     def add_request(self, prompt: Sequence[int], max_new_tokens: int = 16,
-                    now: float | None = None) -> int:
+                    now: float | None = None, *,
+                    stop_ids=None, min_tokens: int = 0) -> int:
         if not len(prompt):
             raise ValueError("empty prompt")
         if max_new_tokens < 1:
             raise ValueError("max_new_tokens must be >= 1")
+        if min_tokens < 0:
+            raise ValueError("min_tokens must be >= 0")
         rid = next(self._ids)
         self.queue.append(Request(rid=rid, prompt=list(prompt),
                                   max_new_tokens=max_new_tokens,
-                                  arrival=self.clock() if now is None else now))
+                                  arrival=self.clock() if now is None else now,
+                                  stop_ids=(None if stop_ids is None
+                                            else frozenset(int(t) for t in stop_ids)),
+                                  min_tokens=int(min_tokens)))
         return rid
+
+    def abort(self, rid: int) -> bool:
+        """Drop a request the caller no longer wants (a disconnected
+        client). Queued: removed before it ever takes a slot. Active: its
+        slot is freed NOW, not at the end of the step it would have
+        finished in. Aborted requests go to ``aborted``, never ``done``,
+        so they cannot pull the gate's percentiles either way. Returns
+        whether anything was found; must be called between steps by the
+        thread that steps (the scheduler has no locks of its own)."""
+        for i, req in enumerate(self.queue):
+            if req.rid == rid:
+                self.queue.pop(i)
+                req.phase = Phase.DONE
+                req.finish_reason = "abort"
+                req.finished_at = self.clock()
+                self.aborted.append(req)
+                return True
+        req = self.active.get(rid)
+        if req is None:
+            return False
+        req.phase = Phase.DONE
+        req.finish_reason = "abort"
+        self._retire()
+        return True
 
     def _admit(self) -> None:
         """FIFO admission, bounded by batch width AND KV slots."""
@@ -245,8 +285,17 @@ class ContinuousScheduler:
             req.first_token_at = self.clock()
         req.out.append(token)
         self.tokens_emitted += 1
-        req.phase = (Phase.DONE if len(req.out) >= req.max_new_tokens
-                     else Phase.DECODE)
+        # a stop token at the length boundary reports "stop", as vLLM does:
+        # the model ended the sequence, the budget merely coincided
+        if (req.stop_ids is not None and token in req.stop_ids
+                and len(req.out) >= req.min_tokens):
+            req.phase = Phase.DONE
+            req.finish_reason = "stop"
+        elif len(req.out) >= req.max_new_tokens:
+            req.phase = Phase.DONE
+            req.finish_reason = "length"
+        else:
+            req.phase = Phase.DECODE
 
     def _retire(self) -> None:
         for rid in [r for r, q in self.active.items() if q.phase is Phase.DONE]:
@@ -255,7 +304,7 @@ class ContinuousScheduler:
             self.runner.free_slot(rid)
             self._free_slots.append(req.slot)
             req.slot = None
-            self.done.append(req)
+            (self.aborted if req.finish_reason == "abort" else self.done).append(req)
 
     # ------------------------------------------------------------ drive --
     def run_until_idle(self, max_steps: int = 1_000_000) -> int:
@@ -289,6 +338,7 @@ class ContinuousScheduler:
         return {
             "steps": self.steps,
             "completed": len(self.done),
+            "aborted": len(self.aborted),
             "in_flight": len(self.active),
             "queued": len(self.queue),
             "tokens_emitted": self.tokens_emitted,

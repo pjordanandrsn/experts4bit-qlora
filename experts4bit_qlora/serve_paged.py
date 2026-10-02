@@ -1,0 +1,1155 @@
+# Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
+"""OpenAI-compatible HTTP server over the continuous-batching engine (opt-in, v1).
+
+``experts4bit_qlora.serve`` admits one generation at a time through HF ``generate``. This module
+serves the OTHER engine -- :class:`~.engines.scheduler.ContinuousScheduler` driving
+:class:`~.engines.paged_runner.PagedModelRunner` over :class:`~.engines.fp8_paged_kv.Fp8PagedKV`
+-- behind ``/v1/completions`` so that request-level serving benchmarks (TTFT, inter-token latency
+and throughput under Poisson arrivals, as ``vllm bench serve`` and ``sglang.bench_serving`` drive
+them) run against e4b exactly as they run against vLLM, SGLang and llama.cpp. It is the server the
+serving campaign benchmarks against; it is not a general-purpose deployment.
+
+::
+
+    E4B_PAGED_MODEL=Qwen/Qwen3-30B-A3B E4B_PAGED_ARENA=/arenas/qwen3.nf4 E4B_PAGED_CALIB=/calib.json \\
+      python -m experts4bit_qlora.serve_paged                      # 127.0.0.1:8778
+
+**The served stack is the harness's stack.** :func:`build_engine` reproduces the construction
+``bench/p39/step_decomp.py`` and ``bench/p44/serve_stack.build_served_model`` use, in the same
+order: ``load_moe_4bit_streaming`` through the NF4 arena -> the placement solver, then every
+expert moved into the VRAM tier (``E4B_PAGED_PLACEMENT=all-vram``, the point every certified
+serving number was measured at) -> ``enable_hybrid_tier`` -> the int4 levers the lane hook
+(``bench/p42/hook/usercustomize.py``) applies right after the tier, read from the SAME environment
+names (``E4B_SERVE_EXP_INT4``, ``E4B_SERVE_EXP_INT4_CALIB``, ``E4B_SERVE_ATTN_INT4``,
+``E4B_SERVE_ATTN_INT4_CALIB``, ``E4B_SERVE_LMHEAD_INT4_CALIB``, ``E4B_SERVE_DENSE_INT4_CALIB``,
+``E4B_CALIB_NSEQ``, ``E4B_CALIB_SOURCE``, ``E4B_INT4_ARTIFACT_DIR``, ``E4B_INT4_EXPECTED_FINGERPRINT``,
+``E4B_INT4_DUMP_ARTIFACT_DIR``, ``E4B_CALIB_LAYERS_PER_PASS``; ``E4B_INT4_ASSIGNMENT`` is read by the
+library itself) -> amortisation counters off (``--amort off``, the production shape) -> the paged
+attention registered -> the fusions, at ONE assembly point as the harness has them: with
+``E4B_PAGED_FUSE_QKV=1``, ``fuse_qkv`` (lane P54), which applies the three env-gated folds
+(``E4B_FUSE_T1_GLUE``, ``E4B_FUSE_T1_GLUE_R2``, ``E4B_FUSE_ROUTER_EPI``) ITSELF after fusing -- the
+registered B=1 fused stack (P54 / P58 / P88) is ``--fuse-qkv`` WITH those flags set; without it, the
+three folds called directly. The census reports what each fold returned either way (in the fused
+branch the fold functions are wrapped on their modules for the duration of the ``fuse_qkv`` call,
+which imports them inside its body) -> ``Fp8PagedKV(batch=max_seqs, scratch_slots=max(buckets))`` ->
+``PagedModelRunner`` -> ``enable_decode_graphs`` when ``E4B_PAGED_GRAPHS=1`` -> the scheduler. A
+lever that is set and patches nothing RAISES at startup (the lanes' ``_lever_check`` rule); the
+census -- how many modules each lever patched -- is reported at ``GET /health`` so a reader can
+tell which stack answered.
+
+**Semantics (stated, not silently approximated).** Greedy only: ``temperature`` must be 0 or
+absent (the runner argmaxes; a nonzero temperature is a 400, never ignored). ``max_tokens`` is
+honoured exactly; ``ignore_eos`` runs the request to ``max_tokens``; ``min_tokens`` suppresses the
+EOS stop until that many tokens are out. ``logprobs``, ``echo``, ``n > 1``, ``best_of > 1``,
+``suffix``, stop STRINGS and the penalties are 400s (``stop_token_ids`` is honoured; ``top_p`` /
+``top_k`` / ``seed`` are accepted because they cannot change a greedy result). A prompt is a string
+(tokenised with the model's tokenizer, ``add_special_tokens`` per request, default on as vLLM's
+completions endpoint has it) or a list of token ids. Streaming emits one SSE chunk per generated
+token with the incremental text delta (the detokenizer keeps a window over the last tokens and
+holds a delta back while it ends in U+FFFD, so a code point split across byte-fallback tokens is
+never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage``-only chunk when
+``stream_options.include_usage`` is set, then ``data: [DONE]``.
+
+**Engine facts a benchmark reader needs (read from the engine code, 2026-10-01):**
+
+* **EOS.** Before this module the engine had no stop set: ``PagedModelRunner`` stores ``eos_id``
+  and never consults it, and ``ContinuousScheduler._emit`` ended a sequence only at
+  ``max_new_tokens``. Every registered serving measurement ran that way (fixed output length). The
+  fix is additive in the scheduler -- ``add_request(..., stop_ids=, min_tokens=)`` -- so an
+  EOS-finished request frees its KV slot in the step that produced the EOS rather than decoding
+  wasted tokens to ``max_tokens``; the default (``stop_ids=None``) is the old contract and the
+  harness is unchanged. The stop token is kept in ``out`` and counted in ``completion_tokens``
+  (vLLM's convention); its text is dropped with ``skip_special_tokens``.
+* **Length.** A sequence owns ``max_tokens_per_seq`` tokens of KV. The KV's ``append`` raises
+  ``ValueError("... overflows its ... blocks")`` INSIDE an engine step, which is an engine fault
+  for every resident request, so admission refuses (400) any request with
+  ``prompt_len + max_tokens > E4B_PAGED_MAX_TOKENS_PER_SEQ`` before it reaches the scheduler.
+  A prefilling prompt's bf16 K/V is staged on the GPU until the prompt completes (then quantised
+  into the pool once); that staging is the engine's VRAM cost per concurrently prefilling prompt.
+* **Prefill.** A prompt is ingested ``chunk_tokens`` per step (``E4B_PAGED_CHUNK_TOKENS``), and a
+  step's total prefill budget is ``max_prefill_tokens_per_step`` (default = chunk, the harness's
+  ``--chunk``). The scheduler prefers prefill over decode within a step and each chunk is its own
+  batch-1 forward, so resident decoders see one prefill forward of extra latency per step while a
+  prompt is ingesting -- the TTFT/ITL trade the chunk size sets.
+* **Capacity.** Admission is bounded by ``max_seqs`` AND free KV slots (``kv_slots = max_seqs``);
+  a request past capacity WAITS in the scheduler's FIFO queue and its TTFT includes that wait
+  (``Request.arrival`` is stamped at HTTP arrival and handed to ``add_request(now=...)``). There
+  is no eviction or preemption anywhere in the engine and this server adds none.
+  ``E4B_PAGED_MAX_QUEUE`` (default 0 = unbounded) can cap in-flight requests with a 503.
+* **Graphs.** ``enable_decode_graphs`` captures one CUDA graph per bucket on scratch slots and pads
+  a decode step to the next bucket; an active set larger than the largest bucket is split into
+  consecutive chunks of at most that size (two replays per step at ``max_seqs=32``, buckets up to
+  16). A bucket whose capture failed runs the same padded step eagerly and says so in
+  ``/health`` (``engine.graph_status``).
+* **Clocks.** ``GET /stats`` returns ``scheduler.stats()`` (TTFT p50/p99 FROM ARRIVAL, queue wait,
+  per-stream rate) plus the runner's ``graph_stats``; ``E4B_PAGED_TRACE=<path>`` appends one JSON
+  line per finished request (arrival / admitted_at / first_token_at / finished_at on the engine's
+  monotonic clock, ``arrival_epoch`` on the wall clock, prompt_len, out_len, finish_reason) so
+  server-side TTFT and ITL can be read beside the client's.
+
+Not in v1: sampling, logprobs, stop strings, adapters, prefix caching, per-request timeouts.
+Everything above the engine seam is testable on CPU with a fake runner (``tests/test_serve_paged.py``);
+:func:`build_engine` is the one function that needs a GPU, and it was written from the harness
+rather than measured here.
+"""
+import asyncio
+import collections
+import json
+import os
+import threading
+import time
+import uuid
+from dataclasses import dataclass, field
+from typing import Any, Optional, Sequence
+
+from .engines.scheduler import ContinuousScheduler, Request
+
+DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
+
+# lever flags the lane hook reads; snapshotted into /health so the served stack is legible
+LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_INT4", "E4B_SERVE_ATTN_INT4_CALIB",
+             "E4B_SERVE_LMHEAD_INT4_CALIB", "E4B_SERVE_DENSE_INT4_CALIB", "E4B_CALIB_NSEQ", "E4B_CALIB_SOURCE",
+             "E4B_INT4_ARTIFACT_DIR", "E4B_INT4_EXPECTED_FINGERPRINT", "E4B_INT4_DUMP_ARTIFACT_DIR",
+             "E4B_INT4_ASSIGNMENT", "E4B_CALIB_LAYERS_PER_PASS", "E4B_INT4_KEEP_NF4",
+             "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND")
+FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
+
+
+def log(msg: str) -> None:
+    print(f"[serve_paged] {msg}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PagedServeConfig:
+    """Every knob, read once at startup, never at import."""
+
+    model: str = ""                      # E4B_PAGED_MODEL (HF id or local snapshot)
+    arena: str = ""                      # E4B_PAGED_ARENA (the NF4 arena; <arena>.index.json beside it)
+    calib: str = ""                      # E4B_PAGED_CALIB (placement calibration JSON; the solver refuses to guess)
+    revision: str = ""                   # E4B_PAGED_REVISION
+    served_names: tuple = ()             # E4B_PAGED_SERVED_NAME: extra names accepted in `model` (comma-separated)
+    max_seqs: int = 16                   # E4B_PAGED_MAX_SEQS: batch width == KV slots
+    max_tokens_per_seq: int = 4096       # E4B_PAGED_MAX_TOKENS_PER_SEQ: prompt + output per sequence
+    chunk_tokens: int = 512              # E4B_PAGED_CHUNK_TOKENS
+    max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
+    graphs: bool = False                 # E4B_PAGED_GRAPHS=1
+    buckets: tuple = DEFAULT_BUCKETS     # E4B_PAGED_BUCKETS="1,2,4,8,16"
+    placement: str = "all-vram"          # E4B_PAGED_PLACEMENT: all-vram | solver
+    vram_gb: float = 1.2                 # E4B_PAGED_VRAM_GB (solver budget; the harness default)
+    dram_gb: float = 6.0                 # E4B_PAGED_DRAM_GB
+    hot_rows: int = 64                   # E4B_PAGED_HOT_ROWS
+    kv_groups: str = "auto"              # E4B_PAGED_KV_GROUPS: auto | <int>
+    fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV=1 (fuse_qkv applies the env-gated folds itself)
+    torch_threads: int = 8               # E4B_PAGED_TORCH_THREADS
+    max_tokens_cap: int = 0              # E4B_PAGED_MAX_TOKENS: 0 -> max_tokens_per_seq - 1 (refuses, never clamps)
+    max_queue: int = 0                   # E4B_PAGED_MAX_QUEUE: in-flight cap, 0 = unbounded
+    eos_ids: tuple = ()                  # E4B_PAGED_EOS_IDS: override the model's EOS set
+    host: str = "127.0.0.1"              # E4B_HOST
+    port: int = 8778                     # E4B_PORT (serve.py takes 8777)
+    token: str = ""                      # E4B_TOKEN: bearer on /v1/*
+    trace_path: str = ""                 # E4B_PAGED_TRACE: per-request JSONL
+    device: str = "cuda"
+
+    @classmethod
+    def from_env(cls) -> "PagedServeConfig":
+        env = os.environ.get
+
+        def _ints(s):
+            return tuple(int(x) for x in s.split(",") if x.strip())
+
+        cfg = cls(
+            model=env("E4B_PAGED_MODEL", ""),
+            arena=env("E4B_PAGED_ARENA", ""),
+            calib=env("E4B_PAGED_CALIB", ""),
+            revision=env("E4B_PAGED_REVISION", ""),
+            served_names=tuple(x.strip() for x in env("E4B_PAGED_SERVED_NAME", "").split(",") if x.strip()),
+            max_seqs=int(env("E4B_PAGED_MAX_SEQS", "16")),
+            max_tokens_per_seq=int(env("E4B_PAGED_MAX_TOKENS_PER_SEQ", "4096")),
+            chunk_tokens=int(env("E4B_PAGED_CHUNK_TOKENS", "512")),
+            max_prefill_tokens=int(env("E4B_PAGED_MAX_PREFILL_TOKENS", "0")),
+            graphs=env("E4B_PAGED_GRAPHS", "0") == "1",
+            buckets=_ints(env("E4B_PAGED_BUCKETS", "1,2,4,8,16")),
+            placement=env("E4B_PAGED_PLACEMENT", "all-vram"),
+            vram_gb=float(env("E4B_PAGED_VRAM_GB", "1.2")),
+            dram_gb=float(env("E4B_PAGED_DRAM_GB", "6.0")),
+            hot_rows=int(env("E4B_PAGED_HOT_ROWS", "64")),
+            kv_groups=env("E4B_PAGED_KV_GROUPS", "auto"),
+            fuse_qkv=env("E4B_PAGED_FUSE_QKV", "0") == "1",
+            torch_threads=int(env("E4B_PAGED_TORCH_THREADS", "8")),
+            max_tokens_cap=int(env("E4B_PAGED_MAX_TOKENS", "0")),
+            max_queue=int(env("E4B_PAGED_MAX_QUEUE", "0")),
+            eos_ids=_ints(env("E4B_PAGED_EOS_IDS", "")),
+            host=env("E4B_HOST", "127.0.0.1"),
+            port=int(env("E4B_PORT", "8778")),
+            token=env("E4B_TOKEN", ""),
+            trace_path=env("E4B_PAGED_TRACE", ""),
+            device=env("E4B_PAGED_DEVICE", "cuda"),
+        )
+        cfg.validate()
+        return cfg
+
+    def validate(self) -> None:
+        if self.max_seqs < 1:
+            raise ValueError("E4B_PAGED_MAX_SEQS must be >= 1")
+        if self.max_tokens_per_seq < 2:
+            raise ValueError("E4B_PAGED_MAX_TOKENS_PER_SEQ must be >= 2 (one prompt token + one output token)")
+        if self.chunk_tokens < 1:
+            raise ValueError("E4B_PAGED_CHUNK_TOKENS must be >= 1")
+        if self.max_prefill_tokens < 0:
+            raise ValueError("E4B_PAGED_MAX_PREFILL_TOKENS must be >= 0 (0 = chunk_tokens)")
+        if not self.buckets or min(self.buckets) < 1:
+            raise ValueError(f"E4B_PAGED_BUCKETS must be positive ints, got {self.buckets}")
+        if self.placement not in ("all-vram", "solver"):
+            raise ValueError(f"E4B_PAGED_PLACEMENT must be all-vram or solver, got {self.placement!r}")
+        if self.kv_groups != "auto":
+            int(self.kv_groups)
+        if self.max_queue < 0:
+            raise ValueError("E4B_PAGED_MAX_QUEUE must be >= 0")
+
+    @property
+    def prefill_budget(self) -> int:
+        return self.max_prefill_tokens or self.chunk_tokens
+
+    @property
+    def max_tokens_limit(self) -> int:
+        return self.max_tokens_cap or (self.max_tokens_per_seq - 1)
+
+    @property
+    def model_names(self) -> tuple:
+        names = [self.model] if self.model else []
+        names += [n for n in self.served_names if n not in names]
+        return tuple(names)
+
+
+# ---------------------------------------------------------------------------
+# Incremental detokenisation
+# ---------------------------------------------------------------------------
+
+
+class IncrementalDetokenizer:
+    """Per-token text deltas that never split a code point.
+
+    The vLLM detokenizer's scheme: decode a window from ``prefix_offset`` to the end, compare with
+    the window decoded up to ``read_offset``, and emit the difference only when it does not end in
+    U+FFFD (a byte-fallback token that is the first byte of a multi-byte character decodes to the
+    replacement character until its continuation arrives). The window starts with the last few
+    PROMPT tokens so a sentencepiece tokenizer's leading-space rule sees context rather than a
+    sequence start. Decoding is windowed, not whole-output, so a long completion costs the same per
+    token as a short one.
+    """
+
+    def __init__(self, tokenizer, prompt_ids: Sequence[int], *, skip_special_tokens: bool = True,
+                 context: int = 5):
+        self.tok = tokenizer
+        self.ids: list[int] = [int(t) for t in list(prompt_ids)[-context:]] if context > 0 else []
+        self.prefix_offset = 0
+        self.read_offset = len(self.ids)
+        self.skip = skip_special_tokens
+        self.text = ""
+
+    def _decode(self, ids) -> str:
+        try:
+            return self.tok.decode(ids, skip_special_tokens=self.skip, clean_up_tokenization_spaces=False)
+        except TypeError:   # a tokenizer whose decode has no clean-up keyword
+            return self.tok.decode(ids, skip_special_tokens=self.skip)
+
+    def push(self, token_id: int) -> str:
+        self.ids.append(int(token_id))
+        prefix = self._decode(self.ids[self.prefix_offset:self.read_offset])
+        full = self._decode(self.ids[self.prefix_offset:])
+        if len(full) > len(prefix) and not full.endswith("�"):
+            delta = full[len(prefix):]
+            self.prefix_offset = self.read_offset
+            self.read_offset = len(self.ids)
+            self.text += delta
+            return delta
+        return ""
+
+    def flush(self) -> str:
+        """Whatever is still held (an incomplete trailing byte sequence decodes to U+FFFD)."""
+        prefix = self._decode(self.ids[self.prefix_offset:self.read_offset])
+        full = self._decode(self.ids[self.prefix_offset:])
+        delta = full[len(prefix):] if len(full) > len(prefix) else ""
+        self.prefix_offset = self.read_offset = len(self.ids)
+        self.text += delta
+        return delta
+
+
+# ---------------------------------------------------------------------------
+# Engine: one thread owns the GPU and steps the scheduler
+# ---------------------------------------------------------------------------
+
+
+class BusyError(Exception):
+    pass
+
+
+@dataclass
+class EngineParts:
+    """What :func:`build_engine` returns and what a test injects instead."""
+    scheduler: ContinuousScheduler
+    tokenizer: Any
+    eos_ids: frozenset
+    info: dict = field(default_factory=dict)
+    runner: Any = None
+
+
+_TOKENS, _DONE, _ERROR = "tokens", "done", "error"
+
+
+class PagedStream:
+    """One request's hand-off between the event loop and the engine thread."""
+
+    def __init__(self, *, queue, request_id: str, prompt_ids: list, max_tokens: int, stop_ids,
+                 min_tokens: int, arrival: float, arrival_epoch: float):
+        self.queue = queue
+        self.request_id = request_id
+        self.prompt_ids = prompt_ids
+        self.max_tokens = max_tokens
+        self.stop_ids = stop_ids
+        self.min_tokens = min_tokens
+        self.arrival = arrival
+        self.arrival_epoch = arrival_epoch
+        self.rid: Optional[int] = None
+        self.sent = 0
+        self.finished = False
+
+
+def _append_jsonl(path: str, record: dict) -> None:
+    """Best-effort trace append; a trace that cannot be written must not take serving down."""
+    try:
+        d = os.path.dirname(path)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, separators=(",", ":")) + "\n")
+    except Exception as e:  # noqa: BLE001
+        log(f"trace append failed ({type(e).__name__}: {e})")
+
+
+class PagedEngine:
+    """The engine loop. ``parts=None`` builds the GPU stack on the engine thread at start (the HTTP
+    layer answers 503 until it is ready); a test passes its own parts."""
+
+    def __init__(self, cfg: PagedServeConfig, parts: Optional[EngineParts] = None, *, builder=None):
+        self.cfg = cfg
+        self.parts = parts
+        self._builder = builder or build_engine
+        self.state = "ready" if parts is not None else "loading"
+        self.error: Optional[str] = None
+        self.started_at = time.time()
+        self._cv = threading.Condition()
+        self._ops: collections.deque = collections.deque()
+        self._lock = threading.Lock()            # scheduler + bookkeeping, held per step
+        self._streams: dict = {}
+        self._done_idx = 0
+        self._abort_idx = 0
+        self._inflight = 0
+        self._stop = False
+        self._thread: Optional[threading.Thread] = None
+        self._loop = None
+        self.records: collections.deque = collections.deque(maxlen=256)
+        self.n_records = 0
+
+    # ------------------------------------------------------------ lifecycle --
+    def start(self, loop) -> None:
+        self._loop = loop
+        self._thread = threading.Thread(target=self._run, name="e4b-paged-engine", daemon=True)
+        self._thread.start()
+
+    def shutdown(self, timeout: float = 10.0) -> None:
+        with self._cv:
+            self._stop = True
+            self._cv.notify_all()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
+
+    @property
+    def queue_depth(self) -> int:
+        return self._inflight
+
+    # --------------------------------------------------------------- intake --
+    def submit(self, stream: PagedStream) -> None:
+        with self._cv:
+            if self.cfg.max_queue and self._inflight >= self.cfg.max_queue:
+                raise BusyError(f"{self._inflight} requests in flight (E4B_PAGED_MAX_QUEUE={self.cfg.max_queue})")
+            self._inflight += 1
+            self._ops.append(("submit", stream))
+            self._cv.notify()
+
+    def abort(self, stream: PagedStream) -> None:
+        with self._cv:
+            self._ops.append(("abort", stream))
+            self._cv.notify()
+
+    # ---------------------------------------------------------------- stats --
+    def stats(self) -> dict:
+        out = {"state": self.state, "error": self.error, "in_flight": self._inflight,
+               "trace_path": self.cfg.trace_path or None, "records_total": self.n_records,
+               "records_recent": list(self.records)}
+        if self.parts is None:
+            return out
+        with self._lock:
+            out["scheduler"] = self.parts.scheduler.stats()
+            runner = self.parts.runner
+            gs = getattr(runner, "graph_stats", None)
+            out["graph_stats"] = ({str(k): dict(v) for k, v in gs.items()} if isinstance(gs, dict) else None)
+            st = getattr(runner, "graph_status", None)
+            out["graph_status"] = ({str(k): v for k, v in st.items()} if isinstance(st, dict) else None)
+        return out
+
+    # ---------------------------------------------------------------- loop --
+    def _run(self) -> None:
+        if self.parts is None:
+            try:
+                self.parts = self._builder(self.cfg)
+            except BaseException as e:  # noqa: BLE001 -- a failed build is the server's state, not a crash
+                self.error = f"{type(e).__name__}: {e}"
+                self.state = "error"
+                log(f"engine build FAILED: {self.error}")
+                self._fail_pending(self.error)
+                return
+        self.state = "ready"
+        sched = self.parts.scheduler
+        while True:
+            with self._cv:
+                while not self._ops and not self._stop and not (sched.queue or sched.active):
+                    self._cv.wait(timeout=1.0)
+                if self._stop:
+                    break
+                ops = list(self._ops)
+                self._ops.clear()
+            with self._lock:
+                for kind, stream in ops:
+                    self._apply(kind, stream)
+                try:
+                    sched.step()
+                except Exception as e:  # noqa: BLE001
+                    self.error = f"{type(e).__name__}: {e}"
+                    self.state = "error"
+                    log(f"engine step FAILED: {self.error}")
+                    for st in list(self._streams.values()):
+                        self._push(st, (_ERROR, self.error))
+                    self._streams.clear()
+                    self._fail_pending(self.error)
+                    return
+                self._dispatch()
+        self._fail_pending("server shutting down")
+        for st in list(self._streams.values()):
+            self._push(st, (_ERROR, "server shutting down"))
+        self._streams.clear()
+
+    def _fail_pending(self, msg: str) -> None:
+        with self._cv:
+            ops = list(self._ops)
+            self._ops.clear()
+        for kind, stream in ops:
+            if kind == "submit":
+                self._push(stream, (_ERROR, msg))
+
+    def _apply(self, kind: str, stream: PagedStream) -> None:
+        sched = self.parts.scheduler
+        if kind == "submit":
+            try:
+                rid = sched.add_request(stream.prompt_ids, max_new_tokens=stream.max_tokens, now=stream.arrival,
+                                        stop_ids=stream.stop_ids, min_tokens=stream.min_tokens)
+            except ValueError as e:
+                self._push(stream, (_ERROR, str(e)))
+                return
+            stream.rid = rid
+            self._streams[rid] = stream
+        elif kind == "abort":
+            if stream.rid is not None and stream.rid in self._streams:
+                sched.abort(stream.rid)
+
+    def _push(self, stream: PagedStream, item) -> None:
+        if item[0] in (_DONE, _ERROR):
+            if stream.finished:
+                return
+            stream.finished = True
+            with self._cv:
+                self._inflight = max(0, self._inflight - 1)
+        loop = self._loop
+        try:
+            if loop is not None and not loop.is_closed():
+                loop.call_soon_threadsafe(stream.queue.put_nowait, item)
+        except RuntimeError:     # loop closed under us (shutdown): nobody is listening
+            pass
+
+    def _dispatch(self) -> None:
+        sched = self.parts.scheduler
+        for rid, req in sched.active.items():
+            st = self._streams.get(rid)
+            if st is not None and len(req.out) > st.sent:
+                self._push(st, (_TOKENS, req.out[st.sent:]))
+                st.sent = len(req.out)
+        for lst, idx_attr in ((sched.done, "_done_idx"), (sched.aborted, "_abort_idx")):
+            i = getattr(self, idx_attr)
+            while i < len(lst):
+                req = lst[i]
+                i += 1
+                st = self._streams.pop(req.rid, None)
+                if st is None:
+                    continue
+                rest = req.out[st.sent:]
+                st.sent = len(req.out)
+                rec = self._record(req, st)
+                self._push(st, (_DONE, (rest, req.finish_reason or "length", rec)))
+            setattr(self, idx_attr, i)
+
+    def _record(self, req: Request, st: PagedStream) -> dict:
+        rec = {
+            "request_id": st.request_id, "rid": req.rid,
+            "arrival": req.arrival, "arrival_epoch": st.arrival_epoch,
+            "admitted_at": req.admitted_at, "first_token_at": req.first_token_at,
+            "finished_at": req.finished_at,
+            "prompt_len": req.prompt_len, "out_len": len(req.out),
+            "finish_reason": req.finish_reason,
+            "ttft": req.ttft, "queue_wait": req.queue_wait,
+            "decode_s": ((req.finished_at - req.first_token_at)
+                         if req.finished_at is not None and req.first_token_at is not None else None),
+        }
+        # the scheduler keeps every finished Request for stats(); its stats never read the prompt
+        # again, so drop the ids -- a long benchmark would otherwise hold every prompt it ever saw
+        req.prompt = ()
+        self.records.append(rec)
+        self.n_records += 1
+        if self.cfg.trace_path:
+            _append_jsonl(self.cfg.trace_path, rec)
+        return rec
+
+
+# ---------------------------------------------------------------------------
+# GPU construction (the harness's sequence; needs a CUDA box)
+# ---------------------------------------------------------------------------
+
+
+def _routed_topk(cfg) -> int:
+    """step_decomp._routed_topk: the routed top-k under whatever name this family uses."""
+    for c in (cfg, getattr(cfg, "text_config", None)):
+        for key in ("num_experts_per_tok", "num_experts_per_token", "moe_top_k", "moe_topk", "top_k_experts", "top_k"):
+            v = getattr(c, key, None)
+            if isinstance(v, int) and v > 0:
+                return v
+    raise ValueError("cannot find the routed top-k in this config")
+
+
+def _kv_geometry(cfg):
+    """step_decomp._kv_geometry: (kv heads, head_dim), scalars or per-layer lists."""
+    def _one(c):
+        heads = getattr(c, "num_key_value_heads")
+        hd = getattr(c, "head_dim", None) or (c.hidden_size // getattr(c, "num_attention_heads"))
+        return int(heads), int(hd)
+    try:
+        return _one(cfg)
+    except Exception as e:  # noqa: BLE001  (transformers' AmbiguousGlobalPerLayerAttributeError)
+        if "per-layer attribute" not in str(e):
+            raise
+    per = [_one(lc) for lc in cfg.per_layer_config]
+    heads, dims = [h for h, _ in per], [d for _, d in per]
+    if len(set(heads)) == 1 and len(set(dims)) == 1:
+        return heads[0], dims[0]
+    log(f"KV geometry varies per layer: {sorted(set(zip(heads, dims)))}")
+    return heads, dims
+
+
+def _bytes_per_expert(arena: str) -> int:
+    idx = json.loads(open(arena + ".index.json", encoding="utf-8").read())
+    bpe = 0
+    for seg in idx["segments"]:
+        n = 1
+        for d in seg["shape_per_expert"]:
+            n *= d
+        bpe += n * (4 if seg["dtype"] == "F32" else 1)
+    return bpe
+
+
+def _calib_batches(tok, n_seq=None, seq_len=512, bsz=4):
+    """The lane hook's ``_calib_batches`` (hook v5/v7), same defaults: 32 x 512 tokens of C4 validation."""
+    import torch
+    from datasets import load_dataset
+    n_seq = int(os.environ.get("E4B_CALIB_NSEQ", "32")) if n_seq is None else n_seq
+    src = os.environ.get("E4B_CALIB_SOURCE", "c4")
+    if src == "c4":
+        ds = load_dataset("allenai/c4", data_files={"v": "en/c4-validation.00000-of-00008.json.gz"}, split="v")
+        text = "\n\n".join(ds["text"][:4000])
+    else:
+        ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train")
+        text = "\n\n".join(t for t in ds["text"] if t.strip())
+    text = text[:6_000_000]
+    ids = tok(text, return_tensors="pt").input_ids[0]
+    step = max(1, (ids.numel() - seq_len) // n_seq)
+    rows = [ids[i * step:i * step + seq_len] for i in range(n_seq)]
+    return [torch.stack(rows[i:i + bsz]) for i in range(0, n_seq, bsz)]
+
+
+def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
+    """``bench/p42/hook/usercustomize.py::_apply_lanes``, called where the hook calls it (right after
+    ``enable_hybrid_tier``), reading the same environment. A refusal raises, as the hook re-raises."""
+    env = os.environ.get
+    out = {"exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0}
+    mt = getattr(getattr(model, "config", None), "model_type", "?")
+    if env("E4B_SERVE_EXP_INT4", "0") == "1":
+        from huggingface_hub import snapshot_download
+        from .engines.int4_experts import enable_serve_experts_int4
+        src = snapshot_download(cfg.model, allow_patterns=["*.json", "*.safetensors"],
+                                revision=cfg.revision or None)
+        if env("E4B_SERVE_EXP_INT4_CALIB", "0") == "1":
+            from .engines.int4_experts import enable_serve_experts_int4_calibrated
+            batches = _calib_batches(tok)
+            art_dir = env("E4B_INT4_ARTIFACT_DIR") or None
+            art_fp = env("E4B_INT4_EXPECTED_FINGERPRINT") or None
+            dump_dir = env("E4B_INT4_DUMP_ARTIFACT_DIR") or None
+            lpp = env("E4B_CALIB_LAYERS_PER_PASS")
+            log(f"INT4EXP {'loading licensed artifact ' + str(art_dir) if (art_dir or art_fp) else 'calibrating (streamed)'}"
+                f": {len(batches)} batches of {env('E4B_CALIB_SOURCE', 'c4')}, layers_per_pass={lpp or 'auto'}")
+            n = enable_serve_experts_int4_calibrated(model, src, batches, artifact_dir=art_dir,
+                                                     expected_fingerprint=art_fp, dump_artifact_dir=dump_dir,
+                                                     layers_per_pass=int(lpp) if lpp else None)
+        else:
+            n = enable_serve_experts_int4(model, src)
+        log(f"INT4EXP enabled: {n} layers (model_type={mt})")
+        if n <= 0:
+            raise RuntimeError("E4B_SERVE_EXP_INT4=1 but enable_serve_experts_int4 patched 0 layers")
+        out["exp_int4_layers_enabled"] = int(n)
+    if env("E4B_SERVE_ATTN_INT4", "0") == "1":
+        from .engines.int4_attn import enable_serve_attn_int4
+        n = enable_serve_attn_int4(model)
+        log(f"ATTNINT4 rtn: {n} projections (uncalibrated; model_type={mt})")
+        out["attn_int4_rtn_projections"] = int(n)
+    _attn = env("E4B_SERVE_ATTN_INT4_CALIB", "0") == "1"
+    _head = env("E4B_SERVE_LMHEAD_INT4_CALIB", "0") == "1"
+    _dense = env("E4B_SERVE_DENSE_INT4_CALIB", "0") == "1"
+    if _attn or _head or _dense:
+        from .engines.int4_attn_calib import calibrate_attention_hessians, enable_serve_attn_int4_calib
+        batches = _calib_batches(tok)
+        hs = calibrate_attention_hessians(model, batches, include_attention=_attn, include_head=_head,
+                                          include_dense_mlp=_dense)
+        n = enable_serve_attn_int4_calib(model, hs, include_attention=_attn, include_head=_head,
+                                         include_dense_mlp=_dense)
+        log(f"ATTNINT4 calibrated: {n} projections (attn={int(_attn)} head={int(_head)} dense={int(_dense)}; "
+            f"{len(batches)} batches of {env('E4B_CALIB_SOURCE', 'c4')}; model_type={mt})")
+        out["attn_int4_calib_projections"] = int(n)
+    return out
+
+
+def _count(v):
+    return [int(x) for x in v] if isinstance(v, (tuple, list)) else int(v)
+
+
+def _apply_fusions(model, cfg: PagedServeConfig) -> dict:
+    """One assembly point, as the harness: ``qkv_fuse.fuse_qkv`` imports and calls ``fuse_t1_glue``,
+    ``fuse_t1_glue_r2`` and ``fuse_router_epilogue`` itself after fusing (so the env flags are live on the
+    fused path -- the registered B=1 stack is ``--fuse-qkv`` WITH the fold flags set); the unfused branch
+    calls the three directly. The census carries what each fold RETURNED, never a literal 0: in the fused
+    branch the fold functions are wrapped on their modules for the duration of the call -- ``fuse_qkv``
+    imports them inside its body, so the wrapper is what it calls -- and restored afterwards."""
+    from .engines import glue_fuse, glue_r2, router_epilogue
+    set_folds = [k for k in FUSION_ENV if os.environ.get(k, "0") == "1"]
+    folds = ((glue_fuse, "fuse_t1_glue", "fuse_t1_glue_n"),
+             (glue_r2, "fuse_t1_glue_r2", "fuse_t1_glue_r2_n"),
+             (router_epilogue, "fuse_router_epilogue", "fuse_router_epilogue_n"))
+    if cfg.fuse_qkv:
+        from .engines.qkv_fuse import fuse_qkv
+        captured: dict = {}
+        saved = []
+        for mod, fname, key in folds:
+            orig = getattr(mod, fname)
+
+            def _recording(*a, _orig=orig, _key=key, **k):
+                r = _orig(*a, **k)
+                captured[_key] = r
+                return r
+
+            saved.append((mod, fname, orig))
+            setattr(mod, fname, _recording)
+        try:
+            n = fuse_qkv(model)
+        finally:
+            for mod, fname, orig in saved:
+                setattr(mod, fname, orig)
+        if n == 0:
+            raise RuntimeError("E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion")
+        missing = [key for _, _, key in folds if key not in captured]
+        if missing:
+            raise RuntimeError(
+                f"fuse_qkv returned without calling {missing}: qkv_fuse no longer applies the folds at its assembly "
+                "point, so this census cannot be reported -- update _apply_fusions rather than guessing")
+        out = {"fuse_qkv_n": int(n), **{key: _count(captured[key]) for _, _, key in folds}}
+    else:
+        out = {"fuse_qkv_n": 0, **{key: _count(getattr(mod, fname)(model)) for mod, fname, key in folds}}
+    log(f"fusions (fold flags set: {set_folds or 'none'}): {out}")
+    return out
+
+
+def _eos_ids(model, tok, cfg: PagedServeConfig) -> frozenset:
+    if cfg.eos_ids:
+        return frozenset(int(t) for t in cfg.eos_ids)
+    ids = set()
+    v = getattr(getattr(model, "generation_config", None), "eos_token_id", None)
+    if isinstance(v, int):
+        ids.add(v)
+    elif isinstance(v, (list, tuple)):
+        ids.update(int(x) for x in v)
+    t = getattr(tok, "eos_token_id", None)
+    if isinstance(t, int):
+        ids.add(t)
+    if not ids:
+        raise RuntimeError("no EOS id on the model's generation_config or tokenizer; set E4B_PAGED_EOS_IDS")
+    return frozenset(ids)
+
+
+def build_engine(cfg: PagedServeConfig) -> EngineParts:
+    """The harness's construction, in its order (see the module docstring). GPU only."""
+    cfg.validate()
+    for name, val in (("E4B_PAGED_MODEL", cfg.model), ("E4B_PAGED_ARENA", cfg.arena), ("E4B_PAGED_CALIB", cfg.calib)):
+        if not val:
+            raise ValueError(f"{name} is required")
+    for path in (cfg.arena, cfg.arena + ".index.json", cfg.calib):
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+
+    import torch
+    from transformers import AutoTokenizer
+
+    from . import load_moe_4bit_streaming
+    from .engines.fp8_paged_kv import Fp8PagedKV
+    from .engines.hot_residency import target_modules
+    from .engines.hybrid import enable_hybrid_tier
+    from .engines.paged_attention import register
+    from .engines.paged_runner import PagedModelRunner
+    from .engines.placement import solve_placement
+
+    torch.manual_seed(1689)
+    tok = AutoTokenizer.from_pretrained(cfg.model, revision=cfg.revision or None)
+    model, _ = load_moe_4bit_streaming(cfg.model, cfg.device, torch.bfloat16, r=8, alpha=16, quant_type="nf4",
+                                       arena=cfg.arena, revision=cfg.revision or None)
+    model.eval()
+    mods = target_modules(model)
+    L, E = len(mods), mods[0].num_experts
+    k = _routed_topk(model.config)
+    torch.set_num_threads(cfg.torch_threads)
+    man = solve_placement(n_layers=L, n_experts=E, bytes_per_expert=_bytes_per_expert(cfg.arena),
+                          vram_budget_bytes=int(cfg.vram_gb * 2**30), dram_budget_bytes=int(cfg.dram_gb * 2**30),
+                          calibration=json.loads(open(cfg.calib, encoding="utf-8").read()), profile_path=None,
+                          batch=1, top_k=k, cpu_us_fixed=None, cpu_us_per_row=None)
+    if cfg.placement == "all-vram":
+        # step_decomp --placement-override all-vram: the solver ran, then every expert is in the VRAM tier
+        pairs = sorted(tuple(pp) for t in ("vram", "dram", "nvme") for pp in man["tiers"][t])
+        man["tiers"] = {"vram": [list(pp) for pp in pairs], "dram": [], "nvme": []}
+        man["masses"] = {"vram_frac": 1.0, "dram_frac": 0.0, "nvme_frac": 0.0}
+    n = enable_hybrid_tier(model, cfg.arena, man, hot_rows=cfg.hot_rows, threads=0, pool=True,
+                           dispatch_diet=False, collapse_resident=True)
+    if n != L:
+        raise RuntimeError(f"enable_hybrid_tier patched {n}/{L} MoE layers")
+    levers = _apply_levers(model, cfg, tok)
+    for m in mods:
+        m._hot_residency.arm_amortization(False)          # --amort off: the production shape
+    register(model)
+    fusions = _apply_fusions(model, cfg)
+
+    # proof of execution, the lanes' census (serve_stack.build_served_model) + their refusal rule
+    try:
+        from .engines.int4_attn import Int4Linear
+        int4_attn = sum(1 for m in model.modules() if isinstance(m, Int4Linear))
+    except ImportError:
+        int4_attn = 0
+    stores = [getattr(getattr(m, "_hot_residency", None), "_int4_stores", None) for m in mods]
+    int4_layers = sum(1 for s in stores if s)
+    kinds = sorted({str(s.get("kind", "int4_b32")) if isinstance(s, dict) else "int4_b32" for s in stores if s})
+    env = os.environ.get
+    if env("E4B_SERVE_EXP_INT4", "0") == "1" and int4_layers == 0:
+        raise RuntimeError("E4B_SERVE_EXP_INT4=1 but no expert layer carries an int4 store")
+    if (env("E4B_SERVE_ATTN_INT4", "0") == "1" or env("E4B_SERVE_ATTN_INT4_CALIB", "0") == "1") and int4_attn == 0:
+        raise RuntimeError("int4 attention requested but no projection is Int4Linear")
+    if 0 < int4_layers < L:
+        log(f"WARNING int4 expert stores on {int4_layers}/{L} MoE layers -- a partial stack; see /health")
+
+    hkv, hd = _kv_geometry(model.config)
+    scratch = max(cfg.buckets) if cfg.graphs else 0
+    kv = Fp8PagedKV(L, hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
+                    k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
+                    batched_append=True, device=cfg.device, scratch_slots=scratch)
+    runner = PagedModelRunner(model, kv, device=cfg.device)
+    graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
+    sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
+                                chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget)
+    info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),
+            "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
+            "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
+                   "blocks_per_seq": getattr(kv, "blocks_per_seq", None)},
+            "graph_status": graph_status, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
+    info.update(levers)
+    info.update(fusions)
+    log(f"ready: {json.dumps(info, default=str)}")
+    return EngineParts(scheduler=sched, tokenizer=tok, eos_ids=_eos_ids(model, tok, cfg), info=info, runner=runner)
+
+
+# ---------------------------------------------------------------------------
+# HTTP
+# ---------------------------------------------------------------------------
+
+
+def _sse(obj) -> str:
+    return f"data: {json.dumps(obj, separators=(',', ':'), ensure_ascii=False)}\n\n"
+
+
+def _usage(prompt_len: int, out_len: int) -> dict:
+    return {"prompt_tokens": prompt_len, "completion_tokens": out_len, "total_tokens": prompt_len + out_len}
+
+
+async def stream_events(engine: PagedEngine, stream: PagedStream, detok: IncrementalDetokenizer, chunk, usage_only,
+                        include_usage: bool):
+    """The SSE body: one chunk per token; finish_reason (and usage) on the last token's chunk; an optional
+    usage-only chunk; ``[DONE]``. Starlette closes this generator when the client disconnects, and the
+    ``finally`` then aborts the request so its KV slot is freed instead of decoding to ``max_tokens``."""
+    try:
+        while True:
+            kind, payload = await stream.queue.get()
+            if kind == _TOKENS:
+                for tid in payload:
+                    yield _sse(chunk(detok.push(tid), None, None))
+            elif kind == _DONE:
+                rest, finish, rec = payload
+                texts = [detok.push(tid) for tid in rest]
+                tail = detok.flush()
+                if texts:
+                    texts[-1] += tail
+                else:
+                    texts = [tail]
+                usage = _usage(rec["prompt_len"], rec["out_len"])
+                for i, text in enumerate(texts):
+                    last = i == len(texts) - 1
+                    yield _sse(chunk(text, finish if last else None, usage if last else None))
+                if include_usage:
+                    yield _sse(usage_only(usage))
+                yield "data: [DONE]\n\n"
+                return
+            else:
+                yield _sse({"error": {"message": str(payload), "type": "engine_error"}})
+                return
+    finally:
+        if not stream.finished:
+            engine.abort(stream)          # the client went away: free the slot now
+
+
+def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEngine] = None):
+    """App factory. ``engine`` injection is for tests (a :class:`PagedEngine` built on fake parts)."""
+    from contextlib import asynccontextmanager
+
+    from fastapi import Depends, FastAPI, Header, HTTPException, Request as HttpRequest
+    from fastapi.responses import StreamingResponse
+    from pydantic import BaseModel
+
+    cfg = cfg or PagedServeConfig.from_env()
+    engine = engine or PagedEngine(cfg)
+
+    def _auth(authorization: Optional[str] = Header(None)):
+        if cfg.token and authorization != f"Bearer {cfg.token}":
+            raise HTTPException(401, "missing or invalid bearer token (set 'Authorization: Bearer <E4B_TOKEN>')")
+
+    @asynccontextmanager
+    async def lifespan(app):
+        engine.start(asyncio.get_running_loop())
+        yield
+        engine.shutdown()
+
+    app = FastAPI(title="experts4bit-qlora serve_paged", lifespan=lifespan)
+    app.state.engine = engine
+
+    class CompletionRequest(BaseModel):
+        model: str
+        prompt: Any
+        max_tokens: Optional[int] = 16
+        min_tokens: int = 0
+        temperature: Optional[float] = None
+        top_p: Optional[float] = None
+        top_k: Optional[int] = None
+        seed: Optional[int] = None
+        n: int = 1
+        best_of: Optional[int] = None
+        stream: bool = False
+        stream_options: Optional[dict] = None
+        ignore_eos: bool = False
+        logprobs: Optional[int] = None
+        echo: bool = False
+        stop: Any = None
+        stop_token_ids: Optional[list] = None
+        repetition_penalty: float = 1.0
+        presence_penalty: float = 0.0
+        frequency_penalty: float = 0.0
+        suffix: Optional[str] = None
+        add_special_tokens: bool = True
+        skip_special_tokens: bool = True
+
+    class ChatRequest(BaseModel):
+        model: str
+        messages: list
+        max_tokens: Optional[int] = None
+        max_completion_tokens: Optional[int] = None
+        min_tokens: int = 0
+        temperature: Optional[float] = None
+        top_p: Optional[float] = None
+        top_k: Optional[int] = None
+        seed: Optional[int] = None
+        n: int = 1
+        stream: bool = False
+        stream_options: Optional[dict] = None
+        ignore_eos: bool = False
+        logprobs: Any = None
+        top_logprobs: Optional[int] = None
+        stop: Any = None
+        stop_token_ids: Optional[list] = None
+        repetition_penalty: float = 1.0
+        presence_penalty: float = 0.0
+        frequency_penalty: float = 0.0
+        skip_special_tokens: bool = True
+
+    def _ready() -> EngineParts:
+        if engine.state == "error":
+            raise HTTPException(500, f"engine unavailable: {engine.error}")
+        if engine.state != "ready" or engine.parts is None:
+            raise HTTPException(503, "engine is loading", headers={"Retry-After": "30"})
+        return engine.parts
+
+    def _names(parts: EngineParts) -> list:
+        names = list(cfg.model_names)
+        mid = parts.info.get("model_id")
+        if mid and mid not in names:
+            names.append(mid)
+        return names or ["experts4bit-qlora"]
+
+    def _common_checks(req, parts: EngineParts) -> None:
+        if req.model not in _names(parts):
+            raise HTTPException(404, f"unknown model {req.model!r}; this server serves {_names(parts)}")
+        if req.temperature is not None and req.temperature != 0:
+            raise HTTPException(400, "this server is greedy-only (the engine argmaxes): send temperature 0 or omit "
+                                     "it (vllm bench serve: --temperature 0; sglang.bench_serving sends 0.0 by default)")
+        if req.n != 1:
+            raise HTTPException(400, "n must be 1 (greedy decoding has one completion)")
+        if getattr(req, "best_of", None) not in (None, 1):
+            raise HTTPException(400, "best_of must be 1 or absent")
+        if getattr(req, "logprobs", None) not in (None, False) or getattr(req, "top_logprobs", None):
+            raise HTTPException(400, "logprobs are not supported in v1 (the runner returns argmax ids, not logits)")
+        if getattr(req, "echo", False):
+            raise HTTPException(400, "echo is not supported")
+        if getattr(req, "suffix", None):
+            raise HTTPException(400, "suffix is not supported")
+        if req.stop not in (None, "", []):
+            raise HTTPException(400, "stop strings are not supported in v1; stop_token_ids are")
+        if req.repetition_penalty != 1.0 or req.presence_penalty != 0.0 or req.frequency_penalty != 0.0:
+            raise HTTPException(400, "penalties are not supported (they would change the greedy argmax)")
+
+    def _budget(prompt_len: int, max_tokens, min_tokens: int) -> int:
+        if max_tokens is None:
+            max_tokens = 16
+        if max_tokens < 1:
+            raise HTTPException(400, "max_tokens must be >= 1")
+        if max_tokens > cfg.max_tokens_limit:
+            raise HTTPException(400, f"max_tokens {max_tokens} exceeds this server's limit {cfg.max_tokens_limit} "
+                                     "(E4B_PAGED_MAX_TOKENS; requests are refused, not clamped)")
+        if min_tokens < 0 or min_tokens > max_tokens:
+            raise HTTPException(400, "min_tokens must be in [0, max_tokens]")
+        if prompt_len < 1:
+            raise HTTPException(400, "empty prompt")
+        if prompt_len + max_tokens > cfg.max_tokens_per_seq:
+            raise HTTPException(400, f"prompt_len {prompt_len} + max_tokens {max_tokens} exceeds "
+                                     f"E4B_PAGED_MAX_TOKENS_PER_SEQ={cfg.max_tokens_per_seq} (the KV a sequence owns)")
+        return max_tokens
+
+    def _stop_set(parts: EngineParts, ignore_eos: bool, extra) -> Optional[frozenset]:
+        ids = set() if ignore_eos else set(parts.eos_ids)
+        if extra:
+            ids.update(int(t) for t in extra)
+        return frozenset(ids) if ids else None
+
+    def _encode(tok, text: str, add_special: bool) -> list:
+        return [int(t) for t in tok.encode(text, add_special_tokens=add_special)]
+
+    def _prompt_ids(parts: EngineParts, prompt, add_special: bool) -> list:
+        tok = parts.tokenizer
+        if isinstance(prompt, str):
+            return _encode(tok, prompt, add_special)
+        if isinstance(prompt, list) and prompt:
+            if all(isinstance(t, int) and not isinstance(t, bool) for t in prompt):
+                return [int(t) for t in prompt]
+            if len(prompt) == 1 and isinstance(prompt[0], str):
+                return _encode(tok, prompt[0], add_special)
+            if len(prompt) == 1 and isinstance(prompt[0], list) and all(isinstance(t, int) for t in prompt[0]):
+                return [int(t) for t in prompt[0]]
+            raise HTTPException(400, "prompt must be one string or one list of token ids (batched prompts are not "
+                                     "supported; send one request per prompt)")
+        raise HTTPException(400, "prompt must be a non-empty string or a non-empty list of token ids")
+
+    def _submit(parts: EngineParts, prompt_ids: list, max_tokens: int, min_tokens: int, stop_ids,
+                request_id: str, arrival: float, arrival_epoch: float) -> PagedStream:
+        stream = PagedStream(queue=asyncio.Queue(), request_id=request_id, prompt_ids=prompt_ids,
+                             max_tokens=max_tokens, stop_ids=stop_ids, min_tokens=min_tokens,
+                             arrival=arrival, arrival_epoch=arrival_epoch)
+        try:
+            engine.submit(stream)
+        except BusyError as e:
+            raise HTTPException(503, str(e), headers={"Retry-After": "1"})
+        return stream
+
+    async def _collect(stream: PagedStream):
+        """Non-streaming: every token id, the finish reason and the trace record."""
+        ids: list = []
+        while True:
+            kind, payload = await stream.queue.get()
+            if kind == _TOKENS:
+                ids.extend(payload)
+            elif kind == _DONE:
+                rest, finish, rec = payload
+                ids.extend(rest)
+                return ids, finish, rec
+            else:
+                raise HTTPException(500, f"engine error: {payload}")
+
+    def _include_usage(opts) -> bool:
+        return bool(opts and opts.get("include_usage"))
+
+    # ------------------------------------------------------------- routes --
+    @app.get("/health")
+    async def health():
+        parts = engine.parts
+        info = dict(parts.info) if parts is not None else {}
+        return {
+            "status": "busy" if (engine.state == "ready" and engine.queue_depth > 0) else engine.state,
+            "error": engine.error,
+            "model": cfg.model,
+            "served_model_names": list(cfg.model_names),
+            "engine": {
+                "max_seqs": cfg.max_seqs, "kv_slots": cfg.max_seqs, "max_tokens_per_seq": cfg.max_tokens_per_seq,
+                "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
+                "graphs": cfg.graphs, "buckets": list(cfg.buckets), "graph_status": info.pop("graph_status", None),
+                "placement": cfg.placement, "fuse_qkv": cfg.fuse_qkv, "max_tokens_limit": cfg.max_tokens_limit,
+                "max_queue": cfg.max_queue or None,
+            },
+            "levers": info,
+            "eos_token_ids": sorted(parts.eos_ids) if parts is not None else None,
+            "sampling": {"greedy_only": True, "logprobs": False, "stop_strings": False},
+            "queue_depth": engine.queue_depth,
+            "trace_path": cfg.trace_path or None,
+            "uptime_s": round(time.time() - engine.started_at, 1),
+        }
+
+    @app.get("/stats")
+    async def stats():
+        return await asyncio.to_thread(engine.stats)
+
+    @app.get("/v1/models")
+    async def v1_models():
+        names = _names(engine.parts) if engine.parts is not None else list(cfg.model_names)
+        return {"object": "list",
+                "data": [{"id": n, "object": "model", "owned_by": "experts4bit-qlora",
+                          "max_model_len": cfg.max_tokens_per_seq} for n in names]}
+
+    @app.post("/v1/completions", dependencies=[Depends(_auth)])
+    async def v1_completions(req: CompletionRequest, http: HttpRequest):
+        arrival, arrival_epoch = time.monotonic(), time.time()
+        parts = _ready()
+        _common_checks(req, parts)
+        prompt_ids = _prompt_ids(parts, req.prompt, req.add_special_tokens)
+        max_tokens = _budget(len(prompt_ids), req.max_tokens, req.min_tokens)
+        stop_ids = _stop_set(parts, req.ignore_eos, req.stop_token_ids)
+        cid = http.headers.get("x-request-id") or f"cmpl-{uuid.uuid4().hex}"
+        created = int(time.time())
+        stream = _submit(parts, prompt_ids, max_tokens, req.min_tokens, stop_ids, cid, arrival, arrival_epoch)
+
+        def chunk(text, finish, usage):
+            body = {"id": cid, "object": "text_completion", "created": created, "model": req.model,
+                    "choices": [{"index": 0, "text": text, "logprobs": None, "finish_reason": finish}]}
+            if usage is not None:
+                body["usage"] = usage
+            return body
+
+        def usage_only(usage):
+            return {"id": cid, "object": "text_completion", "created": created, "model": req.model,
+                    "choices": [], "usage": usage}
+
+        detok = IncrementalDetokenizer(parts.tokenizer, prompt_ids, skip_special_tokens=req.skip_special_tokens)
+        if req.stream:
+            return StreamingResponse(stream_events(engine, stream, detok, chunk, usage_only,
+                                             _include_usage(req.stream_options)),
+                                     media_type="text/event-stream")
+        ids, finish, rec = await _collect(stream)
+        for tid in ids:
+            detok.push(tid)
+        detok.flush()
+        return chunk(detok.text, finish, _usage(rec["prompt_len"], rec["out_len"]))
+
+    @app.post("/v1/chat/completions", dependencies=[Depends(_auth)])
+    async def v1_chat_completions(req: ChatRequest, http: HttpRequest):
+        arrival, arrival_epoch = time.monotonic(), time.time()
+        parts = _ready()
+        _common_checks(req, parts)
+        tok = parts.tokenizer
+        if not getattr(tok, "chat_template", None):
+            raise HTTPException(400, "this model's tokenizer has no chat template; use /v1/completions")
+        try:
+            text = tok.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(400, f"chat template refused these messages: {type(e).__name__}: {e}")
+        prompt_ids = _encode(tok, text, False)       # the template already placed the special tokens
+        max_tokens = req.max_completion_tokens if req.max_completion_tokens is not None else req.max_tokens
+        max_tokens = _budget(len(prompt_ids), max_tokens, req.min_tokens)
+        stop_ids = _stop_set(parts, req.ignore_eos, req.stop_token_ids)
+        cid = http.headers.get("x-request-id") or f"chatcmpl-{uuid.uuid4().hex}"
+        created = int(time.time())
+        stream = _submit(parts, prompt_ids, max_tokens, req.min_tokens, stop_ids, cid, arrival, arrival_epoch)
+        first = {"sent": False}
+
+        def chunk(text, finish, usage):
+            delta = {"content": text}
+            if not first["sent"]:
+                delta = {"role": "assistant", "content": text}
+                first["sent"] = True
+            body = {"id": cid, "object": "chat.completion.chunk", "created": created, "model": req.model,
+                    "choices": [{"index": 0, "delta": delta, "logprobs": None, "finish_reason": finish}]}
+            if usage is not None:
+                body["usage"] = usage
+            return body
+
+        def usage_only(usage):
+            return {"id": cid, "object": "chat.completion.chunk", "created": created, "model": req.model,
+                    "choices": [], "usage": usage}
+
+        detok = IncrementalDetokenizer(tok, prompt_ids, skip_special_tokens=req.skip_special_tokens)
+        if req.stream:
+            return StreamingResponse(stream_events(engine, stream, detok, chunk, usage_only,
+                                             _include_usage(req.stream_options)),
+                                     media_type="text/event-stream")
+        ids, finish, rec = await _collect(stream)
+        for tid in ids:
+            detok.push(tid)
+        detok.flush()
+        return {"id": cid, "object": "chat.completion", "created": created, "model": req.model,
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": detok.text},
+                             "logprobs": None, "finish_reason": finish}],
+                "usage": _usage(rec["prompt_len"], rec["out_len"])}
+
+    return app
+
+
+def main() -> None:
+    import uvicorn
+
+    cfg = PagedServeConfig.from_env()
+    if not cfg.model:
+        raise SystemExit("E4B_PAGED_MODEL is required (plus E4B_PAGED_ARENA and E4B_PAGED_CALIB)")
+    exposure = "localhost" if cfg.host in ("127.0.0.1", "localhost", "::1") else f"LAN ({cfg.host})"
+    log(f"listening on {cfg.host}:{cfg.port} [{exposure}, {'token-gated' if cfg.token else 'no auth'}] "
+        f"max_seqs={cfg.max_seqs} max_tokens_per_seq={cfg.max_tokens_per_seq} chunk={cfg.chunk_tokens} "
+        f"graphs={int(cfg.graphs)} buckets={list(cfg.buckets)} placement={cfg.placement}; "
+        f"the engine builds on its own thread -- /health reports 'loading' until it is ready")
+    uvicorn.run(create_app(cfg), host=cfg.host, port=cfg.port, log_level="info")
+
+
+if __name__ == "__main__":
+    main()
