@@ -7598,6 +7598,34 @@
         "receipts/experts4bit-qlora/2026-10-01/p93-5090-1/ (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #836. Verdict granite=LICENSED olmoe=QUALITY_FAIL; the default moves only on two LICENSED families, so E4B_NF4_GROUPED_SMALLM stays 0. In-model K25 (TF32 tree) 2.700 vs the served 6.606 ms/step (Granite), 4.954 vs 10.389 (OLMoE). P92 attributed OLMoE's c4val1 K8 move to bf16 weight rounding; P93 changed exactly that and the move flipped sign and grew (+0.155 against -0.107), so the attribution is refuted. The open question is the instrument's spread under the production path's own arithmetic variants."
+    },
+    {
+      "id": "e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P94, one RTX 5090: K8 at T == 1 of K25 (select tree through TF32 MMA) against the served NF4 M-tile kernel it would replace above T == 1 moves c4val1 +0.102 ppl on Granite r12epi and +0.168 on OLMoE nf4 (wikitext -0.020 / -0.005; bar |0.05|), QUALITY_FAIL in both families, so E4B_NF4_GROUPED_SMALLM stays 0; the served M-tile itself reads -0.078 from the scalar GEMV on Granite c4val1 and within 0.017 of it on OLMoE.",
+      "value": 0.16778,
+      "unit": "K8 ppl delta, K25 (t) minus the served M-tile (m), OLMoE c4val1 (the largest |delta|; bar 0.05)",
+      "hardware": "RTX 5090 (sm_120, driver 575.57.08, 600 W), one rented Vast.ai verified host (machine 37958, instance 53772194, AMD Ryzen 9 7950X), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @966a95e (instrument #838: E4B_NF4_T1_DEVICE_GROUPING) + grouped-nf4-gemm @908a2ca; Granite @a0278068 r12epi, OLMoE @7f1c97f4 nf4, envs = bench/p44/serve_stack.py arm_env; arms g (E4B_NF4_GROUPED_SMALLM=0, E4B_NF4_T1_DEVICE_GROUPING=0), m (0, 1), t (1, 0); K8 2048 steps, eager B=1, --no-fuse-qkv, wikitext and c4val1, k8_gate uncalibrated with base m and candidate t; m engaged (B=1 census: _gemm_nf4_grouped 64 / 32 per step, no NF4 GEMV); on-card premise (row-exact 6, K25 contract compiled 30); verdict by bench/p94/p94_reduce.py",
+      "measured_on": "2026-10-01",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p94/RESULTS-p94.md",
+        "bench/p94/PREREG-p94.md",
+        "bench/p94/p94_reduce.py",
+        "bench/p94/receipts/p94-5090-2/verdict.json",
+        "bench/p94/receipts/p94-5090-2/olmoe_k8_t_c4val1.json",
+        "bench/p94/receipts/p94-5090-2/olmoe_k8_m_c4val1.json",
+        "bench/p94/receipts/p94-5090-2/granite_k8_m_c4val1.json",
+        "bench/p94/receipts/p94-5090-2/logs/census_granite_m_b1_d1.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-01/p94-5090-2/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #841. Verdict QUALITY_FAIL (granite FAIL, olmoe FAIL); BASELINE_SHIFT on Granite only. g and t reproduce P93's OFF and ON exactly on all four texts, on a different host. Predictions refuted: |t - m| < 0.01, and OLMoE c4val1 m - g near +0.10 to +0.20 (it is -0.013), so P93's OLMoE swing is not the GEMV-to-tile difference production carries. On wikitext every pair of the three arithmetics is within 0.026; on c4val1 the pairs range 0.013 to 0.168, with equal per-GEMM rms error (grouped-nf4-gemm K27). One draw per arithmetic cannot separate a c4val1 realization spread from a K25-specific bias on OLMoE; that is the next lane's calibration."
     }
   ]
 }

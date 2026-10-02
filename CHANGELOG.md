@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Lane P94 read (#564, one RTX 5090): QUALITY_FAIL in both families. K25 against the served NF4 M-tile kernel it would replace moves c4val1 K8 +0.102 (Granite) and +0.168 (OLMoE); `E4B_NF4_GROUPED_SMALLM` stays `0` (`e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01`)
+
+- **K8 at T == 1, three arithmetics:** g = the scalar GEMV, m = the served M-tile through #838's instrument, t = K25
+  TF32 tree. Gated on t − m:
+  - Granite: −0.020 (wikitext) / **+0.102** (c4val1);
+  - OLMoE: −0.005 / **+0.168**.
+- **The baseline:**
+  - On Granite c4val1 the M-tile itself reads −0.078 from the GEMV (`BASELINE_SHIFT`).
+  - On OLMoE it reads within 0.017 of the GEMV, so P93's OLMoE swing is not the GEMV-to-tile difference that
+    production carries.
+- **Reproduction:** g and t reproduce P93's OFF and ON exactly, on a different host.
+- **Spread:** on wikitext every pair is within 0.026; on c4val1 the pairs range from 0.013 to 0.168.
+- **Next:** a lane that calibrates c4val1's K8 spread across equal-error arithmetics, registered before any noise-aware
+  gate.
+- `bench/p94/RESULTS-p94.md`, `bench/p94/receipts/p94-5090-2/` (`p94-5090-2` $0.1373, plus `p94-5090-1` NOT_RUN at the
+  bandwidth pre-flight, $0.0164).
+
 ### `docs/system-manifest.json` follows grouped-nf4-gemm v0.34.1 (byte-identical)
 
 - The `consumer_ci_pin` prose names v0.34.0, the release whose commit this CI installs (846b512); it still named v0.33.0. The kernel repository changed it in its 0.34.1 release, and this CI compares the manifest byte-for-byte against the kernel's latest tag. No floor, range or ownership changes.
