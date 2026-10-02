@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### TC1 native-best against native-best: e4b as shipped steps 1.79x faster than Unsloth's native-best; the axolotl half is untested
+
+- **What was asked.** Amendments 5-7 of `bench/tc1/TC1-PREREG.md` set each framework's native-best configuration against the
+  others on one RTX 5090, two interleaved draws each. P13 predicted that e4b as shipped is the fastest of the three.
+- **What `tc1-5090-34` read.** Every arm is VALID. Unsloth native-best / e4b shipped is **1.794 [1.790, 1.797]** over two stable
+  pairs, so P13's Unsloth half is HELD (register `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.native-vs-native`, a labelled row).
+  axolotl's scattermoe draws were 10.8 % apart, so its half is UNTESTED and P13 is UNTESTED. No "fastest" statement is made.
+- **Why axolotl's draws disagree.** The arm spends 216, 61-65 and 76-81 s on steps 1, 3 and 6 in both draws, with no Dynamo
+  recompile, and runs at 0.94-0.99 of e4b shipped on steps 14-16. Amendment 8 re-asks it over steps 101..200 (P14).
+- **The first box.** `tc1-5090-33`'s receipts are bundled with a re-reduction: its anchor read VOID only because the reducer
+  had not registered the token, and its e4b-shipped pair was 6.1 % apart. See
+  `bench/h2h-2026-10-02/tc1/RESULTS-tc1-nativebest.md`.
+
 ### The linear-state pool builds each slot tuple's index once, so a fixed-slot graph capture copies nothing to the device
 
 - **Why.** `bench/p39/step_decomp.py`'s B=1 and batched lanes capture the model forward with fixed slots, and never

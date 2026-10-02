@@ -1,0 +1,5 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01, GPU-96fb75e3-e935-ea7f-350f-5a47c71abc21, 600.00 W, 3150 MHz
+CPU(s):                                  64
+Model name:                              AMD EPYC 9334 32-Core Processor
+MemTotal:       659622416 kB
+overlay         320G   35M  320G   1% /
