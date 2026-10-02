@@ -232,15 +232,14 @@ base — e4b keeps the 30 linear-attention layers' projections and the 40
 shared experts in bf16 (about 1.14 B parameters) where Unsloth stores them in
 4-bit, worth about 1.6 GB of the resident footprint and a 0.05-nat step-0
 gap that VOIDs the same-box pair by rule.
-**Nothing is quoted for Unsloth on Mixtral-8x7B.** The Mixtral rows
-registered on 2026-10-02 are retired (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-02`,
-retired, and `.compile-warmup`): their Unsloth readings — the 76–89-minute
-compile phase, the 6.2 / 7.0 s/step, the 12 % draw spread — came from this
-harness's engagement counters inside Unsloth's compiled MoE block (a guard
-that failed on every call, 743 graph breaks, the 1024 recompile limit hit),
-not from Unsloth (TC2 amendment 5). The counters are trace-safe now and the
-Mixtral pair is being re-measured; e4b under offload trained the set at
-7.15 GB and 15.8 s/step, unaffected.
+**On Mixtral-8x7B, re-measured with the counters fixed**
+(`e4b.train.footprint.unsloth.mixtral.5090.2026-10-02`): Unsloth resident steps
+in 3.74 s at 29.1 GB after one 34-second compile, e4b under expert offload in
+19.8 / 21.2 s at 7.16 GB — a footprint row, e4b's peak ×4.07 lower and
+Unsloth about 5.3× faster per step. No position: e4b's offload draws are 7 %
+apart. The 2026-10-02 Mixtral rows that read Unsloth at 6.2 / 7.0 s/step after
+a 76–89-minute compile are retired: that was this harness's counters
+recompiling Unsloth's compiled MoE block on every call (TC2 amendment 5).
 
 
 **Against Unsloth, end-to-end, on one identical training problem** (lane
