@@ -1116,3 +1116,20 @@ def test_reducer_regime_sees_axolotls_parametrized_4bit_experts():
     assert red.regime_of("granite", g).startswith("4-bit expert stacks")
     none = dict(base, axolotl_bnb4bit_modules={"quantized_moe_experts_n": 0})
     assert "NOT the 4-bit MoE regime" in red.regime_of("qwen3", none)
+
+
+def test_tc1_amendment_5_native_best_token():
+    """TC1 amendment 5: `qwen3nativebest` runs the three native-best configurations interleaved, two draws each, then e4b's matched
+    anchor; every native arm carries its own init and adapter precision, and axolotl's is the scattermoe native-best."""
+    run = RUN_SH.read_text()
+    m = re.search(r"^tc1_nativebest_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE)
+    assert m, "tc1_nativebest_family is gone"
+    body = m.group(0)
+    order = re.findall(r"&& (?:arm|draw2) +\$FAM (e4b|axolotl|unsloth) (\S+)", body)
+    assert order == [("e4b", "fused_attn4_shipped"), ("axolotl", "ckpt_axolotl_best"), ("unsloth", "ckpt_unsloth_best"),
+                     ("e4b", "fused_attn4_shipped"), ("axolotl", "ckpt_axolotl_best"), ("unsloth", "ckpt_unsloth_best"),
+                     ("e4b", "fused_attn4_m")], order
+    assert body.count("draw2") == 3 and "--axolotl-best 1" in body and "--unsloth-speed-tilt 1" in body
+    assert 'local NATIVE="--adapter-dtype native --lora-init native"' in body
+    assert "qwen3nativebest) tc1_nativebest_family qwen3nativebest Qwen/Qwen3-30B-A3B" in run
+

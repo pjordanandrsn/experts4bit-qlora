@@ -836,6 +836,28 @@ tc1_curve_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SAL=$
   can_run 600 $FAM/unsloth/m_r64    && arm $FAM unsloth ckpt_unsloth_m_r64 unsloth $SAL "$MID" $REV 0 r64 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_nativebest_family FAM MID REV FETCH_AL E4B_AL UNS_AL AX_AL -- TC1 amendment 5 (2026-10-02): each framework's NATIVE-BEST
+# configuration on one box, two interleaved draws each -- e4b as shipped (bf16 expert adapters, its own init), axolotl's scattermoe
+# native-best, Unsloth's native-best (grouped_mm, speed tilt, its own init) -- plus e4b's matched fused arm as the box's anchor for
+# the validity predicates. Not matched work: the adapter precision and init are each framework's own, said on every row.
+tc1_nativebest_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7
+  local ALL="e4b:fused_attn4_shipped:fused axolotl:ckpt_axolotl_best:axolotl unsloth:ckpt_unsloth_best:unsloth e4b:fused_attn4_shipped_d2:fused axolotl:ckpt_axolotl_best_d2:axolotl unsloth:ckpt_unsloth_best_d2:unsloth e4b:fused_attn4_m:fused"
+  say "===== NATIVE-BEST family $FAM ($MID @ $REV; each framework as its users run it, two draws each; e4b fused_m the anchor)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
+  local AXB="--axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native"
+  local UNB="$UNS --unsloth-moe-backend grouped_mm --unsloth-speed-tilt 1 --adapter-dtype fp32 --lora-init native"
+  can_run 600 $FAM/e4b/shipped      && arm   $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/axolotl/best     && arm   $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS $AXB
+  can_run 600 $FAM/unsloth/best     && arm   $FAM unsloth ckpt_unsloth_best unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNB
+  can_run 600 $FAM/e4b/shipped_d2   && draw2 $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/axolotl/best_d2  && draw2 $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS $AXB
+  can_run 600 $FAM/unsloth/best_d2  && draw2 $FAM unsloth ckpt_unsloth_best unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNB
+  can_run 600 $FAM/e4b/fused_m      && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_family FAM MID REV FETCH_AL E4B_AL UNS_AL HF_AL AX_AL REF_AL PROF_AL -- the JUDGED family (phase 3 I [F4]), one process per arm, in this order:
 #   1 e4b/fused_attn4_m  2 unsloth/ckpt_unsloth_m  3 e4b/reference_attn4_m (THIRD: the e4b-side control sits beside the pair it controls)
 #   4 e4b/fused_attn4_m_d2  5 unsloth/ckpt_unsloth_m_d2  6 hf/hf_peft_m  7 axolotl/ckpt_axolotl_m
@@ -906,6 +928,8 @@ tc1_native_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=
 for FAM in $FAMILIES; do case "$FAM" in
   qwen3)       tc1_family        qwen3       Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700 5400 2400;;
   qwen3native) tc1_native_family qwen3native Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700;;
+  #                                                                                                        FETCH E4B  UNS  AX     (TC1 amendment 5: native-best vs native-best)
+  qwen3nativebest) tc1_nativebest_family qwen3nativebest Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 2700;;
   #                                                                                                        FETCH E4B  HF   AX     (amendment 3: the axolotl box)
   qwen3axolotl) tc1_axolotl_family qwen3axolotl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 1800 2700;;
   #                                                                                                        FETCH E4B  UNS  ANCH SCALE   (TC1b alarms: e4b 200-step 4800, Unsloth 200-step 9000, anchor 1800 each, t1/r64 3600)
