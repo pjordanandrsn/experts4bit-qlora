@@ -597,7 +597,7 @@ tc1_prepare(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5 EVN=${6:-$EVAL_N}      #
 #   11 e4b/reference_attn4_m_offload (the parity / equivalence anchor under offload)
 # Alarms (the draft's): e4b resident 1200 (an OOM is quick), offload 3600, mb1 3600, Unsloth 3600 each, HF 1800 / HF offload 3600, axolotl 2700 / 3600 / 3600, reference offload 5400.
 tc1_frontier_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ERAL=$5 EOAL=$6 MBAL=$7 UAL=$8 HAL=$9 HOAL=${10} AAL=${11} ALAL=${12} AZAL=${13} ROAL=${14}
-  local ALL="e4b:fused_attn4_m:fused e4b:fused_attn4_m_offload:fused e4b:fused_attn4_m_mb1:fused unsloth:ckpt_unsloth_m:unsloth unsloth:ckpt_unsloth_m_mb1:unsloth hf:hf_peft_m:hf hf:hf_peft_m_offload:hf axolotl:ckpt_axolotl_m:axolotl axolotl:ckpt_axolotl_m_layeroffload:axolotl axolotl:ckpt_axolotl_m_zero3:axolotl e4b:reference_attn4_m_offload:reference"
+  local ALL="e4b:fused_attn4_m:fused e4b:fused_attn4_m_offload:fused e4b:fused_attn4_m_mb1:fused e4b:fused_attn4_shipped:fused unsloth:ckpt_unsloth_m:unsloth unsloth:ckpt_unsloth_m_mb1:unsloth hf:hf_peft_m:hf hf:hf_peft_m_offload:hf axolotl:ckpt_axolotl_m:axolotl axolotl:ckpt_axolotl_m_layeroffload:axolotl axolotl:ckpt_axolotl_m_zero3:axolotl e4b:reference_attn4_m_offload:reference"
   say "===== FRONTIER family $FAM (TC3; $MID @ $REV; matched seed $MATCHED_SEED; box class $BOX_CLASS; alarms e4b resident $ERAL offload $EOAL mb1 $MBAL unsloth $UAL hf $HAL hf-offload $HOAL axolotl $AAL/$ALAL/$AZAL reference-offload $ROAL)"
   local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
   local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"      # every arm is a matched arm
@@ -606,6 +606,10 @@ tc1_frontier_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ERAL=$5 EOAL=$6 MBAL=$7
   can_run 600 $FAM/e4b/fused_m             && arm   $FAM e4b fused_attn4_m fused $ERAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
   can_run 600 $FAM/e4b/fused_m_offload     && arm   $FAM e4b fused_attn4_m_offload fused $EOAL "$MID" $REV 1 field $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
   can_run 600 $FAM/e4b/fused_m_mb1         && arm   $FAM e4b fused_attn4_m_mb1 fused $MBAL "$MID" $REV 0 mb1 $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  # TC3-PREREG amendment 3 (2026-10-02): e4b as shipped (bf16 expert adapters, N(0,1/r) init) RESIDENT -- a FIT row, never a position: tc3-4090-1 showed
+  # Unsloth's matched arm fitting resident on 24 GB (24.22 GB peak) while e4b's matched arm (fp32 adapters) OOMs at both recipes; the question a 24 GB owner asks
+  local NATIVE="--adapter-dtype native --lora-init native"
+  can_run 600 $FAM/e4b/shipped             && arm   $FAM e4b fused_attn4_shipped fused $ERAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE ${NOTE:+--note} ${NOTE:+"$NOTE"}
   can_run 600 $FAM/unsloth/m               && arm   $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
   can_run 600 $FAM/unsloth/m_mb1           && arm   $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
   can_run 600 $FAM/hf/m                    && arm   $FAM hf hf_peft_m hf $HAL "$MID" $REV 0 field $TOK $TS $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}

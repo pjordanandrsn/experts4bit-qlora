@@ -150,3 +150,16 @@ empties, the positive control flips a byte of the home copy, and the receipt rec
 resident regime is byte-for-byte as before (same hasher, same names). The 12 GB run restarts from this merge; the 24 GB token is
 redrawn once (`tc3-4090-2`) so its e4b offload rows are measured, with `tc3-4090-1`'s non-e4b rows reported beside as a second draw.
 TC2's box B launches from this merge (TC2-PREREG amendment 1). Nothing in the arms, the alarms, the predicates or the readings moves.
+
+### Amendment 3 (2026-10-02T05:09Z, before the 24 GB redraw; while `tc3-4090-1` was still running): e4b as shipped, resident, as a fit row on the 24 GB token
+
+**What the first 24 GB box showed.** `tc3-4090-1` (RTX 4090, 24,564 MiB, EPYC 7B13 host): Unsloth's matched arm trained RESIDENT at
+the field recipe -- 8.43 s/step, peak 24.22 GB, held-out 1.9515 -> 0.8527 -- while e4b's matched arm (fp32 adapters) OOMed at both
+recipes (24.32 / 24.30 GB at the first step). P1's clause (ii) ("Unsloth OOMs at both recipes") is therefore FALSIFIED on that box, as
+registered, and the question the box raises is whether e4b at its own defaults (bf16 expert adapters, N(0, 1/r) init; 24.58 GB peak on
+the 32 GB card in TC1) fits a 24 GB card resident.
+
+**The amendment.** The 24 GB token gains `e4b/fused_attn4_shipped` -- resident, native precision and init, the field recipe -- as a
+FIT row after the mb1 resident arm (alarm 1200 as the resident arm's): never a position, outside P1, reported in the FIT TABLE and
+beside the matched arms (the 12 GB token already carries its offloaded counterpart). The reducer registers the row (`EXPECTED`,
+`FRONTIER_LEVER`); nothing in the predictions, bands or decision rules moves.

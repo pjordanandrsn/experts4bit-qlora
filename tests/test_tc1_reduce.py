@@ -237,7 +237,7 @@ def test_amendment_3_profile_sidecars_are_not_receipts_and_the_axolotl_token_is_
 def test_tc3_registration_constants_and_arm_order():
     R = _mod()
     assert R.FRONTIER_FAM == "qwen3frontier" and R.FRONTIER12_FAM == "qwen3frontier12" and set(R.FRONTIER_FAMS) <= set(R.FAMS)
-    assert R.EXPECTED["qwen3frontier"] == [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
+    assert R.EXPECTED["qwen3frontier"] == [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("e4b", "fused_attn4_shipped"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
                                            ("hf", "hf_peft_m"), ("hf", "hf_peft_m_offload"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_m_layeroffload"),
                                            ("axolotl", "ckpt_axolotl_m_zero3"), ("e4b", "reference_attn4_m_offload")]
     assert R.EXPECTED["qwen3frontier12"] == [("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_offload_d2"), ("e4b", "reference_attn4_m_offload"), ("e4b", "fused_attn4_m"),
@@ -269,7 +269,7 @@ def test_tc3_readings_on_hand_built_receipts():
     import tempfile
     R = _mod()
     F = R.reduce_frontier_family(R.FRONTIER_FAM, R._frontier_set(), {}, 20)
-    assert F["fit"]["unsloth"]["fits"] is False and F["fit"]["e4b"]["completed"] == ["fused_attn4_m_offload", "fused_attn4_m_mb1", "reference_attn4_m_offload"] and F["fit"]["hf"]["fits"] is False
+    assert F["fit"]["unsloth"]["fits"] is False and F["fit"]["e4b"]["completed"] == ["fused_attn4_m_offload", "fused_attn4_m_mb1", "fused_attn4_shipped", "reference_attn4_m_offload"] and F["fit"]["hf"]["fits"] is False
     assert F["equivalence"][R.FRONTIER_REF]["reading"] == "EQUIVALENT" and F["parity"]["verdict"] == "PASS" and F["resident"]["reading"] == "UNTESTED"
     assert F["verdicts"][("hf", "hf_peft_m_offload")] == "UNSUPPORTED" and F["verdicts"][("axolotl", "ckpt_axolotl_m_zero3")] == "UNSUPPORTED"
     assert {p: v for p, _, v, _ in R.score_frontier_predictions({R.FRONTIER_FAM: F})} == {"P1": "HELD", "P3": "UNTESTED", "P4": "UNTESTED"}
