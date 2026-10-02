@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### The per-slot linear-state pool grows when a second runner on the same model binds more slots
+
+- **Why.** `linear_state.install()` keeps one pool per model and returned an existing one unchanged. A second
+  `PagedModelRunner` on the same model with a larger batch would have bound slots past the pool's end
+  (`IndexError`, or `index_copy_` out of range).
+- **What.** `LinearStatePool.ensure_slots(n)` grows the pool, keeping every existing slot's state, and never shrinks.
+  `install()` calls it when it returns an existing pool.
+- **Tests** (`tests/test_linear_state.py`): a 2-slot pool grows to 4 for a second install. Slot 1's state is kept bit
+  for bit, the new slot 3 starts from zero (its logits equal a fresh run's), and a smaller later install leaves it at 4.
+
 ### P97 registered (#564): hybrid paged serving on the card -- the paged runner's per-slot linear state against transformers' own cache, and its whole-model error, on Qwen3.6-35B-A3B (bench and tests only)
 
 - **Why.** #889 and #897 (per-slot Gated DeltaNet state, compact fp8 pool) are tested on CPU only, with a stand-in for
