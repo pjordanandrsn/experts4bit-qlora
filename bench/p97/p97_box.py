@@ -303,8 +303,10 @@ def main() -> int:
 
     t0 = time.time()
     tok = AutoTokenizer.from_pretrained(a.model, revision=a.revision)
-    model, _ = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, r=8, alpha=16, quant_type="nf4",
-                                       revision=a.revision, offload=a.offload)
+    # the loader returns the checkpoint's own config beside the model: for a composite (vision-language) checkpoint
+    # the model is built from its text_config, and the loaded commit is recorded on the top-level config only
+    model, ckpt_cfg = load_moe_4bit_streaming(a.model, "cuda", torch.bfloat16, r=8, alpha=16, quant_type="nf4",
+                                              revision=a.revision, offload=a.offload)
     model.eval()
     load_s = time.time() - t0
     windows = wikitext_windows(tok, a.windows, a.prompt, a.cont)
@@ -312,7 +314,8 @@ def main() -> int:
                   stand_in_attention=a.stand_in_attention)
     rec["rehearsal"]["offload"] = a.offload
     rec = {"tag": a.tag, "model": a.model, "revision": a.revision,
-           "loaded_commit": getattr(model.config, "_commit_hash", None), "transformers": transformers.__version__,
+           "loaded_commit": getattr(ckpt_cfg, "_commit_hash", None) or getattr(model.config, "_commit_hash", None),
+           "transformers": transformers.__version__,
            "load_s": round(load_s, 1), **rec,
            "gpu": torch.cuda.get_device_name(0), "max_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2)}
     open(a.out, "w").write(json.dumps(rec, indent=1))

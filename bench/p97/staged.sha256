@@ -1,6 +1,6 @@
 # Names as the BOX sees them after staging ($W). The box runs `sha256sum -c` on this file and the controller resolves
 # each name to its source (p97_drive.sh's case) and compares.
 b2b85fd6fbda39deb6dc0a5275ed0e3102f2daace3f172c80a6edea531d12137  p97_run.sh
-21af2e90ec80c8f040aa51536b31c0daf87e6cd5a9605e2746084f6faf462417  p97_box.py
+608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31  p97_box.py
 bf01f829aa3915dc6d724a3fc53bd60fe383709a41667341385d6b62dbc5d6ea  p97_reduce.py
 6ca7c51d76a964c6e53a7caa4f288a6a04566e10930bb4d2cf3658dcdad9664f  test_linear_state_gpu.py

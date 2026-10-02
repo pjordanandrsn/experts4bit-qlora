@@ -165,5 +165,11 @@ records, as it must. No time is quoted.
   - the rotation mutant: mean KL 2.95 nats, agreement 0.34, pre-attention state error 0.73.
 - **On CPU** (`tests/test_p97_box.py`, fp32), the same pre-attention state reads 1e-7, and the mutant 1.4. A pool that
   drops its write-backs reads 1.5.
+- **One fix after the rehearsals, which they could not exercise.** The harness read the loaded commit from
+  `model.config`. For a composite checkpoint the loader builds the model from `text_config`, and the commit is
+  recorded only on the top-level config it returns: Qwen3.6's `text_config` carries no `_commit_hash` (checked against
+  the hub). The reducer would have voided the subject's record. The rehearsals loaded local directories, which record
+  no commit, so they could not see it. The harness now reads the returned config, and `tests/test_p97_staged_pin.py`
+  pins that.
 
 Amendments, dated, go below this line before any data is read.

@@ -94,6 +94,13 @@ def test_the_runner_and_the_reducer_name_the_same_models_and_shape():
     assert _const(REDUCE, "KL_CEIL") == 0.05 and _const(REDUCE, "AGREE_MIN") == 0.85
 
 
+def test_the_loaded_commit_is_read_from_the_checkpoints_own_config():
+    # a composite checkpoint (Qwen3.6) is built from its text_config, which carries no _commit_hash; the reducer voids
+    # a record without the loaded commit, so the harness must read the config the loader returns
+    assert "model, ckpt_cfg = load_moe_4bit_streaming(" in BOX
+    assert '"loaded_commit": getattr(ckpt_cfg, "_commit_hash", None)' in BOX
+
+
 def test_the_registered_run_passes_no_measurement_flags():
     box = RUN[RUN.index("box(){"):RUN.index("[ \"$CTRL_OK\" = 0 ]")]
     assert '--model "$SRC" --revision "$REV" --tag $TAG --out $W/p97_$TAG.json $BOX_EXTRA' in box
