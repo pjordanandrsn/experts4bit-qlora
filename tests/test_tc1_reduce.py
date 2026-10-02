@@ -132,3 +132,84 @@ def test_tc1b_readings_on_hand_built_receipts():
     F = R.reduce_dir(d, 20)
     text = R.render(F, d)
     assert "## TC1b predictions P1–P4" in text and "## Predictions P1–P10" not in text and "SCALING POINT `r64` (never a position)" in text
+
+
+# ----------------------------------------------------------------------------- lane TC2 (the tc2small / tc2big tokens)
+def test_tc2_registration_constants_and_arm_order():
+    R = _mod()
+    assert R.TC2_FAMS == ["granite", "olmoe", "gptoss", "qwen3_5", "mixtral"] and all(f in R.FAMS for f in R.TC2_FAMS)
+    assert R.TC2_TOKENS == {"tc2small": ["granite", "olmoe", "gptoss"], "tc2big": ["qwen3_5", "mixtral"]}
+    assert {f: R.N_LAYERS[f] for f in R.TC2_FAMS} == {"granite": 32, "olmoe": 16, "gptoss": 24, "qwen3_5": 40, "mixtral": 32}
+    assert {f: R.ATTN_CENSUS[f] for f in R.TC2_FAMS} == {"granite": 128, "olmoe": 64, "gptoss": None, "qwen3_5": None, "mixtral": 128} and R.ATTN_CENSUS["qwen3"] == 192
+    assert R.TC2_MODELS == {"granite": ("ibm-granite/granite-3.1-3b-a800m-instruct", "a02780686e08a03fe0d2679a293b5c74a90efa89", 32),
+                            "olmoe": ("allenai/OLMoE-1B-7B-0924-Instruct", "7f1c97f440f06ce36705e4f2b843edb5925f4498", 16),
+                            "gptoss": ("openai/gpt-oss-20b", "6cee5e81ee83917806bbde320786a8fb61efebee", 24),
+                            "qwen3_5": ("Qwen/Qwen3.6-35B-A3B", "995ad96eacd98c81ed38be0c5b274b04031597b0", 40),
+                            "mixtral": ("mistralai/Mixtral-8x7B-Instruct-v0.1", "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", 32)}
+    assert R.EXPECTED["granite"] == [("e4b", "fused_attn4_m"), ("hf", "hf_peft_m"), ("e4b", "reference_attn4_m"), ("e4b", "fused_attn4_m_d2"), ("hf", "hf_peft_m_d2"),
+                                     ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_experts"), ("hf", "hf_peft_m_t214"),
+                                     ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("e4b", "fused_attn4_shipped")]
+    assert R.EXPECTED["olmoe"] == [k for k in R.EXPECTED["granite"] if k != ("unsloth", "ckpt_unsloth_m_experts")]
+    assert R.EXPECTED["gptoss"] == [("e4b", "fused_attn4_m"), ("e4b", "attn_only_m"), ("e4b", "attn_only_m_d2"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_mxfp4"),
+                                    ("unsloth", "ckpt_unsloth_mxfp4_d2"), ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m"), ("e4b", "reference_attn4_m")]
+    assert R.EXPECTED["qwen3_5"] == [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "fused_attn4_m_d2"), ("unsloth", "ckpt_unsloth_m_d2"), ("unsloth", "ckpt_unsloth_m_experts"),
+                                     ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("e4b", "fused_attn4_shipped"), ("e4b", "reference_attn4_m")]
+    assert R.EXPECTED["mixtral"] == [k for k in R.EXPECTED["qwen3_5"] if k != ("unsloth", "ckpt_unsloth_m_experts")]
+    assert R.TC2_ANCHOR == {"gptoss": ("e4b", "attn_only_m")} and R.anchor_of("gptoss") == ("e4b", "attn_only_m") and R.anchor_of("granite") == ("e4b", "fused_attn4_m")
+    assert set(R.NO_COMMON_SET) == {"gptoss"} and set(R.FOOTPRINT_FAMS) == {"mixtral"}
+    for t in ("attn_only_m", "attn_only_m_d2", "ckpt_unsloth_m_experts", "ckpt_unsloth_mxfp4", "ckpt_unsloth_mxfp4_d2", "hf_peft_m_d2", "hf_peft_m_t214"):
+        assert t in R.MATCHED, t
+    assert R.DRAW2[("e4b", "attn_only_m")] == ("e4b", "attn_only_m_d2") and R.DRAW2[("hf", "hf_peft_m")] == ("hf", "hf_peft_m_d2") and R.DRAW2[("unsloth", "ckpt_unsloth_mxfp4")] == ("unsloth", "ckpt_unsloth_mxfp4_d2")
+    assert R.registered_draw2("granite", ("hf", "hf_peft_m")) == ("hf", "hf_peft_m_d2") and R.registered_draw2("qwen3", ("hf", "hf_peft_m")) is None
+    assert R.registered_draw2("qwen3", ("unsloth", "ckpt_unsloth_m")) == ("unsloth", "ckpt_unsloth_m_d2") and R.registered_draw2("qwen3native", ("e4b", "fused_attn4_m")) is None
+    # TC1's registration is untouched: its LABELLED set, its qwen3 order and anchors; TC2's labelled rows live in their own dict
+    assert set(R.LABELLED) == {("unsloth", "ckpt_unsloth_t28"), ("unsloth", "ckpt_unsloth_triton"), ("unsloth", "ckpt_unsloth_best"), ("axolotl", "ckpt_axolotl_best"),
+                               ("e4b", "fused_attn4_shipped"), ("e4b", "fused_attn4_m_nodgrad"), ("e4b", "fused_attn4_m_t212"), ("hf", "hf_peft_m_mb1_t214")}
+    assert set(R.TC2_LABELLED) == {("unsloth", "ckpt_unsloth_m_experts"), ("hf", "hf_peft_m_t214"), ("unsloth", "ckpt_unsloth_mxfp4")} and set(R.ALL_LABELLED) == set(R.LABELLED) | set(R.TC2_LABELLED)
+    assert R.EXPECTED["qwen3"][0] == ("e4b", "fused_attn4_m") and R.QUALITY_ANCHOR == ("e4b", "fused_attn4_m") and R.EQUIV_ANCHOR == ("e4b", "fused_attn4_m")
+    assert R.TC2_P1_HF_BAND == (1.1, 1.6) and R.TC2_P2_UNS_BAND == (1.2, 3.0) and R.TC2_P2_HF_BAND == (1.5, 2.5) and R.TC2_P4_UNS_BAND == (2.0, 6.0)
+    assert R.TP4_QWEN3_5_E4B_S_PER_STEP == 6.3344 and R.TC2_P4_E4B_TOL == 0.15 and R.TC2_P5_BAND == (0.3, 0.5) and R.TC2_P5_PEAK_X == 8.0
+    assert R.TP2_MIXTRAL == {"ratio_unsloth_over_e4b": 0.361, "peak_unsloth_gb": 29.16, "peak_e4b_gb": 3.22}
+    assert R.UNSLOTH_BANNER_PER_EXPERT == "Detected MoE model with per-expert Linear experts" and R.UNSLOTH_BANNER == "Enabling LoRA on MoE parameters"
+
+
+def test_tc2_selftest_cases_and_failing_lines():
+    p = subprocess.run([sys.executable, str(REDUCE), "--selftest"], capture_output=True, text=True, timeout=300, cwd=REPO)
+    assert p.returncode == 0, (p.stdout + p.stderr)[-3000:]
+    assert int(re.search(r"REDUCE SELFTEST OK cases=(\d+)", p.stdout).group(1)) >= 53, p.stdout[-300:]
+    for needle in ("FAILING-CASE TC2-attention-only (reducer): attention-only: trainable 5200000 != e4b's 99600000 (unsloth adapted no expert parameter",
+                   "FAILING-CASE TC2-no-common-set (reducer): a ratio on gpt-oss is never quoted -- - **NO COMMON ADAPTER SET (unsloth/ckpt_unsloth_mxfp4 vs e4b/attn_only_m)",
+                   "FAILING-CASE TC2-packed (reducer): packed expert parameters 0 < 2*24 (expert parameter classes {'Parameter': 48}): the experts are not packed",
+                   "FAILING-CASE TC2-footprint (reducer): Unsloth OOM -> - **FOOTPRINT (e4b under expert offload (--offload 1, tp2 / tp4's arm) vs Unsloth resident): not readable**",
+                   "FAILING-CASE TC2-dispatch (reducer): experts_implementation requested 'grouped_mm', accepted True, config 'grouped_mm'; torch grouped_mm calls/step min 0 (F.grouped_mm 0): dispatch did NOT reach grouped_mm (recorded, not VOID)"):
+        assert needle in p.stdout, needle
+
+
+def test_tc2_readings_on_hand_built_receipts():
+    R = _mod()
+    G = R.reduce_family("granite", R._tc2_set("granite"), {}, None)
+    assert G["positions"]["hf"]["label"] == "HF (bf16 experts)" and G["positions"]["hf"]["quoted"] and G["verdicts"][("unsloth", "ckpt_unsloth_m")] == "VOID"
+    assert next(x for x in G["rows"] if x["tag"] == "ckpt_unsloth_m")["why"].startswith("attention-only:") and not G["positions"]["unsloth"]["quoted"]
+    GO = R.reduce_family("gptoss", R._tc2_set("gptoss"), {}, None)
+    assert all(pz["no_common_set"] and not pz["quoted"] for pz in GO["positions"].values()) and GO["verdicts"][("unsloth", "ckpt_unsloth_mxfp4")] == "VALID" and GO["verdicts"][("e4b", "attn_only_m")] == "VALID"
+    assert "NO COMMON ADAPTER SET" in R.pos_lines(GO["positions"]["unsloth_mxfp4"], 60)[0] and "5000000 trainable" in R.pos_lines(GO["positions"]["unsloth_mxfp4"], 60)[0]
+    MX = R.reduce_family("mixtral", R._tc2_set("mixtral"), {}, None)
+    assert MX["footprint"]["readable"] and R.family_block(MX)[1].startswith("- **FOOTPRINT (e4b under expert offload") and abs(MX["footprint"]["peak_ratio"] - 29.18 / 3.235) < 1e-9
+    F = {fam: R.reduce_family(fam, R._tc2_set(fam), {}, None) for fam in R.TC2_FAMS}
+    assert {p: v for p, _, v, _ in R.score_tc2_predictions(F)} == {f"P{i}": "HELD" for i in range(1, 8)}
+    # a t214 arm whose dispatch did not reach grouped_mm is VALID with the note recorded
+    S = R._tc2_set("granite")
+    S[("hf", "hf_peft_m_t214")]["hf_experts_dispatch"].update({"torch_grouped_mm_calls_per_step_min": 0, "reached_grouped_mm": False})
+    x = next(x for x in R.reduce_family("granite", S, {}, None)["rows"] if x["tag"] == "hf_peft_m_t214")
+    assert x["verdict"] == "VALID" and "did NOT reach grouped_mm" in x["dispatch"]
+    # the receipt file names parse (qwen3_5's underscore included) and the printer renders the TC2 table without TC1's
+    import json
+    import tempfile
+    d = tempfile.mkdtemp()
+    for fam in R.TC2_FAMS:
+        for (fw, tag), r in R._tc2_set(fam).items():
+            json.dump(r, open(f"{d}/{fam}_{fw}_{tag}.json", "w"))
+    recs = R.load(d)
+    assert set(recs) == set(R.TC2_FAMS) and set(recs["qwen3_5"]) == set(R.EXPECTED["qwen3_5"]) and set(recs["gptoss"]) == set(R.EXPECTED["gptoss"])
+    text = R.render(R.reduce_dir(d, None), d)
+    assert "## TC2 predictions P1–P7" in text and "## Predictions P1–P10" not in text and "MATCHED POSITION: s/step ratio HF (bf16 experts) / e4b = 1.292**" in text
