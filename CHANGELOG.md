@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### P97 registered (#564): hybrid paged serving on the card -- the paged runner against transformers' own forward on Qwen3.6-35B-A3B, held to an all-attention control (bench and tests only)
+
+- **Why.** #889 and #897 (per-slot Gated DeltaNet state, compact fp8 pool) are tested on CPU only, with a stand-in for
+  gnf4's fp8 decode kernel (sm_89+). This lane is their first GPU reading.
+- **What.** `bench/p97/`: the pre-registration, the box measurement `p97_box.py`, the reducer `p97_reduce.py` (20-case
+  self-test), the runner and driver, and the staged pin.
+  - On one RTX 5090, each model is measured on the same in-process weights: transformers' forward with a
+    `DynamicCache` against `PagedModelRunner` (fp8 pool, 128-token prefill chunks, 4 rows decoded together),
+    teacher-forced over 4 wikitext windows (512 + 256 tokens). Per step: KL(reference || paged) on fp32 log-probs,
+    Δnll and argmax agreement.
+  - Subject Qwen3.6-35B-A3B (30 linear + 10 attention layers on a 10-layer pool); control OLMoE-1B-7B (16 attention
+    layers). The subject also runs a mutant pass with the state write-back dropped, which must fail the rule.
+  - SUPPORTED if the subject's mean KL <= 2 x max(control's, 1e-3) and its agreement >= control's - 0.02; VOID on any
+    engagement count off its expected value, a rehearsal knob, or a mutant that would pass.
+  - The premise, on the card before any fetch: `tests/test_linear_state_gpu.py` (new) must pass, not skip. It takes
+    tiny hybrid and all-attention models through the real kernel.
+- **Tests.** `tests/test_p97_box.py` runs the whole measurement on CPU in CI, with the stand-in kernel. The hybrid's
+  KL must stay within 2x its control's; the counts must match; the mutant must fail (on CPU it reads 480x the hybrid's
+  KL). `tests/test_p97_staged_pin.py` pins the registration.
+
 ### `serve_paged` builds a hybrid checkpoint: the fp8 KV pool holds the attention layers only, and the KV geometry reads a composite config's `text_config`
 
 - **Why.** The fp8 KV pool pre-allocates rows for every layer it is given. A hybrid model's linear-attention layers
