@@ -394,7 +394,8 @@ def test_the_default_casts_softmax_topk_to_the_upstream_router(monkeypatch):
 
 def test_zero_restores_the_fp32_weights(monkeypatch):
     """E4B_ROUTER_EPI_CAST=0: the behaviour of every release before the P70
-    read, kept for one release -- fp32 weights where upstream returns bf16."""
+    read, kept until #674's K8 question is measured (#782) -- fp32 weights where
+    upstream returns bf16."""
     re_mod, gate, ref, calls = _qwen3_pair(monkeypatch)
     re_mod.CAST_WEIGHTS[0] = False
     x = torch.randn(8, HID, dtype=torch.bfloat16)

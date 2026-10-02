@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+### `E4B_ROUTER_EPI_CAST=0` stays, with a stated end condition: until #674's K8 question is measured (#782)
+
+- 0.37.5 said `=0` (fp32 router top-k weights) would be kept "for one release", and it survived 0.37.6–0.38.1.
+- It is now the only way to reproduce the licensed build's function. #674 asks whether the 0.37.5 cast default
+  explains the licensed K8 gap (6.33015 against 6.36709), and measuring that needs `=0`.
+- It is therefore kept until that question is measured, then removed with notice in this file.
+- `router_epilogue._cast_default`'s docstring says so. `docs/STATUS.md` no longer calls the 0.37.5 default
+  "(Unreleased)". No behavior changes.
+
 ### Foreign-format loader refuses what it cannot decode: compressed-tensors zero points and GPTQ `gptq_v2` (#789)
 
 - **compressed-tensors asymmetric weights.** An `X.weight_zero_point` beside a pack-quantized or NVFP4 tuple is now

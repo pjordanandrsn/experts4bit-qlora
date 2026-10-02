@@ -2841,7 +2841,8 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     is **INDISTINGUISHABLE**
     (`e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25`). By the
     registered rule it is now the default for the `softmax_topk` kind
-    (Unreleased). `E4B_ROUTER_EPI_CAST=0` restores fp32 for one release.
+    (since 0.37.5). `E4B_ROUTER_EPI_CAST=0` restores fp32. It stays until #674's
+    K8 question is measured, then goes with notice (#782).
     `topk_softmax` keeps fp32 until it is read.
 - **Bucketed CUDA-graph decode decodes exactly as the eager runner and is
   4.8× faster on a host-bound host** (lane B771b, `bench/b771b/`,
