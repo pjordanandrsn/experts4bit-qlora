@@ -243,3 +243,34 @@ draw on the same box trained (5.128 s/step). With one draw, P13's axolotl half i
 on one box with the amendment-5 token minus the Unsloth arms and the matched anchor (`TC1_SKIP`): e4b `fused_attn4_shipped` x2 and axolotl
 `ckpt_axolotl_best` x2, interleaved as registered. P13's Unsloth half is scored on `tc1-5090-33`, which holds both Unsloth draws. Budget:
 one RTX 5090, $0.69/h, 4.5 h, under $3.20; the standing no-ask tier.
+
+### Amendment 7 (2026-10-02T21:45Z, after `tc1-5090-33`'s full read, before any re-run): the whole native-best box again, with clocks recorded
+
+**What happened.** `tc1-5090-33` ran all seven arms of amendment 5's token. Amendment 5 registered the token in the box script but not in
+the reducer, which therefore had no `n_layers` for it and read the matched anchor VOID. With the token registered (below), every arm that
+trained is VALID. P13 still reads UNTESTED on both halves by its own rule:
+
+- **The axolotl half.** The second scattermoe draw refused with the Hub offline (amendment 6).
+- **The Unsloth half.** e4b shipped's two draws differ by 6.1 % (4.306 and 4.578 s/step) against the 5 % rule. Unsloth's pair agreed
+  within 0.5 %.
+
+The second e4b draw ran 5.5-8.5 % slower on every one of steps 11-20, on byte-identical tokens, at a lower mean power (255.7 W against
+266.8 W). Unsloth's two draws on the same box differed per step in both directions. The box recorded no clock, temperature or host load,
+so it cannot say whether the card or the host slowed.
+
+**The amendment.**
+
+1. The re-run is amendment 5's whole token: all seven arms in the same order. Amendment 6's reduced set (no Unsloth arms, no anchor) is
+   withdrawn, because P13's Unsloth half is now as untested as its axolotl half, and one box answers both.
+2. P13 is scored on the re-run box alone. `tc1-5090-33`'s rows are reported as that box's reading and are never pooled with the re-run's
+   draws.
+3. Each second, the box's sampler also records the SM and memory clocks, the GPU temperature, the active clock-event reasons, the host
+   load average and the host's aggregate CPU counters (`gpuclk_<arm>.txt`, beside the unchanged `vram_<arm>.txt`). These are descriptive.
+   No predicate reads them, and they cannot void an arm.
+4. The reducer registers the token: `n_layers` 48, attention census 192, the seven arms in box order, a second draw for each native arm,
+   and P13 scored mechanically per half. A half is HELD when its point ratio over two stable draws a side is above 1.0, FALSIFIED at or
+   below 1.0, and UNTESTED otherwise. P13 is FALSIFIED when either half is, and HELD when both are.
+5. If e4b shipped's pair is unstable again, P13 stays UNTESTED. The instability, with its telemetry, is then the reported finding, and
+   no third box runs under this amendment.
+
+Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20 (`tc1-5090-33` cost $0.51); the standing no-ask tier.
