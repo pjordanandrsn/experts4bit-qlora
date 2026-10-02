@@ -746,7 +746,7 @@ def test_tc2_knobs_are_read_by_the_box_and_forwarded_by_the_driver():
         assert knob in forwarded_block.split(), (knob, "read by tc1_run.sh but not forwarded by tc1_drive.sh")
     assert 'case "$TC1_BOX" in A|B)' in run and 'case "$TC1_BOX" in A|B)' in drive
     assert 'A) FAMILIES=${TC1_FAMILIES:-"qwen3"};;' in run and 'B) FAMILIES=${TC1_FAMILIES:-"tc2big"};;' in run
-    assert '[ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md' in run and 'case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*)' in run
+    assert '[ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md' in run and 'case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*)' in run
     assert "small)  s=$SMALL_STEPS; en=$SMALL_EVAL_N; ee=$SMALL_EVAL_EVERY; ex_tag=fused_attn4_m;;" in run
 
 
@@ -789,7 +789,7 @@ def test_tc2_run_sh_runs_the_registered_arm_order_with_the_flags():
     assert 'local UP2ARG=""; [ -n "$UP2" ] && UP2ARG="--unsloth-target-parameters $UP2"' in big
     assert re.search(r"reference_attn4_m reference \$RAL \"\$MID\" \$REV \$OFF field .* --attn-4bit 1 \$MATCH", big) and big.index("reference_attn4_m reference") > big.index("fused_attn4_shipped fused")
     assert re.search(r"fused_attn4_shipped fused \$EAL \"\$MID\" \$REV \$OFF field .* \$NATIVE", big) and re.search(r"fused_attn4_m_mb1 fused \$EAL \"\$MID\" \$REV \$OFF mb1", big)
-    assert 'UNS="--grad-ckpt unsloth --unsloth-targets $UT"' in big and 'UNS="--grad-ckpt unsloth --unsloth-targets $UT7"' in small
+    assert 'UNS="--grad-ckpt unsloth --unsloth-targets $UT${TC2_UNS_TARGET_PARAMS:+ --unsloth-target-parameters $TC2_UNS_TARGET_PARAMS}"' in big and 'UNS="--grad-ckpt unsloth --unsloth-targets $UT7"' in small
     # the plan tables: the registered pins, tp4's ceilings (FETCH E4B UNS HF AX=HF+900 REF), gptoss MODE, granite's second list, qwen3_5's UT4 + explicit target_parameters, mixtral's offload
     assert 'tc2_small_family granite  ibm-granite/granite-3.1-3b-a800m-instruct a02780686e08a03fe0d2679a293b5c74a90efa89 1800 1800 1800 1800 2700 2400 normal "$UT_GRANITE2"' in body
     assert 'tc2_small_family olmoe    allenai/OLMoE-1B-7B-0924-Instruct         7f1c97f440f06ce36705e4f2b843edb5925f4498 2400 2400 2400 2400 3300 3000 normal ""' in body
@@ -798,7 +798,7 @@ def test_tc2_run_sh_runs_the_registered_arm_order_with_the_flags():
     assert 'tc2_big_family   mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 5400 2400 1800 2700 6000 1 "$UT7" ""     ""' in body
     assert 'UT4="q_proj,k_proj,v_proj,o_proj"' in body and 'UT_GRANITE2="q_proj,k_proj,v_proj,o_proj,input_linear,output_linear"' in body
     assert 'UP_QWEN3_5="mlp.experts.gate_up_proj,mlp.experts.down_proj"' in body and 'UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"' in body
-    assert "tc2small)    tc2_small_box;;" in body and "tc2big)      tc2_big_box;;" in body and "tc2mixtral)  tc2_mixtral_redraw;;" in body and 'for t in (tag, "attn_only_m", "reference_attn4_m", "fused_attn4_m_offload", "reference_attn4_m_offload"):' in body
+    assert "tc2small)    tc2_small_box;;" in body and "tc2big)      tc2_big_box;;" in body and "tc2mixtral)  tc2_mixtral_redraw;;" in body and "tc2qwen35off) tc2_qwen35_offload;;" in body and 'for t in (tag, "attn_only_m", "reference_attn4_m", "fused_attn4_m_offload", "reference_attn4_m_offload"):' in body
     fam = body[body.index("tc1_family(){"):body.index("# tc1_native_family")]
     assert re.findall(calls, fam)[:3] == [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "reference_attn4_m")]   # TC1 untouched
 
@@ -980,3 +980,24 @@ def test_tc3_amendment_4_an_exception_after_load_is_a_row():
         arm.run_arm_or_row(a, None, run=done)
     assert ex.value.code == 7
     assert arm.run_arm_or_row(a, None, run=lambda a_, loader_, sampler=True: "ok") == "ok"
+
+
+def test_tc2_amendment_4_qwen35_offload_token():
+    """TC2 amendment 4: `tc2qwen35off` runs Qwen3.6's matched set with every e4b arm under expert offload and the matched Unsloth arm
+    (both draws) given the family's expert target parameters; HF, both axolotl arms and e4b as shipped are skipped as not_run stubs;
+    the target-parameter knob is reset after the family so no other token inherits it."""
+    run = RUN_SH.read_text()
+    m = re.search(r"^tc2_qwen35_offload\(\)\{\n(.*?)^\}\n", run, re.DOTALL | re.MULTILINE)
+    assert m, "tc2_qwen35_offload is gone"
+    body = m.group(1)
+    assert 'TC2_UNS_TARGET_PARAMS="$UP_QWEN3_5"' in body and body.rstrip().endswith('TC2_UNS_TARGET_PARAMS=""')
+    call = re.search(r"tc2_big_family +qwen3_5 +Qwen/Qwen3\.6-35B-A3B +995ad96eacd98c81ed38be0c5b274b04031597b0 +(\d+) +(\d+) +(\d+) +(\d+) +(\d+) +(\d+) +(\d) +\"\$UT4\" +\"\" +\"\"", body)
+    assert call, body
+    _fetch, e4b, _uns, _hf, _ax, ref, off = call.groups()
+    assert off == "1" and int(e4b) >= 3600 and int(ref) >= int(e4b), "every e4b arm under offload, with an alarm for the slower stream"
+    for arm in ("qwen3_5/hf/hf_peft_m", "qwen3_5/axolotl/ckpt_axolotl_m", "qwen3_5/axolotl/ckpt_axolotl_best", "qwen3_5/e4b/fused_attn4_shipped"):
+        assert arm in body, arm
+    assert "qwen3_5/unsloth/ckpt_unsloth_m " not in body and "qwen3_5/e4b/reference_attn4_m" not in body, "the pair and the parity control run"
+    assert 'tc2qwen35off) tc2_qwen35_offload;;' in run
+    assert "TC2_UNS_TARGET_PARAMS" not in run.split("tc2_qwen35_offload(){")[0].split("tc2_big_family(){")[0], "no other token sets it"
+
