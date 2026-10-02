@@ -979,4 +979,4 @@ def test_tc3_amendment_4_an_exception_after_load_is_a_row():
     with pytest.raises(SystemExit) as ex:
         arm.run_arm_or_row(a, None, run=done)
     assert ex.value.code == 7
-    assert arm.run_arm_or_row(a, None, run=lambda a_, l, sampler=True: "ok") == "ok"
+    assert arm.run_arm_or_row(a, None, run=lambda a_, loader_, sampler=True: "ok") == "ok"
