@@ -1,0 +1,1 @@
+TOKENS fam=mixtral template=alpaca n_train=1200 n_eval=8 train_tokens=274890 mean=229.1 pad_id=2 sha=4a41b3f4a56149f688da50886b694239ac8bbdda715310d2375c1ea172bd59cf

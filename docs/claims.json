@@ -8601,7 +8601,8 @@
       ],
       "notes": "Retired the day it was registered; the receipts stay public so the retraction can be checked.",
       "retired_on": "2026-10-02",
-      "retired_reason": "The Unsloth Mixtral readings were this harness's engagement counters inside Unsloth's compiled MoE block, not Unsloth (TC2 amendment 5, bench/tc1/TC2-PREREG.md): Python dict increments wrapped around torch._grouped_mm and Unsloth's MoE backend functions became Dynamo guards that failed on every call (3,547 unique graphs, 743 'HOP: Unsafe side effect' graph breaks, two hits of the 1024 recompile limit, after which the frames ran eagerly), on both draws. Unsloth compiles Mixtral's MoE block and leaves Qwen3's uncompiled, which is why no other family's Unsloth arm shows it. The counters are now trace-safe and the Mixtral pair is re-run (amendment 5); e4b's offload readings were unaffected and are restated there."
+      "retired_reason": "The Unsloth Mixtral readings were this harness's engagement counters inside Unsloth's compiled MoE block, not Unsloth (TC2 amendment 5, bench/tc1/TC2-PREREG.md): Python dict increments wrapped around torch._grouped_mm and Unsloth's MoE backend functions became Dynamo guards that failed on every call (3,547 unique graphs, 743 'HOP: Unsafe side effect' graph breaks, two hits of the 1024 recompile limit, after which the frames ran eagerly), on both draws. Unsloth compiles Mixtral's MoE block and leaves Qwen3's uncompiled, which is why no other family's Unsloth arm shows it. The counters are now trace-safe and the Mixtral pair is re-run (amendment 5); e4b's offload readings were unaffected and are restated there.",
+      "superseded_by": "e4b.train.footprint.unsloth.mixtral.5090.2026-10-02"
     },
     {
       "id": "e4b.train.h2h.unsloth.mixtral.5090.2026-10-02.compile-warmup",
@@ -8627,7 +8628,8 @@
       ],
       "notes": "Retired the day it was registered; the receipts stay public so the retraction can be checked.",
       "retired_on": "2026-10-02",
-      "retired_reason": "The Unsloth Mixtral readings were this harness's engagement counters inside Unsloth's compiled MoE block, not Unsloth (TC2 amendment 5, bench/tc1/TC2-PREREG.md): Python dict increments wrapped around torch._grouped_mm and Unsloth's MoE backend functions became Dynamo guards that failed on every call (3,547 unique graphs, 743 'HOP: Unsafe side effect' graph breaks, two hits of the 1024 recompile limit, after which the frames ran eagerly), on both draws. Unsloth compiles Mixtral's MoE block and leaves Qwen3's uncompiled, which is why no other family's Unsloth arm shows it. The counters are now trace-safe and the Mixtral pair is re-run (amendment 5); e4b's offload readings were unaffected and are restated there."
+      "retired_reason": "The Unsloth Mixtral readings were this harness's engagement counters inside Unsloth's compiled MoE block, not Unsloth (TC2 amendment 5, bench/tc1/TC2-PREREG.md): Python dict increments wrapped around torch._grouped_mm and Unsloth's MoE backend functions became Dynamo guards that failed on every call (3,547 unique graphs, 743 'HOP: Unsafe side effect' graph breaks, two hits of the 1024 recompile limit, after which the frames ran eagerly), on both draws. Unsloth compiles Mixtral's MoE block and leaves Qwen3's uncompiled, which is why no other family's Unsloth arm shows it. The counters are now trace-safe and the Mixtral pair is re-run (amendment 5); e4b's offload readings were unaffected and are restated there.",
+      "superseded_by": "e4b.train.footprint.unsloth.mixtral.5090.2026-10-02"
     },
     {
       "id": "e4b.train.h2h.axolotl.qwen3.5090.2026-10-02",
@@ -8703,6 +8705,34 @@
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-29/tc1/"
       ],
       "notes": ""
+    },
+    {
+      "id": "e4b.train.footprint.unsloth.mixtral.5090.2026-10-02",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a286",
+      "claim": "Lane TC2 (#835), 2026-10-02, the Mixtral pair re-measured with the harness's engagement counters trace-safe (TC2 amendment 5), one rented RTX 5090: Unsloth 2026.9.14 resident trains Mixtral-8x7B-Instruct's matched set (223,346,688 fp32 adapters over 640 slots) at 3.735 / 3.748 s/step (two draws, STABLE at 0.3 %), 29.12 / 29.14 GB peak, after ONE compile in its first step (34 s; 29 Dynamo frames, 26 graphs, 0 graph breaks, no recompile-limit hit; 1,792 grouped_mm calls per step counted under compile). e4b's fused path under expert offload takes 19.751 / 21.181 s/step (UNSTABLE at 7.0 %, the offload step bound by the host link) at 7.16 / 7.15 GB. FOOTPRINT: e4b's peak is x4.07 lower; Unsloth steps about 5.3x faster -- said, never quoted as a position, because e4b's pair is unstable (TC2 P5 UNTESTED by its rule; the steady ratio about 0.18-0.19 lies far below P5's [0.3, 0.5] band, toward Unsloth). Held-out at N=20: e4b 0.7147 / 0.7138, Unsloth 0.7086 / 0.7095 (COMPARABLE, 0.005-0.006 nats in Unsloth's favour; TC2 P7 FALSIFIED). e4b's parity under offload PASSES (|delta| final 0.00010; fused x1.04 the reference's speed, the step stream-bound). This replaces the retired 2026-10-02 Mixtral rows, whose Unsloth readings (a 76-89-minute compile phase, 6.2 / 7.0 s/step) were the old counters recompiling Unsloth's compiled MoE block on every call.",
+      "value": 4.07,
+      "unit": "ratio of peak VRAM, Unsloth resident / e4b under expert offload (first draws)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host with 792 GB RAM (tc1-5090-32: instance 53908726, AMD EPYC 7663, driver 580.95.05); e4b 0.39.0 @ 3e41f0f + grouped-nf4-gemm 0.34.0 @ 846b512 on torch 2.8.0+cu128 under expert offload; Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 on torch 2.12.1+cu130 resident (grouped_mm)",
+      "conditions": "bench/tc1 TC2 amendments 2, 3 and 5 (token tc2mixtral, the harness's engagement counters trace-safe): the field recipe -- alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 223,346,688 trainable parameters over 640 slots, one per-slot init (matched:3407), fp32 adapters, the same tokens; e4b under expert offload, Unsloth resident; positions quoted only over two draws within 5 %; scoring by bench/tc1/tc1_reduce.py (P5-P7)",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc2/README.md",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-32/RESULTS-tc1.md",
+        "bench/tc1/TC2-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-32/tc1/"
+      ],
+      "notes": "",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-10-02",
+        "e4b.train.h2h.unsloth.mixtral.5090.2026-10-02.compile-warmup"
+      ]
     }
   ]
 }

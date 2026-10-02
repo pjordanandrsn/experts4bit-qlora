@@ -168,6 +168,26 @@ only ×1.01 faster per step than the reference loop on this host, at ×0.675 its
 expert bytes, not the expert GEMM. **P7 FALSIFIED**: Unsloth's first draw is EQUIVALENT to e4b's anchor (held-out |Δ| 0.0035), its second
 COMPARABLE (0.0053, just outside the 0.005 band).
 
+## Mixtral-8x7B, re-measured with the counters trace-safe (`tc1-5090-32`, TC2 amendment 5, $0.56)
+
+The same token and arms as `tc1-5090-26`, run from the amendment-5 merge (`3e41f0f`), on an AMD EPYC 7663 host with 792 GB of RAM.
+Register `e4b.train.footprint.unsloth.mixtral.5090.2026-10-02`, superseding the two retired rows.
+
+| arm | verdict | s/step (median 11–20) | peak VRAM | held-out 0 → 20 | Dynamo |
+|---|---|---|---|---|---|
+| e4b `fused_attn4_m` (offload) ×2 | VALID | 19.751 / 21.181 | 7.164 / 7.145 GB | 1.4297 → 0.7147 / 0.7138 | not compiled |
+| Unsloth `ckpt_unsloth_m` (resident) ×2 | VALID | **3.735 / 3.748** | 29.115 / 29.142 GB | 1.4277 → 0.7086 / 0.7095 | 29 frames, 26 graphs, 0 breaks, no limit hit |
+| e4b `reference_attn4_m` (offload) | VALID | 20.618 | 10.595 GB | 1.4259 → 0.7135 | — |
+
+**Read.** With the counters a registered custom op under tracing, Unsloth's Mixtral arm compiles once (its first step took 34 s) and
+then steps in 3.5–4.1 s, counting 1,792 grouped-GEMM calls per step. The 76–89-minute "compile phase" in the retired rows above was
+the old counters. Against e4b under expert offload, Unsloth is about **5.3× faster per step** and e4b's peak is **×4.07 lower** —
+the footprint trade on this family, said as one. No position is quoted: e4b's two offload draws differ by 7.0 %, outside the 5 %
+rule (the offload step is bound by the host link; it read 15.9 s on the earlier host), so **P5 stays UNTESTED**. The steady ratio,
+about 0.18–0.19, sits far below P5's [0.3, 0.5] band, toward Unsloth, and is not scored. **P6 HELD** (parity |Δ| 0.00010; under
+offload the fused path is ×1.04 the reference's speed, the step stream-bound). **P7 FALSIFIED**: Unsloth's held-out sits 0.005–0.006
+nats under e4b's, COMPARABLE, just outside the equivalence band.
+
 ## Predictions scored (box A)
 
 P1 granite FALSIFIED; P2 olmoe FALSIFIED; P3 gptoss FALSIFIED; P6 (e4b parity on every family with a reference) HELD; P7 (matched sets
