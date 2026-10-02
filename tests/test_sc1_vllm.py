@@ -486,3 +486,31 @@ def test_receipt_is_json_serialisable(mods, tmp_path):
     back = json.loads(out.read_text())
     assert back["engine"] == "vllm" and back["vllm_tag_commit"] == mods.C.TAG_COMMIT and sorted(back["x"]) == [1, 2]
     assert back["llm_kwargs"]["attention_backend"] == "FLASH_ATTN" and "kwarg_sources" in back
+
+
+# --- A5 (sc1a-5090-1): the batched-token budget never exceeds max_num_seqs * max_model_len -----------------------------
+
+def test_batched_token_budget_fits_seqs_times_len(mods):
+    """sc1a-5090-1: every B=1 vLLM arm (matched, fp8kv, nodetok, the NLL scorer, TTFT) died at engine init with an illegal
+    memory access after vLLM 0.30 warned "max_num_batched_tokens (8192) exceeds max_num_seqs * max_model_len (2048)";
+    its kernel warm-up runs that many tokens. B=16 (16 * 2048 = 32768 >= 8192) was unaffected."""
+    C = mods.C
+    for arm in [a for a in C.ARMS if a != "native"]:
+        for b in (1, 16):
+            kw = C.build_llm_kwargs(arm, b)
+            assert kw["max_num_batched_tokens"] <= kw["max_num_seqs"] * kw["max_model_len"], (arm, b, kw)
+            assert kw["max_num_batched_tokens"] >= C.PROMPT_LEN * b, (arm, b, kw)        # the prompts still fit one chunk
+    assert C.build_llm_kwargs("graph_r1", 1)["max_num_batched_tokens"] == 2048
+    assert C.build_llm_kwargs("graph_r1", 16)["max_num_batched_tokens"] == 8192          # B=16 unchanged
+    P, S = 512, 2048                                                                    # the scorer's window
+    assert C.capped_batched_tokens(1, P + S + 16, max(8192, P + S + 1)) == P + S + 16 >= P + S + 1
+    assert C.capped_batched_tokens(1, 2048, max(8192, 512)) == 2048                     # TTFT 512
+    assert C.capped_batched_tokens(1, 4096 + 8, max(8192, 4096)) == 4104 >= 4096         # TTFT 4096: one chunk
+    with pytest.raises(AssertionError):
+        C.check_budget({"max_num_batched_tokens": 8192, "max_num_seqs": 1, "max_model_len": 2048})   # the registered B=1 config
+    C.check_budget({"model": "x"})                                                      # native: vLLM's own tier defaults
+    for drv in (mods.arm, mods.nll, mods.ttft):
+        src = pathlib.Path(drv.__file__).read_text()
+        assert src.index("C.check_budget(kw)") < src.index("llm = LLM(**kw)"), drv.__file__
+    assert "C.capped_batched_tokens(" in pathlib.Path(mods.nll.__file__).read_text()
+    assert "C.capped_batched_tokens(" in pathlib.Path(mods.ttft.__file__).read_text()

@@ -363,7 +363,7 @@ def interval(num_vals, den_vals):
     return {"point": statistics.median(num_vals) / statistics.median(den_vals), "min": min(cross), "max": max(cross), "n_cross": len(cross)}
 
 
-def energy_integral(csv_text, start, stop, interval_ms=50, sampler_start=None):
+def energy_integral(csv_text, start, stop, interval_ms=50, sampler_start=None, fields=None):
     """Trapezoid of power.draw.instant [W] over the samples inside [start, stop] (epoch s). Timestamps come from a
     `timestamp` column when the sampler wrote one, else from sampler_start + i * interval_ms, else (stated) the rows are
     assumed to span [start, stop] uniformly. -> {joules, seconds, n_samples, mean_w, basis}."""
@@ -371,9 +371,13 @@ def energy_integral(csv_text, start, stop, interval_ms=50, sampler_start=None):
     if not rows:
         return {"joules": None, "seconds": None, "n_samples": 0, "mean_w": None, "basis": "empty csv"}
     header = [h.strip() for h in rows[0]]
+    data = rows[1:]
+    if fields and not any(h.startswith("power.draw") for h in header):   # the sampler writes noheader; its fields ride the receipt (A5)
+        header = [f.strip() for f in (fields.split(",") if isinstance(fields, str) else fields)]
+        data = rows
     pcol = next((i for i, h in enumerate(header) if h.startswith("power.draw")), None)
     tcol = next((i for i, h in enumerate(header) if h in ("timestamp", "epoch")), None)
-    body = [r for r in rows[1:] if len(r) > (pcol or 0)]
+    body = [r for r in data if len(r) > (pcol or 0)]
     if pcol is None:
         return {"joules": None, "seconds": None, "n_samples": 0, "mean_w": None, "basis": "no power.draw column"}
     pts = []
@@ -505,7 +509,7 @@ def check_prompts(rec, pf, B, same=False):
     rsha = rec.get("prompts_sha256")
     if same:
         sp = rec.get("sameprompt") or {}
-        rsha = sp.get("file_prompts_sha256") or rsha
+        rsha = sp.get("effective_prompts_sha256") or rsha    # the rows the arm ran = the same-file's (A5)
         if not (sp.get("rows_identical") or rec.get("rows_identical")):
             why.append("SAMEPROMPT arm does not say rows_identical")
     if psha and rsha and rsha != psha:
@@ -1243,7 +1247,8 @@ def energy_block(d):
             r["why"] = "csv missing"
             out[tag] = r
             continue
-        e = energy_integral(read_text(csv_path), start, stop, int(meta.get("interval_ms") or 50), meta.get("sampler_start_epoch"))
+        e = energy_integral(read_text(csv_path), start, stop, int(meta.get("interval_ms") or 50), meta.get("sampler_start_epoch"),
+                            fields=meta.get("sampler_fields") or meta.get("fields"))
         r.update({k: e[k] for k in ("joules", "seconds", "n_samples", "mean_w", "basis")})
         if e["joules"] is not None and meta.get("tokens"):
             r["j_per_token"] = e["joules"] / float(meta["tokens"])

@@ -239,6 +239,21 @@ def _source_from_name(path):
 
 
 # ------------------------------------------------------------------------------------------------------ LLM kwargs
+def capped_batched_tokens(batch, max_len, want):
+    """``max_num_batched_tokens`` capped at ``max_num_seqs * max_model_len``. vLLM 0.30 warns when the budget exceeds that
+    product ("may lead to unexpected behavior") and its kernel warm-up then runs a step of that many tokens: at B=1 /
+    max_model_len 2048 with 8192 every engine start raised an illegal memory access (sc1a-5090-1, A5)."""
+    return min(int(want), int(batch) * int(max_len))
+
+
+def check_budget(kw):
+    """Refuse an engine config vLLM itself flags (budget > max_num_seqs * max_model_len); `native` leaves both to vLLM."""
+    if "max_num_batched_tokens" in kw and "max_num_seqs" in kw and "max_model_len" in kw:
+        assert kw["max_num_batched_tokens"] <= kw["max_num_seqs"] * kw["max_model_len"], (
+            f"max_num_batched_tokens {kw['max_num_batched_tokens']} > max_num_seqs {kw['max_num_seqs']} * "
+            f"max_model_len {kw['max_model_len']} (A5)")
+
+
 def build_llm_kwargs(arm, batch, model=MODEL_DEFAULT, rev=REV_DEFAULT, gpu_util=0.90, max_len=2048, prompt_len=PROMPT_LEN,
                      attn=None, moe="marlin"):
     """The exact `LLM(**kw)` per arm. `native` = the shipped defaults (prefix caching ON, O2 graphs, async scheduling,
@@ -255,7 +270,7 @@ def build_llm_kwargs(arm, batch, model=MODEL_DEFAULT, rev=REV_DEFAULT, gpu_util=
     return dict(model=model, revision=rev, tokenizer_revision=rev, gpu_memory_utilization=gpu_util, max_model_len=max_len,
                 enable_prefix_caching=False, seed=0, disable_log_stats=True, tensor_parallel_size=1,
                 enforce_eager=(arm == "eager"), kv_cache_dtype=kv, max_num_seqs=batch,
-                max_num_batched_tokens=max(8192, prompt_len * batch),
+                max_num_batched_tokens=capped_batched_tokens(batch, max_len, max(8192, prompt_len * batch)),
                 attention_backend=(attn or ("FLASHINFER" if kv == "fp8" else "FLASH_ATTN")), moe_backend=moe)
 
 

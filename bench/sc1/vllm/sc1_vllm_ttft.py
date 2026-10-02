@@ -50,7 +50,7 @@ def main():
     plen = len(row)
     max_len = C.env_int("MAX_LEN", max(2048, plen + 8))
     assert max_len >= plen + 1, f"max_model_len {max_len} cannot hold prompt {plen} + 1"
-    max_batched = C.env_int("MAX_BATCHED", max(8192, plen))
+    max_batched = C.env_int("MAX_BATCHED", C.capped_batched_tokens(1, max_len, max(8192, plen)))   # A5
     chunked = C.env("CHUNKED", "1") == "1"
     detok = C.env("DETOKENIZE", "1") == "1"          # shipped default kept: a comparator's loop is never trimmed (F7)
 
@@ -83,6 +83,7 @@ def main():
 
 def _run(rec, row, plen, kw, reps, log, out_path, detok=True):
     t0 = time.perf_counter()
+    C.check_budget(kw)
     llm = LLM(**kw)
     rec["load_s"] = round(time.perf_counter() - t0, 1)
     rec.update(C.resolved_config(llm, kw))
