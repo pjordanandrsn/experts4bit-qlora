@@ -105,3 +105,26 @@ appear as `not_run` stubs. P5, P6 (Mixtral) and P7 (the Mixtral pair) are scored
 draws each, the 5 % stability rule). A second alarm reads as the finding: Unsloth's Mixtral load does not complete in two hours on a
 verified-secure RTX 5090 host, said so, no position. Budget: one RTX 5090, ceiling $0.54/h, guard 8 h, estimate under $5; the standing
 no-ask tier. The launch waits for box B's teardown and for the launcher checkout's pending update, and the manifest pins both heads.
+
+### Amendment 3 (2026-10-02T12:15Z, after box B was lost, before either re-run launches): box B's receipts died with its instance; the Qwen3.6 half re-runs on its own box, and the Mixtral redraw box gets a host-RAM floor
+
+**What happened.** Box B (`tc1-5090-22`) stopped answering at 11:42Z during its Mixtral Unsloth micro-batch-1 secondary, with every
+arm but that one and HF's secondary complete on the box. The provider's listing then read the instance as exited and stopped by the host
+(`intended_status: stopped`, memory use 85 % at the stop, its last duration ending about 11:41Z), the ssh gateway refused, and the
+controller ran out its deadline with no answer; the guard's teardown destroys the instance and the receipts on its disk with it. The
+controller's own log holds only the status of each cell, never its numbers, so nothing from that box is registered. The session's
+automation was not permitted to restart the stopped instance to fetch them; the loss is recorded in the private store's receipt for the run.
+
+**The amendment.** Two boxes, each under the standing no-ask tier, launched together:
+
+- `tc1-5090-24`, token `tc2big` with `TC1_SKIP=mixtral` (the harness's registered skip knob, forwarded by the driver; the Mixtral family
+  appears as `not_run` stubs): Qwen3.6-35B-A3B exactly as box B ran it -- e4b fused x2, Unsloth with explicit expert names x2 and the
+  `m_experts` arm, HF, both axolotl arms, e4b as shipped, the e4b reference, and the micro-batch-1 secondary of any framework whose matched
+  arm OOMs. P4, P6 (Qwen3.6) and P7 (its pairs) are scored on it.
+- `tc1-5090-23`, token `tc2mixtral` as amendment 2 registers it, with one addition to the box specification: the host must offer at least
+  192 GB of RAM (box B's manifest asked for 98 GB). Unsloth's loader materialises the 93 GB bf16 checkpoint in host memory before it
+  quantises, and a host that stops the container at that point cannot answer the question amendment 2 asks. If no verified-secure RTX
+  5090 host at the ceiling offers that much RAM, the box is not drawn and the Mixtral position stays open, said so.
+
+Nothing in the harness, the arms, the alarms or the readings moves beyond what amendment 2 registered; the budgets are box B's (/bin/zsh.54/h
+ceiling, 4.5 h, under .11) and amendment 2's (8 h guard, under ).
