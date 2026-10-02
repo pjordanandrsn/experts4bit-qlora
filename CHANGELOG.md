@@ -1,20 +1,5 @@
 # Changelog
 
-<<<<<<< HEAD
-## 0.38.1 — 2026-10-02 — the K25 route for the NF4 store's batched decode rows runs at the served precision (select tree through TF32 MMA; opt-in, lanes P93 and P94), an instrument for the served M-tile kernel at T == 1, and CI on grouped-nf4-gemm 0.34.1
-
-**0.38.1.** No default changes.
-- **`E4B_NF4_GROUPED_SMALLM` (K25, opt-in) runs at the served kernel's precision:** the select-tree codebook decode through TF32 MMA at lane K27's plan.
-  - It takes the tree when the installed grouped-nf4-gemm carries it (0.34.1 does). With 0.34.0 it uses the paired lookup, which gives bit-identical outputs.
-  - Lane P93 measured the route on an RTX 5090 at B=16 ×0.594 (Granite) and ×0.598 (OLMoE).
-  - Lane P94 read its K8 against the served M-tile kernel it would replace: QUALITY_FAIL in both families (c4val1 +0.102 / +0.168 ppl). So it stays opt-in.
-- **New: `E4B_NF4_T1_DEVICE_GROUPING=1`.** An off-by-default instrument that serves T == 1 NF4 rows through the served M-tile kernel (lane P94's m arm).
-- **Dependencies:** CI installs grouped-nf4-gemm at the v0.34.1 commit. The `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
-- **The rest is bench and evidence:**
-  - lanes K26 and K27's runners;
-  - lanes P93 and P94: registrations, reads, receipts and register rows;
-  - the training campaign's lane TC1: its registration and amendments, bench only.
-=======
 ## Unreleased
 ### Scheduler: an optional per-request stop set, `min_tokens`, `finish_reason` and `abort()` (additive)
 
@@ -32,7 +17,19 @@
 - **Tests.** `tests/test_scheduler.py`: the default contract without a stop set; a stop frees the slot in that step;
   `min_tokens` defers the stop; a boundary stop reports `stop`; abort of queued and active requests.
 
->>>>>>> 2a2e5b7 (CHANGELOG: the scheduler's optional stop set, min_tokens, finish_reason and abort())
+## 0.38.1 — 2026-10-02 — the K25 route for the NF4 store's batched decode rows runs at the served precision (select tree through TF32 MMA; opt-in, lanes P93 and P94), an instrument for the served M-tile kernel at T == 1, and CI on grouped-nf4-gemm 0.34.1
+
+**0.38.1.** No default changes.
+- **`E4B_NF4_GROUPED_SMALLM` (K25, opt-in) runs at the served kernel's precision:** the select-tree codebook decode through TF32 MMA at lane K27's plan.
+  - It takes the tree when the installed grouped-nf4-gemm carries it (0.34.1 does). With 0.34.0 it uses the paired lookup, which gives bit-identical outputs.
+  - Lane P93 measured the route on an RTX 5090 at B=16 ×0.594 (Granite) and ×0.598 (OLMoE).
+  - Lane P94 read its K8 against the served M-tile kernel it would replace: QUALITY_FAIL in both families (c4val1 +0.102 / +0.168 ppl). So it stays opt-in.
+- **New: `E4B_NF4_T1_DEVICE_GROUPING=1`.** An off-by-default instrument that serves T == 1 NF4 rows through the served M-tile kernel (lane P94's m arm).
+- **Dependencies:** CI installs grouped-nf4-gemm at the v0.34.1 commit. The `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
+- **The rest is bench and evidence:**
+  - lanes K26 and K27's runners;
+  - lanes P93 and P94: registrations, reads, receipts and register rows;
+  - the training campaign's lane TC1: its registration and amendments, bench only.
 
 ### Lane P94 read (#564, one RTX 5090): QUALITY_FAIL in both families. K25 against the served NF4 M-tile kernel it would replace moves c4val1 K8 +0.102 (Granite) and +0.168 (OLMoE); `E4B_NF4_GROUPED_SMALLM` stays `0` (`e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01`)
 
