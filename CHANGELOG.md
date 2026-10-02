@@ -26,6 +26,14 @@
   match; the pre-attention state must match transformers' cache (1e-7 on CPU); the mutant must fail the state check
   (1.4). A pool that drops its write-backs reads 1.5 there. `tests/test_p97_staged_pin.py` pins the registration.
 
+### Lane TC2 read, Mixtral re-measured (#835): with the counters trace-safe, Unsloth steps in 3.74 s at 29.1 GB against e4b under offload at 19.8 s and 7.16 GB -- a footprint row, no position (bench, docs and register)
+
+- `bench/h2h-2026-10-02/tc2/receipts/tc1-5090-32/` (TC2 amendment 5): Unsloth's Mixtral arm compiles once (34 s) and steps in 3.735 / 3.748 s (stable),
+  29 Dynamo frames and no graph break; e4b under expert offload 19.751 / 21.181 s (7 % apart, unstable) at 7.16 GB. e4b's peak x4.07 lower, Unsloth about
+  5.3x faster per step; P5 UNTESTED (e4b's pair unstable), P6 HELD, P7 FALSIFIED (Unsloth's held-out 0.005-0.006 nats lower, COMPARABLE).
+  `e4b.train.footprint.unsloth.mixtral.5090.2026-10-02` supersedes the two retired 2026-10-02 Mixtral rows.
+- `docs/STATUS.md`, the solution page and the capability list follow. No code, gate, default or licence moves.
+
 ### `serve_paged` builds a hybrid checkpoint: the fp8 KV pool holds the attention layers only, and the KV geometry reads a composite config's `text_config`
 
 - **Why.** The fp8 KV pool pre-allocates rows for every layer it is given. A hybrid model's linear-attention layers
