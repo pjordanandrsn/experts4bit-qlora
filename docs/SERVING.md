@@ -139,5 +139,7 @@ Qwen3-Next.
   control's fp8 error, with greedy tokens equal.
 - **Refused:** Mamba-style layers, which transformers also labels `linear_attention` (granite-4.0-h, Nemotron-H, Jamba,
   Bamba); other state-carrying layer types; and decode graphs for a model with linear layers.
-- **Not yet done:** this path has not run on a GPU, and `serve_paged.build_engine` has not been wired for a hybrid
-  checkpoint.
+- **`build_engine` for a hybrid checkpoint.** The fp8 KV pool is sized to the attention layers only (paged attention
+  maps model layer to pool layer; on Qwen3.6, 10 of 40 layers), and the KV geometry comes from a composite config's
+  `text_config`. A CPU test pins the compact pool against a one-layer-per-index pool, bit for bit.
+- **Not yet done:** this path has not run on a GPU, and decode graphs are refused for hybrid models.

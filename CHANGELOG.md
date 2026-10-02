@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### `serve_paged` builds a hybrid checkpoint: the fp8 KV pool holds the attention layers only, and the KV geometry reads a composite config's `text_config`
+
+- **Why.** The fp8 KV pool pre-allocates rows for every layer it is given. A hybrid model's linear-attention layers
+  keep no K/V (#889), so a pool with a layer per index would spend most of its memory on layers that never write: 30
+  of 40 on Qwen3.6-35B-A3B. Qwen3.5 / Qwen3.6's composite vision-language config also keeps `num_key_value_heads` in
+  `text_config`.
+- **What.**
+  - `paged_runner.kv_layers()` sizes the pool to the attention layers when `config.layer_types` names linear layers.
+  - `kv_layer_map()` gives paged attention a model-layer to pool-layer map through `PagedAttentionContext.layer_map`.
+    It is identity when the pool has a layer per index, compact when it holds exactly the attention layers, and
+    refused otherwise.
+  - The runner flushes K/V into the mapped layers. `serve_paged._kv_geometry` falls back to `text_config`.
+- **Tests** (`tests/test_linear_state.py`): a compact pool matches a one-layer-per-index pool bit for bit on a hybrid
+  model; the map and pool-size rules; the composite-config geometry.
+- **Not yet:** a GPU run. Decode graphs stay refused for hybrid models.
+
 ### Lane TC1 / TC2 reads, axolotl re-run and Qwen3.6 offload (#835): axolotl/e4b 1.416 on Qwen3-30B-A3B; e4b fits Qwen3.6's matched set on 32 GB under offload; Granite's axolotl regime corrected to 4-bit (bench, reducer, docs and register)
 
 - `bench/h2h-2026-10-02/tc1/receipts/tc1-5090-30/`: with the harness no longer breaking axolotl's fp32 routers (TC1 amendment 4), axolotl trains the

@@ -11,6 +11,8 @@ models built in place (no download), on CPU.
   comes from a CONTROL: the same comparison on an all-attention model of the same shape, which has no linear state.
   The hybrid model must stay within 2x the control's error, with greedy tokens equal. On CPU the decode attention is
   SDPA over the pool's own dequantized K/V (``Fp8PagedKV.reference_kv``) in place of the Triton kernel.
+* **A compact KV pool.** A pool sized to the attention layers only (paged attention maps model layer -> pool layer)
+  gives the same logits, bit for bit, as a pool with a layer per index.
 * **Refusals.** Rows that mix sequences with and without state; a linear layer the pool cannot drive (transformers
   labels Mamba-style layers ``linear_attention`` too); an unknown state-carrying layer type; decode graphs for a model
   with linear layers. And a recycled slot starts from zero.
@@ -27,7 +29,7 @@ from transformers import Qwen3_5MoeTextConfig  # noqa: E402
 from transformers.cache_utils import DynamicCache  # noqa: E402
 
 from experts4bit_qlora.engines import linear_state, paged_attention  # noqa: E402
-from experts4bit_qlora.engines.paged_runner import PagedModelRunner, layer_plan  # noqa: E402
+from experts4bit_qlora.engines.paged_runner import PagedModelRunner, kv_layer_map, kv_layers, layer_plan  # noqa: E402
 
 LIN, ATT = "linear_attention", "full_attention"
 NOMASK = {LIN: None, ATT: None}           # an all-linear model: no attention mask to build (no padding)
@@ -126,15 +128,16 @@ def test_the_pool_reproduces_transformers_dynamic_cache():
     assert toks_equal and worst < 1e-5, worst
 
 
-def _paged_run(model, prompts, ref_tok):
-    """PagedModelRunner end to end on CPU, teacher-forced with the reference's greedy tokens."""
+def _paged_run(model, prompts, ref_tok, pool_layers=None):
+    """PagedModelRunner end to end on CPU, teacher-forced with the reference's greedy tokens. ``pool_layers`` sizes
+    the KV pool (default: one layer per index)."""
     pytest.importorskip("row_pool", reason="needs grouped-nf4-gemm N-series")
     pytest.importorskip("fp8_kv", reason="needs grouped-nf4-gemm N-series")
     from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
     cfg = model.config
     paged_attention.register(model)
-    kv = Fp8PagedKV(cfg.num_hidden_layers, cfg.num_key_value_heads, cfg.head_dim, batch=4, max_tokens_per_seq=64,
-                    device="cpu")
+    kv = Fp8PagedKV(pool_layers or cfg.num_hidden_layers, cfg.num_key_value_heads, cfg.head_dim, batch=4,
+                    max_tokens_per_seq=64, device="cpu")
 
     def reference_attention(layer, q, slots=None, sm_scale=None, window=None, sinks=None, **_):
         outs = []
@@ -245,3 +248,36 @@ def test_decode_graphs_are_refused_for_a_model_with_linear_layers():
     assert runner.linear_state is not None and runner.attn_layers == [1]
     with pytest.raises(NotImplementedError, match="not captured yet"):
         runner.enable_decode_graphs(buckets=(1, 2))
+
+
+def test_a_compact_kv_pool_matches_one_layer_per_index_bit_for_bit():
+    prompts = _prompts()
+    model = _model([LIN, ATT, LIN, ATT])
+    _, ref_tok = _reference(model, prompts)
+    full_runner, full = _paged_run(model, prompts, ref_tok)
+    model = _model([LIN, ATT, LIN, ATT])                           # a fresh copy: the same seed, the same weights
+    assert kv_layers(model, 4) == 2
+    compact_runner, compact = _paged_run(model, prompts, ref_tok, pool_layers=2)
+    assert full_runner.ctx.layer_map == {} and compact_runner.ctx.layer_map == {1: 0, 3: 1}
+    for s in prompts:
+        for a, b in zip(full[s], compact[s]):
+            assert torch.equal(a, b)
+
+
+def test_the_kv_layer_map_and_the_pool_size():
+    assert kv_layer_map([3, 7], 8) == {} and kv_layer_map([3, 7], 2) == {3: 0, 7: 1}
+    assert kv_layer_map([0, 1, 2], 3) == {}                        # a plain model: identity
+    with pytest.raises(ValueError, match="size it to 2"):
+        kv_layer_map([3, 7], 5)
+    plain = torch.nn.Linear(2, 2)
+    assert kv_layers(plain, 6) == 6
+    sliding = torch.nn.Linear(2, 2)                                # every layer attends (gpt-oss style): no compaction
+    sliding.config = types.SimpleNamespace(layer_types=["sliding_attention", ATT, "sliding_attention"])
+    assert kv_layers(sliding, 3) == 3
+
+
+def test_kv_geometry_reads_a_composite_configs_text_config():
+    from experts4bit_qlora.serve_paged import _kv_geometry
+    vl = types.SimpleNamespace(text_config=types.SimpleNamespace(num_key_value_heads=2, head_dim=256, hidden_size=2048,
+                                                                 num_attention_heads=16))
+    assert _kv_geometry(vl) == (2, 256)
