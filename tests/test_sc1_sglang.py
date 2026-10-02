@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import subprocess
 import sys
 import threading
 import time
@@ -480,3 +481,71 @@ def test_served_tail2_cross_check(server, tmp_path):
     assert r["per_request_logprob_count_histogram"] == {"2": 6}               # [None, (lp of the scored token)]
     assert r["recomputed_suffix_histogram"] == {"2": 5, "6": 1}                # the cap at logprob_start_len = L-2 -> 2 recomputed
     assert r["mode_label"].startswith("served_tail2 (T==2")
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# A8: SGLang's static memory pool on the chunking-off modes (receipt sc1c-prove-13)
+# ---------------------------------------------------------------------------------------------------------------------
+SERVER_SH = SGL / "server.sh"
+CHUNKING_OFF = ("matched", "kvfp8", "ttft_matched", "quality")
+RTX5090_MIB = 32607                         # nvidia-smi memory.total on the SC1 boxes
+PRE_GIB, AFTER_LOAD_GIB = 30.69, 14.98      # sc1c-prove-13's SGLang log: "avail mem" before / after loading the GPTQ checkpoint
+MIN_VIABLE = 0.5134                         # the same log: "minimum viable = 1 - available/pre"
+KV_BYTES_PER_TOKEN = 48 * 4 * 128 * 2 * 2   # Qwen3-30B-A3B: 48 layers x 4 KV heads x head_dim 128 x (K, V) x bf16
+VLLM_PEAK_GIB = 0.86 + 0.50                 # sc1a-5090-1: vLLM 0.30's largest peak activation + CUDA-graph memory, 8192-token batch
+
+
+def _flags(mode):
+    out = subprocess.run(["bash", "-c", 'source "$1"; sglang_server_flags "$2" 30000', "_", str(SERVER_SH), mode],
+                         capture_output=True, text=True, check=True)
+    return out.stdout.split()
+
+
+def _flag(flags, name):
+    return flags[flags.index(name) + 1] if name in flags else None
+
+
+def _sglang_0520_auto_fraction(activation_tokens, gpu_mib=RTX5090_MIB, decode_max_bs=16):
+    """``arg_groups/memory_hook.py`` ``handle_gpu_memory_settings`` at v0.5.20 for this lane's servers (TP 1, no post-capture
+    KV sizing, no DP attention, no DeepEP, no prefill graphs at ``chunked_prefill_size -1``): reserved MB = 512 +
+    1.5 x max(tokens, 2048) + 1024 x tp x pp / 8 + 2 x decode max_bs."""
+    reserved = 512 + 1.5 * max(activation_tokens, 2048) + 1024 / 8 + 2 * decode_max_bs
+    return round((gpu_mib - reserved) / gpu_mib, 3)
+
+
+def test_a8_sglang_auto_fraction_cannot_hold_the_checkpoint():
+    # chunked prefill off -> the activation term is max_prefill_tokens (default 16384): the 0.226 the receipt resolved
+    assert _sglang_0520_auto_fraction(16384) == 0.226
+    assert _sglang_0520_auto_fraction(16384) < MIN_VIABLE
+    # even the lane's real largest extend (16 rows x 512) leaves too little KV for the registered 16 x 2048 under SGLang's rule
+    f = _sglang_0520_auto_fraction(16 * 512)
+    assert (AFTER_LOAD_GIB - PRE_GIB * (1 - f)) * 2**30 / KV_BYTES_PER_TOKEN < 16 * 2048
+
+
+def test_a8_chunking_off_modes_pin_the_static_fraction():
+    for mode in CHUNKING_OFF:
+        f = _flags(mode)
+        assert _flag(f, "--chunked-prefill-size") == "-1", mode
+        assert _flag(f, "--mem-fraction-static") == "0.75", (mode, f)
+    assert "--mem-fraction-static" not in _flags("native")   # native keeps SGLang's own resolution (chunked prefill on)
+
+
+def test_a8_pinned_fraction_holds_capacity_and_headroom():
+    for mode in CHUNKING_OFF:
+        f = _flags(mode)
+        frac = float(_flag(f, "--mem-fraction-static"))
+        assert frac > MIN_VIABLE, mode
+        per_token = KV_BYTES_PER_TOKEN // (2 if _flag(f, "--kv-cache-dtype") == "fp8_e4m3" else 1)
+        kv_tokens = (AFTER_LOAD_GIB - PRE_GIB * (1 - frac)) * 2**30 / per_token   # kv_cache_configurator._profile_available_bytes
+        running = int(_flag(f, "--max-running-requests"))
+        need = int(_flag(f, "--context-length")) * running                        # the registered capacity of this server
+        assert kv_tokens >= need, (mode, int(kv_tokens), need)
+        assert min(running, int(kv_tokens) // 2) == running, mode                  # resolve_max_num_reqs keeps the request cap
+        assert PRE_GIB * (1 - frac) >= 4 * VLLM_PEAK_GIB, mode                     # headroom outside the static pool
+
+
+def test_a8_engagement_refuses_a_drifted_fraction_or_a_short_pool():
+    text = SERVER_SH.read_text()
+    assert "SC1_MFS=$SC1_SGLANG_MEM_FRACTION_STATIC" in text
+    assert 'need(abs(float(info.get("mem_fraction_static") or 0) - mfs) < 1e-9' in text
+    assert 'need(int(info.get("max_total_num_tokens") or 0) >= cap' in text

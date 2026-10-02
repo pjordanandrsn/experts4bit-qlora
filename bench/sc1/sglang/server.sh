@@ -26,6 +26,15 @@
 #                 overlap scheduler ON, max_running_requests derived (mem_cache/kv_cache_configurator.py resolve_max_num_reqs)
 #   quality       the NLL scorer's server: radix cache ON (default), --max-running-requests 1, --chunked-prefill-size -1
 #                 (the 2561-token prefill-shaped request is one extend), --context-length 4096, --dtype bfloat16 --random-seed 0
+#   A8 (receipt sc1c-prove-13): matched / kvfp8 / ttft_matched / quality also pass --mem-fraction-static 0.75. With
+#                 --chunked-prefill-size -1, v0.5.20's own rule (arg_groups/memory_hook.py handle_gpu_memory_settings) reserves
+#                 512 + 1.5 MB x max(max_prefill_tokens = 16384, 2048) + 128 + 2 x decode max_bs MB of activations -- 25.2 GB of a
+#                 32,607 MiB 5090, i.e. mem_fraction_static 0.226, below the 0.514 the 15.7 GB GPTQ checkpoint alone needs ("Loaded
+#                 weights leave no GPU memory for the KV cache"). 0.75 gives a ~7.3 GiB KV pool (~79,800 bf16 tokens: each server's
+#                 registered capacity, 16 x 2048 and the TTFT server's 16 x 4608) and keeps 7.7 GiB outside the static pool, >= 5x
+#                 the peak activation + CUDA-graph memory vLLM 0.30 measured for the same checkpoint, card and 8192-token batch
+#                 (<= 0.86 + 0.50 GiB, sc1a-5090-1). The fraction sizes the static pool only; no kernel or scheduling flag changes.
+#                 native keeps SGLang's own resolution (chunked prefill on: ~0.79 on this card).
 #
 # Readiness + engagement (refused with a non-zero return otherwise):
 #   * GET /health -> 200 (http_server.py:669-735; 503 while ServerStatus.Starting, i.e. until the startup warmup request has
@@ -51,6 +60,7 @@ SGLANG_WORK=${SGLANG_WORK:-/root/sc1}
 SGLANG_VENV=${SGLANG_VENV:-$SGLANG_WORK/venv-sglang}
 SGLANG_ENV_FILE=${SGLANG_ENV_FILE:-$SGLANG_WORK/sglang.env}
 SGLANG_START_TIMEOUT=${SGLANG_START_TIMEOUT:-1800}   # model load + Marlin JIT (nvcc, minutes) + graph capture + warmup
+SC1_SGLANG_MEM_FRACTION_STATIC=0.75   # A8: pinned on every chunking-off mode (see the header); deliberately not env-overridable
 SGLANG_SERVER_PID=""; SGLANG_SERVER_PGID=""; SGLANG_SERVER_PORT=""; SGLANG_SERVER_LOG=""
 _sgl_say(){ echo "[$(date -u +%FT%TZ)] sglang-server: $*"; }
 
@@ -59,13 +69,13 @@ sglang_server_flags(){  # <mode> <port> -> echoes the flag list (one per line; t
   printf '%s\n' --host 127.0.0.1 --port "$PORT" --random-seed 0 --moe-runner-backend auto --log-level info
   case "$MODE" in
     matched)      printf '%s\n' --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs \
-                                --cuda-graph-bs-decode 1 16 --dtype bfloat16 --context-length 2048 ;;
+                                --cuda-graph-bs-decode 1 16 --dtype bfloat16 --context-length 2048 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     kvfp8)        printf '%s\n' --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs \
-                                --cuda-graph-bs-decode 1 16 --dtype bfloat16 --context-length 2048 --kv-cache-dtype fp8_e4m3 ;;
+                                --cuda-graph-bs-decode 1 16 --dtype bfloat16 --context-length 2048 --kv-cache-dtype fp8_e4m3 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     ttft_matched) printf '%s\n' --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs \
-                                --cuda-graph-bs-decode 1 16 --dtype bfloat16 --context-length 4608 --cuda-graph-backend-prefill disabled ;;
+                                --cuda-graph-bs-decode 1 16 --dtype bfloat16 --context-length 4608 --cuda-graph-backend-prefill disabled --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     native)       printf '%s\n' --disable-radix-cache ;;
-    quality)      printf '%s\n' --max-running-requests 1 --chunked-prefill-size -1 --dtype bfloat16 --context-length 4096 ;;
+    quality)      printf '%s\n' --max-running-requests 1 --chunked-prefill-size -1 --dtype bfloat16 --context-length 4096 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     *) return 1 ;;
   esac
 }
@@ -102,7 +112,7 @@ sglang_server_start(){
     || curl -fsS -m 30 "http://127.0.0.1:$PORT/get_server_info" -o "$LOG.server_info.json" 2>/dev/null \
     || { _sgl_say "no /server_info"; sglang_server_stop; return 45; }
   # ---- engagement: resolved args, the gptq_marlin banner, no JIT build failure, the Marlin MoE leaf on disk
-  SC1_MODE=$MODE SC1_LOG=$LOG SC1_STARTUP_S=$startup_s SC1_JIT=$SGLANG_JIT_CACHE_DIR SC1_CMD="${CMD[*]}" "$SGLANG_VENV/bin/python" - <<'PYT'
+  SC1_MODE=$MODE SC1_MFS=$SC1_SGLANG_MEM_FRACTION_STATIC SC1_LOG=$LOG SC1_STARTUP_S=$startup_s SC1_JIT=$SGLANG_JIT_CACHE_DIR SC1_CMD="${CMD[*]}" "$SGLANG_VENV/bin/python" - <<'PYT'
 import glob, json, os, re, sys
 mode, log, jit = os.environ["SC1_MODE"], os.environ["SC1_LOG"], os.environ["SC1_JIT"]
 info = json.load(open(log + ".server_info.json"))
@@ -122,6 +132,11 @@ need(bool(info.get("disable_radix_cache")) == radix_off, f"disable_radix_cache={
 if mode == "kvfp8": need(info.get("kv_cache_dtype") == "fp8_e4m3", f"kv_cache_dtype={info.get('kv_cache_dtype')}")
 if mode in ("matched", "kvfp8", "ttft_matched"): need(info.get("max_running_requests") == 16, f"max_running_requests={info.get('max_running_requests')}")
 if mode == "quality": need(info.get("max_running_requests") == 1, f"max_running_requests={info.get('max_running_requests')}")
+if mode in ("matched", "kvfp8", "ttft_matched", "quality"):  # A8: the pinned static pool, and the capacity it has to hold
+    mfs = float(os.environ["SC1_MFS"])
+    need(abs(float(info.get("mem_fraction_static") or 0) - mfs) < 1e-9, f"mem_fraction_static={info.get('mem_fraction_static')} != {mfs} (A8)")
+    cap = int(info.get("context_length") or 0) * (16 if mode in ("matched", "kvfp8") else 1)
+    need(int(info.get("max_total_num_tokens") or 0) >= cap, f"max_total_num_tokens={info.get('max_total_num_tokens')} < {cap}, the registered capacity (A8)")
 cg = json.dumps(info.get("cuda_graph_config"), default=str)
 eng["cuda_graph_config_json"] = cg[:2000]
 if mode == "ttft_matched": need('"disabled"' in cg or "DISABLED" in cg.upper(), "prefill cuda graphs not disabled in the resolved cuda_graph_config")
