@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+### Lane SC1 amendment A4 (#846): the scheduler arms applied the int4 levers twice (harness hook + serve_paged) -- they now run with the hook off (bench + tests)
+
+- `bench/sc1/sc1_run.sh`: the P42 hook on `PYTHONPATH` and `serve_paged.build_engine` both apply the int4 levers right after the
+  tier, so the second enable refused on Qwen3 (box-A reading `sc1a-5090-1`). Both `sc1_e4b_sched.py` invocations clear
+  `PYTHONPATH`; the harness `step_decomp.py` arms keep the hook. `bench/sc1/sc1_e4b_sched.py` refuses if the hook is loaded.
+  A shape test and three self-test checks; the pin is regenerated; `SC1-PREREG.md` gains A4.
+
 ## 0.40.0 — 2026-10-02 — the NF4 store's batched decode rows take K25 by default (`E4B_NF4_GROUPED_SMALLM=auto`, lane P96: B=16 about 40 % faster on Granite and OLMoE); `serve_paged`'s batched decode graphs fixed and confirmed on a GPU
 
 **0.40.0.** One default changes:

@@ -72,6 +72,15 @@ BANNERS = {"int4exp_artifact": r"INT4EXP licensed artifact (\S+)", "int4exp_enab
            "decode_graph": r"DECODE_GRAPH[^\n]*", "fusions": r"\[serve_paged\] fusions[^\n]*", "ready": r"\[serve_paged\] ready: [^\n]*"}
 
 
+def harness_hook_loaded(modules=None):
+    """The P42 harness hook's path when it is loaded, else None. ``serve_paged.build_engine`` applies the int4 levers itself --
+    its ``_apply_levers`` IS the hook's ``_apply_lanes``, at the same point -- so with the hook ALSO loaded they are applied
+    twice and the second enable refuses ("matched no attention projections"; sc1a-5090-1, Amendment A4)."""
+    m = (sys.modules if modules is None else modules).get("usercustomize")
+    f = str(getattr(m, "__file__", "") or "")
+    return f if (m is not None and f.endswith("/hook/usercustomize.py")) else None
+
+
 class Refusal(SystemExit):
     """A validity predicate failed before any number existed: no receipt, exit 2 (p37's asserts)."""
 
@@ -218,6 +227,11 @@ def selftest() -> int:
     checks.append(s["decode_tok_s"] == round(16 * 96 / 1.0, 1) and s["decode_ms_per_step"] == round(1.0 / 96 * 1e3, 4))
     checks.append(s["decode_tok_s_median"] == round(16 * 96 / 1.0, 1) and s["end_to_end_tok_s_long"] == round(128 * 16 / 2.0, 1))
     checks.append(slope([1.0, 1.0, 1.0], [1.0, 1.0, 1.0], batch=1)["status"] == "void")
+    import types as _t
+    checks.append(harness_hook_loaded({"usercustomize": _t.SimpleNamespace(__file__="/root/sc1/hook/usercustomize.py")})
+                  == "/root/sc1/hook/usercustomize.py")
+    checks.append(harness_hook_loaded({}) is None)
+    checks.append(harness_hook_loaded({"usercustomize": _t.SimpleNamespace(__file__="/usr/lib/python3/dist-packages/usercustomize.py")}) is None)
     rows = [[(r * 31 + i) % 1000 for i in range(PROMPT_LEN)] for r in range(16)]
     pf = {"batch": 16, "prompts": rows, "prompts_sha256": prompts_digest(rows), "rows_sha256": ["x"] * 16}
     with tempfile.TemporaryDirectory() as d:
@@ -337,6 +351,10 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
+    hook = harness_hook_loaded()
+    if hook:
+        raise Refusal(f"REFUSED: the P42 harness hook is loaded ({hook}) -- serve_paged applies the levers itself; "
+                      "run the scheduler arms with PYTHONPATH= (A4)")
     if sum((a.ttft, a.sameprompt, a.energy, a.smoke)) > 1:
         raise Refusal("REFUSED: --ttft / --sameprompt / --energy / --smoke are exclusive")
     batch = int(os.environ["SC1_BATCH"])

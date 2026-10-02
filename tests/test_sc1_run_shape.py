@@ -197,8 +197,10 @@ def test_p88s_environment_and_command_lines_are_byte_identical():
     assert "GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441" in RUN
     assert "GNF4_SHA=34da93d6fe8d2a401b7001705658ce00b2b18213" in RUN            # v0.34.1's COMMIT (the tag object is e7ae8e2e)
     assert 'ROUTEENV="E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto"' in RUN
-    for fn, nxt in (("e4b_window", "e4b_k8"), ("e4b_k8", "k8_census"), ("e4b_build", "lic_ready"), ("sched_arm", "sched_smoke"), ("sched_smoke", "vllm_arm")):
+    for fn, nxt in (("e4b_window", "e4b_k8"), ("e4b_k8", "k8_census"), ("e4b_build", "lic_ready")):
         assert "env $ROUTEENV " in _body(fn, nxt), fn                            # every e4b arm names the four route knobs
+    for fn, nxt in (("sched_arm", "sched_smoke"), ("sched_smoke", "vllm_arm")):
+        assert "env PYTHONPATH= $ROUTEENV " in _body(fn, nxt), fn               # ... the scheduler arms with the hook off (A4)
     assert 'e4b_window lic_degraded_b16_$D 16 "$LICENV $PACKENV" --fuse-qkv 1 E4B_INT4_GROUPED_SMALLM=0' in RUN
     assert "E4B_INT4_ARTIFACT_DIR=$W/artifact E4B_INT4_EXPECTED_FINGERPRINT=$FP" in RUN and 'echo "PACK $FP"' in RUN
     assert "test_k19_row_exact_gpu.py -q -p no:cacheprovider" in RUN and "finish 25" in RUN
@@ -348,3 +350,21 @@ def test_the_proof_needs_every_comparator_the_box_installs_and_box_c_needs_the_j
     assert "A) install_vllm ;;" in RUN and "B) install_vllm; install_llamacpp; install_exl3 cu128; install_lmdeploy ;;" in RUN
     assert 'C) install_vllm; install_exl3 cu132; [ "$PROVE" = 1 ] && install_sglang ;;' in RUN
     assert "can_run 900 prove_sglang_jit" in block and 'if [ -z "${SC1_PROVE_SGLANG_MODEL:-}" ]' in block
+
+
+def test_the_sched_arms_run_without_the_harness_hook():
+    """sc1a-5090-1 (Amendment A4): the P42 hook (PYTHONPATH=$W/hook) applies the int4 levers right after the tier, and
+    serve_paged.build_engine applies the SAME levers at the same point (its _apply_levers IS the hook's _apply_lanes); with
+    both, the second enable refused ('E4B_SERVE_ATTN_INT4=1 matched no attention projections'). Every sc1_e4b_sched.py
+    invocation clears PYTHONPATH; every step_decomp.py invocation (the harness path) keeps the hook."""
+    lines = RUN.splitlines()
+    sched = [i for i, ln in enumerate(lines) if "$W/sc1_e4b_sched.py" in ln and "perl -e" in ln]
+    assert len(sched) == 2, sched
+    for i in sched:
+        env_line = lines[i - 1]
+        assert env_line.lstrip().startswith("env PYTHONPATH= $ROUTEENV "), env_line
+    for i, ln in enumerate(lines):
+        if "$W/step_decomp.py" in ln and "exec @ARGV" in ln:
+            ctx = lines[i - 1] + ln
+            assert "PYTHONPATH=" not in ctx, ln
+    assert "harness_hook_loaded()" in SCHED and "REFUSED: the P42 harness hook is loaded" in SCHED

@@ -327,10 +327,11 @@ sched_env(){ local B=$1 MTS=$2 FUSE=$3 M=${4:-$MID} R=${5:-$REV} ARENA=${6:-$QA}
   case "$B" in 1) BK=1;; 2) BK=1,2;; 4) BK=1,2,4;; 8) BK=1,2,4,8;; *) BK=1,2,4,8,16;; esac
   echo "E4B_PAGED_MODEL=$M E4B_PAGED_REVISION=$R E4B_PAGED_ARENA=$ARENA E4B_PAGED_CALIB=$W/calib.json E4B_PAGED_PLACEMENT=all-vram E4B_PAGED_MAX_SEQS=$B E4B_PAGED_MAX_TOKENS_PER_SEQ=$MTS E4B_PAGED_CHUNK_TOKENS=512 E4B_PAGED_GRAPHS=1 E4B_PAGED_BUCKETS=$BK E4B_PAGED_FUSE_QKV=$FUSE E4B_PAGED_TORCH_THREADS=8"; }
 # sched_arm TAG B STACKENV MAX_TOKENS_PER_SEQ FUSE PROMPTS [MODE FLAGS...] -- sc1_e4b_sched.py: e4b through ContinuousScheduler.step() (the ratio axis); receipt e4bsched_<TAG>.json (ttft_* bare)
+# PYTHONPATH= (A4): serve_paged.build_engine applies the int4 levers itself; the P42 hook on PYTHONPATH would apply them a second time.
 sched_arm(){ local TAG=$1 B=$2 STACK=$3 MTS=$4 FUSE=$5 PROMPTS=$6; shift 6; local S AL; S=$(stem_of e4bsched "$TAG"); AL=$(arm_alarm 1800)
   say "arm $S (sched B=$B fuse_qkv=$FUSE max_tokens_per_seq=$MTS $* alarm=$AL)"; sampler_start $S
   { echo "SC1 arm=$S box=$BOX e4b=$E4B_SHA gnf4=$GNF4_SHA at=$(date -u +%FT%TZ) $(host_snapshot)"; echo "ENV: $ROUTEENV $STACK $(sched_env $B $MTS $FUSE)"; } > logs/run_$S.log
-  env $ROUTEENV $STACK $(sched_env $B $MTS $FUSE) E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA SC1_ARM=$TAG SC1_BATCH=$B SC1_PROMPTS=$PROMPTS SC1_OUT=$W/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID \
+  env PYTHONPATH= $ROUTEENV $STACK $(sched_env $B $MTS $FUSE) E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA SC1_ARM=$TAG SC1_BATCH=$B SC1_PROMPTS=$PROMPTS SC1_OUT=$W/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID \
     perl -e "alarm $AL; exec @ARGV" "$PY" $W/sc1_e4b_sched.py "$@" >> logs/run_$S.log 2>&1
   local rc=$?; sampler_stop $S
   [ -s $W/$S.json ] || stub $W/$S.json e4bsched "$TAG" "$B" "$(status_of_rc $rc)" "rc=$rc" logs/run_$S.log
@@ -340,7 +341,7 @@ sched_arm(){ local TAG=$1 B=$2 STACK=$3 MTS=$4 FUSE=$5 PROMPTS=$6; shift 6; loca
 sched_smoke(){ local TAG=$1 B=$2 STACK=$3 FUSE=$4 M=${5:-$MID} R=${6:-$REV} ARENA=${7:-$QA}; local S=smoke_$TAG AL; AL=$(arm_alarm 1200)
   say "smoke $S (build_engine B=$B fuse_qkv=$FUSE model=$M alarm=$AL)"
   { echo "SC1 smoke=$S box=$BOX at=$(date -u +%FT%TZ) $(host_snapshot)"; echo "ENV: $ROUTEENV $STACK $(sched_env $B 2048 $FUSE "$M" "$R" "$ARENA")"; } > logs/run_$S.log
-  env $ROUTEENV $STACK $(sched_env $B 2048 $FUSE "$M" "$R" "$ARENA") E4B_MODEL_ID=$M SC1_ARM=$S SC1_BATCH=$B SC1_OUT=$W/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID \
+  env PYTHONPATH= $ROUTEENV $STACK $(sched_env $B 2048 $FUSE "$M" "$R" "$ARENA") E4B_MODEL_ID=$M SC1_ARM=$S SC1_BATCH=$B SC1_OUT=$W/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID \
     perl -e "alarm $AL; exec @ARGV" "$PY" $W/sc1_e4b_sched.py --smoke >> logs/run_$S.log 2>&1
   local rc=$?
   [ -s $W/$S.json ] || stub $W/$S.json e4bsched "$S" "$B" "$(status_of_rc $rc)" "rc=$rc" logs/run_$S.log
