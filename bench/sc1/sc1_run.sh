@@ -28,7 +28,7 @@
 # SC1_PROVE=1 is the PROVING RENTAL (one per box image; guards per Amendments A1/A2): pre-flight, every install + tripwire
 # for the box, the e4b paged engine end to end on Granite (fetch @ P94's GR_REV, NF4 bake, sc1_e4b_sched.py --smoke at B=1
 # and 16 with graphs, census printed), and on box C SGLang's Marlin MoE JIT + /health against SC1_PROVE_SGLANG_MODEL=<repo@rev>
-# (REQUIRED on box C) -- NO Qwen3 fetch in the proof. PROVED is written only when every one of those RAN and passed (A2).
+# (REQUIRED on box C; since A7 the lane's own 17 GB GPTQ checkpoint) -- no bf16 Qwen3 fetch in the proof. PROVED is written only when every one of those RAN and passed (A2).
 set -uo pipefail
 W=/root/sc1; mkdir -p $W/logs $W/samples; cd $W || exit 78
 say(){ echo "[$(date -u +%FT%TZ)] sc1: $*"; }
@@ -137,7 +137,7 @@ ensure_tools(){ local need=0 t; for t in git cmake curl; do command -v $t >/dev/
   [ "$BOX" = C ] && { command -v python >/dev/null 2>&1 || need=1; }
   [ "$need" = 1 ] || return 0
   say "apt: python3-venv / python-is-python3 / git / cmake / curl / build-essential (missing on this image)"
-  perl -e 'alarm 900; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 python3-venv python3-pip python-is-python3 git cmake ninja-build curl ca-certificates build-essential' > logs/apt.log 2>&1 \
+  perl -e 'alarm 900; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 python3-dev python3-venv python3-pip python-is-python3 git cmake ninja-build curl ca-certificates build-essential' > logs/apt.log 2>&1 \
     || { tail -3 logs/apt.log; say "APT FAIL"; finish 9; }; }
 ensure_tools
 command -v "$BASEPY" >/dev/null 2>&1 || { say "no base python ($BASEPY)"; finish 9; }
@@ -513,7 +513,7 @@ PY
 reduce(){ if [ -s $W/sc1_reduce.py ]; then say "reduce"; "$PY" $W/sc1_reduce.py $W --box $BOX --out-dir $W > logs/reduce.log 2>&1; local rc=$?; tail -30 logs/reduce.log | tee -a summary.txt
     [ -s $W/verdict.json ] || { say "REDUCER wrote no verdict (rc=$rc)"; rec 22; }
   else echo "REDUCE skipped: sc1_reduce.py not staged (the receipts are complete; reduce off-box)" | tee -a summary.txt; fi; }
-# ============================================================================ the PROVING RENTAL (SC1_PROVE=1): no Qwen3 fetch
+# ============================================================================ the PROVING RENTAL (SC1_PROVE=1): no bf16 Qwen3 fetch
 if [ "$PROVE" = 1 ]; then
   echo "PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite" | tee -a summary.txt
   case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3 lmdeploy";; C) PROVE_NEEDS="vllm exl3 sglang";; esac   # = the install dispatch's sets

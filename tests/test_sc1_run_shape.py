@@ -394,3 +394,11 @@ def test_the_tripwire_requires_each_route_knob_read_not_its_default():
         run(today.replace("E4B_NF4_GROUPED_SMALLM", "E4B_NF4_SOMETHING_ELSE"))             # a knob no longer read: refuse
     for k in knobs:
         assert f"{k}=" in RUN.split("ROUTEENV=", 1)[1].split("\n", 1)[0], k                 # ... and the arms pin all four
+
+
+def test_box_c_installs_the_python_headers_triton_compiles_against():
+    """sc1c-prove-12 (Amendment A7): both Granite smokes on box C's CUDA-13 image died in Triton's driver build -- gcc
+    "fatal error: Python.h: No such file or directory" -- because apt installed python3 without python3-dev; the PyTorch
+    images of boxes A and B ship the headers."""
+    apt = next(ln for ln in RUN.splitlines() if "apt-get install" in ln)
+    assert " python3-dev " in apt and " build-essential" in apt, apt
