@@ -777,6 +777,28 @@ tc2_qwen35_offload(){
   tc2_big_family   qwen3_5  Qwen/Qwen3.6-35B-A3B                      995ad96eacd98c81ed38be0c5b274b04031597b0 6000 5400 3600 1800 2700 7200 1 "$UT4" ""     ""
   TC2_UNS_TARGET_PARAMS=""
 }
+# tc1_nativebest_family FAM MID REV FETCH_AL E4B_AL UNS_AL AX_AL -- TC1 amendment 5 (2026-10-02): each framework's NATIVE-BEST
+# configuration on one box, two interleaved draws each -- e4b as shipped (bf16 expert adapters, its own init), axolotl's scattermoe
+# native-best, Unsloth's native-best (grouped_mm, speed tilt, its own init) -- plus e4b's matched fused arm as the box's anchor for
+# the validity predicates. Not matched work: the adapter precision and init are each framework's own, said on every row.
+tc1_nativebest_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7
+  local ALL="e4b:fused_attn4_shipped:fused axolotl:ckpt_axolotl_best:axolotl unsloth:ckpt_unsloth_best:unsloth e4b:fused_attn4_shipped_d2:fused axolotl:ckpt_axolotl_best_d2:axolotl unsloth:ckpt_unsloth_best_d2:unsloth e4b:fused_attn4_m:fused"
+  say "===== NATIVE-BEST family $FAM ($MID @ $REV; each framework as its users run it, two draws each; e4b fused_m the anchor)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
+  local AXB="--axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native"
+  local UNB="$UNS --unsloth-moe-backend grouped_mm --unsloth-speed-tilt 1 --adapter-dtype fp32 --lora-init native"
+  can_run 600 $FAM/e4b/shipped      && arm   $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/axolotl/best     && arm   $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS $AXB
+  can_run 600 $FAM/unsloth/best     && arm   $FAM unsloth ckpt_unsloth_best unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNB
+  can_run 600 $FAM/e4b/shipped_d2   && draw2 $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/axolotl/best_d2  && draw2 $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS $AXB
+  can_run 600 $FAM/unsloth/best_d2  && draw2 $FAM unsloth ckpt_unsloth_best unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNB
+  can_run 600 $FAM/e4b/fused_m      && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_axolotl_family FAM MID REV FETCH_AL E4B_AL HF_AL AX_AL -- TC1-PREREG amendment 3 (2026-10-02): the axolotl rows re-asked on their own box, each a
 # position within this box against the e4b fused_m it runs first; two draws of the matched pair so the matched position carries its cross-draw interval:
 #   e4b/fused_attn4_m  axolotl/ckpt_axolotl_m  e4b/fused_attn4_m_d2  axolotl/ckpt_axolotl_m_d2  axolotl/ckpt_axolotl_best (scattermoe, native init)
@@ -834,28 +856,6 @@ tc1_curve_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7 SAL=$
   can_run 600 $FAM/unsloth/m_t1     && arm $FAM unsloth ckpt_unsloth_m_t1 unsloth $SAL "$MID" $REV 0 t1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
   can_run 600 $FAM/e4b/m_r64        && arm $FAM e4b fused_attn4_m_r64 fused $SAL "$MID" $REV 0 r64 $TOK $TS --attn-4bit 1 $MATCH
   can_run 600 $FAM/unsloth/m_r64    && arm $FAM unsloth ckpt_unsloth_m_r64 unsloth $SAL "$MID" $REV 0 r64 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
-  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
-  free_family $FAM ${MID//\//--}; }
-# tc1_nativebest_family FAM MID REV FETCH_AL E4B_AL UNS_AL AX_AL -- TC1 amendment 5 (2026-10-02): each framework's NATIVE-BEST
-# configuration on one box, two interleaved draws each -- e4b as shipped (bf16 expert adapters, its own init), axolotl's scattermoe
-# native-best, Unsloth's native-best (grouped_mm, speed tilt, its own init) -- plus e4b's matched fused arm as the box's anchor for
-# the validity predicates. Not matched work: the adapter precision and init are each framework's own, said on every row.
-tc1_nativebest_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 AAL=$7
-  local ALL="e4b:fused_attn4_shipped:fused axolotl:ckpt_axolotl_best:axolotl unsloth:ckpt_unsloth_best:unsloth e4b:fused_attn4_shipped_d2:fused axolotl:ckpt_axolotl_best_d2:axolotl unsloth:ckpt_unsloth_best_d2:unsloth e4b:fused_attn4_m:fused"
-  say "===== NATIVE-BEST family $FAM ($MID @ $REV; each framework as its users run it, two draws each; e4b fused_m the anchor)"
-  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
-  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
-  local NATIVE="--adapter-dtype native --lora-init native"
-  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
-  local AXB="--axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native"
-  local UNB="$UNS --unsloth-moe-backend grouped_mm --unsloth-speed-tilt 1 --adapter-dtype fp32 --lora-init native"
-  can_run 600 $FAM/e4b/shipped      && arm   $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
-  can_run 600 $FAM/axolotl/best     && arm   $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS $AXB
-  can_run 600 $FAM/unsloth/best     && arm   $FAM unsloth ckpt_unsloth_best unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNB
-  can_run 600 $FAM/e4b/shipped_d2   && draw2 $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
-  can_run 600 $FAM/axolotl/best_d2  && draw2 $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS $AXB
-  can_run 600 $FAM/unsloth/best_d2  && draw2 $FAM unsloth ckpt_unsloth_best unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNB
-  can_run 600 $FAM/e4b/fused_m      && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
 # tc1_family FAM MID REV FETCH_AL E4B_AL UNS_AL HF_AL AX_AL REF_AL PROF_AL -- the JUDGED family (phase 3 I [F4]), one process per arm, in this order:
