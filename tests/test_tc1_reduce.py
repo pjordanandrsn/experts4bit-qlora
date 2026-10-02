@@ -237,7 +237,7 @@ def test_amendment_3_profile_sidecars_are_not_receipts_and_the_axolotl_token_is_
 def test_tc3_registration_constants_and_arm_order():
     R = _mod()
     assert R.FRONTIER_FAM == "qwen3frontier" and R.FRONTIER12_FAM == "qwen3frontier12" and set(R.FRONTIER_FAMS) <= set(R.FAMS)
-    assert R.EXPECTED["qwen3frontier"] == [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
+    assert R.EXPECTED["qwen3frontier"] == [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("e4b", "fused_attn4_shipped"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
                                            ("hf", "hf_peft_m"), ("hf", "hf_peft_m_offload"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_m_layeroffload"),
                                            ("axolotl", "ckpt_axolotl_m_zero3"), ("e4b", "reference_attn4_m_offload")]
     assert R.EXPECTED["qwen3frontier12"] == [("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_offload_d2"), ("e4b", "reference_attn4_m_offload"), ("e4b", "fused_attn4_m"),

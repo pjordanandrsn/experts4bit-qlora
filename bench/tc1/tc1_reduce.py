@@ -292,14 +292,15 @@ RESIDENT_KEY = ("qwen3", ("e4b", "fused_attn4_m"))      # TC1's resident arm (sa
 P1_HF_SLOWER, P1_Z3_SLOWER, P1_Z3_HOST_GB = 20.0, 5.0, 60.0   # P1's within-box clauses (the draft): HF offload REFUSED or > 20x e4b offload; ZeRO-3, if it runs, > 5x at >= 60 GB host RAM
 P4_FACTOR = 2.0                                          # P4: e4b offload s/step on the 24 GB card within 2x of TC1's resident e4b -- two measurements, never a ratio
 FRONTIER_LEVER = {"fused_attn4_m": "resident", "fused_attn4_m_offload": "e4b expert offload (--offload 1)", "fused_attn4_m_offload_d2": "e4b expert offload (--offload 1), draw 2",
-                  "fused_attn4_m_mb1": "resident, micro-batch 1 x accum 8", "ckpt_unsloth_m": "resident (Unsloth's own: use_gradient_checkpointing=unsloth)",
+                  "fused_attn4_m_mb1": "resident, micro-batch 1 x accum 8", "fused_attn4_shipped": "resident, as shipped (bf16 expert adapters, N(0,1/r) init): a fit row, never a position",
+                  "ckpt_unsloth_m": "resident (Unsloth's own: use_gradient_checkpointing=unsloth)",
                   "ckpt_unsloth_m_mb1": "micro-batch 1 x accum 8", "hf_peft_m": "resident", "hf_peft_m_offload": "accelerate device_map=auto + max_memory (--hf-offload 1)",
                   "hf_peft_m_mb1": "micro-batch 1 x accum 8", "ckpt_axolotl_m": "resident (quantize_moe_experts)", "ckpt_axolotl_m_layeroffload": "layer_offloading (--axolotl-layer-offload 1)",
                   "ckpt_axolotl_m_zero3": "DeepSpeed ZeRO-3 parameter offload, bf16 experts (--axolotl-zero3 1)", "reference_attn4_m_offload": "e4b expert offload, the reference path",
                   "fused_attn4_m_offload_mb1": "e4b expert offload, micro-batch 1 x accum 8 (the 12 GB secondary)", "reference_attn4_m_offload_mb1": "e4b expert offload, the reference path, micro-batch 1 x accum 8",
                   "fused_attn4_shipped_offload": "e4b expert offload, as shipped (bf16 expert adapters, N(0,1/r) init): a fit row, never a position"}
 FRONTIER12_SECONDARY = (("e4b", "fused_attn4_m_offload_mb1"), ("e4b", "reference_attn4_m_offload_mb1"))   # run only when the field-recipe offload arm OOMed (one draw each)
-EXPECTED[FRONTIER_FAM] = [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
+EXPECTED[FRONTIER_FAM] = [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("e4b", "fused_attn4_shipped"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
                           ("hf", "hf_peft_m"), ("hf", "hf_peft_m_offload"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_m_layeroffload"),
                           ("axolotl", "ckpt_axolotl_m_zero3"), ("e4b", "reference_attn4_m_offload")]
 EXPECTED[FRONTIER12_FAM] = [("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_offload_d2"), ("e4b", "reference_attn4_m_offload"), ("e4b", "fused_attn4_m"),
@@ -2456,6 +2457,7 @@ def _frontier_set():
     R[("e4b", "fused_attn4_m")] = _fstub(F, "e4b", "fused_attn4_m", "fused", "oom", "OOM at step 1: CUDA out of memory", peak=23.6, host=6.0)
     R[("e4b", "fused_attn4_m_offload")] = _frontier_receipt(F, "e4b", "fused_attn4_m_offload", "fused", lever="e4b_offload", peak=9.5, host=40.0, s=2.00)
     R[("e4b", "fused_attn4_m_mb1")] = _frontier_receipt(F, "e4b", "fused_attn4_m_mb1", "fused", peak=21.0, host=6.0, s=1.60, accum=8, micro_batch=1, kernel_calls_per_step_min=2 * 48 * 8)
+    R[("e4b", "fused_attn4_shipped")] = _frontier_receipt(F, "e4b", "fused_attn4_shipped", "fused", peak=22.9, host=6.0, s=1.30, heldout_n=1.79, matched=False)   # amendment 3: the as-shipped resident fit row
     R[("unsloth", "ckpt_unsloth_m")] = _fstub(F, "unsloth", "ckpt_unsloth_m", "unsloth", "oom", "OOM at step 1", peak=23.9, host=5.0)
     R[("unsloth", "ckpt_unsloth_m_mb1")] = _fstub(F, "unsloth", "ckpt_unsloth_m_mb1", "unsloth", "oom", "OOM at step 2", peak=23.8, host=5.0)
     R[("hf", "hf_peft_m")] = _fstub(F, "hf", "hf_peft_m", "hf", "oom", "OOM at load", peak=23.9, host=4.0)
@@ -3132,7 +3134,7 @@ def selftest():
     assert V[("unsloth", "ckpt_unsloth_m")] == "OOM" and V[("unsloth", "ckpt_unsloth_m_mb1")] == "OOM" and V[("hf", "hf_peft_m")] == "OOM"
     assert V[("hf", "hf_peft_m_offload")] == "UNSUPPORTED" and V[("axolotl", "ckpt_axolotl_m_zero3")] == "UNSUPPORTED" and V[("axolotl", "ckpt_axolotl_m_layeroffload")] == "VALID", V
     ft = Fr["fit"]
-    assert set(ft) == {"e4b", "unsloth", "hf", "axolotl"} and ft["e4b"]["fits"] and ft["e4b"]["completed"] == ["fused_attn4_m_offload", "fused_attn4_m_mb1", "reference_attn4_m_offload"], ft["e4b"]["completed"]
+    assert set(ft) == {"e4b", "unsloth", "hf", "axolotl"} and ft["e4b"]["fits"] and ft["e4b"]["completed"] == ["fused_attn4_m_offload", "fused_attn4_m_mb1", "fused_attn4_shipped", "reference_attn4_m_offload"], ft["e4b"]["completed"]
     assert not ft["unsloth"]["fits"] and ft["unsloth"]["reading"].startswith("NO ARM COMPLETED") and "`ckpt_unsloth_m_mb1` OOM" in ft["unsloth"]["reading"], ft["unsloth"]["reading"]
     assert not ft["hf"]["fits"] and ft["axolotl"]["completed"] == ["ckpt_axolotl_m_layeroffload"]
     a1 = next(x for x in ft["e4b"]["arms"] if x["tag"] == "fused_attn4_m_offload")
