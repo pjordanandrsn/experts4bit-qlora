@@ -144,6 +144,17 @@ STATUS_MAP = {"ok": "OK", "c1_failed": "OK", "refused": "REFUSED", "oom": "OOM",
               "harness_error": "HARNESS_ERROR", "unreadable": "HARNESS_ERROR"}
 FW_RE = "|".join(FW)
 
+# ----------------------------------------------------------------------------- TC1 amendments 5 and 7: native-best against native-best (the qwen3nativebest token)
+NB_FAM = "qwen3nativebest"        # e4b shipped, axolotl native-best, Unsloth native-best, two interleaved draws each, then e4b fused_m as the box's anchor
+NB_HALVES = (("axolotl", "axolotl"), ("unsloth", "Unsloth"))     # P13's two halves: <framework> native-best / e4b shipped
+FAMS.append(NB_FAM)
+NAMES[NB_FAM] = "Qwen3-30B-A3B (amendment 5: native-best against native-best, two draws each)"
+N_LAYERS[NB_FAM] = 48
+EXPECTED[NB_FAM] = [("e4b", NATIVE["e4b"]), ("axolotl", NATIVE["axolotl"]), ("unsloth", NATIVE["unsloth"]),
+                    ("e4b", NATIVE["e4b"] + "_d2"), ("axolotl", NATIVE["axolotl"] + "_d2"), ("unsloth", NATIVE["unsloth"] + "_d2"), ("e4b", "fused_attn4_m")]
+DRAW2.update({("e4b", NATIVE["e4b"]): ("e4b", NATIVE["e4b"] + "_d2"), ("axolotl", NATIVE["axolotl"]): ("axolotl", NATIVE["axolotl"] + "_d2"),
+              ("unsloth", NATIVE["unsloth"]): ("unsloth", NATIVE["unsloth"] + "_d2")})   # registered (in EXPECTED) on this token only: qwen3native reads one draw
+
 # ----------------------------------------------------------------------------- R10: lane TC1b (the qwen3curve token)
 CURVE_FAM = "qwen3curve"
 CURVE_BAND = 0.02         # (a): paired held-out |delta| <= 0.02 at every eval -- the DRAFT's band (TC1b-PREREG-draft "Readings"); the registration may tie it to the TC1 floor
@@ -194,7 +205,7 @@ N_LAYERS.update({fam: v[2] for fam, v in TC2_MODELS.items()})
 # gpt-oss is REFUSED on the bias rule -- its attention is never converted; Gemma-4 is out of scope). None = not registered here: the receipt's own
 # structural_expected_n_attn4 governs (qwen3_5: linear-attention layers, no committed census in this tree -- UNVERIFIED). A receipt whose census
 # disagrees with a registered value is VOID (R11).
-ATTN_CENSUS = {"qwen3": 192, "qwen3native": 192, AX_FAM: 192, CURVE_FAM: 192, "granite": 128, "olmoe": 64, "mixtral": 128, "gptoss": None, "qwen3_5": None}
+ATTN_CENSUS = {"qwen3": 192, "qwen3native": 192, AX_FAM: 192, NB_FAM: 192, CURVE_FAM: 192, "granite": 128, "olmoe": 64, "mixtral": 128, "gptoss": None, "qwen3_5": None}
 TC2_ANCHOR = {"gptoss": ("e4b", "attn_only_m")}      # the family's e4b anchor arm (quality, draws, step-0, sha): attention-only on gpt-oss (bare experts, tp1/tp2)
 NO_COMMON_SET = {"gptoss": "e4b adapts attention only on this family (experts built bare, no ExpertsLoRA: tp1/tp2 cited) while Unsloth / HF / axolotl adapt the experts -- "
                            "no ratio is quoted across different adapter sets (TC2-PREREG-draft 'Arms per family')"}
@@ -995,6 +1006,34 @@ def _score_p6(fam, vd, pos, nvd):
             return ("P6", fam, "HELD" if 1.5 <= pa["ratio"] <= 6 else "FALSIFIED", f"axolotl trained; axolotl/e4b {pa['ratio']:.3f} vs [1.5, 6]")
         return ("P6", fam, "UNTESTED", f"axolotl {av} but no quoted position: {pa.get('why')}")
     return ("P6", fam, "UNTESTED", f"axolotl {av} (NOT_RUN / HARNESS_ERROR / ALARM is not a reading)")
+
+
+def score_p13(F):
+    """TC1-PREREG amendment 5's P13, on the qwen3nativebest box: e4b as shipped is the fastest native configuration of the three. Each half
+    (axolotl native-best / e4b shipped, Unsloth native-best / e4b shipped) is HELD when its point ratio over two STABLE draws a side is above
+    1.0 and FALSIFIED at or below it; an unstable, unmeasured or missing pair leaves that half UNTESTED. P13 is FALSIFIED when either half
+    is, HELD when both are, UNTESTED otherwise. Held-out losses ride along, never judged across different inits."""
+    R = F.get(NB_FAM)
+    if not R:
+        return []
+    out = []
+    for fw, name in NB_HALVES:
+        p = R["native"].get(fw) or {"quoted": False, "why": f"no {fw}/{NATIVE[fw]} receipt"}
+        if not p.get("quoted"):
+            out.append((f"P13 ({name} half)", NB_FAM, "UNTESTED", p.get("why") or "not quoted"))
+            continue
+        if p["e4b_draws"] != 2 or p["other_draws"] != 2:
+            out.append((f"P13 ({name} half)", NB_FAM, "UNTESTED", f"draws e4b {p['e4b_draws']} / {name} {p['other_draws']}: the registration asks for two stable draws a side"))
+            continue
+        ho = (f"; held-out at N e4b shipped {p['heldout_e4b']:.4f} / {name} {p['heldout_other']:.4f} (reported, not judged: each framework's own init)"
+              if p.get("heldout_e4b") is not None and p.get("heldout_other") is not None else "")
+        out.append((f"P13 ({name} half)", NB_FAM, "HELD" if p["ratio"] > 1.0 else "FALSIFIED",
+                    f"{name} native-best / e4b shipped {p['ratio']:.3f} [{p['ratio_min']:.3f}, {p['ratio_max']:.3f} over {p['n_cross']} cross-draw ratios] (> 1.0 predicted); "
+                    f"s/step e4b {p['e4b_s']:.3f} (draws within {100 * p['e4b_stability']:.1f}%) vs {name} {p['other_s']:.3f} (within {100 * p['other_stability']:.1f}%){ho}"))
+    vs = [v for _, _, v, _ in out]
+    overall = "FALSIFIED" if "FALSIFIED" in vs else ("HELD" if all(v == "HELD" for v in vs) else "UNTESTED")
+    out.append(("P13", NB_FAM, overall, "; ".join(f"{pid.split('(')[1].rstrip(')')} {v}" for pid, _, v, _ in out)))
+    return out
 
 
 # ----------------------------------------------------------------------------- R6: predictions (TC1-PREREG.md, scored mechanically)
@@ -2077,7 +2116,7 @@ def frontier_block(R):
 
 
 def render(F, d):
-    out = [f"# TC1 — Qwen3-30B-A3B on one RTX 5090: e4b vs Unsloth vs HF+PEFT vs axolotl at matched work, init and adapter precision ({os.path.abspath(d)})",
+    out = [f"# TC1 — Qwen3-30B-A3B on one RTX 5090: e4b vs Unsloth vs HF+PEFT vs axolotl at matched work, init and adapter precision ({os.path.basename(os.path.abspath(d))})",
            f"Rule ({PREREG}): status per attempt in the vocabulary {' / '.join(VOCAB)}; VALID/VOID per tp4's predicates plus the matched-set predicates (R3: matched init complete, "
            f"fp32 adapters, step-0 held-out within {STEP0_TOL} of e4b/reference_attn4_m); VERDICT exactly one of {' / '.join(VERDICTS)} (QUALITY_FAIL = held-out |Δ| at N > {READ} "
            f"vs e4b/fused_attn4_m); positions = s/step ratios other/e4b from the medians over both draws (stability |d1-d2|/mean ≤ 5 % e4b / 10 % others, else UNSTABLE), quoted only "
@@ -2119,6 +2158,11 @@ def render(F, d):
     if any(fam in F for fam in ("qwen3", "qwen3native", AX_FAM)):
         out += ["\n## Predictions P1–P10 (+ P1b) (TC1-PREREG.md + phase 2, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_predictions(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if NB_FAM in F:
+        out += ["\n## Prediction P13 (TC1-PREREG amendment 5: native-best against native-best, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_p13(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CURVE_FAM in F:
         out += ["\n## TC1b predictions P1–P4 (TC1b-PREREG-draft, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -2249,6 +2293,19 @@ def _ax_set(ax_s=(2.00, 2.02)):
     R[("hf", "hf_peft_m_mb1_t214")] = _receipt("hf", "hf_peft_m_mb1_t214", "hf", s=3.00, heldout_n=1.8050, accum=8, micro_batch=1, experts_forward_calls_per_step_min=48 * 8)
     for r in R.values():
         r["fam"] = AX_FAM
+    return R
+
+
+def _nb_set(e4b_s=(1.00, 1.02), ax_s=(1.20, 1.21), un_s=(1.80, 1.82)):
+    """Amendments 5 and 7: the native-best box -- e4b shipped, axolotl scattermoe and Unsloth native-best, two draws each, then e4b fused_m."""
+    R = {}
+    for i, sfx in enumerate(("", "_d2")):
+        R[("e4b", "fused_attn4_shipped" + sfx)] = _receipt("e4b", "fused_attn4_shipped" + sfx, "fused", s=e4b_s[i], heldout_n=1.7800, matched=False)
+        R[("axolotl", "ckpt_axolotl_best" + sfx)] = _receipt("axolotl", "ckpt_axolotl_best" + sfx, "axolotl", s=ax_s[i], heldout_n=1.7950, matched=False)
+        R[("unsloth", "ckpt_unsloth_best" + sfx)] = _receipt("unsloth", "ckpt_unsloth_best" + sfx, "unsloth", s=un_s[i], heldout_n=1.8000, matched=False)
+    R[("e4b", "fused_attn4_m")] = _receipt("e4b", "fused_attn4_m", "fused", s=1.25)
+    for r in R.values():
+        r["fam"] = NB_FAM
     return R
 
 
@@ -3129,6 +3186,34 @@ def selftest():
     AXR = reduce_family(AX_FAM, _ax_set((1.20, 1.21)), {}, 20)
     assert {p: v for p, _, v, _ in score_predictions({AX_FAM: AXR})}["P6"] == "FALSIFIED"
     assert {p: v for p, _, v, _ in score_predictions({"qwen3": run(_good_set()), AX_FAM: AXR})}["P6"] == "FALSIFIED"      # the axolotl box outranks the judged box's install defect
+    cases += 1
+    # 54. amendments 5 and 7: the native-best box -- every arm VALID against its own anchor (tc1-5090-33 read the anchor VOID for want of this
+    #     registration), two draws a side, P13 HELD on both halves; an unstable e4b pair, a refused second draw and a faster framework each read as registered
+    nd = tempfile.mkdtemp(prefix="tc1_nativebest_selftest_")
+    for (fw, tag), r in _nb_set().items():
+        json.dump(r, open(os.path.join(nd, f"{NB_FAM}_{fw}_{tag}.json"), "w"))
+    F = reduce_dir(nd, 20)
+    NB = F[NB_FAM]
+    assert set(F) == {NB_FAM} and [(x["fw"], x["tag"]) for x in NB["rows"]] == EXPECTED[NB_FAM], [(x["fw"], x["tag"]) for x in NB["rows"]]
+    assert all(x["verdict"] == "VALID" for x in NB["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in NB["rows"]]
+    assert NB["draws"][("e4b", "fused_attn4_shipped")]["verdict"] == "STABLE" and NB["draws"][("e4b", "fused_attn4_m")]["verdict"] == "SINGLE"
+    P13 = {p: (v, ev) for p, _, v, ev in score_p13(F)}
+    assert P13["P13"][0] == "HELD" and P13["P13 (axolotl half)"][0] == "HELD" and P13["P13 (Unsloth half)"][0] == "HELD", P13
+    assert "axolotl native-best / e4b shipped 1.193 [1.176, 1.210 over 4 cross-draw ratios]" in P13["P13 (axolotl half)"][1], P13
+    text = render(F, nd)
+    for needle in ("## Prediction P13", "| P13 | qwen3nativebest | **HELD** |", "NATIVE-BEST (reported beside, never instead of, the matched position): s/step ratio unsloth native-best vs e4b shipped/e4b = 1.792**",
+                   "draws (R1): `e4b/fused_attn4_shipped` STABLE (1.000/1.020 s"):
+        assert needle in text, needle
+    assert os.path.dirname(os.path.abspath(nd)) not in text, "the header names the receipt dir, never its absolute path"
+    assert "## Predictions P1–P10" not in text
+    def p13(R):
+        return {p: v for p, _, v, _ in score_p13({NB_FAM: reduce_family(NB_FAM, R, {}, 20)})}
+    assert p13(_nb_set(e4b_s=(1.00, 1.07))) == {"P13 (axolotl half)": "UNTESTED", "P13 (Unsloth half)": "UNTESTED", "P13": "UNTESTED"}   # tc1-5090-33's shape
+    assert p13(_nb_set(ax_s=(0.90, 0.91))) == {"P13 (axolotl half)": "FALSIFIED", "P13 (Unsloth half)": "HELD", "P13": "FALSIFIED"}
+    R = _nb_set(); R[("axolotl", "ckpt_axolotl_best_d2")] = {**_stub("axolotl", "ckpt_axolotl_best_d2", "axolotl", "refused", "offline Hub"), "fam": NB_FAM}
+    assert p13(R) == {"P13 (axolotl half)": "UNTESTED", "P13 (Unsloth half)": "HELD", "P13": "UNTESTED"}
+    assert registered_draw2("qwen3native", ("e4b", "fused_attn4_shipped")) is None and run(_native_set(), fam="qwen3native")["draws"][("e4b", "fused_attn4_shipped")]["verdict"] == "SINGLE"
+    assert score_p13({"qwen3": run(_good_set())}) == []
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 

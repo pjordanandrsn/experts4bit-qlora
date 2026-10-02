@@ -370,7 +370,15 @@ case " $FAMILIES " in *" qwen3curve "*)      # TC1b: the anchor pair's text, bui
   echo "DATASET clinical sha=$CLIN_SHA" | tee -a summary.txt;;
 esac
 # ---------------------------------------------------------------- helpers
-vram_start(){ ( while :; do echo "$(date -u +%s) $(nvidia-smi --query-gpu=memory.used,utilization.gpu,power.draw --format=csv,noheader,nounits)"; sleep 1; done ) > $W/vram_$1.txt 2>/dev/null & echo $!; }
+# TC1 amendment 7: each second also writes the SM and memory clocks, the GPU temperature, the active clock-event (throttle) reasons, the
+# host load average and the host's aggregate cpu counters to gpuclk_<arm>.txt, so a draw that slows (tc1-5090-33's e4b shipped pair, 6.1 %)
+# can be put down to the card or to the host. The vram file's columns are unchanged; a field this driver does not know fails only its own
+# line. The loop's stdout goes to /dev/null: it runs inside the caller's $(...), which would otherwise wait for it forever.
+vram_start(){ : > $W/vram_$1.txt; : > $W/gpuclk_$1.txt
+  ( while :; do
+      echo "$(date -u +%s) $(nvidia-smi --query-gpu=memory.used,utilization.gpu,power.draw --format=csv,noheader,nounits)" >> $W/vram_$1.txt
+      echo "$(date -u +%s) $(nvidia-smi --query-gpu=clocks.sm,clocks.mem,temperature.gpu,clocks_event_reasons.active --format=csv,noheader,nounits 2>&1 | head -1) | $(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null) | $(head -1 /proc/stat 2>/dev/null)" >> $W/gpuclk_$1.txt
+      sleep 1; done ) >/dev/null 2>&1 & echo $!; }
 vram_stop(){ kill $1 2>/dev/null; wait $1 2>/dev/null; }
 skip(){ case " $SKIP " in *" $1 "*) return 0;; *) return 1;; esac; }
 status_of(){ $PY_E4B -c "import json,sys; print(json.load(open(sys.argv[1])).get('status','missing'))" "$W/${1}_${2}_${3}.json" 2>/dev/null || echo missing; }

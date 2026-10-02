@@ -290,3 +290,17 @@ def test_tc3_readings_on_hand_built_receipts():
     assert set(recs) == set(R.FRONTIER_FAMS) and set(recs["qwen3frontier"]) == set(R.EXPECTED["qwen3frontier"])
     text = R.render(R.reduce_dir(d, 20), d)
     assert "## TC3 predictions P1–P4" in text and "**(a) FIT TABLE**" in text and "## Predictions P1–P10" not in text and "MATCHED POSITION" not in text
+
+
+def test_amendment_7_registers_the_native_best_token():
+    R = _mod()
+    assert R.NB_FAM == "qwen3nativebest" and R.NB_FAM in R.FAMS and R.N_LAYERS[R.NB_FAM] == 48 and R.ATTN_CENSUS[R.NB_FAM] == 192
+    assert R.EXPECTED[R.NB_FAM] == [("e4b", "fused_attn4_shipped"), ("axolotl", "ckpt_axolotl_best"), ("unsloth", "ckpt_unsloth_best"),
+                                    ("e4b", "fused_attn4_shipped_d2"), ("axolotl", "ckpt_axolotl_best_d2"), ("unsloth", "ckpt_unsloth_best_d2"),
+                                    ("e4b", "fused_attn4_m")]
+    for fw in ("e4b", "axolotl", "unsloth"):
+        k = (fw, R.NATIVE[fw])
+        assert R.registered_draw2(R.NB_FAM, k) == (fw, R.NATIVE[fw] + "_d2") and R.registered_draw2("qwen3native", k) is None
+    NB = R.reduce_family(R.NB_FAM, R._nb_set(e4b_s=(4.306, 4.578), ax_s=(5.128, 5.20), un_s=(7.938, 7.897)), {}, 20)
+    assert NB["verdicts"][("e4b", "fused_attn4_m")] == "VALID"          # tc1-5090-33 read it VOID: no registered n_layers for the token
+    assert {p: v for p, _, v, _ in R.score_p13({R.NB_FAM: NB})}["P13"] == "UNTESTED"   # e4b shipped's 6.1 % pair, as on tc1-5090-33
