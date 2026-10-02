@@ -207,3 +207,27 @@ RTX 5090, ceiling $0.69/h, 4.5 h, under $3.20; the standing no-ask tier.
 loader read the checkpoint as multimodal (`is_multimodal: true`) and built the vision-language class, whose language layers sit under a
 different module path from the `AutoModelForCausalLM` skeleton on which this harness enumerates target names. That refusal is also the
 harness's; building the skeleton from the class axolotl loads is the fix, not made in this amendment.
+
+### Amendment 5 (2026-10-02T19:55Z, after the axolotl re-run read, before any box): native-best against native-best on one card
+
+**Why.** The axolotl re-run (`tc1-5090-30`) found the campaign's strongest counterexample to e4b's speed lead: axolotl's scattermoe
+native-best stepped at 0.929 x e4b's MATCHED fused path on the RTX 5090 (one draw, axolotl's own init). That compares axolotl's best
+configuration with e4b's matched one, and e4b's own native configuration (as shipped: bf16 expert adapters, its own init) was measured
+only on another host (0.671 x its matched step, `.shipped-vs-matched`). Before any statement that one framework trains this family fastest
+as its users run it, the three native-best configurations run on one box, two interleaved draws each.
+
+**The token** `qwen3nativebest` (TC1_BOX=A): e4b `fused_attn4_shipped`, axolotl `ckpt_axolotl_best` (scattermoe, Hub reachable for its
+kernels as amendment 4 allows), Unsloth `ckpt_unsloth_best` (grouped_mm, speed tilt, native init), interleaved, two draws each; then e4b
+`fused_attn4_m` once as the box's matched anchor for the validity predicates. The field recipe and tokens as TC1. Not matched work: the
+adapter precision and init are each framework's own, and every row says so; held-out losses are reported beside the times, never
+judged EQUIVALENT across different inits.
+
+**Prediction P13** (registered before the box; read off the reducer's per-arm medians and draw-stability lines): e4b as shipped is the
+fastest native configuration of the three -- axolotl native-best / e4b shipped > 1.0 AND Unsloth native-best / e4b shipped > 1.0, each
+over stable pairs (draws within 5 %). Either ratio below 1.0 on stable pairs FALSIFIES it, and that framework's native path is the
+fastest of the three on this card, said so. An unstable pair leaves that half UNTESTED.
+
+**Decision rules.** P13 holds -> a labelled native-best row registers e4b shipped as the fastest native configuration on the 5090 for this
+family, beside (never replacing) the matched positions; refuted -> the faster framework's native row is the finding, and no "fastest"
+statement is made for e4b on this card. Nothing here moves a matched position. Budget: one RTX 5090, ceiling $0.69/h, 4.5 h, under
+$3.20; the standing no-ask tier.
