@@ -111,6 +111,10 @@ CT_GLOBAL_SCALE_SUFFIX = "weight_global_scale"
 #: with a per-group ``weight_scale`` and a per-tensor ``weight_scale_2``.
 #: ``input_scale`` is an ACTIVATION scale and is not part of the weight.
 MODELOPT_SCALE2_SUFFIX = "weight_scale_2"
+#: compressed-tensors ASYMMETRIC weights (``weights.symmetric: false``) add this
+#: companion to the pack-quantized and NVFP4 tuples. The decoders here are
+#: symmetric only, so a zero point is refused rather than loaded without (#789).
+CT_ZERO_POINT_SUFFIX = "weight_zero_point"
 MODELOPT_INPUT_SCALE_SUFFIX = "input_scale"
 #: AWQ / GPTQ: qweight + qzeros + scales, ASYMMETRIC (zero-point) and packed
 #: along the OUT axis. The module parameter is ``X.weight``, a name these
@@ -163,6 +167,11 @@ def _split_block_scales(checkpoint_keys):
             # Same weight_packed + weight_scale; the third companion decides:
             # a weight_shape means int pack-quantized, a weight_global_scale
             # means NVFP4 (E2M1 with a per-tensor global scale).
+            if scale in keys and (shape in keys or gscale in keys) and stem + CT_ZERO_POINT_SUFFIX in keys:
+                raise MoEConventionError(
+                    f"{stem}{CT_ZERO_POINT_SUFFIX}: an asymmetric compressed-tensors weight (a zero point beside "
+                    f"{CT_PACKED_SUFFIX}). e4b decodes the symmetric formats only; loading it without the zero "
+                    f"point would shift every weight. Refusing (#789)")
             if scale in keys and shape in keys:
                 dequant[base] = ("compressed_int", k, scale, shape)
                 consumed.update((k, scale, shape))
@@ -280,6 +289,31 @@ def _tied_targets(model):
     return {k: src for k in keys if k != src}
 
 
+def _checkpoint_format(model):
+    """``quantization_config.checkpoint_format`` from the model's config, whether
+    transformers kept it as a dict or as a config object; None when absent."""
+    qc = getattr(getattr(model, "config", None), "quantization_config", None)
+    if qc is None:
+        return None
+    return qc.get("checkpoint_format") if isinstance(qc, dict) else getattr(qc, "checkpoint_format", None)
+
+
+def _refuse_gptq_v2(block_scales, model, model_type):
+    """GPTQ's ``gptq_v2`` checkpoint format stores zero points WITHOUT v1's -1,
+    and ``formats/gptq.py`` applies v1's ``zeros + 1`` unconditionally, so a v2
+    checkpoint would load clean with every zero point one step off. Refused
+    when the config names it (#789). A config without ``quantization_config``
+    cannot say, and is read as v1, the format every GPTQ release here uses."""
+    if not any(v[0] == "gptq" for v in block_scales.values()):
+        return
+    fmt = _checkpoint_format(model)
+    if fmt is not None and str(fmt).lower() == "gptq_v2":
+        raise MoEConventionError(
+            f"{model_type}: quantization_config.checkpoint_format is 'gptq_v2'. Its zero points carry no -1 "
+            f"offset, and e4b's GPTQ decoder applies v1's zeros + 1, so every zero point would be one step "
+            f"off. Refusing (#789); a v1 export of the same weights loads")
+
+
 def plan_moe_checkpoint(
     checkpoint_keys,
     model,
@@ -310,6 +344,7 @@ def plan_moe_checkpoint(
     """
     conv = convention_for(model_type, dense_ok=dense_ok)
     checkpoint_keys, block_scales = _split_block_scales(checkpoint_keys)
+    _refuse_gptq_v2(block_scales, model, model_type)
     extra = _extra_head_keys(checkpoint_keys, model)
     if extra and skip_extra_layers:
         drop = set(extra)

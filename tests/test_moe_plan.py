@@ -805,6 +805,49 @@ def test_gptq_and_awq_are_told_apart_by_g_idx():
     assert dq2["m.weight"][0] == "awq"
 
 
+def test_compressed_tensors_zero_point_is_refused_not_dropped():
+    """An asymmetric compressed-tensors weight adds X.weight_zero_point to the
+    pack-quantized and NVFP4 tuples. The decoders are symmetric only, so the
+    planner must refuse it by name -- not consume the tuple and leave the zero
+    point to surface later as an unmapped key, or worse, drop it (#789)."""
+    from experts4bit_qlora.arch.moe_plan import _split_block_scales
+
+    for third in ("weight_shape", "weight_global_scale"):        # int pack, NVFP4
+        keys = ["m.weight_packed", "m.weight_scale", f"m.{third}", "m.weight_zero_point"]
+        with pytest.raises(MoEConventionError, match="weight_zero_point"):
+            _split_block_scales(keys)
+        # the same tuple without the zero point is the symmetric format, as before
+        _w, dq = _split_block_scales(keys[:3])
+        assert dq["m.weight"][0] == ("compressed_int" if third == "weight_shape" else "nvfp4")
+
+
+@pytest.mark.parametrize("qc", [{"quant_method": "gptq", "checkpoint_format": "gptq_v2"},
+                                SimpleNamespace(quant_method="gptq", checkpoint_format="gptq_v2")],
+                         ids=["dict", "config-object"])
+def test_gptq_v2_checkpoint_format_is_refused(qc):
+    """gptq_v2 stores zero points without v1's -1; the decoder applies v1's
+    zeros + 1, so a v2 checkpoint would load clean one zero-point step off. The
+    planner refuses it when the config names it, whether transformers kept
+    quantization_config as a dict or as an object (#789)."""
+    class M(torch.nn.Module):
+        def __init__(self, qc):
+            super().__init__()
+            self.config = SimpleNamespace(tie_word_embeddings=False, num_hidden_layers=1,
+                                          quantization_config=qc)
+            self.proj = torch.nn.Linear(64, 8, bias=False)
+
+    keys = ["proj.qweight", "proj.qzeros", "proj.scales", "proj.g_idx"]
+    with pytest.raises(MoEConventionError, match="gptq_v2"):
+        plan_moe_checkpoint(keys, M(qc), "llama", dense_ok=True)
+    # v1, an unnamed format, and no quantization_config at all plan as GPTQ
+    for ok in ({"quant_method": "gptq", "checkpoint_format": "gptq"}, {"quant_method": "gptq"}, None):
+        plan = plan_moe_checkpoint(keys, M(ok), "llama", dense_ok=True)
+        assert plan.scales["proj.weight"][0] == "gptq", ok
+    # and a v2 config does not refuse a checkpoint with no GPTQ tensors in it
+    m = M(qc)
+    assert plan_moe_checkpoint(["proj.weight"], m, "llama", dense_ok=True).passthrough
+
+
 def test_gptq_dequant_matches_gptqmodel_including_desc_act():
     """Pinned against gptqmodel's dequantize_weight: scales[g_idx] * (w -
     (zeros+1)[g_idx]), sequential bit order, packed along IN. The desc_act case

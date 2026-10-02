@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+### Foreign-format loader refuses what it cannot decode: compressed-tensors zero points and GPTQ `gptq_v2` (#789)
+
+- **compressed-tensors asymmetric weights.** An `X.weight_zero_point` beside a pack-quantized or NVFP4 tuple is now
+  refused by name. Before, the planner consumed the symmetric tuple and left the zero point to surface as an unmapped
+  key. The decoders are symmetric only, so loading without the zero point would shift every weight.
+- **GPTQ `checkpoint_format: gptq_v2`.** It stores zero points without v1's −1, and `formats/gptq.py` applies v1's
+  `zeros + 1`, so a v2 checkpoint would load clean one zero-point step off. `plan_moe_checkpoint` now refuses GPTQ
+  tensors when the model config names `gptq_v2`, whether transformers kept `quantization_config` as a dict or as an
+  object. A config without `quantization_config` cannot say, and is read as v1, as before.
+- Decoding either format, rather than refusing it, is left for a change with its own oracle.
+- `tests/test_moe_plan.py`: both refusals; the symmetric tuples and v1 GPTQ plan as before.
+
 
 ### compressed-tensors NVFP4 decoded global_scale² too large: the global scale is a divisor (#788)
 
