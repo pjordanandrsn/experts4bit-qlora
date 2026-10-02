@@ -88,3 +88,20 @@ Mixtral's e4b arms run under expert offload (`--offload 1`, as tp4). TC3's first
 e4b's evicted expert stacks (0-element GPU placeholders; the bytes live in the offload handle's pinned-CPU `home`) as empty frozen
 tensors and refuses the arm. TC3 amendment 2 makes the hasher read the home copy; box B (`tc2big`) launches from that merge so its
 Mixtral e4b rows are measured, not refused. Box A (`tc1-5090-17`, no offload arm) is unaffected. Nothing else moves.
+
+### Amendment 2 (2026-10-02T10:58Z, after box B's Mixtral Unsloth arms, before any redraw): the Mixtral pair re-asked with the Unsloth alarm at 7,200 s
+
+**What box B showed.** On `tc1-5090-22` both Unsloth matched arms on Mixtral-8x7B (`ckpt_unsloth_m` and its second draw) exited with the
+alarm's code (142) with no step taken: the arm was still loading at about 30 GB on the card when its registered 2,400 s ran out, twice.
+e4b's arms on the same box loaded and trained (two draws under expert offload), HF OOMed at load, so P5's pair -- e4b under offload against
+Unsloth resident -- has no Unsloth reading; by the lane's rules P5 is UNTESTED on that box, and that is what its read records. The 2,400 s
+was tp2's figure for Unsloth 2026.9.2's loader on a different host; whether 2026.9.14's load of this 93 GB checkpoint completes at all
+under a budget that is not the host's disk is the open question.
+
+**The amendment.** One more box, token `tc2mixtral` on `TC1_BOX=B` (the same `tc2_big_family` call with the Unsloth alarm raised from
+2,400 s to 7,200 s and nothing else changed): e4b `fused_attn4_m` under offload x2, Unsloth `ckpt_unsloth_m` x2 (`grouped_mm`, the registered
+targets), the e4b reference arm under offload once; HF, both axolotl arms and e4b as shipped are not re-run (box B holds those rows) and
+appear as `not_run` stubs. P5, P6 (Mixtral) and P7 (the Mixtral pair) are scored on this box; the position, if any, is within it (two
+draws each, the 5 % stability rule). A second alarm reads as the finding: Unsloth's Mixtral load does not complete in two hours on a
+verified-secure RTX 5090 host, said so, no position. Budget: one RTX 5090, ceiling $0.54/h, guard 8 h, estimate under $5; the standing
+no-ask tier. The launch waits for box B's teardown and for the launcher checkout's pending update, and the manifest pins both heads.

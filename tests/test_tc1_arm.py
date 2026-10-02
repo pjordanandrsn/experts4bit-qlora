@@ -746,7 +746,7 @@ def test_tc2_knobs_are_read_by_the_box_and_forwarded_by_the_driver():
         assert knob in forwarded_block.split(), (knob, "read by tc1_run.sh but not forwarded by tc1_drive.sh")
     assert 'case "$TC1_BOX" in A|B)' in run and 'case "$TC1_BOX" in A|B)' in drive
     assert 'A) FAMILIES=${TC1_FAMILIES:-"qwen3"};;' in run and 'B) FAMILIES=${TC1_FAMILIES:-"tc2big"};;' in run
-    assert '[ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md' in run and 'case " $FAMILIES " in *" tc2small "*|*" tc2big "*)' in run
+    assert '[ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md' in run and 'case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*)' in run
     assert "small)  s=$SMALL_STEPS; en=$SMALL_EVAL_N; ee=$SMALL_EVAL_EVERY; ex_tag=fused_attn4_m;;" in run
 
 
@@ -798,7 +798,7 @@ def test_tc2_run_sh_runs_the_registered_arm_order_with_the_flags():
     assert 'tc2_big_family   mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 5400 2400 1800 2700 6000 1 "$UT7" ""     ""' in body
     assert 'UT4="q_proj,k_proj,v_proj,o_proj"' in body and 'UT_GRANITE2="q_proj,k_proj,v_proj,o_proj,input_linear,output_linear"' in body
     assert 'UP_QWEN3_5="mlp.experts.gate_up_proj,mlp.experts.down_proj"' in body and 'UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"' in body
-    assert "tc2small)    tc2_small_box;;" in body and "tc2big)      tc2_big_box;;" in body and 'for t in (tag, "attn_only_m", "reference_attn4_m", "fused_attn4_m_offload", "reference_attn4_m_offload"):' in body
+    assert "tc2small)    tc2_small_box;;" in body and "tc2big)      tc2_big_box;;" in body and "tc2mixtral)  tc2_mixtral_redraw;;" in body and 'for t in (tag, "attn_only_m", "reference_attn4_m", "fused_attn4_m_offload", "reference_attn4_m_offload"):' in body
     fam = body[body.index("tc1_family(){"):body.index("# tc1_native_family")]
     assert re.findall(calls, fam)[:3] == [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "reference_attn4_m")]   # TC1 untouched
 
