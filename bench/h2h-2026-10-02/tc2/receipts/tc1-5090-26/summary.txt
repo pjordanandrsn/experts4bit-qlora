@@ -1,0 +1,29 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+FIXTURE tc2 (TC2-PREREG-draft): small (box A: granite olmoe gptoss): steps=60 eval_every=20 eval_n=48; big (box B: qwen3_5 mixtral): the field recipe (steps=20 eval_every=20 eval_n=8)
+BOX B families: tc2mixtral; e4b 0933d4e20b3adff6fea9c4f9ac0e5c37d25b338e gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-26 instance 53859501 deadline 1790966302; prereg tc1/TC2-PREREG.md
+OMP_NUM_THREADS=128 (physical cores) box_class=RTX 5090
+DRIVER 595.71.05 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK mixtral staged=eba92302a2861cdc0098cc54bc9f17cb2c47eb61 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS mixtral alpaca sha=4a41b3f4a56149f688da50886b694239ac8bbdda715310d2375c1ea172bd59cf eval_n=8 train_only_sha=f2fdf2616af939abbbf97a420e44c6c6146087815c5cbf6976b663e5184b01cd
+mixtral/e4b/fused_attn4_m PROLOGUE {"phase_seconds": {"preamble": 6.032, "load_weights": 119.363, "verify": 0.001, "attn4": 16.232, "lora": 0.058, "enable": 0.008, "tokenizer": 0.24, "census": 1.045, "frozen_probe": 0.207, "trainable_sha": 1.078, "counters": 0.0, "c1_before": 157.047, "eval0": 20.317, "optimizer": 0.409}, "phase_budget_s": 1890.0, "prologue_s": 323.597, "prologue_unattributed_s": 1.559}
+mixtral/e4b/fused_attn4_m rc=0 CELL OK {"framework": "e4b", "fam": "mixtral", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "off
+
+mixtral/unsloth/ckpt_unsloth_m PROLOGUE {"phase_seconds": {"preamble": 2.316, "snapshot": 0.0, "load_weights": 28.455, "census": 0.663, "frozen_probe": 1.648, "trainable_sha": 1.201, "counters": 0.102, "c1_before": 94.086, "eval0": 555.031, "optimizer": 3.238}, "phase_budget_s": 2520.0, "prologue_s": 698.342, "prologue_unattributed_s": 11.603}
+mixtral/unsloth/ckpt_unsloth_m rc=0 CELL OK {"framework": "unsloth", "fam": "mixtral", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": "/root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "arm": "unsloth", "tag": "ckpt_unsloth_m", "status": "ok",
+
+mixtral/e4b/fused_attn4_m_d2 PROLOGUE {"phase_seconds": {"preamble": 5.291, "load_weights": 76.639, "verify": 0.002, "attn4": 13.775, "lora": 0.042, "enable": 0.009, "tokenizer": 0.218, "census": 1.138, "frozen_probe": 0.211, "trainable_sha": 1.078, "counters": 0.0, "c1_before": 100.534, "eval0": 12.287, "optimizer": 0.434}, "phase_budget_s": 1890.0, "prologue_s": 213.42, "prologue_unattributed_s": 1.762}
+mixtral/e4b/fused_attn4_m_d2 rc=0 CELL OK {"framework": "e4b", "fam": "mixtral", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_d2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "
+
+mixtral/unsloth/ckpt_unsloth_m_d2 PROLOGUE {"phase_seconds": {"preamble": 2.324, "snapshot": 0.0, "load_weights": 32.304, "census": 0.872, "frozen_probe": 1.703, "trainable_sha": 0.798, "counters": 0.117, "c1_before": 93.748, "eval0": 336.042, "optimizer": 1.913}, "phase_budget_s": 2520.0, "prologue_s": 480.673, "prologue_unattributed_s": 10.851}
+mixtral/unsloth/ckpt_unsloth_m_d2 rc=0 CELL OK {"framework": "unsloth", "fam": "mixtral", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": "/root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "arm": "unsloth", "tag": "ckpt_unsloth_m_d2", "status": "o
+
+mixtral/hf/hf_peft_m STUB not_run: skipped by TC1_SKIP
+mixtral/axolotl/ckpt_axolotl_m STUB not_run: skipped by TC1_SKIP
+mixtral/axolotl/ckpt_axolotl_best STUB not_run: skipped by TC1_SKIP
+mixtral/e4b/fused_attn4_shipped STUB not_run: skipped by TC1_SKIP
+mixtral/e4b/reference_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.732, "load_weights": 77.329, "verify": 0.001, "attn4": 10.938, "lora": 0.032, "enable": 0.002, "tokenizer": 0.165, "census": 0.965, "frozen_probe": 0.172, "trainable_sha": 0.817, "counters": 0.002, "c1_before": 102.382, "eval0": 12.978, "optimizer": 0.351}, "phase_budget_s": 2100.0, "prologue_s": 212.447, "prologue_unattributed_s": 1.581}
+mixtral/e4b/reference_attn4_m rc=0 CELL OK {"framework": "e4b", "fam": "mixtral", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 34
+
+MIXTRAL DONE

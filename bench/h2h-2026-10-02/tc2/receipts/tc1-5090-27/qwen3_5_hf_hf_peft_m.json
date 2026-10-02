@@ -1,0 +1,39 @@
+{
+ "framework": "hf",
+ "fam": "qwen3_5",
+ "model": "Qwen/Qwen3.6-35B-A3B",
+ "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+ "arm": "hf",
+ "tag": "hf_peft_m",
+ "status": "oom",
+ "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 512.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 15.06 MiB is free. Including non-PyTorch memory, this process has 31.33 GiB memory in use. Of the allocated memory 30.74 GiB is allocated by PyTorch, and 29.85 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "offload": false,
+ "prereg": "tc1/TC2-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe)",
+ "note": null,
+ "phase_seconds": {
+  "preamble": 2.31,
+  "snapshot": 0.0,
+  "load_weights": 8.072
+ },
+ "phase_in_flight": null,
+ "phase_budget_s": 630.0,
+ "phase": "load",
+ "memory_lever": null,
+ "host_ram": {
+  "rss_hwm_gb": 35.063,
+  "ru_maxrss_gb": 35.063,
+  "cgroup_peak_gb": null,
+  "cgroup_peak_source": null,
+  "cgroup_peak_before_gb": null,
+  "cgroup_peak_rose_during_arm": null,
+  "cgroup_limit_gb": 294.413,
+  "total_gb": 811.403,
+  "high_water_gb": 35.063
+ },
+ "exception_type": "OutOfMemoryError"
+}

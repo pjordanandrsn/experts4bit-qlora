@@ -234,7 +234,11 @@
     "e4b.train.frontier.qwen3.4090-24gb.2026-10-02.e4b-resident-oom",
     "e4b.train.frontier.qwen3.4090-24gb.2026-10-02.hf-axolotl",
     "e4b.train.frontier.qwen3.4090-24gb.2026-10-02.offload-keeps-trajectory",
-    "e4b.train.frontier.qwen3.a2000-12gb.2026-10-02"
+    "e4b.train.frontier.qwen3.a2000-12gb.2026-10-02",
+    "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02",
+    "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02.shipped-labelled",
+    "e4b.train.h2h.unsloth.mixtral.5090.2026-10-02",
+    "e4b.train.h2h.unsloth.mixtral.5090.2026-10-02.compile-warmup"
    ],
    "limitations": [
     "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",

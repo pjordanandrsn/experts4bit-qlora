@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Lane TC2 read, box B re-run (#835): Qwen3.6-35B-A3B at matched work does not fit e4b on 32 GB while Unsloth trains it; Mixtral-8x7B: e4b under offload at x4.5 lower peak, Unsloth faster per step once compiled but unstable across draws, no position (bench, docs and register only)
+
+- `bench/h2h-2026-10-02/tc2/receipts/tc1-5090-27/`: box B's Qwen3.6 half re-run (TC2 amendment 3). The matched set (926,187,520 fp32 adapters over 20,520 slots) OOMs e4b's fused path at
+  step 1 at both draws (32.52 GB on 31.36 GiB usable), at micro-batch 1 and in the reference loop; **Unsloth 2026.9.14 with the family's own expert names trains the same set resident at
+  30.47 GB and 10.59 s/step** (its registered target list still adapts the attention only: VOID). e4b as shipped (bf16 adapters) fits at 32.48 GB and 5.09 s/step -- a labelled row. HF OOMs,
+  axolotl's PEFT target names do not resolve. An e4b loss, said as such; TC2 P4 FALSIFIED. `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02` with its `.shipped-labelled` row.
+- `bench/h2h-2026-10-02/tc2/receipts/tc1-5090-26/`: the Mixtral pair re-asked (TC2 amendment 2, on a host with 1.06 TB of RAM under amendment 3). e4b under expert offload:
+  15.891 / 15.719 s/step at 7.15 GB (STABLE). Unsloth resident: 6.213 / 7.011 s/step at 31.95 / 32.24 GB once compiled -- 12.1 % apart, UNSTABLE, so no position is quoted
+  and P5 is UNTESTED by its rule. Unsloth 2026.9.14 spends its first six steps compiling Triton kernels on this family (76-89 minutes; 5,413 / 4,673 s of 20-step
+  wall against e4b's 337 / 329 s), at a 95 GB host-RAM high-water -- what stopped box B's 98 GB host. `e4b.train.h2h.unsloth.mixtral.5090.2026-10-02` with its
+  `.compile-warmup` row.
+- Box B's first instance (`tc1-5090-22`) was stopped by its host with its receipts unfetched (amendment 3); three re-launches were refused at $0 by launcher rules (an 8 h guard over
+  the 6 h cap; the pool's cheapest verified RTX 5090 above the lane's $0.54/h) and the boxes ran at the $0.69/h ceiling box B itself had used -- the lane's budget line says $0.54/h, the receipts say $0.69/h.
+- `docs/STATUS.md`, `docs/solutions/qlora-fused-moe-experts.md`, `docs/capabilities.json`: the paragraph and the claim list follow. No code, gate, default or licence moves.
+
 ### Lane SC1 amendment A8 (#846): SGLang's chunking-off servers pin `--mem-fraction-static 0.75` (its own rule left 0.226, below the 0.514 the GPTQ weights need) (bench + tests)
 
 - `bench/sc1/sglang/server.sh`: matched, kvfp8, ttft_matched and quality pass `--mem-fraction-static 0.75`. With chunked

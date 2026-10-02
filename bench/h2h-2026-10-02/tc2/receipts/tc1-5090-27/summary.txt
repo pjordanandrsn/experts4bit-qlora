@@ -1,0 +1,55 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+FIXTURE tc2 (TC2-PREREG-draft): small (box A: granite olmoe gptoss): steps=60 eval_every=20 eval_n=48; big (box B: qwen3_5 mixtral): the field recipe (steps=20 eval_every=20 eval_n=8)
+BOX B families: tc2big; e4b 0933d4e20b3adff6fea9c4f9ac0e5c37d25b338e gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-27 instance 53859323 deadline 1790960809; prereg tc1/TC2-PREREG.md
+OMP_NUM_THREADS=112 (physical cores) box_class=RTX 5090
+DRIVER 580.95.05 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3_5 staged=995ad96eacd98c81ed38be0c5b274b04031597b0 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3_5 alpaca sha=0d94e9b8893645edda2c1ba7e90d34b41374164b37f72d4d72422af79896e866 eval_n=8 train_only_sha=46d0f136c03e2539cbc85706381b8ecf739cbce387a67128a2aecd50eb255f82
+qwen3_5/e4b/fused_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.555, "load_weights": 40.116, "verify": 0.001, "attn4": 1.677, "lora": 0.049, "enable": 0.005, "tokenizer": 0.467, "census": 4.702, "frozen_probe": 0.165, "trainable_sha": 5.843, "counters": 0.0, "c1_before": 65.773, "eval0": 18.208, "optimizer": 0.279}, "phase_budget_s": 1260.0, "prologue_s": 143.118, "prologue_unattributed_s": 1.279}
+qwen3_5/e4b/fused_attn4_m rc=5 CELL OOM {"framework": "e4b", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "fused", "tag": "fused_attn4_m", "status": "oom", "reason": "OOM at step 1: CUDA out of memory. Tried to allocate 606.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 495.00 MiB is free. Including non-PyTorch memory, this process has 30.86 GiB memo
+
+qwen3_5/unsloth/ckpt_unsloth_m PROLOGUE {"phase_seconds": {"preamble": 2.299, "snapshot": 0.0, "load_weights": 29.411, "census": 0.067, "frozen_probe": 0.158, "trainable_sha": 0.017, "counters": 0.086, "c1_before": 60.606, "eval0": 43.858, "optimizer": 0.429}, "phase_budget_s": 1260.0, "prologue_s": 147.079, "prologue_unattributed_s": 10.149}
+qwen3_5/unsloth/ckpt_unsloth_m rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "model_type": "qwen3_5_moe", "n_layers": 40, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "unsloth", "tag": "ckpt_unsloth_m", "status": "ok", "steps": 20, "seq": 2048, "
+
+qwen3_5/e4b/fused_attn4_m_d2 PROLOGUE {"phase_seconds": {"preamble": 4.478, "load_weights": 35.341, "verify": 0.001, "attn4": 1.672, "lora": 0.014, "enable": 0.005, "tokenizer": 0.476, "census": 4.511, "frozen_probe": 0.136, "trainable_sha": 5.736, "counters": 0.0, "c1_before": 63.613, "eval0": 3.182, "optimizer": 0.254}, "phase_budget_s": 1260.0, "prologue_s": 120.682, "prologue_unattributed_s": 1.262}
+qwen3_5/e4b/fused_attn4_m_d2 rc=5 CELL OOM {"framework": "e4b", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "fused", "tag": "fused_attn4_m_d2", "status": "oom", "reason": "OOM at step 1: CUDA out of memory. Tried to allocate 606.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 495.06 MiB is free. Including non-PyTorch memory, this process has 30.86 GiB m
+
+qwen3_5/unsloth/ckpt_unsloth_m_d2 PROLOGUE {"phase_seconds": {"preamble": 2.259, "snapshot": 0.0, "load_weights": 26.506, "census": 0.06, "frozen_probe": 0.122, "trainable_sha": 0.013, "counters": 0.089, "c1_before": 62.796, "eval0": 35.946, "optimizer": 0.406}, "phase_budget_s": 1260.0, "prologue_s": 138.342, "prologue_unattributed_s": 10.147}
+qwen3_5/unsloth/ckpt_unsloth_m_d2 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "model_type": "qwen3_5_moe", "n_layers": 40, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "unsloth", "tag": "ckpt_unsloth_m_d2", "status": "ok", "steps": 20, "seq": 2048
+
+qwen3_5/unsloth/ckpt_unsloth_m_experts PROLOGUE {"phase_seconds": {"preamble": 2.369, "snapshot": 0.0, "load_weights": 41.744, "census": 4.211, "frozen_probe": 0.125, "trainable_sha": 5.512, "counters": 0.1, "c1_before": 57.608, "eval0": 14.231, "optimizer": 0.398}, "phase_budget_s": 1260.0, "prologue_s": 136.719, "prologue_unattributed_s": 10.42}
+qwen3_5/unsloth/ckpt_unsloth_m_experts rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "model_type": "qwen3_5_moe", "n_layers": 40, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "unsloth", "tag": "ckpt_unsloth_m_experts", "status": "ok", "steps": 20, "seq":
+
+qwen3_5/hf/hf_peft_m rc=5 CELL OOM {"framework": "hf", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "hf", "tag": "hf_peft_m", "status": "oom", "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 512.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 15.06 MiB is free. Including non-PyTorch memory, this process has 31.33 GiB memory in 
+
+qwen3_5/axolotl/ckpt_axolotl_m rc=3 CELL REFUSED {"framework": "axolotl", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "axolotl", "tag": "ckpt_axolotl_m", "status": "refused", "reason": "NoMatchingPeftModuleError: Target modules {'model.layers.35.self_attn.q_proj', 'model.layers.39.self_attn.v_proj', 'model.layers.27.self_attn.o_proj', 'model.layers.23.self_attn.q_
+
+qwen3_5/axolotl/ckpt_axolotl_best rc=3 CELL REFUSED {"framework": "axolotl", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "axolotl", "tag": "ckpt_axolotl_best", "status": "refused", "reason": "ValueError: Version 1 of 'kernels-community/activation' is not available in the local cache and Hugging Face Hub is in offline mode. Download the kernel while online first, or p
+
+qwen3_5/e4b/fused_attn4_shipped PROLOGUE {"phase_seconds": {"preamble": 4.484, "load_weights": 33.581, "verify": 0.001, "attn4": 1.596, "lora": 0.014, "enable": 0.005, "tokenizer": 0.475, "census": 2.02, "frozen_probe": 0.14, "trainable_sha": 7.021, "counters": 0.0, "c1_before": 61.565, "eval0": 2.762, "optimizer": 0.284}, "phase_budget_s": 1260.0, "prologue_s": 115.184, "prologue_unattributed_s": 1.235}
+qwen3_5/e4b/fused_attn4_shipped rc=0 CELL OK {"framework": "e4b", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "model_type": "qwen3_5_moe", "n_layers": 40, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload":
+
+qwen3_5/e4b/reference_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.555, "load_weights": 35.846, "verify": 0.001, "attn4": 1.589, "lora": 0.014, "enable": 0.003, "tokenizer": 0.454, "census": 4.617, "frozen_probe": 0.145, "trainable_sha": 5.622, "counters": 0.001, "c1_before": 63.669, "eval0": 32.29, "optimizer": 0.26}, "phase_budget_s": 1890.0, "prologue_s": 150.297, "prologue_unattributed_s": 1.229}
+qwen3_5/e4b/reference_attn4_m rc=5 CELL OOM {"framework": "e4b", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "reference", "tag": "reference_attn4_m", "status": "oom", "reason": "OOM at step 2: CUDA out of memory. Tried to allocate 440.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 367.00 MiB is free. Including non-PyTorch memory, this process has 30.99 
+
+SECONDARY qwen3_5: a primary matched arm OOMed (e4b=oom unsloth=ok hf=oom) -> mb1 pair
+qwen3_5/e4b/fused_attn4_m_mb1 PROLOGUE {"phase_seconds": {"preamble": 4.432, "load_weights": 34.136, "verify": 0.001, "attn4": 1.596, "lora": 0.014, "enable": 0.005, "tokenizer": 0.477, "census": 4.486, "frozen_probe": 0.142, "trainable_sha": 5.712, "counters": 0.0, "c1_before": 63.802, "eval0": 3.194, "optimizer": 0.254}, "phase_budget_s": 1260.0, "prologue_s": 119.516, "prologue_unattributed_s": 1.266}
+qwen3_5/e4b/fused_attn4_m_mb1 rc=5 CELL OOM {"framework": "e4b", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "fused", "tag": "fused_attn4_m_mb1", "status": "oom", "reason": "OOM at step 2: CUDA out of memory. Tried to allocate 366.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 301.00 MiB is free. Including non-PyTorch memory, this process has 31.05 GiB 
+
+qwen3_5/unsloth/ckpt_unsloth_m_mb1 PROLOGUE {"phase_seconds": {"preamble": 2.342, "snapshot": 0.0, "load_weights": 28.886, "census": 0.062, "frozen_probe": 0.15, "trainable_sha": 0.016, "counters": 0.091, "c1_before": 59.101, "eval0": 11.217, "optimizer": 0.334}, "phase_budget_s": 1260.0, "prologue_s": 112.024, "prologue_unattributed_s": 9.825}
+qwen3_5/unsloth/ckpt_unsloth_m_mb1 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "model_type": "qwen3_5_moe", "n_layers": 40, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "unsloth", "tag": "ckpt_unsloth_m_mb1", "status": "ok", "steps": 20, "seq": 204
+
+qwen3_5/hf/hf_peft_m_mb1 rc=5 CELL OOM {"framework": "hf", "fam": "qwen3_5", "model": "Qwen/Qwen3.6-35B-A3B", "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0", "arm": "hf", "tag": "hf_peft_m_mb1", "status": "oom", "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 512.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 15.06 MiB is free. Including non-PyTorch memory, this process has 31.33 GiB memory
+
+QWEN3_5 DONE
+mixtral/e4b/fused_attn4_m STUB not_run: family skipped by TC1_SKIP
+mixtral/unsloth/ckpt_unsloth_m STUB not_run: family skipped by TC1_SKIP
+mixtral/e4b/fused_attn4_m_d2 STUB not_run: family skipped by TC1_SKIP
+mixtral/unsloth/ckpt_unsloth_m_d2 STUB not_run: family skipped by TC1_SKIP
+mixtral/hf/hf_peft_m STUB not_run: family skipped by TC1_SKIP
+mixtral/axolotl/ckpt_axolotl_m STUB not_run: family skipped by TC1_SKIP
+mixtral/axolotl/ckpt_axolotl_best STUB not_run: family skipped by TC1_SKIP
+mixtral/e4b/fused_attn4_shipped STUB not_run: family skipped by TC1_SKIP
+mixtral/e4b/reference_attn4_m STUB not_run: family skipped by TC1_SKIP

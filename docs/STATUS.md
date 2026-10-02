@@ -206,11 +206,24 @@ either target list (`e4b.train.h2h.unsloth.granite.5090.2026-10-02.coverage`),
 and gpt-oss-20b has no common adapter set across frameworks — e4b trains its
 attention only there, an e4b limitation beside the wins
 (`e4b.train.h2h.unsloth.gptoss.5090.2026-10-02.no-common-set`). e4b's parity
-control PASSES on every family with a reference (P6 HELD). Qwen3.6-35B-A3B and
-Mixtral-8x7B (box B) were lost with their instance — stopped by its host
-during Unsloth's Mixtral load, the receipts unfetched — and nothing from
-that box is registered; their re-runs are registered (TC2 amendments 2 and
-3) and read next.
+control PASSES on every family with a reference (P6 HELD). Box B (Qwen3.6-35B-A3B,
+Mixtral-8x7B) was lost with its instance and re-run under amendments 2 and 3.
+**On Qwen3.6-35B-A3B at matched work, Unsloth trains the set resident on
+32 GB and e4b does not** (`e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02`):
+the matched 926,187,520 fp32 adapters over 20,520 slots OOM e4b's fused
+path at both micro-batches and in its reference loop (32.5 GB peak on a
+31.4 GiB card), while Unsloth, given the family's own expert names, trains
+them at 30.47 GB and 10.59 s/step; e4b fits only as shipped (bf16 adapters,
+32.48 GB, 5.09 s/step — a labelled row, not a comparison). An e4b loss,
+said as such; e4b under expert offload on this family is the next row.
+On Mixtral-8x7B (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-02`) e4b under
+expert offload trains the matched set at 7.15 GB and 15.8 s/step against
+Unsloth resident at 31.95 GB; once compiled, Unsloth steps in 6.2 / 7.0 s,
+but its two draws differ by 12 %, so no position is quoted (P5 UNTESTED).
+Unsloth 2026.9.14 spends its first six steps compiling kernels on this
+family — 76 to 89 minutes on the box, against e4b's 5.5-minute 20-step
+run (`.compile-warmup`); that compile phase's 95 GB host-RAM high-water is
+what stopped box B's host.
 
 
 **Against Unsloth, end-to-end, on one identical training problem** (lane
