@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Lane SC1 amendment A6 (#846): the box's e4b tripwire asserted each route knob's DEFAULT (0.40.0 moved one); it now asserts each knob is READ -- the arms pin all four (bench + tests)
+
+- `bench/sc1/sc1_run.sh`: box B's proof refused because `E4B_NF4_GROUPED_SMALLM`'s default moved `0` -> `auto` (#878). Every e4b
+  arm pins the four route knobs via `ROUTEENV`, so the tripwire now requires each knob to be read from the environment and logs
+  its observed default (`ROUTE_DEFAULT`). A shape test that fails on the registered loop; pin regenerated; `SC1-PREREG.md` A6.
+
 ### Lanes TC2 and TC3 read (#835): the other families at matched work on the current cuts, and the memory frontier on 24 GB and 12 GB cards (bench, docs and register only)
 
 - `bench/h2h-2026-10-02/tc3/`: Qwen3-30B-A3B at TC1's matched set on a rented 24 GB RTX 4090 and on the owned 12 GB RTX A2000, every framework with

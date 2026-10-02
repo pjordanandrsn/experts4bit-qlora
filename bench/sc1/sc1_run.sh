@@ -165,8 +165,10 @@ _p = inspect.signature(gemm_int4_b32_grouped_smallm).parameters
 assert (_p["block_n"].default, _p["kc"].default) == (32, 256), "gnf4 lacks K20's default plan (BLOCK_N 32 / KC 256)"
 from experts4bit_qlora.engines import hot_residency as hr
 src = inspect.getsource(hr)
-for knob, default in (("E4B_INT4_GROUPED_SMALLM", "auto"), ("E4B_INT4_LEAN_GLUE", "auto"), ("E4B_MXFP4_GROUPED_SMALLM", "auto"), ("E4B_NF4_GROUPED_SMALLM", "0")):
-    assert re.search(rf'environ\.get\("{knob}",\s*"{default}"\)', src), f"{knob} is not read with the registered default {default!r} (K19/K23/K21/K25)"
+for knob in ("E4B_INT4_GROUPED_SMALLM", "E4B_INT4_LEAN_GLUE", "E4B_MXFP4_GROUPED_SMALLM", "E4B_NF4_GROUPED_SMALLM"):   # A6
+    m = re.search(rf'environ\.get\("{knob}",\s*"([^"]*)"\)', src)
+    assert m, f"{knob} is not read from the environment (K19/K23/K21/K25): ROUTEENV could not pin it"
+    print(f"ROUTE_DEFAULT {knob}={m.group(1)} (every e4b arm pins it via ROUTEENV)", flush=True)
 assert hasattr(hr, "_collapsed_grouping"), "e4b lacks the T == 1 extension (#804): K8 would read the GEMV"
 from experts4bit_qlora.engines.int4_attn import Int4Linear, _smallm_kernels
 assert getattr(Int4Linear, "SMALLM_ROWS_MAX", None) == 16 and hasattr(Int4Linear, "fuse"), "e4b cut lacks the K16 route or Int4Linear.fuse"
