@@ -242,4 +242,21 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
   - Four CPU tests. One reproduces SGLang's 0.226 from its rule; the other three fail on the registered `server.sh`.
   - **Boxes.** Box C re-proves at A8's merge and runs there. A8 touches only box C's SGLang wrapper, so boxes A and B keep the
     commits their proofs ran on (`32d424e`, `3db414e`).
+- **A9 (2026-10-02T17:41Z; receipt `sc1c-prove-14`, adertha-receipts `4cd4854`).** Box C's re-proof at A8's merge (`cb9e18f`) passed both Granite
+  smokes, and A8 held: SGLang sized a KV pool of 79,560 tokens against the 79,800 predicted. It is NOT PROVED on the next step
+  (rc 45 after 819 s). While capturing the decode CUDA graphs, SGLang's Marlin MoE asserted "moe_wna16_marlin_gemm assumes
+  hidden_states.dtype (torch.bfloat16) == w1_scale.dtype (torch.float16)".
+  - **Cause.** `server.sh` and `one_batch.sh` ran SGLang with `--dtype bfloat16`. The lane's GPTQ checkpoint declares `torch_dtype`
+    float16 and stores float16 scales. SGLang 0.5.20's GPTQ Marlin MoE requires the activations in the scales' dtype
+    (`layers/moe/fused_moe_triton/fused_marlin_moe.py`), so every SGLang mode and the one-batch benchmark would have failed at
+    their first MoE call.
+  - **It was not matched work either.** vLLM's arms pass no dtype, and `auto` resolved float16 on this checkpoint (`sc1a-5090-1`:
+    `dtype=torch.float16`). LMDeploy's registered kernel family is f16 (`sm80_f16_u4k128_f16`). bf16 on SGLang alone would have
+    put a different activation dtype on the pair P3 ratios (SGLang against box C's vLLM anchor).
+  - **Fix.** Every pinned SGLang server mode and the one-batch benchmark pass `--dtype float16`. `native` passes none, and
+    SGLang's `auto` follows the checkpoint's float16. The engagement check refuses a pinned-mode server that resolves any other
+    dtype. One CPU test fails on the registered wrappers. Capacity is unchanged, because an fp16 KV token is the same size as a
+    bf16 one.
+  - **Boxes.** Box C re-proves at A9's merge and runs there. A9 touches only box C's SGLang wrappers, so boxes A and B keep the
+    commits their proofs ran on (`32d424e`, `3db414e`).
 

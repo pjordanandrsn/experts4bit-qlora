@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Lane SC1 amendment A9 (#846): SGLang runs `--dtype float16`, the GPTQ checkpoint's scales dtype (its Marlin MoE asserted on bf16 activations) (bench + tests)
+
+- `bench/sc1/sglang/server.sh`, `one_batch.sh`: `--dtype float16` instead of `bfloat16`. Box C's re-proof `sc1c-prove-14` got past
+  A8's memory pin and then hit SGLang's Marlin MoE assertion (`hidden_states.dtype == w1_scale.dtype`; the scales are float16).
+  float16 is also what vLLM's `auto` resolves on the same checkpoint, so it is the matched activation dtype. The engagement check
+  refuses any other resolved dtype. One CPU test that fails on the registered wrappers; pin regenerated; `SC1-PREREG.md` A9.
+
 ### Lane TC2 read, box B re-run (#835): Qwen3.6-35B-A3B at matched work does not fit e4b on 32 GB while Unsloth trains it; Mixtral-8x7B: e4b under offload at x4.5 lower peak, Unsloth faster per step once compiled but unstable across draws, no position (bench, docs and register only)
 
 - `bench/h2h-2026-10-02/tc2/receipts/tc1-5090-27/`: box B's Qwen3.6 half re-run (TC2 amendment 3). The matched set (926,187,520 fp32 adapters over 20,520 slots) OOMs e4b's fused path at

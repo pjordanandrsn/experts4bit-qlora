@@ -8,13 +8,13 @@
 # name is the field name with underscores -> dashes): disable_radix_cache (memory.py:65), max_running_requests
 # (schedule.py:38), chunked_prefill_size (schedule.py:59, -1 = no chunking), schedule_policy (schedule.py:89, choice fcfs),
 # cuda_graph_bs_decode (exec_.py:488, explicit capture list), cuda_graph_backend_prefill (exec_.py:475, choice disabled),
-# moe_runner_backend (exec_.py:683, default auto), dtype (model.py:159, choice bfloat16), context_length (model.py:109),
+# moe_runner_backend (exec_.py:683, default auto), dtype (model.py:159, choice float16 since A9), context_length (model.py:109),
 # kv_cache_dtype (model.py:196, choice fp8_e4m3), random_seed (device.py:43), revision (model.py:121), host/port
 # (serving.py:72-73). There is no --cuda-graph-max-bs / --cuda-graph-bs any more (per-phase flags only).
 #
 # Modes (the draft's SGLang block, "Environments" + "Validity"):
 #   matched       --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs
-#                 --cuda-graph-bs-decode 1 16 --moe-runner-backend auto --dtype bfloat16 --context-length 2048 --random-seed 0
+#                 --cuda-graph-bs-decode 1 16 --moe-runner-backend auto --dtype float16 --context-length 2048 --random-seed 0
 #                 (2048 holds the 512-token rows + 128 new: tokenizer_manager.py:1260-1305 refuses input >= context_len and
 #                 input + max_new_tokens > context_len)
 #   kvfp8         matched + --kv-cache-dtype fp8_e4m3 (FlashInfer takes the kv dtype straight: flashinfer_backend.py:356-367)
@@ -25,16 +25,21 @@
 #                 [1,2,4,8,12,16,24,32,40,48] (cuda_graph_hook.py:577-608; 16 is native), prefill graphs `breakable`,
 #                 overlap scheduler ON, max_running_requests derived (mem_cache/kv_cache_configurator.py resolve_max_num_reqs)
 #   quality       the NLL scorer's server: radix cache ON (default), --max-running-requests 1, --chunked-prefill-size -1
-#                 (the 2561-token prefill-shaped request is one extend), --context-length 4096, --dtype bfloat16 --random-seed 0
+#                 (the 2561-token prefill-shaped request is one extend), --context-length 4096, --dtype float16 --random-seed 0
 #   A8 (receipt sc1c-prove-13): matched / kvfp8 / ttft_matched / quality also pass --mem-fraction-static 0.75. With
 #                 --chunked-prefill-size -1, v0.5.20's own rule (arg_groups/memory_hook.py handle_gpu_memory_settings) reserves
 #                 512 + 1.5 MB x max(max_prefill_tokens = 16384, 2048) + 128 + 2 x decode max_bs MB of activations -- 25.2 GB of a
 #                 32,607 MiB 5090, i.e. mem_fraction_static 0.226, below the 0.514 the 15.7 GB GPTQ checkpoint alone needs ("Loaded
-#                 weights leave no GPU memory for the KV cache"). 0.75 gives a ~7.3 GiB KV pool (~79,800 bf16 tokens: each server's
+#                 weights leave no GPU memory for the KV cache"). 0.75 gives a ~7.3 GiB KV pool (~79,800 16-bit tokens: each server's
 #                 registered capacity, 16 x 2048 and the TTFT server's 16 x 4608) and keeps 7.7 GiB outside the static pool, >= 5x
 #                 the peak activation + CUDA-graph memory vLLM 0.30 measured for the same checkpoint, card and 8192-token batch
 #                 (<= 0.86 + 0.50 GiB, sc1a-5090-1). The fraction sizes the static pool only; no kernel or scheduling flag changes.
 #                 native keeps SGLang's own resolution (chunked prefill on: ~0.79 on this card).
+#   A9 (receipt sc1c-prove-14): every pinned mode runs --dtype float16 (was bfloat16). The lane's GPTQ checkpoint declares
+#                 torch_dtype float16 and stores float16 scales, and v0.5.20's GPTQ Marlin MoE asserts the activations are in the
+#                 scales' dtype (layers/moe/fused_moe_triton/fused_marlin_moe.py: "moe_wna16_marlin_gemm assumes
+#                 hidden_states.dtype == w1_scale.dtype"). vLLM's arms pass no dtype and `auto` resolves float16 on the same
+#                 checkpoint (sc1a-5090-1), so float16 is also the matched activation dtype. native passes none (auto = float16).
 #
 # Readiness + engagement (refused with a non-zero return otherwise):
 #   * GET /health -> 200 (http_server.py:669-735; 503 while ServerStatus.Starting, i.e. until the startup warmup request has
@@ -69,13 +74,13 @@ sglang_server_flags(){  # <mode> <port> -> echoes the flag list (one per line; t
   printf '%s\n' --host 127.0.0.1 --port "$PORT" --random-seed 0 --moe-runner-backend auto --log-level info
   case "$MODE" in
     matched)      printf '%s\n' --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs \
-                                --cuda-graph-bs-decode 1 16 --dtype bfloat16 --context-length 2048 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
+                                --cuda-graph-bs-decode 1 16 --dtype float16 --context-length 2048 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     kvfp8)        printf '%s\n' --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs \
-                                --cuda-graph-bs-decode 1 16 --dtype bfloat16 --context-length 2048 --kv-cache-dtype fp8_e4m3 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
+                                --cuda-graph-bs-decode 1 16 --dtype float16 --context-length 2048 --kv-cache-dtype fp8_e4m3 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     ttft_matched) printf '%s\n' --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs \
-                                --cuda-graph-bs-decode 1 16 --dtype bfloat16 --context-length 4608 --cuda-graph-backend-prefill disabled --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
+                                --cuda-graph-bs-decode 1 16 --dtype float16 --context-length 4608 --cuda-graph-backend-prefill disabled --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     native)       printf '%s\n' --disable-radix-cache ;;
-    quality)      printf '%s\n' --max-running-requests 1 --chunked-prefill-size -1 --dtype bfloat16 --context-length 4096 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
+    quality)      printf '%s\n' --max-running-requests 1 --chunked-prefill-size -1 --dtype float16 --context-length 4096 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     *) return 1 ;;
   esac
 }
@@ -137,6 +142,7 @@ if mode in ("matched", "kvfp8", "ttft_matched", "quality"):  # A8: the pinned st
     need(abs(float(info.get("mem_fraction_static") or 0) - mfs) < 1e-9, f"mem_fraction_static={info.get('mem_fraction_static')} != {mfs} (A8)")
     cap = int(info.get("context_length") or 0) * (16 if mode in ("matched", "kvfp8") else 1)
     need(int(info.get("max_total_num_tokens") or 0) >= cap, f"max_total_num_tokens={info.get('max_total_num_tokens')} < {cap}, the registered capacity (A8)")
+    need(info.get("dtype") == "float16", f"dtype={info.get('dtype')!r}, not float16: the GPTQ Marlin MoE needs the activations in the scales' dtype (A9)")
 cg = json.dumps(info.get("cuda_graph_config"), default=str)
 eng["cuda_graph_config_json"] = cg[:2000]
 if mode == "ttft_matched": need('"disabled"' in cg or "DISABLED" in cg.upper(), "prefill cuda graphs not disabled in the resolved cuda_graph_config")
