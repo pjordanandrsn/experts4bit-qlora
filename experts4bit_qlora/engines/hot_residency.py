@@ -129,12 +129,13 @@ def _k25_mode_env() -> str:
     K25 -- K19's grouped small-M tensor-core GEMM with the NF4 codebook dequant, over the 16-row device tile table --
     instead of the served NF4 M-tile GEMM (``gemm_4bit_grouped_captured``, TF32 on fp32-dequantised weights). Lane P91
     sized it: that GEMM is 62 % (Granite) and 72 % (OLMoE) of B=16 decode kernel time on an RTX 5090. The route runs
-    K25 at the served precision (:data:`_K25_PLAN`); lane P92 read its earlier bf16 arithmetic (Granite LICENSED, OLMoE
-    QUALITY_FAIL), and no lane has read this one yet, so ``0`` is the default (also when unset): today's NF4 routes. ``auto`` takes K25 for rows above T == 1 when the kernel package carries it and keeps today's
-    routes when it does not; ``1`` requires K25 (absent is a refusal) and routes T == 1 to it too
+    K25 at the served precision (:data:`_K25_PLAN`). Lane P93 read its speed (B=16 x0.594 Granite, x0.598 OLMoE), and
+    lane P96 licensed its K8 against the M-tile it replaces, under P95's windowed gate, so ``auto`` is the default (also
+    when unset): K25 for rows above T == 1 when the kernel package carries it, the previous routes when it does not.
+    ``0`` keeps the previous NF4 routes; ``1`` requires K25 (absent is a refusal) and routes T == 1 to it too
     (:func:`_collapsed_grouping`), which is what lets the decode-shaped K8 instrument read the kernel. Anything else is
     refused."""
-    v = os.environ.get("E4B_NF4_GROUPED_SMALLM", "0").strip().lower() or "0"
+    v = os.environ.get("E4B_NF4_GROUPED_SMALLM", "auto").strip().lower() or "auto"
     if v not in ("auto", "0", "1"):
         raise ValueError(f"E4B_NF4_GROUPED_SMALLM={v!r}: expected 'auto', '0' or '1'")
     return v
@@ -180,7 +181,8 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
 def _nf4_t1_device_grouping_env() -> bool:
     """``E4B_NF4_T1_DEVICE_GROUPING=1`` (an instrument; off by default, also when unset): the NF4 store's T == 1 decode
     rows take the device tile table, as batched rows do, instead of the singleton decode GEMV. With
-    ``E4B_NF4_GROUPED_SMALLM`` at ``0`` they then run the served NF4 M-tile GEMM (``gemm_4bit_grouped_captured``, TF32 on
+    ``E4B_NF4_GROUPED_SMALLM=0`` set explicitly (the default is ``auto`` since lane P96) they then run the served NF4
+    M-tile GEMM (``gemm_4bit_grouped_captured``, TF32 on
     the fp32 dequant) -- the arithmetic B=16 decode serves today -- so the decode-shaped K8 can read it at T == 1. It
     exists for lane P94's calibration (how far the production path's own arithmetic variants move K8, on OLMoE in
     particular; lanes P92/P93) and changes no default route. Anything other than ``0``/``1`` is refused."""
@@ -402,9 +404,9 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             _k19 = None                   # auto: the kernel package predates K19 -> the split-K GEMV, as before
         if _k19 is not None:
             _int4_gemv_decode = False     # take the device-grouping branch: it builds the 16-row tile table
-    # K25 (E4B_NF4_GROUPED_SMALLM, opt-in): the NF4 store's device-grouped decode rows through the grouped small-M
-    # tensor-core GEMM with the NF4 dequant, instead of the served M-tile GEMM. Not under a calibration sink: the sink
-    # reads x_sorted beside sorted_ids, and K25 gathers inside the kernel.
+    # K25 (E4B_NF4_GROUPED_SMALLM, default auto since lane P96): the NF4 store's device-grouped decode rows through
+    # the grouped small-M tensor-core GEMM with the NF4 dequant, instead of the served M-tile GEMM. Not under a
+    # calibration sink: the sink reads x_sorted beside sorted_ids, and K25 gathers inside the kernel.
     _k25 = None
     _k25_mode = _k25_mode_env()
     if (int4_stores is None and device_grouping and R_rows <= 256 and _k25_mode != "0"

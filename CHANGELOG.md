@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### `E4B_NF4_GROUPED_SMALLM` defaults to `auto`: the NF4 store's batched decode rows take K25 at the served precision (lane P96)
+
+- **What changes.** With the variable unset, NF4 rows above T == 1 now run through K25 instead of the served NF4 M-tile
+  GEMM, when the installed grouped-nf4-gemm carries it. K25 is the grouped small-M tensor-core GEMM with the select-tree
+  decode through TF32 MMA at lane K27's plan.
+  - T == 1 stays on the decode GEMV.
+  - `0` restores the previous route.
+  - A kernel package without K25 keeps the previous route silently.
+- **The licence.**
+  - Speed, lane P93: B=16 ×0.594 (Granite) and ×0.598 (OLMoE) on an RTX 5090.
+  - Quality, lane P96: K8 of K25 against the M-tile it replaces, under lane P95's windowed gate, with mean deltas
+    inside 0.05 on every text in both families.
+  - P94's single-window QUALITY_FAIL stands under its own rule. P95 measured that one window cannot resolve 0.05 on
+    these families.
+- **Tests.**
+  - `tests/test_nf4_grouped_smallm_route.py`: unset and `auto` take K25 above T == 1 and leave T == 1 alone; `0` is
+    the previous route; unset without K25 is the previous route, silently.
+  - `tests/test_s2_verify_mechanics.py` selects the M-tile explicitly, since its subject is the captured M-tile path.
+- **Re-running an older lane.** A lane that read the M-tile at T > 1 without naming the variable (P91–P93's OFF arms
+  set it explicitly) now needs `E4B_NF4_GROUPED_SMALLM=0` to read what it read.
+
 ### Lane P96 read (#564, one RTX 5090): LICENSED -- under P95's windowed K8 gate, K25 against the served NF4 M-tile reads mean t − m −0.001 / −0.015 (Granite) and −0.016 / −0.004 (OLMoE), so `E4B_NF4_GROUPED_SMALLM` defaults to `auto` (`e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`)
 
 - **What it read.** K8 of K25 (t) and the served M-tile (m) at T == 1 on fresh windows (c4val1 9–16, wikitext 9–12),

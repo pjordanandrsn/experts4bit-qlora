@@ -1,18 +1,19 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """E4B_NF4_GROUPED_SMALLM routes the NF4 store's device-grouped decode rows through K25 (grouped-nf4-gemm#429,
-`nf4_smallm.gemm_nf4_grouped_smallm`): "0" (the default, also when unset) is today's route; "auto" takes K25 above
-T == 1 when the kernel package carries it; "1" requires it and adds T == 1.
+`nf4_smallm.gemm_nf4_grouped_smallm`): "auto" (the default since lane P96, also when unset) takes K25 above T == 1
+when the kernel package carries it; "0" is the previous route; "1" requires K25 and adds T == 1.
 
 K25 is K19's kernel with the NF4 dequant: the 16-row device tile table, gate_up's gather folded into the kernel, outputs
 in sorted order, K23's scatter / gather_div. These tests stub it, the served NF4 M-tile GEMM and the host-grouped NF4
 GEMM with pure-torch oracles (`nf4_grouped.dequant_ref`) obeying those contracts, and pin:
-  - unset / "0": the served M-tile GEMM serves the batched rows and the host path T == 1; K25 never runs;
+  - "0": the served M-tile GEMM serves the batched rows and the host path T == 1; K25 never runs;
   - "1" at T > 1: both projections go through K25 (gate_up WITH `order`, down WITHOUT) at the route's registered plan,
     the served GEMM does not run, the table is 16-row, and the output equals the per-row oracle in the caller's row
     order -- with gpt-oss's per-expert biases and clamped GLU too;
-  - "auto" takes K25 for batched rows and leaves T == 1 on the singleton route; "1" moves T == 1 to the device table;
+  - unset / "auto" takes K25 for batched rows and leaves T == 1 on the singleton route; "1" moves T == 1 to the device
+    table;
   - the decision never moves an int4 or MXFP4 store's T == 1;
-  - "auto" on a kernel side without K25 is today's route, silently; "1" there is a RuntimeError naming K25;
+  - unset / "auto" on a kernel side without K25 is the previous route, silently; "1" there is a RuntimeError naming K25;
   - an unknown value is refused;
   - prefill rows (R > 256) and a calibration sink do not take K25;
   - under the lean glue (K23), gate_up reads the token rows (gather_div) and down scatters, with the same bits as the
@@ -155,16 +156,19 @@ def _run(R, *, T1=False, gptoss=None, seed=3, x_tokens=None):
     return out, _oracle(x, ids, st, gptoss)
 
 
-def _close(out, ref):
-    return float((out.float() - ref).abs().max() / ref.abs().max()) < 0.05
-
-
-@pytest.mark.parametrize("env", [None, "0"], ids=["unset", "0"])
-def test_the_default_is_todays_route(monkeypatch, env):
+def _set_mode(monkeypatch, env):
     if env is None:
         monkeypatch.delenv("E4B_NF4_GROUPED_SMALLM", raising=False)
     else:
         monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", env)
+
+
+def _close(out, ref):
+    return float((out.float() - ref).abs().max() / ref.abs().max()) < 0.05
+
+
+def test_0_is_the_previous_route(monkeypatch):
+    monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "0")
     calls = _install_stubs(monkeypatch)
     out, ref = _run(24)
     assert calls["captured"] == ["sorted", "sorted"] and calls["k25"] == [] and calls["tiles"] == [16], calls
@@ -192,9 +196,10 @@ def test_opted_in_batched_rows_go_through_k25_and_match_the_oracle(monkeypatch, 
     assert _close(out, ref)
 
 
-def test_auto_takes_k25_above_t1_and_leaves_t1_alone(monkeypatch):
+@pytest.mark.parametrize("env", [None, "auto"], ids=["unset (the default)", "auto"])
+def test_auto_takes_k25_above_t1_and_leaves_t1_alone(monkeypatch, env):
     from experts4bit_qlora.engines import hot_residency as hr
-    monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "auto")
+    _set_mode(monkeypatch, env)
     assert hr._collapsed_grouping(1, None) == (True, False)
     calls = _install_stubs(monkeypatch)
     out, ref = _run(24)
@@ -224,8 +229,9 @@ def test_the_t1_decision_never_moves_another_store(monkeypatch, mode):
     assert hr._collapsed_grouping(1, {"kind": "mxfp4"}) == (True, False)
 
 
-def test_auto_without_k25_is_todays_route_silently(monkeypatch):
-    monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "auto")
+@pytest.mark.parametrize("env", [None, "auto"], ids=["unset (the default)", "auto"])
+def test_auto_without_k25_is_the_previous_route_silently(monkeypatch, env):
+    _set_mode(monkeypatch, env)
     calls = _install_stubs(monkeypatch, with_k25=False)
     out, ref = _run(24)
     assert calls["captured"] == ["sorted", "sorted"], calls
