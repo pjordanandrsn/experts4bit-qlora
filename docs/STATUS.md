@@ -544,6 +544,10 @@ QUALITY_FAIL on OLMoE (c4val1 K8 −0.107 ppl, step ×1.024); its own GEMM runs 
 at the served precision (the select tree through TF32 MMA, P93) the route takes Granite's B=16 step to ×0.594 (B=1
 ×0.854, K8 inside the gate) and OLMoE's to ×0.598, but OLMoE's c4val1 K8 moved +0.155 ppl, the other sign from P92's
 −0.107, so the default stays `0` (`e4b.serve.p93.nf4-families.k25-tree-tf32-b16.5090.2026-10-01`);
+against the arithmetic it would replace above T == 1 (the served M-tile), K25 reads QUALITY_FAIL in both families
+(c4val1 K8 +0.102 Granite, +0.168 OLMoE; wikitext inside), and the served M-tile itself sits −0.078 from the GEMV on
+Granite c4val1, so the default stays `0` and c4val1's spread is the next question
+(P94, `e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01`);
 **gpt-oss's quoted best is its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970; with K21 serving the store's batched rows, its B=16 step reads
 ×0.581 against the NF4 fallback, at a lower KL from the reference (0.00147 vs 0.00192;
