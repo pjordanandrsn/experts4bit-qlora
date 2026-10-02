@@ -151,3 +151,14 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
   `sc1a-prove-8` ran on; it installs vLLM only, so none of these drivers is on its path. Boxes B and C run at A3's merge, after
   their own proofs there. The e4b package (`experts4bit_qlora/`) is byte-identical between the two commits. The reducer's
   `--cross-box` reads each box's receipts at its own commit.
+- **A3 erratum (2026-10-02T07:05Z).** A3's sentence "The e4b package (`experts4bit_qlora/`) is byte-identical between the two commits"
+  is **wrong**. I wrote it against the main of the moment, and #878 (`82cd87d`) merged before A3 did. #878 flips
+  `E4B_NF4_GROUPED_SMALLM`'s default from `0` to `auto` in `engines/hot_residency.py`, so the package differs between box A's
+  commit (`0a2a0c8`) and A3's merge (`477670f`). The landing script's own identity check caught it after the merge. The run's
+  arithmetic is unaffected, for two reasons:
+  - Every e4b MoE invocation in the box script names `E4B_NF4_GROUPED_SMALLM=0` explicitly (`ROUTEENV`): the timed windows,
+    K8, the pack build, the scheduler arms and the smokes. `tests/test_sc1_run_shape.py` pins the four route knobs on every e4b
+    arm, so each arm takes the same route at both commits.
+  - The one `step_decomp.py` call without `ROUTEENV` is box B's bf16 oracle (`--ppl-oracle upstream`). Its quantity is the
+    transformers bf16 forward, and its e4b side runs at T == 1, where `auto` does not route; K25 takes only rows above T == 1.
+  The cross-box reading states both commits. The receipts record each box's e4b sha.

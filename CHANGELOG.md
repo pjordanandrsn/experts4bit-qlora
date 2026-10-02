@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+
+### Lane SC1 A3 erratum (#846): the e4b package is NOT identical between box A's and boxes B/C's commits (#878 landed between) -- the arms' arithmetic is, because SC1 pins the route knob (text only)
+
+- `bench/sc1/SC1-PREREG.md`: A3 claimed `experts4bit_qlora/` was byte-identical between `0a2a0c8` and A3's merge. #878 (the NF4
+  grouped small-M default `0` -> `auto`) merged first. Every SC1 e4b arm sets `E4B_NF4_GROUPED_SMALLM=0` explicitly, so the
+  routes match. The bf16 oracle, the one call without it, reads the transformers forward at T == 1. Recorded as an erratum.
 ### Lane SC1 amendment A3 (#846): box B's proof found three bugs in SC1's own drivers (llama.cpp version check, two in the ExLlamaV3 tripwire) -- fixed, with tests that fail on the registered drivers (bench + tests)
 
 - `bench/sc1/llamacpp/llamacpp_box.sh`: llama.cpp built, then the check grepped an 8-character commit where `llama-server
