@@ -58,6 +58,22 @@ kept. What TC1 adds, named so the files can be diffed:
      scored HELD / FALSIFIED / UNTESTED; the selftest adds a DIVERGENT curve, a REPRODUCES-P38 plateau and its refutations, a
      failing anchor, a VOID r64 pair, a DOES-NOT-TRAVEL speed row and a target never reached.
 
+  R11 (lane TC2, the `tc2small` / `tc2big` tokens; TC2-PREREG.md, drafted in TC2-PREREG-draft.md): the other families -- granite, olmoe,
+     gptoss (box A, N 60, 48 rows every 20) and qwen3_5, mixtral (box B, N 20, 8 rows) -- read per family with TC1's support / validity /
+     VERDICT / positions (point + cross-draw interval where two draws exist) / equivalence / frozen-base readings, plus: the registered
+     n_layers and structural attention census per family (a receipt that disagrees is VOID); the HF position quoted as "HF (bf16
+     experts) / e4b" (or 4-bit) with its regime; an Unsloth arm whose trainable count differs from e4b's is VOID with the reason
+     "attention-only" when it adapted no expert parameter, as tp4; on gpt-oss (e4b adapts attention only: `attn_only_m` is the anchor)
+     NO ratio is quoted across different adapter sets -- a "no common adapter set" line carries both s/step values and both trainable
+     counts, the trainable / sha / quality predicates against e4b are not applied to the other frameworks' arms there; the Unsloth
+     regimes beyond bnb stacks: `ckpt_unsloth_mxfp4` (load_in_4bit=False) is VALID only with >= 2L packed expert parameters of a
+     recorded class, grouped_mm selected and the MXFP4 grouped GEMM counted >= L*A per step, and gpt-oss's bnb-4bit arm (per-expert
+     Linear4bit, no stacks) with >= 2L Params4bit under its experts and either MoE banner; mixtral's FOOTPRINT line (e4b under expert
+     offload vs Unsloth resident: peak VRAM and s/step) leads its block; an HF t214 arm whose dispatch did not reach grouped_mm is
+     RECORDED (the row's note), never VOID. P1-P7 of the draft scored HELD / FALSIFIED / UNTESTED; the selftest adds a VOID attention-only
+     Unsloth arm, the gpt-oss no-common-set line, the mixtral footprint line, a t214 arm that did not reach grouped_mm, the packed-arm
+     VOIDs (unpacked, wrong backend, uncounted GEMM), the census / pin VOIDs and every prediction's failing leg.
+
 It licenses nothing and quotes no cross-box number. stdlib only.  Usage: tc1_reduce.py <dir> [--md out.md] [--steps N] | --selftest
 """
 import argparse
@@ -157,6 +173,107 @@ FAMS.append(CURVE_FAM)
 NAMES[CURVE_FAM] = "Qwen3-30B-A3B (lane TC1b: the 200-step curve box, the anchor pair, the t1 and r64 scaling pairs)"
 N_LAYERS[CURVE_FAM] = 48
 
+# ----------------------------------------------------------------------------- R11: lane TC2 (the tc2small / tc2big tokens; TC2-PREREG-draft, registered by the PI)
+TC2_FAMS = ["granite", "olmoe", "gptoss", "qwen3_5", "mixtral"]
+TC2_TOKENS = {"tc2small": ["granite", "olmoe", "gptoss"], "tc2big": ["qwen3_5", "mixtral"]}
+# (model id, revision, n_layers): bench/tp4/tp4_run.sh's family table / TC2-PREREG-draft; a receipt whose model or revision differs from the pin is VOID
+TC2_MODELS = {"granite": ("ibm-granite/granite-3.1-3b-a800m-instruct", "a02780686e08a03fe0d2679a293b5c74a90efa89", 32),
+              "olmoe": ("allenai/OLMoE-1B-7B-0924-Instruct", "7f1c97f440f06ce36705e4f2b843edb5925f4498", 16),
+              "gptoss": ("openai/gpt-oss-20b", "6cee5e81ee83917806bbde320786a8fb61efebee", 24),
+              "qwen3_5": ("Qwen/Qwen3.6-35B-A3B", "995ad96eacd98c81ed38be0c5b274b04031597b0", 40),
+              "mixtral": ("mistralai/Mixtral-8x7B-Instruct-v0.1", "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", 32)}
+NAMES.update({"granite": "Granite-3.1-3B-A800M-instruct (lane TC2, box A)", "olmoe": "OLMoE-1B-7B-0924-Instruct (lane TC2, box A)",
+              "gptoss": "gpt-oss-20b (lane TC2, box A; e4b attention-only -- no common adapter set)",
+              "qwen3_5": "Qwen3.6-35B-A3B (lane TC2, box B)", "mixtral": "Mixtral-8x7B-Instruct-v0.1 (lane TC2, box B; e4b under expert offload, Unsloth resident)"})
+N_LAYERS.update({fam: v[2] for fam, v in TC2_MODELS.items()})
+# the structural attention census per family (tc1_arm.py's T10 docstring, #434: "granite 128, olmoe 64, qwen3 192, mixtral 128 (exactly 4 x n_layers)";
+# gpt-oss is REFUSED on the bias rule -- its attention is never converted; Gemma-4 is out of scope). None = not registered here: the receipt's own
+# structural_expected_n_attn4 governs (qwen3_5: linear-attention layers, no committed census in this tree -- UNVERIFIED). A receipt whose census
+# disagrees with a registered value is VOID (R11).
+ATTN_CENSUS = {"qwen3": 192, "qwen3native": 192, CURVE_FAM: 192, "granite": 128, "olmoe": 64, "mixtral": 128, "gptoss": None, "qwen3_5": None}
+TC2_ANCHOR = {"gptoss": ("e4b", "attn_only_m")}      # the family's e4b anchor arm (quality, draws, step-0, sha): attention-only on gpt-oss (bare experts, tp1/tp2)
+NO_COMMON_SET = {"gptoss": "e4b adapts attention only on this family (experts built bare, no ExpertsLoRA: tp1/tp2 cited) while Unsloth / HF / axolotl adapt the experts -- "
+                           "no ratio is quoted across different adapter sets (TC2-PREREG-draft 'Arms per family')"}
+FOOTPRINT_FAMS = {"mixtral": "e4b under expert offload (--offload 1, tp2 / tp4's arm) vs Unsloth resident"}
+TC2_LABELLED = {("unsloth", "ckpt_unsloth_m_experts"): "unsloth with the family's own expert names as targets (tp4 amendment 4's second arm)",
+                ("hf", "hf_peft_m_t214"): "hf on torch 2.14 (venv-axolotl) with experts_implementation=grouped_mm (what dispatched is recorded)",
+                ("unsloth", "ckpt_unsloth_mxfp4"): "unsloth 16-bit load (load_in_4bit=False): the MXFP4 experts kept packed, grouped_mm"}
+ALL_LABELLED = {**LABELLED, **TC2_LABELLED}            # LABELLED stays TC1's registered set; reduce_family iterates the union
+EXPECTED["granite"] = [("e4b", "fused_attn4_m"), ("hf", "hf_peft_m"), ("e4b", "reference_attn4_m"), ("e4b", "fused_attn4_m_d2"), ("hf", "hf_peft_m_d2"),
+                       ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_experts"), ("hf", "hf_peft_m_t214"),
+                       ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("e4b", "fused_attn4_shipped")]
+EXPECTED["olmoe"] = [k for k in EXPECTED["granite"] if k != ("unsloth", "ckpt_unsloth_m_experts")]
+EXPECTED["gptoss"] = [("e4b", "fused_attn4_m"), ("e4b", "attn_only_m"), ("e4b", "attn_only_m_d2"), ("unsloth", "ckpt_unsloth_m"),
+                      ("unsloth", "ckpt_unsloth_mxfp4"), ("unsloth", "ckpt_unsloth_mxfp4_d2"), ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m"),
+                      ("e4b", "reference_attn4_m")]
+EXPECTED["qwen3_5"] = [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "fused_attn4_m_d2"), ("unsloth", "ckpt_unsloth_m_d2"),
+                       ("unsloth", "ckpt_unsloth_m_experts"), ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"),
+                       ("e4b", "fused_attn4_shipped"), ("e4b", "reference_attn4_m")]
+EXPECTED["mixtral"] = [k for k in EXPECTED["qwen3_5"] if k != ("unsloth", "ckpt_unsloth_m_experts")]
+MATCHED |= {"attn_only_m", "attn_only_m_d2", "ckpt_unsloth_m_experts", "ckpt_unsloth_mxfp4", "ckpt_unsloth_mxfp4_d2", "hf_peft_m_d2", "hf_peft_m_t214"}
+DRAW2.update({("e4b", "attn_only_m"): ("e4b", "attn_only_m_d2"), ("hf", "hf_peft_m"): ("hf", "hf_peft_m_d2"),
+              ("unsloth", "ckpt_unsloth_mxfp4"): ("unsloth", "ckpt_unsloth_mxfp4_d2")})   # registered per family through EXPECTED (registered_draw2)
+FAMS += TC2_FAMS
+UNSLOTH_BANNER = "Enabling LoRA on MoE parameters"
+UNSLOTH_BANNER_PER_EXPERT = "Detected MoE model with per-expert Linear experts"   # unsloth llama.py:3888-3896 (UPSTREAM-NOTES): gpt-oss's bnb-4bit class, per-expert Linear4bit
+# the draft's predictions (TC2-PREREG-draft "Predictions") and the lineage numbers they read against
+TC2_P1_HF_BAND = (1.1, 1.6)            # granite HF/e4b (tp4: 1.292, RESULTS-tp4-p46cut.md)
+TC2_P2_UNS_BAND = (1.2, 3.0)           # olmoe Unsloth/e4b if its arm engages
+TC2_P2_HF_BAND = (1.5, 2.5)            # olmoe HF/e4b (tp4: 1.945, quality FLAGGED 0.0550 there)
+TC2_P4_UNS_BAND = (2.0, 6.0)           # qwen3_5 Unsloth (explicit expert targets)/e4b if it engages the routed experts
+TP4_QWEN3_5_E4B_S_PER_STEP = 6.3344    # bench/tp4/RESULTS-tp4-p46cut.md (e4b fused_attn4 on Qwen3.6-35B-A3B, N 20; the draft rounds it to 6.33)
+TC2_P4_E4B_TOL = 0.15                  # P4's e4b leg: fused_m within 15 % of that
+TC2_P5_BAND = (0.3, 0.5)               # mixtral: the pair's s/step ratio in the lane's other/e4b convention, Unsloth(resident)/e4b(offload) -- tp2's 0.361 = 0.858 / 2.377 s
+TC2_P5_PEAK_X = 8.0                    # ... at a >= 8x lower e4b peak
+TP2_MIXTRAL = {"ratio_unsloth_over_e4b": 0.361, "peak_unsloth_gb": 29.16, "peak_e4b_gb": 3.22}   # bench/h2h-20260906/tp2/RESULTS-tp2.md:84 (the draft's 3.2 / 29.2 GB)
+
+
+def anchor_of(fam):
+    """R11: the family's e4b anchor arm -- fused_attn4_m everywhere but gpt-oss, where e4b trains attention only (attn_only_m)."""
+    return TC2_ANCHOR.get(fam, QUALITY_ANCHOR)
+
+
+def registered_draw2(fam, key):
+    """R11: the second-draw key of `key` when the family REGISTERS it (in EXPECTED), else None -- DRAW2 is global, the registration per family."""
+    k2 = DRAW2.get(key)
+    return k2 if (k2 is not None and k2 in EXPECTED.get(fam, EXPECTED["qwen3"])) else None
+
+
+def unsloth_regime(r):
+    """R11: which Unsloth expert regime a receipt describes -- `packed` (load_in_4bit=False: the checkpoint's packed expert format kept,
+    gpt-oss MXFP4), `per-expert-linear4bit` (no Params4bit stacks but Params4bit under the experts container: gpt-oss's bnb-4bit
+    GptOssExpertsBnb4bit), else `bnb-stacks` (TC1's regime: Params4bit on the fused 3-D stacks)."""
+    c = r.get("census") or {}
+    if r.get("unsloth_load_in_4bit") is False:
+        return "packed"
+    if (c.get("Params4bit_expert_stacks") or 0) == 0 and (c.get("Params4bit_expert_linears") or 0) > 0:
+        return "per-expert-linear4bit"
+    return "bnb-stacks"
+
+
+def packed_expert_params(r):
+    """R11: (count of expert parameters in a class other than a plain Parameter, {class: count}) from the census -- the packed stacks."""
+    epc = (r.get("census") or {}).get("expert_param_classes") or {}
+    return sum(v for k, v in epc.items() if k != "Parameter"), epc
+
+
+def hf_dispatch_note(r):
+    """R11: what the HF arm's experts implementation DISPATCHED (recorded, never a validity predicate): config._experts_implementation and
+    the torch grouped_mm counters per step; None when the receipt carries no dispatch record (TC1's HF rows)."""
+    d = r.get("hf_experts_dispatch")
+    if not isinstance(d, dict):
+        return None
+    reached = d.get("reached_grouped_mm")
+    return (f"experts_implementation requested {d.get('requested')!r}, accepted {d.get('accepted')!r}, config {d.get('config')!r}; torch grouped_mm calls/step min "
+            f"{d.get('torch_grouped_mm_calls_per_step_min')} (F.grouped_mm {d.get('torch_F_grouped_mm_calls_per_step_min')}): dispatch "
+            + ("REACHED grouped_mm" if reached else "did NOT reach grouped_mm (recorded, not VOID)"))
+
+
+def hf_label(fam, r):
+    """R11: the HF position's label -- "HF (bf16 experts)" or "HF (4-bit experts)" from the arm's own regime."""
+    reg = regime_of(fam, r) or ""
+    return "HF (bf16 experts)" if "bf16 experts" in reg else ("HF (4-bit experts)" if "4-bit expert" in reg else "HF")
+
 
 # ----------------------------------------------------------------------------- inputs
 def load(d):
@@ -255,11 +372,24 @@ def regime_of(fam, r):
     L = N_LAYERS.get(fam) or r.get("n_layers") or 0
     c = r.get("census", {}) or {}
     if r.get("framework") == "e4b":
-        return "4-bit experts (e4b NF4) + " + ("NF4 attention" if r.get("attn_4bit") else "bf16 attention")
+        return "4-bit experts (e4b NF4) + " + ("NF4 attention" if r.get("attn_4bit") else "bf16 attention") + (" (attention-only adapters)" if r.get("arm") == "attn_only" else "")
     stacks = c.get("Params4bit_expert_stacks", 0) or 0
     attn4 = c.get("Linear4bit", 0) or 0
+    if r.get("framework") == "unsloth":                                   # R11: the regimes beyond bnb stacks
+        reg = unsloth_regime(r)
+        if reg == "packed":
+            n, epc = packed_expert_params(r)
+            return (f"packed experts in the checkpoint's own format ({', '.join(f'{k} x{v}' for k, v in epc.items()) or 'no expert parameter class recorded'}; load_in_4bit=False) + "
+                    f"{'bnb-4bit' if attn4 else 'bf16'} attention; backend selected {r.get('moe_backend_selected')}")
+        if reg == "per-expert-linear4bit":
+            return (f"per-expert Linear4bit experts ({c.get('Params4bit_expert_linears')} Params4bit under the experts container, no fused stack: the per-expert LoRA loop) + "
+                    f"{'bnb-4bit' if attn4 else 'bf16'} attention (Linear4bit {attn4})")
     exp = "4-bit expert stacks" if L and stacks >= 2 * L else ("PARTIAL 4-bit experts" if stacks else "bf16 experts (NOT the 4-bit MoE regime)")
-    return f"{exp} + {'bnb-4bit' if attn4 else 'bf16'} attention (Params4bit stacks {stacks}, Linear4bit {attn4})"
+    out = f"{exp} + {'bnb-4bit' if attn4 else 'bf16'} attention (Params4bit stacks {stacks}, Linear4bit {attn4})"
+    d = r.get("hf_experts_dispatch")
+    if isinstance(d, dict):                                                # R11: the HF arm's dispatch rides on its regime label
+        out += f"; experts_implementation {d.get('config')!r}, torch grouped_mm {d.get('torch_grouped_mm_calls_per_step_min')}/step ({'reached' if d.get('reached_grouped_mm') else 'NOT reached'})"
+    return out
 
 
 def matched_seed_of(r):
@@ -274,19 +404,28 @@ def step0_class(d):
     return "SAME-BYTES-CLASS" if d <= STEP0_SAME else ("NEAR" if d <= STEP0_VOID else "VOID")
 
 
-def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step0=None, anchor_seed=None, is_ref=False, anchor_sha=None):
-    """tp4's validity rules for an OK row (+ R3 for a registered matched arm, + R9) -> (VALID|VOID, why). The n_layers table is
-    the registered one; accum-aware (a kernel call per micro-batch per layer)."""
+def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step0=None, anchor_seed=None, is_ref=False, anchor_sha=None, common_set=True):
+    """tp4's validity rules for an OK row (+ R3 for a registered matched arm, + R9, + R11) -> (VALID|VOID, why). The n_layers table is
+    the registered one; accum-aware (a kernel call per micro-batch per layer). `common_set=False` (gpt-oss): the trainable-count and
+    harness-mismatch predicates against e4b do not apply -- the family has no common adapter set by registration."""
     if r is None or not is_ok(r):
         return "—", ""
     L = N_LAYERS.get(fam)
     A = int(r.get("accum") or 1)
+    fw = r.get("framework")
     why = []
     if L is None:
         why.append(f"no registered n_layers for family {fam}")
         L = r.get("n_layers") or 0
     elif r.get("n_layers") not in (None, L):
         why.append(f"config n_layers {r.get('n_layers')} != registered {L}")
+    want_census = ATTN_CENSUS.get(fam)                                   # R11: the registered structural attention census
+    if want_census is not None and r.get("structural_expected_n_attn4") not in (None, want_census):
+        why.append(f"structural attention census {r.get('structural_expected_n_attn4')} != registered {want_census}")
+    if fam in TC2_MODELS:                                                # R11: the pin
+        mid, rev, _ = TC2_MODELS[fam]
+        if r.get("model") not in (None, mid) or r.get("revision") not in (None, rev):
+            why.append(f"model/revision {r.get('model')} @ {str(r.get('revision'))[:12]} != the registered pin {mid} @ {rev[:12]}")
     if not c1_ok(r) or r.get("status") == "c1_failed":
         why.append("C1 not clean" if r.get("status") != "c1_failed" else "C1 FAILED (the arm's own status)")
         if not r.get("C1_control_tensor"):
@@ -295,13 +434,17 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         why.append(f"step count {len(r.get('losses', []))}/{r.get('steps')} != N={n_steps or r.get('steps')}")
     if tokens_sha and r.get("tokens", {}).get("sha256") != tokens_sha:
         why.append("tokens sha differs from the family's")
-    if e4b_trainable is not None and r.get("trainable_params") != e4b_trainable:
+    if not common_set:
+        pass                                                             # R11: no common adapter set with e4b on this family (recorded on the row, never a VOID)
+    elif e4b_trainable is not None and r.get("trainable_params") != e4b_trainable:
         g = r.get("trainable_by_group") or {}
-        why.append(f"trainable {r.get('trainable_params')} != e4b's {e4b_trainable} (by group: {g})")
+        if fw != "e4b" and g.get("experts") == 0:                        # R11: the arm adapted no expert parameter -- attention only, as tp4 read Granite / Qwen3.6
+            why.append(f"attention-only: trainable {r.get('trainable_params')} != e4b's {e4b_trainable} ({fw} adapted no expert parameter; by group: {g})")
+        else:
+            why.append(f"trainable {r.get('trainable_params')} != e4b's {e4b_trainable} (by group: {g})")
     elif r.get("trainable_mismatch"):
         tm = r["trainable_mismatch"]
         why.append(f"harness recorded a trainable mismatch: expected {tm.get('expected')} got {tm.get('got')} (by group: {tm.get('by_group')})")
-    fw = r.get("framework")
     if fw == "e4b":
         if r.get("arm") == "fused":
             if r.get("n_patched") != L:
@@ -319,6 +462,31 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
                 want = 4 * L
             if r.get("n_attn4") != want:
                 why.append(f"n_attn4 {r.get('n_attn4')} != {want} ({'structural census' if r.get('structural_expected_n_attn4') is not None else '4*L'})")
+    elif fw == "unsloth" and unsloth_regime(r) == "packed":              # R11: the 16-bit load, experts kept in the checkpoint's packed format (gpt-oss MXFP4)
+        n_packed, epc = packed_expert_params(r)
+        if n_packed < 2 * L:
+            why.append(f"packed expert parameters {n_packed} < 2*{L} (expert parameter classes {epc}): the experts are not packed")
+        if r.get("experts_forward_calls_per_step_min", 0) < L * A:
+            why.append(f"experts forward calls/step min {r.get('experts_forward_calls_per_step_min')} < {L}*accum {A}")
+        if not any(UNSLOTH_BANNER in s for s in r.get("engagement_banners", []) or []):
+            why.append(f"no '{UNSLOTH_BANNER}' banner")
+        if r.get("moe_backend_selected") != "grouped_mm":
+            why.append(f"moe_backend_selected {r.get('moe_backend_selected')!r} != grouped_mm (the packed MXFP4 path's own condition, mxfp4.py:141-164 per UPSTREAM-NOTES)")
+        key, pk = "unsloth_mxfp4_grouped_mm", r.get("unsloth_packed_calls_per_step_min")
+        absent = [s for s in (r.get("unsloth_backend_absent") or []) if "Mxfp4GroupedMM" in s]
+        if absent or not isinstance(pk, dict) or key not in pk:
+            why.append(f"the MXFP4 grouped GEMM entry point (unsloth_zoo.mxfp4_gemm.Mxfp4GroupedMM.apply) was not counted on this box ({absent or 'no packed counters on the receipt'}): the packed path cannot be verified")
+        elif pk.get(key, 0) < L * A:
+            why.append(f"MXFP4 grouped GEMM engaged {pk.get(key, 0)} < {L}*accum {A} per step")
+    elif fw == "unsloth" and unsloth_regime(r) == "per-expert-linear4bit":   # R11: gpt-oss's bnb-4bit load -- per-expert Linear4bit, the per-expert LoRA loop (gpt_oss.py:1214-1300)
+        c = r.get("census", {}) or {}
+        if c.get("Params4bit_expert_linears", 0) < 2 * L:
+            why.append(f"Params4bit under the experts container {c.get('Params4bit_expert_linears')} < 2*{L}")
+        if r.get("experts_forward_calls_per_step_min", 0) < L * A:
+            why.append(f"experts forward calls/step min {r.get('experts_forward_calls_per_step_min')} < {L}*accum {A}")
+        if not any((UNSLOTH_BANNER in s) or (UNSLOTH_BANNER_PER_EXPERT in s) for s in r.get("engagement_banners", []) or []):
+            why.append(f"neither the '{UNSLOTH_BANNER}' nor the '{UNSLOTH_BANNER_PER_EXPERT}' banner")
+        # the backend request is recorded, not required: LoRA-wrapped 4-bit experts take the per-expert loop on this class (UPSTREAM-NOTES)
     elif fw == "unsloth":
         c = r.get("census", {}) or {}
         if c.get("Params4bit_expert_stacks", 0) < 2 * L:
@@ -578,11 +746,56 @@ def frozen_base(anchor, r):
     return out
 
 
+# ----------------------------------------------------------------------------- R11: the no-common-set line (gpt-oss) and the footprint line (mixtral)
+def no_common_set_reading(fam, e_d, o_d, e_rec, o_rec, key):
+    """R11: the line that REPLACES a position on a family with no common adapter set: both s/step values (quoted draws only), both peaks,
+    both trainable counts and each side's state -- never a ratio."""
+    def _state(d):
+        return f"{d.get('draws')} draw(s), {d.get('verdict')}" if d.get("usable") else (d.get("why") or d.get("verdict") or "no receipt")
+    return {"quoted": False, "no_common_set": True, "label": f"{key[0]}/{key[1]}", "e4b_label": f"e4b/{anchor_of(fam)[1]}",
+            "e4b_s": e_d.get("s") if e_d.get("usable") else None, "other_s": o_d.get("s") if o_d.get("usable") else None,
+            "e4b_peak": e_d.get("peak") if e_d.get("usable") else None, "other_peak": o_d.get("peak") if o_d.get("usable") else None,
+            "e4b_trainable": (e_rec or {}).get("trainable_params") if is_ok(e_rec) else None,
+            "other_trainable": (o_rec or {}).get("trainable_params") if is_ok(o_rec) else None,
+            "e4b_state": _state(e_d), "other_state": _state(o_d), "why": NO_COMMON_SET[fam]}
+
+
+def footprint(fam, recs, draws, verdicts):
+    """R11: mixtral's footprint reading -- e4b under expert offload vs Unsloth resident: peak VRAM (GB) and s/step from the quoted draws when
+    usable, else from the single OK receipt with its verdict named (a measurement, never a position)."""
+    out = {"fam": fam, "label": FOOTPRINT_FAMS.get(fam, "e4b (offload) vs Unsloth (resident)"), "sides": {}}
+    for side, key in (("e4b", ("e4b", PRIMARY["e4b"])), ("unsloth", ("unsloth", PRIMARY["unsloth"]))):
+        d, r = draws.get(key, {}), recs.get(key)
+        if d.get("usable"):
+            out["sides"][side] = {"peak": d["peak"], "s": d["s"], "draws": d["draws"], "basis": f"quoted draws ({d['verdict']})", "offload": bool((r or {}).get("offload"))}
+        elif is_ok(r) and r.get("peak_vram_gb") is not None:
+            out["sides"][side] = {"peak": r.get("peak_vram_gb"), "s": r.get("s_per_step_median_11plus"), "draws": 1,
+                                  "basis": f"single receipt, verdict {verdicts.get(key)} (not a quoted draw)", "offload": bool(r.get("offload"))}
+        else:
+            out["sides"][side] = {"peak": None, "s": None, "draws": 0, "basis": f"{verdicts.get(key, 'missing')}: no peak to read", "offload": None}
+    e, u = out["sides"]["e4b"], out["sides"]["unsloth"]
+    out["peak_ratio"] = ratio(u.get("peak"), e.get("peak")) if (e.get("peak") and u.get("peak")) else None
+    out["s_ratio_e4b_over_unsloth"] = ratio(e.get("s"), u.get("s")) if (e.get("s") and u.get("s")) else None
+    out["readable"] = out["peak_ratio"] is not None
+    return out
+
+
+def footprint_line(fp):
+    e, u = fp["sides"]["e4b"], fp["sides"]["unsloth"]
+    if fp["readable"]:
+        return (f"- **FOOTPRINT ({fp['label']}): e4b `fused_attn4_m` peak VRAM {e['peak']:.2f} GB{' under expert offload' if e.get('offload') else ''} vs Unsloth `ckpt_unsloth_m` "
+                f"{u['peak']:.2f} GB resident (×{fp['peak_ratio']:.2f} lower on e4b); s/step e4b {f(e['s'])} vs Unsloth {f(u['s'])} (e4b/Unsloth {f(fp['s_ratio_e4b_over_unsloth'])})** "
+                f"— e4b: {e['basis']}; Unsloth: {u['basis']}")
+    return f"- **FOOTPRINT ({fp['label']}): not readable** — e4b: {e['basis']}; Unsloth: {u['basis']}"
+
+
 # ----------------------------------------------------------------------------- the per-family reduction (one dict; the printer and the tests read it)
 def reduce_family(fam, recs, rcs_all, n_steps=None):
     exp = list(EXPECTED.get(fam, EXPECTED["qwen3"]))
     keys = exp + [k for k in recs if k not in exp]
-    e_anchor = recs.get(QUALITY_ANCHOR)
+    qa = anchor_of(fam)                              # R11: the family's e4b anchor arm (attn_only_m on gpt-oss)
+    common = fam not in NO_COMMON_SET                # R11: gpt-oss -- no framework shares e4b's adapter set
+    e_anchor = recs.get(qa)
     e4b_trainable = e_anchor.get("trainable_params") if is_ok(e_anchor) else None
     if e4b_trainable is None:                        # fall back to the e4b reference arm (same recipe, same adapter set)
         rr = recs.get(EQUIV_ANCHOR)
@@ -595,10 +808,11 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
             return r.get("trainable_params") if is_ok(r) else None
         return e4b_trainable
     tokens_sha = next((r["tokens"]["sha256"] for k in keys if (r := recs.get(k)) and r.get("tokens", {}).get("sha256")), None)
-    N = n_steps or next((r.get("steps") for r in recs.values() if r and r.get("steps")), None)
+    N = n_steps or next((r.get("steps") for r in recs.values() if is_ok(r) and r.get("steps")), None) \
+        or next((r.get("steps") for r in recs.values() if r and r.get("steps")), None)      # R11: an OK receipt's N before a stub's
     ref = recs.get(REFERENCE)
     anchor = e_anchor if is_ok(e_anchor) else (ref if is_ok(ref) else None)          # I: fused_m, else the reference as a stand-in
-    anchor_key = QUALITY_ANCHOR if is_ok(e_anchor) else (REFERENCE if is_ok(ref) else None)
+    anchor_key = qa if is_ok(e_anchor) else (REFERENCE if is_ok(ref) else None)
     ref_step0 = anchor.get("eval_loss_step0") if anchor else None
     anchor_seed = matched_seed_of(anchor) if anchor else None
     anchor_sha = (anchor.get("matched_init_sha") or None) if (anchor and matched_seed_of(anchor) is not None) else None   # B
@@ -606,24 +820,32 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
     for fw, tag in keys:
         r = recs.get((fw, tag))
         st, reason = status_of(r, rcs_all.get((fam, fw, tag)))
-        v, why = validity(fam, r, tokens_sha, trainable_ref(tag) if fw != "e4b" else None, N,
-                          matched=(tag in MATCHED), ref_step0=ref_step0, anchor_seed=anchor_seed, is_ref=((fw, tag) == anchor_key), anchor_sha=anchor_sha)
+        own_set = common or fw == "e4b"              # R11: on gpt-oss only e4b's own arms are read against the e4b anchor's count / sha
+        v, why = validity(fam, r, tokens_sha, trainable_ref(tag) if (fw != "e4b" and common) else None, N,
+                          matched=(tag in MATCHED), ref_step0=ref_step0, anchor_seed=anchor_seed, is_ref=((fw, tag) == anchor_key),
+                          anchor_sha=(anchor_sha if own_set else None), common_set=own_set)
         d0 = abs(r["eval_loss_step0"] - ref_step0) if (is_ok(r) and tag in MATCHED and ref_step0 is not None and r.get("eval_loss_step0") is not None) else None
         rows.append({"fw": fw, "tag": tag, "status": st, "reason": reason, "validity": v, "why": why, "r": r,
                      "regime": regime_of(fam, r) if (r and st == "OK") else None, "matched": tag in MATCHED,
-                     "step0_delta": d0, "step0_class": step0_class(d0)})
+                     "step0_delta": d0, "step0_class": step0_class(d0),
+                     "dispatch": hf_dispatch_note(r) if (fw == "hf" and is_ok(r)) else None,                        # R11: recorded, never VOID
+                     "no_common_set": (f"no common adapter set with e4b: trainable {r.get('trainable_params')} vs e4b's {e4b_trainable} -- {NO_COMMON_SET[fam]}"
+                                       if (not own_set and is_ok(r)) else None)})
         V[(fw, tag)] = v
     # R2: quality against the anchor (read only when the anchor is VALID by predicates), then the verdict
-    anchor_ok = is_ok(e_anchor) and V.get(QUALITY_ANCHOR) == "VALID"
+    anchor_ok = is_ok(e_anchor) and V.get(qa) == "VALID"
     ha = heldout_at_N(e_anchor) if anchor_ok else None
     verdicts = {}
     for x in rows:
         r = x["r"]
         q = None
-        if x["status"] == "OK" and ha is not None and heldout_at_N(r) is not None:
+        if x["status"] == "OK" and ha is not None and heldout_at_N(r) is not None and (common or x["fw"] == "e4b"):
             q = heldout_at_N(r) - ha
         x["quality_delta"] = q
-        x["quality"] = ("COMPARABLE" if abs(q) <= READ else "FLAGGED") if q is not None else ("N-A (anchor " + ("VOID" if is_ok(e_anchor) else "missing") + ")" if x["status"] == "OK" else None)
+        if x["status"] == "OK" and not common and x["fw"] != "e4b":
+            x["quality"] = "N-A (no common adapter set)"                 # R11: a different adapter set's held-out is not a quality reading against e4b
+        else:
+            x["quality"] = ("COMPARABLE" if abs(q) <= READ else "FLAGGED") if q is not None else ("N-A (anchor " + ("VOID" if is_ok(e_anchor) else "missing") + ")" if x["status"] == "OK" else None)
         x["verdict"] = verdict_of(x["status"], x["validity"], q)
         assert x["verdict"] in VERDICTS
         verdicts[(x["fw"], x["tag"])] = x["verdict"]
@@ -642,22 +864,30 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
     par["equiv_band"] = band
     # R1 draws per arm, then the positions
     draws = {k: draws_of(recs, verdicts, k, expected=exp) for k in keys if k not in DRAW2.values()}
-    e_d = draws.get(QUALITY_ANCHOR, {"usable": False, "why": "no e4b/fused_attn4_m"})
+    e_d = draws.get(qa, {"usable": False, "why": f"no e4b/{qa[1]}"})
     positions = {}
-    for other in ("unsloth", "hf", "axolotl"):
-        k = (other, PRIMARY[other])
-        positions[other] = position(e_d, draws.get(k, {"usable": False, "why": "no receipt"}), other)
-        if positions[other].get("quoted"):
-            positions[other]["other_regime"] = regime_of(fam, recs[k])
+    if common:
+        for other in ("unsloth", "hf", "axolotl"):
+            k = (other, PRIMARY[other])
+            label = other
+            if other == "hf" and fam in TC2_FAMS and is_ok(recs.get(k)):   # R11: "HF (bf16 experts) / e4b" (or 4-bit), the regime beside it
+                label = hf_label(fam, recs[k])
+            positions[other] = position(e_d, draws.get(k, {"usable": False, "why": "no receipt"}), label)
+            if positions[other].get("quoted"):
+                positions[other]["other_regime"] = regime_of(fam, recs[k])
+    else:                                                                   # R11: gpt-oss -- the no-common-set line replaces every position
+        for name, k in (("unsloth", ("unsloth", PRIMARY["unsloth"])), ("unsloth_mxfp4", ("unsloth", "ckpt_unsloth_mxfp4")),
+                        ("hf", ("hf", PRIMARY["hf"])), ("axolotl", ("axolotl", PRIMARY["axolotl"]))):
+            positions[name] = no_common_set_reading(fam, e_d, draws.get(k, {"usable": False, "why": "no receipt"}), e_anchor, recs.get(k), k)
     secondary = {}
     e2 = draws.get(("e4b", SECONDARY["e4b"]))
     for other in ("unsloth", "hf", "axolotl"):
         k2 = (other, SECONDARY[other])
         if e2 or recs.get(k2):
             secondary[other] = position(e2 or {"usable": False, "why": "no receipt"}, draws.get(k2, {"usable": False, "why": "no receipt"}), other + " (mb1)")
-    labelled = {}                                       # R8: labelled rows against e4b/fused_attn4_m
-    for k, label in LABELLED.items():
-        if recs.get(k) is not None:
+    labelled = {}                                       # R8: labelled rows against e4b/fused_attn4_m (R11: none on a family with no common adapter set)
+    for k, label in ALL_LABELLED.items():
+        if recs.get(k) is not None and common:
             labelled[k] = position(e_d, draws.get(k, {"usable": False, "why": "no receipt"}), label)
             if labelled[k].get("quoted"):
                 labelled[k]["other_regime"] = regime_of(fam, recs[k])
@@ -676,19 +906,23 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
     # R4/I: equivalence of every matched arm against e4b/fused_attn4_m (the fused-vs-reference pair rides along as the control); R5: frozen base
     equiv = {}
     for fw, tag in keys:
-        if tag in MATCHED and (fw, tag) != EQUIV_ANCHOR and recs.get((fw, tag)) is not None:
-            equiv[(fw, tag)] = equivalence(e_anchor, recs[(fw, tag)], V.get(EQUIV_ANCHOR), V.get((fw, tag)), band=band, noise_floor=noise_floor)
+        if tag in MATCHED and (fw, tag) != qa and recs.get((fw, tag)) is not None:
+            if not common and fw != "e4b":                                  # R11: a different adapter set has no equivalence reading against e4b
+                equiv[(fw, tag)] = {"reading": "N-A", "why": "no common adapter set with e4b (gpt-oss: e4b attention-only vs this arm's experts); not an equivalence reading"}
+            else:
+                equiv[(fw, tag)] = equivalence(e_anchor, recs[(fw, tag)], V.get(qa), V.get((fw, tag)), band=band, noise_floor=noise_floor)
     frozen = {}
     for fw, tag in keys:
         r = recs.get((fw, tag))
-        if is_ok(r) and (fw, tag) != QUALITY_ANCHOR:
+        if is_ok(r) and (fw, tag) != qa:
             frozen[(fw, tag)] = frozen_base(e_anchor if is_ok(e_anchor) else None, r)
     anchor_probe = ((e_anchor or {}).get("frozen_base_probe") or {}) if is_ok(e_anchor) else {}
     prof = recs.get(PROF)
     profile = (prof.get("profile") or None) if is_ok(prof) else None
+    fp = footprint(fam, recs, draws, verdicts) if (fam in FOOTPRINT_FAMS or (is_ok(e_anchor) and e_anchor.get("offload"))) else None   # R11
     return {"fam": fam, "rows": rows, "V": V, "verdicts": verdicts, "parity": par, "draws": draws, "positions": positions, "secondary": secondary,
             "native": native, "labelled": labelled, "equivalence": equiv, "frozen": frozen, "anchor_probe": anchor_probe, "profile": profile,
-            "noise_floor": noise_floor, "equiv_band": band, "anchor_sha": anchor_sha,
+            "noise_floor": noise_floor, "equiv_band": band, "anchor_sha": anchor_sha, "footprint": fp, "common_set": common, "anchor_key": qa,
             "prof_knobs": (prof.get("unsloth_knobs") or {}) if is_ok(prof) else {},
             "tokens_sha": tokens_sha, "e4b_trainable": e4b_trainable, "N": N, "e": e_anchor, "ref": ref,
             "u": recs.get(("unsloth", PRIMARY["unsloth"])), "h": recs.get(("hf", PRIMARY["hf"])), "ax": recs.get(("axolotl", PRIMARY["axolotl"]))}
@@ -822,6 +1056,184 @@ def score_predictions(F):
             out.append(("P10", "qwen3", "HELD" if held else "FALSIFIED", f"C1 bit-exact on every OK arm; expert slots e4b vs unsloth {ex}; attention {at} ({fb['q_proj'].get('why') or fb['q_proj'].get('regime')})"))
     return out
 
+
+
+# ----------------------------------------------------------------------------- R11: the TC2 predictions (TC2-PREREG-draft "Predictions"), scored mechanically
+def _in(x, band):
+    return x is not None and band[0] <= x <= band[1]
+
+
+def _row(R, fw, tag):
+    return next((x for x in R["rows"] if (x["fw"], x["tag"]) == (fw, tag)), None)
+
+
+def _attention_only(R, fw, tag):
+    """An Unsloth arm that adapted attention only: VOID with the attention-only reason, or OK with experts 0 in its trainable groups."""
+    x = _row(R, fw, tag)
+    if x is None:
+        return False
+    g = ((x["r"] or {}).get("trainable_by_group") or {})
+    return (x["verdict"] == "VOID" and "attention-only" in (x["why"] or "")) or (x["status"] == "OK" and g.get("experts") == 0)
+
+
+def score_tc2_predictions(F):
+    out = []
+    G, OL, GO, Q, MX = (F.get(fam) for fam in TC2_FAMS)
+
+    def vof(R, fw, tag):
+        return R["verdicts"].get((fw, tag), "missing") if R else "missing"
+    # P1 granite: Unsloth adapts attention only on both target lists -> UNSUPPORTED for the 4-bit MoE regime; HF/e4b in [1.1, 1.6]; axolotl ~ HF or UNSUPPORTED (no band in the draft: printed, not scored)
+    if not G:
+        out.append(("P1", "granite", "UNTESTED", "no receipts"))
+    else:
+        legs, bad, untested = [], [], []
+        for tag in ("ckpt_unsloth_m", "ckpt_unsloth_m_experts"):
+            v = vof(G, "unsloth", tag)
+            if v in ("UNSUPPORTED", "OOM") or _attention_only(G, "unsloth", tag):
+                legs.append(f"unsloth/{tag} {v}" + (" attention-only" if _attention_only(G, "unsloth", tag) else ""))
+            elif v in ("VALID", "QUALITY_FAIL", "VOID"):
+                bad.append(f"unsloth/{tag} {v} and NOT attention-only (it adapted expert parameters)")
+            else:
+                untested.append(f"unsloth/{tag} {v}")
+        ph = G["positions"].get("hf", {})
+        if ph.get("quoted"):
+            legs.append(f"HF/e4b {ph['ratio']:.3f} vs {TC2_P1_HF_BAND}")
+            if not _in(ph["ratio"], TC2_P1_HF_BAND):
+                bad.append(f"HF/e4b {ph['ratio']:.3f} outside {TC2_P1_HF_BAND}")
+        else:
+            untested.append("HF position not quoted: " + ph.get("why", "no pair"))
+        pa = G["positions"].get("axolotl", {})
+        ax = f"axolotl/e4b {pa['ratio']:.3f} (vs HF, unscored: the draft gives no band for ~)" if pa.get("quoted") else f"axolotl {vof(G, 'axolotl', 'ckpt_axolotl_m')}"
+        out.append(("P1", "granite", "FALSIFIED" if bad else ("UNTESTED" if untested else "HELD"), "; ".join(legs + bad + untested) + "; " + ax))
+    # P2 olmoe: Unsloth engages (ratio in [1.2, 3]) or dies again (HARNESS_ERROR / UNSUPPORTED); HF/e4b in [1.5, 2.5] and COMPARABLE
+    if not OL:
+        out.append(("P2", "olmoe", "UNTESTED", "no receipts"))
+    else:
+        legs, bad, untested = [], [], []
+        pu, vu = OL["positions"].get("unsloth", {}), vof(OL, "unsloth", "ckpt_unsloth_m")
+        if pu.get("quoted"):
+            legs.append(f"Unsloth engaged: unsloth/e4b {pu['ratio']:.3f} vs {TC2_P2_UNS_BAND}")
+            if not _in(pu["ratio"], TC2_P2_UNS_BAND):
+                bad.append(f"unsloth/e4b {pu['ratio']:.3f} outside {TC2_P2_UNS_BAND}")
+        elif vu in ("UNSUPPORTED", "HARNESS_ERROR"):
+            legs.append(f"Unsloth died again: {vu}")
+        elif vu in ("VALID", "QUALITY_FAIL", "VOID", "OOM"):
+            bad.append(f"unsloth/ckpt_unsloth_m {vu} but no quoted position: " + pu.get("why", ""))
+        else:
+            untested.append(f"unsloth/ckpt_unsloth_m {vu}")
+        ph = OL["positions"].get("hf", {})
+        if ph.get("quoted"):
+            legs.append(f"HF/e4b {ph['ratio']:.3f} vs {TC2_P2_HF_BAND}, quality {ph.get('quality')}")
+            if not _in(ph["ratio"], TC2_P2_HF_BAND) or ph.get("quality") != "COMPARABLE":
+                bad.append(f"HF leg: ratio {ph['ratio']:.3f} / quality {ph.get('quality')} (COMPARABLE within {TC2_P2_HF_BAND} predicted)")
+        else:
+            untested.append("HF position not quoted: " + ph.get("why", "no pair"))
+        out.append(("P2", "olmoe", "FALSIFIED" if bad else ("UNTESTED" if untested else "HELD"), "; ".join(legs + bad + untested)))
+    # P3 gptoss: Unsloth's packed-MXFP4 arm trains the experts (VALID, packed class recorded); e4b attn-only VALID; both s/step reported, never a ratio
+    if not GO:
+        out.append(("P3", "gptoss", "UNTESTED", "no receipts"))
+    else:
+        vm, va = vof(GO, "unsloth", "ckpt_unsloth_mxfp4"), vof(GO, "e4b", "attn_only_m")
+        xm = _row(GO, "unsloth", "ckpt_unsloth_mxfp4")
+        n_packed, epc = packed_expert_params((xm or {}).get("r") or {}) if xm else (0, {})
+        line = GO["positions"].get("unsloth_mxfp4", {})
+        if vm == "VALID" and va == "VALID":
+            out.append(("P3", "gptoss", "HELD", f"unsloth/ckpt_unsloth_mxfp4 VALID with packed expert parameters {epc}; e4b/attn_only_m VALID; "
+                        f"reported without a ratio: e4b {f(line.get('e4b_s'))} s/step ({line.get('e4b_trainable')} trainable) vs Unsloth packed {f(line.get('other_s'))} s/step ({line.get('other_trainable')} trainable)"))
+        elif vm in ("UNSUPPORTED", "OOM", "VOID", "QUALITY_FAIL"):
+            out.append(("P3", "gptoss", "FALSIFIED", f"unsloth/ckpt_unsloth_mxfp4 {vm}: " + ((xm["why"] or xm["reason"]) if xm else "") + f"; e4b/attn_only_m {va}"))
+        else:
+            out.append(("P3", "gptoss", "UNTESTED", f"unsloth/ckpt_unsloth_mxfp4 {vm}, e4b/attn_only_m {va}"))
+    # P4 qwen3_5: Unsloth with explicit expert names engages the routed experts (ratio in [2, 6]) or VOIDs on trainable count again; HF OOM; e4b fused_m within 15 % of tp4's 6.3344
+    if not Q:
+        out.append(("P4", "qwen3_5", "UNTESTED", "no receipts"))
+    else:
+        legs, bad, untested = [], [], []
+        k = ("unsloth", "ckpt_unsloth_m_experts")
+        lp, vx = Q["labelled"].get(k, {}), vof(Q, *k)
+        if lp.get("quoted"):
+            legs.append(f"Unsloth (explicit expert targets) engaged: unsloth/e4b {lp['ratio']:.3f} vs {TC2_P4_UNS_BAND}")
+            if not _in(lp["ratio"], TC2_P4_UNS_BAND):
+                bad.append(f"ratio {lp['ratio']:.3f} outside {TC2_P4_UNS_BAND}")
+        elif vx == "VOID" and "trainable" in (_row(Q, *k) or {}).get("why", ""):
+            legs.append(f"unsloth/ckpt_unsloth_m_experts VOID on trainable count again: {_row(Q, *k)['why'][:120]}")
+        elif vx in ("VALID", "QUALITY_FAIL", "UNSUPPORTED", "OOM", "VOID"):
+            bad.append(f"unsloth/ckpt_unsloth_m_experts {vx} (neither an engaged ratio nor a trainable-count VOID): " + (lp.get("why") or (_row(Q, *k) or {}).get("why") or ""))
+        else:
+            untested.append(f"unsloth/ckpt_unsloth_m_experts {vx}")
+        vh = vof(Q, "hf", "hf_peft_m")
+        if vh == "OOM":
+            legs.append("HF OOM")
+        elif vh in ("VALID", "QUALITY_FAIL", "VOID", "UNSUPPORTED"):
+            bad.append(f"hf/hf_peft_m {vh} (OOM predicted)")
+        else:
+            untested.append(f"hf/hf_peft_m {vh}")
+        de = Q["draws"].get(QUALITY_ANCHOR, {})
+        if de.get("usable"):
+            dev = de["s"] / TP4_QWEN3_5_E4B_S_PER_STEP - 1
+            legs.append(f"e4b fused_m {de['s']:.3f} s/step vs tp4's {TP4_QWEN3_5_E4B_S_PER_STEP} ({dev:+.1%}; within {TC2_P4_E4B_TOL:.0%} predicted)")
+            if abs(dev) > TC2_P4_E4B_TOL:
+                bad.append(f"e4b fused_m {dev:+.1%} from tp4's {TP4_QWEN3_5_E4B_S_PER_STEP}")
+        else:
+            untested.append("e4b fused_m not usable: " + de.get("why", "no receipt"))
+        out.append(("P4", "qwen3_5", "FALSIFIED" if bad else ("UNTESTED" if untested else "HELD"), "; ".join(legs + bad + untested)))
+    # P5 mixtral: e4b (offload) / Unsloth (resident) in [0.3, 0.5] (tp2 0.361) at a >= 8x lower e4b peak; HF and axolotl OOM resident
+    if not MX:
+        out.append(("P5", "mixtral", "UNTESTED", "no receipts"))
+    else:
+        legs, bad, untested = [], [], []
+        pu, fp = MX["positions"].get("unsloth", {}), MX.get("footprint") or {}
+        if pu.get("quoted"):
+            px = ratio(pu.get("peak_other"), pu.get("peak_e4b"))
+            legs.append(f"Unsloth(resident)/e4b(offload) s/step {pu['ratio']:.3f} vs {TC2_P5_BAND} (the lane's other/e4b convention; tp2 {TP2_MIXTRAL['ratio_unsloth_over_e4b']} = 0.858 / 2.377); "
+                        f"Unsloth peak / e4b peak {f(px, 2)} (>= {TC2_P5_PEAK_X:.0f} predicted; tp2 {TP2_MIXTRAL['peak_unsloth_gb']} / {TP2_MIXTRAL['peak_e4b_gb']} GB)")
+            if not _in(pu["ratio"], TC2_P5_BAND):
+                bad.append(f"Unsloth/e4b {pu['ratio']:.3f} outside {TC2_P5_BAND}")
+            if px is None or px < TC2_P5_PEAK_X:
+                bad.append(f"peak ratio {f(px, 2)} < {TC2_P5_PEAK_X:.0f}")
+        else:
+            untested.append("mixtral position not quoted: " + pu.get("why", "no pair") + (f" (footprint: {footprint_line(fp)[2:120]})" if fp else ""))
+        for fw, tag in (("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m")):
+            v = vof(MX, fw, tag)
+            if v == "OOM":
+                legs.append(f"{fw} OOM")
+            elif v in ("VALID", "QUALITY_FAIL", "VOID", "UNSUPPORTED"):
+                bad.append(f"{fw}/{tag} {v} (OOM predicted)")
+            else:
+                untested.append(f"{fw}/{tag} {v}")
+        out.append(("P5", "mixtral", "FALSIFIED" if bad else ("UNTESTED" if untested else "HELD"), "; ".join(legs + bad + untested)))
+    # P6 e4b internal parity PASS on every family with both arms
+    ev, fails = [], []
+    for fam in TC2_FAMS:
+        R = F.get(fam)
+        if not R:
+            continue
+        pv = R["parity"]["verdict"]
+        if pv in ("PASS", "FAIL"):
+            ev.append(f"{fam} {pv} (Δfinal {R['parity']['d_final']:.5f})")
+            if pv == "FAIL":
+                fails.append(fam)
+    if not ev:
+        out.append(("P6", "tc2", "UNTESTED", "no family with both e4b arms OK"))
+    else:
+        out.append(("P6", "tc2", "FALSIFIED" if fails else "HELD", "; ".join(ev)))
+    # P7 matched sets EQUIVALENT where two frameworks train the SAME adapter set (VALID, trainable == e4b's, against a VALID e4b anchor)
+    ev, bad = [], []
+    for fam in TC2_FAMS:
+        R = F.get(fam)
+        if not R or not R.get("common_set", True):
+            continue
+        for k, e in R["equivalence"].items():
+            if k[0] == "e4b" or R["verdicts"].get(k) != "VALID" or R["verdicts"].get(R["anchor_key"]) != "VALID":
+                continue
+            ev.append(f"{fam} {k[0]}/{k[1]} {e['reading']}")
+            if e["reading"] not in ("EQUIVALENT", "INSIDE-DRAW-NOISE"):
+                bad.append(f"{fam} {k[0]}/{k[1]} {e['reading']}")
+    if not ev:
+        out.append(("P7", "tc2", "UNTESTED", "no VALID matched pair sharing e4b's adapter set"))
+    else:
+        out.append(("P7", "tc2", "FALSIFIED" if bad else "HELD", "; ".join(ev)))
+    return out
 
 
 # ----------------------------------------------------------------------------- R10: the TC1b readings (the qwen3curve family)
@@ -1102,11 +1514,17 @@ def score_curve_predictions(F):
 
 # ----------------------------------------------------------------------------- the printer
 def pos_lines(pos, N, prefix="POSITION"):
+    if pos.get("no_common_set"):                                            # R11: gpt-oss -- both values, both counts, never a ratio
+        return [f"- **NO COMMON ADAPTER SET ({pos['label']} vs {pos['e4b_label']}) — no ratio is quoted**: e4b attention-only {f(pos.get('e4b_s'))} s/step "
+                f"({pos.get('e4b_trainable') if pos.get('e4b_trainable') is not None else '—'} trainable; {pos['e4b_state']}) vs {pos['label']} {f(pos.get('other_s'))} s/step "
+                f"({pos.get('other_trainable') if pos.get('other_trainable') is not None else '—'} trainable; {pos['other_state']}); peak VRAM e4b {f(pos.get('e4b_peak'), 2)} / "
+                f"{pos['label']} {f(pos.get('other_peak'), 2)} GB — {pos['why']}"]
     if not pos.get("quoted"):
         return [f"- **NO {prefix} QUOTED ({pos['label']})** — {pos['why']}"]
     flag = "" if pos["quality"] == "COMPARABLE" else " **[QUALITY FLAGGED: not a clean position]**"
     who = pos["label"]
-    lines = [f"- **{prefix}: s/step ratio {who}/e4b = {pos['ratio']:.3f}** [{f(pos.get('ratio_min'))}, {f(pos.get('ratio_max'))} over {pos.get('n_cross')} cross-draw ratios]{flag} ({pos['other_s']:.3f} vs {pos['e4b_s']:.3f} s, medians over {pos['other_draws']}/{pos['e4b_draws']} draws; "
+    sep = " / " if "(" in who else "/"                                      # R11: "HF (bf16 experts) / e4b"
+    lines = [f"- **{prefix}: s/step ratio {who}{sep}e4b = {pos['ratio']:.3f}** [{f(pos.get('ratio_min'))}, {f(pos.get('ratio_max'))} over {pos.get('n_cross')} cross-draw ratios]{flag} ({pos['other_s']:.3f} vs {pos['e4b_s']:.3f} s, medians over {pos['other_draws']}/{pos['e4b_draws']} draws; "
              f"{'e4b faster' if pos['ratio'] > 1 else who + ' faster'} per step); "
              f"peak VRAM {who} {pos['peak_other']:.2f} vs e4b {pos['peak_e4b']:.2f} GB (Δ {pos['peak_delta']:+.2f}); J/step {who} {f(pos['j_other'], 1)} vs e4b {f(pos['j_e4b'], 1)} (×{f(pos['j_ratio'], 3)}); "
              f"tok/s {who} {f(pos['tok_other'], 1)} vs e4b {f(pos['tok_e4b'], 1)}" + (f"; {who} regime: {pos['other_regime']}" if pos.get("other_regime") else "")]
@@ -1132,7 +1550,7 @@ def support_table(rows):
         mi = r.get("matched_init") or {}
         init = f"{r.get('lora_init', '—')}" + (f" ({'complete' if mi.get('complete') else 'INCOMPLETE'} {mi.get('n_slots_set')}/{mi.get('n_slots_expected')})" if mi else "") \
             + f" / {','.join(sorted(k.replace('torch.', '') for k in (r.get('adapter_dtypes_after') or {}))) or '—'}"
-        note = " — ".join(s for s in (x["reason"], x["why"]) if s)
+        note = " — ".join(s for s in (x["reason"], x["why"], x.get("dispatch"), x.get("no_common_set")) if s)      # R11: dispatch / no-common-set notes
         s0 = f"{x['step0_class']} ({x['step0_delta']:.4f})" if x.get("step0_class") else "—"
         lines.append(f"| {x['fw']} | {x['tag']} | **{x['status']}** | {x['validity']} | **{x['verdict']}** | {'yes' if x['matched'] else 'native'} | {init} | {s0} | {r.get('steps', '—')} | "
                      f"{f(r.get('s_per_step_median_11plus'))} | {f(r.get('tokens_per_s'), 1)} | {f(r.get('peak_vram_gb'))} | {f(r.get('joules_per_step'), 1)} | "
@@ -1224,7 +1642,9 @@ def curve_block(R):
 
 def family_block(R):
     fam = R["fam"]
-    lines = [f"\n### {NAMES.get(fam, fam)} (`{fam}`, registered n_layers {N_LAYERS.get(fam, '?')})"]
+    lines = [f"\n### {NAMES.get(fam, fam)} (`{fam}`, registered n_layers {N_LAYERS.get(fam, '?')}" + (f", attention census {ATTN_CENSUS[fam]}" if ATTN_CENSUS.get(fam) else "") + ")"]
+    if R.get("footprint"):
+        lines.append(footprint_line(R["footprint"]))                                  # R11: mixtral's footprint line leads its block
 
     def _ran(*cands):
         for c in cands:
@@ -1243,16 +1663,15 @@ def family_block(R):
         lines.append(line)
     lines.append("- draws (R1): " + "; ".join(
         f"`{k[0]}/{k[1]}` {d['verdict']}" + (f" ({d['s1']:.3f}/{d['s2']:.3f} s, |Δ|/mean {100 * d['stability']:.1f}% vs {100 * d['threshold']:.0f}%)" if d.get("draws") == 2 and d.get("stability") is not None else (f" ({d['why']})" if d.get("why") else ""))
-        for k, d in R["draws"].items() if k in DRAW2 or k in DRAW2.values() or d.get("draws")))
+        for k, d in R["draws"].items() if registered_draw2(fam, k) is not None or d.get("draws")))
     p = R["parity"]
     if p["verdict"] in ("PASS", "FAIL"):
         lines.append(f"- e4b internal parity (tp1's rule, informational): fused_attn4_m vs reference_attn4_m Δfinal {p['d_final']:.5f}, median step |Δ| {p['median']:.5f} → **{p['verdict']}** "
                      f"(band {BAND}/{BAND}); ×{f(p.get('speed_x'), 2)} faster per step, peak ×{f(p.get('peak_x'), 3)}")
     else:
         lines.append(f"- e4b internal parity: {p['verdict']}{(' — ' + p['why']) if p['why'] else ''}")
-    for other in ("unsloth", "hf", "axolotl"):
-        if other in R["positions"]:
-            lines += pos_lines(R["positions"][other], R["N"], prefix="MATCHED POSITION")
+    for other, pz in R["positions"].items():
+        lines += pos_lines(pz, R["N"], prefix="MATCHED POSITION")
     for other, sp in R["secondary"].items():
         lines += pos_lines(sp, R["N"], prefix="SECONDARY POSITION (mb1 × accum 8, run because a primary arm OOMed)")
     for other, np_ in R["native"].items():
@@ -1297,6 +1716,16 @@ def render(F, d):
         out.append(f"Lane TC1b (`{CURVE_FAM}`, TC1B-PREREG.md): validity per sub-fixture against its own e4b arm; the curve reading EQUIVALENT-AT-EVERY-EVAL iff every paired held-out |Δ| <= {CURVE_BAND} "
                    f"({CURVE_BAND_NOTE}), else DIVERGENT with the first divergent step; plateau REPRODUCES-P38 iff >= +{PLATEAU_GAP} at 200 and <= 0 at {PLATEAU_EARLY_STEP}; time to target = the matched pair's step-200 held-out + {TARGET_MARGIN}; "
                    f"s/step 11..200 vs TC1's 11..20 within {TRAVEL_TOL:.0%} = TRAVELS; anchor within ±{ANCHOR_TOL:.0%} of tp2 {TP2_ANCHOR} / P38 {P38_ANCHOR}; the t1 and r64 pairs are SCALING POINTS, never positions; P1–P4 of the draft scored HELD / FALSIFIED / UNTESTED.")
+    if any(fam in F for fam in TC2_FAMS):
+        out.append(f"Lane TC2 (`tc2small` / `tc2big` tokens, TC2-PREREG.md, drafted in TC2-PREREG-draft): TC1's readings per family with the registered n_layers "
+                   f"{ {fam: N_LAYERS[fam] for fam in TC2_FAMS} } and attention census { {fam: ATTN_CENSUS.get(fam) for fam in TC2_FAMS} } (None = the receipt's own structural census governs); "
+                   f"the HF position is quoted as HF (bf16 experts) / e4b (or 4-bit) with its regime; an Unsloth arm whose trainable count differs from e4b's is VOID (attention-only when it "
+                   f"adapted no expert parameter), as tp4; gpt-oss carries a NO COMMON ADAPTER SET line (both s/step values, both trainable counts), never a ratio; mixtral's FOOTPRINT line "
+                   f"(e4b under expert offload vs Unsloth resident: peak VRAM and s/step) leads its block; `ckpt_unsloth_mxfp4` (load_in_4bit=False) is VALID only with >= 2L packed expert "
+                   f"parameters of a recorded class, grouped_mm selected and the MXFP4 grouped GEMM counted >= L*A per step; gpt-oss's bnb-4bit Unsloth arm reads the per-expert Linear4bit regime; "
+                   f"an HF t214 arm whose dispatch did not reach grouped_mm is recorded, never VOID; P1–P7 of the draft scored HELD / FALSIFIED / UNTESTED "
+                   f"(P1 HF band {TC2_P1_HF_BAND}; P2 Unsloth {TC2_P2_UNS_BAND} / HF {TC2_P2_HF_BAND}; P4 Unsloth {TC2_P4_UNS_BAND}, e4b within {TC2_P4_E4B_TOL:.0%} of tp4's "
+                   f"{TP4_QWEN3_5_E4B_S_PER_STEP} s/step; P5 e4b/Unsloth {TC2_P5_BAND} at a >= {TC2_P5_PEAK_X:.0f}x lower e4b peak, tp2 {TP2_MIXTRAL['ratio_unsloth_over_e4b']}).")
     for fam in list(FAMS) + sorted(set(F) - set(FAMS)):
         if fam in F:
             out += curve_block(F[fam]) if fam == CURVE_FAM else family_block(F[fam])
@@ -1314,6 +1743,10 @@ def render(F, d):
     if CURVE_FAM in F:
         out += ["\n## TC1b predictions P1–P4 (TC1b-PREREG-draft, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_curve_predictions(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if any(fam in F for fam in TC2_FAMS):
+        out += ["\n## TC2 predictions P1–P7 (TC2-PREREG-draft, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_tc2_predictions(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     return "\n".join(out)
 
@@ -1483,6 +1916,133 @@ def _curve_set():
     R[("unsloth", "ckpt_unsloth_m_r64")] = _curve_receipt("unsloth", "ckpt_unsloth_m_r64", "unsloth", s=3.90)
     # the native-init Unsloth p38 arms carry their own matched_init_sha (not the matched set's); the shipped arm its loader's
     R[("e4b", "fused_attn4_shipped_200")]["matched_init_sha"] = "e" * 64
+    return R
+
+
+# R11: TC2 hand-built receipts. The trainable counts are selftest STAND-INS (the orders of magnitude tp4 recorded: Granite 99.6 M vs Unsloth's
+# 5.2 M, Qwen3.6 926 M vs 3.4 M -- RESULTS-tp4-p46cut.md), never registered numbers; every other field is consistent with the family's L / accum.
+TC2_SELFTEST_TRAINABLE = {"granite": 99600000, "olmoe": 70000000, "gptoss": 90000000, "qwen3_5": 926000000, "mixtral": 100000000}
+
+
+def _merge(r, over):
+    for k, v in over.items():
+        if isinstance(v, dict) and isinstance(r.get(k), dict):
+            r[k] = {**r[k], **v}
+        else:
+            r[k] = v
+    return r
+
+
+def _tc2_receipt(fam, fw, tag, arm, s=1.0, heldout_n=1.8, trainable=None, matched=True, **over):
+    """A complete OK receipt for one TC2 family arm, from `_receipt` with the family's registered pin / L / census and counters consistent
+    with its accum (A 4) and instrument (small: N 60, 48 rows; big: N 20, 8 rows); `trainable` defaults to the family's stand-in."""
+    L, A = N_LAYERS[fam], 4
+    mid, rev, _ = TC2_MODELS[fam]
+    small = fam in TC2_TOKENS["tc2small"]
+    steps, rows = (60, 48) if small else (20, 8)
+    n_attn = ATTN_CENSUS.get(fam) or 4 * L
+    tr = trainable if trainable is not None else TC2_SELFTEST_TRAINABLE[fam]
+    e4b_attn4 = (fw == "e4b" and arm != "attn_only")
+    r = _receipt(fw, tag, arm, steps=steps, s=s, heldout_n=heldout_n, matched=matched)
+    ub = {"unsloth_grouped_mm": L * A, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": L * A}
+    r.update({"fam": fam, "model": mid, "revision": rev, "n_layers": L, "trainable_params": tr,
+              "eval_rows": [{"step": 0, "losses": [r["eval_loss_step0"]] * rows}, {"step": steps, "losses": [round(heldout_n + 0.001 * (i - rows // 2), 5) for i in range(rows)]}],
+              "attn_4bit": e4b_attn4, "n_attn4": n_attn if e4b_attn4 else 0, "structural_expected_n_attn4": n_attn if e4b_attn4 else None,
+              "n_patched": L if arm == "fused" else 0, "kernel_calls_per_step_min": 2 * L * A if arm == "fused" else 0,
+              "lora_path_present": (arm == "fused"), "lora_loop_share": ([0.0] * steps if arm == "fused" else None), "lora_path_loop_steps": ([] if arm == "fused" else None),
+              "census": {"Params4bit_expert_stacks": 2 * L if fw in ("unsloth", "axolotl") else 0, "Linear4bit": 4 * L if fw != "hf" else 0,
+                         "expert_param_classes": ({"Params4bit": 2 * L} if fw == "unsloth" else ({"Parameter": 2 * L} if fw in ("hf", "axolotl") else {}))},
+              "experts_forward_calls_per_step_min": L * A if fw != "e4b" else 0,
+              "unsloth_bnb4bit_modules": {"n_bnb4bit_unwrapped": L} if fw == "unsloth" else None,
+              "hf_targets": {"n_target_modules": n_attn, "n_target_parameters": 2 * L} if fw in ("hf", "axolotl") else None,
+              "unsloth_grouped_mm_calls_per_step_min": (GMM_FACTOR * L * A) if fw == "unsloth" else None,
+              "unsloth_grouped_mm_calls_per_step_max": (GMM_FACTOR * L * A) if fw == "unsloth" else None,
+              "unsloth_backend_calls_per_step_min": dict(ub) if fw == "unsloth" else None, "unsloth_backend_calls_per_step_max": dict(ub) if fw == "unsloth" else None,
+              "axolotl_bnb4bit_modules": {"n_bnb4bit_unwrapped": L, "quantized_moe_experts_n": 2 * L} if fw == "axolotl" else None,
+              "trainable_by_group": {"attention": 1, "experts": 0, "other": 0} if arm == "attn_only" else {"attention": 1, "experts": 2, "other": 0}})
+    if matched:
+        n_slots = n_attn if arm == "attn_only" else n_attn + 2 * L * 8
+        r["matched_init"] = {"seed": 3407, "complete": True, "n_slots_set": n_slots, "n_slots_expected": n_slots, "unmapped": [],
+                             "expected_parts": ({"n_attention_projections": n_attn, "experts": "excluded: attn_only arm (expert adapters frozen or absent; trainable slots only)"} if arm == "attn_only"
+                                                else {"n_attention_projections": n_attn, "n_layers": L, "n_experts": 8})}
+        r["matched_init_sha_slots"] = n_slots
+    return _merge(r, over)
+
+
+def _tc2_set(fam):
+    """R11: the baseline receipt set per TC2 family, in the registered order -- every arm that can be VALID is, the attention-only Unsloth
+    arms VOID (granite, qwen3_5's UT4 arm), gpt-oss's packed arm VALID beside e4b's attention-only arm, mixtral under offload."""
+    def T(fw, tag, arm, **kw):
+        return _tc2_receipt(fam, fw, tag, arm, **kw)
+
+    def S(fw, tag, arm, st, why="x", **extra):
+        return {**_stub(fw, tag, arm, st, why), "fam": fam, "steps": 60 if fam in TC2_TOKENS["tc2small"] else 20, **extra}
+    R = {}
+    zero = {"unsloth_grouped_mm": 0, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 0}
+    reached = {"requested": "grouped_mm", "accepted": True, "config": "grouped_mm", "torch_grouped_mm_calls_per_step_min": 2 * N_LAYERS[fam] * 4, "torch_F_grouped_mm_calls_per_step_min": 0, "reached_grouped_mm": True}
+    if fam in ("granite", "olmoe"):
+        e_s, e2, h_s, h2, r_s, u_s, a_s = {"granite": (2.366, 2.39, 3.057, 3.09, 18.59, 2.445, 3.3), "olmoe": (1.395, 1.40, 2.713, 2.73, 14.883, 2.8, 3.0)}[fam]
+        R[("e4b", "fused_attn4_m")] = T("e4b", "fused_attn4_m", "fused", s=e_s)
+        R[("hf", "hf_peft_m")] = T("hf", "hf_peft_m", "hf", s=h_s, heldout_n=1.8004)
+        R[("e4b", "reference_attn4_m")] = T("e4b", "reference_attn4_m", "reference", s=r_s, heldout_n=1.8005)
+        R[("e4b", "fused_attn4_m_d2")] = T("e4b", "fused_attn4_m_d2", "fused", s=e2)
+        R[("hf", "hf_peft_m_d2")] = T("hf", "hf_peft_m_d2", "hf", s=h2, heldout_n=1.8004)
+        if fam == "granite":          # Unsloth never discovers Granite's ParallelExperts: attention only, experts bf16, no banner (UPSTREAM-NOTES)
+            att = dict(trainable=5200000, heldout_n=1.85, trainable_by_group={"attention": 1, "experts": 0, "other": 0}, unsloth_bnb4bit_modules={"n_bnb4bit_unwrapped": 0},
+                       census={"Params4bit_expert_stacks": 0, "expert_param_classes": {"Parameter": 64}},
+                       engagement_banners=["Unsloth: get_moe_target_parameters resolved no expert parameters for the requested targets. The expert weights will NOT be trained."])
+            R[("unsloth", "ckpt_unsloth_m")] = T("unsloth", "ckpt_unsloth_m", "unsloth", s=u_s, **att)
+            R[("unsloth", "ckpt_unsloth_m_experts")] = T("unsloth", "ckpt_unsloth_m_experts", "unsloth", s=u_s + 0.01, **att)
+        else:
+            R[("unsloth", "ckpt_unsloth_m")] = T("unsloth", "ckpt_unsloth_m", "unsloth", s=u_s, heldout_n=1.8004)
+        R[("hf", "hf_peft_m_t214")] = T("hf", "hf_peft_m_t214", "hf", s=round(h_s * 0.95, 4), heldout_n=1.8004, hf_experts_dispatch=dict(reached))
+        R[("axolotl", "ckpt_axolotl_m")] = T("axolotl", "ckpt_axolotl_m", "axolotl", s=a_s, heldout_n=1.8004)
+        R[("axolotl", "ckpt_axolotl_best")] = T("axolotl", "ckpt_axolotl_best", "axolotl", s=round(a_s * 0.9, 4), heldout_n=1.83, matched=False)
+        R[("e4b", "fused_attn4_shipped")] = T("e4b", "fused_attn4_shipped", "fused", s=round(e_s * 0.9, 4), heldout_n=1.78, matched=False)
+    elif fam == "gptoss":
+        R[("e4b", "fused_attn4_m")] = S("e4b", "fused_attn4_m", "fused", "refused", "SKIPPED as REFUSED: tp1 (P36) + tp2 (P40) rows cited -- enable_fast_train(dgrad=True) patched 0 modules on gpt-oss",
+                                        cited="tp1,tp2", probed_by="attn_only", probe_reason="enable_fast_train(dgrad=True) patched 0 modules on this box: 0 ExpertsLoRA", n_patched=0)
+        R[("e4b", "attn_only_m")] = T("e4b", "attn_only_m", "attn_only", s=3.1, trainable=5000000)
+        R[("e4b", "attn_only_m_d2")] = T("e4b", "attn_only_m_d2", "attn_only", s=3.15, trainable=5000000)
+        L = N_LAYERS["gptoss"]
+        R[("unsloth", "ckpt_unsloth_m")] = T("unsloth", "ckpt_unsloth_m", "unsloth", s=9.0, heldout_n=1.75, unsloth_load_in_4bit=True,
+                                             census={"Params4bit_expert_stacks": 0, "Params4bit_expert_linears": 2 * L * 32, "expert_param_classes": {"Params4bit": 2 * L * 32}},
+                                             unsloth_bnb4bit_modules={"n_bnb4bit_unwrapped": 0}, engagement_banners=[f"Unsloth: {UNSLOTH_BANNER_PER_EXPERT}"],
+                                             unsloth_backend_calls_per_step_min=dict(zero), unsloth_backend_calls_per_step_max=dict(zero),
+                                             unsloth_grouped_mm_calls_per_step_min=0, unsloth_grouped_mm_calls_per_step_max=0)
+        pk = {"unsloth_mxfp4_grouped_mm": L * 4}
+        for tag, s_ in (("ckpt_unsloth_mxfp4", 4.0), ("ckpt_unsloth_mxfp4_d2", 4.1)):
+            R[("unsloth", tag)] = T("unsloth", tag, "unsloth", s=s_, heldout_n=1.75, unsloth_load_in_4bit=False,
+                                    census={"Params4bit_expert_stacks": 0, "Linear4bit": 0, "expert_param_classes": {"Mxfp4ExpertParam": 2 * L}},
+                                    unsloth_bnb4bit_modules={"n_bnb4bit_unwrapped": 0}, unsloth_packed_calls_per_step_min=dict(pk), unsloth_packed_calls_per_step_max=dict(pk),
+                                    unsloth_backend_calls_per_step_min=dict(zero), unsloth_backend_calls_per_step_max=dict(zero),
+                                    unsloth_grouped_mm_calls_per_step_min=0, unsloth_grouped_mm_calls_per_step_max=0,
+                                    unsloth_double_quant={"requested": None, "how": "not applicable: load_in_4bit=False", "loaded_nested": None})
+        R[("hf", "hf_peft_m")] = S("hf", "hf_peft_m", "hf", "oom", "OOM at load")
+        R[("axolotl", "ckpt_axolotl_m")] = S("axolotl", "ckpt_axolotl_m", "axolotl", "refused", "quantize_moe_experts on an is_transposed stack")
+        R[("e4b", "reference_attn4_m")] = S("e4b", "reference_attn4_m", "reference", "refused", "SKIPPED as REFUSED: tp4's bias rule", cited="tp4", n_patched=0)
+    elif fam == "qwen3_5":
+        R[("e4b", "fused_attn4_m")] = T("e4b", "fused_attn4_m", "fused", s=6.33)
+        att = dict(trainable=3400000, heldout_n=1.85, trainable_by_group={"attention": 1, "experts": 0, "other": 0}, engagement_banners=[])   # UT4: the stacks quantised, nothing on them adapted
+        R[("unsloth", "ckpt_unsloth_m")] = T("unsloth", "ckpt_unsloth_m", "unsloth", s=26.98, **att)
+        R[("e4b", "fused_attn4_m_d2")] = T("e4b", "fused_attn4_m_d2", "fused", s=6.35)
+        R[("unsloth", "ckpt_unsloth_m_d2")] = T("unsloth", "ckpt_unsloth_m_d2", "unsloth", s=27.0, **att)
+        R[("unsloth", "ckpt_unsloth_m_experts")] = T("unsloth", "ckpt_unsloth_m_experts", "unsloth", s=25.0, heldout_n=1.8004)
+        R[("hf", "hf_peft_m")] = S("hf", "hf_peft_m", "hf", "oom", "OOM at load")
+        R[("axolotl", "ckpt_axolotl_m")] = S("axolotl", "ckpt_axolotl_m", "axolotl", "oom", "OOM at step 1")
+        R[("axolotl", "ckpt_axolotl_best")] = S("axolotl", "ckpt_axolotl_best", "axolotl", "oom", "OOM at step 1")
+        R[("e4b", "fused_attn4_shipped")] = T("e4b", "fused_attn4_shipped", "fused", s=5.5, heldout_n=1.78, matched=False)
+        R[("e4b", "reference_attn4_m")] = T("e4b", "reference_attn4_m", "reference", s=88.0, heldout_n=1.8005)
+    elif fam == "mixtral":
+        R[("e4b", "fused_attn4_m")] = T("e4b", "fused_attn4_m", "fused", s=2.377, peak_vram_gb=3.22, offload=True)
+        R[("unsloth", "ckpt_unsloth_m")] = T("unsloth", "ckpt_unsloth_m", "unsloth", s=0.858, heldout_n=1.8004, peak_vram_gb=29.16)
+        R[("e4b", "fused_attn4_m_d2")] = T("e4b", "fused_attn4_m_d2", "fused", s=2.40, peak_vram_gb=3.25, offload=True)
+        R[("unsloth", "ckpt_unsloth_m_d2")] = T("unsloth", "ckpt_unsloth_m_d2", "unsloth", s=0.87, heldout_n=1.8004, peak_vram_gb=29.2)
+        R[("hf", "hf_peft_m")] = S("hf", "hf_peft_m", "hf", "oom", "OOM at load")
+        R[("axolotl", "ckpt_axolotl_m")] = S("axolotl", "ckpt_axolotl_m", "axolotl", "oom", "OOM at load")
+        R[("axolotl", "ckpt_axolotl_best")] = S("axolotl", "ckpt_axolotl_best", "axolotl", "oom", "OOM at load")
+        R[("e4b", "fused_attn4_shipped")] = T("e4b", "fused_attn4_shipped", "fused", s=2.2, heldout_n=1.78, matched=False, peak_vram_gb=3.2, offload=True)
+        R[("e4b", "reference_attn4_m")] = T("e4b", "reference_attn4_m", "reference", s=19.0, heldout_n=1.8005, peak_vram_gb=3.3, offload=True)
     return R
 
 
@@ -1943,6 +2503,160 @@ def selftest():
         json.dump(r, open(os.path.join(d, f"{CURVE_FAM}_{fw}_{tag}.json"), "w"))
     text = render(reduce_dir(d, 20), d)
     assert "## Predictions P1–P10" in text and "## TC1b predictions P1–P4" in text and "Lane TC1b" in text
+    cases += 1
+    # ----------------------------------------------------------------------- R11: lane TC2 (the tc2small / tc2big tokens)
+    def trun(fam, R=None):
+        return reduce_family(fam, R if R is not None else _tc2_set(fam), {}, None)
+
+    def TP(F):
+        return {p_: v for p_, _, v, _ in score_tc2_predictions(F)}
+    T_ALL = {fam: trun(fam) for fam in TC2_FAMS}
+    # 44. the baseline per family: the registered order, the verdicts, the HF position spelled "HF (bf16 experts) / e4b" with two draws, every prediction HELD
+    G = T_ALL["granite"]
+    for fam in TC2_FAMS:
+        assert [(x["fw"], x["tag"]) for x in T_ALL[fam]["rows"]] == EXPECTED[fam], fam
+    assert G["verdicts"][("e4b", "fused_attn4_m")] == "VALID" and G["verdicts"][("hf", "hf_peft_m")] == "VALID" and G["verdicts"][("hf", "hf_peft_m_d2")] == "VALID" and G["verdicts"][("e4b", "reference_attn4_m")] == "VALID"
+    assert G["verdicts"][("unsloth", "ckpt_unsloth_m")] == "VOID" and G["verdicts"][("unsloth", "ckpt_unsloth_m_experts")] == "VOID"
+    assert G["verdicts"][("hf", "hf_peft_m_t214")] == "VALID" and G["verdicts"][("axolotl", "ckpt_axolotl_m")] == "VALID" and G["verdicts"][("axolotl", "ckpt_axolotl_best")] == "VALID" and G["verdicts"][("e4b", "fused_attn4_shipped")] == "VALID"
+    ph = G["positions"]["hf"]
+    assert ph["quoted"] and ph["label"] == "HF (bf16 experts)" and ph["e4b_draws"] == 2 and ph["other_draws"] == 2 and abs(ph["ratio"] - 3.0735 / 2.378) < 1e-9 and "bf16 experts" in ph["other_regime"], ph
+    assert G["draws"][("hf", "hf_peft_m")]["verdict"] == "STABLE" and G["parity"]["verdict"] == "PASS" and G["common_set"] is True and G["anchor_key"] == ("e4b", "fused_attn4_m")
+    assert "HF (bf16 experts) / e4b = 1.292**" in pos_lines(ph, 60, prefix="MATCHED POSITION")[0]
+    assert TP(T_ALL) == {f"P{i}": "HELD" for i in range(1, 8)}, TP(T_ALL)
+    cases += 1
+    # 45. a VOID attention-only Unsloth arm (granite): the reason names it first, no position, the labelled _experts arm likewise; a same-count arm stays VALID; a different count WITH experts is plain VOID
+    x = row(G, "unsloth", "ckpt_unsloth_m")
+    assert x["verdict"] == "VOID" and x["why"].startswith("attention-only: trainable 5200000 != e4b's 99600000 (unsloth adapted no expert parameter"), x["why"]
+    assert not G["positions"]["unsloth"]["quoted"] and "VOID" in G["positions"]["unsloth"]["why"] and not G["labelled"][("unsloth", "ckpt_unsloth_m_experts")]["quoted"]
+    print("FAILING-CASE TC2-attention-only (reducer):", x["why"])
+    R = _tc2_set("granite")
+    R[("unsloth", "ckpt_unsloth_m")] = _tc2_receipt("granite", "unsloth", "ckpt_unsloth_m", "unsloth", s=2.9, heldout_n=1.8004)
+    assert row(trun("granite", R), "unsloth", "ckpt_unsloth_m")["verdict"] == "VALID"
+    R[("unsloth", "ckpt_unsloth_m")]["trainable_params"] = 99600001
+    y = row(trun("granite", R), "unsloth", "ckpt_unsloth_m")
+    assert y["verdict"] == "VOID" and "attention-only" not in y["why"] and y["why"].startswith("trainable 99600001 != e4b's 99600000"), y["why"]
+    cases += 1
+    # 46. gptoss: the no-common-set line replaces every position (both s/step values, both counts, no ratio); the harness-recorded mismatch and the sha / quality predicates against e4b do not apply there
+    GO = T_ALL["gptoss"]
+    assert GO["common_set"] is False and GO["anchor_key"] == ("e4b", "attn_only_m") and GO["labelled"] == {}
+    assert GO["verdicts"][("e4b", "attn_only_m")] == "VALID" and GO["verdicts"][("e4b", "attn_only_m_d2")] == "VALID" and GO["verdicts"][("unsloth", "ckpt_unsloth_mxfp4")] == "VALID"
+    assert GO["verdicts"][("unsloth", "ckpt_unsloth_mxfp4_d2")] == "VALID" and GO["verdicts"][("unsloth", "ckpt_unsloth_m")] == "VALID"
+    assert GO["verdicts"][("e4b", "fused_attn4_m")] == "UNSUPPORTED" and GO["verdicts"][("e4b", "reference_attn4_m")] == "UNSUPPORTED" and GO["verdicts"][("hf", "hf_peft_m")] == "OOM" and GO["verdicts"][("axolotl", "ckpt_axolotl_m")] == "UNSUPPORTED"
+    assert GO["draws"][("e4b", "attn_only_m")]["verdict"] == "STABLE" and GO["draws"][("unsloth", "ckpt_unsloth_mxfp4")]["verdict"] == "STABLE"
+    ln = GO["positions"]["unsloth_mxfp4"]
+    assert ln["no_common_set"] and not ln["quoted"] and "ratio" not in ln and abs(ln["e4b_s"] - 3.125) < 1e-9 and abs(ln["other_s"] - 4.05) < 1e-9, ln
+    assert ln["e4b_trainable"] == 5000000 and ln["other_trainable"] == 90000000 and all(pz.get("no_common_set") and not pz.get("quoted") for pz in GO["positions"].values())
+    assert set(GO["positions"]) == {"unsloth", "unsloth_mxfp4", "hf", "axolotl"} and GO["positions"]["hf"]["other_s"] is None and "OOM" in GO["positions"]["hf"]["other_state"]
+    txt = pos_lines(ln, 60)[0]
+    assert txt.startswith("- **NO COMMON ADAPTER SET (unsloth/ckpt_unsloth_mxfp4 vs e4b/attn_only_m) — no ratio is quoted**") and "3.125 s/step (5000000 trainable" in txt and "4.050 s/step (90000000 trainable" in txt, txt
+    assert row(GO, "unsloth", "ckpt_unsloth_m")["quality"] == "N-A (no common adapter set)" and "no common adapter set with e4b: trainable 90000000 vs e4b's 5000000" in row(GO, "unsloth", "ckpt_unsloth_m")["no_common_set"]
+    assert GO["equivalence"][("unsloth", "ckpt_unsloth_mxfp4")]["reading"] == "N-A" and GO["equivalence"][("e4b", "attn_only_m_d2")]["reading"] == "COMPARABLE"
+    assert "per-expert Linear4bit experts (1536 Params4bit under the experts container" in row(GO, "unsloth", "ckpt_unsloth_m")["regime"]
+    assert "packed experts in the checkpoint's own format (Mxfp4ExpertParam x48; load_in_4bit=False)" in row(GO, "unsloth", "ckpt_unsloth_mxfp4")["regime"] and "attention-only adapters" in row(GO, "e4b", "attn_only_m")["regime"]
+    print("FAILING-CASE TC2-no-common-set (reducer): a ratio on gpt-oss is never quoted --", txt[:160])
+    R = _tc2_set("gptoss")
+    R[("unsloth", "ckpt_unsloth_mxfp4")]["trainable_mismatch"] = {"expected": 5000000, "got": 90000000, "by_group": {}}   # expect_of hands the arm attn_only_m's count
+    assert row(trun("gptoss", R), "unsloth", "ckpt_unsloth_mxfp4")["verdict"] == "VALID"
+    cases += 1
+    # 47. the packed arm's VOIDs (unpacked / wrong backend / uncounted / absent / short GEMM), and the per-expert Linear4bit arm's own floor
+    for name, over, needle in (("unpacked", {"census": {"expert_param_classes": {"Parameter": 48}}}, "not packed"),
+                               ("backend", {"moe_backend_selected": "native_torch"}, "!= grouped_mm"),
+                               ("uncounted", {"unsloth_packed_calls_per_step_min": None}, "not counted"),
+                               ("absent", {"unsloth_backend_absent": ["unsloth_zoo.mxfp4_gemm.Mxfp4GroupedMM.apply: ModuleNotFoundError"]}, "not counted"),
+                               ("short", {"unsloth_packed_calls_per_step_min": {"unsloth_mxfp4_grouped_mm": 24 * 4 - 1}}, "engaged 95 < 24*accum 4")):
+        R = _tc2_set("gptoss")
+        _merge(R[("unsloth", "ckpt_unsloth_mxfp4")], over)
+        y = row(trun("gptoss", R), "unsloth", "ckpt_unsloth_mxfp4")
+        assert y["verdict"] == "VOID" and needle in y["why"], (name, y["why"])
+        if name == "unpacked":
+            print("FAILING-CASE TC2-packed (reducer):", y["why"])
+    assert TP({**T_ALL, "gptoss": trun("gptoss", R)})["P3"] == "FALSIFIED"
+    R = _tc2_set("gptoss")
+    _merge(R[("unsloth", "ckpt_unsloth_m")], {"census": {"Params4bit_expert_linears": 10}})
+    y = row(trun("gptoss", R), "unsloth", "ckpt_unsloth_m")
+    assert y["verdict"] == "VOID" and "under the experts container 10 < 2*24" in y["why"], y["why"]
+    cases += 1
+    # 48. mixtral's footprint line leads its block; P5 reads the pair (Unsloth/e4b, the lane's convention: tp2 0.361) and the peak ratio; its failing legs
+    MX = T_ALL["mixtral"]
+    fp = MX["footprint"]
+    assert fp["readable"] and abs(fp["peak_ratio"] - 29.18 / 3.235) < 1e-9 and fp["sides"]["e4b"]["offload"] is True and fp["sides"]["e4b"]["basis"].startswith("quoted draws"), fp
+    blk = family_block(MX)
+    assert blk[1].startswith("- **FOOTPRINT (e4b under expert offload") and "peak VRAM 3.24 GB under expert offload vs Unsloth `ckpt_unsloth_m` 29.18 GB resident (×9.02 lower on e4b); s/step e4b 2.388 vs Unsloth 0.864" in blk[1], blk[1]
+    assert 1 < next(i for i, ln_ in enumerate(blk) if ln_.startswith("| framework |"))
+    pu = MX["positions"]["unsloth"]
+    assert pu["quoted"] and abs(pu["ratio"] - 0.864 / 2.3885) < 1e-9 and pu["quality"] == "COMPARABLE", pu
+    R = _tc2_set("mixtral")
+    R[("unsloth", "ckpt_unsloth_m")]["peak_vram_gb"] = R[("unsloth", "ckpt_unsloth_m_d2")]["peak_vram_gb"] = 20.0
+    assert TP({**T_ALL, "mixtral": trun("mixtral", R)})["P5"] == "FALSIFIED"
+    R = _tc2_set("mixtral")
+    R[("unsloth", "ckpt_unsloth_m")] = {**_stub("unsloth", "ckpt_unsloth_m", "unsloth", "oom"), "fam": "mixtral", "steps": 20}
+    M2 = trun("mixtral", R)
+    assert M2["footprint"]["readable"] is False and "OOM: no peak to read" in M2["footprint"]["sides"]["unsloth"]["basis"] and TP({**T_ALL, "mixtral": M2})["P5"] == "UNTESTED"
+    print("FAILING-CASE TC2-footprint (reducer): Unsloth OOM ->", footprint_line(M2["footprint"]))
+    cases += 1
+    # 49. an HF t214 arm whose dispatch did not reach grouped_mm: VALID, the note on the row and the regime (never VOID); accepted=False likewise
+    R = _tc2_set("granite")
+    R[("hf", "hf_peft_m_t214")]["hf_experts_dispatch"] = {"requested": "grouped_mm", "accepted": True, "config": "grouped_mm", "torch_grouped_mm_calls_per_step_min": 0, "torch_F_grouped_mm_calls_per_step_min": 0, "reached_grouped_mm": False}
+    y = row(trun("granite", R), "hf", "hf_peft_m_t214")
+    assert y["verdict"] == "VALID" and y["dispatch"].endswith("did NOT reach grouped_mm (recorded, not VOID)") and "NOT reached" in y["regime"], (y["verdict"], y["dispatch"])
+    print("FAILING-CASE TC2-dispatch (reducer):", y["dispatch"])
+    R[("hf", "hf_peft_m_t214")]["hf_experts_dispatch"].update({"accepted": False, "config": "eager"})
+    y = row(trun("granite", R), "hf", "hf_peft_m_t214")
+    assert y["verdict"] == "VALID" and "accepted False" in y["dispatch"]
+    assert row(G, "hf", "hf_peft_m_t214")["dispatch"].endswith("REACHED grouped_mm") and row(G, "hf", "hf_peft_m")["dispatch"] is None
+    cases += 1
+    # 50. the registered census and pin VOID a receipt that disagrees; a family without a registered census takes the receipt's own
+    R = _tc2_set("granite")
+    R[("e4b", "fused_attn4_m")].update({"structural_expected_n_attn4": 127, "n_attn4": 127})
+    assert "structural attention census 127 != registered 128" in row(trun("granite", R), "e4b", "fused_attn4_m")["why"]
+    R = _tc2_set("olmoe")
+    R[("hf", "hf_peft_m")]["revision"] = "f" * 40
+    assert "the registered pin" in row(trun("olmoe", R), "hf", "hf_peft_m")["why"]
+    assert row(trun("qwen3_5"), "e4b", "fused_attn4_m")["verdict"] == "VALID" and ATTN_CENSUS["qwen3_5"] is None
+    cases += 1
+    # 51. the predictions' other legs: P1 (Unsloth adapts experts / HF outside the band), P2 (Unsloth dies -> HELD; VOID -> FALSIFIED), P4 (VOID on count -> HELD; e4b drifts), P6 FAIL, P7 COMPARABLE, UNTESTED legs
+    R = _tc2_set("granite")
+    R[("unsloth", "ckpt_unsloth_m")] = _tc2_receipt("granite", "unsloth", "ckpt_unsloth_m", "unsloth", s=2.9, heldout_n=1.8004)
+    assert TP({**T_ALL, "granite": trun("granite", R)})["P1"] == "FALSIFIED"
+    R = _tc2_set("granite")
+    R[("hf", "hf_peft_m")]["s_per_step_median_11plus"] = R[("hf", "hf_peft_m_d2")]["s_per_step_median_11plus"] = 5.0
+    assert TP({**T_ALL, "granite": trun("granite", R)})["P1"] == "FALSIFIED"
+    R = _tc2_set("olmoe")
+    R[("unsloth", "ckpt_unsloth_m")] = {**_stub("unsloth", "ckpt_unsloth_m", "unsloth", "harness_error", "died before its first step"), "fam": "olmoe", "steps": 60}
+    assert TP({**T_ALL, "olmoe": trun("olmoe", R)})["P2"] == "HELD"
+    R = _tc2_set("olmoe")
+    R[("unsloth", "ckpt_unsloth_m")]["trainable_params"] = 1
+    assert TP({**T_ALL, "olmoe": trun("olmoe", R)})["P2"] == "FALSIFIED"
+    R = _tc2_set("qwen3_5")
+    R[("unsloth", "ckpt_unsloth_m_experts")].update({"trainable_params": 3400000, "trainable_by_group": {"attention": 1, "experts": 0, "other": 0}})
+    Q2 = trun("qwen3_5", R)
+    assert row(Q2, "unsloth", "ckpt_unsloth_m_experts")["verdict"] == "VOID" and TP({**T_ALL, "qwen3_5": Q2})["P4"] == "HELD"
+    R = _tc2_set("qwen3_5")
+    R[("e4b", "fused_attn4_m")]["s_per_step_median_11plus"] = R[("e4b", "fused_attn4_m_d2")]["s_per_step_median_11plus"] = 8.0
+    assert TP({**T_ALL, "qwen3_5": trun("qwen3_5", R)})["P4"] == "FALSIFIED"
+    R = _tc2_set("olmoe")
+    R[("e4b", "reference_attn4_m")]["losses"] = [round(2.1 - 0.01 * i, 5) for i in range(60)]
+    R[("e4b", "reference_attn4_m")]["loss_last"] = R[("e4b", "reference_attn4_m")]["losses"][-1]
+    assert TP({**T_ALL, "olmoe": trun("olmoe", R)})["P6"] == "FALSIFIED"
+    R = _tc2_set("granite")
+    R[("hf", "hf_peft_m")]["eval_curve"][1]["heldout_loss"] = 1.83
+    assert TP({**T_ALL, "granite": trun("granite", R)})["P7"] == "FALSIFIED"
+    assert TP({"granite": trun("granite")})["P2"] == "UNTESTED" and TP({})["P6"] == "UNTESTED" and TP({})["P7"] == "UNTESTED"
+    cases += 1
+    # 52. end to end through the files: both tokens' families (qwen3_5's underscore parses), the printer renders the TC2 paragraph, the footprint, the no-common-set line, the HF spelling and the P1-P7 table
+    td = tempfile.mkdtemp(prefix="tc2_reduce_selftest_")
+    for fam in TC2_FAMS:
+        for (fw, tag), r in _tc2_set(fam).items():
+            json.dump(r, open(os.path.join(td, f"{fam}_{fw}_{tag}.json"), "w"))
+    F = reduce_dir(td, None)
+    assert set(F) == set(TC2_FAMS) and all([(x["fw"], x["tag"]) for x in F[fam]["rows"]] == EXPECTED[fam] for fam in TC2_FAMS)
+    text = render(F, td)
+    for needle in ("Lane TC2 (`tc2small` / `tc2big` tokens", "MATCHED POSITION: s/step ratio HF (bf16 experts) / e4b = 1.292**", "NO COMMON ADAPTER SET (unsloth/ckpt_unsloth_mxfp4 vs e4b/attn_only_m) — no ratio is quoted",
+                   "- **FOOTPRINT (e4b under expert offload", "## TC2 predictions P1–P7", "| P3 | gptoss | **HELD** |", "| P5 | mixtral | **HELD** |", "| P7 | tc2 | **HELD** |",
+                   "attention census 128", "LABELLED ROW hf_peft_m_t214", "attention-only: trainable 5200000", "did NOT reach grouped_mm" if False else "REACHED grouped_mm"):
+        assert needle in text, needle
+    assert "## Predictions P1–P10" not in text and "## TC1b predictions" not in text
+    assert text.index("- **FOOTPRINT") < text.index("| framework |", text.index("### Mixtral"))
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
