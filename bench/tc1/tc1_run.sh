@@ -107,7 +107,7 @@ case " $FAMILIES " in *" qwen3curve "*)
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC1B-PREREG.md     # TC1b: the curve token is governed by its own registration (the PI's); TC1_PREREG still overrides
   ;;
 esac
-case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*)
+case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*)
   echo "FIXTURE tc2 (TC2-PREREG-draft): small (box A: granite olmoe gptoss): steps=$SMALL_STEPS eval_every=$SMALL_EVAL_EVERY eval_n=$SMALL_EVAL_N; big (box B: qwen3_5 mixtral): the field recipe (steps=$STEPS eval_every=$EVAL_EVERY eval_n=$EVAL_N)" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md      # TC2: governed by its own registration (the PI's, bench/tc1/TC2-PREREG.md); TC1_PREREG still overrides
   ;;
@@ -718,7 +718,8 @@ tc2_big_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8 
   local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
   local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
   local NATIVE="--adapter-dtype native --lora-init native"
-  local UNS="--grad-ckpt unsloth --unsloth-targets $UT"
+  # TC2 amendment 4: TC2_UNS_TARGET_PARAMS gives the matched Unsloth arms (both draws) the family's expert target parameters -- unset everywhere else
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT${TC2_UNS_TARGET_PARAMS:+ --unsloth-target-parameters $TC2_UNS_TARGET_PARAMS}"
   local UP2ARG=""; [ -n "$UP2" ] && UP2ARG="--unsloth-target-parameters $UP2"
   can_run 600 $FAM/e4b/fused_m     && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 $MATCH
   can_run 600 $FAM/unsloth/m       && arm   $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
@@ -760,6 +761,17 @@ tc2_big_box(){
 tc2_mixtral_redraw(){
   SKIP="$SKIP mixtral/hf/hf_peft_m mixtral/axolotl/ckpt_axolotl_m mixtral/axolotl/ckpt_axolotl_best mixtral/e4b/fused_attn4_shipped"
   tc2_big_family   mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 5400 7200 1800 2700 6000 1 "$UT7" ""     ""
+}
+# TC2 amendment 4 (2026-10-02): Qwen3.6-35B-A3B's matched set (926,187,520 fp32 adapters) OOMs e4b's fused path resident on 32 GB
+# at both micro-batches (tc1-5090-27), while Unsloth trains it resident given the family's expert target parameters. This token asks
+# the registered next row: e4b under expert offload (--offload 1) x2 and the e4b reference under offload, against Unsloth's matched
+# arm WITH the expert targets x2 (so the pair is the reducer's ordinary matched pair). HF, both axolotl arms and e4b as shipped are
+# not re-run (tc1-5090-27 holds them) and appear as not_run stubs. Nothing else in the family moves.
+tc2_qwen35_offload(){
+  SKIP="$SKIP qwen3_5/hf/hf_peft_m qwen3_5/axolotl/ckpt_axolotl_m qwen3_5/axolotl/ckpt_axolotl_best qwen3_5/e4b/fused_attn4_shipped"
+  TC2_UNS_TARGET_PARAMS="$UP_QWEN3_5"
+  tc2_big_family   qwen3_5  Qwen/Qwen3.6-35B-A3B                      995ad96eacd98c81ed38be0c5b274b04031597b0 6000 5400 3600 1800 2700 7200 1 "$UT4" ""     ""
+  TC2_UNS_TARGET_PARAMS=""
 }
 # tc1_axolotl_family FAM MID REV FETCH_AL E4B_AL HF_AL AX_AL -- TC1-PREREG amendment 3 (2026-10-02): the axolotl rows re-asked on their own box, each a
 # position within this box against the e4b fused_m it runs first; two draws of the matched pair so the matched position carries its cross-draw interval:
@@ -897,6 +909,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
   tc2big)      tc2_big_box;;                   # lane TC2, box B: qwen3_5, mixtral (tc2_big_box's table)
   tc2mixtral)  tc2_mixtral_redraw;;            # lane TC2 amendment 2: Mixtral's P5 pair and reference redrawn with the Unsloth alarm at 7,200 s
+  tc2qwen35off) tc2_qwen35_offload;;           # lane TC2 amendment 4: Qwen3.6's matched set, e4b under expert offload vs Unsloth resident with expert targets
   # TC3 (TC3-PREREG-draft): the 24 GB RTX 4090 token (TC1_GPU_CLASS=4090) and the owned 12 GB RTX A2000 token (TC1_GPU_CLASS="RTX A2000", TC1_LOCAL_BOX=1)
   #                                                                                                        FETCH ERES EOFF MB1  UNS  HF   HOFF AX   ALO  AZ3  ROFF   (the draft's alarms)
   qwen3frontier)   tc1_frontier_family   qwen3frontier   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1200 3600 3600 3600 1800 3600 2700 3600 3600 5400;;

@@ -128,3 +128,29 @@ automation was not permitted to restart the stopped instance to fetch them; the 
 
 Nothing in the harness, the arms, the alarms or the readings moves beyond what amendment 2 registered; the budgets are box B's (/bin/zsh.54/h
 ceiling, 4.5 h, under .11) and amendment 2's (8 h guard, under ).
+
+### Amendment 4 (2026-10-02T17:29Z, after the box B re-run read, before any box): Qwen3.6-35B-A3B's matched set with e4b under expert offload
+
+**What the re-run showed.** On `tc1-5090-27` the matched set (926,187,520 fp32 adapters over 20,520 slots) OOMed e4b's fused path resident
+on the 32 GB card at both micro-batches and in its reference loop, while Unsloth 2026.9.14, given the family's expert target parameters,
+trained it resident at 30.47 GB and 10.59 s/step (one draw). The read registered it as an e4b loss and named the row that was not asked:
+e4b under expert offload, the lever e4b ships for exactly this case (lane TC3 measured it on Qwen3-30B-A3B: EQUIVALENT-TO-RESIDENT).
+
+**The amendment.** Token `tc2qwen35off` on `TC1_BOX=B`: the same `tc2_big_family` call for Qwen3.6 with `--offload 1` on every e4b arm
+(the e4b alarm 5,400 s, the reference 7,200 s) and the matched Unsloth arm given the expert target parameters on both draws
+(`TC2_UNS_TARGET_PARAMS`), so the reducer's ordinary matched pair is e4b-under-offload against Unsloth-resident at the same 926 M
+parameters. HF, both axolotl arms and e4b as shipped are `not_run` stubs (`tc1-5090-27` holds them). Host RAM floor 192 GB (e4b's offload
+pins the expert stacks in host memory; box B was lost to a 98 GB host).
+
+**Predictions** (registered before the box is drawn; each read off a line `tc1_reduce.py` already prints for that box, no new
+reducer code: P8 from `e4b/fused_attn4_m`'s VERDICT and peak, P9 from the MATCHED POSITION line for Unsloth or its NO-POSITION reason,
+P10 from the equivalence line and the e4b internal-parity line):
+- **P8**: e4b's fused path under offload completes the matched set (VALID) at a peak under 24 GB.
+- **P9**: Unsloth/e4b s/step in [0.4, 1.0] -- Unsloth faster per step, e4b paying the expert stream -- with both arms' draws within 5 %.
+  A ratio outside the band refutes; an unstable pair is UNTESTED.
+- **P10**: the matched pair EQUIVALENT at N = 20 (the lane's band), and e4b's parity control under offload PASSES.
+
+**Decision rules.** P8 holds -> `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02`'s resident OOM stands as measured and a new row
+registers the offload fit; a stable P9 pair is a position on this family, quoted with its footprint and with "e4b under offload" in its
+name. P8 refuted -> the e4b loss on this family stands, now with the lever tried. Budget: one RTX 5090, ceiling $0.69/h (the pool's
+cheapest verified host was $0.57/h at the box B re-run), 4.5 h, estimate under $3.20; the standing no-ask tier.
