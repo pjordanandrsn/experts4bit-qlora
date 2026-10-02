@@ -71,3 +71,52 @@ against tp2); (f) the t1 and r64 pairs as SCALING POINTS under the matched set's
 scored HELD / FALSIFIED / UNTESTED. The selftest adds 10 cases (44 in all): a DIVERGENT curve, a REPRODUCES-P38 plateau and both refutations,
 a failing anchor, a VOID r64 pair (trainable count, the LoRA loop, the manual grouped-mm fallback), the registered-count VOIDs, TRAVELS /
 DOES-NOT-TRAVEL, a target never reached, and the curve token rendered alone (no TC1 P1–P10 table) and beside TC1's tokens.
+
+## Lane TC2 — the `tc2small` and `tc2big` family tokens (TC2-PREREG.md, the PI's; drafted in `campaign-2026-10-01/notes/TC2-PREREG-draft.md`)
+
+The same files, extended (no parallel copy of anything). Two tokens, one box each; the box defaults `PREREG` to `tc1/TC2-PREREG.md` for both unless
+`TC1_PREREG` says otherwise. `TC1_BOX=B` is admitted by `tc1_run.sh` and `tc1_drive.sh` and defaults `TC1_FAMILIES` to `tc2big`; box A keeps `qwen3` and
+takes `TC1_FAMILIES=tc2small`.
+
+**`tc2small`** (`tc2_small_box` → `tc2_small_family`, recipe `small`: N 60, 48 held-out rows every 20 steps — tp4's registration for the small families;
+`TC1_SMALL_STEPS` / `TC1_SMALL_EVAL_N` / `TC1_SMALL_EVAL_EVERY`, forwarded by `tc1_drive.sh`; the function shadows `STEPS` / `EVAL_N` / `EVAL_EVERY` with
+`local`, so its stubs carry the same N as its receipts and the box's reduce call passes no `--steps` for this token): granite
+(`ibm-granite/granite-3.1-3b-a800m-instruct` @ `a0278068…`, 32 layers), olmoe (`allenai/OLMoE-1B-7B-0924-Instruct` @ `7f1c97f4…`, 16), gptoss
+(`openai/gpt-oss-20b` @ `6cee5e81…`, 24). MODE normal, in THIS order: `e4b/fused_attn4_m` · `hf/hf_peft_m` · `e4b/reference_attn4_m` · `e4b/fused_attn4_m_d2`
+· `hf/hf_peft_m_d2` · `unsloth/ckpt_unsloth_m` (venv-unsloth grouped_mm, the seven) · `unsloth/ckpt_unsloth_m_experts` (granite only:
+`q_proj,k_proj,v_proj,o_proj,input_linear,output_linear`, tp4 amendment 4's second arm) · `hf/hf_peft_m_t214` (`HF_VENV=t214`,
+`--hf-experts-implementation grouped_mm`) · `axolotl/ckpt_axolotl_m` · `axolotl/ckpt_axolotl_best` · `e4b/fused_attn4_shipped`. MODE gptoss (tp4's):
+`e4b/fused_attn4_m` and `e4b/reference_attn4_m` are REFUSED stubs written first (tp1/tp2 cited; tp4's bias rule), refreshed by `e4b/attn_only_m`'s own probes;
+then `e4b/attn_only_m` ×2 (`--attn-4bit 0`) · `unsloth/ckpt_unsloth_m` (`--unsloth-load-in-4bit 1`) · `unsloth/ckpt_unsloth_mxfp4` ×2 (`--unsloth-load-in-4bit 0`:
+the 16-bit load that keeps the MXFP4 experts packed; grouped_mm) · `hf/hf_peft_m` · `axolotl/ckpt_axolotl_m`. Alarms = tp4's per-family ceilings
+(fetch/e4b/unsloth/hf/reference: granite 1800/1800/1800/1800/2400, olmoe 2400/2400/2400/2400/3000, gptoss 3000/3600/2400/2400/3600), axolotl = hf + 900.
+
+**`tc2big`** (`tc2_big_box` → `tc2_big_family`, the field recipe: N 20, 8 rows at 0 and N): qwen3_5 (`Qwen/Qwen3.6-35B-A3B` @ `995ad96e…`, 40 layers; Unsloth
+targets UT4 = `q_proj,k_proj,v_proj,o_proj` as tp4, plus `unsloth/ckpt_unsloth_m_experts` with UT4 + `--unsloth-target-parameters
+mlp.experts.gate_up_proj,mlp.experts.down_proj`) and mixtral (`mistralai/Mixtral-8x7B-Instruct-v0.1` @ `eba92302…`, 32; e4b arms `--offload 1`, the others
+resident; the seven). In THIS order: `e4b/fused_attn4_m` · `unsloth/ckpt_unsloth_m` · `e4b/fused_attn4_m_d2` · `unsloth/ckpt_unsloth_m_d2` ·
+`unsloth/ckpt_unsloth_m_experts` (qwen3_5) · `hf/hf_peft_m` · `axolotl/ckpt_axolotl_m` · `axolotl/ckpt_axolotl_best` · `e4b/fused_attn4_shipped` ·
+`e4b/reference_attn4_m` LAST · the `_mb1` pair on an OOM as `tc1_family`. Alarms qwen3_5 6000/3600/3600/1800/5400, mixtral 7200/5400/2400/1800/6000, axolotl = hf + 900.
+
+**Arm driver** (`tc1_arm.py`, T23–T27): `--unsloth-load-in-4bit 0|1` (receipt `unsloth_load_in_4bit`; the double-quant kwarg is not passed on a 16-bit load);
+`--unsloth-target-parameters a,b` (passed as PEFT `target_parameters` only when `get_peft_model`'s signature names it, read at runtime, else the arm REFUSES;
+receipt `unsloth_target_parameters`); the census gains `expert_param_classes` (the class of every frozen expert parameter — `Mxfp4ExpertParam` on the packed
+load) and `Params4bit_expert_linears` (per-expert Linear4bit under an experts container: gpt-oss's bnb-4bit class); `unsloth_zoo.mxfp4_gemm.Mxfp4GroupedMM.apply`
+is counted per step (`unsloth_packed_calls_per_step_min/_max`; an absent name lands in `unsloth_backend_absent`); an attn_only arm's tag suffix names the
+stubs it refreshes (`attn_only_m` → `fused_attn4_m` / `reference_attn4_m`, a `_d2` draw the same stubs) and its matched init / name-free sha cover the trainable
+(attention) slots only; the HF arm passes `experts_implementation` only if the installed transformers accepts the kwarg (a TypeError naming it reloads without,
+`accepted=False`) and records what dispatched (`hf_experts_dispatch`: config + torch grouped_mm calls per step); the probe decodes a self-decoding packed
+parameter (`<class>-packed/dequantize()`, its control flipping one byte of the real storage in place and restoring it). Every name here that comes from
+unsloth / unsloth_zoo source is read from `UPSTREAM-NOTES.md`, not executed on this machine (UNVERIFIED by execution; the selftest exercises the harness's
+own paths on stand-ins).
+
+**Reducer** (`tc1_reduce.py`, R11): the five families with their registered n_layers (32/16/24/40/32), attention census (granite 128, olmoe 64, mixtral 128;
+gpt-oss REFUSED on the bias rule; qwen3_5 unregistered → the receipt's own structural census governs) and pins; TC1's readings per family, plus the HF
+position quoted as `HF (bf16 experts) / e4b` (or 4-bit) with its regime; an Unsloth arm whose trainable count differs from e4b's VOID with the reason
+`attention-only: …` when it adapted no expert parameter; gpt-oss (`attn_only_m` as the anchor) prints a `NO COMMON ADAPTER SET` line — both s/step values,
+both peaks, both trainable counts — in place of every position, and applies no trainable / sha / quality predicate against e4b to the other frameworks' arms
+there; `ckpt_unsloth_mxfp4` is VALID only with ≥ 2L packed expert parameters of a recorded class, `moe_backend_selected == grouped_mm` and the MXFP4 grouped
+GEMM counted ≥ L·A per step; gpt-oss's bnb-4bit Unsloth arm reads the per-expert Linear4bit regime (≥ 2L Params4bit under its experts, either MoE banner);
+mixtral's `FOOTPRINT` line (e4b under offload vs Unsloth resident: peak VRAM, s/step) leads its block; a t214 arm whose dispatch did not reach grouped_mm is
+recorded on its row, never VOID. P1–P7 of the draft in their own table (`## TC2 predictions P1–P7`); P4's e4b leg reads against tp4's 6.3344 s/step
+(`RESULTS-tp4-p46cut.md`), P5 against tp2's 0.361 (= Unsloth/e4b, the lane's convention) and 29.16 / 3.22 GB. The selftest adds 10 cases (53 in all).

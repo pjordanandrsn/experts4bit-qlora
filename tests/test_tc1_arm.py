@@ -108,6 +108,21 @@ def test_tc1_arm_selftest():
     # T17 (P43) still holds: every step printed, every micro-batch timed, the CELL line never carries the per-step lists
     assert ref["log_every"] == 1 and ref["microbatch_timing"] is True
     assert '"microbatch_ms"' not in "".join(line for line in p.stdout.splitlines() if line.startswith("CELL "))
+    # TC2 (T23-T27): the 16-bit Unsloth load's receipt (packed class, counted GEMM, the probe's dequantize() regime), the suffixed attn_only stubs with a
+    # matched init over the trainable slots, the HF arm's dispatch record, and the failing cases printed
+    mx = json.loads((d / "tiny_unsloth_ckpt_unsloth_mxfp4.json").read_text())
+    assert mx["unsloth_load_in_4bit"] is False and mx["census"]["expert_param_classes"] == {"Mxfp4ExpertParam": 4} and mx["unsloth_packed_calls_per_step_min"] == {"unsloth_mxfp4_grouped_mm": 8}
+    assert mx["frozen_base_probe"]["slots"]["gate_up"]["regime"] == "Mxfp4ExpertParam-packed/dequantize()" and mx["frozen_base_probe"]["control_detects_flip"] is True
+    assert mx["unsloth_double_quant"]["how"].startswith("not applicable") and mx["moe_backend_selected"] == "grouped_mm" and mx["unsloth_backend_calls_per_step_min"]["moe_bnb4bit_backend"] == 0
+    ao = json.loads((d / "tinygo_e4b_attn_only_m.json").read_text())
+    ao2 = json.loads((d / "tinygo_e4b_attn_only_m_d2.json").read_text())
+    assert ao["matched_init"]["complete"] is True and ao["matched_init"]["n_slots_expected"] == 8 and ao["matched_init"]["expected_parts"]["experts"].startswith("excluded") and ao["matched_init_sha"] == ao2["matched_init_sha"]
+    st = json.loads((d / "tinygo_e4b_fused_attn4_m.json").read_text())
+    assert st["status"] == "refused" and st["cited"] == "tp1,tp2" and st["probed_by"] == "attn_only" and not (d / "tinygo_e4b_fused_attn4_m_d2.json").exists()
+    t214 = json.loads((d / "tiny_hf_hf_peft_m_t214.json").read_text())
+    assert t214["hf_experts_dispatch"]["requested"] == "grouped_mm" and t214["hf_experts_dispatch"]["reached_grouped_mm"] is False and t214["hf_experts_dispatch"]["torch_grouped_mm_calls_per_step_min"] == 0
+    for needle in ("FAILING-CASE TC2-T24 (arm):", "FAILING-CASE TC2-T26 (arm):", "FAILING-CASE TC2-dispatch (arm):", "tc2={'mxfp4': {'classes': {'Mxfp4ExpertParam': 4}, 'packed_calls': {'unsloth_mxfp4_grouped_mm': 8}"):
+        assert needle in p.stdout, needle
 
 
 def test_real_run_without_prereg_refuses():
@@ -602,3 +617,118 @@ def test_run_and_drive_scripts_parse():
     assert "GNF4_SHA=${GNF4_SHA:-846b512b905468c08f5748943d08769b572affa2}" in drive      # the v0.34.0 COMMIT, not the tag object
     assert '$REPO/bench/tp4/tp4_alpaca.py' in drive                                     # tp4's Alpaca builder is referenced, not copied
     assert "$REPO/bench/flagship-matrix/drivers/n9_datasets.py" in drive and "$HERE/n9_datasets.py" not in drive   # TC1b: the clinical builder likewise (referenced)
+
+
+# ----------------------------------------------------------------------------- lane TC2 (the tc2small / tc2big tokens)
+TC2_KNOBS = ("TC1_SMALL_STEPS", "TC1_SMALL_EVAL_N", "TC1_SMALL_EVAL_EVERY")
+
+
+def test_tc2_knobs_are_read_by_the_box_and_forwarded_by_the_driver():
+    """TC2: the small families' instrument knobs (N 60, 48 rows every 20 -- tp4's registration for them) are read by tc1_run.sh with those
+    defaults and forwarded by tc1_drive.sh; box B exists on both sides and defaults to the tc2big token; the tokens default their PREREG."""
+    run, drive = RUN_SH.read_text(), DRIVE_SH.read_text()
+    forwarded_block = drive[drive.index("for v in TC1_FAMILIES"):drive.index("; do", drive.index("for v in TC1_FAMILIES"))]
+    for knob, default in zip(TC2_KNOBS, ("60", "48", "20")):
+        assert re.search(rf"\${{{knob}:-{default}}}", run), (knob, default, "the box script does not read it with the registered default")
+        assert knob in forwarded_block.split(), (knob, "read by tc1_run.sh but not forwarded by tc1_drive.sh")
+    assert 'case "$TC1_BOX" in A|B)' in run and 'case "$TC1_BOX" in A|B)' in drive
+    assert 'A) FAMILIES=${TC1_FAMILIES:-"qwen3"};;' in run and 'B) FAMILIES=${TC1_FAMILIES:-"tc2big"};;' in run
+    assert '[ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md' in run and 'case " $FAMILIES " in *" tc2small "*|*" tc2big "*)' in run
+    assert "small)  s=$SMALL_STEPS; en=$SMALL_EVAL_N; ee=$SMALL_EVAL_EVERY; ex_tag=fused_attn4_m;;" in run
+
+
+def test_tc2_run_sh_runs_the_registered_arm_order_with_the_flags():
+    """TC2 (TC2-PREREG-draft 'Arms per family'): tc2_small_family's two modes and tc2_big_family's invocations in order with the registered
+    recipes, flags, venvs and stubs; the plan tables carry the pins, tp4's ceilings (axolotl = hf + 900) and the target lists; TC1's own
+    function is untouched."""
+    body = RUN_SH.read_text()
+    small = body[body.index("tc2_small_family(){"):body.index("# tc2_big_family")]
+    big = body[body.index("tc2_big_family(){"):body.index("# tc2_small_box / tc2_big_box")]
+    go = small[small.index('if [ "$MODE" = gptoss ]; then\n    stubw'):small.index("  else\n    can_run 600 $FAM/e4b/fused_m")]
+    normal = small[small.index("  else\n    can_run 600 $FAM/e4b/fused_m"):]
+    calls = r"(?:arm|draw2)\s+\$FAM\s+(e4b|unsloth|hf|axolotl)\s+(\S+)"
+    assert re.findall(calls, normal) == [
+        ("e4b", "fused_attn4_m"), ("hf", "hf_peft_m"), ("e4b", "reference_attn4_m"), ("e4b", "fused_attn4_m"), ("hf", "hf_peft_m"), ("unsloth", "ckpt_unsloth_m"),
+        ("unsloth", "ckpt_unsloth_m_experts"), ("hf", "hf_peft_m_t214"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("e4b", "fused_attn4_shipped")]
+    assert normal.count("draw2 $FAM") == 2 and "todo_arm" not in small
+    assert re.findall(calls, go) == [("e4b", "attn_only_m"), ("e4b", "attn_only_m"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_mxfp4"),
+                                     ("unsloth", "ckpt_unsloth_mxfp4"), ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m")]
+    assert re.findall(r"stubw \$FAM e4b (\S+) (\S+) refused", go) == [("fused_attn4_m", "fused"), ("reference_attn4_m", "reference")]
+    assert '\'{"cited": "tp1,tp2", "n_patched": 0}\'' in go and '\'{"cited": "tp4", "n_patched": 0}\'' in go and go.index("stubw") < go.index("arm   $FAM e4b attn_only_m")
+    assert re.search(r"arm   \$FAM e4b attn_only_m attn_only \$EAL \"\$MID\" \$REV 0 small \$TOK \$TS --attn-4bit 0 \$MATCH", go)
+    assert re.search(r"draw2 \$FAM e4b attn_only_m attn_only \$EAL .* 0 small .* --attn-4bit 0 \$MATCH", go)
+    assert re.search(r"ckpt_unsloth_m unsloth \$UAL .* 0 small .* \$UNS --unsloth-moe-backend grouped_mm --unsloth-load-in-4bit 1 \$MATCH", go)
+    assert re.search(r"arm   \$FAM unsloth ckpt_unsloth_mxfp4 unsloth \$UAL .* 0 small .* \$UNS --unsloth-moe-backend grouped_mm --unsloth-load-in-4bit 0 \$MATCH", go)
+    assert re.search(r"draw2 \$FAM unsloth ckpt_unsloth_mxfp4 unsloth \$UAL .* --unsloth-load-in-4bit 0 \$MATCH", go)
+    assert re.search(r"fused_attn4_m fused \$EAL \"\$MID\" \$REV 0 small \$TOK \$TS --attn-4bit 1 \$MATCH", normal) and re.search(r"reference_attn4_m reference \$RAL .* 0 small .* --attn-4bit 1 \$MATCH", normal)
+    assert re.search(r'ckpt_unsloth_m unsloth \$UAL .* 0 small .* \$UNS --unsloth-moe-backend grouped_mm \$MATCH', normal)
+    assert re.search(r'\[ -n "\$UT2" \] && can_run 600 \$FAM/unsloth/m_experts && arm \$FAM unsloth ckpt_unsloth_m_experts unsloth \$UAL .* --grad-ckpt unsloth --unsloth-targets "\$UT2" --unsloth-moe-backend grouped_mm \$MATCH', normal)
+    assert re.search(r"HF_VENV=t214 arm \$FAM hf hf_peft_m_t214 hf \$HAL .* 0 small .* --hf-experts-implementation grouped_mm \$MATCH", normal)
+    assert re.search(r"ckpt_axolotl_best axolotl \$AAL .* --axolotl-best 1 --adapter-dtype fp32 --lora-init native", normal) and re.search(r"fused_attn4_shipped fused \$EAL .* 0 small .* \$NATIVE", normal)
+    assert 'tc1_prepare $FAM "$MID" $REV $FAL "$ALL" $SMALL_EVAL_N' in small and 'MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"' in small
+    assert re.findall(calls, big) == [
+        ("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_experts"),
+        ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("e4b", "fused_attn4_shipped"), ("e4b", "reference_attn4_m"),
+        ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m_mb1"), ("hf", "hf_peft_m_mb1")]
+    assert re.search(r"fused_attn4_m fused \$EAL \"\$MID\" \$REV \$OFF field \$TOK \$TS --attn-4bit 1 \$MATCH", big) and big.count("draw2 $FAM") == 2
+    assert re.search(r"ckpt_unsloth_m unsloth \$UAL \"\$MID\" \$REV 0 field \$TOK \$TS \$UNS --unsloth-moe-backend grouped_mm \$MATCH", big)
+    assert re.search(r'ckpt_unsloth_m_experts unsloth \$UAL .* 0 field .* --grad-ckpt unsloth --unsloth-targets "\$UT2" \$UP2ARG --unsloth-moe-backend grouped_mm \$MATCH', big)
+    assert 'local UP2ARG=""; [ -n "$UP2" ] && UP2ARG="--unsloth-target-parameters $UP2"' in big
+    assert re.search(r"reference_attn4_m reference \$RAL \"\$MID\" \$REV \$OFF field .* --attn-4bit 1 \$MATCH", big) and big.index("reference_attn4_m reference") > big.index("fused_attn4_shipped fused")
+    assert re.search(r"fused_attn4_shipped fused \$EAL \"\$MID\" \$REV \$OFF field .* \$NATIVE", big) and re.search(r"fused_attn4_m_mb1 fused \$EAL \"\$MID\" \$REV \$OFF mb1", big)
+    assert 'UNS="--grad-ckpt unsloth --unsloth-targets $UT"' in big and 'UNS="--grad-ckpt unsloth --unsloth-targets $UT7"' in small
+    # the plan tables: the registered pins, tp4's ceilings (FETCH E4B UNS HF AX=HF+900 REF), gptoss MODE, granite's second list, qwen3_5's UT4 + explicit target_parameters, mixtral's offload
+    assert 'tc2_small_family granite  ibm-granite/granite-3.1-3b-a800m-instruct a02780686e08a03fe0d2679a293b5c74a90efa89 1800 1800 1800 1800 2700 2400 normal "$UT_GRANITE2"' in body
+    assert 'tc2_small_family olmoe    allenai/OLMoE-1B-7B-0924-Instruct         7f1c97f440f06ce36705e4f2b843edb5925f4498 2400 2400 2400 2400 3300 3000 normal ""' in body
+    assert 'tc2_small_family gptoss   openai/gpt-oss-20b                        6cee5e81ee83917806bbde320786a8fb61efebee 3000 3600 2400 2400 3300 3600 gptoss ""' in body
+    assert 'tc2_big_family   qwen3_5  Qwen/Qwen3.6-35B-A3B                      995ad96eacd98c81ed38be0c5b274b04031597b0 6000 3600 3600 1800 2700 5400 0 "$UT4" "$UT4" "$UP_QWEN3_5"' in body
+    assert 'tc2_big_family   mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 5400 2400 1800 2700 6000 1 "$UT7" ""     ""' in body
+    assert 'UT4="q_proj,k_proj,v_proj,o_proj"' in body and 'UT_GRANITE2="q_proj,k_proj,v_proj,o_proj,input_linear,output_linear"' in body
+    assert 'UP_QWEN3_5="mlp.experts.gate_up_proj,mlp.experts.down_proj"' in body and 'UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"' in body
+    assert "tc2small)    tc2_small_box;;" in body and "tc2big)      tc2_big_box;;" in body and 'for t in (tag, "attn_only_m", "reference_attn4_m"):' in body
+    fam = body[body.index("tc1_family(){"):body.index("# tc1_native_family")]
+    assert re.findall(calls, fam)[:3] == [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "reference_attn4_m")]   # TC1 untouched
+
+
+def test_tc2_pure_helpers_and_knobs():
+    """TC2 T23-T27: the target_parameters and experts_implementation decisions follow signatures / exceptions read at runtime, the knobs reach
+    the receipt block, the attn_only stub tags carry the lane's suffix, and the self-decoding test keys on a class override (every tensor
+    carries Tensor.dequantize())."""
+    import types
+    import torch
+    arm = _load_arm_module()
+
+    def gpm_with(model, r=16, target_modules=None, target_parameters=None):
+        pass
+
+    def gpm_without(model, r=16, target_modules=None):
+        pass
+    want = ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"]
+    kw, info = arm.unsloth_target_parameters_kwargs(gpm_with, want)
+    assert kw == {"target_parameters": want} and info == {"requested": want, "passed": True, "how": "get_peft_model(target_parameters=[...])"}
+    kw, info = arm.unsloth_target_parameters_kwargs(gpm_without, want)
+    assert kw == {} and info["passed"] is False and "does not name target_parameters" in info["how"]
+    assert arm.unsloth_target_parameters_kwargs(gpm_without, [])[1]["how"] == "not requested"
+    assert arm.unsloth_target_parameters_of(types.SimpleNamespace(unsloth_target_parameters="a, b,")) == ["a", "b"] and arm.unsloth_target_parameters_of(types.SimpleNamespace()) == []
+    assert arm.unsloth_load_in_4bit_of(types.SimpleNamespace(unsloth_load_in_4bit=0)) is False and arm.unsloth_load_in_4bit_of(types.SimpleNamespace()) is True
+
+    def fp_rejects(path, **kw):
+        if "experts_implementation" in kw:
+            raise TypeError("__init__() got an unexpected keyword argument 'experts_implementation'")
+        return ("model", kw)
+    m, info = arm.hf_from_pretrained_experts_impl(fp_rejects, "grouped_mm", "p", dtype=1)
+    assert info["accepted"] is False and "experts_implementation" in info["error"] and m[1] == {"dtype": 1}
+    m, info = arm.hf_from_pretrained_experts_impl(lambda path, **kw: ("model", kw), "grouped_mm", "p")
+    assert info["accepted"] is True and m[1] == {"experts_implementation": "grouped_mm"}
+    assert arm.attn_only_stub_tags("attn_only_m_d2") == ("fused_attn4_m", "reference_attn4_m") and arm.attn_only_stub_tags("attn_only") == ("fused_attn4", "reference_attn4")
+    out = arm.apply_unsloth_knobs(types.SimpleNamespace(framework="e4b", unsloth_moe_backend="default", unsloth_speed_tilt=0, unsloth_double_quant="off", unsloth_load_in_4bit=0, unsloth_target_parameters="x,y"))
+    assert out["load_in_4bit_requested"] is False and out["target_parameters_requested"] == ["x", "y"] and out["env_set"] == {}
+    assert arm.self_decoding(torch.nn.Parameter(torch.zeros(2, dtype=torch.uint8), requires_grad=False)) is False
+
+    class Packed(torch.nn.Parameter):
+        def dequantize(self):
+            return self.float()
+    assert arm.self_decoding(Packed(torch.zeros(2, dtype=torch.uint8), requires_grad=False)) is True
+    assert "unsloth_mxfp4_grouped_mm" in arm.UNSLOTH_PACKED_KEYS and arm.UNSLOTH_PACKED_FUNCS[0][:3] == ("unsloth_zoo.mxfp4_gemm", "Mxfp4GroupedMM", "apply")
+    p = _run("--help")
+    assert "--unsloth-load-in-4bit" in p.stdout and "--unsloth-target-parameters" in p.stdout
