@@ -19,7 +19,7 @@ def test_it_refuses_without_the_launcher_environment():
 
 def test_a_missing_gnf4_pin_is_refused_too():
     env = {k: v for k, v in os.environ.items() if k != "GNF4_SHA"}
-    env.update({"E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_RUN_DIR": "/nonexistent/x",
+    env.update({"E4B_RENT_SSH_HOST": "h", "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts", "E4B_RENT_RUN_DIR": "/nonexistent/x",
                 "E4B_RENT_RUN_ID": "t", "E4B_RENT_INSTANCE_ID": "0"})
     r = subprocess.run(["bash", str(SCRIPT)], capture_output=True, text=True, env=env)
     assert r.returncode == 78 and "GNF4_SHA" in r.stdout

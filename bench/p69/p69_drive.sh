@@ -5,12 +5,12 @@
 # compute -- the launcher owns attach, pre-flight, receipt, ledger row and teardown.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p69_drive] $*"; }
-for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_INSTANCE_ID GNF4_SHA; do
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_INSTANCE_ID GNF4_SHA; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight, with GNF4_SHA pinned"; exit 78; }
 done
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; OUT="$E4B_RENT_RUN_DIR/p69"
-SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -p $PORT root@$HOST"
-SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
+SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT root@$HOST"
+SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 RAW="https://raw.githubusercontent.com/pjordanandrsn/grouped-nf4-gemm/$GNF4_SHA/bench/calibrate.py"
 mkdir -p "$OUT/run1" "$OUT/run2" || { say "cannot create $OUT"; exit 20; }
 

@@ -7,7 +7,7 @@
 # Nothing here creates, destroys or approves compute.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p39_drive] $*"; }
-for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID P39_BOX; do
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID P39_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
 case "$P39_BOX" in 1|2|3|4) ;; *) say "refusing: P39_BOX must be 1, 2, 3 or 4"; exit 78;; esac
@@ -35,8 +35,8 @@ if [ "$P39_BOX" = 2 ] || [ "$P39_BOX" = 3 ]; then
   BOX1_FP=$(tr -d '\n' < "$P39_BOX1_DIR/box1_out/FINGERPRINT"); case "$BOX1_FP" in sha256:*) ;; *) say "refusing: box 1 fingerprint malformed"; exit 78;; esac
 fi
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
-SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
-SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
+SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
+SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${P39_POLL_S:-60}; W=/root/p39
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P39_BOX=$P39_BOX P39_RUN_ID=$RUN_ID P39_RUN_NONCE=$NONCE P39_DEADLINE_EPOCH=$DEADLINE P39_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_NEW_SHA=$GNF4_NEW_SHA GNF4_OLD_SHA=$GNF4_OLD_SHA"
@@ -62,7 +62,7 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/p39" && mkdir -p "$RUN_DIR/p39" || { say "fetch failed: local dir"; exit 22; }
-rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude 'artifact*/payloads/layer_*' --exclude work_qwen3 --exclude 'venv*' --exclude '.cache' "root@$HOST:$W/" "$RUN_DIR/p39/" || { say "fetch failed: rsync"; exit 22; }
+rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude 'artifact*/payloads/layer_*' --exclude work_qwen3 --exclude 'venv*' --exclude '.cache' "root@$HOST:$W/" "$RUN_DIR/p39/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/p39" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/p39/P39_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/p39/TP_DONE.$NONCE" ] || { say "lane did not finish (no TP_DONE for this run)"; exit 23; }

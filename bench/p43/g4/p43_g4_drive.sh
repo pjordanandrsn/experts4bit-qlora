@@ -5,11 +5,11 @@
 # _RUN_DIR). Nothing here creates, destroys or approves compute. Lineage: the mini's untracked probe_drive4.sh.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p43_g4_drive] $*"; }
-for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR; do [ -n "${!v:-}" ] || { say "refusing: $v unset -- run as rent.py --command after a live pre-flight"; exit 78; }; done
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR; do [ -n "${!v:-}" ] || { say "refusing: $v unset -- run as rent.py --command after a live pre-flight"; exit 78; }; done
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../../.." && pwd)
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT
-SSH="ssh -n -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
-SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
+SSH="ssh -n -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
+SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 W=/root/probe
 # The e4b the box installs is the e4b this driver ships from (pod-launch.sh has proven this checkout is heads.e4b).
 if [ -z "${E4B_SHA:-}" ]; then
@@ -34,7 +34,7 @@ $SSH "cd $W && E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA MID='$MID' REV=$REV P43_MIN_M
 rc=${PIPESTATUS[0]}
 say "box returned rc=$rc; fetching"
 mkdir -p "$E4B_RENT_RUN_DIR/probe"
-rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude 'venv*' --exclude '.cache' "root@$HOST:$W/" "$E4B_RENT_RUN_DIR/probe/" || { say "fetch failed"; exit 22; }
+rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude 'venv*' --exclude '.cache' "root@$HOST:$W/" "$E4B_RENT_RUN_DIR/probe/" || { say "fetch failed"; exit 22; }
 say "fetched $(ls "$E4B_RENT_RUN_DIR/probe" | wc -l | tr -d ' ') entries"
 [ -f "$E4B_RENT_RUN_DIR/probe/PROBE_SUCCESS" ] || { say "probe did not succeed (rc=$rc; REFUSAL: $(cat "$E4B_RENT_RUN_DIR/probe/REFUSAL" 2>/dev/null || echo none))"; exit "${rc:-1}"; }
 say "probe complete"; exit 0

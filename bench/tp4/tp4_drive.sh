@@ -7,7 +7,7 @@
 # Pattern: bench/p39/p39_drive.sh.   TP4_BOX=A|B|C|D|E (required; D = P43 diagnosis, E = P45 profiling).   Nothing here creates, destroys or approves compute.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [tp4_drive] $*"; }
-for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID TP4_BOX; do
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID TP4_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
 case "$TP4_BOX" in A|B|C|D|E|F) ;; *) say "refusing: TP4_BOX must be A, B, C, D, E or F (D = P43 diagnosis, E = P45 profiling, F = P46 adapter path)"; exit 78;; esac
@@ -30,8 +30,8 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not a 40-char hex s
 GNF4_SHA=${GNF4_SHA:-d9fd170d83305fbe3f9b5ae2e661d45307c0a2c5}   # grouped-nf4-gemm main on 2026-09-10 (TP4-PREREG "Environments")
 [ ${#GNF4_SHA} -eq 40 ] || { say "refusing: GNF4_SHA is not a 40-char hex sha ($GNF4_SHA)"; exit 78; }
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
-SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
-SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
+SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
+SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${TP4_POLL_S:-60}; STALL_S=${TP4_STALL_S:-900}; W=/root/tp4
 HF_TOKEN_FILE=${HF_TOKEN_FILE:-$HOME/.config/hf/token}
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
@@ -123,7 +123,7 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/tp4" && mkdir -p "$RUN_DIR/tp4" || { say "fetch failed: local dir"; exit 22; }
-rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' "root@$HOST:$W/" "$RUN_DIR/tp4/" || { say "fetch failed: rsync"; exit 22; }
+rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' "root@$HOST:$W/" "$RUN_DIR/tp4/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/tp4" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/tp4/TP4_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/tp4/TP_DONE.$NONCE" ] || {

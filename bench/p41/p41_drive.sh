@@ -16,7 +16,7 @@
 # beside it. Two numbers, two jobs; the driver refuses without either. P41_FAMILIES etc. pass through; P41_DRIVE_DRYRUN=1 prints the commands.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p41_drive] $*"; }
-for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_WALLCLOCK_S E4B_RENT_USD_PER_HOUR E4B_RENT_EST_USD E4B_RENT_INSTANCE_ID; do
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_WALLCLOCK_S E4B_RENT_USD_PER_HOUR E4B_RENT_EST_USD E4B_RENT_INSTANCE_ID; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run this as rent.py --command after a live pre-flight (e4b#464)"; exit 78; }
 done
 [ -n "${P41_PLAN_EST_USD:-}" ] || { say "refusing: P41_PLAN_EST_USD is not set -- the run's amended planning estimate (P41-PREREG.md Amendments) is what STOP-4 works from; the approval line (E4B_RENT_EST_USD) is the guard, not the estimate"; exit 78; }
@@ -24,7 +24,7 @@ HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 HARNESS=$REPO/bench/tp3/tp3_arm.py; RUNSH=$HERE/p41_run.sh; ADMIT=$HERE/p41_admit.py
 [ -s "$HARNESS" ] && [ -s "$RUNSH" ] && [ -s "$ADMIT" ] || { say "refusing: harness, lane script or admission rules missing ($HARNESS, $RUNSH, $ADMIT)"; exit 78; }
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
-SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
+SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
 POLL=${P41_POLL_S:-60}; START_WAIT=${P41_START_WAIT_S:-30}; W=/root/p41
 case "$START_WAIT" in ""|*[!0-9]*) say "refusing: P41_START_WAIT_S must be an integer from 1 to 60"; exit 78;; esac
 [ "$START_WAIT" -ge 1 ] && [ "$START_WAIT" -le 60 ] || { say "refusing: P41_START_WAIT_S must be from 1 to 60"; exit 78; }
@@ -50,7 +50,7 @@ say "run $RUN_ID nonce=$RUN_NONCE -> box $HOST:$PORT; receipts -> $RUN_DIR/p41; 
 # The workdir is intentionally fixed for the box-side scripts, so clear it synchronously before staging. The child
 # also writes the nonce; the controller never manufactures the child's proof of start.
 $SSH "rm -rf -- $W && mkdir -p $W/logs && printf '%s\n' '$E4B_RENT_INSTANCE_ID' > $W/INSTANCE_ID" || { say "stage failed: synchronous remote cleanup"; exit 20; }
-scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P "$PORT" "$HARNESS" "$RUNSH" "$ADMIT" "root@$HOST:$W/" || { say "stage failed: scp"; exit 20; }
+scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P "$PORT" "$HARNESS" "$RUNSH" "$ADMIT" "root@$HOST:$W/" || { say "stage failed: scp"; exit 20; }
 $SSH "cd $W || exit 20; nohup env $PASS bash p41_run.sh > outer.log 2>&1 < /dev/null & child=\$!; end=\$((\$(date +%s) + $START_WAIT)); while [ \$(date +%s) -lt \$end ]; do observed=\$(cat P41_RUN_NONCE 2>/dev/null || true); [ \"\$observed\" = '$RUN_NONCE' ] && { echo started:\$child; exit 0; }; if ! kill -0 \$child 2>/dev/null; then wait \$child; child_rc=\$?; echo child-exited-before-nonce:rc=\$child_rc >&2; [ \$child_rc -ne 0 ] && exit \$child_rc; exit 125; fi; sleep 1; done; echo nonce-handshake-timeout >&2; exit 124" || { say "start failed: child did not bind the current run nonce"; exit 21; }
 say "lane started on the box; polling TP_DONE every $POLL s"
 LAST=""
@@ -63,7 +63,7 @@ while :; do
 done
 rm -rf "$RUN_DIR/p41" || { say "fetch failed: cannot clear local result directory"; exit 22; }
 mkdir -p "$RUN_DIR/p41"
-rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude adapters --exclude e4b-src --exclude data --exclude 'venv*' "root@$HOST:$W/" "$RUN_DIR/p41/" || { say "fetch failed: rsync"; exit 22; }
+rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude adapters --exclude e4b-src --exclude data --exclude 'venv*' "root@$HOST:$W/" "$RUN_DIR/p41/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/p41" | wc -l | tr -d ' ') entries into $RUN_DIR/p41"
 NONCE_FILE="$RUN_DIR/p41/P41_RUN_NONCE"
 [ -f "$NONCE_FILE" ] || { say "fetched artifacts have no P41_RUN_NONCE"; exit 24; }

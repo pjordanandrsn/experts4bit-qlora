@@ -5,7 +5,7 @@
 # creates, destroys or approves compute. Pattern: bench/p42/p42_drive.sh.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p47_drive] $*"; }
-for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID; do
+for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd); P39="$REPO/bench/p39"; P44="$REPO/bench/p44"; P49="$REPO/bench/p49"
@@ -26,8 +26,8 @@ fi
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex ($E4B_SHA)"; exit 78;; esac; [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not 40 chars"; exit 78; }
 GNF4_SHA=${GNF4_SHA:-8b1acc9e103ed1798a82307503c1c63d667b59ee}   # grouped-nf4-gemm v0.32.0, the consumer CI pin
 HOST=$E4B_RENT_SSH_HOST; PORT=$E4B_RENT_SSH_PORT; RUN_DIR=$E4B_RENT_RUN_DIR; RUN_ID=$E4B_RENT_RUN_ID; DEADLINE=$E4B_RENT_DEADLINE_EPOCH
-SSH="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
-SCP="scp -q -o BatchMode=yes -o StrictHostKeyChecking=accept-new -P $PORT"
+SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAliveInterval=30 -p $PORT root@$HOST"
+SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${P47_POLL_S:-60}; W=/root/p47
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
 PASS="P47_RUN_ID=$RUN_ID P47_RUN_NONCE=$NONCE P47_DEADLINE_EPOCH=$DEADLINE P47_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA P47_MIN_MBPS=${P47_MIN_MBPS:-20} P47_MIN_DISK_GB=${P47_MIN_DISK_GB:-120} P47_FAMILY=${P47_FAMILY:-gemma4diag} P47_NEED_S=${P47_NEED_S:-6000} P47_ACT_PROBE=${P47_ACT_PROBE:-0} P47_ACT_PROBE_N=${P47_ACT_PROBE_N:-8} P47_KL_SKIP=${P47_KL_SKIP:-0} P47_PROMPT_SET=${P47_PROMPT_SET:-committed} ${P47_ARMS:+P47_ARMS=\"$P47_ARMS\" }${P47_FAMILY2:+P47_FAMILY2=$P47_FAMILY2 }${P47_ARMS2:+P47_ARMS2=\"$P47_ARMS2\" }${P47_NEED_S2:+P47_NEED_S2=$P47_NEED_S2 }"
@@ -82,7 +82,7 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/p47" && mkdir -p "$RUN_DIR/p47" || { say "fetch failed: local dir"; exit 22; }
-rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $PORT" --exclude 'work_*' --exclude 'refcache_*' --exclude '.cache' --exclude '__pycache__' "root@$HOST:$W/" "$RUN_DIR/p47/" || { say "fetch failed: rsync"; exit 22; }
+rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude 'work_*' --exclude 'refcache_*' --exclude '.cache' --exclude '__pycache__' "root@$HOST:$W/" "$RUN_DIR/p47/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/p47" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/p47/P47_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/p47/TP_DONE.$NONCE" ] || {

@@ -49,7 +49,7 @@ def test_lane_failures_avoid_the_machine_exclusion_codes():
 
 def test_the_driver_runs_to_its_dry_run(tmp_path):
     env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path), "E4B_RENT_SSH_HOST": "h",
-           "E4B_RENT_SSH_PORT": "1", "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "k27-dry", "E4B_RENT_DEADLINE_EPOCH": "1",
+           "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts", "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "k27-dry", "E4B_RENT_DEADLINE_EPOCH": "1",
            "E4B_RENT_INSTANCE_ID": "0", "E4B_SHA": "0" * 40, "GNF4_SHA": "1" * 40, "K27_DRIVE_DRYRUN": "1"}
     out = subprocess.run(["bash", str(LANE / "k27_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> root@h:/root/k27"), out.stdout + out.stderr

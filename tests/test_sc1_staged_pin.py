@@ -108,7 +108,7 @@ def test_make_pin_reproduces_the_pin(tmp_path):
 
 def _dry_env(tmp_path, **extra):
     env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path), "E4B_RENT_SSH_HOST": "h",
-           "E4B_RENT_SSH_PORT": "1", "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "sc1-dry", "E4B_RENT_DEADLINE_EPOCH": "1",
+           "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts", "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "sc1-dry", "E4B_RENT_DEADLINE_EPOCH": "1",
            "E4B_RENT_INSTANCE_ID": "0", "E4B_SHA": "0" * 40, "SC1_DRIVE_DRYRUN": "1", "SC1_BOX": "A"}
     env.update(extra)
     return env
