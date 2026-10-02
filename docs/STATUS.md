@@ -172,8 +172,13 @@ re-run once the harness stopped breaking its fp32 routers, TC1 amendment 4):
 **axolotl/e4b 1.416 [1.398, 1.435]** at the same matched work, e4b faster per
 step, axolotl 0.93 GB lower at peak and ×2.31 the energy; its scattermoe
 native-best arm steps 7 % faster than e4b's matched path (0.929, one draw,
-its own init — `.scattermoe-native`, a labelled row; the native-vs-native
-comparison on one box is open). **On an H100 NVL the sign reverses** (lane TC1c, the same
+its own init — `.scattermoe-native`, a labelled row). **Native-best against
+native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
+native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.
+axolotl's scattermoe draws on that box were 10.8 % apart, with large warm-up
+steps inside the 20-step window, so its ratio is not quoted, P13 is UNTESTED,
+and no "fastest" statement is made; amendment 8 re-asks it over steps 101..200
+of a 200-step run. **On an H100 NVL the sign reverses** (lane TC1c, the same
 matched set, one rented box, [`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md);
 register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`): Unsloth takes 2.546
 s/step against e4b's 4.097 — **Unsloth/e4b 0.621 [0.615, 0.628]**, Unsloth
