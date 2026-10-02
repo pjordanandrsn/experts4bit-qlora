@@ -33,7 +33,7 @@ export PATH=$SGLANG_VENV/bin:${CUDA_HOME:-/usr/local/cuda}/bin:$PATH
 JSONL=${OUT%.json}.jsonl; rm -f -- "${JSONL:?}"
 CMD=("$SGLANG_VENV/bin/python" -m sglang.benchmark.one_batch --model-path "$MODEL" --revision "$REV"
      --batch-size 1 16 --input-len 512 --output-len 128 --disable-radix-cache --cuda-graph-bs-decode 1 16 --moe-runner-backend auto
-     --dtype bfloat16 --random-seed 0 --run-name sc1_sglang_native --result-filename "$JSONL" "$@")
+     --dtype float16 --random-seed 0 --run-name sc1_sglang_native --result-filename "$JSONL" "$@")
 { echo "# sc1 sglang one_batch at=$(date -u +%FT%TZ) alarm=${ALARM}s"; echo "# cmd: ${CMD[*]}"; } > "$LOG"
 echo "[$(date -u +%FT%TZ)] one_batch: ${CMD[*]}"
 perl -e "alarm $ALARM; exec @ARGV" "${CMD[@]}" 2>&1 | tee -a "$LOG" | grep -aE "Prefill\.|Decode\.|Total\.|skipping|Error|error|Warmup|Benchmark" | cut -c1-200

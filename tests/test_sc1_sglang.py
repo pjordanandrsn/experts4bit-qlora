@@ -69,7 +69,7 @@ class FakeState:
         self.flushes = 0
         self.server_info = {"version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto",
                             "disable_radix_cache": True, "max_running_requests": 16, "chunked_prefill_size": -1,
-                            "schedule_policy": "fcfs", "context_length": 2048, "dtype": "bfloat16", "quantization": None,
+                            "schedule_policy": "fcfs", "context_length": 2048, "dtype": "float16", "quantization": None,
                             "moe_runner_backend": "auto", "cuda_graph_config": {"decode": {"backend": "full", "bs": [1, 16]},
                                                                                  "prefill": {"backend": "breakable"}},
                             "launch_command": "fake"}
@@ -491,7 +491,7 @@ CHUNKING_OFF = ("matched", "kvfp8", "ttft_matched", "quality")
 RTX5090_MIB = 32607                         # nvidia-smi memory.total on the SC1 boxes
 PRE_GIB, AFTER_LOAD_GIB = 30.69, 14.98      # sc1c-prove-13's SGLang log: "avail mem" before / after loading the GPTQ checkpoint
 MIN_VIABLE = 0.5134                         # the same log: "minimum viable = 1 - available/pre"
-KV_BYTES_PER_TOKEN = 48 * 4 * 128 * 2 * 2   # Qwen3-30B-A3B: 48 layers x 4 KV heads x head_dim 128 x (K, V) x bf16
+KV_BYTES_PER_TOKEN = 48 * 4 * 128 * 2 * 2   # Qwen3-30B-A3B: 48 layers x 4 KV heads x head_dim 128 x (K, V) x 2 bytes (16-bit KV)
 VLLM_PEAK_GIB = 0.86 + 0.50                 # sc1a-5090-1: vLLM 0.30's largest peak activation + CUDA-graph memory, 8192-token batch
 
 
@@ -549,3 +549,14 @@ def test_a8_engagement_refuses_a_drifted_fraction_or_a_short_pool():
     assert "SC1_MFS=$SC1_SGLANG_MEM_FRACTION_STATIC" in text
     assert 'need(abs(float(info.get("mem_fraction_static") or 0) - mfs) < 1e-9' in text
     assert 'need(int(info.get("max_total_num_tokens") or 0) >= cap' in text
+
+
+def test_a9_sglang_runs_the_gptq_scales_dtype():
+    # SGLang 0.5.20's GPTQ Marlin MoE asserts hidden_states.dtype == w1_scale.dtype (fused_marlin_moe.py); the lane's
+    # checkpoint declares torch_dtype float16 and stores float16 scales, and vLLM's `auto` resolved float16 on it (sc1a-5090-1)
+    for mode in CHUNKING_OFF:
+        assert _flag(_flags(mode), "--dtype") == "float16", mode
+    assert "--dtype" not in _flags("native")            # native keeps SGLang's auto: the checkpoint's float16
+    ob = (SGL / "one_batch.sh").read_text()
+    assert "--dtype float16" in ob and "bfloat16" not in ob
+    assert 'need(info.get("dtype") == "float16"' in SERVER_SH.read_text()
