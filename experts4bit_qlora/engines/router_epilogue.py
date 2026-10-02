@@ -39,9 +39,11 @@ def _cast_default():
     """``E4B_ROUTER_EPI_CAST`` (e4b#726, lane P70), read once at import into
     :data:`CAST_WEIGHTS`. Unset (or empty) -> ``None``, the per-kind default
     (:func:`_cast_for`); ``"1"`` -> ``True``, cast every kind; ``"0"`` ->
-    ``False``, the fp32 weights of every release before the P70 read, kept
-    for ONE release. Anything else is refused: a typo must not silently pick
-    an arithmetic."""
+    ``False``, the fp32 weights of every release before the P70 read. It is
+    the only way to reproduce the licensed build's function, so it stays until
+    #674's question is measured (does the cast default explain the licensed
+    K8 gap?); it is then removed with notice in the CHANGELOG (#782). Anything
+    else is refused: a typo must not silently pick an arithmetic."""
     v = os.environ.get("E4B_ROUTER_EPI_CAST", "")
     if v == "":
         return None
