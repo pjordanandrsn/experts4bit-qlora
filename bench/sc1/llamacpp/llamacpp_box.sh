@@ -33,6 +33,15 @@ _SC1_LLAMACPP_HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 _llamacpp_log() { printf '[llamacpp_box %s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 
+# `llama-server --version` prints "commit <abbrev>" with git's default abbreviation (7+ hex); the pin is a full sha. The build
+# is accepted iff that abbreviation is a prefix of the pin (A3: the registered 8-char grep refused a correct build whose
+# version line read "commit 552f18f", sc1b-prove-5).
+llamacpp_version_names_commit() {
+    local vfile=$1 commit=$2 vc
+    vc=$(grep -a -o -E 'commit [0-9a-f]{7,40}' "$vfile" 2>/dev/null | head -1 | cut -d' ' -f2)
+    [ -n "$vc" ] && [ "${commit#"$vc"}" != "$commit" ]
+}
+
 llamacpp_build() {
     local dir=$1 commit=${2:-$LLAMACPP_PIN_COMMIT}
     local jobs=${LLAMACPP_JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu)}
@@ -62,9 +71,8 @@ llamacpp_build() {
     export LLAMACPP_SRC_DIR LLAMACPP_BIN
     export LD_LIBRARY_PATH="$LLAMACPP_BIN${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
     "$LLAMACPP_BIN/llama-server" --version > "$dir/build/llama-server.version.txt" 2>&1 || true
-    local short=${commit:0:8}
-    if ! grep -q "$short" "$dir/build/llama-server.version.txt"; then
-        _llamacpp_log "REFUSE: llama-server --version does not name commit $short:"; cat "$dir/build/llama-server.version.txt" >&2; return 1
+    if ! llamacpp_version_names_commit "$dir/build/llama-server.version.txt" "$commit"; then
+        _llamacpp_log "REFUSE: llama-server --version does not name a prefix of commit $commit:"; cat "$dir/build/llama-server.version.txt" >&2; return 1
     fi
     {
         echo "commit: $head"

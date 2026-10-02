@@ -1,6 +1,14 @@
 # Changelog
 
 ## Unreleased
+### Lane SC1 amendment A3 (#846): box B's proof found three bugs in SC1's own drivers (llama.cpp version check, two in the ExLlamaV3 tripwire) -- fixed, with tests that fail on the registered drivers (bench + tests)
+
+- `bench/sc1/llamacpp/llamacpp_box.sh`: llama.cpp built, then the check grepped an 8-character commit where `llama-server
+  --version` prints git's 7-character abbreviation; the printed abbreviation must now be a prefix of the pin.
+- `bench/sc1/exl3/install.sh`: the tripwire read `exllamav3.version.__version__`, which v1.5.3's package does not expose without
+  importing `exllamav3.version`, and required the symbol `exl3_gemv_int8`, which v1.5.3 binds as `exl3_gemv_int8_max_k`.
+- Pin regenerated; `SC1-PREREG.md` gains A3; `UPSTREAM-NOTES.md` carries the corrected symbol list. Box A's reading runs at its
+  proof's commit; B and C at A3's merge.
 
 ### Lane P96 read (#564, one RTX 5090): LICENSED -- under P95's windowed K8 gate, K25 against the served NF4 M-tile reads mean t − m −0.001 / −0.015 (Granite) and −0.016 / −0.004 (OLMoE), so `E4B_NF4_GROUPED_SMALLM` defaults to `auto` (`e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`)
 
