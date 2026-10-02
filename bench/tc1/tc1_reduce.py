@@ -277,6 +277,40 @@ def hf_label(fam, r):
     """R11: the HF position's label -- "HF (bf16 experts)" or "HF (4-bit experts)" from the arm's own regime."""
     reg = regime_of(fam, r) or ""
     return "HF (bf16 experts)" if "bf16 experts" in reg else ("HF (4-bit experts)" if "4-bit expert" in reg else "HF")
+# ----------------------------------------------------------------------------- R11: lane TC3 (the memory frontier; TC3-PREREG-draft, registered as bench/tc1/TC3-PREREG.md by the PI)
+# Two family tokens, each ONE box: `qwen3frontier` (a 24 GB RTX 4090, every framework with its own memory lever) and `qwen3frontier12` (the owned 12 GB RTX A2000).
+# The box's anchor is the e4b OFFLOAD arm (the resident e4b arm is expected to OOM there); the in-box control is the reference path under offload. Readings:
+# (a) the FIT TABLE per framework; (b) the in-box equivalence fused_offload vs reference_offload under TC1's R4 bands, and, with --tc1-dir, the matched
+# trajectory against TC1's RESIDENT e4b/fused_attn4_m (same tokens / init / precision asserted first; median per-step |delta| <= RESIDENT_BAND reads
+# EQUIVALENT-TO-RESIDENT); (c) no cross-box ratio anywhere (P1's ratios are within the 24 GB box; P4 is two measurements); (d) P1-P4 of the draft scored.
+FRONTIER_FAM, FRONTIER12_FAM = "qwen3frontier", "qwen3frontier12"
+FRONTIER_FAMS = (FRONTIER_FAM, FRONTIER12_FAM)
+FRONTIER_ANCHOR = ("e4b", "fused_attn4_m_offload")      # the quality / equivalence anchor on a frontier box
+FRONTIER_REF = ("e4b", "reference_attn4_m_offload")     # the in-box control (parity under offload)
+RESIDENT_BAND = 0.02                                    # (b): median per-step |delta| vs TC1's resident e4b/fused_attn4_m <= 0.02 reads EQUIVALENT-TO-RESIDENT (the draft's band)
+RESIDENT_KEY = ("qwen3", ("e4b", "fused_attn4_m"))      # TC1's resident arm (same tokens, init, precision), read from --tc1-dir
+P1_HF_SLOWER, P1_Z3_SLOWER, P1_Z3_HOST_GB = 20.0, 5.0, 60.0   # P1's within-box clauses (the draft): HF offload REFUSED or > 20x e4b offload; ZeRO-3, if it runs, > 5x at >= 60 GB host RAM
+P4_FACTOR = 2.0                                          # P4: e4b offload s/step on the 24 GB card within 2x of TC1's resident e4b -- two measurements, never a ratio
+FRONTIER_LEVER = {"fused_attn4_m": "resident", "fused_attn4_m_offload": "e4b expert offload (--offload 1)", "fused_attn4_m_offload_d2": "e4b expert offload (--offload 1), draw 2",
+                  "fused_attn4_m_mb1": "resident, micro-batch 1 x accum 8", "ckpt_unsloth_m": "resident (Unsloth's own: use_gradient_checkpointing=unsloth)",
+                  "ckpt_unsloth_m_mb1": "micro-batch 1 x accum 8", "hf_peft_m": "resident", "hf_peft_m_offload": "accelerate device_map=auto + max_memory (--hf-offload 1)",
+                  "hf_peft_m_mb1": "micro-batch 1 x accum 8", "ckpt_axolotl_m": "resident (quantize_moe_experts)", "ckpt_axolotl_m_layeroffload": "layer_offloading (--axolotl-layer-offload 1)",
+                  "ckpt_axolotl_m_zero3": "DeepSpeed ZeRO-3 parameter offload, bf16 experts (--axolotl-zero3 1)", "reference_attn4_m_offload": "e4b expert offload, the reference path",
+                  "fused_attn4_m_offload_mb1": "e4b expert offload, micro-batch 1 x accum 8 (the 12 GB secondary)", "reference_attn4_m_offload_mb1": "e4b expert offload, the reference path, micro-batch 1 x accum 8",
+                  "fused_attn4_shipped_offload": "e4b expert offload, as shipped (bf16 expert adapters, N(0,1/r) init): a fit row, never a position"}
+FRONTIER12_SECONDARY = (("e4b", "fused_attn4_m_offload_mb1"), ("e4b", "reference_attn4_m_offload_mb1"))   # run only when the field-recipe offload arm OOMed (one draw each)
+EXPECTED[FRONTIER_FAM] = [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
+                          ("hf", "hf_peft_m"), ("hf", "hf_peft_m_offload"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_m_layeroffload"),
+                          ("axolotl", "ckpt_axolotl_m_zero3"), ("e4b", "reference_attn4_m_offload")]
+EXPECTED[FRONTIER12_FAM] = [("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_offload_d2"), ("e4b", "reference_attn4_m_offload"), ("e4b", "fused_attn4_m"),
+                            ("unsloth", "ckpt_unsloth_m_mb1"), ("hf", "hf_peft_m_mb1"), ("axolotl", "ckpt_axolotl_m")]
+MATCHED |= {"fused_attn4_m_offload", "fused_attn4_m_offload_d2", "reference_attn4_m_offload", "hf_peft_m_offload", "ckpt_axolotl_m_layeroffload", "ckpt_axolotl_m_zero3",
+            "fused_attn4_m_offload_mb1", "reference_attn4_m_offload_mb1"}
+DRAW2[("e4b", "fused_attn4_m_offload")] = ("e4b", "fused_attn4_m_offload_d2")   # registered on the 12 GB token only (draws_of reads the family's `expected`)
+FAMS += list(FRONTIER_FAMS)
+NAMES[FRONTIER_FAM] = "Qwen3-30B-A3B (lane TC3: the 24 GB RTX 4090 memory frontier, every framework with its own lever)"
+NAMES[FRONTIER12_FAM] = "Qwen3-30B-A3B (lane TC3: the owned 12 GB RTX A2000, e4b's offload territory)"
+N_LAYERS[FRONTIER_FAM] = N_LAYERS[FRONTIER12_FAM] = 48
 
 
 # ----------------------------------------------------------------------------- inputs
@@ -1526,6 +1560,256 @@ def score_curve_predictions(F):
     return out
 
 
+# ----------------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
+def fit_table(rows):
+    """(a) the FIT TABLE: per framework every arm with its lever, VERDICT, peak VRAM, host-RAM high-water, s/step, J/step and regime; `fits` = at least one arm
+    COMPLETED on this box (status OK: VALID, VOID or QUALITY_FAIL -- validity is its own column), the completed arms named; an OOM-only column reads so.
+    The OOM rows carry the peak VRAM and host RAM they reached."""
+    out = {}
+    for fw in FW:
+        arms = [x for x in rows if x["fw"] == fw]
+        if not arms:
+            continue
+        done = [x for x in arms if x["status"] == "OK"]
+        out[fw] = {"arms": [{"tag": x["tag"], "lever": x["lever"], "verdict": x["verdict"], "status": x["status"], "validity": x["validity"],
+                             "peak_vram_gb": (x["r"] or {}).get("peak_vram_gb"), "host_ram_high_water_gb": (x["r"] or {}).get("host_ram_high_water_gb"),
+                             "host_ram_total_gb": (x["r"] or {}).get("host_ram_total_gb"), "s": (x["r"] or {}).get("s_per_step_median_11plus"),
+                             "j": (x["r"] or {}).get("joules_per_step"), "regime": x["regime"], "note": x["reason"] or x["why"]} for x in arms],
+                   "fits": bool(done), "completed": [x["tag"] for x in done],
+                   "reading": ("FITS on this box: " + ", ".join(f"`{x['tag']}` [{x['lever']}] {x['verdict']}" for x in done)) if done
+                   else ("NO ARM COMPLETED on this box: " + ", ".join(f"`{x['tag']}` {x['verdict']}" for x in arms))}
+    return out
+
+
+def resident_comparison(anchor, v_anchor, tc1):
+    """(b) with --tc1-dir: the frontier box's e4b offload arm against TC1's RESIDENT e4b/fused_attn4_m -- the same tokens (sha), the same init (the name-free
+    matched sha), the same precision (fp32-only adapters) and the same N asserted FIRST, then the median per-step |delta train| <= RESIDENT_BAND reads
+    EQUIVALENT-TO-RESIDENT, else DIVERGENT-FROM-RESIDENT; |delta held-out at N| and the step-0 class beside. TC1's resident s/step (its quoted draws when
+    usable) and peak VRAM are carried as MEASUREMENTS for P4; no ratio is formed across the two boxes."""
+    if tc1 is None:
+        return {"reading": "UNTESTED", "why": "no --tc1-dir given"}
+    fam_, key = RESIDENT_KEY
+    T = (tc1 or {}).get(fam_)
+    res = T.get("e") if T else None
+    if not is_ok(res):
+        return {"reading": "UNTESTED", "why": f"no OK {fam_} {key[0]}/{key[1]} receipt in the TC1 dir"}
+    dq = (T.get("draws") or {}).get(key) or {}
+    tc1_s = dq.get("s") if dq.get("usable") else res.get("s_per_step_median_11plus")
+    carry = {"tc1_s": tc1_s, "tc1_draws": dq.get("draws"), "tc1_peak": res.get("peak_vram_gb"), "tc1_box": (res.get("env") or {}).get("box_class")}
+    if not is_ok(anchor):
+        return {"reading": "N-A", "why": "the box's offload anchor e4b/fused_attn4_m_offload is missing or not OK", **carry}
+    if v_anchor != "VALID":
+        return {"reading": "N-A", "why": f"the box's offload anchor is {v_anchor} (VOID never enters an equivalence reading)", **carry}
+    vres = (T.get("V") or {}).get(key)
+    if vres != "VALID":
+        return {"reading": "N-A", "why": f"TC1's resident arm is {vres}", **carry}
+    pre = []
+    if (anchor.get("tokens") or {}).get("sha256") != (res.get("tokens") or {}).get("sha256"):
+        pre.append("tokens sha differs")
+    if not anchor.get("matched_init_sha") or anchor.get("matched_init_sha") != res.get("matched_init_sha"):
+        pre.append("matched_init_sha differs (not the same init)")
+    for nm, r in (("offload", anchor), ("resident", res)):
+        if list((r.get("adapter_dtypes_after") or {}).keys()) != ["torch.float32"]:
+            pre.append(f"{nm} adapters are not fp32-only")
+    if len(anchor.get("losses") or []) != len(res.get("losses") or []) or not anchor.get("losses"):
+        pre.append("step counts differ")
+    if pre:
+        return {"reading": "N-A", "why": "not the matched trajectory: " + "; ".join(pre), **carry}
+    med = statistics.median(abs(x - y) for x, y in zip(anchor["losses"], res["losses"]))
+    hr, hs = heldout_at_N(anchor), heldout_at_N(res)
+    dh = abs(hr - hs) if (hr is not None and hs is not None) else None
+    d0 = abs(anchor["eval_loss_step0"] - res["eval_loss_step0"]) if (anchor.get("eval_loss_step0") is not None and res.get("eval_loss_step0") is not None) else None
+    return {"reading": "EQUIVALENT-TO-RESIDENT" if med <= RESIDENT_BAND else "DIVERGENT-FROM-RESIDENT", "med_train": med, "d_heldout": dh, "d_step0": d0,
+            "step0_class": step0_class(d0), "band": RESIDENT_BAND, "offload_s": anchor.get("s_per_step_median_11plus"), "offload_peak": anchor.get("peak_vram_gb"), "why": "", **carry}
+
+
+def reduce_frontier_family(fam, recs, rcs_all, n_steps=None, tc1=None):
+    """R11: one frontier token. Validity per arm as TC1's (tp4's predicates + the matched-set predicates against the box's OWN e4b offload anchor, since the
+    resident e4b arm is expected to OOM here; the reference-under-offload arm stands in when the fused offload arm did not complete), the VERDICT (quality
+    against that anchor), the draws (the 12 GB token registers a second offload draw), then (a) the FIT TABLE, (b) the in-box equivalence of every matched
+    arm against the anchor under the fixed R4 bands with tp1's parity on the fused/reference pair, and the resident comparison when --tc1-dir is given."""
+    exp = list(EXPECTED[fam])
+    keys = exp + [k for k in recs if k not in exp]
+    anchor, ref = recs.get(FRONTIER_ANCHOR), recs.get(FRONTIER_REF)
+    anchor_key = next((k for k in (FRONTIER_ANCHOR, FRONTIER_REF) + FRONTIER12_SECONDARY if is_ok(recs.get(k))), None)   # the mb1 secondary stands in on the 12 GB token
+    A = recs.get(anchor_key) if anchor_key else None
+    e4b_trainable = A.get("trainable_params") if A else None
+    tokens_sha = ((A.get("tokens") or {}).get("sha256") if A else None) or next((r["tokens"]["sha256"] for k in keys if (r := recs.get(k)) and (r.get("tokens") or {}).get("sha256")), None)
+    N = n_steps or next((r.get("steps") for r in recs.values() if r and r.get("steps")), None)
+    ref_step0 = A.get("eval_loss_step0") if A else None
+    anchor_seed = matched_seed_of(A) if A else None
+    anchor_sha = (A.get("matched_init_sha") or None) if (A and anchor_seed is not None) else None
+    rows, V = [], {}
+    for fw, tag in keys:
+        r = recs.get((fw, tag))
+        st, reason = status_of(r, rcs_all.get((fam, fw, tag)))
+        v, why = validity(fam, r, tokens_sha, (e4b_trainable if fw != "e4b" else None), N, matched=(tag in MATCHED), ref_step0=ref_step0,
+                          anchor_seed=anchor_seed, is_ref=((fw, tag) == anchor_key), anchor_sha=anchor_sha)
+        d0 = abs(r["eval_loss_step0"] - ref_step0) if (is_ok(r) and tag in MATCHED and ref_step0 is not None and r.get("eval_loss_step0") is not None) else None
+        rows.append({"fw": fw, "tag": tag, "status": st, "reason": reason, "validity": v, "why": why, "r": r, "regime": regime_of(fam, r) if (r and st == "OK") else None,
+                     "matched": tag in MATCHED, "step0_delta": d0, "step0_class": step0_class(d0),
+                     "lever": FRONTIER_LEVER.get(tag) or (r or {}).get("memory_lever") or "—"})
+        V[(fw, tag)] = v
+    ha = heldout_at_N(A) if (A and V.get(anchor_key) == "VALID") else None
+    verdicts = {}
+    for x in rows:
+        r, q = x["r"], None
+        if x["status"] == "OK" and ha is not None and heldout_at_N(r) is not None and (x["fw"], x["tag"]) != anchor_key:
+            q = heldout_at_N(r) - ha
+        x["quality_delta"] = q
+        x["quality"] = ("COMPARABLE" if abs(q) <= READ else "FLAGGED") if q is not None else \
+            (("the box's anchor" if (x["fw"], x["tag"]) == anchor_key else "N-A (anchor " + ("VOID" if A else "missing") + ")") if x["status"] == "OK" else None)
+        x["verdict"] = verdict_of(x["status"], x["validity"], q)
+        assert x["verdict"] in VERDICTS
+        verdicts[(x["fw"], x["tag"])] = x["verdict"]
+    draws = {k: draws_of(recs, verdicts, k, expected=exp) for k in keys if k not in DRAW2.values()}
+    fit = fit_table(rows)
+    pv, d_final, med, pwhy = parity(ref, anchor)                   # tp1's rule on the in-box pair (fused offload vs reference offload)
+    par = {"verdict": pv, "d_final": d_final, "median": med, "why": pwhy}
+    if pv in ("PASS", "FAIL"):
+        par["speed_x"] = ratio(ref.get("s_per_step_median_11plus"), anchor.get("s_per_step_median_11plus"))
+        par["peak_x"] = ratio(anchor.get("peak_vram_gb"), ref.get("peak_vram_gb"))
+    band = {"train": EQUIV, "heldout": EQUIV}                      # (b): TC1's R4 bands, FIXED on a frontier box (EQUIVALENT <= 0.02 on both, COMPARABLE <= 0.05)
+    equiv = {}
+    for fw, tag in keys:
+        if tag in MATCHED and (fw, tag) != FRONTIER_ANCHOR and recs.get((fw, tag)) is not None:
+            e = equivalence(anchor, recs[(fw, tag)], V.get(FRONTIER_ANCHOR), V.get((fw, tag)), band=band, noise_floor=None)
+            if e["reading"] == "N-A" and not is_ok(anchor):
+                e["why"] = "the box's offload anchor e4b/fused_attn4_m_offload is missing or not OK"
+            equiv[(fw, tag)] = e
+    resident = resident_comparison(anchor, V.get(FRONTIER_ANCHOR), tc1)
+    src = next((recs[k] for k in keys if is_ok(recs.get(k))), None) or next((recs[k] for k in keys if recs.get(k)), None)
+    return {"fam": fam, "rows": rows, "V": V, "verdicts": verdicts, "draws": draws, "fit": fit, "parity": par, "equivalence": equiv, "equiv_band": band,
+            "resident": resident, "tc1_given": tc1 is not None, "recs": recs, "src": src, "N": N, "e4b_trainable": e4b_trainable, "tokens_sha": tokens_sha,
+            "anchor_key": anchor_key, "anchor_sha": anchor_sha, "e": anchor, "ref": ref}
+
+
+def _completed(v):
+    return v in ("VALID", "VOID", "QUALITY_FAIL")
+
+
+def _untested(v):
+    return v in (None, "NOT_RUN", "HARNESS_ERROR", "ALARM")
+
+
+def score_frontier_predictions(F):
+    """TC3-PREREG-draft "Predictions" P1-P4, scored mechanically. 'Completed' = the arm trained to N (status OK: VALID / VOID / QUALITY_FAIL -- validity is read
+    separately); OOM and UNSUPPORTED are the two ways not to; NOT_RUN / HARNESS_ERROR / ALARM leave a clause UNTESTED. P1's ratios are WITHIN the 24 GB box; P2 is
+    about FRAMEWORKS (an e4b resident arm that also completed is noted, never a refutation); P3 is read per token; P4 is two measurements with the factor applied."""
+    out = []
+    R = F.get(FRONTIER_FAM)
+    if R:
+        V, rec = R["verdicts"], R["recs"]
+        s_e = (rec.get(FRONTIER_ANCHOR) or {}).get("s_per_step_median_11plus") if _completed(V.get(FRONTIER_ANCHOR)) else None
+        cl = []
+        v = V.get(FRONTIER_ANCHOR)                                              # (i) e4b fits under offload (mb1 resident informational)
+        cl.append(("i", "HELD" if _completed(v) else ("UNTESTED" if _untested(v) else "FALSIFIED"),
+                   f"e4b offload {v}" + (f" at {s_e:.3f} s/step" if s_e else "") + f"; mb1 resident {V.get(('e4b', 'fused_attn4_m_mb1'))} (informational)"))
+        vu, vu2 = V.get(("unsloth", "ckpt_unsloth_m")), V.get(("unsloth", "ckpt_unsloth_m_mb1"))   # (ii) Unsloth OOMs at both recipes
+        if _completed(vu) or _completed(vu2):
+            cl.append(("ii", "FALSIFIED", f"Unsloth completed: m {vu}, mb1 {vu2}"))
+        elif vu == "OOM" and vu2 == "OOM":
+            cl.append(("ii", "HELD", "Unsloth OOM at both recipes"))
+        else:
+            cl.append(("ii", "UNTESTED", f"Unsloth m {vu}, mb1 {vu2} (not two OOM readings)"))
+        vh, vho = V.get(("hf", "hf_peft_m")), V.get(("hf", "hf_peft_m_offload"))   # (iii) HF OOMs resident; the offload arm REFUSED or > 20x slower than e4b offload
+        if _completed(vh):
+            cl.append(("iii-a", "FALSIFIED", f"HF resident completed ({vh})"))
+        elif vh == "OOM":
+            cl.append(("iii-a", "HELD", "HF resident OOM"))
+        else:
+            cl.append(("iii-a", "UNTESTED", f"HF resident {vh}"))
+        rho = rec.get(("hf", "hf_peft_m_offload")) or {}
+        if vho == "UNSUPPORTED":
+            cl.append(("iii-b", "HELD", f"HF offload REFUSED ({(rho.get('reason') or '')[:90]})"))
+        elif _completed(vho):
+            s_h = rho.get("s_per_step_median_11plus")
+            if s_h is None or s_e is None:
+                cl.append(("iii-b", "UNTESTED", f"HF offload {vho} but no s/step on both sides (hf {s_h}, e4b offload {s_e})"))
+            else:
+                xr = s_h / s_e
+                cl.append(("iii-b", "HELD" if xr > P1_HF_SLOWER else "FALSIFIED", f"HF offload RAN: {s_h:.3f} vs e4b offload {s_e:.3f} s/step = {xr:.1f}x within this box ({'>' if xr > P1_HF_SLOWER else '<='} {P1_HF_SLOWER:.0f}x)"))
+        elif vho == "OOM":
+            cl.append(("iii-b", "FALSIFIED", "HF offload OOM: neither REFUSED nor a measured slowdown"))
+        else:
+            cl.append(("iii-b", "UNTESTED", f"HF offload {vho}"))
+        vz = V.get(("axolotl", "ckpt_axolotl_m_zero3"))                        # (iv) ZeRO-3, if it runs: > 5x slower than e4b offload at >= 60 GB host RAM
+        rz = rec.get(("axolotl", "ckpt_axolotl_m_zero3")) or {}
+        if _completed(vz):
+            s_z, h_z = rz.get("s_per_step_median_11plus"), rz.get("host_ram_high_water_gb")
+            if s_z is None or s_e is None or h_z is None:
+                cl.append(("iv", "UNTESTED", f"axolotl zero3 {vz} but s/step or host RAM missing (s {s_z}, e4b offload {s_e}, host {h_z})"))
+            else:
+                xr = s_z / s_e
+                ok = xr > P1_Z3_SLOWER and h_z >= P1_Z3_HOST_GB
+                cl.append(("iv", "HELD" if ok else "FALSIFIED", f"axolotl zero3 RAN: {s_z:.3f} vs e4b offload {s_e:.3f} s/step = {xr:.1f}x within this box, host RAM high-water {h_z:.1f} GB "
+                                                                f"(wants > {P1_Z3_SLOWER:.0f}x and >= {P1_Z3_HOST_GB:.0f} GB)"))
+        elif _untested(vz):
+            cl.append(("iv", "UNTESTED", f"axolotl zero3 {vz}"))
+        else:
+            cl.append(("iv", "HELD", f"axolotl zero3 did not run ({vz}: {(rz.get('reason') or '')[:80]}) -- a conditional clause, vacuously held"))
+        vs = [c for _, c, _ in cl]
+        out.append(("P1", FRONTIER_FAM, "FALSIFIED" if "FALSIFIED" in vs else ("UNTESTED" if "UNTESTED" in vs else "HELD"), "; ".join(f"({i}) {e} -> {c}" for i, c, e in cl)))
+    R12 = F.get(FRONTIER12_FAM)
+    if R12:
+        V, rec = R12["verdicts"], R12["recs"]
+        e4b_off = [("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_offload_d2"), ("e4b", "reference_attn4_m_offload")]
+        sec = [k for k in FRONTIER12_SECONDARY if k in V]                       # present only when the field-recipe offload arm OOMed
+        others = [k for k in EXPECTED[FRONTIER12_FAM] if k[0] != "e4b"]
+        ev = ["e4b offload arms " + ", ".join(f"{k[1]} {V.get(k)}" for k in e4b_off) + (" ; mb1 secondary " + ", ".join(f"{k[1]} {V.get(k)}" for k in sec) if sec else ""),
+              "other frameworks " + ", ".join(f"{k[0]}/{k[1]} {V.get(k)}" + (f" (not an OOM reading: {((rec.get(k) or {}).get('reason') or '')[:60]})" if V.get(k) == "UNSUPPORTED" else "") for k in others)]
+        vres = V.get(("e4b", "fused_attn4_m"))
+        ev.append(f"e4b resident {vres}" + (" (completed too: noted, P2 is about frameworks)" if _completed(vres) else ""))
+        vsh = V.get(("e4b", "fused_attn4_shipped_offload"))
+        if vsh is not None:
+            ev.append(f"e4b as-shipped offload {vsh} (a fit row, outside P2)")
+        # P2 (TC3-PREREG): HELD iff the e4b FUSED offload arm completed -- at the field recipe, or at its mb1 secondary after a field-recipe OOM -- and every
+        # non-e4b arm is OOM / UNSUPPORTED; UNTESTED when a non-e4b arm, or the deciding e4b arm, is NOT_RUN / HARNESS_ERROR / ALARM; the second draw and the
+        # reference-under-offload arm are reported in the evidence, never scored (a stability and a parity reading, not a fit reading)
+        fused_done = _completed(V.get(("e4b", "fused_attn4_m_offload"))) or _completed(V.get(("e4b", "fused_attn4_m_offload_mb1")))
+        if any(_completed(V.get(k)) for k in others):
+            verdict = "FALSIFIED"
+        elif any(_untested(V.get(k)) for k in others):
+            verdict = "UNTESTED"
+        elif fused_done:
+            verdict = "HELD"
+            ev.append("the e4b fused offload arm completed at " + ("the field recipe" if _completed(V.get(("e4b", "fused_attn4_m_offload"))) else "its mb1 secondary (the field recipe OOMed)"))
+        elif _untested(V.get(("e4b", "fused_attn4_m_offload"))) or any(_untested(V.get(k)) for k in sec):
+            verdict = "UNTESTED"
+        else:
+            verdict = "FALSIFIED"
+            ev.append("no e4b fused offload arm completed at either recipe")
+        out.append(("P2", FRONTIER12_FAM, verdict, "; ".join(ev)))
+    for fam in FRONTIER_FAMS:
+        Rf = F.get(fam)
+        if not Rf:
+            continue
+        res = Rf["resident"]
+        ctrl = Rf["equivalence"].get(FRONTIER_REF) or {}
+        ctrl_txt = f"in-box control fused_offload vs reference_offload: {ctrl.get('reading', '—')}" + (
+            f" (median step |Δ| {f(ctrl.get('med_train'), 4)}, |Δ held-out at N| {f(ctrl.get('d_heldout'), 4)})" if ctrl.get("med_train") is not None else (f" ({ctrl.get('why')})" if ctrl.get("why") else ""))
+        if res["reading"] == "EQUIVALENT-TO-RESIDENT":
+            out.append(("P3", fam, "HELD", f"median per-step |Δ| vs TC1's resident e4b/fused_attn4_m {res['med_train']:.4f} <= {RESIDENT_BAND} (|Δ held-out at N| {f(res.get('d_heldout'), 4)}, "
+                                           f"step-0 {f(res.get('d_step0'), 4)} {res.get('step0_class') or ''}); {ctrl_txt}"))
+        elif res["reading"] == "DIVERGENT-FROM-RESIDENT":
+            out.append(("P3", fam, "FALSIFIED", f"median per-step |Δ| vs TC1's resident e4b/fused_attn4_m {res['med_train']:.4f} > {RESIDENT_BAND}; {ctrl_txt}"))
+        else:
+            out.append(("P3", fam, "UNTESTED", f"resident comparison {res['reading']}: {res.get('why', '')}; {ctrl_txt}"))
+    if R:
+        res = R["resident"]
+        s_e = res.get("offload_s")
+        if res["reading"] in ("EQUIVALENT-TO-RESIDENT", "DIVERGENT-FROM-RESIDENT") and res.get("tc1_s") is not None and s_e is not None:
+            lim = P4_FACTOR * res["tc1_s"]
+            box = ((R["e"] or {}).get("env") or {}).get("box_class")
+            out.append(("P4", FRONTIER_FAM, "HELD" if s_e <= lim else "FALSIFIED",
+                        f"e4b offload on this box ({box}) {s_e:.3f} s/step; TC1's resident e4b/fused_attn4_m on {res.get('tc1_box')} {res['tc1_s']:.3f} s/step over {res.get('tc1_draws') or 1} draw(s); "
+                        f"{P4_FACTOR:.0f} x {res['tc1_s']:.3f} = {lim:.3f} -- two measurements, no cross-box ratio formed"))
+        else:
+            out.append(("P4", FRONTIER_FAM, "UNTESTED", f"resident comparison {res['reading']}: {res.get('why', '')}" if res["reading"] not in ("EQUIVALENT-TO-RESIDENT", "DIVERGENT-FROM-RESIDENT")
+                        else "TC1's resident s/step or this box's offload s/step unavailable"))
+    return out
+
+
 # ----------------------------------------------------------------------------- the printer
 def pos_lines(pos, N, prefix="POSITION"):
     if pos.get("no_common_set"):                                            # R11: gpt-oss -- both values, both counts, never a ratio
@@ -1715,6 +1999,70 @@ def family_block(R):
     return lines
 
 
+def frontier_block(R):
+    """R11: a frontier token's block -- the support table, the FIT TABLE, the draws, the in-box parity and equivalence, the resident comparison, what each lever recorded."""
+    fam = R["fam"]
+    lines = [f"\n### {NAMES.get(fam, fam)} (`{fam}`, registered n_layers {N_LAYERS.get(fam, '?')})"]
+    src = R.get("src")
+    if src:
+        env, hr = src.get("env", {}) or {}, src.get("host_ram") or {}
+        ak = R.get("anchor_key")
+        lines.append(f"- model `{src.get('model')}` @ `{str(src.get('revision', ''))[:12]}`; tokens sha `{str(R['tokens_sha'] or '')[:12]}`; N={R['N']}; fixture template {src.get('template')} seq {src.get('seq')} "
+                     f"micro-batch {src.get('micro_batch')} × accum {src.get('accum')} r {src.get('r')} α {src.get('alpha')}; e4b trainable {R['e4b_trainable']}; box_class {env.get('box_class')} gpu {env.get('gpu')}; "
+                     f"host RAM total {f(src.get('host_ram_total_gb'))} GB (cgroup limit {f(hr.get('cgroup_limit_gb'))}); "
+                     + (f"the box's anchor `{ak[0]}/{ak[1]}`" if ak else "NO ANCHOR: no e4b offload arm completed"))
+    lines += support_table(R["rows"])
+    for line in prologue_lines(R["rows"]):
+        lines.append(line)
+    lines.append("- **(a) FIT TABLE** (per framework: did any arm complete on this box, with its lever; peak VRAM = torch max_memory_allocated over the window (an OOM row: at the OOM); "
+                 "host RAM high-water = max over the arm of the process peak RSS and the cgroup peak when it rose during the arm; s/step = the median over steps 11..N; J/step = net of idle):")
+    lines.append("| framework | arm | lever | **VERDICT** | peak VRAM GB | host RAM high-water GB | s/step | J/step | regime | note |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|")
+    for fw, Fw in R["fit"].items():
+        for ar in Fw["arms"]:
+            lines.append(f"| {fw} | {ar['tag']} | {ar['lever']} | **{ar['verdict']}** | {f(ar['peak_vram_gb'])} | {f(ar['host_ram_high_water_gb'])} | {f(ar['s'])} | {f(ar['j'], 1)} | {ar['regime'] or '—'} | {(ar['note'] or '')[:140]} |")
+    for fw, Fw in R["fit"].items():
+        lines.append(f"- fit `{fw}`: **{Fw['reading']}**")
+    lines.append("- draws (R1): " + "; ".join(
+        f"`{k[0]}/{k[1]}` {d['verdict']}" + (f" ({d['s1']:.3f}/{d['s2']:.3f} s, |Δ|/mean {100 * d['stability']:.1f}% vs {100 * d['threshold']:.0f}%)" if d.get("draws") == 2 and d.get("stability") is not None else (f" ({d['why']})" if d.get("why") else ""))
+        for k, d in R["draws"].items() if k in DRAW2 or d.get("draws")))
+    p = R["parity"]
+    if p["verdict"] in ("PASS", "FAIL"):
+        lines.append(f"- e4b internal parity under offload (tp1's rule): fused_attn4_m_offload vs reference_attn4_m_offload Δfinal {p['d_final']:.5f}, median step |Δ| {p['median']:.5f} → **{p['verdict']}** "
+                     f"(band {BAND}/{BAND}); ×{f(p.get('speed_x'), 2)} faster per step, peak ×{f(p.get('peak_x'), 3)}")
+    else:
+        lines.append(f"- e4b internal parity under offload: {p['verdict']}{(' — ' + p['why']) if p['why'] else ''}")
+    bd = R["equiv_band"]
+    lines.append(f"- **(b) in-box equivalence** vs the box's anchor `e4b/fused_attn4_m_offload` (TC1's R4 bands, fixed: EQUIVALENT iff median step |Δ train| ≤ {bd['train']} and |Δ held-out at N| ≤ {bd['heldout']}; COMPARABLE ≤ {COMPARABLE}; "
+                 f"the fused/reference pair is the control): "
+                 + ("; ".join(f"`{k[0]}/{k[1]}` **{e['reading']}**" + (f" (median step |Δ| {f(e.get('med_train'), 4)}, |Δ held-out at N| {f(e.get('d_heldout'), 4)}, step-0 {f(e.get('d_step0'), 4)} {e.get('step0_class') or ''}, |Δ loss at step 2| {f(e.get('d_loss_step2'), 4)})" if e.get("med_train") is not None else "")
+                              + (f" — {e['why']}" if e.get("why") else "") for k, e in R["equivalence"].items()) or "no matched arm beside the anchor"))
+    rs = R["resident"]
+    if rs["reading"] in ("EQUIVALENT-TO-RESIDENT", "DIVERGENT-FROM-RESIDENT"):
+        lines.append(f"- **RESIDENT COMPARISON: **{rs['reading']}**** — the offload anchor vs TC1's resident `e4b/fused_attn4_m` (same tokens, init, precision, N asserted): median per-step |Δ| {rs['med_train']:.4f} vs band {rs['band']}, "
+                     f"|Δ held-out at N| {f(rs.get('d_heldout'), 4)}, step-0 {f(rs.get('d_step0'), 4)} {rs.get('step0_class') or ''}; measurements beside each other, never a ratio: this box's offload {f(rs.get('offload_s'))} s/step "
+                     f"at peak {f(rs.get('offload_peak'))} GB; TC1's resident on {rs.get('tc1_box')} {f(rs.get('tc1_s'))} s/step over {rs.get('tc1_draws') or 1} draw(s) at peak {f(rs.get('tc1_peak'))} GB")
+    else:
+        lines.append(f"- RESIDENT COMPARISON: {rs['reading']} — {rs.get('why', '')}")
+    if R.get("anchor_sha"):
+        lines.append(f"- matched_init_sha (B, name-free): anchor `{R['anchor_sha'][:16]}`; " + "; ".join(f"`{x['fw']}/{x['tag']}` {'same' if (x['r'] or {}).get('matched_init_sha') == R['anchor_sha'] else 'DIFFERS: ' + str((x['r'] or {}).get('matched_init_sha'))[:12]}" for x in R["rows"] if x["matched"] and x["status"] == "OK"))
+    for x in R["rows"]:                                    # what each lever recorded, on the row that carries it (OK or not)
+        r = x["r"] or {}
+        if r.get("hf_offload"):
+            ho = r["hf_offload"]
+            dm = ho.get("device_map_summary") or {}
+            lines.append(f"- lever `hf/{x['tag']}`: max_memory {ho.get('max_memory')}, llm_int8_enable_fp32_cpu_offload {ho.get('llm_int8_enable_fp32_cpu_offload')}; hf_device_map by device {dm.get('by_device')}, "
+                         f"expert entries by device {dm.get('experts_entries_by_device')}, CPU/disk sample {dm.get('cpu_or_disk_sample')}; trained: {'yes (status OK)' if x['status'] == 'OK' else 'NO -- ' + (x['reason'] or '')[:160]}")
+        if r.get("axolotl_layer_offload"):
+            lo = r["axolotl_layer_offload"]
+            lines.append(f"- lever `axolotl/{x['tag']}`: layer_offloading engaged {lo.get('engaged')} over {lo.get('n_layers')} layers ({lo.get('n_frozen_params_managed')} frozen params, {lo.get('n_hooks')} hooks; "
+                         f"VRAM allocated {f(lo.get('vram_allocated_before_gb'))} → {f(lo.get('vram_allocated_after_gb'))} GB at setup); driven by {lo.get('driven_by')}")
+        if r.get("axolotl_zero3"):
+            z = r["axolotl_zero3"]
+            lines.append(f"- lever `axolotl/{x['tag']}` (ZeRO-3): {x['status']} — {(x['reason'] or '')[:400]} (deepspeed {z.get('deepspeed_version')}; the config it would have used is on the receipt)")
+    return lines
+
+
 def render(F, d):
     out = [f"# TC1 — Qwen3-30B-A3B on one RTX 5090: e4b vs Unsloth vs HF+PEFT vs axolotl at matched work, init and adapter precision ({os.path.abspath(d)})",
            f"Rule ({PREREG}): status per attempt in the vocabulary {' / '.join(VOCAB)}; VALID/VOID per tp4's predicates plus the matched-set predicates (R3: matched init complete, "
@@ -1740,9 +2088,14 @@ def render(F, d):
                    f"an HF t214 arm whose dispatch did not reach grouped_mm is recorded, never VOID; P1–P7 of the draft scored HELD / FALSIFIED / UNTESTED "
                    f"(P1 HF band {TC2_P1_HF_BAND}; P2 Unsloth {TC2_P2_UNS_BAND} / HF {TC2_P2_HF_BAND}; P4 Unsloth {TC2_P4_UNS_BAND}, e4b within {TC2_P4_E4B_TOL:.0%} of tp4's "
                    f"{TP4_QWEN3_5_E4B_S_PER_STEP} s/step; P5 e4b/Unsloth {TC2_P5_BAND} at a >= {TC2_P5_PEAK_X:.0f}x lower e4b peak, tp2 {TP2_MIXTRAL['ratio_unsloth_over_e4b']}).")
+    if any(fam in F for fam in FRONTIER_FAMS):
+        out.append(f"Lane TC3 (`{FRONTIER_FAM}` / `{FRONTIER12_FAM}`, TC3-PREREG.md): one box per token; the box's anchor is `e4b/fused_attn4_m_offload` (the resident e4b arm is expected to OOM); "
+                   f"(a) the FIT TABLE per framework; (b) in-box equivalence under TC1's R4 bands (EQUIVALENT ≤ {EQUIV} / COMPARABLE ≤ {COMPARABLE}) with the fused/reference offload pair as the control, and with `--tc1-dir` "
+                   f"the matched trajectory against TC1's resident `e4b/fused_attn4_m` (median per-step |Δ| ≤ {RESIDENT_BAND} reads EQUIVALENT-TO-RESIDENT); (c) no cross-box ratio: P1's ratios are within the 24 GB box, "
+                   f"P4 is two measurements; (d) P1–P4 of the draft scored HELD / FALSIFIED / UNTESTED.")
     for fam in list(FAMS) + sorted(set(F) - set(FAMS)):
         if fam in F:
-            out += curve_block(F[fam]) if fam == CURVE_FAM else family_block(F[fam])
+            out += curve_block(F[fam]) if fam == CURVE_FAM else (frontier_block(F[fam]) if fam in FRONTIER_FAMS else family_block(F[fam]))
     out += ["\n## Verdicts", "| family | arm | VERDICT | validity | quality | note |", "|---|---|---|---|---|---|"]
     for fam in list(FAMS) + sorted(set(F) - set(FAMS)):
         R = F.get(fam)
@@ -1762,15 +2115,21 @@ def render(F, d):
         out += ["\n## TC2 predictions P1–P7 (TC2-PREREG-draft, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_tc2_predictions(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if any(fam in F for fam in FRONTIER_FAMS):
+        out += ["\n## TC3 predictions P1–P4 (TC3-PREREG-draft, scored mechanically; P1 on the 24 GB token, P2 on the 12 GB token, P3 per token, P4 on the 24 GB token with --tc1-dir)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_frontier_predictions(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     return "\n".join(out)
 
 
 def reduce_dir(d, n_steps=None, tc1_dir=None):
-    """Every family token in the dir; the qwen3curve token through R10 (its N is per arm, `--steps` does not apply to it), with TC1's
-    receipts reduced first when `tc1_dir` names them (the (d) speed reading reads their quoted draws)."""
+    """Every family token in the dir; the qwen3curve token through R10 (its N is per arm, `--steps` does not apply to it) and the frontier tokens through R11,
+    with TC1's receipts reduced first when `tc1_dir` names them (TC1b's (d) speed reading and TC3's resident comparison read them)."""
     recs, rcs = load(d), load_summary(d)
     tc1 = reduce_dir(tc1_dir, None) if tc1_dir else None
-    return {fam: (reduce_curve_family(fam, recs[fam], rcs, tc1=tc1) if fam == CURVE_FAM else reduce_family(fam, recs[fam], rcs, n_steps))
+    return {fam: (reduce_curve_family(fam, recs[fam], rcs, tc1=tc1) if fam == CURVE_FAM
+                  else (reduce_frontier_family(fam, recs[fam], rcs, n_steps, tc1=tc1) if fam in FRONTIER_FAMS else reduce_family(fam, recs[fam], rcs, n_steps)))
             for fam in list(FAMS) + sorted(set(recs) - set(FAMS)) if fam in recs}
 
 
@@ -2071,6 +2430,60 @@ def _tc2_set(fam):
         R[("axolotl", "ckpt_axolotl_best")] = S("axolotl", "ckpt_axolotl_best", "axolotl", "oom", "OOM at load")
         R[("e4b", "fused_attn4_shipped")] = T("e4b", "fused_attn4_shipped", "fused", s=2.2, heldout_n=1.78, matched=False, peak_vram_gb=3.2, offload=True)
         R[("e4b", "reference_attn4_m")] = T("e4b", "reference_attn4_m", "reference", s=19.0, heldout_n=1.8005, peak_vram_gb=3.3, offload=True)
+    return R
+
+
+def _frontier_receipt(fam, fw, tag, arm, lever=None, peak=None, host=None, total=125.0, box="RTX 4090", **over):
+    """R11: a complete OK receipt for a frontier arm from `_receipt`, with the lever, the host-RAM fields and the box class the arm driver records."""
+    r = _receipt(fw, tag, arm, **over)
+    r.update({"fam": fam, "memory_lever": lever, "offload": lever == "e4b_offload", "host_ram_high_water_gb": host, "host_ram_total_gb": total,
+              "host_ram": {"high_water_gb": host, "total_gb": total, "cgroup_limit_gb": None}, "env": {"box_class": box, "gpu": "NVIDIA " + box}})
+    if peak is not None:
+        r["peak_vram_gb"] = peak
+    return r
+
+
+def _fstub(fam, fw, tag, arm, status, reason, peak=None, host=None, total=125.0, **over):
+    """R11: a stub (OOM / refused) as tc1_arm.py writes it on a frontier box: the peak VRAM and host RAM it reached travel on the row."""
+    return {**_stub(fw, tag, arm, status, reason), "fam": fam, "peak_vram_gb": peak, "host_ram_high_water_gb": host, "host_ram_total_gb": total, **over}
+
+
+def _frontier_set():
+    """The 24 GB token, baseline: e4b resident OOM, offload OK (2.0 s/step, 9.5 GB, 40 GB host), mb1 resident OK, Unsloth OOM at both recipes, HF OOM resident and
+    REFUSED under offload (accelerate's exception text), axolotl 4-bit OOM, layer-offload OK, ZeRO-3 REFUSED (the trainer's engine), reference offload OK."""
+    F = FRONTIER_FAM
+    R = {}
+    R[("e4b", "fused_attn4_m")] = _fstub(F, "e4b", "fused_attn4_m", "fused", "oom", "OOM at step 1: CUDA out of memory", peak=23.6, host=6.0)
+    R[("e4b", "fused_attn4_m_offload")] = _frontier_receipt(F, "e4b", "fused_attn4_m_offload", "fused", lever="e4b_offload", peak=9.5, host=40.0, s=2.00)
+    R[("e4b", "fused_attn4_m_mb1")] = _frontier_receipt(F, "e4b", "fused_attn4_m_mb1", "fused", peak=21.0, host=6.0, s=1.60, accum=8, micro_batch=1, kernel_calls_per_step_min=2 * 48 * 8)
+    R[("unsloth", "ckpt_unsloth_m")] = _fstub(F, "unsloth", "ckpt_unsloth_m", "unsloth", "oom", "OOM at step 1", peak=23.9, host=5.0)
+    R[("unsloth", "ckpt_unsloth_m_mb1")] = _fstub(F, "unsloth", "ckpt_unsloth_m_mb1", "unsloth", "oom", "OOM at step 2", peak=23.8, host=5.0)
+    R[("hf", "hf_peft_m")] = _fstub(F, "hf", "hf_peft_m", "hf", "oom", "OOM at load", peak=23.9, host=4.0)
+    R[("hf", "hf_peft_m_offload")] = _fstub(F, "hf", "hf_peft_m_offload", "hf", "refused", "hf_offload: NotImplementedError at step 1: Cannot copy out of meta tensor; no data!", peak=20.1, host=70.0,
+                                            memory_lever="hf_offload", hf_offload={"max_memory": {"0": "22GiB", "cpu": "125GiB"}, "llm_int8_enable_fp32_cpu_offload": True,
+                                                                                   "device_map_summary": {"by_device": {"cuda:0": 60, "cpu": 40}, "experts_entries_by_device": {"cpu": 40}, "cpu_or_disk_sample": ["model.layers.8.mlp.experts"], "any_cpu_or_disk": True}})
+    R[("axolotl", "ckpt_axolotl_m")] = _fstub(F, "axolotl", "ckpt_axolotl_m", "axolotl", "oom", "OOM at step 1", peak=23.7, host=5.0)
+    R[("axolotl", "ckpt_axolotl_m_layeroffload")] = _frontier_receipt(F, "axolotl", "ckpt_axolotl_m_layeroffload", "axolotl", lever="axolotl_layer_offload", peak=14.0, host=30.0, s=6.00, heldout_n=1.8100,
+                                                                      axolotl_layer_offload={"engaged": True, "n_layers": 48, "n_frozen_params_managed": 480, "n_hooks": 192, "driven_by": "the harness"})
+    R[("axolotl", "ckpt_axolotl_m_zero3")] = _fstub(F, "axolotl", "ckpt_axolotl_m_zero3", "axolotl", "refused",
+                                                    "axolotl ZeRO-3 parameter offload cannot be driven outside axolotl's trainer: ModelLoader.load() reads cfg.deepspeed only for zero.init() partitioning; "
+                                                    "the engine is deepspeed.initialize, created by transformers' Trainer inside axolotl.train.train", host=3.0, memory_lever="axolotl_zero3",
+                                                    axolotl_zero3={"deepspeed_version": "0.19.7", "deepspeed_config_not_run": {"zero_optimization": {"stage": 3}}})
+    R[("e4b", "reference_attn4_m_offload")] = _frontier_receipt(F, "e4b", "reference_attn4_m_offload", "reference", lever="e4b_offload", peak=9.6, host=40.0, s=4.00, heldout_n=1.8050)
+    return R
+
+
+def _frontier12_set():
+    """The 12 GB token, baseline: the e4b offload pair (two draws) and the reference offload OK, the e4b resident OOM, Unsloth and HF OOM at mb1, axolotl REFUSED by the driver gate."""
+    F, b = FRONTIER12_FAM, "RTX A2000"
+    R = {}
+    R[("e4b", "fused_attn4_m_offload")] = _frontier_receipt(F, "e4b", "fused_attn4_m_offload", "fused", lever="e4b_offload", peak=7.2, host=42.0, total=64.0, box=b, s=9.00)
+    R[("e4b", "fused_attn4_m_offload_d2")] = _frontier_receipt(F, "e4b", "fused_attn4_m_offload_d2", "fused", lever="e4b_offload", peak=7.2, host=42.0, total=64.0, box=b, s=9.18)
+    R[("e4b", "reference_attn4_m_offload")] = _frontier_receipt(F, "e4b", "reference_attn4_m_offload", "reference", lever="e4b_offload", peak=7.3, host=42.0, total=64.0, box=b, s=18.0, heldout_n=1.8050)
+    R[("e4b", "fused_attn4_m")] = _fstub(F, "e4b", "fused_attn4_m", "fused", "oom", "OOM at load", peak=11.9, host=6.0, total=64.0)
+    R[("unsloth", "ckpt_unsloth_m_mb1")] = _fstub(F, "unsloth", "ckpt_unsloth_m_mb1", "unsloth", "oom", "OOM at step 1", peak=11.8, host=5.0, total=64.0)
+    R[("hf", "hf_peft_m_mb1")] = _fstub(F, "hf", "hf_peft_m_mb1", "hf", "oom", "OOM at load", peak=11.9, host=4.0, total=64.0)
+    R[("axolotl", "ckpt_axolotl_m")] = _fstub(F, "axolotl", "ckpt_axolotl_m", "axolotl", "refused", "cu130 wheels need driver >= 580; host has 575.57", total=64.0, venv="venv-axolotl (torch cu130)")
     return R
 
 
@@ -2703,6 +3116,193 @@ def selftest():
     assert {p: v for p, _, v, _ in score_predictions({AX_FAM: AXR})}["P6"] == "FALSIFIED"
     assert {p: v for p, _, v, _ in score_predictions({"qwen3": run(_good_set()), AX_FAM: AXR})}["P6"] == "FALSIFIED"      # the axolotl box outranks the judged box's install defect
     cases += 1
+    # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
+
+    def frun(R, fam=FRONTIER_FAM, tc1=None):
+        return reduce_frontier_family(fam, R, {}, 20, tc1=tc1)
+
+    def FP(F):
+        return {p_: v for p_, _, v, _ in score_frontier_predictions(F)}
+    # 44. baseline 24 GB: the verdicts, the FIT TABLE (an OOM-only Unsloth column), the HF offload refused row and the ZeRO-3 refused row UNSUPPORTED with their text,
+    #     the in-box equivalence EQUIVALENT under the fixed bands with parity PASS, the resident comparison UNTESTED without --tc1-dir; P1 HELD, P3 / P4 UNTESTED
+    Fr = frun(_frontier_set())
+    V = Fr["verdicts"]
+    assert [(x["fw"], x["tag"]) for x in Fr["rows"]] == EXPECTED[FRONTIER_FAM]
+    assert V[("e4b", "fused_attn4_m")] == "OOM" and V[FRONTIER_ANCHOR] == "VALID" and V[("e4b", "fused_attn4_m_mb1")] == "VALID" and V[FRONTIER_REF] == "VALID", V
+    assert V[("unsloth", "ckpt_unsloth_m")] == "OOM" and V[("unsloth", "ckpt_unsloth_m_mb1")] == "OOM" and V[("hf", "hf_peft_m")] == "OOM"
+    assert V[("hf", "hf_peft_m_offload")] == "UNSUPPORTED" and V[("axolotl", "ckpt_axolotl_m_zero3")] == "UNSUPPORTED" and V[("axolotl", "ckpt_axolotl_m_layeroffload")] == "VALID", V
+    ft = Fr["fit"]
+    assert set(ft) == {"e4b", "unsloth", "hf", "axolotl"} and ft["e4b"]["fits"] and ft["e4b"]["completed"] == ["fused_attn4_m_offload", "fused_attn4_m_mb1", "reference_attn4_m_offload"], ft["e4b"]["completed"]
+    assert not ft["unsloth"]["fits"] and ft["unsloth"]["reading"].startswith("NO ARM COMPLETED") and "`ckpt_unsloth_m_mb1` OOM" in ft["unsloth"]["reading"], ft["unsloth"]["reading"]
+    assert not ft["hf"]["fits"] and ft["axolotl"]["completed"] == ["ckpt_axolotl_m_layeroffload"]
+    a1 = next(x for x in ft["e4b"]["arms"] if x["tag"] == "fused_attn4_m_offload")
+    assert a1["lever"].startswith("e4b expert offload") and a1["peak_vram_gb"] == 9.5 and a1["host_ram_high_water_gb"] == 40.0 and a1["s"] == 2.0, a1
+    oomrow = next(x for x in ft["e4b"]["arms"] if x["tag"] == "fused_attn4_m")
+    assert oomrow["peak_vram_gb"] == 23.6 and oomrow["verdict"] == "OOM" and oomrow["lever"] == "resident"
+    print("FAILING-CASE TC3-fit (reducer): unsloth ->", ft["unsloth"]["reading"])
+    hx = row(Fr, "hf", "hf_peft_m_offload")
+    assert hx["verdict"] == "UNSUPPORTED" and "NotImplementedError" in hx["reason"] and "Cannot copy out of meta tensor" in hx["reason"], hx["reason"]
+    print("FAILING-CASE TC3-hf-offload (reducer):", hx["verdict"], "--", hx["reason"][:100])
+    zx = row(Fr, "axolotl", "ckpt_axolotl_m_zero3")
+    assert zx["verdict"] == "UNSUPPORTED" and "trainer" in zx["reason"], zx["reason"]
+    print("FAILING-CASE TC3-zero3 (reducer):", zx["verdict"], "--", zx["reason"][:100])
+    eq = Fr["equivalence"]
+    assert eq[FRONTIER_REF]["reading"] == "EQUIVALENT" and abs(eq[FRONTIER_REF]["d_heldout"] - 0.005) < 1e-9 and eq[FRONTIER_REF]["med_train"] == 0.0 and Fr["equiv_band"] == {"train": EQUIV, "heldout": EQUIV}, eq[FRONTIER_REF]
+    assert eq[("axolotl", "ckpt_axolotl_m_layeroffload")]["reading"] == "EQUIVALENT" and eq[("e4b", "fused_attn4_m_mb1")]["reading"] == "EQUIVALENT"   # every matched arm beside the anchor, the mb1 e4b arm included
+    assert eq[("hf", "hf_peft_m_offload")]["reading"] == "—" and eq[("axolotl", "ckpt_axolotl_m_zero3")]["reading"] == "—"                         # the refused rows: no OK receipt
+    assert Fr["parity"]["verdict"] == "PASS" and abs(Fr["parity"]["speed_x"] - 2.0) < 1e-9, Fr["parity"]
+    assert Fr["resident"]["reading"] == "UNTESTED" and "no --tc1-dir" in Fr["resident"]["why"]
+    assert Fr["draws"][FRONTIER_ANCHOR]["verdict"] == "SINGLE" and Fr["anchor_key"] == FRONTIER_ANCHOR        # no second draw registered on the 24 GB token
+    P_ = FP({FRONTIER_FAM: Fr})
+    assert P_ == {"P1": "HELD", "P3": "UNTESTED", "P4": "UNTESTED"}, P_
+    p1 = next(x for x in score_frontier_predictions({FRONTIER_FAM: Fr}) if x[0] == "P1")
+    assert "(iii-b) HF offload REFUSED" in p1[3] and "(iv) axolotl zero3 did not run" in p1[3] and "vacuously" in p1[3] and "(ii) Unsloth OOM at both recipes -> HELD" in p1[3], p1[3]
+    cases += 1
+    # 45. a VOID offload equivalence: the fused offload anchor's kernel took the loop on a step -> VOID, the control pair's equivalence N-A, P3 UNTESTED (P1's (i) still "completed");
+    #     the control itself VOID -> N-A; the in-box pair DIVERGENT (the reference's train losses 0.10 above) with parity FAIL; no e4b offload arm completed -> the reference stands in as anchor, P1 (i) FALSIFIED
+    R = _frontier_set()
+    R[FRONTIER_ANCHOR] = {**R[FRONTIER_ANCHOR], "lora_path_loop_steps": [2], "lora_loop_share": [0.0, 0.5] + [0.0] * 18}
+    Fr = frun(R)
+    assert Fr["verdicts"][FRONTIER_ANCHOR] == "VOID" and Fr["equivalence"][FRONTIER_REF]["reading"] == "N-A" and "VOID" in Fr["equivalence"][FRONTIER_REF]["why"], Fr["equivalence"][FRONTIER_REF]
+    assert FP({FRONTIER_FAM: Fr})["P3"] == "UNTESTED" and FP({FRONTIER_FAM: Fr})["P1"] == "HELD"
+    print("FAILING-CASE TC3-equiv (reducer): offload anchor", Fr["verdicts"][FRONTIER_ANCHOR], "->", Fr["equivalence"][FRONTIER_REF]["reading"], "--", Fr["equivalence"][FRONTIER_REF]["why"])
+    R = _frontier_set()
+    R[FRONTIER_REF] = {**R[FRONTIER_REF], "C1_control_tensor": None}
+    assert frun(R)["equivalence"][FRONTIER_REF]["reading"] == "N-A"
+    R = _frontier_set()
+    R[FRONTIER_REF] = _frontier_receipt(FRONTIER_FAM, "e4b", "reference_attn4_m_offload", "reference", lever="e4b_offload", peak=9.6, host=40.0, s=4.0, heldout_n=1.805, losses=[round(2.1 - 0.01 * i, 5) for i in range(20)])
+    Fr = frun(R)
+    assert Fr["equivalence"][FRONTIER_REF]["reading"] == "DIVERGENT" and Fr["parity"]["verdict"] == "FAIL", (Fr["equivalence"][FRONTIER_REF], Fr["parity"])
+    R = _frontier_set()
+    R[FRONTIER_ANCHOR] = _fstub(FRONTIER_FAM, "e4b", "fused_attn4_m_offload", "fused", "oom", "OOM at step 3", peak=23.9, host=40.0)
+    Fr = frun(R)
+    assert Fr["anchor_key"] == FRONTIER_REF and FP({FRONTIER_FAM: Fr})["P1"] == "FALSIFIED" and Fr["equivalence"][FRONTIER_REF]["reading"] == "N-A" and "offload anchor" in Fr["equivalence"][FRONTIER_REF]["why"]
+    cases += 1
+    # 46. P1's other legs, within the box: Unsloth mb1 completes -> FALSIFIED; HF offload RUNS at 10x -> FALSIFIED, at 25x -> HELD; HF offload OOM -> FALSIFIED;
+    #     ZeRO-3 runs at 6x with 70 GB host -> HELD, at 3x -> FALSIFIED, at 6x with 40 GB -> FALSIFIED; a missing Unsloth mb1 row -> UNTESTED
+    R = _frontier_set()
+    ub = {"unsloth_grouped_mm": 48 * 8, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 48 * 8}
+    R[("unsloth", "ckpt_unsloth_m_mb1")] = _frontier_receipt(FRONTIER_FAM, "unsloth", "ckpt_unsloth_m_mb1", "unsloth", peak=22.0, host=8.0, s=5.0, heldout_n=1.81, accum=8, micro_batch=1,
+                                                             experts_forward_calls_per_step_min=48 * 8, unsloth_backend_calls_per_step_min=ub, unsloth_backend_calls_per_step_max=ub,
+                                                             unsloth_grouped_mm_calls_per_step_min=GMM_FACTOR * 48 * 8, unsloth_grouped_mm_calls_per_step_max=GMM_FACTOR * 48 * 8)
+    Fr = frun(R)
+    assert Fr["verdicts"][("unsloth", "ckpt_unsloth_m_mb1")] == "VALID" and FP({FRONTIER_FAM: Fr})["P1"] == "FALSIFIED" and Fr["fit"]["unsloth"]["fits"], (Fr["verdicts"][("unsloth", "ckpt_unsloth_m_mb1")], row(Fr, "unsloth", "ckpt_unsloth_m_mb1")["why"])
+    for s_h, want in ((20.0, "FALSIFIED"), (50.0, "HELD")):
+        R = _frontier_set()
+        R[("hf", "hf_peft_m_offload")] = _frontier_receipt(FRONTIER_FAM, "hf", "hf_peft_m_offload", "hf", lever="hf_offload", peak=20.0, host=90.0, s=s_h, heldout_n=1.81)
+        assert FP({FRONTIER_FAM: frun(R)})["P1"] == want, (s_h, want, FP({FRONTIER_FAM: frun(R)}))
+    R = _frontier_set()
+    R[("hf", "hf_peft_m_offload")] = _fstub(FRONTIER_FAM, "hf", "hf_peft_m_offload", "hf", "oom", "OOM at step 1", peak=23.9, host=90.0)
+    assert FP({FRONTIER_FAM: frun(R)})["P1"] == "FALSIFIED"
+    for s_z, h_z, want in ((12.0, 70.0, "HELD"), (6.0, 70.0, "FALSIFIED"), (12.0, 40.0, "FALSIFIED")):
+        R = _frontier_set()
+        R[("axolotl", "ckpt_axolotl_m_zero3")] = _frontier_receipt(FRONTIER_FAM, "axolotl", "ckpt_axolotl_m_zero3", "axolotl", lever="axolotl_zero3", peak=12.0, host=h_z, s=s_z, heldout_n=1.81,
+                                                                    axolotl={"version": "0.20.0", "config": {"quantize_moe_experts": False}}, axolotl_bnb4bit_modules={"n_bnb4bit_unwrapped": 0})
+        assert FP({FRONTIER_FAM: frun(R)})["P1"] == want, (s_z, h_z, want)
+    R = _frontier_set()
+    del R[("unsloth", "ckpt_unsloth_m_mb1")]
+    assert FP({FRONTIER_FAM: frun(R)})["P1"] == "UNTESTED"
+    cases += 1
+    # 47. with --tc1-dir: the offload anchor against TC1's resident e4b/fused_attn4_m (same tokens / init / precision) -> EQUIVALENT-TO-RESIDENT, P3 HELD, P4 HELD (2.000 <= 2 x 1.010);
+    #     offload at 2.1 s/step -> P4 FALSIFIED; its losses +0.03 -> DIVERGENT-FROM-RESIDENT, P3 FALSIFIED; another tokens sha -> N-A naming it, P3 / P4 UNTESTED
+    tc1 = {"qwen3": run(_good_set())}
+    Fr = frun(_frontier_set(), tc1=tc1)
+    rs = Fr["resident"]
+    assert rs["reading"] == "EQUIVALENT-TO-RESIDENT" and rs["med_train"] == 0.0 and abs(rs["tc1_s"] - 1.01) < 1e-9 and rs["tc1_draws"] == 2 and rs["tc1_box"] == "RTX 5090" and rs["offload_s"] == 2.0, rs
+    P_ = FP({FRONTIER_FAM: Fr})
+    assert P_["P3"] == "HELD" and P_["P4"] == "HELD", P_
+    p4 = next(x for x in score_frontier_predictions({FRONTIER_FAM: Fr}) if x[0] == "P4")
+    assert "two measurements, no cross-box ratio formed" in p4[3] and "2.000 s/step" in p4[3] and "1.010 s/step" in p4[3] and "RTX 4090" in p4[3], p4[3]
+    R = _frontier_set()
+    R[FRONTIER_ANCHOR]["s_per_step_median_11plus"] = 2.1
+    assert FP({FRONTIER_FAM: frun(R, tc1=tc1)})["P4"] == "FALSIFIED"
+    R = _frontier_set()
+    R[FRONTIER_ANCHOR]["losses"] = [round(2.03 - 0.01 * i, 5) for i in range(20)]
+    Fr = frun(R, tc1=tc1)
+    assert Fr["resident"]["reading"] == "DIVERGENT-FROM-RESIDENT" and abs(Fr["resident"]["med_train"] - 0.03) < 1e-9 and FP({FRONTIER_FAM: Fr})["P3"] == "FALSIFIED", Fr["resident"]
+    print("FAILING-CASE TC3-P3 (reducer): median per-step |delta| vs TC1's resident", f(Fr["resident"]["med_train"], 4), ">", RESIDENT_BAND, "->", Fr["resident"]["reading"])
+    R = _frontier_set()
+    for k in R:
+        if is_ok(R[k]):
+            R[k]["tokens"] = {"sha256": "u" * 64}
+    Fr = frun(R, tc1=tc1)
+    assert Fr["resident"]["reading"] == "N-A" and "tokens sha differs" in Fr["resident"]["why"] and FP({FRONTIER_FAM: Fr}) == {"P1": "HELD", "P3": "UNTESTED", "P4": "UNTESTED"}, (Fr["resident"], FP({FRONTIER_FAM: Fr}))
+    assert Fr["verdicts"][FRONTIER_ANCHOR] == "VALID"                        # the family's own tokens agree among themselves: nothing VOID
+    cases += 1
+    # 48. the 12 GB token: baseline -> P2 HELD (the axolotl row UNSUPPORTED, said as "not an OOM reading"), the offload pair STABLE (9.00 / 9.18 s), P3 UNTESTED (its own box);
+    #     HF mb1 completes -> P2 FALSIFIED; the second draw missing -> UNMEASURED, P2 still HELD (a stability reading, not a fit reading); the reference offload
+    #     OOM -> P2 still HELD with the OOM in the evidence (a parity control, not the fit claim); HF mb1 NOT_RUN -> UNTESTED
+    F12 = frun(_frontier12_set(), fam=FRONTIER12_FAM)
+    assert [(x["fw"], x["tag"]) for x in F12["rows"]] == EXPECTED[FRONTIER12_FAM]
+    dw = F12["draws"][FRONTIER_ANCHOR]
+    assert dw["verdict"] == "STABLE" and dw["draws"] == 2 and abs(dw["stability"] - 0.18 / 9.09) < 1e-9 and dw["usable"], dw
+    assert F12["equivalence"][("e4b", "fused_attn4_m_offload_d2")]["reading"] == "EQUIVALENT" and F12["equivalence"][FRONTIER_REF]["reading"] == "EQUIVALENT"
+    P_ = FP({FRONTIER12_FAM: F12})
+    assert P_ == {"P2": "HELD", "P3": "UNTESTED"}, P_
+    p2 = next(x for x in score_frontier_predictions({FRONTIER12_FAM: F12}) if x[0] == "P2")
+    assert "axolotl/ckpt_axolotl_m UNSUPPORTED (not an OOM reading" in p2[3] and "e4b resident OOM" in p2[3], p2[3]
+    R = _frontier12_set()
+    R[("hf", "hf_peft_m_mb1")] = _frontier_receipt(FRONTIER12_FAM, "hf", "hf_peft_m_mb1", "hf", peak=11.5, host=8.0, total=64.0, box="RTX A2000", s=30.0, heldout_n=1.81, accum=8, micro_batch=1, experts_forward_calls_per_step_min=48 * 8)
+    F12 = frun(R, fam=FRONTIER12_FAM)
+    assert F12["verdicts"][("hf", "hf_peft_m_mb1")] == "VALID" and FP({FRONTIER12_FAM: F12})["P2"] == "FALSIFIED", row(F12, "hf", "hf_peft_m_mb1")["why"]
+    print("FAILING-CASE TC3-P2 (reducer):", next(x for x in score_frontier_predictions({FRONTIER12_FAM: F12}) if x[0] == "P2")[3][:170])
+    R = _frontier12_set()
+    del R[("e4b", "fused_attn4_m_offload_d2")]
+    F12 = frun(R, fam=FRONTIER12_FAM)
+    assert F12["draws"][FRONTIER_ANCHOR]["verdict"] == "UNMEASURED" and FP({FRONTIER12_FAM: F12})["P2"] == "HELD"
+    R = _frontier12_set()
+    R[FRONTIER_REF] = _fstub(FRONTIER12_FAM, "e4b", "reference_attn4_m_offload", "reference", "oom", "OOM at step 1", peak=11.9, host=40.0, total=64.0)
+    p2 = next(x for x in score_frontier_predictions({FRONTIER12_FAM: frun(R, fam=FRONTIER12_FAM)}) if x[0] == "P2")
+    assert p2[2] == "HELD" and "reference_attn4_m_offload OOM" in p2[3], p2
+    R = _frontier12_set()
+    R[("hf", "hf_peft_m_mb1")] = _fstub(FRONTIER12_FAM, "hf", "hf_peft_m_mb1", "hf", "not_run", "deadline", total=64.0)
+    assert FP({FRONTIER12_FAM: frun(R, fam=FRONTIER12_FAM)})["P2"] == "UNTESTED"
+    cases += 1
+    # 48b. the 12 GB token under the mb1 secondary: the field-recipe offload pair OOMs, fused_attn4_m_offload_mb1 completes (one draw) -> P2 HELD naming the
+    #      secondary, the anchor falls back to it (quality / equivalence read against it); the as-shipped offload row is a FIT row outside P2; nothing completed -> FALSIFIED
+    S12 = _frontier12_set()
+    for t in ("fused_attn4_m_offload", "fused_attn4_m_offload_d2", "reference_attn4_m_offload"):
+        S12[("e4b", t)] = _fstub(FRONTIER12_FAM, "e4b", t, "fused" if t.startswith("fused") else "reference", "oom", "OOM at step 1", peak=11.9, host=40.0, total=64.0)
+    S12[("e4b", "fused_attn4_m_offload_mb1")] = _frontier_receipt(FRONTIER12_FAM, "e4b", "fused_attn4_m_offload_mb1", "fused", lever="e4b_offload", peak=9.8, host=42.0, total=64.0, box="RTX A2000",
+                                                                  s=14.0, accum=8, micro_batch=1, kernel_calls_per_step_min=2 * 48 * 8)
+    S12[("e4b", "reference_attn4_m_offload_mb1")] = _frontier_receipt(FRONTIER12_FAM, "e4b", "reference_attn4_m_offload_mb1", "reference", lever="e4b_offload", peak=9.9, host=42.0, total=64.0, box="RTX A2000",
+                                                                      s=40.0, heldout_n=1.8050, accum=8, micro_batch=1)
+    S12[("e4b", "fused_attn4_shipped_offload")] = _frontier_receipt(FRONTIER12_FAM, "e4b", "fused_attn4_shipped_offload", "fused", lever="e4b_offload", peak=8.1, host=42.0, total=64.0, box="RTX A2000",
+                                                                    s=11.0, heldout_n=1.79, matched=False)
+    F12b = reduce_frontier_family(FRONTIER12_FAM, S12, {}, 20)
+    assert F12b["anchor_key"] == ("e4b", "fused_attn4_m_offload_mb1"), F12b["anchor_key"]
+    assert F12b["verdicts"][("e4b", "fused_attn4_m_offload_mb1")] == "VALID" and F12b["verdicts"][("e4b", "fused_attn4_shipped_offload")] == "VALID", F12b["verdicts"]
+    assert F12b["fit"]["e4b"]["completed"] == ["fused_attn4_m_offload_mb1", "reference_attn4_m_offload_mb1", "fused_attn4_shipped_offload"], F12b["fit"]["e4b"]["completed"]
+    p2 = next(x for x in score_frontier_predictions({FRONTIER12_FAM: F12b}) if x[0] == "P2")
+    assert p2[2] == "HELD" and "its mb1 secondary" in p2[3] and "a fit row, outside P2" in p2[3], p2
+    S12[("e4b", "fused_attn4_m_offload_mb1")] = _fstub(FRONTIER12_FAM, "e4b", "fused_attn4_m_offload_mb1", "fused", "oom", "OOM at step 1", peak=11.9, host=40.0, total=64.0)
+    S12[("e4b", "reference_attn4_m_offload_mb1")] = _fstub(FRONTIER12_FAM, "e4b", "reference_attn4_m_offload_mb1", "reference", "oom", "OOM at step 1", peak=11.9, host=40.0, total=64.0)
+    p2 = next(x for x in score_frontier_predictions({FRONTIER12_FAM: reduce_frontier_family(FRONTIER12_FAM, S12, {}, 20)}) if x[0] == "P2")
+    print("FAILING-CASE TC3-P2-secondary (reducer):", p2[2], "--", p2[3][-120:])
+    assert p2[2] == "FALSIFIED" and "no e4b fused offload arm completed at either recipe" in p2[3], p2
+    cases += 1
+    # 49. end to end through the files: both frontier tokens, the printer renders the FIT TABLE and fit lines, the in-box equivalence, the resident line, the levers' records and the TC3 P1-P4 table
+    #     (never TC1's P1-P10 table or a POSITION); with --tc1-dir the resident reading and P3 / P4
+    fd = tempfile.mkdtemp(prefix="tc3_reduce_selftest_")
+    for (fw, tag), r in _frontier_set().items():
+        json.dump(r, open(os.path.join(fd, f"{FRONTIER_FAM}_{fw}_{tag}.json"), "w"))
+    for (fw, tag), r in _frontier12_set().items():
+        json.dump(r, open(os.path.join(fd, f"{FRONTIER12_FAM}_{fw}_{tag}.json"), "w"))
+    F = reduce_dir(fd, 20)
+    assert set(F) == set(FRONTIER_FAMS) and [(x["fw"], x["tag"]) for x in F[FRONTIER_FAM]["rows"]] == EXPECTED[FRONTIER_FAM]
+    text = render(F, fd)
+    for needle in ("Lane TC3", "**(a) FIT TABLE**", "| e4b | fused_attn4_m_offload | e4b expert offload (--offload 1) | **VALID** | 9.500 | 40.000 | 2.000 |", "fit `unsloth`: **NO ARM COMPLETED on this box",
+                   "fit `e4b`: **FITS on this box", "**(b) in-box equivalence**", "`e4b/reference_attn4_m_offload` **EQUIVALENT**", "RESIDENT COMPARISON: UNTESTED", "e4b internal parity under offload",
+                   "lever `hf/hf_peft_m_offload`: max_memory", "trained: NO -- hf_offload: NotImplementedError", "lever `axolotl/ckpt_axolotl_m_layeroffload`: layer_offloading engaged True over 48 layers",
+                   "lever `axolotl/ckpt_axolotl_m_zero3` (ZeRO-3): REFUSED", "## TC3 predictions P1–P4", "| P1 | qwen3frontier | **HELD** |", "| P2 | qwen3frontier12 | **HELD** |",
+                   "| P3 | qwen3frontier | **UNTESTED** |", "| P3 | qwen3frontier12 | **UNTESTED** |", "| P4 | qwen3frontier | **UNTESTED** |", "draws (R1): `e4b/fused_attn4_m_offload` STABLE (9.000/9.180 s"):
+        assert needle in text, needle
+    assert "## Predictions P1–P10" not in text and "MATCHED POSITION" not in text and "POSITION:" not in text
+    F = reduce_dir(fd, 20, tc1_dir=d)                    # `d` holds TC1's qwen3 receipts (cases 22 / 43)
+    text = render(F, fd)
+    assert "RESIDENT COMPARISON: **EQUIVALENT-TO-RESIDENT**" in text and "| P3 | qwen3frontier | **HELD** |" in text and "| P4 | qwen3frontier | **HELD** |" in text and "no cross-box ratio formed" in text
+    assert "| P3 | qwen3frontier12 | **HELD** |" in text and text.count("| P4 |") == 1   # P3 is read per token (the 12 GB anchor shares TC1's tokens and init here too); P4 only on the 24 GB token
+    cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
 
@@ -2713,7 +3313,8 @@ def main():
     ap.add_argument("--md", default=None)
     ap.add_argument("--steps", type=int, default=None, help="registered N (default: read from the receipts)")
     ap.add_argument("--selftest", action="store_true", help="R7: hand-built receipts through every reading; exit 0 iff every case reads as registered")
-    ap.add_argument("--tc1-dir", default=None, help="R10 (d): a TC1 receipt dir (qwen3 / qwen3native tokens) whose quoted 11..20 s/step medians the qwen3curve arms are read beside (TRAVELS within 10 %%)")
+    ap.add_argument("--tc1-dir", default=None, help="R10 (d): a TC1 receipt dir (qwen3 / qwen3native tokens) whose quoted 11..20 s/step medians the qwen3curve arms are read beside (TRAVELS within 10 %%); "
+                                                   "R11 (b): the frontier tokens' offload anchor is read against its resident e4b/fused_attn4_m (EQUIVALENT-TO-RESIDENT) and P4 is scored")
     a = ap.parse_args()
     if a.selftest:
         selftest()

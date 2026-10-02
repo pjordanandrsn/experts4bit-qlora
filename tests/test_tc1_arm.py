@@ -94,6 +94,14 @@ def test_tc1_arm_selftest():
     # phase 3: the controls that could not fail now have a failing case each, printed by the selftest, and the receipts carry the new fields
     for needle in ("FAILING-CASE A:", "FAILING-CASE B:", "FAILING-CASE D:", "'blind_hasher_detects': False", "'control_tensor': 'model.layers.0.mlp.experts.base.down_absmax'"):
         assert needle in p.stdout, needle
+    # TC3: the lever helpers, the per-micro-batch step context (entered steps x accum times) and the lever refusal's failing case
+    assert "FAILING-CASE TC3-lever: hf_offload: NotImplementedError at step 1" in p.stdout and "'lever_refusal': 'NotImplementedError'" in p.stdout
+    tc3 = re.search(r"tc3=(\{.*\})$", p.stdout, re.S).group(1)
+    assert "'step_ctx': {'entered': 48, 'steps_x_accum': 48}" in tc3 or "'step_ctx': 'skipped" in tc3, tc3
+    rf = json.loads((d / "tiny_hf_hf_peft_m_offload.json").read_text())
+    assert rf["status"] == "refused" and rf["memory_lever"] == "hf_offload" and rf["exception_type"] == "NotImplementedError" and rf["host_ram_high_water_gb"] > 0 and rf["hf_offload"]["device_map_summary"]["any_cpu_or_disk"]
+    res = json.loads((d / "tiny_e4b_fused_attn4.json").read_text())        # a resident arm: no lever, the host-RAM fields on the row all the same
+    assert res["memory_lever"] is None and res["host_ram"]["high_water_gb"] == res["host_ram_high_water_gb"] > 0 and "host_ram_total_gb" in res
     fu = json.loads((d / "tiny_e4b_fused_attn4.json").read_text())
     assert fu["C1_control_tensor"] and fu["C1_control_detects_flipped_byte"] is True and fu["C1_regime_by_tensor"] == {"u8-packed": 4, "fp32": 4}
     assert fu["lora_path_present"] is True and fu["lora_path_loop_steps"] == [] and fu["matched_init_sha"] and fu["matched_init_sha_slots"] == 24 and fu["loss_step2"] == fu["losses"][2]
@@ -343,7 +351,9 @@ def test_gpu_class_check_accepts_h100_spellings_and_labels_the_box():
     label = re.search(r'^case "\$GPU_CLASS" in \[0-9\]\*\) BOX_CLASS="RTX \$GPU_CLASS";; \*\) BOX_CLASS="\$GPU_CLASS";; esac$', body, re.M)
     assert check and label, "the class check / label lines are not in the shape this test drives"
     for name, cls, ok, want_label in (("NVIDIA H100 NVL", "H100", True, "H100"), ("NVIDIA H100 80GB HBM3", "H100", True, "H100"), ("NVIDIA H100 PCIe", "H100", True, "H100"),
-                                      ("NVIDIA GeForce RTX 5090", "5090", True, "RTX 5090"), ("NVIDIA GeForce RTX 4090", "5090", False, None)):
+                                      ("NVIDIA GeForce RTX 5090", "5090", True, "RTX 5090"), ("NVIDIA GeForce RTX 4090", "5090", False, None),
+                                      ("NVIDIA GeForce RTX 4090", "4090", True, "RTX 4090"), ("NVIDIA RTX A2000 12GB", "RTX A2000", True, "RTX A2000"),      # TC3's two boxes
+                                      ("NVIDIA GeForce RTX 5090", "RTX A2000", False, None)):
         script = "\n".join(['say(){ echo "$*"; }; finish(){ echo "FINISH $1"; exit $1; }', f'GPU_NAME="{name}"; GPU_CLASS="{cls}"', check.group(0), label.group(0), 'echo "PASS label=$BOX_CLASS"'])
         r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
         if ok:
@@ -361,8 +371,12 @@ def test_every_env_knob_the_box_reads_is_forwarded_by_the_driver():
     read |= set(re.findall(r'os\.environ\.get\("(TC1_[A-Z0-9_]+)"', arm)) | set(re.findall(r'\("(TC1_[A-Z0-9_]+)", [0-9.A-Z_]+\)', arm))
     set_by_box = set(re.findall(r"(?:^|\s)(TC1_[A-Z0-9_]+)=", run))
     forwarded = set(re.findall(r"TC1_[A-Z0-9_]+", drive[drive.index("PASS="):drive.index("TC1_DRIVE_DRYRUN")]))
-    missing = sorted(read - set_by_box - forwarded)
+    # TC3: TC1_LOCAL_* are the HAND-RUN knobs of the owned 12 GB box (TC1_LOCAL_BOX=1 skips the launcher's nonce / instance / deadline) and are
+    # deliberately never forwarded by the launcher's driver -- a rental must never run without its nonce.
+    missing = sorted(k for k in read - set_by_box - forwarded if not k.startswith("TC1_LOCAL_"))
     assert not missing, f"read by the box/arm but never forwarded by tc1_drive.sh: {missing}"
+    assert not any(k.startswith("TC1_LOCAL_") for k in forwarded) and "TC1_LOCAL" not in drive, "tc1_drive.sh must never forward the hand-run knobs"
+    assert {"TC1_LOCAL_BOX", "TC1_LOCAL_OUT", "TC1_LOCAL_SNAPSHOT", "TC1_LOCAL_PYTHON"} <= read
     for must in ("TC1_STEPS", "TC1_EVAL_N", "TC1_EVAL_EVERY", "TC1_MATCHED_SEED", "TC1_PHASE_BUDGET_S", "TC1_PROFILE_STEPS"):
         assert must in forwarded, must
 
@@ -609,6 +623,105 @@ def test_arm_env_prefix_actually_executes():
         assert r.returncode == 0 and "RAN" in r.stdout and 'box=RTX 5090' in r.stdout and "alarm=3600" in r.stdout and f"pad={want}" in r.stdout and "omp=4" in r.stdout, (arm, r.stdout, r.stderr)
 
 
+# ----------------------------------------------------------------------------- lane TC3 (the frontier tokens, the hand-run block, the lever helpers)
+def test_tc1_run_sh_runs_the_frontier_families_in_the_registered_order():
+    """TC3 (TC3-PREREG-draft 'Arms'): the 24 GB token's eleven arms in order with their lever flags and the draft's alarms; the 12 GB token's seven with the
+    second offload draw, the t28 Unsloth venv and the loader-default backend; the deepspeed extra only under the 24 GB token and as a separate non-fatal step;
+    the axolotl venv install no longer the uv first-index line that failed on both TC1 boxes; the local-snapshot path; TC1's slices untouched."""
+    body = RUN_SH.read_text()
+    ff = body[body.index("tc1_frontier_family(){"):body.index("# tc1_frontier12_family FAM MID REV")]
+    f12 = body[body.index("tc1_frontier12_family(){"):body.index("# tc2_small_family FAM MID REV")]
+    pat = r"(?:arm|draw2|todo_arm)\s+\$FAM\s+(e4b|unsloth|hf|axolotl)\s+(\S+)"
+    assert re.findall(pat, ff) == [("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_mb1"),
+                                   ("hf", "hf_peft_m"), ("hf", "hf_peft_m_offload"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_m_layeroffload"),
+                                   ("axolotl", "ckpt_axolotl_m_zero3"), ("e4b", "reference_attn4_m_offload")], re.findall(pat, ff)
+    assert "draw2 $FAM" not in ff and "todo_arm" not in ff and 'MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"' in ff
+    assert re.search(r"fused_attn4_m fused \$ERAL .* 0 field \$TOK \$TS --attn-4bit 1 \$MATCH", ff) and re.search(r"fused_attn4_m_offload fused \$EOAL .* 1 field \$TOK \$TS --attn-4bit 1 \$MATCH", ff)
+    assert re.search(r"fused_attn4_m_mb1 fused \$MBAL .* 0 mb1 \$TOK \$TS --attn-4bit 1 \$MATCH", ff)
+    assert re.search(r"ckpt_unsloth_m unsloth \$UAL .* 0 field .* --unsloth-moe-backend grouped_mm \$MATCH", ff) and re.search(r"ckpt_unsloth_m_mb1 unsloth \$UAL .* 0 mb1 .* --unsloth-moe-backend grouped_mm \$MATCH", ff)
+    assert re.search(r"hf_peft_m hf \$HAL .* 0 field \$TOK \$TS \$MATCH", ff) and re.search(r"hf_peft_m_offload hf \$HOAL .* 0 field \$TOK \$TS --hf-offload 1 \$MATCH", ff)
+    assert re.search(r"ckpt_axolotl_m axolotl \$AAL .* 0 field .* --axolotl-dataset \$W/data/ds_alpaca.json \$MATCH", ff)
+    assert re.search(r"ckpt_axolotl_m_layeroffload axolotl \$ALAL .* --axolotl-layer-offload 1 \$MATCH", ff) and re.search(r"ckpt_axolotl_m_zero3 axolotl \$AZAL .* --axolotl-zero3 1 \$MATCH", ff)
+    assert re.search(r"reference_attn4_m_offload reference \$ROAL .* 1 field \$TOK \$TS --attn-4bit 1 \$MATCH", ff) and "can_run 900 $FAM/e4b/reference_m_offload" in ff
+    assert re.findall(pat, f12) == [("e4b", "fused_attn4_m_offload"), ("e4b", "fused_attn4_m_offload"), ("e4b", "reference_attn4_m_offload"), ("e4b", "fused_attn4_m"),
+                                    ("e4b", "fused_attn4_m_offload_mb1"), ("e4b", "reference_attn4_m_offload_mb1"), ("e4b", "fused_attn4_shipped_offload"),
+                                    ("unsloth", "ckpt_unsloth_m_mb1"), ("hf", "hf_peft_m_mb1"), ("axolotl", "ckpt_axolotl_m")], re.findall(pat, f12)
+    # the 12 GB secondary runs only on a field-recipe OOM (one draw each), the as-shipped offload row always; the plan line's alarms and the 12 h hand-run deadline
+    assert 'so=$(status_of $FAM e4b fused_attn4_m_offload)' in f12 and 'if [ "$so" = oom ]; then' in f12 and f12.count("_mb1 fused $EOAL") == 1 and f12.count("_mb1 reference $ROAL") == 1
+    assert re.search(r"fused_attn4_m_offload_mb1 fused \$EOAL .* 1 mb1 \$TOK \$TS --attn-4bit 1 \$MATCH", f12) and re.search(r"fused_attn4_shipped_offload fused \$EOAL .* 1 field \$TOK \$TS --attn-4bit 1 \$NATIVE", f12)
+    assert 'TC1_DEADLINE_EPOCH=${TC1_DEADLINE_EPOCH:-$(( $(date +%s) + ${TC1_LOCAL_HOURS:-12} * 3600 ))}' in body
+    assert f12.count("draw2 $FAM e4b fused_attn4_m_offload fused $EOAL") == 1
+    assert re.search(r"UNS_VENV=t28 arm \$FAM unsloth ckpt_unsloth_m_mb1 unsloth \$UAL .* 0 mb1 .* --unsloth-moe-backend default \$MATCH", f12)
+    assert re.search(r"hf_peft_m_mb1 hf \$HAL .* 0 mb1 \$TOK \$TS \$MATCH", f12) and re.search(r"ckpt_axolotl_m axolotl \$AAL .* 0 field .* \$MATCH", f12)
+    assert '${NOTE:+--note} ${NOTE:+"$NOTE"}' in ff and '${NOTE:+--note} ${NOTE:+"$NOTE"}' in f12 and 'NOTE="TC1_LOCAL_BOX hand run: snapshot ${TC1_LOCAL_SNAPSHOT:-?} (pin_proof: ${PIN_PROOF:-?})"' in f12
+    # the plan lines: the tokens, the pin, the draft's alarms (e4b resident 1200, offload 3600, mb1 3600, Unsloth 3600, HF 1800 / 3600, axolotl 2700 / 3600 / 3600, reference offload 5400)
+    assert "qwen3frontier)   tc1_frontier_family   qwen3frontier   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1200 3600 3600 3600 1800 3600 2700 3600 3600 5400;;" in body
+    assert "qwen3frontier12) tc1_frontier12_family qwen3frontier12 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1200 7200 3600 1800 2700 14400;;" in body
+    assert 'PREREG=tc1/TC3-PREREG.md' in body and '*" qwen3frontier "*|*" qwen3frontier12 "*)' in body
+    # the axolotl venv: torch alone from the cu130 index, axolotl from PyPI under unsafe-best-match (the TC1 boxes' uv first-index failure), the deepspeed extra separate and non-fatal
+    # the axolotl venv's install is TC1 amendment 3's registered single line (dry-resolved; torch 2.14.0+cu130 by axolotl's own pin) under the base interpreter;
+    # TC3 keeps AX_PKG / AX_INDEX for its separate, non-fatal deepspeed step
+    assert 'AX_PKG="axolotl==$AX_VER"; AX_INDEX="https://download.pytorch.org/whl/cu130"' in body and "AX_TORCH_PIN" not in body
+    assert re.search(r'\$PY_BASE -m uv pip install --python \$PY_AX "axolotl==\$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log', body)
+    assert 'AX_PKG="axolotl==$AX_VER"' in body and body.count("--index-strategy unsafe-best-match") >= 2      # the registered install line and the deepspeed step
+    assert '"axolotl==$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 > logs/pip_axolotl.log' not in body, "the uv line that failed on both TC1 boxes must not survive"
+    assert '--no-build-isolation "axolotl[deepspeed]==$AX_VER"' in body and body.index('case " $FAMILIES " in *" qwen3frontier "*)\n    say "venv-axolotl + axolotl[deepspeed]') > body.index('pip(axolotl) rc=$rc')
+    # the local snapshot replaces the fetch, the pin proof links the directory into the private cache, free_family keeps it; the frontier venvs from PY_BASE
+    assert 'if [ -n "${TC1_LOCAL_SNAPSHOT:-}" ]; then local_snapshot $FAM $MID $REV; frc=$?; else fetch $FAM $MID $REV $FAL; frc=$?; fi' in body
+    assert "local_snapshot(){" in body and 'ln -sfn "$SNAP" $RDIR/snapshots/$REV' in body and 'out["pin_proof"], out["offline_reason"] = "offline"' in body and "PIN_PROOF=$PROOF" in body
+    assert "$PY_BASE -m venv --system-site-packages $W/venv-e4b" in body and "$PY_BASE -m venv $W/venv-unsloth-t28" in body and 'free_family(){ [ "$TC1_LOCAL_BOX" = 1 ]' in body
+    assert 'for t in (tag, "attn_only_m", "reference_attn4_m", "fused_attn4_m_offload", "reference_attn4_m_offload"):' in body
+    assert '[ "$CU130_OK" != 1 ] && [ "$TC1_LOCAL_BOX" != 1 ]' in body
+    # the function block sits outside every TC1 / TC1b slice
+    assert body.index("tc1_frontier_family(){") < body.index("# tc1_curve_family FAM MID REV") < body.index("tc1_curve_family(){") < body.index("tc1_family(){") < body.index("tc1_native_family(){")
+
+
+def test_local_box_block_executes_through_bash(tmp_path):
+    """TC3: the TC1_LOCAL_BOX block out of the real file, executed -- a hand run defaults the box id, the run id, the instance id, the deadline (now + 6 h),
+    the nonce and the private HF cache under TC1_LOCAL_OUT; the launcher's path leaves everything exactly as before; TC1_LOCAL_BOX=1 without TC1_LOCAL_OUT refuses."""
+    body = RUN_SH.read_text()
+    blk = body[body.index("TC1_LOCAL_BOX=${TC1_LOCAL_BOX:-0}"):body.index("PY_BASE=${TC1_LOCAL_PYTHON:-python}")]
+    env = {k: v for k, v in os.environ.items() if not k.startswith("TC1_")}
+    script = "set -u\nLANE=tc1\n" + blk + 'echo "W=$W BOX=$TC1_BOX RUN=$TC1_RUN_ID IID=$TC1_INSTANCE_ID DL=$TC1_DEADLINE_EPOCH NONCE=$TC1_RUN_NONCE HF=$HF_HUB_CACHE TW=$TC1_W"'
+    t0 = int(time.time())
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env={**env, "TC1_LOCAL_BOX": "1", "TC1_LOCAL_OUT": str(tmp_path)})
+    assert r.returncode == 0, (r.stdout, r.stderr)
+    kv = dict(tok.split("=", 1) for tok in r.stdout.split())
+    assert kv["W"] == str(tmp_path) and kv["BOX"] == "A" and kv["RUN"].startswith("local-") and kv["IID"].startswith("local:") and kv["NONCE"].startswith("local-"), kv
+    assert t0 + 12 * 3600 - 5 <= int(kv["DL"]) <= t0 + 12 * 3600 + 60 and kv["HF"] == str(tmp_path) + "/hf-cache" and kv["TW"] == str(tmp_path), kv
+    r = subprocess.run(["bash", "-c", "set -u\nLANE=tc1\n" + blk + 'echo "W=$W TW=$TC1_W BOX=${TC1_BOX:-unset} DL=${TC1_DEADLINE_EPOCH:-unset} HF=${HF_HUB_CACHE:-unset}"'], capture_output=True, text=True, env=env)
+    assert r.returncode == 0 and r.stdout.split() == ["W=/root/tc1", "TW=/root/tc1", "BOX=unset", "DL=unset", "HF=unset"], (r.stdout, r.stderr)
+    r = subprocess.run(["bash", "-c", "set -u\nLANE=tc1\n" + blk], capture_output=True, text=True, env={**env, "TC1_LOCAL_BOX": "1"})
+    assert r.returncode == 78 and "TC1_LOCAL_OUT" in r.stdout, (r.returncode, r.stdout)
+
+
+def test_tc3_arm_helpers_and_flags():
+    """TC3: the pure helpers the lever arms use (the max_memory cap, the device-map summary, the config dict's lever keys, the ZeRO-3 dict, lever_of), the
+    host-RAM report's shape, and the five flags with their defaults."""
+    import types
+    arm = _load_arm_module()
+    assert arm.hf_max_memory(24 * (1 << 30), 125 * (1 << 30), 2) == {0: "22GiB", "cpu": "125GiB"} and arm.hf_max_memory(1 << 30, 1 << 29, 2) == {0: "1GiB", "cpu": "1GiB"}
+    dm = arm.device_map_summary({"model.layers.0": 0, "model.layers.1.mlp.experts": "cpu", "lm_head": "disk"})
+    assert dm == {"n_entries": 3, "by_device": {"cuda:0": 1, "cpu": 1, "disk": 1}, "experts_entries_by_device": {"cpu": 1}, "cpu_or_disk_sample": ["model.layers.1.mlp.experts", "lm_head"], "any_cpu_or_disk": True}
+    assert arm.device_map_summary(None) is None
+    a = types.SimpleNamespace(r=16, alpha=16, seq=2048, seed=3407, micro_batch=2, accum=4, steps=20, lr=2e-4, weight_decay=0.001, warmup_steps=5)
+    z = arm.axolotl_zero3_config(a)
+    assert z == {"zero_optimization": {"stage": 3, "offload_param": {"device": "cpu", "pin_memory": True}, "offload_optimizer": {"device": "cpu", "pin_memory": True}},
+                 "bf16": {"enabled": True}, "train_micro_batch_size_per_gpu": 2, "gradient_accumulation_steps": 4}
+    c = arm.axolotl_config_dict(a, "/snap", ["m"], ["p"], layer_offload=True, deepspeed=z, quantize_moe_experts=False)
+    assert c["layer_offloading"] is True and c["deepspeed"] is z and c["quantize_moe_experts"] is False and c["load_in_4bit"] is True
+    c0 = arm.axolotl_config_dict(a, "/snap", ["m"], ["p"])
+    assert "layer_offloading" not in c0 and "deepspeed" not in c0 and c0["quantize_moe_experts"] is True
+    assert arm.lever_of(types.SimpleNamespace(framework="hf", hf_offload=1)) == "hf_offload" and arm.lever_of(types.SimpleNamespace(framework="e4b", offload=1)) == "e4b_offload"
+    assert arm.lever_of(types.SimpleNamespace(framework="axolotl", axolotl_zero3=1)) == "axolotl_zero3" and arm.lever_of(types.SimpleNamespace(framework="axolotl", axolotl_layer_offload=1)) == "axolotl_layer_offload"
+    assert arm.lever_of(types.SimpleNamespace(framework="e4b", offload=0)) is None and set(arm.LEVER_LABELS) == {"e4b_offload", "hf_offload", "axolotl_layer_offload", "axolotl_zero3"}
+    h = arm.host_ram_report()
+    assert h["ru_maxrss_gb"] is not None and h["high_water_gb"] >= h["ru_maxrss_gb"] > 0 and set(h) >= {"rss_hwm_gb", "cgroup_peak_gb", "cgroup_limit_gb", "total_gb", "high_water_gb"}
+    p = _run("--help")
+    for flag in ("--hf-offload", "--hf-offload-gpu-margin-gib", "--hf-offload-fp32-cpu", "--axolotl-layer-offload", "--axolotl-zero3"):
+        assert flag in p.stdout, flag
+
+
 def test_run_and_drive_scripts_parse():
     for sh in (RUN_SH, DRIVE_SH):
         r = subprocess.run(["bash", "-n", str(sh)], capture_output=True, text=True)
@@ -685,7 +798,7 @@ def test_tc2_run_sh_runs_the_registered_arm_order_with_the_flags():
     assert 'tc2_big_family   mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 5400 2400 1800 2700 6000 1 "$UT7" ""     ""' in body
     assert 'UT4="q_proj,k_proj,v_proj,o_proj"' in body and 'UT_GRANITE2="q_proj,k_proj,v_proj,o_proj,input_linear,output_linear"' in body
     assert 'UP_QWEN3_5="mlp.experts.gate_up_proj,mlp.experts.down_proj"' in body and 'UT7="q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj"' in body
-    assert "tc2small)    tc2_small_box;;" in body and "tc2big)      tc2_big_box;;" in body and 'for t in (tag, "attn_only_m", "reference_attn4_m"):' in body
+    assert "tc2small)    tc2_small_box;;" in body and "tc2big)      tc2_big_box;;" in body and 'for t in (tag, "attn_only_m", "reference_attn4_m", "fused_attn4_m_offload", "reference_attn4_m_offload"):' in body
     fam = body[body.index("tc1_family(){"):body.index("# tc1_native_family")]
     assert re.findall(calls, fam)[:3] == [("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "reference_attn4_m")]   # TC1 untouched
 

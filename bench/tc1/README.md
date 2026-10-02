@@ -59,6 +59,62 @@ cannot carry TC1's `qwen3` sha (8 rows) although its TRAIN rows are byte-identic
 (sha256 of `json.dumps(train, separators=(",", ":"))`) beside the file sha for the assertion the registration should make. The t1 / r64 arms
 take the first 8 of the 16 rows (a prefix), paired with TC1's 8.
 
+## Lane TC3 — the `qwen3frontier` / `qwen3frontier12` family tokens (TC3-PREREG.md, the PI's; drafted in `TC3-PREREG-draft.md`)
+
+The same files, extended; nothing copied. `tc1_run.sh`'s `tc1_frontier_family` (24 GB box: `TC1_FAMILIES=qwen3frontier TC1_GPU_CLASS=4090`, the class
+check accepts "NVIDIA GeForce RTX 4090", box class `RTX 4090`) runs, in THIS order, one process per arm, every arm `--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED`:
+`e4b/fused_attn4_m` (resident; expected OOM, 1200 s) · `e4b/fused_attn4_m_offload` (the `arm` wrapper's OFFLOAD positional = 1 → `--offload 1`, 3600 s) · `e4b/fused_attn4_m_mb1`
+(resident, recipe `mb1`, 3600 s) · `unsloth/ckpt_unsloth_m` (venv-unsloth grouped_mm; expected OOM, 3600 s) · `unsloth/ckpt_unsloth_m_mb1` (3600 s) · `hf/hf_peft_m` (expected OOM at
+load, 1800 s) · `hf/hf_peft_m_offload` (`--hf-offload 1`: `device_map="auto"` under `max_memory = {0: "<GPU GiB − 2>GiB", "cpu": "<host RAM GiB>GiB"}` from `hf_max_memory`, with
+`llm_int8_enable_fp32_cpu_offload=True` — the switch transformers' own error names for a 4-bit device_map with CPU entries, `--hf-offload-fp32-cpu 0` turns it off — and
+`hf_device_map` summarised (`device_map_summary`: entries and expert entries per device) on the receipt; a `NotImplementedError` / `RuntimeError` inside the loop is a `refused` row
+with the exception text; 3600 s) · `axolotl/ckpt_axolotl_m` (2700 s) · `axolotl/ckpt_axolotl_m_layeroffload` (`--axolotl-layer-offload 1`: `layer_offloading: true` in the config
+dict, schema `config.py:653`, and the `LayerOffloadManager` + `_LayerOffloadContext` the trainer mixin would run, driven by `run_arm` around every micro-batch; 3600 s) ·
+`axolotl/ckpt_axolotl_m_zero3` (`--axolotl-zero3 1`: a `refused` row — the DeepSpeed engine is created by transformers' Trainer inside `axolotl.train.train`, not by `ModelLoader`;
+the config it would have used and the installed deepspeed version are on the row; `axolotl[deepspeed]` is installed as a separate non-fatal step only under this token; 3600 s) ·
+`e4b/reference_attn4_m_offload` (the parity / equivalence anchor under offload, 5400 s). Every row records `peak_vram_gb`, `host_ram_high_water_gb` (max over the arm of the process
+peak RSS — `/proc/self/status` VmHWM and `ru_maxrss` — and the cgroup `memory.peak` when it rose during the arm; the parts under `host_ram`), `host_ram_total_gb` and `memory_lever`.
+
+`tc1_frontier12_family` (the owned 12 GB RTX A2000, `TC1_FAMILIES=qwen3frontier12 TC1_GPU_CLASS="RTX A2000"`, box class the string itself): `e4b/fused_attn4_m_offload` ·
+`e4b/fused_attn4_m_offload_d2` (`draw2`) · `e4b/reference_attn4_m_offload` · `e4b/fused_attn4_m` (resident; expected OOM) · `unsloth/ckpt_unsloth_m_mb1` (`UNS_VENV=t28`,
+`--unsloth-moe-backend default`: that host's driver is 575, so every cu130 venv is refused by the gate — recorded in the receipt's `env.torch` and `versions.txt`) · `hf/hf_peft_m_mb1`
+· `axolotl/ckpt_axolotl_m` (a `refused` row naming the driver). Alarms: the 24 GB token's classes (a choice; the draft names none for this box).
+
+**TC3 hand run on the owned box** (`TC1_LOCAL_BOX=1`: no launcher, no nonce / instance id / deadline from rent.py — deadline = now + 6 h; the checkpoint from
+`TC1_LOCAL_SNAPSHOT`, a directory at the registered revision, linked into a private HF cache under `TC1_LOCAL_OUT/hf-cache` so every loader resolves the pin offline; the pin proof
+compares the directory's `config.json` sha256 — and the safetensors count/bytes — with the Hub's at the pin when the network answers, else records `pin_proof: offline`, never
+fetches; the venvs, tokens and receipts under `TC1_LOCAL_OUT`; `TC1_LOCAL_PYTHON` = the interpreter the venvs are made from — if it is itself a venv its torch is invisible to
+`--system-site-packages`, so venv-e4b installs the same `torch==<version>` from the matching `/whl/<cuNNN>` index; `tc1_drive.sh` never forwards `TC1_LOCAL_*`). From the
+`gpu-dev` container, with the worktree's `bench/tc1/*` and `bench/tp4/tp4_alpaca.py`, `bench/flagship-matrix/drivers/n9_datasets.py`, `bench/flagship-matrix/ds_manifest.json`
+copied into `$OUT` (the script refuses to start without them):
+```
+OUT=/workspace/tc1-frontier12; mkdir -p $OUT; cd $OUT
+TC1_LOCAL_BOX=1 TC1_LOCAL_OUT=$OUT TC1_LOCAL_SNAPSHOT=/models/Qwen3-30B-A3B TC1_LOCAL_PYTHON=/workspace/venv-k3rel/bin/python \
+TC1_BOX=A TC1_FAMILIES=qwen3frontier12 TC1_GPU_CLASS="RTX A2000" \
+E4B_SHA=<the 40-char e4b commit the receipts should cite> GNF4_SHA=846b512b905468c08f5748943d08769b572affa2 \
+bash tc1_run.sh > outer.log 2>&1
+```
+(`TC1_LOCAL_PYTHON`'s path is the k3rel venv's interpreter on that box — verify it with `ls` before the run; `/models/Qwen3-30B-A3B` must hold `config.json` and the
+`*.safetensors` of revision `ad44e777…`. `TC1_MIN_DISK_GB` defaults to 40 under a hand run. The reducer runs at the end as on a rental; `pin_proof_qwen3frontier12.json`
+sits beside the receipts and every receipt's `note` carries the proof.)
+
+**Reducer** (`tc1_reduce.py`, R11): the frontier tokens have their OWN anchor, `e4b/fused_attn4_m_offload` (the resident e4b arm is expected to OOM), and their own control,
+`e4b/reference_attn4_m_offload`; validity = TC1's predicates against that anchor. Readings: (a) the FIT TABLE — per framework every arm with its lever, VERDICT, peak VRAM,
+host-RAM high-water, s/step, J/step, regime, and a fit line (`FITS on this box via …` / `NO ARM COMPLETED on this box: …`); (b) the in-box equivalence of every matched arm against
+the anchor under TC1's R4 bands (EQUIVALENT ≤ 0.02 on both the median per-step |Δ train| and |Δ held-out at N|, COMPARABLE ≤ 0.05) with tp1's parity on the fused/reference offload
+pair, and, with `--tc1-dir <TC1 receipt dir>`, the matched trajectory of the offload anchor against TC1's resident `e4b/fused_attn4_m` — the same tokens sha, name-free
+`matched_init_sha`, fp32-only adapters and N asserted first, then median per-step |Δ| ≤ 0.02 reads EQUIVALENT-TO-RESIDENT, else DIVERGENT-FROM-RESIDENT; (c) no cross-box ratio
+anywhere — P1's ratios are within the 24 GB box, P4 prints the two s/step measurements with the 2× factor applied; (d) P1–P4 of the draft scored HELD / FALSIFIED / UNTESTED
+(P1's four clauses each named in the evidence; P2 is about frameworks — an e4b resident arm that also completed is noted, never a refutation; P3 per token). The selftest adds
+six cases (50 in all): the OOM-only Unsloth column, the HF offload `refused` row, the axolotl ZeRO-3 `refused` row, a VOID offload equivalence (plus a DIVERGENT in-box pair and a
+missing anchor), P1's legs within the box, the resident comparison with `--tc1-dir` (EQUIVALENT / DIVERGENT / N-A on a tokens mismatch), the 12 GB token's P2 legs, and both
+tokens end to end through files. Facts read while building this: axolotl's `layer_offloading` is a trainer mixin over two trainer-free classes; its ZeRO-3 engine is the Trainer's;
+transformers 5.18's bnb-4bit quantizer refuses CPU entries in a device_map without `llm_int8_enable_fp32_cpu_offload`; axolotl 0.20.0 pins `torch<=2.14.0` (not the 2.14.1 the TC1
+prose assumed) and `packaging==26.0`, which uv's first-index strategy cannot satisfy with the cu130 extra index (both TC1 boxes) — `UPSTREAM-NOTES.md` "TC3 addendum". Nothing in
+TC3 ran on a GPU; axolotl and DeepSpeed were read, not run.
+
+## Lane TC1b — reducer notes
+
 **Reducer** (`tc1_reduce.py`, R10): validity per sub-fixture against its own e4b arm (tokens sha, trainable count, step-0 band, name-free
 matched sha, N per arm; the registered counts 642,514,944 on arms 1-3 / t1 and 321,257,472 on the anchor arms; r64 asserted equal between its
 two arms only), then (a) the curve table (paired mean ± SE over the 16 rows per eval for arms 1-3, paired |Δ| 2 vs 1 and 3 vs 1) and the curve

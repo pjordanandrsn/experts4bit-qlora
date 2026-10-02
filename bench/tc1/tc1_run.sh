@@ -36,7 +36,26 @@
 # is gated on the host driver >= 580 (checked BEFORE any install); below it the arms that need one are `refused` rows that
 # name the driver -- never a silent fallback to the t28 venv.
 set -uo pipefail
-LANE=tc1; W=/root/$LANE; mkdir -p $W/logs $W/adapters $W/data; cd $W || exit 9
+LANE=tc1
+# TC3 (lane TC3, the owned 12 GB box; TC3-PREREG-draft "12 GB box", README "TC3 hand run"): TC1_LOCAL_BOX=1 is a HAND RUN without the launcher -- no nonce,
+# no instance id and no deadline from rent.py (deadline = now + 6 h), the checkpoint from TC1_LOCAL_SNAPSHOT (a directory at the registered revision,
+# never fetched; `local_snapshot` below links it into a private HF cache and proves the pin against the Hub's config.json when the network answers, else
+# records `pin_proof: offline`), venvs / tokens / receipts under TC1_LOCAL_OUT, the venvs made from TC1_LOCAL_PYTHON. Everything else -- the tokens, the arm
+# wrapper, the alarms, the reducer -- is the registered path. tc1_drive.sh never forwards TC1_LOCAL_* (tests/test_tc1_arm.py asserts it).
+TC1_LOCAL_BOX=${TC1_LOCAL_BOX:-0}
+if [ "$TC1_LOCAL_BOX" = 1 ]; then
+  [ -n "${TC1_LOCAL_OUT:-}" ] || { echo "refusing: TC1_LOCAL_BOX=1 needs TC1_LOCAL_OUT (where the venvs, tokens and receipts go)"; exit 78; }
+  W=$TC1_LOCAL_OUT
+  TC1_BOX=${TC1_BOX:-A}; TC1_RUN_ID=${TC1_RUN_ID:-local-$(date -u +%Y%m%dT%H%M%SZ)}; TC1_INSTANCE_ID=${TC1_INSTANCE_ID:-local:$(hostname)}
+  TC1_DEADLINE_EPOCH=${TC1_DEADLINE_EPOCH:-$(( $(date +%s) + ${TC1_LOCAL_HOURS:-12} * 3600 ))}
+  TC1_RUN_NONCE=${TC1_RUN_NONCE:-local-$(date +%s)-$$}
+  export HF_HUB_CACHE=$W/hf-cache          # the local snapshot is linked in here, so every loader resolves the pin offline exactly as after a fetch
+else
+  W=/root/$LANE
+fi
+export TC1_W=$W                            # the venv tripwires write versions.txt beside the receipts, wherever they are
+PY_BASE=${TC1_LOCAL_PYTHON:-python}        # the interpreter the venvs are made from (the image's `python` on a rental)
+mkdir -p $W/logs $W/adapters $W/data; cd $W || exit 9
 say(){ echo "[$(date -u +%FT%TZ)] tc1/box${TC1_BOX:-?}: $*"; }
 NONCE=${TC1_RUN_NONCE:?}; printf '%s\n' "$NONCE" > $W/TC1_RUN_NONCE.tmp && mv $W/TC1_RUN_NONCE.tmp $W/TC1_RUN_NONCE
 finish(){ local rc=$1; printf '%s\n' "$rc" > TC1_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > TC1_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
@@ -93,6 +112,11 @@ case " $FAMILIES " in *" tc2small "*|*" tc2big "*)
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md      # TC2: governed by its own registration (the PI's, bench/tc1/TC2-PREREG.md); TC1_PREREG still overrides
   ;;
 esac
+case " $FAMILIES " in *" qwen3frontier "*|*" qwen3frontier12 "*)      # TC3: the memory-frontier tokens are governed by their own registration (the PI's); TC1_PREREG still overrides
+  echo "FIXTURE frontier (TC3): the field recipe, matched init, fp32 adapters on a memory-frontier box (class $GPU_CLASS); levers: e4b --offload 1, hf --hf-offload 1 (device_map auto + max_memory), axolotl --axolotl-layer-offload 1 / --axolotl-zero3 1; local_box=$TC1_LOCAL_BOX snapshot=${TC1_LOCAL_SNAPSHOT:-<fetched>}" | tee -a summary.txt
+  [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC3-PREREG.md
+  ;;
+esac
 echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RUN_ID instance $TC1_INSTANCE_ID deadline $TC1_DEADLINE_EPOCH; prereg $PREREG" | tee -a summary.txt
 # ---------------------------------------------------------------- staged pieces, box class, forensics
 for f in tc1_arm.py tc1_reduce.py tp4_alpaca.py n9_datasets.py ds_manifest.json; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done   # TC1b: + the clinical builder and its manifest (tc1_drive.sh's STAGE)
@@ -105,8 +129,9 @@ PHYS=$(lscpu -p=CORE,SOCKET 2>/dev/null | grep -v '^#' | sort -u | wc -l | tr -d
 echo "OMP_NUM_THREADS=$PHYS (physical cores) box_class=$BOX_CLASS" | tee -a summary.txt
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
-MIN_DISK_GB=${TC1_MIN_DISK_GB:-200}; FREE_GB=$(df -BG --output=avail /root 2>/dev/null | tail -1 | tr -dc 0-9)
-if [ "${FREE_GB:-0}" -lt "$MIN_DISK_GB" ]; then say "BOX REFUSED: ${FREE_GB:-?} GB free on /root < ${MIN_DISK_GB} GB (instance overlay too small for the checkpoints -- host-limited)"; echo "BOX_REFUSED disk=${FREE_GB:-?}GB" >> summary.txt; finish 13; fi
+MIN_DISK_DEFAULT=200; [ "$TC1_LOCAL_BOX" = 1 ] && MIN_DISK_DEFAULT=40      # TC3 local box: nothing is fetched; the venvs need ~20 GB
+MIN_DISK_GB=${TC1_MIN_DISK_GB:-$MIN_DISK_DEFAULT}; FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
+if [ "${FREE_GB:-0}" -lt "$MIN_DISK_GB" ]; then say "BOX REFUSED: ${FREE_GB:-?} GB free on $W < ${MIN_DISK_GB} GB (instance overlay too small for the checkpoints -- host-limited)"; echo "BOX_REFUSED disk=${FREE_GB:-?}GB" >> summary.txt; finish 13; fi
 # cu130 wheels (torch 2.12.1 / 2.14.1) need an NVIDIA driver >= 580: checked here, before any install; recorded in summary.txt
 DRIVER=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d ' '); DRIVER_MAJOR=${DRIVER%%.*}
 CU130_OK=1; case "$DRIVER_MAJOR" in ''|*[!0-9]*) CU130_OK=0;; *) [ "$DRIVER_MAJOR" -ge 580 ] || CU130_OK=0;; esac
@@ -115,7 +140,9 @@ CU130_REASON="cu130 wheels need driver >= 580; host has ${DRIVER:-unknown}"
 # below the driver floor cannot produce the lane's readings. It is a REGISTERED HOST FLOOR -- rent.py's lane-refusal class
 # 18 (P86's driver refusal, machine 37958 at 575.57 on tc1-5090-3) -- so the box refuses here, before any install or
 # fetch, and the receipt names the machine for exclusion on the next draw instead of running four hours of refused rows.
-if [ "$CU130_OK" != 1 ]; then say "REFUSED: $CU130_REASON (registered host floor; TC1-PREREG amendment 1)"; echo "refused: driver ${DRIVER:-unknown} < 580" > REFUSAL; echo "BOX_REFUSED driver=${DRIVER:-unknown} floor=580" | tee -a summary.txt; finish 18; fi
+# TC3's owned 12 GB box (TC1_LOCAL_BOX=1) sits at driver 575 by design: NOT a box refusal there -- its registered arms run on venv-e4b and venv-unsloth-t28,
+# and every arm that needs a cu130 venv (axolotl) is a refused row naming the driver, as the gate below arranges.
+if [ "$CU130_OK" != 1 ] && [ "$TC1_LOCAL_BOX" != 1 ]; then say "REFUSED: $CU130_REASON (registered host floor; TC1-PREREG amendment 1)"; echo "refused: driver ${DRIVER:-unknown} < 580" > REFUSAL; echo "BOX_REFUSED driver=${DRIVER:-unknown} floor=580" | tee -a summary.txt; finish 18; fi
 [ "$CU130_OK" = 1 ] && say "driver $DRIVER: cu130 venvs (venv-unsloth, venv-axolotl) will be built" || say "driver ${DRIVER:-unknown}: $CU130_REASON -- venv-unsloth (cu130) and venv-axolotl are NOT built; their arms are refused rows"
 echo "DRIVER $DRIVER cu130_ok=$CU130_OK" | tee -a summary.txt
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,power.limit,clocks.max.sm --format=csv,noheader | tee forensics.txt
@@ -129,7 +156,8 @@ def sh(c):
 print(json.dumps({"box": box, "run_id": run_id, "instance_id": iid, "gpu": gpu, "driver": sh("nvidia-smi --query-gpu=driver_version --format=csv,noheader"),
                   "cpu": sh("lscpu | grep 'Model name' | cut -d: -f2 | xargs"), "nproc": os.cpu_count(), "mem_total_kb": sh("grep MemTotal /proc/meminfo | awk '{print $2}'"),
                   "cgroup_memory_max": sh("cat /sys/fs/cgroup/memory.max 2>/dev/null"), "disk_root": sh("df -h /root | tail -1"), "hostname": sh("hostname"),
-                  "registered_gpu_class": os.environ.get("TC1_GPU_CLASS", "5090"), "prereg": "tc1/TC1-PREREG.md"}, indent=1))
+                  "registered_gpu_class": os.environ.get("TC1_GPU_CLASS", "5090"), "prereg": "tc1/TC1-PREREG.md",
+                  "local_box": os.environ.get("TC1_LOCAL_BOX"), "local_snapshot": os.environ.get("TC1_LOCAL_SNAPSHOT")}, indent=1))   # TC3: the hand-run facts
 PYB
 # ---------------------------------------------------------------- deadline-derived alarms (p39's rule): what is LEFT minus a fetch margin, never a literal that outlives the rental
 left(){ echo $(( TC1_DEADLINE_EPOCH - $(date +%s) )); }
@@ -139,7 +167,17 @@ can_run(){ local need=$1 name=$2; [ $(( $(left) - 900 )) -ge "$need" ] && return
 export DEBIAN_FRONTEND=noninteractive
 PY_E4B=$W/venv-e4b/bin/python; PY_UNS=$W/venv-unsloth/bin/python; PY_UNS_T28=$W/venv-unsloth-t28/bin/python; PY_AX=$W/venv-axolotl/bin/python
 say "venv-e4b (system torch): e4b @$E4B_SHA + gnf4 @$GNF4_SHA + transformers==$TF_VER bitsandbytes==$BNB_VER peft==$PEFT_VER"
-python -m venv --system-site-packages $W/venv-e4b || { say "VENV FAIL (e4b)"; finish 9; }
+$PY_BASE -m venv --system-site-packages $W/venv-e4b || { say "VENV FAIL (e4b)"; finish 9; }
+if [ "$TC1_LOCAL_BOX" = 1 ] && ! $PY_E4B -c "import torch; assert torch.cuda.is_available()" > logs/torch_probe_e4b.log 2>&1; then
+  # TC3 local box: a venv made FROM a venv inherits the BASE interpreter's site-packages, not the venv's (the owned box keeps torch in a venv, so
+  # --system-site-packages sees no torch there). venv-e4b then gets the base interpreter's own torch build explicitly: its version + CUDA tag,
+  # from PyTorch's matching index -- recorded in versions.txt like every other torch.
+  TORCH_SPEC=$($PY_BASE -c "import torch; print(torch.__version__)" 2>/dev/null); TORCH_CU=${TORCH_SPEC##*+}; TORCH_VER=${TORCH_SPEC%%+*}
+  say "venv-e4b sees no CUDA torch; installing torch==${TORCH_VER:-?} from https://download.pytorch.org/whl/${TORCH_CU:-?} (TC1_LOCAL_PYTHON's build: ${TORCH_SPEC:-none})"
+  [ -n "$TORCH_SPEC" ] && [ "$TORCH_CU" != "$TORCH_SPEC" ] || { say "VENV FAIL (e4b): TC1_LOCAL_PYTHON=$PY_BASE has no '+cuNNN' torch to mirror"; finish 9; }
+  perl -e 'alarm 2400; exec @ARGV' $PY_E4B -m pip install -q --no-input "torch==$TORCH_VER" --index-url "https://download.pytorch.org/whl/$TORCH_CU" > logs/pip_torch_e4b.log 2>&1 \
+    || { tail -4 logs/pip_torch_e4b.log; say "PIP FAIL (torch into venv-e4b)"; finish 9; }
+fi
 perl -e 'alarm 2400; exec @ARGV' $PY_E4B -m pip install -q --no-input --prefer-binary \
   "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" \
   "transformers==$TF_VER" "bitsandbytes==$BNB_VER" "peft==$PEFT_VER" accelerate safetensors "huggingface_hub>=0.23" sentencepiece tiktoken > logs/pip_e4b.log 2>&1
@@ -163,7 +201,7 @@ assert transformers.__version__ == os.environ["TF_VER"], transformers.__version_
 assert torch.cuda.is_available(), "no CUDA in venv-e4b"
 print("tc1 tripwire OK (e4b):", e.__version__, "@", ce[:12], "gnf4", md.version("grouped-nf4-gemm"), "@", cg[:12], "torch", torch.__version__, "triton", triton.__version__,
       "transformers", transformers.__version__, "bnb", bitsandbytes.__version__, "peft", peft.__version__)
-open("/root/tc1/versions.txt", "a").write(f"e4b {e.__version__} @{ce} (GitHub main)\ngnf4 {md.version('grouped-nf4-gemm')} @{cg} (GitHub main)\ntorch(e4b/hf) {torch.__version__}\ntriton(e4b/hf) {triton.__version__}\n"
+open(os.path.join(os.environ.get("TC1_W", "/root/tc1"), "versions.txt"), "a").write(f"e4b {e.__version__} @{ce} (GitHub main)\ngnf4 {md.version('grouped-nf4-gemm')} @{cg} (GitHub main)\ntorch(e4b/hf) {torch.__version__}\ntriton(e4b/hf) {triton.__version__}\n"
                                           f"transformers(e4b/hf) {transformers.__version__}\nbitsandbytes(e4b/hf) {bitsandbytes.__version__}\npeft(hf) {peft.__version__}\n")
 PYT
 tail -1 logs/tripwire_e4b.log
@@ -177,7 +215,7 @@ UNS_T28_OK=0
 if [ "$NEED_UNSLOTH" = 1 ]; then
 UNS_T28_OK=1
 say "venv-unsloth-t28: unsloth[cu128-torch280]==$UNS_VER unsloth_zoo==$ZOO_VER (the image's torch 2.8.0+cu128)"
-python -m venv $W/venv-unsloth-t28 && perl -e 'alarm 2700; exec @ARGV' $PY_UNS_T28 -m pip install -q --no-input --no-cache-dir \
+$PY_BASE -m venv $W/venv-unsloth-t28 && perl -e 'alarm 2700; exec @ARGV' $PY_UNS_T28 -m pip install -q --no-input --no-cache-dir \
   "unsloth[cu128-torch280]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth_t28.log 2>&1
 rc=$?; echo "pip(unsloth-t28) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth_t28.log; echo "PIP FAIL (unsloth-t28) -- its rows = install_failed"; UNS_T28_OK=0; }
 else
@@ -188,7 +226,7 @@ if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then
   UNS_OK=1; say "venv-unsloth: unsloth[cu130-torch2121]==$UNS_VER unsloth_zoo==$ZOO_VER (torch 2.12.1+cu130)"
   # TC1-PREREG amendment 2 (2026-10-01): the cu130 extra pins torch==2.12.1+cu130 / torchvision+cu130, which live on PyTorch's cu130
   # index, not PyPI -- without the index pip's resolver backtracks for the whole 2,700 s alarm (tc1-5090-7, 30 min at 99 % CPU, 0 sockets).
-  python -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu130 \
+  $PY_BASE -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu130 \
     "unsloth[cu130-torch2121]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth.log 2>&1
   rc=$?; echo "pip(unsloth) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth.log; echo "PIP FAIL (unsloth cu130) -- its rows = install_failed"; UNS_OK=0; }
 elif [ "$NEED_UNSLOTH" != 1 ]; then
@@ -217,7 +255,7 @@ fm = hasattr(unsloth, "FastModel")
 tag = os.environ.get("TC1_VENV_TAG", "unsloth")          # phase 2: one tripwire per Unsloth venv, lines suffixed with the venv
 print(f"tc1 tripwire OK ({tag}):", unsloth.__version__, "zoo", unsloth_zoo.__version__, "torch", torch.__version__, "triton", tri, "transformers", transformers.__version__,
       "bnb", bitsandbytes.__version__, "peft", peft.__version__, "torchao", tao, "moe_backend", select_moe_backend(), "separated_lora", _should_use_separated_lora(), "FastModel", fm)
-open("/root/tc1/versions.txt", "a").write(f"unsloth({tag}) {unsloth.__version__}\nunsloth_zoo({tag}) {unsloth_zoo.__version__}\ntorch({tag}) {torch.__version__}\ntriton({tag}) {tri}\n"
+open(os.path.join(os.environ.get("TC1_W", "/root/tc1"), "versions.txt"), "a").write(f"unsloth({tag}) {unsloth.__version__}\nunsloth_zoo({tag}) {unsloth_zoo.__version__}\ntorch({tag}) {torch.__version__}\ntriton({tag}) {tri}\n"
                                           f"transformers({tag}) {transformers.__version__}\nbitsandbytes({tag}) {bitsandbytes.__version__}\npeft({tag}) {peft.__version__}\ntorchao({tag}) {tao}\nmoe_backend({tag}) {select_moe_backend()}\n")
 PYU
 # tripwire_unsloth VENV_TAG PY OK_VAR: the import tripwire for one Unsloth venv (torchao removed once on ScalingType, P38 amendment 2)
@@ -255,7 +293,7 @@ def commit(dist):
 assert commit("experts4bit-qlora") == os.environ["E4B_SHA"] and commit("grouped-nf4-gemm") == os.environ["GNF4_SHA"], (commit("experts4bit-qlora"), commit("grouped-nf4-gemm"))
 assert torch.cuda.is_available()
 print("tc1 tripwire OK (e4b-t212):", e.__version__, "gnf4", md.version("grouped-nf4-gemm"), "torch", torch.__version__)
-open("/root/tc1/versions.txt", "a").write(f"e4b(t212) {e.__version__} @{commit('experts4bit-qlora')}\ngnf4(t212) {md.version('grouped-nf4-gemm')} @{commit('grouped-nf4-gemm')}\ntorch(e4b-t212) {torch.__version__}\n")
+open(os.path.join(os.environ.get("TC1_W", "/root/tc1"), "versions.txt"), "a").write(f"e4b(t212) {e.__version__} @{commit('experts4bit-qlora')}\ngnf4(t212) {md.version('grouped-nf4-gemm')} @{commit('grouped-nf4-gemm')}\ntorch(e4b-t212) {torch.__version__}\n")
 PYT2
     if [ $trc -ne 0 ]; then tail -4 logs/tripwire_e4b_t212.log; T212_REASON="e4b-t212 tripwire failed (logs/tripwire_e4b_t212.log): $(tail -2 logs/tripwire_e4b_t212.log | tr '\n' ' ' | cut -c1-300)"; else T212_OK=1; tail -1 logs/tripwire_e4b_t212.log; fi
   fi
@@ -269,18 +307,32 @@ AX_VER=${TC1_AXOLOTL_VERSION:-0.20.0}; AX_OK=0; AX_REASON=""
 if [ "$CU130_OK" != 1 ]; then
   AX_REASON="$CU130_REASON"; say "venv-axolotl SKIPPED: $AX_REASON -- its arms are refused rows"
 else
+  AX_PKG="axolotl==$AX_VER"; AX_INDEX="https://download.pytorch.org/whl/cu130"      # TC3 reuses both for its deepspeed extra (a separate, non-fatal step)
   # TC1-PREREG amendment 3 (2026-10-02): uv's default first-index strategy takes `packaging` (and anything else PyTorch's index carries) from the
   # cu130 index alone, where axolotl's packaging==26.0 does not exist -> "No solution found" on both TC1 boxes (tc1-5090-14, -16: INSTALL_FAILED).
   # unsafe-best-match reads PyPI for the rest while the cu130 wheels still win on version (torch 2.14.0+cu130, torchao 0.18.0+cu130, triton 3.8.0;
   # dry-resolved for x86_64-manylinux_2_28 / cp312 with uv 0.12.22 before the amendment: axolotl 0.20.0, transformers 5.17.0, peft 0.21.0, bnb 0.50.2).
   say "venv-axolotl: uv venv --python 3.12 + axolotl==$AX_VER --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match (alarm 2700 s)"
-  python -m pip install -q --no-input uv > logs/pip_uv.log 2>&1 && python -m uv venv --python 3.12 $W/venv-axolotl > logs/uv_venv_axolotl.log 2>&1 \
-    && perl -e 'alarm 2700; exec @ARGV' python -m uv pip install --python $PY_AX "axolotl==$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log 2>&1
+  $PY_BASE -m pip install -q --no-input uv > logs/pip_uv.log 2>&1 && $PY_BASE -m uv venv --python 3.12 $W/venv-axolotl > logs/uv_venv_axolotl.log 2>&1 \
+    && perl -e 'alarm 2700; exec @ARGV' $PY_BASE -m uv pip install --python $PY_AX "axolotl==$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log 2>&1
   rc=$?; echo "pip(axolotl) rc=$rc"
+  # TC3 arm 10 (ckpt_axolotl_m_zero3): the `deepspeed` extra (METADATA lines 80-81: deepspeed>=0.18.6,<0.20.0 + deepspeed-kernels) ONLY under the
+  # qwen3frontier token, as a SEPARATE, non-fatal step: deepspeed ships an sdist whose setup imports torch, so it is built without isolation against
+  # the venv's torch (setuptools/wheel/ninja installed first -- a uv venv carries none). A failure here leaves the other axolotl arms their venv and
+  # the ZeRO-3 refused row records `deepspeed_version: not installed` (the row is refused on the trainer either way). UNVERIFIED by execution here.
+  AX_DS_OK=0
+  if [ $rc -eq 0 ]; then case " $FAMILIES " in *" qwen3frontier "*)
+    say "venv-axolotl + axolotl[deepspeed]==$AX_VER (TC3 arm 10; non-fatal, alarm 2700 s)"
+    perl -e 'alarm 600; exec @ARGV' $PY_BASE -m uv pip install --python $PY_AX setuptools wheel ninja > logs/pip_axolotl_deepspeed_build.log 2>&1 \
+      && perl -e 'alarm 2700; exec @ARGV' $PY_BASE -m uv pip install --python $PY_AX --no-build-isolation "axolotl[deepspeed]==$AX_VER" --extra-index-url $AX_INDEX --index-strategy unsafe-best-match > logs/pip_axolotl_deepspeed.log 2>&1
+    dsrc=$?; echo "pip(axolotl[deepspeed]) rc=$dsrc"
+    if [ $dsrc -ne 0 ]; then tail -4 logs/pip_axolotl_deepspeed.log; echo "AXOLOTL[deepspeed] INSTALL FAILED rc=$dsrc (logs/pip_axolotl_deepspeed.log): the ZeRO-3 row records deepspeed as not installed; the other axolotl arms keep their venv" | tee -a summary.txt
+    else AX_DS_OK=1; fi;;
+  esac; fi
   if [ $rc -ne 0 ]; then tail -6 logs/pip_axolotl.log; AX_REASON="axolotl venv install failed rc=$rc (logs/pip_axolotl.log): $(tail -3 logs/pip_axolotl.log 2>/dev/null | tr '\n' ' ' | cut -c1-300)"; echo "PIP FAIL (axolotl) -- its rows = install_failed"
   else
     $PY_AX - <<'PYA' > logs/tripwire_axolotl.log 2>&1; trc=$?
-import importlib.metadata as md, torch, transformers, peft, bitsandbytes
+import importlib.metadata as md, os, torch, transformers, peft, bitsandbytes
 import axolotl
 from axolotl.cli.config import load_cfg
 from axolotl.loaders import ModelLoader, load_tokenizer
@@ -288,8 +340,12 @@ from axolotl.monkeypatch.moe_quant import get_moe_quantized_count, patch_moe_qua
 from axolotl.integrations.base import PluginManager
 from bitsandbytes.nn.parametrize import replace_parameter_4bit
 assert torch.cuda.is_available(), "no CUDA in venv-axolotl"
-print("tc1 tripwire OK (axolotl):", md.version("axolotl"), "torch", torch.__version__, "transformers", transformers.__version__, "peft", peft.__version__, "bnb", bitsandbytes.__version__, "python", __import__("sys").version.split()[0])
-open("/root/tc1/versions.txt", "a").write(f"axolotl {md.version('axolotl')}\ntorch(axolotl) {torch.__version__}\ntransformers(axolotl) {transformers.__version__}\npeft(axolotl) {peft.__version__}\nbitsandbytes(axolotl) {bitsandbytes.__version__}\npython(axolotl) {__import__('sys').version.split()[0]}\n")
+try:
+    ds = md.version("deepspeed")          # TC3: present only under the qwen3frontier token's axolotl[deepspeed] install (read, never run by this harness)
+except Exception:
+    ds = None
+print("tc1 tripwire OK (axolotl):", md.version("axolotl"), "torch", torch.__version__, "transformers", transformers.__version__, "peft", peft.__version__, "bnb", bitsandbytes.__version__, "python", __import__("sys").version.split()[0], "deepspeed", ds)
+open(os.path.join(os.environ.get("TC1_W", "/root/tc1"), "versions.txt"), "a").write(f"axolotl {md.version('axolotl')}\ntorch(axolotl) {torch.__version__}\ntransformers(axolotl) {transformers.__version__}\npeft(axolotl) {peft.__version__}\nbitsandbytes(axolotl) {bitsandbytes.__version__}\npython(axolotl) {__import__('sys').version.split()[0]}\ndeepspeed(axolotl) {ds}\n")
 PYA
     if [ $trc -ne 0 ]; then tail -5 logs/tripwire_axolotl.log; AX_REASON="axolotl tripwire failed (logs/tripwire_axolotl.log): $(tail -2 logs/tripwire_axolotl.log | tr '\n' ' ' | cut -c1-300)"; echo "TRIPWIRE FAIL (axolotl) -- its rows = install_failed"; else AX_OK=1; tail -1 logs/tripwire_axolotl.log; fi
   fi
@@ -355,11 +411,58 @@ print(snapshot_download('$MID', revision='$REV', allow_patterns=['*.safetensors'
     return 2
   fi
   df -h /root | tail -1; return 0; }
+# local_snapshot FAM MID REV (TC3, TC1_LOCAL_BOX / TC1_LOCAL_SNAPSHOT): the checkpoint is a DIRECTORY at the registered revision, linked into the private
+# HF cache as snapshots/<REV> with refs/main = REV, so every loader resolves the pin offline exactly as after a fetch (nothing in tc1_arm.py changes).
+# The pin proof: the directory's config.json sha256 against the Hub's at REV (hf_hub_download, into a side cache) -> `pin_proof: config.json sha == hub@<rev>`,
+# plus the safetensors count and bytes against the Hub listing when it answers; no network -> `pin_proof: offline` (recorded, the family runs);
+# a MISMATCH aborts the family with load_fault stubs, as fetch's PIN MISMATCH does. Written to pin_proof_<FAM>.json beside the receipts and into summary.txt;
+# every arm of the family carries it in --note.
+local_snapshot(){ local FAM=$1 MID=$2 REV=$3 SNAP=$TC1_LOCAL_SNAPSHOT; say "local snapshot $FAM: $SNAP (pin $REV; TC1_LOCAL_BOX)"
+  [ -s "$SNAP/config.json" ] || { echo "$FAM: LOCAL SNAPSHOT MISSING $SNAP/config.json" | tee -a summary.txt; FETCH_REASON="TC1_LOCAL_SNAPSHOT=$SNAP has no config.json"; return 1; }
+  local RDIR=${HF_HUB_CACHE:-/root/.cache/huggingface/hub}/models--${MID//\//--}     # the private cache under TC1_LOCAL_BOX; the image's otherwise
+  { mkdir -p $RDIR/snapshots $RDIR/refs && ln -sfn "$SNAP" $RDIR/snapshots/$REV && printf '%s' "$REV" > $RDIR/refs/main; } || { FETCH_REASON="could not link $SNAP into $RDIR"; return 1; }
+  perl -e 'alarm 300; exec @ARGV' $PY_E4B - "$MID" "$REV" "$SNAP" "$FAM" <<'PYL' > logs/pin_proof_$FAM.log 2>&1
+import glob, hashlib, json, os, sys
+mid, rev, snap, fam = sys.argv[1:5]
+def sha(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as fh:
+        for b in iter(lambda: fh.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+local = sha(os.path.join(snap, "config.json"))
+shards = sorted(glob.glob(os.path.join(snap, "*.safetensors")))
+out = {"snapshot": snap, "model": mid, "revision": rev, "config_sha256_local": local, "n_safetensors_local": len(shards), "bytes_safetensors_local": sum(os.path.getsize(p) for p in shards)}
+try:
+    from huggingface_hub import HfApi, hf_hub_download
+    p = hf_hub_download(mid, "config.json", revision=rev, cache_dir=os.path.join(os.environ["HF_HUB_CACHE"], "pin-proof"))
+    hub = sha(p)
+    out["config_sha256_hub"] = hub
+    out["pin_proof"] = ("config.json sha == hub@" + rev[:12]) if hub == local else ("MISMATCH: config.json sha != hub@" + rev[:12])
+    try:
+        info = HfApi().model_info(mid, revision=rev, files_metadata=True)
+        sib = [s for s in info.siblings if s.rfilename.endswith(".safetensors")]
+        out["n_safetensors_hub"], out["bytes_safetensors_hub"] = len(sib), sum((s.size or 0) for s in sib)
+        if out["n_safetensors_hub"] != out["n_safetensors_local"] or out["bytes_safetensors_hub"] != out["bytes_safetensors_local"]:
+            out["pin_proof"] = "MISMATCH: safetensors count/bytes differ from the Hub listing at " + rev[:12]
+        elif out["pin_proof"].startswith("config.json"):
+            out["pin_proof"] += f" and {len(sib)} safetensors ({out['bytes_safetensors_hub']} bytes) match the Hub listing"
+    except Exception as e:
+        out["hub_listing"] = f"unavailable: {type(e).__name__}: {str(e)[:120]}"
+except Exception as e:
+    out["pin_proof"], out["offline_reason"] = "offline", f"{type(e).__name__}: {str(e)[:160]}"
+json.dump(out, open(f"pin_proof_{fam}.json", "w"), indent=1)
+print("PIN_PROOF", out["pin_proof"])
+PYL
+  local rc=$? PROOF; PROOF=$(grep -a "^PIN_PROOF " logs/pin_proof_$FAM.log | tail -1 | cut -d' ' -f2-)
+  if [ $rc -ne 0 ] || [ -z "$PROOF" ]; then tail -3 logs/pin_proof_$FAM.log; echo "$FAM: PIN PROOF FAILED rc=$rc" | tee -a summary.txt; FETCH_REASON="pin proof script failed rc=$rc (logs/pin_proof_$FAM.log)"; return 1; fi
+  case "$PROOF" in MISMATCH*) echo "PIN MISMATCH $FAM (local snapshot $SNAP): $PROOF -- the family is ABORTED with load_fault stubs (not coerced)" | tee -a summary.txt; FETCH_REASON="local snapshot $SNAP: $PROOF"; return 2;; esac
+  PIN_PROOF=$PROOF; echo "PIN LOCAL $FAM snapshot=$SNAP -> $RDIR/snapshots/$REV (refs/main := pin); pin_proof: $PROOF" | tee -a summary.txt; return 0; }
 # expect_of FAM E4BTAG: the family's e4b trainable count (the primary receipt of the same recipe) for --expect-trainable
 expect_of(){ $PY_E4B - "$W" "$1" "$2" <<'PYE' 2>/dev/null
 import json, os, sys
 W, fam, tag = sys.argv[1], sys.argv[2], sys.argv[3]
-for t in (tag, "attn_only_m", "reference_attn4_m"):     # TC2: gpt-oss's e4b arm is attn_only_m (fused_attn4_m is a refused stub there), as tp4's expect_of listed attn_only
+for t in (tag, "attn_only_m", "reference_attn4_m", "fused_attn4_m_offload", "reference_attn4_m_offload"):   # TC2: gpt-oss's e4b arm is attn_only_m; TC3: on a frontier box the resident e4b arm is expected to OOM, the offload arms carry the count
     p = os.path.join(W, f"{fam}_e4b_{t}.json")
     if os.path.exists(p):
         r = json.load(open(p))
@@ -436,7 +539,8 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   { echo -n "$FAM/$FW/$TAG rc=$rc "; grep -aE "^CELL " logs/run_${FAM}_${FW}_$TAG.log | tail -1 | cut -c1-400; echo; } >> summary.txt
   $PY -c "import torch; torch.cuda.empty_cache()" 2>/dev/null; nvidia-smi --query-gpu=memory.used --format=csv,noheader
   rm -rf $W/adapters/* 2>/dev/null; }
-free_family(){ rm -rf /root/.cache/huggingface/hub/models--$2; say "freed $1 (disk: $(df -h /root | tail -1 | awk '{print $4}') free)"; }
+free_family(){ [ "$TC1_LOCAL_BOX" = 1 ] && { say "local snapshot kept ($1: TC1_LOCAL_SNAPSHOT is the owner's directory, never freed)"; return 0; }
+  rm -rf /root/.cache/huggingface/hub/models--$2; say "freed $1 (disk: $(df -h /root | tail -1 | awk '{print $4}') free)"; }
 tokenise(){ local FAM=$1 MID=$2 REV=$3 TEMPLATE_=$4 SEQ_=$5 DATA=$6 DATA_SHA=$7 TOK=$8 EVAL_N_=${9:-$EVAL_N}
   say "tokenise $FAM ($TEMPLATE_, seq $SEQ_) -> $(basename $TOK)"
   HF_HUB_OFFLINE=1 $PY_E4B $W/tc1_arm.py --prepare --fam $FAM --model "$MID" --revision $REV --data $DATA --data-sha $DATA_SHA --seq $SEQ_ --eval-n $EVAL_N_ --template $TEMPLATE_ --tokens $TOK > logs/prepare_${FAM}_$TEMPLATE_.log 2>&1 || return 1
@@ -466,7 +570,8 @@ PROFILE_STEPS=${TC1_PROFILE_STEPS:-3}; PROFILE_WARM=${TC1_PROFILE_WARM:-3}   # a
 tc1_prepare(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5 EVN=${6:-$EVAL_N}      # EVN: held-out rows written into the tokens file (TC1b: CURVE_EVAL_N; every arm takes its own --eval-n prefix)
   stub_all(){ local st=$1 why=$2 t fw tag arm; for t in $ALL; do IFS=: read -r fw tag arm <<< "$t"; stubw $FAM $fw $tag $arm $st "$why"; done; }
   if skip $FAM; then say "skip family $FAM (TC1_SKIP)"; stub_all not_run "family skipped by TC1_SKIP"; return 1; fi
-  FETCH_REASON=""; fetch $FAM $MID $REV $FAL; local frc=$?
+  FETCH_REASON=""; local frc
+  if [ -n "${TC1_LOCAL_SNAPSHOT:-}" ]; then local_snapshot $FAM $MID $REV; frc=$?; else fetch $FAM $MID $REV $FAL; frc=$?; fi   # TC3: the owned box's directory, never a fetch
   if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault; stub_all $st "$FETCH_REASON"; free_family $FAM ${MID//\//--}; return 1; fi
   TOK=$W/tokens_$FAM.json
   if ! tokenise $FAM "$MID" $REV alpaca $SEQ $W/data/ds_alpaca.json $DS_ALPACA_SHA $TOK $EVN; then
@@ -475,6 +580,70 @@ tc1_prepare(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5 EVN=${6:-$EVAL_N}      #
     stub_all harness_error "$why"; free_family $FAM ${MID//\//--}; return 1
   fi
   TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS eval_n=$EVN train_only_sha=$(train_sha $TOK)" | tee -a summary.txt; return 0; }
+# tc1_frontier_family FAM MID REV FETCH ERES EOFF MB1 UNS HF HOFF AX ALO AZ3 ROFF -- lane TC3 (TC3-PREREG-draft "24 GB box"; registered as bench/tc1/TC3-PREREG.md by
+# the PI): Qwen3-30B-A3B at the pin on ONE 24 GB card (TC1_GPU_CLASS=4090), the field recipe, matched init + fp32 adapters, N 20, 8 held-out rows at 0 and N,
+# every framework with its own memory lever, one process per arm, IN THIS ORDER (an OOM is a row; every row records peak VRAM, the host-RAM high-water and the host total):
+#   1 e4b/fused_attn4_m (resident; expected OOM)   2 e4b/fused_attn4_m_offload (--offload 1: frozen 4-bit experts in pinned host RAM, one layer GPU-resident)
+#   3 e4b/fused_attn4_m_mb1 (resident, micro-batch 1 x accum 8)   4 unsloth/ckpt_unsloth_m (venv-unsloth, grouped_mm; expected OOM)   5 unsloth/ckpt_unsloth_m_mb1
+#   6 hf/hf_peft_m (expected OOM at load)   7 hf/hf_peft_m_offload (--hf-offload 1: device_map auto + max_memory cap; what landed where and whether it trained ARE the row)
+#   8 axolotl/ckpt_axolotl_m (its 4-bit path)   9 axolotl/ckpt_axolotl_m_layeroffload (--axolotl-layer-offload 1: layer_offloading: true, driven as the trainer mixin does)
+#   10 axolotl/ckpt_axolotl_m_zero3 (--axolotl-zero3 1: DeepSpeed ZeRO-3 parameter offload without quantize_moe_experts -- a refused row naming why: the engine is the trainer's)
+#   11 e4b/reference_attn4_m_offload (the parity / equivalence anchor under offload)
+# Alarms (the draft's): e4b resident 1200 (an OOM is quick), offload 3600, mb1 3600, Unsloth 3600 each, HF 1800 / HF offload 3600, axolotl 2700 / 3600 / 3600, reference offload 5400.
+tc1_frontier_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ERAL=$5 EOAL=$6 MBAL=$7 UAL=$8 HAL=$9 HOAL=${10} AAL=${11} ALAL=${12} AZAL=${13} ROAL=${14}
+  local ALL="e4b:fused_attn4_m:fused e4b:fused_attn4_m_offload:fused e4b:fused_attn4_m_mb1:fused unsloth:ckpt_unsloth_m:unsloth unsloth:ckpt_unsloth_m_mb1:unsloth hf:hf_peft_m:hf hf:hf_peft_m_offload:hf axolotl:ckpt_axolotl_m:axolotl axolotl:ckpt_axolotl_m_layeroffload:axolotl axolotl:ckpt_axolotl_m_zero3:axolotl e4b:reference_attn4_m_offload:reference"
+  say "===== FRONTIER family $FAM (TC3; $MID @ $REV; matched seed $MATCHED_SEED; box class $BOX_CLASS; alarms e4b resident $ERAL offload $EOAL mb1 $MBAL unsloth $UAL hf $HAL hf-offload $HOAL axolotl $AAL/$ALAL/$AZAL reference-offload $ROAL)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"      # every arm is a matched arm
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"                   # the notebooks' recipe (tp4's arm); double-quant OFF is the arm's default
+  local NOTE=""; [ "$TC1_LOCAL_BOX" = 1 ] && NOTE="TC1_LOCAL_BOX hand run: snapshot ${TC1_LOCAL_SNAPSHOT:-?} (pin_proof: ${PIN_PROOF:-?})"
+  can_run 600 $FAM/e4b/fused_m             && arm   $FAM e4b fused_attn4_m fused $ERAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/e4b/fused_m_offload     && arm   $FAM e4b fused_attn4_m_offload fused $EOAL "$MID" $REV 1 field $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/e4b/fused_m_mb1         && arm   $FAM e4b fused_attn4_m_mb1 fused $MBAL "$MID" $REV 0 mb1 $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/unsloth/m               && arm   $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/unsloth/m_mb1           && arm   $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/hf/m                    && arm   $FAM hf hf_peft_m hf $HAL "$MID" $REV 0 field $TOK $TS $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/hf/m_offload            && arm   $FAM hf hf_peft_m_offload hf $HOAL "$MID" $REV 0 field $TOK $TS --hf-offload 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/axolotl/m               && arm   $FAM axolotl ckpt_axolotl_m axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/axolotl/m_layeroffload  && arm   $FAM axolotl ckpt_axolotl_m_layeroffload axolotl $ALAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-layer-offload 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/axolotl/m_zero3         && arm   $FAM axolotl ckpt_axolotl_m_zero3 axolotl $AZAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-zero3 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 900 $FAM/e4b/reference_m_offload && arm   $FAM e4b reference_attn4_m_offload reference $ROAL "$MID" $REV 1 field $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
+# tc1_frontier12_family FAM MID REV FETCH ERES EOFF UNS HF AX ROFF -- lane TC3's owned 12 GB box (TC3-PREREG-draft "12 GB box": the RTX A2000 in container gpu-dev;
+# TC1_GPU_CLASS="RTX A2000", run by hand with TC1_LOCAL_BOX=1 -- README "TC3 hand run"). Its host's driver is 575, so every cu130 venv is refused by the driver
+# gate: the Unsloth arm runs in venv-unsloth-t28 (UNS_VENV=t28; the venv and its torch land in the receipt's env and in versions.txt) with the loader-default
+# backend, and the axolotl arm is a refused row naming the driver. In this order:
+#   1 e4b/fused_attn4_m_offload   2 e4b/fused_attn4_m_offload_d2 (the second draw)   3 e4b/reference_attn4_m_offload   4 e4b/fused_attn4_m (resident; expected OOM)
+#   5 unsloth/ckpt_unsloth_m_mb1 (t28)   6 hf/hf_peft_m_mb1   7 axolotl/ckpt_axolotl_m (refused: its venv needs cu130 torch)
+# Alarms: the 24 GB token's classes (offload 3600, reference offload 5400, resident 1200, Unsloth 3600, HF 1800, axolotl 2700) -- a choice, not the draft's (it names none for this box).
+tc1_frontier12_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ERAL=$5 EOAL=$6 UAL=$7 HAL=$8 AAL=$9 ROAL=${10}
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local ALL="e4b:fused_attn4_m_offload:fused e4b:fused_attn4_m_offload_d2:fused e4b:reference_attn4_m_offload:reference e4b:fused_attn4_m:fused unsloth:ckpt_unsloth_m_mb1:unsloth hf:hf_peft_m_mb1:hf axolotl:ckpt_axolotl_m:axolotl"
+  say "===== FRONTIER-12 family $FAM (TC3, the owned 12 GB box; $MID @ $REV; matched seed $MATCHED_SEED; box class $BOX_CLASS; local_box=$TC1_LOCAL_BOX; alarms e4b resident $ERAL offload $EOAL unsloth $UAL hf $HAL axolotl $AAL reference-offload $ROAL)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
+  local NOTE=""; [ "$TC1_LOCAL_BOX" = 1 ] && NOTE="TC1_LOCAL_BOX hand run: snapshot ${TC1_LOCAL_SNAPSHOT:-?} (pin_proof: ${PIN_PROOF:-?})"
+  can_run 600 $FAM/e4b/fused_m_offload     && arm   $FAM e4b fused_attn4_m_offload fused $EOAL "$MID" $REV 1 field $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/e4b/fused_m_offload_d2  && draw2 $FAM e4b fused_attn4_m_offload fused $EOAL "$MID" $REV 1 field $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 900 $FAM/e4b/reference_m_offload && arm   $FAM e4b reference_attn4_m_offload reference $ROAL "$MID" $REV 1 field $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/e4b/fused_m             && arm   $FAM e4b fused_attn4_m fused $ERAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  # TC3-PREREG (12 GB): the mb1 secondary -- micro-batch 1 x accum 8, the same tokens per step, as TC1's -- for the e4b offload pair when the field recipe OOMed
+  # on this card (fp32 adapters + their grads + 8-bit Adam states on 642 M parameters alone are ~6.5 GB), one draw each; then the as-shipped e4b under offload
+  # (bf16 expert adapters, N(0,1/r) init) as a labelled FIT row: never a position, the question a 12 GB owner asks
+  local so; so=$(status_of $FAM e4b fused_attn4_m_offload)
+  if [ "$so" = oom ]; then
+    echo "SECONDARY $FAM: e4b fused_attn4_m_offload OOMed at the field recipe -> the mb1 offload pair" | tee -a summary.txt
+    can_run 600 $FAM/e4b/fused_m_offload_mb1     && arm $FAM e4b fused_attn4_m_offload_mb1 fused $EOAL "$MID" $REV 1 mb1 $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+    can_run 900 $FAM/e4b/reference_m_offload_mb1 && arm $FAM e4b reference_attn4_m_offload_mb1 reference $ROAL "$MID" $REV 1 mb1 $TOK $TS --attn-4bit 1 $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  fi
+  can_run 600 $FAM/e4b/shipped_offload       && arm   $FAM e4b fused_attn4_shipped_offload fused $EOAL "$MID" $REV 1 field $TOK $TS --attn-4bit 1 $NATIVE ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/unsloth/m_mb1           && UNS_VENV=t28 arm $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS $UNS --unsloth-moe-backend default $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/hf/m_mb1                && arm   $FAM hf hf_peft_m_mb1 hf $HAL "$MID" $REV 0 mb1 $TOK $TS $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  can_run 600 $FAM/axolotl/m               && arm   $FAM axolotl ckpt_axolotl_m axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json $MATCH ${NOTE:+--note} ${NOTE:+"$NOTE"}
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc2_small_family FAM MID REV FETCH_AL E4B_AL UNS_AL HF_AL AX_AL REF_AL MODE UT2 -- lane TC2's box A token (tc2small; TC2-PREREG-draft "Arms per family"), recipe `small`
 # (N 60, 48 held-out rows every 20 steps), one process per arm, in THIS order:
 #   MODE normal (granite, olmoe):  1 e4b/fused_attn4_m  2 hf/hf_peft_m  3 e4b/reference_attn4_m  4 e4b/fused_attn4_m_d2  5 hf/hf_peft_m_d2
@@ -709,6 +878,11 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3curve)  tc1_curve_family  qwen3curve  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 9000 1800 3600;;
   tc2small)    tc2_small_box;;                 # lane TC2, box A: granite, olmoe, gptoss (tc2_small_box's table)
   tc2big)      tc2_big_box;;                   # lane TC2, box B: qwen3_5, mixtral (tc2_big_box's table)
+  # TC3 (TC3-PREREG-draft): the 24 GB RTX 4090 token (TC1_GPU_CLASS=4090) and the owned 12 GB RTX A2000 token (TC1_GPU_CLASS="RTX A2000", TC1_LOCAL_BOX=1)
+  #                                                                                                        FETCH ERES EOFF MB1  UNS  HF   HOFF AX   ALO  AZ3  ROFF   (the draft's alarms)
+  qwen3frontier)   tc1_frontier_family   qwen3frontier   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1200 3600 3600 3600 1800 3600 2700 3600 3600 5400;;
+  #                                                                                                        FETCH ERES EOFF UNS  HF   AX   ROFF   (FETCH unused with a local snapshot)
+  qwen3frontier12) tc1_frontier12_family qwen3frontier12 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1200 7200 3600 1800 2700 14400;;
   *) say "unknown family token $FAM"; echo "UNKNOWN $FAM" >> summary.txt;;
 esac; done
 # ---------------------------------------------------------------- reduce, summarise, mark
@@ -720,4 +894,5 @@ echo "----- summary.txt -----"; cat summary.txt; echo "----- versions.txt -----"
 [ "$NEED_UNSLOTH" != 1 ] || [ "$UNS_OK" = 1 ] || echo "NO cu130 UNSLOTH COMPARATOR on this box (venv-unsloth: ${CU130_OK:-?} driver gate, install ok=$UNS_OK): its rows are refused/install_failed" | tee -a summary.txt
 [ "$NEED_UNSLOTH" != 1 ] || [ "$UNS_T28_OK" = 1 ] || echo "NO torch-2.8 UNSLOTH ROW on this box (venv-unsloth-t28 did not install/import)" | tee -a summary.txt
 [ "$AX_OK" = 1 ] || echo "NO AXOLOTL on this box: $AX_REASON" | tee -a summary.txt
+case " $FAMILIES " in *" qwen3frontier "*) echo "AXOLOTL[deepspeed] extra installed=$AX_DS_OK (TC3 arm 10 is a refused row either way; its stub records the deepspeed version)" | tee -a summary.txt;; esac
 finish 0
