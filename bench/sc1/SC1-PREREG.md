@@ -216,3 +216,30 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
      1.0 h guard. "The proof fetches no Qwen3" now reads: no bf16 Qwen3.
   Box A's re-proof `sc1a-prove-11` launched at `32d424e` before A7. A7 does not touch box A's path (its PyTorch image never runs
   the apt step), so box A runs at `32d424e`, its proof's commit, and boxes B and C run at A7's merge.
+- **A8 (2026-10-02T16:55Z; receipt `sc1c-prove-13`, adertha-receipts `aff68b9`).** Box C's proof at A7's merge (`3db414e`) passed both Granite
+  smokes: A7's `python3-dev` held, and the B=16 smoke captured buckets 1–16. It is NOT PROVED on its SGLang JIT + `/health` check
+  (rc 45 after 339 s). SGLang loaded the lane's GPTQ checkpoint (15.71 GB, upgraded to gptq_marlin) and then refused to size its
+  KV pool: "Loaded weights leave no GPU memory for the KV cache under --mem-fraction-static=0.226. Raise --mem-fraction-static
+  above 0.514".
+  - **Cause.** `server.sh` passed no `--mem-fraction-static`, so SGLang 0.5.20 resolved its own. Its rule
+    (`arg_groups/memory_hook.py`, `handle_gpu_memory_settings`) reserves activation memory at 1.5 MB per token of the largest
+    prefill it expects. With `--chunked-prefill-size -1` that token count is `max_prefill_tokens`, 16384 by default, so it
+    reserved 25.2 GB of the 32,607 MiB card. That left a static pool of 0.226, and the weights alone need 0.514. Every SGLang
+    mode that turns chunking off resolves the same way: matched, kvfp8, ttft_matched and quality. Every timed SGLang arm except
+    `native`, and both SGLang quality scorings, would have died at start-up. The proof runs the registered matched mode and
+    caught it.
+  - **Fix.** Those four modes pin `--mem-fraction-static 0.75`. The fraction sizes only SGLang's static pool (weights plus KV).
+    No kernel and no scheduling flag changes.
+    - Capacity: at 0.75 the KV pool is about 7.3 GiB, about 79,800 bf16 tokens (twice that in fp8). That holds the registered
+      capacity rule, 16 × 2048 = 32,768 tokens, and the TTFT server's 16 × 4608 = 73,728. SGLang's own rule applied to the
+      lane's real largest extend (16 rows × 512 = 8192 tokens) would give 0.603, about 30,500 tokens, short of the rule.
+    - Headroom: 7.7 GiB of the card stays outside the static pool. vLLM 0.30's profile of the same checkpoint on the same card
+      at the same 8192-token batch measured 0.45 GiB of peak activation with bf16 KV and 0.86 GiB with fp8 KV, plus at most
+      0.50 GiB of CUDA graphs (`sc1a-5090-1`). The headroom is more than five times that.
+    - `native` keeps SGLang's own resolution. With chunked prefill on, SGLang's rule gives about 0.79 on this card.
+  - `server.sh`'s engagement check now refuses a server whose resolved fraction is not the pin, or whose `max_total_num_tokens`
+    is below the registered capacity: 16 × 2048 on matched and kvfp8, one full context on ttft_matched and quality.
+  - Four CPU tests. One reproduces SGLang's 0.226 from its rule; the other three fail on the registered `server.sh`.
+  - **Boxes.** Box C re-proves at A8's merge and runs there. A8 touches only box C's SGLang wrapper, so boxes A and B keep the
+    commits their proofs ran on (`32d424e`, `3db414e`).
+

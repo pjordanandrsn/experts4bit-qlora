@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Lane SC1 amendment A8 (#846): SGLang's chunking-off servers pin `--mem-fraction-static 0.75` (its own rule left 0.226, below the 0.514 the GPTQ weights need) (bench + tests)
+
+- `bench/sc1/sglang/server.sh`: matched, kvfp8, ttft_matched and quality pass `--mem-fraction-static 0.75`. With chunked
+  prefill off, SGLang 0.5.20 sized its activation reserve from `max_prefill_tokens` (16384 × 1.5 MB on a 32 GB card), and
+  box C's proof `sc1c-prove-13` refused at start-up. The engagement check now refuses a drifted fraction or a KV pool below
+  the registered capacity. Four CPU tests (three fail on the registered wrapper); pin regenerated; `SC1-PREREG.md` A8.
+
 ### `PagedModelRunner` serves hybrid linear-attention models (Qwen3.5 / Qwen3.6 MoE, Qwen3-Next): per-slot Gated DeltaNet state (engine side, CPU-tested)
 
 - **Why.** The paged runner drives the model with `use_cache=False`. A hybrid model's linear-attention layers keep a
