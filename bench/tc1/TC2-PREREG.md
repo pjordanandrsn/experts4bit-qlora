@@ -81,3 +81,10 @@ wins. Nothing licenses; `training_support` cells move only through the read PR.
 ## Amendments
 
 (none yet)
+
+### Amendment 1 (2026-10-02T04:59Z, before box B launched): box B runs from TC3 amendment 2's merge (C1 under expert offload)
+
+Mixtral's e4b arms run under expert offload (`--offload 1`, as tp4). TC3's first 12 GB arm showed that the phase-3 C1 hasher counts
+e4b's evicted expert stacks (0-element GPU placeholders; the bytes live in the offload handle's pinned-CPU `home`) as empty frozen
+tensors and refuses the arm. TC3 amendment 2 makes the hasher read the home copy; box B (`tc2big`) launches from that merge so its
+Mixtral e4b rows are measured, not refused. Box A (`tc1-5090-17`, no offload arm) is unaffected. Nothing else moves.

@@ -877,3 +877,62 @@ def test_tc3_amendment_1_every_venv_the_box_makes_upgrades_pip_first():
     assert "venv-e4b || { say \"VENV FAIL (e4b)\"; finish 9; }" in body and body.index("pip_fresh $PY_E4B e4b") < body.index("pip_e4b.log")
     assert "venv-unsloth-t28 && pip_fresh $PY_UNS_T28 unsloth-t28 && perl" in body and "venv-unsloth && pip_fresh $PY_UNS unsloth && perl" in body
     assert body.index("pip_fresh(){") < body.index("pip_fresh $PY_E4B e4b")
+
+
+def test_tc3_amendment_2_c1_hashes_the_offload_home_not_the_placeholder():
+    """TC3 amendment 2: under e4b's expert offload the base's packed stacks and absmax buffers are 0-element GPU placeholders and the bytes
+    live in `experts_lora._offload.home`; the hasher must read the home (no empties, the control flips the home copy) and the resident
+    case is untouched."""
+    import torch
+    from torch import nn
+    arm = _load_arm_module()
+
+    class Base(nn.Module):
+        def __init__(self, empty):
+            super().__init__()
+            self.gate_up_proj = nn.Parameter(torch.empty(0, dtype=torch.uint8) if empty else torch.randint(0, 255, (4, 8), dtype=torch.uint8), requires_grad=False)
+            self.down_proj = nn.Parameter(torch.empty(0, dtype=torch.uint8) if empty else torch.randint(0, 255, (4, 8), dtype=torch.uint8), requires_grad=False)
+            self.register_buffer("gate_up_absmax", torch.empty(0) if empty else torch.rand(4))
+            self.register_buffer("down_absmax", torch.empty(0) if empty else torch.rand(4))
+
+    class Handle:
+        def __init__(self, base):
+            self.base = base
+            self.home = {"gate_up_proj": torch.randint(0, 255, (4, 8), dtype=torch.uint8), "down_proj": torch.randint(0, 255, (4, 8), dtype=torch.uint8),
+                         "gate_up_absmax": torch.rand(4), "down_absmax": torch.rand(4)}
+
+    class ExpertsLoRA(nn.Module):
+        def __init__(self, empty, offload):
+            super().__init__()
+            self.base = Base(empty)
+            self.lora_A = nn.Parameter(torch.zeros(2, 2))
+            if offload:
+                self._offload = Handle(self.base)
+
+    class Layer(nn.Module):
+        def __init__(self, empty, offload):
+            super().__init__()
+            self.experts = ExpertsLoRA(empty, offload)
+
+    class Model(nn.Module):
+        def __init__(self, empty, offload):
+            super().__init__()
+            self.layers = nn.ModuleList([Layer(empty, offload), Layer(empty, offload)])
+
+    off = Model(empty=True, offload=True)
+    homes = arm.offload_homes(off)
+    assert set(homes) == {f"layers.{i}.experts.base.{k}" for i in (0, 1) for k in ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")}, sorted(homes)
+    ft = {n: t for n, t, _ in arm.frozen_tensors(off)}
+    assert all(ft[n] is homes[n] for n in homes) and all(ft[n].numel() > 0 for n in homes), "the hasher must yield the home tensors"
+    h, nbytes, empties, regimes = arm.hashes_frozen(off)
+    assert empties == 0 and nbytes == 2 * (2 * 32 + 2 * 16) and regimes == {"u8-packed": 4, "fp32": 4}, (empties, nbytes, regimes)
+    ctl = arm.c1_control(off, h)
+    assert ctl["detects"] and ctl["tensor"] in homes, ctl
+    # the same hasher on a RESIDENT model (no handle) reads the parameters themselves, as before
+    res = Model(empty=False, offload=False)
+    assert arm.offload_homes(res) == {}
+    h2, nbytes2, empties2, _ = arm.hashes_frozen(res)
+    assert empties2 == 0 and nbytes2 == nbytes and len(h2) == 8 and arm.c1_control(res, h2)["detects"]
+    # an evicted model WITHOUT a handle is what the first hand run saw: every placeholder counts as an empty (the assertion in run_arm fires)
+    _, _, empties3, _ = arm.hashes_frozen(Model(empty=True, offload=False))
+    assert empties3 == 8
