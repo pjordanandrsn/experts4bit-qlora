@@ -167,6 +167,9 @@ def test_device_grouping_branch_dispatch(monkeypatch):
     import sys
 
     hr = pytest.importorskip("experts4bit_qlora.engines.hot_residency")
+    # The subject is the served captured M-tile path; since lane P96 the default sends these rows to K25 when the
+    # kernel package carries it (tests/test_nf4_grouped_smallm_route.py), so the M-tile is selected explicitly.
+    monkeypatch.setenv("E4B_NF4_GROUPED_SMALLM", "0")
 
     calls = []
 

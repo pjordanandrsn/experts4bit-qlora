@@ -538,7 +538,7 @@ row's label predates the two-text clause; its calibrated attention is refused
 on this family); on both families' position configs the NF4 grouped expert GEMM is 61.7 % (Granite) and 71.9 %
 (OLMoE) of B=16 decode kernel time (P91, descriptive, licenses nothing;
 `e4b.serve.p91.nf4-families.kernel-census.5090.2026-10-01`), so the next family lane is an NF4 grouped small-M kernel;
-that kernel (K25, `E4B_NF4_GROUPED_SMALLM`, default `0`) reads ×0.937 at B=16 on Granite with K8 inside the gate, and
+that kernel (K25, `E4B_NF4_GROUPED_SMALLM`, default `auto` since P96) reads ×0.937 at B=16 on Granite with K8 inside the gate, and
 QUALITY_FAIL on OLMoE (c4val1 K8 −0.107 ppl, step ×1.024); its own GEMM runs within 4 % of the served one (P92,
 `e4b.serve.p92.nf4-families.k25-b16.5090.2026-10-01`);
 at the served precision (the select tree through TF32 MMA, P93) the route takes Granite's B=16 step to ×0.594 (B=1
