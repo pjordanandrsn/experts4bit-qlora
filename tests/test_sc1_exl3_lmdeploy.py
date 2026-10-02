@@ -153,6 +153,11 @@ def test_receipt_shape_with_stubbed_engine(arm, tmp_path, monkeypatch):
     assert rec["batch"] == 2 and rec["mode"] == "slope" and rec["vast_instance_id"] == "123"
     assert rec["prompts_sha256"] == json.loads(p.read_text())["prompts_sha256"]
     assert rec["generation"] and rec["resolved"] == {"fake": True}
+    cap = rec["capacity"]
+    if arm.ENGINE == "exllamav3":
+        assert cap["cache_tokens"] == 2 * 2048 and cap["cache_tokens_source"] == "default:B*2048" and cap["max_batch_size"] == 2
+    else:
+        assert cap["session_len"] == 2048 and cap["session_len_source"] == "default:2048" and cap["max_batch_size"] == 2
 
 
 def test_ttft_mode_receipt(arm, tmp_path, monkeypatch):
@@ -169,6 +174,57 @@ def test_ttft_mode_receipt(arm, tmp_path, monkeypatch):
     rec = json.loads(out.read_text())
     assert rec["mode"] == "ttft" and rec["prompt_tokens"] == [4096] and rec["ttft_prompt_tokens"] == 4096 and rec["max_new_tokens"] == 8
     assert len(rec["ttft_walls_s"]) == 3 and rec["tokens_generated"] == [8, 8, 8]
+    cap = rec["capacity"]
+    if arm.ENGINE == "exllamav3":
+        assert cap["cache_tokens"] == 4352 and cap["cache_tokens_source"].startswith("default:ttft")
+    else:
+        assert cap["session_len"] == 4104 and cap["session_len_source"].startswith("default:ttft")
+
+
+# ---------------------------------------------------------------------------------------------- registered capacity rule
+
+def test_exl3_capacity_rule_b_times_2048_and_ttft_4352():
+    e = _load("exl3_arm")
+    assert e.cache_tokens_for(16, 512, 128, {}) == (32768, "default:B*2048")
+    assert e.cache_tokens_for(1, 512, 128, {}) == (2048, "default:B*2048")
+    assert e.cache_tokens_for(1, 512, 8, {}) == (2048, "default:B*2048")
+    assert e.cache_tokens_for(1, 4096, 8, {}) == (4352, "default:ttft:roundup256(prompt+max_new)")
+    assert all(t % 256 == 0 for t in (32768, 2048, 4352))
+    assert e.cache_tokens_for(16, 512, 128, {"SC1_EXL3_CACHE_TOKENS": "16384"}) == (16384, "env:SC1_EXL3_CACHE_TOKENS")
+    with pytest.raises(e.Refusal):                      # not a page multiple
+        e.cache_tokens_for(16, 512, 128, {"SC1_EXL3_CACHE_TOKENS": "1000"})
+    with pytest.raises(e.Refusal):                      # cannot hold 16 x roundup256(640) = 12288
+        e.cache_tokens_for(16, 512, 128, {"SC1_EXL3_CACHE_TOKENS": "8192"})
+    blk = e.capacity_block(16, 512, 128, 32768, "default:B*2048")
+    assert blk["sequences_x_2048"] == 16 and blk["max_batch_size"] == 16 and blk["page_size"] == 256
+
+
+def test_lmdeploy_capacity_rule_session_len_2048_and_ttft_4104():
+    lm = _load("lmd_arm")
+    assert lm.session_len_for(512, 128, {}) == (2048, "default:2048")
+    assert lm.session_len_for(512, 8, {}) == (2048, "default:2048")
+    assert lm.session_len_for(4096, 8, {}) == (4104, "default:ttft:prompt+max_new")
+    assert lm.session_len_for(512, 128, {"SC1_LMDEPLOY_SESSION_LEN": "3000"}) == (3000, "env:SC1_LMDEPLOY_SESSION_LEN")
+    with pytest.raises(lm.Refusal):                     # 600 < 512 + 128 + 1
+        lm.session_len_for(512, 128, {"SC1_LMDEPLOY_SESSION_LEN": "600"})
+    blk = lm.capacity_block(16, 512, 128, 2048, "default:2048", {"cache_max_entry_count_resolved": 0.8})
+    assert blk["kv_tokens_held_target"] == 16 * 2048 and blk["cache_max_entry_count_resolved"] == 0.8
+
+
+def test_scorers_set_their_own_capacity_above_the_arm_defaults():
+    e, lm = _load("exl3_nll"), _load("lmd_nll")
+    assert e.NLL_CACHE_TOKENS_MIN == 2816 and e.nll_cache_tokens({}) == (2816, "default:roundup256(P+S+1)")
+    assert e.nll_cache_tokens({"SC1_EXL3_CACHE_TOKENS": "3072"}) == (3072, "env:SC1_EXL3_CACHE_TOKENS")
+    with pytest.raises(e.Refusal):                      # 2560 < 2816: the window would not fit
+        e.nll_cache_tokens({"SC1_EXL3_CACHE_TOKENS": "2560"})
+    with pytest.raises(e.Refusal):                      # 2048 = the arm's B=1 default is BELOW the scorer floor
+        e.nll_cache_tokens({"SC1_EXL3_CACHE_TOKENS": "2048"})
+    assert lm.NLL_SESSION_LEN_MIN == 2562 and lm.nll_session_len({}) == (2816, "default:2816 (>= P+S+2)")
+    assert lm.nll_session_len({"SC1_LMDEPLOY_SESSION_LEN": "2562"})[0] == 2562
+    with pytest.raises(lm.Refusal):                     # 2561 input + 1 generated does not fit
+        lm.nll_session_len({"SC1_LMDEPLOY_SESSION_LEN": "2561"})
+    with pytest.raises(lm.Refusal):                     # the arm's 2048 default is below the scorer floor
+        lm.nll_session_len({"SC1_LMDEPLOY_SESSION_LEN": "2048"})
 
 
 # ---------------------------------------------------------------------------------------------- K8 window + NLL
@@ -200,8 +256,10 @@ def test_window_refusals(nll, tmp_path):
 
 
 def test_nll_receipt_shape_and_ppl(nll):
-    r = nll.receipt("prefill", 1.8621, "ab" * 32, 12.3, {"version": "x", "logits_dtype": "torch.float16"})
+    r = nll.receipt("prefill", 1.8621, "ab" * 32, 12.3, {"version": "x", "logits_dtype": "torch.float16",
+                                                       "capacity": {"independent_of_arm_defaults": True}})
     assert all(k in r for k in nll.RECEIPT_KEYS), [k for k in nll.RECEIPT_KEYS if k not in r]
+    assert r["capacity"]["independent_of_arm_defaults"] is True
     assert abs(r["ppl"] - math.exp(1.8621)) < 1e-9 and r["steps"] == 2048 and r["prompt_len"] == 512
     assert "prefill" in r["mode_available"]
 

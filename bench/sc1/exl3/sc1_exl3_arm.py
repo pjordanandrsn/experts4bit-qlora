@@ -19,14 +19,17 @@ ExLlamaV3 1.5.3 facts the arm is built on (file:line in turboderp-org/exllamav3 
     PageTable, generator.py:149) is built per timed call so no prompt page is reused across requests; every job's
     EOS result carries `cached_pages`/`cached_tokens` (job.py:764-777) and the receipt records them (expected 0).
   * cache: `Cache(model, max_num_tokens)` must be a multiple of PAGE_SIZE=256 (cache/cache.py:115-118,
-    constants.py:2); for the generator it is the TOTAL tokens across concurrent jobs.
+    constants.py:2); for the generator it is the TOTAL tokens across concurrent jobs. REGISTERED CAPACITY RULE: every
+    engine holds B sequences x 2048 tokens on its timed arms -> max_num_tokens = B * 2048 (32768 at B=16, 2048 at B=1);
+    the TTFT-4096 arm is a single sequence of 4096+8 rounded up to the page = 4352. `max_batch_size = B` on the Generator.
   * attention: ExLlamaV3 1.5.3 imports neither flash-attn nor xformers (removed in v1.0.0); attention is its own
     Triton paged kernels + graph-captured "BC_Attention" decode (EXL3_BC_ATTN=1 default, doc/env_vars.md:12-26).
 
 Env: SC1_ARM, SC1_BATCH, SC1_PROMPTS, SC1_MODEL (default turboderp/Qwen3-30B-A3B-exl3), SC1_REV (default the
 `4.0bpw` branch commit 0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef; the branch is head_bits 6), SC1_OUT, SC1_INSTANCE_ID.
-Optional: SC1_MODEL_DIR (skip the hub fetch), SC1_EXL3_CACHE_QUANT ("8" or "4,4" -> CacheLayer_quant), SC1_EXL3_FRESH_GENERATOR
-(default 1), SC1_EXL3_NO_WARMUP (default 0). Modes: default slope; `--ttft` (one 512- or 4096-token row, wall to first
+Optional: SC1_MODEL_DIR (skip the hub fetch), SC1_EXL3_CACHE_TOKENS (override of the capacity rule; multiple of 256, must
+hold the workload; the value and its source are recorded under receipt["capacity"]), SC1_EXL3_CACHE_QUANT ("8" or "4,4" ->
+CacheLayer_quant), SC1_EXL3_FRESH_GENERATOR (default 1), SC1_EXL3_NO_WARMUP (default 0). Modes: default slope; `--ttft` (one 512- or 4096-token row, wall to first
 token, 3 timed repeats after one warm, max_new_tokens=8); `--native-loop` (B=1 only: upstream eval/perf.py:140-156's raw
 `model.forward` loop with argmax feedback, labelled, the kernel-level ceiling); `--selftest` (no engine).
 """
@@ -162,7 +165,7 @@ def base_receipt(arm: str, batch: int, pf: dict, model: str, rev: str, mode: str
 RECEIPT_KEYS_SLOPE = ("engine", "arm", "mode", "model", "revision", "batch", "prompts_sha256", "rows_sha256", "load_s",
                       "decode_tok_s", "decode_ms_per_step", "decode_tok_s_median", "decode_ms_per_step_median",
                       "end_to_end_tok_s_long", "walls_short_s", "walls_long_s", "tokens", "resolved", "versions",
-                      "vram_peak_bytes")
+                      "vram_peak_bytes", "capacity")
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -177,15 +180,40 @@ def resolve_model_dir(model: str, rev: str) -> str:
     return snapshot_download(model, revision=rev, max_workers=4)
 
 
-def cache_tokens_for(batch: int, prompt_len: int, max_new: int) -> int:
-    per_row = ((prompt_len + max_new + 1 + PAGE_SIZE - 1) // PAGE_SIZE) * PAGE_SIZE
-    return per_row * batch
+SLOPE_CAPACITY_PER_SEQ = 2048       # the registered rule: B sequences x 2048 tokens held on every timed arm
+
+
+def _pages(n: int) -> int:
+    return ((n + PAGE_SIZE - 1) // PAGE_SIZE) * PAGE_SIZE
+
+
+def cache_tokens_for(batch: int, prompt_len: int, max_new: int, env=None) -> tuple[int, str]:
+    """Registered capacity rule -> (Cache.max_num_tokens, source). Slope arms: B * 2048 (32768 at B=16, 2048 at B=1).
+    The TTFT-4096 arm (prompt + 8 > 2048): one sequence of roundup256(prompt + 8) = 4352. SC1_EXL3_CACHE_TOKENS overrides;
+    it must be a multiple of 256 and hold B x roundup256(prompt + max_new) tokens, else the arm REFUSES."""
+    env = os.environ if env is None else env
+    need = prompt_len + max_new
+    per_seq = SLOPE_CAPACITY_PER_SEQ if need <= SLOPE_CAPACITY_PER_SEQ else _pages(need)
+    ov = env.get("SC1_EXL3_CACHE_TOKENS")
+    if ov:
+        tokens = int(ov)
+        if tokens % PAGE_SIZE or tokens < batch * _pages(need):
+            raise Refusal(f"REFUSED: SC1_EXL3_CACHE_TOKENS={tokens} is not a multiple of {PAGE_SIZE} or cannot hold "
+                          f"{batch} x {need} tokens ({batch * _pages(need)} needed)")
+        return tokens, "env:SC1_EXL3_CACHE_TOKENS"
+    return per_seq * batch, ("default:B*2048" if per_seq == SLOPE_CAPACITY_PER_SEQ else "default:ttft:roundup256(prompt+max_new)")
+
+
+def capacity_block(batch: int, prompt_len: int, max_new: int, tokens: int, source: str) -> dict:
+    return {"rule": "B sequences x 2048 tokens on timed arms; TTFT-4096 = one sequence of 4352", "cache_tokens": tokens,
+            "cache_tokens_source": source, "max_batch_size": batch, "sequences_x_2048": tokens // SLOPE_CAPACITY_PER_SEQ,
+            "workload_tokens_per_seq": prompt_len + max_new, "page_size": PAGE_SIZE}
 
 
 class Exl3Engine:
     """Generator/Job-driven adapter. `generate(prompts, n)` -> (rows, meta); `first_token(prompt, n)` -> (wall, engine_ttft, n)."""
 
-    def __init__(self, model_dir: str, batch: int, prompt_len: int, max_new: int, warmup: bool = True):
+    def __init__(self, model_dir: str, batch: int, prompt_len: int, max_new: int, cache_tokens: int, warmup: bool = True):
         import torch
         import exllamav3
         from exllamav3 import Cache, CacheLayer_fp16, CacheLayer_quant, Config, Model, Tokenizer
@@ -197,7 +225,7 @@ class Exl3Engine:
         t0 = time.perf_counter()
         self.config = Config.from_directory(model_dir)
         self.model = Model.from_config(self.config)
-        self.cache_tokens = cache_tokens_for(batch, prompt_len, max_new)
+        self.cache_tokens = cache_tokens                      # from cache_tokens_for (the registered rule or the override)
         cq = os.environ.get("SC1_EXL3_CACHE_QUANT")
         if cq:
             bits = [int(b) for b in cq.split(",")]
@@ -356,8 +384,8 @@ class Exl3Engine:
                 "mem_get_info_drop_bytes": int(self.free0 - self.min_free)}
 
 
-def make_engine(model_dir: str, batch: int, prompt_len: int, max_new: int):
-    return Exl3Engine(model_dir, batch, prompt_len, max_new, warmup=os.environ.get("SC1_EXL3_NO_WARMUP", "0") == "0")
+def make_engine(model_dir: str, batch: int, prompt_len: int, max_new: int, cache_tokens: int):
+    return Exl3Engine(model_dir, batch, prompt_len, max_new, cache_tokens, warmup=os.environ.get("SC1_EXL3_NO_WARMUP", "0") == "0")
 
 
 # ----------------------------------------------------------------------------------------------------------------
@@ -421,9 +449,19 @@ def selftest() -> int:
         pass
     t = run_ttft(FakeEngine(), rows[0])
     assert t["tokens_generated"] == [8, 8, 8]
+    assert cache_tokens_for(16, 512, 128, {}) == (32768, "default:B*2048")
+    assert cache_tokens_for(1, 512, 128, {})[0] == 2048 and cache_tokens_for(1, 512, 8, {})[0] == 2048
+    assert cache_tokens_for(1, 4096, 8, {})[0] == 4352
+    assert cache_tokens_for(16, 512, 128, {"SC1_EXL3_CACHE_TOKENS": "16384"}) == (16384, "env:SC1_EXL3_CACHE_TOKENS")
+    for bad in ("1000", "256"):
+        try:
+            cache_tokens_for(16, 512, 128, {"SC1_EXL3_CACHE_TOKENS": bad})
+            raise AssertionError("bad override passed")
+        except Refusal:
+            pass
     rec = base_receipt("selftest", 2, loaded, DEFAULT_MODEL, DEFAULT_REV, "slope")
     rec.update(r)
-    rec.update(load_s=0.0, resolved={}, versions={}, vram_peak_bytes={})
+    rec.update(load_s=0.0, resolved={}, versions={}, vram_peak_bytes={}, capacity=capacity_block(2, 512, 128, 4096, "default:B*2048"))
     missing = [k for k in RECEIPT_KEYS_SLOPE if k not in rec]
     assert not missing, missing
     print("SELFTEST OK sc1_exl3_arm")
@@ -449,7 +487,9 @@ def main(argv=None) -> int:
     model_dir = resolve_model_dir(model, rev)
     rec["model_dir"] = model_dir
     max_new = 8 if a.ttft else LONG
-    engine = make_engine(model_dir, batch, max(pf["prompt_tokens"]), max_new)
+    tokens, src = cache_tokens_for(batch, max(pf["prompt_tokens"]), max_new)
+    rec["capacity"] = capacity_block(batch, max(pf["prompt_tokens"]), max_new, tokens, src)
+    engine = make_engine(model_dir, batch, max(pf["prompt_tokens"]), max_new, tokens)
     rec["load_s"] = engine.load_s
     if a.ttft:
         rec.update(run_ttft(engine, prompts[0]))
