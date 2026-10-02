@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### The linear-state pool builds each slot tuple's index once, so a fixed-slot graph capture copies nothing to the device
+
+- **Why.** `bench/p39/step_decomp.py`'s B=1 and batched lanes capture the model forward with fixed slots, and never
+  bind a bucket selector. The linear wrapper's slot-list path then ran `torch.tensor(slots, device=...)`, a
+  host-to-device copy that a CUDA-graph capture refuses. A hybrid model could not be captured there.
+- **What.** `LinearStatePool._index` caches the index tensor per (slots, device), bounded at 512 entries. The eager
+  warm-up step builds it, and the capture reuses it.
+- **Tests** (`tests/test_linear_state_graph_gpu.py`, any CUDA card; no fp8, so the NAS A2000 runs it). An all-linear
+  dense Qwen3.5 is captured for real:
+  - a fixed-slot graph replays bit for bit as the eager steps;
+  - a bucket-selector graph (#907), captured on scratch slots, replays the slots its selector names, reordered
+    between replays, bit for bit. The capture itself writes nothing.
+
 ### Decode graphs capture a hybrid model's per-slot linear state (opt-in `E4B_PAGED_GRAPHS=1`; not yet read on a GPU)
 
 - **Why.** `enable_decode_graphs` refused models with Gated DeltaNet layers. The per-slot state was gathered and

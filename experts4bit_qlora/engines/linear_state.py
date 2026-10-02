@@ -74,6 +74,7 @@ class LinearStatePool:
         self.kernel: dict[int, int] = {}
         self.has = [False] * self.n_slots          # a slot carries state once its first prompt chunk has run
         self.frozen = False                        # a captured decode graph holds these tensors' addresses
+        self._idx: dict = {}                       # (slots, device) -> index tensor, see _index
 
     def view(self, layer: int, slots, sel=None):
         """transformers' ``LinearAttentionLayer`` for ``slots``' rows of ``layer``: empty when none carries state.
@@ -95,8 +96,21 @@ class LinearStatePool:
             if not all(have):
                 raise RuntimeError(f"linear layer {layer}: rows bound to slots {list(slots)} mix sequences with and "
                                    "without state -- a prompt's first chunk must run on its own")
-            self._fill(lal, layer, torch.tensor(list(slots), device=self.conv[layer].device))
+            self._fill(lal, layer, self._index(slots, self.conv[layer].device))
         return lal
+
+    def _index(self, slots, device):
+        """The device index tensor for ``slots``, built once per slot tuple. Building one is a host-to-device copy,
+        which a CUDA graph capture refuses; a graph loop that binds FIXED slots (``bench/p39/step_decomp.py``'s B=1
+        and batched lanes, which never bind a bucket selector) warms eagerly first, so its capture finds the tensor
+        here and copies nothing. Bounded: an eager server's varying active sets just rebuild after a clear."""
+        key = (tuple(int(s) for s in slots), str(device))
+        idx = self._idx.get(key)
+        if idx is None:
+            if len(self._idx) >= 512:
+                self._idx.clear()
+            idx = self._idx[key] = torch.tensor(key[0], device=device)
+        return idx
 
     def _fill(self, lal, layer: int, idx) -> None:
         conv = self.conv[layer].index_select(0, idx)
@@ -123,7 +137,7 @@ class LinearStatePool:
             self.conv[layer] = torch.zeros((self.n_slots, *conv.shape[1:]), dtype=conv.dtype, device=conv.device)
             self.rec[layer] = torch.zeros((self.n_slots, *rec.shape[1:]), dtype=rec.dtype, device=rec.device)
             self.kernel[layer] = int(lal.conv_kernel_size[0])
-        idx = sel if sel is not None else torch.tensor(list(slots), device=conv.device)
+        idx = sel if sel is not None else self._index(slots, conv.device)
         self.conv[layer].index_copy_(0, idx, conv)
         self.rec[layer].index_copy_(0, idx, rec)
 
