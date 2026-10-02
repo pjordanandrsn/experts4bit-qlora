@@ -7626,6 +7626,34 @@
         "receipts/experts4bit-qlora/2026-10-01/p94-5090-2/ (receipt.json, teardown-proof.json)"
       ],
       "notes": "Pre-registered in #841. Verdict QUALITY_FAIL (granite FAIL, olmoe FAIL); BASELINE_SHIFT on Granite only. g and t reproduce P93's OFF and ON exactly on all four texts, on a different host. Predictions refuted: |t - m| < 0.01, and OLMoE c4val1 m - g near +0.10 to +0.20 (it is -0.013), so P93's OLMoE swing is not the GEMV-to-tile difference production carries. On wikitext every pair of the three arithmetics is within 0.026; on c4val1 the pairs range 0.013 to 0.168, with equal per-GEMM rms error (grouped-nf4-gemm K27). One draw per arithmetic cannot separate a c4val1 realization spread from a K25-specific bias on OLMoE; that is the next lane's calibration."
+    },
+    {
+      "id": "e4b.serve.p95.nf4-families.k8-window-spread.5090.2026-10-02",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct; allenai/OLMoE-1B-7B-0924-Instruct",
+      "claim": "Lane P95, one RTX 5090: across arithmetics of equal per-GEMM error at T == 1 (the scalar GEMV, the served NF4 M-tile, K25 TF32), K8's per-window spread over disjoint 2048-token windows is 0.054 (Granite r12epi c4val1), 0.055 (OLMoE nf4 c4val1), 0.026 and 0.030 (wikitext) ppl, UNDER_RESOLVED on every text: a single-window 0.05 gate cannot resolve these families, and a windowed gate needs W >= 5 windows on c4val1 and W >= 2 on wikitext.",
+      "value": 0.0546,
+      "unit": "sigma = max(SD(m - g), SD(t - m)) over the fresh windows, ppl, OLMoE c4val1 (the largest; bar 0.025)",
+      "hardware": "RTX 5090 (sm_120, driver 580.178.04, 400 W), one rented Vast.ai verified host (machine 29048, instance 53797211, AMD Ryzen Threadripper PRO 7975WX), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @7b8bbbd + grouped-nf4-gemm @908a2ca (P94's pins); Granite @a0278068 r12epi, OLMoE @7f1c97f4 nf4, envs = bench/p44/serve_stack.py arm_env; arms g / m / t as P94; K8 2048 steps, eager B=1, --no-fuse-qkv, windows at token k*4096 (--prompt-offset, --prompt-span 2600 for k >= 1): window 0 = P94's (reproduced all twelve values), fresh c4val1 1-8 and wikitext 1-4; m engaged (B=1 census: _gemm_nf4_grouped 64 / 32 per step, no NF4 GEMV); verdict by bench/p95/p95_reduce.py; licenses nothing",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p95/RESULTS-p95.md",
+        "bench/p95/PREREG-p95.md",
+        "bench/p95/p95_reduce.py",
+        "bench/p95/receipts/p95-5090-1/verdict.json",
+        "bench/p95/receipts/p95-5090-1/olmoe_k8_m_c4val1_w2.json",
+        "bench/p95/receipts/p95-5090-1/olmoe_k8_g_c4val1_w2.json",
+        "bench/p95/receipts/p95-5090-1/logs/census_olmoe_m_b1_d1.txt"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/p95-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-02/p95-prove-4/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #855. Verdict UNDER_RESOLVED on all four family-texts (W = 5 / 2 / 5 / 2). Production's own GEMV and M-tile differ by more than 0.05 on 1 of 8 (Granite) and 2 of 8 (OLMoE) fresh c4val1 windows. Over the fresh windows K25 shows no consistent shift against the M-tile (c4val1 t - m -0.019 / +0.028, SE 0.019); P94's window-0 t - m (+0.102 / +0.168) sits 2.3 / 2.7 SD above the fresh mean. P94's verdict stands; a later lane asking K25's default again uses the windowed gate on windows k >= 9. Window 0 reproduced P94 bit for bit on a third host."
     }
   ]
 }

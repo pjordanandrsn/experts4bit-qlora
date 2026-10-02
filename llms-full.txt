@@ -2484,6 +2484,10 @@ against the arithmetic it would replace above T == 1 (the served M-tile), K25 re
 (c4val1 K8 +0.102 Granite, +0.168 OLMoE; wikitext inside), and the served M-tile itself sits −0.078 from the GEMV on
 Granite c4val1, so the default stays `0` and c4val1's spread is the next question
 (P94, `e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01`);
+on disjoint windows, K8's own spread across those equal-error arithmetics is 0.054 / 0.055 ppl on c4val1 and
+0.026 / 0.030 on wikitext, so a single-window 0.05 gate cannot resolve these families; a windowed gate needs
+W >= 5 / 2 windows, and P94's window was an outlier for K25 (P95, UNDER_RESOLVED,
+`e4b.serve.p95.nf4-families.k8-window-spread.5090.2026-10-02`);
 **gpt-oss's quoted best is its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970; with K21 serving the store's batched rows, its B=16 step reads
 ×0.581 against the NF4 fallback, at a lower KL from the reference (0.00147 vs 0.00192;
@@ -3522,6 +3526,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.p92.nf4-families.k25-b16.5090.2026-10-01 [measured]: Lane P92, one RTX 5090: K25 (E4B_NF4_GROUPED_SMALLM=1) takes Granite r12epi's B=16 step 10.529 -> 9.865 ms (0.937x; bar 0.95) with K8 -0.023 / +0.016 ppl (wikitext / c4val1; bar |0.05|), but OLMoE nf4's 14.355 -> 14.694 ms (1.024x) with its c4val1 K8 moved -0.107 ppl (QUALITY_FAIL); K25's own GEMM runs within 4 % of the served NF4 GEMM, so the default stays 0.
 - e4b.serve.p93.nf4-families.k25-tree-tf32-b16.5090.2026-10-01 [measured]: Lane P93, one RTX 5090: the K25 route at the served precision (select tree through TF32 MMA, E4B_NF4_GROUPED_SMALLM=1) takes Granite r12epi's B=16 step 10.535 -> 6.258 ms (0.594x; bar 0.95) and B=1 3.862 -> 3.299 (0.854x) with K8 -0.026 / +0.024 ppl (wikitext / c4val1; bar |0.05|), and OLMoE nf4's B=16 14.352 -> 8.585 ms (0.598x) with its c4val1 K8 moved +0.155 ppl (QUALITY_FAIL; P92's bf16 route moved it -0.107), so the default stays 0.
 - e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01 [measured]: Lane P94, one RTX 5090: K8 at T == 1 of K25 (select tree through TF32 MMA) against the served NF4 M-tile kernel it would replace above T == 1 moves c4val1 +0.102 ppl on Granite r12epi and +0.168 on OLMoE nf4 (wikitext -0.020 / -0.005; bar |0.05|), QUALITY_FAIL in both families, so E4B_NF4_GROUPED_SMALLM stays 0; the served M-tile itself reads -0.078 from the scalar GEMV on Granite c4val1 and within 0.017 of it on OLMoE.
+- e4b.serve.p95.nf4-families.k8-window-spread.5090.2026-10-02 [measured]: Lane P95, one RTX 5090: across arithmetics of equal per-GEMM error at T == 1 (the scalar GEMV, the served NF4 M-tile, K25 TF32), K8's per-window spread over disjoint 2048-token windows is 0.054 (Granite r12epi c4val1), 0.055 (OLMoE nf4 c4val1), 0.026 and 0.030 (wikitext) ppl, UNDER_RESOLVED on every text: a single-window 0.05 gate cannot resolve these families, and a windowed gate needs W >= 5 windows on c4val1 and W >= 2 on wikitext.
 
 Open items (no evidence either way):
 
@@ -3529,4 +3534,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(272 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(273 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

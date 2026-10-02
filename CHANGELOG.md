@@ -1,6 +1,20 @@
 # Changelog
 
 ## Unreleased
+### Lane P95 read (#564, one RTX 5090): UNDER_RESOLVED -- K8's per-window spread across equal-error arithmetics is 0.054 / 0.055 ppl on c4val1 and 0.026 / 0.030 on wikitext, so a single-window 0.05 gate cannot resolve the NF4 families (`e4b.serve.p95.nf4-families.k8-window-spread.5090.2026-10-02`)
+
+- **What it read.** P94's three arithmetics (GEMV, served M-tile, K25 TF32) on 9 c4val1 windows and 5 wikitext
+  windows per family. Window 0 is P94's, reproduced bit for bit on a third host.
+- **The spread.** σ = max(SD(m − g), SD(t − m)): Granite 0.054 / 0.026, OLMoE 0.055 / 0.030 (c4val1 / wikitext). A
+  windowed gate needs W ≥ 5 windows on c4val1 and W ≥ 2 on wikitext.
+- **Production's own pair already crosses 0.05.** The GEMV and the M-tile differ by more than 0.05 on 1 of 8
+  (Granite) and 2 of 8 (OLMoE) fresh c4val1 windows.
+- **K25, descriptively.** Over the fresh windows it shows no consistent shift against the M-tile: c4val1 −0.019 /
+  +0.028, SE 0.019. P94's window was an outlier for it, 2.3 / 2.7 SD above the fresh mean.
+- **Consequence.** P94's verdict stands, and this lane licenses nothing. A later lane that asks about K25's default
+  again uses the windowed gate on fresh windows (k ≥ 9).
+- `bench/p95/RESULTS-p95.md`, `bench/p95/receipts/p95-5090-1/` ($0.7049; lane $0.7965 with four proving attempts).
+
 
 ### Lane SC1 amendment A2 (#846): the box script's quiesce could never succeed, and a proof could pass with its smokes skipped (bench + tests)
 

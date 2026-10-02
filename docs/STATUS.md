@@ -548,6 +548,10 @@ against the arithmetic it would replace above T == 1 (the served M-tile), K25 re
 (c4val1 K8 +0.102 Granite, +0.168 OLMoE; wikitext inside), and the served M-tile itself sits −0.078 from the GEMV on
 Granite c4val1, so the default stays `0` and c4val1's spread is the next question
 (P94, `e4b.serve.p94.nf4-families.k25-vs-mtile-k8.5090.2026-10-01`);
+on disjoint windows, K8's own spread across those equal-error arithmetics is 0.054 / 0.055 ppl on c4val1 and
+0.026 / 0.030 on wikitext, so a single-window 0.05 gate cannot resolve these families; a windowed gate needs
+W >= 5 / 2 windows, and P94's window was an outlier for K25 (P95, UNDER_RESOLVED,
+`e4b.serve.p95.nf4-families.k8-window-spread.5090.2026-10-02`);
 **gpt-oss's quoted best is its own reference arm** (NF4 + exact folds, 144.5 / 761.6; `e4b.serve.census.bo7.gptoss.b1.5090.2026-09-05` / `e4b.serve.census.bo7.gptoss.b16.5090.2026-09-05`) and the MXFP4
 store under the route rule reads ×1.293 / ×0.970; with K21 serving the store's batched rows, its B=16 step reads
 ×0.581 against the NF4 fallback, at a lower KL from the reference (0.00147 vs 0.00192;

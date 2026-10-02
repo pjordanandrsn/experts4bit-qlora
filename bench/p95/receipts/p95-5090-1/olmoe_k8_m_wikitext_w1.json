@@ -1,0 +1,30 @@
+{
+ "k8": "ppl",
+ "steps": 2048,
+ "mean_nll": 2.4070190696259077,
+ "ppl": 11.10082100087535,
+ "prompt_len": 512,
+ "prompt_offset": 4096,
+ "ppl_source": "wikitext",
+ "tokens_scored": 2048,
+ "text_sha": "058522e83f7e87a97a261404c664e375b464c437beef3107fb99b32193c3c28a",
+ "attn_compute_requested": null,
+ "attn_compute": "fp8",
+ "mech": {
+  "dispatch": {
+   "dotpad": 0,
+   "dotpad_splitk": 0,
+   "scalar": 0,
+   "scalar_splitk": 0
+  },
+  "compute": {
+   "f32": 0,
+   "fp8": 32768
+  },
+  "window": "warmup+capture (graph) or the whole loop (eager); graph replays do not re-enter Python and cannot increment"
+ },
+ "warm_tokens_discarded": 3,
+ "route": null,
+ "router_probe": null,
+ "basis": "teacher-forced through the paged decode path after rewinding the scheduler's warm tokens; identical context in both arms by construction (PREREG-k8)"
+}
