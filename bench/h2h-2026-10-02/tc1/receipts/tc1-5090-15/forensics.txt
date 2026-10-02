@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-7ad8f490-fcd6-e98f-6a7a-2329e08d349d, 500.00 W, 3135 MHz
+CPU(s):                                  32
+Model name:                              13th Gen Intel(R) Core(TM) i9-13900
+MemTotal:       131726324 kB
+cgroup memory.max 129490747392
+overlay         320G  1.7M  320G   1% /

@@ -1,0 +1,581 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+W1002 06:17:29.211000 8513 venv-axolotl/lib/python3.12/site-packages/torch/utils/_pytree.py:630] <enum 'KernelPreference'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+W1002 06:17:29.245000 8513 venv-axolotl/lib/python3.12/site-packages/torch/utils/_pytree.py:630] <enum 'ScaleCalculationMode'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+[2026-10-02 06:17:31,271] [WARNING] [axolotl.utils.schemas.config] Auto-enabling LoRA kernel optimizations for faster training. Please explicitly set `lora_*_kernel` config values to `false` to disable. See https://docs.axolotl.ai/docs/lora_optims.html for more info.
+[2026-10-02 06:17:31,310] [INFO] [axolotl.cli.config] config:
+{
+  "activation_offloading": false,
+  "adapter": "qlora",
+  "attn_decontaminates_packing": false,
+  "attn_needs_dtype_cast": false,
+  "attn_supports_packing": false,
+  "attn_uses_flash_lib": false,
+  "axolotl_config_path": "/tmp/axolotl_config_cow5u8xd.yml",
+  "base_model": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "base_model_config": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "batch_size": 8,
+  "bf16": true,
+  "bnb_config_kwargs": {
+    "bnb_4bit_use_double_quant": false
+  },
+  "capabilities": {
+    "bf16": true,
+    "compute_capability": "sm_120",
+    "fp8": true,
+    "n_gpu": 1,
+    "n_node": 1,
+    "tf32": true
+  },
+  "context_parallel_size": 1,
+  "dataloader_num_workers": 1,
+  "dataloader_pin_memory": true,
+  "dataloader_prefetch_factor": 256,
+  "dataset_num_proc": 112,
+  "datasets": [
+    {
+      "message_property_mappings": {
+        "content": "content",
+        "role": "role"
+      },
+      "path": "/root/tc1/data/ds_alpaca.json",
+      "trust_remote_code": false,
+      "type": "alpaca"
+    }
+  ],
+  "ddp": false,
+  "device": "cuda:0",
+  "device_map": "auto",
+  "dion_rank_fraction": 1.0,
+  "dion_rank_multiple_of": 1,
+  "eaft_alpha": 1.0,
+  "eaft_k": 20,
+  "env_capabilities": {
+    "torch_version": "2.14.0"
+  },
+  "eval_batch_size": 2,
+  "eval_causal_lm_metrics": [
+    "sacrebleu",
+    "comet",
+    "ter",
+    "chrf"
+  ],
+  "eval_max_new_tokens": 128,
+  "eval_table_size": 0,
+  "experimental_skip_move_to_device": true,
+  "fp16": false,
+  "fsdp_version": 2,
+  "generate_samples": false,
+  "generation_do_sample": true,
+  "generation_max_new_tokens": 50,
+  "generation_prompt_ratio": 0.5,
+  "generation_temperature": 0.7,
+  "gradient_accumulation_steps": 4,
+  "gradient_checkpointing": true,
+  "gradient_checkpointing_kwargs": {
+    "use_reentrant": false
+  },
+  "include_tkps": true,
+  "layer_offloading": false,
+  "learning_rate": 0.0002,
+  "lisa_layers_attribute": "model.layers",
+  "load_best_model_at_end": false,
+  "load_in_4bit": true,
+  "load_in_8bit": false,
+  "local_rank": 0,
+  "lora_alpha": 16,
+  "lora_dropout": 0.0,
+  "lora_embedding_kernel": true,
+  "lora_fp32_gradients": false,
+  "lora_mlp_kernel": true,
+  "lora_o_kernel": true,
+  "lora_qkv_kernel": true,
+  "lora_r": 16,
+  "lora_target_modules": [
+    "model.layers.0.self_attn.q_proj",
+    "model.layers.0.self_attn.k_proj",
+    "model.layers.0.self_attn.v_proj",
+    "model.layers.0.self_attn.o_proj",
+    "model.layers.1.self_attn.q_proj",
+    "model.layers.1.self_attn.k_proj",
+    "model.layers.1.self_attn.v_proj",
+    "model.layers.1.self_attn.o_proj",
+    "model.layers.2.self_attn.q_proj",
+    "model.layers.2.self_attn.k_proj",
+    "model.layers.2.self_attn.v_proj",
+    "model.layers.2.self_attn.o_proj",
+    "model.layers.3.self_attn.q_proj",
+    "model.layers.3.self_attn.k_proj",
+    "model.layers.3.self_attn.v_proj",
+    "model.layers.3.self_attn.o_proj",
+    "model.layers.4.self_attn.q_proj",
+    "model.layers.4.self_attn.k_proj",
+    "model.layers.4.self_attn.v_proj",
+    "model.layers.4.self_attn.o_proj",
+    "model.layers.5.self_attn.q_proj",
+    "model.layers.5.self_attn.k_proj",
+    "model.layers.5.self_attn.v_proj",
+    "model.layers.5.self_attn.o_proj",
+    "model.layers.6.self_attn.q_proj",
+    "model.layers.6.self_attn.k_proj",
+    "model.layers.6.self_attn.v_proj",
+    "model.layers.6.self_attn.o_proj",
+    "model.layers.7.self_attn.q_proj",
+    "model.layers.7.self_attn.k_proj",
+    "model.layers.7.self_attn.v_proj",
+    "model.layers.7.self_attn.o_proj",
+    "model.layers.8.self_attn.q_proj",
+    "model.layers.8.self_attn.k_proj",
+    "model.layers.8.self_attn.v_proj",
+    "model.layers.8.self_attn.o_proj",
+    "model.layers.9.self_attn.q_proj",
+    "model.layers.9.self_attn.k_proj",
+    "model.layers.9.self_attn.v_proj",
+    "model.layers.9.self_attn.o_proj",
+    "model.layers.10.self_attn.q_proj",
+    "model.layers.10.self_attn.k_proj",
+    "model.layers.10.self_attn.v_proj",
+    "model.layers.10.self_attn.o_proj",
+    "model.layers.11.self_attn.q_proj",
+    "model.layers.11.self_attn.k_proj",
+    "model.layers.11.self_attn.v_proj",
+    "model.layers.11.self_attn.o_proj",
+    "model.layers.12.self_attn.q_proj",
+    "model.layers.12.self_attn.k_proj",
+    "model.layers.12.self_attn.v_proj",
+    "model.layers.12.self_attn.o_proj",
+    "model.layers.13.self_attn.q_proj",
+    "model.layers.13.self_attn.k_proj",
+    "model.layers.13.self_attn.v_proj",
+    "model.layers.13.self_attn.o_proj",
+    "model.layers.14.self_attn.q_proj",
+    "model.layers.14.self_attn.k_proj",
+    "model.layers.14.self_attn.v_proj",
+    "model.layers.14.self_attn.o_proj",
+    "model.layers.15.self_attn.q_proj",
+    "model.layers.15.self_attn.k_proj",
+    "model.layers.15.self_attn.v_proj",
+    "model.layers.15.self_attn.o_proj",
+    "model.layers.16.self_attn.q_proj",
+    "model.layers.16.self_attn.k_proj",
+    "model.layers.16.self_attn.v_proj",
+    "model.layers.16.self_attn.o_proj",
+    "model.layers.17.self_attn.q_proj",
+    "model.layers.17.self_attn.k_proj",
+    "model.layers.17.self_attn.v_proj",
+    "model.layers.17.self_attn.o_proj",
+    "model.layers.18.self_attn.q_proj",
+    "model.layers.18.self_attn.k_proj",
+    "model.layers.18.self_attn.v_proj",
+    "model.layers.18.self_attn.o_proj",
+    "model.layers.19.self_attn.q_proj",
+    "model.layers.19.self_attn.k_proj",
+    "model.layers.19.self_attn.v_proj",
+    "model.layers.19.self_attn.o_proj",
+    "model.layers.20.self_attn.q_proj",
+    "model.layers.20.self_attn.k_proj",
+    "model.layers.20.self_attn.v_proj",
+    "model.layers.20.self_attn.o_proj",
+    "model.layers.21.self_attn.q_proj",
+    "model.layers.21.self_attn.k_proj",
+    "model.layers.21.self_attn.v_proj",
+    "model.layers.21.self_attn.o_proj",
+    "model.layers.22.self_attn.q_proj",
+    "model.layers.22.self_attn.k_proj",
+    "model.layers.22.self_attn.v_proj",
+    "model.layers.22.self_attn.o_proj",
+    "model.layers.23.self_attn.q_proj",
+    "model.layers.23.self_attn.k_proj",
+    "model.layers.23.self_attn.v_proj",
+    "model.layers.23.self_attn.o_proj",
+    "model.layers.24.self_attn.q_proj",
+    "model.layers.24.self_attn.k_proj",
+    "model.layers.24.self_attn.v_proj",
+    "model.layers.24.self_attn.o_proj",
+    "model.layers.25.self_attn.q_proj",
+    "model.layers.25.self_attn.k_proj",
+    "model.layers.25.self_attn.v_proj",
+    "model.layers.25.self_attn.o_proj",
+    "model.layers.26.self_attn.q_proj",
+    "model.layers.26.self_attn.k_proj",
+    "model.layers.26.self_attn.v_proj",
+    "model.layers.26.self_attn.o_proj",
+    "model.layers.27.self_attn.q_proj",
+    "model.layers.27.self_attn.k_proj",
+    "model.layers.27.self_attn.v_proj",
+    "model.layers.27.self_attn.o_proj",
+    "model.layers.28.self_attn.q_proj",
+    "model.layers.28.self_attn.k_proj",
+    "model.layers.28.self_attn.v_proj",
+    "model.layers.28.self_attn.o_proj",
+    "model.layers.29.self_attn.q_proj",
+    "model.layers.29.self_attn.k_proj",
+    "model.layers.29.self_attn.v_proj",
+    "model.layers.29.self_attn.o_proj",
+    "model.layers.30.self_attn.q_proj",
+    "model.layers.30.self_attn.k_proj",
+    "model.layers.30.self_attn.v_proj",
+    "model.layers.30.self_attn.o_proj",
+    "model.layers.31.self_attn.q_proj",
+    "model.layers.31.self_attn.k_proj",
+    "model.layers.31.self_attn.v_proj",
+    "model.layers.31.self_attn.o_proj",
+    "model.layers.32.self_attn.q_proj",
+    "model.layers.32.self_attn.k_proj",
+    "model.layers.32.self_attn.v_proj",
+    "model.layers.32.self_attn.o_proj",
+    "model.layers.33.self_attn.q_proj",
+    "model.layers.33.self_attn.k_proj",
+    "model.layers.33.self_attn.v_proj",
+    "model.layers.33.self_attn.o_proj",
+    "model.layers.34.self_attn.q_proj",
+    "model.layers.34.self_attn.k_proj",
+    "model.layers.34.self_attn.v_proj",
+    "model.layers.34.self_attn.o_proj",
+    "model.layers.35.self_attn.q_proj",
+    "model.layers.35.self_attn.k_proj",
+    "model.layers.35.self_attn.v_proj",
+    "model.layers.35.self_attn.o_proj",
+    "model.layers.36.self_attn.q_proj",
+    "model.layers.36.self_attn.k_proj",
+    "model.layers.36.self_attn.v_proj",
+    "model.layers.36.self_attn.o_proj",
+    "model.layers.37.self_attn.q_proj",
+    "model.layers.37.self_attn.k_proj",
+    "model.layers.37.self_attn.v_proj",
+    "model.layers.37.self_attn.o_proj",
+    "model.layers.38.self_attn.q_proj",
+    "model.layers.38.self_attn.k_proj",
+    "model.layers.38.self_attn.v_proj",
+    "model.layers.38.self_attn.o_proj",
+    "model.layers.39.self_attn.q_proj",
+    "model.layers.39.self_attn.k_proj",
+    "model.layers.39.self_attn.v_proj",
+    "model.layers.39.self_attn.o_proj",
+    "model.layers.40.self_attn.q_proj",
+    "model.layers.40.self_attn.k_proj",
+    "model.layers.40.self_attn.v_proj",
+    "model.layers.40.self_attn.o_proj",
+    "model.layers.41.self_attn.q_proj",
+    "model.layers.41.self_attn.k_proj",
+    "model.layers.41.self_attn.v_proj",
+    "model.layers.41.self_attn.o_proj",
+    "model.layers.42.self_attn.q_proj",
+    "model.layers.42.self_attn.k_proj",
+    "model.layers.42.self_attn.v_proj",
+    "model.layers.42.self_attn.o_proj",
+    "model.layers.43.self_attn.q_proj",
+    "model.layers.43.self_attn.k_proj",
+    "model.layers.43.self_attn.v_proj",
+    "model.layers.43.self_attn.o_proj",
+    "model.layers.44.self_attn.q_proj",
+    "model.layers.44.self_attn.k_proj",
+    "model.layers.44.self_attn.v_proj",
+    "model.layers.44.self_attn.o_proj",
+    "model.layers.45.self_attn.q_proj",
+    "model.layers.45.self_attn.k_proj",
+    "model.layers.45.self_attn.v_proj",
+    "model.layers.45.self_attn.o_proj",
+    "model.layers.46.self_attn.q_proj",
+    "model.layers.46.self_attn.k_proj",
+    "model.layers.46.self_attn.v_proj",
+    "model.layers.46.self_attn.o_proj",
+    "model.layers.47.self_attn.q_proj",
+    "model.layers.47.self_attn.k_proj",
+    "model.layers.47.self_attn.v_proj",
+    "model.layers.47.self_attn.o_proj"
+  ],
+  "lora_target_parameters": [
+    "model.layers.0.mlp.experts.gate_up_proj",
+    "model.layers.0.mlp.experts.down_proj",
+    "model.layers.1.mlp.experts.gate_up_proj",
+    "model.layers.1.mlp.experts.down_proj",
+    "model.layers.2.mlp.experts.gate_up_proj",
+    "model.layers.2.mlp.experts.down_proj",
+    "model.layers.3.mlp.experts.gate_up_proj",
+    "model.layers.3.mlp.experts.down_proj",
+    "model.layers.4.mlp.experts.gate_up_proj",
+    "model.layers.4.mlp.experts.down_proj",
+    "model.layers.5.mlp.experts.gate_up_proj",
+    "model.layers.5.mlp.experts.down_proj",
+    "model.layers.6.mlp.experts.gate_up_proj",
+    "model.layers.6.mlp.experts.down_proj",
+    "model.layers.7.mlp.experts.gate_up_proj",
+    "model.layers.7.mlp.experts.down_proj",
+    "model.layers.8.mlp.experts.gate_up_proj",
+    "model.layers.8.mlp.experts.down_proj",
+    "model.layers.9.mlp.experts.gate_up_proj",
+    "model.layers.9.mlp.experts.down_proj",
+    "model.layers.10.mlp.experts.gate_up_proj",
+    "model.layers.10.mlp.experts.down_proj",
+    "model.layers.11.mlp.experts.gate_up_proj",
+    "model.layers.11.mlp.experts.down_proj",
+    "model.layers.12.mlp.experts.gate_up_proj",
+    "model.layers.12.mlp.experts.down_proj",
+    "model.layers.13.mlp.experts.gate_up_proj",
+    "model.layers.13.mlp.experts.down_proj",
+    "model.layers.14.mlp.experts.gate_up_proj",
+    "model.layers.14.mlp.experts.down_proj",
+    "model.layers.15.mlp.experts.gate_up_proj",
+    "model.layers.15.mlp.experts.down_proj",
+    "model.layers.16.mlp.experts.gate_up_proj",
+    "model.layers.16.mlp.experts.down_proj",
+    "model.layers.17.mlp.experts.gate_up_proj",
+    "model.layers.17.mlp.experts.down_proj",
+    "model.layers.18.mlp.experts.gate_up_proj",
+    "model.layers.18.mlp.experts.down_proj",
+    "model.layers.19.mlp.experts.gate_up_proj",
+    "model.layers.19.mlp.experts.down_proj",
+    "model.layers.20.mlp.experts.gate_up_proj",
+    "model.layers.20.mlp.experts.down_proj",
+    "model.layers.21.mlp.experts.gate_up_proj",
+    "model.layers.21.mlp.experts.down_proj",
+    "model.layers.22.mlp.experts.gate_up_proj",
+    "model.layers.22.mlp.experts.down_proj",
+    "model.layers.23.mlp.experts.gate_up_proj",
+    "model.layers.23.mlp.experts.down_proj",
+    "model.layers.24.mlp.experts.gate_up_proj",
+    "model.layers.24.mlp.experts.down_proj",
+    "model.layers.25.mlp.experts.gate_up_proj",
+    "model.layers.25.mlp.experts.down_proj",
+    "model.layers.26.mlp.experts.gate_up_proj",
+    "model.layers.26.mlp.experts.down_proj",
+    "model.layers.27.mlp.experts.gate_up_proj",
+    "model.layers.27.mlp.experts.down_proj",
+    "model.layers.28.mlp.experts.gate_up_proj",
+    "model.layers.28.mlp.experts.down_proj",
+    "model.layers.29.mlp.experts.gate_up_proj",
+    "model.layers.29.mlp.experts.down_proj",
+    "model.layers.30.mlp.experts.gate_up_proj",
+    "model.layers.30.mlp.experts.down_proj",
+    "model.layers.31.mlp.experts.gate_up_proj",
+    "model.layers.31.mlp.experts.down_proj",
+    "model.layers.32.mlp.experts.gate_up_proj",
+    "model.layers.32.mlp.experts.down_proj",
+    "model.layers.33.mlp.experts.gate_up_proj",
+    "model.layers.33.mlp.experts.down_proj",
+    "model.layers.34.mlp.experts.gate_up_proj",
+    "model.layers.34.mlp.experts.down_proj",
+    "model.layers.35.mlp.experts.gate_up_proj",
+    "model.layers.35.mlp.experts.down_proj",
+    "model.layers.36.mlp.experts.gate_up_proj",
+    "model.layers.36.mlp.experts.down_proj",
+    "model.layers.37.mlp.experts.gate_up_proj",
+    "model.layers.37.mlp.experts.down_proj",
+    "model.layers.38.mlp.experts.gate_up_proj",
+    "model.layers.38.mlp.experts.down_proj",
+    "model.layers.39.mlp.experts.gate_up_proj",
+    "model.layers.39.mlp.experts.down_proj",
+    "model.layers.40.mlp.experts.gate_up_proj",
+    "model.layers.40.mlp.experts.down_proj",
+    "model.layers.41.mlp.experts.gate_up_proj",
+    "model.layers.41.mlp.experts.down_proj",
+    "model.layers.42.mlp.experts.gate_up_proj",
+    "model.layers.42.mlp.experts.down_proj",
+    "model.layers.43.mlp.experts.gate_up_proj",
+    "model.layers.43.mlp.experts.down_proj",
+    "model.layers.44.mlp.experts.gate_up_proj",
+    "model.layers.44.mlp.experts.down_proj",
+    "model.layers.45.mlp.experts.gate_up_proj",
+    "model.layers.45.mlp.experts.down_proj",
+    "model.layers.46.mlp.experts.gate_up_proj",
+    "model.layers.46.mlp.experts.down_proj",
+    "model.layers.47.mlp.experts.gate_up_proj",
+    "model.layers.47.mlp.experts.down_proj"
+  ],
+  "loraplus_lr_embedding": 1e-06,
+  "lr_scheduler": "linear",
+  "max_steps": 20,
+  "mean_resizing_embeddings": false,
+  "merge_method": "memory_efficient",
+  "micro_batch_size": 2,
+  "mixlora_jitter_noise": 0.0,
+  "mixlora_num_experts": 8,
+  "mixlora_router_aux_loss_coef": 0.01,
+  "mixlora_router_init_range": 0.02,
+  "mixlora_top_k": 2,
+  "model_config_type": "qwen3_moe",
+  "nf4_backend": "bitsandbytes",
+  "num_epochs": 1.0,
+  "num_generation_samples": 3,
+  "optimizer": "adamw_bnb_8bit",
+  "otel_metrics_host": "localhost",
+  "otel_metrics_port": 8000,
+  "output_dir": "/root/tc1/axolotl-out",
+  "ple_cpu_offload": false,
+  "pretrain_multipack_attn": true,
+  "profiler_steps_start": 0,
+  "qgalore_cos_threshold": 0.4,
+  "qgalore_gamma_proj": 2,
+  "qgalore_proj_bits": 4,
+  "qgalore_proj_group_size": 256,
+  "qgalore_proj_quant": true,
+  "qgalore_proj_type": "std",
+  "qgalore_queue_size": 5,
+  "qgalore_rank": 256,
+  "qgalore_scale": 0.25,
+  "qgalore_update_proj_gap": 200,
+  "qlora_sharded_model_loading": false,
+  "quantize_moe_experts": true,
+  "ray_num_workers": 1,
+  "relora_prune_method": "magnitude",
+  "resources_per_worker": {
+    "GPU": 1
+  },
+  "sample_packing_bin_size": 200,
+  "sample_packing_group_size": 100000,
+  "save_only_model": false,
+  "save_safetensors": true,
+  "seed": 3407,
+  "sequence_len": 2048,
+  "shuffle_before_merging_datasets": false,
+  "shuffle_merged_datasets": true,
+  "skip_prepare_dataset": false,
+  "streaming_multipack_buffer_size": 10000,
+  "strict": false,
+  "tensor_parallel_size": 1,
+  "tf32": true,
+  "tiled_mlp_use_original_mlp": true,
+  "tokenizer_config": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "tokenizer_save_jinja_files": true,
+  "torch_dtype": "torch.bfloat16",
+  "train_on_inputs": false,
+  "trl": {
+    "async_prefetch": false,
+    "log_completions": false,
+    "mask_truncated_completions": false,
+    "ref_model_mixup_alpha": 0.9,
+    "ref_model_sync_steps": 64,
+    "replay_buffer_size": 0,
+    "replay_recompute_logps": true,
+    "reroll_max_groups": 1,
+    "reroll_start_fraction": 1.0,
+    "reward_num_workers": 1,
+    "scale_rewards": true,
+    "skip_zero_advantage_batches": true,
+    "sync_ref_model": false,
+    "use_data_producer": false,
+    "use_vllm": false,
+    "vllm_lora_sync": false,
+    "vllm_server_host": "0.0.0.0",
+    "vllm_server_port": 8000
+  },
+  "use_otel_metrics": false,
+  "use_ray": false,
+  "val_set_size": 0.0,
+  "vllm": {
+    "device": "auto",
+    "dtype": "auto",
+    "gpu_memory_utilization": 0.9,
+    "host": "0.0.0.0",
+    "port": 8000
+  },
+  "warmup_steps": 5,
+  "weight_decay": 0.001,
+  "world_size": 1
+}
+[2026-10-02 06:17:31,973] [INFO] [axolotl.monkeypatch.peft.utils] patching prepare_model_for_kbit_training to allow for overrides
+[2026-10-02 06:17:34,226] [INFO] [axolotl.monkeypatch.lora_kernels] Patched attention class with LoRA optims: Qwen3MoeAttention
+[2026-10-02 06:17:34,229] [INFO] [axolotl.monkeypatch.moe_quant] Patched PEFT _inject_parameters for consistent ParamWrapper ordering
+Loading weights:   0%|          | 0/531 [00:00<?, ?it/s]Loading weights:   0%|          | 2/531 [00:00<00:41, 12.82it/s]Loading weights:   1%|          | 4/531 [00:00<00:40, 13.15it/s]Loading weights:   1%|          | 6/531 [00:00<00:37, 13.86it/s]Loading weights:   3%|▎         | 16/531 [00:00<00:16, 31.20it/s]Loading weights:   5%|▌         | 27/531 [00:00<00:12, 40.90it/s]Loading weights:   7%|▋         | 38/531 [00:01<00:10, 46.48it/s]Loading weights:   9%|▉         | 49/531 [00:01<00:09, 49.85it/s]Loading weights:  11%|█▏        | 60/531 [00:01<00:09, 52.05it/s]Loading weights:  13%|█▎        | 71/531 [00:01<00:08, 51.25it/s]Loading weights:  15%|█▌        | 82/531 [00:01<00:08, 52.27it/s]Loading weights:  18%|█▊        | 93/531 [00:02<00:08, 52.45it/s]Loading weights:  20%|█▉        | 104/531 [00:02<00:08, 52.73it/s]Loading weights:  22%|██▏       | 115/531 [00:02<00:08, 51.20it/s]Loading weights:  24%|██▎       | 126/531 [00:02<00:08, 50.14it/s]Loading weights:  26%|██▌       | 137/531 [00:02<00:07, 53.00it/s]Loading weights:  28%|██▊       | 148/531 [00:03<00:06, 57.61it/s]Loading weights:  30%|██▉       | 159/531 [00:03<00:06, 61.68it/s]Loading weights:  32%|███▏      | 170/531 [00:03<00:05, 62.69it/s]Loading weights:  34%|███▍      | 181/531 [00:03<00:05, 60.80it/s]Loading weights:  36%|███▌      | 192/531 [00:03<00:05, 59.17it/s]Loading weights:  38%|███▊      | 203/531 [00:03<00:05, 56.60it/s]Loading weights:  40%|████      | 214/531 [00:04<00:05, 56.69it/s]Loading weights:  42%|████▏     | 225/531 [00:04<00:05, 56.40it/s]Loading weights:  44%|████▍     | 236/531 [00:04<00:05, 56.36it/s]Loading weights:  47%|████▋     | 247/531 [00:04<00:05, 55.76it/s]Loading weights:  49%|████▊     | 258/531 [00:04<00:04, 55.24it/s]Loading weights:  51%|█████     | 269/531 [00:05<00:04, 55.36it/s]Loading weights:  53%|█████▎    | 280/531 [00:05<00:04, 55.81it/s]Loading weights:  55%|█████▍    | 291/531 [00:05<00:04, 55.99it/s]Loading weights:  57%|█████▋    | 302/531 [00:05<00:04, 56.18it/s]Loading weights:  59%|█████▉    | 313/531 [00:05<00:03, 54.90it/s]Loading weights:  61%|██████    | 324/531 [00:06<00:03, 53.26it/s]Loading weights:  63%|██████▎   | 335/531 [00:06<00:03, 53.22it/s]Loading weights:  65%|██████▌   | 346/531 [00:06<00:03, 53.32it/s]Loading weights:  67%|██████▋   | 357/531 [00:06<00:03, 51.50it/s]Loading weights:  69%|██████▉   | 368/531 [00:07<00:03, 52.53it/s]Loading weights:  71%|███████▏  | 379/531 [00:07<00:02, 52.02it/s]Loading weights:  73%|███████▎  | 390/531 [00:07<00:02, 51.87it/s]Loading weights:  76%|███████▌  | 401/531 [00:07<00:02, 51.83it/s]Loading weights:  78%|███████▊  | 412/531 [00:07<00:02, 50.87it/s]Loading weights:  80%|███████▉  | 423/531 [00:08<00:02, 51.05it/s]Loading weights:  82%|████████▏ | 434/531 [00:08<00:01, 52.27it/s]Loading weights:  84%|████████▍ | 445/531 [00:08<00:01, 51.76it/s]Loading weights:  86%|████████▌ | 456/531 [00:08<00:01, 52.56it/s]Loading weights:  88%|████████▊ | 467/531 [00:08<00:01, 53.07it/s]Loading weights:  90%|█████████ | 478/531 [00:09<00:01, 52.52it/s]Loading weights:  92%|█████████▏| 489/531 [00:09<00:00, 52.00it/s]Loading weights:  94%|█████████▍| 500/531 [00:09<00:00, 51.76it/s]Loading weights:  96%|█████████▌| 511/531 [00:09<00:00, 51.00it/s]Loading weights:  98%|█████████▊| 522/531 [00:09<00:00, 52.34it/s]Loading weights: 100%|██████████| 531/531 [00:09<00:00, 53.12it/s]
+[2026-10-02 06:17:48,245] [INFO] [axolotl.loaders.patch_manager] Quantized 96 MoE expert parameter(s) to 4-bit during model loading
+[2026-10-02 06:17:48,671] [INFO] [axolotl.loaders.model] Converting modules to torch.bfloat16
+trainable params: 642,514,944 || all params: 16,679,122,944 || trainable%: 3.8522
+LOAD OK {"fam": "qwen3axolotl", "framework": "axolotl", "arm": "axolotl", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 32.4, "verify": {"n_quantized": null, "n_unquantized": null}, "n_attn4": 0, "n_patched": 0, "structural_expected_n_attn4": null, "detector_version": null, "trainable_params": 642514944, "trainable_tensors": 576, "trainable_by_group": {"attention": 13369344, "experts": 629145600, "other": 0}, "trainable_mismatch": null, "dtypes_before": {"torch.float32": 576}, "dtypes_after": {"torch.float32": 576}, "lora_cast_to_fp32": 0, "adapter_dtype": "fp32", "lora_init": "matched:3407", "matched_init": {"seed": 3407, "n_slots_set": 12480, "n_slots_expected": 12480, "expected_parts": {"n_attention_projections": 192, "n_layers": 48, "n_experts": 128}, "unmapped": [], "n_unmapped": 0, "complete": true, "kinds": {"q": 48, "k": 48, "v": 48, "o": 48, "down": 6144, "gate_up": 6144}, "b_nonzero": [], "hidden": {"value": 2048, "rule": "config.hidden_size"}, "mapping_rules": {"base_model.model.model.layers.0.self_attn.q_proj": "q by name (attention)", "base_model.model.model.layers.0.self_attn.k_proj": "k by name (attention)", "base_model.model.model.layers.0.self_attn.v_proj": "v by name (attention)", "base_model.model.model.layers.0.self_attn.o_proj": "o by name (attention)", "base_model.model.model.layers.0.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.layers.0.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden", "base_model.model.model.layers.1.self_attn.q_proj": "q by name (attention)", "base_model.model.model.layers.1.self_attn.k_proj": "k by name (attention)", "base_model.model.model.layers.1.self_attn.v_proj": "v by name (attention)", "base_model.model.model.layers.1.self_attn.o_proj": "o by name (attention)", "base_model.model.model.layers.1.mlp.experts (down_proj)": "down by structure: out == hidden", "base_model.model.model.layers.1.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden"}, "n_mapping_rules": 288, "distribution": "A[slot] ~ U(-b, b), b = 1/sqrt(fan_in), fan_in = in-width of the [r, in] slot = PEFT's kaiming_uniform(a=sqrt(5)) on a [r, in] weight; drawn in fp32 on CPU from torch.Generator().manual_seed(int.from_bytes(sha256('<seed>|<layer>|<kind>|<expert>')[:8], 'big')); B left as built and asserted zero"}, "frozen_base_probe": {"slots": {"down": {"sha": "f2ade29dafdbc052", "regime": "nf4/64+dq", "control_detects_flip": true}, "gate_up": {"sha": "e2bed944143e4da4", "regime": "nf4/64+dq", "control_detects_flip": true}, "q_proj": {"sha": "a2a4282aab2e5204", "regime": "nf4/64", "control_detects_flip": true}}, "control_detects_flip": true, "errors": []}, "non_adapter_trainable": [], "census": {"Params4bit_expert_stacks": 0, "Params4bit_other": 192, "Linear4bit": 384, "Linear_bf16": 1, "Linear_fp32": 0, "Experts4bit": 0, "ExpertsLoRA": 0, "LoRALinear": 0, "experts_modules": 48, "experts_module_classes": {"ParametrizedQwen3MoeExperts": 48}, "router_gate": [{"name": "base_model.model.model.layers.0.mlp.gate", "cls": "Qwen3MoeTopKRouter", "dtype": "torch.float32"}, {"name": "base_model.model.model.layers.1.mlp.gate", "cls": "Qwen3MoeTopKRouter", "dtype": "torch.float32"}], "lm_head": {"cls": "Linear", "dtype": "torch.bfloat16"}, "Params4bit_expert_linears": 0, "expert_param_classes": {"Parameter": 96}}, "tokenizer_agree": true, "ckpt": "axolotl cfg gradient_checkpointing=True kwargs={'use_reentrant': False}", "probes": {}, "attn4_probe": null}
+ENGAGE axolotl 0.20.0: quantized_moe_experts_n=96 parametrized=96 n_bnb4bit_unwrapped=48 experts_implementation cfg=None config=grouped_mm plugins=None
+Traceback (most recent call last):
+  File "/root/tc1/tc1_arm.py", line 4124, in <module>
+    main()
+  File "/root/tc1/tc1_arm.py", line 4120, in main
+    return run_arm(a, loader, sampler=not a.no_sampler)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/tc1_arm.py", line 2477, in run_arm
+    ev0, rows0 = eval_loss(model, ev, fwd_kwargs, a.autocast)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/tc1_arm.py", line 714, in eval_loss
+    per_row.append(round(float(model(input_ids=x, labels=x, **fwd_kwargs(x)).loss), 5))
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/peft/peft_model.py", line 2120, in forward
+    return self.base_model(
+           ^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/peft/tuners/tuners_utils.py", line 359, in forward
+    return self.model(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/transformers/utils/generic.py", line 939, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 645, in forward
+    outputs: MoeModelOutputWithPast = self.model(
+                                      ^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/transformers/utils/generic.py", line 1068, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/transformers/utils/output_capturing.py", line 286, in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 496, in forward
+    hidden_states = decoder_layer(
+                    ^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/transformers/modeling_layers.py", line 109, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 346, in forward
+    hidden_states = self.mlp(hidden_states)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 279, in forward
+    _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1783, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1794, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/venv-axolotl/lib/python3.12/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", line 260, in forward
+    router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: expected mat1 and mat2 to have the same dtype, but got: c10::BFloat16 != float

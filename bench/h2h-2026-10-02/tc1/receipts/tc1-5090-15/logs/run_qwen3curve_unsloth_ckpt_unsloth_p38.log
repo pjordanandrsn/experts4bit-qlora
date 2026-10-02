@@ -1,0 +1,454 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+[unsloth.import_fixes|INFO]Unsloth: ROCm detection did not match any known hints.
+[unsloth.import_fixes|INFO]Unsloth: Patching protobuf.MessageFactory.GetPrototype
+[unsloth.import_fixes|INFO]Unsloth: torch==2.12.1+cu130 and torchvision==0.27.1+cu130 are compatible.
+🦥 Unsloth: Will patch your computer to enable 2x faster free finetuning.
+[fla.utils._device|INFO]Blackwell detected: registering default global_scratch allocator.
+[unsloth_zoo.log|INFO]Unsloth: aliased recurrent_gated_delta_rule onto fla.ops.gated_delta_rule so the Triton decode kernel is reachable.
+W1002 00:45:03.671000 34331 venv-unsloth/lib/python3.11/site-packages/torch/utils/_pytree.py:630] <enum 'KernelPreference'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+W1002 00:45:03.685000 34331 venv-unsloth/lib/python3.11/site-packages/torch/utils/_pytree.py:630] <enum 'ScaleCalculationMode'> is an Enum subclass and is now natively supported by torch.compile as an opaque value type. Calling register_constant() on Enum subclasses is deprecated and will be an error in a future release.
+[unsloth.import_fixes|INFO]Unsloth: Patched transformers config classes to accept legacy 4.x value types.
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `PretrainedConfig.__init_subclass__` so vLLM config classes with bare annotations still import
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `sdpa_mask` so a left-padded row that attends to nothing cannot return NaN (unsloth #9708)
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `get_model_conversion_mapping` so a pre-quantized multimodal checkpoint keeps its bitsandbytes quant_state (transformers PR #45567)
+[unsloth.import_fixes|INFO]Unsloth: Patching transformers `rope_scaling` so replacing it keeps the RoPE base frequency (unsloth #2405)
+[unsloth.import_fixes|INFO]Unsloth: Patched transformers `validate_rope` to accept the 5.0 `ignore_keys` argument.
+[unsloth.import_fixes|INFO]Unsloth: LongcatCausalLM configs without a model_type load on transformers' longcat_flash.
+[unsloth.import_fixes|INFO]Unsloth: Restored transformers `is_torch_fx_available` for remote modeling code written against 4.x.
+[unsloth.import_fixes|INFO]Unsloth: Remote modeling code written for transformers 4.x gets the 5.x model API shims.
+[unsloth.import_fixes|INFO]Unsloth: Patched triton CompiledKernel with num_ctas/cluster_dims for torch.compile compatibility.
+[unsloth.import_fixes|INFO]Unsloth: Patched torch config modules so dynamo/inductor settings (e.g. recompile_limit) apply across threads on torch >= 2.12.
+[unsloth.import_fixes|INFO]Unsloth: Patched torch.nn.init.trunc_normal_ for fp16/bf16 stability.
+[unsloth.import_fixes|INFO]Unsloth: Patched enable_input_require_grads for vision model compatibility
+[datasets|INFO]Disabling Tensorflow because USE_TORCH is set
+[unsloth_zoo.log|INFO]Unsloth: set VIDEO_TOTAL_PIXELS: 90316800
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Processor.__call__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3RMSNorm.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Attention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched AutoHfQuantizer.merge_quantization_configs.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmDepthDecoderForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration._merge_input_ids_with_input_values.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.predict.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.correct.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.scale_corrected_output.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nModel.get_placeholder_mask.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextMLP.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4MultimodalEmbedder.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched PreTrainedModel.get_correct_experts_implementation.
+[unsloth_zoo.log|INFO]Unsloth: registered the 'unsloth' experts implementation as transformers' default
+[unsloth_zoo.log|WARNING]Unsloth: triton_kernels is not installed. MXFP4 GPT OSS will NOT be patched for LoRA.
+To train GPT OSS with LoRA, either:
+  1. Install triton_kernels from OpenAI (for native MXFP4), OR
+  2. Use Mxfp4Config(dequantize=True) when loading (dequantizes to bf16), OR
+  3. Use the BF16 model: 'unsloth/gpt-oss-20b-BF16'
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteMoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE Lite for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE (standard) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepseekV3NaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepseekV3MoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepSeekV3 MoE for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepseekV3ForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched DeepSeekV3ForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4ForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4ForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4 MoE (current layout) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Lfm2MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched LFM2 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched MixtralExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Mixtral MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Llama4TextMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Llama4TextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Llama-4 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched bitsandbytes quantize_4bit / dequantize_4bit for tensors with 2^31 elements or more.
+[unsloth_zoo.log|INFO]Unsloth: Patched Ernie4_5_MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Ernie4_5_VLMoeMoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched ERNIE 4.5 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralModel.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.convert_moe_packed_tensors.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.dequantize_convertops.
+[unsloth_zoo.log|INFO]Unsloth: Successfully added convert_moe_packed_tensors_cpu function.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4bitQuantize.convert.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4bitQuantize.convert for MoE expert parameter support
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.param_needs_quantization.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.param_needs_quantization for MoE expert parameters
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer._process_model_before_weight_loading.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.get_weight_conversions.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer.preprocess_model.
+[unsloth_zoo.log|INFO]Unsloth: Patched Bnb4BitHfQuantizer._process_model_after_weight_loading.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers WeightConverter.__init__ to ignore unknown kwargs (peft 0.19 forward-compat)
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.get_param.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.merge.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.unmerge.
+[unsloth_zoo.log|INFO]Unsloth: routed transformers ALL_FP8_EXPERTS_FUNCTIONS through forward_moe_backend_fp8
+[unsloth_zoo.log|INFO]Unsloth: relaxed HF validate_quantization_for_training for FP8+LoRA
+[unsloth_zoo.log|INFO]Unsloth: ParamWrapper.get_param exposes the logical shape of FP4-packed experts
+🦥 Unsloth Zoo will now patch everything to make training faster!
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:6234: FutureWarning: torch._dynamo.config.inline_inbuilt_nn_modules is deprecated and does not do anything, inline_inbuilt_nn_modules is always True. It will be removed in a future version of PyTorch.
+  original_setattr(self, name, value)
+[unsloth_zoo.log|INFO]Unsloth: Could not find fbgemm_gpu.experimental.gemm.triton_gemm.fp8_gemm.triton_quantize_fp8_block
+[unsloth_zoo.log|INFO]Unsloth: Could not find torchao.prototype.blockwise_fp8_inference.blockwise_quantization.blockwise_fp8_gemm
+[unsloth_zoo.log|INFO]Unsloth: Patching trl openenv with function: openenv_vllm_reload_weights
+[unsloth_zoo.log|INFO]Unsloth: Patching trl VLLMGeneration with function: vllm_generation_init_patch
+The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[huggingface_hub._login|INFO]The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[unsloth_zoo.log|INFO]Failed to login to huggingface using token with error: Cannot reach https://huggingface.co/api/whoami-v2: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.
+The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[huggingface_hub._login|INFO]The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[unsloth_zoo.log|INFO]Failed to login to huggingface using token with error: Cannot reach https://huggingface.co/api/whoami-v2: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.
+[unsloth_zoo.log|INFO]Unsloth: transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.l2norm now reduces in float32 (pure-torch gated delta, float16 safe).
+[unsloth_zoo.log|INFO]Unsloth: transformers.models.qwen3_next.modeling_qwen3_next.l2norm now reduces in float32 (pure-torch gated delta, float16 safe).
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Processor.__call__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3RMSNorm.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Attention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmDepthDecoderForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration._merge_input_ids_with_input_values.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.predict.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.correct.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.scale_corrected_output.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nModel.get_placeholder_mask.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextMLP.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4MultimodalEmbedder.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteMoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE Lite for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE (standard) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4 MoE (current layout) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched ERNIE 4.5 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralModel.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.convert_moe_packed_tensors.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.dequantize_convertops.
+[unsloth_zoo.log|INFO]Unsloth: Successfully added convert_moe_packed_tensors_cpu function.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.get_param.
+[unsloth_zoo.log|INFO]Unsloth: ParamWrapper.get_param exposes the logical shape of FP4-packed experts
+[unsloth_zoo.log|INFO]Unsloth: Patched 62 FLA autotune caches: fla.modules.fused_norm_gate.layer_norm_gated_bwd_kernel, fla.modules.fused_norm_gate.layer_norm_gated_bwd_kernel1, fla.modules.fused_norm_gate.layer_norm_gated_fwd_kernel, fla.modules.fused_norm_gate.layer_norm_gated_fwd_kernel1, fla.modules.l2norm.l2norm_bwd_kernel, fla.modules.l2norm.l2norm_bwd_kernel1, fla.modules.l2norm.l2norm_fwd_kernel, fla.modules.l2norm.l2norm_fwd_kernel1, fla.ops.common.chunk_delta_h.chunk_gated_delta_rule_bwd_kernel_dhu_blockdim64, fla.ops.common.chunk_delta_h.chunk_gated_delta_rule_fwd_kernel_h_blockdim64, fla.ops.common.chunk_h.chunk_bwd_kernel_dh, fla.ops.common.chunk_h.chunk_fwd_kernel_h, fla.ops.common.chunk_o.chunk_bwd_kernel_dqkwg, fla.ops.common.chunk_o.chunk_bwd_kernel_dv, fla.ops.common.chunk_o.chunk_bwd_kernel_dv_local, fla.ops.common.chunk_o.chunk_fwd_kernel_o, fla.ops.common.fused_recurrent.fused_recurrent_bwd_kernel, fla.ops.common.fused_recurrent.fused_recurrent_fwd_kernel, fla.ops.cp.chunk_delta_h.merge_fwd_bwd_kernel, fla.ops.cp.chunk_delta_h.pre_process_bwd_kernel_merged, fla.ops.cp.chunk_delta_h.pre_process_fwd_kernel_merged, fla.ops.gated_delta_rule.chunk_fwd.chunk_gated_delta_rule_fwd_kkt_solve_kernel, fla.ops.gated_delta_rule.gate.gdn_gate_bwd_kernel, fla.ops.gated_delta_rule.gate.gdn_gate_chunk_cumsum_scalar_kernel, fla.ops.gated_delta_rule.gate.gdn_gate_fwd_kernel, fla.ops.gated_delta_rule.wy_fast.prepare_wy_repr_bwd_kernel, fla.ops.gated_delta_rule.wy_fast.recompute_w_u_fwd_kernel, fla.ops.gla.chunk.chunk_gla_bwd_kernel_dA, fla.ops.gla.chunk.chunk_gla_bwd_kernel_dv, fla.ops.gla.chunk.chunk_gla_bwd_kernel_inter, fla.ops.gla.chunk.chunk_gla_bwd_kernel_intra, fla.ops.gla.chunk.chunk_gla_fwd_A_kernel_intra_sub_inter, fla.ops.gla.chunk.chunk_gla_fwd_A_kernel_intra_sub_intra, fla.ops.gla.chunk.chunk_gla_fwd_A_kernel_intra_sub_intra_merge, fla.ops.gla.chunk.chunk_gla_fwd_A_kernel_intra_sub_intra_split, fla.ops.gla.chunk.chunk_gla_fwd_kernel_o, fla.ops.kda.chunk_bwd.chunk_kda_bwd_kernel_dAv, fla.ops.kda.chunk_bwd.chunk_kda_bwd_kernel_wy_dqkg_fused, fla.ops.kda.chunk_intra.chunk_kda_bwd_kernel_intra, fla.ops.kda.chunk_intra.chunk_kda_fwd_kernel_inter_solve_fused, fla.ops.kda.chunk_intra.chunk_kda_fwd_kernel_intra_sub_chunk, fla.ops.kda.chunk_intra_token_parallel.chunk_kda_fwd_kernel_intra_token_parallel, fla.ops.kda.gate.kda_gate_bwd_kernel, fla.ops.kda.gate.kda_gate_chunk_cumsum_vector_kernel, fla.ops.kda.gate.kda_gate_fwd_kernel, fla.ops.kda.wy_fast.prepare_wy_repr_bwd_kda_kernel, fla.ops.kda.wy_fast.recompute_w_u_fwd_kda_kernel, fla.ops.utils.cumsum.chunk_global_cumsum_scalar_kernel, fla.ops.utils.cumsum.chunk_global_cumsum_vector_kernel, fla.ops.utils.cumsum.chunk_local_cumsum_scalar_kernel, fla.ops.utils.cumsum.chunk_local_cumsum_vector_kernel, fla.ops.utils.index.prepare_position_ids_kernel, fla.ops.utils.logsumexp.logsumexp_fwd_kernel, fla.ops.utils.matmul.matmul_kernel, fla.ops.utils.pack.packunpack_sequence_kernel, fla.ops.utils.pooling.mean_pooling_bwd_kernel, fla.ops.utils.pooling.mean_pooling_fwd_kernel, fla.ops.utils.softmax.softmax_bwd_kernel, fla.ops.utils.softmax.softmax_fwd_kernel, fla.ops.utils.solve_tril.merge_16x16_to_32x32_inverse_kernel, fla.ops.utils.solve_tril.merge_16x16_to_64x64_inverse_kernel, fla.ops.utils.solve_tril.solve_tril_16x16_kernel
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Processor.__call__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3RMSNorm.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3Attention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmDepthDecoderForCausalLM.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched CsmForConditionalGeneration._merge_input_ids_with_input_values.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.predict.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.correct.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nTextAltUp.scale_corrected_output.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma3nModel.get_placeholder_mask.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4TextMLP.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4MultimodalEmbedder.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeTextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3VLMoeForConditionalGeneration.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3NextForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeExperts.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeSparseMoeBlock.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Qwen3_5MoeForCausalLM.forward for GRPO hidden states.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeLiteMoE.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE Lite for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Glm4MoeNaiveMoe.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched GLM4 MoE (standard) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched Gemma4 MoE (current layout) for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched ERNIE 4.5 MoE experts for Split LoRA support.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.__init__.
+[unsloth_zoo.log|INFO]Unsloth: Patched PixtralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralAttention.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched MinistralModel.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.convert_moe_packed_tensors.
+[unsloth_zoo.log|INFO]Unsloth: Patched transformers.integrations.mxfp4.dequantize_convertops.
+[unsloth_zoo.log|INFO]Unsloth: Successfully added convert_moe_packed_tensors_cpu function.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched Linear4bit.forward.
+[unsloth_zoo.log|INFO]Unsloth: Patched ParamWrapper.get_param.
+[unsloth_zoo.log|INFO]Unsloth: ParamWrapper.get_param exposes the logical shape of FP4-packed experts
+The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[huggingface_hub._login|INFO]The token has not been saved to the git credentials helper. Pass `add_to_git_credential=True` in this function directly or `--add-to-git-credential` if using via `hf`CLI if you want to set the git credential as well.
+[unsloth_zoo.log|INFO]Failed to login to huggingface using token with error: Cannot reach https://huggingface.co/api/whoami-v2: offline mode is enabled. To disable it, please unset the `HF_HUB_OFFLINE` environment variable.
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.0.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.1.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.2.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.3.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.4.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.5.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.6.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.7.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.8.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.9.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.10.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.11.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.12.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.13.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.14.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.15.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.16.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.17.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.18.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.19.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.20.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.21.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.22.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.23.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.24.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.25.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.26.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.27.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.28.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.29.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.30.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.31.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.32.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.33.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.34.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.35.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.36.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.37.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.38.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.39.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.40.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.41.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.42.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.43.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.44.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.45.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.46.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+[unsloth_zoo.log|INFO]Unsloth: Prepared model.layers.47.mlp.experts's gate_up_proj & down_proj for BNB 4-bit quantization (shapes: torch.Size([128, 1536, 2048]), torch.Size([128, 2048, 768]))
+Loading weights:   0%|          | 0/531 [00:00<?, ?it/s]Loading weights:   1%|          | 4/531 [00:00<00:18, 27.86it/s]Loading weights:   3%|▎         | 15/531 [00:00<00:08, 63.01it/s]Loading weights:   5%|▍         | 26/531 [00:00<00:06, 76.33it/s]Loading weights:   7%|▋         | 37/531 [00:00<00:05, 83.20it/s]Loading weights:   9%|▉         | 48/531 [00:00<00:05, 87.19it/s]Loading weights:  11%|█         | 59/531 [00:00<00:05, 89.70it/s]Loading weights:  13%|█▎        | 70/531 [00:00<00:05, 91.24it/s]Loading weights:  15%|█▌        | 81/531 [00:00<00:04, 92.22it/s]Loading weights:  17%|█▋        | 92/531 [00:01<00:04, 93.04it/s]Loading weights:  19%|█▉        | 103/531 [00:01<00:04, 93.52it/s]Loading weights:  21%|██▏       | 114/531 [00:01<00:04, 93.57it/s]Loading weights:  24%|██▎       | 125/531 [00:01<00:04, 93.77it/s]Loading weights:  26%|██▌       | 136/531 [00:01<00:04, 94.05it/s]Loading weights:  28%|██▊       | 147/531 [00:01<00:04, 94.18it/s]Loading weights:  30%|██▉       | 158/531 [00:01<00:03, 94.31it/s]Loading weights:  32%|███▏      | 169/531 [00:01<00:03, 94.34it/s]Loading weights:  34%|███▍      | 180/531 [00:02<00:03, 94.47it/s]Loading weights:  36%|███▌      | 191/531 [00:02<00:03, 94.50it/s]Loading weights:  38%|███▊      | 202/531 [00:02<00:03, 94.31it/s]Loading weights:  40%|████      | 213/531 [00:02<00:03, 94.29it/s]Loading weights:  42%|████▏     | 224/531 [00:02<00:03, 94.36it/s]Loading weights:  44%|████▍     | 235/531 [00:02<00:03, 94.41it/s]Loading weights:  46%|████▋     | 246/531 [00:02<00:03, 94.47it/s]Loading weights:  48%|████▊     | 257/531 [00:02<00:02, 94.41it/s]Loading weights:  50%|█████     | 268/531 [00:02<00:02, 94.48it/s]Loading weights:  53%|█████▎    | 279/531 [00:03<00:02, 94.52it/s]Loading weights:  55%|█████▍    | 290/531 [00:03<00:02, 94.53it/s]Loading weights:  57%|█████▋    | 301/531 [00:03<00:02, 94.25it/s]Loading weights:  59%|█████▉    | 312/531 [00:03<00:02, 94.28it/s]Loading weights:  61%|██████    | 323/531 [00:03<00:02, 94.32it/s]Loading weights:  63%|██████▎   | 334/531 [00:03<00:02, 94.32it/s]Loading weights:  65%|██████▍   | 345/531 [00:03<00:01, 94.38it/s]Loading weights:  67%|██████▋   | 356/531 [00:03<00:01, 94.46it/s]Loading weights:  69%|██████▉   | 367/531 [00:03<00:01, 94.62it/s]Loading weights:  71%|███████   | 378/531 [00:04<00:01, 94.77it/s]Loading weights:  73%|███████▎  | 389/531 [00:04<00:01, 94.61it/s]Loading weights:  75%|███████▌  | 400/531 [00:04<00:01, 94.11it/s]Loading weights:  77%|███████▋  | 411/531 [00:04<00:01, 94.24it/s]Loading weights:  79%|███████▉  | 422/531 [00:04<00:01, 94.35it/s]Loading weights:  82%|████████▏ | 433/531 [00:04<00:01, 94.50it/s]Loading weights:  84%|████████▎ | 444/531 [00:04<00:00, 94.69it/s]Loading weights:  86%|████████▌ | 455/531 [00:04<00:00, 94.84it/s]Loading weights:  88%|████████▊ | 466/531 [00:05<00:00, 94.72it/s]Loading weights:  90%|████████▉ | 477/531 [00:05<00:00, 94.65it/s]Loading weights:  92%|█████████▏| 488/531 [00:05<00:00, 94.55it/s]Loading weights:  94%|█████████▍| 499/531 [00:05<00:00, 94.01it/s]Loading weights:  96%|█████████▌| 510/531 [00:05<00:00, 94.03it/s]Loading weights:  98%|█████████▊| 521/531 [00:05<00:00, 94.06it/s]Loading weights: 100%|██████████| 531/531 [00:05<00:00, 93.13it/s]
+[unsloth_zoo.log|INFO]Unsloth: Making `model.base_model.model.model` require gradients
+[unsloth_zoo.log|INFO]Unsloth: Registered output gradient hook on `model.base_model.model.model` input embeddings.
+Unsloth: Not an error, but could not optimize some PEFT modules.
+[]
+Unsloth: Will not compile SiglipEncoder since it looks like a vision encoder!
+Unsloth: Compiled module SiglipVisionEmbeddings.
+Unsloth: Compiled module SiglipTextEmbeddings.
+Unsloth: Compiled module SiglipMLP.
+Unsloth: Compiled module SiglipMultiheadAttentionPoolingHead.
+Unsloth: Fast Attention patch for SiglipAttention.
+Unsloth: Compiled function eager_attention_forward.
+Unsloth: Mega-cache loaded bundle for key 95af60474868367cdc6d03beefb9d8ff (14661297 bytes)
+No module named 'causal_conv1d' No module named 'causal_conv1d'
+Unsloth: Failed compiling causal_conv1d
+Unsloth: Failed compiling mamba_ssm
+Unsloth: Patching LoRA to make it faster
+Unsloth: Not an error, but could not optimize some PEFT modules.
+Unsloth: Not an error, but could not optimize some PEFT modules.
+[]
+Unsloth: Will compile Qwen3MoeSparseMoeBlock without fullgraph since output capture hooks run inside it.
+Unsloth: Compiled module Qwen3MoeMLP.
+Unsloth: Compiled module Qwen3MoeExperts.
+Unsloth: Compiled module Qwen3MoeTopKRouter.
+Unsloth: Compiled module Qwen3MoeSparseMoeBlock.
+Unsloth: Compiled module Qwen3MoeRMSNorm.
+Unsloth: Compiled module Qwen3MoeRotaryEmbedding.
+Unsloth: Fast Attention patch for Qwen3MoeAttention.
+(4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM
+(1) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM
+(4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM
+Unsloth: Compiled function rotate_half.
+Unsloth: Compiled function apply_rotary_pos_emb.
+Unsloth: Compiled function repeat_kv.
+Unsloth: Compiled function eager_attention_forward.
+Unsloth: Compiled function load_balancing_loss_func.
+==((====))==  Unsloth 2026.9.14: Fast Qwen3_MoE patching. Transformers: 5.5.0.
+   \\   /|    NVIDIA GeForce RTX 5090. Num GPUs = 1. Max memory: 31.358 GB. Platform: Linux.
+O^O/ \_/ \    Torch: 2.12.1+cu130. CUDA: 12.0. CUDA Toolkit: 13.0. Triton: 3.7.1
+\        /    Bfloat16 = TRUE. FA [Xformers = 0.0.35. FA2 = False]
+ "-____-"     Free license: http://github.com/unslothai/unsloth
+Unsloth: Explicit target_modules are constrained by the finetune_(vision|language|attention|mlp) filters; adapters attach only where both select.
+Unsloth: Detected MoE model with num_experts = 128 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']
+LOAD OK {"fam": "qwen3curve", "framework": "unsloth", "arm": "unsloth", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 16.7, "verify": {"n_quantized": null, "n_unquantized": null}, "n_attn4": 0, "n_patched": 0, "structural_expected_n_attn4": null, "detector_version": null, "trainable_params": 321257472, "trainable_tensors": 576, "trainable_by_group": {"attention": 6684672, "experts": 314572800, "other": 0}, "trainable_mismatch": null, "dtypes_before": {"torch.float32": 576}, "dtypes_after": {"torch.float32": 576}, "lora_cast_to_fp32": 0, "adapter_dtype": "fp32", "lora_init": "native", "matched_init": null, "frozen_base_probe": {"slots": {"gate_up": {"sha": "e2bed944143e4da4", "regime": "nf4/64+dq", "control_detects_flip": true}, "down": {"sha": "f2ade29dafdbc052", "regime": "nf4/64+dq", "control_detects_flip": true}, "q_proj": {"sha": "5c5e402ce51d389f", "regime": "nf4/64+dq", "control_detects_flip": true}}, "control_detects_flip": true, "errors": []}, "non_adapter_trainable": [], "census": {"Params4bit_expert_stacks": 96, "Params4bit_other": 192, "Linear4bit": 384, "Linear_bf16": 1, "Linear_fp32": 0, "Experts4bit": 0, "ExpertsLoRA": 0, "LoRALinear": 0, "experts_modules": 48, "experts_module_classes": {"Qwen3MoeExperts": 48}, "router_gate": [{"name": "base_model.model.model.layers.0.mlp.gate", "cls": "Qwen3MoeTopKRouter", "dtype": "torch.bfloat16"}, {"name": "base_model.model.model.layers.1.mlp.gate", "cls": "Qwen3MoeTopKRouter", "dtype": "torch.bfloat16"}], "lm_head": {"cls": "Linear", "dtype": "torch.bfloat16"}}, "tokenizer_agree": true, "ckpt": "unsloth", "probes": {}, "attn4_probe": null}
+ENGAGE Unsloth: Will compile Qwen3MoeSparseMoeBlock without fullgraph since output capture hooks run inside it.
+ENGAGE Unsloth: Compiled module Qwen3MoeMLP.
+ENGAGE Unsloth: Compiled module Qwen3MoeExperts.
+ENGAGE Unsloth: Compiled module Qwen3MoeTopKRouter.
+ENGAGE Unsloth: Compiled module Qwen3MoeSparseMoeBlock.
+ENGAGE Unsloth: Compiled module Qwen3MoeRMSNorm.
+ENGAGE Unsloth: Compiled module Qwen3MoeRotaryEmbedding.
+ENGAGE Unsloth: Fast Attention patch for Qwen3MoeAttention.
+ENGAGE (4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM
+ENGAGE (1) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM
+ENGAGE (4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM
+ENGAGE ==((====))==  Unsloth 2026.9.14: Fast Qwen3_MoE patching. Transformers: 5.5.0.
+ENGAGE Unsloth: Detected MoE model with num_experts = 128 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:5429: UserWarning: 'has_cuda' is deprecated, please use 'torch.backends.cuda.is_built()'
+  return original(name)
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:5429: UserWarning: 'has_cudnn' is deprecated, please use 'torch.backends.cudnn.is_available()'
+  return original(name)
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:5429: UserWarning: 'has_mps' is deprecated, please use 'torch.backends.mps.is_built()'
+  return original(name)
+/root/tc1/venv-unsloth/lib/python3.11/site-packages/unsloth/import_fixes.py:5429: UserWarning: 'has_mkldnn' is deprecated, please use 'torch.backends.mkldnn.is_available()'
+  return original(name)
+Unsloth: Compiling kernels: 0it [00:00, ?it/s]Unsloth: Compiling kernels: 0it [00:00, ?it/s]
+Unsloth: Compiling kernels: 0it [00:00, ?it/s]Unsloth: Compiling kernels: 0it [00:00, ?it/s]
+Unsloth: Compiling kernels: 0it [00:00, ?it/s]Unsloth: Compiling kernels: 0it [00:00, ?it/s]
+Unsloth: Compiling kernels: 0it [00:00, ?it/s]Unsloth: Compiling kernels: 0it [00:00, ?it/s]
+Unsloth: Compiling kernels: 0it [00:00, ?it/s]Unsloth: Compiling kernels: 0it [00:00, ?it/s]
+Unsloth: Compiling kernels: 0it [00:00, ?it/s]Unsloth: Compiling kernels: 0it [00:00, ?it/s]
+[unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 2676.65it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 2992.72it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s, triton_red_fused__to_copy_prepare_softmax_online_0]Unsloth: Compiling kernels:  14%|█▍        | 1/7 [00:00<00:00, 3412.78it/s, triton_per_fused__to_copy_prepare_softmax_online_1]Unsloth: Compiling kernels:  29%|██▊       | 2/7 [00:00<00:00, 3288.36it/s, triton_red_fused__to_copy_prepare_softmax_online_2]Unsloth: Compiling kernels:  43%|████▎     | 3/7 [00:00<00:00, 3650.40it/s, triton_per_fused__to_copy_prepare_softmax_online_3]Unsloth: Compiling kernels:  57%|█████▋    | 4/7 [00:00<00:00, 3696.24it/s, triton_red_fused__log_softmax__to_copy_add_copy__div_nll_loss_forward_4]Unsloth: Compiling kernels:  71%|███████▏  | 5/7 [00:00<00:00, 3808.85it/s, triton_red_fused__log_softmax__log_softmax_backward_data__to_copy_arange_div_eq_expand_nll_loss_backward_ones_like_scalar_tensor_view_5]Unsloth: Compiling kernels:  86%|████████▌ | 6/7 [00:00<00:00, 3949.44it/s, triton_poi_fused_copy__6]                                                                                                               Unsloth: Compiling kernels: 100%|██████████| 7/7 [00:00<00:00, 3931.46it/s, triton_poi_fused_copy__6]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+PROLOGUE {"phase_seconds": {"preamble": 1.899, "snapshot": 0.0, "load_weights": 11.826, "census": 0.425, "frozen_probe": 0.043, "trainable_sha": 0.632, "counters": 0.016, "c1_before": 26.568, "eval0": 5.71, "optimizer": 0.182}, "phase_budget_s": 630.0, "prologue_s": 52.177, "prologue_unattributed_s": 4.877}
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_poi_fused__to_copy_bmm_cat_cos_expand_sin_transpose_unsqueeze_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00, 1875.81it/s, triton_poi_fused__to_copy_bmm_cat_cos_expand_sin_transpose_unsqueeze_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  7.12it/s, triton_red_fused__to_copy_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  7.11it/s, triton_red_fused__to_copy_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_red_fused__to_copy_add_div_expand_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  7.96it/s, triton_red_fused__to_copy_add_div_expand_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  7.95it/s, triton_red_fused__to_copy_add_div_expand_mul_pow_sum_0]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/7 [00:00<?, ?it/s, triton_red_fused__to_copy_prepare_softmax_online_0]Unsloth: Compiling kernels:  14%|█▍        | 1/7 [00:00<00:00, 3659.95it/s, triton_per_fused__to_copy_prepare_softmax_online_1]Unsloth: Compiling kernels:  29%|██▊       | 2/7 [00:00<00:00, 3509.88it/s, triton_red_fused__to_copy_prepare_softmax_online_2]Unsloth: Compiling kernels:  43%|████▎     | 3/7 [00:00<00:00, 3844.46it/s, triton_per_fused__to_copy_prepare_softmax_online_3]Unsloth: Compiling kernels:  57%|█████▋    | 4/7 [00:00<00:00, 3880.92it/s, triton_red_fused__log_softmax__to_copy_add_copy__div_nll_loss_forward_4]Unsloth: Compiling kernels:  71%|███████▏  | 5/7 [00:00<00:00, 4016.76it/s, triton_red_fused__log_softmax__log_softmax_backward_data__to_copy_arange_div_eq_expand_nll_loss_backward_ones_like_scalar_tensor_view_5]Unsloth: Compiling kernels:  86%|████████▌ | 6/7 [00:00<00:00, 4188.02it/s, triton_poi_fused_copy__6]                                                                                                               Unsloth: Compiling kernels: 100%|██████████| 7/7 [00:00<00:00, 4182.95it/s, triton_poi_fused_copy__6]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.84it/s, triton_per_fused__to_copy_mean_mul_pow_rsqrt_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.84it/s, triton_per_fused__to_copy_mean_mul_pow_rsqrt_0]
+Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/1 [00:00<?, ?it/s, triton_per_fused__to_copy_add_div_expand_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.96it/s, triton_per_fused__to_copy_add_div_expand_mul_pow_sum_0]Unsloth: Compiling kernels: 100%|██████████| 1/1 [00:00<00:00,  3.96it/s, triton_per_fused__to_copy_add_div_expand_mul_pow_sum_0]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  7.52it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  7.52it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 13.23it/s, triton_poi_fused_add_cat_mul_neg_slice_unsqueeze_1]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_poi_fused_add_mul_neg_slice_slice_backward_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  8.28it/s, triton_poi_fused_add_mul_neg_slice_slice_backward_unsqueeze_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00,  8.28it/s, triton_poi_fused_add_mul_neg_slice_slice_backward_unsqueeze_1]Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 11.67it/s, triton_poi_fused_add_mul_neg_slice_slice_backward_unsqueeze_1]
+Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/2 [00:00<?, ?it/s, triton_per_fused__softmax__to_copy_prepare_softmax_online_0]Unsloth: Compiling kernels:  50%|█████     | 1/2 [00:00<00:00, 2486.25it/s, triton_red_fused_div_sum_1]                       Unsloth: Compiling kernels: 100%|██████████| 2/2 [00:00<00:00, 3199.32it/s, triton_red_fused_div_sum_1]
+Unsloth: Compiling kernels:   0%|          | 0/3 [00:00<?, ?it/s]Unsloth: Compiling kernels:   0%|          | 0/3 [00:00<?, ?it/s, triton_poi_fused_add_div_expand_new_zeros_scatter_0]Unsloth: Compiling kernels:  33%|███▎      | 1/3 [00:00<00:00, 3477.86it/s, triton_red_fused_add_div_expand_mul_neg_new_zeros_scatter_sum_1]Unsloth: Compiling kernels:  67%|██████▋   | 2/3 [00:00<00:00, 3840.94it/s, triton_per_fused__softmax_backward_data__to_copy_add_2]         Unsloth: Compiling kernels: 100%|██████████| 3/3 [00:00<00:00, 3703.03it/s, triton_per_fused__softmax_backward_data__to_copy_add_2]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+    step 10/60 loss 1.43273 1088.1 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96, 'unsloth_grouped_mm': 96, 'unsloth_triton': 0, 'unsloth_loop': 0, 'torch_grouped_mm': 672, 'torch_F_grouped_mm': 0, 'manual_grouped_mm': 0, 'lora_path_loop': 0, 'lora_path_padded': 0, 'lora_path_grouped_mm': 0}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=92][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+    step 20/60 loss 0.63866 1102.3 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96, 'unsloth_grouped_mm': 96, 'unsloth_triton': 0, 'unsloth_loop': 0, 'torch_grouped_mm': 672, 'torch_F_grouped_mm': 0, 'manual_grouped_mm': 0, 'lora_path_loop': 0, 'lora_path_padded': 0, 'lora_path_grouped_mm': 0}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+    eval@20 heldout 0.60647 train_wall 26.2s
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+    step 30/60 loss 0.36671 1091.8 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96, 'unsloth_grouped_mm': 96, 'unsloth_triton': 0, 'unsloth_loop': 0, 'torch_grouped_mm': 672, 'torch_F_grouped_mm': 0, 'manual_grouped_mm': 0, 'lora_path_loop': 0, 'lora_path_padded': 0, 'lora_path_grouped_mm': 0}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=78][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=94][vocab_size=151936][n_chunks=1]
+    step 40/60 loss 0.34664 1097.5 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96, 'unsloth_grouped_mm': 96, 'unsloth_triton': 0, 'unsloth_loop': 0, 'torch_grouped_mm': 672, 'torch_F_grouped_mm': 0, 'manual_grouped_mm': 0, 'lora_path_loop': 0, 'lora_path_padded': 0, 'lora_path_grouped_mm': 0}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+    eval@40 heldout 0.36254 train_wall 48.1s
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=84][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=94][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=90][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=92][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=93][vocab_size=151936][n_chunks=1]
+    step 50/60 loss 0.36581 1102.9 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96, 'unsloth_grouped_mm': 96, 'unsloth_triton': 0, 'unsloth_loop': 0, 'torch_grouped_mm': 672, 'torch_F_grouped_mm': 0, 'manual_grouped_mm': 0, 'lora_path_loop': 0, 'lora_path_padded': 0, 'lora_path_grouped_mm': 0}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=94][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=91][vocab_size=151936][n_chunks=1]
+    step 60/60 loss 0.26645 1089.9 ms kcalls {'fused_grouped_lora': 0, 'experts_forward': 96, 'moe_bnb4bit_backend': 96, 'unsloth_grouped_mm': 96, 'unsloth_triton': 0, 'unsloth_loop': 0, 'torch_grouped_mm': 672, 'torch_F_grouped_mm': 0, 'manual_grouped_mm': 0, 'lora_path_loop': 0, 'lora_path_padded': 0, 'lora_path_grouped_mm': 0}
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=85][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=86][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=88][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=80][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=87][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=82][vocab_size=151936][n_chunks=1]
+[unsloth_zoo.log|INFO]Fused CE Loss [bsz=1][qlen=81][vocab_size=151936][n_chunks=1]
+    eval@60 heldout 0.30532 train_wall 69.9s
+CELL OK {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_p38", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "micro_batch": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": false, "optimizer": "adamw_torch(lr=0.0001, weight_decay=0.01) schedule=constant warmup_steps=0", "template": "clinical", "grad_ckpt": "unsloth", "attn_4bit": false, "n_attn4": 0, "attn4_probe": null, "structural_expected_n_attn4": null, "detector_version": null, "loader_used": "FastLanguageModel", "loader_fallback_reason": null, "unsloth_targets": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], "hf_targets": null, "axolotl_targets": null, "axolotl": null, "hf_experts_implementation": null, "hf_double_quant": null, "axolotl_bnb4bit_modules": null, "unsloth_knobs": {"moe_backend_requested": "grouped_mm", "speed_tilt": false, "double_quant_requested": "default", "env_set": {"UNSLOTH_MOE_BACKEND": "grouped_mm"}}, "moe_backend_selected": "grouped_mm", "unsloth_double_quant": {"requested": null, "how": "loader default (not requested)", "loaded_nested": true}, "unsloth_backend_calls_per_step_min": {"unsloth_grouped_mm": 96, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 96}, "unsloth_backend_calls_per_step_max": {"unsloth_grouped_mm": 96, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 96}, "unsloth_backend_absent": [], "tokens": {"path": "tokens_qwen3curve_p38.json", "sha256": "cb4f505d61ef3b485fddaf0d31e57197d79c7c6b2728467f5d56565f42355fc5", "n_train": 1200, "eval_rows_used": 8, "tokenizer_agree": true, "pad_id": 151643}, "prereg": "tc1/TC1B-PREREG.md", "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader)", "load_s": 16.7, "phase_seconds": {"preamble": 1.899, "snapshot": 0.0, "load_weights": 11.826, "census": 0.425, "frozen_probe": 0.043, "trainable_sha": 0.632, "counters": 0.016, "c1_before": 26.568, "eval0": 5.71, "optimizer": 0.182, "c1_after": 13.217, "adapter_save": 0.497}, "phase_budget_s": 630.0, "prologue_s": 52.177, "prologue_unattributed_s": 4.877, "verify": {"n_quantized": null, "n_unquantized": null}, "engagement_banners": ["Unsloth: Will compile Qwen3MoeSparseMoeBlock without fullgraph since output capture hooks run inside it.", "Unsloth: Compiled module Qwen3MoeMLP.", "Unsloth: Compiled module Qwen3MoeExperts.", "Unsloth: Compiled module Qwen3MoeTopKRouter.", "Unsloth: Compiled module Qwen3MoeSparseMoeBlock.", "Unsloth: Compiled module Qwen3MoeRMSNorm.", "Unsloth: Compiled module Qwen3MoeRotaryEmbedding.", "Unsloth: Fast Attention patch for Qwen3MoeAttention.", "(4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM", "(1) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM", "(4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM", "==((====))==  Unsloth 2026.9.14: Fast Qwen3_MoE patching. Transformers: 5.5.0.", "Unsloth: Detected MoE model with num_experts = 128 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']"], "unsloth_bnb4bit_modules": {"n_experts_modules": 48, "n_bnb4bit": 0, "n_bnb4bit_unwrapped": 48, "inner_param_types": ["Params4bit"], "wrap_depth": 2}, "trainable_params": 321257472, "trainable_tensors": 576, "trainable_by_group": {"attention": 6684672, "experts": 314572800, "other": 0}, "expect_trainable": 321257472, "trainable_mismatch": null, "adapter_dtypes_before": {"torch.float32": 576}, "adapter_dtypes_after": {"torch.float32": 576}, "lora_cast_to_fp32": 0, "init_sha": "83332aed4cb565b9b2a2e0f2834beec231e4f12f59bf8187cdc635e51e30b82f", "n_patched": 0, "enable_reason": "", "probes": {}, "adapter_dtype": "fp32", "lora_init": "native", "matched_init": null, "frozen_base_probe": {"slots": {"gate_up": {"sha": "e2bed944143e4da415e69e1a3a9a89fb09ba88cb0361a306de6a39f2990c6579", "regime": "nf4/64+dq", "n_bytes": 6291456, "shape": [1536, 2048], "dtype": "bf16", "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16", "source": "gate_up_proj[0]", "control_sha": "d150bcf1e860a3fe197eb5195ac4a3ddce070394056a9fa4d39097649bb522a1", "control_detects_flip": true, "mapped_by": "structure: in == hidden"}, "down": {"sha": "f2ade29dafdbc0528e30577b57ad75076bbad5cc82e849f8d0a36a5387b4bb7d", "regime": "nf4/64+dq", "n_bytes": 3145728, "shape": [2048, 768], "dtype": "bf16", "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16", "source": "down_proj[0]", "control_sha": "aa56e49752308955ff0b2555c0adbb71034fa2f6a3c8614d8892fafb3ecfb07d", "control_detects_flip": true, "mapped_by": "structure: out == hidden"}, "q_proj": {"sha": "5c5e402ce51d389ff36c75dd525bac8779c0943e9ce3982e6b8e3b5ff30dfdc6", "regime": "nf4/64+dq", "n_bytes": 16777216, "shape": [4096, 2048], "dtype": "bf16", "method": "bnb dequantize_4bit(weight, own quant_state) -> bf16", "source": "q_proj.weight", "control_sha": "a2f40bdf8c6e9cf29ca3e9d8a723d7fe81b84f98b981c3a1eb1c904f689e29ea", "control_detects_flip": true}}, "control_detects_flip": true, "experts_module": "base_model.model.model.layers.0.mlp.experts", "attention_module": "base_model.model.model.layers.0.self_attn", "errors": []}, "batched_stats": null, "reference_order": null, "dgrad": null, "kernel_counter_key": "moe_bnb4bit_backend", "kernel_calls_per_step_min": 96, "experts_forward_calls_per_step_min": 96, "C1_tensors_hashed": 288, "C1_bytes_hashed": 14948499456, "C1_empties_skipped": 0, "C1_control_detects_flipped_byte": true, "C1_control_tensor": "base_model.model.model.layers.0.mlp.experts.base_layer.base_layer.down_proj", "C1_regime_by_tensor": {"nf4/64+dq": 288}, "C1_hasher": "hashes_frozen: every frozen expert / 4-bit tensor, any dtype (params + buffers)", "C1_experts_changed": 0, "C1_bit_exact": true, "C1_changed_sample": [], "loss_first": 3.61153, "loss_last": 0.26645, "loss_mean_last20": 0.32717, "loss_step2": 3.09729, "eval_loss_step0": 3.76057, "eval_loss_final": 0.30532, "matched_init_sha": "9dece81250aac08574988610c05ee403ff825526ec3b3d1aeabf0e5905670c39", "matched_init_sha_slots": 12480, "matched_init_sha_unmapped": 0, "lora_path_present": true, "lora_path_loop_steps": [], "unsloth_grouped_mm_calls_per_step_min": 672, "unsloth_grouped_mm_calls_per_step_max": 672, "unsloth_manual_grouped_mm_calls_per_step_max": 0, "arm_facts": {"attn_implementation": "sdpa", "output_router_logits": false, "loss_class": "model.forward(input_ids, labels[, attention_mask]).loss -- the model's own loss; the harness computes none", "torch_num_threads": 24, "omp_num_threads": "24", "cpu_model": "13th Gen Intel(R) Core(TM) i9-13900", "lora_delta_dtype": "the activation dtype: unsloth_zoo moe_utils.py:3875 casts the fp32 factors to the activation dtype per forward (UPSTREAM-NOTES; UNVERIFIED against installed source)", "unsloth_zoo": "2026.9.9", "unsloth_zoo_note": "unsloth_zoo main's #1529 is not in the 2026.9.9 release (phase-3 instruction; not verified here)"}, "s_per_step": 1.3037, "s_per_step_median_11plus": 1.0953, "log_every": 10, "microbatch_timing": false, "train_wall_s": 69.94, "window_wall_s": 78.22, "tokens_total": 5175, "tokens_per_s": 74.0, "tokens_padded_total": 0, "peak_vram_gb": 23.191, "idle_w": 49.0, "mean_w": 208.3, "power_samples": 356, "sampler": true, "joules_per_step": 185.58, "adapter": {"path": "/root/tc1/adapters/qwen3curve_ckpt_unsloth_p38", "bytes": 1285116314, "files": ["README.md", "adapter_config.json", "adapter_model.safetensors"], "tensors": 576, "params": 321257472, "dtypes": ["F32"]}, "profile": null, "profile_steps": 0, "profile_warm": 3, "note": "tp4's anchor arm EXCEPT the venv: venv-unsloth (unsloth[cu130-torch2121], torch 2.12.1+cu130) with UNSLOTH_MOE_BACKEND=grouped_mm; tp4 ran venv-unsloth-t28 (torch 2.8.0+cu128) with the loader-default backend -- ckpt_unsloth_p38_t28 is that arm"}
+Unsloth: Mega-cache merged 27 artifact(s) from the existing bundle
+Unsloth: Mega-cache saved bundle for key 95af60474868367cdc6d03beefb9d8ff (18342443 bytes)

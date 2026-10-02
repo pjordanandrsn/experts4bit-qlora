@@ -1,0 +1,14 @@
+{
+ "framework": "hf",
+ "fam": "qwen3native",
+ "arm": "hf",
+ "tag": "hf_peft_m_mb1_t214",
+ "status": "not_run",
+ "reason": "runs only when the judged family's hf/hf_peft_m on this box OOMed; its status here is 'missing'",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "written_by": "tc1_run.sh",
+ "prereg": "tc1/TC1-PREREG.md"
+}

@@ -1,6 +1,6 @@
 {
   "package": "experts4bit-qlora",
-  "generated": "2026-10-01",
+  "generated": "2026-10-02",
   "schema": "docs/claims-schema.md",
   "status_vocabulary": {
     "verified": "reproduced under stated conditions with a public receipt",
@@ -5002,11 +5002,11 @@
       "value": 4.49,
       "unit": "ratio s/step Unsloth/e4b (median of steps 11..20; > 1 = e4b faster per step)",
       "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
-      "notes": "The single rule that moved it is grouped-nf4-gemm 0.32.1's structural padding guard on the grouped-LoRA delta (P46). Quoted because both arms are VALID and the internal parity control passes; a fast arm failing that control is not a position. The secondary micro-batch-1 pair, run because the HF arm OOMed, reads 5.024 the same way.",
+      "notes": "The single rule that moved it is grouped-nf4-gemm 0.32.1's structural padding guard on the grouped-LoRA delta (P46). Quoted because both arms are VALID and the internal parity control passes; a fast arm failing that control is not a position. The secondary micro-batch-1 pair, run because the HF arm OOMed, reads 5.024 the same way. SUPERSEDED 2026-10-02 by lane TC1 (e4b.train.h2h.unsloth.qwen3.5090.2026-10-02): this row's Unsloth arm ran on torch 2.8.0+cu128, where torch._grouped_mm is sm_90-only and Unsloth's loader silently selects its per-expert native_torch loop; at matched work with Unsloth's grouped_mm backend engaged (torch 2.12.1+cu130) the ratio is 1.437, not 4.490.",
       "package": "experts4bit-qlora",
       "area": "train",
       "measured_on": "2026-09-19",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "hardware": "RTX 5090 (sm_120), rented hosts (vast 51566878 / 51580462); torch 2.8.0+cu128, grouped-nf4-gemm pinned at the v0.32.1 release commit 9206352f",
       "conditions": "bench/tp4 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20; s/step is the median over steps 11+; validity, quoting and quality rules applied by bench/tp4/tp4_reduce.py",
@@ -5019,7 +5019,8 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-19/tp4-b-p46cut-4/tp4/",
         "receipts/experts4bit-qlora/2026-09-19/tp4-b-p46cut-A/tp4/"
-      ]
+      ],
+      "superseded_by": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02"
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-09-19.quality-n20",
@@ -5030,7 +5031,7 @@
       "package": "experts4bit-qlora",
       "area": "train",
       "measured_on": "2026-09-19",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "hardware": "RTX 5090 (sm_120), rented hosts (vast 51566878 / 51580462); torch 2.8.0+cu128, grouped-nf4-gemm pinned at the v0.32.1 release commit 9206352f",
       "conditions": "bench/tp4 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20; s/step is the median over steps 11+; validity, quoting and quality rules applied by bench/tp4/tp4_reduce.py",
@@ -5043,7 +5044,9 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-19/tp4-b-p46cut-4/tp4/",
         "receipts/experts4bit-qlora/2026-09-19/tp4-b-p46cut-A/tp4/"
-      ]
+      ],
+      "superseded_by": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.quality-n20",
+      "notes": " SUPERSEDED 2026-10-02 by lane TC1 (e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.quality-n20): this row's Unsloth arm ran on torch 2.8.0+cu128, where torch._grouped_mm is sm_90-only and Unsloth's loader silently selects its per-expert native_torch loop; at matched work with Unsloth's grouped_mm backend engaged (torch 2.12.1+cu130) the ratio is 1.437, not 4.490."
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-09-19.e4b-internal-parity",
@@ -5054,7 +5057,7 @@
       "package": "experts4bit-qlora",
       "area": "train",
       "measured_on": "2026-09-19",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "hardware": "RTX 5090 (sm_120), rented hosts (vast 51566878 / 51580462); torch 2.8.0+cu128, grouped-nf4-gemm pinned at the v0.32.1 release commit 9206352f",
       "conditions": "bench/tp4 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20; s/step is the median over steps 11+; validity, quoting and quality rules applied by bench/tp4/tp4_reduce.py",
@@ -5067,7 +5070,9 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-19/tp4-b-p46cut-4/tp4/",
         "receipts/experts4bit-qlora/2026-09-19/tp4-b-p46cut-A/tp4/"
-      ]
+      ],
+      "superseded_by": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.e4b-internal-parity",
+      "notes": " SUPERSEDED 2026-10-02 by lane TC1 (e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.e4b-internal-parity): this row's Unsloth arm ran on torch 2.8.0+cu128, where torch._grouped_mm is sm_90-only and Unsloth's loader silently selects its per-expert native_torch loop; at matched work with Unsloth's grouped_mm backend engaged (torch 2.12.1+cu130) the ratio is 1.437, not 4.490."
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-09-19.secondary-mb1",
@@ -5078,7 +5083,7 @@
       "package": "experts4bit-qlora",
       "area": "train",
       "measured_on": "2026-09-19",
-      "status": "measured",
+      "status": "superseded",
       "tier": "measured",
       "hardware": "RTX 5090 (sm_120), rented hosts (vast 51566878 / 51580462); torch 2.8.0+cu128, grouped-nf4-gemm pinned at the v0.32.1 release commit 9206352f",
       "conditions": "bench/tp4 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20; s/step is the median over steps 11+; validity, quoting and quality rules applied by bench/tp4/tp4_reduce.py",
@@ -5091,7 +5096,9 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-09-19/tp4-b-p46cut-4/tp4/",
         "receipts/experts4bit-qlora/2026-09-19/tp4-b-p46cut-A/tp4/"
-      ]
+      ],
+      "superseded_by": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.secondary-mb1",
+      "notes": " SUPERSEDED 2026-10-02 by lane TC1 (e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.secondary-mb1): this row's Unsloth arm ran on torch 2.8.0+cu128, where torch._grouped_mm is sm_90-only and Unsloth's loader silently selects its per-expert native_torch loop; at matched work with Unsloth's grouped_mm backend engaged (torch 2.12.1+cu130) the ratio is 1.437, not 4.490."
     },
     {
       "id": "e4b.train.h2h.unsloth.granite.5090.2026-09-19.arm.e4b.fused_attn4",
@@ -7683,6 +7690,536 @@
         "receipts/experts4bit-qlora/2026-10-02/p96-prove-1/ (receipt.json, the proving run)"
       ],
       "notes": "Pre-registered in #870 under the windowed gate P95 (#866) named. Six of the 24 single windows exceed 0.05 (up to -0.150 on an OLMoE c4val1 window at ppl 29.5, -0.5 % relative), so a single-window gate would have failed this change; the windowed means are near zero (95 % intervals +-0.033 / +-0.064 / +-0.064 / +-0.021). P94's single-window QUALITY_FAIL stands under its own rule; this lane is the default's licence."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1 (#835), 2026-10-02, one rented RTX 5090: Qwen3-30B-A3B at the tp4 field recipe with the work MATCHED -- the same 642,514,944 trainable parameters, one per-slot LoRA A init in both frameworks, fp32 adapters in both, the same tokens -- and Unsloth 2026.9.14 on torch 2.12.1+cu130 with its grouped_mm backend ENGAGED on every step: e4b's fused path (enable_fast_train(dgrad=True) + NF4 attention) takes 5.688 s/step against Unsloth's 8.171 (medians of two interleaved draws each: 5.692 / 5.683 and 8.160 / 8.183, both STABLE within 0.3 %) -- Unsloth/e4b 1.437 with the cross-draw interval [1.434, 1.440]; 265.2 vs 176.4 tokens/s. Quoted beside it, in Unsloth's favour: peak VRAM 24.27 vs e4b's 27.83 GB (-3.57 GB) and 660.7 vs 921.3 J/step (x0.72). Held-out at N=20 EQUIVALENT (.quality-n20); e4b's parity control PASSES on the same box (.e4b-internal-parity). This row SUPERSEDES the 2026-09-19 position (4.490): that Unsloth arm ran on torch 2.8, where torch._grouped_mm is sm_90-only and Unsloth's loader silently takes its per-expert loop -- the standing comparison was e4b's fused kernel against Unsloth's fallback (TC1 P1, registered band [2.0, 5.0], below 1.5 refutes: FALSIFIED). On the same card class a torch-2.8 Unsloth still reads 6.565 x e4b (.loop-fallback-t28).",
+      "value": 1.437,
+      "unit": "ratio s/step Unsloth/e4b (medians of steps 11..20 over two draws each; > 1 = e4b faster per step); cross-draw interval [1.434, 1.440]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53773622, AMD Threadripper PRO 3975WX, driver 580.178.04); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (the route its installer names for Blackwell; torch._grouped_mm engaged)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/"
+      ],
+      "notes": "Both steps are host-bound on this card: the profiled matched arms read device-busy 0.480 (e4b; 141k device events, 753k CPU ops per step) vs 0.234 (Unsloth; 612k, 7.43M) -- the fused path records 4.3x fewer device events and 9.9x fewer CPU-side ops per step, which is where the gap is. The absolute s/step does NOT travel between 5090 hosts (the same e4b arm: 3.16 / 5.69 / 9.34 s on three hosts); the within-box ratio does (1.42-1.44). Unsloth's expert stacks are double-quantised (its loader exposes no knob) while e4b's are not; the attention projections are SAME-BYTES. e4b on the comparator's cu130 torch is 14 % faster per step (.e4b-t212) and is not the quoted side.",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-19"
+      ],
+      "quoted_in": [
+        "docs/STATUS.md",
+        "docs/solutions/qlora-fused-moe-experts.md"
+      ]
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.quality-n20",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02: at matched work the two primary arms' held-out losses at N=20 are EQUIVALENT -- e4b fused_attn4_m 0.8516 / 0.8487 (two draws) vs Unsloth ckpt_unsloth_m 0.8482 / 0.8476, paired delta -0.0034 +- 0.0028 SE over 8 rows, median per-step |delta train| 0.0011; the EQUIVALENT band is 0.0123 (3 x the in-draw fused-vs-reference |delta|; floor 0.005) and the draw-noise floor 0.0030; step-0 delta 0.0078 (SAME-BYTES-CLASS: the two quantisers on the same bytes, B=0). The second e4b draw sits inside the draw noise of the first.",
+      "value": -0.0034,
+      "unit": "|delta held-out loss| at N=20 in nats, Unsloth minus e4b (0.8482 vs 0.8516, first draws; EQUIVALENT under the registered band)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53773622, AMD Threadripper PRO 3975WX, driver 580.178.04); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (the route its installer names for Blackwell; torch._grouped_mm engaged)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/"
+      ],
+      "notes": "",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-19.quality-n20"
+      ]
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.e4b-internal-parity",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02: e4b's fused_attn4_m (fused dgrad + NF4 attention) against its own reference_attn4_m (per-expert loop + NF4 attention) on the same box, matched init and fp32 adapters in both: |delta final train loss| 0.00041, median step-wise |delta| 0.00141 against the 0.05 band -- PASS; the fused arm is x10.39 faster per step (5.692 vs 59.171 s) at x1.03 the reference's peak VRAM (27.85 vs 27.10 GB); C1 bit-exact in both arms with the real-storage flip control detecting.",
+      "value": 0.00041,
+      "unit": "|delta final train loss| fused vs reference, nats (band 0.05)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53773622, AMD Threadripper PRO 3975WX, driver 580.178.04); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (the route its installer names for Blackwell; torch._grouped_mm engaged)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/"
+      ],
+      "notes": "",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-19.e4b-internal-parity"
+      ]
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.secondary-mb1",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02: the secondary pair (micro-batch 1 x accum 8, the same tokens per step; run because the HF arm OOMed) reads Unsloth/e4b 1.725 (15.021 vs 8.706 s/step, single draws, both VALID, held-out delta -0.0054 COMPARABLE); peak VRAM 24.24 vs 26.42 GB, 1120 vs 948 J/step.",
+      "value": 1.725,
+      "unit": "ratio s/step Unsloth/e4b at micro-batch 1 x accum 8 (single draws)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53773622, AMD Threadripper PRO 3975WX, driver 580.178.04); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (the route its installer names for Blackwell; torch._grouped_mm engaged)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/"
+      ],
+      "notes": "",
+      "supersedes": [
+        "e4b.train.h2h.unsloth.qwen3.5090.2026-09-19.secondary-mb1"
+      ]
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.loop-fallback-t28",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02, the native box: the SAME Unsloth 2026.9.14 install on the field image's torch 2.8.0+cu128 (tp4's venv, the loader-default backend) selects native_torch -- the per-expert Python loop, 96 loop calls per step -- and takes 61.295 s/step against e4b's matched arm's 9.336 on that host: 6.565 x, at 23.9 tok/s and 3885 J/step, with the same held-out at N (0.8471 vs 0.8481). This is the configuration the superseded 4.490 position measured; on a torch < 2.12 install Unsloth's grouped_mm backend never engages on sm_120.",
+      "value": 6.565,
+      "unit": "ratio s/step Unsloth(torch 2.8, native_torch loop)/e4b within the native box (single draws)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53773863, Intel Xeon E5-2698 v4, driver 595.71.05); e4b on torch 2.8.0+cu128; Unsloth on torch 2.12.1+cu130 (grouped_mm) and, for the t28 row, on torch 2.8.0+cu128 (native_torch loop)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-14/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-14/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.native-best",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02, the native box (single draws, each against the box's own arms): Unsloth at its native best (grouped_mm, its speed tilt, native init, fp32) takes 15.245 s/step; e4b as shipped by load_moe_4bit_streaming (bf16 expert adapters, N(0,1/r) init) 6.267 -- 2.433 x with both frameworks at their own defaults, held-out 0.8467 vs 0.8108 at N=20; against e4b's MATCHED arm on the same box (9.336 s) Unsloth's native best reads 1.633 (P7's >= 2 FALSIFIED). Reported beside the matched position, never instead of it.",
+      "value": 2.433,
+      "unit": "ratio s/step Unsloth native-best / e4b as shipped within the native box (single draws)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53773863, Intel Xeon E5-2698 v4, driver 595.71.05); e4b on torch 2.8.0+cu128; Unsloth on torch 2.12.1+cu130 (grouped_mm) and, for the t28 row, on torch 2.8.0+cu128 (native_torch loop)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-14/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-14/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.shipped-vs-matched",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02, the native box: e4b as shipped (bf16 expert adapters, N(0,1/r) init) against e4b's matched arm (fp32 adapters, the PEFT-distribution init) on the same box: 6.267 vs 9.336 s/step (1.49 x faster), peak 24.58 vs 27.85 GB, 843 vs 1255 J/step, held-out at N=20 0.8108 vs 0.8481 (0.037 LOWER). TC1b's 200-step curves (.curve-n200, .plateau-shipped-n200) put the as-shipped arm ABOVE the matched one from step 40 on; the two instruments disagree early and agree from step 80. P4 (1.05-1.3 x and >= 0.01 lower) FALSIFIED on the speed half.",
+      "value": 0.671,
+      "unit": "ratio s/step e4b shipped / e4b matched within the native box (single draws)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53773863, Intel Xeon E5-2698 v4, driver 595.71.05); e4b on torch 2.8.0+cu128; Unsloth on torch 2.12.1+cu130 (grouped_mm) and, for the t28 row, on torch 2.8.0+cu128 (native_torch loop)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-14/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-14/tc1/"
+      ],
+      "notes": "The matched set's fp32 adapters are a design choice of the comparison, not e4b's default; the footprint rows in Unsloth's favour on the matched box (-3.57 GB, x0.72 J/step) close to parity at e4b's shipped precision (24.58 GB, 843 J/step on this box)."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.e4b-t212",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02, the native box: e4b + grouped-nf4-gemm installed into the comparator's venv (torch 2.12.1+cu130, triton 3.7.1) runs the matched arm at 8.069 s/step against 9.336 on the field image's torch 2.8.0+cu128 -- 0.864, 14 % faster per step, same peak (27.90 GB), held-out 0.8506 vs 0.8481 (COMPARABLE; no in-box reference on that box). One draw, one host; the quoted position keeps e4b on torch 2.8.",
+      "value": 0.864,
+      "unit": "ratio s/step e4b on torch 2.12.1+cu130 / e4b on torch 2.8.0+cu128, within the native box (single draws)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53773863, Intel Xeon E5-2698 v4, driver 595.71.05); e4b on torch 2.8.0+cu128; Unsloth on torch 2.12.1+cu130 (grouped_mm) and, for the t28 row, on torch 2.8.0+cu128 (native_torch loop)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-14/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-14/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.hf-oom",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02: plain transformers 5.18.0 + PEFT 0.21.2 + bitsandbytes 0.50.2 (the Linear-only quantizer leaves the expert stacks in bf16; target_parameters on them) OOMs on the 32 GB card at this recipe at micro-batch 2 x accum 4 and at micro-batch 1 x accum 8 (31.34 GB in use at a 20 MiB allocation, both). P5 HELD; no HF position on this card at this recipe. The HF arm on torch 2.14.0+cu130 with experts_implementation=grouped_mm at micro-batch 1 (the axolotl venv's transformers 5.17.0, box tc1-5090-20) OOMs at load the same way (31.35 GB in use).",
+      "value": 0,
+      "unit": "count of HF+PEFT arms that completed on the 32 GB card at this recipe (of 3: mb2, mb1, and mb1 on torch 2.14 with grouped_mm)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53773622, AMD Threadripper PRO 3975WX, driver 580.178.04); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (the route its installer names for Blackwell; torch._grouped_mm engaged)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-20/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-20/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.host-variance",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1, 2026-10-02: the SAME e4b matched arm (same code, same pins, 0 recompiles, OMP_NUM_THREADS = physical cores) takes 3.162 s/step on an i9-13900 host, 5.692 on a Threadripper PRO 3975WX host and 9.336 on a Xeon E5-2698 v4 host -- three rented RTX 5090 boxes of the same card class; Unsloth's matched arm tracks it (4.505 / 8.171 / --). The profiled pair shows why: device-busy 0.480 (e4b) and 0.234 (Unsloth) -- both steps are host-launch-bound on this card. Absolute s/step is a property of the host; the within-box ratio (1.425 / 1.437) is the quotable number. No cross-box ratio is quoted anywhere in the bundle.",
+      "value": 2.95,
+      "unit": "ratio of the slowest to the fastest host's s/step for the same e4b arm (9.336 / 3.162) across three RTX 5090 hosts",
+      "hardware": "three rented RTX 5090 (sm_120) Vast.ai verified/secure hosts: 53772765 (i9-13900), 53773622 (Threadripper PRO 3975WX), 53773863 (Xeon E5-2698 v4)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-14/RESULTS-tc1.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-15/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-14/tc1/",
+        "receipts/experts4bit-qlora/2026-10-01/tc1-5090-15/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.curve-n200",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1b (#835), 2026-10-02, one rented RTX 5090: with init, adapter precision, tokens and schedule matched, e4b's fused path and Unsloth's grouped_mm path produce the SAME held-out curve over 200 steps of the field recipe -- 16 held-out rows paired by row every 40 steps: 1.9607/1.9604 at 0, 0.7880/0.7885 at 40, 0.7709/0.7724 at 80, 0.7665/0.7669 at 120, 0.7626/0.7646 at 160, 0.7687/0.7688 at 200; largest paired |delta| 0.0020 (step 160) against the registered 0.02 band -- EQUIVALENT AT EVERY EVAL (TC1b P1 HELD); s/step over steps 11..200 3.162 vs 4.505 (1.425 within this box). This is the 200-step counterpart of the N=20 equivalence row and supersedes nothing: P38's 2026-09-05 curve (Unsloth's favour at tp2's clinical fixture) stands as a dated measurement on that fixture and those cuts.",
+      "value": 0.002,
+      "unit": "largest paired |delta held-out loss| over six evals to step 200, nats (band 0.02)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53772765, Intel i9-13900, driver 595.91.07); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (grouped_mm)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/TC1B-PREREG.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-15/RESULTS-tc1.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1b-vs-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-01/tc1-5090-15/tc1/"
+      ],
+      "notes": "",
+      "quoted_in": [
+        "docs/STATUS.md"
+      ]
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.plateau-shipped-n200",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1b, 2026-10-02: e4b as shipped by its loader (bf16 expert adapters, N(0,1/r) init) against e4b's matched arm (fp32, PEFT-distribution init) on the same box over 200 steps: 2.527 vs 3.162 s/step (1.25 x faster) and held-out 0.7945 vs 0.7687 at step 200 -- +0.0258 +- 0.0069 SE, 13 of 16 rows favouring the matched arm -- with the shipped curve above the matched one at every eval from 40 (+0.0014 at 40, +0.0032 at 80, +0.0009 at 120, +0.0045 at 160). The direction P38 reported against e4b, reproduced on e4b's own side with the comparator out of the picture: the loader's adapter defaults are the cause, not the kernel. Not P38's shape (no early lead; TC1b P2 FALSIFIED); the N=20 instrument reads the shipped arm 0.037 LOWER (.shipped-vs-matched).",
+      "value": 0.0258,
+      "unit": "delta held-out loss at step 200, e4b as shipped minus e4b matched, nats (positive = shipped worse)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53772765, Intel i9-13900, driver 595.91.07); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (grouped_mm)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/TC1B-PREREG.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-15/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-01/tc1-5090-15/tc1/"
+      ],
+      "notes": "Open item for load_moe_4bit_streaming's adapter defaults (fp32 expert adapters and PEFT's init as defaults, or documented); filed under the campaign, not changed by this bundle."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.anchor-p38-fixture",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1b, 2026-10-02: tp2/P38's fixture re-run byte-for-byte (clinical text sha cb4f505d61ef, seq 512, micro-batch 1 x accum 1, r 8 / alpha 16, lr 1e-4, torch AdamW wd 0.01, constant, seed 0, N 60, native init and precision): e4b fused_attn4 0.451 s/step; Unsloth on torch 2.12.1+cu130 grouped_mm 1.095 (2.428 x); Unsloth on torch 2.8 native_torch loop 2.322 (5.147 x); held-out at 60 0.2847 / 0.3053 / 0.2900 (COMPARABLE). Against tp2's 1.457 and P38's 1.413 (e4b 0.35.0 + grouped-nf4-gemm 0.30.0 vs Unsloth 2026.9.2): outside +-10 % both ways (TC1b P4 FALSIFIED) -- both frameworks moved between those cuts and these; the old anchors are dated measurements on their cuts, not current positions.",
+      "value": 2.428,
+      "unit": "ratio s/step Unsloth(grouped_mm)/e4b at tp2's fixture within the TC1b box (single draws; the torch-2.8 variant 5.147)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53772765, Intel i9-13900, driver 595.91.07); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (grouped_mm)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/TC1B-PREREG.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-15/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-01/tc1-5090-15/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.scaling-points",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1b, 2026-10-02, matched init and precision, single draws, never positions: at seq 2048 x micro-batch 1 x accum 1 (N 20) Unsloth/e4b reads 1.918 (1.073 vs 0.559 s/step; held-out delta 0.0033); at r 64 / alpha 64 (2,570,059,776 trainable) both frameworks OOM at step 1 on the 32 GB card (e4b 31.88 GB, Unsloth 32.38 GB peak). The ratio grows with tokens per step (1.92 at 2048 tokens, 1.44 at 16,384 on the matched box) only in the sense that both paths are launch-bound at the small end; no scaling law is claimed.",
+      "value": 1.918,
+      "unit": "ratio s/step Unsloth/e4b at seq 2048 x micro-batch 1 x accum 1 within the TC1b box (single draws)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (instance 53772765, Intel i9-13900, driver 595.91.07); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (grouped_mm)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combined.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/tc1/TC1B-PREREG.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-15/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/",
+        "receipts/experts4bit-qlora/2026-10-01/tc1-5090-15/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1c (#835), 2026-10-02, one rented H100 NVL: TC1's matched set unchanged -- the same 642,514,944 trainable parameters, the same per-slot LoRA init (name-free sha f7832488926eda91), fp32 adapters in both frameworks, the same tokens (sha bfc742f67e37), Unsloth 2026.9.14 on torch 2.12.1+cu130 with its grouped_mm backend engaged on every step: Unsloth takes 2.546 s/step against e4b's fused path's 4.097 (medians of two interleaved draws each: 2.539 / 2.553 and 4.130 / 4.065, both STABLE) -- Unsloth/e4b 0.621 with the cross-draw interval [0.615, 0.628]: UNSLOTH IS FASTER PER STEP BY 1.61x ON THIS CARD, at 491 vs 370 tokens/s, 24.27 vs 27.86 GB peak VRAM (-3.59 GB) and 466.8 vs 742.5 J/step (x0.63). Held-out at N=20 EQUIVALENT (.quality-n20); e4b's parity control PASSES on the same box (.e4b-internal-parity). The RTX 5090 position (e4b.train.h2h.unsloth.qwen3.5090.2026-10-02, 1.437, e4b faster) is a 5090 position: on the card where torch._grouped_mm is first-class the sign reverses, and by TC1c's registered decision rule no 'e4b faster' position is quoted for the H100 class.",
+      "value": 0.621,
+      "unit": "ratio s/step Unsloth/e4b on an H100 NVL (medians of steps 11..20 over two draws each; < 1 = Unsloth faster per step); cross-draw interval [0.615, 0.628]",
+      "hardware": "H100 NVL (sm_90, 95,830 MiB, driver 595.71.05), one rented Vast.ai verified/secure host (instance 53802633, AMD EPYC 9534, 224 vCPU, 1.58 TB RAM); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (grouped_mm engaged on every step)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-2/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/"
+      ],
+      "notes": "The profiles say why the cards disagree (.dispatch-profile): e4b issues ~139k device events per step on both cards; Unsloth issues 612k on the RTX 5090 (torch 2.12.1+cu130, sm_120) and 82k on the H100 (sm_90) with 14x fewer CPU-side ops -- the grouped GEMM it routes through is one launch per call on Hopper and not on Blackwell. Which torch code path sm_120 takes is not established here. HF+PEFT (bf16 experts) fit on 80 GB (62 GB resident) but produced no step within its 1,800 s alarm: not measured. axolotl died in transformers 5.17.0's Qwen3-MoE router (bf16 vs fp32) before any receipt.",
+      "quoted_in": [
+        "docs/STATUS.md",
+        "docs/solutions/qlora-fused-moe-experts.md"
+      ]
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.quality-n20",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1c, 2026-10-02, H100 NVL: at matched work the two primary arms' held-out losses at N=20 are EQUIVALENT -- e4b fused_attn4_m 0.8476 / 0.8490 (two draws) vs Unsloth ckpt_unsloth_m 0.8517 / 0.8498, delta +0.0041 against the band 0.0078 (3 x the in-draw fused-vs-reference |delta|), draw-noise floor 0.0019, median per-step |delta train| 0.0038; step-0 delta -0.0163 reads NEAR (the two quantisers' bytes through Hopper's kernels; <= 0.05), not SAME-BYTES-CLASS as on the 5090 (0.0078).",
+      "value": 0.0041,
+      "unit": "|delta held-out loss| at N=20 in nats, Unsloth minus e4b (0.8517 vs 0.8476, first draws; EQUIVALENT under the registered band)",
+      "hardware": "H100 NVL (sm_90, 95,830 MiB, driver 595.71.05), one rented Vast.ai verified/secure host (instance 53802633, AMD EPYC 9534, 224 vCPU, 1.58 TB RAM); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (grouped_mm engaged on every step)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-2/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.e4b-internal-parity",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1c, 2026-10-02, H100 NVL: e4b's fused_attn4_m against its own reference_attn4_m (per-expert loop + NF4 attention) on the same box, matched init and fp32 adapters: |delta final train loss| 0.00414, median step-wise |delta| 0.00218 against the 0.05 band -- PASS; x12.58 faster per step (4.130 vs 51.940 s) at x1.025 the reference's peak; C1 bit-exact in both arms with the real-storage flip control detecting.",
+      "value": 0.00414,
+      "unit": "|delta final train loss| fused vs reference, nats (band 0.05)",
+      "hardware": "H100 NVL (sm_90, 95,830 MiB, driver 595.71.05), one rented Vast.ai verified/secure host (instance 53802633, AMD EPYC 9534, 224 vCPU, 1.58 TB RAM); e4b on torch 2.8.0+cu128, Unsloth on torch 2.12.1+cu130 (grouped_mm engaged on every step)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-2/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.dispatch-profile",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1c with TC1, 2026-10-02: the profiled matched arms on the two cards. e4b fused_attn4_m_prof: RTX 5090 6.169 s/step, device-busy 0.480, 140,809 device events and 753,129 CPU-side ops per step; H100 NVL 4.306 s/step, 0.562, 139,181 events, 744,465 ops -- the same launch count on both cards. Unsloth ckpt_unsloth_prof (grouped_mm): RTX 5090 9.868 s/step, 0.234, 612,179 events, 7,430,931 ops; H100 NVL 2.828 s/step, 0.308, 81,780 events, 515,683 ops -- 7.5x fewer device events and 14x fewer CPU-side ops on Hopper. The grouped GEMM Unsloth's path routes through (torch 2.12.1+cu130) is one launch per call on sm_90 and many on sm_120; that is where the 5090's 1.437 and the H100's 0.621 come from. Descriptive: which torch code path sm_120 takes is not established here.",
+      "value": 7.49,
+      "unit": "ratio of Unsloth's device events per step on the RTX 5090 to the H100 NVL (612,179 / 81,780) for the same profiled matched arm; e4b's ratio is 1.01",
+      "hardware": "RTX 5090 (sm_120; instance 53773622, Threadripper PRO 3975WX) and H100 NVL (sm_90; instance 53802633, EPYC 9534), rented Vast.ai verified/secure hosts; torch 2.12.1+cu130 for Unsloth on both",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-2/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-16/RESULTS-tc1.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1 (#835), 2026-10-02: axolotl 0.20.0 at its own pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0, bitsandbytes 0.50.2; load_in_4bit, adapter qlora, quantize_moe_experts, double-quant off; PEFT target_parameters on the expert stacks and the attention projections by module -- the router untargeted) does NOT train Qwen3-30B-A3B at the field recipe: on box tc1-5090-20 (RTX 5090, the venv installing after amendment 3) both matched draws loaded -- all 96 expert stacks packed -- and died in the first forward inside transformers' Qwen3MoeTopKRouter (F.linear(hidden_states, self.weight): bf16 activations against an fp32 router weight); the same exception on the 24 GB box (tc3-4090-1) and the H100 NVL box (tc1c-h100-2): five attempts, three cards, zero steps. The HF arm's own loader (transformers 5.18.0, the same quantizer, the same model) builds a bf16 router and trains; the router code is identical in 5.17.0 and 5.18.0, so the fp32 weight is a property of the model axolotl's ModelLoader hands over -- whether its post-quantisation conversion or 5.17.0's bnb path leaves it is not established here. The scattermoe native-best row refused at load because the KernelsPlugin fetches kernels-community/rotary and this harness runs arms with the Hub offline (a harness limit, open). No axolotl position on this family; axolotl trains Granite's 4-bit path in lane TC2.",
+      "value": 0,
+      "unit": "count of axolotl 0.20.0 arms that trained Qwen3-30B-A3B at the field recipe across tc1-5090-20, tc3-4090-1 and tc1c-h100-2 (of 5)",
+      "hardware": "RTX 5090 (instance 53812706), RTX 4090 (instance 53804549), H100 NVL (instance 53802633), rented Vast.ai verified/secure hosts; axolotl's own cu130 venv (CPython 3.12)",
+      "conditions": "bench/tc1 field recipe (tp4's): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; MATCHED WORK: 642,514,944 trainable parameters in both frameworks, one per-slot LoRA A init (matched:3407, name-free sha f7832488926eda91, 12480/12480 slots), fp32 adapters in both, the same tokens (sha bfc742f67e37); Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 with UNSLOTH_MOE_BACKEND=grouped_mm (384 torch._grouped_mm calls per step, 0 loop calls, asserted per step), use_gradient_checkpointing=unsloth; e4b 0.38.0 @ 079a422 + grouped-nf4-gemm 0.34.0 @ 846b512, enable_fast_train(dgrad=True) + NF4 attention; s/step = median of steps 11..20; positions quoted only when both arms are VALID, two draws within 5 %, quality COMPARABLE; validity, equivalence and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-20/RESULTS-tc1.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-20/logs/run_qwen3axolotl_axolotl_ckpt_axolotl_m.log",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-2/logs/run_qwen3_axolotl_ckpt_axolotl_m.log",
+        "bench/tc1/TC1-PREREG.md"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-20/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc3-4090-1/tc1/",
+        "receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/"
+      ],
+      "notes": "On these boxes the harness wrote no receipt for the crash (it died after load, outside the loader's handler; TC3 amendment 4 makes such a crash a row), so the mechanical verdict is HARNESS_ERROR and TC1's P6 reads UNTESTED; the logs are the evidence."
     }
   ]
 }

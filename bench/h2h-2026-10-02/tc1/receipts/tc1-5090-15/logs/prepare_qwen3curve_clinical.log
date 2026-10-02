@@ -1,0 +1,1 @@
+TOKENS fam=qwen3curve template=clinical n_train=1200 n_eval=8 train_tokens=103298 mean=86.1 pad_id=151643 sha=cb4f505d61ef3b485fddaf0d31e57197d79c7c6b2728467f5d56565f42355fc5

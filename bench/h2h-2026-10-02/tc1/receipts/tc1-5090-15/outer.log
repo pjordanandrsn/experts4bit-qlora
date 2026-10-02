@@ -1,0 +1,221 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+FIXTURE curve (TC1b): steps=200 eval_every=40 eval_n=16; t1: micro_batch=1 accum=1; r64: r=64 alpha=64
+FIXTURE anchor (tp4's A_*): template=clinical steps=60 seq=512 micro_batch=1 accum=1 r=8 alpha=16 lr=1e-4 wd=0.01 warmup=0 sched=constant optim=adamw_torch seed=0 eval_every=20 eval_n=8
+BOX A families: qwen3curve; e4b 079a4220b4b334903b0e77725eb94a0f58848018 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-15 instance 53772765 deadline 1790918681; prereg tc1/TC1B-PREREG.md
+OMP_NUM_THREADS=24 (physical cores) box_class=RTX 5090
+[2026-10-01T23:55:38Z] tc1/boxA: driver 595.91.07: cu130 venvs (venv-unsloth, venv-axolotl) will be built
+DRIVER 595.91.07 cu130_ok=1
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-7ad8f490-fcd6-e98f-6a7a-2329e08d349d, 500.00 W, 3135 MHz
+CPU(s):                                  32
+Model name:                              13th Gen Intel(R) Core(TM) i9-13900
+MemTotal:       131726324 kB
+cgroup memory.max 129490747392
+overlay         320G  1.7M  320G   1% /
+[2026-10-01T23:55:38Z] tc1/boxA: venv-e4b (system torch): e4b @079a4220b4b334903b0e77725eb94a0f58848018 + gnf4 @846b512b905468c08f5748943d08769b572affa2 + transformers==5.18.0 bitsandbytes==0.50.2 peft==0.21.2
+pip(e4b) rc=0
+tc1 tripwire OK (e4b): 0.38.0 @ 079a4220b4b3 gnf4 0.34.0 @ 846b512b9054 torch 2.8.0+cu128 triton 3.4.0 transformers 5.18.0 bnb 0.50.2 peft 0.21.2
+[2026-10-01T23:56:05Z] tc1/boxA: venv-unsloth-t28: unsloth[cu128-torch280]==2026.9.14 unsloth_zoo==2026.9.9 (the image's torch 2.8.0+cu128)
+pip(unsloth-t28) rc=0
+[2026-10-01T23:58:10Z] tc1/boxA: venv-unsloth: unsloth[cu130-torch2121]==2026.9.14 unsloth_zoo==2026.9.9 (torch 2.12.1+cu130)
+pip(unsloth) rc=0
+[2026-10-01T23:59:41Z] tc1/boxA: tripwire(unsloth-t28) failed on ScalingType -> removing torchao (P38 amendment 2)
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+tc1 tripwire OK (unsloth-t28): 2026.9.14 zoo 2026.9.9 torch 2.8.0+cu128 triton 3.4.0 transformers 5.5.0 bnb 0.50.2 peft 0.21.2 torchao None moe_backend native_torch separated_lora True FastModel True
+tc1 tripwire OK (unsloth): 2026.9.14 zoo 2026.9.9 torch 2.12.1+cu130 triton 3.7.1 transformers 5.5.0 bnb 0.50.2 peft 0.21.2 torchao 0.18.0+cu130 moe_backend grouped_mm separated_lora True FastModel True
+[2026-10-01T23:59:55Z] tc1/boxA: venv-unsloth + e4b @079a4220b4b334903b0e77725eb94a0f58848018 + gnf4 @846b512b905468c08f5748943d08769b572affa2 (the t212 row)
+pip(e4b-t212) rc=0
+tc1 tripwire OK (e4b-t212): 0.38.0 gnf4 0.34.0 torch 2.12.1+cu130
+[2026-10-02T00:00:18Z] tc1/boxA: venv-axolotl: uv venv --python 3.12 + axolotl==0.20.0 --extra-index-url https://download.pytorch.org/whl/cu130 (alarm 2700 s)
+pip(axolotl) rc=1
+Using Python 3.12.14 environment at: venv-axolotl
+error: No solution found when resolving dependencies
+  cause: Because there is no version of packaging==26.0 and axolotl>=0.20.0 depends on packaging==26.0, we can conclude that axolotl>=0.20.0 cannot be used.
+         And because you require axolotl==0.20.0, we can conclude that your requirements are unsatisfiable.
+
+hint: `packaging` was found on https://download.pytorch.org/whl/cu130, but not at the requested version (packaging==26.0). A compatible version may be available on a subsequent index (e.g., https://pypi.org/simple). By default, uv will only consider versions that are published on the first index that contains a given package, to avoid dependency confusion attacks. If all indexes are equally trusted, use `--index-strategy unsafe-best-match` to consider all versions from all indexes, regardless of the order in which they were defined.
+PIP FAIL (axolotl) -- its rows = install_failed
+[2026-10-02T00:00:21Z] tc1/boxA: dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)
+DS alpaca n_train=1200 n_eval=48 seed=3407 sha256=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb -> /root/tc1/data/ds_alpaca.json
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+[2026-10-02T00:00:22Z] tc1/boxA: dataset clinical (n9_datasets.py, sha-verified against ds_manifest.json) for the anchor pair
+manifest written
+DATASET clinical sha=76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791
+[2026-10-02T00:00:22Z] tc1/boxA: ===== CURVE family qwen3curve (TC1b; Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39; matched seed 3407; N 200 eval every 40 on 16 rows; alarms e4b 4800 unsloth 9000 anchor 1800 t1/r64 3600)
+[2026-10-02T00:00:22Z] tc1/boxA: fetch qwen3curve (Qwen/Qwen3-30B-A3B, unpinned; pin ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+staged in 4.0 min at /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+PIN OK qwen3curve staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+overlay         320G   72G  249G  23% /
+[2026-10-02T00:04:23Z] tc1/boxA: tokenise qwen3curve (alpaca, seq 2048) -> tokens_qwen3curve.json
+TOKENS fam=qwen3curve template=alpaca n_train=1200 n_eval=16 train_tokens=235852 mean=196.5 pad_id=151643 sha=f07accfe6fcfcd5994aefed4bde0927cc5a3c1ccab4e63ebe891b432905c80cb
+TOKENS qwen3curve alpaca sha=f07accfe6fcfcd5994aefed4bde0927cc5a3c1ccab4e63ebe891b432905c80cb eval_n=16 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+[2026-10-02T00:04:26Z] tc1/boxA: arm qwen3curve/e4b/fused_attn4_m_200 (arm=fused recipe=curve steps=200 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=4800 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3curve", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 16.3, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainab
+    PROLOGUE {"phase_seconds": {"preamble": 2.997, "load_weights": 12.635, "verify": 0.0, "attn4": 2.877, "lora": 0.01, "enable": 0.003, "tokenizer": 0.205, "census": 1.556, "frozen_probe": 0.035, "trainable_sha": 1.251, "counters": 0.0, "c1_before": 29.159, "eval0": 9.34, "optimizer": 0.089}, "phase_bu
+    CELL OK {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_200", "status": "ok", "steps": 200, "seq": 2048, "accum": 4,
+2 MiB
+[2026-10-02T00:16:36Z] tc1/boxA: arm qwen3curve/unsloth/ckpt_unsloth_m_200 (arm=unsloth recipe=curve steps=200 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=9000 expect_trainable=642514944 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --adapter-dtype fp32 --lora-init matched:3407)
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+    PROLOGUE {"phase_seconds": {"preamble": 1.846, "snapshot": 0.0, "load_weights": 12.898, "census": 1.441, "frozen_probe": 0.043, "trainable_sha": 1.25, "counters": 0.015, "c1_before": 26.29, "eval0": 11.141, "optimizer": 0.212}, "phase_budget_s": 3150.0, "prologue_s": 60.065, "prologue_unattributed_s
+    CELL OK {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33
+2 MiB
+[2026-10-02T00:33:30Z] tc1/boxA: arm qwen3curve/e4b/fused_attn4_shipped_200 (arm=fused recipe=curve steps=200 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=4800 expect_trainable=none --attn-4bit 1 --adapter-dtype native --lora-init native)
+    LOAD OK {"fam": "qwen3curve", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 16.5, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainab
+    PROLOGUE {"phase_seconds": {"preamble": 2.786, "load_weights": 12.77, "verify": 0.0, "attn4": 2.904, "lora": 0.012, "enable": 0.003, "tokenizer": 0.217, "census": 0.812, "frozen_probe": 0.036, "trainable_sha": 1.265, "counters": 0.0, "c1_before": 28.932, "eval0": 2.48, "optimizer": 0.091}, "phase_bu
+    CELL OK {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_200", "status": "ok", "steps": 200, "seq": 2048, "accu
+2 MiB
+[2026-10-02T00:43:21Z] tc1/boxA: tokenise qwen3curve (clinical, seq 512) -> tokens_qwen3curve_p38.json
+TOKENS fam=qwen3curve template=clinical n_train=1200 n_eval=8 train_tokens=103298 mean=86.1 pad_id=151643 sha=cb4f505d61ef3b485fddaf0d31e57197d79c7c6b2728467f5d56565f42355fc5
+TOKENS qwen3curve_p38 clinical sha=cb4f505d61ef3b485fddaf0d31e57197d79c7c6b2728467f5d56565f42355fc5 train_only_sha=87bec6ddaa3ae67125df4a39985974854af567c122164975b5ee7ce8c33a88e1 (tp2's tokens_qwen3 / tp4's tokens_qwen3_p38 sha for the cross-check: their receipts record it)
+[2026-10-02T00:43:23Z] tc1/boxA: arm qwen3curve/e4b/fused_attn4_p38 (arm=fused recipe=anchor steps=60 seq=512 mb=1 accum=1 r=8 lr=1e-4 optim=adamw_torch sched=constant offload=0 alarm=1800 expect_trainable=none --attn-4bit 1 --adapter-dtype native --lora-init native)
+    LOAD OK {"fam": "qwen3curve", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 14.3, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainab
+    PROLOGUE {"phase_seconds": {"preamble": 2.858, "load_weights": 10.918, "verify": 0.0, "attn4": 2.52, "lora": 0.009, "enable": 0.003, "tokenizer": 0.199, "census": 0.504, "frozen_probe": 0.035, "trainable_sha": 0.614, "counters": 0.0, "c1_before": 28.289, "eval0": 1.351, "optimizer": 0.084}, "phase_b
+    CELL OK {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_p38", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "mi
+2 MiB
+[2026-10-02T00:44:59Z] tc1/boxA: arm qwen3curve/unsloth/ckpt_unsloth_p38 (arm=unsloth recipe=anchor steps=60 seq=512 mb=1 accum=1 r=8 lr=1e-4 optim=adamw_torch sched=constant offload=0 alarm=1800 expect_trainable=321257472 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --adapter-dtype fp32 --lora-init native --unsloth-double-quant default --note tp4's anchor arm EXCEPT the venv: venv-unsloth (unsloth[cu130-torch2121], torch 2.12.1+cu130) with UNSLOTH_MOE_BACKEND=grouped_mm; tp4 ran venv-unsloth-t28 (torch 2.8.0+cu128) with the loader-default backend -- ckpt_unsloth_p38_t28 is that arm)
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+    PROLOGUE {"phase_seconds": {"preamble": 1.899, "snapshot": 0.0, "load_weights": 11.826, "census": 0.425, "frozen_probe": 0.043, "trainable_sha": 0.632, "counters": 0.016, "c1_before": 26.568, "eval0": 5.71, "optimizer": 0.182}, "phase_budget_s": 630.0, "prologue_s": 52.177, "prologue_unattributed_s"
+    CELL OK {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33
+2 MiB
+[2026-10-02T00:47:26Z] tc1/boxA: arm qwen3curve/unsloth/ckpt_unsloth_p38_t28 (arm=unsloth recipe=anchor steps=60 seq=512 mb=1 accum=1 r=8 lr=1e-4 optim=adamw_torch sched=constant offload=0 alarm=1800 expect_trainable=321257472 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend default --adapter-dtype fp32 --lora-init native --unsloth-double-quant default --note byte-for-byte tp4's anchor arm: venv-unsloth-t28 (unsloth[cu128-torch280] on the image's torch 2.8.0), the loader-default MoE backend)
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit using dequantize-plus-native_torch loop.
+    PROLOGUE {"phase_seconds": {"preamble": 1.849, "snapshot": 0.0, "load_weights": 11.586, "census": 0.443, "frozen_probe": 0.046, "trainable_sha": 0.66, "counters": 0.014, "c1_before": 26.554, "eval0": 26.332, "optimizer": 0.214}, "phase_budget_s": 630.0, "prologue_s": 72.769, "prologue_unattributed_s
+    CELL OK {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33
+2 MiB
+[2026-10-02T00:51:36Z] tc1/boxA: arm qwen3curve/e4b/fused_attn4_m_t1 (arm=fused recipe=t1 steps=20 seq=2048 mb=1 accum=1 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3curve", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 16.5, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainab
+    PROLOGUE {"phase_seconds": {"preamble": 2.79, "load_weights": 12.77, "verify": 0.0, "attn4": 2.903, "lora": 0.011, "enable": 0.003, "tokenizer": 0.212, "census": 1.55, "frozen_probe": 0.035, "trainable_sha": 1.245, "counters": 0.0, "c1_before": 29.151, "eval0": 1.593, "optimizer": 0.084}, "phase_bud
+    CELL OK {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_t1", "status": "ok", "steps": 20, "seq": 2048, "accum": 1, "
+2 MiB
+[2026-10-02T00:53:00Z] tc1/boxA: arm qwen3curve/unsloth/ckpt_unsloth_m_t1 (arm=unsloth recipe=t1 steps=20 seq=2048 mb=1 accum=1 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=642514944 --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --adapter-dtype fp32 --lora-init matched:3407)
+    [unsloth_zoo.log|INFO]Unsloth: MoE bnb4bit grouped_mm with backward-recompute.
+    PROLOGUE {"phase_seconds": {"preamble": 1.894, "snapshot": 0.0, "load_weights": 13.124, "census": 1.458, "frozen_probe": 0.042, "trainable_sha": 1.255, "counters": 0.015, "c1_before": 26.481, "eval0": 5.448, "optimizer": 0.197}, "phase_budget_s": 1260.0, "prologue_s": 54.868, "prologue_unattributed_
+    CELL OK {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33
+2 MiB
+[2026-10-02T00:54:38Z] tc1/boxA: arm qwen3curve/e4b/fused_attn4_m_r64 (arm=fused recipe=r64 steps=20 seq=2048 mb=2 accum=4 r=64 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3curve", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 26.6, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.38.0+det:8af1918f6c2e", "trainab
+    PROLOGUE {"phase_seconds": {"preamble": 2.787, "load_weights": 23.458, "verify": 0.0, "attn4": 2.273, "lora": 0.019, "enable": 0.003, "tokenizer": 0.213, "census": 5.025, "frozen_probe": 0.029, "trainable_sha": 8.614, "counters": 0.0, "c1_before": 28.282, "eval0": 1.649, "optimizer": 0.088}, "phase_
+    CELL OOM {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "fused", "tag": "fused_attn4_m_r64", "status": "oom", "reason": "OOM at step 1: CUDA out of memory. Tried to allocate 52.00 MiB. GPU 0 has a total capacity
+2 MiB
+[2026-10-02T00:55:54Z] tc1/boxA: arm qwen3curve/unsloth/ckpt_unsloth_m_r64 (arm=unsloth recipe=r64 steps=20 seq=2048 mb=2 accum=4 r=64 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=3600 expect_trainable=none --grad-ckpt unsloth --unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj --unsloth-moe-backend grouped_mm --adapter-dtype fp32 --lora-init matched:3407)
+    PROLOGUE {"phase_seconds": {"preamble": 1.871, "snapshot": 0.0, "load_weights": 20.551, "census": 4.776, "frozen_probe": 0.033, "trainable_sha": 8.597, "counters": 0.016, "c1_before": 26.21, "eval0": 5.649, "optimizer": 0.182}, "phase_budget_s": 1260.0, "prologue_s": 72.875, "prologue_unattributed_s
+    [unsloth_zoo.temporary_patches.moe_triton_kernels|WARNING]Unsloth: the Triton MoE kernels failed to compile or launch and are disabled for this process; the bitsandbytes / eager path is used instead. Set UNSLOTH_MOE_TRITON_KERNELS=0 to silence this. Reason: nf4_dequant_triton: OutOfMemoryError: CUDA
+    CELL OOM {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_r64", "status": "oom", "reason": "OOM at step 1: CUDA out of memory. Tried to allocate 768.00 MiB. GPU 0 has a total 
+2 MiB
+QWEN3CURVE DONE
+[2026-10-02T00:57:12Z] tc1/boxA: freed qwen3curve (disk: 302G free)
+[2026-10-02T00:57:12Z] tc1/boxA: reduce
+| eval step | e4b `fused_attn4_m_200` | unsloth `ckpt_unsloth_m_200` | e4b `fused_attn4_shipped_200` | paired Δ(2−1) ± SE | paired Δ(3−1) ± SE |
+|---|---|---|---|---|---|
+| 0 | 1.9607 ± 0.1113 | 1.9604 ± 0.1074 | 1.9607 ± 0.1113 | -0.0004 ± 0.0104 (|Δ| 0.0004; rows favouring 7/9) | +0.0000 ± 0.0000 (|Δ| 0.0000; rows favouring 0/0) |
+| 40 | 0.7880 ± 0.0683 | 0.7885 ± 0.0682 | 0.7894 ± 0.0677 | +0.0005 ± 0.0016 (|Δ| 0.0005; rows favouring 8/8) | +0.0014 ± 0.0039 (|Δ| 0.0014; rows favouring 8/8) |
+| 80 | 0.7709 ± 0.0668 | 0.7724 ± 0.0666 | 0.7741 ± 0.0667 | +0.0015 ± 0.0011 (|Δ| 0.0015; rows favouring 4/12) | +0.0032 ± 0.0029 (|Δ| 0.0032; rows favouring 6/10) |
+| 120 | 0.7665 ± 0.0671 | 0.7669 ± 0.0672 | 0.7674 ± 0.0674 | +0.0004 ± 0.0010 (|Δ| 0.0004; rows favouring 8/8) | +0.0009 ± 0.0031 (|Δ| 0.0009; rows favouring 7/9) |
+| 160 | 0.7626 ± 0.0666 | 0.7646 ± 0.0671 | 0.7671 ± 0.0688 | +0.0020 ± 0.0018 (|Δ| 0.0020; rows favouring 6/10) | +0.0045 ± 0.0040 (|Δ| 0.0045; rows favouring 6/10) |
+| 200 | 0.7687 ± 0.0676 | 0.7688 ± 0.0676 | 0.7945 ± 0.0733 | +0.0001 ± 0.0016 (|Δ| 0.0001; rows favouring 6/10) | +0.0258 ± 0.0069 (|Δ| 0.0258; rows favouring 3/13) |
+- **CURVE READING (arms 1 vs 2): EQUIVALENT-AT-EVERY-EVAL** — largest paired |Δ(1,2)| 0.0020 at step 160 over 6 evals; Δ at step 200 +0.0001 (sign +; + = Unsloth's held-out above e4b's); band 0.02 = the draft's band, kept fixed by the registration (0.02 nats at every eval: this lane has no in-draw reference arm); TC1's floor is quoted beside it: TC1's floor max(0.005, 3 × fused-vs-reference |Δ|) (no --tc1-dir: the measured band is not to hand)
+- **(b) PLATEAU TEST (arm 3 − arm 1): NOT-P38-SHAPE** — held-out gap at 200 +0.0258 (paired +0.0258 ± 0.0069 (|Δ| 0.0258; rows favouring 3/13)), at 40 +0.0014 (paired +0.0014 ± 0.0039 (|Δ| 0.0014; rows favouring 8/8)); REPRODUCES-P38 iff >= +0.01 at 200 and <= 0 at 40 — as-shipped is +0.0014 ABOVE the matched arm at step 40 too: no early lead, not P38's shape
+- **(c) time to target** (target 0.7888 = mean of the matched pair's step-200 held-out + 0.02; the first eval at or below it, informational): `e4b/fused_attn4_m_200` step 40 at 132.27 s train wall (held-out 0.7880); `unsloth/ckpt_unsloth_m_200` step 40 at 189.07 s train wall (held-out 0.7885); `e4b/fused_attn4_shipped_200` step 80 at 204.86 s train wall (held-out 0.7741)
+- **(d) s/step medians over steps 11..200** (not a position: TC1 owns positions; TRAVELS iff within 10% of TC1's 11..20 median when `--tc1-dir` is given, NOT given: UNTESTED; the in-receipt 11..20 window is a same-draw check): `e4b/fused_attn4_m_200` 3.162 s/step (in-receipt 11..20 3.277, -3.5%) **UNTESTED** (no --tc1-dir given); `unsloth/ckpt_unsloth_m_200` 4.505 s/step (in-receipt 11..20 4.496, +0.2%) **UNTESTED** (no --tc1-dir given); `e4b/fused_attn4_shipped_200` 2.527 s/step (in-receipt 11..20 2.532, -0.2%) **UNTESTED** (no --tc1-dir given)
+- **(e) ANCHOR grouped_mm: s/step ratio unsloth/e4b = 2.428 → FINDING** (unsloth p38 (venv-unsloth cu130 torch 2.12.1, grouped_mm: tp4's arm EXCEPT the venv); 1.095 vs 0.451 s; tp2 1.457 +66.6% outside, P38 1.413 +71.8% outside, tp4's anchor row not in this tree (UNVERIFIED); ±10%); quality Δ 0.0206 COMPARABLE; peak Δ +1.82 GB
+- **(e) ANCHOR t28: s/step ratio unsloth/e4b = 5.147 → FINDING** (unsloth p38_t28 (venv-unsloth-t28, loader-default backend: tp4's arm byte-for-byte); 2.322 vs 0.451 s; tp2 1.457 +253.2% outside, P38 1.413 +264.2% outside, tp4's anchor row not in this tree (UNVERIFIED); ±10%); quality Δ 0.0053 COMPARABLE; peak Δ +1.77 GB
+- **(f) SCALING POINT `t1` (never a position): s/step ratio unsloth/e4b = 1.918** (tokens-per-step scaling point (seq 2048, micro-batch 1 x accum 1, N 20); 1.073 vs 0.559 s, single draws; peak Δ -1.66 GB; held-out Δ 0.0033 COMPARABLE); predicates: both arms VALID ok (e4b VALID / unsloth VALID); same trainable count within the pair ok (642514944 / 642514944); lora_path_loop == 0 on every e4b step ok (loop steps []); Unsloth backend counters: torch._grouped_mm >= 6*L*A per step, manual fallback 0 ok (grouped_mm min 672 (>= 288), manual max 0)
+- **(f) SCALING POINT `r64`: NOT QUOTED** — not quoted: e4b e4b/fused_attn4_m_r64 is OOM / rank scaling point (r 64 / alpha 64, N 20) unsloth/ckpt_unsloth_m_r64 is OOM; predicates failing: both arms VALID, lora_path_loop == 0 on every e4b step, Unsloth backend counters: torch._grouped_mm >= 6*L*A per step, manual fallback 0; predicates: both arms VALID FAILS (e4b — / unsloth —); same trainable count within the pair ok (2570059776 / 2570059776); lora_path_loop == 0 on every e4b step FAILS (loop steps None); Unsloth backend counters: torch._grouped_mm >= 6*L*A per step, manual fallback 0 FAILS (grouped_mm min None (>= 1152), manual max None)
+- TC1's equivalence reading at N per matched pair (informational; no reference arm in this family, so COMPARABLE is the ceiling): `unsloth/ckpt_unsloth_m_200` **COMPARABLE** (median step |Δ| 0.0015, |Δ held-out at N| 0.0001, step-0 0.0004 SAME-BYTES-CLASS); `unsloth/ckpt_unsloth_m_t1` **COMPARABLE** (median step |Δ| 0.0152, |Δ held-out at N| 0.0033, step-0 0.0054 SAME-BYTES-CLASS); `unsloth/ckpt_unsloth_m_r64` **—** (no OK receipt)
+- matched_init_sha per sub-fixture (B, name-free): `200` anchor `f7832488926eda91`: unsloth/ckpt_unsloth_m_200 same; `t1` anchor `f7832488926eda91`: unsloth/ckpt_unsloth_m_t1 same
+
+## Verdicts
+| family | arm | VERDICT | validity | quality | note |
+|---|---|---|---|---|---|
+| qwen3curve | e4b/fused_attn4_m_200 | **VALID** | VALID | anchor of its sub-fixture |  |
+| qwen3curve | unsloth/ckpt_unsloth_m_200 | **VALID** | VALID | 0.0001 |  |
+| qwen3curve | e4b/fused_attn4_shipped_200 | **VALID** | VALID | 0.0258 |  |
+| qwen3curve | e4b/fused_attn4_p38 | **VALID** | VALID | anchor of its sub-fixture |  |
+| qwen3curve | unsloth/ckpt_unsloth_p38 | **VALID** | VALID | 0.0206 |  |
+| qwen3curve | unsloth/ckpt_unsloth_p38_t28 | **VALID** | VALID | 0.0053 |  |
+| qwen3curve | e4b/fused_attn4_m_t1 | **VALID** | VALID | anchor of its sub-fixture |  |
+| qwen3curve | unsloth/ckpt_unsloth_m_t1 | **VALID** | VALID | 0.0033 |  |
+| qwen3curve | e4b/fused_attn4_m_r64 | **OOM** | — | — | OOM at step 1: CUDA out of memory. Tried to allocate 52.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 31.69 MiB is free. Including non-PyTorch memory |
+| qwen3curve | unsloth/ckpt_unsloth_m_r64 | **OOM** | — | — | OOM at step 1: CUDA out of memory. Tried to allocate 768.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 753.69 MiB is free. Including non-PyTorch memo |
+
+## TC1b predictions P1–P4 (TC1b-PREREG-draft, scored mechanically)
+| prediction | family | verdict | evidence |
+|---|---|---|---|
+| P1 | qwen3curve | **HELD** | max paired |Δ(1,2)| 0.0020 at step 160 over 6 evals (<= 0.02: the draft's band, kept fixed by the registration (0.02 nats at every eval: this lane has no in-draw reference arm); TC1's floor is quoted beside it); Δ at 200 +0.0001 (sign +, + = Unsloth above) |
+| P2 | qwen3curve | **FALSIFIED** | gap at 200 +0.0258, at 40 +0.0014: as-shipped is +0.0014 ABOVE the matched arm at step 40 too: no early lead, not P38's shape |
+| P3 | qwen3curve | **UNTESTED** | e4b/fused_attn4_m_200: no --tc1-dir given; unsloth/ckpt_unsloth_m_200: no --tc1-dir given; e4b/fused_attn4_shipped_200: no --tc1-dir given |
+| P4 | qwen3curve | **FALSIFIED** | p38 unsloth/e4b 2.428 vs tp2 1.457 (+66.6%) and P38 1.413 (+71.8%), +-10%; tp4's own anchor row is NOT in this tree (TP4_ANCHOR_RATIO unset, UNVERIFIED) -- scored against tp2's 1.457, the number tp4 registered against; t28 variant 5.147 (+253.2% vs tp2) |
+----- summary.txt -----
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+FIXTURE curve (TC1b): steps=200 eval_every=40 eval_n=16; t1: micro_batch=1 accum=1; r64: r=64 alpha=64
+FIXTURE anchor (tp4's A_*): template=clinical steps=60 seq=512 micro_batch=1 accum=1 r=8 alpha=16 lr=1e-4 wd=0.01 warmup=0 sched=constant optim=adamw_torch seed=0 eval_every=20 eval_n=8
+BOX A families: qwen3curve; e4b 079a4220b4b334903b0e77725eb94a0f58848018 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-15 instance 53772765 deadline 1790918681; prereg tc1/TC1B-PREREG.md
+OMP_NUM_THREADS=24 (physical cores) box_class=RTX 5090
+DRIVER 595.91.07 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+DATASET clinical sha=76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791
+PIN OK qwen3curve staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3curve alpaca sha=f07accfe6fcfcd5994aefed4bde0927cc5a3c1ccab4e63ebe891b432905c80cb eval_n=16 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3curve/e4b/fused_attn4_m_200 PROLOGUE {"phase_seconds": {"preamble": 2.997, "load_weights": 12.635, "verify": 0.0, "attn4": 2.877, "lora": 0.01, "enable": 0.003, "tokenizer": 0.205, "census": 1.556, "frozen_probe": 0.035, "trainable_sha": 1.251, "counters": 0.0, "c1_before": 29.159, "eval0": 9.34, "optimizer": 0.089}, "phase_budget_s": 1680.0, "prologue_s": 60.762, "prologue_unattributed_s": 0.604}
+qwen3curve/e4b/fused_attn4_m_200 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_200", "status": "ok", "steps": 200, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": f
+
+qwen3curve/unsloth/ckpt_unsloth_m_200 PROLOGUE {"phase_seconds": {"preamble": 1.846, "snapshot": 0.0, "load_weights": 12.898, "census": 1.441, "frozen_probe": 0.043, "trainable_sha": 1.25, "counters": 0.015, "c1_before": 26.29, "eval0": 11.141, "optimizer": 0.212}, "phase_budget_s": 3150.0, "prologue_s": 60.065, "prologue_unattributed_s": 4.93}
+qwen3curve/unsloth/ckpt_unsloth_m_200 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_200", "status": "ok", "steps": 200, "seq": 2048,
+
+qwen3curve/e4b/fused_attn4_shipped_200 PROLOGUE {"phase_seconds": {"preamble": 2.786, "load_weights": 12.77, "verify": 0.0, "attn4": 2.904, "lora": 0.012, "enable": 0.003, "tokenizer": 0.217, "census": 0.812, "frozen_probe": 0.036, "trainable_sha": 1.265, "counters": 0.0, "c1_before": 28.932, "eval0": 2.48, "optimizer": 0.091}, "phase_budget_s": 1680.0, "prologue_s": 52.919, "prologue_unattributed_s": 0.613}
+qwen3curve/e4b/fused_attn4_shipped_200 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_200", "status": "ok", "steps": 200, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offlo
+
+TOKENS qwen3curve_p38 clinical sha=cb4f505d61ef3b485fddaf0d31e57197d79c7c6b2728467f5d56565f42355fc5 train_only_sha=87bec6ddaa3ae67125df4a39985974854af567c122164975b5ee7ce8c33a88e1 (tp2's tokens_qwen3 / tp4's tokens_qwen3_p38 sha for the cross-check: their receipts record it)
+qwen3curve/e4b/fused_attn4_p38 PROLOGUE {"phase_seconds": {"preamble": 2.858, "load_weights": 10.918, "verify": 0.0, "attn4": 2.52, "lora": 0.009, "enable": 0.003, "tokenizer": 0.199, "census": 0.504, "frozen_probe": 0.035, "trainable_sha": 0.614, "counters": 0.0, "c1_before": 28.289, "eval0": 1.351, "optimizer": 0.084}, "phase_budget_s": 630.0, "prologue_s": 48.0, "prologue_unattributed_s": 0.615}
+qwen3curve/e4b/fused_attn4_p38 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_p38", "status": "ok", "steps": 60, "seq": 512, "accum": 1, "micro_batch": 1, "autocast": false, "r": 8, "alpha": 16, "lr": 0.0001, "seed": 0, "offload": false, "o
+
+qwen3curve/unsloth/ckpt_unsloth_p38 PROLOGUE {"phase_seconds": {"preamble": 1.899, "snapshot": 0.0, "load_weights": 11.826, "census": 0.425, "frozen_probe": 0.043, "trainable_sha": 0.632, "counters": 0.016, "c1_before": 26.568, "eval0": 5.71, "optimizer": 0.182}, "phase_budget_s": 630.0, "prologue_s": 52.177, "prologue_unattributed_s": 4.877}
+qwen3curve/unsloth/ckpt_unsloth_p38 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_p38", "status": "ok", "steps": 60, "seq": 512, "ac
+
+qwen3curve/unsloth/ckpt_unsloth_p38_t28 PROLOGUE {"phase_seconds": {"preamble": 1.849, "snapshot": 0.0, "load_weights": 11.586, "census": 0.443, "frozen_probe": 0.046, "trainable_sha": 0.66, "counters": 0.014, "c1_before": 26.554, "eval0": 26.332, "optimizer": 0.214}, "phase_budget_s": 630.0, "prologue_s": 72.769, "prologue_unattributed_s": 5.072}
+qwen3curve/unsloth/ckpt_unsloth_p38_t28 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_p38_t28", "status": "ok", "steps": 60, "seq": 512,
+
+qwen3curve/e4b/fused_attn4_m_t1 PROLOGUE {"phase_seconds": {"preamble": 2.79, "load_weights": 12.77, "verify": 0.0, "attn4": 2.903, "lora": 0.011, "enable": 0.003, "tokenizer": 0.212, "census": 1.55, "frozen_probe": 0.035, "trainable_sha": 1.245, "counters": 0.0, "c1_before": 29.151, "eval0": 1.593, "optimizer": 0.084}, "phase_budget_s": 1260.0, "prologue_s": 52.963, "prologue_unattributed_s": 0.618}
+qwen3curve/e4b/fused_attn4_m_t1 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_t1", "status": "ok", "steps": 20, "seq": 2048, "accum": 1, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": fal
+
+qwen3curve/unsloth/ckpt_unsloth_m_t1 PROLOGUE {"phase_seconds": {"preamble": 1.894, "snapshot": 0.0, "load_weights": 13.124, "census": 1.458, "frozen_probe": 0.042, "trainable_sha": 1.255, "counters": 0.015, "c1_before": 26.481, "eval0": 5.448, "optimizer": 0.197}, "phase_budget_s": 1260.0, "prologue_s": 54.868, "prologue_unattributed_s": 4.954}
+qwen3curve/unsloth/ckpt_unsloth_m_t1 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_t1", "status": "ok", "steps": 20, "seq": 2048, "
+
+qwen3curve/e4b/fused_attn4_m_r64 PROLOGUE {"phase_seconds": {"preamble": 2.787, "load_weights": 23.458, "verify": 0.0, "attn4": 2.273, "lora": 0.019, "enable": 0.003, "tokenizer": 0.213, "census": 5.025, "frozen_probe": 0.029, "trainable_sha": 8.614, "counters": 0.0, "c1_before": 28.282, "eval0": 1.649, "optimizer": 0.088}, "phase_budget_s": 1260.0, "prologue_s": 73.056, "prologue_unattributed_s": 0.617}
+qwen3curve/e4b/fused_attn4_m_r64 rc=5 CELL OOM {"framework": "e4b", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "fused", "tag": "fused_attn4_m_r64", "status": "oom", "reason": "OOM at step 1: CUDA out of memory. Tried to allocate 52.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 31.69 MiB is free. Including non-PyTorch memory, this process has 31.32 GiB m
+
+qwen3curve/unsloth/ckpt_unsloth_m_r64 PROLOGUE {"phase_seconds": {"preamble": 1.871, "snapshot": 0.0, "load_weights": 20.551, "census": 4.776, "frozen_probe": 0.033, "trainable_sha": 8.597, "counters": 0.016, "c1_before": 26.21, "eval0": 5.649, "optimizer": 0.182}, "phase_budget_s": 1260.0, "prologue_s": 72.875, "prologue_unattributed_s": 4.99}
+qwen3curve/unsloth/ckpt_unsloth_m_r64 rc=5 CELL OOM {"framework": "unsloth", "fam": "qwen3curve", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_r64", "status": "oom", "reason": "OOM at step 1: CUDA out of memory. Tried to allocate 768.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 753.69 MiB is free. Including non-PyTorch memory, this process has 30
+
+QWEN3CURVE DONE
+----- versions.txt -----
+e4b 0.38.0 @079a4220b4b334903b0e77725eb94a0f58848018 (GitHub main)
+gnf4 0.34.0 @846b512b905468c08f5748943d08769b572affa2 (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.18.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.21.2
+unsloth(unsloth-t28) 2026.9.14
+unsloth_zoo(unsloth-t28) 2026.9.9
+torch(unsloth-t28) 2.8.0+cu128
+triton(unsloth-t28) 3.4.0
+transformers(unsloth-t28) 5.5.0
+bitsandbytes(unsloth-t28) 0.50.2
+peft(unsloth-t28) 0.21.2
+torchao(unsloth-t28) None
+moe_backend(unsloth-t28) native_torch
+unsloth(unsloth) 2026.9.14
+unsloth_zoo(unsloth) 2026.9.9
+torch(unsloth) 2.12.1+cu130
+triton(unsloth) 3.7.1
+transformers(unsloth) 5.5.0
+bitsandbytes(unsloth) 0.50.2
+peft(unsloth) 0.21.2
+torchao(unsloth) 0.18.0+cu130
+moe_backend(unsloth) grouped_mm
+e4b(t212) 0.38.0 @079a4220b4b334903b0e77725eb94a0f58848018
+gnf4(t212) 0.34.0 @846b512b905468c08f5748943d08769b572affa2
+torch(e4b-t212) 2.12.1+cu130
+NO AXOLOTL on this box: axolotl venv install failed rc=1 (logs/pip_axolotl.log):          And because you require axolotl==0.20.0, we can conclude that your requirements are unsatisfiable.  hint: `packaging` was found on https://download.pytorch.org/whl/cu130, but not at the requested version (packaging==26.0). A compatible version may be available on a subsequent index (e.g., h
+[2026-10-02T00:57:12Z] tc1/boxA: TP_DONE rc=0

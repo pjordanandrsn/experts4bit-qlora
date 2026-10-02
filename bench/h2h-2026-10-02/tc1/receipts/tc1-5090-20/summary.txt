@@ -1,0 +1,20 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: qwen3axolotl; e4b 09b0f6a6586d755dccad3550f68ae1b2e57773ad gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-20 instance 53812706 deadline 1790930871; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=56 (physical cores) box_class=RTX 5090
+DRIVER 595.71.05 cu130_ok=1
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3axolotl staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3axolotl alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3axolotl/e4b/fused_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.354, "load_weights": 21.97, "verify": 0.001, "attn4": 6.775, "lora": 0.04, "enable": 0.008, "tokenizer": 0.506, "census": 2.992, "frozen_probe": 0.082, "trainable_sha": 2.463, "counters": 0.0, "c1_before": 66.47, "eval0": 14.936, "optimizer": 0.174}, "phase_budget_s": 1260.0, "prologue_s": 122.125, "prologue_unattributed_s": 1.354}
+qwen3axolotl/e4b/fused_attn4_m rc=0 CELL OK {"framework": "e4b", "fam": "qwen3axolotl", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": fals
+
+qwen3axolotl/axolotl/ckpt_axolotl_m rc=1 
+qwen3axolotl/e4b/fused_attn4_m_d2 PROLOGUE {"phase_seconds": {"preamble": 4.076, "load_weights": 21.486, "verify": 0.001, "attn4": 6.267, "lora": 0.026, "enable": 0.005, "tokenizer": 0.478, "census": 2.803, "frozen_probe": 0.08, "trainable_sha": 2.47, "counters": 0.0, "c1_before": 66.875, "eval0": 3.007, "optimizer": 0.19}, "phase_budget_s": 1260.0, "prologue_s": 109.013, "prologue_unattributed_s": 1.248}
+qwen3axolotl/e4b/fused_attn4_m_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3axolotl", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_d2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": f
+
+qwen3axolotl/axolotl/ckpt_axolotl_m_d2 rc=1 
+qwen3axolotl/axolotl/ckpt_axolotl_best rc=3 CELL REFUSED {"framework": "axolotl", "fam": "qwen3axolotl", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "axolotl", "tag": "ckpt_axolotl_best", "status": "refused", "reason": "ValueError: Version 2 of 'kernels-community/rotary' is not available in the local cache and Hugging Face Hub is in offline mode. Download the kernel while online first, or pa
+
+qwen3axolotl/hf/hf_peft_m_mb1_t214 rc=5 CELL OOM {"framework": "hf", "fam": "qwen3axolotl", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "hf", "tag": "hf_peft_m_mb1_t214", "status": "oom", "reason": "OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 3.75 MiB is free. Including non-PyTorch memory, this process has 31.35 GiB 
+
+QWEN3AXOLOTL DONE
