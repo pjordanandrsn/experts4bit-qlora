@@ -126,3 +126,18 @@ capturing. A T > 1 step therefore took the eager grouping's host sync inside the
 At B=16 all five decode-graph buckets (1/2/4/8/16) captured and the smoke passed. The census reports
 `grouping: {device_grouping: true}` at B=16 and the library defaults at B=1. Scope of that evidence: Granite-3.1-3B with
 NF4 experts and the unfused fold set. Qwen3-30B-A3B with int4 experts and `fuse_qkv` first runs in SC1's box-A reading.
+
+**Hybrid models (linear attention; engine side, CPU-tested only).** `PagedModelRunner` now serves models whose
+`config.layer_types` mixes `full_attention` with Gated DeltaNet `linear_attention` layers: Qwen3.5 / Qwen3.6 MoE and
+Qwen3-Next.
+- **The state.** Each sequence's linear-attention state (the causal-conv window and the recurrent state) lives in a
+  per-slot pool (`experts4bit_qlora/engines/linear_state.py`). For each forward, a linear layer receives transformers'
+  own `LinearAttentionLayer`, built from the bound rows' pooled state, and its updated state is written back. Only
+  attention layers flush K/V to the fp8 pool.
+- **What the CPU tests pin** (`tests/test_linear_state.py`): the pool reproduces transformers' DynamicCache to 1e-5
+  across chunked prefill and batched decode; and a hybrid model through the runner stays within its all-attention
+  control's fp8 error, with greedy tokens equal.
+- **Refused:** Mamba-style layers, which transformers also labels `linear_attention` (granite-4.0-h, Nemotron-H, Jamba,
+  Bamba); other state-carrying layer types; and decode graphs for a model with linear layers.
+- **Not yet done:** this path has not run on a GPU, and `serve_paged.build_engine` has not been wired for a hybrid
+  checkpoint.

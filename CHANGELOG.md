@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### `PagedModelRunner` serves hybrid linear-attention models (Qwen3.5 / Qwen3.6 MoE, Qwen3-Next): per-slot Gated DeltaNet state (engine side, CPU-tested)
+
+- **Why.** The paged runner drives the model with `use_cache=False`. A hybrid model's linear-attention layers keep a
+  causal-conv window and a recurrent state per sequence, and without a cache each call would start them from zero.
+  The runner's "every layer flushes K/V" step was also the only thing refusing these models, by raising.
+- **What.**
+  - `engines/linear_state.py` keeps those states in a per-slot pool. For each forward, a linear layer receives
+    transformers' own `LinearAttentionLayer` built from the bound rows' state, and the updated state is written back.
+    The state arithmetic stays transformers'.
+  - `PagedModelRunner` flushes K/V for attention layers only (`attn_layers`, from `config.layer_types`, including a VL
+    `text_config`). It marks the pool after each prompt chunk and resets a slot's state wherever it resets the slot's
+    KV.
+  - **Refused:** Mamba-style layers (transformers labels them `linear_attention` too), unknown state-carrying layer
+    types, and decode graphs for a model with linear layers (the gather / scatter is not captured yet).
+- **Tests** (`tests/test_linear_state.py`, CPU, tiny random models, no download):
+  - the pool against transformers' DynamicCache to 1e-5, with greedy tokens equal, across chunked prefill, batched
+    decode in changing row orders, and non-contiguous slots;
+  - the runner end to end on a hybrid model (3 linear + 1 attention layer) within its all-attention control's fp8 error
+    (1.4e-2 against 3.4e-2), with tokens equal;
+  - the refusals, and slot recycling.
+- **Not yet:** a GPU run, and `serve_paged.build_engine` wiring for a hybrid checkpoint. `docs/SERVING.md` says so.
+
 ### Lane SC1 amendment A6 (#846): the box's e4b tripwire asserted each route knob's DEFAULT (0.40.0 moved one); it now asserts each knob is READ -- the arms pin all four (bench + tests)
 
 - `bench/sc1/sc1_run.sh`: box B's proof refused because `E4B_NF4_GROUPED_SMALLM`'s default moved `0` -> `auto` (#878). Every e4b
