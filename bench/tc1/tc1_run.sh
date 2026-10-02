@@ -168,6 +168,12 @@ export DEBIAN_FRONTEND=noninteractive
 PY_E4B=$W/venv-e4b/bin/python; PY_UNS=$W/venv-unsloth/bin/python; PY_UNS_T28=$W/venv-unsloth-t28/bin/python; PY_AX=$W/venv-axolotl/bin/python
 say "venv-e4b (system torch): e4b @$E4B_SHA + gnf4 @$GNF4_SHA + transformers==$TF_VER bitsandbytes==$BNB_VER peft==$PEFT_VER"
 $PY_BASE -m venv --system-site-packages $W/venv-e4b || { say "VENV FAIL (e4b)"; finish 9; }
+# TC3-PREREG amendment 1 (2026-10-02): a venv made by `python -m venv` carries ensurepip's bundled pip -- 22.0.2 on the owned box's Ubuntu-22.04
+# interpreter -- which cannot read the setuptools>=77 (PEP 621) metadata of e4b / grouped-nf4-gemm and reports both as "unknown 0.0.0 ...
+# ResolutionImpossible" (the first 12 GB hand run, 04:17Z). The rented images carry a current pip. Every venv this script makes upgrades
+# pip first (a no-op where it is current); the upgrade is logged, never fatal: the install that follows is what fails if pip cannot move.
+pip_fresh(){ "$1" -m pip install -q --no-input -U pip > "logs/pip_upgrade_$2.log" 2>&1 || say "pip upgrade ($2) failed (logs/pip_upgrade_$2.log): continuing on $("$1" -m pip --version | cut -d" " -f1-2)"; }
+pip_fresh $PY_E4B e4b
 if [ "$TC1_LOCAL_BOX" = 1 ] && ! $PY_E4B -c "import torch; assert torch.cuda.is_available()" > logs/torch_probe_e4b.log 2>&1; then
   # TC3 local box: a venv made FROM a venv inherits the BASE interpreter's site-packages, not the venv's (the owned box keeps torch in a venv, so
   # --system-site-packages sees no torch there). venv-e4b then gets the base interpreter's own torch build explicitly: its version + CUDA tag,
@@ -215,7 +221,7 @@ UNS_T28_OK=0
 if [ "$NEED_UNSLOTH" = 1 ]; then
 UNS_T28_OK=1
 say "venv-unsloth-t28: unsloth[cu128-torch280]==$UNS_VER unsloth_zoo==$ZOO_VER (the image's torch 2.8.0+cu128)"
-$PY_BASE -m venv $W/venv-unsloth-t28 && perl -e 'alarm 2700; exec @ARGV' $PY_UNS_T28 -m pip install -q --no-input --no-cache-dir \
+$PY_BASE -m venv $W/venv-unsloth-t28 && pip_fresh $PY_UNS_T28 unsloth-t28 && perl -e 'alarm 2700; exec @ARGV' $PY_UNS_T28 -m pip install -q --no-input --no-cache-dir \
   "unsloth[cu128-torch280]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth_t28.log 2>&1
 rc=$?; echo "pip(unsloth-t28) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth_t28.log; echo "PIP FAIL (unsloth-t28) -- its rows = install_failed"; UNS_T28_OK=0; }
 else
@@ -226,7 +232,7 @@ if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then
   UNS_OK=1; say "venv-unsloth: unsloth[cu130-torch2121]==$UNS_VER unsloth_zoo==$ZOO_VER (torch 2.12.1+cu130)"
   # TC1-PREREG amendment 2 (2026-10-01): the cu130 extra pins torch==2.12.1+cu130 / torchvision+cu130, which live on PyTorch's cu130
   # index, not PyPI -- without the index pip's resolver backtracks for the whole 2,700 s alarm (tc1-5090-7, 30 min at 99 % CPU, 0 sockets).
-  $PY_BASE -m venv $W/venv-unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu130 \
+  $PY_BASE -m venv $W/venv-unsloth && pip_fresh $PY_UNS unsloth && perl -e 'alarm 2700; exec @ARGV' $PY_UNS -m pip install -q --no-input --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu130 \
     "unsloth[cu130-torch2121]==$UNS_VER" ${ZOO_VER:+"unsloth_zoo==$ZOO_VER"} datasets safetensors "huggingface_hub>=0.23" > logs/pip_unsloth.log 2>&1
   rc=$?; echo "pip(unsloth) rc=$rc"; [ $rc -ne 0 ] && { tail -6 logs/pip_unsloth.log; echo "PIP FAIL (unsloth cu130) -- its rows = install_failed"; UNS_OK=0; }
 elif [ "$NEED_UNSLOTH" != 1 ]; then

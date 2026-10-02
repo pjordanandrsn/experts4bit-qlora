@@ -867,3 +867,13 @@ def test_amendment_3_axolotl_family_uv_index_strategy_and_no_unsloth_venv_on_tha
     assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl ") NEED_UNSLOTH=0;; esac' in body
     assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then' in body
     assert body.index("NEED_UNSLOTH=1; case") < body.index("venv-unsloth-t28:") and body.count("runs no Unsloth arm (TC1-PREREG amendment 3)") == 2
+
+
+def test_tc3_amendment_1_every_venv_the_box_makes_upgrades_pip_first():
+    """TC3-PREREG amendment 1: the owned box's `python -m venv` carries ensurepip's pip 22.0.2, which reads e4b / grouped-nf4-gemm as "unknown 0.0.0";
+    the script upgrades pip in each venv it makes (logged, never fatal) before the install that needs it."""
+    body = RUN_SH.read_text()
+    assert 'pip_fresh(){ "$1" -m pip install -q --no-input -U pip > "logs/pip_upgrade_$2.log" 2>&1 ||' in body
+    assert "venv-e4b || { say \"VENV FAIL (e4b)\"; finish 9; }" in body and body.index("pip_fresh $PY_E4B e4b") < body.index("pip_e4b.log")
+    assert "venv-unsloth-t28 && pip_fresh $PY_UNS_T28 unsloth-t28 && perl" in body and "venv-unsloth && pip_fresh $PY_UNS unsloth && perl" in body
+    assert body.index("pip_fresh(){") < body.index("pip_fresh $PY_E4B e4b")
