@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.40.0 — 2026-10-02 — the NF4 store's batched decode rows take K25 by default (`E4B_NF4_GROUPED_SMALLM=auto`, lane P96: B=16 about 40 % faster on Granite and OLMoE); `serve_paged`'s batched decode graphs fixed and confirmed on a GPU
+
+**0.40.0.** One default changes:
+- **`E4B_NF4_GROUPED_SMALLM` is `auto`.** With the variable unset, the NF4 store's batched decode rows (T > 1) take K25, the grouped small-M tensor-core GEMM with the select-tree decode through TF32, instead of the served NF4 M-tile GEMM.
+  - **The licence.** Lane P93 measured the speed: B=16 ×0.594 (Granite) and ×0.598 (OLMoE) on an RTX 5090. Lane P96 licensed the quality under lane P95's windowed K8 gate.
+  - **Unchanged:** T == 1 stays on the decode GEMV. `=0` restores the previous route.
+  - **Kernel versions:** K25 needs grouped-nf4-gemm 0.34.0 or newer; 0.34.1 adds the select tree, which is bit-identical. With an older kernel package the previous route runs, silently.
+- **Fixed: `serve_paged` with batched decode graphs** (`E4B_PAGED_GRAPHS=1`, `E4B_PAGED_MAX_SEQS>1`). In 0.39.0 only bucket 1 captured; every batch above 1 ran eagerly, and `graph_status` showed it (#874).
+  - Confirmed on an RTX 5090: buckets 1–16 capture (lane SC1's proof `sc1a-prove-8`, Granite NF4 at B=1 and B=16).
+  - B=1 and eager servers were unaffected.
+- **Dependencies:** CI still installs grouped-nf4-gemm at the v0.34.1 commit; the `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`.
+- **The rest is evidence and bench:** lane P96 (registration, read, receipts, register row), lane TC3's amendments, and serve_paged's GPU-status docs.
 
 ### `E4B_NF4_GROUPED_SMALLM` defaults to `auto`: the NF4 store's batched decode rows take K25 at the served precision (lane P96)
 
