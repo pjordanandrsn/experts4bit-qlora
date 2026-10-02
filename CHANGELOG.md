@@ -13,6 +13,53 @@
 - **CI.** `compressed-tensors==0.18.0` is in `[test]`, and an unguarded import tripwire keeps those tests from skipping.
 - **Not in this change** (#789): `gptq_v2` checkpoints and compressed-tensors `weight_zero_point` both change the math, and the loader reads neither.
 
+### Lane SC1 amendment A1 (#846): proving-rental guards 0.75 / 0.75 / 1.0 h (bench text only)
+
+- `bench/sc1/SC1-PREREG.md`: the per-proof budget as first registered (≤ 10 min, ≤ $0.15) did not count instance acquisition
+  (6.4 min measured) or the box script's `can_run` admission tail, so `sc1a-prove-2` hit the deadline after the installs with
+  nothing measured. Guards move to A 0.75 h / B 0.75 h / C 1.0 h; an `## Amendments` section records it with the receipts; the
+  fourth proof's model revision is spelled out in full. No script, pin, gate or claim changes.
+
+### CI: `conflict-marker-guard` refuses merge-conflict markers in tracked text (tooling only; mirror of grouped-nf4-gemm#437)
+
+- New workflow on push and pull_request: a positive control plants a two-sided conflict and asserts both marker lines are
+  flagged, then `git grep` refuses any tracked line beginning `<<<<<<< ` or `>>>>>>> ` (the lone `=======` is a legitimate
+  setext underline and is not matched; a conflict always carries the other two). `guard-allow` on the line exempts a
+  deliberate quotation. Motivated by this repository's two CHANGELOG races in one hour (#848's rebase staged an unresolved
+  file; hotfix #852). No package code changes.
+### Lane P95 registered (#564): K8's spread across arithmetics of equal per-GEMM error -- P94's three arithmetics at T == 1 on disjoint windows of each text (bench and tests only)
+
+- **Why.** P94 read K8 on one window per text. On c4val1 its pairs differed by 0.013 to 0.168 ppl, and production's own
+  GEMV and M-tile read 0.078 apart on Granite. One draw per arithmetic cannot say whether a single-window 0.05 gate is
+  inside the instrument's resolution.
+- **What it reads.**
+  - P94's arms on both families: g, the scalar GEMV; m, the served M-tile; t, K25 TF32.
+  - Disjoint windows of each text: window k starts at token k × 4096. Window 0 is P94's, the reproduction control.
+    Fresh windows: c4val1 1–8, wikitext 1–4.
+  - Window-major order, so a deadline trims both families evenly.
+- **The rule** (`bench/p95/p95_reduce.py`, 12-case self-test).
+  - σ = max(SD(m − g), SD(t − m)) over the fresh windows.
+  - **RESOLVED** if σ ≤ 0.025 on every text in both families: the single-window gate stands.
+  - **UNDER_RESOLVED** otherwise, with W = ⌈(σ/0.025)²⌉ windows for a windowed-mean gate that a later lane registers.
+  - The lane licenses nothing, and P94's verdict stands.
+- **Rentals.** A proving rental (0.5 h), then the reading (2.5 h guard, ≤ $1.875). Lane ceiling $3.00.
+- `tests/test_p95_staged_pin.py` pins:
+  - the windows, and that the reducer reads the same ones;
+  - P94's kernel pin, harness bytes and arms;
+  - the window-0 control values against P94's receipts;
+  - the order and the proving switch.
+
+
+### Lane SC1 registered (#846): Qwen3-30B-A3B serving head-to-head on RTX 5090s against vLLM 0.30.0, SGLang 0.5.20, llama.cpp b11327, ExLlamaV3 1.5.3 and LMDeploy 0.18.0 (bench and tests only)
+
+- `bench/sc1/`: the pre-registration (three boxes with minute budgets; matched work on identical token ids; e4b's licensed
+  pack built and K8-gated on the box at both arithmetics it serves; quality on every arm in the served and the prefill
+  shape, in nats, vs the bf16 checkpoint and vs the ratioed arm; the e4b ratio taken on a scheduler-in-the-loop slope with
+  the graph window as the kernel ceiling; TTFT, resources, energy; controls), `UPSTREAM-NOTES.md` (read from source at
+  the pinned tags), `DESIGN-REVIEW.md` (three adversarial rounds with dispositions), the comparator drivers and their
+  teacher-forced NLL scorers, the orchestration, the reducer with its self-test, the staged pin. Nothing outside `bench/`
+  and `tests/` changes; no default, gate, licence or claim moves.
+
 ### serve_paged correction: `fuse_qkv` applies the env-gated folds itself -- the server no longer refuses the registered fused stack
 
 - #853 described `--fuse-qkv` and the three fold flags as the harness's exclusive branches and refused

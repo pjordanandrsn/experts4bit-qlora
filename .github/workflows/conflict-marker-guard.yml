@@ -1,0 +1,47 @@
+name: conflict-marker-guard
+on: [push, pull_request]
+
+# Refuses merge-conflict markers in tracked text.
+#
+# Added 2026-10-02 after two CHANGELOG races in one hour on experts4bit-qlora
+# (e4b#848's final rebase staged an unresolved CHANGELOG.md; three conflict
+# markers sat at the top of main for about six minutes until hotfix e4b#852).
+# Three sessions merge into that file; a resolver whose assertion fails does
+# not stop a `set -e`-less chain from staging the file. CI is the gate that
+# does not depend on the chain. Landed in grouped-nf4-gemm first (gnf4#437,
+# shared tooling); this is the experts4bit-qlora mirror, identical in rule
+# and control.
+#
+# Rule: a line that BEGINS with `<<<<<<< ` or `>>>>>>> ` (seven, then a space,
+# then git's label). The middle `=======` separator is not matched on its own:
+# it is a legitimate setext underline in Markdown and RST, and a conflict
+# always carries the other two.
+#
+# ALLOWLIST: `guard-allow` on the same line exempts a deliberate mention (a
+# doc that quotes the markers). This workflow file is excluded by path.
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: self-test — a check that cannot fail is not a check
+        run: |
+          set -euo pipefail
+          printf 'kept line\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> 1234abc (their commit)\n' > /tmp/canary.txt
+          n=$(grep -c -E '^(<<<<<<< |>>>>>>> )' /tmp/canary.txt)
+          [ "$n" -eq 2 ] || { echo "::error::positive control failed: expected 2 marker lines, got $n"; exit 1; }
+          echo "positive control: 2/2 marker lines flagged"
+
+      - name: refuse conflict markers in tracked text
+        run: |
+          set -euo pipefail
+          hits=$(git grep -n -I -E '^(<<<<<<< |>>>>>>> )' -- . ':!.github/workflows/conflict-marker-guard.yml' \
+                 | grep -v 'guard-allow' || true)
+          if [ -n "${hits}" ]; then
+            echo "::error::merge-conflict markers found in tracked text:"
+            printf '%s\n' "${hits}" | head -40
+            exit 1
+          fi
+          echo "clean"
