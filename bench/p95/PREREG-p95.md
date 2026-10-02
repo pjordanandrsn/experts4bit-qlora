@@ -91,8 +91,8 @@ arms present).
   - an HF CDN egress probe.
 
   It loads no model.
-- **`p95-5090-<n>`:** one RTX 5090, after a passing proof. **Guard 2.0 h at ≤ $0.75/h (≤ $1.50).** About 100
-  minutes:
+- **`p95-5090-<n>`:** one RTX 5090, after a passing proof. **Guard 2.5 h at ≤ $0.75/h (≤ $1.875).** About
+  100 minutes, and the runner stops starting arms 20 minutes before the deadline:
   - install and premise ~5;
   - fetch and bake ~5;
   - two censuses ~3;
@@ -101,6 +101,30 @@ arms present).
 
 ## Rehearsal
 
-To be written from the A2000 rehearsal before this page merges.
+Run on the NAS RTX A2000 (sm_86) from e4b `503cdc7`, this branch before this section, with grouped-nf4-gemm at the pin.
+Every run used `P95_GPU_CLASS=A2000 P95_MIN_DISK_GB=20`, so each was marked REHEARSAL. No time is quoted: the A2000 is
+correctness-only.
+- **The proving run** (`P95_PROVE=1`) held end to end, rc 0:
+  - install and the tripwire;
+  - the reducer's self-test (12 cases);
+  - the premise: row-exact 6/6, K25's contract compiled 30/30;
+  - the HF CDN probe;
+  - `PROVED`.
+- **The full run:**
+  - Both families were fetched and baked.
+  - The census arm and all 84 K8 arms stopped at the fp8 paged-KV append, which sm_86 cannot compile, as in P91–P94's
+    rehearsals.
+  - Every fresh-window arm reached that point after its window was cut: `step_decomp` slices the window, with its
+    length assertion, before it builds the runner.
+  - The reducer read VOID with every arm missing, as it must.
+- **The windows, checked directly** through `step_decomp._k8_window` on both families' tokenizers:
+  - every window holds the 2,561 tokens it needs (the fresh windows' slices are 2,600);
+  - the 28 scored-window digests are distinct;
+  - window 0 reproduces P94's four digests (`549ca209af16`, `5281b7c3df28`, `932b86d7a513`, `2d22dfc7e0b1`).
+
+  The check script's closing summary line printed a failure. That came from a bug in the script itself (a bitwise AND
+  on integers), not from any window; every per-window line passed.
+- **After the rehearsal** only the reading's guard changed, 2.0 → 2.5 h, in this page and the driver's comment. The
+  staged files are the rehearsed bytes.
 
 Amendments, dated, go below this line before any data is read.

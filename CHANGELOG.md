@@ -1,6 +1,28 @@
 # Changelog
 
 ## Unreleased
+### Lane P95 registered (#564): K8's spread across arithmetics of equal per-GEMM error -- P94's three arithmetics at T == 1 on disjoint windows of each text (bench and tests only)
+
+- **Why.** P94 read K8 on one window per text. On c4val1 its pairs differed by 0.013 to 0.168 ppl, and production's own
+  GEMV and M-tile read 0.078 apart on Granite. One draw per arithmetic cannot say whether a single-window 0.05 gate is
+  inside the instrument's resolution.
+- **What it reads.**
+  - P94's arms on both families: g, the scalar GEMV; m, the served M-tile; t, K25 TF32.
+  - Disjoint windows of each text: window k starts at token k × 4096. Window 0 is P94's, the reproduction control.
+    Fresh windows: c4val1 1–8, wikitext 1–4.
+  - Window-major order, so a deadline trims both families evenly.
+- **The rule** (`bench/p95/p95_reduce.py`, 12-case self-test).
+  - σ = max(SD(m − g), SD(t − m)) over the fresh windows.
+  - **RESOLVED** if σ ≤ 0.025 on every text in both families: the single-window gate stands.
+  - **UNDER_RESOLVED** otherwise, with W = ⌈(σ/0.025)²⌉ windows for a windowed-mean gate that a later lane registers.
+  - The lane licenses nothing, and P94's verdict stands.
+- **Rentals.** A proving rental (0.5 h), then the reading (2.5 h guard, ≤ $1.875). Lane ceiling $3.00.
+- `tests/test_p95_staged_pin.py` pins:
+  - the windows, and that the reducer reads the same ones;
+  - P94's kernel pin, harness bytes and arms;
+  - the window-0 control values against P94's receipts;
+  - the order and the proving switch.
+
 
 ### serve_paged correction: `fuse_qkv` applies the env-gated folds itself -- the server no longer refuses the registered fused stack
 

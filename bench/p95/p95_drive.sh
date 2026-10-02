@@ -53,7 +53,7 @@ NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "ref
 PASS="P95_RUN_ID=$RUN_ID P95_RUN_NONCE=$NONCE P95_DEADLINE_EPOCH=$DEADLINE P95_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA"
 # Only host-limit knobs and the proving-run switch travel: a rental is the registered run, so the knobs that change WHAT
 # is measured are not forwarded -- a rehearsal sets them on its own box and the runner marks it REHEARSAL. P95_PROVE=1 is
-# the proving rental the pre-registration names (its guard is 2.0 h): install, tripwire, reducer self-test, premise; no
+# the proving rental the pre-registration names (its guard is 2.5 h): install, tripwire, reducer self-test, premise; no
 # model.
 for v in P95_PROVE; do [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"; done
 if [ "${P95_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash p95_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/p95"; exit 0; fi
