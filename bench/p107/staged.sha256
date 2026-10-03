@@ -1,0 +1,12 @@
+# Names as the BOX sees them after staging ($W). The box runs `sha256sum -c` on this file and the controller resolves
+# each name to its source (p107_drive.sh's case) and compares. sc1_e4b_sched.py / sc1_prompts.py are SC1's;
+# step_decomp.py / calib.json P39's; p98_bake.py P98's; test_paged_prefill_attn_route_gpu.py is the premise (tests/).
+9836613267d12ad281efa1640217f40c64158b7d2996d6eed8da207c296c0569  p107_run.sh
+c120fd97b340bdf0e6225a166665fafe58f248127287db4c7e8baaa9f1d4b7fc  p107_box.py
+ca4559f09b949b6bf75c5a54288f8a27326814a10965f36212787290bdde58e5  p107_reduce.py
+e3964c66997c2c2f39406904ac0cfa37bd083ed1f40f85117eadc1620be9a1ce  sc1_e4b_sched.py
+eae98f666da1337bc1c2bd14b6b19f6c8c6103e9492c025b8d905f197024b1cd  sc1_prompts.py
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
+1b523751b504c16a977853e12b9db7f07c3e5c4019fe31f22e4b4c69caff6f89  p98_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+ef7e081df950afac0308d0a417eeb3a0f14dffc0c5827195a0f2e837653e31ca  test_paged_prefill_attn_route_gpu.py

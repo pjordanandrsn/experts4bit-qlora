@@ -1,6 +1,22 @@
 # Changelog
 
 ## Unreleased
+### P107 registered (#960): paged prefill attention's route A/B -- math (SDPA's fp32 math backend, today) against flash (#963's lower-right causal bias) on one engine, gated by the calibrated K8 rule on the served-prefill NLL (bench and tests)
+
+- `bench/p107/{PREREG-p107.md,p107_run.sh,p107_drive.sh,p107_box.py,p107_reduce.py,staged.sha256}`,
+  `tests/test_p107_served_prefill_scorer.py`, `tests/test_p107_staged_pin.py`.
+- **Why:** under k19, P102's 4096-token profile spends about 445 of 924 device-ms in fp32 SIMT SGEMMs, masking and
+  softmax -- prefill attention on SDPA's math backend, because a boolean mask with GQA rules out every fused kernel.
+- **The box:** one engine, `E4B_PAGED_PREFILL_ATTN` switched between requests. TTFT at 512 and 4,096 tokens over three
+  rotated rounds; a 512-token kernel census per route; and the SERVED-PREFILL NLL on 12 fresh windows (c4val1 W=8,
+  wikitext W=4), each window's 2,560 tokens run through the paged prefill path in 512-token chunks and its 2,048
+  predictions after the prompt scored. The decode-shaped K8 and P102's eager-attention NLL never score a logit this code produces.
+- **The rule:** `DEFAULT=flash` iff flash PASSES the K8 rule (|mean dppl| <= 0.05 per text) and its TTFT-4096 is at
+  most 0.9x math's.
+- **The scorer** equals one non-paged forward within 1e-4 on a tiny Qwen3 for both routes (CPU test), and two of its
+  mutations fail that test.
+- **Predictions:** PASS with |mean dppl| <= 0.01; TTFT-4096 1.25-1.55 s -> 0.85-1.10 s; `DEFAULT=flash`.
+
 ### E4B_PAGED_PREFILL_ATTN (#960): a route knob for paged prefill attention -- math (the default, unchanged) or flash (the same lower-right causal mask as a bias the flash kernel takes)
 
 - **Why.** For a layer without sinks or a sliding window, the paged prefill branch called SDPA with an explicit
