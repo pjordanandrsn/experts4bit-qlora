@@ -1,7 +1,7 @@
 """The p102 lane's staged-file pin must match the repo (the e4b#642 check, mirrored for P102).
 
 `bench/p102/p102_drive.sh` refuses to run when a staged file's sha256 differs from `bench/p102/staged.sha256`; this test
-runs the same comparison in CI. It also runs the reducer's self-test (11 cases) and the box instruments' (4), and pins
+runs the same comparison in CI. It also runs the reducer's self-test (14 cases) and the box instruments' (4), and pins
 the A/B: P100's census, SC1's TTFT helpers and prompt dump, P39's step_decomp and calibration, P98's bake and P42's
 hook staged at their lanes' registered bytes; the premise test staged from tests/; SC1's stack and token ids; the four
 routes and their windows; the premise before the fetch; the tripwire on the knob; and the exit codes.
@@ -72,7 +72,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 
 def test_the_reducer_and_the_box_instruments_pass_their_self_tests():
-    for script, want in (("p102_reduce.py", "self-test OK (11 cases)"), ("p102_box.py", "self-test OK (4 cases)")):
+    for script, want in (("p102_reduce.py", "self-test OK (14 cases)"), ("p102_box.py", "self-test OK (4 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True)
         assert out.returncode == 0 and want in out.stdout, script + out.stdout + out.stderr
 
@@ -150,3 +150,12 @@ def test_the_install_carries_what_the_premise_runs():
     tripwire = RUN[start:RUN.index("\nPYT\n", start)]                       # the heredoc's body
     assert "import pytest" in tripwire
     assert RUN.index("import pytest") < RUN.index("python -m pytest test_int4_prefill_route_gpu.py")
+
+
+def test_the_loop_engagement_check_is_structural():
+    """A2: ``p102-5090-5`` was voided by a 9,600-decode floor that P100 had already measured as wrong (8,390). The check
+    is two decodes per distinct expert over 48 loop calls, with a floor of 32 distinct experts per layer."""
+    red = (LANE / "p102_reduce.py").read_text()
+    assert "MIN_LOOP_DEQUANT = 2 * 32 * 48" in red and "9600" not in red
+    assert 'c.get("loop_dequant_is_two_per_distinct") is True' in red
+    assert '"dequant_total": 8390' in red                                   # the fixture is the measured census

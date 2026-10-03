@@ -9,7 +9,10 @@ Inputs in --dir: ``ttft_routes.json`` and ``nll_routes.json`` (``p102_box.py``'s
 - a record is missing or off the registered shape (the build's census: 48 int4 expert layers on the int4_b32 store,
   ``device_grouping`` False; chunk 512; three rounds; SC1's prompt digests);
 - a route did not run as registered in its dispatch census of one 512-token request:
-  - ``loop``: 48 grouped calls, all the host loop, >= 9,600 reference decodes;
+  - ``loop``: 48 grouped calls, all the host loop, exactly two reference decodes per distinct expert per call, and at
+    least 3,072 of them (>= 32 distinct experts per layer -- a floor for "the loop decoded experts"; P100 and P102's
+    first reading both measured 8,390, 87 per layer. A2: the registered 9,600 came from a uniform-routing guess and
+    voided p102-5090-5);
   - ``batched``: 48 host-grouped calls on the int4 store, 0 reference decodes;
   - ``k19``: 48 device-grouped calls, 0 reference decodes, >= 96 K19 launches, 0 M-tile launches;
   - ``mtile``: 48 device-grouped calls, 0 reference decodes, >= 96 M-tile launches, 0 K19 launches;
@@ -45,7 +48,9 @@ NUMERICS_RANK = {"batched": 0, "k19": 1, "mtile": 2}
 PROMPT_SHA = {"512": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3",
               "4096": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd"}
 WINDOWS = {"c4val1": (9, 10, 11, 12, 13, 14, 15, 16), "wikitext": (9, 10, 11, 12)}
-BUDGET, LAYERS, MIN_DEQUANT, MIN_KERNELS = 0.05, 48, 9600, 96
+BUDGET, LAYERS, MIN_KERNELS = 0.05, 48, 96
+#: A2: the loop's engagement floor -- two decodes per distinct expert, >= 32 distinct experts per layer, 48 layers
+MIN_LOOP_DEQUANT = 2 * 32 * 48
 
 
 def _load(p: Path):
@@ -93,7 +98,8 @@ def reduce(d: Path) -> dict:
             if c is None or k is None:
                 void.append(f"{rt}: no census")
                 continue
-            ok = {"loop": c["grouped_calls"] == c["loop_calls"] == LAYERS and c["dequant_total"] >= MIN_DEQUANT,
+            ok = {"loop": c["grouped_calls"] == c["loop_calls"] == LAYERS and c["dequant_total"] >= MIN_LOOP_DEQUANT
+                  and c.get("loop_dequant_is_two_per_distinct") is True,
                   "batched": c["loop_calls"] == LAYERS and c["dequant_total"] == 0,
                   "k19": c["grouped_device_calls"] == LAYERS and c["dequant_total"] == 0
                   and k["k19"] >= MIN_KERNELS and k["mtile"] == 0,
@@ -158,7 +164,8 @@ def reduce(d: Path) -> dict:
 def _fixture(d: Path, ttft=None, nll_delta=None, census_fix=None, tok_fix=None):
     ttft = ttft or {"loop": (2.1, 16.6), "batched": (0.6, 4.0), "k19": (0.12, 0.6), "mtile": (0.12, 0.62)}
     nll_delta = nll_delta or {"batched": 0.0, "k19": 0.004, "mtile": 0.02}
-    cen = {"loop": {"grouped_calls": 48, "loop_calls": 48, "grouped_device_calls": 0, "dequant_total": 12200},
+    cen = {"loop": {"grouped_calls": 48, "loop_calls": 48, "grouped_device_calls": 0, "dequant_total": 8390,
+                    "loop_dequant_is_two_per_distinct": True},
            "batched": {"grouped_calls": 48, "loop_calls": 48, "grouped_device_calls": 0, "dequant_total": 0},
            "k19": {"grouped_calls": 48, "loop_calls": 0, "grouped_device_calls": 48, "dequant_total": 0},
            "mtile": {"grouped_calls": 48, "loop_calls": 0, "grouped_device_calls": 48, "dequant_total": 0}}
@@ -217,7 +224,11 @@ def selftest() -> int:
              tok_fix=lambda dr: [x.update(token=7) for x in dr if x["route"] == "batched" and x["round"] == 2])
     assert r["quality"]["batched"]["first_tokens_identical"] is False
     case("k19 never launched K19: VOID", "VOID", census_fix=lambda c, k: k["k19"].update(k19=0, mtile=96))
-    case("batched still decoded per expert: VOID", "VOID", census_fix=lambda c, k: c["batched"].update(dequant_total=12200))
+    case("batched still decoded per expert: VOID", "VOID", census_fix=lambda c, k: c["batched"].update(dequant_total=8390))
+    case("loop at the measured 8,390 decodes is engaged (A2)", "DEFAULT=k19")
+    case("loop decodes not two per distinct: VOID", "VOID",
+         census_fix=lambda c, k: c["loop"].update(loop_dequant_is_two_per_distinct=False))
+    case("loop decoded almost nothing: VOID", "VOID", census_fix=lambda c, k: c["loop"].update(dequant_total=96))
     case("loop did not loop: VOID", "VOID", census_fix=lambda c, k: c["loop"].update(loop_calls=0))
     with tempfile.TemporaryDirectory() as t:
         d = Path(t)
