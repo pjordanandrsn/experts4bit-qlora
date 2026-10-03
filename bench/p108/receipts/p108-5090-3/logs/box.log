@@ -1,0 +1,25 @@
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files: 100%|██████████| 8/8 [00:00<00:00, 2907.41it/s]
+[18:19:39]   checkpoint: google/gemma-4-26B-A4B-it @ 4d7ae4984b7db7de8f8457170b3f1a419ee76d52 (requested 4d7ae4984b7db7de8f8457170b3f1a419ee76d52)
+[18:19:39]   fusing + quantizing experts (up to 30x128) to nf4 (streaming)...
+[18:19:45]   quantized experts on 30/30 MoE layers (128 experts each)
+[18:19:45]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 343089.45 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 932874.92 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 1252428.77 examples/s]
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+P108_GROUP 1 of 4 done at 645 s, 16.88 GiB allocated
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+P108_GROUP 2 of 4 done at 1180 s, 16.88 GiB allocated
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+P108_GROUP 3 of 4 done at 1722 s, 16.88 GiB allocated
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+[serve_paged] KV geometry varies per layer: [(2, 512), (8, 256)]
+P108_GROUP 4 of 4 done at 2261 s, 16.88 GiB allocated
+P108_BOX: windows 32 | oneshot bias -0.1420 spread 0.2761 | chunk bias -0.2580 spread 0.3492 | batch bias -0.1485 spread 0.3137 | paged bias -0.1960 spread 0.3262 | mutant_scale bias +2.2572 spread 2.2572 | mutant_window bias -0.9530 spread 0.9530 | rep identical True | calls 30600/30600 sliding {'1024': 25500, '0': 5100} | load 10s | mem 20.13 GB

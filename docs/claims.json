@@ -230,6 +230,36 @@
       "conditions": "512 scored steps, 256-token prompt, wikitext-2 test, prompt offsets 0/3000/6000; NF4 experts on the e4b arms; plain bf16 transformers 5.16.1 for the three-forward test"
     },
     {
+      "id": "e4b.parity.gemma4.p108.paged-vs-floor.5090.2026-10-03",
+      "package": "experts4bit-qlora",
+      "area": "parity",
+      "model": "google/gemma-4-26B-A4B-it",
+      "claim": "Lane P108, one RTX 5090: over 32 wikitext windows (1,280-token prompts so Gemma-4's 1,024-token sliding window binds; 256 teacher-forced positions each), e4b's paged path (PagedModelRunner, fp8 KV pool, gnf4's real fp8 kernel) is at parity with transformers' own arithmetically neutral perturbations of the same model: its mean NLL 5.360 lies between the one-shot, chunked-prefill and batched-decode draws (5.298-5.415); against transformers' cached forward its bias is -0.196 nats and spread 0.326, inside the floor's 0.258 / 0.349 (rule: bias <= B_floor + 0.05, spread <= 2 x S_floor). A halved decode softmax scale reads +2.257 (caught); dropping the decode window reads -0.953 (visible). AT_PARITY.",
+      "value": -0.19604246529436048,
+      "unit": "mean NLL bias of the paged path against transformers' cached forward, nats, over 32 windows x 256 positions",
+      "hardware": "RTX 5090 (sm_120, driver 610.57.04, 32607 MiB), one rented Vast.ai verified host (machine 151972, instance 54045920, AMD Ryzen 9 9950X3D), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @e0ae2f3 (0.41.1 + the box's memory release; #964 and #966 present) + grouped-nf4-gemm @34da93d (v0.34.1); torch 2.8.0+cu128, transformers 5.17.0; google/gemma-4-26B-A4B-it @4d7ae49 loaded through e4b's streaming loader (NF4 experts); premise tests/test_gemma4_paged_window_gpu.py 2 passed on the card; the reference is transformers' cached forward, batch 1; the floor draws are a one-shot forward, a 256-token chunked prefill and an 8-window batched decode; 32 windows in groups of 8; verdict by bench/p108/p108_reduce.py",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p108/RESULTS-p108.md",
+        "bench/p108/PREREG-p108.md",
+        "bench/p108/p108_reduce.py",
+        "bench/p108/p108_box.py",
+        "bench/p108/receipts/p108-5090-3/verdict.json",
+        "bench/p108/receipts/p108-5090-3/box.json",
+        "bench/p108/receipts/p108-5090-3/summary.txt",
+        "bench/p108/receipts/p108-5090-3/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/p108-5090-3/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-03/p108-prove-1/ (receipt.json, the proving run)",
+        "receipts/experts4bit-qlora/2026-10-03/p108-5090-1/ and p108-5090-2/ (receipt.json; HARNESS_ERROR, no data)"
+      ],
+      "notes": "Pre-registered in #974 with Amendments 1-3 (#978, #980, #984: the box's time budget and a reference-cycle CUDA memory leak, all before any data). Complements e4b.parity.gemma4.no-reference, which still holds at single-window resolution. transformers' own cached order (R) sits apart from every other arm (0.14-0.26 nats higher NLL), Gemma-4's batch-shape chaos seen in a 32-window mean. Predictions held for AT_PARITY, the paged spread, the reference's repeat, the scale mutant and memory; missed for the floor biases and spreads (larger), the paged bias (-0.196, not 0 to +0.05) and the window mutant's sign. Lane cost $2.3632."
+    },
+    {
       "id": "e4b.parity.gemma4.fp8-share",
       "package": "experts4bit-qlora",
       "area": "parity",
