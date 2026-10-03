@@ -7720,6 +7720,36 @@
       "notes": "Pre-registered in #903. A correctness reading, not a speed one: decode is eager and the Gated DeltaNet layers ran the torch path (830 ms per 4-row step). The rule gates on the state where both paths see the same tokens, not on a cross-model KL ratio: the rehearsal read the subject at 1.78x the control, the reading at 0.62x, so the ratio swings with shape and model sensitivity (prefill-step KL, no fp8 read: 2.66e-3 subject against 9.94e-4 control). Only Qwen3.6 has been read on a GPU."
     },
     {
+      "id": "e4b.serve.p101.qwen36-hybrid-decode-graphs.5090.2026-10-03",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3.6-35B-A3B",
+      "claim": "Lane P101, one RTX 5090: on e4b @4287d07 (with #918's fix of #913), Qwen3.6-35B-A3B served through serve_paged.build_engine (an NF4 arena baked on the box, all in VRAM; the hybrid expert tier; fp8 KV on a compact 10-layer pool; the per-slot Gated DeltaNet state) captures every bucketed decode graph (1, 2, 4, 8, 16) and replays them with no eager step (209 replays), and the graph arm's greedy tokens equal the padded eager step's on all 17 requests (W16: 16 staggered requests, 256-token prompts, 48+4i new tokens; W1: one request, 96 new). Decode 449.0 tok/s on W16 and 79.7 on W1, 2.02x and 3.28x plain eager (222.7 / 24.3) on a Ryzen 9 7950X host. SUPPORTED by P98's registered rule.",
+      "value": 448.982,
+      "unit": "W16 decode tok/s under bucketed graphs (111 timed steps, 16 staggered requests)",
+      "hardware": "RTX 5090 (sm_120, driver 580.95.05, 32607 MiB), one rented Vast.ai verified host (machine 36204, instance 53959695, AMD Ryzen 9 7950X), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @4287d07 + grouped-nf4-gemm @34da93d (v0.34.1); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2, no fla / causal_conv1d (Gated DeltaNet on transformers' torch path); Qwen3.6 @995ad96 baked to an NF4 arena on the box (40 layers x 256 experts, 16.88 GiB snapshot); three fresh engines, each in its own process: g bucketed graphs, e the same buckets run eagerly on the padded layout (the bitwise oracle), p plain eager; device grouping on; premise: the three hybrid GPU test files passed on the card (4 passed, none skipped); P98's kit at its registered bytes (bench/p98/staged.sha256); verdict by bench/p98/p98_reduce.py",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p101/RESULTS-p101.md",
+        "bench/p101/PREREG-p101.md",
+        "bench/p98/PREREG-p98.md",
+        "bench/p98/p98_reduce.py",
+        "bench/p101/receipts/p101-5090-5/verdict.json",
+        "bench/p101/receipts/p101-5090-5/arm_g.json",
+        "bench/p101/receipts/p101-5090-5/arm_e.json",
+        "bench/p101/receipts/p101-5090-5/arm_p.json",
+        "bench/p101/receipts/p101-5090-5/logs/premise.log"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/p101-5090-5/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-03/p101-prove-2/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #919. P98 (#912) asked the same question and read VOID on a replay fault; P99 (#925) localised it to bucket 1's first replay, and #918 fixed its cause, the MoE engine's single-entry row-to-token index cache. The eager arms reproduce P98's tokens exactly but ran about 2.2x P98's speed on a different host (Ryzen 9 7950X against EPYC 7663): eager hybrid decode is launch-bound, so the graph-over-eager ratio depends on the host CPU and is not claimed for another host. Of the predictions, SUPPORTED, the W1 and W16 bands and the memory bound held; 'graphs at least 3x on both workloads' missed on W16 (2.02x), and 'eager arms within 10 % of P98' missed on the host difference."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02",
       "package": "experts4bit-qlora",
       "area": "train",

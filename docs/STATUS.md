@@ -377,7 +377,18 @@ five 512-dim layers, 0.017 with 32-wide K groups. Method: METHODOLOGY
 On Qwen3.6-35B-A3B (30 Gated DeltaNet + 10 attention layers), the paged runner keeps each sequence's linear state at
 transformers' own (7.7e-3 relative error where both paths see the same tokens) and tracks transformers' forward at
 4.43e-3 nats, argmax agreement 0.972, through gnf4's fp8 kernel on a 10-layer pool. A slot-mapping mutant reads 4.05
-nats. Decode is eager (graphs are refused for hybrids), so this is a correctness reading, not a speed one.
+nats. Decode was eager (graphs were then refused for hybrids; P101 below reads them), so this is a correctness
+reading, not a speed one.
+
+**Hybrid models decode under CUDA graphs** (lane P101, 2026-10-03, one rented RTX 5090; **measured** —
+[`bench/p101/RESULTS-p101.md`](../bench/p101/RESULTS-p101.md), `e4b.serve.p101.qwen36-hybrid-decode-graphs.5090.2026-10-03`).
+- **The reading:** on the fixed code (#918, #913), Qwen3.6-35B-A3B through `build_engine` captured every bucketed decode
+  graph (1–16) and replayed them with no eager step, with tokens equal to the padded eager step's on all 17 requests.
+- **The speed:** 449.0 tok/s on 16 staggered requests and 79.7 on one, 2.02x and 3.28x plain eager, on a Ryzen 9 7950X
+  host.
+- **The host matters:** eager hybrid decode is launch-bound, and P98's EPYC 7663 host ran the same eager arms at about
+  half the speed. The ratio is not claimed for another host.
+- **`E4B_PAGED_GRAPHS=1` now serves hybrid models.** The Gated DeltaNet layers still ran transformers' torch path.
 
 **Quality measured from the checkpoint, not from e4b's own reference
 (P44, 2026-09-19).** A second instrument scores each served stack
