@@ -20,6 +20,21 @@
 - **Docs.** The `int4_experts.py` Scope note, the knob's docstring, and a `docs/SERVING.md` paragraph citing P100 and
   P102.
 
+### P105 registered (#928): the Gated DeltaNet kernels under the hybrid paged path with a premise that is a distribution -- a dense hybrid within its control on every one of 8 seeds (bench and tests)
+
+- `bench/p105/{PREREG-p105.md,p105_run.sh,p105_drive.sh,p105_reduce.py,staged.sha256}`, `tests/test_p105_staged_pin.py`.
+- **New test** `tests/test_linear_state_dense_parity_gpu.py`: a dense hybrid through `PagedModelRunner` with the fp8
+  KV pool, against transformers' chunk-matched cache, within 2x its dense all-attention control on every one of 8
+  seeds. Greedy tokens are reported, not gated (the control itself flips argmax near-ties). Variants: SDPA standing in
+  (any CUDA) and the real fp8 kernel (sm_89+).
+  - On the A2000 the ratio is 0.66-1.60 on all seeds under the torch path, fla and fla + causal-conv1d.
+  - A mutant that swaps sequences' states fails at 9.2-14.6x on every seed.
+- **The lane:** P104's, with the premise replaced:
+  - phase t: 11 passed;
+  - kernel phases: the graph files, the chunk-matched all-linear test and the dense parity file, 9 passed;
+  - the single-seed tiny-MoE checks (a seed lottery, P104) are reported only.
+- **Predictions:** SUPPORTED with `recommend`; fc's graph arm 1.15-1.60x phase t's on W16 and 1.02-1.15x on W1.
+
 ### P104 stopped at its proving rental (#928), no verdict; P103's cause corrected: the hybrid parity premise's single-seed MoE statistic is a lottery in every kernel arm, the torch path included -- not the kernels, not e4b
 
 - `bench/p104/RESULTS-p104.md`, `bench/p104/receipts/p104-prove-1/`, `bench/p104/a2000/` (probes 7 and 8).
