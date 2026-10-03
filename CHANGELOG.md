@@ -1,6 +1,23 @@
 # Changelog
 
 ## Unreleased
+### SC1b registered (#846): a per-kernel census of where each engine's decode step goes -- SC1's largest loss (llama.cpp at B=1) and largest win (B=16), named by term (bench and tests only)
+
+- `bench/sc1b/{SC1b-PREREG.md,sc1b_census.py,kernel_classes.json,sc1b_e4b_census.py,sc1b_vllm_census.py,sc1b_serve_census.py,sc1b_toy.py,sc1b_box_d.sh,UPSTREAM-NOTES.md,DESIGN-REVIEW.md}`,
+  `tests/test_sc1b.py`; box D's dispatch points in `bench/sc1/sc1_run.sh` and `sc1_drive.sh`.
+- **The box:** one RTX 5090 runs e4b, llama.cpp, vLLM and SGLang at B=1 and 16. Each (engine, B) gets three passes: SC1's
+  own unprofiled arm, then an Nsight Systems 2025.6.1 graph-mode capture and a node-mode capture of decode steps 34-97.
+- **The reading:** each step's period splits into kernel classes, in-graph idle (graph span minus the union of its
+  records) and out-of-graph idle, with an overlap remainder. A gap is named by the first term with its sign that carries
+  >= 50 % of it and exceeds twice the two arms' per-step IQRs. If the remainder carries half, the gap is UNEXPLAINED.
+  Gates on profiler inflation, node-trace inflation, class-map coverage, MoE segment balance, nsys diagnostics and clocks.
+- **Predictions:** e4b's B=1 loss to llama.cpp is mostly in-graph launch/dependency gaps, not its int4 expert GEMV; its
+  B=16 win is llama.cpp's out-of-graph host time.
+- **SC1's own scripts:** unchanged when `SC1_LAUNCH_PREFIX` is unset. The paged prefill attention is pinned to `math`, the
+  route every SC1 box ran, now that the default is flash.
+- Two hostile design reviews; round 2's disposition is in `DESIGN-REVIEW.md`. One more defect was found while applying it
+  and is fixed with a Linux test: ending a capture with `pkill -f` on the app's pattern also signalled nsys, whose
+  command line carries the app's.
 
 ### P108 Amendment 1 (#359): the box gets 150 minutes and the reading a 3 h guard, before any data is read (bench only)
 

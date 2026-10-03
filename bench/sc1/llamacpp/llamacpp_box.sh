@@ -119,10 +119,14 @@ llamacpp_server_start() {
     # 4 and not 5: 5 is debug output.
     local flags=(-m "$gguf" -ngl 99 -fa on -ctk f16 -ctv f16 -np "$np" --cont-batching -c "$ctx" -b 2048 -ub 512
                  --temp 0 --metrics --host 127.0.0.1 --port "$port" -lm mmap --no-context-shift --no-webui -lv 4)
+    # SC1b: an optional launch prefix (`nsys launch --session-new=... `) and extra flags (the proof's -lv 5); both empty
+    # unless set, so SC1's command is unchanged
+    local -a prefix=(${SC1_LAUNCH_PREFIX:-}) extra=(${LLAMACPP_EXTRA_FLAGS:-})
+    flags+=(${extra[@]+"${extra[@]}"})
     _llamacpp_log "llama-server ${flags[*]}"
     printf 'FLAGS: %s\n' "${flags[*]}" > "$log"
     env | grep -E '^(GGML_|LLAMA_ARG_|CUDA_VISIBLE)' | sed 's/^/ENV: /' >> "$log"
-    nohup "$LLAMACPP_BIN/llama-server" "${flags[@]}" >> "$log" 2>&1 &
+    nohup ${prefix[@]+"${prefix[@]}"} "$LLAMACPP_BIN/llama-server" "${flags[@]}" >> "$log" 2>&1 &
     LLAMACPP_SERVER_PID=$!
     LLAMACPP_SERVER_PORT=$port
     LLAMACPP_SERVER_LOG=$log

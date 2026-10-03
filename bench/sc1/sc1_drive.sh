@@ -8,18 +8,20 @@
 # checks every pin against its source before anything is sent; starts the box script detached under a fresh nonce;
 # polls TP_DONE.<nonce>; fetches receipts, logs, samples and bake.json -- never the venvs, caches, arenas, checkpoints or
 # the pack's payloads (its manifest.json rides along). Nothing here creates, destroys or approves compute.
-# SC1_BOX=A|B|C is required. SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
+# SC1_BOX=A|B|C|D is required (D = SC1b's census box). SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [sc1_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID SC1_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$SC1_BOX" in A|B|C) ;; *) say "refusing: SC1_BOX must be A, B or C"; exit 78;; esac
+case "$SC1_BOX" in A|B|C|D) ;; *) say "refusing: SC1_BOX must be A, B, C or D (SC1b)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 P39="$REPO/bench/p39"; P42="$REPO/bench/p42"; TESTS="$REPO/tests"
 # flat pieces (box sees them in $W); the reducer joins when it exists (staged.sha256 pins it then: "pinned at integration")
 STAGE="$HERE/sc1_run.sh $HERE/sc1_e4b_sched.py $HERE/sc1_prompts.py $HERE/sc1_sampler.sh $P39/step_decomp.py $P39/k8_bake.py $P39/calib.json $TESTS/test_k19_row_exact_gpu.py $HERE/staged.sha256"
 [ -s "$HERE/sc1_reduce.py" ] && STAGE="$STAGE $HERE/sc1_reduce.py"
+# SC1b (bench/sc1b): the census box D's pieces, staged flat on EVERY box so staged.sha256 stays one list for A-D
+SC1B="$REPO/bench/sc1b"; for f in sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh; do STAGE="$STAGE $SC1B/$f"; done
 HOOK="$P42/hook/usercustomize.py"
 COMP_DIRS=""; for d in vllm sglang llamacpp exl3 lmdeploy; do [ -d "$HERE/$d" ] && COMP_DIRS="$COMP_DIRS $d"; done
 for f in $STAGE $HOOK; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -34,6 +36,7 @@ while read -r want name; do
     vllm/*|sglang/*|llamacpp/*|exl3/*|lmdeploy/*) src="$HERE/$name";;
     hook/usercustomize.py) src="$P42/hook/usercustomize.py";;
     test_k19_row_exact_gpu.py) src="$TESTS/$name";;
+    sc1b_*|kernel_classes.json) src="$SC1B/$name";;
     *) src="$P39/$name";;
   esac
   [ -s "$src" ] || { say "refusing: pinned file $name resolves to $src, which is missing"; exit 78; }
@@ -103,7 +106,7 @@ lane_dead() { [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead; }   # live_
 # text that said WHY). Leave: venvs, caches, arenas, snapshots, the llama.cpp tree and GGUFs, the pack payloads. Bounded (ssh
 # ConnectTimeout + rsync --timeout) so a dead box cannot hang the driver; the remote rsync runs at nice 19 / idle I/O so a pull
 # during a timed arm does not perturb it.
-pull_box() { local -a low=(); [ "${2:-}" = low ] && low=(--rsync-path="nice -n 19 ionice -c3 rsync")   # mid-run pulls only
+pull_box() { local -a low=(); [ "${2:-}" = low ] && low=(--rsync-path="nice -n 19 ionice -c3 rsync" --exclude 'census/')   # mid-run pulls only; SC1b's traces come in the final fetch
   # ${low[@]+...}: the controller runs /bin/bash 3.2 under set -u (the mini), where "${low[@]}" of an empty array is unbound
   rsync -az --timeout=120 -e "ssh -o BatchMode=yes -o ConnectTimeout=20 $E4B_RENT_SSH_OPTS -p $PORT" ${low[@]+"${low[@]}"} \
     --exclude 'artifact*/payloads/' --include 'work_*/' --include 'work_*/bake.json' --exclude 'work_*/*' \

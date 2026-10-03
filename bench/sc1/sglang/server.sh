@@ -99,7 +99,9 @@ sglang_server_start(){
   { echo "# sc1 sglang server mode=$MODE at=$(date -u +%FT%TZ)"; echo "# cmd: ${CMD[*]}"; echo "# SGLANG_CACHE_DIR=$SGLANG_CACHE_DIR SGLANG_JIT_CACHE_DIR=$SGLANG_JIT_CACHE_DIR CUDA_HOME=${CUDA_HOME:-}"; } > "$LOG"
   _sgl_say "start mode=$MODE port=$PORT log=$LOG"; _sgl_say "cmd: ${CMD[*]}"
   local t0; t0=$(date +%s)
-  setsid "${CMD[@]}" >> "$LOG" 2>&1 < /dev/null &
+  # SC1b: an optional launch prefix (`nsys launch --session-new=...`), empty unless set, so SC1's command is unchanged
+  local -a PREFIX=(${SC1_LAUNCH_PREFIX:-})
+  setsid ${PREFIX[@]+"${PREFIX[@]}"} "${CMD[@]}" >> "$LOG" 2>&1 < /dev/null &
   SGLANG_SERVER_PID=$!; SGLANG_SERVER_PORT=$PORT; SGLANG_SERVER_LOG=$LOG
   SGLANG_SERVER_PGID=$(ps -o pgid= -p "$SGLANG_SERVER_PID" 2>/dev/null | tr -d ' ')
   local code="" last=0
