@@ -18,6 +18,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-34` | `qwen3nativebest` (amendment 7) | instance 53927504, AMD EPYC 9334 32-Core Processor, driver 590.48.01 | the same token again, with clocks recorded; P13 scored here | $0.44 |
 | `tc1-5090-35` | `qwen3nativebest200` (amendment 8) | instance 53935033, Intel Xeon E5-2698 v4, driver 595.71.05 | e4b shipped vs axolotl scattermoe over 200 steps, two draws each, the 200-step matched anchor; P14 HELD, axolotl faster at steady state | $1.76 |
 | `tc1-5090-36` | `qwen3nativebest200` (amendment 9) | instance 53971676, AMD Ryzen 9 3900X 12-Core Processor, driver 595.71.05 (machine 45501) | P14's box again on a second host, e4b pinned at 7c31b88; P15 HELD (0.901 [0.892, 0.910]) | $0.93 |
+| `tc1-5090-38` | `qwen3syncab` (amendment 10, #945) | instance 53991731, AMD EPYC 7663 56-Core Processor, driver 580.95.05 | e4b against itself: 13 host syncs per MoE layer pass vs 1; P16 0.866, P17 0.847, both HELD | $0.42 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was

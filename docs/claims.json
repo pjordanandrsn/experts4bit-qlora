@@ -8904,6 +8904,30 @@
         "receipts/experts4bit-qlora/2026-10-03/tc1-5090-36/tc1/"
       ],
       "notes": "Not matched work: adapter precision and init are each framework's own. The matched position against axolotl is e4b.train.h2h.axolotl.qwen3.5090.2026-10-02 (1.416, e4b faster)."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.host-syncs.qwen3.5090.2026-10-03",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 10 (#945), one rented RTX 5090 (tc1-5090-38): e4b's single-read grouping (#946) with grouped-nf4-gemm's pinned index ring (grouped-nf4-gemm#438, GNF4_PINNED_RING=1) -- which take a fused MoE training layer pass from 13 host syncs to 1 -- step the Qwen3-30B-A3B field recipe at 0.866 [0.843, 0.889] x the legacy path on the shipped arm (3.508 / 3.654 against 4.110 / 4.162 s) and 0.847 [0.840, 0.854] x on the matched arm (4.426 / 4.453 against 5.267 / 5.213 s); every pair stable (within 4.1 %); held-out at N unchanged (shipped 0.8131 / 0.8133, matched 0.8505 / 0.8506), peak VRAM unchanged, energy per step lower. Engagement is verified per arm (each new-path arm's ring staged 53,680 transfers, every legacy arm's none). P16 and P17 HELD. e4b against itself on one host: no cross-framework position is restated from it.",
+      "value": 0.866,
+      "unit": "ratio s/step, single-read grouping + pinned ring / legacy grouping + pageable copies, shipped arm (medians of steps 11..20 over two draws each; < 1 = faster); matched arm 0.847 [0.840, 0.854]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-38: instance 53991731, AMD EPYC 7663, driver 580.95.05); e4b @ 4dd72be on torch 2.8.0+cu128, grouped-nf4-gemm @ b670e61",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; token qwen3syncab; E4B_GROUPING=legacy GNF4_PINNED_RING=0 vs E4B_GROUPING=single GNF4_PINNED_RING=1, shipped arm (bf16 expert adapters, native init) and matched arm (fp32 adapters, matched:3407), two draws each in ABBA order; validity and scoring by bench/tc1/tc1_reduce.py (engagement predicate on sync_ab)",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-syncab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-38/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-38/tc1/"
+      ],
+      "notes": "Within-box A/B. The one sync left per layer pass is the grouped kernels' host-sized launch grid (#945)."
     }
   ]
 }
