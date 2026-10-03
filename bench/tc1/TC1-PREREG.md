@@ -386,3 +386,34 @@ work, so the gain is expected to be smaller.
   changes are value-identical and the fused path's run-to-run nondeterminism (atomics) is the only difference.
 
 Budget: one RTX 5090, $0.69/h ceiling, 2.5 h cap (eight e4b arms of about 5 minutes plus setup), under $1.75; the standing no-ask tier.
+
+### Amendment 11 (2026-10-03T10:02Z, after amendment 10's read, before any box): the steady-state comparison again, with e4b's syncs removed
+
+**Why.** P14 and P15 found axolotl's scattermoe native-best stepping at 0.911 and 0.901 of e4b as shipped over steps 101..200, on
+two hosts. Amendment 10 then measured e4b's own fused step at 0.866 (shipped) of its previous form, from removing 12 of 13 host
+syncs per MoE layer pass. That changes e4b, not axolotl, so the steady-state ordering may have changed too. Only a new box can
+say: no number from one box is divided by another's.
+
+**The box.** The `qwen3nativebest200` token, unchanged (amendment 8's arms, order and 200-step recipe), with:
+
+- e4b at a head carrying #946, whose single-read grouping is the default;
+- grouped-nf4-gemm at the merge of grouped-nf4-gemm#439, whose pinned ring is the default outside capture.
+
+No environment variables are set: this measures e4b as a user installs it after both changes.
+
+**Prediction P18** (registered before the box), read off the box's own P14 line with no new reducer code: the late-window ratio,
+axolotl scattermoe / e4b shipped over steps 101..200, lies in [0.97, 1.15] on two stable pairs.
+
+- **The reasoning.** P14 and P15 read about 0.90-0.91 against the old e4b, and amendment 10's 13 % gain moves that toward about
+  1.05; host variation widens the band.
+- **The ordering reading** is reported beside, as in amendment 8: an interval wholly above 1.0 means e4b shipped is faster at steady
+  state; wholly below 1.0, axolotl; otherwise no ordering.
+- **FALSIFIED** outside the band. **UNTESTED** on an unstable or missing pair.
+
+**Decision rules.** The result is a new register row for the post-#945 code. `.native-steady-state` stays as measured, labelled as
+the code before #945. If the interval lies above 1.0, STATUS says e4b as shipped now steps faster than axolotl's scattermoe at
+steady state on that host. If it lies below 1.0, the steady-state finding stands for the new code too. If it spans 1.0, STATUS
+says the two are at parity within the draw noise. Either way, e4b finishing a 200-step run first and the held-out comparison are
+reported as before.
+
+Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20; the standing no-ask tier.
