@@ -8940,10 +8940,10 @@
       "area": "train",
       "id": "e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state",
       "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
-      "claim": "Lane TC1 (#835), amendment 16, one rented RTX 5090 (tc1-5090-46): with e4b after amendments 10-15 (#945's single-read grouping + pinned ring, #440's trimmed LoRA delta, #442's cost tile rule, #965's fused rotary, #975's fused RMSNorm -- every one a default, no environment set), e4b as shipped steps FASTER than axolotl 0.20.0's scattermoe native-best at STEADY STATE. Over steps 101..200 of a 200-step field-recipe run axolotl takes 4.014 / 3.991 s per step and e4b as shipped 3.223 / 3.242 (both pairs stable, 0.6 %): axolotl / e4b 1.238 [1.231, 1.246] (P27 HELD inside its [1.05, 1.50] band; the whole interval above 1.0, so e4b is faster). Over the whole run e4b finishes in 650-654 s of summed step time against axolotl's 1,373-1,389 s; axolotl uses x1.79 the energy per step at 1.26 GB more peak (26.77 vs 25.51 GB). Held-out at step 200: axolotl 0.7705 / 0.7704 against the box's matched e4b 0.7673, e4b as shipped 0.7948 / 0.7937 (its plateau from its own init; reported, not judged). One host (AMD EPYC 7663). A LABELLED native-best row. The earlier row (2026-10-02, the code before #945) stands as measured; the boxes' numbers are not divided.",
+      "claim": "Lane TC1 (#835), amendment 16, one rented RTX 5090 (tc1-5090-46): with e4b after amendments 10-15 (#945's single-read grouping + pinned ring, #440's trimmed LoRA delta, #442's cost tile rule, #965's fused rotary, #975's fused RMSNorm -- every one a default, no environment set), e4b as shipped steps FASTER than axolotl 0.20.0's scattermoe native-best at STEADY STATE. Over steps 101..200 of a 200-step field-recipe run axolotl takes 4.014 / 3.991 s per step and e4b as shipped 3.223 / 3.242 (both pairs stable, 0.6 %): axolotl / e4b 1.238 [1.231, 1.246] (P27 HELD inside its [1.05, 1.50] band; the whole interval above 1.0, so e4b is faster). Over the whole run e4b finishes in 650-654 s of summed step time against axolotl's 1,373-1,389 s; axolotl uses x1.79 the energy per step at 1.26 GB more peak (26.77 vs 25.51 GB). Held-out at step 200: axolotl 0.7705 / 0.7704 against the box's matched e4b 0.7673, e4b as shipped 0.7948 / 0.7937 (its plateau from its own init; reported, not judged). REPLICATED on a second host (TC1 amendment 18, P29 HELD; tc1-5090-48: Vast machine 150527, AMD EPYC 7C13, machine 142284 left out by evidence): axolotl takes 4.319 / 4.355 s per step and e4b as shipped 3.826 / 3.740 (stable, 0.8 % and 2.3 %): axolotl / e4b 1.146 [1.129, 1.164], the whole interval above 1.0 -- the ordering holds on two hosts, the margin is host-dependent (15 % vs 24 %). A same-machine repeat (tc1-5090-47, amendment 17, P28 UNTESTED as a repeat) reads 1.253 [1.248, 1.258]. A LABELLED native-best row. The earlier row (2026-10-02, the code before #945) stands as measured; the boxes' numbers are not divided.",
       "value": 1.238,
-      "unit": "ratio s/step axolotl scattermoe native-best / e4b as shipped, median of steps 101..200 per draw, medians over two draws each (> 1 = e4b faster); cross-draw interval [1.231, 1.246]",
-      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-46: instance 54024744, AMD EPYC 7663, driver 580.95.05); e4b @ e5859e9 on torch 2.8.0+cu128, grouped-nf4-gemm @ 00929a4; axolotl 0.20.0 on torch 2.14.0+cu130",
+      "unit": "ratio s/step axolotl scattermoe native-best / e4b as shipped, median of steps 101..200 per draw, medians over two draws each (> 1 = e4b faster); cross-draw interval [1.231, 1.246]; second host 1.146 [1.129, 1.164]",
+      "hardware": "RTX 5090 (sm_120), rented Vast.ai verified/secure hosts (tc1-5090-46: instance 54024744, AMD EPYC 7663, driver 580.95.05); e4b @ e5859e9 on torch 2.8.0+cu128, grouped-nf4-gemm @ 00929a4; axolotl 0.20.0 on torch 2.14.0+cu130; second host tc1-5090-48: instance 54051454, AMD EPYC 7C13, driver 580.95.05",
       "conditions": "bench/tc1 field recipe over 200 steps (TC1b's curve recipe: held-out every 40 steps on 16 rows): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407; token qwen3nativebest200 (amendment 8's arms and order, unchanged); e4b as shipped (bf16 expert adapters, native init) vs axolotl scattermoe native-best (fp32 adapters, native init), two interleaved draws each, e4b matched as the anchor; late-window medians and scoring by bench/tc1/tc1_reduce.py (score_p14, read against P27's band per amendment 16)",
       "measured_on": "2026-10-03",
       "status": "measured",
@@ -8952,12 +8952,16 @@
         "bench/h2h-2026-10-02/tc1/RESULTS-tc1-steady16.md",
         "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-46/RESULTS-tc1.md",
         "bench/tc1/TC1-PREREG.md",
-        "bench/tc1/tc1_reduce.py"
+        "bench/tc1/tc1_reduce.py",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-steady18.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-48/RESULTS-tc1.md"
       ],
       "evidence_private": [
-        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-46/tc1/"
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-46/tc1/",
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-47/tc1/",
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-48/tc1/"
       ],
-      "notes": "Successor reading of e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state for the post-amendment-15 code (that row stays active, labelled as the code before #945). One host so far."
+      "notes": "Successor reading of e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state for the post-amendment-15 code (that row stays active, labelled as the code before #945). Two hosts (machines 142284 and 150527)."
     },
     {
       "package": "experts4bit-qlora",

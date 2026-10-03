@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### TC1 amendments 17–18 read: e4b's steady-state lead over axolotl's scattermoe replicates on a second host (P29 HELD, 1.146)
+
+- **What was asked.** amendment 16's box (P27: axolotl / e4b 1.238) again, byte for byte, on a different machine.
+- **What it read.**
+  - **P29 is HELD:** on machine 150527 (`tc1-5090-48`, EPYC 7C13, $1.23), axolotl / e4b over steps 101..200 is **1.146** [1.129, 1.164],
+    the whole interval above 1.0. That machine was reached by leaving 142284 out by evidence: adertha-agents#139's
+    `avoid_vast_machine_receipts` cited -46's receipt.
+  - **e4b as shipped is faster at steady state on both hosts**, by 15–24 %.
+  - **P28 is UNTESTED:** `tc1-5090-47` re-bought machine 142284, the cheapest 5090. That makes it a same-host repeat, and it reproduces
+    -46 within 1.2 % (1.253).
+- **What follows.** The register row `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state` records the second host. Read: `bench/h2h-2026-10-02/tc1/RESULTS-tc1-steady18.md`.
+
 ### P109 Amendment 2 (#770): the graph replay's oracle is the padded eager step, before any reading data (bench and tests only)
 
 - **What the proof showed.** `p109-prove-2` ($0.057) proved the whole box on Granite. Its verdict, not a reading, was
