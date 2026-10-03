@@ -18,6 +18,12 @@ Q3 (G1): d moe_expert < d I_in, signed, e4b minus llama.cpp. Read only when G1 i
 Q4 (G2, B=16): d idle_out carries >= 50 % of |dP|: same sign as dP and |d idle_out| >= 0.5 |dP|. UNREAD if the gap is
     unread or idle_out is not nameable. No noise clause: the prediction as registered has none (the noise is printed).
 
+A3 (written after sc1d-5090-2's data; confirmatory on the re-run): Q1-Q5 keep A1's term set (`TERMS`, no overlap term), and
+are decided across the node-trace bands. Three predictions are added, each one a replication of what sc1d-5090-2 showed:
+Q6 (G1, B=1): the gap reads "named: overlap_in" -- e4b's loss to llama.cpp is the in-graph kernel overlap it lacks.
+Q7 (G3 and G4, B=16): both gaps read "named: norm_elem".
+Q8 (B=1): llama.cpp overlaps >= 90 % of consecutive in-graph kernel pairs on one stream; e4b overlaps <= 1 %.
+
   sc1b_read.py DIR [--out RESULTS-sc1b.md] [--json verdicts.json]     DIR holds box D's sc1b_arm_*.json / sc1b_gap_*.json
   sc1b_read.py --self-test
 """
@@ -32,8 +38,10 @@ TERMS = ("moe_expert", "moe_route", "attn", "dense_gemm", "norm_elem", "sample",
          "idle_out")
 GAPS = (("G1", "llamacpp", 1, 1.484), ("G2", "llamacpp", 16, 0.624), ("G3", "vllm", 1, 1.203), ("G3", "vllm", 16, 1.172),
         ("G4", "sglang", 1, 1.268), ("G4", "sglang", 16, 1.191))
+RENDER_TERMS = TERMS + ("overlap_in",)
 Q2_RATIO = 1.5
 Q4_SHARE = 0.5
+Q8_LLAMACPP_MIN, Q8_E4B_MAX = 0.9, 0.01
 
 
 def _load(d, name):
@@ -50,28 +58,46 @@ def largest_term(g):
     if not dp:
         return None, None
     s = 1 if dp > 0 else -1
-    k = max(TERMS, key=lambda t: s * g["delta"][t])
-    return k, round(s * g["delta"][k], 6)
+    k = max(TERMS, key=lambda t: s * g["delta"].get(t, 0.0))
+    return k, round(s * g["delta"].get(k, 0.0), 6)
+
+
+def _band(g, t):
+    """A3: the term's delta band across both arms' node-trace overhead; a point when the record has none (A1 era)."""
+    b = (g.get("delta_band") or {}).get(t)
+    v = g["delta"].get(t, 0.0)
+    return (b[0], b[1]) if b else (v, v)
 
 
 def q_largest_is_I_in(g):
+    """HOLDS iff I_in's contribution in dP's direction beats every other term at every corner of the bands; REFUTED iff a
+    nameable term beats I_in at every corner (an untrusted idle_out cannot refute); else UNREAD. With point bands this is
+    A1's rule exactly (an untrusted idle_out that is the largest leaves I_in UNREAD, or REFUTED by a larger class)."""
     if not g or g.get("status") != "ok":
         return {"verdict": "UNREAD", "why": "the gap is unread" + (f": {g.get('why')}" if g else " (no gap record)")}
     k, c = largest_term(g)
     if k is None:
         return {"verdict": "UNREAD", "why": "dP is 0"}
     s = 1 if g["delta_P_ms"] > 0 else -1
-    i_in = s * g["delta"]["I_in"]
-    if not g["idle_out_nameable"] and k == "idle_out":
-        # idle_out's size is not trusted; I_in can still lose to a class (REFUTED whatever idle_out is), or win the rest
-        rest = max((t for t in TERMS if t != "idle_out"), key=lambda t: s * g["delta"][t])
-        if rest != "I_in":
-            return {"verdict": "REFUTED", "largest": rest, "contribution_ms": round(s * g["delta"][rest], 6),
-                    "I_in_contribution_ms": round(i_in, 6), "delta_P_ms": g["delta_P_ms"], "note": "idle_out not nameable"}
-        return {"verdict": "UNREAD", "why": "idle_out is not nameable (G-inflate) and contributes more than I_in, the largest of the rest",
-                "largest": k, "contribution_ms": c}
-    return {"verdict": "HOLDS" if k == "I_in" else "REFUTED", "largest": k, "contribution_ms": c, "I_in_contribution_ms": round(i_in, 6),
-            "delta_P_ms": g["delta_P_ms"]}
+
+    def lo(t):
+        return min(s * x for x in _band(g, t))
+
+    def hi(t):
+        return max(s * x for x in _band(g, t))
+    others = [t for t in TERMS if t != "I_in"]
+    refuters = [t for t in others if (t != "idle_out" or g["idle_out_nameable"]) and lo(t) > hi("I_in")]
+    out = {"largest": k, "contribution_ms": c, "I_in_contribution_ms": round(s * g["delta"]["I_in"], 6), "delta_P_ms": g["delta_P_ms"],
+           "I_in_band_ms": [round(lo("I_in"), 6), round(hi("I_in"), 6)]}
+    if not g["idle_out_nameable"]:
+        out["note"] = "idle_out not nameable"
+    if refuters:
+        w = max(refuters, key=lo)
+        return dict(out, verdict="REFUTED", beaten_by=w, beaten_by_band_ms=[round(lo(w), 6), round(hi(w), 6)])
+    if all(hi(t) < lo("I_in") for t in others):
+        return dict(out, verdict="HOLDS")
+    return dict(out, verdict="UNREAD", why="the largest term is undecided inside the node-trace bands"
+                + (" or behind an untrusted idle_out" if not g["idle_out_nameable"] else ""))
 
 
 def q2(e, ll):
@@ -88,10 +114,16 @@ def q2(e, ll):
 
 
 def q3(g):
+    """d moe_expert < d I_in, signed: HOLDS iff it holds at every corner of the bands, REFUTED iff it fails at every one."""
     if not g or g.get("status") != "ok":
         return {"verdict": "UNREAD", "why": "G1 is unread" + (f": {g.get('why')}" if g else "")}
-    de, di = g["delta"]["moe_expert"], g["delta"]["I_in"]
-    return {"verdict": "HOLDS" if de < di else "REFUTED", "delta_moe_expert_ms": de, "delta_I_in_ms": di}
+    (el, eh), (il, ih) = _band(g, "moe_expert"), _band(g, "I_in")
+    v = "HOLDS" if eh < il else "REFUTED" if el >= ih else "UNREAD"
+    out = {"verdict": v, "delta_moe_expert_ms": g["delta"]["moe_expert"], "delta_I_in_ms": g["delta"]["I_in"],
+           "moe_expert_band_ms": [el, eh], "I_in_band_ms": [il, ih]}
+    if v == "UNREAD":
+        out["why"] = "the bands overlap"
+    return out
 
 
 def q4(g):
@@ -105,11 +137,33 @@ def q4(g):
             "share": round(di / dp, 4) if dp else None, "noise_iqr_ms": g["noise_iqr"].get("idle_out")}
 
 
+def q_named(gs, cause):
+    """HOLDS iff every gap reads "named: cause"; REFUTED iff a read gap reads anything else; else UNREAD."""
+    got = [(g or {}).get("status") == "ok" and (g.get("reading"), g.get("named_cause")) for g in gs]
+    if any(x and x != ("named", cause) for x in got):
+        return {"verdict": "REFUTED", "readings": [x or "unread" for x in got]}
+    if all(got):
+        return {"verdict": "HOLDS", "readings": got}
+    return {"verdict": "UNREAD", "why": "a gap is unread", "readings": [x or "unread" for x in got]}
+
+
+def q8(e, ll):
+    for x, n in ((e, "e4b"), (ll, "llamacpp")):
+        if not x or (x.get("node") or {}).get("status") != "ok" or "overlap_pairs_same_stream_fraction" not in x["node"]:
+            return {"verdict": "UNREAD", "why": f"{n}'s node capture is VOID, missing, or predates A3"}
+        if "NSYS_DIAGNOSTIC_ERRORS" in x.get("labels", []):
+            return {"verdict": "UNREAD", "why": f"{n} carries NSYS_DIAGNOSTIC_ERRORS"}
+    fe, fl = e["node"]["overlap_pairs_same_stream_fraction"], ll["node"]["overlap_pairs_same_stream_fraction"]
+    return {"verdict": "HOLDS" if fl >= Q8_LLAMACPP_MIN and fe <= Q8_E4B_MAX else "REFUTED", "llamacpp_fraction": fl, "e4b_fraction": fe}
+
+
 def read(d):
     arms = {(e, b): _load(d, f"sc1b_arm_{e}_b{b}.json") for e in ("e4b", "llamacpp", "vllm", "sglang") for b in (1, 16)}
     gaps = {(c, b): _load(d, f"sc1b_gap_e4b_{c}_b{b}.json") for _, c, b, _r in GAPS}
     v = {"Q1": q_largest_is_I_in(gaps[("llamacpp", 1)]), "Q2": q2(arms[("e4b", 1)], arms[("llamacpp", 1)]),
-         "Q3": q3(gaps[("llamacpp", 1)]), "Q4": q4(gaps[("llamacpp", 16)]), "Q5": q_largest_is_I_in(gaps[("vllm", 1)])}
+         "Q3": q3(gaps[("llamacpp", 1)]), "Q4": q4(gaps[("llamacpp", 16)]), "Q5": q_largest_is_I_in(gaps[("vllm", 1)]),
+         "Q6": q_named([gaps[("llamacpp", 1)]], "overlap_in"), "Q7": q_named([gaps[("vllm", 16)], gaps[("sglang", 16)]], "norm_elem"),
+         "Q8": q8(arms[("e4b", 1)], arms[("llamacpp", 1)])}
     return arms, gaps, v
 
 
@@ -124,15 +178,15 @@ def render(arms, gaps, v):
     for q, r in v.items():
         det = ", ".join(f"{k}={r[k]}" for k in r if k != "verdict")
         out.append(f"| {q} | {r['verdict']} | {det} |")
-    out += ["", "## Arms", "", "| engine | B | status | labels | P | unprofiled | " + " | ".join(TERMS) + " | O |",
-            "|" + "---|" * (len(TERMS) + 7)]
+    out += ["", "## Arms", "", "| engine | B | status | labels | P | unprofiled | " + " | ".join(RENDER_TERMS) + " | O |",
+            "|" + "---|" * (len(RENDER_TERMS) + 7)]
     for (e, b), a in arms.items():
         if not a:
-            out.append(f"| {e} | {b} | missing | | | | " + " | ".join("" for _ in TERMS) + " | |")
+            out.append(f"| {e} | {b} | missing | | | | " + " | ".join("" for _ in RENDER_TERMS) + " | |")
             continue
         t = a.get("terms") or {}
         out.append(f"| {e} | {b} | {a.get('status')} | {' '.join(a.get('labels', []))} | {_f(a.get('P_ms'))} | {_f(a.get('unprofiled_ms'))} | "
-                   + " | ".join(_f(t.get(k)) for k in TERMS) + f" | {_f(t.get('O'))} |")
+                   + " | ".join(_f(t.get(k)) for k in RENDER_TERMS) + f" | {_f(t.get('O'))} |")
     out += ["", "## Gaps (e4b minus the comparator; positive = e4b slower)", "",
             "| gap | comparator | B | status | reading | named | dP | dO | census ratio | SC1 ratio | top three |",
             "|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -142,7 +196,8 @@ def render(arms, gaps, v):
             out.append(f"| {gid} | {c} | {b} | missing | | | | | | {r} | |")
             continue
         if g.get("status") != "ok":
-            out.append(f"| {gid} | {c} | {b} | unread | {'; '.join(g.get('why', []))} | | | | | {r} | |")
+            nom = f" (nominal: {g['nominal_reading']}, {g.get('nominal_named_cause') or '--'})" if g.get("nominal_reading") else ""
+            out.append(f"| {gid} | {c} | {b} | unread | {'; '.join(g.get('why', []))}{nom} | | | | | {r} | |")
             continue
         top = "; ".join(f"{k} {d:+.3f}" for k, d in g.get("top_three") or [])
         out.append(f"| {gid} | {c} | {b} | ok | {g['reading']} | {g.get('named_cause') or '--'} | {g['delta_P_ms']:+.3f} | "
@@ -180,6 +235,23 @@ def self_test():
     assert q4(gap(-5.0, {"idle_out": 3.0}))["verdict"] == "REFUTED"
     assert q4(gap(-5.0, {"idle_out": -3.0}, nameable=False))["verdict"] == "UNREAD"
     checks += 4
+    # A3 bands: I_in nominally largest but its band overlaps moe_expert's -> UNREAD; disjoint -> HOLDS; Q3 likewise
+    gb = dict(gap(1.0, {"I_in": 0.6, "moe_expert": 0.5}), delta_band={t: [0.0, 0.0] for t in TERMS})
+    gb["delta_band"].update(I_in=[0.45, 0.65], moe_expert=[0.4, 0.55])
+    assert q_largest_is_I_in(gb)["verdict"] == "UNREAD" and q3(gb)["verdict"] == "UNREAD"
+    gb["delta_band"].update(I_in=[0.58, 0.65], moe_expert=[0.45, 0.55])
+    assert q_largest_is_I_in(gb)["verdict"] == "HOLDS" and q3(gb)["verdict"] == "HOLDS"
+    gb["delta_band"].update(I_in=[0.1, 0.2], moe_expert=[0.45, 0.55])
+    assert q_largest_is_I_in(gb)["verdict"] == "REFUTED" and q3(gb)["verdict"] == "REFUTED"
+    checks += 3
+    ok_named = lambda cause: {"status": "ok", "reading": "named", "named_cause": cause}       # noqa: E731
+    assert q_named([ok_named("overlap_in")], "overlap_in")["verdict"] == "HOLDS"
+    assert q_named([ok_named("norm_elem"), {"status": "unread"}], "norm_elem")["verdict"] == "UNREAD"
+    assert q_named([ok_named("norm_elem"), {"status": "ok", "reading": "spread", "named_cause": None}], "norm_elem")["verdict"] == "REFUTED"
+    a8 = lambda f: {"node": {"status": "ok", "overlap_pairs_same_stream_fraction": f}, "labels": []}      # noqa: E731
+    assert q8(a8(0.0), a8(0.955))["verdict"] == "HOLDS" and q8(a8(0.05), a8(0.955))["verdict"] == "REFUTED"
+    assert q8({"node": {"status": "ok"}, "labels": []}, a8(0.95))["verdict"] == "UNREAD"
+    checks += 5
     md = render({("e4b", 1): None}, {}, {"Q1": {"verdict": "UNREAD", "why": "x"}})
     assert "| Q1 | UNREAD |" in md
     checks += 1

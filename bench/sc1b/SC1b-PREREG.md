@@ -298,3 +298,61 @@ Coverage families (their own lane), gpt-oss (SC1g), prefill/TTFT (#916's P100/P1
   - The main box's e4b arms keep `prompts_b{B}.json`.
 
   The proof re-runs as `sc1d-prove-2` before box D.
+- **A3 (written AFTER box D's first run `sc1d-5090-2`, and disclosed as such): the instrument fixes that run showed, and a
+  confirmatory re-run.**
+
+  `sc1d-5090-2`: machine 45511, $0.7788, 74 min. Every one of its 24 passes exited 0. **Its registered reading stands
+  as recorded:**
+  - Q2 is REFUTED: e4b runs 1,550 in-graph kernels per B=1 step against llama.cpp's 1,110, a ratio of 1.396 (≥ 1.5 was
+    predicted).
+  - Q1, Q3, Q4 and Q5 are UNREAD.
+  - One gap reads: G4 at B=16 (e4b − SGLang, ΔP +1.874 ms), named norm_elem (+1.007 ms).
+  - Every other gap is unread.
+
+  The read found three things blocking the instrument; the causes are in the read.
+  1. **vLLM was VOID at both B (55 kept steps < 56).** The drop rule "more out-of-graph kernels than the modal step"
+     removed vLLM's every-16th decode step: one extra `_apply_write_kernel`, a new KV block's table write, at a normal
+     period. That is steady work. A stray prefill or re-warm step is already caught by the replay-count rule.
+     **A3:** such steps are kept and counted (`kept_extra_out_of_graph`).
+  2. **NSYS_DIAGNOSTIC_ERRORS on llama.cpp B=16.** The node capture carried 1,523 each of CUPTI's
+     `GetGraphId(data.originalGraph…)` / `GetGraphNodeId(data.originalNode…)` INVALID_PARAMETER. These concern graph-id
+     attribution for nodes of graphs llama.cpp updates in place, not lost records: every kept replay held the modal
+     1,733 kernels and 48 balanced segments. **A3:** exactly these two messages (full-text regexes) label
+     NSYS_GRAPH_ID_MAPPING and do not block. Every other DIAG_BAD text still blocks.
+  3. **NODE_TRACE_INFLATED at B=1 on e4b, llama.cpp and SGLang.** Node replays ran 2.4–3.7 % past the graph span: tracing
+     overhead of about 0.06–0.11 µs per kernel. **A3** replaces the 2 % gate with a bound and a robustness test, and
+     keeps NODE_TRACE_INFLATED as an information label.
+     - The bound: ω = node span − S limits how much node-mode kernel time can be tracing. dK ∈ [max(0, U_in − S), ω],
+       and the true in-graph idle is S − U_in + dK.
+     - Each gap carries a band per term: classes ±ω of each arm, I_in through dK, overlap ±(ω_e + ω_c); idle_out and O
+       are unaffected.
+     - A gap reads only if its reading (named cause, spread or UNEXPLAINED) is the same at every corner of the bands.
+       Otherwise it is unread, labelled NODE_TRACE_AMBIGUOUS, with the nominal reading kept.
+     - Q1, Q3 and Q5 are decided by interval dominance: HOLDS or REFUTED only when every corner agrees. A1's rules are
+       the zero-width case.
+
+  The read also explained G1's remainder. llama.cpp's in-graph kernel durations sum to 4.09 ms per B=1 step but cover
+  2.74 ms: 1,060 of 1,109 consecutive kernel pairs per replay overlap, on ONE stream. That is about 1.35 ms per step
+  hidden by same-stream overlap, the signature of programmatic dependent launch. e4b and vLLM overlap no pairs.
+  **A3** makes this an explicit term:
+  - overlap_in = −(Σ in-graph durations − U_in), with its own per-step noise and band;
+  - O keeps only the out-of-graph node/graph mismatch;
+  - the identity becomes P = Σ class + overlap_in + I_in + idle_out − O;
+  - overlap_in is nameable.
+
+  **Q1–Q5 keep A1's term set** (no overlap term), so the term added here cannot change what they mean.
+
+  **Confirmatory predictions for the re-run.** These replicate what `sc1d-5090-2` showed, and are labelled as replications,
+  not blind tests:
+  - **Q6** (G1, B=1): the gap reads "named: overlap_in". e4b's loss to llama.cpp is the in-graph overlap it lacks.
+  - **Q7** (G3 and G4, B=16): both read "named: norm_elem".
+  - **Q8** (B=1): llama.cpp overlaps ≥ 90 % of consecutive in-graph kernel pairs on one stream (`sc1d-5090-2`: 95.6 %);
+    e4b overlaps ≤ 1 % (0 %).
+
+  The exploratory A3 reduction of `sc1d-5090-2` is reported in the read, labelled exploratory.
+
+  **The re-run.** Box D re-runs as `sc1d-5090-3` at A3's merge, under the same 4.0 h guard (≤ $3.00).
+  - A3 changes only the reducer (`sc1b_census.py`, run on the box at phase RD) and the read (`sc1b_read.py`).
+  - Every capture path (`sc1b_box_d.sh`, the three bracket/client scripts, the toy, the class map and SC1's scripts) is
+    byte-identical to `77469c1`. That is the commit `sc1d-prove-2` PROVED on, so no new proof is run. The launch chain
+    refuses if any of those files differs.

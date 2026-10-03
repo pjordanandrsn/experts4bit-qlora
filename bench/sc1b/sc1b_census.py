@@ -15,12 +15,15 @@ Per step (medians with interquartile ranges over the kept steps):
 
 Step delimiters: `graph` = one replay of the steady (modal graphExecId) decode graph; `d2h` = llama.cpp's logits
 device-to-host copy (bytes = n_out x vocab x 4), with exactly one steady replay per step. In both modes the first and
-last step are trimmed; a step longer than 1.5x the median, or with more out-of-graph kernels than the modal count, or (d2h)
-without exactly one replay, is dropped and counted; the central `keep` steps are read.
+last step are trimmed; a step longer than 1.5x the median, or (d2h) without exactly one replay, is dropped and counted; a
+step with more out-of-graph kernels than the modal count is KEPT and counted (A3: vLLM's every-16th-step block-table write is
+steady work); the central `keep` steps are read.
 
-Gates (per arm): G-inflate |P/unprofiled - 1| <= 3 % (else PROFILER_INFLATED: idle_out not nameable); G-node median U_in <=
-median S x 1.02 (else NODE_TRACE_INFLATED: classes and I_in unread); G-map residual <= 2 % of node-mode device time (else
-CLASS_MAP_INCOMPLETE). A gap reads only when both arms pass G-node and G-map.
+Gates (per arm): G-inflate |P/unprofiled - 1| <= 5 % (else PROFILER_INFLATED: idle_out not nameable); G-map residual <= 2 %
+of node-mode device time (else CLASS_MAP_INCOMPLETE); segments and nsys diagnostics block. A3: node tracing's overhead is a
+BAND, not a gate -- omega = node span - S bounds how much of the node-mode kernel time can be tracing (dK in
+[max(0, U_in - S), omega]); a gap reads only if its reading is the same at every corner of the two arms' bands (else
+NODE_TRACE_AMBIGUOUS). NODE_TRACE_INFLATED (span or union > S x 1.02) is kept as an information label.
 
   sc1b_census.py arm --graph G.sqlite --node N.sqlite --engine E --batch B --classes kernel_classes.json
                      [--delim graph|d2h --d2h-bytes N] [--unprofiled-ms X] --out arm.json
@@ -32,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sqlite3
 import statistics
 import sys
@@ -49,6 +53,11 @@ MIN_STEPS = 56            # round 2 M8: fewer kept steps is VOID, never a 3-step
 MOE_LAYERS = 48           # Qwen3-30B-A3B: every steady replay must open and close 48 MoE segments (round 2 M6)
 NAMED_SHARE = 0.5
 DIAG_BAD = ("error", "dropped", "lost", "overflow", "buffer full", "failed", "insufficient")
+# A3: CUPTI's graph-id mapping messages for graph nodes whose ORIGINAL graph is gone (llama.cpp updates its graph in place).
+# sc1d-5090-2's llama.cpp B=16 node capture carried 1,523 of each while every kept replay held the modal 1,733 kernels and
+# 48 balanced segments: an attribution message, not lost records. They label NSYS_GRAPH_ID_MAPPING and do not block.
+DIAG_BENIGN = (re.compile(r"^GetGraphId\(data\.originalGraph, &originalGraphId\) returned \d+: CUPTI_ERROR_INVALID_PARAMETER$"),
+               re.compile(r"^GetGraphNodeId\(data\.originalNode, &originalNodeId\) returned \d+: CUPTI_ERROR_INVALID_PARAMETER$"))
 
 
 # ------------------------------------------------------------------------------------------------------------- sqlite --
@@ -159,7 +168,10 @@ def _central(rows, keep):
 
 def _filter(rows, keep, out_key, positions=None):
     """Select the registered positions (when the capture holds the whole run) or trim the capture's edges (when an engine
-    hook bracketed it); drop long periods and steps with extra out-of-graph kernels; keep the central `keep`."""
+    hook bracketed it); drop long periods; keep the central `keep`. A step with more out-of-graph kernels than the modal
+    count is kept and counted under `kept_extra_out_of_graph` (A3): sc1d-5090-2 showed vLLM's every-16th-step
+    `_apply_write_kernel` (a new KV block's table write) at a normal period -- steady work, not a stray prefill, which the
+    replay-count rule already drops."""
     dropped = Counter()
     if positions:
         start, count = positions
@@ -174,11 +186,13 @@ def _filter(rows, keep, out_key, positions=None):
     for r in rows:
         if r["P"] > LONG_PERIOD * med:
             dropped["period_over_1.5x_median"] += 1
-        elif r[out_key] > modal_out:
-            dropped["extra_out_of_graph_kernels"] += 1
         else:
             kept.append(r)
-    return _central(kept, keep), dropped
+    kept = _central(kept, keep)
+    extra = sum(1 for r in kept if r[out_key] > modal_out)
+    if extra:
+        dropped["kept_extra_out_of_graph"] = extra             # not a drop: reported beside them (A3)
+    return kept, dropped
 
 
 # --------------------------------------------------------------------------------------------------------- the classes --
@@ -336,6 +350,9 @@ def node_mode(ex, spec, keep=KEEP, positions=None, min_steps=MIN_STEPS, moe_laye
         sp = max(r["end"] for r in ins) - lo
         row = {"P": hi - lo, "U_in": u_in, "span": sp, "I_node": sp - u_in,
                "k_in": sum(r["kind"] == "kernel" for r in ins), "out_kernels": sum(r["kind"] == "kernel" for r in outs)}
+        kins = [r for r in ins if r["kind"] == "kernel"]                # A3: same-stream overlap of consecutive kernels
+        row["pairs"] = max(0, len(kins) - 1)
+        row["ov_pairs_same"] = sum(1 for x, y in zip(kins, kins[1:]) if y["start"] < x["end"] and y.get("stream") == x.get("stream"))
         st = {}
         for side, seq, flag in (("in", ins, True), ("out", outs, False)):
             for r, cls in zip(seq, classify_seq(seq, spec, flag, st if flag else None)):
@@ -345,6 +362,7 @@ def node_mode(ex, spec, keep=KEEP, positions=None, min_steps=MIN_STEPS, moe_laye
             row["seg_broken"] = int(st.get("starts", 0) != moe_layers or st.get("ends", 0) != moe_layers
                                     or bool(st.get("nested")) or bool(st.get("open_at_end")))
             row["seg_starts"], row["seg_ends"] = st.get("starts", 0), st.get("ends", 0)
+        row["ov_in"] = sum(row.get(f"in:{c}", 0) for c in CLASSES) - u_in      # A3: summed in-graph time beyond its union
         rows.append(row)
     kept, dropped = _filter(rows, keep, "out_kernels", positions)
     if len(kept) < min_steps:
@@ -360,7 +378,9 @@ def node_mode(ex, spec, keep=KEEP, positions=None, min_steps=MIN_STEPS, moe_laye
     return {"status": "ok", "steps_kept": len(kept), "dropped": dict(dropped), "kernels_per_graph_modal": modal_n,
             "other_launches": len(launches) - len(steady), "U_in": _stat([r["U_in"] for r in kept]),
             "span": _stat([r["span"] for r in kept]), "I_in_node": _stat([r["I_node"] for r in kept]), "segments": seg,
-            "kernels_in_graph": statistics.median(r["k_in"] for r in kept),
+            "kernels_in_graph": statistics.median(r["k_in"] for r in kept), "overlap_in": _stat([r["ov_in"] for r in kept]),
+            "overlap_pairs_same_stream_fraction": round(statistics.median(r["ov_pairs_same"] / r["pairs"] if r["pairs"] else 0.0
+                                                                          for r in kept), 4),
             "kernels_out_graph": statistics.median(r["out_kernels"] for r in kept),
             "class": cls, "class_in_graph_median_ms": cls_in, "residual_fraction": round(resid / dev, 4) if dev else 0.0,
             "name_map": {n: dict(c) for n, c in sorted(names.items())},
@@ -368,11 +388,16 @@ def node_mode(ex, spec, keep=KEEP, positions=None, min_steps=MIN_STEPS, moe_laye
 
 
 # ---------------------------------------------------------------------------------------------------------------- arm --
-BLOCKING = ("NODE_TRACE_INFLATED", "CLASS_MAP_INCOMPLETE", "CLASS_MAP_SEGMENT_BROKEN", "NSYS_DIAGNOSTIC_ERRORS")
+BLOCKING = ("CLASS_MAP_INCOMPLETE", "CLASS_MAP_SEGMENT_BROKEN", "NSYS_DIAGNOSTIC_ERRORS")      # A3: NODE_TRACE_INFLATED -> band
+
+
+def _diag_benign(text):
+    return any(r.match(text.strip()) for r in DIAG_BENIGN)
 
 
 def _diag_bad(ex):
-    return [d["text"][:200] for d in ex.get("diagnostics", []) if any(k in d["text"].lower() for k in DIAG_BAD)]
+    return [d["text"][:200] for d in ex.get("diagnostics", [])
+            if any(k in d["text"].lower() for k in DIAG_BAD) and not _diag_benign(d["text"])]
 
 
 def arm(graph_ex, node_ex, engine, batch, spec, delim="graph", d2h_bytes=None, unprofiled_ms=None, positions=None, clocks=None,
@@ -382,6 +407,7 @@ def arm(graph_ex, node_ex, engine, batch, spec, delim="graph", d2h_bytes=None, u
     rec = {"engine": engine, "batch": batch, "graph": gm, "node": nm, "unprofiled_ms": unprofiled_ms, "positions": positions,
            "clocks_mhz": clocks, "gates": {}, "labels": []}
     bad = _diag_bad(graph_ex) + _diag_bad(node_ex)
+    benign = sum(1 for x in (graph_ex, node_ex) for d in x.get("diagnostics", []) if _diag_benign(d["text"]))
     rec["nsys_diagnostics"] = [d["text"][:200] for d in graph_ex.get("diagnostics", []) + node_ex.get("diagnostics", [])][:20]
     if gm["status"] != "ok" or nm["status"] != "ok":
         rec["status"] = "void"
@@ -396,7 +422,11 @@ def arm(graph_ex, node_ex, engine, batch, spec, delim="graph", d2h_bytes=None, u
     g["node_union_over_span"] = round(u / s, 4) if s else None
     g["node_span_over_span"] = round(nm["span"]["median_ms"] / s, 4) if s else None
     if not s or u > s * G_NODE or nm["span"]["median_ms"] > s * G_NODE:
-        rec["labels"].append("NODE_TRACE_INFLATED")
+        rec["labels"].append("NODE_TRACE_INFLATED")            # A3: information; the gap's band test decides
+    # A3: node tracing stretches a replay by omega; up to omega of it can sit inside kernel durations, and at least
+    # U_in - S must (the kernel union cannot exceed the true span), so the true in-graph idle is S - U_in + dK
+    omega = max(0.0, nm["span"]["median_ms"] - s)
+    rec["node_band"] = {"omega_ms": round(omega, 6), "dk_lo_ms": round(min(omega, max(0.0, u - s)), 6)}
     g["map_residual_fraction"] = nm["residual_fraction"]
     if nm["residual_fraction"] > G_MAP:
         rec["labels"].append("CLASS_MAP_INCOMPLETE")
@@ -405,6 +435,9 @@ def arm(graph_ex, node_ex, engine, batch, spec, delim="graph", d2h_bytes=None, u
     if bad:
         rec["labels"].append("NSYS_DIAGNOSTIC_ERRORS")
         rec["nsys_diagnostic_errors"] = bad[:10]
+    if benign:
+        rec["labels"].append("NSYS_GRAPH_ID_MAPPING")
+        rec["nsys_graph_id_mapping_messages"] = benign
     if clocks:
         vals = [v for v in clocks.values() if v]
         g["clock_spread"] = round(max(vals) / min(vals) - 1, 4) if vals else None
@@ -413,9 +446,13 @@ def arm(graph_ex, node_ex, engine, batch, spec, delim="graph", d2h_bytes=None, u
     terms = {c: nm["class"][c]["median_ms"] for c in CLASSES}
     terms["I_in"] = round(s - u, 6)
     terms["idle_out"] = gm["idle_out"]["median_ms"]
-    terms["O"] = round(sum(nm["class"][c]["median_ms"] for c in CLASSES) + terms["I_in"] + terms["idle_out"] - p, 6)
+    # A3: in-graph overlap (summed in-graph durations minus their union) enters P with a minus sign; O keeps only the
+    # out-of-graph node/graph mismatch. P = sum(classes) + overlap_in + I_in + idle_out - O.
+    terms["overlap_in"] = -nm["overlap_in"]["median_ms"]
+    terms["O"] = round(sum(nm["class"][c]["median_ms"] for c in CLASSES) + terms["overlap_in"] + terms["I_in"] + terms["idle_out"] - p, 6)
     noise = {c: nm["class"][c]["iqr_ms"] for c in CLASSES}
-    noise.update(I_in=round(gm["S"]["iqr_ms"] + nm["U_in"]["iqr_ms"], 6), idle_out=gm["idle_out"]["iqr_ms"], O=None)
+    noise.update(I_in=round(gm["S"]["iqr_ms"] + nm["U_in"]["iqr_ms"], 6), idle_out=gm["idle_out"]["iqr_ms"],
+                 overlap_in=nm["overlap_in"]["iqr_ms"], O=None)
     rec.update(P_ms=p, terms=terms, noise_iqr=noise, I_in_node_ms=nm["I_in_node"]["median_ms"],
                status="ok" if not rec["labels"] else "labelled")
     return rec
@@ -438,13 +475,48 @@ def gap(e, c, sc1_ratio=None):
            "profiled_P_ms": [e["P_ms"], c["P_ms"]], "unprofiled_ms": [e.get("unprofiled_ms"), c.get("unprofiled_ms")],
            "census_ratio_unprofiled": ratio, "sc1_ratio": sc1_ratio, "idle_out_nameable": not inflated, "delta_O_ms": d["O"],
            "labels": sorted({lab for x in (e, c) for lab in x.get("labels", [])})}
+    # A3: each term's band across the two arms' node-trace overhead (classes: e4b's could be over-measured by omega_e,
+    # the comparator's by omega_c; I_in = S - U_in + dK; idle_out and O are graph-mode or dK-invariant)
+    be, bc = e.get("node_band") or {}, c.get("node_band") or {}
+    oe, oc, le, lc = be.get("omega_ms", 0.0), bc.get("omega_ms", 0.0), be.get("dk_lo_ms", 0.0), bc.get("dk_lo_ms", 0.0)
+    band = {k: [d[k], d[k]] for k in d}
+    for k in CLASSES:
+        band[k] = [d[k] - oe, d[k] + oc]
+    band["I_in"] = [d["I_in"] + le - oc, d["I_in"] + oe - lc]
+    if "overlap_in" in d:                                       # durations stretched by up to omega can make or hide overlap
+        band["overlap_in"] = [d["overlap_in"] - oe - oc, d["overlap_in"] + oe + oc]
+    rec["delta_band"] = {k: [round(a, 6), round(b, 6)] for k, (a, b) in band.items()}
+    rec["node_band"] = {"e4b": be or None, "comparator": bc or None}
     if dp and abs(d["O"]) >= NAMED_SHARE * abs(dp):
-        rec.update(status="ok", reading="UNEXPLAINED", named_cause=None)
+        rec.update(status="ok", reading="UNEXPLAINED", named_cause=None, node_trace_robust=True)
         return rec
     order = sorted(nameable, key=lambda k: -abs(d[k]))
     named = next((k for k in order if dp and (d[k] > 0) == (dp > 0) and abs(d[k]) >= NAMED_SHARE * abs(dp)
                   and (noise[k] is None or abs(d[k]) > 2 * noise[k])), None)
     rec.update(status="ok", reading="named" if named else "spread", named_cause=named, top_three=[[k, d[k]] for k in order[:3]])
+    sgn = 1 if dp > 0 else -1
+    thr = NAMED_SHARE * abs(dp)
+
+    def lo(k):
+        return min(sgn * band[k][0], sgn * band[k][1])
+
+    def hi(k):
+        return max(sgn * band[k][0], sgn * band[k][1])
+
+    def can(k):
+        return hi(k) >= thr and (noise[k] is None or hi(k) > 2 * noise[k])
+
+    def must(k):
+        return lo(k) >= thr and (noise[k] is None or lo(k) > 2 * noise[k])
+    if named:
+        robust = must(named) and not any(can(j) and hi(j) > lo(named) for j in nameable if j != named)
+    else:
+        robust = not any(can(j) for j in nameable)
+    rec["node_trace_robust"] = robust
+    if not robust:
+        rec.update(status="unread", why=[f"NODE_TRACE_AMBIGUOUS: the nominal reading ({rec['reading']}, {named}) changes inside "
+                                         f"the node-trace bands (omega e4b {oe:.3f} ms, comparator {oc:.3f} ms)"],
+                   nominal_reading=rec.pop("reading"), nominal_named_cause=rec.pop("named_cause"))
     return rec
 
 
@@ -584,16 +656,21 @@ def self_test():
     _mkdb(gp, kernels=gk2, copies=gc2, graphs=gg2)
     a = arm(load(gp), load(pn), "e4b", 1, nspec, unprofiled_ms=0.98, min_steps=3)
     assert a["status"] == "ok" and a["terms"]["I_in"] == 0.1 and a["terms"]["idle_out"] == 0.34, (a["labels"], a["terms"])
-    assert abs(a["P_ms"] - (sum(a["terms"][c] for c in CLASSES) - a["terms"]["O"] + a["terms"]["I_in"] + a["terms"]["idle_out"])) < 1e-9
+    assert abs(a["P_ms"] - (sum(a["terms"][c] for c in CLASSES) + a["terms"]["overlap_in"] - a["terms"]["O"] + a["terms"]["I_in"]
+                            + a["terms"]["idle_out"])) < 1e-9
+    assert a["terms"]["overlap_in"] == 0.0 and a["node"]["overlap_pairs_same_stream_fraction"] == 0.0
     assert "PROFILER_INFLATED" in arm(load(gp), load(pn), "e4b", 1, nspec, unprofiled_ms=0.9, min_steps=3)["labels"]
     a3 = arm(load(gp), load(pn), "e4b", 1, nspec, unprofiled_ms=1.0, min_steps=3, clocks={"pass1": 2800, "graph": 2810, "node": 2950})
     assert "CLOCK_MISMATCH" in a3["labels"], a3["labels"]
-    # node-mode inflation: replays stretched past the graph span -> NODE_TRACE_INFLATED (the span gate, round 2 M10)
+    # node-mode inflation: replays stretched past the graph span -> NODE_TRACE_INFLATED (information since A3) and the
+    # band: omega = node span 0.85 - S 0.6 = 0.25; dK >= U_in 0.8 - S 0.6 = 0.2
     pn2 = os.path.join(d, "n2.sqlite")
     nk2 = [(a_, b_ + 300 * us if name == "attn_decode" else b_, c, nd, name, gr) for a_, b_, c, nd, name, gr in nk]
     _mkdb(pn2, kernels=nk2, copies=nc, launches=nl)
-    assert "NODE_TRACE_INFLATED" in arm(load(gp), load(pn2), "e4b", 1, nspec, unprofiled_ms=1.0, min_steps=3)["labels"]
-    checks += 5
+    a2 = arm(load(gp), load(pn2), "e4b", 1, nspec, unprofiled_ms=1.0, min_steps=3)
+    assert "NODE_TRACE_INFLATED" in a2["labels"] and a2["node_band"] == {"omega_ms": 0.25, "dk_lo_ms": 0.2}, a2
+    assert a["node_band"] == {"omega_ms": 0.0, "dk_lo_ms": 0.0} and "NODE_TRACE_INFLATED" not in BLOCKING
+    checks += 6
     # nsys diagnostics with an error label the arm and block its gaps (R17)
     pd = os.path.join(d, "diag.sqlite")
     _mkdb(pd, kernels=gk2, copies=gc2, graphs=gg2)
@@ -604,16 +681,29 @@ def self_test():
     con.close()
     ad = arm(load(pd), load(pn), "e4b", 1, nspec, unprofiled_ms=1.0, min_steps=3)
     assert "NSYS_DIAGNOSTIC_ERRORS" in ad["labels"] and gap(ad, a)["status"] == "unread", ad["labels"]
-    checks += 1
+    # A3: CUPTI's graph-id mapping messages (a node whose original graph is gone) label but do not block
+    pb = os.path.join(d, "benign.sqlite")
+    _mkdb(pb, kernels=gk2, copies=gc2, graphs=gg2)
+    con = sqlite3.connect(pb)
+    con.execute("CREATE TABLE DIAGNOSTIC_EVENT (timestamp INTEGER, timestampType INTEGER, source INTEGER, severity INTEGER, text TEXT, globalPid INTEGER)")
+    for t_ in ("GetGraphId(data.originalGraph, &originalGraphId) returned 1: CUPTI_ERROR_INVALID_PARAMETER",
+               "GetGraphNodeId(data.originalNode, &originalNodeId) returned 1: CUPTI_ERROR_INVALID_PARAMETER"):
+        con.execute("INSERT INTO DIAGNOSTIC_EVENT VALUES (1, 0, 0, 2, ?, 1)", (t_,))
+    con.commit()
+    con.close()
+    ab = arm(load(pb), load(pn), "e4b", 1, nspec, unprofiled_ms=1.0, min_steps=3)
+    assert "NSYS_GRAPH_ID_MAPPING" in ab["labels"] and "NSYS_DIAGNOSTIC_ERRORS" not in ab["labels"], ab["labels"]
+    assert ab["status"] == "labelled" and gap(ab, a)["status"] == "ok"
+    checks += 3
 
     # gap readings: named (I_in), spread, UNEXPLAINED, unread, idle_out not nameable when inflated, and the first QUALIFYING
     # term is named even when a larger term has the opposite sign (round 2 m2)
     def mk(engine, P, terms, labels=()):
-        tt = dict({c: 0.0 for c in CLASSES}, I_in=0.0, idle_out=0.0)
+        tt = dict({c: 0.0 for c in CLASSES}, I_in=0.0, idle_out=0.0, overlap_in=0.0)
         tt.update(terms)
-        tt["O"] = round(sum(tt[c] for c in CLASSES) + tt["I_in"] + tt["idle_out"] - P, 6)
+        tt["O"] = round(sum(tt[c] for c in CLASSES) + tt["overlap_in"] + tt["I_in"] + tt["idle_out"] - P, 6)
         return {"engine": engine, "batch": 1, "status": "ok", "labels": list(labels), "P_ms": P, "terms": tt,
-                "noise_iqr": dict({c: 0.001 for c in CLASSES}, I_in=0.002, idle_out=0.002, O=None), "unprofiled_ms": P}
+                "noise_iqr": dict({c: 0.001 for c in CLASSES}, I_in=0.002, idle_out=0.002, overlap_in=0.001, O=None), "unprofiled_ms": P}
     lc_ = mk("llamacpp", 3.0, {"moe_expert": 1.1, "attn": 0.7, "dense_gemm": 0.5, "I_in": 0.3, "idle_out": 0.4})
     g1 = gap(mk("e4b", 4.5, {"moe_expert": 1.2, "attn": 0.8, "dense_gemm": 0.6, "I_in": 1.4, "idle_out": 0.5}), lc_)
     assert g1["reading"] == "named" and g1["named_cause"] == "I_in" and g1["delta_P_ms"] == 1.5, g1
@@ -633,6 +723,44 @@ def self_test():
     g7 = gap(e7, l7)                    # dmoe -3.3 is the largest |d| but opposite-signed; dattn +2.8 (>= 0.75) is the named cause
     assert g7["named_cause"] == "attn" and g7["delta_O_ms"] == 0.0, g7
     checks += 7
+    # A3 bands: g1 names I_in (dI_in +1.1 of dP 1.5, threshold 0.75). Small omegas keep it; omega 0.5 on both arms puts
+    # dI_in in [0.6, 1.6], below the threshold at one corner -> unread, NODE_TRACE_AMBIGUOUS, with the nominal kept
+    def nb(x, omega, lo_=0.0):
+        return dict(x, node_band={"omega_ms": omega, "dk_lo_ms": lo_})
+    e1 = mk("e4b", 4.5, {"moe_expert": 1.2, "attn": 0.8, "dense_gemm": 0.6, "I_in": 1.4, "idle_out": 0.5})
+    r1 = gap(nb(e1, 0.05), nb(lc_, 0.05))
+    assert r1["status"] == "ok" and r1["named_cause"] == "I_in" and r1["node_trace_robust"], r1
+    assert r1["delta_band"]["I_in"] == [1.05, 1.15] and r1["delta_band"]["moe_expert"] == [0.05, 0.15], r1["delta_band"]
+    r2 = gap(nb(e1, 0.5), nb(lc_, 0.5))
+    assert r2["status"] == "unread" and r2["nominal_named_cause"] == "I_in" and "NODE_TRACE_AMBIGUOUS" in r2["why"][0], r2
+    # dK's floor narrows I_in's band: the comparator's dK >= 0.4 of omega 0.5 caps dI_in's top at +1.1 + 0.05 - 0.4
+    r3 = gap(nb(e1, 0.05), nb(lc_, 0.5, 0.4))
+    assert r3["delta_band"]["I_in"] == [0.6, 0.75], r3["delta_band"]["I_in"]
+    # a spread reading is robust only if no term could qualify anywhere in its band
+    assert gap(nb(mk("e4b", 4.5, {"moe_expert": 1.6, "attn": 1.0, "dense_gemm": 0.9, "I_in": 0.6, "idle_out": 0.4}), 0.01), nb(lc_, 0.01))["node_trace_robust"]
+    checks += 6
+    # A3: in-graph overlap -- move the node fixture's gemv 80 us earlier on the same stream, over rmsnorm's tail and the copy:
+    # summed in-graph time is unchanged, the union shrinks by 0.08, overlap_in carries it and O is unchanged
+    nko = [(a_ - 80 * us, b_ - 80 * us, c, nd, name, gr) if name == "gemv" else (a_, b_, c, nd, name, gr) for a_, b_, c, nd, name, gr in nk]
+    pno = os.path.join(d, "no.sqlite")
+    _mkdb(pno, kernels=nko, copies=nc, launches=nl)
+    ao = arm(load(gp), load(pno), "e4b", 1, nspec, unprofiled_ms=1.0, min_steps=3)
+    assert ao["terms"]["overlap_in"] == -0.08 and ao["terms"]["O"] == a["terms"]["O"], (ao["terms"], a["terms"])
+    assert ao["node"]["overlap_pairs_same_stream_fraction"] == 0.5, ao["node"]["overlap_pairs_same_stream_fraction"]
+    # a gap where the comparator overlaps and e4b does not names overlap_in (e4b's loss is the overlap it lacks)
+    eo = mk("e4b", 4.4, {"moe_expert": 1.1, "dense_gemm": 1.3, "attn": 0.7, "norm_elem": 0.5, "idle_out": 0.4, "moe_route": 0.4})
+    lo_ = mk("llamacpp", 3.3, {"moe_expert": 1.1, "dense_gemm": 1.8, "attn": 0.6, "norm_elem": 0.5, "idle_out": 0.5, "moe_route": 0.2,
+                              "overlap_in": -1.35})
+    go = gap(eo, lo_)
+    assert go["named_cause"] == "overlap_in" and abs(go["delta"]["overlap_in"] - 1.35) < 1e-9, go
+    checks += 4
+    # A3: a step with one extra out-of-graph kernel (vLLM's every-16th-step block-table write) is KEPT and counted
+    xk = gk + [(gk[3][0] + 5 * us, gk[3][0] + 9 * us, 7777, None, "_apply_write_kernel", (1, 1, 1))]
+    px = os.path.join(d, "gx.sqlite")
+    _mkdb(px, kernels=xk, copies=gc, graphs=gg)
+    rx = graph_mode(load(px), min_steps=3)
+    assert rx["steps_kept"] == 6 and rx["dropped"].get("kept_extra_out_of_graph") == 1, rx      # 6 = the first graph case
+    checks += 1
     # a wrong-mode export is VOID with its reason, never a zero
     assert graph_mode(load(pn), min_steps=3)["status"] == "void" and node_mode(load(gp), spec, min_steps=3)["status"] == "void"
     checks += 1

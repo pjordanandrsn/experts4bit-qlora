@@ -1,6 +1,26 @@
 # Changelog
 
 ## Unreleased
+### SC1b amendment A3 (#846): written after box D's first run -- vLLM's periodic steps kept, CUPTI's graph-id messages labelled, node-trace overhead as a band, in-graph kernel overlap as a term; a confirmatory re-run (bench and tests only)
+
+- **`sc1d-5090-2`** (machine 45511, $0.7788, all 24 passes exit 0) reads as registered:
+  - Q2 REFUTED: e4b runs 1,550 in-graph kernels per B=1 step against llama.cpp's 1,110, a ratio of 1.396 (>= 1.5
+    predicted).
+  - Q1 and Q3-Q5 UNREAD.
+  - The only gap read is G4 at B=16 (e4b - SGLang +1.874 ms/step), named norm_elem (+1.007 ms).
+- **Three instrument causes, each fixed in `sc1b_census.py`:**
+  - The out-of-graph drop rule threw away vLLM's every-16th step (a KV block-table write), which voided vLLM.
+  - The diagnostics gate read CUPTI's graph-id mapping messages as errors on llama.cpp B=16.
+  - A flat 2 % node-trace gate blocked every B=1 arm. It is replaced by a bound on what node tracing can add, and a
+    gap reads only if its reading holds across that bound.
+- **G1's remainder was kernel overlap.** llama.cpp overlaps 1,060 of 1,109 consecutive in-graph kernel pairs on one stream
+  at B=1 (1.35 ms per step); e4b overlaps none. The overlap is now an explicit term of the identity.
+- `sc1b_read.py`: Q1-Q5 keep A1's term set and are decided across the bands. Q6-Q8 are added as replications of what
+  `sc1d-5090-2` showed: G1 names the overlap, the B=16 vLLM and SGLang gaps name norm_elem, and llama.cpp overlaps
+  >= 90 % of pairs where e4b overlaps <= 1 %.
+- Capture paths are byte-identical to `77469c1`, which `sc1d-prove-2` proved, so box D re-runs as `sc1d-5090-3` without
+  a new proof.
+
 
 ### P108 Amendment 3 (#359): a GPU memory leak in the box fixed, and the last attempt's budget, before any data is read (bench only)
 
