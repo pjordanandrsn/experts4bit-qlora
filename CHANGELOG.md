@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### P106 registered (#944): the Gated DeltaNet kernels' quality against transformers' torch path, and their prefill TTFT, on Qwen3.6 -- both paths switched in one process (bench and tests)
+
+- `bench/p106/{PREREG-p106.md,p106_run.sh,p106_drive.sh,p106_box.py,p106_reduce.py,gdn_toggle.py,toggle_probe.py,staged.sha256}`,
+  `tests/test_p106_box.py`, `tests/test_p106_staged_pin.py`.
+- **`gdn_toggle.GdnToggle`** rewrites the three cells of transformers' fallback closure for each Gated DeltaNet function
+  to the torch function's values (what the closure holds without the packages) and restores them. One engine then
+  serves both paths. On the A2000 the switched-off path equals a kernel-free process bit for bit (0 differing logits,
+  tiny dense and MoE hybrids, under fla and under fla + causal-conv1d).
+- **The box:** 8 wikitext windows x (2,048 prefill + 64 teacher-forced decode steps), the two paths in lockstep on fp32
+  log-probs, with a null pair (the torch path against itself) and an l2norm-off mutant. TTFT at 512 / 2,048 / 4,096
+  tokens is alternated over 5 rounds.
+- **The rule:** NEUTRAL iff, on prefill and on decode, mean KL(torch || kernels) <= 0.05, agreement >= 0.85 and d_nll
+  <= +0.01. TTFT is reported only.
+- **Predictions:** NEUTRAL; KL 1e-3 to 2e-2; TTFT 1.3-4x at 4,096 tokens.
+
 ### Fused expert grouping reads the per-expert counts back once, not five times (#945)
 
 - **Why.** `enable_fast` / `enable_fast_train` sized the grouped launch from host-side counts built with `bincount`,
