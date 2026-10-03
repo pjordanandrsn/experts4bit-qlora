@@ -1,0 +1,31 @@
+KNOBS e4b=c141276da96702385e77a4d767073a4f7ae4cb7a gnf4=51a49166ae7bc1a0f84188b7b5d1f42ecbc37e00 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 windows=48 cont=128
+e4b 0.42.0 @c141276da96702385e77a4d767073a4f7ae4cb7a
+gnf4 0.35.0 @51a49166ae7bc1a0f84188b7b5d1f42ecbc37e00
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p110_reduce self-test OK (18 cases)
+premise run rc=0: 7 passed in 9.72s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+box rc=0 P110_BOX: windows 48 | rep bias +0.00000 spread 0.00000 | half bias +0.00180 spread 0.01119 | chunk bias +0.00046 spread 0.01270 | rev bias +0.00000 spread 0.00000 | D bias +0.00153 spread 0.01218 | P bias +0.00036 spread 0.01136 | mutant_scale bias +1.05398 spread 1.05398 | rep identical True | load 34s | mem 22.05 GB | 575.6 s
+
+P110_GROUP 1 of 4 done at 166 s, 21.31 GiB allocated
+P110_GROUP 2 of 4 done at 300 s, 21.31 GiB allocated
+P110_GROUP 3 of 4 done at 439 s, 21.31 GiB allocated
+P110_GROUP 4 of 4 done at 576 s, 21.31 GiB allocated
+P110_VERDICT AT_PARITY ["P bias +0.00036 <= 0.01180, spread 0.01136 <= 0.02541"]
+  floor: {"draws": ["half", "chunk", "rev"], "B_floor": 0.0018019459902627044, "S_floor": 0.012703705255404282}
+  bar: {"tol": 0.01, "spread_x": 2.0, "spread_min": 0.005, "bias_bar": 0.011801945990262705, "spread_bar": 0.025407410510808564}
+  D_passes: true
+  rep_identical: true
+  rep: bias +0.00000 spread 0.00000 se 0.00000 max 0.00000 kl 0.0 agree 1.0000
+  half: bias +0.00180 spread 0.01119 se 0.00200 max 0.03590 kl 0.009545008536247611 agree 0.9634
+  chunk: bias +0.00046 spread 0.01270 se 0.00240 max 0.04437 kl 0.010405376386277884 agree 0.9606
+  rev: bias +0.00000 spread 0.00000 se 0.00000 max 0.00000 kl 0.0 agree 1.0000
+  D: bias +0.00153 spread 0.01218 se 0.00235 max 0.05309 kl 0.00903091926395987 agree 0.9663
+  P: bias +0.00036 spread 0.01136 se 0.00213 max 0.04251 kl 0.008785654484141283 agree 0.9645
+  mutant_scale: bias +1.05398 spread 1.05398 se 0.03722 max 1.66080 kl 1.1903783966575374 agree 0.6004
