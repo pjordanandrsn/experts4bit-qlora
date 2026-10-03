@@ -8976,6 +8976,30 @@
         "receipts/experts4bit-qlora/2026-10-03/tc1-5090-43/tc1/"
       ],
       "notes": "Within-box A/B. Qwen3's real router on these rows: median group ~35 rows, median largest ~155 (a 4-layer RTX A2000 probe, grouped-nf4-gemm bench/tile-rule/)."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.fused-rmsnorm.qwen3.5090.2026-10-03",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 15 (#945), one rented RTX 5090 (tc1-5090-45): e4b's fused training RMSNorm (#961: one Triton launch forward and one backward for the frozen norms, near-exact -- ~1e-5 of elements one bf16 ulp off the Hugging Face composite) steps the Qwen3-30B-A3B field recipe at 0.924 [0.893, 0.955] x the composite on the shipped arm (3.234 / 3.159 against 3.537 / 3.386 s) and 0.959 [0.935, 0.984] x on the matched arm (4.110 / 4.192 against 4.258 / 4.396 s); every pair stable (within 4.3 %); mean held-out at N within 0.0021 (shipped) and 0.0015 (matched); energy per step lower. Engagement is verified per arm (rms_ab: 193 norms patched, 33,888 fused calls on every fused arm, none on the composite's). P24, P25 and P26 HELD. Not bit-identical: before any update the first training loss differs by 0.0090 and held-out at step 0 by 0.0064. e4b against itself on one host: no cross-framework position is restated from it.",
+      "value": 0.924,
+      "unit": "ratio s/step, fused training RMSNorm / Hugging Face composite, shipped arm (medians of steps 11..20 over two draws each; < 1 = faster); matched arm 0.959 [0.935, 0.984]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-45: instance 54018669, AMD EPYC 7663, driver 580.95.05); e4b @ aba67ea on torch 2.8.0+cu128, grouped-nf4-gemm @ 00929a4",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; token qwen3rmsab; E4B_FUSED_RMSNORM=0 vs 1 on the trimmed LoRA delta, the cost tile rule and the post-#945 sync path, the fused rotary on both sides, shipped arm (bf16 expert adapters, native init) and matched arm (fp32 adapters, matched:3407), two draws each in ABBA order; validity and scoring by bench/tc1/tc1_reduce.py (engagement predicates on rms_ab, lean_ab and sync_ab)",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-rmsab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-45/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-45/tc1/"
+      ],
+      "notes": "Within-box A/B. The host (EPYC 7663) steps slower than the earlier Ryzen boxes; every pair passed the 5 % stability gate."
     }
   ]
 }

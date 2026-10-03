@@ -23,6 +23,8 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-41` | `qwen3prof945` (amendment 12, #945) | instance 54000851, Intel Core Ultra 9 285K, driver 595.91.07 | e4b profiled after the sync fix, the legacy path as the before-picture; P19 HELD (matched device busy 0.595 → 0.740); [read](RESULTS-tc1-prof945.md) | $0.27 |
 | `tc1-5090-42` | `qwen3leanab` (amendment 13, #945) | instance 54006898, AMD Ryzen 9 7900 12-Core Processor, driver 580.178.04 | e4b against itself: gnf4's previous padded LoRA delta vs its trimmed body (#440); P20 0.939, P21 0.911, both HELD; [read](RESULTS-tc1-leanab.md) | $0.33 |
 | `tc1-5090-43` | `qwen3tileab` (amendment 14, #945) | instance 54011443, AMD Ryzen 9 7950X 16-Core Processor, driver 580.159.03 | e4b against itself: gnf4's max-keyed prefill M-tile vs the cost rule (#441); P22 0.924, P23 0.968, both HELD; [read](RESULTS-tc1-tileab.md) | $0.41 |
+| `tc1-5090-44` | `qwen3rmsab` (amendment 15, #945) | instance 54018557 | HARNESS_ERROR before the command ran: the guard's Vast auth probe got one HTTP 429 (adertha-agents#138) | $0.00 |
+| `tc1-5090-45` | `qwen3rmsab` (amendment 15, #945) | instance 54018669, AMD EPYC 7663 56-Core Processor, driver 580.95.05 | e4b against itself: the HF RMSNorm composite vs e4b's fused training RMSNorm (#961); P24 0.924, P25 0.959, P26 held-out within 0.0021, all HELD; [read](RESULTS-tc1-rmsab.md) | $0.39 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
