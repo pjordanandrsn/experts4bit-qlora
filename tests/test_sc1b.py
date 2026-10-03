@@ -153,21 +153,34 @@ def test_the_launch_prefix_is_empty_unless_set():
 
 @pytest.mark.skipif(not Path("/proc/self/comm").exists(), reason="end_capture reads /proc/PID/comm (Linux)")
 def test_end_capture_signals_the_app_and_never_nsys(tmp_path):
-    # nsys's own command line carries the app's, so the app pattern matches nsys too; nsys must exit on its own, unsignalled
+    # nsys's command line carries the app's, and so may the caller's: here the calling `bash -c` script holds the pattern too.
+    # Only the app (a child of nsys) may be signalled; nsys must exit on its own once the app is gone.
+    import os
+    import signal
     box = (LANE / "sc1b_box_d.sh").read_text()
-    fn = box[box.index("end_capture(){"):]
+    fn = box[box.index("_descendants(){"):]
     fn = fn[:fn.index("return 1; fi; }") + len("return 1; fi; }")]
     d = tmp_path / "marker-sc1b-ec"
     d.mkdir()
-    for name in ("nsys", "app"):
-        (d / name).write_bytes(Path("/bin/sleep").read_bytes())
-        (d / name).chmod(0o755)
+    (d / "app").write_bytes(Path("/bin/sleep").read_bytes())
+    (d / "app").chmod(0o755)
+    (d / "nsys").write_text('#!/bin/bash\nd=$(dirname "$0"); "$d/app" 300 & echo $! > "$d/app.pid"; wait $!; echo "app=$?" > "$d/app.status"; exit 0\n')
+    (d / "nsys").chmod(0o755)
     script = f"""line(){{ echo "$@"; }}
 {fn}
-{d}/nsys 3 & N=$!; {d}/app 300 & A=$!; sleep 0.5
-end_capture $N marker-sc1b-ec; echo "ec=$?"; wait $N; echo "nsys=$?"; wait $A; echo "app=$?"
+{d}/nsys > /dev/null 2>&1 & N=$!
+for i in $(seq 1 50); do [ -s {d}/app.pid ] && break; sleep 0.1; done
+end_capture $N marker-sc1b-ec; echo "ec=$?"; wait $N; echo "nsys=$?"; cat {d}/app.status
 """
-    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60).stdout.split()
+    try:
+        out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=30).stdout.split()
+    finally:
+        pid = (d / "app.pid").read_text().strip() if (d / "app.pid").exists() else ""
+        if pid:
+            try:
+                os.kill(int(pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
     assert out == ["ec=0", "nsys=0", "app=143"], out
 
 

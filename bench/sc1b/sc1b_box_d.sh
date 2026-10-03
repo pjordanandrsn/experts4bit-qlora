@@ -34,12 +34,14 @@ nsys_export(){ local rep=$1; [ -s "$rep.nsys-rep" ] || { say "no report $rep.nsy
 gpu_free(){ local i; for i in $(seq 1 "${1:-120}"); do
     [ -z "$(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | tr -d ' ')" ] && return 0; sleep 1; done
   line "SC1B GPU still held after ${1:-120}s: $(nvidia-smi --query-compute-apps=pid,process_name --format=csv,noheader | tr '\n' ' ')"; return 1; }
-# end_capture NSYS_PID APP_PATTERN -- SIGTERM the traced APP (never nsys), wait for nsys to write the report and exit. nsys's
-# own command line carries the app's (`nsys profile ... llama-server ... --port 8080`), so a bare `pkill -f` would signal nsys
-# too: every match that is nsys (or its setsid/perl wrapper) is skipped
-end_capture(){ local npid=$1 pat=$2 i p
+# end_capture NSYS_PID APP_PATTERN -- SIGTERM the traced APP (never nsys), wait for nsys to write the report and exit. Only
+# DESCENDANTS of nsys are candidates (the app is nsys's child): a bare `pkill -f` also matches nsys itself (its command line
+# carries the app's) and any unrelated process whose command line happens to hold the pattern, such as a calling shell
+_descendants(){ local c; for c in $(pgrep -P "$1" 2>/dev/null); do echo "$c"; _descendants "$c"; done; }
+end_capture(){ local npid=$1 pat=$2 i p kids
+  kids=" $(_descendants "$npid" | tr '\n' ' ') "
   for p in $(pgrep -f "$pat" 2>/dev/null); do
-    [ "$p" = "$npid" ] && continue
+    case "$kids" in *" $p "*) ;; *) continue;; esac
     case "$(cat "/proc/$p/comm" 2>/dev/null)" in nsys*|setsid|perl|"") continue;; esac
     kill -TERM "$p" 2>/dev/null
   done
