@@ -317,3 +317,34 @@ labelled native-best row for steady state over 200 steps on this card, beside an
 faster, that is the finding, and the claims register and the solution page say so.
 
 Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20 (about 2 h of box time estimated); the standing no-ask tier.
+
+### Amendment 9 (2026-10-03T05:31Z, after the P14 read, before any box): P14 on a second host
+
+**Why.** P14 was read on one host, `tc1-5090-35` (Vast machine 96642, Intel Xeon E5-2698 v4). TC1's within-box ratios have moved
+between hosts before. On `tc1-5090-34`'s AMD EPYC 9334, the scattermoe arm's warm steps 14-16 ran at 0.94-0.99 of e4b shipped, nearer
+parity than `tc1-5090-35`'s 0.911. The steady-state ordering is the campaign's main counterexample to e4b, so it is asked once more on
+a different host before the register treats it as more than one host's reading.
+
+**The box.** The `qwen3nativebest200` token, unchanged: the same five arms and order, the 200-step curve recipe, and the same pins. The
+e4b head is `7c31b88`, the commit `tc1-5090-35` ran, so the harness and the package are byte-identical to that box. A box that lands
+on machine 96642 is a repeat of the same host, not a second host. That leaves P15 UNTESTED and allows one relaunch under this amendment.
+
+**Prediction P15**, read off the box's own P14 line, with no new reducer code: the second host replicates P14's ordering. That needs
+three things on two stable pairs:
+
+1. the late-window ratio, axolotl scattermoe / e4b shipped over steps 101..200, lies in [0.90, 1.10];
+2. its whole cross-draw interval lies below 1.0;
+3. the box ran on a machine other than 96642.
+
+P15 is FALSIFIED if the ratio leaves the band, or if the interval reaches or crosses 1.0. An unstable or missing pair, or a repeat of
+the same machine, leaves P15 UNTESTED.
+
+**Decision rules.**
+
+- **HELD.** The `.native-steady-state` row adds the second host's reading, and its statement covers two hosts.
+- **FALSIFIED.** The row, STATUS and the solution page say the steady-state ordering between axolotl's scattermoe and e4b as shipped
+  is host-dependent, and give both hosts' readings. No single-host ordering is stated as general.
+
+In every case, the two boxes' numbers are never divided into each other.
+
+Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20 (`tc1-5090-35` cost $1.76); the standing no-ask tier.
