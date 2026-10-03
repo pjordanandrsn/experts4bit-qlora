@@ -2,7 +2,8 @@
 """E4B_INT4_PREFILL (e4b#916) routes a uniform-int4 store's host-grouped T > 1 calls -- every prefill chunk with
 DEVICE_GROUPING off, so every max_seqs == 1 server.
 
-- ``loop`` (default): one ``dequant_int4_ref`` per routed expert per projection, as before;
+- ``auto`` (the default since lane P102): ``k19`` where K19 can run, else ``loop``;
+- ``loop``: one ``dequant_int4_ref`` per routed expert per projection, as before;
 - ``batched``: the same bf16 weights decoded in slices, so the output is BIT-IDENTICAL to ``loop`` and
   ``dequant_int4_ref`` is never called;
 - ``k19`` / ``mtile``: ``_collapsed_grouping`` hands the call device grouping; ``k19`` serves it with K19 at every row
@@ -68,14 +69,22 @@ def _counting_reference(monkeypatch):
     return n
 
 
-def test_the_knob_defaults_to_loop_and_refuses_unknown_values(monkeypatch):
+def test_the_knob_defaults_to_auto_and_refuses_unknown_values(monkeypatch):
+    """``auto`` (the default since lane P102) is ``k19`` where K19 can run, else ``loop``."""
     monkeypatch.delenv("E4B_INT4_PREFILL", raising=False)
+    monkeypatch.setattr(hr, "_K19_PREFILL_OK", [True])
+    assert hr._int4_prefill_mode_env() == "k19"
+    monkeypatch.setenv("E4B_INT4_PREFILL", "")
+    assert hr._int4_prefill_mode_env() == "k19"
+    monkeypatch.setattr(hr, "_K19_PREFILL_OK", [False])
     assert hr._int4_prefill_mode_env() == "loop"
-    for v, want in (("loop", "loop"), (" Batched ", "batched"), ("K19", "k19"), ("mtile", "mtile"), ("", "loop")):
+    monkeypatch.setenv("E4B_INT4_PREFILL", "AUTO")
+    assert hr._int4_prefill_mode_env() == "loop"
+    for v, want in (("loop", "loop"), (" Batched ", "batched"), ("K19", "k19"), ("mtile", "mtile")):
         monkeypatch.setenv("E4B_INT4_PREFILL", v)
         assert hr._int4_prefill_mode_env() == want
     assert hr.INT4_PREFILL_ROUTES == ("loop", "batched", "k19", "mtile")
-    for bad in ("1", "grouped", "auto"):
+    for bad in ("1", "grouped", "default"):
         monkeypatch.setenv("E4B_INT4_PREFILL", bad)
         with pytest.raises(ValueError, match="E4B_INT4_PREFILL"):
             hr._int4_prefill_mode_env()

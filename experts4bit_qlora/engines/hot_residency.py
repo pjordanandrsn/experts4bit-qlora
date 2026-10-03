@@ -63,9 +63,13 @@ def _int4_prefill_mode_env() -> str:
     grouping. With :data:`DEVICE_GROUPING` off -- the library default, and every ``max_seqs == 1`` server -- that is
     every prefill chunk.
 
-    * ``loop`` (the default, also when unset): the host-grouped branch as it has always been -- one
-      ``dequant_int4_ref`` per routed expert per projection, cast to bf16, one matmul each. About 14 launches per
-      expert, so about 170k per 512-token chunk on Qwen3-30B-A3B, paid again on every chunk.
+    * ``auto`` (the default since lane P102, also when unset): ``k19`` wherever K19 can run -- the kernel package
+      carries it and a CUDA device is up (:func:`_k19_prefill_available`) -- else ``loop``. P102 (#931, RTX 5090,
+      Qwen3-30B-A3B at ``max_seqs`` 1) read TTFT-4096 7.21 s under ``loop`` and 1.37 s under ``k19``, with the
+      prefill-shaped NLL within +0.011 / +0.007 ppl (c4val1 / wikitext, 12 fresh windows): ``DEFAULT=k19``.
+    * ``loop``: the host-grouped branch as it was before -- one ``dequant_int4_ref`` per routed expert per
+      projection, cast to bf16, one matmul each. About 14 launches per expert (P100: 117k kernels per 512-token chunk
+      on Qwen3-30B-A3B), paid again on every chunk, and host-sensitive (TTFT-4096 4.8-30.1 s across four hosts).
     * ``batched``: the same arithmetic, with each projection's routed experts decoded together in slices of
       :data:`_INT4_PREFILL_SLICE` (:func:`_dequant_int4_bf16`). The bf16 weights and the matmuls are the same, so the
       output is bit-identical to ``loop``.
@@ -83,13 +87,34 @@ def _int4_prefill_mode_env() -> str:
     already device-grouped, so its prefill rows above 256 have always taken the M-tile: ``loop``, ``batched`` and
     ``mtile`` leave that unchanged, and ``k19`` moves those rows to K19 as well. Anything else is refused rather than
     read as one of these."""
-    v = os.environ.get("E4B_INT4_PREFILL", "loop").strip().lower() or "loop"
+    v = os.environ.get("E4B_INT4_PREFILL", "auto").strip().lower() or "auto"
+    if v == "auto":
+        return "k19" if _k19_prefill_available() else "loop"
     if v not in INT4_PREFILL_ROUTES:
-        raise ValueError(f"E4B_INT4_PREFILL={v!r}: expected one of {INT4_PREFILL_ROUTES}")
+        raise ValueError(f"E4B_INT4_PREFILL={v!r}: expected 'auto' or one of {INT4_PREFILL_ROUTES}")
     return v
 
 
-#: ``E4B_INT4_PREFILL``'s values (e4b#916); the device-grouped ones are the last two.
+def _k19_prefill_available() -> bool:
+    """``E4B_INT4_PREFILL=auto``'s test: K19 is in the kernel package and a CUDA device is up. Read once and cached,
+    so ``auto`` resolves the same way for the life of the process; any failure to load K19 keeps the loop."""
+    if not _K19_PREFILL_OK:
+        ok = False
+        try:
+            if torch.cuda.is_available():
+                from int4_smallm import gemm_int4_b32_grouped_smallm  # noqa: F401
+                ok = True
+        except Exception:  # noqa: BLE001 -- a kernel package without K19 (or a broken one) means auto keeps the loop
+            ok = False
+        _K19_PREFILL_OK.append(ok)
+    return _K19_PREFILL_OK[0]
+
+
+_K19_PREFILL_OK: list = []
+
+
+#: ``E4B_INT4_PREFILL``'s routes (e4b#916); the device-grouped ones are the last two. ``auto`` (the default) resolves
+#: to ``k19`` or ``loop`` (:func:`_int4_prefill_mode_env`).
 INT4_PREFILL_ROUTES = ("loop", "batched", "k19", "mtile")
 
 

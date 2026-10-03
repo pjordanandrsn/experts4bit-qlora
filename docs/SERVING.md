@@ -107,6 +107,26 @@ out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_HOST` 
 as above. `GET /stats` returns the scheduler's `stats()` (TTFT p50/p99 **from arrival**, queue wait,
 per-stream rate) and the runner's graph statistics.
 
+**Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
+`hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a
+Python loop: one reference decode, a cast, a matmul and a copy per routed expert per projection, paid per chunk per
+layer.
+- **P100** ([`bench/p100/RESULTS-p100.md`](../bench/p100/RESULTS-p100.md)) measured the loop at 73 % of a 512-token
+  chunk. The same configuration's TTFT-4096 ranged 4.8-30.1 s across the four hosts measured, because the loop is
+  host-sensitive.
+- **`E4B_INT4_PREFILL` picks the route:**
+  - `auto` (the default since P102): `k19` where K19 can run, else `loop`;
+  - `loop`;
+  - `batched`: the same weights decoded in slices, bit-identical;
+  - `k19`: K19 at every row count, the loop's operands within one bf16 ulp;
+  - `mtile`: the grouped int4 M-tile GEMM, int8 activations.
+- **P102** ([`bench/p102/RESULTS-p102.md`](../bench/p102/RESULTS-p102.md), RTX 5090, Qwen3-30B-A3B) read
+  `DEFAULT=k19`: TTFT-4096 7.21 s → 1.37 s and TTFT-512 0.85 s → 0.11 s. The prefill-shaped NLL stayed within +0.011 /
+  +0.007 ppl of the loop on 12 fresh windows (the calibrated K8 rule).
+- With `max_seqs > 1`, prefill rows have always taken the M-tile; `auto` moves them to K19 too.
+- **What remains of a k19 prefill:** about 45 % of its device time is prefill attention in fp32 without tensor cores.
+  Not yet addressed.
+
 **Limits, stated:** greedy only (`temperature` must be 0 or absent -- a nonzero value is a 400, not
 ignored); no `logprobs`, `echo`, `n > 1`, stop strings or penalties (400s); `ignore_eos`,
 `min_tokens`, `stop_token_ids`, `max_tokens` and token-id prompts are honoured. Requests past

@@ -39,9 +39,12 @@ is decided by ``hot_residency.DEVICE_GROUPING``:
   are freed by default). They take the host-grouped int4 branch, whose
   route ``E4B_INT4_PREFILL`` picks (e4b#916,
   ``hot_residency._int4_prefill_mode_env``):
-  - ``loop`` (the default): one ``dequant_int4_ref`` per routed expert
-    per projection, then a bf16 matmul. It is paid on every call, i.e.
-    per prefill chunk per layer, not once per request (lane P100);
+  - ``auto`` (the default since lane P102): ``k19`` where K19 can run,
+    else ``loop``. P102 (#931) read TTFT-4096 7.21 s -> 1.37 s on an RTX
+    5090 with the prefill-shaped NLL within +0.011 / +0.007 ppl;
+  - ``loop``: one ``dequant_int4_ref`` per routed expert per projection,
+    then a bf16 matmul. It is paid on every call, i.e. per prefill chunk
+    per layer, not once per request (lane P100);
   - ``batched``: the same weights decoded in slices, bit-identical;
   - ``k19``: device grouping served by K19 at every row count -- the
     loop's operands (bf16 activations, bf16 weights), within one bf16

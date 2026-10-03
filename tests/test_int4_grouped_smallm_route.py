@@ -199,8 +199,11 @@ def test_opted_in_without_k19_is_refused(monkeypatch):
 
 
 def test_prefill_rows_do_not_take_k19(monkeypatch):
-    """R > 256 is the prefill route (K14's grouped GEMM): the opt-in names a DECODE route and does not touch it."""
+    """R > 256 is the prefill route (K14's grouped GEMM): the opt-in names a DECODE route and does not touch it.
+    The prefill route is pinned to the M-tile here (E4B_INT4_PREFILL, #916): its default ``auto`` sends these rows to
+    K19 wherever K19 can run, which is that knob's business, not this opt-in's."""
     monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "1")
+    monkeypatch.setenv("E4B_INT4_PREFILL", "mtile")
     calls = _install_stubs(monkeypatch)
 
     def gemm_int4_b32_grouped_captured(xq, xs, packed, scales, t_row0, t_rows, t_grp, **kw):
@@ -222,8 +225,10 @@ def test_prefill_rows_do_not_take_k19(monkeypatch):
 @pytest.mark.parametrize("opt_in", [False, True])
 def test_collapsed_grouping_decisions(monkeypatch, opt_in):
     """The all-resident collapse's grouping. The opt-in moves only T == 1 on a uniform-int4 store, from singleton
-    groups to the device tile table; T > 1 still follows DEVICE_GROUPING, and MXFP4 / no store keep T == 1 singleton."""
+    groups to the device tile table; T > 1 still follows DEVICE_GROUPING, and MXFP4 / no store keep T == 1 singleton.
+    The prefill route is pinned to ``loop`` (E4B_INT4_PREFILL, #916), whose T > 1 calls follow DEVICE_GROUPING."""
     from experts4bit_qlora.engines import hot_residency as hr
+    monkeypatch.setenv("E4B_INT4_PREFILL", "loop")
     if opt_in:
         monkeypatch.setenv("E4B_INT4_GROUPED_SMALLM", "1")
     else:

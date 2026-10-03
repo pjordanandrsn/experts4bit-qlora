@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+### E4B_INT4_PREFILL defaults to auto (#916, lane P102's DEFAULT=k19): k19 where K19 can run, else loop -- TTFT-4096 7.21 s -> 1.37 s on an RTX 5090 at max_seqs 1
+
+- **The default** (`hot_residency._int4_prefill_mode_env`) is `auto`, also when unset. It resolves to `k19` when the
+  kernel package carries K19 and a CUDA device is up (`_k19_prefill_available`, read once per process), and to `loop`
+  otherwise, so CPU-only behaviour is unchanged. Every route stays selectable: `loop`, `batched`, `k19`, `mtile`.
+- **Why:** lane P102 (#931) read `DEFAULT=k19`. On an RTX 5090 with Qwen3-30B-A3B at `max_seqs` 1, TTFT-4096 went from
+  7.207 s to 1.373 s and TTFT-512 from 0.851 s to 0.113 s. The prefill-shaped NLL stayed within +0.0115 (c4val1) and
+  +0.0070 (wikitext) ppl of the loop over 12 fresh windows: the calibrated K8 rule, budget 0.05.
+- **What it also moves:** with `DEVICE_GROUPING` on (`max_seqs > 1`), prefill rows above 256 move from the int8 M-tile
+  to K19. T == 1 decode is untouched.
+- **Tests.**
+  - Five existing tests about other knobs now pin the prefill route they assumed: `loop` for the A16 collapse and the
+    collapsed-grouping decisions; `mtile` for the two device-grouping tests and the K19 decode opt-in's prefill rows.
+  - `test_int4_prefill_route.py` pins `auto`'s two resolutions.
+  - P102's staged-pin test now pins the knob's new default string. P102's own tripwire, which requires `loop`, refuses
+    at later commits by design: the lane is read and closed.
+- **Docs.** The `int4_experts.py` Scope note, the knob's docstring, and a `docs/SERVING.md` paragraph citing P100 and
+  P102.
+
 ### SC1 read (#846): no position quoted -- box A's licence reads QUALITY_FAIL, which blocks every box. Measured, vLLM leads e4b's scheduler by 1.17-1.20x at B=1, SGLang by 1.27x, llama.cpp Q4_K_M by 1.48x; P13 holds on boxes B and C (bench docs and receipts only)
 
 - **Receipts:** `sc1a-5090-2` (e4b `32d424e`), `sc1b-5090-3` and `sc1c-5090-5` (`9dd712b`), read with main's reducer
