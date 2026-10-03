@@ -429,15 +429,15 @@ reading, not a speed one.
   ×9.02 at one, on an EPYC 7C13 host.
 - **Exactness:** the replay is bit-identical to its padded eager step.
 - **Verdict DIVERGENT:** 9 of 16 rows agree with the eager default for 16 tokens, against a bar of 12. Grouping alone,
-  with no graphs, reads 10 of 16. The default waits on a teacher-forced quality reading; `E4B_PAGED_GRAPHS=1` serves the
-  graph path every registered serving number describes.
+  with no graphs, reads 10 of 16. The default waited on a teacher-forced quality reading: P110, below.
 
 **The graph arithmetic costs no measurable quality** (lane P110, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p110/RESULTS-p110.md`](../bench/p110/RESULTS-p110.md), `e4b.serve.p110.graph-arithmetic-quality.qwen3.5090.2026-10-03`).
 - **Quality:** on the default server (Qwen3-30B-A3B NF4), teacher-forced over 48 wikitext windows, device grouping plus
   bucket padding (bitwise the graph path) reads +0.0004 nats against the eager default. The eager default's own
   half-batch and prefill-split draws read +0.0018 and +0.0005.
-- **Verdict AT_PARITY:** a halved decode scale reads +1.05. This licenses graphs as `serve_paged`'s default.
+- **Verdict AT_PARITY:** a halved decode scale reads +1.05. Graphs are now `serve_paged`'s default
+  (`E4B_PAGED_GRAPHS=auto`; `0` keeps eager decode).
 
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).

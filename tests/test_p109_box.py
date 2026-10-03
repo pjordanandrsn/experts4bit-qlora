@@ -85,6 +85,9 @@ def stubbed(monkeypatch, tmp_path):
         monkeypatch.setenv(k, v)
     for k in ("E4B_PAGED_GRAPHS", "E4B_PAGED_MAX_SEQS", "E4B_PAGED_BUCKETS", "E4B_PAGED_PLACEMENT"):
         monkeypatch.delenv(k, raising=False)
+    # Since P109's consequence an unset E4B_PAGED_GRAPHS is auto (graphs on CUDA at all-vram). The stub engine is no
+    # CUDA device, so auto reads eager here, as the registered E arm read the eager default.
+    monkeypatch.setenv("E4B_PAGED_DEVICE", "cpu")
     return box, pf, monkeypatch, tmp_path
 
 

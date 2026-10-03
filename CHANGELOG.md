@@ -1,6 +1,33 @@
 # Changelog
 
 ## Unreleased
+
+### `serve_paged` captures bucketed decode graphs by default (`E4B_PAGED_GRAPHS=auto`; `0` keeps eager decode) (#770, lanes P109 and P110)
+
+- **What changes.** `PagedServeConfig.from_env()` resolves `E4B_PAGED_GRAPHS` through `_graphs_env`:
+  - `auto`, the default (also when the variable is unset or empty): graphs on a CUDA device at the `all-vram`
+    placement, and eager decode elsewhere;
+  - `1`: forces graphs, refusing where batched graphs are refused;
+  - `0`: keeps eager decode.
+  - Anything else is refused.
+  - A `PagedServeConfig` built directly keeps `graphs=False`.
+- **Why.** On the default server (Qwen3-30B-A3B NF4, one RTX 5090):
+  - P109 read graphs ×5.60 the eager default with 16 concurrent requests and ×9.02 with one, at +0.055 GiB, with the
+    replay bit-identical to its padded eager step;
+  - P110 read the arithmetic graphs bring, device grouping and bucket padding, at +0.0004 nats against the eager
+    default, teacher-forced and inside the eager default's own floor (AT_PARITY).
+- **What a user sees.**
+  - The default server decodes 5–9× faster on that host.
+  - Greedy outputs differ from the old eager default's at the bf16 level, at no measured quality cost.
+  - Startup adds about 3 s of capture.
+  - `E4B_PAGED_GRAPHS=0` restores the old behaviour.
+- **Scope.** Read on Qwen3-30B-A3B NF4. Hybrid models' graphs are P101's. Other families ride the same capture code
+  without a reading of their own.
+- **Tests.**
+  - `tests/test_serve_paged.py` pins `auto`, `0`, `1`, the CPU and `solver` fallbacks, and the refusal.
+  - `tests/test_p109_box.py`'s stub engine declares a CPU device, so an unset switch still reads as the eager arm P109
+    registered.
+
 ### SC1b read (#846): e4b's B=1 loss to llama.cpp is kernel overlap it lacks, not slower kernels; its B=16 loss to vLLM is per-layer KV-table glue (bench docs, receipts and a read-time tool)
 
 - `bench/h2h-2026-10-02/sc1b/`: the read (`README.md`) and every run's receipts: two proofs, one NOT_RUN, two box D runs.
