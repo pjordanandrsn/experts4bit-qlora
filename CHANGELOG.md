@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### The rotary embedding trains through one Triton launch each way, bit-identical to the composite (on by default; `E4B_FUSED_ROPE=0` turns it off)
+
+- **What.** `experts4bit_qlora.engines.rope_train`: `rope_qk` computes `q * cos + rotate_half(q) * sin`, for q and k, in one launch
+  forward and one per tensor backward. Every op in Hugging Face's composite is elementwise, and a product of two bf16 values is
+  exact in fp32. The kernel therefore rounds each product to bf16 and then the sum, and this reproduces the composite byte for byte,
+  forward and gradients. `tests/test_rope_train.py` asserts `torch.equal` at three shapes, broadcast cos/sin included.
+- **A Triton trap, worked around.** Triton 3.4 folds a `.to(bfloat16).to(float32)` round trip that feeds an add: 14 % of a
+  product-plus-add's elements came out unrounded. The kernel rounds with integer arithmetic on the fp32 bits (`_rne_bf16`), which
+  the compiler cannot elide.
+- **Scope.** `enable_fast_train` points the `apply_rotary_pos_emb` of the model's own attention modules at the kernel. Only a
+  function with the `(q, k, cos, sin, unsqueeze_dim=1)` contract is replaced, any call outside bf16 CUDA `[B, H, L, D]` shapes goes
+  to the original, and `disable_fast_train` unwinds it.
+- **Measured on an RTX A2000** (2-layer Qwen3-MoE at Qwen3-30B-A3B's layer shape, e4b's fused training step, ABBA): launches per
+  step 1,344 → 1,275, which would be about 6,600 fewer a step at the 48-layer accum-4 field recipe. No step-time effect is claimed.
+
 ### LoRA: the delta's scaling multiply is skipped at exactly 1 (exact; fewer launches at alpha == r)
 
 - **What.** `LoRALinear.forward` (the attention adapters), `ExpertsLoRA._lora` (the reference expert path) and the batched engine's
