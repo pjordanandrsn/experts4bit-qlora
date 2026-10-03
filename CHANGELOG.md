@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-### SC1b amendment A1 (#846): the evaluator for predictions Q1-Q5, merged before any box D data (bench and tests only)
+### SC1b amendments A1 and A2 (#846): the evaluator for predictions Q1-Q5, merged before any box D data; the proof's e4b capture gets Granite rows (bench and tests only)
 
 - `bench/sc1b/sc1b_read.py` decides Q1-Q5 (HOLDS / REFUTED / UNREAD) from box D's own arm and gap records and writes
   the read's tables; `SC1b-PREREG.md` gains A1, which fixes three readings of the registered text before data exists.
@@ -10,7 +10,13 @@
   - Q4 has no noise clause.
 - `tests/test_sc1b.py`: the evaluator's self-test, and an end-to-end case that feeds it the reducer's own `gap()`
   records, so a key rename on either side fails. A blocking label leaves the gap and its predictions UNREAD.
-- Box D's code is unchanged; A1 runs at read time.
+- A1 runs at read time; box D's code is unchanged by it.
+- **A2.** The proof `sc1d-prove-1` ($0.41) failed on one item.
+  - Its e4b Granite B=16 capture read the lane's `prompts_b16.json` before that file existed, and the file holds Qwen3 ids
+    beyond Granite's vocabulary.
+  - `sc1b_e4b_census.py --write-prompts` now writes seeded Granite rows that SC1's own `load_prompts` accepts, and the
+    proof passes them to `e4b_census`.
+  - The other four proof items had reduced cleanly. The proof re-runs as `sc1d-prove-2`.
 
 ### P108 Amendment 2 (#359): the box gets 220 minutes and the reading a 4 h guard, before any data is read (bench only)
 

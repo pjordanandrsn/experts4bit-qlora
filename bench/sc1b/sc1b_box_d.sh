@@ -52,13 +52,14 @@ import csv, statistics, sys
 v = [float(r[3]) for r in csv.reader(open(sys.argv[1])) if len(r) > 3 and r[3].strip().replace('.', '', 1).isdigit()]
 print(round(statistics.median(v)) if v else '')" "$W/samples/$1.csv" 2>/dev/null; }
 
-# e4b_census B MODE [STACK MODEL REV ARENA TAG FUSE] -- nsys profile around sc1b_e4b_census.py with the sched arm's exact
-# env (SC1's int4_sched: SPEEDENV, fuse_qkv 1); the proof's Granite capture passes GR_ENV and fuse_qkv 0, as SC1's smokes do
-e4b_census(){ local B=$1 MODE=$2 STACK=${3:-$SPEEDENV} M=${4:-$MID} R=${5:-$REV} ARENA=${6:-$QA} TAG=${7:-e4b} FUSE=${8:-1}
+# e4b_census B MODE [STACK MODEL REV ARENA TAG FUSE PROMPTS] -- nsys profile around sc1b_e4b_census.py with the sched arm's
+# exact env (SC1's int4_sched: SPEEDENV, fuse_qkv 1); the proof's Granite capture passes GR_ENV, fuse_qkv 0 (as SC1's
+# smokes do) and its own Granite prompt file (A2: the lane's prompts carry Qwen3 ids)
+e4b_census(){ local B=$1 MODE=$2 STACK=${3:-$SPEEDENV} M=${4:-$MID} R=${5:-$REV} ARENA=${6:-$QA} TAG=${7:-e4b} FUSE=${8:-1} PR=${9:-$W/prompts_b$1.json}
   local S=census_${TAG}_b${B}_$MODE AL; AL=$(arm_alarm 1800); say "census $S (alarm=$AL)"; sampler_start $S
   { echo "SC1B census=$S at=$(date -u +%FT%TZ) $(host_snapshot)"; echo "ENV: $ROUTEENV $STACK $(sched_env "$B" 2048 "$FUSE" "$M" "$R" "$ARENA")"; } > logs/run_$S.log
   env PYTHONPATH= $ROUTEENV $STACK $(sched_env "$B" 2048 "$FUSE" "$M" "$R" "$ARENA") E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA SC1_ARM=$S SC1_BATCH=$B \
-      SC1_PROMPTS=$W/prompts_b$B.json SC1_OUT=$W/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID \
+      SC1_PROMPTS=$PR SC1_OUT=$W/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID \
     perl -e "alarm $AL; exec @ARGV" "$NSYS" profile $NSYS_TRACE --cuda-graph-trace=$MODE --capture-range=cudaProfilerApi \
       --capture-range-end=stop --force-overwrite true -o "$W/census/$S" "$PY" "$W/sc1b_e4b_census.py" --skip $SC1B_SKIP --steps $SC1B_STEPS >> logs/run_$S.log 2>&1
   local rc=$?; sampler_stop $S
@@ -203,8 +204,13 @@ prove_d(){ local ok=0 r
   line "PROVE toy $(grep -a SC1B_TOY_CHECK logs/prove_toy_check.log | cut -c1-300) $(grep -a 'SC1B_TOY ' logs/prove_toy_node.log | cut -c1-120)"
   [ $ok = 0 ] || { say "PROVE: the toy failed -- the instrument does not record what the census reads -- NOT PROVED"; rec 23; return; }
   # 3. e4b B=16 graph capture on Granite (the staggered-admission bracket, B1), with the Granite arena the common proof baked
-  e4b_census 16 graph "$GR_ENV" "$GR" "$GR_REV" "$W/work_granite/nf4.arena" granite 0; r=$?
-  [ $r = 0 ] && prove_red e4b_granite_b16 graph "$W/census/census_granite_b16_graph.sqlite" e4b '{}' || { say "PROVE: e4b B=16 census rc=$r -- NOT PROVED"; rec 23; }
+  #    and Granite rows (A2: sc1d-prove-1 fed it the lane's prompts_b16.json, which did not exist yet and holds Qwen3 ids)
+  if "$PY" "$W/sc1b_e4b_census.py" --write-prompts "$W/prompts_granite_b16.json" --vocab-from "$(cat "$W/fetch_granite.path")/config.json" \
+      --batch 16 > logs/prove_granite_prompts.log 2>&1; then
+    line "PROVE granite prompts $(grep -a SC1B_PROMPTS logs/prove_granite_prompts.log | cut -c1-200)"
+    e4b_census 16 graph "$GR_ENV" "$GR" "$GR_REV" "$W/work_granite/nf4.arena" granite 0 "$W/prompts_granite_b16.json"; r=$?
+    [ $r = 0 ] && prove_red e4b_granite_b16 graph "$W/census/census_granite_b16_graph.sqlite" e4b '{}' || { say "PROVE: e4b B=16 census rc=$r -- NOT PROVED"; rec 23; }
+  else say "PROVE: Granite prompt rows not written ($(tail -1 logs/prove_granite_prompts.log | cut -c1-160)) -- NOT PROVED"; rec 23; fi
   # 4. vLLM B=1 node mode on the lane's checkpoint (spawned EngineCore, in-process start_profile, the class map on real kernels)
   if fetch gptq "$GPTQ_MID" "$GPTQ_REV" 1800 && prompts; then           # prompts() fetches the bf16 repo's tokenizer itself
     vllm_census 1 node; r=$?

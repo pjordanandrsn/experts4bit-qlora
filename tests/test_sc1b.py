@@ -282,3 +282,25 @@ def test_the_a1_evaluator_reads_the_reducers_own_gap_records(tmp_path):
     (tmp_path / "sc1b_gap_e4b_llamacpp_b1.json").write_text(json.dumps(census.gap(e1, l1b, 1.484)))
     _arms, _gaps, v = rd.read(str(tmp_path))
     assert v["Q1"]["verdict"] == v["Q3"]["verdict"] == "UNREAD" and v["Q2"]["verdict"] == "HOLDS", v
+
+
+def test_a2_the_proofs_granite_rows_pass_sc1s_own_prompt_checks(tmp_path):
+    # A2 (#846): sc1d-prove-1's Granite capture read the lane's prompts_b16.json before it existed (and it holds Qwen3 ids,
+    # beyond Granite's 49,155-token vocabulary). The proof now writes Granite rows that SC1's own load_prompts accepts.
+    sys.path.insert(0, str(SC1))
+    try:
+        import sc1_e4b_sched as sc1
+        ce = _mod("sc1b_e4b_census")
+        p = tmp_path / "prompts_granite_b16.json"
+        sha = ce.write_prompts(str(p), 49155, 16)
+        pf = sc1.load_prompts(str(p), 16, prompt_len=sc1.PROMPT_LEN)
+        assert pf["info"]["prompts_sha256"] == sha and pf["info"]["rows_distinct_in_file"]
+        assert all(16 <= t < 49155 for r in pf["prompts"] for t in r) and all(len(r) == 512 for r in pf["prompts"])
+        assert ce.write_prompts(str(tmp_path / "again.json"), 49155, 16) == sha        # seeded: the same rows on every box
+    finally:
+        sys.path.remove(str(SC1))
+    box = (LANE / "sc1b_box_d.sh").read_text()
+    item3 = box[box.index("# 3. e4b B=16 graph capture on Granite"):box.index("# 4. vLLM B=1 node mode")]
+    assert item3.index("--write-prompts") < item3.index("e4b_census 16 graph")
+    assert '"$W/prompts_granite_b16.json"; r=$?' in item3
+    assert 'PR=${9:-$W/prompts_b$1.json}' in box and "SC1_PROMPTS=$PR " in box               # the main box's default is unchanged

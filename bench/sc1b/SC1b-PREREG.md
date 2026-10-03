@@ -279,3 +279,22 @@ Coverage families (their own lane), gpt-oss (SC1g), prefill/TTFT (#916's P100/P1
 
   Each prediction reads HOLDS, REFUTED or UNREAD. A prediction on an unread gap is UNREAD. The read's tables
   (`RESULTS-sc1b.md`) come from the same script. Box D's code is unchanged: A1 runs at read time only.
+- **A2 (after `sc1d-prove-1`, before box D): the proof's e4b capture gets its own Granite rows.** `sc1d-prove-1`
+  (Vast machine 142284, $0.4124, 47 min) read HARNESS_ERROR on proof item 3 alone.
+  - The e4b Granite B=16 capture read the lane's `prompts_b16.json` before item 4 had written it
+    (`FileNotFoundError`; nsys wrote no report).
+  - That file carries Qwen3 token ids, which are beyond Granite's 49,155-token vocabulary anyway.
+  - Items 2, 4, 5 and 6 passed and reduced:
+    - the toy: 20 replays, 3 kernels each, eager work non-graph;
+    - vLLM B=1 node: 57 steps, residual 0.11 %, 48/48 segments;
+    - SGLang B=1 node: 61 steps, residual 0.12 %, 48/48 segments;
+    - llama.cpp B=16 graph: 62 steps at positions 33:64.
+
+  The fix:
+  - `sc1b_e4b_census.py --write-prompts` writes 16 distinct 512-token rows of seeded random ids under Granite's
+    vocabulary (read from the fetched checkpoint's `config.json`).
+  - It uses SC1's own digest, and SC1's own `load_prompts` checks the file.
+  - Item 3 writes the rows first and passes them to `e4b_census` (new optional prompts argument).
+  - The main box's e4b arms keep `prompts_b{B}.json`.
+
+  The proof re-runs as `sc1d-prove-2` before box D.
