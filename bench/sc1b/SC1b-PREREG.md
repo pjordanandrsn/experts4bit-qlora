@@ -270,8 +270,8 @@ Coverage families (their own lane), gpt-oss (SC1g), prefill/TTFT (#916's P100/P1
   1. **"The largest term of ΔP"** (Q1, Q5) is the term with the largest contribution in ΔP's direction:
      argmax_k sign(ΔP) × Δ_k over the nine classes, I_in and idle_out. The remainder O is not a term.
      - An opposite-signed term is not "of ΔP", however large.
-     - If idle_out is not nameable (G-inflate) and contributes more than I_in, the prediction is UNREAD: the winner
-       cannot be decided.
+     - If idle_out is not nameable (G-inflate) and is the largest, the prediction is decided on the other terms: a
+       class beating I_in makes it REFUTED (whatever idle_out's true size), and I_in winning the rest makes it UNREAD.
   2. **Q2's kernel count** is the node-mode median `kernels_in_graph` per step. Q2 is read even when the class map is
      incomplete, but not when either arm's node capture is VOID or carries NSYS_DIAGNOSTIC_ERRORS.
   3. **Q4** carries no noise clause, as registered: same sign as ΔP and |Δidle_out| ≥ 0.5 |ΔP|, with idle_out

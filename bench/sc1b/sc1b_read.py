@@ -7,8 +7,9 @@ re-reduces a trace.
 
 Q1 (G1, B=1) and Q5 (G3, B=1): "the largest term of dP is dI_in". The largest term of dP is the term with the largest
     contribution in dP's direction, argmax_k sign(dP) x d_k over the identity's terms (the nine classes, I_in, idle_out);
-    the remainder O is not a term. HOLDS iff that term is I_in. UNREAD if the gap is unread, or if idle_out is not
-    nameable (G-inflate failed on either arm) and its contribution exceeds I_in's (the winner cannot be decided).
+    the remainder O is not a term. HOLDS iff that term is I_in. UNREAD if the gap is unread. If idle_out is not nameable
+    (G-inflate failed on either arm) and is the largest, the rest decide: a class beating I_in is REFUTED whatever
+    idle_out's true size; I_in winning the rest is UNREAD.
 Q2 (G1): e4b runs >= 1.5x llama.cpp's in-graph kernels per B=1 step: the ratio of the two node-mode medians
     `kernels_in_graph`. UNREAD if either arm's node capture is VOID or carries NSYS_DIAGNOSTIC_ERRORS (counts need complete
     records; the class map does not enter).
@@ -61,8 +62,13 @@ def q_largest_is_I_in(g):
         return {"verdict": "UNREAD", "why": "dP is 0"}
     s = 1 if g["delta_P_ms"] > 0 else -1
     i_in = s * g["delta"]["I_in"]
-    if not g["idle_out_nameable"] and s * g["delta"]["idle_out"] > i_in:
-        return {"verdict": "UNREAD", "why": "idle_out is not nameable (G-inflate) and contributes more than I_in",
+    if not g["idle_out_nameable"] and k == "idle_out":
+        # idle_out's size is not trusted; I_in can still lose to a class (REFUTED whatever idle_out is), or win the rest
+        rest = max((t for t in TERMS if t != "idle_out"), key=lambda t: s * g["delta"][t])
+        if rest != "I_in":
+            return {"verdict": "REFUTED", "largest": rest, "contribution_ms": round(s * g["delta"][rest], 6),
+                    "I_in_contribution_ms": round(i_in, 6), "delta_P_ms": g["delta_P_ms"], "note": "idle_out not nameable"}
+        return {"verdict": "UNREAD", "why": "idle_out is not nameable (G-inflate) and contributes more than I_in, the largest of the rest",
                 "largest": k, "contribution_ms": c}
     return {"verdict": "HOLDS" if k == "I_in" else "REFUTED", "largest": k, "contribution_ms": c, "I_in_contribution_ms": round(i_in, 6),
             "delta_P_ms": g["delta_P_ms"]}
@@ -156,9 +162,11 @@ def self_test():
     assert q_largest_is_I_in(gap(1.0, {"I_in": 0.4, "attn": -0.9}))["verdict"] == "HOLDS"
     assert q_largest_is_I_in(gap(1.0, {"I_in": 0.4, "idle_out": 0.5}, nameable=False))["verdict"] == "UNREAD"
     assert q_largest_is_I_in(gap(1.0, {"I_in": 0.6, "idle_out": 0.5}, nameable=False))["verdict"] == "HOLDS"
+    # idle_out untrusted but a class beats I_in anyway: REFUTED, not UNREAD
+    assert q_largest_is_I_in(gap(1.0, {"I_in": 0.2, "moe_expert": 0.4, "idle_out": 0.5}, nameable=False))["verdict"] == "REFUTED"
     assert q_largest_is_I_in({"status": "unread", "why": ["x"]})["verdict"] == "UNREAD"
     assert q_largest_is_I_in(None)["verdict"] == "UNREAD"
-    checks += 7
+    checks += 8
     arm = lambda k, labels=(): {"node": {"status": "ok", "kernels_in_graph": k}, "labels": list(labels)}   # noqa: E731
     assert q2(arm(900), arm(500))["verdict"] == "HOLDS" and q2(arm(700), arm(500))["verdict"] == "REFUTED"
     assert q2(arm(900, ["NSYS_DIAGNOSTIC_ERRORS"]), arm(500))["verdict"] == "UNREAD"
