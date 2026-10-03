@@ -128,3 +128,21 @@ Amendments, dated, go below this line before any data is read.
     tables) equals the chained builder's: 0 of 300 calls differ.
 
   The builder is not the cause.
+- **A second mechanism ruled out, at $0 on the A2000: K25 with device grouping under capture.** The expert engine's
+  `_fused_over_stack` ran with `E4B_NF4_GROUPED_SMALLM=1`, device grouping, and the lean glue on (the serving
+  default) and off. Its shapes were Qwen3.6's experts exactly: hidden 2048, expert intermediate 512, 256 experts,
+  top-8; plus 40 experts as a control.
+  - One graph was captured per row count (2, 4, 8, 16, ascending, as `enable_decode_graphs` captures). They were then
+    replayed in a different order on new inputs and routings, 5 per step of the order 16, 8, 2, 4, 16, 2.
+  - Every replay equals the eager call on the same inputs, bit for bit: 0 of 120 replays differ.
+
+  K25 and the device tile table do not fault under capture on their own.
+- **Prediction revised accordingly** (from the $0 evidence above, before any P99 data): **k25_necessary: no.** With
+  K25 off, Qwen3.6's replays are predicted to fault as well. The remaining suspects are what the A2000 checks did not
+  include:
+  - the hybrid expert tier's glue around `_fused_over_stack` (routing, combine, the shared expert);
+  - the per-slot linear state inside the full model;
+  - the compact pool's paged attention;
+  - a buffer moved between bucket captures or by a prefill between replays.
+
+  The other predictions stand.
