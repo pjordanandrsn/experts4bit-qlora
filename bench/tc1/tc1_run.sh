@@ -98,7 +98,7 @@ case "$TC1_BOX" in
 esac
 # TC1-PREREG amendment 3 (2026-10-02): the qwen3axolotl token runs no Unsloth arm, so it builds neither Unsloth venv (~15 min of box time
 # on the TC1 boxes); every other token builds both as before.
-NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 ") NEED_UNSLOTH=0;; esac
+NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab ") NEED_UNSLOTH=0;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
@@ -540,6 +540,9 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   # fails whether the variable is empty or set. As an argument to `env` the expansion is
   # an ordinary word and an empty one simply vanishes.
   local ARM_ENV=""; [ "$ARM" = batched ] && ARM_ENV="E4B_BATCHED_PAD_WASTE_LIMIT=${TC1_BATCHED_PAD_WASTE_LIMIT:-64}"
+  # TC1 amendment 10 (#945): a family may hand one arm extra environment (TC1_ARM_EXTRA_ENV="K=V ..." as a prefix on the
+  # arm/draw2 call); it rides the same `env` word list, so an empty value vanishes as ARM_ENV's does
+  [ -n "${TC1_ARM_EXTRA_ENV:-}" ] && ARM_ENV="$ARM_ENV $TC1_ARM_EXTRA_ENV"
   # TC1 amendment 4: every arm runs with the Hub offline (the pinned snapshot is the only model bytes) except axolotl's scattermoe
   # native-best, whose KernelsPlugin fetches kernels-community kernels by version at load, as an axolotl user's run does; the
   # arm records the kernel commits it fetched (hub_kernels_cached), and the model revision stays pinned by sha.
@@ -828,6 +831,28 @@ tc1_nativebest200_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 AAL=$6 MAL=
   can_run 900 $FAM/e4b/m_200           && arm   $FAM e4b fused_attn4_m_200 fused $MAL "$MID" $REV 0 curve $TOK $TS --attn-4bit 1 $MATCH
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_syncab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 10 (2026-10-03, #945): e4b against itself on one card. The legacy
+# grouping with grouped-nf4-gemm's pageable index copies (E4B_GROUPING=legacy GNF4_PINNED_RING=0: 13 host syncs per MoE layer pass)
+# against the single-read grouping with the pinned ring (E4B_GROUPING=single GNF4_PINNED_RING=1: 1 sync), on the shipped arm and the
+# matched arm, two draws each in ABBA order so neither side always runs first. The values are identical by construction; the
+# question is the step time. GNF4_SHA must carry the ring (grouped-nf4-gemm#438); the receipts record which path each arm ran.
+tc1_syncab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_legacy:fused e4b:fused_attn4_shipped_sync1:fused e4b:fused_attn4_m_legacy:fused e4b:fused_attn4_m_sync1:fused e4b:fused_attn4_m_sync1_d2:fused e4b:fused_attn4_m_legacy_d2:fused e4b:fused_attn4_shipped_sync1_d2:fused e4b:fused_attn4_shipped_legacy_d2:fused"
+  say "===== SYNC A/B family $FAM ($MID @ $REV; legacy grouping + pageable copies vs single-read grouping + pinned ring, #945)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local LEG="E4B_GROUPING=legacy GNF4_PINNED_RING=0" NEW="E4B_GROUPING=single GNF4_PINNED_RING=1"
+  can_run 600 $FAM/e4b/shipped_legacy    && TC1_ARM_EXTRA_ENV="$LEG" arm   $FAM e4b fused_attn4_shipped_legacy fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_sync1     && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_shipped_sync1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_legacy          && TC1_ARM_EXTRA_ENV="$LEG" arm   $FAM e4b fused_attn4_m_legacy fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_sync1           && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_m_sync1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_sync1_d2        && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_m_sync1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_legacy_d2       && TC1_ARM_EXTRA_ENV="$LEG" draw2 $FAM e4b fused_attn4_m_legacy fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_sync1_d2  && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_shipped_sync1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_legacy_d2 && TC1_ARM_EXTRA_ENV="$LEG" draw2 $FAM e4b fused_attn4_shipped_legacy fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_axolotl_family FAM MID REV FETCH_AL E4B_AL HF_AL AX_AL -- TC1-PREREG amendment 3 (2026-10-02): the axolotl rows re-asked on their own box, each a
 # position within this box against the e4b fused_m it runs first; two draws of the matched pair so the matched position carries its cross-draw interval:
 #   e4b/fused_attn4_m  axolotl/ckpt_axolotl_m  e4b/fused_attn4_m_d2  axolotl/ckpt_axolotl_m_d2  axolotl/ckpt_axolotl_best (scattermoe, native init)
@@ -959,6 +984,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3native) tc1_native_family qwen3native Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 1800 2700;;
   #                                                                                                        FETCH E4B  UNS  AX     (TC1 amendment 5: native-best vs native-best)
   qwen3nativebest) tc1_nativebest_family qwen3nativebest Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 2700;;
+  qwen3syncab) tc1_syncab_family qwen3syncab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 10 (#945)
   qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 5400 4800;;   # TC1 amendment 8
   #                                                                                                        FETCH E4B  HF   AX     (amendment 3: the axolotl box)
   qwen3axolotl) tc1_axolotl_family qwen3axolotl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 1800 2700;;

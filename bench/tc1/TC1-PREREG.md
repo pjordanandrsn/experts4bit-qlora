@@ -348,3 +348,41 @@ the same machine, leaves P15 UNTESTED.
 In every case, the two boxes' numbers are never divided into each other.
 
 Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20 (`tc1-5090-35` cost $1.76); the standing no-ask tier.
+
+### Amendment 10 (2026-10-03T08:42Z, before any box): e4b's grouping and index-copy syncs, A/B on one card (#945)
+
+**Why.** TC1's profiled matched arm on an RTX 5090 was 48 % device-busy, and the profile spent 1.27 s of each 7.28 s profiled step in
+`cudaStreamSynchronize` while the GPU still had work queued. The A2000 accounting in #945 traces every one of the step's ~4,400 syncs
+to the MoE layer: 13 per layer pass. Five come from e4b's grouping in the forward; five forward and three backward come from
+grouped-nf4-gemm's pageable index copies. #946 makes e4b's grouping read its counts back once, and grouped-nf4-gemm#438 adds an opt-in
+pinned ring that removes the copies' syncs. Both are value-identical. Together they take a layer pass from 13 syncs to 1. Whether that
+moves the 5090 training step is the question.
+
+**The token** `qwen3syncab` (TC1_BOX=A): e4b against itself on one card, at the field recipe for N = 20.
+
+- **Legacy side:** `E4B_GROUPING=legacy GNF4_PINNED_RING=0`.
+- **New side:** `E4B_GROUPING=single GNF4_PINNED_RING=1`.
+- **Arms:** the shipped arm (`fused_attn4_shipped_*`) and the matched arm (`fused_attn4_m_*`), two draws each, in ABBA order so neither
+  side always runs first.
+- **Pins:** e4b at a head carrying #946, and grouped-nf4-gemm at the merge of #438 rather than 846b512. Both sides run the same code; only
+  the two variables differ.
+- **Engagement record:** each arm records the path it ran (`sync_ab`: grouping mode, ring switch, ring staged count).
+- **Validity:** the reducer voids an arm whose record contradicts its tag. A legacy arm must show legacy grouping, the ring off and
+  nothing staged. A new arm must show single grouping, the ring on and staged > 0. The matched legacy arm is the box's anchor.
+
+**Predictions** (registered before the box): over two VALID draws a side, each side's draws within 5 %, sync1 / legacy s/step (medians
+of steps 11..20) lies in [0.75, 0.95], at least 5 % faster and at most 25 %. P16 is the shipped arm and P17 the matched arm. Outside
+the band is FALSIFIED; an unstable, missing or non-VALID side is UNTESTED. The interval over the four cross-draw ratios is reported
+beside each. The band comes from the profile: the sync wait was about 17 % of a profiled step, and an unprofiled step has less host
+work, so the gain is expected to be smaller.
+
+**Decision rules.**
+
+- **Both ratios below 0.95 on stable pairs** (HELD, or FALSIFIED below 0.75): the ring becomes grouped-nf4-gemm's default outside
+  capture in its next release, and #945 records the step gain.
+- **Either ratio at or above 0.95:** the ring stays opt-in, and #945 records that removing the syncs did not move the 5090 step, so the
+  sync wait was not that step's bottleneck.
+- **Either way:** held-out losses at N are reported per side. They are expected to agree within the draws' own noise, because both
+  changes are value-identical and the fused path's run-to-run nondeterminism (atomics) is the only difference.
+
+Budget: one RTX 5090, $0.69/h ceiling, 2.5 h cap (eight e4b arms of about 5 minutes plus setup), under $1.75; the standing no-ask tier.

@@ -316,3 +316,14 @@ def test_amendment_8_registers_the_200_step_native_best_token():
     assert [(p, v) for p, _, v, _ in R.score_p14(F)] == [("P14", "HELD")]
     assert R.score_p14({}) == [] and R.NATIVE["e4b"] == "fused_attn4_shipped"          # the 20-step tokens keep their native arms
 
+
+
+
+def test_amendment_10_registers_the_sync_ab_token():
+    R = _mod()
+    assert R.SYNC_FAM == "qwen3syncab" and R.SYNC_FAM in R.FAMS and R.N_LAYERS[R.SYNC_FAM] == 48 and R.SYNC_BAND == (0.75, 0.95)
+    assert R.anchor_of(R.SYNC_FAM) == ("e4b", "fused_attn4_m_legacy") and "fused_attn4_m_sync1_d2" in R.MATCHED and "fused_attn4_shipped_sync1" not in R.MATCHED
+    assert R.registered_draw2(R.SYNC_FAM, ("e4b", "fused_attn4_shipped_sync1")) == ("e4b", "fused_attn4_shipped_sync1_d2")
+    F = {R.SYNC_FAM: R.reduce_family(R.SYNC_FAM, R._sync_set(), {}, 20)}
+    assert [(p, v) for p, _, v, _ in R.score_syncab(F)] == [("P16", "HELD"), ("P17", "HELD")]
+    assert R.sync_ab_why("fused_attn4_m_legacy", {}).startswith("no sync_ab record")

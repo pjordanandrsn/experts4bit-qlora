@@ -864,7 +864,7 @@ def test_amendment_3_axolotl_family_uv_index_strategy_and_no_unsloth_venv_on_tha
     # the uv install reads PyPI past the cu130 index: uv's first-index strategy left axolotl's packaging==26.0 unsatisfiable on both TC1 boxes
     assert re.search(r'uv pip install --python \$PY_AX "axolotl==\$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log', body)
     # the token alone builds no Unsloth venv; every other token still builds both, behind the same driver gate
-    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 ") NEED_UNSLOTH=0;; esac' in body   # amendment 8 adds its token
+    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab ") NEED_UNSLOTH=0;; esac' in body   # amendments 8 and 10 add their tokens
     assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then' in body
     assert body.index("NEED_UNSLOTH=1; case") < body.index("venv-unsloth-t28:") and body.count("runs no Unsloth arm (TC1-PREREG amendment 3)") == 2
 
@@ -1148,7 +1148,7 @@ def test_tc1_amendment_8_native_best_200_token():
                      ("axolotl", "ckpt_axolotl_best_200"), ("e4b", "fused_attn4_m_200")], order
     assert body.count("draw2") == 2 and body.count(" curve $TOK $TS") == 5 and "--axolotl-best 1" in body and "tc1_prepare $FAM \"$MID\" $REV $FAL \"$ALL\" $CURVE_EVAL_N" in body
     assert "qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in run
-    assert 'case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 ") NEED_UNSLOTH=0;; esac' in run
+    assert 'case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab ") NEED_UNSLOTH=0;; esac' in run
     rule = re.search(r'^  local OFFL=1; case .*?esac$', run, re.MULTILINE).group(0)
     for tag, want in (("ckpt_axolotl_best", "0"), ("ckpt_axolotl_best_d2", "0"), ("ckpt_axolotl_best_200", "0"), ("ckpt_axolotl_best_200_d2", "0"),
                       ("ckpt_axolotl_m", "1"), ("ckpt_axolotl_m_d2", "1")):
@@ -1156,3 +1156,27 @@ def test_tc1_amendment_8_native_best_200_token():
         assert got == want, (tag, got)
     got = subprocess.run(["bash", "-c", f'f(){{ FW=e4b; TAG=ckpt_axolotl_best\n{rule}\necho $OFFL; }}; f'], capture_output=True, text=True, check=True).stdout.strip()
     assert got == "1"
+
+
+def test_tc1_amendment_10_sync_ab_token():
+    """TC1 amendment 10 (#945): `qwen3syncab` runs e4b against itself -- legacy grouping + pageable copies vs single-read grouping +
+    pinned ring -- on the shipped and matched arms, two draws each in ABBA order, each arm handed its path through TC1_ARM_EXTRA_ENV,
+    which `arm` appends to the `env` word list; the arm records the path it ran (sync_ab)."""
+    import subprocess
+    run = RUN_SH.read_text()
+    m = re.search(r"^tc1_syncab_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE)
+    assert m, "tc1_syncab_family is gone"
+    calls = re.findall(r'TC1_ARM_EXTRA_ENV="\$(LEG|NEW)" (arm|draw2) +\$FAM e4b (\S+) fused .* \$(NATIVE|MATCH)$', m.group(0), re.MULTILINE)
+    assert calls == [("LEG", "arm", "fused_attn4_shipped_legacy", "NATIVE"), ("NEW", "arm", "fused_attn4_shipped_sync1", "NATIVE"),
+                     ("LEG", "arm", "fused_attn4_m_legacy", "MATCH"), ("NEW", "arm", "fused_attn4_m_sync1", "MATCH"),
+                     ("NEW", "draw2", "fused_attn4_m_sync1", "MATCH"), ("LEG", "draw2", "fused_attn4_m_legacy", "MATCH"),
+                     ("NEW", "draw2", "fused_attn4_shipped_sync1", "NATIVE"), ("LEG", "draw2", "fused_attn4_shipped_legacy", "NATIVE")], calls
+    assert 'local LEG="E4B_GROUPING=legacy GNF4_PINNED_RING=0" NEW="E4B_GROUPING=single GNF4_PINNED_RING=1"' in m.group(0)
+    assert "qwen3syncab) tc1_syncab_family qwen3syncab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in run
+    hook = re.search(r'^  \[ -n "\$\{TC1_ARM_EXTRA_ENV:-\}" \] && ARM_ENV=.*$', run, re.MULTILINE).group(0)
+    script = 'f(){ local ARM="fused"; local ARM_ENV=""\n' + hook + '\necho "[$ARM_ENV]"; }\nTC1_ARM_EXTRA_ENV="A=1 B=2" f; f'
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout.split()
+    assert out == ["[", "A=1", "B=2]", "[]"], out
+    src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
+    assert '"sync_ab": sync_ab,' in src and '"ring_staged": int(sum(r.staged for r in _rings))' in src
+
