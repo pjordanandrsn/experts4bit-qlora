@@ -277,6 +277,40 @@ for _p, _k, _t in LEAN_PAIRS:
         DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 14 (#945): gnf4's prefill M-tile rule, max vs cost
+TILE_FAM = "qwen3tileab"          # GNF4_PREFILL_TILE_RULE=max (the M-tile height keyed on the largest group) vs =cost (gnf4#441), lean delta + post-#945 sync path
+TILE_PAIRS = (("P22", "shipped", "fused_attn4_shipped"), ("P23", "matched", "fused_attn4_m"))   # each: <tag>_tilemax vs <tag>_tilecost, two draws a side
+TILE_BANDS = {"P22": (0.85, 0.97), "P23": (0.88, 0.98)}   # tilecost / tilemax s/step on stable pairs
+TILE_FLIP_AT_OR_BELOW = 0.99      # amendment 14's decision rule: both stable ratios at or below this flip gnf4's default to cost
+TILE_KEEP_ABOVE = 1.01            # ... a stable ratio above this on either arm keeps max
+FAMS.append(TILE_FAM)
+NAMES[TILE_FAM] = "Qwen3-30B-A3B (amendment 14: gnf4's max-keyed prefill M-tile vs the cost rule, on the trimmed delta and the post-#945 sync path)"
+N_LAYERS[TILE_FAM] = 48
+ATTN_CENSUS[TILE_FAM] = 192
+FAM_ANCHOR[TILE_FAM] = ("e4b", "fused_attn4_m_tilemax")
+EXPECTED[TILE_FAM] = [("e4b", "fused_attn4_shipped_tilemax"), ("e4b", "fused_attn4_shipped_tilecost"), ("e4b", "fused_attn4_m_tilemax"), ("e4b", "fused_attn4_m_tilecost"),
+                      ("e4b", "fused_attn4_m_tilecost_d2"), ("e4b", "fused_attn4_m_tilemax_d2"), ("e4b", "fused_attn4_shipped_tilecost_d2"), ("e4b", "fused_attn4_shipped_tilemax_d2")]
+MATCHED |= {"fused_attn4_m_tilemax", "fused_attn4_m_tilecost", "fused_attn4_m_tilemax_d2", "fused_attn4_m_tilecost_d2"}
+for _p, _k, _t in TILE_PAIRS:
+    for _side in ("tilemax", "tilecost"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def tile_ab_why(tag, r):
+    """Amendment 14's engagement predicate: the arm ran the tile rule its tag names, by its own record, on the trimmed LoRA delta; a cost
+    arm launched at least one tile shorter than 128 (else the rule changed nothing on this box). Empty string = engaged."""
+    ta, la = (r or {}).get("tile_ab"), (r or {}).get("lean_ab") or {}
+    if not isinstance(ta, dict):
+        return "no tile_ab record on the receipt: the tile rule this arm ran cannot be verified"
+    want = "max" if "_tilemax" in tag else "cost"
+    bm = ta.get("prefill_bm_launches") or {}
+    short = sum(int(v) for k, v in bm.items() if str(k) != "128")
+    bad = [k for k, ok in ((f"gnf4_tile_rule {want}", ta.get("gnf4_tile_rule") == want), ("gnf4_has_tile_rule", ta.get("gnf4_has_tile_rule") is True),
+                           ("gnf4_lean_delta 1", la.get("gnf4_lean_delta") == "1"),
+                           ("a tile shorter than 128 launched", want == "max" or short > 0)) if not ok]
+    return "" if not bad else f"tile-rule A/B not engaged ({', '.join(bad)}; record {ta})"
+
+
 def lean_ab_why(tag, r):
     """Amendment 13's engagement predicate: the arm ran the delta body its tag names, by its own record, and the padded path -- the only
     one the switch touches -- served the delta. Empty string = engaged."""
@@ -683,12 +717,16 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             nb = (r.get("axolotl_bnb4bit_modules") or {}).get("n_bnb4bit_unwrapped")
             if nb is None or nb < L:
                 why.append(f"quantize_moe_experts set but bnb-parametrized experts modules (innermost) {nb} < {L}")
-    if fam in (SYNC_FAM, PROF945_FAM, LEAN_FAM) and fw == "e4b":   # amendments 10 / 12 / 13: the arm ran the sync path its tag names (13: the new one)
+    if fam in (SYNC_FAM, PROF945_FAM, LEAN_FAM, TILE_FAM) and fw == "e4b":   # amendments 10 / 12 / 13 / 14: the arm ran the sync path its tag names (13, 14: the new one)
         w = sync_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == LEAN_FAM and fw == "e4b":                 # amendment 13: ... and the padded LoRA-delta body its tag names
         w = lean_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == TILE_FAM and fw == "e4b":                 # amendment 14: ... and the prefill M-tile rule its tag names, on the trimmed delta
+        w = tile_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -1228,6 +1266,37 @@ def score_leanab(F):
                     f"s/step lean0 {O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), lean1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
                     f"(within {100 * N['stability']:.1f}%); held-out at N lean0 {f(O.get('heldout'), 4)} / lean1 {f(N.get('heldout'), 4)}; "
                     f"delta paths (lean1, process) {json.dumps(calls, sort_keys=True)}"))
+    return out
+
+
+def score_tileab(F):
+    """TC1-PREREG amendment 14 (#945), on the qwen3tileab box: P22 (shipped arm) and P23 (matched arm) -- gnf4's cost tile rule steps at
+    tilecost / tilemax within TILE_BANDS[pid], the median over two VALID draws a side with each side's draws within 5 %. Outside the band
+    FALSIFIED; an unstable, missing or non-VALID side UNTESTED. The evidence names the decision rule's reading (flip / keep / no effect)
+    and each side's launched tile heights."""
+    R = F.get(TILE_FAM)
+    if not R:
+        return []
+    out = []
+    for pid, name, t in TILE_PAIRS:
+        O, N = R["draws"].get(("e4b", f"{t}_tilemax"), {}), R["draws"].get(("e4b", f"{t}_tilecost"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("tilemax", O), ("tilecost", N)))
+            out.append((pid, TILE_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        lo, hi = TILE_BANDS[pid]
+        rule = ("flip-eligible" if ratio_ <= TILE_FLIP_AT_OR_BELOW else "KEEP max" if ratio_ > TILE_KEEP_ABOVE else "no measurable effect")
+        bms = {}
+        for side in ("tilemax", "tilecost"):
+            r1 = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == ("e4b", f"{t}_{side}")), None) or {}
+            bms[side] = (r1.get("tile_ab") or {}).get("prefill_bm_launches") or {}
+        out.append((pid, TILE_FAM, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+                    f"{name}: tilecost / tilemax {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; decision reading: {rule}; "
+                    f"s/step tilemax {O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), tilecost {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
+                    f"(within {100 * N['stability']:.1f}%); held-out at N tilemax {f(O.get('heldout'), 4)} / tilecost {f(N.get('heldout'), 4)}; "
+                    f"tile heights launched (process) tilemax {json.dumps(bms['tilemax'], sort_keys=True)} tilecost {json.dumps(bms['tilecost'], sort_keys=True)}"))
     return out
 
 
@@ -2403,6 +2472,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_leanab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if TILE_FAM in F:
+        out += ["\n## Predictions P22 / P23 (TC1-PREREG amendment 14, #945: gnf4's cost tile rule vs the max-keyed M-tile, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_tileab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -2618,6 +2692,27 @@ def _lean_set(ship=((5.00, 5.05), (4.70, 4.72)), match=((5.30, 5.33), (4.95, 4.9
                                                     "lora_path_calls": {"loop": 0, "padded": pc, "grouped_mm": 0}})
     for r in R.values():
         r["fam"] = LEAN_FAM
+    return R
+
+
+def _tile_set(ship=((5.00, 5.05), (4.60, 4.62)), match=((5.30, 5.33), (5.00, 5.02)), rules=("max", "cost"), short=96, lean="1"):
+    """Amendment 14: e4b against itself on the trimmed delta and the post-#945 sync path -- each pair as (tilemax draws, tilecost draws);
+    `rules` = the rule each side's record says it ran; `short` = the cost side's launches of tiles shorter than 128."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for side, ss, rule in (("tilemax", old, rules[0]), ("tilecost", new, rules[1])):
+            bm = {"16": 0, "32": 0, "64": 0, "128": 384} if side == "tilemax" else {"16": 0, "32": short // 2, "64": short - short // 2, "128": 384 - short}
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                R[("e4b", tag)] = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000), matched=matched,
+                                           sync_ab={"e4b_grouping": "default", "gnf4_pinned_ring": "1", "e4b_has_group_by_expert": True,
+                                                    "gnf4_has_ring": True, "ring_staged": 9216, "ring_waits": 0},
+                                           lean_ab={"gnf4_lean_delta": lean, "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                                                    "lora_path_calls": {"loop": 0, "padded": 9216, "grouped_mm": 0}},
+                                           tile_ab={"gnf4_tile_rule": rule, "gnf4_tile_rule_env": rule, "gnf4_tile_d_env": None, "gnf4_has_tile_rule": True,
+                                                    "prefill_bm_launches": bm})
+    for r in R.values():
+        r["fam"] = TILE_FAM
     return R
 
 
@@ -3614,6 +3709,26 @@ def selftest():
     assert reduce_family(LEAN_FAM, R, {}, 20)["verdicts"][("e4b", "fused_attn4_m_lean0")] == "VOID"
     text = render(LF, "x")
     assert "## Predictions P20 / P21" in text and "| P20 | qwen3leanab | **HELD** |" in text and "| P21 | qwen3leanab | **HELD** |" in text
+    cases += 1
+    # 59. amendment 14 (#945): gnf4's max-keyed prefill M-tile vs the cost rule -- every arm VALID when it ran the rule its tag names on the
+    #     trimmed delta, P22 / P23 HELD inside their bands with the flip reading, FALSIFIED and KEEP above 1.01, a cost arm that launched only
+    #     128-row tiles or ran max VOID (UNTESTED), an arm on the previous delta body VOID
+    def pt(R):
+        return {p: v for p, _, v, _ in score_tileab({TILE_FAM: reduce_family(TILE_FAM, R, {}, 20)})}
+    TF = {TILE_FAM: reduce_family(TILE_FAM, _tile_set(), {}, 20)}
+    assert [(x["fw"], x["tag"]) for x in TF[TILE_FAM]["rows"]] == EXPECTED[TILE_FAM]
+    assert all(x["verdict"] == "VALID" for x in TF[TILE_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in TF[TILE_FAM]["rows"]]
+    PT = {p: (v, ev) for p, _, v, ev in score_tileab(TF)}
+    assert PT["P22"][0] == "HELD" and PT["P23"][0] == "HELD" and "tilecost / tilemax 0.917 [" in PT["P22"][1] and "flip-eligible" in PT["P22"][1], PT
+    slow = score_tileab({TILE_FAM: reduce_family(TILE_FAM, _tile_set(match=((5.00, 5.02), (5.20, 5.22))), {}, 20)})
+    assert [(p, v) for p, _, v, _ in slow] == [("P22", "HELD"), ("P23", "FALSIFIED")] and "KEEP max" in slow[1][3]
+    assert pt(_tile_set(ship=((5.00, 5.05), (4.99, 5.02)))) == {"P22": "FALSIFIED", "P23": "HELD"}         # no gain: 0.995, no measurable effect
+    RR = reduce_family(TILE_FAM, _tile_set(short=0), {}, 20)
+    assert RR["verdicts"][("e4b", "fused_attn4_shipped_tilecost")] == "VOID" and "a tile shorter than 128 launched" in next(x["why"] for x in RR["rows"] if x["tag"] == "fused_attn4_shipped_tilecost")
+    assert pt(_tile_set(short=0)) == {"P22": "UNTESTED", "P23": "UNTESTED"} and pt(_tile_set(rules=("max", "max"))) == {"P22": "UNTESTED", "P23": "UNTESTED"}
+    assert reduce_family(TILE_FAM, _tile_set(lean="0"), {}, 20)["verdicts"][("e4b", "fused_attn4_m_tilemax")] == "VOID"
+    text = render(TF, "x")
+    assert "## Predictions P22 / P23" in text and "| P22 | qwen3tileab | **HELD** |" in text and "| P23 | qwen3tileab | **HELD** |" in text
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 

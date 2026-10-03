@@ -3107,6 +3107,21 @@ def run_arm(a, load_fn, sampler=True):
                    "gnf4_lean_delta_env": os.environ.get("NF4_QLORA_LEAN_DELTA"),
                    "gnf4_has_lean_delta": _lean_on is not None,
                    "lora_path_calls": {k: int(v) for k, v in (getattr(_nq, "LORA_PATH_STATS", None) or {}).items()} if _nq is not None else {}}
+    tile_ab = None                                     # TC1 amendment 14 (#945): which prefill M-tile rule this e4b arm ran, and what it launched
+    if a.framework == "e4b":
+        try:
+            import nf4_grouped as _ngt
+        except Exception:
+            _ngt = None
+        _rule = None
+        if _ngt is not None and hasattr(_ngt, "_prefill_tile_rule"):
+            try:
+                _rule = _ngt._prefill_tile_rule()
+            except Exception:
+                _rule = None
+        tile_ab = {"gnf4_tile_rule": _rule, "gnf4_tile_rule_env": os.environ.get("GNF4_PREFILL_TILE_RULE"),
+                   "gnf4_tile_d_env": os.environ.get("GNF4_PREFILL_TILE_D"), "gnf4_has_tile_rule": _rule is not None,
+                   "prefill_bm_launches": {str(k): int(v) for k, v in (getattr(_ngt, "PREFILL_BM_STATS", None) or {}).items()} if _ngt is not None else {}}
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -3160,6 +3175,7 @@ def run_arm(a, load_fn, sampler=True):
         "arm_facts": arm_facts, "dynamo_counters": dyn, "microbatch_padded_len": mb_padded_len,                        # [F6/F9/F16/F19/F20]
         "sync_ab": sync_ab,                                                                                              # TC1 amendment 10 (#945)
         "lean_ab": lean_ab,                                                                                              # TC1 amendment 13 (#945)
+        "tile_ab": tile_ab,                                                                                              # TC1 amendment 14 (#945)
         "s_per_step": round(wall / a.steps, 4), "s_per_step_median_11plus": round(statistics.median(steady) / 1e3, 4), "step_ms": step_ms, "microbatch_ms": microbatch_ms, "log_every": int(a.log_every), "microbatch_timing": bool(a.microbatch_timing),
         "train_wall_s": round(train_wall, 2), "window_wall_s": round(wall, 2),
         "tokens_per_step": tokens_per_step, "tokens_total": sum(tokens_per_step), "tokens_per_s": round(sum(tokens_per_step) / train_wall, 1) if train_wall else None,
