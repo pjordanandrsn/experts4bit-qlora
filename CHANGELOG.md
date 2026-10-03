@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+
+### P108 Amendment 2 (#359): the box gets 220 minutes and the reading a 4 h guard, before any data is read (bench only)
+
+- **Why.** `p108-5090-1` ended on its 75-minute alarm (rc 142, $0.8047) after two of four groups. The box needs about
+  140 minutes, so Amendment 1's 150 would leave ~10 minutes of margin on a host-bound decode. No data exists.
+- **What changes:** the box alarm, 150 → 220 min; the guard, 3 h → 4 h (≤ $3.00); the lane ceiling, $3.50 → $4.25
+  (the hard stop stays $4.50).
+- **What stays:** the registered design (32 windows × 256 positions).
+
 ### SC1b registered (#846): a per-kernel census of where each engine's decode step goes -- SC1's largest loss (llama.cpp at B=1) and largest win (B=16), named by term (bench and tests only)
 
 - `bench/sc1b/{SC1b-PREREG.md,sc1b_census.py,kernel_classes.json,sc1b_e4b_census.py,sc1b_vllm_census.py,sc1b_serve_census.py,sc1b_toy.py,sc1b_box_d.sh,UPSTREAM-NOTES.md,DESIGN-REVIEW.md}`,
