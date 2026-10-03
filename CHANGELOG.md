@@ -1,6 +1,39 @@
 # Changelog
 
 ## Unreleased
+### E4B_INT4_PREFILL (#916): a route knob for the int4 store's host-grouped prefill calls -- loop (the default, unchanged), batched (bit-identical), k19, mtile; the "paid once per request" comment and the int4 Scope note corrected
+
+- **Why.** With `DEVICE_GROUPING` off (the library default, so every `max_seqs == 1` server), a T > 1 call on the
+  uniform-int4 store takes host grouping and the int4 store's else-branch. That branch loops in Python over the routed
+  experts: one `dequant_int4_ref` (a pure-torch reference decoder), a cast, a matmul and a copy per expert per
+  projection. Lane P100 read the cost on an RTX 5090: about 0.43 s fixed per 512-token chunk (73 % of the chunk in the profile) on an AMD Ryzen 9 9950X3D host, and 2.07 s per chunk on SC1 box B's host, where TTFT-4096 read 16.6 s (#920).
+- **What.** `hot_residency._int4_prefill_mode_env` reads `E4B_INT4_PREFILL` at every call (an unknown value is
+  refused):
+  - `loop` is the default and leaves behaviour unchanged.
+  - `batched` decodes each projection's routed experts together, in slices of 16 (`_dequant_int4_bf16`, the
+    reference's own elementwise operations), and keeps the same matmuls: bit-identical output, no per-expert decode.
+  - `k19` and `mtile` give those calls device grouping (`_collapsed_grouping`). `k19` serves them with K19 at every
+    row count: bf16 activations and in-register int4 decode, i.e. the loop's operands, within one bf16 ulp. `mtile`
+    serves them with the grouped int4-b32 M-tile GEMM: int8 activations.
+  - With `DEVICE_GROUPING` on (`max_seqs > 1`), prefill rows above 256 have always taken the M-tile; only `k19` moves
+    them.
+  - The default changes only by a registered reading (lane P102).
+- **Docs.** The branch comment said the loop was "paid once per request". It runs on every call, i.e. per prefill chunk
+  per layer. `int4_experts.py`'s Scope note said a T > 1 call with `DEVICE_GROUPING` off takes "the NF4 grouped path";
+  with the int4 store installed it never does. Both are corrected, and `test_int4_docstring_matches_dispatch.py` now
+  refuses either sentence.
+- **Tests.**
+  - `tests/test_int4_prefill_route.py` (CPU, 14): the knob and its refusal; `_collapsed_grouping` per route, store
+    kind and `T == 1`; the batched decode bitwise against the reference; batched bitwise against the loop through
+    `_fused_over_stack`, across slices and on DECODE_A16's singleton rows, with no reference decode; `k19` reaching
+    K19 (refused without it) and `mtile` the M-tile at prefill rows; device-grouped rows staying on the M-tile unless
+    `k19`.
+  - `tests/test_int4_prefill_route_gpu.py` (2): the real kernels at Qwen3-30B-A3B's expert shapes and 4,096 / 16,384
+    rows. Batched is bit-identical to loop; k19 is within 0.8 % of loop and mtile within 3 %, both with no reference
+    decode. On an A2000 the deviations were 0.20 / 0.43 % (k19) and 1.30 / 1.32 % (mtile).
+  - The A2000 run also exercised three mutations, each failing its test: the batched product rounded before the
+    scale, the route switch removed, and K19 never selected.
+
 ### P100 read (RTX 5090, #916): REFUTED by its rule -- the per-expert prefill loop runs exactly as traced and is 73 % of a 512-token chunk, but costs 0.42 s per chunk on this host, not 2.07 s; SC1 box B's TTFT ran 3.5-3.8x faster on another 5090 host (bench docs and receipts only)
 
 - **Verdict** (`p100_reduce.py`): REFUTED.

@@ -111,3 +111,19 @@ def test_the_default_is_stated_and_is_still_the_default():
 def test_the_scope_note_describes_both_branches(phrase):
     doc = re.sub(r"\s+", " ", _docstring(INT4_DOC))
     assert phrase in doc, f"Scope note no longer describes {phrase!r} (#496)"
+
+
+def test_the_docstring_names_the_host_grouped_int4_route():
+    """A T > 1 call with DEVICE_GROUPING off does NOT take the NF4 grouped path on this store (e4b#916).
+
+    The note said it did. The int4 branches come first in the dispatch, so those calls -- every prefill chunk of a
+    max_seqs == 1 server -- ran the host-grouped int4 loop, ~170k launches per 512-token chunk, paid per chunk; and
+    the branch's comment said "paid once per request". Both are refused here, and the knob that picks the route
+    must be named where the route is described.
+    """
+    doc = re.sub(r"\s+", " ", _docstring(INT4_DOC))
+    assert re.search(r"DEVICE_GROUPING off -- the NF4 grouped path", doc) is None, (
+        "int4_experts.py again says T > 1 with DEVICE_GROUPING off takes the NF4 grouped path (e4b#916)")
+    assert "E4B_INT4_PREFILL" in doc and "per prefill chunk" in doc
+    assert "paid once per request" not in HOT_RES, "the host-grouped int4 branch is paid per call, not per request"
+    assert re.search(r"def _int4_prefill_mode_env\(", HOT_RES), "the route knob is gone from dispatch"
