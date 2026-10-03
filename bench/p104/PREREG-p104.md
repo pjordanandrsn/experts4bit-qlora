@@ -92,6 +92,18 @@ Rule: the owner's standing no-ask tier for a single run under $15 (2026-09-26), 
 - **The new test** on the A2000, at e4b `fd19337`:
   - 4 passed and 1 skipped (the fp8 hybrid, sm_86) on the torch path, with fla, and with fla + causal-conv1d;
   - the mutant fails 4 of 4 on the torch path and under fla + causal-conv1d.
-- **The runner's proving path** is rehearsed on the A2000 before the merge, as P103's was, and recorded below.
+- **The runner's proving path** is rehearsed on the A2000 before the merge, as P103's was.
+
+**Rehearsed 2026-10-03, 05:36–05:40Z, at `f190ff3`, on the NAS RTX A2000**, staged exactly as `p104_drive.sh` stages.
+`P104_PROVE=1` with the knobs class A2000, disk 10 GB and premise skips allowed. Exit rc 0, with `PROVED` and the
+`REHEARSAL` marker.
+- **Install and tripwire held:** e4b `f190ff3`, gnf4 `34da93d`, torch 2.8.0+cu128, transformers 5.17.0. Phase t is
+  kernel-free. The reducer's self-test passed 20 cases.
+- **Premise t:** 6 passed, 3 skipped. On sm_86 the three fp8 tests skip and the chunk-matched all-linear tests run, so
+  the expected count is exactly 6 passed.
+- **Phase f:** fla 0.5.2 engaged as registered. Premise 6 passed, 2 skipped: **the chunk-matched all-linear tests pass
+  with fla's chunk and recurrent rules**. The single-call check was reported (it skips on sm_86). `phase f ok`.
+- **Phase fc:** causal-conv1d 1.7.0 engaged as registered. Premise 6 passed, 2 skipped. `phase fc ok`.
+- **HF CDN probe:** 48.3 MB/s.
 
 Amendments, dated, go below this line before any data is read.
