@@ -131,7 +131,7 @@ if [ -z "$MODEL_DIR" ]; then
 fi
 # ---- the box: one load, the reference, the floors, the subject and the mutants
 can_run 2700 box || finish 40
-AL=$(step_alarm 4500); say "the box (alarm=$AL)"
+AL=$(step_alarm 9000); say "the box (alarm=$AL)"   # Amendment 1: 150 min (p108-5090-1 took ~31 min for its first group)
 # shellcheck disable=SC2086  # BOX_EXTRA is a list of rehearsal flags by design
 perl -e "alarm $AL; exec @ARGV" python $W/p108_box.py --model "$SRC" --revision "$REV" --out $W/box.json $BOX_EXTRA > logs/box.log 2>&1
 rc=$?

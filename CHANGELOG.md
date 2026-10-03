@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### P108 Amendment 1 (#359): the box gets 150 minutes and the reading a 3 h guard, before any data is read (bench only)
+
+- **Why.** `p108-5090-1` showed that transformers' batch-1 eager decode of Gemma-4-26B-A4B runs at about 0.25 s a step.
+  The reference, its repeat and the chunked floor need about 95–100 minutes in all, and the 75-minute alarm ends the
+  box before it writes a record. No per-window value was read.
+- **What changes:** the box alarm, 75 → 150 min; the guard, 2 h → 3 h (≤ $2.25).
+- **What stays:** the windows, arms, floor, rule, premise and predictions. The "box ≤ 60 min" prediction is already
+  refuted.
+
 ### TC1 amendment 15 read (#945): e4b's fused training RMSNorm makes the step 4–8 % faster on a 5090, held-out unchanged
 
 - **What was asked.** On one RTX 5090 (`tc1-5090-45`, $0.39), e4b against itself: the Hugging Face RMSNorm composite against #961's
