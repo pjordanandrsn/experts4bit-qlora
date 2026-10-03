@@ -8708,7 +8708,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-30/tc1/"
       ],
-      "notes": "Update 2026-10-02 (tc1-5090-34, TC1 amendments 5-7): on one box against e4b AS SHIPPED, the scattermoe draws ran 4.574 / 4.107 s/step against e4b's 3.277 / 3.279 -- UNSTABLE (10.8 %), so no ratio is quoted; every cross-draw ratio lies at 1.25-1.40. The arm spends 216, 61-65 and 76-81 s on steps 1, 3 and 6 in both draws (no Dynamo recompile) and runs at 0.94-0.99 of e4b shipped on steps 14-16, a warm-up the 20-step window cannot separate from the steady step; TC1 amendment 8 re-asks it over steps 101..200 (P14). See bench/h2h-2026-10-02/tc1/RESULTS-tc1-nativebest.md."
+      "notes": "Update 2026-10-02 (tc1-5090-34, TC1 amendments 5-7): on one box against e4b AS SHIPPED, the scattermoe draws ran 4.574 / 4.107 s/step against e4b's 3.277 / 3.279 -- UNSTABLE (10.8 %), so no ratio is quoted; every cross-draw ratio lies at 1.25-1.40. The arm spends 216, 61-65 and 76-81 s on steps 1, 3 and 6 in both draws (no Dynamo recompile) and runs at 0.94-0.99 of e4b shipped on steps 14-16, a warm-up the 20-step window cannot separate from the steady step; TC1 amendment 8 re-asks it over steps 101..200 (P14). See bench/h2h-2026-10-02/tc1/RESULTS-tc1-nativebest.md. Steady state (tc1-5090-35, TC1 amendment 8): over steps 101..200 of a 200-step run the scattermoe arm steps at 0.911 [0.902, 0.921] x e4b AS SHIPPED, axolotl faster (e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state)."
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02.e4b-offload",
@@ -8787,6 +8787,30 @@
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-33/tc1/"
       ],
       "notes": "Not matched work: adapter precision and init are each framework's own. The matched position against Unsloth is e4b.train.h2h.unsloth.qwen3.5090.2026-10-02."
+    },
+    {
+      "id": "e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "Lane TC1 (#835), amendment 8, one rented RTX 5090 (tc1-5090-35): at STEADY STATE axolotl 0.20.0's scattermoe native-best steps about 9 % faster than e4b as shipped. Over steps 101..200 of a 200-step field-recipe run, axolotl takes 6.114 / 6.092 s per step and e4b as shipped 6.637 / 6.757 (both pairs stable, 0.4 % and 1.8 %): axolotl / e4b 0.911 [0.902, 0.921] (P14 HELD, inside its [0.90, 1.10] band; the whole interval below 1.0, so axolotl is faster). Over steps 11..200 the ratio is 0.909 [0.894, 0.924]. Over the WHOLE run e4b finishes first: axolotl's per-process warm-up (359 / 324 s at step 1, then spikes on the same 18 steps in both draws) puts its summed step time at 1,934-2,023 s against e4b's 1,353-1,372 s. axolotl uses x1.32 the energy per step (whole-run, net of idle) at 1.25 GB more peak (26.77 vs 25.51 GB). Held-out at step 200: axolotl 0.7696 / 0.7695, level with the box's matched e4b arm (0.7691); e4b as shipped 0.7926 / 0.7958, its TC1b plateau reproduced (reported, not judged: different inits). One host (Xeon E5-2698 v4); on tc1-5090-34's faster host the warm steps pointed the same way (0.94-0.99). A LABELLED native-best row: no 'fastest' statement is made for e4b on this card.",
+      "value": 0.911,
+      "unit": "ratio s/step axolotl scattermoe native-best / e4b as shipped, median of steps 101..200 per draw, medians over two draws each (< 1 = axolotl faster); cross-draw interval [0.902, 0.921]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-35: instance 53935033, Intel Xeon E5-2698 v4, driver 595.71.05); e4b 0.40.0 @ 7c31b88 + grouped-nf4-gemm 0.34.0 @ 846b512 on torch 2.8.0+cu128; axolotl 0.20.0 at its own pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0)",
+      "conditions": "bench/tc1 field recipe over 200 steps (TC1b's curve recipe): alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, 16 held-out rows every 40 steps; NATIVE-BEST, NOT matched work: e4b as shipped (bf16 expert adapters, its own N(0,1/r) init) against axolotl 0.20.0's scattermoe native-best (KernelsPlugin, its own init, fp32 adapters), the same 642,514,944 trainable parameters and training tokens; two interleaved draws each, e4b's 200-step matched fused arm last as the anchor; P14's statistic = the median s/step over steps 101..200 per draw, both draws of each side within 5 %; token qwen3nativebest200 (TC1 amendment 8); validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-02",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-nativebest.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-35/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-02/tc1-5090-35/tc1/"
+      ],
+      "notes": "Not matched work: adapter precision and init are each framework's own. The matched position against axolotl is e4b.train.h2h.axolotl.qwen3.5090.2026-10-02 (1.416, e4b faster)."
     }
   ]
 }
