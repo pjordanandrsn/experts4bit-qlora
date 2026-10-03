@@ -179,11 +179,12 @@ axolotl's scattermoe draws on that box were 10.8 % apart, with large warm-up
 steps inside the 20-step window, so its ratio is not quoted, P13 is UNTESTED,
 and no "fastest" statement is made. **At steady state axolotl's scattermoe is
 faster than e4b as shipped** (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state`,
-amendment 8, one host): over steps 101..200 of a 200-step run, axolotl / e4b
-shipped is **0.911 [0.902, 0.921]**, axolotl about 9 % faster per step. Over the
-whole run e4b finishes first (summed step time 1,353-1,372 s against axolotl's
-1,934-2,023 s, axolotl's warm-up included), and axolotl spends ×1.32 the
-energy per step. axolotl's native configuration also reaches the matched
+amendments 8 and 9, two hosts): over steps 101..200 of a 200-step run, axolotl /
+e4b shipped is **0.911 [0.902, 0.921]** on a Xeon E5-2698 v4 host and **0.901
+[0.892, 0.910]** on a Ryzen 9 3900X host, axolotl 9-10 % faster per step on both.
+Over the whole run e4b finishes first on both (summed step time 1,353-1,372 s
+against axolotl's 1,934-2,023 s, and 743-752 s against 1,219-1,231 s, axolotl's
+warm-up included), and axolotl spends ×1.32-1.39 the energy per step. axolotl's native configuration also reaches the matched
 held-out curve at step 200, while e4b as shipped sits 0.024-0.027 above it.
 **On an H100 NVL the sign reverses** (lane TC1c, the same
 matched set, one rented box, [`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md);

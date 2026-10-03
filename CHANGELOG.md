@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+### TC1 P15: axolotl's steady-state lead over e4b as shipped replicates on a second host
+
+- **What was asked.** TC1 amendment 9 asked P14 again on a different machine (`tc1-5090-36`: Vast machine 45501, AMD Ryzen 9 3900X),
+  with the harness and package byte-identical to `tc1-5090-35`'s.
+- **What it read.** P15 is HELD: over steps 101..200, axolotl scattermoe / e4b shipped is **0.901 [0.892, 0.910]**, the whole interval
+  below 1.0, and the point 0.001 above the band's lower bound. axolotl is faster at steady state on two hosts with different CPU
+  classes (0.911 on the first). The register row `e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state` now covers both.
+- **Beside it, as on the first host.** e4b finishes the 200-step run first (743-752 s against 1,219-1,231 s of summed step time).
+  axolotl spends ×1.39 the energy per step. axolotl's held-out sits within 0.003 of the matched curve, and e4b as shipped 0.026 above it.
+
 ### E4B_INT4_PREFILL defaults to auto (#916, lane P102's DEFAULT=k19): k19 where K19 can run, else loop -- TTFT-4096 7.21 s -> 1.37 s on an RTX 5090 at max_seqs 1
 
 - **The default** (`hot_residency._int4_prefill_mode_env`) is `auto`, also when unset. It resolves to `k19` when the
