@@ -145,3 +145,24 @@ logs' own stamps. Gemma-4-26B-A4B does not fit the 12 GB card, so the box ran on
    - These are a random model's numbers. They show the path works, not what the reading will find.
 
 Amendments, dated, go below this line before any data is read.
+
+### Amendment 1 (2026-10-03, written at 15:02Z by `date -u`, before any data is read): the box's time budget
+
+**What happened.** `p108-5090-1` (launched 2026-10-03, lane started 14:14:19Z) loaded the model at 14:29Z. By 15:01Z it
+had finished only about one group of four.
+- **The evidence:** the box prints one line per paged pass, and two had appeared.
+- **The cause:** transformers' batch-1 eager decode of Gemma-4-26B-A4B runs at about 0.25 s a step. The reference, the
+  repeat and the chunked floor each take 8 × 255 of those steps per group.
+- **The consequence:** the box needs about 95–100 minutes. Its 75-minute alarm (`step_alarm 4500`) ends it at about
+  15:44Z, before `box.json` is written. So that run cannot produce a reading, and it is left to end on its alarm.
+- **Nothing was read.** No per-window value was seen: the box writes its record only at the end.
+
+**What changes, and only this:**
+- **The box's alarm:** 75 → **150 minutes** (`step_alarm 9000` in `p108_run.sh`, re-pinned).
+- **The reading's guard:** 2 h → **3 h at ≤ $0.75/h (≤ $2.25)**.
+- **The lane ceiling** stays at **$3.50**, hard stop $4.50.
+- **A progress line:** the box prints `P108_GROUP <k> of 4 done at <s>` after each group (logging only).
+
+**What does not change:** the windows, the arms, the floor, the rule, the premise, the predictions and the consequence.
+
+**One prediction is already wrong.** "The box ≤ 60 min" is refuted by the timing above, and the read will say so.

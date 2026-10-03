@@ -157,6 +157,7 @@ def measure(model, windows, *, prompt, cont, chunk, group, device, stand_in=Fals
     eng = {"calls": 0, "by_window": {}, "groups": 0}
     rep_identical = None
     timing = {}
+    start = time.time()
 
     def add(arm, wi, lp, ref_lp, cont_tokens, ref_argmax):
         nll, am = _score(lp, cont_tokens)
@@ -202,6 +203,7 @@ def measure(model, windows, *, prompt, cont, chunk, group, device, stand_in=Fals
             del lps, runner
         del refs
         p97_box._sync(device)
+        print(f"P108_GROUP {eng['groups']} of {-(-len(windows) // group)} done at {time.time() - start:.0f} s", flush=True)
     cfg = getattr(model.config, "text_config", None) or model.config
     types = list(getattr(cfg, "layer_types", []) or [])
     sliding = sum(t == "sliding_attention" for t in types)
