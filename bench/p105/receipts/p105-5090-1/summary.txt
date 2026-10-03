@@ -1,0 +1,97 @@
+KNOBS e4b=eeffabbac446dc2e37611b3efd18ceb03ee6a364 gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3.6-35B-A3B@995ad96eacd98c81ed38be0c5b274b04031597b0 kernels='flash-linear-attention==0.5.2 causal-conv1d==1.7.0' gpu_class=5090 min_disk_gb=170 prove=0 model_dir=hub allow_skip=0 phases='t f fc'
+e4b 0.40.0 @eeffabbac446dc2e37611b3efd18ceb03ee6a364
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+gated-deltanet kernel modules (phase t) {'fla': False, 'causal_conv1d': False, 'kernels': False}
+self-test OK (20 cases)
+kernels t rc=0 KERNELS {"phase": "t", "torch": "2.8.0+cu128", "torch_held": true, "torch_chunk_gated_delta_rule": "transformers.models.qwen3_5.modeling_qwen3_5", "torch_recurrent_gated_delta_rule": "transformers.models.qwen3_5.modeling_qwen3_5", "causal_conv1d_fn": "transformers.models.qwen3_5.modeling_qwen3_5", "causal_conv1d_update": "transformers.models.qwen3_5.modeling_qwen3_5", "flash-linear-attention": null, "fla-core": null, "causal-conv1d": null, "kernels": null}
+premise t rc=0: 11 passed in 33.62s
+  t dense seed 0: control worst 2.941e-02 argmax agree 21/21 | hybrid worst 2.577e-02 argmax agree 20/21 | ratio 0.88
+  t dense seed 1: control worst 3.125e-02 argmax agree 20/21 | hybrid worst 2.759e-02 argmax agree 20/21 | ratio 0.88
+  t dense seed 2: control worst 2.924e-02 argmax agree 21/21 | hybrid worst 2.724e-02 argmax agree 21/21 | ratio 0.93
+  t dense seed 3: control worst 2.347e-02 argmax agree 21/21 | hybrid worst 2.861e-02 argmax agree 21/21 | ratio 1.22
+  t dense seed 4: control worst 2.454e-02 argmax agree 19/21 | hybrid worst 2.523e-02 argmax agree 20/21 | ratio 1.03
+  t dense seed 5: control worst 2.160e-02 argmax agree 21/21 | hybrid worst 3.421e-02 argmax agree 21/21 | ratio 1.58
+  t dense seed 6: control worst 2.967e-02 argmax agree 21/21 | hybrid worst 2.299e-02 argmax agree 21/21 | ratio 0.77
+  t dense seed 7: control worst 4.050e-02 argmax agree 21/21 | hybrid worst 2.533e-02 argmax agree 21/21 | ratio 0.63
+  t dense seed 0: control worst 2.744e-02 argmax agree 21/21 | hybrid worst 2.348e-02 argmax agree 20/21 | ratio 0.86
+  t dense seed 1: control worst 2.761e-02 argmax agree 20/21 | hybrid worst 3.103e-02 argmax agree 20/21 | ratio 1.12
+  t dense seed 2: control worst 2.899e-02 argmax agree 21/21 | hybrid worst 2.335e-02 argmax agree 21/21 | ratio 0.81
+  t dense seed 3: control worst 2.622e-02 argmax agree 21/21 | hybrid worst 2.711e-02 argmax agree 21/21 | ratio 1.03
+  t dense seed 4: control worst 2.649e-02 argmax agree 19/21 | hybrid worst 2.795e-02 argmax agree 19/21 | ratio 1.06
+  t dense seed 5: control worst 2.376e-02 argmax agree 21/21 | hybrid worst 3.421e-02 argmax agree 21/21 | ratio 1.44
+  t dense seed 6: control worst 3.358e-02 argmax agree 21/21 | hybrid worst 2.586e-02 argmax agree 21/21 | ratio 0.77
+  t dense seed 7: control worst 3.378e-02 argmax agree 21/21 | hybrid worst 2.174e-02 argmax agree 21/21 | ratio 0.64
+/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0
+bake rc=0 {'status': 'OK', 'layers': 40, 'experts': 256, 'snapshot_gib': 16.88, 'load_s': 85.2, 'snapshot_s': 24.6, 'bake_s': 30.4, 'loaded_commit': '995ad96eacd98c81ed38be0c5b274b04031597b0', 'err': None}
+phase t arm g rc=0 P98_ARM g: build 77s | graph_status {1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} | W16 472.655 tok/s over 111 steps | W1 90.149 tok/s | mem 23.76 GB
+
+phase t arm e rc=0 P98_ARM e: build 57s | graph_status {1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} | W16 77.587 tok/s over 111 steps | W1 7.365 tok/s | mem 23.71 GB
+
+phase t arm p rc=0 P98_ARM p: build 56s | graph_status None | W16 66.069 tok/s over 111 steps | W1 7.008 tok/s | mem 22.74 GB
+
+install f rc=0 (flash-linear-attention==0.5.2)
+kernels f rc=0 KERNELS {"phase": "f", "torch": "2.8.0+cu128", "torch_held": true, "torch_chunk_gated_delta_rule": "fla.ops.gated_delta_rule.chunk", "torch_recurrent_gated_delta_rule": "fla.ops.gated_delta_rule.fused_recurrent", "causal_conv1d_fn": "transformers.models.qwen3_5.modeling_qwen3_5", "causal_conv1d_update": "transformers.models.qwen3_5.modeling_qwen3_5", "flash-linear-attention": "0.5.2", "fla-core": "0.5.2", "causal-conv1d": null, "kernels": null}
+single-seed MoE checks f (reported): control worst 2.027e-02 tokens True | hybrid worst 7.577e-02;chunk-matched: control worst 2.027e-02 tokens True | hybrid worst 7.535e-02;| 2 failed in 47.95s
+premise f rc=0: 9 passed in 27.87s
+  f dense seed 0: control worst 2.941e-02 argmax agree 21/21 | hybrid worst 2.072e-02 argmax agree 21/21 | ratio 0.70
+  f dense seed 1: control worst 3.125e-02 argmax agree 20/21 | hybrid worst 3.125e-02 argmax agree 20/21 | ratio 1.00
+  f dense seed 2: control worst 2.924e-02 argmax agree 21/21 | hybrid worst 3.324e-02 argmax agree 20/21 | ratio 1.14
+  f dense seed 3: control worst 2.347e-02 argmax agree 21/21 | hybrid worst 2.630e-02 argmax agree 21/21 | ratio 1.12
+  f dense seed 4: control worst 2.454e-02 argmax agree 19/21 | hybrid worst 2.637e-02 argmax agree 21/21 | ratio 1.07
+  f dense seed 5: control worst 2.160e-02 argmax agree 21/21 | hybrid worst 2.895e-02 argmax agree 21/21 | ratio 1.34
+  f dense seed 6: control worst 2.967e-02 argmax agree 21/21 | hybrid worst 2.529e-02 argmax agree 21/21 | ratio 0.85
+  f dense seed 7: control worst 4.050e-02 argmax agree 21/21 | hybrid worst 2.454e-02 argmax agree 21/21 | ratio 0.61
+  f dense seed 0: control worst 2.744e-02 argmax agree 21/21 | hybrid worst 2.259e-02 argmax agree 21/21 | ratio 0.82
+  f dense seed 1: control worst 2.761e-02 argmax agree 20/21 | hybrid worst 3.165e-02 argmax agree 20/21 | ratio 1.15
+  f dense seed 2: control worst 2.899e-02 argmax agree 21/21 | hybrid worst 3.613e-02 argmax agree 20/21 | ratio 1.25
+  f dense seed 3: control worst 2.622e-02 argmax agree 21/21 | hybrid worst 2.410e-02 argmax agree 21/21 | ratio 0.92
+  f dense seed 4: control worst 2.649e-02 argmax agree 19/21 | hybrid worst 2.676e-02 argmax agree 21/21 | ratio 1.01
+  f dense seed 5: control worst 2.376e-02 argmax agree 21/21 | hybrid worst 3.076e-02 argmax agree 21/21 | ratio 1.29
+  f dense seed 6: control worst 3.358e-02 argmax agree 21/21 | hybrid worst 2.529e-02 argmax agree 21/21 | ratio 0.75
+  f dense seed 7: control worst 3.378e-02 argmax agree 21/21 | hybrid worst 2.531e-02 argmax agree 21/21 | ratio 0.75
+phase f ok
+phase f arm g rc=0 P98_ARM g: build 97s | graph_status {1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} | W16 525.015 tok/s over 111 steps | W1 98.921 tok/s | mem 23.76 GB
+
+phase f arm e rc=0 P98_ARM e: build 59s | graph_status {1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} | W16 66.973 tok/s over 111 steps | W1 6.351 tok/s | mem 23.71 GB
+
+phase f arm p rc=0 P98_ARM p: build 57s | graph_status None | W16 71.06 tok/s over 111 steps | W1 7.572 tok/s | mem 22.74 GB
+
+install fc rc=0 (causal-conv1d==1.7.0)
+kernels fc rc=0 KERNELS {"phase": "fc", "torch": "2.8.0+cu128", "torch_held": true, "torch_chunk_gated_delta_rule": "fla.ops.gated_delta_rule.chunk", "torch_recurrent_gated_delta_rule": "fla.ops.gated_delta_rule.fused_recurrent", "causal_conv1d_fn": "causal_conv1d.causal_conv1d_interface", "causal_conv1d_update": "causal_conv1d.causal_conv1d_interface", "flash-linear-attention": "0.5.2", "fla-core": "0.5.2", "causal-conv1d": "1.7.0", "kernels": null}
+single-seed MoE checks fc (reported): control worst 2.027e-02 tokens True | hybrid worst 8.229e-02;chunk-matched: control worst 2.027e-02 tokens True | hybrid worst 8.125e-02;| 2 failed in 12.79s
+premise fc rc=0: 9 passed in 27.25s
+  fc dense seed 0: control worst 2.941e-02 argmax agree 21/21 | hybrid worst 2.320e-02 argmax agree 20/21 | ratio 0.79
+  fc dense seed 1: control worst 3.125e-02 argmax agree 20/21 | hybrid worst 2.414e-02 argmax agree 20/21 | ratio 0.77
+  fc dense seed 2: control worst 2.924e-02 argmax agree 21/21 | hybrid worst 2.705e-02 argmax agree 20/21 | ratio 0.92
+  fc dense seed 3: control worst 2.347e-02 argmax agree 21/21 | hybrid worst 2.664e-02 argmax agree 21/21 | ratio 1.13
+  fc dense seed 4: control worst 2.454e-02 argmax agree 19/21 | hybrid worst 2.795e-02 argmax agree 20/21 | ratio 1.14
+  fc dense seed 5: control worst 2.160e-02 argmax agree 21/21 | hybrid worst 2.895e-02 argmax agree 20/21 | ratio 1.34
+  fc dense seed 6: control worst 2.967e-02 argmax agree 21/21 | hybrid worst 2.601e-02 argmax agree 21/21 | ratio 0.88
+  fc dense seed 7: control worst 4.050e-02 argmax agree 21/21 | hybrid worst 2.746e-02 argmax agree 20/21 | ratio 0.68
+  fc dense seed 0: control worst 2.744e-02 argmax agree 21/21 | hybrid worst 2.191e-02 argmax agree 20/21 | ratio 0.80
+  fc dense seed 1: control worst 2.761e-02 argmax agree 20/21 | hybrid worst 2.112e-02 argmax agree 20/21 | ratio 0.77
+  fc dense seed 2: control worst 2.899e-02 argmax agree 21/21 | hybrid worst 3.106e-02 argmax agree 20/21 | ratio 1.07
+  fc dense seed 3: control worst 2.622e-02 argmax agree 21/21 | hybrid worst 2.732e-02 argmax agree 21/21 | ratio 1.04
+  fc dense seed 4: control worst 2.649e-02 argmax agree 19/21 | hybrid worst 2.795e-02 argmax agree 20/21 | ratio 1.06
+  fc dense seed 5: control worst 2.376e-02 argmax agree 21/21 | hybrid worst 2.814e-02 argmax agree 20/21 | ratio 1.18
+  fc dense seed 6: control worst 3.358e-02 argmax agree 21/21 | hybrid worst 2.616e-02 argmax agree 21/21 | ratio 0.78
+  fc dense seed 7: control worst 3.378e-02 argmax agree 21/21 | hybrid worst 2.769e-02 argmax agree 20/21 | ratio 0.82
+phase fc ok
+phase fc arm g rc=0 P98_ARM g: build 60s | graph_status {1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} | W16 536.464 tok/s over 111 steps | W1 100.745 tok/s | mem 23.76 GB
+
+phase fc arm e rc=0 P98_ARM e: build 59s | graph_status {1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} | W16 67.579 tok/s over 111 steps | W1 6.433 tok/s | mem 23.71 GB
+
+phase fc arm p rc=0 P98_ARM p: build 56s | graph_status None | W16 73.555 tok/s over 111 steps | W1 7.882 tok/s | mem 22.74 GB
+
+kernel phases: f:ok fc:ok
+P105 VERDICT SUPPORTED (recommend True)
+  phase t: SUPPORTED  
+  phase f: SUPPORTED  
+  phase fc: SUPPORTED  
+  decode tok/s {'t': {'w16': {'g': 472.655, 'e': 77.587, 'p': 66.069}, 'w1': {'g': 90.149, 'e': 7.365, 'p': 7.008}}, 'f': {'w16': {'g': 525.015, 'e': 66.973, 'p': 71.06}, 'w1': {'g': 98.921, 'e': 6.351, 'p': 7.572}}, 'fc': {'w16': {'g': 536.464, 'e': 67.579, 'p': 73.555}, 'w1': {'g': 100.745, 'e': 6.433, 'p': 7.882}}}
+  over the torch path {'f': {'g': {'w16': 1.110778474786049, 'w1': 1.0973055718865434}, 'e': {'w16': 0.8631987317462977, 'w1': 0.8623217922606924}, 'p': {'w16': 1.0755422361470584, 'w1': 1.0804794520547945}}, 'fc': {'g': {'w16': 1.135001216532143, 'w1': 1.1175387414169875}, 'e': {'w16': 0.8710093185714101, 'w1': 0.8734555329260013}, 'p': {'w16': 1.1133057863748506, 'w1': 1.124714611872146}}} | graph token agreement with t {'f': {'w16': 0.41025641025641024, 'w1': 0.5729166666666666}, 'fc': {'w16': 0.421474358974359, 'w1': 0.53125}}

@@ -390,6 +390,16 @@ reading, not a speed one.
   half the speed. The ratio is not claimed for another host.
 - **`E4B_PAGED_GRAPHS=1` now serves hybrid models.** The Gated DeltaNet layers still ran transformers' torch path.
 
+**The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
+[`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).
+- **Speed:** with `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 installed, Qwen3.6-35B-A3B's bucketed decode
+  graphs ran 1.135× (W16) and 1.118× (W1) the torch path's on the same host, 536.5 and 100.7 tok/s.
+- **Exactness:** every bucket still replays exactly as the padded eager step.
+- **Correctness:** a dense hybrid stays within 2× its all-attention control on every seed, on the real fp8 kernel.
+- **Caveats:** token streams differ from the torch path's (the kernels' arithmetic). Quality in nats is not measured.
+- **Earlier lanes:** P103 and P104 stopped on a single-seed tiny-MoE premise, which proved to be a seed lottery on
+  every kernel set.
+
 **Quality measured from the checkpoint, not from e4b's own reference
 (P44, 2026-09-19).** A second instrument scores each served stack
 against the family's bf16 checkpoint (full-vocabulary KL, 200 committed

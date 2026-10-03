@@ -185,17 +185,28 @@ Qwen3-Next.
     bucket 1's first replay.
   - The cause was the MoE engine's single-entry row-to-token index cache: a later bucket's capture warm-up freed the
     index an earlier bucket's graph still read. It is fixed in #918 (#913), with a reproduction test on a non-hybrid NF4 MoE.
-- **The Gated DeltaNet kernels (lanes P103 and P104, [`bench/p103/RESULTS-p103.md`](../bench/p103/RESULTS-p103.md),
-  [`bench/p104/RESULTS-p104.md`](../bench/p104/RESULTS-p104.md); both stopped at their proving rentals, no verdict).** transformers uses `fla` / `causal_conv1d` when they are installed, and its torch
-  path otherwise. Every reading above ran the torch path: P97 eagerly, at 830 ms per 4-row step, and P101 under
-  graphs.
-  - On a 5090, `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 install and engage, and decode graphs replay
-    exactly on them.
-  - The hybrid parity premise, `tests/test_linear_state_gpu.py`, fails with the kernels installed: 7.6e-2 against a
-    4.05e-2 bound, with tokens equal. The cause is the test, not the kernels (P104, `bench/p104/RESULTS-p104.md`).
-    Its statistic, the worst-case logit error of a tiny 4-expert MoE at one seed, is bimodal across seeds on every
-    kernel set, the torch path included. A dense hybrid shows no difference between the torch path and the kernels.
-  - Separately, fla's chunk kernel makes chunked prefill depend on where a prompt is split, by about 3–5e-3
-    relative. transformers' own chunked prefill drifts identically.
-  - The torch path remains the read configuration. The kernels' speed has not been read.
+- **The Gated DeltaNet kernels: supported and recommended (lane P105,
+  [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), SUPPORTED).** transformers uses `fla` /
+  `causal_conv1d` when they are installed, and its torch path otherwise. For hybrid serving, install the read
+  versions:
+
+  ```sh
+  pip install flash-linear-attention==0.5.2 causal-conv1d==1.7.0
+  ```
+
+  - **Speed.** On one RTX 5090, Qwen3.6-35B-A3B under decode graphs ran 536.5 tok/s against 472.7 on W16 (1.135×), and
+    100.7 against 90.1 on W1 (1.118×). That saves 1.6 ms per step at one row and 3.3 ms at sixteen. fla alone carries
+    82–83 % of the gain. Every bucket replays exactly as the padded eager step on the kernels.
+  - **Correctness.** The paged path's error against transformers running the same kernels stays within 2× an
+    all-attention control on every seed of a dense hybrid (`tests/test_linear_state_dense_parity_gpu.py`), on the real
+    fp8 kernel.
+  - **Caveat: token streams differ from the torch path's.** The kernels' arithmetic differs, so greedy decode diverges
+    from the torch path's after the first flipped argmax: graph tokens agreed with phase t's on 41–57 % of positions.
+    Quality against the torch path in nats is not measured.
+  - **Caveat: chunked prefill depends on chunk boundaries.** fla's chunk kernel moves results by about 3–5e-3 relative
+    with where a prompt is split. transformers' own chunked prefill drifts identically.
+  - **History.** P103 and P104 ([`bench/p103/RESULTS-p103.md`](../bench/p103/RESULTS-p103.md),
+    [`bench/p104/RESULTS-p104.md`](../bench/p104/RESULTS-p104.md)) stopped at their proving rentals on
+    `tests/test_linear_state_gpu.py`. That test's single-seed tiny-MoE statistic is bimodal across seeds on every
+    kernel set, the torch path included, so its pass is one draw. P105 gates on the dense multi-seed test instead.
 - **Not yet done:** only Qwen3.6 has been read on a GPU.

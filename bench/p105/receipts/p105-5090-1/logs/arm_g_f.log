@@ -1,0 +1,20 @@
+Fetching 36 files:   0%|          | 0/36 [00:00<?, ?it/s]Fetching 36 files: 100%|██████████| 36/36 [00:00<00:00, 1260.70it/s]
+[07:14:57]   checkpoint: Qwen/Qwen3.6-35B-A3B @ 995ad96eacd98c81ed38be0c5b274b04031597b0 (requested 995ad96eacd98c81ed38be0c5b274b04031597b0)
+[07:14:57]   untied output head recovered from 'lm_head.weight' (outside the 'model.language_model.' text-tower prefix, which would otherwise drop it)
+[07:14:57]   fusing + quantizing experts (up to 40x256) to nf4 (streaming)...
+[07:14:57]   quantized experts on 40/40 MoE layers (256 experts each)
+[07:14:57]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[07:14:59]   experts deferred to the arena: 40 module(s), 200 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[07:14:59]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[07:15:49]   hybrid tier active on 40 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (fold flags set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[transformers] `causal_conv1d_fn` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `causal_conv1d_update` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] ready: {"moe_layers": 40, "experts": 256, "top_k": 8, "model_type": "qwen3_5_moe_text", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 2, "head_dim": 256, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 32}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (297053 > 262144). Running this sequence through the model will result in indexing errors
+P98_ARM g: build 97s | graph_status {1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} | W16 525.015 tok/s over 111 steps | W1 98.921 tok/s | mem 23.76 GB
