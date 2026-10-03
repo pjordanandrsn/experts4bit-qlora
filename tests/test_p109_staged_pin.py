@@ -123,3 +123,17 @@ def test_the_driver_runs_to_its_dry_run(tmp_path):
            "E4B_RENT_INSTANCE_ID": "0", "E4B_SHA": "0" * 40, "P109_DRIVE_DRYRUN": "1"}
     out = subprocess.run(["bash", str(LANE / "p109_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> root@h:/root/p109"), out.stdout + out.stderr
+
+
+def test_every_time_left_check_fits_its_own_guard():
+    """Amendment 1 (p109-prove-1): the proof's checks were sized for the reading and could never pass in its guard."""
+    prereg = (LANE / "PREREG-p109.md").read_text()
+    assert "guard 0.75 h" in prereg and "guard 2.5 h" in prereg
+    prove = dict(re.findall(r"NEED_(FETCH|BAKE|ARM)=(\d+)", RUN[RUN.index('if [ "$PROVE" = 1 ]; then'):RUN.index("else\n")]))
+    reading = dict(re.findall(r"NEED_(FETCH|BAKE|ARM)=(\d+)", RUN[RUN.index("else\n"):RUN.index("fi\nGPU_CLASS=")]))
+    assert set(prove) == set(reading) == {"FETCH", "BAKE", "ARM"}
+    for need in prove.values():                       # after 15 min of install and premise, with the 600 s margin
+        assert int(need) + 600 <= 0.75 * 3600 - 900, prove
+    for need in reading.values():
+        assert int(need) + 600 <= 2.5 * 3600 - 900, reading
+    assert re.findall(r"can_run (\S+)", RUN) == ["$NEED_FETCH", "$NEED_BAKE", "$NEED_ARM"]

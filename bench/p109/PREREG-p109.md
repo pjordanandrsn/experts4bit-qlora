@@ -169,6 +169,29 @@ none skipped. That means a bucket replay decodes exactly as the padded eager ste
 - Nothing about hosts unlike the one drawn: the eager path is host-bound, so S16 moves with the host. The rule's bars
   are set where any measured host clears them.
 
+## Amendment 1 (2026-10-03, after `p109-prove-1`, before any reading data): the proof's own time-left checks
+
+`p109-prove-1` (adertha-receipts `5809721`, $0.0207) got through everything up to the fetch, on an RTX 5090 (sm_120):
+- the refusals and the install;
+- the tripwire: e4b 0.42.0 at `b27b73f` and grouped-nf4-gemm 0.35.0 at `51a4916`;
+- both self-tests;
+- the premise: `test_decode_graph_buckets.py`, 7 passed, none skipped.
+
+It then stopped with lane rc 40, `SKIPPED fetch host-limited deadline`. The runner's time-left checks were sized for the
+reading: before the fetch, `can_run 2400` needs 2,400 s plus the 600 s margin, 50 minutes in all. The proof's whole guard
+is 45 minutes, so the proof could never pass that check. That is a harness defect, and no data was produced.
+
+**The fix.** The runner sets `NEED_FETCH`, `NEED_BAKE` and `NEED_ARM`:
+- the proof: 300 / 300 / 240 s (Granite is a 6.6 GB checkpoint);
+- the reading: 2,400 / 1,800 / 900 s, unchanged.
+
+`tests/test_p109_staged_pin.py` now asserts that each proof need plus the 600 s margin fits inside the proof's 0.75 h guard
+after 15 minutes of install. It also asserts that each reading need fits inside the reading's 2.5 h guard.
+
+**Unchanged:** the rule, the arms, the subject, the predictions, the budget and the guards.
+
+**The next proof** is `p109-prove-2`, under the same relay.
+
 ## Receipts
 
 Fetched to the run directory's `p109/` and committed to `bench/p109/receipts/<run>/`:

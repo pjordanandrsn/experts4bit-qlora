@@ -29,9 +29,11 @@ PROVE=${P109_PROVE:-0}
 if [ "$PROVE" = 1 ]; then
   MODEL=ibm-granite/granite-3.1-3b-a800m-instruct; REV=a02780686e08a03fe0d2679a293b5c74a90efa89   # P94's pin (SC1's proof model)
   SHORT_DEF=8; LONG_DEF=24; REPS_DEF=1
+  NEED_FETCH=300; NEED_BAKE=300; NEED_ARM=240                                                   # Amendment 1: the proof's own time-left checks
 else
   MODEL=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39                            # SC1's pin
   SHORT_DEF=32; LONG_DEF=160; REPS_DEF=3
+  NEED_FETCH=2400; NEED_BAKE=1800; NEED_ARM=900
 fi
 GPU_CLASS=${P109_GPU_CLASS:-5090}; MIN_DISK_GB=${P109_MIN_DISK_GB:-150}; MIN_RAM_GB=${P109_MIN_RAM_GB:-60}
 REHEARSAL=${P109_REHEARSAL:-0}; SHORT=${P109_SHORT:-$SHORT_DEF}; LONG=${P109_LONG:-$LONG_DEF}; REPS=${P109_REPS:-$REPS_DEF}
@@ -110,12 +112,12 @@ else
   echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card"; echo "premise failed rc=$rc" > REFUSAL; finish 25
 fi
 # ---- the checkpoint, its NF4 arena (P39's k8_bake.py, as SC1 bakes it) and the prompts
-can_run 2400 fetch || finish 40
+can_run $NEED_FETCH fetch || finish 40
 say "fetch $MODEL @ $REV"
 perl -e "alarm $(step_alarm 2700); exec @ARGV" python -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', allow_patterns=['*.safetensors','*.json','tokenizer*','*.model','*.txt','merges.txt','vocab.json'], max_workers=8))" > logs/fetch.log 2>&1 || { tail -2 logs/fetch.log; say "DL FAIL"; finish 11; }
 SNAP=$(tail -1 logs/fetch.log); echo "FETCH $MODEL@$REV $SNAP" | tee -a summary.txt
 [ -d "$SNAP" ] || { say "DL FAIL: no snapshot dir"; finish 11; }
-can_run 1800 bake || finish 40
+can_run $NEED_BAKE bake || finish 40
 say "bake the NF4 arena"; mkdir -p $W/work
 K8_MODEL="$SNAP" K8_WORK="$W/work" perl -e "alarm $(step_alarm 5400); exec @ARGV" python $W/k8_bake.py > logs/bake.log 2>&1 \
   || { tail -3 logs/bake.log; say "BAKE FAIL"; finish 12; }
@@ -128,7 +130,7 @@ grep -a "^P109_PROMPTS" logs/prompts.log | tee -a summary.txt
 ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json"
 for TAG in E1 G1 G2 E2 D1; do
   ARM=${TAG:0:1}; GR=""; [ "$ARM" = G ] && GR="E4B_PAGED_GRAPHS=1"
-  can_run 900 "arm $TAG" || finish 40
+  can_run $NEED_ARM "arm $TAG" || finish 40
   AL=$(step_alarm 2400); say "arm $TAG (alarm=$AL)"
   # shellcheck disable=SC2086  # ENGINE_ENV and GR are assignment lists by design
   env PYTHONPATH= $ENGINE_ENV $GR P109_ARM=$ARM E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
