@@ -17,6 +17,7 @@ LANE = REPO / "bench" / "sc1"
 PIN = LANE / "staged.sha256"
 OWN = ("sc1_run.sh", "sc1_e4b_sched.py", "sc1_prompts.py", "sc1_sampler.sh")
 COMP_DIRS = ("vllm", "sglang", "llamacpp", "exl3", "lmdeploy")
+SC1B = tuple("sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh".split())                         # bench/sc1b, staged flat on every box
 P39 = ("step_decomp.py", "k8_bake.py", "calib.json")
 
 
@@ -30,6 +31,8 @@ def resolve(name: str) -> pathlib.Path:
         return REPO / "bench" / "p42" / "hook" / "usercustomize.py"
     if name == "test_k19_row_exact_gpu.py":
         return REPO / "tests" / name
+    if name in SC1B:
+        return REPO / "bench" / "sc1b" / name
     return REPO / "bench" / "p39" / name
 
 
@@ -43,7 +46,7 @@ def _entries(pin=PIN):
 def staged_names() -> set:
     """What make_pin.sh pins and sc1_drive.sh stages: the lane's own files, the reducer when present, P39's pieces, the hook,
     the premise test, and every file under each comparator directory that exists."""
-    names = set(OWN) | set(P39) | {"hook/usercustomize.py", "test_k19_row_exact_gpu.py"}
+    names = set(OWN) | set(P39) | set(SC1B) | {"hook/usercustomize.py", "test_k19_row_exact_gpu.py"}
     if (LANE / "sc1_reduce.py").is_file() and any(n == "sc1_reduce.py" for _w, n in _entries()):
         names.add("sc1_reduce.py")            # pinned by default when present (make_pin.sh); staged by path either way
     for d in COMP_DIRS:
@@ -82,6 +85,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_resolves_the_same_way():
     assert "sc1_run.sh|sc1_e4b_sched.py|sc1_prompts.py|sc1_sampler.sh|sc1_reduce.py) src=\"$HERE/$name\"" in case
     assert "vllm/*|sglang/*|llamacpp/*|exl3/*|lmdeploy/*) src=\"$HERE/$name\"" in case
     assert 'hook/usercustomize.py) src="$P42/hook/usercustomize.py"' in case and 'test_k19_row_exact_gpu.py) src="$TESTS/$name"' in case
+    assert 'sc1b_*|kernel_classes.json) src="$SC1B/$name"' in case
     assert '*) src="$P39/$name"' in case
     # the box checks the same file with sha256sum -c (strict: a pinned file missing on the box is a stop)
     run = (LANE / "sc1_run.sh").read_text()
@@ -132,5 +136,5 @@ def test_the_driver_refuses_without_a_box_or_with_a_bad_one(tmp_path):
     del env["SC1_BOX"]
     out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 78 and "SC1_BOX is not set" in out.stdout
-    out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=_dry_env(tmp_path, SC1_BOX="D"))
-    assert out.returncode == 78 and "SC1_BOX must be A, B or C" in out.stdout
+    out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=_dry_env(tmp_path, SC1_BOX="E"))
+    assert out.returncode == 78 and "SC1_BOX must be A, B, C or D" in out.stdout          # D is SC1b's census box
