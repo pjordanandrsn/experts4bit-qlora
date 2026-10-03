@@ -1,0 +1,134 @@
+{
+ "engine": "e4b",
+ "comparator": "llamacpp",
+ "batch": 16,
+ "delta_P_ms": -6.314583,
+ "delta": {
+  "moe_expert": -1.536689,
+  "moe_route": 0.347904,
+  "attn": -0.433555,
+  "dense_gemm": -1.438385,
+  "norm_elem": 0.893671,
+  "sample": 0.007072,
+  "input_prep": 0.002592,
+  "memcpy": -0.35173,
+  "residual": 0.000832,
+  "I_in": 0.019373,
+  "idle_out": -3.95979,
+  "overlap_in": 0.171136,
+  "O": 0.037014
+ },
+ "noise_iqr": {
+  "moe_expert": 0.677922,
+  "moe_route": 0.003416,
+  "attn": 0.018188,
+  "dense_gemm": 0.006341,
+  "norm_elem": 0.005002,
+  "sample": 0.000192,
+  "input_prep": 3.2e-05,
+  "memcpy": 0.000679,
+  "residual": 0.000288,
+  "I_in": 1.330884,
+  "idle_out": 0.27817,
+  "overlap_in": 0.002256,
+  "O": null
+ },
+ "profiled_P_ms": [
+  9.766943,
+  16.081526
+ ],
+ "unprofiled_ms": [
+  9.8633,
+  13.977
+ ],
+ "census_ratio_unprofiled": 0.7057,
+ "sc1_ratio": 0.624,
+ "idle_out_nameable": false,
+ "delta_O_ms": 0.037014,
+ "labels": [
+  "NSYS_GRAPH_ID_MAPPING",
+  "PROFILER_INFLATED"
+ ],
+ "delta_band": {
+  "moe_expert": [
+   -1.584307,
+   -1.459281
+  ],
+  "moe_route": [
+   0.300286,
+   0.425312
+  ],
+  "attn": [
+   -0.481173,
+   -0.356147
+  ],
+  "dense_gemm": [
+   -1.486003,
+   -1.360977
+  ],
+  "norm_elem": [
+   0.846053,
+   0.971079
+  ],
+  "sample": [
+   -0.040546,
+   0.08448
+  ],
+  "input_prep": [
+   -0.045026,
+   0.08
+  ],
+  "memcpy": [
+   -0.399348,
+   -0.274322
+  ],
+  "residual": [
+   -0.046786,
+   0.07824
+  ],
+  "I_in": [
+   -0.058035,
+   0.066991
+  ],
+  "idle_out": [
+   -3.95979,
+   -3.95979
+  ],
+  "overlap_in": [
+   0.04611,
+   0.296162
+  ],
+  "O": [
+   0.037014,
+   0.037014
+  ]
+ },
+ "node_band": {
+  "e4b": {
+   "omega_ms": 0.047618,
+   "dk_lo_ms": 0.0
+  },
+  "comparator": {
+   "omega_ms": 0.077408,
+   "dk_lo_ms": 0.0
+  }
+ },
+ "status": "ok",
+ "reading": "spread",
+ "named_cause": null,
+ "top_three": [
+  [
+   "moe_expert",
+   -1.536689
+  ],
+  [
+   "dense_gemm",
+   -1.438385
+  ],
+  [
+   "norm_elem",
+   0.893671
+  ]
+ ],
+ "node_trace_robust": true
+}

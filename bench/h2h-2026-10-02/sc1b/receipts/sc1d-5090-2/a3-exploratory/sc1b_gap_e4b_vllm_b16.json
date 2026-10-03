@@ -1,0 +1,131 @@
+{
+ "engine": "e4b",
+ "comparator": "vllm",
+ "batch": 16,
+ "delta_P_ms": 1.607688,
+ "delta": {
+  "moe_expert": 0.387236,
+  "moe_route": 0.314274,
+  "attn": -0.332257,
+  "dense_gemm": -0.043206,
+  "norm_elem": 1.049448,
+  "sample": -0.066881,
+  "input_prep": -0.023968,
+  "memcpy": -0.001056,
+  "residual": -0.005024,
+  "I_in": 0.046716,
+  "idle_out": 0.334562,
+  "overlap_in": -0.0024,
+  "O": 0.049756
+ },
+ "noise_iqr": {
+  "moe_expert": 0.444329,
+  "moe_route": 0.003009,
+  "attn": 0.040053,
+  "dense_gemm": 0.005758,
+  "norm_elem": 0.003713,
+  "sample": 0.004769,
+  "input_prep": 0.001089,
+  "memcpy": 0.000288,
+  "residual": 0.000544,
+  "I_in": 0.937255,
+  "idle_out": 0.027072,
+  "overlap_in": 0.002112,
+  "O": null
+ },
+ "profiled_P_ms": [
+  9.766943,
+  8.159255
+ ],
+ "unprofiled_ms": [
+  9.8633,
+  8.2714
+ ],
+ "census_ratio_unprofiled": 1.1925,
+ "sc1_ratio": 1.172,
+ "idle_out_nameable": true,
+ "delta_O_ms": 0.049756,
+ "labels": [],
+ "delta_band": {
+  "moe_expert": [
+   0.339618,
+   0.429732
+  ],
+  "moe_route": [
+   0.266656,
+   0.35677
+  ],
+  "attn": [
+   -0.379875,
+   -0.289761
+  ],
+  "dense_gemm": [
+   -0.090824,
+   -0.00071
+  ],
+  "norm_elem": [
+   1.00183,
+   1.091944
+  ],
+  "sample": [
+   -0.114499,
+   -0.024385
+  ],
+  "input_prep": [
+   -0.071586,
+   0.018528
+  ],
+  "memcpy": [
+   -0.048674,
+   0.04144
+  ],
+  "residual": [
+   -0.052642,
+   0.037472
+  ],
+  "I_in": [
+   0.00422,
+   0.094334
+  ],
+  "idle_out": [
+   0.334562,
+   0.334562
+  ],
+  "overlap_in": [
+   -0.092514,
+   0.087714
+  ],
+  "O": [
+   0.049756,
+   0.049756
+  ]
+ },
+ "node_band": {
+  "e4b": {
+   "omega_ms": 0.047618,
+   "dk_lo_ms": 0.0
+  },
+  "comparator": {
+   "omega_ms": 0.042496,
+   "dk_lo_ms": 0.0
+  }
+ },
+ "status": "ok",
+ "reading": "named",
+ "named_cause": "norm_elem",
+ "top_three": [
+  [
+   "norm_elem",
+   1.049448
+  ],
+  [
+   "moe_expert",
+   0.387236
+  ],
+  [
+   "idle_out",
+   0.334562
+  ]
+ ],
+ "node_trace_robust": true
+}

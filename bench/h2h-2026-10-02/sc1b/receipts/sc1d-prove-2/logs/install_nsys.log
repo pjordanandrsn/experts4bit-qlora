@@ -1,0 +1,56 @@
+debconf: delaying package configuration, since apt-utils is not installed
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 27304 files and directories currently installed.)
+Preparing to unpack .../0-dirmngr_2.4.4-2ubuntu17.6_amd64.deb ...
+Unpacking dirmngr (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Preparing to unpack .../1-gpgsm_2.4.4-2ubuntu17.6_amd64.deb ...
+Unpacking gpgsm (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Preparing to unpack .../2-gnupg-utils_2.4.4-2ubuntu17.6_amd64.deb ...
+Unpacking gnupg-utils (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Preparing to unpack .../3-gpg-agent_2.4.4-2ubuntu17.6_amd64.deb ...
+Unpacking gpg-agent (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Preparing to unpack .../4-gpg_2.4.4-2ubuntu17.6_amd64.deb ...
+Unpacking gpg (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Preparing to unpack .../5-gpgconf_2.4.4-2ubuntu17.6_amd64.deb ...
+Unpacking gpgconf (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Preparing to unpack .../6-gnupg_2.4.4-2ubuntu17.6_all.deb ...
+Unpacking gnupg (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Preparing to unpack .../7-keyboxd_2.4.4-2ubuntu17.6_amd64.deb ...
+Unpacking keyboxd (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Preparing to unpack .../8-gpgv_2.4.4-2ubuntu17.6_amd64.deb ...
+Unpacking gpgv (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Setting up gpgv (2.4.4-2ubuntu17.6) ...
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 27304 files and directories currently installed.)
+Preparing to unpack .../gnupg2_2.4.4-2ubuntu17.6_all.deb ...
+Unpacking gnupg2 (2.4.4-2ubuntu17.6) over (2.4.4-2ubuntu17.4) ...
+Setting up gpgconf (2.4.4-2ubuntu17.6) ...
+Setting up gpg (2.4.4-2ubuntu17.6) ...
+Setting up gnupg-utils (2.4.4-2ubuntu17.6) ...
+Setting up gpg-agent (2.4.4-2ubuntu17.6) ...
+Setting up gpgsm (2.4.4-2ubuntu17.6) ...
+Setting up dirmngr (2.4.4-2ubuntu17.6) ...
+Setting up keyboxd (2.4.4-2ubuntu17.6) ...
+Setting up gnupg (2.4.4-2ubuntu17.6) ...
+Setting up gnupg2 (2.4.4-2ubuntu17.6) ...
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package nsight-systems-cli-2025.6.1.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 27304 files and directories currently installed.)
+Preparing to unpack .../nsight-systems-cli-2025.6.1_2025.6.1.190-256136895201v0_amd64.deb ...
+Unpacking nsight-systems-cli-2025.6.1 (2025.6.1.190-256136895201v0) ...
+Setting up nsight-systems-cli-2025.6.1 (2025.6.1.190-256136895201v0) ...
+update-alternatives: using /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/nsys to provide /usr/local/bin/nsys (nsys) in auto mode
+General Check
+- Timestamp counter supported: Yes
+
+CPU Profiling Environment Check
+- Root privilege: enabled
+- Linux Kernel Paranoid Level: 4 (some features maybe not available)
+- Linux Distribution: Ubuntu
+- Linux Kernel Version (5.15.0-185-generic): OK
+- Linux perf_event_open syscall available: Fail
+- Sampling trigger event available: Fail
+- Intel(c) Last Branch Record support: Not Available
+- CPU Profiling Environment (process-tree): Fail
+- CPU Profiling Environment (system-wide): Fail
+
+See the product documentation at https://docs.nvidia.com/nsight-systems for more information,
+including information on how to set the Linux Kernel Paranoid Level.

@@ -1,0 +1,24 @@
+SC1B census=census_e4b_b1_graph at=2026-10-03T18:12:34Z nproc=256 cpu.max=3071999/100000 load=17.87/22.24/24.19
+ENV: E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_PAGED_MODEL=Qwen/Qwen3-30B-A3B E4B_PAGED_REVISION=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 E4B_PAGED_ARENA=/root/sc1/work_qwen3/nf4.arena E4B_PAGED_CALIB=/root/sc1/calib.json E4B_PAGED_PLACEMENT=all-vram E4B_PAGED_MAX_SEQS=1 E4B_PAGED_MAX_TOKENS_PER_SEQ=2048 E4B_PAGED_CHUNK_TOKENS=512 E4B_PAGED_GRAPHS=1 E4B_PAGED_BUCKETS=1 E4B_PAGED_FUSE_QKV=1 E4B_PAGED_TORCH_THREADS=8
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1702.95it/s]
+[18:12:41]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[18:12:41]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[18:12:41]   quantized experts on 48/48 MoE layers (128 experts each)
+[18:12:41]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[18:12:43]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[18:12:43]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[18:13:07]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 1517.90it/s]
+[serve_paged] INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[serve_paged] ATTNINT4 rtn: 192 projections (uncalibrated; model_type=qwen3_moe)
+[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+DECODE_GRAPH bucket=1 captured
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 48, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 96, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 1, "blocks_per_seq": 128}, "graph_status": {"1": "graph"}, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "levers_env": {"E4B_SERVE_EXP_INT4": "1", "E4B_SERVE_ATTN_INT4": "1", "E4B_SERVE_ATTN_INT4_CALIB": "0", "E4B_CALIB_SOURCE": "c4", "E4B_FUSE_T1_GLUE": "1", "E4B_FUSE_T1_GLUE_R2": "1", "E4B_FUSE_ROUTER_EPI": "1"}, "exp_int4_layers_enabled": 48, "attn_int4_rtn_projections": 192, "attn_int4_calib_projections": 0, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}
+Capture range started in the application.
+Capture range ended in the application.
+Generating '/tmp/nsys-report-b31c.qdstrm'
+[1/1] [0%                          ] census_e4b_b1_graph.nsys-repProcessing events...
+[1/1] [0%                          ] census_e4b_b1_graph.nsys-rep[1/1] [10%                         ] census_e4b_b1_graph.nsys-rep[1/1] [==21%                       ] census_e4b_b1_graph.nsys-rep[1/1] [=============59%            ] census_e4b_b1_graph.nsys-rep[1/1] [=============60%            ] census_e4b_b1_graph.nsys-rep[1/1] [========================100%] census_e4b_b1_graph.nsys-rep[1/1] [========================100%] census_e4b_b1_graph.nsys-rep
+SC1B_E4B {"arm": "census_e4b_b1_graph", "batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 4.4614}
+Generated:
+	/root/sc1/census/census_e4b_b1_graph.nsys-rep

@@ -1,0 +1,74 @@
+{
+ "verdicts": {
+  "Q1": {
+   "largest": "moe_route",
+   "contribution_ms": 0.238113,
+   "I_in_contribution_ms": 0.057145,
+   "delta_P_ms": 1.10763,
+   "I_in_band_ms": [
+    -0.004448,
+    0.145665
+   ],
+   "note": "idle_out not nameable",
+   "verdict": "UNREAD",
+   "why": "the largest term is undecided inside the node-trace bands or behind an untrusted idle_out"
+  },
+  "Q2": {
+   "verdict": "REFUTED",
+   "ratio": 1.3964,
+   "kernels_in_graph": [
+    1550,
+    1110.0
+   ]
+  },
+  "Q3": {
+   "verdict": "UNREAD",
+   "delta_moe_expert_ms": 0.038513,
+   "delta_I_in_ms": 0.057145,
+   "moe_expert_band_ms": [
+    -0.109704,
+    0.102658
+   ],
+   "I_in_band_ms": [
+    -0.004448,
+    0.145665
+   ],
+   "why": "the bands overlap"
+  },
+  "Q4": {
+   "verdict": "UNREAD",
+   "why": "idle_out is not nameable (G-inflate failed on an arm)"
+  },
+  "Q5": {
+   "verdict": "UNREAD",
+   "why": "the gap is unread: ['NODE_TRACE_AMBIGUOUS: the nominal reading (spread, None) changes inside the node-trace bands (omega e4b 0.148 ms, comparator 0.103 ms)']"
+  },
+  "Q6": {
+   "verdict": "HOLDS",
+   "readings": [
+    [
+     "named",
+     "overlap_in"
+    ]
+   ]
+  },
+  "Q7": {
+   "verdict": "HOLDS",
+   "readings": [
+    [
+     "named",
+     "norm_elem"
+    ],
+    [
+     "named",
+     "norm_elem"
+    ]
+   ]
+  },
+  "Q8": {
+   "verdict": "HOLDS",
+   "llamacpp_fraction": 0.9558,
+   "e4b_fraction": 0.0
+  }
+ }
+}

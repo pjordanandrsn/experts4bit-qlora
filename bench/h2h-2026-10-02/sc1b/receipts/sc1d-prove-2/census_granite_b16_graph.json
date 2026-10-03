@@ -1,0 +1,119 @@
+{
+ "engine": "e4b",
+ "arm": "census_granite_b16_graph",
+ "batch": 16,
+ "mode": "census",
+ "e4b_sha": "77469c19d15a983607efbeec198dc227604112cb",
+ "route_env": {
+  "E4B_INT4_GROUPED_SMALLM": "auto",
+  "E4B_INT4_LEAN_GLUE": "auto",
+  "E4B_NF4_GROUPED_SMALLM": "0",
+  "E4B_MXFP4_GROUPED_SMALLM": "auto",
+  "E4B_INT4_PREFILL": "loop"
+ },
+ "engine_kwargs": {
+  "E4B_PAGED_MODEL": "ibm-granite/granite-3.1-3b-a800m-instruct",
+  "E4B_PAGED_REVISION": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+  "E4B_PAGED_ARENA": "/root/sc1/work_granite/nf4.arena",
+  "E4B_PAGED_CALIB": "/root/sc1/calib.json",
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "16",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "2048",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1,2,4,8,16",
+  "E4B_PAGED_FUSE_QKV": "0",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "torch": "2.8.0+cu128",
+ "load_s": 7.5,
+ "census": {
+  "moe_layers": 32,
+  "experts": 40,
+  "top_k": 8,
+  "model_type": "granitemoe",
+  "int4_expert_layers": 0,
+  "int4_store_kinds": [],
+  "int4_attn_projections": 0,
+  "kv": {
+   "n_kv_heads": 8,
+   "head_dim": 64,
+   "k_groups": "auto",
+   "scratch_slots": 16,
+   "blocks_per_seq": 128
+  },
+  "graph_status": {
+   "1": "graph",
+   "2": "graph",
+   "4": "graph",
+   "8": "graph",
+   "16": "graph"
+  },
+  "grouping": {
+   "device_grouping": true,
+   "force_singleton_groups": false
+  },
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "0",
+   "E4B_SERVE_ATTN_INT4_CALIB": "0",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  },
+  "exp_int4_layers_enabled": 0,
+  "attn_int4_rtn_projections": 0,
+  "attn_int4_calib_projections": 0,
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 65,
+  "fuse_t1_glue_r2_n": [
+   32,
+   32
+  ],
+  "fuse_router_epilogue_n": 32
+ },
+ "prompts_sha256": "f47140bf6eeaf734ca6331ab8716ea59196641bf40149edd0c627f7f13f25547",
+ "ramp_steps": 17,
+ "skip": 32,
+ "steps_bracketed": 64,
+ "row_tokens": 160,
+ "window_decode_positions": [
+  35,
+  113
+ ],
+ "profiled_wall_s": 0.579404,
+ "profiled_ms_per_step": 9.0532,
+ "note": "profiled wall: never a speed reading (SC1's unprofiled arm is the speed)",
+ "graph_stats": {
+  "1": {
+   "replays": 4,
+   "eager_steps": 0,
+   "rows": 4,
+   "pad_rows": 0
+  },
+  "2": {
+   "replays": 4,
+   "eager_steps": 0,
+   "rows": 8,
+   "pad_rows": 0
+  },
+  "4": {
+   "replays": 8,
+   "eager_steps": 0,
+   "rows": 28,
+   "pad_rows": 4
+  },
+  "8": {
+   "replays": 16,
+   "eager_steps": 0,
+   "rows": 104,
+   "pad_rows": 24
+  },
+  "16": {
+   "replays": 188,
+   "eager_steps": 0,
+   "rows": 2896,
+   "pad_rows": 112
+  }
+ }
+}

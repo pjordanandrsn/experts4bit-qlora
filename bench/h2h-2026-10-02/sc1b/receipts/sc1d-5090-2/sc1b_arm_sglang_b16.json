@@ -1,0 +1,270 @@
+{
+ "engine": "sglang",
+ "batch": 16,
+ "graph": {
+  "status": "ok",
+  "delim": "graph",
+  "steps_kept": 61,
+  "dropped": {},
+  "steady_graph_exec": 2,
+  "other_graph_replays": 0,
+  "P": {
+   "median_ms": 7.893012,
+   "iqr_ms": 0.218113
+  },
+  "S": {
+   "median_ms": 7.824404,
+   "iqr_ms": 0.214113
+  },
+  "D_out": {
+   "median_ms": 0.051104,
+   "iqr_ms": 0.004705
+  },
+  "idle_out": {
+   "median_ms": 0.016673,
+   "iqr_ms": 0.010721
+  }
+ },
+ "node": {
+  "status": "ok",
+  "steps_kept": 61,
+  "dropped": {},
+  "kernels_per_graph_modal": 1012,
+  "other_launches": 0,
+  "U_in": {
+   "median_ms": 7.808501,
+   "iqr_ms": 0.204067
+  },
+  "span": {
+   "median_ms": 7.910933,
+   "iqr_ms": 0.203714
+  },
+  "I_in_node": {
+   "median_ms": 0.102944,
+   "iqr_ms": 0.000766
+  },
+  "segments": {
+   "replays_broken": 0,
+   "starts_modal": 48,
+   "ends_modal": 48,
+   "moe_layers": 48
+  },
+  "kernels_in_graph": 1012,
+  "kernels_out_graph": 22,
+  "class": {
+   "moe_expert": {
+    "median_ms": 4.501282,
+    "iqr_ms": 0.184998
+   },
+   "moe_route": {
+    "median_ms": 0.349666,
+    "iqr_ms": 0.000926
+   },
+   "attn": {
+    "median_ms": 0.994945,
+    "iqr_ms": 0.030015
+   },
+   "dense_gemm": {
+    "median_ms": 1.532044,
+    "iqr_ms": 0.002015
+   },
+   "norm_elem": {
+    "median_ms": 0.453541,
+    "iqr_ms": 0.001733
+   },
+   "sample": {
+    "median_ms": 0.005952,
+    "iqr_ms": 9.6e-05
+   },
+   "input_prep": {
+    "median_ms": 0.05712,
+    "iqr_ms": 0.008704
+   },
+   "memcpy": {
+    "median_ms": 0.011584,
+    "iqr_ms": 0.006176
+   },
+   "residual": {
+    "median_ms": 0.004064,
+    "iqr_ms": 9.6e-05
+   }
+  },
+  "class_in_graph_median_ms": {
+   "moe_expert": 4.501282,
+   "moe_route": 0.349666,
+   "attn": 0.994945,
+   "dense_gemm": 1.532044,
+   "norm_elem": 0.453541,
+   "sample": 0.0,
+   "input_prep": 0.0,
+   "memcpy": 0.0,
+   "residual": 0.0
+  },
+  "residual_fraction": 0.0005,
+  "name_map": {
+   "BatchPrefillWithPagedKVCacheKernel": {
+    "attn": 3024
+   },
+   "DeviceScanInitKernel": {
+    "input_prep": 63
+   },
+   "DeviceScanKernel": {
+    "input_prep": 63
+   },
+   "Kernel2": {
+    "dense_gemm": 3087
+   },
+   "Marlin": {
+    "dense_gemm": 6048,
+    "moe_expert": 6048
+   },
+   "PersistentVariableLengthMergeStatesKernel": {
+    "attn": 3024
+   },
+   "_router_triton_kernel": {
+    "moe_route": 3024
+   },
+   "act_and_mul_kernel": {
+    "moe_expert": 3024
+   },
+   "clamp_position_kernel": {
+    "residual": 63
+   },
+   "count_and_sort_expert_tokens_kernel": {
+    "moe_route": 3024
+   },
+   "create_flashinfer_kv_indices_triton": {
+    "residual": 63
+   },
+   "elementwise_kernel": {
+    "norm_elem": 3024,
+    "input_prep": 63
+   },
+   "fused_qknorm_warp": {
+    "norm_elem": 3024
+   },
+   "fused_rope_kernel": {
+    "norm_elem": 3024
+   },
+   "indexSelectSmallIndex": {
+    "norm_elem": 63
+   },
+   "index_elementwise_kernel": {
+    "input_prep": 252
+   },
+   "kernel_cutlass_kernel_flashinfernormkernelsfused_add_rmsnormFusedAddRMSNormKernel_object_at__tensorptrf16gmemalign128oi64204820481_tensorptrf16gmemalign128oi64204820481_tensorptrf16gmemal_0": {
+    "norm_elem": 6048
+   },
+   "kernel_cutlass_kernel_flashinfernormkernelsrmsnormRMSNormKernel_object_at__tensorptrf16gmemalign128oi64204820481_tensorptrf16gmemalign16o20481_tensorptrf16gmemalign128oi64204820481___True_0": {
+    "norm_elem": 63
+   },
+   "memcpy": {
+    "memcpy": 252
+   },
+   "memset": {
+    "memcpy": 63
+   },
+   "moe_align_block_size_kernel": {
+    "moe_route": 3024
+   },
+   "moe_sum_reduce_kernel": {
+    "moe_route": 3024
+   },
+   "multi_tensor_apply_kernel": {
+    "residual": 63
+   },
+   "reduce_kernel": {
+    "sample": 63
+   },
+   "splitKreduce_kernel": {
+    "dense_gemm": 3024
+   },
+   "store_kvcache": {
+    "attn": 3024
+   },
+   "unrolled_elementwise_kernel": {
+    "norm_elem": 63,
+    "input_prep": 126
+   },
+   "vectorized_elementwise_kernel": {
+    "moe_route": 6048,
+    "input_prep": 567
+   }
+  },
+  "top_residual_kernels": [
+   "clamp_position_kernel",
+   "multi_tensor_apply_kernel",
+   "create_flashinfer_kv_indices_triton"
+  ]
+ },
+ "unprofiled_ms": 8.0241,
+ "positions": null,
+ "clocks_mhz": {
+  "pass1": 2782.0,
+  "graph": 2857.0,
+  "node": 2880.0
+ },
+ "gates": {
+  "inflate": -0.0163,
+  "node_union_over_span": 0.998,
+  "node_span_over_span": 1.0111,
+  "map_residual_fraction": 0.0005,
+  "clock_spread": 0.0352
+ },
+ "labels": [
+  "CLOCK_MISMATCH"
+ ],
+ "nsys_diagnostics": [
+  "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_1049353/streams/pid_49364_stdout.log and stderr.log for program output",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully."
+ ],
+ "P_ms": 7.893012,
+ "terms": {
+  "moe_expert": 4.501282,
+  "moe_route": 0.349666,
+  "attn": 0.994945,
+  "dense_gemm": 1.532044,
+  "norm_elem": 0.453541,
+  "sample": 0.005952,
+  "input_prep": 0.05712,
+  "memcpy": 0.011584,
+  "residual": 0.004064,
+  "I_in": 0.015903,
+  "idle_out": 0.016673,
+  "O": 0.049762
+ },
+ "noise_iqr": {
+  "moe_expert": 0.184998,
+  "moe_route": 0.000926,
+  "attn": 0.030015,
+  "dense_gemm": 0.002015,
+  "norm_elem": 0.001733,
+  "sample": 9.6e-05,
+  "input_prep": 0.008704,
+  "memcpy": 0.006176,
+  "residual": 9.6e-05,
+  "I_in": 0.41818,
+  "idle_out": 0.010721,
+  "O": null
+ },
+ "I_in_node_ms": 0.102944,
+ "status": "labelled"
+}

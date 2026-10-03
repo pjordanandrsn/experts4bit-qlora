@@ -1,0 +1,8 @@
+{
+ "status": "unread",
+ "why": [
+  "an arm's capture is VOID"
+ ],
+ "engine": "e4b",
+ "comparator": "vllm"
+}

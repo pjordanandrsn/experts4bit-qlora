@@ -1,0 +1,133 @@
+{
+ "engine": "e4b",
+ "comparator": "vllm",
+ "batch": 16,
+ "delta_P_ms": 1.811874,
+ "delta": {
+  "moe_expert": 0.349776,
+  "moe_route": 0.314465,
+  "attn": -0.324975,
+  "dense_gemm": -0.04808,
+  "norm_elem": 1.057556,
+  "sample": -0.063472,
+  "input_prep": -0.024128,
+  "memcpy": -0.00096,
+  "residual": -0.00464,
+  "I_in": 0.135585,
+  "idle_out": 0.394402,
+  "overlap_in": -0.002352,
+  "O": -0.028697
+ },
+ "noise_iqr": {
+  "moe_expert": 0.484303,
+  "moe_route": 0.003105,
+  "attn": 0.035474,
+  "dense_gemm": 0.007954,
+  "norm_elem": 0.006927,
+  "sample": 0.005344,
+  "input_prep": 0.000352,
+  "memcpy": 0.000512,
+  "residual": 0.000448,
+  "I_in": 0.932923,
+  "idle_out": 0.023137,
+  "overlap_in": 0.002616,
+  "O": null
+ },
+ "profiled_P_ms": [
+  9.801049,
+  7.989175
+ ],
+ "unprofiled_ms": [
+  9.6629,
+  8.2983
+ ],
+ "census_ratio_unprofiled": 1.1644,
+ "sc1_ratio": 1.172,
+ "idle_out_nameable": true,
+ "delta_O_ms": -0.028697,
+ "labels": [
+  "NODE_TRACE_INFLATED"
+ ],
+ "delta_band": {
+  "moe_expert": [
+   0.252657,
+   0.528015
+  ],
+  "moe_route": [
+   0.217346,
+   0.492704
+  ],
+  "attn": [
+   -0.422094,
+   -0.146736
+  ],
+  "dense_gemm": [
+   -0.145199,
+   0.130159
+  ],
+  "norm_elem": [
+   0.960437,
+   1.235795
+  ],
+  "sample": [
+   -0.160591,
+   0.114767
+  ],
+  "input_prep": [
+   -0.121247,
+   0.154111
+  ],
+  "memcpy": [
+   -0.098079,
+   0.177279
+  ],
+  "residual": [
+   -0.101759,
+   0.173599
+  ],
+  "I_in": [
+   -0.042654,
+   0.143745
+  ],
+  "idle_out": [
+   0.394402,
+   0.394402
+  ],
+  "overlap_in": [
+   -0.27771,
+   0.273006
+  ],
+  "O": [
+   -0.028697,
+   -0.028697
+  ]
+ },
+ "node_band": {
+  "e4b": {
+   "omega_ms": 0.097119,
+   "dk_lo_ms": 0.0
+  },
+  "comparator": {
+   "omega_ms": 0.178239,
+   "dk_lo_ms": 0.088959
+  }
+ },
+ "status": "ok",
+ "reading": "named",
+ "named_cause": "norm_elem",
+ "top_three": [
+  [
+   "norm_elem",
+   1.057556
+  ],
+  [
+   "idle_out",
+   0.394402
+  ],
+  [
+   "moe_expert",
+   0.349776
+  ]
+ ],
+ "node_trace_robust": true
+}

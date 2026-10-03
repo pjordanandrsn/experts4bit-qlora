@@ -1,0 +1,138 @@
+{
+ "engine": "e4b",
+ "comparator": "vllm",
+ "batch": 1,
+ "delta_P_ms": 0.883465,
+ "delta": {
+  "moe_expert": 0.030417,
+  "moe_route": 0.046224,
+  "attn": 0.086032,
+  "dense_gemm": 0.073679,
+  "norm_elem": 0.379424,
+  "sample": -0.016865,
+  "input_prep": -0.020672,
+  "memcpy": -0.034048,
+  "residual": -0.002528,
+  "I_in": 0.01945,
+  "idle_out": 0.354467,
+  "overlap_in": 0.0,
+  "O": 0.032115
+ },
+ "noise_iqr": {
+  "moe_expert": 0.004544,
+  "moe_route": 0.0022,
+  "attn": 0.002873,
+  "dense_gemm": 0.004793,
+  "norm_elem": 0.001571,
+  "sample": 0.000408,
+  "input_prep": 0.000465,
+  "memcpy": 0.000624,
+  "residual": 0.000216,
+  "I_in": 0.022001,
+  "idle_out": 0.071233,
+  "overlap_in": 0.0,
+  "O": null
+ },
+ "profiled_P_ms": [
+  4.405951,
+  3.522486
+ ],
+ "unprofiled_ms": [
+  4.1599,
+  3.5457
+ ],
+ "census_ratio_unprofiled": 1.1732,
+ "sc1_ratio": 1.203,
+ "idle_out_nameable": false,
+ "delta_O_ms": 0.032115,
+ "labels": [
+  "CLOCK_MISMATCH",
+  "NODE_TRACE_INFLATED",
+  "PROFILER_INFLATED"
+ ],
+ "delta_band": {
+  "moe_expert": [
+   -0.1178,
+   0.13293
+  ],
+  "moe_route": [
+   -0.101993,
+   0.148737
+  ],
+  "attn": [
+   -0.062185,
+   0.188545
+  ],
+  "dense_gemm": [
+   -0.074538,
+   0.176192
+  ],
+  "norm_elem": [
+   0.231207,
+   0.481937
+  ],
+  "sample": [
+   -0.165082,
+   0.085648
+  ],
+  "input_prep": [
+   -0.168889,
+   0.081841
+  ],
+  "memcpy": [
+   -0.182265,
+   0.068465
+  ],
+  "residual": [
+   -0.150745,
+   0.099985
+  ],
+  "I_in": [
+   -0.080511,
+   0.145665
+  ],
+  "idle_out": [
+   0.354467,
+   0.354467
+  ],
+  "overlap_in": [
+   -0.25073,
+   0.25073
+  ],
+  "O": [
+   0.032115,
+   0.032115
+  ]
+ },
+ "node_band": {
+  "e4b": {
+   "omega_ms": 0.148217,
+   "dk_lo_ms": 0.002552
+  },
+  "comparator": {
+   "omega_ms": 0.102513,
+   "dk_lo_ms": 0.022002
+  }
+ },
+ "status": "unread",
+ "top_three": [
+  [
+   "norm_elem",
+   0.379424
+  ],
+  [
+   "attn",
+   0.086032
+  ],
+  [
+   "dense_gemm",
+   0.073679
+  ]
+ ],
+ "node_trace_robust": false,
+ "why": [
+  "NODE_TRACE_AMBIGUOUS: the nominal reading (spread, None) changes inside the node-trace bands (omega e4b 0.148 ms, comparator 0.103 ms)"
+ ],
+ "nominal_reading": "spread",
+ "nominal_named_cause": null
+}

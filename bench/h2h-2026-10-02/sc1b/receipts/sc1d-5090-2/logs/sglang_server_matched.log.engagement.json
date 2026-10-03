@@ -1,0 +1,59 @@
+{
+ "mode": "matched",
+ "startup_s": 45,
+ "cmd": "/root/sc1/venv-sglang/bin/python -m sglang.launch_server --model-path Qwen/Qwen3-30B-A3B-GPTQ-Int4 --revision 9b534e4318b7ebc3c961a839f13eb18b1833f441 --host 127.0.0.1 --port 30000 --random-seed 0 --moe-runner-backend auto --log-level info --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs --cuda-graph-bs-decode 1 16 --dtype float16 --context-length 2048 --mem-fraction-static 0.75",
+ "errors": [],
+ "version": "0.5.20",
+ "attention_backend": "flashinfer",
+ "prefill_attention_backend": null,
+ "decode_attention_backend": null,
+ "kv_cache_dtype": "auto",
+ "disable_radix_cache": true,
+ "max_running_requests": 16,
+ "chunked_prefill_size": -1,
+ "schedule_policy": "fcfs",
+ "context_length": 2048,
+ "dtype": "float16",
+ "quantization": null,
+ "moe_runner_backend": "auto",
+ "speculative_algorithm": null,
+ "disable_overlap_schedule": false,
+ "cuda_graph_config": {
+  "decode": {
+   "backend": "full",
+   "max_bs": 16,
+   "bs": [
+    1,
+    16
+   ],
+   "tc_compiler": "eager",
+   "full_prefill_max_req": null,
+   "full_prefill_prefix_chunk_tokens": null
+  },
+  "prefill": {
+   "backend": "breakable",
+   "max_bs": -1,
+   "bs": [],
+   "tc_compiler": "eager",
+   "full_prefill_max_req": null,
+   "full_prefill_prefix_chunk_tokens": null
+  }
+ },
+ "page_size": 1,
+ "mem_fraction_static": 0.75,
+ "max_total_num_tokens": 79347,
+ "max_prefill_tokens": 16384,
+ "random_seed": 0,
+ "model_path": "Qwen/Qwen3-30B-A3B-GPTQ-Int4",
+ "revision": "9b534e4318b7ebc3c961a839f13eb18b1833f441",
+ "cuda_graph_config_json": "{\"decode\": {\"backend\": \"full\", \"max_bs\": 16, \"bs\": [1, 16], \"tc_compiler\": \"eager\", \"full_prefill_max_req\": null, \"full_prefill_prefix_chunk_tokens\": null}, \"prefill\": {\"backend\": \"breakable\", \"max_bs\": -1, \"bs\": [], \"tc_compiler\": \"eager\", \"full_prefill_max_req\": null, \"full_prefill_prefix_chunk_tokens\": null}}",
+ "gptq_marlin_banner": true,
+ "jit_build_failures": [],
+ "marlin_moe_jit_leaves": [
+  "/root/sc1/sglang-cache/jit/sm120f/sgl_kernel_jit_moe_wna16_marlin_fp16_t_false_false/build-41850166463b76e8/deps-c67c6772b7d0c5c5/sgl_kernel_jit_moe_wna16_marlin_fp16_t_false_false.so"
+ ],
+ "jit_target_tag": "sm120f",
+ "gencode": "-gencode=arch=compute_120f,code=sm_120f",
+ "fired_up": true,
+ "server_args_log_line": "server_args={'model_path': 'Qwen/Qwen3-30B-A3B-GPTQ-Int4', 'tokenizer_path': 'Qwen/Qwen3-30B-A3B-GPTQ-Int4', 'tokenizer_mode': 'auto', 'tokenizer_backend': 'huggingface', 'tokenizer_worker_num': 1, 'detokenizer_worker_num': 1, 'skip_tokenizer_init': False, 'load_format': 'auto', 'model_loader_extra_config': '{}', 'trust_remote_code': False, 'context_length': 2048, 'is_embedding': False, 'enable_multimodal': None, 'revision': '9b534e4318b7ebc3c961a839f13eb18b1833f441', 'model_impl': 'auto', 'model_config_parser': 'auto', 'json_model_override_args': '{}', 'dtype': 'float16', 'quantization': None, 'quantization_param_path': None, 'kv_cache_dtype': 'auto', 'enable_fp32_lm_head': False, 'modelopt_quant': None, 'modelopt_checkpoint_restore_path': None, 'modelopt_checkpoint_save_path': None, 'modelopt_export_path': None, 'quantize_and_serve': False, 'rl_quant_profile': None, 'enable_tf32_matmul': False, 'mem_fraction_static': 0.75, 'max_running_requests': 16, 'max_queued_requests': None, 'max_total_tokens': None, 'chunked_prefill_size': -1, 'prefill_decode_interval': 0, 'enable_dynamic_chunking': False, 'max_prefill_tokens': 16384, 'prefill_max_requests': None, 'schedule_policy': 'fcfs', 'enable_priority_scheduling': False, 'disable_priority_preemption': False, 'default_priority_value': None, 'abort_on_priority_when_disabled': False, 'schedule_low_priority_values_first': False, 'priority_scheduling_preemption_threshold': 10, 'retraction_policy': 'length', 'schedule_conservativeness': 1.0, 'page_size': 1, 'c128_page_size': 16, 'swa_full_tokens_ratio': 0.8, 'disable_hybrid_swa_memory': False, 'radix_eviction_policy': 'lru', 'radix_eviction_policy_config': None, 'prefill_only_disable_kv_cache': False, 'disable_radix_cache': True, 'enable_page_major_kv_layout': False, 'enable_unified_memory': False, 'disable_chunked_prefix_cache': False, 'disable_overlap_schedule': False, 'num_continuous_decode_steps': 1, 'scheduler_recv_interval': 1, 'enable_mixed_chunk': False, 'nccl_port': None, 'dist_timeout': None, 'dist_init_addr': None, 'gated_launch_port': None, 'nnodes': 1, 'node_rank': 0, 'tp_size': 1, 'dcp_size': 1, 'pp_size': 1, 'pp_max_micro_batch_size': None, 'pp_async_batch_depth': 0, 'dp_size': 1, 'load_balance_method': 'round_robin', 'attn_cp_size': 1, 'moe_dp_size': 1, 'dwdp_size': 1, 'dcp_comm_backend': 'ag_rs', 'dcp_replicate_q_proj': None, 'enable_prefill_cp': False, 'cp_strategy': None, 'enable_dsa_cache_layer_split': False, 'enable_cp_decode_attn_tp': False, 'enable_dp_attention': False, 'enable_dp_attention_local_control_broadcast': False, 'enable_dp_lm_head': False, 'enable_tp_lm_head_all_to_all': False, 'enable_attn_tp_input_scattered': False, 'enable_shared_experts_attn_tp': False, 'enable_dense_mlp_attn_tp': False, 'enable_layernorm_sp': False, 'disable_attn_tp_gather': False, 'enable_p2p_check': False, 'device': 'cuda', 'base_gpu_id': 0, 'gpu_id_step': 1, 'random_seed': 0, 'mlx_enable_sampling': False, 'watchdog_timeout': 300, 'soft_watchdog_tim"
+}

@@ -1,0 +1,52 @@
+{
+ "engine": "sglang",
+ "batch": 16,
+ "skip": 32,
+ "steps": 64,
+ "tokens": 160,
+ "events": [
+  {
+   "name": "sent",
+   "t": 0.0057
+  },
+  {
+   "name": "start_profile_post",
+   "t": 0.5638
+  },
+  {
+   "name": "start_profile_reply",
+   "t": 3.9539,
+   "code": 200,
+   "text": "Start profiling."
+  },
+  {
+   "name": "generation_done",
+   "t": 6.1795
+  }
+ ],
+ "errors": [],
+ "status": "ok",
+ "plan": {
+  "start_s": 0.5637,
+  "end_of_generation_s": 1.5807
+ },
+ "profile_acknowledged": true,
+ "generated_per_row": [
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160,
+  160
+ ]
+}

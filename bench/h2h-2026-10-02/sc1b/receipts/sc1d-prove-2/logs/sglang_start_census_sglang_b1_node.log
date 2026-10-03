@@ -1,0 +1,22 @@
+[2026-10-03T17:05:08Z] sglang-server: start mode=matched port=30000 log=/root/sc1/logs/sglang_server_census_sglang_b1_node.log
+[2026-10-03T17:05:08Z] sglang-server: cmd: /root/sc1/venv-sglang/bin/python -m sglang.launch_server --model-path Qwen/Qwen3-30B-A3B-GPTQ-Int4 --revision 9b534e4318b7ebc3c961a839f13eb18b1833f441 --host 127.0.0.1 --port 30000 --random-seed 0 --moe-runner-backend auto --log-level info --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs --cuda-graph-bs-decode 1 16 --dtype float16 --context-length 2048 --mem-fraction-static 0.75
+[2026-10-03T17:05:08Z] sglang-server: waiting (0s, /health=000): # SGLANG_CACHE_DIR=/root/sc1/sglang-cache SGLANG_JIT_CACHE_DIR=/root/sc1/sglang-cache/jit CUDA_HOME=/usr/local/cuda
+[2026-10-03T17:05:38Z] sglang-server: waiting (30s, /health=000): Multi-thread loading shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+[2026-10-03T17:06:08Z] sglang-server: waiting (60s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:06:38Z] sglang-server: waiting (90s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:07:09Z] sglang-server: waiting (121s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:07:39Z] sglang-server: waiting (151s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:08:09Z] sglang-server: waiting (181s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:08:39Z] sglang-server: waiting (211s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:09:10Z] sglang-server: waiting (242s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:09:40Z] sglang-server: waiting (272s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:10:10Z] sglang-server: waiting (302s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:10:40Z] sglang-server: waiting (332s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:11:11Z] sglang-server: waiting (363s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:11:41Z] sglang-server: waiting (393s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:12:11Z] sglang-server: waiting (423s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:12:42Z] sglang-server: waiting (454s, /health=000):   0%|          | 0/2 [00:00<?, ?it/s]Capturing batches (bs=16 avail_mem=7.24 GB):   0%|          | 0/2 [00:00<?, ?it/s]
+[2026-10-03T17:13:12Z] sglang-server: waiting (484s, /health=503): [2026-10-03 17:13:12] INFO:     127.0.0.1:57280 - "GET /health HTTP/1.1" 503 Service Unavailable
+[2026-10-03T17:13:15Z] sglang-server: healthy after 487s
+SGLANG_ENGAGEMENT {"mode": "matched", "version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": true, "jit_target_tag": "sm120f", "gencode": "-gencode=arch=compute_120f,code=sm_120f", "startup_s": 487}
+[2026-10-03T17:13:15Z] sglang-server: ready: /root/sc1/logs/sglang_server_census_sglang_b1_node.log.server_info.json /root/sc1/logs/sglang_server_census_sglang_b1_node.log.engagement.json

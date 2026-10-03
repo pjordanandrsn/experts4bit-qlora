@@ -1,0 +1,1 @@
+SC1B_TOY_CHECK {"graph_trace_columns_ok": true, "graph_rows": 20, "graph_execs": 1, "node_launches": 20, "kernels_per_launch": [3], "all_have_node_id_and_grid": true, "graph_eager_kernels": 20, "graph_h2d_copies": 20, "node_eager_kernels": 20, "node_h2d_copies": 20, "eager_work_is_non_graph": true, "ok": true}
