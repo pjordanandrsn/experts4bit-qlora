@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+### P102 amendment A2 (#916): the loop's engagement check is structural -- the registered 9,600-decode floor voided the first full draw (bench and tests only)
+
+- `p102-5090-5` (adertha-receipts `796486c`, $0.3466) ran every arm. The reducer voided it because `loop` had 8,390
+  reference decodes per 512-token request, under a 9,600 floor taken from a uniform-routing guess. P100 had already
+  measured 8,390. The loop ran exactly as registered.
+- The check is now: 48 loop calls, two decodes per distinct expert, and at least 3,072 decodes (>= 32 distinct experts
+  per layer). The fixtures take the measured census; three self-test cases are added (14). Every quality and speed
+  criterion is unchanged. The redraw is `p102-5090-6`.
+
 
 ### Lane SC1 amendment A11 (#846): the reducer reads as the registration reads -- llama.cpp's server log, box A's licence and quality rows carried across boxes, P13 on measured ratios (bench + tests)
 

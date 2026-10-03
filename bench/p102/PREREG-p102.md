@@ -162,3 +162,21 @@ ran in a container where pytest had been installed by hand, so it could not catc
 - **Unchanged:** nothing the lane measures and nothing in its rule. No route was exercised, and no TTFT or NLL was
   recorded.
 - The next attempt is `p102-5090-2`, at this amendment's merge commit.
+
+### A2 (2026-10-03, after a VOID draw; the registered consequence of VOID is "fix the defect it names and redraw once")
+
+`p102-5090-5` (adertha-receipts `796486c`, $0.3466) ran every arm and wrote every record. The reducer voided it on one
+reason: `loop` "did not run as registered", because its 512-token census had 8,390 reference decodes, under the 9,600
+the reducer required. That threshold came from a uniform-routing guess (~128 distinct experts per layer). P100 had
+already measured 8,390 (87 per layer) before this lane was registered, and the threshold was not updated. The loop ran
+exactly as registered: 48 loop calls, two decodes per distinct expert, no device grouping.
+
+- **The fix**, to the named check only: `loop`'s engagement is structural. It needs 48 loop calls, exactly two decodes
+  per distinct expert per call, and at least 3,072 decodes (≥ 32 distinct experts per layer). The self-test fixtures
+  take their counts from the measured census (8,390) instead of the guess, plus three cases: the measured count is
+  engaged; decodes not two per distinct, VOID; almost no decodes, VOID.
+- **Unchanged:** every quality and speed criterion, the windows, the arms, the default rule, and the other three
+  routes' engagement checks.
+- **Checked, not read:** the fixed reducer, run on the void draw's files, raises no other VOID reason. Its output on
+  those files is not this lane's reading; the redraw is.
+- The redraw is `p102-5090-6`, at this amendment's merge commit.
