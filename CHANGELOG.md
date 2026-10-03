@@ -1,6 +1,19 @@
 # Changelog
 
 ## Unreleased
+### P107 read (RTX 5090, #960): DEFAULT=flash -- a 4096-token prefill's device time 906 -> 378 ms; TTFT-4096 1.984 -> 1.742 s (1.14x) on a CPU-bound host; served-prefill NLL within -0.014 / -0.008 ppl of math on 12 fresh windows (bench docs and receipts only)
+
+- **Verdict** (`p107_reduce.py`, the first full draw `p107-5090-3`, AMD EPYC 7663 host, $0.1634): `DEFAULT=flash`, no
+  VOID reason.
+  - TTFT-512 / TTFT-4096: math 0.249 / 1.984 s; flash 0.235 / 1.742 s. Every draw had the same first token.
+  - Quality: mean dppl -0.0140 (c4val1, W=8, one window at -0.079) and -0.0085 (wikitext, W=4). PASS.
+  - Census: math 0 flash kernels and 97 SGEMMs; flash 48 flash kernels.
+- **The device saving is larger than the wall saving.** The fp32 SGEMMs, masking and softmax (about 477 ms) give way
+  to 40 ms of flash attention. On this host the GPU then idles for most of a prefill: the wall moved 242 ms, against a
+  528 ms device saving. P102's Ryzen host ran the same math route at 1.373 s.
+- **Next lead:** host-side. About 50,000 device-to-device copies per 4096-token prefill remain under both routes.
+- `bench/p107/RESULTS-p107.md`; receipts under `bench/p107/receipts/p107-5090-3/`. Lane total $0.1634; two $0
+  launcher refusals came first (my exclusion list).
 
 ## 0.41.1 — 2026-10-03 — Gemma-4 serves through `serve_paged` again (a 0.41.0 regression), the paged attention's unbound fallback keeps sliding windows, and fused training makes fewer host syncs and launches
 

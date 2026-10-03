@@ -1,0 +1,613 @@
+{
+ "mode": "ab",
+ "load_s": 137.5,
+ "census_build": {
+  "moe_layers": 48,
+  "experts": 128,
+  "top_k": 8,
+  "model_type": "qwen3_moe",
+  "int4_expert_layers": 48,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "int4_attn_projections": 96,
+  "kv": {
+   "n_kv_heads": 4,
+   "head_dim": 128,
+   "k_groups": "auto",
+   "scratch_slots": 1,
+   "blocks_per_seq": 257
+  },
+  "graph_status": {
+   "1": "graph"
+  },
+  "grouping": {
+   "device_grouping": false,
+   "force_singleton_groups": false
+  },
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "1",
+   "E4B_SERVE_ATTN_INT4": "1",
+   "E4B_SERVE_ATTN_INT4_CALIB": "0",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  },
+  "exp_int4_layers_enabled": 48,
+  "attn_int4_rtn_projections": 192,
+  "attn_int4_calib_projections": 0,
+  "fuse_qkv_n": 48,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48
+ },
+ "rounds": 3,
+ "chunk_tokens": 512,
+ "routes": [
+  "math",
+  "flash"
+ ],
+ "int4_prefill_route": "k19",
+ "prompts_sha256": {
+  "512": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3",
+  "4096": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd"
+ },
+ "warm": [
+  {
+   "route": "math",
+   "L": 512,
+   "wall_s": 1.111,
+   "sched_ttft_s": 1.1098462670051958,
+   "token": 75923
+  },
+  {
+   "route": "math",
+   "L": 4096,
+   "wall_s": 2.016,
+   "sched_ttft_s": 2.014760281002964,
+   "token": 44643
+  },
+  {
+   "route": "flash",
+   "L": 512,
+   "wall_s": 0.2393,
+   "sched_ttft_s": 0.23822311600088142,
+   "token": 75923
+  },
+  {
+   "route": "flash",
+   "L": 4096,
+   "wall_s": 1.7436,
+   "sched_ttft_s": 1.7423299600050086,
+   "token": 44643
+  }
+ ],
+ "draws": [
+  {
+   "route": "math",
+   "L": 512,
+   "wall_s": 0.2488,
+   "sched_ttft_s": 0.24777995300246403,
+   "token": 75923,
+   "round": 0
+  },
+  {
+   "route": "math",
+   "L": 4096,
+   "wall_s": 1.9803,
+   "sched_ttft_s": 1.9791155429993523,
+   "token": 44643,
+   "round": 0
+  },
+  {
+   "route": "flash",
+   "L": 512,
+   "wall_s": 0.2351,
+   "sched_ttft_s": 0.23406963500019629,
+   "token": 75923,
+   "round": 0
+  },
+  {
+   "route": "flash",
+   "L": 4096,
+   "wall_s": 1.7418,
+   "sched_ttft_s": 1.7405923449987313,
+   "token": 44643,
+   "round": 0
+  },
+  {
+   "route": "flash",
+   "L": 512,
+   "wall_s": 0.2416,
+   "sched_ttft_s": 0.2406077630002983,
+   "token": 75923,
+   "round": 1
+  },
+  {
+   "route": "flash",
+   "L": 4096,
+   "wall_s": 1.7442,
+   "sched_ttft_s": 1.7429229319968726,
+   "token": 44643,
+   "round": 1
+  },
+  {
+   "route": "math",
+   "L": 512,
+   "wall_s": 0.2491,
+   "sched_ttft_s": 0.24809695400472265,
+   "token": 75923,
+   "round": 1
+  },
+  {
+   "route": "math",
+   "L": 4096,
+   "wall_s": 1.9951,
+   "sched_ttft_s": 1.9940974240016658,
+   "token": 44643,
+   "round": 1
+  },
+  {
+   "route": "math",
+   "L": 512,
+   "wall_s": 0.2465,
+   "sched_ttft_s": 0.24546769600419793,
+   "token": 75923,
+   "round": 2
+  },
+  {
+   "route": "math",
+   "L": 4096,
+   "wall_s": 1.9845,
+   "sched_ttft_s": 1.9833711639948888,
+   "token": 44643,
+   "round": 2
+  },
+  {
+   "route": "flash",
+   "L": 512,
+   "wall_s": 0.2347,
+   "sched_ttft_s": 0.23370196399628185,
+   "token": 75923,
+   "round": 2
+  },
+  {
+   "route": "flash",
+   "L": 4096,
+   "wall_s": 1.7369,
+   "sched_ttft_s": 1.7357953129976522,
+   "token": 44643,
+   "round": 2
+  }
+ ],
+ "ttft_s_median": {
+  "math": {
+   "512": 0.2488,
+   "4096": 1.9845
+  },
+  "flash": {
+   "512": 0.2351,
+   "4096": 1.7418
+  }
+ },
+ "kernels": {
+  "math": {
+   "flash": 0,
+   "sgemm": 97
+  },
+  "flash": {
+   "flash": 48,
+   "sgemm": 1
+  }
+ },
+ "windows": [
+  {
+   "source": "c4val1",
+   "k": 9,
+   "route": "math",
+   "mean_nll": 2.8168631196022034,
+   "ppl": 16.724306106567383,
+   "text_sha": "1739015aa61fc9fd07724046e0ac02c421a1efa86aa2a9e276f69271a200bea7",
+   "steps": 2048,
+   "wall_s": 0.68
+  },
+  {
+   "source": "c4val1",
+   "k": 9,
+   "route": "flash",
+   "mean_nll": 2.816838562488556,
+   "ppl": 16.723894119262695,
+   "text_sha": "1739015aa61fc9fd07724046e0ac02c421a1efa86aa2a9e276f69271a200bea7",
+   "steps": 2048,
+   "wall_s": 0.59
+  },
+  {
+   "source": "c4val1",
+   "k": 10,
+   "route": "flash",
+   "mean_nll": 2.9344784021377563,
+   "ppl": 18.81168556213379,
+   "text_sha": "b52741dc23a2980cc0c9f7a6d56290dd138fef2389018b79a8580ea40f277f6d",
+   "steps": 2048,
+   "wall_s": 0.6
+  },
+  {
+   "source": "c4val1",
+   "k": 10,
+   "route": "math",
+   "mean_nll": 2.9361536502838135,
+   "ppl": 18.843229293823242,
+   "text_sha": "b52741dc23a2980cc0c9f7a6d56290dd138fef2389018b79a8580ea40f277f6d",
+   "steps": 2048,
+   "wall_s": 0.68
+  },
+  {
+   "source": "c4val1",
+   "k": 11,
+   "route": "math",
+   "mean_nll": 2.8083876967430115,
+   "ppl": 16.583160400390625,
+   "text_sha": "25c54f955ef00673964e4c54867505d76a2f0b3d79b7ccf3e5a5a9e275e643b3",
+   "steps": 2048,
+   "wall_s": 0.68
+  },
+  {
+   "source": "c4val1",
+   "k": 11,
+   "route": "flash",
+   "mean_nll": 2.8068437576293945,
+   "ppl": 16.557575225830078,
+   "text_sha": "25c54f955ef00673964e4c54867505d76a2f0b3d79b7ccf3e5a5a9e275e643b3",
+   "steps": 2048,
+   "wall_s": 0.59
+  },
+  {
+   "source": "c4val1",
+   "k": 12,
+   "route": "flash",
+   "mean_nll": 2.870646893978119,
+   "ppl": 17.6484317779541,
+   "text_sha": "8408d81a70b731786fffb2d85132c4a4f448278df3814b21bd1eeea02d08992d",
+   "steps": 2048,
+   "wall_s": 0.6
+  },
+  {
+   "source": "c4val1",
+   "k": 12,
+   "route": "math",
+   "mean_nll": 2.8683175444602966,
+   "ppl": 17.607370376586914,
+   "text_sha": "8408d81a70b731786fffb2d85132c4a4f448278df3814b21bd1eeea02d08992d",
+   "steps": 2048,
+   "wall_s": 0.68
+  },
+  {
+   "source": "c4val1",
+   "k": 13,
+   "route": "math",
+   "mean_nll": 1.5615883469581604,
+   "ppl": 4.766385555267334,
+   "text_sha": "972ce97f9a028a5c530481471070df4b72b5313a2203fa7bad237de566e16d53",
+   "steps": 2048,
+   "wall_s": 0.68
+  },
+  {
+   "source": "c4val1",
+   "k": 13,
+   "route": "flash",
+   "mean_nll": 1.5590472221374512,
+   "ppl": 4.754289150238037,
+   "text_sha": "972ce97f9a028a5c530481471070df4b72b5313a2203fa7bad237de566e16d53",
+   "steps": 2048,
+   "wall_s": 0.6
+  },
+  {
+   "source": "c4val1",
+   "k": 14,
+   "route": "flash",
+   "mean_nll": 2.609546720981598,
+   "ppl": 13.592886924743652,
+   "text_sha": "2971667355bf509f2672f31e74787f51ab6a16e43af6f360cae7e5a7fc3cd407",
+   "steps": 2048,
+   "wall_s": 0.6
+  },
+  {
+   "source": "c4val1",
+   "k": 14,
+   "route": "math",
+   "mean_nll": 2.607943594455719,
+   "ppl": 13.571113586425781,
+   "text_sha": "2971667355bf509f2672f31e74787f51ab6a16e43af6f360cae7e5a7fc3cd407",
+   "steps": 2048,
+   "wall_s": 0.67
+  },
+  {
+   "source": "c4val1",
+   "k": 15,
+   "route": "math",
+   "mean_nll": 1.8365496098995209,
+   "ppl": 6.274850368499756,
+   "text_sha": "98940f1a9a61f95dc39b315eedad8ab76195273573441683513d16d61559b48c",
+   "steps": 2048,
+   "wall_s": 0.68
+  },
+  {
+   "source": "c4val1",
+   "k": 15,
+   "route": "flash",
+   "mean_nll": 1.832381784915924,
+   "ppl": 6.248751640319824,
+   "text_sha": "98940f1a9a61f95dc39b315eedad8ab76195273573441683513d16d61559b48c",
+   "steps": 2048,
+   "wall_s": 0.59
+  },
+  {
+   "source": "c4val1",
+   "k": 16,
+   "route": "flash",
+   "mean_nll": 2.861882507801056,
+   "ppl": 17.494428634643555,
+   "text_sha": "4c9b19926fcd0cc85ef7639ff7b8a8a9b655dd3b62fea593718a1ffe4d1a2440",
+   "steps": 2048,
+   "wall_s": 0.59
+  },
+  {
+   "source": "c4val1",
+   "k": 16,
+   "route": "math",
+   "mean_nll": 2.8663870096206665,
+   "ppl": 17.573408126831055,
+   "text_sha": "4c9b19926fcd0cc85ef7639ff7b8a8a9b655dd3b62fea593718a1ffe4d1a2440",
+   "steps": 2048,
+   "wall_s": 0.65
+  },
+  {
+   "source": "wikitext",
+   "k": 9,
+   "route": "math",
+   "mean_nll": 2.022615373134613,
+   "ppl": 7.5580668449401855,
+   "text_sha": "4f24d56224e8e9c557b7306b9955d1cd8315d7b54fbc2c5442294a3309ff6763",
+   "steps": 2048,
+   "wall_s": 0.66
+  },
+  {
+   "source": "wikitext",
+   "k": 9,
+   "route": "flash",
+   "mean_nll": 2.024070292711258,
+   "ppl": 7.569070339202881,
+   "text_sha": "4f24d56224e8e9c557b7306b9955d1cd8315d7b54fbc2c5442294a3309ff6763",
+   "steps": 2048,
+   "wall_s": 0.59
+  },
+  {
+   "source": "wikitext",
+   "k": 10,
+   "route": "flash",
+   "mean_nll": 2.2569002509117126,
+   "ppl": 9.553430557250977,
+   "text_sha": "7a52479d6ccc37addae0280af498c4650c6af71f7f05d882a1536d0edcfa24bf",
+   "steps": 2048,
+   "wall_s": 0.6
+  },
+  {
+   "source": "wikitext",
+   "k": 10,
+   "route": "math",
+   "mean_nll": 2.259899139404297,
+   "ppl": 9.582122802734375,
+   "text_sha": "7a52479d6ccc37addae0280af498c4650c6af71f7f05d882a1536d0edcfa24bf",
+   "steps": 2048,
+   "wall_s": 0.67
+  },
+  {
+   "source": "wikitext",
+   "k": 11,
+   "route": "math",
+   "mean_nll": 2.1408894658088684,
+   "ppl": 8.506999969482422,
+   "text_sha": "1d748ee196f762f96a1c1e767ad844a3627d9e3bbd722a6d114d0a7aa55b5e86",
+   "steps": 2048,
+   "wall_s": 0.67
+  },
+  {
+   "source": "wikitext",
+   "k": 11,
+   "route": "flash",
+   "mean_nll": 2.1376301050186157,
+   "ppl": 8.479317665100098,
+   "text_sha": "1d748ee196f762f96a1c1e767ad844a3627d9e3bbd722a6d114d0a7aa55b5e86",
+   "steps": 2048,
+   "wall_s": 0.59
+  },
+  {
+   "source": "wikitext",
+   "k": 12,
+   "route": "flash",
+   "mean_nll": 2.326233208179474,
+   "ppl": 10.239298820495605,
+   "text_sha": "1d82e175e7ccfdd5ae5670121b9faac60f839cd2d3e065dc9ca91f10e1773173",
+   "steps": 2048,
+   "wall_s": 0.61
+  },
+  {
+   "source": "wikitext",
+   "k": 12,
+   "route": "math",
+   "mean_nll": 2.325116217136383,
+   "ppl": 10.22786808013916,
+   "text_sha": "1d82e175e7ccfdd5ae5670121b9faac60f839cd2d3e065dc9ca91f10e1773173",
+   "steps": 2048,
+   "wall_s": 0.67
+  }
+ ],
+ "profile_4096": {
+  "math": {
+   "device_ms_total": 905.788,
+   "top": [
+    [
+     "_gemm_int4_b32_grouped_smallm",
+     768,
+     138.784
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_tn_align1>(cutlass_80_simt_sgemm_128x32_8x5_tn_align1::Params)",
+     384,
+     119.031
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_nn_align1>(cutlass_80_simt_sgemm_128x32_8x5_nn_align1::Params)",
+     384,
+     106.331
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::where_",
+     384,
+     69.587
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl<at::native::CUDAFunctor_add<float> >(at::TensorI",
+     384,
+     68.969
+    ],
+    [
+     "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+     2712,
+     51.467
+    ],
+    [
+     "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::isneginf_kernel_impl(at::TensorIter",
+     384,
+     43.298
+    ],
+    [
+     "Memcpy DtoD (Device -> Device)",
+     50736,
+     38.804
+    ],
+    [
+     "void at::native::(anonymous namespace)::cunn_SoftMaxForwardReg<float, float, float, at::native::(anonymous namespace)::S",
+     96,
+     31.355
+    ],
+    [
+     "void at::native::(anonymous namespace)::cunn_SoftMaxForwardReg<float, float, float, at::native::(anonymous namespace)::S",
+     96,
+     23.775
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x3_tn_align8>(cutlass_80_tensorop_bf16_s16",
+     384,
+     18.522
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_tn_align8>(cutlass_80_tensorop_bf16_s16",
+     384,
+     18.157
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::T",
+     768,
+     15.052
+    ],
+    [
+     "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+     784,
+     15.002
+    ],
+    [
+     "void (anonymous namespace)::softmax_warp_forward<float, float, float, 11, false, false>(float*, float const*, int, int, ",
+     96,
+     14.547
+    ]
+   ],
+   "wall_s": 2.442
+  },
+  "flash": {
+   "device_ms_total": 378.131,
+   "top": [
+    [
+     "_gemm_int4_b32_grouped_smallm",
+     768,
+     138.239
+    ],
+    [
+     "Memcpy DtoD (Device -> Device)",
+     50352,
+     37.994
+    ],
+    [
+     "void pytorch_flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 64, 128, 4, false, false, cutlass::bfloat16_t,",
+     288,
+     36.163
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x3_tn_align8>(cutlass_80_tensorop_bf16_s16",
+     384,
+     18.259
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_tn_align8>(cutlass_80_tensorop_bf16_s16",
+     384,
+     18.236
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(cutlass_80_tensorop_bf16_s16",
+     8,
+     10.359
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, ",
+     3080,
+     9.617
+    ],
+    [
+     "void at::native::radixSortKVInPlace<-2, -1, 128, 32, long, long, unsigned int>(at::cuda::detail::TensorInfo<long, unsign",
+     384,
+     9.211
+    ],
+    [
+     "void at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<2> >(at::Ten",
+     384,
+     7.536
+    ],
+    [
+     "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+     1648,
+     5.204
+    ],
+    [
+     "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::MeanOps<float, float, float, float>, unsi",
+     1544,
+     5.033
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, f",
+     1544,
+     4.724
+    ],
+    [
+     "void at::native::_scatter_gather_elementwise_kernel<128, 8, at::native::_cuda_scatter_gather_internal_kernel<false, at::",
+     1920,
+     4.136
+    ],
+    [
+     "void pytorch_flash::flash_fwd_kernel<Flash_fwd_kernel_traits<128, 128, 64, 4, false, false, cutlass::bfloat16_t, Flash_k",
+     96,
+     4.029
+    ],
+    [
+     "void at::native::unrolled_elementwise_kernel<at::native::FillFunctor<int>, std::array<char*, 1ul>, 4, TrivialOffsetCalcu",
+     6144,
+     3.856
+    ]
+   ],
+   "wall_s": 2.3254
+  }
+ }
+}
