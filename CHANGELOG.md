@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### P98 registered (#564): hybrid decode under CUDA graphs through the serving stack -- Qwen3.6-35B-A3B's bucketed graph replays against its padded eager step, and the first hybrid decode speed (bench and tests only)
+
+- **Why.** #907 and #908 capture a hybrid model's per-slot linear state. On a GPU they have been read only on small
+  models (the A2000 real-capture tests in #908). P97 read Qwen3.6 eagerly, at 830 ms per 4-row step.
+- **What.** `bench/p98/`:
+  - `p98_bake.py`: the NF4 arena, with the checkpoint pinned;
+  - `p98_box.py`: one arm per process through `serve_paged.build_engine`;
+  - `p98_reduce.py` (19-case self-test);
+  - the runner, the driver and the staged pin.
+  - On one RTX 5090, three fresh engines: **g** bucketed graphs (1–16), **e** the same padded steps eagerly (the
+    bitwise oracle), **p** plain eager. Two workloads: 16 staggered requests that walk every bucket, and one request.
+  - SUPPORTED if every bucket captures and replays with no eager step and g's tokens equal e's. NOT_SUPPORTED
+    otherwise. VOID on a broken oracle, layout or shape. Decode speed, graphs against plain eager, is reported.
+  - The premise, on the card before any fetch: the three hybrid GPU test files pass, all four tests, none skipped.
+- **Rehearsed on the A2000** (stand-in attention, solver placement):
+  - the bake on Qwen3.6 now reads an offloaded layer's NF4 tensors from the offload handle's host copies (it read
+    0-element placeholders first);
+  - `build_engine` serves the `qwen3_5_moe` checkpoint from the arena;
+  - arm p ran end to end.
+- **Tests.** `tests/test_p98_box.py` covers the workload, timer and summary helpers. `tests/test_p98_staged_pin.py`
+  pins the registration.
+
 ### TC1 native-best against native-best: e4b as shipped steps 1.79x faster than Unsloth's native-best; the axolotl half is untested
 
 - **What was asked.** Amendments 5-7 of `bench/tc1/TC1-PREREG.md` set each framework's native-best configuration against the
