@@ -50,6 +50,23 @@
   - one synchronizing call against the legacy form's four or more (the control);
   - the fused training forward and every gradient bit-identical under either grouping.
 
+### TC1 amendment 10 read (#945): one host sync per fused MoE layer pass instead of 13 makes e4b's training step 13-15 % faster on a 5090
+
+- **What was asked.** On one RTX 5090 (`tc1-5090-38`), e4b against itself: legacy grouping with grouped-nf4-gemm's pageable
+  index copies (13 host syncs per MoE layer pass), against #946's single-read grouping with grouped-nf4-gemm's pinned ring
+  (1). Shipped and matched arms, two draws each, ABBA order.
+- **What it read.** P16 and P17 are HELD:
+
+  | arm | new / legacy step time | cross-draw range |
+  |---|---|---|
+  | shipped | **0.866** | 0.843 – 0.889 |
+  | matched | **0.847** | 0.840 – 0.854 |
+
+  Held-out loss and peak VRAM are unchanged, and energy per step is lower. Every new-path arm's ring staged 53,680
+  transfers; no legacy arm's did (register `e4b.train.host-syncs.qwen3.5090.2026-10-03`).
+- **What follows.** By the registered decision rule, the ring becomes grouped-nf4-gemm's default outside capture. The
+  cross-framework positions measured before this change stand as measured.
+
 ## 0.41.0 — 2026-10-03 — hybrid linear-attention models (Qwen3.5 / Qwen3.6 MoE, Qwen3-Next) serve paged, under decode graphs, with the Gated DeltaNet kernels recommended; the int4 store's prefill takes K19 by default (`E4B_INT4_PREFILL=auto`, lane P102: TTFT-4096 7.21 s -> 1.37 s); bucketed decode graphs on an NF4 MoE no longer replay against a freed index (#913)
 
 **0.41.0.** One default changes, one feature lands, and one fix ships.

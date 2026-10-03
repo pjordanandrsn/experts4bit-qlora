@@ -186,6 +186,12 @@ Over the whole run e4b finishes first on both (summed step time 1,353-1,372 s
 against axolotl's 1,934-2,023 s, and 743-752 s against 1,219-1,231 s, axolotl's
 warm-up included), and axolotl spends ×1.32-1.39 the energy per step. axolotl's native configuration also reaches the matched
 held-out curve at step 200, while e4b as shipped sits 0.024-0.027 above it.
+**e4b's own step got faster afterwards** (`e4b.train.host-syncs.qwen3.5090.2026-10-03`,
+TC1 amendment 10, #945): a fused MoE training layer pass made 13 host syncs, and
+#946 plus grouped-nf4-gemm's pinned index ring take it to 1. On one 5090 that steps
+the field recipe at **0.866** (shipped) and **0.847** (matched) of the legacy path,
+with unchanged held-out loss and peak VRAM. The positions above predate it and stand
+as measured; none is restated from an A/B of e4b against itself.
 **On an H100 NVL the sign reverses** (lane TC1c, the same
 matched set, one rented box, [`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md);
 register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`): Unsloth takes 2.546

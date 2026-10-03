@@ -1,0 +1,10 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files:   4%|▍         | 1/23 [00:00<00:04,  4.78it/s]Fetching 23 files:  13%|█▎        | 3/23 [00:00<00:01, 10.89it/s]Fetching 23 files:  13%|█▎        | 3/23 [00:20<00:01, 10.89it/s]Fetching 23 files:  17%|█▋        | 4/23 [01:14<08:07, 25.67s/it]Fetching 23 files:  22%|██▏       | 5/23 [01:20<05:47, 19.30s/it]Fetching 23 files:  26%|██▌       | 6/23 [01:24<04:04, 14.39s/it]Fetching 23 files:  30%|███       | 7/23 [02:21<07:21, 27.62s/it]Fetching 23 files:  35%|███▍      | 8/23 [02:23<04:57, 19.87s/it]Fetching 23 files:  39%|███▉      | 9/23 [03:15<06:53, 29.54s/it]Fetching 23 files:  43%|████▎     | 10/23 [03:49<06:43, 31.02s/it]Fetching 23 files:  48%|████▊     | 11/23 [04:41<07:28, 37.37s/it]Fetching 23 files:  52%|█████▏    | 12/23 [05:35<07:44, 42.24s/it]Fetching 23 files:  57%|█████▋    | 13/23 [05:52<05:46, 34.62s/it]Fetching 23 files:  61%|██████    | 14/23 [06:34<05:33, 37.04s/it]Fetching 23 files:  65%|██████▌   | 15/23 [06:48<04:00, 30.04s/it]Fetching 23 files:  70%|██████▉   | 16/23 [07:03<02:57, 25.42s/it]Fetching 23 files:  74%|███████▍  | 17/23 [07:03<01:47, 17.91s/it]Fetching 23 files:  78%|███████▊  | 18/23 [07:04<01:03, 12.79s/it]Fetching 23 files:  83%|████████▎ | 19/23 [07:04<00:35,  9.00s/it]Fetching 23 files:  87%|████████▋ | 20/23 [07:04<00:19,  6.36s/it]Fetching 23 files:  91%|█████████▏| 21/23 [08:27<00:58, 29.32s/it]Fetching 23 files:  96%|█████████▌| 22/23 [08:30<00:21, 21.32s/it]Fetching 23 files: 100%|██████████| 23/23 [08:53<00:00, 21.92s/it]Fetching 23 files: 100%|██████████| 23/23 [08:53<00:00, 23.20s/it]
+staged in 8.9 min at /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+STAGED ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
