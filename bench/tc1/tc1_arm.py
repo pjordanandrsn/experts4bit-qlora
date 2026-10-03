@@ -3122,6 +3122,16 @@ def run_arm(a, load_fn, sampler=True):
         tile_ab = {"gnf4_tile_rule": _rule, "gnf4_tile_rule_env": os.environ.get("GNF4_PREFILL_TILE_RULE"),
                    "gnf4_tile_d_env": os.environ.get("GNF4_PREFILL_TILE_D"), "gnf4_has_tile_rule": _rule is not None,
                    "prefill_bm_launches": {str(k): int(v) for k, v in (getattr(_ngt, "PREFILL_BM_STATS", None) or {}).items()} if _ngt is not None else {}}
+    rms_ab = None                                      # TC1 amendment 15 (#945): whether e4b's fused training RMSNorm was requested, patched and called
+    if a.framework == "e4b":
+        try:
+            from experts4bit_qlora.engines import rmsnorm_train as _rt
+            _rs = dict(getattr(_rt, "RMSNORM_TRAIN_STATS", {}) or {})
+            _has = True
+        except Exception:
+            _rs, _has = {}, False
+        rms_ab = {"requested_env": os.environ.get("E4B_FUSED_RMSNORM"), "e4b_has_fused_rmsnorm": _has,
+                  "patched": int(_rs.get("patched", 0)), "calls": int(_rs.get("calls", 0))}
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -3176,6 +3186,7 @@ def run_arm(a, load_fn, sampler=True):
         "sync_ab": sync_ab,                                                                                              # TC1 amendment 10 (#945)
         "lean_ab": lean_ab,                                                                                              # TC1 amendment 13 (#945)
         "tile_ab": tile_ab,                                                                                              # TC1 amendment 14 (#945)
+        "rms_ab": rms_ab,                                                                                                # TC1 amendment 15 (#945)
         "s_per_step": round(wall / a.steps, 4), "s_per_step_median_11plus": round(statistics.median(steady) / 1e3, 4), "step_ms": step_ms, "microbatch_ms": microbatch_ms, "log_every": int(a.log_every), "microbatch_timing": bool(a.microbatch_timing),
         "train_wall_s": round(train_wall, 2), "window_wall_s": round(wall, 2),
         "tokens_per_step": tokens_per_step, "tokens_total": sum(tokens_per_step), "tokens_per_s": round(sum(tokens_per_step) / train_wall, 1) if train_wall else None,

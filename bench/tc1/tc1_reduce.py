@@ -311,6 +311,40 @@ def tile_ab_why(tag, r):
     return "" if not bad else f"tile-rule A/B not engaged ({', '.join(bad)}; record {ta})"
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 15 (#945): the RMSNorm composite vs e4b's fused training kernel
+RMS_FAM = "qwen3rmsab"            # E4B_FUSED_RMSNORM=0 (the Hugging Face composite) vs =1 (#961's fused kernel), trimmed delta + post-#945 sync path
+RMS_PAIRS = (("P24", "shipped", "fused_attn4_shipped"), ("P25", "matched", "fused_attn4_m"))   # each: <tag>_rms0 vs <tag>_rms1, two draws a side
+RMS_BANDS = {"P24": (0.85, 0.97), "P25": (0.88, 0.98)}   # rms1 / rms0 s/step on stable pairs
+RMS_QUALITY_MAX = 0.01            # P26: |mean held-out at N, rms1 - rms0| on each arm (the kernel is near-exact, not exact)
+RMS_FLIP_AT_OR_BELOW = 0.99       # amendment 15's decision rule: both stable ratios at or below this AND P26 HELD flip the default on
+FAMS.append(RMS_FAM)
+NAMES[RMS_FAM] = "Qwen3-30B-A3B (amendment 15: the Hugging Face RMSNorm composite vs e4b's fused training RMSNorm, trimmed delta, post-#945 sync path)"
+N_LAYERS[RMS_FAM] = 48
+ATTN_CENSUS[RMS_FAM] = 192
+FAM_ANCHOR[RMS_FAM] = ("e4b", "fused_attn4_m_rms0")
+EXPECTED[RMS_FAM] = [("e4b", "fused_attn4_shipped_rms0"), ("e4b", "fused_attn4_shipped_rms1"), ("e4b", "fused_attn4_m_rms0"), ("e4b", "fused_attn4_m_rms1"),
+                     ("e4b", "fused_attn4_m_rms1_d2"), ("e4b", "fused_attn4_m_rms0_d2"), ("e4b", "fused_attn4_shipped_rms1_d2"), ("e4b", "fused_attn4_shipped_rms0_d2")]
+MATCHED |= {"fused_attn4_m_rms0", "fused_attn4_m_rms1", "fused_attn4_m_rms0_d2", "fused_attn4_m_rms1_d2"}
+for _p, _k, _t in RMS_PAIRS:
+    for _side in ("rms0", "rms1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def rms_ab_why(tag, r):
+    """Amendment 15's engagement predicate: an rms1 arm requested, patched and called the fused RMSNorm; an rms0 arm patched none;
+    both on the trimmed LoRA delta. Empty string = engaged."""
+    ra, la = (r or {}).get("rms_ab"), (r or {}).get("lean_ab") or {}
+    if not isinstance(ra, dict):
+        return "no rms_ab record on the receipt: whether the fused RMSNorm ran cannot be verified"
+    if "_rms1" in tag:
+        checks = (("requested_env 1", ra.get("requested_env") == "1"), ("e4b_has_fused_rmsnorm", ra.get("e4b_has_fused_rmsnorm") is True),
+                  ("patched > 0", (ra.get("patched") or 0) > 0), ("calls > 0", (ra.get("calls") or 0) > 0))
+    else:
+        checks = (("patched 0", (ra.get("patched") or 0) == 0), ("calls 0", (ra.get("calls") or 0) == 0))
+    bad = [k for k, ok in checks + (("gnf4_lean_delta 1", la.get("gnf4_lean_delta") == "1"),) if not ok]
+    return "" if not bad else f"fused-RMSNorm A/B not engaged ({', '.join(bad)}; record {ra})"
+
+
 def lean_ab_why(tag, r):
     """Amendment 13's engagement predicate: the arm ran the delta body its tag names, by its own record, and the padded path -- the only
     one the switch touches -- served the delta. Empty string = engaged."""
@@ -717,7 +751,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             nb = (r.get("axolotl_bnb4bit_modules") or {}).get("n_bnb4bit_unwrapped")
             if nb is None or nb < L:
                 why.append(f"quantize_moe_experts set but bnb-parametrized experts modules (innermost) {nb} < {L}")
-    if fam in (SYNC_FAM, PROF945_FAM, LEAN_FAM, TILE_FAM) and fw == "e4b":   # amendments 10 / 12 / 13 / 14: the arm ran the sync path its tag names (13, 14: the new one)
+    if fam in (SYNC_FAM, PROF945_FAM, LEAN_FAM, TILE_FAM, RMS_FAM) and fw == "e4b":   # amendments 10 / 12-15: the arm ran the sync path its tag names (13-15: the new one)
         w = sync_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
@@ -727,6 +761,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == TILE_FAM and fw == "e4b":                 # amendment 14: ... and the prefill M-tile rule its tag names, on the trimmed delta
         w = tile_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == RMS_FAM and fw == "e4b":                  # amendment 15: ... and the RMSNorm path its tag names, on the trimmed delta
+        w = rms_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -1297,6 +1335,41 @@ def score_tileab(F):
                     f"s/step tilemax {O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), tilecost {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
                     f"(within {100 * N['stability']:.1f}%); held-out at N tilemax {f(O.get('heldout'), 4)} / tilecost {f(N.get('heldout'), 4)}; "
                     f"tile heights launched (process) tilemax {json.dumps(bms['tilemax'], sort_keys=True)} tilecost {json.dumps(bms['tilecost'], sort_keys=True)}"))
+    return out
+
+
+def score_rmsab(F):
+    """TC1-PREREG amendment 15 (#945), on the qwen3rmsab box: P24 (shipped) and P25 (matched) -- e4b's fused training RMSNorm steps at
+    rms1 / rms0 within RMS_BANDS[pid], the median over two VALID draws a side with each side's draws within 5 %; P26 -- on each arm the
+    two sides' mean held-out at N agree within RMS_QUALITY_MAX. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED."""
+    R = F.get(RMS_FAM)
+    if not R:
+        return []
+    out, qual = [], []
+    for pid, name, t in RMS_PAIRS:
+        O, N = R["draws"].get(("e4b", f"{t}_rms0"), {}), R["draws"].get(("e4b", f"{t}_rms1"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("rms0", O), ("rms1", N)))
+            out.append((pid, RMS_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            qual.append((name, None, why))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        lo, hi = RMS_BANDS[pid]
+        h0 = [x["r"].get("eval_loss_final") for x in R["rows"] if x["fw"] == "e4b" and x["tag"] in (f"{t}_rms0", f"{t}_rms0_d2")]
+        h1 = [x["r"].get("eval_loss_final") for x in R["rows"] if x["fw"] == "e4b" and x["tag"] in (f"{t}_rms1", f"{t}_rms1_d2")]
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        qual.append((name, dq, f"held-out at N rms0 {[round(v, 4) for v in h0]} rms1 {[round(v, 4) for v in h1]}"))
+        out.append((pid, RMS_FAM, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+                    f"{name}: rms1 / rms0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; "
+                    f"s/step rms0 {O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), rms1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
+                    f"(within {100 * N['stability']:.1f}%); {'flip-eligible on speed' if ratio_ <= RMS_FLIP_AT_OR_BELOW else 'no flip on speed'}"))
+    if any(d is None for _, d, _ in qual):
+        out.append(("P26", RMS_FAM, "UNTESTED", "; ".join(f"{n}: {e}" for n, d, e in qual if d is None)))
+    else:
+        held = all(abs(d) <= RMS_QUALITY_MAX for _, d, _ in qual)
+        out.append(("P26", RMS_FAM, "HELD" if held else "FALSIFIED",
+                    "; ".join(f"{n}: mean held-out rms1 - rms0 {d:+.4f} (|.| <= {RMS_QUALITY_MAX}); {e}" for n, d, e in qual)))
     return out
 
 
@@ -2477,6 +2550,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_tileab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if RMS_FAM in F:
+        out += ["\n## Predictions P24 / P25 / P26 (TC1-PREREG amendment 15, #945: e4b's fused training RMSNorm vs the composite, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_rmsab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -2713,6 +2791,27 @@ def _tile_set(ship=((5.00, 5.05), (4.60, 4.62)), match=((5.30, 5.33), (5.00, 5.0
                                                     "prefill_bm_launches": bm})
     for r in R.values():
         r["fam"] = TILE_FAM
+    return R
+
+
+def _rms_set(ship=((5.00, 5.05), (4.60, 4.62)), match=((5.30, 5.33), (5.00, 5.02)), held_shift=0.0, patched=192, calls=1536):
+    """Amendment 15: e4b against itself on the trimmed delta and the post-#945 sync path -- each pair as (rms0 draws, rms1 draws);
+    `held_shift` moves the rms1 side's held-out; `patched` / `calls` = the rms1 side's fused-RMSNorm record."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for side, ss in (("rms0", old), ("rms1", new)):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                on = side == "rms1"
+                R[("e4b", tag)] = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if on else 0.0), matched=matched,
+                                           sync_ab={"e4b_grouping": "default", "gnf4_pinned_ring": "1", "e4b_has_group_by_expert": True,
+                                                    "gnf4_has_ring": True, "ring_staged": 9216, "ring_waits": 0},
+                                           lean_ab={"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                                                    "lora_path_calls": {"loop": 0, "padded": 9216, "grouped_mm": 0}},
+                                           rms_ab={"requested_env": "1" if on else "0", "e4b_has_fused_rmsnorm": True,
+                                                   "patched": patched if on else 0, "calls": calls if on else 0})
+    for r in R.values():
+        r["fam"] = RMS_FAM
     return R
 
 
@@ -3729,6 +3828,23 @@ def selftest():
     assert reduce_family(TILE_FAM, _tile_set(lean="0"), {}, 20)["verdicts"][("e4b", "fused_attn4_m_tilemax")] == "VOID"
     text = render(TF, "x")
     assert "## Predictions P22 / P23" in text and "| P22 | qwen3tileab | **HELD** |" in text and "| P23 | qwen3tileab | **HELD** |" in text
+    cases += 1
+    # 60. amendment 15 (#945): the RMSNorm composite vs e4b's fused training kernel -- every arm VALID when it ran the path its tag names,
+    #     P24 / P25 HELD inside their bands and P26 HELD on matching held-out, P26 FALSIFIED on a 0.02 held-out shift, an rms1 arm that
+    #     patched nothing VOID (P24-P26 UNTESTED)
+    def pr(R):
+        return {p: v for p, _, v, _ in score_rmsab({RMS_FAM: reduce_family(RMS_FAM, R, {}, 20)})}
+    RF = {RMS_FAM: reduce_family(RMS_FAM, _rms_set(), {}, 20)}
+    assert [(x["fw"], x["tag"]) for x in RF[RMS_FAM]["rows"]] == EXPECTED[RMS_FAM]
+    assert all(x["verdict"] == "VALID" for x in RF[RMS_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RF[RMS_FAM]["rows"]]
+    assert pr(_rms_set()) == {"P24": "HELD", "P25": "HELD", "P26": "HELD"}
+    assert pr(_rms_set(held_shift=0.02)) == {"P24": "HELD", "P25": "HELD", "P26": "FALSIFIED"}
+    assert pr(_rms_set(ship=((5.00, 5.05), (4.99, 5.02)))) == {"P24": "FALSIFIED", "P25": "HELD", "P26": "HELD"}
+    RR = reduce_family(RMS_FAM, _rms_set(patched=0), {}, 20)
+    assert RR["verdicts"][("e4b", "fused_attn4_shipped_rms1")] == "VOID" and "patched > 0" in next(x["why"] for x in RR["rows"] if x["tag"] == "fused_attn4_shipped_rms1")
+    assert pr(_rms_set(patched=0)) == {"P24": "UNTESTED", "P25": "UNTESTED", "P26": "UNTESTED"}
+    text = render(RF, "x")
+    assert "## Predictions P24 / P25 / P26" in text and "| P26 | qwen3rmsab | **HELD** |" in text
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 

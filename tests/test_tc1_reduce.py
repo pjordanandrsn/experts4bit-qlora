@@ -351,6 +351,16 @@ def test_amendment_14_registers_the_tile_rule_token():
     assert R.tile_ab_why("fused_attn4_m_tilemax", {}).startswith("no tile_ab record")
 
 
+def test_amendment_15_registers_the_fused_rmsnorm_token():
+    R = _mod()
+    assert R.RMS_FAM == "qwen3rmsab" and R.RMS_FAM in R.FAMS and R.N_LAYERS[R.RMS_FAM] == 48
+    assert R.RMS_BANDS == {"P24": (0.85, 0.97), "P25": (0.88, 0.98)} and R.RMS_QUALITY_MAX == 0.01 and R.RMS_FLIP_AT_OR_BELOW == 0.99
+    assert R.anchor_of(R.RMS_FAM) == ("e4b", "fused_attn4_m_rms0") and "fused_attn4_m_rms1_d2" in R.MATCHED
+    F = {R.RMS_FAM: R.reduce_family(R.RMS_FAM, R._rms_set(), {}, 20)}
+    assert [(p, v) for p, _, v, _ in R.score_rmsab(F)] == [("P24", "HELD"), ("P25", "HELD"), ("P26", "HELD")]
+    assert R.rms_ab_why("fused_attn4_m_rms0", {}).startswith("no rms_ab record")
+
+
 def test_amendment_12_registers_the_profile_token():
     R = _mod()
     assert R.PROF945_FAM == "qwen3prof945" and R.PROF945_FAM in R.FAMS and R.EXPECTED[R.PROF945_FAM] == list(R.PROF945_ARMS)
