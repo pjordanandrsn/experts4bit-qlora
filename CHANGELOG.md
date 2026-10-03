@@ -24,6 +24,21 @@
     removed, and a top-left causal bias.
 
 
+### Fix: `serve_paged` sizes a Gemma-4 KV pool again (a 0.41.0 regression from #897)
+
+- **The bug.** `serve_paged._kv_geometry` read `num_key_value_heads` before looking for a composite config's
+  `text_config` (#897, for Qwen3.5 / Qwen3.6 MoE). On Gemma-4's per-layer text config, which is the config of the model
+  the streaming loader builds, that read raises transformers' `AmbiguousGlobalPerLayerAttributeError`. That error is a
+  `RuntimeError`, so `getattr`'s default did not catch it, and `build_engine` died before reaching the per-layer branch.
+  Found while building lane P107 (#359).
+- **The fix.** `text_config` is read first. The per-layer branch is unchanged.
+- **Tests** (`tests/test_linear_state.py`), using transformers' own Gemma-4 configs:
+  - a tiny per-layer text config, which with the fix reverted fails with exactly that error;
+  - a composite config wrapping it.
+
+  The existing heterogeneous-config test covered the harness's copy (`bench/hybrid-g9/step_decomp.py`) only.
+- **Scope.** CPU-tested. Gemma-4 under `serve_paged` has not been read on a GPU since 0.41.0.
+
 ### LoRA: the delta's scaling multiply is skipped at exactly 1 (exact; fewer launches at alpha == r)
 
 - **What.** `LoRALinear.forward` (the attention adapters), `ExpertsLoRA._lora` (the reference expert path) and the batched engine's
