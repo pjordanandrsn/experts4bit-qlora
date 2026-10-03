@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+### Lane SC1 amendment A10 (#846): box B's full run exposed four instrument defects and an unsupported comparator; box C's stall gets bounded stops (bench + tests)
+
+- **llama.cpp.** `llamacpp_box.sh` starts llama-server with `-lv 4`. At the pin, the offload and `flash_attn` lines the
+  engagement checks read are library INFO messages, logged only at verbosity 4, so every start was refused.
+- **LMDeploy.** LMDeploy 0.18.0 TurboMind W4A16 is UNSUPPORTED on sm_120: its SM80 GEMM fallback compiles to empty kernels
+  there. Box B records P5b's stated alternative instead of installing it.
+- **ExLlamaV3.** Both drivers import `exllamav3.version`; the quality scorer died on that read after scoring.
+- **Reducer.** `sc1_reduce.py` checks the scheduler census in its own units: the pre-fusion lever count is 192, and the
+  `Int4Linear` count after q/k/v fusion is 192 - 2 x `fuse_qkv_n`. The self-test fixture now carries the real shape.
+- **Bounded stops.** The SGLang and llama.cpp stops never `wait` without a bound; a process stuck in the driver ignores
+  SIGKILL. SGLang transitions write summary lines before they start.
+- **Box B's proof** starts llama-server on the lane's Q4_K_M through the registered checks.
+- **Incremental pulls.** `sc1_drive.sh` pulls the box's results every 20 min during the run, at low priority and
+  bounded. A failed final fetch keeps the last pull, labelled `PARTIAL_PULL_AT`. Box C's draw was lost with its unreachable box.
+- **Scheduler decode reading.** `sc1_e4b_sched.py` records per-request `Request.ttft` and reads decode from the slope of
+  decode-only time, each rep's wall minus its own prefill. The registered wall slope stays recorded beside it. On box B, e4b's
+  2.1 s prefill jitter had made the wall slope UNSTABLE.
+- **Tests.** `tests/test_sc1_a10.py` (13), four reducer self-test cases, four scheduler self-test cases, and the amended proof-needs test. Pin regenerated;
+  `SC1-PREREG.md` A10.
 
 ### P98 registered (#564): hybrid decode under CUDA graphs through the serving stack -- Qwen3.6-35B-A3B's bucketed graph replays against its padded eager step, and the first hybrid decode speed (bench and tests only)
 

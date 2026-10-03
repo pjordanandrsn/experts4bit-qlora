@@ -53,6 +53,12 @@ GGUF_Q4KM=Qwen3-30B-A3B-Q4_K_M.gguf; GGUF_IQ4XS=Qwen3-30B-A3B-IQ4_XS.gguf
 EXL3_MID=turboderp/Qwen3-30B-A3B-exl3; EXL3_REV=0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef           # branch 4.0bpw (head_bits 6)
 GR=ibm-granite/granite-3.1-3b-a800m-instruct; GR_REV=a02780686e08a03fe0d2679a293b5c74a90efa89       # P94's pin (the proof's model)
 LLAMACPP_COMMIT=552f18f912a32ea86edf82e2b76431cb7131538d                                            # b11327
+# A10: LMDeploy 0.18.0 TurboMind W4A16 cannot run on sm_120 -- P5b's stated alternative, UNSUPPORTED. The host dispatch
+# runs the SM80 GEMM kernels on an sm_120 device (src/turbomind/kernels/gemm/arch.h:53), but each kernel body is compiled
+# only where Kernel::Arch::is_compatible(__CUDA_ARCH__) holds (gemm_universal.h:174-178) and Sm80 is Arch<800, 900>
+# (arch.h:25): at 1200 every 4-bit GEMM is an empty kernel. sc1b-5090-1: all 11 LMDeploy runs aborted (rc 134) on their
+# first real request, 0.55-0.62 s in whatever the prompt length (512 to 4096 tokens); vLLM ran the same checkpoint. Box B no longer installs it.
+LMD_UNSUPPORTED="LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)"
 GPU_CLASS=${SC1_GPU_CLASS:-5090}; MIN_DISK_GB=${SC1_MIN_DISK_GB:-320}; MIN_DRIVER=${SC1_MIN_DRIVER:-580}; CPU_VENDOR=${SC1_CPU_VENDOR:-AuthenticAMD}
 NSEQ=${SC1_CALIB_NSEQ:-128}; REHEARSAL=${SC1_REHEARSAL:-0}; QUIESCE_S=${SC1_QUIESCE_S:-900}; PROVE=${SC1_PROVE:-0}
 MIN_RAM_GB=98                                                                                       # the bf16 oracle spills to host RAM (box B); recorded, the oracle is host-limited below it
@@ -216,7 +222,7 @@ install_lmdeploy(){ [ -s $W/lmdeploy/install.sh ] || { unsupported lmdeploy "dri
   else unsupported lmdeploy "install.sh rc=$rc" logs/install_lmdeploy.log; fi; }
 case "$BOX" in
   A) install_vllm ;;
-  B) install_vllm; install_llamacpp; install_exl3 cu128; install_lmdeploy ;;
+  B) install_vllm; install_llamacpp; install_exl3 cu128; unsupported lmdeploy "$LMD_UNSUPPORTED" ;;
   C) install_vllm; install_exl3 cu132; [ "$PROVE" = 1 ] && install_sglang ;;   # the real lane installs SGLang AFTER the anchors (v3's order)
 esac
 # ---- environments (P88, byte for byte) + SC1's explicit route knobs (v3 "Fixture": never inherited)
@@ -379,13 +385,22 @@ vllm_nll(){ local MODE=$1 SRC=$2 KV=${3:-} S; S=nll_vllm${3:+_fp8kv}_${MODE}_$SR
   [ -s $W/$S.json ] || stub $W/$S.json vllm "nll_$MODE" 1 "$(status_of_rc $rc load_fault)" "rc=$rc" logs/run_$S.log
   line "$S mode=$MODE src=$SRC rc=$rc $(grep -aE 'mean_nll|ppl|VOID|Error' logs/run_$S.log | tail -1 | cut -c1-200)"; return $rc; }
 # sglang_up MODE / sglang_down -- bench/sc1/sglang/server.sh (sourced by install_sglang); the first start in a fresh work dir is the Marlin MoE JIT
-SGL_MODE=""; SGL_LOG=""
+SGL_MODE=""; SGL_LOG=""; SGL_DEAD=""
+# A10: every server transition writes a summary line BEFORE it starts (the heartbeat shows only the last summary line, so a
+# stall inside a transition was unlocatable on sc1c-5090-1), and a stop that leaves a process stuck in the driver ends SGLang
+# on this box: later starts are refused at once rather than piled onto GPU memory a stuck process still holds.
 sglang_up(){ local MODE=$1; have sglang || return 1; SGL_LOG=$W/logs/sglang_server_$MODE.log; say "sglang server up (mode=$MODE)"
+  if [ -n "$SGL_DEAD" ]; then line "sglang server mode=$MODE NOT STARTED (a previous stop left pid $SGL_DEAD stuck)"; return 46; fi
+  line "sglang server mode=$MODE starting"
   sglang_server_start "$GPTQ_MID" "$GPTQ_REV" 30000 "$SGL_LOG" "$MODE" > logs/sglang_start_$MODE.log 2>&1; local rc=$?
   grep -a SGLANG_ENGAGEMENT logs/sglang_start_$MODE.log | tail -2 | cut -c1-300 | sed "s/^/    /"
   if [ $rc -ne 0 ]; then line "sglang server mode=$MODE FAILED rc=$rc $(tail -1 logs/sglang_start_$MODE.log | cut -c1-160)"; SGL_MODE=""; return $rc; fi
   SGL_MODE=$MODE; line "sglang server mode=$MODE up $(grep -a 'SGLANG_ENGAGEMENT {' logs/sglang_start_$MODE.log | tail -1 | cut -c1-200)"; }
-sglang_down(){ [ -n "$SGL_MODE" ] && sglang_server_stop; SGL_MODE=""; }
+sglang_down(){ [ -n "$SGL_MODE" ] || return 0
+  line "sglang server mode=$SGL_MODE stopping"; sglang_server_stop > logs/sglang_stop_$SGL_MODE.log 2>&1
+  if [ -n "${SGLANG_STOP_STUCK:-}" ]; then SGL_DEAD=$SGLANG_STOP_STUCK; line "sglang server mode=$SGL_MODE STOP STUCK pid $SGL_DEAD (later sglang starts refused)"
+  else line "sglang server mode=$SGL_MODE stopped"; fi
+  SGL_MODE=""; }
 # sglang_arm TAG ARM B [EXTRA ARGS...] -- sc1_sglang_arm.py against the running server; receipt sglang_<TAG>.json (ttft_* bare)
 sglang_arm(){ local TAG=$1 ARM=$2 B=$3; shift 3; local S; S=$(stem_of sglang "$TAG")
   [ -n "$SGL_MODE" ] || { stub $W/$S.json sglang "$ARM" "$B" "$(have sglang && echo harness_error || echo unsupported)" "no sglang server (install or start failed)" $W/logs/install_sglang.log; line "$S SKIPPED no server"; return 0; }
@@ -452,15 +467,15 @@ exl3_nll(){ local MODE=$1 SRC=$2 S=nll_exl3_$1_$2
   line "$S mode=$MODE src=$SRC rc=$rc $(grep -aE 'mean_nll|ppl|REFUSED|Error' logs/run_$S.log | tail -1 | cut -c1-200)"; return $rc; }
 # lmdeploy_arm TAG B [--ttft] / lmdeploy_nll MODE SRC -- bench/sc1/lmdeploy (TurboMind W4A16 on the GPTQ checkpoint); receipts lmdeploy_<TAG>.json / nll_lmdeploy_<mode>_<src>.json
 lmdeploy_arm(){ local TAG=$1 B=$2; shift 2; local S PROMPTS=$W/prompts_b$B.json; S=$(stem_of lmdeploy "$TAG"); case " $* " in *" --ttft "*) PROMPTS=$LMD_TTFT_PROMPTS;; esac
-  have lmdeploy && [ -n "$GPTQ_DIR" ] || { stub $W/$S.json lmdeploy-turbomind "$TAG" "$B" unsupported "lmdeploy not installed or GPTQ checkpoint not fetched" $W/logs/install_lmdeploy.log; line "$S SKIPPED unsupported"; return 0; }
+  have lmdeploy && [ -n "$GPTQ_DIR" ] || { stub $W/$S.json lmdeploy-turbomind "$TAG" "$B" unsupported "${LMD_UNSUPPORTED:-lmdeploy not installed or GPTQ checkpoint not fetched}" $W/logs/install_lmdeploy.log; line "$S SKIPPED unsupported"; return 0; }
   local AL; AL=$(arm_alarm 1800); say "arm $S (B=$B $* alarm=$AL)"; sampler_start $S
   env SC1_ARM=$TAG SC1_BATCH=$B SC1_PROMPTS=$PROMPTS SC1_MODEL=$GPTQ_MID SC1_REV=$GPTQ_REV SC1_MODEL_DIR=$GPTQ_DIR SC1_OUT=$W/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID \
     perl -e "alarm $AL; exec @ARGV" $W/venv-lmdeploy/bin/python $W/lmdeploy/sc1_lmdeploy_arm.py "$@" > logs/run_$S.log 2>&1
   local rc=$?; sampler_stop $S
   [ -s $W/$S.json ] || stub $W/$S.json lmdeploy-turbomind "$TAG" "$B" "$(status_of_rc $rc)" "rc=$rc" logs/run_$S.log
-  line "$S B=$B rc=$rc $(grep -a 'SC1LMDEPLOY' logs/run_$S.log | tail -1 | cut -c1-300)"; return $rc; }
+  line "$S B=$B rc=$rc $(grep -a 'SC1LMD ' logs/run_$S.log | tail -1 | cut -c1-300)"; return $rc; }
 lmdeploy_nll(){ local MODE=$1 SRC=$2 S=nll_lmdeploy_$1_$2
-  have lmdeploy && [ -n "$GPTQ_DIR" ] || { stub $W/$S.json lmdeploy-turbomind "nll_$MODE" 1 unsupported "lmdeploy not installed"; line "$S SKIPPED"; return 0; }
+  have lmdeploy && [ -n "$GPTQ_DIR" ] || { stub $W/$S.json lmdeploy-turbomind "nll_$MODE" 1 unsupported "${LMD_UNSUPPORTED:-lmdeploy not installed}"; line "$S SKIPPED"; return 0; }
   local AL; AL=$(arm_alarm 2400); say "arm $S (nll $MODE $SRC alarm=$AL)"; sampler_start $S
   env SC1_WINDOW=$W/k8_window_$SRC.json SC1_MODEL=$GPTQ_MID SC1_REV=$GPTQ_REV SC1_MODEL_DIR=$GPTQ_DIR SC1_OUT=$W/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID \
     perl -e "alarm $AL; exec @ARGV" $W/venv-lmdeploy/bin/python $W/lmdeploy/sc1_lmdeploy_nll.py --mode $MODE > logs/run_$S.log 2>&1
@@ -516,13 +531,25 @@ reduce(){ if [ -s $W/sc1_reduce.py ]; then say "reduce"; "$PY" $W/sc1_reduce.py 
 # ============================================================================ the PROVING RENTAL (SC1_PROVE=1): no bf16 Qwen3 fetch
 if [ "$PROVE" = 1 ]; then
   echo "PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite" | tee -a summary.txt
-  case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3 lmdeploy";; C) PROVE_NEEDS="vllm exl3 sglang";; esac   # = the install dispatch's sets
+  case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3";; C) PROVE_NEEDS="vllm exl3 sglang";; esac   # = the install dispatch's sets
   for E in $PROVE_NEEDS; do have $E || { say "PROVE: $E did not install -- NOT PROVED"; rec 23; }; done
   quiesce prove
   if fetch granite "$GR" "$GR_REV" 900 && bake granite "$GR" 1500; then
     GA=$W/work_granite/nf4.arena
     for B in 1 16; do if can_run 600 smoke_granite_b$B; then sched_smoke granite_b$B $B "$GR_ENV" 0 "$GR" "$GR_REV" "$GA"; rec $?; else say "PROVE: smoke_granite_b$B NOT RUN (deadline) -- a skipped smoke is not a proof (A2)"; rec 23; fi; done
   else rec 12; fi
+  if [ "$BOX" = B ]; then
+    # A10: box B's proof starts the comparator server sc1b-5090-1 could not start: the registered llama-server start and
+    # engagement checks on the lane's own Q4_K_M at np=1. Installs + tripwires alone (A2's proof) never started a server.
+    # A skipped (can_run) or failed fetch or start is NOT PROVED. LMDeploy is not installed on box B (LMD_UNSUPPORTED).
+    PB_STEPS=""
+    if can_run 900 prove_gguf_q4km && mkdir -p $W/gguf && LLAMACPP_PY=$PY perl -e "alarm $(arm_alarm 1800); exec @ARGV" \
+         bash -c ". $W/llamacpp/llamacpp_box.sh && llamacpp_fetch $GGUF_REPO $GGUF_Q4KM $W/gguf $GGUF_REV" > logs/fetch_gguf_prove.log 2>&1; then
+      if can_run 300 prove_llama_server && llamacpp_up $W/gguf/$GGUF_Q4KM 1; then
+        line "PROVE llama-server engaged: $(grep -a 'healthy on' logs/llamacpp_start_*np1.log | tail -1 | cut -c1-160)"; llamacpp_down; PB_STEPS="$PB_STEPS llama_server"
+      else say "PROVE: llama-server did not start or was refused -- NOT PROVED (A10)"; rec 23; fi
+    else say "PROVE: the Q4_K_M fetch did not run or failed -- NOT PROVED (A10)"; rec 23; fi
+  fi
   if [ "$BOX" = C ]; then
     if [ -z "${SC1_PROVE_SGLANG_MODEL:-}" ]; then say "PROVE: box C needs SC1_PROVE_SGLANG_MODEL=<repo@rev> -- NOT PROVED (A2)"; rec 23
     elif ! have sglang; then rec 23
@@ -534,7 +561,7 @@ if [ "$PROVE" = 1 ]; then
     fi
   fi
   [ "$rc_any" = 0 ] || { say "PROVE: NOT PROVED (rc_any=$rc_any)"; finish 23; }
-  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')" | tee -a summary.txt
+  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")" | tee -a summary.txt
   : > PROVED; finish 0
 fi
 # ============================================================================ the REAL lane: common Phase 0 pieces

@@ -66,6 +66,14 @@ def text_sha(ids, prompt_len: int = PROMPT_LEN, steps: int = STEPS) -> str:
     return hashlib.sha256(struct.pack(f"<{n}q", *[int(x) for x in ids[:n]])).hexdigest()
 
 
+def exl3_version():
+    """ExLlamaV3's version string. 1.5.3 keeps ``__version__`` in ``exllamav3/version.py`` and its package ``__init__`` does
+    not import that module, so ``exllamav3.version`` is unbound until imported. A3 fixed the install tripwire; A10 these
+    drivers (sc1b-5090-1: every NLL run died on this read AFTER scoring, and the arm receipts recorded ``None``)."""
+    import importlib
+    return importlib.import_module("exllamav3.version").__version__
+
+
 def load_window(path: str, prompt_len: int = PROMPT_LEN, steps: int = STEPS) -> dict:
     w = json.load(open(path))
     ids = [int(x) for x in w["ids"]]
@@ -155,8 +163,9 @@ def main(argv=None) -> int:
     model_id, rev = os.environ.get("SC1_MODEL", DEFAULT_MODEL), os.environ.get("SC1_REV", DEFAULT_REV)
     model_dir = resolve_model_dir(model_id, rev)
     import torch
-    import exllamav3
+    import exllamav3  # noqa: F401  (the package must import before its version module)
     from exllamav3 import Cache, CacheLayer_fp16, Config, Model
+    exl3_ver = exl3_version()   # read BEFORE the load: a failure here costs nothing (A10)
     t0 = time.perf_counter()
     config = Config.from_directory(model_dir)
     model = Model.from_config(config)
@@ -173,7 +182,7 @@ def main(argv=None) -> int:
         nll, dtype = score_decode(model, config, cache, win["ids"], L)
     wall = time.perf_counter() - t1
     rec = receipt(a.mode, nll, win["text_sha"], wall, {
-        "version": getattr(exllamav3, "__version__", None) or exllamav3.version.__version__, "torch": torch.__version__,
+        "version": exl3_ver, "torch": torch.__version__,
         "torch_cuda": torch.version.cuda, "logits_dtype": dtype, "load_s": round(load_s, 1), "model": model_id, "revision": rev,
         "model_dir": model_dir, "vocab_size_scored": int(config.vocab_size), "cache_tokens": L if cache else None,
         "capacity": {"cache_tokens": L if cache else None, "cache_tokens_source": cap_src if cache else "prefill: no cache (flash_attn_nc)",

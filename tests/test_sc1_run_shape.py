@@ -344,10 +344,10 @@ def test_the_proof_needs_every_comparator_the_box_installs_and_box_c_needs_the_j
     assert _run_prove_line(needs, f"{have}; PROVE_NEEDS='vllm'") == "0"
     assert _run_prove_line(needs, f"{have}; PROVE_NEEDS='vllm exl3'") == "23"
     block = _prove_block()
-    assert 'A) PROVE_NEEDS="vllm";;' in block and 'B) PROVE_NEEDS="vllm llamacpp exl3 lmdeploy";;' in block
+    assert 'A) PROVE_NEEDS="vllm";;' in block and 'B) PROVE_NEEDS="vllm llamacpp exl3";;' in block   # A10: no LMDeploy on box B
     assert 'C) PROVE_NEEDS="vllm exl3 sglang";;' in block
     # the install dispatch installs exactly those sets (box C's SGLang only in the proof)
-    assert "A) install_vllm ;;" in RUN and "B) install_vllm; install_llamacpp; install_exl3 cu128; install_lmdeploy ;;" in RUN
+    assert "A) install_vllm ;;" in RUN and 'B) install_vllm; install_llamacpp; install_exl3 cu128; unsupported lmdeploy "$LMD_UNSUPPORTED" ;;' in RUN
     assert 'C) install_vllm; install_exl3 cu132; [ "$PROVE" = 1 ] && install_sglang ;;' in RUN
     assert "can_run 900 prove_sglang_jit" in block and 'if [ -z "${SC1_PROVE_SGLANG_MODEL:-}" ]' in block
 

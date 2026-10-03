@@ -56,7 +56,7 @@ import time
 SHORT, LONG = 32, 128
 PROMPT_LEN = 512
 ENGINE = "e4b-sched"
-METHOD = "slope(32->128) through ContinuousScheduler.step(); min-of-3 (P20 estimator) and median-of-3 both recorded"
+METHOD = ("slope(32->128) through ContinuousScheduler.step() of DECODE-ONLY time (each rep's wall minus its last row's own Request.ttft: A10); min-of-3 (P20 estimator) and median-of-3 both recorded; the registered wall slope recorded beside it")
 ROUTE_ENV = ("E4B_INT4_GROUPED_SMALLM", "E4B_INT4_LEAN_GLUE", "E4B_NF4_GROUPED_SMALLM", "E4B_MXFP4_GROUPED_SMALLM")
 PAGED_ENV = ("E4B_PAGED_MODEL", "E4B_PAGED_REVISION", "E4B_PAGED_ARENA", "E4B_PAGED_CALIB", "E4B_PAGED_PLACEMENT",
              "E4B_PAGED_MAX_SEQS", "E4B_PAGED_MAX_TOKENS_PER_SEQ", "E4B_PAGED_CHUNK_TOKENS", "E4B_PAGED_MAX_PREFILL_TOKENS",
@@ -154,6 +154,31 @@ def slope(w_short, w_long, batch: int, short: int = SHORT, long_: int = LONG) ->
     return out
 
 
+def decode_only_slope(w_short, t_short, w_long, t_long, batch: int, short: int = SHORT, long_: int = LONG) -> dict:
+    """A10. The registered slope differences two walls that each carry the engine's prefill (about 2.1 s per 512-token chunk on
+    e4b's paged engine), so a few percent of prefill jitter became 10-25 % of a 0.45 s difference (sc1b-5090-1: B=1 draws
+    225.8 / 178.7 / 214.9 tok/s, UNSTABLE). Each rep's prefill is cancelled with its own clock instead: decode-only time = wall -
+    max over the rep's rows of Request.ttft (rows are added together at t0; ttft runs from arrival). The short/long slope then
+    differences decode steps only. Same arithmetic as ``slope`` otherwise; a rep without every row's ttft is no reading."""
+    def dec(ws, ts):
+        if len(ws) != len(ts) or any(t is None or not ts_ok(t) for t in ts):
+            return None
+        return [w - max(t) for w, t in zip(ws, ts)]
+
+    def ts_ok(t):
+        return isinstance(t, (list, tuple)) and len(t) == batch and all(isinstance(x, (int, float)) and x >= 0 for x in t)
+
+    ds, dl = dec(w_short, t_short), dec(w_long, t_long)
+    out = {"prefill_s_short": [round(max(t), 4) for t in t_short if ts_ok(t)],
+           "prefill_s_long": [round(max(t), 4) for t in t_long if ts_ok(t)]}
+    if ds is None or dl is None:
+        out.update(decode_only_note="per-request ttft missing on a rep: no decode-only reading", decode_only_status="void")
+        return out
+    s = slope(ds, dl, batch, short, long_)
+    out.update({f"decode_only_{k}": v for k, v in s.items() if k.startswith(("decode_", "wall", "walls", "status", "slope_note"))})
+    return out
+
+
 def _nonzero(v) -> bool:
     if isinstance(v, (list, tuple)):
         return any(int(x) > 0 for x in v)
@@ -227,6 +252,16 @@ def selftest() -> int:
     checks.append(s["decode_tok_s"] == round(16 * 96 / 1.0, 1) and s["decode_ms_per_step"] == round(1.0 / 96 * 1e3, 4))
     checks.append(s["decode_tok_s_median"] == round(16 * 96 / 1.0, 1) and s["end_to_end_tok_s_long"] == round(128 * 16 / 2.0, 1))
     checks.append(slope([1.0, 1.0, 1.0], [1.0, 1.0, 1.0], batch=1)["status"] == "void")
+    # A10: prefill jitter cancelled per rep. Decode is 4.4 ms/step throughout (31 / 127 steps after the first token); the short
+    # reps' prefills ran slow (2.2-2.3 s) and the long reps' fast (2.0-2.1 s). The wall slope reads ~431 tok/s; decode-only 227.3.
+    pre_s, pre_l = [2.2, 2.3, 2.25], [2.0, 2.1, 2.05]
+    ws = [p + 31 * 0.0044 for p in pre_s]
+    wl = [p + 127 * 0.0044 for p in pre_l]
+    d = decode_only_slope(ws, [[p] for p in pre_s], wl, [[p] for p in pre_l], batch=1)
+    checks.append(d["decode_only_decode_tok_s"] == round(96 / (96 * 0.0044), 1))
+    checks.append(slope(ws, wl, batch=1)["decode_tok_s"] > 400)
+    checks.append(decode_only_slope(ws, [[2.2], None, [2.25]], wl, [[p] for p in pre_l], batch=1)["decode_only_status"] == "void")
+    checks.append(decode_only_slope(ws, [[p, p] for p in pre_s], wl, [[p] for p in pre_l], batch=1)["decode_only_status"] == "void")
     import types as _t
     checks.append(harness_hook_loaded({"usercustomize": _t.SimpleNamespace(__file__="/root/sc1/hook/usercustomize.py")})
                   == "/root/sc1/hook/usercustomize.py")
@@ -333,7 +368,8 @@ def run_batch(parts, torch, rows, n_tokens: int, prompt_len=PROMPT_LEN):
         if bad:
             raise AssertionError(f"rows {bad[:8]} saw {[by_rid[r].prompt_len for r in bad[:8]]} prompt tokens, expected {prompt_len}")
     ordered = [by_rid[r] for r in rids]
-    return {"wall": wall, "steps": steps, "requests": ordered, "epoch": [t_epoch0, t_epoch1]}
+    return {"wall": wall, "steps": steps, "requests": ordered, "epoch": [t_epoch0, t_epoch1],
+            "ttft": [getattr(q, "ttft", None) for q in ordered]}
 
 
 def main(argv=None) -> int:
@@ -435,6 +471,7 @@ def main(argv=None) -> int:
         print("SC1SCHED_CENSUS " + json.dumps({"arm": arm, "batch": batch, "ok": ok, "failures": check["failures"],
                                                "smoke_error": rec.get("smoke_error"), "load_s": rec["load_s"],
                                                "census": {k: info.get(k) for k in ("moe_layers", "int4_expert_layers", "int4_attn_projections",
+                                                                                   "attn_int4_calib_projections", "attn_int4_rtn_projections",
                                                                                    "fuse_qkv_n", "fuse_t1_glue_n", "fuse_t1_glue_r2_n",
                                                                                    "fuse_router_epilogue_n", "graph_status")}}, default=str), flush=True)
         return 0 if ok else 1
@@ -479,24 +516,36 @@ def main(argv=None) -> int:
         print("SC1SCHED " + json.dumps({k: rec[k] for k in ("arm", "batch", "energy_tokens", "energy_wall_s", "energy_tok_s", "prompts_sha256")}), flush=True)
         return 0
 
-    walls, epochs, tokens = {}, {}, {}
+    walls, epochs, tokens, ttfts = {}, {}, {}, {}
     for n in (a.short, a.long_):
         run_batch(parts, torch, rows, n)                                                        # warm (untimed)
-        ws, es = [], []
+        ws, es, ts = [], [], []
         for _ in range(a.reps):
             r = run_batch(parts, torch, rows, n)
             ws.append(r["wall"])
             es.append(r["epoch"])
+            ts.append(r["ttft"])
             tokens[n] = {str(i): [int(t) for t in q.out] for i, q in enumerate(r["requests"])}
             rec["prompt_tokens_engine"] = [q.prompt_len for q in r["requests"]]
-        walls[n], epochs[n] = ws, es
+        walls[n], epochs[n], ttfts[n] = ws, es, ts
     s = slope(walls[a.short], walls[a.long_], batch, a.short, a.long_)
-    if s.get("status") == "void":
-        rec["status"] = "void"
-    rec.update(s)
+    rec.update({f"{k}_wall_slope" if k.startswith(("decode_", "status", "slope_note")) else k: v for k, v in s.items()})   # the registered estimator, kept
+    d = decode_only_slope(walls[a.short], ttfts[a.short], walls[a.long_], ttfts[a.long_], batch, a.short, a.long_)
+    rec.update(d, ttft_s_short=[[round(x, 4) for x in t] for t in ttfts[a.short] if t and None not in t],
+               ttft_s_long=[[round(x, 4) for x in t] for t in ttfts[a.long_] if t and None not in t])
+    if d.get("decode_only_status") == "void" or d.get("decode_only_decode_tok_s") is None:
+        # no per-request clock: the registered wall slope stays the reading (labelled)
+        rec.update({k: s.get(k) for k in ("decode_tok_s", "decode_ms_per_step", "decode_tok_s_median", "decode_ms_per_step_median")},
+                   estimator="wall slope (registered; no decode-only reading)")
+        if s.get("status") == "void":
+            rec["status"] = "void"
+    else:
+        rec.update(decode_tok_s=d["decode_only_decode_tok_s"], decode_ms_per_step=d["decode_only_decode_ms_per_step"],
+                   decode_tok_s_median=d["decode_only_decode_tok_s_median"], decode_ms_per_step_median=d["decode_only_decode_ms_per_step_median"],
+                   estimator="decode-only slope (A10): wall minus each rep's last-row Request.ttft")
     rec.update(short=a.short, long=a.long_, reps=a.reps, tokens=tokens[a.long_], tokens_short=tokens[a.short],
                timed_windows_epoch={"short": epochs[a.short], "long": epochs[a.long_]},
-               ttft_note="not measured in slope mode; the --ttft arm measures it on this engine")
+               ttft_note="per-request Request.ttft recorded to cancel each rep's prefill (A10); the --ttft arm is the TTFT reading")
     _finish()
     print("SC1SCHED " + json.dumps({k: rec.get(k) for k in ("arm", "batch", "decode_tok_s", "decode_ms_per_step", "decode_tok_s_median",
                                                             "end_to_end_tok_s_long", "status", "prompts_sha256")}), flush=True)

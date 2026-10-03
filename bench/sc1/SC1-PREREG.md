@@ -259,4 +259,85 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
     bf16 one.
   - **Boxes.** Box C re-proves at A9's merge and runs there. A9 touches only box C's SGLang wrappers, so boxes A and B keep the
     commits their proofs ran on (`32d424e`, `3db414e`).
-
+- **A10 (2026-10-02T21:20Z; receipts `sc1b-5090-1`, adertha-receipts `cabef5a`, and `sc1c-5090-1`, adertha-receipts `711a2d9`).** Box B's first full run at
+  A7's merge (`3db414e`) ran 1 h 54 min of its 5 h guard and ended rc 134. Its e4b window, vLLM, oracle and ExLlamaV3 B=1
+  rows read VALID. Every llama.cpp server, every LMDeploy arm and every ExLlamaV3 quality scoring failed. The e4b scheduler
+  arms read VOID on a reducer rule that measured the wrong quantity. Box B's proof (`sc1b-prove-10`) had installed and
+  tripwired every comparator, but never started a server or generated a token, so none of this was reachable from it.
+  1. **llama.cpp: every server refused.** `llamacpp_server_start` greps the log for `offloaded N/N layers to GPU` and
+     `flash_attn = enabled`. At the pin (552f18f) library INFO messages map to verbosity 4 (`common/log.cpp`
+     `common_log_get_verbosity`) and the default threshold is 3, so neither line was logged. The server log has 14 lines.
+     llama-server now runs with `-lv 4` (5 is debug output). The registered checks are unchanged.
+  2. **LMDeploy: UNSUPPORTED on sm_120, P5b's stated alternative.** All 11 LMDeploy runs aborted with rc 134 on their first
+     real request, 0.55–0.62 s in, whatever the prompt length (512 to 4096 tokens). The reported sites were `invokeMinLengthPenalty` (speed, TTFT
+     and energy) and an `output_processor.cc:333` copy (quality). Both are only where an earlier fault (CUDA error 700)
+     surfaced.
+     - The cause is in LMDeploy 0.18.0 (`110965c7`), read at the tag. TurboMind's host dispatch runs the SM80 GEMM kernels
+       on an sm_120 device (`src/turbomind/kernels/gemm/arch.h:53`).
+     - Each kernel body is compiled only where `Kernel::Arch::is_compatible(__CUDA_ARCH__)` holds
+       (`gemm_universal.h:174-178`), and `Sm80` is `Arch<800, 900>` (`arch.h:25`). At 1200 every 4-bit GEMM is an empty
+       kernel.
+     - Warm-up cannot see this: it runs layer 0 only, skips attention, uses synthetic routing and never checks results.
+     - vLLM ran the same checkpoint on the same card.
+     - No generation or engine setting can repair a no-op GEMM. Box B records UNSUPPORTED with this reason
+       (`LMD_UNSUPPORTED`) instead of installing LMDeploy, and every LMDeploy row is an UNSUPPORTED stub carrying it.
+     - The reducer already reads P5b as HOLD on its stated alternative.
+     - Not tried, and not registered: LMDeploy's PyTorch backend, or a source build that widens `Sm80`.
+  3. **ExLlamaV3 quality scorer.** Every `nll_exl3_*` run died with `AttributeError: module 'exllamav3' has no attribute
+     'version'`, after loading and scoring. A3 fixed this read only in the install tripwire. The speed arm read it through
+     `hasattr` and recorded `versions.exllamav3 = None`. Both drivers now import `exllamav3.version`. The scorer reads it
+     before the load, so a failure there costs nothing.
+  4. **Reducer: every engaged scheduler arm VOIDed.** The rule `census int4_attn_projections == 192` compared a
+     post-fusion count with a pre-fusion one. `serve_paged.build_engine` counts `Int4Linear` modules after `_apply_fusions`
+     merges q/k/v. A fully converted fused model therefore reads 192 - 2 × 48 = 96. Box B: 96, with
+     `attn_int4_rtn_projections` 192 and the log line "ATTNINT4 rtn: 192 projections". The rule now checks two counts, each
+     in its own units:
+     - the arm's lever (calibrated for `lic*`, rtn for `int4*`) converted 192 projections with the other lever at 0;
+     - the post-fusion count is 192 - 2 × `fuse_qkv_n`.
+     The self-test fixture had carried 192 for the post-fusion count, which is why the self-test passed on a shape the
+     engine never writes. It now carries the real shape, and four VOID cases are added. Box B's scheduler draws re-read
+     VALID or VOID on their other checks once re-reduced. No re-run is needed for this item.
+  5. **Box C's stall (`sc1c-5090-1`), hardening that does not wait for the cause.** After `sglang_gptq_matched_b1_r1`
+     (19:02Z) the summary never changed. The heartbeat read GPU idle with 25.6 GB resident and no disk movement for
+     6731 s, and from 20:55Z the box stopped answering. It never answered again. At the guard's deadline (22:21Z) the
+     fetch got nothing (`ssh: connect … Connection refused`, driver exit 22). The receipt is HARNESS_ERROR, $2.15,
+     teardown proven, and its `sc1/` directory is empty. So the stall's cause cannot be read from the box (item 8).
+     - The next step was the matched server's stop. `sglang_server_stop` ended in an unbounded `wait "$pid"`.
+     - A process stuck in the GPU driver sits in uninterruptible sleep, ignores SIGKILL, and makes that `wait` block forever.
+       llama.cpp's stop had the same `wait`.
+     - Both stops now poll for up to 60 s after SIGKILL, reap only an exited process, and report a stuck pid.
+     - Every SGLang transition writes a summary line before it starts, so the heartbeat can locate a stall.
+     - A stuck stop ends SGLang on the box: later starts are refused rather than piled onto memory the stuck process holds.
+     - The stall's actual cause is read from box C's receipt when it lands, and amended if it is something else.
+  6. **Box B's proof starts the server it could not start.** After the Granite smokes it fetches the lane's Q4_K_M and
+     starts llama-server at np=1 through the registered checks. A skipped (`can_run`) or failed fetch or start is NOT
+     PROVED. That adds 18.6 GB, about 4 min on box B's link, and the guard stays 1.0 h. Box B's proof no longer needs
+     LMDeploy (item 2). The ExLlamaV3 scorer is not in the proof: its GPU path ran on box B, which loaded and scored before
+     dying on the version read, and item 3's fix is covered on CPU.
+  7. **The scheduler arms' decode reading cancels each rep's own prefill.** Re-reduced with item 4's rule, box B's
+     scheduler draws are engaged and read UNSTABLE: B=1 225.8 / 178.7 / 214.9 tok/s (26.4 %), B=16 1676.9 / 1612.7 /
+     1580.6 (6.1 %). The window arms beside them were steady to 0.1 %.
+     - The registered slope (32 → 128 tokens) differences two walls that each carry e4b's paged prefill, about 2.1 s per
+       512-token chunk. Box B's per-draw TTFT medians moved 2.05–2.18 s, with p99 up to 2.39 s.
+     - So prefill jitter of a few percent became 10–25 % of the 0.45 s difference the decode rate is read from. vLLM's
+       prefill is 0.04 s, so its slope is not exposed.
+     - The scheduler driver now records every request's `Request.ttft`, measured from arrival; rows are added together at
+       the start of the rep. Each rep's decode-only time is its wall minus the latest row's TTFT, and the slope is taken over
+       those. The quantity is the same, decode cost per step at the registered batch, and the estimator cancels the prefill
+       per rep.
+     - The registered wall slope is recorded beside it (`*_wall_slope`). A rep without every row's TTFT falls back to the
+       wall slope, labelled.
+     - Box B's scheduler draws cannot be re-read this way, because their receipts carry only TTFT p50/p99. Box A's running
+       draw (`32d424e`) uses the registered estimator, and its reading is labelled as such.
+  8. **The driver pulls the box's results during the run.** `sc1_drive.sh` fetched the box's `sc1/` directory once, after
+     TP_DONE or at the deadline. Box C's box was unreachable by then, and the whole draw was lost, including the logs that
+     would name item 5's cause. TC2's box B was lost the same way.
+     - The driver now pulls every `SC1_PULL_EVERY_S` (1200 s), while the heartbeat answers, into `sc1.partial/`. It uses the
+       final fetch's keep/leave rules. The remote rsync runs at nice 19 with idle I/O, so a pull during a timed arm does
+       not perturb it. Both pulls are bounded by an ssh ConnectTimeout and `rsync --timeout`.
+     - If the final fetch fails, the last pull becomes the receipt's `sc1/`, labelled `PARTIAL_PULL_AT`, and the driver
+       still exits 22.
+     - The controller runs `/bin/bash` 3.2 under `set -u`, so the optional rsync argument uses the 3.2-safe expansion. The
+       test runs the driver's own `pull_box` under the system bash.
+  CPU tests: `tests/test_sc1_a10.py` (13, with the scheduler driver's own self-test now 25 cases; every test of a fix fails on the registered drivers, and the 48/49-offload control passes on both), four new reducer self-test cases on the corrected fixture (which VOIDs under the registered rule), and the amended proof-needs test. Box B re-proves at A10's merge and re-runs there (`sc1b-5090-2`). Box A (`sc1a-5090-2`, at
+  `32d424e`, launched before A10) runs none of items 1–3, 5, 6 or 8 (its controller started on the registered driver); item 4 applies when its receipts are reduced; its scheduler reading is the registered wall slope, labelled (item 7). Box C re-proves at A10's merge and re-runs there (`sc1c-5090-2`): its first draw returned nothing.

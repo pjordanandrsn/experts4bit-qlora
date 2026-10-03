@@ -178,11 +178,21 @@ sglang_server_stop(){
   [ -n "$pid" ] || return 0
   _sgl_say "stop pid=$pid pgid=$pgid"
   [ -n "$pgid" ] && kill -TERM -- "-$pgid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
-  local i; for i in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+  local i; for i in $(seq 1 "${SGLANG_STOP_TERM_S:-30}"); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
   if kill -0 "$pid" 2>/dev/null; then _sgl_say "SIGKILL"; [ -n "$pgid" ] && kill -KILL -- "-$pgid" 2>/dev/null; kill -KILL "$pid" 2>/dev/null; fi
   # the scheduler / detokenizer children are spawned processes; sweep anything still bound to this launch's port
   [ -n "$port" ] && pkill -KILL -f "sglang.launch_server.*--port $port( |$)" 2>/dev/null
-  wait "$pid" 2>/dev/null
+  # A10: never an unbounded `wait`. A process stuck in the GPU driver sits in uninterruptible sleep and ignores SIGKILL;
+  # `wait` on it never returns (sc1c-5090-1 stalled with the server's memory resident and the GPU idle). Poll, reap
+  # only a process that has exited, and report a stuck one through SGLANG_STOP_STUCK so the lane skips later starts.
+  SGLANG_STOP_STUCK=""
+  for i in $(seq 1 "${SGLANG_STOP_WAIT_S:-60}"); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+  if kill -0 "$pid" 2>/dev/null; then
+    SGLANG_STOP_STUCK=$pid
+    _sgl_say "STOP STUCK: pid $pid still present ${SGLANG_STOP_WAIT_S:-60} s after SIGKILL (uninterruptible?) -- not waiting on it"
+  else
+    wait "$pid" 2>/dev/null
+  fi
   for i in $(seq 1 30); do curl -s -o /dev/null -m 2 "http://127.0.0.1:$port/health" 2>/dev/null || break; sleep 1; done
   SGLANG_SERVER_PID=""; SGLANG_SERVER_PGID=""; SGLANG_SERVER_PORT=""
   return 0

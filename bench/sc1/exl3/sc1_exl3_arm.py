@@ -168,6 +168,14 @@ RECEIPT_KEYS_SLOPE = ("engine", "arm", "mode", "model", "revision", "batch", "pr
                       "vram_peak_bytes", "capacity")
 
 
+def exl3_version():
+    """ExLlamaV3's version string. 1.5.3 keeps ``__version__`` in ``exllamav3/version.py`` and its package ``__init__`` does
+    not import that module, so ``exllamav3.version`` is unbound until imported. A3 fixed the install tripwire; A10 these
+    drivers (sc1b-5090-1: every NLL run died on this read AFTER scoring, and the arm receipts recorded ``None``)."""
+    import importlib
+    return importlib.import_module("exllamav3.version").__version__
+
+
 # ----------------------------------------------------------------------------------------------------------------
 # the real engine adapter (imports exllamav3 lazily; nothing below runs on a box without the engine)
 # ----------------------------------------------------------------------------------------------------------------
@@ -367,7 +375,7 @@ class Exl3Engine:
 
     def versions(self) -> dict:
         torch = self.torch
-        v = {"exllamav3": self.exl.version.__version__ if hasattr(self.exl, "version") else getattr(self.exl, "__version__", None),
+        v = {"exllamav3": exl3_version(),
              "torch": torch.__version__, "torch_cuda": torch.version.cuda, "python": sys.version.split()[0],
              "device": torch.cuda.get_device_name(0), "capability": list(torch.cuda.get_device_capability(0)),
              "torch_arch_list": torch.cuda.get_arch_list()}
