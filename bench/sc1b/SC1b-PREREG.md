@@ -260,3 +260,22 @@ stops. If item 3, 4, 5 or 6 fails, its path is amended before the run.
 ## Out of scope
 
 Coverage families (their own lane), gpt-oss (SC1g), prefill/TTFT (#916's P100/P102), request-level serving (SC2).
+
+## Amendments
+
+- **A1 (before any box D data; the proof `sc1d-prove-1` was renting, box D not launched): the prediction evaluator.**
+  Q1–Q5 had no code (round 2 M4 named it for Q1–Q4). `sc1b_read.py` decides each one from box D's own
+  `sc1b_arm_*.json` / `sc1b_gap_*.json`, and re-reduces nothing. Three readings of the registered text are fixed here,
+  before any data exists:
+  1. **"The largest term of ΔP"** (Q1, Q5) is the term with the largest contribution in ΔP's direction:
+     argmax_k sign(ΔP) × Δ_k over the nine classes, I_in and idle_out. The remainder O is not a term.
+     - An opposite-signed term is not "of ΔP", however large.
+     - If idle_out is not nameable (G-inflate) and contributes more than I_in, the prediction is UNREAD: the winner
+       cannot be decided.
+  2. **Q2's kernel count** is the node-mode median `kernels_in_graph` per step. Q2 is read even when the class map is
+     incomplete, but not when either arm's node capture is VOID or carries NSYS_DIAGNOSTIC_ERRORS.
+  3. **Q4** carries no noise clause, as registered: same sign as ΔP and |Δidle_out| ≥ 0.5 |ΔP|, with idle_out
+     nameable. The noise is printed beside it.
+
+  Each prediction reads HOLDS, REFUTED or UNREAD. A prediction on an unread gap is UNREAD. The read's tables
+  (`RESULTS-sc1b.md`) come from the same script. Box D's code is unchanged: A1 runs at read time only.
