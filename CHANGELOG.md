@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## 0.41.1 — 2026-10-03 — Gemma-4 serves through `serve_paged` again (a 0.41.0 regression), the paged attention's unbound fallback keeps sliding windows, and fused training makes fewer host syncs and launches
+
+**0.41.1.** Two fixes, three training-path reductions that leave the arithmetic unchanged, and one opt-in serving knob.
+No default changes the arithmetic of a path that was already correct.
+
+- **Fix: `serve_paged` sizes a Gemma-4 KV pool again** (#964).
+  - 0.41.0's composite-config check (#897) read `num_key_value_heads` first. On Gemma-4's per-layer text config that
+    raises transformers' `AmbiguousGlobalPerLayerAttributeError`, a `RuntimeError`, so `build_engine` failed for the
+    family.
+  - Now `text_config` is read first.
+  - CPU-tested. Gemma-4 under `serve_paged` has not been read on a GPU since 0.41.0.
+- **Fix: the paged attention's unbound fallback keeps sliding windows and aligns a cached chunk to its last key**
+  (#966).
+  - transformers builds no mask for an attention implementation with no mask function. A registered model run with no
+    paged context therefore dropped Gemma-4's and gpt-oss's windows, and took torch's top-left `is_causal` in a cached
+    chunked prefill.
+  - The fallback now builds the mask itself. The bound serving path builds its own masks and is untouched.
+- **Fused training (the TC campaign, #945).** Each change is exact.
+  - **Grouping reads the per-expert counts back once, not five times** (#946).
+  - **The rotary embedding trains through one Triton launch each way** (on by default; `E4B_FUSED_ROPE=0` turns it
+    off). It is bit-identical to the composite: `tests/test_rope_train.py` asserts `torch.equal`.
+  - **LoRA skips the scaling multiply at exactly 1** (#959).
+  - **What PyPI users get.** TC1's reading of 1 host sync per fused MoE layer pass instead of 13 (13–15 % faster on a
+    5090) also needs grouped-nf4-gemm's pinned index ring (grouped-nf4-gemm#438, its default since #439). That is on
+    grouped-nf4-gemm's main and not yet in a release, so with grouped-nf4-gemm 0.34.1 from PyPI this release delivers
+    #946's share only.
+- **`E4B_PAGED_PREFILL_ATTN`** (#960) is a route knob for paged prefill attention: `math`, the default and unchanged,
+  or `flash`. Lane P107 (#960) is registered to read it.
+- **Docs.**
+  - `docs/SERVING.md` gives the Gated DeltaNet kernels' measured quality against the torch path (P106: KL 5.7e-3 /
+    4.9e-3 nats, d_nll within ±0.001) and their prefill TTFT (1.10–1.12×).
+  - `docs/ARCHITECTURE_SUPPORT.md` names the modules that stay bf16 on Qwen3.6 / Qwen3-Next (#899).
+
 ### TC1 amendment 11 read (#945): the steady-state comparison after the sync fix is UNTESTED -- an unstable host
 
 - **What was asked.** On one RTX 5090 (`tc1-5090-40`, Xeon E5-2696 v4, $1.50), amendment 8's 200-step comparison of e4b as shipped
