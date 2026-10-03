@@ -33,6 +33,25 @@
 - `bench/p107/RESULTS-p107.md`; receipts under `bench/p107/receipts/p107-5090-3/`. Lane total $0.1634; two $0
   launcher refusals came first (my exclusion list).
 
+### P108 registered (#359): is e4b's paged path on Gemma-4 worse than transformers' own forward, judged against transformers' own chaos? (bench and tests)
+
+- **Files:** `bench/p108/{PREREG-p108.md,p108_run.sh,p108_drive.sh,p108_box.py,p108_reduce.py,staged.sha256,a2000/}`,
+  `tests/test_p108_box.py`, `tests/test_p108_staged_pin.py`.
+- **The box:** `google/gemma-4-26B-A4B-it` at `4d7ae49` on one RTX 5090. 32 wikitext windows (1,280-token prompts, so
+  the 1,024 sliding window binds; 256-token continuations) run through:
+  - the reference (transformers' cached forward, batch 1) and a repeat of it;
+  - three floor draws, the same model under arithmetically neutral perturbations: one-shot, chunked prefill, batched;
+  - the paged path (fp8 KV, the real kernel);
+  - a decode-scale mutant the bar must catch, and a window mutant (reported).
+- **The rule:** AT_PARITY iff the paged bias is ≤ the floor's largest |bias| + 0.05 nats and its spread is ≤ 2× the
+  floor's.
+- **New premise test** `tests/test_gemma4_paged_window_gpu.py`:
+  - a tiny dense Gemma-4 whose window binds, through the paged path, within 2× a non-binding control on every one of 8
+    seeds;
+  - variants: SDPA standing in, and the real fp8 kernel (sm_89+);
+  - on the A2000 it reads 0.55–1.33×, and a mutant that ignores the window fails at 13.5–27.2×.
+- **Predictions:** AT_PARITY. Paged bias 0 to +0.05, spread ≤ 1.5× the floor's. The scale mutant above +0.3.
+
 ### TC1 amendment 14 read (#945): the grouped GEMM's M-tile height from the group sizes makes e4b's training step 3–8 % faster on a 5090
 
 - **What was asked.** On one RTX 5090 (`tc1-5090-43`, $0.41), e4b against itself: grouped-nf4-gemm's M-tile height keyed on the
