@@ -1,0 +1,13 @@
+{
+ "k8": "ppl",
+ "attn_path": "eager-oracle",
+ "steps": 2048,
+ "mean_nll": 2.8051710724830627,
+ "ppl": 16.529903411865234,
+ "prompt_len": 512,
+ "prompt_offset": 0,
+ "ppl_source": "c4val1",
+ "tokens_scored": 2048,
+ "text_sha": "4bcb55179b962a8fe5e9fbe562e13f78fbb67fda6e3ef770e3f110bea8f1989a",
+ "wall_s": 6.4
+}

@@ -1,0 +1,17 @@
+{
+ "tag": "vllm_b1",
+ "engine": "vllm",
+ "batch": 1,
+ "start_epoch": 1791026534.141,
+ "stop_epoch": 1791026538.081,
+ "tokens": 1024,
+ "interval_ms": 50,
+ "sampler_start_epoch": 1791026499.3289344,
+ "sampler_fields": "timestamp,memory.used,utilization.gpu,clocks.sm,power.draw.instant,pcie.link.gen.current",
+ "arm_start_epoch": 1791026499.2871902,
+ "arm_end_epoch": 1791026540.7716205,
+ "receipt": "vllm_energy_b1.json",
+ "receipt_status": "ok",
+ "basis": "vLLM timed_windows_epoch.long[0] (SC1_LONG=1024 x B decoded tokens, one rep)",
+ "csv": "energy_vllm_b1.csv"
+}

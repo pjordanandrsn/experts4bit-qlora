@@ -1,0 +1,24 @@
+SC1 arm=e4bsched_lic_sched_sameprompt_b16_r1 box=A e4b=c19dd5248c9af650d1619dba45ea62d28a59772c gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 at=2026-10-03T10:55:12Z nproc=32 cpu.max=3071999/100000 load=1.65/3.33/3.78
+ENV: E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_SERVE_EXP_INT4=1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_SERVE_ATTN_INT4_CALIB=1 E4B_SERVE_ATTN_INT4=0 E4B_CALIB_SOURCE=c4 E4B_CALIB_NSEQ=128 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_INT4_ARTIFACT_DIR=/root/sc1/artifact E4B_INT4_EXPECTED_FINGERPRINT=sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d E4B_PAGED_MODEL=Qwen/Qwen3-30B-A3B E4B_PAGED_REVISION=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 E4B_PAGED_ARENA=/root/sc1/work_qwen3/nf4.arena E4B_PAGED_CALIB=/root/sc1/calib.json E4B_PAGED_PLACEMENT=all-vram E4B_PAGED_MAX_SEQS=16 E4B_PAGED_MAX_TOKENS_PER_SEQ=2048 E4B_PAGED_CHUNK_TOKENS=512 E4B_PAGED_GRAPHS=1 E4B_PAGED_BUCKETS=1,2,4,8,16 E4B_PAGED_FUSE_QKV=1 E4B_PAGED_TORCH_THREADS=8
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 3896.32it/s]
+[10:55:15]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[10:55:15]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[10:55:15]   quantized experts on 48/48 MoE layers (128 experts each)
+[10:55:15]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[10:55:16]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[10:55:35]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 4024.89it/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+[serve_paged] INT4EXP loading licensed artifact /root/sc1/artifact: 32 batches of c4, layers_per_pass=auto
+INT4EXP licensed artifact sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d installed on 48 layers
+[serve_paged] INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[serve_paged] ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; 32 batches of c4; model_type=qwen3_moe)
+[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 48, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 96, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 128}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "levers_env": {"E4B_SERVE_EXP_INT4": "1", "E4B_SERVE_EXP_INT4_CALIB": "1", "E4B_SERVE_ATTN_INT4": "0", "E4B_SERVE_ATTN_INT4_CALIB": "1", "E4B_CALIB_NSEQ": "128", "E4B_CALIB_SOURCE": "c4", "E4B_INT4_ARTIFACT_DIR": "/root/sc1/artifact", "E4B_INT4_EXPECTED_FINGERPRINT": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d", "E4B_FUSE_T1_GLUE": "1", "E4B_FUSE_T1_GLUE_R2": "1", "E4B_FUSE_ROUTER_EPI": "1"}, "exp_int4_layers_enabled": 48, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 192, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}
+SC1SCHED {"arm": "lic_sched_sameprompt_b16_r1", "batch": 16, "decode_tok_s": 1939.5, "decode_ms_per_step": 8.2495, "decode_tok_s_median": 1939.2, "end_to_end_tok_s_long": 537.8, "status": "ok", "prompts_sha256": "1e452ab00ffd792a8cdf809b27d41ddd2c1eed833fe486be9d003db7bf72d0fa"}

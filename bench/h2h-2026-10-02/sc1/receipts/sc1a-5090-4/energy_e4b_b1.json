@@ -1,0 +1,17 @@
+{
+ "tag": "e4b_b1",
+ "engine": "e4b",
+ "batch": 1,
+ "start_epoch": 1791026242.849296,
+ "stop_epoch": 1791026248.4449475,
+ "tokens": 1024,
+ "interval_ms": 50,
+ "sampler_start_epoch": 1791026008.0852919,
+ "sampler_fields": "timestamp,memory.used,utilization.gpu,clocks.sm,power.draw.instant,pcie.link.gen.current",
+ "arm_start_epoch": 1791026008.0438588,
+ "arm_end_epoch": 1791026250.0462043,
+ "receipt": "e4bsched_energy_b1.json",
+ "receipt_status": "ok",
+ "basis": "e4b-sched energy_window_epoch (1024 decoded tokens per row)",
+ "csv": "energy_e4b_b1.csv"
+}

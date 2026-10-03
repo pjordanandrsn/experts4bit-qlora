@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+### SC1 read, box A's third draw (#846): P13 holds on all three boxes (vLLM / e4b scheduler 1.167-1.203 at B=1, 1.167-1.177 at B=16); P7, P8 and P11 REFUTED, P14 HOLDS; the licence is QUALITY_FAIL a third time (bench docs and receipts only)
+
+- `sc1a-5090-4` (adertha-receipts `c4915d3`, e4b `c19dd52` with A13, Ryzen 9 7950X, $1.9335): every arm VALID, none
+  skipped. It ran at the launcher's 6.0 h cap; `sc1a-5090-3` was refused at $0 for A13's 7.5 h.
+- **P13 HOLD:** B=1 A 1.187 / B 1.203 / C 1.167 (gap 3.1 %); B=16 A 1.167 / B 1.172 / C 1.177 (gap 0.8 %).
+- **P7 REFUTED:** e4b's SAMEPROMPT ×1.18 < 1.3; vLLM's ×1.62 holds.
+- **P8 REFUTED:** fp8-KV ×1.079 at B=1 (> 5 %); ×1.110 at B=16; Δ_bf16 +0.003 / +0.004 holds.
+- **P11 REFUTED:** vLLM / e4b J/token 0.751 at B=1.
+- **P14 HOLD:** 1.016 / 0.996.
+- e4b's TTFT on this host is 0.82 / 7.01 s against 2.0 / 16.4 s on the EPYC boxes: the prefill loop is host-bound.
+- Lane total $15.9047 over 40 receipts. `RESULTS-sc1-cross-box-a3.md` is added beside the first read.
+
 
 ### TC1 amendment 12 read (#945): after the sync fix, e4b's matched step is 0.740 device-busy (was 0.595) and the next target is the LoRA path's launch volume
 

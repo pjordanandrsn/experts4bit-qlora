@@ -1,0 +1,248 @@
+{
+ "engine": "vllm",
+ "driver": "ttft",
+ "arm": "graph_r1",
+ "vllm_tag": "v0.30.0",
+ "vllm_tag_commit": "ced6857afa0ea7b2e3f0846a62e1394e90f15607",
+ "llm_kwargs": {
+  "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4",
+  "revision": "9b534e4318b7ebc3c961a839f13eb18b1833f441",
+  "tokenizer_revision": "9b534e4318b7ebc3c961a839f13eb18b1833f441",
+  "gpu_memory_utilization": 0.9,
+  "max_model_len": 2048,
+  "enable_prefix_caching": false,
+  "seed": 0,
+  "disable_log_stats": true,
+  "tensor_parallel_size": 1,
+  "enforce_eager": false,
+  "kv_cache_dtype": "auto",
+  "max_num_seqs": 1,
+  "max_num_batched_tokens": 2048,
+  "attention_backend": "FLASH_ATTN",
+  "moe_backend": "marlin",
+  "enable_chunked_prefill": true
+ },
+ "kwarg_sources": {
+  "attention_backend": "EngineArgs.attention_backend (arg_utils.py:731) <- LLM(**kwargs) (llm.py:224); string->enum via AttentionConfig.validate_backend_before (config/attention.py:156-167; arg_utils.py:2494-2505); names: v1/attention/backends/registry.py:44-68",
+  "moe_backend": "EngineArgs.moe_backend (arg_utils.py:511); MoEBackend Literal 'marlin' (config/kernel.py:125-148); -> kernel_config.moe_backend (arg_utils.py:2560-2561); oracle honours it at fused_moe/oracle/int_wna16.py:290-300",
+  "max_logprobs": "EngineArgs.max_logprobs (arg_utils.py:562) -> ModelConfig.max_logprobs default 20, -1 = all (config/model.py:254); SamplingParams validation sampling_params.py:838-895",
+  "prompt_logprobs": "SamplingParams.prompt_logprobs (sampling_params.py:293); gather target = next prompt token (v1/worker/gpu_model_runner.py:5684-5736; V2: v1/worker/gpu/sample/prompt_logprob.py:166-170); position 0 is None (vllm/logprobs.py:167-172)",
+  "logprobs": "SamplingParams.logprobs (sampling_params.py:285); -1 = vocab (V2: v1/worker/gpu/sample/states.py:59-60; V1 sampler returns empty ids for -1: v1/sample/sampler.py:123-127)",
+  "logprob_token_ids": "SamplingParams.logprob_token_ids (sampling_params.py:296-301); sampled-position gather v1/sample/sampler.py:110-118 (gather_specific_token_logprobs)",
+  "num_cached_tokens": "RequestOutput.num_cached_tokens (outputs.py:126,168) <- prefill_stats (v1/engine/output_processor.py:682-686)",
+  "enable_prefix_caching": "EngineArgs.enable_prefix_caching (arg_utils.py:538); CacheConfig default True (config/cache.py:130); block-granular hit, last token recomputed (v1/core/kv_cache_manager.py:289-296)",
+  "kv_cache_dtype": "EngineArgs.kv_cache_dtype (arg_utils.py:459); choices config/cache.py:39-47; fp8 scales 1.0 when absent (layers/quantization/kv_cache.py:123-129, warning :163-168); no calculate_kv_scales at tag",
+  "max_num_seqs": "EngineArgs.max_num_seqs (arg_utils.py:559); drives capture sizes (config/vllm.py:2151-2200)",
+  "max_num_batched_tokens": "EngineArgs.max_num_batched_tokens (arg_utils.py:556); LLM-class default 8192 on the 32 GB tier (arg_utils.py:2718-2760); chunked prefill default True (config/scheduler.py:116)",
+  "enforce_eager": "EngineArgs.enforce_eager (arg_utils.py:584); sets compile NONE + cudagraph NONE (config/vllm.py:1546-1552, 1779-1784)",
+  "cudagraph_capture_sizes": "CompilationConfig.cudagraph_capture_sizes (config/compilation.py:655)",
+  "detokenize": "SamplingParams.detokenize (sampling_params.py:311); False -> tokenizer None in the LogprobsProcessor (v1/engine/output_processor.py:234-242)",
+  "collective_rpc": "LLM.collective_rpc(method | callable) (entrypoints/llm.py:567-598); cloudpickle only with VLLM_ALLOW_INSECURE_SERIALIZATION=1 (v1/serial_utils.py:214-231)",
+  "engagement_log_lines": "MoE: \"Using 'MARLIN' WNA16 MoE backend.\" (fused_moe/oracle/int_wna16.py:255-256, info_once at :282/:325) + 'Using MarlinExperts' (:436); linear: 'Using MarlinLinearKernel for AutoGPTQLinearMethod' (layers/quantization/auto_gptq.py:352-354); graphs: tqdm desc 'Capturing CUDA graphs (decode|mixed prefill-decode, MODE)' (v1/worker/gpu_model_runner.py:7005) + 'Graph capturing finished in N secs, took X GiB' (:6930); attention: 'Using FLASH_ATTN backend.' (platforms/cuda.py:478); KV: 'Available KV cache memory: X GiB' (v1/worker/gpu_worker.py:641); runner: 'Using V2 Model Runner' (gpu_worker.py:441)"
+ },
+ "vast_instance_id": "53985115",
+ "host_pid": 79977,
+ "env": {
+  "VLLM_LOGGING_LEVEL": "INFO",
+  "VLLM_ENABLE_V1_MULTIPROCESSING": null,
+  "VLLM_USE_V2_MODEL_RUNNER": null,
+  "VLLM_ALLOW_INSECURE_SERIALIZATION": "1",
+  "VLLM_ATTENTION_BACKEND": null,
+  "CUDA_VISIBLE_DEVICES": null
+ },
+ "vllm_version": "0.30.0",
+ "torch": "2.13.0+cu130",
+ "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4",
+ "revision": "9b534e4318b7ebc3c961a839f13eb18b1833f441",
+ "batch": 1,
+ "prompt_len": 512,
+ "status": "ok",
+ "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3",
+ "rows_sha256": [
+  "70271aa1cb4555546a6cb771e04ee7983f7140c03b8460fc85012f6498bcb4a3"
+ ],
+ "prompt_file": "prompts_b1.json",
+ "method": "TTFT = wall of LLM.generate([{prompt_token_ids}], SamplingParams(max_tokens=1, temperature=0), use_tqdm=False) at the Python entry; warm engine (one untimed call first); prefix caching OFF so nothing is cached between repeats; median of REPS (F18)",
+ "generation": {
+  "temperature": 0.0,
+  "max_tokens": 1,
+  "greedy": true,
+  "detokenize": true,
+  "note": "detokenize stays at vLLM's shipped default (True) unless SC1_DETOKENIZE=0: the comparator's loop is never trimmed; one token's detokenisation is inside the TTFT by design"
+ },
+ "engine_timer": "none: the offline LLM exposes no request-level TTFT (RequestOutput.metrics is None with disable_log_stats=True); prefill tok/s below is derived from the wall, not an engine timer",
+ "chunks_expected": 1,
+ "reps": 3,
+ "load_s": 25.8,
+ "vllm_config": "model='Qwen/Qwen3-30B-A3B-GPTQ-Int4', speculative_config=None, tokenizer='Qwen/Qwen3-30B-A3B-GPTQ-Int4', skip_tokenizer_init=False, tokenizer_mode=auto, revision=9b534e4318b7ebc3c961a839f13eb18b1833f441, tokenizer_revision=9b534e4318b7ebc3c961a839f13eb18b1833f441, trust_remote_code=False, dtype=torch.float16, max_seq_len=2048, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=auto_gptq, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, per_request_spec_decode_metrics='none', kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=Qwen/Qwen3-30B-A3B-GPTQ-Int4, enable_prefix_caching=False, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::qwen4_exp_ple_short_conv', 'vllm::qwen4_exp_qsa_with_output', 'vllm::linear_attention', 'vllm::qwen_gdn_attention_core', 'vllm::qwen_gdn_attention_core_fused_norm_packed', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::hpc_rope_norm_forward', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [2048], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': False, 'fuse_act_quant': False, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 2, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'], gelu_and_mul_sparse=['triton', 'native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, moe_backend='marlin', sparse_indexer_topk_backend='auto', linear_backend='auto', linear_backend_per_quant=None)",
+ "resolved": {
+  "dtype": "torch.float16",
+  "quantization": "auto_gptq",
+  "max_model_len": 2048,
+  "max_num_seqs": 1,
+  "max_num_batched_tokens": 2048,
+  "chunked_prefill": true,
+  "kv_cache_dtype": "auto",
+  "enable_prefix_caching": false,
+  "cudagraph_mode": "FULL_AND_PIECEWISE",
+  "enforce_eager": false,
+  "speculative": "None",
+  "attention_backend": "FLASH_ATTN",
+  "moe_backend": "marlin",
+  "linear_backend": "auto",
+  "cudagraph_capture_sizes": [
+   1,
+   2
+  ],
+  "max_cudagraph_capture_size": 2,
+  "compilation_mode": "3",
+  "optimization_level": "2",
+  "async_scheduling": true,
+  "policy": "fcfs",
+  "long_prefill_token_threshold": 0,
+  "block_size": 16,
+  "num_gpu_blocks": 8169,
+  "gpu_memory_utilization": 0.9,
+  "kv_cache_memory_bytes": null,
+  "max_logprobs": 20,
+  "logprobs_mode": "raw_logprobs",
+  "seed": 0,
+  "use_v2_model_runner": true,
+  "vocab_size": 151936,
+  "kv_tokens_capacity": 130704
+ },
+ "engagement": {
+  "log": "/root/sc1/logs/run_ttft_vllm_512.engine.log",
+  "status": "grepped",
+  "log_bytes": 12816,
+  "moe_backend_line": [
+   "Using 'MARLIN' WNA16 MoE backend."
+  ],
+  "mxfp4_moe_backend_line": [],
+  "experts_cls_line": [
+   "Using MarlinExperts"
+  ],
+  "linear_kernel_line": [
+   "Using MarlinLinearKernel for AutoGPTQLinearMethod"
+  ],
+  "cudagraph_capture_line": [
+   "Capturing CUDA graphs (PIECEWISE)",
+   "Capturing CUDA graphs (FULL)"
+  ],
+  "graph_capture_finished_line": [
+   "Graph capturing finished in 1 secs, took 0.08 GiB",
+   "Graph capturing finished in 1 secs, took 0.06 GiB"
+  ],
+  "attention_backend_line": [],
+  "kv_cache_memory_line": [
+   "Available KV cache memory: 11.97 GiB"
+  ],
+  "model_loading_line": [
+   "Model loading took 15.66 GiB memory and 12.710466 seconds"
+  ],
+  "actual_usage_line": [
+   "Actual usage is 16.08 GiB"
+  ],
+  "v2_runner_line": [
+   "Using V2 Model Runner"
+  ],
+  "kv_scale_warning_line": [],
+  "engine_core_error_line": [],
+  "marlin_moe": true,
+  "marlin_linear": true,
+  "cudagraphs_captured": true,
+  "v2_model_runner": true,
+  "attention_backend_logged": []
+ },
+ "mem_after_load": {
+  "driver_process": {
+   "max_memory_allocated": 0,
+   "memory_allocated": 0
+  },
+  "worker": {
+   "max_memory_allocated": 29931248128,
+   "memory_allocated": 29861915648,
+   "memory_reserved": 30016536576,
+   "max_memory_reserved": 30054285312,
+   "mem_get_info_free": 2933850112,
+   "mem_get_info_total": 33668857856,
+   "device_name": "NVIDIA GeForce RTX 5090",
+   "capability": [
+    12,
+    0
+   ]
+  },
+  "reservation": {
+   "gpu_memory_utilization": 0.9,
+   "total_bytes": 33668857856,
+   "requested_bytes": 30301972070,
+   "note": "policy reservation (weights + activations + KV budget), NOT a demand -- compare with worker.max_memory_allocated and the 'Available KV cache memory' log line"
+  },
+  "nvidia_smi": "29312 MiB, 32607 MiB, 500.00 W, 3105 MHz, 580.159.03, NVIDIA GeForce RTX 5090"
+ },
+ "walls_s": [
+  0.0293,
+  0.03044,
+  0.0305
+ ],
+ "ttft_s_median": 0.03044,
+ "ttft_s_min": 0.0293,
+ "ttft_ms_median": 30.44,
+ "prefill_tok_s_median": 16821.9,
+ "num_cached_tokens_per_rep": [
+  0,
+  0,
+  0
+ ],
+ "first_token_ids": [
+  75923,
+  75923,
+  75923
+ ],
+ "prompt_tokens_engine": [
+  512,
+  512,
+  512
+ ],
+ "warm_first_token_id": 75923,
+ "timed_windows_epoch": [
+  [
+   1791025949.819,
+   1791025949.848
+  ],
+  [
+   1791025949.848,
+   1791025949.878
+  ],
+  [
+   1791025949.878,
+   1791025949.909
+  ]
+ ],
+ "mem_after_runs": {
+  "driver_process": {
+   "max_memory_allocated": 0,
+   "memory_allocated": 0
+  },
+  "worker": {
+   "max_memory_allocated": 29931248128,
+   "memory_allocated": 29861915648,
+   "memory_reserved": 30058479616,
+   "max_memory_reserved": 30058479616,
+   "mem_get_info_free": 2891907072,
+   "mem_get_info_total": 33668857856,
+   "device_name": "NVIDIA GeForce RTX 5090",
+   "capability": [
+    12,
+    0
+   ]
+  },
+  "reservation": {
+   "gpu_memory_utilization": 0.9,
+   "total_bytes": 33668857856,
+   "requested_bytes": 30301972070,
+   "note": "policy reservation (weights + activations + KV budget), NOT a demand -- compare with worker.max_memory_allocated and the 'Available KV cache memory' log line"
+  },
+  "nvidia_smi": "29352 MiB, 32607 MiB, 500.00 W, 3105 MHz, 580.159.03, NVIDIA GeForce RTX 5090"
+ }
+}
