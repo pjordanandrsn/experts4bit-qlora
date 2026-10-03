@@ -93,7 +93,7 @@ this one.
   - the reversed-write-back mutant fails on the bar in the two arms where it ran.
 - **The runner's proving path** is rehearsed on the A2000 before the merge.
 
-**Rehearsed 2026-10-03, 06:24–06:30Z, at `506ce06`, on the NAS RTX A2000**, staged exactly as `p105_drive.sh` stages.
+**Rehearsed 2026-10-03, 06:24–06:29Z (the log's own stamps: 06:24:57Z to 06:29:13Z), at `506ce06`, on the NAS RTX A2000**, staged exactly as `p105_drive.sh` stages.
 `P105_PROVE=1` with the knobs class A2000, disk 10 GB and premise skips allowed. Exit rc 0, with `PROVED` and the
 `REHEARSAL` marker.
 - **Install and tripwire held:** e4b `506ce06`, gnf4 `34da93d`, torch 2.8.0+cu128, transformers 5.17.0. Phase t is
