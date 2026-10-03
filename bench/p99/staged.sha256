@@ -1,0 +1,11 @@
+# Names as the BOX sees them after staging ($W). The box runs `sha256sum -c` on this file and the controller resolves
+# each name to its source (p99_drive.sh's case) and compares. p98_box.py / p98_bake.py are P98's registered bytes.
+9703a9c6d0cad55d1f293aefbdc326a10705f30f0161a460bea293193822f792  p99_run.sh
+b312a9d35198d5200aa4ed2d6889d0d37752cce77fef60d5d75acead50ae288f  p99_box.py
+9ed5b5912c8d4a24e8437a1e46b58ce08c32a33f67f25aca58761b98bd4085af  p99_reduce.py
+5a34b1d6cd1267df787f87725538f9712e7cc00a3ae33f95cdfe783e878f9b8a  p98_box.py
+1b523751b504c16a977853e12b9db7f07c3e5c4019fe31f22e4b4c69caff6f89  p98_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+6ca7c51d76a964c6e53a7caa4f288a6a04566e10930bb4d2cf3658dcdad9664f  test_linear_state_gpu.py
+7054682e345bef43c1a490758a736a3f03ee37ed43d2322383495b23f5f41c20  test_hybrid_decode_graphs_gpu.py
+f11ef702b7298dd047a02d830b011dbcaeffa0e611c681d92e31304b277070d4  test_linear_state_graph_gpu.py
