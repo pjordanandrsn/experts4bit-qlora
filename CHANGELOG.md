@@ -1,6 +1,23 @@
 # Changelog
 
 ## Unreleased
+### P100 registered (#916): where the paged prefill's time goes on the int4 expert store -- TTFT against chunk size, and the per-expert loop counted, with no code change (bench and tests only)
+
+- **Why.** SC1 box B read TTFT 2.08 s at 512 tokens and 16.6 s at 4096 for Qwen3-30B-A3B on an RTX 5090 (int4
+  experts, chunk 512, `max_seqs=1`): about 2.07 s per chunk. A code trace (#916) names a per-expert host loop in the
+  int4 store's host-grouped branch (`hot_residency.py:721-752`, one `dequant_int4_ref` per routed expert per GEMM),
+  reached because `max_seqs == 1` leaves `DEVICE_GROUPING` off. Not yet confirmed on a GPU.
+- **What.** `bench/p100/`: five arms on one 5090, each a fresh engine. TTFT-512 at chunk 512; TTFT-4096 at chunk
+  2048, 512 and 1024 (SC1's `sc1_e4b_sched.py --ttft`, its registered bytes, SC1's stack and token ids); and
+  `step_decomp.py --cprofile-out` at `--batch 1` with int4 experts. `p100_box.py` adds an untimed census request per
+  arm: every MoE call's rows, grouping and `dequant_int4_ref` calls, plus a device-kernel count in the 512-token arm.
+  `p100_reduce.py` (13 cases) reads SCALING (rho = T(chunk 512) / T(chunk 2048) >= 3) and MECHANISM (48 loop calls
+  per chunk, >= 9,600 dequant calls, none at T == 1).
+- **A2000 pre-check ($0).** The census recorded the real loop branch exactly at Qwen3's expert shapes. The branch took
+  ~104-110 ms per layer whether a call carried 4,096 or 16,384 rows, with ~3.6k device kernels per call.
+- **Tests.** `tests/test_p100_staged_pin.py` (11): the pin, the borrowed files at their lanes' bytes, SC1's stack and
+  token ids, the arms and their order, the tripwire strings against the library, the timed requests unwrapped, the
+  exit codes, the dry run.
 
 ### P99 amendment 1 (#913): the OLMoE arm's answer reads "Qwen3.6-specific"; two mechanisms ruled out at $0 on the A2000 (bench docs only)
 
