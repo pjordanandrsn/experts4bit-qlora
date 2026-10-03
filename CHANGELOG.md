@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+
+### The fused training RMSNorm is on by default (`E4B_FUSED_RMSNORM=0` turns it off)
+
+- **Why.** TC1 amendment 15 registered a 5090 A/B of #961 with a decision rule: flip the default on if held-out loss agreed within
+  0.01 (P26) and both arms stepped at or below 0.99 of the composite. The box (`tc1-5090-45`, EPYC 7663, $0.39) read all three
+  predictions HELD:
+
+  | reading | result | range |
+  |---|---|---|
+  | P24, shipped | fused / composite **0.924** | 0.893 – 0.955 |
+  | P25, matched | **0.959** | 0.935 – 0.984 |
+  | P26, held-out difference | −0.0021 shipped, −0.0015 matched | within 0.01 |
+
+- **What.** `enable_fast_train` applies `enable_fused_rmsnorm_train` unless `E4B_FUSED_RMSNORM=0`. On the default path a model with no
+  frozen, probe-matching RMSNorm is skipped quietly. An explicit `E4B_FUSED_RMSNORM=1` keeps the refusal of a vacuous enable.
+- **Numerics.** Near-exact, not exact: about 1e-5 of elements are one bf16 ulp off the composite. Through Qwen3-MoE's 48 layers and
+  router that showed up on the box before any update: held-out loss at step 0 differed by 0.0064 (1.9441 against 1.9505), and the
+  first training loss by 0.0090 (2.0614 against 2.0705). Held-out at N stayed inside P26's band.
+
 ### E4B_PAGED_PREFILL_ATTN defaults to flash (#960, lane P107's DEFAULT=flash): a 4096-token prefill's attention on the flash kernel in bf16 instead of SDPA's fp32 math backend -- device time 906 -> 378 ms on an RTX 5090
 
 - **What changes.** A paged prefill chunk on a layer without sinks or a sliding window now passes SDPA the lower-right
