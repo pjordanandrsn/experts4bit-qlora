@@ -18,6 +18,25 @@
     proof passes them to `e4b_census`.
   - The other four proof items had reduced cleanly. The proof re-runs as `sc1d-prove-2`.
 
+### TC1 amendment 16 read: at steady state e4b as shipped now steps faster than axolotl's scattermoe on a 5090 (P27 HELD, 1.238)
+
+- **What was asked.** On one RTX 5090 (`tc1-5090-46`, EPYC 7663, $0.99), amendment 8's 200-step comparison again. This time e4b ran
+  with every default from amendments 10–15 (#945, #440, #442, #965, #975), against axolotl 0.20.0's scattermoe native-best. P27
+  predicted axolotl / e4b over steps 101..200 in [1.05, 1.50].
+- **What it read.** P27 is HELD:
+
+  | reading | result |
+  |---|---|
+  | axolotl / e4b, steps 101..200 | **1.238**, cross-draw 1.231 – 1.246; both pairs stable (0.6 %) |
+  | ordering | **e4b shipped faster** |
+  | summed step time, 200 steps | 650–654 s against 1,373–1,389 s |
+  | axolotl's energy per step | ×1.79 |
+  | held-out at 200 | axolotl on the matched curve; e4b as shipped 0.024–0.027 above it |
+
+  Register `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`.
+- **What follows.** STATUS says e4b as shipped is faster at steady state on that host. The 2026-10-02 rows stand for the code before
+  #945. Read: `bench/h2h-2026-10-02/tc1/RESULTS-tc1-steady16.md`.
+
 ### P108 Amendment 2 (#359): the box gets 220 minutes and the reading a 4 h guard, before any data is read (bench only)
 
 - **Why.** `p108-5090-1` ended on its 75-minute alarm (rc 142, $0.8047) after two of four groups. The box needs about
