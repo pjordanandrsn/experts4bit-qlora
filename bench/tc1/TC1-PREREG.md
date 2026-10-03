@@ -553,3 +553,41 @@ Each is FALSIFIED outside its band, and UNTESTED if a side is missing, not VALID
 The prediction verdicts are read beside the rule, not instead of it.
 
 Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.
+
+### Amendment 15 (2026-10-03T12:43Z, before any box): e4b's fused training RMSNorm against the Hugging Face composite, A/B on one 5090 (P24, P25, P26)
+
+**Why.** Amendment 12's profile (`tc1-5090-41`) is launch-bound on the matched arm. After the LoRA delta (#440, amendment 13), the
+largest launch item left is the four Hugging Face RMSNorms per layer. Each is a composite of about 8 kernels forward and 10
+backward, and gradient checkpointing runs the forward twice. Together that is roughly 20,000 of the shipped step's 134,000 device
+events and 17 % of its CPU op time.
+
+#961 adds `E4B_FUSED_RMSNORM=1`: a one-launch Triton forward and a dx-only backward for frozen norms, mirroring the composite's
+casts. It is **not bit-identical**, because the row reductions run in another order: on an RTX A2000 about 1 element in 100,000
+differs, by one bf16 ulp. On the A2000 (2-layer Qwen3-MoE, ABBA) launches per step went 1,344 → 1,109 and wall 227.6 → 216.4 ms.
+
+**The token** `qwen3rmsab` (TC1_BOX=A) runs e4b against itself on the shipped arm and the matched arm, two draws each in ABBA order:
+
+- `*_rms0`: `E4B_FUSED_RMSNORM=0`, the composite;
+- `*_rms1`: `E4B_FUSED_RMSNORM=1`.
+
+Both sides run the trimmed LoRA delta on the post-#945 sync path, with gnf4's default tile rule in force at the pinned gnf4. e4b is
+pinned at a main commit carrying #961 and this amendment. Each arm's `rms_ab` record names the environment value and the patched and
+called counts. The engagement predicate voids an rms1 arm that did not request, patch and call the fusion, and an rms0 arm that
+patched anything.
+
+**Predictions.** Speed figures are the median over two VALID draws a side, each side's draws within 5 %.
+
+- **P24** (shipped arm): rms1 / rms0 s/step lies in **[0.85, 0.97]**.
+- **P25** (matched arm): rms1 / rms0 s/step lies in **[0.88, 0.98]**.
+- **P26** (quality): on each arm the two sides' mean held-out loss at N agrees within **0.01**. On `tc1-5090-42` the two draws of one
+  configuration differed by up to 0.0047.
+
+Each is FALSIFIED outside its band, and UNTESTED if a side is missing, not VALID or unstable.
+
+**Decision rule.**
+
+- **P26 HELD and both stable speed ratios at or below 0.99:** `E4B_FUSED_RMSNORM` becomes on by default.
+- **P26 FALSIFIED:** the fusion stays opt-in whatever the speed, and the read names the held-out gap.
+- **Otherwise:** it stays opt-in, and the register says no measurable step effect on that arm.
+
+Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.
