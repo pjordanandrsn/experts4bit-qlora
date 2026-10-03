@@ -1,6 +1,21 @@
 # Changelog
 
 ## Unreleased
+### TC1 P14: at steady state axolotl's scattermoe steps 9 % faster than e4b as shipped; e4b still finishes a 200-step run first
+
+- **What was asked.** TC1 amendment 8 re-asked P13's axolotl half over 200 steps of the field recipe, read on steps 101..200, on
+  one RTX 5090 (`tc1-5090-35`): e4b as shipped and axolotl 0.20.0's scattermoe native-best, two draws each.
+- **What it read.** P14 is HELD: axolotl / e4b shipped is **0.911 [0.902, 0.921]**, inside [0.90, 1.10], both pairs stable. The
+  whole interval lies below 1.0, so **axolotl is faster at steady state**. Under the amendment's decision rule that is the finding
+  (register `e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state`, a labelled row).
+- **Beside it.**
+  - Over the whole run e4b finishes first. axolotl's warm-up (359 / 324 s at step 1, then spikes on the same 18 steps in both
+    draws) puts its summed step time at 1,934-2,023 s against e4b's 1,353-1,372 s.
+  - axolotl spends ×1.32 the energy per step.
+  - At step 200 axolotl's native configuration matches the box's matched e4b held-out (0.7696 against 0.7691), while e4b as
+    shipped sits 0.024-0.027 above, its TC1b plateau reproduced.
+- One host (Xeon E5-2698 v4). See `bench/h2h-2026-10-02/tc1/RESULTS-tc1-nativebest.md`.
+
 ### P102 amendment A1 (#916): the runner installs pytest, which the premise runs under (bench and tests only)
 
 - `p102-5090-1` (adertha-receipts `139544a`, $0.0303) stopped at the premise, rc 25, before any fetch: "No module named
