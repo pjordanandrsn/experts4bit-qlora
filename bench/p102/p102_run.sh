@@ -70,7 +70,7 @@ pipx(){ local log=$1 secs=$2; shift 2
   perl -e "alarm $secs; exec @ARGV" python -m pip install -q --no-input "$@" >> $log 2>&1; }
 say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (image python; transformers 5.17.0)"
 pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
-  "transformers==5.17.0" "bitsandbytes==0.50.2" datasets accelerate sentencepiece safetensors "huggingface_hub>=0.23" || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
+  "transformers==5.17.0" "bitsandbytes==0.50.2" datasets accelerate sentencepiece safetensors "huggingface_hub>=0.23" pytest || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
 # The tripwire: the commits, and the code under test present AS the trace read it -- so a reading is about this path.
 WANT_E4B=$E4B_SHA WANT_GNF4=$GNF4_SHA python - <<'PYT' || { say "TRIPWIRE FAIL"; finish 9; }
@@ -81,6 +81,7 @@ dg = json.loads(md.distribution("grouped-nf4-gemm").read_text("direct_url.json")
 assert dg.get("vcs_info", {}).get("commit_id") == os.environ["WANT_GNF4"], f"installed gnf4 is not the pinned commit: {dg}"
 import transformers
 assert transformers.__version__ == "5.17.0", transformers.__version__
+import pytest  # noqa: F401  (the premise runs under it -- A1: p102-5090-1 stopped there, "No module named pytest")
 from experts4bit_qlora.engines import hot_residency as hr
 from experts4bit_qlora import serve_paged
 src = inspect.getsource(hr._fused_over_stack)

@@ -23,6 +23,14 @@
   at 46.4, 3.6x and 4.3x its padded-eager arm.
 - $0.196 (one RTX 5090, 21 min; destroyed, absent). P101 (#919) asks P98's question again on code that includes #918.
 
+### P102 amendment A1 (#916): the runner installs pytest, which the premise runs under (bench and tests only)
+
+- `p102-5090-1` (adertha-receipts `139544a`, $0.0303) stopped at the premise, rc 25, before any fetch: "No module named
+  pytest". The runner was derived from P100's install line, which has none.
+- The install line adds `pytest`, and the tripwire imports it. `tests/test_p102_staged_pin.py` adds a check, false on
+  the registered runner, that whatever the premise runs is installed and imported first. Pin regenerated;
+  `PREREG-p102.md` A1. Nothing measured, and nothing in the rule, changes.
+
 ### P102 registered (#916): the int4 store's prefill route A/B -- loop against batched, k19 and mtile on one RTX 5090 and one engine, gated by the calibrated K8 rule on a prefill-shaped NLL (bench and tests only)
 
 - **Why.** P100 (#920) put 73 % of a 512-token prefill chunk in the per-expert host loop: about 0.43 s fixed per chunk
