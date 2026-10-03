@@ -17,6 +17,23 @@
   <= +0.01. TTFT is reported only.
 - **Predictions:** NEUTRAL; KL 1e-3 to 2e-2; TTFT 1.3-4x at 4,096 tokens.
 
+### Fused expert grouping reads the per-expert counts back once, not five times (#945)
+
+- **Why.** `enable_fast` / `enable_fast_train` sized the grouped launch from host-side counts built with `bincount`,
+  `nonzero` and two `.tolist()` calls: five synchronizing calls per grouped forward (measured with
+  `torch.cuda.set_sync_debug_mode`). Under gradient checkpointing, a fused MoE training layer pass paid 10 of its 13
+  host syncs on this grouping and grouped-nf4-gemm's index transfers.
+- **What.** `engines/fast.py::_group_by_expert` counts with `scatter_add_` and reads the counts back with one
+  `.tolist()`. The lists are identical: the non-empty experts in ascending id with their counts, as Python ints. All
+  three grouped call sites use it. `E4B_GROUPING=legacy` restores the old form for A/B measurement.
+- **Measured on an RTX A2000** (Qwen3-30B-A3B layer shape, 512 tokens, bf16 adapters): forward syncs per layer
+  10 -> 6, and forward launches 89 -> 79. With grouped-nf4-gemm's opt-in `GNF4_PINNED_RING=1` (grouped-nf4-gemm#438),
+  syncs are 1 forward and 0 backward. The 5090 training-step effect is measured separately.
+- **Tests** (`tests/test_fast_grouping.py`):
+  - the same lists as the legacy form on CPU and CUDA, including empty experts;
+  - one synchronizing call against the legacy form's four or more (the control);
+  - the fused training forward and every gradient bit-identical under either grouping.
+
 ## 0.41.0 — 2026-10-03 — hybrid linear-attention models (Qwen3.5 / Qwen3.6 MoE, Qwen3-Next) serve paged, under decode graphs, with the Gated DeltaNet kernels recommended; the int4 store's prefill takes K19 by default (`E4B_INT4_PREFILL=auto`, lane P102: TTFT-4096 7.21 s -> 1.37 s); bucketed decode graphs on an NF4 MoE no longer replay against a freed index (#913)
 
 **0.41.0.** One default changes, one feature lands, and one fix ships.

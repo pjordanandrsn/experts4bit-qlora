@@ -60,6 +60,8 @@ from typing import Optional
 
 import types
 
+import os
+
 import torch
 
 
@@ -117,6 +119,34 @@ def _refuse_under_capture(hidden_states) -> None:
             "stay on the device (#527).")
 
 
+def _group_by_expert(flat, E):
+    """Host-side group sizes and expert ids for the grouped kernels, with ONE device-to-host read.
+
+    The grouped launch grid is sized from host-side per-expert counts (the kernels' contract), so
+    one read is the floor. The previous form paid more than one: ``torch.bincount`` reads its
+    input's max back to size the output, ``torch.nonzero`` reads its count back, and the two
+    ``.tolist()`` calls are one read each -- five synchronizing calls per grouped forward,
+    measured with ``torch.cuda.set_sync_debug_mode`` (one ``bincount`` call counts twice). In a
+    training step that is two forwards per layer under checkpointing, so 10 of the 13 host syncs
+    of a fused MoE layer pass came from here and grouped-nf4-gemm's index transfers (#945).
+
+    ``scatter_add_`` builds the same counts without a read, and one ``.tolist()`` brings them
+    back; the lists are rebuilt on the host. Identical values and order to the old form: the
+    non-empty experts in ascending id, and their counts, as Python ints.
+
+    ``E4B_GROUPING=legacy`` restores the old five-read form, for A/B measurement only.
+    """
+    if os.environ.get("E4B_GROUPING", "").strip().lower() == "legacy":
+        counts = torch.bincount(flat, minlength=E)
+        active = torch.nonzero(counts, as_tuple=False).view(-1)
+        return counts[active].tolist(), active.to(torch.int32).tolist()
+    counts = torch.zeros(E, dtype=torch.int64, device=flat.device)
+    counts.scatter_add_(0, flat.reshape(-1).to(torch.int64), torch.ones(flat.numel(), dtype=torch.int64, device=flat.device))
+    counts_h = counts.tolist()               # the one read: the launch grid needs host sizes
+    expert_ids = [e for e, c in enumerate(counts_h) if c]
+    return [counts_h[e] for e in expert_ids], expert_ids
+
+
 def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
     """Fused inference forward with the reference signature and semantics.
 
@@ -148,10 +178,7 @@ def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
     order = torch.argsort(flat, stable=True)                      # [tokens*k], expert-grouped
     token_rows = order // k                          # source token per row
     top_pos = order - token_rows * k                 # which top-k slot it was
-    counts = torch.bincount(flat, minlength=E)       # tokens per expert
-    active = torch.nonzero(counts, as_tuple=False).view(-1)
-    sizes = counts[active].tolist()
-    expert_ids = active.to(torch.int32).tolist()
+    sizes, expert_ids = _group_by_expert(flat, E)   # tokens per non-empty expert, ascending id
 
     a_cat = hidden_states.index_select(0, token_rows).to(compute_dtype).contiguous()
 
@@ -232,10 +259,7 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
     order = torch.argsort(flat, stable=True)
     token_rows = order // k
     top_pos = order - token_rows * k
-    counts = torch.bincount(flat, minlength=E)
-    active = torch.nonzero(counts, as_tuple=False).view(-1)
-    sizes = counts[active].tolist()
-    expert_ids = active.to(torch.int32).tolist()
+    sizes, expert_ids = _group_by_expert(flat, E)
 
     a_cat = hidden_states.index_select(0, token_rows).contiguous()
 
@@ -545,10 +569,7 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     order = torch.argsort(flat, stable=True)
     token_rows = order // k
     top_pos = order - token_rows * k
-    counts = torch.bincount(flat, minlength=E)
-    active = torch.nonzero(counts, as_tuple=False).view(-1)
-    sizes = counts[active].tolist()
-    expert_ids = active.to(torch.int32).tolist()
+    sizes, expert_ids = _group_by_expert(flat, E)
 
     a_cat = hidden_states.index_select(0, token_rows).contiguous()
 
