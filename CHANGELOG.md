@@ -1,27 +1,20 @@
 # Changelog
 
 ## Unreleased
+### TC1 P14: at steady state axolotl's scattermoe steps 9 % faster than e4b as shipped; e4b still finishes a 200-step run first
 
-### P99 read (RTX 5090): LOCALISED -- P98's fault repeats at the first bucket-1 replay, also with K25 off; not with one bucket, and not on OLMoE (#913)
-
-- `bench/p99/receipts/p99-5090-1/`, `bench/p99/RESULTS-p99.md`. e4b at `daef38c`, before #918's fix.
-  - **d0g** (P98's arm g) and **d2g** (K25 off) faulted on the same kernel assert as P98
-    (`indexSelectSmallIndex: srcIndex < srcSelectDimSize`). Both died at decode call 110, W16's first one-row step,
-    so the first replay of bucket 1's graph.
-  - **d3g** (bucket 16 only) ran: 209 replays, tokens equal its padded-eager arm.
-  - **d1g** (OLMoE-1B-7B through the same hybrid expert tier, all-VRAM, device grouping on) ran: bucket 1 replayed 99
-    times, tokens equal its padded-eager arm.
-- Answers: **qwen36_specific yes** (the reducer's key `hybrid_state_necessary`, renamed by amendment 1),
-  **k25_necessary no**, **multiple_buckets_necessary yes**. No silent mismatch.
-- Against the predictions:
-  - The pre-registration's k25 and OLMoE predictions missed.
-  - The predictions posted on #913 from the code reading, before any data, got k25 and multiple-buckets right and
-    OLMoE wrong.
-  - The fault sits where #918's cause puts it: the T == 1 gather at bucket 1's first replay, after other buckets'
-    warm-ups. P99 does not explain why OLMoE's run never reached the stale read's failing state.
-- Observation, not this lane's question: Qwen3.6 with bucket 16 only, under graphs, decoded W16 at 421.0 tok/s and W1
-  at 46.4, 3.6x and 4.3x its padded-eager arm.
-- $0.196 (one RTX 5090, 21 min; destroyed, absent). P101 (#919) asks P98's question again on code that includes #918.
+- **What was asked.** TC1 amendment 8 re-asked P13's axolotl half over 200 steps of the field recipe, read on steps 101..200, on
+  one RTX 5090 (`tc1-5090-35`): e4b as shipped and axolotl 0.20.0's scattermoe native-best, two draws each.
+- **What it read.** P14 is HELD: axolotl / e4b shipped is **0.911 [0.902, 0.921]**, inside [0.90, 1.10], both pairs stable. The
+  whole interval lies below 1.0, so **axolotl is faster at steady state**. Under the amendment's decision rule that is the finding
+  (register `e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state`, a labelled row).
+- **Beside it.**
+  - Over the whole run e4b finishes first. axolotl's warm-up (359 / 324 s at step 1, then spikes on the same 18 steps in both
+    draws) puts its summed step time at 1,934-2,023 s against e4b's 1,353-1,372 s.
+  - axolotl spends ×1.32 the energy per step.
+  - At step 200 axolotl's native configuration matches the box's matched e4b held-out (0.7696 against 0.7691), while e4b as
+    shipped sits 0.024-0.027 above, its TC1b plateau reproduced.
+- One host (Xeon E5-2698 v4). See `bench/h2h-2026-10-02/tc1/RESULTS-tc1-nativebest.md`.
 
 ### P102 amendment A1 (#916): the runner installs pytest, which the premise runs under (bench and tests only)
 

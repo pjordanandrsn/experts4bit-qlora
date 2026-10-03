@@ -237,6 +237,7 @@
     "e4b.train.h2h.axolotl.qwen3.5090.2026-10-02",
     "e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.scattermoe-native",
     "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.native-vs-native",
+    "e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state",
     "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02.e4b-offload",
     "e4b.train.footprint.unsloth.mixtral.5090.2026-10-02",
     "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02",

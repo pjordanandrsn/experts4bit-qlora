@@ -16,6 +16,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-20` | `qwen3axolotl` (amendment 3) | instance 53812706, AMD EPYC 7663 56-Core Processor, driver 595.71.05 | the axolotl rows re-asked on their own box with a working venv, plus the HF torch-2.14 grouped_mm row at micro-batch 1 | $0.32 |
 | `tc1-5090-33` | `qwen3nativebest` (amendment 5) | instance 53916526, AMD EPYC 7663 56-Core Processor, driver 580.95.05 | each framework's native-best, two draws each, e4b's matched arm as the anchor; P13 UNTESTED (a refused scattermoe second draw, e4b's pair 6.1 % apart) | $0.51 |
 | `tc1-5090-34` | `qwen3nativebest` (amendment 7) | instance 53927504, AMD EPYC 9334 32-Core Processor, driver 590.48.01 | the same token again, with clocks recorded; P13 scored here | $0.44 |
+| `tc1-5090-35` | `qwen3nativebest200` (amendment 8) | instance 53935033, Intel Xeon E5-2698 v4, driver 595.71.05 | e4b shipped vs axolotl scattermoe over 200 steps, two draws each, the 200-step matched anchor; P14 HELD, axolotl faster at steady state | $1.76 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -109,6 +110,10 @@ re-ask box: P5 HELD. No HF position exists on this card at this recipe.
 > stable: P13's Unsloth half HELD (register `.native-vs-native`, a labelled row). axolotl's scattermoe draws were 10.8 % apart, with
 > 216, 61-65 and 76-81 s warm-up steps inside the window, so P13 is UNTESTED and no "fastest" statement is made. Amendment 8 re-asks the
 > axolotl half over steps 101..200 of a 200-step run (P14).
+>
+> **P14 (`tc1-5090-35`, amendment 8).** Over steps 101..200 of a 200-step run, **axolotl scattermoe / e4b as shipped is 0.911
+> [0.902, 0.921]**: P14 HELD, and axolotl is faster at steady state (register `.native-steady-state`). e4b still finishes the 200-step run
+> first, because of axolotl's warm-up, and axolotl's held-out matches the matched curve while e4b as shipped sits 0.024-0.027 above it.
 
 **axolotl 0.20.0 on Qwen3-30B-A3B at its pins (torch 2.14.0+cu130, transformers 5.17.0, peft 0.21.0) does not train** (box `tc1-5090-20`,
 with the venv installing after amendment 3): both matched draws loaded (`quantize_moe_experts` packed all 96 stacks, PEFT's

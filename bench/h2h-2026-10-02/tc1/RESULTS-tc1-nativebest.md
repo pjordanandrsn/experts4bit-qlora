@@ -1,4 +1,4 @@
-# TC1 native-best against native-best (amendments 5-7, P13): two boxes, one scored
+# TC1 native-best against native-best (amendments 5-8: P13 and P14)
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 5 (the token and P13), 6 (the scattermoe second
 draw's Hub rule) and 7 (the reducer registration, the clock sampler, and the whole token again). Receipts:
@@ -12,6 +12,38 @@ N(0, 1/r) init. axolotl 0.20.0 uses its scattermoe native-best (KernelsPlugin) w
 uses grouped_mm, the speed tilt and its own init. All three train the same 642,514,944 parameters on the same tokens (sha
 `bfc742f67e37`) at the field recipe for N = 20, on one RTX 5090 per box. e4b's matched fused arm runs last on each box as the anchor for
 the validity predicates. Held-out losses are reported beside the times and never judged across different inits.
+
+## P14 on `tc1-5090-35`: at steady state axolotl's scattermoe steps 9 % faster than e4b as shipped
+
+Amendment 8 re-asked P13's axolotl half over 200 steps of the field recipe, read on steps 101..200. The box was instance 53935033
+(Intel Xeon E5-2698 v4, driver 595.71.05), e4b `7c31b88`, $1.76, with receipts in [`receipts/tc1-5090-35/`](receipts/tc1-5090-35/).
+Every arm is VALID, and the reducer's box-side `RESULTS-tc1.md` scores P14.
+
+| arm | late window, median of steps 101..200 (s) | median of steps 11..200 (s) | sum of all 200 steps (s) | peak VRAM | held-out at 200 |
+|---|---|---|---|---|---|
+| e4b shipped, draw 1 / 2 | 6.637 / 6.757 | 6.739 / 6.675 | 1,372 / 1,353 | 25.51 GB | 0.7926 / 0.7958 |
+| axolotl scattermoe native-best, draw 1 / 2 | 6.114 / 6.092 | 6.169 / 6.026 | 2,023 / 1,934 | 26.77 GB | 0.7696 / 0.7695 |
+| e4b matched fused (anchor, one draw) | 7.556 | 8.048 | 1,649 | 29.15 GB | 0.7691 |
+
+- **P14 is HELD.** axolotl scattermoe / e4b shipped is **0.911 [0.902, 0.921]** on the late window, inside [0.90, 1.10]. The late
+  medians agree within 1.8 % (e4b) and 0.4 % (axolotl).
+- **The ordering reading favours axolotl.** The whole interval lies below 1.0, so axolotl's scattermoe native-best steps about 9 %
+  faster than e4b as shipped at steady state on this card and host. The 11..200 medians read the same: 0.909 [0.894, 0.924]. Under
+  amendment 8's decision rule this is the finding, and the claims register says so (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.native-steady-state`).
+- **Over the whole run, e4b finishes first.** axolotl's first steps take 359 / 324, 57 / 53 and 103 / 102 s (steps 1-3). Counting a spike as a step
+  above 1.5× the draw's late median, draw 1 spikes on 20 steps and draw 2 on 19. Eighteen of those steps are the same in both draws (1, 2,
+  3, 5, 6, 11, 13, 18, 20, 22, 32, 52, 63, 68, 72, 117, 144 and 191), and three fall inside the late window. Summed over 200 steps, its step time is 1,934-2,023 s against e4b shipped's 1,353-1,372 s.
+- **Energy and memory.** axolotl spends ×1.32 the energy per step (1,242 against 940 J). This is net-of-idle power times the whole
+  run's mean step time, so it includes the warm-up. Its peak VRAM is 1.25 GB higher.
+- **Held-out at step 200.** axolotl's native configuration reaches the box's matched e4b curve (0.7696 / 0.7695 against 0.7691). e4b as
+  shipped sits 0.024-0.027 above it, which reproduces TC1b's as-shipped plateau (+0.0258, `.plateau-shipped-n200`). These are reported,
+  not judged: each framework uses its own init.
+- **Clocks.** The SM clock averages 2,400-2,406 MHz on every arm. A software power-cap flag (`0x4`) appears in some axolotl samples
+  only, and one transient sample dips to 1,327 MHz. Dynamo records no recompile on any arm.
+
+The spikes landing on the same steps in both draws fit the warm-up hypothesis: a per-process cost keyed on batch shape, such as Triton
+autotuning in the scattermoe kernels. The cause is still not measured. This is one host. On `tc1-5090-34`'s faster host, the warm steps
+14-16 put axolotl at 0.94-0.99 of e4b shipped, the same direction.
 
 ## P13 is scored on `tc1-5090-34` and is UNTESTED
 
