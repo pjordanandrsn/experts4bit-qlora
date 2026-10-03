@@ -8928,6 +8928,30 @@
         "receipts/experts4bit-qlora/2026-10-03/tc1-5090-38/tc1/"
       ],
       "notes": "Within-box A/B. The one sync left per layer pass is the grouped kernels' host-sized launch grid (#945)."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.lora-delta-lean.qwen3.5090.2026-10-03",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 13 (#945), one rented RTX 5090 (tc1-5090-42): grouped-nf4-gemm's trimmed padded LoRA delta (grouped-nf4-gemm#440: one flat row index, a gather with a scatter backward, no zero fill or slice copy, scaling on the gathered rows and skipped at exactly 1 -- forward and gradients bit-identical to the previous body) steps the Qwen3-30B-A3B field recipe at 0.939 [0.935, 0.944] x the previous body on the shipped arm (2.218 / 2.217 against 2.371 / 2.350 s) and 0.911 [0.898, 0.925] x on the matched arm (2.728 / 2.654 against 2.949 / 2.955 s); every pair stable (within 2.7 %); held-out at N unchanged (shipped 0.8110 / 0.8127 against 0.8113 / 0.8160, matched 0.8489 / 0.8502 against 0.8497 / 0.8516), matched peak VRAM 27.24 against 27.82 GB, energy per step lower. Engagement is verified per arm (lean_ab: the body in force; the padded path served all 16,896 delta calls). P20 and P21 HELD. e4b against itself on one host, after #945's sync fix: no cross-framework position is restated from it.",
+      "value": 0.939,
+      "unit": "ratio s/step, trimmed padded LoRA delta / previous body, shipped arm (medians of steps 11..20 over two draws each; < 1 = faster); matched arm 0.911 [0.898, 0.925]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-42: instance 54006898, AMD Ryzen 9 7900, driver 580.178.04); e4b @ e129650 on torch 2.8.0+cu128, grouped-nf4-gemm @ 58fb19d",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; token qwen3leanab; NF4_QLORA_LEAN_DELTA=0 vs 1 on the post-#945 sync path (single-read grouping, pinned ring), LoRA path auto, shipped arm (bf16 expert adapters, native init) and matched arm (fp32 adapters, matched:3407), two draws each in ABBA order; validity and scoring by bench/tc1/tc1_reduce.py (engagement predicates on lean_ab and sync_ab)",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-leanab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-42/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-42/tc1/"
+      ],
+      "notes": "Within-box A/B. The removed scalar pass was 94 ms of the shipped arm's 2.05 s device time in amendment 12's profile (tc1-5090-41)."
     }
   ]
 }

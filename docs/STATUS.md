@@ -192,6 +192,10 @@ TC1 amendment 10, #945): a fused MoE training layer pass made 13 host syncs, and
 the field recipe at **0.866** (shipped) and **0.847** (matched) of the legacy path,
 with unchanged held-out loss and peak VRAM. The positions above predate it and stand
 as measured; none is restated from an A/B of e4b against itself.
+**And again** (`e4b.train.lora-delta-lean.qwen3.5090.2026-10-03`, TC1 amendment 13): grouped-nf4-gemm's padded LoRA delta
+trimmed exactly (#440: no zero fill, no scalar pass at scaling 1, a sort-free gather) steps the field
+recipe at **0.939** (shipped) and **0.911** (matched) of the previous body on one 5090, held-out loss
+unchanged.
 **On an H100 NVL the sign reverses** (lane TC1c, the same
 matched set, one rented box, [`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md);
 register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`): Unsloth takes 2.546

@@ -1,0 +1,17 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-42",
+ "instance_id": "54006898",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "580.178.04",
+ "cpu": "AMD Ryzen 9 7900 12-Core Processor",
+ "nproc": 24,
+ "mem_total_kb": "130952932",
+ "cgroup_memory_max": "128730529792",
+ "disk_root": "overlay         320G  9.3M  320G   1% /",
+ "hostname": "90606a9f8d52",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}

@@ -1,6 +1,22 @@
 # Changelog
 
 ## Unreleased
+
+### TC1 amendment 13 read (#945): grouped-nf4-gemm's trimmed LoRA delta makes e4b's training step 6–9 % faster on a 5090
+
+- **What was asked.** On one RTX 5090 (`tc1-5090-42`, $0.33), e4b against itself on the post-#945 sync path: grouped-nf4-gemm's
+  previous padded LoRA delta (`NF4_QLORA_LEAN_DELTA=0`) against its trimmed body (#440). Shipped and matched arms, two draws each,
+  ABBA order.
+- **What it read.** P20 and P21 are HELD:
+
+  | arm | trimmed / previous step time | cross-draw range |
+  |---|---|---|
+  | shipped | **0.939** | 0.935 – 0.944 |
+  | matched | **0.911** | 0.898 – 0.925 |
+
+  Held-out loss is unchanged, matched peak VRAM is 0.6 GB lower, and energy per step is lower (register `e4b.train.lora-delta-lean.qwen3.5090.2026-10-03`).
+- **What follows.** The trimmed body stays grouped-nf4-gemm's default. Read: `bench/h2h-2026-10-02/tc1/RESULTS-tc1-leanab.md`.
+
 ### SC1 read, box A's third draw (#846): P13 holds on all three boxes (vLLM / e4b scheduler 1.167-1.203 at B=1, 1.167-1.177 at B=16); P7, P8 and P11 REFUTED, P14 HOLDS; the licence is QUALITY_FAIL a third time (bench docs and receipts only)
 
 - `sc1a-5090-4` (adertha-receipts `c4915d3`, e4b `c19dd52` with A13, Ryzen 9 7950X, $1.9335): every arm VALID, none
