@@ -43,7 +43,8 @@ def test_fused_matches_the_composite_to_one_ulp(shape):
     xa, xb = x.clone().requires_grad_(True), x.clone().requires_grad_(True)
     ya, yb = ref(xa), rmsnorm_frozen(xb, ref.weight, ref.variance_epsilon)
     g = torch.randn_like(ya)
-    ya.backward(g); yb.backward(g)
+    ya.backward(g)
+    yb.backward(g)
     for a, b in ((ya.detach(), yb.detach()), (xa.grad, xb.grad)):
         d = (a.float() - b.float()).abs()
         ulp = torch.finfo(torch.bfloat16).eps * a.float().abs().clamp_min(torch.finfo(torch.bfloat16).tiny)
