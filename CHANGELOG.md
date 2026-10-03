@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.43.0 — 2026-10-03 — `serve_paged` captures bucketed decode graphs by default (`E4B_PAGED_GRAPHS=auto`): ×5.60 the old eager default with 16 concurrent requests and ×9.02 with one on an RTX 5090, at no measured quality cost (lanes P109, P110); e4b's training lead over axolotl's scattermoe replicates on a second host
+
+**0.43.0.** One default changes. `serve_paged` now decodes with bucketed CUDA graphs on a CUDA device at the `all-vram`
+placement (`E4B_PAGED_GRAPHS=auto`). `E4B_PAGED_GRAPHS=0` restores eager decode.
+
+**The license.** On the default server (Qwen3-30B-A3B NF4, one RTX 5090):
+- **Speed (P109).** Graphs ran ×5.60 the eager default with 16 concurrent requests (731–748 against 125–131 tok/s) and
+  ×9.02 with one (99.4 against 10.4–11.0).
+- **Function (P109).** The replay is bit-identical to its own padded eager step.
+- **Quality (P110).** The arithmetic graphs bring, device grouping plus bucket padding, reads +0.0004 nats against the
+  eager default, teacher-forced. That is inside the eager default's own neutral perturbations (AT_PARITY).
+
+**What it means for a user.**
+- Greedy outputs change from the old eager default's at the bf16 level, at no measured quality cost.
+- Startup adds about 3 s of capture.
+- A `PagedServeConfig` built directly in code keeps `graphs=False`.
+- **Scope.** Read on Qwen3-30B-A3B NF4. Hybrid models' graphs are P101's; other families ride the same capture code
+  without a reading of their own.
+
+**Also in this release:**
+- TC1 amendments 17–18 read e4b's steady-state training lead over axolotl's scattermoe on a second host: 1.146, against
+  1.238 on the first.
+- SC1b's read names where e4b's serving losses come from.
+- TC1 amendment 19 is registered.
+
+grouped-nf4-gemm is unchanged; CI still tests against 0.35.0.
+
 ### `serve_paged` captures bucketed decode graphs by default (`E4B_PAGED_GRAPHS=auto`; `0` keeps eager decode) (#770, lanes P109 and P110)
 
 - **What changes.** `PagedServeConfig.from_env()` resolves `E4B_PAGED_GRAPHS` through `_graphs_env`:
@@ -172,26 +199,11 @@
   - `tests/test_p109_box.py`: the box end to end on CPU over a scripted runner and a real scheduler, through the
     reducer.
 
-### SC1b amendment A3 (#846): written after box D's first run -- vLLM's periodic steps kept, CUPTI's graph-id messages labelled, node-trace overhead as a band, in-graph kernel overlap as a term; a confirmatory re-run (bench and tests only)
+### TC1 amendment 19 registered (#835): the matched-work positions again, with e4b after amendments 10–15 (P30, P31, P32) (bench only)
 
-- **`sc1d-5090-2`** (machine 45511, $0.7788, all 24 passes exit 0) reads as registered:
-  - Q2 REFUTED: e4b runs 1,550 in-graph kernels per B=1 step against llama.cpp's 1,110, a ratio of 1.396 (>= 1.5
-    predicted).
-  - Q1 and Q3-Q5 UNREAD.
-  - The only gap read is G4 at B=16 (e4b - SGLang +1.874 ms/step), named norm_elem (+1.007 ms).
-- **Three instrument causes, each fixed in `sc1b_census.py`:**
-  - The out-of-graph drop rule threw away vLLM's every-16th step (a KV block-table write), which voided vLLM.
-  - The diagnostics gate read CUPTI's graph-id mapping messages as errors on llama.cpp B=16.
-  - A flat 2 % node-trace gate blocked every B=1 arm. It is replaced by a bound on what node tracing can add, and a
-    gap reads only if its reading holds across that bound.
-- **G1's remainder was kernel overlap.** llama.cpp overlaps 1,060 of 1,109 consecutive in-graph kernel pairs on one stream
-  at B=1 (1.35 ms per step); e4b overlaps none. The overlap is now an explicit term of the identity.
-- `sc1b_read.py`: Q1-Q5 keep A1's term set and are decided across the bands. Q6-Q8 are added as replications of what
-  `sc1d-5090-2` showed: G1 names the overlap, the B=16 vLLM and SGLang gaps name norm_elem, and llama.cpp overlaps
-  >= 90 % of pairs where e4b overlaps <= 1 %.
-- Capture paths are byte-identical to `77469c1`, which `sc1d-prove-2` proved, so box D re-runs as `sc1d-5090-3` without
-  a new proof.
-
+- #996 pre-registers re-reads of TC1's headline matched-work positions on the current e4b, before any box runs:
+  Unsloth / e4b 1.437 and axolotl / e4b 1.416, both measured before #945. It merged without a changelog line, so it is
+  listed here.
 
 ## 0.42.0 — 2026-10-03 — paged prefill attention on the flash kernel by default (lane P107: a 4096-token prefill's device time 906 → 378 ms on an RTX 5090); the fused training RMSNorm on by default; with grouped-nf4-gemm 0.35.0, e4b's fused training step runs ahead of axolotl's scattermoe at steady state on a 5090 (1.238); Gemma-4's paged path at parity (P108)
 
@@ -224,6 +236,27 @@
 **Also in this release:**
 - P108 reads Gemma-4's paged path **AT_PARITY** with transformers' own perturbations, which closes #359.
 - SC1b, the per-kernel census of each serving engine's decode step, is registered.
+
+### SC1b amendment A3 (#846): written after box D's first run -- vLLM's periodic steps kept, CUPTI's graph-id messages labelled, node-trace overhead as a band, in-graph kernel overlap as a term; a confirmatory re-run (bench and tests only)
+
+- **`sc1d-5090-2`** (machine 45511, $0.7788, all 24 passes exit 0) reads as registered:
+  - Q2 REFUTED: e4b runs 1,550 in-graph kernels per B=1 step against llama.cpp's 1,110, a ratio of 1.396 (>= 1.5
+    predicted).
+  - Q1 and Q3-Q5 UNREAD.
+  - The only gap read is G4 at B=16 (e4b - SGLang +1.874 ms/step), named norm_elem (+1.007 ms).
+- **Three instrument causes, each fixed in `sc1b_census.py`:**
+  - The out-of-graph drop rule threw away vLLM's every-16th step (a KV block-table write), which voided vLLM.
+  - The diagnostics gate read CUPTI's graph-id mapping messages as errors on llama.cpp B=16.
+  - A flat 2 % node-trace gate blocked every B=1 arm. It is replaced by a bound on what node tracing can add, and a
+    gap reads only if its reading holds across that bound.
+- **G1's remainder was kernel overlap.** llama.cpp overlaps 1,060 of 1,109 consecutive in-graph kernel pairs on one stream
+  at B=1 (1.35 ms per step); e4b overlaps none. The overlap is now an explicit term of the identity.
+- `sc1b_read.py`: Q1-Q5 keep A1's term set and are decided across the bands. Q6-Q8 are added as replications of what
+  `sc1d-5090-2` showed: G1 names the overlap, the B=16 vLLM and SGLang gaps name norm_elem, and llama.cpp overlaps
+  >= 90 % of pairs where e4b overlaps <= 1 %.
+- Capture paths are byte-identical to `77469c1`, which `sc1d-prove-2` proved, so box D re-runs as `sc1d-5090-3` without
+  a new proof.
+
 
 ### P108 read (RTX 5090): AT_PARITY -- Gemma-4's paged path is indistinguishable from transformers' own arithmetically neutral perturbations over 32 windows with the sliding window binding (#359)
 
