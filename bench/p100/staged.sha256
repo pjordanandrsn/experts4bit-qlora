@@ -1,0 +1,12 @@
+# Names as the BOX sees them after staging ($W). The box runs `sha256sum -c` on this file and the controller resolves
+# each name to its source (p100_drive.sh's case) and compares. sc1_e4b_sched.py / sc1_prompts.py are SC1's registered bytes,
+# step_decomp.py / calib.json P39's, p98_bake.py P98's; p42_usercustomize.py is bench/p42/hook/usercustomize.py.
+de979f3100cab6282f6f2095f4eb6bb3a93936997febfb9f9e36c9cb2ff7ebc2  p100_run.sh
+6e06d46163ff11bf2af9979de2f4a509bc8f7f0d6d36f66c26eb639e4631dc09  p100_box.py
+351467b903ffbbbedd4c4034d8e359ffd1963e6fe58c117c3d4dd4e8234019f6  p100_reduce.py
+e3964c66997c2c2f39406904ac0cfa37bd083ed1f40f85117eadc1620be9a1ce  sc1_e4b_sched.py
+eae98f666da1337bc1c2bd14b6b19f6c8c6103e9492c025b8d905f197024b1cd  sc1_prompts.py
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
+1b523751b504c16a977853e12b9db7f07c3e5c4019fe31f22e4b4c69caff6f89  p98_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  p42_usercustomize.py
