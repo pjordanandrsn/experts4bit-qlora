@@ -165,7 +165,15 @@ Qwen3-Next.
     bucket 1's first replay.
   - The cause was the MoE engine's single-entry row-to-token index cache: a later bucket's capture warm-up freed the
     index an earlier bucket's graph still read. It is fixed in #918 (#913), with a reproduction test on a non-hybrid NF4 MoE.
-- **Not yet done:**
-  - the Gated DeltaNet layers run whatever kernels transformers finds (`fla` / `causal_conv1d`), or its torch path.
-    P97 read the torch path, at 830 ms per 4-row step, eagerly; P101's graphs replay the same torch path.
-  - Only Qwen3.6 has been read on a GPU.
+- **The Gated DeltaNet kernels (lane P103, [`bench/p103/RESULTS-p103.md`](../bench/p103/RESULTS-p103.md), stopped at
+  its proving rental, no verdict).** transformers uses `fla` / `causal_conv1d` when they are installed, and its torch
+  path otherwise. Every reading above ran the torch path: P97 eagerly, at 830 ms per 4-row step, and P101 under
+  graphs.
+  - On a 5090, `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 install and engage, and decode graphs replay
+    exactly on them.
+  - But fla's chunk kernel makes chunked prefill depend on where a prompt is split. transformers' own chunked prefill
+    drifts identically, so this is not e4b's pool.
+  - As a result, the hybrid parity test, calibrated on the torch path, fails with the kernels installed: worst relative
+    logit error 7.6e-2 against a 4.05e-2 bound, with tokens still equal.
+  - The torch path remains the read configuration. The kernels' speed has not been read.
+- **Not yet done:** only Qwen3.6 has been read on a GPU.

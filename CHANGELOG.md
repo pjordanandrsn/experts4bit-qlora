@@ -14,6 +14,27 @@
   softmax kernels around them -- prefill attention without tensor cores.
 - `bench/p102/RESULTS-p102.md`; receipts under `bench/p102/receipts/`. Lane total $0.7328 over six attempts.
 
+### P103 stopped at its proving rental (#928), no verdict: flash-linear-attention and causal-conv1d install and engage on a 5090, and decode graphs replay exactly on them, but the hybrid premise fails; the cause is fla's chunk kernel, not e4b
+
+- `bench/p103/RESULTS-p103.md`, `bench/p103/receipts/p103-prove-2/`, `bench/p103/a2000/`.
+- **The proving rental** (`p103-prove-2`, one RTX 5090): premise t passed 4. Premise f and premise fc each read
+  1 failed, 3 passed: `test_linear_state_gpu.py`'s hybrid-vs-transformers check, hybrid 7.6e-2 / 8.2e-2 against a
+  4.05e-2 bound (torch path 2.6e-2), tokens equal. The graph tests passed in every phase.
+- **Isolated at $0 on the A2000, over 20 seeds:**
+  - fla's chunk rule is not invariant to where a prompt is split: 3.4e-3 to 5.1e-3 relative, against 6e-7 to 1.7e-3
+    on the torch path;
+  - transformers' own chunked prefill under fla drifts exactly as e4b's pooled chunked prefill does: identical median,
+    mean and maximum;
+  - on the torch path both are exact;
+  - the decode-step recurrent rule is exactly batch-invariant in both implementations;
+  - the layout of the state handed over does not matter.
+  Not an e4b defect.
+- **The reading is not run:** it could only re-measure phase t (P101). `docs/SERVING.md` records the finding, and the
+  torch path remains the read configuration.
+- **Unexplained:** with causal-conv1d engaged, one seed in 20 read 1.66 relative error in transformers' own chunked
+  prefill (e4b's pooled path: 8.4e-3 at most). Not filed upstream.
+- $0.1330: two proving rentals, one stuck `loading`.
+
 ### P102 amendment A2 (#916): the loop's engagement check is structural -- the registered 9,600-decode floor voided the first full draw (bench and tests only)
 
 - `p102-5090-5` (adertha-receipts `796486c`, $0.3466) ran every arm. The reducer voided it because `loop` had 8,390
