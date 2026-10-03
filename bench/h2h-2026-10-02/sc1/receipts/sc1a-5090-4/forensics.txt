@@ -1,0 +1,16 @@
+GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-b59c7979-74a7-fdfc-280d-0d81c32ec602)
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.159.03, GPU-b59c7979-74a7-fdfc-280d-0d81c32ec602, 12.0, 1, 16, 5, 16
+power.limit,clocks.max.sm 500.00 W, 3105 MHz
+Vendor ID:                            AuthenticAMD
+Model name:                           AMD Ryzen 9 7950X 16-Core Processor
+nproc 32
+cgroup cpu.max 3071999 100000  memory.max 128756744192
+loadavg 0.09 0.14 0.25 1/606 596
+               total        used        free      shared  buff/cache   available
+Mem:             124           1          49           0          73         121
+overlay         320G  2.0M  320G   1% /
+Build cuda_12.9.r12.9/compiler.36037853_0
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+Python 3.11.13
+cpu_vendor AuthenticAMD
+ram_gb 124 (oracle floor 98)

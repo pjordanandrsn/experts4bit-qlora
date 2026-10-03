@@ -1,0 +1,13 @@
+SC1 arm=e4b_nf4_ctrl_b1_r1 box=A e4b=c19dd5248c9af650d1619dba45ea62d28a59772c gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 at=2026-10-03T10:53:59Z nproc=32 cpu.max=3071999/100000 load=2.77/3.90/3.98
+ENV: E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=0 
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 3551.88it/s]
+[10:54:04]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested main, unpinned)
+[10:54:04]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[10:54:04]   quantized experts on 48/48 MoE layers (128 experts each)
+[10:54:04]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[10:54:05]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[10:54:24]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+REPLAY_PROFILE_OUT /root/sc1/logs/census_e4b_nf4_ctrl_b1_r1.txt
+B1D_TIMED_GRAPH steps=127 step=9.96ms compile=None recompiles=0 out=/root/sc1/e4b_nf4_ctrl_b1_r1.json

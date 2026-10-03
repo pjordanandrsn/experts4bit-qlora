@@ -1,0 +1,21 @@
+SC1 arm=e4b_k19census_b1 box=A e4b=c19dd5248c9af650d1619dba45ea62d28a59772c gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 at=2026-10-03T09:58:22Z nproc=32 cpu.max=3071999/100000 load=2.72/3.71/3.72
+ENV: E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_SERVE_EXP_INT4=1 E4B_SERVE_EXP_INT4_CALIB=1 E4B_SERVE_ATTN_INT4_CALIB=1 E4B_SERVE_ATTN_INT4=0 E4B_CALIB_SOURCE=c4 E4B_CALIB_NSEQ=128 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_INT4_ARTIFACT_DIR=/root/sc1/artifact E4B_INT4_EXPECTED_FINGERPRINT=sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d E4B_INT4_GROUPED_SMALLM=1 E4B_INT4_LEAN_GLUE=auto 
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 3252.71it/s]
+[09:58:26]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested main, unpinned)
+[09:58:26]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[09:58:26]   quantized experts on 48/48 MoE layers (128 experts each)
+[09:58:26]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[09:58:27]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[09:58:46]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 3376.07it/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+INT4EXP loading licensed artifact: /root/sc1/artifact sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d
+INT4EXP licensed artifact sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d installed on 48 layers
+INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+REPLAY_PROFILE_OUT /root/sc1/logs/census_e4b_k19census_b1.txt
+B1D_TIMED_GRAPH steps=127 step=4.82ms compile=None recompiles=0 out=/root/sc1/e4b_k19census_b1.json
