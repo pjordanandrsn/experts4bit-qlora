@@ -102,3 +102,29 @@ configurations (an environment variable and a flag of `p98_box.py`'s), and the r
 self-test, the staged pin and the driver's dry run.
 
 Amendments, dated, go below this line before any data is read.
+
+### Amendment 1 (2026-10-03, before the launch; no P99 data exists)
+
+- **Answer 1 reads as "Qwen3.6-specific", not "the hybrid state".** Arm d1 swaps Qwen3.6 for OLMoE-1B-7B, which
+  removes more than the per-slot linear state:
+  - 64 routed experts instead of 256;
+  - no shared expert;
+  - a different attention geometry (16 KV heads × 128 against 2 × 256);
+  - a full-size KV pool instead of the compact 10-layer one.
+
+  A d1g that does not fault therefore says that something particular to Qwen3.6 is necessary for the fault, not that
+  the linear state is. The reducer's key keeps its name, `hybrid_state_necessary`, because its bytes are staged and
+  pinned. The results report it as **qwen36_specific**. A conclusion about the hybrid state needs a further arm.
+  `tests/test_hybrid_decode_graphs_gpu.py`, which passed on sm_120 in P98's premise, already shows the per-slot state
+  replaying exactly under bucketed fp8 graphs on a dense hybrid with no MoE.
+- **One mechanism ruled out before the launch, at $0, on the NAS A2000.** The fused tile-table builder
+  (`int4_b32.build_group_tiles_fused`) feeds `sorted_ids = local_ids.index_select(0, order)`: a small-index
+  `index_select` over the routed rows, the shape of P98's assert. If its kernel left part of `order` unwritten,
+  an eager step could reuse a block that held a valid `order` and pass, while a graph's never-written buffer would
+  index past the routed rows.
+  - Checked on 64, 128 and 256 experts, 1–16 rows × top-8, 20 random routings each, with the caching allocator handed
+    a poisoned block (`0x7FFFFFFF`) before every call.
+  - Every output (`order` a full permutation of the rows, `counts` the per-expert histogram, and the three tile
+    tables) equals the chained builder's: 0 of 300 calls differ.
+
+  The builder is not the cause.
