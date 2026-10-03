@@ -166,3 +166,21 @@ had finished only about one group of four.
 **What does not change:** the windows, the arms, the floor, the rule, the premise, the predictions and the consequence.
 
 **One prediction is already wrong.** "The box ≤ 60 min" is refuted by the timing above, and the read will say so.
+
+### Amendment 2 (2026-10-03, written at 15:46Z by `date -u`, before any data is read): the box's time budget again, with margin
+
+**What happened.** `p108-5090-1` ended on its 75-minute alarm (rc 142, HARNESS_ERROR, $0.8047; store `bdc1b6d`) after
+two of its four groups (six paged passes). No `box.json` was written, and no measurement exists.
+- **The timing:** a group takes about 33–40 minutes on that host (AMD EPYC 7663), so the whole box needs about 140.
+- **Why Amendment 1 is not enough:** its 150-minute alarm would leave ~10 minutes of margin, and this decode is
+  host-bound, so a slower host would fail again.
+
+**What changes:**
+- **The box's alarm:** 150 → **220 minutes** (`step_alarm 13200`, re-pinned).
+- **The reading's guard:** 3 h → **4 h at ≤ $0.75/h (≤ $3.00)**.
+- **The lane ceiling:** $3.50 → **$4.25**. Spent so far: $0.8383 (the proof $0.0336, run 1 $0.8047). The hard stop
+  stays at $4.50.
+
+**What does not change:** everything else, as in Amendment 1. The registered design (32 windows × 256 positions) is
+kept rather than shrunk: a shorter reading would trade away the statistical power the lane exists for, to save about
+$1.
