@@ -246,6 +246,19 @@ for _p, _k, _t in SYNC_PAIRS:
         DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 12 (#945): the profile after the syncs are gone
+PROF945_FAM = "qwen3prof945"      # the TC1 profile instrument on e4b shipped + matched (new path) and matched (legacy path) on one card
+PROF945_ARMS = (("e4b", "fused_attn4_shipped_prof"), ("e4b", "fused_attn4_m_prof"), ("e4b", "fused_attn4_m_prof_legacy"))
+P19_MIN_GAIN = 0.05               # P19: matched new-path device busy fraction >= the legacy arm's + 0.05
+FAMS.append(PROF945_FAM)
+NAMES[PROF945_FAM] = "Qwen3-30B-A3B (amendment 12: where e4b's step goes after #945, profiled; the legacy path as the before-picture)"
+N_LAYERS[PROF945_FAM] = 48
+ATTN_CENSUS[PROF945_FAM] = 192
+FAM_ANCHOR[PROF945_FAM] = ("e4b", "fused_attn4_m_prof_legacy")
+EXPECTED[PROF945_FAM] = list(PROF945_ARMS)
+MATCHED |= {"fused_attn4_m_prof_legacy"}
+
+
 def sync_ab_why(tag, r):
     """Amendment 10's engagement predicate: the arm ran the path its tag names, by its own record. Empty string = engaged."""
     sa = (r or {}).get("sync_ab")
@@ -639,7 +652,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             nb = (r.get("axolotl_bnb4bit_modules") or {}).get("n_bnb4bit_unwrapped")
             if nb is None or nb < L:
                 why.append(f"quantize_moe_experts set but bnb-parametrized experts modules (innermost) {nb} < {L}")
-    if fam == SYNC_FAM and fw == "e4b":            # amendment 10: the arm ran the path its tag names
+    if fam in (SYNC_FAM, PROF945_FAM) and fw == "e4b":   # amendments 10 / 12: the arm ran the path its tag names
         w = sync_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
@@ -1152,6 +1165,36 @@ def score_syncab(F):
                     f"s/step legacy {L['s_list'][0]:.3f} / {L['s_list'][1]:.3f} (within {100 * L['stability']:.1f}%), sync1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
                     f"(within {100 * N['stability']:.1f}%); held-out at N legacy {f(L.get('heldout'), 4)} / sync1 {f(N.get('heldout'), 4)}"))
     return out
+
+
+def prof945_table(F):
+    """Amendment 12, descriptive: each profiled arm's summary (device busy fraction, device events and CPU ops per step, CPU self by family)."""
+    R = F.get(PROF945_FAM)
+    if not R:
+        return []
+    out = []
+    for k in PROF945_ARMS:
+        r = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == k), None) or {}
+        pr = r.get("profile") or {}
+        out.append({"arm": k[1], "verdict": R["verdicts"].get(k, "missing"), "s_per_step_profiled_run": r.get("s_per_step_median_11plus"),
+                    "device_busy_fraction": pr.get("device_busy_fraction"), "device_events_per_step": pr.get("device_events_per_step"),
+                    "cpu_ops_per_step": pr.get("cpu_ops_per_step"), "cpu_self_by_family_fraction": pr.get("cpu_self_by_family_fraction")})
+    return out
+
+
+def score_prof945(F):
+    """P19: the matched arm's device busy fraction with the single-read grouping + pinned ring is at least the legacy arm's + P19_MIN_GAIN,
+    both arms VALID with a profile summary. Otherwise FALSIFIED; a missing / non-VALID / unprofiled arm UNTESTED."""
+    rows = {t["arm"]: t for t in prof945_table(F)}
+    if not rows:
+        return []
+    new, old = rows.get("fused_attn4_m_prof") or {}, rows.get("fused_attn4_m_prof_legacy") or {}
+    if new.get("verdict") != "VALID" or old.get("verdict") != "VALID" or new.get("device_busy_fraction") is None or old.get("device_busy_fraction") is None:
+        return [("P19", PROF945_FAM, "UNTESTED", f"matched new {new.get('verdict')} busy {new.get('device_busy_fraction')}; legacy {old.get('verdict')} busy {old.get('device_busy_fraction')}")]
+    gain = new["device_busy_fraction"] - old["device_busy_fraction"]
+    return [("P19", PROF945_FAM, "HELD" if gain >= P19_MIN_GAIN else "FALSIFIED",
+             f"device busy fraction matched new {new['device_busy_fraction']:.3f} vs legacy {old['device_busy_fraction']:.3f} ({gain:+.3f}; >= +{P19_MIN_GAIN} predicted); "
+             f"device events/step {new.get('device_events_per_step')} vs {old.get('device_events_per_step')}; CPU ops/step {new.get('cpu_ops_per_step')} vs {old.get('cpu_ops_per_step')}")]
 
 
 # ----------------------------------------------------------------------------- R6: predictions (TC1-PREREG.md, scored mechanically)
@@ -2277,6 +2320,15 @@ def render(F, d):
         out += ["\n## Predictions P1–P10 (+ P1b) (TC1-PREREG.md + phase 2, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_predictions(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PROF945_FAM in F:
+        out += ["\n## Amendment 12 (#945): the profile after the syncs are gone (descriptive) and P19",
+                "| arm | verdict | s/step (profiled run) | device busy | device events/step | CPU ops/step | CPU self by family |", "|---|---|---|---|---|---|---|"]
+        for t in prof945_table(F):
+            out.append(f"| {t['arm']} | **{t['verdict']}** | {f(t['s_per_step_profiled_run'])} | {f(t['device_busy_fraction'], 3)} | {t['device_events_per_step']} | "
+                       f"{t['cpu_ops_per_step']} | {json.dumps(t['cpu_self_by_family_fraction'], sort_keys=True) if t['cpu_self_by_family_fraction'] else '—'} |")
+        out += ["", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_prof945(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if SYNC_FAM in F:
         out += ["\n## Predictions P16 / P17 (TC1-PREREG amendment 10, #945: single-read grouping + pinned ring vs legacy, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -2466,6 +2518,19 @@ def _sync_set(ship=((5.00, 5.05), (4.30, 4.32)), match=((5.30, 5.33), (4.60, 4.6
                                                     "gnf4_has_ring": True, "ring_staged": st, "ring_waits": 0})
     for r in R.values():
         r["fam"] = SYNC_FAM
+    return R
+
+
+def _prof945_set(busy_new=0.62, busy_old=0.48):
+    """Amendment 12: three profiled e4b arms, each recording the path it ran and a profile summary."""
+    R = {}
+    for tag, matched, mode, ring, staged, busy in (("fused_attn4_shipped_prof", False, "single", "1", 9216, 0.66), ("fused_attn4_m_prof", True, "single", "1", 9216, busy_new),
+                                                   ("fused_attn4_m_prof_legacy", True, "legacy", "0", 0, busy_old)):
+        R[("e4b", tag)] = _receipt("e4b", tag, "fused", s=4.0, matched=matched, profile={"device_busy_fraction": busy, "device_events_per_step": 140000, "cpu_ops_per_step": 700000,
+                                   "cpu_self_by_family_fraction": {"other": 0.4}},
+                                   sync_ab={"e4b_grouping": mode, "gnf4_pinned_ring": ring, "e4b_has_group_by_expert": True, "gnf4_has_ring": True, "ring_staged": staged, "ring_waits": 0})
+    for r in R.values():
+        r["fam"] = PROF945_FAM
     return R
 
 
@@ -3426,6 +3491,19 @@ def selftest():
     assert ps(_sync_set(ship=((5.00, 5.05), (4.97, 5.00)))) == {"P16": "FALSIFIED", "P17": "HELD"}          # no gain: 0.99
     R = _sync_set(); R[("e4b", "fused_attn4_m_legacy")]["sync_ab"]["e4b_grouping"] = "single"                 # a legacy arm that ran the new grouping
     assert reduce_family(SYNC_FAM, R, {}, 20)["verdicts"][("e4b", "fused_attn4_m_legacy")] == "VOID"
+    cases += 1
+    # 57. amendment 12 (#945): the profile token -- every arm VALID, the descriptive table, P19 HELD on a +0.14 busy-fraction gain, FALSIFIED on +0.02,
+    #     UNTESTED when the legacy arm ran the new path (VOID by the engagement predicate)
+    def p19(R):
+        return [(p, v) for p, _, v, _ in score_prof945({PROF945_FAM: reduce_family(PROF945_FAM, R, {}, 20)})]
+    PF = {PROF945_FAM: reduce_family(PROF945_FAM, _prof945_set(), {}, 20)}
+    assert all(x["verdict"] == "VALID" for x in PF[PROF945_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in PF[PROF945_FAM]["rows"]]
+    assert [t["arm"] for t in prof945_table(PF)] == [k[1] for k in PROF945_ARMS] and p19(_prof945_set()) == [("P19", "HELD")]
+    assert p19(_prof945_set(busy_new=0.50)) == [("P19", "FALSIFIED")]
+    R = _prof945_set(); R[("e4b", "fused_attn4_m_prof_legacy")]["sync_ab"]["e4b_grouping"] = "single"
+    assert p19(R) == [("P19", "UNTESTED")]
+    text = render(PF, "x")
+    assert "## Amendment 12 (#945)" in text and "| P19 | qwen3prof945 | **HELD** |" in text
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 

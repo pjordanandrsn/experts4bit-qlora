@@ -327,3 +327,12 @@ def test_amendment_10_registers_the_sync_ab_token():
     F = {R.SYNC_FAM: R.reduce_family(R.SYNC_FAM, R._sync_set(), {}, 20)}
     assert [(p, v) for p, _, v, _ in R.score_syncab(F)] == [("P16", "HELD"), ("P17", "HELD")]
     assert R.sync_ab_why("fused_attn4_m_legacy", {}).startswith("no sync_ab record")
+
+
+def test_amendment_12_registers_the_profile_token():
+    R = _mod()
+    assert R.PROF945_FAM == "qwen3prof945" and R.PROF945_FAM in R.FAMS and R.EXPECTED[R.PROF945_FAM] == list(R.PROF945_ARMS)
+    assert R.anchor_of(R.PROF945_FAM) == ("e4b", "fused_attn4_m_prof_legacy") and R.P19_MIN_GAIN == 0.05
+    F = {R.PROF945_FAM: R.reduce_family(R.PROF945_FAM, R._prof945_set(), {}, 20)}
+    assert [(p, v) for p, _, v, _ in R.score_prof945(F)] == [("P19", "HELD")]
+
