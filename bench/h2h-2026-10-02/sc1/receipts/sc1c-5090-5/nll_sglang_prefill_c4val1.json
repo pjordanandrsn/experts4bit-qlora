@@ -1,0 +1,9 @@
+{
+ "engine": "sglang",
+ "arm": "nll_prefill",
+ "batch": 1,
+ "status": "harness_error",
+ "reason": "rc=1",
+ "log_tail": "Traceback (most recent call last):\n  File \"/root/sc1/sglang/sc1_sglang_nll.py\", line 336, in <module>\n    sys.exit(main())\n             ^^^^^^\n  File \"/root/sc1/sglang/sc1_sglang_nll.py\", line 312, in main\n    rep = score_prefill(client, ids, prompt_len, steps, a.top_logprobs, flush)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/sc1/sglang/sc1_sglang_nll.py\", line 133, in score_prefill\n    assert lps[0] is None, \"entry 0 must be None (logprob_result_processor.py:38)\"\n           ^^^^^^^^^^^^^^\nAssertionError: entry 0 must be None (logprob_result_processor.py:38)\n",
+ "written_by": "sc1_run.sh"
+}

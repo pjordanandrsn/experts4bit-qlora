@@ -1,0 +1,1 @@
+SC1EXL3 {"arm": "4bpw_cu13_b1_r1", "batch": 1, "mode": "slope", "decode_tok_s": 117.7, "decode_ms_per_step": 8.4927, "decode_tok_s_median": 115.8, "end_to_end_tok_s_long": 81.4, "load_s": 10.6, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}

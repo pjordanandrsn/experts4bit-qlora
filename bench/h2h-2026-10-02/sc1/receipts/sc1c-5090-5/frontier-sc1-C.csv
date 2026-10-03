@@ -1,0 +1,11 @@
+B,engine,arm,tok_s_sched_axis,delta_bf16_wikitext_served,delta_bf16_c4val1_served,bpw,bpw_basis,resident_gb,stability,native
+1,e4bsched,int4_sched,209.6,0.0142,0.0241,4.50,nominal,—,STABLE,False
+16,e4bsched,int4_sched,1541.5,0.0142,0.0241,4.50,nominal,—,STABLE,False
+1,exl3,4bpw_cu13,117.7,—,—,4.03,receipt (bpw_layer),15.29,SINGLE,True
+16,exl3,4bpw_cu13,65.7,—,—,4.03,receipt (bpw_layer),18.13,SINGLE,True
+1,sglang,gptq_matched,265.9,0.0191,0.0274,4.15,nominal,—,STABLE,False
+16,sglang,gptq_matched,1836.6,0.0191,0.0274,4.15,nominal,—,STABLE,False
+1,sglang,gptq_native,265.6,0.0191,0.0274,4.15,nominal,—,STABLE,True
+16,sglang,gptq_native,1833.3,0.0191,0.0274,4.15,nominal,—,STABLE,True
+1,vllm,gptq_graph,244.5,—,—,4.15,nominal,27.49,STABLE,False
+16,vllm,gptq_graph,1814.1,—,—,4.15,nominal,27.80,STABLE,False

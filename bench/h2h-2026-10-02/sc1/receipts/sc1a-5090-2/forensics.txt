@@ -1,0 +1,16 @@
+GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-5f46ba71-1679-f4de-6f90-b53c5dbaf4d3)
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-5f46ba71-1679-f4de-6f90-b53c5dbaf4d3, 12.0, 1, 16, 4, 16
+power.limit,clocks.max.sm 600.00 W, 3210 MHz
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7663 56-Core Processor
+nproc 224
+cgroup cpu.max 3071999 100000  memory.max 294412877824
+loadavg 4.46 9.38 11.28 5/3916 633
+               total        used        free      shared  buff/cache   available
+Mem:             755          44         510           0         201         706
+overlay         320G   55M  320G   1% /
+Build cuda_12.9.r12.9/compiler.36037853_0
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+Python 3.11.13
+cpu_vendor AuthenticAMD
+ram_gb 755 (oracle floor 98)

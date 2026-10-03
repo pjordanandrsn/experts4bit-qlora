@@ -1,0 +1,260 @@
+{
+ "engine": "e4b-sched",
+ "arm": "ttft_e4b_4096",
+ "e4b_sha": "32d424e2835c3010ec199c8984af2561e3147f33",
+ "gnf4_sha": "34da93d6fe8d2a401b7001705658ce00b2b18213",
+ "torch": "2.8.0+cu129",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "batch": 1,
+ "method": "slope(32->128) through ContinuousScheduler.step(); min-of-3 (P20 estimator) and median-of-3 both recorded",
+ "prompts": "identical token ids to every other engine (step_decomp._k8_window, wikitext-2 test, 512-token rows)",
+ "engine_kwargs": {
+  "E4B_PAGED_MODEL": "Qwen/Qwen3-30B-A3B",
+  "E4B_PAGED_REVISION": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "E4B_PAGED_ARENA": "/root/sc1/work_qwen3/nf4.arena",
+  "E4B_PAGED_CALIB": "/root/sc1/calib.json",
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "1",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "4104",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1",
+  "E4B_PAGED_FUSE_QKV": "1",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "config": {
+  "model": "Qwen/Qwen3-30B-A3B",
+  "arena": "/root/sc1/work_qwen3/nf4.arena",
+  "calib": "/root/sc1/calib.json",
+  "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "served_names": [],
+  "max_seqs": 1,
+  "max_tokens_per_seq": 4104,
+  "chunk_tokens": 512,
+  "max_prefill_tokens": 0,
+  "graphs": true,
+  "buckets": [
+   1
+  ],
+  "placement": "all-vram",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64,
+  "kv_groups": "auto",
+  "fuse_qkv": true,
+  "torch_threads": 8,
+  "max_tokens_cap": 0,
+  "max_queue": 0,
+  "eos_ids": [],
+  "host": "127.0.0.1",
+  "port": 8778,
+  "trace_path": "",
+  "device": "cuda"
+ },
+ "generation": {
+  "temperature": 0.0,
+  "greedy": "argmax (PagedModelRunner)",
+  "ignore_eos": true,
+  "stop_ids": null,
+  "min_tokens": "= max_new_tokens (the scheduler's length contract)",
+  "chunk_tokens": 512,
+  "prefill_budget_per_step": 512
+ },
+ "route_env": {
+  "E4B_INT4_GROUPED_SMALLM": "auto",
+  "E4B_INT4_LEAN_GLUE": "auto",
+  "E4B_NF4_GROUPED_SMALLM": "0",
+  "E4B_MXFP4_GROUPED_SMALLM": "auto"
+ },
+ "pack_fingerprint": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d",
+ "fusion_set": "fused q/k/v WITH the env-gated folds (fuse_qkv applies them itself; the registered set)",
+ "vast_instance_id": "53918541",
+ "mode": "ttft",
+ "status": "ok",
+ "e4b_version": "0.40.0",
+ "load_s": 442.0,
+ "census": {
+  "moe_layers": 48,
+  "experts": 128,
+  "top_k": 8,
+  "model_type": "qwen3_moe",
+  "int4_expert_layers": 48,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "int4_attn_projections": 96,
+  "kv": {
+   "n_kv_heads": 4,
+   "head_dim": 128,
+   "k_groups": "auto",
+   "scratch_slots": 1,
+   "blocks_per_seq": 257
+  },
+  "graph_status": {
+   "1": "graph"
+  },
+  "grouping": {
+   "device_grouping": false,
+   "force_singleton_groups": false
+  },
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "1",
+   "E4B_SERVE_EXP_INT4_CALIB": "1",
+   "E4B_SERVE_ATTN_INT4": "0",
+   "E4B_SERVE_ATTN_INT4_CALIB": "1",
+   "E4B_CALIB_NSEQ": "128",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_INT4_ARTIFACT_DIR": "/root/sc1/artifact",
+   "E4B_INT4_EXPECTED_FINGERPRINT": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d",
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  },
+  "exp_int4_layers_enabled": 48,
+  "attn_int4_rtn_projections": 0,
+  "attn_int4_calib_projections": 192,
+  "fuse_qkv_n": 48,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48,
+  "fingerprint": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d"
+ },
+ "graph_status": {
+  "1": "graph"
+ },
+ "same_stack": {
+  "fuse_qkv_n": 48,
+  "int4_expert_layers": 48,
+  "int4_attn_projections": 96,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48,
+  "pack_fingerprint": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d",
+  "graph_status": {
+   "1": "graph"
+  }
+ },
+ "mem_after_load": {
+  "max_memory_allocated": 20299576320,
+  "memory_reserved": 18756927488,
+  "memory_allocated": 18491149312,
+  "mem_get_info_free": 14202961920,
+  "mem_get_info_total": 33668988928
+ },
+ "eos_ids_model": [
+  151645
+ ],
+ "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd",
+ "rows_sha256": [
+  "360bb886b23eebbf53c6ab8cc76fb513116ad05d613de39448f5546c4a1895ba"
+ ],
+ "prompt_tokens": [
+  4096
+ ],
+ "prompt_file": {
+  "file": "prompts_b1_4096.json",
+  "file_prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd",
+  "rows_sha256": [
+   "360bb886b23eebbf53c6ab8cc76fb513116ad05d613de39448f5546c4a1895ba"
+  ],
+  "rows_distinct_in_file": true,
+  "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd"
+ },
+ "ttft_mode": "wall of a max_new_tokens=1 request at add_request (warm, uncached: every request re-prefills)",
+ "ttft_prompt_tokens": 4096,
+ "ttft_walls_s": [
+  16.9001,
+  16.3477,
+  16.3861
+ ],
+ "ttft_s_median": 16.3861,
+ "ttft_s_min": 16.3477,
+ "scheduler_ttft_s": [
+  16.8989,
+  16.3465,
+  16.3849
+ ],
+ "prefill_steps_expected": 8,
+ "timed_windows_epoch": [
+  [
+   1790992336.1371121,
+   1790992353.0372002
+  ],
+  [
+   1790992353.037237,
+   1790992369.3849626
+  ],
+  [
+   1790992369.3849897,
+   1790992385.7710922
+  ]
+ ],
+ "prompt_tokens_engine": [
+  4096
+ ],
+ "ttft_note": "the engine's own clock (Request.ttft, from arrival) beside the wall",
+ "graph_stats": {
+  "1": {
+   "replays": 0,
+   "eager_steps": 0,
+   "rows": 0,
+   "pad_rows": 0
+  }
+ },
+ "scheduler_stats": {
+  "steps": 32,
+  "completed": 4,
+  "aborted": 0,
+  "in_flight": 0,
+  "queued": 0,
+  "tokens_emitted": 4,
+  "prefill_tokens": 16384,
+  "ttft_p50": 16.748939021003025,
+  "ttft_p99": 16.898929846996907,
+  "queue_wait_p50": 1.6170000890269876e-05,
+  "per_stream_tok_s_mean": 0.060271793583161516,
+  "kv_slots_free": 1
+ },
+ "mem_after_runs": {
+  "max_memory_allocated": 23318019584,
+  "memory_reserved": 23534239744,
+  "memory_allocated": 20306185216,
+  "mem_get_info_free": 9423552512,
+  "mem_get_info_total": 33668988928
+ },
+ "nvidia_smi": "NVIDIA GeForce RTX 5090, 23123 MiB, 32607 MiB, 580.95.05",
+ "dynamo_counters": {
+  "before_build": {},
+  "after_runs": {}
+ },
+ "banners": {
+  "int4exp_artifact": [
+   "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d"
+  ],
+  "int4exp_enabled": [
+   "48"
+  ],
+  "int4exp_calibrated": null,
+  "attn_calib": [
+   "192"
+  ],
+  "attn_rtn": null,
+  "fused_qkv": null,
+  "decode_graph": [
+   "DECODE_GRAPH bucket=1 captured"
+  ],
+  "fusions": [
+   "[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}"
+  ],
+  "ready": [
+   "[serve_paged] ready: {\"moe_layers\": 48, \"experts\": 128, \"top_k\": 8, \"model_type\": \"qwen3_moe\", \"int4_expert_layers\": 48, \"int4_store_kinds\": [\"int4_b32\"], \"int4_attn_projections\": 96, \"kv\": {\"n_kv_heads\": 4, \"head_dim\": 128, \"k_groups\": \"auto\", \"scratch_slots\": 1, \"blocks_per_seq\": 257}, \"graph_status\": {\"1\": \"graph\"}, \"grouping\": {\"device_grouping\": false, \"force_singleton_groups\": false}, \"levers_env\": {\"E4B_SERVE_EXP_INT4\": \"1\", \"E4B_SERVE_EXP_INT4_CALIB\": \"1\", \"E4B_SERVE_ATTN_INT4\": \"0\", \"E4B_SERVE_ATTN_INT4_CALIB\": \"1\", \"E4B_CALIB_NSEQ\": \"128\", \"E4B_CALIB_SOURCE\": \"c4\", \"E4B_INT4_ARTIFACT_DIR\": \"/root/sc1/artifact\", \"E4B_INT4_EXPECTED_FINGERPRINT\": \"sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d\", \"E4B_FUSE_T1_GLUE\": \"1\", \"E4B_FUSE_T1_GLUE_R2\": \"1\", \"E4B_FUSE_ROUTER_EPI\": \"1\"}, \"exp_int4_layers_enabled\": 48, \"attn_int4_rtn_projections\": 0, \"attn_int4_calib_projections\": 192, \"fuse_qkv_n\": 48, \"fuse_t1_glue_n\": 193, \"fuse_t1_glue_r2_n\": [48, 48], \"fuse_router_epilogue_n\": 48}"
+  ]
+ }
+}

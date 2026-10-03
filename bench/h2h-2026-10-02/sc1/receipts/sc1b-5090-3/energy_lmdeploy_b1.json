@@ -1,0 +1,17 @@
+{
+ "tag": "lmdeploy_b1",
+ "engine": "lmdeploy",
+ "batch": 1,
+ "start_epoch": 1790998552.1696453,
+ "stop_epoch": 1790998552.193989,
+ "tokens": 640,
+ "interval_ms": 50,
+ "sampler_start_epoch": null,
+ "sampler_fields": null,
+ "arm_start_epoch": 1790998552.1696453,
+ "arm_end_epoch": 1790998552.193989,
+ "receipt": "lmdeploy_energy_w4a16_b1.json",
+ "receipt_status": "unsupported",
+ "basis": "whole arm after load_s: 4x32 + 4x128 decoded tokens per row (640 x B); the prefills' energy is INCLUDED -- an upper bound on J/token, labelled",
+ "csv": "energy_lmdeploy_b1.csv"
+}

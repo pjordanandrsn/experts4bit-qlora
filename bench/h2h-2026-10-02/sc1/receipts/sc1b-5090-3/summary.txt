@@ -1,0 +1,130 @@
+KNOBS box=B e4b=9dd712b538e0d8102ae5c60f85f6fe854daeb205 gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
+e4b 0.40.0 @9dd712b538e0d8102ae5c60f85f6fe854daeb205
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu129 cuda 12.9
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[install-vllm 02:11:38] vllm==0.30.0 ready in /root/sc1/venv-vllm
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+exl3 install OK (cu128)
+UNSUPPORTED lmdeploy: LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)
+PHASE 0 fetches (bf16 for the bake + the oracle, GPTQ, two GGUFs, EXL3), bake, prompts; llama.cpp build + ExLlamaV3 + LMDeploy venvs done above; quiesce before the first timed arm at=2026-10-03T02:16:53Z nproc=224 cpu.max=3071999/100000 load=14.30/10.09/10.15
+FETCH qwen3 Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH gptq Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+FETCH gguf Qwen3-30B-A3B-Q4_K_M.gguf 9f1a24700a339b09
+FETCH gguf Qwen3-30B-A3B-IQ4_XS.gguf 0b06312b1b356a66
+FETCH exl3 turboderp/Qwen3-30B-A3B-exl3@0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef /root/.cache/huggingface/hub/models--turboderp--Qwen3-30B-A3B-exl3/snapshots/0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef
+BAKE qwen3 BAKE OK
+PROMPTS file=prompts_b1.json B=1 prompt_len=512 corpus=298938 step=298426 sha=a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3
+PROMPTS file=prompts_b16.json B=16 prompt_len=512 corpus=298938 step=18651 sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+PROMPTS file=prompts_b1_4096.json B=1 prompt_len=4096 corpus=298938 step=294842 sha=cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd
+PROMPTS file=prompts_b16_same.json B=16 prompt_len=512 copies_of_row0=16 sha=1e452ab00ffd792a8cdf809b27d41ddd2c1eed833fe486be9d003db7bf72d0fa source_sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+WINDOW src=wikitext text_sha=9ef10d760ad9f9eaafaedfc320702ad341cabfb141ef511eb5c71e3da94f833b n_ids=2561 prompt_len=512 steps=2048
+WINDOW src=c4val1 text_sha=4bcb55179b962a8fe5e9fbe562e13f78fbb67fda6e3ef770e3f110bea8f1989a n_ids=2561 prompt_len=512 steps=2048
+QUIESCE arms quiesced=yes waited=0s busy_procs=0 load1=9.81 nproc=224 cpu.max=3071999/100000 at=2026-10-03T02:40:15Z
+PHASE AN anchors: e4b/int4_b{16,1} window, e4bsched/int4_sched_b{16,1}, vllm/gptq_graph_b{16,1} (first draws) at=2026-10-03T02:40:15Z nproc=224 cpu.max=3071999/100000 load=9.81/11.25/10.49
+e4b_int4_b16_r1 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=9.55ms agg=1676.0tok/s recompiles=0 out=/root/sc1/e4b_int4_b16_r1.json
+e4b_int4_b1_r1 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.27ms compile=None recompiles=0 out=/root/sc1/e4b_int4_b1_r1.json
+e4bsched_int4_sched_b16_r1 B=16 rc=0 SC1SCHED {"arm": "int4_sched_b16_r1", "batch": 16, "decode_tok_s": 1655.4, "decode_ms_per_step": 9.6654, "decode_tok_s_median": 1634.4, "end_to_end_tok_s_long": 331.4, "status": "ok", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef
+e4bsched_int4_sched_b1_r1 B=1 rc=0 SC1SCHED {"arm": "int4_sched_b1_r1", "batch": 1, "decode_tok_s": 220.1, "decode_ms_per_step": 4.5435, "decode_tok_s_median": 220.0, "end_to_end_tok_s_long": 48.6, "status": "ok", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f19
+vllm_gptq_graph_b16_r1 B=16 rc=0 SC1VLLM {"arm": "graph_r1", "batch": 16, "decode_tok_s": 1961.4, "decode_ms_per_step": 8.1573, "decode_tok_s_median": 1948.8, "end_to_end_tok_s_long": 1523.3, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "status": "ok"}
+vllm_gptq_graph_b1_r1 B=1 rc=0 SC1VLLM {"arm": "graph_r1", "batch": 1, "decode_tok_s": 266.8, "decode_ms_per_step": 3.7485, "decode_tok_s_median": 266.9, "end_to_end_tok_s_long": 247.8, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "status": "ok"}
+PHASE OR the bf16 upstream oracle, both windows (oracle_<src>; box A's whole delta_bf16 axis depends on it) at=2026-10-03T02:59:02Z nproc=224 cpu.max=3071999/100000 load=3.00/6.16/7.76
+oracle_wikitext rc=0 K8_PPL steps=2048 nll=1.84015 ppl=6.29746 compute=upstream-eager-oracle sha=9ef10d760ad9 out=/root/sc1/oracle_wikitext.json
+oracle_c4val1 rc=0 K8_PPL steps=2048 nll=2.78358 ppl=16.17689 compute=upstream-eager-oracle sha=4bcb55179b96 out=/root/sc1/oracle_c4val1.json
+PHASE CMP llamacpp/q4km_b{16,1}, exl3/4bpw_b{16,1}, lmdeploy/w4a16_b{16,1} (first draws; LMDeploy last among them); llamacpp/iq4xs_b1 (single draw, speed only) at=2026-10-03T03:02:46Z nproc=224 cpu.max=3071999/100000 load=10.44/11.20/9.63
+llamacpp server Qwen3-30B-A3B-Q4_K_M_np16 up
+llamacpp_q4km_b16_r1 B=16 rc=0 SC1LLAMACPP {"arm": "q4km_b16_r1", "batch": 16, "mode": "slope", "decode_tok_s": 1031.3, "decode_ms_per_step": 15.5148, "decode_tok_s_median": 942.2, "end_to_end_tok_s_long": 722.2, "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "verdict": "VALID"}
+llamacpp server Qwen3-30B-A3B-Q4_K_M_np1 up
+llamacpp_q4km_b1_r1 B=1 rc=0 SC1LLAMACPP {"arm": "q4km_b1_r1", "batch": 1, "mode": "slope", "decode_tok_s": 325.1, "decode_ms_per_step": 3.0758, "decode_tok_s_median": 312.0, "end_to_end_tok_s_long": 288.3, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "verdict": "VALID"}
+exl3_4bpw_b16_r1 B=16 rc=0 SC1EXL3 {"arm": "4bpw_b16_r1", "batch": 16, "mode": "slope", "decode_tok_s": 108.6, "decode_ms_per_step": 147.3447, "decode_tok_s_median": 108.6, "end_to_end_tok_s_long": 85.6, "load_s": 30.5, "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+exl3_4bpw_b1_r1 B=1 rc=0 SC1EXL3 {"arm": "4bpw_b1_r1", "batch": 1, "mode": "slope", "decode_tok_s": 197.4, "decode_ms_per_step": 5.0665, "decode_tok_s_median": 207.4, "end_to_end_tok_s_long": 133.5, "load_s": 9.5, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+lmdeploy_w4a16_b16_r1 SKIPPED unsupported
+lmdeploy_w4a16_b1_r1 SKIPPED unsupported
+llamacpp server Qwen3-30B-A3B-IQ4_XS_np1 up
+llamacpp_iq4xs_b1_r1 B=1 rc=0 SC1LLAMACPP {"arm": "iq4xs_b1_r1", "batch": 1, "mode": "slope", "decode_tok_s": 325.5, "decode_ms_per_step": 3.0722, "decode_tok_s_median": 318.0, "end_to_end_tok_s_long": 293.1, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "verdict": "VALID"}
+PHASE Q quality: llama.cpp / ExLlamaV3 / LMDeploy, both windows, prefill + served shape (nll_<engine>_<mode>_<src>) at=2026-10-03T03:06:44Z nproc=224 cpu.max=3071999/100000 load=2.08/6.16/7.90
+nll_llamacpp_prefill_wikitext mode=prefill src=wikitext rc=0 SC1_LLAMACPP_NLL mode=prefill steps=2048 prompt_len=512 nll=1.853241 ppl=6.38047 top1=0.6104 sha=9ef10d760ad9 tok_s=1628.97 out=/root/sc1/nll_llamacpp_prefill_wikitext.json
+nll_llamacpp_decode_wikitext mode=decode src=wikitext rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=1.856642 ppl=6.40220 top1=0.6104 sha=9ef10d760ad9 tok_s=247.67 out=/root/sc1/nll_llamacpp_decode_wikitext.json
+nll_llamacpp_prefill_c4val1 mode=prefill src=c4val1 rc=0 SC1_LLAMACPP_NLL mode=prefill steps=2048 prompt_len=512 nll=2.803069 ppl=16.49519 top1=0.4658 sha=4bcb55179b96 tok_s=1612.37 out=/root/sc1/nll_llamacpp_prefill_c4val1.json
+nll_llamacpp_decode_c4val1 mode=decode src=c4val1 rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=2.800482 ppl=16.45257 top1=0.4644 sha=4bcb55179b96 tok_s=248.17 out=/root/sc1/nll_llamacpp_decode_c4val1.json
+nll_exl3_prefill_wikitext mode=prefill src=wikitext rc=0 SC1EXL3_NLL mode=prefill nll=1.83795 ppl=6.28363 dtype=torch.float16 sha=9ef10d760ad9
+nll_exl3_decode_wikitext mode=decode src=wikitext rc=0 SC1EXL3_NLL mode=decode nll=1.83912 ppl=6.29102 dtype=torch.float16 sha=9ef10d760ad9
+nll_exl3_prefill_c4val1 mode=prefill src=c4val1 rc=0 SC1EXL3_NLL mode=prefill nll=2.79215 ppl=16.31610 dtype=torch.float16 sha=4bcb55179b96
+nll_exl3_decode_c4val1 mode=decode src=c4val1 rc=0 SC1EXL3_NLL mode=decode nll=2.79365 ppl=16.34049 dtype=torch.float16 sha=4bcb55179b96
+nll_lmdeploy_prefill_wikitext SKIPPED
+nll_lmdeploy_decode_prefix_wikitext SKIPPED
+nll_lmdeploy_prefill_c4val1 SKIPPED
+nll_lmdeploy_decode_prefix_c4val1 SKIPPED
+PHASE AN2 anchors' second draws at=2026-10-03T03:13:26Z nproc=224 cpu.max=3071999/100000 load=6.84/5.94/6.91
+e4b_int4_b16_r2 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=9.54ms agg=1677.1tok/s recompiles=0 out=/root/sc1/e4b_int4_b16_r2.json
+e4b_int4_b1_r2 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.23ms compile=None recompiles=0 out=/root/sc1/e4b_int4_b1_r2.json
+e4bsched_int4_sched_b16_r2 B=16 rc=0 SC1SCHED {"arm": "int4_sched_b16_r2", "batch": 16, "decode_tok_s": 1669.0, "decode_ms_per_step": 9.5864, "decode_tok_s_median": 1660.8, "end_to_end_tok_s_long": 325.9, "status": "ok", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef
+e4bsched_int4_sched_b1_r2 B=1 rc=0 SC1SCHED {"arm": "int4_sched_b1_r2", "batch": 1, "decode_tok_s": 224.1, "decode_ms_per_step": 4.4631, "decode_tok_s_median": 225.2, "end_to_end_tok_s_long": 49.5, "status": "ok", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f19
+vllm_gptq_graph_b16_r2 B=16 rc=0 SC1VLLM {"arm": "graph_r2", "batch": 16, "decode_tok_s": 1934.9, "decode_ms_per_step": 8.2693, "decode_tok_s_median": 1926.0, "end_to_end_tok_s_long": 1533.7, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "status": "ok"}
+vllm_gptq_graph_b1_r2 B=1 rc=0 SC1VLLM {"arm": "graph_r2", "batch": 1, "decode_tok_s": 267.6, "decode_ms_per_step": 3.7364, "decode_tok_s_median": 266.9, "end_to_end_tok_s_long": 248.9, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "status": "ok"}
+PHASE TT TTFT 512 / 4096 on every engine present (ttft_<engine>_<len>) at=2026-10-03T03:26:31Z nproc=224 cpu.max=3071999/100000 load=2.04/5.24/7.00
+ttft_e4b_512 B=1 rc=0 SC1SCHED {"arm": "ttft_e4b_512", "batch": 1, "ttft_prompt_tokens": 512, "ttft_s_median": 2.0266, "ttft_s_min": 2.0226, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+ttft_e4b_4096 B=1 rc=0 SC1SCHED {"arm": "ttft_e4b_4096", "batch": 1, "ttft_prompt_tokens": 4096, "ttft_s_median": 16.3209, "ttft_s_min": 16.3171, "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd"}
+ttft_vllm_512 rc=0 SC1VLLMTTFT {"arm": "graph_r1", "prompt_len": 512, "ttft_ms_median": 41.09, "ttft_s_min": 0.04067, "prefill_tok_s_median": 12460.5, "max_num_batched_tokens": 2048, "max_model_len": 2048, "chunked_prefill": true, "status": "ok"}
+ttft_vllm_4096 rc=0 SC1VLLMTTFT {"arm": "graph_r1", "prompt_len": 4096, "ttft_ms_median": 174.2, "ttft_s_min": 0.17411, "prefill_tok_s_median": 23513.8, "max_num_batched_tokens": 4104, "max_model_len": 4104, "chunked_prefill": true, "status": "ok"}
+llamacpp server Qwen3-30B-A3B-Q4_K_M_np1_c8192 up
+ttft_llamacpp_512 B=1 rc=0 SC1LLAMACPP {"arm": "ttft_llamacpp_512", "batch": 1, "mode": "ttft", "ttft_s_median": 0.04479, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "verdict": "VALID"}
+ttft_llamacpp_4096 B=1 rc=0 SC1LLAMACPP {"arm": "ttft_llamacpp_4096", "batch": 1, "mode": "ttft", "ttft_s_median": 0.36278, "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd", "verdict": "VALID"}
+ttft_exl3_512 B=1 rc=0 SC1EXL3 {"arm": "ttft_exl3_512", "batch": 1, "mode": "ttft", "ttft_s": 0.3107, "load_s": 7.1, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+ttft_exl3_4096 B=1 rc=0 SC1EXL3 {"arm": "ttft_exl3_4096", "batch": 1, "mode": "ttft", "ttft_s": 0.7738, "load_s": 7.4, "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd"}
+ttft_lmdeploy_512 SKIPPED unsupported
+ttft_lmdeploy_4096 SKIPPED unsupported
+PHASE EN energy windows, B=1 only: llamacpp_b1, exl3_b1, lmdeploy_b1 (whole-arm, labelled) at=2026-10-03T03:35:25Z nproc=224 cpu.max=3071999/100000 load=5.19/6.42/7.14
+llamacpp server Qwen3-30B-A3B-Q4_K_M_np1 up
+llamacpp_energy_q4km_b1 B=1 rc=0 SC1LLAMACPP {"arm": "energy_q4km_b1", "batch": 1, "mode": "slope", "decode_tok_s": 336.8, "decode_ms_per_step": 2.9688, "decode_tok_s_median": 333.2, "end_to_end_tok_s_long": 298.6, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "verdict": "VALID"}
+ENERGY llamacpp_b1 engine=llamacpp B=1 tokens=640 window=1790998531.763679..1790998534.3880358 basis=whole arm after load_s: 4x32 + 4x128 decoded tokens per row (640 x B);
+exl3_energy_4bpw_b1 B=1 rc=0 SC1EXL3 {"arm": "energy_4bpw_b1", "batch": 1, "mode": "slope", "decode_tok_s": 196.0, "decode_ms_per_step": 5.1015, "decode_tok_s_median": 195.4, "end_to_end_tok_s_long": 133.2, "load_s": 7.0, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+ENERGY exl3_b1 engine=exl3 B=1 tokens=640 window=1790998542.4277484..1790998552.1382306 basis=whole arm after load_s: 4x32 + 4x128 decoded tokens per row (640 x B);
+lmdeploy_energy_w4a16_b1 SKIPPED unsupported
+ENERGY lmdeploy_b1 engine=lmdeploy B=1 tokens=640 window=1790998552.1696453..1790998552.193989 basis=whole arm after load_s: 4x32 + 4x128 decoded tokens per row (640 x B);
+PHASE CMP2 second draws of the six comparator arms; third draws where r1/r2 disagree > 3 % at=2026-10-03T03:35:52Z nproc=224 cpu.max=3071999/100000 load=3.76/5.98/6.98
+llamacpp server Qwen3-30B-A3B-Q4_K_M_np16 up
+llamacpp_q4km_b16_r2 B=16 rc=0 SC1LLAMACPP {"arm": "q4km_b16_r2", "batch": 16, "mode": "slope", "decode_tok_s": 1041.7, "decode_ms_per_step": 15.3593, "decode_tok_s_median": 1227.5, "end_to_end_tok_s_long": 727.0, "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "verdict": "VALID"}
+llamacpp server Qwen3-30B-A3B-Q4_K_M_np1 up
+llamacpp_q4km_b1_r2 B=1 rc=0 SC1LLAMACPP {"arm": "q4km_b1_r2", "batch": 1, "mode": "slope", "decode_tok_s": 334.1, "decode_ms_per_step": 2.9929, "decode_tok_s_median": 333.2, "end_to_end_tok_s_long": 296.0, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "verdict": "VALID"}
+exl3_4bpw_b16_r2 B=16 rc=0 SC1EXL3 {"arm": "4bpw_b16_r2", "batch": 16, "mode": "slope", "decode_tok_s": 112.8, "decode_ms_per_step": 141.8, "decode_tok_s_median": 111.3, "end_to_end_tok_s_long": 89.1, "load_s": 7.8, "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+exl3_4bpw_b1_r2 B=1 rc=0 SC1EXL3 {"arm": "4bpw_b1_r2", "batch": 1, "mode": "slope", "decode_tok_s": 205.1, "decode_ms_per_step": 4.8752, "decode_tok_s_median": 204.7, "end_to_end_tok_s_long": 134.3, "load_s": 8.1, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+lmdeploy_w4a16_b16_r2 SKIPPED unsupported
+lmdeploy_w4a16_b1_r2 SKIPPED unsupported
+THIRD DRAW exl3/4bpw_b16: r1 and r2 disagree by > 3 %
+exl3_4bpw_b16_r3 B=16 rc=0 SC1EXL3 {"arm": "4bpw_b16_r3", "batch": 16, "mode": "slope", "decode_tok_s": 104.9, "decode_ms_per_step": 152.5989, "decode_tok_s_median": 106.2, "end_to_end_tok_s_long": 83.6, "load_s": 7.9, "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+THIRD DRAW exl3/4bpw_b1: r1 and r2 disagree by > 3 %
+exl3_4bpw_b1_r3 B=1 rc=0 SC1EXL3 {"arm": "4bpw_b1_r3", "batch": 1, "mode": "slope", "decode_tok_s": 199.7, "decode_ms_per_step": 5.0082, "decode_tok_s_median": 196.9, "end_to_end_tok_s_long": 134.4, "load_s": 7.0, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+- P1: **UNREAD** -- box B: P1/P2 are box A's
+- P2: **UNREAD** -- box B: P1/P2 are box A's
+- P3: **UNREAD** -- box B: SGLang is box C's
+- P4: **UNREAD** -- B=1 no quoted position; B=16 no quoted position
+- P5: **UNREAD** -- B=1 no quoted position; B=16 no quoted position
+- P5b: **HOLD** -- B=1 UNSUPPORTED (the prediction's stated alternative); B=16 UNSUPPORTED (the prediction's stated alternative)
+- P6: **UNREAD** -- wikitext: vllm served/prefill pair unread; c4val1: vllm served/prefill pair unread
+- P7: **UNREAD** -- vllm: no vllm/gptq_graph_sameprompt receipt; e4bsched: no e4bsched/int4_sched_sameprompt receipt
+- P8: **UNREAD** -- B=1 fp8kv or kv-auto arm not VALID/stable; B=16 fp8kv or kv-auto arm not VALID/stable; wikitext: fp8kv/auto delta_bf16 unread; c4val1: fp8kv/auto delta_bf16 unread
+- P9: **UNREAD** -- box B: the licence is box A's
+- P10: **REFUTED** -- TTFT-4096 vllm/e4b 0.011
+- P11: **UNREAD** -- B=1 J/token for vllm and e4b not both read; B=16 J/token for vllm and e4b not both read
+- P12: **UNREAD** -- box B: read on box A (see --cross-box / --box-a)
+- P13: **UNREAD** -- single box: --cross-box reads P13
+- P14: **UNREAD** -- B=1 nodetok pair not both VALID; B=16 nodetok pair not both VALID
+
+## 11. Frontier (per B, every VALID arm on the sched axis: tok/s, d_bf16 served per text, bpw, resident GB)
+| B | engine | arm | tok/s | d_bf16 wikitext | d_bf16 c4val1 | bpw | resident GB | stability | native |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | e4bsched | int4_sched | 222.1 | UNREAD | UNREAD | 4.50 (nominal) | — | STABLE | False |
+| 16 | e4bsched | int4_sched | 1662.2 | UNREAD | UNREAD | 4.50 (nominal) | — | STABLE | False |
+| 1 | exl3 | 4bpw | 199.7 | -0.0010 | 0.0101 | 4.03 (receipt (bpw_layer)) | 15.26 | STABLE | False |
+| 1 | vllm | gptq_graph | 267.2 | UNREAD | UNREAD | 4.15 (nominal) | 27.52 | STABLE | False |
+| 16 | vllm | gptq_graph | 1948.2 | UNREAD | UNREAD | 4.15 (nominal) | 27.82 | STABLE | False |
+
+CSV: frontier-sc1-B.csv beside this file.
+
+Stated limits: one card class, one prompt distribution, one request shape, n = 2-3 draws, in-process loops on both sides of every engine-level ratio; the sched-vs-window method pair is reported, never averaged; nothing here moves a gate, a licence, a kernel default or a claim id.
+
+wrote /root/sc1/RESULTS-sc1-B-generated.md and verdict.json

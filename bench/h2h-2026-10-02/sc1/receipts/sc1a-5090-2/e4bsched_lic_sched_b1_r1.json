@@ -1,0 +1,449 @@
+{
+ "engine": "e4b-sched",
+ "arm": "lic_sched_b1_r1",
+ "e4b_sha": "32d424e2835c3010ec199c8984af2561e3147f33",
+ "gnf4_sha": "34da93d6fe8d2a401b7001705658ce00b2b18213",
+ "torch": "2.8.0+cu129",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "batch": 1,
+ "method": "slope(32->128) through ContinuousScheduler.step(); min-of-3 (P20 estimator) and median-of-3 both recorded",
+ "prompts": "identical token ids to every other engine (step_decomp._k8_window, wikitext-2 test, 512-token rows)",
+ "engine_kwargs": {
+  "E4B_PAGED_MODEL": "Qwen/Qwen3-30B-A3B",
+  "E4B_PAGED_REVISION": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "E4B_PAGED_ARENA": "/root/sc1/work_qwen3/nf4.arena",
+  "E4B_PAGED_CALIB": "/root/sc1/calib.json",
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "1",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "2048",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1",
+  "E4B_PAGED_FUSE_QKV": "1",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "config": {
+  "model": "Qwen/Qwen3-30B-A3B",
+  "arena": "/root/sc1/work_qwen3/nf4.arena",
+  "calib": "/root/sc1/calib.json",
+  "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "served_names": [],
+  "max_seqs": 1,
+  "max_tokens_per_seq": 2048,
+  "chunk_tokens": 512,
+  "max_prefill_tokens": 0,
+  "graphs": true,
+  "buckets": [
+   1
+  ],
+  "placement": "all-vram",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64,
+  "kv_groups": "auto",
+  "fuse_qkv": true,
+  "torch_threads": 8,
+  "max_tokens_cap": 0,
+  "max_queue": 0,
+  "eos_ids": [],
+  "host": "127.0.0.1",
+  "port": 8778,
+  "trace_path": "",
+  "device": "cuda"
+ },
+ "generation": {
+  "temperature": 0.0,
+  "greedy": "argmax (PagedModelRunner)",
+  "ignore_eos": true,
+  "stop_ids": null,
+  "min_tokens": "= max_new_tokens (the scheduler's length contract)",
+  "chunk_tokens": 512,
+  "prefill_budget_per_step": 512
+ },
+ "route_env": {
+  "E4B_INT4_GROUPED_SMALLM": "auto",
+  "E4B_INT4_LEAN_GLUE": "auto",
+  "E4B_NF4_GROUPED_SMALLM": "0",
+  "E4B_MXFP4_GROUPED_SMALLM": "auto"
+ },
+ "pack_fingerprint": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d",
+ "fusion_set": "fused q/k/v WITH the env-gated folds (fuse_qkv applies them itself; the registered set)",
+ "vast_instance_id": "53918541",
+ "mode": "slope",
+ "status": "ok",
+ "e4b_version": "0.40.0",
+ "load_s": 444.8,
+ "census": {
+  "moe_layers": 48,
+  "experts": 128,
+  "top_k": 8,
+  "model_type": "qwen3_moe",
+  "int4_expert_layers": 48,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "int4_attn_projections": 96,
+  "kv": {
+   "n_kv_heads": 4,
+   "head_dim": 128,
+   "k_groups": "auto",
+   "scratch_slots": 1,
+   "blocks_per_seq": 128
+  },
+  "graph_status": {
+   "1": "graph"
+  },
+  "grouping": {
+   "device_grouping": false,
+   "force_singleton_groups": false
+  },
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "1",
+   "E4B_SERVE_EXP_INT4_CALIB": "1",
+   "E4B_SERVE_ATTN_INT4": "0",
+   "E4B_SERVE_ATTN_INT4_CALIB": "1",
+   "E4B_CALIB_NSEQ": "128",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_INT4_ARTIFACT_DIR": "/root/sc1/artifact",
+   "E4B_INT4_EXPECTED_FINGERPRINT": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d",
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  },
+  "exp_int4_layers_enabled": 48,
+  "attn_int4_rtn_projections": 0,
+  "attn_int4_calib_projections": 192,
+  "fuse_qkv_n": 48,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48,
+  "fingerprint": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d"
+ },
+ "graph_status": {
+  "1": "graph"
+ },
+ "same_stack": {
+  "fuse_qkv_n": 48,
+  "int4_expert_layers": 48,
+  "int4_attn_projections": 96,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48,
+  "pack_fingerprint": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d",
+  "graph_status": {
+   "1": "graph"
+  }
+ },
+ "mem_after_load": {
+  "max_memory_allocated": 20299576320,
+  "memory_reserved": 18652069888,
+  "memory_allocated": 18381700096,
+  "mem_get_info_free": 14307819520,
+  "mem_get_info_total": 33668988928
+ },
+ "eos_ids_model": [
+  151645
+ ],
+ "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3",
+ "rows_sha256": [
+  "70271aa1cb4555546a6cb771e04ee7983f7140c03b8460fc85012f6498bcb4a3"
+ ],
+ "prompt_tokens": [
+  512
+ ],
+ "prompt_file": {
+  "file": "prompts_b1.json",
+  "file_prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3",
+  "rows_sha256": [
+   "70271aa1cb4555546a6cb771e04ee7983f7140c03b8460fc85012f6498bcb4a3"
+  ],
+  "rows_distinct_in_file": true,
+  "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"
+ },
+ "prompt_tokens_engine": [
+  512
+ ],
+ "walls_short_s": [
+  2.2369,
+  2.2788,
+  2.2391
+ ],
+ "walls_long_s": [
+  2.6744,
+  2.6723,
+  2.6813
+ ],
+ "wall_short_s": 2.2369,
+ "wall_long_s": 2.6723,
+ "end_to_end_tok_s_long": 47.9,
+ "decode_tok_s": 220.5,
+ "decode_ms_per_step": 4.5354,
+ "decode_tok_s_median": 220.5,
+ "decode_ms_per_step_median": 4.5345,
+ "short": 32,
+ "long": 128,
+ "reps": 3,
+ "tokens": {
+  "0": [
+   75923,
+   1154,
+   892,
+   572,
+   10660,
+   304,
+   220,
+   17,
+   15,
+   15,
+   16,
+   518,
+   279,
+   16194,
+   7154,
+   26221,
+   659,
+   758,
+   220,
+   17,
+   15,
+   15,
+   17,
+   425,
+   10965,
+   465,
+   1030,
+   264,
+   8640,
+   3476,
+   304,
+   279,
+   12425,
+   4013,
+   20207,
+   3757,
+   1581,
+   291,
+   659,
+   758,
+   220,
+   17,
+   15,
+   15,
+   19,
+   425,
+   10965,
+   465,
+   6342,
+   330,
+   28417,
+   330,
+   304,
+   279,
+   9234,
+   330,
+   70066,
+   364,
+   82,
+   15106,
+   330,
+   315,
+   279,
+   12425,
+   4013,
+   576,
+   5724,
+   37625,
+   2587,
+   566,
+   58235,
+   16263,
+   4389,
+   26099,
+   323,
+   42323,
+   15035,
+   18337,
+   659,
+   758,
+   220,
+   17,
+   15,
+   15,
+   20,
+   425,
+   10965,
+   465,
+   572,
+   304,
+   279,
+   33496,
+   53148,
+   315,
+   279,
+   25179,
+   92301,
+   1486,
+   43562,
+   49840,
+   1154,
+   892,
+   572,
+   10660,
+   518,
+   279,
+   45406,
+   26221,
+   304,
+   70998,
+   323,
+   279,
+   11012,
+   1268,
+   38420,
+   16937,
+   304,
+   7148,
+   659,
+   1260,
+   572,
+   15540,
+   553,
+   3757,
+   67473,
+   323,
+   58235,
+   16263
+  ]
+ },
+ "tokens_short": {
+  "0": [
+   75923,
+   1154,
+   892,
+   572,
+   10660,
+   304,
+   220,
+   17,
+   15,
+   15,
+   16,
+   518,
+   279,
+   16194,
+   7154,
+   26221,
+   659,
+   758,
+   220,
+   17,
+   15,
+   15,
+   17,
+   425,
+   10965,
+   465,
+   1030,
+   264,
+   8640,
+   3476,
+   304,
+   279
+  ]
+ },
+ "timed_windows_epoch": {
+  "short": [
+   [
+    1790982772.9459083,
+    1790982775.182777
+   ],
+   [
+    1790982775.18281,
+    1790982777.461576
+   ],
+   [
+    1790982777.4616044,
+    1790982779.7006576
+   ]
+  ],
+  "long": [
+   [
+    1790982782.3590848,
+    1790982785.0334506
+   ],
+   [
+    1790982785.0335252,
+    1790982787.705796
+   ],
+   [
+    1790982787.7058477,
+    1790982790.3871279
+   ]
+  ]
+ },
+ "ttft_note": "not measured in slope mode; the --ttft arm measures it on this engine",
+ "graph_stats": {
+  "1": {
+   "replays": 632,
+   "eager_steps": 0,
+   "rows": 632,
+   "pad_rows": 0
+  }
+ },
+ "scheduler_stats": {
+  "steps": 640,
+  "completed": 8,
+  "aborted": 0,
+  "in_flight": 0,
+  "queued": 0,
+  "tokens_emitted": 640,
+  "prefill_tokens": 4096,
+  "ttft_p50": 2.053019705002953,
+  "ttft_p99": 2.1258116040044115,
+  "queue_wait_p50": 9.309995220974088e-06,
+  "per_stream_tok_s_mean": 31.027310811299557,
+  "kv_slots_free": 1
+ },
+ "mem_after_runs": {
+  "max_memory_allocated": 20631247872,
+  "memory_reserved": 20937965568,
+  "memory_allocated": 20196736000,
+  "mem_get_info_free": 12019826688,
+  "mem_get_info_total": 33668988928
+ },
+ "nvidia_smi": "NVIDIA GeForce RTX 5090, 20647 MiB, 32607 MiB, 580.95.05",
+ "dynamo_counters": {
+  "before_build": {},
+  "after_runs": {}
+ },
+ "banners": {
+  "int4exp_artifact": [
+   "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d"
+  ],
+  "int4exp_enabled": [
+   "48"
+  ],
+  "int4exp_calibrated": null,
+  "attn_calib": [
+   "192"
+  ],
+  "attn_rtn": null,
+  "fused_qkv": null,
+  "decode_graph": [
+   "DECODE_GRAPH bucket=1 captured"
+  ],
+  "fusions": [
+   "[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}"
+  ],
+  "ready": [
+   "[serve_paged] ready: {\"moe_layers\": 48, \"experts\": 128, \"top_k\": 8, \"model_type\": \"qwen3_moe\", \"int4_expert_layers\": 48, \"int4_store_kinds\": [\"int4_b32\"], \"int4_attn_projections\": 96, \"kv\": {\"n_kv_heads\": 4, \"head_dim\": 128, \"k_groups\": \"auto\", \"scratch_slots\": 1, \"blocks_per_seq\": 128}, \"graph_status\": {\"1\": \"graph\"}, \"grouping\": {\"device_grouping\": false, \"force_singleton_groups\": false}, \"levers_env\": {\"E4B_SERVE_EXP_INT4\": \"1\", \"E4B_SERVE_EXP_INT4_CALIB\": \"1\", \"E4B_SERVE_ATTN_INT4\": \"0\", \"E4B_SERVE_ATTN_INT4_CALIB\": \"1\", \"E4B_CALIB_NSEQ\": \"128\", \"E4B_CALIB_SOURCE\": \"c4\", \"E4B_INT4_ARTIFACT_DIR\": \"/root/sc1/artifact\", \"E4B_INT4_EXPECTED_FINGERPRINT\": \"sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d\", \"E4B_FUSE_T1_GLUE\": \"1\", \"E4B_FUSE_T1_GLUE_R2\": \"1\", \"E4B_FUSE_ROUTER_EPI\": \"1\"}, \"exp_int4_layers_enabled\": 48, \"attn_int4_rtn_projections\": 0, \"attn_int4_calib_projections\": 192, \"fuse_qkv_n\": 48, \"fuse_t1_glue_n\": 193, \"fuse_t1_glue_r2_n\": [48, 48], \"fuse_router_epilogue_n\": 48}"
+  ]
+ }
+}

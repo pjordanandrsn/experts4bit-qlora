@@ -1,0 +1,9 @@
+B,engine,arm,tok_s_sched_axis,delta_bf16_wikitext_served,delta_bf16_c4val1_served,bpw,bpw_basis,resident_gb,stability,native
+1,e4bsched,int4_sched,222.1,0.0142,0.0241,4.50,nominal,—,STABLE,False
+16,e4bsched,int4_sched,1662.2,0.0142,0.0241,4.50,nominal,—,STABLE,False
+1,exl3,4bpw,199.7,-0.0010,0.0101,4.03,receipt (bpw_layer),15.26,STABLE,False
+1,llamacpp,iq4xs,325.5,—,—,4.29,nominal,—,SINGLE,False
+1,llamacpp,q4km,329.6,0.0165,0.0169,4.86,nominal,—,STABLE,False
+16,llamacpp,q4km,1036.5,0.0165,0.0169,4.86,nominal,—,STABLE,False
+1,vllm,gptq_graph,267.2,—,—,4.15,nominal,27.52,STABLE,False
+16,vllm,gptq_graph,1948.2,—,—,4.15,nominal,27.82,STABLE,False

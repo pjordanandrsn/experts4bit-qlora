@@ -1,0 +1,1 @@
+SC1LLAMACPP {"arm": "ttft_llamacpp_512", "batch": 1, "mode": "ttft", "ttft_s_median": 0.04479, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "verdict": "VALID"}

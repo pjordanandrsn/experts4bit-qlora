@@ -1,0 +1,19 @@
+e4b 0.40.0 @9dd712b538e0d8102ae5c60f85f6fe854daeb205
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu129 cuda 12.9
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+vllm 0.30.0
+vllm_wheel pypi
+torch(vllm) 2.13.0+cu130
+torch.version.cuda(vllm) 13.0
+triton(vllm) 3.7.1
+flashinfer(vllm) 0.6.18.post1
+cuda_capability (12, 0)
+gpu NVIDIA GeForce RTX 5090
+nvidia-smi 580.95.05, NVIDIA GeForce RTX 5090, 32607 MiB, 600.00 W, 3210 MHz
+python(vllm) 3.11.13
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+SC1_TRIPWIRE exl3 {"exllamav3": "1.5.3", "torch": "2.8.0+cu128", "torch_cuda": "12.8", "triton": "3.4.0", "driver": "580.95.05, NVIDIA GeForce RTX 5090", "device": "NVIDIA GeForce RTX 5090", "capability": [12, 0], "torch_arch_list": ["sm_70", "sm_75", "sm_80", "sm_86", "sm_90", "sm_100", "sm_120"], 

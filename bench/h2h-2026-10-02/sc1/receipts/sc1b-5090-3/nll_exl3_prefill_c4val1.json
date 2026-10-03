@@ -1,0 +1,44 @@
+{
+ "engine": "exllamav3",
+ "mode": "prefill",
+ "mode_available": [
+  "prefill",
+  "decode"
+ ],
+ "steps": 2048,
+ "prompt_len": 512,
+ "mean_nll": 2.792152613401413,
+ "ppl": 16.316104291325896,
+ "tokens_scored": 2048,
+ "text_sha": "4bcb55179b962a8fe5e9fbe562e13f78fbb67fda6e3ef770e3f110bea8f1989a",
+ "wall_s": 0.5,
+ "basis": "teacher-forced; prefill: one flash_attn_nc forward, positions P..P+S-1 score ids[P+1..P+S]; decode: prefill P then one token per forward with the rectangular-batch cache (T == 1)",
+ "version": "1.5.3",
+ "torch": "2.8.0+cu128",
+ "torch_cuda": "12.8",
+ "logits_dtype": "torch.float16",
+ "load_s": 7.5,
+ "model": "turboderp/Qwen3-30B-A3B-exl3",
+ "revision": "0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef",
+ "model_dir": "/root/.cache/huggingface/hub/models--turboderp--Qwen3-30B-A3B-exl3/snapshots/0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef",
+ "vocab_size_scored": 151936,
+ "cache_tokens": null,
+ "capacity": {
+  "cache_tokens": null,
+  "cache_tokens_source": "prefill: no cache (flash_attn_nc)",
+  "floor": 2816,
+  "independent_of_arm_defaults": true,
+  "batch_shape": null
+ },
+ "cache_granularity_tokens": 1,
+ "env_knobs": {
+  "EXL3_BC_ATTN": null,
+  "EXL3_GEMV": null,
+  "EXL3_INT8_GEMV": null
+ },
+ "device": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ]
+}

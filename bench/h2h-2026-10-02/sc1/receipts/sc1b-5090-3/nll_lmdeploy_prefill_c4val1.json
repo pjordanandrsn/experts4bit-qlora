@@ -1,0 +1,9 @@
+{
+ "engine": "lmdeploy-turbomind",
+ "arm": "nll_prefill",
+ "batch": 1,
+ "status": "unsupported",
+ "reason": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+ "log_tail": "",
+ "written_by": "sc1_run.sh"
+}

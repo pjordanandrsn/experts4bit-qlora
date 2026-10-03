@@ -1,0 +1,402 @@
+KNOBS box=A e4b=32d424e2835c3010ec199c8984af2561e3147f33 gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-5f46ba71-1679-f4de-6f90-b53c5dbaf4d3, 12.0, 1, 16, 4, 16
+power.limit,clocks.max.sm 600.00 W, 3210 MHz
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7663 56-Core Processor
+nproc 224
+cgroup cpu.max 3071999 100000  memory.max 294412877824
+loadavg 4.46 9.38 11.28 5/3916 633
+               total        used        free      shared  buff/cache   available
+Mem:             755          44         510           0         201         706
+overlay         320G   55M  320G   1% /
+Build cuda_12.9.r12.9/compiler.36037853_0
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+Python 3.11.13
+cpu_vendor AuthenticAMD
+ram_gb 755 (oracle floor 98)
+[2026-10-02T21:00:16Z] sc1: install e4b @32d424e2835c3010ec199c8984af2561e3147f33 + gnf4 @34da93d6fe8d2a401b7001705658ce00b2b18213 (venv-e4b --system-site-packages; P58 pins transformers 5.16.1 / bitsandbytes 0.50.1)
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+ROUTE_DEFAULT E4B_INT4_GROUPED_SMALLM=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_INT4_LEAN_GLUE=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_MXFP4_GROUPED_SMALLM=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_NF4_GROUPED_SMALLM=auto (every e4b arm pins it via ROUTEENV)
+tripwire OK (e4b): 0.40.0 gnf4 0.34.1 torch 2.8.0+cu129 K19/K23 defaults auto, K25 0, serve_paged + stop_ids present
+e4b 0.40.0 @32d424e2835c3010ec199c8984af2561e3147f33
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu129 cuda 12.9
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[2026-10-02T21:01:08Z] sc1: install vllm (bench/sc1/vllm/install.sh)
+[install-vllm 21:03:24] vllm==0.30.0 ready in /root/sc1/venv-vllm
+[2026-10-02T21:03:24Z] sc1: phase 0: fetch bf16 + the GPTQ checkpoint, bake, prompts, build_engine smoke (both fusion sets), quiesce, the licensed pack build, the premise
+[2026-10-02T21:03:24Z] sc1: fetch Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[2026-10-02T21:08:15Z] sc1: fetch Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441
+[2026-10-02T21:11:50Z] sc1: bake NF4 arena (qwen3)
+[2026-10-02T21:13:30Z] sc1: prompt dump: sc1_prompts.py (step_decomp._k8_window) -> prompts_b{1,16,1_4096,16_same}.json + k8_window_{wikitext,c4val1}.json
+PROMPTS file=prompts_b1.json B=1 prompt_len=512 corpus=298938 step=298426 sha=a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3
+PROMPTS file=prompts_b16.json B=16 prompt_len=512 corpus=298938 step=18651 sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+PROMPTS file=prompts_b1_4096.json B=1 prompt_len=4096 corpus=298938 step=294842 sha=cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd
+PROMPTS file=prompts_b16_same.json B=16 prompt_len=512 copies_of_row0=16 sha=1e452ab00ffd792a8cdf809b27d41ddd2c1eed833fe486be9d003db7bf72d0fa source_sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+WINDOW src=wikitext text_sha=9ef10d760ad9f9eaafaedfc320702ad341cabfb141ef511eb5c71e3da94f833b n_ids=2561 prompt_len=512 steps=2048
+WINDOW src=c4val1 text_sha=4bcb55179b962a8fe5e9fbe562e13f78fbb67fda6e3ef770e3f110bea8f1989a n_ids=2561 prompt_len=512 steps=2048
+[2026-10-02T21:13:58Z] sc1: smoke smoke_qwen3_fused_b1 (build_engine B=1 fuse_qkv=1 model=Qwen/Qwen3-30B-A3B alarm=1200)
+[2026-10-02T21:16:44Z] sc1: smoke smoke_qwen3_folds_b1 (build_engine B=1 fuse_qkv=0 model=Qwen/Qwen3-30B-A3B alarm=1200)
+[2026-10-02T21:19:11Z] sc1: smoke smoke_qwen3_fused_b16 (build_engine B=16 fuse_qkv=1 model=Qwen/Qwen3-30B-A3B alarm=1200)
+[2026-10-02T21:21:43Z] sc1: smoke smoke_qwen3_folds_b16 (build_engine B=16 fuse_qkv=0 model=Qwen/Qwen3-30B-A3B alarm=1200)
+QUIESCE build quiesced=yes waited=0s busy_procs=0 load1=26.23 nproc=224 cpu.max=3071999/100000 at=2026-10-02T21:24:12Z
+[2026-10-02T21:24:12Z] sc1: build the licensed pack (K8 build row, wikitext; alarm=5400; first-chunk watchdog 1500 s)
+[2026-10-02T21:37:12Z] sc1: build: calibration chunk 1 in 780s
+PACK sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d
+[2026-10-02T22:33:04Z] sc1: premise: tests/test_k19_row_exact_gpu.py on this card
+PREMISE row-exact rc=0: 3 passed in 35.66s
+[2026-10-02T22:33:42Z] sc1: phase A: e4b/lic_b16_r1, vllm/gptq_graph_b16_r1, e4b/lic_b1_r1, vllm/gptq_graph_b1_r1
+QUIESCE arms quiesced=yes waited=0s busy_procs=0 load1=3.53 nproc=224 cpu.max=3071999/100000 at=2026-10-02T22:33:42Z
+[2026-10-02T22:33:42Z] sc1: arm e4b_lic_b16_r1 (window B=16 fuse=--fuse-qkv census=1 alarm=1800)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+    BV3_GRAPH batch=16 steps=70 step=9.49ms agg=1686.1tok/s recompiles=0 out=/root/sc1/e4b_lic_b16_r1.json
+[2026-10-02T22:41:45Z] sc1: arm vllm_gptq_graph_b16_r1 (arm=graph_r1 B=16 Qwen/Qwen3-30B-A3B-GPTQ-Int4  alarm=1800)
+    (EngineCore pid=44716) INFO 10-02 22:45:37 [model_runner.py:1066] Graph capturing finished in 141 secs, took 0.11 GiB
+    (EngineCore pid=44716) INFO 10-02 22:46:54 [model_runner.py:1066] Graph capturing finished in 2 secs, took 0.07 GiB
+    (EngineCore pid=44716) INFO 10-02 22:46:54 [gpu_worker.py:888] Free memory on device (30.86/31.36 GiB) on startup. Desired GPU memory utilization is (0.9, 28.22 GiB). Actual usage is 16.49 GiB for consumed memory (weights + non-torch), 0.46
+    SC1VLLM {"arm": "graph_r1", "batch": 16, "decode_tok_s": 1942.5, "decode_ms_per_step": 8.2368, "decode_tok_s_median": 1918.8, "end_to_end_tok_s_long": 1512.1, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598e
+[2026-10-02T22:47:09Z] sc1: arm e4b_lic_b1_r1 (window B=1 fuse=--fuse-qkv census=1 alarm=1800)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+    B1D_TIMED_GRAPH steps=127 step=4.22ms compile=None recompiles=0 out=/root/sc1/e4b_lic_b1_r1.json
+[2026-10-02T22:55:23Z] sc1: arm vllm_gptq_graph_b1_r1 (arm=graph_r1 B=1 Qwen/Qwen3-30B-A3B-GPTQ-Int4  alarm=1800)
+    (EngineCore pid=52404) INFO 10-02 22:56:48 [model_runner.py:1066] Graph capturing finished in 1 secs, took 0.08 GiB
+    (EngineCore pid=52404) INFO 10-02 22:56:53 [model_runner.py:1066] Graph capturing finished in 1 secs, took 0.06 GiB
+    (EngineCore pid=52404) INFO 10-02 22:56:53 [gpu_worker.py:888] Free memory on device (30.86/31.36 GiB) on startup. Desired GPU memory utilization is (0.9, 28.22 GiB). Actual usage is 16.1 GiB for consumed memory (weights + non-torch), 0.52 
+    SC1VLLM {"arm": "graph_r1", "batch": 1, "decode_tok_s": 267.0, "decode_ms_per_step": 3.7454, "decode_tok_s_median": 267.0, "end_to_end_tok_s_long": 247.0, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f
+[2026-10-02T22:57:03Z] sc1: phase A2: e4bsched/lic_sched_b16_r1, e4bsched/lic_sched_b1_r1 (the ratio axis)
+[2026-10-02T22:57:03Z] sc1: arm e4bsched_lic_sched_b16_r1 (sched B=16 fuse_qkv=1 max_tokens_per_seq=2048  alarm=1800)
+    DECODE_GRAPH bucket=4 captured
+    DECODE_GRAPH bucket=8 captured
+    DECODE_GRAPH bucket=16 captured
+    SC1SCHED {"arm": "lic_sched_b16_r1", "batch": 16, "decode_tok_s": 2390.4, "decode_ms_per_step": 6.6936, "decode_tok_s_median": 1720.0, "end_to_end_tok_s_long": 346.2, "status": "ok", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3
+[2026-10-02T23:05:22Z] sc1: arm e4bsched_lic_sched_b1_r1 (sched B=1 fuse_qkv=1 max_tokens_per_seq=2048  alarm=1800)
+    [serve_paged] ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; 32 batches of c4; model_type=qwen3_moe)
+    [serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+    DECODE_GRAPH bucket=1 captured
+    SC1SCHED {"arm": "lic_sched_b1_r1", "batch": 1, "decode_tok_s": 220.5, "decode_ms_per_step": 4.5354, "decode_tok_s_median": 220.5, "end_to_end_tok_s_long": 47.9, "status": "ok", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196
+[2026-10-02T23:13:13Z] sc1: phase B: the licence on this box: K8 lic at auto (k8_lic_auto_*) and at =1 (k8_lic_1_*, K19 + K23 at T == 1, censused), wikitext + c4val1; the NF4 control K8 both texts
+[2026-10-02T23:13:13Z] sc1: arm k8_lic_auto_wikitext (wikitext  alarm=2400)
+[2026-10-02T23:24:19Z] sc1: arm k8_lic_auto_c4val1 (c4val1  alarm=2400)
+[2026-10-02T23:35:03Z] sc1: arm e4b_k19census_b1 (window B=1 fuse=--no-fuse-qkv census=1 alarm=1800)
+    INT4EXP licensed artifact sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d installed on 48 layers
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    B1D_TIMED_GRAPH steps=127 step=4.65ms compile=None recompiles=0 out=/root/sc1/e4b_k19census_b1.json
+[2026-10-02T23:42:44Z] sc1: arm k8_lic_1_wikitext (wikitext  alarm=2400)
+[2026-10-02T23:53:07Z] sc1: arm k8_lic_1_c4val1 (c4val1  alarm=2400)
+[2026-10-03T00:03:47Z] sc1: arm k8_nf4_wikitext (wikitext  alarm=2400)
+[2026-10-03T00:07:24Z] sc1: arm k8_nf4_c4val1 (c4val1  alarm=2400)
+[2026-10-03T00:10:59Z] sc1: phase D-vLLM: vLLM quality both windows, prefill + served (nll_vllm_*); the e4b prefill-shaped rows (nll_e4b_prefill_*: --ppl-oracle eager on the lic env)
+[2026-10-03T00:10:59Z] sc1: arm nll_vllm_prefill_wikitext (nll prefill wikitext alarm=2400)
+[2026-10-03T00:12:33Z] sc1: arm nll_vllm_prefill_c4val1 (nll prefill c4val1 alarm=2400)
+[2026-10-03T00:13:28Z] sc1: arm nll_vllm_served_wikitext (nll served wikitext alarm=2400)
+[2026-10-03T00:16:21Z] sc1: arm nll_vllm_served_c4val1 (nll served c4val1 alarm=2400)
+[2026-10-03T00:18:30Z] sc1: arm nll_e4b_prefill_wikitext (wikitext --ppl-oracle eager alarm=2400)
+[2026-10-03T00:26:32Z] sc1: arm nll_e4b_prefill_c4val1 (c4val1 --ppl-oracle eager alarm=2400)
+[2026-10-03T00:34:11Z] sc1: phase G1: second draws of A and A2
+[2026-10-03T00:34:11Z] sc1: arm e4b_lic_b16_r2 (window B=16 fuse=--fuse-qkv census=no alarm=1800)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+    BV3_GRAPH batch=16 steps=70 step=9.49ms agg=1685.7tok/s recompiles=0 out=/root/sc1/e4b_lic_b16_r2.json
+[2026-10-03T00:41:51Z] sc1: arm vllm_gptq_graph_b16_r2 (arm=graph_r2 B=16 Qwen/Qwen3-30B-A3B-GPTQ-Int4  alarm=1800)
+    (EngineCore pid=111771) INFO 10-03 00:42:37 [model_runner.py:1066] Graph capturing finished in 2 secs, took 0.11 GiB
+    (EngineCore pid=111771) INFO 10-03 00:42:40 [model_runner.py:1066] Graph capturing finished in 2 secs, took 0.07 GiB
+    (EngineCore pid=111771) INFO 10-03 00:42:40 [gpu_worker.py:888] Free memory on device (30.86/31.36 GiB) on startup. Desired GPU memory utilization is (0.9, 28.22 GiB). Actual usage is 16.49 GiB for consumed memory (weights + non-torch), 0.4
+    SC1VLLM {"arm": "graph_r2", "batch": 16, "decode_tok_s": 1944.6, "decode_ms_per_step": 8.2278, "decode_tok_s_median": 1909.5, "end_to_end_tok_s_long": 1519.8, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598e
+[2026-10-03T00:42:55Z] sc1: arm e4b_lic_b1_r2 (window B=1 fuse=--fuse-qkv census=no alarm=1800)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+    B1D_TIMED_GRAPH steps=127 step=4.21ms compile=None recompiles=0 out=/root/sc1/e4b_lic_b1_r2.json
+[2026-10-03T00:50:30Z] sc1: arm vllm_gptq_graph_b1_r2 (arm=graph_r2 B=1 Qwen/Qwen3-30B-A3B-GPTQ-Int4  alarm=1800)
+    (EngineCore pid=117093) INFO 10-03 00:51:14 [model_runner.py:1066] Graph capturing finished in 1 secs, took 0.08 GiB
+    (EngineCore pid=117093) INFO 10-03 00:51:16 [model_runner.py:1066] Graph capturing finished in 1 secs, took 0.06 GiB
+    (EngineCore pid=117093) INFO 10-03 00:51:16 [gpu_worker.py:888] Free memory on device (30.86/31.36 GiB) on startup. Desired GPU memory utilization is (0.9, 28.22 GiB). Actual usage is 16.08 GiB for consumed memory (weights + non-torch), 0.1
+    SC1VLLM {"arm": "graph_r2", "batch": 1, "decode_tok_s": 266.4, "decode_ms_per_step": 3.7541, "decode_tok_s_median": 261.0, "end_to_end_tok_s_long": 246.9, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f
+[2026-10-03T00:51:25Z] sc1: arm e4bsched_lic_sched_b16_r2 (sched B=16 fuse_qkv=1 max_tokens_per_seq=2048  alarm=1800)
+    DECODE_GRAPH bucket=4 captured
+    DECODE_GRAPH bucket=8 captured
+    DECODE_GRAPH bucket=16 captured
+    SC1SCHED {"arm": "lic_sched_b16_r2", "batch": 16, "decode_tok_s": 1552.1, "decode_ms_per_step": 10.3089, "decode_tok_s_median": 1514.3, "end_to_end_tok_s_long": 341.9, "status": "ok", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef
+[2026-10-03T00:59:50Z] sc1: arm e4bsched_lic_sched_b1_r2 (sched B=1 fuse_qkv=1 max_tokens_per_seq=2048  alarm=1800)
+    [serve_paged] ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; 32 batches of c4; model_type=qwen3_moe)
+    [serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+    DECODE_GRAPH bucket=1 captured
+    SC1SCHED {"arm": "lic_sched_b1_r2", "batch": 1, "decode_tok_s": 310.2, "decode_ms_per_step": 3.2232, "decode_tok_s_median": 287.2, "end_to_end_tok_s_long": 49.0, "status": "ok", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196
+[2026-10-03T01:07:56Z] sc1: phase C: vllm/gptq_fp8kv_b{16,1}, e4b/rtn_b{16,1}, e4b/nf4_ctrl_b{16,1} (first draws; the AWQ arm is CUT from SC1 -- v4 Phase C)
+[2026-10-03T01:07:56Z] sc1: arm vllm_gptq_fp8kv_b16_r1 (arm=fp8kv B=16 Qwen/Qwen3-30B-A3B-GPTQ-Int4  alarm=1800)
+    (EngineCore pid=126873) INFO 10-03 01:09:40 [model_runner.py:1066] Graph capturing finished in 27 secs, took 0.50 GiB
+    (EngineCore pid=126873) INFO 10-03 01:09:46 [model_runner.py:1066] Graph capturing finished in 2 secs, took 0.07 GiB
+    (EngineCore pid=126873) INFO 10-03 01:09:46 [gpu_worker.py:888] Free memory on device (30.86/31.36 GiB) on startup. Desired GPU memory utilization is (0.9, 28.22 GiB). Actual usage is 16.49 GiB for consumed memory (weights + non-torch), 0.8
+    SC1VLLM {"arm": "fp8kv", "batch": 16, "decode_tok_s": 2037.9, "decode_ms_per_step": 7.8513, "decode_tok_s_median": 2116.5, "end_to_end_tok_s_long": 1627.7, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3f
+[2026-10-03T01:10:00Z] sc1: arm vllm_gptq_fp8kv_b1_r1 (arm=fp8kv B=1 Qwen/Qwen3-30B-A3B-GPTQ-Int4  alarm=1800)
+    (EngineCore pid=128762) INFO 10-03 01:11:25 [model_runner.py:1066] Graph capturing finished in 2 secs, took 0.47 GiB
+    (EngineCore pid=128762) INFO 10-03 01:11:30 [model_runner.py:1066] Graph capturing finished in 1 secs, took 0.06 GiB
+    (EngineCore pid=128762) INFO 10-03 01:11:30 [gpu_worker.py:888] Free memory on device (30.86/31.36 GiB) on startup. Desired GPU memory utilization is (0.9, 28.22 GiB). Actual usage is 16.1 GiB for consumed memory (weights + non-torch), 0.91
+    SC1VLLM {"arm": "fp8kv", "batch": 1, "decode_tok_s": 284.2, "decode_ms_per_step": 3.5181, "decode_tok_s_median": 284.2, "end_to_end_tok_s_long": 261.6, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196
+[2026-10-03T01:11:40Z] sc1: arm e4b_rtn_b16_r1 (window B=16 fuse=--fuse-qkv census=1 alarm=1800)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 rtn: 192 projections (uncalibrated; model_type=qwen3_moe)
+    fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+    BV3_GRAPH batch=16 steps=70 step=9.50ms agg=1683.4tok/s recompiles=0 out=/root/sc1/e4b_rtn_b16_r1.json
+[2026-10-03T01:14:32Z] sc1: arm e4b_rtn_b1_r1 (window B=1 fuse=--fuse-qkv census=1 alarm=1800)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 rtn: 192 projections (uncalibrated; model_type=qwen3_moe)
+    fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+    B1D_TIMED_GRAPH steps=127 step=4.21ms compile=None recompiles=0 out=/root/sc1/e4b_rtn_b1_r1.json
+[2026-10-03T01:17:14Z] sc1: arm e4b_nf4_ctrl_b16_r1 (window B=16 fuse=--no-fuse-qkv census=1 alarm=1800)
+    BV3_GRAPH batch=16 steps=70 step=32.04ms agg=499.4tok/s recompiles=0 out=/root/sc1/e4b_nf4_ctrl_b16_r1.json
+[2026-10-03T01:18:34Z] sc1: arm e4b_nf4_ctrl_b1_r1 (window B=1 fuse=--no-fuse-qkv census=1 alarm=1800)
+    B1D_TIMED_GRAPH steps=127 step=9.61ms compile=None recompiles=0 out=/root/sc1/e4b_nf4_ctrl_b1_r1.json
+[2026-10-03T01:19:25Z] sc1: phase F: controls: vllm/gptq_graph_sameprompt_b16, e4bsched/lic_sched_sameprompt_b16, e4b/lic_degraded_b16 (E4B_INT4_GROUPED_SMALLM=0)
+[2026-10-03T01:19:25Z] sc1: arm vllm_gptq_graph_sameprompt_b16_r1 (arm=sameprompt B=16 Qwen/Qwen3-30B-A3B-GPTQ-Int4  alarm=1800)
+    (EngineCore pid=136809) INFO 10-03 01:20:07 [model_runner.py:1066] Graph capturing finished in 2 secs, took 0.11 GiB
+    (EngineCore pid=136809) INFO 10-03 01:20:10 [model_runner.py:1066] Graph capturing finished in 2 secs, took 0.07 GiB
+    (EngineCore pid=136809) INFO 10-03 01:20:10 [gpu_worker.py:888] Free memory on device (30.86/31.36 GiB) on startup. Desired GPU memory utilization is (0.9, 28.22 GiB). Actual usage is 16.49 GiB for consumed memory (weights + non-torch), 0.4
+    SC1VLLM {"arm": "sameprompt", "batch": 16, "decode_tok_s": 3200.1, "decode_ms_per_step": 4.9998, "decode_tok_s_median": 3139.6, "end_to_end_tok_s_long": 2235.7, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a59
+[2026-10-03T01:20:22Z] sc1: arm e4bsched_lic_sched_sameprompt_b16_r1 (sched B=16 fuse_qkv=1 max_tokens_per_seq=2048 --sameprompt alarm=1800)
+    DECODE_GRAPH bucket=4 captured
+    DECODE_GRAPH bucket=8 captured
+    DECODE_GRAPH bucket=16 captured
+    SC1SCHED {"arm": "lic_sched_sameprompt_b16_r1", "batch": 16, "decode_tok_s": 1996.2, "decode_ms_per_step": 8.0152, "decode_tok_s_median": 2061.2, "end_to_end_tok_s_long": 374.1, "status": "ok", "prompts_sha256": "1e452ab00ffd792a8cdf809b27d
+[2026-10-03T01:28:47Z] sc1: arm e4b_lic_degraded_b16_r1 (window B=16 fuse=--fuse-qkv census=1 alarm=1800)
+    INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+    ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+    fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+    BV3_GRAPH batch=16 steps=70 step=11.15ms agg=1435.0tok/s recompiles=0 out=/root/sc1/e4b_lic_degraded_b16_r1.json
+[2026-10-03T01:36:53Z] sc1: phase E: TTFT 512 / 4096 on e4b (sched engine, max_tokens=1) and vLLM
+[2026-10-03T01:36:53Z] sc1: arm ttft_e4b_512 (sched B=1 fuse_qkv=1 max_tokens_per_seq=2048 --ttft alarm=1800)
+    [serve_paged] ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; 32 batches of c4; model_type=qwen3_moe)
+    [serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+    DECODE_GRAPH bucket=1 captured
+    SC1SCHED {"arm": "ttft_e4b_512", "batch": 1, "ttft_prompt_tokens": 512, "ttft_s_median": 2.0101, "ttft_s_min": 2.008, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+[2026-10-03T01:44:33Z] sc1: arm ttft_e4b_4096 (sched B=1 fuse_qkv=1 max_tokens_per_seq=4104 --ttft alarm=1800)
+    [serve_paged] ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; 32 batches of c4; model_type=qwen3_moe)
+    [serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+    DECODE_GRAPH bucket=1 captured
+    SC1SCHED {"arm": "ttft_e4b_4096", "batch": 1, "ttft_prompt_tokens": 4096, "ttft_s_median": 16.3861, "ttft_s_min": 16.3477, "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd"}
+[2026-10-03T01:53:08Z] sc1: arm ttft_vllm_512 (/root/sc1/prompts_b1.json alarm=1534)
+[2026-10-03T01:53:59Z] sc1: arm ttft_vllm_4096 (/root/sc1/prompts_b1_4096.json alarm=1483)
+[2026-10-03T01:55:32Z] sc1: phase EN: energy windows: e4b_b1, e4b_b16 (the sched engine), vllm_b1, vllm_b16 (1024 decoded tokens under the sampler)
+[2026-10-03T01:55:32Z] sc1: arm e4bsched_energy_b1 (sched B=1 fuse_qkv=1 max_tokens_per_seq=2048 --energy alarm=1390)
+    [serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+    DECODE_GRAPH bucket=1 captured
+    SC1_ENERGY_WINDOW start_epoch=1790992986.134 stop_epoch=1790992993.044 tokens=1024
+    SC1SCHED {"arm": "energy_b1", "batch": 1, "energy_tokens": 1024, "energy_wall_s": 6.9096, "energy_tok_s": 148.2, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+ENERGY e4b_b1 engine=e4b B=1 tokens=1024 window=1790992986.1343577..1790992993.0439675 basis=e4b-sched energy_window_epoch (1024 decoded tokens per row)
+[2026-10-03T02:03:15Z] sc1: arm e4bsched_energy_b16 (sched B=16 fuse_qkv=1 max_tokens_per_seq=2048 --energy alarm=927)
+    DECODE_GRAPH bucket=8 captured
+    DECODE_GRAPH bucket=16 captured
+    SC1_ENERGY_WINDOW start_epoch=1790993437.107 stop_epoch=1790993451.992 tokens=16384
+    SC1SCHED {"arm": "energy_b16", "batch": 16, "energy_tokens": 16384, "energy_wall_s": 14.8848, "energy_tok_s": 1100.7, "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+ENERGY e4b_b16 engine=e4b B=16 tokens=16384 window=1790993437.1067765..1790993451.9915535 basis=e4b-sched energy_window_epoch (1024 decoded tokens per row)
+[2026-10-03T02:10:55Z] sc1: STOP-2: energy_vllm_b1 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: energy_vllm_b16 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: phase G2: second draws of C and the controls; third draws where r1/r2 disagree > 3 %; then the designated droppables in order: the nodetok pair (both B), nf4_ctrl r2, the fp8-KV served quality rows
+[2026-10-03T02:10:55Z] sc1: STOP-2: vllm_gptq_fp8kv_b16_r2 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: vllm_gptq_fp8kv_b1_r2 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: e4b_rtn_b16_r2 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: e4b_rtn_b1_r2 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: vllm_gptq_graph_sameprompt_b16_r2 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: e4bsched_lic_sched_sameprompt_b16_r2 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: e4b_lic_degraded_b16_r2 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: e4bsched_lic_sched_b16_r3 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: e4bsched_lic_sched_b1_r3 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: vllm_gptq_graph_nodetok_b1_r1 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: vllm_gptq_graph_nodetok_b16_r1 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: e4b_nf4_ctrl_b16_r2 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: e4b_nf4_ctrl_b1_r2 needs 900s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: nll_vllm_fp8kv_served_wikitext needs 1500s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: STOP-2: nll_vllm_fp8kv_served_c4val1 needs 1500s, only 1067s left -- skipped (host-limited)
+[2026-10-03T02:10:55Z] sc1: reduce
+## 10. Predictions (HOLD / REFUTED / UNREAD; only quoted positions and VALID rows are evidence)
+- P1: **UNREAD** -- no quoted position for vllm/gptq_graph B=1 (VALID)
+- P2: **UNREAD** -- no quoted position for vllm/gptq_graph B=16 (VALID)
+- P3: **UNREAD** -- box A: SGLang is box C's
+- P4: **UNREAD** -- no llamacpp arms on box A
+- P5: **UNREAD** -- no exl3 arms on box A
+- P5b: **UNREAD** -- no lmdeploy arms on box A
+- P6: **REFUTED** -- wikitext: e4b +0.0048; wikitext: vllm -0.0017; c4val1: e4b +0.0025; c4val1: vllm -0.0006
+- P7: **UNREAD** -- vllm x1.65; e4bsched: e4bsched: sameprompt VOID / distinct VOID
+- P8: **UNREAD** -- B=1 fp8kv or kv-auto arm not VALID/stable; B=16 fp8kv or kv-auto arm not VALID/stable; wikitext: fp8kv/auto delta_bf16 unread; c4val1: fp8kv/auto delta_bf16 unread
+- P9: **REFUTED** -- QUALITY_FAIL
+- P10: **REFUTED** -- TTFT-4096 vllm/e4b 0.011
+- P11: **UNREAD** -- B=1 J/token for vllm and e4b not both read; B=16 J/token for vllm and e4b not both read
+- P12: **HOLD** -- B=1 -0.1 %, B=16 +0.1 %
+- P13: **UNREAD** -- single box: --cross-box reads P13
+- P14: **UNREAD** -- B=1 nodetok pair not both VALID; B=16 nodetok pair not both VALID
+
+## 11. Frontier (per B, every VALID arm on the sched axis: tok/s, d_bf16 served per text, bpw, resident GB)
+| B | engine | arm | tok/s | d_bf16 wikitext | d_bf16 c4val1 | bpw | resident GB | stability | native |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | vllm | gptq_fp8kv | 284.2 | UNREAD | UNREAD | 4.15 (nominal) | 27.90 | SINGLE | False |
+| 16 | vllm | gptq_fp8kv | 2037.9 | UNREAD | UNREAD | 4.15 (nominal) | 28.31 | SINGLE | False |
+| 1 | vllm | gptq_graph | 266.7 | UNREAD | UNREAD | 4.15 (nominal) | 27.52 | STABLE | False |
+| 16 | vllm | gptq_graph | 1943.5 | UNREAD | UNREAD | 4.15 (nominal) | 27.82 | STABLE | False |
+
+CSV: frontier-sc1-A.csv beside this file.
+
+Stated limits: one card class, one prompt distribution, one request shape, n = 2-3 draws, in-process loops on both sides of every engine-level ratio; the sched-vs-window method pair is reported, never averaged; nothing here moves a gate, a licence, a kernel default or a claim id.
+
+wrote /root/sc1/RESULTS-sc1-A-generated.md and verdict.json
+[2026-10-03T02:11:02Z] sc1: ----- summary -----
+KNOBS box=A e4b=32d424e2835c3010ec199c8984af2561e3147f33 gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
+e4b 0.40.0 @32d424e2835c3010ec199c8984af2561e3147f33
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu129 cuda 12.9
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[install-vllm 21:03:24] vllm==0.30.0 ready in /root/sc1/venv-vllm
+PHASE 0 fetch bf16 + the GPTQ checkpoint, bake, prompts, build_engine smoke (both fusion sets), quiesce, the licensed pack build, the premise at=2026-10-02T21:03:24Z nproc=224 cpu.max=3071999/100000 load=6.00/7.60/10.21
+FETCH qwen3 Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH gptq Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+BAKE qwen3 BAKE OK
+PROMPTS file=prompts_b1.json B=1 prompt_len=512 corpus=298938 step=298426 sha=a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3
+PROMPTS file=prompts_b16.json B=16 prompt_len=512 corpus=298938 step=18651 sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+PROMPTS file=prompts_b1_4096.json B=1 prompt_len=4096 corpus=298938 step=294842 sha=cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd
+PROMPTS file=prompts_b16_same.json B=16 prompt_len=512 copies_of_row0=16 sha=1e452ab00ffd792a8cdf809b27d41ddd2c1eed833fe486be9d003db7bf72d0fa source_sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+WINDOW src=wikitext text_sha=9ef10d760ad9f9eaafaedfc320702ad341cabfb141ef511eb5c71e3da94f833b n_ids=2561 prompt_len=512 steps=2048
+WINDOW src=c4val1 text_sha=4bcb55179b962a8fe5e9fbe562e13f78fbb67fda6e3ef770e3f110bea8f1989a n_ids=2561 prompt_len=512 steps=2048
+smoke_qwen3_fused_b1 B=1 rc=0 SC1SCHED_CENSUS {"arm": "smoke_qwen3_fused_b1", "batch": 1, "ok": true, "failures": [], "smoke_error": null, "load_s": 157.5, "census": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilo
+smoke_qwen3_folds_b1 B=1 rc=0 SC1SCHED_CENSUS {"arm": "smoke_qwen3_folds_b1", "batch": 1, "ok": true, "failures": [], "smoke_error": null, "load_s": 138.3, "census": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 192, "fuse_qkv_n": 0, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilo
+smoke_qwen3_fused_b16 B=16 rc=0 SC1SCHED_CENSUS {"arm": "smoke_qwen3_fused_b16", "batch": 16, "ok": true, "failures": [], "smoke_error": null, "load_s": 141.1, "census": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epi
+smoke_qwen3_folds_b16 B=16 rc=0 SC1SCHED_CENSUS {"arm": "smoke_qwen3_folds_b16", "batch": 16, "ok": true, "failures": [], "smoke_error": null, "load_s": 138.7, "census": {"moe_layers": 48, "int4_expert_layers": 48, "int4_attn_projections": 192, "fuse_qkv_n": 0, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epi
+QUIESCE build quiesced=yes waited=0s busy_procs=0 load1=26.23 nproc=224 cpu.max=3071999/100000 at=2026-10-02T21:24:12Z
+k8_build rc=0 K8_PPL steps=2048 nll=1.85437 ppl=6.38767 compute=fp8 sha=9ef10d760ad9 out=/root/sc1/k8_build_wikitext.json
+PACK sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d
+PREMISE row-exact rc=0: 3 passed in 35.66s
+PHASE A e4b/lic_b16_r1, vllm/gptq_graph_b16_r1, e4b/lic_b1_r1, vllm/gptq_graph_b1_r1 at=2026-10-02T22:33:42Z nproc=224 cpu.max=3071999/100000 load=3.53/9.74/12.00
+QUIESCE arms quiesced=yes waited=0s busy_procs=0 load1=3.53 nproc=224 cpu.max=3071999/100000 at=2026-10-02T22:33:42Z
+e4b_lic_b16_r1 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=9.49ms agg=1686.1tok/s recompiles=0 out=/root/sc1/e4b_lic_b16_r1.json
+vllm_gptq_graph_b16_r1 B=16 rc=0 SC1VLLM {"arm": "graph_r1", "batch": 16, "decode_tok_s": 1942.5, "decode_ms_per_step": 8.2368, "decode_tok_s_median": 1918.8, "end_to_end_tok_s_long": 1512.1, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "status": "ok"}
+e4b_lic_b1_r1 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.22ms compile=None recompiles=0 out=/root/sc1/e4b_lic_b1_r1.json
+vllm_gptq_graph_b1_r1 B=1 rc=0 SC1VLLM {"arm": "graph_r1", "batch": 1, "decode_tok_s": 267.0, "decode_ms_per_step": 3.7454, "decode_tok_s_median": 267.0, "end_to_end_tok_s_long": 247.0, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "status": "ok"}
+PHASE A2 e4bsched/lic_sched_b16_r1, e4bsched/lic_sched_b1_r1 (the ratio axis) at=2026-10-02T22:57:03Z nproc=224 cpu.max=3071999/100000 load=5.71/7.32/8.44
+e4bsched_lic_sched_b16_r1 B=16 rc=0 SC1SCHED {"arm": "lic_sched_b16_r1", "batch": 16, "decode_tok_s": 2390.4, "decode_ms_per_step": 6.6936, "decode_tok_s_median": 1720.0, "end_to_end_tok_s_long": 346.2, "status": "ok", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3
+e4bsched_lic_sched_b1_r1 B=1 rc=0 SC1SCHED {"arm": "lic_sched_b1_r1", "batch": 1, "decode_tok_s": 220.5, "decode_ms_per_step": 4.5354, "decode_tok_s_median": 220.5, "end_to_end_tok_s_long": 47.9, "status": "ok", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196
+PHASE B the licence on this box: K8 lic at auto (k8_lic_auto_*) and at =1 (k8_lic_1_*, K19 + K23 at T == 1, censused), wikitext + c4val1; the NF4 control K8 both texts at=2026-10-02T23:13:13Z nproc=224 cpu.max=3071999/100000 load=7.99/9.87/9.72
+k8_lic_auto_wikitext src=wikitext rc=0 K8_PPL steps=2048 nll=1.85437 ppl=6.38767 compute=fp8 sha=9ef10d760ad9 out=/root/sc1/k8_lic_auto_wikitext.json
+k8_lic_auto_c4val1 src=c4val1 rc=0 K8_PPL steps=2048 nll=2.80771 ppl=16.57196 compute=fp8 sha=4bcb55179b96 out=/root/sc1/k8_lic_auto_c4val1.json
+e4b_k19census_b1 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.65ms compile=None recompiles=0 out=/root/sc1/e4b_k19census_b1.json
+K8CENSUS lic_1: logs/census_e4b_k19census_b1.txt -> logs/census_k8_lic_1_{wikitext,c4val1}.txt (the same stack at T == 1 in a graph window; the K8 rows run eager)
+k8_lic_1_wikitext src=wikitext rc=0 K8_PPL steps=2048 nll=1.85495 ppl=6.39138 compute=fp8 sha=9ef10d760ad9 out=/root/sc1/k8_lic_1_wikitext.json
+k8_lic_1_c4val1 src=c4val1 rc=0 K8_PPL steps=2048 nll=2.80676 ppl=16.55625 compute=fp8 sha=4bcb55179b96 out=/root/sc1/k8_lic_1_c4val1.json
+k8_nf4_wikitext src=wikitext rc=0 K8_PPL steps=2048 nll=1.85662 ppl=6.40205 compute=fp8 sha=9ef10d760ad9 out=/root/sc1/k8_nf4_wikitext.json
+k8_nf4_c4val1 src=c4val1 rc=0 K8_PPL steps=2048 nll=2.80433 ppl=16.51595 compute=fp8 sha=4bcb55179b96 out=/root/sc1/k8_nf4_c4val1.json
+PHASE D-vLLM vLLM quality both windows, prefill + served (nll_vllm_*); the e4b prefill-shaped rows (nll_e4b_prefill_*: --ppl-oracle eager on the lic env) at=2026-10-03T00:10:59Z nproc=224 cpu.max=3071999/100000 load=4.54/6.56/8.38
+nll_vllm_prefill_wikitext mode=prefill src=wikitext rc=0 SC1VLLMNLL {"mode": "prefill", "mode_label": "prefill-shaped (one forward over 2561 prompt tokens, prompt_logprobs=0)", "mean_nll": 1.8613182129937695, "ppl": 6.432210208380118, "steps": 2048, "tokens
+nll_vllm_prefill_c4val1 mode=prefill src=c4val1 rc=0 SC1VLLMNLL {"mode": "prefill", "mode_label": "prefill-shaped (one forward over 2561 prompt tokens, prompt_logprobs=0)", "mean_nll": 2.813819717266006, "ppl": 16.673484735968017, "steps": 2048, "tokens
+nll_vllm_served_wikitext mode=served src=wikitext rc=0 SC1VLLMNLL {"mode": "served", "mode_label": "served (partial-block, M<=16)", "mean_nll": 1.8596377738814205, "ppl": 6.421410347562824, "steps": 2048, "tokens_scored": 2048, "top1_agreement": 0.5986328
+nll_vllm_served_c4val1 mode=served src=c4val1 rc=0 SC1VLLMNLL {"mode": "served", "mode_label": "served (partial-block, M<=16)", "mean_nll": 2.8132196348931062, "ppl": 16.663482273134118, "steps": 2048, "tokens_scored": 2048, "top1_agreement": 0.459960
+nll_e4b_prefill_wikitext src=wikitext rc=0 K8_PPL steps=2048 nll=1.84955 ppl=6.35697 compute=eager-oracle sha=9ef10d760ad9 out=/root/sc1/nll_e4b_prefill_wikitext.json
+nll_e4b_prefill_c4val1 src=c4val1 rc=0 K8_PPL steps=2048 nll=2.80517 ppl=16.52990 compute=eager-oracle sha=4bcb55179b96 out=/root/sc1/nll_e4b_prefill_c4val1.json
+PHASE G1 second draws of A and A2 at=2026-10-03T00:34:11Z nproc=224 cpu.max=3071999/100000 load=9.27/11.18/10.86
+e4b_lic_b16_r2 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=9.49ms agg=1685.7tok/s recompiles=0 out=/root/sc1/e4b_lic_b16_r2.json
+vllm_gptq_graph_b16_r2 B=16 rc=0 SC1VLLM {"arm": "graph_r2", "batch": 16, "decode_tok_s": 1944.6, "decode_ms_per_step": 8.2278, "decode_tok_s_median": 1909.5, "end_to_end_tok_s_long": 1519.8, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "status": "ok"}
+e4b_lic_b1_r2 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.21ms compile=None recompiles=0 out=/root/sc1/e4b_lic_b1_r2.json
+vllm_gptq_graph_b1_r2 B=1 rc=0 SC1VLLM {"arm": "graph_r2", "batch": 1, "decode_tok_s": 266.4, "decode_ms_per_step": 3.7541, "decode_tok_s_median": 261.0, "end_to_end_tok_s_long": 246.9, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "status": "ok"}
+e4bsched_lic_sched_b16_r2 B=16 rc=0 SC1SCHED {"arm": "lic_sched_b16_r2", "batch": 16, "decode_tok_s": 1552.1, "decode_ms_per_step": 10.3089, "decode_tok_s_median": 1514.3, "end_to_end_tok_s_long": 341.9, "status": "ok", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef
+e4bsched_lic_sched_b1_r2 B=1 rc=0 SC1SCHED {"arm": "lic_sched_b1_r2", "batch": 1, "decode_tok_s": 310.2, "decode_ms_per_step": 3.2232, "decode_tok_s_median": 287.2, "end_to_end_tok_s_long": 49.0, "status": "ok", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196
+PHASE C vllm/gptq_fp8kv_b{16,1}, e4b/rtn_b{16,1}, e4b/nf4_ctrl_b{16,1} (first draws; the AWQ arm is CUT from SC1 -- v4 Phase C) at=2026-10-03T01:07:56Z nproc=224 cpu.max=3071999/100000 load=9.76/9.82/8.88
+vllm_gptq_fp8kv_b16_r1 B=16 rc=0 SC1VLLM {"arm": "fp8kv", "batch": 16, "decode_tok_s": 2037.9, "decode_ms_per_step": 7.8513, "decode_tok_s_median": 2116.5, "end_to_end_tok_s_long": 1627.7, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "status": "ok"}
+vllm_gptq_fp8kv_b1_r1 B=1 rc=0 SC1VLLM {"arm": "fp8kv", "batch": 1, "decode_tok_s": 284.2, "decode_ms_per_step": 3.5181, "decode_tok_s_median": 284.2, "end_to_end_tok_s_long": 261.6, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "status": "ok"}
+e4b_rtn_b16_r1 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=9.50ms agg=1683.4tok/s recompiles=0 out=/root/sc1/e4b_rtn_b16_r1.json
+e4b_rtn_b1_r1 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=4.21ms compile=None recompiles=0 out=/root/sc1/e4b_rtn_b1_r1.json
+e4b_nf4_ctrl_b16_r1 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=32.04ms agg=499.4tok/s recompiles=0 out=/root/sc1/e4b_nf4_ctrl_b16_r1.json
+e4b_nf4_ctrl_b1_r1 B=1 rc=0 B1D_TIMED_GRAPH steps=127 step=9.61ms compile=None recompiles=0 out=/root/sc1/e4b_nf4_ctrl_b1_r1.json
+PHASE F controls: vllm/gptq_graph_sameprompt_b16, e4bsched/lic_sched_sameprompt_b16, e4b/lic_degraded_b16 (E4B_INT4_GROUPED_SMALLM=0) at=2026-10-03T01:19:25Z nproc=224 cpu.max=3071999/100000 load=6.77/9.92/9.89
+vllm_gptq_graph_sameprompt_b16_r1 B=16 rc=0 SC1VLLM {"arm": "sameprompt", "batch": 16, "decode_tok_s": 3200.1, "decode_ms_per_step": 4.9998, "decode_tok_s_median": 3139.6, "end_to_end_tok_s_long": 2235.7, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "status": "ok"}
+e4bsched_lic_sched_sameprompt_b16_r1 B=16 rc=0 SC1SCHED {"arm": "lic_sched_sameprompt_b16_r1", "batch": 16, "decode_tok_s": 1996.2, "decode_ms_per_step": 8.0152, "decode_tok_s_median": 2061.2, "end_to_end_tok_s_long": 374.1, "status": "ok", "prompts_sha256": "1e452ab00ffd792a8cdf809b27d
+e4b_lic_degraded_b16_r1 B=16 rc=0 BV3_GRAPH batch=16 steps=70 step=11.15ms agg=1435.0tok/s recompiles=0 out=/root/sc1/e4b_lic_degraded_b16_r1.json
+PHASE E TTFT 512 / 4096 on e4b (sched engine, max_tokens=1) and vLLM at=2026-10-03T01:36:53Z nproc=224 cpu.max=3071999/100000 load=6.86/8.01/8.92
+ttft_e4b_512 B=1 rc=0 SC1SCHED {"arm": "ttft_e4b_512", "batch": 1, "ttft_prompt_tokens": 512, "ttft_s_median": 2.0101, "ttft_s_min": 2.008, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+ttft_e4b_4096 B=1 rc=0 SC1SCHED {"arm": "ttft_e4b_4096", "batch": 1, "ttft_prompt_tokens": 4096, "ttft_s_median": 16.3861, "ttft_s_min": 16.3477, "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd"}
+ttft_vllm_512 rc=0 SC1VLLMTTFT {"arm": "graph_r1", "prompt_len": 512, "ttft_ms_median": 40.51, "ttft_s_min": 0.04049, "prefill_tok_s_median": 12638.9, "max_num_batched_tokens": 2048, "max_model_len": 2048, "chunked_prefill": true, "status": "ok"}
+ttft_vllm_4096 rc=0 SC1VLLMTTFT {"arm": "graph_r1", "prompt_len": 4096, "ttft_ms_median": 172.59, "ttft_s_min": 0.17015, "prefill_tok_s_median": 23732.7, "max_num_batched_tokens": 4104, "max_model_len": 4104, "chunked_prefill": true, "status": "ok"}
+PHASE EN energy windows: e4b_b1, e4b_b16 (the sched engine), vllm_b1, vllm_b16 (1024 decoded tokens under the sampler) at=2026-10-03T01:55:32Z nproc=224 cpu.max=3071999/100000 load=21.89/13.66/10.39
+e4bsched_energy_b1 B=1 rc=0 SC1SCHED {"arm": "energy_b1", "batch": 1, "energy_tokens": 1024, "energy_wall_s": 6.9096, "energy_tok_s": 148.2, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+ENERGY e4b_b1 engine=e4b B=1 tokens=1024 window=1790992986.1343577..1790992993.0439675 basis=e4b-sched energy_window_epoch (1024 decoded tokens per row)
+e4bsched_energy_b16 B=16 rc=0 SC1SCHED {"arm": "energy_b16", "batch": 16, "energy_tokens": 16384, "energy_wall_s": 14.8848, "energy_tok_s": 1100.7, "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+ENERGY e4b_b16 engine=e4b B=16 tokens=16384 window=1790993437.1067765..1790993451.9915535 basis=e4b-sched energy_window_epoch (1024 decoded tokens per row)
+SKIPPED energy_vllm_b1 host-limited deadline
+SKIPPED energy_vllm_b16 host-limited deadline
+PHASE G2 second draws of C and the controls; third draws where r1/r2 disagree > 3 %; then the designated droppables in order: the nodetok pair (both B), nf4_ctrl r2, the fp8-KV served quality rows at=2026-10-03T02:10:55Z nproc=224 cpu.max=3071999/100000 load=6.95/9.57/10.23
+SKIPPED vllm_gptq_fp8kv_b16_r2 host-limited deadline
+SKIPPED vllm_gptq_fp8kv_b1_r2 host-limited deadline
+SKIPPED e4b_rtn_b16_r2 host-limited deadline
+SKIPPED e4b_rtn_b1_r2 host-limited deadline
+SKIPPED vllm_gptq_graph_sameprompt_b16_r2 host-limited deadline
+SKIPPED e4bsched_lic_sched_sameprompt_b16_r2 host-limited deadline
+SKIPPED e4b_lic_degraded_b16_r2 host-limited deadline
+THIRD DRAW e4bsched/lic_sched_b16: r1 and r2 disagree by > 3 %
+SKIPPED e4bsched_lic_sched_b16_r3 host-limited deadline
+THIRD DRAW e4bsched/lic_sched_b1: r1 and r2 disagree by > 3 %
+SKIPPED e4bsched_lic_sched_b1_r3 host-limited deadline
+SKIPPED vllm_gptq_graph_nodetok_b1_r1 host-limited deadline
+SKIPPED vllm_gptq_graph_nodetok_b16_r1 host-limited deadline
+SKIPPED e4b_nf4_ctrl_b16_r2 host-limited deadline
+SKIPPED e4b_nf4_ctrl_b1_r2 host-limited deadline
+SKIPPED nll_vllm_fp8kv_served_wikitext host-limited deadline
+SKIPPED nll_vllm_fp8kv_served_c4val1 host-limited deadline
+## 10. Predictions (HOLD / REFUTED / UNREAD; only quoted positions and VALID rows are evidence)
+- P1: **UNREAD** -- no quoted position for vllm/gptq_graph B=1 (VALID)
+- P2: **UNREAD** -- no quoted position for vllm/gptq_graph B=16 (VALID)
+- P3: **UNREAD** -- box A: SGLang is box C's
+- P4: **UNREAD** -- no llamacpp arms on box A
+- P5: **UNREAD** -- no exl3 arms on box A
+- P5b: **UNREAD** -- no lmdeploy arms on box A
+- P6: **REFUTED** -- wikitext: e4b +0.0048; wikitext: vllm -0.0017; c4val1: e4b +0.0025; c4val1: vllm -0.0006
+- P7: **UNREAD** -- vllm x1.65; e4bsched: e4bsched: sameprompt VOID / distinct VOID
+- P8: **UNREAD** -- B=1 fp8kv or kv-auto arm not VALID/stable; B=16 fp8kv or kv-auto arm not VALID/stable; wikitext: fp8kv/auto delta_bf16 unread; c4val1: fp8kv/auto delta_bf16 unread
+- P9: **REFUTED** -- QUALITY_FAIL
+- P10: **REFUTED** -- TTFT-4096 vllm/e4b 0.011
+- P11: **UNREAD** -- B=1 J/token for vllm and e4b not both read; B=16 J/token for vllm and e4b not both read
+- P12: **HOLD** -- B=1 -0.1 %, B=16 +0.1 %
+- P13: **UNREAD** -- single box: --cross-box reads P13
+- P14: **UNREAD** -- B=1 nodetok pair not both VALID; B=16 nodetok pair not both VALID
+
+## 11. Frontier (per B, every VALID arm on the sched axis: tok/s, d_bf16 served per text, bpw, resident GB)
+| B | engine | arm | tok/s | d_bf16 wikitext | d_bf16 c4val1 | bpw | resident GB | stability | native |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | vllm | gptq_fp8kv | 284.2 | UNREAD | UNREAD | 4.15 (nominal) | 27.90 | SINGLE | False |
+| 16 | vllm | gptq_fp8kv | 2037.9 | UNREAD | UNREAD | 4.15 (nominal) | 28.31 | SINGLE | False |
+| 1 | vllm | gptq_graph | 266.7 | UNREAD | UNREAD | 4.15 (nominal) | 27.52 | STABLE | False |
+| 16 | vllm | gptq_graph | 1943.5 | UNREAD | UNREAD | 4.15 (nominal) | 27.82 | STABLE | False |
+
+CSV: frontier-sc1-A.csv beside this file.
+
+Stated limits: one card class, one prompt distribution, one request shape, n = 2-3 draws, in-process loops on both sides of every engine-level ratio; the sched-vs-window method pair is reported, never averaged; nothing here moves a gate, a licence, a kernel default or a claim id.
+
+wrote /root/sc1/RESULTS-sc1-A-generated.md and verdict.json
+----- versions -----
+e4b 0.40.0 @32d424e2835c3010ec199c8984af2561e3147f33
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu129 cuda 12.9
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+vllm 0.30.0
+vllm_wheel pypi
+torch(vllm) 2.13.0+cu130
+torch.version.cuda(vllm) 13.0
+triton(vllm) 3.7.1
+flashinfer(vllm) 0.6.18.post1
+cuda_capability (12, 0)
+gpu NVIDIA GeForce RTX 5090
+nvidia-smi 580.95.05, NVIDIA GeForce RTX 5090, 32607 MiB, 600.00 W, 3210 MHz
+python(vllm) 3.11.13
+[2026-10-03T02:11:02Z] sc1: TP_DONE rc=0

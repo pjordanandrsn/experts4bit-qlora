@@ -1,0 +1,496 @@
+{
+ "engine": "e4b-sched",
+ "arm": "int4_sched_b1_r1",
+ "e4b_sha": "9dd712b538e0d8102ae5c60f85f6fe854daeb205",
+ "gnf4_sha": "34da93d6fe8d2a401b7001705658ce00b2b18213",
+ "torch": "2.8.0+cu128",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "batch": 1,
+ "method": "slope(32->128) through ContinuousScheduler.step() of DECODE-ONLY time (each rep's wall minus its last row's own Request.ttft: A10); min-of-3 (P20 estimator) and median-of-3 both recorded; the registered wall slope recorded beside it",
+ "prompts": "identical token ids to every other engine (step_decomp._k8_window, wikitext-2 test, 512-token rows)",
+ "engine_kwargs": {
+  "E4B_PAGED_MODEL": "Qwen/Qwen3-30B-A3B",
+  "E4B_PAGED_REVISION": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "E4B_PAGED_ARENA": "/root/sc1/work_qwen3/nf4.arena",
+  "E4B_PAGED_CALIB": "/root/sc1/calib.json",
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "1",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "2048",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1",
+  "E4B_PAGED_FUSE_QKV": "1",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "config": {
+  "model": "Qwen/Qwen3-30B-A3B",
+  "arena": "/root/sc1/work_qwen3/nf4.arena",
+  "calib": "/root/sc1/calib.json",
+  "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "served_names": [],
+  "max_seqs": 1,
+  "max_tokens_per_seq": 2048,
+  "chunk_tokens": 512,
+  "max_prefill_tokens": 0,
+  "graphs": true,
+  "buckets": [
+   1
+  ],
+  "placement": "all-vram",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64,
+  "kv_groups": "auto",
+  "fuse_qkv": true,
+  "torch_threads": 8,
+  "max_tokens_cap": 0,
+  "max_queue": 0,
+  "eos_ids": [],
+  "host": "127.0.0.1",
+  "port": 8778,
+  "trace_path": "",
+  "device": "cuda"
+ },
+ "generation": {
+  "temperature": 0.0,
+  "greedy": "argmax (PagedModelRunner)",
+  "ignore_eos": true,
+  "stop_ids": null,
+  "min_tokens": "= max_new_tokens (the scheduler's length contract)",
+  "chunk_tokens": 512,
+  "prefill_budget_per_step": 512
+ },
+ "route_env": {
+  "E4B_INT4_GROUPED_SMALLM": "auto",
+  "E4B_INT4_LEAN_GLUE": "auto",
+  "E4B_NF4_GROUPED_SMALLM": "0",
+  "E4B_MXFP4_GROUPED_SMALLM": "auto"
+ },
+ "pack_fingerprint": null,
+ "fusion_set": "fused q/k/v WITH the env-gated folds (fuse_qkv applies them itself; the registered set)",
+ "vast_instance_id": "53955591",
+ "mode": "slope",
+ "status": "ok",
+ "e4b_version": "0.40.0",
+ "load_s": 149.7,
+ "census": {
+  "moe_layers": 48,
+  "experts": 128,
+  "top_k": 8,
+  "model_type": "qwen3_moe",
+  "int4_expert_layers": 48,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "int4_attn_projections": 96,
+  "kv": {
+   "n_kv_heads": 4,
+   "head_dim": 128,
+   "k_groups": "auto",
+   "scratch_slots": 1,
+   "blocks_per_seq": 128
+  },
+  "graph_status": {
+   "1": "graph"
+  },
+  "grouping": {
+   "device_grouping": false,
+   "force_singleton_groups": false
+  },
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "1",
+   "E4B_SERVE_ATTN_INT4": "1",
+   "E4B_SERVE_ATTN_INT4_CALIB": "0",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  },
+  "exp_int4_layers_enabled": 48,
+  "attn_int4_rtn_projections": 192,
+  "attn_int4_calib_projections": 0,
+  "fuse_qkv_n": 48,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48,
+  "fingerprint": null
+ },
+ "graph_status": {
+  "1": "graph"
+ },
+ "same_stack": {
+  "fuse_qkv_n": 48,
+  "int4_expert_layers": 48,
+  "int4_attn_projections": 96,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48,
+  "pack_fingerprint": null,
+  "graph_status": {
+   "1": "graph"
+  }
+ },
+ "mem_after_load": {
+  "max_memory_allocated": 19798733824,
+  "memory_reserved": 18712887296,
+  "memory_allocated": 18381700096,
+  "mem_get_info_free": 14218297344,
+  "mem_get_info_total": 33670758400
+ },
+ "eos_ids_model": [
+  151645
+ ],
+ "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3",
+ "rows_sha256": [
+  "70271aa1cb4555546a6cb771e04ee7983f7140c03b8460fc85012f6498bcb4a3"
+ ],
+ "prompt_tokens": [
+  512
+ ],
+ "prompt_file": {
+  "file": "prompts_b1.json",
+  "file_prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3",
+  "rows_sha256": [
+   "70271aa1cb4555546a6cb771e04ee7983f7140c03b8460fc85012f6498bcb4a3"
+  ],
+  "rows_distinct_in_file": true,
+  "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"
+ },
+ "prompt_tokens_engine": [
+  512
+ ],
+ "walls_short_s": [
+  3.9314,
+  3.9182,
+  3.9667
+ ],
+ "walls_long_s": [
+  4.4113,
+  4.4006,
+  4.4453
+ ],
+ "wall_short_s": 3.9182,
+ "wall_long_s": 4.4006,
+ "end_to_end_tok_s_long": 29.1,
+ "decode_tok_s_wall_slope": 199.0,
+ "decode_ms_per_step_wall_slope": 5.0248,
+ "decode_tok_s_median_wall_slope": 200.0,
+ "decode_ms_per_step_median_wall_slope": 4.9989,
+ "prefill_s_short": [
+  3.6879,
+  3.6796,
+  3.729
+ ],
+ "prefill_s_long": [
+  3.7145,
+  3.699,
+  3.7483
+ ],
+ "decode_only_walls_short_s": [
+  0.2434,
+  0.2386,
+  0.2377
+ ],
+ "decode_only_walls_long_s": [
+  0.6968,
+  0.7016,
+  0.697
+ ],
+ "decode_only_wall_short_s": 0.2377,
+ "decode_only_wall_long_s": 0.6968,
+ "decode_only_decode_tok_s": 209.1,
+ "decode_only_decode_ms_per_step": 4.7823,
+ "decode_only_decode_tok_s_median": 209.4,
+ "decode_only_decode_ms_per_step_median": 4.7749,
+ "ttft_s_short": [
+  [
+   3.6879
+  ],
+  [
+   3.6796
+  ],
+  [
+   3.729
+  ]
+ ],
+ "ttft_s_long": [
+  [
+   3.7145
+  ],
+  [
+   3.699
+  ],
+  [
+   3.7483
+  ]
+ ],
+ "decode_tok_s": 209.1,
+ "decode_ms_per_step": 4.7823,
+ "decode_tok_s_median": 209.4,
+ "decode_ms_per_step_median": 4.7749,
+ "estimator": "decode-only slope (A10): wall minus each rep's last-row Request.ttft",
+ "short": 32,
+ "long": 128,
+ "reps": 3,
+ "tokens": {
+  "0": [
+   75923,
+   1154,
+   892,
+   572,
+   10660,
+   304,
+   220,
+   17,
+   15,
+   15,
+   16,
+   518,
+   279,
+   16194,
+   7154,
+   26221,
+   659,
+   1260,
+   1030,
+   264,
+   8640,
+   3476,
+   304,
+   279,
+   12425,
+   4013,
+   20207,
+   3757,
+   1581,
+   291,
+   304,
+   220,
+   17,
+   15,
+   15,
+   17,
+   659,
+   758,
+   220,
+   17,
+   15,
+   15,
+   19,
+   425,
+   10965,
+   465,
+   6342,
+   330,
+   28417,
+   330,
+   304,
+   279,
+   9234,
+   330,
+   70066,
+   364,
+   82,
+   15106,
+   330,
+   315,
+   279,
+   12425,
+   4013,
+   576,
+   5724,
+   37625,
+   2587,
+   566,
+   58235,
+   16263,
+   19571,
+   4389,
+   26099,
+   323,
+   42323,
+   15035,
+   18337,
+   659,
+   1260,
+   572,
+   6311,
+   304,
+   279,
+   220,
+   17,
+   15,
+   15,
+   20,
+   33496,
+   53148,
+   315,
+   279,
+   25179,
+   92301,
+   1486,
+   43562,
+   49840,
+   1154,
+   892,
+   572,
+   10660,
+   518,
+   279,
+   45406,
+   26221,
+   304,
+   70998,
+   323,
+   279,
+   11012,
+   1268,
+   38420,
+   16937,
+   304,
+   7148,
+   659,
+   1260,
+   572,
+   15540,
+   553,
+   3757,
+   67473,
+   323,
+   58235,
+   16263,
+   7355,
+   1232,
+   812
+  ]
+ },
+ "tokens_short": {
+  "0": [
+   75923,
+   1154,
+   892,
+   572,
+   10660,
+   304,
+   220,
+   17,
+   15,
+   15,
+   16,
+   518,
+   279,
+   16194,
+   7154,
+   26221,
+   659,
+   1260,
+   1030,
+   264,
+   8640,
+   3476,
+   304,
+   279,
+   12425,
+   4013,
+   20207,
+   3757,
+   1581,
+   291,
+   304,
+   220
+  ]
+ },
+ "timed_windows_epoch": {
+  "short": [
+   [
+    1790998580.8702433,
+    1790998584.8016195
+   ],
+   [
+    1790998584.8016617,
+    1790998588.7198906
+   ],
+   [
+    1790998588.7199335,
+    1790998592.6866457
+   ]
+  ],
+  "long": [
+   [
+    1790998597.0806901,
+    1790998601.4919589
+   ],
+   [
+    1790998601.492002,
+    1790998605.8926094
+   ],
+   [
+    1790998605.8926592,
+    1790998610.337956
+   ]
+  ]
+ },
+ "ttft_note": "per-request Request.ttft recorded to cancel each rep's prefill (A10); the --ttft arm is the TTFT reading",
+ "graph_stats": {
+  "1": {
+   "replays": 632,
+   "eager_steps": 0,
+   "rows": 632,
+   "pad_rows": 0
+  }
+ },
+ "scheduler_stats": {
+  "steps": 640,
+  "completed": 8,
+  "aborted": 0,
+  "in_flight": 0,
+  "queued": 0,
+  "tokens_emitted": 640,
+  "prefill_tokens": 4096,
+  "ttft_p50": 3.714487007819116,
+  "ttft_p99": 3.828633143566549,
+  "queue_wait_p50": 9.81893390417099e-06,
+  "per_stream_tok_s_mean": 18.541138418291354,
+  "kv_slots_free": 1
+ },
+ "mem_after_runs": {
+  "max_memory_allocated": 20631247872,
+  "memory_reserved": 21061697536,
+  "memory_allocated": 20196736000,
+  "mem_get_info_free": 11869487104,
+  "mem_get_info_total": 33670758400
+ },
+ "nvidia_smi": "NVIDIA GeForce RTX 5090, 20792 MiB, 32607 MiB, 595.71.05",
+ "dynamo_counters": {
+  "before_build": {},
+  "after_runs": {}
+ },
+ "banners": {
+  "int4exp_artifact": null,
+  "int4exp_enabled": [
+   "48"
+  ],
+  "int4exp_calibrated": null,
+  "attn_calib": null,
+  "attn_rtn": [
+   "192"
+  ],
+  "fused_qkv": null,
+  "decode_graph": [
+   "DECODE_GRAPH bucket=1 captured"
+  ],
+  "fusions": [
+   "[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}"
+  ],
+  "ready": [
+   "[serve_paged] ready: {\"moe_layers\": 48, \"experts\": 128, \"top_k\": 8, \"model_type\": \"qwen3_moe\", \"int4_expert_layers\": 48, \"int4_store_kinds\": [\"int4_b32\"], \"int4_attn_projections\": 96, \"kv\": {\"n_kv_heads\": 4, \"head_dim\": 128, \"k_groups\": \"auto\", \"scratch_slots\": 1, \"blocks_per_seq\": 128}, \"graph_status\": {\"1\": \"graph\"}, \"grouping\": {\"device_grouping\": false, \"force_singleton_groups\": false}, \"levers_env\": {\"E4B_SERVE_EXP_INT4\": \"1\", \"E4B_SERVE_ATTN_INT4\": \"1\", \"E4B_SERVE_ATTN_INT4_CALIB\": \"0\", \"E4B_CALIB_SOURCE\": \"c4\", \"E4B_FUSE_T1_GLUE\": \"1\", \"E4B_FUSE_T1_GLUE_R2\": \"1\", \"E4B_FUSE_ROUTER_EPI\": \"1\"}, \"exp_int4_layers_enabled\": 48, \"attn_int4_rtn_projections\": 192, \"attn_int4_calib_projections\": 0, \"fuse_qkv_n\": 48, \"fuse_t1_glue_n\": 193, \"fuse_t1_glue_r2_n\": [48, 48], \"fuse_router_epilogue_n\": 48}"
+  ]
+ }
+}

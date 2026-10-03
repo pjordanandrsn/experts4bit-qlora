@@ -1,0 +1,138 @@
+{
+ "engine": "exllamav3",
+ "arm": "ttft_exl3_4096",
+ "mode": "ttft",
+ "model": "turboderp/Qwen3-30B-A3B-exl3",
+ "revision": "0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef",
+ "batch": 1,
+ "method": "wall from request submission to the first streamed token, engine warm, fresh generator per repeat (no prompt-page reuse); engine-reported = Job.time_prefill at EOS",
+ "prompts": "identical token ids to the e4b arms (step_decomp._k8_window, wikitext-2 test, 512-token rows)",
+ "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd",
+ "rows_sha256": [
+  "360bb886b23eebbf53c6ab8cc76fb513116ad05d613de39448f5546c4a1895ba"
+ ],
+ "prompt_tokens": [
+  4096
+ ],
+ "generation": {
+  "sampler": "ArgmaxSampler (greedy)",
+  "ignore_eos": "stop_conditions=None (Job.stop_tokens empty)",
+  "min_new_tokens": "= max_new_tokens",
+  "speculative": false,
+  "prefix_cache_reuse": "fresh Generator per call"
+ },
+ "vast_instance_id": "53951082",
+ "env_knobs": {
+  "EXL3_BC_ATTN": null,
+  "EXL3_GEMV": null,
+  "EXL3_INT8_GEMV": null,
+  "EXL3_INT8_GEMV_MAX_K": null,
+  "EXL3_MOE_FUSED_ROWS": null,
+  "EXL3_MOE_FUSED_ROWS_WIDE": null,
+  "EXL3_MOE_MTILE": null,
+  "EXL3_MOE_FUSED_DET": null,
+  "EXL3_MOE_BATCH_RECON": null,
+  "EXL3_MOE_SHARED_COOP": null,
+  "EXL3_PREFER_FA2": null,
+  "EXL3_FUSED_SAMPLER": null,
+  "EXL3_EXPANDABLE_SEGMENTS": null,
+  "TORCH_CUDA_ARCH_LIST": null,
+  "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+  "EXLLAMAV3_TUNE_CACHE": null
+ },
+ "model_dir": "/root/.cache/huggingface/hub/models--turboderp--Qwen3-30B-A3B-exl3/snapshots/0b83e92c6d3b5a868ecd5a5fbb3bcc1920e388ef",
+ "capacity": {
+  "rule": "B sequences x 2048 tokens on timed arms; TTFT-4096 = one sequence of 4352",
+  "cache_tokens": 4352,
+  "cache_tokens_source": "default:ttft:roundup256(prompt+max_new)",
+  "max_batch_size": 1,
+  "sequences_x_2048": 2,
+  "workload_tokens_per_seq": 4104,
+  "page_size": 256
+ },
+ "load_s": 7.4,
+ "ttft_prompt_tokens": 4096,
+ "max_new_tokens": 8,
+ "ttft_walls_s": [
+  0.7864,
+  0.779,
+  0.7738
+ ],
+ "ttft_s": 0.7738,
+ "ttft_s_median": 0.779,
+ "ttft_engine_reported_s": [
+  0.7797,
+  0.7714,
+  0.7671
+ ],
+ "prefill_tok_s": 5293.3,
+ "tokens_generated": [
+  8,
+  8,
+  8
+ ],
+ "resolved": {
+  "architecture": "Qwen3MoeForCausalLM",
+  "quantization_config": {
+   "quant_method": "exl3",
+   "version": "0.0.1",
+   "bits": 4.0,
+   "head_bits": 6,
+   "calibration": {
+    "rows": 100,
+    "cols": 2048
+   },
+   "out_scales": "auto"
+  },
+  "bpw_layer": 4.03326146403029,
+  "bpw_head": 6.007917807497894,
+  "vram_bits": 122502617088.0,
+  "cache": {
+   "layer_type": "CacheLayer_fp16",
+   "max_num_tokens": 4352,
+   "page_size": 256
+  },
+  "generator": {
+   "max_batch_size": 1,
+   "max_chunk_size": 2048,
+   "fresh_generator_per_call": true,
+   "max_q_size": 8,
+   "draft_model": null,
+   "ngram_match_min": 0
+  },
+  "load": {
+   "device": "single/autosplit (default)",
+   "warmup": true,
+   "max_batch_size_hint": 1
+  },
+  "precompiled_extension": true,
+  "attention": "built-in Triton paged attention + BC_Attention graph decode (no flash-attn/xformers in 1.5.3)",
+  "moe_path_by_batch": "bsz<=8: BC_BlockSparseMLP.run_bszN (exl3_moe_coop_*); bsz>=4 & >8: ext.exl3_moe fused (exl3_moe_kernel); f_threshold=min(128//8,4)=4 (modules/block_sparse_mlp.py:190,1003,1068,1334)"
+ },
+ "versions": {
+  "exllamav3": "1.5.3",
+  "torch": "2.8.0+cu128",
+  "torch_cuda": "12.8",
+  "python": "3.11.13",
+  "device": "NVIDIA GeForce RTX 5090",
+  "capability": [
+   12,
+   0
+  ],
+  "torch_arch_list": [
+   "sm_70",
+   "sm_75",
+   "sm_80",
+   "sm_86",
+   "sm_90",
+   "sm_100",
+   "sm_120"
+  ],
+  "triton": "3.4.0"
+ },
+ "vram_peak_bytes": {
+  "torch_max_memory_allocated": 16294966784,
+  "torch_max_memory_reserved": 16311648256,
+  "mem_get_info_drop_bytes": 16615735296
+ }
+}
