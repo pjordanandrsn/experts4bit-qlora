@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### P110 registered (#770): does the arithmetic decode graphs bring to `serve_paged` cost quality? Device grouping and bucket padding against the eager default, teacher-forced, judged against the eager default's own neutral perturbations (bench and tests only)
+
+- **Why.** P109 read graphs ×5.60 / ×9.02 and the replay exact, but DIVERGENT on tokens. The divergence comes from the
+  device grouping and bucket padding that graphs bring, and token agreement cannot say which arithmetic is better.
+- **What.** One RTX 5090 runs the default server (Qwen3-30B-A3B NF4, built eager by `build_engine`). Teacher-forced
+  paged passes on its model cover 48 wikitext windows (512 + 128) in groups of 12:
+  - **R:** the eager default, host grouping;
+  - **the floor:** a half-batch, a 256-token prefill split, and reversed slots;
+  - **D:** device grouping;
+  - **P:** device grouping plus bucket padding, which is the graph server's arithmetic (G ≡ P, per P109);
+  - **a scale mutant.**
+- **The rule (P108's):** AT_PARITY iff P's bias ≤ B_floor + 0.01 nats and spread ≤ 2 × max(S_floor, 0.005); VOID on
+  commits, windows, engagement or a passing mutant; COST otherwise.
+- **Consequence of AT_PARITY:** `E4B_PAGED_GRAPHS` defaults to `auto` (on for CUDA at all-vram), with a register row,
+  and #770 closes.
+- **Proof.** It runs the whole box on Granite, because no local card runs the bucketed path.
+- **Files:**
+  - `bench/p110/` (prereg, runner, box, reducer, driver, pin);
+  - `tests/test_p110_staged_pin.py`;
+  - `tests/test_p110_box.py`: every CPU-capable arm on a tiny Qwen3-MoE.
+
 ### P109 read (RTX 5090): DIVERGENT -- graphs are 5.60x the eager default at 16 requests and 9.02x at one, and the replay is bit-identical to its padded eager step, but the graph server's tokens leave the eager default's within 16 tokens on 7 of 16 rows; `serve_paged` keeps eager decode by default (#770)
 
 - **Files.**
