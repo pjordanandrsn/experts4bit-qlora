@@ -1,6 +1,17 @@
 # Changelog
 
 ## Unreleased
+
+### TC1 amendment 11 read (#945): the steady-state comparison after the sync fix is UNTESTED -- an unstable host
+
+- **What was asked.** On one RTX 5090 (`tc1-5090-40`, Xeon E5-2696 v4, $1.50), amendment 8's 200-step comparison of e4b as shipped
+  against axolotl's scattermoe native-best, re-run after #945. P18 predicted the late-window ratio in [0.97, 1.15].
+- **What it read.** UNTESTED: e4b's late-window draws are 12.0 % apart and axolotl's 9.1 %, both outside the registered 5 %, with
+  the drift alternating between frameworks (the host). Reported, not quoted: e4b finishes 200 steps first (1,042–1,182 s against
+  1,781–1,910 s), and axolotl reaches the matched held-out curve.
+- **What follows.** No register row; `.native-steady-state` stands for the code before #945. The question is re-asked on a stable
+  host after amendments 13–15. Read: `bench/h2h-2026-10-02/tc1/RESULTS-tc1-steady945.md`.
+
 ### P107 registered (#960): paged prefill attention's route A/B -- math (SDPA's fp32 math backend, today) against flash (#963's lower-right causal bias) on one engine, gated by the calibrated K8 rule on the served-prefill NLL (bench and tests)
 
 - `bench/p107/{PREREG-p107.md,p107_run.sh,p107_drive.sh,p107_box.py,p107_reduce.py,staged.sha256}`,
