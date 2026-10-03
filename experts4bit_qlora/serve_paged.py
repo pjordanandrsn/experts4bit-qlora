@@ -32,7 +32,8 @@ registered B=1 fused stack (P54 / P58 / P88) is ``--fuse-qkv`` WITH those flags 
 three folds called directly. The census reports what each fold returned either way (in the fused
 branch the fold functions are wrapped on their modules for the duration of the ``fuse_qkv`` call,
 which imports them inside its body) -> ``Fp8PagedKV(batch=max_seqs, scratch_slots=max(buckets))`` ->
-``PagedModelRunner`` -> ``enable_decode_graphs`` when ``E4B_PAGED_GRAPHS=1`` (with more than one sequence, after the batched
+``PagedModelRunner`` -> ``enable_decode_graphs`` when graphs are on (``E4B_PAGED_GRAPHS``: ``auto``, the default since lane
+P109, captures them on a CUDA device at the all-resident placement; with more than one sequence, after the batched
 lane's sync-free device grouping is switched on, as ``_bv3_stage`` does) -> the scheduler. A
 lever that is set and patches nothing RAISES at startup (the lanes' ``_lever_check`` rule); the
 census -- how many modules each lever patched -- is reported at ``GET /health`` so a reader can
@@ -116,6 +117,19 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 
 
+def _graphs_env(value: str, device: str, placement: str) -> bool:
+    """``E4B_PAGED_GRAPHS``: ``auto`` (the default since lane P109, also when unset or empty) captures bucketed decode
+    graphs on a CUDA device at the ``all-vram`` placement and decodes eagerly anywhere else; ``1`` forces them (and is
+    refused where batched graphs are refused); ``0`` keeps eager decode. Anything else is refused rather than read as one
+    of these. P109 (e4b#770, ``bench/p109/RESULTS-p109.md``) read the default server both ways on an RTX 5090."""
+    v = (value or "auto").strip().lower() or "auto"
+    if v == "auto":
+        return str(device).startswith("cuda") and placement == "all-vram"
+    if v in ("0", "1"):
+        return v == "1"
+    raise ValueError(f"E4B_PAGED_GRAPHS={value!r}: expected 'auto', '0' or '1'")
+
+
 def log(msg: str) -> None:
     print(f"[serve_paged] {msg}", flush=True)
 
@@ -138,7 +152,7 @@ class PagedServeConfig:
     max_tokens_per_seq: int = 4096       # E4B_PAGED_MAX_TOKENS_PER_SEQ: prompt + output per sequence
     chunk_tokens: int = 512              # E4B_PAGED_CHUNK_TOKENS
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
-    graphs: bool = False                 # E4B_PAGED_GRAPHS=1
+    graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     buckets: tuple = DEFAULT_BUCKETS     # E4B_PAGED_BUCKETS="1,2,4,8,16"
     placement: str = "all-vram"          # E4B_PAGED_PLACEMENT: all-vram | solver
     vram_gb: float = 1.2                 # E4B_PAGED_VRAM_GB (solver budget; the harness default)
@@ -173,7 +187,8 @@ class PagedServeConfig:
             max_tokens_per_seq=int(env("E4B_PAGED_MAX_TOKENS_PER_SEQ", "4096")),
             chunk_tokens=int(env("E4B_PAGED_CHUNK_TOKENS", "512")),
             max_prefill_tokens=int(env("E4B_PAGED_MAX_PREFILL_TOKENS", "0")),
-            graphs=env("E4B_PAGED_GRAPHS", "0") == "1",
+            graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
+                               env("E4B_PAGED_PLACEMENT", "all-vram")),
             buckets=_ints(env("E4B_PAGED_BUCKETS", "1,2,4,8,16")),
             placement=env("E4B_PAGED_PLACEMENT", "all-vram"),
             vram_gb=float(env("E4B_PAGED_VRAM_GB", "1.2")),

@@ -714,3 +714,25 @@ def test_build_engine_sets_grouping_before_it_captures():
     assert "_batched_graph_grouping(cfg)" in src
     assert src.index("_batched_graph_grouping(cfg)") < src.index("runner.enable_decode_graphs(")
     assert '"grouping": grouping' in src            # the census reports what was set
+
+
+def test_graphs_default_to_auto_on_a_cuda_all_vram_server(monkeypatch):
+    """Lane P109 (e4b#770): E4B_PAGED_GRAPHS defaults to auto -- on for CUDA at all-vram, eager elsewhere."""
+    from experts4bit_qlora.serve_paged import _graphs_env
+    for k in ("E4B_PAGED_GRAPHS", "E4B_PAGED_DEVICE", "E4B_PAGED_PLACEMENT"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("E4B_PAGED_MODEL", "Qwen/Qwen3-30B-A3B")
+    assert PagedServeConfig.from_env().graphs is True
+    monkeypatch.setenv("E4B_PAGED_PLACEMENT", "solver")
+    assert PagedServeConfig.from_env().graphs is False
+    monkeypatch.delenv("E4B_PAGED_PLACEMENT")
+    monkeypatch.setenv("E4B_PAGED_DEVICE", "cpu")
+    assert PagedServeConfig.from_env().graphs is False
+    monkeypatch.delenv("E4B_PAGED_DEVICE")
+    monkeypatch.setenv("E4B_PAGED_GRAPHS", "0")
+    assert PagedServeConfig.from_env().graphs is False
+    assert _graphs_env("1", "cpu", "solver") is True and _graphs_env("", "cuda:0", "all-vram") is True
+    assert _graphs_env(" AUTO ", "cuda", "all-vram") is True and _graphs_env("auto", "cuda", "solver") is False
+    for bad in ("2", "on", "yes"):
+        with pytest.raises(ValueError, match="E4B_PAGED_GRAPHS"):
+            _graphs_env(bad, "cuda", "all-vram")

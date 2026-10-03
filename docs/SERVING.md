@@ -100,20 +100,22 @@ patched, decode-graph status per bucket) so a reader can tell which stack answer
 
 Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
-(512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS=1` +
-`E4B_PAGED_BUCKETS` (`1,2,4,8,16`; bucketed CUDA-graph decode on scratch slots), `E4B_PAGED_TRACE=<path>`
+(512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS` (`auto`, the default:
+bucketed CUDA-graph decode on scratch slots on a CUDA device at `all-vram`; `0` eager, `1` forced) +
+`E4B_PAGED_BUCKETS` (`1,2,4,8,16`), `E4B_PAGED_TRACE=<path>`
 (one JSON line per finished request: arrival, admitted_at, first_token_at, finished_at, prompt_len,
 out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_HOST` / `E4B_PORT` / `E4B_TOKEN`
 as above. `GET /stats` returns the scheduler's `stats()` (TTFT p50/p99 **from arrival**, queue wait,
 per-stream rate) and the runner's graph statistics.
 
-**Decode graphs (#770; lane P109).** `serve_paged` decodes eagerly by default. `E4B_PAGED_GRAPHS=1` captures the
-bucketed graphs, and **every registered serving-speed number is the graph path**: SC1, P96, and P98 to P101.
+**Decode graphs (#770; lanes P109, P110).** `serve_paged` captures bucketed decode graphs by default
+(`E4B_PAGED_GRAPHS=auto`: on a CUDA device at `all-vram`, eager elsewhere; `0` keeps eager decode). This is the path
+**every registered serving-speed number** describes: SC1, P96, and P98 to P101.
 - **The speed.** P109 ([`bench/p109/RESULTS-p109.md`](../bench/p109/RESULTS-p109.md)) read the default server on one
   RTX 5090, with Qwen3-30B-A3B NF4 at `max_seqs` 16, on an EPYC 7C13 host. Graphs were **×5.60** the eager default
   with 16 concurrent requests (731–748 against 125–131 tok/s) and **×9.02** with one request (99.4 against 10.4–11.0).
   The capture costs +0.055 GiB of peak memory and about 3 s at startup.
-- **The default stays eager.** P109 read DIVERGENT:
+- **Why the default waited for P110.** P109 read DIVERGENT:
   - The replay is bit-identical to its own padded eager step.
   - But the graph server's tokens leave the eager default's within 16 tokens on 7 of 16 rows. The cause is the device
     grouping and the bucket padding that graphs bring.
@@ -122,8 +124,8 @@ bucketed graphs, and **every registered serving-speed number is the graph path**
 - **The quality.** P110 ([`bench/p110/RESULTS-p110.md`](../bench/p110/RESULTS-p110.md)) read AT_PARITY. Teacher-forced
   over 48 wikitext windows, the graph arithmetic (device grouping and bucket padding) sits at +0.0004 nats against the
   eager default. That is inside the eager default's own neutral perturbations: a half-batch reads +0.0018, a prefill
-  split +0.0005, spreads 0.011–0.013. A halved decode scale reads +1.05. This licenses `E4B_PAGED_GRAPHS=auto` as the
-  default (#770).
+  split +0.0005, spreads 0.011–0.013. A halved decode scale reads +1.05. On that, `E4B_PAGED_GRAPHS=auto` became the
+  default (#770). Greedy outputs differ from the old eager default's at the bf16 level, at no measured quality cost.
 
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
 `hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a
