@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+
+### P101 registered (#564, #913): P98's question asked again on the fixed code -- Qwen3.6's bucketed decode graphs through the serving stack, against the padded eager step, and the first hybrid decode speed (bench docs only)
+
+- `bench/p101/PREREG-p101.md`. P98's kit runs at its registered bytes (`bench/p98/staged.sha256` unchanged), under
+  P98's rule. Only the code under test differs: e4b at the launch commit, which includes #918's fix of #913.
+- Predictions: SUPPORTED; graphs at least 3x plain eager on both workloads (P98's eager arms were launch-bound at
+  about 85 ms per step); the eager arms reproduce P98's readings within 10 %.
+- A proving rental, then the reading (1.5 h guard, <= $1.125).
+
 ### P100 registered (#916): where the paged prefill's time goes on the int4 expert store -- TTFT against chunk size, and the per-expert loop counted, with no code change (bench and tests only)
 
 - **Why.** SC1 box B read TTFT 2.08 s at 512 tokens and 16.6 s at 4096 for Qwen3-30B-A3B on an RTX 5090 (int4
