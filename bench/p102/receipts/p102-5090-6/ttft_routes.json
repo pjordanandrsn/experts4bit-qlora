@@ -1,0 +1,582 @@
+{
+ "mode": "ttft",
+ "load_s": 117.1,
+ "census_build": {
+  "moe_layers": 48,
+  "experts": 128,
+  "top_k": 8,
+  "model_type": "qwen3_moe",
+  "int4_expert_layers": 48,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "int4_attn_projections": 96,
+  "kv": {
+   "n_kv_heads": 4,
+   "head_dim": 128,
+   "k_groups": "auto",
+   "scratch_slots": 1,
+   "blocks_per_seq": 257
+  },
+  "graph_status": {
+   "1": "graph"
+  },
+  "grouping": {
+   "device_grouping": false,
+   "force_singleton_groups": false
+  },
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "1",
+   "E4B_SERVE_ATTN_INT4": "1",
+   "E4B_SERVE_ATTN_INT4_CALIB": "0",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  },
+  "exp_int4_layers_enabled": 48,
+  "attn_int4_rtn_projections": 192,
+  "attn_int4_calib_projections": 0,
+  "fuse_qkv_n": 48,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48
+ },
+ "chunk_tokens": 512,
+ "rounds": 3,
+ "routes": [
+  "loop",
+  "batched",
+  "k19",
+  "mtile"
+ ],
+ "prompts_sha256": {
+  "512": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3",
+  "4096": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd"
+ },
+ "warm": [
+  {
+   "route": "loop",
+   "L": 512,
+   "wall_s": 0.9512,
+   "sched_ttft_s": 0.9506995260016993,
+   "token": 75923
+  },
+  {
+   "route": "loop",
+   "L": 4096,
+   "wall_s": 7.2424,
+   "sched_ttft_s": 7.241802083008224,
+   "token": 44643
+  },
+  {
+   "route": "batched",
+   "L": 512,
+   "wall_s": 0.6719,
+   "sched_ttft_s": 0.6714201440045144,
+   "token": 75923
+  },
+  {
+   "route": "batched",
+   "L": 4096,
+   "wall_s": 5.8158,
+   "sched_ttft_s": 5.81524252599047,
+   "token": 44643
+  },
+  {
+   "route": "k19",
+   "L": 512,
+   "wall_s": 0.136,
+   "sched_ttft_s": 0.13546378898900002,
+   "token": 75923
+  },
+  {
+   "route": "k19",
+   "L": 4096,
+   "wall_s": 1.375,
+   "sched_ttft_s": 1.3743660479958635,
+   "token": 44643
+  },
+  {
+   "route": "mtile",
+   "L": 512,
+   "wall_s": 0.1588,
+   "sched_ttft_s": 0.15829040799872018,
+   "token": 75923
+  },
+  {
+   "route": "mtile",
+   "L": 4096,
+   "wall_s": 1.6496,
+   "sched_ttft_s": 1.6490702780138236,
+   "token": 44643
+  }
+ ],
+ "draws": [
+  {
+   "route": "loop",
+   "L": 512,
+   "wall_s": 0.8521,
+   "sched_ttft_s": 0.8515839589963434,
+   "token": 75923,
+   "round": 0
+  },
+  {
+   "route": "loop",
+   "L": 4096,
+   "wall_s": 7.202,
+   "sched_ttft_s": 7.201412950991653,
+   "token": 44643,
+   "round": 0
+  },
+  {
+   "route": "batched",
+   "L": 512,
+   "wall_s": 0.6715,
+   "sched_ttft_s": 0.6709759200020926,
+   "token": 75923,
+   "round": 0
+  },
+  {
+   "route": "batched",
+   "L": 4096,
+   "wall_s": 5.8213,
+   "sched_ttft_s": 5.820755366992671,
+   "token": 44643,
+   "round": 0
+  },
+  {
+   "route": "k19",
+   "L": 512,
+   "wall_s": 0.1127,
+   "sched_ttft_s": 0.11222006700700149,
+   "token": 75923,
+   "round": 0
+  },
+  {
+   "route": "k19",
+   "L": 4096,
+   "wall_s": 1.3727,
+   "sched_ttft_s": 1.3721691960090538,
+   "token": 44643,
+   "round": 0
+  },
+  {
+   "route": "mtile",
+   "L": 512,
+   "wall_s": 0.1471,
+   "sched_ttft_s": 0.14662091199716087,
+   "token": 75923,
+   "round": 0
+  },
+  {
+   "route": "mtile",
+   "L": 4096,
+   "wall_s": 1.6535,
+   "sched_ttft_s": 1.652909042997635,
+   "token": 44643,
+   "round": 0
+  },
+  {
+   "route": "batched",
+   "L": 512,
+   "wall_s": 0.6719,
+   "sched_ttft_s": 0.6713907379889861,
+   "token": 75923,
+   "round": 1
+  },
+  {
+   "route": "batched",
+   "L": 4096,
+   "wall_s": 5.8198,
+   "sched_ttft_s": 5.819286165002268,
+   "token": 44643,
+   "round": 1
+  },
+  {
+   "route": "k19",
+   "L": 512,
+   "wall_s": 0.1127,
+   "sched_ttft_s": 0.11224234600376803,
+   "token": 75923,
+   "round": 1
+  },
+  {
+   "route": "k19",
+   "L": 4096,
+   "wall_s": 1.3753,
+   "sched_ttft_s": 1.3747270650055725,
+   "token": 44643,
+   "round": 1
+  },
+  {
+   "route": "mtile",
+   "L": 512,
+   "wall_s": 0.147,
+   "sched_ttft_s": 0.1465855509886751,
+   "token": 75923,
+   "round": 1
+  },
+  {
+   "route": "mtile",
+   "L": 4096,
+   "wall_s": 1.6492,
+   "sched_ttft_s": 1.648709291999694,
+   "token": 44643,
+   "round": 1
+  },
+  {
+   "route": "loop",
+   "L": 512,
+   "wall_s": 0.8507,
+   "sched_ttft_s": 0.8501969600038137,
+   "token": 75923,
+   "round": 1
+  },
+  {
+   "route": "loop",
+   "L": 4096,
+   "wall_s": 7.2065,
+   "sched_ttft_s": 7.2059172820008826,
+   "token": 44643,
+   "round": 1
+  },
+  {
+   "route": "k19",
+   "L": 512,
+   "wall_s": 0.1129,
+   "sched_ttft_s": 0.11243412698968314,
+   "token": 75923,
+   "round": 2
+  },
+  {
+   "route": "k19",
+   "L": 4096,
+   "wall_s": 1.3706,
+   "sched_ttft_s": 1.370085543996538,
+   "token": 44643,
+   "round": 2
+  },
+  {
+   "route": "mtile",
+   "L": 512,
+   "wall_s": 0.1468,
+   "sched_ttft_s": 0.14630928001133725,
+   "token": 75923,
+   "round": 2
+  },
+  {
+   "route": "mtile",
+   "L": 4096,
+   "wall_s": 1.6521,
+   "sched_ttft_s": 1.6514676689985208,
+   "token": 44643,
+   "round": 2
+  },
+  {
+   "route": "loop",
+   "L": 512,
+   "wall_s": 0.8498,
+   "sched_ttft_s": 0.8493173049937468,
+   "token": 75923,
+   "round": 2
+  },
+  {
+   "route": "loop",
+   "L": 4096,
+   "wall_s": 7.4115,
+   "sched_ttft_s": 7.41096788100549,
+   "token": 44643,
+   "round": 2
+  },
+  {
+   "route": "batched",
+   "L": 512,
+   "wall_s": 0.6712,
+   "sched_ttft_s": 0.6707547209953191,
+   "token": 75923,
+   "round": 2
+  },
+  {
+   "route": "batched",
+   "L": 4096,
+   "wall_s": 5.8176,
+   "sched_ttft_s": 5.817045365998638,
+   "token": 44643,
+   "round": 2
+  }
+ ],
+ "ttft_s_median": {
+  "loop": {
+   "512": 0.8507,
+   "4096": 7.2065
+  },
+  "batched": {
+   "512": 0.6715,
+   "4096": 5.8198
+  },
+  "k19": {
+   "512": 0.1127,
+   "4096": 1.3727
+  },
+  "mtile": {
+   "512": 0.147,
+   "4096": 1.6521
+  }
+ },
+ "census": {
+  "loop": {
+   "calls": 48,
+   "singleton_calls": 0,
+   "singleton_dequant": 0,
+   "grouped_calls": 48,
+   "grouped_device_calls": 0,
+   "grouped_no_store_calls": 0,
+   "loop_calls": 48,
+   "loop_rows": [
+    4096
+   ],
+   "loop_distinct_mean": 87.4,
+   "loop_dequant": 8390,
+   "loop_dequant_is_two_per_distinct": true,
+   "dequant_total": 8390,
+   "dequant_outside_calls": 0
+  },
+  "batched": {
+   "calls": 48,
+   "singleton_calls": 0,
+   "singleton_dequant": 0,
+   "grouped_calls": 48,
+   "grouped_device_calls": 0,
+   "grouped_no_store_calls": 0,
+   "loop_calls": 48,
+   "loop_rows": [
+    4096
+   ],
+   "loop_distinct_mean": 87.4,
+   "loop_dequant": 0,
+   "loop_dequant_is_two_per_distinct": false,
+   "dequant_total": 0,
+   "dequant_outside_calls": 0
+  },
+  "k19": {
+   "calls": 48,
+   "singleton_calls": 0,
+   "singleton_dequant": 0,
+   "grouped_calls": 48,
+   "grouped_device_calls": 48,
+   "grouped_no_store_calls": 0,
+   "loop_calls": 0,
+   "loop_rows": [],
+   "loop_distinct_mean": null,
+   "loop_dequant": 0,
+   "loop_dequant_is_two_per_distinct": true,
+   "dequant_total": 0,
+   "dequant_outside_calls": 0
+  },
+  "mtile": {
+   "calls": 48,
+   "singleton_calls": 0,
+   "singleton_dequant": 0,
+   "grouped_calls": 48,
+   "grouped_device_calls": 48,
+   "grouped_no_store_calls": 0,
+   "loop_calls": 0,
+   "loop_rows": [],
+   "loop_distinct_mean": null,
+   "loop_dequant": 0,
+   "loop_dequant_is_two_per_distinct": true,
+   "dequant_total": 0,
+   "dequant_outside_calls": 0
+  }
+ },
+ "kernels": {
+  "loop": {
+   "k19": 0,
+   "mtile": 0,
+   "device_kernels": 132216
+  },
+  "batched": {
+   "k19": 0,
+   "mtile": 0,
+   "device_kernels": 38919
+  },
+  "k19": {
+   "k19": 96,
+   "mtile": 0,
+   "device_kernels": 15383
+  },
+  "mtile": {
+   "k19": 0,
+   "mtile": 96,
+   "device_kernels": 15479
+  }
+ },
+ "profile_4096": {
+  "k19": {
+   "device_ms_total": 923.504,
+   "top": [
+    [
+     "_gemm_int4_b32_grouped_smallm",
+     768,
+     143.465
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_tn_align1>(cutlass_80_simt_sgemm_128x32_8x5_tn_align1::Params)",
+     384,
+     122.938
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_nn_align1>(cutlass_80_simt_sgemm_128x32_8x5_nn_align1::Params)",
+     384,
+     108.529
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::where_",
+     384,
+     69.818
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl<at::native::CUDAFunctor_add<float> >(at::TensorI",
+     384,
+     69.21
+    ],
+    [
+     "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+     2712,
+     51.55
+    ],
+    [
+     "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::isneginf_kernel_impl(at::TensorIter",
+     384,
+     43.306
+    ],
+    [
+     "Memcpy DtoD (Device -> Device)",
+     50501,
+     40.063
+    ],
+    [
+     "void at::native::(anonymous namespace)::cunn_SoftMaxForwardReg<float, float, float, at::native::(anonymous namespace)::S",
+     96,
+     31.435
+    ],
+    [
+     "void at::native::(anonymous namespace)::cunn_SoftMaxForwardReg<float, float, float, at::native::(anonymous namespace)::S",
+     96,
+     23.944
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x3_tn_align8>(cutlass_80_tensorop_bf16_s16",
+     384,
+     18.977
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_tn_align8>(cutlass_80_tensorop_bf16_s16",
+     384,
+     18.635
+    ],
+    [
+     "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+     784,
+     15.176
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::T",
+     768,
+     15.121
+    ],
+    [
+     "void (anonymous namespace)::softmax_warp_forward<float, float, float, 11, false, false>(float*, float const*, int, int, ",
+     96,
+     14.557
+    ]
+   ],
+   "wall_s": 1.505
+  },
+  "mtile": {
+   "device_ms_total": 1196.403,
+   "top": [
+    [
+     "_gemm_int4_b32_grouped",
+     768,
+     355.765
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_tn_align1>(cutlass_80_simt_sgemm_128x32_8x5_tn_align1::Params)",
+     384,
+     122.445
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_simt_sgemm_128x32_8x5_nn_align1>(cutlass_80_simt_sgemm_128x32_8x5_nn_align1::Params)",
+     384,
+     108.165
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::(anonymous namespace)::where_",
+     384,
+     69.554
+    ],
+    [
+     "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl<at::native::CUDAFunctor_add<float> >(at::TensorI",
+     384,
+     69.004
+    ],
+    [
+     "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+     2712,
+     51.461
+    ],
+    [
+     "_quant_x_rows_gathered",
+     384,
+     47.419
+    ],
+    [
+     "void at::native::vectorized_elementwise_kernel<4, at::native::(anonymous namespace)::isneginf_kernel_impl(at::TensorIter",
+     384,
+     43.226
+    ],
+    [
+     "Memcpy DtoD (Device -> Device)",
+     50736,
+     40.07
+    ],
+    [
+     "void at::native::(anonymous namespace)::cunn_SoftMaxForwardReg<float, float, float, at::native::(anonymous namespace)::S",
+     96,
+     31.365
+    ],
+    [
+     "void at::native::(anonymous namespace)::cunn_SoftMaxForwardReg<float, float, float, at::native::(anonymous namespace)::S",
+     96,
+     23.821
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_64x3_tn_align8>(cutlass_80_tensorop_bf16_s16",
+     384,
+     18.771
+    ],
+    [
+     "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_tn_align8>(cutlass_80_tensorop_bf16_s16",
+     384,
+     18.583
+    ],
+    [
+     "_quant_x_rows",
+     384,
+     17.929
+    ],
+    [
+     "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+     784,
+     15.133
+    ]
+   ],
+   "wall_s": 1.7698
+  }
+ }
+}

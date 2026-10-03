@@ -1,0 +1,109 @@
+{
+ "lane": "P102",
+ "void_reasons": [],
+ "ttft_s_median": {
+  "loop": {
+   "512": 0.8507,
+   "4096": 7.2065
+  },
+  "batched": {
+   "512": 0.6715,
+   "4096": 5.8198
+  },
+  "k19": {
+   "512": 0.1127,
+   "4096": 1.3727
+  },
+  "mtile": {
+   "512": 0.147,
+   "4096": 1.6521
+  }
+ },
+ "quality": {
+  "batched": {
+   "verdict": "PASS",
+   "nll_identical": true,
+   "first_tokens_identical": true
+  },
+  "k19": {
+   "verdict": "PASS",
+   "per_text": {
+    "c4val1": {
+     "deltas": [
+      -0.03271,
+      0.10143,
+      -0.02885,
+      0.009,
+      -0.00383,
+      -0.00433,
+      0.00902,
+      0.04198
+     ],
+     "mean": 0.01146,
+     "sd": 0.04325,
+     "windows_over_budget": 1
+    },
+    "wikitext": {
+     "deltas": [
+      -0.04607,
+      0.00054,
+      0.03162,
+      0.04194
+     ],
+     "mean": 0.00701,
+     "sd": 0.03952,
+     "windows_over_budget": 0
+    }
+   },
+   "k8_lines": [
+    "K8 c4val1: base=13.97924 cand=13.99070 delta=+0.01146 sha=dd38e6b6b29c steps=2048",
+    "K8 wikitext: base=8.95132 cand=8.95833 delta=+0.00701 sha=680574d7fc8b steps=2048",
+    "K8 VERDICT PASS (uncalibrated: |delta| <= 0.05 on every text)"
+   ]
+  },
+  "mtile": {
+   "verdict": "PASS",
+   "per_text": {
+    "c4val1": {
+     "deltas": [
+      -0.00144,
+      -0.02332,
+      0.02858,
+      -0.00238,
+      -0.01255,
+      0.00423,
+      0.03573,
+      0.0349
+     ],
+     "mean": 0.00797,
+     "sd": 0.02246,
+     "windows_over_budget": 0
+    },
+    "wikitext": {
+     "deltas": [
+      -0.02181,
+      0.01966,
+      0.03579,
+      0.0423
+     ],
+     "mean": 0.01898,
+     "sd": 0.02882,
+     "windows_over_budget": 0
+    }
+   },
+   "k8_lines": [
+    "K8 c4val1: base=13.97924 cand=13.98721 delta=+0.00797 sha=dd38e6b6b29c steps=2048",
+    "K8 wikitext: base=8.95132 cand=8.97030 delta=+0.01898 sha=680574d7fc8b steps=2048",
+    "K8 VERDICT PASS (uncalibrated: |delta| <= 0.05 on every text)"
+   ]
+  }
+ },
+ "candidate": "k19",
+ "speedup_4096_vs_loop": {
+  "loop": 1.0,
+  "batched": 1.24,
+  "k19": 5.25,
+  "mtile": 4.36
+ },
+ "verdict": "DEFAULT=k19"
+}

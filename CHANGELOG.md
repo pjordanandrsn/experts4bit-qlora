@@ -1,6 +1,19 @@
 # Changelog
 
 ## Unreleased
+### P102 read (RTX 5090, #916): DEFAULT=k19 -- TTFT-4096 7.21 s -> 1.37 s (5.25x) at max_seqs 1, with the prefill-shaped NLL within +0.011 / +0.007 ppl of the loop on 12 fresh windows (bench docs and receipts only)
+
+- **Verdict** (`p102_reduce.py`, the registered redraw `p102-5090-6`, Ryzen 9 7900 host, $0.2085): `DEFAULT=k19`.
+  - TTFT-512 / TTFT-4096: loop 0.851 / 7.207 s; batched 0.672 / 5.820 s; k19 0.113 / 1.373 s; mtile 0.147 / 1.652 s.
+  - Quality: batched bit-identical (every window's NLL, every first token); k19 mean dppl +0.0115 (c4val1, W=8) /
+    +0.0070 (wikitext, W=4); mtile +0.0080 / +0.0190. All PASS.
+- **The VOID first draw** `p102-5090-5` (my stale engagement threshold; Xeon E5-2698 v4): loop 30.1 s, k19 3.4 s at
+  4096 tokens. Its NLL deltas equal the reading's to every digit. The loop's TTFT-4096 runs 4.8-30.1 s across the four
+  hosts measured; k19's lead over loop holds on both of P102's draws (5.25x and 8.7x).
+- **Next lead:** under k19, a 4096-token prefill spends ~45 % of its device time in fp32 SIMT SGEMMs with masking and
+  softmax kernels around them -- prefill attention without tensor cores.
+- `bench/p102/RESULTS-p102.md`; receipts under `bench/p102/receipts/`. Lane total $0.7328 over six attempts.
+
 ### P102 amendment A2 (#916): the loop's engagement check is structural -- the registered 9,600-decode floor voided the first full draw (bench and tests only)
 
 - `p102-5090-5` (adertha-receipts `796486c`, $0.3466) ran every arm. The reducer voided it because `loop` had 8,390
