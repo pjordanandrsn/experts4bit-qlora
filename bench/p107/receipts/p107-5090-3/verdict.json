@@ -1,0 +1,57 @@
+{
+ "lane": "P107",
+ "void_reasons": [],
+ "ttft_s_median": {
+  "math": {
+   "512": 0.2488,
+   "4096": 1.9845
+  },
+  "flash": {
+   "512": 0.2351,
+   "4096": 1.7418
+  }
+ },
+ "int4_prefill_route": "k19",
+ "quality": {
+  "verdict": "PASS",
+  "per_text": {
+   "c4val1": {
+    "deltas": [
+     -0.00041,
+     -0.03154,
+     -0.02559,
+     0.04106,
+     -0.0121,
+     0.02177,
+     -0.0261,
+     -0.07898
+    ],
+    "mean": -0.01399,
+    "sd": 0.03647,
+    "windows_over_budget": 1,
+    "mean_ppl_math": 13.99298
+   },
+   "wikitext": {
+    "deltas": [
+     0.011,
+     -0.02869,
+     -0.02768,
+     0.01143
+    ],
+    "mean": -0.00849,
+    "sd": 0.02275,
+    "windows_over_budget": 0,
+    "mean_ppl_math": 8.96876
+   }
+  },
+  "k8_lines": [
+   "K8 c4val1: base=13.99298 cand=13.97899 delta=-0.01399 sha=dd38e6b6b29c steps=2048",
+   "K8 wikitext: base=8.96876 cand=8.96028 delta=-0.00849 sha=680574d7fc8b steps=2048",
+   "K8 VERDICT PASS (uncalibrated: |delta| <= 0.05 on every text)"
+  ]
+ },
+ "first_tokens_identical": true,
+ "speedup_4096": 1.139,
+ "speedup_512": 1.058,
+ "verdict": "DEFAULT=flash"
+}

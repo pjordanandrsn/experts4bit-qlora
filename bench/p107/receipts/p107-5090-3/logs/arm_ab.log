@@ -1,0 +1,40 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1477.34it/s]
+[13:27:56]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[13:27:57]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[13:27:57]   quantized experts on 48/48 MoE layers (128 experts each)
+[13:27:57]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[13:27:58]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[13:28:02]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[13:28:28]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 1641.96it/s]
+[serve_paged] INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[serve_paged] ATTNINT4 rtn: 192 projections (uncalibrated; model_type=qwen3_moe)
+[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+DECODE_GRAPH bucket=1 captured
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 48, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 96, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 1, "blocks_per_seq": 257}, "graph_status": {"1": "graph"}, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "levers_env": {"E4B_SERVE_EXP_INT4": "1", "E4B_SERVE_ATTN_INT4": "1", "E4B_SERVE_ATTN_INT4_CALIB": "0", "E4B_CALIB_SOURCE": "c4", "E4B_FUSE_T1_GLUE": "1", "E4B_FUSE_T1_GLUE_R2": "1", "E4B_FUSE_ROUTER_EPI": "1"}, "exp_int4_layers_enabled": 48, "attn_int4_rtn_projections": 192, "attn_int4_calib_projections": 0, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (866460 > 131072). Running this sequence through the model will result in indexing errors
+P107_NLL c4val1 k=9 route=math nll=2.816863
+P107_NLL c4val1 k=9 route=flash nll=2.816839
+P107_NLL c4val1 k=10 route=flash nll=2.934478
+P107_NLL c4val1 k=10 route=math nll=2.936154
+P107_NLL c4val1 k=11 route=math nll=2.808388
+P107_NLL c4val1 k=11 route=flash nll=2.806844
+P107_NLL c4val1 k=12 route=flash nll=2.870647
+P107_NLL c4val1 k=12 route=math nll=2.868318
+P107_NLL c4val1 k=13 route=math nll=1.561588
+P107_NLL c4val1 k=13 route=flash nll=1.559047
+P107_NLL c4val1 k=14 route=flash nll=2.609547
+P107_NLL c4val1 k=14 route=math nll=2.607944
+P107_NLL c4val1 k=15 route=math nll=1.836550
+P107_NLL c4val1 k=15 route=flash nll=1.832382
+P107_NLL c4val1 k=16 route=flash nll=2.861883
+P107_NLL c4val1 k=16 route=math nll=2.866387
+P107_NLL wikitext k=9 route=math nll=2.022615
+P107_NLL wikitext k=9 route=flash nll=2.024070
+P107_NLL wikitext k=10 route=flash nll=2.256900
+P107_NLL wikitext k=10 route=math nll=2.259899
+P107_NLL wikitext k=11 route=math nll=2.140889
+P107_NLL wikitext k=11 route=flash nll=2.137630
+P107_NLL wikitext k=12 route=flash nll=2.326233
+P107_NLL wikitext k=12 route=math nll=2.325116
+P107_TTFT {"math": {"512": 0.2488, "4096": 1.9845}, "flash": {"512": 0.2351, "4096": 1.7418}}
