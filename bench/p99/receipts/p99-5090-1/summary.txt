@@ -1,0 +1,31 @@
+KNOBS e4b=daef38cb30f5974a08d60f15d9e1423049f2fc3c gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3.6-35B-A3B@995ad96eacd98c81ed38be0c5b274b04031597b0 olmoe=allenai/OLMoE-1B-7B-0924-Instruct@7f1c97f440f06ce36705e4f2b843edb5925f4498 gpu_class=5090 min_disk_gb=170 arms='d0g d1g d1e d2g d2e d3g d3e'
+e4b 0.40.0 @daef38cb30f5974a08d60f15d9e1423049f2fc3c
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+gated-deltanet kernel modules {'fla': False, 'causal_conv1d': False, 'kernels': False}
+self-test OK (11 cases)
+premise rc=0: 4 passed in 11.33s
+/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0
+/root/.cache/huggingface/hub/models--allenai--OLMoE-1B-7B-0924-Instruct/snapshots/7f1c97f440f06ce36705e4f2b843edb5925f4498
+bake qwen rc=0 {'status': 'OK', 'layers': 40, 'experts': 256, 'snapshot_gib': 16.88, 'loaded_commit': '995ad96eacd98c81ed38be0c5b274b04031597b0', 'err': None}
+bake olmoe rc=0 {'status': 'OK', 'layers': 16, 'experts': 64, 'snapshot_gib': 3.38, 'loaded_commit': '7f1c97f440f06ce36705e4f2b843edb5925f4498', 'err': None}
+arm d0g rc=134  asserts=2 P99_STEP call=110 rows=1 
+arm d1g rc=0 P98_ARM g: build 12s | graph_status {1: 'graph', 2: 'graph', 4: 'graph', 8: 'graph', 16: 'graph'} | W16 1515.21 tok/s over 111 steps | W1 254.589 tok/s | mem 4.98 GB  asserts=0 P99_STEP call=94 rows=1 
+arm d1e rc=0 P98_ARM e: build 5s | graph_status {1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} | W16 402.051 tok/s over 111 steps | W1 38.215 tok/s | mem 4.93 GB  asserts=0 P99_STEP call=94 rows=1 
+arm d2g rc=134  asserts=2 P99_STEP call=110 rows=1 
+arm d2e rc=0 P98_ARM e: build 35s | graph_status {1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} | W16 122.457 tok/s over 111 steps | W1 12.464 tok/s | mem 23.71 GB  asserts=0 P99_STEP call=94 rows=1 
+arm d3g rc=0 P98_ARM g: build 36s | graph_status {16: 'graph'} | W16 420.981 tok/s over 111 steps | W1 46.411 tok/s | mem 23.72 GB  asserts=0 P99_STEP call=94 rows=1 
+arm d3e rc=0 P98_ARM e: build 39s | graph_status {16: 'eager: capture=False'} | W16 115.59 tok/s over 111 steps | W1 10.836 tok/s | mem 23.71 GB  asserts=0 P99_STEP call=94 rows=1 
+P99 VERDICT LOCALISED
+  d0g: faulted last_step (110, 1) fault_bucket 1
+  d1g: ran last_step None fault_bucket None
+  d1e: ran last_step None fault_bucket None
+  d2g: faulted last_step (110, 1) fault_bucket 1
+  d2e: ran last_step None fault_bucket None
+  d3g: ran last_step None fault_bucket None
+  d3e: ran last_step None fault_bucket None
+  answers {'hybrid_state_necessary': True, 'k25_necessary': False, 'multiple_buckets_necessary': True}
