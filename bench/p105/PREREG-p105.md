@@ -91,6 +91,20 @@ this one.
 - **The new test** on the A2000 at e4b `a1bd83d`:
   - 1 passed, 1 skipped (the real-kernel variant, sm_86) on the torch path, fla and fla + causal-conv1d;
   - the reversed-write-back mutant fails on the bar in the two arms where it ran.
-- **The runner's proving path** is rehearsed on the A2000 before the merge, and recorded below.
+- **The runner's proving path** is rehearsed on the A2000 before the merge.
+
+**Rehearsed 2026-10-03, 06:24–06:30Z, at `506ce06`, on the NAS RTX A2000**, staged exactly as `p105_drive.sh` stages.
+`P105_PROVE=1` with the knobs class A2000, disk 10 GB and premise skips allowed. Exit rc 0, with `PROVED` and the
+`REHEARSAL` marker.
+- **Install and tripwire held:** e4b `506ce06`, gnf4 `34da93d`, torch 2.8.0+cu128, transformers 5.17.0. Phase t is
+  kernel-free. The reducer's self-test passed 20 cases.
+- **Premise t:** 7 passed, 4 skipped (the fp8 tests on sm_86). The dense parity stand-in ran: hybrid-to-control ratios
+  0.68–1.60 over the 8 seeds.
+- **Phase f:** fla 0.5.2 engaged as registered. Premise 7 passed, 2 skipped; dense ratios 0.66–1.36. The two
+  single-seed MoE checks were reported (they skip on sm_86). `phase f ok`.
+- **Phase fc:** causal-conv1d 1.7.0 engaged as registered. Premise 7 passed, 2 skipped; dense ratios 0.74–1.36.
+  `phase fc ok`.
+- **Reporting:** the per-seed dense lines and the reported-only MoE lines reach `summary.txt` as designed.
+- **HF CDN probe:** 55.1 MB/s.
 
 Amendments, dated, go below this line before any data is read.
