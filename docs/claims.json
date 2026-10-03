@@ -7841,6 +7841,37 @@
       "notes": "Pre-registered in #947 (#944). Follows P105 (e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03), which recommended the kernels on decode speed with quality in nats unmeasured. Predictions held for NEUTRAL, the KL band, agreement, d_nll, the null pair and memory; missed for TTFT at 4,096 tokens (1.101x against 1.3-4x) and its growth with length (flat), and the mutant read NaN rather than above 1 nat. The KL is about the fp8 KV's own effect on this model (P97: 4.43e-3). Lane cost $0.3472 (proof $0.0913, reading $0.2559)."
     },
     {
+      "id": "e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P109, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, max_seqs 16, all-vram, every lever at its default, built by PagedServeConfig.from_env() + build_engine), E4B_PAGED_GRAPHS=1 decodes 5.597x the eager default with 16 concurrent requests and 9.020x with one (min over both ABBA pairs, p37's slope at 32/160 tokens); the replay is bit-identical to its own padded eager step (capture=False) on every row. Verdict DIVERGENT: 9 of 16 rows agree with the eager default for 16 tokens (bar 12); host vs device grouping alone, both eager, reads 10 of 16. Graphs stay opt-in.",
+      "value": 5.5969,
+      "unit": "decode tok/s ratio, E4B_PAGED_GRAPHS=1 over the eager default, 16 concurrent requests (min over two pairs)",
+      "hardware": "RTX 5090 (sm_120, driver 580.95.05, 32607 MiB), one rented Vast.ai verified host (instance 54064967, AMD EPYC 7C13, 818 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @3185b46 (0.42.0 + P109's registration and Amendments 1-2) + grouped-nf4-gemm @51a4916 (v0.35.0); torch 2.8.0+cu128, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box (P39's k8_bake.py); premise tests/test_decode_graph_buckets.py 7 passed on the card; six arms in their own processes (E1 G1 G2 E2 D1 P1), W16 = 16 wikitext 512-token prompts at once, W1 = one; 3 timed passes; verdict by bench/p109/p109_reduce.py",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p109/RESULTS-p109.md",
+        "bench/p109/PREREG-p109.md",
+        "bench/p109/p109_reduce.py",
+        "bench/p109/p109_box.py",
+        "bench/p109/receipts/p109-5090-2/verdict.json",
+        "bench/p109/receipts/p109-5090-2/arm_G1.json",
+        "bench/p109/receipts/p109-5090-2/arm_E1.json",
+        "bench/p109/receipts/p109-5090-2/summary.txt",
+        "bench/p109/receipts/p109-5090-2/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/p109-5090-2/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-03/p109-prove-2/ and p109-prove-3/ (receipt.json, the proving runs)",
+        "receipts/experts4bit-qlora/2026-10-03/p109-prove-1/ and p109-5090-1/ (receipt.json; HARNESS_ERROR, no data)"
+      ],
+      "notes": "Pre-registered in #988 with Amendments 1-2 (#989: the proof's own time-left checks; #990: the replay's oracle is the PADDED eager step, since W16's staggered prefill pads 1-15 active rows to buckets), all before any reading data. The registration named a register row only for DEFAULT_GRAPHS; this is a measurement row. Predictions held for S16, G = P, E1 = E2 and memory/load; missed for S1 (above its 1.5-8 band), the median E-vs-G first divergence (23.5, not >= 32) and the sanity bar. Lane cost $0.4599."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02",
       "package": "experts4bit-qlora",
       "area": "train",

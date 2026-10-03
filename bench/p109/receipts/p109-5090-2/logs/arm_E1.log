@@ -1,0 +1,13 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1690.42it/s]
+[21:25:33]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[21:25:33]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[21:25:33]   quantized experts on 48/48 MoE layers (128 experts each)
+[21:25:33]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[21:25:35]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[21:25:39]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[21:26:03]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (fold flags set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}
+P109_W E/E1 W16 B=16 decode_tok_s=130.55 median=130.6 walls={'32': [9.06507, 9.07435, 9.058], '160': [24.7449, 24.74711, 25.52281]}
+P109_W E/E1 W1 B=1 decode_tok_s=11.02 median=11.02 walls={'32': [3.02947, 3.03306, 3.03025], '160': [14.65002, 14.64597, 14.65857]}
+P109_ARM {"arm": "E", "tag": "E1", "load_s": 33.42, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "W16": 130.55, "W1": 11.02, "peak_gib": 21.505}
