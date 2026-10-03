@@ -259,6 +259,37 @@ EXPECTED[PROF945_FAM] = list(PROF945_ARMS)
 MATCHED |= {"fused_attn4_m_prof_legacy"}
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 13 (#945): gnf4's padded LoRA delta, previous body vs trimmed
+LEAN_FAM = "qwen3leanab"          # NF4_QLORA_LEAN_DELTA=0 (gnf4's previous padded delta body) vs =1 (gnf4#440's trimmed body), both on the post-#945 sync path
+LEAN_PAIRS = (("P20", "shipped", "fused_attn4_shipped"), ("P21", "matched", "fused_attn4_m"))   # each: <tag>_lean0 vs <tag>_lean1, two draws a side
+LEAN_BAND = (0.90, 0.99)          # P20 / P21: lean1 / lean0 s/step on stable pairs -- at least 1 % faster, at most 10 %
+LEAN_REVERT_ABOVE = 1.01          # amendment 13's decision rule: a stable ratio above this on either arm reverts gnf4's default
+FAMS.append(LEAN_FAM)
+NAMES[LEAN_FAM] = "Qwen3-30B-A3B (amendment 13: gnf4's previous padded LoRA delta vs its trimmed body, both on the post-#945 sync path)"
+N_LAYERS[LEAN_FAM] = 48
+ATTN_CENSUS[LEAN_FAM] = 192
+FAM_ANCHOR[LEAN_FAM] = ("e4b", "fused_attn4_m_lean0")
+EXPECTED[LEAN_FAM] = [("e4b", "fused_attn4_shipped_lean0"), ("e4b", "fused_attn4_shipped_lean1"), ("e4b", "fused_attn4_m_lean0"), ("e4b", "fused_attn4_m_lean1"),
+                      ("e4b", "fused_attn4_m_lean1_d2"), ("e4b", "fused_attn4_m_lean0_d2"), ("e4b", "fused_attn4_shipped_lean1_d2"), ("e4b", "fused_attn4_shipped_lean0_d2")]
+MATCHED |= {"fused_attn4_m_lean0", "fused_attn4_m_lean1", "fused_attn4_m_lean0_d2", "fused_attn4_m_lean1_d2"}
+for _p, _k, _t in LEAN_PAIRS:
+    for _side in ("lean0", "lean1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def lean_ab_why(tag, r):
+    """Amendment 13's engagement predicate: the arm ran the delta body its tag names, by its own record, and the padded path -- the only
+    one the switch touches -- served the delta. Empty string = engaged."""
+    la = (r or {}).get("lean_ab")
+    if not isinstance(la, dict):
+        return "no lean_ab record on the receipt: the delta body this arm ran cannot be verified"
+    want = "0" if "_lean0" in tag else "1"
+    calls = la.get("lora_path_calls") or {}
+    bad = [k for k, ok in ((f"gnf4_lean_delta {want}", la.get("gnf4_lean_delta") == want), ("gnf4_has_lean_delta", la.get("gnf4_has_lean_delta") is True),
+                           ("padded calls > 0", (calls.get("padded") or 0) > 0)) if not ok]
+    return "" if not bad else f"lean-delta A/B body not engaged ({', '.join(bad)}; record {la})"
+
+
 def sync_ab_why(tag, r):
     """Amendment 10's engagement predicate: the arm ran the path its tag names, by its own record. Empty string = engaged."""
     sa = (r or {}).get("sync_ab")
@@ -652,8 +683,12 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             nb = (r.get("axolotl_bnb4bit_modules") or {}).get("n_bnb4bit_unwrapped")
             if nb is None or nb < L:
                 why.append(f"quantize_moe_experts set but bnb-parametrized experts modules (innermost) {nb} < {L}")
-    if fam in (SYNC_FAM, PROF945_FAM) and fw == "e4b":   # amendments 10 / 12: the arm ran the path its tag names
+    if fam in (SYNC_FAM, PROF945_FAM, LEAN_FAM) and fw == "e4b":   # amendments 10 / 12 / 13: the arm ran the sync path its tag names (13: the new one)
         w = sync_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == LEAN_FAM and fw == "e4b":                 # amendment 13: ... and the padded LoRA-delta body its tag names
+        w = lean_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -1164,6 +1199,35 @@ def score_syncab(F):
                     f"{name}: sync1 / legacy {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {list(SYNC_BAND)}; "
                     f"s/step legacy {L['s_list'][0]:.3f} / {L['s_list'][1]:.3f} (within {100 * L['stability']:.1f}%), sync1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
                     f"(within {100 * N['stability']:.1f}%); held-out at N legacy {f(L.get('heldout'), 4)} / sync1 {f(N.get('heldout'), 4)}"))
+    return out
+
+
+def score_leanab(F):
+    """TC1-PREREG amendment 13 (#945), on the qwen3leanab box: P20 (shipped arm) and P21 (matched arm) -- gnf4's trimmed padded LoRA
+    delta steps at lean1 / lean0 within LEAN_BAND, the median over two VALID draws a side with each side's draws within 5 %. Outside the
+    band FALSIFIED (the evidence names a stable ratio above LEAN_REVERT_ABOVE, which the decision rule acts on); an unstable, missing or
+    non-VALID side UNTESTED. The interval is over the four cross-draw ratios."""
+    R = F.get(LEAN_FAM)
+    if not R:
+        return []
+    out = []
+    for pid, name, t in LEAN_PAIRS:
+        O, N = R["draws"].get(("e4b", f"{t}_lean0"), {}), R["draws"].get(("e4b", f"{t}_lean1"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("lean0", O), ("lean1", N)))
+            out.append((pid, LEAN_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        held = LEAN_BAND[0] <= ratio_ <= LEAN_BAND[1]
+        r1 = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == ("e4b", f"{t}_lean1")), None) or {}
+        calls = (r1.get("lean_ab") or {}).get("lora_path_calls") or {}
+        out.append((pid, LEAN_FAM, "HELD" if held else "FALSIFIED",
+                    f"{name}: lean1 / lean0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {list(LEAN_BAND)}"
+                    f"{'; ABOVE ' + str(LEAN_REVERT_ABOVE) + ' -- the decision rule reverts the default' if ratio_ > LEAN_REVERT_ABOVE else ''}; "
+                    f"s/step lean0 {O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), lean1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
+                    f"(within {100 * N['stability']:.1f}%); held-out at N lean0 {f(O.get('heldout'), 4)} / lean1 {f(N.get('heldout'), 4)}; "
+                    f"delta paths (lean1, process) {json.dumps(calls, sort_keys=True)}"))
     return out
 
 
@@ -2334,6 +2398,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_syncab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if LEAN_FAM in F:
+        out += ["\n## Predictions P20 / P21 (TC1-PREREG amendment 13, #945: gnf4's trimmed padded LoRA delta vs its previous body, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_leanab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -2531,6 +2600,24 @@ def _prof945_set(busy_new=0.62, busy_old=0.48):
                                    sync_ab={"e4b_grouping": mode, "gnf4_pinned_ring": ring, "e4b_has_group_by_expert": True, "gnf4_has_ring": True, "ring_staged": staged, "ring_waits": 0})
     for r in R.values():
         r["fam"] = PROF945_FAM
+    return R
+
+
+def _lean_set(ship=((5.00, 5.05), (4.70, 4.72)), match=((5.30, 5.33), (4.95, 4.97)), padded=(9216, 9216), lean=("0", "1")):
+    """Amendment 13: e4b against itself on the post-#945 sync path -- each pair as (lean0 draws, lean1 draws); `padded` = the padded
+    path's call count on (lean0, lean1) arms; `lean` = the body each side's record says it ran."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for side, ss, pc, body in (("lean0", old, padded[0], lean[0]), ("lean1", new, padded[1], lean[1])):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                R[("e4b", tag)] = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000), matched=matched,
+                                           sync_ab={"e4b_grouping": "default", "gnf4_pinned_ring": "1", "e4b_has_group_by_expert": True,
+                                                    "gnf4_has_ring": True, "ring_staged": 9216, "ring_waits": 0},
+                                           lean_ab={"gnf4_lean_delta": body, "gnf4_lean_delta_env": body, "gnf4_has_lean_delta": True,
+                                                    "lora_path_calls": {"loop": 0, "padded": pc, "grouped_mm": 0}})
+    for r in R.values():
+        r["fam"] = LEAN_FAM
     return R
 
 
@@ -3504,6 +3591,29 @@ def selftest():
     assert p19(R) == [("P19", "UNTESTED")]
     text = render(PF, "x")
     assert "## Amendment 12 (#945)" in text and "| P19 | qwen3prof945 | **HELD** |" in text
+    cases += 1
+    # 58. amendment 13 (#945): gnf4's previous padded LoRA delta vs its trimmed body -- every arm VALID when it ran the body its tag names on
+    #     the new sync path, P20 / P21 HELD inside the band, FALSIFIED with no gain and flagged above the revert line, a lean1 arm that ran the
+    #     previous body or whose padded path never served VOID (its prediction UNTESTED), and a lean arm on the legacy sync path VOID
+    def pl(R):
+        return {p: v for p, _, v, _ in score_leanab({LEAN_FAM: reduce_family(LEAN_FAM, R, {}, 20)})}
+    LF = {LEAN_FAM: reduce_family(LEAN_FAM, _lean_set(), {}, 20)}
+    assert [(x["fw"], x["tag"]) for x in LF[LEAN_FAM]["rows"]] == EXPECTED[LEAN_FAM]
+    assert all(x["verdict"] == "VALID" for x in LF[LEAN_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in LF[LEAN_FAM]["rows"]]
+    assert LF[LEAN_FAM]["anchor_key"] == ("e4b", "fused_attn4_m_lean0")
+    PL = {p: (v, ev) for p, _, v, ev in score_leanab(LF)}
+    assert PL["P20"][0] == "HELD" and PL["P21"][0] == "HELD" and "lean1 / lean0 0.937 [" in PL["P20"][1], PL
+    assert pl(_lean_set(ship=((5.00, 5.05), (4.99, 5.02)))) == {"P20": "FALSIFIED", "P21": "HELD"}           # no gain: 0.995
+    slow = score_leanab({LEAN_FAM: reduce_family(LEAN_FAM, _lean_set(match=((5.00, 5.02), (5.20, 5.22))), {}, 20)})
+    assert [(p, v) for p, _, v, _ in slow] == [("P20", "HELD"), ("P21", "FALSIFIED")] and "the decision rule reverts the default" in slow[1][3]
+    RR = reduce_family(LEAN_FAM, _lean_set(lean=("0", "0")), {}, 20)
+    assert RR["verdicts"][("e4b", "fused_attn4_shipped_lean1")] == "VOID" and "gnf4_lean_delta 1" in next(x["why"] for x in RR["rows"] if x["tag"] == "fused_attn4_shipped_lean1")
+    assert pl(_lean_set(lean=("0", "0"))) == {"P20": "UNTESTED", "P21": "UNTESTED"}
+    assert reduce_family(LEAN_FAM, _lean_set(padded=(9216, 0)), {}, 20)["verdicts"][("e4b", "fused_attn4_m_lean1")] == "VOID"
+    R = _lean_set(); R[("e4b", "fused_attn4_m_lean0")]["sync_ab"]["gnf4_pinned_ring"] = "0"            # an arm on the pre-#945 sync path
+    assert reduce_family(LEAN_FAM, R, {}, 20)["verdicts"][("e4b", "fused_attn4_m_lean0")] == "VOID"
+    text = render(LF, "x")
+    assert "## Predictions P20 / P21" in text and "| P20 | qwen3leanab | **HELD** |" in text and "| P21 | qwen3leanab | **HELD** |" in text
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 

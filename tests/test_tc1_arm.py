@@ -864,7 +864,7 @@ def test_amendment_3_axolotl_family_uv_index_strategy_and_no_unsloth_venv_on_tha
     # the uv install reads PyPI past the cu130 index: uv's first-index strategy left axolotl's packaging==26.0 unsatisfiable on both TC1 boxes
     assert re.search(r'uv pip install --python \$PY_AX "axolotl==\$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log', body)
     # the token alone builds no Unsloth venv; every other token still builds both, behind the same driver gate
-    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 ") NEED_UNSLOTH=0;; esac' in body   # amendments 8, 10 and 12 add their tokens
+    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab ") NEED_UNSLOTH=0;; esac' in body   # amendments 8, 10, 12 and 13 add their tokens
     assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then' in body
     assert body.index("NEED_UNSLOTH=1; case") < body.index("venv-unsloth-t28:") and body.count("runs no Unsloth arm (TC1-PREREG amendment 3)") == 2
 
@@ -1148,7 +1148,7 @@ def test_tc1_amendment_8_native_best_200_token():
                      ("axolotl", "ckpt_axolotl_best_200"), ("e4b", "fused_attn4_m_200")], order
     assert body.count("draw2") == 2 and body.count(" curve $TOK $TS") == 5 and "--axolotl-best 1" in body and "tc1_prepare $FAM \"$MID\" $REV $FAL \"$ALL\" $CURVE_EVAL_N" in body
     assert "qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in run
-    assert 'case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 ") NEED_UNSLOTH=0;; esac' in run
+    assert 'case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab ") NEED_UNSLOTH=0;; esac' in run
     rule = re.search(r'^  local OFFL=1; case .*?esac$', run, re.MULTILINE).group(0)
     for tag, want in (("ckpt_axolotl_best", "0"), ("ckpt_axolotl_best_d2", "0"), ("ckpt_axolotl_best_200", "0"), ("ckpt_axolotl_best_200_d2", "0"),
                       ("ckpt_axolotl_m", "1"), ("ckpt_axolotl_m_d2", "1")):
@@ -1179,6 +1179,24 @@ def test_tc1_amendment_10_sync_ab_token():
     assert out == ["[", "A=1", "B=2]", "[]"], out
     src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
     assert '"sync_ab": sync_ab,' in src and '"ring_staged": int(sum(r.staged for r in _rings))' in src
+
+
+def test_tc1_amendment_13_lean_delta_token():
+    """TC1 amendment 13 (#945): `qwen3leanab` runs e4b against itself -- grouped-nf4-gemm's previous padded LoRA delta
+    (NF4_QLORA_LEAN_DELTA=0) vs its trimmed body (=1), both on the post-#945 sync path -- on the shipped and matched arms, two draws
+    each in ABBA order; the arm records the body it ran (lean_ab) and the delta's per-path call counts."""
+    run = RUN_SH.read_text()
+    m = re.search(r"^tc1_leanab_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE)
+    assert m, "tc1_leanab_family is gone"
+    calls = re.findall(r'TC1_ARM_EXTRA_ENV="\$(OLD|NEW)" (arm|draw2) +\$FAM e4b (\S+) fused .* \$(NATIVE|MATCH)$', m.group(0), re.MULTILINE)
+    assert calls == [("OLD", "arm", "fused_attn4_shipped_lean0", "NATIVE"), ("NEW", "arm", "fused_attn4_shipped_lean1", "NATIVE"),
+                     ("OLD", "arm", "fused_attn4_m_lean0", "MATCH"), ("NEW", "arm", "fused_attn4_m_lean1", "MATCH"),
+                     ("NEW", "draw2", "fused_attn4_m_lean1", "MATCH"), ("OLD", "draw2", "fused_attn4_m_lean0", "MATCH"),
+                     ("NEW", "draw2", "fused_attn4_shipped_lean1", "NATIVE"), ("OLD", "draw2", "fused_attn4_shipped_lean0", "NATIVE")], calls
+    assert 'local OLD="NF4_QLORA_LEAN_DELTA=0" NEW="NF4_QLORA_LEAN_DELTA=1"' in m.group(0) and "NF4_QLORA_LORA_PATH" not in m.group(0)
+    assert "qwen3leanab) tc1_leanab_family qwen3leanab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in run
+    src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
+    assert '"lean_ab": lean_ab,' in src and "_lean_on = bool(_nq._lean_delta_enabled())" in src and '"lora_path_calls":' in src
 
 
 def test_tc1_amendment_12_profile_token():

@@ -98,7 +98,7 @@ case "$TC1_BOX" in
 esac
 # TC1-PREREG amendment 3 (2026-10-02): the qwen3axolotl token runs no Unsloth arm, so it builds neither Unsloth venv (~15 min of box time
 # on the TC1 boxes); every other token builds both as before.
-NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 ") NEED_UNSLOTH=0;; esac
+NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab ") NEED_UNSLOTH=0;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
@@ -853,6 +853,28 @@ tc1_syncab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_legacy_d2 && TC1_ARM_EXTRA_ENV="$LEG" draw2 $FAM e4b fused_attn4_shipped_legacy fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_leanab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 13 (2026-10-03, #945): grouped-nf4-gemm's padded LoRA delta with its
+# trimmed body (gnf4#440: flat row index, scatter-backward gather, no zero fill, scaling on the gathered rows and skipped at 1) against
+# the previous body (NF4_QLORA_LEAN_DELTA=0), both on the post-#945 sync path, on the shipped arm and the matched arm, two draws each in
+# ABBA order. Values are identical by construction; the question is the step time. GNF4_SHA must carry the switch (gnf4#440); the
+# receipts record which body each arm ran.
+tc1_leanab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_lean0:fused e4b:fused_attn4_shipped_lean1:fused e4b:fused_attn4_m_lean0:fused e4b:fused_attn4_m_lean1:fused e4b:fused_attn4_m_lean1_d2:fused e4b:fused_attn4_m_lean0_d2:fused e4b:fused_attn4_shipped_lean1_d2:fused e4b:fused_attn4_shipped_lean0_d2:fused"
+  say "===== LEAN-DELTA A/B family $FAM ($MID @ $REV; gnf4's previous padded LoRA delta vs its trimmed body, #945)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local OLD="NF4_QLORA_LEAN_DELTA=0" NEW="NF4_QLORA_LEAN_DELTA=1"
+  can_run 600 $FAM/e4b/shipped_lean0    && TC1_ARM_EXTRA_ENV="$OLD" arm   $FAM e4b fused_attn4_shipped_lean0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_lean1    && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_shipped_lean1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_lean0          && TC1_ARM_EXTRA_ENV="$OLD" arm   $FAM e4b fused_attn4_m_lean0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_lean1          && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_m_lean1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_lean1_d2       && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_m_lean1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_lean0_d2       && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_m_lean0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_lean1_d2 && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_shipped_lean1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_lean0_d2 && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_shipped_lean0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_prof945_family FAM MID REV FETCH_AL PROF_AL -- TC1 amendment 12 (2026-10-03, #945): where e4b's fused training step goes once
 # the host syncs are gone -- the TC1 profile instrument (3 warm + 3 profiled steps, dmon beside) on the shipped and the matched arm with
 # the single-read grouping + pinned ring, and the matched arm with the legacy grouping + pageable copies as the before-picture.
@@ -1006,6 +1028,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3nativebest) tc1_nativebest_family qwen3nativebest Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 2700;;
   qwen3prof945) tc1_prof945_family qwen3prof945 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 12 (#945)
   qwen3syncab) tc1_syncab_family qwen3syncab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 10 (#945)
+  qwen3leanab) tc1_leanab_family qwen3leanab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 13 (#945)
   qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 5400 4800;;   # TC1 amendment 8
   #                                                                                                        FETCH E4B  HF   AX     (amendment 3: the axolotl box)
   qwen3axolotl) tc1_axolotl_family qwen3axolotl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 1800 2700;;
