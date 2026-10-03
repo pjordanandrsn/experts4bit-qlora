@@ -20,6 +20,22 @@
 - **Docs.** The `int4_experts.py` Scope note, the knob's docstring, and a `docs/SERVING.md` paragraph citing P100 and
   P102.
 
+### P104 stopped at its proving rental (#928), no verdict; P103's cause corrected: the hybrid parity premise's single-seed MoE statistic is a lottery in every kernel arm, the torch path included -- not the kernels, not e4b
+
+- `bench/p104/RESULTS-p104.md`, `bench/p104/receipts/p104-prove-1/`, `bench/p104/a2000/` (probes 7 and 8).
+- **The proving rental** (`p104-prove-1`, one RTX 5090, $0.0527):
+  - premise t passed 9;
+  - premises f and fc each read 1 failed, 7 passed: the chunk-matched fp8 hybrid test at 7.54e-2 / 8.13e-2 against a
+    4.05e-2 bound, tokens equal;
+  - the four chunk-matched all-linear tests and the graph tests pass in every phase.
+- **The cause, at $0 on the A2000** (e4b's `PagedModelRunner` with SDPA standing in for the fp8 kernel, 10 seeds):
+  - the test's 4-expert MoE hybrid is bimodal in every arm, with 5/10 torch-path seeds above the test's own bound;
+  - a dense hybrid is stable (2.1-3.9e-2) and identical across the torch path, fla and fla + causal-conv1d;
+  - seed 0 (the test's) lands low on the torch path and high under fla.
+- **Corrected:** `bench/p103/RESULTS-p103.md` carries a dated correction withdrawing its attribution to fla's
+  chunk-split variance. That variance is real, but not the cause. `docs/SERVING.md` states the corrected cause.
+- `tests/test_linear_state_gpu.py` is unchanged; six lanes pin its bytes.
+
 ### SC1 read (#846): no position quoted -- box A's licence reads QUALITY_FAIL, which blocks every box. Measured, vLLM leads e4b's scheduler by 1.17-1.20x at B=1, SGLang by 1.27x, llama.cpp Q4_K_M by 1.48x; P13 holds on boxes B and C (bench docs and receipts only)
 
 - **Receipts:** `sc1a-5090-2` (e4b `32d424e`), `sc1b-5090-3` and `sc1c-5090-5` (`9dd712b`), read with main's reducer
