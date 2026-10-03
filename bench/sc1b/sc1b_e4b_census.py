@@ -11,6 +11,7 @@ recorded and is NEVER a speed reading: every speed in SC1b is SC1's own unprofil
 
   env: SC1_BATCH, SC1_ARM, SC1_PROMPTS, SC1_OUT, and SC1's engine env (E4B_PAGED_*, the levers); PYTHONPATH= (A4)
   sc1b_e4b_census.py --skip K --steps N
+  sc1b_e4b_census.py --write-prompts PATH --vocab-from CONFIG.json [--batch 16]   (the proof's Granite rows, amendment A2)
   sc1b_e4b_census.py --selftest
 """
 from __future__ import annotations
@@ -134,14 +135,47 @@ def selftest() -> int:
     return 0
 
 
+def write_prompts(path: str, vocab: int, batch: int, n: int | None = None, seed: int = 0) -> str:
+    """Amendment A2: B distinct rows of seeded random token ids in [16, vocab), written in SC1's prompt-file format with
+    SC1's own digest and checked by SC1's own `load_prompts`. Only the proof's Granite capture reads it: the lane's
+    prompts_b{B}.json carries Qwen3 ids, which overflow Granite's vocabulary. The instrument proof needs real decode
+    steps, not meaningful text."""
+    import random
+
+    import sc1_e4b_sched as sc1
+    n = sc1.PROMPT_LEN if n is None else n
+    if vocab <= 16 + n:
+        raise Refusal(f"REFUSED: vocab {vocab} is too small for {n}-token rows")
+    rng = random.Random(seed)
+    rows: list = []
+    while len(rows) < batch:
+        r = [rng.randrange(16, vocab) for _ in range(n)]
+        if r not in rows:
+            rows.append(r)
+    pf = {"batch": batch, "prompts": rows, "prompts_sha256": sc1.prompts_digest(rows),
+          "source": f"seeded random token ids in [16, {vocab}), seed {seed}: SC1b proof only (A2)"}
+    with open(path, "w") as f:
+        json.dump(pf, f)
+    return sc1.load_prompts(path, batch, prompt_len=n)["info"]["prompts_sha256"]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--skip", type=int, default=32)
     ap.add_argument("--steps", type=int, default=64)
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--write-prompts")
+    ap.add_argument("--vocab-from")
+    ap.add_argument("--batch", type=int, default=16)
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
+    if a.write_prompts:
+        with open(a.vocab_from) as f:
+            vocab = int(json.load(f)["vocab_size"])
+        sha = write_prompts(a.write_prompts, vocab, a.batch)
+        print("SC1B_PROMPTS " + json.dumps({"path": a.write_prompts, "batch": a.batch, "vocab": vocab, "prompts_sha256": sha}), flush=True)
+        return 0
     import sc1_e4b_sched as sc1                                      # staged beside this file on the box, SC1's bytes
     hook = sc1.harness_hook_loaded()
     if hook:

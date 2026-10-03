@@ -260,3 +260,41 @@ stops. If item 3, 4, 5 or 6 fails, its path is amended before the run.
 ## Out of scope
 
 Coverage families (their own lane), gpt-oss (SC1g), prefill/TTFT (#916's P100/P102), request-level serving (SC2).
+
+## Amendments
+
+- **A1 (before any box D data; the proof `sc1d-prove-1` was renting, box D not launched): the prediction evaluator.**
+  Q1–Q5 had no code (round 2 M4 named it for Q1–Q4). `sc1b_read.py` decides each one from box D's own
+  `sc1b_arm_*.json` / `sc1b_gap_*.json`, and re-reduces nothing. Three readings of the registered text are fixed here,
+  before any data exists:
+  1. **"The largest term of ΔP"** (Q1, Q5) is the term with the largest contribution in ΔP's direction:
+     argmax_k sign(ΔP) × Δ_k over the nine classes, I_in and idle_out. The remainder O is not a term.
+     - An opposite-signed term is not "of ΔP", however large.
+     - If idle_out is not nameable (G-inflate) and is the largest, the prediction is decided on the other terms: a
+       class beating I_in makes it REFUTED (whatever idle_out's true size), and I_in winning the rest makes it UNREAD.
+  2. **Q2's kernel count** is the node-mode median `kernels_in_graph` per step. Q2 is read even when the class map is
+     incomplete, but not when either arm's node capture is VOID or carries NSYS_DIAGNOSTIC_ERRORS.
+  3. **Q4** carries no noise clause, as registered: same sign as ΔP and |Δidle_out| ≥ 0.5 |ΔP|, with idle_out
+     nameable. The noise is printed beside it.
+
+  Each prediction reads HOLDS, REFUTED or UNREAD. A prediction on an unread gap is UNREAD. The read's tables
+  (`RESULTS-sc1b.md`) come from the same script. Box D's code is unchanged: A1 runs at read time only.
+- **A2 (after `sc1d-prove-1`, before box D): the proof's e4b capture gets its own Granite rows.** `sc1d-prove-1`
+  (Vast machine 142284, $0.4124, 47 min) read HARNESS_ERROR on proof item 3 alone.
+  - The e4b Granite B=16 capture read the lane's `prompts_b16.json` before item 4 had written it
+    (`FileNotFoundError`; nsys wrote no report).
+  - That file carries Qwen3 token ids, which are beyond Granite's 49,155-token vocabulary anyway.
+  - Items 2, 4, 5 and 6 passed and reduced:
+    - the toy: 20 replays, 3 kernels each, eager work non-graph;
+    - vLLM B=1 node: 57 steps, residual 0.11 %, 48/48 segments;
+    - SGLang B=1 node: 61 steps, residual 0.12 %, 48/48 segments;
+    - llama.cpp B=16 graph: 62 steps at positions 33:64.
+
+  The fix:
+  - `sc1b_e4b_census.py --write-prompts` writes 16 distinct 512-token rows of seeded random ids under Granite's
+    vocabulary (read from the fetched checkpoint's `config.json`).
+  - It uses SC1's own digest, and SC1's own `load_prompts` checks the file.
+  - Item 3 writes the rows first and passes them to `e4b_census` (new optional prompts argument).
+  - The main box's e4b arms keep `prompts_b{B}.json`.
+
+  The proof re-runs as `sc1d-prove-2` before box D.

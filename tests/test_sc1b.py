@@ -247,3 +247,60 @@ def test_e4b_bracket_on_the_real_scheduler_with_staggered_admission():
                 assert ok and r["steps_bracketed"] == 64 and r["window_decode_positions"][1] <= tokens, r
             except e4b.Refusal as e:
                 assert not ok and "retire it inside the window" in str(e) and not opened, (b, tokens, e)
+
+
+def test_the_a1_evaluator_reads_the_reducers_own_gap_records(tmp_path):
+    # A1 (#846): sc1b_read.py consumes exactly what census.gap() writes; a key rename on either side fails here
+    rd = _mod("sc1b_read")
+    rd.self_test()
+
+    def arm(engine, batch, p, terms, labels=(), unprofiled=None, k_in=600):
+        full = {c: 0.0 for c in census.CLASSES}
+        full.update(I_in=0.0, idle_out=0.0)
+        full.update(terms)
+        full["O"] = round(sum(v for k, v in full.items() if k != "O") - p, 6)
+        noise = {k: 0.001 for k in full}
+        noise["O"] = None
+        return {"engine": engine, "batch": batch, "status": "labelled" if labels else "ok", "labels": list(labels), "P_ms": p,
+                "terms": full, "noise_iqr": noise, "unprofiled_ms": unprofiled or p, "node": {"status": "ok", "kernels_in_graph": k_in}}
+    e1 = arm("e4b", 1, 4.5, {"moe_expert": 1.4, "attn": 0.5, "dense_gemm": 0.6, "I_in": 1.6, "idle_out": 0.4}, k_in=1100)
+    l1 = arm("llamacpp", 1, 3.0, {"moe_expert": 1.3, "attn": 0.4, "dense_gemm": 0.6, "I_in": 0.4, "idle_out": 0.3}, k_in=650)
+    e16 = arm("e4b", 16, 9.6, {"moe_expert": 5.0, "attn": 1.0, "I_in": 2.0, "idle_out": 1.6})
+    l16 = arm("llamacpp", 16, 15.4, {"moe_expert": 5.5, "attn": 1.1, "I_in": 1.8, "idle_out": 7.0})
+    v1 = arm("vllm", 1, 3.7, {"moe_expert": 1.2, "attn": 0.5, "dense_gemm": 0.6, "I_in": 0.9, "idle_out": 0.5})
+    for name, rec in (("sc1b_arm_e4b_b1", e1), ("sc1b_arm_llamacpp_b1", l1), ("sc1b_arm_e4b_b16", e16), ("sc1b_arm_llamacpp_b16", l16),
+                      ("sc1b_arm_vllm_b1", v1), ("sc1b_gap_e4b_llamacpp_b1", census.gap(e1, l1, 1.484)),
+                      ("sc1b_gap_e4b_llamacpp_b16", census.gap(e16, l16, 0.624)), ("sc1b_gap_e4b_vllm_b1", census.gap(e1, v1, 1.203))):
+        (tmp_path / f"{name}.json").write_text(json.dumps(rec))
+    arms, gaps, v = rd.read(str(tmp_path))
+    assert {q: r["verdict"] for q, r in v.items()} == {"Q1": "HOLDS", "Q2": "HOLDS", "Q3": "HOLDS", "Q4": "HOLDS", "Q5": "HOLDS"}, v
+    assert v["Q2"]["ratio"] == round(1100 / 650, 4) and v["Q1"]["largest"] == "I_in" and v["Q4"]["share"] > 0.5
+    md = rd.render(arms, gaps, v)
+    assert "| G1 | llamacpp | 1 | ok |" in md and "| sglang | 16 | missing |" in md
+    # a blocking label on either arm leaves the gap, and every prediction that reads it, UNREAD
+    l1b = dict(l1, labels=["CLASS_MAP_INCOMPLETE"], status="labelled")
+    (tmp_path / "sc1b_gap_e4b_llamacpp_b1.json").write_text(json.dumps(census.gap(e1, l1b, 1.484)))
+    _arms, _gaps, v = rd.read(str(tmp_path))
+    assert v["Q1"]["verdict"] == v["Q3"]["verdict"] == "UNREAD" and v["Q2"]["verdict"] == "HOLDS", v
+
+
+def test_a2_the_proofs_granite_rows_pass_sc1s_own_prompt_checks(tmp_path):
+    # A2 (#846): sc1d-prove-1's Granite capture read the lane's prompts_b16.json before it existed (and it holds Qwen3 ids,
+    # beyond Granite's 49,155-token vocabulary). The proof now writes Granite rows that SC1's own load_prompts accepts.
+    sys.path.insert(0, str(SC1))
+    try:
+        import sc1_e4b_sched as sc1
+        ce = _mod("sc1b_e4b_census")
+        p = tmp_path / "prompts_granite_b16.json"
+        sha = ce.write_prompts(str(p), 49155, 16)
+        pf = sc1.load_prompts(str(p), 16, prompt_len=sc1.PROMPT_LEN)
+        assert pf["info"]["prompts_sha256"] == sha and pf["info"]["rows_distinct_in_file"]
+        assert all(16 <= t < 49155 for r in pf["prompts"] for t in r) and all(len(r) == 512 for r in pf["prompts"])
+        assert ce.write_prompts(str(tmp_path / "again.json"), 49155, 16) == sha        # seeded: the same rows on every box
+    finally:
+        sys.path.remove(str(SC1))
+    box = (LANE / "sc1b_box_d.sh").read_text()
+    item3 = box[box.index("# 3. e4b B=16 graph capture on Granite"):box.index("# 4. vLLM B=1 node mode")]
+    assert item3.index("--write-prompts") < item3.index("e4b_census 16 graph")
+    assert '"$W/prompts_granite_b16.json"; r=$?' in item3
+    assert 'PR=${9:-$W/prompts_b$1.json}' in box and "SC1_PROMPTS=$PR " in box               # the main box's default is unchanged
