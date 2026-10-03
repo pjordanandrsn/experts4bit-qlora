@@ -6,7 +6,8 @@
 
 **0.41.0.** One default changes, one feature lands, and one fix ships.
 
-- **`E4B_INT4_PREFILL` is `auto`** (#916, lane P102).
+- **`E4B_INT4_PREFILL` is `auto`** (#916, lane P102). The knob is new in this release (#916). Its routes for the
+  int4 store's host-grouped prefill calls are `loop`, `batched`, `k19`, `mtile` and `auto`, and `auto` is the default.
   - With the variable unset, the uniform-int4 store's host-grouped prefill calls take K19 when the kernel package
     carries K19 and a CUDA device is up, and the per-expert loop otherwise. CPU-only behaviour is unchanged.
   - **Measured:** on an RTX 5090 with Qwen3-30B-A3B at `max_seqs` 1, TTFT-4096 went from 7.21 s to 1.37 s and TTFT-512
