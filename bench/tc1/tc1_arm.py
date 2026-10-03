@@ -3065,6 +3065,21 @@ def run_arm(a, load_fn, sampler=True):
         tot = [c.get("lora_path_loop", 0) + c.get("lora_path_padded", 0) + c.get("lora_path_grouped_mm", 0) for c in kcalls]
         lora_loop_share = [round(c.get("lora_path_loop", 0) / t, 4) if t else None for c, t in zip(kcalls, tot)]
         lora_path_loop_steps = [i + 1 for i, c in enumerate(kcalls) if c.get("lora_path_loop", 0)]
+    sync_ab = None                                     # TC1 amendment 10 (#945): which grouping / index-transfer path this e4b arm ran
+    if a.framework == "e4b":
+        try:
+            import nf4_grouped as _ng
+            _rings = list(getattr(_ng, "_RINGS", {}).values())
+        except Exception:
+            _ng, _rings = None, []
+        try:
+            from experts4bit_qlora.engines import fast as _fast
+            _has_gbe = hasattr(_fast, "_group_by_expert")
+        except Exception:
+            _has_gbe = False
+        sync_ab = {"e4b_grouping": os.environ.get("E4B_GROUPING") or "default", "gnf4_pinned_ring": os.environ.get("GNF4_PINNED_RING") or "0",
+                   "e4b_has_group_by_expert": _has_gbe, "gnf4_has_ring": bool(_ng is not None and hasattr(_ng, "_PinnedRing")),
+                   "ring_staged": int(sum(r.staged for r in _rings)), "ring_waits": int(sum(r.waits for r in _rings))}
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -3116,6 +3131,7 @@ def run_arm(a, load_fn, sampler=True):
         "unsloth_grouped_mm_calls_per_step_min": gmm_min, "unsloth_grouped_mm_calls_per_step_max": gmm_max,            # [F15]
         "unsloth_manual_grouped_mm_calls_per_step_max": manual_max,
         "arm_facts": arm_facts, "dynamo_counters": dyn, "microbatch_padded_len": mb_padded_len,                        # [F6/F9/F16/F19/F20]
+        "sync_ab": sync_ab,                                                                                              # TC1 amendment 10 (#945)
         "s_per_step": round(wall / a.steps, 4), "s_per_step_median_11plus": round(statistics.median(steady) / 1e3, 4), "step_ms": step_ms, "microbatch_ms": microbatch_ms, "log_every": int(a.log_every), "microbatch_timing": bool(a.microbatch_timing),
         "train_wall_s": round(train_wall, 2), "window_wall_s": round(wall, 2),
         "tokens_per_step": tokens_per_step, "tokens_total": sum(tokens_per_step), "tokens_per_s": round(sum(tokens_per_step) / train_wall, 1) if train_wall else None,

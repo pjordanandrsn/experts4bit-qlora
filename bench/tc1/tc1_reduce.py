@@ -228,6 +228,37 @@ NATIVE_BY_FAM = {NB200_FAM: {"e4b": "fused_attn4_shipped_200", "axolotl": "ckpt_
 EXPECTED[NB200_FAM] = [("e4b", "fused_attn4_shipped_200"), ("axolotl", "ckpt_axolotl_best_200"), ("e4b", "fused_attn4_shipped_200_d2"),
                        ("axolotl", "ckpt_axolotl_best_200_d2"), ("e4b", "fused_attn4_m_200")]
 DRAW2.update({("e4b", "fused_attn4_shipped_200"): ("e4b", "fused_attn4_shipped_200_d2"), ("axolotl", "ckpt_axolotl_best_200"): ("axolotl", "ckpt_axolotl_best_200_d2")})
+
+# ----------------------------------------------------------------------------- TC1 amendment 10 (#945): e4b's grouping + index-transfer syncs, A/B on one card
+SYNC_FAM = "qwen3syncab"          # legacy grouping + pageable copies (13 host syncs per MoE layer pass) vs single-read grouping + pinned ring (1)
+SYNC_PAIRS = (("P16", "shipped", "fused_attn4_shipped"), ("P17", "matched", "fused_attn4_m"))   # each: <tag>_legacy vs <tag>_sync1, two draws a side
+SYNC_BAND = (0.75, 0.95)          # P16 / P17: sync1 / legacy s/step on stable pairs -- at least 5 % faster, at most 25 %
+FAMS.append(SYNC_FAM)
+NAMES[SYNC_FAM] = "Qwen3-30B-A3B (amendment 10: e4b legacy grouping + pageable copies vs single-read grouping + pinned ring, #945)"
+N_LAYERS[SYNC_FAM] = 48
+ATTN_CENSUS[SYNC_FAM] = 192
+FAM_ANCHOR[SYNC_FAM] = ("e4b", "fused_attn4_m_legacy")
+EXPECTED[SYNC_FAM] = [("e4b", "fused_attn4_shipped_legacy"), ("e4b", "fused_attn4_shipped_sync1"), ("e4b", "fused_attn4_m_legacy"), ("e4b", "fused_attn4_m_sync1"),
+                      ("e4b", "fused_attn4_m_sync1_d2"), ("e4b", "fused_attn4_m_legacy_d2"), ("e4b", "fused_attn4_shipped_sync1_d2"), ("e4b", "fused_attn4_shipped_legacy_d2")]
+MATCHED |= {"fused_attn4_m_legacy", "fused_attn4_m_sync1", "fused_attn4_m_legacy_d2", "fused_attn4_m_sync1_d2"}
+for _p, _k, _t in SYNC_PAIRS:
+    for _side in ("legacy", "sync1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def sync_ab_why(tag, r):
+    """Amendment 10's engagement predicate: the arm ran the path its tag names, by its own record. Empty string = engaged."""
+    sa = (r or {}).get("sync_ab")
+    if not isinstance(sa, dict):
+        return "no sync_ab record on the receipt: the path this arm ran cannot be verified"
+    if "_legacy" in tag:
+        bad = [k for k, ok in (("e4b_grouping legacy", sa.get("e4b_grouping") == "legacy"), ("gnf4_pinned_ring 0", sa.get("gnf4_pinned_ring") == "0"),
+                               ("ring_staged 0", sa.get("ring_staged") == 0)) if not ok]
+    else:
+        bad = [k for k, ok in (("e4b_grouping single", sa.get("e4b_grouping") in ("single", "default")), ("gnf4_pinned_ring 1", sa.get("gnf4_pinned_ring") == "1"),
+                               ("ring_staged > 0", (sa.get("ring_staged") or 0) > 0), ("e4b_has_group_by_expert", sa.get("e4b_has_group_by_expert") is True),
+                               ("gnf4_has_ring", sa.get("gnf4_has_ring") is True)) if not ok]
+    return "" if not bad else f"sync A/B path not engaged ({', '.join(bad)}; record {sa})"
 EXPECTED["granite"] = [("e4b", "fused_attn4_m"), ("hf", "hf_peft_m"), ("e4b", "reference_attn4_m"), ("e4b", "fused_attn4_m_d2"), ("hf", "hf_peft_m_d2"),
                        ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_experts"), ("hf", "hf_peft_m_t214"),
                        ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("e4b", "fused_attn4_shipped")]
@@ -608,6 +639,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             nb = (r.get("axolotl_bnb4bit_modules") or {}).get("n_bnb4bit_unwrapped")
             if nb is None or nb < L:
                 why.append(f"quantize_moe_experts set but bnb-parametrized experts modules (innermost) {nb} < {L}")
+    if fam == SYNC_FAM and fw == "e4b":            # amendment 10: the arm ran the path its tag names
+        w = sync_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
         seed = matched_seed_of(r)
         if seed is None:
@@ -1093,6 +1128,30 @@ def score_p14(F):
              f"axolotl scattermoe / e4b shipped over steps {LATE_FROM}..200 {r:.3f} [{lo:.3f}, {hi:.3f} over 4 cross-draw ratios] vs {list(P14_BAND)}; "
              f"late medians e4b {e['late'][0]:.3f} / {e['late'][1]:.3f} (within {100 * e['stab']:.1f}%), axolotl {a['late'][0]:.3f} / {a['late'][1]:.3f} "
              f"(within {100 * a['stab']:.1f}%); ordering: {order}")]
+
+
+def score_syncab(F):
+    """TC1-PREREG amendment 10 (#945), on the qwen3syncab box: P16 (shipped arm) and P17 (matched arm) -- the single-read grouping with the
+    pinned ring steps at sync1 / legacy within SYNC_BAND, the median over two VALID draws a side with each side's draws within 5 %. Outside
+    the band FALSIFIED; an unstable, missing or non-VALID side UNTESTED. The interval is over the four cross-draw ratios."""
+    R = F.get(SYNC_FAM)
+    if not R:
+        return []
+    out = []
+    for pid, name, t in SYNC_PAIRS:
+        L, N = R["draws"].get(("e4b", f"{t}_legacy"), {}), R["draws"].get(("e4b", f"{t}_sync1"), {})
+        if not (L.get("usable") and N.get("usable") and L.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("legacy", L), ("sync1", N)))
+            out.append((pid, SYNC_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            continue
+        ratio_ = N["s"] / L["s"]
+        cross = [n / l for n in N["s_list"] for l in L["s_list"]]
+        held = SYNC_BAND[0] <= ratio_ <= SYNC_BAND[1]
+        out.append((pid, SYNC_FAM, "HELD" if held else "FALSIFIED",
+                    f"{name}: sync1 / legacy {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {list(SYNC_BAND)}; "
+                    f"s/step legacy {L['s_list'][0]:.3f} / {L['s_list'][1]:.3f} (within {100 * L['stability']:.1f}%), sync1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
+                    f"(within {100 * N['stability']:.1f}%); held-out at N legacy {f(L.get('heldout'), 4)} / sync1 {f(N.get('heldout'), 4)}"))
+    return out
 
 
 # ----------------------------------------------------------------------------- R6: predictions (TC1-PREREG.md, scored mechanically)
@@ -2218,6 +2277,11 @@ def render(F, d):
         out += ["\n## Predictions P1–P10 (+ P1b) (TC1-PREREG.md + phase 2, scored mechanically)", "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_predictions(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if SYNC_FAM in F:
+        out += ["\n## Predictions P16 / P17 (TC1-PREREG amendment 10, #945: single-read grouping + pinned ring vs legacy, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_syncab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -2387,6 +2451,21 @@ def _nb200_set(e4b_late=(3.00, 3.03), ax_late=(3.10, 3.12)):
     R[("e4b", "fused_attn4_m_200")] = _receipt("e4b", "fused_attn4_m_200", "fused", steps=200, s=4.0, heldout_n=0.7687, step_ms=[4000.0] * 200)
     for r in R.values():
         r["fam"] = NB200_FAM
+    return R
+
+
+def _sync_set(ship=((5.00, 5.05), (4.30, 4.32)), match=((5.30, 5.33), (4.60, 4.62)), staged=(0, 9216)):
+    """Amendment 10: e4b against itself -- each pair as (legacy draws, sync1 draws); `staged` = the ring's staged count on (legacy, sync1) arms."""
+    R = {}
+    for t, (leg, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for side, ss, st, mode, ring in (("legacy", leg, staged[0], "legacy", "0"), ("sync1", new, staged[1], "single", "1")):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                R[("e4b", tag)] = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000), matched=matched,
+                                           sync_ab={"e4b_grouping": mode, "gnf4_pinned_ring": ring, "e4b_has_group_by_expert": True,
+                                                    "gnf4_has_ring": True, "ring_staged": st, "ring_waits": 0})
+    for r in R.values():
+        r["fam"] = SYNC_FAM
     return R
 
 
@@ -3322,6 +3401,31 @@ def selftest():
     R = _nb200_set(); R.pop(("axolotl", "ckpt_axolotl_best_200_d2"))
     assert p14() == [("P14", "HELD")] and [(p, v) for p, _, v, _ in score_p14({NB200_FAM: reduce_family(NB200_FAM, R, {}, None)})] == [("P14", "UNTESTED")]
     assert registered_draw2(NB200_FAM, ("e4b", "fused_attn4_shipped_200")) == ("e4b", "fused_attn4_shipped_200_d2") and registered_draw2(CURVE_FAM, ("e4b", "fused_attn4_shipped_200")) is None
+    cases += 1
+    # 56. amendment 10 (#945): e4b legacy grouping + pageable copies vs single-read grouping + pinned ring -- every arm VALID when it ran the
+    #     path its tag names, P16 / P17 HELD inside the band, a sync1 arm whose ring never staged VOID (its prediction UNTESTED), parity FALSIFIED
+    sd = tempfile.mkdtemp(prefix="tc1_syncab_selftest_")
+    for (fw, tag), r in _sync_set().items():
+        json.dump(r, open(os.path.join(sd, f"{SYNC_FAM}_{fw}_{tag}.json"), "w"))
+    F = reduce_dir(sd, 20)
+    SY = F[SYNC_FAM]
+    assert [(x["fw"], x["tag"]) for x in SY["rows"]] == EXPECTED[SYNC_FAM] and all(x["verdict"] == "VALID" for x in SY["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in SY["rows"]]
+    assert SY["anchor_key"] == ("e4b", "fused_attn4_m_legacy")
+    PS = {p: (v, ev) for p, _, v, ev in score_syncab(F)}
+    assert PS["P16"][0] == "HELD" and PS["P17"][0] == "HELD", PS
+    assert "sync1 / legacy 0.858 [" in PS["P16"][1], PS["P16"][1]
+    text = render(F, sd)
+    for needle in ("## Predictions P16 / P17", "| P16 | qwen3syncab | **HELD** |", "| P17 | qwen3syncab | **HELD** |"):
+        assert needle in text, needle
+    def ps(R):
+        return {p: v for p, _, v, _ in score_syncab({SYNC_FAM: reduce_family(SYNC_FAM, R, {}, 20)})}
+    R = _sync_set(staged=(0, 0))
+    RR = reduce_family(SYNC_FAM, R, {}, 20)
+    assert RR["verdicts"][("e4b", "fused_attn4_shipped_sync1")] == "VOID" and "ring_staged > 0" in next(x["why"] for x in RR["rows"] if x["tag"] == "fused_attn4_shipped_sync1")
+    assert ps(R) == {"P16": "UNTESTED", "P17": "UNTESTED"}
+    assert ps(_sync_set(ship=((5.00, 5.05), (4.97, 5.00)))) == {"P16": "FALSIFIED", "P17": "HELD"}          # no gain: 0.99
+    R = _sync_set(); R[("e4b", "fused_attn4_m_legacy")]["sync_ab"]["e4b_grouping"] = "single"                 # a legacy arm that ran the new grouping
+    assert reduce_family(SYNC_FAM, R, {}, 20)["verdicts"][("e4b", "fused_attn4_m_legacy")] == "VOID"
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 
