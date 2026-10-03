@@ -12,6 +12,24 @@
   identical windows and labelled.
 - **P13.** P13 reads the measured vLLM/e4b anchor ratios (both arms VALID and stable) instead of quoted positions.
 - **Tests.** Four self-test cases, each failing when its change is reverted. Pin regenerated; `SC1-PREREG.md` A11.
+### P103 registered (#928): the Gated DeltaNet kernels under the hybrid paged path -- flash-linear-attention and causal-conv1d against transformers' torch path, on one 5090 and one host (bench and tests only)
+
+- `bench/p103/PREREG-p103.md`, `bench/p103/{p103_run.sh,p103_drive.sh,p103_reduce.py,staged.sha256}`,
+  `tests/test_p103_staged_pin.py`.
+- P98's measurement at its registered bytes, in three phases on one box:
+  - **t**, transformers' torch path (P101's reading again);
+  - **f**, `flash-linear-attention==0.5.2`;
+  - **fc**, plus `causal-conv1d==1.7.0`.
+  Each phase records an engagement probe (what transformers resolves at import, torch held) and runs the hybrid GPU
+  premise with the kernels engaged.
+- The rule:
+  - per phase, P98's rule unchanged;
+  - the lane VOID unless phase t holds; otherwise fc's result, else f's, else UNAVAILABLE;
+  - `recommend` iff fc is SUPPORTED at 1.05x or better on a workload.
+- Predictions: SUPPORTED with `recommend`; fc's graph arm 1.10-1.35x phase t's on W1 and 1.03-1.20x on W16.
+- A proving rental (premise t plus both kernel installs and premises on sm_120, no model), then the reading (1.5 h
+  guard, <= $1.125).
+
 ### TC1 P14: at steady state axolotl's scattermoe steps 9 % faster than e4b as shipped; e4b still finishes a 200-step run first
 
 - **What was asked.** TC1 amendment 8 re-asked P13's axolotl half over 200 steps of the field recipe, read on steps 101..200, on
