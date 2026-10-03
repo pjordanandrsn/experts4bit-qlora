@@ -688,3 +688,50 @@ on a second host.
 `tc1-5090-47`'s same-host repeat is reported beside as a repeatability reading, never as a second host.
 
 Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20; the standing no-ask tier.
+
+### Amendment 19 (2026-10-03T22:52Z, before any box): the matched-work positions again, with e4b after amendments 10–15 (P30, P31, P32)
+
+**Why.** TC1's headline matched-work positions were measured on e4b before #945:
+
+- Unsloth (`grouped_mm`) / e4b **1.437** [1.434, 1.440] (`tc1-5090-16`), register `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02`;
+- axolotl / e4b **1.416** [1.398, 1.435] (amendment 4), register `e4b.train.h2h.axolotl.qwen3.5090.2026-10-02`.
+
+Since then e4b's matched arm (fp32 adapters, matched init) has stepped faster four times, each measured against itself on one 5090:
+
+- #945's host syncs: 0.847;
+- #440's trimmed LoRA delta: 0.911;
+- #442's tile rule: 0.968;
+- #975's fused RMSNorm: 0.959.
+
+The fused rotary (#965) is exact and unmeasured. Nothing on the other frameworks' side changed. The amendment-16 and -18 boxes
+have already shown the native steady-state ordering against axolotl flipping. The matched positions are the campaign's headline,
+and only new boxes can re-read them: no number from one box is divided by another's.
+
+**The boxes.** The tokens are unchanged:
+
+- box A runs `qwen3`, TC1's matched set: e4b fused, Unsloth `grouped_mm` and e4b reference, two draws where registered, then HF,
+  axolotl and the profiled pair;
+- box B runs `qwen3axolotl`, amendment 3's axolotl rows re-asked on their own box.
+
+Both pin e4b at the main commit carrying this amendment, which has every default from amendments 10–15, and grouped-nf4-gemm at the
+main commit carrying #442. No environment variables are set.
+
+**Predictions** (registered before the boxes), read off each box's own lines with no new reducer code:
+
+- **P30** (box A): the MATCHED POSITION unsloth/e4b lies in **[1.6, 2.8]**. The point estimate is 1.437 divided by the product of e4b's
+  matched factors (≈ 0.716), about 2.0; host variation widens the band.
+- **P31** (box A): the box's P3 line is HELD. The matched set (e4b reference, Unsloth) is EQUIVALENT to e4b fused, so the fused
+  RMSNorm's near-exact numerics keep e4b inside the equivalence bands.
+- **P32** (box B): the MATCHED POSITION axolotl/e4b lies in **[1.6, 2.8]** (1.416 / 0.716 ≈ 1.98).
+
+Each is FALSIFIED outside its band, and UNTESTED where the box quotes no position: an unstable pair, a non-VALID arm or a missing
+receipt.
+
+**Decision rules.**
+
+- **A HELD or FALSIFIED reading** becomes a new register row for the post-amendment-15 code, and STATUS quotes it as the current
+  position. The 2026-10-02 rows stay active, labelled as the code before #945, as in amendments 11 and 16.
+- **P31 FALSIFIED** blocks any position from box A being quoted until the equivalence gap is explained.
+
+Budget: two RTX 5090 boxes, $0.69/h ceiling each, 4.5 h cap each, under $4.20 together; the standing no-ask tier, a single run
+under $15.
