@@ -161,6 +161,7 @@ had finished only about one group of four.
 - **The box's alarm:** 75 → **150 minutes** (`step_alarm 9000` in `p108_run.sh`, re-pinned).
 - **The reading's guard:** 2 h → **3 h at ≤ $0.75/h (≤ $2.25)**.
 - **The lane ceiling** stays at **$3.50**, hard stop $4.50.
+- **A progress line:** the box prints `P108_GROUP <k> of 4 done at <s>` after each group (logging only).
 
 **What does not change:** the windows, the arms, the floor, the rule, the premise, the predictions and the consequence.
 
