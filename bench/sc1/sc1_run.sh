@@ -70,7 +70,11 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 E4B_FUSE_ROUTER_EPI E4B_INT4_DECODE_A16 E4B_ROUTER_EPI_CAST \
       E4B_FUSED_KV_APPEND E4B_INT4_ARTIFACT_DIR E4B_INT4_EXPECTED_FINGERPRINT E4B_INT4_DUMP_ARTIFACT_DIR E4B_INT4_ASSIGNMENT \
       E4B_CALIB_NSEQ E4B_CALIB_SOURCE E4B_CALIB_LAYERS_PER_PASS E4B_INT4_GROUPED_SMALLM E4B_INT4_LEAN_GLUE E4B_NF4_GROUPED_SMALLM \
-      E4B_MXFP4_GROUPED_SMALLM E4B_NF4_T1_DEVICE_GROUPING E4B_INT4_KEEP_NF4 E4B_PAGED_FUSE_QKV
+      E4B_MXFP4_GROUPED_SMALLM E4B_NF4_T1_DEVICE_GROUPING E4B_INT4_KEEP_NF4 E4B_PAGED_FUSE_QKV E4B_INT4_PREFILL
+# A13: the int4 store's prefill route every SC1 box ran. #937 made `auto` (K19 wherever it can run) the default afterwards.
+# Exported once, after the scrub, so every e4b process reads it; FOLDS / SPEEDENV / ROUTEENV stay byte-identical to the
+# lanes that pin them to SC1's (P100, P102). No arm sets it.
+export E4B_INT4_PREFILL=loop
 : > summary.txt; echo "$SC1_INSTANCE_ID" > INSTANCE_ID
 echo "KNOBS box=$BOX e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MID rev=$REV gptq=$GPTQ_REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_driver=$MIN_DRIVER cpu_vendor=$CPU_VENDOR calib_nseq=$NSEQ quiesce_s=$QUIESCE_S prove=$PROVE" | tee -a summary.txt
 if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 320 ] || [ "$MIN_DRIVER" != 580 ] || [ "$NSEQ" != 128 ] || { [ "$BOX" = A ] && [ "$CPU_VENDOR" != AuthenticAMD ]; }; then
@@ -175,6 +179,13 @@ for knob in ("E4B_INT4_GROUPED_SMALLM", "E4B_INT4_LEAN_GLUE", "E4B_MXFP4_GROUPED
     m = re.search(rf'environ\.get\("{knob}",\s*"([^"]*)"\)', src)
     assert m, f"{knob} is not read from the environment (K19/K23/K21/K25): ROUTEENV could not pin it"
     print(f"ROUTE_DEFAULT {knob}={m.group(1)} (every e4b arm pins it via ROUTEENV)", flush=True)
+# A13: the int4 store's prefill route is read from the environment, and the box's exported `loop` resolves to it (the
+# registered route; #937 made `auto` -- K19 wherever it can run -- the default after every box had run)
+m = re.search(r'environ\.get\("E4B_INT4_PREFILL",\s*"([^"]*)"\)', src)
+assert m, "E4B_INT4_PREFILL is not read from the environment: the box's export could not pin the prefill route"
+assert os.environ.get("E4B_INT4_PREFILL") == "loop", "the box did not export E4B_INT4_PREFILL=loop"
+assert hr._int4_prefill_mode_env() == "loop", "E4B_INT4_PREFILL=loop does not resolve to the loop route"
+print(f"ROUTE_DEFAULT E4B_INT4_PREFILL={m.group(1)} (the box exports loop to every e4b process, A13)", flush=True)
 assert hasattr(hr, "_collapsed_grouping"), "e4b lacks the T == 1 extension (#804): K8 would read the GEMV"
 from experts4bit_qlora.engines.int4_attn import Int4Linear, _smallm_kernels
 assert getattr(Int4Linear, "SMALLM_ROWS_MAX", None) == 16 and hasattr(Int4Linear, "fuse"), "e4b cut lacks the K16 route or Int4Linear.fuse"
