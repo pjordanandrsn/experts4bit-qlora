@@ -1,0 +1,138 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: qwen3nativebest200; e4b 7c31b8887275517e1d65398c3cef89f9d324a634 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-36 instance 53971676 deadline 1791022040; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=12 (physical cores) box_class=RTX 5090
+[2026-10-03T05:38:24Z] tc1/boxA: driver 595.71.05: cu130 venvs (venv-unsloth, venv-axolotl) will be built
+DRIVER 595.71.05 cu130_ok=1
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-1038a52e-6a90-bf2d-1206-1f2e831e76d9, 500.00 W, 3105 MHz
+CPU(s):                                  24
+Model name:                              AMD Ryzen 9 3900X 12-Core Processor
+MemTotal:       131810204 kB
+cgroup memory.max 129573584896
+overlay         320G  9.3M  320G   1% /
+[2026-10-03T05:38:24Z] tc1/boxA: venv-e4b (system torch): e4b @7c31b8887275517e1d65398c3cef89f9d324a634 + gnf4 @846b512b905468c08f5748943d08769b572affa2 + transformers==5.18.0 bitsandbytes==0.50.2 peft==0.21.2
+pip(e4b) rc=0
+tc1 tripwire OK (e4b): 0.40.0 @ 7c31b8887275 gnf4 0.34.0 @ 846b512b9054 torch 2.8.0+cu128 triton 3.4.0 transformers 5.18.0 bnb 0.50.2 peft 0.21.2
+[2026-10-03T05:39:01Z] tc1/boxA: venv-unsloth-t28 SKIPPED: the qwen3nativebest200 token runs no Unsloth arm (TC1-PREREG amendment 3)
+[2026-10-03T05:39:01Z] tc1/boxA: venv-unsloth (cu130) SKIPPED: the qwen3nativebest200 token runs no Unsloth arm (TC1-PREREG amendment 3)
+[2026-10-03T05:39:01Z] tc1/boxA: venv-axolotl: uv venv --python 3.12 + axolotl==0.20.0 --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match (alarm 2700 s)
+pip(axolotl) rc=0
+tc1 tripwire OK (axolotl): 0.20.0 torch 2.14.0+cu130 transformers 5.17.0 peft 0.21.0 bnb 0.50.2 python 3.12.15 deepspeed None
+[2026-10-03T05:39:59Z] tc1/boxA: dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)
+DS alpaca n_train=1200 n_eval=48 seed=3407 sha256=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb -> /root/tc1/data/ds_alpaca.json
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+[2026-10-03T05:40:01Z] tc1/boxA: ===== NATIVE-BEST 200 family qwen3nativebest200 (Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39; e4b shipped vs axolotl scattermoe over 200 steps, two draws each; e4b fused_m_200 the anchor)
+[2026-10-03T05:40:01Z] tc1/boxA: fetch qwen3nativebest200 (Qwen/Qwen3-30B-A3B, unpinned; pin ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+staged in 5.5 min at /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+PIN OK qwen3nativebest200 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+overlay         320G   72G  249G  23% /
+[2026-10-03T05:45:32Z] tc1/boxA: tokenise qwen3nativebest200 (alpaca, seq 2048) -> tokens_qwen3nativebest200.json
+TOKENS fam=qwen3nativebest200 template=alpaca n_train=1200 n_eval=16 train_tokens=235852 mean=196.5 pad_id=151643 sha=f07accfe6fcfcd5994aefed4bde0927cc5a3c1ccab4e63ebe891b432905c80cb
+TOKENS qwen3nativebest200 alpaca sha=f07accfe6fcfcd5994aefed4bde0927cc5a3c1ccab4e63ebe891b432905c80cb eval_n=16 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+[2026-10-03T05:45:36Z] tc1/boxA: arm qwen3nativebest200/e4b/fused_attn4_shipped_200 (arm=fused recipe=curve steps=200 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=4800 expect_trainable=none --attn-4bit 1 --adapter-dtype native --lora-init native)
+    LOAD OK {"fam": "qwen3nativebest200", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 24.9, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.40.0+det:8af1918f6c2e", 
+    PROLOGUE {"phase_seconds": {"preamble": 3.88, "load_weights": 18.123, "verify": 0.001, "attn4": 5.288, "lora": 0.029, "enable": 0.004, "tokenizer": 0.411, "census": 0.976, "frozen_probe": 0.056, "trainable_sha": 1.742, "counters": 0.0, "c1_before": 50.243, "eval0": 15.099, "optimizer": 0.151}, "phas
+    CELL OK {"framework": "e4b", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_200", "status": "ok", "steps": 200, "seq": 204
+0 MiB
+[2026-10-03T06:00:25Z] tc1/boxA: arm qwen3nativebest200/axolotl/ckpt_axolotl_best_200 (arm=axolotl recipe=curve steps=200 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=5400 expect_trainable=none --axolotl-dataset /root/tc1/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native)
+    ENGAGE axolotl 0.20.0: quantized_moe_experts_n=96 parametrized=96 n_bnb4bit_unwrapped=48 experts_implementation cfg=scattermoe config=scattermoe plugins=['axolotl.integrations.kernels.KernelsPlugin']
+    PROLOGUE {"phase_seconds": {"preamble": 1.924, "snapshot": 0.0, "targets": 0.644, "load_weights": 29.258, "router_recast": 0.027, "census": 1.005, "frozen_probe": 0.069, "trainable_sha": 1.708, "counters": 0.011, "c1_before": 47.893, "eval0": 225.409, "optimizer": 0.478}, "phase_budget_s": 1890.0, "
+    CELL OK {"framework": "axolotl", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3b
+0 MiB
+[2026-10-03T06:27:13Z] tc1/boxA: arm qwen3nativebest200/e4b/fused_attn4_shipped_200_d2 (arm=fused recipe=curve steps=200 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=4800 expect_trainable=none --attn-4bit 1 --adapter-dtype native --lora-init native)
+    LOAD OK {"fam": "qwen3nativebest200", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 25.4, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.40.0+det:8af1918f6c2e", 
+    PROLOGUE {"phase_seconds": {"preamble": 3.734, "load_weights": 18.438, "verify": 0.001, "attn4": 5.432, "lora": 0.021, "enable": 0.004, "tokenizer": 0.423, "census": 0.997, "frozen_probe": 0.054, "trainable_sha": 1.779, "counters": 0.0, "c1_before": 51.972, "eval0": 3.819, "optimizer": 0.15}, "phase
+    CELL OK {"framework": "e4b", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_200_d2", "status": "ok", "steps": 200, "seq": 
+0 MiB
+[2026-10-03T06:42:02Z] tc1/boxA: arm qwen3nativebest200/axolotl/ckpt_axolotl_best_200_d2 (arm=axolotl recipe=curve steps=200 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=5400 expect_trainable=none --axolotl-dataset /root/tc1/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native)
+    ENGAGE axolotl 0.20.0: quantized_moe_experts_n=96 parametrized=96 n_bnb4bit_unwrapped=48 experts_implementation cfg=scattermoe config=scattermoe plugins=['axolotl.integrations.kernels.KernelsPlugin']
+    PROLOGUE {"phase_seconds": {"preamble": 1.928, "snapshot": 0.0, "targets": 0.635, "load_weights": 24.917, "router_recast": 0.021, "census": 1.013, "frozen_probe": 0.065, "trainable_sha": 1.66, "counters": 0.011, "c1_before": 46.662, "eval0": 225.651, "optimizer": 0.425}, "phase_budget_s": 1890.0, "p
+    CELL OK {"framework": "axolotl", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3b
+0 MiB
+[2026-10-03T07:08:31Z] tc1/boxA: arm qwen3nativebest200/e4b/fused_attn4_m_200 (arm=fused recipe=curve steps=200 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=4800 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3nativebest200", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 25.4, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.40.0+det:8af1918f6c2e", 
+    PROLOGUE {"phase_seconds": {"preamble": 3.701, "load_weights": 18.495, "verify": 0.001, "attn4": 5.426, "lora": 0.024, "enable": 0.004, "tokenizer": 0.422, "census": 2.472, "frozen_probe": 0.052, "trainable_sha": 1.66, "counters": 0.0, "c1_before": 51.357, "eval0": 4.66, "optimizer": 0.149}, "phase_
+    CELL OK {"framework": "e4b", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_200", "status": "ok", "steps": 200, "seq": 2048, "ac
+0 MiB
+QWEN3NATIVEBEST200 DONE
+[2026-10-03T07:26:31Z] tc1/boxA: freed qwen3nativebest200 (disk: 305G free)
+[2026-10-03T07:26:31Z] tc1/boxA: reduce
+
+### Qwen3-30B-A3B (amendment 8: e4b shipped vs axolotl scattermoe over 200 steps, two draws each) (`qwen3nativebest200`, registered n_layers 48, attention census 192)
+- model `Qwen/Qwen3-30B-A3B` @ `ad44e777bcd1`; tokens sha `f07accfe6fcf`; N=20; fixture template alpaca seq 2048 micro-batch 2 × accum 4 lr 0.0002 r 16 α 16 optimizer adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5 autocast False; e4b trainable 642514944; box_class RTX 5090 gpu NVIDIA GeForce RTX 5090
+| framework | arm | status | validity | **VERDICT** | matched | init / dtype | step-0 class | N | s/step med(11+) | tok/s | peak GB | J/step | train first→last | held-out 0→final | quality Δ | engagement | trainable | regime | reason / why |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| e4b | fused_attn4_shipped_200 | **OK** | VOID | **VOID** | native | native / bfloat16,float32 | — | 200 | 3.701 | 423.9 | 25.514 | 964.8 | 2.0705→0.6059 | 1.9607→0.7930 | N-A (anchor VOID) | patched 48 / kcalls 768 | 642514944 | 4-bit experts (e4b NF4) + NF4 attention | step count 200/200 != N=20 |
+| axolotl | ckpt_axolotl_best_200 | **OK** | VOID | **VOID** | native | native / float32 | — | 200 | 3.371 | 255.8 | 26.769 | 1279.6 | 2.0621→0.7376 | 1.9546→0.7706 | N-A (anchor VOID) | peft mods 192 / params 96 / fwd 384 | 642514944 | 4-bit expert stacks (axolotl quantize_moe_experts: 96 parametrized stacks, nf4/64+dq) + bnb-4bit attention (Linear4bit 384) | step count 200/200 != N=20 |
+| e4b | fused_attn4_shipped_200_d2 | **OK** | VOID | **VOID** | native | native / bfloat16,float32 | — | 200 | 3.765 | 419.1 | 25.514 | 879.8 | 2.0705→0.6059 | 1.9607→0.7936 | N-A (anchor VOID) | patched 48 / kcalls 768 | 642514944 | 4-bit experts (e4b NF4) + NF4 attention | step count 200/200 != N=20 |
+| axolotl | ckpt_axolotl_best_200_d2 | **OK** | VOID | **VOID** | native | native / float32 | — | 200 | 3.351 | 258.4 | 26.769 | 1278.7 | 2.0621→0.7367 | 1.9546→0.7703 | N-A (anchor VOID) | peft mods 192 / params 96 / fwd 384 | 642514944 | 4-bit expert stacks (axolotl quantize_moe_experts: 96 parametrized stacks, nf4/64+dq) + bnb-4bit attention (Linear4bit 384) | step count 200/200 != N=20 |
+| e4b | fused_attn4_m_200 | **OK** | VOID | **VOID** | yes | matched:3407 (complete 12480/12480) / float32 | SAME-BYTES-CLASS (0.0000) | 200 | 4.617 | 336.0 | 29.047 | 1136.6 | 2.0705→0.7389 | 1.9607→0.7675 | N-A (anchor VOID) | patched 48 / kcalls 768 | 642514944 | 4-bit experts (e4b NF4) + NF4 attention | step count 200/200 != N=20 |
+- prologue `e4b/fused_attn4_shipped_200` **97.1 s** before step 1 (11% of the arm): c1_before 50.2, c1_after 25.8, load_weights 18.1, eval0 15.1; unattributed 1.061; budget 1680.0
+- prologue `axolotl/ckpt_axolotl_best_200` **313.3 s** before step 1 (20% of the arm): eval0 225.4, c1_before 47.9, load_weights 29.3, c1_after 23.8; unattributed 4.827; budget 1890.0
+- prologue `e4b/fused_attn4_shipped_200_d2` **87.9 s** before step 1 (10% of the arm): c1_before 52.0, c1_after 26.5, load_weights 18.4, attn4 5.4; unattributed 1.033; budget 1680.0
+- prologue `axolotl/ckpt_axolotl_best_200_d2` **307.8 s** before step 1 (20% of the arm): eval0 225.7, c1_before 46.7, load_weights 24.9, c1_after 23.4; unattributed 4.825; budget 1890.0
+- prologue `e4b/fused_attn4_m_200` **89.5 s** before step 1 (9% of the arm): c1_before 51.4, c1_after 26.1, load_weights 18.5, attn4 5.4; unattributed 1.078; budget 1680.0
+- draws (R1): `e4b/fused_attn4_shipped_200` — (e4b/fused_attn4_shipped_200 is VOID); `axolotl/ckpt_axolotl_best_200` — (axolotl/ckpt_axolotl_best_200 is VOID)
+- e4b internal parity: NO-ARM
+- **NO MATCHED POSITION QUOTED (unsloth)** — not quoted: e4b e4b/fused_attn4_m_200 is VOID / unsloth no receipt
+- **NO MATCHED POSITION QUOTED (hf)** — not quoted: e4b e4b/fused_attn4_m_200 is VOID / hf no receipt
+- **NO MATCHED POSITION QUOTED (axolotl)** — not quoted: e4b e4b/fused_attn4_m_200 is VOID / axolotl no receipt
+- **NO NATIVE-BEST (reported beside, never instead of, the matched position) QUOTED (axolotl native-best vs e4b shipped)** — not quoted: e4b e4b/fused_attn4_shipped_200 is VOID / axolotl native-best vs e4b shipped axolotl/ckpt_axolotl_best_200 is VOID
+- frozen base (R5), anchor `e4b/fused_attn4_m`: gate_up nf4/64 sha 8c3b3fd78e89 control detects, down nf4/64 sha 59569d810a1a control detects, q_proj nf4/64+dq sha 5c5e402ce51d control detects
+- frozen base `e4b/fused_attn4_shipped_200`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `axolotl/ckpt_axolotl_best_200`: gate_up **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, down **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, q_proj **N-A** (regime differs: anchor nf4/64+dq vs nf4/64) control detects
+- frozen base `e4b/fused_attn4_shipped_200_d2`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `axolotl/ckpt_axolotl_best_200_d2`: gate_up **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, down **N-A** (regime differs: anchor nf4/64 vs nf4/64+dq) control detects, q_proj **N-A** (regime differs: anchor nf4/64+dq vs nf4/64) control detects
+
+## Verdicts
+| family | arm | VERDICT | validity | quality | note |
+|---|---|---|---|---|---|
+| qwen3nativebest200 | e4b/fused_attn4_shipped_200 | **VOID** | VOID | N-A (anchor VOID) | step count 200/200 != N=20 |
+| qwen3nativebest200 | axolotl/ckpt_axolotl_best_200 | **VOID** | VOID | N-A (anchor VOID) | step count 200/200 != N=20 |
+| qwen3nativebest200 | e4b/fused_attn4_shipped_200_d2 | **VOID** | VOID | N-A (anchor VOID) | step count 200/200 != N=20 |
+| qwen3nativebest200 | axolotl/ckpt_axolotl_best_200_d2 | **VOID** | VOID | N-A (anchor VOID) | step count 200/200 != N=20 |
+| qwen3nativebest200 | e4b/fused_attn4_m_200 | **VOID** | VOID | N-A (anchor VOID) | step count 200/200 != N=20 |
+
+## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps 101..200, two stable draws a side; scored mechanically)
+| prediction | family | verdict | evidence |
+|---|---|---|---|
+| P14 | qwen3nativebest200 | **UNTESTED** | e4b draws fused_attn4_shipped_200 VOID / fused_attn4_shipped_200_d2 VOID: two VALID draws a side are registered |
+----- summary.txt -----
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: qwen3nativebest200; e4b 7c31b8887275517e1d65398c3cef89f9d324a634 gnf4 846b512b905468c08f5748943d08769b572affa2; run tc1-5090-36 instance 53971676 deadline 1791022040; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=12 (physical cores) box_class=RTX 5090
+DRIVER 595.71.05 cu130_ok=1
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3nativebest200 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3nativebest200 alpaca sha=f07accfe6fcfcd5994aefed4bde0927cc5a3c1ccab4e63ebe891b432905c80cb eval_n=16 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3nativebest200/e4b/fused_attn4_shipped_200 PROLOGUE {"phase_seconds": {"preamble": 3.88, "load_weights": 18.123, "verify": 0.001, "attn4": 5.288, "lora": 0.029, "enable": 0.004, "tokenizer": 0.411, "census": 0.976, "frozen_probe": 0.056, "trainable_sha": 1.742, "counters": 0.0, "c1_before": 50.243, "eval0": 15.099, "optimizer": 0.151}, "phase_budget_s": 1680.0, "prologue_s": 97.064, "prologue_unattributed_s": 1.061}
+qwen3nativebest200/e4b/fused_attn4_shipped_200 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_200", "status": "ok", "steps": 200, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407
+
+qwen3nativebest200/axolotl/ckpt_axolotl_best_200 PROLOGUE {"phase_seconds": {"preamble": 1.924, "snapshot": 0.0, "targets": 0.644, "load_weights": 29.258, "router_recast": 0.027, "census": 1.005, "frozen_probe": 0.069, "trainable_sha": 1.708, "counters": 0.011, "c1_before": 47.893, "eval0": 225.409, "optimizer": 0.478}, "phase_budget_s": 1890.0, "prologue_s": 313.254, "prologue_unattributed_s": 4.827}
+qwen3nativebest200/axolotl/ckpt_axolotl_best_200 rc=0 CELL OK {"framework": "axolotl", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "axolotl", "tag": "ckpt_axolotl_best_200", "status": "ok", "steps": 200, "
+
+qwen3nativebest200/e4b/fused_attn4_shipped_200_d2 PROLOGUE {"phase_seconds": {"preamble": 3.734, "load_weights": 18.438, "verify": 0.001, "attn4": 5.432, "lora": 0.021, "enable": 0.004, "tokenizer": 0.423, "census": 0.997, "frozen_probe": 0.054, "trainable_sha": 1.779, "counters": 0.0, "c1_before": 51.972, "eval0": 3.819, "optimizer": 0.15}, "phase_budget_s": 1680.0, "prologue_s": 87.859, "prologue_unattributed_s": 1.033}
+qwen3nativebest200/e4b/fused_attn4_shipped_200_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_200_d2", "status": "ok", "steps": 200, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3
+
+qwen3nativebest200/axolotl/ckpt_axolotl_best_200_d2 PROLOGUE {"phase_seconds": {"preamble": 1.928, "snapshot": 0.0, "targets": 0.635, "load_weights": 24.917, "router_recast": 0.021, "census": 1.013, "frozen_probe": 0.065, "trainable_sha": 1.66, "counters": 0.011, "c1_before": 46.662, "eval0": 225.651, "optimizer": 0.425}, "phase_budget_s": 1890.0, "prologue_s": 307.814, "prologue_unattributed_s": 4.825}
+qwen3nativebest200/axolotl/ckpt_axolotl_best_200_d2 rc=0 CELL OK {"framework": "axolotl", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "axolotl", "tag": "ckpt_axolotl_best_200_d2", "status": "ok", "steps": 200
+
+qwen3nativebest200/e4b/fused_attn4_m_200 PROLOGUE {"phase_seconds": {"preamble": 3.701, "load_weights": 18.495, "verify": 0.001, "attn4": 5.426, "lora": 0.024, "enable": 0.004, "tokenizer": 0.422, "census": 2.472, "frozen_probe": 0.052, "trainable_sha": 1.66, "counters": 0.0, "c1_before": 51.357, "eval0": 4.66, "optimizer": 0.149}, "phase_budget_s": 1680.0, "prologue_s": 89.5, "prologue_unattributed_s": 1.078}
+qwen3nativebest200/e4b/fused_attn4_m_200 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3nativebest200", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_200", "status": "ok", "steps": 200, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "off
+
+QWEN3NATIVEBEST200 DONE
+----- versions.txt -----
+e4b 0.40.0 @7c31b8887275517e1d65398c3cef89f9d324a634 (GitHub main)
+gnf4 0.34.0 @846b512b905468c08f5748943d08769b572affa2 (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.18.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.21.2
+axolotl 0.20.0
+torch(axolotl) 2.14.0+cu130
+transformers(axolotl) 5.17.0
+peft(axolotl) 0.21.0
+bitsandbytes(axolotl) 0.50.2
+python(axolotl) 3.12.15
+deepspeed(axolotl) None
+[2026-10-03T07:26:31Z] tc1/boxA: TP_DONE rc=0
