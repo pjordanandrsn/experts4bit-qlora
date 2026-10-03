@@ -202,9 +202,9 @@ actual group sizes instead of the largest group (grouped-nf4-gemm#441) steps it 
 **And the norms** (`e4b.train.fused-rmsnorm.qwen3.5090.2026-10-03`, TC1 amendment 15): fusing the frozen RMSNorms into one launch each way
 (#961, near-exact) steps it at **0.924** (shipped) and **0.959** (matched) of the composite on one 5090, held-out
 within 0.0021.
-**With all of that, the steady-state ordering flipped** (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`, TC1 amendment 16, one host):
+**With all of that, the steady-state ordering flipped** (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`, TC1 amendments 16 and 18, two hosts):
 over steps 101..200 of the same 200-step run, axolotl's scattermoe / e4b as shipped is **1.238 [1.231, 1.246]**
-on an EPYC 7663 host -- **e4b as shipped now steps about 24 % faster at steady state**, finishes 200 steps in about
+on an EPYC 7663 host and **1.146 [1.129, 1.164]** on an EPYC 7C13 host -- **e4b as shipped now steps 15-24 % faster at steady state**, finishes 200 steps in about
 half the summed step time (650-654 s against 1,373-1,389 s), and axolotl spends x1.79 the energy per step. axolotl
 still reaches the matched held-out curve while e4b as shipped sits 0.024-0.027 above it. The 2026-10-02 rows above
 stand as measured for the code before #945.
