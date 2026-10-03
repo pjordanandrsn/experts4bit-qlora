@@ -1,0 +1,15 @@
+# Names as the BOX sees them after staging ($W). The box runs `sha256sum -c` on this file and the controller resolves
+# each name to its source (p102_drive.sh's case) and compares. p100_box.py is P100's registered census; sc1_e4b_sched.py /
+# sc1_prompts.py SC1's; step_decomp.py / calib.json P39's; p98_bake.py P98's; p42_usercustomize.py is
+# bench/p42/hook/usercustomize.py; test_int4_prefill_route_gpu.py is the premise (tests/).
+61d80fe29db1887204d2b03a0edbd3ba7e66e7c5d2195cc6250af769453ed51b  p102_run.sh
+d56adbd0a50689643e02e428e95b4eb2a00e91b7a2636c486fa21d24cbc859de  p102_box.py
+a636656f514cbf079e284976971e5aad833f408e9fced4047bbfa48cda683539  p102_reduce.py
+6e06d46163ff11bf2af9979de2f4a509bc8f7f0d6d36f66c26eb639e4631dc09  p100_box.py
+e3964c66997c2c2f39406904ac0cfa37bd083ed1f40f85117eadc1620be9a1ce  sc1_e4b_sched.py
+eae98f666da1337bc1c2bd14b6b19f6c8c6103e9492c025b8d905f197024b1cd  sc1_prompts.py
+034a2c31f00e0ce2bd1a0b153688554d95e1e91cc719d6bd32d7dc81d3a9fc3d  step_decomp.py
+1b523751b504c16a977853e12b9db7f07c3e5c4019fe31f22e4b4c69caff6f89  p98_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+216b0db19dc96bfa8cfc45042f79664377c80844872b18921a5b06e618021c05  p42_usercustomize.py
+d0229003e33df98138ad0056da7beadc710148d13a3a27da9e9d165b901d758c  test_int4_prefill_route_gpu.py
