@@ -1,6 +1,43 @@
 # Changelog
 
 ## Unreleased
+### E4B_PAGED_PREFILL_ATTN (#960): a route knob for paged prefill attention -- math (the default, unchanged) or flash (the same lower-right causal mask as a bias the flash kernel takes)
+
+- **Why.** For a layer without sinks or a sliding window, the paged prefill branch called SDPA with an explicit
+  boolean mask and `enable_gqa`. With fewer KV heads than query heads, flash attention refuses a non-null mask and
+  memory-efficient attention refuses mismatched head counts, so the call lands on SDPA's math backend: fp32, scores
+  materialised.
+  - P102's profile put this at ~45 % of a 4096-token Qwen3 prefill's device time under k19.
+  - On an A2000 at Qwen3's shapes the math backend took 19.1 ms per 4096-context call, against 1.31 ms for flash.
+- **What.** `paged_attention._prefill_attn_mode_env` reads `E4B_PAGED_PREFILL_ATTN` at every call; an unknown value
+  is refused.
+  - `math` (the default) leaves behaviour unchanged.
+  - `flash` passes `causal_lower_right(T, t_total)` with `enable_gqa`, with no K/V expansion.
+  - Layers with sinks or a sliding window keep the explicit-mask path under either value.
+  - The default moves only by a registered reading (lane P107).
+- **Tests.**
+  - `tests/test_paged_prefill_attn_route.py` (CPU, 7): the knob; both routes equal the whole-sequence reference across
+    chunk boundaries; `flash` hands SDPA a `CausalBias` with GQA on a plain layer, and never on a windowed or sink layer.
+  - `tests/test_paged_prefill_attn_route_gpu.py`: Qwen3 shapes, three 512-token chunks; `flash` reaches the flash
+    kernel and stays within 1 % of `math` (0.21 % on an A2000).
+  - On the A2000: CPU arm 25 passed with CUDA hidden, GPU arm 26 passed. Two mutations each failed: the flash branch
+    removed, and a top-left causal bias.
+
+
+### Fix: `serve_paged` sizes a Gemma-4 KV pool again (a 0.41.0 regression from #897)
+
+- **The bug.** `serve_paged._kv_geometry` read `num_key_value_heads` before looking for a composite config's
+  `text_config` (#897, for Qwen3.5 / Qwen3.6 MoE). On Gemma-4's per-layer text config, which is the config of the model
+  the streaming loader builds, that read raises transformers' `AmbiguousGlobalPerLayerAttributeError`. That error is a
+  `RuntimeError`, so `getattr`'s default did not catch it, and `build_engine` died before reaching the per-layer branch.
+  Found while building lane P107 (#359).
+- **The fix.** `text_config` is read first. The per-layer branch is unchanged.
+- **Tests** (`tests/test_linear_state.py`), using transformers' own Gemma-4 configs:
+  - a tiny per-layer text config, which with the fix reverted fails with exactly that error;
+  - a composite config wrapping it.
+
+  The existing heterogeneous-config test covered the harness's copy (`bench/hybrid-g9/step_decomp.py`) only.
+- **Scope.** CPU-tested. Gemma-4 under `serve_paged` has not been read on a GPU since 0.41.0.
 
 ### Fix: the paged attention's unbound fallback keeps sliding windows and aligns a cached chunk to its last key
 

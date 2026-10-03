@@ -39,9 +39,34 @@ rather than picking one.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 import torch
+
+#: ``E4B_PAGED_PREFILL_ATTN``'s routes (e4b#960); see :func:`_prefill_attn_mode_env`.
+PREFILL_ATTN_ROUTES = ("math", "flash")
+
+
+def _prefill_attn_mode_env() -> str:
+    """``E4B_PAGED_PREFILL_ATTN`` (e4b#960): how a prefill chunk attends on a layer with no attention sinks and no
+    sliding window (every layer of Qwen3-MoE, OLMoE, Granite; Gemma-4's full layers). Read at every call; anything
+    else is refused.
+
+    * ``math`` (the default, also when unset): SDPA with the explicit lower-right causal boolean mask and
+      ``enable_gqa``. With fewer KV heads than query heads, flash refuses a non-null mask and memory-efficient
+      attention refuses mismatched head counts, so this lands on SDPA's math backend, which upcasts bf16 to fp32
+      and materialises the scores (P102's profile: ~45 % of a 4096-token Qwen3 prefill's device time).
+    * ``flash``: the same mask expressed as ``torch.nn.attention.bias.causal_lower_right(T, t_total)`` with
+      ``enable_gqa``, which the flash kernel serves in bf16 (A2000, Qwen3 shapes: ~14x faster per call; error vs an
+      fp64 reference 0.0023 against the math backend's 0.0017). Where no fused kernel applies (CPU, older GPUs)
+      SDPA serves the bias itself with the same lower-right mask.
+
+    Layers with sinks (gpt-oss) or a sliding window keep the explicit-mask path under either value."""
+    v = os.environ.get("E4B_PAGED_PREFILL_ATTN", "math").strip().lower() or "math"
+    if v not in PREFILL_ATTN_ROUTES:
+        raise ValueError(f"E4B_PAGED_PREFILL_ATTN={v!r}: expected one of {PREFILL_ATTN_ROUTES}")
+    return v
 
 
 @dataclass
@@ -294,18 +319,24 @@ def paged_attention_forward(module, query, key, value, attention_mask,
         vv = v_all.permute(1, 0, 2)[None]
         q_b = query[b:b + 1]
         t_total = kk.shape[2]
+        win = _window_of(module, kwargs)
+        sinks = _sinks_of(module, kwargs)
+        if not win and sinks is None and _prefill_attn_mode_env() == "flash":
+            # e4b#960: the lower-right causal mask as a bias the flash kernel takes, GQA kept (no K/V expansion)
+            from torch.nn.attention.bias import causal_lower_right
+            outs.append(torch.nn.functional.scaled_dot_product_attention(
+                q_b, kk, vv, attn_mask=causal_lower_right(T, t_total), scale=scaling, enable_gqa=True))
+            continue
         # the chunk's queries are the LAST T positions of the sequence;
         # each attends to everything up to and including itself
         pos = torch.arange(t_total - T, t_total, device=query.device)
         keys = torch.arange(t_total, device=query.device)
         mask = keys[None, :] <= pos[:, None]
-        win = _window_of(module, kwargs)
         if win:
             # the last `win` keys of each query's past, itself included
             mask = mask & (keys[None, :] > pos[:, None] - win)
         mask = mask[None, None]
-        o = _prefill_attend(q_b, kk, vv, mask, scaling,
-                            _sinks_of(module, kwargs))
+        o = _prefill_attend(q_b, kk, vv, mask, scaling, sinks)
         outs.append(o)
     out = torch.cat(outs, dim=0).transpose(1, 2).contiguous()
     return out.to(query.dtype), None

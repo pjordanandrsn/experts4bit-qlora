@@ -541,13 +541,18 @@ def _routed_topk(cfg) -> int:
 
 
 def _kv_geometry(cfg):
-    """step_decomp._kv_geometry: (kv heads, head_dim), scalars or per-layer lists."""
+    """step_decomp._kv_geometry: (kv heads, head_dim), scalars or per-layer lists.
+
+    A composite (vision-language) config, e.g. Qwen3.5 / Qwen3.6 MoE, keeps the geometry on ``text_config``, which is
+    therefore read FIRST. Reading ``num_key_value_heads`` first broke Gemma-4: on a per-layer config a global read
+    raises transformers' ``AmbiguousGlobalPerLayerAttributeError``, a ``RuntimeError`` that ``getattr``'s default does
+    not catch, so ``build_engine`` died before reaching the per-layer branch below."""
     def _one(c):
         heads = getattr(c, "num_key_value_heads")
         hd = getattr(c, "head_dim", None) or (c.hidden_size // getattr(c, "num_attention_heads"))
         return int(heads), int(hd)
-    if getattr(cfg, "num_key_value_heads", None) is None and getattr(cfg, "text_config", None) is not None:
-        cfg = cfg.text_config            # a composite (vision-language) config, e.g. Qwen3.5 / Qwen3.6 MoE
+    if getattr(cfg, "text_config", None) is not None:
+        cfg = cfg.text_config            # a composite (vision-language) config, e.g. Qwen3.5 / Qwen3.6 MoE, Gemma-4
     try:
         return _one(cfg)
     except Exception as e:  # noqa: BLE001  (transformers' AmbiguousGlobalPerLayerAttributeError)
