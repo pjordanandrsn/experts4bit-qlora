@@ -149,3 +149,16 @@ The guard is 1 h, so there is no proving rental. The premise runs first on the b
   CI covers the self-tests, the staged pin and the driver's dry run.
 
 Amendments, dated, go below this line before any data is read.
+
+### A1 (2026-10-03, before any data was read)
+
+`p102-5090-1` (adertha-receipts `139544a`, $0.0303) stopped at the premise, rc 25, before anything was fetched:
+`/opt/conda/bin/python: No module named pytest`. The runner was derived from P100's, whose install line has no pytest
+(P100 ran no test on the box). P99's runner, which also runs a premise, installs it. The A2000 rehearsal of the premise
+ran in a container where pytest had been installed by hand, so it could not catch this.
+
+- **Changes:** the install line adds `pytest`, and the tripwire imports it (rc 9 before the premise, not rc 25 after).
+  `tests/test_p102_staged_pin.py` adds a check that whatever the premise runs is installed and imported first.
+- **Unchanged:** nothing the lane measures and nothing in its rule. No route was exercised, and no TTFT or NLL was
+  recorded.
+- The next attempt is `p102-5090-2`, at this amendment's merge commit.

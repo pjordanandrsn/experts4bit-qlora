@@ -138,3 +138,15 @@ def test_the_driver_runs_to_its_dry_run(tmp_path):
            "E4B_RENT_INSTANCE_ID": "0", "E4B_SHA": "0" * 40, "P102_DRIVE_DRYRUN": "1"}
     out = subprocess.run(["bash", str(LANE / "p102_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> root@h:/root/p102"), out.stdout + out.stderr
+
+
+def test_the_install_carries_what_the_premise_runs():
+    """A1: ``p102-5090-1`` stopped at the premise with "No module named pytest" -- the install line, derived from P100's,
+    had none. Whatever the premise runs under must be installed, and imported by the tripwire before the premise."""
+    install = RUN[RUN.index('say "install e4b @'):RUN.index("TRIPWIRE FAIL")]
+    assert "python -m pytest test_int4_prefill_route_gpu.py" in RUN
+    assert re.search(r'"huggingface_hub>=0\.23" pytest \|\|', install), "pytest is not on the install line"
+    start = RUN.index("python - <<'PYT'")
+    tripwire = RUN[start:RUN.index("\nPYT\n", start)]                       # the heredoc's body
+    assert "import pytest" in tripwire
+    assert RUN.index("import pytest") < RUN.index("python -m pytest test_int4_prefill_route_gpu.py")
