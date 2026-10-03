@@ -192,6 +192,49 @@ after 15 minutes of install. It also asserts that each reading need fits inside 
 
 **The next proof** is `p109-prove-2`, under the same relay.
 
+## Amendment 2 (2026-10-03, after `p109-prove-2`, before any reading data): the replay's oracle is the PADDED eager step
+
+**What `p109-prove-2` showed.** `p109-prove-2` (adertha-receipts `45517df`, $0.057) ran the whole box on Granite at 8 / 24
+tokens and was PROVED: lane rc 0, a verdict other than VOID, every bucket captured in G. Its verdict, which is not a
+reading, was FUNCTION_FAIL:
+- G1 and G2 were identical to each other;
+- both differed from D1 on W16 rows 0, 2, 4, 7, 8, 9 and 14 at 24 tokens;
+- they agreed with D1 at 8 tokens and on W1.
+
+**The error was the registration's, not the graph path's.** W16's staggered prefill decodes 1–15 active rows while the
+prompts ingest, one 512-token chunk per step, and a graph step pads those rows to the next bucket.
+`tests/test_decode_graph_buckets.py` asserts the replay against the SAME padded step run eagerly. It reports the unpadded
+eager step and does not assert it, because a bf16 GEMM may round differently at a different row count. P82 and B771b read
+the unpadded eager step equal to the replay, but their traces held 16, 8, 4, 2 and 1 active rows, every one a bucket size,
+so no step was padded. The registration's D arm is that unpadded step. It was the wrong oracle for this workload.
+
+**The reading that was stopped.** `p109-5090-1` was launched before this was seen. The executing agent stopped it 27 s
+into staging, before any data: adertha-receipts `af87536`, $0.015, teardown proven.
+
+**The change.**
+- **A sixth arm, P1, runs last.** It sets `E4B_PAGED_GRAPHS=1` and runs every bucket eagerly on the same padded layout:
+  `enable_decode_graphs(capture=False)`, installed by the box on `PagedModelRunner` before `build_engine`. This is
+  P82 / B771b's arm P.
+  - Engagement: every bucket reads `eager: capture=False`, and device grouping is on.
+- **FUNCTION_FAIL now means:**
+  - G1 or G2 differs from P1 on any row of either workload at either length; or
+  - a G or P arm's timed reps differ.
+- **D1 stays.** Its comparison with G is REPORTED: rows identical, first divergences, and whether P1 = D1.
+- `p109_reduce.py` self-tests on 18 cases.
+
+**Predictions.**
+- Q3 is restated as G1 ≡ G2 ≡ P1 on every row.
+- The original Q3 (G ≡ D) is kept as a reported prediction, which the Granite proof suggests will fail on some W16 rows.
+
+**Unchanged:**
+- the subject, the workloads, the speed and noise bars;
+- the sanity bar, 12 of 16 rows agreeing with E for 16 tokens. The Granite proof read 8 of 16 on that bar, at short
+  lengths, so DIVERGENT is a live outcome for the reading. It is said here, before the data, and the bar is not moved;
+- the consequences.
+
+**Budget.** The sixth arm adds about 6 minutes, inside the 2.5 h guard. The lane has spent $0.0927. The next runs are
+`p109-prove-3` (the P arm's path on hardware) and then `p109-5090-2`, under the same relay and the $3.50 ceiling.
+
 ## Receipts
 
 Fetched to the run directory's `p109/` and committed to `bench/p109/receipts/<run>/`:

@@ -8,12 +8,13 @@ measurement); the receipt's shape, the engagement fields and the token identity 
 import importlib.util
 import json
 import pathlib
+import time
 
 import pytest
 import torch
 
 from experts4bit_qlora import serve_paged
-from experts4bit_qlora.engines import hot_residency
+from experts4bit_qlora.engines import hot_residency, paged_runner
 from experts4bit_qlora.engines.scheduler import ContinuousScheduler
 
 LANE = pathlib.Path(__file__).resolve().parents[1] / "bench" / "p109"
@@ -45,6 +46,7 @@ class _Runner:
         return {rid: self._next(rid) for rid, start, n in chunks if start + n >= len(self.prompts[rid])}
 
     def run_decode(self, rids):
+        time.sleep(0.002)                      # so LONG is measurably slower than SHORT; speeds are still not asserted
         return {r: self._next(r) for r in rids}
 
     def free_slot(self, rid):
@@ -58,10 +60,15 @@ def stubbed(monkeypatch, tmp_path):
         sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
                                     chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget)
         grouping = serve_paged._batched_graph_grouping(cfg)
-        status = {b: "graph" for b in cfg.buckets} if cfg.graphs else None
+        # resolved through the class at call time, as build_engine's runner.enable_decode_graphs is, so the P arm's
+        # capture=False wrapper (installed by the box on the class) is what answers
+        status = paged_runner.PagedModelRunner.enable_decode_graphs(runner, cfg.buckets) if cfg.graphs else None
         return serve_paged.EngineParts(scheduler=sched, tokenizer=None, eos_ids=frozenset(), runner=runner,
                                        info={"graph_status": status, "grouping": grouping, "moe_layers": 1})
     monkeypatch.setattr(serve_paged, "build_engine", build_engine)
+    monkeypatch.setattr(paged_runner.PagedModelRunner, "enable_decode_graphs",
+                        lambda self, buckets=(1, 2, 4, 8, 16), *, capture=True, **kw:
+                        {b: ("graph" if capture else "eager: capture=False") for b in buckets})
     for name, val in (("synchronize", lambda *a, **k: None), ("mem_get_info", lambda *a, **k: (0, 0)),
                       ("max_memory_allocated", lambda *a, **k: 0), ("memory_allocated", lambda *a, **k: 0),
                       ("memory_reserved", lambda *a, **k: 0)):
@@ -84,30 +91,34 @@ def stubbed(monkeypatch, tmp_path):
 def _arm(box, pf, mp, tmp, tag):
     arm = tag[0]
     mp.setenv("P109_ARM", arm)
-    if arm == "G":
+    if arm in ("G", "P"):
         mp.setenv("E4B_PAGED_GRAPHS", "1")
     else:
         mp.delenv("E4B_PAGED_GRAPHS", raising=False)
     hot_residency.DEVICE_GROUPING[0] = False                    # each arm is a fresh process on the box
     hot_residency.FORCE_SINGLETON_GROUPS[0] = False
     out = tmp / f"arm_{tag}.json"
-    assert box.main(["--prompts", str(pf), "--out", str(out), "--tag", tag, "--short", "2", "--long", "5", "--reps", "2"]) == 0
+    assert box.main(["--prompts", str(pf), "--out", str(out), "--tag", tag, "--short", "2", "--long", "12", "--reps", "2"]) == 0
     return json.loads(out.read_text())
 
 
-def test_the_five_arms_record_their_engagement_and_reduce(stubbed):
+def test_the_six_arms_record_their_engagement_and_reduce(stubbed):
     box, pf, mp, tmp = stubbed
-    recs = {t: _arm(box, pf, mp, tmp, t) for t in ("E1", "G1", "G2", "E2", "D1")}
+    recs = {t: _arm(box, pf, mp, tmp, t) for t in ("E1", "G1", "G2", "E2", "D1", "P1")}
     assert recs["G1"]["graph_status"] == {str(b): "graph" for b in (1, 2, 4, 8, 16)}
+    assert recs["P1"]["graph_status"] == {str(b): "eager: capture=False" for b in (1, 2, 4, 8, 16)}   # Amendment 2
     assert recs["E1"]["graph_status"] is None and recs["D1"]["graph_status"] is None
-    assert [recs[t]["grouping_flags_at_run"]["device_grouping"] for t in ("E1", "G1", "D1")] == [False, True, True]
+    assert [recs[t]["grouping_flags_at_run"]["device_grouping"] for t in ("E1", "G1", "D1", "P1")] == [False, True, True, True]
     w16 = recs["E1"]["workloads"]["W16"]
-    assert w16["batch"] == 16 and len(w16["tokens"]["5"]) == 16 and all(len(r) == 5 for r in w16["tokens"]["5"])
-    assert len(recs["E1"]["workloads"]["W1"]["tokens"]["2"]) == 1 and len(w16["rep_digests"]["5"]) == 2
+    assert w16["batch"] == 16 and len(w16["tokens"]["12"]) == 16 and all(len(r) == 12 for r in w16["tokens"]["12"])
+    assert len(recs["E1"]["workloads"]["W1"]["tokens"]["2"]) == 1 and len(w16["rep_digests"]["12"]) == 2
     red = _load("p109_reduce")
     v = red.reduce(recs, "a" * 40)
-    assert v["verdict"] not in ("VOID", "FUNCTION_FAIL"), v                 # timing-dependent verdicts are not asserted
-    assert v["report"]["E1_eq_E2"] and v["report"]["E_vs_G_W16_rows_identical"] == 16
+    # timing-dependent verdicts are not asserted; the one VOID a CI runner's clock can cause is a void slope
+    assert v["verdict"] != "FUNCTION_FAIL" and (v["verdict"] != "VOID" or v["reasons"] == ["a decode slope is void"]), v
+    if "report" in v:
+        assert v["report"]["E1_eq_E2"] and v["report"]["E_vs_G_W16_rows_identical"] == 16 and v["report"]["G_eq_D"]
+    assert all(recs[t]["workloads"][w]["tokens"] == recs["P1"]["workloads"][w]["tokens"] for t in ("G1", "G2", "D1") for w in ("W16", "W1"))
 
 
 def test_the_box_refuses_anything_but_the_default_server(stubbed):
