@@ -77,6 +77,8 @@ Registration: `bench/p100/PREREG-p100.md` (#917, `b676a8e`). Issue: #916. e4b at
 
 ## The registered consequence, and what happens next
 
+(Lane numbers: P100's registration names the A/B "P101"; P101 was taken by the hybrid-graphs lane, #919, while P100 ran, so the A/B is **P102**.)
+
 The registration said: **REFUTED** → "no fix lane against the loop. #916 records the reading. The census and the
 scaling say where the time is instead, and the next lane is written against that."
 
@@ -85,7 +87,7 @@ On this data those two sentences disagree. The census and the profile put the la
 QUANTITIES were wrong (a constant 2.07 s per chunk, ~128 distinct experts), not because the loop is elsewhere.
 
 **Decision:** made by the executing agent under the owner's delegation of owner decisions, stated here so it can be
-reversed. The next lane, P101, is written against where the time was measured to be:
+reversed. The next lane, P102, is written against where the time was measured to be:
 - the loop's per-chunk cost;
 - the part that grows with tokens.
 

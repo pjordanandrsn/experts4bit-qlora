@@ -16,7 +16,8 @@
   - In the cProfile, the int4 branch is 0.454 s of the 0.619 s prefill, and its `ncalls` equals the census.
   - Per chunk: about 0.43 s fixed plus about 0.35 ms per token.
 - **Next:** the registered consequence's two sentences disagree on this data (the time IS in the loop; the rule failed
-  on the hypothesis's quantities). P101 is written against where the time was measured to be, with a fresh rule.
+  on the hypothesis's quantities). P102 (P101 went to the hybrid-graphs lane) is written against where the time was
+  measured to be, with a fresh rule.
   `bench/p100/RESULTS-p100.md`; receipts under `bench/p100/receipts/p100-5090-2/`.
 
 
