@@ -1,0 +1,33 @@
+KNOBS e4b=3185b46ab041666894fd776fed904a6a96f1c396 gnf4=51a49166ae7bc1a0f84188b7b5d1f42ecbc37e00 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 short=32 long=160 reps=3
+e4b 0.42.0 @3185b46ab041666894fd776fed904a6a96f1c396
+gnf4 0.35.0 @51a49166ae7bc1a0f84188b7b5d1f42ecbc37e00
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p109_reduce self-test OK (18 cases)
+p109_box self-test OK (5/5 cases)
+premise run rc=0: 7 passed in 9.05s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm E1 rc=0 P109_ARM {"arm": "E", "tag": "E1", "load_s": 33.42, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "W16": 130.55, "W1": 11.02, "peak_gib": 21.505}
+
+arm G1 rc=0 P109_ARM {"arm": "G", "tag": "G1", "load_s": 36.71, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "W16": 730.68, "W1": 99.4, "peak_gib": 21.56}
+
+arm G2 rc=0 P109_ARM {"arm": "G", "tag": "G2", "load_s": 33.46, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "W16": 747.66, "W1": 99.48, "peak_gib": 21.56}
+
+arm E2 rc=0 P109_ARM {"arm": "E", "tag": "E2", "load_s": 31.94, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "W16": 124.49, "W1": 10.37, "peak_gib": 21.505}
+
+arm D1 rc=0 P109_ARM {"arm": "D", "tag": "D1", "load_s": 35.12, "graph_status": null, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "W16": 148.68, "W1": 10.65, "peak_gib": 21.505}
+
+arm P1 rc=0 P109_ARM {"arm": "P", "tag": "P1", "load_s": 33.42, "graph_status": {"1": "eager: capture=False", "2": "eager: capture=False", "4": "eager: capture=False", "8": "eager: capture=False", "16": "eager: capture=False"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "W16": 191.62, "W1": 12.51, "peak_gib": 21.512}
+
+P109_VERDICT DIVERGENT ["9 of 16 W16 rows agree for 16 tokens (bar 12)"]
+  S16: 5.5969
+  S1: 9.02
+  self_pairs: {"E2/E1 W16": 0.9536, "E2/E1 W1": 0.941, "G2/G1 W16": 1.0232, "G2/G1 W1": 1.0008}
+  decode_tok_s: {"E1": {"W16": 130.55, "W1": 11.02}, "G1": {"W16": 730.68, "W1": 99.4}, "G2": {"W16": 747.66, "W1": 99.48}, "E2": {"W16": 124.49, "W1": 10.37}, "D1": {"W16": 148.68, "W1": 10.65}, "P1": {"W16": 191.62, "W1": 12.51}}
+  report: {"E1_eq_E2": true, "E_vs_G_W16_first_divergence": [160, 31, 107, 52, 40, 16, 10, 7, 3, 7, 7, 9, 68, 7, 103, 45], "E_vs_G_W16_rows_identical": 1, "E_vs_G_W16_median_first_divergence": 23.5, "E_vs_G_W1_first_divergence": 160, "sanity_rows_agreeing": 9, "G_vs_D_first_divergence": {"W16": [160, 25, 117, 69, 97, 15, 10, 7, 37, 7, 157, 160, 160, 160, 160, 145], "W1": [160]}, "G_eq_D": false, "P_eq_D": false, "peak_gib": {"E1": 21.505, "G1": 21.56, "G2": 21.56, "E2": 21.505, "D1": 21.505, "P1": 21.512}, "load_s": {"E1": 33.42, "G1": 36.71, "G2": 33.46, "E2": 31.94, "D1": 35.12, "P1": 33.42}, "G_minus_E_peak_gib": 0.055, "G_minus_E_load_s": 3.29}

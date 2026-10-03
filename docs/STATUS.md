@@ -423,6 +423,15 @@ reading, not a speed one.
   half the speed. The ratio is not claimed for another host.
 - **`E4B_PAGED_GRAPHS=1` now serves hybrid models.** The Gated DeltaNet layers still ran transformers' torch path.
 
+**`serve_paged` keeps eager decode by default** (lane P109, 2026-10-03, one rented RTX 5090; **measured** —
+[`bench/p109/RESULTS-p109.md`](../bench/p109/RESULTS-p109.md), `e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03`).
+- **Speed:** on the default server (Qwen3-30B-A3B NF4), graphs ran ×5.60 the eager default at 16 concurrent requests and
+  ×9.02 at one, on an EPYC 7C13 host.
+- **Exactness:** the replay is bit-identical to its padded eager step.
+- **Verdict DIVERGENT:** 9 of 16 rows agree with the eager default for 16 tokens, against a bar of 12. Grouping alone,
+  with no graphs, reads 10 of 16. The default waits on a teacher-forced quality reading; `E4B_PAGED_GRAPHS=1` serves the
+  graph path every registered serving number describes.
+
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).
 - **Speed:** with `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 installed, Qwen3.6-35B-A3B's bucketed decode

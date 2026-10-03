@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### P109 read (RTX 5090): DIVERGENT -- graphs are 5.60x the eager default at 16 requests and 9.02x at one, and the replay is bit-identical to its padded eager step, but the graph server's tokens leave the eager default's within 16 tokens on 7 of 16 rows; `serve_paged` keeps eager decode by default (#770)
+
+- **Files.**
+  - `bench/p109/RESULTS-p109.md`;
+  - `bench/p109/receipts/p109-5090-2/`: one RTX 5090 on an AMD EPYC 7C13, $0.2926. The lane cost $0.4599 over five runs.
+- **The read.** The default server ran Qwen3-30B-A3B NF4 at `max_seqs` 16, built by `build_engine`.
+  - `E4B_PAGED_GRAPHS=1` ran 731–748 tok/s against the eager default's 125–131 at 16 concurrent requests, and 99.4 against
+    10.4–11.0 for one request.
+  - It cost +0.055 GiB of peak memory and +3.3 s of load.
+  - G1 ≡ G2 ≡ P1, the padded eager step, bitwise on every row.
+- **Why DIVERGENT.**
+  - The registered sanity bar needed 12 of 16 rows agreeing with the eager default for 16 tokens; the reading had 9.
+  - The decomposition shows that graph replay adds no divergence. The divergence comes from the device grouping and
+    bucket padding that graphs bring.
+  - Grouping alone, with no graphs, reads 10 of 16.
+  - Whether either arithmetic is better is a teacher-forced quality question, and it is still open.
+- **The registered consequence.**
+  - Graphs stay opt-in.
+  - `docs/SERVING.md` and `docs/STATUS.md` state the measured ratio, and that the registered serving-speed numbers are the
+    graph path.
+  - A measured register row: `e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03`.
+  - #770 stays open.
+- **Predictions missed:** S1, which was above its band; the median E-vs-G first divergence; and the sanity bar.
+
 ### TC1 amendments 17–18 read: e4b's steady-state lead over axolotl's scattermoe replicates on a second host (P29 HELD, 1.146)
 
 - **What was asked.** amendment 16's box (P27: axolotl / e4b 1.238) again, byte for byte, on a different machine.

@@ -107,6 +107,19 @@ out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_HOST` 
 as above. `GET /stats` returns the scheduler's `stats()` (TTFT p50/p99 **from arrival**, queue wait,
 per-stream rate) and the runner's graph statistics.
 
+**Decode graphs (#770; lane P109).** `serve_paged` decodes eagerly by default. `E4B_PAGED_GRAPHS=1` captures the
+bucketed graphs, and **every registered serving-speed number is the graph path**: SC1, P96, and P98 to P101.
+- **The speed.** P109 ([`bench/p109/RESULTS-p109.md`](../bench/p109/RESULTS-p109.md)) read the default server on one
+  RTX 5090, with Qwen3-30B-A3B NF4 at `max_seqs` 16, on an EPYC 7C13 host. Graphs were **×5.60** the eager default
+  with 16 concurrent requests (731–748 against 125–131 tok/s) and **×9.02** with one request (99.4 against 10.4–11.0).
+  The capture costs +0.055 GiB of peak memory and about 3 s at startup.
+- **The default stays eager.** P109 read DIVERGENT:
+  - The replay is bit-identical to its own padded eager step.
+  - But the graph server's tokens leave the eager default's within 16 tokens on 7 of 16 rows. The cause is the device
+    grouping and the bucket padding that graphs bring.
+  - Two eager configurations, host and device grouping, diverge as fast without any graphs.
+  - Which arithmetic is better is a teacher-forced quality question, and it is still open.
+
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
 `hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a
 Python loop: one reference decode, a cast, a matmul and a copy per routed expert per projection, paid per chunk per
