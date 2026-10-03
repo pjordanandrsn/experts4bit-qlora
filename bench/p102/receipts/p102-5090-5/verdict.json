@@ -1,0 +1,7 @@
+{
+ "lane": "P102",
+ "void_reasons": [
+  "loop: did not run as registered (census {'calls': 48, 'singleton_calls': 0, 'singleton_dequant': 0, 'grouped_calls': 48, 'grouped_device_calls': 0, 'grouped_no_store_calls': 0, 'loop_calls': 48, 'loop_rows': [4096], 'loop_distinct_mean': 87.4, 'loop_dequant': 8390, 'loop_dequant_is_two_per_distinct': True, 'dequant_total': 8390, 'dequant_outside_calls': 0}, kernels {'k19': 0, 'mtile': 0, 'device_kernels': 132216})"
+ ],
+ "verdict": "VOID"
+}
