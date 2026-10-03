@@ -273,7 +273,7 @@ def test_the_a1_evaluator_reads_the_reducers_own_gap_records(tmp_path):
                       ("sc1b_gap_e4b_llamacpp_b16", census.gap(e16, l16, 0.624)), ("sc1b_gap_e4b_vllm_b1", census.gap(e1, v1, 1.203))):
         (tmp_path / f"{name}.json").write_text(json.dumps(rec))
     arms, gaps, v = rd.read(str(tmp_path))
-    assert {q: r["verdict"] for q, r in v.items()} == {"Q1": "HOLDS", "Q2": "HOLDS", "Q3": "HOLDS", "Q4": "HOLDS", "Q5": "HOLDS"}, v
+    assert {q: v[q]["verdict"] for q in ("Q1", "Q2", "Q3", "Q4", "Q5")} == {"Q1": "HOLDS", "Q2": "HOLDS", "Q3": "HOLDS", "Q4": "HOLDS", "Q5": "HOLDS"}, v
     assert v["Q2"]["ratio"] == round(1100 / 650, 4) and v["Q1"]["largest"] == "I_in" and v["Q4"]["share"] > 0.5
     md = rd.render(arms, gaps, v)
     assert "| G1 | llamacpp | 1 | ok |" in md and "| sglang | 16 | missing |" in md
@@ -304,3 +304,42 @@ def test_a2_the_proofs_granite_rows_pass_sc1s_own_prompt_checks(tmp_path):
     assert item3.index("--write-prompts") < item3.index("e4b_census 16 graph")
     assert '"$W/prompts_granite_b16.json"; r=$?' in item3
     assert 'PR=${9:-$W/prompts_b$1.json}' in box and "SC1_PROMPTS=$PR " in box               # the main box's default is unchanged
+
+
+def test_a3_overlap_term_bands_and_the_confirmatory_predictions(tmp_path):
+    # A3 (#846): the in-graph overlap is a term of the identity, each gap carries node-trace bands, and Q6-Q8 read from the
+    # reducer's own records. Numbers follow sc1d-5090-2's B=1 arms (e4b overlaps nothing; llama.cpp 1.35 ms on one stream).
+    rd = _mod("sc1b_read")
+
+    def arm(engine, batch, p, terms, omega=0.0, dk_lo=0.0, pairs=0.0, k_in=1000):
+        full = dict({c: 0.0 for c in census.CLASSES}, I_in=0.0, idle_out=0.0, overlap_in=0.0)
+        full.update(terms)
+        full["O"] = round(sum(v for k, v in full.items() if k != "O") - p, 6)
+        noise = dict({k: 0.002 for k in full}, O=None)
+        return {"engine": engine, "batch": batch, "status": "ok", "labels": [], "P_ms": p, "terms": full, "noise_iqr": noise,
+                "unprofiled_ms": p, "node_band": {"omega_ms": omega, "dk_lo_ms": dk_lo},
+                "node": {"status": "ok", "kernels_in_graph": k_in, "overlap_pairs_same_stream_fraction": pairs}}
+    e1 = arm("e4b", 1, 4.406, {"moe_expert": 1.113, "moe_route": 0.441, "attn": 0.683, "dense_gemm": 1.292, "norm_elem": 0.497,
+                               "idle_out": 0.370}, omega=0.148, dk_lo=0.003, k_in=1550)
+    l1 = arm("llamacpp", 1, 3.298, {"moe_expert": 1.075, "moe_route": 0.203, "attn": 0.557, "dense_gemm": 1.791, "norm_elem": 0.465,
+                                    "memcpy": 0.195, "idle_out": 0.482, "overlap_in": -1.352}, omega=0.064, dk_lo=0.060, pairs=0.956, k_in=1110)
+    g1 = census.gap(e1, l1, 1.484)
+    assert g1["status"] == "ok" and g1["named_cause"] == "overlap_in" and g1["node_trace_robust"], g1
+    lo, hi = g1["delta_band"]["overlap_in"]
+    assert abs(lo - (1.352 - 0.212)) < 1e-6 and abs(hi - (1.352 + 0.212)) < 1e-6, g1["delta_band"]["overlap_in"]
+    e16 = arm("e4b", 16, 9.767, {"moe_expert": 4.916, "norm_elem": 1.461, "dense_gemm": 1.351, "attn": 0.832, "moe_route": 0.726,
+                                 "idle_out": 0.351}, omega=0.048)
+    s16 = arm("sglang", 16, 7.893, {"moe_expert": 4.501, "norm_elem": 0.454, "dense_gemm": 1.532, "attn": 0.995, "moe_route": 0.350,
+                                    "idle_out": 0.017}, omega=0.087)
+    v16 = arm("vllm", 16, 8.159, {"moe_expert": 4.529, "norm_elem": 0.411, "dense_gemm": 1.394, "attn": 1.164, "moe_route": 0.411,
+                                  "idle_out": 0.017}, omega=0.042)
+    for name, rec in (("sc1b_arm_e4b_b1", e1), ("sc1b_arm_llamacpp_b1", l1), ("sc1b_gap_e4b_llamacpp_b1", g1),
+                      ("sc1b_gap_e4b_sglang_b16", census.gap(e16, s16, 1.191)), ("sc1b_gap_e4b_vllm_b16", census.gap(e16, v16, 1.172))):
+        (tmp_path / f"{name}.json").write_text(json.dumps(rec))
+    _arms, _gaps, v = rd.read(str(tmp_path))
+    assert (v["Q6"]["verdict"], v["Q7"]["verdict"], v["Q8"]["verdict"]) == ("HOLDS", "HOLDS", "HOLDS"), v
+    # Q1 keeps A1's term set: the overlap term does not enter it, so it cannot make Q1 hold
+    assert v["Q1"]["largest"] != "overlap_in" and v["Q1"]["verdict"] in ("REFUTED", "UNREAD"), v["Q1"]
+    # a band wide enough to let another term qualify makes the gap unread, with the nominal reading kept
+    wide = census.gap(dict(e1, node_band={"omega_ms": 1.2, "dk_lo_ms": 0.0}), l1, 1.484)
+    assert wide["status"] == "unread" and wide["nominal_named_cause"] == "overlap_in" and "NODE_TRACE_AMBIGUOUS" in wide["why"][0], wide
