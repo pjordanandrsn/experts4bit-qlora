@@ -118,7 +118,12 @@ bucketed graphs, and **every registered serving-speed number is the graph path**
   - But the graph server's tokens leave the eager default's within 16 tokens on 7 of 16 rows. The cause is the device
     grouping and the bucket padding that graphs bring.
   - Two eager configurations, host and device grouping, diverge as fast without any graphs.
-  - Which arithmetic is better is a teacher-forced quality question, and it is still open.
+  - Which arithmetic is better is a teacher-forced quality question. P110 answered it.
+- **The quality.** P110 ([`bench/p110/RESULTS-p110.md`](../bench/p110/RESULTS-p110.md)) read AT_PARITY. Teacher-forced
+  over 48 wikitext windows, the graph arithmetic (device grouping and bucket padding) sits at +0.0004 nats against the
+  eager default. That is inside the eager default's own neutral perturbations: a half-batch reads +0.0018, a prefill
+  split +0.0005, spreads 0.011–0.013. A halved decode scale reads +1.05. This licenses `E4B_PAGED_GRAPHS=auto` as the
+  default (#770).
 
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
 `hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a

@@ -7872,6 +7872,35 @@
       "notes": "Pre-registered in #988 with Amendments 1-2 (#989: the proof's own time-left checks; #990: the replay's oracle is the PADDED eager step, since W16's staggered prefill pads 1-15 active rows to buckets), all before any reading data. The registration named a register row only for DEFAULT_GRAPHS; this is a measurement row. Predictions held for S16, G = P, E1 = E2 and memory/load; missed for S1 (above its 1.5-8 band), the median E-vs-G first divergence (23.5, not >= 32) and the sanity bar. Lane cost $0.4599."
     },
     {
+      "id": "e4b.serve.p110.graph-arithmetic-quality.qwen3.5090.2026-10-03",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P110, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, built eager by build_engine), the arithmetic decode graphs bring -- device grouping plus bucket padding, read through the padded eager step that P109 found bit-identical to the graph replay -- costs no measurable quality. Teacher-forced over 48 wikitext windows (512 + 128, groups of 12) it reads +0.00036 nats (spread 0.0114) against the eager default, inside the eager default's own neutral perturbations (half-batch +0.0018, prefill split +0.0005; B_floor 0.0018, S_floor 0.0127); a halved decode scale reads +1.054. AT_PARITY.",
+      "value": 0.0003625983990197211,
+      "unit": "mean NLL bias of the graph arithmetic (P) against the eager default (R), nats, over 48 windows x 128 positions",
+      "hardware": "RTX 5090 (sm_120, driver 580.95.05, 32607 MiB), one rented Vast.ai verified host (instance 54072289, AMD EPYC 7C13, 818 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @c141276 (0.42.0 + P110's registration) + grouped-nf4-gemm @51a4916 (v0.35.0); torch 2.8.0+cu128, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; premise tests/test_decode_graph_buckets.py 7 passed on the card; arms R (host grouping), rep, floor (half / chunk 256 / rev), D (device grouping), P (device grouping + padded bucket steps, capture=False), mutant_scale; rule AT_PARITY iff P bias <= B_floor + 0.01 and spread <= 2 x max(S_floor, 0.005); verdict by bench/p110/p110_reduce.py",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p110/RESULTS-p110.md",
+        "bench/p110/PREREG-p110.md",
+        "bench/p110/p110_reduce.py",
+        "bench/p110/p110_box.py",
+        "bench/p110/receipts/p110-5090-1/verdict.json",
+        "bench/p110/receipts/p110-5090-1/box.json",
+        "bench/p110/receipts/p110-5090-1/summary.txt",
+        "bench/p110/receipts/p110-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/p110-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-03/p110-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #994. With P109 (e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03: speed x5.60 / x9.02, replay = padded eager step) this licenses E4B_PAGED_GRAPHS=auto as serve_paged's default (#770). Predictions held for R's repeat, the biases, D, the mutant, engagement, the box's time and the verdict; missed for the floor's and P's spreads (0.0127 / 0.0114, above the 0.005 / 0.006 predicted). Lane cost $0.2455."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02",
       "package": "experts4bit-qlora",
       "area": "train",

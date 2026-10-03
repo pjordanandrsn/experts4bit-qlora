@@ -21,6 +21,23 @@
 - `bench/sc1b/sc1b_kernels.py` (read time, descriptive only) lists one class's kernels by per-step time. It has a
   self-test in `tests/test_sc1b.py`.
 
+### P110 read (RTX 5090): AT_PARITY -- the arithmetic decode graphs bring to `serve_paged` costs no measurable quality: +0.0004 nats against the eager default, inside its own neutral perturbations (#770)
+
+- **Files.**
+  - `bench/p110/RESULTS-p110.md`;
+  - `bench/p110/receipts/p110-5090-1/`: one RTX 5090 on an AMD EPYC 7C13, $0.1904. The lane cost $0.2455.
+- **The read.** The default server ran Qwen3-30B-A3B NF4, built eager, scored teacher-forced over 48 wikitext windows.
+  - Device grouping plus bucket padding, which is bitwise the graph path per P109, reads +0.00036 nats (spread 0.0114)
+    against the eager default.
+  - The eager default's own half-batch and prefill-split draws read +0.0018 and +0.0005 (spreads 0.011–0.013).
+  - Grouping alone reads +0.0015.
+  - A halved decode scale reads +1.05.
+  - Engagement is exact.
+- **The registered consequence.** It licenses `E4B_PAGED_GRAPHS=auto` as `serve_paged`'s default; the code change is the
+  follow-up PR. Register row `e4b.serve.p110.graph-arithmetic-quality.qwen3.5090.2026-10-03`. SERVING and STATUS are
+  updated.
+- **Predictions missed:** the floor's and P's spreads, both wider than predicted (0.0127 / 0.0114).
+
 ### P110 registered (#770): does the arithmetic decode graphs bring to `serve_paged` cost quality? Device grouping and bucket padding against the eager default, teacher-forced, judged against the eager default's own neutral perturbations (bench and tests only)
 
 - **Why.** P109 read graphs ×5.60 / ×9.02 and the replay exact, but DIVERGENT on tokens. The divergence comes from the

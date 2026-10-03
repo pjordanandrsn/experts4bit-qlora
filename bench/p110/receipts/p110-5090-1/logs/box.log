@@ -1,0 +1,19 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1668.29it/s]
+[22:35:30]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[22:35:30]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[22:35:30]   quantized experts on 48/48 MoE layers (128 experts each)
+[22:35:30]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[22:35:31]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[22:35:35]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[22:36:00]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (fold flags set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 380609.62 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 1036591.87 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 624948.80 examples/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+P110_GROUP 1 of 4 done at 166 s, 21.31 GiB allocated
+P110_GROUP 2 of 4 done at 300 s, 21.31 GiB allocated
+P110_GROUP 3 of 4 done at 439 s, 21.31 GiB allocated
+P110_GROUP 4 of 4 done at 576 s, 21.31 GiB allocated
+P110_BOX: windows 48 | rep bias +0.00000 spread 0.00000 | half bias +0.00180 spread 0.01119 | chunk bias +0.00046 spread 0.01270 | rev bias +0.00000 spread 0.00000 | D bias +0.00153 spread 0.01218 | P bias +0.00036 spread 0.01136 | mutant_scale bias +1.05398 spread 1.05398 | rep identical True | load 34s | mem 22.05 GB | 575.6 s
