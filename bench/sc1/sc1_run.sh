@@ -580,9 +580,9 @@ if [ "$PROVE" = 1 ]; then
       line "PROVE sglang jit+health rc=$rc startup_s=$(( $(date +%s) - t0 )) $(grep -a 'SGLANG_ENGAGEMENT {' logs/sglang_start_prove.log | tail -1 | cut -c1-200)"; sglang_server_stop; rec $rc
     fi
   fi
-  [ "$BOX" = D ] && prove_d                                                   # SC1b: the instrument, vLLM B=1 node, llama.cpp B=16
+  [ "$BOX" = D ] && prove_d                                                   # SC1b: the toy + four captures that must reduce
   [ "$rc_any" = 0 ] || { say "PROVE: NOT PROVED (rc_any=$rc_any)"; finish 23; }
-  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")$([ "$BOX" = D ] && echo ' census=[toy vllm_b1_node llamacpp_b16_graph]')" | tee -a summary.txt
+  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")$([ "$BOX" = D ] && echo ' census=[toy e4b_granite_b16_graph vllm_b1_node sglang_b1_node llamacpp_b16_graph]')" | tee -a summary.txt
   : > PROVED; finish 0
 fi
 # ============================================================================ the REAL lane: common Phase 0 pieces
