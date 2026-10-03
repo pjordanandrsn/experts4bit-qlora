@@ -57,7 +57,7 @@
   `text_config` (#897, for Qwen3.5 / Qwen3.6 MoE). On Gemma-4's per-layer text config, which is the config of the model
   the streaming loader builds, that read raises transformers' `AmbiguousGlobalPerLayerAttributeError`. That error is a
   `RuntimeError`, so `getattr`'s default did not catch it, and `build_engine` died before reaching the per-layer branch.
-  Found while building lane P107 (#359).
+  Found while drafting a Gemma-4 parity lane for #359 (unregistered; the number P107 belongs to #960's lane).
 - **The fix.** `text_config` is read first. The per-layer branch is unchanged.
 - **Tests** (`tests/test_linear_state.py`), using transformers' own Gemma-4 configs:
   - a tiny per-layer text config, which with the fix reverted fails with exactly that error;
@@ -65,6 +65,28 @@
 
   The existing heterogeneous-config test covered the harness's copy (`bench/hybrid-g9/step_decomp.py`) only.
 - **Scope.** CPU-tested. Gemma-4 under `serve_paged` has not been read on a GPU since 0.41.0.
+
+### Fix: the paged attention's unbound fallback keeps sliding windows and aligns a cached chunk to its last key
+
+- **The bug.** A model with `e4b_paged` registered and no paged context bound (the "transformers reference" in
+  P97-style instruments, or any direct forward after `register`) falls back to SDPA. transformers builds no attention
+  mask for an implementation it has no mask function for, and `e4b_paged` registers none, so the fallback ran with no
+  mask at all:
+  - it dropped sliding windows (Gemma-4, gpt-oss): a tiny Gemma-4's last logits moved by 0.85 at window 16;
+  - in a cached chunked prefill it took torch's top-left `is_causal` alignment.
+- **The fix.** When transformers passes no mask, the fallback builds the causal mask aligned to the last key, with the
+  layer's window. It builds none where SDPA's own handling is already right: a square prefill with no window, or one
+  query whose keys all sit inside the window.
+  - No mask function is registered, because one would run HF's mask preprocessing inside the bound, graph-captured
+    forwards.
+  - The bound paged path builds its own masks and is untouched.
+  - The fallback assumes unpadded batches.
+- **Tests** (`tests/test_paged_attention_unbound_mask.py`, a tiny Gemma-4 whose window binds):
+  - a one-shot forward and a cached chunked prefill with decode both match transformers' own attention;
+  - with the fix reverted, both fail on ~60 % of logits, by up to 1.26.
+- **Not affected.** Serving, which binds the context. P97's readings (Qwen3.6 and OLMoE: no windows, unpadded windows,
+  square prefill). P106 (paged against paged). Found while drafting a Gemma-4 parity lane for #359
+  (unregistered; the number P107 belongs to #960's lane).
 
 ### The rotary embedding trains through one Triton launch each way, bit-identical to the composite (on by default; `E4B_FUSED_ROPE=0` turns it off)
 

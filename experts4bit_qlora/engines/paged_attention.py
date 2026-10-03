@@ -170,6 +170,30 @@ def _prefill_attend(q_b, kk, vv, mask, scaling, sinks):
     return torch.matmul(probs.to(vv.dtype), vv)
 
 
+def _fallback_mask(q_len: int, k_len: int, win: int, device):
+    """The mask the UNBOUND fallback needs when transformers built none.
+
+    transformers builds no attention mask for an implementation it has no
+    mask function for (``masking_utils._preprocess_mask_arguments`` exits
+    early), and this one registers none: one would run HF's mask
+    preprocessing inside the bound, graph-captured forwards too. Unbound,
+    SDPA then needs the causal mask aligned to the LAST key, because a cached
+    chunk's queries sit after the cache and torch's ``is_causal`` aligns to
+    the first key. It also needs the layer's sliding window, which SDPA does
+    not know. ``None`` when SDPA's own handling is already right: a square
+    prefill with no window, or one query whose keys all sit inside the
+    window. Padding is not known here, so the fallback is for unpadded
+    batches."""
+    if (q_len == k_len and not win) or (q_len == 1 and (not win or k_len <= win)):
+        return None
+    pos = torch.arange(k_len - q_len, k_len, device=device)
+    keys = torch.arange(k_len, device=device)
+    mask = keys[None, :] <= pos[:, None]
+    if win:
+        mask = mask & (keys[None, :] > pos[:, None] - win)
+    return mask[None, None]
+
+
 def paged_attention_forward(module, query, key, value, attention_mask,
                             dropout: float = 0.0,
                             scaling: float | None = None,
@@ -177,6 +201,12 @@ def paged_attention_forward(module, query, key, value, attention_mask,
     """``[B, H_q, T, D]`` in, ``[B, T, H_q, D]`` out."""
     ctx = _CTX
     if ctx is None:
+        if attention_mask is None:
+            attention_mask = _fallback_mask(query.shape[2], key.shape[2],
+                                            _window_of(module, kwargs),
+                                            query.device)
+            if attention_mask is not None:
+                is_causal = False
         return _sdpa(module, query, key, value, attention_mask, dropout,
                      scaling, is_causal, **kwargs)
 
