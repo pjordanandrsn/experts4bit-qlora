@@ -186,7 +186,8 @@ Qwen3-Next.
   - The cause was the MoE engine's single-entry row-to-token index cache: a later bucket's capture warm-up freed the
     index an earlier bucket's graph still read. It is fixed in #918 (#913), with a reproduction test on a non-hybrid NF4 MoE.
 - **The Gated DeltaNet kernels: supported and recommended (lane P105,
-  [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), SUPPORTED).** transformers uses `fla` /
+  [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), SUPPORTED; quality and prefill: lane P106,
+  [`bench/p106/RESULTS-p106.md`](../bench/p106/RESULTS-p106.md), NEUTRAL).** transformers uses `fla` /
   `causal_conv1d` when they are installed, and its torch path otherwise. For hybrid serving, install the read
   versions:
 
@@ -200,9 +201,17 @@ Qwen3-Next.
   - **Correctness.** The paged path's error against transformers running the same kernels stays within 2× an
     all-attention control on every seed of a dense hybrid (`tests/test_linear_state_dense_parity_gpu.py`), on the real
     fp8 kernel.
-  - **Caveat: token streams differ from the torch path's.** The kernels' arithmetic differs, so greedy decode diverges
-    from the torch path's after the first flipped argmax: graph tokens agreed with phase t's on 41–57 % of positions.
-    Quality against the torch path in nats is not measured.
+  - **Quality: no measurable cost (P106).** Both paths ran in one process, compared teacher-forced on wikitext
+    (16,384 prompt positions, 512 decode steps) on fp32 log-probs:
+    - KL(torch ‖ kernels) 5.7e-3 nats on prompt positions and 4.9e-3 on decode steps, about the fp8 KV's own 4.43e-3
+      (P97);
+    - argmax agreement 0.969 and 0.973;
+    - d_nll +3e-5 and −8e-4 nats.
+  - **Prefill (P106).** TTFT at one request runs 1.124× the torch path's at 512 tokens, 1.106× at 2,048 and 1.101× at
+    4,096. That is about 32 µs saved per prompt token, roughly 10 % of prefill.
+  - **Caveat: token streams differ from the torch path's.** The kernels' arithmetic differs. About 3 % of positions are
+    argmax near-ties that flip, so greedy decode diverges from the torch path's after the first one: graph tokens agreed
+    with phase t's on 41–57 % of positions. In nats the difference is the one above.
   - **Caveat: chunked prefill depends on chunk boundaries.** fla's chunk kernel moves results by about 3–5e-3 relative
     with where a prompt is split. transformers' own chunked prefill drifts identically.
   - **History.** P103 and P104 ([`bench/p103/RESULTS-p103.md`](../bench/p103/RESULTS-p103.md),

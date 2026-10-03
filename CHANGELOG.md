@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### P106 read (RTX 5090): NEUTRAL -- against transformers' torch path, the Gated DeltaNet kernels cost Qwen3.6 nothing measurable in nats (KL 5.7e-3 prefill / 4.9e-3 decode, d_nll within +-0.001); prefill TTFT 1.10-1.12x (#944)
+
+- `bench/p106/RESULTS-p106.md`, `bench/p106/receipts/p106-5090-1/` (one RTX 5090, Intel Core Ultra 9 285K; $0.2559,
+  lane $0.3472).
+- **Quality**, both paths in one process, teacher-forced on 8 wikitext windows, on fp32 log-probs:
+  - KL(torch || kernels) 5.69e-3 nats over 16,384 prompt positions and 4.86e-3 over 512 decode steps, about the fp8
+    KV's own effect (P97: 4.43e-3);
+  - argmax agreement 0.969 / 0.973;
+  - d_nll +3.3e-5 / -8.4e-4 nats;
+  - the null pair bit-identical; the l2norm-off mutant's logits went NaN (agreement 0.0).
+- **TTFT** at one request: 1.124x (512 tokens), 1.106x (2,048), 1.101x (4,096), about 32 us saved per prompt token.
+  The predicted 1.3-4x at 4,096 missed: the Gated DeltaNet layers are about 10 % of prefill on this stack.
+- **Registered consequence (NEUTRAL):** `docs/SERVING.md` replaces "quality ... not measured" with the measured
+  numbers and adds the TTFT ratios; the recommendation stands. `docs/STATUS.md`; register row
+  `e4b.serve.p106.qwen36-gdn-kernel-quality.5090.2026-10-03`; `llms-full.txt` regenerated.
+
 ### P106 registered (#944): the Gated DeltaNet kernels' quality against transformers' torch path, and their prefill TTFT, on Qwen3.6 -- both paths switched in one process (bench and tests)
 
 - `bench/p106/{PREREG-p106.md,p106_run.sh,p106_drive.sh,p106_box.py,p106_reduce.py,gdn_toggle.py,toggle_probe.py,staged.sha256}`,

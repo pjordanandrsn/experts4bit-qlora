@@ -7779,6 +7779,38 @@
       "notes": "Pre-registered in #939. P103 (#932) and P104 (#938) stopped at their proving rentals on tests/test_linear_state_gpu.py, whose single-seed tiny-MoE statistic is bimodal across seeds on every kernel set including the torch path (P104); P105 gates on a dense multi-seed parity test instead. Predictions: W16 1.15-1.60x missed (1.135x), W1 1.02-1.15x held, f >= 80 % of fc's gain held (82-83 %), fc plain eager W16 >= 1.15x missed (1.113x). The padded-eager oracle ran 0.87x with the kernels (not explained). The kernels change greedy trajectories (graph tokens agree with the torch path's on 41-57 % of positions); quality against the torch path in nats is not measured. One host (Xeon E5-2696 v4), whose eager arms are slow (launch-bound); the graph arms are near host-independent."
     },
     {
+      "id": "e4b.serve.p106.qwen36-gdn-kernel-quality.5090.2026-10-03",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3.6-35B-A3B",
+      "claim": "Lane P106, one RTX 5090, one host, one process: with flash-linear-attention 0.5.2 and causal-conv1d 1.7.0 installed and transformers' four Gated DeltaNet functions switched in place between them and its torch path (gdn_toggle.GdnToggle, proven bit-exact against a kernel-free process on the card), Qwen3.6-35B-A3B through serve_paged.build_engine, teacher-forced on 8 wikitext windows in lockstep on fp32 log-probs, reads KL(torch || kernels) 5.69e-3 nats over 16,384 prompt positions and 4.86e-3 over 512 decode steps, argmax agreement 0.969 / 0.973, and d_nll (kernels minus torch) +3.3e-5 / -8.4e-4 nats; the torch path against itself is bit-identical. NEUTRAL by the registered rule (KL <= 0.05, agreement >= 0.85, d_nll <= +0.01 on both). Prefill TTFT at one request: 1.124x (512 tokens), 1.106x (2,048), 1.101x (4,096) the torch path's.",
+      "value": 0.005687022721257304,
+      "unit": "mean KL(torch path || kernels), nats, over 16,384 teacher-forced prompt positions (fp32 log-probs)",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, 32607 MiB), one rented Vast.ai verified host (machine 151350, instance 53991424, Intel Core Ultra 9 285K), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @6e63088 + grouped-nf4-gemm @34da93d (v0.34.1); torch 2.8.0+cu128 held by a constraint, transformers 5.17.0; the toggle's reference saved in the kernel-free process before the installs; premise = P105's kernel-phase set (9 passed); toggle check on the card (0 differing logits on the torch path); serve_paged.build_engine (all-vram NF4, fp8 paged KV, chunk 512, eager); 8 wikitext-2 windows x (2,048 prompt + 64 teacher-forced decode steps), the two paths on two KV slots in lockstep, a null pair (the torch path again) on windows 0-1, an l2norm-off mutant (NaN logits, agreement 0.0); TTFT medians of 5 alternated rounds at max_new_tokens 1; verdict by bench/p106/p106_reduce.py",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p106/RESULTS-p106.md",
+        "bench/p106/PREREG-p106.md",
+        "bench/p106/p106_reduce.py",
+        "bench/p106/p106_box.py",
+        "bench/p106/gdn_toggle.py",
+        "bench/p106/receipts/p106-5090-1/verdict.json",
+        "bench/p106/receipts/p106-5090-1/box.json",
+        "bench/p106/receipts/p106-5090-1/toggle_check.json",
+        "bench/p106/receipts/p106-5090-1/kernels_fc.json",
+        "bench/p106/receipts/p106-5090-1/summary.txt",
+        "bench/p106/receipts/p106-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/p106-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-03/p106-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #947 (#944). Follows P105 (e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03), which recommended the kernels on decode speed with quality in nats unmeasured. Predictions held for NEUTRAL, the KL band, agreement, d_nll, the null pair and memory; missed for TTFT at 4,096 tokens (1.101x against 1.3-4x) and its growth with length (flat), and the mutant read NaN rather than above 1 nat. The KL is about the fp8 KV's own effect on this model (P97: 4.43e-3). Lane cost $0.3472 (proof $0.0913, reading $0.2559)."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02",
       "package": "experts4bit-qlora",
       "area": "train",

@@ -1,0 +1,70 @@
+{
+ "ok": true,
+ "steps": [
+  {
+   "step": 0,
+   "path": "torch",
+   "impl_modules": [
+    "transformers.models.qwen3_5.modeling_qwen3_5",
+    "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe"
+   ],
+   "differing_hf": 0,
+   "worst_rel_hf": 0.0,
+   "differing_paged": 0,
+   "worst_rel_paged": 0.0,
+   "ok": true
+  },
+  {
+   "step": 1,
+   "path": "resolved",
+   "impl_modules": [
+    "causal_conv1d.causal_conv1d_interface",
+    "fla.ops.gated_delta_rule.chunk",
+    "fla.ops.gated_delta_rule.fused_recurrent"
+   ],
+   "differing_hf": 34622,
+   "worst_rel_hf": 1.1186046600341797,
+   "differing_paged": 36475,
+   "worst_rel_paged": 1.1139534711837769,
+   "ok": true
+  },
+  {
+   "step": 2,
+   "path": "torch",
+   "impl_modules": [
+    "transformers.models.qwen3_5.modeling_qwen3_5",
+    "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe"
+   ],
+   "differing_hf": 0,
+   "worst_rel_hf": 0.0,
+   "differing_paged": 0,
+   "worst_rel_paged": 0.0,
+   "ok": true
+  },
+  {
+   "step": 3,
+   "path": "resolved",
+   "impl_modules": [
+    "causal_conv1d.causal_conv1d_interface",
+    "fla.ops.gated_delta_rule.chunk",
+    "fla.ops.gated_delta_rule.fused_recurrent"
+   ],
+   "differing_hf": 34622,
+   "worst_rel_hf": 1.1186046600341797,
+   "differing_paged": 36475,
+   "worst_rel_paged": 1.1139534711837769,
+   "ok": true
+  }
+ ],
+ "resolved": {
+  "transformers.models.qwen3_5.modeling_qwen3_5.torch_chunk_gated_delta_rule": "fla.ops.gated_delta_rule.chunk",
+  "transformers.models.qwen3_5.modeling_qwen3_5.torch_recurrent_gated_delta_rule": "fla.ops.gated_delta_rule.fused_recurrent",
+  "transformers.models.qwen3_5.modeling_qwen3_5.causal_conv1d_fn": "causal_conv1d.causal_conv1d_interface",
+  "transformers.models.qwen3_5.modeling_qwen3_5.causal_conv1d_update": "causal_conv1d.causal_conv1d_interface",
+  "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.torch_chunk_gated_delta_rule": "fla.ops.gated_delta_rule.chunk",
+  "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.torch_recurrent_gated_delta_rule": "fla.ops.gated_delta_rule.fused_recurrent",
+  "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.causal_conv1d_fn": "causal_conv1d.causal_conv1d_interface",
+  "transformers.models.qwen3_5_moe.modeling_qwen3_5_moe.causal_conv1d_update": "causal_conv1d.causal_conv1d_interface"
+ },
+ "n_logits": 86016
+}
