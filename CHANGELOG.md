@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Fix: `serve_paged` sizes a Gemma-4 KV pool again (a 0.41.0 regression from #897)
+
+- **The bug.** `serve_paged._kv_geometry` read `num_key_value_heads` before looking for a composite config's
+  `text_config` (#897, for Qwen3.5 / Qwen3.6 MoE). On Gemma-4's per-layer text config, which is the config of the model
+  the streaming loader builds, that read raises transformers' `AmbiguousGlobalPerLayerAttributeError`. That error is a
+  `RuntimeError`, so `getattr`'s default did not catch it, and `build_engine` died before reaching the per-layer branch.
+  Found while building lane P107 (#359).
+- **The fix.** `text_config` is read first. The per-layer branch is unchanged.
+- **Tests** (`tests/test_linear_state.py`), using transformers' own Gemma-4 configs:
+  - a tiny per-layer text config, which with the fix reverted fails with exactly that error;
+  - a composite config wrapping it.
+
+  The existing heterogeneous-config test covered the harness's copy (`bench/hybrid-g9/step_decomp.py`) only.
+- **Scope.** CPU-tested. Gemma-4 under `serve_paged` has not been read on a GPU since 0.41.0.
+
 ### TC1 amendment 13 read (#945): grouped-nf4-gemm's trimmed LoRA delta makes e4b's training step 6–9 % faster on a 5090
 
 - **What was asked.** On one RTX 5090 (`tc1-5090-42`, $0.33), e4b against itself on the post-#945 sync path: grouped-nf4-gemm's

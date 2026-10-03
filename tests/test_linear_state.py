@@ -368,3 +368,34 @@ def test_kv_geometry_reads_a_composite_configs_text_config():
     vl = types.SimpleNamespace(text_config=types.SimpleNamespace(num_key_value_heads=2, head_dim=256, hidden_size=2048,
                                                                  num_attention_heads=16))
     assert _kv_geometry(vl) == (2, 256)
+
+
+def _tiny_gemma4_text_config():
+    from transformers import Gemma4TextConfig
+    return Gemma4TextConfig(vocab_size=256, hidden_size=128, intermediate_size=128, num_hidden_layers=6,
+                            num_attention_heads=4, num_key_value_heads=2, head_dim=32, global_head_dim=64,
+                            num_global_key_value_heads=1, layer_types=["sliding_attention"] * 5 + ["full_attention"],
+                            sliding_window=16, enable_moe_block=True, num_experts=4, top_k_experts=2,
+                            moe_intermediate_size=64, attention_k_eq_v=True, hidden_size_per_layer_input=0,
+                            vocab_size_per_layer_input=256)
+
+
+def test_kv_geometry_reads_a_per_layer_config():
+    """Gemma-4's text config is per-layer: a global read of num_key_value_heads raises transformers'
+    AmbiguousGlobalPerLayerAttributeError (a RuntimeError). serve_paged read that attribute before looking for a
+    composite's text_config (#897), so build_engine could not size a Gemma-4 pool. The geometry is per layer."""
+    pytest.importorskip("transformers.models.gemma4", reason="needs transformers with Gemma-4")
+    from experts4bit_qlora.serve_paged import _kv_geometry
+    cfg = _tiny_gemma4_text_config()
+    with pytest.raises(RuntimeError, match="per-layer attribute"):
+        cfg.num_key_value_heads
+    assert _kv_geometry(cfg) == ([2, 2, 2, 2, 2, 1], [32, 32, 32, 32, 32, 64])
+
+
+def test_kv_geometry_reads_a_composite_configs_per_layer_text_config():
+    pytest.importorskip("transformers.models.gemma4", reason="needs transformers with Gemma-4")
+    from transformers import Gemma4Config
+
+    from experts4bit_qlora.serve_paged import _kv_geometry
+    vl = Gemma4Config(text_config=_tiny_gemma4_text_config().to_dict())
+    assert _kv_geometry(vl) == ([2, 2, 2, 2, 2, 1], [32, 32, 32, 32, 32, 64])
