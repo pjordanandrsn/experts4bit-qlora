@@ -1,0 +1,17 @@
+Fetching 36 files:   0%|          | 0/36 [00:00<?, ?it/s]Fetching 36 files: 100%|██████████| 36/36 [00:00<00:00, 1900.22it/s]
+[00:21:44]   checkpoint: Qwen/Qwen3.6-35B-A3B @ 995ad96eacd98c81ed38be0c5b274b04031597b0 (requested 995ad96eacd98c81ed38be0c5b274b04031597b0)
+[00:21:44]   untied output head recovered from 'lm_head.weight' (outside the 'model.language_model.' text-tower prefix, which would otherwise drop it)
+[00:21:44]   fusing + quantizing experts (up to 40x256) to nf4 (streaming)...
+[00:21:44]   quantized experts on 40/40 MoE layers (256 experts each)
+[00:21:44]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[00:21:46]   experts deferred to the arena: 40 module(s), 200 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[00:21:46]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[00:22:13]   hybrid tier active on 40 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (fold flags set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[serve_paged] ready: {"moe_layers": 40, "experts": 256, "top_k": 8, "model_type": "qwen3_5_moe_text", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 2, "head_dim": 256, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 32}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (297053 > 262144). Running this sequence through the model will result in indexing errors
+[transformers] `causal_conv1d_fn` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `chunk_gated_delta_rule` is falling back to its reference PyTorch implementation because `flash-linear-attention` is not installed. This is correct but much slower; install `flash-linear-attention` for the optimized kernel.
+[transformers] `causal_conv1d_update` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `fused_recurrent_gated_delta_rule` is falling back to its reference PyTorch implementation because `flash-linear-attention` is not installed. This is correct but much slower; install `flash-linear-attention` for the optimized kernel.
+P98_ARM p: build 31s | graph_status None | W16 107.283 tok/s over 111 steps | W1 11.464 tok/s | mem 22.74 GB

@@ -1,0 +1,332 @@
+Fetching 36 files:   0%|          | 0/36 [00:00<?, ?it/s]Fetching 36 files: 100%|██████████| 36/36 [00:00<00:00, 2490.06it/s]
+[00:19:37]   checkpoint: Qwen/Qwen3.6-35B-A3B @ 995ad96eacd98c81ed38be0c5b274b04031597b0 (requested 995ad96eacd98c81ed38be0c5b274b04031597b0)
+[00:19:37]   untied output head recovered from 'lm_head.weight' (outside the 'model.language_model.' text-tower prefix, which would otherwise drop it)
+[00:19:37]   fusing + quantizing experts (up to 40x256) to nf4 (streaming)...
+[00:19:37]   quantized experts on 40/40 MoE layers (256 experts each)
+[00:19:37]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[00:19:39]   experts deferred to the arena: 40 module(s), 200 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[00:19:43]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[00:20:10]   hybrid tier active on 40 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (fold flags set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[transformers] `causal_conv1d_fn` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `chunk_gated_delta_rule` is falling back to its reference PyTorch implementation because `flash-linear-attention` is not installed. This is correct but much slower; install `flash-linear-attention` for the optimized kernel.
+[transformers] `causal_conv1d_update` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `fused_recurrent_gated_delta_rule` is falling back to its reference PyTorch implementation because `flash-linear-attention` is not installed. This is correct but much slower; install `flash-linear-attention` for the optimized kernel.
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] ready: {"moe_layers": 40, "experts": 256, "top_k": 8, "model_type": "qwen3_5_moe_text", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 2, "head_dim": 256, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 32}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 315167.63 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 739505.48 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 574143.84 examples/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (297053 > 262144). Running this sequence through the model will result in indexing errors
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [0,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [1,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [2,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [3,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [4,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [5,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [6,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [7,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [8,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [9,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [10,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [11,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [12,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [13,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [14,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [15,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [16,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [17,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [18,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [19,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [20,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [21,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [22,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [23,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [24,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [25,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [26,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [27,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [28,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [29,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [30,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [6,0,0], thread: [31,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [0,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [1,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [2,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [3,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [4,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [5,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [6,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [7,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [8,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [9,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [10,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [11,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [12,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [13,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [14,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [15,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [16,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [17,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [18,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [19,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [20,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [21,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [22,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [23,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [24,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [25,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [26,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [27,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [28,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [29,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [30,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [9,0,0], thread: [31,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [96,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [97,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [98,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [99,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [100,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [101,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [102,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [103,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [104,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [105,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [106,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [107,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [108,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [109,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [110,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [111,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [112,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [113,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [114,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [115,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [116,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [117,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [118,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [119,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [120,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [121,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [122,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [123,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [124,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [125,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [126,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [10,0,0], thread: [127,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [32,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [33,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [34,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [35,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [36,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [37,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [38,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [39,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [40,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [41,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [42,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [43,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [44,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [45,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [46,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [47,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [48,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [49,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [50,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [51,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [52,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [53,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [54,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [55,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [56,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [57,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [58,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [59,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [60,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [61,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [62,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [13,0,0], thread: [63,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [32,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [33,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [34,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [35,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [36,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [37,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [38,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [39,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [40,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [41,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [42,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [43,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [44,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [45,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [46,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [47,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [48,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [49,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [50,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [51,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [52,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [53,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [54,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [55,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [56,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [57,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [58,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [59,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [60,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [61,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [62,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [4,0,0], thread: [63,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [0,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [1,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [2,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [3,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [4,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [5,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [6,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [7,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [8,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [9,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [10,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [11,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [12,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [13,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [14,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [15,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [16,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [17,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [18,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [19,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [20,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [21,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [22,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [23,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [24,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [25,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [26,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [27,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [28,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [29,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [30,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [0,0,0], thread: [31,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [0,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [1,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [2,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [3,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [4,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [5,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [6,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [7,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [8,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [9,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [10,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [11,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [12,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [13,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [14,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [15,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [16,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [17,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [18,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [19,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [20,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [21,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [22,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [23,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [24,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [25,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [26,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [27,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [28,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [29,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [30,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [14,0,0], thread: [31,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [32,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [33,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [34,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [35,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [36,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [37,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [38,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [39,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [40,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [41,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [42,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [43,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [44,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [45,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [46,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [47,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [48,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [49,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [50,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [51,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [52,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [53,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [54,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [55,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [56,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [57,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [58,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [59,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [60,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [61,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [62,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+/pytorch/aten/src/ATen/native/cuda/Indexing.cu:1478: indexSelectSmallIndex: block: [2,0,0], thread: [63,0,0] Assertion `srcIndex < srcSelectDimSize` failed.
+Traceback (most recent call last):
+  File "/root/p98/p98_box.py", line 206, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/root/p98/p98_box.py", line 172, in main
+    w16 = run_workload(sched, prompts[:a.n], max_new)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/p98/p98_box.py", line 93, in run_workload
+    sched.run_until_idle(max_steps=1_000_000)
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/scheduler.py", line 314, in run_until_idle
+    if self.step().is_empty:
+       ^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/scheduler.py", line 278, in step
+    for rid, tok in self.runner.run_decode(plan.decode).items():
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/p98/p98_box.py", line 70, in __call__
+    got = self.inner(rids)
+          ^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/paged_runner.py", line 189, in run_decode
+    return self._run_decode_bucketed(rids)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/engines/paged_runner.py", line 384, in _run_decode_bucketed
+    toks = buf["tok"][:n].tolist()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: device-side assert triggered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+terminate called after throwing an instance of 'c10::AcceleratorError'
+  what():  CUDA error: device-side assert triggered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+Exception raised from c10_cuda_check_implementation at /pytorch/c10/cuda/CUDAException.cpp:42 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x80 (0x7f62cb77eeb0 in /opt/conda/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0x111c7 (0x7f62cbb901c7 in /opt/conda/lib/python3.11/site-packages/torch/lib/libc10_cuda.so)
+frame #2: <unknown function> + 0xc69459 (0x7f626eabc459 in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #3: <unknown function> + 0xc643a3 (0x7f626eab73a3 in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xc6b2dc (0x7f626eabe2dc in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_cuda.so)
+frame #5: <unknown function> + 0x44166f (0x7f62be33e66f in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_python.so)
+frame #6: c10::TensorImpl::~TensorImpl() + 0x9 (0x7f62cb75c179 in /opt/conda/lib/python3.11/site-packages/torch/lib/libc10.so)
+frame #7: <unknown function> + 0x6e12e8 (0x7f62be5de2e8 in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_python.so)
+frame #8: <unknown function> + 0x6e1684 (0x7f62be5de684 in /opt/conda/lib/python3.11/site-packages/torch/lib/libtorch_python.so)
+<omitting python frames>
+frame #19: <unknown function> + 0x29d90 (0x7f62cc552d90 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+frame #20: __libc_start_main + 0x80 (0x7f62cc552e40 in /usr/lib/x86_64-linux-gnu/libc.so.6)
+

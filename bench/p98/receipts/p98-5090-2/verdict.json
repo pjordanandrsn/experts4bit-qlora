@@ -1,0 +1,6 @@
+{
+ "verdict": "VOID",
+ "why": [
+  "arm g record missing"
+ ]
+}

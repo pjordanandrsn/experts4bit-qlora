@@ -151,8 +151,11 @@ Qwen3-Next.
     harness: 7.15e-3, 0.974);
   - a slot-mapping mutant reads 4.05 nats.
 - **Not yet done:**
-  - decode graphs for hybrid models are now captured, but not yet read on a GPU. The per-slot state is gathered
-    and scattered through the bound bucket's device selector, and the pool is warmed and frozen before capture.
+  - decode graphs for hybrid models are now captured, but **on Qwen3.6 their replay faults**. P98
+    ([`bench/p98/RESULTS-p98.md`](../bench/p98/RESULTS-p98.md), VOID) captured every bucket, and the first replays hit
+    a device-side assert (`index_select` out of range); the same padded steps run eagerly were fine. Do not set
+    `E4B_PAGED_GRAPHS=1` for a hybrid model until that is localised. The per-slot state is gathered and scattered
+    through the bound bucket's device selector, and the pool is warmed and frozen before capture.
     `tests/test_hybrid_decode_graphs_gpu.py` pins replay against the padded eager step bit for bit, on an sm_89+
     card. P97 ran eagerly;
   - the Gated DeltaNet layers run whatever kernels transformers finds (`fla` / `causal_conv1d`), or its torch path.

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### P98 read (RTX 5090): VOID -- Qwen3.6's bucketed decode graphs all captured, then a replay hit a device-side assert (`index_select` out of range); the padded-eager and plain-eager arms ran (bench and docs)
+
+- `bench/p98/receipts/p98-5090-2/`, `bench/p98/RESULTS-p98.md`.
+  - The premise held on the card: 4 passed, including the dense hybrid's bucket graphs replaying exactly.
+  - The bake held.
+  - Arm g (graphs): `build_engine` reported every bucket captured, then a W16 replay raised `device-side assert
+    triggered` (`indexSelectSmallIndex: srcIndex < srcSelectDimSize`). The process aborted and wrote no record, so the
+    reducer reads VOID.
+  - Arm e ran the same padded steps eagerly, 209 of them across all five buckets, without fault. The fault appears only
+    under replay.
+- Observations from the eager arms, not this lane's question. W16 128.3 tok/s (padded eager) and 107.3 (plain); W1
+  11.98 / 11.46; peak 23.7 / 22.7 GB. A step costs about 85 ms at 1 row and at 16: eager hybrid decode is bound by
+  launch overhead, which graphs remove.
+- Not shown to be hybrid-specific: bucketed graphs with K25 (the NF4 default above T == 1 since 0.40.0) on a real NF4
+  MoE have not run together before. The next lane separates the candidates. `docs/SERVING.md` now warns against
+  `E4B_PAGED_GRAPHS=1` on hybrid models until then.
+- $0.153 (proving $0.018; one $0 refusal; the reading $0.135). No code, gate or default moves.
+
 ### P98 registered (#564): hybrid decode under CUDA graphs through the serving stack -- Qwen3.6-35B-A3B's bucketed graph replays against its padded eager step, and the first hybrid decode speed (bench and tests only)
 
 - **Why.** #907 and #908 capture a hybrid model's per-slot linear state. On a GPU they have been read only on small
