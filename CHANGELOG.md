@@ -1,6 +1,19 @@
 # Changelog
 
 ## Unreleased
+
+### P99 amendment 1 (#913): the OLMoE arm's answer reads "Qwen3.6-specific"; two mechanisms ruled out at $0 on the A2000 (bench docs only)
+
+- `bench/p99/PREREG-p99.md`, before the launch. OLMoE differs from Qwen3.6 in more than the hybrid state (64 vs 256
+  experts, no shared expert, a different attention geometry, a full-size pool). So a d1g that does not fault reads as
+  "something Qwen3.6-specific is necessary", not "the hybrid state is".
+- The fused tile-table builder (`build_group_tiles_fused`, which feeds the small-index `index_select` that matches
+  P98's assert) matches the chained builder in every output. That held on 64, 128 and 256 experts with a poisoned
+  allocator: 0 of 300 calls differ.
+- K25 with device grouping and the lean glue, captured at 2 to 16 rows on Qwen3.6's exact expert shapes (and on 40
+  experts) and replayed on new routings, equals eager: 0 of 120 replays differ. The k25_necessary prediction is
+  revised, before any data, to no.
+
 ### Lane SC1 amendment A10 (#846): box B's full run exposed four instrument defects and an unsupported comparator; box C's stall gets bounded stops (bench + tests)
 
 - **llama.cpp.** `llamacpp_box.sh` starts llama-server with `-lv 4`. At the pin, the offload and `flash_attn` lines the
