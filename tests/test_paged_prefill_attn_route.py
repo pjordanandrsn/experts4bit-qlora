@@ -1,9 +1,9 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
 """E4B_PAGED_PREFILL_ATTN (e4b#960): how a prefill chunk attends on a layer without sinks or a sliding window.
 
-``math`` (default) passes SDPA the explicit lower-right causal boolean mask -- with GQA that call lands on SDPA's
-math backend (fp32 on CUDA). ``flash`` passes the same mask as ``causal_lower_right(T, t_total)``, which the flash
-kernel takes. Pinned here on CPU, where SDPA serves the bias itself:
+``flash`` (the default since lane P107) passes the lower-right causal mask as ``causal_lower_right(T, t_total)``,
+which the flash kernel takes. ``math`` passes SDPA the explicit boolean mask -- with GQA that call lands on SDPA's
+math backend (fp32 on CUDA). Pinned here on CPU, where SDPA serves the bias itself:
 
 - the knob's default, values and refusal;
 - ``flash`` across chunk boundaries equals the whole-sequence reference, as ``math`` does (the chunked-prefill
@@ -60,10 +60,10 @@ def _chunked(q, k, v, cuts, mod=None, **kw):
     return torch.cat(outs, dim=1)
 
 
-def test_the_knob_defaults_to_math_and_refuses_unknown_values(monkeypatch):
+def test_the_knob_defaults_to_flash_and_refuses_unknown_values(monkeypatch):
     monkeypatch.delenv("E4B_PAGED_PREFILL_ATTN", raising=False)
-    assert pa._prefill_attn_mode_env() == "math"
-    for v, want in (("math", "math"), (" Flash ", "flash"), ("", "math")):
+    assert pa._prefill_attn_mode_env() == "flash"                    # P107: DEFAULT=flash
+    for v, want in (("math", "math"), (" Flash ", "flash"), ("", "flash"), (" MATH ", "math")):
         monkeypatch.setenv("E4B_PAGED_PREFILL_ATTN", v)
         assert pa._prefill_attn_mode_env() == want
     assert pa.PREFILL_ATTN_ROUTES == ("math", "flash")

@@ -53,17 +53,20 @@ def _prefill_attn_mode_env() -> str:
     sliding window (every layer of Qwen3-MoE, OLMoE, Granite; Gemma-4's full layers). Read at every call; anything
     else is refused.
 
-    * ``math`` (the default, also when unset): SDPA with the explicit lower-right causal boolean mask and
-      ``enable_gqa``. With fewer KV heads than query heads, flash refuses a non-null mask and memory-efficient
-      attention refuses mismatched head counts, so this lands on SDPA's math backend, which upcasts bf16 to fp32
-      and materialises the scores (P102's profile: ~45 % of a 4096-token Qwen3 prefill's device time).
-    * ``flash``: the same mask expressed as ``torch.nn.attention.bias.causal_lower_right(T, t_total)`` with
-      ``enable_gqa``, which the flash kernel serves in bf16 (A2000, Qwen3 shapes: ~14x faster per call; error vs an
-      fp64 reference 0.0023 against the math backend's 0.0017). Where no fused kernel applies (CPU, older GPUs)
-      SDPA serves the bias itself with the same lower-right mask.
+    * ``flash`` (the default since lane P107, also when unset): the lower-right causal mask expressed as
+      ``torch.nn.attention.bias.causal_lower_right(T, t_total)`` with ``enable_gqa``, which the flash kernel serves
+      in bf16 (A2000, Qwen3 shapes: ~14x faster per call; error vs an fp64 reference 0.0023 against the math
+      backend's 0.0017). Where no fused kernel applies (CPU, older GPUs, head dims flash does not take) SDPA serves
+      the bias itself with the same lower-right mask. P107 (``bench/p107/RESULTS-p107.md``, RTX 5090, Qwen3-30B-A3B):
+      a 4096-token prefill's device time 906 -> 378 ms, the served-prefill NLL within -0.014 / -0.008 ppl of
+      ``math`` on 12 fresh windows.
+    * ``math``: SDPA with the explicit lower-right causal boolean mask and ``enable_gqa``. With fewer KV heads than
+      query heads, flash refuses a non-null mask and memory-efficient attention refuses mismatched head counts, so
+      this lands on SDPA's math backend, which upcasts bf16 to fp32 and materialises the scores (P102's profile:
+      ~45 % of a 4096-token Qwen3 prefill's device time). Kept selectable.
 
     Layers with sinks (gpt-oss) or a sliding window keep the explicit-mask path under either value."""
-    v = os.environ.get("E4B_PAGED_PREFILL_ATTN", "math").strip().lower() or "math"
+    v = os.environ.get("E4B_PAGED_PREFILL_ATTN", "flash").strip().lower() or "flash"
     if v not in PREFILL_ATTN_ROUTES:
         raise ValueError(f"E4B_PAGED_PREFILL_ATTN={v!r}: expected one of {PREFILL_ATTN_ROUTES}")
     return v
