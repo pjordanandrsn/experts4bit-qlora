@@ -39,6 +39,7 @@ decode attention stood in by SDPA over the pool's own fp8 bytes, honouring the w
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import os
 import sys
@@ -148,6 +149,15 @@ def paged(model, ws, P, C, chunk, device, stand_in, mutant=None):
     return lps, att.calls, step_ms, runner
 
 
+def _release(device):
+    """Collect the reference cycles a paged pass leaves (P97's ``_paged_pass`` binds ``kv.attention`` to a closure over
+    ``kv``) and hand their CUDA blocks back. Without it each pass's KV pool waits for Python's cycle collector:
+    ``p108-5090-2`` ran out of memory in group 3 of 4 (Amendment 3)."""
+    gc.collect()
+    if str(device).startswith("cuda"):
+        torch.cuda.empty_cache()
+
+
 def measure(model, windows, *, prompt, cont, chunk, group, device, stand_in=False):
     from experts4bit_qlora.engines import paged_attention
     P, C = prompt, cont
@@ -201,9 +211,14 @@ def measure(model, windows, *, prompt, cont, chunk, group, device, stand_in=Fals
                 eng["attn_layers"] = list(runner.attn_layers)
                 eng["step_ms"] = round(step_ms, 2)
             del lps, runner
+            _release(device)
         del refs
+        _release(device)
         p97_box._sync(device)
-        print(f"P108_GROUP {eng['groups']} of {-(-len(windows) // group)} done at {time.time() - start:.0f} s", flush=True)
+        mem = torch.cuda.memory_allocated() / 2**30 if str(device).startswith("cuda") else 0.0
+        eng.setdefault("allocated_gib_after_group", []).append(round(mem, 3))
+        print(f"P108_GROUP {eng['groups']} of {-(-len(windows) // group)} done at {time.time() - start:.0f} s, "
+              f"{mem:.2f} GiB allocated", flush=True)
     cfg = getattr(model.config, "text_config", None) or model.config
     types = list(getattr(cfg, "layer_types", []) or [])
     sliding = sum(t == "sliding_attention" for t in types)

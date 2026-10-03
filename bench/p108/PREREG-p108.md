@@ -184,3 +184,30 @@ two of its four groups (six paged passes). No `box.json` was written, and no mea
 **What does not change:** everything else, as in Amendment 1. The registered design (32 windows × 256 positions) is
 kept rather than shrunk: a shorter reading would trade away the statistical power the lane exists for, to save about
 $1.
+
+### Amendment 3 (2026-10-03, written at 17:56Z by `date -u`, before any data is read): a GPU memory leak fixed, and the last attempt's budget
+
+**What happened.** `p108-5090-2` finished groups 1 and 2 of 4 (at 2,248 s and 4,084 s), then died of CUDA
+out-of-memory in group 3's paged prefill, with 30.67 GiB allocated (rc 1, HARNESS_ERROR, $1.0068; store `7aad017`). No
+`box.json` was written, and no measurement exists.
+
+**The cause, found at $0 on the NAS A2000** (tiny Gemma-4 MoE, 16 windows in 4 groups, `memory_allocated` at every
+sync):
+- P97's `_paged_pass` binds `kv.attention` to a closure over `kv`, so each pass's KV pool sits in a reference cycle
+  until Python's cycle collector runs.
+- Without a collection, allocated memory crept from 10.8 to 12.6 MiB across the passes, falling only when the collector
+  happened to run. With `gc.collect()` plus `torch.cuda.empty_cache()` it stayed at 10.5–10.9 MiB.
+- On the real model a pass's pool is about 1.4 GiB, and three passes run per group.
+
+**What changes:**
+- **The box releases memory:** `p108_box.py` collects and empties the cache after every paged pass and at each group's
+  end (`_release`), and logs the allocated memory on each group line. Re-pinned. With this alone, the A2000 probe held
+  10.5 MiB at every group's end.
+- **The box's alarm:** 220 → **180 minutes** (`step_alarm 10800`). `p108-5090-2`'s groups took 31–37 minutes, so
+  the box needs about 135.
+- **The reading's guard:** 4 h → **3.25 h at ≤ $0.75/h (≤ $2.44)**.
+- **The lane ceiling:** $4.25 → **$4.30**. Spent so far: $1.8451 (the proof $0.0336, run 1 $0.8047, run 2 $1.0068).
+  The hard stop stays at $4.50.
+- **This is the lane's last attempt.** If it fails, P108 closes with NO_READING, and #359 records why.
+
+**What does not change:** the windows, arms, floor, rule, premise, predictions and consequence.

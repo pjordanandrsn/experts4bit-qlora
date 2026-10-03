@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+
+### P108 Amendment 3 (#359): a GPU memory leak in the box fixed, and the last attempt's budget, before any data is read (bench only)
+
+- **Why.** `p108-5090-2` ran out of CUDA memory in group 3 of 4 (30.67 GiB allocated; $1.0068; no data). P97's
+  `_paged_pass` leaves each pass's KV pool in a reference cycle (`kv.attention` is a closure over `kv`), so the pools
+  waited for Python's cycle collector.
+- **The A2000 confirmation:** allocated memory crept upward without a collection and stayed flat with one.
+- **The fix:** `p108_box.py` collects and empties the CUDA cache after every paged pass and each group, and logs the
+  allocated memory.
+- **The budget:** box alarm 180 min; guard 3.25 h (≤ $2.44); lane ceiling $4.30. The hard stop stays $4.50.
+- **This is the last attempt.**
+
 ### SC1b amendments A1 and A2 (#846): the evaluator for predictions Q1-Q5, merged before any box D data; the proof's e4b capture gets Granite rows (bench and tests only)
 
 - `bench/sc1b/sc1b_read.py` decides Q1-Q5 (HOLDS / REFUTED / UNREAD) from box D's own arm and gap records and writes
