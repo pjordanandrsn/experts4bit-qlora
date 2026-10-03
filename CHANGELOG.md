@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+### P102 registered (#916): the int4 store's prefill route A/B -- loop against batched, k19 and mtile on one RTX 5090 and one engine, gated by the calibrated K8 rule on a prefill-shaped NLL (bench and tests only)
+
+- **Why.** P100 (#920) put 73 % of a 512-token prefill chunk in the per-expert host loop: about 0.43 s fixed per chunk
+  plus 0.35 ms per token on a fast host, and 2.07 s per chunk on SC1 box B's. #921 added `E4B_INT4_PREFILL` with the
+  default unchanged. This lane decides the default.
+- **What.** `bench/p102/`:
+  - The premise first: `tests/test_int4_prefill_route_gpu.py` on the card.
+  - Arm `ttft`: one `serve_paged` engine at `max_seqs` 1 and chunk 512, the route switched between requests, three
+    interleaved rounds at 512 and 4096 tokens. It adds P100's dispatch census and a kernel census per route, and a
+    device-time profile of one 4096-token request under k19 and under mtile.
+  - Arm `nll`: `step_decomp --ppl-oracle eager` (every MoE call T >= 256) on one model, over 12 fresh windows
+    (c4val1 9-16, wikitext 9-12) x 4 routes.
+  - `p102_reduce.py` (11 cases):
+    - batched must be bit-identical (NLL and first tokens);
+    - k19 and mtile must hold |mean dppl| <= 0.05 on both texts;
+    - the fastest passing route (numerics break 10 % ties) becomes the default iff it at least halves loop's TTFT-4096.
+  - Predicted: `DEFAULT=k19`.
+- **Tests.** `tests/test_p102_staged_pin.py` (10).
+
 ### E4B_INT4_PREFILL (#916): a route knob for the int4 store's host-grouped prefill calls -- loop (the default, unchanged), batched (bit-identical), k19, mtile; the "paid once per request" comment and the int4 Scope note corrected
 
 - **Why.** With `DEVICE_GROUPING` off (the library default, so every `max_seqs == 1` server), a T > 1 call on the
