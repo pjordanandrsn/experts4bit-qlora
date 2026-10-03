@@ -70,6 +70,24 @@
 - **Measured on an RTX A2000** (2-layer Qwen3-MoE at Qwen3-30B-A3B's layer shape, e4b's fused training step, ABBA): launches per
   step 1,344 → 1,275, which would be about 6,600 fewer a step at the 48-layer accum-4 field recipe. No step-time effect is claimed.
 
+### `E4B_FUSED_RMSNORM=1`: frozen RMSNorms train through one Triton launch each way (opt-in; default unchanged)
+
+- **Why.** A Qwen3-MoE layer runs four Hugging Face RMSNorms: input and post-attention, and the per-head q and k norms. Each is a
+  composite of about 8 kernels forward and 10 backward, and gradient checkpointing runs the forward twice. TC1's RTX 5090 profile
+  (`tc1-5090-41`) puts that at roughly 20,000 of the shipped step's 134,000 device events and 17 % of its CPU op time.
+- **What.** `experts4bit_qlora.engines.rmsnorm_train`:
+  - `rmsnorm_frozen` is a one-launch Triton forward and a one-launch backward. The backward returns dx only, because QLoRA freezes
+    the norm weights. It mirrors the composite's casts: fp32 statistics, the normalised value rounded to the input dtype, then the
+    weight multiply rounded once, and `g * w` rounded the same way in the backward.
+  - `enable_fused_rmsnorm_train` patches only norms that are frozen, structurally matched and probe-verified, the decode fusion's
+    rules (a centered `x * (1 + w)` variant is never patched). Other inputs fall through to the composite.
+  - `enable_fast_train` applies it when `E4B_FUSED_RMSNORM=1`.
+  - The result is not bit-identical: row reductions run in another order. On an RTX A2000 about 1 element in 100,000 differs, by one
+    bf16 ulp, in the forward and in dx (`tests/test_rmsnorm_train.py`).
+- **Measured on an RTX A2000** (2-layer Qwen3-MoE at Qwen3-30B-A3B's layer shape, r16 alpha 16, e4b's fused training step, ABBA):
+  launches per step 1,344 → 1,109, device time 216.2 → 206.9 ms, wall 227.6 → 216.4 ms. The 5090 effect and a held-out quality
+  reading come from TC1 before any default changes.
+
 ### LoRA: the delta's scaling multiply is skipped at exactly 1 (exact; fewer launches at alpha == r)
 
 - **What.** `LoRALinear.forward` (the attention adapters), `ExpertsLoRA._lora` (the reference expert path) and the batched engine's
