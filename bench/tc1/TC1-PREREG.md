@@ -591,3 +591,43 @@ Each is FALSIFIED outside its band, and UNTESTED if a side is missing, not VALID
 - **Otherwise:** it stays opt-in, and the register says no measurable step effect on that arm.
 
 Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.
+
+### Amendment 16 (2026-10-03T13:50Z, before any box): the steady-state comparison again, with e4b after amendments 10–15 (P27)
+
+**Why.** P14 and P15 found axolotl's scattermoe native-best stepping at 0.911 and 0.901 of e4b as shipped over steps 101..200, on
+two hosts. Amendment 11 re-asked after #945, but its box (`tc1-5090-40`) read UNTESTED on an unstable host. Since then e4b's own
+step has moved four more times, each measured against itself on one 5090:
+
+- #945's host syncs: 0.866 (shipped);
+- #440's trimmed LoRA delta: 0.939;
+- #441/#442's tile rule: 0.924;
+- #965's fused rotary: exact, fewer launches, unmeasured;
+- #961's fused RMSNorm, per amendment 15's decision.
+
+None of these changes axolotl. The ordering may have flipped, and only one box can say: no number from one box is divided by
+another's.
+
+**The box.** The `qwen3nativebest200` token, unchanged (amendment 8's arms, order and 200-step recipe). e4b is pinned at the main
+commit that carries amendment 15's decision, and grouped-nf4-gemm at the main commit carrying #442. No environment variables are
+set: this measures e4b as a user installs it then. The launcher's machine ranking (adertha-agents#137, deployed) orders the offers.
+
+**Prediction P27** (registered before the box), read off the box's own P14 line with no new reducer code: the late-window ratio,
+axolotl scattermoe / e4b shipped over steps 101..200, lies in **[1.05, 1.50]** on two stable pairs.
+
+- **The reasoning.** About 0.905 against the old e4b, divided by the product of e4b's measured factors (0.866 × 0.939 × 0.924 ≈ 0.751,
+  lower still if the RMSNorm fusion lands), gives about 1.2–1.3. Those factors are 11..20-step medians from other hosts, so the
+  band is wide.
+- **The ordering reading** is reported beside, as in amendment 8: an interval wholly above 1.0 means e4b shipped is faster at steady
+  state; wholly below 1.0, axolotl; otherwise no ordering.
+- **FALSIFIED** outside the band. **UNTESTED** on an unstable or missing pair.
+
+**Decision rules.** A stable reading becomes a new register row, the successor of `.native-steady-state` for the post-amendment-15
+code; the earlier row stays as measured, labelled as the code before #945.
+
+- **Interval above 1.0:** STATUS says e4b as shipped now steps faster than axolotl's scattermoe at steady state on that host.
+- **Interval below 1.0:** the old finding stands for the new code.
+- **Interval spanning 1.0:** STATUS says parity within the draw noise.
+
+The 200-step totals and the held-out comparison are reported as before. An UNTESTED box is re-run once, on another host.
+
+Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20; the standing no-ask tier.
