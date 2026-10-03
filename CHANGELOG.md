@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### TC1 amendment 12 read (#945): after the sync fix, e4b's matched step is 0.740 device-busy (was 0.595) and the next target is the LoRA path's launch volume
+
+- **What was asked.** TC1's profile instrument on one RTX 5090 (`tc1-5090-41`, $0.27). Three arms:
+  - e4b shipped on the post-#945 path;
+  - e4b matched on the post-#945 path;
+  - e4b matched on the legacy path, as the before-picture on the same host.
+- **What it read.** P19 is HELD: the matched arm's device-busy fraction went from 0.595 to **0.740**, and the shipped arm reads 0.830. Device
+  work is unchanged (2,629 against 2,632 ms a step), and the legacy arm's 4,436 stream syncs a step are gone.
+- **Where the time goes.** On the shipped arm the grouped GEMM takes 811 + 294 ms of 2,049 ms device time per step. It runs at under a tenth
+  of the card's rooflines at this fixture's ~24 to 32 rows per expert. The next kernel is a bf16 scalar multiply of the padded expert LoRA
+  delta, 94 ms with scaling 1.0. The matched arm's fp32 LoRA `bmm` costs 607 ms of CPU time a step.
+- **What follows.** By amendment 12's rule the step is launch-bound, so the first change targets the LoRA path:
+  - grouped-nf4-gemm#440, an exact trim of the padded delta;
+  - amendment 13 (#954), which registers its 5090 A/B.
+
+  Read: `bench/h2h-2026-10-02/tc1/RESULTS-tc1-prof945.md`, receipts `receipts/tc1-5090-41/`.
+
 ### Docs: which Qwen3.6 / Qwen3-Next modules stay bf16, and what that costs (#899)
 
 - `docs/ARCHITECTURE_SUPPORT.md` gains a `qwen3_5_moe` / `qwen3_next` note.
