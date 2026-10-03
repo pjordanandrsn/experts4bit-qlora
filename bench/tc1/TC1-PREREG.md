@@ -502,3 +502,54 @@ an arm on any of these:
 - **Below 0.90:** FALSIFIED as over-predicted. The body stays, and the read names what else moved.
 
 Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.
+
+### Amendment 14 (2026-10-03T12:14Z, before any box): grouped-nf4-gemm's prefill M-tile height from the group sizes, A/B on one 5090 (P22, P23)
+
+**Why.** Amendment 12's profile (`tc1-5090-41`) puts the grouped GEMM forward at 811 ms of the shipped arm's 2.05 s of device time.
+At this fixture's 1,521 real tokens a step, that is under a tenth of either of the card's rooflines. One cause is in its launch rule:
+`gemm_4bit_grouped` uses one M-tile height for a whole launch, keyed on the largest group, so a single hot expert puts every group on
+128-row tiles. Qwen3's real router does this here. On a 4-layer slice of the checkpoint, trained through e4b's fused step on these
+token rows on an RTX A2000, the median group was 35 rows, while the largest group in a call had a median of 155 rows (90th percentile
+377).
+
+grouped-nf4-gemm#441 adds `GNF4_PREFILL_TILE_RULE=cost`, which picks the height that minimises `tiles x (96 + BLOCK_M)` over the actual
+sizes. Outputs are bit-identical across rules. On the A2000:
+
+- replaying 64 recorded calls took 711.5 ms under `max` and 545.5 ms under `cost`, against 538.5 ms at the best height;
+- the 4-layer training step, in ABBA order, took 1.619 / 1.589 s under `max` and 1.484 / 1.493 s under `cost`.
+
+The default stays `max` until this box reads.
+
+**The token** `qwen3tileab` (TC1_BOX=A) runs e4b against itself on the shipped arm and the matched arm, two draws each in ABBA order:
+
+- `*_tilemax`: `GNF4_PREFILL_TILE_RULE=max`;
+- `*_tilecost`: `GNF4_PREFILL_TILE_RULE=cost`.
+
+Both sides run the trimmed LoRA delta (#440) on the post-#945 sync path. grouped-nf4-gemm is pinned at the merge of #441, and e4b at this
+amendment's merge. Each arm's `tile_ab` record names the rule in force, the environment values and the tile heights it launched
+(`PREFILL_BM_STATS`). The engagement predicate voids an arm on any of these:
+
+- its record contradicts its tag;
+- it is a cost arm that launched no tile shorter than 128;
+- it is not on the trimmed delta and the post-#945 sync path.
+
+**Predictions.** Each figure is the median over two VALID draws a side, each side's draws within 5 %; the interval over the four cross-draw
+ratios is reported beside it.
+
+- **P22** (shipped arm): tilecost / tilemax s/step lies in **[0.85, 0.97]**.
+- **P23** (matched arm): tilecost / tilemax s/step lies in **[0.88, 0.98]**.
+
+Each is FALSIFIED outside its band, and UNTESTED if a side is missing, not VALID or unstable.
+
+**Basis.** A 23 % cut of the 811 ms forward would be 0.92 of a fully device-bound 2.2 s shipped step. The matched step is longer
+(3.1 s), and the forward is the same size within it, so its ratio sits higher. The A2000 measured 0.926 on its 4-layer step.
+
+**Decision rule.**
+
+- **Both stable ratios at or below 0.99:** gnf4's default becomes `cost` (D 96).
+- **A stable ratio above 1.01 on either arm:** the default stays `max`.
+- **Otherwise:** the rule stays opt-in, and the register says no measurable step effect on that arm.
+
+The prediction verdicts are read beside the rule, not instead of it.
+
+Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.

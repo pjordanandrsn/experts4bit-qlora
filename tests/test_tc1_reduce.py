@@ -340,6 +340,17 @@ def test_amendment_13_registers_the_lean_delta_token():
     assert R.lean_ab_why("fused_attn4_m_lean0", {}).startswith("no lean_ab record")
 
 
+def test_amendment_14_registers_the_tile_rule_token():
+    R = _mod()
+    assert R.TILE_FAM == "qwen3tileab" and R.TILE_FAM in R.FAMS and R.N_LAYERS[R.TILE_FAM] == 48
+    assert R.TILE_BANDS == {"P22": (0.85, 0.97), "P23": (0.88, 0.98)} and R.TILE_FLIP_AT_OR_BELOW == 0.99 and R.TILE_KEEP_ABOVE == 1.01
+    assert R.anchor_of(R.TILE_FAM) == ("e4b", "fused_attn4_m_tilemax") and "fused_attn4_m_tilecost_d2" in R.MATCHED
+    assert R.registered_draw2(R.TILE_FAM, ("e4b", "fused_attn4_shipped_tilecost")) == ("e4b", "fused_attn4_shipped_tilecost_d2")
+    F = {R.TILE_FAM: R.reduce_family(R.TILE_FAM, R._tile_set(), {}, 20)}
+    assert [(p, v) for p, _, v, _ in R.score_tileab(F)] == [("P22", "HELD"), ("P23", "HELD")]
+    assert R.tile_ab_why("fused_attn4_m_tilemax", {}).startswith("no tile_ab record")
+
+
 def test_amendment_12_registers_the_profile_token():
     R = _mod()
     assert R.PROF945_FAM == "qwen3prof945" and R.PROF945_FAM in R.FAMS and R.EXPECTED[R.PROF945_FAM] == list(R.PROF945_ARMS)
