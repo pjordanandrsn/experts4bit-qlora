@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### P109 Amendment 1 (#770): the proving run gets its own time-left checks, before any reading data (bench only)
+
+- **What happened.** `p109-prove-1` ($0.0207) passed everything up to the fetch on an RTX 5090: the install, the tripwire,
+  both self-tests, and the premise (7 passed, none skipped). It then stopped with rc 40.
+  - The runner's check before the fetch needed 2,400 s plus a 600 s margin. That is 50 minutes, more than the proof's
+    whole 45-minute guard.
+- **The fix.** The proof's checks are 300 / 300 / 240 s (fetch, bake, arm). The reading's are unchanged.
+- **New test.** `tests/test_p109_staged_pin.py` asserts that every check fits its own guard.
+
 ### P109 registered (#770): should `serve_paged` capture decode graphs by default? Its eager default against bucketed graphs, through the server's own construction (bench and tests only)
 
 - **Why.** Every e4b serving number in the register ran with decode graphs: SC1 and P96–P101. `serve_paged` ships with
