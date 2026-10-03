@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### P99 registered (#913, #564): localise P98's replay fault -- P98's graph run repeated beside arms without the hybrid state, without K25, and with one bucket (bench and tests only)
+
+- **Why.** P98 (#912, VOID): Qwen3.6's bucketed decode graphs captured, then a replay hit a device-side assert. The
+  same padded steps run eagerly were fine. Three candidate causes (#913): the hybrid's per-slot state; K25 under
+  bucketed graphs; a buffer moved after capture.
+- **What.** `bench/p99/`: `p99_box.py` (P98's `p98_box.py` at its registered bytes, plus a `P99_STEP` line flushed
+  before every decode call, so a faulting replay names its step and bucket), `p99_reduce.py` (11-case self-test), the
+  runner, the driver and the staged pin.
+  - On one RTX 5090, seven fresh engines: d0g, P98's arm g repeated, must fault; d1 OLMoE, with no linear state; d2
+    Qwen3.6 with K25 off; d3 Qwen3.6 with bucket 16 only. Each of d1-d3 runs graphs and a padded-eager oracle.
+  - LOCALISED with three answers (is each cause necessary?) plus any silent mismatch against an oracle. VOID if the
+    fault does not reproduce or an arm errors otherwise.
+  - Guard 1 h, so no proving rental. The premise runs first on the box.
+- **Tests.** `tests/test_p99_staged_pin.py` pins the diagnosis. P98's files are staged at P98's pinned bytes.
+
 ### P98 read (RTX 5090): VOID -- Qwen3.6's bucketed decode graphs all captured, then a replay hit a device-side assert (`index_select` out of range); the padded-eager and plain-eager arms ran (bench and docs)
 
 - `bench/p98/receipts/p98-5090-2/`, `bench/p98/RESULTS-p98.md`.
