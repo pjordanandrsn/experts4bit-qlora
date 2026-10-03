@@ -1,0 +1,17 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-40",
+ "instance_id": "53999231",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "595.91.07",
+ "cpu": "Intel(R) Xeon(R) CPU E5-2696 v4 @ 2.20GHz",
+ "nproc": 88,
+ "mem_total_kb": "131869268",
+ "cgroup_memory_max": "129631256576",
+ "disk_root": "overlay         320G  9.3M  320G   1% /",
+ "hostname": "63bcf4000c9a",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}
