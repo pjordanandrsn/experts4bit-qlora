@@ -32,12 +32,28 @@ is decided by ``hot_residency.DEVICE_GROUPING``:
   lane P88 licensed it, ``e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01``)
   and the split-K GEMV otherwise or under ``=0``. So batched decode does
   NOT keep the NF4 M-tile path in that configuration.
-* ``T > 1`` with DEVICE_GROUPING off -- the NF4 grouped path, which is
-  the library default: ``DEVICE_GROUPING = [False]``. Inside the package
-  exactly one place assigns it: ``serve_paged._batched_graph_grouping``,
-  which turns it on when the server captures decode graphs with
-  ``max_seqs > 1`` (the harness's batched lane does the same before it
-  captures). Every other library path keeps the default.
+* ``T > 1`` with DEVICE_GROUPING off -- the library default,
+  ``DEVICE_GROUPING = [False]``, so every prefill chunk of a
+  ``max_seqs == 1`` server. These calls do NOT take the NF4 grouped
+  path: the int4 branches come first in the dispatch (and the NF4 stacks
+  are freed by default). They take the host-grouped int4 branch, whose
+  route ``E4B_INT4_PREFILL`` picks (e4b#916,
+  ``hot_residency._int4_prefill_mode_env``):
+  - ``loop`` (the default): one ``dequant_int4_ref`` per routed expert
+    per projection, then a bf16 matmul. It is paid on every call, i.e.
+    per prefill chunk per layer, not once per request (lane P100);
+  - ``batched``: the same weights decoded in slices, bit-identical;
+  - ``k19``: device grouping served by K19 at every row count -- the
+    loop's operands (bf16 activations, bf16 weights), within one bf16
+    ulp per output row;
+  - ``mtile``: device grouping served by the grouped captured int4-b32
+    M-tile GEMM above, int8 activations.
+
+  Inside the package exactly one place assigns DEVICE_GROUPING:
+  ``serve_paged._batched_graph_grouping``, which turns it on when the
+  server captures decode graphs with ``max_seqs > 1`` (the harness's
+  batched lane does the same before it captures). Every other library
+  path keeps the default.
 
 The flag is set by ``bench/hybrid-g9/step_decomp.py`` and by
 ``tests/test_s2_verify_mechanics.py``, which is the configuration the

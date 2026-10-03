@@ -58,6 +58,61 @@ def _k19_mode_env() -> str:
     return v
 
 
+def _int4_prefill_mode_env() -> str:
+    """``E4B_INT4_PREFILL`` (e4b#916): the route of a uniform-int4 store's T > 1 calls that would otherwise take HOST
+    grouping. With :data:`DEVICE_GROUPING` off -- the library default, and every ``max_seqs == 1`` server -- that is
+    every prefill chunk.
+
+    * ``loop`` (the default, also when unset): the host-grouped branch as it has always been -- one
+      ``dequant_int4_ref`` per routed expert per projection, cast to bf16, one matmul each. About 14 launches per
+      expert, so about 170k per 512-token chunk on Qwen3-30B-A3B, paid again on every chunk.
+    * ``batched``: the same arithmetic, with each projection's routed experts decoded together in slices of
+      :data:`_INT4_PREFILL_SLICE` (:func:`_dequant_int4_bf16`). The bf16 weights and the matmuls are the same, so the
+      output is bit-identical to ``loop``.
+    * ``k19``: device grouping for those calls, served by K19 (``int4_smallm.gemm_int4_b32_grouped_smallm``) at every
+      row count: bf16 activations, the int4 weights decoded in registers, bf16 MMA. The operands are the loop's, so
+      each output row is within one bf16 ulp of it (K19's contract); only the summation order differs.
+    * ``mtile``: device grouping for those calls, served by the grouped int4-b32 M-tile GEMM batched decode uses above
+      256 rows (``gemm_int4_b32_grouped_captured``). Its activations are int8 (``quant_x_rows``), so the numerics
+      change.
+
+    Under ``k19`` and ``mtile`` a call of at most 256 rows takes the device-grouped decode route it always has (K19 by
+    default, see :func:`_k19_mode_env`).
+
+    With :data:`DEVICE_GROUPING` ON (a server capturing batched decode graphs, ``max_seqs > 1``), every T > 1 call is
+    already device-grouped, so its prefill rows above 256 have always taken the M-tile: ``loop``, ``batched`` and
+    ``mtile`` leave that unchanged, and ``k19`` moves those rows to K19 as well. Anything else is refused rather than
+    read as one of these."""
+    v = os.environ.get("E4B_INT4_PREFILL", "loop").strip().lower() or "loop"
+    if v not in INT4_PREFILL_ROUTES:
+        raise ValueError(f"E4B_INT4_PREFILL={v!r}: expected one of {INT4_PREFILL_ROUTES}")
+    return v
+
+
+#: ``E4B_INT4_PREFILL``'s values (e4b#916); the device-grouped ones are the last two.
+INT4_PREFILL_ROUTES = ("loop", "batched", "k19", "mtile")
+
+
+#: Experts decoded per batched pass under ``E4B_INT4_PREFILL=batched``: bounds the transient fp32 decode buffer
+#: (16 x 1536 x 2048 x 4 B ~ 0.2 GB for Qwen3-30B-A3B's gate_up) while cutting the launches per expert ~16-fold.
+_INT4_PREFILL_SLICE = 16
+
+
+def _dequant_int4_bf16(packed, scales, ids, N: int, K: int):
+    """``dequant_int4_ref(packed[e], scales[e], N, K).to(torch.bfloat16)`` for every ``e`` in ``ids`` at once,
+    ``[len(ids), N, K]``. The same elementwise operations in the same precision -- int16 nibbles minus 8, an fp32
+    product with the fp16 scale widened to fp32, one rounding to bf16 -- so each slice is bit-identical to the
+    per-expert decode (``tests/test_int4_prefill_route.py`` pins it against the reference itself)."""
+    G = ids.numel()
+    p = packed.index_select(0, ids).to(torch.int16)
+    lo = (p & 0xF) - 8
+    hi = ((p >> 4) & 0xF) - 8
+    q = torch.stack([lo, hi], dim=-1).reshape(G, N, K).float()
+    s = scales.index_select(0, ids).float()
+    blk = K // s.shape[-1]
+    return (q.reshape(G, N, K // blk, blk) * s[..., None]).reshape(G, N, K).to(torch.bfloat16)
+
+
 def _lean_glue_mode_env() -> str:
     """``E4B_INT4_LEAN_GLUE`` (lane K23): ``auto`` (the default, also when unset) folds the grouping glue around K19 into
     the two kernels that bracket it when the kernel package carries K23's options, and keeps the separate launches when
@@ -166,7 +221,11 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     included, so T == 1 takes the device tile table too (capture-legal, no host sync) and its rows reach K19.
     Without that the singleton GEMV would keep T == 1, and K8, which scores through the T == 1 loop, would read
     the GEMV instead of the kernel it gates (lane P87). K21's opt-in does the same on the MXFP4 store, and K25's
-    (``E4B_NF4_GROUPED_SMALLM=1``) on the NF4 store."""
+    (``E4B_NF4_GROUPED_SMALLM=1``) on the NF4 store.
+
+    A T > 1 call that would take HOST grouping on a uniform-int4 store -- every prefill chunk with
+    :data:`DEVICE_GROUPING` off -- takes device grouping instead under ``E4B_INT4_PREFILL=k19`` or ``mtile`` (e4b#916;
+    see :func:`_int4_prefill_mode_env`). Singleton groups, when chosen, are left alone."""
     k19_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
               and _k19_mode_env() == "1")
     k21_t1 = (T == 1 and int4_stores is not None and int4_stores.get("kind") == "mxfp4"
@@ -175,7 +234,12 @@ def _collapsed_grouping(T: int, int4_stores) -> tuple[bool, bool]:
     nf4_t1 = T == 1 and int4_stores is None and _nf4_t1_device_grouping_env()
     if k19_t1 or k21_t1 or k25_t1 or nf4_t1:
         return False, True
-    return (T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])), (DEVICE_GROUPING[0] and T > 1)
+    singleton = T == 1 or (FORCE_SINGLETON_GROUPS[0] and not DEVICE_GROUPING[0])
+    device = DEVICE_GROUPING[0] and T > 1
+    if (not singleton and not device and int4_stores is not None and int4_stores.get("kind") != "mxfp4"
+            and _int4_prefill_mode_env() in ("k19", "mtile")):
+        device = True
+    return singleton, device
 
 
 def _nf4_t1_device_grouping_env() -> bool:
@@ -437,6 +501,17 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 "gemm_int4_b32_grouped_smallm scatter=/gather_div=)")
         else:
             _fused_tiles = None           # auto: the kernel package predates K23 -> the separate launches, as before
+    if (_k19 is None and device_grouping and int4_stores is not None and not _mxfp4_store and R_rows > 256
+            and _int4_prefill_mode_env() == "k19"):
+        # E4B_INT4_PREFILL=k19 (e4b#916): K19 serves the device-grouped PREFILL rows too, over the chained 16-row tile
+        # table built below (K23's lean glue stays off: its one-launch builder is a decode-shape builder). Without K19
+        # in the kernel package the route is refused, not silently replaced by the int8 M-tile.
+        try:
+            from int4_smallm import gemm_int4_b32_grouped_smallm as _k19
+        except ImportError as e:
+            raise RuntimeError(
+                "E4B_INT4_PREFILL=k19 needs grouped-nf4-gemm with K19 "
+                "(int4_smallm.gemm_int4_b32_grouped_smallm, grouped-nf4-gemm#419)") from e
     _tok = None
     if x_rows is None:
         x_t, row_token, top_k = x_tokens
@@ -719,10 +794,15 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                                      part=_int4_part_or_none(st, e32.numel(),
                                                              xq.device))
         else:
-            # prefill / verify (M per group is large): dequant each
-            # routed expert once and matmul -- the winning regime per
-            # the fused/dequant crossover, paid once per request. The
-            # host loop over ~E_active groups is prefill-frequency.
+            # Host-grouped T > 1 calls (prefill chunks, verify) with
+            # DEVICE_GROUPING off: dequant each routed expert and matmul in
+            # bf16. It runs on every call -- once per prefill CHUNK per
+            # layer, never amortised over a request -- a host loop over
+            # the ~E_active groups of each projection (e4b#916: ~2.07 s per
+            # 512-token chunk on Qwen3-30B-A3B, ~170k launches; lane P100).
+            # E4B_INT4_PREFILL picks the route (_int4_prefill_mode_env):
+            # `loop` below, `batched` = the same weights decoded in slices,
+            # bit-identical; `k19` and `mtile` never reach this branch.
             # Under DECODE_A16 (P64) the singleton decode rows land here
             # too, one row per group: bf16 activations, no quant_x_rows.
             if (singleton_groups and x_rows.is_cuda
@@ -738,8 +818,26 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             row0 = [0]
             for m_ in sizes[:-1]:
                 row0.append(row0[-1] + m_)
+            _batched = _int4_prefill_mode_env() == "batched"
+            if _batched:
+                _eids_t = (eids if torch.is_tensor(eids) else torch.as_tensor(eids_l)).to(
+                    device=int4_stores["gu"]["packed"].device, dtype=torch.long)
 
-            def _mm(xr, pk, am):
+            def _mm_batched(xr, pk, am):
+                st = int4_stores["gu" if pk is gu_p else "dn"]
+                N_, K_ = st["N"], st["K"]
+                out = torch.empty(xr.shape[0], N_, dtype=torch.bfloat16,
+                                  device=xr.device)
+                for j0 in range(0, len(eids_l), _INT4_PREFILL_SLICE):
+                    w = _dequant_int4_bf16(st["packed"], st["scales"],
+                                           _eids_t[j0:j0 + _INT4_PREFILL_SLICE], N_, K_)
+                    for j, (m_, r0) in enumerate(zip(sizes[j0:j0 + _INT4_PREFILL_SLICE],
+                                                     row0[j0:j0 + _INT4_PREFILL_SLICE])):
+                        out[r0:r0 + m_] = (xr[r0:r0 + m_].to(torch.bfloat16)
+                                           @ w[j].t())
+                return out
+
+            def _mm_loop(xr, pk, am):
                 st = int4_stores["gu" if pk is gu_p else "dn"]
                 N_, K_ = st["N"], st["K"]
                 out = torch.empty(xr.shape[0], N_, dtype=torch.bfloat16,
@@ -750,6 +848,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     out[r0:r0 + m_] = (xr[r0:r0 + m_].to(torch.bfloat16)
                                        @ w.to(torch.bfloat16).t())
                 return out
+            _mm = _mm_batched if _batched else _mm_loop
     else:
         def _mm(xr, pk, am):
             if pk is not None and pk.numel() == 0:
