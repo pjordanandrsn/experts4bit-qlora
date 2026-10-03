@@ -16,9 +16,12 @@ Modes (every API fact read at tag v0.5.20, python/sglang/srt/...):
            return_logprob: true, logprob_start_len: 0 (io_struct.py:226-231 field names; sampling_params.py:257-261 accepts
            max_new_tokens 0 -- a prefill-only request, schedule_batch.py:1359-1364 `is_prefill_only`; if the server refuses 0
            the scorer retries with 1 and discards the output). Reads meta_info.input_token_logprobs: entry i is
-           (logprob of the ACTUAL prompt token i given tokens < i, token_id, None) and entry 0 is None
-           (scheduler_components/logprob_result_processor.py:38 `[None] + input_token_logprobs[:-1]`;
-           tokenizer_manager.py:2690 emits it, :2882-2900 the (logprob, id, text|None) triple). NLL_i = -lp[i] for i in
+           (logprob of the ACTUAL prompt token i given tokens < i, token_id, None) and entry 0 is (None, ids[0], None):
+           the leading None is prepended to the VALUES (scheduler_components/logprob_result_processor.py:38
+           `[None] + input_token_logprobs[:-1]`), the ids are `origin_input_ids[logprob_start_len:]` (:50), and
+           tokenizer_manager.py:2882-2892 zips the two into (logprob, id, text|None) triples, emitted at :2690 -- so entry
+           0 is a triple whose logprob is None, not a bare None (A12: the registered scorer asserted the bare None and
+           refused every real response). NLL_i = -lp[i] for i in
            prompt_len+1 .. prompt_len+steps. With logprob_start_len 0 the radix match is CAPPED at 0
            (schedule_batch.py:1631-1637 `_compute_max_prefix_len` -> :1542 `key_limit`), so the whole window is one
            prefill regardless of cache state -- the prefill-shaped number by construction. top_logprobs_num 1 adds
@@ -100,10 +103,11 @@ def load_window(path: str, prompt_len: int, steps: int):
 
 
 def _lp(entry):
-    """A logprob entry is (logprob, token_id, text|None) -- list after JSON. None for the first prompt position."""
+    """A logprob entry is (logprob, token_id, text|None) -- list after JSON. The first prompt position's logprob is None
+    inside its triple (tokenizer_manager.py:2888-2892 zips the None-led values with the ids); a bare None is read the same."""
     if entry is None:
         return None, None
-    return float(entry[0]), int(entry[1])
+    return (None if entry[0] is None else float(entry[0])), int(entry[1])
 
 
 def score_prefill(client: SGLangClient, ids, prompt_len: int, steps: int, top_logprobs: int = 1, flush: bool = True) -> dict:
@@ -130,7 +134,9 @@ def score_prefill(client: SGLangClient, ids, prompt_len: int, steps: int, top_lo
     lps = meta.get("input_token_logprobs")
     assert lps is not None, f"no input_token_logprobs in meta_info (keys {sorted(meta)})"
     assert len(lps) == n, f"input_token_logprobs has {len(lps)} entries, prompt has {n}"
-    assert lps[0] is None, "entry 0 must be None (logprob_result_processor.py:38)"
+    lp0, tok0 = _lp(lps[0])
+    assert lp0 is None, f"entry 0 must carry no logprob (logprob_result_processor.py:38), got {lps[0]!r}"
+    assert tok0 is None or tok0 == prompt[0], f"entry 0 is for token {tok0}, prompt token 0 is {prompt[0]}"
     nll = 0.0
     idx = scored_indices(prompt_len, steps)
     for i in idx:
