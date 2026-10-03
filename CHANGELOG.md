@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### TC1 amendment 15 read (#945): e4b's fused training RMSNorm makes the step 4–8 % faster on a 5090, held-out unchanged
+
+- **What was asked.** On one RTX 5090 (`tc1-5090-45`, $0.39), e4b against itself: the Hugging Face RMSNorm composite against #961's
+  fused kernel. Shipped and matched arms, two draws each, ABBA order. (`tc1-5090-44` ended HARNESS_ERROR at $0.0004: the guard's auth
+  probe got an HTTP 429.)
+- **What it read.** P24, P25 and P26 are HELD:
+
+  | reading | result | range |
+  |---|---|---|
+  | shipped | fused / composite **0.924** | 0.893 – 0.955 |
+  | matched | **0.959** | 0.935 – 0.984 |
+  | held-out at N | within 0.0021 | band 0.01 |
+
+  Not bit-identical: the first training loss differs by 0.0090 before any update (register `e4b.train.fused-rmsnorm.qwen3.5090.2026-10-03`).
+- **What follows.** The fusion is on by default (#975). Read: `bench/h2h-2026-10-02/tc1/RESULTS-tc1-rmsab.md`.
+
 ### The fused training RMSNorm is on by default (`E4B_FUSED_RMSNORM=0` turns it off)
 
 - **Why.** TC1 amendment 15 registered a 5090 A/B of #961 with a decision rule: flip the default on if held-out loss agreed within

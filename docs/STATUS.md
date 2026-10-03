@@ -199,6 +199,9 @@ unchanged.
 **And the grouped GEMM's tile** (`e4b.train.prefill-tile-rule.qwen3.5090.2026-10-03`, TC1 amendment 14): sizing its M-tile from the
 actual group sizes instead of the largest group (grouped-nf4-gemm#441) steps it at **0.924** (shipped) and
 **0.968** (matched) of before on one 5090, outputs identical.
+**And the norms** (`e4b.train.fused-rmsnorm.qwen3.5090.2026-10-03`, TC1 amendment 15): fusing the frozen RMSNorms into one launch each way
+(#961, near-exact) steps it at **0.924** (shipped) and **0.959** (matched) of the composite on one 5090, held-out
+within 0.0021.
 **On an H100 NVL the sign reverses** (lane TC1c, the same
 matched set, one rented box, [`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md);
 register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`): Unsloth takes 2.546
