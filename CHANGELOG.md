@@ -1,6 +1,36 @@
 # Changelog
 
 ## Unreleased
+
+### P109 registered (#770): should `serve_paged` capture decode graphs by default? Its eager default against bucketed graphs, through the server's own construction (bench and tests only)
+
+- **Why.** Every e4b serving number in the register ran with decode graphs: SC1 and P96–P101. `serve_paged` ships with
+  them off, so its default user gets an eager configuration no registered number describes.
+- **What.** One RTX 5090 runs the default server: Qwen3-30B-A3B NF4, `max_seqs` 16, `all-vram`, every lever at its
+  default, built by `PagedServeConfig.from_env()` + `build_engine`. It runs in five arms, each in its own process:
+  - **E1, E2:** today's eager default;
+  - **G1, G2:** `E4B_PAGED_GRAPHS=1`;
+  - **D1:** eager with G's device grouping.
+
+  Each arm decodes 16 concurrent requests and 1 request, at 32 and 160 new tokens.
+- **The rule, in order:**
+  - VOID on commits, prompts or engagement;
+  - NOISY if a self-pair falls outside [0.93, 1.07];
+  - FUNCTION_FAIL unless G ≡ D on every row;
+  - KEEP if graphs are below ×1.25 at 16 requests or ×0.97 at 1;
+  - DIVERGENT if fewer than 12 of 16 rows agree with eager for 16 tokens;
+  - DEFAULT_GRAPHS otherwise.
+- **Registered consequence of DEFAULT_GRAPHS:**
+  - `E4B_PAGED_GRAPHS` defaults to `auto` (on for CUDA `all-vram`);
+  - a register row;
+  - #770 closes.
+- **The proving rental** runs the whole box on Granite-3.1-3b-a800m, because no local card runs the fp8 paged KV.
+- **Files:**
+  - `bench/p109/` (prereg, runner, box, reducer, driver, pin);
+  - `tests/test_p109_staged_pin.py`;
+  - `tests/test_p109_box.py`: the box end to end on CPU over a scripted runner and a real scheduler, through the
+    reducer.
+
 ### SC1b amendment A3 (#846): written after box D's first run -- vLLM's periodic steps kept, CUPTI's graph-id messages labelled, node-trace overhead as a band, in-graph kernel overlap as a term; a confirmatory re-run (bench and tests only)
 
 - **`sc1d-5090-2`** (machine 45511, $0.7788, all 24 passes exit 0) reads as registered:
