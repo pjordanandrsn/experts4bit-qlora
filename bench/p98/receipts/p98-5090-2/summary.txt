@@ -1,0 +1,20 @@
+KNOBS e4b=a08df83477886bad6e8b20435e6440a25a548f0e gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3.6-35B-A3B@995ad96eacd98c81ed38be0c5b274b04031597b0 gpu_class=5090 min_disk_gb=170 prove=0 model_dir=hub box_extra='' bake_extra='' allow_skip=0 arms='g e p'
+e4b 0.40.0 @a08df83477886bad6e8b20435e6440a25a548f0e
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+gated-deltanet kernel modules {'fla': False, 'causal_conv1d': False, 'kernels': False}
+self-test OK (19 cases)
+premise rc=0: 4 passed in 11.13s
+/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0
+bake rc=0 {'status': 'OK', 'layers': 40, 'experts': 256, 'snapshot_gib': 16.88, 'load_s': 26.6, 'snapshot_s': 40.7, 'bake_s': 15.0, 'loaded_commit': '995ad96eacd98c81ed38be0c5b274b04031597b0', 'err': None}
+arm g rc=134 
+arm e rc=0 P98_ARM e: build 31s | graph_status {1: 'eager: capture=False', 2: 'eager: capture=False', 4: 'eager: capture=False', 8: 'eager: capture=False', 16: 'eager: capture=False'} | W16 128.279 tok/s over 111 steps | W1 11.975 tok/s | mem 23.71 GB
+
+arm p rc=0 P98_ARM p: build 31s | graph_status None | W16 107.283 tok/s over 111 steps | W1 11.464 tok/s | mem 22.74 GB
+
+P98 VERDICT VOID
+  void: arm g record missing

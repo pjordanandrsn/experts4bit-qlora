@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.95.05, GPU-5e911316-b19e-7a23-f96a-6c16430f161a, 12.0
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7663 56-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             755          45         456           2         252         702
+overlay         320G   55M  320G   1% /
