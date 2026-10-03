@@ -1,6 +1,22 @@
 # Changelog
 
 ## Unreleased
+### P107 registered (#960): paged prefill attention's route A/B -- math (SDPA's fp32 math backend, today) against flash (#963's lower-right causal bias) on one engine, gated by the calibrated K8 rule on the served-prefill NLL (bench and tests)
+
+- `bench/p107/{PREREG-p107.md,p107_run.sh,p107_drive.sh,p107_box.py,p107_reduce.py,staged.sha256}`,
+  `tests/test_p107_served_prefill_scorer.py`, `tests/test_p107_staged_pin.py`.
+- **Why:** under k19, P102's 4096-token profile spends about 445 of 924 device-ms in fp32 SIMT SGEMMs, masking and
+  softmax -- prefill attention on SDPA's math backend, because a boolean mask with GQA rules out every fused kernel.
+- **The box:** one engine, `E4B_PAGED_PREFILL_ATTN` switched between requests. TTFT at 512 and 4,096 tokens over three
+  rotated rounds; a 512-token kernel census per route; and the SERVED-PREFILL NLL on 12 fresh windows (c4val1 W=8,
+  wikitext W=4), each window's 2,560 tokens run through the paged prefill path in 512-token chunks and its 2,048
+  predictions after the prompt scored. The decode-shaped K8 and P102's eager-attention NLL never score a logit this code produces.
+- **The rule:** `DEFAULT=flash` iff flash PASSES the K8 rule (|mean dppl| <= 0.05 per text) and its TTFT-4096 is at
+  most 0.9x math's.
+- **The scorer** equals one non-paged forward within 1e-4 on a tiny Qwen3 for both routes (CPU test), and two of its
+  mutations fail that test.
+- **Predictions:** PASS with |mean dppl| <= 0.01; TTFT-4096 1.25-1.55 s -> 0.85-1.10 s; `DEFAULT=flash`.
+
 ### E4B_PAGED_PREFILL_ATTN (#960): a route knob for paged prefill attention -- math (the default, unchanged) or flash (the same lower-right causal mask as a bias the flash kernel takes)
 
 - **Why.** For a layer without sinks or a sliding window, the paged prefill branch called SDPA with an explicit
@@ -30,7 +46,7 @@
   `text_config` (#897, for Qwen3.5 / Qwen3.6 MoE). On Gemma-4's per-layer text config, which is the config of the model
   the streaming loader builds, that read raises transformers' `AmbiguousGlobalPerLayerAttributeError`. That error is a
   `RuntimeError`, so `getattr`'s default did not catch it, and `build_engine` died before reaching the per-layer branch.
-  Found while building lane P107 (#359).
+  Found while drafting a Gemma-4 parity lane for #359 (unregistered; the number P107 belongs to #960's lane).
 - **The fix.** `text_config` is read first. The per-layer branch is unchanged.
 - **Tests** (`tests/test_linear_state.py`), using transformers' own Gemma-4 configs:
   - a tiny per-layer text config, which with the fix reverted fails with exactly that error;
@@ -58,7 +74,23 @@
   - a one-shot forward and a cached chunked prefill with decode both match transformers' own attention;
   - with the fix reverted, both fail on ~60 % of logits, by up to 1.26.
 - **Not affected.** Serving, which binds the context. P97's readings (Qwen3.6 and OLMoE: no windows, unpadded windows,
-  square prefill). P106 (paged against paged). Found while building lane P107 (#359).
+  square prefill). P106 (paged against paged). Found while drafting a Gemma-4 parity lane for #359
+  (unregistered; the number P107 belongs to #960's lane).
+
+### The rotary embedding trains through one Triton launch each way, bit-identical to the composite (on by default; `E4B_FUSED_ROPE=0` turns it off)
+
+- **What.** `experts4bit_qlora.engines.rope_train`: `rope_qk` computes `q * cos + rotate_half(q) * sin`, for q and k, in one launch
+  forward and one per tensor backward. Every op in Hugging Face's composite is elementwise, and a product of two bf16 values is
+  exact in fp32. The kernel therefore rounds each product to bf16 and then the sum, and this reproduces the composite byte for byte,
+  forward and gradients. `tests/test_rope_train.py` asserts `torch.equal` at three shapes, broadcast cos/sin included.
+- **A Triton trap, worked around.** Triton 3.4 folds a `.to(bfloat16).to(float32)` round trip that feeds an add: 14 % of a
+  product-plus-add's elements came out unrounded. The kernel rounds with integer arithmetic on the fp32 bits (`_rne_bf16`), which
+  the compiler cannot elide.
+- **Scope.** `enable_fast_train` points the `apply_rotary_pos_emb` of the model's own attention modules at the kernel. Only a
+  function with the `(q, k, cos, sin, unsqueeze_dim=1)` contract is replaced, any call outside bf16 CUDA `[B, H, L, D]` shapes goes
+  to the original, and `disable_fast_train` unwinds it.
+- **Measured on an RTX A2000** (2-layer Qwen3-MoE at Qwen3-30B-A3B's layer shape, e4b's fused training step, ABBA): launches per
+  step 1,344 → 1,275, which would be about 6,600 fewer a step at the 48-layer accum-4 field recipe. No step-time effect is claimed.
 
 ### LoRA: the delta's scaling multiply is skipped at exactly 1 (exact; fewer launches at alpha == r)
 

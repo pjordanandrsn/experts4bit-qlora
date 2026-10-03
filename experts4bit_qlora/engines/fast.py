@@ -737,6 +737,11 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     if verbose:
         print(f"[e4b.fast] fused TRAINING path on {patched} ExpertsLoRA module(s)"
               + (" (dgrad kernel backward)" if dgrad else ""))
+    # On by default (E4B_FUSED_ROPE=0 turns it off): the rotary embedding through one launch each way, bit-identical to the
+    # Hugging Face composite (engines/rope_train.py), in the attention modules of this model only.
+    from .rope_train import enable_fused_rope, fused_rope_requested
+    if patched and fused_rope_requested():
+        enable_fused_rope(model, verbose=verbose)
     return patched
 
 
@@ -751,4 +756,7 @@ def disable_fast_train(model) -> int:
             if hasattr(mod, "_e4b_dgrad"):
                 del mod._e4b_dgrad
             n += 1
+    if n:
+        from .rope_train import disable_fused_rope
+        disable_fused_rope(model)                        # the rotary patch rides enable_fast_train, so it unwinds with it
     return n
