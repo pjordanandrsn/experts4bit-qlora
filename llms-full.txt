@@ -2357,6 +2357,16 @@ A parity delta below the floor means *indistinguishable*, never "a small
 cost". Method in [`METHODOLOGY.md`](METHODOLOGY.md) §13.1; per-family
 table in [`SERVING-PARITY.md`](SERVING-PARITY.md).
 
+**Gemma-4's paged path is at parity with transformers' own perturbations** (lane P108, 2026-10-03, one rented
+RTX 5090; **measured** — [`bench/p108/RESULTS-p108.md`](../bench/p108/RESULTS-p108.md),
+`e4b.parity.gemma4.p108.paged-vs-floor.5090.2026-10-03`).
+- **The setup:** 32 wikitext windows with the 1,024-token sliding window binding. The paged path is set against a
+  floor of three arithmetically neutral transformers draws.
+- **The result:** the paged path's mean NLL (5.360) lies between the floor draws' (5.298–5.415). Its bias against
+  transformers' cached forward is −0.196 nats with spread 0.326, against the floor's 0.258 / 0.349. A halved
+  decode scale reads +2.26.
+- **What it supersedes:** the single-window statement below. It still holds at that resolution.
+
 **Gemma-4 has no reference at this resolution.** On three 512-token
 windows transformers' *own* cached forward sits as far from a one-shot
 forward as the paged path does (`e4b.parity.gemma4.no-reference`).
@@ -3473,6 +3483,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.parity.gptoss.paged-vs-own-attention [measured-private] (receipt private): gpt-oss-20b's paged decode (sinks + alternating sliding windows) is indistinguishable from the model's own attention: 0.00288 nats from a chunk-free full-forward reference, below its 0.01758-nat floor.
 - e4b.parity.qwen3.paged-vs-own-attention [measured-private] (receipt private): Qwen3-30B-A3B's paged decode is indistinguishable from the model's own attention: 0.00173 nats from a chunk-free full-forward reference, below the model's own 0.00641-nat arithmetic-order floor (512-step window). Its 8192-step delta against the chunked oracle (+0.0058 nats) also sits below the 8192-window floor of 0.0095.
 - e4b.parity.gemma4.no-reference [measured-private] (receipt private): Gemma-4-26B-A4B-it has no parity reference at 512-token resolution: the paged path is +0.093/+0.114/+0.247 nats from a one-shot forward on three windows while transformers' own cached forward is -0.107/+0.271/+0.081 from the same one-shot forwards; in plain transformers the NLL of identical prefix tokens moves 0.4 nats with the batch shape.
+- e4b.parity.gemma4.p108.paged-vs-floor.5090.2026-10-03 [measured]: Lane P108, one RTX 5090: over 32 wikitext windows (1,280-token prompts so Gemma-4's 1,024-token sliding window binds; 256 teacher-forced positions each), e4b's paged path (PagedModelRunner, fp8 KV pool, gnf4's real fp8 kernel) is at parity with transformers' own arithmetically neutral perturbations of the same model: its mean NLL 5.360 lies between the one-shot, chunked-prefill and batched-decode draws (5.298-5.415); against transformers' cached forward its bias is -0.196 nats and spread 0.326, inside the floor's 0.258 / 0.349 (rule: bias <= B_floor + 0.05, spread <= 2 x S_floor). A halved decode softmax scale reads +2.257 (caught); dropping the decode window reads -0.953 (visible). AT_PARITY.
 - e4b.parity.gemma4.fp8-share [measured]: The fp8 paged cache and fp8 dot cost Gemma-4-26B-A4B-it 0.046 nats on the P26b window (the kernel's full precision model -- Q per-tile, K 4-group, V per-row, P range-folded e4m3 -- applied inside the one-shot forward on the scored rows); 0.017 with 32-wide K groups; the five 512-dim full-attention layers carry 0.019 of it and the 25 sliding layers 0.002.
 - e4b.parity.moe-routing-flip-floor [measured]: Two arithmetically equivalent forwards of an MoE model disagree because rounding flips router top-k choices: 4.52% of (layer, token) choices on gpt-oss-20b and 6.77% on Qwen3-30B, with the disagreement carried by the flipped tokens (KL 0.0504 vs 0.0013). Every parity delta must be read against a per-model measured floor, never against zero.
 - e4b.serve.gptoss.loader-faithful [measured]: e4b's gpt-oss expert path is faithful: MXFP4 dequant bit-identical to transformers' and to an independent decode; the NF4 expert forward matches HF's reference math at cosine 0.991-0.993; the served layer 0 inside the running model matches the reference MoE at cosine 0.998 per token.
@@ -3790,4 +3801,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(317 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(318 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

@@ -1,0 +1,39 @@
+KNOBS e4b=e0ae2f32f65e0a832ab1b4654152b02152f9b5b5 gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=google/gemma-4-26B-A4B-it@4d7ae4984b7db7de8f8457170b3f1a419ee76d52 gpu_class=5090 min_disk_gb=100 min_ram_gb=90 prove=0 model_dir=hub box_extra='' allow_skip=0
+e4b 0.41.1 @e0ae2f32f65e0a832ab1b4654152b02152f9b5b5
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+self-test OK (17 cases)
+premise run rc=0: 2 passed in 8.68s
+  gemma4 window seed 0: control prefill 7.65e-05 all 1.710e-03 | window prefill 2.67e-04 all 1.224e-03 | ratio 0.72
+  gemma4 window seed 1: control prefill 6.97e-05 all 1.624e-03 | window prefill 9.01e-04 all 1.580e-03 | ratio 0.97
+  gemma4 window seed 2: control prefill 4.55e-05 all 2.848e-03 | window prefill 1.69e-04 all 1.580e-03 | ratio 0.55
+  gemma4 window seed 3: control prefill 1.01e-04 all 1.638e-03 | window prefill 5.55e-05 all 9.488e-04 | ratio 0.58
+  gemma4 window seed 4: control prefill 2.30e-04 all 1.799e-03 | window prefill 3.39e-04 all 1.814e-03 | ratio 1.01
+  gemma4 window seed 5: control prefill 9.33e-05 all 1.440e-03 | window prefill 1.29e-04 all 1.929e-03 | ratio 1.34
+  gemma4 window seed 6: control prefill 9.25e-05 all 1.653e-03 | window prefill 4.39e-04 all 1.274e-03 | ratio 0.77
+  gemma4 window seed 7: control prefill 1.74e-04 all 2.823e-03 | window prefill 7.46e-05 all 2.105e-03 | ratio 0.75
+  gemma4 window seed 0: control prefill 7.65e-05 all 1.810e-03 | window prefill 2.67e-04 all 1.329e-03 | ratio 0.73
+  gemma4 window seed 1: control prefill 6.97e-05 all 1.592e-03 | window prefill 9.01e-04 all 1.519e-03 | ratio 0.95
+  gemma4 window seed 2: control prefill 4.55e-05 all 2.720e-03 | window prefill 1.69e-04 all 1.606e-03 | ratio 0.59
+  gemma4 window seed 3: control prefill 1.01e-04 all 1.592e-03 | window prefill 5.55e-05 all 8.967e-04 | ratio 0.56
+  gemma4 window seed 4: control prefill 2.30e-04 all 1.662e-03 | window prefill 3.39e-04 all 1.644e-03 | ratio 0.99
+  gemma4 window seed 5: control prefill 9.33e-05 all 1.501e-03 | window prefill 1.29e-04 all 1.866e-03 | ratio 1.24
+  gemma4 window seed 6: control prefill 9.25e-05 all 1.589e-03 | window prefill 4.39e-04 all 1.478e-03 | ratio 0.93
+  gemma4 window seed 7: control prefill 1.74e-04 all 2.554e-03 | window prefill 7.46e-05 all 2.183e-03 | ratio 0.85
+premise ok
+/root/.cache/huggingface/hub/models--google--gemma-4-26B-A4B-it/snapshots/4d7ae4984b7db7de8f8457170b3f1a419ee76d52
+box rc=0 P108_BOX: windows 32 | oneshot bias -0.1420 spread 0.2761 | chunk bias -0.2580 spread 0.3492 | batch bias -0.1485 spread 0.3137 | paged bias -0.1960 spread 0.3262 | mutant_scale bias +2.2572 spread 2.2572 | mutant_window bias -0.9530 spread 0.9530 | rep identical True | calls 30600/30600 sliding {'1024': 25500, '0': 5100} | load 10s | mem 20.13 GB
+
+VERDICT AT_PARITY | -
+FLOOR {"draws": ["oneshot", "chunk", "batch"], "B_floor": 0.2580395855746465, "S_floor": 0.3491854064050725}
+ARM rep: bias +0.0000 spread 0.0000 se 0.0000 kl 0.0 agree 1.000
+ARM oneshot: bias -0.1420 spread 0.2761 se 0.0613 kl 0.42768746083841996 agree 0.790
+ARM chunk: bias -0.2580 spread 0.3492 se 0.0729 kl 0.4826512231170038 agree 0.791
+ARM batch: bias -0.1485 spread 0.3137 se 0.0747 kl 0.4568679269377578 agree 0.795
+ARM paged: bias -0.1960 spread 0.3262 se 0.0699 kl 0.528262332707702 agree 0.773
+ARM mutant_scale: bias +2.2572 spread 2.2572 se 0.1272 kl 5.267709489341508 agree 0.203
+ARM mutant_window: bias -0.9530 spread 0.9530 se 0.0756 kl 1.66074232925935 agree 0.584

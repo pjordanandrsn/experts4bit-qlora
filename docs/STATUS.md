@@ -382,6 +382,16 @@ A parity delta below the floor means *indistinguishable*, never "a small
 cost". Method in [`METHODOLOGY.md`](METHODOLOGY.md) §13.1; per-family
 table in [`SERVING-PARITY.md`](SERVING-PARITY.md).
 
+**Gemma-4's paged path is at parity with transformers' own perturbations** (lane P108, 2026-10-03, one rented
+RTX 5090; **measured** — [`bench/p108/RESULTS-p108.md`](../bench/p108/RESULTS-p108.md),
+`e4b.parity.gemma4.p108.paged-vs-floor.5090.2026-10-03`).
+- **The setup:** 32 wikitext windows with the 1,024-token sliding window binding. The paged path is set against a
+  floor of three arithmetically neutral transformers draws.
+- **The result:** the paged path's mean NLL (5.360) lies between the floor draws' (5.298–5.415). Its bias against
+  transformers' cached forward is −0.196 nats with spread 0.326, against the floor's 0.258 / 0.349. A halved
+  decode scale reads +2.26.
+- **What it supersedes:** the single-window statement below. It still holds at that resolution.
+
 **Gemma-4 has no reference at this resolution.** On three 512-token
 windows transformers' *own* cached forward sits as far from a one-shot
 forward as the paged path does (`e4b.parity.gemma4.no-reference`).

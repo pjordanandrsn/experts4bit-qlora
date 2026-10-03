@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### P108 read (RTX 5090): AT_PARITY -- Gemma-4's paged path is indistinguishable from transformers' own arithmetically neutral perturbations over 32 windows with the sliding window binding (#359)
+
+- **Files:** `bench/p108/RESULTS-p108.md`, `bench/p108/receipts/p108-5090-3/` (one RTX 5090, AMD Ryzen 9 9950X3D;
+  $0.5181; lane $2.3632 over four runs).
+- **The result:**
+  - the paged path's mean NLL, 5.360, lies between the one-shot, chunked and batched transformers draws
+    (5.298–5.415);
+  - against transformers' cached forward its bias is −0.196 nats and spread 0.326, inside the floor's 0.258 / 0.349;
+  - a halved decode scale reads +2.26, and is caught;
+  - a dropped decode window reads −0.95: visible, and LOWER NLL.
+- **Unexplained:** transformers' own cached order sits apart from every other arm.
+- **Registered consequence:**
+  - `docs/SERVING-PARITY.md`'s Gemma-4 row is now "at parity with transformers' own perturbations", with a new section
+    on the floor;
+  - `docs/STATUS.md`;
+  - register row `e4b.parity.gemma4.p108.paged-vs-floor.5090.2026-10-03`;
+  - #359 closes.
+- **Predictions missed:** the floors and the paged bias (larger, and negative), and the window mutant's sign.
+
 ### P108 Amendment 3 (#359): a GPU memory leak in the box fixed, and the last attempt's budget, before any data is read (bench only)
 
 - **Why.** `p108-5090-2` ran out of CUDA memory in group 3 of 4 (30.67 GiB allocated; $1.0068; no data). P97's

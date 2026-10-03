@@ -1,0 +1,50 @@
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+gemma4 window seed 0: control prefill 7.65e-05 all 1.710e-03 | window prefill 2.67e-04 all 1.224e-03 | ratio 0.72
+gemma4 window seed 1: control prefill 6.97e-05 all 1.624e-03 | window prefill 9.01e-04 all 1.580e-03 | ratio 0.97
+gemma4 window seed 2: control prefill 4.55e-05 all 2.848e-03 | window prefill 1.69e-04 all 1.580e-03 | ratio 0.55
+gemma4 window seed 3: control prefill 1.01e-04 all 1.638e-03 | window prefill 5.55e-05 all 9.488e-04 | ratio 0.58
+gemma4 window seed 4: control prefill 2.30e-04 all 1.799e-03 | window prefill 3.39e-04 all 1.814e-03 | ratio 1.01
+gemma4 window seed 5: control prefill 9.33e-05 all 1.440e-03 | window prefill 1.29e-04 all 1.929e-03 | ratio 1.34
+gemma4 window seed 6: control prefill 9.25e-05 all 1.653e-03 | window prefill 4.39e-04 all 1.274e-03 | ratio 0.77
+gemma4 window seed 7: control prefill 1.74e-04 all 2.823e-03 | window prefill 7.46e-05 all 2.105e-03 | ratio 0.75
+.[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+[serve_paged] KV geometry varies per layer: [(1, 64), (2, 32)]
+gemma4 window seed 0: control prefill 7.65e-05 all 1.810e-03 | window prefill 2.67e-04 all 1.329e-03 | ratio 0.73
+gemma4 window seed 1: control prefill 6.97e-05 all 1.592e-03 | window prefill 9.01e-04 all 1.519e-03 | ratio 0.95
+gemma4 window seed 2: control prefill 4.55e-05 all 2.720e-03 | window prefill 1.69e-04 all 1.606e-03 | ratio 0.59
+gemma4 window seed 3: control prefill 1.01e-04 all 1.592e-03 | window prefill 5.55e-05 all 8.967e-04 | ratio 0.56
+gemma4 window seed 4: control prefill 2.30e-04 all 1.662e-03 | window prefill 3.39e-04 all 1.644e-03 | ratio 0.99
+gemma4 window seed 5: control prefill 9.33e-05 all 1.501e-03 | window prefill 1.29e-04 all 1.866e-03 | ratio 1.24
+gemma4 window seed 6: control prefill 9.25e-05 all 1.589e-03 | window prefill 4.39e-04 all 1.478e-03 | ratio 0.93
+gemma4 window seed 7: control prefill 1.74e-04 all 2.554e-03 | window prefill 7.46e-05 all 2.183e-03 | ratio 0.85
+.
+2 passed in 8.68s
