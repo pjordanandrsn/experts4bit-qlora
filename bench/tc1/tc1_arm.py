@@ -3077,7 +3077,16 @@ def run_arm(a, load_fn, sampler=True):
             _has_gbe = hasattr(_fast, "_group_by_expert")
         except Exception:
             _has_gbe = False
-        sync_ab = {"e4b_grouping": os.environ.get("E4B_GROUPING") or "default", "gnf4_pinned_ring": os.environ.get("GNF4_PINNED_RING") or "0",
+        _ring_on = None
+        if _ng is not None and hasattr(_ng, "_pinned_ring_enabled"):
+            try:
+                _ring_on = bool(_ng._pinned_ring_enabled())
+            except Exception:
+                _ring_on = None
+        # the ACTUAL state since grouped-nf4-gemm#439 made the ring the default (unset = on there); the env value rides beside it
+        sync_ab = {"e4b_grouping": os.environ.get("E4B_GROUPING") or "default",
+                   "gnf4_pinned_ring": ("1" if _ring_on else "0") if _ring_on is not None else (os.environ.get("GNF4_PINNED_RING") or "0"),
+                   "gnf4_pinned_ring_env": os.environ.get("GNF4_PINNED_RING"),
                    "e4b_has_group_by_expert": _has_gbe, "gnf4_has_ring": bool(_ng is not None and hasattr(_ng, "_PinnedRing")),
                    "ring_staged": int(sum(r.staged for r in _rings)), "ring_waits": int(sum(r.waits for r in _rings))}
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms

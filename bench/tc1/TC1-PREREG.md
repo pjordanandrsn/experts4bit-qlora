@@ -417,3 +417,34 @@ says the two are at parity within the draw noise. Either way, e4b finishing a 20
 reported as before.
 
 Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20; the standing no-ask tier.
+
+### Amendment 12 (2026-10-03T10:34Z, before any box): where e4b's step goes after #945, profiled (P19)
+
+**Why.** Amendment 10 removed 12 of 13 host syncs per MoE layer pass, and e4b's step got 13-15 % faster. TC1's only profile of e4b's
+fused step (`tc1-5090-16`, matched arm) predates that change: 48 % device-busy, about 141,000 device events and 753,000 CPU ops per
+step. The next change to e4b depends on what bounds the step now: kernel-launch volume, the one remaining sync, or the GPU itself.
+
+**The token** `qwen3prof945` (TC1_BOX=A) runs TC1's profile instrument on three arms in this order: 3 warm and 3 profiled steps, with
+`nvidia-smi dmon` beside each.
+
+1. e4b shipped with the single-read grouping and pinned ring;
+2. e4b matched with the same;
+3. e4b matched with the legacy grouping and pageable copies, as the before-picture on the same host.
+
+grouped-nf4-gemm is pinned at the merge of #439. Each arm's `sync_ab` record names its path. That record now carries the ring's
+actual state, because #439 made it the default, plus the environment value beside it. The engagement predicate voids an arm whose
+record contradicts its tag.
+
+**Readings.**
+
+- **Descriptive:** per arm, the device busy fraction, device events and CPU ops per step, and CPU self time by family.
+- **Prediction P19:** the matched arm's device busy fraction on the new path is at least the legacy arm's plus 0.05. FALSIFIED below
+  that; UNTESTED if either arm is not VALID or lacks a profile.
+
+**Decision rule.** The next engineering target for #945 follows from the profile.
+
+- **Device events and CPU ops per step still near the before-picture's, with the busy fraction rising but under 0.75:** the step is
+  launch-bound, and the next work is launch volume (fusion in the attention and LoRA paths, then graph capture).
+- **Busy fraction at or above 0.75:** the GPU is the bound, and the next work is the kernels.
+
+Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.
