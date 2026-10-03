@@ -10,9 +10,11 @@ written there. P98 hit it as ``indexSelectSmallIndex: srcIndex < srcSelectDimSiz
 route gathers ``x.index_select(0, rt)``.
 
 Here K25 is off (``E4B_NF4_GROUPED_SMALLM=0``), so every row count gathers through ``rt``. Buckets 2 and 4 are captured
-in that order, the allocator is then handed zero-filled blocks of ``rt``'s size (a reused ``rt`` reads token 0 for
+in that order, warmed on one side stream as ``_capture_bucket`` warms them. The allocator then hands that stream's
+small blocks back out zero-filled (a freed block is reused only on its own stream; a reused ``rt`` reads token 0 for
 every row: a clean mismatch rather than a process-killing out-of-range read), and bucket 2 replays new inputs. It must
-equal the eager call on the same inputs, bit for bit.
+equal the eager call on the same inputs, bit for bit. A first version churned on the default stream and passed with
+the fix reverted: an inert check.
 
 Any CUDA card (the NF4 M-tile and the tile builder are Triton, no fp8); skips without one.
 """
@@ -67,9 +69,11 @@ def test_an_earlier_buckets_replay_keeps_its_row_to_token_index(monkeypatch):
         return m._forward_collapsed(x, flat, w, T, TOPK, H, dev, dev, torch.bfloat16)
 
     graphs = {}
+    # ONE side stream for every warm-up and for the churn below: the caching allocator reuses a freed block only on the
+    # stream it was allocated on, and the warm-ups (where rt is built) run on a side stream, as in _capture_bucket
+    side = torch.cuda.Stream()
     for T in (2, 4):                                              # enable_decode_graphs' order: warm, then capture
         x_s, f_s, w_s = (t.clone() for t in _inputs(T, 10 + T))
-        side = torch.cuda.Stream()
         side.wait_stream(torch.cuda.current_stream())
         with torch.no_grad(), torch.cuda.stream(side):
             for _ in range(2):
@@ -80,8 +84,9 @@ def test_an_earlier_buckets_replay_keeps_its_row_to_token_index(monkeypatch):
         with torch.no_grad(), torch.cuda.graph(g):
             out = call(x_s, f_s, w_s, T)
         graphs[T] = (g, x_s, f_s, w_s, out)
-    # hand the allocator's small blocks back out, zero-filled: a freed rt now reads token 0 for every row
-    churn = [torch.zeros(n, dtype=torch.long, device=DEV) for n in (2 * TOPK, 4 * TOPK) for _ in range(64)]
+    # hand the side stream's small blocks back out, zero-filled: a freed rt now reads token 0 for every row
+    with torch.cuda.stream(side):
+        churn = [torch.zeros(n, dtype=torch.long, device=DEV) for n in (2 * TOPK, 4 * TOPK) for _ in range(64)]
     torch.cuda.synchronize()
     g, x_s, f_s, w_s, out = graphs[2]
     for seed in (101, 102, 103):
