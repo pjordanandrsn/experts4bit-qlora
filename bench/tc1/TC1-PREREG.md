@@ -658,3 +658,33 @@ That replicates the ordering.
 - **UNTESTED:** the row stays one-host, and the box is not re-run inside this amendment.
 
 Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20; the standing no-ask tier.
+
+### Amendment 18 (2026-10-03T17:12Z, before any box): P27's ordering on a second host, with the machine excluded by evidence (P29)
+
+**Why.** Amendment 17's box (`tc1-5090-47`) landed on Vast machine 142284 again, the same machine as `tc1-5090-46`. With the
+launcher's machine preference off, that machine was still the cheapest RTX 5090 offer. By amendment 17's rule the box is a repeat
+and P28 is UNTESTED, and the rule forbids re-running inside that amendment. adertha-agents#139 adds the missing mechanism: a launch
+can cite a COMPLETED receipt whose machine it must not reuse (`--avoid-vast-machine-receipt`; manifest field
+`avoid_vast_machine_receipts`). The exclusion and its reason are recorded in the new receipt.
+
+**The box.** Byte-identical to `tc1-5090-46`: the `qwen3nativebest200` token, e4b pinned at `e5859e9`, grouped-nf4-gemm at
+`00929a4`, no environment set. The manifest cites `receipts/experts4bit-qlora/2026-10-03/tc1-5090-46/receipt.json` in
+`avoid_vast_machine_receipts`, so machine 142284 is out of the offer search. The launcher's adertha head carries #139.
+
+**Prediction P29** (registered before the box), read off the box's own P14 line: the late-window ratio axolotl scattermoe / e4b
+shipped over steps 101..200 lies in **[1.05, 1.50]**, with its whole cross-draw interval above 1.0. That replicates P27's ordering
+on a second host.
+
+- FALSIFIED outside the band, or with an interval that reaches 1.0.
+- UNTESTED on an unstable or missing pair.
+- UNTESTED if the receipt does not show machine 142284 excluded and a different machine bought.
+
+**Decision rules.**
+
+- **HELD:** the amendment-16 register row records the replication on a second host, and STATUS drops "one host".
+- **FALSIFIED:** the row and STATUS say the ordering is host-dependent and name both hosts.
+- **UNTESTED:** the row stays one-host.
+
+`tc1-5090-47`'s same-host repeat is reported beside as a repeatability reading, never as a second host.
+
+Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20; the standing no-ask tier.
