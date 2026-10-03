@@ -10,8 +10,11 @@ Arms (``P109_ARM``):
   G  ``E4B_PAGED_GRAPHS=1``: bucketed CUDA-graph decode. ``build_engine`` switches on the batched lane's sync-free
      device grouping before it captures (``serve_paged._batched_graph_grouping``).
   D  eager decode with G's grouping forced before ``build_engine``: ``hot_residency.DEVICE_GROUPING`` on and
-     ``FORCE_SINGLETON_GROUPS`` off, as ``_batched_graph_grouping`` sets them. This is the function G's replay must equal
-     (P82's identity, here through the server's construction).
+     ``FORCE_SINGLETON_GROUPS`` off, as ``_batched_graph_grouping`` sets them. Unpadded: reported against G (Amendment 2).
+  P  ``E4B_PAGED_GRAPHS=1`` with every bucket run EAGERLY on the same padded layout
+     (``enable_decode_graphs(capture=False)``, the oracle ``tests/test_decode_graph_buckets.py`` asserts and P82 / B771b's
+     arm P). This is the function G's replay must equal (Amendment 2): W16's staggered prefill decodes 1-15 active rows,
+     and a graph step pads them to the next bucket, where a bf16 GEMM may round differently than at the unpadded count.
 
 Each arm runs two workloads on the same engine:
   W16  the 16 prompt rows added at once;
@@ -35,7 +38,7 @@ import sys
 import time
 
 ROWS, PROMPT, OFFSET = 16, 512, 4096
-ARMS = ("E", "G", "D")
+ARMS = ("E", "G", "D", "P")
 WORKLOADS = {"W16": ROWS, "W1": 1}
 
 
@@ -116,7 +119,7 @@ def arm_main(a) -> int:
     from experts4bit_qlora.engines import hot_residency as hr
     from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
     cfg = PagedServeConfig.from_env()
-    want_graphs = arm == "G"
+    want_graphs = arm in ("G", "P")
     if cfg.graphs != want_graphs:
         raise SystemExit(f"REFUSED: arm {arm} with E4B_PAGED_GRAPHS -> graphs={cfg.graphs}")
     if (cfg.max_seqs, cfg.placement, tuple(cfg.buckets)) != (16, "all-vram", (1, 2, 4, 8, 16)):
@@ -125,6 +128,14 @@ def arm_main(a) -> int:
     if arm == "D":                       # G's grouping, without the graphs
         hr.DEVICE_GROUPING[0] = True
         hr.FORCE_SINGLETON_GROUPS[0] = False
+    if arm == "P":                       # G's padded bucket steps, run eagerly: the replays' bitwise oracle
+        from experts4bit_qlora.engines import paged_runner
+        _capture = paged_runner.PagedModelRunner.enable_decode_graphs
+
+        def _padded_eager(self, buckets=paged_runner.DEFAULT_BUCKETS, **kw):
+            kw["capture"] = False
+            return _capture(self, buckets, **kw)
+        paged_runner.PagedModelRunner.enable_decode_graphs = _padded_eager
     t0 = time.perf_counter()
     parts = build_engine(cfg)
     load_s = time.perf_counter() - t0
@@ -185,7 +196,7 @@ def self_test() -> int:
     ok.append(s["decode_tok_s_median"] == round(16 * 128 / (3.1 - 1.05), 2))
     ok.append(slope([2.0], [2.0], 1, 32, 160)["status"].startswith("void"))
     ok.append(digest([[1, 2], [3]]) == digest([[1, 2], [3]]) != digest([[1, 2], [4]]))
-    ok.append(WORKLOADS == {"W16": 16, "W1": 1} and ARMS == ("E", "G", "D"))
+    ok.append(WORKLOADS == {"W16": 16, "W1": 1} and ARMS == ("E", "G", "D", "P"))
     n = len(ok)
     print(f"p109_box self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{n} cases)")
     return 0 if all(ok) else 1

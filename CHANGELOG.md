@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### P109 Amendment 2 (#770): the graph replay's oracle is the padded eager step, before any reading data (bench and tests only)
+
+- **What the proof showed.** `p109-prove-2` ($0.057) proved the whole box on Granite. Its verdict, not a reading, was
+  FUNCTION_FAIL: G1 = G2, but both differed from D1, the unpadded eager step, on 7 of 16 rows of the 16-request workload.
+- **Why that was the registration's error.** The 16-request workload's staggered prefill decodes 1–15 active rows, and a
+  graph step pads them to the next bucket. The repo's own test asserts the replay against the PADDED eager step and
+  only reports the unpadded one. P82 and B771b's identity traces were all bucket-sized, so they never padded.
+- **The stopped reading.** `p109-5090-1` was stopped 27 s into staging, before any data, at $0.015.
+- **The change.** A sixth arm, P1 (`E4B_PAGED_GRAPHS=1` with `enable_decode_graphs(capture=False)`), is now FUNCTION's
+  oracle. G-vs-D is reported. The reducer self-tests on 18 cases. Everything else is unchanged.
+- **Said before the data:** the sanity bar is unchanged, and the Granite proof read 8 of 16 on it.
+
 ### P109 Amendment 1 (#770): the proving run gets its own time-left checks, before any reading data (bench only)
 
 - **What happened.** `p109-prove-1` ($0.0207) passed everything up to the fetch on an RTX 5090: the install, the tripwire,

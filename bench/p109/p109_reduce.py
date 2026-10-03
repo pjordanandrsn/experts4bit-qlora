@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """p109_reduce.py -- lane P109's registered rule (bench/p109/PREREG-p109.md; e4b#770), from the five arm receipts.
 
-Receipts: arm_E1.json, arm_G1.json, arm_G2.json, arm_E2.json, arm_D1.json (run in that order), each from p109_box.py.
+Receipts: arm_E1.json, arm_G1.json, arm_G2.json, arm_E2.json, arm_D1.json, arm_P1.json (run in that order), each from
+p109_box.py.
 
 The verdict is the first of these that applies:
   VOID           an arm is missing or not ok; a receipt names the wrong e4b / grouped-nf4-gemm commit or model revision; the
                  arms read different prompts; or engagement is wrong:
                    G: every bucket in (1, 2, 4, 8, 16) is "graph" and device grouping is on;
                    E: no graphs and device grouping off;
-                   D: no graphs and device grouping on.
+                   D: no graphs and device grouping on;
+                   P: every bucket "eager: capture=False" and device grouping on (Amendment 2).
   NOISY          a self-pair (E2/E1 or G2/G1, decode tok/s, either workload) falls outside [0.93, 1.07].
-  FUNCTION_FAIL  the graph replay is not its own eager function:
-                   G1 and G2 must emit tokens identical to D1's on every row of both workloads, at both lengths;
-                   every timed rep of a G arm must digest the same.
+  FUNCTION_FAIL  the graph replay is not its own eager function (Amendment 2: the PADDED eager step, P1):
+                   G1 and G2 must emit tokens identical to P1's on every row of both workloads, at both lengths;
+                   every timed rep of a G or P arm must digest the same.
   KEEP           speed: S16 = min(G1/E1, G2/E2) on W16 < 1.25, or S1 = the same on W1 < 0.97.
   DIVERGENT      sanity: fewer than 12 of W16's 16 rows have G1 agree with E1 for their first 16 LONG tokens.
   DEFAULT_GRAPHS otherwise.
@@ -20,6 +22,8 @@ The verdict is the first of these that applies:
 Reported beside the verdict (no bar):
   - E1 = E2 tokens;
   - E-vs-G first-divergence positions;
+  - G against D1, the UNPADDED eager step with the same grouping (the registration's original oracle): rows identical
+    and first divergences, and whether P1 = D1;
   - G-minus-E peak memory and load time.
 """
 import argparse
@@ -28,7 +32,7 @@ import os
 import statistics
 import sys
 
-TAGS = ("E1", "G1", "G2", "E2", "D1")
+TAGS = ("E1", "G1", "G2", "E2", "D1", "P1")
 BUCKETS = ("1", "2", "4", "8", "16")
 SELF_LO, SELF_HI = 0.93, 1.07
 S16_MIN, S1_MIN = 1.25, 0.97
@@ -70,8 +74,9 @@ def reduce(arms: dict, e4b_sha: str) -> dict:
         if REVS.get(r.get("model")) != r.get("revision"):
             void.append(f"{t}: model {r.get('model')}@{r.get('revision')} is not a registered revision")
         g, flags = r.get("graph_status"), r.get("grouping_flags_at_run") or {}
-        if t.startswith("G"):
-            if not g or [g.get(b) for b in BUCKETS] != ["graph"] * 5:
+        if t.startswith(("G", "P")):
+            want = "graph" if t.startswith("G") else "eager: capture=False"
+            if not g or [g.get(b) for b in BUCKETS] != [want] * 5:
                 void.append(f"{t}: graph_status {g}")
             if not flags.get("device_grouping"):
                 void.append(f"{t}: device grouping off")
@@ -87,7 +92,7 @@ def reduce(arms: dict, e4b_sha: str) -> dict:
     if void:
         out.update(verdict="VOID", reasons=void)
         return out
-    E1, G1, G2, E2, D1 = (arms[t] for t in TAGS)
+    E1, G1, G2, E2, D1, P1 = (arms[t] for t in TAGS)
     short, long_ = E1["short"], E1["long"]
     rates = {t: {w: _rate(arms[t], w) for w in ("W16", "W1")} for t in TAGS}
     out["decode_tok_s"] = rates
@@ -103,10 +108,10 @@ def reduce(arms: dict, e4b_sha: str) -> dict:
     for w in ("W16", "W1"):
         for n in (short, long_):
             for t in ("G1", "G2"):
-                if _tok(arms[t], w, n) != _tok(D1, w, n):
-                    rows = [i for i, (x, y) in enumerate(zip(_tok(arms[t], w, n), _tok(D1, w, n))) if x != y]
-                    fn.append(f"{t} != D1 on {w} at {n} tokens, rows {rows}")
-    for t in ("G1", "G2"):
+                if _tok(arms[t], w, n) != _tok(P1, w, n):
+                    rows = [i for i, (x, y) in enumerate(zip(_tok(arms[t], w, n), _tok(P1, w, n))) if x != y]
+                    fn.append(f"{t} != P1 on {w} at {n} tokens, rows {rows}")
+    for t in ("G1", "G2", "P1"):
         for w in ("W16", "W1"):
             for n, ds in arms[t]["workloads"][w]["rep_digests"].items():
                 if len(set(ds)) != 1:
@@ -119,6 +124,10 @@ def reduce(arms: dict, e4b_sha: str) -> dict:
         "E_vs_G_W16_median_first_divergence": statistics.median(fd),
         "E_vs_G_W1_first_divergence": first_divergence(_tok(E1, "W1", long_)[0], _tok(G1, "W1", long_)[0]),
         "sanity_rows_agreeing": agree,
+        "G_vs_D_first_divergence": {w: [first_divergence(a, b) for a, b in zip(_tok(G1, w, long_), _tok(D1, w, long_))]
+                                    for w in ("W16", "W1")},
+        "G_eq_D": all(_tok(G1, w, n) == _tok(D1, w, n) for w in ("W16", "W1") for n in (short, long_)),
+        "P_eq_D": all(_tok(P1, w, n) == _tok(D1, w, n) for w in ("W16", "W1") for n in (short, long_)),
         "peak_gib": {t: round(arms[t]["mem_after_runs"]["max_memory_allocated"] / 2**30, 3) for t in TAGS},
         "load_s": {t: arms[t]["load_s"] for t in TAGS}}
     out["report"]["G_minus_E_peak_gib"] = round(out["report"]["peak_gib"]["G1"] - out["report"]["peak_gib"]["E1"], 3)
@@ -144,9 +153,10 @@ def _fake(tag, rate16, rate1, toks16, toks1, *, e4b="a" * 40, model="Qwen/Qwen3-
           digests=None, short=4, long_=8):
     arm = tag[0]
     if graphs is None:
-        graphs = {b: "graph" for b in BUCKETS} if arm == "G" else None
+        graphs = ({b: "graph" for b in BUCKETS} if arm == "G" else
+                  {b: "eager: capture=False" for b in BUCKETS} if arm == "P" else None)
     if dg is None:
-        dg = arm in ("G", "D")
+        dg = arm in ("G", "D", "P")
 
     def wl(rate, toks):
         return {"decode_tok_s": rate, "tokens": {str(short): [t[:short] for t in toks], str(long_): toks},
@@ -165,7 +175,7 @@ def self_test() -> int:
     def arms(**over):
         a = {"E1": _fake("E1", 200.0, 40.0, base, one), "G1": _fake("G1", 900.0, 150.0, base, one),
              "G2": _fake("G2", 905.0, 151.0, base, one), "E2": _fake("E2", 198.0, 40.5, base, one),
-             "D1": _fake("D1", 210.0, 41.0, base, one)}
+             "D1": _fake("D1", 210.0, 41.0, base, one), "P1": _fake("P1", 230.0, 42.0, base, one)}
         a.update(over)
         return a
     E = "a" * 40
@@ -180,7 +190,12 @@ def self_test() -> int:
     cases.append(("noisy E", reduce(arms(E2=_fake("E2", 150.0, 40.5, base, one)), E)["verdict"] == "NOISY"))
     g_off = [list(r) for r in base]
     g_off[3][5] += 1
-    cases.append(("G != D", reduce(arms(G1=_fake("G1", 900.0, 150.0, g_off, one)), E)["verdict"] == "FUNCTION_FAIL"))
+    cases.append(("G != P", reduce(arms(G1=_fake("G1", 900.0, 150.0, g_off, one)), E)["verdict"] == "FUNCTION_FAIL"))
+    r_d = reduce(arms(D1=_fake("D1", 210.0, 41.0, g_off, one)), E)                 # unpadded eager differs: reported only
+    cases.append(("G != D reported", r_d["verdict"] == "DEFAULT_GRAPHS" and not r_d["report"]["G_eq_D"]
+                  and r_d["report"]["G_vs_D_first_divergence"]["W16"][3] == 5 and not r_d["report"]["P_eq_D"]))
+    cases.append(("P captured graphs", reduce(arms(P1=_fake("P1", 230.0, 42.0, base, one,
+                                                             graphs={b: "graph" for b in BUCKETS})), E)["verdict"] == "VOID"))
     cases.append(("G reps differ", reduce(arms(G2=_fake("G2", 905.0, 151.0, base, one, digests={"4": ["x"] * 3, "8": ["y", "y", "z"]})), E)["verdict"] == "FUNCTION_FAIL"))
     cases.append(("slow at B=16", reduce(arms(G1=_fake("G1", 240.0, 150.0, base, one), G2=_fake("G2", 241.0, 151.0, base, one)), E)["verdict"] == "KEEP"))
     cases.append(("regress at B=1", reduce(arms(G1=_fake("G1", 900.0, 38.0, base, one), G2=_fake("G2", 905.0, 38.2, base, one)), E)["verdict"] == "KEEP"))

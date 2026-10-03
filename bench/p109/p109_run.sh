@@ -4,12 +4,13 @@
 # P109_SUCCESS.<nonce> only when the reducer ran (or, under P109_PROVE=1, when the proof passed).
 #
 # serve_paged's decode-graph default, on ONE RTX 5090: the engine built exactly as the shipped server builds it, at its
-# default configuration, in five arms of their own processes -- E1 G1 G2 E2 D1 (E = today's eager default, G =
-# E4B_PAGED_GRAPHS=1, D = eager with G's device grouping) -- each through W16 (16 requests at once) and W1 (one request);
+# default configuration, in six arms of their own processes -- E1 G1 G2 E2 D1 P1 (E = today's eager default, G =
+# E4B_PAGED_GRAPHS=1, D = eager with G's device grouping, P = G's padded bucket steps run eagerly: Amendment 2) -- each
+# through W16 (16 requests at once) and W1 (one request);
 # p109_reduce.py applies the registered rule.
 #   premise  on THIS card, before anything is fetched: tests/test_decode_graph_buckets.py, 7 passed, none skipped (a
 #            bucket replay decodes exactly as the padded eager step on a tiny model, real fp8 KV) (rc 25)
-#   order    install + tripwire; box and reducer self-tests; premise; fetch; NF4 arena bake; prompts; five arms; reduce
+#   order    install + tripwire; box and reducer self-tests; premise; fetch; NF4 arena bake; prompts; six arms; reduce
 #
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
 # P109_GPU_CLASS P109_MIN_DISK_GB P109_MIN_RAM_GB P109_REHEARSAL P109_SHORT P109_LONG P109_REPS.
@@ -126,10 +127,10 @@ grep -a "BAKE" logs/bake.log | tail -1 | tee -a summary.txt
 perl -e "alarm 1200; exec @ARGV" python $W/p109_box.py --prompts-only --model "$MODEL" --revision "$REV" --out $W/prompts.json > logs/prompts.log 2>&1 \
   || { tail -4 logs/prompts.log; say "PROMPTS FAIL"; finish 19; }
 grep -a "^P109_PROMPTS" logs/prompts.log | tee -a summary.txt
-# ---- the five arms: E1 G1 G2 E2 D1, each a fresh process on the default server (only the arm's switch differs)
+# ---- the six arms: E1 G1 G2 E2 D1 P1, each a fresh process on the default server (only the arm's switch differs)
 ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json"
-for TAG in E1 G1 G2 E2 D1; do
-  ARM=${TAG:0:1}; GR=""; [ "$ARM" = G ] && GR="E4B_PAGED_GRAPHS=1"
+for TAG in E1 G1 G2 E2 D1 P1; do
+  ARM=${TAG:0:1}; GR=""; case "$ARM" in G|P) GR="E4B_PAGED_GRAPHS=1";; esac
   can_run $NEED_ARM "arm $TAG" || finish 40
   AL=$(step_alarm 2400); say "arm $TAG (alarm=$AL)"
   # shellcheck disable=SC2086  # ENGINE_ENV and GR are assignment lists by design

@@ -64,13 +64,13 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 
 
 def test_the_self_tests_pass():
-    for script, want in (("p109_reduce.py", "self-test OK (16 cases)"), ("p109_box.py", "self-test OK (5/5 cases)")):
+    for script, want in (("p109_reduce.py", "self-test OK (18 cases)"), ("p109_box.py", "self-test OK (5/5 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True)
         assert out.returncode == 0 and want in out.stdout, out.stdout + out.stderr
 
 
 def test_the_rule_is_the_registered_rule():
-    assert 'TAGS = ("E1", "G1", "G2", "E2", "D1")' in REDUCE
+    assert 'TAGS = ("E1", "G1", "G2", "E2", "D1", "P1")' in REDUCE                  # Amendment 2: P1
     assert "SELF_LO, SELF_HI = 0.93, 1.07" in REDUCE and "S16_MIN, S1_MIN = 1.25, 0.97" in REDUCE
     assert "SANE_ROWS, SANE_TOKENS = 12, 16" in REDUCE
     gnf4 = re.search(r'GNF4_SHA = "([0-9a-f]{40})"', REDUCE).group(1)
@@ -83,7 +83,7 @@ def test_the_order_puts_every_refusal_before_the_fetch():
     order = ["REFUSED: card is", "REFUSED: ${FREE_GB", "REFUSED: ${RAM_GB", 'say "install e4b @', "python - <<'PYT'",
              "p109_reduce.py --self-test", "p109_box.py --self-test", "python -m pytest test_decode_graph_buckets.py",
              'echo "premise ok"', 'say "fetch $MODEL @ $REV"', "python $W/k8_bake.py", "p109_box.py --prompts-only",
-             "for TAG in E1 G1 G2 E2 D1; do", "python $W/p109_reduce.py --dir $W --out $W/verdict.json"]
+             "for TAG in E1 G1 G2 E2 D1 P1; do", "python $W/p109_reduce.py --dir $W --out $W/verdict.json"]
     at = [RUN.index(s) for s in order]
     assert at == sorted(at), list(zip(order, at))
     assert 'grep -q "7 passed" && ! echo "$LASTL" | grep -q skipped' in RUN
@@ -98,9 +98,11 @@ def test_the_subject_is_the_default_server():
                  "E4B_NF4_GROUPED_SMALLM", "E4B_SERVE_EXP_INT4"):
         assert knob in unset, knob
     assert 'ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work/nf4.arena E4B_PAGED_CALIB=$W/calib.json"' in RUN
-    assert '[ "$ARM" = G ] && GR="E4B_PAGED_GRAPHS=1"' in RUN
+    assert 'case "$ARM" in G|P) GR="E4B_PAGED_GRAPHS=1";; esac' in RUN
     assert '(cfg.max_seqs, cfg.placement, tuple(cfg.buckets)) != (16, "all-vram", (1, 2, 4, 8, 16))' in BOX
     assert "hr.DEVICE_GROUPING[0] = True" in BOX and "hr.FORCE_SINGLETON_GROUPS[0] = False" in BOX
+    assert 'kw["capture"] = False' in BOX and "paged_runner.PagedModelRunner.enable_decode_graphs = _padded_eager" in BOX
+    assert '"FUNCTION_FAIL"' in REDUCE and 'fn.append(f"{t} != P1 on {w} at {n} tokens, rows {rows}")' in REDUCE
 
 
 def test_the_box_reads_the_registered_shape():
