@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### TC1 amendment 14 read (#945): the grouped GEMM's M-tile height from the group sizes makes e4b's training step 3–8 % faster on a 5090
+
+- **What was asked.** On one RTX 5090 (`tc1-5090-43`, $0.41), e4b against itself: grouped-nf4-gemm's M-tile height keyed on the
+  largest group (`GNF4_PREFILL_TILE_RULE=max`) against the cost rule over the actual sizes (#441). Shipped and matched arms, two
+  draws each, ABBA order.
+- **What it read.** P22 and P23 are HELD:
+
+  | arm | cost / max step time | cross-draw range |
+  |---|---|---|
+  | shipped | **0.924** | 0.918 – 0.930 |
+  | matched | **0.968** | 0.964 – 0.971 |
+
+  Held-out loss is unchanged and energy per step lower (register `e4b.train.prefill-tile-rule.qwen3.5090.2026-10-03`).
+- **What follows.** `cost` becomes grouped-nf4-gemm's default (#442). Read: `bench/h2h-2026-10-02/tc1/RESULTS-tc1-tileab.md`.
+
 ## 0.41.1 — 2026-10-03 — Gemma-4 serves through `serve_paged` again (a 0.41.0 regression), the paged attention's unbound fallback keeps sliding windows, and fused training makes fewer host syncs and launches
 
 **0.41.1.** Two fixes, three training-path reductions that leave the arithmetic unchanged, and one opt-in serving knob.

@@ -1,0 +1,162 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: qwen3tileab; e4b 43f36c79f6f2b0c028744a5e8f9acc43acb15c58 gnf4 c8f0adcc67f4cbd954b4c12e50dd48bf8d024efd; run tc1-5090-43 instance 54011443 deadline 1791035995; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=16 (physical cores) box_class=RTX 5090
+[2026-10-03T12:31:14Z] tc1/boxA: driver 580.159.03: cu130 venvs (venv-unsloth, venv-axolotl) will be built
+DRIVER 580.159.03 cu130_ok=1
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.159.03, GPU-b59c7979-74a7-fdfc-280d-0d81c32ec602, 500.00 W, 3105 MHz
+CPU(s):                               32
+Model name:                           AMD Ryzen 9 7950X 16-Core Processor
+MemTotal:       130979720 kB
+cgroup memory.max 128756744192
+overlay         320G   35M  320G   1% /
+[2026-10-03T12:31:14Z] tc1/boxA: venv-e4b (system torch): e4b @43f36c79f6f2b0c028744a5e8f9acc43acb15c58 + gnf4 @c8f0adcc67f4cbd954b4c12e50dd48bf8d024efd + transformers==5.18.0 bitsandbytes==0.50.2 peft==0.21.2
+pip(e4b) rc=0
+tc1 tripwire OK (e4b): 0.41.0 @ 43f36c79f6f2 gnf4 0.34.1 @ c8f0adcc67f4 torch 2.8.0+cu128 triton 3.4.0 transformers 5.18.0 bnb 0.50.2 peft 0.21.2
+[2026-10-03T12:32:25Z] tc1/boxA: venv-unsloth-t28 SKIPPED: the qwen3tileab token runs no Unsloth arm (TC1-PREREG amendment 3)
+[2026-10-03T12:32:25Z] tc1/boxA: venv-unsloth (cu130) SKIPPED: the qwen3tileab token runs no Unsloth arm (TC1-PREREG amendment 3)
+[2026-10-03T12:32:25Z] tc1/boxA: venv-axolotl: uv venv --python 3.12 + axolotl==0.20.0 --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match (alarm 2700 s)
+pip(axolotl) rc=0
+tc1 tripwire OK (axolotl): 0.20.0 torch 2.14.0+cu130 transformers 5.17.0 peft 0.21.0 bnb 0.50.2 python 3.12.15 deepspeed None
+[2026-10-03T12:34:38Z] tc1/boxA: dataset alpaca (tp4_alpaca.py: unsloth/alpaca-cleaned @ pinned revision, seed 3407, 1200/48)
+DS alpaca n_train=1200 n_eval=48 seed=3407 sha256=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb -> /root/tc1/data/ds_alpaca.json
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+[2026-10-03T12:34:42Z] tc1/boxA: ===== TILE-RULE A/B family qwen3tileab (Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39; gnf4's max-keyed prefill M-tile vs the cost rule, #945)
+[2026-10-03T12:34:42Z] tc1/boxA: fetch qwen3tileab (Qwen/Qwen3-30B-A3B, unpinned; pin ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+staged in 22.3 min at /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+PIN OK qwen3tileab staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+overlay         320G   72G  249G  23% /
+[2026-10-03T12:57:00Z] tc1/boxA: tokenise qwen3tileab (alpaca, seq 2048) -> tokens_qwen3tileab.json
+TOKENS fam=qwen3tileab template=alpaca n_train=1200 n_eval=8 train_tokens=235852 mean=196.5 pad_id=151643 sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac
+TOKENS qwen3tileab alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+[2026-10-03T12:57:03Z] tc1/boxA: arm qwen3tileab/e4b/fused_attn4_shipped_tilemax (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2872 expect_trainable=none --attn-4bit 1 --adapter-dtype native --lora-init native)
+    LOAD OK {"fam": "qwen3tileab", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 19.3, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.41.0+det:8af1918f6c2e", "traina
+    PROLOGUE {"phase_seconds": {"preamble": 3.365, "load_weights": 15.005, "verify": 0.0, "attn4": 3.279, "lora": 0.022, "enable": 0.003, "tokenizer": 0.29, "census": 0.673, "frozen_probe": 0.057, "trainable_sha": 1.56, "counters": 0.0, "c1_before": 33.466, "eval0": 7.661, "optimizer": 0.128}, "phase_bu
+    CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_tilemax", "status": "ok", "steps": 20, "seq": 2048, "
+1 MiB
+[2026-10-03T12:59:17Z] tc1/boxA: arm qwen3tileab/e4b/fused_attn4_shipped_tilecost (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2738 expect_trainable=none --attn-4bit 1 --adapter-dtype native --lora-init native)
+    LOAD OK {"fam": "qwen3tileab", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 21.0, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.41.0+det:8af1918f6c2e", "traina
+    PROLOGUE {"phase_seconds": {"preamble": 3.011, "load_weights": 16.632, "verify": 0.0, "attn4": 3.295, "lora": 0.011, "enable": 0.003, "tokenizer": 0.292, "census": 0.687, "frozen_probe": 0.046, "trainable_sha": 1.601, "counters": 0.0, "c1_before": 34.905, "eval0": 2.173, "optimizer": 0.13}, "phase_b
+    CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_tilecost", "status": "ok", "steps": 20, "seq": 2048, 
+1 MiB
+[2026-10-03T13:01:23Z] tc1/boxA: arm qwen3tileab/e4b/fused_attn4_m_tilemax (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2612 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3tileab", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 19.5, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.41.0+det:8af1918f6c2e", "traina
+    PROLOGUE {"phase_seconds": {"preamble": 3.095, "load_weights": 15.096, "verify": 0.0, "attn4": 3.334, "lora": 0.012, "enable": 0.003, "tokenizer": 0.3, "census": 1.706, "frozen_probe": 0.048, "trainable_sha": 2.448, "counters": 0.0, "c1_before": 34.728, "eval0": 1.264, "optimizer": 0.127}, "phase_bu
+    CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_tilemax", "status": "ok", "steps": 20, "seq": 2048, "accum"
+1 MiB
+[2026-10-03T13:03:42Z] tc1/boxA: arm qwen3tileab/e4b/fused_attn4_m_tilecost (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2473 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3tileab", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 19.4, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.41.0+det:8af1918f6c2e", "traina
+    PROLOGUE {"phase_seconds": {"preamble": 3.039, "load_weights": 15.057, "verify": 0.0, "attn4": 3.29, "lora": 0.011, "enable": 0.003, "tokenizer": 0.289, "census": 1.694, "frozen_probe": 0.047, "trainable_sha": 1.53, "counters": 0.0, "c1_before": 34.869, "eval0": 1.2, "optimizer": 0.124}, "phase_budg
+    CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_tilecost", "status": "ok", "steps": 20, "seq": 2048, "accum
+1 MiB
+[2026-10-03T13:05:57Z] tc1/boxA: arm qwen3tileab/e4b/fused_attn4_m_tilecost_d2 (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2338 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3tileab", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 19.6, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.41.0+det:8af1918f6c2e", "traina
+    PROLOGUE {"phase_seconds": {"preamble": 3.089, "load_weights": 15.143, "verify": 0.0, "attn4": 3.364, "lora": 0.013, "enable": 0.003, "tokenizer": 0.307, "census": 1.713, "frozen_probe": 0.046, "trainable_sha": 1.525, "counters": 0.0, "c1_before": 34.814, "eval0": 1.232, "optimizer": 0.127}, "phase_
+    CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_tilecost_d2", "status": "ok", "steps": 20, "seq": 2048, "ac
+1 MiB
+[2026-10-03T13:08:12Z] tc1/boxA: arm qwen3tileab/e4b/fused_attn4_m_tilemax_d2 (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2203 expect_trainable=none --attn-4bit 1 --adapter-dtype fp32 --lora-init matched:3407)
+    LOAD OK {"fam": "qwen3tileab", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 19.4, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.41.0+det:8af1918f6c2e", "traina
+    PROLOGUE {"phase_seconds": {"preamble": 3.126, "load_weights": 15.057, "verify": 0.0, "attn4": 3.339, "lora": 0.013, "enable": 0.003, "tokenizer": 0.3, "census": 1.698, "frozen_probe": 0.047, "trainable_sha": 1.481, "counters": 0.0, "c1_before": 34.894, "eval0": 1.286, "optimizer": 0.126}, "phase_bu
+    CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_tilemax_d2", "status": "ok", "steps": 20, "seq": 2048, "acc
+1 MiB
+[2026-10-03T13:10:30Z] tc1/boxA: arm qwen3tileab/e4b/fused_attn4_shipped_tilecost_d2 (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=2065 expect_trainable=none --attn-4bit 1 --adapter-dtype native --lora-init native)
+    LOAD OK {"fam": "qwen3tileab", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 19.6, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.41.0+det:8af1918f6c2e", "traina
+    PROLOGUE {"phase_seconds": {"preamble": 3.053, "load_weights": 15.166, "verify": 0.0, "attn4": 3.384, "lora": 0.013, "enable": 0.003, "tokenizer": 0.301, "census": 0.693, "frozen_probe": 0.047, "trainable_sha": 1.515, "counters": 0.0, "c1_before": 34.958, "eval0": 1.103, "optimizer": 0.129}, "phase_
+    CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_tilecost_d2", "status": "ok", "steps": 20, "seq": 204
+1 MiB
+[2026-10-03T13:12:33Z] tc1/boxA: arm qwen3tileab/e4b/fused_attn4_shipped_tilemax_d2 (arm=fused recipe=field steps=20 seq=2048 mb=2 accum=4 r=16 lr=2e-4 optim=adamw_8bit sched=linear offload=0 alarm=1942 expect_trainable=none --attn-4bit 1 --adapter-dtype native --lora-init native)
+    LOAD OK {"fam": "qwen3tileab", "framework": "e4b", "arm": "fused", "model_type": "qwen3_moe", "n_layers": 48, "load_s": 19.5, "verify": {"n_quantized": 48, "n_unquantized": 0}, "n_attn4": 192, "n_patched": 48, "structural_expected_n_attn4": 192, "detector_version": "0.41.0+det:8af1918f6c2e", "traina
+    PROLOGUE {"phase_seconds": {"preamble": 3.088, "load_weights": 15.094, "verify": 0.0, "attn4": 3.33, "lora": 0.013, "enable": 0.003, "tokenizer": 0.296, "census": 0.685, "frozen_probe": 0.046, "trainable_sha": 1.55, "counters": 0.0, "c1_before": 34.006, "eval0": 1.207, "optimizer": 0.133}, "phase_bu
+    CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_tilemax_d2", "status": "ok", "steps": 20, "seq": 2048
+1 MiB
+QWEN3TILEAB DONE
+[2026-10-03T13:14:43Z] tc1/boxA: freed qwen3tileab (disk: 302G free)
+[2026-10-03T13:14:43Z] tc1/boxA: reduce
+- prologue `e4b/fused_attn4_shipped_tilecost` **63.5 s** before step 1 (61% of the arm): c1_before 34.9, c1_after 17.4, load_weights 16.6, attn4 3.3; unattributed 0.72; budget 958.3
+- prologue `e4b/fused_attn4_m_tilemax` **62.9 s** before step 1 (54% of the arm): c1_before 34.7, c1_after 17.0, load_weights 15.1, attn4 3.3; unattributed 0.738; budget 914.2
+- prologue `e4b/fused_attn4_m_tilecost` **61.9 s** before step 1 (55% of the arm): c1_before 34.9, c1_after 17.4, load_weights 15.1, attn4 3.3; unattributed 0.739; budget 865.5
+- prologue `e4b/fused_attn4_m_tilecost_d2` **62.1 s** before step 1 (55% of the arm): c1_before 34.8, c1_after 17.3, load_weights 15.1, attn4 3.4; unattributed 0.745; budget 818.3
+- prologue `e4b/fused_attn4_m_tilemax_d2` **62.1 s** before step 1 (54% of the arm): c1_before 34.9, c1_after 17.2, load_weights 15.1, attn4 3.3; unattributed 0.738; budget 771.0
+- prologue `e4b/fused_attn4_shipped_tilecost_d2` **61.1 s** before step 1 (60% of the arm): c1_before 35.0, c1_after 17.1, load_weights 15.2, attn4 3.4; unattributed 0.746; budget 722.8
+- prologue `e4b/fused_attn4_shipped_tilemax_d2` **60.2 s** before step 1 (57% of the arm): c1_before 34.0, c1_after 17.5, load_weights 15.1, attn4 3.3; unattributed 0.735; budget 679.7
+- draws (R1): `e4b/fused_attn4_shipped_tilemax` STABLE (2.232/2.232 s, |Δ|/mean 0.0% vs 5%); `e4b/fused_attn4_shipped_tilecost` STABLE (2.077/2.049 s, |Δ|/mean 1.4% vs 5%); `e4b/fused_attn4_m_tilemax` STABLE (2.618/2.628 s, |Δ|/mean 0.4% vs 5%); `e4b/fused_attn4_m_tilecost` STABLE (2.533/2.543 s, |Δ|/mean 0.4% vs 5%)
+- e4b internal parity: NO-ARM
+- **NO MATCHED POSITION QUOTED (unsloth)** — not quoted: e4b STABLE / unsloth no receipt
+- **NO MATCHED POSITION QUOTED (hf)** — not quoted: e4b STABLE / hf no receipt
+- **NO MATCHED POSITION QUOTED (axolotl)** — not quoted: e4b STABLE / axolotl no receipt
+- equivalence vs `e4b/fused_attn4_m` (I/H; EQUIVALENT iff both ≤ band = max(0.005, 3 × fused-vs-reference |Δ|) = none (no reference arm: COMPARABLE is the ceiling); COMPARABLE ≤ 0.05; draw-noise floor 0.0034): `e4b/fused_attn4_m_tilecost` **COMPARABLE** (median step |Δ| 0.0015, |Δ held-out at N| 0.0029, step-0 0.0000 SAME-BYTES-CLASS, |Δ loss at step 2| 0.0094, paired rows mean -0.0029 ± 0.0028 SE over 8, favouring arm 3 / anchor 5) — no reference arm ran: the EQUIVALENT band cannot be set, COMPARABLE is the ceiling; `e4b/fused_attn4_m_tilecost_d2` **COMPARABLE** (median step |Δ| 0.0017, |Δ held-out at N| 0.0015, step-0 0.0000 SAME-BYTES-CLASS, |Δ loss at step 2| 0.0143, paired rows mean -0.0015 ± 0.0017 SE over 8, favouring arm 5 / anchor 3) — no reference arm ran: the EQUIVALENT band cannot be set, COMPARABLE is the ceiling; `e4b/fused_attn4_m_tilemax_d2` **COMPARABLE** (median step |Δ| 0.0015, |Δ held-out at N| 0.0034, step-0 0.0000 SAME-BYTES-CLASS, |Δ loss at step 2| 0.0010, paired rows mean +0.0034 ± 0.0031 SE over 8, favouring arm 3 / anchor 5) — no reference arm ran: the EQUIVALENT band cannot be set, COMPARABLE is the ceiling
+- matched_init_sha (B, name-free, canonical slot order): anchor `f7832488926eda91`; `e4b/fused_attn4_m_tilemax` same; `e4b/fused_attn4_m_tilecost` same; `e4b/fused_attn4_m_tilecost_d2` same; `e4b/fused_attn4_m_tilemax_d2` same
+- frozen base (R5), anchor `e4b/fused_attn4_m`: gate_up nf4/64 sha 8c3b3fd78e89 control detects, down nf4/64 sha 59569d810a1a control detects, q_proj nf4/64+dq sha 5c5e402ce51d control detects
+- frozen base `e4b/fused_attn4_shipped_tilemax`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `e4b/fused_attn4_shipped_tilecost`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `e4b/fused_attn4_m_tilecost`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `e4b/fused_attn4_m_tilecost_d2`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `e4b/fused_attn4_m_tilemax_d2`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `e4b/fused_attn4_shipped_tilecost_d2`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+- frozen base `e4b/fused_attn4_shipped_tilemax_d2`: gate_up **SAME-BYTES** (nf4/64) control detects, down **SAME-BYTES** (nf4/64) control detects, q_proj **SAME-BYTES** (nf4/64+dq) control detects
+
+## Verdicts
+| family | arm | VERDICT | validity | quality | note |
+|---|---|---|---|---|---|
+| qwen3tileab | e4b/fused_attn4_shipped_tilemax | **VALID** | VALID | -0.0394 |  |
+| qwen3tileab | e4b/fused_attn4_shipped_tilecost | **VALID** | VALID | -0.0404 |  |
+| qwen3tileab | e4b/fused_attn4_m_tilemax | **VALID** | VALID | 0.0000 |  |
+| qwen3tileab | e4b/fused_attn4_m_tilecost | **VALID** | VALID | -0.0029 |  |
+| qwen3tileab | e4b/fused_attn4_m_tilecost_d2 | **VALID** | VALID | -0.0015 |  |
+| qwen3tileab | e4b/fused_attn4_m_tilemax_d2 | **VALID** | VALID | 0.0034 |  |
+| qwen3tileab | e4b/fused_attn4_shipped_tilecost_d2 | **VALID** | VALID | -0.0394 |  |
+| qwen3tileab | e4b/fused_attn4_shipped_tilemax_d2 | **VALID** | VALID | -0.0383 |  |
+
+## Predictions P22 / P23 (TC1-PREREG amendment 14, #945: gnf4's cost tile rule vs the max-keyed M-tile, two stable draws a side; scored mechanically)
+| prediction | family | verdict | evidence |
+|---|---|---|---|
+| P22 | qwen3tileab | **HELD** | shipped: tilecost / tilemax 0.924 [0.918, 0.930 over 4 cross-draw ratios] vs [0.85, 0.97]; decision reading: flip-eligible; s/step tilemax 2.232 / 2.232 (within 0.0%), tilecost 2.077 / 2.049 (within 1.4%); held-out at N tilemax 0.8105 / tilecost 0.8095; tile heights launched (process) tilemax {"128": 15592, "16": 0, "32": 114, "64": 1190} tilecost {"128": 1256, "16": 754, "32": 4096, "64": 10790} |
+| P23 | qwen3tileab | **HELD** | matched: tilecost / tilemax 0.968 [0.964, 0.971 over 4 cross-draw ratios] vs [0.88, 0.98]; decision reading: flip-eligible; s/step tilemax 2.618 / 2.628 (within 0.4%), tilecost 2.533 / 2.543 (within 0.4%); held-out at N tilemax 0.8499 / tilecost 0.8470; tile heights launched (process) tilemax {"128": 15562, "16": 0, "32": 110, "64": 1224} tilecost {"128": 1320, "16": 756, "32": 4052, "64": 10768} |
+----- summary.txt -----
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: qwen3tileab; e4b 43f36c79f6f2b0c028744a5e8f9acc43acb15c58 gnf4 c8f0adcc67f4cbd954b4c12e50dd48bf8d024efd; run tc1-5090-43 instance 54011443 deadline 1791035995; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=16 (physical cores) box_class=RTX 5090
+DRIVER 580.159.03 cu130_ok=1
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3tileab staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3tileab alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3tileab/e4b/fused_attn4_shipped_tilemax PROLOGUE {"phase_seconds": {"preamble": 3.365, "load_weights": 15.005, "verify": 0.0, "attn4": 3.279, "lora": 0.022, "enable": 0.003, "tokenizer": 0.29, "census": 0.673, "frozen_probe": 0.057, "trainable_sha": 1.56, "counters": 0.0, "c1_before": 33.466, "eval0": 7.661, "optimizer": 0.128}, "phase_budget_s": 1005.2, "prologue_s": 66.25, "prologue_unattributed_s": 0.738}
+qwen3tileab/e4b/fused_attn4_shipped_tilemax rc=0 CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_tilemax", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "o
+
+qwen3tileab/e4b/fused_attn4_shipped_tilecost PROLOGUE {"phase_seconds": {"preamble": 3.011, "load_weights": 16.632, "verify": 0.0, "attn4": 3.295, "lora": 0.011, "enable": 0.003, "tokenizer": 0.292, "census": 0.687, "frozen_probe": 0.046, "trainable_sha": 1.601, "counters": 0.0, "c1_before": 34.905, "eval0": 2.173, "optimizer": 0.13}, "phase_budget_s": 958.3, "prologue_s": 63.508, "prologue_unattributed_s": 0.72}
+qwen3tileab/e4b/fused_attn4_shipped_tilecost rc=0 CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_tilecost", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "
+
+qwen3tileab/e4b/fused_attn4_m_tilemax PROLOGUE {"phase_seconds": {"preamble": 3.095, "load_weights": 15.096, "verify": 0.0, "attn4": 3.334, "lora": 0.012, "enable": 0.003, "tokenizer": 0.3, "census": 1.706, "frozen_probe": 0.048, "trainable_sha": 2.448, "counters": 0.0, "c1_before": 34.728, "eval0": 1.264, "optimizer": 0.127}, "phase_budget_s": 914.2, "prologue_s": 62.898, "prologue_unattributed_s": 0.738}
+qwen3tileab/e4b/fused_attn4_m_tilemax rc=0 CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_tilemax", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload
+
+qwen3tileab/e4b/fused_attn4_m_tilecost PROLOGUE {"phase_seconds": {"preamble": 3.039, "load_weights": 15.057, "verify": 0.0, "attn4": 3.29, "lora": 0.011, "enable": 0.003, "tokenizer": 0.289, "census": 1.694, "frozen_probe": 0.047, "trainable_sha": 1.53, "counters": 0.0, "c1_before": 34.869, "eval0": 1.2, "optimizer": 0.124}, "phase_budget_s": 865.5, "prologue_s": 61.893, "prologue_unattributed_s": 0.739}
+qwen3tileab/e4b/fused_attn4_m_tilecost rc=0 CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_tilecost", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offloa
+
+qwen3tileab/e4b/fused_attn4_m_tilecost_d2 PROLOGUE {"phase_seconds": {"preamble": 3.089, "load_weights": 15.143, "verify": 0.0, "attn4": 3.364, "lora": 0.013, "enable": 0.003, "tokenizer": 0.307, "census": 1.713, "frozen_probe": 0.046, "trainable_sha": 1.525, "counters": 0.0, "c1_before": 34.814, "eval0": 1.232, "optimizer": 0.127}, "phase_budget_s": 818.3, "prologue_s": 62.122, "prologue_unattributed_s": 0.745}
+qwen3tileab/e4b/fused_attn4_m_tilecost_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_tilecost_d2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "off
+
+qwen3tileab/e4b/fused_attn4_m_tilemax_d2 PROLOGUE {"phase_seconds": {"preamble": 3.126, "load_weights": 15.057, "verify": 0.0, "attn4": 3.339, "lora": 0.013, "enable": 0.003, "tokenizer": 0.3, "census": 1.698, "frozen_probe": 0.047, "trainable_sha": 1.481, "counters": 0.0, "c1_before": 34.894, "eval0": 1.286, "optimizer": 0.126}, "phase_budget_s": 771.0, "prologue_s": 62.108, "prologue_unattributed_s": 0.738}
+qwen3tileab/e4b/fused_attn4_m_tilemax_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_tilemax_d2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offl
+
+qwen3tileab/e4b/fused_attn4_shipped_tilecost_d2 PROLOGUE {"phase_seconds": {"preamble": 3.053, "load_weights": 15.166, "verify": 0.0, "attn4": 3.384, "lora": 0.013, "enable": 0.003, "tokenizer": 0.301, "census": 0.693, "frozen_probe": 0.047, "trainable_sha": 1.515, "counters": 0.0, "c1_before": 34.958, "eval0": 1.103, "optimizer": 0.129}, "phase_budget_s": 722.8, "prologue_s": 61.109, "prologue_unattributed_s": 0.746}
+qwen3tileab/e4b/fused_attn4_shipped_tilecost_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_tilecost_d2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407
+
+qwen3tileab/e4b/fused_attn4_shipped_tilemax_d2 PROLOGUE {"phase_seconds": {"preamble": 3.088, "load_weights": 15.094, "verify": 0.0, "attn4": 3.33, "lora": 0.013, "enable": 0.003, "tokenizer": 0.296, "census": 0.685, "frozen_probe": 0.046, "trainable_sha": 1.55, "counters": 0.0, "c1_before": 34.006, "eval0": 1.207, "optimizer": 0.133}, "phase_budget_s": 679.7, "prologue_s": 60.187, "prologue_unattributed_s": 0.735}
+qwen3tileab/e4b/fused_attn4_shipped_tilemax_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3tileab", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_shipped_tilemax_d2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407,
+
+QWEN3TILEAB DONE
+----- versions.txt -----
+e4b 0.41.0 @43f36c79f6f2b0c028744a5e8f9acc43acb15c58 (GitHub main)
+gnf4 0.34.1 @c8f0adcc67f4cbd954b4c12e50dd48bf8d024efd (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.18.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.21.2
+axolotl 0.20.0
+torch(axolotl) 2.14.0+cu130
+transformers(axolotl) 5.17.0
+peft(axolotl) 0.21.0
+bitsandbytes(axolotl) 0.50.2
+python(axolotl) 3.12.15
+deepspeed(axolotl) None
+[2026-10-03T13:14:43Z] tc1/boxA: TP_DONE rc=0
