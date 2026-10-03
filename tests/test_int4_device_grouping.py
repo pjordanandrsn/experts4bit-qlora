@@ -69,6 +69,7 @@ def _stores(gu_w, dn_w):
 
 
 def test_int4_wins_device_grouping_dispatch(monkeypatch):
+    monkeypatch.setenv("E4B_INT4_PREFILL", "mtile")   # device-grouped prefill rows on the M-tile (#916: auto sends them to K19)
     from experts4bit_qlora.engines.hot_residency import _fused_over_stack
     _stub_int4_b32(monkeypatch)
     torch.manual_seed(9)
@@ -112,6 +113,7 @@ def test_int4_device_grouping_with_fused_tail(monkeypatch):
     entry points present in the stub: the gathered quantise (order
     folded in) and the epilogue chain must produce the same rows in
     the same caller order."""
+    monkeypatch.setenv("E4B_INT4_PREFILL", "mtile")   # device-grouped prefill rows on the M-tile (#916: auto sends them to K19)
     from experts4bit_qlora.engines.hot_residency import _fused_over_stack
     stub = _stub_int4_b32(monkeypatch)
 

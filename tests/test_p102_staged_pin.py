@@ -122,7 +122,9 @@ def test_the_order_the_premise_and_the_tripwire():
 def test_the_tripwire_strings_are_the_librarys_code():
     hr = (REPO / "experts4bit_qlora" / "engines" / "hot_residency.py").read_text()
     assert 'INT4_PREFILL_ROUTES = ("loop", "batched", "k19", "mtile")' in hr
-    assert 'os.environ.get("E4B_INT4_PREFILL", "loop")' in hr
+    # P102 read DEFAULT=k19 (#931) and the default is now auto; P102's own tripwire (default reads "loop") refuses at any
+    # later commit by design -- the lane is read and closed. What stays pinned is the knob and its routes.
+    assert 'os.environ.get("E4B_INT4_PREFILL", "auto")' in hr
     assert 'w = dequant_int4_ref(st["packed"][e_],' in hr
 
 

@@ -216,7 +216,8 @@ def test_on_does_not_cover_the_device_grouped_decode_gemv(kernels, monkeypatch):
 
 def test_forward_collapsed_t1_follows_the_flag(kernels, monkeypatch):
     """Through the collapse the serving stack runs: T == 1 is where the flag bites,
-    T > 1 is the prefill branch in both states."""
+    T > 1 is the prefill branch in both states. The prefill route is pinned to ``loop`` (E4B_INT4_PREFILL, #916)."""
+    monkeypatch.setenv("E4B_INT4_PREFILL", "loop")
     stores = _stores()
     m = hr._HotResidency.__new__(hr._HotResidency)
     m._rt_cache = None
