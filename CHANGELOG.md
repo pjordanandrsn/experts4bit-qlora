@@ -33,6 +33,24 @@
 - No re-run: the prefill-shaped SGLang rows bear on no registered prediction, and SGLang's served-shape rows are VALID and
   CLOSE on both texts.
 
+### P104 registered (#928): P103 re-asked with a chunk-matched premise -- the Gated DeltaNet kernels (flash-linear-attention, causal-conv1d) under the hybrid paged path, on one 5090 and one host (bench and tests)
+
+- `bench/p104/{PREREG-p104.md,p104_run.sh,p104_drive.sh,p104_reduce.py,staged.sha256}`, `tests/test_p104_staged_pin.py`.
+- **New test** `tests/test_linear_state_chunk_matched_gpu.py`. P103 showed that fla's chunk kernel is split-variant, so
+  comparing a chunked paged path with a single-call forward charges the kernel to e4b. This test compares like with
+  like:
+  - an all-linear pool against transformers' cache prefilled in the same 32-token chunks, **bit for bit** (4 seeds,
+    any CUDA card);
+  - the fp8 hybrid against chunk-matched references, within 2× its all-attention control (sm_89+).
+  On the A2000 it passes on the torch path, fla, and fla + causal-conv1d. A mutant that stops marking state between
+  prefill chunks fails in every arm.
+- **The lane:** P103's, with only the premise changed:
+  - phase t: the three pinned files plus the chunk-matched file, 9 passed;
+  - phases f and fc: the two graph files plus the chunk-matched file, 8 passed;
+  - P103's single-call check is reported, not gating.
+- **Predictions:** SUPPORTED with `recommend`; fc's graph arm 1.15-1.60x phase t's on W16 and 1.02-1.15x on W1.
+- `bench/p103/a2000/probe6.py` and `probe6_run.sh`: the indicative per-call timing probe cited on #928.
+
 ### P102 read (RTX 5090, #916): DEFAULT=k19 -- TTFT-4096 7.21 s -> 1.37 s (5.25x) at max_seqs 1, with the prefill-shaped NLL within +0.011 / +0.007 ppl of the loop on 12 fresh windows (bench docs and receipts only)
 
 - **Verdict** (`p102_reduce.py`, the registered redraw `p102-5090-6`, Ryzen 9 7900 host, $0.2085): `DEFAULT=k19`.
