@@ -8952,6 +8952,30 @@
         "receipts/experts4bit-qlora/2026-10-03/tc1-5090-42/tc1/"
       ],
       "notes": "Within-box A/B. The removed scalar pass was 94 ms of the shipped arm's 2.05 s device time in amendment 12's profile (tc1-5090-41)."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.prefill-tile-rule.qwen3.5090.2026-10-03",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 14 (#945), one rented RTX 5090 (tc1-5090-43): grouped-nf4-gemm's cost rule for the grouped GEMM's M-tile height (grouped-nf4-gemm#441: the height minimising tiles x (96 + BLOCK_M) over the actual group sizes, instead of the height keyed on the largest group; outputs identical) steps the Qwen3-30B-A3B field recipe at 0.924 [0.918, 0.930] x the max-keyed rule on the shipped arm (2.077 / 2.049 against 2.232 / 2.233 s) and 0.968 [0.964, 0.971] x on the matched arm (2.533 / 2.543 against 2.618 / 2.628 s); every pair stable (within 1.4 %); held-out at N unchanged; energy per step lower. Engagement is verified per arm (tile_ab: under max ~92 % of launches took 128-row tiles, under cost mostly 64 and 32). P22 and P23 HELD. e4b against itself on one host, on the trimmed LoRA delta and the post-#945 sync path: no cross-framework position is restated from it.",
+      "value": 0.924,
+      "unit": "ratio s/step, cost tile rule / max-keyed tile rule, shipped arm (medians of steps 11..20 over two draws each; < 1 = faster); matched arm 0.968 [0.964, 0.971]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-43: instance 54011443, AMD Ryzen 9 7950X, driver 580.159.03); e4b @ 43f36c7 on torch 2.8.0+cu128, grouped-nf4-gemm @ c8f0adc",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; token qwen3tileab; GNF4_PREFILL_TILE_RULE=max vs cost on the trimmed LoRA delta (#440) and the post-#945 sync path, shipped arm (bf16 expert adapters, native init) and matched arm (fp32 adapters, matched:3407), two draws each in ABBA order; validity and scoring by bench/tc1/tc1_reduce.py (engagement predicates on tile_ab, lean_ab and sync_ab)",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-tileab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-43/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-43/tc1/"
+      ],
+      "notes": "Within-box A/B. Qwen3's real router on these rows: median group ~35 rows, median largest ~155 (a 4-layer RTX A2000 probe, grouped-nf4-gemm bench/tile-rule/)."
     }
   ]
 }

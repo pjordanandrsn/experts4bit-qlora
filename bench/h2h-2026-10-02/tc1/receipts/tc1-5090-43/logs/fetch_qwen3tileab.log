@@ -1,0 +1,10 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files:   4%|▍         | 1/23 [00:00<00:05,  4.21it/s]Fetching 23 files:  17%|█▋        | 4/23 [05:35<28:41, 90.62s/it]Fetching 23 files:  22%|██▏       | 5/23 [05:36<19:42, 65.67s/it]Fetching 23 files:  26%|██▌       | 6/23 [05:43<13:52, 48.99s/it]Fetching 23 files:  30%|███       | 7/23 [05:49<09:43, 36.49s/it]Fetching 23 files:  35%|███▍      | 8/23 [11:19<30:33, 122.23s/it]Fetching 23 files:  39%|███▉      | 9/23 [11:25<20:34, 88.21s/it] Fetching 23 files:  43%|████▎     | 10/23 [11:36<14:07, 65.16s/it]Fetching 23 files:  48%|████▊     | 11/23 [11:44<09:40, 48.34s/it]Fetching 23 files:  52%|█████▏    | 12/23 [16:45<22:39, 123.57s/it]Fetching 23 files:  57%|█████▋    | 13/23 [16:56<14:59, 89.93s/it] Fetching 23 files:  61%|██████    | 14/23 [16:58<09:33, 63.68s/it]Fetching 23 files:  65%|██████▌   | 15/23 [17:27<07:06, 53.37s/it]Fetching 23 files:  70%|██████▉   | 16/23 [19:01<07:38, 65.44s/it]Fetching 23 files:  74%|███████▍  | 17/23 [19:07<04:45, 47.51s/it]Fetching 23 files:  78%|███████▊  | 18/23 [19:10<02:50, 34.18s/it]Fetching 23 files:  83%|████████▎ | 19/23 [19:10<01:36, 24.13s/it]Fetching 23 files:  87%|████████▋ | 20/23 [19:11<00:51, 17.08s/it]Fetching 23 files:  91%|█████████▏| 21/23 [22:11<02:11, 65.91s/it]Fetching 23 files:  96%|█████████▌| 22/23 [22:11<00:46, 46.18s/it]Fetching 23 files: 100%|██████████| 23/23 [22:17<00:00, 34.17s/it]Fetching 23 files: 100%|██████████| 23/23 [22:17<00:00, 58.16s/it]
+staged in 22.3 min at /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+STAGED ad44e777bcd18fa416d9da3bd8f70d33ebb85d39

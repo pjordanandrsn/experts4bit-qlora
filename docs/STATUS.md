@@ -196,6 +196,9 @@ as measured; none is restated from an A/B of e4b against itself.
 trimmed exactly (#440: no zero fill, no scalar pass at scaling 1, a sort-free gather) steps the field
 recipe at **0.939** (shipped) and **0.911** (matched) of the previous body on one 5090, held-out loss
 unchanged.
+**And the grouped GEMM's tile** (`e4b.train.prefill-tile-rule.qwen3.5090.2026-10-03`, TC1 amendment 14): sizing its M-tile from the
+actual group sizes instead of the largest group (grouped-nf4-gemm#441) steps it at **0.924** (shipped) and
+**0.968** (matched) of before on one 5090, outputs identical.
 **On an H100 NVL the sign reverses** (lane TC1c, the same
 matched set, one rented box, [`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md);
 register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`): Unsloth takes 2.546
