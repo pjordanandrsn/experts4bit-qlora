@@ -538,7 +538,7 @@ class ExpertsLoRA(nn.Module):
         # different (typically higher, e.g. fp32) precision than the compute dtype; matmul requires
         # matching dtypes, so run the low-rank path in the adapter dtype and cast the delta back.
         # No-ops (no copies) when the dtypes already match.
-        return (self.scaling * F.linear(F.linear(x.to(A.dtype), A), B)).to(x.dtype)
+        return _scaled(F.linear(F.linear(x.to(A.dtype), A), B), self.scaling).to(x.dtype)
 
     def _use_infer_gemv(self, hidden_states: torch.Tensor) -> bool:
         """Whether *single-row* base projections in this forward may route through
@@ -775,8 +775,18 @@ class LoRALinear(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Same dtype rule as ExpertsLoRA._lora: adapters may sit in a different precision than the
         # activations; compute the delta in the adapter dtype, cast back (no-op when they match).
-        delta = self.scaling * F.linear(F.linear(x.to(self.lora_A.dtype), self.lora_A), self.lora_B)
+        delta = _scaled(F.linear(F.linear(x.to(self.lora_A.dtype), self.lora_A), self.lora_B), self.scaling)
         return self.base(x) + delta.to(x.dtype)
+
+
+def _scaled(d: torch.Tensor, scaling) -> torch.Tensor:
+    """``scaling * d``, skipped when ``scaling`` is exactly 1. ``1.0 * x == x`` for every float, so the skip is bit-exact; at
+    alpha == r (the field recipe) the multiply was a full elementwise pass over each delta in the forward, the checkpoint recompute
+    and the backward, for nothing. A tensor ``scaling`` is always applied (comparing it would read the device). Same rule as
+    grouped-nf4-gemm's ``nf4_qlora._scaled`` (#440)."""
+    if isinstance(scaling, (int, float)) and scaling == 1:
+        return d
+    return scaling * d
 
 
 def _is_supported_linear(obj, *, exact: bool) -> bool:
