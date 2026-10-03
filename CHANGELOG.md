@@ -1,6 +1,51 @@
 # Changelog
 
 ## Unreleased
+
+## 0.41.0 — 2026-10-03 — hybrid linear-attention models (Qwen3.5 / Qwen3.6 MoE, Qwen3-Next) serve paged, under decode graphs, with the Gated DeltaNet kernels recommended; the int4 store's prefill takes K19 by default (`E4B_INT4_PREFILL=auto`, lane P102: TTFT-4096 7.21 s -> 1.37 s); bucketed decode graphs on an NF4 MoE no longer replay against a freed index (#913)
+
+**0.41.0.** One default changes, one feature lands, and one fix ships.
+
+- **`E4B_INT4_PREFILL` is `auto`** (#916, lane P102). The knob is new in this release (#916). Its routes for the
+  int4 store's host-grouped prefill calls are `loop`, `batched`, `k19`, `mtile` and `auto`, and `auto` is the default.
+  - With the variable unset, the uniform-int4 store's host-grouped prefill calls take K19 when the kernel package
+    carries K19 and a CUDA device is up, and the per-expert loop otherwise. CPU-only behaviour is unchanged.
+  - **Measured:** on an RTX 5090 with Qwen3-30B-A3B at `max_seqs` 1, TTFT-4096 went from 7.21 s to 1.37 s and TTFT-512
+    from 0.85 s to 0.11 s. The prefill-shaped NLL stayed within +0.0115 / +0.0070 ppl of the loop, under the
+    calibrated K8 rule with a 0.05 budget.
+  - **Also moved:** with device grouping on (`max_seqs > 1`), prefill rows above 256 move from the int8 M-tile to K19.
+    T == 1 decode is untouched.
+  - **Restoring the old route:** `E4B_INT4_PREFILL=loop`. K19 needs grouped-nf4-gemm 0.34.0 or newer; with an older
+    kernel package `auto` resolves to the loop.
+- **Hybrid linear-attention models serve paged** (#889, #897, #905, #907, #908).
+  - `PagedModelRunner` keeps a per-slot Gated DeltaNet state pool.
+  - `serve_paged` builds a hybrid checkpoint with an fp8 KV pool sized to the attention layers only.
+  - Decode graphs (`E4B_PAGED_GRAPHS=1`) capture the per-slot state.
+  - Mamba-style layers, which transformers also labels `linear_attention`, are refused.
+  - **Read on an RTX 5090 with Qwen3.6-35B-A3B:**
+    - P97: the pooled state stays transformers' own, and the whole model tracks transformers' forward at 4.43e-3
+      nats.
+    - P101: every decode bucket replays exactly as the padded eager step; W16 449 tok/s, W1 79.7.
+    - P105: with `flash-linear-attention==0.5.2` and `causal-conv1d==1.7.0` installed, graph decode runs 1.135× (W16)
+      and 1.118× (W1) the torch path's on the same host. **Recommended.** See `docs/SERVING.md` for the two caveats:
+      token streams differ from the torch path's, and chunked prefill depends on chunk boundaries.
+- **Fixed: bucketed decode graphs on an NF4 MoE** (#913, #918).
+  - **The bug:** a later bucket's capture warm-up freed the row-to-token index that an earlier bucket's graph still
+    read. On Qwen3.6 that was a device-side assert (lane P98).
+  - **Who was exposed:** any NF4 MoE served with `E4B_PAGED_GRAPHS=1` and `E4B_PAGED_MAX_SEQS>1` on 0.40.0. The
+    earlier serving lanes' bitwise graph gates held (#913's exposure audit).
+  - **The fix:** the index cache is keyed per (row count, top-k, device). A GPU test reproduces the fault with the fix
+    reverted.
+- **Tests:** `tests/test_linear_state_chunk_matched_gpu.py` and `tests/test_linear_state_dense_parity_gpu.py`.
+  `tests/test_linear_state_gpu.py` is unchanged. Its single-seed tiny-MoE statistic is a seed lottery (lane P104), and
+  this is documented, not edited, because six lanes pin its bytes.
+- **Dependencies:** CI still installs grouped-nf4-gemm at the v0.34.1 commit; the `[fast]` floor stays
+  `grouped-nf4-gemm>=0.30.0`.
+- **The rest is evidence and bench:**
+  - lanes P97–P105 (hybrid serving, its graphs, the Gated DeltaNet kernels);
+  - P100 and P102 (the int4 prefill route);
+  - lane SC1's and TC1–TC3's amendments and reads.
+
 ### SC1 amendment A13 (#846): box A's third draw -- a 7.5 h guard so Phase G2 runs, and the int4 prefill route pinned to the `loop` every box ran (#937 made `auto` the default afterwards) (bench and tests only)
 
 - The read (#934) left P7, P8, P11, P14 and P13's third box unread. `sc1a-5090-2` ran out of its 5.5 h guard before
