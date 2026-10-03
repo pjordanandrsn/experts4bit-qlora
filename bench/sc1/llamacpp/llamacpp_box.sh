@@ -113,8 +113,12 @@ llamacpp_server_start() {
     local need=$(( np * 640 ))
     if [ "$ctx" -lt "$need" ]; then _llamacpp_log "REFUSE: -c $ctx < np*640 = $need (512 prompt + 128 generated per slot)"; return 1; fi
     [ -n "$LLAMACPP_BIN" ] || { _llamacpp_log "LLAMACPP_BIN unset (run llamacpp_build first)"; return 1; }
+    # A10: -lv 4. At the pin, library INFO messages map to verbosity 4 (common/log.cpp common_log_get_verbosity) and the
+    # default threshold is 3 (common/log.h LOG_DEFAULT_LLAMA), so `offloaded N/N layers to GPU` (src/llama-model.cpp) and
+    # `flash_attn = enabled` (src/llama-context.cpp) never reached the log and every start was refused (sc1b-5090-1).
+    # 4 and not 5: 5 is debug output.
     local flags=(-m "$gguf" -ngl 99 -fa on -ctk f16 -ctv f16 -np "$np" --cont-batching -c "$ctx" -b 2048 -ub 512
-                 --temp 0 --metrics --host 127.0.0.1 --port "$port" -lm mmap --no-context-shift --no-webui)
+                 --temp 0 --metrics --host 127.0.0.1 --port "$port" -lm mmap --no-context-shift --no-webui -lv 4)
     _llamacpp_log "llama-server ${flags[*]}"
     printf 'FLAGS: %s\n' "${flags[*]}" > "$log"
     env | grep -E '^(GGML_|LLAMA_ARG_|CUDA_VISIBLE)' | sed 's/^/ENV: /' >> "$log"
@@ -159,10 +163,17 @@ llamacpp_server_stop() {
     if [ -n "$LLAMACPP_SERVER_PID" ] && kill -0 "$LLAMACPP_SERVER_PID" 2>/dev/null; then
         kill "$LLAMACPP_SERVER_PID" 2>/dev/null
         local i=0
-        while kill -0 "$LLAMACPP_SERVER_PID" 2>/dev/null && [ $i -lt 30 ]; do sleep 1; i=$((i + 1)); done
+        while kill -0 "$LLAMACPP_SERVER_PID" 2>/dev/null && [ $i -lt "${LLAMACPP_STOP_TERM_S:-30}" ]; do sleep 1; i=$((i + 1)); done
         kill -9 "$LLAMACPP_SERVER_PID" 2>/dev/null || true
-        wait "$LLAMACPP_SERVER_PID" 2>/dev/null || true
-        _llamacpp_log "stopped pid $LLAMACPP_SERVER_PID"
+        # A10: never an unbounded `wait` (a process stuck in the GPU driver ignores SIGKILL; see sglang/server.sh)
+        i=0
+        while kill -0 "$LLAMACPP_SERVER_PID" 2>/dev/null && [ $i -lt "${LLAMACPP_STOP_WAIT_S:-60}" ]; do sleep 1; i=$((i + 1)); done
+        if kill -0 "$LLAMACPP_SERVER_PID" 2>/dev/null; then
+            _llamacpp_log "STOP STUCK: pid $LLAMACPP_SERVER_PID still present after SIGKILL -- not waiting on it"
+        else
+            wait "$LLAMACPP_SERVER_PID" 2>/dev/null || true
+            _llamacpp_log "stopped pid $LLAMACPP_SERVER_PID"
+        fi
     fi
     LLAMACPP_SERVER_PID=
 }

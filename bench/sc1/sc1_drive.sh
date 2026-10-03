@@ -98,6 +98,21 @@ progress_verdict() {  # idle_s stall_s util dfk_now dfk_prev du_now du_prev -> "
   if [ "$idle_s" -ge "$stall_s" ] && [ "${util:-0}" -eq 0 ] 2>/dev/null; then echo "stall:$idle_s"; fi
 }
 lane_dead() { [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead; }   # live_now live_prev: two DEFINITE zeros
+# A10: one pull for both uses (the same keep/leave rules). Keep: every receipt / log / sample csv / summary / quiesce / energy
+# json, the pack's manifest.json (payloads stay), work_*/bake.json (k8_bake.py's failure record travels; p57-5090-1 lost the only
+# text that said WHY). Leave: venvs, caches, arenas, snapshots, the llama.cpp tree and GGUFs, the pack payloads. Bounded (ssh
+# ConnectTimeout + rsync --timeout) so a dead box cannot hang the driver; the remote rsync runs at nice 19 / idle I/O so a pull
+# during a timed arm does not perturb it.
+pull_box() { local -a low=(); [ "${2:-}" = low ] && low=(--rsync-path="nice -n 19 ionice -c3 rsync")   # mid-run pulls only
+  # ${low[@]+...}: the controller runs /bin/bash 3.2 under set -u (the mini), where "${low[@]}" of an empty array is unbound
+  rsync -az --timeout=120 -e "ssh -o BatchMode=yes -o ConnectTimeout=20 $E4B_RENT_SSH_OPTS -p $PORT" ${low[@]+"${low[@]}"} \
+    --exclude 'artifact*/payloads/' --include 'work_*/' --include 'work_*/bake.json' --exclude 'work_*/*' \
+    --exclude 'venv*' --exclude '.cache' --exclude 'llama.cpp/' --exclude 'gguf/' --exclude 'sglang-cache/' \
+    "root@$HOST:$W/" "$1/"; }
+# A10: an incremental pull every PULL_EVERY_S during the run, into sc1.partial/ -- sc1c-5090-1's box stopped answering at
+# 20:55Z and the single end-of-run fetch got nothing (TC2's box B was lost the same way). The partial copy becomes the
+# receipt's sc1/ only when the final fetch fails, and is labelled so.
+PULL_EVERY_S=${SC1_PULL_EVERY_S:-1200}; LAST_PULL=$(date +%s); PARTIAL_AT=""
 say "lane started; polling TP_DONE every ${POLL}s with a heartbeat (stall reported after ${STALL_S}s of no change, idle GPU AND no disk movement; never acted on; a lane whose process is gone for two polls ends the wait)"
 LAST=""; LAST_CHANGE=$(date +%s); LAST_DFK=""; LAST_DU=""; LAST_LIVE=""; LANE_DEAD=0
 while :; do
@@ -122,16 +137,21 @@ while :; do
     *)          stall="" ;;
   esac
   say "hb: ${hb:-<no answer>} | left $((DEADLINE - now))s$stall"
+  if [ $((now - LAST_PULL)) -ge "$PULL_EVERY_S" ] && [ -n "$hb" ]; then
+    LAST_PULL=$now; mkdir -p "$RUN_DIR/sc1.partial"
+    if pull_box "$RUN_DIR/sc1.partial" low > /dev/null 2>&1; then PARTIAL_AT=$(date -u +%FT%TZ); say "partial pull ok ($PARTIAL_AT)"; else say "partial pull failed (kept the previous one: ${PARTIAL_AT:-none})"; fi
+  fi
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/sc1" && mkdir -p "$RUN_DIR/sc1" || { say "fetch failed: local dir"; exit 22; }
-# Keep: every receipt / log / sample csv / summary / quiesce / energy json, the pack's manifest.json (payloads stay), work_*/bake.json
-# (k8_bake.py's failure record travels; p57-5090-1 lost the only text that said WHY). Leave: venvs, caches, arenas, snapshots,
-# the llama.cpp tree and GGUFs, the pack payloads, the vLLM engine logs' duplicates are small and come along.
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
-  --exclude 'artifact*/payloads/' --include 'work_*/' --include 'work_*/bake.json' --exclude 'work_*/*' \
-  --exclude 'venv*' --exclude '.cache' --exclude 'llama.cpp/' --exclude 'gguf/' --exclude 'sglang-cache/' \
-  "root@$HOST:$W/" "$RUN_DIR/sc1/" || { say "fetch failed: rsync"; exit 22; }
+if ! pull_box "$RUN_DIR/sc1"; then
+  if [ -n "$PARTIAL_AT" ] && [ -d "$RUN_DIR/sc1.partial" ]; then
+    rm -rf "$RUN_DIR/sc1" && mv "$RUN_DIR/sc1.partial" "$RUN_DIR/sc1" && echo "$PARTIAL_AT" > "$RUN_DIR/sc1/PARTIAL_PULL_AT"
+    say "fetch failed: rsync -- the receipt keeps the last incremental pull ($PARTIAL_AT, labelled PARTIAL_PULL_AT)"
+  else say "fetch failed: rsync (no incremental pull to keep)"; fi
+  exit 22
+fi
+rm -rf "$RUN_DIR/sc1.partial"
 say "fetched $(ls "$RUN_DIR/sc1" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/sc1/SC1_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/sc1/TP_DONE.$NONCE" ] || {

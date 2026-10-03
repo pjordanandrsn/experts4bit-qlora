@@ -17,7 +17,8 @@ bench/sc1/{exl3,lmdeploy}/ on sc1/exl3-lmdeploy -- if the orchestration lands wi
         n_steps, tokens, recompiles_in_window, aggregate_tok_s (B=16); arms lic | rtn | nf4_ctrl | int4 | lic_degraded
     e4bsched_<arm>_b<B>_r<n>.json (+ logs/run_e4bsched_...)     p37-shaped, engine "e4b-sched": decode_tok_s,
         decode_ms_per_step, prompts_sha256, prompt_tokens, tokens, census {fuse_qkv_n, fuse_t1_glue_n,
-        fuse_t1_glue_r2_n, fuse_router_epilogue_n, int4_expert_layers, int4_attn_projections, graph_status,
+        fuse_t1_glue_r2_n, fuse_router_epilogue_n, int4_expert_layers, int4_attn_projections (AFTER q/k/v fusion: 192 - 2 x
+        fuse_qkv_n), attn_int4_calib_projections | attn_int4_rtn_projections (BEFORE fusion: 192, the arm's lever), graph_status,
         levers_env, fingerprint?}, graph_stats; arms lic_sched | int4_sched | lic_sched_sameprompt
         (another agent writes that driver concurrently: this file codes to the shape named here)
     <engine>_<arm>_b<B>_r<n>.json (+ logs/run_<engine>_<arm>_b<B>_r<n>.log)   engines vllm | sglang | llamacpp |
@@ -601,8 +602,26 @@ def e4b_sched_row(rec, d, arm, B, log, fp, pf):
             why.append(f"census fuse_qkv_n {c.get('fuse_qkv_n')} != 48")
         if c.get("int4_expert_layers") != 48:
             why.append(f"census int4_expert_layers {c.get('int4_expert_layers')} != 48")
-        if c.get("int4_attn_projections") != 192:
-            why.append(f"census int4_attn_projections {c.get('int4_attn_projections')} != 192")
+        # A10: two counts, each in its own units. BEFORE fusion the attention lever converts 192 projections (48 layers x
+        # q/k/v/o): the licensed arms through the calibrated lever (LICENV: E4B_SERVE_ATTN_INT4_CALIB=1), the RTN arms through
+        # the rtn lever (SPEEDENV: E4B_SERVE_ATTN_INT4=1). serve_paged.build_engine then counts Int4Linear modules AFTER
+        # _apply_fusions merges q/k/v, so a fully converted fused model reads 192 - 2 x fuse_qkv_n = 96. The registered rule
+        # compared that post-fusion count with 192 and VOIDed every engaged sched arm (sc1b-5090-1: 96, rtn 192, calib 0).
+        calib, rtn = c.get("attn_int4_calib_projections"), c.get("attn_int4_rtn_projections")
+        if arm.startswith("lic"):
+            levers = [("attn_int4_calib_projections", calib, "attn_int4_rtn_projections", rtn)]
+        elif arm.startswith("int4"):
+            levers = [("attn_int4_rtn_projections", rtn, "attn_int4_calib_projections", calib)]
+        else:
+            levers = [("attn_int4_calib_projections", calib, "attn_int4_rtn_projections", rtn),
+                      ("attn_int4_rtn_projections", rtn, "attn_int4_calib_projections", calib)]
+        if not any(on == 192 and (off or 0) == 0 for _, on, _, off in levers):
+            why.append("census attention lever: " + " or ".join(f"{n} {on} (want 192) with {m} {off} (want 0)" for n, on, m, off in levers))
+        fq = c.get("fuse_qkv_n") if isinstance(c.get("fuse_qkv_n"), int) else 0
+        want_post = 192 - 2 * fq
+        if c.get("int4_attn_projections") != want_post:
+            why.append(f"census int4_attn_projections {c.get('int4_attn_projections')} != {want_post} "
+                       f"(192 - 2 x fuse_qkv_n {fq}: Int4Linear modules counted after q/k/v fusion)")
         r2 = c.get("fuse_t1_glue_r2_n")
         folds_ok = bool(c.get("fuse_t1_glue_n")) and bool(c.get("fuse_router_epilogue_n")) and (bool(r2) and all(r2) if isinstance(r2, list) else bool(r2))
         if not folds_ok:
@@ -1725,9 +1744,12 @@ def _e4b_log(arm, B):
     return "\n".join(lines) + "\n"
 
 
-def _census(B, fp=_FP):
+def _census(B, fp=_FP, arm="lic_sched"):
+    # the shape serve_paged.build_engine writes (sc1b-5090-1): Int4Linear counted after q/k/v fusion = 192 - 2 x 48 = 96, and the
+    # pre-fusion lever count 192 on the arm's lever (licensed: calibrated; RTN/int4: rtn) with the other lever at 0 (A10)
+    lic = arm.startswith("lic")
     return {"fuse_qkv_n": 48, "fuse_t1_glue_n": 48, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "int4_expert_layers": 48,
-            "int4_attn_projections": 192, "graph_status": {"1": "graph", "16": "graph"}, "levers_env": {"E4B_INT4_EXPECTED_FINGERPRINT": fp,
+            "int4_attn_projections": 96, "attn_int4_calib_projections": 192 if lic else 0, "attn_int4_rtn_projections": 0 if lic else 192, "graph_status": {"1": "graph", "16": "graph"}, "levers_env": {"E4B_INT4_EXPECTED_FINGERPRINT": fp,
             "E4B_INT4_GROUPED_SMALLM": "auto"}, "fingerprint": fp, "moe_layers": 48}
 
 
@@ -1739,7 +1761,7 @@ def _p37(engine, arm, B, tok, same=False):
     if same:
         rec["sameprompt"] = {"rows_identical": True, "file_prompts_sha256": _PSHA["same"]}
     if engine == "e4bsched":
-        rec.update(engine="e4b-sched", census=_census(B), graph_stats={"replays": 100})
+        rec.update(engine="e4b-sched", census=_census(B, arm=arm), graph_stats={"replays": 100})
     elif engine == "vllm":
         rec.update(engagement={"status": "grepped", "marlin_moe": True, "marlin_linear": True, "cudagraphs_captured": True},
                    resolved={"attention_backend": "FLASHINFER" if "fp8" in arm else "FLASH_ATTN", "enable_prefix_caching": False, "max_model_len": 2048,
@@ -2011,6 +2033,27 @@ def selftest():
     def m_sched_fuse(F, L, T):
         F["e4bsched_lic_sched_b1_r1.json"]["census"]["fuse_qkv_n"] = 47
     case("VOID sched census fuse_qkv_n != 48", m_sched_fuse, check=expect_void("e4bsched", "lic_sched", 1, "fuse_qkv_n 47"))
+
+    def m_sched_prefusion(F, L, T):
+        F["e4bsched_lic_sched_b1_r1.json"]["census"]["int4_attn_projections"] = 192
+    case("VOID sched census counts 192 Int4Linear after fusing q/k/v on 48 layers (want 96: the fused qkv is not int4, or fusion did not run)",
+         m_sched_prefusion, check=expect_void("e4bsched", "lic_sched", 1, "int4_attn_projections 192 != 96"))
+
+    def m_sched_lever_short(F, L, T):
+        F["e4bsched_lic_sched_b16_r1.json"]["census"]["attn_int4_calib_projections"] = 191
+    case("VOID sched census: the calibrated attention lever converted 191 of 192 projections", m_sched_lever_short,
+         check=expect_void("e4bsched", "lic_sched", 16, "attn_int4_calib_projections 191"))
+
+    def m_sched_lever_missing(F, L, T):
+        del F["e4bsched_lic_sched_b1_r2.json"]["census"]["attn_int4_calib_projections"]
+    case("VOID sched census without the pre-fusion lever count (never assumed)", m_sched_lever_missing,
+         check=expect_void("e4bsched", "lic_sched", 1, "attn_int4_calib_projections None"))
+
+    def m_sched_wrong_lever(F, L, T):
+        c = F["e4bsched_lic_sched_b16_r2.json"]["census"]
+        c["attn_int4_calib_projections"], c["attn_int4_rtn_projections"] = 0, 192
+    case("VOID sched census: a licensed arm ran the RTN attention lever", m_sched_wrong_lever,
+         check=expect_void("e4bsched", "lic_sched", 16, "attn_int4_calib_projections 0"))
 
     def m_sched_graph(F, L, T):
         F["e4bsched_lic_sched_b16_r1.json"]["census"]["graph_status"] = {"1": "graph", "16": "eager: capture failed"}
