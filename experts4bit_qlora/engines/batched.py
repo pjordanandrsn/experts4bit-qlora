@@ -178,7 +178,8 @@ def _lora_delta_padded(x_pad, lora_A, lora_B, eids, scaling):
     A = lora_A if eids is None else lora_A[eids]      # [G, r, in]
     B = lora_B if eids is None else lora_B[eids]      # [G, out, r]
     d = torch.bmm(torch.bmm(x_pad.to(A.dtype), A.transpose(1, 2)), B.transpose(1, 2))
-    return (scaling * d).to(x_pad.dtype)
+    from ..lora import _scaled                         # lazy, as this module's other lora imports (no cycle at import time)
+    return _scaled(d, scaling).to(x_pad.dtype)
 
 
 #: The per-call fallback reasons this path records, in the order they are tested.

@@ -17,6 +17,17 @@
   The existing heterogeneous-config test covered the harness's copy (`bench/hybrid-g9/step_decomp.py`) only.
 - **Scope.** CPU-tested. Gemma-4 under `serve_paged` has not been read on a GPU since 0.41.0.
 
+### LoRA: the delta's scaling multiply is skipped at exactly 1 (exact; fewer launches at alpha == r)
+
+- **What.** `LoRALinear.forward` (the attention adapters), `ExpertsLoRA._lora` (the reference expert path) and the batched engine's
+  padded delta used to compute `scaling * delta` even at scaling 1.0. They now go through `lora._scaled`, which returns the delta
+  unchanged when `scaling` is exactly 1 and applies any other value (a tensor `scaling` is always applied). `1.0 * x == x` for
+  every float, so outputs and gradients are bit-identical (`tests/test_lora_unit_scaling.py`: 5 (r, alpha) pairs × fp32 and bf16
+  adapters, against the explicit multiply). This is the same rule as grouped-nf4-gemm#440's `_scaled` for the fused expert delta.
+- **Measured on an RTX A2000** (2-layer Qwen3-MoE at Qwen3-30B-A3B's layer shape, r16 alpha 16, fp32 attention adapters, ABBA):
+  launches per step 1,344 → 1,320. That is 4 projections × the forward, recompute and backward. At the 48-layer, accum-4 field
+  recipe that would be 2,304 fewer launches a step. No step-time effect is claimed.
+
 ### TC1 amendment 13 read (#945): grouped-nf4-gemm's trimmed LoRA delta makes e4b's training step 6–9 % faster on a 5090
 
 - **What was asked.** On one RTX 5090 (`tc1-5090-42`, $0.33), e4b against itself on the post-#945 sync path: grouped-nf4-gemm's
