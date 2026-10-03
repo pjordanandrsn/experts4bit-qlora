@@ -79,9 +79,18 @@ def test_vacuous_enable_refuses():
         rt.enable_fused_rmsnorm_train(m)
 
 
-def test_requested_reads_the_env(monkeypatch):
-    from experts4bit_qlora.engines.rmsnorm_train import fused_rmsnorm_requested
+def test_requested_defaults_on_and_explicit_is_separate(monkeypatch):
+    from experts4bit_qlora.engines.rmsnorm_train import fused_rmsnorm_explicit, fused_rmsnorm_requested
     monkeypatch.delenv("E4B_FUSED_RMSNORM", raising=False)
+    assert fused_rmsnorm_requested() and not fused_rmsnorm_explicit()     # on by default since TC1 amendment 15
+    monkeypatch.setenv("E4B_FUSED_RMSNORM", "0")
     assert not fused_rmsnorm_requested()
     monkeypatch.setenv("E4B_FUSED_RMSNORM", "1")
-    assert fused_rmsnorm_requested()
+    assert fused_rmsnorm_requested() and fused_rmsnorm_explicit()
+
+
+@pytest.mark.skipif(not CUDA, reason="the patcher's probe runs the module on CUDA")
+def test_default_on_skips_a_model_without_frozen_norms_quietly():
+    from experts4bit_qlora.engines import rmsnorm_train as rt
+    m = nn.ModuleDict({"x": FakeRMSNorm(64)}).cuda()                 # trainable weight only
+    assert rt.enable_fused_rmsnorm_train(m, strict=False) == 0

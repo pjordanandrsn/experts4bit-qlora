@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""Fused RMSNorm for TRAINING with a frozen weight (``E4B_FUSED_RMSNORM=1``): one Triton launch forward, one backward (dx only).
+"""Fused RMSNorm for TRAINING with a frozen weight (on by default since TC1 amendment 15; ``E4B_FUSED_RMSNORM=0`` turns it
+off): one Triton launch forward, one backward (dx only).
 
 A Qwen3-MoE layer runs four Hugging Face RMSNorms (input and post-attention, and the per-head q / k norms). Each is a composite
 of about eight kernels forward and ten backward; under gradient checkpointing the forward runs twice. On TC1's RTX 5090 profile
@@ -110,7 +111,7 @@ def rmsnorm_frozen(x, weight, eps):
     return RMSNormFrozen.apply(x, weight, eps)
 
 
-def enable_fused_rmsnorm_train(model, verbose: bool = False) -> int:
+def enable_fused_rmsnorm_train(model, verbose: bool = False, strict: bool = True) -> int:
     """Patch every structurally-matched RMSNorm whose weight is FROZEN to :func:`rmsnorm_frozen` on CUDA bf16 / fp16 inputs.
 
     Matching reuses the decode fusion's rules (:mod:`glue_fuse`): a 1-D ``weight``, a float epsilon under either upstream
@@ -118,9 +119,13 @@ def enable_fused_rmsnorm_train(model, verbose: bool = False) -> int:
     (``x_norm * (1 + weight)``) is never patched. A norm whose weight trains keeps the original chain (this backward returns
     no weight gradient). Other dtypes, devices and shapes fall through to the original forward. Not bit-identical to the
     composite (row reductions run in another order): on an RTX A2000 about 1 element in 100,000 differs, by one bf16 ulp, in
-    the forward and in dx. Returns the number patched; refuses a zero-match enable and a missing Triton."""
+    the forward and in dx. Returns the number patched. ``strict`` (an explicit ``E4B_FUSED_RMSNORM=1``, or a direct call)
+    refuses a zero-match enable and a missing Triton; the default-on path (``strict=False``) returns 0 instead, so a model
+    without a frozen RMSNorm trains on its composite as before."""
     if triton is None:
-        raise RuntimeError("enable_fused_rmsnorm_train needs Triton (Linux); unset E4B_FUSED_RMSNORM")
+        if not strict:
+            return 0
+        raise RuntimeError("enable_fused_rmsnorm_train needs Triton (Linux); set E4B_FUSED_RMSNORM=0")
     from .glue_fuse import _is_rmsnorm, _norm_eps, _probe_matches
     n = skipped = 0
     for mod in model.modules():
@@ -145,6 +150,8 @@ def enable_fused_rmsnorm_train(model, verbose: bool = False) -> int:
         mod.forward = _fwd
         mod._e4b_rmsnorm_train = True
         n += 1
+    if n == 0 and not strict:
+        return 0
     if n == 0:
         raise RuntimeError(f"E4B_FUSED_RMSNORM=1 patched no RMSNorm ({skipped} name-matched but trainable or failing the probe) -- "
                            "refusing a vacuous enable")
@@ -155,4 +162,10 @@ def enable_fused_rmsnorm_train(model, verbose: bool = False) -> int:
 
 
 def fused_rmsnorm_requested() -> bool:
-    return os.environ.get("E4B_FUSED_RMSNORM", "0").strip() == "1"
+    """On unless ``E4B_FUSED_RMSNORM=0`` (the default since TC1 amendment 15's 5090 A/B, ``tc1-5090-45``)."""
+    return os.environ.get("E4B_FUSED_RMSNORM", "1").strip() != "0"
+
+
+def fused_rmsnorm_explicit() -> bool:
+    """``E4B_FUSED_RMSNORM=1`` set by hand: a zero-match enable is then refused rather than skipped."""
+    return os.environ.get("E4B_FUSED_RMSNORM", "").strip() == "1"
