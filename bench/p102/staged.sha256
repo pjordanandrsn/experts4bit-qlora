@@ -2,7 +2,7 @@
 # each name to its source (p102_drive.sh's case) and compares. p100_box.py is P100's registered census; sc1_e4b_sched.py /
 # sc1_prompts.py SC1's; step_decomp.py / calib.json P39's; p98_bake.py P98's; p42_usercustomize.py is
 # bench/p42/hook/usercustomize.py; test_int4_prefill_route_gpu.py is the premise (tests/).
-61d80fe29db1887204d2b03a0edbd3ba7e66e7c5d2195cc6250af769453ed51b  p102_run.sh
+6b1de94d14cd4f2cfe278b8a8c89015e77a513fe027c49a9cafe6f767b31f5d9  p102_run.sh
 d56adbd0a50689643e02e428e95b4eb2a00e91b7a2636c486fa21d24cbc859de  p102_box.py
 a636656f514cbf079e284976971e5aad833f408e9fced4047bbfa48cda683539  p102_reduce.py
 6e06d46163ff11bf2af9979de2f4a509bc8f7f0d6d36f66c26eb639e4631dc09  p100_box.py
