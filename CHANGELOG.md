@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## 0.42.0 — 2026-10-03 — paged prefill attention on the flash kernel by default (lane P107: a 4096-token prefill's device time 906 → 378 ms on an RTX 5090); the fused training RMSNorm on by default; with grouped-nf4-gemm 0.35.0, e4b's fused training step runs ahead of axolotl's scattermoe at steady state on a 5090 (1.238); Gemma-4's paged path at parity (P108)
+
+**0.42.0.** This package changes two defaults, and grouped-nf4-gemm 0.35.0, released the same day, carries three more.
+
+**This package's defaults:**
+- **Prefill attention takes the flash kernel** (`E4B_PAGED_PREFILL_ATTN=flash`, lane P107). `=math` restores the old path.
+  - A 4096-token prefill's device time fell from 906 to 378 ms on an RTX 5090.
+  - Served-prefill NLL stayed within the K8 rule (−0.014 / −0.008 ppl). This was read on Qwen3-30B-A3B only.
+- **Fused training runs a fused RMSNorm** (TC1 amendment 15). `E4B_FUSED_RMSNORM=0` restores the old path.
+  - Step time was 0.924 of the old path on the shipped arm and 0.959 on the matched arm.
+  - It is near-exact, not exact: about 1e-5 of elements are one bf16 ulp off. Held-out loss agreed within 0.01.
+
+**grouped-nf4-gemm 0.35.0's defaults** are value-identical:
+- the pinned index ring outside capture;
+- the lean padded LoRA delta;
+- the prefill M-tile height from the group sizes.
+
+**Installing the kernel package.**
+- The `[fast]` floor stays `grouped-nf4-gemm>=0.30.0`, because nothing here needs the new kernel to be correct.
+- A fresh install gets 0.35.0. An existing environment gets the speed with `pip install -U grouped-nf4-gemm`.
+- CI now tests against 0.35.0's commit (`51a4916`).
+
+**What the combination measured.** TC1 amendment 16 ran this combination against axolotl 0.20.0's scattermoe native-best on one RTX 5090 (EPYC 7663), over steps 101–200. It ran e4b at every default from amendments 10–15, with those kernels.
+- axolotl / e4b = **1.238**: e4b was faster.
+- At step 200, e4b's held-out loss was 0.024–0.027 above axolotl's matched curve.
+- Register: `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`.
+- This is one host. Amendments 17–18 register the same ordering on a second host; they are not read at this release.
+
+**Also in this release:**
+- P108 reads Gemma-4's paged path **AT_PARITY** with transformers' own perturbations, which closes #359.
+- SC1b, the per-kernel census of each serving engine's decode step, is registered.
+
 ### P108 read (RTX 5090): AT_PARITY -- Gemma-4's paged path is indistinguishable from transformers' own arithmetically neutral perturbations over 32 windows with the sliding window binding (#359)
 
 - **Files:** `bench/p108/RESULTS-p108.md`, `bench/p108/receipts/p108-5090-3/` (one RTX 5090, AMD Ryzen 9 9950X3D;
@@ -202,6 +234,10 @@
 
   Held-out loss is unchanged and energy per step lower (register `e4b.train.prefill-tile-rule.qwen3.5090.2026-10-03`).
 - **What follows.** `cost` becomes grouped-nf4-gemm's default (#442). Read: `bench/h2h-2026-10-02/tc1/RESULTS-tc1-tileab.md`.
+
+### TC1 amendments 16–18 registered (#835): the steady-state comparison with every new default (P27, read in this release), then P27's ordering on a second host (P28; P29 with the machine excluded by evidence) (bench only)
+
+- #972 (amendment 16), #982 (amendment 17) and #983 (amendment 18) are registration PRs that shipped without a changelog line. They are listed here so that the release names every merged PR.
 
 ## 0.41.1 — 2026-10-03 — Gemma-4 serves through `serve_paged` again (a 0.41.0 regression), the paged attention's unbound fallback keeps sliding windows, and fused training makes fewer host syncs and launches
 
