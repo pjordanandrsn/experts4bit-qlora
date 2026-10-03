@@ -2,7 +2,7 @@
 # The box runs `sha256sum -c` on this file and the controller (sc1_drive.sh's case) and tests/test_sc1_staged_pin.py
 # resolve each name to its source and compare. Regenerate with bench/sc1/make_pin.sh after editing any staged file.
 # sc1_reduce.py is pinned whenever it is present (it is staged by path; the box's sha256sum -c covers it).
-b00aff927a73b1c54516234a5124680b3e57deae9cc8bc9666b7666595eb22fe  sc1_run.sh
+2d715435d2a0bc8498131f733ccb35480f7269ab02ac3a1be88c4efabddf346e  sc1_run.sh
 e3964c66997c2c2f39406904ac0cfa37bd083ed1f40f85117eadc1620be9a1ce  sc1_e4b_sched.py
 eae98f666da1337bc1c2bd14b6b19f6c8c6103e9492c025b8d905f197024b1cd  sc1_prompts.py
 f471b9d00f9a36763951fd42b90f73a1da90cac4081d3c31e38fbfd4c97b26f5  sc1_sampler.sh

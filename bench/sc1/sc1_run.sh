@@ -192,6 +192,7 @@ assert hr._int4_prefill_mode_env() == "loop", "E4B_INT4_PREFILL=loop does not re
 import experts4bit_qlora.engines.paged_attention as pa
 assert re.search(r'environ\.get\("E4B_PAGED_PREFILL_ATTN"', inspect.getsource(pa)), "E4B_PAGED_PREFILL_ATTN is not read from the environment"
 assert os.environ.get("E4B_PAGED_PREFILL_ATTN") == "math", "the box did not export E4B_PAGED_PREFILL_ATTN=math"
+assert pa._prefill_attn_mode_env() == "math", "E4B_PAGED_PREFILL_ATTN=math does not resolve to the math route"
 print(f"ROUTE_DEFAULT E4B_INT4_PREFILL={m.group(1)} (the box exports loop to every e4b process, A13)", flush=True)
 assert hasattr(hr, "_collapsed_grouping"), "e4b lacks the T == 1 extension (#804): K8 would read the GEMV"
 from experts4bit_qlora.engines.int4_attn import Int4Linear, _smallm_kernels
