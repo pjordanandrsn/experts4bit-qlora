@@ -448,3 +448,57 @@ record contradicts its tag.
 - **Busy fraction at or above 0.75:** the GPU is the bound, and the next work is the kernels.
 
 Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.
+
+### Amendment 13 (2026-10-03T11:31Z, before any box): grouped-nf4-gemm's padded LoRA delta trimmed, A/B on one 5090 (P20, P21)
+
+**Why.** Amendment 12's profile (`tc1-5090-41`) read P19 HELD. On the matched arm the device busy fraction rose from 0.595 to 0.740, while device events
+(136,969 against 140,809) and CPU ops (750,409 against 753,087) per step stayed near the before-picture. Under that amendment's decision rule
+this is the launch-bound branch, and the next work is launch volume in the attention and LoRA paths. The profile also named the first target:
+
+- **Shipped arm** (busy 0.830): 94 ms of its 2.05 s of device time per step went to one scalar-times-tensor kernel, 1,152 calls. That kernel is
+  grouped-nf4-gemm's `lora_delta_grouped` multiplying the padded `[G, widest, N]` expert delta by `scaling`, in the forward, the checkpoint
+  recompute and the backward. At the field recipe (r16, alpha 16) the scaling is 1.0.
+- **Matched arm:** its fp32 counterpart made 5,008 calls and took 228.7 ms. That is the shipped arm's 3,856 fp32 calls plus the same 1,152.
+
+grouped-nf4-gemm#440 trims the padded delta with four changes, each exact:
+
+1. a flat row index;
+2. a gather whose backward is a plain scatter (`_GatherRows`; autograd's own is an atomic `index_add_`);
+3. no zero fill or slice copy;
+4. `scaling` on the gathered rows, skipped at exactly 1.
+
+Forward and gradients are `torch.equal` to the previous body. On an RTX A2000 (a 2-layer Qwen3-MoE at this layer shape, ABBA), launches per step
+went 1,424 → 1,344, device time 228.5 → 216.3 ms, and wall time 241.0 → 227.1 ms. `NF4_QLORA_LEAN_DELTA=0` restores the previous body.
+
+**The token** `qwen3leanab` (TC1_BOX=A) runs e4b against itself on the shipped arm and the matched arm, two draws each in ABBA order:
+
+- `*_lean0`: `NF4_QLORA_LEAN_DELTA=0`, the previous body;
+- `*_lean1`: `NF4_QLORA_LEAN_DELTA=1`, the trimmed body.
+
+Both sides run the post-#945 sync path (single-read grouping and the pinned ring). The LoRA path selector stays on `auto`, so the measurement
+is the shipped behavior. grouped-nf4-gemm is pinned at the merge of #440, e4b at this amendment's merge. Each arm's `lean_ab` record names
+three things: the body actually in force, the environment value, and the process's per-path delta call counts. The engagement predicate voids
+an arm on any of these:
+
+- its record contradicts its tag;
+- the padded path never served it;
+- its `sync_ab` record is not the post-#945 path.
+
+**Predictions.**
+
+- **P20** (shipped arm) and **P21** (matched arm): lean1 / lean0 s/step lies in **[0.90, 0.99]**. The figure is the median over two VALID draws
+  a side, each side's draws within 5 %; the interval over the four cross-draw ratios is reported beside it. FALSIFIED outside the band;
+  UNTESTED if a side is missing, not VALID or unstable.
+- **Basis.** The removed multiply alone is 4.6 % of the shipped arm's device time. The rest of the trim removes index sorts, fills and copies.
+  The A2000, which is device-bound, measured 0.943 of wall. On the 5090 the step is partly host-bound, so the launch cut counts as well as
+  the device time.
+
+**Decision rule.** The trimmed body is already gnf4's default, because it is exact; this box decides whether it stays.
+
+- **Both HELD:** it stays, and a register row records the step-time effect.
+- **A stable ratio in (0.99, 1.01] on an arm:** it stays, because it is exact and launches less; the register says no measurable step effect
+  on that arm.
+- **A stable ratio above 1.01 on either arm:** gnf4's default reverts (`NF4_QLORA_LEAN_DELTA` defaults to 0) until the cause is found.
+- **Below 0.90:** FALSIFIED as over-predicted. The body stays, and the read names what else moved.
+
+Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.

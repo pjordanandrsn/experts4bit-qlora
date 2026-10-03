@@ -329,6 +329,17 @@ def test_amendment_10_registers_the_sync_ab_token():
     assert R.sync_ab_why("fused_attn4_m_legacy", {}).startswith("no sync_ab record")
 
 
+def test_amendment_13_registers_the_lean_delta_token():
+    R = _mod()
+    assert R.LEAN_FAM == "qwen3leanab" and R.LEAN_FAM in R.FAMS and R.N_LAYERS[R.LEAN_FAM] == 48 and R.LEAN_BAND == (0.90, 0.99)
+    assert R.LEAN_REVERT_ABOVE == 1.01 and R.anchor_of(R.LEAN_FAM) == ("e4b", "fused_attn4_m_lean0")
+    assert "fused_attn4_m_lean1_d2" in R.MATCHED and "fused_attn4_shipped_lean1" not in R.MATCHED
+    assert R.registered_draw2(R.LEAN_FAM, ("e4b", "fused_attn4_shipped_lean1")) == ("e4b", "fused_attn4_shipped_lean1_d2")
+    F = {R.LEAN_FAM: R.reduce_family(R.LEAN_FAM, R._lean_set(), {}, 20)}
+    assert [(p, v) for p, _, v, _ in R.score_leanab(F)] == [("P20", "HELD"), ("P21", "HELD")]
+    assert R.lean_ab_why("fused_attn4_m_lean0", {}).startswith("no lean_ab record")
+
+
 def test_amendment_12_registers_the_profile_token():
     R = _mod()
     assert R.PROF945_FAM == "qwen3prof945" and R.PROF945_FAM in R.FAMS and R.EXPECTED[R.PROF945_FAM] == list(R.PROF945_ARMS)
