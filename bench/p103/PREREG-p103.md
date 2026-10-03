@@ -126,7 +126,24 @@ Already done:
 
 **The new piece is the runner's phase machinery.** Its proving path (install, tripwire, self-test, premise t, both
 kernel installs, probes and premises) is rehearsed on the A2000 before the merge, with the class, disk and premise-skip
-knobs that mark a REHEARSAL. The result is recorded below. On sm_86 the fp8 premise tests skip, so the rehearsal proves
-the machinery, not the premise.
+knobs that mark a REHEARSAL. On sm_86 the fp8 premise tests skip, so the rehearsal proves the machinery, not the
+premise.
+
+**Rehearsed 2026-10-03, 04:16–04:19Z, at `933c01e`, on the NAS RTX A2000**, staged exactly as `p103_drive.sh` stages.
+`P103_PROVE=1` with the knobs class A2000, disk 10 GB and premise skips allowed. Exit rc 0, with `PROVED` and the
+`REHEARSAL` marker.
+- **The install:** e4b `933c01e`, gnf4 `34da93d`, torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0. The tripwire
+  held: phase t has no `fla`, `causal_conv1d` or `kernels`.
+- **The reducer's self-test:** 20 cases OK.
+- **Phase t:** all four functions resolve to transformers' module. Premise 2 passed and 2 skipped (the fp8 tests on
+  sm_86).
+- **Phase f:** `flash-linear-attention` 0.5.2 installed with torch held. The chunk rule resolves to
+  `fla.ops.gated_delta_rule.chunk`, the recurrent rule to `fla.ops.gated_delta_rule.fused_recurrent`, and the conv
+  functions stay transformers'. Premise 2 passed and 2 skipped. Recorded `phase f ok`.
+- **Phase fc:** `causal-conv1d` 1.7.0 installed with torch held, and both conv functions resolve to
+  `causal_conv1d.causal_conv1d_interface`. Premise 2 passed and 2 skipped. Recorded `phase fc ok`.
+- **The three real engagement records pass the reducer's checks unchanged**, and its state parser reads t, f and fc as
+  `ok`.
+- **HF CDN probe:** 34.4 MB/s.
 
 Amendments, dated, go below this line before any data is read.
