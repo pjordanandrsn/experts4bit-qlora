@@ -1,4 +1,4 @@
-# P103 — results: **stopped at the proving rental, no verdict**. On the 5090, flash-linear-attention and causal-conv1d install and engage, but the hybrid GPU premise fails with them; the cause, isolated at $0, is fla's chunk kernel not being invariant to how a prompt is split, which transformers' own chunked prefill shows identically
+# P103 — results: **stopped at the proving rental, no verdict**. On the 5090, flash-linear-attention and causal-conv1d install and engage and decode graphs replay exactly on them, but the hybrid parity premise fails; the cause (corrected 2026-10-03, see below) is that premise's single-seed MoE statistic, a lottery in every kernel arm
 
 Registration: `bench/p103/PREREG-p103.md` (#929, `d1554ea`). Issue: #928. Code under test: e4b at `d1554ea`,
 grouped-nf4-gemm at `34da93d`, `flash-linear-attention==0.5.2`, `causal-conv1d==1.7.0`, torch 2.8.0+cu128 held.
@@ -10,6 +10,34 @@ grouped-nf4-gemm at `34da93d`, `flash-linear-attention==0.5.2`, `causal-conv1d==
 - Under the registered rule, a reading would score phases f and fc NOT_SUPPORTED on that premise and skip their arms.
   It could only re-measure phase t, which P101 (#926) already read.
 - So the reading is not run, and P103 closes here. No registered consequence fires.
+
+## Correction (2026-10-03, after P104's proving rental; #928)
+
+**This page first attributed the premise failure to fla's chunk-split variance. That attribution is withdrawn.**
+
+The withdrawn title read:
+> P103 — results: **stopped at the proving rental, no verdict**. On the 5090, flash-linear-attention and causal-conv1d install and engage, but the hybrid GPU premise fails with them; the cause, isolated at $0, is fla's chunk kernel not being invariant to how a prompt is split, which transformers' own chunked prefill shows identically
+
+**What changed:**
+- P104 (#936) gated on a chunk-matched copy of the failing test. Its proving rental (`p104-prove-1`) still failed the
+  fp8 hybrid test under fla: 7.54e-2 with fla and 8.13e-2 with fla + causal-conv1d, against a 4.05e-2 bound.
+  Chunk-matching barely moved the number.
+- A $0 probe on the A2000 (`bench/p104/a2000/`, probes 7 and 8) then ran the test's own models through e4b's
+  `PagedModelRunner`, with SDPA standing in for the fp8 kernel's attention, over 10 seeds.
+  - The test's **MoE** hybrid (4 experts, top-2) is bimodal **in every arm, including the torch path**: 5 of 10 seeds
+    on the torch path land at 1–2e-1, above the test's own bound.
+  - A **dense** hybrid sits at the control's error on every seed (2.1–3.9e-2), and is indistinguishable across the
+    torch path, fla, and fla + causal-conv1d.
+- The test's seed 0 lands in the low mode on the torch path (2.6e-2 on the 5090) and in the high mode under fla
+  (7.5e-2). That is all the "failure" was.
+
+**What stands:**
+- the kernels engage on the card;
+- decode graphs replay exactly on them;
+- fla's chunk rule is split-variant (the isolation below), as transformers' own chunked prefill shows.
+
+**What is withdrawn:** that this split-variance is why the hybrid test fails ("Why the premise fails" below, and its
+echo in `docs/SERVING.md`, corrected in the same PR as this section).
 
 ## The proving rental (`p103-prove-2`)
 
@@ -65,7 +93,7 @@ DynamicCache with a single prefill, over 20 seeds (`probe4.py`, `probe5.py`):
   indistinguishable: identical median, mean and maximum over the same 20 seeds. On the torch path both are exact.
 - **The source** is fla's chunk kernel, whose result depends on where a prompt is split. The torch path, computing in
   fp32, is essentially split-invariant.
-- **Why the premise fails:** the test compares e4b's 32-token-chunked paged path with a single-call reference. Its
+- **[WITHDRAWN 2026-10-03, see the correction above] Why the premise fails:** the test compares e4b's 32-token-chunked paged path with a single-call reference. Its
   bound, 2× the all-attention control, was calibrated where chunking is free.
 - **Batched decode** drifts about equally in every arm: ordinary bf16 batching noise in the projections and experts.
 - **Unexplained:** with causal-conv1d engaged, transformers' own chunked prefill read 1.660 relative error on one seed

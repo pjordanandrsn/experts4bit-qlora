@@ -1,0 +1,36 @@
+[transformers] `causal_conv1d_fn` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `causal_conv1d_update` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+control worst 2.027e-02 tokens True | hybrid worst 7.577e-02 tokens True
+F
+=================================== FAILURES ===================================
+____ test_the_hybrid_paged_path_on_the_real_kernel_stays_within_its_control ____
+
+    @needs_fp8
+    def test_the_hybrid_paged_path_on_the_real_kernel_stays_within_its_control():
+        pytest.importorskip("fp8_paged_attn", reason="needs grouped-nf4-gemm's fp8 paged attention")
+        prompts = _prompts()
+        control = _model([ATT] * 4)
+        c_ref, c_tok = _reference(control, prompts)
+        c_runner, c_got = _paged(control, prompts, c_tok, compact=False)
+        assert c_runner.linear_state is None
+        c_worst, c_toks = _worst(c_got, c_ref)
+    
+        hybrid = _model([LIN, ATT, LIN, LIN])
+        h_ref, h_tok = _reference(hybrid, prompts)
+        h_runner, h_got = _paged(hybrid, prompts, h_tok, compact=True)
+        assert h_runner.linear_state is not None and h_runner.attn_layers == [1]
+        assert h_runner.kv.L == 1 and h_runner.ctx.layer_map == {1: 0}
+        assert h_runner.linear_state.conv and all(t.is_cuda for t in h_runner.linear_state.conv.values())
+        h_worst, h_toks = _worst(h_got, h_ref)
+        print(f"control worst {c_worst:.3e} tokens {c_toks} | hybrid worst {h_worst:.3e} tokens {h_toks}")
+        assert c_toks and h_toks, (c_toks, h_toks)
+>       assert h_worst <= 2 * max(c_worst, 1e-2), (h_worst, c_worst)
+E       AssertionError: (0.07576815783977509, 0.020270269364118576)
+E       assert 0.07576815783977509 <= (2 * 0.020270269364118576)
+E        +  where 0.020270269364118576 = max(0.020270269364118576, 0.01)
+
+test_linear_state_gpu.py:124: AssertionError
+------------------------------ Captured log call -------------------------------
+DEBUG    torch.__trace:utils.py:1900 
+DEBUG    torch.__trace:utils.py:1900
+1 failed in 47.08s

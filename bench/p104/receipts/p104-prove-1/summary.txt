@@ -1,0 +1,27 @@
+KNOBS e4b=a1bd83d00e5e9ada02023268a55b440cace2e2bc gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3.6-35B-A3B@995ad96eacd98c81ed38be0c5b274b04031597b0 kernels='flash-linear-attention==0.5.2 causal-conv1d==1.7.0' gpu_class=5090 min_disk_gb=170 prove=1 model_dir=hub allow_skip=0 phases='t f fc'
+e4b 0.40.0 @a1bd83d00e5e9ada02023268a55b440cace2e2bc
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+gated-deltanet kernel modules (phase t) {'fla': False, 'causal_conv1d': False, 'kernels': False}
+self-test OK (20 cases)
+kernels t rc=0 KERNELS {"phase": "t", "torch": "2.8.0+cu128", "torch_held": true, "torch_chunk_gated_delta_rule": "transformers.models.qwen3_5.modeling_qwen3_5", "torch_recurrent_gated_delta_rule": "transformers.models.qwen3_5.modeling_qwen3_5", "causal_conv1d_fn": "transformers.models.qwen3_5.modeling_qwen3_5", "causal_conv1d_update": "transformers.models.qwen3_5.modeling_qwen3_5", "flash-linear-attention": null, "fla-core": null, "causal-conv1d": null, "kernels": null}
+premise t rc=0: 9 passed in 18.24s
+  t .......chunk-matched: control worst 2.027e-02 tokens True | hybrid worst 2.632e-02 tokens True
+install f rc=0 (flash-linear-attention==0.5.2)
+kernels f rc=0 KERNELS {"phase": "f", "torch": "2.8.0+cu128", "torch_held": true, "torch_chunk_gated_delta_rule": "fla.ops.gated_delta_rule.chunk", "torch_recurrent_gated_delta_rule": "fla.ops.gated_delta_rule.fused_recurrent", "causal_conv1d_fn": "transformers.models.qwen3_5.modeling_qwen3_5", "causal_conv1d_update": "transformers.models.qwen3_5.modeling_qwen3_5", "flash-linear-attention": "0.5.2", "fla-core": "0.5.2", "causal-conv1d": null, "kernels": null}
+single-call check f (reported):         print(f"control worst {c_worst:.3e} tokens {c_toks} | hybrid worst {h_worst:.3e} tokens {h_toks}") | 1 failed in 47.08s
+premise f rc=1: 1 failed, 7 passed in 15.77s
+  f         print(f"chunk-matched: control worst {c_worst:.3e} tokens {c_toks} | hybrid worst {h_worst:.3e} tokens {h_toks}")
+phase f premise_failed
+install fc rc=0 (causal-conv1d==1.7.0)
+kernels fc rc=0 KERNELS {"phase": "fc", "torch": "2.8.0+cu128", "torch_held": true, "torch_chunk_gated_delta_rule": "fla.ops.gated_delta_rule.chunk", "torch_recurrent_gated_delta_rule": "fla.ops.gated_delta_rule.fused_recurrent", "causal_conv1d_fn": "causal_conv1d.causal_conv1d_interface", "causal_conv1d_update": "causal_conv1d.causal_conv1d_interface", "flash-linear-attention": "0.5.2", "fla-core": "0.5.2", "causal-conv1d": "1.7.0", "kernels": null}
+single-call check fc (reported):         print(f"control worst {c_worst:.3e} tokens {c_toks} | hybrid worst {h_worst:.3e} tokens {h_toks}") | 1 failed in 11.54s
+premise fc rc=1: 1 failed, 7 passed in 15.70s
+  fc         print(f"chunk-matched: control worst {c_worst:.3e} tokens {c_toks} | hybrid worst {h_worst:.3e} tokens {h_toks}")
+phase fc premise_failed
+PROVE -- the proving run: install tripwired; reducer self-test passed; premise t held; kernel phases: f:premise_failed fc:premise_failed
+PROVE hf_cdn_mbps=28.4 bytes=52428800
