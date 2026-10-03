@@ -1,0 +1,45 @@
+{
+ "engine": "vllm",
+ "arm": "graph_r1",
+ "batch": 1,
+ "mode": "census",
+ "skip": 32,
+ "steps": 64,
+ "tokens": 160,
+ "llm_kwargs": {
+  "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4",
+  "revision": "9b534e4318b7ebc3c961a839f13eb18b1833f441",
+  "tokenizer_revision": "9b534e4318b7ebc3c961a839f13eb18b1833f441",
+  "gpu_memory_utilization": 0.9,
+  "max_model_len": 2048,
+  "enable_prefix_caching": false,
+  "seed": 0,
+  "disable_log_stats": true,
+  "tensor_parallel_size": 1,
+  "enforce_eager": false,
+  "kv_cache_dtype": "auto",
+  "max_num_seqs": 1,
+  "max_num_batched_tokens": 2048,
+  "attention_backend": "FLASH_ATTN",
+  "moe_backend": "marlin"
+ },
+ "profiler_config": {
+  "profiler": "cuda",
+  "delay_iterations": 35,
+  "max_iterations": 64
+ },
+ "multiproc_method": "spawn",
+ "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3",
+ "rows_sha256": [
+  "70271aa1cb4555546a6cb771e04ee7983f7140c03b8460fc85012f6498bcb4a3"
+ ],
+ "prompt_tokens": [
+  512
+ ],
+ "rows_distinct_in_file": true,
+ "prompt_file": "prompts_b1.json",
+ "load_s": 324.5,
+ "profiled_wall_s": 3.774,
+ "status": "ok",
+ "note": "profiled wall: never a speed reading (SC1's unprofiled arm is the speed)"
+}

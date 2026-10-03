@@ -1,0 +1,1 @@
+SC1B_PROVE_RED {"kind": "node", "engine": "vllm", "ok": true, "status": "ok", "why": null, "steps_kept": 57, "residual": 0.0012, "segments": {"replays_broken": 0, "starts_modal": 48, "ends_modal": 48, "moe_layers": 48}, "top_residual": ["_bias_kernel", "_apply_write_kernel"], "diagnostic_errors": []}

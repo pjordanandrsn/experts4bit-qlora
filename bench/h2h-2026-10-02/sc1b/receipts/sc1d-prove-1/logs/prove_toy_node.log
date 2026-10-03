@@ -1,0 +1,8 @@
+Capture range started in the application.
+Capture range ended in the application.
+Generating '/tmp/nsys-report-dadf.qdstrm'
+[1/1] [0%                          ] toy_node.nsys-repProcessing events...
+[1/1] [0%                          ] toy_node.nsys-rep[1/1] [==19%                       ] toy_node.nsys-rep[1/1] [=======38%                  ] toy_node.nsys-rep[1/1] [===============67%          ] toy_node.nsys-rep[1/1] [================68%         ] toy_node.nsys-rep[1/1] [========================100%] toy_node.nsys-rep[1/1] [========================100%] toy_node.nsys-rep
+SC1B_TOY {"replays": 20, "mem_used_fraction": 0.911, "y0": 2.289689540863037, "hog_gb": 27.9}
+Generated:
+	/root/sc1/census/toy_node.nsys-rep

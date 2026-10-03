@@ -1,0 +1,135 @@
+{
+ "engine": "e4b",
+ "comparator": "sglang",
+ "batch": 1,
+ "delta_P_ms": 1.118431,
+ "delta": {
+  "moe_expert": 0.182176,
+  "moe_route": 0.185568,
+  "attn": 0.227324,
+  "dense_gemm": -0.067554,
+  "norm_elem": 0.254367,
+  "sample": 0.000256,
+  "input_prep": -0.024384,
+  "memcpy": -0.003456,
+  "residual": -0.0032,
+  "I_in": -0.028769,
+  "idle_out": 0.34912,
+  "overlap_in": 0.036384,
+  "O": -0.010599
+ },
+ "noise_iqr": {
+  "moe_expert": 0.004448,
+  "moe_route": 0.001218,
+  "attn": 0.004736,
+  "dense_gemm": 0.00474,
+  "norm_elem": 0.001916,
+  "sample": 0.000128,
+  "input_prep": 0.002816,
+  "memcpy": 0.001312,
+  "residual": 0.000192,
+  "I_in": 0.016734,
+  "idle_out": 0.025218,
+  "overlap_in": 0.000576,
+  "O": null
+ },
+ "profiled_P_ms": [
+  4.443368,
+  3.324937
+ ],
+ "unprofiled_ms": [
+  4.2771,
+  3.1084
+ ],
+ "census_ratio_unprofiled": 1.376,
+ "sc1_ratio": 1.268,
+ "idle_out_nameable": false,
+ "delta_O_ms": -0.010599,
+ "labels": [
+  "CLOCK_MISMATCH",
+  "NODE_TRACE_INFLATED",
+  "PROFILER_INFLATED"
+ ],
+ "delta_band": {
+  "moe_expert": [
+   0.017118,
+   0.265919
+  ],
+  "moe_route": [
+   0.02051,
+   0.269311
+  ],
+  "attn": [
+   0.062266,
+   0.311067
+  ],
+  "dense_gemm": [
+   -0.232612,
+   0.016189
+  ],
+  "norm_elem": [
+   0.089309,
+   0.33811
+  ],
+  "sample": [
+   -0.164802,
+   0.083999
+  ],
+  "input_prep": [
+   -0.189442,
+   0.059359
+  ],
+  "memcpy": [
+   -0.168514,
+   0.080287
+  ],
+  "residual": [
+   -0.168258,
+   0.080543
+  ],
+  "I_in": [
+   -0.100704,
+   0.136289
+  ],
+  "idle_out": [
+   0.34912,
+   0.34912
+  ],
+  "overlap_in": [
+   -0.212417,
+   0.285185
+  ],
+  "O": [
+   -0.010599,
+   -0.010599
+  ]
+ },
+ "node_band": {
+  "e4b": {
+   "omega_ms": 0.165058,
+   "dk_lo_ms": 0.011808
+  },
+  "comparator": {
+   "omega_ms": 0.083743,
+   "dk_lo_ms": 0.0
+  }
+ },
+ "status": "ok",
+ "reading": "spread",
+ "named_cause": null,
+ "top_three": [
+  [
+   "norm_elem",
+   0.254367
+  ],
+  [
+   "attn",
+   0.227324
+  ],
+  [
+   "moe_route",
+   0.185568
+  ]
+ ],
+ "node_trace_robust": true
+}

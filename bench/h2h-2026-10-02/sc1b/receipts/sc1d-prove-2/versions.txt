@@ -1,0 +1,20 @@
+e4b 0.41.1 @77469c19d15a983607efbeec198dc227604112cb
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+vllm 0.30.0
+vllm_wheel pypi
+torch(vllm) 2.13.0+cu130
+torch.version.cuda(vllm) 13.0
+triton(vllm) 3.7.1
+flashinfer(vllm) 0.6.18.post1
+cuda_capability (12, 0)
+gpu NVIDIA GeForce RTX 5090
+nvidia-smi 580.95.05, NVIDIA GeForce RTX 5090, 32607 MiB, 600.00 W, 3210 MHz
+python(vllm) 3.12.3
+sglang 0.5.20 (tag 94602c9c) torch 2.13.0+cu130 cuda 13.0 flashinfer 0.6.18 sglang-kernel 0.4.7 tvm-ffi 0.1.11 cc 12.0 (NVIDIA GeForce RTX 5090) nvcc 'Cuda compilation tools, release 13.0, V13.0.88' jit_target sm_120f python 3.12.3 ninja yes
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/nsys

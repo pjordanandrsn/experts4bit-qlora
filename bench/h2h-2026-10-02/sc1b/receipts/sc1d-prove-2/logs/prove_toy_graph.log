@@ -1,0 +1,8 @@
+Capture range started in the application.
+Capture range ended in the application.
+Generating '/tmp/nsys-report-2a90.qdstrm'
+[1/1] [0%                          ] toy_graph.nsys-repProcessing events...
+[1/1] [0%                          ] toy_graph.nsys-rep[1/1] [==20%                       ] toy_graph.nsys-rep[1/1] [========41%                 ] toy_graph.nsys-rep[1/1] [================68%         ] toy_graph.nsys-rep[1/1] [================69%         ] toy_graph.nsys-rep[1/1] [================70%         ] toy_graph.nsys-rep[1/1] [========================100%] toy_graph.nsys-rep[1/1] [========================100%] toy_graph.nsys-rep
+SC1B_TOY {"replays": 20, "mem_used_fraction": 0.912, "y0": 0.0, "hog_gb": 27.9}
+Generated:
+	/root/sc1/census/toy_graph.nsys-rep

@@ -1,0 +1,303 @@
+{
+ "engine": "vllm",
+ "batch": 16,
+ "graph": {
+  "status": "ok",
+  "delim": "graph",
+  "steps_kept": 61,
+  "dropped": {
+   "kept_extra_out_of_graph": 6
+  },
+  "steady_graph_exec": 2066,
+  "other_graph_replays": 0,
+  "P": {
+   "median_ms": 7.989175,
+   "iqr_ms": 0.179265
+  },
+  "S": {
+   "median_ms": 7.49839,
+   "iqr_ms": 0.179136
+  },
+  "D_out": {
+   "median_ms": 0.473281,
+   "iqr_ms": 0.005952
+  },
+  "idle_out": {
+   "median_ms": 0.0144,
+   "iqr_ms": 0.001376
+  }
+ },
+ "node": {
+  "status": "ok",
+  "steps_kept": 61,
+  "dropped": {
+   "kept_extra_out_of_graph": 6
+  },
+  "kernels_per_graph_modal": 962,
+  "other_launches": 0,
+  "U_in": {
+   "median_ms": 7.587349,
+   "iqr_ms": 0.257922
+  },
+  "span": {
+   "median_ms": 7.676629,
+   "iqr_ms": 0.256417
+  },
+  "I_in_node": {
+   "median_ms": 0.090336,
+   "iqr_ms": 0.001311
+  },
+  "segments": {
+   "replays_broken": 0,
+   "starts_modal": 48,
+   "ends_modal": 48,
+   "moe_layers": 48
+  },
+  "kernels_in_graph": 961,
+  "overlap_in": {
+   "median_ms": 0.003744,
+   "iqr_ms": 0.001376
+  },
+  "overlap_pairs_same_stream_fraction": 0.0406,
+  "kernels_out_graph": 19,
+  "class": {
+   "moe_expert": {
+    "median_ms": 4.566668,
+    "iqr_ms": 0.244162
+   },
+   "moe_route": {
+    "median_ms": 0.417856,
+    "iqr_ms": 0.000799
+   },
+   "attn": {
+    "median_ms": 1.165154,
+    "iqr_ms": 0.022815
+   },
+   "dense_gemm": {
+    "median_ms": 1.403234,
+    "iqr_ms": 0.00365
+   },
+   "norm_elem": {
+    "median_ms": 0.412032,
+    "iqr_ms": 0.001024
+   },
+   "sample": {
+    "median_ms": 0.070528,
+    "iqr_ms": 0.005216
+   },
+   "input_prep": {
+    "median_ms": 0.026784,
+    "iqr_ms": 0.00032
+   },
+   "memcpy": {
+    "median_ms": 0.003264,
+    "iqr_ms": 0.000448
+   },
+   "residual": {
+    "median_ms": 0.005504,
+    "iqr_ms": 0.00016
+   }
+  },
+  "class_in_graph_median_ms": {
+   "moe_expert": 4.566668,
+   "moe_route": 0.417856,
+   "attn": 1.165154,
+   "dense_gemm": 1.027075,
+   "norm_elem": 0.412032,
+   "sample": 0.0,
+   "input_prep": 0.0,
+   "memcpy": 0.000832,
+   "residual": 0.0
+  },
+  "residual_fraction": 0.0007,
+  "name_map": {
+   "Kernel2": {
+    "dense_gemm": 3087
+   },
+   "Marlin": {
+    "dense_gemm": 6048,
+    "moe_expert": 6048
+   },
+   "_apply_write_kernel": {
+    "residual": 7
+   },
+   "_bias_kernel": {
+    "residual": 63
+   },
+   "_combine_sampled_and_draft_tokens_kernel": {
+    "input_prep": 63
+   },
+   "_compute_slot_mappings_kernel": {
+    "input_prep": 63
+   },
+   "_gather_block_tables_kernel": {
+    "input_prep": 63
+   },
+   "_get_num_sampled_and_rejected_kernel": {
+    "sample": 63
+   },
+   "_gumbel_sample_kernel": {
+    "sample": 63
+   },
+   "_post_update_kernel": {
+    "sample": 63
+   },
+   "_prepare_pos_seq_lens_kernel": {
+    "input_prep": 63
+   },
+   "_scatter_gather_elementwise_kernel": {
+    "input_prep": 63
+   },
+   "act_and_mul_kernel": {
+    "moe_expert": 3024
+   },
+   "count_and_sort_expert_tokens_kernel": {
+    "moe_route": 3024
+   },
+   "elementwise_kernel": {
+    "norm_elem": 6048
+   },
+   "elementwise_kernel_with_index": {
+    "input_prep": 63
+   },
+   "flash_fwd_splitkv_combine_kernel": {
+    "attn": 3024
+   },
+   "flash_fwd_splitkv_kernel": {
+    "attn": 3024
+   },
+   "index_elementwise_kernel": {
+    "input_prep": 126
+   },
+   "memcpy": {
+    "memcpy": 322
+   },
+   "moe_align_block_size_kernel": {
+    "moe_route": 3024
+   },
+   "moe_sum_vec_kernel": {
+    "moe_route": 3024
+   },
+   "reduce_kernel": {
+    "sample": 63
+   },
+   "reshape_and_cache_flash_kernel": {
+    "attn": 3024
+   },
+   "splitKreduce_kernel": {
+    "dense_gemm": 3024
+   },
+   "topkGating": {
+    "moe_route": 3024
+   },
+   "triton_red_fused_1": {
+    "norm_elem": 63
+   },
+   "triton_red_fused_2": {
+    "norm_elem": 2961
+   },
+   "triton_red_fused__to_copy_embedding_marlin_gemm_rms_norm_0": {
+    "dense_gemm": 63
+   },
+   "triton_red_fused_fused_add_rms_norm_1": {
+    "norm_elem": 63
+   },
+   "triton_red_fused_fused_add_rms_norm_marlin_gemm_1": {
+    "dense_gemm": 2961
+   },
+   "triton_red_fused_fused_add_rms_norm_moe_forward_0": {
+    "norm_elem": 3024
+   },
+   "unrolled_elementwise_kernel": {
+    "input_prep": 63
+   },
+   "vectorized_elementwise_kernel": {
+    "moe_route": 3024,
+    "input_prep": 189
+   },
+   "vectorized_gather_kernel": {
+    "input_prep": 63
+   }
+  },
+  "top_residual_kernels": [
+   "_bias_kernel",
+   "_apply_write_kernel"
+  ]
+ },
+ "unprofiled_ms": 8.2983,
+ "positions": null,
+ "clocks_mhz": {
+  "pass1": 2400.0,
+  "graph": 2415.0,
+  "node": 2407.0
+ },
+ "gates": {
+  "inflate": -0.0373,
+  "node_union_over_span": 1.0119,
+  "node_span_over_span": 1.0238,
+  "map_residual_fraction": 0.0007,
+  "clock_spread": 0.0063
+ },
+ "labels": [
+  "NODE_TRACE_INFLATED"
+ ],
+ "nsys_diagnostics": [
+  "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_1046709/streams/pid_46720_stdout.log and stderr.log for program output",
+  "Common injection library initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "NVTX injection initialized successfully.",
+  "Profiling has started.",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?",
+  "Not all NVTX events might have been collected.",
+  "Number of NVTX events collected: \t65.",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?"
+ ],
+ "node_band": {
+  "omega_ms": 0.178239,
+  "dk_lo_ms": 0.088959
+ },
+ "P_ms": 7.989175,
+ "terms": {
+  "moe_expert": 4.566668,
+  "moe_route": 0.417856,
+  "attn": 1.165154,
+  "dense_gemm": 1.403234,
+  "norm_elem": 0.412032,
+  "sample": 0.070528,
+  "input_prep": 0.026784,
+  "memcpy": 0.003264,
+  "residual": 0.005504,
+  "I_in": -0.088959,
+  "idle_out": 0.0144,
+  "overlap_in": -0.003744,
+  "O": 0.003546
+ },
+ "noise_iqr": {
+  "moe_expert": 0.244162,
+  "moe_route": 0.000799,
+  "attn": 0.022815,
+  "dense_gemm": 0.00365,
+  "norm_elem": 0.001024,
+  "sample": 0.005216,
+  "input_prep": 0.00032,
+  "memcpy": 0.000448,
+  "residual": 0.00016,
+  "I_in": 0.437058,
+  "idle_out": 0.001376,
+  "overlap_in": 0.001376,
+  "O": null
+ },
+ "I_in_node_ms": 0.090336,
+ "status": "labelled"
+}

@@ -1,6 +1,25 @@
 # Changelog
 
 ## Unreleased
+### SC1b read (#846): e4b's B=1 loss to llama.cpp is kernel overlap it lacks, not slower kernels; its B=16 loss to vLLM is per-layer KV-table glue (bench docs, receipts and a read-time tool)
+
+- `bench/h2h-2026-10-02/sc1b/`: the read (`README.md`) and every run's receipts: two proofs, one NOT_RUN, two box D runs.
+  The nsys exports stay in the private receipt store. SC1b total: $3.04 over 5 receipts.
+- **`sc1d-5090-2` under A1** (registered): Q2 REFUTED (1,550 vs 1,110 in-graph kernels, 1.396); G4 B=16 named norm_elem;
+  every other gap unread. That outcome led to A3.
+- **`sc1d-5090-3` under A3** (confirmatory, capture paths byte-identical to the proved commit):
+  - **Q6 HOLDS**: G1 names the in-graph overlap, +1.380 of e4b's +1.199 ms/step loss to llama.cpp at B=1.
+  - **Q8 HOLDS**: llama.cpp overlaps 95.5 % of consecutive in-graph kernels on one stream; e4b none. The two engines'
+    summed kernel time agrees within 1.2 %.
+  - Q2 REFUTED again.
+  - G3 B=16 names norm_elem. G4 B=16 does too nominally, but its band floor sits 17 us under the threshold, so Q7 is
+    UNREAD.
+  - Q1 and Q3-Q5 UNREAD.
+- **What e4b's B=16 `norm_elem` is.** About 0.8 ms/step is `fp8_paged_kv.py` re-selecting the active set's block-table
+  and seq-lens rows per layer (97 `index_select`), plus a per-layer `seq_lens.index_add_` (48). Levers, untested here:
+  programmatic dependent launch in e4b's decode graph; one active-set selection per step.
+- `bench/sc1b/sc1b_kernels.py` (read time, descriptive only) lists one class's kernels by per-step time. It has a
+  self-test in `tests/test_sc1b.py`.
 
 ### P110 registered (#770): does the arithmetic decode graphs bring to `serve_paged` cost quality? Device grouping and bucket padding against the eager default, teacher-forced, judged against the eager default's own neutral perturbations (bench and tests only)
 

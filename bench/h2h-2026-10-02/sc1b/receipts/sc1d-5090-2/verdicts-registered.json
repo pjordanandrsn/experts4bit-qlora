@@ -1,0 +1,28 @@
+{
+ "verdicts": {
+  "Q1": {
+   "verdict": "UNREAD",
+   "why": "the gap is unread: ['e4b: NODE_TRACE_INFLATED', 'llamacpp: NODE_TRACE_INFLATED']"
+  },
+  "Q2": {
+   "verdict": "REFUTED",
+   "ratio": 1.3964,
+   "kernels_in_graph": [
+    1550,
+    1110.0
+   ]
+  },
+  "Q3": {
+   "verdict": "UNREAD",
+   "why": "G1 is unread: ['e4b: NODE_TRACE_INFLATED', 'llamacpp: NODE_TRACE_INFLATED']"
+  },
+  "Q4": {
+   "verdict": "UNREAD",
+   "why": "G2 is unread: ['llamacpp: NSYS_DIAGNOSTIC_ERRORS']"
+  },
+  "Q5": {
+   "verdict": "UNREAD",
+   "why": "the gap is unread: ['e4b: NODE_TRACE_INFLATED']"
+  }
+ }
+}

@@ -1,0 +1,231 @@
+KNOBS box=D e4b=77469c19d15a983607efbeec198dc227604112cb gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-1005bc9b-09da-8d2e-750d-538c74d1c107, 12.0, 1, 16, 4, 16
+power.limit,clocks.max.sm 400.00 W, 3090 MHz
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7C13 64-Core Processor
+nproc 256
+cgroup cpu.max 3071999 100000  memory.max 367227043840
+loadavg 14.66 13.55 17.38 5/13988 533
+               total        used        free      shared  buff/cache   available
+Mem:            1007         752         119          60         205         254
+overlay         320G  2.2M  320G   1% /
+Build cuda_13.0.r13.0/compiler.36424714_0
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+Python 3.12.3
+cpu_vendor AuthenticAMD
+ram_gb 1007 (oracle floor 98)
+[2026-10-03T17:34:56Z] sc1: apt: python3-venv / python-is-python3 / git / cmake / curl / build-essential (missing on this image)
+[2026-10-03T17:35:09Z] sc1: install e4b @77469c19d15a983607efbeec198dc227604112cb + gnf4 @34da93d6fe8d2a401b7001705658ce00b2b18213 (venv-e4b --system-site-packages; P58 pins transformers 5.16.1 / bitsandbytes 0.50.1)
+ROUTE_DEFAULT E4B_INT4_GROUPED_SMALLM=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_INT4_LEAN_GLUE=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_MXFP4_GROUPED_SMALLM=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_NF4_GROUPED_SMALLM=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_INT4_PREFILL=auto (the box exports loop to every e4b process, A13)
+tripwire OK (e4b): 0.41.1 gnf4 0.34.1 torch 2.8.0+cu128 K19/K23 defaults auto, K25 0, serve_paged + stop_ids present
+e4b 0.41.1 @77469c19d15a983607efbeec198dc227604112cb
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[2026-10-03T17:37:24Z] sc1: install vllm (bench/sc1/vllm/install.sh)
+[install-vllm 17:39:55] vllm==0.30.0 ready in /root/sc1/venv-vllm
+[2026-10-03T17:39:55Z] sc1: install sglang (bench/sc1/sglang/install.sh)
+SGLANG_INSTALL OK
+[2026-10-03T17:42:35Z] sc1: build llama.cpp @552f18f912a32ea86edf82e2b76431cb7131538d (CUDA 120a-real) + the NLL harness
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+[2026-10-03T17:46:12Z] sc1: install nsight-systems-cli-2025.6.1 (NVIDIA devtools apt repo; the image's own nsys is Nsight Compute's, never used)
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/nsys
+[2026-10-03T17:46:37Z] sc1: phase 0: fetches (bf16 for the bake, GPTQ, the Q4_K_M GGUF), bake, prompts; vLLM / SGLang / llama.cpp / nsys installed above
+[2026-10-03T17:46:37Z] sc1: fetch Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+[2026-10-03T17:52:15Z] sc1: fetch Qwen/Qwen3-30B-A3B-GPTQ-Int4 @ 9b534e4318b7ebc3c961a839f13eb18b1833f441
+[2026-10-03T17:55:26Z] sc1: fetch unsloth/Qwen3-30B-A3B-GGUF/Qwen3-30B-A3B-Q4_K_M.gguf @ d5b1d57bd0b504ac62ae6c725904e96ef228dc74
+[2026-10-03T17:59:32Z] sc1: bake NF4 arena (qwen3)
+[2026-10-03T18:01:25Z] sc1: prompt dump: sc1_prompts.py (step_decomp._k8_window) -> prompts_b{1,16,1_4096,16_same}.json + k8_window_{wikitext,c4val1}.json
+PROMPTS file=prompts_b1.json B=1 prompt_len=512 corpus=298938 step=298426 sha=a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3
+PROMPTS file=prompts_b16.json B=16 prompt_len=512 corpus=298938 step=18651 sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+PROMPTS file=prompts_b1_4096.json B=1 prompt_len=4096 corpus=298938 step=294842 sha=cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd
+PROMPTS file=prompts_b16_same.json B=16 prompt_len=512 copies_of_row0=16 sha=1e452ab00ffd792a8cdf809b27d41ddd2c1eed833fe486be9d003db7bf72d0fa source_sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+WINDOW src=wikitext text_sha=9ef10d760ad9f9eaafaedfc320702ad341cabfb141ef511eb5c71e3da94f833b n_ids=2561 prompt_len=512 steps=2048
+WINDOW src=c4val1 text_sha=4bcb55179b962a8fe5e9fbe562e13f78fbb67fda6e3ef770e3f110bea8f1989a n_ids=2561 prompt_len=512 steps=2048
+[2026-10-03T18:01:48Z] sc1: phase SG0: SGLang first JIT (matched) before any timing
+[2026-10-03T18:01:48Z] sc1: sglang server up (mode=matched)
+    SGLANG_ENGAGEMENT {"mode": "matched", "version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": true, "jit_target_tag": "sm120f", "gencode": "-gencode=arch=compute_120f,code=sm_120f", "startup_s": 
+QUIESCE arms quiesced=yes waited=0s busy_procs=0 load1=15.49 nproc=256 cpu.max=3071999/100000 at=2026-10-03T18:09:39Z
+[2026-10-03T18:09:39Z] sc1: phase E4B1: e4b B=1: SC1's unprofiled int4_sched arm, then graph + node captures
+[2026-10-03T18:09:39Z] sc1: arm e4bsched_int4_sched_b1_r1 (sched B=1 fuse_qkv=1 max_tokens_per_seq=2048  alarm=1800)
+    [serve_paged] ATTNINT4 rtn: 192 projections (uncalibrated; model_type=qwen3_moe)
+    [serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}
+    DECODE_GRAPH bucket=1 captured
+    SC1SCHED {"arm": "int4_sched_b1_r1", "batch": 1, "decode_tok_s": 240.6, "decode_ms_per_step": 4.1567, "decode_tok_s_median": 240.4, "end_to_end_tok_s_long": 46.9, "status": "ok", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f19
+[2026-10-03T18:12:34Z] sc1: census census_e4b_b1_graph (alarm=1800)
+[2026-10-03T18:15:19Z] sc1: census census_e4b_b1_node (alarm=1800)
+[2026-10-03T18:17:51Z] sc1: phase LL1: llama.cpp B=1: SC1's unprofiled q4km arm, then graph + node captures (whole run; positions 33:64)
+[2026-10-03T18:17:51Z] sc1: llama-server up (Qwen3-30B-A3B-Q4_K_M_np1)
+[2026-10-03T18:17:59Z] sc1: arm llamacpp_q4km_b1_r1 (B=1  alarm=1800)
+[llamacpp_box 18:18:03] stopped pid 22825
+[2026-10-03T18:18:03Z] sc1: census census_llamacpp_b1_graph (alarm=1200)
+[2026-10-03T18:18:13Z] sc1: census census_llamacpp_b1_node (alarm=1200)
+[2026-10-03T18:18:25Z] sc1: phase E4B16: e4b B=16: SC1's unprofiled int4_sched arm, then graph + node captures
+[2026-10-03T18:18:25Z] sc1: arm e4bsched_int4_sched_b16_r1 (sched B=16 fuse_qkv=1 max_tokens_per_seq=2048  alarm=1800)
+    DECODE_GRAPH bucket=4 captured
+    DECODE_GRAPH bucket=8 captured
+    DECODE_GRAPH bucket=16 captured
+    SC1SCHED {"arm": "int4_sched_b16_r1", "batch": 16, "decode_tok_s": 1622.0, "decode_ms_per_step": 9.8644, "decode_tok_s_median": 1622.2, "end_to_end_tok_s_long": 349.1, "status": "ok", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef
+[2026-10-03T18:21:53Z] sc1: census census_e4b_b16_graph (alarm=1800)
+[2026-10-03T18:24:49Z] sc1: census census_e4b_b16_node (alarm=1800)
+[2026-10-03T18:27:30Z] sc1: phase LL16: llama.cpp B=16: SC1's unprofiled q4km arm, then graph + node captures (whole run; positions 33:64)
+[2026-10-03T18:27:31Z] sc1: llama-server up (Qwen3-30B-A3B-Q4_K_M_np16)
+[2026-10-03T18:27:37Z] sc1: arm llamacpp_q4km_b16_r1 (B=16  alarm=1800)
+[llamacpp_box 18:27:58] stopped pid 31179
+[2026-10-03T18:27:58Z] sc1: census census_llamacpp_b16_graph (alarm=1200)
+[2026-10-03T18:28:10Z] sc1: census census_llamacpp_b16_node (alarm=1200)
+[2026-10-03T18:28:26Z] sc1: phase VL1: vLLM B=1 (spawn workers in every pass)
+[2026-10-03T18:28:26Z] sc1: arm vllm_gptq_graph_b1_r1 (arm=graph_r1 B=1 Qwen/Qwen3-30B-A3B-GPTQ-Int4 VLLM_WORKER_MULTIPROC_METHOD=spawn alarm=1800)
+    (EngineCore pid=34014) INFO 10-03 18:32:39 [model_runner.py:1066] Graph capturing finished in 145 secs, took 0.08 GiB
+    (EngineCore pid=34014) INFO 10-03 18:33:59 [model_runner.py:1066] Graph capturing finished in 1 secs, took 0.06 GiB
+    (EngineCore pid=34014) INFO 10-03 18:33:59 [gpu_worker.py:888] Free memory on device (30.86/31.36 GiB) on startup. Desired GPU memory utilization is (0.9, 28.22 GiB). Actual usage is 16.13 GiB for consumed memory (weights + non-torch), 0.52
+    SC1VLLM {"arm": "graph_r1", "batch": 1, "decode_tok_s": 283.6, "decode_ms_per_step": 3.5266, "decode_tok_s_median": 282.0, "end_to_end_tok_s_long": 258.7, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f
+[2026-10-03T18:34:17Z] sc1: census census_vllm_b1_graph (alarm=1800)
+[2026-10-03T18:35:30Z] sc1: census census_vllm_b1_node (alarm=1800)
+[2026-10-03T18:36:40Z] sc1: phase VL16: vLLM B=16 (spawn workers in every pass)
+[2026-10-03T18:36:40Z] sc1: arm vllm_gptq_graph_b16_r1 (arm=graph_r1 B=16 Qwen/Qwen3-30B-A3B-GPTQ-Int4 VLLM_WORKER_MULTIPROC_METHOD=spawn alarm=1800)
+    (EngineCore pid=41038) INFO 10-03 18:38:13 [model_runner.py:1066] Graph capturing finished in 2 secs, took 0.11 GiB
+    (EngineCore pid=41038) INFO 10-03 18:38:20 [model_runner.py:1066] Graph capturing finished in 2 secs, took 0.07 GiB
+    (EngineCore pid=41038) INFO 10-03 18:38:20 [gpu_worker.py:888] Free memory on device (30.86/31.36 GiB) on startup. Desired GPU memory utilization is (0.9, 28.22 GiB). Actual usage is 16.52 GiB for consumed memory (weights + non-torch), 0.45
+    SC1VLLM {"arm": "graph_r1", "batch": 16, "decode_tok_s": 1934.7, "decode_ms_per_step": 8.2699, "decode_tok_s_median": 1934.4, "end_to_end_tok_s_long": 1505.1, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598e
+[2026-10-03T18:38:38Z] sc1: census census_vllm_b16_graph (alarm=1800)
+[2026-10-03T18:39:53Z] sc1: census census_vllm_b16_node (alarm=1800)
+[2026-10-03T18:41:16Z] sc1: phase SGL: SGLang: SC1's unprofiled matched arms, then one nsys-launched server per (B, mode)
+[2026-10-03T18:41:16Z] sc1: sglang server up (mode=matched)
+    SGLANG_ENGAGEMENT {"mode": "matched", "version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": true, "jit_target_tag": "sm120f", "gencode": "-gencode=arch=compute_120f,code=sm_120f", "startup_s": 
+[2026-10-03T18:42:02Z] sc1: arm sglang_gptq_matched_b1_r1 (arm=gptq_default B=1 mode=matched  alarm=1800)
+[2026-10-03T18:42:05Z] sc1: arm sglang_gptq_matched_b16_r1 (arm=gptq_default B=16 mode=matched  alarm=1800)
+[2026-10-03T18:42:20Z] sc1: census census_sglang_b1_graph (alarm=900)
+[2026-10-03T18:43:17Z] sc1: census census_sglang_b1_node (alarm=900)
+[2026-10-03T18:44:12Z] sc1: census census_sglang_b16_graph (alarm=900)
+[2026-10-03T18:45:04Z] sc1: census census_sglang_b16_node (alarm=900)
+[2026-10-03T18:46:02Z] sc1: phase RD: the reading: census arms, then the registered gaps (SC1's own reducer is not run on box D)
+SC1B {"engine": "e4b", "comparator": null, "batch": 1, "status": "labelled", "reading": null, "named_cause": null, "labels": ["PROFILER_INFLATED", "NODE_TRACE_INFLATED"]}
+SC1B {"engine": "llamacpp", "comparator": null, "batch": 1, "status": "labelled", "reading": null, "named_cause": null, "labels": ["NODE_TRACE_INFLATED", "CLOCK_MISMATCH"]}
+SC1B {"engine": "vllm", "comparator": null, "batch": 1, "status": "void", "reading": null, "named_cause": null, "labels": []}
+SC1B {"engine": "sglang", "comparator": null, "batch": 1, "status": "labelled", "reading": null, "named_cause": null, "labels": ["NODE_TRACE_INFLATED", "CLOCK_MISMATCH"]}
+SC1B {"engine": "e4b", "comparator": null, "batch": 16, "status": "ok", "reading": null, "named_cause": null, "labels": []}
+SC1B {"engine": "llamacpp", "comparator": null, "batch": 16, "status": "labelled", "reading": null, "named_cause": null, "labels": ["PROFILER_INFLATED", "NSYS_DIAGNOSTIC_ERRORS"]}
+SC1B {"engine": "vllm", "comparator": null, "batch": 16, "status": "void", "reading": null, "named_cause": null, "labels": []}
+SC1B {"engine": "sglang", "comparator": null, "batch": 16, "status": "labelled", "reading": null, "named_cause": null, "labels": ["CLOCK_MISMATCH"]}
+SC1B {"engine": "e4b", "comparator": "llamacpp", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "llamacpp", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "vllm", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "vllm", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "sglang", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "sglang", "batch": 16, "status": "ok", "reading": "named", "named_cause": "norm_elem", "labels": ["CLOCK_MISMATCH"]}
+[2026-10-03T18:46:15Z] sc1: ----- summary -----
+KNOBS box=D e4b=77469c19d15a983607efbeec198dc227604112cb gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
+e4b 0.41.1 @77469c19d15a983607efbeec198dc227604112cb
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[install-vllm 17:39:55] vllm==0.30.0 ready in /root/sc1/venv-vllm
+SGLANG_INSTALL OK
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/nsys
+PHASE 0 fetches (bf16 for the bake, GPTQ, the Q4_K_M GGUF), bake, prompts; vLLM / SGLang / llama.cpp / nsys installed above at=2026-10-03T17:46:37Z nproc=256 cpu.max=3071999/100000 load=31.23/40.16/28.91
+FETCH qwen3 Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+FETCH gptq Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+FETCH gguf Qwen3-30B-A3B-Q4_K_M.gguf 9f1a24700a339b09
+BAKE qwen3 BAKE OK
+PROMPTS file=prompts_b1.json B=1 prompt_len=512 corpus=298938 step=298426 sha=a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3
+PROMPTS file=prompts_b16.json B=16 prompt_len=512 corpus=298938 step=18651 sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+PROMPTS file=prompts_b1_4096.json B=1 prompt_len=4096 corpus=298938 step=294842 sha=cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd
+PROMPTS file=prompts_b16_same.json B=16 prompt_len=512 copies_of_row0=16 sha=1e452ab00ffd792a8cdf809b27d41ddd2c1eed833fe486be9d003db7bf72d0fa source_sha=f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2
+WINDOW src=wikitext text_sha=9ef10d760ad9f9eaafaedfc320702ad341cabfb141ef511eb5c71e3da94f833b n_ids=2561 prompt_len=512 steps=2048
+WINDOW src=c4val1 text_sha=4bcb55179b962a8fe5e9fbe562e13f78fbb67fda6e3ef770e3f110bea8f1989a n_ids=2561 prompt_len=512 steps=2048
+PHASE SG0 SGLang first JIT (matched) before any timing at=2026-10-03T18:01:48Z nproc=256 cpu.max=3071999/100000 load=44.24/33.80/27.49
+sglang server mode=matched starting
+sglang server mode=matched up SGLANG_ENGAGEMENT {"mode": "matched", "version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": t
+sglang server mode=matched stopping
+sglang server mode=matched stopped
+QUIESCE arms quiesced=yes waited=0s busy_procs=0 load1=15.49 nproc=256 cpu.max=3071999/100000 at=2026-10-03T18:09:39Z
+PHASE E4B1 e4b B=1: SC1's unprofiled int4_sched arm, then graph + node captures at=2026-10-03T18:09:39Z nproc=256 cpu.max=3071999/100000 load=15.49/22.82/24.59
+e4bsched_int4_sched_b1_r1 B=1 rc=0 SC1SCHED {"arm": "int4_sched_b1_r1", "batch": 1, "decode_tok_s": 240.6, "decode_ms_per_step": 4.1567, "decode_tok_s_median": 240.4, "end_to_end_tok_s_long": 46.9, "status": "ok", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f19
+census_e4b_b1_graph B=1 mode=graph rc=0 SC1B_E4B {"arm": "census_e4b_b1_graph", "batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 4.4614}
+census_e4b_b1_node B=1 mode=node rc=0 SC1B_E4B {"arm": "census_e4b_b1_node", "batch": 1, "steps_bracketed": 64, "profiled_ms_per_step": 5.6955}
+PHASE LL1 llama.cpp B=1: SC1's unprofiled q4km arm, then graph + node captures (whole run; positions 33:64) at=2026-10-03T18:17:51Z nproc=256 cpu.max=3071999/100000 load=32.02/25.11/24.56
+llamacpp server Qwen3-30B-A3B-Q4_K_M_np1 up
+llamacpp_q4km_b1_r1 B=1 rc=0 SC1LLAMACPP {"arm": "q4km_b1_r1", "batch": 1, "mode": "slope", "decode_tok_s": 303.7, "decode_ms_per_step": 3.2924, "decode_tok_s_median": 305.5, "end_to_end_tok_s_long": 275.2, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "verdict": "VALID"}
+census_llamacpp_b1_graph B=1 mode=graph rc=0 SC1B_SERVE {"engine": "llamacpp", "batch": 1, "status": "ok", "profile_acknowledged": true, "generated_per_row": [160]}
+census_llamacpp_b1_node B=1 mode=node rc=0 SC1B_SERVE {"engine": "llamacpp", "batch": 1, "status": "ok", "profile_acknowledged": true, "generated_per_row": [160]}
+PHASE E4B16 e4b B=16: SC1's unprofiled int4_sched arm, then graph + node captures at=2026-10-03T18:18:25Z nproc=256 cpu.max=3071999/100000 load=24.03/23.90/24.18
+e4bsched_int4_sched_b16_r1 B=16 rc=0 SC1SCHED {"arm": "int4_sched_b16_r1", "batch": 16, "decode_tok_s": 1622.0, "decode_ms_per_step": 9.8644, "decode_tok_s_median": 1622.2, "end_to_end_tok_s_long": 349.1, "status": "ok", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef
+census_e4b_b16_graph B=16 mode=graph rc=0 SC1B_E4B {"arm": "census_e4b_b16_graph", "batch": 16, "steps_bracketed": 64, "profiled_ms_per_step": 9.7829}
+census_e4b_b16_node B=16 mode=node rc=0 SC1B_E4B {"arm": "census_e4b_b16_node", "batch": 16, "steps_bracketed": 64, "profiled_ms_per_step": 10.7455}
+PHASE LL16 llama.cpp B=16: SC1's unprofiled q4km arm, then graph + node captures (whole run; positions 33:64) at=2026-10-03T18:27:30Z nproc=256 cpu.max=3071999/100000 load=25.10/28.77/26.67
+llamacpp server Qwen3-30B-A3B-Q4_K_M_np16 up
+llamacpp_q4km_b16_r1 B=16 rc=0 SC1LLAMACPP {"arm": "q4km_b16_r1", "batch": 16, "mode": "slope", "decode_tok_s": 948.2, "decode_ms_per_step": 16.8737, "decode_tok_s_median": 1144.7, "end_to_end_tok_s_long": 665.5, "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "verdict": "VALID"}
+census_llamacpp_b16_graph B=16 mode=graph rc=0 SC1B_SERVE {"engine": "llamacpp", "batch": 16, "status": "ok", "profile_acknowledged": true, "generated_per_row": [160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160]}
+census_llamacpp_b16_node B=16 mode=node rc=0 SC1B_SERVE {"engine": "llamacpp", "batch": 16, "status": "ok", "profile_acknowledged": true, "generated_per_row": [160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160]}
+PHASE VL1 vLLM B=1 (spawn workers in every pass) at=2026-10-03T18:28:26Z nproc=256 cpu.max=3071999/100000 load=23.75/27.73/26.44
+vllm_gptq_graph_b1_r1 B=1 rc=0 SC1VLLM {"arm": "graph_r1", "batch": 1, "decode_tok_s": 283.6, "decode_ms_per_step": 3.5266, "decode_tok_s_median": 282.0, "end_to_end_tok_s_long": 258.7, "vllm_version": "0.30.0", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "status": "ok"}
+census_vllm_b1_graph B=1 mode=graph rc=0 SC1B_VLLM {"arm": "graph_r1", "batch": 1, "profiler_config": {"profiler": "cuda", "delay_iterations": 35, "max_iterations": 64}, "profiled_wall_s": 1.3408}
+census_vllm_b1_node B=1 mode=node rc=0 SC1B_VLLM {"arm": "graph_r1", "batch": 1, "profiler_config": {"profiler": "cuda", "delay_iterations": 35, "max_iterations": 64}, "profiled_wall_s": 1.6991}
+PHASE VL16 vLLM B=16 (spawn workers in every pass) at=2026-10-03T18:36:40Z nproc=256 cpu.max=3071999/100000 load=28.54/26.09/25.58
+vllm_gptq_graph_b16_r1 B=16 rc=0 SC1VLLM {"arm": "graph_r1", "batch": 16, "decode_tok_s": 1934.7, "decode_ms_per_step": 8.2699, "decode_tok_s_median": 1934.4, "end_to_end_tok_s_long": 1505.1, "vllm_version": "0.30.0", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2", "status": "ok"}
+census_vllm_b16_graph B=16 mode=graph rc=0 SC1B_VLLM {"arm": "graph_r1", "batch": 16, "profiler_config": {"profiler": "cuda", "delay_iterations": 35, "max_iterations": 64}, "profiled_wall_s": 2.3155}
+census_vllm_b16_node B=16 mode=node rc=0 SC1B_VLLM {"arm": "graph_r1", "batch": 16, "profiler_config": {"profiler": "cuda", "delay_iterations": 35, "max_iterations": 64}, "profiled_wall_s": 3.0195}
+PHASE SGL SGLang: SC1's unprofiled matched arms, then one nsys-launched server per (B, mode) at=2026-10-03T18:41:16Z nproc=256 cpu.max=3071999/100000 load=13.03/19.47/23.02
+sglang server mode=matched starting
+sglang server mode=matched up SGLANG_ENGAGEMENT {"mode": "matched", "version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": t
+sglang_gptq_matched_b1_r1 B=1 rc=0 SC1SGLANG {"arm": "gptq_default", "batch": 1, "decode_tok_s": 294.6, "decode_ms_per_step": 3.3946, "decode_tok_s_median": 300.1, "end_to_end_tok_s_long": 264.9, "sglang_version": "0.5.20", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}
+sglang_gptq_matched_b16_r1 B=16 rc=0 SC1SGLANG {"arm": "gptq_default", "batch": 16, "decode_tok_s": 2005.8, "decode_ms_per_step": 7.9769, "decode_tok_s_median": 1994.0, "end_to_end_tok_s_long": 1532.8, "sglang_version": "0.5.20", "prompts_sha256": "f67e7e4d592b002b70c50e98f12e991a598ef3fdea54adbe3d4c5a2a776b36d2"}
+sglang server mode=matched stopping
+sglang server mode=matched stopped
+sglang census server census_sglang_b1_graph starting
+census_sglang_b1_graph B=1 mode=graph rc=0 SC1B_SERVE {"engine": "sglang", "batch": 1, "status": "ok", "profile_acknowledged": true, "generated_per_row": [160]}
+sglang census server census_sglang_b1_node starting
+census_sglang_b1_node B=1 mode=node rc=0 SC1B_SERVE {"engine": "sglang", "batch": 1, "status": "ok", "profile_acknowledged": true, "generated_per_row": [160]}
+sglang census server census_sglang_b16_graph starting
+census_sglang_b16_graph B=16 mode=graph rc=0 SC1B_SERVE {"engine": "sglang", "batch": 16, "status": "ok", "profile_acknowledged": true, "generated_per_row": [160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160]}
+sglang census server census_sglang_b16_node starting
+census_sglang_b16_node B=16 mode=node rc=0 SC1B_SERVE {"engine": "sglang", "batch": 16, "status": "ok", "profile_acknowledged": true, "generated_per_row": [160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160, 160]}
+PHASE RD the reading: census arms, then the registered gaps (SC1's own reducer is not run on box D) at=2026-10-03T18:46:02Z nproc=256 cpu.max=3071999/100000 load=19.02/27.45/26.15
+SC1B {"engine": "e4b", "comparator": null, "batch": 1, "status": "labelled", "reading": null, "named_cause": null, "labels": ["PROFILER_INFLATED", "NODE_TRACE_INFLATED"]}
+SC1B {"engine": "llamacpp", "comparator": null, "batch": 1, "status": "labelled", "reading": null, "named_cause": null, "labels": ["NODE_TRACE_INFLATED", "CLOCK_MISMATCH"]}
+SC1B {"engine": "vllm", "comparator": null, "batch": 1, "status": "void", "reading": null, "named_cause": null, "labels": []}
+SC1B {"engine": "sglang", "comparator": null, "batch": 1, "status": "labelled", "reading": null, "named_cause": null, "labels": ["NODE_TRACE_INFLATED", "CLOCK_MISMATCH"]}
+SC1B {"engine": "e4b", "comparator": null, "batch": 16, "status": "ok", "reading": null, "named_cause": null, "labels": []}
+SC1B {"engine": "llamacpp", "comparator": null, "batch": 16, "status": "labelled", "reading": null, "named_cause": null, "labels": ["PROFILER_INFLATED", "NSYS_DIAGNOSTIC_ERRORS"]}
+SC1B {"engine": "vllm", "comparator": null, "batch": 16, "status": "void", "reading": null, "named_cause": null, "labels": []}
+SC1B {"engine": "sglang", "comparator": null, "batch": 16, "status": "labelled", "reading": null, "named_cause": null, "labels": ["CLOCK_MISMATCH"]}
+SC1B {"engine": "e4b", "comparator": "llamacpp", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "llamacpp", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "vllm", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "vllm", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "sglang", "batch": null, "status": "unread", "reading": null, "named_cause": null, "labels": null}
+SC1B {"engine": "e4b", "comparator": "sglang", "batch": 16, "status": "ok", "reading": "named", "named_cause": "norm_elem", "labels": ["CLOCK_MISMATCH"]}
+----- versions -----
+e4b 0.41.1 @77469c19d15a983607efbeec198dc227604112cb
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+vllm 0.30.0
+vllm_wheel pypi
+torch(vllm) 2.13.0+cu130
+torch.version.cuda(vllm) 13.0
+triton(vllm) 3.7.1
+flashinfer(vllm) 0.6.18.post1
+cuda_capability (12, 0)
+gpu NVIDIA GeForce RTX 5090
+nvidia-smi 595.71.05, NVIDIA GeForce RTX 5090, 32607 MiB, 400.00 W, 3090 MHz
+python(vllm) 3.12.3
+sglang 0.5.20 (tag 94602c9c) torch 2.13.0+cu130 cuda 13.0 flashinfer 0.6.18 sglang-kernel 0.4.7 tvm-ffi 0.1.11 cc 12.0 (NVIDIA GeForce RTX 5090) nvcc 'Cuda compilation tools, release 13.0, V13.0.88' jit_target sm_120f python 3.12.3 ninja yes
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+nsys NVIDIA Nsight Systems version 2025.6.1.190-256136895201v0 at /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/nsys
+[2026-10-03T18:46:15Z] sc1: TP_DONE rc=0

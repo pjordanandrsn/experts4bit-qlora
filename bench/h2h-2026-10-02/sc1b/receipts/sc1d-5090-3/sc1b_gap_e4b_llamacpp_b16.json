@@ -1,0 +1,135 @@
+{
+ "engine": "e4b",
+ "comparator": "llamacpp",
+ "batch": 16,
+ "delta_P_ms": -5.6067,
+ "delta": {
+  "moe_expert": -1.304538,
+  "moe_route": 0.350592,
+  "attn": -0.440082,
+  "dense_gemm": -1.4474,
+  "norm_elem": 0.898147,
+  "sample": 0.007056,
+  "input_prep": 0.002656,
+  "memcpy": -0.887603,
+  "residual": 0.000864,
+  "I_in": -0.082862,
+  "idle_out": -3.432139,
+  "overlap_in": 0.17293,
+  "O": -0.555679
+ },
+ "noise_iqr": {
+  "moe_expert": 0.569249,
+  "moe_route": 0.003833,
+  "attn": 0.0157,
+  "dense_gemm": 0.007897,
+  "norm_elem": 0.007887,
+  "sample": 0.000128,
+  "input_prep": 3.2e-05,
+  "memcpy": 3.013114,
+  "residual": 0.000288,
+  "I_in": 1.159924,
+  "idle_out": 0.150785,
+  "overlap_in": 0.002161,
+  "O": null
+ },
+ "profiled_P_ms": [
+  9.801049,
+  15.407749
+ ],
+ "unprofiled_ms": [
+  9.6629,
+  13.4314
+ ],
+ "census_ratio_unprofiled": 0.7194,
+ "sc1_ratio": 0.624,
+ "idle_out_nameable": false,
+ "delta_O_ms": -0.555679,
+ "labels": [
+  "CLOCK_MISMATCH",
+  "NSYS_GRAPH_ID_MAPPING",
+  "PROFILER_INFLATED"
+ ],
+ "delta_band": {
+  "moe_expert": [
+   -1.401657,
+   -1.279658
+  ],
+  "moe_route": [
+   0.253473,
+   0.375472
+  ],
+  "attn": [
+   -0.537201,
+   -0.415202
+  ],
+  "dense_gemm": [
+   -1.544519,
+   -1.42252
+  ],
+  "norm_elem": [
+   0.801028,
+   0.923027
+  ],
+  "sample": [
+   -0.090063,
+   0.031936
+  ],
+  "input_prep": [
+   -0.094463,
+   0.027536
+  ],
+  "memcpy": [
+   -0.984722,
+   -0.862723
+  ],
+  "residual": [
+   -0.096255,
+   0.025744
+  ],
+  "I_in": [
+   -0.107742,
+   0.014257
+  ],
+  "idle_out": [
+   -3.432139,
+   -3.432139
+  ],
+  "overlap_in": [
+   0.050931,
+   0.294929
+  ],
+  "O": [
+   -0.555679,
+   -0.555679
+  ]
+ },
+ "node_band": {
+  "e4b": {
+   "omega_ms": 0.097119,
+   "dk_lo_ms": 0.0
+  },
+  "comparator": {
+   "omega_ms": 0.02488,
+   "dk_lo_ms": 0.0
+  }
+ },
+ "status": "ok",
+ "reading": "spread",
+ "named_cause": null,
+ "top_three": [
+  [
+   "dense_gemm",
+   -1.4474
+  ],
+  [
+   "moe_expert",
+   -1.304538
+  ],
+  [
+   "norm_elem",
+   0.898147
+  ]
+ ],
+ "node_trace_robust": true
+}

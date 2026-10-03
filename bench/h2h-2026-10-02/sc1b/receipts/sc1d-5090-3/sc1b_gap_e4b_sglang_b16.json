@@ -1,0 +1,136 @@
+{
+ "engine": "e4b",
+ "comparator": "sglang",
+ "batch": 16,
+ "delta_P_ms": 1.868391,
+ "delta": {
+  "moe_expert": 0.43195,
+  "moe_route": 0.379584,
+  "attn": -0.153677,
+  "dense_gemm": -0.187474,
+  "norm_elem": 1.014356,
+  "sample": 0.000976,
+  "input_prep": -0.053153,
+  "memcpy": -0.005824,
+  "residual": -0.003296,
+  "I_in": -0.026111,
+  "idle_out": 0.394146,
+  "overlap_in": 0.030992,
+  "O": -0.045922
+ },
+ "noise_iqr": {
+  "moe_expert": 0.472724,
+  "moe_route": 0.003488,
+  "attn": 0.038578,
+  "dense_gemm": 0.006671,
+  "norm_elem": 0.008177,
+  "sample": 0.000192,
+  "input_prep": 0.004,
+  "memcpy": 0.003328,
+  "residual": 0.000416,
+  "I_in": 0.925146,
+  "idle_out": 0.028033,
+  "overlap_in": 0.001944,
+  "O": null
+ },
+ "profiled_P_ms": [
+  9.801049,
+  7.932658
+ ],
+ "unprofiled_ms": [
+  9.6629,
+  7.9517
+ ],
+ "census_ratio_unprofiled": 1.2152,
+ "sc1_ratio": 1.191,
+ "idle_out_nameable": true,
+ "delta_O_ms": -0.045922,
+ "labels": [
+  "CLOCK_MISMATCH"
+ ],
+ "delta_band": {
+  "moe_expert": [
+   0.334831,
+   0.465101
+  ],
+  "moe_route": [
+   0.282465,
+   0.412735
+  ],
+  "attn": [
+   -0.250796,
+   -0.120526
+  ],
+  "dense_gemm": [
+   -0.284593,
+   -0.154323
+  ],
+  "norm_elem": [
+   0.917237,
+   1.047507
+  ],
+  "sample": [
+   -0.096143,
+   0.034127
+  ],
+  "input_prep": [
+   -0.150272,
+   -0.020002
+  ],
+  "memcpy": [
+   -0.102943,
+   0.027327
+  ],
+  "residual": [
+   -0.100415,
+   0.029855
+  ],
+  "I_in": [
+   -0.059262,
+   0.071008
+  ],
+  "idle_out": [
+   0.394146,
+   0.394146
+  ],
+  "overlap_in": [
+   -0.099278,
+   0.161262
+  ],
+  "O": [
+   -0.045922,
+   -0.045922
+  ]
+ },
+ "node_band": {
+  "e4b": {
+   "omega_ms": 0.097119,
+   "dk_lo_ms": 0.0
+  },
+  "comparator": {
+   "omega_ms": 0.033151,
+   "dk_lo_ms": 0.0
+  }
+ },
+ "status": "unread",
+ "top_three": [
+  [
+   "norm_elem",
+   1.014356
+  ],
+  [
+   "moe_expert",
+   0.43195
+  ],
+  [
+   "idle_out",
+   0.394146
+  ]
+ ],
+ "node_trace_robust": false,
+ "why": [
+  "NODE_TRACE_AMBIGUOUS: the nominal reading (named, norm_elem) changes inside the node-trace bands (omega e4b 0.097 ms, comparator 0.033 ms)"
+ ],
+ "nominal_reading": "named",
+ "nominal_named_cause": "norm_elem"
+}

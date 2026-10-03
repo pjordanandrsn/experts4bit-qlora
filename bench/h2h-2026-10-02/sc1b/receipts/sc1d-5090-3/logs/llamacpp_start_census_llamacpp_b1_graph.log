@@ -1,0 +1,2 @@
+[llamacpp_box 21:23:12] llama-server -m /root/sc1/gguf/Qwen3-30B-A3B-Q4_K_M.gguf -ngl 99 -fa on -ctk f16 -ctv f16 -np 1 --cont-batching -c 1024 -b 2048 -ub 512 --temp 0 --metrics --host 127.0.0.1 --port 8080 -lm mmap --no-context-shift --no-webui -lv 4
+[llamacpp_box 21:23:21] healthy on :8080, 0.02.831.070 I load_tensors: offloaded 49/49 layers to GPU, pid 26201

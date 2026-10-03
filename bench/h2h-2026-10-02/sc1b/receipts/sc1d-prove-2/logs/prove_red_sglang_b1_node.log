@@ -1,0 +1,1 @@
+SC1B_PROVE_RED {"kind": "node", "engine": "sglang", "ok": true, "status": "ok", "why": null, "steps_kept": 61, "residual": 0.0013, "segments": {"replays_broken": 0, "starts_modal": 48, "ends_modal": 48, "moe_layers": 48}, "top_residual": ["clamp_position_kernel", "multi_tensor_apply_kernel", "create_flashinfer_kv_indices_triton"], "diagnostic_errors": []}

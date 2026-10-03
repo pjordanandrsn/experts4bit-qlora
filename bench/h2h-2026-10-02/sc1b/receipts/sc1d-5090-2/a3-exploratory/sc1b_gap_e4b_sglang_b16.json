@@ -1,0 +1,133 @@
+{
+ "engine": "e4b",
+ "comparator": "sglang",
+ "batch": 16,
+ "delta_P_ms": 1.873931,
+ "delta": {
+  "moe_expert": 0.414911,
+  "moe_route": 0.375905,
+  "attn": -0.163034,
+  "dense_gemm": -0.181257,
+  "norm_elem": 1.007172,
+  "sample": 0.00112,
+  "input_prep": -0.054528,
+  "memcpy": -0.009376,
+  "residual": -0.003232,
+  "I_in": 0.074495,
+  "idle_out": 0.334465,
+  "overlap_in": 0.031328,
+  "O": -0.045962
+ },
+ "noise_iqr": {
+  "moe_expert": 0.431335,
+  "moe_route": 0.003168,
+  "attn": 0.044511,
+  "dense_gemm": 0.005023,
+  "norm_elem": 0.004453,
+  "sample": 0.000288,
+  "input_prep": 0.008736,
+  "memcpy": 0.006208,
+  "residual": 0.000384,
+  "I_in": 0.912296,
+  "idle_out": 0.035393,
+  "overlap_in": 0.001632,
+  "O": null
+ },
+ "profiled_P_ms": [
+  9.766943,
+  7.893012
+ ],
+ "unprofiled_ms": [
+  9.8633,
+  8.0241
+ ],
+ "census_ratio_unprofiled": 1.2292,
+ "sc1_ratio": 1.191,
+ "idle_out_nameable": true,
+ "delta_O_ms": -0.045962,
+ "labels": [
+  "CLOCK_MISMATCH"
+ ],
+ "delta_band": {
+  "moe_expert": [
+   0.367293,
+   0.50144
+  ],
+  "moe_route": [
+   0.328287,
+   0.462434
+  ],
+  "attn": [
+   -0.210652,
+   -0.076505
+  ],
+  "dense_gemm": [
+   -0.228875,
+   -0.094728
+  ],
+  "norm_elem": [
+   0.959554,
+   1.093701
+  ],
+  "sample": [
+   -0.046498,
+   0.087649
+  ],
+  "input_prep": [
+   -0.102146,
+   0.032001
+  ],
+  "memcpy": [
+   -0.056994,
+   0.077153
+  ],
+  "residual": [
+   -0.05085,
+   0.083297
+  ],
+  "I_in": [
+   -0.012034,
+   0.122113
+  ],
+  "idle_out": [
+   0.334465,
+   0.334465
+  ],
+  "overlap_in": [
+   -0.102819,
+   0.165475
+  ],
+  "O": [
+   -0.045962,
+   -0.045962
+  ]
+ },
+ "node_band": {
+  "e4b": {
+   "omega_ms": 0.047618,
+   "dk_lo_ms": 0.0
+  },
+  "comparator": {
+   "omega_ms": 0.086529,
+   "dk_lo_ms": 0.0
+  }
+ },
+ "status": "ok",
+ "reading": "named",
+ "named_cause": "norm_elem",
+ "top_three": [
+  [
+   "norm_elem",
+   1.007172
+  ],
+  [
+   "moe_expert",
+   0.414911
+  ],
+  [
+   "moe_route",
+   0.375905
+  ]
+ ],
+ "node_trace_robust": true
+}

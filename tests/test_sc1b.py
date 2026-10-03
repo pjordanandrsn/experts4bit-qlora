@@ -343,3 +343,8 @@ def test_a3_overlap_term_bands_and_the_confirmatory_predictions(tmp_path):
     # a band wide enough to let another term qualify makes the gap unread, with the nominal reading kept
     wide = census.gap(dict(e1, node_band={"omega_ms": 1.2, "dk_lo_ms": 0.0}), l1, 1.484)
     assert wide["status"] == "unread" and wide["nominal_named_cause"] == "overlap_in" and "NODE_TRACE_AMBIGUOUS" in wide["why"][0], wide
+
+
+def test_the_kernel_breakdown_tool_self_test():
+    # read-time and descriptive only: lists the kernels of one class by per-step time from a node export + its arm record
+    assert _mod("sc1b_kernels").self_test() == 0

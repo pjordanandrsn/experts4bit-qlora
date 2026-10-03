@@ -1,0 +1,266 @@
+{
+ "engine": "e4b",
+ "batch": 16,
+ "graph": {
+  "status": "ok",
+  "delim": "graph",
+  "steps_kept": 61,
+  "dropped": {},
+  "steady_graph_exec": 14,
+  "other_graph_replays": 0,
+  "P": {
+   "median_ms": 9.801049,
+   "iqr_ms": 0.266273
+  },
+  "S": {
+   "median_ms": 9.370104,
+   "iqr_ms": 0.25408
+  },
+  "D_out": {
+   "median_ms": 0.00384,
+   "iqr_ms": 3.2e-05
+  },
+  "idle_out": {
+   "median_ms": 0.408802,
+   "iqr_ms": 0.021761
+  }
+ },
+ "node": {
+  "status": "ok",
+  "steps_kept": 60,
+  "dropped": {
+   "period_over_1.5x_median": 1
+  },
+  "kernels_per_graph_modal": 1312,
+  "other_launches": 0,
+  "U_in": {
+   "median_ms": 9.323478,
+   "iqr_ms": 0.241785
+  },
+  "span": {
+   "median_ms": 9.467223,
+   "iqr_ms": 0.238161
+  },
+  "I_in_node": {
+   "median_ms": 0.145088,
+   "iqr_ms": 0.002025
+  },
+  "segments": {
+   "replays_broken": 0,
+   "starts_modal": 48,
+   "ends_modal": 48,
+   "moe_layers": 48
+  },
+  "kernels_in_graph": 1310.0,
+  "overlap_in": {
+   "median_ms": 0.006096,
+   "iqr_ms": 0.00124
+  },
+  "overlap_pairs_same_stream_fraction": 0.0504,
+  "kernels_out_graph": 2.0,
+  "class": {
+   "moe_expert": {
+    "median_ms": 4.916444,
+    "iqr_ms": 0.240141
+   },
+   "moe_route": {
+    "median_ms": 0.732321,
+    "iqr_ms": 0.002306
+   },
+   "attn": {
+    "median_ms": 0.840179,
+    "iqr_ms": 0.012659
+   },
+   "dense_gemm": {
+    "median_ms": 1.355154,
+    "iqr_ms": 0.004304
+   },
+   "norm_elem": {
+    "median_ms": 1.469588,
+    "iqr_ms": 0.005903
+   },
+   "sample": {
+    "median_ms": 0.007056,
+    "iqr_ms": 0.000128
+   },
+   "input_prep": {
+    "median_ms": 0.002656,
+    "iqr_ms": 3.2e-05
+   },
+   "memcpy": {
+    "median_ms": 0.002304,
+    "iqr_ms": 6.4e-05
+   },
+   "residual": {
+    "median_ms": 0.000864,
+    "iqr_ms": 0.000288
+   }
+  },
+  "class_in_graph_median_ms": {
+   "moe_expert": 4.916444,
+   "moe_route": 0.732321,
+   "attn": 0.840179,
+   "dense_gemm": 1.355154,
+   "norm_elem": 1.469588,
+   "sample": 0.007056,
+   "input_prep": 0.0,
+   "memcpy": 0.001152,
+   "residual": 0.000864
+  },
+  "residual_fraction": 0.0001,
+  "name_map": {
+   "CatArrayBatchedCopy_alignedK_contig": {
+    "residual": 63
+   },
+   "Kernel2": {
+    "dense_gemm": 3087
+   },
+   "_combine_rows": {
+    "moe_route": 3024
+   },
+   "_fp8_append_bt1_side": {
+    "attn": 6048
+   },
+   "_fp8_paged_decode_split_f8dot": {
+    "attn": 3024
+   },
+   "_gemm_int4_b32_grouped_smallm": {
+    "moe_expert": 6048
+   },
+   "_gemm_int4_b32_smallm": {
+    "dense_gemm": 6048
+   },
+   "_rmsnorm_resid_rows": {
+    "norm_elem": 3024
+   },
+   "_rmsnorm_rows": {
+    "norm_elem": 3087
+   },
+   "_rope_norm_heads": {
+    "norm_elem": 6048
+   },
+   "_router_epilogue": {
+    "moe_route": 3024
+   },
+   "_swiglu_rows": {
+    "moe_expert": 3024
+   },
+   "_tile_table_r1": {
+    "moe_route": 3024
+   },
+   "elementwise_kernel": {
+    "norm_elem": 9072
+   },
+   "gemmk1_kernel": {
+    "dense_gemm": 63
+   },
+   "indexFuncSmallIndex": {
+    "norm_elem": 3024
+   },
+   "indexSelectSmallIndex": {
+    "norm_elem": 6111
+   },
+   "index_elementwise_kernel": {
+    "input_prep": 63
+   },
+   "memcpy": {
+    "memcpy": 315
+   },
+   "memset": {
+    "memcpy": 63
+   },
+   "reduce_kernel": {
+    "sample": 63
+   },
+   "splitKreduce_kernel": {
+    "dense_gemm": 3024
+   },
+   "unrolled_elementwise_kernel": {
+    "norm_elem": 3087,
+    "moe_route": 3024,
+    "input_prep": 63
+   },
+   "vectorized_elementwise_kernel": {
+    "norm_elem": 3465,
+    "moe_route": 3024
+   }
+  },
+  "top_residual_kernels": [
+   "CatArrayBatchedCopy_alignedK_contig"
+  ]
+ },
+ "unprofiled_ms": 9.6629,
+ "positions": null,
+ "clocks_mhz": {
+  "pass1": 2400.0,
+  "graph": 2400.0,
+  "node": 2400.0
+ },
+ "gates": {
+  "inflate": 0.0143,
+  "node_union_over_span": 0.995,
+  "node_span_over_span": 1.0104,
+  "map_residual_fraction": 0.0001,
+  "clock_spread": 0.0
+ },
+ "labels": [],
+ "nsys_diagnostics": [
+  "Process was launched by the profiler, see /tmp/nvidia/nsight_systems/quadd_session_1030266/streams/pid_30277_stdout.log and stderr.log for program output",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "Common injection library initialized successfully.",
+  "Buffers holding CUDA trace data will be flushed on CudaProfilerStop() call. See --flush-on-cudaprofilerstop to control this behavior.",
+  "Loaded CUPTI library: /opt/nvidia/nsight-systems-cli/2025.6.1/target-linux-x64/libcupti.so.13.1",
+  "Installed CUDA driver version (13.2) is not supported by this build of Nsight Systems. CUDA trace will be collected using libraries for driver version 13.1",
+  "Enabling trace for device graph launch",
+  "CUDA injection initialized successfully.",
+  "NVTX injection initialized successfully.",
+  "Profiling has started.",
+  "Not all NVTX events might have been collected.",
+  "No NVTX events collected. Does the process use NVTX?",
+  "Not all NVTX events might have been collected.",
+  "Number of NVTX events collected: \t1.",
+  "Not all CUDA events might have been collected."
+ ],
+ "node_band": {
+  "omega_ms": 0.097119,
+  "dk_lo_ms": 0.0
+ },
+ "P_ms": 9.801049,
+ "terms": {
+  "moe_expert": 4.916444,
+  "moe_route": 0.732321,
+  "attn": 0.840179,
+  "dense_gemm": 1.355154,
+  "norm_elem": 1.469588,
+  "sample": 0.007056,
+  "input_prep": 0.002656,
+  "memcpy": 0.002304,
+  "residual": 0.000864,
+  "I_in": 0.046626,
+  "idle_out": 0.408802,
+  "overlap_in": -0.006096,
+  "O": -0.025151
+ },
+ "noise_iqr": {
+  "moe_expert": 0.240141,
+  "moe_route": 0.002306,
+  "attn": 0.012659,
+  "dense_gemm": 0.004304,
+  "norm_elem": 0.005903,
+  "sample": 0.000128,
+  "input_prep": 3.2e-05,
+  "memcpy": 6.4e-05,
+  "residual": 0.000288,
+  "I_in": 0.495865,
+  "idle_out": 0.021761,
+  "overlap_in": 0.00124,
+  "O": null
+ },
+ "I_in_node_ms": 0.145088,
+ "status": "ok"
+}
