@@ -397,7 +397,18 @@ reading, not a speed one.
   graphs ran 1.135× (W16) and 1.118× (W1) the torch path's on the same host, 536.5 and 100.7 tok/s.
 - **Exactness:** every bucket still replays exactly as the padded eager step.
 - **Correctness:** a dense hybrid stays within 2× its all-attention control on every seed, on the real fp8 kernel.
-- **Caveats:** token streams differ from the torch path's (the kernels' arithmetic). Quality in nats is not measured.
+- **Caveats:** token streams differ from the torch path's (the kernels' arithmetic). Quality in nats: lane P106, below.
+
+**The Gated DeltaNet kernels cost no measurable quality** (lane P106, 2026-10-03, one rented RTX 5090; **measured** —
+[`bench/p106/RESULTS-p106.md`](../bench/p106/RESULTS-p106.md), `e4b.serve.p106.qwen36-gdn-kernel-quality.5090.2026-10-03`).
+- **How:** transformers' Gated DeltaNet functions were switched in place inside one process, proven bit-exact against
+  a kernel-free process on the card.
+- **Quality:** against transformers' torch path on Qwen3.6-35B-A3B, teacher-forced on wikitext:
+  - KL 5.7e-3 nats on prompt positions and 4.9e-3 on decode steps;
+  - argmax agreement 0.969 and 0.973;
+  - d_nll within ±0.001 nats;
+  - NEUTRAL by the registered rule.
+- **Prefill:** TTFT 1.10–1.12× the torch path's at 512–4,096 tokens.
 - **Earlier lanes:** P103 and P104 stopped on a single-seed tiny-MoE premise, which proved to be a seed lottery on
   every kernel set.
 
