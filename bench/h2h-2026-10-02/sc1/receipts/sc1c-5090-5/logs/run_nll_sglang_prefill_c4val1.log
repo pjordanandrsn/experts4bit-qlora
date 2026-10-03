@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/root/sc1/sglang/sc1_sglang_nll.py", line 336, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/sc1/sglang/sc1_sglang_nll.py", line 312, in main
+    rep = score_prefill(client, ids, prompt_len, steps, a.top_logprobs, flush)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/sc1/sglang/sc1_sglang_nll.py", line 133, in score_prefill
+    assert lps[0] is None, "entry 0 must be None (logprob_result_processor.py:38)"
+           ^^^^^^^^^^^^^^
+AssertionError: entry 0 must be None (logprob_result_processor.py:38)

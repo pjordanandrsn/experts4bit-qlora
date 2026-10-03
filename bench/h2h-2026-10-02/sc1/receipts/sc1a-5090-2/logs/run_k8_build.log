@@ -1,0 +1,27 @@
+SC1 arm=k8_build box=A at=2026-10-02T21:24:12Z nproc=224 cpu.max=3071999/100000 load=26.23/18.38/14.94
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1329.84it/s]
+[21:24:19]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested main, unpinned)
+[21:24:19]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[21:24:19]   quantized experts on 48/48 MoE layers (128 experts each)
+[21:24:19]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[21:24:21]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[21:24:21]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[21:24:52]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 1335.26it/s]
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9120 examples [00:00, 53308.88 examples/s]Generating v split: 18229 examples [00:00, 54179.57 examples/s]Generating v split: 27647 examples [00:00, 51933.38 examples/s]Generating v split: 36991 examples [00:00, 51163.59 examples/s]Generating v split: 45576 examples [00:00, 51556.87 examples/s]Generating v split: 45576 examples [00:00, 51880.76 examples/s]
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+INT4EXP calibrating (streamed): 32 batches of c4 budget GB 24 assignment recipe dump /root/sc1/artifact
+INT4EXP calibration order: layers_per_pass = 10
+INT4EXP calibrated experts: 2418 gptq / 142 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2398 gptq / 162 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2412 gptq / 148 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 2338 gptq / 222 rtn (min_rows=32) over 10 layers
+INT4EXP calibrated experts: 1956 gptq / 92 rtn (min_rows=32) over 8 layers
+INT4EXP calibrated streaming: 48 layers in 5 passes of <= 10 layer(s)
+INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (1307564 > 131072). Running this sequence through the model will result in indexing errors
+ATTNINT4 calibrated: 192 projections (attn=1 head=0 dense=0; hessians from 32 batches of c4; model_type=qwen3_moe)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+K8_PPL steps=2048 nll=1.85437 ppl=6.38767 compute=fp8 sha=9ef10d760ad9 out=/root/sc1/k8_build_wikitext.json

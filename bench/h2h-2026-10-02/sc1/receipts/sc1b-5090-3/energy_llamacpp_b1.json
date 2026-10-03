@@ -1,0 +1,17 @@
+{
+ "tag": "llamacpp_b1",
+ "engine": "llamacpp",
+ "batch": 1,
+ "start_epoch": 1790998531.763679,
+ "stop_epoch": 1790998534.3880358,
+ "tokens": 640,
+ "interval_ms": 50,
+ "sampler_start_epoch": 1790998531.8291879,
+ "sampler_fields": "timestamp,memory.used,utilization.gpu,clocks.sm,power.draw.instant,pcie.link.gen.current",
+ "arm_start_epoch": 1790998531.763679,
+ "arm_end_epoch": 1790998534.3880358,
+ "receipt": "llamacpp_energy_q4km_b1.json",
+ "receipt_status": "VALID",
+ "basis": "whole arm after load_s: 4x32 + 4x128 decoded tokens per row (640 x B); the prefills' energy is INCLUDED -- an upper bound on J/token, labelled",
+ "csv": "energy_llamacpp_b1.csv"
+}

@@ -1,0 +1,9 @@
+  served t=256/2048 nll_so_far=1.36548 recomputed=1 cached=767 elapsed=38.5s
+  served t=512/2048 nll_so_far=1.63276 recomputed=1 cached=1023 elapsed=70.7s
+  served t=768/2048 nll_so_far=1.58774 recomputed=1 cached=1279 elapsed=105.7s
+  served t=1024/2048 nll_so_far=1.60391 recomputed=1 cached=1535 elapsed=143.6s
+  served t=1280/2048 nll_so_far=1.80512 recomputed=1 cached=1791 elapsed=184.1s
+  served t=1536/2048 nll_so_far=1.82469 recomputed=1 cached=2047 elapsed=225.9s
+  served t=1792/2048 nll_so_far=1.84479 recomputed=1 cached=2303 elapsed=269.9s
+  served t=2048/2048 nll_so_far=1.85922 recomputed=1 cached=2559 elapsed=316.6s
+SC1_SGLANG_NLL {"mode": "served", "mode_label": "served (T==1: uncached suffix 1 token on every request after the first)", "mean_nll": 1.8592171194978215, "ppl": 6.4187097212062145, "steps": 2048, "top1_agreement": 0.59814453125, "recomputed_suffix_histogram": {"1": 2047, "513": 1}, "wall_s": 316.582, "text_sha": "9ef10d760ad9f9eaafaedfc320702ad341cabfb141ef511eb5c71e3da94f833b"}

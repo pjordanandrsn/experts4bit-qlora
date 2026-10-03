@@ -1,0 +1,1726 @@
+{
+ "lane": "SC1",
+ "box": "B",
+ "dir": "/private/tmp/claude-501/-Users-jordananderson-code/d479c659-f03e-44eb-9883-8d2aa60a2184/scratchpad/xbox/B",
+ "pack_fp": null,
+ "arms": {
+  "e4b/int4/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     1675.9880056661384,
+     1677.0849981895867
+    ],
+    "point": 1676.5365019278624,
+    "spread": 0.0006545348294496274,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 0.1 %"
+   },
+   "draws": [
+    {
+     "tok": 1675.9880056661384,
+     "ms": 9.5466077,
+     "verdict": "VALID",
+     "why": "",
+     "k19": true,
+     "draw": 1,
+     "file": "e4b_int4_b16_r1.json"
+    },
+    {
+     "tok": 1677.0849981895867,
+     "ms": 9.5403632,
+     "verdict": "VALID",
+     "why": "",
+     "k19": true,
+     "draw": 2,
+     "file": "e4b_int4_b16_r2.json"
+    }
+   ]
+  },
+  "e4b/int4/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     234.10799102262587,
+     236.52690507885882
+    ],
+    "point": 235.31744805074234,
+    "spread": 0.010332471120130063,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 1.0 %"
+   },
+   "draws": [
+    {
+     "tok": 234.10799102262587,
+     "ms": 4.271532960629921,
+     "verdict": "VALID",
+     "why": "",
+     "k19": false,
+     "draw": 1,
+     "file": "e4b_int4_b1_r1.json"
+    },
+    {
+     "tok": 236.52690507885882,
+     "ms": 4.227848834645669,
+     "verdict": "VALID",
+     "why": "",
+     "k19": false,
+     "draw": 2,
+     "file": "e4b_int4_b1_r2.json"
+    }
+   ]
+  },
+  "e4bsched/int4_sched/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     1655.4,
+     1669.0
+    ],
+    "point": 1662.2,
+    "spread": 0.008215537030324942,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 0.8 %"
+   },
+   "draws": [
+    {
+     "tok": 1655.4,
+     "ms": 9.6654,
+     "verdict": "VALID",
+     "why": "",
+     "draw": 1,
+     "file": "e4bsched_int4_sched_b16_r1.json"
+    },
+    {
+     "tok": 1669.0,
+     "ms": 9.5864,
+     "verdict": "VALID",
+     "why": "",
+     "draw": 2,
+     "file": "e4bsched_int4_sched_b16_r2.json"
+    }
+   ]
+  },
+  "e4bsched/int4_sched/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     220.1,
+     224.1
+    ],
+    "point": 222.1,
+    "spread": 0.01817355747387551,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 1.8 %"
+   },
+   "draws": [
+    {
+     "tok": 220.1,
+     "ms": 4.5435,
+     "verdict": "VALID",
+     "why": "",
+     "draw": 1,
+     "file": "e4bsched_int4_sched_b1_r1.json"
+    },
+    {
+     "tok": 224.1,
+     "ms": 4.4631,
+     "verdict": "VALID",
+     "why": "",
+     "draw": 2,
+     "file": "e4bsched_int4_sched_b1_r2.json"
+    }
+   ]
+  },
+  "exl3/4bpw/16": {
+   "verdict": "UNSTABLE",
+   "summary": {
+    "n": 3,
+    "values": [
+     108.6,
+     112.8,
+     104.9
+    ],
+    "point": 108.6,
+    "spread": 0.07530981887511908,
+    "status": "UNSTABLE",
+    "usable": false,
+    "why": "draws 108.6, 112.8, 104.9 tok/s spread 7.5 % > 5 %: UNSTABLE, no position"
+   },
+   "draws": [
+    {
+     "tok": 108.6,
+     "ms": 147.3447,
+     "verdict": "VALID",
+     "why": "",
+     "note": "4.03326146403029",
+     "draw": 1,
+     "file": "exl3_4bpw_b16_r1.json"
+    },
+    {
+     "tok": 112.8,
+     "ms": 141.8,
+     "verdict": "VALID",
+     "why": "",
+     "note": "4.03326146403029",
+     "draw": 2,
+     "file": "exl3_4bpw_b16_r2.json"
+    },
+    {
+     "tok": 104.9,
+     "ms": 152.5989,
+     "verdict": "VALID",
+     "why": "",
+     "note": "4.03326146403029",
+     "draw": 3,
+     "file": "exl3_4bpw_b16_r3.json"
+    }
+   ]
+  },
+  "exl3/4bpw/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 3,
+    "values": [
+     197.4,
+     205.1,
+     199.7
+    ],
+    "point": 199.7,
+    "spread": 0.0390070921985815,
+    "status": "STABLE",
+    "usable": true,
+    "why": "3 draws, spread 3.9 %"
+   },
+   "draws": [
+    {
+     "tok": 197.4,
+     "ms": 5.0665,
+     "verdict": "VALID",
+     "why": "",
+     "note": "4.03326146403029",
+     "draw": 1,
+     "file": "exl3_4bpw_b1_r1.json"
+    },
+    {
+     "tok": 205.1,
+     "ms": 4.8752,
+     "verdict": "VALID",
+     "why": "",
+     "note": "4.03326146403029",
+     "draw": 2,
+     "file": "exl3_4bpw_b1_r2.json"
+    },
+    {
+     "tok": 199.7,
+     "ms": 5.0082,
+     "verdict": "VALID",
+     "why": "",
+     "note": "4.03326146403029",
+     "draw": 3,
+     "file": "exl3_4bpw_b1_r3.json"
+    }
+   ]
+  },
+  "llamacpp/iq4xs/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     325.5
+    ],
+    "point": 325.5,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured"
+   },
+   "draws": [
+    {
+     "tok": 325.5,
+     "ms": 3.0722,
+     "verdict": "VALID",
+     "why": "",
+     "note": "MMVQ (dp4a) at B=1 / MMQ (int8 mma) at B=16 by design",
+     "draw": 1,
+     "file": "llamacpp_iq4xs_b1_r1.json"
+    }
+   ]
+  },
+  "llamacpp/q4km/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     1031.3,
+     1041.7
+    ],
+    "point": 1036.5,
+    "spread": 0.01008435954620391,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 1.0 %"
+   },
+   "draws": [
+    {
+     "tok": 1031.3,
+     "ms": 15.5148,
+     "verdict": "VALID",
+     "why": "",
+     "note": "MMVQ (dp4a) at B=1 / MMQ (int8 mma) at B=16 by design",
+     "draw": 1,
+     "file": "llamacpp_q4km_b16_r1.json"
+    },
+    {
+     "tok": 1041.7,
+     "ms": 15.3593,
+     "verdict": "VALID",
+     "why": "",
+     "note": "MMVQ (dp4a) at B=1 / MMQ (int8 mma) at B=16 by design",
+     "draw": 2,
+     "file": "llamacpp_q4km_b16_r2.json"
+    }
+   ]
+  },
+  "llamacpp/q4km/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     325.1,
+     334.1
+    ],
+    "point": 329.6,
+    "spread": 0.027683789603199015,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 2.8 %"
+   },
+   "draws": [
+    {
+     "tok": 325.1,
+     "ms": 3.0758,
+     "verdict": "VALID",
+     "why": "",
+     "note": "MMVQ (dp4a) at B=1 / MMQ (int8 mma) at B=16 by design",
+     "draw": 1,
+     "file": "llamacpp_q4km_b1_r1.json"
+    },
+    {
+     "tok": 334.1,
+     "ms": 2.9929,
+     "verdict": "VALID",
+     "why": "",
+     "note": "MMVQ (dp4a) at B=1 / MMQ (int8 mma) at B=16 by design",
+     "draw": 2,
+     "file": "llamacpp_q4km_b1_r2.json"
+    }
+   ]
+  },
+  "lmdeploy/w4a16/16": {
+   "verdict": "UNSUPPORTED",
+   "summary": {
+    "n": 0,
+    "values": [],
+    "point": null,
+    "spread": null,
+    "status": "NONE",
+    "usable": false,
+    "why": "no VALID draw"
+   },
+   "draws": [
+    {
+     "tok": null,
+     "ms": null,
+     "verdict": "UNSUPPORTED",
+     "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+     "draw": 1,
+     "file": "lmdeploy_w4a16_b16_r1.json"
+    },
+    {
+     "tok": null,
+     "ms": null,
+     "verdict": "UNSUPPORTED",
+     "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+     "draw": 2,
+     "file": "lmdeploy_w4a16_b16_r2.json"
+    }
+   ]
+  },
+  "lmdeploy/w4a16/1": {
+   "verdict": "UNSUPPORTED",
+   "summary": {
+    "n": 0,
+    "values": [],
+    "point": null,
+    "spread": null,
+    "status": "NONE",
+    "usable": false,
+    "why": "no VALID draw"
+   },
+   "draws": [
+    {
+     "tok": null,
+     "ms": null,
+     "verdict": "UNSUPPORTED",
+     "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+     "draw": 1,
+     "file": "lmdeploy_w4a16_b1_r1.json"
+    },
+    {
+     "tok": null,
+     "ms": null,
+     "verdict": "UNSUPPORTED",
+     "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+     "draw": 2,
+     "file": "lmdeploy_w4a16_b1_r2.json"
+    }
+   ]
+  },
+  "vllm/gptq_graph/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     1961.4,
+     1934.9
+    ],
+    "point": 1948.15,
+    "spread": 0.013695798232466793,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 1.4 %"
+   },
+   "draws": [
+    {
+     "tok": 1961.4,
+     "ms": 8.1573,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASH_ATTN; capture [1, 2, 4, 8, 16, 24, 32]; detok True",
+     "draw": 1,
+     "file": "vllm_gptq_graph_b16_r1.json"
+    },
+    {
+     "tok": 1934.9,
+     "ms": 8.2693,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASH_ATTN; capture [1, 2, 4, 8, 16, 24, 32]; detok True",
+     "draw": 2,
+     "file": "vllm_gptq_graph_b16_r2.json"
+    }
+   ]
+  },
+  "vllm/gptq_graph/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     266.8,
+     267.6
+    ],
+    "point": 267.20000000000005,
+    "spread": 0.00299850074962523,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 0.3 %"
+   },
+   "draws": [
+    {
+     "tok": 266.8,
+     "ms": 3.7485,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASH_ATTN; capture [1, 2]; detok True",
+     "draw": 1,
+     "file": "vllm_gptq_graph_b1_r1.json"
+    },
+    {
+     "tok": 267.6,
+     "ms": 3.7364,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASH_ATTN; capture [1, 2]; detok True",
+     "draw": 2,
+     "file": "vllm_gptq_graph_b1_r2.json"
+    }
+   ]
+  }
+ },
+ "licence": {
+  "box": "B",
+  "gate_impl": "package",
+  "rows": {},
+  "b1": null,
+  "b16": null,
+  "lines": [],
+  "verdict": "UNREAD",
+  "why": [
+   "box B carries no licence rows (box A's reading applies through the substitution licence)"
+  ]
+ },
+ "comparability": {
+  "oracle": {
+   "wikitext": {
+    "mean_nll": 1.8401463627815247,
+    "ppl": 6.297459602355957,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null
+   },
+   "c4val1": {
+    "mean_nll": 2.783583551645279,
+    "ppl": 16.176889419555664,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null
+   }
+  },
+  "rows": [
+   {
+    "mean_nll": 2.7936463444024713,
+    "ppl": 16.340494373698434,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "decode",
+    "hist": null,
+    "engine": "exl3",
+    "variant": null,
+    "mode": "decode",
+    "src": "c4val1",
+    "shape": "served",
+    "file": "nll_exl3_decode_c4val1.json",
+    "delta_bf16": 0.010062792757192351,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": -0.014065881276698722,
+    "band": "COMPARABLE"
+   },
+   {
+    "mean_nll": 1.8391227337630056,
+    "ppl": 6.291016942787451,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "decode",
+    "hist": null,
+    "engine": "exl3",
+    "variant": null,
+    "mode": "decode",
+    "src": "wikitext",
+    "shape": "served",
+    "file": "nll_exl3_decode_wikitext.json",
+    "delta_bf16": -0.0010236290185190455,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": -0.015246698596024899,
+    "band": "COMPARABLE"
+   },
+   {
+    "mean_nll": 2.792152613401413,
+    "ppl": 16.316104291325896,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "prefill",
+    "hist": null,
+    "engine": "exl3",
+    "variant": null,
+    "mode": "prefill",
+    "src": "c4val1",
+    "shape": "prefill",
+    "file": "nll_exl3_prefill_c4val1.json",
+    "delta_bf16": 0.008569061756134033,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": -0.01301845908164978,
+    "band": "COMPARABLE"
+   },
+   {
+    "mean_nll": 1.837948516011238,
+    "ppl": 6.283634254306758,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "prefill",
+    "hist": null,
+    "engine": "exl3",
+    "variant": null,
+    "mode": "prefill",
+    "src": "wikitext",
+    "shape": "prefill",
+    "file": "nll_exl3_prefill_wikitext.json",
+    "delta_bf16": -0.00219784677028656,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": -0.011603131890296936,
+    "band": "COMPARABLE"
+   },
+   {
+    "mean_nll": 2.8004818446146946,
+    "ppl": 16.452572444902533,
+    "verdict": "VALID",
+    "why": "",
+    "top1": 0.46435546875,
+    "label": "decode",
+    "hist": null,
+    "engine": "llamacpp",
+    "variant": null,
+    "mode": "decode",
+    "src": "c4val1",
+    "shape": "served",
+    "file": "nll_llamacpp_decode_c4val1.json",
+    "delta_bf16": 0.016898292969415696,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": -0.007230381064475377,
+    "band": "CLOSE"
+   },
+   {
+    "mean_nll": 1.8566418524051602,
+    "ppl": 6.402201095467918,
+    "verdict": "VALID",
+    "why": "",
+    "top1": 0.6103515625,
+    "label": "decode",
+    "hist": null,
+    "engine": "llamacpp",
+    "variant": null,
+    "mode": "decode",
+    "src": "wikitext",
+    "shape": "served",
+    "file": "nll_llamacpp_decode_wikitext.json",
+    "delta_bf16": 0.016495489623635562,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.0022724200461297084,
+    "band": "CLOSE"
+   },
+   {
+    "mean_nll": 2.803068948621498,
+    "ppl": 16.495192067924233,
+    "verdict": "VALID",
+    "why": "",
+    "top1": 0.4658203125,
+    "label": "prefill",
+    "hist": null,
+    "engine": "llamacpp",
+    "variant": null,
+    "mode": "prefill",
+    "src": "c4val1",
+    "shape": "prefill",
+    "file": "nll_llamacpp_prefill_c4val1.json",
+    "delta_bf16": 0.019485396976218983,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": -0.0021021238615648308,
+    "band": "CLOSE"
+   },
+   {
+    "mean_nll": 1.8532412306741468,
+    "ppl": 6.380466607627394,
+    "verdict": "VALID",
+    "why": "",
+    "top1": 0.6103515625,
+    "label": "prefill",
+    "hist": null,
+    "engine": "llamacpp",
+    "variant": null,
+    "mode": "prefill",
+    "src": "wikitext",
+    "shape": "prefill",
+    "file": "nll_llamacpp_prefill_wikitext.json",
+    "delta_bf16": 0.013094867892622153,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.003689582772611777,
+    "band": "CLOSE"
+   },
+   {
+    "mean_nll": null,
+    "ppl": null,
+    "verdict": "UNSUPPORTED",
+    "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "engine": "lmdeploy",
+    "variant": null,
+    "mode": "decode_prefix",
+    "src": "c4val1",
+    "shape": "served",
+    "file": "nll_lmdeploy_decode_prefix_c4val1.json",
+    "delta_bf16": null,
+    "bf16_note": "oracle VALID",
+    "ood_flag": false,
+    "delta_pair": null,
+    "band": "UNSUPPORTED"
+   },
+   {
+    "mean_nll": null,
+    "ppl": null,
+    "verdict": "UNSUPPORTED",
+    "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "engine": "lmdeploy",
+    "variant": null,
+    "mode": "decode_prefix",
+    "src": "wikitext",
+    "shape": "served",
+    "file": "nll_lmdeploy_decode_prefix_wikitext.json",
+    "delta_bf16": null,
+    "bf16_note": "oracle VALID",
+    "ood_flag": false,
+    "delta_pair": null,
+    "band": "UNSUPPORTED"
+   },
+   {
+    "mean_nll": null,
+    "ppl": null,
+    "verdict": "UNSUPPORTED",
+    "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "engine": "lmdeploy",
+    "variant": null,
+    "mode": "prefill",
+    "src": "c4val1",
+    "shape": "prefill",
+    "file": "nll_lmdeploy_prefill_c4val1.json",
+    "delta_bf16": null,
+    "bf16_note": "oracle VALID",
+    "ood_flag": false,
+    "delta_pair": null,
+    "band": "UNSUPPORTED"
+   },
+   {
+    "mean_nll": null,
+    "ppl": null,
+    "verdict": "UNSUPPORTED",
+    "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "engine": "lmdeploy",
+    "variant": null,
+    "mode": "prefill",
+    "src": "wikitext",
+    "shape": "prefill",
+    "file": "nll_lmdeploy_prefill_wikitext.json",
+    "delta_bf16": null,
+    "bf16_note": "oracle VALID",
+    "ood_flag": false,
+    "delta_pair": null,
+    "band": "UNSUPPORTED"
+   }
+  ],
+  "e4b_served": {
+   "wikitext": {
+    "mean_nll": 1.8543694323590305,
+    "ppl": 6.387669122985474,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "source": "box A: k8_lic_auto_wikitext",
+    "engine": "e4b",
+    "variant": null,
+    "mode": "served",
+    "src": "wikitext",
+    "shape": "served",
+    "delta_bf16": 0.014223069577505854,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.0,
+    "band": "anchor",
+    "carried_from": "A"
+   },
+   "c4val1": {
+    "mean_nll": 2.80771222567917,
+    "ppl": 16.57196190870543,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "source": "box A: k8_lic_auto_c4val1",
+    "engine": "e4b",
+    "variant": null,
+    "mode": "served",
+    "src": "c4val1",
+    "shape": "served",
+    "delta_bf16": 0.024128674033891073,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.0,
+    "band": "anchor",
+    "carried_from": "A"
+   }
+  },
+  "e4b_prefill": {
+   "wikitext": {
+    "mean_nll": 1.849551647901535,
+    "ppl": 6.356968879699707,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "engine": "e4b",
+    "variant": null,
+    "mode": "prefill",
+    "src": "wikitext",
+    "shape": "prefill",
+    "delta_bf16": 0.009405285120010376,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.0,
+    "band": "anchor",
+    "source": "box A: e4b_prefill",
+    "carried_from": "A"
+   },
+   "c4val1": {
+    "mean_nll": 2.8051710724830627,
+    "ppl": 16.529903411865234,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "engine": "e4b",
+    "variant": null,
+    "mode": "prefill",
+    "src": "c4val1",
+    "shape": "prefill",
+    "delta_bf16": 0.021587520837783813,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.0,
+    "band": "anchor",
+    "source": "box A: e4b_prefill",
+    "carried_from": "A"
+   }
+  },
+  "served_vs_prefill": {
+   "exl3/None/c4val1": 0.0014937310010583182,
+   "exl3/None/wikitext": 0.0011742177517675145,
+   "llamacpp/None/c4val1": -0.002587104006803287,
+   "llamacpp/None/wikitext": 0.003400621731013409,
+   "e4b/None/wikitext": 0.004817784457495478,
+   "e4b/None/c4val1": 0.0025411531961072598
+  }
+ },
+ "substitution": {
+  "gap": {
+   "1": -0.0005146792680144063,
+   "16": 0.0014646108228053567
+  },
+  "holds": true,
+  "why": []
+ },
+ "controls": {
+  "sameprompt": {
+   "vllm": {
+    "ratio": null,
+    "label": "UNREAD",
+    "why": "no vllm/gptq_graph_sameprompt receipt"
+   },
+   "e4bsched": {
+    "ratio": null,
+    "label": "UNREAD",
+    "why": "no e4bsched/int4_sched_sameprompt receipt"
+   }
+  },
+  "degraded": {
+   "ratio": null,
+   "verdict": "UNREAD",
+   "why": "box B: the degraded control runs on box A",
+   "k19_lic": null,
+   "k19_degraded": null
+  },
+  "method_pair": {
+   "1": 0.0595112474144186,
+   "16": 0.008625016200133784
+  }
+ },
+ "positions": {
+  "anchor": "e4bsched/int4_sched",
+  "window_anchor": "e4b/int4",
+  "rows": [
+   {
+    "engine": "exl3",
+    "arm": "4bpw",
+    "B": 1,
+    "quoted": false,
+    "why": [
+     "box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "COMPARABLE",
+      "c4val1": "COMPARABLE"
+     },
+     "deltas": {
+      "wikitext": -0.015246698596024899,
+      "c4val1": -0.014065881276698722
+     },
+     "comparable": true,
+     "close": false
+    },
+    "contract": {
+     "bpw": 4.03326146403029,
+     "bpw_basis": "receipt (bpw_layer)",
+     "kv": "\u2014",
+     "graphs": "\u2014",
+     "prefix_cache": "None",
+     "model": "turboderp/Qwen3-30B-A3B-exl3"
+    },
+    "window_ratio": 0.8486408536817804,
+    "point": 0.8991445294912201,
+    "min": 0.8808567603748327,
+    "max": 0.9318491594729669,
+    "n_cross": 6,
+    "substitution": {
+     "gap": {
+      "1": -0.0005146792680144063,
+      "16": 0.0014646108228053567
+     },
+     "holds": true,
+     "why": []
+    }
+   },
+   {
+    "engine": "exl3",
+    "arm": "4bpw",
+    "B": 16,
+    "quoted": false,
+    "why": [
+     "exl3/4bpw UNSTABLE",
+     "box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "COMPARABLE",
+      "c4val1": "COMPARABLE"
+     },
+     "deltas": {
+      "wikitext": -0.015246698596024899,
+      "c4val1": -0.014065881276698722
+     },
+     "comparable": true,
+     "close": false
+    },
+    "contract": {
+     "bpw": 4.03326146403029,
+     "bpw_basis": "receipt (bpw_layer)",
+     "kv": "\u2014",
+     "graphs": "\u2014",
+     "prefix_cache": "None",
+     "model": "turboderp/Qwen3-30B-A3B-exl3"
+    },
+    "window_ratio": 0.06477640055860401,
+    "substitution": {
+     "gap": {
+      "1": -0.0005146792680144063,
+      "16": 0.0014646108228053567
+     },
+     "holds": true,
+     "why": []
+    }
+   },
+   {
+    "engine": "llamacpp",
+    "arm": "iq4xs",
+    "B": 1,
+    "quoted": false,
+    "why": [
+     "llamacpp/iq4xs SINGLE: single draw: stability unmeasured",
+     "served-shape quality not COMPARABLE on both texts: wikitext UNREAD, c4val1 UNREAD",
+     "box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "UNREAD",
+      "c4val1": "UNREAD"
+     },
+     "deltas": {
+      "wikitext": null,
+      "c4val1": null
+     },
+     "comparable": false,
+     "close": false
+    },
+    "contract": {
+     "bpw": 4.29,
+     "bpw_basis": "nominal",
+     "kv": "\u2014",
+     "graphs": "\u2014",
+     "prefix_cache": "None",
+     "model": ""
+    },
+    "window_ratio": 1.3832378461363022,
+    "substitution": {
+     "gap": {
+      "1": -0.0005146792680144063,
+      "16": 0.0014646108228053567
+     },
+     "holds": true,
+     "why": []
+    }
+   },
+   {
+    "engine": "llamacpp",
+    "arm": "q4km",
+    "B": 1,
+    "quoted": false,
+    "why": [
+     "box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "CLOSE",
+      "c4val1": "CLOSE"
+     },
+     "deltas": {
+      "wikitext": 0.0022724200461297084,
+      "c4val1": -0.007230381064475377
+     },
+     "comparable": true,
+     "close": true
+    },
+    "contract": {
+     "bpw": 4.86,
+     "bpw_basis": "nominal",
+     "kv": "\u2014",
+     "graphs": "\u2014",
+     "prefix_cache": "None",
+     "model": ""
+    },
+    "window_ratio": 1.4006611185453923,
+    "point": 1.4840162089149034,
+    "min": 1.4506916555109328,
+    "max": 1.5179463880054522,
+    "n_cross": 4,
+    "substitution": {
+     "gap": {
+      "1": -0.0005146792680144063,
+      "16": 0.0014646108228053567
+     },
+     "holds": true,
+     "why": []
+    }
+   },
+   {
+    "engine": "llamacpp",
+    "arm": "q4km",
+    "B": 16,
+    "quoted": false,
+    "why": [
+     "box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "CLOSE",
+      "c4val1": "CLOSE"
+     },
+     "deltas": {
+      "wikitext": 0.0022724200461297084,
+      "c4val1": -0.007230381064475377
+     },
+     "comparable": true,
+     "close": true
+    },
+    "contract": {
+     "bpw": 4.86,
+     "bpw_basis": "nominal",
+     "kv": "\u2014",
+     "graphs": "\u2014",
+     "prefix_cache": "None",
+     "model": ""
+    },
+    "window_ratio": 0.6182388506352952,
+    "point": 0.6235711707375767,
+    "min": 0.6179149191132415,
+    "max": 0.6292738915065845,
+    "n_cross": 4,
+    "substitution": {
+     "gap": {
+      "1": -0.0005146792680144063,
+      "16": 0.0014646108228053567
+     },
+     "holds": true,
+     "why": []
+    }
+   },
+   {
+    "engine": "lmdeploy",
+    "arm": "w4a16",
+    "B": 1,
+    "quoted": false,
+    "why": [
+     "lmdeploy/w4a16 UNSUPPORTED",
+     "served-shape quality not COMPARABLE on both texts: wikitext UNSUPPORTED, c4val1 UNSUPPORTED",
+     "box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "UNSUPPORTED",
+      "c4val1": "UNSUPPORTED"
+     },
+     "deltas": {
+      "wikitext": null,
+      "c4val1": null
+     },
+     "comparable": false,
+     "close": false
+    },
+    "contract": {
+     "bpw": 4.15,
+     "bpw_basis": "nominal",
+     "kv": "\u2014",
+     "graphs": "\u2014",
+     "prefix_cache": "None",
+     "model": ""
+    },
+    "window_ratio": null,
+    "substitution": {
+     "gap": {
+      "1": -0.0005146792680144063,
+      "16": 0.0014646108228053567
+     },
+     "holds": true,
+     "why": []
+    }
+   },
+   {
+    "engine": "lmdeploy",
+    "arm": "w4a16",
+    "B": 16,
+    "quoted": false,
+    "why": [
+     "lmdeploy/w4a16 UNSUPPORTED",
+     "served-shape quality not COMPARABLE on both texts: wikitext UNSUPPORTED, c4val1 UNSUPPORTED",
+     "box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "UNSUPPORTED",
+      "c4val1": "UNSUPPORTED"
+     },
+     "deltas": {
+      "wikitext": null,
+      "c4val1": null
+     },
+     "comparable": false,
+     "close": false
+    },
+    "contract": {
+     "bpw": 4.15,
+     "bpw_basis": "nominal",
+     "kv": "\u2014",
+     "graphs": "\u2014",
+     "prefix_cache": "None",
+     "model": ""
+    },
+    "window_ratio": null,
+    "substitution": {
+     "gap": {
+      "1": -0.0005146792680144063,
+      "16": 0.0014646108228053567
+     },
+     "holds": true,
+     "why": []
+    }
+   },
+   {
+    "engine": "vllm",
+    "arm": "gptq_graph",
+    "B": 1,
+    "quoted": false,
+    "why": [
+     "served-shape quality not COMPARABLE on both texts: wikitext UNREAD, c4val1 UNREAD",
+     "box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "UNREAD",
+      "c4val1": "UNREAD"
+     },
+     "deltas": {
+      "wikitext": null,
+      "c4val1": null
+     },
+     "comparable": false,
+     "close": false
+    },
+    "contract": {
+     "bpw": 4.15,
+     "bpw_basis": "nominal",
+     "kv": "auto",
+     "graphs": "[1, 2]",
+     "prefix_cache": "False",
+     "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4"
+    },
+    "window_ratio": 1.1354874116363134,
+    "point": 1.2030616839261596,
+    "min": 1.1905399375278893,
+    "max": 1.2158109950022717,
+    "n_cross": 4,
+    "substitution": {
+     "gap": {
+      "1": -0.0005146792680144063,
+      "16": 0.0014646108228053567
+     },
+     "holds": true,
+     "why": []
+    }
+   },
+   {
+    "engine": "vllm",
+    "arm": "gptq_graph",
+    "B": 16,
+    "quoted": false,
+    "why": [
+     "served-shape quality not COMPARABLE on both texts: wikitext UNREAD, c4val1 UNREAD",
+     "box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "UNREAD",
+      "c4val1": "UNREAD"
+     },
+     "deltas": {
+      "wikitext": null,
+      "c4val1": null
+     },
+     "comparable": false,
+     "close": false
+    },
+    "contract": {
+     "bpw": 4.15,
+     "bpw_basis": "nominal",
+     "kv": "auto",
+     "graphs": "[1, 2, 4, 8, 16, 24, 32]",
+     "prefix_cache": "False",
+     "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4"
+    },
+    "window_ratio": 1.162008699339267,
+    "point": 1.1720310431957646,
+    "min": 1.1593169562612344,
+    "max": 1.1848495831823125,
+    "n_cross": 4,
+    "substitution": {
+     "gap": {
+      "1": -0.0005146792680144063,
+      "16": 0.0014646108228053567
+     },
+     "holds": true,
+     "why": []
+    }
+   }
+  ]
+ },
+ "ttft": {
+  "e4b/4096": {
+   "median_s": 16.3209,
+   "min_s": 16.3171,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "e4b/512": {
+   "median_s": 2.0266,
+   "min_s": 2.0226,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "exl3/4096": {
+   "median_s": 0.779,
+   "min_s": 0.7738,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "exl3/512": {
+   "median_s": 0.3328,
+   "min_s": 0.3107,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "llamacpp/4096": {
+   "median_s": 0.36278,
+   "min_s": 0.36259,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "llamacpp/512": {
+   "median_s": 0.04479,
+   "min_s": 0.04426,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "lmdeploy/4096": {
+   "median_s": null,
+   "min_s": null,
+   "verdict": "UNSUPPORTED",
+   "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+   "own_timer": null
+  },
+  "lmdeploy/512": {
+   "median_s": null,
+   "min_s": null,
+   "verdict": "UNSUPPORTED",
+   "why": "LMDeploy 0.18.0 TurboMind W4A16 on sm_120: its SM80 GEMM fallback compiles to empty kernels (A10; sc1b-5090-1 aborted every run)",
+   "own_timer": null
+  },
+  "vllm/4096": {
+   "median_s": 0.1742,
+   "min_s": 0.17411,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "vllm/512": {
+   "median_s": 0.04109,
+   "min_s": 0.04067,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  }
+ },
+ "resources": [
+  {
+   "engine": "e4b",
+   "arm": "int4",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4b",
+   "arm": "int4",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4bsched",
+   "arm": "int4_sched",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4bsched",
+   "arm": "int4_sched",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "exl3",
+   "arm": "4bpw",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": 15.255859375,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "exl3",
+   "arm": "4bpw",
+   "B": 16,
+   "verdict": "UNSTABLE",
+   "reserved_gb": null,
+   "peak_gb": 18.091796875,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "llamacpp",
+   "arm": "iq4xs",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "llamacpp",
+   "arm": "q4km",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "llamacpp",
+   "arm": "q4km",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "lmdeploy",
+   "arm": "w4a16",
+   "B": 1,
+   "verdict": "UNSUPPORTED",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "lmdeploy",
+   "arm": "w4a16",
+   "B": 16,
+   "verdict": "UNSUPPORTED",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "vllm",
+   "arm": "gptq_graph",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": 27.623046875,
+   "peak_gb": 27.51529550552368,
+   "demand_gb": 28.221020507626235,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "vllm",
+   "arm": "gptq_graph",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": 28.033203125,
+   "peak_gb": 27.81941270828247,
+   "demand_gb": 28.221020507626235,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  }
+ ],
+ "energy": {
+  "exl3_b1": {
+   "tag": "exl3_b1",
+   "engine": "exl3",
+   "batch": 1,
+   "tokens": 640,
+   "joules": 2170.507360094786,
+   "j_per_token": 3.391417750148103,
+   "mean_w": 226.42471457172988,
+   "seconds": 9.586000204086304,
+   "n_samples": 192,
+   "basis": "csv timestamps",
+   "why": ""
+  },
+  "llamacpp_b1": {
+   "tag": "llamacpp_b1",
+   "engine": "llamacpp",
+   "batch": 1,
+   "tokens": 640,
+   "joules": 852.9747772955894,
+   "j_per_token": 1.3327730895243586,
+   "mean_w": 346.17483032366965,
+   "seconds": 2.4639999866485596,
+   "n_samples": 50,
+   "basis": "csv timestamps",
+   "why": ""
+  },
+  "lmdeploy_b1": {
+   "tag": "lmdeploy_b1",
+   "engine": "lmdeploy",
+   "batch": 1,
+   "tokens": 640,
+   "joules": null,
+   "j_per_token": null,
+   "mean_w": null,
+   "seconds": null,
+   "n_samples": 0,
+   "basis": "",
+   "why": "csv missing"
+  }
+ },
+ "predictions": {
+  "P1": {
+   "verdict": "UNREAD",
+   "evidence": "box B: P1/P2 are box A's"
+  },
+  "P2": {
+   "verdict": "UNREAD",
+   "evidence": "box B: P1/P2 are box A's"
+  },
+  "P3": {
+   "verdict": "UNREAD",
+   "evidence": "box B: SGLang is box C's"
+  },
+  "P4": {
+   "verdict": "UNREAD",
+   "evidence": "B=1 no quoted position; B=16 no quoted position"
+  },
+  "P5": {
+   "verdict": "UNREAD",
+   "evidence": "B=1 no quoted position; B=16 no quoted position"
+  },
+  "P5b": {
+   "verdict": "HOLD",
+   "evidence": "B=1 UNSUPPORTED (the prediction's stated alternative); B=16 UNSUPPORTED (the prediction's stated alternative)"
+  },
+  "P6": {
+   "verdict": "UNREAD",
+   "evidence": "wikitext: vllm served/prefill pair unread; c4val1: vllm served/prefill pair unread"
+  },
+  "P7": {
+   "verdict": "UNREAD",
+   "evidence": "vllm: no vllm/gptq_graph_sameprompt receipt; e4bsched: no e4bsched/int4_sched_sameprompt receipt"
+  },
+  "P8": {
+   "verdict": "UNREAD",
+   "evidence": "B=1 fp8kv or kv-auto arm not VALID/stable; B=16 fp8kv or kv-auto arm not VALID/stable; wikitext: fp8kv/auto delta_bf16 unread; c4val1: fp8kv/auto delta_bf16 unread"
+  },
+  "P9": {
+   "verdict": "UNREAD",
+   "evidence": "box B: the licence is box A's"
+  },
+  "P10": {
+   "verdict": "REFUTED",
+   "evidence": "TTFT-4096 vllm/e4b 0.011"
+  },
+  "P11": {
+   "verdict": "UNREAD",
+   "evidence": "B=1 J/token for vllm and e4b not both read; B=16 J/token for vllm and e4b not both read"
+  },
+  "P12": {
+   "verdict": "UNREAD",
+   "evidence": "box B: read on box A (see --cross-box / --box-a)"
+  },
+  "P13": {
+   "verdict": "HOLD",
+   "evidence": "B=1 B 1.203, C 1.167 (gap 3.1 % vs 5 %); B=16 B 1.172, C 1.177 (gap 0.4 % vs 5 %)"
+  },
+  "P14": {
+   "verdict": "UNREAD",
+   "evidence": "B=1 nodetok pair not both VALID; B=16 nodetok pair not both VALID"
+  }
+ },
+ "frontier": [
+  {
+   "B": 1,
+   "engine": "e4bsched",
+   "arm": "int4_sched",
+   "tok_s": 222.1,
+   "delta_bf16_wikitext": 0.014223069577505854,
+   "delta_bf16_c4val1": 0.024128674033891073,
+   "bpw": 4.5,
+   "bpw_basis": "nominal",
+   "resident_gb": null,
+   "stability": "STABLE",
+   "native": false
+  },
+  {
+   "B": 16,
+   "engine": "e4bsched",
+   "arm": "int4_sched",
+   "tok_s": 1662.2,
+   "delta_bf16_wikitext": 0.014223069577505854,
+   "delta_bf16_c4val1": 0.024128674033891073,
+   "bpw": 4.5,
+   "bpw_basis": "nominal",
+   "resident_gb": null,
+   "stability": "STABLE",
+   "native": false
+  },
+  {
+   "B": 1,
+   "engine": "exl3",
+   "arm": "4bpw",
+   "tok_s": 199.7,
+   "delta_bf16_wikitext": -0.0010236290185190455,
+   "delta_bf16_c4val1": 0.010062792757192351,
+   "bpw": 4.03326146403029,
+   "bpw_basis": "receipt (bpw_layer)",
+   "resident_gb": 15.255859375,
+   "stability": "STABLE",
+   "native": false
+  },
+  {
+   "B": 1,
+   "engine": "llamacpp",
+   "arm": "iq4xs",
+   "tok_s": 325.5,
+   "delta_bf16_wikitext": null,
+   "delta_bf16_c4val1": null,
+   "bpw": 4.29,
+   "bpw_basis": "nominal",
+   "resident_gb": null,
+   "stability": "SINGLE",
+   "native": false
+  },
+  {
+   "B": 1,
+   "engine": "llamacpp",
+   "arm": "q4km",
+   "tok_s": 329.6,
+   "delta_bf16_wikitext": 0.016495489623635562,
+   "delta_bf16_c4val1": 0.016898292969415696,
+   "bpw": 4.86,
+   "bpw_basis": "nominal",
+   "resident_gb": null,
+   "stability": "STABLE",
+   "native": false
+  },
+  {
+   "B": 16,
+   "engine": "llamacpp",
+   "arm": "q4km",
+   "tok_s": 1036.5,
+   "delta_bf16_wikitext": 0.016495489623635562,
+   "delta_bf16_c4val1": 0.016898292969415696,
+   "bpw": 4.86,
+   "bpw_basis": "nominal",
+   "resident_gb": null,
+   "stability": "STABLE",
+   "native": false
+  },
+  {
+   "B": 1,
+   "engine": "vllm",
+   "arm": "gptq_graph",
+   "tok_s": 267.20000000000005,
+   "delta_bf16_wikitext": null,
+   "delta_bf16_c4val1": null,
+   "bpw": 4.15,
+   "bpw_basis": "nominal",
+   "resident_gb": 27.51529550552368,
+   "stability": "STABLE",
+   "native": false
+  },
+  {
+   "B": 16,
+   "engine": "vllm",
+   "arm": "gptq_graph",
+   "tok_s": 1948.15,
+   "delta_bf16_wikitext": null,
+   "delta_bf16_c4val1": null,
+   "bpw": 4.15,
+   "bpw_basis": "nominal",
+   "resident_gb": 27.81941270828247,
+   "stability": "STABLE",
+   "native": false
+  }
+ ],
+ "thresholds": {
+  "close": 0.0095,
+  "comparable": 0.02,
+  "k8_budget": 0.05,
+  "draw_third": 0.03,
+  "draw_unstable": 0.05,
+  "substitution": 0.02,
+  "sameprompt_fired": 1.3,
+  "degraded_min": 1.05,
+  "cross_box": 0.05
+ }
+}

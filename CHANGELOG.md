@@ -1,6 +1,26 @@
 # Changelog
 
 ## Unreleased
+### SC1 read (#846): no position quoted -- box A's licence reads QUALITY_FAIL, which blocks every box. Measured, vLLM leads e4b's scheduler by 1.17-1.20x at B=1, SGLang by 1.27x, llama.cpp Q4_K_M by 1.48x; P13 holds on boxes B and C (bench docs and receipts only)
+
+- **Receipts:** `sc1a-5090-2` (e4b `32d424e`), `sc1b-5090-3` and `sc1c-5090-5` (`9dd712b`), read with main's reducer
+  (A10 census, A11 cross-box). Files under `bench/h2h-2026-10-02/sc1/`.
+- **Licence QUALITY_FAIL** on both box-A draws: wikitext -0.014 / -0.011 ppl, c4val1 +0.056 / +0.040 ppl. Under the
+  registered rule no position is quoted on any box. P1-P5 read UNREAD and the register does not move.
+- **Measured** (comparator / e4b `int4_sched`):
+  - vLLM: 1.203 (B) / 1.167 (C) at B=1, 1.172 / 1.177 at B=16.
+  - SGLang 0.5.20: 1.268 / 1.191.
+  - llama.cpp Q4_K_M: 1.484 / 0.624.
+  - ExLlamaV3: 0.899 at B=1, B=16 UNSTABLE.
+  - LMDeploy UNSUPPORTED on sm_120.
+  - Served quality is CLOSE to e4b for vLLM, SGLang and llama.cpp, and COMPARABLE (closer to bf16) for ExLlamaV3.
+- **Predictions:**
+  - P5b HOLD (UNSUPPORTED), P12 HOLD, P13 HOLD on B and C (box A's scheduler anchor UNSTABLE on the pre-A10 estimator).
+  - P6, P9 and P10 REFUTED: e4b's TTFT-4096 is 16.3 s on the EPYC boxes and 27.6 s on box C's Xeon, against vLLM's
+    0.17-0.21 s. That is P100's host-bound per-expert prefill loop; P102 read `DEFAULT=k19` for it.
+  - P7, P8, P11 and P14 UNREAD; box A's host-limited deadline skipped their arms.
+- SGLang's prefill-shaped rows are HARNESS_ERROR, fixed by A12 (#933) without a re-run. Lane total $13.8566 over 37
+  receipts.
 ### SC1 amendment A12 (#846): the SGLang prefill scorer reads entry 0 as v0.5.20 emits it -- a (None, id, None) triple, not a bare None (bench and tests only)
 
 - `sc1c-5090-5` (adertha-receipts `94a8f5e`, $1.2626) read every box-C speed arm VALID. Its rc 1 is the two

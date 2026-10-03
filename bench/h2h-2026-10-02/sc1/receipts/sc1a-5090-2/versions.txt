@@ -1,0 +1,17 @@
+e4b 0.40.0 @32d424e2835c3010ec199c8984af2561e3147f33
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu129 cuda 12.9
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+vllm 0.30.0
+vllm_wheel pypi
+torch(vllm) 2.13.0+cu130
+torch.version.cuda(vllm) 13.0
+triton(vllm) 3.7.1
+flashinfer(vllm) 0.6.18.post1
+cuda_capability (12, 0)
+gpu NVIDIA GeForce RTX 5090
+nvidia-smi 580.95.05, NVIDIA GeForce RTX 5090, 32607 MiB, 600.00 W, 3210 MHz
+python(vllm) 3.11.13

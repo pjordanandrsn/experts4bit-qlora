@@ -1,0 +1,2 @@
+[2026-10-03T04:48:38Z] sglang-server: stop pid=42638 pgid=42638
+/root/sc1/sglang/server.sh: line 181: 42638 Killed                  setsid "${CMD[@]}" >> "$LOG" 2>&1 < /dev/null

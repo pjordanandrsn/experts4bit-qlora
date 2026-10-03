@@ -1,0 +1,254 @@
+{
+ "engine": "e4b-sched",
+ "arm": "ttft_e4b_4096",
+ "e4b_sha": "9dd712b538e0d8102ae5c60f85f6fe854daeb205",
+ "gnf4_sha": "34da93d6fe8d2a401b7001705658ce00b2b18213",
+ "torch": "2.8.0+cu128",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "batch": 1,
+ "method": "slope(32->128) through ContinuousScheduler.step() of DECODE-ONLY time (each rep's wall minus its last row's own Request.ttft: A10); min-of-3 (P20 estimator) and median-of-3 both recorded; the registered wall slope recorded beside it",
+ "prompts": "identical token ids to every other engine (step_decomp._k8_window, wikitext-2 test, 512-token rows)",
+ "engine_kwargs": {
+  "E4B_PAGED_MODEL": "Qwen/Qwen3-30B-A3B",
+  "E4B_PAGED_REVISION": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "E4B_PAGED_ARENA": "/root/sc1/work_qwen3/nf4.arena",
+  "E4B_PAGED_CALIB": "/root/sc1/calib.json",
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "1",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "4104",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1",
+  "E4B_PAGED_FUSE_QKV": "1",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "config": {
+  "model": "Qwen/Qwen3-30B-A3B",
+  "arena": "/root/sc1/work_qwen3/nf4.arena",
+  "calib": "/root/sc1/calib.json",
+  "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "served_names": [],
+  "max_seqs": 1,
+  "max_tokens_per_seq": 4104,
+  "chunk_tokens": 512,
+  "max_prefill_tokens": 0,
+  "graphs": true,
+  "buckets": [
+   1
+  ],
+  "placement": "all-vram",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64,
+  "kv_groups": "auto",
+  "fuse_qkv": true,
+  "torch_threads": 8,
+  "max_tokens_cap": 0,
+  "max_queue": 0,
+  "eos_ids": [],
+  "host": "127.0.0.1",
+  "port": 8778,
+  "trace_path": "",
+  "device": "cuda"
+ },
+ "generation": {
+  "temperature": 0.0,
+  "greedy": "argmax (PagedModelRunner)",
+  "ignore_eos": true,
+  "stop_ids": null,
+  "min_tokens": "= max_new_tokens (the scheduler's length contract)",
+  "chunk_tokens": 512,
+  "prefill_budget_per_step": 512
+ },
+ "route_env": {
+  "E4B_INT4_GROUPED_SMALLM": "auto",
+  "E4B_INT4_LEAN_GLUE": "auto",
+  "E4B_NF4_GROUPED_SMALLM": "0",
+  "E4B_MXFP4_GROUPED_SMALLM": "auto"
+ },
+ "pack_fingerprint": null,
+ "fusion_set": "fused q/k/v WITH the env-gated folds (fuse_qkv applies them itself; the registered set)",
+ "vast_instance_id": "53955591",
+ "mode": "ttft",
+ "status": "ok",
+ "e4b_version": "0.40.0",
+ "load_s": 150.3,
+ "census": {
+  "moe_layers": 48,
+  "experts": 128,
+  "top_k": 8,
+  "model_type": "qwen3_moe",
+  "int4_expert_layers": 48,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "int4_attn_projections": 96,
+  "kv": {
+   "n_kv_heads": 4,
+   "head_dim": 128,
+   "k_groups": "auto",
+   "scratch_slots": 1,
+   "blocks_per_seq": 257
+  },
+  "graph_status": {
+   "1": "graph"
+  },
+  "grouping": {
+   "device_grouping": false,
+   "force_singleton_groups": false
+  },
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "1",
+   "E4B_SERVE_ATTN_INT4": "1",
+   "E4B_SERVE_ATTN_INT4_CALIB": "0",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  },
+  "exp_int4_layers_enabled": 48,
+  "attn_int4_rtn_projections": 192,
+  "attn_int4_calib_projections": 0,
+  "fuse_qkv_n": 48,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48,
+  "fingerprint": null
+ },
+ "graph_status": {
+  "1": "graph"
+ },
+ "same_stack": {
+  "fuse_qkv_n": 48,
+  "int4_expert_layers": 48,
+  "int4_attn_projections": 96,
+  "fuse_t1_glue_n": 193,
+  "fuse_t1_glue_r2_n": [
+   48,
+   48
+  ],
+  "fuse_router_epilogue_n": 48,
+  "pack_fingerprint": null,
+  "graph_status": {
+   "1": "graph"
+  }
+ },
+ "mem_after_load": {
+  "max_memory_allocated": 19798733824,
+  "memory_reserved": 18817744896,
+  "memory_allocated": 18491149312,
+  "mem_get_info_free": 14113505280,
+  "mem_get_info_total": 33670758400
+ },
+ "eos_ids_model": [
+  151645
+ ],
+ "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd",
+ "rows_sha256": [
+  "360bb886b23eebbf53c6ab8cc76fb513116ad05d613de39448f5546c4a1895ba"
+ ],
+ "prompt_tokens": [
+  4096
+ ],
+ "prompt_file": {
+  "file": "prompts_b1_4096.json",
+  "file_prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd",
+  "rows_sha256": [
+   "360bb886b23eebbf53c6ab8cc76fb513116ad05d613de39448f5546c4a1895ba"
+  ],
+  "rows_distinct_in_file": true,
+  "prompts_sha256": "cd70a142d533eb88a3d2bec79bc4b11539f3a08b30c20ba5fbba248fb9dbafdd"
+ },
+ "ttft_mode": "wall of a max_new_tokens=1 request at add_request (warm, uncached: every request re-prefills)",
+ "ttft_prompt_tokens": 4096,
+ "ttft_walls_s": [
+  27.7296,
+  27.5029,
+  27.6147
+ ],
+ "ttft_s_median": 27.6147,
+ "ttft_s_min": 27.5029,
+ "scheduler_ttft_s": [
+  27.7278,
+  27.5011,
+  27.6128
+ ],
+ "prefill_steps_expected": 8,
+ "timed_windows_epoch": [
+  [
+   1791002329.1219597,
+   1791002356.8515708
+  ],
+  [
+   1791002356.851602,
+   1791002384.3545392
+  ],
+  [
+   1791002384.3545687,
+   1791002411.9692383
+  ]
+ ],
+ "prompt_tokens_engine": [
+  4096
+ ],
+ "ttft_note": "the engine's own clock (Request.ttft, from arrival) beside the wall",
+ "graph_stats": {
+  "1": {
+   "replays": 0,
+   "eager_steps": 0,
+   "rows": 0,
+   "pad_rows": 0
+  }
+ },
+ "scheduler_stats": {
+  "steps": 32,
+  "completed": 4,
+  "aborted": 0,
+  "in_flight": 0,
+  "queued": 0,
+  "tokens_emitted": 4,
+  "prefill_tokens": 16384,
+  "ttft_p50": 27.72778237890452,
+  "ttft_p99": 27.835900421254337,
+  "queue_wait_p50": 2.0675361156463623e-05,
+  "per_stream_tok_s_mean": 0.0361417410544235,
+  "kv_slots_free": 1
+ },
+ "mem_after_runs": {
+  "max_memory_allocated": 23318019584,
+  "memory_reserved": 23555211264,
+  "memory_allocated": 20306185216,
+  "mem_get_info_free": 9375973376,
+  "mem_get_info_total": 33670758400
+ },
+ "nvidia_smi": "NVIDIA GeForce RTX 5090, 23170 MiB, 32607 MiB, 595.71.05",
+ "dynamo_counters": {
+  "before_build": {},
+  "after_runs": {}
+ },
+ "banners": {
+  "int4exp_artifact": null,
+  "int4exp_enabled": [
+   "48"
+  ],
+  "int4exp_calibrated": null,
+  "attn_calib": null,
+  "attn_rtn": [
+   "192"
+  ],
+  "fused_qkv": null,
+  "decode_graph": [
+   "DECODE_GRAPH bucket=1 captured"
+  ],
+  "fusions": [
+   "[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48}"
+  ],
+  "ready": [
+   "[serve_paged] ready: {\"moe_layers\": 48, \"experts\": 128, \"top_k\": 8, \"model_type\": \"qwen3_moe\", \"int4_expert_layers\": 48, \"int4_store_kinds\": [\"int4_b32\"], \"int4_attn_projections\": 96, \"kv\": {\"n_kv_heads\": 4, \"head_dim\": 128, \"k_groups\": \"auto\", \"scratch_slots\": 1, \"blocks_per_seq\": 257}, \"graph_status\": {\"1\": \"graph\"}, \"grouping\": {\"device_grouping\": false, \"force_singleton_groups\": false}, \"levers_env\": {\"E4B_SERVE_EXP_INT4\": \"1\", \"E4B_SERVE_ATTN_INT4\": \"1\", \"E4B_SERVE_ATTN_INT4_CALIB\": \"0\", \"E4B_CALIB_SOURCE\": \"c4\", \"E4B_FUSE_T1_GLUE\": \"1\", \"E4B_FUSE_T1_GLUE_R2\": \"1\", \"E4B_FUSE_ROUTER_EPI\": \"1\"}, \"exp_int4_layers_enabled\": 48, \"attn_int4_rtn_projections\": 192, \"attn_int4_calib_projections\": 0, \"fuse_qkv_n\": 48, \"fuse_t1_glue_n\": 193, \"fuse_t1_glue_r2_n\": [48, 48], \"fuse_router_epilogue_n\": 48}"
+  ]
+ }
+}

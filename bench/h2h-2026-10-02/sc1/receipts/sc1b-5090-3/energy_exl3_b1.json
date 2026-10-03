@@ -1,0 +1,17 @@
+{
+ "tag": "exl3_b1",
+ "engine": "exl3",
+ "batch": 1,
+ "start_epoch": 1790998542.4277484,
+ "stop_epoch": 1790998552.1382306,
+ "tokens": 640,
+ "interval_ms": 50,
+ "sampler_start_epoch": 1790998535.5013413,
+ "sampler_fields": "timestamp,memory.used,utilization.gpu,clocks.sm,power.draw.instant,pcie.link.gen.current",
+ "arm_start_epoch": 1790998535.4277484,
+ "arm_end_epoch": 1790998552.1382306,
+ "receipt": "exl3_energy_4bpw_b1.json",
+ "receipt_status": null,
+ "basis": "whole arm after load_s: 4x32 + 4x128 decoded tokens per row (640 x B); the prefills' energy is INCLUDED -- an upper bound on J/token, labelled",
+ "csv": "energy_exl3_b1.csv"
+}

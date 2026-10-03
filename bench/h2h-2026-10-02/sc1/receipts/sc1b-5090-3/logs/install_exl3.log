@@ -1,0 +1,6 @@
+exl3 install: flavor=cu128 torch=2.8.0 pytag=cp311 wheel=https://github.com/turboderp-org/exllamav3/releases/download/v1.5.3/exllamav3-1.5.3+cu128.torch2.8.0-cp311-cp311-linux_x86_64.whl alarm=2700
+
+[notice] A new release of pip is available: 24.0 -> 26.2.1
+[notice] To update, run: python -m pip install --upgrade pip
+SC1_TRIPWIRE exl3 {"exllamav3": "1.5.3", "torch": "2.8.0+cu128", "torch_cuda": "12.8", "triton": "3.4.0", "driver": "580.95.05, NVIDIA GeForce RTX 5090", "device": "NVIDIA GeForce RTX 5090", "capability": [12, 0], "torch_arch_list": ["sm_70", "sm_75", "sm_80", "sm_86", "sm_90", "sm_100", "sm_120"], "precompiled_extension": true, "ext_symbols": {"exl3_gemm": true, "exl3_mgemm": true, "exl3_moe": true, "exl3_gemv": true, "exl3_gemv_int8_max_k": true, "BC_LinearEXL3": true, "BC_BlockSparseMLP": true, "BC_Attention": true}, "live_kernel": "ok", "python": "3.11.13"}
+exl3 install OK

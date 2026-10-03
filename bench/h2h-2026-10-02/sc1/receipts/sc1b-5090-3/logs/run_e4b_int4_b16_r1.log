@@ -1,0 +1,19 @@
+SC1 arm=e4b_int4_b16_r1 box=B e4b=9dd712b538e0d8102ae5c60f85f6fe854daeb205 gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 at=2026-10-03T02:40:15Z nproc=224 cpu.max=3071999/100000 load=9.81/11.25/10.49
+ENV: E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 
+No prebuilt binary for CUDA 12.9, loading CUDA 12.8 instead. Set BNB_CUDA_VERSION to override.
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1083.92it/s]
+[02:40:23]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested main, unpinned)
+[02:40:23]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[02:40:23]   quantized experts on 48/48 MoE layers (128 experts each)
+[02:40:23]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[02:40:24]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[02:40:28]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[02:40:55]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 1626.16it/s]
+INT4EXP enabled: 48 layers (model_type=qwen3_moe)
+ATTNINT4 rtn: 192 projections (uncalibrated; model_type=qwen3_moe)
+fused q/k/v projections on 48 attention modules (RESULTS-f2-tail default)
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+REPLAY_PROFILE_OUT /root/sc1/logs/census_e4b_int4_b16_r1.txt
+BV3_GRAPH batch=16 steps=70 step=9.55ms agg=1676.0tok/s recompiles=0 out=/root/sc1/e4b_int4_b16_r1.json

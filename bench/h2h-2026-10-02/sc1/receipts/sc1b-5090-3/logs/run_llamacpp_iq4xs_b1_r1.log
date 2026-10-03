@@ -1,0 +1,1 @@
+SC1LLAMACPP {"arm": "iq4xs_b1_r1", "batch": 1, "mode": "slope", "decode_tok_s": 325.5, "decode_ms_per_step": 3.0722, "decode_tok_s_median": 318.0, "end_to_end_tok_s_long": 293.1, "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3", "verdict": "VALID"}

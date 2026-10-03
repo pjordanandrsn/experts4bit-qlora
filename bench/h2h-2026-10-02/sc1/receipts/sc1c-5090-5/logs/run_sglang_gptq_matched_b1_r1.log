@@ -1,0 +1,1 @@
+SC1SGLANG {"arm": "gptq_default", "batch": 1, "decode_tok_s": 266.3, "decode_ms_per_step": 3.7547, "decode_tok_s_median": 267.1, "end_to_end_tok_s_long": 222.7, "sglang_version": "0.5.20", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}

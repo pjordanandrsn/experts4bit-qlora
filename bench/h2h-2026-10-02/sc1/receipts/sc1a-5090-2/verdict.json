@@ -1,0 +1,1341 @@
+{
+ "lane": "SC1",
+ "box": "A",
+ "dir": "/private/tmp/claude-501/-Users-jordananderson-code/d479c659-f03e-44eb-9883-8d2aa60a2184/scratchpad/xbox/A",
+ "pack_fp": "sha256:f22abe2823b48edbfa61097a397236d45d6ccea11649dbba35effab1c697df3d",
+ "arms": {
+  "e4b/lic/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     1686.0835775461053,
+     1685.6785876000129
+    ],
+    "point": 1685.881082573059,
+    "spread": 0.00024025336091445105,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 0.0 %"
+   },
+   "draws": [
+    {
+     "tok": 1686.0835775461053,
+     "ms": 9.489446557142857,
+     "verdict": "VALID",
+     "why": "",
+     "k19": true,
+     "draw": 1,
+     "file": "e4b_lic_b16_r1.json"
+    },
+    {
+     "tok": 1685.6785876000129,
+     "ms": 9.491726428571429,
+     "verdict": "VALID",
+     "why": "",
+     "k19": true,
+     "draw": 2,
+     "file": "e4b_lic_b16_r2.json"
+    }
+   ]
+  },
+  "e4b/lic/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     237.01009886594477,
+     237.43413226628417
+    ],
+    "point": 237.22211556611447,
+    "spread": 0.0017890942300278702,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 0.2 %"
+   },
+   "draws": [
+    {
+     "tok": 237.01009886594477,
+     "ms": 4.219229496062992,
+     "verdict": "VALID",
+     "why": "",
+     "k19": false,
+     "draw": 1,
+     "file": "e4b_lic_b1_r1.json"
+    },
+    {
+     "tok": 237.43413226628417,
+     "ms": 4.211694377952756,
+     "verdict": "VALID",
+     "why": "",
+     "k19": false,
+     "draw": 2,
+     "file": "e4b_lic_b1_r2.json"
+    }
+   ]
+  },
+  "e4b/lic_degraded/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     1434.96770928038
+    ],
+    "point": 1434.96770928038,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured"
+   },
+   "draws": [
+    {
+     "tok": 1434.96770928038,
+     "ms": 11.150076685714286,
+     "verdict": "VALID",
+     "why": "",
+     "k19": false,
+     "draw": 1,
+     "file": "e4b_lic_degraded_b16_r1.json"
+    }
+   ]
+  },
+  "e4b/nf4_ctrl/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     499.3999266218312
+    ],
+    "point": 499.3999266218312,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured"
+   },
+   "draws": [
+    {
+     "tok": 499.3999266218312,
+     "ms": 32.03845084285714,
+     "verdict": "VALID",
+     "why": "",
+     "k19": false,
+     "draw": 1,
+     "file": "e4b_nf4_ctrl_b16_r1.json"
+    }
+   ]
+  },
+  "e4b/nf4_ctrl/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     104.09228021610687
+    ],
+    "point": 104.09228021610687,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured"
+   },
+   "draws": [
+    {
+     "tok": 104.09228021610687,
+     "ms": 9.60686035433071,
+     "verdict": "VALID",
+     "why": "",
+     "k19": false,
+     "draw": 1,
+     "file": "e4b_nf4_ctrl_b1_r1.json"
+    }
+   ]
+  },
+  "e4b/rtn/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     1683.4155339627387
+    ],
+    "point": 1683.4155339627387,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured; no position"
+   },
+   "draws": [
+    {
+     "tok": 1683.4155339627387,
+     "ms": 9.504486371428571,
+     "verdict": "VALID",
+     "why": "",
+     "k19": true,
+     "draw": 1,
+     "file": "e4b_rtn_b16_r1.json"
+    }
+   ]
+  },
+  "e4b/rtn/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     237.34427174216214
+    ],
+    "point": 237.34427174216214,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured; no position"
+   },
+   "draws": [
+    {
+     "tok": 237.34427174216214,
+     "ms": 4.213288960629922,
+     "verdict": "VALID",
+     "why": "",
+     "k19": false,
+     "draw": 1,
+     "file": "e4b_rtn_b1_r1.json"
+    }
+   ]
+  },
+  "e4bsched/lic_sched/16": {
+   "verdict": "UNSTABLE",
+   "summary": {
+    "n": 2,
+    "values": [
+     2390.4,
+     1552.1
+    ],
+    "point": 1971.25,
+    "spread": 0.5401069518716579,
+    "status": "UNSTABLE",
+    "usable": false,
+    "why": "draws 2390.4, 1552.1 tok/s spread 54.0 % > 5 %: UNSTABLE, no position"
+   },
+   "draws": [
+    {
+     "tok": 2390.4,
+     "ms": 6.6936,
+     "verdict": "VALID",
+     "why": "",
+     "draw": 1,
+     "file": "e4bsched_lic_sched_b16_r1.json"
+    },
+    {
+     "tok": 1552.1,
+     "ms": 10.3089,
+     "verdict": "VALID",
+     "why": "",
+     "draw": 2,
+     "file": "e4bsched_lic_sched_b16_r2.json"
+    }
+   ]
+  },
+  "e4bsched/lic_sched/1": {
+   "verdict": "UNSTABLE",
+   "summary": {
+    "n": 2,
+    "values": [
+     220.5,
+     310.2
+    ],
+    "point": 265.35,
+    "spread": 0.40680272108843535,
+    "status": "UNSTABLE",
+    "usable": false,
+    "why": "draws 220.5, 310.2 tok/s spread 40.7 % > 5 %: UNSTABLE, no position"
+   },
+   "draws": [
+    {
+     "tok": 220.5,
+     "ms": 4.5354,
+     "verdict": "VALID",
+     "why": "",
+     "draw": 1,
+     "file": "e4bsched_lic_sched_b1_r1.json"
+    },
+    {
+     "tok": 310.2,
+     "ms": 3.2232,
+     "verdict": "VALID",
+     "why": "",
+     "draw": 2,
+     "file": "e4bsched_lic_sched_b1_r2.json"
+    }
+   ]
+  },
+  "e4bsched/lic_sched_sameprompt/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     1996.2
+    ],
+    "point": 1996.2,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured"
+   },
+   "draws": [
+    {
+     "tok": 1996.2,
+     "ms": 8.0152,
+     "verdict": "VALID",
+     "why": "",
+     "draw": 1,
+     "file": "e4bsched_lic_sched_sameprompt_b16_r1.json"
+    }
+   ]
+  },
+  "vllm/gptq_fp8kv/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     2037.9
+    ],
+    "point": 2037.9,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured; no position"
+   },
+   "draws": [
+    {
+     "tok": 2037.9,
+     "ms": 7.8513,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASHINFER; capture [1, 2, 4, 8, 16, 24, 32]; detok True",
+     "draw": 1,
+     "file": "vllm_gptq_fp8kv_b16_r1.json"
+    }
+   ]
+  },
+  "vllm/gptq_fp8kv/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     284.2
+    ],
+    "point": 284.2,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured; no position"
+   },
+   "draws": [
+    {
+     "tok": 284.2,
+     "ms": 3.5181,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASHINFER; capture [1, 2]; detok True",
+     "draw": 1,
+     "file": "vllm_gptq_fp8kv_b1_r1.json"
+    }
+   ]
+  },
+  "vllm/gptq_graph/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     1942.5,
+     1944.6
+    ],
+    "point": 1943.55,
+    "spread": 0.0010810810810810343,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 0.1 %"
+   },
+   "draws": [
+    {
+     "tok": 1942.5,
+     "ms": 8.2368,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASH_ATTN; capture [1, 2, 4, 8, 16, 24, 32]; detok True",
+     "draw": 1,
+     "file": "vllm_gptq_graph_b16_r1.json"
+    },
+    {
+     "tok": 1944.6,
+     "ms": 8.2278,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASH_ATTN; capture [1, 2, 4, 8, 16, 24, 32]; detok True",
+     "draw": 2,
+     "file": "vllm_gptq_graph_b16_r2.json"
+    }
+   ]
+  },
+  "vllm/gptq_graph/1": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 2,
+    "values": [
+     267.0,
+     266.4
+    ],
+    "point": 266.7,
+    "spread": 0.0022522522522523377,
+    "status": "STABLE",
+    "usable": true,
+    "why": "2 draws, spread 0.2 %"
+   },
+   "draws": [
+    {
+     "tok": 267.0,
+     "ms": 3.7454,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASH_ATTN; capture [1, 2]; detok True",
+     "draw": 1,
+     "file": "vllm_gptq_graph_b1_r1.json"
+    },
+    {
+     "tok": 266.4,
+     "ms": 3.7541,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASH_ATTN; capture [1, 2]; detok True",
+     "draw": 2,
+     "file": "vllm_gptq_graph_b1_r2.json"
+    }
+   ]
+  },
+  "vllm/gptq_graph_sameprompt/16": {
+   "verdict": "VALID",
+   "summary": {
+    "n": 1,
+    "values": [
+     3200.1
+    ],
+    "point": 3200.1,
+    "spread": null,
+    "status": "SINGLE",
+    "usable": false,
+    "why": "single draw: stability unmeasured"
+   },
+   "draws": [
+    {
+     "tok": 3200.1,
+     "ms": 4.9998,
+     "verdict": "VALID",
+     "why": "",
+     "note": "attn FLASH_ATTN; capture [1, 2, 4, 8, 16, 24, 32]; detok True",
+     "draw": 1,
+     "file": "vllm_gptq_graph_sameprompt_b16_r1.json"
+    }
+   ]
+  }
+ },
+ "licence": {
+  "box": "A",
+  "gate_impl": "package",
+  "rows": {
+   "nf4_wikitext": {
+    "used": true,
+    "ppl": 6.4020490724976895,
+    "why": "",
+    "mean_nll": 1.8566181067006884,
+    "k19": null,
+    "k23": null
+   },
+   "lic_auto_wikitext": {
+    "used": true,
+    "ppl": 6.387669122985474,
+    "why": "",
+    "mean_nll": 1.8543694323590305,
+    "k19": null,
+    "k23": null
+   },
+   "lic_1_wikitext": {
+    "used": true,
+    "ppl": 6.391382438800201,
+    "why": "",
+    "mean_nll": 1.8549505890906213,
+    "k19": true,
+    "k23": true
+   },
+   "nf4_c4val1": {
+    "used": true,
+    "ppl": 16.515948254543627,
+    "why": "",
+    "mean_nll": 2.80432647496878,
+    "k19": null,
+    "k23": null
+   },
+   "lic_auto_c4val1": {
+    "used": true,
+    "ppl": 16.57196190870543,
+    "why": "",
+    "mean_nll": 2.80771222567917,
+    "k19": null,
+    "k23": null
+   },
+   "lic_1_c4val1": {
+    "used": true,
+    "ppl": 16.55624665345671,
+    "why": "",
+    "mean_nll": 2.8067634719065024,
+    "k19": true,
+    "k23": true
+   }
+  },
+  "b1": false,
+  "b16": false,
+  "lines": [
+   "auto (B=1 arithmetic): K8 wikitext: base=6.40205 cand=6.38767 delta=-0.01438 sha=9ef10d760ad9 steps=2048",
+   "auto (B=1 arithmetic): K8 c4val1: base=16.51595 cand=16.57196 delta=+0.05601 sha=4bcb55179b96 steps=2048",
+   "auto (B=1 arithmetic): K8 VERDICT FAIL (calibrated: an improvement needs the same sign on >= 2 scoring texts, one outside the calibration domain -- an improvement that moves with the calibration text is fitting it)",
+   "=1 (K19+K23, B=16 arithmetic): K8 wikitext: base=6.40205 cand=6.39138 delta=-0.01067 sha=9ef10d760ad9 steps=2048",
+   "=1 (K19+K23, B=16 arithmetic): K8 c4val1: base=16.51595 cand=16.55625 delta=+0.04030 sha=4bcb55179b96 steps=2048",
+   "=1 (K19+K23, B=16 arithmetic): K8 VERDICT FAIL (calibrated: an improvement needs the same sign on >= 2 scoring texts, one outside the calibration domain -- an improvement that moves with the calibration text is fitting it)"
+  ],
+  "verdict": "QUALITY_FAIL",
+  "why": [],
+  "quality_fail": true
+ },
+ "comparability": {
+  "oracle": {
+   "wikitext": {
+    "mean_nll": 1.8401463627815247,
+    "ppl": 6.297459602355957,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "source": "box B: oracle",
+    "carried_from": "B"
+   },
+   "c4val1": {
+    "mean_nll": 2.783583551645279,
+    "ppl": 16.176889419555664,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "source": "box B: oracle",
+    "carried_from": "B"
+   }
+  },
+  "rows": [
+   {
+    "mean_nll": 2.813819717266006,
+    "ppl": 16.673484735968017,
+    "verdict": "VALID",
+    "why": "",
+    "top1": 0.4580078125,
+    "label": "prefill-shaped (one forward over 2561 prompt tokens, prompt_logprobs=0)",
+    "hist": null,
+    "engine": "vllm",
+    "variant": null,
+    "mode": "prefill",
+    "src": "c4val1",
+    "shape": "prefill",
+    "file": "nll_vllm_prefill_c4val1.json",
+    "delta_bf16": 0.030236165620727284,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.008648644782943471,
+    "band": "CLOSE"
+   },
+   {
+    "mean_nll": 1.8613182129937695,
+    "ppl": 6.432210208380118,
+    "verdict": "VALID",
+    "why": "",
+    "top1": 0.59912109375,
+    "label": "prefill-shaped (one forward over 2561 prompt tokens, prompt_logprobs=0)",
+    "hist": null,
+    "engine": "vllm",
+    "variant": null,
+    "mode": "prefill",
+    "src": "wikitext",
+    "shape": "prefill",
+    "file": "nll_vllm_prefill_wikitext.json",
+    "delta_bf16": 0.02117185021224488,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.011766565092234504,
+    "band": "COMPARABLE"
+   },
+   {
+    "mean_nll": 2.8132196348931062,
+    "ppl": 16.663482273134118,
+    "verdict": "VALID",
+    "why": "",
+    "top1": 0.4599609375,
+    "label": "served (partial-block, M<=16)",
+    "hist": {
+     "1": 128,
+     "2": 128,
+     "3": 128,
+     "4": 128,
+     "5": 128,
+     "6": 128,
+     "7": 128,
+     "8": 128,
+     "9": 128,
+     "10": 128,
+     "11": 128,
+     "12": 128,
+     "13": 128,
+     "14": 128,
+     "15": 128,
+     "16": 128
+    },
+    "engine": "vllm",
+    "variant": null,
+    "mode": "served",
+    "src": "c4val1",
+    "shape": "served",
+    "file": "nll_vllm_served_c4val1.json",
+    "delta_bf16": 0.029636083247827294,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.005507409213936221,
+    "band": "CLOSE"
+   },
+   {
+    "mean_nll": 1.8596377738814205,
+    "ppl": 6.421410347562824,
+    "verdict": "VALID",
+    "why": "",
+    "top1": 0.5986328125,
+    "label": "served (partial-block, M<=16)",
+    "hist": {
+     "1": 128,
+     "2": 128,
+     "3": 128,
+     "4": 128,
+     "5": 128,
+     "6": 128,
+     "7": 128,
+     "8": 128,
+     "9": 128,
+     "10": 128,
+     "11": 128,
+     "12": 128,
+     "13": 128,
+     "14": 128,
+     "15": 128,
+     "16": 128
+    },
+    "engine": "vllm",
+    "variant": null,
+    "mode": "served",
+    "src": "wikitext",
+    "shape": "served",
+    "file": "nll_vllm_served_wikitext.json",
+    "delta_bf16": 0.019491411099895828,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.005268341522389974,
+    "band": "CLOSE"
+   }
+  ],
+  "e4b_served": {
+   "wikitext": {
+    "mean_nll": 1.8543694323590305,
+    "ppl": 6.387669122985474,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "source": "k8_lic_auto_wikitext",
+    "engine": "e4b",
+    "variant": null,
+    "mode": "served",
+    "src": "wikitext",
+    "shape": "served",
+    "delta_bf16": 0.014223069577505854,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.0,
+    "band": "anchor"
+   },
+   "c4val1": {
+    "mean_nll": 2.80771222567917,
+    "ppl": 16.57196190870543,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "source": "k8_lic_auto_c4val1",
+    "engine": "e4b",
+    "variant": null,
+    "mode": "served",
+    "src": "c4val1",
+    "shape": "served",
+    "delta_bf16": 0.024128674033891073,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.0,
+    "band": "anchor"
+   }
+  },
+  "e4b_prefill": {
+   "wikitext": {
+    "mean_nll": 1.849551647901535,
+    "ppl": 6.356968879699707,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "engine": "e4b",
+    "variant": null,
+    "mode": "prefill",
+    "src": "wikitext",
+    "shape": "prefill",
+    "delta_bf16": 0.009405285120010376,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.0,
+    "band": "anchor"
+   },
+   "c4val1": {
+    "mean_nll": 2.8051710724830627,
+    "ppl": 16.529903411865234,
+    "verdict": "VALID",
+    "why": "",
+    "top1": null,
+    "label": "",
+    "hist": null,
+    "engine": "e4b",
+    "variant": null,
+    "mode": "prefill",
+    "src": "c4val1",
+    "shape": "prefill",
+    "delta_bf16": 0.021587520837783813,
+    "bf16_note": "",
+    "ood_flag": false,
+    "delta_pair": 0.0,
+    "band": "anchor"
+   }
+  },
+  "served_vs_prefill": {
+   "vllm/None/c4val1": -0.0006000823728999904,
+   "vllm/None/wikitext": -0.0016804391123490525,
+   "e4b/None/wikitext": 0.004817784457495478,
+   "e4b/None/c4val1": 0.0025411531961072598
+  }
+ },
+ "substitution": {
+  "gap": {
+   "1": -0.0005146792680144063,
+   "16": 0.0014646108228053567
+  },
+  "holds": true,
+  "why": []
+ },
+ "controls": {
+  "sameprompt": {
+   "vllm": {
+    "ratio": 1.6465231149185768,
+    "label": "detector fired (x1.65): the distinct rows are confirmed distinct",
+    "why": ""
+   },
+   "e4bsched": {
+    "ratio": null,
+    "label": "UNREAD",
+    "why": "e4bsched: sameprompt VALID / distinct UNSTABLE"
+   }
+  },
+  "degraded": {
+   "ratio": 1.1748564596052893,
+   "verdict": "PASS",
+   "why": "degraded x1.175 slower (>= 1.05), K19 absent in its census, present in lic_b16's",
+   "k19_lic": true,
+   "k19_degraded": false
+  },
+  "method_pair": {
+   "1": -0.10600295622342393,
+   "16": -0.14476546223307085
+  }
+ },
+ "positions": {
+  "anchor": "e4bsched/lic_sched",
+  "window_anchor": "e4b/lic",
+  "rows": [
+   {
+    "engine": "vllm",
+    "arm": "gptq_fp8kv",
+    "B": 1,
+    "quoted": false,
+    "why": [
+     "vllm/gptq_fp8kv SINGLE: single draw: stability unmeasured; no position",
+     "anchor UNSTABLE: draws 220.5, 310.2 tok/s spread 40.7 % > 5 %: UNSTABLE, no position",
+     "served-shape quality not COMPARABLE on both texts: wikitext UNREAD, c4val1 UNREAD",
+     "B=1 position needs LICENSED-B1",
+     "QUALITY_FAIL: no position from the RTN rows either"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "UNREAD",
+      "c4val1": "UNREAD"
+     },
+     "deltas": {
+      "wikitext": null,
+      "c4val1": null
+     },
+     "comparable": false,
+     "close": false
+    },
+    "contract": {
+     "bpw": 4.15,
+     "bpw_basis": "nominal",
+     "kv": "fp8",
+     "graphs": "[1, 2]",
+     "prefix_cache": "False",
+     "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4"
+    },
+    "window_ratio": 1.1980333255260622
+   },
+   {
+    "engine": "vllm",
+    "arm": "gptq_fp8kv",
+    "B": 16,
+    "quoted": false,
+    "why": [
+     "vllm/gptq_fp8kv SINGLE: single draw: stability unmeasured; no position",
+     "anchor UNSTABLE: draws 2390.4, 1552.1 tok/s spread 54.0 % > 5 %: UNSTABLE, no position",
+     "served-shape quality not COMPARABLE on both texts: wikitext UNREAD, c4val1 UNREAD",
+     "B=16 position needs LICENSED-B16",
+     "QUALITY_FAIL: no position from the RTN rows either"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "UNREAD",
+      "c4val1": "UNREAD"
+     },
+     "deltas": {
+      "wikitext": null,
+      "c4val1": null
+     },
+     "comparable": false,
+     "close": false
+    },
+    "contract": {
+     "bpw": 4.15,
+     "bpw_basis": "nominal",
+     "kv": "fp8",
+     "graphs": "[1, 2, 4, 8, 16, 24, 32]",
+     "prefix_cache": "False",
+     "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4"
+    },
+    "window_ratio": 1.2088041209227378
+   },
+   {
+    "engine": "vllm",
+    "arm": "gptq_graph",
+    "B": 1,
+    "quoted": false,
+    "why": [
+     "anchor UNSTABLE: draws 220.5, 310.2 tok/s spread 40.7 % > 5 %: UNSTABLE, no position",
+     "B=1 position needs LICENSED-B1",
+     "QUALITY_FAIL: no position from the RTN rows either"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "CLOSE",
+      "c4val1": "CLOSE"
+     },
+     "deltas": {
+      "wikitext": 0.005268341522389974,
+      "c4val1": 0.005507409213936221
+     },
+     "comparable": true,
+     "close": true
+    },
+    "contract": {
+     "bpw": 4.15,
+     "bpw_basis": "nominal",
+     "kv": "auto",
+     "graphs": "[1, 2]",
+     "prefix_cache": "False",
+     "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4"
+    },
+    "window_ratio": 1.1242628005552457
+   },
+   {
+    "engine": "vllm",
+    "arm": "gptq_graph",
+    "B": 16,
+    "quoted": false,
+    "why": [
+     "anchor UNSTABLE: draws 2390.4, 1552.1 tok/s spread 54.0 % > 5 %: UNSTABLE, no position",
+     "B=16 position needs LICENSED-B16",
+     "QUALITY_FAIL: no position from the RTN rows either"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "CLOSE",
+      "c4val1": "CLOSE"
+     },
+     "deltas": {
+      "wikitext": 0.005268341522389974,
+      "c4val1": 0.005507409213936221
+     },
+     "comparable": true,
+     "close": true
+    },
+    "contract": {
+     "bpw": 4.15,
+     "bpw_basis": "nominal",
+     "kv": "auto",
+     "graphs": "[1, 2, 4, 8, 16, 24, 32]",
+     "prefix_cache": "False",
+     "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4"
+    },
+    "window_ratio": 1.1528393195050723
+   },
+   {
+    "engine": "vllm",
+    "arm": "gptq_graph_sameprompt",
+    "B": 16,
+    "quoted": false,
+    "why": [
+     "vllm/gptq_graph_sameprompt SINGLE: single draw: stability unmeasured",
+     "anchor UNSTABLE: draws 2390.4, 1552.1 tok/s spread 54.0 % > 5 %: UNSTABLE, no position",
+     "B=16 position needs LICENSED-B16",
+     "QUALITY_FAIL: no position from the RTN rows either"
+    ],
+    "native": false,
+    "quality": {
+     "bands": {
+      "wikitext": "CLOSE",
+      "c4val1": "CLOSE"
+     },
+     "deltas": {
+      "wikitext": 0.005268341522389974,
+      "c4val1": 0.005507409213936221
+     },
+     "comparable": true,
+     "close": true
+    },
+    "contract": {
+     "bpw": null,
+     "bpw_basis": "unknown",
+     "kv": "auto",
+     "graphs": "[1, 2, 4, 8, 16, 24, 32]",
+     "prefix_cache": "False",
+     "model": "Qwen/Qwen3-30B-A3B-GPTQ-Int4"
+    },
+    "window_ratio": 1.898176587352104
+   }
+  ]
+ },
+ "ttft": {
+  "e4b/4096": {
+   "median_s": 16.3861,
+   "min_s": 16.3477,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "e4b/512": {
+   "median_s": 2.0101,
+   "min_s": 2.008,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "vllm/4096": {
+   "median_s": 0.17259,
+   "min_s": 0.17015,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  },
+  "vllm/512": {
+   "median_s": 0.04051,
+   "min_s": 0.04049,
+   "verdict": "VALID",
+   "why": "",
+   "own_timer": null
+  }
+ },
+ "resources": [
+  {
+   "engine": "e4b",
+   "arm": "lic",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4b",
+   "arm": "lic",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4b",
+   "arm": "lic_degraded",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4b",
+   "arm": "nf4_ctrl",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4b",
+   "arm": "nf4_ctrl",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4b",
+   "arm": "rtn",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4b",
+   "arm": "rtn",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4bsched",
+   "arm": "lic_sched",
+   "B": 1,
+   "verdict": "UNSTABLE",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4bsched",
+   "arm": "lic_sched",
+   "B": 16,
+   "verdict": "UNSTABLE",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "e4bsched",
+   "arm": "lic_sched_sameprompt",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": null,
+   "peak_gb": null,
+   "demand_gb": null,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "vllm",
+   "arm": "gptq_fp8kv",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": 28.03515625,
+   "peak_gb": 27.90238380432129,
+   "demand_gb": 28.221020507626235,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "vllm",
+   "arm": "gptq_fp8kv",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": 28.62109375,
+   "peak_gb": 28.30636167526245,
+   "demand_gb": 28.221020507626235,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "vllm",
+   "arm": "gptq_graph",
+   "B": 1,
+   "verdict": "VALID",
+   "reserved_gb": 27.623046875,
+   "peak_gb": 27.51529550552368,
+   "demand_gb": 28.221020507626235,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "vllm",
+   "arm": "gptq_graph",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": 28.033203125,
+   "peak_gb": 27.81941270828247,
+   "demand_gb": 28.221020507626235,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  },
+  {
+   "engine": "vllm",
+   "arm": "gptq_graph_sameprompt",
+   "B": 16,
+   "verdict": "VALID",
+   "reserved_gb": 28.111328125,
+   "peak_gb": 27.81941270828247,
+   "demand_gb": 28.221020507626235,
+   "smi_max_gb": null,
+   "host_rss_gb": null,
+   "cpu_share": null,
+   "pcie": null,
+   "loadavg": null
+  }
+ ],
+ "energy": {
+  "e4b_b1": {
+   "tag": "e4b_b1",
+   "engine": "e4b",
+   "batch": 1,
+   "tokens": 1024,
+   "joules": 1781.3447771275044,
+   "j_per_token": 1.7395945089135785,
+   "mean_w": 260.8118297256029,
+   "seconds": 6.829999923706055,
+   "n_samples": 137,
+   "basis": "csv timestamps",
+   "why": ""
+  },
+  "e4b_b16": {
+   "tag": "e4b_b16",
+   "engine": "e4b",
+   "batch": 16,
+   "tokens": 16384,
+   "joules": 6413.514738720655,
+   "j_per_token": 0.3914498741894931,
+   "mean_w": 431.33463272459386,
+   "seconds": 14.86900019645691,
+   "n_samples": 297,
+   "basis": "csv timestamps",
+   "why": ""
+  }
+ },
+ "predictions": {
+  "P1": {
+   "verdict": "UNREAD",
+   "evidence": "no quoted position for vllm/gptq_graph B=1 (VALID)"
+  },
+  "P2": {
+   "verdict": "UNREAD",
+   "evidence": "no quoted position for vllm/gptq_graph B=16 (VALID)"
+  },
+  "P3": {
+   "verdict": "UNREAD",
+   "evidence": "box A: SGLang is box C's"
+  },
+  "P4": {
+   "verdict": "UNREAD",
+   "evidence": "no llamacpp arms on box A"
+  },
+  "P5": {
+   "verdict": "UNREAD",
+   "evidence": "no exl3 arms on box A"
+  },
+  "P5b": {
+   "verdict": "UNREAD",
+   "evidence": "no lmdeploy arms on box A"
+  },
+  "P6": {
+   "verdict": "REFUTED",
+   "evidence": "wikitext: e4b +0.0048; wikitext: vllm -0.0017; c4val1: e4b +0.0025; c4val1: vllm -0.0006"
+  },
+  "P7": {
+   "verdict": "UNREAD",
+   "evidence": "vllm x1.65; e4bsched: e4bsched: sameprompt VALID / distinct UNSTABLE"
+  },
+  "P8": {
+   "verdict": "UNREAD",
+   "evidence": "B=1 fp8kv or kv-auto arm not VALID/stable; B=16 fp8kv or kv-auto arm not VALID/stable; wikitext: fp8kv/auto delta_bf16 unread; c4val1: fp8kv/auto delta_bf16 unread"
+  },
+  "P9": {
+   "verdict": "REFUTED",
+   "evidence": "QUALITY_FAIL"
+  },
+  "P10": {
+   "verdict": "REFUTED",
+   "evidence": "TTFT-4096 vllm/e4b 0.011"
+  },
+  "P11": {
+   "verdict": "UNREAD",
+   "evidence": "B=1 J/token for vllm and e4b not both read; B=16 J/token for vllm and e4b not both read"
+  },
+  "P12": {
+   "verdict": "HOLD",
+   "evidence": "B=1 -0.1 %, B=16 +0.1 %"
+  },
+  "P13": {
+   "verdict": "HOLD",
+   "evidence": "B=1 B 1.203, C 1.167 (gap 3.1 % vs 5 %); B=16 B 1.172, C 1.177 (gap 0.4 % vs 5 %)"
+  },
+  "P14": {
+   "verdict": "UNREAD",
+   "evidence": "B=1 nodetok pair not both VALID; B=16 nodetok pair not both VALID"
+  }
+ },
+ "frontier": [
+  {
+   "B": 1,
+   "engine": "vllm",
+   "arm": "gptq_fp8kv",
+   "tok_s": 284.2,
+   "delta_bf16_wikitext": null,
+   "delta_bf16_c4val1": null,
+   "bpw": 4.15,
+   "bpw_basis": "nominal",
+   "resident_gb": 27.90238380432129,
+   "stability": "SINGLE",
+   "native": false
+  },
+  {
+   "B": 16,
+   "engine": "vllm",
+   "arm": "gptq_fp8kv",
+   "tok_s": 2037.9,
+   "delta_bf16_wikitext": null,
+   "delta_bf16_c4val1": null,
+   "bpw": 4.15,
+   "bpw_basis": "nominal",
+   "resident_gb": 28.30636167526245,
+   "stability": "SINGLE",
+   "native": false
+  },
+  {
+   "B": 1,
+   "engine": "vllm",
+   "arm": "gptq_graph",
+   "tok_s": 266.7,
+   "delta_bf16_wikitext": 0.019491411099895828,
+   "delta_bf16_c4val1": 0.029636083247827294,
+   "bpw": 4.15,
+   "bpw_basis": "nominal",
+   "resident_gb": 27.51529550552368,
+   "stability": "STABLE",
+   "native": false
+  },
+  {
+   "B": 16,
+   "engine": "vllm",
+   "arm": "gptq_graph",
+   "tok_s": 1943.55,
+   "delta_bf16_wikitext": 0.019491411099895828,
+   "delta_bf16_c4val1": 0.029636083247827294,
+   "bpw": 4.15,
+   "bpw_basis": "nominal",
+   "resident_gb": 27.81941270828247,
+   "stability": "STABLE",
+   "native": false
+  }
+ ],
+ "thresholds": {
+  "close": 0.0095,
+  "comparable": 0.02,
+  "k8_budget": 0.05,
+  "draw_third": 0.03,
+  "draw_unstable": 0.05,
+  "substitution": 0.02,
+  "sameprompt_fired": 1.3,
+  "degraded_min": 1.05,
+  "cross_box": 0.05
+ }
+}

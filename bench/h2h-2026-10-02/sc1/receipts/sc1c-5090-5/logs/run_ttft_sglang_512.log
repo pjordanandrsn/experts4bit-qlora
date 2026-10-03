@@ -1,0 +1,1 @@
+SC1SGLANG {"arm": "ttft", "batch": 1, "ttft_min_s": 0.09139, "ttft_median_s": 0.09757, "prefill_tok_s_min": 5602.1, "sglang_version": "0.5.20", "prompts_sha256": "a8e6ea1d7d140dbe726c94f0e6325eb11457a93f196419483de79507272f95e3"}

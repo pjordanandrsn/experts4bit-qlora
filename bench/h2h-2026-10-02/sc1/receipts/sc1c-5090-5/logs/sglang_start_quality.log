@@ -1,0 +1,7 @@
+[2026-10-03T04:16:38Z] sglang-server: start mode=quality port=30000 log=/root/sc1/logs/sglang_server_quality.log
+[2026-10-03T04:16:38Z] sglang-server: cmd: /root/sc1/venv-sglang/bin/python -m sglang.launch_server --model-path Qwen/Qwen3-30B-A3B-GPTQ-Int4 --revision 9b534e4318b7ebc3c961a839f13eb18b1833f441 --host 127.0.0.1 --port 30000 --random-seed 0 --moe-runner-backend auto --log-level info --max-running-requests 1 --chunked-prefill-size -1 --dtype float16 --context-length 4096 --mem-fraction-static 0.75
+[2026-10-03T04:16:38Z] sglang-server: waiting (0s, /health=000): # SGLANG_CACHE_DIR=/root/sc1/sglang-cache SGLANG_JIT_CACHE_DIR=/root/sc1/sglang-cache/jit CUDA_HOME=/usr/local/cuda
+[2026-10-03T04:17:08Z] sglang-server: waiting (30s, /health=000): Multi-thread loading shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+[2026-10-03T04:17:34Z] sglang-server: healthy after 56s
+SGLANG_ENGAGEMENT {"mode": "quality", "version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto", "disable_radix_cache": false, "max_running_requests": 1, "gptq_marlin_banner": true, "jit_target_tag": "sm120f", "gencode": "-gencode=arch=compute_120f,code=sm_120f", "startup_s": 56}
+[2026-10-03T04:17:34Z] sglang-server: ready: /root/sc1/logs/sglang_server_quality.log.server_info.json /root/sc1/logs/sglang_server_quality.log.engagement.json

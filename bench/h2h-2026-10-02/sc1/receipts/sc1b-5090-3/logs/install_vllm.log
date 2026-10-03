@@ -1,0 +1,4 @@
+[install-vllm 02:09:21] driver 580.95.05 >= R580: installing vllm==0.30.0 (pypi) into /root/sc1/venv-vllm (alarm 2700s, pip log /root/sc1/logs/pip_vllm.log)
+tripwire (vllm): vllm 0.30.0 | vllm_wheel pypi | torch(vllm) 2.13.0+cu130 | torch.version.cuda(vllm) 13.0 | triton(vllm) 3.7.1 | flashinfer(vllm) 0.6.18.post1 | cuda_capability (12, 0) | gpu NVIDIA GeForce RTX 5090 | nvidia-smi 580.95.05, NVIDIA GeForce RTX 5090, 32607 MiB, 600.00 W, 3210 MHz | python(vllm) 3.11.13
+tripwire OK (vllm): 0.30.0 torch 2.13.0+cu130 cuda 13.0 triton 3.7.1 flashinfer 0.6.18.post1 cc (12, 0) gpu NVIDIA GeForce RTX 5090
+[install-vllm 02:11:38] vllm==0.30.0 ready in /root/sc1/venv-vllm
