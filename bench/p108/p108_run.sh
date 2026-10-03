@@ -83,6 +83,7 @@ assert hasattr(paged_attention, "_fallback_mask"), "needs #966 (the unbound fall
 cfg = Gemma4TextConfig(vocab_size=256, hidden_size=128, intermediate_size=128, num_hidden_layers=2, num_attention_heads=4,
                        num_key_value_heads=2, head_dim=32, global_head_dim=64, num_global_key_value_heads=1,
                        layer_types=["sliding_attention", "full_attention"], sliding_window=16, enable_moe_block=False,
+                       attention_k_eq_v=True,   # as the real config: the full layers then take the global KV heads
                        hidden_size_per_layer_input=0, vocab_size_per_layer_input=256)
 assert _kv_geometry(cfg) == ([2, 1], [32, 64]), "needs #964 (a per-layer config's KV geometry)"
 import fp8_paged_attn  # noqa: F401  (the decode kernel)
