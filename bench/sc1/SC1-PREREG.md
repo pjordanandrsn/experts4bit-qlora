@@ -391,3 +391,45 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
     pair is e4b's and vLLM's. Every SGLang position reads the served shape, which is VALID. Under box A's QUALITY_FAIL
     licence (A11 item 2), no SC1 position is quoted in any case. SGLang's served-minus-prefill engagement reading is
     reported as UNREAD, with this cause. Any later box-C draw runs the fixed scorer.
+- **A13 (2026-10-03; box A's third draw; the owner approved the redraw in chat after the read, e4b#934).** The read
+  (`bench/h2h-2026-10-02/sc1/`) left five box-A predictions unread: P7, P8, P11, P14, and P13's third box.
+  - Box A's second draw (`sc1a-5090-2`, at `32d424e`) ran out of guard. From its phase stamps:
+    - Phase 0 took 1 h 30 min, and Phases A–EN took 3 h 37 min.
+    - The 5.5 h deadline skipped vLLM's energy windows and all of Phase G2: the second fp8-KV, rtn, nf4_ctrl and control
+      draws, the third scheduler draws, the nodetok pair, and the fp8-KV quality rows.
+  - Its scheduler anchor read UNSTABLE (220.5 / 310.2 tok/s at B=1) on the registered wall-slope estimator that A10 item
+    7 replaced.
+  - Box A's third draw, `sc1a-5090-3`, runs at A13's merge. It is proved first by `sc1a-prove-12` at the same commit.
+  1. **The guard is 7.5 h for this draw (≤ $5.63 at $0.75/h; the registered 5.5 h ≤ $4.13 stands for the record).**
+     G2 plus vLLM's energy windows took no time on `sc1a-5090-2`, because they never ran. From the first draws' phase
+     lengths they need about 70 min: Phase C's six arms took 11.5 min, Phase F's three took 17.5 min, and Phase D-vLLM's
+     scorings took 23 min. The draw then ends near 6 h 40 min. The extra 2 h leaves about 50 min of slack for a slower
+     host. No arm, phase or order changes.
+  2. **The int4 prefill route is pinned to `loop`.** #937 (after every box had run) made `E4B_INT4_PREFILL=auto` the
+     default: K19 wherever it can run.
+     - On an unpinned redraw that changes every int4 arm with a T > 1 call: the scheduler's prefill, TTFT, the energy
+       windows' prefill, and the K8 licence's 512-token prompt. P102 read that last one moving by up to 0.011 ppl.
+     - The box script scrubs the knob and then exports `E4B_INT4_PREFILL=loop` once, before the tripwire and every arm,
+       so every e4b process inherits it.
+     - It does not go in `ROUTEENV`: P100's and P102's staged-pin tests assert that their `FOLDS`, `SPEEDENV` and
+       `ROUTEENV` equal SC1's byte for byte, and A13 leaves all three unchanged.
+     - The e4b tripwire asserts that the knob is read from the environment, that the box's environment holds `loop`,
+       and that it resolves to `loop`.
+     - Decode is untouched either way: B=1 decode is T == 1, and B=16 decode rows are at most 256, which take the
+       device-grouped route under every value.
+  3. **Recorded, not changed: #918 (#913) is in this draw and was not in the others.**
+     - Boxes A (`32d424e`), B and C (`9dd712b`) ran the scheduler arms' bucketed decode graphs over a single-entry
+       row-to-token cache. A later bucket's warm-up could free an earlier bucket's index, and the earlier bucket's replay
+       then gathered token rows through whatever was in the freed block.
+     - SC1's scheduler rows are speed only. The fix keeps one index per row count, so the gathered rows change and the
+       kernels, shapes and launches do not. The speed rows are therefore read as comparable across the fix.
+     - The same-box method pair (window / sched) is the check: B=1 +6.0 % on B and +10.4 % on C before the fix.
+  - **Reads:**
+    - P13 on all three boxes, if box A's scheduler anchor is stable on A10's estimator.
+    - P7, P8, P11 and P14, if G2 and the energy windows complete.
+    - Box A's licence a third time.
+  - **Does not read:** P1–P5. They need a quoted position, and the licence has read QUALITY_FAIL on both draws. A third
+    QUALITY_FAIL changes nothing; a PASS would be reported beside the two FAILs, not instead of them.
+  - CPU tests: `tests/test_sc1_a13.py` (6). Three fail on the registered script: the export, its place between the
+    scrub and the tripwire, and the tripwire's checks. Three controls pass on both: no arm sets another route,
+    `ROUTEENV` and `FOLDS` are untouched, and `auto` would take K19 where `loop` holds. `staged.sha256` is re-pinned.

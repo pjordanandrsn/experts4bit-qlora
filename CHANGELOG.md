@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+### SC1 amendment A13 (#846): box A's third draw -- a 7.5 h guard so Phase G2 runs, and the int4 prefill route pinned to the `loop` every box ran (#937 made `auto` the default afterwards) (bench and tests only)
+
+- The read (#934) left P7, P8, P11, P14 and P13's third box unread. `sc1a-5090-2` ran out of its 5.5 h guard before
+  Phase G2, and its scheduler anchor read UNSTABLE on the wall-slope estimator A10 replaced.
+- `sc1a-5090-3` runs at this merge, after `sc1a-prove-12`, with a 7.5 h guard (<= $5.63). G2 needs about 70 min by the
+  first draws' phase lengths.
+- The box scrubs `E4B_INT4_PREFILL` and exports `loop` before the tripwire and every arm, and the tripwire asserts it.
+  `ROUTEENV` is left as it was, because P100's and P102's pins compare it byte for byte. Without the pin, the redraw's TTFT, scheduler prefill and K8 licence prompt would run K19 while every other
+  SC1 row ran the loop.
+- Recorded, not changed: #918's row-index fix is in this draw and was not in the others. SC1's scheduler rows are speed
+  only, and the fix changes the gathered rows, not the work.
+- `tests/test_sc1_a13.py` (6; three fail on the registered script). `staged.sha256` is re-pinned.
 ### TC1 P15: axolotl's steady-state lead over e4b as shipped replicates on a second host
 
 - **What was asked.** TC1 amendment 9 asked P14 again on a different machine (`tc1-5090-36`: Vast machine 45501, AMD Ryzen 9 3900X),
