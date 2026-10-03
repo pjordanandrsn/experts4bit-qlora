@@ -23,8 +23,14 @@
 
   A first version churned the default stream and passed either way; it was corrected before use.
 - **Scope.** Any bucketed-graph serving of an NF4 MoE through the all-resident collapse ran this cache before now,
-  not only hybrid models. Earlier serving lanes that read token outputs under bucketed graphs should be checked
-  against it. `docs/SERVING.md`'s hybrid warning stays until a lane re-reads P98's question on the card.
+  not only hybrid models. Six earlier lanes ran bucketed decode graphs on an MoE:
+  - **P80, P81, B771b and P82** (Qwen3-30B-A3B; `step_decomp` graph buckets 1–16) ran the cache at commits where every
+    bucket read `rt`. The lean glue arrived later, in v0.38.0. Each lane's registered graph-vs-padded-eager token gate
+    held bitwise in all 16 rows, so the fault did not show in their outputs, and their claims stand.
+  - **SC1** recorded speed only, from `serve_paged`.
+  - **P98** hit the fault.
+
+  `docs/SERVING.md`'s hybrid warning stays until a lane re-reads P98's question on the card.
 
 ### P99 amendment 1 (#913): the OLMoE arm's answer reads "Qwen3.6-specific"; two mechanisms ruled out at $0 on the A2000 (bench docs only)
 
