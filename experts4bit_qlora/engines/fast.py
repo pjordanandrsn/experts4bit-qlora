@@ -742,6 +742,11 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     from .rope_train import enable_fused_rope, fused_rope_requested
     if patched and fused_rope_requested():
         enable_fused_rope(model, verbose=verbose)
+    # Opt-in (E4B_FUSED_RMSNORM=1): the frozen RMSNorms through one launch each way instead of the composite's ~18. Its own
+    # numerics change (row reductions in another order, ~1e-5 of elements one bf16 ulp off), so a separate switch.
+    from .rmsnorm_train import enable_fused_rmsnorm_train, fused_rmsnorm_requested
+    if patched and fused_rmsnorm_requested():
+        enable_fused_rmsnorm_train(model, verbose=verbose)
     return patched
 
 
