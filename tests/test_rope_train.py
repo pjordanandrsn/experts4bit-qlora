@@ -66,7 +66,8 @@ def test_patch_is_scoped_falls_through_and_unwinds():
             assert n == 0
             return
         assert n == 1 and mod.apply_rotary_pos_emb is not hf_apply and mod.apply_rotary_pos_emb._e4b_orig is hf_apply
-        q = torch.randn(1, 2, 3, 8); k = torch.randn(1, 2, 3, 8); c = torch.randn(1, 3, 8); s = torch.randn(1, 3, 8)
+        q, k = torch.randn(1, 2, 3, 8), torch.randn(1, 2, 3, 8)
+        c, s = torch.randn(1, 3, 8), torch.randn(1, 3, 8)
         before = rt.ROPE_TRAIN_STATS["calls"]
         out = mod.apply_rotary_pos_emb(q, k, c, s)                   # CPU fp32: outside the contract -> the original
         assert rt.ROPE_TRAIN_STATS["calls"] == before and torch.equal(out[0], hf_apply(q, k, c, s)[0])
