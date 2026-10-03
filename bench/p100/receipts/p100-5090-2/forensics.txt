@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-3ac82132-b928-547f-6616-3284eb216566, 12.0
+CPU(s):                                  32
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD Ryzen 9 9950X3D 16-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             125           1         121           0           2         122
+overlay         320G  9.1M  320G   1% /

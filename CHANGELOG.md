@@ -1,6 +1,24 @@
 # Changelog
 
 ## Unreleased
+### P100 read (RTX 5090, #916): REFUTED by its rule -- the per-expert prefill loop runs exactly as traced and is 73 % of a 512-token chunk, but costs 0.42 s per chunk on this host, not 2.07 s; SC1 box B's TTFT ran 3.5-3.8x faster on another 5090 host (bench docs and receipts only)
+
+- **Verdict** (`p100_reduce.py`): REFUTED.
+  - SCALING INDETERMINATE: rho = T(chunk 512) / T(chunk 2048) = 4.79 / 2.25 = 2.13, under the registered 3.0.
+  - MECHANISM NOT_CONFIRMED on its size threshold: 8,390 `dequant_int4_ref` calls per 512-token chunk, under 9,600.
+    Routing hits 87 distinct experts per layer, not ~128.
+- **Measured** (`p100-5090-2`, AMD Ryzen 9 9950X3D host, $0.163):
+  - TTFT 0.550 s at 512 tokens; 4.790 / 3.065 / 2.255 s at 4096 tokens, chunk 512 / 1024 / 2048 (SC1 box B: 2.078 /
+    16.597 s for the same configuration and token ids).
+  - The census confirms the trace exactly: 48 host-grouped loop calls per chunk per layer (384 for an 8-chunk
+    request), two reference decodes per distinct expert, none device-grouped, none at T == 1.
+  - 117,247 device kernels and 14,969 copies per 512-token request.
+  - In the cProfile, the int4 branch is 0.454 s of the 0.619 s prefill, and its `ncalls` equals the census.
+  - Per chunk: about 0.43 s fixed plus about 0.35 ms per token.
+- **Next:** the registered consequence's two sentences disagree on this data (the time IS in the loop; the rule failed
+  on the hypothesis's quantities). P101 is written against where the time was measured to be, with a fresh rule.
+  `bench/p100/RESULTS-p100.md`; receipts under `bench/p100/receipts/p100-5090-2/`.
+
 
 ### P101 registered (#564, #913): P98's question asked again on the fixed code -- Qwen3.6's bucketed decode graphs through the serving stack, against the padded eager step, and the first hybrid decode speed (bench docs only)
 
