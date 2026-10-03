@@ -1,6 +1,28 @@
 # Changelog
 
 ## Unreleased
+### E4B_PAGED_PREFILL_ATTN (#960): a route knob for paged prefill attention -- math (the default, unchanged) or flash (the same lower-right causal mask as a bias the flash kernel takes)
+
+- **Why.** For a layer without sinks or a sliding window, the paged prefill branch called SDPA with an explicit
+  boolean mask and `enable_gqa`. With fewer KV heads than query heads, flash attention refuses a non-null mask and
+  memory-efficient attention refuses mismatched head counts, so the call lands on SDPA's math backend: fp32, scores
+  materialised.
+  - P102's profile put this at ~45 % of a 4096-token Qwen3 prefill's device time under k19.
+  - On an A2000 at Qwen3's shapes the math backend took 19.1 ms per 4096-context call, against 1.31 ms for flash.
+- **What.** `paged_attention._prefill_attn_mode_env` reads `E4B_PAGED_PREFILL_ATTN` at every call; an unknown value
+  is refused.
+  - `math` (the default) leaves behaviour unchanged.
+  - `flash` passes `causal_lower_right(T, t_total)` with `enable_gqa`, with no K/V expansion.
+  - Layers with sinks or a sliding window keep the explicit-mask path under either value.
+  - The default moves only by a registered reading (lane P107).
+- **Tests.**
+  - `tests/test_paged_prefill_attn_route.py` (CPU, 7): the knob; both routes equal the whole-sequence reference across
+    chunk boundaries; `flash` hands SDPA a `CausalBias` with GQA on a plain layer, and never on a windowed or sink layer.
+  - `tests/test_paged_prefill_attn_route_gpu.py`: Qwen3 shapes, three 512-token chunks; `flash` reaches the flash
+    kernel and stays within 1 % of `math` (0.21 % on an A2000).
+  - On the A2000: CPU arm 25 passed with CUDA hidden, GPU arm 26 passed. Two mutations each failed: the flash branch
+    removed, and a top-left causal bias.
+
 
 ### LoRA: the delta's scaling multiply is skipped at exactly 1 (exact; fewer launches at alpha == r)
 
