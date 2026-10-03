@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Fix: the paged attention's unbound fallback keeps sliding windows and aligns a cached chunk to its last key
+
+- **The bug.** A model with `e4b_paged` registered and no paged context bound (the "transformers reference" in
+  P97-style instruments, or any direct forward after `register`) falls back to SDPA. transformers builds no attention
+  mask for an implementation it has no mask function for, and `e4b_paged` registers none, so the fallback ran with no
+  mask at all:
+  - it dropped sliding windows (Gemma-4, gpt-oss): a tiny Gemma-4's last logits moved by 0.85 at window 16;
+  - in a cached chunked prefill it took torch's top-left `is_causal` alignment.
+- **The fix.** When transformers passes no mask, the fallback builds the causal mask aligned to the last key, with the
+  layer's window. It builds none where SDPA's own handling is already right: a square prefill with no window, or one
+  query whose keys all sit inside the window.
+  - No mask function is registered, because one would run HF's mask preprocessing inside the bound, graph-captured
+    forwards.
+  - The bound paged path builds its own masks and is untouched.
+  - The fallback assumes unpadded batches.
+- **Tests** (`tests/test_paged_attention_unbound_mask.py`, a tiny Gemma-4 whose window binds):
+  - a one-shot forward and a cached chunked prefill with decode both match transformers' own attention;
+  - with the fix reverted, both fail on ~60 % of logits, by up to 1.26.
+- **Not affected.** Serving, which binds the context. P97's readings (Qwen3.6 and OLMoE: no windows, unpadded windows,
+  square prefill). P106 (paged against paged). Found while building lane P107 (#359).
+
 ### LoRA: the delta's scaling multiply is skipped at exactly 1 (exact; fewer launches at alpha == r)
 
 - **What.** `LoRALinear.forward` (the attention adapters), `ExpertsLoRA._lora` (the reference expert path) and the batched engine's
