@@ -69,9 +69,9 @@ def test_the_reducer_applies_the_registered_rule():
 
 
 def test_the_stack_is_e4b_cis_kernel_pin_on_transformers_5_17():
-    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
     pin = re.search(r"^GNF4_SHA=([0-9a-f]{40})\b", RUN, re.M).group(1)
-    assert f"grouped-nf4-gemm.git@{pin}" in ci                                  # the kernels CI tests the hybrid path on
+    # CI's kernel pin when the lane registered: v0.34.1. CI moved to v0.35.0 in 0.42.0; a frozen lane keeps its own.
+    assert pin == "34da93d6fe8d2a401b7001705658ce00b2b18213"
     assert '"transformers==5.17.0"' in RUN and 'assert transformers.__version__ == "5.17.0"' in RUN
     assert "import fp8_paged_attn" in RUN and "from experts4bit_qlora.engines.linear_state import" in RUN
     assert "E4B_NF4_T1_DEVICE_GROUPING E4B_CALIB_SOURCE" in RUN                  # every serving lever starts unset
