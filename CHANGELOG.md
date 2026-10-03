@@ -1,6 +1,17 @@
 # Changelog
 
 ## Unreleased
+
+### Lane SC1 amendment A11 (#846): the reducer reads as the registration reads -- llama.cpp's server log, box A's licence and quality rows carried across boxes, P13 on measured ratios (bench + tests)
+
+- **llama.cpp.** `sc1_reduce.py` reads llama.cpp's engagement lines from the server log each receipt names. Box B's engaged rows
+  had all VOIDed.
+- **Licence carried.** The cross-box read carries box A's QUALITY_FAIL onto boxes B and C, under the registered no-side-door
+  rule.
+- **Quality carried.** It carries e4b's quality rows (box A) and the bf16 oracle (box B) to the boxes that lack them, on
+  identical windows and labelled.
+- **P13.** P13 reads the measured vLLM/e4b anchor ratios (both arms VALID and stable) instead of quoted positions.
+- **Tests.** Four self-test cases, each failing when its change is reverted. Pin regenerated; `SC1-PREREG.md` A11.
 ### TC1 P14: at steady state axolotl's scattermoe steps 9 % faster than e4b as shipped; e4b still finishes a 200-step run first
 
 - **What was asked.** TC1 amendment 8 re-asked P13's axolotl half over 200 steps of the field recipe, read on steps 101..200, on

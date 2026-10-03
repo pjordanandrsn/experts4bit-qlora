@@ -733,7 +733,11 @@ def llamacpp_row(rec, arm, B, log, pf):
     t = check_tokens(rec, B)
     if t:
         why.append(t)
+    # A11: the engagement lines are in the SERVER log the receipt names (server_log, a box path; the same basename under the
+    # run's logs/), not the arm's own log -- sc1b-5090-3 VOIDed every engaged llama.cpp row on "no offloaded line"
     text = read_text(log)
+    if rec.get("server_log"):
+        text += "\n" + read_text(os.path.join(os.path.dirname(log), os.path.basename(str(rec["server_log"]))))
     m = re.search(r"offloaded (\d+)/(\d+) layers", text)
     if not m:
         why.append("no `offloaded N/N layers to GPU` line in the server log")
@@ -1054,10 +1058,12 @@ def served_quality_for(comp, engine, arm):
 
 
 # ------------------------------------------------------------------------------------------------- positions
-def positions_block(arms, comp, box, licence, substitution=None):
+def positions_block(arms, comp, box, licence, substitution=None, licence_a=None):
     anchor_arm, window_arm = ANCHOR_SCHED[box], ANCHOR_WINDOW[box]
     out = {"anchor": f"e4bsched/{anchor_arm}", "window_anchor": f"e4b/{window_arm}", "rows": []}
     rtn_blocked = bool(licence and licence.get("quality_fail")) and box == "A"
+    # A11: "QUALITY_FAIL -> ... no position is quoted from the RTN rows either" -- boxes B/C's anchors are RTN rows
+    rtn_blocked_by_a = bool(licence_a and licence_a.get("quality_fail")) and box != "A"
     for (engine, arm, B), a in sorted(arms.items()):
         if engine not in COMPARATOR_ENGINES:
             continue
@@ -1084,6 +1090,8 @@ def positions_block(arms, comp, box, licence, substitution=None):
             pos["why"].append("B=1 position needs LICENSED-B1")
         if rtn_blocked:
             pos["why"].append("QUALITY_FAIL: no position from the RTN rows either")
+        if rtn_blocked_by_a:
+            pos["why"].append("box A's licence QUALITY_FAIL: no position from the RTN rows either (this box's anchors are RTN)")
         if anc and a["all_valid"] and a["summary"]["usable"] and anc["summary"]["usable"]:
             iv = interval([r["tok"] for r in a["draws"]], [r["tok"] for r in anc["draws"]])
             pos.update(iv)
@@ -1490,13 +1498,53 @@ def reduce_dir(run_dir, box=None, box_a_dir=None):
 
 
 def anchor_ratios(R):
-    """The box's vllm/gptq_graph over the e4b sched anchor per B (sched) and over the window anchor (window), quoted
-    positions only for the sched ratio; the window ratio is informational."""
+    """The box's vllm/gptq_graph over the e4b sched anchor per B (sched) and over the window anchor (window).
+    A11: P13 is the registered "three boxes' vLLM/e4b anchor ratios side by side" -- a measured ratio wherever both arms are
+    VALID and stable (the position's point), NOT gated on the quotation rule (quality comparability, the licence): a
+    QUALITY_FAIL licence blocks every position, and would otherwise make the registered cross-box check unreadable. The
+    quoted flag is carried beside it."""
     out = {}
     for B in BATCHES:
-        p = _pos(R["positions"], "vllm", "gptq_graph", B)
-        out[B] = {"sched": p["point"] if p else None, "interval": (p["min"], p["max"]) if p else None, "window": (p or {}).get("window_ratio")}
+        p = next((r for r in R["positions"]["rows"] if (r["engine"], r["arm"], r["B"]) == ("vllm", "gptq_graph", B)), None)
+        has = p is not None and p.get("point") is not None
+        out[B] = {"sched": p["point"] if has else None, "interval": (p["min"], p["max"]) if has else None,
+                  "window": (p or {}).get("window_ratio"), "quoted": bool(p and p.get("quoted"))}
     return out
+
+
+def _carry_quality(Rs):
+    """A11: the registered quality rows live on ONE box each -- e4b's served/prefill rows on box A (k8_lic_auto, nll_e4b_prefill)
+    and the bf16 oracle on box B ("box A's whole delta_bf16 axis depends on it") -- yet every box's comparators are read
+    against them. Carry a row into a box that lacks it, from a box that has it VALID on the IDENTICAL window (text_sha), and
+    label its source; then recompute that box's deltas, bands and served-vs-prefill readings."""
+    for R in Rs:
+        comp, d = R["comparability"], R["dir"]
+        for src in TEXTS:
+            mine = window_sha(d, src)
+            for key, from_box in (("oracle", None), ("e4b_served", "A"), ("e4b_prefill", "A")):
+                q = comp[key][src]
+                if q.get("verdict") == "VALID":
+                    continue
+                for other in Rs:
+                    if other is R or (from_box and other["box"] != from_box):
+                        continue
+                    oq = other["comparability"][key][src]
+                    # only a row measured on other itself (never one other was carried): the source box stays the box that measured it
+                    if oq.get("verdict") == "VALID" and not oq.get("carried_from") and mine is not None and window_sha(other["dir"], src) == mine:
+                        comp[key][src] = dict(oq, source=f"box {other['box']}: {oq.get('source') or key}", carried_from=other["box"])
+                        break
+        for q in comp["rows"]:
+            _deltas(q, comp, q["src"], q["shape"])
+        for src in TEXTS:
+            for shape in ("served", "prefill"):
+                q = comp[f"e4b_{shape}"][src]
+                q.update(engine="e4b", variant=None, mode=shape, src=src, shape=shape)
+                _deltas(q, comp, src, shape, is_e4b=True)
+        keyed = {}
+        for q in comp["rows"] + [comp["e4b_served"][s] for s in TEXTS] + [comp["e4b_prefill"][s] for s in TEXTS]:
+            if q.get("shape") in ("served", "prefill") and q.get("verdict") == "VALID":
+                keyed.setdefault((q["engine"], q.get("variant"), q["src"]), {})[q["shape"]] = q["mean_nll"]
+        comp["served_vs_prefill"] = {k: v["served"] - v["prefill"] for k, v in keyed.items() if "served" in v and "prefill" in v}
 
 
 def cross_box(run_dirs, boxes=None):
@@ -1504,6 +1552,12 @@ def cross_box(run_dirs, boxes=None):
     for i, rd in enumerate(run_dirs):
         Rs.append(reduce_dir(rd, (boxes[i] if boxes and i < len(boxes) else None)))
     A = next((R for R in Rs if R["box"] == "A"), None)
+    _carry_quality(Rs)
+    for R in Rs:                                            # A11: positions re-read with the carried rows and box A's licence
+        sub_ = A["substitution"] if (A and R["box"] != "A") else (R["substitution"] if R["box"] != "A" else None)
+        R["positions"] = positions_block(R["arms"], R["comparability"], R["box"], R["licence"], substitution=sub_,
+                                         licence_a=A["licence"] if A else None)
+        R["frontier"] = frontier_rows(R)
     out = {"boxes": {R["box"]: anchor_ratios(R) for R in Rs}, "agree": {}, "substitution": A["substitution"] if A else None, "p13": None, "lines": []}
     legs = []
     for B in BATCHES:
@@ -1515,7 +1569,7 @@ def cross_box(run_dirs, boxes=None):
             legs.append(("HOLD" if g <= CROSS_BOX else "REFUTED", f"B={B} " + ", ".join(f"{b} {v:.3f}" for b, v in sorted(have.items())) + f" (gap {100 * g:.1f} % vs {100 * CROSS_BOX:.0f} %)"))
         else:
             out["agree"][B] = {"ratios": have, "gap": None, "within": None}
-            legs.append(("UNREAD", f"B={B} fewer than two boxes with a quoted vLLM anchor ratio"))
+            legs.append(("UNREAD", f"B={B} fewer than two boxes with a measured vLLM anchor ratio (both arms VALID and stable)"))
     out["p13"] = _combine(legs) if len(Rs) >= 2 else ("UNREAD", "cross-box needs two or three run dirs")
     for R in Rs:
         R["cross_box_p13"] = out["p13"]
@@ -1525,13 +1579,13 @@ def cross_box(run_dirs, boxes=None):
                 p["substitution"] = A["substitution"]
         R["predictions"] = predictions_block(R)
     out["reductions"] = Rs
-    out["lines"].append("| B | " + " | ".join(f"box {R['box']} vllm/e4b-sched (interval)" for R in Rs) + " | gap | within 5 % |")
+    out["lines"].append("| B | " + " | ".join(f"box {R['box']} vllm/e4b-sched (interval; quoted?)" for R in Rs) + " | gap | within 5 % |")
     out["lines"].append("|---|" + "---|" * len(Rs) + "---|---|")
     for B in BATCHES:
         cells = []
         for R in Rs:
             a = anchor_ratios(R)[B]
-            cells.append(f"{a['sched']:.3f} [{a['interval'][0]:.3f}, {a['interval'][1]:.3f}]" if a["sched"] else "not quoted")
+            cells.append(f"{a['sched']:.3f} [{a['interval'][0]:.3f}, {a['interval'][1]:.3f}]; {'quoted' if a['quoted'] else 'measured, not quoted'}" if a["sched"] else "no measured ratio")
         ag = out["agree"][B]
         out["lines"].append(f"| {B} | " + " | ".join(cells) + f" | {pct(ag['gap'])} | {ag['within'] if ag['within'] is not None else '—'} |")
     if A and A["substitution"]:
@@ -1864,10 +1918,14 @@ def _box_set(box="A"):
                 for B, t in ((1, t1), (16, t16)):
                     for r in (1, 2):
                         F[f"{engine}_{arm}_b{B}_r{r}.json"] = _p37(engine, arm, B, t * (1 + 0.005 * (r - 1)))
-                        if engine == "llamacpp":
-                            L[f"run_llamacpp_{arm}_b{B}_r{r}.log"] = _llamacpp_log(B)
+                        if engine == "llamacpp":   # A11: the real shape -- banners in the server log the receipt names
+                            F[f"{engine}_{arm}_b{B}_r{r}.json"]["server_log"] = f"/root/sc1/logs/llamacpp_server_{arm}_np{B}.log"
+                            L[f"llamacpp_server_{arm}_np{B}.log"] = _llamacpp_log(B)
+                            L[f"run_llamacpp_{arm}_b{B}_r{r}.log"] = "SC1LLAMA arm log (no server banners)\n"
             F["llamacpp_iq4xs_b1_r1.json"] = _p37("llamacpp", "iq4xs", 1, 245.0)
-            L["run_llamacpp_iq4xs_b1_r1.log"] = _llamacpp_log(1)
+            F["llamacpp_iq4xs_b1_r1.json"]["server_log"] = "/root/sc1/logs/llamacpp_server_iq4xs_np1.log"
+            L["llamacpp_server_iq4xs_np1.log"] = _llamacpp_log(1)
+            L["run_llamacpp_iq4xs_b1_r1.log"] = "SC1LLAMA arm log (no server banners)\n"
             for src in TEXTS:
                 e_served = math.log(_LIC_PPL[src] + 0.02)
                 F[f"nll_llamacpp_decode_{src}.json"] = _nll("llamacpp", src, e_served + 0.012, "decode")
@@ -2069,7 +2127,7 @@ def selftest():
     case("VOID sched census a fold count is 0", m_sched_folds, check=expect_void("e4bsched", "lic_sched", 1, "fold counts"))
 
     def m_llama(F, L, T):
-        L["run_llamacpp_q4km_b1_r1.log"] = L["run_llamacpp_q4km_b1_r1.log"].replace("49/49", "48/49")
+        L["llamacpp_server_q4km_np1.log"] = L["llamacpp_server_q4km_np1.log"].replace("49/49", "48/49")
     case("VOID llama.cpp offloaded 48/49 layers", m_llama, box="B", check=expect_void("llamacpp", "q4km", 1, "offloaded 48/49"))
 
     def m_llama_prec(F, L, T):
@@ -2393,6 +2451,62 @@ def selftest():
     RB = next(R for R in X["reductions"] if R["box"] == "B")
     assert RB["substitution"]["holds"] is False and "RTN speed" in _subst_label(RB["substitution"])
     print(f"CASE {n[0]:02d} [cross-box: box B's B=16 anchor ratio 8 % off box A's; box A's substitution fails] -> P13 REFUTED; box B anchors labelled '{_subst_label(RB['substitution'])}'")
+    # A11: llama.cpp's engagement lines are read from the server log the receipt names
+    n[0] += 1
+    F, L, T = _box_set("B")
+    L["llamacpp_server_q4km_np16.log"] = L["llamacpp_server_q4km_np16.log"].replace("flash_attn = enabled", "flash_attn = auto")
+    RB = reduce_dir(_write_set(os.path.join(tmp, f"case{n[0]:02d}_B"), F, L, T))
+    assert arm(RB, "llamacpp", "q4km", 16)["verdict"] == "VOID" and arm(RB, "llamacpp", "q4km", 1)["verdict"] == "VALID", \
+        (arm(RB, "llamacpp", "q4km", 16)["verdict"], arm(RB, "llamacpp", "q4km", 1)["verdict"])
+    print(f"CASE {n[0]:02d} [llama.cpp: the receipt's server log says flash_attn = auto] -> B=16 VOID; B=1 (its own server log intact) VALID")
+    n[0] += 1
+    F, L, T = _box_set("B")
+    for k in [k for k in F if k.startswith("llamacpp_q4km_b1_")]:
+        F[k].pop("server_log", None)                               # no server log named, none of its lines in the arm log
+    RB = reduce_dir(_write_set(os.path.join(tmp, f"case{n[0]:02d}_B"), F, L, T))
+    assert arm(RB, "llamacpp", "q4km", 1)["verdict"] == "VOID" and "offloaded" in arm(RB, "llamacpp", "q4km", 1)["draws"][0]["why"]
+    print(f"CASE {n[0]:02d} [llama.cpp: no server log named, no banner in the arm log] -> VOID (never assumed)")
+    # A11: box A's QUALITY_FAIL blocks boxes B/C's positions; P13 still reads the measured anchor ratios
+    n[0] += 1
+    roots = []
+    for box in ("A", "B", "C"):
+        F, L, T = _box_set(box)
+        if box == "A":
+            F["k8_lic_auto_c4val1.json"] = _k8(_NF4_PPL["c4val1"] + 0.10, "c4val1")
+            F["k8_lic_1_c4val1.json"] = _k8(_NF4_PPL["c4val1"] + 0.10, "c4val1", census=[K19_KERNEL, K23_KERNEL, "_gemv_int4_b32"])
+        roots.append(_write_set(os.path.join(tmp, f"case{n[0]:02d}_{box}"), F, L, T))
+    X = cross_box(roots)
+    RA, RB = (next(R for R in X["reductions"] if R["box"] == b) for b in ("A", "B"))
+    assert RA["licence"]["quality_fail"] and not pos(RB, "vllm", "gptq_graph", 1)["quoted"]
+    assert any("box A's licence QUALITY_FAIL" in w for w in pos(RB, "vllm", "gptq_graph", 16)["why"])
+    assert X["p13"][0] == "HOLD" and all(X["agree"][B]["within"] for B in BATCHES), X["p13"]
+    print(f"CASE {n[0]:02d} [cross-box: box A QUALITY_FAIL] -> no position on any box (B/C: 'box A's licence QUALITY_FAIL'); "
+          f"P13 still HOLD on the measured ratios")
+    # A11: e4b's quality rows (box A) and the oracle (box B) are carried to the boxes that lack them, on identical windows
+    n[0] += 1
+    roots = []
+    for box in ("A", "B", "C"):
+        F, L, T = _box_set(box)
+        if box != "B":
+            for src in TEXTS:
+                F.pop(f"oracle_{src}.json", None)
+        if box != "A":
+            for k in [k for k in F if k.startswith(("k8_int4_", "k8_rtn_", "nll_e4b_prefill_", "k8_lic_"))]:
+                F.pop(k)
+        roots.append(_write_set(os.path.join(tmp, f"case{n[0]:02d}_{box}"), F, L, T))
+    X = cross_box(roots)
+    RA, RB, RC = (next(R for R in X["reductions"] if R["box"] == b) for b in ("A", "B", "C"))
+    for R in (RB, RC):
+        es = R["comparability"]["e4b_served"]["wikitext"]
+        assert es["verdict"] == "VALID" and es.get("carried_from") == "A", es
+        rows = [q for q in R["comparability"]["rows"] if q["shape"] == "served" and q.get("verdict") == "VALID"]
+        assert rows and all(q["delta_pair"] is not None for q in rows), [(q["engine"], q["delta_pair"]) for q in rows]
+    for R in (RA, RC):
+        o = R["comparability"]["oracle"]["c4val1"]
+        assert o["verdict"] == "VALID" and o.get("carried_from") == "B", o
+    assert RA["comparability"]["e4b_served"]["c4val1"]["delta_bf16"] is not None
+    print(f"CASE {n[0]:02d} [cross-box: B/C lack e4b quality rows, A/C lack the oracle] -> box A's e4b rows and box B's oracle "
+          f"carried (labelled); every comparator delta_pair and box A's delta_bf16 read")
     print(f"REDUCE SELFTEST OK cases={n[0]} dir={tmp}")
 
 
@@ -2412,7 +2526,7 @@ def main():
         if len(a.dirs) < 2:
             ap.error("--cross-box takes two or three run dirs")
         X = cross_box(a.dirs)
-        print("# SC1 cross-box anchor ratios (vllm/gptq_graph over the box's e4b sched anchor; quoted positions only)")
+        print("# SC1 cross-box anchor ratios (vllm/gptq_graph over the box's e4b sched anchor; measured wherever both arms are VALID and stable, the quotation flag beside -- A11)")
         print("\n".join(X["lines"]))
         print(f"\nP13: {X['p13'][0]} -- {X['p13'][1]}")
         for R in X["reductions"]:
