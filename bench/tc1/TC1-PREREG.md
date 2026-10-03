@@ -631,3 +631,30 @@ code; the earlier row stays as measured, labelled as the code before #945.
 The 200-step totals and the held-out comparison are reported as before. An UNTESTED box is re-run once, on another host.
 
 Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20; the standing no-ask tier.
+
+### Amendment 17 (2026-10-03T16:35Z, after amendment 16's read, before any box): P27's ordering on a second host (P28)
+
+**Why.** Amendment 16's box (`tc1-5090-46`, Vast machine 142284, AMD EPYC 7663) read P27 HELD: axolotl scattermoe / e4b shipped over
+steps 101..200 at **1.238** [1.231, 1.246], e4b faster at steady state. That reverses P14 and P15 for the new code, but on one host.
+The campaign's rule is counterexamples before a broad claim, and the 5090 step is host-launch-bound (the same e4b arm has measured
+3.2–5.9 s on different hosts). So the ordering is re-asked on a second host, as amendment 9 did for P14.
+
+**The box.** Byte-identical to `tc1-5090-46`: the `qwen3nativebest200` token, e4b pinned at `e5859e9`, grouped-nf4-gemm at
+`00929a4`, no environment set. The launcher's machine preference is switched off for this launch (`ADERTHA_PREFER_MACHINES=0`):
+with it on, the offer order puts machine 142284 first again.
+
+**Prediction P28** (registered before the box), read off the box's own P14 line: on a machine other than 142284, the late-window
+ratio axolotl scattermoe / e4b shipped over steps 101..200 lies in **[1.05, 1.50]**, with its whole cross-draw interval above 1.0.
+That replicates the ordering.
+
+- A box on machine 142284 is a repeat: P28 UNTESTED.
+- FALSIFIED outside the band, or with an interval that reaches 1.0.
+- UNTESTED on an unstable or missing pair.
+
+**Decision rules.**
+
+- **HELD:** the amendment-16 register row records the replication on a second host, and STATUS drops "one host".
+- **FALSIFIED:** the row and STATUS say the ordering is host-dependent and name both hosts.
+- **UNTESTED:** the row stays one-host, and the box is not re-run inside this amendment.
+
+Budget: one RTX 5090, $0.69/h ceiling, 4.5 h cap, under $3.20; the standing no-ask tier.
