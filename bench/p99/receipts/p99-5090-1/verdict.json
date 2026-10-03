@@ -1,0 +1,53 @@
+{
+ "verdict": "LOCALISED",
+ "why": [],
+ "arms": {
+  "d0g": {
+   "state": "faulted",
+   "last_step": [
+    110,
+    1
+   ],
+   "fault_bucket": 1
+  },
+  "d1g": {
+   "state": "ran",
+   "last_step": null,
+   "fault_bucket": null
+  },
+  "d1e": {
+   "state": "ran",
+   "last_step": null,
+   "fault_bucket": null
+  },
+  "d2g": {
+   "state": "faulted",
+   "last_step": [
+    110,
+    1
+   ],
+   "fault_bucket": 1
+  },
+  "d2e": {
+   "state": "ran",
+   "last_step": null,
+   "fault_bucket": null
+  },
+  "d3g": {
+   "state": "ran",
+   "last_step": null,
+   "fault_bucket": null
+  },
+  "d3e": {
+   "state": "ran",
+   "last_step": null,
+   "fault_bucket": null
+  }
+ },
+ "silent_mismatch": [],
+ "answers": {
+  "hybrid_state_necessary": true,
+  "k25_necessary": false,
+  "multiple_buckets_necessary": true
+ }
+}
