@@ -369,3 +369,25 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
      QUALITY_FAIL made it unreadable by construction. P13 now reads the measured ratios, with the quotation flag beside.
      *This reading of P13 is a judgment under the owner's delegation; it is flagged for review.*
 
+- **A12 (2026-10-03; the scorer only; receipt `sc1c-5090-5`, adertha-receipts `94a8f5e`). No box re-runs.**
+  Box C's run at A10's merge (`9dd712b`) read every speed arm VALID: SGLang matched and native, vLLM, both e4b anchors and
+  ExLlamaV3 cu13. Its exit code 1 came from two rows only: `nll_sglang_prefill_wikitext` and `nll_sglang_prefill_c4val1`
+  each died on `assert lps[0] is None` in `score_prefill`. Both served-shape scorings on the same server read VALID, CLOSE
+  on both texts.
+  - The scorer misread the response's composition. SGLang 0.5.20 (tag `94602c9c`) prepends `None` to the logprob
+    **values** (`scheduler_components/logprob_result_processor.py:38`) and takes the ids from
+    `origin_input_ids[logprob_start_len:]` (`:50`). `tokenizer_manager.py:2888-2892` then zips the two lists into
+    `(logprob, token_id, text|None)` triples. Entry 0 is therefore `(None, ids[0], None)`, a triple whose logprob is None,
+    not a bare None.
+  - The CPU fake had the same misreading (`[None] + [...]`), so the registered tests passed against a shape the server never
+    sends.
+  - The fix: the scorer reads entry 0 through `_lp`, requires its logprob to be None, and requires its token, when present,
+    to be `prompt[0]`. A bare None is still accepted. The per-position checks on the scored indices are unchanged, and they
+    were never reached on the box. The fake now emits v0.5.20's triple.
+  - CPU tests in `tests/test_sc1_sglang.py`: one reads the triple; it fails on the registered scorer, as do the two
+    existing prefill tests on the corrected fake. One reads a bare None. Two refuse an entry 0 that carries a logprob, or
+    that is for another token. `staged.sha256` is re-pinned.
+  - Why there is no re-run: the prefill-shaped SGLang rows are evidence for no registered prediction. P6's served-vs-prefill
+    pair is e4b's and vLLM's. Every SGLang position reads the served shape, which is VALID. Under box A's QUALITY_FAIL
+    licence (A11 item 2), no SC1 position is quoted in any case. SGLang's served-minus-prefill engagement reading is
+    reported as UNREAD, with this cause. Any later box-C draw runs the fixed scorer.

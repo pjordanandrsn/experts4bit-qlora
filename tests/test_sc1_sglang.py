@@ -3,7 +3,7 @@
 
 The fake speaks the v0.5.20 native-API shapes the drivers rely on (verified at the tag, see the drivers' docstrings):
 /health, /server_info, /flush_cache, /generate (list-of-lists -> list of rows; flat list -> one dict; return_logprob with
-logprob_start_len 0 -> input_token_logprobs with a leading None; token_ids_logprob -> output_token_ids_logprobs;
+logprob_start_len 0 -> input_token_logprobs led by (None, ids[0], None) -- A12; token_ids_logprob -> output_token_ids_logprobs;
 stream=true -> `data: {json}\\n\\n` ... `data: [DONE]\\n\\n`). Its "model" is a deterministic logprob rule of (position, token),
 so every expected number here is computed independently of the driver and pinned exactly.
 
@@ -65,6 +65,7 @@ class FakeState:
         self.empty_first_chunk = False
         self.incremental = False
         self.refuse_max_new_0 = False
+        self.entry0 = "triple"          # A12: v0.5.20's shape | "bare" (a bare None) | "lp" (a logprob where none exists) | "tok"
         self.requests: list[dict] = []
         self.flushes = 0
         self.server_info = {"version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto",
@@ -161,7 +162,12 @@ class Handler(BaseHTTPRequestHandler):
                 # SGLang: the radix match is capped at logprob_start_len, so positions >= start are all computed
                 cached = min(cached, start)
                 meta["cached_tokens"] = cached
-                lps = [None] + [[rule_lp(p, prompt[p]), prompt[p], None] for p in range(start + 1, L)]
+                # v0.5.20 prepends None to the VALUES (logprob_result_processor.py:38), takes the ids from
+                # origin_input_ids[logprob_start_len:] (:50), and zips them (tokenizer_manager.py:2888-2892): entry 0 is
+                # (None, ids[start], None), a triple -- not a bare None (A12; the registered fake had the bare None)
+                e0 = {"triple": [None, prompt[start], None], "bare": None, "lp": [-0.5, prompt[start], None],
+                      "tok": [None, prompt[start] + 1, None]}[STATE.entry0]
+                lps = [e0] + [[rule_lp(p, prompt[p]), prompt[p], None] for p in range(start + 1, L)]
                 meta["input_token_logprobs"] = lps
                 k = int(body.get("top_logprobs_num") or 0)
                 if k > 0:
@@ -560,3 +566,37 @@ def test_a9_sglang_runs_the_gptq_scales_dtype():
     ob = (SGL / "one_batch.sh").read_text()
     assert "--dtype float16" in ob and "bfloat16" not in ob
     assert 'need(info.get("dtype") == "float16"' in SERVER_SH.read_text()
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# A12: the prefill scorer reads entry 0 as v0.5.20 emits it (sc1c-5090-5: both prefill scorings died on the bare-None assert)
+# ---------------------------------------------------------------------------------------------------------------------
+def _prefill(server, tmp_path, entry0):
+    STATE.server_info["disable_radix_cache"] = False
+    STATE.radix_on = True
+    STATE.entry0 = entry0
+    prompt_len, steps = 4, 6
+    ids, w = _write_window(tmp_path, prompt_len, steps)
+    out = tmp_path / f"p_{entry0}.json"
+    rc = nll.main(["--window", str(w), "--mode", "prefill", "--port", str(server), "--out", str(out)])
+    return rc, ids, out
+
+
+def test_a12_prefill_reads_the_v0520_entry0_triple(server, tmp_path):
+    # fails on the registered scorer: `assert lps[0] is None` refuses (None, ids[0], None) -- box C's two prefill rows
+    rc, ids, out = _prefill(server, tmp_path, "triple")
+    assert rc == 0
+    assert json.loads(out.read_text())["mean_nll"] == pytest.approx(expected_mean(ids, 4, 6), abs=1e-12)
+
+
+def test_a12_prefill_still_reads_a_bare_none_entry0(server, tmp_path):
+    rc, ids, out = _prefill(server, tmp_path, "bare")
+    assert rc == 0
+    assert json.loads(out.read_text())["mean_nll"] == pytest.approx(expected_mean(ids, 4, 6), abs=1e-12)
+
+
+@pytest.mark.parametrize("entry0, why", [("lp", "entry 0 must carry no logprob"), ("tok", "entry 0 is for token")])
+def test_a12_prefill_refuses_a_misaligned_entry0(server, tmp_path, entry0, why):
+    # the relaxed check still refuses an off-by-one response: a logprob at position 0, or entry 0 for another token
+    with pytest.raises(AssertionError, match=why):
+        _prefill(server, tmp_path, entry0)

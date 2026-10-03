@@ -1,6 +1,18 @@
 # Changelog
 
 ## Unreleased
+### SC1 amendment A12 (#846): the SGLang prefill scorer reads entry 0 as v0.5.20 emits it -- a (None, id, None) triple, not a bare None (bench and tests only)
+
+- `sc1c-5090-5` (adertha-receipts `94a8f5e`, $1.2626) read every box-C speed arm VALID. Its rc 1 is the two
+  `nll_sglang_prefill_*` scorings, which died on `assert lps[0] is None`. SGLang prepends None to the logprob values and
+  zips them with the ids (`logprob_result_processor.py:38`, `:50`; `tokenizer_manager.py:2888-2892`), so entry 0 is
+  `(None, ids[0], None)`.
+- The scorer now requires entry 0's logprob to be None and its token to be `prompt[0]`. The CPU fake emits the real triple.
+  Four tests are added: the triple test fails on the registered scorer, and two tests refuse a misaligned entry 0.
+  `staged.sha256` is re-pinned.
+- No re-run: the prefill-shaped SGLang rows bear on no registered prediction, and SGLang's served-shape rows are VALID and
+  CLOSE on both texts.
+
 ### P102 read (RTX 5090, #916): DEFAULT=k19 -- TTFT-4096 7.21 s -> 1.37 s (5.25x) at max_seqs 1, with the prefill-shaped NLL within +0.011 / +0.007 ppl of the loop on 12 fresh windows (bench docs and receipts only)
 
 - **Verdict** (`p102_reduce.py`, the registered redraw `p102-5090-6`, Ryzen 9 7900 host, $0.2085): `DEFAULT=k19`.
