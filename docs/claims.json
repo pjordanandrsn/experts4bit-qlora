@@ -7750,6 +7750,35 @@
       "notes": "Pre-registered in #919. P98 (#912) asked the same question and read VOID on a replay fault; P99 (#925) localised it to bucket 1's first replay, and #918 fixed its cause, the MoE engine's single-entry row-to-token index cache. The eager arms reproduce P98's tokens exactly but ran about 2.2x P98's speed on a different host (Ryzen 9 7950X against EPYC 7663): eager hybrid decode is launch-bound, so the graph-over-eager ratio depends on the host CPU and is not claimed for another host. Of the predictions, SUPPORTED, the W1 and W16 bands and the memory bound held; 'graphs at least 3x on both workloads' missed on W16 (2.02x), and 'eager arms within 10 % of P98' missed on the host difference."
     },
     {
+      "id": "e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3.6-35B-A3B",
+      "claim": "Lane P105, one RTX 5090, one host: with flash-linear-attention 0.5.2 and causal-conv1d 1.7.0 installed (transformers resolving its Gated DeltaNet chunk / recurrent rules to fla and its conv fn / update to causal_conv1d), Qwen3.6-35B-A3B through serve_paged.build_engine keeps every bucketed decode graph (1-16) replaying exactly as the padded eager step (all 17 requests), its dense hybrid parity premise holds (within 2x an all-attention control on every one of 8 seeds, real fp8 kernel), and graph decode runs 536.5 tok/s on W16 and 100.7 on W1, 1.135x and 1.118x the torch path's 472.7 / 90.1 on the same box (fla alone 1.111x / 1.097x). SUPPORTED by P98's rule in every phase; recommend.",
+      "value": 1.135001216532143,
+      "unit": "W16 graph-decode tok/s with fla + causal-conv1d over the torch path, same box (111 timed steps, 16 staggered requests)",
+      "hardware": "RTX 5090 (sm_120, driver 595.91.07, 32607 MiB), one rented Vast.ai verified host (machine 152323, instance 53977714, Intel Xeon E5-2696 v4), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @eeffabb + grouped-nf4-gemm @34da93d (v0.34.1); torch 2.8.0+cu128 held by a constraint, triton 3.4.0, transformers 5.17.0, bitsandbytes 0.50.2; three phases on one box -- t transformers' torch path (asserted kernel-free), f + flash-linear-attention==0.5.2, fc + causal-conv1d==1.7.0 -- each with an engagement record and a premise (t: the three pinned hybrid GPU files + test_linear_state_chunk_matched_gpu.py + test_linear_state_dense_parity_gpu.py, 11 passed; f / fc: the graph files + the chunk-matched all-linear test + the dense parity file, 9 passed); P98's measurement at its registered bytes (arms g graphs, e the padded-eager oracle, p plain eager; W16, W1); verdict by bench/p105/p105_reduce.py",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p105/RESULTS-p105.md",
+        "bench/p105/PREREG-p105.md",
+        "bench/p105/p105_reduce.py",
+        "bench/p105/receipts/p105-5090-1/verdict.json",
+        "bench/p105/receipts/p105-5090-1/arm_g_t.json",
+        "bench/p105/receipts/p105-5090-1/arm_g_fc.json",
+        "bench/p105/receipts/p105-5090-1/kernels_fc.json",
+        "bench/p105/receipts/p105-5090-1/logs/premise_fc.log"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/p105-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-03/p105-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #939. P103 (#932) and P104 (#938) stopped at their proving rentals on tests/test_linear_state_gpu.py, whose single-seed tiny-MoE statistic is bimodal across seeds on every kernel set including the torch path (P104); P105 gates on a dense multi-seed parity test instead. Predictions: W16 1.15-1.60x missed (1.135x), W1 1.02-1.15x held, f >= 80 % of fc's gain held (82-83 %), fc plain eager W16 >= 1.15x missed (1.113x). The padded-eager oracle ran 0.87x with the kernels (not explained). The kernels change greedy trajectories (graph tokens agree with the torch path's on 41-57 % of positions); quality against the torch path in nats is not measured. One host (Xeon E5-2696 v4), whose eager arms are slow (launch-bound); the graph arms are near host-independent."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02",
       "package": "experts4bit-qlora",
       "area": "train",

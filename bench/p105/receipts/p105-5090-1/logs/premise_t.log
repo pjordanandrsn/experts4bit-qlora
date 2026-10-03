@@ -1,0 +1,25 @@
+[transformers] `causal_conv1d_fn` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `chunk_gated_delta_rule` is falling back to its reference PyTorch implementation because `flash-linear-attention` is not installed. This is correct but much slower; install `flash-linear-attention` for the optimized kernel.
+[transformers] `causal_conv1d_update` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[transformers] `fused_recurrent_gated_delta_rule` is falling back to its reference PyTorch implementation because `flash-linear-attention` is not installed. This is correct but much slower; install `flash-linear-attention` for the optimized kernel.
+control worst 2.027e-02 tokens True | hybrid worst 2.632e-02 tokens True
+.unpadded-eager agreement: 41 / 41
+.......chunk-matched: control worst 2.027e-02 tokens True | hybrid worst 2.632e-02 tokens True
+.dense seed 0: control worst 2.941e-02 argmax agree 21/21 | hybrid worst 2.577e-02 argmax agree 20/21 | ratio 0.88
+dense seed 1: control worst 3.125e-02 argmax agree 20/21 | hybrid worst 2.759e-02 argmax agree 20/21 | ratio 0.88
+dense seed 2: control worst 2.924e-02 argmax agree 21/21 | hybrid worst 2.724e-02 argmax agree 21/21 | ratio 0.93
+dense seed 3: control worst 2.347e-02 argmax agree 21/21 | hybrid worst 2.861e-02 argmax agree 21/21 | ratio 1.22
+dense seed 4: control worst 2.454e-02 argmax agree 19/21 | hybrid worst 2.523e-02 argmax agree 20/21 | ratio 1.03
+dense seed 5: control worst 2.160e-02 argmax agree 21/21 | hybrid worst 3.421e-02 argmax agree 21/21 | ratio 1.58
+dense seed 6: control worst 2.967e-02 argmax agree 21/21 | hybrid worst 2.299e-02 argmax agree 21/21 | ratio 0.77
+dense seed 7: control worst 4.050e-02 argmax agree 21/21 | hybrid worst 2.533e-02 argmax agree 21/21 | ratio 0.63
+.dense seed 0: control worst 2.744e-02 argmax agree 21/21 | hybrid worst 2.348e-02 argmax agree 20/21 | ratio 0.86
+dense seed 1: control worst 2.761e-02 argmax agree 20/21 | hybrid worst 3.103e-02 argmax agree 20/21 | ratio 1.12
+dense seed 2: control worst 2.899e-02 argmax agree 21/21 | hybrid worst 2.335e-02 argmax agree 21/21 | ratio 0.81
+dense seed 3: control worst 2.622e-02 argmax agree 21/21 | hybrid worst 2.711e-02 argmax agree 21/21 | ratio 1.03
+dense seed 4: control worst 2.649e-02 argmax agree 19/21 | hybrid worst 2.795e-02 argmax agree 19/21 | ratio 1.06
+dense seed 5: control worst 2.376e-02 argmax agree 21/21 | hybrid worst 3.421e-02 argmax agree 21/21 | ratio 1.44
+dense seed 6: control worst 3.358e-02 argmax agree 21/21 | hybrid worst 2.586e-02 argmax agree 21/21 | ratio 0.77
+dense seed 7: control worst 3.378e-02 argmax agree 21/21 | hybrid worst 2.174e-02 argmax agree 21/21 | ratio 0.64
+.
+11 passed in 33.62s

@@ -1,0 +1,32 @@
+{
+ "step": "start",
+ "model": "Qwen/Qwen3.6-35B-A3B",
+ "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+ "offload": false,
+ "load_s": 85.2,
+ "loaded_commit": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+ "read_from": "the modules",
+ "layers": 40,
+ "experts": 256,
+ "snapshot_gib": 16.88,
+ "snapshot_s": 24.6,
+ "bake_s": 30.4,
+ "arena": "/root/p105/work/nf4.arena",
+ "bake_info": {
+  "magic": "gnf4-nvme-arena",
+  "version": 1,
+  "snapshot": "/root/p105/work/nf4snap",
+  "prefix": "model.layers.{layer}.mlp.experts.{expert}.{kind}",
+  "align": 4096,
+  "row_bytes": 1769472,
+  "row_stride": 1769472,
+  "n_layers": 40,
+  "n_experts_per_layer": 256,
+  "segments": "[{'suffix': 'nf4.gate_up_blocks', 'seg_off': 0, 'length': 1048576, 'shape_per_expert': [1024, 1024], 'dtype': 'U8'}, {'suffix': 'nf4.gate_up_absmax', 'seg_off': 1048576, 'length': 131072, 'shape_per_e",
+  "rows": "[[0, 0, 0], [0, 1, 1769472], [0, 2, 3538944], [0, 3, 5308416], [0, 4, 7077888], [0, 5, 8847360], [0, 6, 10616832], [0, 7, 12386304], [0, 8, 14155776], [0, 9, 15925248], [0, 10, 17694720], [0, 11, 1946",
+  "arena_bytes": 18119393280,
+  "bake_mode": "relocate-expert-tensors",
+  "moe_layers": "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]"
+ },
+ "status": "OK"
+}

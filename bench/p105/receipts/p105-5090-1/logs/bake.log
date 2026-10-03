@@ -1,0 +1,20 @@
+Fetching 36 files:   0%|          | 0/36 [00:00<?, ?it/s]Fetching 36 files: 100%|██████████| 36/36 [00:00<00:00, 1199.91it/s]
+[07:05:36]   checkpoint: Qwen/Qwen3.6-35B-A3B @ 995ad96eacd98c81ed38be0c5b274b04031597b0 (requested 995ad96eacd98c81ed38be0c5b274b04031597b0)
+[07:05:36]   untied output head recovered from 'lm_head.weight' (outside the 'model.language_model.' text-tower prefix, which would otherwise drop it)
+[07:05:36]   fusing + quantizing experts (up to 40x256) to nf4 (streaming)...
+[07:06:53]   quantized experts on 40/40 MoE layers (256 experts each)
+[07:06:53]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=40 experts=256
+  shard 0/40  0.4 GiB  1s
+  shard 8/40  3.8 GiB  6s
+  shard 16/40  7.2 GiB  12s
+  shard 24/40  10.5 GiB  16s
+  shard 32/40  13.9 GiB  21s
+expert-tensor bake: L=40 E=256 (baking 256) row=1769472 stride=1769472 total=18.1 GB workers=8
+  2048/10240 rows (4 GB, 2s)
+  4096/10240 rows (7 GB, 4s)
+  6144/10240 rows (11 GB, 6s)
+  8192/10240 rows (14 GB, 7s)
+  10240/10240 rows (18 GB, 9s)
+bake complete: 10240 rows (18.1 GB) in 30s
+BAKE OK

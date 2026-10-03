@@ -30,6 +30,23 @@
 - **Docs.** The `int4_experts.py` Scope note, the knob's docstring, and a `docs/SERVING.md` paragraph citing P100 and
   P102.
 
+### P105 read (RTX 5090): SUPPORTED, recommend -- with flash-linear-attention and causal-conv1d, Qwen3.6's hybrid paged path holds its dense parity premise and replays every decode graph exactly; graph decode 1.135x (W16) / 1.118x (W1) the torch path's on the same host (#928)
+
+- `bench/p105/RESULTS-p105.md`, `bench/p105/receipts/p105-5090-1/`.
+- All three phases SUPPORTED by P98's rule. Graph decode tok/s t / f / fc: W16 472.7 / 525.0 / 536.5, W1 90.1 /
+  98.9 / 100.7. That saves 1.6 ms per step at one row and 3.3 ms at sixteen; fla carries 82-83 % of the gain.
+- Plain eager 1.11-1.12x. The padded-eager oracle ran 0.87x with the kernels (not explained).
+- The kernels change greedy trajectories: 41-57 % positional agreement with the torch path. Quality in nats is not
+  measured.
+- Against the predictions:
+  - held: SUPPORTED + recommend, W1 band, f's share, memory;
+  - missed: W16 band (1.135x below 1.15) and fc plain eager W16 (1.113x below 1.15).
+- The registered consequence:
+  - `docs/SERVING.md` lists the two kernels as supported and recommended (install line, gain, two caveats);
+  - `docs/STATUS.md`;
+  - register row `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`.
+- $0.4280 (proof + reading). The kernel question across P103-P105: $0.6137.
+
 ### P105 registered (#928): the Gated DeltaNet kernels under the hybrid paged path with a premise that is a distribution -- a dense hybrid within its control on every one of 8 seeds (bench and tests)
 
 - `bench/p105/{PREREG-p105.md,p105_run.sh,p105_drive.sh,p105_reduce.py,staged.sha256}`, `tests/test_p105_staged_pin.py`.
