@@ -1,0 +1,8 @@
+e4b 0.40.0 @4287d07a8524e24bba008863739bd2afa89cf959
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+gated-deltanet kernel modules {'fla': False, 'causal_conv1d': False, 'kernels': False}

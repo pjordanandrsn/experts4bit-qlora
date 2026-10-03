@@ -16,6 +16,27 @@
     shipped sits 0.024-0.027 above, its TC1b plateau reproduced.
 - One host (Xeon E5-2698 v4). See `bench/h2h-2026-10-02/tc1/RESULTS-tc1-nativebest.md`.
 
+### P101 read (RTX 5090): SUPPORTED -- on the fixed code, Qwen3.6's bucketed decode graphs all capture and replay through the serving stack bit for bit; 449.0 / 79.7 tok/s (W16 / W1), 2.02x / 3.28x plain eager (#919, #913)
+
+- `bench/p101/receipts/p101-5090-5/`, `bench/p101/RESULTS-p101.md`.
+  - P98's kit at its registered bytes and P98's rule.
+  - e4b at `4287d07`, which includes #918's fix of #913.
+- Every bucket (1, 2, 4, 8, 16) captured and replayed with no eager step (209 replays; bucket 1, the faulting bucket,
+  99). Arm g's tokens equal the padded-eager oracle's on all 17 requests.
+- The eager arms wrote the same tokens as P98's, on another host and an older commit, but ran about 2.2x P98's speed.
+  This box was a Ryzen 9 7950X against P98's EPYC 7663, and eager hybrid decode is launch-bound. The graph-over-eager
+  ratio is therefore not claimed for another host.
+- Against the predictions:
+  - held: SUPPORTED, the W1 band (79.7 in 30-150), W16 above 350, and peak memory 23.76 GB;
+  - missed: "graphs at least 3x on both workloads", on W16 (2.02x), and "eager arms within 10 % of P98", on the host.
+- The registered consequence:
+  - `docs/SERVING.md` cites this lane and lifts its warning against `E4B_PAGED_GRAPHS=1` on hybrid models;
+  - `docs/STATUS.md` adds it;
+  - register row `e4b.serve.p101.qwen36-hybrid-decode-graphs.5090.2026-10-03`.
+- $0.3192 across seven rentals. Five were refused before any lane code ran: four on the pre-flight's 40 MB/s download
+  floor (two slow hosts that were the cheapest offers) and one on a Vast API TLS timeout. Then the proof, and the
+  reading at $0.1937.
+
 ### P99 read (RTX 5090): LOCALISED -- P98's fault repeats at the first bucket-1 replay, also with K25 off; not with one bucket, and not on OLMoE (#913)
 
 - `bench/p99/receipts/p99-5090-1/`, `bench/p99/RESULTS-p99.md`. e4b at `daef38c`, before #918's fix.

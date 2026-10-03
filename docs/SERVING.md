@@ -127,7 +127,7 @@ At B=16 all five decode-graph buckets (1/2/4/8/16) captured and the smoke passed
 `grouping: {device_grouping: true}` at B=16 and the library defaults at B=1. Scope of that evidence: Granite-3.1-3B with
 NF4 experts and the unfused fold set. Qwen3-30B-A3B with int4 experts and `fuse_qkv` first runs in SC1's box-A reading.
 
-**Hybrid models (linear attention; read on an RTX 5090 in lane P97).** `PagedModelRunner` serves models whose
+**Hybrid models (linear attention; read on an RTX 5090 in lanes P97 and P101).** `PagedModelRunner` serves models whose
 `config.layer_types` mixes `full_attention` with Gated DeltaNet `linear_attention` layers: Qwen3.5 / Qwen3.6 MoE and
 Qwen3-Next.
 - **The state.** Each sequence's linear-attention state (the causal-conv window and the recurrent state) lives in a
@@ -150,16 +150,22 @@ Qwen3-Next.
   - the whole model tracks transformers' forward at 4.43e-3 nats, argmax agreement 0.972 (OLMoE through the same
     harness: 7.15e-3, 0.974);
   - a slot-mapping mutant reads 4.05 nats.
+- **Decode graphs (lane P101, [`bench/p101/RESULTS-p101.md`](../bench/p101/RESULTS-p101.md), SUPPORTED).**
+  `E4B_PAGED_GRAPHS=1` serves hybrid models.
+  - On one RTX 5090, Qwen3.6-35B-A3B through `build_engine` captured every decode bucket (1, 2, 4, 8, 16) and
+    replayed them with no eager step. The graph arm's tokens equal the padded eager step's on all 17 requests.
+  - W16 (16 staggered requests) decoded at 449.0 tok/s and W1 (one request) at 79.7, 2.02x and 3.28x plain eager,
+    on a Ryzen 9 7950X host. Eager hybrid decode is launch-bound, so its speed, and the ratio, depend on the host
+    CPU: P98's EPYC 7663 host ran the same eager arms at about half the speed.
+  - The per-slot state is gathered and scattered through the bound bucket's device selector, and the pool is warmed
+    and frozen before capture. `tests/test_hybrid_decode_graphs_gpu.py` pins replay against the padded eager step bit
+    for bit, on an sm_89+ card.
+  - Before the fix, the replays faulted. P98 ([`bench/p98/RESULTS-p98.md`](../bench/p98/RESULTS-p98.md), VOID) hit a
+    device-side assert during W16, which P99 ([`bench/p99/RESULTS-p99.md`](../bench/p99/RESULTS-p99.md)) localised to
+    bucket 1's first replay.
+  - The cause was the MoE engine's single-entry row-to-token index cache: a later bucket's capture warm-up freed the
+    index an earlier bucket's graph still read. It is fixed in #918 (#913), with a reproduction test on a non-hybrid NF4 MoE.
 - **Not yet done:**
-  - decode graphs for hybrid models are now captured, but **on Qwen3.6 their replay faults**. P98
-    ([`bench/p98/RESULTS-p98.md`](../bench/p98/RESULTS-p98.md), VOID) captured every bucket, and the first replays hit
-    a device-side assert (`index_select` out of range); the same padded steps run eagerly were fine. The cause was the
-    MoE engine's row-to-token index cache, which affects any NF4 MoE under bucketed graphs, not hybrids alone. It is
-    fixed (#913), with a reproduction test, but not yet re-read on a GPU, so do not set `E4B_PAGED_GRAPHS=1` for a
-    hybrid model until that reading. The per-slot state is gathered and scattered
-    through the bound bucket's device selector, and the pool is warmed and frozen before capture.
-    `tests/test_hybrid_decode_graphs_gpu.py` pins replay against the padded eager step bit for bit, on an sm_89+
-    card. P97 ran eagerly;
   - the Gated DeltaNet layers run whatever kernels transformers finds (`fla` / `causal_conv1d`), or its torch path.
-    P97 read the torch path, at 830 ms per 4-row step: not a serving speed.
+    P97 read the torch path, at 830 ms per 4-row step, eagerly; P101's graphs replay the same torch path.
   - Only Qwen3.6 has been read on a GPU.
