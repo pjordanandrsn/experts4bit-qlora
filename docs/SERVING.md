@@ -153,8 +153,10 @@ Qwen3-Next.
 - **Not yet done:**
   - decode graphs for hybrid models are now captured, but **on Qwen3.6 their replay faults**. P98
     ([`bench/p98/RESULTS-p98.md`](../bench/p98/RESULTS-p98.md), VOID) captured every bucket, and the first replays hit
-    a device-side assert (`index_select` out of range); the same padded steps run eagerly were fine. Do not set
-    `E4B_PAGED_GRAPHS=1` for a hybrid model until that is localised. The per-slot state is gathered and scattered
+    a device-side assert (`index_select` out of range); the same padded steps run eagerly were fine. The cause was the
+    MoE engine's row-to-token index cache, which affects any NF4 MoE under bucketed graphs, not hybrids alone. It is
+    fixed (#913), with a reproduction test, but not yet re-read on a GPU, so do not set `E4B_PAGED_GRAPHS=1` for a
+    hybrid model until that reading. The per-slot state is gathered and scattered
     through the bound bucket's device selector, and the pool is warmed and frozen before capture.
     `tests/test_hybrid_decode_graphs_gpu.py` pins replay against the padded eager step bit for bit, on an sm_89+
     card. P97 ran eagerly;

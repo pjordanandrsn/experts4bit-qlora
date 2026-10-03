@@ -841,7 +841,25 @@ class _HotResidency:
     # partition-free all-hot fast path. The baseline `forward` body is
     # untouched when this is False.
     dispatch_diet = False
-    _rt_cache = None
+    _rt_cache = None                # {(T, k, device): (row_token, row_slot)}; see _row_index
+
+    def _row_index(self, T, k, dev):
+        """``(row_token, row_slot)`` for ``T`` tokens of ``k`` experts: built once per (T, k, device) and KEPT for the
+        module's life. A captured CUDA graph reads these by address and holds no reference to them, and
+        ``PagedModelRunner.enable_decode_graphs`` warms each bucket eagerly before capturing it. A single-entry cache
+        freed the earlier bucket's index when the next bucket warmed up, and once the allocator handed that block out
+        again the earlier bucket's replay gathered token rows through garbage (#913, lane P98: an out-of-range
+        ``index_select`` at bucket 1). Bounded by the distinct row counts a model sees: the decode buckets plus the
+        prefill chunk lengths, each a few KB."""
+        c = self._rt_cache
+        if c is None:
+            c = self._rt_cache = {}
+        key = (int(T), int(k), str(dev))
+        hit = c.get(key)
+        if hit is None:
+            rt = torch.arange(T * k, device=dev) // k
+            hit = c[key] = (rt, torch.arange(T * k, device=dev) - rt * k)
+        return hit
 
     # B1c collapse (PREREG-b1c, the BRANCH-2 optimization): when the
     # PLACEMENT is all-VRAM, the token-critical path runs no dispatch
@@ -1071,13 +1089,7 @@ class _HotResidency:
         `sum(dim=1)` the baseline runs. Same kernel, same row order,
         same per-cell values ⇒ bitwise-equal output — the on-box G1
         gate holds this claim to account."""
-        c = self._rt_cache
-        if c is None or c[0] != (T, k):
-            rt = torch.arange(T * k, device=dev) // k
-            rs = torch.arange(T * k, device=dev) - rt * k
-            self._rt_cache = ((T, k), rt, rs)
-        else:
-            rt = c[1]
+        rt = self._row_index(T, k, dev)[0]
         gptoss = ((self.h_gu_b, self.h_dn_b, self.alpha, self.limit)
                   if self.gptoss else None)
         # K23 (E4B_INT4_LEAN_GLUE auto / 1): hand over the token rows; the (token, slot) expansion is made inside only
@@ -1126,14 +1138,7 @@ class _HotResidency:
           every (token, slot) cell written exactly once in row-major
           order, the scatter is a reshape.
         """
-        c = self._rt_cache
-        if c is None or c[0] != (T, k):
-            rt = torch.arange(T * k, device=dev) // k
-            rs = torch.arange(T * k, device=dev) - rt * k
-            self._rt_cache = ((T, k), rt, rs)
-        else:
-            rt, rs = c[1], c[2]
-        row_token, row_slot = rt, rs
+        row_token, row_slot = self._row_index(T, k, dev)
         hot_row = self.is_hot[flat]                            # [T*k] bool
         n_cold, cr, hr = _partition_by_mask(hot_row)
 

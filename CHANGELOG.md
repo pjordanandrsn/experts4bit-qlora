@@ -19,6 +19,36 @@
   token ids, the arms and their order, the tripwire strings against the library, the timed requests unwrapped, the
   exit codes, the dry run.
 
+### Bucketed decode graphs on an NF4 MoE no longer replay against a freed row-to-token index (#913; the cause of P98's replay fault)
+
+- **The bug.** `_HotResidency._forward_collapsed` (the all-VRAM path) and `_forward_diet` cached `rt`, the token each
+  expert row reads, in a single-entry cache keyed by row count.
+  - `PagedModelRunner.enable_decode_graphs` warms each bucket eagerly and then captures it, in ascending order. Each
+    bucket's warm-up therefore freed the previous bucket's `rt`, while that bucket's graph still read the address: a
+    CUDA graph keeps no reference to the tensors it reads.
+  - Once the caching allocator handed the block out again (on the warm-ups' side stream), an earlier bucket's replay
+    gathered token rows through whatever was there.
+  - At T == 1, and at every T with K25 off, the gather is `x.index_select(0, rt)`. P98 hit it as an out-of-range
+    assert at bucket 1. **With in-range garbage it is silent:** wrong token rows, no error.
+- **The fix.** `_HotResidency._row_index(T, k, dev)` builds `(row_token, row_slot)` once per (T, k, device) and keeps
+  them for the module's life, a few KB per distinct row count.
+- **Test** (`tests/test_rt_cache_graph_gpu.py`, any CUDA card). K25 off; buckets 2 and 4 captured as
+  `enable_decode_graphs` captures them; the warm-ups' side stream handed zero-filled blocks; bucket 2 replays new
+  inputs and must equal eager bit for bit. On the NAS A2000:
+  - **with the fix reverted it fails**: max abs 1.77e-2, silent;
+  - with the fix it passes, and so do 27 neighbouring expert-engine GPU tests.
+
+  A first version churned the default stream and passed either way; it was corrected before use.
+- **Scope.** Any bucketed-graph serving of an NF4 MoE through the all-resident collapse ran this cache before now,
+  not only hybrid models. Six earlier lanes ran bucketed decode graphs on an MoE:
+  - **P80, P81, B771b and P82** (Qwen3-30B-A3B; `step_decomp` graph buckets 1–16) ran the cache at commits where every
+    bucket read `rt`. The lean glue arrived later, in v0.38.0. Each lane's registered graph-vs-padded-eager token gate
+    held bitwise in all 16 rows, so the fault did not show in their outputs, and their claims stand.
+  - **SC1** recorded speed only, from `serve_paged`.
+  - **P98** hit the fault.
+
+  `docs/SERVING.md`'s hybrid warning stays until a lane re-reads P98's question on the card.
+
 ### P99 amendment 1 (#913): the OLMoE arm's answer reads "Qwen3.6-specific"; two mechanisms ruled out at $0 on the A2000 (bench docs only)
 
 - `bench/p99/PREREG-p99.md`, before the launch. OLMoE differs from Qwen3.6 in more than the hybrid state (64 vs 256
