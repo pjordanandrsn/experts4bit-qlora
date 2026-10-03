@@ -1,6 +1,24 @@
 # Changelog
 
 ## Unreleased
+### E4B_PAGED_PREFILL_ATTN defaults to flash (#960, lane P107's DEFAULT=flash): a 4096-token prefill's attention on the flash kernel in bf16 instead of SDPA's fp32 math backend -- device time 906 -> 378 ms on an RTX 5090
+
+- **What changes.** A paged prefill chunk on a layer without sinks or a sliding window now passes SDPA the lower-right
+  causal mask as `causal_lower_right(T, t_total)` with `enable_gqa`, which the flash kernel takes. It used to pass an
+  explicit boolean mask, which with GQA lands on the fp32 math backend.
+  - `E4B_PAGED_PREFILL_ATTN=math` restores the old path.
+  - Layers with sinks or a sliding window are unchanged.
+  - Where no fused kernel applies (CPU, older GPUs, head dims flash does not take), SDPA serves the same mask itself.
+- **The read** (`bench/p107/RESULTS-p107.md`, #971; RTX 5090, Qwen3-30B-A3B, the calibrated K8 rule on a
+  served-prefill NLL, 12 fresh windows): flash - math = -0.014 / -0.008 ppl (PASS). TTFT-4096 fell from 1.984 s to
+  1.742 s (1.14x) on a CPU-bound host, with device time down from 906 ms to 378 ms. First tokens were identical in
+  every timed draw.
+- **Scope:** read on Qwen3-30B-A3B. For other families with plain full-attention layers, the route's CPU equivalence
+  tests cover the arithmetic; no reading does.
+- `docs/SERVING.md` gains a "Prefill attention" note. `tests/test_paged_prefill_attn_route.py` and
+  `tests/test_p107_staged_pin.py` pin the new default; P107's own runner refuses at this commit by design (its tripwire
+  asserted the old default).
+
 ### P107 read (RTX 5090, #960): DEFAULT=flash -- a 4096-token prefill's device time 906 -> 378 ms; TTFT-4096 1.984 -> 1.742 s (1.14x) on a CPU-bound host; served-prefill NLL within -0.014 / -0.008 ppl of math on 12 fresh windows (bench docs and receipts only)
 
 - **Verdict** (`p107_reduce.py`, the first full draw `p107-5090-3`, AMD EPYC 7663 host, $0.1634): `DEFAULT=flash`, no

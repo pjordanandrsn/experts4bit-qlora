@@ -145,7 +145,9 @@ def test_the_order_the_premise_and_the_tripwire():
 def test_the_tripwire_strings_are_the_librarys_code():
     pa = (REPO / "experts4bit_qlora" / "engines" / "paged_attention.py").read_text()
     assert 'PREFILL_ATTN_ROUTES = ("math", "flash")' in pa
-    assert 'os.environ.get("E4B_PAGED_PREFILL_ATTN", "math")' in pa
+    # P107 read DEFAULT=flash (#971) and the default is now flash; P107's own tripwire (default reads "math") refuses at
+    # any later commit by design -- the lane is read and closed. What stays pinned is the knob and its routes.
+    assert 'os.environ.get("E4B_PAGED_PREFILL_ATTN", "flash")' in pa
     assert "attn_mask=causal_lower_right(T, t_total), scale=scaling, enable_gqa=True" in pa
     hr = (REPO / "experts4bit_qlora" / "engines" / "hot_residency.py").read_text()
     assert 'os.environ.get("E4B_INT4_PREFILL", "auto")' in hr

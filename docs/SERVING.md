@@ -124,8 +124,26 @@ layer.
   `DEFAULT=k19`: TTFT-4096 7.21 s → 1.37 s and TTFT-512 0.85 s → 0.11 s. The prefill-shaped NLL stayed within +0.011 /
   +0.007 ppl of the loop on 12 fresh windows (the calibrated K8 rule).
 - With `max_seqs > 1`, prefill rows have always taken the M-tile; `auto` moves them to K19 too.
-- **What remains of a k19 prefill:** about 45 % of its device time is prefill attention in fp32 without tensor cores.
-  Not yet addressed.
+- **What remained of a k19 prefill:** about 45 % of its device time was prefill attention in fp32 without tensor
+  cores. The next paragraph covers it.
+
+**Prefill attention (#960; lane P107).** For a layer without sinks or a sliding window, the paged prefill used to hand
+SDPA an explicit boolean lower-right mask with `enable_gqa`. With fewer KV heads than query heads, that combination
+rules out the flash and memory-efficient kernels, so SDPA ran its fp32 math backend.
+- **`E4B_PAGED_PREFILL_ATTN` picks the route:**
+  - `flash` (the default since P107): the same mask as `causal_lower_right(T, t_total)`, which the flash kernel takes in
+    bf16. Where no fused kernel applies, SDPA serves the bias itself with the same mask.
+  - `math`: the explicit boolean mask (SDPA's fp32 math backend).
+- Layers with sinks or a sliding window keep the explicit mask under either value.
+- **P107** ([`bench/p107/RESULTS-p107.md`](../bench/p107/RESULTS-p107.md), RTX 5090, Qwen3-30B-A3B) read
+  `DEFAULT=flash`:
+  - a 4096-token prefill's device time fell from 906 ms to 378 ms;
+  - TTFT-4096 fell from 1.98 s to 1.74 s on a CPU-bound EPYC host, where the GPU then idles for most of a prefill;
+  - the served-prefill NLL stayed within −0.014 / −0.008 ppl of `math` on 12 fresh windows (the calibrated K8 rule).
+- The read covers Qwen3-30B-A3B. Other families with plain full-attention layers are covered by the route's CPU
+  equivalence tests (`tests/test_paged_prefill_attn_route.py`), not by a reading.
+- **What remains:** host-side launch overhead. About 50,000 device-to-device copies per 4096-token prefill remain under
+  both routes.
 
 **Limits, stated:** greedy only (`temperature` must be 0 or absent -- a nonzero value is a 400, not
 ignored); no `logprobs`, `echo`, `n > 1`, stop strings or penalties (400s); `ignore_eos`,
