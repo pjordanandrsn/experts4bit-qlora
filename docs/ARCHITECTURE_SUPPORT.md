@@ -86,6 +86,32 @@ CUDA-graph capture is untested for the family (CPU probe).
 reads those `gate_up` rows. Loading only the routed experts is not a fix: the router keeps
 selecting over the full space. Supporting it needs an identity slot in the expert primitive.
 
+**`qwen3_5_moe` / `qwen3_next` — which modules stay bf16**
+([#899](https://github.com/pjordanandrsn/experts4bit-qlora/issues/899)). On these hybrid families only the routed
+experts, and on request the full-attention projections, are stored in 4-bit.
+
+On Qwen3.6-35B-A3B, the TC2 training census (`TRAIN_ATTN_4BIT=1`) recorded:
+- **4-bit:** 40 `Experts4bit` stacks, and 40 `Linear4bit` projections (q/k/v/o of the 10 full-attention layers).
+- **bf16, 311 `Linear`:**
+  - the 30 Gated DeltaNet layers' five projections each (`in_proj_qkv`, `in_proj_z`, `in_proj_b`, `in_proj_a`,
+    `out_proj`);
+  - the 40 shared experts' gate/up/down and their `shared_expert_gate`;
+  - `lm_head`.
+
+That is about 1.14 B parameters: ~2.3 GB in bf16 against ~0.64 GB in NF4, so ~1.6 GB of extra VRAM. With TC1's
+926 M-parameter adapter set, e4b's fused path OOMs resident on a 32 GB card where Unsloth, which quantizes these
+modules, fits at 30.47 GB. About 1.6 GB of that gap is this coverage difference. Under expert offload e4b fits at
+19.35 GB.
+
+**In serving** (`serve_paged`, lanes P98–P106), the routed experts are the NF4 arena and the engine reports
+`int4_attn_projections: 0`. So the attention projections, the Gated DeltaNet projections and the shared experts all
+run in bf16.
+
+**The bf16 default is deliberate, and unmeasured as a trade.** NF4 error in a Gated DeltaNet input projection feeds a
+recurrent state that carries it across every later token, and the shared expert sits on every token's path. No reading
+has priced either in nats. An opt-in that quantizes them would need a KL reading against the bf16 default, as P97 did
+for the fp8 KV, before it could be offered.
+
 **Rows that changed after re-running against real checkpoints:** `deepseek_v2` and `qwen3_next`
 moved from *broken* to *validated*, and `deepseek_v3` from *broken* to *blocked*. Only
 `ernie4_5_moe` survived as a real defect — closed 2026-09-18 by the MTP drop (#529, 0.36.1).

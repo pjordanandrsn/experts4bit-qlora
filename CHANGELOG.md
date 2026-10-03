@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Docs: which Qwen3.6 / Qwen3-Next modules stay bf16, and what that costs (#899)
+
+- `docs/ARCHITECTURE_SUPPORT.md` gains a `qwen3_5_moe` / `qwen3_next` note.
+  - Only the routed experts, and on request (`TRAIN_ATTN_4BIT=1`) the full-attention projections, are 4-bit.
+  - The Gated DeltaNet projections, the shared experts and their gates, and `lm_head` stay bf16: about 1.14 B
+    parameters and ~1.6 GB of VRAM over NF4 on Qwen3.6-35B-A3B (TC2's census).
+  - In serving, the attention projections stay bf16 as well.
+- The default is kept and stated as deliberate but unpriced. An opt-in would need a KL reading against it first.
+
 ### P106 read (RTX 5090): NEUTRAL -- against transformers' torch path, the Gated DeltaNet kernels cost Qwen3.6 nothing measurable in nats (KL 5.7e-3 prefill / 4.9e-3 decode, d_nll within +-0.001); prefill TTFT 1.10-1.12x (#944)
 
 - `bench/p106/RESULTS-p106.md`, `bench/p106/receipts/p106-5090-1/` (one RTX 5090, Intel Core Ultra 9 285K; $0.2559,
