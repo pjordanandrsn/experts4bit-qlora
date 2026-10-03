@@ -341,3 +341,31 @@ Request-level serving (SC2); gpt-oss-20b on identical MXFP4 bytes (SC1g); covera
        test runs the driver's own `pull_box` under the system bash.
   CPU tests: `tests/test_sc1_a10.py` (13, with the scheduler driver's own self-test now 25 cases; every test of a fix fails on the registered drivers, and the 48/49-offload control passes on both), four new reducer self-test cases on the corrected fixture (which VOIDs under the registered rule), and the amended proof-needs test. Box B re-proves at A10's merge and re-runs there (`sc1b-5090-2`). Box A (`sc1a-5090-2`, at
   `32d424e`, launched before A10) runs none of items 1–3, 5, 6 or 8 (its controller started on the registered driver); item 4 applies when its receipts are reduced; its scheduler reading is the registered wall slope, labelled (item 7). Box C re-proves at A10's merge and re-runs there (`sc1c-5090-2`): its first draw returned nothing.
+- **A11 (2026-10-03T03:50Z; read-time, the reducer only; receipts `sc1b-5090-3` (adertha-receipts `8b4e2c9`) and `sc1a-5090-2` (`db915fc`)).**
+  Box B's run at A10's merge started every llama.cpp server through the registered checks. Its scheduler arms read STABLE
+  with A10's decode-only estimator. Reducing it alongside box A exposed four places where the reducer read differently from
+  the registration. Each change has a self-test case that fails when the change is reverted. No box re-runs.
+  1. **llama.cpp's engagement lines are read from the server log.** The reducer grepped the arm's log for `offloaded N/N
+     layers to GPU`, `flash_attn = enabled` and `n_slots`. Those lines are in `logs/llamacpp_server_*.log`, whose path each
+     receipt records as `server_log`. Box B's server log reads 49/49, enabled, `n_slots = 1` / `16`. The self-test fixture
+     had put the lines in the arm log, so every engaged llama.cpp row VOIDed. The reducer now reads the named server log
+     beside the arm log.
+  2. **Box A's licence blocks boxes B and C too.** The registration: "QUALITY_FAIL → … no position is quoted from the RTN
+     rows either (P58's headline is not restored by a side door)". Boxes B and C are ratioed to RTN anchors, and the reducer
+     had applied the block on box A only. The cross-box read now carries box A's licence onto every position on B and C.
+     Box A's licence read QUALITY_FAIL on both draws (`sc1a-5090-1`, `sc1a-5090-2`). So SC1 quotes no position on any box.
+     Every ratio is reported as a measurement, labelled.
+  3. **Quality rows measured on one box are carried to the others.** e4b's served/prefill rows run on box A only
+     (`k8_lic_auto_*`, `nll_e4b_prefill_*`). The bf16 oracle runs on box B only; the registration says box A's "whole
+     delta_bf16 axis depends on it". Yet every box's rows are read against them. The cross-box read now copies a row into a
+     box that lacks it, from the box that measured it VALID, only on an identical window (same `text_sha`), labelled with its
+     source. It then recomputes delta_pair, delta_bf16 and the bands. Box A's e4b rows are its licensed pack: the e4b stand-in
+     that B's and C's RTN anchors substitute for under the substitution licence (P12). The self-test fixture had given boxes
+     B and C e4b quality rows the box script never produces. It now has a case without them.
+  4. **P13 reads the measured anchor ratios.** The registration: "The three boxes' vLLM/e4b anchor ratios are reported side
+     by side (expected within 5 %; a larger gap is a host finding)". That is a ratio of two engines' measured speeds on one
+     box, wherever both arms are VALID and stable. The reducer had read only *quoted* positions, a choice of the reducer and
+     not of the registration. That gated a host-agreement check on quality comparability and the licence, and under
+     QUALITY_FAIL made it unreadable by construction. P13 now reads the measured ratios, with the quotation flag beside.
+     *This reading of P13 is a judgment under the owner's delegation; it is flagged for review.*
+
