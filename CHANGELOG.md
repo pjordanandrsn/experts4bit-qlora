@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 21 — keeping MoE activations steps e4b at 0.835 / 0.926 on a 5090 (P35, P36, P37 HELD)
+
+- **What.** `tc1-5090-52` (AMD EPYC 7C13, $0.35) ran e4b against itself with whole-layer gradient checkpointing against
+  `E4B_MOE_KEEP_LAYERS=n` with `NF4_QLORA_COMPACT_DELTA=1`.
+- **Shipped arm**, 32 of 48 layers kept: **0.835** [0.823, 0.849], peak 24.58 → 29.09 GB.
+- **Matched arm**, 16 kept: **0.926** [0.920, 0.932], peak 27.14 → 29.40 GB.
+- **Memory and quality.** About 141 MB per kept layer. Held-out moved within +0.0037 / +0.0014. All eight arms VALID.
+- **Decision.** By the registered rule it is the recommended setting where the headroom exists (README "Which door?",
+  `docs/CHOOSING.md`), and it stays opt-in. Register `e4b.train.moe-keep.qwen3.5090.2026-10-04`; read page
+  `bench/h2h-2026-10-02/tc1/RESULTS-tc1-keepab.md`.
+
 ### Reads: TC1 amendment 20 (host reuse, 0.933 / 0.951 on a 5090) and TC1c amendment 1 (H100 NVL, Unsloth/e4b 0.817)
 
 - **TC1 amendment 20** (`tc1-5090-51`, AMD EPYC 7C13, $0.36). grouped-nf4-gemm's per-pass host reuse (`GNF4_HOST_REUSE`, #444,

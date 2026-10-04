@@ -28,6 +28,19 @@ check it.** A zero means `grouped-nf4-gemm` is missing and you are silently on t
 path; `dgrad=True` on a kernel cut too old for it is turned off with a `RuntimeWarning`, not
 an error.
 
+**It trains with `enable_fast_train`, there is spare VRAM, and the step should be faster.**
+Set `E4B_MOE_KEEP_LAYERS=n` (or `all`) and grouped-nf4-gemm's `NF4_QLORA_COMPACT_DELTA=1` before `enable_fast_train`.
+Hugging Face gradient checkpointing recomputes each decoder layer whole, so every MoE forward runs twice. In the last n checkpointed
+layers this checkpoints attention only and keeps the MoE activations: the same gradients (`torch.equal`), less device and host work,
+more memory. On one RTX 5090 at TC1's field recipe on Qwen3-30B-A3B (`e4b.train.moe-keep.qwen3.5090.2026-10-04`):
+
+- 32 of 48 layers kept on the shipped arm stepped at **0.835** of the default, at +4.5 GB of peak (24.6 → 29.1 GB);
+- 16 kept on the matched arm stepped at **0.926**, at +2.3 GB (27.1 → 29.4 GB).
+
+That is about 141 MB of peak per kept layer at that recipe's largest micro-batch. Size n to the headroom you have, and assert
+`enable_fast_train`'s count: the setting rides it, and `disable_fast_train` unwinds it. Without the compact delta a kept layer saves
+its padded LoRA blocks too, up to 4x the memory. With gradient checkpointing off, there is nothing to keep, and it changes nothing.
+
 **It trains, but each step is slow — and `[fast]` will not build.**
 `enable_batched_train(model)` (no extra: stock torch + bitsandbytes). The kernel-free lane:
 one whole-stack dequant in place of the per-expert loop. It is the fallback for an arch

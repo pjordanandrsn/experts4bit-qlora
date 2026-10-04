@@ -9245,6 +9245,30 @@
         "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-3/tc1/"
       ],
       "notes": "The current matched position against Unsloth on the H100 class; e4b.train.h2h.unsloth.qwen3.h100.2026-10-02 (0.621) stands for the code before #945. The profiled arms on this box: e4b device-busy 0.665 (was 0.562) at 97,851 device events and 619,192 CPU-side ops per step (was 139,181 / 744,465); Unsloth 0.305 at 81,780 / 515,750 -- e4b now spends ~2.4x Unsloth's device time per step, which is the remaining gap on sm_90. axolotl trained on this box (one VALID draw, axolotl/e4b 1.299, a reported row); HF + PEFT hit its alarm again."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.moe-keep.qwen3.5090.2026-10-04",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 21 (#945), one rented RTX 5090 (tc1-5090-52): keeping the MoE activations of the last n decoder layers instead of recomputing them under gradient checkpointing (E4B_MOE_KEEP_LAYERS=n, e4b#1007, with grouped-nf4-gemm's NF4_QLORA_COMPACT_DELTA=1, #445; gradients identical by construction) steps the Qwen3-30B-A3B field recipe at 0.835 [0.823, 0.849] x whole-layer checkpointing on the shipped arm with 32 of 48 layers kept (2.536 / 2.536 against 3.083 / 2.989 s; peak 24.58 -> 29.09 GB) and 0.926 [0.920, 0.932] x on the matched arm with 16 kept (3.642 / 3.600 against 3.908 / 3.914 s; peak 27.14 -> 29.40 GB); about 141 MB of peak per kept layer; mean held-out at N within +0.0037 / +0.0014 (bound 0.005); every pair stable; energy per step lower. Engagement verified per arm (keep_ab: exactly 32 / 16 layers kept with the compact delta on, none on keep0). P35, P36 and P37 HELD: by the registered decision rule it is the recommended setting for cards with the headroom, and it stays opt-in. e4b against itself on one host: no cross-framework position is restated from it.",
+      "value": 0.835,
+      "unit": "ratio s/step, MoE activations kept / whole-layer checkpointing, shipped arm with 32 of 48 layers kept (medians of steps 11..20 over two draws each; < 1 = faster); matched arm with 16 kept 0.926 [0.920, 0.932]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-52: instance 54100315, AMD EPYC 7C13, driver 580.95.05); e4b @ 65d3fc1 on torch 2.8.0+cu128, grouped-nf4-gemm @ 1e41298",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; token qwen3keepab; E4B_MOE_KEEP_LAYERS unset vs 32 (shipped) / 16 (matched) with NF4_QLORA_COMPACT_DELTA=1, every other default in force (post-#945 sync path, trimmed LoRA delta, cost tile rule, fused RMSNorm and rotary; grouped-nf4-gemm's host reuse off on both sides at this pin), shipped arm (bf16 expert adapters, native init) and matched arm (fp32 adapters, matched:3407), two draws each in ABBA order; validity and scoring by bench/tc1/tc1_reduce.py (engagement predicates on keep_ab, lean_ab and sync_ab)",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-keepab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-52/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-52/tc1/"
+      ],
+      "notes": "Within-box A/B; a memory-for-time trade at a stated layer count. The A2000 slice predicted ~121 MB per kept layer; the 5090 measured ~141 MB at this fixture's largest micro-batch (1,110 padded tokens)."
     }
   ]
 }

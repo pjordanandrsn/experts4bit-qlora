@@ -209,6 +209,10 @@ within 0.0021.
 **And the host reuse** (`e4b.train.host-reuse.qwen3.5090.2026-10-04`, TC1 amendment 20): grouped-nf4-gemm reusing repeated index
 uploads and the LoRA plan inside each MoE layer pass (#444, values identical) steps it at **0.933** (shipped) and **0.951**
 (matched) of before on one 5090, held-out unchanged; on by default since grouped-nf4-gemm#446.
+**And keeping MoE activations** (`e4b.train.moe-keep.qwen3.5090.2026-10-04`, TC1 amendment 21): checkpointing attention only in the
+last n layers instead of whole layers (`E4B_MOE_KEEP_LAYERS` with grouped-nf4-gemm's compact delta, gradients identical) steps it at
+**0.835** with 32 of 48 layers kept (shipped, +4.5 GB) and **0.926** with 16 kept (matched, +2.3 GB) on one 5090 — opt-in, the
+recommended setting where that headroom exists (`docs/CHOOSING.md`); the cross-framework positions are quoted with the defaults.
 **With all of that, the steady-state ordering flipped** (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`, TC1 amendments 16 and 18, two hosts):
 over steps 101..200 of the same 200-step run, axolotl's scattermoe / e4b as shipped is **1.238 [1.231, 1.246]**
 on an EPYC 7663 host and **1.146 [1.129, 1.164]** on an EPYC 7C13 host -- **e4b as shipped now steps 15-24 % faster at steady state**, finishes 200 steps in about
