@@ -1096,6 +1096,24 @@ tc1_bmmab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_tv0_d2 && draw2              $FAM e4b fused_attn4_shipped_tv0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_samestack_family FAM MID REV FETCH_AL E4B_AL UNS_AL REF_AL -- TC1 amendment 25 (2026-10-04): TC1's matched set with both frameworks on one
+# stack -- e4b's anchor, its second draw and its reference in venv-unsloth (torch 2.12.1+cu130, transformers 5.5.0: TC1's t212 install), Unsloth as
+# TC1 -- and e4b's matched arm in venv-e4b (the field image) as _t28, two draws, the environment pair read ABBA around Unsloth's draws.
+tc1_samestack_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 RAL=$7
+  local ALL="e4b:fused_attn4_m:fused unsloth:ckpt_unsloth_m:unsloth e4b:reference_attn4_m:reference e4b:fused_attn4_m_t28:fused e4b:fused_attn4_m_t28_d2:fused unsloth:ckpt_unsloth_m_d2:unsloth e4b:fused_attn4_m_d2:fused"
+  say "===== SAME-STACK family $FAM ($MID @ $REV; e4b and Unsloth both in venv-unsloth, e4b's field-image arm beside it; amendment 25)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
+  can_run 600 $FAM/e4b/fused_m        && E4B_VENV=t212 arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m          && arm                 $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 900 $FAM/e4b/reference_m    && E4B_VENV=t212 arm   $FAM e4b reference_attn4_m reference $RAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/fused_m_t28    && arm                 $FAM e4b fused_attn4_m_t28 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/fused_m_t28_d2 && draw2               $FAM e4b fused_attn4_m_t28 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m_d2       && draw2               $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 600 $FAM/e4b/fused_m_d2     && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_routebench_family FAM ALARM -- TC1c amendment 3 (2026-10-04): a kernel-route replay, not a training run. grouped-nf4-gemm's
 # fused NF4 grouped GEMM (forward and dgrad) against a whole-stack bitsandbytes dequantize_4bit + torch._grouped_mm on the
 # recorded real-router calls of e4b's training step (routecalls-qwen3.json, staged by TC1_EXTRA_STAGE with route_bench.py; no
@@ -1281,6 +1299,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3keepab) tc1_keepab_family qwen3keepab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 21 (#945)
   qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 22
   qwen3bmmab)  tc1_bmmab_family  qwen3bmmab  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 24: bmm replay + venv-e4b vs venv-unsloth
+  qwen3samestack) tc1_samestack_family qwen3samestack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1 amendment 25: both frameworks on one stack
   mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 22 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3memcensus) tc1_memcensus_family qwen3memcensus Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 23 (fetch 5400, e4b 3600, Unsloth 3600)
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
