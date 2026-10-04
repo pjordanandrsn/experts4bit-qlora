@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### TC1 amendment 22 registered: grouped-nf4-gemm's dense route against its fused kernels, A/B on one RTX 5090 (P38–P40) (bench and tests only)
+
+- **Why.** TC2 amendment 7's box D read e4b's reference loop (each expert dequantized, then a dense GEMM) on Mixtral-8x7B at
+  4.69 s/step against the fused kernels' 5.52 s. An RTX A2000 replay of the expert GEMMs timed the dense path at 0.13–0.58 of
+  the fused kernels' time at large groups. grouped-nf4-gemm#459 adds the opt-in `GNF4_TRAIN_GEMM=dense`.
+- **The box.** Two tokens on one RTX 5090, each the matched arm with `GNF4_TRAIN_GEMM=fused` against `=dense`, two draws a side
+  in ABBA order:
+  - `qwen3denseab`: Qwen3-30B-A3B on TC1's recipe and tokens;
+  - `mixtraldenseab`: Mixtral-8x7B-Instruct at TC2's pin, field recipe and tokens, resident, with `E4B_ABSMAX_DQ=1` on both sides.
+- **Engagement.** Each arm's `route_ab` record must show the route its tag names: dense forward and dgrad calls counted on the
+  dense side, no dense forward on the fused side, and on Mixtral `absmax_dq` on both. A side that misses reads VOID.
+- **Predictions.** P38: Mixtral dense/fused s/step in [0.55, 0.90]. P39: Qwen3-30B-A3B in [0.85, 1.15]. P40: on each family the
+  two routes' mean held-out at N within 0.01.
+- **Decision.** P38 and P40 HELD: grouped-nf4-gemm's `auto` takes the dense route off sm_90 for calls with at most 16 present
+  groups. P39 HELD at or below 0.95: dense for every group count. Otherwise fused stays for that family.
+- **Harness.** `tc1_run.sh` gains both families (no Unsloth venv on either token). `tc1_reduce.py` gains the registration,
+  the engagement predicate and the P38–P40 scorer; its self-test goes from 70 to 75 cases. `bench/tc1/TC1-PREREG.md`
+  amendment 22.
+
 ### Lane K29's runner (grouped-nf4-gemm#71): what a pinned host byte costs a cgroup v2 container (bench and tests only)
 
 - **Why.** grouped-nf4-gemm#457 models pinned-tier sizing as PyTorch's power-of-two rounding (measured on cgroup v1),

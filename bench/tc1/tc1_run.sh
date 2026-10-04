@@ -99,6 +99,8 @@ esac
 # TC1-PREREG amendment 3 (2026-10-02): the qwen3axolotl token runs no Unsloth arm, so it builds neither Unsloth venv (~15 min of box time
 # on the TC1 boxes); every other token builds both as before.
 NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab "|" routebench "|" fusedsweep ") NEED_UNSLOTH=0;; esac
+# TC1 amendment 22: the dense-route A/B tokens run no Unsloth arm either -- alone, or both on their one box (in either order)
+case " $FAMILIES " in " qwen3denseab "|" mixtraldenseab "|" qwen3denseab mixtraldenseab "|" mixtraldenseab qwen3denseab ") NEED_UNSLOTH=0;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
@@ -978,6 +980,39 @@ tc1_keepab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_keep0_d2  && TC1_ARM_EXTRA_ENV="$OLD"      draw2 $FAM e4b fused_attn4_shipped_keep0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_denseab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 22 (2026-10-04): grouped-nf4-gemm's dense training GEMM route
+# (GNF4_TRAIN_GEMM=dense, gnf4#459: one present expert dequantized at a time, its GEMM through torch.mm) against its fused 4-bit kernels
+# (=fused), on the matched arm only (fp32 adapters, matched init), two draws a side in ABBA order, every other setting the default.
+# GNF4_SHA must carry the route (gnf4#459); each receipt's route_ab record names the route in force and the dense_fwd / dense_dgrad counts.
+tc1_denseab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_dense0:fused e4b:fused_attn4_m_dense1:fused e4b:fused_attn4_m_dense1_d2:fused e4b:fused_attn4_m_dense0_d2:fused"
+  say "===== DENSE-ROUTE A/B family $FAM ($MID @ $REV; gnf4's fused 4-bit kernels vs its dense route, matched arm, amendment 22)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local OLD="GNF4_TRAIN_GEMM=fused" NEW="GNF4_TRAIN_GEMM=dense"
+  can_run 600 $FAM/e4b/m_dense0     && TC1_ARM_EXTRA_ENV="$OLD" arm   $FAM e4b fused_attn4_m_dense0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_dense1     && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_m_dense1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_dense1_d2  && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_m_dense1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_dense0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_m_dense0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
+# tc1_mixtral_denseab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 22 (2026-10-04): the same A/B on Mixtral-8x7B-Instruct at TC2's pin
+# and field recipe (N 20, 8 held-out rows at 0 and N), prepared as tc2_big_family prepares mixtral (tc1_prepare: the pinned Alpaca text,
+# the alpaca template, seq $SEQ, $EVAL_N held-out rows -- so the tokens and held-out rows are TC2's own), every e4b arm RESIDENT (--offload 0)
+# with E4B_ABSMAX_DQ=1 on BOTH sides: the double-quantized expert absmax leaves room for the dense route's one-expert transient (235 MB at
+# gate_up). Each receipt records absmax_dq beside its route_ab record.
+tc1_mixtral_denseab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_dense0:fused e4b:fused_attn4_m_dense1:fused e4b:fused_attn4_m_dense1_d2:fused e4b:fused_attn4_m_dense0_d2:fused"
+  say "===== DENSE-ROUTE A/B family $FAM ($MID @ $REV; resident, E4B_ABSMAX_DQ=1 both sides; gnf4's fused 4-bit kernels vs its dense route, matched arm, amendment 22)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local OLD="GNF4_TRAIN_GEMM=fused E4B_ABSMAX_DQ=1" NEW="GNF4_TRAIN_GEMM=dense E4B_ABSMAX_DQ=1"
+  can_run 600 $FAM/e4b/m_dense0     && TC1_ARM_EXTRA_ENV="$OLD" arm   $FAM e4b fused_attn4_m_dense0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_dense1     && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_m_dense1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_dense1_d2  && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_m_dense1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_dense0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_m_dense0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_routebench_family FAM ALARM -- TC1c amendment 3 (2026-10-04): a kernel-route replay, not a training run. grouped-nf4-gemm's
 # fused NF4 grouped GEMM (forward and dgrad) against a whole-stack bitsandbytes dequantize_4bit + torch._grouped_mm on the
 # recorded real-router calls of e4b's training step (routecalls-qwen3.json, staged by TC1_EXTRA_STAGE with route_bench.py; no
@@ -1161,6 +1196,8 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3rmsab) tc1_rmsab_family qwen3rmsab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 15 (#945)
   qwen3reuseab) tc1_reuseab_family qwen3reuseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 20 (#945)
   qwen3keepab) tc1_keepab_family qwen3keepab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 21 (#945)
+  qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 22
+  mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 22 (TC2's mixtral pin, fetch 7200, e4b 3600)
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
   fusedsweep)  tc1_fusedsweep_family fusedsweep 2400;;   # TC1c amendment 5: a fused-kernel config replay (no model)
   qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 5400 4800;;   # TC1 amendment 8

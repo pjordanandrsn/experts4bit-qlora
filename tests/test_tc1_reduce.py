@@ -384,6 +384,23 @@ def test_amendment_21_registers_the_moe_keep_token():
     assert R.keep_ab_why("fused_attn4_m_keep0", {}).startswith("no keep_ab record")
 
 
+def test_amendment_22_registers_the_dense_route_tokens():
+    R = _mod()
+    assert (R.QDENSE_FAM, R.MDENSE_FAM) == ("qwen3denseab", "mixtraldenseab") and R.QDENSE_FAM in R.FAMS and R.MDENSE_FAM in R.FAMS
+    assert (R.N_LAYERS[R.QDENSE_FAM], R.N_LAYERS[R.MDENSE_FAM]) == (48, 32) and (R.ATTN_CENSUS[R.QDENSE_FAM], R.ATTN_CENSUS[R.MDENSE_FAM]) == (192, 128)
+    assert R.DENSE_BANDS == {"P38": (0.55, 0.90), "P39": (0.85, 1.15)} and R.DENSE_HELDOUT_MAX == 0.01
+    assert R.DENSE_PINS[R.MDENSE_FAM] == ("mistralai/Mixtral-8x7B-Instruct-v0.1", "eba92302a2861cdc0098cc54bc9f17cb2c47eb61") == R.TC2_MODELS["mixtral"][:2]
+    assert R.DENSE_PINS[R.QDENSE_FAM] == ("Qwen/Qwen3-30B-A3B", "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39")
+    for fam in R.DENSE_FAMS:
+        assert R.anchor_of(fam) == ("e4b", "fused_attn4_m_dense0") and "fused_attn4_m_dense1_d2" in R.MATCHED
+        assert R.registered_draw2(fam, ("e4b", "fused_attn4_m_dense1")) == ("e4b", "fused_attn4_m_dense1_d2")
+    F = {fam: R.reduce_family(fam, R._dense_set(fam), {}, 20) for fam in R.DENSE_FAMS}
+    assert [(p, v) for p, _, v, _ in R.score_denseab(F)] == [("P38", "HELD"), ("P39", "HELD"), ("P40", "HELD")]
+    assert R.dense_ab_why(R.QDENSE_FAM, "fused_attn4_m_dense0", {}).startswith("no route_ab record")
+    assert "absmax_dq true" in R.dense_ab_why(R.MDENSE_FAM, "fused_attn4_m_dense0", {"route_ab": {"gnf4_train_gemm": "fused", "stats": {"dense_fwd": 0}}})
+    assert R.dense_ab_why(R.QDENSE_FAM, "fused_attn4_m_dense0", {"route_ab": {"gnf4_train_gemm": "fused", "stats": {"dense_fwd": 0}}}) == ""
+
+
 def test_amendment_12_registers_the_profile_token():
     R = _mod()
     assert R.PROF945_FAM == "qwen3prof945" and R.PROF945_FAM in R.FAMS and R.EXPECTED[R.PROF945_FAM] == list(R.PROF945_ARMS)

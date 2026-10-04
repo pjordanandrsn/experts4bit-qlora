@@ -860,3 +860,50 @@ with that headroom (README and STATUS). Any other reading leaves it documented a
 
 Budget: one RTX 5090, $0.69/h GPU ceiling (the offer's price; 320 GB of disk is billed on top, as on every TC1 box), 1.5 h cap, under
 $1.30 with disk; the standing no-ask tier.
+
+### Amendment 22 (2026-10-04T16:15Z, before any box): grouped-nf4-gemm's dense route against its fused kernels, A/B on one RTX 5090, Qwen3-30B-A3B and Mixtral-8x7B (P38–P40)
+
+**Why.** TC2 amendment 7's box D (`tc1-5090-55`) read e4b's reference loop on Mixtral-8x7B at 4.69 s/step against the fused kernels'
+5.52 s on the same box. The reference loop dequantizes each expert and runs a dense GEMM. An RTX A2000 replay of the expert GEMMs then
+showed grouped-nf4-gemm's fused 4-bit kernels far from efficient at large groups:
+
+| shapes | forward, dense/fused | dgrad, dense/fused |
+|---|---|---|
+| Mixtral, 1,024 rows per expert | 0.29–0.30 | 0.13–0.14 |
+| Qwen3-30B-A3B, 256 rows per expert | 0.57–0.58 | 0.22 |
+
+The fused forward was ahead only at Qwen3's down projection with 64 rows. grouped-nf4-gemm#459 adds `GNF4_TRAIN_GEMM=dense`, an
+opt-in route that dequantizes one present expert at a time and multiplies with `torch.mm` on any CUDA card. This amendment reads
+it on the full training step.
+
+**The box.** One RTX 5090 with two A/B families, each a matched arm (fp32 adapters, matched init) in two draws a side, in ABBA order.
+Side 0 sets `GNF4_TRAIN_GEMM=fused`; side 1 sets `GNF4_TRAIN_GEMM=dense`. Everything else is the default.
+
+- `qwen3denseab`: Qwen3-30B-A3B, TC1's qwen3 token's tokens and recipe.
+- `mixtraldenseab`: Mixtral-8x7B-Instruct at TC2's field recipe, resident, with `E4B_ABSMAX_DQ=1` on both sides. That leaves room
+  for the dense route's one-expert transient (235 MB at gate_up); box D read 29.03 GB with it.
+
+grouped-nf4-gemm is pinned at #459's merge. Engagement is read off each arm's `route_ab` record: side 1 counts `dense_fwd` and
+`dense_dgrad` calls, side 0 counts none.
+
+**Predictions** (registered before the box):
+
+- **P38** (Mixtral): dense/fused s/step lies in **[0.55, 0.90]**, both sides stable. The expert GEMMs dominate this step, and the
+  reference loop already reads 0.85.
+- **P39** (Qwen3-30B-A3B): dense/fused s/step lies in **[0.85, 1.15]**. This is a wide band on purpose: the device time falls, but
+  the loop adds one launch per present expert per projection (up to 128) to a 5090 step that is launch-bound.
+- **P40:** on each family, |mean held-out at N, dense − fused| ≤ **0.01**. Both routes share the dequant bytes and differ only in the
+  GEMM's accumulation order.
+
+Each is FALSIFIED outside its band, and UNTESTED where a side is unstable or not engaged.
+
+**Decision rules.**
+
+- **P38 and P40 HELD:** grouped-nf4-gemm's `auto` takes the dense route on cards other than sm_90 for calls with at most 16 present
+  groups (Mixtral's case, not Qwen3-30B-A3B's). That is grouped-nf4-gemm's own PR, citing this box.
+- **P39 HELD with the ratio at or below 0.95:** `auto` takes dense for every group count on non-sm_90 cards.
+- **Otherwise:** fused stays for that family.
+- No position against another framework is read here. A position follows in its own box once `auto` changes.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, a 192 GB host floor (Mixtral's checkpoint). About $2.50 with the
+download; the standing no-ask tier; the campaign's daily cap is $100, counted 9 am to 9 am Central.

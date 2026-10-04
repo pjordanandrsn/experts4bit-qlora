@@ -417,6 +417,52 @@ def keep_ab_why(tag, r):
     return "" if not bad else f"MoE-keep A/B not engaged ({', '.join(bad)}; record {ka})"
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 22: grouped-nf4-gemm's dense route vs its fused kernels
+QDENSE_FAM = "qwen3denseab"       # GNF4_TRAIN_GEMM=fused (side 0) vs =dense (side 1, gnf4#459) on the matched arm, every other default
+MDENSE_FAM = "mixtraldenseab"     # the same on Mixtral-8x7B-Instruct at TC2's pin and field recipe, resident, E4B_ABSMAX_DQ=1 on both sides
+DENSE_FAMS = (MDENSE_FAM, QDENSE_FAM)                    # scored in this order: P38 (Mixtral), P39 (Qwen3-30B-A3B), then P40 over both
+DENSE_ARM = "fused_attn4_m"       # each family's one arm: <arm>_dense0 vs <arm>_dense1, two draws a side in ABBA order
+DENSE_PREDS = {MDENSE_FAM: ("P38", "Mixtral-8x7B"), QDENSE_FAM: ("P39", "Qwen3-30B-A3B")}
+DENSE_BANDS = {"P38": (0.55, 0.90), "P39": (0.85, 1.15)}   # dense1 / dense0 s/step on stable pairs
+DENSE_HELDOUT_MAX = 0.01          # P40: |mean held-out at N over the dense1 draws - over the dense0 draws| on each family
+DENSE_ALL_GROUPS_AT_OR_BELOW = 0.95   # amendment 22's decision rule: P39 HELD at or below this makes `auto` dense for every group count
+DENSE_PINS = {QDENSE_FAM: ("Qwen/Qwen3-30B-A3B", "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39"), MDENSE_FAM: TC2_MODELS["mixtral"][:2]}   # mixtral: TC2's pin
+FAMS += [QDENSE_FAM, MDENSE_FAM]
+NAMES[QDENSE_FAM] = "Qwen3-30B-A3B (amendment 22: grouped-nf4-gemm's fused 4-bit kernels vs its dense route, matched arm)"
+NAMES[MDENSE_FAM] = "Mixtral-8x7B-Instruct-v0.1 (amendment 22: grouped-nf4-gemm's fused 4-bit kernels vs its dense route, matched arm, resident, E4B_ABSMAX_DQ=1)"
+N_LAYERS.update({QDENSE_FAM: 48, MDENSE_FAM: 32})
+ATTN_CENSUS.update({QDENSE_FAM: 192, MDENSE_FAM: 128})
+for _fam in DENSE_FAMS:
+    FAM_ANCHOR[_fam] = ("e4b", f"{DENSE_ARM}_dense0")
+    EXPECTED[_fam] = [("e4b", f"{DENSE_ARM}_dense0"), ("e4b", f"{DENSE_ARM}_dense1"), ("e4b", f"{DENSE_ARM}_dense1_d2"), ("e4b", f"{DENSE_ARM}_dense0_d2")]
+MATCHED |= {f"{DENSE_ARM}_dense0", f"{DENSE_ARM}_dense1", f"{DENSE_ARM}_dense0_d2", f"{DENSE_ARM}_dense1_d2"}
+for _side in ("dense0", "dense1"):
+    DRAW2[("e4b", f"{DENSE_ARM}_{_side}")] = ("e4b", f"{DENSE_ARM}_{_side}_d2")
+
+
+def dense_ab_why(fam, tag, r):
+    """Amendment 22's engagement predicate, read off the arm's `route_ab` record (grouped-nf4-gemm's nf4_route.ROUTE_STATS for the process):
+    a dense1 arm ran with the route resolved to `dense` and counted dense forward AND dense dgrad calls; a dense0 arm ran `fused` and counted
+    no dense forward (a record without the `dense_fwd` counter -- grouped-nf4-gemm before #459 -- cannot show that); on mixtral both sides
+    also ran with the double-quantized expert absmax (the receipt's `absmax_dq`). Empty string = engaged."""
+    r = r or {}
+    ra = r.get("route_ab")
+    if not isinstance(ra, dict):
+        return "no route_ab record on the receipt: the training GEMM route this arm took cannot be verified"
+    st = ra.get("stats") or {}
+    if "_dense1" in tag:
+        checks = [("gnf4_train_gemm dense", ra.get("gnf4_train_gemm") == "dense"), ("dense_fwd > 0", (st.get("dense_fwd") or 0) > 0),
+                  ("dense_dgrad > 0", (st.get("dense_dgrad") or 0) > 0)]
+    else:
+        checks = [("gnf4_train_gemm fused", ra.get("gnf4_train_gemm") == "fused"), ("dense_fwd 0", st.get("dense_fwd") == 0)]
+    if fam == MDENSE_FAM:
+        checks.append(("absmax_dq true", r.get("absmax_dq") is True))
+    bad = [k for k, ok in checks if not ok]
+    if not bad:
+        return ""
+    return f"dense-route A/B not engaged ({', '.join(bad)}; record {ra}" + (f"; absmax_dq {r.get('absmax_dq')!r}" if fam == MDENSE_FAM else "") + ")"
+
+
 def lean_ab_why(tag, r):
     """Amendment 13's engagement predicate: the arm ran the delta body its tag names, by its own record, and the padded path -- the only
     one the switch touches -- served the delta. Empty string = engaged."""
@@ -719,6 +765,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         mid, rev, _ = TC2_MODELS[fam]
         if r.get("model") not in (None, mid) or r.get("revision") not in (None, rev):
             why.append(f"model/revision {r.get('model')} @ {str(r.get('revision'))[:12]} != the registered pin {mid} @ {rev[:12]}")
+    if fam in DENSE_PINS:                                                # amendment 22: each dense-route family's pin (mixtral: TC2's)
+        mid, rev = DENSE_PINS[fam]
+        if r.get("model") not in (None, mid) or r.get("revision") not in (None, rev):
+            why.append(f"model/revision {r.get('model')} @ {str(r.get('revision'))[:12]} != the registered pin {mid} @ {rev[:12]}")
     if not c1_ok(r) or r.get("status") == "c1_failed":
         why.append("C1 not clean" if r.get("status") != "c1_failed" else "C1 FAILED (the arm's own status)")
         if not r.get("C1_control_tensor"):
@@ -845,6 +895,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == KEEP_FAM and fw == "e4b":                 # amendment 21: ... and the layers-kept setting its tag names, on the trimmed delta
         w = keep_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam in DENSE_FAMS and fw == "e4b":              # amendment 22: the training GEMM route its tag names (mixtral: on the double-quantized absmax)
+        w = dense_ab_why(fam, r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -1524,6 +1578,55 @@ def score_keepab(F):
         out.append(("P37", KEEP_FAM, "HELD" if held else "FALSIFIED",
                     "; ".join(f"{n}: keep1 peak {v[0]:.2f} GB (<= {KEEP_PEAK_MAX_GB}), mean held-out keep1 - keep0 {v[1]:+.4f} (|.| <= {KEEP_HELDOUT_MAX}); {e}"
                               for n, v, e in p37)))
+    return out
+
+
+def score_denseab(F):
+    """TC1-PREREG amendment 22, on the mixtraldenseab / qwen3denseab tokens: P38 (Mixtral) and P39 (Qwen3-30B-A3B) -- grouped-nf4-gemm's
+    dense route steps at dense1 / dense0 within DENSE_BANDS[pid], the median over two VALID draws a side with each side's draws within 5 %;
+    P40 -- on each family the two sides' mean held-out at N agree within DENSE_HELDOUT_MAX. Outside FALSIFIED; a missing, non-VALID (a side
+    the engagement predicate voided) or unstable side UNTESTED. P40 is one reading over both families: FALSIFIED when either family is read
+    outside the bound, else UNTESTED while either family is unread, else HELD."""
+    if not any(fam in F for fam in DENSE_FAMS):
+        return []
+    out, p40 = [], []
+    for fam in DENSE_FAMS:
+        pid, name = DENSE_PREDS[fam]
+        R = F.get(fam)
+        if not R:
+            out.append((pid, fam, "UNTESTED", f"{name}: no {fam} receipts in this directory"))
+            p40.append((fam, None, "no receipts"))
+            continue
+        D0, D1 = R["draws"].get(("e4b", f"{DENSE_ARM}_dense0"), {}), R["draws"].get(("e4b", f"{DENSE_ARM}_dense1"), {})
+        if not (D0.get("usable") and D1.get("usable") and D0.get("draws") == 2 and D1.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("dense0", D0), ("dense1", D1)))
+            out.append((pid, fam, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            p40.append((fam, None, why))
+            continue
+        ratio_ = D1["s"] / D0["s"]
+        cross = [n / o for n in D1["s_list"] for o in D0["s_list"]]
+        lo, hi = DENSE_BANDS[pid]
+        h0, h1 = D0.get("heldout_list") or [], D1.get("heldout_list") or []
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        p40.append((fam, dq, f"held-out at N dense0 {[round(v, 4) for v in h0 if v is not None]} dense1 {[round(v, 4) for v in h1 if v is not None]}"))
+        r1 = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == ("e4b", f"{DENSE_ARM}_dense1")), None) or {}
+        stats = (r1.get("route_ab") or {}).get("stats") or {}
+        rule = ""
+        if fam == QDENSE_FAM:
+            rule = (f"; at or below {DENSE_ALL_GROUPS_AT_OR_BELOW} (the decision rule's every-group-count reading)" if ratio_ <= DENSE_ALL_GROUPS_AT_OR_BELOW
+                    else f"; above {DENSE_ALL_GROUPS_AT_OR_BELOW} (fused stays at every group count on this family)")
+        out.append((pid, fam, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+                    f"{name}: dense1 / dense0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}{rule}; "
+                    f"s/step dense0 {D0['s_list'][0]:.3f} / {D0['s_list'][1]:.3f} (within {100 * D0['stability']:.1f}%), dense1 {D1['s_list'][0]:.3f} / {D1['s_list'][1]:.3f} "
+                    f"(within {100 * D1['stability']:.1f}%); peak dense0 {f(D0.get('peak'), 2)} / dense1 {f(D1.get('peak'), 2)} GB; "
+                    f"dense1 route counts (process) {json.dumps(stats, sort_keys=True)}"))
+    ev = "; ".join(f"{fam}: " + (f"mean held-out dense1 - dense0 {d:+.4f} (|.| <= {DENSE_HELDOUT_MAX}); {e}" if d is not None else e) for fam, d, e in p40)
+    if any(d is not None and abs(d) > DENSE_HELDOUT_MAX for _, d, _ in p40):
+        out.append(("P40", "denseab", "FALSIFIED", ev))
+    elif any(d is None for _, d, _ in p40):
+        out.append(("P40", "denseab", "UNTESTED", ev))
+    else:
+        out.append(("P40", "denseab", "HELD", ev))
     return out
 
 
@@ -2721,6 +2824,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_keepab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if any(fam in F for fam in DENSE_FAMS):
+        out += ["\n## Predictions P38 / P39 / P40 (TC1-PREREG amendment 22: grouped-nf4-gemm's dense route vs its fused kernels, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_denseab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -3001,6 +3109,30 @@ def _keep_set(ship=((5.00, 5.05), (4.40, 4.42)), match=((5.30, 5.33), (4.90, 4.9
                 R[("e4b", tag)]["peak_vram_gb"] = peak1 if on else 27.2
     for r in R.values():
         r["fam"] = KEEP_FAM
+    return R
+
+
+def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1536), dense_dgrad=(0, 1536), absmax=(True, True), held_shift=0.0, drop_route=False):
+    """Amendment 22: e4b against itself on one family's matched arm -- (dense0 draws, dense1 draws) s/step; `routes` = the route each side's
+    record resolved; `dense_fwd` / `dense_dgrad` = each side's process counts (None drops the counter, as grouped-nf4-gemm before #459);
+    `absmax` = each side's absmax_dq; `held_shift` moves the dense1 side's held-out at N; `drop_route` removes the route_ab record."""
+    d0 = d0 or ((5.50, 5.52) if fam == MDENSE_FAM else (5.30, 5.33))
+    d1 = d1 or ((4.10, 4.12) if fam == MDENSE_FAM else (4.95, 4.97))
+    R = {}
+    for i_side, (side, ss) in enumerate((("dense0", d0), ("dense1", d1))):
+        for i, sfx in enumerate(("", "_d2")):
+            tag = f"{DENSE_ARM}_{side}{sfx}"
+            held = 1.8000 + (held_shift if side == "dense1" else 0.0)
+            r = (_tc2_receipt("mixtral", "e4b", tag, "fused", s=ss[i], heldout_n=held) if fam == MDENSE_FAM
+                 else _receipt("e4b", tag, "fused", s=ss[i], heldout_n=held))
+            stats = {"fwd": 0, "dgrad": 0}
+            for k, v in (("dense_fwd", dense_fwd[i_side]), ("dense_dgrad", dense_dgrad[i_side])):
+                if v is not None:
+                    stats[k] = v
+            r["route_ab"] = None if drop_route else {"gnf4_train_gemm": routes[i_side], "gnf4_train_gemm_env": routes[i_side], "gnf4_has_route": True, "stats": stats}
+            r["absmax_dq"] = absmax[i_side]
+            r["fam"] = fam
+            R[("e4b", tag)] = r
     return R
 
 
@@ -4107,6 +4239,101 @@ def selftest():
     assert reduce_family(KEEP_FAM, _keep_set(compact="0"), {}, 20)["verdicts"][("e4b", "fused_attn4_m_keep1")] == "VOID"
     text = render(KF, "x")
     assert "## Predictions P35 / P36 / P37" in text and "| P35 | qwen3keepab | **HELD** |" in text and "| P37 | qwen3keepab | **HELD** |" in text
+    cases += 1
+    # 63. amendment 22: grouped-nf4-gemm's dense route vs its fused kernels on both families -- every arm VALID when it took the route its tag
+    #     names (mixtral: with the double-quantized absmax), P38 / P39 HELD inside their bands, P40 HELD on matching held-out; the printer's table
+    def DF(m=None, q=None):
+        return {MDENSE_FAM: reduce_family(MDENSE_FAM, m if m is not None else _dense_set(MDENSE_FAM), {}, 20),
+                QDENSE_FAM: reduce_family(QDENSE_FAM, q if q is not None else _dense_set(QDENSE_FAM), {}, 20)}
+
+    def pd(m=None, q=None):
+        return {p: v for p, _, v, _ in score_denseab(DF(m, q))}
+    DD = DF()
+    for fam in DENSE_FAMS:
+        assert [(x["fw"], x["tag"]) for x in DD[fam]["rows"]] == EXPECTED[fam]
+        assert all(x["verdict"] == "VALID" for x in DD[fam]["rows"]), [(fam, x["tag"], x["verdict"], x["why"]) for x in DD[fam]["rows"]]
+    PD = {p: (fam, v, ev) for p, fam, v, ev in score_denseab(DD)}
+    assert [p for p, _, _, _ in score_denseab(DD)] == ["P38", "P39", "P40"]
+    assert PD["P38"][:2] == (MDENSE_FAM, "HELD") and "dense1 / dense0 0.746 [" in PD["P38"][2] and '"dense_dgrad": 1536' in PD["P38"][2], PD["P38"]
+    assert PD["P39"][:2] == (QDENSE_FAM, "HELD") and "dense1 / dense0 0.933 [" in PD["P39"][2] and "every-group-count reading" in PD["P39"][2], PD["P39"]
+    assert PD["P40"][1] == "HELD" and "mixtraldenseab: mean held-out dense1 - dense0 +0.0000" in PD["P40"][2], PD["P40"]
+    assert pd(q=_dense_set(QDENSE_FAM, d1=(5.10, 5.12))) == {"P38": "HELD", "P39": "HELD", "P40": "HELD"}           # 0.961: HELD, fused stays at every group count
+    assert "fused stays at every group count" in score_denseab(DF(q=_dense_set(QDENSE_FAM, d1=(5.10, 5.12))))[1][3]
+    assert pd(m=_dense_set(MDENSE_FAM, held_shift=0.009)) == {"P38": "HELD", "P39": "HELD", "P40": "HELD"}          # 0.009 <= 0.01
+    text = render(DD, "x")
+    assert ("## Predictions P38 / P39 / P40" in text and "| P38 | mixtraldenseab | **HELD** |" in text and "| P39 | qwen3denseab | **HELD** |" in text
+            and "| P40 | denseab | **HELD** |" in text), text[-1500:]
+    cases += 1
+    # 64. amendment 22, each band edge: P38 FALSIFIED below 0.55 and above 0.90, P39 FALSIFIED below 0.85 and above 1.15; P40 FALSIFIED on a
+    #     0.02 held-out shift on either family (the speed readings unchanged)
+    assert pd(m=_dense_set(MDENSE_FAM, d1=(2.90, 2.92))) == {"P38": "FALSIFIED", "P39": "HELD", "P40": "HELD"}       # 0.528
+    assert pd(m=_dense_set(MDENSE_FAM, d1=(5.10, 5.12))) == {"P38": "FALSIFIED", "P39": "HELD", "P40": "HELD"}       # 0.927
+    assert pd(q=_dense_set(QDENSE_FAM, d1=(4.40, 4.42))) == {"P38": "HELD", "P39": "FALSIFIED", "P40": "HELD"}       # 0.829
+    assert pd(q=_dense_set(QDENSE_FAM, d1=(6.20, 6.22))) == {"P38": "HELD", "P39": "FALSIFIED", "P40": "HELD"}       # 1.168
+    assert pd(m=_dense_set(MDENSE_FAM, held_shift=0.02)) == {"P38": "HELD", "P39": "HELD", "P40": "FALSIFIED"}
+    assert pd(q=_dense_set(QDENSE_FAM, held_shift=-0.02)) == {"P38": "HELD", "P39": "HELD", "P40": "FALSIFIED"}
+    lo_ev = score_denseab(DF(m=_dense_set(MDENSE_FAM, d1=(2.90, 2.92))))[0][3]
+    print("FAILING-CASE A22-P38 (reducer):", lo_ev[:120])
+    print("FAILING-CASE A22-P40 (reducer):", score_denseab(DF(m=_dense_set(MDENSE_FAM, held_shift=0.02)))[2][3][:120])
+    cases += 1
+    # 65. amendment 22, instability and missing sides: a dense1 side whose draws differ by > 5 % is UNSTABLE (P38 UNTESTED and P40 UNTESTED
+    #     with the other family still read), a missing second draw UNMEASURED, a family absent from the directory UNTESTED
+    DU = DF(m=_dense_set(MDENSE_FAM, d1=(4.10, 4.40)))
+    assert DU[MDENSE_FAM]["draws"][("e4b", "fused_attn4_m_dense1")]["verdict"] == "UNSTABLE"
+    assert {p: v for p, _, v, _ in score_denseab(DU)} == {"P38": "UNTESTED", "P39": "HELD", "P40": "UNTESTED"}
+    print("FAILING-CASE A22-unstable (reducer):", score_denseab(DU)[0][3][:160])
+    Q = _dense_set(QDENSE_FAM)
+    del Q[("e4b", "fused_attn4_m_dense0_d2")]
+    assert pd(q=Q) == {"P38": "HELD", "P39": "UNTESTED", "P40": "UNTESTED"}
+    assert DF(q=Q)[QDENSE_FAM]["draws"][("e4b", "fused_attn4_m_dense0")]["verdict"] == "UNMEASURED"
+    only_q = {QDENSE_FAM: reduce_family(QDENSE_FAM, _dense_set(QDENSE_FAM), {}, 20)}
+    assert {p: v for p, _, v, _ in score_denseab(only_q)} == {"P38": "UNTESTED", "P39": "HELD", "P40": "UNTESTED"}
+    assert score_denseab({}) == [] and "## Predictions P38 / P39 / P40" not in render({}, "x")
+    cases += 1
+    # 66. amendment 22, engagement: a side that did not take the route its tag names reads VOID with the reason and its prediction UNTESTED --
+    #     a dense1 side with no dense dgrad, a dense1 side resolved to fused, a dense0 side resolved to dense or counting dense forwards, a dense0
+    #     record without the dense_fwd counter (grouped-nf4-gemm before #459), a receipt without a route_ab record
+    def void_why(fam, R, tag):
+        F1 = reduce_family(fam, R, {}, 20)
+        return F1["verdicts"][("e4b", tag)], next(x["why"] for x in F1["rows"] if x["tag"] == tag)
+    v, why = void_why(QDENSE_FAM, _dense_set(QDENSE_FAM, dense_dgrad=(0, 0)), "fused_attn4_m_dense1")
+    assert v == "VOID" and "dense-route A/B not engaged (dense_dgrad > 0;" in why, why
+    print("FAILING-CASE A22-engagement (reducer):", why[:160])
+    assert pd(q=_dense_set(QDENSE_FAM, dense_dgrad=(0, 0))) == {"P38": "HELD", "P39": "UNTESTED", "P40": "UNTESTED"}
+    v, why = void_why(QDENSE_FAM, _dense_set(QDENSE_FAM, routes=("fused", "fused"), dense_fwd=(0, 0), dense_dgrad=(0, 0)), "fused_attn4_m_dense1_d2")
+    assert v == "VOID" and "gnf4_train_gemm dense, dense_fwd > 0, dense_dgrad > 0" in why, why
+    v, why = void_why(MDENSE_FAM, _dense_set(MDENSE_FAM, routes=("dense", "dense")), "fused_attn4_m_dense0")
+    assert v == "VOID" and "gnf4_train_gemm fused" in why and "dense_fwd 0" not in why, why
+    v, why = void_why(MDENSE_FAM, _dense_set(MDENSE_FAM, dense_fwd=(64, 1536)), "fused_attn4_m_dense0_d2")
+    assert v == "VOID" and "(dense_fwd 0;" in why, why
+    assert pd(m=_dense_set(MDENSE_FAM, dense_fwd=(64, 1536))) == {"P38": "UNTESTED", "P39": "HELD", "P40": "UNTESTED"}
+    v, why = void_why(QDENSE_FAM, _dense_set(QDENSE_FAM, dense_fwd=(None, 1536)), "fused_attn4_m_dense0")
+    assert v == "VOID" and "dense_fwd 0" in why, why
+    v, why = void_why(QDENSE_FAM, _dense_set(QDENSE_FAM, drop_route=True), "fused_attn4_m_dense0")
+    assert v == "VOID" and "no route_ab record" in why, why
+    assert dense_ab_why(QDENSE_FAM, "fused_attn4_m_dense1", {}).startswith("no route_ab record")
+    cases += 1
+    # 67. amendment 22, mixtral's absmax_dq requirement and its pin: a mixtral side without the double-quantized absmax reads VOID (either side),
+    #     while qwen3denseab requires nothing of it; a mixtral receipt off TC2's pin or with Qwen3's layer count reads VOID
+    v, why = void_why(MDENSE_FAM, _dense_set(MDENSE_FAM, absmax=(True, False)), "fused_attn4_m_dense1")
+    assert v == "VOID" and "(absmax_dq true;" in why and "absmax_dq False" in why, why
+    print("FAILING-CASE A22-absmax (reducer):", why[:160])
+    v, why = void_why(MDENSE_FAM, _dense_set(MDENSE_FAM, absmax=(False, True)), "fused_attn4_m_dense0_d2")
+    assert v == "VOID" and "absmax_dq true" in why, why
+    assert pd(m=_dense_set(MDENSE_FAM, absmax=(False, True))) == {"P38": "UNTESTED", "P39": "HELD", "P40": "UNTESTED"}
+    assert all(x["verdict"] == "VALID" for x in reduce_family(QDENSE_FAM, _dense_set(QDENSE_FAM, absmax=(False, False)), {}, 20)["rows"])
+    M = _dense_set(MDENSE_FAM)
+    M[("e4b", "fused_attn4_m_dense1")]["revision"] = "0" * 40
+    v, why = void_why(MDENSE_FAM, M, "fused_attn4_m_dense1")
+    assert v == "VOID" and "the registered pin mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a286" in why, why
+    M = _dense_set(MDENSE_FAM)
+    M[("e4b", "fused_attn4_m_dense0_d2")]["n_layers"] = 48
+    v, why = void_why(MDENSE_FAM, M, "fused_attn4_m_dense0_d2")
+    assert v == "VOID" and "config n_layers 48 != registered 32" in why, why
+    Q = _dense_set(QDENSE_FAM)
+    Q[("e4b", "fused_attn4_m_dense0")]["model"] = "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    v, why = void_why(QDENSE_FAM, Q, "fused_attn4_m_dense0")
+    assert v == "VOID" and "the registered pin Qwen/Qwen3-30B-A3B @ ad44e777bcd1" in why, why
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 
