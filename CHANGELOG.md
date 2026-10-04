@@ -22,6 +22,14 @@
 - **Decision.** Off sm_90, grouped-nf4-gemm's `auto` takes the dense route for calls with at most 16 present groups (grouped-nf4-gemm#463).
   Rows `e4b.train.dense-route.{mixtral,qwen3}.5090.2026-10-04`; lane page `bench/h2h-2026-10-02/tc1/README.md`.
 
+### MG1 amendment 1, before any box: the regression anchors re-read what was licensed (bench and prereg only)
+
+- **OLMoE re-reads `OLMoE-1B-7B-0924-Instruct` @ `7f1c97f4`, the checkpoint tp1 licensed.** The registration had named the base
+  model, which no licence reads.
+- **Gemma-4-26B-A4B-it @ `4d7ae498` joins as a second regression anchor.** #1048 changed its fused RMSNorm numerics, and its tp1
+  median (0.04742 against a 0.05 band) has the least margin of any licensed family. P6: PASS with the median at most 0.0574.
+- The guard is 6 h, about $5.10, still under the $15 no-ask tier.
+
 ### The Qwen training stack, by structure: what another MoE family inherits (moe-generalize; `docs/MOE_RUNTIME_PORTABILITY.md`)
 
 - **Why.** The expert-side work behind Qwen3-30B-A3B's fused training step already applied to any family `ExpertsLoRA` wraps:
