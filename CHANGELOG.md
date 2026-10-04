@@ -18,6 +18,7 @@
   - amendment 4: the route as first shipped making e4b slower, because of its dequant kernel;
   - amendment 5: the fused kernels' own configs changing nothing worth taking.
 - **SC2 registered** (#846): request-level serving, `serve_paged` against vLLM, SGLang and llama.cpp under Poisson arrivals.
+- **TC2 amendment 6 registered** (#1032, merged during the release PR): Mixtral and Qwen3.6 trained with every e4b arm resident on one RTX 5090, against Unsloth resident (P11–P14).
 - **Lane K28's runner** (bench and tests), and a correction pricing five TC boxes at Vast's invoiced cost.
 - **Registrations with no entry of their own:** TC1c amendments 3 (#1018), 4 (#1020), 5 (#1021) and 6 (#1028). Also #1011 (tests only): the GPU-class refusal snippet runs in a temp dir.
 
