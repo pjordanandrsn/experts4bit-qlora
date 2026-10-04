@@ -1,0 +1,38 @@
+KNOBS e4b=234880c0490f46f909f647cb0e5dbd58f893fe12 gnf4=bc2214ce46fe3d1967ccce3ca36aca73f23198e9 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 short=32 long=160 reps=3
+e4b 0.44.0 @234880c0490f46f909f647cb0e5dbd58f893fe12
+gnf4 0.36.0 @bc2214ce46fe3d1967ccce3ca36aca73f23198e9
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p113_reduce self-test OK (22 cases)
+p109_box self-test OK (5/5 cases)
+p113_box self-test OK (8/8 cases)
+premise run rc=0: 7 passed in 6.67s
+premise GNF4_PDL contract rc=0: 25 passed in 5.63s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm OFF1 rc=0 P113_ARM {"arm": "OFF", "tag": "OFF1", "pdl_active": false, "pdl_cap": 0, "load_s": 109.23, "pdl_launches": 6927, "pdl_with": 0, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 1786.77, "W1": 228.12}
+
+arm ALL1 rc=0 P113_ARM {"arm": "ALL", "tag": "ALL1", "pdl_active": true, "pdl_cap": 0, "load_s": 102.26, "pdl_launches": 6927, "pdl_with": 6907, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 1754.06, "W1": 237.77}
+
+arm CAP1 rc=0 P113_ARM {"arm": "CAP", "tag": "CAP1", "pdl_active": true, "pdl_cap": 8, "load_s": 99.77, "pdl_launches": 6927, "pdl_with": 5465, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 1790.52, "W1": 237.35}
+
+arm CAP2 rc=0 P113_ARM {"arm": "CAP", "tag": "CAP2", "pdl_active": true, "pdl_cap": 8, "load_s": 103.62, "pdl_launches": 6927, "pdl_with": 5465, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 1790.01, "W1": 237.62}
+
+arm ALL2 rc=0 P113_ARM {"arm": "ALL", "tag": "ALL2", "pdl_active": true, "pdl_cap": 0, "load_s": 100.61, "pdl_launches": 6927, "pdl_with": 6907, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 1751.92, "W1": 237.55}
+
+arm OFF2 rc=0 P113_ARM {"arm": "OFF", "tag": "OFF2", "pdl_active": false, "pdl_cap": 0, "load_s": 103.98, "pdl_launches": 6927, "pdl_with": 0, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 1789.99, "W1": 228.39}
+
+P113_VERDICT CAP_DEFAULT ["tokens identical on every row; ALL g1 1.0401 g16 0.9787; CAP g1 1.0404 g16 1.0 (geomeans ALL {'W16': 0.9802, 'W1': 1.0412}, CAP {'W16': 1.0011, 'W1': 1.0404})"]
+  g: {"ALL": {"W16": 0.9787, "W1": 1.0401}, "CAP": {"W16": 1.0, "W1": 1.0404}}
+  geomean: {"ALL": {"W16": 0.9802, "W1": 1.0412}, "CAP": {"W16": 1.0011, "W1": 1.0404}}
+  pair_ratios: {"ALL": {"W16": [0.9817, 0.9787], "W1": [1.0423, 1.0401]}, "CAP": {"W16": [1.0021, 1.0], "W1": [1.0405, 1.0404]}}
+  self_pairs: {"OFF2/OFF1 W16": 1.0018, "OFF2/OFF1 W1": 1.0012, "ALL2/ALL1 W16": 0.9988, "ALL2/ALL1 W1": 0.9991, "CAP2/CAP1 W16": 0.9997, "CAP2/CAP1 W1": 1.0011}
+  decode_tok_s: {"OFF1": {"W16": 1786.77, "W1": 228.12}, "ALL1": {"W16": 1754.06, "W1": 237.77}, "CAP1": {"W16": 1790.52, "W1": 237.35}, "CAP2": {"W16": 1790.01, "W1": 237.62}, "ALL2": {"W16": 1751.92, "W1": 237.55}, "OFF2": {"W16": 1789.99, "W1": 228.39}}
+  ms_per_step: {"OFF1": {"W16": 8.9547, "W1": 4.3836}, "ALL1": {"W16": 9.1217, "W1": 4.2057}, "CAP1": {"W16": 8.9359, "W1": 4.2131}, "CAP2": {"W16": 8.9385, "W1": 4.2084}, "ALL2": {"W16": 9.1328, "W1": 4.2097}, "OFF2": {"W16": 8.9386, "W1": 4.3784}}
+  whole_pass_tok_s: {"OFF1": {"W16": 1779.88, "W1": 228.01}, "ALL1": {"W16": 1764.35, "W1": 237.59}, "CAP1": {"W16": 1783.32, "W1": 236.67}, "CAP2": {"W16": 1786.2, "W1": 237.43}, "ALL2": {"W16": 1753.77, "W1": 237.31}, "OFF2": {"W16": 1785.39, "W1": 227.83}}
+  switched_launches_build: {"OFF1": [6927, 0], "ALL1": [6927, 6907], "CAP1": [6927, 5465], "CAP2": [6927, 5465], "ALL2": [6927, 6907], "OFF2": [6927, 0]}

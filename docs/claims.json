@@ -9389,6 +9389,34 @@
         "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-10/tc1/"
       ],
       "notes": "Vast invoiced $2.76."
+    },
+    {
+      "id": "e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P113, one RTX 5090: on SC1's int4 serving configuration (the default serve_paged graph server with RTN int4 experts and attention and the fused glue; Qwen3-30B-A3B), grouped-nf4-gemm's programmatic dependent launch capped to launches of at most 8 activation rows (GNF4_PDL=1, GNF4_PDL_MAX_ROWS=8) decodes identical tokens on every row and runs 1.0404x the switch off with one request (min over two palindromic pairs; geomean 1.0404) and 1.0000x with sixteen (geomean 1.0011), decode-only timing. Uncapped (GNF4_PDL=1) it runs 1.0401x with one and 0.9787x with sixteen. CAP_DEFAULT.",
+      "value": 1.0404,
+      "unit": "decode tok/s ratio, capped PDL over no PDL, one request (min over two palindromic pairs, decode-only timing)",
+      "hardware": "RTX 5090 (sm_120, driver 580.178.04, 32607 MiB), one rented Vast.ai verified host (instance 54131692, AMD Ryzen 9 7900, 124 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @234880c (0.44.0 + P113's registration) + grouped-nf4-gemm @bc2214c (0.36.0 + GNF4_PDL #448 + GNF4_PDL_MAX_ROWS #453); torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box, SC1's int4_sched levers; premise test_decode_graph_buckets.py 7 passed + grouped-nf4-gemm test_pdl.py 25 passed on the card; six palindromic arms (OFF1 ALL1 CAP1 CAP2 ALL2 OFF2) differing only in GNF4_PDL / GNF4_PDL_MAX_ROWS, W16 = 16 wikitext 512-token prompts at once, W1 = one, 32/160 new tokens, 3 timed reps, decode-only slope (wall minus each pass's largest ttft); verdict by bench/p113/p113_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p113/RESULTS-p113.md",
+        "bench/p113/PREREG-p113.md",
+        "bench/p113/p113_reduce.py",
+        "bench/p113/p113_box.py",
+        "bench/p113/receipts/p113-5090-1/verdict.json",
+        "bench/p113/receipts/p113-5090-1/arm_CAP1.json",
+        "bench/p113/receipts/p113-5090-1/arm_OFF1.json",
+        "bench/p113/receipts/p113-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/p113-5090-1/ (receipt.json, teardown-proof.json)"
+      ],
+      "notes": "Pre-registered in #1029; the switches are grouped-nf4-gemm#448 and #453; follows K28 (LEVER) and P112 (closed VOID twice: its accounting, then a prefill-jittered slope). All eight predictions held, written after P112 run 1's arms. Uncapped PDL costs the 16-row step 8.947 -> 9.127 ms; the cap leaves it at 8.937. Lane cost $0.4710."
     }
   ]
 }

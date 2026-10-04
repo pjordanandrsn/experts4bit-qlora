@@ -1,0 +1,7 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.178.04, GPU-eecf00ca-44b0-935f-8716-cfefee62dc4e, 12.0
+CPU(s):                                  24
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD Ryzen 9 7900 12-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:             124           3          78           0          43         120
+overlay         320G  8.6M  320G   1% /

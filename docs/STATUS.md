@@ -463,6 +463,15 @@ reading, not a speed one.
   of per-layer KV-table glue.
 - **Default:** on (`E4B_KV_STEP_SELECT`; `0` keeps the per-layer form).
 
+**Programmatic dependent launch, capped to small launches** (lane P113, 2026-10-04, one rented RTX 5090; **measured** —
+[`bench/p113/RESULTS-p113.md`](../bench/p113/RESULTS-p113.md), `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04`).
+- **Speed:** on SC1's int4 serving configuration (Qwen3-30B-A3B), grouped-nf4-gemm's `GNF4_PDL=1` with
+  `GNF4_PDL_MAX_ROWS=8` runs 1.0404× / 1.0000× the switch off (one request / 16; min over two pairs,
+  decode-only timing) with identical tokens. Uncapped it runs 1.0401× / 0.9787×: PDL helps the B=1 step
+  (4.38 → 4.21 ms) and costs the 16-row one, which the cap leaves alone.
+- **Default:** grouped-nf4-gemm's next release turns it on, capped at 8 (`GNF4_PDL=0` turns it off). P112, the
+  first served read, closed VOID twice (`bench/p112/RESULTS-p112.md`).
+
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).
 - **Speed:** with `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 installed, Qwen3.6-35B-A3B's bucketed decode

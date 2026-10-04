@@ -2449,6 +2449,15 @@ reading, not a speed one.
   of per-layer KV-table glue.
 - **Default:** on (`E4B_KV_STEP_SELECT`; `0` keeps the per-layer form).
 
+**Programmatic dependent launch, capped to small launches** (lane P113, 2026-10-04, one rented RTX 5090; **measured** —
+[`bench/p113/RESULTS-p113.md`](../bench/p113/RESULTS-p113.md), `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04`).
+- **Speed:** on SC1's int4 serving configuration (Qwen3-30B-A3B), grouped-nf4-gemm's `GNF4_PDL=1` with
+  `GNF4_PDL_MAX_ROWS=8` runs 1.0404× / 1.0000× the switch off (one request / 16; min over two pairs,
+  decode-only timing) with identical tokens. Uncapped it runs 1.0401× / 0.9787×: PDL helps the B=1 step
+  (4.38 → 4.21 ms) and costs the 16-row one, which the cap leaves alone.
+- **Default:** grouped-nf4-gemm's next release turns it on, capped at 8 (`GNF4_PDL=0` turns it off). P112, the
+  first served read, closed VOID twice (`bench/p112/RESULTS-p112.md`).
+
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).
 - **Speed:** with `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 installed, Qwen3.6-35B-A3B's bucketed decode
@@ -3871,6 +3880,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep-route [measured]: TC1c amendment 4, box K (tc1c-h100-7, one rented H100 NVL): with every e4b arm keeping all 48 layers' MoE activations AND on the grouped_mm route, Unsloth/e4b reads 0.934 [0.916, 0.953] -- e4b 2.771 s/step against Unsloth's 2.588, slower than the keep-only 2.343 (amendment 2, 1.100). P13 FALSIFIED (band [1.15, 1.60]); the matched set EQUIVALENT / inside the draw noise (P14 HELD). The route's dequant kernel took 1,456 ms of device time per step. Peak VRAM 34.08 vs Unsloth's 24.27 GB. A LABELLED row, quoted beside amendment 2's, never in place of it.
 - e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2 [measured]: TC1c amendment 6, box R (tc1c-h100-9, one rented H100 NVL): with every e4b arm on grouped-nf4-gemm's grouped_mm route (GNF4_TRAIN_GEMM=grouped_mm) at #452's dequant kernel (bit-equal to #450's, ~8.5x faster), Unsloth/e4b reads 1.030 [1.016, 1.045] -- e4b 2.481 s/step against Unsloth's 2.557, e4b FASTER per step, against 0.664 with the old dequant (amendment 4) and the default-settings 0.817 (amendment 1). P18 HELD (band [0.90, 1.25]); the matched set EQUIVALENT (P20 HELD). The profiled e4b arm puts the dequant at 256 ms of device time per step (0.222 ms per call; was 2,178 ms at 1.89 ms) and dequant + grouped GEMMs at about 0.50 s against the fused kernels' 1.42 s; the step is now host-bound (device-busy 0.454). Amendment 4's default rule holds (P20, R >= 0.858, e4b held-out 0.8481 within 0.005 of amendment 1's 0.8521, a thin margin: two of four draw-against-draw pairings would miss it), so the route qualifies as grouped-nf4-gemm's sm_90 default (grouped-nf4-gemm#454). A LABELLED row until a default-settings box re-reads the H100 position on the release that carries that default.
 - e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep-route-v2 [measured]: TC1c amendment 6, box K (tc1c-h100-10, one rented H100 NVL): with every e4b arm keeping all 48 layers' MoE activations (E4B_MOE_KEEP_LAYERS=all, compact delta, host reuse) AND on the grouped_mm route at #452's dequant kernel, Unsloth/e4b reads 1.325 [1.296, 1.356] -- e4b 1.925 s/step against Unsloth's 2.552, at 34.08 against 24.27 GB peak; against 0.934 with the old dequant (amendment 4) and keep alone 1.100 (amendment 2). P19 HELD (band [1.15, 1.65]); the matched set EQUIVALENT (P20 HELD). A LABELLED row: an opt-in memory-for-time setting on the route, quoted beside the default-settings row, never in place of it.
+- e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04 [measured]: Lane P113, one RTX 5090: on SC1's int4 serving configuration (the default serve_paged graph server with RTN int4 experts and attention and the fused glue; Qwen3-30B-A3B), grouped-nf4-gemm's programmatic dependent launch capped to launches of at most 8 activation rows (GNF4_PDL=1, GNF4_PDL_MAX_ROWS=8) decodes identical tokens on every row and runs 1.0404x the switch off with one request (min over two palindromic pairs; geomean 1.0404) and 1.0000x with sixteen (geomean 1.0011), decode-only timing. Uncapped (GNF4_PDL=1) it runs 1.0401x with one and 0.9787x with sixteen. CAP_DEFAULT.
 
 Open items (no evidence either way):
 
@@ -3878,4 +3888,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(331 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(332 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
