@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Read: TC1c amendment 5 — the fused kernels' own configs on the H100 change nothing worth taking (P15, P16 FALSIFIED; P17 HELD, near-exact)
+
+- **What.** `tc1c-h100-8` (H100 NVL, $0.33 invoiced) swept grouped-nf4-gemm's fused forward (25 configs) and dgrad (9) on the 128
+  recorded real-router calls.
+- **Forward.** The default stays best: 0.985 re-run, every other config 0.999–1.82×. bf16 MMA is 2.3–3.5× slower. BLOCK_K 128 fits
+  but does not help.
+- **dgrad.** 64/128/64/w4 reads 0.853, a near-exact config (5e-5 Frobenius); the best bit-identical config reads 0.988.
+- **Decision.** The gap to `torch._grouped_mm` is structural, so the grouped_mm route (TC1c amendment 4) is the H100 path, and the
+  dgrad config is recorded, not taken. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ### SC2 registered (#846): request-level serving, e4b's `serve_paged` against vLLM, SGLang and llama.cpp under Poisson arrivals
 
 - **What it asks.** SC1 timed decode loops at fixed batches; SC2 drives each engine's own OpenAI `/v1/completions` with ONE client
