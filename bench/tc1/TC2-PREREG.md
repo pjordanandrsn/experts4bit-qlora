@@ -229,3 +229,56 @@ e4b's anchor ran resident. Host RAM floor 192 GB (amendment 3).
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 5 h guard. Estimate: $4.25 plus about 165 GB of checkpoint download at the
 launcher's cap of $0.011/GB, under $6.10 in all. The standing no-ask tier for a single run under $15; the campaign's daily cap is $100.
+
+### Amendment 7 (2026-10-04T14:03Z, after amendment 6's read and the two e4b memory switches, before any box): the small families re-read, and the big families with the absmax double-quantized
+
+**Why.** Amendment 6 left two things open.
+
+- **The small-family positions are stale.** Granite and OLMoE were read on 2026-10-02 at e4b 0.38.1, before TC1 amendments 10–15 made e4b's
+  own step about 1.4× faster on Qwen3-30B-A3B (Unsloth/e4b 1.437 → 1.997 on a 5090). On Granite, HF read 0.971 and axolotl 0.903 against
+  e4b, both faster than it then.
+- **e4b's extra resident footprint has a measured cause.** e4b stores the expert absmax in fp32, where Unsloth trains on bitsandbytes'
+  double-quantized absmax; on Qwen3.6, e4b also keeps 270 non-routed projections in bf16 that Unsloth stores in 4-bit. Two switches now
+  exist. `E4B_ABSMAX_DQ=1` (#1040) stores the absmax as bitsandbytes does and expands one layer's to fp32 for the kernel. Its values
+  are bitsandbytes' nested ones, and it measured 3.94× fewer absmax bytes on a Qwen3-30B-A3B layer. `--frozen-4bit` (#1037) stores
+  the non-routed projections in NF4; it is a measurement hook that puts e4b on a 4-bit comparator's bytes, priced at 0.05 nats at
+  step 0 on Qwen3.6.
+
+**The boxes.** Three RTX 5090s, each from this amendment's merge, with grouped-nf4-gemm v0.37.0:
+
+- **Box S** (`tc2small`, unchanged token): Granite, OLMoE and gpt-oss at the small instrument, every arm as on 2026-10-02.
+- **Box D** (`tc2resident`, `TC1_E4B_ENV="E4B_ABSMAX_DQ=1"`): amendment 6's box with the absmax double-quantized on every e4b arm.
+  This is e4b's quality-preserving configuration (the non-routed projections stay bf16).
+- **Box F** (`tc2resident`, `TC1_E4B_ENV="E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1"`): box D plus the non-routed projections in NF4, the
+  bytes Unsloth trains on. On Mixtral the second switch converts nothing, so box F's Mixtral half is a replication of box D's.
+
+**Predictions** (registered before the boxes), read off each box's own lines:
+
+- **P15** (box S, Granite): HF/e4b in **[1.05, 1.60]** and axolotl/e4b in **[1.00, 1.50]**, e4b now faster against both.
+- **P16** (box S, OLMoE): Unsloth/e4b in **[1.30, 2.20]** and HF/e4b in **[1.40, 2.40]**.
+- **P17** (box S): e4b's parity PASSES on both families, and each quoted pair reads as on 2026-10-02 (Granite axolotl EQUIVALENT, OLMoE
+  Unsloth EQUIVALENT; HF COMPARABLE).
+- **P18** (box D, Mixtral): e4b's resident peak at most **29.6 GB** (amendment 6: 31.07), its pair stable, Unsloth/e4b in
+  **[0.62, 0.78]** (amendment 6: 0.697; the expansion costs a few percent), and the held-out within the pair's equivalence band.
+- **P19** (box D, Qwen3.6): e4b's fused path completes the matched set resident at micro-batch 2 (VALID). Its pair is VOID by the
+  step-0 rule (the bf16 projections), as registered: a fit row, not a position.
+- **P20** (box F, Qwen3.6): e4b completes the matched set resident at micro-batch 2 at a peak at most **30.6 GB**.
+- **P21** (box F, Qwen3.6): the step-0 held-out gap |e4b − Unsloth| is at most **0.01** nats (amendment 6's census: 0.05 with the
+  projections in bf16).
+- **P22** (box F, Qwen3.6): Unsloth/e4b in **[1.30, 2.50]**, e4b faster, both pairs stable.
+- **P23** (boxes D and F): every resident matched pair that runs is EQUIVALENT at N = 20, and e4b's parity PASSES wherever its
+  resident reference fits.
+
+Each is FALSIFIED outside its band and UNTESTED where the box quotes no reading.
+
+**Decision rules.**
+
+- **P15/P16:** each quoted pair supersedes its 2026-10-02 row as the family's position. The old rows stay, labelled as e4b 0.38.1.
+- **Default:** `E4B_ABSMAX_DQ` becomes e4b's training default only if P18 holds and box D's e4b held-out is within 0.005 of amendment
+  6's e4b held-out on Mixtral. Until then it stays opt-in.
+- **Qwen3.6 position:** box F's pair, with P20–P23 holding, is the family's first matched position. It is quoted as "e4b on the
+  comparator's 4-bit bytes" (`--frozen-4bit`), since e4b's own default keeps those projections bf16.
+
+**Budget.** Three RTX 5090s at the policy rate ($0.85/h). Box S has a 3 h guard; boxes D and F have 5 h each, with the 192 GB host floor.
+Estimates: S about $1.5, D and F about $3.2 each with the download, about $8 in all. The standing no-ask tier per run; the campaign's daily
+cap is $100, counted 9 am to 9 am Central.
