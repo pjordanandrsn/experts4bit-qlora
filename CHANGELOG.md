@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### P55 Amendment 1 (#344): the launcher can now draw the low-RAM host class, and the lane reads the class correctly (bench and tests only)
+
+- **Why.** P55 tests whether #344's Gemma-4 load failure (`CUDA error: invalid argument` on 2 of 6 rented 5090s) is a
+  host-memory class. Preparing its launch found five defects:
+  - the launcher could only rent hosts with ≥ 98 GB;
+  - STOP-1 read MemTotal, which inside a Vast container is the whole host's RAM, not the allotment;
+  - P4 read the host's MemAvailable for the same reason;
+  - the shard's "49.9 GiB" was 49.9 GB, which is 46.48 GiB;
+  - the first arm downloaded the 51.6 GB checkpoint inside its own load, unbounded and on the Xet backend.
+- **What.**
+  - The launch uses adertha-agents#145's host-RAM band, `[48, 72]` GB.
+  - The class is the memory a process there can have, min(MemTotal, cgroup limit). The new `bench/p55/p55_ram.py`
+    computes it, and it is staged and pinned.
+  - P4's headroom is min(MemAvailable, limit − usage) against 46.48 GiB, and the forensics record `ulimit -a`.
+  - The checkpoint is 51.6 GB, not ~12 GiB. It is fetched before the arms, bounded and with Xet disabled (exit 11 on failure).
+    The launcher's estimate is $1.95, and the lane ceiling is $3.00.
+- **Tests.** `tests/test_p55_staged_pin.py`, 17 tests: pins, the memory arithmetic on cgroup v1, v2 and none, and the
+  reducer on synthetic receipts.
+
 ### TC1c amendment 7 registered: the H100 position at default settings on 0.45.0 / grouped-nf4-gemm 0.37.0 (P21–P23). One H100 NVL
 
 - **Why.** Amendment 6 read the grouped_mm route at 1.030 with it forced, as a labelled row. grouped-nf4-gemm 0.37.0 makes the
