@@ -11,6 +11,19 @@
 - **Decision.** All three held: this becomes the H100 default-settings position, superseding amendment 1's 0.817.
   `bench/tc1/TC1C-PREREG.md` amendment 7.
 
+### Read: TC2 amendment 6 — e4b now trains Mixtral resident on a 32 GB 5090, and Unsloth is faster there; Qwen3.6 still does not fit (P11, P12, P14 HELD; P13 FALSIFIED)
+
+- **The box.** `tc1-5090-53` ($3.03 invoiced) ran both big families with every e4b arm resident, against Unsloth resident.
+- **Mixtral-8x7B.** e4b's fused path fits at 31.07 GB, where on 2026-10-02 it ran only under offload. Unsloth/e4b is **0.697**
+  [0.679, 0.714]: Unsloth is faster per step, at 1.94 GB less peak and ×0.65 the energy. The pair is inside draw noise, and e4b's
+  resident parity PASSES.
+- **Qwen3.6-35B-A3B.** e4b still OOMs at both micro-batches. It now fails at step 2 instead of step 1. Unsloth trains it at 30.47 GB.
+- **Why, as read from the receipts.** Mixtral's step is GEMM-bound on 2 of 8 large experts. e4b's extra VRAM matches its fp32
+  expert absmax, about 2.8 GB against about 0.7 GB double-quantized. On Qwen3.6, add about 1.6 GB of non-routed weights kept in bf16.
+- **Next levers,** each to be registered: double-quantized absmax, 4-bit non-routed projections, and a dequantize-then-GEMM route
+  for large experts on sm_120. Rows `e4b.train.h2h.unsloth.mixtral.5090.2026-10-04` and `...qwen3_5.5090.2026-10-04`; lane page
+  `bench/h2h-2026-10-02/tc2/README.md`.
+
 ## 0.45.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.37.0, whose two new defaults were registered and read here: programmatic dependent launch capped to launches of at most 8 rows (lane P113: SC1's int4 serving decode 1.0404× at one request and 1.0000× at 16 on an RTX 5090, identical tokens) and the grouped_mm training route on sm_90 (TC1c amendment 6: Unsloth/e4b 1.030 on an H100 NVL, a labelled row)
 
 **0.45.0.** No default in this package changes. Two change in grouped-nf4-gemm 0.37.0, each by a rule registered here, and CI now tests against 0.37.0's commit.
