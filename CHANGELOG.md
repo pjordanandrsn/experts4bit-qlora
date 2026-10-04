@@ -19,6 +19,14 @@
     records the counters and keeps the driver's exit code, including a stub's.
 - **Spend.** $0.357 for amendment 2; $2.24 for the MG1 lane in all.
 
+### Read: TC1 amendment 25, first box — on one stack the matched set holds (P52 HELD); the speed pairs were unstable (P50, P51 UNTESTED); amendment 27 registers one re-draw
+
+- `tc1-5090-67` ($0.61, Core Ultra 9 285K): e4b's matched set in Unsloth's venv steps in 2.220 / 2.188 s, stable. Unsloth's draws were
+  18.2 % apart and e4b's field-image draws 8.4 % apart, so neither ratio is read.
+- On one stack Unsloth and e4b's reference are EQUIVALENT to e4b's fused arm, and parity PASSES (P52).
+- Amendment 27: one re-draw of the same token on another machine, with amendment 25's predictions unchanged; its reading is final.
+  Bundle and `RESULTS-tc1-samestack-box1.md`; no register row until the re-draw is read.
+
 ### TC1 amendment 26 registered: prebound Triton launches, A/B on one RTX 5090 (P53–P55) (bench and tests only)
 
 - **Why.** e4b's training step is host-bound, and much of each hot launch's host time is Triton's per-call binding. #1078
