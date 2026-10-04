@@ -251,6 +251,11 @@ them on the current cuts; the next paragraph is what it found.
 time into `torch.mm`. Against the fused kernels it reads 0.651 on Mixtral-8x7B (few large experts) and 2.947 on Qwen3-30B-A3B
 (many experts, a launch-bound step), with held-out unchanged. Off sm_90, grouped-nf4-gemm's `auto` takes it for calls with at most
 16 present groups.
+**Where the memory goes** (`e4b.train.memory-census.qwen3.5090.2026-10-04`, TC1 amendment 23): a census of the CUDA allocator
+on Qwen3-30B-A3B at micro-batch 1 finds every static class byte-for-byte the same in e4b and Unsloth except the expert absmax.
+e4b keeps it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 GB, as Unsloth does. With that switch e4b peaks
+0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults
+the gap is 1.78 GB.
 
 **The other families at matched work** (lane TC2, 2026-10-02, two rented
 RTX 5090 hosts, [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md);

@@ -1,0 +1,43 @@
+[20:20:45]   checkpoint: local directory /root/pg/tiny
+[20:20:45]   fusing + quantizing experts (up to 4x32) to nf4 (streaming)...
+[20:20:45]   quantized experts on 4/4 MoE layers (32 experts each)
+[20:20:45]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:20:46]   experts deferred to the arena: 4 module(s), 20 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[20:20:47]   hybrid tier active on 4 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] INT4EXP enabled: 4 layers (model_type=qwen3_moe)
+[serve_paged] ATTNINT4 rtn: 16 projections (uncalibrated; model_type=qwen3_moe)
+[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 4, 'fuse_t1_glue_n': 17, 'fuse_t1_glue_r2_n': [4, 4], 'fuse_router_epilogue_n': 4}
+DECODE_GRAPH bucket=1 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=2 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=4 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=8 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=16 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+[serve_paged] ready: {"moe_layers": 4, "experts": 32, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 4, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 8, "kv": {"n_kv_heads": 2, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256}, "graph_status": {"1": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "2": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "4": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "8": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "16": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + "}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "levers_env": {"E4B_SERVE_EXP_INT4": "1", "E4B_SERVE_ATTN_INT4": "1", "E4B_SERVE_ATTN_INT4_CALIB": "0", "E4B_CALIB_SOURCE": "c4", "E4B_FUSE_T1_GLUE": "1", "E4B_FUSE_T1_GLUE_R2": "1", "E4B_FUSE_ROUTER_EPI": "1"}, "exp_int4_layers_enabled": 4, "attn_int4_rtn_projections": 16, "attn_int4_calib_projections": 0, "fuse_qkv_n": 4, "fuse_t1_glue_n": 17, "fuse_t1_glue_r2_n": [4, 4], "fuse_router_epilogue_n": 4}
+CENSUS c1_no_history: forward 0 around 2
+  [around] x1 ?
+  [around] x1 e4b/experts4bit_qlora/engines/paged_runner.py:150 run_prefill
+CENSUS c2_with_history: forward 0 around 2
+  [around] x1 e4b/experts4bit_qlora/engines/paged_runner.py:150 run_prefill
+  [around] x1 e4b/experts4bit_qlora/engines/paged_runner.py:175 run_prefill
+CENSUS runtime_c1: {"Memcpy DtoD (Device -> Device)": 16, "Memcpy HtoD (Pageable -> Device)": 1, "cuLaunchKernel": 4, "cuLaunchKernelEx": 24, "cudaDeviceSynchronize": 2, "cudaLaunchKernel": 428, "cudaMemcpyAsync": 17, "cudaStreamSynchronize": 1}
+CENSUS runtime_c2: {"Memcpy DtoD (Device -> Device)": 1036, "Memcpy DtoH (Device -> Pinned)": 1, "Memcpy HtoD (Pageable -> Device)": 1, "aten::_local_scalar_dense": 1, "aten::item": 1, "cuLaunchKernel": 4, "cuLaunchKernelEx": 24, "cudaDeviceSynchronize": 2, "cudaLaunchKernel": 773, "cudaMemcpyAsync": 1038, "cudaStreamSynchronize": 2}

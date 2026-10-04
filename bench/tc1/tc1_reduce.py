@@ -446,6 +446,45 @@ for _side in ("dense0", "dense1"):
     DRAW2[("e4b", f"{DENSE_ARM}_{_side}")] = ("e4b", f"{DENSE_ARM}_{_side}_d2")
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 24: the RTX 5090's fp32 bmm host cost and the torch 2.12 environment
+BMMAB_FAM = "qwen3bmmab"          # venv-e4b (torch 2.8.0+cu128, side tv0) vs venv-unsloth + e4b (torch 2.12.1+cu130, side tv1), matched and shipped arms
+BMMAB_PAIRS = (("matched", "fused_attn4_m"), ("shipped", "fused_attn4_shipped"))   # each: <tag>_tv0 vs <tag>_tv1, two draws a side in ABBA order
+BMMAB_TORCH = {"tv0": "2.8.", "tv1": "2.12."}   # the torch each side's receipt must record (env.torch prefix)
+BMM_FILES = {"t28": "BMMBENCH-t28.json", "t212": "BMMBENCH-t212.json"}   # the replay's outputs (bench/tc1/bmm_bench.py), one per environment
+BMM_CAP = [12, 0]                 # the registered card: sm_120 (RTX 5090)
+BMM_P44_MIN_US, BMM_P44_MIN_X = 100.0, 3.0   # P44: fp32 recorded median host us per forward bmm >= 100 and >= 3x bf16's (torch 2.8)
+BMM_P45_MIN_X = 2.0               # P45: fp32 cold median >= 2x its repeated-shape median (torch 2.8)
+BMM_P46_MAX_X = 0.5               # P46: torch 2.12's fp32 cold median <= 0.5x torch 2.8's
+BMM_P47_BAND = (0.70, 0.95)       # P47: matched tv1 / tv0 s/step on stable pairs
+BMM_P48_MIN_GAP = 0.05            # P48: shipped tv1 / tv0 >= matched tv1 / tv0 + this
+BMM_HELDOUT_MAX = 0.01            # P49: |mean held-out at N, tv1 - tv0| on each arm
+FAMS.append(BMMAB_FAM)
+NAMES[BMMAB_FAM] = "Qwen3-30B-A3B (amendment 24: venv-e4b torch 2.8.0+cu128 vs venv-unsloth torch 2.12.1+cu130, matched and shipped arms)"
+N_LAYERS[BMMAB_FAM] = 48
+ATTN_CENSUS[BMMAB_FAM] = 192
+DENSE_PINS[BMMAB_FAM] = DENSE_PINS[QDENSE_FAM]   # amendment 24 reads the same pin through amendment 22's check
+FAM_ANCHOR[BMMAB_FAM] = ("e4b", "fused_attn4_m_tv0")
+EXPECTED[BMMAB_FAM] = [("e4b", f"{_t}_{_s}") for _, _t in BMMAB_PAIRS for _s in ("tv0", "tv1", "tv1_d2", "tv0_d2")]
+MATCHED |= {f"fused_attn4_m_{_s}" for _s in ("tv0", "tv1", "tv0_d2", "tv1_d2")}
+for _, _t in BMMAB_PAIRS:
+    for _side in ("tv0", "tv1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def bmm_ab_why(tag, r):
+    """Amendment 24's engagement predicate: the arm ran in the environment its tag names (env.torch 2.8.* for _tv0, 2.12.* for _tv1) with
+    the adapter dtype its arm names (fp32 matched, native shipped). Empty string = engaged."""
+    side = "tv1" if "_tv1" in tag else "tv0"
+    torch_v = str(((r or {}).get("env") or {}).get("torch") or "")
+    want_dt = "fp32" if tag.startswith("fused_attn4_m_") else "native"
+    bad = []
+    if not torch_v.startswith(BMMAB_TORCH[side]):
+        bad.append(f"env.torch {torch_v or 'missing'} is not {BMMAB_TORCH[side]}*")
+    if (r or {}).get("adapter_dtype") != want_dt:
+        bad.append(f"adapter_dtype {(r or {}).get('adapter_dtype')!r} != {want_dt!r}")
+    return "" if not bad else f"environment A/B not engaged ({'; '.join(bad)})"
+
+
 def dense_ab_why(fam, tag, r):
     """Amendment 22's engagement predicate, read off the arm's `route_ab` record (grouped-nf4-gemm's nf4_route.ROUTE_STATS for the process):
     a dense1 arm ran with the route resolved to `dense` and counted dense forward AND dense dgrad calls; a dense0 arm ran `fused` and counted
@@ -997,6 +1036,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == MEMCENSUS_FAM:                            # amendment 23: the pin, the mb1 recipe, the census on the receipt, the absmax the tag names
         w = memcensus_why(r)
+        if w:
+            why.append(w)
+    if fam == BMMAB_FAM and fw == "e4b":               # amendment 24: the environment and adapter dtype its tag names
+        w = bmm_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -1873,6 +1916,133 @@ def memcensus_block(F):
                 cells.append(f"{gs[i]['group']} {_gb(gs[i].get('bytes'))} ×{gs[i].get('count')}" if i < len(gs) else "")
             lines.append(f"| {i + 1} | " + " | ".join(cells) + " |")
     return lines
+def bmm_replay(d):
+    """Amendment 24's replay files: {label: {"file": ..., "rows": {(dtype, blas): row}, "error": ...}} for each of BMM_FILES present in d."""
+    out = {}
+    for label, name in BMM_FILES.items():
+        p = os.path.join(d or "", name)
+        if not (d and os.path.exists(p)):
+            continue
+        try:
+            js = json.load(open(p))
+            out[label] = {"file": name, "rows": {(x.get("dtype"), x.get("blas")): x for x in js.get("results", [])}}
+        except Exception as e:
+            out[label] = {"file": name, "rows": {}, "error": f"{type(e).__name__}: {e}"}
+    return out
+
+
+def _bmm_row(rep, label, dtype, blas="default"):
+    """(row, why): the replay row for one variant, or None with the reason it cannot be read."""
+    if label not in rep:
+        return None, f"{BMM_FILES[label]} not in this directory (the replay did not run in that environment)"
+    x = rep[label]["rows"].get((dtype, blas))
+    if not x:
+        return None, f"{BMM_FILES[label]}: no {dtype}/{blas} row" + (f" ({rep[label]['error']})" if rep[label].get("error") else "")
+    if x.get("error"):
+        return None, f"{BMM_FILES[label]}: {dtype}/{blas} errored: {str(x['error'])[-160:]}"
+    if list(x.get("cap") or []) != BMM_CAP:
+        return None, f"{BMM_FILES[label]}: {dtype}/{blas} ran on {x.get('gpu')} (cap {x.get('cap')}), not the registered sm_120 card"
+    want = "2.8." if label == "t28" else "2.12."
+    if not str(x.get("torch") or "").startswith(want):
+        return None, f"{BMM_FILES[label]}: {dtype}/{blas} ran torch {x.get('torch')}, not {want}*"
+    return x, ""
+
+
+def score_bmm_replay(d):
+    """TC1-PREREG amendment 24, the replay (BMMBENCH-t28.json / BMMBENCH-t212.json): P44 -- torch 2.8's fp32 median host us per forward bmm at
+    the recorded shapes >= BMM_P44_MIN_US and >= BMM_P44_MIN_X x bf16's; P45 -- its fp32 cold median >= BMM_P45_MIN_X x its repeated-shape
+    median; P46 -- torch 2.12's fp32 cold median <= BMM_P46_MAX_X x torch 2.8's. Outside FALSIFIED; a missing file / row / card UNTESTED."""
+    rep = bmm_replay(d)
+    if not rep:
+        return []
+    out = []
+    fp, why_fp = _bmm_row(rep, "t28", "fp32")
+    bf, why_bf = _bmm_row(rep, "t28", "bf16")
+    if fp and bf:
+        a_, b_ = fp["recorded"]["fwd_host_us_median"], bf["recorded"]["fwd_host_us_median"]
+        ok = a_ >= BMM_P44_MIN_US and a_ >= BMM_P44_MIN_X * b_
+        out.append(("P44", "bmmbench", "HELD" if ok else "FALSIFIED",
+                    f"torch {fp['torch']} on {fp['gpu']}: fp32 {a_:.1f} us vs bf16 {b_:.1f} us per forward bmm at the recorded shapes "
+                    f"(x{a_ / b_:.2f}; registered >= {BMM_P44_MIN_US:.0f} us and >= x{BMM_P44_MIN_X:.0f})"))
+    else:
+        out.append(("P44", "bmmbench", "UNTESTED", "; ".join(w for w in (why_fp, why_bf) if w)))
+    if fp:
+        c_, g_ = fp["cold"]["fwd_host_us_median"], fp["recorded_again"]["fwd_host_us_median"]
+        out.append(("P45", "bmmbench", "HELD" if c_ >= BMM_P45_MIN_X * g_ else "FALSIFIED",
+                    f"torch {fp['torch']} fp32: cold {c_:.1f} us ({fp['cold']['calls']} calls, {fp['cold']['distinct_shapes']} new shapes) vs repeated "
+                    f"{g_:.1f} us (x{c_ / g_:.2f}; registered >= x{BMM_P45_MIN_X:.0f}); fixed shape {fp['fixed']['fwd_host_us_median']:.1f} us, "
+                    f"bucketed (multiple of {fp.get('bucket_multiple')}) {fp['bucket']['fwd_host_us_median']:.1f} / again {fp['bucket_again']['fwd_host_us_median']:.1f} us"))
+    else:
+        out.append(("P45", "bmmbench", "UNTESTED", why_fp))
+    fn, why_fn = _bmm_row(rep, "t212", "fp32")
+    if fp and fn:
+        c8, c12 = fp["cold"]["fwd_host_us_median"], fn["cold"]["fwd_host_us_median"]
+        out.append(("P46", "bmmbench", "HELD" if c12 <= BMM_P46_MAX_X * c8 else "FALSIFIED",
+                    f"fp32 cold median torch {fn['torch']} {c12:.1f} us vs torch {fp['torch']} {c8:.1f} us (x{c12 / c8:.3f}; registered <= x{BMM_P46_MAX_X})"))
+    else:
+        out.append(("P46", "bmmbench", "UNTESTED", "; ".join(w for w in (why_fp, why_fn) if w)))
+    return out
+
+
+def bmm_replay_table(d):
+    """Amendment 24, descriptive: every replay row's medians per regime (host us per forward bmm; backward host and device ms)."""
+    rep = bmm_replay(d)
+    if not rep:
+        return []
+    out = ["\n**Replay rows** (median host us per forward bmm; `bwd` = backward host / device ms at the recorded shapes)",
+           "| env | torch | dtype | blas | recorded | again | cold | fixed | bucket | bucket again | bwd host / device |", "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for label in BMM_FILES:
+        for (dt, blas), x in (rep.get(label) or {}).get("rows", {}).items():
+            if x.get("error"):
+                out.append(f"| {label} | {x.get('torch', '?')} | {dt} | {blas} | ERROR: {str(x['error'])[-80:]} | | | | | | |")
+                continue
+            m = lambda k: f"{x[k]['fwd_host_us_median']:.1f}"
+            out.append(f"| {label} | {x['torch']} | {dt} | {blas} | {m('recorded')} | {m('recorded_again')} | {m('cold')} | {m('fixed')} | {m('bucket')} | "
+                       f"{m('bucket_again')} | {x['recorded']['bwd_host_ms_median']:.3f} / {x['recorded']['bwd_device_ms_median']:.3f} |")
+    return out
+
+
+def score_bmmab(F):
+    """TC1-PREREG amendment 24, the training A/B on the qwen3bmmab box: P47 -- the matched arm's tv1 / tv0 s/step within BMM_P47_BAND, the
+    median over two VALID draws a side with each side's draws within 5 %; P48 -- the shipped arm's tv1 / tv0 >= the matched arm's + BMM_P48_MIN_GAP;
+    P49 -- on each arm |mean held-out at N, tv1 - tv0| <= BMM_HELDOUT_MAX. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED."""
+    R = F.get(BMMAB_FAM)
+    if not R:
+        return []
+    out, ratios, p49 = [], {}, []
+    for name, t in BMMAB_PAIRS:
+        O, N = R["draws"].get(("e4b", f"{t}_tv0"), {}), R["draws"].get(("e4b", f"{t}_tv1"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {dd.get('verdict') or 'missing'}: {dd.get('why') or ''}".strip() for side, dd in (("tv0", O), ("tv1", N)))
+            ratios[name] = (None, f"{name}: two stable VALID draws a side are registered -- {why}")
+            p49.append((name, None, why))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        h0, h1 = O.get("heldout_list") or [], N.get("heldout_list") or []
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        p49.append((name, dq, f"held-out at N tv0 {[round(v, 4) for v in h0 if v is not None]} tv1 {[round(v, 4) for v in h1 if v is not None]}"))
+        ratios[name] = (ratio_, f"{name}: tv1 / tv0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios]; s/step tv0 "
+                                f"{O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), tv1 {N['s_list'][0]:.3f} / "
+                                f"{N['s_list'][1]:.3f} (within {100 * N['stability']:.1f}%); peak tv0 {f(O.get('peak'), 2)} / tv1 {f(N.get('peak'), 2)} GB")
+    m, ev_m = ratios["matched"]
+    lo, hi = BMM_P47_BAND
+    out.append(("P47", BMMAB_FAM, "UNTESTED" if m is None else ("HELD" if lo <= m <= hi else "FALSIFIED"),
+                ev_m + ("" if m is None else f" vs {[lo, hi]}")))
+    sh, ev_s = ratios["shipped"]
+    if m is None or sh is None:
+        out.append(("P48", BMMAB_FAM, "UNTESTED", "; ".join(e for r_, e in (ratios["matched"], ratios["shipped"]) if r_ is None)))
+    else:
+        out.append(("P48", BMMAB_FAM, "HELD" if sh >= m + BMM_P48_MIN_GAP else "FALSIFIED",
+                    f"shipped {sh:.3f} vs matched {m:.3f} (gap {sh - m:+.3f}; registered >= +{BMM_P48_MIN_GAP}); {ev_s}"))
+    ev = "; ".join(f"{n}: " + (f"mean held-out tv1 - tv0 {dq:+.4f} (|.| <= {BMM_HELDOUT_MAX}); {e}" if dq is not None else e) for n, dq, e in p49)
+    if any(dq is not None and abs(dq) > BMM_HELDOUT_MAX for _, dq, _ in p49):
+        out.append(("P49", BMMAB_FAM, "FALSIFIED", ev))
+    elif any(dq is None for _, dq, _ in p49):
+        out.append(("P49", BMMAB_FAM, "UNTESTED", ev))
+    else:
+        out.append(("P49", BMMAB_FAM, "HELD", ev))
+    return out
 
 
 def prof945_table(F):
@@ -3085,6 +3255,12 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_memcensus(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if BMMAB_FAM in F or bmm_replay(d):
+        out += ["\n## Predictions P44–P49 (TC1-PREREG amendment 24: the RTX 5090's fp32 bmm host cost, replay and venv-e4b vs venv-unsloth A/B; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_bmm_replay(d) + score_bmmab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+        out += bmm_replay_table(d)
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -3366,6 +3542,42 @@ def _keep_set(ship=((5.00, 5.05), (4.40, 4.42)), match=((5.30, 5.33), (4.90, 4.9
     for r in R.values():
         r["fam"] = KEEP_FAM
     return R
+
+
+def _bmm_set(m=((5.00, 5.03), (4.20, 4.23)), sh=((3.90, 3.92), (3.86, 3.88)), torch_v=("2.8.0+cu128", "2.12.1+cu130"), held_shift=0.0, wrong_dtype=False):
+    """Amendment 24: e4b against itself -- each arm as (tv0 draws, tv1 draws) s/step; `torch_v` = the torch each side's receipts record;
+    `held_shift` moves the tv1 sides' held-out; `wrong_dtype` gives the matched tv1 side native adapters."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_m", m, True), ("fused_attn4_shipped", sh, False)):
+        for side, ss, tv in (("tv0", old, torch_v[0]), ("tv1", new, torch_v[1])):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if side == "tv1" else 0.0), matched=matched,
+                             env={"box_class": "RTX 5090", "gpu": "NVIDIA GeForce RTX 5090", "torch": tv})
+                if wrong_dtype and matched and side == "tv1":
+                    r["adapter_dtype"] = "native"
+                R[("e4b", tag)] = r
+    for r in R.values():
+        r["fam"] = BMMAB_FAM
+    return R
+
+
+def _bmm_replay_files(d, t28=None, t212=None, cap=(12, 0)):
+    """Amendment 24: write BMMBENCH-t28.json / -t212.json into d. Each arg = {(dtype, blas): (recorded, again, cold)} medians in us (None =
+    no file). Rows not given read 50 us in every regime."""
+    def row(label, torch_v, dt, blas, vals):
+        rec, again, cold = vals
+        reg = lambda v: {"fwd_host_us_median": v, "fwd_host_us_p90": v * 1.2, "bwd_host_ms_median": 0.4, "bwd_device_ms_median": 1.0, "calls": 96, "distinct_shapes": 60}
+        return {"label": label, "dtype": dt, "blas": blas, "torch": torch_v, "cuda": "x", "gpu": "NVIDIA GeForce RTX 5090", "cap": list(cap), "n_calls": 96,
+                "median_shape": [107, 138], "bucket_multiple": 32, "r": 16, "recorded": reg(rec), "recorded_again": reg(again), "cold": reg(cold),
+                "fixed": reg(again), "bucket": reg(again), "bucket_again": reg(again)}
+    for label, torch_v, spec in (("t28", "2.8.0+cu128", t28), ("t212", "2.12.1+cu130", t212)):
+        if spec is None:
+            continue
+        rows = []
+        for dt, blas in (("fp32", "default"), ("bf16", "default"), ("fp32", "cublaslt"), ("fp32tf32", "default")):
+            rows.append(row(label, torch_v, dt, blas, spec.get((dt, blas), (50.0, 50.0, 50.0))))
+        json.dump({"label": label, "results": rows}, open(os.path.join(d, BMM_FILES[label]), "w"))
 
 
 def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1536), dense_dgrad=(0, 1536), absmax=(True, True), held_shift=0.0, drop_route=False):
@@ -4978,6 +5190,66 @@ def selftest():
     assert set(F) == {MEMCENSUS_FAM} and [(x["fw"], x["tag"]) for x in F[MEMCENSUS_FAM]["rows"]] == EXPECTED[MEMCENSUS_FAM]
     text = render(F, md_)
     assert "| P43 | qwen3memcensus | **HELD** |" in text and "### Qwen3-30B-A3B (amendment 23: the memory census" in text and "## Predictions P1–P10" not in text
+    cases += 1
+    # 74. TC1 amendment 24 (qwen3bmmab): the environment A/B (P47-P49) -- matched 0.841 and shipped 0.990 HELD; no matched gain, a shipped
+    #     gain as large as the matched one, and a held-out gap each FALSIFY their prediction
+    BF = lambda R: {BMMAB_FAM: reduce_family(BMMAB_FAM, R, {}, 20)}
+    RB = BF(_bmm_set())
+    assert [(x["fw"], x["tag"]) for x in RB[BMMAB_FAM]["rows"]] == EXPECTED[BMMAB_FAM]
+    assert all(x["verdict"] == "VALID" for x in RB[BMMAB_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RB[BMMAB_FAM]["rows"]]
+    pb = lambda **kw: {p: v for p, _, v, _ in score_bmmab(BF(_bmm_set(**kw)))}
+    assert pb() == {"P47": "HELD", "P48": "HELD", "P49": "HELD"}, pb()
+    assert "tv1 / tv0 0.840 [" in score_bmmab(RB)[0][3], score_bmmab(RB)[0]
+    assert pb(m=((5.00, 5.03), (4.95, 4.97))) == {"P47": "FALSIFIED", "P48": "FALSIFIED", "P49": "HELD"}     # 0.989: no matched gain
+    assert pb(sh=((3.90, 3.92), (3.40, 3.42))) == {"P47": "HELD", "P48": "FALSIFIED", "P49": "HELD"}        # shipped 0.872: not fp32-specific
+    assert pb(m=((5.00, 5.03), (3.40, 3.42))) == {"P47": "FALSIFIED", "P48": "HELD", "P49": "HELD"}         # 0.680: below the band
+    assert pb(held_shift=0.02) == {"P47": "HELD", "P48": "HELD", "P49": "FALSIFIED"}
+    cases += 1
+    # 75. FAILING CASES: a tv1 side that ran torch 2.8 (the venv fell back) or the wrong adapter dtype is VOID, and the A/B reads UNTESTED
+    RV = BF(_bmm_set(torch_v=("2.8.0+cu128", "2.8.0+cu128")))
+    v = RV[BMMAB_FAM]["verdicts"][("e4b", "fused_attn4_m_tv1")]
+    why = next(x["why"] for x in RV[BMMAB_FAM]["rows"] if x["tag"] == "fused_attn4_m_tv1")
+    print("FAILING-CASE TC1-am24-env (reducer):", v, "--", str(why)[-140:])
+    assert v == "VOID" and "env.torch 2.8.0+cu128 is not 2.12.*" in str(why), (v, why)
+    assert pb(torch_v=("2.8.0+cu128", "2.8.0+cu128")) == {"P47": "UNTESTED", "P48": "UNTESTED", "P49": "UNTESTED"}
+    RW = BF(_bmm_set(wrong_dtype=True))
+    assert RW[BMMAB_FAM]["verdicts"][("e4b", "fused_attn4_m_tv1")] == "VOID"
+    assert "adapter_dtype 'native' != 'fp32'" in str(next(x["why"] for x in RW[BMMAB_FAM]["rows"] if x["tag"] == "fused_attn4_m_tv1"))
+    assert bmm_ab_why("fused_attn4_shipped_tv0", {"env": {"torch": "2.8.0+cu128"}, "adapter_dtype": "native"}) == ""
+    cases += 1
+    # 76. the replay (P44-P46): HELD, each FALSIFIED in turn, UNTESTED without the 2.12 file or off the registered card, nothing without files
+    pr = lambda dd: {p: v for p, _, v, _ in score_bmm_replay(dd)}
+    T28 = {("fp32", "default"): (320.0, 40.0, 310.0), ("bf16", "default"): (15.0, 14.0, 15.0)}
+    bd = tempfile.mkdtemp(prefix="tc1_bmm_selftest_")
+    _bmm_replay_files(bd, t28=T28, t212={("fp32", "default"): (40.0, 30.0, 45.0)})
+    assert pr(bd) == {"P44": "HELD", "P45": "HELD", "P46": "HELD"}, pr(bd)
+    assert "cold 310.0 us" in score_bmm_replay(bd)[1][3] and "multiple of 32" in score_bmm_replay(bd)[1][3]
+    bd = tempfile.mkdtemp(prefix="tc1_bmm_selftest_")
+    _bmm_replay_files(bd, t28={("fp32", "default"): (90.0, 40.0, 95.0), ("bf16", "default"): (15.0, 14.0, 15.0)}, t212={("fp32", "default"): (40.0, 30.0, 45.0)})
+    assert pr(bd) == {"P44": "FALSIFIED", "P45": "HELD", "P46": "HELD"}, pr(bd)        # 90 us: the anomaly is not the call's own
+    bd = tempfile.mkdtemp(prefix="tc1_bmm_selftest_")
+    _bmm_replay_files(bd, t28={("fp32", "default"): (320.0, 300.0, 310.0), ("bf16", "default"): (15.0, 14.0, 15.0)}, t212={("fp32", "default"): (250.0, 240.0, 250.0)})
+    assert pr(bd) == {"P44": "HELD", "P45": "FALSIFIED", "P46": "FALSIFIED"}, pr(bd)   # every call slow, and torch 2.12 no better
+    bd = tempfile.mkdtemp(prefix="tc1_bmm_selftest_")
+    _bmm_replay_files(bd, t28=T28)
+    print("FAILING-CASE TC1-am24-replay (reducer):", score_bmm_replay(bd)[2])
+    assert pr(bd) == {"P44": "HELD", "P45": "HELD", "P46": "UNTESTED"} and "BMMBENCH-t212.json not in this directory" in score_bmm_replay(bd)[2][3]
+    bd = tempfile.mkdtemp(prefix="tc1_bmm_selftest_")
+    _bmm_replay_files(bd, t28=T28, t212={("fp32", "default"): (40.0, 30.0, 45.0)}, cap=(8, 6))
+    assert pr(bd) == {"P44": "UNTESTED", "P45": "UNTESTED", "P46": "UNTESTED"} and "not the registered sm_120 card" in score_bmm_replay(bd)[0][3]
+    assert score_bmm_replay(tempfile.mkdtemp(prefix="tc1_bmm_selftest_")) == [] and bmm_replay_table(None) == []
+    cases += 1
+    # 77. end to end through the files: the A/B receipts and both replay files -> the P44-P49 table and the replay rows
+    bd = tempfile.mkdtemp(prefix="tc1_bmm_selftest_")
+    for (fw, tag), r in _bmm_set().items():
+        json.dump(r, open(os.path.join(bd, f"{BMMAB_FAM}_{fw}_{tag}.json"), "w"))
+    _bmm_replay_files(bd, t28=T28, t212={("fp32", "default"): (40.0, 30.0, 45.0)})
+    F = reduce_dir(bd, 20)
+    assert set(F) == {BMMAB_FAM} and [(x["fw"], x["tag"]) for x in F[BMMAB_FAM]["rows"]] == EXPECTED[BMMAB_FAM]
+    text = render(F, bd)
+    for needle in ("## Predictions P44–P49", "| P44 | bmmbench | **HELD** |", "| P46 | bmmbench | **HELD** |", "| P47 | qwen3bmmab | **HELD** |",
+                   "| P49 | qwen3bmmab | **HELD** |", "**Replay rows**", "| t212 | 2.12.1+cu130 | fp32 | default | 40.0 | 30.0 | 45.0 |"):
+        assert needle in text, needle
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

@@ -1064,6 +1064,38 @@ tc1_memcensus_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/unsloth/m_mb1 && arm $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $CEN
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_bmmab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 24 (2026-10-04): the RTX 5090's fp32 bmm host cost. First a replay, no model:
+# bmm_bench.py (staged with routecalls-qwen3.json by TC1_EXTRA_STAGE) under venv-e4b (torch 2.8.0+cu128) and, when TC1's t212 install held,
+# venv-unsloth (torch 2.12.1+cu130) -> BMMBENCH-t28.json / BMMBENCH-t212.json. Then the training A/B on TC1's qwen3 tokens and recipe: the
+# matched arm and the shipped arm, each _tv0 (venv-e4b) vs _tv1 (venv-unsloth + e4b and gnf4 at the box's pins, TC1's t212 row), two
+# draws a side in ABBA order. Every other setting is the default.
+tc1_bmmab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_tv0:fused e4b:fused_attn4_m_tv1:fused e4b:fused_attn4_m_tv1_d2:fused e4b:fused_attn4_m_tv0_d2:fused e4b:fused_attn4_shipped_tv0:fused e4b:fused_attn4_shipped_tv1:fused e4b:fused_attn4_shipped_tv1_d2:fused e4b:fused_attn4_shipped_tv0_d2:fused"
+  say "===== BMM A/B family $FAM ($MID @ $REV; the padded LoRA delta's bmm replay, then venv-e4b vs venv-unsloth on the matched and shipped arms, amendment 24)"
+  local f ok=1; for f in bmm_bench.py routecalls-qwen3.json; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; echo "BMMBENCH STAGE MISSING $f" | tee -a summary.txt; ok=0; }; done
+  if [ $ok = 1 ] && can_run 600 $FAM/bmmbench; then
+    perl -e "alarm 900; exec @ARGV" $PY_E4B -u $W/bmm_bench.py $W/routecalls-qwen3.json $W/BMMBENCH-t28.json --label t28 > logs/run_${FAM}_bmmbench_t28.log 2>&1
+    echo "BMMBENCH t28 rc=$?" | tee -a summary.txt; grep '^BMM ' logs/run_${FAM}_bmmbench_t28.log | sed 's/^/    /' | tee -a summary.txt
+    if [ "$T212_OK" = 1 ]; then
+      perl -e "alarm 900; exec @ARGV" $PY_UNS -u $W/bmm_bench.py $W/routecalls-qwen3.json $W/BMMBENCH-t212.json --label t212 > logs/run_${FAM}_bmmbench_t212.log 2>&1
+      echo "BMMBENCH t212 rc=$?" | tee -a summary.txt; grep '^BMM ' logs/run_${FAM}_bmmbench_t212.log | sed 's/^/    /' | tee -a summary.txt
+    else
+      echo "BMMBENCH t212 NOT RUN: ${T212_REASON:-the t212 install did not hold}" | tee -a summary.txt
+    fi
+  fi
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  can_run 600 $FAM/e4b/m_tv0         && arm                 $FAM e4b fused_attn4_m_tv0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_tv1         && E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_tv1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_tv1_d2      && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_tv1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_tv0_d2      && draw2               $FAM e4b fused_attn4_m_tv0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_tv0   && arm                 $FAM e4b fused_attn4_shipped_tv0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_tv1   && E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_tv1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_tv1_d2 && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_tv1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_tv0_d2 && draw2              $FAM e4b fused_attn4_shipped_tv0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_routebench_family FAM ALARM -- TC1c amendment 3 (2026-10-04): a kernel-route replay, not a training run. grouped-nf4-gemm's
 # fused NF4 grouped GEMM (forward and dgrad) against a whole-stack bitsandbytes dequantize_4bit + torch._grouped_mm on the
 # recorded real-router calls of e4b's training step (routecalls-qwen3.json, staged by TC1_EXTRA_STAGE with route_bench.py; no
@@ -1248,6 +1280,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3reuseab) tc1_reuseab_family qwen3reuseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 20 (#945)
   qwen3keepab) tc1_keepab_family qwen3keepab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 21 (#945)
   qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 22
+  qwen3bmmab)  tc1_bmmab_family  qwen3bmmab  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 24: bmm replay + venv-e4b vs venv-unsloth
   mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 22 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3memcensus) tc1_memcensus_family qwen3memcensus Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 23 (fetch 5400, e4b 3600, Unsloth 3600)
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)

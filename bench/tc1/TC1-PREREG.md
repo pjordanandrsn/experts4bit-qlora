@@ -943,3 +943,76 @@ registration with its own A/B.
 
 **Budget.** One RTX 5090 at the policy rate, 2 h guard, about $1 with the download; the standing no-ask tier; the campaign's daily cap is
 $100, counted 9 am to 9 am Central.
+### Amendment 24 (2026-10-04T19:31Z, before any box): the RTX 5090's fp32 `bmm` host cost and the torch 2.12 environment, on one RTX 5090 (P44–P49)
+
+**Why.** The TC1 profile instrument puts the largest single e4b host row on both 5090 profiles in `aten::bmm`, the padded LoRA delta's
+two batched products and their backward (grouped-nf4-gemm `kernel/nf4_qlora.py:_lora_delta_padded`), on the matched arm's fp32 adapters:
+
+| profile | arm | host self per `bmm` call | `bmm` host per step | device per call |
+|---|---|---|---|---|
+| `tc1-5090-49` (0.42.0) | matched, fp32 | 324 µs | 998 ms | 118 µs |
+| `tc1-5090-41` | matched, fp32 | 197 µs | 607 ms | 122 µs |
+| `tc1-5090-41` | shipped, bf16 | 15 µs | 47 ms | — |
+| `tc1c-h100-15` (0.45.0) | matched, fp32 | 30 µs | 93 ms | 102 µs |
+
+The same 5090 profiles read the launch APIs at 2.5–6 µs a call, so the time is not a blocked launch: it sits in the `bmm` call's own
+host code. On `tc1-5090-41` the matched arm's step is 1,085 ms longer than the shipped arm's, and `bmm` alone accounts for 560 ms of
+that. An RTX A2000 (sm_86, torch 2.8.0+cu128) replay of the same shapes reads 70–100 µs per fp32 call against 45–60 µs for bf16, with
+no gap between new and repeated shapes, so the effect is not general.
+
+TC1's native box (`tc1-5090-14`, 2026-10-02) also ran e4b's matched arm in two environments on one card: 9.336 s/step on the field
+image's torch 2.8.0+cu128, and 8.069 s/step in the torch 2.12.1+cu130 venv, 0.864×. That reading was one draw each, on e4b 0.38.0,
+and was never attributed. Every 5090 position of record runs e4b on torch 2.8.0+cu128 and Unsloth on torch 2.12.1+cu130.
+
+**Hypothesis.** cuBLAS 12.8 on sm_120 spends a per-shape host search on fp32 batched GEMMs. The padded delta's shape (present groups,
+widest group) changes with the routing on every call, so the search is paid on nearly every call. bf16 and the H100 take paths whose
+search is cheap or cached.
+
+**The box** (token `qwen3bmmab`). One RTX 5090.
+
+1. **Replay, no model.** `bench/tc1/bmm_bench.py` replays the padded delta's two `bmm` and their backward at the shapes of the 96
+   forward calls in `routecalls-qwen3.json` (r 16). It runs once under each environment: venv-e4b (torch 2.8.0+cu128) and venv-unsloth
+   (torch 2.12.1+cu130). For each of fp32, bf16, fp32 with `preferred_blas_library("cublaslt")`, and fp32 with TF32, in a fresh process,
+   it reads the host time of each forward `bmm` with the queue drained first, so a launch cannot block. The shapes are taken:
+   - as recorded (first exposure),
+   - again (repeats),
+   - as new shapes the process has not used (cold),
+   - at one fixed shape,
+   - with the widest group rounded up to a multiple of 32.
+
+   The cublasLt and TF32 rows are descriptive. TF32 changes the numerics, so it is not a candidate for the matched arm.
+2. **Training A/B** on TC1's qwen3 token's tokens and recipe, ABBA order, two draws a side:
+   - the matched arm (fp32 adapters, matched init): `fused_attn4_m_tv0` (venv-e4b) vs `fused_attn4_m_tv1` (venv-unsloth with e4b and
+     grouped-nf4-gemm at the box's pins, as TC1's `t212` row);
+   - the shipped arm (native bf16 adapters): `fused_attn4_shipped_tv0` vs `fused_attn4_shipped_tv1`.
+
+   The two venvs also differ in transformers (5.18.0 vs 5.5.0) and triton (3.4.0 vs 3.7.1), so this half reads the environment as a
+   whole. The replay is what isolates cuBLAS. Engagement: each arm's receipt records the torch its tag names (`env.torch` 2.8.* for
+   `_tv0`, 2.12.* for `_tv1`) and the adapter dtype its arm names.
+
+**Predictions** (registered before the box):
+
+- **P44** (the anomaly outside training): under torch 2.8.0+cu128, fp32's median host time per forward `bmm` at the recorded shapes
+  is ≥ **100 µs** and ≥ **3×** bf16's.
+- **P45** (per shape): under torch 2.8.0+cu128, fp32's median on cold shapes is ≥ **2×** its median on repeated shapes.
+- **P46** (the environment): torch 2.12.1+cu130's fp32 cold median is ≤ **0.5×** torch 2.8.0+cu128's.
+- **P47** (the matched arm): `_tv1` / `_tv0` s/step lies in **[0.70, 0.95]**, both sides stable (two draws within 5 %).
+- **P48** (where the gain lands): the shipped arm's `_tv1` / `_tv0` ratio is at least the matched arm's ratio + **0.05**.
+- **P49:** on each arm, |mean held-out at N, `_tv1` − `_tv0`| ≤ **0.01**.
+
+P44–P46 are FALSIFIED outside their bounds and UNTESTED where the replay did not run in that environment. P47–P49 are FALSIFIED
+outside their bounds, and UNTESTED where a side is unstable, not VALID or not engaged.
+
+**Decision rules.**
+
+- **P44 FALSIFIED:** the profile's `bmm` time is a load effect, not a property of the call. No grouped-nf4-gemm change follows from this box.
+- **P44 and P45 HELD:** grouped-nf4-gemm gets an opt-in that rounds the padded delta's widest group up to a bucket, so the shapes
+  recur. It is read in its own A/B box (the replay's bucket rows size it). Padding rows are zero and sliced away, but a different
+  shape can select a different kernel, so the change is reorder-class, not bit-identical.
+- **P46 HELD:** the docs say that fp32 adapters on an sm_120 card want torch ≥ 2.12 (cu130).
+- **P47 and P48 HELD:** the 5090 positions of record carry an environment asymmetry in Unsloth's favour. STATUS names it with this
+  box's ratio. A position with both frameworks on torch 2.12.1+cu130 follows in its own box. No position against another framework is
+  read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor. Qwen3-30B-A3B's download plus eight arms
+and the replay come to about $1.50; this is in the standing no-ask tier.

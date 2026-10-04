@@ -1,0 +1,13 @@
+{
+ "mode": "capture",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "prefill_routes": {
+  "int4_prefill_env": null,
+  "prefill_attn_env": null,
+  "device_grouping": true,
+  "int4_prefill": "k19",
+  "int4_prefill_above_256_rows": "k19",
+  "prefill_attn": "flash"
+ },
+ "captured": true
+}
