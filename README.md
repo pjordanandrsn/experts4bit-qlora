@@ -148,6 +148,7 @@ image whose torch you want to keep.
 |---|---|---|
 | nothing — just train a fused MoE | `load_moe_4bit_streaming(...)` | `[train]` |
 | each step is slow | `enable_fast_train(model, dgrad=True)` | `[fast]` |
+| …and there is spare VRAM to trade | `E4B_MOE_KEEP_LAYERS=n` + `NF4_QLORA_COMPACT_DELTA=1`, then `enable_fast_train` | `[fast]` + grad ckpt |
 | …and `[fast]` will not build | `enable_batched_train(model)` | — |
 | the experts do not fit VRAM | `load_moe_4bit_streaming(..., offload=True)` | — |
 | the experts do not fit host RAM, serving | `enable_nvme_residency(...)` | `[fast]` + arena |
