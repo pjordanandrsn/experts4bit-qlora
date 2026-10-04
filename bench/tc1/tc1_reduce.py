@@ -381,6 +381,42 @@ def reuse_ab_why(tag, r):
     return "" if not bad else f"host-reuse A/B not engaged ({', '.join(bad)}; record {ra})"
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 21 (#945): whole-layer checkpointing vs keeping MoE activations
+KEEP_FAM = "qwen3keepab"          # E4B_MOE_KEEP_LAYERS unset (whole-layer checkpointing) vs =n with NF4_QLORA_COMPACT_DELTA=1 (e4b#1007, gnf4#445)
+KEEP_PAIRS = (("P35", "shipped", "fused_attn4_shipped"), ("P36", "matched", "fused_attn4_m"))   # each: <tag>_keep0 vs <tag>_keep1, two draws a side
+KEEP_N = {"fused_attn4_shipped": 32, "fused_attn4_m": 16}  # the layers kept on each arm's keep1 side, sized to the 5090's headroom
+KEEP_BANDS = {"P35": (0.80, 0.95), "P36": (0.86, 0.98)}    # keep1 / keep0 s/step on stable pairs
+KEEP_PEAK_MAX_GB = 31.0           # P37: each keep1 side's median peak at or under this ...
+KEEP_HELDOUT_MAX = 0.005          # ... and |mean held-out at N, keep1 - keep0| at or under this on each arm (gradients are identical by construction)
+FAMS.append(KEEP_FAM)
+NAMES[KEEP_FAM] = "Qwen3-30B-A3B (amendment 21: whole-layer gradient checkpointing vs keeping the last n layers' MoE activations)"
+N_LAYERS[KEEP_FAM] = 48
+ATTN_CENSUS[KEEP_FAM] = 192
+FAM_ANCHOR[KEEP_FAM] = ("e4b", "fused_attn4_m_keep0")
+EXPECTED[KEEP_FAM] = [("e4b", "fused_attn4_shipped_keep0"), ("e4b", "fused_attn4_shipped_keep1"), ("e4b", "fused_attn4_m_keep0"), ("e4b", "fused_attn4_m_keep1"),
+                      ("e4b", "fused_attn4_m_keep1_d2"), ("e4b", "fused_attn4_m_keep0_d2"), ("e4b", "fused_attn4_shipped_keep1_d2"), ("e4b", "fused_attn4_shipped_keep0_d2")]
+MATCHED |= {"fused_attn4_m_keep0", "fused_attn4_m_keep1", "fused_attn4_m_keep0_d2", "fused_attn4_m_keep1_d2"}
+for _p, _k, _t in KEEP_PAIRS:
+    for _side in ("keep0", "keep1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def keep_ab_why(tag, r):
+    """Amendment 21's engagement predicate: a keep1 arm kept exactly its arm's KEEP_N layers with the compact delta in force; a keep0
+    arm kept none; both on the trimmed LoRA delta. Empty string = engaged."""
+    ka, la = (r or {}).get("keep_ab"), (r or {}).get("lean_ab") or {}
+    if not isinstance(ka, dict):
+        return "no keep_ab record on the receipt: how many layers kept their MoE activations cannot be verified"
+    if "_keep1" in tag:
+        want = next((n for t, n in KEEP_N.items() if tag.startswith(t + "_")), None)
+        checks = (("e4b_has_moe_keep", ka.get("e4b_has_moe_keep") is True), (f"layers_kept {want}", ka.get("layers_kept") == want),
+                  ("gnf4_compact_delta 1", ka.get("gnf4_compact_delta") == "1"))
+    else:
+        checks = (("layers_kept 0", (ka.get("layers_kept") or 0) == 0),)
+    bad = [k for k, ok in checks + (("gnf4_lean_delta 1", la.get("gnf4_lean_delta") == "1"),) if not ok]
+    return "" if not bad else f"MoE-keep A/B not engaged ({', '.join(bad)}; record {ka})"
+
+
 def lean_ab_why(tag, r):
     """Amendment 13's engagement predicate: the arm ran the delta body its tag names, by its own record, and the padded path -- the only
     one the switch touches -- served the delta. Empty string = engaged."""
@@ -787,7 +823,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             nb = (r.get("axolotl_bnb4bit_modules") or {}).get("n_bnb4bit_unwrapped")
             if nb is None or nb < L:
                 why.append(f"quantize_moe_experts set but bnb-parametrized experts modules (innermost) {nb} < {L}")
-    if fam in (SYNC_FAM, PROF945_FAM, LEAN_FAM, TILE_FAM, RMS_FAM, REUSE_FAM) and fw == "e4b":   # amendments 10 / 12-15 / 20: the arm ran the sync path its tag names (13-15, 20: the new one)
+    if fam in (SYNC_FAM, PROF945_FAM, LEAN_FAM, TILE_FAM, RMS_FAM, REUSE_FAM, KEEP_FAM) and fw == "e4b":   # amendments 10 / 12-15 / 20-21: the arm ran the sync path its tag names (13-15, 20-21: the new one)
         w = sync_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
@@ -805,6 +841,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == REUSE_FAM and fw == "e4b":                # amendment 20: ... and the host-reuse setting its tag names, on the trimmed delta
         w = reuse_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == KEEP_FAM and fw == "e4b":                 # amendment 21: ... and the layers-kept setting its tag names, on the trimmed delta
+        w = keep_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -1439,6 +1479,47 @@ def score_reuseab(F):
                     f"s/step reuse0 {O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), reuse1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
                     f"(within {100 * N['stability']:.1f}%); held-out at N reuse0 {f(O.get('heldout'), 4)} / reuse1 {f(N.get('heldout'), 4)}; "
                     f"reuse1 hits (process) {json.dumps(hits, sort_keys=True)}"))
+    return out
+
+
+def score_keepab(F):
+    """TC1-PREREG amendment 21 (#945), on the qwen3keepab box: P35 (shipped arm, 32 layers kept) and P36 (matched arm, 16 kept) -- keep1 / keep0
+    s/step within KEEP_BANDS[pid], the median over two VALID draws a side with each side's draws within 5 %; P37 -- on each arm the keep1
+    side's median peak is at or under KEEP_PEAK_MAX_GB and the two sides' mean held-out at N agree within KEEP_HELDOUT_MAX. Outside
+    FALSIFIED; a missing / non-VALID / unstable side UNTESTED (an OOM keep1 side is a non-VALID side: P37 FALSIFIED reads it)."""
+    R = F.get(KEEP_FAM)
+    if not R:
+        return []
+    out, p37 = [], []
+    for pid, name, t in KEEP_PAIRS:
+        O, N = R["draws"].get(("e4b", f"{t}_keep0"), {}), R["draws"].get(("e4b", f"{t}_keep1"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("keep0", O), ("keep1", N)))
+            out.append((pid, KEEP_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            oom = R["verdicts"].get(("e4b", f"{t}_keep1")) == "OOM" or R["verdicts"].get(("e4b", f"{t}_keep1_d2")) == "OOM"
+            p37.append((name, "OOM" if oom else None, why))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        lo, hi = KEEP_BANDS[pid]
+        h0 = [x["r"].get("eval_loss_final") for x in R["rows"] if x["fw"] == "e4b" and x["tag"] in (f"{t}_keep0", f"{t}_keep0_d2")]
+        h1 = [x["r"].get("eval_loss_final") for x in R["rows"] if x["fw"] == "e4b" and x["tag"] in (f"{t}_keep1", f"{t}_keep1_d2")]
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        p37.append((name, (N.get("peak"), dq), f"peak keep0 {f(O.get('peak'), 2)} / keep1 {f(N.get('peak'), 2)} GB; held-out at N keep0 "
+                                               f"{[round(v, 4) for v in h0]} keep1 {[round(v, 4) for v in h1]}"))
+        out.append((pid, KEEP_FAM, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+                    f"{name} ({KEEP_N[t]} of 48 layers kept): keep1 / keep0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs "
+                    f"{[lo, hi]}; s/step keep0 {O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), keep1 "
+                    f"{N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} (within {100 * N['stability']:.1f}%); peak keep0 {f(O.get('peak'), 2)} / keep1 {f(N.get('peak'), 2)} GB"))
+    if any(v == "OOM" for _, v, _ in p37):
+        out.append(("P37", KEEP_FAM, "FALSIFIED", "; ".join(f"{n}: {'keep1 OOM' if v == 'OOM' else e}" for n, v, e in p37)))
+    elif any(v is None or v[0] is None or v[1] is None for _, v, _ in p37):
+        out.append(("P37", KEEP_FAM, "UNTESTED", "; ".join(f"{n}: {e}" for n, _, e in p37)))
+    else:
+        held = all(v[0] <= KEEP_PEAK_MAX_GB and abs(v[1]) <= KEEP_HELDOUT_MAX for _, v, _ in p37)
+        out.append(("P37", KEEP_FAM, "HELD" if held else "FALSIFIED",
+                    "; ".join(f"{n}: keep1 peak {v[0]:.2f} GB (<= {KEEP_PEAK_MAX_GB}), mean held-out keep1 - keep0 {v[1]:+.4f} (|.| <= {KEEP_HELDOUT_MAX}); {e}"
+                              for n, v, e in p37)))
     return out
 
 
@@ -2629,6 +2710,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_reuseab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if KEEP_FAM in F:
+        out += ["\n## Predictions P35 / P36 / P37 (TC1-PREREG amendment 21, #945: whole-layer checkpointing vs keeping MoE activations, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_keepab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -2886,6 +2972,29 @@ def _reuse_set(ship=((5.00, 5.05), (4.70, 4.72)), match=((5.30, 5.33), (5.05, 5.
                                            reuse_ab={"gnf4_host_reuse": flag, "gnf4_host_reuse_env": flag, "gnf4_has_host_reuse": True, "stats": st})
     for r in R.values():
         r["fam"] = REUSE_FAM
+    return R
+
+
+def _keep_set(ship=((5.00, 5.05), (4.40, 4.42)), match=((5.30, 5.33), (4.90, 4.92)), kept=None, compact="1", held_shift=0.0, peak1=29.5, lean="1"):
+    """Amendment 21: e4b against itself -- each pair as (keep0 draws, keep1 draws); `kept` overrides the keep1 sides' layers_kept (default
+    each arm's KEEP_N); `held_shift` moves the keep1 sides' held-out; `peak1` = the keep1 sides' peak GB."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for side, ss in (("keep0", old), ("keep1", new)):
+            on = side == "keep1"
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                R[("e4b", tag)] = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if on else 0.0), matched=matched,
+                                           sync_ab={"e4b_grouping": "default", "gnf4_pinned_ring": "1", "e4b_has_group_by_expert": True,
+                                                    "gnf4_has_ring": True, "ring_staged": 9216, "ring_waits": 0},
+                                           lean_ab={"gnf4_lean_delta": lean, "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                                                    "lora_path_calls": {"loop": 0, "padded": 9216, "grouped_mm": 0}},
+                                           keep_ab={"requested_env": str(KEEP_N[t]) if on else "0", "e4b_has_moe_keep": True,
+                                                    "layers_kept": ((kept if kept is not None else KEEP_N[t]) if on else 0),
+                                                    "gnf4_compact_delta": compact if on else "0", "gnf4_compact_delta_env": compact if on else None})
+                R[("e4b", tag)]["peak_vram_gb"] = peak1 if on else 27.2
+    for r in R.values():
+        r["fam"] = KEEP_FAM
     return R
 
 
@@ -3962,6 +4071,27 @@ def selftest():
     assert reduce_family(REUSE_FAM, _reuse_set(lean="0"), {}, 20)["verdicts"][("e4b", "fused_attn4_m_reuse0")] == "VOID"
     text = render(UF, "x")
     assert "## Predictions P33 / P34" in text and "| P33 | qwen3reuseab | **HELD** |" in text and "| P34 | qwen3reuseab | **HELD** |" in text
+    cases += 1
+    # 62. amendment 21 (#945): whole-layer checkpointing vs keeping MoE activations -- every arm VALID when it kept the layers its tag names
+    #     with the compact delta, P35 / P36 HELD inside their bands, P37 HELD on peak and held-out, P37 FALSIFIED on a 31.5 GB peak or a 0.01
+    #     held-out shift, a keep1 arm that kept the wrong count or ran without the compact delta VOID (UNTESTED)
+    def pk(R):
+        return {p: v for p, _, v, _ in score_keepab({KEEP_FAM: reduce_family(KEEP_FAM, R, {}, 20)})}
+    KF = {KEEP_FAM: reduce_family(KEEP_FAM, _keep_set(), {}, 20)}
+    assert [(x["fw"], x["tag"]) for x in KF[KEEP_FAM]["rows"]] == EXPECTED[KEEP_FAM]
+    assert all(x["verdict"] == "VALID" for x in KF[KEEP_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in KF[KEEP_FAM]["rows"]]
+    PK = {p: (v, ev) for p, _, v, ev in score_keepab(KF)}
+    assert PK["P35"][0] == "HELD" and PK["P36"][0] == "HELD" and PK["P37"][0] == "HELD", PK
+    assert "keep1 / keep0 0.878 [" in PK["P35"][1] and "(32 of 48 layers kept)" in PK["P35"][1] and "(16 of 48 layers kept)" in PK["P36"][1], PK
+    assert pk(_keep_set(peak1=31.5)) == {"P35": "HELD", "P36": "HELD", "P37": "FALSIFIED"}
+    assert pk(_keep_set(held_shift=0.01)) == {"P35": "HELD", "P36": "HELD", "P37": "FALSIFIED"}
+    assert pk(_keep_set(ship=((5.00, 5.05), (4.99, 5.02)))) == {"P35": "FALSIFIED", "P36": "HELD", "P37": "HELD"}
+    RR = reduce_family(KEEP_FAM, _keep_set(kept=8), {}, 20)
+    assert RR["verdicts"][("e4b", "fused_attn4_shipped_keep1")] == "VOID" and "layers_kept 32" in next(x["why"] for x in RR["rows"] if x["tag"] == "fused_attn4_shipped_keep1")
+    assert pk(_keep_set(kept=8)) == {"P35": "UNTESTED", "P36": "UNTESTED", "P37": "UNTESTED"}
+    assert reduce_family(KEEP_FAM, _keep_set(compact="0"), {}, 20)["verdicts"][("e4b", "fused_attn4_m_keep1")] == "VOID"
+    text = render(KF, "x")
+    assert "## Predictions P35 / P36 / P37" in text and "| P35 | qwen3keepab | **HELD** |" in text and "| P37 | qwen3keepab | **HELD** |" in text
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 
