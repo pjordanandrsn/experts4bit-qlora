@@ -14,6 +14,15 @@
   `sc2_prompts.py`, `sc2_reduce.py` (self-tested on 10 cases) and box E, `sc2_box_e.sh`, which `sc1_run.sh` sources with
   `SC1_BOX=E` so the lane reuses SC1's installs, checkpoints, bake and sampler. The SC2 files are staged and pinned like SC1's.
 - **Budget.** Proof guard 1.25 h ≤ $0.94; reading guard 3.0 h ≤ $2.25; expected about $2.5.
+### Read: TC1c amendment 3 — on an H100, dequantize + `torch._grouped_mm` runs e4b's recorded GEMM calls in 0.50–0.60 of the fused kernels' time
+
+- **What.** `tc1c-h100-5` (H100 NVL, $0.21) replayed the 128 unique fused forward and dgrad calls of e4b's training step, recorded
+  through the real router at Qwen3-30B-A3B's shapes.
+- **Reading.** Forward (dequant + grouped_mm) / fused is **0.596**, and dgrad **0.494**. The grouped GEMM alone is 0.20 / 0.16, so
+  the dequantize is two thirds of the route.
+- **Numerics.** Every call is within 0.0024 relative Frobenius error of the fused output. P9, P10 and P11 HELD.
+- **Decision.** By the registered rule, grouped-nf4-gemm takes the route as an sm_90 opt-in, and its full-step value is a separate
+  box. It is a kernel replay, not a position, so no register row changes. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
 
 ### Lane K28's runner (#1015): the GNF4_PDL decode-chain bench's box side (bench and tests only)
 
