@@ -27,6 +27,14 @@ so neither the warm-up forwards nor the capture can advance a live sequence. A b
 capture fails runs the SAME padded step eagerly, and says so once. The oracle for a replay
 is that padded eager step, bitwise: a bf16 GEMM can round differently at a different row
 count, so an unpadded eager step is not the same function.
+
+**First-chunk prefill graph (opt-in, ``E4B_PAGED_PREFILL_GRAPH``).** :meth:`PagedModelRunner.enable_prefill_graph`
+captures one CUDA graph of a ``T``-token prefill forward at positions ``0..T-1`` and serves every first chunk of
+exactly ``T`` tokens from it. A first chunk reads no history: its attention runs over its own K/V, which
+:meth:`.paged_attention.PagedAttentionContext.stage` keys by slot in Python. So one graph serves every slot, and after
+a replay the graph's K/V outputs are staged for the request's slot. Later chunks, and first chunks of any other
+length, run eagerly and are counted by reason. The A2000 census (``bench/prefill-graph-census-2026-10-04``) found no
+host sync in the prefill forward under device grouping.
 """
 from __future__ import annotations
 
@@ -38,6 +46,15 @@ from .scheduler import StepRunner
 
 
 DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
+
+
+class PrefillGraphRefused(ValueError):
+    """:meth:`PagedModelRunner.enable_prefill_graph` would not engage; ``why`` is the reason."""
+
+    def __init__(self, why: str):
+        super().__init__(f"prefill graph refused: {why}")
+        self.why = why
+
 
 #: ``config.layer_types`` values whose layers own K/V in the paged pool, and values that carry no per-sequence state
 ATTENTION_LAYER_TYPES = frozenset({"full_attention", "sliding_attention", "attention"})
@@ -119,6 +136,8 @@ class PagedModelRunner(StepRunner):
         # the pool layers attention appends to (all of them, unless a hybrid's pool keeps a row per model layer)
         self.pool_layers = [self.ctx.layer_map.get(a, a) for a in self.attn_layers]
         self._graphs = None          # bucket -> CUDAGraph | None (eager); see enable_decode_graphs
+        self._prefill_graph = None   # see enable_prefill_graph
+        self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
 
     # ------------------------------------------------------------ intake --
     def bind(self, rid: int, slot: int, prompt) -> None:
@@ -147,15 +166,23 @@ class PagedModelRunner(StepRunner):
             for rid, start, take in chunks:
                 slot = self.slot_of[rid]
                 self.ctx.slots = [slot]
-                ids = torch.tensor(self.tokens[rid][start:start + take],
-                                   dtype=torch.long, device=self.device)
-                pos = torch.arange(start, start + take, device=self.device)
-                prev = set_context(self.ctx)
-                try:
-                    out = self.model(input_ids=ids[None],
-                                     position_ids=pos[None], use_cache=False)
-                finally:
-                    set_context(prev)
+                done = start + take >= len(self.tokens[rid])
+                pg = self._prefill_graph
+                if pg is not None and start == 0 and take == pg["T"]:
+                    logits = self._replay_prefill_graph(rid, slot, take, done)
+                else:
+                    if pg is not None:
+                        self._note_eager("later_chunk" if start else "short_chunk")
+                    ids = torch.tensor(self.tokens[rid][start:start + take],
+                                       dtype=torch.long, device=self.device)
+                    pos = torch.arange(start, start + take, device=self.device)
+                    prev = set_context(self.ctx)
+                    try:
+                        out = self.model(input_ids=ids[None],
+                                         position_ids=pos[None], use_cache=False)
+                    finally:
+                        set_context(prev)
+                    logits = out.logits
                 if self.linear_state is not None:
                     self.linear_state.mark([slot])     # its linear layers now carry this prompt's state
                 self.pos_of[rid] = start + take
@@ -172,7 +199,7 @@ class PagedModelRunner(StepRunner):
                         k, v = staged
                         self.kv.append(layer, slot, k.contiguous(),
                                        v.contiguous())
-                    tok = int(out.logits[0, -1].argmax(-1))
+                    tok = int(logits[0, -1].argmax(-1))
                     first[rid] = tok
                     self.tokens[rid].append(tok)
                     self.pos_of[rid] += 1
@@ -393,6 +420,133 @@ class PagedModelRunner(StepRunner):
         if ctrl is not None:
             ctrl.on_decode_step()
         return got
+
+    # ------------------------------------------ first-chunk prefill graph --
+    def enable_prefill_graph(self, T: int, *, warmup: int = 2, seed: int = 1689) -> dict:
+        """Capture one CUDA graph of a ``T``-token first-chunk prefill forward and serve first chunks of exactly
+        ``T`` tokens from it (see the module docstring). Refuses with :class:`PrefillGraphRefused` naming the reason:
+
+        * no CUDA device;
+        * ``hot_residency.DEVICE_GROUPING`` off: host grouping syncs inside the forward;
+        * a linear-attention (hybrid) model: its per-slot state is mutated by prefill;
+        * a capture that raises (a host sync inside the forward invalidates it);
+        * a capture that does not stage K/V for every pool layer;
+        * a failed startup check. On two seeded prompts, each replay must equal an eager forward bit for bit, in
+          the logits and in every pool layer's staged K/V. The two prompts' eager logits must also differ; a check
+          whose prompts gave identical outputs could not tell a stale graph from a live one.
+
+        Returns :meth:`prefill_graph_stats`."""
+        from . import hot_residency
+
+        T = int(T)
+        why = None
+        if self.device.type != "cuda":
+            why = f"needs a CUDA device, not {self.device}"
+        elif T < 1:
+            why = f"T must be positive, got {T}"
+        elif not hot_residency.DEVICE_GROUPING[0]:
+            why = ("device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with "
+                   "decode graphs at max_seqs > 1 on the all-vram placement)")
+        elif self.linear_state is not None:
+            why = "a hybrid model's linear-attention state is per slot, and prefill mutates it"
+        if why:
+            raise PrefillGraphRefused(why)
+        dev, ctx, key = self.device, self.ctx, -1     # key: the staging slot of the capture and the check
+        vocab = int(self.model.get_output_embeddings().weight.shape[0])
+        gen = torch.Generator().manual_seed(seed)
+        prompts = [torch.randint(0, vocab, (1, T), generator=gen).to(dev) for _ in range(2)]
+        ids = prompts[0].clone()
+        pos = torch.arange(T, device=dev)[None]
+
+        def staged():
+            return {lay: (buf[0][-1], buf[1][-1]) for (lay, s), buf in ctx.staging.items() if s == key}
+
+        saved_slots = ctx.slots
+        self._mode(True)
+        ctx.mode, ctx.slots = "prefill", [key]
+        prev = set_context(ctx)
+        try:
+            with torch.no_grad():
+                side = torch.cuda.Stream(dev)
+                side.wait_stream(torch.cuda.current_stream(dev))
+                with torch.cuda.stream(side):
+                    for _ in range(max(1, warmup)):
+                        ctx.drop(key)
+                        self.model(input_ids=ids, position_ids=pos, use_cache=False)
+                torch.cuda.current_stream(dev).wait_stream(side)
+                torch.cuda.synchronize(dev)
+                ctx.drop(key)
+                g = torch.cuda.CUDAGraph()
+                try:
+                    with torch.cuda.graph(g):
+                        out = self.model(input_ids=ids, position_ids=pos, use_cache=False)
+                except Exception as e:  # noqa: BLE001 -- any capture failure is a refusal, with its reason
+                    raise PrefillGraphRefused(f"the {T}-token prefill forward did not capture "
+                                              f"({type(e).__name__}: {str(e)[:300]})") from e
+                logits, kv_out = out.logits, staged()
+                ctx.drop(key)
+                if sorted(kv_out) != sorted(self.pool_layers):
+                    raise PrefillGraphRefused(f"the capture staged K/V for layers {sorted(kv_out)}, not the pool's "
+                                              f"{sorted(self.pool_layers)}")
+                refs = []
+                for p in prompts:
+                    ctx.drop(key)
+                    o = self.model(input_ids=p, position_ids=pos, use_cache=False)
+                    refs.append((o.logits.clone(), {lay: (k.clone(), v.clone()) for lay, (k, v) in staged().items()}))
+                ctx.drop(key)
+                if torch.equal(refs[0][0], refs[1][0]):
+                    raise PrefillGraphRefused("the startup check's two prompts gave identical logits, so it could not "
+                                              "tell a stale graph from a live one")
+                for i in (1, 0):          # the second prompt first: the graph last saw the first
+                    ids.copy_(prompts[i])
+                    g.replay()
+                    rl, rkv = refs[i]
+                    bad = [lay for lay in rkv if not (torch.equal(kv_out[lay][0], rkv[lay][0])
+                                                      and torch.equal(kv_out[lay][1], rkv[lay][1]))]
+                    if not torch.equal(logits, rl) or bad:
+                        d = (logits.float() - rl.float()).abs().max().item()
+                        raise PrefillGraphRefused(f"the startup check's replay of prompt {i} differs from the eager "
+                                                  f"forward (logits max abs {d:.3g}; K/V layers {bad})")
+        finally:
+            ctx.drop(key)
+            set_context(prev)
+            ctx.slots, ctx.mode = saved_slots, "decode"
+            self._mode(False)
+        self._prefill_graph = {"T": T, "graph": g, "ids": ids, "logits": logits, "staged": kv_out}
+        self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
+        return self.prefill_graph_stats()
+
+    def _replay_prefill_graph(self, rid: int, slot: int, take: int, done: bool):
+        pg = self._prefill_graph
+        # the same host-to-device copy the eager path makes, into the graph's input
+        pg["ids"].copy_(torch.tensor(self.tokens[rid][:take], dtype=torch.long)[None])
+        pg["graph"].replay()
+        self.ctx.drop(slot)
+        for layer, (k, v) in pg["staged"].items():
+            # the next replay overwrites the graph's outputs: a prompt that continues keeps a copy. A prompt that
+            # completes is flushed into the pool in this call, before any other replay.
+            self.ctx.staging[(layer, slot)] = ([k], [v]) if done else ([k.clone()], [v.clone()])
+        self._pg_stats["replays"] += 1
+        return pg["logits"]
+
+    def _note_eager(self, reason: str) -> None:
+        s = self._pg_stats
+        s["eager_chunks"] += 1
+        s["eager_reasons"][reason] += 1
+
+    def prefill_graph_stats(self) -> dict:
+        """``{"status": "off"}``, or ``{"status": "on", "T", "replays", "eager_chunks", "eager_reasons"}``: first
+        chunks served from the graph, and chunks that ran eagerly with the reason (``later_chunk``: a chunk after
+        the first; ``short_chunk``: a first chunk of another length). The startup check's replays are not
+        counted."""
+        if self._prefill_graph is None:
+            return {"status": "off"}
+        s = self._pg_stats
+        return {"status": "on", "T": self._prefill_graph["T"], "replays": s["replays"],
+                "eager_chunks": s["eager_chunks"], "eager_reasons": dict(s["eager_reasons"])}
+
+    def disable_prefill_graph(self) -> None:
+        self._prefill_graph = None
 
     def free_slot(self, rid: int) -> None:
         slot = self.slot_of.pop(rid, None)

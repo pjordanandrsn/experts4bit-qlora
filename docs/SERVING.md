@@ -102,6 +102,22 @@ resolved, `auto` -> `k19` or `loop`), `int4_prefill_above_256_rows` (with `devic
 `k19`, else `mtile`), `prefill_attn` (`E4B_PAGED_PREFILL_ATTN` resolved), and the raw `*_env` values. A harness
 should record that block, not the box's environment.
 
+**First-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH=1`, off by default).** Every first chunk of exactly
+`E4B_PAGED_CHUNK_TOKENS` tokens replays one CUDA graph of the prefill forward instead of launching it kernel by
+kernel; later chunks, and first chunks of other lengths, run eagerly. A first chunk reads no history, so one graph
+serves every slot. The knob engages only if it verifies at startup:
+- device grouping is on (decode graphs at `max_seqs > 1` on the all-vram placement) and the model has no
+  linear-attention state;
+- the capture succeeds (a host sync inside the forward fails it);
+- on two seeded prompts, each replay equals an eager forward bit for bit, in the logits and in every layer's staged
+  K/V.
+
+Otherwise the server stops at startup: `/health` reads `status: "error"`, and its `prefill_graph` block reads
+`status: "refused"` with the reason (`E4B_PAGED_PREFILL_GRAPH=1 refused: ...`). It never falls back silently. When
+engaged, the block reads `status: "on"`, `T`, `replays`, `eager_chunks` and `eager_reasons` (`later_chunk`,
+`short_chunk`); the startup check's replays are not counted. It reads `status: "off"` when not requested. The A2000
+census behind it is `bench/prefill-graph-census-2026-10-04/`.
+
 Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
 (512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS` (`auto`, the default:

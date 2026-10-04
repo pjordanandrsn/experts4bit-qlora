@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### serve_paged: opt-in first-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH=1`)
+
+- **What.** With the knob on, every first chunk of exactly `E4B_PAGED_CHUNK_TOKENS` tokens replays one CUDA graph of
+  the prefill forward (`PagedModelRunner.enable_prefill_graph`). Later chunks and other first-chunk lengths run
+  eagerly and are counted by reason. A first chunk reads no history, so one graph serves every slot; after a replay
+  the graph's K/V outputs are staged for the request's slot, copied when the prompt continues.
+- **Engages only if verified at startup.** It needs device grouping, no linear-attention state, and a capture that
+  succeeds. On two seeded prompts, each replay must equal an eager forward bit for bit in the logits and every layer's
+  staged K/V, and the two prompts must give different logits. Otherwise the server refuses at startup (`/health`
+  `prefill_graph.status: "refused"`, with the reason) rather than falling back silently.
+- **`/health`.** The `prefill_graph` block reports `off` / `on` / `loading` / `refused`; when on, it adds `T`,
+  `replays`, `eager_chunks` and `eager_reasons`.
+- **Tests.**
+  - CPU: routing, counters, and the copy for a continuing prompt, with a mutation arm that drops the copy.
+  - GPU: bitwise against eager on the FP8 pool and first tokens, the same mutation arm, and every refusal, each made
+    to fire.
+- **Basis.** The A2000 census (`bench/prefill-graph-census-2026-10-04/`). Off by default; its speed is for lane
+  SC2b to read.
+
 ### serve_paged: `/health` reports the prefill routes the server resolves
 
 - **What.** `GET /health` gains a `prefill_routes` block, computed at each request by the same functions the forward

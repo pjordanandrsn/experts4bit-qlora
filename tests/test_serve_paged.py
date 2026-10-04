@@ -765,3 +765,39 @@ def test_prefill_routes_report_what_the_forward_resolves(monkeypatch):
 def test_health_carries_the_prefill_routes():
     src = (__import__("pathlib").Path(__file__).resolve().parents[1] / "experts4bit_qlora" / "serve_paged.py").read_text()
     assert '"prefill_routes": prefill_routes(),' in src
+
+
+# ---- E4B_PAGED_PREFILL_GRAPH: the knob, and /health's prefill_graph block
+def test_prefill_graph_env_is_0_or_1_and_refuses_anything_else():
+    from experts4bit_qlora.serve_paged import _prefill_graph_env
+    assert _prefill_graph_env("") is False and _prefill_graph_env("0") is False and _prefill_graph_env(" 1 ") is True
+    with pytest.raises(ValueError, match="expected '0' or '1'"):
+        _prefill_graph_env("on")
+
+
+def test_health_reports_the_prefill_graph_off_by_default():
+    client, engine = _client(ScriptedRunner())
+    with client as c:
+        assert c.get("/health").json()["prefill_graph"] == {"status": "off", "requested": False}
+
+
+def test_health_reports_an_engaged_prefill_graphs_counters():
+    runner = ScriptedRunner()
+    stats = {"status": "on", "T": 8, "replays": 3, "eager_chunks": 1,
+             "eager_reasons": {"later_chunk": 1, "short_chunk": 0}}
+    runner.prefill_graph_stats = lambda: dict(stats)
+    client, engine = _client(runner, prefill_graph=True)
+    with client as c:
+        assert c.get("/health").json()["prefill_graph"] == dict(stats, requested=True)
+
+
+def test_a_refused_prefill_graph_reads_refused_with_the_reason():
+    from experts4bit_qlora.serve_paged import prefill_graph_report
+    cfg = PagedServeConfig(model="tiny/moe", prefill_graph=True)
+    why = "RuntimeError: E4B_PAGED_PREFILL_GRAPH=1 refused: device grouping is off: host grouping syncs"
+    rep = prefill_graph_report(cfg, types.SimpleNamespace(parts=None, state="error", error=why))
+    assert rep == {"status": "refused", "why": why, "requested": True}
+    other = prefill_graph_report(cfg, types.SimpleNamespace(parts=None, state="error", error="OSError: no arena"))
+    assert other["status"] == "error"
+    assert prefill_graph_report(cfg, types.SimpleNamespace(parts=None, state="loading", error=None)) == {
+        "status": "loading", "requested": True}
