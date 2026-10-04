@@ -1,0 +1,6 @@
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files: 100%|██████████| 8/8 [00:00<00:00, 3037.70it/s]
+[14:06:50]   checkpoint: google/gemma-4-26B-A4B-it @ 4d7ae4984b7db7de8f8457170b3f1a419ee76d52 (requested 4d7ae4984b7db7de8f8457170b3f1a419ee76d52)
+[14:06:50]   fusing + quantizing experts (up to 30x128) to nf4 (streaming)...
+[14:07:10]   quantized experts on 30/30 MoE layers (128 experts each)
+[14:07:10]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+P55 A_baseline: OK

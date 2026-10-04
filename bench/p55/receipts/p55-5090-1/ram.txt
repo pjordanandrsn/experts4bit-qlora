@@ -1,0 +1,7 @@
+mem_total_gib: 62.4
+cgroup_limit_source: /sys/fs/cgroup/memory.max
+cgroup_limit_bytes: 64328040448
+effective_ram_gib: 59.9
+largest_shard_gib: 46.48
+class_max_gib: 72
+class_drawn: 1

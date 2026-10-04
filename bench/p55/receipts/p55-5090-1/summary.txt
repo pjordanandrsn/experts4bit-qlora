@@ -1,0 +1,6 @@
+[2026-10-04T13:32:52Z] P55 p55-5090-1: e4b 66ebfd46a8e1c5be96136e2a3e7e1ddb3cfdbd1a, model google/gemma-4-26B-A4B-it @ 4d7ae4984b7db7de8f8457170b3f1a419ee76d52
+[2026-10-04T13:32:52Z] memory: MemTotal 62.4 GiB, cgroup limit 64328040448 B -> effective 59.9 GiB
+e4b 0.45.0 torch 2.8.0+cu128
+[2026-10-04T13:33:04Z] fetch: google/gemma-4-26B-A4B-it @ 4d7ae4984b7db7de8f8457170b3f1a419ee76d52 (51.6 GB, Xet disabled, alarm 2480s)
+[2026-10-04T13:33:04Z] DL FAIL -- harness fault (STOP-2): no verdict
+[2026-10-04T13:33:04Z] TP_DONE rc=11
