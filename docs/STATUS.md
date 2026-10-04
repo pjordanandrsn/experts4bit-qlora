@@ -119,7 +119,9 @@ experts on its own text with the step-0 canary passing — experimental,
 never licensed. The capability list (`qlora-fused-moe-experts.model_families` in
 [`capabilities.json`](capabilities.json)) is exactly the families whose
 `fast_train` is `supported`: `olmoe`, `qwen3_moe`, `gemma4_text`, `mixtral`,
-`granitemoe` — the last two entered on this lane; `gpt_oss` stays out. No
+`granitemoe` — the last two entered on this lane — and, since lane MG1
+(2026-10-04), `lfm2_moe`, `granitemoehybrid`, `ernie4_5_moe` and `nemotron_h`;
+`gpt_oss` stays out. No
 convergence claim, no cross-family ratio, no training throughput position;
 a PASS is a PASS on one text.
 
@@ -134,12 +136,19 @@ README. The same reading, per family and per path:
 
 | model_type | quantize | reference_train | fast_train (the headline path) | batched_train | nvme_train | native_mxfp4_train |
 |---|---|---|---|---|---|---|
-| `olmoe` | supported (tp1) | supported (tp1; `e4b.train.olmoe-converges`) | **supported** — tp1 OK · PASS on the registered text with real weights (`e4b.train.parity.tp1.olmoe.fused.2026-09-05`) | **void** — tp1 OK · VOID: the `_PAD_WASTE_LIMIT` fallback engaged without a counter (`…olmoe.batched…`) | not_tested (outside tp1; the arena ladder, `e4b.offload.arena-vs-host-ram`, is a separate receipt) | n/a |
+| `olmoe` | supported (tp1) | supported (tp1; `e4b.train.olmoe-converges`) | **supported** — tp1 OK · PASS on the registered text with real weights (`e4b.train.parity.tp1.olmoe.fused.2026-09-05`); re-read on the moe-generalize code by MG1, PASS (`e4b.train.parity.mg1.olmoe.fused.2026-10-04`) | **void** — tp1 OK · VOID: the `_PAD_WASTE_LIMIT` fallback engaged without a counter (`…olmoe.batched…`) | not_tested (outside tp1; the arena ladder, `e4b.offload.arena-vs-host-ram`, is a separate receipt) | n/a |
 | `qwen3_moe` | supported (tp1, resident on a 32 GB card; flagship) | supported (tp1; flagship) | **supported** — tp1 OK · PASS resident on one 5090 (`…qwen3.fused…`), beside the flagship's five datasets (`e4b.train.flagship-matrix`) | **void** — tp1 OK · VOID: the kernel reached on a fraction of the layers every step (`…qwen3.batched…`); the dgrad-gate trajectory stands on its own fixture | not_tested (outside tp1; the arena ladder, `e4b.offload.arena-vs-host-ram`, is a separate receipt) | n/a |
-| `gemma4_text` | supported (tp1: the `-it` checkpoint loaded on this host, no #344; flagship: base) | supported (tp1; flagship) | **supported** — tp1 OK · PASS with the step-wise median inside the band by a small margin (`…gemma4.fused…`), beside the model-2 flagship (`e4b.train.flagship-matrix`) | **void** — tp1 OK · VOID: on some steps no layer reached the kernel (`…gemma4.batched…`) | not_tested (outside tp1; the arena ladder, `e4b.offload.arena-vs-host-ram`, is a separate receipt) | n/a |
+| `gemma4_text` | supported (tp1: the `-it` checkpoint loaded on this host, no #344; flagship: base) | supported (tp1; flagship) | **supported** — tp1 OK · PASS with the step-wise median inside the band by a small margin (`…gemma4.fused…`); MG1 re-read it after #1048 moved its fused RMSNorm to its own fp32 multiply, PASS with the median further inside the band (`e4b.train.parity.mg1.gemma4.fused.2026-10-04`), beside the model-2 flagship (`e4b.train.flagship-matrix`) | **void** — tp1 OK · VOID: on some steps no layer reached the kernel (`…gemma4.batched…`) | not_tested (outside tp1; the arena ladder, `e4b.offload.arena-vs-host-ram`, is a separate receipt) | n/a |
 | `granitemoe` | supported (tp1: the first direct real-weight load) | supported (tp1 OK) | **supported** — tp1 OK · PASS on the corrected-counter re-run (`…granite.fused…`; attempt 1 a kept HARNESS_ERROR of the harness's counter, `…granite.fused.attempt1…`, amendment 3) — **entered `model_families` on it** | supported — tp1 OK · PASS (`…granite.batched…`) | not_tested | n/a |
 | `gpt_oss` | supported (bare `GptOssExperts4bit`; tp1) | refused — no `ExpertsLoRA`; attention-only QLoRA trains (`…gptoss.attn_only…`, OK · no pair) | refused — `enable_fast_train` returns 0 (`…gptoss.fused…`, REFUSED) | refused — `enable_batched_train` returns 0 (`…gptoss.batched…`, REFUSED) | refused — `enable_mxfp4_nvme_residency` refuses bias-carrying modules (#402; it had defaulted to the V4 epilogue, #397), `enable_nvme_train_residency` refuses bare modules, and the `arena_train=True` wrap is refused on structure | **experimental** — grouped-nf4-gemm's `ExpertsMxfp4LoRA`; tp1 canary and provenance passed on its own text (`…gptoss.mxfp4…`, EXPERIMENTAL); never licensed |
 | `mixtral` | supported (tp1: the first real-weight pass through the `w1/w3/w2` fusion, `offload=True`) | supported (tp1, offload) | **supported** — tp1 OK · PASS under offload at half the reference loop's peak VRAM (`…mixtral.fused…`); **entered `model_families` on this row** | supported — tp1 OK · PASS, the kernel reached everywhere (the 8-expert shape; `…mixtral.batched…`) | not_tested | n/a |
+| `lfm2_moe` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on the released LFM2-8B-A1B (`e4b.train.parity.mg1.lfm2.fused.2026-10-04`); its `out_proj` attention gets LoRA since #1048; **entered `model_families` on this row** | not_tested | not_tested | n/a |
+| `granitemoehybrid` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on granite-4.0-h-tiny, its Mamba blocks on mamba-ssm / causal-conv1d (`e4b.train.parity.mg1.graniteh.fused.2026-10-04`); **entered `model_families` on this row** | not_tested | not_tested | n/a |
+| `ernie4_5_moe` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on ERNIE-4.5-21B-A3B-PT, its interleaved rotary refused by the fused-RoPE semantics probe and kept (`e4b.train.parity.mg1.ernie.fused.2026-10-04`); **entered `model_families` on this row** | not_tested | not_tested | n/a |
+| `nemotron_h` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on Nemotron-3.5-Lightning-30B-A3B, the non-gated relu² expert path's first full-model reading (`e4b.train.parity.mg1.nemotron.fused.2026-10-04`); **entered `model_families` on this row** | not_tested | not_tested | n/a |
+| `qwen3_5_moe` | supported (MG1, resident) | supported (MG1) | experimental — MG1 OK · PASS, unlicensed (`e4b.train.parity.mg1.qwen3_5.fused.2026-10-04`): MG1's rule also needs P2, the dgrad kernel's engagement, whose counter was not read on that box; MG1 amendment 2 reads it | not_tested | not_tested | n/a |
+
+**Lane MG1 (2026-10-04, [`bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`](../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md)) put seven families through tp1's arm driver and verdict on one RTX 5090 behind the train anchor**, on the moe-generalize code (#1048: the training stack's glue matched by structure, not by Qwen names). Every family PASSES. LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H enter on their rows above. Qwen3.6-35B-A3B passes but stays `experimental` until P2 is read. The two regression anchors re-read clean: OLMoE (`e4b.train.parity.mg1.olmoe.fused.2026-10-04`) and Gemma-4 (`e4b.train.parity.mg1.gemma4.fused.2026-10-04`), whose fused RMSNorm numerics #1048 changed.
 
 Each cell is one of `supported` (completed under the registered protocol with a PASS/OK receipt), `refused` (with the reason), `void` (ran, unreadable), `harness_error`, `not_tested`, `experimental`, `n/a` — per path, never a flat flag; the machine-readable form, with the claim id behind every `supported` / `void` / `refused` cell, is `training_support` in [`capabilities.json`](capabilities.json), validated by `scripts/check_capabilities.py`, and `model_families` is exactly the families whose `fast_train` is `supported`.
 
@@ -256,6 +265,10 @@ on Qwen3-30B-A3B at micro-batch 1 finds every static class byte-for-byte the sam
 e4b keeps it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 GB, as Unsloth does. With that switch e4b peaks
 0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults
 the gap is 1.78 GB.
+**The environment** (`e4b.train.env-ab.qwen3.5090.2026-10-04`, TC1 amendment 24): every 5090 position so far ran e4b on the
+field image's torch 2.8.0+cu128 / transformers 5.18.0 and Unsloth on torch 2.12.1+cu130 / transformers 5.5.0. In Unsloth's environment
+e4b's matched arm steps 0.882× as long. The cause is not the padded LoRA delta's fp32 `bmm`, whose host cost per new shape is the same
+on both torch versions (`e4b.train.bmm-host-replay.5090.2026-10-04`). A position with both frameworks on one stack is its own box.
 
 **The other families at matched work** (lane TC2, 2026-10-02, two rented
 RTX 5090 hosts, [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md);
@@ -309,7 +322,8 @@ with the absmax double-quantized and the non-routed projections in NF4, Unsloth/
 30.41 GB), the pair COMPARABLE. e4b's defaults keep those projections bf16 and do not fit.
 **On Mixtral-8x7B at default settings Unsloth is faster, 0.836**
 (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`, TC2 amendment 8): with
-grouped-nf4-gemm 0.38.0's dense route, which `auto` takes for Mixtral's calls, e4b steps in
+grouped-nf4-gemm's dense route under `auto` (gnf4#463, run at `bb56b42`, a main commit whose version still read
+0.38.0; it ships in 0.39.0), which `auto` takes for Mixtral's calls, e4b steps in
 3.57 s against Unsloth's 2.98 s, at 1.95 GB more peak (31.1 vs 29.1 GB), the pair
 COMPARABLE. The host, a Core Ultra 9 285K, is the Unsloth-favouring end of the range seen.
 Amendment 6's 0.697 on the fused kernels (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04`) is superseded by it.

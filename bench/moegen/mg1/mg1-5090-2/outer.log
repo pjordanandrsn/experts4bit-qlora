@@ -1,0 +1,86 @@
+[2026-10-04T19:31:24Z] mg1: install: gnf4 @1546db26139c23cb36bbf9d50bd3a3794f080505 + e4b @058dda34f5cb452e3af9b6cf5673895886a5f0ce, transformers 5.18.0
+RECURRENT_KERNELS mamba2/causal_conv1d/fla True True True
+mg1 tripwire OK 0.45.0 0.38.0 2.8.0+cu128 NVIDIA GeForce RTX 5090
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07
+Model name:                              Intel(R) Core(TM) Ultra 9 285K
+[2026-10-04T19:32:38Z] mg1: train anchor
+  flops.self_pair      1.0039                         ok
+  launch.self_pair     1.002                          ok
+  h2d.self_pair        1.0066                         ok
+  flops                181.35 (0.979x ref)            ok
+  class                pcie-full/launch-fast          reported
+
+BOX ACCEPTED
+ANCHOR rc=0 class=pcie-full/launch-fast
+DATASET clinical sha=76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791
+[2026-10-04T19:32:40Z] mg1: fetch olmoe allenai/OLMoE-1B-7B-0924-Instruct@7f1c97f440f06ce36705e4f2b843edb5925f4498
+olmoe: fetched 13G
+[2026-10-04T19:35:19Z] mg1: arm olmoe/reference offload=0
+olmoe/reference offload=0 rc=0
+[2026-10-04T19:37:29Z] mg1: arm olmoe/fused offload=0
+olmoe/fused offload=0 rc=0
+[2026-10-04T19:38:00Z] mg1: ladder olmoe
+olmoe/ladder rc=0 3 rungs summarised
+[2026-10-04T19:38:44Z] mg1: fetch gemma4 google/gemma-4-26B-A4B-it@4d7ae4984b7db7de8f8457170b3f1a419ee76d52
+gemma4: fetched 49G
+[2026-10-04T19:55:06Z] mg1: arm gemma4/reference offload=0
+gemma4/reference offload=0 rc=0
+[2026-10-04T20:00:49Z] mg1: arm gemma4/fused offload=0
+gemma4/fused offload=0 rc=0
+[2026-10-04T20:02:15Z] mg1: ladder gemma4
+gemma4/ladder rc=0 3 rungs summarised
+[2026-10-04T20:04:07Z] mg1: fetch lfm2 LiquidAI/LFM2-8B-A1B@c1c44ff9fc00db3ebf4516970563f5f383d23670
+lfm2: fetched 16G
+[2026-10-04T20:07:53Z] mg1: arm lfm2/reference offload=0
+lfm2/reference offload=0 rc=0
+[2026-10-04T20:09:43Z] mg1: arm lfm2/fused offload=0
+lfm2/fused offload=0 rc=0
+[2026-10-04T20:10:15Z] mg1: ladder lfm2
+lfm2/ladder rc=0 3 rungs summarised
+[2026-10-04T20:10:57Z] mg1: fetch graniteh ibm-granite/granite-4.0-h-tiny@791e0d3d28c86e106c9b6e0b4cecdee0375b6124
+graniteh: fetched 13G
+[2026-10-04T20:19:34Z] mg1: arm graniteh/reference offload=0
+graniteh/reference offload=0 rc=0
+[2026-10-04T20:25:37Z] mg1: arm graniteh/fused offload=0
+graniteh/fused offload=0 rc=0
+[2026-10-04T20:26:36Z] mg1: ladder graniteh
+graniteh/ladder rc=0 3 rungs summarised
+[2026-10-04T20:27:55Z] mg1: fetch ernie baidu/ERNIE-4.5-21B-A3B-PT@87db95487941cb39592ee0abca3b9155a6d19c5c
+ernie: fetched 41G
+[2026-10-04T20:35:50Z] mg1: arm ernie/reference offload=0
+ernie/reference offload=0 rc=0
+[2026-10-04T20:40:27Z] mg1: arm ernie/fused offload=0
+ernie/fused offload=0 rc=0
+[2026-10-04T20:41:29Z] mg1: ladder ernie
+ernie/ladder rc=0 3 rungs summarised
+[2026-10-04T20:42:49Z] mg1: fetch nemotron nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16@a9904d24bcc1d289a1950fa9d2b978c47cf903b9
+nemotron: fetched 62G
+[2026-10-04T20:54:12Z] mg1: arm nemotron/reference offload=0
+nemotron/reference offload=0 rc=0
+[2026-10-04T21:00:47Z] mg1: arm nemotron/fused offload=0
+nemotron/fused offload=0 rc=0
+[2026-10-04T21:02:18Z] mg1: ladder nemotron
+nemotron/ladder rc=0 3 rungs summarised
+[2026-10-04T21:04:26Z] mg1: fetch qwen3_5 Qwen/Qwen3.6-35B-A3B@995ad96eacd98c81ed38be0c5b274b04031597b0
+qwen3_5: fetched 67G
+[2026-10-04T21:17:05Z] mg1: arm qwen3_5/reference offload=0
+qwen3_5/reference offload=0 rc=0
+[2026-10-04T21:30:33Z] mg1: arm qwen3_5/fused offload=0
+qwen3_5/fused offload=0 rc=0
+[2026-10-04T21:32:16Z] mg1: ladder qwen3_5
+qwen3_5/ladder rc=1 0 rungs summarised
+MG1 reduce: receipts  (BAND 0.05, tp1 v2.1 verdict)
+family     ref        fused      verdict   d_final      med  ref s/st  fus s/st  ref GB  fus GB n_patched  notes
+ernie      ok         ok         PASS       0.0215   0.0139     2.922     0.219   15.81   15.81        27  
+gemma4     ok         ok         PASS       0.0030   0.0314     3.534     0.324   20.20   20.20        30  
+graniteh   ok         ok         PASS       0.0020   0.0177     4.338     0.463    6.18    6.18        40  
+lfm2       ok         ok         PASS       0.0067   0.0195     1.124     0.147    6.11    6.11        22  
+nemotron   ok         ok         PASS       0.0129   0.0094     4.153     0.310   23.16   23.16        23  
+olmoe      ok         ok         PASS       0.0089   0.0110     1.484     0.123    5.23    5.23        16  
+qwen3_5    ok         ok         PASS       0.0262   0.0159     9.244     0.377   27.73   27.73        40  
+ernie_ladder.json: fused 0.3133 s/step (x1.0, spread 0.005, 15.871 GB); fused_pre 0.4828 s/step (x1.541, spread 0.006, 15.871 GB); keep 0.2257 s/step (x0.72, spread 0.0, 17.634 GB)
+gemma4_ladder.json: fused 0.3688 s/step (x1.0, spread 0.029, 20.378 GB); fused_pre 0.6123 s/step (x1.66, spread 0.002, 20.381 GB); keep 0.2891 s/step (x0.784, spread 0.003, 22.946 GB)
+graniteh_ladder.json: fused 0.253 s/step (x1.0, spread 0.107, 6.94 GB); fused_pre 0.345 s/step (x1.364, spread 0.001, 6.94 GB); keep 0.213 s/step (x0.842, spread 0.005, 8.264 GB)
+lfm2_ladder.json: fused 0.1559 s/step (x1.0, spread 0.016, 6.315 GB); fused_pre 0.2444 s/step (x1.568, spread 0.0, 6.338 GB); keep 0.1109 s/step (x0.711, spread 0.003, 7.36 GB)
+nemotron_ladder.json: fused 0.2927 s/step (x1.0, spread 0.013, 24.124 GB); fused_pre 0.4939 s/step (x1.687, spread 0.001, 24.124 GB); keep 0.2241 s/step (x0.766, spread 0.002, 24.763 GB)
+olmoe_ladder.json: fused 0.1336 s/step (x1.0, spread 0.02, 5.367 GB); fused_pre 0.2179 s/step (x1.631, spread 0.003, 5.385 GB); keep 0.1036 s/step (x0.775, spread 0.003, 6.218 GB)

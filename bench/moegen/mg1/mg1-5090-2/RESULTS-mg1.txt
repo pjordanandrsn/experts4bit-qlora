@@ -1,0 +1,15 @@
+MG1 reduce: receipts  (BAND 0.05, tp1 v2.1 verdict)
+family     ref        fused      verdict   d_final      med  ref s/st  fus s/st  ref GB  fus GB n_patched  notes
+ernie      ok         ok         PASS       0.0215   0.0139     2.922     0.219   15.81   15.81        27  
+gemma4     ok         ok         PASS       0.0030   0.0314     3.534     0.324   20.20   20.20        30  
+graniteh   ok         ok         PASS       0.0020   0.0177     4.338     0.463    6.18    6.18        40  
+lfm2       ok         ok         PASS       0.0067   0.0195     1.124     0.147    6.11    6.11        22  
+nemotron   ok         ok         PASS       0.0129   0.0094     4.153     0.310   23.16   23.16        23  
+olmoe      ok         ok         PASS       0.0089   0.0110     1.484     0.123    5.23    5.23        16  
+qwen3_5    ok         ok         PASS       0.0262   0.0159     9.244     0.377   27.73   27.73        40  
+ernie_ladder.json: fused 0.3133 s/step (x1.0, spread 0.005, 15.871 GB); fused_pre 0.4828 s/step (x1.541, spread 0.006, 15.871 GB); keep 0.2257 s/step (x0.72, spread 0.0, 17.634 GB)
+gemma4_ladder.json: fused 0.3688 s/step (x1.0, spread 0.029, 20.378 GB); fused_pre 0.6123 s/step (x1.66, spread 0.002, 20.381 GB); keep 0.2891 s/step (x0.784, spread 0.003, 22.946 GB)
+graniteh_ladder.json: fused 0.253 s/step (x1.0, spread 0.107, 6.94 GB); fused_pre 0.345 s/step (x1.364, spread 0.001, 6.94 GB); keep 0.213 s/step (x0.842, spread 0.005, 8.264 GB)
+lfm2_ladder.json: fused 0.1559 s/step (x1.0, spread 0.016, 6.315 GB); fused_pre 0.2444 s/step (x1.568, spread 0.0, 6.338 GB); keep 0.1109 s/step (x0.711, spread 0.003, 7.36 GB)
+nemotron_ladder.json: fused 0.2927 s/step (x1.0, spread 0.013, 24.124 GB); fused_pre 0.4939 s/step (x1.687, spread 0.001, 24.124 GB); keep 0.2241 s/step (x0.766, spread 0.002, 24.763 GB)
+olmoe_ladder.json: fused 0.1336 s/step (x1.0, spread 0.02, 5.367 GB); fused_pre 0.2179 s/step (x1.631, spread 0.003, 5.385 GB); keep 0.1036 s/step (x0.775, spread 0.003, 6.218 GB)

@@ -33,6 +33,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-59` | `qwen3denseab` (amendment 22) | instance 54177463, AMD EPYC 9454P | e4b against itself: grouped-nf4-gemm's fused kernels vs its dense route: dense/fused 2.947, far slower (P39 FALSIFIED); [read](RESULTS-tc1-denseab.md) | $0.45 |
 | `tc1-5090-62` | `mixtraldenseab` (amendment 22) | instance 54179030, Intel Core Ultra 9 285K | the same A/B on Mixtral-8x7B resident (`E4B_ABSMAX_DQ=1` both sides): dense/fused 0.651 (P38 HELD); held-out within 0.01 on both families (P40 HELD); [read](RESULTS-tc1-denseab.md) | $0.51 |
 | `tc1-5090-65` | `qwen3memcensus` (amendment 23) | instance 54195008, AMD EPYC 9454P | a memory census, no speed read: e4b fp32 absmax, e4b `E4B_ABSMAX_DQ=1`, Unsloth at micro-batch 1; e4b dq − Unsloth +0.43 GB, all transient (P41, P42 HELD; P43 FALSIFIED); [read](RESULTS-tc1-memcensus.md) | $0.38 |
+| `tc1-5090-66` | `qwen3bmmab` (amendment 24) | instance 54201179, AMD EPYC 7B13 | a bmm replay (no model), then e4b in its field environment vs Unsloth's: the matched arm 0.882× in torch 2.12.1+cu130 (P47 HELD); the fp32 bmm's cost is per new shape and the same on both torch versions (P44, P46 FALSIFIED; P45 HELD); [read](RESULTS-tc1-bmmab.md) | $1.26 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -41,6 +42,56 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 24 (2026-10-04): the 5090's fp32 `bmm` costs host time per new shape, not per torch version; in Unsloth's environment e4b's matched arm steps 0.882×
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 24. One RTX 5090 (`tc1-5090-66`, AMD EPYC 7B13). The box
+ran two parts:
+
+1. A replay with no model. `bmm_bench.py` timed the padded LoRA delta's batched products at the 96 recorded real-router shapes, with
+   the queue drained before each call.
+2. e4b against itself in two environments, on TC1's qwen3 tokens and recipe, two draws a side in ABBA order:
+   - `_tv0`: the field image's torch 2.8.0+cu128, transformers 5.18.0, triton 3.4.0;
+   - `_tv1`: Unsloth's venv, torch 2.12.1+cu130, transformers 5.5.0, triton 3.7.1.
+
+Read: [`RESULTS-tc1-bmmab.md`](RESULTS-tc1-bmmab.md).
+
+**The replay** (median host µs per forward `bmm`):
+
+| torch | fp32, recorded shapes | bf16 | fp32, new shapes | fp32, repeated shapes | fp32, one fixed shape |
+|---|---|---|---|---|---|
+| 2.8.0+cu128 | 88.9 | 38.3 | **119.4** | **37.9** | 37.4 |
+| 2.12.1+cu130 | 93.4 | 38.3 | **120.9** | **37.9** | 35.9 |
+
+- **P44 FALSIFIED.** Outside training, the fp32 call costs 89 µs at the recorded shapes, 2.3× bf16's. The profiles' 197–324 µs
+  (under the profiler, mid-training) does not reproduce.
+- **P45 HELD.** What does reproduce is a per-shape cost: a shape the process has not seen costs 119 µs, and a repeated one 38 µs,
+  the same as bf16. The routing makes nearly every call's padded shape new.
+- **P46 FALSIFIED.** torch 2.12.1+cu130 pays the same cost (120.9 µs).
+- The cublasLt and TF32 rows are descriptive and cost more on new shapes (223–269 µs). The bucket rows are not a clean first
+  exposure: the cold passes had already used most of the bucketed widths.
+
+**The environment A/B:**
+
+| arm | `_tv0` s/step | `_tv1` s/step | `_tv1`/`_tv0` | held-out at N, `_tv0` / `_tv1` |
+|---|---|---|---|---|
+| matched (fp32 adapters) | 3.915 / 3.895 | 3.495 / 3.394 | **0.882** [0.867, 0.897] | 0.8522, 0.8531 / 0.8467, 0.8483 |
+| shipped (bf16 adapters) | 3.009 / 3.171 (5.3 % apart) | 2.950 / 2.897 | not quoted | 0.8160, 0.8104 / 0.8124, 0.8133 |
+
+- **P47 HELD.** In Unsloth's environment e4b's matched arm steps 0.882× as long, with held-out 0.005 lower. The peak is unchanged at 27.2 GB.
+- **P48 and P49 UNTESTED.** The shipped arm's torch 2.8 draws were 5.3 % apart, so its pair cannot be quoted. Its medians read 0.946.
+- The replay shows the `bmm` is not the cause: torch 2.12 pays the same per call. The environment changes torch, transformers and
+  triton together, so this box does not say which one gives the gain.
+
+**What follows, as registered.**
+
+- P44 failed, so grouped-nf4-gemm does not change.
+- P46 failed, so the docs do not change.
+- The rule that would have named an environment asymmetry in STATUS needed P48 as well, and P48 went untested.
+- What stands is P47's reading. Every 5090 position so far ran e4b in the field image's environment and Unsloth in torch 2.12.1's.
+  e4b requires only `torch>=2.2` and `transformers>=5.0`, so both are e4b environments.
+- A position with both frameworks on one stack needs its own registration. Rows: `e4b.train.env-ab.qwen3.5090.2026-10-04` and
+  `e4b.train.bmm-host-replay.5090.2026-10-04`.
 
 ## Amendment 23 (2026-10-04): a memory census of e4b against Unsloth — with the absmax double-quantized, e4b's peak is 0.43 GB above Unsloth's, all of it transient
 

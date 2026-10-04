@@ -138,7 +138,11 @@
     "qwen3_moe",
     "gemma4_text",
     "mixtral",
-    "granitemoe"
+    "granitemoe",
+    "lfm2_moe",
+    "granitemoehybrid",
+    "ernie4_5_moe",
+    "nemotron_h"
    ],
    "environment": {
     "python": ">=3.11 tested in CI (pyproject says >=3.10; 3.10 is not tested)",
@@ -271,7 +275,9 @@
     "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.fit-mb1-dq-frozen4",
     "e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default",
     "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.mb1-dq-frozen4",
-    "e4b.train.memory-census.qwen3.5090.2026-10-04"
+    "e4b.train.memory-census.qwen3.5090.2026-10-04",
+    "e4b.train.env-ab.qwen3.5090.2026-10-04",
+    "e4b.train.bmm-host-replay.5090.2026-10-04"
    ],
    "limitations": [
     "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
@@ -314,9 +320,10 @@
         "e4b.train.parity.tp1.olmoe.fused.2026-09-05",
         "e4b.train.fast-train-dgrad",
         "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.arm.e4b.fused_attn4",
-        "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.e4b-internal-parity"
+        "e4b.train.h2h.unsloth.olmoe.5090.2026-09-06.e4b-internal-parity",
+        "e4b.train.parity.mg1.olmoe.fused.2026-10-04"
        ],
-       "reason": "tp1: PASS on the registered clinical text with real -Instruct weights; the dgrad-gate receipt was synthetic tokens. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 64 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence)."
+       "reason": "tp1: PASS on the registered clinical text with real -Instruct weights; the dgrad-gate receipt was synthetic tokens. tp2/P40 (2026-09-06, a second rented 5090): the same path in the attention-4-bit configuration (the shipped TRAIN_ATTN_4BIT mechanism, 64 NF4 attention projections) now has its own receipt -- reference_attn4 and fused_attn4 both OK and VALID, fused-vs-reference internal parity PASS in tp1's band (informational; tp1 owns the licence). MG1 (2026-10-04, the moe-generalize code, one RTX 5090 behind tp1's anchor) re-read it as a regression anchor: PASS 0.0089 / 0.01104 -- the current evidence (tp1 read 0.01327 / 0.01249)."
       },
       "batched_train": {
        "status": "void",
@@ -411,9 +418,10 @@
         "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.reference_attn4",
         "e4b.train.h2h.unsloth.gemma4.5090.2026-09-06.arm.e4b.fused_attn4",
         "e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24",
-        "e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24"
+        "e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24",
+        "e4b.train.parity.mg1.gemma4.fused.2026-10-04"
        ],
-       "reason": "tp1: PASS on the -it checkpoint with the step-wise median inside the band by a small margin (read with it), beside the model-2 flagship's five-dataset PASS on the base checkpoint. The attention-4-bit configuration (TRAIN_ATTN_4BIT / reference_attn4 / fused_attn4, 115 projections) is supported since lane P67 (2026-09-24, #713) under the registered per-family floor band (max of tp1's tolerance and three times the floor's upper edge): the fused arm PASSES, carried by the tolerance and not detectable against the reference's own reordering floor, and the two earlier sessions' FAILs against the constant band PASS the same floor band, so the reading is not MIXED (e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24, e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24). A statement of resolution, not equality: on this family two correct reference runs land far enough apart at step 20 that a 20-step trajectory cannot resolve a tolerance-sized defect (the numbers are in the claim rows). On tp2/P40 (2026-09-06) both e4b attention-4-bit arms had died on the harness's projection-count check ('quantize_attention_projections_4bit converted 100 projections, expected 120') before a step ran (void_attn4 receipts, HARNESS_ERROR; fixed by #435). The fast_train path with bf16 attention stays exactly as tp1 left it: supported."
+       "reason": "tp1: PASS on the -it checkpoint with the step-wise median inside the band by a small margin (read with it), beside the model-2 flagship's five-dataset PASS on the base checkpoint. The attention-4-bit configuration (TRAIN_ATTN_4BIT / reference_attn4 / fused_attn4, 115 projections) is supported since lane P67 (2026-09-24, #713) under the registered per-family floor band (max of tp1's tolerance and three times the floor's upper edge): the fused arm PASSES, carried by the tolerance and not detectable against the reference's own reordering floor, and the two earlier sessions' FAILs against the constant band PASS the same floor band, so the reading is not MIXED (e4b.train.p67.gemma4.fused-attn4.floor-band.5090.2026-09-24, e4b.train.p67.gemma4.attn4-reorder-floor.5090.2026-09-24). A statement of resolution, not equality: on this family two correct reference runs land far enough apart at step 20 that a 20-step trajectory cannot resolve a tolerance-sized defect (the numbers are in the claim rows). On tp2/P40 (2026-09-06) both e4b attention-4-bit arms had died on the harness's projection-count check ('quantize_attention_projections_4bit converted 100 projections, expected 120') before a step ran (void_attn4 receipts, HARNESS_ERROR; fixed by #435). The fast_train path with bf16 attention stays exactly as tp1 left it: supported. MG1 (2026-10-04, the moe-generalize code, one RTX 5090 behind tp1's anchor) re-read it as a regression anchor: PASS 0.00296 / 0.03144 -- the current evidence after #1048 moved its fused RMSNorm to its own fp32 multiply (tp1 read 0.02385 / 0.04742)."
       },
       "batched_train": {
        "status": "void",
@@ -562,6 +570,186 @@
       "native_mxfp4_train": {
        "status": "n/a",
        "reason": "the checkpoint's experts are not native MXFP4"
+      }
+     },
+     "lfm2_moe": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.lfm2.reference.2026-10-04"
+       ],
+       "reason": "MG1: load_moe_4bit_streaming + verify_moe_4bit(strict=True) on the released LFM2-8B-A1B checkpoint"
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.lfm2.reference.2026-10-04"
+       ],
+       "reason": "MG1: the reference arm trains 60 steps with the frozen 4-bit stack bit-identical (C1)"
+      },
+      "fast_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.lfm2.fused.2026-10-04",
+        "e4b.train.parity.mg1.lfm2.matrix.2026-10-04"
+       ],
+       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor, the moe-generalize code): PASS on LFM2-8B-A1B -- |delta final| 0.00666, median 0.01948 against the 0.05 band, every MoE layer patched, init_sha identical, C1 bit-exact; the dgrad kernel served every frozen-GEMM backward (ladder census, DGRAD_STATS loop 0). The family enters model_families on this row."
+      },
+      "batched_train": {
+       "status": "not_tested",
+       "reason": "no batched arm was registered for this family"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no NVMe-tier training receipt for this family"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "NF4 checkpoint path; no native MXFP4 experts"
+      }
+     },
+     "granitemoehybrid": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.graniteh.reference.2026-10-04"
+       ],
+       "reason": "MG1: load_moe_4bit_streaming + verify_moe_4bit(strict=True) on the released granite-4.0-h-tiny checkpoint"
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.graniteh.reference.2026-10-04"
+       ],
+       "reason": "MG1: the reference arm trains 60 steps with the frozen 4-bit stack bit-identical (C1)"
+      },
+      "fast_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.graniteh.fused.2026-10-04",
+        "e4b.train.parity.mg1.graniteh.matrix.2026-10-04"
+       ],
+       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor, the moe-generalize code): PASS on granite-4.0-h-tiny -- |delta final| 0.00196, median 0.01775 against the 0.05 band, every MoE layer patched, init_sha identical, C1 bit-exact; the dgrad kernel served every frozen-GEMM backward (ladder census, DGRAD_STATS loop 0). The family enters model_families on this row."
+      },
+      "batched_train": {
+       "status": "not_tested",
+       "reason": "no batched arm was registered for this family"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no NVMe-tier training receipt for this family"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "NF4 checkpoint path; no native MXFP4 experts"
+      }
+     },
+     "ernie4_5_moe": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.ernie.reference.2026-10-04"
+       ],
+       "reason": "MG1: load_moe_4bit_streaming + verify_moe_4bit(strict=True) on the released ERNIE-4.5-21B-A3B-PT checkpoint"
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.ernie.reference.2026-10-04"
+       ],
+       "reason": "MG1: the reference arm trains 60 steps with the frozen 4-bit stack bit-identical (C1)"
+      },
+      "fast_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.ernie.fused.2026-10-04",
+        "e4b.train.parity.mg1.ernie.matrix.2026-10-04"
+       ],
+       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor, the moe-generalize code): PASS on ERNIE-4.5-21B-A3B-PT -- |delta final| 0.0215, median 0.01394 against the 0.05 band, every MoE layer patched, init_sha identical, C1 bit-exact; the dgrad kernel served every frozen-GEMM backward (ladder census, DGRAD_STATS loop 0). The family enters model_families on this row."
+      },
+      "batched_train": {
+       "status": "not_tested",
+       "reason": "no batched arm was registered for this family"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no NVMe-tier training receipt for this family"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "NF4 checkpoint path; no native MXFP4 experts"
+      }
+     },
+     "nemotron_h": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.nemotron.reference.2026-10-04"
+       ],
+       "reason": "MG1: load_moe_4bit_streaming + verify_moe_4bit(strict=True) on the released Nemotron-3.5-Lightning-30B-A3B checkpoint"
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.nemotron.reference.2026-10-04"
+       ],
+       "reason": "MG1: the reference arm trains 60 steps with the frozen 4-bit stack bit-identical (C1)"
+      },
+      "fast_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.nemotron.fused.2026-10-04",
+        "e4b.train.parity.mg1.nemotron.matrix.2026-10-04"
+       ],
+       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor, the moe-generalize code): PASS on Nemotron-3.5-Lightning-30B-A3B -- |delta final| 0.01293, median 0.00940 against the 0.05 band, every MoE layer patched, init_sha identical, C1 bit-exact; the dgrad kernel served every frozen-GEMM backward (ladder census, DGRAD_STATS loop 0). The family enters model_families on this row."
+      },
+      "batched_train": {
+       "status": "not_tested",
+       "reason": "no batched arm was registered for this family"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no NVMe-tier training receipt for this family"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "NF4 checkpoint path; no native MXFP4 experts"
+      }
+     },
+     "qwen3_5_moe": {
+      "quantize": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.qwen3_5.reference.2026-10-04"
+       ],
+       "reason": "MG1: load_moe_4bit_streaming + verify_moe_4bit(strict=True) on the released Qwen3.6-35B-A3B checkpoint"
+      },
+      "reference_train": {
+       "status": "supported",
+       "claim_ids": [
+        "e4b.train.parity.mg1.qwen3_5.reference.2026-10-04"
+       ],
+       "reason": "MG1: the reference arm trains 60 steps with the frozen 4-bit stack bit-identical (C1)"
+      },
+      "fast_train": {
+       "status": "experimental",
+       "claim_ids": [
+        "e4b.train.parity.mg1.qwen3_5.fused.2026-10-04",
+        "e4b.train.parity.mg1.qwen3_5.matrix.2026-10-04"
+       ],
+       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor): the fused arm PASSES tp1's verdict on Qwen3.6-35B-A3B (0.02624 / 0.01594, 40/40 layers patched, resident), but MG1's registered rule also needs P2 (the dgrad kernel's engagement), whose counter was not read on that box (tp1's arm driver predates DGRAD_STATS and the ladder OOMed). MG1 amendment 2 reads it; until then this path is experimental, not supported."
+      },
+      "batched_train": {
+       "status": "not_tested",
+       "reason": "no batched arm was registered for this family"
+      },
+      "nvme_train": {
+       "status": "not_tested",
+       "reason": "no NVMe-tier training receipt for this family"
+      },
+      "native_mxfp4_train": {
+       "status": "n/a",
+       "reason": "NF4 checkpoint path; no native MXFP4 experts"
       }
      }
     }
