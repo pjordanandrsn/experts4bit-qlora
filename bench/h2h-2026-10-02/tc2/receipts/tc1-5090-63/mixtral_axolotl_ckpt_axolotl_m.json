@@ -1,0 +1,14 @@
+{
+ "framework": "axolotl",
+ "fam": "mixtral",
+ "arm": "axolotl",
+ "tag": "ckpt_axolotl_m",
+ "status": "not_run",
+ "reason": "skipped by TC1_SKIP",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "written_by": "tc1_run.sh",
+ "prereg": "tc1/TC2-PREREG.md"
+}

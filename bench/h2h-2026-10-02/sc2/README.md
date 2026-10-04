@@ -1,4 +1,4 @@
-# SC2: request-level serving on one RTX 5090. vLLM and SGLang hold the SLO to 8 req/s; e4b's `serve_paged` holds it only at 1 req/s, because each 512-token prefill stalls every running decode (lane SC2 of #846; 2026-10-04)
+# SC2: request-level serving on one RTX 5090. vLLM and SGLang hold the SLO to 8 req/s; e4b's `serve_paged`, as run on SC1's prefill route pins, holds it only at 1 req/s, because each 512-token prefill stalls every running decode (lane SC2 of #846; 2026-10-04; corrected the same day)
 
 Pre-registration: [`../../sc2/SC2-PREREG.md`](../../sc2/SC2-PREREG.md) (#1014), with amendment A1 (#1033).
 
@@ -37,13 +37,54 @@ board, in one run.
 
 **Stack.**
 - **e4b `b7e41a7`.** Its package code is the registration's (`887940e`) plus the 0.45.0 version string; nothing else
-  changed. e4b serves its NF4 arena with SC1's int4 levers, and the health record confirms them: 48 int4 expert
+  changed. e4b serves its NF4 arena with SC1's int4 levers **and, unintended, SC1's prefill route pins (`E4B_INT4_PREFILL=loop` → M-tile, `E4B_PAGED_PREFILL_ATTN=math`; see the Correction)**. The health record confirms the levers: 48 int4 expert
   layers, 96 int4 attention projections, decode graphs on buckets 1–16, `fuse_qkv` on. The labelled e4b_nf4 row has no
   levers.
 - **grouped-nf4-gemm v0.34.1** (`34da93d6`), SC1's pinned stack, not e4b CI's v0.37.0. So `GNF4_PDL` and
   `GNF4_TRAIN_GEMM=auto` are not in play.
 - **vLLM 0.30.0 and SGLang 0.5.20** serve `Qwen/Qwen3-30B-A3B-GPTQ-Int4` @ `9b534e4`.
 - **llama.cpp `552f18f`** serves the Q4_K_M GGUF @ `d5b1d57`.
+
+## Correction (2026-10-04, after this read merged): e4b did not run the PREREG's prefill routes
+
+**What the PREREG stated.** e4b serves "at main's current defaults": int4 prefill through k19 (P102) and flash prefill
+attention (P107). It said SC1's two route pins "existed so SC1's own boxes compared alike; SC2 is a fresh lane and drops
+them."
+
+**What actually ran.** Box E did not drop the pins. `bench/sc1/sc1_run.sh` exports `E4B_INT4_PREFILL=loop` (SC1
+amendment A13) and `E4B_PAGED_PREFILL_ATTN=math` (SC1b) to every box, unconditionally, before box dispatch. Box E's
+`env … python -m experts4bit_qlora.serve_paged` inherited both. `sc2-5090-1`'s `outer.log` records the export
+("the box exports loop to every e4b process").
+
+**What that means inside `serve_paged`.** With `max_seqs` 16 the server captures batched decode graphs, so
+`DEVICE_GROUPING` is on and every prefill call is device-grouped. Under `loop`, a call over 256 rows takes the int4
+M-tile GEMM (`gemm_int4_b32_grouped_captured`); only the default `auto` moves those rows to K19
+(`hot_residency._int4_prefill_mode_env`'s docstring). So both e4b rows (int4 and the labelled NF4) ran **M-tile expert
+prefill and `math` prefill attention**, not k19 and flash.
+
+**Why the check missed it.** `tests/test_sc2_box.py` asserted that `e4b_server_start`'s own text sets neither pin. The
+property was that the server process runs without them. That check was weaker than the property.
+
+**What stands:**
+- every comparator row (vLLM, SGLang, llama.cpp), unaffected;
+- every request-level measurement of e4b as run;
+- the mechanism. Each prefill forward stalls every running decode, and capacity is prefill-bound. P102 counted about
+  15k device kernels per 512-token chunk on both the M-tile and K19 routes, so the launch-bound reading holds on
+  either.
+
+**What changes.**
+- **e4b's prefill cost is overstated.** P102 measured M-tile at 1.30× k19's TTFT-512 on one host and 1.03× on another.
+  Flash vs `math` attention at 512 tokens adds whatever P107's route difference is at that length.
+- **Q4 and Q5 are relabelled.** They compared capacity ceilings on an e4b arm that was not the registered
+  configuration, so they read **REFUTED for e4b as run (SC1's route pins); UNREAD for the registered configuration**.
+  Q4 could plausibly differ there: e4b needs only 2 req/s to tie llama.cpp.
+- **Q6 is unchanged.** UNSTABLE rows exist with or without e4b.
+- **Q1–Q3 were UNREAD anyway.**
+- **Where the registered-config reading comes from.** Lane SC2b, the prefill-graph lever, runs e4b at main's defaults
+  with the pins explicitly unset. Its box records the server's resolved routes, and its baseline arm is the
+  registered-configuration e4b reading.
+
+The receipts are unchanged. `verdict.json` is the rule's mechanical output on the rows as run.
 
 ## The outcome by the registered rule
 
@@ -66,8 +107,8 @@ e4b_int4 1, e4b_nf4 1** req/s.
 | Q1 serial: e4b_int4's p50 TTFT ≥ 2 × vLLM's | UNREAD | e4b_int4's serial row is UNSTABLE: its draws' p50 TTFT are 0.293 and 0.246 s, 17 % apart against a 10 % band. Seen, not read: 5.18× |
 | Q2 serial: e4b_int4's p50 TPOT / vLLM's in [1.10, 1.35] | UNREAD | the same row. Seen, not read: 1.29 |
 | Q3 serial: llama.cpp's p50 TPOT is the lowest of the four lane engines | UNREAD | e4b_int4's serial row is not VALID. Seen, not read: llama.cpp 3.06 ms is the lowest (SGLang 3.27, vLLM 3.50, e4b 4.51) |
-| Q4 capacity: vLLM ≥ e4b_int4 ≥ llama.cpp | **REFUTED** | 8 ≥ 1, but 1 < 2 |
-| Q5 capacity: e4b_nf4 < e4b_int4 | **REFUTED** | both 1 |
+| Q4 capacity: vLLM ≥ e4b_int4 ≥ llama.cpp | **REFUTED for e4b as run**; UNREAD for the registered configuration (see Correction) | 8 ≥ 1, but 1 < 2 |
+| Q5 capacity: e4b_nf4 < e4b_int4 | **REFUTED for e4b as run**; UNREAD for the registered configuration (see Correction) | both 1 |
 | Q6 every row VALID | **REFUTED** | UNSTABLE rows: e4b_int4 serial and 2 req/s, llama.cpp 4 req/s, e4b_nf4 2 req/s. **No row is INVALID**: all 5,060 requests completed with exactly `max_tokens` tokens and finish `length` |
 
 **No position sentence comes from SC2 alone.** SC1's licence read QUALITY_FAIL. These are measured serving behaviours
