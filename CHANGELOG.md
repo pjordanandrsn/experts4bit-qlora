@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### serve_paged: opt-in first-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH=1`)
+
+- **What.** With the knob on, every first chunk of exactly `E4B_PAGED_CHUNK_TOKENS` tokens replays one CUDA graph of
+  the prefill forward (`PagedModelRunner.enable_prefill_graph`). Later chunks and other first-chunk lengths run
+  eagerly and are counted by reason. A first chunk reads no history, so one graph serves every slot; after a replay
+  the graph's K/V outputs are staged for the request's slot, copied when the prompt continues.
+- **Engages only if verified at startup.** It needs device grouping, no linear-attention state, and a capture that
+  succeeds. On two seeded prompts, each replay must equal an eager forward bit for bit in the logits and every layer's
+  staged K/V, and the two prompts must give different logits. Otherwise the server refuses at startup (`/health`
+  `prefill_graph.status: "refused"`, with the reason) rather than falling back silently.
+- **`/health`.** The `prefill_graph` block reports `off` / `on` / `loading` / `refused`; when on, it adds `T`,
+  `replays`, `eager_chunks` and `eager_reasons`.
+- **Tests.**
+  - CPU: routing, counters, and the copy for a continuing prompt, with a mutation arm that drops the copy.
+  - GPU: bitwise against eager on the FP8 pool and first tokens, the same mutation arm, and every refusal, each made
+    to fire.
+- **What the A2000 caught.** The first version kept the graph's input ids but not its positions tensor. Its startup
+  check ran while the positions were still alive, so it passed, and every served replay then read freed memory: the
+  bitwise test failed on the A2000. The graph now keeps everything it reads that was allocated outside the capture.
+  The startup check now runs only after the capture's scope has returned and the allocator has been churned with a
+  sentinel. A mutation test drops the positions after capture, and the check must refuse it.
+- **Verified on the A2000** (`bench/prefill-graph-knob-2026-10-04/`). The GPU tests pass (7), and so do their
+  neighbours (82). Through `build_engine`, on tiny random models with SC2's int4 stack (Qwen3-MoE) and with the
+  Granite NF4 store, the knob engages, and 5 prompts each prefill bitwise against eager in the first token and the
+  pool. At `max_seqs` 1 it refuses at startup.
+- **Basis.** The A2000 census (`bench/prefill-graph-census-2026-10-04/`). Off by default; its speed is for lane
+  SC2b to read.
+
 ### Prefill-graph feasibility census on the A2000 (bench only)
 
 - **Result.** `serve_paged`'s 512-token prefill forward makes **zero host syncs**, on chunk 1 and on a chunk with 512

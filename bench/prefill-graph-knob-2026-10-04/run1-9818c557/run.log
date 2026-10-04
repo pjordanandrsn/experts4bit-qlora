@@ -1,0 +1,104 @@
+[2026-10-04T20:41:55Z] preflight util,mem_used,mem_total: 0, 7522, 12282
+git version 2.34.1
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+9818c557 serve_paged: opt-in first-chunk prefill graph (E4B_PAGED_PREFILL_GRAPH=1)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+GUARD ok 2.8.0+cu128 5.17.0 NVIDIA RTX A2000 12GB
+[2026-10-04T20:43:04Z] arm T1: the new GPU tests, verbose
+tests/test_prefill_graph_gpu.py::test_replayed_first_chunks_prefill_exactly_as_eager FAILED [ 16%]
+tests/test_prefill_graph_gpu.py::test_without_the_copy_the_continuing_prompts_pool_is_wrong PASSED [ 33%]
+tests/test_prefill_graph_gpu.py::test_refuses_without_device_grouping PASSED [ 50%]
+tests/test_prefill_graph_gpu.py::test_the_startup_check_refuses_a_graph_that_differs_from_eager PASSED [ 66%]
+tests/test_prefill_graph_gpu.py::test_the_startup_check_refuses_when_its_prompts_cannot_tell_graphs_apart PASSED [ 83%]
+tests/test_prefill_graph_gpu.py::test_refuses_a_forward_that_syncs PASSED [100%]
+FAILED tests/test_prefill_graph_gpu.py::test_replayed_first_chunks_prefill_exactly_as_eager
+========================= 1 failed, 5 passed in 11.17s =========================
+[2026-10-04T20:43:18Z] arm T2: neighbours
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_decode_graph_buckets.py:98: the fp8 paged KV needs native e4m3 (sm_89+)
+SKIPPED [2] tests/test_decode_graph_buckets.py:116: the fp8 paged KV needs native e4m3 (sm_89+)
+SKIPPED [2] tests/test_kv_step_select.py:121: the fp8 paged KV needs native e4m3 (sm_89+)
+82 passed, 5 skipped, 1 warning in 12.96s
+[2026-10-04T20:43:34Z] tiny models + arenas
+TINY_OK /root/pg/tiny 211228160
+BAKE OK
+Writing model shards:   0%|          | 0/1 [00:00<?, ?it/s]Writing model shards: 100%|██████████| 1/1 [00:00<00:00, 13.21it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+TINY_OK /root/pg/tinyg 78190592
+BAKE OK
+[2026-10-04T20:44:17Z] arm K1_qwen3_int4_on (E4B_PAGED_MODEL=/root/pg/tiny E4B_PAGED_ARENA=/root/pg/arena/nf4.arena E4B_PAGED_CALIB=/root/pg/calib.json E4B_PAGED_PLACEMENT=all-vram PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_PAGED_FUSE_QKV=1 E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_PAGED_PREFILL_GRAPH=1)
+RC=0
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+[2026-10-04T20:44:50Z] arm K0_qwen3_int4_maxseqs1_refusal (E4B_PAGED_MODEL=/root/pg/tiny E4B_PAGED_ARENA=/root/pg/arena/nf4.arena E4B_PAGED_CALIB=/root/pg/calib.json E4B_PAGED_PLACEMENT=all-vram PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_PAGED_FUSE_QKV=1 E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_PAGED_PREFILL_GRAPH=1 E4B_PAGED_MAX_SEQS=1)
+RC=0
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+KNOB {"mode": "knob", "built": false, "error": "RuntimeError: E4B_PAGED_PREFILL_GRAPH=1 refused: device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"}
+[2026-10-04T20:45:36Z] arm KG_granite_nf4_on (E4B_PAGED_MODEL=/root/pg/tinyg E4B_PAGED_ARENA=/root/pg/arenag/nf4.arena E4B_PAGED_CALIB=/root/pg/calib.json E4B_PAGED_PLACEMENT=all-vram PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_PAGED_PREFILL_GRAPH=1)
+bash: line 1:  1836 Aborted                 env -u E4B_INT4_PREFILL -u E4B_PAGED_PREFILL_ATTN E4B_PAGED_MODEL=/root/pg/tinyg E4B_PAGED_ARENA=/root/pg/arenag/nf4.arena E4B_PAGED_CALIB=/root/pg/calib.json E4B_PAGED_PLACEMENT=all-vram PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_PAGED_PREFILL_GRAPH=1 perl -e 'alarm 1500; exec @ARGV' python census_prefill_sync.py knob out/KG_granite_nf4_on.json > out/KG_granite_nf4_on.log 2>&1
+RC=134
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+torch.AcceleratorError: CUDA error: device-side assert triggered
+terminate called after throwing an instance of 'c10::AcceleratorError'
+frame #0: c10::Error::Error(c10::SourceLocation, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x80 (0x7fba72dd1eb0 in /opt/conda/lib/python3.11/site-packages/torch/lib/libc10.so)
+[2026-10-04T20:45:53Z] done
+PG_DONE
