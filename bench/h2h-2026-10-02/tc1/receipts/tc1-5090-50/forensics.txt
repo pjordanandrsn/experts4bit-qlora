@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 610.57.04, GPU-3ac82132-b928-547f-6616-3284eb216566, 575.00 W, 3090 MHz
+CPU(s):                                  32
+Model name:                              AMD Ryzen 9 9950X3D 16-Core Processor
+MemTotal:       129218432 kB
+cgroup memory.max 127025545216
+overlay         320G  9.3M  320G   1% /
