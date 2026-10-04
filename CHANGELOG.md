@@ -16,6 +16,7 @@
 - **TC1 amendment 19** read the matched-work training positions on an RTX 5090 with e4b at every default from amendments 10–15: Unsloth/e4b **1.997** and axolotl/e4b **2.775**, against 1.437 and 1.416 before #945.
 - **TC1c amendment 1** read the H100 NVL position at Unsloth/e4b 0.817. Unsloth is still faster per step on that card.
 - **`E4B_MOE_KEEP_LAYERS` (opt-in)** keeps MoE activations instead of recomputing them under gradient checkpointing.
+  TC1 amendment 21 read it at 0.835 / 0.926 of recomputing on a 5090.
 - **The fused training forward** gathers its routing weights with a scatter backward (values identical).
 
 ### Read: TC1 amendment 21 — keeping MoE activations steps e4b at 0.835 / 0.926 on a 5090 (P35, P36, P37 HELD)
@@ -165,11 +166,12 @@
     padded eager step.
 - **Next.** A lane reads the exactness and speed on an RTX 5090 through the default server before the default moves.
 
-### TC1 amendments 20 and 21 and TC1c amendment 1 registered (#835, #945) (bench only)
+### TC1 amendments 20 and 21 and TC1c amendments 1 and 2 registered (#835, #945) (bench only)
 
 - #1006 (amendment 20: grouped-nf4-gemm's per-pass host reuse, A/B on one 5090), #1008 (amendment 21: keeping MoE activations
-  instead of recomputing them) and #1004 (TC1c amendment 1: the H100 position again) are registration PRs that merged without a
-  changelog line. They are listed here so that the release names every merged PR.
+  instead of recomputing them), #1004 (TC1c amendment 1: the H100 position again) and #1010 (TC1c amendment 2: the H100 position
+  with e4b keeping its MoE activations) are registration PRs that merged without a changelog line. They are listed here so that
+  the release names every merged PR.
 
 ## 0.43.0 — 2026-10-03 — `serve_paged` captures bucketed decode graphs by default (`E4B_PAGED_GRAPHS=auto`): ×5.60 the old eager default with 16 concurrent requests and ×9.02 with one on an RTX 5090, at no measured quality cost (lanes P109, P110); e4b's training lead over axolotl's scattermoe replicates on a second host
 
