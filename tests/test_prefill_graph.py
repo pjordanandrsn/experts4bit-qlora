@@ -116,8 +116,8 @@ def test_first_chunks_of_T_tokens_replay_and_the_rest_run_eagerly():
         assert torch.equal(got_k, k) and torch.equal(got_v, v), name
         assert first[name] == tok, name
     st = r.prefill_graph_stats()
-    assert st == {"status": "on", "T": T, "replays": 3, "eager_chunks": 3,
-                  "eager_reasons": {"later_chunk": 2, "short_chunk": 1}}
+    assert {k: st[k] for k in ("status", "T", "replays", "eager_chunks", "eager_reasons")} == {
+        "status": "on", "T": T, "replays": 3, "eager_chunks": 3, "eager_reasons": {"later_chunk": 2, "short_chunk": 1}}
     assert r.model.calls == 3                 # B's two later chunks and C's short first chunk
 
 
@@ -141,6 +141,13 @@ def test_without_the_copy_a_continuing_prompt_flushes_the_next_replays_kv():
     got_k, _ = r.kv.appended[SLOTS["B"]]
     assert not torch.equal(got_k, k)
     assert torch.equal(got_k[:T], kv_of(torch.tensor(PROMPTS["D"]))[0])
+
+
+def test_an_auto_refusal_is_recorded_and_reported_with_its_reason():
+    r = _runner()
+    r.note_prefill_graph_refused("memory: 3300 MiB pool, 1000 MiB free")
+    assert r.prefill_graph_stats() == {"status": "refused", "why": "memory: 3300 MiB pool, 1000 MiB free"}
+    assert r._prefill_graph is None
 
 
 def test_stats_read_off_until_enabled_and_cpu_refuses():

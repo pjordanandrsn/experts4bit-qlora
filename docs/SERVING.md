@@ -102,21 +102,41 @@ resolved, `auto` -> `k19` or `loop`), `int4_prefill_above_256_rows` (with `devic
 `k19`, else `mtile`), `prefill_attn` (`E4B_PAGED_PREFILL_ATTN` resolved), and the raw `*_env` values. A harness
 should record that block, not the box's environment.
 
-**First-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH=1`, off by default).** Every first chunk of exactly
-`E4B_PAGED_CHUNK_TOKENS` tokens replays one CUDA graph of the prefill forward instead of launching it kernel by
+**First-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH`, `auto` by default since lane SC2b).** Every first chunk of
+exactly `E4B_PAGED_CHUNK_TOKENS` tokens replays one CUDA graph of the prefill forward instead of launching it kernel by
 kernel; later chunks, and first chunks of other lengths, run eagerly. A first chunk reads no history, so one graph
-serves every slot. The knob engages only if it verifies at startup:
+serves every slot.
+
+It engages only if it verifies at startup:
 - device grouping is on (decode graphs at `max_seqs > 1` on the all-vram placement) and the model has no
   linear-attention state;
 - the capture succeeds (a host sync inside the forward fails it);
 - on two seeded prompts, each replay equals an eager forward bit for bit, in the logits and in every layer's staged
   K/V.
 
-Otherwise the server stops at startup: `/health` reads `status: "error"`, and its `prefill_graph` block reads
-`status: "refused"` with the reason (`E4B_PAGED_PREFILL_GRAPH=1 refused: ...`). It never falls back silently. When
-engaged, the block reads `status: "on"`, `T`, `replays`, `eager_chunks` and `eager_reasons` (`later_chunk`,
-`short_chunk`); the startup check's replays are not counted. It reads `status: "off"` when not requested. The A2000
-census behind it is `bench/prefill-graph-census-2026-10-04/`.
+The three settings:
+- **`auto`** (the default) also stands down when the device's free memory after capture is below the graph's private
+  pool. The graph keeps its 512-token forward's working set for its life (+3.3 GiB on Qwen3-30B-A3B int4 at 16
+  sequences in SC2b), and a later chunk still runs eagerly and needs that working set again. When `auto` stands down,
+  the server runs with eager prefill and `/health` says why.
+- **`1`** engages, or stops the server at startup with the reason.
+- **`0`** prefills eagerly.
+
+`/health`'s `prefill_graph` block reads:
+- `status`: `on`, `off`, `refused`, `loading` or `error`;
+- `requested`: the setting;
+- when engaged, `T`, `replays`, `eager_chunks`, `eager_reasons` (`later_chunk`, `short_chunk`), `pool_mib` and
+  `free_after_mib`. The startup check's replays are not counted;
+- when refused, `why`.
+
+What SC2b read (#846, `bench/sc2/`, one RTX 5090, Qwen3-30B-A3B int4, 16 sequences, 512-token prompts):
+- serial TTFT **1.30-1.65x** faster;
+- every request's streamed text byte-identical with the graph off and on, in both draws;
+- no regression at any arrival rate;
+- the capacity ceiling **unchanged** at 1 req/s. Under load, most of the per-prefill stall on running decodes is work
+  outside the graphed forward.
+
+The A2000 census behind it is `bench/prefill-graph-census-2026-10-04/`.
 
 Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`

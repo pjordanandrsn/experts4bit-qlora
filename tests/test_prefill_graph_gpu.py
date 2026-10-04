@@ -80,16 +80,19 @@ def test_replayed_first_chunks_prefill_exactly_as_eager(grouping):
     eager_first, eager_pool = _drive(_runner(model), prompts)
     r = _runner(model)
     st = r.enable_prefill_graph(T)
-    assert st == {"status": "on", "T": T, "replays": 0, "eager_chunks": 0,
-                  "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}      # the startup check is not counted
+    assert {k: st[k] for k in ("status", "T", "replays", "eager_chunks", "eager_reasons")} == {
+        "status": "on", "T": T, "replays": 0, "eager_chunks": 0,
+        "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}                  # the startup check is not counted
+    assert st["pool_mib"] >= 0 and st["free_after_mib"] > 0
     first, pool = _drive(r, prompts)
     assert first == eager_first
     for n in prompts:
         assert _same_pool(pool[n], eager_pool[n]), n
     # the prompts differ, so equal pools are not a coincidence of identical inputs
     assert not _same_pool(eager_pool["A"], eager_pool["D"])
-    assert r.prefill_graph_stats() == {"status": "on", "T": T, "replays": 3, "eager_chunks": 3,
-                                       "eager_reasons": {"later_chunk": 2, "short_chunk": 1}}
+    st = r.prefill_graph_stats()
+    assert {k: st[k] for k in ("status", "T", "replays", "eager_chunks", "eager_reasons")} == {
+        "status": "on", "T": T, "replays": 3, "eager_chunks": 3, "eager_reasons": {"later_chunk": 2, "short_chunk": 1}}
 
 
 @needs_cuda
@@ -170,6 +173,22 @@ def test_the_startup_check_refuses_a_graph_reading_a_tensor_nothing_keeps(groupi
     r._capture_prefill_graph = types.MethodType(drops_pos, r)
     with pytest.raises(PrefillGraphRefused, match="differs from the eager forward"):
         r.enable_prefill_graph(T)
+
+
+@needs_cuda
+def test_auto_stands_down_when_the_pool_leaves_too_little_memory(grouping, monkeypatch):
+    """With require_headroom (``auto``), free memory after capture below the graph's pool is a refusal, and the
+    graph is released. The same runner engages when the device reports room."""
+    from experts4bit_qlora.engines.paged_runner import PrefillGraphRefused
+    r = _runner(_model())
+    total = torch.cuda.mem_get_info()[1]
+    monkeypatch.setattr(torch.cuda, "mem_get_info", lambda *a, **k: (0, total))
+    with pytest.raises(PrefillGraphRefused, match="memory: the graph's private pool"):
+        r.enable_prefill_graph(T, require_headroom=True)
+    assert r._prefill_graph is None
+    monkeypatch.undo()
+    st = r.enable_prefill_graph(T, require_headroom=True)
+    assert st["status"] == "on"
 
 
 @needs_cuda

@@ -137,6 +137,7 @@ class PagedModelRunner(StepRunner):
         self.pool_layers = [self.ctx.layer_map.get(a, a) for a in self.attn_layers]
         self._graphs = None          # bucket -> CUDAGraph | None (eager); see enable_decode_graphs
         self._prefill_graph = None   # see enable_prefill_graph
+        self._pg_refused = None      # why an `auto` prefill graph stood down (see note_prefill_graph_refused)
         self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
 
     # ------------------------------------------------------------ intake --
@@ -422,7 +423,8 @@ class PagedModelRunner(StepRunner):
         return got
 
     # ------------------------------------------ first-chunk prefill graph --
-    def enable_prefill_graph(self, T: int, *, warmup: int = 2, seed: int = 1689) -> dict:
+    def enable_prefill_graph(self, T: int, *, warmup: int = 2, seed: int = 1689,
+                             require_headroom: bool = False) -> dict:
         """Capture one CUDA graph of a ``T``-token first-chunk prefill forward and serve first chunks of exactly
         ``T`` tokens from it (see the module docstring). Refuses with :class:`PrefillGraphRefused` naming the reason:
 
@@ -432,7 +434,11 @@ class PagedModelRunner(StepRunner):
         * a capture that raises (a host sync inside the forward invalidates it);
         * a capture that does not stage K/V for every pool layer;
         * a failed startup check (:meth:`_check_prefill_graph`). The check runs only after the capture's scope has
-          returned and the allocator has been churned, so a tensor the graph reads but nothing keeps fails it.
+          returned and the allocator has been churned, so a tensor the graph reads but nothing keeps fails it;
+        * with ``require_headroom`` (``E4B_PAGED_PREFILL_GRAPH=auto``), too little memory left. The graph keeps its
+          forward's working set in a private pool for its life (SC2b measured +3.3 GiB on Qwen3-30B-A3B int4), where
+          an eager prefill only borrows it, and a later chunk still runs eagerly and needs that working set again. So
+          ``auto`` stands down when the device's free memory after capture is below the pool's size.
 
         Returns :meth:`prefill_graph_stats`."""
         from . import hot_residency
@@ -455,7 +461,16 @@ class PagedModelRunner(StepRunner):
         prompts = [torch.randint(0, vocab, (1, T), generator=gen) for _ in range(2)]
         pg = self._capture_prefill_graph(T, prompts[0], warmup)
         self._check_prefill_graph(pg, prompts)
+        pg["free_after_bytes"] = int(torch.cuda.mem_get_info(self.device)[0])
+        if require_headroom and pg["free_after_bytes"] < pg["pool_bytes"]:
+            pool_mib, free_mib = pg["pool_bytes"] / 2**20, pg["free_after_bytes"] / 2**20
+            del pg
+            torch.cuda.empty_cache()
+            raise PrefillGraphRefused(
+                f"memory: the graph's private pool holds {pool_mib:.0f} MiB for its life and {free_mib:.0f} MiB is "
+                f"free after capture; a later chunk's eager forward needs about that working set again")
         self._prefill_graph = pg
+        self._pg_refused = None
         self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
         return self.prefill_graph_stats()
 
@@ -496,6 +511,7 @@ class PagedModelRunner(StepRunner):
                 torch.cuda.current_stream(dev).wait_stream(side)
                 torch.cuda.synchronize(dev)
                 ctx.drop(self._PG_KEY)
+                reserved0 = torch.cuda.memory_reserved(dev)
                 g = torch.cuda.CUDAGraph()
                 try:
                     with torch.cuda.graph(g):
@@ -504,12 +520,14 @@ class PagedModelRunner(StepRunner):
                     raise PrefillGraphRefused(f"the {T}-token prefill forward did not capture "
                                               f"({type(e).__name__}: {str(e)[:300]})") from e
                 staged = self._staged_under_key()
+                pool_bytes = max(0, int(torch.cuda.memory_reserved(dev)) - int(reserved0))   # the private pool
         finally:
             restore()
         if sorted(staged) != sorted(self.pool_layers):
             raise PrefillGraphRefused(f"the capture staged K/V for layers {sorted(staged)}, not the pool's "
                                       f"{sorted(self.pool_layers)}")
-        return {"T": T, "graph": g, "ids": ids, "pos": pos, "logits": out.logits, "staged": staged}
+        return {"T": T, "graph": g, "ids": ids, "pos": pos, "logits": out.logits, "staged": staged,
+                "pool_bytes": pool_bytes}
 
     @staticmethod
     def _churn_allocator(dev) -> None:
@@ -572,15 +590,23 @@ class PagedModelRunner(StepRunner):
         s["eager_reasons"][reason] += 1
 
     def prefill_graph_stats(self) -> dict:
-        """``{"status": "off"}``, or ``{"status": "on", "T", "replays", "eager_chunks", "eager_reasons"}``: first
-        chunks served from the graph, and chunks that ran eagerly with the reason (``later_chunk``: a chunk after
-        the first; ``short_chunk``: a first chunk of another length). The startup check's replays are not
-        counted."""
-        if self._prefill_graph is None:
-            return {"status": "off"}
+        """``{"status": "off"}``; ``{"status": "refused", "why"}`` when an ``auto`` graph stood down
+        (:meth:`note_prefill_graph_refused`); or ``{"status": "on", "T", "replays", "eager_chunks", "eager_reasons",
+        "pool_mib", "free_after_mib"}``: first chunks served from the graph, chunks that ran eagerly with the reason
+        (``later_chunk``: a chunk after the first; ``short_chunk``: a first chunk of another length), the graph's
+        private pool, and the device's free memory after capture. The startup check's replays are not counted."""
+        pg = self._prefill_graph
+        if pg is None:
+            return {"status": "refused", "why": self._pg_refused} if self._pg_refused else {"status": "off"}
         s = self._pg_stats
-        return {"status": "on", "T": self._prefill_graph["T"], "replays": s["replays"],
-                "eager_chunks": s["eager_chunks"], "eager_reasons": dict(s["eager_reasons"])}
+        return {"status": "on", "T": pg["T"], "replays": s["replays"],
+                "eager_chunks": s["eager_chunks"], "eager_reasons": dict(s["eager_reasons"]),
+                "pool_mib": round(pg.get("pool_bytes", 0) / 2**20), "free_after_mib": round(pg.get("free_after_bytes", 0) / 2**20)}
+
+    def note_prefill_graph_refused(self, why: str) -> None:
+        """Record that an ``auto`` prefill graph stood down, and why: prefill stays eager, and the stats say so."""
+        self._prefill_graph = None
+        self._pg_refused = str(why)
 
     def disable_prefill_graph(self) -> None:
         self._prefill_graph = None
