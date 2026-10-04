@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### TC1 amendment 26 registered: prebound Triton launches, A/B on one RTX 5090 (P53–P55) (bench and tests only)
+
+- **Why.** e4b's training step is host-bound, and much of each hot launch's host time is Triton's per-call binding. #1078
+  (`E4B_TRITON_PREBIND=1`) and grouped-nf4-gemm#468 (`GNF4_TRITON_PREBIND=1`) are opt-in and bit-identical, and they cut those calls'
+  host time on an RTX A2000 host.
+- **Token `qwen3prebindab`.** The shipped and matched arms, both flags 0 against both 1, two draws a side in ABBA order, in venv-e4b
+  (triton 3.4). `tc1_arm.py` records `prebind_ab` (each side's requested flag and its prebound and Triton launch counts) on every e4b
+  receipt.
+- **Predictions.** P53 shipped in [0.90, 0.98]; P54 matched in [0.92, 0.99]; P55 held-out within 0.005 on each arm. All three HELD
+  turns both flags on by default for the Triton versions they cover. The reducer scores them (two new self-test cases).
+
 ### Tests: the family-blind training parity test counts grouped-nf4-gemm's dense dgrad route
 
 - `tests/test_fused_train_parity.py::test_fused_train_is_family_blind` checked that the dgrad kernel or the grouped_mm route served
