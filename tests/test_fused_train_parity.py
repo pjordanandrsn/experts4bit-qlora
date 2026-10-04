@@ -528,8 +528,10 @@ def test_fused_train_is_family_blind(name, act, gated, n_exp, top_k, hidden, int
     ref_out, ref_dx, ref_grads = _forward_backward(reference, hs, idx, wts, loss_w)
     got_out, got_dx, got_grads = _forward_backward(candidate, hs, idx, wts, loss_w)
     f32_out, _, _ = _forward_backward(fp32_arm, hs.float(), idx, wts.float(), loss_w)
-    if d0 is not None:                                   # the dgrad KERNEL served both frozen GEMMs; the exact loop did not
-        assert nf4_qlora.DGRAD_STATS["kernel"] + nf4_qlora.DGRAD_STATS["grouped_mm"] - d0["kernel"] - d0["grouped_mm"] == 2
+    if d0 is not None:                                   # a dgrad route (kernel, grouped_mm or dense) served both frozen GEMMs; the exact loop did not
+        def served(st):                                  # auto takes dense off sm_90 for <= 16 groups (gnf4#463)
+            return st["kernel"] + st["grouped_mm"] + st.get("dense", 0)
+        assert served(nf4_qlora.DGRAD_STATS) - served(d0) == 2
         assert nf4_qlora.DGRAD_STATS["loop"] == d0["loop"], nf4_qlora.DGRAD_STATS["loop_reasons"]
     ref_floor, got_floor = _rel(ref_out, f32_out), _rel(got_out, f32_out)
     worst_grad = max(_rel(got_grads[n], ref_grads[n]) for n in ref_grads)

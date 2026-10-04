@@ -85,6 +85,23 @@ is removed after its ladder.
 * **Budget:** Gemma-4's fetch (51.6 GB) and two arms add about 30 min. Guard 6 h, so about $5.10 at $0.85/h, still under the
   $15 no-ask tier.
 
+## Amendment 2 (2026-10-04, after the reading and before its own box): P2 for Qwen3.6
+
+The reading ([`mg1/mg1-5090-2/RESULTS-mg1.md`](mg1/mg1-5090-2/RESULTS-mg1.md)) PASSED all seven families. P2 went unread for
+Qwen3.6, because tp1's arm driver predates `DGRAD_STATS` and Qwen3.6's ladder OOMed at its default r 16. The decision rule needs
+P2, so `qwen3_5_moe` entered as `experimental`. This amendment reads that one counter.
+
+* **Run.** `MG1_FAMILIES=qwen3_5 MG1_LADDER_ONLY=1 MG1_LADDER_ARGS='--rungs fused --r 8 --alpha 16 --adapter-dtype fp32 --attn4 0 --attn-lora 1 --profile 0 --warmup 1 --steps 2'`: the pinned Qwen3.6 revision, the `fused` rung
+  only, at the licensed arms' configuration (r 8, alpha 16, fp32 expert and attention adapters, bf16 attention), with no
+  profiler, 1 warmup and 2 timed steps. The runner prints `AMENDMENT 2 SHAPE (registered)`. It skips the train anchor and the
+  arms: P2 is an engagement count, not a timing, and the arms are already read.
+* **P7.** The `fused` rung's census reads `DGRAD_STATS["loop"] == 0`, with `kernel` > 0, on Qwen3.6 resident.
+* **Decision.** If loop is 0, `qwen3_5_moe.fast_train` becomes `supported`, citing the reading's PASS and this receipt, and the
+  family joins `model_families`. If loop is above 0, it stays `experimental`, with the loop's reasons named. An OOM or harness
+  error is a row, and the status is unchanged.
+* **Budget.** One RTX 5090: a 67 GB fetch and one load. Guard 0.75 h, about $0.64. The guard is under one hour, so no proving
+  run is required.
+
 ## Staging, the proving run and the rehearsal
 
 * **Controller.** `bench/tc1/tc1_drive.sh` with `TC1_BOX=A`, `TC1_RUNNER=mg1_run.sh`, and `TC1_EXTRA_STAGE` = `bench/moegen/mg1_run.sh

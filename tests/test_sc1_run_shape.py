@@ -135,10 +135,10 @@ def test_box_b_phases_run_in_v3_order():
 
 def test_box_c_phases_run_in_v3_order():
     body = _body("box_c", "")
-    body = body[:body.index('case "$BOX" in A) box_a;; B) box_b;; C) box_c;; D) box_d;; E) box_e;; esac')]
+    body = body[:body.index('case "$BOX" in A) box_a;; B) box_b;; C) box_c;; D) box_d;; E) box_e;; F) box_f;; esac')]
     _in_order(body, BOX_C)
     assert _phases(body) == 8 and 'SCHED_NAME=int4; SCHED_STACK="$SPEEDENV"' in body   # 0 AN SG0 SG SGQ EX TT SG2
-    assert 'case "$BOX" in A) box_a;; B) box_b;; C) box_c;; D) box_d;; E) box_e;; esac' in RUN
+    assert 'case "$BOX" in A) box_a;; B) box_b;; C) box_c;; D) box_d;; E) box_e;; F) box_f;; esac' in RUN
 
 
 def test_every_env_knob_the_box_reads_is_forwarded_by_the_driver():
