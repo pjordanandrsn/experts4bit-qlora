@@ -1,0 +1,136 @@
+{
+ "base": "http://127.0.0.1:8778",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "profile": "e4b",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "de63bb35245fad5630580af0a54db04364d2e7e2a5aba72e2d18a61aee8f9fc0",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 0.6039,
+  "wall_s": 6.311,
+  "ttft_p50_s": 0.305367,
+  "ttft_p90_s": 1.138258,
+  "ttft_p99_s": 1.458283,
+  "tpot_p50_s": 0.004596,
+  "tpot_p90_s": 0.004722,
+  "tpot_p99_s": 0.004755,
+  "e2el_p50_s": 1.332605,
+  "e2el_p90_s": 2.12369,
+  "e2el_p99_s": 2.424559,
+  "ttft_mean_s": 0.601395,
+  "output_tok_s": 135.157,
+  "output_tokens": 853,
+  "good": 3,
+  "attainment": 0.75,
+  "goodput_rps": null,
+  "good_per_wall_rps": 0.4753,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " He was inducted into the College Football Hall of Fame in 1973 . He was also inducted into the Michigan Sports Hall of Fame in 1981 and the University of Michigan Hall of Honor in 1993 . \n\nQuestion: What was the reason for the bias against Michigan by sportswriters of that era?\n\nAnswer: \n\nOkay, let's see. The question is asking about the reason for the bias against Michigan by sportswriters in that era. The passage provided mentions a few points. \n\nFirst, there's the part about the Associated Press poll after the 1947 season. It says that Notre Dame was ranked ahead of Michigan even though both were undefeated. Then it notes that every Southern AP voter voted for Notre Dame, which hadn't integrated yet. Also, three of Michigan's star players were African American: Bob Mann, Gene Derricotte, and Len Ford. The Southern schools didn't want to play against teams with African American players.\n\nSo the bias seems to",
+   "completion_tokens": 209,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 2.457989,
+   "ttft_s": 1.493841,
+   "tpot_s": 0.004634,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 2.458097,
+   "text": " November . He had to decide whether to attack the French or to retreat . He chose to attack . The decision was not made lightly . He had to consider the possibility that the French might have a larger force than he had estimated . He also had to consider the terrain . The French were in a narrow pass , and the Coalition had the advantage of higher ground . The terrain was a narrow canyon , with the Danube on one side and a steep hill on the other . The French were in a vulnerable position . The Coalition had the advantage of higher ground and the French were in a narrow pass . The terrain was a narrow canyon , with the Danube on one side and a steep hill on the other . The French were in a vulnerable position . The Coalition had the advantage of higher ground and the French were in a narrow pass . The terrain was a narrow canyon , with the Danube on one side and a steep hill on the other",
+   "completion_tokens": 187,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.18758,
+   "ttft_s": 0.302169,
+   "tpot_s": 0.004759,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 3.64577,
+   "text": " Sergeant Caldwell was killed by a grenade during the escape . The rest of the group reached friendly lines the next day . The 27 men who escaped were the only survivors of the original 310 . \n\nQuestion: What was the main reason for the US forces to be in a desperate situation on the hill?\n\nOptions:\nA) They were surrounded by North Korean forces\nB) They were low on supplies and ammunition\nC) They were cut off from communication\nD) They were attacked by North Korean artillery\n\nAnswer: B) They were low on supplies and ammunition\n\nOkay, let's try to figure out the answer here. The question is asking what the main reason was for the US forces being in a desperate situation on the hill. The options are A to D.\n\nFirst, I need to recall the details from the passage. The passage describes a battle where US forces, under Lieutenant Schmitt, are defending a position against North Korean attacks. The key points mentioned are:\n\n- On the first day, they face mortar fire, machine guns, and mortars. They have to stay in foxholes. The situation is bad",
+   "completion_tokens": 229,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.321552,
+   "ttft_s": 0.301004,
+   "tpot_s": 0.004475,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 4.967434,
+   "text": " earliest in his career . He was named the National League MVP for the 2014 season , the first Dodger since 1981 to win the award . He was also named the National League Cy Young Award winner for the third time in his career . He was the first pitcher to win the Cy Young Award three times in the 21st century . He was also named the National League Player of the Month for July 2014 . \n\n = = = = 2015 season : 2nd Cy Young Award = = = = \n\n Kershaw was named the starting pitcher for the 2015 All @-@ Star Game , the first Dodger since 1988 to be selected as a starter . He was the only Dodger pitcher to be selected to the All @-@ Star team . He was also named the National League Cy Young Award winner for the second time in his career . He was the first Dodger to win the Cy Young Award twice . He was also named the National League Player of the Month for July 2015 .",
+   "completion_tokens": 228,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.343658,
+   "ttft_s": 0.308565,
+   "tpot_s": 0.004559,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

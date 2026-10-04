@@ -11,6 +11,24 @@
 - **Register.** The new H100 position of record is `e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`. It supersedes amendment 1's 0.817
   (the fused kernels) as the default-settings row. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
 
+### Read: SC2 (#846) -- request-level serving on one RTX 5090. vLLM and SGLang hold the SLO to 8 req/s; e4b's `serve_paged` holds it only at 1 req/s
+
+- **What ran.** `sc2-5090-1` ($2.349, a 400 W-capped 5090) drove e4b `serve_paged` (SC1's int4 levers, plus the NF4
+  default as a labelled row), vLLM 0.30.0, SGLang 0.5.20 and llama.cpp `552f18f` through one driver. All 5,060 requests
+  were VALID.
+- **The rule's verdicts.**
+  - Capacity ceilings (attainment ≥ 0.95 in both draws): vLLM 8, SGLang 8, llama.cpp 2, e4b_int4 1, e4b_nf4 1 req/s.
+  - **Q4 and Q5 REFUTED.** Q6 REFUTED by UNSTABLE rows; no row is INVALID.
+  - **Q1–Q3 UNREAD**, because e4b_int4's serial row is UNSTABLE (p50 TTFT 0.293 vs 0.246 s). Seen, not read: TTFT
+    5.18× vLLM's, TPOT 1.29×.
+- **Why** (post hoc, from e4b's own trace; `bench/sc2/sc2_trace.py`).
+  - Every SLO miss is a TTFT miss.
+  - A request's decode time fits 6.15 ms/token + 0.356 s per other request's prefill landing during it (R² 0.985).
+  - A 512-token prefill step stalls every running decode for about a third of a second, so e4b's capacity is set by
+    prefill, not decode.
+- **The lever it names:** cheaper prefill, or prefill that doesn't stall decode.
+- **Total and read page.** SC2 cost $4.225 across 3 receipts. Read page: `bench/h2h-2026-10-02/sc2/README.md`.
+
 ### TC2 amendment 8 registered: Mixtral at default settings with the dense route, and Qwen3.6's micro-batch-1 pair (P24–P28). Two RTX 5090s
 
 - **Box M** (`tc2mixtralres`): Mixtral alone, every e4b arm resident at e4b's default settings, so grouped-nf4-gemm's `auto` takes its
