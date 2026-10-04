@@ -96,7 +96,11 @@ the paged attention, and the fusions at one assembly point as the harness: `fuse
 `E4B_FUSE_ROUTER_EPI`) itself -- the registered B=1 fused stack is `--fuse-qkv` with those flags set -- or,
 without it, the three folds called directly. A set lever that patches nothing refuses at startup, and
 `GET /health` reports the census (int4 expert layers, int4 attention projections, modules each fusion
-patched, decode-graph status per bucket) so a reader can tell which stack answered.
+patched, decode-graph status per bucket) so a reader can tell which stack answered. Its `prefill_routes` block
+reports the prefill routes as the forward resolves them, read at each request: `int4_prefill` (`E4B_INT4_PREFILL`
+resolved, `auto` -> `k19` or `loop`), `int4_prefill_above_256_rows` (with `device_grouping` on, `k19` only under
+`k19`, else `mtile`), `prefill_attn` (`E4B_PAGED_PREFILL_ATTN` resolved), and the raw `*_env` values. A harness
+should record that block, not the box's environment.
 
 Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
