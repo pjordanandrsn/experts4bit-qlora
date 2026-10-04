@@ -224,7 +224,10 @@ stand as measured for the code before #945.
 (`e4b.train.h2h.unsloth.qwen3.h100.2026-10-04`, TC1c amendment 1), Unsloth takes 2.571 s/step against e4b's 3.146 —
 **Unsloth/e4b 0.817 [0.799, 0.836]**, Unsloth faster by 1.22 ×, at 2.98 GB less peak VRAM and ×0.79 the energy, with the matched set
 EQUIVALENT. e4b's own step fell ×0.768 since the first H100 box; on this card it is now mostly device-bound (device-busy 0.665), and
-it spends ~2.4 × Unsloth's device time per step. The first H100 reading, e4b before #945
+it spends ~2.4 × Unsloth's device time per step. **With e4b keeping all 48 layers' MoE activations** (an opt-in memory-for-time setting,
+`E4B_MOE_KEEP_LAYERS=all` with the compact delta; TC1c amendment 2, a LABELLED row `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep`,
+same machine) **e4b is faster per step on the H100 too: Unsloth/e4b 1.100 [1.088, 1.111]** (2.577 against 2.343 s), at 9.81 GB more
+peak VRAM (34.08 vs 24.27 GB) and about equal energy — quoted beside the default-settings 0.817, never in place of it. The first H100 reading, e4b before #945
 (`e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`), was 0.621 [0.615, 0.628]: Unsloth 2.546
 s/step against e4b's 4.097, faster by 1.61 × at 3.59 GB less peak VRAM and ×0.63 the energy, with the
 same loss (EQUIVALENT). The profiles then said why (`.dispatch-profile`): e4b

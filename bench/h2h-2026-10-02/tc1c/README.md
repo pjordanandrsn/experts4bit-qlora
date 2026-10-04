@@ -8,6 +8,38 @@ frameworks, Unsloth 2026.9.14 on torch 2.12.1+cu130 with `grouped_mm` engaged on
 (AMD EPYC 9534, 224 vCPU, 1.58 TB host RAM, driver 595.71.05), $4.88. The first draw (`tc1c-h100-1`) was refused at $0 before any
 instance existed (its manifest carried the 5090 pre-flight exclusion receipts, not same-class for an H100).
 
+## Amendment 2 (2026-10-04): with e4b keeping all 48 layers' MoE activations it is faster per step on the H100 too — 1.100, a labelled row (register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep`)
+
+Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 2.
+
+**The box.** `tc1c-h100-4`: Vast instance 54103635 on the same machine as amendment 1's box (AMD EPYC 9534, H100 NVL, driver
+595.71.05), $2.80; receipts in [`receipts/tc1c-h100-4/`](receipts/tc1c-h100-4/). It used TC1c's token. Every e4b arm ran with
+`TC1_E4B_ENV="E4B_MOE_KEEP_LAYERS=all NF4_QLORA_COMPACT_DELTA=1 GNF4_HOST_REUSE=1"`. In each of the 48 decoder layers attention alone
+is checkpointed, and the MoE activations are kept rather than recomputed; gradients are identical by construction. HF and axolotl
+were skipped (`not_run`). The code was e4b `8846764` and grouped-nf4-gemm `ac84818`. Unsloth's arms were unchanged.
+
+**Engagement.** Each e4b fused arm's `keep_ab` records 48 layers kept with the compact delta on, and its `reuse_ab` records the flag on
+with 8,640 upload hits.
+
+| | e4b `fused_attn4_m`, MoE activations kept | Unsloth `ckpt_unsloth_m` | reading |
+|---|---|---|---|
+| s/step, median of steps 11..20, two draws | 2.333 / 2.353 (**2.343**) | 2.593 / 2.560 (**2.577**) | **Unsloth/e4b 1.100 [1.088, 1.111]**: e4b faster per step; both STABLE |
+| peak VRAM | 34.08 GB | **24.27 GB** | Unsloth lower by 9.81 GB |
+| energy per step | 475.1 / 443.8 J | 480.1 / 451.1 J | about equal (Unsloth ×1.013) |
+| held-out at N = 20 | 0.8486 / 0.8500 | 0.8507 / 0.8483 | the matched set inside the draw noise (P3 HELD) |
+
+- **P7 HELD.** 1.100 lies in the registered [0.85, 1.30]. The interval is wholly above 1.0, so by the registered ordering reading
+  **e4b with this setting is faster per step on this card**, at 9.8 GB more peak memory.
+- **P8 HELD.** e4b's reference arm and Unsloth are both inside the fused arm's draw noise.
+- **Against amendment 1 on the same machine.** e4b's step went from 3.146 to 2.343 s (×0.745). Unsloth's went from 2.571 to 2.577 s.
+- **The profiled e4b arm.** Device-busy is 0.659, with 68,452 device events and 455,685 CPU-side ops per step (amendment 1: 97,851 and
+  619,192). Unsloth reads 0.306 / 81,780 / 515,750. e4b still spends about 1.8× Unsloth's device time per step.
+
+**How to read the two H100 rows.** Amendment 1's 0.817 is e4b with its default settings, and stays the H100 position for those
+defaults. This row is e4b with an opt-in memory-for-time setting, and is quoted beside it, never in place of it. The setting costs
+peak memory: e4b keeps 34.08 GB here against Unsloth's 24.27 GB. The 5090 measured the same trade at 16–32 kept layers
+(`e4b.train.moe-keep.qwen3.5090.2026-10-04`).
+
 ## Amendment 1 (2026-10-04): the position again with e4b after TC1 amendments 10–15 — Unsloth still faster, by 1.22× instead of 1.61× (register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04`)
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 1.
