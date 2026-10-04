@@ -8,6 +8,37 @@ frameworks, Unsloth 2026.9.14 on torch 2.12.1+cu130 with `grouped_mm` engaged on
 (AMD EPYC 9534, 224 vCPU, 1.58 TB host RAM, driver 595.71.05), $4.88. The first draw (`tc1c-h100-1`) was refused at $0 before any
 instance existed (its manifest carried the 5090 pre-flight exclusion receipts, not same-class for an H100).
 
+## Amendment 5 (2026-10-04): the fused kernels' own configs on the H100 change nothing worth taking — a kernel replay, not a position
+
+Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 5.
+
+**The box.** `tc1c-h100-8`: Vast instance 54116273, H100 NVL (capability 9.0), torch 2.8.0+cu128. Vast invoiced $0.33: GPU $0.324,
+storage $0.007, download $0.001 for 4.4 GB. Receipts are in [`receipts/tc1c-h100-8/`](receipts/tc1c-h100-8/), with the per-config table
+in `FUSEDSWEEP.json`. The code was e4b `4ce22eb` and grouped-nf4-gemm `951a97f`. Token `fusedsweep`, with no model:
+[`../../tc1/fused_sweep.py`](../../tc1/fused_sweep.py) ran the same 128 unique recorded calls as amendment 3.
+
+**Forward** (25 configs; the default is variant 1, groups 1, BLOCK_N 128, 4 warps, 3 stages):
+
+- Nothing beats the default. Re-run explicitly it read 0.985, and every other variant-1 config was 0.999–1.82×. All of them were
+  bit-identical to the default.
+- BLOCK_K 128 (`prefill_groups=2`) now fits in the H100's 227 KB, unlike the A2000's 101 KB, but reads 1.03–1.78×.
+- The bf16-MMA mainloop (variant 3) is **2.3–3.5× slower**, at 0.0024 relative Frobenius off the default. With BLOCK_K 128 it still
+  does not fit.
+- **P15 FALSIFIED:** the best bit-identical config is 0.985 against a bound of 0.90.
+- **P16 FALSIFIED:** the best config of any kind is 0.985 against a bound of 0.60.
+
+**dgrad** (9 configs; the default is BLOCK_M 32, BLOCK_N 64, BLOCK_K 64, 2 warps):
+
+- (BLOCK_M 64, BLOCK_N 128, BLOCK_K 64, 4 warps) reads **0.853**.
+- It is not bit-identical to the default: a 5e-5 relative Frobenius difference, a different accumulation order. The best bit-identical
+  config reads 0.988.
+- **P17 HELD** (bound 0.90).
+
+**What follows.** The fused kernels' gap to `torch._grouped_mm` on sm_90 is structural, not a configuration choice: amendment 3 found
+the grouped GEMM alone at 0.20 / 0.16 of them. The decision rule turned a P17 win into a default only for a bit-identical config, and
+this one is near-exact, not identical. It is recorded, not taken. It would matter only if the grouped_mm route, whose dgrad reads 0.494,
+does not become the H100 default after amendment 4. This box quotes no position and changes no register row.
+
 ## Amendment 3 (2026-10-04): on the H100, dequantize + `torch._grouped_mm` runs the recorded GEMM calls in 0.50–0.60 of the fused kernels' time — a kernel replay, not a position
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 3.
