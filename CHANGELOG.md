@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Read: TC1c amendment 6 — with the dequant at bandwidth the grouped_mm route makes e4b faster than Unsloth on an H100 (P18, P19, P20 HELD)
+
+- **What.** Amendment 4's two boxes again, with grouped-nf4-gemm at #452's merge (`81706a9`), whose route dequant is bit-equal and
+  about 8.5× faster on the card. Box R `tc1c-h100-9` ($2.65 invoiced) put every e4b arm on the route; box K `tc1c-h100-10`
+  ($2.76) also kept all 48 layers' MoE activations.
+- **Positions.** Unsloth/e4b **1.030** [1.016, 1.045] on the route (was 0.664 with the old dequant; 0.817 with the fused kernels) and
+  **1.325** [1.296, 1.356] with keep + route (was 0.934; keep alone 1.100). e4b is faster per step on the H100 in both. The matched set
+  is EQUIVALENT on both boxes.
+- **Why.** The dequant now takes 256 ms of device time per step (0.222 ms per call), against 2,178 ms before. The step is host-bound
+  now: device-busy 0.454.
+- **Decision.** Amendment 4's default rule holds, on a thin held-out margin (Δ 0.0041 on two-draw means; two of four draw pairings
+  exceed 0.005). the route qualifies as grouped-nf4-gemm's sm_90 default (grouped-nf4-gemm#454). The readings are labelled rows `...h100.2026-10-04.route-v2`
+  and `.moe-keep-route-v2`. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ### P113 registered (#1015): PDL everywhere or capped to small launches, on SC1's int4 serving step, under decode-only timing. One RTX 5090
 
 - **Why.** P112 closed VOID with no reading. Its first run's arms showed grouped-nf4-gemm's `GNF4_PDL=1` helping B=1 and

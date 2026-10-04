@@ -1,0 +1,34 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: qwen3; e4b e775eff806df92e7da0ee0fef6f3a25b049023b1 gnf4 81706a9c6673ed37b4e01480d318ec7d549434e9; run tc1c-h100-10 instance 54128460 deadline 1791112933; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=112 (physical cores) box_class=H100 NVL
+DRIVER 595.71.05 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3 alpaca sha=bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac eval_n=8 train_only_sha=604f314033450d4d4b5953bb13b3651d919d9b05c46a317e6267a3c2f6c007d7
+qwen3/e4b/fused_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.536, "load_weights": 22.462, "verify": 0.001, "attn4": 5.088, "lora": 0.034, "enable": 0.184, "tokenizer": 0.607, "census": 2.382, "frozen_probe": 0.068, "trainable_sha": 1.829, "counters": 0.0, "c1_before": 52.367, "eval0": 3.68, "optimizer": 0.22}, "phase_budget_s": 1260.0, "prologue_s": 94.599, "prologue_unattributed_s": 1.14}
+qwen3/e4b/fused_attn4_m rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": false, "opt
+
+qwen3/unsloth/ckpt_unsloth_m PROLOGUE {"phase_seconds": {"preamble": 2.581, "snapshot": 0.0, "load_weights": 28.326, "census": 2.399, "frozen_probe": 0.071, "trainable_sha": 1.734, "counters": 0.091, "c1_before": 47.473, "eval0": 12.354, "optimizer": 0.375}, "phase_budget_s": 1260.0, "prologue_s": 104.801, "prologue_unattributed_s": 9.397}
+qwen3/unsloth/ckpt_unsloth_m rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 
+
+qwen3/e4b/reference_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.578, "load_weights": 21.816, "verify": 0.001, "attn4": 5.349, "lora": 0.027, "enable": 0.003, "tokenizer": 0.514, "census": 2.541, "frozen_probe": 0.076, "trainable_sha": 1.794, "counters": 0.001, "c1_before": 57.913, "eval0": 19.613, "optimizer": 0.199}, "phase_budget_s": 1890.0, "prologue_s": 115.747, "prologue_unattributed_s": 1.322}
+qwen3/e4b/reference_attn4_m rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "reference", "tag": "reference_attn4_m", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": fal
+
+qwen3/e4b/fused_attn4_m_d2 PROLOGUE {"phase_seconds": {"preamble": 4.378, "load_weights": 24.074, "verify": 0.001, "attn4": 5.209, "lora": 0.021, "enable": 0.172, "tokenizer": 0.605, "census": 2.364, "frozen_probe": 0.062, "trainable_sha": 1.712, "counters": 0.0, "c1_before": 57.077, "eval0": 1.744, "optimizer": 0.215}, "phase_budget_s": 1260.0, "prologue_s": 99.154, "prologue_unattributed_s": 1.521}
+qwen3/e4b/fused_attn4_m_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_d2", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": false, "
+
+qwen3/unsloth/ckpt_unsloth_m_d2 PROLOGUE {"phase_seconds": {"preamble": 2.558, "snapshot": 0.0, "load_weights": 26.702, "census": 2.265, "frozen_probe": 0.077, "trainable_sha": 1.815, "counters": 0.078, "c1_before": 49.445, "eval0": 5.495, "optimizer": 0.308}, "phase_budget_s": 1260.0, "prologue_s": 98.095, "prologue_unattributed_s": 9.352}
+qwen3/unsloth/ckpt_unsloth_m_d2 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_d2", "status": "ok", "steps": 20, "seq": 2048, "accum
+
+qwen3/hf/hf_peft_m STUB not_run: skipped by TC1_SKIP
+qwen3/axolotl/ckpt_axolotl_m STUB not_run: skipped by TC1_SKIP
+qwen3/e4b/fused_attn4_m_prof PROLOGUE {"phase_seconds": {"preamble": 4.285, "load_weights": 23.307, "verify": 0.001, "attn4": 5.175, "lora": 0.021, "enable": 0.165, "tokenizer": 0.49, "census": 2.374, "frozen_probe": 0.064, "trainable_sha": 1.811, "counters": 0.0, "c1_before": 57.245, "eval0": 1.894, "optimizer": 0.2}, "phase_budget_s": 840.0, "prologue_s": 98.176, "prologue_unattributed_s": 1.143}
+qwen3/e4b/fused_attn4_m_prof rc=0 CELL OK {"framework": "e4b", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_prof", "status": "ok", "steps": 20, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": false,
+
+qwen3/unsloth/ckpt_unsloth_prof PROLOGUE {"phase_seconds": {"preamble": 2.55, "snapshot": 0.0, "load_weights": 26.305, "census": 2.256, "frozen_probe": 0.067, "trainable_sha": 1.806, "counters": 0.074, "c1_before": 51.781, "eval0": 5.292, "optimizer": 0.319}, "phase_budget_s": 840.0, "prologue_s": 98.884, "prologue_unattributed_s": 8.434}
+qwen3/unsloth/ckpt_unsloth_prof rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_prof", "status": "ok", "steps": 20, "seq": 2048, "accum
+
+DMON dmon_qwen3_e4b_fused_attn4_m_prof.txt 287 samples
+DMON dmon_qwen3_unsloth_ckpt_unsloth_prof.txt 327 samples
+QWEN3 DONE
