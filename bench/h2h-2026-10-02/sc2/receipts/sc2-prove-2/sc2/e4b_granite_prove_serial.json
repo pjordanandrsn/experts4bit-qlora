@@ -1,0 +1,180 @@
+{
+ "base": "http://127.0.0.1:8778",
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "profile": "e4b",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 6,
+ "seed": 1,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "6fee055b7515760392259956bf0e968c5d083feb773cb1ed9143a36b77959122",
+ "plan": [
+  [
+   0.0,
+   17,
+   209
+  ],
+  [
+   0.0,
+   8,
+   129
+  ],
+  [
+   0.0,
+   15,
+   190
+  ],
+  [
+   0.0,
+   57,
+   184
+  ],
+  [
+   0.0,
+   48,
+   117
+  ],
+  [
+   0.0,
+   12,
+   188
+  ]
+ ],
+ "summary": {
+  "n": 6,
+  "valid": 6,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.2286,
+  "wall_s": 4.948,
+  "ttft_p50_s": 0.163814,
+  "ttft_p90_s": 0.208106,
+  "ttft_p99_s": 0.245521,
+  "tpot_p50_s": 0.003828,
+  "tpot_p90_s": 0.003915,
+  "tpot_p99_s": 0.003915,
+  "e2el_p50_s": 0.872588,
+  "e2el_p90_s": 0.959929,
+  "e2el_p99_s": 1.031344,
+  "ttft_mean_s": 0.17804,
+  "output_tok_s": 205.53,
+  "output_tokens": 1017,
+  "good": 6,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.2126,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 5e-06,
+   "text": " in from the front indicated that the 23rd Infantry had been forced to withdraw from its northern blocking position and had retreated to the southern road toward Pugong @-@ ni . The 23rd Infantry Headquarters and Service Companies and other miscellaneous regimental units had been unable to stop the North Korean advance . The 23rd Infantry Headquarters and Service Companies and other miscellaneous regimental units had been unable to stop the North Korean advance . The 23rd Infantry Headquarters and Service Companies and other miscellaneous regimental units had been unable to stop the North Korean advance . The 23rd Infantry Headquarters and Service Companies and other miscellaneous regimental units had been unable to stop the North Korean advance . The 23rd Infantry Headquarters and Service Companies and other miscellaneous regimental units had",
+   "completion_tokens": 209,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.039279,
+   "ttft_s": 0.249678,
+   "tpot_s": 0.003795,
+   "i": 0,
+   "prompt_index": 17,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 129,
+   "prompt_len": 512,
+   "t_send": 1.039409,
+   "text": "azine , the Ise class ships had a fireproof bulkhead between the magazine and the shell magazine . The fireproof bulkhead was 149 mm thick and was made of a special fireproof material that was resistant to the heat of the magazine explosions . The fireproof bulkhead was designed to withstand a fire that would burn for 10 hours at a temperature of 1000 degrees Fahrenheit . The fireproof bulkhead was also designed to be able to withstand a pressure of 100 atmospheres . The fireproof bulkhead was located",
+   "completion_tokens": 129,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.666252,
+   "ttft_s": 0.164987,
+   "tpot_s": 0.003915,
+   "i": 1,
+   "prompt_index": 8,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 190,
+   "prompt_len": 512,
+   "t_send": 1.705735,
+   "text": " area and were not yet fully trained .\n\n\n The North Korean attack began at 05:30 on August 31 , with the 1st Battalion of the 9th Infantry Regiment leading the way . The 1st Battalion 's advance was halted by the 1st Battalion of the 1st Marine Regiment , which had been positioned on the 9th Infantry 's right flank . The 1st Marine Battalion 's advance was halted by the 1st Battalion of the 1st Cavalry Regiment , which had been positioned on the 1st Marine Regiment 's right flank . The 1st Cavalry Battalion 's advance was halted by the 1st Battalion of the 1st",
+   "completion_tokens": 190,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.880579,
+   "ttft_s": 0.162641,
+   "tpot_s": 0.003798,
+   "i": 2,
+   "prompt_index": 15,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 184,
+   "prompt_len": 512,
+   "t_send": 2.586413,
+   "text": " requests and provided assistance .\n\n\n\n= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =",
+   "completion_tokens": 184,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.866802,
+   "ttft_s": 0.162351,
+   "tpot_s": 0.003849,
+   "i": 3,
+   "prompt_index": 57,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 117,
+   "prompt_len": 512,
+   "t_send": 3.453312,
+   "text": " his 10 pitches , 7 are fastballs , 2 are sliders , and 1 is a changeup . His fastballs are usually in the low 90s , with the occasional high 90s pitch . His slider is a 12 to 14 mph slower than his fastball , and his changeup is a 1 to 3 mph slower than his fastball . His fastball is his most consistent pitch , and he has a high success rate with it . His slider is his second most",
+   "completion_tokens": 117,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.616322,
+   "ttft_s": 0.162048,
+   "tpot_s": 0.003915,
+   "i": 4,
+   "prompt_index": 48,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 188,
+   "prompt_len": 512,
+   "t_send": 4.069699,
+   "text": " a new morning show . He then moved to WBEN ( AM ) and WBEN ( FM ) and became the sideline announcer for the Buffalo Bills . He also served as the play @-@ by @-@ play announcer for the University of Buffalo Bulls football team . As a radio broadcaster , he is remembered for things ranging from ski reports , to 17 years worth of \" Breakfast At \u2014 \" programs live from various local restaurants , to 27 years as the WBEN @-@ AM All Night Show host . \n\n\n In 1973 , Rifenburg was diagnosed with a rare form of cancer that had spread to his brain . He was treated with radiation and chemotherapy , but the cancer was not cured . He died in 1974 at the age of",
+   "completion_tokens": 188,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.878374,
+   "ttft_s": 0.166535,
+   "tpot_s": 0.003806,
+   "i": 5,
+   "prompt_index": 12,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

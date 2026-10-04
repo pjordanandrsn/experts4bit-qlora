@@ -43,6 +43,22 @@
     The loader, serving, int4, moe-keep and quant_guard suites pass too.
 - `train.py` is untouched; adopting `prepare_qlora_training` there is a separate change.
 
+### TC1 amendment 23 registered: a memory census of e4b against Unsloth on one RTX 5090 (P41–P43)
+
+- **The box** (`qwen3memcensus`). Qwen3-30B-A3B at TC1's pin and tokens, micro-batch 1 × accum 8, one draw per arm: e4b at its defaults
+  (fp32 expert absmax), e4b with `E4B_ABSMAX_DQ=1`, and Unsloth on grouped_mm. Every arm runs the new memory census. No speed is read.
+- **Predictions.** P41: the census finds e4b's fp32 expert absmax within 2 % of the analytic 1.81 GB, and the double-quantized one
+  within 2 % of that over 3.94. P42: it attributes at least 90 % of each arm's peak to named groups. P43: with the absmax
+  double-quantized, e4b's peak exceeds Unsloth's by 0.5–2.5 GB.
+- **Harness.** `tc1_arm.py --mem-census 1` (any framework, off by default) records PyTorch's allocator history from the arm's start, in
+  a ring of 1,000,000 events with Python stacks. Each time the run's peak grows by 32 MiB, the box snapshots the ring and reduces it on
+  the spot. The reduction finds the peak and groups the allocations live at it by static class, else by the first e4b,
+  grouped-nf4-gemm, Unsloth, bitsandbytes or optimizer frame. A static census by class runs after setup and after training. The
+  receipt gains `mem_census`; a failure inside the census is recorded there, and the arm finishes as usual. Smoke-tested on torch 2.8 on
+  an RTX A2000. The Unsloth venv's torch 2.12 is handled by reading the recorder's signature, but has not run.
+- **Reducer.** The family is registered with no position quoted. Its scorer prints P41–P43 beside side-by-side census tables. Four new
+  self-test cases, 81 in all. `bench/tc1/TC1-PREREG.md` amendment 23.
+
 ### Read: TC1c amendment 8 — on an H100 at default settings e4b is faster per step than Unsloth: 1.061 (P24, P25, P26 HELD)
 
 - **The box.** `tc1c-h100-15` ($2.44) ran e4b 0.45.0's code with grouped-nf4-gemm 0.37.0 and nothing set. `auto` took the grouped_mm
@@ -51,6 +67,24 @@
   energy. The matched set is EQUIVALENT.
 - **Register.** The new H100 position of record is `e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`. It supersedes amendment 1's 0.817
   (the fused kernels) as the default-settings row. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
+### Read: SC2 (#846) -- request-level serving on one RTX 5090. vLLM and SGLang hold the SLO to 8 req/s; e4b's `serve_paged` holds it only at 1 req/s
+
+- **What ran.** `sc2-5090-1` ($2.349, a 400 W-capped 5090) drove e4b `serve_paged` (SC1's int4 levers, plus the NF4
+  default as a labelled row), vLLM 0.30.0, SGLang 0.5.20 and llama.cpp `552f18f` through one driver. All 5,060 requests
+  were VALID.
+- **The rule's verdicts.**
+  - Capacity ceilings (attainment ≥ 0.95 in both draws): vLLM 8, SGLang 8, llama.cpp 2, e4b_int4 1, e4b_nf4 1 req/s.
+  - **Q4 and Q5 REFUTED.** Q6 REFUTED by UNSTABLE rows; no row is INVALID.
+  - **Q1–Q3 UNREAD**, because e4b_int4's serial row is UNSTABLE (p50 TTFT 0.293 vs 0.246 s). Seen, not read: TTFT
+    5.18× vLLM's, TPOT 1.29×.
+- **Why** (post hoc, from e4b's own trace; `bench/sc2/sc2_trace.py`).
+  - Every SLO miss is a TTFT miss.
+  - A request's decode time fits 6.15 ms/token + 0.356 s per other request's prefill landing during it (R² 0.985).
+  - A 512-token prefill step stalls every running decode for about a third of a second, so e4b's capacity is set by
+    prefill, not decode.
+- **The lever it names:** cheaper prefill, or prefill that doesn't stall decode.
+- **Total and read page.** SC2 cost $4.225 across 3 receipts. Read page: `bench/h2h-2026-10-02/sc2/README.md`.
 
 ### TC2 amendment 8 registered: Mixtral at default settings with the dense route, and Qwen3.6's micro-batch-1 pair (P24–P28). Two RTX 5090s
 

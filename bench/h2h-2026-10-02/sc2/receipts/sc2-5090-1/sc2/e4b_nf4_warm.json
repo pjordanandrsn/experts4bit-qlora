@@ -1,0 +1,136 @@
+{
+ "base": "http://127.0.0.1:8778",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "profile": "e4b",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "de63bb35245fad5630580af0a54db04364d2e7e2a5aba72e2d18a61aee8f9fc0",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 0.4399,
+  "wall_s": 9.241,
+  "ttft_p50_s": 0.267776,
+  "ttft_p90_s": 0.358934,
+  "ttft_p99_s": 0.392188,
+  "tpot_p50_s": 0.009475,
+  "tpot_p90_s": 0.009495,
+  "tpot_p99_s": 0.0095,
+  "e2el_p50_s": 2.394264,
+  "e2el_p90_s": 2.421101,
+  "e2el_p99_s": 2.421374,
+  "ttft_mean_s": 0.298173,
+  "output_tok_s": 92.311,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 0.4329,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " He was inducted into the College Football Hall of Fame in 1973 . \n\nAnswer the following question: What was the name of the team that Rifenburg played for?\n\nThe name of the team that Rifenburg played for is the Michigan Wolverines.\n\nOkay, let me check the text again to make sure. The article mentions \"Michigan Wolverines\" several times. For example, in the first paragraph, it says \"Rifenberg and teammate Len Ford...\" and later references \"Michigan rolled to a 49\u20130 victory over USC.\" Also, the last sentence mentions \"Michigan Wolverines.\" So yes, the answer is the Michigan Wolverines.\nAnswer: The name of the team that Rifenburg played for is the Michigan Wolverines. \n\n**Step-by-Step Explanation:**\n1. The text explicitly mentions \"Michigan Wolverines\" in multiple contexts.\n2. Examples include references to games against Wisconsin and USC, as well as Rifenburg's statistics with the team.\n3. The final sentence confirms his association with the",
+   "completion_tokens": 209,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 2.368132,
+   "ttft_s": 0.395883,
+   "tpot_s": 0.009481,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 2.368242,
+   "text": " November . He was advised by his generals to attack the French at once . However , Kutuzov was not convinced that the French were in a vulnerable position . He was also concerned about the possibility of a French counterattack . He decided to wait until the next day to attack . This decision was to have a major impact on the outcome of the battle . \n\nAnswer the following questions in English:\n1. What was the name of the battle in which the French were caught in a narrow canyon?\n2. What was the name of the French general who was in command of the division that was caught in the canyon?\n3. What was the name of the Russian general who was in command of the Coalition army?\n4. What was the approximate number of men in the Coalition force that was concentrated near the French position at D\u00fcrenstein?\n5. What was the approximate number of men in Gazan's division?\n6. What was the",
+   "completion_tokens": 187,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 2.030175,
+   "ttft_s": 0.262833,
+   "tpot_s": 0.009501,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 4.398509,
+   "text": " Sergeant Caldwell was the last to leave . The next day , 5 September , the North Koreans captured the hill . The survivors of the 1st Battalion , 7th Cavalry , were now scattered in the hills , some of them still in the area . The 1st Battalion had been destroyed . \n\nThe 1st Battalion , 7th Cavalry , was destroyed in the Battle of the Punchbowl . The 1st Battalion , 7th Cavalry , was destroyed in the Battle of the Punchbowl . The 1st Battalion , 7th Cavalry , was destroyed in the Battle of the Punchbowl . \n\nThe 1st Battalion , 7th Cavalry , was destroyed in the Battle of the Punchbowl . The 1st Battalion , 7th Cavalry , was destroyed in the Battle of the Punchbowl . The 1st Battalion , 7th Cavalry , was destroyed in the Battle of the Punchbowl . \n\nThe 1st Battalion , 7th Cavalry , was destroyed in the Battle of the Punchbowl . The 1",
+   "completion_tokens": 229,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 2.420395,
+   "ttft_s": 0.261254,
+   "tpot_s": 0.009469,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 6.819021,
+   "text": " earliest in his career . He was named the National League MVP for the 2014 season , becoming the first Dodger since Sandy Koufax in 1963 to win the award . He also won his third Cy Young Award , making him the first pitcher in MLB history to win three Cy Young Awards in a row . He was also named the 2014 National League Player of the Year by The Sporting News . \n\n = = = = 2015 season : 2nd World Series appearance = = = = \n\n Kershaw was named the starting pitcher for the 2015 Major League Baseball All @-@ Star Game . He was selected to the National League squad for the fourth straight year . He was also named to the All @-@ Star Game for the second time in his career . Kershaw had a 16 \u2013 9 record with a 2 @.@ 58 ERA in 2015 . He was selected to the All @-@ Star Game for the fourth straight year . He was also named to the All @-@ Star",
+   "completion_tokens": 228,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 2.421404,
+   "ttft_s": 0.27272,
+   "tpot_s": 0.009465,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

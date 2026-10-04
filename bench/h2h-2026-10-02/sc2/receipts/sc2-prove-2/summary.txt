@@ -1,0 +1,35 @@
+KNOBS box=E e4b=b7e41a7f1e9452a74d452540e4ac4e94d7dd193a gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=1
+e4b 0.45.0 @b7e41a7f1e9452a74d452540e4ac4e94d7dd193a
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[install-vllm 16:22:58] vllm==0.30.0 ready in /root/sc1/venv-vllm
+SGLANG_INSTALL OK
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+aiohttp 3.14.3 fastapi 0.141.1 uvicorn 0.54.0
+PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite
+QUIESCE prove quiesced=yes waited=0s busy_procs=0 load1=13.07 nproc=256 cpu.max=3071999/100000 at=2026-10-04T16:29:32Z
+FETCH granite ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+BAKE granite BAKE OK
+smoke_granite_b1 B=1 rc=0 SC1SCHED_CENSUS {"arm": "smoke_granite_b1", "batch": 1, "ok": true, "failures": [], "smoke_error": null, "load_s": 15.1, "census": {"moe_layers": 32, "int4_expert_layers": 0, "int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_
+smoke_granite_b16 B=16 rc=0 SC1SCHED_CENSUS {"arm": "smoke_granite_b16", "batch": 16, "ok": true, "failures": [], "smoke_error": null, "load_s": 10.5, "census": {"moe_layers": 32, "int4_expert_layers": 0, "int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glu
+sc2_driver self-test OK (9/9 cases)
+sc2_reduce self-test OK (10 cases)
+SC2 e4b (granite) healthy: {"status":"ready","error":null,"model":"ibm-granite/granite-3.1-3b-a800m-instruct","served_model_names":["ibm-granite/granite-3.1-3b-a800m-instruct"],"engine":{"max_seqs":16,"kv_slots":16,"max_tokens_per_seq":2048,"chunk_tokens":512,"max_prefill_tokens_per_step":512,"graphs":true,"buckets":[1,2,4,8,
+SC2 e4b_granite_prove_serial rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.2286, "ttft_p50_s": 0.163814, "ttft_p99_s": 0.245521, "tpot_p50_s": 0.003828, "tpot_p99_s": 0.003915, "output_tok_s": 205.53, "goodput_rps": null}
+SC2 e4b_granite_prove_poisson rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2832, "ttft_p50_s": 0.200608, "ttft_p99_s": 0.497662, "tpot_p50_s": 0.016384, "tpot_p99_s": 0.022933, "output_tok_s": 352.656, "goodput_rps": 4.0}
+FETCH gptq Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+SC2 vllm healthy:       1 quantization=auto_gptq 
+SC2 vllm_prove_serial rc=0 SC2_RUN {"profile": "vllm", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.5739, "ttft_p50_s": 0.04951, "ttft_p99_s": 0.10505, "tpot_p50_s": 0.003487, "tpot_p99_s": 0.003492, "output_tok_s": 262.184, "goodput_rps": null}
+SC2 vllm_prove_poisson rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2831, "ttft_p50_s": 0.052346, "ttft_p99_s": 0.102302, "tpot_p50_s": 0.005312, "tpot_p99_s": 0.006152, "output_tok_s": 417.882, "goodput_rps": 4.0}
+SC2 sglang healthy: SGLANG_ENGAGEMENT {"mode": "native", "version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": true, "jit_target_tag": "sm120f", "gencode": "-gencode=arch=compute_120f,code=sm_120f", "startup_s": 4
+SC2 sglang_prove_serial rc=0 SC2_RUN {"profile": "sglang", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.7542, "ttft_p50_s": 0.033412, "ttft_p99_s": 0.034812, "tpot_p50_s": 0.003254, "tpot_p99_s": 0.003263, "output_tok_s": 291.197, "goodput_rps": null}
+SC2 sglang_prove_poisson rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2834, "ttft_p50_s": 0.03788, "ttft_p99_s": 0.12242, "tpot_p50_s": 0.005343, "tpot_p99_s": 0.00618, "output_tok_s": 420.083, "goodput_rps": 4.0}
+FETCH gguf Qwen3-30B-A3B-Q4_K_M.gguf 9f1a24700a339b09
+SC2 llamacpp healthy: [llamacpp_box 17:02:05] healthy on :8080, 0.03.153.340 I load_tensors: offloaded 49/49 layers to GPU, pid 19674
+SC2 llamacpp_prove_serial rc=0 SC2_RUN {"profile": "llamacpp", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.6159, "ttft_p50_s": 0.083284, "ttft_p99_s": 0.151042, "tpot_p50_s": 0.003151, "tpot_p99_s": 0.00324, "output_tok_s": 270.33, "goodput_rps": null}
+SC2 llamacpp_prove_poisson rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2832, "ttft_p50_s": 0.090201, "ttft_p99_s": 0.173522, "tpot_p50_s": 0.01536, "tpot_p99_s": 0.023511, "output_tok_s": 315.221, "goodput_rps": 4.0}
+PROVED box=E installs=[vllm sglang llamacpp sc2client] smokes=[granite_b1 granite_b16] servers=[e4b_granite vllm sglang llamacpp]

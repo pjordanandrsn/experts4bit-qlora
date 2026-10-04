@@ -1,0 +1,238 @@
+{
+ "engine": "e4b-sched",
+ "arm": "smoke_granite_b1",
+ "e4b_sha": "b7e41a7f1e9452a74d452540e4ac4e94d7dd193a",
+ "gnf4_sha": null,
+ "torch": "2.8.0+cu128",
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+ "batch": 1,
+ "method": "slope(32->128) through ContinuousScheduler.step() of DECODE-ONLY time (each rep's wall minus its last row's own Request.ttft: A10); min-of-3 (P20 estimator) and median-of-3 both recorded; the registered wall slope recorded beside it",
+ "prompts": "identical token ids to every other engine (step_decomp._k8_window, wikitext-2 test, 512-token rows)",
+ "engine_kwargs": {
+  "E4B_PAGED_MODEL": "ibm-granite/granite-3.1-3b-a800m-instruct",
+  "E4B_PAGED_REVISION": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+  "E4B_PAGED_ARENA": "/root/sc1/work_granite/nf4.arena",
+  "E4B_PAGED_CALIB": "/root/sc1/calib.json",
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "1",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "2048",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1",
+  "E4B_PAGED_FUSE_QKV": "0",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "config": {
+  "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+  "arena": "/root/sc1/work_granite/nf4.arena",
+  "calib": "/root/sc1/calib.json",
+  "revision": "a02780686e08a03fe0d2679a293b5c74a90efa89",
+  "served_names": [],
+  "max_seqs": 1,
+  "max_tokens_per_seq": 2048,
+  "chunk_tokens": 512,
+  "max_prefill_tokens": 0,
+  "graphs": true,
+  "buckets": [
+   1
+  ],
+  "placement": "all-vram",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64,
+  "kv_groups": "auto",
+  "fuse_qkv": false,
+  "torch_threads": 8,
+  "max_tokens_cap": 0,
+  "max_queue": 0,
+  "eos_ids": [],
+  "host": "127.0.0.1",
+  "port": 8778,
+  "trace_path": "",
+  "device": "cuda"
+ },
+ "generation": {
+  "temperature": 0.0,
+  "greedy": "argmax (PagedModelRunner)",
+  "ignore_eos": true,
+  "stop_ids": null,
+  "min_tokens": "= max_new_tokens (the scheduler's length contract)",
+  "chunk_tokens": 512,
+  "prefill_budget_per_step": 512
+ },
+ "route_env": {
+  "E4B_INT4_GROUPED_SMALLM": "auto",
+  "E4B_INT4_LEAN_GLUE": "auto",
+  "E4B_NF4_GROUPED_SMALLM": "0",
+  "E4B_MXFP4_GROUPED_SMALLM": "auto"
+ },
+ "pack_fingerprint": null,
+ "fusion_set": "unfused: the three env-gated folds called directly",
+ "vast_instance_id": "54171687",
+ "mode": "smoke",
+ "status": "ok",
+ "e4b_version": "0.45.0",
+ "load_s": 15.1,
+ "census": {
+  "moe_layers": 32,
+  "experts": 40,
+  "top_k": 8,
+  "model_type": "granitemoe",
+  "int4_expert_layers": 0,
+  "int4_store_kinds": [],
+  "int4_attn_projections": 0,
+  "kv": {
+   "n_kv_heads": 8,
+   "head_dim": 64,
+   "k_groups": "auto",
+   "scratch_slots": 1,
+   "blocks_per_seq": 128
+  },
+  "graph_status": {
+   "1": "graph"
+  },
+  "grouping": {
+   "device_grouping": false,
+   "force_singleton_groups": false
+  },
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "0",
+   "E4B_SERVE_ATTN_INT4_CALIB": "0",
+   "E4B_CALIB_SOURCE": "c4",
+   "E4B_FUSE_T1_GLUE": "1",
+   "E4B_FUSE_T1_GLUE_R2": "1",
+   "E4B_FUSE_ROUTER_EPI": "1"
+  },
+  "exp_int4_layers_enabled": 0,
+  "attn_int4_rtn_projections": 0,
+  "attn_int4_calib_projections": 0,
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 65,
+  "fuse_t1_glue_r2_n": [
+   32,
+   32
+  ],
+  "fuse_router_epilogue_n": 32,
+  "fingerprint": null
+ },
+ "graph_status": {
+  "1": "graph"
+ },
+ "same_stack": {
+  "fuse_qkv_n": 0,
+  "int4_expert_layers": 0,
+  "int4_attn_projections": 0,
+  "fuse_t1_glue_n": 65,
+  "fuse_t1_glue_r2_n": [
+   32,
+   32
+  ],
+  "fuse_router_epilogue_n": 32,
+  "pack_fingerprint": null,
+  "graph_status": {
+   "1": "graph"
+  }
+ },
+ "mem_after_load": {
+  "max_memory_allocated": 2361682432,
+  "memory_reserved": 2403336192,
+  "memory_allocated": 2360578560,
+  "mem_get_info_free": 30536302592,
+  "mem_get_info_total": 33670758400
+ },
+ "eos_ids_model": [
+  0
+ ],
+ "prompt_tokens": [
+  64
+ ],
+ "smoke_wall_s": 2.0772,
+ "smoke_steps": 16,
+ "tokens": {
+  "0": [
+   736,
+   4840,
+   6613,
+   45,
+   312,
+   17521,
+   688,
+   6496,
+   458,
+   5258,
+   6496,
+   2769,
+   312,
+   2145,
+   1957,
+   32
+  ]
+ },
+ "lever_census": {
+  "ok": true,
+  "failures": [],
+  "checked": {
+   "E4B_FUSE_T1_GLUE": 65,
+   "E4B_FUSE_T1_GLUE_R2": [
+    32,
+    32
+   ],
+   "E4B_FUSE_ROUTER_EPI": 32,
+   "E4B_PAGED_GRAPHS": {
+    "1": "graph"
+   }
+  }
+ },
+ "graph_stats": {
+  "1": {
+   "replays": 15,
+   "eager_steps": 0,
+   "rows": 15,
+   "pad_rows": 0
+  }
+ },
+ "scheduler_stats": {
+  "steps": 16,
+  "completed": 1,
+  "aborted": 0,
+  "in_flight": 0,
+  "queued": 0,
+  "tokens_emitted": 16,
+  "prefill_tokens": 64,
+  "ttft_p50": 1.9846687649842352,
+  "ttft_p99": 1.9846687649842352,
+  "queue_wait_p50": 1.6552978195250034e-05,
+  "per_stream_tok_s_mean": 7.705265715465449,
+  "kv_slots_free": 1
+ },
+ "mem_after_runs": {
+  "max_memory_allocated": 2377817088,
+  "memory_reserved": 2432696320,
+  "memory_allocated": 2360841216,
+  "mem_get_info_free": 30504845312,
+  "mem_get_info_total": 33670758400
+ },
+ "nvidia_smi": "NVIDIA GeForce RTX 5090, 3020 MiB, 32607 MiB, 595.84",
+ "dynamo_counters": {
+  "before_build": {},
+  "after_runs": {}
+ },
+ "banners": {
+  "int4exp_artifact": null,
+  "int4exp_enabled": null,
+  "int4exp_calibrated": null,
+  "attn_calib": null,
+  "attn_rtn": null,
+  "fused_qkv": null,
+  "decode_graph": [
+   "DECODE_GRAPH bucket=1 captured"
+  ],
+  "fusions": [
+   "[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 65, 'fuse_t1_glue_r2_n': [32, 32], 'fuse_router_epilogue_n': 32}"
+  ],
+  "ready": [
+   "[serve_paged] ready: {\"moe_layers\": 32, \"experts\": 40, \"top_k\": 8, \"model_type\": \"granitemoe\", \"int4_expert_layers\": 0, \"int4_store_kinds\": [], \"int4_attn_projections\": 0, \"kv\": {\"n_kv_heads\": 8, \"head_dim\": 64, \"k_groups\": \"auto\", \"scratch_slots\": 1, \"blocks_per_seq\": 128}, \"graph_status\": {\"1\": \"graph\"}, \"grouping\": {\"device_grouping\": false, \"force_singleton_groups\": false}, \"levers_env\": {\"E4B_SERVE_EXP_INT4\": \"0\", \"E4B_SERVE_ATTN_INT4_CALIB\": \"0\", \"E4B_CALIB_SOURCE\": \"c4\", \"E4B_FUSE_T1_GLUE\": \"1\", \"E4B_FUSE_T1_GLUE_R2\": \"1\", \"E4B_FUSE_ROUTER_EPI\": \"1\"}, \"exp_int4_layers_enabled\": 0, \"attn_int4_rtn_projections\": 0, \"attn_int4_calib_projections\": 0, \"fuse_qkv_n\": 0, \"fuse_t1_glue_n\": 65, \"fuse_t1_glue_r2_n\": [32, 32], \"fuse_router_epilogue_n\": 32}"
+  ]
+ }
+}

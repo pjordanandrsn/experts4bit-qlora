@@ -57,6 +57,12 @@ def test_tc1_arm_selftest():
     # receipts name THIS lane's pre-registration
     ref = json.loads((d / "tiny_e4b_reference_attn4.json").read_text())
     assert ref["prereg"] == "tc1/TC1-PREREG.md" and ref["harness"].startswith("tc1_arm.py (copy of tp4_arm.py @ 10ce711d")
+    # TC1 amendment 23: the census arms' static classes on both tiny layouts, its failing case, and no mem_census on an arm without the flag
+    cen = json.loads((d / "tiny_e4b_fused_attn4_census.json").read_text())["mem_census"]
+    assert cen["static_after_setup"]["expert_absmax"] == 256 and cen["static_after_setup"]["expert_params"] == 2304 and cen["trace"].startswith("not recorded: no CUDA")
+    assert json.loads((d / "tiny_unsloth_ckpt_unsloth_census.json").read_text())["mem_census"]["static_after_setup"]["frozen_expert_weights"] == 2304
+    assert "FAILING-CASE A23-census (arm): mem_census = static_after_setup: RuntimeError: selftest: census failure injected -> the arm's status ok" in p.stdout
+    assert "mem_census" not in ref and "--mem-census" in ref["harness"]
     # TC1b: --note lands verbatim on exactly the arm it was given to (the p38 anchor arms record how they differ from tp4's)
     assert ref["note"] == "selftest note (TC1b --note)" and json.loads((d / "tiny_e4b_fused_attn4.json").read_text())["note"] is None
     # T19: the default cast reaches e4b's expert adapters (bf16 as the loader builds them -> fp32), recorded
@@ -1636,3 +1642,235 @@ def test_frozen_base_probe_reads_a_compressed_stack_as_bnbs_nested_path_does():
     for k in ("gate_up", "down"):
         assert pe["slots"][k]["regime"] == ph["slots"][k]["regime"] == "nf4/64+dq", (k, pe["slots"][k]["regime"], ph["slots"][k]["regime"])
         assert pe["slots"][k]["sha"] == ph["slots"][k]["sha"], f"{k}: e4b's double-quantized expert 0 != bnb's nested whole-stack slice"
+
+
+# ----------------------------------------------------------------------------- TC1 amendment 23: the memory census
+_F_TORCH = [{"filename": "venv/site-packages/torch/autograd/graph.py", "line": 824, "name": "_engine_run_backward"}]
+_F_E4B = [{"filename": "venv/site-packages/torch/nn/functional.py", "line": 1, "name": "linear"},
+          {"filename": "venv/site-packages/experts4bit_qlora/lora.py", "line": 500, "name": "forward"},
+          {"filename": "work/tc1_arm.py", "line": 3000, "name": "run_arm"}]
+_F_GNF4 = [{"filename": "venv/site-packages/torch/_tensor.py", "line": 9, "name": "__torch_function__"},
+           {"filename": "venv/site-packages/nf4_qlora.py", "line": 77, "name": "lora_delta_grouped"},
+           {"filename": "venv/site-packages/experts4bit_qlora/engines/fast.py", "line": 300, "name": "forward"}]
+_F_HF = [{"filename": "venv/site-packages/torch/nn/functional.py", "line": 2, "name": "softmax"},
+         {"filename": "venv/site-packages/transformers/models/qwen3_moe/modeling_qwen3_moe.py", "line": 200, "name": "forward"}]
+_F_OPT = [{"filename": "venv/site-packages/torch/optim/adamw.py", "line": 100, "name": "_init_group"}]
+
+
+def _synthetic_snapshot():
+    """A torch.cuda.memory._snapshot()-shaped dict: a frozen weight resident from the load (W, no frame), a pre-window block (P), a gradient
+    (G, a C++ allocation: no frame), an e4b activation freed after the peak (A1) at an address the optimizer state reuses after the peak (O),
+    a grouped-nf4-gemm buffer still live (A6, under an outer e4b frame), a backward C++ temporary (A3), a torch-only allocation (A4), and an
+    address reused before the peak (A2 freed, A5 allocated at it -- the peak)."""
+    blk = lambda a, s, fr, st="active_allocated": {"address": a, "size": s + 12, "requested_size": s, "state": st, "frames": fr}   # noqa: E731
+    ev = lambda act, a, s, fr, t: {"action": act, "addr": a, "size": s, "stream": 0, "frames": fr, "time_us": t}                # noqa: E731
+    return {"segments": [{"device": 0, "address": 0, "blocks": [blk(4096, 1000, []), blk(36864, 50, []), blk(20480, 200, []), blk(8192, 400, _F_OPT),
+                                                               blk(32768, 20, _F_GNF4), blk(12288, 512, [], "inactive")]}],
+            "device_traces": [[ev("alloc", 8192, 300, _F_E4B, 10.0), ev("alloc", 12288, 100, _F_GNF4, 11.0), ev("alloc", 32768, 20, _F_GNF4, 12.0),
+                               ev("alloc", 20480, 200, [], 20.0), ev("alloc", 16384, 80, [], 21.0), ev("alloc", 28672, 60, _F_TORCH, 22.0),
+                               ev("free_requested", 12288, 100, _F_GNF4, 23.0), ev("free_completed", 12288, 100, _F_GNF4, 23.5),
+                               ev("alloc", 12288, 150, _F_HF, 24.0),
+                               ev("free_requested", 8192, 300, _F_E4B, 30.0), ev("free_requested", 16384, 80, [], 31.0), ev("free_requested", 28672, 60, _F_TORCH, 32.0),
+                               ev("free_requested", 12288, 150, _F_HF, 33.0), ev("alloc", 8192, 400, _F_OPT, 40.0),
+                               {"action": "segment_alloc", "addr": 1 << 30, "size": 2 << 20, "stream": 0, "frames": [], "time_us": 41.0}]]}
+
+
+_STATIC = [(4096, 1000, "frozen_expert_weights"), (20480, 200, "adapter_grads"), (8192, 400, "optimizer_state")]
+_MARKS = [(5.0, "s1.mb1.forward"), (20.0, "s1.mb1.backward"), (35.0, "s1.optimizer")]
+_GROUPS = [("static:frozen_expert_weights", 1000, 1), ("site:experts4bit_qlora/lora.py:500 forward", 300, 1), ("static:adapter_grads", 200, 1),
+           ("site:transformers/models/qwen3_moe/modeling_qwen3_moe.py:200 forward", 150, 1),
+           ("unattributed:backward, no Python frame (an autograd C++ op or allocator-internal)", 80, 1), ("unattributed:backward, torch frames only", 60, 1),
+           ("unattributed:allocated before the census window, no frame", 50, 1), ("site:nf4_qlora.py:77 lora_delta_grouped", 20, 1)]
+
+
+def test_mem_census_reducer_finds_the_peak_and_groups_the_live_set():
+    """The pure reducer on a synthetic snapshot: the backward replay's peak (an alloc, the latest when tied) and window start, the live set
+    at the peak (a block freed after it comes back with its allocation stack; a block that is not the same allocation at the snapshot never
+    takes a static label from an address reused later), the registered grouping (static class, the innermost e4b / nf4_ / Unsloth / bnb /
+    torch.optim frame, the first non-torch frame, else unattributed with the harness phase), attributed_fraction, and the same reading on
+    a ring that wrapped before the peak."""
+    arm = _load_arm_module()
+    snap = _synthetic_snapshot()
+    red = arm.reduce_memory_snapshot(snap, device=0, static_ranges=_STATIC, marks=_MARKS)
+    assert (red["peak_bytes"], red["peak_event_index"], red["window_start_bytes"], red["end_bytes"]) == (1860, 8, 1050, 1670), red
+    assert red["live_bytes"] == red["peak_bytes"] and red["live_blocks"] == 8 and red["inconsistent_events"] == 0 and red["window_events"] == 15
+    assert [(g["group"], g["bytes"], g["count"]) for g in red["live_at_peak_top"]] == _GROUPS, red["live_at_peak_top"]
+    assert red["attributed_bytes"] == 1670 and red["attributed_fraction"] == round(1670 / 1860, 4)
+    assert red["peak_phase"] == "s1.mb1.backward" and red["static_at_peak"] == {"frozen_expert_weights": 1000, "adapter_grads": 200} and red["n_groups"] == 8
+    assert [g["group"] for g in arm.reduce_memory_snapshot(snap, static_ranges=_STATIC, marks=_MARKS, top=3)["live_at_peak_top"]] == [g[0] for g in _GROUPS[:3]]
+    wrapped = dict(snap, device_traces=[snap["device_traces"][0][3:]])            # the ring dropped the three oldest allocations
+    rw = arm.reduce_memory_snapshot(wrapped, static_ranges=_STATIC, marks=_MARKS)
+    assert (rw["peak_bytes"], rw["peak_event_index"], rw["window_start_bytes"]) == (1860, 5, 1470) and rw["live_at_peak_top"] == red["live_at_peak_top"], rw
+    # without the address map or the marks every block falls back to its frames; an empty snapshot reads nothing
+    bare = arm.reduce_memory_snapshot(snap)
+    assert ("unattributed:allocated before the census window, no frame", 1050, 2) in [(g["group"], g["bytes"], g["count"]) for g in bare["live_at_peak_top"]]
+    assert ("unattributed:no Python frame (an autograd C++ op or allocator-internal)", 280, 2) in [(g["group"], g["bytes"], g["count"]) for g in bare["live_at_peak_top"]]
+    empty = arm.reduce_memory_snapshot({})
+    assert empty["peak_bytes"] == 0 and empty["attributed_fraction"] is None and empty["live_at_peak_top"] == []
+    # a trace that disagrees with the end state is counted, never fatal
+    bad = dict(snap, device_traces=[snap["device_traces"][0] + [{"action": "alloc", "addr": 49152, "size": 10, "frames": [], "time_us": 50.0}]])
+    assert arm.reduce_memory_snapshot(bad)["inconsistent_events"] == 1
+
+
+def test_mem_census_grouping_rules_and_the_recorders_kwargs():
+    arm = _load_arm_module()
+    assert arm.census_site_of(_F_GNF4) == "nf4_qlora.py:77 lora_delta_grouped"                     # the INNERMOST marker frame, not the outer e4b one
+    assert arm.census_site_of(_F_OPT) == "torch/optim/adamw.py:100 _init_group"                   # torch/optim is a marker though it is torch
+    assert arm.census_site_of(_F_HF) == "transformers/models/qwen3_moe/modeling_qwen3_moe.py:200 forward"   # no marker: the first non-torch frame
+    assert arm.census_site_of(_F_TORCH) is None and arm.census_site_of([]) is None and arm.census_site_of(None) is None
+    assert arm.census_site_of([{"filename": "venv/site-packages/unsloth_zoo/temporary_patches/moe_utils.py", "line": 3790, "name": "forward_native_grouped_mm"}]).startswith("unsloth_zoo/")
+    assert arm.census_site_of([{"filename": "venv/site-packages/bitsandbytes/optim/optimizer.py", "line": 5, "name": "init_state"}]) == "bitsandbytes/optim/optimizer.py:5 init_state"
+    assert arm.census_frame_label({"filename": "/home/someone/x/run.py", "line": 3, "name": "f"}) == "run.py:3 f"             # never a host path
+    assert arm.census_frame_label({"filename": "/src/experts4bit_qlora/lora.py", "line": 3, "name": "f"}) == "experts4bit_qlora/lora.py:3 f"
+    torch28 = ["enabled", "context", "stacks", "max_entries", "device", "clear_history", "compile_context", "global_record_annotations"]
+    want = {"context": "alloc", "stacks": "python", "max_entries": arm.MEM_CENSUS_MAX_ENTRIES}
+    assert arm.mem_history_kwargs(torch28) == ("current", "all", want)
+    assert arm.mem_history_kwargs(torch28 + ["skip_actions"]) == ("current", "all", want)            # torch 2.13's impl (read locally)
+    assert arm.mem_history_kwargs(["enabled", "args", "**"]) == ("current", "all", want)              # a (enabled, *args, **kwargs) wrapper
+    assert arm.mem_history_kwargs(None) == ("current", "all", want)
+    assert arm.mem_history_kwargs(["enabled", "context", "max_entries"]) == ("current", "all", {"context": "alloc", "max_entries": arm.MEM_CENSUS_MAX_ENTRIES})
+    legacy = arm.mem_history_kwargs(["enabled", "record_context", "trace_alloc_max_entries", "trace_alloc_record_context", "device", "record_context_cpp"], 10)
+    assert legacy == ("legacy", True, {"record_context": True, "trace_alloc_max_entries": 10, "trace_alloc_record_context": True, "record_context_cpp": False})
+    import inspect as _inspect
+    rec, snap, names = arm._mem_history_api()                                                           # this torch's real recorder and snapshot
+    assert rec is not None and snap is not None and names is not None and ("max_entries" in names or "**" in names), names
+    impl = getattr(arm.torch.cuda.memory, "_record_memory_history_impl", None) or rec
+    assert set(arm.mem_history_kwargs(names)[2]) <= set(_inspect.signature(impl).parameters), (names, arm.mem_history_kwargs(names))
+
+
+def test_mem_census_class_drives_snapshot_and_reduction_and_never_raises(monkeypatch):
+    """MemCensus's glue on CPU with torch.cuda's statistics and the recorder faked: recording starts with the registered kwargs, setup_done
+    reads the baseline, a checkpoint snapshots only after the max grew by MEM_CENSUS_GROW_BYTES (or when forced), the reduction is kept,
+    finish() stops recording and returns the receipt block; an exception anywhere is kept as {"error"} and never reaches the arm."""
+    import torch
+    arm = _load_arm_module()
+    state = {"max": 0, "alloc": 0}
+    calls, snaps = [], []
+    for name, fn in (("is_available", lambda: True), ("max_memory_allocated", lambda *a, **k: state["max"]), ("memory_allocated", lambda *a, **k: state["alloc"]),
+                     ("max_memory_reserved", lambda *a, **k: state["max"] + 512), ("memory_reserved", lambda *a, **k: state["alloc"] + 512), ("current_device", lambda: 0)):
+        monkeypatch.setattr(torch.cuda, name, fn)
+
+    def rec(enabled, **kw):
+        calls.append((enabled, kw))
+
+    def snap():
+        snaps.append(1)
+        return _synthetic_snapshot()
+    monkeypatch.setattr(arm, "_mem_history_api", lambda: (rec, snap, ["enabled", "context", "stacks", "max_entries"]))
+    model = torch.nn.Linear(4, 4)
+    mc = arm.MemCensus(dev="cuda")
+    mc.start()
+    assert calls == [("all", {"context": "alloc", "stacks": "python", "max_entries": arm.MEM_CENSUS_MAX_ENTRIES})] and mc.recording
+    mc.setup_done(model, None)
+    mc.mark("s1.mb1.forward")
+    state.update({"max": arm.MEM_CENSUS_GROW_BYTES - 1})
+    mc.checkpoint("s1.mb1", model, None)
+    assert snaps == [], "no snapshot below the growth threshold"
+    state.update({"max": 1860, "alloc": 1670})
+    mc.checkpoint("s1.mb2", model, None, force=True)
+    assert len(snaps) == 1 and mc.best["checkpoint"] == "s1.mb2" and mc.best["peak_in_window"] is True and mc.best["peak_bytes"] == 1860
+    state.update({"max": 1860 + arm.MEM_CENSUS_GROW_BYTES})
+    mc.checkpoint("s2.mb1", model, None)
+    assert len(snaps) == 2 and mc.best["checkpoint"] == "s2.mb1" and mc.best["peak_in_window"] is False     # the window's peak is far below the run's max
+    out = mc.finish(model, None)
+    assert calls[-1] == (None, {}) and not mc.recording and len(snaps) == 2                        # finish: no growth since -> no third snapshot; recording stopped
+    assert out["peak_allocated_bytes"] == 1860 + arm.MEM_CENSUS_GROW_BYTES and out["snapshots"] == 2 and out["peak_window"]["checkpoint"] == "s2.mb1"
+    assert [g["group"] for g in out["live_at_peak_top"]][:2] == ["unattributed:allocated before the census window, no frame", "site:experts4bit_qlora/lora.py:500 forward"]
+    assert out["static_after_setup"]["allocated_bytes"] == 0 and out["static_after_train"]["allocated_bytes"] == 1670 and "error" not in out
+    # a recorder that raises: kept as the error, every later call a no-op, finish() returns {"error"} -- never an exception
+    def bad_rec(enabled, **kw):
+        raise RuntimeError("recorder exploded")
+    monkeypatch.setattr(arm, "_mem_history_api", lambda: (bad_rec, snap, ["enabled", "context", "stacks", "max_entries"]))
+    mc = arm.MemCensus(dev="cuda")
+    mc.start()
+    mc.setup_done(model, None)
+    mc.checkpoint("s1.mb1", model, None, force=True)
+    out = mc.finish(model, None)
+    assert set(out) == {"error", "torch", "max_entries", "stacks", "context"} and out["error"] == "start: RuntimeError: recorder exploded", out
+    # a snapshot that raises mid-run: recording is stopped, the reduction so far is dropped, finish() returns the error
+    def bad_snap():
+        raise MemoryError("host out of memory converting the ring")
+    calls.clear()
+    monkeypatch.setattr(arm, "_mem_history_api", lambda: (rec, bad_snap, ["enabled", "context", "stacks", "max_entries"]))
+    mc = arm.MemCensus(dev="cuda")
+    mc.start()
+    mc.setup_done(model, None)
+    mc.checkpoint("s3.optimizer", model, None, force=True)
+    assert calls[-1] == (None, {}) and mc.error.startswith("checkpoint s3.optimizer: MemoryError: host out of memory")
+    assert mc.finish(model, None)["error"] == mc.error
+
+
+def test_mem_census_static_classes_on_real_e4b_storage():
+    """P41's instrument on REAL e4b storage (CPU): the fp32 expert absmax is exactly expert_params / 64 x 4 bytes and equals the library's
+    expert_absmax_bytes; after compress_expert_absmax_ the census reads #1040's four nested buffers, again equal to the library's count;
+    the packed stacks are half a byte a weight; gradients and optimizer state land in their own classes."""
+    pytest.importorskip("bitsandbytes")
+    import torch
+
+    from experts4bit_qlora import compress_expert_absmax_, expert_absmax_bytes
+    arm = _load_arm_module()
+    try:
+        model = _tiny_e4b_model()
+    except Exception as e:
+        pytest.skip(f"bitsandbytes CPU 4-bit quantisation unavailable: {type(e).__name__}: {e}")
+    E, H, inter, L = 4, 128, 64, 2
+    ep = L * E * (2 * inter * H + H * inter)
+    s, ranges = arm.static_mem_census(model, None, "cpu")
+    assert s["expert_params"] == ep and s["expert_stacks"] == 2 * L and s["frozen_expert_weights"] == ep // 2, s
+    assert s["expert_absmax"] == ep // 64 * 4 == expert_absmax_bytes(model) and s["expert_absmax_parts"] == {"fp32": ep // 64 * 4}, s
+    trainable = sum(p.numel() * p.element_size() for p in model.parameters() if p.requires_grad)
+    assert s["trainable_adapters"] == trainable > 0 and s["adapter_grads"] == 0 and s["optimizer_state"] == 0 and s["allocated_bytes"] is None, s
+    assert {c for _, _, c in ranges} >= {"frozen_expert_weights", "expert_absmax", "trainable_adapters", "other_buffers"}
+    assert compress_expert_absmax_(model) == L
+    s2, _ = arm.static_mem_census(model, None, "cpu")
+    assert s2["expert_absmax"] == expert_absmax_bytes(model) and set(s2["expert_absmax_parts"]) == {"nested_q", "nested_s", "nested_off", "nested_code"}, s2
+    m_gu, m_dn = E * 2 * inter * H // 64, E * H * inter // 64                     # one u8 code a block, an fp32 scale per 256, an offset, a 256-entry map
+    assert s2["expert_absmax_parts"]["nested_q"] == ep // 64 and s2["expert_absmax"] == L * sum(m + 4 * -(-m // 256) + 4 + 1024 for m in (m_gu, m_dn)), s2
+    params = [p for p in model.parameters() if p.requires_grad]
+    opt = torch.optim.AdamW(params, lr=1e-3)
+    for p in params:
+        p.grad = torch.zeros_like(p)
+    opt.step()
+    s3, _ = arm.static_mem_census(model, opt, "cpu")
+    assert s3["adapter_grads"] == trainable and s3["optimizer_state"] >= 2 * trainable and s3["frozen_expert_weights"] == ep // 2, s3
+
+
+def test_tc1_amendment_23_memory_census_token():
+    """TC1 amendment 23: `qwen3memcensus` runs, IN THIS ORDER, e4b fused_attn4_m_mb1 (defaults), e4b fused_attn4_m_mb1_dq (E4B_ABSMAX_DQ=1)
+    and Unsloth ckpt_unsloth_m_mb1 (TC1's qwen3 Unsloth arm, grouped_mm) at the mb1 recipe on Qwen3-30B-A3B at the pin, one draw each, every
+    arm with --mem-census 1; the token builds the Unsloth venvs (it is in neither NEED_UNSLOTH=0 list); the arm's flag is off by default."""
+    run = RUN_SH.read_text()
+    m = re.search(r"^tc1_memcensus_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE)
+    assert m, "tc1_memcensus_family is gone"
+    body = m.group(0)
+    calls = re.findall(r'^  can_run 600 \$FAM/\S+ +&& (?:TC1_ARM_EXTRA_ENV="([^"]*)" )?arm \$FAM (e4b|unsloth) (\S+) (fused|unsloth) \$(EAL|UAL) "\$MID" \$REV (\d) (\w+) \$TOK \$TS (.*)$',
+                       body, re.MULTILINE)
+    assert [c[:7] for c in calls] == [("", "e4b", "fused_attn4_m_mb1", "fused", "EAL", "0", "mb1"),
+                                      ("E4B_ABSMAX_DQ=1", "e4b", "fused_attn4_m_mb1_dq", "fused", "EAL", "0", "mb1"),
+                                      ("", "unsloth", "ckpt_unsloth_m_mb1", "unsloth", "UAL", "0", "mb1")], calls
+    assert [c[7] for c in calls] == ["--attn-4bit 1 $MATCH $CEN", "--attn-4bit 1 $MATCH $CEN", "$UNS --unsloth-moe-backend grouped_mm $MATCH $CEN"], calls
+    assert 'local CEN="--mem-census 1"' in body and 'local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"' in body
+    assert 'local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"' in body and body.count("TC1_ARM_EXTRA_ENV=") == 1 and "draw2" not in body
+    assert 'local ALL="e4b:fused_attn4_m_mb1:fused e4b:fused_attn4_m_mb1_dq:fused unsloth:ckpt_unsloth_m_mb1:unsloth"' in body
+    assert 'local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0' in body
+    fam = re.search(r"^tc1_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE).group(0)        # TC1's qwen3 Unsloth mb1 arm: the same flags
+    assert 'arm $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH' in fam
+    assert 'local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"' in fam
+    assert "  qwen3memcensus) tc1_memcensus_family qwen3memcensus Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;" in run
+    assert "    mb1)    m=1; ac=$(( MB * ACCUM )); ex_tag=fused_attn4_m_mb1;;" in run and "MB=${TC1_MB:-2}; ACCUM=${TC1_ACCUM:-4}" in run   # 1 x 8
+    shared = re.search(r"^NEED_UNSLOTH=1; case .*$", run, re.MULTILINE).group(0)
+    dense = re.search(r'^case " \$FAMILIES " in " qwen3denseab ".*NEED_UNSLOTH=0;; esac$', run, re.MULTILINE).group(0)
+    for fams, want in (("qwen3memcensus", "1"), ("qwen3keepab", "0"), ("qwen3denseab", "0"), ("qwen3", "1")):
+        out = subprocess.run(["bash", "-c", f'FAMILIES="{fams}"\n{shared}\n{dense}\necho "$NEED_UNSLOTH"'], capture_output=True, text=True, check=True).stdout.strip()
+        assert out == want, (fams, out)
+    # the arm's flag: present, off by default, and E4B_ABSMAX_DQ=1 in the dq arm's environment is what turns its absmax switch on
+    src = ARM.read_text()
+    assert 'ap.add_argument("--mem-census", type=int, default=0,' in src and '**({"mem_census": mem_census} if mcen is not None else {}),' in src
+    assert 'ap.add_argument("--absmax-dq", type=int, default=int(os.environ.get("E4B_ABSMAX_DQ", "0") == "1"),' in src
+    p = _run("--help")
+    assert p.returncode == 0 and "--mem-census" in p.stdout, p.stdout[-800:]
+    # the reducer registers the family without speed positions, and its self-test reads P41-P43
+    red = (REPO / "bench" / "tc1" / "tc1_reduce.py").read_text()
+    assert 'MEMCENSUS_FAM = "qwen3memcensus"' in red and "NO_SPEED_FAMS = {MEMCENSUS_FAM:" in red and "## Predictions P41 / P42 / P43" in red
+    r = _run("--selftest", script=REPO / "bench" / "tc1" / "tc1_reduce.py")
+    assert r.returncode == 0 and "REDUCE SELFTEST OK" in r.stdout and "FAILING-CASE A23-P41 (reducer)" in r.stdout and "FAILING-CASE A23-P43 (reducer)" in r.stdout, r.stdout[-1500:]

@@ -1,0 +1,136 @@
+{
+ "base": "http://127.0.0.1:30000",
+ "model": "sc2",
+ "profile": "sglang",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "de63bb35245fad5630580af0a54db04364d2e7e2a5aba72e2d18a61aee8f9fc0",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.3974,
+  "wall_s": 2.927,
+  "ttft_p50_s": 0.035888,
+  "ttft_p90_s": 0.048783,
+  "ttft_p99_s": 0.053597,
+  "tpot_p50_s": 0.003275,
+  "tpot_p90_s": 0.003284,
+  "tpot_p99_s": 0.003284,
+  "e2el_p50_s": 0.749267,
+  "e2el_p90_s": 0.781151,
+  "e2el_p99_s": 0.781503,
+  "ttft_mean_s": 0.04008,
+  "output_tok_s": 291.397,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.3665,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " He was inducted into the College Football Hall of Fame in 1973 . \n\nQuestion: What was the reason for Rifenburg not finishing higher in the Heisman voting?\n\nOptions:\nA) He was not a good enough player\nB) He was not a star player\nC) He was not given enough recognition\nD) He was not given enough recognition\n\nWait, the options C and D are the same. Let me check again.\n\nLooking back, the user provided the options as:\n\nOptions:\nA) He was not a good enough player\nB) He was not a star player\nC) He was not given enough recognition\nD) He was not given enough recognition\n\nYes, options C and D are the same. That might be a mistake. However, based on the text, the answer is likely C/D. The passage states that it's not clear why Rifenburg didn't finish higher, but there was a bias against Michigan, and sportswriters had a bias. So the reason is that he",
+   "completion_tokens": 209,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.718296,
+   "ttft_s": 0.054132,
+   "tpot_s": 0.00319,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 0.718517,
+   "text": " November . He was advised by his generals that the French were in a vulnerable position and that the Coalition should attack . The Russian general , however , was not convinced . He was still waiting for the arrival of the reinforcements from Galicia . He was also concerned about the French army 's possible retreat to the north and the need to protect the Coalition 's own left flank . The council of war was not in favor of an immediate attack . The French , however , were not aware of this decision and were preparing for a possible attack . \n\nThe French had no idea that the Coalition had concentrated a large force near them, and they were preparing for an attack. The French were unaware of the size of the Coalition's army, which was much larger than theirs. The French were also unaware of the Coalition's plans to attack them. The French were in a vulnerable position, and their lack of knowledge about the Coalition's strength and plans put",
+   "completion_tokens": 187,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.646582,
+   "ttft_s": 0.035473,
+   "tpot_s": 0.003283,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 1.365223,
+   "text": " Sergeant John C. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H",
+   "completion_tokens": 229,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.781542,
+   "ttft_s": 0.036302,
+   "tpot_s": 0.003267,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 2.146886,
+   "text": " earliest in his career . He was named the National League Pitcher of the Year for the 2014 season by the Baseball Writers ' Association of America ( BBWAA ) . He was also named the National League Most Valuable Player ( MVP ) for the 2014 season . He was the first Dodger pitcher to win the MVP award since Sandy Koufax in 1963 . He was also the first left-handed pitcher to win the MVP since 1963 . He was the first pitcher to win the MVP since 1986 , when Greg Maddux won it . He was the first pitcher to win the MVP since 1986 , when Greg Maddux won it . He was the first pitcher to win the MVP since 1986 , when Greg Maddux won it . He was the first pitcher to win the MVP since 1986 , when Greg Maddux won it . He was the first pitcher to win the MVP since 1986 , when Greg Maddux won it . He was the first pitcher to win the MVP since",
+   "completion_tokens": 228,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.780238,
+   "ttft_s": 0.034413,
+   "tpot_s": 0.003284,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}
