@@ -1016,3 +1016,49 @@ outside their bounds, and UNTESTED where a side is unstable, not VALID or not en
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor. Qwen3-30B-A3B's download plus eight arms
 and the replay come to about $1.50; this is in the standing no-ask tier.
+
+### Amendment 25 (2026-10-04T21:48Z, after amendment 24's read, before any box): the matched position with both frameworks on one stack, on one RTX 5090 (P50–P52)
+
+**Why.** Every 5090 position on Qwen3-30B-A3B has run e4b and Unsloth in different environments:
+
+- e4b in the field image's: torch 2.8.0+cu128, transformers 5.18.0, triton 3.4.0;
+- Unsloth in its own venv: torch 2.12.1+cu130, transformers 5.5.0, triton 3.7.1, because its grouped_mm path needs it.
+
+Amendment 24 (`tc1-5090-66`) read e4b's matched arm at **0.882×** its field-image step in Unsloth's venv (P47 HELD). Its replay showed the
+cause is not the padded LoRA delta's `bmm`. e4b requires only `torch>=2.2` and `transformers>=5.0`, so Unsloth's stack is an e4b
+environment too. The comparison with the fewest confounds runs both frameworks on that one stack.
+
+**The box** (token `qwen3samestack`). One RTX 5090, TC1's qwen3 tokens and field recipe, the matched set (fp32 adapters, matched init).
+In this order:
+
+1. e4b `fused_attn4_m` in venv-unsloth (e4b and grouped-nf4-gemm installed there at the box's pins, as TC1's `t212` row);
+2. Unsloth `ckpt_unsloth_m` (grouped_mm, the notebooks' seven targets, as TC1);
+3. e4b `reference_attn4_m` in venv-unsloth;
+4. e4b `fused_attn4_m_t28` in venv-e4b, then its second draw;
+5. Unsloth's second draw;
+6. e4b `fused_attn4_m`'s second draw.
+
+HF, axolotl and the profiled arms are not run. Engagement: each e4b receipt records the torch its tag names (`env.torch` 2.12.* for
+`fused_attn4_m`, `fused_attn4_m_d2` and `reference_attn4_m`; 2.8.* for `_t28`).
+
+**Predictions** (registered before the box):
+
+- **P50:** with both frameworks on torch 2.12.1+cu130 / transformers 5.5.0, Unsloth/e4b lies in **[1.9, 2.9]**, both pairs stable
+  (two draws within 5 %). The basis: amendment 19's 1.997 with e4b on the field image, divided by P47's 0.882, is about 2.26. Hosts
+  move both steps.
+- **P51:** on this second host, e4b's matched arm in venv-unsloth over venv-e4b lies in **[0.80, 0.95]**, both sides stable. This
+  replicates P47.
+- **P52:** on one stack the matched set holds. e4b's reference and Unsloth each read EQUIVALENT or INSIDE-DRAW-NOISE against e4b's
+  fused arm, and e4b's parity PASSES.
+
+Each is FALSIFIED outside its band, and UNTESTED where a side is missing, unstable or not engaged.
+
+**Decision rules.**
+
+- **P50 and P52 HELD:** this box's ratio becomes the Qwen3-30B-A3B 5090 position to quote (`….qwen3.5090.<date>.same-stack`).
+  Amendment 19's 1.997 stays as the reading with e4b in the field image's environment, and STATUS names both environments.
+- **P50 FALSIFIED:** the ratio is recorded as a labelled row; the quoted position does not change.
+- **P51 HELD:** the environment gain replicates across hosts. Splitting it between torch, transformers and triton is its own registration.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor. Qwen3-30B-A3B's download plus seven arms come to
+about $1.50; this is in the standing no-ask tier.
