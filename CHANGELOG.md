@@ -15,6 +15,47 @@
 - **Records.** New register row `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`. The fork-build row stands, and its
   notes point here. METHODOLOGY §10 carries a dated note. The receipts are in `bench/energy-remeasure-2026-10-04/`.
 
+### Before-load planning: `describe_moe`, `QLoRASetup`, `estimate_qlora_footprint`, `prepare_qlora_training`
+
+- **Why.**
+  - Asking "will this fit, and how" meant loading the model, or re-deriving its structure from config attributes
+    whose names differ per family. Two call sites carried different lists of the routed top-k's spellings.
+  - The training recipe's choices were split across env vars read at import (`train.py`) and keyword arguments
+    spread over five calls (the documented fast path).
+  - The only automatic memory decision was halving `TOKEN_BUDGET` after an OOM.
+- **What.**
+  - `arch.topology.describe_moe(model)` returns a `MoETopology` built from the config plus the module tree on
+    `meta`, with no weights read. It records which layers carry an expert stack at the loader's path, each stack's
+    shape, the non-expert parameter count (a tied head counted once), the attention projections, the loader's
+    refusal, and the provenance of each fact.
+  - `recipe.QLoRASetup` holds every mechanism choice in one place: storage, adapters, expert residency, expert
+    kernel, dgrad, NF4 attention and kept MoE layers.
+  - `recipe.estimate_qlora_footprint(topology, setup, tokens_per_microbatch=...)` returns an itemized estimate. Each
+    item is `derived` (sized from this package's own `Experts4bit`/`ExpertsLoRA` built on `meta`, the classes the
+    load builds) or `heuristic` (a stated formula: activations, kept MoE layers, the offload staging transient), and
+    the estimate lists what it does not model. Pinned host homes are rounded to a power of two (grouped-nf4-gemm#71).
+  - `recipe.setup_refusals` refuses by structure, never by family name. Two examples: biased expert stacks can't
+    take `ExpertsLoRA`, and the grouped kernel reads NF4 only.
+  - `recipe.prepare_qlora_training(model_id, setup)` builds exactly the priced setup: the documented fast path as
+    one call. Every requested accelerated path must engage or it raises.
+- **Refactors, behaviour unchanged.**
+  - The loader's three config-level refusals moved into `loader.check_admission` (the loader calls it first, and
+    quant_guard's source scan still sees every literal raise). `loader.admission_refusal` returns the message instead
+    of raising.
+  - `serve_paged._routed_topk` and `int4_experts._top_k` now read one alias list
+    (`arch.topology.ROUTED_TOP_K_KEYS`, the union of the two), so each now also accepts the spelling only the other
+    knew.
+- **Tests.**
+  - `tests/test_topology_recipe.py` checks topology against the real model built from the same config, for
+    qwen3_moe, olmoe and granitemoe (exact parameter counts).
+  - The derived footprint items are checked against the built modules.
+  - Structural refusals are tested on a gpt-oss config and on Llama.
+  - A CUDA test runs `prepare_qlora_training` on a tiny checkpoint with both expert kernels and asserts the trainable
+    count is the count the estimate priced.
+  - On an RTX A2000: 121 passed together with `test_int4_experts_topk_alias.py` and `test_loader_architectures.py`.
+    The loader, serving, int4, moe-keep and quant_guard suites pass too.
+- `train.py` is untouched; adopting `prepare_qlora_training` there is a separate change.
+
 ### Read: TC2 amendment 8 — at default settings Unsloth is faster on Mixtral, 0.836; on Qwen3.6 at micro-batch 1 e4b is 2.05× faster (P24–P28 HELD)
 
 - **Box M** (`tc1-5090-63`, $0.60): Mixtral-8x7B with e4b at default settings, where grouped-nf4-gemm 0.38.0's `auto` takes the dense
