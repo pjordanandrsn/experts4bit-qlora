@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### SC2b registered (#846): does a CUDA-graphed prefill chunk lift e4b `serve_paged`'s request-level capacity?
+
+- **Why.** SC2 read e4b's request-level capacity as prefill-bound: each 512-token prefill forward stalls every running
+  decode. That forward is launch-bound (about 15k kernels per chunk; P102's TTFT moved 4× with the host CPU alone).
+  `E4B_PAGED_PREFILL_GRAPH=1` (#1070) captures the first chunk once, verifies it bitwise at startup and replays it.
+- **What runs.**
+  - A new box F, e4b only: the code at `373c89ac` with grouped-nf4-gemm v0.38.0.
+  - Prefill routes are main's defaults (k19 + flash), with neither SC1 pin exported. The server's own `/health` routes
+    are asserted, and a test executes the box's export block.
+  - Knob OFF against ON, paired: same seeds within a draw, counterbalanced order, a determinism repeat.
+  - Engagement is checked right after warm-up.
+- **The rule.** `bench/sc2/sc2b_reduce.py`, 10 self-test cases.
+  - Gates: ROUTES, ENGAGED, PROMPTS, DETERMINISM and IDENTITY (every request's serial text byte-equal OFF vs ON).
+  - P1: serial TTFT OFF/ON ≥ 1.5. P2: TPOT unchanged. P3: ON's ceiling ≥ 2 req/s. P4: no regression.
+  - The licence, decoupled from P1: the gates, P4 and TTFT ≥ 1.10× in both draws. It licenses a default of `auto`.
+- **Instrument additions.** `sc2_identity.py` (the serial identity gate); the driver records `usage.prompt_tokens`; a
+  server error saves the full `/health` JSON.
+- **Budget.** Proof 1.0 h and reading 2.5 h, each stated with download charges this time.
+
 ## 0.46.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.38.0, whose pinned-tier sizing models PyTorch's power-of-two allocator; before-load planning (`describe_moe`, `prepare_qlora_training`); `serve_paged` reports its prefill routes; two opt-ins, a first-chunk prefill graph verified at startup and the double-quantized expert absmax
 
 **0.46.0.** No default in this package changes. CI now tests against grouped-nf4-gemm 0.38.0's commit.
@@ -33,25 +54,6 @@
 - **#392:** the energy claim was remeasured on a released bitsandbytes. Decode is now at break-even (0.91–1.06×).
 - **moe-generalize.** MG1's regression anchors pass after #1048; there are more RTX A2000 ladders, and a portability
   map.
-
-### SC2b registered (#846): does a CUDA-graphed prefill chunk lift e4b `serve_paged`'s request-level capacity?
-
-- **Why.** SC2 read e4b's request-level capacity as prefill-bound: each 512-token prefill forward stalls every running
-  decode. That forward is launch-bound (about 15k kernels per chunk; P102's TTFT moved 4× with the host CPU alone).
-  `E4B_PAGED_PREFILL_GRAPH=1` (#1070) captures the first chunk once, verifies it bitwise at startup and replays it.
-- **What runs.**
-  - A new box F, e4b only: the code at `373c89ac` with grouped-nf4-gemm v0.38.0.
-  - Prefill routes are main's defaults (k19 + flash), with neither SC1 pin exported. The server's own `/health` routes
-    are asserted, and a test executes the box's export block.
-  - Knob OFF against ON, paired: same seeds within a draw, counterbalanced order, a determinism repeat.
-  - Engagement is checked right after warm-up.
-- **The rule.** `bench/sc2/sc2b_reduce.py`, 10 self-test cases.
-  - Gates: ROUTES, ENGAGED, PROMPTS, DETERMINISM and IDENTITY (every request's serial text byte-equal OFF vs ON).
-  - P1: serial TTFT OFF/ON ≥ 1.5. P2: TPOT unchanged. P3: ON's ceiling ≥ 2 req/s. P4: no regression.
-  - The licence, decoupled from P1: the gates, P4 and TTFT ≥ 1.10× in both draws. It licenses a default of `auto`.
-- **Instrument additions.** `sc2_identity.py` (the serial identity gate); the driver records `usage.prompt_tokens`; a
-  server error saves the full `/health` JSON.
-- **Budget.** Proof 1.0 h and reading 2.5 h, each stated with download charges this time.
 
 ### serve_paged: opt-in first-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH=1`)
 
