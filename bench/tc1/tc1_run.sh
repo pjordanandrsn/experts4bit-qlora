@@ -543,6 +543,9 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   # TC1 amendment 10 (#945): a family may hand one arm extra environment (TC1_ARM_EXTRA_ENV="K=V ..." as a prefix on the
   # arm/draw2 call); it rides the same `env` word list, so an empty value vanishes as ARM_ENV's does
   [ -n "${TC1_ARM_EXTRA_ENV:-}" ] && ARM_ENV="$ARM_ENV $TC1_ARM_EXTRA_ENV"
+  # TC1c amendment 2: a box may hand EVERY e4b arm extra environment (TC1_E4B_ENV="K=V ...", forwarded by tc1_drive.sh) -- an opt-in
+  # e4b setting measured inside an unchanged family; the comparator's arms never see it, and an empty value vanishes as above
+  [ "$FW" = e4b ] && [ -n "${TC1_E4B_ENV:-}" ] && ARM_ENV="$ARM_ENV $TC1_E4B_ENV"
   # TC1 amendment 4: every arm runs with the Hub offline (the pinned snapshot is the only model bytes) except axolotl's scattermoe
   # native-best, whose KernelsPlugin fetches kernels-community kernels by version at load, as an axolotl user's run does; the
   # arm records the kernel commits it fetched (hub_kernels_cached), and the model revision stays pinned by sha.

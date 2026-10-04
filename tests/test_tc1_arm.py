@@ -1181,6 +1181,21 @@ def test_tc1_amendment_10_sync_ab_token():
     assert '"sync_ab": sync_ab,' in src and '"ring_staged": int(sum(r.staged for r in _rings))' in src
 
 
+def test_tc1c_amendment_2_e4b_env_reaches_only_e4b_arms():
+    """TC1c amendment 2: TC1_E4B_ENV is forwarded by tc1_drive.sh and lands on every e4b arm's env word list -- never on another
+    framework's -- after the per-arm TC1_ARM_EXTRA_ENV; an unset value adds nothing."""
+    run, drive = RUN_SH.read_text(), DRIVE_SH.read_text()
+    forwarded_block = drive[drive.index("for v in TC1_FAMILIES"):drive.index("; do", drive.index("for v in TC1_FAMILIES"))]
+    assert "TC1_E4B_ENV" in forwarded_block.split()
+    extra = re.search(r'^  \[ -n "\$\{TC1_ARM_EXTRA_ENV:-\}" \] && ARM_ENV=.*$', run, re.MULTILINE).group(0)
+    hook = re.search(r'^  \[ "\$FW" = e4b \] && \[ -n "\$\{TC1_E4B_ENV:-\}" \] && ARM_ENV=.*$', run, re.MULTILINE).group(0)
+    assert run.index(extra) < run.index(hook)
+    script = ('f(){ local FW=$1 ARM="fused"; local ARM_ENV=""\n' + extra + "\n" + hook + '\necho "[$ARM_ENV]"; }\n'
+              'TC1_E4B_ENV="K=1 C=2" f e4b; TC1_E4B_ENV="K=1" f unsloth; f e4b; TC1_ARM_EXTRA_ENV="A=1" TC1_E4B_ENV="K=1" f e4b')
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout.split("\n")
+    assert [o.split() for o in out if o] == [["[", "K=1", "C=2]"], ["[]"], ["[]"], ["[", "A=1", "K=1]"]], out
+
+
 def test_tc1_amendment_13_lean_delta_token():
     """TC1 amendment 13 (#945): `qwen3leanab` runs e4b against itself -- grouped-nf4-gemm's previous padded LoRA delta
     (NF4_QLORA_LEAN_DELTA=0) vs its trimmed body (=1), both on the post-#945 sync path -- on the shipped and matched arms, two draws
