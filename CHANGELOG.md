@@ -11,6 +11,11 @@
   and the instance was proven absent.
 - **Amendment 8** re-asks the same box once, the last re-ask under these rules. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
 
+### `llms-full.txt`'s size cap raised from 500,000 to 600,000 bytes
+
+- The bundle reached 499,973 bytes, and every read PR adds register rows to it. The cap was last raised (from 400,000) on 2026-10-01,
+  for the same reason. `docs/llms-bundle.json` records both.
+
 ### P55 read (#344): the host-memory reading of the Gemma-4 load fault is REFUTED; the fault does not reproduce on the current loader
 
 - **Run.** `p55-5090-2`, the one rerun Amendment 2 allowed, cost $0.164; the lane's total is $0.179 against its $3.00
