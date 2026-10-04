@@ -227,6 +227,8 @@
     "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.scaling-points",
     "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04",
     "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep",
+    "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route",
+    "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep-route",
     "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02",
     "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.quality-n20",
     "e4b.train.h2h.unsloth.qwen3.h100.2026-10-02.e4b-internal-parity",

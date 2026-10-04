@@ -9293,6 +9293,54 @@
         "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-4/tc1/"
       ],
       "notes": "Against amendment 1 on the same machine e4b's step went 3.146 -> 2.343 s (x0.745), Unsloth's 2.571 -> 2.577. The profiled e4b arm: device-busy 0.659 at 68,452 device events and 455,685 CPU-side ops per step (amendment 1: 97,851 / 619,192); Unsloth 0.306 / 81,780 / 515,750 -- e4b still spends ~1.8x Unsloth's device time per step. The 5090 trade at 16-32 kept layers: e4b.train.moe-keep.qwen3.5090.2026-10-04."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route",
+      "claim": "TC1c amendment 4, box R (tc1c-h100-6, one rented H100 NVL): with every e4b arm on grouped-nf4-gemm's opt-in grouped_mm route (GNF4_TRAIN_GEMM=grouped_mm, #450: its own Triton dequant of the present experts + torch._grouped_mm; not bit-identical), Unsloth/e4b reads 0.664 [0.650, 0.678] -- e4b 3.932 s/step against Unsloth's 2.612, SLOWER than e4b's default-settings 3.146 (amendment 1, 0.817). P12 FALSIFIED (band [0.85, 1.20]); the matched set inside the draw noise (P14 HELD). The profiled e4b arm puts the route's dequant kernel at 2,178 ms of device time per step (1.89 ms per call) against the fused kernels' 1,424 ms -- the kernel, ~4x slower than the bitsandbytes dequant amendment 3's replay timed, is why. A LABELLED row: an opt-in route as shipped in #450, quoted beside the default-settings row, never in place of it.",
+      "value": 0.664,
+      "unit": "ratio s/step Unsloth/e4b with e4b on GNF4_TRAIN_GEMM=grouped_mm (medians of steps 11..20 over two draws each; < 1 = Unsloth faster); cross-draw interval [0.650, 0.678]",
+      "hardware": "H100 NVL (sm_90), one rented Vast.ai verified/secure host (tc1c-h100-6: instance 54119104, AMD EPYC 9534, driver 595.71.05); e4b @ 8208f5e on torch 2.8.0+cu128, grouped-nf4-gemm @ e7ec90a; Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; matched work (642,514,944 trainable parameters, per-slot init matched:3407, fp32 adapters, the same tokens); token qwen3 with TC1_GPU_CLASS=\"H100 NVL\", HF and axolotl skipped; engagement read off route_ab (and keep_ab); validity, positions and equivalence by bench/tc1/tc1_reduce.py; TC1_E4B_ENV=\"GNF4_TRAIN_GEMM=grouped_mm\"",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-6/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-6/tc1/"
+      ],
+      "notes": "Vast invoiced $2.49. The route's dequant kernel ran 2.9-4.1x slower than bitsandbytes' dequantize_4bit on an RTX A2000 too (bit-equal outputs); a faster kernel is the next change."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep-route",
+      "claim": "TC1c amendment 4, box K (tc1c-h100-7, one rented H100 NVL): with every e4b arm keeping all 48 layers' MoE activations AND on the grouped_mm route, Unsloth/e4b reads 0.934 [0.916, 0.953] -- e4b 2.771 s/step against Unsloth's 2.588, slower than the keep-only 2.343 (amendment 2, 1.100). P13 FALSIFIED (band [1.15, 1.60]); the matched set EQUIVALENT / inside the draw noise (P14 HELD). The route's dequant kernel took 1,456 ms of device time per step. Peak VRAM 34.08 vs Unsloth's 24.27 GB. A LABELLED row, quoted beside amendment 2's, never in place of it.",
+      "value": 0.934,
+      "unit": "ratio s/step Unsloth/e4b with e4b keeping MoE activations and on GNF4_TRAIN_GEMM=grouped_mm (medians over two draws each; < 1 = Unsloth faster); cross-draw interval [0.916, 0.953]",
+      "hardware": "H100 NVL (sm_90), one rented Vast.ai verified/secure host (tc1c-h100-7: instance 54119272, AMD EPYC 9534, driver 595.71.05); e4b @ 8208f5e on torch 2.8.0+cu128, grouped-nf4-gemm @ e7ec90a; Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; matched work (642,514,944 trainable parameters, per-slot init matched:3407, fp32 adapters, the same tokens); token qwen3 with TC1_GPU_CLASS=\"H100 NVL\", HF and axolotl skipped; engagement read off route_ab (and keep_ab); validity, positions and equivalence by bench/tc1/tc1_reduce.py; TC1_E4B_ENV=\"E4B_MOE_KEEP_LAYERS=all NF4_QLORA_COMPACT_DELTA=1 GNF4_HOST_REUSE=1 GNF4_TRAIN_GEMM=grouped_mm\"",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-7/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-7/tc1/"
+      ],
+      "notes": "Vast invoiced $2.49. Same diagnosis as the .route row: the route's dequant kernel, not the route."
     }
   ]
 }
