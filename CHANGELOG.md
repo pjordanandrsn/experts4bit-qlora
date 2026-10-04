@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### P112 registered (#1015): does `GNF4_PDL=1` decode SC1's int4 serving configuration's tokens exactly, and faster? One RTX 5090
+
+- **Why.** grouped-nf4-gemm's lane K28 read programmatic dependent launch LEVER on the served B=1 layer's gnf4 kernels
+  (0.323 µs saved per kernel, bit-identical; grouped-nf4-gemm#451). P112 is its registered served read.
+- **The subject.** The default graph server with SC1's int4_sched levers. These are RTN int4 experts and attention, the
+  fused T1 glue, the router epilogue and the fused qkv, verbatim from `bench/sc1/sc1_run.sh`, and they are where the
+  913 switched kernels of SC1b's census run. e4b's default NF4 server reaches only `swiglu_rows` and `combine_rows`,
+  by its defaults; the box measures that in a census after the arms.
+- **The arms.** Four ABBA arms (P0 off, P1 on) through P109's W16 and W1. A launch hook proves that every switched
+  kernel in P1's build carried PDL.
+- **The rule** (`bench/p112/p112_reduce.py`, 17-case self-test): VOID / NOISY / FUNCTION_FAIL / SLOWER /
+  **DEFAULT_ON**. On DEFAULT_ON, grouped-nf4-gemm turns `GNF4_PDL` on by default in its next release.
+- **No proving rental.** The proof model (Granite) cannot run the Qwen3-only fused qkv; this was seen on the NAS A2000.
+  The reading runs under a 1.0 h guard. `tests/test_p112_staged_pin.py` pins the lane.
+
 ### Correction: five TC boxes of 2026-10-04 at Vast's invoiced cost (read pages and the host-reuse register note)
 
 - **What was wrong.** The reads of TC1 amendments 20 and 21 and TC1c amendments 1–3 quoted each box's receipt cost. That figure was the
