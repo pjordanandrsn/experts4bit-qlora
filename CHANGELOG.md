@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+### Opt-in: the fused RMSNorm and rotary kernels launch without Triton's per-call argument binding (`E4B_TRITON_PREBIND=1`)
+
+- **What.** `engines/triton_prebind.py`'s `prebind(kernel)` lets the first launch of each specialization go through Triton and keeps
+  the compiled kernel that launch returns. Its key is what Triton specializes on: each tensor's dtype and 16-byte alignment, each
+  integer's value, every other argument's type and value, the launch options, the device and the debug knobs. Later launches with
+  that key call the kernel's own launcher. `rmsnorm_train` (`_rms_fwd`, `_rms_bwd`) and `rope_train` (`_rope_fwd`) launch through
+  it. The flag is read when those modules are imported; off, `prebind` returns the kernel itself and nothing changes.
+- **Values.** Same compiled binary, arguments and stream, so outputs are bit-identical. Triton's own launch serves a Triton release
+  other than 3.4 and 3.6, a registered launch or pre-run hook, a callable grid, a changed global the kernel reads, and an argument of
+  another type. One knob is read less often: triton 3.4 re-reads `TRITON_DEBUG` at every launch, the prebound path once per kernel
+  (3.6 itself reads it once).
+- **Measured** on the RTX A2000 box's host: a Xeon W-1250 at load average 18–44 on its 12 threads, the bench at nice 10. Host µs per
+  call, each timed after a synchronize; median of 2,000 interleaved off/on pairs; two runs per torch. Qwen3-30B-A3B shapes: sequence
+  2048 × micro-batch 2, hidden 2048, 32 query and 4 key-value heads of 128.
+
+  | call | torch 2.8.0 / triton 3.4.0: off → on | torch 2.11.0 / triton 3.6.0: off → on |
+  |---|---|---|
+  | `RMSNormFrozen.apply`, hidden / q_norm / k_norm | 152–160 → 117–121 / 137–170 → 105–127 / 132–144 → 101–111 | 143–146 → 129–131 / 154–197 → 135–168 / 133–140 → 120–126 |
+  | `RMSNormFrozen.backward`, hidden / q_norm / k_norm | 110–116 → 74–77 / 124–126 → 82–83 / 82–95 → 55–64 | 92–96 → 78–82 / 118–156 → 98–125 / 81 → 70 |
+  | `rope_qk` forward (two launches) | 232–255 → 149–168 | 204–211 → 171–174 |
+  | `_RopeQK.backward` (two launches) | 185–197 → 102–109 | 135–138 → 108–109 |
+  | one launch alone (the kernels and shapes above) | 53–90 → 28–46 | 40–69 → 30–48 |
+
+  Most of what is left in an RMSNorm forward is torch's: `autograd.Function.apply` (24–31 µs for a no-op), the two allocations (10–12)
+  and the views (9–13).
+- **Not measured.** No training step, and no H100 or RTX 5090 host. The default stays off until a registered A/B reads it.
+- **Tested.** `tests/test_triton_prebind.py`. Against Triton's own launch, outputs and dx match under `torch.equal`: RMSNorm in bf16
+  and fp16, all four variants, odd widths and row counts, misaligned pointers; rotary at odd lengths. Every prebound launch is the
+  very compiled kernel Triton's lookup returns. A launch hook, a callable grid, a changed global, a tensor passed by keyword and an
+  unsupported Triton release take Triton's path. On an RTX A2000 under torch 2.8.0 and 2.11.0, flag off and on: 41 passed with
+  `test_rmsnorm_train.py` and `test_rope_train.py`. The fused-training suites agree flag off and on (156 passed;
+  `test_fast_v4.py::test_gptoss_inside_lora_is_still_skipped` fails either way on that box).
+
 ### CI on grouped-nf4-gemm 0.39.0; where the dense-route rows came from (docs and register notes only)
 
 - **CI** now tests against grouped-nf4-gemm **0.39.0** (`a5edec87`). In that release `GNF4_TRAIN_GEMM=auto` takes the
