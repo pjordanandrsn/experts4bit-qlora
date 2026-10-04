@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### The fused training forward gathers the routing weights with a scatter backward instead of a sorted one (values identical)
+
+- **What.** `fused_experts_train_forward` gathered the routing weights as `top_k_weights[token_rows, top_pos]`. The backward of
+  that two-index advanced gather is `index_put_(accumulate=True)`, which linearizes the two indices and radix-sorts them, about
+  ten launches per MoE layer backward. `order` is a permutation of the `[tokens, k]` slots, so `_PermGather` now does the same
+  gather as one `index_select`, and its backward is a zero fill plus one `index_copy_`. `top_pos` is no longer computed.
+- **Values.** Forward and every gradient are `torch.equal` to the old form, in `tests/test_perm_gather.py` (CPU and CUDA,
+  bf16 and fp32) and in one Qwen3-30B-A3B-shaped `ExpertsLoRA` layer on an RTX A2000 under deterministic mode: the output, the
+  input and routing-weight gradients, and all four adapter gradients.
+- **Measured on an RTX A2000** (grouped-nf4-gemm's `bench/host-reuse/moe_host.py`, router weights carrying grad,
+  `GNF4_HOST_REUSE=1` in both arms), three interleaved old/new pairs of 300 repetitions, on a host shared with other jobs:
+  - backward host median 3.015 / 2.866 / 2.801 → 2.775 / 2.558 / 2.578 ms;
+  - forward host median 3.319 / 3.066 / 3.052 → 3.261 / 2.819 / 2.799 ms;
+  - backward device span 18.88 / 19.17 / 19.38 → 18.99 / 19.25 / 19.44 ms. Each new arm ran second, and the span drifted
+    upward across the run, so this is not read as a device cost.
+
 ### TC1 amendment 19 read: the matched-work positions after amendments 10–15 — Unsloth/e4b 1.997, axolotl/e4b 2.775
 
 - **What was asked.** TC1's matched set (`tc1-5090-49`, EPYC 7C13, $1.15) and the axolotl rows (`tc1-5090-50`, Ryzen 9 9950X3D, $0.33),
