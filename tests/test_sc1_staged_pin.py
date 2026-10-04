@@ -18,7 +18,7 @@ PIN = LANE / "staged.sha256"
 OWN = ("sc1_run.sh", "sc1_e4b_sched.py", "sc1_prompts.py", "sc1_sampler.sh")
 COMP_DIRS = ("vllm", "sglang", "llamacpp", "exl3", "lmdeploy")
 SC1B = tuple("sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh".split())                         # bench/sc1b, staged flat on every box
-SC2 = tuple("sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh".split())                                                                                            # bench/sc2, staged flat on every box
+SC2 = tuple("sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py".split())                                                                                            # bench/sc2, staged flat on every box
 P39 = ("step_decomp.py", "k8_bake.py", "calib.json")
 
 
@@ -89,7 +89,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_resolves_the_same_way():
     assert "vllm/*|sglang/*|llamacpp/*|exl3/*|lmdeploy/*) src=\"$HERE/$name\"" in case
     assert 'hook/usercustomize.py) src="$P42/hook/usercustomize.py"' in case and 'test_k19_row_exact_gpu.py) src="$TESTS/$name"' in case
     assert 'sc1b_*|kernel_classes.json) src="$SC1B/$name"' in case
-    assert 'sc2_*) src="$SC2/$name"' in case
+    assert 'sc2_*|sc2b_*) src="$SC2/$name"' in case
     assert '*) src="$P39/$name"' in case
     # the box checks the same file with sha256sum -c (strict: a pinned file missing on the box is a stop)
     run = (LANE / "sc1_run.sh").read_text()
@@ -140,5 +140,5 @@ def test_the_driver_refuses_without_a_box_or_with_a_bad_one(tmp_path):
     del env["SC1_BOX"]
     out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 78 and "SC1_BOX is not set" in out.stdout
-    out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=_dry_env(tmp_path, SC1_BOX="F"))
-    assert out.returncode == 78 and "SC1_BOX must be A, B, C, D or E" in out.stdout       # D is SC1b's census box, E SC2's serving box
+    out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=_dry_env(tmp_path, SC1_BOX="G"))
+    assert out.returncode == 78 and "SC1_BOX must be A, B, C, D, E or F" in out.stdout    # D SC1b's census box, E SC2's, F SC2b's
