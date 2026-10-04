@@ -1,0 +1,32 @@
+KNOBS e4b=7abf9b1be08b3f83f836b06d017cbb0f3ccb1572 gnf4=51a49166ae7bc1a0f84188b7b5d1f42ecbc37e00 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 short=32 long=160 reps=3
+e4b 0.43.0 @7abf9b1be08b3f83f836b06d017cbb0f3ccb1572
+gnf4 0.35.0 @51a49166ae7bc1a0f84188b7b5d1f42ecbc37e00
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p111_reduce self-test OK (11 cases)
+p109_box self-test OK (5/5 cases)
+p111_box self-test OK (3/3 cases)
+premise run rc=0: 13 passed in 6.07s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm S0a rc=0 P111_ARM {"arm": "S0", "tag": "S0a", "step_select": false, "load_s": 17.31, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 772.4, "W1": 109.41}
+
+arm S1a rc=0 P111_ARM {"arm": "S1", "tag": "S1a", "step_select": true, "load_s": 13.83, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 799.61, "W1": 110.46}
+
+arm S1b rc=0 P111_ARM {"arm": "S1", "tag": "S1b", "step_select": true, "load_s": 13.11, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 800.87, "W1": 110.62}
+
+arm S0b rc=0 P111_ARM {"arm": "S0", "tag": "S0b", "step_select": false, "load_s": 13.42, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 771.8, "W1": 109.11}
+
+P111_VERDICT DEFAULT_ON ["tokens identical on every row; g16 = 1.0352, g1 = 1.0096 (geomean 1.0364 / 1.0117)"]
+  g16: 1.0352
+  g1: 1.0096
+  geomean: {"W16": 1.0364, "W1": 1.0117}
+  pair_ratios: {"W16": [1.0352, 1.0377], "W1": [1.0096, 1.0138]}
+  self_pairs: {"S0b/S0a W16": 0.9992, "S0b/S0a W1": 0.9973, "S1b/S1a W16": 1.0016, "S1b/S1a W1": 1.0014}
+  decode_tok_s: {"S0a": {"W16": 772.4, "W1": 109.41}, "S1a": {"W16": 799.61, "W1": 110.46}, "S1b": {"W16": 800.87, "W1": 110.62}, "S0b": {"W16": 771.8, "W1": 109.11}}
+  ms_per_step: {"S0a": {"W16": 20.7147, "W1": 9.1396}, "S1a": {"W16": 20.0098, "W1": 9.0527}, "S1b": {"W16": 19.9783, "W1": 9.0397}, "S0b": {"W16": 20.7309, "W1": 9.1647}}

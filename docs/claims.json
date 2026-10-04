@@ -7901,6 +7901,35 @@
       "notes": "Pre-registered in #994. With P109 (e4b.serve.p109.decode-graphs-vs-eager-default.qwen3.5090.2026-10-03: speed x5.60 / x9.02, replay = padded eager step) this licenses E4B_PAGED_GRAPHS=auto as serve_paged's default (#770). Predictions held for R's repeat, the biases, D, the mutant, engagement, the box's time and the verdict; missed for the floor's and P's spreads (0.0127 / 0.0114, above the 0.005 / 0.006 predicted). Lane cost $0.2455."
     },
     {
+      "id": "e4b.serve.p111.kv-step-select.qwen3.5090.2026-10-04",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P111, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs), selecting a bucket's KV-table rows once per decode step instead of once per layer (E4B_KV_STEP_SELECT) decodes identical tokens on every row and runs 1.0352x (min over two ABBA pairs; geomean 1.0364) the per-layer selection with 16 concurrent requests and 1.0096x (geomean 1.0117) with one. DEFAULT_ON.",
+      "value": 1.0352,
+      "unit": "decode tok/s ratio, step selection over per-layer selection, 16 concurrent requests (min over two ABBA pairs)",
+      "hardware": "RTX 5090 (sm_120, driver 610.57.04, 32607 MiB), one rented Vast.ai verified host (instance 54083342, AMD Ryzen 9 9950X3D, 123 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @7abf9b1 (0.43.0 + #999 + P111's registration) + grouped-nf4-gemm @51a4916 (v0.35.0); torch 2.8.0+cu128, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; premise test_decode_graph_buckets.py + test_kv_step_select.py 13 passed on the card; four ABBA arms (S0a S1a S1b S0b) differing only in E4B_KV_STEP_SELECT, W16 = 16 wikitext 512-token prompts at once, W1 = one, 32/160 new tokens, 3 timed reps; verdict by bench/p111/p111_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p111/RESULTS-p111.md",
+        "bench/p111/PREREG-p111.md",
+        "bench/p111/p111_reduce.py",
+        "bench/p111/p111_box.py",
+        "bench/p111/receipts/p111-5090-1/verdict.json",
+        "bench/p111/receipts/p111-5090-1/arm_S1a.json",
+        "bench/p111/receipts/p111-5090-1/arm_S0a.json",
+        "bench/p111/receipts/p111-5090-1/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/p111-5090-1/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-04/p111-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1000; the switch is #999, the lever SC1b's (#993). The step falls 20.72 -> 19.99 ms at 16 rows, matching SC1b's ~0.8 ms census of per-layer index_select/index_add_. Predictions held for exactness, engagement, g16 and noise; missed for g1 (1.0096, below its 1.02-1.10 band). Lane cost $0.1959."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02",
       "package": "experts4bit-qlora",
       "area": "train",
