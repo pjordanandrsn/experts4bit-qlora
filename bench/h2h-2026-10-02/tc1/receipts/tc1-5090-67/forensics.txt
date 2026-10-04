@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-1988d9ef-19d0-36d8-6639-210c4347c852, 470.00 W, 3090 MHz
+CPU(s):                                  24
+Model name:                              Intel(R) Core(TM) Ultra 9 285K
+MemTotal:       197216440 kB
+cgroup memory.max 193871216640
+overlay         320G  9.5M  320G   1% /
