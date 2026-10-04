@@ -1469,6 +1469,9 @@ def enable_hot_residency(model, hot_sets: Sequence, device: str = "cuda",
     win is realized when the base experts are offloaded (streaming loader): the
     resident stack is then the only GPU copy. Standalone Experts4bit is the
     correctness-supported path today."""
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(model, "enable_hot_residency")
     import warnings
     warnings.warn(
         "enable_hot_residency is superseded by enable_pipelined_residency "

@@ -612,6 +612,9 @@ def enable_pipelined_residency(model, hot_sets: Sequence, device: str = "cuda",
     (assert > 0). Needs ``[fast]`` and a CUDA device. See
     ``docs/solutions/run-moe-larger-than-vram.md``.
     """
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(model, "enable_pipelined_residency")
     from experts4bit_qlora import Experts4bit, ExpertsNbit
     from experts4bit_qlora.arch.gptoss import GptOssExperts4bit
 

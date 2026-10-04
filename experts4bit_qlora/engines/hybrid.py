@@ -1106,6 +1106,9 @@ def enable_hybrid_tier(model, arena_path: str, manifest, *,
     anywhere in it, reproduces the cold arm's divergence to the digit. Both
     destinations are exact against their matched control, and both of those
     equalities are pinned in ``tests/test_hybrid_cold_dest.py``."""
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(model, "enable_hybrid_tier")
     try:
         from nvme_residency import ColdTier
     except ImportError as exc:                        # pragma: no cover
