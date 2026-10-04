@@ -864,7 +864,7 @@ def test_amendment_3_axolotl_family_uv_index_strategy_and_no_unsloth_venv_on_tha
     # the uv install reads PyPI past the cu130 index: uv's first-index strategy left axolotl's packaging==26.0 unsatisfiable on both TC1 boxes
     assert re.search(r'uv pip install --python \$PY_AX "axolotl==\$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log', body)
     # the token alone builds no Unsloth venv; every other token still builds both, behind the same driver gate
-    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab ") NEED_UNSLOTH=0;; esac' in body   # amendments 8, 10, 12-15 add their tokens
+    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab "|" routebench ") NEED_UNSLOTH=0;; esac' in body   # amendments 8, 10, 12-15 add their tokens
     assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then' in body
     assert body.index("NEED_UNSLOTH=1; case") < body.index("venv-unsloth-t28:") and body.count("runs no Unsloth arm (TC1-PREREG amendment 3)") == 2
 
@@ -1148,7 +1148,7 @@ def test_tc1_amendment_8_native_best_200_token():
                      ("axolotl", "ckpt_axolotl_best_200"), ("e4b", "fused_attn4_m_200")], order
     assert body.count("draw2") == 2 and body.count(" curve $TOK $TS") == 5 and "--axolotl-best 1" in body and "tc1_prepare $FAM \"$MID\" $REV $FAL \"$ALL\" $CURVE_EVAL_N" in body
     assert "qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in run
-    assert 'case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab ") NEED_UNSLOTH=0;; esac' in run
+    assert 'case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab "|" routebench ") NEED_UNSLOTH=0;; esac' in run
     rule = re.search(r'^  local OFFL=1; case .*?esac$', run, re.MULTILINE).group(0)
     for tag, want in (("ckpt_axolotl_best", "0"), ("ckpt_axolotl_best_d2", "0"), ("ckpt_axolotl_best_200", "0"), ("ckpt_axolotl_best_200_d2", "0"),
                       ("ckpt_axolotl_m", "1"), ("ckpt_axolotl_m_d2", "1")):
@@ -1194,6 +1194,26 @@ def test_tc1c_amendment_2_e4b_env_reaches_only_e4b_arms():
               'TC1_E4B_ENV="K=1 C=2" f e4b; TC1_E4B_ENV="K=1" f unsloth; f e4b; TC1_ARM_EXTRA_ENV="A=1" TC1_E4B_ENV="K=1" f e4b')
     out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout.split("\n")
     assert [o.split() for o in out if o] == [["[", "K=1", "C=2]"], ["[]"], ["[]"], ["[", "A=1", "K=1]"]], out
+
+
+def test_tc1c_amendment_3_routebench_token():
+    """TC1c amendment 3: `routebench` runs bench/tc1/route_bench.py on the staged recorded calls under an alarm, writes ROUTEBENCH.json,
+    builds no Unsloth venv and downloads no model; neither staged nor written file matches the reducer's *_*_*.json receipt glob."""
+    import fnmatch
+    run = RUN_SH.read_text()
+    m = re.search(r"^tc1_routebench_family\(\)\{.*?DONE\" \| tee -a summary.txt; \}", run, re.DOTALL | re.MULTILINE)
+    assert m, "tc1_routebench_family is gone"
+    body = m.group(0)
+    assert "$PY_E4B -u $W/route_bench.py $W/routecalls-qwen3.json $W/ROUTEBENCH.json --reps 10" in body and 'perl -e "alarm $AL' in body
+    assert "tc1_prepare" not in body                                   # no model fetch, no tokens
+    assert "routebench)  tc1_routebench_family routebench 1800;;" in run
+    for name in ("routecalls-qwen3.json", "ROUTEBENCH.json"):
+        assert not fnmatch.fnmatch(name, "*_*_*.json"), name
+    bench = REPO / "bench" / "tc1"
+    assert (bench / "route_bench.py").is_file() and (bench / "routecalls-qwen3.json").is_file()
+    calls = json.loads((bench / "routecalls-qwen3.json").read_text())["calls"]
+    assert {c["op"] for c in calls} == {"fwd", "dgrad"} and all(c["eids"] == sorted(c["eids"]) for c in calls)
+    assert {(c["N"], c["K"]) for c in calls} == {(1536, 2048), (2048, 768)}
 
 
 def test_tc1_amendment_13_lean_delta_token():
