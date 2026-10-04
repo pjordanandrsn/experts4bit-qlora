@@ -56,3 +56,11 @@ def test_the_verdict_is_tp1s():
         assert _fn(mg1, name) == _fn(tp1, name), name
     band = [re.search(r"^BAND = (.+)$", p.read_text(), re.M).group(1) for p in (tp1, mg1)]
     assert band[0] == band[1], band
+
+
+def test_amendment_2_shape_is_the_registered_one():
+    """The runner's registered amendment-2 args are exactly the ones MG1-PREREG.md registers, and the knobs reach the box."""
+    run, prereg = RUN.read_text(), PREREG.read_text()
+    a2 = re.search(r'^A2_ARGS="([^"]+)"$', run, re.M).group(1)
+    assert f"MG1_LADDER_ARGS='{a2}'" in prereg
+    assert {"MG1_LADDER_ONLY", "MG1_LADDER_ARGS"} <= _forwarded()

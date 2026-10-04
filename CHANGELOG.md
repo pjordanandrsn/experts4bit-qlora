@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### MG1 amendment 2, before its box: P2 for Qwen3.6, read from the fused rung's dgrad counter at the licensed configuration (bench and prereg only)
+
+- **Why.** The MG1 reading PASSED Qwen3.6-35B-A3B, but P2 went unread: tp1's arm driver predates `DGRAD_STATS`, and Qwen3.6's
+  ladder OOMed at its default r 16. The decision rule needs P2, so `qwen3_5_moe` waits as `experimental`.
+- **What.** `mg1_run.sh` gains two knobs, both forwarded by `tc1_drive.sh` and pinned by `tests/test_mg1_lane.py`.
+  `MG1_LADDER_ONLY=1` skips the anchor and the arms, and `MG1_LADDER_ARGS` is appended to the ladder. The registered shape is
+  the `fused` rung at r 8 / alpha 16 / fp32 adapters / bf16 attention, with no profiler: the licensed arms' configuration.
+- **P7.** `DGRAD_STATS["loop"] == 0`. A zero loop flips the row to `supported`; anything else is a row, and the status is
+  unchanged. Guard 0.75 h, about $0.64.
+
 ## 0.46.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.38.0, whose pinned-tier sizing models PyTorch's power-of-two allocator; before-load planning (`describe_moe`, `prepare_qlora_training`); `serve_paged` reports its prefill routes; two opt-ins, a first-chunk prefill graph verified at startup and the double-quantized expert absmax
 
 **0.46.0.** No default in this package changes. CI now tests against grouped-nf4-gemm 0.38.0's commit.

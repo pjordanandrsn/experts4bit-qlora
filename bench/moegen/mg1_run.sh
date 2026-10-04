@@ -23,7 +23,17 @@ FAMS=${MG1_FAMILIES:-"olmoe gemma4 lfm2 graniteh ernie nemotron qwen3_5"}
 # MG1_REHEARSAL=1 (the $0 A2000 container rehearsal ONLY; tc1_drive does not forward it, so a rented box can never set it): a
 # train-anchor refusal is recorded and the lane continues, so the arms and the ladder run on a card outside the anchor band.
 PROVE=${MG1_PROVE:-0}; REHEARSAL=${MG1_REHEARSAL:-0}
-[ "$STEPS" = 60 ] && [ "$FAMS" = "olmoe gemma4 lfm2 graniteh ernie nemotron qwen3_5" ] || echo "NON-REGISTERED SHAPE: MG1_STEPS=$STEPS MG1_FAMILIES=$FAMS (not a registered reading)" | tee -a summary.txt
+# Amendment 2: MG1_LADDER_ONLY=1 skips the anchor and the arms and runs only the ladder, with MG1_LADDER_ARGS appended (argparse:
+# the last value wins). Its registered shape reads P2 for Qwen3.6 -- the fused rung's DGRAD_STATS -- at the licensed arms'
+# configuration. P2 is an engagement count, not a timing, so the box class does not bear on it.
+LADDER_ONLY=${MG1_LADDER_ONLY:-0}; LADDER_ARGS=${MG1_LADDER_ARGS:-}
+A2_ARGS="--rungs fused --r 8 --alpha 16 --adapter-dtype fp32 --attn4 0 --attn-lora 1 --profile 0 --warmup 1 --steps 2"
+if [ "$LADDER_ONLY" = 1 ]; then
+  [ "$FAMS" = qwen3_5 ] && [ "$LADDER_ARGS" = "$A2_ARGS" ] && echo "AMENDMENT 2 SHAPE (registered): P2 for qwen3_5" | tee -a summary.txt \
+    || echo "NON-REGISTERED SHAPE: MG1_LADDER_ONLY=1 MG1_FAMILIES=$FAMS MG1_LADDER_ARGS=$LADDER_ARGS (not a registered reading)" | tee -a summary.txt
+else
+  [ "$STEPS" = 60 ] && [ "$FAMS" = "olmoe gemma4 lfm2 graniteh ernie nemotron qwen3_5" ] || echo "NON-REGISTERED SHAPE: MG1_STEPS=$STEPS MG1_FAMILIES=$FAMS (not a registered reading)" | tee -a summary.txt
+fi
 [ "$REHEARSAL" = 1 ] && echo "REHEARSAL (MG1_REHEARSAL=1): not a registered reading" | tee -a summary.txt
 # family -> model id | pinned revision | offload (0 resident; qwen3_5 retries under offload on an OOM stub)
 declare -A MID=( [olmoe]=allenai/OLMoE-1B-7B-0924-Instruct [gemma4]=google/gemma-4-26B-A4B-it [lfm2]=LiquidAI/LFM2-8B-A1B [graniteh]=ibm-granite/granite-4.0-h-tiny
@@ -74,6 +84,7 @@ nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | 
 [ "$PROVE" = 1 ] && { echo "PROVE: install + tripwire OK; no anchor, no fetch, no arm" | tee -a summary.txt; finish 0; }
 
 # ---------------------------------------------------------------- box class (bench/train-anchor), strict as tp1
+if [ "$LADDER_ONLY" = 1 ]; then echo "ANCHOR skipped (MG1_LADDER_ONLY: an engagement count, not a timing)" | tee -a summary.txt; else
 say "train anchor"
 ANCHOR_OUT=$W/anchor.json perl -e 'alarm 900; exec @ARGV' python train_anchor.py > logs/anchor.log 2>&1
 python train_anchor_gate.py anchor.json | tee logs/anchor_gate.log; arc=${PIPESTATUS[0]}
@@ -82,6 +93,7 @@ echo "ANCHOR rc=$arc class=$TP1_BOX_CLASS" | tee -a summary.txt
 if [ "$arc" -ne 0 ]; then
   [ "$REHEARSAL" = 1 ] || { echo "BOX REFUSED by train anchor" | tee -a summary.txt; finish 12; }
   echo "REHEARSAL: train anchor refused this card (rc=$arc); continuing" | tee -a summary.txt
+fi
 fi
 
 # ---------------------------------------------------------------- the fixture: regenerate, refuse unless the registered bytes
@@ -104,6 +116,7 @@ print(snapshot_download('${MID[$fam]}', revision='${REV[$fam]}', allow_patterns=
   [ -d "$snap" ] || { echo "$fam: FETCH FAILED" | tee -a summary.txt; continue; }
   echo "$fam: fetched $(du -shL "$snap" | cut -f1)" | tee -a summary.txt
   off=0
+  if [ "$LADDER_ONLY" != 1 ]; then
   arm $fam reference "$snap" $off 5400
   if [ "$fam" = qwen3_5 ] && grep -q '"status": "oom"' receipts/${fam}_train_reference.json 2>/dev/null; then
     mv receipts/${fam}_train_reference.json receipts/${fam}_train_reference.resident_oom.json; off=1
@@ -111,9 +124,10 @@ print(snapshot_download('${MID[$fam]}', revision='${REV[$fam]}', allow_patterns=
     arm $fam reference "$snap" $off 9000
   fi
   arm $fam fused "$snap" $off 5400
+  fi
   say "ladder $fam"
   perl -e 'alarm 3600; exec @ARGV' python ladder.py --model "$snap" --rungs fused,fused_pre,keep --offload $off --steps 8 --warmup 3 \
-    --seq $SEQ --out receipts/${fam}_ladder.json > logs/ladder_$fam.log 2>&1
+    --seq $SEQ $LADDER_ARGS --out receipts/${fam}_ladder.json > logs/ladder_$fam.log 2>&1
   echo "$fam/ladder rc=$? $(grep -c SUMMARY logs/ladder_$fam.log) rungs summarised" | tee -a summary.txt
   rm -rf "$(dirname "$(dirname "$snap")")"          # the family's cache: the box disk holds one checkpoint at a time
 done
