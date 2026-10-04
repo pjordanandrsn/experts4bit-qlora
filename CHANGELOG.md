@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Read: TC2 amendment 8 — at default settings Unsloth is faster on Mixtral, 0.836; on Qwen3.6 at micro-batch 1 e4b is 2.05× faster (P24–P28 HELD)
+
+- **Box M** (`tc1-5090-63`, $0.60): Mixtral-8x7B with e4b at default settings, where grouped-nf4-gemm 0.38.0's `auto` takes the dense
+  route on every expert call. e4b steps in 3.57 s against Unsloth's 2.98 s: Unsloth/e4b **0.836** [0.828, 0.844], the pair
+  COMPARABLE, e4b's peak 31.08 GB against 29.13. The host is a Core Ultra 9 285K, the Unsloth-favouring end of the range seen. By the
+  registered rule this becomes the family's position and supersedes amendment 6's 0.697 on the fused kernels.
+- **Box Q** (`tc1-5090-64`, $1.31): Qwen3.6-35B-A3B resident at micro-batch 1 × accum 8, e4b with the absmax double-quantized and the
+  non-routed projections in NF4. Unsloth/e4b **2.049** [2.028, 2.070] (18.95 against 9.25 s/step), the pair COMPARABLE, step-0 gap 0.019
+  nats. Qwen3.6's first quoted position, labelled; e4b's defaults do not fit this family on 32 GB.
+- Rows `e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default` and `…qwen3_5.5090.2026-10-04.mb1-dq-frozen4`. Lane page
+  `bench/h2h-2026-10-02/tc2/README.md`.
+
 ### Read: TC1c amendment 8 — on an H100 at default settings e4b is faster per step than Unsloth: 1.061 (P24, P25, P26 HELD)
 
 - **The box.** `tc1c-h100-15` ($2.44) ran e4b 0.45.0's code with grouped-nf4-gemm 0.37.0 and nothing set. `auto` took the grouped_mm
