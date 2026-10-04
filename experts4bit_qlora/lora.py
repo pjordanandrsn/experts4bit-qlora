@@ -930,6 +930,64 @@ def quantize_attention_projections_4bit(model) -> int:
     return n
 
 
+#: Child names that are a router, never stored in 4-bit by :func:`quantize_frozen_linears_4bit`: the MoE block's
+#: ``gate`` (Qwen3-MoE ``mlp.gate``, Mixtral ``block_sparse_moe.gate``), a ``router``, and the shared expert's 1-wide
+#: ``shared_expert_gate``. Routing decides which experts run, so its weights stay in their load dtype.
+_FROZEN_4BIT_ROUTER_NAMES = frozenset({"gate", "router", "shared_expert_gate"})
+
+
+def frozen_linear_4bit_candidates(model) -> list[tuple[nn.Module, str, str]]:
+    """The frozen linears :func:`quantize_frozen_linears_4bit` stores in NF4, as ``(parent, child_name, full_name)``.
+
+    A candidate is an exact ``nn.Linear`` (not a subclass: a ``Linear4bit`` is already 4-bit, a ``LoRALinear`` is an
+    adapter) whose weight is frozen and bf16/fp16 and which carries no bias. Excluded by rule: the output head
+    (``get_output_embeddings``), every router (:data:`_FROZEN_4BIT_ROUTER_NAMES`), and the attention projections that
+    :func:`detect_attention_projections` finds -- those belong to :func:`quantize_attention_projections_4bit` and its own
+    switch. What remains are the dense frozen projections a bitsandbytes ``load_in_4bit`` load would also quantise: on
+    Qwen3.6-35B-A3B the 30 linear-attention layers' projections and the 40 shared experts (about 1.14 B parameters); on
+    Qwen3-30B-A3B and Mixtral-8x7B none (their only frozen bf16 linears are routers and ``lm_head``).
+    """
+    attn = {id(getattr(m, n)) for m, n in detect_attention_projections(model, exact_linear=False).candidates}
+    head = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+    out: list[tuple[nn.Module, str, str]] = []
+    for parent_name, parent in model.named_modules():
+        for name, child in parent.named_children():
+            if type(child) is not nn.Linear or child is head or id(child) in attn or name in _FROZEN_4BIT_ROUTER_NAMES:
+                continue
+            w = child.weight
+            if w.requires_grad or w.dtype not in (torch.bfloat16, torch.float16) or child.bias is not None:
+                continue
+            out.append((parent, name, f"{parent_name}.{name}" if parent_name else name))
+    return out
+
+
+def quantize_frozen_linears_4bit(model) -> int:
+    """Store every :func:`frozen_linear_4bit_candidates` linear in bnb NF4, the way
+    :func:`quantize_attention_projections_4bit` stores the attention: ``Linear4bit`` with bnb's default
+    ``compress_statistics=True`` (double-quantised absmax), bf16 compute, the frozen weight quantised on transfer.
+
+    A MEASUREMENT hook, not a training option: it puts e4b's frozen base in a bitsandbytes ``load_in_4bit`` comparator's
+    regime so a matched-work pair starts from the same bytes (the TC1 harness's ``--frozen-4bit``). It is not offered as a
+    default, and :mod:`experts4bit_qlora.train` does not read it: on Qwen3.6-35B-A3B these modules in NF4 start about
+    0.05 nats higher on TC1's held-out rows (a comparator that quantises them: 1.194-1.196, against e4b's bf16 1.143),
+    for about 1.6 GB of VRAM. ``docs/ARCHITECTURE_SUPPORT.md`` keeps the bf16 default and why.
+
+    Run after the attention conversion and BEFORE :func:`add_attention_lora` (an adapter's own base is then never a
+    candidate). Returns the number converted.
+    """
+    import bitsandbytes as bnb
+
+    n = 0
+    for parent, name, _full in frozen_linear_4bit_candidates(model):
+        lin = getattr(parent, name)
+        dev = lin.weight.device
+        q = bnb.nn.Linear4bit(lin.in_features, lin.out_features, bias=False, compute_dtype=torch.bfloat16, quant_type="nf4")
+        q.weight = bnb.nn.Params4bit(lin.weight.data.to("cpu", torch.bfloat16).contiguous(), requires_grad=False, quant_type="nf4")
+        setattr(parent, name, q.to(dev))   # quantises on transfer
+        n += 1
+    return n
+
+
 def add_attention_lora(model, r: int, alpha: int, dtype: torch.dtype) -> int:
     """Wrap each structurally detected attention projection with a trainable LoRA adapter.
 
