@@ -1,0 +1,29 @@
+{
+ "framework": "e4b",
+ "fam": "gptoss",
+ "arm": "reference",
+ "tag": "reference_attn4_m",
+ "status": "refused",
+ "reason": "SKIPPED as REFUSED: tp4's gptoss MODE ran no reference arm -- TRAIN_ATTN_4BIT refuses gpt-oss's bias-carrying attention projections (quantize_attention_projections_4bit raises SystemExit on a bias, #435); attn_only_m's attn4 probe refreshes this stub with what it measured",
+ "steps": 60,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "written_by": "tc1_run.sh",
+ "prereg": "tc1/TC2-PREREG.md",
+ "cited": "tp4",
+ "n_patched": 0,
+ "model_type": "gpt_oss",
+ "n_layers": 24,
+ "probed_by": "attn_only",
+ "attn4_probe": {
+  "n_projections": 96,
+  "n_biased": 96,
+  "would_refuse": true,
+  "sample": [
+   "model.layers.0.self_attn.q_proj",
+   "model.layers.0.self_attn.k_proj"
+  ]
+ },
+ "probe_reason": "TRAIN_ATTN_4BIT would refuse: 96 of 96 attention projections carry a bias (quantize_attention_projections_4bit raises SystemExit on a bias; e.g. ['model.layers.0.self_attn.q_proj', 'model.layers.0.self_attn.k_proj'])"
+}

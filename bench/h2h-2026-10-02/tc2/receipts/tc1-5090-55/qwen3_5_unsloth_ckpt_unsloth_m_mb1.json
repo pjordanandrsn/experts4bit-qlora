@@ -1,0 +1,1292 @@
+{
+ "framework": "unsloth",
+ "fam": "qwen3_5",
+ "model": "Qwen/Qwen3.6-35B-A3B",
+ "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+ "model_type": "qwen3_5_moe",
+ "n_layers": 40,
+ "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0",
+ "arm": "unsloth",
+ "tag": "ckpt_unsloth_m_mb1",
+ "status": "ok",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 8,
+ "micro_batch": 1,
+ "autocast": false,
+ "r": 16,
+ "alpha": 16,
+ "lr": 0.0002,
+ "seed": 3407,
+ "offload": false,
+ "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+ "lr_per_step": [
+  0.0,
+  4e-05,
+  8e-05,
+  0.00012,
+  0.00016,
+  0.0002,
+  0.00018667,
+  0.00017333,
+  0.00016,
+  0.00014667,
+  0.00013333,
+  0.00012,
+  0.00010667,
+  9.333e-05,
+  8e-05,
+  6.667e-05,
+  5.333e-05,
+  4e-05,
+  2.667e-05,
+  1.333e-05
+ ],
+ "template": "alpaca",
+ "grad_ckpt": "unsloth",
+ "attn_4bit": false,
+ "n_attn4": 0,
+ "frozen_4bit": false,
+ "n_frozen4": 0,
+ "attn4_probe": null,
+ "absmax_dq": false,
+ "structural_expected_n_attn4": null,
+ "detector_version": null,
+ "loader_used": "FastLanguageModel",
+ "loader_fallback_reason": null,
+ "unsloth_targets": [
+  "q_proj",
+  "k_proj",
+  "v_proj",
+  "o_proj"
+ ],
+ "hf_targets": null,
+ "axolotl_targets": null,
+ "axolotl": null,
+ "axolotl_router_recast": null,
+ "hub_kernels_cached": null,
+ "hf_experts_implementation": null,
+ "hf_double_quant": null,
+ "axolotl_bnb4bit_modules": null,
+ "unsloth_knobs": {
+  "moe_backend_requested": "grouped_mm",
+  "speed_tilt": false,
+  "double_quant_requested": "off",
+  "env_set": {
+   "UNSLOTH_MOE_BACKEND": "grouped_mm"
+  },
+  "load_in_4bit_requested": true,
+  "target_parameters_requested": [
+   "mlp.experts.gate_up_proj",
+   "mlp.experts.down_proj"
+  ]
+ },
+ "moe_backend_selected": "grouped_mm",
+ "unsloth_double_quant": {
+  "requested": null,
+  "how": "unknown-default: from_pretrained names neither bnb_4bit_use_double_quant nor quantization_config",
+  "loaded_nested": true
+ },
+ "unsloth_load_in_4bit": true,
+ "unsloth_target_parameters": {
+  "requested": [
+   "mlp.experts.gate_up_proj",
+   "mlp.experts.down_proj"
+  ],
+  "passed": true,
+  "how": "get_peft_model(target_parameters=[...])"
+ },
+ "unsloth_packed_calls_per_step_min": {
+  "unsloth_mxfp4_grouped_mm": 0
+ },
+ "unsloth_packed_calls_per_step_max": {
+  "unsloth_mxfp4_grouped_mm": 0
+ },
+ "hf_experts_dispatch": null,
+ "unsloth_backend_calls_per_step_min": {
+  "unsloth_grouped_mm": 640,
+  "unsloth_triton": 0,
+  "unsloth_loop": 0,
+  "moe_bnb4bit_backend": 640
+ },
+ "unsloth_backend_calls_per_step_max": {
+  "unsloth_grouped_mm": 640,
+  "unsloth_triton": 0,
+  "unsloth_loop": 0,
+  "moe_bnb4bit_backend": 640
+ },
+ "unsloth_backend_absent": [],
+ "tokens": {
+  "path": "tokens_qwen3_5.json",
+  "sha256": "0d94e9b8893645edda2c1ba7e90d34b41374164b37f72d4d72422af79896e866",
+  "n_train": 1200,
+  "eval_rows_used": 8,
+  "tokenizer_agree": "unchecked: Incorrect image source. Must be a valid URL starting with `http://` or `https://`, a valid path to an image file, or a base64 encoded string. Got Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.\n\n### Instruction:\nGenerate a sentence that starts with \"We all wish\".\n\n### Input:\n\n\n### Response:\nWe all wish to live a fulfilling and contented life filled with joy, love and success.<|im_end|>. Failed with Invalid base64-encoded string: number of data characters (269) cannot be 1 more than a multiple of 4",
+  "pad_id": 248044
+ },
+ "prereg": "tc1/TC2-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe; + --absmax-dq: e4b's double-quantized expert absmax)",
+ "env": {
+  "framework": "unsloth",
+  "torch": "2.12.1+cu130",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-1988d9ef-19d0-36d8-6639-210c4347c852",
+   "pci.bus_id": "00000000:02:00.0",
+   "pcie.link.gen.current": "5",
+   "pcie.link.gen.max": "5",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "470.00",
+   "clocks.max.sm": "3090",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.00.B1",
+   "driver_version": "595.91.07",
+   "cpu": "Intel(R) Core(TM) Ultra 9 285K",
+   "cpu_threads": 24,
+   "host_mem_gib": 188.1,
+   "vast_instance_id": "54159409",
+   "container_host": "97f2b223cf2f"
+  },
+  "anchor_json": null,
+  "box_class": "RTX 5090",
+  "hf_hub_offline": "1",
+  "unsloth_loader": "FastLanguageModel",
+  "unsloth_env": {
+   "UNSLOTH_ENABLE_LOGGING": "1",
+   "UNSLOTH_MOE_BACKEND": "grouped_mm"
+  },
+  "transformers": "5.5.0",
+  "experts4bit-qlora": "0.45.0",
+  "grouped-nf4-gemm": "0.37.0",
+  "bitsandbytes": "0.50.2",
+  "peft": "0.21.2",
+  "unsloth": "2026.9.14",
+  "unsloth_zoo": "2026.9.9",
+  "triton": "3.7.1",
+  "huggingface_hub": "1.33.0"
+ },
+ "load_s": 24.7,
+ "phase_seconds": {
+  "preamble": 2.072,
+  "snapshot": 0.0,
+  "load_weights": 18.73,
+  "census": 2.255,
+  "frozen_probe": 0.075,
+  "trainable_sha": 2.582,
+  "counters": 0.055,
+  "c1_before": 27.442,
+  "eval0": 7.839,
+  "optimizer": 0.246,
+  "c1_after": 14.208,
+  "adapter_save": 2.038
+ },
+ "phase_budget_s": 1260.0,
+ "prologue_s": 67.236,
+ "prologue_unattributed_s": 5.94,
+ "verify": {
+  "n_quantized": null,
+  "n_unquantized": null
+ },
+ "census": {
+  "Params4bit_expert_stacks": 80,
+  "Params4bit_other": 458,
+  "Linear4bit": 498,
+  "Linear_bf16": 3,
+  "Linear_fp32": 0,
+  "Experts4bit": 0,
+  "ExpertsLoRA": 0,
+  "LoRALinear": 0,
+  "experts_modules": 40,
+  "experts_module_classes": {
+   "Qwen3_5MoeExperts": 40
+  },
+  "router_gate": [
+   {
+    "name": "base_model.model.model.language_model.layers.0.mlp.gate",
+    "cls": "Qwen3_5MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   },
+   {
+    "name": "base_model.model.model.language_model.layers.1.mlp.gate",
+    "cls": "Qwen3_5MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   }
+  ],
+  "lm_head": {
+   "cls": "Linear",
+   "dtype": "torch.bfloat16"
+  },
+  "samples": [
+   {
+    "name": "base_model.model.model.language_model.layers.0.mlp.experts.base_layer.base_layer.gate_up_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     268435456,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.language_model.layers.0.mlp.experts.base_layer.base_layer.down_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     134217728,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.language_model.layers.1.mlp.experts.base_layer.base_layer.gate_up_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     268435456,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.language_model.layers.1.mlp.experts.base_layer.base_layer.down_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     134217728,
+     1
+    ]
+   }
+  ],
+  "Params4bit_expert_linears": 0,
+  "expert_param_classes": {
+   "Params4bit": 80
+  }
+ },
+ "engagement_banners": [
+  "Unsloth: Failed compiling function Qwen3_5MoeGatedDeltaNet since there is padding done.",
+  "Unsloth: Disabling compile for Qwen3_5MoeGatedDeltaNet since it's marked for disabling.",
+  "Unsloth: Compiled module Qwen3_5MoeVisionRotaryEmbedding.",
+  "Unsloth: Compiled module Qwen3_5MoeTextRotaryEmbedding.",
+  "Unsloth: Compiled module Qwen3_5MoeRMSNormGated.",
+  "Unsloth: Compiled module Qwen3_5MoeMLP.",
+  "Unsloth: Compiled module Qwen3_5MoeExperts.",
+  "Unsloth: Compiled module Qwen3_5MoeTopKRouter.",
+  "Unsloth: Compiled module Qwen3_5MoeSparseMoeBlock.",
+  "Unsloth: Compiled module Qwen3_5MoeRMSNorm.",
+  "Unsloth: Compiled module Qwen3_5MoeVisionMLP.",
+  "Unsloth: Compiled module Qwen3_5MoeVisionPatchEmbed.",
+  "Unsloth: Compiled module Qwen3_5MoeVisionPatchMerger.",
+  "Unsloth: Fast Attention patch for Qwen3_5MoeAttention.",
+  "Unsloth: Fast Attention patch for Qwen3_5MoeVisionAttention.",
+  "(4) Unsloth skipping patching fast linear cross entropy for Qwen3_5MoeForCausalLM",
+  "NO 'Enabling LoRA on MoE parameters' banner on stdout (the census below decides)"
+ ],
+ "unsloth_bnb4bit_modules": {
+  "n_experts_modules": 40,
+  "n_bnb4bit": 0,
+  "n_bnb4bit_unwrapped": 40,
+  "inner_param_types": [
+   "Params4bit"
+  ],
+  "wrap_depth": 2
+ },
+ "trainable_params": 926187520,
+ "trainable_tensors": 240,
+ "trainable_by_group": {
+  "attention": 3440640,
+  "experts": 922746880,
+  "other": 0
+ },
+ "expect_trainable": null,
+ "trainable_mismatch": null,
+ "adapter_dtypes_before": {
+  "torch.float32": 240
+ },
+ "adapter_dtypes_after": {
+  "torch.float32": 240
+ },
+ "lora_cast_to_fp32": 0,
+ "init_sha": "9e0f9b59a6ca329203b7928e72bb4d12a8d0e42610da0606f05eea114beaf714",
+ "n_patched": 0,
+ "enable_reason": "",
+ "probes": {},
+ "adapter_dtype": "fp32",
+ "lora_init": "matched:3407",
+ "matched_init": {
+  "seed": 3407,
+  "n_slots_set": 20520,
+  "n_slots_expected": 20520,
+  "expected_parts": {
+   "n_attention_projections": 40,
+   "n_layers": 40,
+   "n_experts": 256
+  },
+  "unmapped": [],
+  "n_unmapped": 0,
+  "complete": true,
+  "kinds": {
+   "down": 10240,
+   "gate_up": 10240,
+   "q": 10,
+   "k": 10,
+   "v": 10,
+   "o": 10
+  },
+  "b_nonzero": [],
+  "hidden": {
+   "value": 2048,
+   "rule": "config.hidden_size"
+  },
+  "mapping_rules": {
+   "base_model.model.model.language_model.layers.0.mlp.experts (down_proj)": "down by structure: out == hidden",
+   "base_model.model.model.language_model.layers.0.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden",
+   "base_model.model.model.language_model.layers.1.mlp.experts (down_proj)": "down by structure: out == hidden",
+   "base_model.model.model.language_model.layers.1.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden",
+   "base_model.model.model.language_model.layers.2.mlp.experts (down_proj)": "down by structure: out == hidden",
+   "base_model.model.model.language_model.layers.2.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden",
+   "base_model.model.model.language_model.layers.3.self_attn.q_proj": "q by name (attention)",
+   "base_model.model.model.language_model.layers.3.self_attn.k_proj": "k by name (attention)",
+   "base_model.model.model.language_model.layers.3.self_attn.v_proj": "v by name (attention)",
+   "base_model.model.model.language_model.layers.3.self_attn.o_proj": "o by name (attention)",
+   "base_model.model.model.language_model.layers.3.mlp.experts (down_proj)": "down by structure: out == hidden",
+   "base_model.model.model.language_model.layers.3.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden"
+  },
+  "n_mapping_rules": 120,
+  "distribution": "A[slot] ~ U(-b, b), b = 1/sqrt(fan_in), fan_in = in-width of the [r, in] slot = PEFT's kaiming_uniform(a=sqrt(5)) on a [r, in] weight; drawn in fp32 on CPU from torch.Generator().manual_seed(int.from_bytes(sha256('<seed>|<layer>|<kind>|<expert>')[:8], 'big')); B left as built and asserted zero"
+ },
+ "frozen_base_probe": {
+  "slots": {
+   "gate_up": {
+    "sha": "c798a2390c7a87d552a4db8288e737233f40f24adffc0c255b3187d18b5f89c6",
+    "regime": "nf4/64+dq",
+    "n_bytes": 4194304,
+    "shape": [
+     1024,
+     2048
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16",
+    "source": "gate_up_proj[0]",
+    "control_sha": "7cb6576b44882e2cdc974fddcbb661faa25cb805d627f33dec24dbc329bc773d",
+    "control_detects_flip": true,
+    "mapped_by": "structure: in == hidden"
+   },
+   "down": {
+    "sha": "20146c64832c579ebd098ceccc905aef5734051a899b0c15f29ac808f13c286a",
+    "regime": "nf4/64+dq",
+    "n_bytes": 2097152,
+    "shape": [
+     2048,
+     512
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16",
+    "source": "down_proj[0]",
+    "control_sha": "cef6d7d9b2de3acb9fcb700840dcdde3db243f786ad99c43acb761a7976e6fce",
+    "control_detects_flip": true,
+    "mapped_by": "structure: out == hidden"
+   },
+   "q_proj": {
+    "sha": "b44f6f9750532910d05fda825111716f0e87f651c3417882f63f78956efacec3",
+    "regime": "nf4/64+dq",
+    "n_bytes": 33554432,
+    "shape": [
+     8192,
+     2048
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(weight, own quant_state) -> bf16",
+    "source": "q_proj.weight",
+    "control_sha": "443f236507c4094339609e7b28cdb3e323821dcffaf18c7c729242d3ba4fef2e",
+    "control_detects_flip": true
+   }
+  },
+  "control_detects_flip": true,
+  "experts_module": "base_model.model.model.language_model.layers.0.mlp.experts",
+  "attention_module": "base_model.model.model.language_model.layers.3.self_attn",
+  "errors": []
+ },
+ "batched_stats": null,
+ "reference_order": null,
+ "dgrad": null,
+ "kernel_counter_key": "moe_bnb4bit_backend",
+ "kernel_calls_per_step": [
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640,
+  640
+ ],
+ "kernel_calls_per_step_min": 640,
+ "experts_forward_calls_per_step_min": 640,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 640,
+   "moe_bnb4bit_backend": 640,
+   "unsloth_grouped_mm": 640,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 4480,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  }
+ ],
+ "C1_tensors_hashed": 538,
+ "C1_bytes_hashed": 17016215552,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_control_tensor": "base_model.model.model.language_model.layers.0.linear_attn.in_proj_a.weight",
+ "C1_regime_by_tensor": {
+  "nf4/64+dq": 538
+ },
+ "C1_hasher": "hashes_frozen: every frozen expert / 4-bit tensor, any dtype (params + buffers; an offloaded stack from its pinned-CPU home)",
+ "C1_offloaded_homes": 0,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 1.19188,
+ "loss_last": 0.73249,
+ "loss_mean_last20": 0.91502,
+ "loss_step2": 1.29275,
+ "eval_loss_step0": 1.19616,
+ "eval_loss_final": 0.68698,
+ "eval_curve": [
+  {
+   "step": 0,
+   "heldout_loss": 1.19616,
+   "train_wall_s": 0.0,
+   "row_losses": [
+    1.1565,
+    1.51174,
+    1.56073,
+    0.84894,
+    0.90455,
+    1.31927,
+    1.27198,
+    0.9956
+   ]
+  },
+  {
+   "step": 20,
+   "heldout_loss": 0.68698,
+   "train_wall_s": 280.54,
+   "row_losses": [
+    0.42745,
+    1.11884,
+    1.09624,
+    0.63019,
+    0.34805,
+    0.66394,
+    0.72701,
+    0.48415
+   ]
+  }
+ ],
+ "eval_rows": [
+  {
+   "step": 0,
+   "losses": [
+    1.1565,
+    1.51174,
+    1.56073,
+    0.84894,
+    0.90455,
+    1.31927,
+    1.27198,
+    0.9956
+   ]
+  },
+  {
+   "step": 20,
+   "losses": [
+    0.42745,
+    1.11884,
+    1.09624,
+    0.63019,
+    0.34805,
+    0.66394,
+    0.72701,
+    0.48415
+   ]
+  }
+ ],
+ "matched_init_sha": "4b90bf05bd02baf35c65b1497896e93660a10f95442daefc3bcf95e2c90e3b98",
+ "matched_init_sha_slots": 20520,
+ "matched_init_sha_unmapped": 0,
+ "lora_path_present": true,
+ "lora_loop_share": [
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null
+ ],
+ "lora_path_loop_steps": [],
+ "unsloth_grouped_mm_calls_per_step_min": 4480,
+ "unsloth_grouped_mm_calls_per_step_max": 4480,
+ "unsloth_manual_grouped_mm_calls_per_step_max": 0,
+ "arm_facts": {
+  "attn_implementation": "sdpa",
+  "output_router_logits": null,
+  "loss_class": "model.forward(input_ids, labels[, attention_mask]).loss -- the model's own loss; the harness computes none",
+  "torch_num_threads": 24,
+  "omp_num_threads": "24",
+  "cpu_model": "Intel(R) Core(TM) Ultra 9 285K",
+  "lora_delta_dtype": "the activation dtype: unsloth_zoo moe_utils.py:3875 casts the fp32 factors to the activation dtype per forward (UPSTREAM-NOTES; UNVERIFIED against installed source)",
+  "unsloth_zoo": "2026.9.9",
+  "unsloth_zoo_note": "unsloth_zoo main's #1529 is not in the 2026.9.9 release (phase-3 instruction; not verified here)"
+ },
+ "dynamo_counters": {
+  "step10": {
+   "counters": {
+    "frames": {
+     "total": 6,
+     "ok": 6
+    },
+    "stats": {
+     "calls_captured": 423,
+     "unique_graphs": 20
+    },
+    "aot_autograd": {
+     "total": 20,
+     "autograd_cache_hit": 13,
+     "ok": 20,
+     "autograd_cache_miss": 6,
+     "autograd_cache_saved": 6,
+     "autograd_cache_bypass": 1
+    },
+    "inductor": {
+     "triton_bundler_load_static_autotuner": 36,
+     "async_compile_cache_miss": 131,
+     "async_compile_cache_hit": 82,
+     "fxgraph_cache_hit": 16,
+     "extern_calls": 40,
+     "pattern_matcher_count": 25,
+     "pattern_matcher_nodes": 39,
+     "fxgraph_cache_miss": 10,
+     "triton_bundler_save_kernel": 168,
+     "triton_bundler_save_static_autotuner": 10,
+     "removed_pointless_view_pair": 1,
+     "benchmarking.InductorBenchmarker.benchmark": 14,
+     "benchmarking.InductorBenchmarker.benchmark_gpu": 14
+    },
+    "unimplemented": {},
+    "graph_break": {}
+   },
+   "recompiles_total": 0,
+   "frames_total": 6,
+   "unique_graphs": 20,
+   "graph_breaks_total": 0,
+   "recompile_limit_hits": 0
+  },
+  "step20": {
+   "counters": {
+    "frames": {
+     "total": 6,
+     "ok": 6
+    },
+    "stats": {
+     "calls_captured": 423,
+     "unique_graphs": 20
+    },
+    "aot_autograd": {
+     "total": 20,
+     "autograd_cache_hit": 13,
+     "ok": 20,
+     "autograd_cache_miss": 6,
+     "autograd_cache_saved": 6,
+     "autograd_cache_bypass": 1
+    },
+    "inductor": {
+     "triton_bundler_load_static_autotuner": 36,
+     "async_compile_cache_miss": 131,
+     "async_compile_cache_hit": 82,
+     "fxgraph_cache_hit": 16,
+     "extern_calls": 40,
+     "pattern_matcher_count": 25,
+     "pattern_matcher_nodes": 39,
+     "fxgraph_cache_miss": 10,
+     "triton_bundler_save_kernel": 168,
+     "triton_bundler_save_static_autotuner": 10,
+     "removed_pointless_view_pair": 1,
+     "benchmarking.InductorBenchmarker.benchmark": 14,
+     "benchmarking.InductorBenchmarker.benchmark_gpu": 14
+    },
+    "unimplemented": {},
+    "graph_break": {}
+   },
+   "recompiles_total": 0,
+   "frames_total": 6,
+   "unique_graphs": 20,
+   "graph_breaks_total": 0,
+   "recompile_limit_hits": 0
+  }
+ },
+ "microbatch_padded_len": [
+  [
+   72,
+   65,
+   138,
+   128,
+   340,
+   155,
+   85,
+   77
+  ],
+  [
+   393,
+   74,
+   463,
+   165,
+   70,
+   187,
+   55,
+   79
+  ],
+  [
+   252,
+   195,
+   74,
+   66,
+   194,
+   297,
+   96,
+   99
+  ],
+  [
+   73,
+   368,
+   58,
+   263,
+   70,
+   128,
+   268,
+   154
+  ],
+  [
+   104,
+   315,
+   157,
+   94,
+   177,
+   372,
+   76,
+   307
+  ],
+  [
+   61,
+   75,
+   83,
+   182,
+   219,
+   407,
+   177,
+   528
+  ],
+  [
+   122,
+   85,
+   406,
+   356,
+   131,
+   401,
+   73,
+   81
+  ],
+  [
+   58,
+   208,
+   111,
+   102,
+   66,
+   399,
+   139,
+   96
+  ],
+  [
+   370,
+   84,
+   148,
+   130,
+   364,
+   257,
+   80,
+   141
+  ],
+  [
+   78,
+   74,
+   191,
+   402,
+   88,
+   235,
+   181,
+   119
+  ],
+  [
+   363,
+   490,
+   133,
+   85,
+   77,
+   64,
+   66,
+   216
+  ],
+  [
+   227,
+   151,
+   76,
+   283,
+   399,
+   94,
+   159,
+   250
+  ],
+  [
+   337,
+   78,
+   73,
+   174,
+   88,
+   431,
+   181,
+   176
+  ],
+  [
+   436,
+   427,
+   145,
+   60,
+   77,
+   110,
+   135,
+   315
+  ],
+  [
+   187,
+   68,
+   73,
+   81,
+   155,
+   326,
+   303,
+   301
+  ],
+  [
+   59,
+   123,
+   182,
+   62,
+   169,
+   275,
+   75,
+   278
+  ],
+  [
+   390,
+   162,
+   316,
+   68,
+   436,
+   79,
+   302,
+   134
+  ],
+  [
+   410,
+   223,
+   247,
+   224,
+   111,
+   583,
+   68,
+   345
+  ],
+  [
+   76,
+   300,
+   230,
+   215,
+   204,
+   467,
+   349,
+   97
+  ],
+  [
+   367,
+   330,
+   78,
+   493,
+   154,
+   324,
+   325,
+   62
+  ]
+ ],
+ "sync_ab": null,
+ "lean_ab": null,
+ "tile_ab": null,
+ "rms_ab": null,
+ "reuse_ab": null,
+ "keep_ab": null,
+ "route_ab": null,
+ "s_per_step": 14.1826,
+ "s_per_step_median_11plus": 13.675,
+ "step_ms": [
+  20494.6,
+  13300.1,
+  13457.0,
+  13577.5,
+  13893.3,
+  13550.0,
+  13783.6,
+  13222.7,
+  13872.3,
+  13757.0,
+  13362.6,
+  13786.5,
+  13460.8,
+  13563.5,
+  13376.4,
+  13309.0,
+  14018.7,
+  14401.9,
+  14052.9,
+  14298.3
+ ],
+ "microbatch_ms": [],
+ "log_every": 10,
+ "microbatch_timing": false,
+ "train_wall_s": 280.54,
+ "window_wall_s": 283.65,
+ "tokens_per_step": [
+  1060,
+  1486,
+  1273,
+  1382,
+  1602,
+  1732,
+  1655,
+  1179,
+  1574,
+  1368,
+  1494,
+  1639,
+  1538,
+  1705,
+  1494,
+  1223,
+  1887,
+  2211,
+  1938,
+  2133
+ ],
+ "tokens_total": 31573,
+ "tokens_per_s": 112.5,
+ "tokens_padded_per_step": [
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "tokens_padded_total": 0,
+ "peak_vram_gb": 30.41,
+ "idle_w": 60.8,
+ "mean_w": 192.1,
+ "power_samples": 1238,
+ "memory_lever": null,
+ "memory_lever_label": null,
+ "host_ram": {
+  "rss_hwm_gb": 72.1,
+  "ru_maxrss_gb": 72.1,
+  "cgroup_peak_gb": null,
+  "cgroup_peak_source": null,
+  "cgroup_peak_before_gb": null,
+  "cgroup_peak_rose_during_arm": null,
+  "cgroup_limit_gb": 193.871,
+  "total_gb": 201.95,
+  "high_water_gb": 72.1
+ },
+ "host_ram_high_water_gb": 72.1,
+ "host_ram_total_gb": 201.95,
+ "hf_offload": null,
+ "axolotl_layer_offload": null,
+ "sampler": true,
+ "joules_per_step": 1841.03,
+ "adapter": {
+  "path": "/root/tc1/adapters/qwen3_5_ckpt_unsloth_m_mb1",
+  "bytes": 3704794668,
+  "files": [
+   "README.md",
+   "adapter_config.json",
+   "adapter_model.safetensors"
+  ],
+  "tensors": 240,
+  "params": 926187520,
+  "dtypes": [
+   "F32"
+  ]
+ },
+ "losses": [
+  1.19188,
+  1.2848,
+  1.29275,
+  0.96482,
+  1.0468,
+  0.8795,
+  0.96938,
+  0.80083,
+  0.99734,
+  0.79275,
+  0.75325,
+  0.80409,
+  0.90654,
+  0.81697,
+  0.90392,
+  0.80802,
+  0.71041,
+  0.76303,
+  0.88088,
+  0.73249
+ ],
+ "profile": null,
+ "profile_steps": 0,
+ "profile_warm": 3,
+ "note": null
+}

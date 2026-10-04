@@ -242,6 +242,68 @@ parameters / 64 × 4 bytes ≈ 2.8 GB), where Unsloth double-quantizes it (about
 in grouped-nf4-gemm's kernels, a values-changing switch that needs its own A/B. Second, 4-bit storage for Qwen3.6's non-routed
 projections. On Mixtral's speed, the lever is a dequantize-then-GEMM route for large experts on sm_120. Each needs its own registration.
 
+## TC2 amendment 7 (2026-10-04): the small families re-read, and the big families with the absmax double-quantized
+
+Pre-registration: [`../../tc1/TC2-PREREG.md`](../../tc1/TC2-PREREG.md), amendment 7. Three RTX 5090s, e4b `7145425`, grouped-nf4-gemm
+v0.37.0 (`71185d6`). Receipts: [`receipts/tc1-5090-54/`](receipts/tc1-5090-54/) (box S), [`receipts/tc1-5090-55/`](receipts/tc1-5090-55/)
+(box D), [`receipts/tc1-5090-56/`](receipts/tc1-5090-56/) (box F).
+
+| box | host | e4b settings | invoiced |
+|---|---|---|---|
+| S | AMD EPYC 7C13 | defaults | $2.59 |
+| D | Intel Core Ultra 9 285K | `E4B_ABSMAX_DQ=1` | $1.14 |
+| F | AMD EPYC 7B13 | `E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1` | $3.00 |
+
+### Box S: on the current code e4b is faster than each comparator on Granite and OLMoE
+
+| family | pair | other/e4b | 2026-10-02 (e4b 0.38.1) | peak e4b / other | pair reads | prediction |
+|---|---|---|---|---|---|---|
+| Granite | HF (bf16 experts) | **1.299** [1.268, 1.332] | 0.971 | 4.31 / 8.50 GB | COMPARABLE | **P15 HELD** |
+| Granite | axolotl (4-bit) | **1.150** [1.130, 1.170] | 0.903 | 4.31 / 4.08 GB | EQUIVALENT | **P15 HELD** |
+| OLMoE | Unsloth (4-bit) | **1.821** [1.805, 1.838] | 1.201 | 7.67 / 5.97 GB | EQUIVALENT | **P16 HELD** (Unsloth half) |
+| OLMoE | HF | not quoted: HF's draws 6.0 % apart | 1.255 | | COMPARABLE | P16's HF half UNTESTED |
+
+e4b's parity PASSES on both families, and each quoted pair reads as on 2026-10-02 (**P17 HELD**). gpt-oss keeps no common adapter set,
+and Unsloth still adapts no expert parameter of Granite, both as before. e4b's own step on this host is 2.11 s on Granite and 1.20 s on
+OLMoE. On 2026-10-02 the same arms read 1.48 s and 1.11 s on other hosts; that comparison crosses hosts, so it is context, not a reading.
+The three rows supersede the 2026-10-02 positions.
+
+### Boxes D and F: the absmax double-quantized brings e4b's Mixtral peak level with Unsloth's
+
+| | box D (285K) | box F (EPYC 7B13) | amendment 6 (fp32 absmax) |
+|---|---|---|---|
+| e4b peak | **29.03 GB** | 29.02 GB | 31.07 GB |
+| Unsloth peak | 29.13 GB | 29.13 GB | 29.12 GB |
+| Unsloth/e4b | 0.542 [0.534, 0.549] | 0.644 [0.641, 0.646] | 0.697 |
+| e4b held-out, two draws | 0.7138 / 0.7155 | 0.7135 / 0.7136 | 0.7113 / 0.7145 |
+| pair | COMPARABLE | COMPARABLE | EQUIVALENT |
+
+- **P18 FALSIFIED.** Its peak clause held (at most 29.6 GB), but the position fell outside [0.62, 0.78]. On box D's desktop CPU
+  Unsloth steps in 3.0 s, against 3.7 s on box F and 4.1 s on amendment 6's host; e4b's step moves much less (5.5, 5.7, 5.9 s).
+  Unsloth's Mixtral step is far more host-bound than e4b's.
+- **P23 FALSIFIED** on Mixtral: both pairs read COMPARABLE, not EQUIVALENT (Unsloth 0.0025–0.0054 nats lower on held-out).
+- **By the registered rule `E4B_ABSMAX_DQ` stays opt-in**, because P18 failed. Its own effect is what the rule set out to protect:
+  e4b's held-out moved 0.0017 nats on the two-draw mean.
+- **e4b's reference loop against its fused kernels on Mixtral is host-dependent.** On box D the reference (dequantize, then a dense
+  GEMM per expert) ran 4.69 s against the fused 5.52. On box F it ran 6.76 against 5.69. TC1 amendment 22 reads grouped-nf4-gemm's dense
+  route against the fused kernels on the full step.
+
+### Box F: Qwen3.6 trains resident at micro-batch 1 on Unsloth's bytes
+
+| arm | verdict | s/step | peak |
+|---|---|---|---|
+| e4b `fused_attn4_m` ×2 | OOM at step 6 | — | 32.79 GB |
+| e4b `fused_attn4_m_mb1` | **VALID** | **9.241** | 31.36 GB |
+| Unsloth `ckpt_unsloth_m` ×2 | VALID | 10.393 / 11.008 (5.7 % apart) | 30.47 GB |
+| Unsloth `ckpt_unsloth_m_mb1` | VALID | 18.494 | 30.41 GB |
+
+- **The first resident e4b run of Qwen3.6 on a 32 GB card**, at micro-batch 1, with the absmax double-quantized and the non-routed
+  projections in NF4. `--frozen-4bit` is a measurement hook that matches the comparator's bytes, not a training option.
+- At micro-batch 1 e4b steps about twice as fast as Unsloth on the same box. That is one draw each, so it is reported, not a quoted position.
+- **P20 FALSIFIED** (micro-batch 2 OOMs). **P21 FALSIFIED**: the step-0 gap to Unsloth is 0.011–0.014 nats, down from 0.05 with
+  the projections in bf16. **P22 UNTESTED**: there is no micro-batch-2 pair.
+- **Box D** (the absmax alone): Qwen3.6 OOMs at micro-batch 2 (step 2) and at micro-batch 1 (step 18). **P19 FALSIFIED.**
+
 ## Predictions scored (box A)
 
 P1 granite FALSIFIED; P2 olmoe FALSIFIED; P3 gptoss FALSIFIED; P6 (e4b parity on every family with a reference) HELD; P7 (matched sets

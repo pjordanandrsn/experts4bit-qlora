@@ -1,0 +1,209 @@
+{
+ "framework": "e4b",
+ "fam": "qwen3_5",
+ "model": "Qwen/Qwen3.6-35B-A3B",
+ "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+ "arm": "fused",
+ "tag": "fused_attn4_m_d2",
+ "status": "oom",
+ "reason": "OOM at step 2: CUDA out of memory. Tried to allocate 704.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 493.69 MiB is free. Including non-PyTorch memory, this process has 30.83 GiB memory in use. Of the al",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "offload": false,
+ "prereg": "tc1/TC2-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe; + --absmax-dq: e4b's double-quantized expert absmax)",
+ "note": null,
+ "absmax_dq": true,
+ "phase_seconds": {
+  "preamble": 3.067,
+  "load_weights": 21.094,
+  "verify": 0.0,
+  "attn4": 1.001,
+  "absmax_dq": 0.007,
+  "lora": 0.006,
+  "enable": 0.065,
+  "tokenizer": 0.272,
+  "census": 2.385,
+  "frozen_probe": 0.035,
+  "trainable_sha": 2.229,
+  "counters": 0.0,
+  "c1_before": 27.824,
+  "eval0": 1.452,
+  "optimizer": 0.129
+ },
+ "phase_in_flight": null,
+ "phase_budget_s": 1260.0,
+ "n_patched": 40,
+ "n_attn4": 40,
+ "init_sha": "e3b72e1eb2c91a1bcc408d45bba5ac162d0a6dc258b911610e1f9a269d5e4d7a",
+ "load_s": 23.2,
+ "trainable_params": 926187520,
+ "census": {
+  "Params4bit_expert_stacks": 0,
+  "Params4bit_other": 40,
+  "Linear4bit": 40,
+  "Linear_bf16": 311,
+  "Linear_fp32": 0,
+  "Experts4bit": 40,
+  "ExpertsLoRA": 40,
+  "LoRALinear": 40,
+  "experts_modules": 40,
+  "experts_module_classes": {
+   "ExpertsLoRA": 40
+  },
+  "router_gate": [
+   {
+    "name": "model.layers.0.mlp.gate",
+    "cls": "Qwen3_5MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   },
+   {
+    "name": "model.layers.1.mlp.gate",
+    "cls": "Qwen3_5MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   }
+  ],
+  "lm_head": {
+   "cls": "Linear",
+   "dtype": "torch.bfloat16"
+  },
+  "samples": [],
+  "Params4bit_expert_linears": 0,
+  "expert_param_classes": {
+   "Parameter": 80
+  }
+ },
+ "n_layers": 40,
+ "model_type": "qwen3_5_moe",
+ "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+ "adapter_dtype": "fp32",
+ "lora_init": "matched:3407",
+ "matched_init": {
+  "seed": 3407,
+  "n_slots_set": 20520,
+  "n_slots_expected": 20520,
+  "expected_parts": {
+   "n_attention_projections": 40,
+   "n_layers": 40,
+   "n_experts": 256
+  },
+  "unmapped": [],
+  "n_unmapped": 0,
+  "complete": true,
+  "kinds": {
+   "gate_up": 10240,
+   "down": 10240,
+   "q": 10,
+   "k": 10,
+   "v": 10,
+   "o": 10
+  },
+  "b_nonzero": [],
+  "hidden": {
+   "value": 2048,
+   "rule": "config.hidden_size"
+  },
+  "mapping_rules": {
+   "model.layers.0.mlp.experts.gate_up_lora_A": "gate_up by structure: in == hidden",
+   "model.layers.0.mlp.experts.down_lora_A": "down by structure: out == hidden",
+   "model.layers.1.mlp.experts.gate_up_lora_A": "gate_up by structure: in == hidden",
+   "model.layers.1.mlp.experts.down_lora_A": "down by structure: out == hidden",
+   "model.layers.2.mlp.experts.gate_up_lora_A": "gate_up by structure: in == hidden",
+   "model.layers.2.mlp.experts.down_lora_A": "down by structure: out == hidden",
+   "model.layers.3.self_attn.q_proj": "q by name (attention)",
+   "model.layers.3.self_attn.k_proj": "k by name (attention)",
+   "model.layers.3.self_attn.v_proj": "v by name (attention)",
+   "model.layers.3.self_attn.o_proj": "o by name (attention)",
+   "model.layers.3.mlp.experts.gate_up_lora_A": "gate_up by structure: in == hidden",
+   "model.layers.3.mlp.experts.down_lora_A": "down by structure: out == hidden"
+  },
+  "n_mapping_rules": 120,
+  "distribution": "A[slot] ~ U(-b, b), b = 1/sqrt(fan_in), fan_in = in-width of the [r, in] slot = PEFT's kaiming_uniform(a=sqrt(5)) on a [r, in] weight; drawn in fp32 on CPU from torch.Generator().manual_seed(int.from_bytes(sha256('<seed>|<layer>|<kind>|<expert>')[:8], 'big')); B left as built and asserted zero"
+ },
+ "frozen_base_probe": {
+  "slots": {
+   "gate_up": {
+    "sha": "c798a2390c7a87d552a4db8288e737233f40f24adffc0c255b3187d18b5f89c6",
+    "regime": "nf4/64+dq",
+    "n_bytes": 4194304,
+    "shape": [
+     1024,
+     2048
+    ],
+    "dtype": "bf16",
+    "method": "e4b Experts4bit._dequantize_expert(expert 0) -> bf16",
+    "source": "gate_up_proj[0]",
+    "control_sha": "7cb6576b44882e2cdc974fddcbb661faa25cb805d627f33dec24dbc329bc773d",
+    "control_detects_flip": true
+   },
+   "down": {
+    "sha": "20146c64832c579ebd098ceccc905aef5734051a899b0c15f29ac808f13c286a",
+    "regime": "nf4/64+dq",
+    "n_bytes": 2097152,
+    "shape": [
+     2048,
+     512
+    ],
+    "dtype": "bf16",
+    "method": "e4b Experts4bit._dequantize_expert(expert 0) -> bf16",
+    "source": "down_proj[0]",
+    "control_sha": "cef6d7d9b2de3acb9fcb700840dcdde3db243f786ad99c43acb761a7976e6fce",
+    "control_detects_flip": true
+   },
+   "q_proj": {
+    "sha": "b44f6f9750532910d05fda825111716f0e87f651c3417882f63f78956efacec3",
+    "regime": "nf4/64+dq",
+    "n_bytes": 33554432,
+    "shape": [
+     8192,
+     2048
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(weight, own quant_state) -> bf16",
+    "source": "q_proj.weight",
+    "control_sha": "443f236507c4094339609e7b28cdb3e323821dcffaf18c7c729242d3ba4fef2e",
+    "control_detects_flip": true
+   }
+  },
+  "control_detects_flip": true,
+  "experts_module": "model.layers.0.mlp.experts",
+  "attention_module": "model.layers.3.self_attn",
+  "errors": []
+ },
+ "adapter_dtypes_before": {
+  "torch.bfloat16": 160,
+  "torch.float32": 80
+ },
+ "adapter_dtypes_after": {
+  "torch.float32": 240
+ },
+ "lora_cast_to_fp32": 160,
+ "phase": "train",
+ "steps_done": 1,
+ "losses": [
+  1.14091
+ ],
+ "step_ms": [
+  2509.6
+ ],
+ "microbatch_ms": [],
+ "peak_vram_gb": 32.722,
+ "memory_lever": null,
+ "host_ram": {
+  "rss_hwm_gb": 73.331,
+  "ru_maxrss_gb": 73.331,
+  "cgroup_peak_gb": null,
+  "cgroup_peak_source": null,
+  "cgroup_peak_before_gb": null,
+  "cgroup_peak_rose_during_arm": null,
+  "cgroup_limit_gb": 193.871,
+  "total_gb": 201.95,
+  "high_water_gb": 73.331
+ },
+ "host_ram_high_water_gb": 73.331,
+ "host_ram_total_gb": 201.95,
+ "hf_offload": null,
+ "axolotl_layer_offload": null
+}

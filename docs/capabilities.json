@@ -258,7 +258,12 @@
     "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02",
     "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02.shipped-labelled",
     "e4b.train.h2h.unsloth.mixtral.5090.2026-10-04",
-    "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04"
+    "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04",
+    "e4b.train.h2h.hf.granite.5090.2026-10-04",
+    "e4b.train.h2h.axolotl.granite.5090.2026-10-04",
+    "e4b.train.h2h.unsloth.olmoe.5090.2026-10-04",
+    "e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.absmax-dq",
+    "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.fit-mb1-dq-frozen4"
    ],
    "limitations": [
     "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",

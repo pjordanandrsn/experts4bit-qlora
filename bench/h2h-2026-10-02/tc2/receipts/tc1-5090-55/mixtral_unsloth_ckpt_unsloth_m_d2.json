@@ -1,0 +1,1181 @@
+{
+ "framework": "unsloth",
+ "fam": "mixtral",
+ "model": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+ "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61",
+ "model_type": "mixtral",
+ "n_layers": 32,
+ "snapshot_dir": "/root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61",
+ "arm": "unsloth",
+ "tag": "ckpt_unsloth_m_d2",
+ "status": "ok",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "autocast": false,
+ "r": 16,
+ "alpha": 16,
+ "lr": 0.0002,
+ "seed": 3407,
+ "offload": false,
+ "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+ "lr_per_step": [
+  0.0,
+  4e-05,
+  8e-05,
+  0.00012,
+  0.00016,
+  0.0002,
+  0.00018667,
+  0.00017333,
+  0.00016,
+  0.00014667,
+  0.00013333,
+  0.00012,
+  0.00010667,
+  9.333e-05,
+  8e-05,
+  6.667e-05,
+  5.333e-05,
+  4e-05,
+  2.667e-05,
+  1.333e-05
+ ],
+ "template": "alpaca",
+ "grad_ckpt": "unsloth",
+ "attn_4bit": false,
+ "n_attn4": 0,
+ "frozen_4bit": false,
+ "n_frozen4": 0,
+ "attn4_probe": null,
+ "absmax_dq": false,
+ "structural_expected_n_attn4": null,
+ "detector_version": null,
+ "loader_used": "FastLanguageModel",
+ "loader_fallback_reason": null,
+ "unsloth_targets": [
+  "q_proj",
+  "k_proj",
+  "v_proj",
+  "o_proj",
+  "gate_proj",
+  "up_proj",
+  "down_proj"
+ ],
+ "hf_targets": null,
+ "axolotl_targets": null,
+ "axolotl": null,
+ "axolotl_router_recast": null,
+ "hub_kernels_cached": null,
+ "hf_experts_implementation": null,
+ "hf_double_quant": null,
+ "axolotl_bnb4bit_modules": null,
+ "unsloth_knobs": {
+  "moe_backend_requested": "grouped_mm",
+  "speed_tilt": false,
+  "double_quant_requested": "off",
+  "env_set": {
+   "UNSLOTH_MOE_BACKEND": "grouped_mm"
+  },
+  "load_in_4bit_requested": true,
+  "target_parameters_requested": []
+ },
+ "moe_backend_selected": "grouped_mm",
+ "unsloth_double_quant": {
+  "requested": null,
+  "how": "unknown-default: from_pretrained names neither bnb_4bit_use_double_quant nor quantization_config",
+  "loaded_nested": true
+ },
+ "unsloth_load_in_4bit": true,
+ "unsloth_target_parameters": {
+  "requested": [],
+  "passed": false,
+  "how": "not requested"
+ },
+ "unsloth_packed_calls_per_step_min": {
+  "unsloth_mxfp4_grouped_mm": 0
+ },
+ "unsloth_packed_calls_per_step_max": {
+  "unsloth_mxfp4_grouped_mm": 0
+ },
+ "hf_experts_dispatch": null,
+ "unsloth_backend_calls_per_step_min": {
+  "unsloth_grouped_mm": 256,
+  "unsloth_triton": 0,
+  "unsloth_loop": 0,
+  "moe_bnb4bit_backend": 256
+ },
+ "unsloth_backend_calls_per_step_max": {
+  "unsloth_grouped_mm": 256,
+  "unsloth_triton": 0,
+  "unsloth_loop": 0,
+  "moe_bnb4bit_backend": 256
+ },
+ "unsloth_backend_absent": [],
+ "tokens": {
+  "path": "tokens_mixtral.json",
+  "sha256": "4a41b3f4a56149f688da50886b694239ac8bbdda715310d2375c1ea172bd59cf",
+  "n_train": 1200,
+  "eval_rows_used": 8,
+  "tokenizer_agree": true,
+  "pad_id": 2
+ },
+ "prereg": "tc1/TC2-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe; + --absmax-dq: e4b's double-quantized expert absmax)",
+ "env": {
+  "framework": "unsloth",
+  "torch": "2.12.1+cu130",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-1988d9ef-19d0-36d8-6639-210c4347c852",
+   "pci.bus_id": "00000000:02:00.0",
+   "pcie.link.gen.current": "5",
+   "pcie.link.gen.max": "5",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "470.00",
+   "clocks.max.sm": "3090",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.00.B1",
+   "driver_version": "595.91.07",
+   "cpu": "Intel(R) Core(TM) Ultra 9 285K",
+   "cpu_threads": 24,
+   "host_mem_gib": 188.1,
+   "vast_instance_id": "54159409",
+   "container_host": "97f2b223cf2f"
+  },
+  "anchor_json": null,
+  "box_class": "RTX 5090",
+  "hf_hub_offline": "1",
+  "unsloth_loader": "FastLanguageModel",
+  "unsloth_env": {
+   "UNSLOTH_ENABLE_LOGGING": "1",
+   "UNSLOTH_MOE_BACKEND": "grouped_mm"
+  },
+  "transformers": "5.5.0",
+  "experts4bit-qlora": "0.45.0",
+  "grouped-nf4-gemm": "0.37.0",
+  "bitsandbytes": "0.50.2",
+  "peft": "0.21.2",
+  "unsloth": "2026.9.14",
+  "unsloth_zoo": "2026.9.9",
+  "triton": "3.7.1",
+  "huggingface_hub": "1.33.0"
+ },
+ "load_s": 23.3,
+ "phase_seconds": {
+  "preamble": 2.013,
+  "snapshot": 0.0,
+  "load_weights": 17.138,
+  "census": 0.367,
+  "frozen_probe": 0.652,
+  "trainable_sha": 0.343,
+  "counters": 0.052,
+  "c1_before": 37.613,
+  "eval0": 6.185,
+  "optimizer": 0.255,
+  "c1_after": 18.53,
+  "adapter_save": 0.432
+ },
+ "phase_budget_s": 1260.0,
+ "prologue_s": 70.762,
+ "prologue_unattributed_s": 6.145,
+ "verify": {
+  "n_quantized": null,
+  "n_unquantized": null
+ },
+ "census": {
+  "Params4bit_expert_stacks": 64,
+  "Params4bit_other": 128,
+  "Linear4bit": 256,
+  "Linear_bf16": 1,
+  "Linear_fp32": 0,
+  "Experts4bit": 0,
+  "ExpertsLoRA": 0,
+  "LoRALinear": 0,
+  "experts_modules": 32,
+  "experts_module_classes": {
+   "MixtralExperts": 32
+  },
+  "router_gate": [
+   {
+    "name": "base_model.model.model.layers.0.mlp.gate",
+    "cls": "MixtralTopKRouter",
+    "dtype": "torch.bfloat16"
+   },
+   {
+    "name": "base_model.model.model.layers.1.mlp.gate",
+    "cls": "MixtralTopKRouter",
+    "dtype": "torch.bfloat16"
+   }
+  ],
+  "lm_head": {
+   "cls": "Linear",
+   "dtype": "torch.bfloat16"
+  },
+  "samples": [
+   {
+    "name": "base_model.model.model.layers.0.mlp.experts.base_layer.base_layer.gate_up_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     469762048,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.layers.0.mlp.experts.base_layer.base_layer.down_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     234881024,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.layers.1.mlp.experts.base_layer.base_layer.gate_up_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     469762048,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.layers.1.mlp.experts.base_layer.base_layer.down_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     234881024,
+     1
+    ]
+   }
+  ],
+  "Params4bit_expert_linears": 0,
+  "expert_param_classes": {
+   "Params4bit": 64
+  }
+ },
+ "engagement_banners": [
+  "Unsloth: Will compile MixtralSparseMoeBlock without fullgraph since output capture hooks run inside it.",
+  "Unsloth: Compiled module MixtralSparseMoeBlock.",
+  "Unsloth: Detected MoE model with num_experts = 8 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']"
+ ],
+ "unsloth_bnb4bit_modules": {
+  "n_experts_modules": 32,
+  "n_bnb4bit": 0,
+  "n_bnb4bit_unwrapped": 32,
+  "inner_param_types": [
+   "Params4bit"
+  ],
+  "wrap_depth": 2
+ },
+ "trainable_params": 223346688,
+ "trainable_tensors": 384,
+ "trainable_by_group": {
+  "attention": 13631488,
+  "experts": 209715200,
+  "other": 0
+ },
+ "expect_trainable": 223346688,
+ "trainable_mismatch": null,
+ "adapter_dtypes_before": {
+  "torch.float32": 384
+ },
+ "adapter_dtypes_after": {
+  "torch.float32": 384
+ },
+ "lora_cast_to_fp32": 0,
+ "init_sha": "75fe950ebaa8f20d2ad8cdcd567673654f7d25770088141f0fbc96da20e05021",
+ "n_patched": 0,
+ "enable_reason": "",
+ "probes": {},
+ "adapter_dtype": "fp32",
+ "lora_init": "matched:3407",
+ "matched_init": {
+  "seed": 3407,
+  "n_slots_set": 640,
+  "n_slots_expected": 640,
+  "expected_parts": {
+   "n_attention_projections": 128,
+   "n_layers": 32,
+   "n_experts": 8
+  },
+  "unmapped": [],
+  "n_unmapped": 0,
+  "complete": true,
+  "kinds": {
+   "q": 32,
+   "k": 32,
+   "v": 32,
+   "o": 32,
+   "down": 256,
+   "gate_up": 256
+  },
+  "b_nonzero": [],
+  "hidden": {
+   "value": 4096,
+   "rule": "config.hidden_size"
+  },
+  "mapping_rules": {
+   "base_model.model.model.layers.0.self_attn.q_proj": "q by name (attention)",
+   "base_model.model.model.layers.0.self_attn.k_proj": "k by name (attention)",
+   "base_model.model.model.layers.0.self_attn.v_proj": "v by name (attention)",
+   "base_model.model.model.layers.0.self_attn.o_proj": "o by name (attention)",
+   "base_model.model.model.layers.0.mlp.experts (down_proj)": "down by structure: out == hidden",
+   "base_model.model.model.layers.0.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden",
+   "base_model.model.model.layers.1.self_attn.q_proj": "q by name (attention)",
+   "base_model.model.model.layers.1.self_attn.k_proj": "k by name (attention)",
+   "base_model.model.model.layers.1.self_attn.v_proj": "v by name (attention)",
+   "base_model.model.model.layers.1.self_attn.o_proj": "o by name (attention)",
+   "base_model.model.model.layers.1.mlp.experts (down_proj)": "down by structure: out == hidden",
+   "base_model.model.model.layers.1.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden"
+  },
+  "n_mapping_rules": 192,
+  "distribution": "A[slot] ~ U(-b, b), b = 1/sqrt(fan_in), fan_in = in-width of the [r, in] slot = PEFT's kaiming_uniform(a=sqrt(5)) on a [r, in] weight; drawn in fp32 on CPU from torch.Generator().manual_seed(int.from_bytes(sha256('<seed>|<layer>|<kind>|<expert>')[:8], 'big')); B left as built and asserted zero"
+ },
+ "frozen_base_probe": {
+  "slots": {
+   "gate_up": {
+    "sha": "e809c37f09fd5c676b866354f150965b2f490e9b01a804bd53ad5737cab25823",
+    "regime": "nf4/64+dq",
+    "n_bytes": 234881024,
+    "shape": [
+     28672,
+     4096
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16",
+    "source": "gate_up_proj[0]",
+    "control_sha": "31a7f400a42eb4f29f1900ba8919181c06fce560bdb7295d7f84993c3571a727",
+    "control_detects_flip": true,
+    "mapped_by": "structure: in == hidden"
+   },
+   "down": {
+    "sha": "682dd5320a0410054892485fd5f2eadd6370ae522def681c27aa3114a28287bf",
+    "regime": "nf4/64+dq",
+    "n_bytes": 117440512,
+    "shape": [
+     4096,
+     14336
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16",
+    "source": "down_proj[0]",
+    "control_sha": "684931dc89fe681082dfd43c9905f451d8460a17e12785b1716ad11374f4c7da",
+    "control_detects_flip": true,
+    "mapped_by": "structure: out == hidden"
+   },
+   "q_proj": {
+    "sha": "d5fbebd64960cef9c501f32c83327775ee2475e18653d710b9b2bf511d30493c",
+    "regime": "nf4/64+dq",
+    "n_bytes": 33554432,
+    "shape": [
+     4096,
+     4096
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(weight, own quant_state) -> bf16",
+    "source": "q_proj.weight",
+    "control_sha": "37ccb3aed36d13867a1de34f4730712654c194ab1ce6cae514238a7fae73cb63",
+    "control_detects_flip": true
+   }
+  },
+  "control_detects_flip": true,
+  "experts_module": "base_model.model.model.layers.0.mlp.experts",
+  "attention_module": "base_model.model.model.layers.0.self_attn",
+  "errors": []
+ },
+ "batched_stats": null,
+ "reference_order": null,
+ "dgrad": null,
+ "kernel_counter_key": "moe_bnb4bit_backend",
+ "kernel_calls_per_step": [
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256,
+  256
+ ],
+ "kernel_calls_per_step_min": 256,
+ "experts_forward_calls_per_step_min": 256,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 256,
+   "moe_bnb4bit_backend": 256,
+   "unsloth_grouped_mm": 256,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 1792,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  }
+ ],
+ "C1_tensors_hashed": 192,
+ "C1_bytes_hashed": 23219666944,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_control_tensor": "base_model.model.model.layers.0.mlp.experts.base_layer.base_layer.down_proj",
+ "C1_regime_by_tensor": {
+  "nf4/64+dq": 192
+ },
+ "C1_hasher": "hashes_frozen: every frozen expert / 4-bit tensor, any dtype (params + buffers; an offloaded stack from its pinned-CPU home)",
+ "C1_offloaded_homes": 0,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 1.41077,
+ "loss_last": 0.69519,
+ "loss_mean_last20": 0.95594,
+ "loss_step2": 1.51944,
+ "eval_loss_step0": 1.42914,
+ "eval_loss_final": 0.70834,
+ "eval_curve": [
+  {
+   "step": 0,
+   "heldout_loss": 1.42914,
+   "train_wall_s": 0.0,
+   "row_losses": [
+    1.56626,
+    1.52729,
+    1.71069,
+    0.90704,
+    1.19665,
+    1.52058,
+    1.57327,
+    1.43136
+   ]
+  },
+  {
+   "step": 20,
+   "heldout_loss": 0.70834,
+   "train_wall_s": 64.68,
+   "row_losses": [
+    0.53888,
+    1.05704,
+    1.0529,
+    0.62007,
+    0.39182,
+    0.68503,
+    0.72079,
+    0.6002
+   ]
+  }
+ ],
+ "eval_rows": [
+  {
+   "step": 0,
+   "losses": [
+    1.56626,
+    1.52729,
+    1.71069,
+    0.90704,
+    1.19665,
+    1.52058,
+    1.57327,
+    1.43136
+   ]
+  },
+  {
+   "step": 20,
+   "losses": [
+    0.53888,
+    1.05704,
+    1.0529,
+    0.62007,
+    0.39182,
+    0.68503,
+    0.72079,
+    0.6002
+   ]
+  }
+ ],
+ "matched_init_sha": "8d6f46fd1d2799968e4277dde921b44c1e2c3b9fe57bc21f34056a7184a1d81d",
+ "matched_init_sha_slots": 640,
+ "matched_init_sha_unmapped": 0,
+ "lora_path_present": true,
+ "lora_loop_share": [
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null
+ ],
+ "lora_path_loop_steps": [],
+ "unsloth_grouped_mm_calls_per_step_min": 1792,
+ "unsloth_grouped_mm_calls_per_step_max": 1792,
+ "unsloth_manual_grouped_mm_calls_per_step_max": 0,
+ "arm_facts": {
+  "attn_implementation": "sdpa",
+  "output_router_logits": false,
+  "loss_class": "model.forward(input_ids, labels[, attention_mask]).loss -- the model's own loss; the harness computes none",
+  "torch_num_threads": 24,
+  "omp_num_threads": "24",
+  "cpu_model": "Intel(R) Core(TM) Ultra 9 285K",
+  "lora_delta_dtype": "the activation dtype: unsloth_zoo moe_utils.py:3875 casts the fp32 factors to the activation dtype per forward (UPSTREAM-NOTES; UNVERIFIED against installed source)",
+  "unsloth_zoo": "2026.9.9",
+  "unsloth_zoo_note": "unsloth_zoo main's #1529 is not in the 2026.9.9 release (phase-3 instruction; not verified here)"
+ },
+ "dynamo_counters": {
+  "step10": {
+   "counters": {
+    "frames": {
+     "total": 29,
+     "ok": 27
+    },
+    "stats": {
+     "calls_captured": 564,
+     "unique_graphs": 26
+    },
+    "aot_autograd": {
+     "total": 26,
+     "autograd_cache_hit": 23,
+     "ok": 26,
+     "autograd_cache_bypass": 3
+    },
+    "inductor": {
+     "triton_bundler_load_static_autotuner": 93,
+     "async_compile_cache_miss": 293,
+     "async_compile_cache_hit": 182,
+     "fxgraph_cache_hit": 32,
+     "pattern_matcher_count": 74,
+     "pattern_matcher_nodes": 91,
+     "extern_calls": 74
+    },
+    "unimplemented": {
+     "Observed exception\n  Explanation: Dynamo found no exception handler at the top-level compiled function when encountering an exception. Exception will propagate outside the compiled region.\n  Hint: Your code may result in an error when running in eager. Please double check that your code doesn't contain a similar error when actually running eager/uncompiled. You can do this by removing the `torch.compile` call, or by using `torch.compiler.set_stance(\"force_eager\")`. \n  Hint: It may be possible to write Dynamo tracing rules for this code. Please report an issue to PyTorch if you encounter this graph break often and it is causing performance issues.\n\n  Developer debug context: raised exception AttributeError()\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0088.html": 2
+    }
+   },
+   "recompiles_total": 0,
+   "frames_total": 29,
+   "unique_graphs": 26,
+   "graph_breaks_total": 0,
+   "recompile_limit_hits": 0
+  },
+  "step20": {
+   "counters": {
+    "frames": {
+     "total": 29,
+     "ok": 27
+    },
+    "stats": {
+     "calls_captured": 564,
+     "unique_graphs": 26
+    },
+    "aot_autograd": {
+     "total": 26,
+     "autograd_cache_hit": 23,
+     "ok": 26,
+     "autograd_cache_bypass": 3
+    },
+    "inductor": {
+     "triton_bundler_load_static_autotuner": 93,
+     "async_compile_cache_miss": 293,
+     "async_compile_cache_hit": 182,
+     "fxgraph_cache_hit": 32,
+     "pattern_matcher_count": 74,
+     "pattern_matcher_nodes": 91,
+     "extern_calls": 74
+    },
+    "unimplemented": {
+     "Observed exception\n  Explanation: Dynamo found no exception handler at the top-level compiled function when encountering an exception. Exception will propagate outside the compiled region.\n  Hint: Your code may result in an error when running in eager. Please double check that your code doesn't contain a similar error when actually running eager/uncompiled. You can do this by removing the `torch.compile` call, or by using `torch.compiler.set_stance(\"force_eager\")`. \n  Hint: It may be possible to write Dynamo tracing rules for this code. Please report an issue to PyTorch if you encounter this graph break often and it is causing performance issues.\n\n  Developer debug context: raised exception AttributeError()\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0088.html": 2
+    }
+   },
+   "recompiles_total": 0,
+   "frames_total": 29,
+   "unique_graphs": 26,
+   "graph_breaks_total": 0,
+   "recompile_limit_hits": 0
+  }
+ },
+ "microbatch_padded_len": [
+  [
+   82,
+   162,
+   365,
+   101
+  ],
+  [
+   426,
+   508,
+   215,
+   88
+  ],
+  [
+   283,
+   82,
+   319,
+   113
+  ],
+  [
+   415,
+   291,
+   146,
+   300
+  ],
+  [
+   350,
+   173,
+   423,
+   350
+  ],
+  [
+   85,
+   209,
+   446,
+   556
+  ],
+  [
+   142,
+   451,
+   447,
+   92
+  ],
+  [
+   228,
+   127,
+   453,
+   157
+  ],
+  [
+   416,
+   171,
+   404,
+   158
+  ],
+  [
+   89,
+   439,
+   282,
+   193
+  ],
+  [
+   552,
+   144,
+   89,
+   253
+  ],
+  [
+   250,
+   307,
+   445,
+   279
+  ],
+  [
+   369,
+   194,
+   470,
+   204
+  ],
+  [
+   522,
+   163,
+   126,
+   348
+  ],
+  [
+   206,
+   92,
+   384,
+   347
+  ],
+  [
+   139,
+   197,
+   309,
+   303
+  ],
+  [
+   439,
+   369,
+   472,
+   329
+  ],
+  [
+   459,
+   273,
+   711,
+   375
+  ],
+  [
+   340,
+   262,
+   511,
+   406
+  ],
+  [
+   416,
+   546,
+   372,
+   383
+  ]
+ ],
+ "sync_ab": null,
+ "lean_ab": null,
+ "tile_ab": null,
+ "rms_ab": null,
+ "reuse_ab": null,
+ "keep_ab": null,
+ "route_ab": null,
+ "s_per_step": 3.3227,
+ "s_per_step_median_11plus": 2.9603,
+ "step_ms": [
+  7833.2,
+  3035.0,
+  2668.1,
+  2873.9,
+  3002.1,
+  3177.8,
+  2951.9,
+  2783.4,
+  2907.3,
+  2814.9,
+  2883.2,
+  2954.5,
+  2966.1,
+  2943.0,
+  2840.3,
+  2740.6,
+  3257.5,
+  3482.7,
+  3190.0,
+  3377.2
+ ],
+ "microbatch_ms": [],
+ "log_every": 10,
+ "microbatch_timing": false,
+ "train_wall_s": 64.68,
+ "window_wall_s": 66.45,
+ "tokens_per_step": [
+  1192,
+  1645,
+  1423,
+  1582,
+  1806,
+  1898,
+  1854,
+  1337,
+  1754,
+  1539,
+  1707,
+  1820,
+  1718,
+  1957,
+  1687,
+  1368,
+  2097,
+  2532,
+  2159,
+  2417
+ ],
+ "tokens_total": 35492,
+ "tokens_per_s": 548.7,
+ "tokens_padded_per_step": [
+  228,
+  829,
+  171,
+  722,
+  786,
+  694,
+  410,
+  593,
+  544,
+  467,
+  369,
+  742,
+  756,
+  361,
+  371,
+  528,
+  1121,
+  1104,
+  879,
+  1017
+ ],
+ "tokens_padded_total": 12692,
+ "peak_vram_gb": 29.142,
+ "idle_w": 66.6,
+ "mean_w": 427.7,
+ "power_samples": 283,
+ "memory_lever": null,
+ "memory_lever_label": null,
+ "host_ram": {
+  "rss_hwm_gb": 95.301,
+  "ru_maxrss_gb": 95.301,
+  "cgroup_peak_gb": null,
+  "cgroup_peak_source": null,
+  "cgroup_peak_before_gb": null,
+  "cgroup_peak_rose_during_arm": null,
+  "cgroup_limit_gb": 193.871,
+  "total_gb": 201.95,
+  "high_water_gb": 95.301
+ },
+ "host_ram_high_water_gb": 95.301,
+ "host_ram_total_gb": 201.95,
+ "hf_offload": null,
+ "axolotl_layer_offload": null,
+ "sampler": true,
+ "joules_per_step": 1167.7,
+ "adapter": {
+  "path": "/root/tc1/adapters/mixtral_ckpt_unsloth_m_d2",
+  "bytes": 893446968,
+  "files": [
+   "README.md",
+   "adapter_config.json",
+   "adapter_model.safetensors"
+  ],
+  "tensors": 384,
+  "params": 223346688,
+  "dtypes": [
+   "F32"
+  ]
+ },
+ "losses": [
+  1.41077,
+  1.50365,
+  1.51944,
+  1.04266,
+  1.10066,
+  0.99303,
+  0.97824,
+  0.85176,
+  0.97717,
+  0.78653,
+  0.76091,
+  0.84685,
+  0.93233,
+  0.77008,
+  0.89779,
+  0.81315,
+  0.71834,
+  0.69031,
+  0.82996,
+  0.69519
+ ],
+ "profile": null,
+ "profile_steps": 0,
+ "profile_warm": 3,
+ "note": null
+}

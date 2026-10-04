@@ -8888,6 +8888,125 @@
       "notes": "The same box as e4b.train.h2h.unsloth.mixtral.5090.2026-10-04 (Vast invoiced $3.03 for both families)."
     },
     {
+      "id": "e4b.train.h2h.hf.granite.5090.2026-10-04",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "claim": "Lane TC2 amendment 7 box S (#835), 2026-10-04, one rented RTX 5090: Granite-3.1-3B-A800M at matched work on the current code. HF + PEFT with bf16 experts 2.739 s/step against e4b's fused 4-bit experts 2.108 (two draws each): HF/e4b 1.299 [1.268, 1.332], e4b FASTER per step (2026-10-02, e4b 0.38.1: 0.971, HF faster), at 4.31 against 8.50 GB peak and x0.77 HF's energy per step. Held-out at N=60 COMPARABLE (e4b 0.8312, HF 0.8275). TC2 P15 HELD (band [1.05, 1.60]). Supersedes the 2026-10-02 row as Granite's HF position.",
+      "value": 1.299,
+      "unit": "ratio s/step HF/e4b (medians of steps 11..60 over two draws each; > 1 = e4b faster per step); cross-draw interval [1.268, 1.332]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-54: instance 54159256, AMD EPYC 7C13); e4b @ 7145425 + grouped-nf4-gemm v0.37.0 @ 71185d6 on torch 2.8.0+cu128; comparators as in TC2 (Unsloth 2026.9.14 on torch 2.12.1+cu130, HF 5.18 / PEFT 0.21.2, axolotl 0.20.0)",
+      "conditions": "bench/tc1 lane TC2 token tc2small (TC2 amendment 7, box S): the small instrument (N 60, 48 held-out rows every 20 steps), matched work, matched init, fp32 adapters, every arm as on 2026-10-02; validity, positions and equivalence by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc2/README.md",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-54/RESULTS-tc1.md",
+        "bench/tc1/TC2-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-54/tc1/"
+      ],
+      "notes": "Vast invoiced $2.59 for box S (Granite, OLMoE, gpt-oss)."
+    },
+    {
+      "id": "e4b.train.h2h.axolotl.granite.5090.2026-10-04",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+      "claim": "Lane TC2 amendment 7 box S (#835), 2026-10-04, one rented RTX 5090: Granite-3.1-3B-A800M at matched work on the current code. axolotl 0.20.0 (quantize_moe_experts, 4-bit expert stacks) 2.423 s/step against e4b's 2.108: axolotl/e4b 1.150 [1.130, 1.170], e4b FASTER per step (2026-10-02: 0.903, axolotl faster), at 0.23 GB more peak on e4b (4.31 against 4.08 GB) and x0.75 axolotl's energy per step. The pair EQUIVALENT (held-out 0.8312 against 0.8308). TC2 P15 HELD (band [1.00, 1.50]). Supersedes the 2026-10-02 row as Granite's axolotl position.",
+      "value": 1.15,
+      "unit": "ratio s/step axolotl/e4b (medians of steps 11..60; one axolotl draw, two e4b draws; > 1 = e4b faster per step); cross-draw interval [1.130, 1.170]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-54: instance 54159256, AMD EPYC 7C13); e4b @ 7145425 + grouped-nf4-gemm v0.37.0 @ 71185d6 on torch 2.8.0+cu128; comparators as in TC2 (Unsloth 2026.9.14 on torch 2.12.1+cu130, HF 5.18 / PEFT 0.21.2, axolotl 0.20.0)",
+      "conditions": "bench/tc1 lane TC2 token tc2small (TC2 amendment 7, box S): the small instrument (N 60, 48 held-out rows every 20 steps), matched work, matched init, fp32 adapters, every arm as on 2026-10-02; validity, positions and equivalence by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc2/README.md",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-54/RESULTS-tc1.md",
+        "bench/tc1/TC2-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-54/tc1/"
+      ]
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.olmoe.5090.2026-10-04",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "allenai/OLMoE-1B-7B-0125-Instruct",
+      "claim": "Lane TC2 amendment 7 box S (#835), 2026-10-04, one rented RTX 5090: OLMoE-1B-7B-0924-Instruct at matched work on the current code. Unsloth 2026.9.14 (grouped path engaged, 4-bit expert stacks) 2.176 s/step against e4b's 1.195: Unsloth/e4b 1.821 [1.805, 1.838], e4b FASTER per step (2026-10-02: 1.201), at 1.70 GB more peak on e4b (7.67 against 5.97 GB) and x0.86 Unsloth's energy per step. The pair EQUIVALENT (held-out 0.8423 against 0.8429). TC2 P16 HELD on its Unsloth half (band [1.30, 2.20]); its HF half is UNTESTED (HF's draws 6.0 % apart). Supersedes the 2026-10-02 row as OLMoE's Unsloth position.",
+      "value": 1.821,
+      "unit": "ratio s/step Unsloth/e4b (medians of steps 11..60; one Unsloth draw, two e4b draws; > 1 = e4b faster per step); cross-draw interval [1.805, 1.838]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-54: instance 54159256, AMD EPYC 7C13); e4b @ 7145425 + grouped-nf4-gemm v0.37.0 @ 71185d6 on torch 2.8.0+cu128; comparators as in TC2 (Unsloth 2026.9.14 on torch 2.12.1+cu130, HF 5.18 / PEFT 0.21.2, axolotl 0.20.0)",
+      "conditions": "bench/tc1 lane TC2 token tc2small (TC2 amendment 7, box S): the small instrument (N 60, 48 held-out rows every 20 steps), matched work, matched init, fp32 adapters, every arm as on 2026-10-02; validity, positions and equivalence by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc2/README.md",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-54/RESULTS-tc1.md",
+        "bench/tc1/TC2-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-54/tc1/"
+      ]
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.absmax-dq",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a286",
+      "claim": "Lane TC2 amendment 7 boxes D and F (#835), 2026-10-04, two rented RTX 5090s: Mixtral-8x7B-Instruct's matched set resident with E4B_ABSMAX_DQ=1 (the expert absmax stored double-quantized, bitsandbytes' nested statistics). e4b's peak falls to 29.03 / 29.02 GB, from 31.07 GB with the fp32 absmax (amendment 6), level with Unsloth's 29.13 GB; e4b's held-out moves by 0.0017 nats on the two-draw mean (0.7146 against 0.7129). Unsloth/e4b reads 0.542 [0.534, 0.549] on box D (Intel Core Ultra 9 285K host) and 0.644 [0.641, 0.646] on box F (AMD EPYC 7B13): Unsloth faster per step on both, by a host-dependent margin. Both pairs read COMPARABLE, not EQUIVALENT. TC2 P18 FALSIFIED on its position band, so the switch stays opt-in. A LABELLED row (an opt-in setting), quoted beside the default-settings row, never in place of it.",
+      "value": 29.03,
+      "unit": "GB peak VRAM, e4b fused resident with E4B_ABSMAX_DQ=1 (box D, first draw); 31.07 GB without it (amendment 6)",
+      "hardware": "RTX 5090 (sm_120), two rented Vast.ai verified/secure hosts (tc1-5090-55: instance 54159409, Intel Core Ultra 9 285K; tc1-5090-56: instance 54159598, AMD EPYC 7B13); e4b @ 7145425 + grouped-nf4-gemm v0.37.0 @ 71185d6; Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 lane TC2 token tc2resident (TC2 amendment 7, boxes D and F) with TC1_E4B_ENV=\"E4B_ABSMAX_DQ=1\" (box F adds TRAIN_FROZEN_4BIT=1, which converts nothing on Mixtral): the field recipe, matched work, matched init, fp32 adapters, every e4b arm resident; tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc2/README.md",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-55/RESULTS-tc1.md",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-56/RESULTS-tc1.md",
+        "bench/tc1/TC2-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-55/tc1/",
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-56/tc1/"
+      ],
+      "notes": "Vast invoiced $1.14 (box D) and $3.00 (box F), each for both families."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.fit-mb1-dq-frozen4",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3.6-35B-A3B @ 995ad96eacd9",
+      "claim": "Lane TC2 amendment 7 box F (#835), 2026-10-04, one rented RTX 5090: with E4B_ABSMAX_DQ=1 and --frozen-4bit (the non-routed projections in NF4, a comparator's bytes; a measurement hook, not a training option), e4b's fused path trains Qwen3.6-35B-A3B's matched set (926,187,520 fp32 adapters) RESIDENT at micro-batch 1: VALID, 31.36 GB peak, 9.241 s/step, held-out 1.1822 -> 0.6890 at N=20. The first resident e4b run of this family on a 32 GB card. Micro-batch 2 still OOMs (step 6, 32.79 GB; P20 FALSIFIED). Beside it on the same box, Unsloth's micro-batch-1 arm took 18.494 s/step at 30.41 GB, one draw each: reported, not a quoted position. The step-0 gap to Unsloth is 0.011-0.014 nats with these bytes (0.05 with the projections in bf16; P21 FALSIFIED at 0.01). A LABELLED fit row.",
+      "value": 31.36,
+      "unit": "GB peak VRAM, e4b fused resident at micro-batch 1 with E4B_ABSMAX_DQ=1 and --frozen-4bit (VALID)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-56: instance 54159598, AMD EPYC 7B13); e4b @ 7145425 + grouped-nf4-gemm v0.37.0 @ 71185d6; Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 lane TC2 token tc2resident with TC1_E4B_ENV=\"E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1\" (TC2 amendment 7, box F): the field recipe and its micro-batch-1 secondary (1 x 8, the same tokens per step), matched work, matched init, fp32 adapters, Unsloth with the family's expert targets; tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc2/README.md",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-56/RESULTS-tc1.md",
+        "bench/tc1/TC2-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-56/tc1/"
+      ]
+    },
+    {
       "id": "e4b.train.h2h.unsloth.mixtral.5090.2026-10-02",
       "package": "experts4bit-qlora",
       "area": "train",
