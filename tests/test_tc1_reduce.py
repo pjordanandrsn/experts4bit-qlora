@@ -361,6 +361,17 @@ def test_amendment_15_registers_the_fused_rmsnorm_token():
     assert R.rms_ab_why("fused_attn4_m_rms0", {}).startswith("no rms_ab record")
 
 
+def test_amendment_20_registers_the_host_reuse_token():
+    R = _mod()
+    assert R.REUSE_FAM == "qwen3reuseab" and R.REUSE_FAM in R.FAMS and R.N_LAYERS[R.REUSE_FAM] == 48
+    assert R.REUSE_BANDS == {"P33": (0.92, 0.99), "P34": (0.93, 0.99)} and R.REUSE_FLIP_AT_OR_BELOW == 0.99 and R.REUSE_KEEP_ABOVE == 1.01
+    assert R.anchor_of(R.REUSE_FAM) == ("e4b", "fused_attn4_m_reuse0") and "fused_attn4_m_reuse1_d2" in R.MATCHED
+    assert R.registered_draw2(R.REUSE_FAM, ("e4b", "fused_attn4_shipped_reuse1")) == ("e4b", "fused_attn4_shipped_reuse1_d2")
+    F = {R.REUSE_FAM: R.reduce_family(R.REUSE_FAM, R._reuse_set(), {}, 20)}
+    assert [(p, v) for p, _, v, _ in R.score_reuseab(F)] == [("P33", "HELD"), ("P34", "HELD")]
+    assert R.reuse_ab_why("fused_attn4_m_reuse0", {}).startswith("no reuse_ab record")
+
+
 def test_amendment_12_registers_the_profile_token():
     R = _mod()
     assert R.PROF945_FAM == "qwen3prof945" and R.PROF945_FAM in R.FAMS and R.EXPECTED[R.PROF945_FAM] == list(R.PROF945_ARMS)

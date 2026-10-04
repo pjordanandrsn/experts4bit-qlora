@@ -3132,6 +3132,21 @@ def run_arm(a, load_fn, sampler=True):
             _rs, _has = {}, False
         rms_ab = {"requested_env": os.environ.get("E4B_FUSED_RMSNORM"), "e4b_has_fused_rmsnorm": _has,
                   "patched": int(_rs.get("patched", 0)), "calls": int(_rs.get("calls", 0))}
+    reuse_ab = None                                    # TC1 amendment 20 (#945): whether gnf4's per-pass host reuse was in force, and how often it hit
+    if a.framework == "e4b":
+        try:
+            import nf4_grouped as _ngr
+        except Exception:
+            _ngr = None
+        _ron = None
+        if _ngr is not None and hasattr(_ngr, "_host_reuse_enabled"):
+            try:
+                _ron = bool(_ngr._host_reuse_enabled())
+            except Exception:
+                _ron = None
+        reuse_ab = {"gnf4_host_reuse": ("1" if _ron else "0") if _ron is not None else None, "gnf4_host_reuse_env": os.environ.get("GNF4_HOST_REUSE"),
+                    "gnf4_has_host_reuse": _ron is not None,
+                    "stats": {k: int(v) for k, v in (getattr(_ngr, "HOST_REUSE_STATS", None) or {}).items()} if _ngr is not None else {}}
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -3187,6 +3202,7 @@ def run_arm(a, load_fn, sampler=True):
         "lean_ab": lean_ab,                                                                                              # TC1 amendment 13 (#945)
         "tile_ab": tile_ab,                                                                                              # TC1 amendment 14 (#945)
         "rms_ab": rms_ab,                                                                                                # TC1 amendment 15 (#945)
+        "reuse_ab": reuse_ab,                                                                                            # TC1 amendment 20 (#945)
         "s_per_step": round(wall / a.steps, 4), "s_per_step_median_11plus": round(statistics.median(steady) / 1e3, 4), "step_ms": step_ms, "microbatch_ms": microbatch_ms, "log_every": int(a.log_every), "microbatch_timing": bool(a.microbatch_timing),
         "train_wall_s": round(train_wall, 2), "window_wall_s": round(wall, 2),
         "tokens_per_step": tokens_per_step, "tokens_total": sum(tokens_per_step), "tokens_per_s": round(sum(tokens_per_step) / train_wall, 1) if train_wall else None,

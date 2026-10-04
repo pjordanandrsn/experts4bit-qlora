@@ -735,3 +735,70 @@ receipt.
 
 Budget: two RTX 5090 boxes, $0.69/h ceiling each, 4.5 h cap each, under $4.20 together; the standing no-ask tier, a single run
 under $15.
+
+### Amendment 20 (2026-10-04T02:36Z, before any box): grouped-nf4-gemm's per-pass host reuse, A/B on one 5090 (P33, P34)
+
+**Why.** e4b's fused training step is host-bound on these boxes. In amendment 19's read, the same code's matched arm stepped at 2.147 s
+on a Ryzen 9 9950X3D host and 3.973 s on an EPYC 7C13 host, both on an RTX 5090. A profile of the step on an RTX A2000 (4-layer slice, TC1's token rows, every current default) found a MoE
+layer pass re-doing host work it had already done:
+
+- the gate_up and down GEMMs each upload `expert_ids`;
+- the two LoRA deltas each upload `(rows, ids)` and rebuild the same flat padded-row index (about ten launches);
+- the backward's dgrad uploads `expert_ids` twice more: 8 transfers per layer forward + backward, 4 of them repeats;
+- the adapters' advanced-index gather backward radix-sorts its indices (about ten launches per adapter).
+
+grouped-nf4-gemm#444 adds `GNF4_HOST_REUSE=1`, which turns on three changes:
+
+- a content-, device- and stream-keyed memo of those uploads, never used under capture;
+- a one-entry memo of the delta's device plan;
+- a scatter backward for the adapter gather when the ids are distinct.
+
+The forward output and every adapter gradient are `torch.equal` with the flag off and on. Under deterministic mode the input gradient
+is too; outside it, the input gradient already varies from run to run with the flag off.
+
+On one `ExpertsLoRA` layer at Qwen3-30B-A3B's shape on the A2000 (three interleaved off/on pairs of 300 repetitions):
+
+- the forward's host median went from 3.193 / 3.150 / 2.947 ms to 2.784 / 2.822 / 2.906 ms;
+- the backward's went from 3.003 / 2.871 / 2.720 ms to 2.401 / 2.422 / 2.508 ms.
+
+The default stays off until this box reads.
+
+**The token** `qwen3reuseab` (TC1_BOX=A) runs e4b against itself on the shipped arm and the matched arm, two draws each in ABBA order:
+
+- `*_reuse0`: `GNF4_HOST_REUSE=0`;
+- `*_reuse1`: `GNF4_HOST_REUSE=1`.
+
+Every other setting is the current default: the post-#945 sync path, the trimmed LoRA delta, the cost tile rule and the fused RMSNorm.
+grouped-nf4-gemm is pinned at the merge of #444, and e4b at this amendment's merge. Each arm's `reuse_ab` record names the flag in
+force, its environment value and the process's hit counts (`HOST_REUSE_STATS`). The engagement predicate voids an arm on any of these:
+
+- its record contradicts its tag;
+- it is a reuse1 arm whose upload memo or plan memo never hit;
+- it is a reuse0 arm on which anything hit;
+- it is not on the trimmed delta and the post-#945 sync path.
+
+**Predictions.** Each figure is the median over two VALID draws a side, each side's draws within 5 %; the interval over the four cross-draw
+ratios is reported beside it.
+
+- **P33** (shipped arm): reuse1 / reuse0 s/step lies in **[0.92, 0.99]**.
+- **P34** (matched arm): reuse1 / reuse0 s/step lies in **[0.93, 0.99]**.
+
+Each is FALSIFIED outside its band, and UNTESTED if a side is missing, not VALID or unstable.
+
+**Basis.**
+
+- On the A2000's host, the layer bench saves about 0.26 ms per forward pass and 0.42 ms per backward pass. Over 48 layers, with each
+  forward run twice under checkpointing, that is about 45 ms per micro-batch, or about 180 ms per 4-micro-batch step.
+- Against a fully host-bound 2.1–4.0 s step, that is 0.92–0.96 (more saved on a slower host, but a longer step). A step that is partly device-bound passes on less, which is why the
+  upper edge sits at 0.99.
+- The matched step is longer and carries the same per-pass saving, so its band sits slightly higher.
+
+**Decision rule.**
+
+- **Both stable ratios at or below 0.99:** gnf4's default becomes on.
+- **A stable ratio above 1.01 on either arm:** the default stays off.
+- **Otherwise:** the flag stays opt-in, and the register says no measurable step effect on that arm.
+
+The prediction verdicts are read beside the rule, not instead of it.
+
+Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.

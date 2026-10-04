@@ -864,7 +864,7 @@ def test_amendment_3_axolotl_family_uv_index_strategy_and_no_unsloth_venv_on_tha
     # the uv install reads PyPI past the cu130 index: uv's first-index strategy left axolotl's packaging==26.0 unsatisfiable on both TC1 boxes
     assert re.search(r'uv pip install --python \$PY_AX "axolotl==\$AX_VER" --extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match > logs/pip_axolotl.log', body)
     # the token alone builds no Unsloth venv; every other token still builds both, behind the same driver gate
-    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab ") NEED_UNSLOTH=0;; esac' in body   # amendments 8, 10, 12-15 add their tokens
+    assert 'NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab ") NEED_UNSLOTH=0;; esac' in body   # amendments 8, 10, 12-15 add their tokens
     assert 'if [ "$NEED_UNSLOTH" = 1 ]; then\nUNS_T28_OK=1' in body and 'if [ "$CU130_OK" = 1 ] && [ "$NEED_UNSLOTH" = 1 ]; then' in body
     assert body.index("NEED_UNSLOTH=1; case") < body.index("venv-unsloth-t28:") and body.count("runs no Unsloth arm (TC1-PREREG amendment 3)") == 2
 
@@ -1148,7 +1148,7 @@ def test_tc1_amendment_8_native_best_200_token():
                      ("axolotl", "ckpt_axolotl_best_200"), ("e4b", "fused_attn4_m_200")], order
     assert body.count("draw2") == 2 and body.count(" curve $TOK $TS") == 5 and "--axolotl-best 1" in body and "tc1_prepare $FAM \"$MID\" $REV $FAL \"$ALL\" $CURVE_EVAL_N" in body
     assert "qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in run
-    assert 'case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab ") NEED_UNSLOTH=0;; esac' in run
+    assert 'case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab ") NEED_UNSLOTH=0;; esac' in run
     rule = re.search(r'^  local OFFL=1; case .*?esac$', run, re.MULTILINE).group(0)
     for tag, want in (("ckpt_axolotl_best", "0"), ("ckpt_axolotl_best_d2", "0"), ("ckpt_axolotl_best_200", "0"), ("ckpt_axolotl_best_200_d2", "0"),
                       ("ckpt_axolotl_m", "1"), ("ckpt_axolotl_m_d2", "1")):
@@ -1232,6 +1232,23 @@ def test_tc1_amendment_15_fused_rmsnorm_token():
     assert "qwen3rmsab) tc1_rmsab_family qwen3rmsab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in run
     src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
     assert '"rms_ab": rms_ab,' in src and "from experts4bit_qlora.engines import rmsnorm_train as _rt" in src
+
+
+def test_tc1_amendment_20_host_reuse_token():
+    """TC1 amendment 20 (#945): `qwen3reuseab` runs e4b against itself -- grouped-nf4-gemm's per-pass host reuse off (GNF4_HOST_REUSE=0)
+    vs on (=1) -- on the shipped and matched arms, two draws each in ABBA order; the arm records the flag in force and the hit counts."""
+    run = RUN_SH.read_text()
+    m = re.search(r"^tc1_reuseab_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE)
+    assert m, "tc1_reuseab_family is gone"
+    calls = re.findall(r'TC1_ARM_EXTRA_ENV="\$(OLD|NEW)" (arm|draw2) +\$FAM e4b (\S+) fused .* \$(NATIVE|MATCH)$', m.group(0), re.MULTILINE)
+    assert calls == [("OLD", "arm", "fused_attn4_shipped_reuse0", "NATIVE"), ("NEW", "arm", "fused_attn4_shipped_reuse1", "NATIVE"),
+                     ("OLD", "arm", "fused_attn4_m_reuse0", "MATCH"), ("NEW", "arm", "fused_attn4_m_reuse1", "MATCH"),
+                     ("NEW", "draw2", "fused_attn4_m_reuse1", "MATCH"), ("OLD", "draw2", "fused_attn4_m_reuse0", "MATCH"),
+                     ("NEW", "draw2", "fused_attn4_shipped_reuse1", "NATIVE"), ("OLD", "draw2", "fused_attn4_shipped_reuse0", "NATIVE")], calls
+    assert 'local OLD="GNF4_HOST_REUSE=0" NEW="GNF4_HOST_REUSE=1"' in m.group(0)
+    assert "qwen3reuseab) tc1_reuseab_family qwen3reuseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39" in run
+    src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
+    assert '"reuse_ab": reuse_ab,' in src and "_ron = bool(_ngr._host_reuse_enabled())" in src and '"HOST_REUSE_STATS"' in src
 
 
 def test_tc1_amendment_12_profile_token():

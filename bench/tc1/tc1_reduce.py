@@ -345,6 +345,42 @@ def rms_ab_why(tag, r):
     return "" if not bad else f"fused-RMSNorm A/B not engaged ({', '.join(bad)}; record {ra})"
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 20 (#945): gnf4's per-pass host reuse, off vs on
+REUSE_FAM = "qwen3reuseab"        # GNF4_HOST_REUSE=0 (the default) vs =1 (gnf4#444), on every current default (post-#945 sync path, trimmed delta, cost tile, fused RMSNorm)
+REUSE_PAIRS = (("P33", "shipped", "fused_attn4_shipped"), ("P34", "matched", "fused_attn4_m"))   # each: <tag>_reuse0 vs <tag>_reuse1, two draws a side
+REUSE_BANDS = {"P33": (0.92, 0.99), "P34": (0.93, 0.99)}   # reuse1 / reuse0 s/step on stable pairs
+REUSE_FLIP_AT_OR_BELOW = 0.99     # amendment 20's decision rule: both stable ratios at or below this flip gnf4's default on
+REUSE_KEEP_ABOVE = 1.01           # ... a stable ratio above this on either arm keeps it off
+FAMS.append(REUSE_FAM)
+NAMES[REUSE_FAM] = "Qwen3-30B-A3B (amendment 20: gnf4's per-pass host reuse off vs on, on every current default)"
+N_LAYERS[REUSE_FAM] = 48
+ATTN_CENSUS[REUSE_FAM] = 192
+FAM_ANCHOR[REUSE_FAM] = ("e4b", "fused_attn4_m_reuse0")
+EXPECTED[REUSE_FAM] = [("e4b", "fused_attn4_shipped_reuse0"), ("e4b", "fused_attn4_shipped_reuse1"), ("e4b", "fused_attn4_m_reuse0"), ("e4b", "fused_attn4_m_reuse1"),
+                       ("e4b", "fused_attn4_m_reuse1_d2"), ("e4b", "fused_attn4_m_reuse0_d2"), ("e4b", "fused_attn4_shipped_reuse1_d2"), ("e4b", "fused_attn4_shipped_reuse0_d2")]
+MATCHED |= {"fused_attn4_m_reuse0", "fused_attn4_m_reuse1", "fused_attn4_m_reuse0_d2", "fused_attn4_m_reuse1_d2"}
+for _p, _k, _t in REUSE_PAIRS:
+    for _side in ("reuse0", "reuse1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def reuse_ab_why(tag, r):
+    """Amendment 20's engagement predicate: a reuse1 arm ran with the flag in force and the process's upload and plan memos both hit; a
+    reuse0 arm ran with it off and nothing hit; both on the trimmed LoRA delta. Empty string = engaged."""
+    ra, la = (r or {}).get("reuse_ab"), (r or {}).get("lean_ab") or {}
+    if not isinstance(ra, dict):
+        return "no reuse_ab record on the receipt: whether gnf4's host reuse ran cannot be verified"
+    st = ra.get("stats") or {}
+    if "_reuse1" in tag:
+        checks = (("gnf4_host_reuse 1", ra.get("gnf4_host_reuse") == "1"), ("gnf4_has_host_reuse", ra.get("gnf4_has_host_reuse") is True),
+                  ("upload_hits > 0", (st.get("upload_hits") or 0) > 0), ("plan_hits > 0", (st.get("plan_hits") or 0) > 0))
+    else:
+        checks = (("gnf4_host_reuse 0", ra.get("gnf4_host_reuse") == "0"), ("upload_hits 0", (st.get("upload_hits") or 0) == 0),
+                  ("plan_hits 0", (st.get("plan_hits") or 0) == 0))
+    bad = [k for k, ok in checks + (("gnf4_lean_delta 1", la.get("gnf4_lean_delta") == "1"),) if not ok]
+    return "" if not bad else f"host-reuse A/B not engaged ({', '.join(bad)}; record {ra})"
+
+
 def lean_ab_why(tag, r):
     """Amendment 13's engagement predicate: the arm ran the delta body its tag names, by its own record, and the padded path -- the only
     one the switch touches -- served the delta. Empty string = engaged."""
@@ -751,7 +787,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             nb = (r.get("axolotl_bnb4bit_modules") or {}).get("n_bnb4bit_unwrapped")
             if nb is None or nb < L:
                 why.append(f"quantize_moe_experts set but bnb-parametrized experts modules (innermost) {nb} < {L}")
-    if fam in (SYNC_FAM, PROF945_FAM, LEAN_FAM, TILE_FAM, RMS_FAM) and fw == "e4b":   # amendments 10 / 12-15: the arm ran the sync path its tag names (13-15: the new one)
+    if fam in (SYNC_FAM, PROF945_FAM, LEAN_FAM, TILE_FAM, RMS_FAM, REUSE_FAM) and fw == "e4b":   # amendments 10 / 12-15 / 20: the arm ran the sync path its tag names (13-15, 20: the new one)
         w = sync_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
@@ -765,6 +801,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == RMS_FAM and fw == "e4b":                  # amendment 15: ... and the RMSNorm path its tag names, on the trimmed delta
         w = rms_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == REUSE_FAM and fw == "e4b":                # amendment 20: ... and the host-reuse setting its tag names, on the trimmed delta
+        w = reuse_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -1370,6 +1410,35 @@ def score_rmsab(F):
         held = all(abs(d) <= RMS_QUALITY_MAX for _, d, _ in qual)
         out.append(("P26", RMS_FAM, "HELD" if held else "FALSIFIED",
                     "; ".join(f"{n}: mean held-out rms1 - rms0 {d:+.4f} (|.| <= {RMS_QUALITY_MAX}); {e}" for n, d, e in qual)))
+    return out
+
+
+def score_reuseab(F):
+    """TC1-PREREG amendment 20 (#945), on the qwen3reuseab box: P33 (shipped arm) and P34 (matched arm) -- gnf4's per-pass host reuse steps at
+    reuse1 / reuse0 within REUSE_BANDS[pid], the median over two VALID draws a side with each side's draws within 5 %. Outside the band
+    FALSIFIED; an unstable, missing or non-VALID side UNTESTED. The evidence names the decision rule's reading (flip / keep / no effect),
+    each side's held-out at N and the reuse1 side's hit counts."""
+    R = F.get(REUSE_FAM)
+    if not R:
+        return []
+    out = []
+    for pid, name, t in REUSE_PAIRS:
+        O, N = R["draws"].get(("e4b", f"{t}_reuse0"), {}), R["draws"].get(("e4b", f"{t}_reuse1"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("reuse0", O), ("reuse1", N)))
+            out.append((pid, REUSE_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        lo, hi = REUSE_BANDS[pid]
+        rule = ("flip-eligible" if ratio_ <= REUSE_FLIP_AT_OR_BELOW else "KEEP off" if ratio_ > REUSE_KEEP_ABOVE else "no measurable effect")
+        r1 = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == ("e4b", f"{t}_reuse1")), None) or {}
+        hits = (r1.get("reuse_ab") or {}).get("stats") or {}
+        out.append((pid, REUSE_FAM, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+                    f"{name}: reuse1 / reuse0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; decision reading: {rule}; "
+                    f"s/step reuse0 {O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), reuse1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
+                    f"(within {100 * N['stability']:.1f}%); held-out at N reuse0 {f(O.get('heldout'), 4)} / reuse1 {f(N.get('heldout'), 4)}; "
+                    f"reuse1 hits (process) {json.dumps(hits, sort_keys=True)}"))
     return out
 
 
@@ -2555,6 +2624,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_rmsab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if REUSE_FAM in F:
+        out += ["\n## Predictions P33 / P34 (TC1-PREREG amendment 20, #945: gnf4's per-pass host reuse off vs on, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_reuseab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -2791,6 +2865,27 @@ def _tile_set(ship=((5.00, 5.05), (4.60, 4.62)), match=((5.30, 5.33), (5.00, 5.0
                                                     "prefill_bm_launches": bm})
     for r in R.values():
         r["fam"] = TILE_FAM
+    return R
+
+
+def _reuse_set(ship=((5.00, 5.05), (4.70, 4.72)), match=((5.30, 5.33), (5.05, 5.07)), flags=("0", "1"), hits=(1536, 768), lean="1"):
+    """Amendment 20: e4b against itself on every current default -- each pair as (reuse0 draws, reuse1 draws); `flags` = the flag each
+    side's record says was in force; `hits` = the reuse1 side's (upload_hits, plan_hits)."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for side, ss, flag in (("reuse0", old, flags[0]), ("reuse1", new, flags[1])):
+            on = side == "reuse1"
+            st = {"upload_hits": hits[0] if on else 0, "upload_misses": 2048, "plan_hits": hits[1] if on else 0, "plan_misses": 768 if on else 0}
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                R[("e4b", tag)] = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000), matched=matched,
+                                           sync_ab={"e4b_grouping": "default", "gnf4_pinned_ring": "1", "e4b_has_group_by_expert": True,
+                                                    "gnf4_has_ring": True, "ring_staged": 9216, "ring_waits": 0},
+                                           lean_ab={"gnf4_lean_delta": lean, "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                                                    "lora_path_calls": {"loop": 0, "padded": 9216, "grouped_mm": 0}},
+                                           reuse_ab={"gnf4_host_reuse": flag, "gnf4_host_reuse_env": flag, "gnf4_has_host_reuse": True, "stats": st})
+    for r in R.values():
+        r["fam"] = REUSE_FAM
     return R
 
 
@@ -3845,6 +3940,28 @@ def selftest():
     assert pr(_rms_set(patched=0)) == {"P24": "UNTESTED", "P25": "UNTESTED", "P26": "UNTESTED"}
     text = render(RF, "x")
     assert "## Predictions P24 / P25 / P26" in text and "| P26 | qwen3rmsab | **HELD** |" in text
+    cases += 1
+    # 61. amendment 20 (#945): gnf4's per-pass host reuse off vs on -- every arm VALID when it ran the setting its tag names on the trimmed
+    #     delta, P33 / P34 HELD inside their bands with the flip reading, FALSIFIED and KEEP above 1.01, a reuse1 arm whose memos never hit
+    #     or that ran with the flag off VOID (UNTESTED), an arm on the previous delta body VOID
+    def pu(R):
+        return {p: v for p, _, v, _ in score_reuseab({REUSE_FAM: reduce_family(REUSE_FAM, R, {}, 20)})}
+    UF = {REUSE_FAM: reduce_family(REUSE_FAM, _reuse_set(), {}, 20)}
+    assert [(x["fw"], x["tag"]) for x in UF[REUSE_FAM]["rows"]] == EXPECTED[REUSE_FAM]
+    assert all(x["verdict"] == "VALID" for x in UF[REUSE_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in UF[REUSE_FAM]["rows"]]
+    PU = {p: (v, ev) for p, _, v, ev in score_reuseab(UF)}
+    assert PU["P33"][0] == "HELD" and PU["P34"][0] == "HELD" and "reuse1 / reuse0 0.937 [" in PU["P33"][1] and "flip-eligible" in PU["P33"][1], PU
+    assert '"plan_hits": 768' in PU["P33"][1], PU["P33"][1]
+    slow = score_reuseab({REUSE_FAM: reduce_family(REUSE_FAM, _reuse_set(match=((5.00, 5.02), (5.20, 5.22))), {}, 20)})
+    assert [(p, v) for p, _, v, _ in slow] == [("P33", "HELD"), ("P34", "FALSIFIED")] and "KEEP off" in slow[1][3]
+    assert pu(_reuse_set(ship=((5.00, 5.05), (4.99, 5.02)))) == {"P33": "FALSIFIED", "P34": "HELD"}        # no gain: 0.995, no measurable effect
+    RR = reduce_family(REUSE_FAM, _reuse_set(hits=(1536, 0)), {}, 20)
+    assert RR["verdicts"][("e4b", "fused_attn4_shipped_reuse1")] == "VOID" and "plan_hits > 0" in next(x["why"] for x in RR["rows"] if x["tag"] == "fused_attn4_shipped_reuse1")
+    assert pu(_reuse_set(hits=(0, 0))) == {"P33": "UNTESTED", "P34": "UNTESTED"} and pu(_reuse_set(flags=("0", "0"))) == {"P33": "UNTESTED", "P34": "UNTESTED"}
+    assert reduce_family(REUSE_FAM, _reuse_set(flags=("1", "1")), {}, 20)["verdicts"][("e4b", "fused_attn4_m_reuse0")] == "VOID"
+    assert reduce_family(REUSE_FAM, _reuse_set(lean="0"), {}, 20)["verdicts"][("e4b", "fused_attn4_m_reuse0")] == "VOID"
+    text = render(UF, "x")
+    assert "## Predictions P33 / P34" in text and "| P33 | qwen3reuseab | **HELD** |" in text and "| P34 | qwen3reuseab | **HELD** |" in text
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 
