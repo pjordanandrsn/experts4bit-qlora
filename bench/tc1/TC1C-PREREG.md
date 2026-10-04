@@ -122,3 +122,51 @@ position and never in place of it. STATUS states both and names the setting. P8 
 **Budget.** One H100 NVL on Vast verified-secure, $2.80/h GPU ceiling (disk billed on top, as on every box), 2.5 h guard, estimate
 about $4–5 with the HF arm skipped; the owner's standing tier (a single run under $15). The box launches only after TC1 amendment 21's
 5090 box has produced a VALID keep arm, so a broken path is found on the cheaper card.
+
+### Amendment 3 (2026-10-04T06:00Z, after amendment 2's read, before any box): which GEMM route the H100 wants — a kernel replay, not a position (P9, P10, P11)
+
+**Why.** On the H100 NVL e4b is now mostly device-bound. Amendment 2's profiled e4b arm reads device-busy 0.659, about 1.58 s of device
+time per step, against Unsloth's 0.306 at about 0.87 s. The step's device time is dominated by grouped-nf4-gemm's fused NF4 grouped
+kernels: on an RTX A2000 the forward and dgrad kernels were 75 % of one MoE layer's device time. Unsloth's path on this card is a
+bitsandbytes dequantize of the 4-bit stack followed by torch's grouped GEMM, and `torch._grouped_mm` is first-class on sm_90. Whether
+e4b should take that route on Hopper is a kernel question, so it is measured as one before any training box depends on it.
+
+**The box.** One H100 NVL, token `routebench`. No model is downloaded, and no Unsloth venv is built. The box runs
+`bench/tc1/route_bench.py` on `bench/tc1/routecalls-qwen3.json` (staged with `TC1_EXTRA_STAGE`). That file holds the 192 group-size /
+expert-id lists of e4b's fused forward and dgrad calls, recorded through the real checkpoint's router on a 4-layer Qwen3-30B-A3B slice
+(TC1's alpaca rows, mb2, 8 micro-batches; recorder `bench/tc1/route_record.py`); the recompute repeats leave 128 unique calls. For each
+unique call at Qwen3-30B-A3B's shapes (E 128; gate_up N 1536 / K 2048; down N 2048 / K 768) it times, by CUDA events at the median of 10:
+
+- **(a)** grouped-nf4-gemm's fused forward and dgrad at their defaults;
+- **(b)** one whole-stack `dequantize_4bit` to bf16;
+- **(c)** `torch._grouped_mm` over all 128 experts' offsets. Empty experts are zero-size groups; the ids are ascending in every call, so
+  there is no gather.
+
+Weights are random NF4 stacks in the training layout, and the script refuses to run unless the dequantized stack matches
+grouped-nf4-gemm's `dequant_ref` bitwise. The route's output is compared against (a) on every call. On the RTX A2000, where
+`torch._grouped_mm` is unavailable, a per-group `torch.mm` on the same dequantized stack agreed with (a) to a relative Frobenius error of
+at most 0.0024. e4b is pinned at this amendment's merge, and grouped-nf4-gemm at its main.
+
+**Predictions** (registered before the box):
+
+- **P9:** summed over the 64 unique forward calls, ((b) + (c)) / (a) lies in **[0.20, 0.80]**.
+- **P10:** the same for the 64 dgrad calls, in **[0.20, 0.80]**.
+- **P11:** on every call, the route's relative Frobenius error against (a) is at most **0.005**.
+
+Each is FALSIFIED outside its band, and UNTESTED if `torch._grouped_mm` is unavailable on the box or the script does not complete.
+(c) / (a) alone is reported beside each figure: the dequant could be shared between a layer's forward, recompute and dgrad.
+
+**Basis.** If the device-time gap is the GEMM route, as the profiles suggest, Unsloth's route should run these calls in about half
+the fused kernels' time. Below 0.20 would mean the fused kernels are badly mistuned for sm_90, and above 0.80 that the route is not
+the gap.
+
+**Decision rule.**
+
+- **P9 and P10 at or below 0.80, with P11 HELD:** build the route into grouped-nf4-gemm as an opt-in for sm_90. Its value then gets
+  measured on the full training step in an amendment 4.
+- **Otherwise:** no route. The H100 gap is documented with this evidence.
+
+This box quotes no position and changes no register row.
+
+**Budget.** One H100 NVL on Vast verified-secure, $2.80/h GPU ceiling (disk billed on top), 1.0 h guard, estimate about $1.50–2.70;
+the owner's standing tier (a single run under $15).
