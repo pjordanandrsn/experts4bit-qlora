@@ -3147,6 +3147,20 @@ def run_arm(a, load_fn, sampler=True):
         reuse_ab = {"gnf4_host_reuse": ("1" if _ron else "0") if _ron is not None else None, "gnf4_host_reuse_env": os.environ.get("GNF4_HOST_REUSE"),
                     "gnf4_has_host_reuse": _ron is not None,
                     "stats": {k: int(v) for k, v in (getattr(_ngr, "HOST_REUSE_STATS", None) or {}).items()} if _ngr is not None else {}}
+    keep_ab = None                                     # TC1 amendment 21 (#945): how many decoder layers kept their MoE activations, with the compact delta
+    if a.framework == "e4b":
+        try:
+            from experts4bit_qlora.engines import moe_keep as _mk
+            _kept, _hask = int((getattr(_mk, "MOE_KEEP_STATS", None) or {}).get("layers", 0)), True
+        except Exception:
+            _kept, _hask = 0, False
+        try:
+            import nf4_qlora as _nqk
+            _cmp = bool(_nqk._compact_delta_enabled()) if hasattr(_nqk, "_compact_delta_enabled") else None
+        except Exception:
+            _cmp = None
+        keep_ab = {"requested_env": os.environ.get("E4B_MOE_KEEP_LAYERS"), "e4b_has_moe_keep": _hask, "layers_kept": _kept,
+                   "gnf4_compact_delta": ("1" if _cmp else "0") if _cmp is not None else None, "gnf4_compact_delta_env": os.environ.get("NF4_QLORA_COMPACT_DELTA")}
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -3203,6 +3217,7 @@ def run_arm(a, load_fn, sampler=True):
         "tile_ab": tile_ab,                                                                                              # TC1 amendment 14 (#945)
         "rms_ab": rms_ab,                                                                                                # TC1 amendment 15 (#945)
         "reuse_ab": reuse_ab,                                                                                            # TC1 amendment 20 (#945)
+        "keep_ab": keep_ab,                                                                                              # TC1 amendment 21 (#945)
         "s_per_step": round(wall / a.steps, 4), "s_per_step_median_11plus": round(statistics.median(steady) / 1e3, 4), "step_ms": step_ms, "microbatch_ms": microbatch_ms, "log_every": int(a.log_every), "microbatch_timing": bool(a.microbatch_timing),
         "train_wall_s": round(train_wall, 2), "window_wall_s": round(wall, 2),
         "tokens_per_step": tokens_per_step, "tokens_total": sum(tokens_per_step), "tokens_per_s": round(sum(tokens_per_step) / train_wall, 1) if train_wall else None,
