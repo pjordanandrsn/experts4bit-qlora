@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### TC1 amendment 19 read: the matched-work positions after amendments 10–15 — Unsloth/e4b 1.997, axolotl/e4b 2.775
+
+- **What was asked.** TC1's matched set (`tc1-5090-49`, EPYC 7C13, $1.15) and the axolotl rows (`tc1-5090-50`, Ryzen 9 9950X3D, $0.33),
+  re-run with e4b carrying every default from amendments 10–15.
+- **What it read.** All three predictions are HELD:
+
+  | prediction | reading | band | was (pre-#945) |
+  |---|---|---|---|
+  | P30, Unsloth / e4b | **1.997** [1.980, 2.014] | 1.6–2.8 | 1.437 |
+  | P31, matched set | inside the draw noise of e4b fused | — | — |
+  | P32, axolotl / e4b | **2.775** [2.735, 2.814] | 1.6–2.8 | 1.416 |
+
+  On the matched-set box's host axolotl/e4b reads 1.979. Unsloth is still 2.95 GB lower at peak (registers `e4b.train.h2h.unsloth.qwen3.5090.2026-10-03`, `e4b.train.h2h.axolotl.qwen3.5090.2026-10-03`).
+- **What follows.** STATUS quotes the new positions, and the 2026-10-02 rows stand for the code before #945. Read:
+  `bench/h2h-2026-10-02/tc1/RESULTS-tc1-matched19.md`.
+
 ### P111 read (RTX 5090): DEFAULT_ON -- one KV-table selection per decode step decodes identical tokens 3.6 % faster with 16 concurrent requests and 1.2 % with one; `E4B_KV_STEP_SELECT` is on by default (`0` keeps the per-layer form) (#1001)
 
 - **Files.**

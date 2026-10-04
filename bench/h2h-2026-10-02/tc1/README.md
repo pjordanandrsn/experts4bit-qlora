@@ -28,6 +28,8 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-46` | `qwen3nativebest200` (amendment 16) | instance 54024744, AMD EPYC 7663 56-Core Processor, driver 580.95.05 | e4b shipped (after amendments 10-15) vs axolotl scattermoe over 200 steps; P27 HELD, axolotl / e4b 1.238 [1.231, 1.246], e4b faster at steady state; [read](RESULTS-tc1-steady16.md) | $0.99 |
 | `tc1-5090-47` | `qwen3nativebest200` (amendment 17) | instance 54037643, machine 142284 again (AMD EPYC 7663) | the same box; a same-machine repeat, P28 UNTESTED by rule; reads 1.253 [1.248, 1.258]; [read](RESULTS-tc1-steady18.md) | $0.98 |
 | `tc1-5090-48` | `qwen3nativebest200` (amendment 18) | instance 54051454, machine 150527, AMD EPYC 7C13 64-Core Processor, driver 580.95.05 | the same box with machine 142284 excluded by evidence; P29 HELD, 1.146 [1.129, 1.164]: e4b faster at steady state on a second host; [read](RESULTS-tc1-steady18.md) | $1.23 |
+| `tc1-5090-49` | `qwen3` (amendment 19) | instance 54075516, AMD EPYC 7C13 64-Core Processor, driver 580.95.05 | the matched set again with e4b after amendments 10-15: Unsloth/e4b 1.997 (P30 HELD), matched set inside the draw noise (P31 HELD); [read](RESULTS-tc1-matched19.md) | $1.15 |
+| `tc1-5090-50` | `qwen3axolotl` (amendment 19) | instance 54075633, AMD Ryzen 9 9950X3D 16-Core Processor, driver 610.57.04 | the axolotl matched rows again: axolotl/e4b 2.775 (P32 HELD); [read](RESULTS-tc1-matched19.md) | $0.33 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was

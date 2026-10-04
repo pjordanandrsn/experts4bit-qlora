@@ -7952,7 +7952,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-16/tc1/"
       ],
-      "notes": "Both steps are host-bound on this card: the profiled matched arms read device-busy 0.480 (e4b; 141k device events, 753k CPU ops per step) vs 0.234 (Unsloth; 612k, 7.43M) -- the fused path records 4.3x fewer device events and 9.9x fewer CPU-side ops per step, which is where the gap is. The absolute s/step does NOT travel between 5090 hosts (the same e4b arm: 3.16 / 5.69 / 9.34 s on three hosts); the within-box ratio does (1.42-1.44). Unsloth's expert stacks are double-quantised (its loader exposes no knob) while e4b's are not; the attention projections are SAME-BYTES. e4b on the comparator's cu130 torch is 14 % faster per step (.e4b-t212) and is not the quoted side.",
+      "notes": "Both steps are host-bound on this card: the profiled matched arms read device-busy 0.480 (e4b; 141k device events, 753k CPU ops per step) vs 0.234 (Unsloth; 612k, 7.43M) -- the fused path records 4.3x fewer device events and 9.9x fewer CPU-side ops per step, which is where the gap is. The absolute s/step does NOT travel between 5090 hosts (the same e4b arm: 3.16 / 5.69 / 9.34 s on three hosts); the within-box ratio does (1.42-1.44). Unsloth's expert stacks are double-quantised (its loader exposes no knob) while e4b's are not; the attention projections are SAME-BYTES. e4b on the comparator's cu130 torch is 14 % faster per step (.e4b-t212) and is not the quoted side. Measured on the code BEFORE #945. The position after TC1 amendments 10-15: e4b.train.h2h.unsloth.qwen3.5090.2026-10-03 (1.997).",
       "supersedes": [
         "e4b.train.h2h.unsloth.qwen3.5090.2026-09-19"
       ],
@@ -7960,6 +7960,30 @@
         "docs/STATUS.md",
         "docs/solutions/qlora-fused-moe-experts.md"
       ]
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-03",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 19 (#835), one rented RTX 5090 (tc1-5090-49): with e4b after TC1 amendments 10-15 (#945 syncs, #440 trimmed LoRA delta, #442 cost tile rule, #965 fused rotary, #975 fused RMSNorm -- all defaults), e4b takes 3.973 s/step against Unsloth 2026.9.14's 7.933 (grouped_mm engaged, torch 2.12.1+cu130) at matched work: Unsloth/e4b 1.997 [1.980, 2.014] over two draws each (P30 HELD, band [1.6, 2.8]); 359 vs 179 tokens/s. Quoted beside it, in Unsloth's favour: peak VRAM 2.95 GB lower (24.27 vs 27.22 GB); energy per step Unsloth x1.17 of e4b's. The matched set is INSIDE-DRAW-NOISE of e4b fused (P31 HELD: e4b reference median step |delta| 0.0017, held-out at N 0.0002; Unsloth 0.0020 / 0.0003). The fused RMSNorm (near-exact) moves e4b's step-0 held-out by ~0.006, so Unsloth's step-0 class reads NEAR (0.0118), recorded. Secondary mb1 x accum 8 (HF OOMed): 2.101. One host (AMD EPYC 7C13); positions are within-box readings of their host.",
+      "value": 1.997,
+      "unit": "ratio s/step Unsloth/e4b (medians of steps 11..20 over two draws each; > 1 = e4b faster per step); cross-draw interval [1.980, 2.014]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-49: instance 54075516, AMD EPYC 7C13, driver 580.95.05); e4b @ 14a9a17 on torch 2.8.0+cu128, grouped-nf4-gemm @ 00929a4; Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; matched work (the same 642,514,944 trainable parameters, one per-slot LoRA init matched:3407, fp32 adapters, the same tokens); e4b at 14a9a17 with every default from TC1 amendments 10-15 and no environment set; validity, positions and equivalence by bench/tc1/tc1_reduce.py; token qwen3 (TC1's matched set)",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-matched19.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-49/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-49/tc1/"
+      ],
+      "notes": "The current matched position against Unsloth; e4b.train.h2h.unsloth.qwen3.5090.2026-10-02 (1.437) stands for the code before #945."
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.quality-n20",
@@ -8891,10 +8915,36 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-02/tc1-5090-30/tc1/"
       ],
-      "notes": "Restates the question the retired e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported row answered wrongly (a harness defect, TC1 amendment 4).",
+      "notes": "Restates the question the retired e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported row answered wrongly (a harness defect, TC1 amendment 4). Measured on the code BEFORE #945. The position after TC1 amendments 10-15: e4b.train.h2h.axolotl.qwen3.5090.2026-10-03 (2.775).",
       "supersedes": [
         "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.axolotl-unsupported"
       ]
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.h2h.axolotl.qwen3.5090.2026-10-03",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 19 (#835), one rented RTX 5090 (tc1-5090-50, amendment 3's axolotl token): with e4b after TC1 amendments 10-15 (all defaults), e4b takes 2.147 s/step against axolotl 0.20.0's 5.956 (quantize_moe_experts, matched init, fp32 adapters) at matched work: axolotl/e4b 2.775 [2.735, 2.814] over two draws each (P32 HELD, band [1.6, 2.8], the interval just past its top); axolotl x2.97 the energy per step, 0.34 GB lower at peak. On the matched-set box (tc1-5090-49, a different host) axolotl's single registered draw reads 1.979 [1.965, 1.994]: e4b's step is host-launch-bound and varies by host more than axolotl's, so the ratio does too. One host per reading.",
+      "value": 2.775,
+      "unit": "ratio s/step axolotl/e4b (medians of steps 11..20 over two draws each; > 1 = e4b faster per step); cross-draw interval [2.735, 2.814]; matched-set box, one axolotl draw, 1.979",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-50: instance 54075633, AMD Ryzen 9 9950X3D, driver 610.57.04); e4b @ 14a9a17 on torch 2.8.0+cu128, grouped-nf4-gemm @ 00929a4; axolotl 0.20.0 on torch 2.14.0+cu130",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; matched work (the same 642,514,944 trainable parameters, one per-slot LoRA init matched:3407, fp32 adapters, the same tokens); e4b at 14a9a17 with every default from TC1 amendments 10-15 and no environment set; validity, positions and equivalence by bench/tc1/tc1_reduce.py; token qwen3axolotl (amendment 3's axolotl rows, amendment 4's router recast)",
+      "measured_on": "2026-10-03",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-matched19.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-50/RESULTS-tc1.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-49/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-50/tc1/",
+        "receipts/experts4bit-qlora/2026-10-03/tc1-5090-49/tc1/"
+      ],
+      "notes": "The current matched position against axolotl; e4b.train.h2h.axolotl.qwen3.5090.2026-10-02 (1.416) stands for the code before #945."
     },
     {
       "id": "e4b.train.h2h.axolotl.qwen3.5090.2026-10-02.scattermoe-native",

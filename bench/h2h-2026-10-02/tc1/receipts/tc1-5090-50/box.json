@@ -1,0 +1,17 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-50",
+ "instance_id": "54075633",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "610.57.04",
+ "cpu": "AMD Ryzen 9 9950X3D 16-Core Processor",
+ "nproc": 32,
+ "mem_total_kb": "129218432",
+ "cgroup_memory_max": "127025545216",
+ "disk_root": "overlay         320G  9.3M  320G   1% /",
+ "hostname": "43bf9be57d0f",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}
