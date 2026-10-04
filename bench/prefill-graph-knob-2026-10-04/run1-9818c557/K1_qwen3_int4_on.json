@@ -1,0 +1,67 @@
+{
+ "mode": "knob",
+ "built": true,
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "prefill_routes": {
+  "int4_prefill_env": null,
+  "prefill_attn_env": null,
+  "device_grouping": true,
+  "int4_prefill": "k19",
+  "int4_prefill_above_256_rows": "k19",
+  "prefill_attn": "flash"
+ },
+ "at_build": {
+  "status": "on",
+  "T": 512,
+  "replays": 0,
+  "eager_chunks": 0,
+  "eager_reasons": {
+   "later_chunk": 0,
+   "short_chunk": 0
+  }
+ },
+ "info_prefill_graph": true,
+ "prompts": [
+  {
+   "len": 512,
+   "first_graph": 52976,
+   "first_eager": 52976,
+   "pool_bitwise": true
+  },
+  {
+   "len": 512,
+   "first_graph": 113435,
+   "first_eager": 113435,
+   "pool_bitwise": false
+  },
+  {
+   "len": 1024,
+   "first_graph": 23932,
+   "first_eager": 23932,
+   "pool_bitwise": false
+  },
+  {
+   "len": 512,
+   "first_graph": 46985,
+   "first_eager": 46985,
+   "pool_bitwise": false
+  },
+  {
+   "len": 300,
+   "first_graph": 33511,
+   "first_eager": 33511,
+   "pool_bitwise": true
+  }
+ ],
+ "stats": {
+  "status": "on",
+  "T": 512,
+  "replays": 4,
+  "eager_chunks": 2,
+  "eager_reasons": {
+   "later_chunk": 1,
+   "short_chunk": 1
+  }
+ },
+ "all_bitwise": false
+}

@@ -23,6 +23,10 @@
   bitwise test failed on the A2000. The graph now keeps everything it reads that was allocated outside the capture.
   The startup check now runs only after the capture's scope has returned and the allocator has been churned with a
   sentinel. A mutation test drops the positions after capture, and the check must refuse it.
+- **Verified on the A2000** (`bench/prefill-graph-knob-2026-10-04/`). The GPU tests pass (7), and so do their
+  neighbours (82). Through `build_engine`, on tiny random models with SC2's int4 stack (Qwen3-MoE) and with the
+  Granite NF4 store, the knob engages, and 5 prompts each prefill bitwise against eager in the first token and the
+  pool. At `max_seqs` 1 it refuses at startup.
 - **Basis.** The A2000 census (`bench/prefill-graph-census-2026-10-04/`). Off by default; its speed is for lane
   SC2b to read.
 
