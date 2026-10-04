@@ -16,9 +16,8 @@
     reads it back (tested).
   - **Checked against lane P109's receipts** (`bench/p109/receipts/p109-5090-2`: Qwen3-30B-A3B, one RTX 5090,
     16 sequences × 4096 tokens, NF4 experts, no int4). The estimate is under the measured allocator peak by
-    158–165 MB with eager decode and 158–210 MB with decode graphs, 0.7–0.9%. The graph arms' extra is the
-    graph pools, which the estimate lists as not modelled. Allocator reserve slack on those arms was 0.1–0.9%,
-    far below a trainer's.
+    165 MB with eager decode and 158–210 MB with decode graphs: 0.7–0.9%. Allocator reserve slack on those arms
+    was 0.1–0.9%, far below a trainer's.
 
 ### Tests: the family-blind training parity test counts grouped-nf4-gemm's dense dgrad route
 
