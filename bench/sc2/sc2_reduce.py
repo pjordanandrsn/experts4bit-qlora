@@ -7,8 +7,10 @@ engines ENGINES, draws 1..DRAWS, rates RATES.
 **A row** is one engine at one workload (``serial``, or one rate). Its status is the first that applies:
   UNREAD    a draw's file is missing (the deadline, a skipped phase, a server that did not start);
   INVALID   any request in either draw is not VALID (an HTTP error, the wrong token count, the wrong finish);
-  UNSTABLE  the draws disagree: serial -- p50 TTFT beyond 10 % or p50 TPOT beyond 5 %; a rate -- p50 TPOT beyond
-            10 %, or SLO attainment beyond max(10 % of the larger, 0.05);
+  UNSTABLE  the draws disagree: serial -- p50 TTFT beyond 10 % or p50 TPOT beyond 5 %; a rate -- SLO attainment beyond
+            max(10 % of the larger, 0.05). A rate row's p50 TPOT disagreeing beyond 10 % is REPORTED (``tpot_spread``), not a
+            status: the draws are different Poisson realizations, so batch occupancy -- and with it TPOT -- differs by
+            design; attainment is the quantity the capacity question reads;
   VALID     otherwise.
 **An engine's capacity ceiling** is the largest rate whose row is VALID with SLO attainment >= 0.95 in BOTH draws (the
 driver's ``attainment``: the share of the run's requests VALID and within the SLO); 0 if no rate qualifies; UNREAD if
@@ -68,8 +70,8 @@ def row(runs: list, workload) -> dict:
             why.append(f"p50 TPOT {a['tpot_p50_s']} vs {b['tpot_p50_s']}")
     else:
         why = []
-        if _rel(a["tpot_p50_s"], b["tpot_p50_s"]) > RATE_TPOT_BAND:
-            why.append(f"p50 TPOT {a['tpot_p50_s']} vs {b['tpot_p50_s']}")
+        out["tpot_spread"] = round(_rel(a["tpot_p50_s"], b["tpot_p50_s"]), 4)
+        out["tpot_spread_over_band"] = out["tpot_spread"] > RATE_TPOT_BAND    # reported, never a status
         tol = max(GOOD_REL * max(a["attainment"], b["attainment"]), GOOD_ABS)
         if abs(a["attainment"] - b["attainment"]) > tol:
             why.append(f"attainment {a['attainment']} vs {b['attainment']} (tolerance {tol:.3f})")
@@ -189,6 +191,11 @@ def self_test() -> int:
         out = reduce(d)
         cases.append(("goodput tolerance", out["engines"]["vllm"]["rows"]["1"]["status"] == "VALID"
                       and out["engines"]["vllm"]["ceiling"] == 8))
+    with tempfile.TemporaryDirectory() as d:                     # Poisson draws differ in TPOT by design: reported, not UNSTABLE
+        fill(d, over={"vllm": {"rate": lambda r, k: _run(0.3, 0.007 if k == 1 else 0.009, r, r)}})
+        x = reduce(d)["engines"]["vllm"]
+        cases.append(("rate tpot spread reported", x["rows"]["4"]["status"] == "VALID" and x["rows"]["4"]["tpot_spread_over_band"]
+                      and x["ceiling"] == 8))
     with tempfile.TemporaryDirectory() as d:                     # the deadline dropped the labelled row: Q3 still reads
         fill(d, skip={("e4b_nf4", w, k) for w in ("serial",) + RATES for k in DRAWS})
         v = reduce(d)["predictions"]

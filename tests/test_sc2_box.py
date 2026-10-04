@@ -25,7 +25,7 @@ def _mod(name):
 
 
 def test_the_self_tests_pass():
-    for script, want in (("sc2_reduce.py", "self-test OK (9 cases)"), ("sc2_prompts.py", "self-test OK (3/3 cases)"),
+    for script, want in (("sc2_reduce.py", "self-test OK (10 cases)"), ("sc2_prompts.py", "self-test OK (3/3 cases)"),
                          ("sc2_driver.py", "self-test OK (9/9 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True)
         assert out.returncode == 0 and want in out.stdout, out.stdout + out.stderr
@@ -50,7 +50,7 @@ def test_the_plan_is_the_registered_plan():
     assert (drv.SLO_TTFT_S, drv.SLO_TPOT_S) == (1.0, 0.100) and drv.PROFILES["llamacpp"] == {"cache_prompt": False}
     assert (pr.ROWS, pr.PROMPT, pr.OFFSET) == (64, 512, 2048)
     for phrase in ("r = 1, 2, 4 and 8 req/s", "120 requests each", "24 requests", "TTFT ≤ 1.0 s AND TPOT ≤ 100 ms",
-                   "self-tested on 9 cases", "guard 3.0 h ≤ $2.25", "guard 1.25 h ≤ $0.94"):
+                   "self-tested on 10 cases", "guard 3.0 h ≤ $2.25", "guard 1.25 h ≤ $0.94"):
         assert phrase in PREREG, phrase
 
 

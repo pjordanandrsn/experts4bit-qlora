@@ -86,14 +86,16 @@ records SM clock, power and temperature throughout.
   own parser;
 - over real sockets (aiohttp): one chunk per token, packed chunks, an early stop, an HTTP 500, and the Poisson schedule.
 
-## The rule (`bench/sc2/sc2_reduce.py`, self-tested on 9 cases)
+## The rule (`bench/sc2/sc2_reduce.py`, self-tested on 10 cases)
 
 A **row** is one engine at one workload (`serial`, or one rate). Its status is the first that applies:
 - **UNREAD:** a draw is missing (the deadline, a skipped phase, a server that did not start).
 - **INVALID:** any request in either draw is not VALID.
 - **UNSTABLE:** the draws disagree.
   - serial: p50 TTFT beyond 10 %, or p50 TPOT beyond 5 %;
-  - a rate: p50 TPOT beyond 10 %, or attainment beyond max(10 % of the larger, 0.05).
+  - a rate: attainment beyond max(10 % of the larger, 0.05). A rate's p50 TPOT disagreeing beyond 10 % is reported
+    (`tpot_spread`), not a status: the draws are different Poisson realizations, so batch occupancy, and with it
+    TPOT, differs by design.
 - **VALID:** otherwise.
 
 **An engine's capacity ceiling** is the largest rate whose row is VALID with attainment ≥ 0.95 in both draws. It is 0

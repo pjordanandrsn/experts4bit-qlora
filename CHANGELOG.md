@@ -11,7 +11,7 @@
   and at Poisson rates of 1, 2, 4 and 8 req/s, two draws each, and each engine's capacity ceiling. Predictions Q1–Q6 are
   in `bench/sc2/SC2-PREREG.md`; no position sentence comes from SC2 alone.
 - **The instrument.** `bench/sc2/sc2_driver.py` (tested against `serve_paged`'s real app and over real sockets),
-  `sc2_prompts.py`, `sc2_reduce.py` (self-tested on 9 cases) and box E, `sc2_box_e.sh`, which `sc1_run.sh` sources with
+  `sc2_prompts.py`, `sc2_reduce.py` (self-tested on 10 cases) and box E, `sc2_box_e.sh`, which `sc1_run.sh` sources with
   `SC1_BOX=E` so the lane reuses SC1's installs, checkpoints, bake and sampler. The SC2 files are staged and pinned like SC1's.
 - **Budget.** Proof guard 1.25 h ≤ $0.94; reading guard 3.0 h ≤ $2.25; expected about $2.5.
 
