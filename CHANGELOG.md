@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Read: TC2 amendment 7 — on the current code e4b is faster than HF and axolotl on Granite and than Unsloth on OLMoE; the absmax double-quantized brings e4b's Mixtral peak level with Unsloth's; Qwen3.6 trains resident at micro-batch 1 (P15, P17 HELD; P16 half HELD; P18–P21, P23 FALSIFIED; P22 UNTESTED)
+
+- **Box S** (`tc1-5090-54`, $2.59): HF/e4b **1.299** and axolotl/e4b **1.150** on Granite, Unsloth/e4b **1.821** on OLMoE. All three
+  are e4b faster; on 2026-10-02 they read 0.971, 0.903 and 1.201. Parity PASS, and the pairs read as before.
+- **Box D** (`tc1-5090-55`, $1.14, `E4B_ABSMAX_DQ=1`): Mixtral's e4b peak is 29.03 GB, against 31.07 with the fp32 absmax and 29.13
+  for Unsloth. Unsloth/e4b reads 0.542 on this desktop-CPU host, outside P18's band, so the switch stays opt-in. Qwen3.6 still OOMs.
+- **Box F** (`tc1-5090-56`, $3.00, plus `--frozen-4bit`): Qwen3.6 trains resident at micro-batch 1 (31.36 GB, 9.24 s/step), the first
+  time on a 32 GB card. Unsloth's micro-batch-1 arm took 18.49 s on the same box (one draw each, not quoted). Mixtral reads 0.644.
+- Rows: three superseding positions, plus labelled `.absmax-dq` and `.fit-mb1-dq-frozen4` rows. Lane page
+  `bench/h2h-2026-10-02/tc2/README.md`.
+
 ### TC1 amendment 22 registered: grouped-nf4-gemm's dense route against its fused kernels, A/B on one RTX 5090 (P38–P40) (bench and tests only)
 
 - **Why.** TC2 amendment 7's box D read e4b's reference loop (each expert dequantized, then a dense GEMM) on Mixtral-8x7B at

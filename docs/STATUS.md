@@ -250,8 +250,12 @@ RTX 5090 hosts, [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README
 register `e4b.train.h2h.hf.granite.5090.2026-10-02`,
 `e4b.train.h2h.axolotl.granite.5090.2026-10-02`,
 `e4b.train.h2h.unsloth.olmoe.5090.2026-10-02`,
-`e4b.train.h2h.hf.olmoe.5090.2026-10-02` and their companions). **The 5090
-per-step edge does not generalise to small experts.** On Granite-3.1-3B-A800M
+`e4b.train.h2h.hf.olmoe.5090.2026-10-02` and their companions). **Re-read on
+2026-10-04 on the current code, e4b is faster than each of them** (TC2 amendment 7,
+`…granite.5090.2026-10-04`, `…olmoe.5090.2026-10-04`): HF/e4b **1.299** and axolotl/e4b
+**1.150** on Granite, Unsloth/e4b **1.821** on OLMoE, with parity PASS and the pairs reading as
+before. The 2026-10-02 readings that follow were e4b 0.38.1's: **then the 5090
+per-step edge did not generalise to small experts.** On Granite-3.1-3B-A800M
 HF + PEFT with bf16 experts reads **HF/e4b 0.971 [0.965, 0.978]**, faster per
 step than e4b's fused 4-bit experts, which train at 0.53 × HF's VRAM (4.54
 vs 8.50 GB) — a footprint position against HF. **axolotl's 4-bit path beats
