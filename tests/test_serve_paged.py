@@ -736,3 +736,32 @@ def test_graphs_default_to_auto_on_a_cuda_all_vram_server(monkeypatch):
     for bad in ("2", "on", "yes"):
         with pytest.raises(ValueError, match="E4B_PAGED_GRAPHS"):
             _graphs_env(bad, "cuda", "all-vram")
+
+
+# ---- /health reports the prefill routes the server resolves (SC2: a box's environment is not evidence of them)
+def test_prefill_routes_report_what_the_forward_resolves(monkeypatch):
+    from experts4bit_qlora import serve_paged
+    from experts4bit_qlora.engines import hot_residency
+    monkeypatch.delenv("E4B_INT4_PREFILL", raising=False)
+    monkeypatch.delenv("E4B_PAGED_PREFILL_ATTN", raising=False)
+    monkeypatch.setattr(hot_residency, "DEVICE_GROUPING", [False])
+    r = serve_paged.prefill_routes()
+    assert r["int4_prefill_env"] is None and r["prefill_attn_env"] is None
+    assert r["int4_prefill"] in ("k19", "loop") and r["prefill_attn"] == "flash"
+    assert r["int4_prefill_above_256_rows"] == r["int4_prefill"]
+    # the pins SC2's box exported, read back as the server resolves them
+    monkeypatch.setenv("E4B_INT4_PREFILL", "loop")
+    monkeypatch.setenv("E4B_PAGED_PREFILL_ATTN", "math")
+    monkeypatch.setattr(hot_residency, "DEVICE_GROUPING", [True])
+    r = serve_paged.prefill_routes()
+    assert (r["int4_prefill"], r["prefill_attn"], r["int4_prefill_env"]) == ("loop", "math", "loop")
+    assert r["device_grouping"] is True and r["int4_prefill_above_256_rows"] == "mtile"
+    monkeypatch.setenv("E4B_INT4_PREFILL", "k19")
+    assert serve_paged.prefill_routes()["int4_prefill_above_256_rows"] == "k19"
+    monkeypatch.setenv("E4B_INT4_PREFILL", "bogus")
+    assert serve_paged.prefill_routes()["int4_prefill"].startswith("invalid:")
+
+
+def test_health_carries_the_prefill_routes():
+    src = (__import__("pathlib").Path(__file__).resolve().parents[1] / "experts4bit_qlora" / "serve_paged.py").read_text()
+    assert '"prefill_routes": prefill_routes(),' in src

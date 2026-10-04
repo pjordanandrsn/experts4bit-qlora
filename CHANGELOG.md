@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### serve_paged: `/health` reports the prefill routes the server resolves
+
+- **What.** `GET /health` gains a `prefill_routes` block, computed at each request by the same functions the forward
+  calls: `int4_prefill` (the resolved `E4B_INT4_PREFILL`), `int4_prefill_above_256_rows` (the route prefill calls
+  above 256 rows take when `device_grouping` is on), `prefill_attn` (the resolved `E4B_PAGED_PREFILL_ATTN`), the raw
+  environment values, and `device_grouping`. A route the environment makes invalid reads `invalid: …`.
+- **Why.** SC2's e4b arm inherited `E4B_INT4_PREFILL=loop` and `E4B_PAGED_PREFILL_ATTN=math` from the box script while
+  its registration said `k19` and `flash`. A box's environment is not evidence of the route the server took; the
+  server's own report is. Documented in `docs/SERVING.md`.
+
 ### #392: the energy claim remeasured with a recorded, released bitsandbytes (bench and docs only)
 
 - **What.** The same NAS RTX A2000 and the unchanged `bench/_upstream/bench_energy.py`, run on **bitsandbytes 0.50.2**
