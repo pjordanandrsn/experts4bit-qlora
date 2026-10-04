@@ -1,0 +1,55 @@
+{
+ "e4b_sha": "282070a8c18a2740519b238f9156771c0a1d65c7",
+ "gnf4_sha": "951a97fbb489b806d238922559b55724b55db8fd",
+ "pdl_active": true,
+ "switched": {
+  "_swiglu_rows": [
+   720,
+   719,
+   1,
+   1,
+   1
+  ],
+  "_combine_rows": [
+   720,
+   719,
+   1,
+   1,
+   1
+  ]
+ },
+ "switched_kernels": [
+  "_combine_rows",
+  "_swiglu_rows"
+ ],
+ "triton_launches": 5616,
+ "triton_kernels": [
+  "_combine_rows",
+  "_fp8_append_bt1_side",
+  "_fp8_paged_decode_split_f8dot",
+  "_gemm_nf4_grouped_smallm",
+  "_gemv_nf4_dotpad",
+  "_swiglu_rows",
+  "_tile_table_r1"
+ ],
+ "int4": {
+  "int4_expert_layers": 0,
+  "int4_attn_projections": 0,
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 0,
+  "moe_layers": 48
+ },
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "4": "graph",
+  "8": "graph",
+  "16": "graph"
+ },
+ "levers_env": {}
+}

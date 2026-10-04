@@ -1,0 +1,13 @@
+{
+ "verdict": "VOID",
+ "reasons": [
+  "a decode slope is void"
+ ],
+ "bars": {
+  "self_pair": [
+   0.96,
+   1.04
+  ],
+  "gain_min": 1.0
+ }
+}
