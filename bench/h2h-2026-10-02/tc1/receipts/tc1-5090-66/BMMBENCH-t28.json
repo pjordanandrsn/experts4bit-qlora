@@ -1,0 +1,273 @@
+{
+ "label": "t28",
+ "results": [
+  {
+   "label": "t28",
+   "dtype": "fp32",
+   "blas": "default",
+   "torch": "2.8.0+cu128",
+   "cuda": "12.8",
+   "gpu": "NVIDIA GeForce RTX 5090",
+   "cap": [
+    12,
+    0
+   ],
+   "n_calls": 128,
+   "median_shape": [
+    107,
+    138
+   ],
+   "bucket_multiple": 32,
+   "r": 16,
+   "recorded": {
+    "fwd_host_us_median": 88.9,
+    "fwd_host_us_p90": 1229.7,
+    "bwd_host_ms_median": 0.924,
+    "bwd_device_ms_median": 1.07,
+    "calls": 128,
+    "distinct_shapes": 64
+   },
+   "recorded_again": {
+    "fwd_host_us_median": 37.9,
+    "fwd_host_us_p90": 45.5,
+    "bwd_host_ms_median": 0.375,
+    "bwd_device_ms_median": 0.401,
+    "calls": 128,
+    "distinct_shapes": 64
+   },
+   "cold": {
+    "fwd_host_us_median": 119.4,
+    "fwd_host_us_p90": 1397.1,
+    "bwd_host_ms_median": 1.936,
+    "bwd_device_ms_median": 1.972,
+    "calls": 384,
+    "distinct_shapes": 384
+   },
+   "fixed": {
+    "fwd_host_us_median": 37.4,
+    "fwd_host_us_p90": 38.3,
+    "bwd_host_ms_median": 0.221,
+    "bwd_device_ms_median": 0.404,
+    "calls": 128,
+    "distinct_shapes": 2
+   },
+   "bucket": {
+    "fwd_host_us_median": 37.9,
+    "fwd_host_us_p90": 672.8,
+    "bwd_host_ms_median": 0.231,
+    "bwd_device_ms_median": 0.649,
+    "calls": 128,
+    "distinct_shapes": 60
+   },
+   "bucket_again": {
+    "fwd_host_us_median": 37.4,
+    "fwd_host_us_p90": 47.4,
+    "bwd_host_ms_median": 0.396,
+    "bwd_device_ms_median": 0.44,
+    "calls": 128,
+    "distinct_shapes": 60
+   }
+  },
+  {
+   "label": "t28",
+   "dtype": "bf16",
+   "blas": "default",
+   "torch": "2.8.0+cu128",
+   "cuda": "12.8",
+   "gpu": "NVIDIA GeForce RTX 5090",
+   "cap": [
+    12,
+    0
+   ],
+   "n_calls": 128,
+   "median_shape": [
+    107,
+    138
+   ],
+   "bucket_multiple": 32,
+   "r": 16,
+   "recorded": {
+    "fwd_host_us_median": 38.3,
+    "fwd_host_us_p90": 44.4,
+    "bwd_host_ms_median": 0.271,
+    "bwd_device_ms_median": 0.267,
+    "calls": 128,
+    "distinct_shapes": 64
+   },
+   "recorded_again": {
+    "fwd_host_us_median": 34.3,
+    "fwd_host_us_p90": 39.2,
+    "bwd_host_ms_median": 0.413,
+    "bwd_device_ms_median": 0.397,
+    "calls": 128,
+    "distinct_shapes": 64
+   },
+   "cold": {
+    "fwd_host_us_median": 42.5,
+    "fwd_host_us_p90": 44.8,
+    "bwd_host_ms_median": 0.472,
+    "bwd_device_ms_median": 0.46,
+    "calls": 384,
+    "distinct_shapes": 384
+   },
+   "fixed": {
+    "fwd_host_us_median": 37.3,
+    "fwd_host_us_p90": 38.8,
+    "bwd_host_ms_median": 0.415,
+    "bwd_device_ms_median": 0.399,
+    "calls": 128,
+    "distinct_shapes": 2
+   },
+   "bucket": {
+    "fwd_host_us_median": 37.3,
+    "fwd_host_us_p90": 43.6,
+    "bwd_host_ms_median": 0.423,
+    "bwd_device_ms_median": 0.425,
+    "calls": 128,
+    "distinct_shapes": 60
+   },
+   "bucket_again": {
+    "fwd_host_us_median": 35.5,
+    "fwd_host_us_p90": 39.7,
+    "bwd_host_ms_median": 0.421,
+    "bwd_device_ms_median": 0.408,
+    "calls": 128,
+    "distinct_shapes": 60
+   }
+  },
+  {
+   "label": "t28",
+   "dtype": "fp32",
+   "blas": "cublaslt",
+   "torch": "2.8.0+cu128",
+   "cuda": "12.8",
+   "gpu": "NVIDIA GeForce RTX 5090",
+   "cap": [
+    12,
+    0
+   ],
+   "n_calls": 128,
+   "median_shape": [
+    107,
+    138
+   ],
+   "bucket_multiple": 32,
+   "r": 16,
+   "recorded": {
+    "fwd_host_us_median": 89.7,
+    "fwd_host_us_p90": 1128.3,
+    "bwd_host_ms_median": 0.62,
+    "bwd_device_ms_median": 1.003,
+    "calls": 128,
+    "distinct_shapes": 64
+   },
+   "recorded_again": {
+    "fwd_host_us_median": 40.6,
+    "fwd_host_us_p90": 43.0,
+    "bwd_host_ms_median": 0.435,
+    "bwd_device_ms_median": 0.433,
+    "calls": 128,
+    "distinct_shapes": 64
+   },
+   "cold": {
+    "fwd_host_us_median": 240.1,
+    "fwd_host_us_p90": 2624.3,
+    "bwd_host_ms_median": 3.725,
+    "bwd_device_ms_median": 3.705,
+    "calls": 384,
+    "distinct_shapes": 384
+   },
+   "fixed": {
+    "fwd_host_us_median": 72.8,
+    "fwd_host_us_p90": 89.0,
+    "bwd_host_ms_median": 0.531,
+    "bwd_device_ms_median": 0.503,
+    "calls": 128,
+    "distinct_shapes": 2
+   },
+   "bucket": {
+    "fwd_host_us_median": 89.8,
+    "fwd_host_us_p90": 1338.9,
+    "bwd_host_ms_median": 0.55,
+    "bwd_device_ms_median": 0.752,
+    "calls": 128,
+    "distinct_shapes": 60
+   },
+   "bucket_again": {
+    "fwd_host_us_median": 50.6,
+    "fwd_host_us_p90": 88.9,
+    "bwd_host_ms_median": 0.501,
+    "bwd_device_ms_median": 0.504,
+    "calls": 128,
+    "distinct_shapes": 60
+   }
+  },
+  {
+   "label": "t28",
+   "dtype": "fp32tf32",
+   "blas": "default",
+   "torch": "2.8.0+cu128",
+   "cuda": "12.8",
+   "gpu": "NVIDIA GeForce RTX 5090",
+   "cap": [
+    12,
+    0
+   ],
+   "n_calls": 128,
+   "median_shape": [
+    107,
+    138
+   ],
+   "bucket_multiple": 32,
+   "r": 16,
+   "recorded": {
+    "fwd_host_us_median": 80.2,
+    "fwd_host_us_p90": 291.4,
+    "bwd_host_ms_median": 0.521,
+    "bwd_device_ms_median": 0.736,
+    "calls": 128,
+    "distinct_shapes": 64
+   },
+   "recorded_again": {
+    "fwd_host_us_median": 35.3,
+    "fwd_host_us_p90": 39.8,
+    "bwd_host_ms_median": 0.418,
+    "bwd_device_ms_median": 0.408,
+    "calls": 128,
+    "distinct_shapes": 64
+   },
+   "cold": {
+    "fwd_host_us_median": 269.4,
+    "fwd_host_us_p90": 673.2,
+    "bwd_host_ms_median": 1.787,
+    "bwd_device_ms_median": 1.752,
+    "calls": 384,
+    "distinct_shapes": 384
+   },
+   "fixed": {
+    "fwd_host_us_median": 37.9,
+    "fwd_host_us_p90": 50.6,
+    "bwd_host_ms_median": 0.27,
+    "bwd_device_ms_median": 0.336,
+    "calls": 128,
+    "distinct_shapes": 2
+   },
+   "bucket": {
+    "fwd_host_us_median": 38.8,
+    "fwd_host_us_p90": 240.8,
+    "bwd_host_ms_median": 0.277,
+    "bwd_device_ms_median": 0.615,
+    "calls": 128,
+    "distinct_shapes": 60
+   },
+   "bucket_again": {
+    "fwd_host_us_median": 33.3,
+    "fwd_host_us_p90": 38.3,
+    "bwd_host_ms_median": 0.252,
+    "bwd_device_ms_median": 0.328,
+    "calls": 128,
+    "distinct_shapes": 60
+   }
+  }
+ ]
+}
