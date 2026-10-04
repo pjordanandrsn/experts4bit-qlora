@@ -1008,21 +1008,23 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   instrument is the next step if one is ever wanted ([`bench/p67/RESULTS-p67.md`](../bench/p67/RESULTS-p67.md)).
   tp2/P40's harness still hard-codes 4 · n_layers ([#412](https://github.com/pjordanandrsn/experts4bit-qlora/issues/412)).
 - **[#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344) —
-  Gemma-4 fails to load on 2 of 6 rented hosts** with `CUDA error: invalid
-  argument`, after the experts quantise. A 2 GiB host-hop fix was merged and
-  reverted the same day: the model's largest tensor is 1.375 GiB, so it never
-  triggered. **The six hosts' forensics have now been put side by side**
-  (`bench/p55/P55-PREREG.md`), and two leads are dead by construction: driver
-  580.159.03 appears on both sides, and every host is the same RTX 5090. What
-  orders every outcome is **host RAM against this checkpoint's 49.9 GiB single
-  shard** — 30 GiB refused the map outright (`Cannot allocate memory`), 64 GiB
-  mapped it and died opaquely, 96 / 125 / 188 GiB passed — and one failing host
-  had already run two hours of clean CUDA on smaller models before Gemma-4
-  reached it. All three outcomes sit inside the `safe_open(device="cuda")`
-  mapping, which maps the whole shard and copies each tensor out of it. That is
-  a reading of six points, not a mechanism; **lane P55 is registered to test it
-  and has not been launched** (its authorisation is the open item, not its
-  code). Meanwhile the loader no longer fails silently about it: a shard-read
+  Gemma-4 failed to load on 2 of 6 rented hosts** (2026-09-03) with `CUDA error:
+  invalid argument`, after the experts quantise. A 2 GiB host-hop fix was merged
+  and reverted the same day: the model's largest tensor is 1.375 GiB, so it never
+  triggered. The six hosts' forensics, put side by side
+  (`bench/p55/P55-PREREG.md`), killed the driver and GPU leads by construction
+  and left one reading: host RAM against the checkpoint's 49.9 GB (46.48 GiB)
+  single shard. **Lane P55 tested that reading and refuted it** (2026-10-04,
+  [`bench/p55/RESULTS-p55.md`](../bench/p55/RESULTS-p55.md)). On a host of the
+  failing class (an RTX 5090 with 58.1 GiB of effective memory, its cgroup
+  limit), the checkpoint loaded cleanly three times:
+  - unarmed;
+  - under staged synchronisation with `CUDA_LAUNCH_BLOCKING=1`, every stage clean;
+  - with the cgroup's headroom down to 5.7 GiB during the load.
+
+  The fault is **unreproduced on the current loader**; the failing runs used
+  e4b as of 2026-09-03. The issue stays open as host-specific, with its leads
+  dead. The loader no longer fails silently about it: a shard-read
   failure now prints the shard, its size and the host's `MemTotal` /
   `MemAvailable` / cgroup limit, and `E4B_LOAD_SYNC_DEBUG=1` inserts staged
   `torch.cuda.synchronize()` checkpoints (arming `CUDA_LAUNCH_BLOCKING=1` while

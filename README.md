@@ -325,8 +325,8 @@ Known open: Gemma-4-26B-A4B needs a parity instrument that survives its
 batch-shape variance before any verdict is quoted for the family
 ([#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359);
 its other half — finer fp8 K-cache groups on the 512-dim heads — shipped
-in 0.32.0 with grouped-nf4-gemm 0.26.0); the model fails to load on
-2 of 6 rented hosts
+in 0.32.0 with grouped-nf4-gemm 0.26.0); the September load fault on
+2 of 6 rented hosts is unreproduced
 ([#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344));
 reproducing the TR2 training receipt from published artifacts is still
 open in the register (`e4b.open.tr2-repro-gap`), although grouped-nf4-gemm's

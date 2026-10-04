@@ -1,0 +1,35 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01
+cpu: AMD Ryzen 9 7945HX with Radeon Graphics
+kernel: 5.15.0-170-generic
+MemTotal:       63481032 kB
+MemAvailable:   61072376 kB
+SwapTotal:       5396476 kB
+cgroup_limit(/sys/fs/cgroup/memory.max): 62403903488
+overcommit_memory: 0
+overcommit_ratio: 50
+max_map_count: 65530
+ulimit:
+  real-time non-blocking time  (microseconds, -R) unlimited
+  core file size              (blocks, -c) unlimited
+  data seg size               (kbytes, -d) unlimited
+  scheduling priority                 (-e) 0
+  file size                   (blocks, -f) unlimited
+  pending signals                     (-i) 247167
+  max locked memory           (kbytes, -l) 64
+  max memory size             (kbytes, -m) unlimited
+  open files                          (-n) 1024
+  pipe size                (512 bytes, -p) 8
+  POSIX message queues         (bytes, -q) 819200
+  real-time priority                  (-r) 0
+  stack size                  (kbytes, -s) 8192
+  cpu time                   (seconds, -t) unlimited
+  max user processes                  (-u) unlimited
+  virtual memory              (kbytes, -v) unlimited
+  file locks                          (-x) unlimited
+mem_total_gib: 60.5
+cgroup_limit_source: /sys/fs/cgroup/memory.max
+cgroup_limit_bytes: 62403903488
+effective_ram_gib: 58.1
+largest_shard_gib: 46.48
+class_max_gib: 72
+class_drawn: 1
