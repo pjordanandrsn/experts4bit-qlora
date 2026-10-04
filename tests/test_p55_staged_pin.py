@@ -53,6 +53,19 @@ def test_stop1_reads_the_effective_memory_not_memtotal():
     assert "ulimit -a" in RUN
 
 
+def test_the_install_brings_the_loaders_stack_and_a_tripwire_proves_it():
+    """Amendment 2: e4b's BASE dependencies are torch and bitsandbytes only. The registered bare install could never
+    load the model, and p55-5090-1 died at the fetch on `No module named 'huggingface_hub'`."""
+    assert 'pip install -q "experts4bit-qlora @' not in RUN, "the bare install is gone"
+    assert RUN.index("command -v git") < RUN.index("pipx logs/pip_e4b.log"), "git is ensured before pip needs it"
+    for pin in ('"transformers==5.17.0"', '"bitsandbytes==0.50.2"', "safetensors", '"huggingface_hub>=0.23"', "accelerate"):
+        assert pin in RUN, pin
+    assert "from experts4bit_qlora.loader import load_moe_4bit_streaming" in RUN
+    assert 'grep -q "^tripwire OK:" summary.txt' in RUN and "TRIPWIRE FAIL" in RUN
+    assert RUN.index("tripwire OK") < RUN.index("snapshot_download") < RUN.index("run_arm A_baseline"), \
+        "install and tripwire, then the fetch, then the arms"
+
+
 def test_the_checkpoint_is_fetched_before_the_arms_bounded_and_without_xet():
     """Amendment 1, defect 5: registered, the first arm downloaded 51.6 GB inside its own load -- unbounded, on the Xet
     backend that wedges on this fleet. The fetch now precedes every arm, under an alarm, and failing it is exit 11."""

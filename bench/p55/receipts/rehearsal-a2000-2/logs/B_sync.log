@@ -1,0 +1,14 @@
+[13:41:31]   E4B_LOAD_SYNC_DEBUG=1: staged synchronisation ON; CUDA_LAUNCH_BLOCKING already set in the environment (the driver will honour it)
+[13:41:31]   host: MemTotal 125.7 GiB, MemAvailable 48.4 GiB, cgroup limit unknown; torch 2.8.0+cu128, device 'cuda'
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 2393.64it/s]
+[13:41:31]   checkpoint: ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89 (requested a02780686e08a03fe0d2679a293b5c74a90efa89)
+[13:41:31]   [sync] mapping 2 shard(s), largest 'model-00001-of-00002.safetensors' at 4.7 GiB
+[13:41:31]   [sync] map shard handles: clean
+[13:41:31]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[13:41:36]   [sync] quantise experts (all layers): clean
+[13:41:36]   quantized experts on 32/32 MoE layers (40 experts each)
+[13:41:36]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[13:41:36]   [sync] load non-expert weights: clean
+[13:41:36]   [sync] rebuild rotary embeddings: clean
+[13:41:36]   [sync] tie output head + final checks: clean
+P55 B_sync: OK

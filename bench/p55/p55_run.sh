@@ -60,8 +60,40 @@ case "$CLASS_DRAWN" in
 esac
 echo "$CLASS_DRAWN" > class_drawn.txt
 
-pip install -q "experts4bit-qlora @ git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" 2>&1 | tail -3
-python3 -c "import experts4bit_qlora, torch; print('e4b', experts4bit_qlora.__version__, 'torch', torch.__version__)" | tee -a summary.txt
+# ---- install (Amendment 2): experts4bit-qlora's BASE dependencies are torch and bitsandbytes only. The loader's
+# transformers / safetensors / huggingface_hub live in its extras, so the registered bare `pip install` could never
+# load the model (p55-5090-1 died at the fetch on `No module named 'huggingface_hub'`). Installed as P113's runner
+# does: the image's torch held by a constraint, the loader's stack pinned, bounded, one retry, exit 9 on failure.
+# git is what `pip install git+https://...` runs. Vast's ssh runtime layer has supplied it so far (P113 relied on that
+# without saying so); the lane's image itself does not ship it, which the $0 rehearsal found. Installed only when absent.
+if ! command -v git >/dev/null 2>&1; then
+  say "git absent -- installing it (apt, bounded)"
+  perl -e "alarm 600; exec @ARGV" sh -c "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git" > logs/apt_git.log 2>&1 \
+    || { tail -3 logs/apt_git.log; say "HARNESS: cannot install git -- no verdict"; finish 9; }
+fi
+TORCH_PIN=$(python3 -c "import torch; print(torch.__version__.split('+')[0])") || { say "HARNESS: no torch in the image"; finish 9; }
+echo "torch==$TORCH_PIN" > constraints.txt
+pipx(){ local log=$1 secs=$2; shift 2
+  perl -e "alarm $secs; exec @ARGV" python3 -m pip install -q --no-input -c constraints.txt "$@" > "$log" 2>&1 && return 0
+  say "pip failed ($(tail -1 "$log" | cut -c1-120)) -- one retry in 20 s"; sleep 20
+  perl -e "alarm $secs; exec @ARGV" python3 -m pip install -q --no-input -c constraints.txt "$@" >> "$log" 2>&1; }
+say "install e4b @$E4B_SHA (transformers 5.17.0, bitsandbytes 0.50.2; torch held at $TORCH_PIN)"
+pipx logs/pip_e4b.log 1200 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
+  "transformers==5.17.0" "bitsandbytes==0.50.2" accelerate safetensors "huggingface_hub>=0.23" \
+  || { tail -4 logs/pip_e4b.log; say "PIP FAIL -- harness fault: no verdict"; finish 9; }
+# The tripwire: the installed commit is the launch commit, and everything the probe and the fetch import imports.
+WANT_E4B=$E4B_SHA python3 - <<'PYT' 2>&1 | tee -a summary.txt
+import json, os, sys, importlib.metadata as md
+d = json.loads(md.distribution("experts4bit-qlora").read_text("direct_url.json") or "{}")
+if d.get("vcs_info", {}).get("commit_id") != os.environ["WANT_E4B"]:
+    sys.exit(f"TRIPWIRE: installed e4b is not the launch commit: {d}")
+import torch, transformers, huggingface_hub, safetensors, bitsandbytes  # noqa: F401
+from experts4bit_qlora.loader import load_moe_4bit_streaming  # noqa: F401
+import experts4bit_qlora as e
+print(f"tripwire OK: e4b {e.__version__} @{os.environ['WANT_E4B'][:12]} torch {torch.__version__} transformers "
+      f"{transformers.__version__} huggingface_hub {huggingface_hub.__version__} bitsandbytes {md.version('bitsandbytes')}")
+PYT
+grep -q "^tripwire OK:" summary.txt || { say "TRIPWIRE FAIL -- harness fault: no verdict"; finish 9; }
 
 # ---- the fetch (Amendment 1, defect 5): BEFORE the arms, bounded, Xet disabled. Registered, the first arm downloaded the
 # 51.6 GB checkpoint inside its own load -- unbounded, on the Xet backend that wedges at ~6.1 MB on this fleet, so a stall
