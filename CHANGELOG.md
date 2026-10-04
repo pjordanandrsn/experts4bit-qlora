@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### SC2 registered (#846): request-level serving, e4b's `serve_paged` against vLLM, SGLang and llama.cpp under Poisson arrivals
+
+- **What it asks.** SC1 timed decode loops at fixed batches; SC2 drives each engine's own OpenAI `/v1/completions` with ONE client
+  and ONE request plan: identical token-id prompts (64 rows of 512 wikitext-2 tokens), `max_tokens` drawn from [64, 256], greedy,
+  `ignore_eos`, streaming, concurrency capped at 16, prefix caching off. Scheduling stays native. It reads TTFT, TPOT and
+  SLO attainment (the share of requests VALID with TTFT ≤ 1.0 s and TPOT ≤ 100 ms; goodput = attainment × rate) serially
+  and at Poisson rates of 1, 2, 4 and 8 req/s, two draws each, and each engine's capacity ceiling. Predictions Q1–Q6 are
+  in `bench/sc2/SC2-PREREG.md`; no position sentence comes from SC2 alone.
+- **The instrument.** `bench/sc2/sc2_driver.py` (tested against `serve_paged`'s real app and over real sockets),
+  `sc2_prompts.py`, `sc2_reduce.py` (self-tested on 10 cases) and box E, `sc2_box_e.sh`, which `sc1_run.sh` sources with
+  `SC1_BOX=E` so the lane reuses SC1's installs, checkpoints, bake and sampler. The SC2 files are staged and pinned like SC1's.
+- **Budget.** Proof guard 1.25 h ≤ $0.94; reading guard 3.0 h ≤ $2.25; expected about $2.5.
+
 ### Lane K28's runner (#1015): the GNF4_PDL decode-chain bench's box side (bench and tests only)
 
 - **What.** `bench/k28/` drives grouped-nf4-gemm's K28 (`kernel/PREREG-k28-pdl-decode-chain.md`). It is K27's runner with

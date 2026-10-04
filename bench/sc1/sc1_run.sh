@@ -43,7 +43,7 @@ trap 'finish 130' INT TERM
 for v in SC1_RUN_ID SC1_DEADLINE_EPOCH SC1_INSTANCE_ID SC1_BOX E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
-BOX=$SC1_BOX; case "$BOX" in A|B|C|D) ;; *) say "refusing: SC1_BOX must be A, B, C or D (SC1b)"; finish 78;; esac
+BOX=$SC1_BOX; case "$BOX" in A|B|C|D|E) ;; *) say "refusing: SC1_BOX must be A, B, C, D or E (SC1b, SC2)"; finish 78;; esac
 # ---- registered constants (v3 "Fixture"); E4B_SHA is the launch commit the driver derived from its checkout
 GNF4_SHA=34da93d6fe8d2a401b7001705658ce00b2b18213   # grouped-nf4-gemm v0.34.1 -- the COMMIT the tag points to (`git rev-parse v0.34.1^{commit}`; the tag OBJECT is e7ae8e2e)
 MID=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
@@ -144,7 +144,7 @@ line(){ echo "$*" >> summary.txt; }
 # ---- the python that runs e4b: a venv WITH --system-site-packages (a plain venv sets site.ENABLE_USER_SITE=False and the
 # P42 hook -- usercustomize via PYTHONPATH -- silently never loads; measured 2026-10-01). Box C builds it on python 3.12
 # with torch 2.8 cu128 wheels; boxes A/B inherit the image's torch 2.8 cu12.9.
-case "$BOX" in A|B) BASEPY=python;; C|D) BASEPY=python3;; esac
+case "$BOX" in A|B) BASEPY=python;; C|D|E) BASEPY=python3;; esac
 ensure_tools(){ local need=0 t; for t in git cmake curl; do command -v $t >/dev/null 2>&1 || need=1; done
   "$BASEPY" -c "import venv, ensurepip" 2>/dev/null || need=1
   [ "$BOX" = C ] && { command -v python >/dev/null 2>&1 || need=1; }
@@ -162,7 +162,7 @@ pipx(){ local log=$1 secs=$2; shift 2
 say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (venv-e4b --system-site-packages; P58 pins transformers 5.16.1 / bitsandbytes 0.50.1)"
 "$BASEPY" -m venv --system-site-packages $W/venv-e4b > logs/venv_e4b.log 2>&1 || { tail -3 logs/venv_e4b.log; say "VENV FAIL (e4b)"; finish 9; }
 PY=$W/venv-e4b/bin/python
-if [ "$BOX" = C ] || [ "$BOX" = D ]; then pipx logs/pip_torch.log 1800 "torch==2.8.0" --index-url https://download.pytorch.org/whl/cu128 || { tail -3 logs/pip_torch.log; say "PIP FAIL (torch cu128)"; finish 9; }; fi
+if [ "$BOX" = C ] || [ "$BOX" = D ] || [ "$BOX" = E ]; then pipx logs/pip_torch.log 1800 "torch==2.8.0" --index-url https://download.pytorch.org/whl/cu128 || { tail -3 logs/pip_torch.log; say "PIP FAIL (torch cu128)"; finish 9; }; fi
 pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
   "transformers==5.16.1" "bitsandbytes==0.50.1" datasets accelerate sentencepiece tiktoken safetensors "huggingface_hub>=0.23" pytest || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }
@@ -244,6 +244,7 @@ case "$BOX" in
   B) install_vllm; install_llamacpp; install_exl3 cu128; unsupported lmdeploy "$LMD_UNSUPPORTED" ;;
   C) install_vllm; install_exl3 cu132; [ "$PROVE" = 1 ] && install_sglang ;;   # the real lane installs SGLang AFTER the anchors (v3's order)
   D) . $W/sc1b_box_d.sh; install_vllm; install_sglang; install_llamacpp; install_nsys ;;   # SC1b's census box (bench/sc1b)
+  E) . $W/sc2_box_e.sh; install_vllm; install_sglang; install_llamacpp; install_sc2_client ;;   # SC2's serving box (bench/sc2)
 esac
 # ---- environments (P88, byte for byte) + SC1's explicit route knobs (v3 "Fixture": never inherited)
 FOLDS="E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1"
@@ -551,7 +552,7 @@ reduce(){ if [ -s $W/sc1_reduce.py ]; then say "reduce"; "$PY" $W/sc1_reduce.py 
 # ============================================================================ the PROVING RENTAL (SC1_PROVE=1): no bf16 Qwen3 fetch
 if [ "$PROVE" = 1 ]; then
   echo "PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite" | tee -a summary.txt
-  case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3";; C) PROVE_NEEDS="vllm exl3 sglang";; D) PROVE_NEEDS="vllm sglang llamacpp nsys";; esac   # = the install dispatch's sets
+  case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3";; C) PROVE_NEEDS="vllm exl3 sglang";; D) PROVE_NEEDS="vllm sglang llamacpp nsys";; E) PROVE_NEEDS="vllm sglang llamacpp sc2client";; esac   # = the install dispatch's sets
   for E in $PROVE_NEEDS; do have $E || { say "PROVE: $E did not install -- NOT PROVED"; rec 23; }; done
   quiesce prove
   if fetch granite "$GR" "$GR_REV" 900 && bake granite "$GR" 1500; then
@@ -581,8 +582,9 @@ if [ "$PROVE" = 1 ]; then
     fi
   fi
   [ "$BOX" = D ] && prove_d                                                   # SC1b: the toy + four captures that must reduce
+  [ "$BOX" = E ] && prove_e                                                   # SC2: every server answers the driver, all VALID
   [ "$rc_any" = 0 ] || { say "PROVE: NOT PROVED (rc_any=$rc_any)"; finish 23; }
-  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")$([ "$BOX" = D ] && echo ' census=[toy e4b_granite_b16_graph vllm_b1_node sglang_b1_node llamacpp_b16_graph]')" | tee -a summary.txt
+  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")$([ "$BOX" = D ] && echo ' census=[toy e4b_granite_b16_graph vllm_b1_node sglang_b1_node llamacpp_b16_graph]')$([ "$BOX" = E ] && echo ' servers=[e4b_granite vllm sglang llamacpp]')" | tee -a summary.txt
   : > PROVED; finish 0
 fi
 # ============================================================================ the REAL lane: common Phase 0 pieces
@@ -775,6 +777,6 @@ box_c(){ SCHED_NAME=int4; SCHED_STACK="$SPEEDENV"
   for B in 16 1; do can_run 900 e4bsched_int4_sched_b${B}_r2 && { arm_int4_sched r2 $B; rec $?; }; done
   for B in 16 1; do can_run 900 vllm_gptq_graph_b${B}_r2 && { arm_vllm_gptq r2 $B; rec $?; }; done
   reduce; }
-case "$BOX" in A) box_a;; B) box_b;; C) box_c;; D) box_d;; esac
+case "$BOX" in A) box_a;; B) box_b;; C) box_c;; D) box_d;; E) box_e;; esac
 say "----- summary -----"; cat summary.txt; echo "----- versions -----"; cat versions.txt
 finish "$rc_any"

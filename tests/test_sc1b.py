@@ -120,12 +120,12 @@ SC1 = LANE.parent / "sc1"
 
 def test_box_d_is_wired_into_sc1s_box_script_and_controller():
     run = (SC1 / "sc1_run.sh").read_text()
-    assert 'case "$BOX" in A|B|C|D) ;;' in run and 'C|D) BASEPY=python3;;' in run
+    assert 'case "$BOX" in A|B|C|D|E) ;;' in run and 'C|D|E) BASEPY=python3;;' in run
     assert "D) . $W/sc1b_box_d.sh; install_vllm; install_sglang; install_llamacpp; install_nsys ;;" in run
     assert 'D) PROVE_NEEDS="vllm sglang llamacpp nsys";;' in run and '[ "$BOX" = D ] && prove_d' in run
-    assert 'C) box_c;; D) box_d;; esac' in run
+    assert 'C) box_c;; D) box_d;; E) box_e;; esac' in run
     drive = (SC1 / "sc1_drive.sh").read_text()
-    assert 'case "$SC1_BOX" in A|B|C|D) ;;' in drive and 'sc1b_*|kernel_classes.json) src="$SC1B/$name"' in drive
+    assert 'case "$SC1_BOX" in A|B|C|D|E) ;;' in drive and 'sc1b_*|kernel_classes.json) src="$SC1B/$name"' in drive
 
 
 def test_every_nsys_call_in_box_d_uses_the_pinned_binary():
