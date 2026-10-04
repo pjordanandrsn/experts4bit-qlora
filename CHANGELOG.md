@@ -47,6 +47,20 @@
 - **Records.** New register row `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`. The fork-build row stands, and its
   notes point here. METHODOLOGY §10 carries a dated note. The receipts are in `bench/energy-remeasure-2026-10-04/`.
 
+### moe-generalize: five more RTX A2000 ladders, the dequantize-then-GEMM geometry and engagement on the hybrids (bench only; `bench/moegen/RESULTS-moegen-ladders.md`)
+
+- **Receipts:** the ERNIE-4.5, Nemotron-H and Qwen3.6 layer slices, OLMoE in the shipped bf16-adapter configuration, and LFM2's
+  route rungs. These are informational within-box readings, not positions.
+- **Engagement:** every MoE layer patched, with no dgrad loop.
+  - Nemotron-H's non-gated relu² experts ran on real weights.
+  - The RMSNorm probe read each family's own formula. Qwen3.6's centered norms fused for the first time; Nemotron-H's run its
+    fp32 multiply.
+  - ERNIE's interleaved rotary was refused on semantics, so it keeps its own.
+  - With mamba-ssm, causal-conv1d and flash-linear-attention installed, no recurrent block fell back.
+- **Geometry:** the dequantize-then-GEMM prototype's device ratio follows rows per expert at seq 512. It was cheaper on every
+  family with 32 or more (LFM2 0.71, ERNIE 0.76, OLMoE 0.79, Granite-H 0.81, Qwen3 0.87) and not at 16–24 (Qwen3.6 0.97,
+  Nemotron-H 1.07). That is the key for a measured dispatch rule, pending full-step readings per card.
+
 ### Before-load planning: `describe_moe`, `QLoRASetup`, `estimate_qlora_footprint`, `prepare_qlora_training`
 
 - **Why.**
