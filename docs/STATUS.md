@@ -296,12 +296,19 @@ shared experts in bf16 (about 1.14 B parameters) where Unsloth stores them in
 4-bit, worth about 1.6 GB of the resident footprint and a 0.05-nat step-0
 gap that VOIDs the same-box pair by rule. Re-asked resident on 2026-10-04 on the current code
 (TC2 amendment 6, `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04`): step 1 now completes, but e4b
-still OOMs at step 2 at both micro-batches.
-**On Mixtral-8x7B, e4b now trains resident on 32 GB, and Unsloth is faster**
-(`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04`, TC2 amendment 6): Unsloth/e4b
-0.697 [0.679, 0.714], 4.11 against 5.90 s/step, at 1.94 GB less peak (29.1 vs 31.1 GB)
-and ×0.65 the energy per step, the pair inside draw noise. The offload footprint row
-below stays as the offload lever's reading.
+still OOMs at step 2 at both micro-batches. **At micro-batch 1, on the comparator's bytes,
+e4b trains it resident and steps 2.05× faster than Unsloth**
+(`e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.mb1-dq-frozen4`, TC2 amendment 8, labelled):
+with the absmax double-quantized and the non-routed projections in NF4, Unsloth/e4b
+**2.049** [2.028, 2.070], 18.95 against 9.25 s/step, at 0.94 GB more peak (31.35 vs
+30.41 GB), the pair COMPARABLE. e4b's defaults keep those projections bf16 and do not fit.
+**On Mixtral-8x7B at default settings Unsloth is faster, 0.836**
+(`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`, TC2 amendment 8): with
+grouped-nf4-gemm 0.38.0's dense route, which `auto` takes for Mixtral's calls, e4b steps in
+3.57 s against Unsloth's 2.98 s, at 1.95 GB more peak (31.1 vs 29.1 GB), the pair
+COMPARABLE. The host, a Core Ultra 9 285K, is the Unsloth-favouring end of the range seen.
+Amendment 6's 0.697 on the fused kernels (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04`) is superseded by it.
+The offload footprint row below stays as the offload lever's reading.
 **On Mixtral-8x7B, re-measured with the counters fixed**
 (`e4b.train.footprint.unsloth.mixtral.5090.2026-10-02`): Unsloth resident steps
 in 3.74 s at 29.1 GB after one 34-second compile, e4b under expert offload in
