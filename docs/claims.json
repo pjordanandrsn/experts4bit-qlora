@@ -9537,6 +9537,56 @@
       "notes": "Vast invoiced $0.38."
     },
     {
+      "id": "e4b.train.env-ab.qwen3.5090.2026-10-04",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 24 (#835), one rented RTX 5090 (tc1-5090-66): e4b against itself in two environments on TC1's qwen3 tokens and field recipe, two draws a side in ABBA order. The matched arm (fp32 adapters, matched init) steps 3.915 / 3.895 s/step in the field image's environment (torch 2.8.0+cu128, transformers 5.18.0, triton 3.4.0) and 3.495 / 3.394 in Unsloth's venv (torch 2.12.1+cu130, transformers 5.5.0, triton 3.7.1): 0.882 [0.867, 0.897] (P47 HELD, band [0.70, 0.95]), held-out at N 0.0052 lower, peak unchanged at 27.2 GB. The shipped arm's torch-2.8 draws were 5.3 % apart, so its pair is not quoted (medians 3.090 -> 2.923, 0.946; P48, P49 UNTESTED). The box's bmm replay shows the padded LoRA delta's fp32 bmm costs the same on both torch versions, so that is not the cause; the environment changes torch, transformers and triton together and this box does not split them. Every 5090 position so far ran e4b in the first environment and Unsloth in the second; e4b requires torch>=2.2 and transformers>=5.0, so both are e4b environments. Not a position against another framework.",
+      "value": 0.882,
+      "unit": "ratio s/step, e4b matched arm in torch 2.12.1+cu130 / transformers 5.5.0 over torch 2.8.0+cu128 / transformers 5.18.0 (medians of steps 11..20 over two draws each; < 1 = faster in the first); cross-draw interval [0.867, 0.897]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-66: instance 54201179, AMD EPYC 7B13); e4b @ 6c2f42c + grouped-nf4-gemm 0.38.0 @ bb56b42",
+      "conditions": "bench/tc1 token qwen3bmmab (TC1 amendment 24): TC1's field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407, N=20, 8 held-out rows at 0 and N); _tv0 venv-e4b, _tv1 venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 row); engagement on env.torch and the adapter dtype; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-bmmab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-66/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-66/tc1/"
+      ],
+      "notes": "Vast invoiced $1.26 for the box (both parts)."
+    },
+    {
+      "id": "e4b.train.bmm-host-replay.5090.2026-10-04",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "none (recorded Qwen3-30B-A3B router shapes)",
+      "claim": "TC1 amendment 24 (#835), one rented RTX 5090 (tc1-5090-66), no model: grouped-nf4-gemm's padded LoRA delta's two batched products replayed at the 96 recorded real-router forward shapes of e4b's Qwen3-30B-A3B training step (r 16), each variant in a fresh process, the queue drained before each call. Median host time per forward bmm under torch 2.8.0+cu128: fp32 88.9 us at the recorded shapes against bf16 38.3 (x2.32): the profiles' 197-324 us per call does not reproduce outside training (P44 FALSIFIED, registered >= 100 us and >= x3). The cost is per new shape: fp32 on shapes the process has not used 119.4 us, on repeated shapes 37.9, on one fixed shape 37.4 (x3.15; P45 HELD, >= x2). torch 2.12.1+cu130 pays the same, 120.9 us on new shapes (x1.013; P46 FALSIFIED, <= x0.5). cuBLASLt and TF32 cost more on new shapes (223-269 us). By the registered rules no grouped-nf4-gemm change and no docs change follow.",
+      "value": 3.15,
+      "unit": "ratio, fp32 bmm median host us per forward call on new shapes over repeated shapes (torch 2.8.0+cu128); 119.4 / 37.9 us",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-66: instance 54201179, AMD EPYC 7B13); e4b @ 6c2f42c + grouped-nf4-gemm 0.38.0 @ bb56b42; venv-e4b torch 2.8.0+cu128 and venv-unsloth torch 2.12.1+cu130",
+      "conditions": "bench/tc1/bmm_bench.py on routecalls-qwen3.json's op == fwd calls (gate_up N 1536 K 2048, down N 2048 K 768); variants fp32 / bf16 / fp32 under preferred_blas_library('cublaslt') / fp32 with TF32, regimes recorded, repeated, cold (3 passes of shapes never used), fixed, bucketed; scored by bench/tc1/tc1_reduce.py from BMMBENCH-t28.json / BMMBENCH-t212.json",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-bmmab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-66/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-66/tc1/"
+      ],
+      "notes": "Part of the same box as e4b.train.env-ab.qwen3.5090.2026-10-04."
+    },
+    {
       "package": "experts4bit-qlora",
       "area": "train",
       "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04",
