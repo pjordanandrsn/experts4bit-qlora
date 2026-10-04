@@ -18,6 +18,11 @@
   - CPU: routing, counters, and the copy for a continuing prompt, with a mutation arm that drops the copy.
   - GPU: bitwise against eager on the FP8 pool and first tokens, the same mutation arm, and every refusal, each made
     to fire.
+- **What the A2000 caught.** The first version kept the graph's input ids but not its positions tensor. Its startup
+  check ran while the positions were still alive, so it passed, and every served replay then read freed memory: the
+  bitwise test failed on the A2000. The graph now keeps everything it reads that was allocated outside the capture.
+  The startup check now runs only after the capture's scope has returned and the allocator has been churned with a
+  sentinel. A mutation test drops the positions after capture, and the check must refuse it.
 - **Basis.** The A2000 census (`bench/prefill-graph-census-2026-10-04/`). Off by default; its speed is for lane
   SC2b to read.
 

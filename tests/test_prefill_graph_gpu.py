@@ -154,6 +154,25 @@ def test_the_startup_check_refuses_when_its_prompts_cannot_tell_graphs_apart(gro
 
 
 @needs_cuda
+def test_the_startup_check_refuses_a_graph_reading_a_tensor_nothing_keeps(grouping):
+    """The lifetime mutation arm: the positions the graph reads are dropped after capture (as a first version did,
+    with the check run while they were still alive, so it passed and every served replay read freed memory). The
+    check runs after the capture's scope and an allocator churn, so it must see it."""
+    from experts4bit_qlora.engines.paged_runner import PagedModelRunner, PrefillGraphRefused
+    r = _runner(_model())
+    orig = PagedModelRunner._capture_prefill_graph
+
+    def drops_pos(self, T, first_ids, warmup):
+        pg = orig(self, T, first_ids, warmup)
+        pg["pos"] = pg["pos"].clone()          # the graph still reads the original block, now freed
+        return pg
+
+    r._capture_prefill_graph = types.MethodType(drops_pos, r)
+    with pytest.raises(PrefillGraphRefused, match="differs from the eager forward"):
+        r.enable_prefill_graph(T)
+
+
+@needs_cuda
 def test_refuses_a_forward_that_syncs(grouping):
     """Last in the file: a capture invalidated by a sync is the one failure that could disturb the context."""
     from experts4bit_qlora.engines.paged_runner import PrefillGraphRefused

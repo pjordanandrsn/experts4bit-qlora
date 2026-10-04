@@ -431,9 +431,8 @@ class PagedModelRunner(StepRunner):
         * a linear-attention (hybrid) model: its per-slot state is mutated by prefill;
         * a capture that raises (a host sync inside the forward invalidates it);
         * a capture that does not stage K/V for every pool layer;
-        * a failed startup check. On two seeded prompts, each replay must equal an eager forward bit for bit, in
-          the logits and in every pool layer's staged K/V. The two prompts' eager logits must also differ; a check
-          whose prompts gave identical outputs could not tell a stale graph from a live one.
+        * a failed startup check (:meth:`_check_prefill_graph`). The check runs only after the capture's scope has
+          returned and the allocator has been churned, so a tensor the graph reads but nothing keeps fails it.
 
         Returns :meth:`prefill_graph_stats`."""
         from . import hot_residency
@@ -451,31 +450,52 @@ class PagedModelRunner(StepRunner):
             why = "a hybrid model's linear-attention state is per slot, and prefill mutates it"
         if why:
             raise PrefillGraphRefused(why)
-        dev, ctx, key = self.device, self.ctx, -1     # key: the staging slot of the capture and the check
         vocab = int(self.model.get_output_embeddings().weight.shape[0])
         gen = torch.Generator().manual_seed(seed)
-        prompts = [torch.randint(0, vocab, (1, T), generator=gen).to(dev) for _ in range(2)]
-        ids = prompts[0].clone()
-        pos = torch.arange(T, device=dev)[None]
+        prompts = [torch.randint(0, vocab, (1, T), generator=gen) for _ in range(2)]
+        pg = self._capture_prefill_graph(T, prompts[0], warmup)
+        self._check_prefill_graph(pg, prompts)
+        self._prefill_graph = pg
+        self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
+        return self.prefill_graph_stats()
 
-        def staged():
-            return {lay: (buf[0][-1], buf[1][-1]) for (lay, s), buf in ctx.staging.items() if s == key}
+    _PG_KEY = -1      # the staging slot of the capture and the startup check: a first chunk reads no slot
 
-        saved_slots = ctx.slots
+    def _staged_under_key(self) -> dict:
+        return {lay: (buf[0][-1], buf[1][-1]) for (lay, s), buf in self.ctx.staging.items() if s == self._PG_KEY}
+
+    def _prefill_scope(self):
+        """Enter prefill mode on the capture key; returns the restore callable."""
+        ctx, saved_slots = self.ctx, self.ctx.slots
         self._mode(True)
-        ctx.mode, ctx.slots = "prefill", [key]
+        ctx.mode, ctx.slots = "prefill", [self._PG_KEY]
         prev = set_context(ctx)
+
+        def restore():
+            ctx.drop(self._PG_KEY)
+            set_context(prev)
+            ctx.slots, ctx.mode = saved_slots, "decode"
+            self._mode(False)
+        return restore
+
+    def _capture_prefill_graph(self, T: int, first_ids, warmup: int) -> dict:
+        """Warm, then capture. Everything the graph reads that was allocated outside the capture -- the input ids and
+        the positions -- is returned with it and kept: a CUDA graph holds no reference to what it reads."""
+        dev, ctx = self.device, self.ctx
+        ids = first_ids.to(dev).clone()
+        pos = torch.arange(T, device=dev)[None]
+        restore = self._prefill_scope()
         try:
             with torch.no_grad():
                 side = torch.cuda.Stream(dev)
                 side.wait_stream(torch.cuda.current_stream(dev))
                 with torch.cuda.stream(side):
                     for _ in range(max(1, warmup)):
-                        ctx.drop(key)
+                        ctx.drop(self._PG_KEY)
                         self.model(input_ids=ids, position_ids=pos, use_cache=False)
                 torch.cuda.current_stream(dev).wait_stream(side)
                 torch.cuda.synchronize(dev)
-                ctx.drop(key)
+                ctx.drop(self._PG_KEY)
                 g = torch.cuda.CUDAGraph()
                 try:
                     with torch.cuda.graph(g):
@@ -483,38 +503,55 @@ class PagedModelRunner(StepRunner):
                 except Exception as e:  # noqa: BLE001 -- any capture failure is a refusal, with its reason
                     raise PrefillGraphRefused(f"the {T}-token prefill forward did not capture "
                                               f"({type(e).__name__}: {str(e)[:300]})") from e
-                logits, kv_out = out.logits, staged()
-                ctx.drop(key)
-                if sorted(kv_out) != sorted(self.pool_layers):
-                    raise PrefillGraphRefused(f"the capture staged K/V for layers {sorted(kv_out)}, not the pool's "
-                                              f"{sorted(self.pool_layers)}")
-                refs = []
-                for p in prompts:
-                    ctx.drop(key)
-                    o = self.model(input_ids=p, position_ids=pos, use_cache=False)
-                    refs.append((o.logits.clone(), {lay: (k.clone(), v.clone()) for lay, (k, v) in staged().items()}))
-                ctx.drop(key)
-                if torch.equal(refs[0][0], refs[1][0]):
-                    raise PrefillGraphRefused("the startup check's two prompts gave identical logits, so it could not "
-                                              "tell a stale graph from a live one")
-                for i in (1, 0):          # the second prompt first: the graph last saw the first
-                    ids.copy_(prompts[i])
-                    g.replay()
-                    rl, rkv = refs[i]
-                    bad = [lay for lay in rkv if not (torch.equal(kv_out[lay][0], rkv[lay][0])
-                                                      and torch.equal(kv_out[lay][1], rkv[lay][1]))]
-                    if not torch.equal(logits, rl) or bad:
-                        d = (logits.float() - rl.float()).abs().max().item()
-                        raise PrefillGraphRefused(f"the startup check's replay of prompt {i} differs from the eager "
-                                                  f"forward (logits max abs {d:.3g}; K/V layers {bad})")
+                staged = self._staged_under_key()
         finally:
-            ctx.drop(key)
-            set_context(prev)
-            ctx.slots, ctx.mode = saved_slots, "decode"
-            self._mode(False)
-        self._prefill_graph = {"T": T, "graph": g, "ids": ids, "logits": logits, "staged": kv_out}
-        self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
-        return self.prefill_graph_stats()
+            restore()
+        if sorted(staged) != sorted(self.pool_layers):
+            raise PrefillGraphRefused(f"the capture staged K/V for layers {sorted(staged)}, not the pool's "
+                                      f"{sorted(self.pool_layers)}")
+        return {"T": T, "graph": g, "ids": ids, "pos": pos, "logits": out.logits, "staged": staged}
+
+    @staticmethod
+    def _churn_allocator(dev) -> None:
+        """Hand freed blocks of many sizes out again, filled with a sentinel, then free them: a block the graph reads
+        but nothing keeps now holds garbage."""
+        held = [torch.full((n,), 1 << 40, dtype=torch.long, device=dev)
+                for n in (16, 64, 128, 256, 512, 1024, 4096, 16384, 65536) for _ in range(48)]
+        del held
+
+    def _check_prefill_graph(self, pg: dict, prompts) -> None:
+        """The startup check, run after the capture's scope has returned and the allocator has been churned. On two
+        seeded prompts each replay must equal an eager forward bit for bit, in the logits and in every pool layer's
+        staged K/V; the two prompts' eager logits must differ (a check whose prompts gave identical outputs could
+        not tell a stale graph from a live one)."""
+        dev, ctx = self.device, self.ctx
+        self._churn_allocator(dev)
+        refs = []
+        restore = self._prefill_scope()
+        try:
+            with torch.no_grad():
+                for p in prompts:
+                    ctx.drop(self._PG_KEY)
+                    o = self.model(input_ids=p.to(dev), position_ids=torch.arange(pg["T"], device=dev)[None],
+                                   use_cache=False)
+                    refs.append((o.logits.clone(),
+                                 {lay: (k.clone(), v.clone()) for lay, (k, v) in self._staged_under_key().items()}))
+        finally:
+            restore()
+        if torch.equal(refs[0][0], refs[1][0]):
+            raise PrefillGraphRefused("the startup check's two prompts gave identical logits, so it could not tell a "
+                                      "stale graph from a live one")
+        self._churn_allocator(dev)
+        for i in (1, 0):          # the second prompt first: the graph last saw the first
+            pg["ids"].copy_(prompts[i])
+            pg["graph"].replay()
+            rl, rkv = refs[i]
+            bad = [lay for lay in rkv if not (torch.equal(pg["staged"][lay][0], rkv[lay][0])
+                                              and torch.equal(pg["staged"][lay][1], rkv[lay][1]))]
+            if not torch.equal(pg["logits"], rl) or bad:
+                d = (pg["logits"].float() - rl.float()).abs().max().item()
+                raise PrefillGraphRefused(f"the startup check's replay of prompt {i} differs from the eager forward "
+                                          f"(logits max abs {d:.3g}; K/V layers {bad})")
 
     def _replay_prefill_graph(self, rid: int, slot: int, take: int, done: bool):
         pg = self._prefill_graph
