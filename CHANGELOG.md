@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### P113 read (RTX 5090): CAP_DEFAULT — programmatic dependent launch, capped to launches of at most 8 rows, decodes SC1's int4 serving step 4.0 % faster with one request, at no cost with sixteen, tokens identical (#1015)
+
+Register: `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04`; `bench/p113/RESULTS-p113.md`.
+- **The reading** (`p113-5090-1`, $0.4710). The run used six palindromic arms on SC1's int4 configuration with
+  decode-only timing. Capped (`GNF4_PDL=1 GNF4_PDL_MAX_ROWS=8`) the ratios were **1.0404** at B=1 and
+  **1.0000** at B=16; uncapped, 1.0401 and 0.9787. The B=1 step went from
+  4.38 to 4.21 ms. Tokens were identical in every arm, and the self-pairs read within
+  0.18 %.
+- **The predictions.** All eight held; they were written after P112 run 1's arms.
+- **What follows (registered).** grouped-nf4-gemm's next release turns `GNF4_PDL` on by default, capped at 8, and this
+  repository's CI moves to it.
+
 ### P113 registered (#1015): PDL everywhere or capped to small launches, on SC1's int4 serving step, under decode-only timing. One RTX 5090
 
 - **Why.** P112 closed VOID with no reading. Its first run's arms showed grouped-nf4-gemm's `GNF4_PDL=1` helping B=1 and
