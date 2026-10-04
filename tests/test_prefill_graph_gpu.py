@@ -181,12 +181,14 @@ def test_auto_stands_down_when_the_pool_leaves_too_little_memory(grouping, monke
     graph is released. The same runner engages when the device reports room."""
     from experts4bit_qlora.engines.paged_runner import PrefillGraphRefused
     r = _runner(_model())
-    total = torch.cuda.mem_get_info()[1]
+    real = torch.cuda.mem_get_info
+    total = real()[1]
     monkeypatch.setattr(torch.cuda, "mem_get_info", lambda *a, **k: (0, total))
     with pytest.raises(PrefillGraphRefused, match="memory: the graph's private pool"):
         r.enable_prefill_graph(T, require_headroom=True)
     assert r._prefill_graph is None
-    monkeypatch.undo()
+    # restore only this patch: undo() would also drop the `grouping` fixture's device grouping
+    monkeypatch.setattr(torch.cuda, "mem_get_info", real)
     st = r.enable_prefill_graph(T, require_headroom=True)
     assert st["status"] == "on"
 
