@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Lane K29's driver retries its fetch (bench and tests only)
+
+- **Why.** `k29-5090-1` ($0.06) drew a cgroup v2 box and ran to TP_DONE. Then the driver's single `rsync` died on a
+  closed connection, the driver exited 22, and the launcher tore the box down with the results still on it.
+- **What.** The fetch retries `rsync` up to 4 times with backoff, then falls back to `tar` over a fresh ssh, all
+  inside the run's deadline. `tests/test_k29_lane.py` pins it. The registered rerun (a harness fault, inside the
+  $3.00 ceiling) is `k29-5090-2`.
+
 ### Lane K29's runner (grouped-nf4-gemm#71): what a pinned host byte costs a cgroup v2 container (bench and tests only)
 
 - **Why.** grouped-nf4-gemm#457 models pinned-tier sizing as PyTorch's power-of-two rounding (measured on cgroup v1),

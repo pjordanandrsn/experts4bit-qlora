@@ -67,7 +67,24 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/k29" && mkdir -p "$RUN_DIR/k29" || { say "fetch failed: local dir"; exit 22; }
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude '.cache' --exclude 'venv*' "root@$HOST:$W/" "$RUN_DIR/k29/" || { say "fetch failed: rsync"; exit 22; }
+# k29-5090-1 (2026-10-04): the box finished (TP_DONE seen), then ONE rsync died on "Connection closed by ... port 31948",
+# the driver exited 22 and the launcher tore the box down with the data on it. A finished run's results are the most
+# expensive bytes in the lane, so the fetch retries with backoff and then falls back to tar over a fresh ssh, all
+# inside the deadline the launcher gave us.
+fetched=0
+for attempt in 1 2 3 4; do
+  if rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" --exclude '.cache' --exclude 'venv*' "root@$HOST:$W/" "$RUN_DIR/k29/"; then
+    fetched=1; break
+  fi
+  [ "$(date +%s)" -ge $((DEADLINE - 120)) ] && break
+  say "fetch attempt $attempt failed (rsync); retrying in $((attempt * 15)) s"
+  sleep $((attempt * 15))
+done
+if [ "$fetched" != 1 ] && [ "$(date +%s)" -lt $((DEADLINE - 60)) ]; then
+  say "rsync failed every attempt; falling back to tar over ssh"
+  $SSH "tar -C $W --exclude=.cache --exclude='venv*' -czf - ." | tar -C "$RUN_DIR/k29" -xzf - && fetched=1
+fi
+[ "$fetched" = 1 ] || { say "fetch failed: rsync x4 and tar"; exit 22; }
 say "fetched $(ls "$RUN_DIR/k29" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/k29/K29_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/k29/TP_DONE.$NONCE" ] || {
