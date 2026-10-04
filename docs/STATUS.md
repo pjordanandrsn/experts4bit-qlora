@@ -914,8 +914,11 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   CUDA inference can consume packed 4-bit weights directly for supported
   ordinary 2-D cells, routed grouped MoE execution is a separate contract,
   and training's input gradient is separate again
-  ([`BITSANDBYTES.md`](BITSANDBYTES.md)); the unrecorded build is open as
-  #392, below.
+  ([`BITSANDBYTES.md`](BITSANDBYTES.md)). The unrecorded build was
+  **remeasured on a release** on 2026-10-04: the same card and harness, on
+  bitsandbytes 0.50.2 (#392, `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`).
+  `matmul_4bit` reads decode 0.91–1.06× (break-even), prefill 1.29–1.49× and
+  train 1.64–2.15× over three passes.
 - **The 13.47× training speedup is ~7.2× against a current baseline.**
   transformers v5 fused the per-expert loop upstream, moving the baseline
   from 50.86 to 26.6 s/step. The grouped arm did not regress. Roughly
@@ -1041,12 +1044,6 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   `torch.cuda.synchronize()` checkpoints (arming `CUDA_LAUNCH_BLOCKING=1` while
   CUDA is still uninitialised) so a fault is bound to a load stage rather than
   to whichever CUDA call observed it.
-- **[#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392) —
-  the energy receipt does not record its bitsandbytes build.**
-  `docs/METHODOLOGY.md` names the build only as `0.50.0.dev0` (§1) and
-  "the fork (bnb 0.50-dev)" (the packaging note covering §9–§10), with no
-  commit; the harness prints the GPU name, not `bitsandbytes.__version__`. Until it is rerun on a recorded release,
-  `e4b.train.energy-honest.scoped-a2000` is a one-card, one-build number.
 - **`e4b.open.tr2-repro-gap` stays open in the register**: reproducing the
   TR2 training receipt from published artifacts. The bake step it names as
   missing ships in grouped-nf4-gemm: `nvme_bake_nf4` writes the NF4 arena

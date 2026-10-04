@@ -740,8 +740,30 @@
       "supersedes": [
         "e4b.train.energy-honest"
       ],
-      "notes": "Scoped successor of e4b.train.energy-honest (2026-09-04): same numbers, comparator and version named, the universal 'GEMM runs in bf16 either way' mechanism dropped. Per arm from the receipt's table: the fork's matmul_4bit routing 1.18x decode / 1.29x prefill / 2.25x train; dequantize-then-linear 2.68x decode / 1.57x train -- the 1.2-2.3x headline is the receipt's own summary line and brackets the matmul_4bit arm; the dequantize arm's decode cell sits above it. The 4.4x inversion figure is independently measured by bench/bench_energy_excluded.py Part B (2311 -> 520 uJ/token). This is one card and one development build of a fork: it says nothing about bitsandbytes >= 0.50.0's direct packed-4-bit inference path for ordinary 2-D layers, about routed grouped MoE execution (grouped-nf4-gemm's contract), or about any other card. Receipt written 2026-07-01; the harness records the GPU name but not bitsandbytes.__version__ -- remeasure with a recorded version is tracked in e4b#392. MEASURED_ON (added 2026-09-05): the receipt's own date -- docs/METHODOLOGY.md section 10 (written 2026-07-01; re-registered with its comparator scoped 2026-09-04).",
+      "notes": "Scoped successor of e4b.train.energy-honest (2026-09-04): same numbers, comparator and version named, the universal 'GEMM runs in bf16 either way' mechanism dropped. Per arm from the receipt's table: the fork's matmul_4bit routing 1.18x decode / 1.29x prefill / 2.25x train; dequantize-then-linear 2.68x decode / 1.57x train -- the 1.2-2.3x headline is the receipt's own summary line and brackets the matmul_4bit arm; the dequantize arm's decode cell sits above it. The 4.4x inversion figure is independently measured by bench/bench_energy_excluded.py Part B (2311 -> 520 uJ/token). This is one card and one development build of a fork: it says nothing about bitsandbytes >= 0.50.0's direct packed-4-bit inference path for ordinary 2-D layers, about routed grouped MoE execution (grouped-nf4-gemm's contract), or about any other card. Receipt written 2026-07-01; the harness records the GPU name but not bitsandbytes.__version__ -- remeasured with a recorded version on 2026-10-04: e4b.train.energy-honest.a2000-bnb0502.2026-10-04 (#392). MEASURED_ON (added 2026-09-05): the receipt's own date -- docs/METHODOLOGY.md section 10 (written 2026-07-01; re-registered with its comparator scoped 2026-09-04).",
       "measured_on": "2026-07-01"
+    },
+    {
+      "id": "e4b.train.energy-honest.a2000-bnb0502.2026-10-04",
+      "area": "train",
+      "claim": "Remeasured with a recorded, released build (#392): on the same NAS RTX A2000 and the unchanged harness, with bitsandbytes 0.50.2, 4-bit expert projections cost 0.91-2.15x native bf16's GPU energy per op over three passes. bnb.matmul_4bit: decode M=1 0.91/1.04/1.06x (break-even; the 0.50.0.dev0 fork read 1.18x), prefill M=512 1.29/1.30/1.49x (fork 1.29x), train fwd+bwd M=32 1.86/2.15/1.64x (fork 2.25x). Dequantize-then-linear: decode 2.37-2.43x, prefill 1.29x, train 1.31-1.68x. The model already fits; one projection; one card.",
+      "value": "0.91-2.15",
+      "unit": "x GPU energy per op vs native bf16, model already fits (one-projection microbench), bnb.matmul_4bit over three passes",
+      "model": "one OLMoE-1B-7B-dims expert projection ([2*1024, 2048], synthetic weights)",
+      "hardware": "RTX A2000 12 GB (Ampere, 70 W cap, driver 575.64.05), in the NAS host; one card (the scoped row's card)",
+      "conditions": "bench/_upstream/bench_energy.py unchanged (sha256 ece6b5c8); experts4bit-qlora 0.45.0 @0c36bf8, bitsandbytes 0.50.2, torch 2.8.0+cu128, in a pytorch:2.8.0-cuda12.8-cudnn9-devel container; nvidia-smi power sampling, total J/op only; three passes 2026-10-04 19:50-19:54Z; nvidia-smi pmon logged every process: only the run's own appears",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/energy-remeasure-2026-10-04/README.md",
+        "bench/energy-remeasure-2026-10-04/run_1.txt",
+        "bench/energy-remeasure-2026-10-04/run_2.txt",
+        "bench/energy-remeasure-2026-10-04/run_3.txt",
+        "bench/energy-remeasure-2026-10-04/versions.txt",
+        "bench/_upstream/bench_energy.py"
+      ],
+      "notes": "Same harness and card as e4b.train.energy-honest.scoped-a2000 (2026-07-01, the fork build), which stands as measured for that build. Passes 2-3 started on a warm card (idle 51.7 W before pass 3; the train cell's native power rose 59.5 -> 69.1 W), so the train ratios drift across passes; pass 1 is the cleanest. pre_3.txt's 94%/68 W is pass 2's lagging average (pmon shows no other process). Not a statement about grouped MoE execution or other cards.",
+      "measured_on": "2026-10-04"
     },
     {
       "id": "e4b.retired.13.47x-training-speedup",
