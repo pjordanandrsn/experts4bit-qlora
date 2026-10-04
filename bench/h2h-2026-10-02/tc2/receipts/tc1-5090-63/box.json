@@ -1,0 +1,17 @@
+{
+ "box": "B",
+ "run_id": "tc1-5090-63",
+ "instance_id": "54186709",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "595.91.07",
+ "cpu": "Intel(R) Core(TM) Ultra 9 285K",
+ "nproc": 24,
+ "mem_total_kb": "197216440",
+ "cgroup_memory_max": "193871216640",
+ "disk_root": "overlay         320G  9.4M  320G   1% /",
+ "hostname": "c2e582419012",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}
