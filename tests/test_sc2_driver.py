@@ -7,6 +7,7 @@
 - **Over a real socket** (needs aiohttp): fake OpenAI streaming servers with known delays check the timing math. That
   covers one chunk per token, four tokens per chunk (TPOT must stay per-token), an engine that stops early (INVALID)
   and an HTTP 500 (INVALID, a row and not a crash). It also checks the Poisson plan's offered rate end to end.
+- **The capacity quantity**: a perfect engine's attainment reads 1.0 however long the drain after the last arrival.
 """
 import asyncio
 import importlib.util
@@ -141,3 +142,18 @@ def test_the_poisson_plan_is_offered_on_schedule():
     assert s["valid"] == 40 and 30.0 <= s["achieved_rate"] <= 55.0, s
     # each send happens no earlier than its planned instant
     assert all(r["t_send"] >= r["planned_s"] - 1e-3 for r in recs)
+
+
+def test_capacity_reads_attainment_not_good_requests_over_the_wall():
+    """A perfect engine at 8 req/s: 120 arrivals over ~15 s, then a ~3 s drain. good / wall is ~6.7 req/s, under 95 % of
+    8, so a rule on it could never credit 8 (nor 4). The registered quantity is attainment: every request good -> 1.0,
+    goodput = 8, and the reducer's capacity ceiling reaches 8."""
+    recs = [{"valid": True, "ttft_s": 0.2, "tpot_s": 0.01, "e2el_s": 3.0, "completion_tokens": 256, "t_send": i * 15.0 / 119}
+            for i in range(120)]
+    sm = drv.summarize(recs, 8.0, 18.0)
+    assert sm["attainment"] == 1.0 and sm["goodput_rps"] == 8.0 and sm["good_per_wall_rps"] == round(120 / 18.0, 4)
+    assert sm["good_per_wall_rps"] < 0.95 * 8                          # the quantity the old rule read: never credits 8
+    red = _mod(REPO / "bench" / "sc2" / "sc2_reduce.py", "sc2_reduce")
+    run = {"summary": dict(sm, ttft_p99_s=0.2, tpot_p99_s=0.01)}
+    rows = {r: red.row([run, run], r) for r in red.RATES}
+    assert all(x["status"] == "VALID" and x["meets_capacity"] for x in rows.values()) and red.ceiling(rows) == 8

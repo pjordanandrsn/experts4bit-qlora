@@ -62,7 +62,10 @@ SC1's two route pins (`loop`, `math`) existed so SC1's own boxes compared alike;
   - the streamed text.
 - **Validity.** A request is VALID iff it got HTTP 200, the server reported exactly `max_tokens` completion tokens, and
   it finished `length`.
-- **Goodput** is the rate of VALID requests within the SLO: **TTFT ≤ 1.0 s AND TPOT ≤ 100 ms**, stated now.
+- **SLO attainment** is the share of a run's requests that are VALID and within the SLO: **TTFT ≤ 1.0 s AND TPOT ≤ 100 ms**,
+  stated now. **Goodput** is attainment × r. Attainment, not good requests per second of wall time, is the capacity
+  quantity: the wall includes the drain after the last arrival, which caps good requests / wall below r even for a perfect
+  engine (at 8 req/s, 120 arrivals span about 15 s and the drain adds about 3 s, so at most about 6.7 req/s).
 
 **The prompts** are `bench/sc2/sc2_prompts.py`: 64 distinct rows of 512 tokens of wikitext-2-raw test (row k from token
 k·2048), tokenised once with the bf16 checkpoint's tokenizer. Every engine receives these ids.
@@ -90,10 +93,10 @@ A **row** is one engine at one workload (`serial`, or one rate). Its status is t
 - **INVALID:** any request in either draw is not VALID.
 - **UNSTABLE:** the draws disagree.
   - serial: p50 TTFT beyond 10 %, or p50 TPOT beyond 5 %;
-  - a rate: p50 TPOT beyond 10 %, or goodput beyond max(10 % of the larger, 0.05 × r).
+  - a rate: p50 TPOT beyond 10 %, or attainment beyond max(10 % of the larger, 0.05).
 - **VALID:** otherwise.
 
-**An engine's capacity ceiling** is the largest rate whose row is VALID with goodput ≥ 95 % of r in both draws. It is 0
+**An engine's capacity ceiling** is the largest rate whose row is VALID with attainment ≥ 0.95 in both draws. It is 0
 if none qualifies, and UNREAD if any rate's row is UNREAD or INVALID.
 
 **Reported, with no bar:** every row's draw means, and e4b_int4 against each comparator: the serial TTFT and TPOT ratios,

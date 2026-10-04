@@ -8,21 +8,22 @@ engines ENGINES, draws 1..DRAWS, rates RATES.
   UNREAD    a draw's file is missing (the deadline, a skipped phase, a server that did not start);
   INVALID   any request in either draw is not VALID (an HTTP error, the wrong token count, the wrong finish);
   UNSTABLE  the draws disagree: serial -- p50 TTFT beyond 10 % or p50 TPOT beyond 5 %; a rate -- p50 TPOT beyond
-            10 %, or goodput beyond max(10 % of the larger, 0.05 x the rate);
+            10 %, or SLO attainment beyond max(10 % of the larger, 0.05);
   VALID     otherwise.
-**An engine's capacity ceiling** is the largest rate whose row is VALID with goodput >= 95 % of the offered rate in
-BOTH draws; 0 if no rate qualifies; UNREAD if any rate's row is not VALID or UNSTABLE.
+**An engine's capacity ceiling** is the largest rate whose row is VALID with SLO attainment >= 0.95 in BOTH draws (the
+driver's ``attainment``: the share of the run's requests VALID and within the SLO); 0 if no rate qualifies; UNREAD if
+any rate's row is UNREAD or INVALID.
 
 **Predictions** (each HOLDS / REFUTED / UNREAD from VALID rows only, means over the two draws):
   Q1  serial: e4b_int4's p50 TTFT >= 2 x vLLM's.
   Q2  serial: e4b_int4's p50 TPOT / vLLM's lies in [1.10, 1.35].
-  Q3  serial: llama.cpp's p50 TPOT is the lowest of the five engines.
+  Q3  serial: llama.cpp's p50 TPOT is the lowest of the four lane engines (not the labelled e4b_nf4 row).
   Q4  capacity: vLLM's ceiling >= e4b_int4's >= llama.cpp's.
   Q5  capacity: e4b_nf4's ceiling < e4b_int4's.
   Q6  every row of every engine is VALID.
 
 Reported (no bar): every row's draw means; e4b_int4 against each comparator (serial TTFT and TPOT ratios, goodput
-ratio per rate).
+ratio per rate, = the attainment ratio at a common offered rate).
 """
 import argparse
 import json
@@ -52,10 +53,10 @@ def row(runs: list, workload) -> dict:
     sums = [r["summary"] for r in runs]
     bad = [f"draw {i + 1}: {s['invalid']} invalid ({s.get('errors')})" for i, s in enumerate(sums) if s["invalid"]]
     out = {"draws": [{k: s.get(k) for k in ("valid", "ttft_p50_s", "ttft_p99_s", "tpot_p50_s", "tpot_p99_s", "e2el_p50_s",
-                                             "output_tok_s", "goodput_rps", "achieved_rate")} for s in sums]}
+                                             "output_tok_s", "attainment", "goodput_rps", "achieved_rate")} for s in sums]}
     if bad:
         return dict(out, status="INVALID", why=bad)
-    mean = {k: statistics.fmean([s[k] for s in sums]) for k in ("ttft_p50_s", "tpot_p50_s", "output_tok_s", "goodput_rps")
+    mean = {k: statistics.fmean([s[k] for s in sums]) for k in ("ttft_p50_s", "tpot_p50_s", "output_tok_s", "attainment", "goodput_rps")
             if all(s.get(k) is not None for s in sums)}
     out["mean"] = {k: round(v, 6) for k, v in mean.items()}
     a, b = sums
@@ -69,10 +70,10 @@ def row(runs: list, workload) -> dict:
         why = []
         if _rel(a["tpot_p50_s"], b["tpot_p50_s"]) > RATE_TPOT_BAND:
             why.append(f"p50 TPOT {a['tpot_p50_s']} vs {b['tpot_p50_s']}")
-        tol = max(GOOD_REL * max(a["goodput_rps"], b["goodput_rps"]), GOOD_ABS * workload)
-        if abs(a["goodput_rps"] - b["goodput_rps"]) > tol:
-            why.append(f"goodput {a['goodput_rps']} vs {b['goodput_rps']} (tolerance {tol:.3f})")
-        out["meets_capacity"] = all(s["goodput_rps"] >= CAP_SHARE * workload for s in sums)
+        tol = max(GOOD_REL * max(a["attainment"], b["attainment"]), GOOD_ABS)
+        if abs(a["attainment"] - b["attainment"]) > tol:
+            why.append(f"attainment {a['attainment']} vs {b['attainment']} (tolerance {tol:.3f})")
+        out["meets_capacity"] = all(s["attainment"] >= CAP_SHARE for s in sums)
     return dict(out, status="UNSTABLE" if why else "VALID", why=why)
 
 
@@ -121,8 +122,8 @@ def reduce(d: str) -> dict:
             r[f"serial_{k}_ratio"] = round(x / y, 4) if x and y else None
         for rt in RATES:
             x, y = eng["e4b_int4"]["rows"][str(rt)], eng[comp]["rows"][str(rt)]
-            r[f"goodput_r{rt}_ratio"] = (round(x["mean"]["goodput_rps"] / y["mean"]["goodput_rps"], 4)
-                                         if x["status"] == y["status"] == "VALID" and y["mean"]["goodput_rps"] else None)
+            r[f"goodput_r{rt}_ratio"] = (round(x["mean"]["attainment"] / y["mean"]["attainment"], 4)
+                                         if x["status"] == y["status"] == "VALID" and y["mean"]["attainment"] else None)
         rep[f"e4b_int4_vs_{comp}"] = r
     return {"engines": eng, "predictions": v, "report": rep}
 
@@ -132,7 +133,8 @@ def reduce(d: str) -> dict:
 def _run(ttft, tpot, good, rate, invalid=0, tok_s=1000.0):
     return {"summary": {"valid": 100 - invalid, "invalid": invalid, "errors": ["x"] if invalid else [], "ttft_p50_s": ttft,
                         "ttft_p99_s": ttft * 3, "tpot_p50_s": tpot, "tpot_p99_s": tpot * 2, "e2el_p50_s": 1.0,
-                        "output_tok_s": tok_s, "goodput_rps": good, "achieved_rate": rate}}
+                        "output_tok_s": tok_s, "goodput_rps": good, "attainment": round(good / rate, 4) if rate else None,
+                        "achieved_rate": rate}}
 
 
 def _write(d, e, serial, rates, draws=DRAWS, skip=()):

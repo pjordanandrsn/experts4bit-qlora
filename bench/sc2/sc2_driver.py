@@ -21,8 +21,11 @@ neither. A request is VALID iff it returned HTTP 200, reported exactly ``max_tok
 tokens into one SSE chunk; the raw chunk gaps are kept beside it.
 
 Summary (``summarize``): offered and achieved arrival rate, wall duration, valid / invalid counts, p50 / p90 / p99 of
-TTFT, TPOT and end-to-end latency, output tok/s over the run, and goodput: the rate of VALID requests that meet the SLO
-(TTFT <= ``slo_ttft_s`` AND TPOT <= ``slo_tpot_s``).
+TTFT, TPOT and end-to-end latency, output tok/s over the run, and SLO ATTAINMENT: the share of the run's requests that are
+VALID and meet the SLO (TTFT <= ``slo_ttft_s`` AND TPOT <= ``slo_tpot_s``). Goodput = attainment x the offered rate.
+Attainment, not good requests / wall time, is the capacity quantity: the wall includes the drain after the last arrival
+(~ one request's E2E), which caps good / wall below the offered rate even for a perfect engine -- at 8 req/s, 120
+arrivals span ~15 s and the drain adds ~3 s, so good / wall <= ~6.7 req/s. ``good_per_wall_rps`` keeps that raw figure.
 
   sc2_driver.py run --base URL --model NAME --prompts prompts.json --mode poisson --rate R --n N --seed S
                     [--max-tokens-lo 64 --max-tokens-hi 256] [--profile e4b|vllm|sglang|llamacpp] --out run.json
@@ -86,7 +89,9 @@ def summarize(recs: list, rate: float, wall_s: float, slo_ttft_s: float = SLO_TT
             **{f"e2el_p{p}_s": _pct(e2e, p) for p in (50, 90, 99)},
             "ttft_mean_s": round(statistics.fmean(ttft), 6) if ttft else None,
             "output_tok_s": round(out_tok / wall_s, 3) if wall_s > 0 else None, "output_tokens": out_tok,
-            "goodput_rps": round(len(good) / wall_s, 4) if wall_s > 0 else None, "good": len(good),
+            "good": len(good), "attainment": round(len(good) / len(recs), 4) if recs else None,
+            "goodput_rps": round(len(good) / len(recs) * rate, 4) if recs and rate > 0 else None,
+            "good_per_wall_rps": round(len(good) / wall_s, 4) if wall_s > 0 else None,
             "slo": {"ttft_s": slo_ttft_s, "tpot_s": slo_tpot_s}}
 
 
@@ -227,7 +232,8 @@ def self_test() -> int:
             {"valid": True, "ttft_s": 1.5, "tpot_s": 0.05, "e2el_s": 6.0, "completion_tokens": 100, "t_send": 1.0},
             {"valid": False, "error": "HTTP 500: x", "t_send": 2.0}]
     sm = summarize(recs, 1.0, 10.0)
-    ok.append(sm["valid"] == 2 and sm["invalid"] == 1 and sm["good"] == 1 and sm["goodput_rps"] == 0.1
+    ok.append(sm["valid"] == 2 and sm["invalid"] == 1 and sm["good"] == 1 and sm["attainment"] == 0.3333
+              and sm["goodput_rps"] == 0.3333 and sm["good_per_wall_rps"] == 0.1
               and sm["output_tok_s"] == 20.0 and sm["achieved_rate"] == 1.0 and sm["errors"] == ["HTTP 500: x"])
     try:
         plan("poisson", 0.0, 3, 1, 3)
