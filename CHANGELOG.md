@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Tests: the family-blind training parity test counts grouped-nf4-gemm's dense dgrad route
+
+- `tests/test_fused_train_parity.py::test_fused_train_is_family_blind` checked that the dgrad kernel or the grouped_mm route served
+  both frozen GEMMs. Since grouped-nf4-gemm#463, `GNF4_TRAIN_GEMM=auto` takes the dense route off sm_90 for calls with at most 16
+  present groups, so the Mixtral case (8 experts) failed on CUDA cards other than the H100. CI has no GPU and skips the test. The
+  count now includes `DGRAD_STATS["dense"]`, read with `.get` for older grouped-nf4-gemm. Test only.
+
 ### CI on grouped-nf4-gemm 0.39.0; where the dense-route rows came from (docs and register notes only)
 
 - **CI** now tests against grouped-nf4-gemm **0.39.0** (`a5edec87`). In that release `GNF4_TRAIN_GEMM=auto` takes the
