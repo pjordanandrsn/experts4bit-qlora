@@ -131,13 +131,11 @@ def _top_k(model):
     first decode step -- a top-8 constant sized it for two lucky
     families and broke the first top-4 one (Qwen1.5-MoE, K8 campaign).
     """
-    cfg = getattr(model, "config", None)
-    for c in (cfg, getattr(cfg, "text_config", None)):
-        for attr in ("num_experts_per_tok", "moe_top_k", "moe_topk",
-                     "n_routed_experts_per_tok", "top_k_experts", "top_k"):
-            v = getattr(c, attr, None)
-            if isinstance(v, int) and v > 0:
-                return v
+    from ..arch.topology import routed_top_k
+
+    v = routed_top_k(getattr(model, "config", None))
+    if v is not None:
+        return v
     raise RuntimeError(
         "enable_serve_experts_int4: cannot read routed-experts-per-token "
         "from the config; the split-K buffer cannot be sized safely")

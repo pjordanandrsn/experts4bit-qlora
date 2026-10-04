@@ -1094,6 +1094,82 @@ def _record_checkpoint_revision(model_id, revision, config, snap):
     return resolved
 
 
+def check_admission(config) -> None:
+    """Raise ``NotImplementedError`` if :func:`load_moe_4bit_streaming` refuses this config; return otherwise.
+
+    Decided from the config alone -- no snapshot, no shard, no device. The loader calls it first; callers that
+    want the answer before loading anything use :func:`admission_refusal`.
+    """
+    model_type = getattr(config, "model_type", None)
+    if model_type not in SUPPORTED_ARCHITECTURES and not _read_compatible_convention(model_type):
+        raise NotImplementedError(
+            f"Unsupported model_type={model_type!r}. This streaming loader handles SwiGLU fused-MoE "
+            f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}, plus every model_type on the "
+            f"{sorted(READ_COMPATIBLE_CONVENTIONS)} conventions, whose per-expert layout the "
+            "generic read takes from the convention itself. The Experts4bit primitive is "
+            "model-agnostic — see the README 'Scope' note to adapt another architecture."
+        )
+    # Identity ("zero-computation") experts: the router indexes a space LARGER than the
+    # set of real experts, and the surplus indices route the token through nn.Identity
+    # scaled by its router weight instead of a SwiGLU. LongCat-Flash ships 512 routed +
+    # 256 identity by default. Experts4bit has no identity slot, so a load would build
+    # only the routed experts while the router keeps emitting indices past the end.
+    #
+    # Refusing here rather than at the read: the surplus experts carry gate_up rows the
+    # forward never reads and NO down_proj at all, so the per-expert reader consumes
+    # 0..n_routed-1, leaves the rest orphaned, and the generic weight walk then dies on
+    # `get_submodule(".../experts.10")` with `ExpertsLoRA has no attribute '10'` — which
+    # says nothing about what is actually unsupported.
+    _gate_cfg = getattr(config, "text_config", None) or config   # same unwrap as lm_config below
+    n_zero = int(getattr(_gate_cfg, "zero_expert_num", 0) or 0)
+    if n_zero > 0:
+        n_routed = int(getattr(_gate_cfg, "n_routed_experts", 0) or 0)
+        raise NotImplementedError(
+            f"{model_type!r} uses {n_zero} identity ('zero-computation') experts on top of "
+            f"{n_routed} routed experts. The router selects over all {n_routed + n_zero}, and "
+            "indices at or above the routed count pass the token through unchanged rather "
+            "than through a SwiGLU expert. Experts4bit represents SwiGLU experts only, so "
+            "loading just the routed ones would leave the router addressing experts that do "
+            "not exist. Supporting this needs an identity slot in the expert primitive, not "
+            "a loader change."
+        )
+    # A convention-admitted family runs the GENERIC Experts4bit, whose epilogue is a
+    # plain act(gate) * up. A family whose experts CLAMP instead computes a different
+    # function over the same weights, and every shape agrees — so the load succeeds,
+    # nothing raises, and only the outputs are wrong. That is the failure this loader
+    # exists to prevent, and it is worth refusing a family for.
+    #
+    # Scoped to the convention-admitted path on purpose: gpt_oss and deepseek_v4 also
+    # clamp, are named in SUPPORTED_ARCHITECTURES, and carry their own Experts4bit
+    # subclasses that reproduce their epilogues faithfully. They must not be refused.
+    if model_type not in SUPPORTED_ARCHITECTURES and _declares_clamped_swiglu(_gate_cfg):
+        raise NotImplementedError(
+            f"{model_type!r} stores its experts in a layout this loader reads, but runs a "
+            f"CLAMPED SwiGLU over them (swiglu_alpha="
+            f"{getattr(_gate_cfg, 'swiglu_alpha', None)}, swiglu_limit="
+            f"{getattr(_gate_cfg, 'swiglu_limit', None)}) rather than the plain "
+            "act(gate) * up the generic Experts4bit computes. Sharing a STORAGE convention "
+            "does not make the epilogue shared. Loading it here would place every weight "
+            "correctly, agree on every shape, raise nothing — and compute the wrong expert "
+            "function. Supporting it needs an Experts4bit subclass carrying that epilogue "
+            "(see arch/gptoss.py and arch/deepseek_v4.py for the two that do), not a change "
+            "to this gate."
+        )
+
+
+def admission_refusal(config):
+    """Why :func:`load_moe_4bit_streaming` would refuse this config (the loader's own message), or ``None``.
+
+    The same gates as :func:`check_admission`, as an answer rather than an exception, so a caller can ask before
+    it downloads or allocates anything (:func:`experts4bit_qlora.arch.topology.describe_moe` does).
+    """
+    try:
+        check_admission(config)
+    except NotImplementedError as e:
+        return str(e)
+    return None
+
+
 def load_moe_4bit_streaming(
     model_id, device, dtype, r, alpha, offload=False, pin=True, prefetch=False, quant_type="nf4",
     trust_remote_code=None, arena=None, quantize_layers=None, arena_train=False,
@@ -1181,60 +1257,7 @@ def load_moe_4bit_streaming(
         trust_remote_code = os.environ.get("E4B_TRUST_REMOTE_CODE", "0") == "1"
     config = AutoConfig.from_pretrained(model_id, trust_remote_code=trust_remote_code, revision=revision)
     model_type = getattr(config, "model_type", None)
-    if model_type not in SUPPORTED_ARCHITECTURES and not _read_compatible_convention(model_type):
-        raise NotImplementedError(
-            f"Unsupported model_type={model_type!r}. This streaming loader handles SwiGLU fused-MoE "
-            f"checkpoints: {sorted(SUPPORTED_ARCHITECTURES)}, plus every model_type on the "
-            f"{sorted(READ_COMPATIBLE_CONVENTIONS)} conventions, whose per-expert layout the "
-            "generic read takes from the convention itself. The Experts4bit primitive is "
-            "model-agnostic — see the README 'Scope' note to adapt another architecture."
-        )
-    # Identity ("zero-computation") experts: the router indexes a space LARGER than the
-    # set of real experts, and the surplus indices route the token through nn.Identity
-    # scaled by its router weight instead of a SwiGLU. LongCat-Flash ships 512 routed +
-    # 256 identity by default. Experts4bit has no identity slot, so a load would build
-    # only the routed experts while the router keeps emitting indices past the end.
-    #
-    # Refusing here rather than at the read: the surplus experts carry gate_up rows the
-    # forward never reads and NO down_proj at all, so the per-expert reader consumes
-    # 0..n_routed-1, leaves the rest orphaned, and the generic weight walk then dies on
-    # `get_submodule(".../experts.10")` with `ExpertsLoRA has no attribute '10'` — which
-    # says nothing about what is actually unsupported.
-    _gate_cfg = getattr(config, "text_config", None) or config   # same unwrap as lm_config below
-    n_zero = int(getattr(_gate_cfg, "zero_expert_num", 0) or 0)
-    if n_zero > 0:
-        n_routed = int(getattr(_gate_cfg, "n_routed_experts", 0) or 0)
-        raise NotImplementedError(
-            f"{model_type!r} uses {n_zero} identity ('zero-computation') experts on top of "
-            f"{n_routed} routed experts. The router selects over all {n_routed + n_zero}, and "
-            "indices at or above the routed count pass the token through unchanged rather "
-            "than through a SwiGLU expert. Experts4bit represents SwiGLU experts only, so "
-            "loading just the routed ones would leave the router addressing experts that do "
-            "not exist. Supporting this needs an identity slot in the expert primitive, not "
-            "a loader change."
-        )
-    # A convention-admitted family runs the GENERIC Experts4bit, whose epilogue is a
-    # plain act(gate) * up. A family whose experts CLAMP instead computes a different
-    # function over the same weights, and every shape agrees — so the load succeeds,
-    # nothing raises, and only the outputs are wrong. That is the failure this loader
-    # exists to prevent, and it is worth refusing a family for.
-    #
-    # Scoped to the convention-admitted path on purpose: gpt_oss and deepseek_v4 also
-    # clamp, are named in SUPPORTED_ARCHITECTURES, and carry their own Experts4bit
-    # subclasses that reproduce their epilogues faithfully. They must not be refused.
-    if model_type not in SUPPORTED_ARCHITECTURES and _declares_clamped_swiglu(_gate_cfg):
-        raise NotImplementedError(
-            f"{model_type!r} stores its experts in a layout this loader reads, but runs a "
-            f"CLAMPED SwiGLU over them (swiglu_alpha="
-            f"{getattr(_gate_cfg, 'swiglu_alpha', None)}, swiglu_limit="
-            f"{getattr(_gate_cfg, 'swiglu_limit', None)}) rather than the plain "
-            "act(gate) * up the generic Experts4bit computes. Sharing a STORAGE convention "
-            "does not make the epilogue shared. Loading it here would place every weight "
-            "correctly, agree on every shape, raise nothing — and compute the wrong expert "
-            "function. Supporting it needs an Experts4bit subclass carrying that epilogue "
-            "(see arch/gptoss.py and arch/deepseek_v4.py for the two that do), not a change "
-            "to this gate."
-        )
+    check_admission(config)
     # Source the expert path and gate from the convention when one exists (the
     # broad source of truth), else this loader's own map. Both agree today; this
     # makes the convention authoritative so a non-gated family loads correctly.

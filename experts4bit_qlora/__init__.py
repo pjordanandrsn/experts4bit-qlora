@@ -162,8 +162,26 @@ from .absmax_dq import (  # noqa: E402
     expert_absmax_bytes,
     expert_absmax_fp32,
 )
+# Before-load planning: what a checkpoint is (config + a meta-device tree, no weights) and what a QLoRA setup on it
+# costs, item by item; `prepare_qlora_training` builds exactly the setup that was priced. torch-only at import
+# time: transformers/accelerate are reached inside the functions.
+from .arch.topology import MoETopology, describe_moe  # noqa: E402
+from .recipe import (  # noqa: E402
+    Footprint,
+    QLoRASetup,
+    estimate_qlora_footprint,
+    prepare_qlora_training,
+    setup_refusals,
+)
 
 __all__ = [
+    "describe_moe",
+    "MoETopology",
+    "QLoRASetup",
+    "Footprint",
+    "estimate_qlora_footprint",
+    "setup_refusals",
+    "prepare_qlora_training",
     "Experts4bit",
     "ExpertsNbit",
     "ExpertsLoRA",
