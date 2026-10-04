@@ -327,3 +327,31 @@ Each is FALSIFIED outside its band or count, and UNTESTED where the box quotes n
 
 **Budget.** One H100 NVL, $2.80/h GPU ceiling (disk billed on top), 2.5 h guard, about $2.60 invoiced like amendment 6's boxes. The owner's
 standing tier for a single run under $15; the campaign's daily cap is $100.
+
+### Amendment 8 (2026-10-04T14:10Z, after amendment 7's read, before any box): amendment 7's box once more, and the last re-ask under these rules
+
+**Why.** Amendment 7's box showed `auto` taking the route with nothing set (P22 HELD), but it could not be quoted. e4b's draws were 5.1 %
+apart, over the 5 % rule (P21 UNTESTED), and Unsloth's first draw read COMPARABLE, at 0.0061 against a 0.0054 band (P23 FALSIFIED).
+On this card e4b's step is now host-bound (amendment 6: device-busy 0.454), which widens its draw spread. Amendment 6's box R read
+2.5 %.
+
+**The box.** Amendment 7's box unchanged (`tc1c-h100-12`): TC1c's token, nothing set, grouped-nf4-gemm v0.37.0, e4b at this
+amendment's merge (no code change from 0.45.0), and HF and axolotl skipped.
+
+**Predictions:** amendment 7's three, renumbered.
+
+- **P24:** the MATCHED POSITION unsloth/e4b lies in **[0.95, 1.12]**.
+- **P25:** `route_ab` names `grouped_mm` with `GNF4_TRAIN_GEMM` unset (16,896 forward and 7,680 dgrad calls).
+- **P26:** the box's P3 line is HELD.
+
+**Decision rules.**
+
+- **All three HELD:** this box becomes the H100 position at default settings (`e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`), as
+  amendment 7 registered.
+- **Otherwise:** there is no further re-ask under these rules. The register keeps amendment 1's row as the fused kernels' reading and
+  amendment 6's labelled rows. STATUS reports the default's readings as measured and unquoted.
+- A change to the instrument (more draws, or a band that accounts for Unsloth's own draw spread) would be its own registration,
+  made before any further box.
+
+**Budget.** One H100 NVL at a $2.80/h GPU ceiling, 2.5 h guard, about $2.15 invoiced like amendment 7's.
+
