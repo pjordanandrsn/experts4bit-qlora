@@ -77,12 +77,12 @@ def test_storage_gate_ignores_absent_attributes():
     assert _train_storage_reason(types.SimpleNamespace()) is None
 
 
-def _experts_lora(E=8, H=64, I=64):
+def _experts_lora(E=8, H=64, inter=64):
     from experts4bit_qlora import Experts4bit, ExpertsLoRA
     from quant_guard import require_quantize
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     require_quantize(dev)
-    base = Experts4bit.from_float((torch.randn(E, 2 * I, H) * 0.1).to(dev), (torch.randn(E, H, I) * 0.1).to(dev),
+    base = Experts4bit.from_float((torch.randn(E, 2 * inter, H) * 0.1).to(dev), (torch.randn(E, H, inter) * 0.1).to(dev),
                                   quant_type="nf4", compute_dtype=torch.bfloat16)
     return ExpertsLoRA(base, r=4, alpha=8, dtype=torch.float32)
 
