@@ -1,0 +1,9 @@
+# Names as the BOX sees them after staging (/root/p113). The box runs `sha256sum -c` on this file; p113_drive.sh and
+# tests/test_p113_staged_pin.py resolve each name to its source (bench/p113, bench/p109, bench/p39, tests) and compare.
+9a100cf9a92a2d4c63283ae4c999673c2b912a90bfe7af5b8140608fc0923e1f  p113_run.sh
+dfd39ff12f7c7b02cb23e7ed4a963e4137356ec8130ce0ef908b8f076c407c84  p113_box.py
+d45206250894981d8f4b96385ac2f415428b404e110191d825c14363cb8d8247  p113_reduce.py
+b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py
