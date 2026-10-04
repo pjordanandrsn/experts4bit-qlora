@@ -14,7 +14,11 @@
     `serve_paged._kv_geometry` and `paged_runner.kv_layers`, as `build_engine` calls them.
   - `ServeSetup.to_env()` is the `E4B_PAGED_*` environment that builds the priced setup; `PagedServeConfig.from_env`
     reads it back (tested).
-  - No serve receipt has checked the estimate against a measured peak yet.
+  - **Checked against lane P109's receipts** (`bench/p109/receipts/p109-5090-2`: Qwen3-30B-A3B, one RTX 5090,
+    16 sequences × 4096 tokens, NF4 experts, no int4). The estimate is under the measured allocator peak by
+    158–165 MB with eager decode and 158–210 MB with decode graphs, 0.7–0.9%. The graph arms' extra is the
+    graph pools, which the estimate lists as not modelled. Allocator reserve slack on those arms was 0.1–0.9%,
+    far below a trainer's.
 
 ### CI on grouped-nf4-gemm 0.39.0; where the dense-route rows came from (docs and register notes only)
 

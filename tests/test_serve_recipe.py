@@ -11,6 +11,7 @@ pytest.importorskip("fp8_kv", reason="needs grouped-nf4-gemm")
 from experts4bit_qlora.arch.topology import describe_moe  # noqa: E402
 from experts4bit_qlora.engines import fp8_paged_kv  # noqa: E402
 from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV  # noqa: E402
+from experts4bit_qlora.recipe import QLoRASetup, _module_bytes, _stack_modules  # noqa: E402
 from experts4bit_qlora.serve_recipe import (BLOCK_TOKENS, ServeSetup, estimate_serve_footprint,  # noqa: E402
                                              paged_kv_pool_bytes)
 
@@ -61,6 +62,8 @@ def test_estimate_items_and_scaling():
     assert {i.name for i in big.items} >= {"frozen expert stacks (all VRAM)", "dense weights (bf16)", "FP8 paged KV pool",
                                             "prefill/decode working set"}
     assert any("CUDA graph" in u for u in big.unmodelled) and not any("CUDA graph" in u for u in small.unmodelled)
+    slab = next(i for i in big.items if i.name.startswith("frozen expert stacks"))
+    assert slab.bytes == sum(_module_bytes(_stack_modules(st, QLoRASetup())[0]) for st in topo.expert_stacks)  # cache
 
 
 def test_unpriced_placements_are_refused_in_words():

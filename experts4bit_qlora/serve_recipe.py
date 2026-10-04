@@ -14,7 +14,8 @@ Only the all-VRAM placement is priced; the solver's VRAM/DRAM/NVMe tiers are ref
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import functools
+from dataclasses import asdict, dataclass, replace
 
 from .recipe import Footprint, FootprintItem, QLoRASetup, _module_bytes, _stack_modules
 
@@ -72,6 +73,13 @@ def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_
     return n_layers * rows * (k_row + v_row) + tables
 
 
+@functools.lru_cache(maxsize=64)
+def _frozen_stack_bytes(stack, qsetup) -> int:
+    """One stack's frozen bytes, built on meta. Keyed by shape (callers pass ``layer=0``): a planner prices the same
+    stacks once per context/concurrency it tries, and a 48-layer model has one stack shape."""
+    return _module_bytes(_stack_modules(stack, qsetup)[0])
+
+
 def serve_setup_refusals(topology, setup: ServeSetup) -> tuple:
     out = []
     if topology.loader_refusal:
@@ -99,7 +107,7 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
         return Footprint(items=(), refusals=refusals)
     items, unmodelled = [], []
     qs = QLoRASetup()                      # nf4, blocksize 64: the arena's default bake
-    slab = sum(_module_bytes(_stack_modules(st, qs)[0]) for st in topology.expert_stacks)
+    slab = sum(_frozen_stack_bytes(replace(st, layer=0), qs) for st in topology.expert_stacks)
     items.append(FootprintItem("frozen expert stacks (all VRAM)", "device", slab, "derived",
                                f"{len(topology.expert_stacks)} layers x all experts, nf4 blocksize 64 (packed + absmax)"))
     items.append(FootprintItem("dense weights (bf16)", "device", 2 * topology.dense_numel, "derived",
