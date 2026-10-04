@@ -372,6 +372,18 @@ def test_amendment_20_registers_the_host_reuse_token():
     assert R.reuse_ab_why("fused_attn4_m_reuse0", {}).startswith("no reuse_ab record")
 
 
+def test_amendment_21_registers_the_moe_keep_token():
+    R = _mod()
+    assert R.KEEP_FAM == "qwen3keepab" and R.KEEP_FAM in R.FAMS and R.N_LAYERS[R.KEEP_FAM] == 48
+    assert R.KEEP_BANDS == {"P35": (0.80, 0.95), "P36": (0.86, 0.98)} and R.KEEP_N == {"fused_attn4_shipped": 32, "fused_attn4_m": 16}
+    assert R.KEEP_PEAK_MAX_GB == 31.0 and R.KEEP_HELDOUT_MAX == 0.005
+    assert R.anchor_of(R.KEEP_FAM) == ("e4b", "fused_attn4_m_keep0") and "fused_attn4_m_keep1_d2" in R.MATCHED
+    assert R.registered_draw2(R.KEEP_FAM, ("e4b", "fused_attn4_shipped_keep1")) == ("e4b", "fused_attn4_shipped_keep1_d2")
+    F = {R.KEEP_FAM: R.reduce_family(R.KEEP_FAM, R._keep_set(), {}, 20)}
+    assert [(p, v) for p, _, v, _ in R.score_keepab(F)] == [("P35", "HELD"), ("P36", "HELD"), ("P37", "HELD")]
+    assert R.keep_ab_why("fused_attn4_m_keep0", {}).startswith("no keep_ab record")
+
+
 def test_amendment_12_registers_the_profile_token():
     R = _mod()
     assert R.PROF945_FAM == "qwen3prof945" and R.PROF945_FAM in R.FAMS and R.EXPECTED[R.PROF945_FAM] == list(R.PROF945_ARMS)

@@ -802,3 +802,61 @@ Each is FALSIFIED outside its band, and UNTESTED if a side is missing, not VALID
 The prediction verdicts are read beside the rule, not instead of it.
 
 Budget: one RTX 5090, $0.69/h ceiling, 1.5 h cap, under $1.05; the standing no-ask tier.
+
+### Amendment 21 (2026-10-04T03:11Z, before any box): keeping MoE activations instead of recomputing them, A/B on one 5090 (P35, P36, P37)
+
+**Why.** Hugging Face checkpoints each decoder layer whole, so e4b's backward re-runs every MoE forward. On a 4-layer Qwen3-30B-A3B
+slice on an RTX A2000 (these token rows, mb2 x accum 4, every current default), the recomputed MoE forwards were 232 of 917 ms of device
+time, and 79 of 505 ms of the step's host compute.
+
+e4b#1007 adds `E4B_MOE_KEEP_LAYERS=n`. In the last n decoder layers, only `self_attn` is checkpointed, and the MoE activations are kept
+from forward to backward. grouped-nf4-gemm#445 adds `NF4_QLORA_COMPACT_DELTA=1`, which makes the padded LoRA delta save its input rather
+than its padded block. Together they cut one MoE layer's saved activations from 229 MB to about 55 MB at 380 tokens with fp32
+adapters. Every trainable gradient is `torch.equal` with the policy on and off (deterministic mode).
+
+On the slice, keeping 4 of 4 layers took the step from 1.2545 / 1.2689 s to 0.9697 / 0.978 s, and 2 of 4 to 1.1349 / 1.1383 s. Each
+kept layer costs about 113 MB of peak at the slice's largest micro-batch (1,036 padded tokens). This box's largest is 1,110, so about
+121 MB per layer. The 5090 arms peak at 25.5 GB (shipped) and 27.2 GB (matched) today, so the kept counts are sized to the headroom:
+
+- **32 layers on the shipped arm:** about +3.9 GB, to about 29.4 GB.
+- **16 on the matched arm:** about +1.9 GB, to about 29.2 GB.
+
+**The token** `qwen3keepab` (TC1_BOX=A) runs e4b against itself, two draws each in ABBA order:
+
+- `*_keep0`: the defaults (whole-layer checkpointing);
+- `fused_attn4_shipped_keep1`: `E4B_MOE_KEEP_LAYERS=32 NF4_QLORA_COMPACT_DELTA=1`;
+- `fused_attn4_m_keep1`: `E4B_MOE_KEEP_LAYERS=16 NF4_QLORA_COMPACT_DELTA=1`.
+
+Every other setting is the default at the pinned commits. grouped-nf4-gemm is pinned at the merge of #445, and e4b at this amendment's
+merge (which carries #1007). Each arm's `keep_ab` record names the layers kept and the compact delta's state. The engagement predicate
+voids an arm on any of these:
+
+- it is a keep1 arm that did not keep exactly its arm's count with the compact delta on;
+- it is a keep0 arm that kept any layer;
+- it is not on the trimmed delta and the post-#945 sync path.
+
+**Predictions.** Each figure is the median over two VALID draws a side, each side's draws within 5 %; the interval over the four cross-draw
+ratios is reported beside it.
+
+- **P35** (shipped arm, 32 of 48 kept): keep1 / keep0 s/step lies in **[0.80, 0.95]**.
+- **P36** (matched arm, 16 of 48 kept): keep1 / keep0 s/step lies in **[0.86, 0.98]**.
+- **P37:** on each arm, the keep1 side's median peak is **at most 31.0 GB**, and the two sides' mean held-out at N agree **within
+  0.005**. Gradients are identical by construction; the draws differ only by the step's existing nondeterminism.
+
+P35 and P36 are FALSIFIED outside their bands. P37 is FALSIFIED if either keep1 side OOMs or misses either bound. Each is UNTESTED if
+a side is missing, not VALID or unstable.
+
+**Basis.**
+
+- Keeping every layer on the slice gave 0.773, and keeping half gave 0.902: about 0.227 per fraction of layers kept on a device-bound
+  card.
+- On the host-bound 5090 the avoided host work is the recompute's ~16 % of host compute, plus device time where the card is busy.
+- Keeping 2/3 of the layers predicts about 0.85–0.90 on the shipped arm, and 1/3 about 0.92–0.95 on the matched arm. The bands widen
+  both ways for the host mix.
+
+**Decision rule.** This is a memory-for-time trade, so no default changes on this box. The register records each arm's ratio and peak
+as the trade at that count. A HELD P37 with both ratios at or below 0.99 makes `E4B_MOE_KEEP_LAYERS` the recommended setting for cards
+with that headroom (README and STATUS). Any other reading leaves it documented as opt-in, with the numbers.
+
+Budget: one RTX 5090, $0.69/h GPU ceiling (the offer's price; 320 GB of disk is billed on top, as on every TC1 box), 1.5 h cap, under
+$1.30 with disk; the standing no-ask tier.
