@@ -1,0 +1,7 @@
+FIXTURE field: template=alpaca steps=20 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: fusedsweep; e4b 4ce22ebca446a60f92ec2449370b9ca10fa04430 gnf4 951a97fbb489b806d238922559b55724b55db8fd; run tc1c-h100-8 instance 54116273 deadline 1791099928; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=112 (physical cores) box_class=H100 NVL
+DRIVER 595.71.05 cu130_ok=1
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+FUSEDSWEEP rc=0 fwd default 75.777 | best (1, 1, 128, 4, 3) 0.9849 | best bit-identical (1, 1, 128, 4, 3) 0.9849 dgrad default 89.458 | best (64, 128, 64, 4) 0.8528 | best bit-identical (32, 64, 64, 2) 0.9876 
+FUSEDSWEEP DONE

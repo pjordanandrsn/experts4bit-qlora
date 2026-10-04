@@ -13,6 +13,16 @@
 - **Decision.** The route stays opt-in, and the readings are labelled rows (`...h100.2026-10-04.route`, `.moe-keep-route`) beside the
   default-settings and keep rows. A faster dequant kernel is the next change. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
 
+### Read: TC1c amendment 5 — the fused kernels' own configs on the H100 change nothing worth taking (P15, P16 FALSIFIED; P17 HELD, near-exact)
+
+- **What.** `tc1c-h100-8` (H100 NVL, $0.33 invoiced) swept grouped-nf4-gemm's fused forward (25 configs) and dgrad (9) on the 128
+  recorded real-router calls.
+- **Forward.** The default stays best: 0.985 re-run, every other config 0.999–1.82×. bf16 MMA is 2.3–3.5× slower. BLOCK_K 128 fits
+  but does not help.
+- **dgrad.** 64/128/64/w4 reads 0.853, a near-exact config (5e-5 Frobenius); the best bit-identical config reads 0.988.
+- **Decision.** The gap to `torch._grouped_mm` is structural, so the grouped_mm route (TC1c amendment 4) is the H100 path, and the
+  dgrad config is recorded, not taken. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ### P112 closed VOID (#1015): no reading on `GNF4_PDL` for the int4 serving step. Seen but not read: B=1 3.7 % faster and B=16 1.5 % slower, with identical tokens
 
 - **Run 1** (`p112-5090-1`, $0.3210) VOIDed on the lane's own launch accounting (Amendment 1).

@@ -252,3 +252,45 @@ ask whether the sm_86 choices leave easy time on the table on sm_90.
 This box quotes no position and changes no register row.
 
 **Budget.** One H100 NVL, $2.80/h GPU ceiling (disk billed on top), 1.0 h guard, estimate under $1; the owner's standing tier.
+
+### Amendment 6 (2026-10-04T08:39Z, after amendment 4's read, before any box): the grouped_mm route again, with a dequant at bandwidth (P18, P19, P20)
+
+**Why.** Amendment 4's boxes made e4b slower with grouped-nf4-gemm's grouped_mm route: Unsloth/e4b 0.664 with the route alone and 0.934
+with MoE activations kept, against 0.817 and 1.100 without it. Their profiled arm showed why. The route's own dequant kernel took 2,178
+ms of device time per step, 1.89 ms per call, against the fused kernels' 1,424 ms. It gathered the NF4 LUT and the absmax per element,
+and amendment 3's replay, whose ratios amendment 4 relied on, had timed bitsandbytes' dequant instead.
+
+grouped-nf4-gemm#452 rewrites the kernel: coalesced byte tiles, a register LUT, block-broadcast absmax. It is still bit-equal to
+`dequant_ref` in bf16. On an RTX A2000 it runs 3.1–5.1× faster than the old kernel and at 0.73–0.93× of bitsandbytes'
+`dequantize_4bit`. Nothing else in the route changes.
+
+**The boxes.** Amendment 4's two boxes are re-run unchanged, with grouped-nf4-gemm pinned at the merge of #452 and e4b at this
+amendment's merge:
+
+- **box R** (`route`): `TC1_E4B_ENV="GNF4_TRAIN_GEMM=grouped_mm"`;
+- **box K** (`keep + route`): `TC1_E4B_ENV="E4B_MOE_KEEP_LAYERS=all NF4_QLORA_COMPACT_DELTA=1 GNF4_HOST_REUSE=1 GNF4_TRAIN_GEMM=grouped_mm"`.
+
+Both run TC1c's token with HF and axolotl skipped. Engagement is read as in amendment 4 (`route_ab`, `keep_ab`). The profiled e4b arm
+also reports the dequant kernel's device time, so its share of the step is read, not assumed.
+
+**Predictions** (registered before the boxes), read off each box's own lines:
+
+- **P18** (box R): the MATCHED POSITION unsloth/e4b lies in **[0.90, 1.25]**. At about 0.3 ms per dequant call, box R's route takes about
+  0.6 s of device time per step against the fused kernels' 1.42 s. Only part of the saving reaches the step, which is partly host-bound,
+  so the estimate is about 1.0 (amendment 1's e4b step was 3.146 s).
+- **P19** (box K): the MATCHED POSITION unsloth/e4b lies in **[1.15, 1.65]**. There are 768 dequant calls per step, the forward and
+  dgrad GEMMs come to about 1.0 s fused, and amendment 2's step was 2.343 s. The estimate is about 1.35.
+- **P20:** both boxes' P3 lines are HELD (the route's training numerics again).
+
+Each is FALSIFIED outside its band, and UNTESTED where the box quotes no position.
+
+**Decision rules.**
+
+- Each reading becomes a LABELLED row (`...h100.<date>.route-v2`, `.moe-keep-route-v2`), quoted beside amendments 1 and 2. Amendment 4's
+  rows stay as they are, labelled as the first dequant kernel.
+- **Default on sm_90.** grouped-nf4-gemm makes the route its default there only if three things hold, as amendment 4 registered: P20
+  HELD, box R at or above 0.858 (5 % over amendment 1's 0.817), and box R's e4b held-out within 0.005 of amendment 1's e4b.
+- **P20 FALSIFIED** blocks quoting that box.
+
+**Budget.** Two H100 NVL boxes, each $2.80/h GPU ceiling (disk billed on top), 2.5 h guard. Each is about $2.50 invoiced, as amendment
+4's were; the owner's standing tier (each a single run under $15).

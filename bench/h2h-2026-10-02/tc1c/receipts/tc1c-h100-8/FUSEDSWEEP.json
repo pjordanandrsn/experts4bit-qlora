@@ -1,0 +1,505 @@
+{
+ "gpu": "NVIDIA H100 NVL",
+ "capability": [
+  9,
+  0
+ ],
+ "torch": "2.8.0+cu128",
+ "unique_calls": 128,
+ "fwd": [
+  {
+   "config": null,
+   "ok": true,
+   "total_ms": 75.777,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.0
+  },
+  {
+   "config": [
+    1,
+    1,
+    128,
+    4,
+    3
+   ],
+   "ok": true,
+   "total_ms": 74.629,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 0.9849
+  },
+  {
+   "config": [
+    1,
+    1,
+    128,
+    8,
+    3
+   ],
+   "ok": true,
+   "total_ms": 137.8,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.8185
+  },
+  {
+   "config": [
+    1,
+    1,
+    128,
+    8,
+    4
+   ],
+   "ok": true,
+   "total_ms": 138.114,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.8226
+  },
+  {
+   "config": [
+    1,
+    1,
+    256,
+    8,
+    3
+   ],
+   "ok": true,
+   "total_ms": 85.698,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.1309
+  },
+  {
+   "config": [
+    1,
+    1,
+    64,
+    4,
+    4
+   ],
+   "ok": true,
+   "total_ms": 131.496,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.7353
+  },
+  {
+   "config": [
+    1,
+    1,
+    128,
+    4,
+    4
+   ],
+   "ok": true,
+   "total_ms": 75.716,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 0.9992
+  },
+  {
+   "config": [
+    1,
+    2,
+    128,
+    4,
+    3
+   ],
+   "ok": true,
+   "total_ms": 77.899,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.028
+  },
+  {
+   "config": [
+    1,
+    2,
+    128,
+    8,
+    3
+   ],
+   "ok": true,
+   "total_ms": 134.885,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.78
+  },
+  {
+   "config": [
+    1,
+    2,
+    128,
+    8,
+    4
+   ],
+   "ok": true,
+   "total_ms": 135.187,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.784
+  },
+  {
+   "config": [
+    1,
+    2,
+    256,
+    8,
+    3
+   ],
+   "ok": true,
+   "total_ms": 89.325,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.1788
+  },
+  {
+   "config": [
+    1,
+    2,
+    64,
+    4,
+    4
+   ],
+   "ok": true,
+   "total_ms": 133.759,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.7652
+  },
+  {
+   "config": [
+    1,
+    2,
+    128,
+    4,
+    4
+   ],
+   "ok": true,
+   "total_ms": 83.173,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.0976
+  },
+  {
+   "config": [
+    3,
+    1,
+    128,
+    4,
+    3
+   ],
+   "ok": true,
+   "total_ms": 173.143,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 0.00244594132527709,
+   "over_default": 2.2849
+  },
+  {
+   "config": [
+    3,
+    1,
+    128,
+    8,
+    3
+   ],
+   "ok": true,
+   "total_ms": 259.5,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 0.00244594132527709,
+   "over_default": 3.4245
+  },
+  {
+   "config": [
+    3,
+    1,
+    128,
+    8,
+    4
+   ],
+   "ok": true,
+   "total_ms": 263.208,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 0.00244594132527709,
+   "over_default": 3.4735
+  },
+  {
+   "config": [
+    3,
+    1,
+    256,
+    8,
+    3
+   ],
+   "ok": true,
+   "total_ms": 183.59,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 0.00244594132527709,
+   "over_default": 2.4228
+  },
+  {
+   "config": [
+    3,
+    1,
+    64,
+    4,
+    4
+   ],
+   "ok": true,
+   "total_ms": 266.779,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 0.00244594132527709,
+   "over_default": 3.5206
+  },
+  {
+   "config": [
+    3,
+    1,
+    128,
+    4,
+    4
+   ],
+   "ok": true,
+   "total_ms": 174.861,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 0.00244594132527709,
+   "over_default": 2.3076
+  },
+  {
+   "config": [
+    3,
+    2,
+    128,
+    4,
+    3
+   ],
+   "ok": false,
+   "error": "OutOfResources: out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `num_stages` may help."
+  },
+  {
+   "config": [
+    3,
+    2,
+    128,
+    8,
+    3
+   ],
+   "ok": false,
+   "error": "OutOfResources: out of resource: shared memory, Required: 264192, Hardware limit: 232448. Reducing block sizes or `num_stages` may help."
+  },
+  {
+   "config": [
+    3,
+    2,
+    128,
+    8,
+    4
+   ],
+   "ok": false,
+   "error": "OutOfResources: out of resource: shared memory, Required: 257024, Hardware limit: 232448. Reducing block sizes or `num_stages` may help."
+  },
+  {
+   "config": [
+    3,
+    2,
+    256,
+    8,
+    3
+   ],
+   "ok": false,
+   "error": "OutOfResources: out of resource: shared memory, Required: 348160, Hardware limit: 232448. Reducing block sizes or `num_stages` may help."
+  },
+  {
+   "config": [
+    3,
+    2,
+    64,
+    4,
+    4
+   ],
+   "ok": false,
+   "error": "OutOfResources: out of resource: shared memory, Required: 247296, Hardware limit: 232448. Reducing block sizes or `num_stages` may help."
+  },
+  {
+   "config": [
+    3,
+    2,
+    128,
+    4,
+    4
+   ],
+   "ok": false,
+   "error": "OutOfResources: out of resource: shared memory, Required: 257024, Hardware limit: 232448. Reducing block sizes or `num_stages` may help."
+  }
+ ],
+ "dgrad": [
+  {
+   "config": null,
+   "ok": true,
+   "total_ms": 89.458,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.0
+  },
+  {
+   "config": [
+    32,
+    64,
+    64,
+    2
+   ],
+   "ok": true,
+   "total_ms": 88.345,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 0.9876
+  },
+  {
+   "config": [
+    64,
+    64,
+    64,
+    4
+   ],
+   "ok": true,
+   "total_ms": 126.318,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 4.9676233174977824e-05,
+   "over_default": 1.412
+  },
+  {
+   "config": [
+    64,
+    128,
+    64,
+    4
+   ],
+   "ok": true,
+   "total_ms": 76.293,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 4.9676233174977824e-05,
+   "over_default": 0.8528
+  },
+  {
+   "config": [
+    128,
+    128,
+    64,
+    8
+   ],
+   "ok": true,
+   "total_ms": 129.99,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 4.9676233174977824e-05,
+   "over_default": 1.4531
+  },
+  {
+   "config": [
+    64,
+    64,
+    64,
+    8
+   ],
+   "ok": true,
+   "total_ms": 128.742,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 4.9676233174977824e-05,
+   "over_default": 1.4391
+  },
+  {
+   "config": [
+    128,
+    64,
+    64,
+    4
+   ],
+   "ok": true,
+   "total_ms": 117.934,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 4.9676233174977824e-05,
+   "over_default": 1.3183
+  },
+  {
+   "config": [
+    32,
+    128,
+    64,
+    4
+   ],
+   "ok": true,
+   "total_ms": 92.998,
+   "bit_identical_to_default": true,
+   "max_fro_rel_vs_default": 0.0,
+   "over_default": 1.0396
+  },
+  {
+   "config": [
+    64,
+    64,
+    32,
+    4
+   ],
+   "ok": true,
+   "total_ms": 127.246,
+   "bit_identical_to_default": false,
+   "max_fro_rel_vs_default": 4.9676233174977824e-05,
+   "over_default": 1.4224
+  }
+ ],
+ "fwd_best": {
+  "config": [
+   1,
+   1,
+   128,
+   4,
+   3
+  ],
+  "ok": true,
+  "total_ms": 74.629,
+  "bit_identical_to_default": true,
+  "max_fro_rel_vs_default": 0.0,
+  "over_default": 0.9849
+ },
+ "fwd_best_bit_identical": {
+  "config": [
+   1,
+   1,
+   128,
+   4,
+   3
+  ],
+  "ok": true,
+  "total_ms": 74.629,
+  "bit_identical_to_default": true,
+  "max_fro_rel_vs_default": 0.0,
+  "over_default": 0.9849
+ },
+ "dgrad_best": {
+  "config": [
+   64,
+   128,
+   64,
+   4
+  ],
+  "ok": true,
+  "total_ms": 76.293,
+  "bit_identical_to_default": false,
+  "max_fro_rel_vs_default": 4.9676233174977824e-05,
+  "over_default": 0.8528
+ },
+ "dgrad_best_bit_identical": {
+  "config": [
+   32,
+   64,
+   64,
+   2
+  ],
+  "ok": true,
+  "total_ms": 88.345,
+  "bit_identical_to_default": true,
+  "max_fro_rel_vs_default": 0.0,
+  "over_default": 0.9876
+ }
+}
