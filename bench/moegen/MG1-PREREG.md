@@ -22,10 +22,12 @@ Qwen3.5/3.6. And how much of the Qwen performance stack does each family's shipp
   `init_sha`, C1 bit-exact frozen experts on both arms with the byte-flip control firing, `n_patched > 0`, and kernel
   calls per step ≥ 2·n_patched on every step. Otherwise FAIL, or VOID with the reason.
 * Box class: the train anchor (`bench/train-anchor/`), strict as in tp1. A refused box ends the lane (exit 12).
-* Revisions pinned in `mg1_run.sh` (the snapshots downloaded on 2026-10-04): OLMoE `6d84c485`, LFM2-8B-A1B `c1c44ff9`,
+* Revisions pinned in `mg1_run.sh` (the snapshots downloaded on 2026-10-04; OLMoE and Gemma-4 by amendment 1): OLMoE-Instruct
+  `7f1c97f4`, Gemma-4-26B-A4B-it `4d7ae498`, LFM2-8B-A1B `c1c44ff9`,
   granite-4.0-h-tiny `791e0d3d`, ERNIE-4.5-21B-A3B-PT `87db9548`, Nemotron-3.5-Lightning-30B-A3B `a9904d24`, Qwen3.6-35B-A3B
   `995ad96e`.
-* OLMoE runs first, as the regression anchor: a licensed family re-read on this branch's code.
+* OLMoE runs first, as the regression anchor: a licensed family re-read on this branch's code (amendment 1: on the licensed
+  `-Instruct` checkpoint, and Gemma-4 beside it).
 * Qwen3.6 runs resident first. On an OOM stub its reference arm is renamed `.resident_oom` and **both** arms rerun under
   expert offload (TC2's working configuration). The two arms are never split across modes.
 
@@ -66,6 +68,22 @@ reason. Under expert offload the box-side mode is named in the row, as Mixtral's
 One RTX 5090 at the policy's $0.85/h ceiling. Estimated wall about 4 h (fetches about 210 GB; per family two N=60 arms and
 one ladder). Guard 5.5 h, so about $4.7, inside the CTO band. The box disk holds one checkpoint at a time; each family's cache
 is removed after its ladder.
+
+## Amendment 1 (2026-10-04, before any box): the regression anchors re-read what was licensed
+
+* **OLMoE is `allenai/OLMoE-1B-7B-0924-Instruct` @ `7f1c97f4`.** That is the checkpoint tp1 licensed. The registration named the
+  base model, which no licence reads, so as registered the anchor could not show a regression.
+* **Gemma-4-26B-A4B-it @ `4d7ae498` is a second regression anchor.** This branch changes its fused RMSNorm numerics: `main`
+  fused its norms with the Llama rounding, and they now run their own fp32 multiply, which is closer to the reference composite.
+  tp1's licensed reading was d_final 0.02385 and median 0.04742, against a 0.05 band, so it is the licensed family with the
+  least margin.
+  - **P6.** Gemma-4 PASSES, with a median no larger than 0.0574 (tp1's 0.04742 + 0.01). This is a regression signal beside the
+    verdict, not a second verdict.
+  - A FAIL, or a median above 0.0574, is recorded, and Gemma-4's licence row is flagged for a re-read. Nothing is removed
+    automatically.
+* **Order:** olmoe, gemma4, lfm2, graniteh, ernie, nemotron, qwen3_5 (`MG1_FAMILIES`' registered default).
+* **Budget:** Gemma-4's fetch (51.6 GB) and two arms add about 30 min. Guard 6 h, so about $5.10 at $0.85/h, still under the
+  $15 no-ask tier.
 
 ## Staging, the proving run and the rehearsal
 

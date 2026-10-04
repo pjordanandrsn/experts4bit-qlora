@@ -219,15 +219,18 @@ on an EPYC 7663 host and **1.146 [1.129, 1.164]** on an EPYC 7C13 host -- **e4b 
 half the summed step time (650-654 s against 1,373-1,389 s), and axolotl spends x1.79 the energy per step. axolotl
 still reaches the matched held-out curve while e4b as shipped sits 0.024-0.027 above it. The 2026-10-02 rows above
 stand as measured for the code before #945.
-**On an H100 NVL Unsloth is faster per step** (lane TC1c, the same matched set, one rented box per reading,
-[`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md)). With e4b after TC1 amendments 10–15
-(`e4b.train.h2h.unsloth.qwen3.h100.2026-10-04`, TC1c amendment 1), Unsloth takes 2.571 s/step against e4b's 3.146 —
+**On an H100 NVL at default settings e4b is now faster per step** (lane TC1c, the same matched set, one rented box per reading,
+[`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md)). On e4b 0.45.0 with grouped-nf4-gemm 0.37.0 and nothing set,
+`auto` takes the grouped_mm route, and Unsloth takes 2.544 s/step against e4b's 2.397: **Unsloth/e4b 1.061 [1.047, 1.075]**
+(`e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`, TC1c amendment 8). That is at 2.93 GB more peak VRAM on e4b (27.20 vs 24.27 GB)
+and ×1.23 Unsloth's energy per step, with the matched set EQUIVALENT. Before the route, with e4b after TC1 amendments 10–15
+(`e4b.train.h2h.unsloth.qwen3.h100.2026-10-04`, TC1c amendment 1), Unsloth took 2.571 s/step against e4b's 3.146 —
 **Unsloth/e4b 0.817 [0.799, 0.836]**, Unsloth faster by 1.22 ×, at 2.98 GB less peak VRAM and ×0.79 the energy, with the matched set
 EQUIVALENT. e4b's own step fell ×0.768 since the first H100 box; on this card it is now mostly device-bound (device-busy 0.665), and
 it spends ~2.4 × Unsloth's device time per step. **With e4b keeping all 48 layers' MoE activations** (an opt-in memory-for-time setting,
 `E4B_MOE_KEEP_LAYERS=all` with the compact delta; TC1c amendment 2, a LABELLED row `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep`,
 same machine) **e4b is faster per step on the H100 too: Unsloth/e4b 1.100 [1.088, 1.111]** (2.577 against 2.343 s), at 9.81 GB more
-peak VRAM (34.08 vs 24.27 GB) and about equal energy — quoted beside the default-settings 0.817, never in place of it. grouped-nf4-gemm's opt-in grouped_mm route made e4b SLOWER on this card as shipped (TC1c amendment 4: 0.664 alone, 0.934 with the activations kept; labelled rows `.route` / `.moe-keep-route`): its dequant kernel ran ~4x slower than the bitsandbytes dequant the kernel replay had timed. With the dequant at bandwidth (grouped-nf4-gemm #452; TC1c amendment 6) the route makes e4b faster per step than Unsloth on the H100: **1.030 [1.016, 1.045] alone and 1.325 [1.296, 1.356] with the activations kept** (labelled rows `.route-v2` / `.moe-keep-route-v2`, matched set EQUIVALENT), and it is the sm_90 default from grouped-nf4-gemm 0.37.0 (grouped-nf4-gemm#454); the H100 position of record stays 0.817 until a default-settings box re-reads it there. The first H100 reading, e4b before #945
+peak VRAM (34.08 vs 24.27 GB) and about equal energy — quoted beside the default-settings 0.817, never in place of it. grouped-nf4-gemm's opt-in grouped_mm route made e4b SLOWER on this card as shipped (TC1c amendment 4: 0.664 alone, 0.934 with the activations kept; labelled rows `.route` / `.moe-keep-route`): its dequant kernel ran ~4x slower than the bitsandbytes dequant the kernel replay had timed. With the dequant at bandwidth (grouped-nf4-gemm #452; TC1c amendment 6) the route makes e4b faster per step than Unsloth on the H100: **1.030 [1.016, 1.045] alone and 1.325 [1.296, 1.356] with the activations kept** (labelled rows `.route-v2` / `.moe-keep-route-v2`, matched set EQUIVALENT), and it is the sm_90 default from grouped-nf4-gemm 0.37.0 (grouped-nf4-gemm#454); the default-settings re-read on 0.45.0 (TC1c amendment 8, above) is the H100 position of record. The first H100 reading, e4b before #945
 (`e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`), was 0.621 [0.615, 0.628]: Unsloth 2.546
 s/step against e4b's 4.097, faster by 1.61 × at 3.59 GB less peak VRAM and ×0.63 the energy, with the
 same loss (EQUIVALENT). The profiles then said why (`.dispatch-profile`): e4b

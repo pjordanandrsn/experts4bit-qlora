@@ -42,6 +42,16 @@
   - On an RTX A2000: 121 passed together with `test_int4_experts_topk_alias.py` and `test_loader_architectures.py`.
     The loader, serving, int4, moe-keep and quant_guard suites pass too.
 - `train.py` is untouched; adopting `prepare_qlora_training` there is a separate change.
+
+### Read: TC1c amendment 8 — on an H100 at default settings e4b is faster per step than Unsloth: 1.061 (P24, P25, P26 HELD)
+
+- **The box.** `tc1c-h100-15` ($2.44) ran e4b 0.45.0's code with grouped-nf4-gemm 0.37.0 and nothing set. `auto` took the grouped_mm
+  route on every fused arm.
+- **Position.** Unsloth/e4b **1.061** [1.047, 1.075] (2.544 against 2.397 s/step), at 2.93 GB more peak VRAM on e4b and ×1.23 Unsloth's
+  energy. The matched set is EQUIVALENT.
+- **Register.** The new H100 position of record is `e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`. It supersedes amendment 1's 0.817
+  (the fused kernels) as the default-settings row. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ### TC2 amendment 8 registered: Mixtral at default settings with the dense route, and Qwen3.6's micro-batch-1 pair (P24–P28). Two RTX 5090s
 
 - **Box M** (`tc2mixtralres`): Mixtral alone, every e4b arm resident at e4b's default settings, so grouped-nf4-gemm's `auto` takes its
@@ -61,6 +71,14 @@
   launch-bound step. Held-out Δ −0.0001.
 - **Decision.** Off sm_90, grouped-nf4-gemm's `auto` takes the dense route for calls with at most 16 present groups (grouped-nf4-gemm#463).
   Rows `e4b.train.dense-route.{mixtral,qwen3}.5090.2026-10-04`; lane page `bench/h2h-2026-10-02/tc1/README.md`.
+
+### MG1 amendment 1, before any box: the regression anchors re-read what was licensed (bench and prereg only)
+
+- **OLMoE re-reads `OLMoE-1B-7B-0924-Instruct` @ `7f1c97f4`, the checkpoint tp1 licensed.** The registration had named the base
+  model, which no licence reads.
+- **Gemma-4-26B-A4B-it @ `4d7ae498` joins as a second regression anchor.** #1048 changed its fused RMSNorm numerics, and its tp1
+  median (0.04742 against a 0.05 band) has the least margin of any licensed family. P6: PASS with the median at most 0.0574.
+- The guard is 6 h, about $5.10, still under the $15 no-ask tier.
 
 ### The Qwen training stack, by structure: what another MoE family inherits (moe-generalize; `docs/MOE_RUNTIME_PORTABILITY.md`)
 
