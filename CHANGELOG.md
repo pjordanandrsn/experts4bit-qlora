@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### `lora.quantize_frozen_linears_4bit`: a measurement hook that puts e4b's other frozen projections in a 4-bit comparator's regime (not a training option)
+
+- **What.** It stores every frozen, bias-free bf16 `nn.Linear` in NF4, the way `TRAIN_ATTN_4BIT` stores the attention. It keeps the
+  routers, the `shared_expert_gate`s, `lm_head` and the attention projections (those stay under their own switch). On
+  Qwen3.6-35B-A3B that is the 150 Gated DeltaNet projections and the shared experts' 120 gate/up/down; on Qwen3-30B-A3B and
+  Mixtral it converts nothing.
+- **Why.** A bitsandbytes `load_in_4bit` comparator quantizes those modules. On Qwen3.6 that starts it 0.05 nats higher on TC1's
+  held-out rows than e4b's bf16 default (1.194–1.196 against 1.143), which VOIDs a same-box pair by the lane's step-0 rule. The TC1
+  harness's `--frozen-4bit` (default from `TRAIN_FROZEN_4BIT`, so `TC1_E4B_ENV` reaches e4b arms only) gives a matched pair the
+  same bytes.
+- **Not offered.** `experts4bit_qlora.train` does not read it, and the bf16 default stays (`docs/ARCHITECTURE_SUPPORT.md`).
+- **Tested.** `tests/test_frozen_linear_4bit.py`: the selection on CPU, and the conversion on CUDA (an RTX A2000: 15 passed with
+  the attention-projection tests). The harness test pins the flag's order: after the attention census, before the LoRA.
+
 ## 0.45.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.37.0, whose two new defaults were registered and read here: programmatic dependent launch capped to launches of at most 8 rows (lane P113: SC1's int4 serving decode 1.0404× at one request and 1.0000× at 16 on an RTX 5090, identical tokens) and the grouped_mm training route on sm_90 (TC1c amendment 6: Unsloth/e4b 1.030 on an H100 NVL, a labelled row)
 
 **0.45.0.** No default in this package changes. Two change in grouped-nf4-gemm 0.37.0, each by a rule registered here, and CI now tests against 0.37.0's commit.

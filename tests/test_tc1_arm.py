@@ -1362,3 +1362,16 @@ def test_tc1_amendment_12_profile_token():
     src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
     assert "_ring_on = bool(_ng._pinned_ring_enabled())" in src and '"gnf4_pinned_ring_env": os.environ.get("GNF4_PINNED_RING"),' in src
 
+
+
+def test_frozen_4bit_flag_defaults_from_the_env_and_runs_between_attn4_and_the_lora():
+    """TRAIN_FROZEN_4BIT: the e4b arm's --frozen-4bit takes its default from the variable (TC1_E4B_ENV hands it to e4b arms only),
+    converts after the attention 4-bit census and BEFORE the attention LoRA wraps (so no adapter's base is ever a candidate),
+    and the receipt records the switch and the count."""
+    src = ARM.read_text()
+    assert 'ap.add_argument("--frozen-4bit", type=int, default=int(os.environ.get("TRAIN_FROZEN_4BIT", "0") == "1"),' in src
+    i = src.index("attn4_census_check(a, model, x, detect_attention_projections, quantize_attention_projections_4bit)   # T10")
+    j = src.index('x["n_frozen4"] = quantize_frozen_linears_4bit(model)')
+    k = src.index("add_attention_lora(model, a.r, a.alpha, torch.float32)", i)
+    assert i < j < k
+    assert '"frozen_4bit": bool(getattr(a, "frozen_4bit", 0)), "n_frozen4": x.get("n_frozen4", 0),' in src
