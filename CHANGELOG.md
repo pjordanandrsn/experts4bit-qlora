@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Prefill-graph feasibility census on the A2000 (bench only)
+
+- **Result.** `serve_paged`'s 512-token prefill forward makes **zero host syncs**, on chunk 1 and on a chunk with 512
+  tokens of history, on both the `k19` and `mtile` routes. It captures as a CUDA graph with no code change, and
+  replays are bitwise-equal to eager on the logits and every layer's staged K/V. Two instruments agree after
+  calibration: `set_sync_debug_mode` sites, and the profiler's stream-sync count against a no-op baseline.
+- **The blocker** for an `E4B_PAGED_PREFILL_GRAPH` knob is the Python-side K/V staging (a list plus a whole-prompt
+  `torch.cat` every chunk), not syncs.
+- **Setup.** A tiny random Qwen3-MoE with Qwen3-30B-A3B's attention geometry, served by the unmodified `build_engine`
+  under SC2's int4 stack with the routes unset. `bench/prefill-graph-census-2026-10-04/`. No claim row; nothing about
+  speed.
+
 ### serve_paged: `/health` reports the prefill routes the server resolves
 
 - **What.** `GET /health` gains a `prefill_routes` block, computed at each request by the same functions the forward

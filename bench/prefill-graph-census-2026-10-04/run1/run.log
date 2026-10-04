@@ -1,0 +1,115 @@
+[2026-10-04T20:10:59Z] preflight util,mem_used,mem_total: 0, 7812, 12282; apps: 
+git version 2.34.1
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+6178a15b serve_paged: /health reports the prefill routes the server resolves
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+GUARD ok 2.8.0+cu128 5.17.0 NVIDIA RTX A2000 12GB
+[2026-10-04T20:16:49Z] tiny model + arena
+TINY_OK /root/pg/tiny 211228160
+bake complete: 128 rows (0.0 GB) in 0s
+BAKE OK
+total 27772
+drwxr-xr-x 3 root root     4096 Oct  4 20:17 .
+drwxr-xr-x 5 root root     4096 Oct  4 20:17 ..
+-rw-r--r-- 1 root root      992 Oct  4 20:17 bake.json
+-rwxr-xr-x 1 root root 28311552 Oct  4 20:17 nf4.arena
+-rw-r--r-- 1 root root     3150 Oct  4 20:17 nf4.arena.index.json
+-rw-r--r-- 1 root root   103945 Oct  4 20:17 nf4.arena.manifest.json
+drwxr-xr-x 2 root root     4096 Oct  4 20:17 nf4snap
+[2026-10-04T20:17:15Z] arm A census ()
+RC=0
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+CENSUS c1_no_history: forward 0 around 2
+  [around] x1 ?
+  [around] x1 e4b/experts4bit_qlora/engines/paged_runner.py:150 run_prefill
+CENSUS c2_with_history: forward 0 around 2
+  [around] x1 e4b/experts4bit_qlora/engines/paged_runner.py:150 run_prefill
+  [around] x1 e4b/experts4bit_qlora/engines/paged_runner.py:175 run_prefill
+CENSUS runtime_c1: {"Memcpy DtoD (Device -> Device)": 16, "Memcpy HtoD (Pageable -> Device)": 1, "cuLaunchKernel": 4, "cuLaunchKernelEx": 16, "cudaDeviceSynchronize": 2, "cudaLaunchKernel": 428, "cudaMemcpyAsync": 17, "cudaStreamSynchronize": 1}
+CENSUS runtime_c2: {"Memcpy DtoD (Device -> Device)": 1036, "Memcpy DtoH (Device -> Pinned)": 1, "Memcpy HtoD (Pageable -> Device)": 1, "aten::_local_scalar_dense": 1, "aten::item": 1, "cuLaunchKernel": 4, "cuLaunchKernelEx": 16, "cudaDeviceSynchronize": 2, "cudaLaunchKernel": 773, "cudaMemcpyAsync": 1038, "cudaStreamSynchronize": 2}
+DECODE_GRAPH bucket=4 EAGER (eager: CompilationError: at 39:12:
+DECODE_GRAPH bucket=8 EAGER (eager: CompilationError: at 39:12:
+DECODE_GRAPH bucket=16 EAGER (eager: CompilationError: at 39:12:
+[serve_paged] ready: {"moe_layers": 4, "experts": 32, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 4, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 8, "kv": {"n_kv_heads": 2, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256}, "graph_status": {"1": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "2": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row =
+[2026-10-04T20:19:35Z] arm A capture ()
+RC=0
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+CAPTURE {"captured": true, "error": null}
+DECODE_GRAPH bucket=4 EAGER (eager: CompilationError: at 39:12:
+DECODE_GRAPH bucket=8 EAGER (eager: CompilationError: at 39:12:
+DECODE_GRAPH bucket=16 EAGER (eager: CompilationError: at 39:12:
+[serve_paged] ready: {"moe_layers": 4, "experts": 32, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 4, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 8, "kv": {"n_kv_heads": 2, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256}, "graph_status": {"1": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "2": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row =
+[2026-10-04T20:20:33Z] arm M census (E4B_INT4_PREFILL=mtile)
+RC=0
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+CENSUS c1_no_history: forward 0 around 2
+  [around] x1 ?
+  [around] x1 e4b/experts4bit_qlora/engines/paged_runner.py:150 run_prefill
+CENSUS c2_with_history: forward 0 around 2
+  [around] x1 e4b/experts4bit_qlora/engines/paged_runner.py:150 run_prefill
+  [around] x1 e4b/experts4bit_qlora/engines/paged_runner.py:175 run_prefill
+CENSUS runtime_c1: {"Memcpy DtoD (Device -> Device)": 16, "Memcpy HtoD (Pageable -> Device)": 1, "cuLaunchKernel": 4, "cuLaunchKernelEx": 24, "cudaDeviceSynchronize": 2, "cudaLaunchKernel": 428, "cudaMemcpyAsync": 17, "cudaStreamSynchronize": 1}
+CENSUS runtime_c2: {"Memcpy DtoD (Device -> Device)": 1036, "Memcpy DtoH (Device -> Pinned)": 1, "Memcpy HtoD (Pageable -> Device)": 1, "aten::_local_scalar_dense": 1, "aten::item": 1, "cuLaunchKernel": 4, "cuLaunchKernelEx": 24, "cudaDeviceSynchronize": 2, "cudaLaunchKernel": 773, "cudaMemcpyAsync": 1038, "cudaStreamSynchronize": 2}
+DECODE_GRAPH bucket=4 EAGER (eager: CompilationError: at 39:12:
+DECODE_GRAPH bucket=8 EAGER (eager: CompilationError: at 39:12:
+DECODE_GRAPH bucket=16 EAGER (eager: CompilationError: at 39:12:
+[serve_paged] ready: {"moe_layers": 4, "experts": 32, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 4, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 8, "kv": {"n_kv_heads": 2, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256}, "graph_status": {"1": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "2": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row =
+[2026-10-04T20:21:16Z] done
+PG_DONE
