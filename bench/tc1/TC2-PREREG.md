@@ -189,3 +189,43 @@ the `recompiles` key the receipt's `recompiles_total` read, which is why it said
 `fused_attn4_m` under offload x2, Unsloth `ckpt_unsloth_m` x2, the e4b reference under offload. P5, P6 and P7 are scored on it as
 registered. A Mixtral Unsloth arm that still recompiles per call, with the counters inert, is the finding and is quoted with its frame
 counts. Budget: one RTX 5090, ceiling $0.69/h, 6 h (the launcher's cap), under $4.20; the standing no-ask tier.
+
+### Amendment 6 (2026-10-04T10:54Z, after TC1 amendments 10-15 and TC1c, before any box): both big families with e4b RESIDENT on the 32 GB card
+
+**Why now.** On 2026-10-02 e4b trained neither big family resident on the RTX 5090. Qwen3.6's matched set (926,187,520 fp32 adapters)
+OOMed e4b's fused path at both micro-batches (`tc1-5090-27`, 32.52 GB at the failing allocation), and Mixtral only ever ran under
+expert offload, where Unsloth, resident at about 29 GB, steps about 5.3x faster (`e4b.train.footprint.unsloth.mixtral.5090.2026-10-02`).
+Both were registered as e4b losses on the footprint/speed trade. Since then e4b's training memory changed: the lean LoRA delta is on by
+default, and `_ScatterCombine` saves the bf16 `down` instead of its fp32 copy (23.75 MB per MoE layer at 380 tokens on Qwen3-30B-A3B).
+Whether either family now fits resident is the open question, and the resident pair is the comparison the footprint row stands in for.
+A rough budget for Mixtral (not a measurement): about 26.7 GB of weights, including 2.8 GB of fp32 absmax, about 2.2 GB of adapters,
+gradients and 8-bit optimizer state, plus activations under checkpointing. That is at the card's edge.
+
+**The token.** `tc2resident` on `TC1_BOX=B`. It makes the same `tc2_big_family` calls with `--offload 0` on every e4b arm: Mixtral first,
+then Qwen3.6 with the matched Unsloth arms given the family's expert target parameters (amendment 4's pair). Each family runs e4b
+`fused_attn4_m` x2, Unsloth `ckpt_unsloth_m` x2 (grouped_mm) and the e4b reference. A primary arm that OOMs falls to the `_mb1` pair (micro-batch 1 x
+accum 8, the same tokens per step), as in every family. HF, both axolotl arms and e4b as shipped are `not_run` stubs (box B and
+`tc1-5090-27` hold them). The reducer no longer draws Mixtral's footprint line, or scores P5 (the offload pair's prediction), when
+e4b's anchor ran resident. Host RAM floor 192 GB (amendment 3).
+
+**Predictions** (registered before the box is drawn; each read off a line `tc1_reduce.py` prints for the box):
+- **P11** (Mixtral fit): e4b's fused path completes Mixtral's matched set RESIDENT at micro-batch 2 (VALID), peak at most 31.5 GB.
+  This is close to a coin flip; the budget above leans to a fit.
+- **P12** (Mixtral position, when P11 holds and both pairs are stable): Unsloth/e4b s/step in **[0.45, 0.95]**, Unsloth faster.
+  Mixtral routes 2 of 8 large experts, so the step is GEMM-bound, not launch-bound. That is where e4b's edge on Qwen3-30B-A3B
+  (many small experts, a launch-bound step) does not carry, and where the H100 showed dequantize + grouped GEMM beating the fused kernels.
+- **P13** (Qwen3.6 fit): e4b's fused path OOMs Qwen3.6 resident at micro-batch 2 again, and completes it resident at micro-batch 1
+  (VALID). Each half is scored on its own.
+- **P14**: each resident matched pair that runs is EQUIVALENT at N = 20 (the lane's band), and e4b's parity control PASSES wherever the
+  resident reference fits. A reference that OOMs resident leaves parity UNTESTED on this box (amendment 5's offload parity stands).
+
+**Decision rules.**
+- P11 holds and a stable pair is quoted: Mixtral gets a resident position row, `e4b.train.h2h.unsloth.mixtral.5090.2026-10-04`. The
+  footprint row stays as the offload lever's reading.
+- P11 refuted at both micro-batches: the resident loss stands, with the peak at the failing allocation recorded. The next lever is
+  e4b's fp32 absmax (about 2.8 GB on Mixtral, where Unsloth double-quantizes), its own registration.
+- P13: a resident fit at either micro-batch registers a row beside `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02`. A pair at
+  micro-batch 1 is quoted with the micro-batch in its name.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 5 h guard. Estimate: $4.25 plus about 165 GB of checkpoint download at the
+launcher's cap of $0.011/GB, under $6.10 in all. The standing no-ask tier for a single run under $15; the campaign's daily cap is $100.
