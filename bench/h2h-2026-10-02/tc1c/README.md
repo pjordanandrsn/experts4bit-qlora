@@ -8,6 +8,57 @@ frameworks, Unsloth 2026.9.14 on torch 2.12.1+cu130 with `grouped_mm` engaged on
 (AMD EPYC 9534, 224 vCPU, 1.58 TB host RAM, driver 595.71.05), $4.88. The first draw (`tc1c-h100-1`) was refused at $0 before any
 instance existed (its manifest carried the 5090 pre-flight exclusion receipts, not same-class for an H100).
 
+## Amendment 6 (2026-10-04): with the dequant at bandwidth the grouped_mm route makes e4b faster than Unsloth on the H100 — 1.030 alone, 1.325 with MoE-keep — P18, P19 and P20 HELD
+
+Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 6.
+
+**The boxes.** Both ran amendment 4's two boxes again on an H100 NVL (AMD EPYC 9534, driver 595.71.05), now with e4b `e775eff` and
+grouped-nf4-gemm `81706a9` (the merge of #452, whose dequant kernel is bit-equal to the old one). HF and axolotl were skipped.
+Receipts are in [`receipts/tc1c-h100-9/`](receipts/tc1c-h100-9/) and [`receipts/tc1c-h100-10/`](receipts/tc1c-h100-10/).
+
+- **Box R** (`tc1c-h100-9`, instance 54128342, $2.65 invoiced): every e4b arm with `GNF4_TRAIN_GEMM=grouped_mm`.
+- **Box K** (`tc1c-h100-10`, instance 54128460, $2.76 invoiced): the same plus `E4B_MOE_KEEP_LAYERS=all`, the compact delta and
+  host reuse.
+
+Engagement is verified on every fused arm. `route_ab` names `grouped_mm` with 16,896 forward and 7,680 dgrad calls on box R, and
+9,216 and 7,680 on box K, the same counts as amendment 4.
+
+| box | e4b s/step (d1 / d2) | Unsloth s/step | **Unsloth/e4b** | amendment 4 (old dequant) | its default counterpart | peak e4b / Unsloth | verdict |
+|---|---|---|---|---|---|---|---|
+| R (route) | 2.512 / 2.450 (2.481) | 2.557 | **1.030** [1.016, 1.045] | 0.664 | 0.817 (amendment 1) | 27.19 / 24.27 GB | **P18 HELD** (0.90–1.25) |
+| K (keep + route) | 1.941 / 1.910 (1.925) | 2.552 | **1.325** [1.296, 1.356] | 0.934 | 1.100 (amendment 2) | 34.08 / 24.27 GB | **P19 HELD** (1.15–1.65) |
+
+**P20 HELD.** On box R e4b's reference and Unsloth are EQUIVALENT to the fused arm. On box K the reference is inside the fused arm's
+draw noise and Unsloth is EQUIVALENT. Held-out losses at N = 20: box R e4b 0.8467 / 0.8495, Unsloth 0.8513 / 0.8515; box K e4b
+0.8531 / 0.8499, Unsloth 0.8532 / 0.8503.
+
+**Why it is faster now.** The profiled e4b arm on box R reads device-busy 0.454, against amendment 4's 0.855:
+
+- `_dequant_groups_kernel` took **256 ms of device time per step**: 1,152 calls at **0.222 ms each**, against amendment 4's 2,178 ms
+  at 1.89 ms (×8.5). The grouped GEMMs took 247 ms per step, as before.
+- Dequant plus grouped GEMMs come to about 0.50 s per step, against the fused kernels' 1.42 s in amendment 1.
+- Box K's dequant took 170 ms per step over 768 calls (0.221 ms each), against amendment 4's 1,456 ms; its device is busy 0.433 of
+  the profiled step.
+- e4b's step on this box is now host-bound: 1.51 s of device time per step against an unprofiled step of 2.48 s (the profiled
+  step takes 3.32 s).
+
+**The default rule.** Amendment 4 registered three conditions for making the route grouped-nf4-gemm's default on sm_90. All three hold:
+
+- P20 HELD.
+- Box R 1.030 ≥ 0.858 (amendment 1's 0.817 + 5 %).
+- Box R's e4b held-out, 0.8481 over the two draws (0.84667 / 0.84945), is within 0.005 of amendment 1's 0.8521 (0.85228 / 0.85201):
+  Δ 0.0041, lower. The margin is thin. Draw against draw the four differences are 0.0026, 0.0028, 0.0053 and 0.0056, so two of the
+  four pairings would miss 0.005. The rule is read on the two-draw means, the statistic this page quotes in bold for every step time,
+  and the route's held-out sits with the other arms on the box: the reference 0.8502, Unsloth 0.8513 / 0.8515.
+
+**What follows.**
+
+- The route qualifies as grouped-nf4-gemm's default on compute capability 9.0. The change is grouped-nf4-gemm#454
+  (`GNF4_TRAIN_GEMM=auto`; `GNF4_TRAIN_GEMM=fused` keeps the fused kernels; other cards unchanged).
+- Both readings are LABELLED rows, `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2` (1.030) and `...moe-keep-route-v2` (1.325),
+  until a default-settings box re-reads the H100 position on the release that carries the new default.
+- The next lever on this card is host time, not device time.
+
 ## Amendment 5 (2026-10-04): the fused kernels' own configs on the H100 change nothing worth taking — a kernel replay, not a position
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 5.
