@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Read: TC1c amendment 8 — on an H100 at default settings e4b is faster per step than Unsloth: 1.061 (P24, P25, P26 HELD)
+
+- **The box.** `tc1c-h100-15` ($2.44) ran e4b 0.45.0's code with grouped-nf4-gemm 0.37.0 and nothing set. `auto` took the grouped_mm
+  route on every fused arm.
+- **Position.** Unsloth/e4b **1.061** [1.047, 1.075] (2.544 against 2.397 s/step), at 2.93 GB more peak VRAM on e4b and ×1.23 Unsloth's
+  energy. The matched set is EQUIVALENT.
+- **Register.** The new H100 position of record is `e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`. It supersedes amendment 1's 0.817
+  (the fused kernels) as the default-settings row. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ### TC2 amendment 8 registered: Mixtral at default settings with the dense route, and Qwen3.6's micro-batch-1 pair (P24–P28). Two RTX 5090s
 
 - **Box M** (`tc2mixtralres`): Mixtral alone, every e4b arm resident at e4b's default settings, so grouped-nf4-gemm's `auto` takes its

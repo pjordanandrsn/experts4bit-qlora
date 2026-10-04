@@ -8,6 +8,32 @@ frameworks, Unsloth 2026.9.14 on torch 2.12.1+cu130 with `grouped_mm` engaged on
 (AMD EPYC 9534, 224 vCPU, 1.58 TB host RAM, driver 595.71.05), $4.88. The first draw (`tc1c-h100-1`) was refused at $0 before any
 instance existed (its manifest carried the 5090 pre-flight exclusion receipts, not same-class for an H100).
 
+## Amendment 8 (2026-10-04): the H100 at default settings on 0.45.0 — e4b faster per step, Unsloth/e4b 1.061 (P24, P25, P26 HELD): the H100 position of record
+
+Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 8. Amendment 7's box once more, the last re-ask under these rules.
+
+**The box.** `tc1c-h100-15`: an H100 NVL (instance 54181574, AMD EPYC 9V84, driver 580.159.03), e4b 0.45.0's code (`3888fca`), grouped-nf4-gemm v0.37.0,
+nothing set, HF and axolotl skipped. Vast invoiced $2.44. Receipts: [`receipts/tc1c-h100-15/`](receipts/tc1c-h100-15/). Three earlier draws produced no box:
+`tc1c-h100-12` and `-14` were refused before any rental ($0; the first at a price that had risen to $3.01/h, the second on an exclusion
+receipt the launcher does not accept), and `-13` failed pre-flight on a 60 GB disk ($0.008). The guard ceiling was raised from $2.80/h to
+$3.10/h, a budget change, not a change to the box.
+
+| | e4b `fused_attn4_m` (default) | Unsloth `ckpt_unsloth_m` |
+|---|---|---|
+| s/step, two draws | 2.428 / 2.367 (**2.5 % apart**) | 2.545 / 2.543 |
+| peak VRAM | 27.21 / 27.19 GB | 24.27 GB |
+| energy per step | 492.9 / 488.8 J | 410.4 / 389.1 J |
+| held-out at N = 20 | 0.8491 / 0.8484 | 0.8487 / 0.8494 |
+
+- **P24 HELD.** The MATCHED POSITION is **Unsloth/e4b 1.061 [1.047, 1.075]**, inside [0.95, 1.12]: e4b is faster per step.
+- **P25 HELD.** `route_ab` names `grouped_mm` with `GNF4_TRAIN_GEMM` unset on every fused arm (16,896 forward and 7,680 dgrad calls), and none on
+  the reference.
+- **P26 HELD.** The reference and Unsloth are both EQUIVALENT to the fused arm.
+
+**Decision, as registered.** This box is the H100 position at default settings: `e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`. It
+supersedes amendment 1's 0.817 as the default-settings row; that row stays as the fused kernels' reading. On the H100, e4b is now faster than
+Unsloth with nothing set, at 2.93 GB more peak VRAM and about ×1.23 Unsloth's energy per step.
+
 ## Amendment 7 (2026-10-04): the H100 at default settings on 0.45.0 — `auto` takes the route (P22 HELD), but the box is not quoted (P21 UNTESTED, P23 FALSIFIED)
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 7.

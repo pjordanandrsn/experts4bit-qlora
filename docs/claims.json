@@ -9464,6 +9464,30 @@
     {
       "package": "experts4bit-qlora",
       "area": "train",
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1c amendment 8, one rented H100 NVL (tc1c-h100-15): the matched position at DEFAULT settings on experts4bit-qlora 0.45.0's code with grouped-nf4-gemm 0.37.0 (v0.37.0, 71185d6), nothing set. auto takes the grouped_mm route on sm_90 (route_ab: 16,896 forward and 7,680 dgrad calls on every fused arm, GNF4_TRAIN_GEMM unset; P25 HELD). Unsloth 2026.9.14 2.544 s/step against e4b 2.397 (2.428 / 2.367, 2.5 % apart): Unsloth/e4b 1.061 [1.047, 1.075], e4b FASTER per step (P24 HELD, band [0.95, 1.12]), at 2.93 GB more peak on e4b (27.20 vs 24.27 GB) and x1.23 Unsloth's energy per step; the matched set EQUIVALENT, the reference EQUIVALENT (P26 HELD). The H100 position of record: it supersedes ...h100.2026-10-04 (0.817, the fused kernels) as the default-settings row; amendment 7's box (not quoted: e4b's draws 5.1 % apart) read about 1.03 on the same code.",
+      "value": 1.061,
+      "unit": "ratio s/step Unsloth/e4b (medians of steps 11..20 over two draws each; > 1 = e4b faster per step); cross-draw interval [1.047, 1.075]",
+      "hardware": "H100 NVL (sm_90), one rented Vast.ai verified/secure host (tc1c-h100-15: instance 54181574, AMD EPYC 9V84, driver 580.159.03); e4b @ 3888fca (0.45.0's code) on torch 2.8.0+cu128, grouped-nf4-gemm v0.37.0 @ 71185d6; Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; matched work (the same 642,514,944 trainable parameters, one per-slot LoRA init matched:3407, fp32 adapters, the same tokens); e4b at e1837cf with every default from TC1 amendments 10-15 and no environment set; token qwen3 with TC1_GPU_CLASS=\"H100 NVL\", nothing set (no TC1_E4B_ENV), HF and axolotl skipped; engagement read off route_ab; validity, positions and equivalence by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-15/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-15/tc1/"
+      ],
+      "notes": "Vast invoiced $2.44. Earlier draws for this re-ask: tc1c-h100-12 / -14 refused before any rental ($0), tc1c-h100-13 NOT_RUN on a 60 GB disk ($0.008)."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
       "id": "e4b.train.moe-keep.qwen3.5090.2026-10-04",
       "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
       "claim": "TC1 amendment 21 (#945), one rented RTX 5090 (tc1-5090-52): keeping the MoE activations of the last n decoder layers instead of recomputing them under gradient checkpointing (E4B_MOE_KEEP_LAYERS=n, e4b#1007, with grouped-nf4-gemm's NF4_QLORA_COMPACT_DELTA=1, #445; gradients identical by construction) steps the Qwen3-30B-A3B field recipe at 0.835 [0.823, 0.849] x whole-layer checkpointing on the shipped arm with 32 of 48 layers kept (2.536 / 2.536 against 3.083 / 2.989 s; peak 24.58 -> 29.09 GB) and 0.926 [0.920, 0.932] x on the matched arm with 16 kept (3.642 / 3.600 against 3.908 / 3.914 s; peak 27.14 -> 29.40 GB); about 141 MB of peak per kept layer; mean held-out at N within +0.0037 / +0.0014 (bound 0.005); every pair stable; energy per step lower. Engagement verified per arm (keep_ab: exactly 32 / 16 layers kept with the compact delta on, none on keep0). P35, P36 and P37 HELD: by the registered decision rule it is the recommended setting for cards with the headroom, and it stays opt-in. e4b against itself on one host: no cross-framework position is restated from it.",

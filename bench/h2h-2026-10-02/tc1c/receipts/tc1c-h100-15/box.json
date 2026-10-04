@@ -1,0 +1,17 @@
+{
+ "box": "A",
+ "run_id": "tc1c-h100-15",
+ "instance_id": "54181574",
+ "gpu": "NVIDIA H100 NVL",
+ "driver": "580.159.03",
+ "cpu": "AMD EPYC 9V84 96-Core Processor",
+ "nproc": 40,
+ "mem_total_kb": "329973116",
+ "cgroup_memory_max": "324375937024",
+ "disk_root": "overlay         788G   89G  700G  12% /",
+ "hostname": "7df3cc2aea4e",
+ "registered_gpu_class": "H100 NVL",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}
