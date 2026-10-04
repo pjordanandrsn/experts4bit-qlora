@@ -75,3 +75,50 @@ the box's position.
 
 **Budget.** One H100 NVL on Vast verified-secure, ceiling $2.80/h, guard 3 h, estimate $8.40 (under $15, the owner's standing tier),
 as TC1c's original box.
+
+### Amendment 2 (2026-10-04T03:41Z, after amendment 1's read, before any box): the H100 position with e4b keeping its MoE activations (P7, P8)
+
+**Why.** Amendment 1 read Unsloth/e4b **0.817** [0.799, 0.836] on an H100 NVL (`tc1c-h100-3`): Unsloth still faster per step there,
+by 1.22×. Its profiled arms say why. e4b's step is now mostly device-bound on that card (device-busy 0.665), and it spends about 2.4×
+Unsloth's device time per step. Part of that device time is gradient checkpointing re-running every MoE forward in backward. On a
+4-layer Qwen3-30B-A3B slice on an RTX A2000 that recompute was 232 of 917 ms of device time. Keeping all four layers' MoE activations
+took the step to 0.773 of before, with every trainable gradient `torch.equal`.
+
+That needs e4b#1007's `E4B_MOE_KEEP_LAYERS` and grouped-nf4-gemm#445's `NF4_QLORA_COMPACT_DELTA=1`. It costs about 121 MB of peak per
+layer at this fixture's largest micro-batch, so about 5.8 GB for all 48 layers. That does not fit beside the 5090 arm's 27.2 GB (TC1
+amendment 21 sizes it to 16–32 layers there), but it does on 80 GB. This box measures that setting on the card where e4b loses.
+
+**The box.** TC1c's token, unchanged: TC1's `qwen3` family with `TC1_GPU_CLASS="H100 NVL"`. Two settings change:
+
+- **Every e4b arm runs with**
+  `TC1_E4B_ENV="E4B_MOE_KEEP_LAYERS=all NF4_QLORA_COMPACT_DELTA=1 GNF4_HOST_REUSE=1"`. This is the new knob, forwarded by the driver
+  and applied to e4b arms only. Host reuse is named explicitly, so the box does not depend on when grouped-nf4-gemm#446 lands.
+- **`TC1_SKIP="qwen3/hf/hf_peft_m qwen3/axolotl/ckpt_axolotl_m"`.** HF + PEFT hit its 1,800 s alarm with no step on both earlier H100
+  boxes, and axolotl's row is not part of this question. Both become `not_run` stubs.
+
+Unsloth's arms are byte-for-byte TC1c's. e4b is pinned at the main commit carrying this amendment, which carries #1007 and TC1
+amendment 21's `keep_ab` record. grouped-nf4-gemm is pinned at a main commit carrying #445.
+
+**Engagement**, read off the receipts before any prediction is scored. Each e4b fused arm's `keep_ab` must record 48 layers kept with
+the compact delta on, and its `reuse_ab` must record the flag in force with hits. If not, the box is VOID for P7.
+
+**Predictions** (registered before the box), read off the box's own lines:
+
+- **P7:** the MATCHED POSITION unsloth/e4b lies in **[0.85, 1.30]**. The point estimate is 0.817 / 0.78 ≈ 1.05: the slice's 0.773,
+  rounded up for the share of the H100 step that is not MoE recompute. The same ordering reading as P5 applies:
+  - interval wholly below 1.0: Unsloth still faster;
+  - wholly above 1.0: e4b faster with this setting;
+  - spanning 1.0: parity within the draw noise.
+- **P8:** the box's P3 line is HELD, with the matched set EQUIVALENT or inside the draw noise of e4b fused (e4b's reference arm runs
+  with the same environment).
+
+Each is FALSIFIED outside its band, and UNTESTED where the box quotes no position. The e4b fused arms' peak memory is reported beside
+P7, not predicted.
+
+**Decision rule.** A HELD or FALSIFIED P7 becomes a LABELLED register row,
+`e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep`. It is e4b with an opt-in setting, quoted beside amendment 1's default-settings
+position and never in place of it. STATUS states both and names the setting. P8 FALSIFIED blocks quoting the box's position.
+
+**Budget.** One H100 NVL on Vast verified-secure, $2.80/h GPU ceiling (disk billed on top, as on every box), 2.5 h guard, estimate
+about $4–5 with the HF arm skipped; the owner's standing tier (a single run under $15). The box launches only after TC1 amendment 21's
+5090 box has produced a VALID keep arm, so a broken path is found on the cheaper card.
