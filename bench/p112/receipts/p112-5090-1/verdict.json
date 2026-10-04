@@ -1,0 +1,14 @@
+{
+ "verdict": "VOID",
+ "reasons": [
+  "P1a: 6907 of 6927 switched launches carried PDL",
+  "P1b: 6907 of 6927 switched launches carried PDL"
+ ],
+ "bars": {
+  "self_pair": [
+   0.96,
+   1.04
+  ],
+  "gain_min": 1.0
+ }
+}

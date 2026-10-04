@@ -12,8 +12,10 @@ The verdict is the first of these that applies:
                 - SC1's int4 configuration must be in force in every arm (int4 stores on every MoE layer, int4 attention,
                   the fused qkv, T1 glue and router epilogue), with the same counts in all four;
                 - ``pdl_active`` must match the arm;
-                - the build must launch the same number of switched gnf4 kernels in every arm, more than zero; every one
-                  of them with PDL in P1, none in P0.
+                - the build must launch the same number of switched gnf4 kernels in every arm, more than zero. In P1
+                  every compiled variant of a launched switched kernel must carry launch_pdl, every launch with a handle
+                  must carry PDL, and the compile launches (the hook sees no handle on them) may not outnumber the
+                  variants; in P0 no variant and no launch carries it (Amendment 1).
   NOISY         a self-pair (P0b/P0a or P1b/P1a, decode tok/s, either workload) falls outside [0.96, 1.04].
   FUNCTION_FAIL P1a or P1b emits a token different from P0a's on any row of either workload at either length, P0b differs
                 from P0a, or an arm's timed reps do not all digest the same.
@@ -51,6 +53,23 @@ def _launches(r):
     return sum(v[0] for v in acct.values()), sum(v[1] for v in acct.values())
 
 
+def _accounting_errors(t, r):
+    """Amendment 1: rows are [launches, with launch_pdl, compile launches, variants, variants with launch_pdl]."""
+    on, out = t.startswith("P1"), []
+    for name, row in sorted((r.get("pdl_launches_build") or {}).items()):
+        if len(row) != 5:
+            out.append(f"{t}: {name} accounting row {row} is not the amended form")
+            continue
+        n, with_pdl, compiles, variants, variants_pdl = row
+        if compiles > variants:
+            out.append(f"{t}: {name} has {compiles} compile launches but {variants} compiled variants")
+        if on and (variants_pdl != variants or variants == 0 or with_pdl != n - compiles):
+            out.append(f"{t}: {name} {with_pdl} of {n - compiles} handled launches and {variants_pdl} of {variants} variants carried PDL")
+        if not on and (variants_pdl or with_pdl):
+            out.append(f"{t}: {name} carried PDL in an off arm ({with_pdl} launches, {variants_pdl} variants)")
+    return out
+
+
 def _engagement(t, r):
     out = []
     g = r.get("graph_status") or {}
@@ -68,11 +87,10 @@ def _engagement(t, r):
     on = t.startswith("P1")
     if bool(r.get("pdl_active")) != on:
         out.append(f"{t}: pdl_active={r.get('pdl_active')}")
-    n, n_pdl = _launches(r)
+    n, _n_pdl = _launches(r)
     if n == 0:
         out.append(f"{t}: the build launched no switched gnf4 kernel")
-    elif n_pdl != (n if on else 0):
-        out.append(f"{t}: {n_pdl} of {n} switched launches carried PDL")
+    out += _accounting_errors(t, r)
     return out
 
 
@@ -148,12 +166,14 @@ INT4_OK = {"int4_expert_layers": 48, "moe_layers": 48, "int4_attn_projections": 
 
 
 def _fake(tag, rate16, rate1, toks, *, e4b="a" * 40, graphs=None, pdl=None, n_launch=4000, n_pdl=None, int4=None,
-          digests=None, short=4, long_=8):
+          digests=None, short=4, long_=8, compiles=4, variants=4, variants_pdl=None):
     if graphs is None:
         graphs = {b: "graph" for b in BUCKETS}
     on = tag.startswith("P1")
     if n_pdl is None:
-        n_pdl = n_launch if on else 0
+        n_pdl = n_launch - compiles if on else 0
+    if variants_pdl is None:
+        variants_pdl = variants if on else 0
 
     def wl(rate):
         return {"decode_tok_s": rate, "decode_ms_per_step": round(1000 / rate, 3),
@@ -161,7 +181,8 @@ def _fake(tag, rate16, rate1, toks, *, e4b="a" * 40, graphs=None, pdl=None, n_la
                 "rep_digests": digests or {str(short): ["x"] * 3, str(long_): ["y"] * 3}}
     return {"tag": tag, "status": "ok", "e4b_sha": e4b, "gnf4_sha": GNF4_SHA, "model": "Qwen/Qwen3-30B-A3B",
             "revision": REVS["Qwen/Qwen3-30B-A3B"], "graph_status": graphs,
-            "pdl_active": on if pdl is None else pdl, "pdl_launches_build": {"_gemv_int4_b32": [n_launch, n_pdl]},
+            "pdl_active": on if pdl is None else pdl,
+            "pdl_launches_build": {"_gemv_int4_b32": [n_launch, n_pdl, compiles, variants, variants_pdl]},
             "int4": dict(INT4_OK) if int4 is None else int4, "prompts_sha256": "p", "short": short,
             "long": long_, "reps": 3, "workloads": {"W16": wl(rate16), "W1": wl(rate1)}}
 
@@ -180,8 +201,13 @@ def self_test() -> int:
     cases.append(("missing", reduce({k: v for k, v in arms().items() if k != "P0b"}, E)["verdict"] == "VOID"))
     cases.append(("wrong e4b", reduce(arms(P1a=_fake("P1a", 1630.0, 232.0, base, e4b="b" * 40)), E)["verdict"] == "VOID"))
     cases.append(("switch not read", reduce(arms(P1b=_fake("P1b", 1632.0, 233.0, base, pdl=False)), E)["verdict"] == "VOID"))
-    cases.append(("partial pdl", reduce(arms(P1a=_fake("P1a", 1630.0, 232.0, base, n_pdl=3999)), E)["verdict"] == "VOID"))
+    cases.append(("partial pdl", reduce(arms(P1a=_fake("P1a", 1630.0, 232.0, base, n_pdl=3990)), E)["verdict"] == "VOID"))
+    cases.append(("a variant without pdl", reduce(arms(P1b=_fake("P1b", 1632.0, 233.0, base, variants_pdl=3)), E)["verdict"] == "VOID"))
+    cases.append(("compiles outnumber variants", reduce(arms(P1a=_fake("P1a", 1630.0, 232.0, base, compiles=5, n_pdl=3995)), E)["verdict"] == "VOID"))
+    cases.append(("the pre-amendment row form", reduce(arms(P0a={**_fake("P0a", 1600.0, 220.0, base),
+                                                                 "pdl_launches_build": {"_gemv_int4_b32": [4000, 0]}}), E)["verdict"] == "VOID"))
     cases.append(("pdl in an off arm", reduce(arms(P0b=_fake("P0b", 1602.0, 221.0, base, n_pdl=1)), E)["verdict"] == "VOID"))
+    cases.append(("a pdl variant in an off arm", reduce(arms(P0a=_fake("P0a", 1600.0, 220.0, base, variants_pdl=1)), E)["verdict"] == "VOID"))
     cases.append(("no switched kernel", reduce(arms(**{t: _fake(t, 1600.0, 220.0, base, n_launch=0) for t in TAGS}), E)["verdict"] == "VOID"))
     cases.append(("launch counts differ", reduce(arms(P1b=_fake("P1b", 1632.0, 233.0, base, n_launch=3990)), E)["verdict"] == "VOID"))
     cases.append(("int4 not in force", reduce(arms(P0a=_fake("P0a", 1600.0, 220.0, base, int4={**INT4_OK, "fuse_t1_glue_n": 0})), E)["verdict"] == "VOID"))
@@ -197,7 +223,7 @@ def self_test() -> int:
     cases.append(("slower at 1", reduce(arms(P1a=_fake("P1a", 1630.0, 219.0, base), P1b=_fake("P1b", 1632.0, 219.5, base)), E)["verdict"] == "SLOWER"))
     r = reduce(arms(), E)
     cases.append(("report", r["g1"] == round(min(232 / 220, 233 / 221), 4) and r["geomean"]["W16"] > 1.0
-                  and r["switched_launches_build"]["P1a"] == [4000, 4000]))
+                  and r["switched_launches_build"]["P1a"] == [4000, 3996]))
     bad = [n for n, ok in cases if not ok]
     print(f"p112_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
