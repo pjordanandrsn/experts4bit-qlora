@@ -1,0 +1,109 @@
+{
+ "status": "OK",
+ "reps": 5,
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "torch": "2.8.0+cu128",
+ "cuda": "12.8",
+ "nvidia_smi": "595.91.07, 470.00 W, 3090 MHz, 32607 MiB",
+ "flops": {
+  "tflops": {
+   "median": 181.35,
+   "min": 181.27,
+   "max": 181.98,
+   "spread": 1.0039
+  },
+  "ms_per_gemm": {
+   "median": 0.7579,
+   "min": 0.7552,
+   "max": 0.7582,
+   "spread": 1.004
+  }
+ },
+ "flops_runs": [
+  {
+   "tflops": 181.98,
+   "ms_per_gemm": 0.7552
+  },
+  {
+   "tflops": 181.35,
+   "ms_per_gemm": 0.7579
+  },
+  {
+   "tflops": 181.35,
+   "ms_per_gemm": 0.7579
+  },
+  {
+   "tflops": 181.33,
+   "ms_per_gemm": 0.758
+  },
+  {
+   "tflops": 181.27,
+   "ms_per_gemm": 0.7582
+  }
+ ],
+ "launch": {
+  "launches_per_s": {
+   "median": 243606,
+   "min": 243295,
+   "max": 243778,
+   "spread": 1.002
+  },
+  "us_per_launch": {
+   "median": 4.105,
+   "min": 4.102,
+   "max": 4.11,
+   "spread": 1.002
+  }
+ },
+ "launch_runs": [
+  {
+   "launches_per_s": 243778,
+   "us_per_launch": 4.102
+  },
+  {
+   "launches_per_s": 243295,
+   "us_per_launch": 4.11
+  },
+  {
+   "launches_per_s": 243710,
+   "us_per_launch": 4.103
+  },
+  {
+   "launches_per_s": 243340,
+   "us_per_launch": 4.109
+  },
+  {
+   "launches_per_s": 243606,
+   "us_per_launch": 4.105
+  }
+ ],
+ "h2d": {
+  "h2d_gb_s": {
+   "median": 45.7,
+   "min": 45.43,
+   "max": 45.73,
+   "spread": 1.0066
+  }
+ },
+ "h2d_runs": [
+  {
+   "h2d_gb_s": 45.73
+  },
+  {
+   "h2d_gb_s": 45.43
+  },
+  {
+   "h2d_gb_s": 45.69
+  },
+  {
+   "h2d_gb_s": 45.7
+  },
+  {
+   "h2d_gb_s": 45.7
+  }
+ ]
+}

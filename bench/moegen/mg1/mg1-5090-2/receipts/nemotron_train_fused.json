@@ -1,0 +1,586 @@
+{
+ "fam": "nemotron",
+ "model": "/root/.cache/huggingface/hub/models--nvidia--NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16/snapshots/a9904d24bcc1d289a1950fa9d2b978c47cf903b9",
+ "model_type": "nemotron_h",
+ "arm": "fused",
+ "tag": "fused",
+ "status": "ok",
+ "steps": 60,
+ "seq": 512,
+ "offload": false,
+ "r": 8,
+ "alpha": 16,
+ "lr": 0.0001,
+ "seed": 0,
+ "dataset": {
+  "path": "ds_clinical.json",
+  "sha256": "76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791",
+  "n_train_rows": 1200,
+  "eval_rows_used": 48
+ },
+ "prereg": "tp1/P36-PREREG.md",
+ "harness": "tp1_train_smoke.py (n17_cell.py + D1-D8)",
+ "env": {
+  "e4b": "0.45.0",
+  "e4b_dist": "0.45.0",
+  "gnf4": "0.38.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-1988d9ef-19d0-36d8-6639-210c4347c852",
+   "pci.bus_id": "00000000:02:00.0",
+   "pcie.link.gen.current": "5",
+   "pcie.link.gen.max": "5",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "470.00",
+   "clocks.max.sm": "3090",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.00.B1",
+   "driver_version": "595.91.07",
+   "cpu": "Intel(R) Core(TM) Ultra 9 285K",
+   "cpu_threads": 24,
+   "host_mem_gib": 188.1,
+   "vast_instance_id": null,
+   "container_host": "2ccbdd2874f0"
+  },
+  "anchor_json": "/root/tc1/anchor.json",
+  "box_class": "pcie-full/launch-fast"
+ },
+ "load_s": 13.7,
+ "verify": {
+  "n_quantized": 23,
+  "n_unquantized": 0
+ },
+ "n_lora_wrapped": 23,
+ "n_bare_experts": 0,
+ "expert_classes": {
+  "Experts4bit": 23
+ },
+ "n_attn_lora": 24,
+ "trainable_tensors": 140,
+ "trainable_params": 214974464,
+ "init_sha": "735b9fa3a99e8998317333179b79cb1b890d9e05356179498bc622c7fd10517f",
+ "init_tensors": 140,
+ "n_patched": 23,
+ "enable_reason": "[e4b.fast] fused TRAINING path on 23 ExpertsLoRA module(s)\n[e4b.rope] fused rotary in 1 attention module(s)\n[e4b.rmsnorm] fused 53 frozen RMSNorm(s) for training [53 w*norm fp32] (0 left on the composite)",
+ "probes": {},
+ "kernel_counter_key": "fused_grouped_lora",
+ "kernel_calls_per_step": [
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92,
+  92
+ ],
+ "kernel_calls_per_step_min": 92,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 92,
+   "batched_dequant_whole": 0
+  }
+ ],
+ "C1_tensors_hashed": 92,
+ "C1_bytes_hashed": 16523329536,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 3.26766,
+ "loss_last": 0.25068,
+ "loss_mean_last20": 0.29257,
+ "eval_loss_step0": 3.24174,
+ "eval_loss_final": 0.2853,
+ "eval_rel_improvement": 0.08801,
+ "s_per_step": 0.3097,
+ "step_ms": [
+  8073.1,
+  168.6,
+  164.9,
+  166.2,
+  165.9,
+  166.0,
+  166.2,
+  166.7,
+  165.6,
+  163.6,
+  605.5,
+  166.9,
+  166.9,
+  165.7,
+  165.4,
+  302.4,
+  166.4,
+  164.8,
+  165.6,
+  166.0,
+  166.0,
+  167.9,
+  165.9,
+  166.3,
+  166.0,
+  165.2,
+  165.5,
+  168.5,
+  166.5,
+  165.2,
+  165.2,
+  167.4,
+  166.2,
+  167.2,
+  165.2,
+  166.1,
+  167.4,
+  167.2,
+  164.9,
+  292.4,
+  164.6,
+  166.0,
+  166.4,
+  166.3,
+  165.2,
+  168.1,
+  167.7,
+  166.1,
+  165.5,
+  167.1,
+  166.6,
+  167.1,
+  165.3,
+  165.9,
+  166.7,
+  166.9,
+  164.4,
+  166.8,
+  168.2,
+  166.3
+ ],
+ "tokens_per_step": [
+  86,
+  83,
+  91,
+  84,
+  81,
+  91,
+  86,
+  88,
+  83,
+  84,
+  80,
+  84,
+  89,
+  92,
+  92,
+  82,
+  81,
+  84,
+  90,
+  89,
+  88,
+  96,
+  84,
+  84,
+  84,
+  90,
+  84,
+  81,
+  81,
+  84,
+  88,
+  87,
+  82,
+  91,
+  86,
+  86,
+  84,
+  94,
+  80,
+  94,
+  90,
+  90,
+  82,
+  82,
+  90,
+  88,
+  92,
+  90,
+  92,
+  96,
+  83,
+  84,
+  92,
+  86,
+  90,
+  84,
+  82,
+  82,
+  90,
+  92
+ ],
+ "tokens_total": 5205,
+ "tokens_per_s": 280.1,
+ "peak_vram_gb": 23.157,
+ "idle_w": 46.4,
+ "mean_w": 342.3,
+ "power_samples": 82,
+ "joules_per_step": 91.65,
+ "losses": [
+  3.26766,
+  2.27152,
+  1.475,
+  0.94535,
+  0.86362,
+  0.56884,
+  0.52454,
+  0.68972,
+  0.41618,
+  0.64187,
+  0.43368,
+  0.37705,
+  0.33895,
+  0.60988,
+  0.2778,
+  0.44551,
+  0.4181,
+  0.34564,
+  0.40388,
+  0.33679,
+  0.33975,
+  0.30823,
+  0.30944,
+  0.31207,
+  0.33432,
+  0.24546,
+  0.3725,
+  0.42274,
+  0.38924,
+  0.27884,
+  0.2947,
+  0.31803,
+  0.30239,
+  0.2808,
+  0.29969,
+  0.26732,
+  0.28961,
+  0.32879,
+  0.28723,
+  0.3282,
+  0.28913,
+  0.25456,
+  0.38248,
+  0.30678,
+  0.27383,
+  0.25137,
+  0.27583,
+  0.27374,
+  0.26299,
+  0.30175,
+  0.28015,
+  0.39505,
+  0.24289,
+  0.33587,
+  0.25674,
+  0.31664,
+  0.30722,
+  0.30981,
+  0.28393,
+  0.25068
+ ]
+}
