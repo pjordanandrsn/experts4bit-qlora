@@ -283,7 +283,14 @@ offload draws are 11 % apart, and the frameworks do not start from the same
 base — e4b keeps the 30 linear-attention layers' projections and the 40
 shared experts in bf16 (about 1.14 B parameters) where Unsloth stores them in
 4-bit, worth about 1.6 GB of the resident footprint and a 0.05-nat step-0
-gap that VOIDs the same-box pair by rule.
+gap that VOIDs the same-box pair by rule. Re-asked resident on 2026-10-04 on the current code
+(TC2 amendment 6, `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04`): step 1 now completes, but e4b
+still OOMs at step 2 at both micro-batches.
+**On Mixtral-8x7B, e4b now trains resident on 32 GB, and Unsloth is faster**
+(`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04`, TC2 amendment 6): Unsloth/e4b
+0.697 [0.679, 0.714], 4.11 against 5.90 s/step, at 1.94 GB less peak (29.1 vs 31.1 GB)
+and ×0.65 the energy per step, the pair inside draw noise. The offload footprint row
+below stays as the offload lever's reading.
 **On Mixtral-8x7B, re-measured with the counters fixed**
 (`e4b.train.footprint.unsloth.mixtral.5090.2026-10-02`): Unsloth resident steps
 in 3.74 s at 29.1 GB after one 34-second compile, e4b under expert offload in
