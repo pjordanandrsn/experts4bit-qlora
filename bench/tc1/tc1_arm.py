@@ -1536,6 +1536,9 @@ def load_e4b(a):
         x["attn4_probe"] = attn4_bias_probe(model)
         if a.attn_4bit:
             attn4_census_check(a, model, x, detect_attention_projections, quantize_attention_projections_4bit)   # T10
+        if getattr(a, "frozen_4bit", 0):       # TRAIN_FROZEN_4BIT: the other frozen dense projections in NF4 (routers, lm_head kept)
+            from experts4bit_qlora.lora import quantize_frozen_linears_4bit
+            x["n_frozen4"] = quantize_frozen_linears_4bit(model)
     if getattr(a, "absmax_dq", 0):                  # ABSMAX-DQ: after the attention conversion, before the LoRA wrap
         with PH("absmax_dq"):
             from experts4bit_qlora import compress_expert_absmax_, expert_absmax_bytes
@@ -3208,7 +3211,8 @@ def run_arm(a, load_fn, sampler=True):
         "status": "ok" if c1_ok else "c1_failed", "steps": a.steps, "seq": a.seq, "accum": a.accum, "micro_batch": M, "autocast": bool(a.autocast),
         "r": a.r, "alpha": a.alpha, "lr": a.lr, "seed": a.seed, "offload": bool(a.offload),
         "optimizer": optimizer_str, "lr_per_step": [round(v, 8) for v in lr_per_step], "template": template,
-        "grad_ckpt": x["ckpt_mode"], "attn_4bit": bool(a.attn_4bit), "n_attn4": n_attn4, "attn4_probe": x.get("attn4_probe"),
+        "grad_ckpt": x["ckpt_mode"], "attn_4bit": bool(a.attn_4bit), "n_attn4": n_attn4,
+        "frozen_4bit": bool(getattr(a, "frozen_4bit", 0)), "n_frozen4": x.get("n_frozen4", 0), "attn4_probe": x.get("attn4_probe"),
         "absmax_dq": bool(getattr(a, "absmax_dq", 0)),                                                                    # ABSMAX-DQ
         **({"absmax_dq_modules": x["absmax_dq"]["modules"], "absmax_bytes_before": x["absmax_dq"]["bytes_before"],
             "absmax_bytes_after": x["absmax_dq"]["bytes_after"], "absmax_bytes_ratio": x["absmax_dq"]["ratio"]} if x.get("absmax_dq") else {}),
@@ -4732,6 +4736,10 @@ def main():
                          "per-expert decode loop, which decodes with the same oracle the reference uses and is EXACT. "
                          "The pair separates the forward fusion's error from the backward kernel's.")
     ap.add_argument("--attn-4bit", type=int, default=0, help="e4b: quantize_attention_projections_4bit before the attention LoRA (U4)")
+    ap.add_argument("--frozen-4bit", type=int, default=int(os.environ.get("TRAIN_FROZEN_4BIT", "0") == "1"),
+                    help="e4b: quantize_frozen_linears_4bit after the attention conversion -- the other frozen dense projections in NF4 "
+                         "(Qwen3.6's linear attention and shared experts; routers and lm_head kept). Default from TRAIN_FROZEN_4BIT, "
+                         "which TC1_E4B_ENV hands to e4b arms only")
     ap.add_argument("--absmax-dq", type=int, default=int(os.environ.get("E4B_ABSMAX_DQ", "0") == "1"),
                     help="e4b: compress_expert_absmax_ -- the frozen expert absmax stored double-quantized (bitsandbytes' nested statistics), "
                          "after the attention conversion and before the LoRA wrap; resident arms only. Default 1 iff E4B_ABSMAX_DQ=1 is in this "
