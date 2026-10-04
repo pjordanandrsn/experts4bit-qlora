@@ -15,11 +15,11 @@ from experts4bit_qlora.arch.topology import ROUTED_TOP_K_KEYS, describe_moe, rou
 from experts4bit_qlora.loader import admission_refusal  # noqa: E402
 from experts4bit_qlora.recipe import QLoRASetup, estimate_qlora_footprint, setup_refusals  # noqa: E402
 
-H, I, E, K, L = 128, 64, 8, 2, 3
+H, INTER, E, K, L = 128, 64, 8, 2, 3
 
 
 def _qwen3(**kw):
-    base = dict(hidden_size=H, intermediate_size=256, moe_intermediate_size=I, num_experts=E, num_experts_per_tok=K,
+    base = dict(hidden_size=H, intermediate_size=256, moe_intermediate_size=INTER, num_experts=E, num_experts_per_tok=K,
                 num_hidden_layers=L, num_attention_heads=4, num_key_value_heads=2, head_dim=32, vocab_size=192,
                 max_position_embeddings=64, decoder_sparse_step=1, norm_topk_prob=True, tie_word_embeddings=False)
     base.update(kw)
@@ -27,12 +27,12 @@ def _qwen3(**kw):
 
 
 def _olmoe():
-    return tr.OlmoeConfig(hidden_size=H, intermediate_size=I, num_experts=E, num_experts_per_tok=K, num_hidden_layers=L,
+    return tr.OlmoeConfig(hidden_size=H, intermediate_size=INTER, num_experts=E, num_experts_per_tok=K, num_hidden_layers=L,
                           num_attention_heads=4, num_key_value_heads=4, vocab_size=192, max_position_embeddings=64)
 
 
 def _granite():
-    return tr.GraniteMoeConfig(hidden_size=H, intermediate_size=I, num_local_experts=E, num_experts_per_tok=K,
+    return tr.GraniteMoeConfig(hidden_size=H, intermediate_size=INTER, num_local_experts=E, num_experts_per_tok=K,
                                num_hidden_layers=L, num_attention_heads=4, num_key_value_heads=4, vocab_size=192,
                                max_position_embeddings=64, tie_word_embeddings=True)
 
@@ -75,7 +75,7 @@ def test_describe_moe_agrees_with_the_real_model(make, model_type, convention):
     topo = describe_moe(cfg)
     assert topo.loader_refusal is None and topo.model_type == model_type and topo.convention == convention
     assert topo.moe_layers == tuple(range(L)) and topo.n_experts == E and topo.top_k == K
-    assert {(s.hidden, s.intermediate, s.first_name) for s in topo.expert_stacks} == {(H, I, "gate_up_proj")}
+    assert {(s.hidden, s.intermediate, s.first_name) for s in topo.expert_stacks} == {(H, INTER, "gate_up_proj")}
     expert, dense = _real_split(cfg)
     assert topo.expert_numel == expert
     assert topo.dense_numel == dense
@@ -95,7 +95,7 @@ def test_tied_head_is_counted_once():
 
 
 def test_a_refused_config_is_described_not_raised():
-    cfg = tr.LlamaConfig(hidden_size=H, intermediate_size=I, num_hidden_layers=2, num_attention_heads=4, vocab_size=192)
+    cfg = tr.LlamaConfig(hidden_size=H, intermediate_size=INTER, num_hidden_layers=2, num_attention_heads=4, vocab_size=192)
     topo = describe_moe(cfg)
     assert topo.loader_refusal and "Unsupported model_type='llama'" in topo.loader_refusal
     assert topo.expert_stacks == () and admission_refusal(cfg) == topo.loader_refusal
@@ -104,7 +104,7 @@ def test_a_refused_config_is_described_not_raised():
 
 
 def test_a_biased_expert_stack_refuses_expert_adapters_by_structure():
-    cfg = tr.GptOssConfig(hidden_size=H, intermediate_size=I, num_local_experts=E, num_experts_per_tok=K,
+    cfg = tr.GptOssConfig(hidden_size=H, intermediate_size=INTER, num_local_experts=E, num_experts_per_tok=K,
                           num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=2, head_dim=32,
                           vocab_size=192, max_position_embeddings=64, layer_types=["full_attention"] * 2)
     topo = describe_moe(cfg)
@@ -121,7 +121,7 @@ def test_footprint_derived_items_are_the_built_modules():
     topo = describe_moe(_qwen3())
     fp = estimate_qlora_footprint(topo, QLoRASetup(), tokens_per_microbatch=256)
     items = {i.name: i for i in fp.items}
-    base = Experts4bit(E, H, I, quant_type="nf4", blocksize=64)
+    base = Experts4bit(E, H, INTER, quant_type="nf4", blocksize=64)
     one = sum(t.numel() * t.element_size() for t in list(base.parameters()) + list(base.buffers()))
     assert items["frozen expert stacks"].bytes == L * one and items["frozen expert stacks"].basis == "derived"
     lora = sum(p.numel() for n, p in ExpertsLoRA(base, r=8, alpha=16, dtype=torch.bfloat16).named_parameters() if "lora" in n)
