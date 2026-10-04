@@ -179,3 +179,64 @@ Fetched to the run directory's `p112/` and committed to `bench/p112/receipts/<ru
 - `SHA256SUMS`.
 
 `RESULTS-p112.md` is written from those files.
+
+## Amendment 1 (2026-10-04, after `p112-5090-1`, written after seeing its arms): the launch accounting's compile launches
+
+`p112-5090-1` ran on one RTX 5090 (Vast 54118102, machine 37958, AMD Ryzen 9 7950X), cost $0.3210, and is in adertha-receipts
+`a88df20`. Teardown was proven at 07:31:36Z. Everything before the verdict passed:
+- the tripwire and both self-tests;
+- the premise: 7 + 23 passed, none skipped;
+- the fetch, the bake and the prompts;
+- all four arms, rc 0;
+- the census.
+
+**The verdict was VOID on engagement:** "P1a: 6907 of 6927 switched launches carried PDL", and the same for P1b.
+
+**Why: the instrument, not the switch.** Triton 3.4's JIT computes the launch hook's metadata, which reads
+`kernel.function`, before it calls `kernel.run`. The handle stays `None` until `run` initialises it
+(`python/triton/compiler/compiler.py`, `CompiledKernel.__getattribute__`). So the launch that compiles a variant reaches
+the hook with `function=None`, and the box counted it as a launch without PDL. In both P1 arms each kernel's shortfall is
+one launch per variant that configuration compiles:
+
+| kernel | shortfall | variants |
+|---|---:|---|
+| `_gemv_int4_b32` | 4 | qkv, o, gate_up and down at one row; the multi-row attention projections take the small-M GEMM |
+| `_rmsnorm_rows` | 4 | |
+| `_quant_x_rows` | 3 | |
+| `_reduce_partials` | 3 | |
+| `_rope_norm_heads` | 2 | q and k heads |
+| `_rmsnorm_resid_rows`, `_router_epilogue`, `_swiglu_rows`, `_combine_rows` | 1 each | |
+| **total** | **20** | |
+
+The run did not record the variants, so that match is inferred. The amended box records the variants, and the rerun
+checks the match directly.
+
+**What the arms showed.** This is not a reading, because the verdict is VOID; it is stated so that nothing is hidden.
+- **Tokens:** identical in every arm, on every row of both workloads at both lengths.
+- **The rule's later steps** would have read **SLOWER**:
+  - g1 = 1.0366 (pairs 1.0393 / 1.0366): the B=1 step went from 4.44 to 4.28 ms;
+  - g16 = 0.9851 (pairs 0.9851 / 0.9854): the B=16 step went from 9.05 to 9.19 ms;
+  - the self-pairs were 1.0023–1.0047.
+- **The census:** the default NF4 server's build launched only `_swiglu_rows` and `_combine_rows` of the twelve (1,440
+  launches), with no int4 store and no fusion. That confirms the correction above.
+
+**The change.**
+- **The instrument.** The box's accounting row is now `[launches, with launch_pdl, compile launches (no handle),
+  compiled variants, variants with launch_pdl]`.
+- **The engagement clause.**
+  - **In P1:** every variant of a launched switched kernel carries `launch_pdl`, every launch with a handle carries PDL,
+    and compile launches do not outnumber the variants.
+  - **In P0:** no variant and no launch carries PDL.
+  - The other engagement conditions are unchanged. `p112_reduce.py` self-tests on 21 cases.
+- **The fetch.** The driver no longer fetches the box's grouped-nf4-gemm clone. `p112-5090-1`'s store commit had picked
+  it up as a gitlink, which adertha-receipts `551651d` removed.
+- **The rerun.** `p112-5090-2` runs under the same relay, guard (1.0 h) and ceiling ($2.00; $0.3210 spent).
+
+**Predictions for the rerun.** These were written after seeing `p112-5090-1`'s arms, so they are not blind:
+- Q1, Q2 and Q5 are unchanged.
+- Q3′: g1 lies between 1.02 and 1.06.
+- Q4′: g16 lies between 0.97 and 1.00, so PDL is slower with 16 concurrent requests.
+- Q6′: the verdict is SLOWER, at about 80 %. Its registered consequence is that the switch stays opt-in. A switch that
+  applies PDL only where it helps would need a lane of its own.
+
+**Unchanged:** the subject, the arms, the workloads, the rule's other steps and its bars, and the consequences.

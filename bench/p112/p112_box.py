@@ -41,19 +41,32 @@ INT4_KEYS = ("int4_expert_layers", "int4_attn_projections", "fuse_qkv_n", "fuse_
 
 
 def pdl_accounting(launches, int4_b32) -> dict:
-    """``{kernel: [launches, with launch_pdl]}`` over the switched kernels, from the hook's (name, function) records."""
-    fn_pdl = {}
+    """``{kernel: [launches, launches with launch_pdl, compile launches, compiled variants, variants with launch_pdl]}``
+    over the switched kernels, from the hook's (name, function) records and the kernels' compiled variants.
+
+    Amendment 1: the launch that COMPILES a variant reaches Triton 3.4's launch hook before the variant's handle exists
+    (``launch_metadata`` reads ``kernel.function`` before ``kernel.run`` initialises it), so the hook sees
+    ``function=None``. p112-5090-1 counted those as launches without PDL. They are now counted as compile launches and
+    checked against the compiled variants instead, each of which records whether it was built with ``launch_pdl``."""
+    fn_pdl, variants = {}, {}
     for name in SWITCHED:
         k = getattr(int4_b32, name, None)
         for _dev, (cache, *_rest) in (getattr(k, "device_caches", None) or {}).items():
             for ck in cache.values():
-                fn_pdl[ck.function] = bool(getattr(ck.metadata, "launch_pdl", False))
+                pdl = bool(getattr(ck.metadata, "launch_pdl", False))
+                fn_pdl[ck.function] = pdl
+                v = variants.setdefault(name, [0, 0])
+                v[0] += 1
+                v[1] += int(pdl)
     out = {}
     for name, fn in launches:
         if name in SWITCHED:
-            row = out.setdefault(name, [0, 0])
+            row = out.setdefault(name, [0, 0, 0] + variants.get(name, [0, 0]))
             row[0] += 1
-            row[1] += int(fn_pdl.get(fn, False))
+            if fn is None:
+                row[2] += 1
+            else:
+                row[1] += int(fn_pdl.get(fn, False))
     return out
 
 
@@ -165,9 +178,11 @@ def self_test() -> int:
     class _Mod:
         _gemv_int4_b32 = _K([_CK(11, False), _CK(12, True)])
         _rmsnorm_rows = _K([_CK(21, True)])
-    acct = pdl_accounting([("_gemv_int4_b32", 11), ("_gemv_int4_b32", 12), ("_rmsnorm_rows", 21), ("other", 99)], _Mod)
+    # a compiling launch reaches the hook with function=None (Amendment 1)
+    acct = pdl_accounting([("_gemv_int4_b32", None), ("_gemv_int4_b32", 11), ("_gemv_int4_b32", 12),
+                           ("_rmsnorm_rows", None), ("_rmsnorm_rows", 21), ("other", 99)], _Mod)
     ok = [ARMS == ("P0", "P1"), p109_box.WORKLOADS == {"W16": 16, "W1": 1}, p109_box.self_test() == 0,
-          acct == {"_gemv_int4_b32": [2, 1], "_rmsnorm_rows": [1, 1]}, len(SWITCHED) == 12]
+          acct == {"_gemv_int4_b32": [3, 1, 1, 2, 1], "_rmsnorm_rows": [2, 1, 1, 1, 1]}, len(SWITCHED) == 12]
     print(f"p112_box self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
     return 0 if all(ok) else 1
 

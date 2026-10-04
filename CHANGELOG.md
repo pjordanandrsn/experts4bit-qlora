@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### P112 Amendment 1: the first reading VOIDed on its own launch accounting; the accounting is fixed and the lane reruns
+
+- **What happened.** `p112-5090-1` ($0.3210) read VOID on engagement: 20 of 6,927 switched launches in each on arm
+  showed no PDL.
+- **Why.** Triton 3.4 hands the launch hook no function handle on the launch that compiles a variant, and the box
+  counted those launches as PDL-less. The shortfall was one per compiled variant in every kernel.
+- **The fix.** The box now counts compile launches and compiled variants separately (`p112_reduce.py`, 21-case
+  self-test), and the driver no longer fetches the box's grouped-nf4-gemm clone.
+- **Seen in the arms (not a reading).** Tokens were identical everywhere. g1 = 1.0366 (B=1 step 4.44 → 4.28 ms) and
+  g16 = 0.9851 (B=16 step 9.05 → 9.19 ms), so the rule's later steps would read SLOWER. The default NF4 server's census
+  shows only `swiglu_rows` and `combine_rows` among the switched kernels.
+- **The rerun** `p112-5090-2` predicts SLOWER, written after seeing these numbers. Receipts are in
+  `bench/p112/receipts/p112-5090-1/`.
+
 ### P112 registered (#1015): does `GNF4_PDL=1` decode SC1's int4 serving configuration's tokens exactly, and faster? One RTX 5090
 
 - **Why.** grouped-nf4-gemm's lane K28 read programmatic dependent launch LEVER on the served B=1 layer's gnf4 kernels

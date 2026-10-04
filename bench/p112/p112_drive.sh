@@ -109,7 +109,7 @@ rm -rf "$RUN_DIR/p112" && mkdir -p "$RUN_DIR/p112" || { say "fetch failed: local
 # bake.json travels); records, logs, the prompts and the verdict travel.
 rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" \
   --include 'work/' --include 'work/bake.json' --exclude 'work/*' \
-  --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
+  --exclude 'gnf4src/' --exclude '__pycache__' --exclude 'venv*' --exclude '.cache' --exclude 'hf' \
   "root@$HOST:$W/" "$RUN_DIR/p112/" || { say "fetch failed: rsync"; exit 22; }
 say "fetched $(ls "$RUN_DIR/p112" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/p112/P112_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }

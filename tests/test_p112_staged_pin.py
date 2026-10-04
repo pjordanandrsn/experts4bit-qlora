@@ -64,11 +64,12 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
         if name != "p112_run.sh":
             assert name in staged, name
     assert "--include 'work/bake.json' --exclude 'work/*'" in driver
+    assert "--exclude 'gnf4src/'" in driver                                  # Amendment 1: never fetch the box's clone
 
 
 def test_the_self_tests_pass():
     out = subprocess.run([sys.executable, str(LANE / "p112_reduce.py"), "--self-test"], capture_output=True, text=True)
-    assert out.returncode == 0 and "self-test OK (17 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (21 cases)" in out.stdout, out.stdout + out.stderr
     env = {"PYTHONPATH": str(REPO / "bench" / "p109"), "PATH": "/usr/bin:/bin"}
     out = subprocess.run([sys.executable, str(LANE / "p112_box.py"), "--self-test"], capture_output=True, text=True, env=env)
     assert out.returncode == 0 and "p112_box self-test OK (5/5 cases)" in out.stdout, out.stdout + out.stderr
