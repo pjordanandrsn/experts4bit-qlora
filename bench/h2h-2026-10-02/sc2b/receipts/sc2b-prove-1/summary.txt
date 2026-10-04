@@ -1,0 +1,34 @@
+KNOBS box=F e4b=f8c9dde89e480fe3fe6c40da45b1901f253b7c69 gnf4=5a887c48acc90207fdd30f2e9b23d21d62102b14 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=1
+e4b 0.46.0 @f8c9dde89e480fe3fe6c40da45b1901f253b7c69
+gnf4 0.38.0 @5a887c48acc90207fdd30f2e9b23d21d62102b14
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+aiohttp 3.14.3 fastapi 0.141.1 uvicorn 0.54.0
+PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite
+QUIESCE prove quiesced=yes waited=0s busy_procs=0 load1=17.52 nproc=256 cpu.max=3071999/100000 at=2026-10-04T22:27:12Z
+FETCH granite ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+BAKE granite BAKE OK
+smoke_granite_b1 B=1 rc=0 SC1SCHED_CENSUS {"arm": "smoke_granite_b1", "batch": 1, "ok": true, "failures": [], "smoke_error": null, "load_s": 12.3, "census": {"moe_layers": 32, "int4_expert_layers": 0, "int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_
+smoke_granite_b16 B=16 rc=0 SC1SCHED_CENSUS {"arm": "smoke_granite_b16", "batch": 16, "ok": true, "failures": [], "smoke_error": null, "load_s": 10.1, "census": {"moe_layers": 32, "int4_expert_layers": 0, "int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glu
+sc2_driver self-test OK (9/9 cases)
+sc2_reduce self-test OK (10 cases)
+sc2_identity self-test OK (5/5 cases)
+sc2b_reduce self-test OK (10 cases)
+SC2B_ROUTES {"ok": true, "bad": {}, "routes": {"int4_prefill_env": null, "prefill_attn_env": null, "device_grouping": true, "int4_prefill": "k19", "int4_prefill_above_256_rows": "k19", "prefill_attn": "flash"}}
+SC2B prove_off healthy (E4B_PAGED_PREFILL_GRAPH=0) vram_used_mib=4304
+SC2 prove_off_warm rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 1.015, "ttft_p50_s": 0.157642, "ttft_p99_s": 0.242152, "tpot_p50_s": 0.003844, "tpot_p99_s": 0.003873, "output_tok_s": 214.498, "goodput_rps": null}
+SC2B_EARLY {"arm": "off", "ok": true, "bad": []}
+SC2 prove_off_serial rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.2643, "ttft_p50_s": 0.153127, "ttft_p99_s": 0.161182, "tpot_p50_s": 0.003855, "tpot_p99_s": 0.003973, "output_tok_s": 210.281, "goodput_rps": null}
+SC2 prove_off_poisson rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2833, "ttft_p50_s": 0.182804, "ttft_p99_s": 0.471606, "tpot_p50_s": 0.014545, "tpot_p99_s": 0.02164, "output_tok_s": 354.819, "goodput_rps": 4.0}
+SC2B_ROUTES {"ok": true, "bad": {}, "routes": {"int4_prefill_env": null, "prefill_attn_env": null, "device_grouping": true, "int4_prefill": "k19", "int4_prefill_above_256_rows": "k19", "prefill_attn": "flash"}}
+SC2B prove_on healthy (E4B_PAGED_PREFILL_GRAPH=1) vram_used_mib=4800
+SC2 prove_on_warm rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 1.0636, "ttft_p50_s": 0.127057, "ttft_p99_s": 0.155515, "tpot_p50_s": 0.003908, "tpot_p99_s": 0.003918, "output_tok_s": 222.144, "goodput_rps": null}
+SC2B_EARLY {"arm": "on", "ok": true, "bad": []}
+SC2 prove_on_serial rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.3054, "ttft_p50_s": 0.120569, "ttft_p99_s": 0.133493, "tpot_p50_s": 0.003886, "tpot_p99_s": 0.003954, "output_tok_s": 217.987, "goodput_rps": null}
+SC2 prove_on_poisson rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.282, "ttft_p50_s": 0.141462, "ttft_p99_s": 0.353653, "tpot_p50_s": 0.01257, "tpot_p99_s": 0.019465, "output_tok_s": 362.983, "goodput_rps": 4.0}
+SC2_IDENTITY {"verdict": "IDENTICAL", "n": 6, "chars": 3389}
+SC2B_ENGAGEMENT {"ok": true, "why": []}
+PROVED box=F installs=[sc2client] smokes=[granite_b1 granite_b16] sc2b=[routes graph_engaged identity]

@@ -1,0 +1,8 @@
+e4b 0.46.0 @f8c9dde89e480fe3fe6c40da45b1901f253b7c69
+gnf4 0.38.0 @5a887c48acc90207fdd30f2e9b23d21d62102b14
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+aiohttp 3.14.3 fastapi 0.141.1 uvicorn 0.54.0
