@@ -156,6 +156,7 @@ image whose torch you want to keep.
 | what ran out | call | needs |
 |---|---|---|
 | you do not know yet — ask before loading | `estimate_qlora_footprint(describe_moe(id), QLoRASetup(...), tokens_per_microbatch=n)`, then `prepare_qlora_training(id, setup)` | `[train]` |
+| you do not know yet — serving, ask before loading | `estimate_serve_footprint(describe_moe(id), ServeSetup(max_seqs=n, max_tokens_per_seq=t))` | `[fast]` |
 | nothing — just train a fused MoE | `load_moe_4bit_streaming(...)` | `[train]` |
 | each step is slow | `enable_fast_train(model, dgrad=True)` | `[fast]` |
 | …and there is spare VRAM to trade | `E4B_MOE_KEEP_LAYERS=n` + `NF4_QLORA_COMPACT_DELTA=1`, then `enable_fast_train` | `[fast]` + grad ckpt |
@@ -1978,7 +1979,8 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "experts4bit_qlora.engines.paged_runner:PagedModelRunner",
     "experts4bit_qlora.engines.int4_experts:enable_serve_experts_int4",
     "experts4bit_qlora.engines.int4_attn_calib:enable_serve_attn_int4_calib",
-    "experts4bit_qlora.engines.capture:capture_decode"
+    "experts4bit_qlora.engines.capture:capture_decode",
+    "experts4bit_qlora.serve_recipe:estimate_serve_footprint"
    ],
    "documentation": [
     "docs/solutions/serve-large-moe-on-a-consumer-gpu.md",
@@ -2032,7 +2034,8 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "Gemma-4 has no quality instrument at this resolution (claim e4b.parity.gemma4.no-reference); gpt-oss raw-text perplexity cannot rank arms",
     "Granite's int4-expert rows fail the registered K8 budget (claim IDs carry the numbers); its licensed stack keeps NF4 experts with the folds and epilogue (e4b.serve.census.bo7.granite.b1.5090.2026-09-05, licensed by e4b.serve.buildout.granite.b1.5090.2026-09-04); the per-family positions the census quotes are in docs/STATUS.md -- Qwen3's licensed stack is the streamed calibrated pack (e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05), OLMoE's and Mixtral's position is NF4, Gemma-4's is the exact round-1 fold on NF4 with no quality instrument, gpt-oss's is its NF4 reference arm",
     "Single-stream speed absolutes are measured-private where the register says so; ratios travel, absolutes do not",
-    "The licensed Qwen3 int4 expert pack travels as bytes: the streamed 64k calibration reproduced it byte-for-byte on one box and across boxes and a release boundary (claims e4b.serve.p55x.qwen3.pack-deterministic-samebox.2026-09-22, e4b.serve.p55x.qwen3.pack-reproduces-crossbox.2026-09-22), and loaded back by fingerprint it passes the registered gate on both texts (e4b.serve.p55x.qwen3.all-calibexp-streamed-64k.k8.2026-09-22); P37's divergent pack, which failed on C4 validation (e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate), was an outlier. The fingerprint covers the experts only: the calibrated attention projections are re-derived on every load, and with RTN attention the same pinned experts fail C4 validation (e4b.serve.p55x.qwen3.rtn-attn.k8.2026-09-22) -- tracked as issue #674"
+    "The licensed Qwen3 int4 expert pack travels as bytes: the streamed 64k calibration reproduced it byte-for-byte on one box and across boxes and a release boundary (claims e4b.serve.p55x.qwen3.pack-deterministic-samebox.2026-09-22, e4b.serve.p55x.qwen3.pack-reproduces-crossbox.2026-09-22), and loaded back by fingerprint it passes the registered gate on both texts (e4b.serve.p55x.qwen3.all-calibexp-streamed-64k.k8.2026-09-22); P37's divergent pack, which failed on C4 validation (e4b.serve.h2h.vllm-0.28.0.qwen3.5090.2026-09-05.gate), was an outlier. The fingerprint covers the experts only: the calibrated attention projections are re-derived on every load, and with RTN attention the same pinned experts fail C4 validation (e4b.serve.p55x.qwen3.rtn-attn.k8.2026-09-22) -- tracked as issue #674",
+    "estimate_serve_footprint prices only serve_paged.build_engine's all-VRAM placement (the solver's tiers are refused, not priced); its prefill/decode working set is a stated heuristic, CUDA graph pools, the CUDA context and fragmentation are excluded, and no serve receipt has checked it against a measured peak yet"
    ],
    "status": "supported"
   },

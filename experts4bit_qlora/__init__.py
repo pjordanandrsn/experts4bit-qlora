@@ -163,8 +163,9 @@ from .absmax_dq import (  # noqa: E402
     expert_absmax_fp32,
 )
 # Before-load planning: what a checkpoint is (config + a meta-device tree, no weights) and what a QLoRA setup on it
-# costs, item by item; `prepare_qlora_training` builds exactly the setup that was priced. torch-only at import
-# time: transformers/accelerate are reached inside the functions.
+# costs, item by item; `prepare_qlora_training` builds exactly the setup that was priced; `estimate_serve_footprint`
+# prices what `serve_paged.build_engine` holds. torch-only at import time: transformers/accelerate and
+# grouped-nf4-gemm are reached inside the functions.
 from .arch.topology import MoETopology, describe_moe  # noqa: E402
 from .recipe import (  # noqa: E402
     Footprint,
@@ -173,6 +174,7 @@ from .recipe import (  # noqa: E402
     prepare_qlora_training,
     setup_refusals,
 )
+from .serve_recipe import ServeSetup, estimate_serve_footprint, paged_kv_pool_bytes  # noqa: E402
 
 __all__ = [
     "describe_moe",
@@ -182,6 +184,9 @@ __all__ = [
     "estimate_qlora_footprint",
     "setup_refusals",
     "prepare_qlora_training",
+    "ServeSetup",
+    "estimate_serve_footprint",
+    "paged_kv_pool_bytes",
     "Experts4bit",
     "ExpertsNbit",
     "ExpertsLoRA",

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Before-load serve planning: `estimate_serve_footprint`, `ServeSetup`, `paged_kv_pool_bytes`
+
+- **New: before-load serve planning.** `estimate_serve_footprint(describe_moe(id), ServeSetup(...))` itemizes the
+  device memory `serve_paged.build_engine` holds under the all-VRAM placement. The expert stacks and bf16 dense
+  weights are sized from this package's own modules. The FP8 paged KV pool is `paged_kv_pool_bytes`, which uses
+  `Fp8PagedKV`'s own arithmetic; tests compare it with a constructed pool. The prefill/decode working set is a
+  stated heuristic. CUDA graph pools, the CUDA context and fragmentation are listed as not modelled. The solver's
+  tiered placements are refused in words until they are measured.
+  - `MoETopology` carries the paged pool's KV geometry: `kv_heads`, `kv_head_dims` and `kv_layers`. They are read by
+    `serve_paged._kv_geometry` and `paged_runner.kv_layers`, as `build_engine` calls them.
+  - `ServeSetup.to_env()` is the `E4B_PAGED_*` environment that builds the priced setup; `PagedServeConfig.from_env`
+    reads it back (tested).
+  - No serve receipt has checked the estimate against a measured peak yet.
+
 ### CI on grouped-nf4-gemm 0.39.0; where the dense-route rows came from (docs and register notes only)
 
 - **CI** now tests against grouped-nf4-gemm **0.39.0** (`a5edec87`). In that release `GNF4_TRAIN_GEMM=auto` takes the
