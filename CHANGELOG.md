@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### #674's last question decided: the licensed Qwen3 K8 row names the software it was read on; no re-read (register note only)
+
+- **Question.** Lane P85 left an owner decision open: should the licensed row
+  (`e4b.serve.buildout.bo6c.qwen3.all-calibexp-streamed-64k.k8.2026-09-05`, read on grouped-nf4-gemm `0b25d13`) name its
+  software, or be re-read on the current release? The decision is made under the owner's delegation.
+- **Decision.** The row stands as read. Its notes now tie it to P85: from grouped-nf4-gemm 0.33.6 the same recipe reads
+  wikitext K8 1.85065 (ppl 6.36396), 0.00049 nats lower, and P85 isolated #413's fused-append fix as the whole move.
+  That is ~5% of the 0.0095-nat floor, so the licence is unchanged and no re-read is registered.
+- #674's titled gap, an artifact for the calibrated attention, was already closed by #754 (2026-09-28): a hash-pinned
+  attention pack with dump and licensed load. The issue closes with this note.
+
 ### Read: TC1c amendment 7 — `auto` takes the grouped_mm route on an H100 with nothing set (P22 HELD); the box is not quoted (P21 UNTESTED, P23 FALSIFIED). Amendment 8 registered
 
 - **The box.** `tc1c-h100-11` ($2.15 invoiced) ran e4b 0.45.0 with grouped-nf4-gemm 0.37.0 and nothing set. Every e4b fused arm took
