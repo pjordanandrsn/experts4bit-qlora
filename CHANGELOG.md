@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### CI on grouped-nf4-gemm 0.39.0; where the dense-route rows came from (docs and register notes only)
+
+- **CI** now tests against grouped-nf4-gemm **0.39.0** (`a5edec87`). In that release `GNF4_TRAIN_GEMM=auto` takes the
+  dense route off sm_90 for training calls with at most 16 present experts, so Mixtral-like layers train densely and
+  Qwen3-like layers stay fused. The rule was read in TC1 amendment 22. The `[fast]` floor stays `>=0.30.0`.
+- **Provenance.** TC2 amendment 8's Mixtral row (`…mixtral.5090.2026-10-04.dense-default`) ran grouped-nf4-gemm
+  `@bb56b42`: #463's merge on main, after the v0.38.0 tag, with its version string still reading 0.38.0. The row's notes
+  and `docs/STATUS.md` now say so, and that the rule ships in 0.39.0.
+- **`docs/MOE_RUNTIME_PORTABILITY.md`** states `auto`'s current rule (grouped_mm on sm_90; dense for at most 16 present
+  experts elsewhere; fused otherwise).
+
 ### MG1 read: LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H enter `fast_train = supported`; Qwen3.6 PASSES and waits on P2; Gemma-4 and OLMoE re-read clean after #1048 (one RTX 5090; `bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`)
 
 - **Why.** #1048 made the training stack's glue structural, so other MoE families could inherit the Qwen work. Lane MG1
