@@ -76,7 +76,7 @@ Fetched to `receipts/experts4bit-qlora/<date>/p55/`: `logs/<arm>.log` (full load
 
 ## Amendment 1 (2026-10-04, before any P55 data): the launcher can now draw the class, and the harness reads the class correctly
 
-Nothing has run under P55. Preparing the launch found four defects. Each would have spent money for a wrong reading or no reading:
+Nothing has run under P55. Preparing the launch found five defects. Each would have spent money for a wrong reading or no reading:
 
 1. **The launcher could not draw the class.** adertha's Vast provider searched `cpu_ram >= 98 GB`, and nothing could change that. Every P55 launch would have drawn a host the lane calls "class not drawn". adertha-agents#145 adds a host-RAM band (`vast_host_ram_gb` in the manifest → `--vast-min-ram-gb` / `--vast-max-ram-gb`). It caps the search server-side and client-side, and the pre-flight refuses a box above the cap. A read-only offer search on 2026-10-04 (no rental) showed 35 verified RTX 5090 offers at ≤ 72 GB, from $0.43/h, several of them 63 GB. **P55 launches with `vast_host_ram_gb: [48, 72]`.**
    - Why 48: the opaque `invalid argument` failure this lane is about was seen at 64 GiB. The 30 GiB host gave a clean, readable `mmap` refusal, which is a different outcome, so the floor keeps the draw on the opaque side.
@@ -84,6 +84,7 @@ Nothing has run under P55. Preparing the launch found four defects. Each would h
 2. **STOP-1 read the wrong number.** On Vast an offer's `cpu_ram` is the container's allotment, but `/proc/meminfo` MemTotal inside the container is the whole host's. A real 63 GB rental on a 512 GB host would have read 512 and fired STOP-1. The class is now the memory a process there can actually have: **min(MemTotal, the cgroup memory limit)**. `bench/p55/p55_ram.py` computes it, it is staged and pinned, and the threshold is still 72 GiB. `forensics.txt` also records `ulimit -a` (RLIMIT_AS and RLIMIT_MEMLOCK are the per-process limits a marginal mapping or a pinned copy can hit).
 3. **P4 measured the wrong headroom.** The C_headroom trace sampled `/proc/meminfo` MemAvailable, which inside a container is also the host's. The trace now records the cgroup's usage and limit beside it. P4 reads the headroom as **min(MemAvailable, limit − usage)** per sample. The prediction and its refutation are otherwise unchanged.
 4. **The shard's size mixed units.** The largest shard is `model-00001-of-00002.safetensors`, **49,907,246,508 bytes**: 49.91 GB, which is **46.48 GiB**. Every "49.9 GiB" above means 46.48 GiB, and P4's threshold is 46.48 GiB. The checkpoint is **51.6 GB** in total (the second shard is 1.70 GB), not the ~12 GiB the budget section assumed (the Hub's blob listing at `4d7ae49`). The download, not the load, is the long pole.
+5. **The download happened inside the first arm, unbounded, on the Xet backend.** `A_baseline`'s load fetched the 51.6 GB checkpoint itself. It ran with no alarm, and on Hugging Face's Xet transfer backend, which wedges at ~6.1 MB on this fleet. A stall would have spent the whole guard with no reading, and A's failure window would have contained a download. Now `p55_run.sh` fetches first, before any arm, with `HF_HUB_DISABLE_XET=1` (as P113's runner does), under an alarm that leaves 15 minutes for the three loads. A failed fetch is exit 11, a harness fault in STOP-2's shape: no verdict, no redraw.
 
 **Budget, restated.**
 - **Rate and estimate.** The RTX 5090 rate is now fixed by policy at $0.85/h (adertha-agents#142), and the launcher prices the download. Its estimate is $0.85 × 1.0 h + 100 GB × $0.011 = **$1.95**.
@@ -96,6 +97,7 @@ Nothing has run under P55. Preparing the launch found four defects. Each would h
 
 **Tests.** `tests/test_p55_staged_pin.py` covers:
 - the pins, and that every pinned file is staged;
+- the fetch before the arms, bounded and without Xet;
 - the effective-memory arithmetic on v1, v2 and absent cgroups;
 - the shard in GiB;
 - the headroom term;

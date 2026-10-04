@@ -53,6 +53,14 @@ def test_stop1_reads_the_effective_memory_not_memtotal():
     assert "ulimit -a" in RUN
 
 
+def test_the_checkpoint_is_fetched_before_the_arms_bounded_and_without_xet():
+    """Amendment 1, defect 5: registered, the first arm downloaded 51.6 GB inside its own load -- unbounded, on the Xet
+    backend that wedges on this fleet. The fetch now precedes every arm, under an alarm, and failing it is exit 11."""
+    fetch = RUN.index("snapshot_download")
+    assert RUN.index("export HF_HUB_DISABLE_XET=1") < fetch < RUN.index("run_arm A_baseline")
+    assert 'perl -e "alarm $FETCH_S; exec @ARGV"' in RUN and "finish 11" in RUN[fetch:fetch + 600]
+
+
 def _world(tmp_path, *, total_kib, avail_kib=None, v2=None, v1=None, usage=None):
     mi = tmp_path / "meminfo"
     mi.write_text(f"MemTotal: {total_kib} kB\nMemFree: 1 kB\n" + (f"MemAvailable: {avail_kib} kB\n" if avail_kib else ""))

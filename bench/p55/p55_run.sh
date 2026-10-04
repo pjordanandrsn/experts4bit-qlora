@@ -63,6 +63,18 @@ echo "$CLASS_DRAWN" > class_drawn.txt
 pip install -q "experts4bit-qlora @ git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" 2>&1 | tail -3
 python3 -c "import experts4bit_qlora, torch; print('e4b', experts4bit_qlora.__version__, 'torch', torch.__version__)" | tee -a summary.txt
 
+# ---- the fetch (Amendment 1, defect 5): BEFORE the arms, bounded, Xet disabled. Registered, the first arm downloaded the
+# 51.6 GB checkpoint inside its own load -- unbounded, on the Xet backend that wedges at ~6.1 MB on this fleet, so a stall
+# would have spent the whole guard with no reading, and A_baseline's failure window would have held a download. A fetch
+# that fails is a harness fault (STOP-2 shape): no verdict, no redraw.
+export HF_HUB_DISABLE_XET=1
+FETCH_S=$(( P55_DEADLINE_EPOCH - $(date +%s) - 900 ))      # leave 15 min for the three loads
+if [ "$FETCH_S" -lt 120 ]; then say "STOP-2: under 17 min of guard left before the fetch"; finish 11; fi
+say "fetch: $MODEL @ $REV (51.6 GB, Xet disabled, alarm ${FETCH_S}s)"
+perl -e "alarm $FETCH_S; exec @ARGV" python3 -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', allow_patterns=['*.safetensors', '*.json', 'tokenizer*', '*.model', '*.txt'], max_workers=8))" > logs/fetch.log 2>&1 \
+  || { tail -3 logs/fetch.log; say "DL FAIL -- harness fault (STOP-2): no verdict"; finish 11; }
+say "fetch: done, $(du -sh "${HF_HOME:-$HOME/.cache/huggingface}" 2>/dev/null | cut -f1) in the HF cache"
+
 # ---- the probe. One process per arm: CUDA_LAUNCH_BLOCKING is read at context creation, so
 # the armed arm MUST be a fresh process -- an in-process second attempt would silently run
 # unarmed and produce exactly the uninformative result #344 already has five of.
