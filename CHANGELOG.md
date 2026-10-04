@@ -12,9 +12,11 @@
   Llama-rounded `w·round(n)`, Gemma-4's fp32 `w·n`, Qwen3.5/3.6's centered fp32 `(1+w)·n`, and `(1+w)·round(n)`. The closest
   candidate inside the old tolerance wins, and an exact one wins outright.
   - Qwen3.5/3.6's norms were all left on the composite before.
-  - **Gemma-4's numerics change slightly.** Its norms were fused with the Llama rounding (inside the probe's tolerance). They now
-    run their own fp32 multiply, which is closer to the reference composite.
-  - Llama-formula families (Qwen3, OLMoE, Mixtral, Granite, LFM2, ERNIE, Nemotron-H) take the same kernel path as before.
+  - **Gemma-4's and Nemotron-H's numerics change slightly.** Their norms multiply in fp32. `main`'s probe accepted them as the
+    Llama formula, inside its tolerance, and fused them with the Llama rounding. They now run their own fp32 multiply, which is
+    closer to the reference composite.
+  - Llama-formula families take the same kernel path as before: Qwen3, OLMoE, Mixtral, Granite-3.1, Granite-4.0-H, LFM2 and
+    ERNIE (each checked on transformers' module or in a ladder's census).
   - Fallback calls are counted (`RMSNORM_TRAIN_STATS["fallback_calls"]`).
 - **Fused RoPE** needs a patch-time semantics probe that reproduces the composite exactly. ERNIE-4.5's `apply_rotary_pos_emb`
   has the Hugging Face signature but rotates interleaved pairs; only its fp32 tables kept it off the kernel. Refusals are listed
