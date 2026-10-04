@@ -751,7 +751,7 @@ def test_tc2_knobs_are_read_by_the_box_and_forwarded_by_the_driver():
         assert knob in forwarded_block.split(), (knob, "read by tc1_run.sh but not forwarded by tc1_drive.sh")
     assert 'case "$TC1_BOX" in A|B)' in run and 'case "$TC1_BOX" in A|B)' in drive
     assert 'A) FAMILIES=${TC1_FAMILIES:-"qwen3"};;' in run and 'B) FAMILIES=${TC1_FAMILIES:-"tc2big"};;' in run
-    assert '[ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md' in run and 'case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*)' in run
+    assert '[ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md' in run and 'case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*|*" tc2resident "*)' in run
     assert "small)  s=$SMALL_STEPS; en=$SMALL_EVAL_N; ee=$SMALL_EVAL_EVERY; ex_tag=fused_attn4_m;;" in run
 
 
@@ -1005,6 +1005,27 @@ def test_tc2_amendment_4_qwen35_offload_token():
     assert "qwen3_5/unsloth/ckpt_unsloth_m " not in body and "qwen3_5/e4b/reference_attn4_m" not in body, "the pair and the parity control run"
     assert 'tc2qwen35off) tc2_qwen35_offload;;' in run
     assert "TC2_UNS_TARGET_PARAMS" not in run.split("tc2_qwen35_offload(){")[0].split("tc2_big_family(){")[0], "no other token sets it"
+
+
+def test_tc2_amendment_6_resident_token():
+    """TC2 amendment 6: `tc2resident` runs Mixtral, then Qwen3.6, with EVERY e4b arm resident (--offload 0); the Qwen3.6 matched Unsloth
+    arms get the family's expert target parameters and the knob is reset after; HF, both axolotl arms and e4b as shipped are skipped as
+    not_run stubs on both families; the pair and the parity control run."""
+    run = RUN_SH.read_text()
+    m = re.search(r"^tc2_resident\(\)\{\n(.*?)^\}\n", run, re.DOTALL | re.MULTILINE)
+    assert m, "tc2_resident is gone"
+    body = m.group(1)
+    mx = re.search(r"tc2_big_family +mixtral +mistralai/Mixtral-8x7B-Instruct-v0\.1 +eba92302a2861cdc0098cc54bc9f17cb2c47eb61 +(\d+) +(\d+) +(\d+) +(\d+) +(\d+) +(\d+) +(\d) +\"\$UT7\"", body)
+    qw = re.search(r"tc2_big_family +qwen3_5 +Qwen/Qwen3\.6-35B-A3B +995ad96eacd98c81ed38be0c5b274b04031597b0 +(\d+) +(\d+) +(\d+) +(\d+) +(\d+) +(\d+) +(\d) +\"\$UT4\" +\"\" +\"\"", body)
+    assert mx and qw, body
+    assert mx.group(7) == "0" and qw.group(7) == "0", "every e4b arm resident"
+    assert body.index("mixtral") < body.index("qwen3_5  Qwen"), "Mixtral first"
+    assert body.index('TC2_UNS_TARGET_PARAMS="$UP_QWEN3_5"') < body.index("tc2_big_family   qwen3_5") and body.rstrip().endswith('TC2_UNS_TARGET_PARAMS=""')
+    for fam in ("mixtral", "qwen3_5"):
+        for arm in ("hf/hf_peft_m", "axolotl/ckpt_axolotl_m", "axolotl/ckpt_axolotl_best", "e4b/fused_attn4_shipped"):
+            assert f"{fam}/{arm}" in body, (fam, arm)
+        assert f"{fam}/unsloth/ckpt_unsloth_m " not in body and f"{fam}/e4b/reference_attn4_m" not in body, "the pair and the parity control run"
+    assert "tc2resident) tc2_resident;;" in run
 
 
 def test_tc1_amendment_4_axolotl_router_recast_is_what_autocast_computes():
