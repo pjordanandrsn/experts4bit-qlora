@@ -1,0 +1,23 @@
+[2026-10-04T15:18:06Z] K29 rehearse-1: sizes 0,340,512,700,1024,1359,2048,2100,3000,4096 MB x 2 reps, pinned and pageable
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05
+kernel: 6.6.32-qnap
+cgroup mounts:
+  cpu /sys/fs/cgroup/cpu cgroup ro,nosuid,nodev,noexec,relatime,cpu 0 0
+  none /sys/fs/cgroup/memory cgroup ro,nosuid,nodev,noexec,relatime,memory 0 0
+  cgroup /sys/fs/cgroup/cpuset cgroup ro,nosuid,nodev,noexec,relatime,cpuset 0 0
+  cgroup /sys/fs/cgroup/cpuacct cgroup ro,nosuid,nodev,noexec,relatime,cpuacct 0 0
+  cgroup /sys/fs/cgroup/blkio cgroup ro,nosuid,nodev,noexec,relatime,blkio 0 0
+  cgroup /sys/fs/cgroup/devices cgroup ro,nosuid,nodev,noexec,relatime,devices 0 0
+  cgroup /sys/fs/cgroup/freezer cgroup ro,nosuid,nodev,noexec,relatime,freezer 0 0
+  cgroup /sys/fs/cgroup/pids cgroup ro,nosuid,nodev,noexec,relatime,pids 0 0
+  cgroup /sys/fs/cgroup/systemd cgroup ro,nosuid,nodev,noexec,relatime,name=systemd 0 0
+proc_self_cgroup: 9:name=systemd:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e 8:pids:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e 7:freezer:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e 6:devices:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e 5:blkio:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e 4:cpuacct:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e 3:cpuset:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e 2:memory:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e 1:cpu:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e 
+/sys/fs/cgroup/memory/memory.limit_in_bytes: 9223372036854771712
+MemTotal:       131757372 kB
+MemAvailable:   55793800 kB
+torch 2.8.0+cu128 cuda 12.8
+[2026-10-04T15:18:07Z] STOP-1: not cgroup v2 -- the probe runs, the verdict is VOID
+FITS {"pinned": {"slope": 1.1512, "intercept_mb": 206.8, "r2": 0.84494, "points": 20}, "pageable": {"slope": 1.002, "intercept_mb": 0.3, "r2": 1.0, "points": 20}}
+ENV {"cgroup": "v1", "torch": "2.8.0+cu128", "driver": "575.64.05", "gpu": "NVIDIA RTX A2000 12GB"}
+[2026-10-04T15:20:23Z] probe done
+[2026-10-04T15:20:23Z] TP_DONE rc=0

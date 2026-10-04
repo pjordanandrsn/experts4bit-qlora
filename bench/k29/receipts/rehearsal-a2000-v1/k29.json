@@ -1,0 +1,388 @@
+{
+ "env": {
+  "cgroup": "v1",
+  "charge_file": "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+  "proc_self_cgroup": "9:name=systemd:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e\n8:pids:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e\n7:freezer:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e\n6:devices:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e\n5:blkio:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e\n4:cpuacct:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e\n3:cpuset:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e\n2:memory:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e\n1:cpu:/docker/86c70ed6cde770abf50e281220c43aa72c1c9c05ae4c0d6ca835726d54e5925e",
+  "torch": "2.8.0+cu128",
+  "cuda": "12.8",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "driver": "575.64.05",
+  "limit_memory_memory.limit_in_bytes": "9223372036854771712"
+ },
+ "rows": [
+  {
+   "mode": "pinned",
+   "size_mb": 0,
+   "charge_before": 598929408,
+   "charge_after": 598937600,
+   "delta_mb": 0.0078125,
+   "is_pinned": null,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 340,
+   "charge_before": 598958080,
+   "charge_after": 1138491392,
+   "delta_mb": 514.5390625,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 512,
+   "charge_before": 598945792,
+   "charge_after": 1138475008,
+   "delta_mb": 514.53515625,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 700,
+   "charge_before": 598958080,
+   "charge_after": 1677643776,
+   "delta_mb": 1028.71484375,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 1024,
+   "charge_before": 598945792,
+   "charge_after": 1677631488,
+   "delta_mb": 1028.71484375,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 1359,
+   "charge_before": 598921216,
+   "charge_after": 2755907584,
+   "delta_mb": 2057.0625,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 2048,
+   "charge_before": 599027712,
+   "charge_after": 2756014080,
+   "delta_mb": 2057.0625,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 2100,
+   "charge_before": 598925312,
+   "charge_after": 4912533504,
+   "delta_mb": 4113.77734375,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 3000,
+   "charge_before": 598929408,
+   "charge_after": 4912537600,
+   "delta_mb": 4113.77734375,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 4096,
+   "charge_before": 598933504,
+   "charge_after": 4912533504,
+   "delta_mb": 4113.76953125,
+   "is_pinned": true,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 0,
+   "charge_before": 598937600,
+   "charge_after": 598945792,
+   "delta_mb": 0.0078125,
+   "is_pinned": null,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 340,
+   "charge_before": 599072768,
+   "charge_after": 956665856,
+   "delta_mb": 341.02734375,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 512,
+   "charge_before": 598970368,
+   "charge_after": 1137274880,
+   "delta_mb": 513.3671875,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 700,
+   "charge_before": 599044096,
+   "charge_after": 1334861824,
+   "delta_mb": 701.73046875,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 1024,
+   "charge_before": 598937600,
+   "charge_after": 1675161600,
+   "delta_mb": 1026.3671875,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 1359,
+   "charge_before": 598945792,
+   "charge_after": 2027126784,
+   "delta_mb": 1362.01953125,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 2048,
+   "charge_before": 598953984,
+   "charge_after": 2751021056,
+   "delta_mb": 2052.37109375,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 2100,
+   "charge_before": 598962176,
+   "charge_after": 2805661696,
+   "delta_mb": 2104.47265625,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 3000,
+   "charge_before": 598949888,
+   "charge_after": 3750969344,
+   "delta_mb": 3006.0,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 4096,
+   "charge_before": 598953984,
+   "charge_after": 4902707200,
+   "delta_mb": 4104.37890625,
+   "is_pinned": false,
+   "rep": 0
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 0,
+   "charge_before": 598953984,
+   "charge_after": 598962176,
+   "delta_mb": 0.0078125,
+   "is_pinned": null,
+   "rep": 1
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 340,
+   "charge_before": 598982656,
+   "charge_after": 1138511872,
+   "delta_mb": 514.53515625,
+   "is_pinned": true,
+   "rep": 1
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 512,
+   "charge_before": 598999040,
+   "charge_after": 1138528256,
+   "delta_mb": 514.53515625,
+   "is_pinned": true,
+   "rep": 1
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 700,
+   "charge_before": 598958080,
+   "charge_after": 1677647872,
+   "delta_mb": 1028.71875,
+   "is_pinned": true,
+   "rep": 1
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 1024,
+   "charge_before": 598958080,
+   "charge_after": 1677643776,
+   "delta_mb": 1028.71484375,
+   "is_pinned": true,
+   "rep": 1
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 1359,
+   "charge_before": 598958080,
+   "charge_after": 2755948544,
+   "delta_mb": 2057.06640625,
+   "is_pinned": true,
+   "rep": 1
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 2048,
+   "charge_before": 599093248,
+   "charge_after": 2756075520,
+   "delta_mb": 2057.05859375,
+   "is_pinned": true,
+   "rep": 1
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 2100,
+   "charge_before": 598953984,
+   "charge_after": 4912562176,
+   "delta_mb": 4113.77734375,
+   "is_pinned": true,
+   "rep": 1
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 3000,
+   "charge_before": 598953984,
+   "charge_after": 4912562176,
+   "delta_mb": 4113.77734375,
+   "is_pinned": true,
+   "rep": 1
+  },
+  {
+   "mode": "pinned",
+   "size_mb": 4096,
+   "charge_before": 599130112,
+   "charge_after": 4912734208,
+   "delta_mb": 4113.7734375,
+   "is_pinned": true,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 0,
+   "charge_before": 599011328,
+   "charge_after": 599019520,
+   "delta_mb": 0.0078125,
+   "is_pinned": null,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 340,
+   "charge_before": 599044096,
+   "charge_after": 956637184,
+   "delta_mb": 341.02734375,
+   "is_pinned": false,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 512,
+   "charge_before": 598949888,
+   "charge_after": 1137250304,
+   "delta_mb": 513.36328125,
+   "is_pinned": false,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 700,
+   "charge_before": 598958080,
+   "charge_after": 1334779904,
+   "delta_mb": 701.734375,
+   "is_pinned": false,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 1024,
+   "charge_before": 598958080,
+   "charge_after": 1675354112,
+   "delta_mb": 1026.53125,
+   "is_pinned": false,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 1359,
+   "charge_before": 598970368,
+   "charge_after": 2027151360,
+   "delta_mb": 1362.01953125,
+   "is_pinned": false,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 2048,
+   "charge_before": 598966272,
+   "charge_after": 2751029248,
+   "delta_mb": 2052.3671875,
+   "is_pinned": false,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 2100,
+   "charge_before": 598962176,
+   "charge_after": 2805690368,
+   "delta_mb": 2104.5,
+   "is_pinned": false,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 3000,
+   "charge_before": 599097344,
+   "charge_after": 3751362560,
+   "delta_mb": 3006.234375,
+   "is_pinned": false,
+   "rep": 1
+  },
+  {
+   "mode": "pageable",
+   "size_mb": 4096,
+   "charge_before": 598966272,
+   "charge_after": 4902719488,
+   "delta_mb": 4104.37890625,
+   "is_pinned": false,
+   "rep": 1
+  }
+ ],
+ "fits": {
+  "pinned": {
+   "slope": 1.1512,
+   "intercept_mb": 206.8,
+   "r2": 0.84494,
+   "points": 20
+  },
+  "pageable": {
+   "slope": 1.002,
+   "intercept_mb": 0.3,
+   "r2": 1.0,
+   "points": 20
+  }
+ }
+}

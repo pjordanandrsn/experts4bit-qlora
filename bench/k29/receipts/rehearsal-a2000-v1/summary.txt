@@ -1,0 +1,6 @@
+[2026-10-04T15:18:06Z] K29 rehearse-1: sizes 0,340,512,700,1024,1359,2048,2100,3000,4096 MB x 2 reps, pinned and pageable
+[2026-10-04T15:18:07Z] STOP-1: not cgroup v2 -- the probe runs, the verdict is VOID
+FITS {"pinned": {"slope": 1.1512, "intercept_mb": 206.8, "r2": 0.84494, "points": 20}, "pageable": {"slope": 1.002, "intercept_mb": 0.3, "r2": 1.0, "points": 20}}
+ENV {"cgroup": "v1", "torch": "2.8.0+cu128", "driver": "575.64.05", "gpu": "NVIDIA RTX A2000 12GB"}
+[2026-10-04T15:20:23Z] probe done
+[2026-10-04T15:20:23Z] TP_DONE rc=0
