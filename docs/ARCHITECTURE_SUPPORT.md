@@ -112,6 +112,14 @@ recurrent state that carries it across every later token, and the shared expert 
 has priced either in nats. An opt-in that quantizes them would need a KL reading against the bf16 default, as P97 did
 for the fp8 KV, before it could be offered.
 
+The training receipts now give a first price, though not a KL reading. On TC1's held-out rows a comparator that quantizes
+these modules starts 0.05 nats higher than e4b: Unsloth 1.194–1.196 against e4b's bf16 1.143 at step 0 (`tc1-5090-27`,
+`tc1-5090-29`; TC2's read attributes the gap to these modules, and a same-bytes pair would confirm it). For matched-work
+comparisons against such a comparator, `lora.quantize_frozen_linears_4bit` (the TC1 harness's `--frozen-4bit`) stores
+them in NF4 so both sides start from the same bytes. It converts the Gated DeltaNet projections and the shared experts'
+gate/up/down (270 linears on Qwen3.6-35B-A3B), and keeps the routers, the `shared_expert_gate`s and `lm_head`. It is a
+measurement hook, not offered as a training option.
+
 **Rows that changed after re-running against real checkpoints:** `deepseek_v2` and `qwen3_next`
 moved from *broken* to *validated*, and `deepseek_v3` from *broken* to *blocked*. Only
 `ernie4_5_moe` survived as a real defect — closed 2026-09-18 by the MTP drop (#529, 0.36.1).
