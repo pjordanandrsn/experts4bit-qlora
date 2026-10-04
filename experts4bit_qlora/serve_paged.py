@@ -546,13 +546,14 @@ class PagedEngine:
 
 
 def _routed_topk(cfg) -> int:
-    """step_decomp._routed_topk: the routed top-k under whatever name this family uses."""
-    for c in (cfg, getattr(cfg, "text_config", None)):
-        for key in ("num_experts_per_tok", "num_experts_per_token", "moe_top_k", "moe_topk", "top_k_experts", "top_k"):
-            v = getattr(c, key, None)
-            if isinstance(v, int) and v > 0:
-                return v
-    raise ValueError("cannot find the routed top-k in this config")
+    """step_decomp._routed_topk: the routed top-k under whatever name this family uses
+    (:func:`experts4bit_qlora.arch.topology.routed_top_k`, the one alias list)."""
+    from .arch.topology import routed_top_k
+
+    v = routed_top_k(cfg)
+    if v is None:
+        raise ValueError("cannot find the routed top-k in this config")
+    return v
 
 
 def _kv_geometry(cfg):
