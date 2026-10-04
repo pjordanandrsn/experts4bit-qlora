@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### #392: the energy claim remeasured with a recorded, released bitsandbytes (bench and docs only)
+
+- **What.** The same NAS RTX A2000 and the unchanged `bench/_upstream/bench_energy.py`, run on **bitsandbytes 0.50.2**
+  with every version recorded, three passes. A per-process GPU monitor shows no other workload.
+- **Result.** `matmul_4bit` vs native bf16 total J/op:
+  - decode **0.91–1.06×** (break-even; the 0.50.0.dev0 fork read 1.18×);
+  - prefill 1.29–1.49×;
+  - train 1.64–2.15× (fork 2.25×).
+
+  The dequantize-then-linear arm reads decode 2.37–2.43×.
+- **Records.** New register row `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`. The fork-build row stands, and its
+  notes point here. METHODOLOGY §10 carries a dated note. The receipts are in `bench/energy-remeasure-2026-10-04/`.
+
 ### Before-load planning: `describe_moe`, `QLoRASetup`, `estimate_qlora_footprint`, `prepare_qlora_training`
 
 - **Why.**

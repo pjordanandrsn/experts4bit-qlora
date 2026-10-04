@@ -2925,8 +2925,11 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   CUDA inference can consume packed 4-bit weights directly for supported
   ordinary 2-D cells, routed grouped MoE execution is a separate contract,
   and training's input gradient is separate again
-  ([`BITSANDBYTES.md`](BITSANDBYTES.md)); the unrecorded build is open as
-  #392, below.
+  ([`BITSANDBYTES.md`](BITSANDBYTES.md)). The unrecorded build was
+  **remeasured on a release** on 2026-10-04: the same card and harness, on
+  bitsandbytes 0.50.2 (#392, `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`).
+  `matmul_4bit` reads decode 0.91–1.06× (break-even), prefill 1.29–1.49× and
+  train 1.64–2.15× over three passes.
 - **The 13.47× training speedup is ~7.2× against a current baseline.**
   transformers v5 fused the per-expert loop upstream, moving the baseline
   from 50.86 to 26.6 s/step. The grouped arm did not regress. Roughly
@@ -3052,12 +3055,6 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   `torch.cuda.synchronize()` checkpoints (arming `CUDA_LAUNCH_BLOCKING=1` while
   CUDA is still uninitialised) so a fault is bound to a load stage rather than
   to whichever CUDA call observed it.
-- **[#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392) —
-  the energy receipt does not record its bitsandbytes build.**
-  `docs/METHODOLOGY.md` names the build only as `0.50.0.dev0` (§1) and
-  "the fork (bnb 0.50-dev)" (the packaging note covering §9–§10), with no
-  commit; the harness prints the GPU name, not `bitsandbytes.__version__`. Until it is rerun on a recorded release,
-  `e4b.train.energy-honest.scoped-a2000` is a one-card, one-build number.
 - **`e4b.open.tr2-repro-gap` stays open in the register**: reproducing the
   TR2 training receipt from published artifacts. The bake step it names as
   missing ships in grouped-nf4-gemm: `nvme_bake_nf4` writes the NF4 arena
@@ -3621,6 +3618,7 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.serve.deepseek-v4 [measured]: DeepSeek-V4-Flash (43 layers x 256 experts, 284B) loads in about 10 s at 8.74 GiB peak VRAM and generates, with 147 GB of experts served from an on-disk arena.
 - e4b.serve.cuda-graph-capture [measured]: capture_decode replays a decode step as one CUDA graph: 4.4-5.6x on 2-layer fixtures, 1.11x on real OLMoE weights and 1.04x on Qwen3-30B — the gain is inversely proportional to real GPU work per step. Both real-weight models replay bit-identical to eager.
 - e4b.train.energy-honest.scoped-a2000 [measured]: On a card that already fits the model, 4-bit expert projections cost 1.2-2.3x the GPU energy of native bf16 on the measured comparator: one OLMoE-dims gate_up projection (NF4 through Experts4bit) on an RTX A2000, bitsandbytes 0.50.0.dev0 (the bitsandbytes#1965 fork build; exact commit unrecorded), measured as dequantize-then-linear and the fork's matmul_4bit routing on a [packed, 1] weight against F.linear on the bf16 weight, at decode M=1 and prefill M=512 (no grad) and train fwd+bwd M=32 (grad enabled). It inverts when memory binds: on the same card bf16 OLMoE-1B-7B does not fit at all, and the fused 4-bit MoE forward's freed memory unlocks a batch worth up to 4.4x lower energy per token (64 -> 4096 tokens).
+- e4b.train.energy-honest.a2000-bnb0502.2026-10-04 [measured]: Remeasured with a recorded, released build (#392): on the same NAS RTX A2000 and the unchanged harness, with bitsandbytes 0.50.2, 4-bit expert projections cost 0.91-2.15x native bf16's GPU energy per op over three passes. bnb.matmul_4bit: decode M=1 0.91/1.04/1.06x (break-even; the 0.50.0.dev0 fork read 1.18x), prefill M=512 1.29/1.30/1.49x (fork 1.29x), train fwd+bwd M=32 1.86/2.15/1.64x (fork 2.25x). Dequantize-then-linear: decode 2.37-2.43x, prefill 1.29x, train 1.31-1.68x. The model already fits; one projection; one card.
 - e4b.host.ratios-travel-absolutes-do-not [measured]: Absolute s/step and tok/s are host-specific: the same config on two RTX 4090s moved 8.6% in s/step and 3.4x in idle power, and the RTX 5090 class carries ~8.5% inter-box dispersion while each box repeats itself to 0.16%. Only within-pair ratios survive a host change.
 - e4b.serve.tp.olmoe.b1.5090.2026-09-04 [measured]: Single-stream (B=1) paged decode of OLMoE-1B-7B on a rented RTX 5090, fastest configuration under the Qwen3-30B campaign's protocol (its registration-time licence label predates the two-text clause and is withdrawn: measured, not licensed; notes): 452.5 tok/s (int4 experts + calibrated int4 attention + round-1/2 glue folds + router epilogue); NF4 baseline 247.7 tok/s.
 - e4b.serve.tp.olmoe.b16.5090.2026-09-04 [measured]: Batched (B=16, aggregate) paged decode of OLMoE-1B-7B on a rented RTX 5090, fastest configuration under the Qwen3-30B campaign's protocol (its registration-time licence label predates the two-text clause and is withdrawn: measured, not licensed; notes): 2412.5 tok/s (int4-b32 experts); NF4 baseline 1294.0 tok/s.
@@ -3944,4 +3942,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(343 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(344 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
