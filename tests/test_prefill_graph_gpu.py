@@ -190,7 +190,8 @@ def test_auto_stands_down_when_the_pool_leaves_too_little_memory(grouping, monke
     # restore only this patch: undo() would also drop the `grouping` fixture's device grouping
     monkeypatch.setattr(torch.cuda, "mem_get_info", real)
     st = r.enable_prefill_graph(T, require_headroom=True)
-    assert st["status"] == "on"
+    assert st["status"] == "on" and st["pool_mib"] >= 0
+    assert r._prefill_graph["pool_bytes"] > 0          # measured from the allocator's segments for this pool id
 
 
 @needs_cuda

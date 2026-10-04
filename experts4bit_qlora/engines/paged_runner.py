@@ -462,6 +462,11 @@ class PagedModelRunner(StepRunner):
         pg = self._capture_prefill_graph(T, prompts[0], warmup)
         self._check_prefill_graph(pg, prompts)
         pg["free_after_bytes"] = int(torch.cuda.mem_get_info(self.device)[0])
+        if require_headroom and pg["pool_bytes"] <= 0:
+            del pg
+            torch.cuda.empty_cache()
+            raise PrefillGraphRefused("memory: the graph's private pool could not be measured (no allocator segment "
+                                      "carries its pool id), so the headroom rule cannot be applied")
         if require_headroom and pg["free_after_bytes"] < pg["pool_bytes"]:
             pool_mib, free_mib = pg["pool_bytes"] / 2**20, pg["free_after_bytes"] / 2**20
             del pg
@@ -511,7 +516,6 @@ class PagedModelRunner(StepRunner):
                 torch.cuda.current_stream(dev).wait_stream(side)
                 torch.cuda.synchronize(dev)
                 ctx.drop(self._PG_KEY)
-                reserved0 = torch.cuda.memory_reserved(dev)
                 g = torch.cuda.CUDAGraph()
                 try:
                     with torch.cuda.graph(g):
@@ -520,14 +524,23 @@ class PagedModelRunner(StepRunner):
                     raise PrefillGraphRefused(f"the {T}-token prefill forward did not capture "
                                               f"({type(e).__name__}: {str(e)[:300]})") from e
                 staged = self._staged_under_key()
-                pool_bytes = max(0, int(torch.cuda.memory_reserved(dev)) - int(reserved0))   # the private pool
         finally:
             restore()
         if sorted(staged) != sorted(self.pool_layers):
             raise PrefillGraphRefused(f"the capture staged K/V for layers {sorted(staged)}, not the pool's "
                                       f"{sorted(self.pool_layers)}")
         return {"T": T, "graph": g, "ids": ids, "pos": pos, "logits": out.logits, "staged": staged,
-                "pool_bytes": pool_bytes}
+                "pool_bytes": self._private_pool_bytes(g)}
+
+    @staticmethod
+    def _private_pool_bytes(graph) -> int:
+        """Bytes of the device segments in ``graph``'s private memory pool, from the allocator's own snapshot. The
+        growth of ``memory_reserved`` across a capture undercounts it -- to 0 once an earlier graph's freed segments
+        are recycled (seen on the A2000) -- and an undercount would let the headroom rule wave through a graph that
+        should stand down."""
+        pid = tuple(graph.pool())
+        return sum(int(s["total_size"]) for s in torch.cuda.memory_snapshot()
+                   if tuple(s.get("segment_pool_id") or ()) == pid)
 
     @staticmethod
     def _churn_allocator(dev) -> None:
