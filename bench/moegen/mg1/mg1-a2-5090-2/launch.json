@@ -1,0 +1,21 @@
+{
+ "experiment_id": "mg1-a2-5090-2",
+ "status": "OK",
+ "result": "pass",
+ "cost_usd": {
+  "actual": 0.288,
+  "estimated": 1.7375
+ },
+ "started_at": "2026-10-04T22:52:21Z",
+ "finished_at": "2026-10-04T23:09:53Z",
+ "instance_id": "54214516",
+ "vast_machine_id": "151350",
+ "vast_offer_choice": "preferred rank 2 of 62",
+ "cpu_name": "Core\u2122 Ultra 9 285K",
+ "vast_preflight": "ok",
+ "vast_hf_cdn_mb_s": "67.4",
+ "vast_bandwidth_mb_s": "87.8",
+ "notes": "guard pid 57907 armed at 2026-10-04T22:52:23Z",
+ "teardown_reason": "completion",
+ "source": "adertha receipts store, receipts/experts4bit-qlora/2026-10-04/mg1-a2-5090-2/receipt.json (fields copied verbatim)"
+}
