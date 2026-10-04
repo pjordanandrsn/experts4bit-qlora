@@ -1,0 +1,22 @@
+{
+ "mode": "knob",
+ "built": true,
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "prefill_routes": {
+  "int4_prefill_env": null,
+  "prefill_attn_env": null,
+  "device_grouping": false,
+  "int4_prefill": "k19",
+  "int4_prefill_above_256_rows": "k19",
+  "prefill_attn": "flash"
+ },
+ "at_build": {
+  "status": "refused",
+  "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+ },
+ "info_prefill_graph": "auto",
+ "stats": {
+  "status": "refused",
+  "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+ }
+}

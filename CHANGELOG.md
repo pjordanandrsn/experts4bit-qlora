@@ -26,6 +26,13 @@
   - The headroom refusal releases the graph and engages when there is room (GPU).
   - `engage_prefill_graph` covers all three settings (CPU).
   - An `auto` refusal is recorded and reported.
+- **Verified on the A2000** (`bench/prefill-graph-auto-2026-10-04/`).
+  - With nothing set, `auto` engaged, and prefill was bitwise against eager on the int4 Qwen3-MoE and on the Granite
+    NF4 store.
+  - At `max_seqs` 1, `auto` served eagerly and reported `refused`, while `1` stopped the server.
+- **The pool measure.** It is the allocator's segments for the graph's own pool id. The first cut used the growth of
+  `memory_reserved`, which read 0 once segments were recycled, so the headroom rule would have failed open. The A2000
+  run caught it.
 
 ### Read: TC1 amendment 25, first box — on one stack the matched set holds (P52 HELD); the speed pairs were unstable (P50, P51 UNTESTED); amendment 27 registers one re-draw
 
