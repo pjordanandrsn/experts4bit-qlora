@@ -1,0 +1,28 @@
+KNOBS e4b=282070a8c18a2740519b238f9156771c0a1d65c7 gnf4=951a97fbb489b806d238922559b55724b55db8fd model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 short=32 long=160 reps=3
+e4b 0.44.0 @282070a8c18a2740519b238f9156771c0a1d65c7
+gnf4 0.36.0 @951a97fbb489b806d238922559b55724b55db8fd
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p112_reduce self-test OK (21 cases)
+p109_box self-test OK (5/5 cases)
+p112_box self-test OK (5/5 cases)
+premise run rc=0: 7 passed in 11.29s
+premise GNF4_PDL contract rc=0: 23 passed in 11.04s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm P0a rc=0 P112_ARM {"arm": "P0", "tag": "P0a", "pdl_active": false, "load_s": 170.7, "pdl_launches": 6927, "pdl_with": 0, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 1630.81, "W1": 316.93}
+
+arm P1a rc=0 P112_ARM {"arm": "P1", "tag": "P1a", "pdl_active": true, "load_s": 140.03, "pdl_launches": 6927, "pdl_with": 6907, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 6458.73, "W1": 265.94}
+
+arm P1b rc=0 P112_ARM {"arm": "P1", "tag": "P1b", "pdl_active": true, "load_s": 122.77, "pdl_launches": 6927, "pdl_with": 6907, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 1857.24, "W1": 248.43}
+
+arm P0b rc=0 P112_ARM {"arm": "P0", "tag": "P0b", "pdl_active": false, "load_s": 130.47, "pdl_launches": 6927, "pdl_with": 0, "int4": {"int4_expert_layers": 48, "int4_attn_projections": 96, "fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48, "moe_layers": 48}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": null, "W1": 247.55}
+
+P112_VERDICT VOID ["a decode slope is void"]
+census rc=0 P112_CENSUS {"switched_kernels": ["_combine_rows", "_swiglu_rows"], "switched_launches": 1440, "triton_launches": 5616, "int4": {"int4_expert_layers": 0, "int4_attn_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "moe_layers": 48}}
+

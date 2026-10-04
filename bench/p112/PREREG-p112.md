@@ -240,3 +240,27 @@ checks the match directly.
   applies PDL only where it helps would need a lane of its own.
 
 **Unchanged:** the subject, the arms, the workloads, the rule's other steps and its bars, and the consequences.
+
+## Amendment 2 (2026-10-04, after `p112-5090-2`): the lane closes VOID
+
+`p112-5090-2` ran on Vast 54122612 (machine 45511, EPYC 7C13, a shared host with 762 of its 1,007 GB of RAM in use),
+cost $1.0210 by its invoice, and is in adertha-receipts `19fb230`. It ran under Amendment 1. Its amended accounting
+passed and confirms that amendment's cause directly: every kernel's compile launches equal its compiled variants, and
+in P1 every variant and every handled launch carried PDL. Tokens were identical in every arm.
+
+**It read VOID:** "a decode slope is void". P109's slope differences whole-pass walls, which begin with the prefill. On
+this host the W16 prefill varied by about 1 s a pass, against about 1.2 s of decode between the two lengths. One W16
+slope was void, and another read 6,459 tok/s.
+
+**The lane closes VOID, with no third run.**
+- **The ceiling.** The registration priced the ceiling ($2.00) at the hourly rate alone, but the provider also bills the
+  checkpoint download, $0.649 on run 2. The lane has spent $1.3420 by the receipts. The launcher estimates $1.95 a run,
+  so a third run would breach the registered ceiling.
+- **The instrument.** A reading needs decode-only timing (SC1's A10: subtract each pass's last time-to-first-token),
+  which this registration does not have.
+- **The question.** Run 1's arms (Amendment 1) suggest that the default worth reading is PDL at small row counts only.
+  That is a different switch.
+
+**The consequence.** None: a VOID registers none, and `GNF4_PDL` stays opt-in. A new lane carries the question with
+decode-only timing and three arms: off, PDL on every switched launch, and PDL on small row counts only.
+`RESULTS-p112.md` records both runs.
