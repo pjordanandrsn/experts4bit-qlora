@@ -44,11 +44,12 @@ print(snapshot_download('$1', revision='$2', allow_patterns=['*.json','*.safeten
 arm(){ local tag=$1 model=$2 rev=$3 res=$4
   say "arm $tag ($res)"
   perl -e 'alarm 5400; exec @ARGV' python fp1_measure.py --model "$model" --revision "$rev" --residency "$res" --out "receipts/$tag.json" > "logs/arm_$tag.log" 2>&1
-  local rc=$?; echo "$tag rc=$rc $(tail -1 "logs/arm_$tag.log" | cut -c1-200)" | tee -a summary.txt; }
+  local rc=$?; echo "$tag rc=$rc $(tail -1 "logs/arm_$tag.log" | cut -c1-200)" | tee -a summary.txt; return $rc; }
 
 snap=$(fetch $OLMOE $OLMOE_REV olmoe); [ -d "$snap" ] || { echo "olmoe: FETCH FAILED" | tee -a summary.txt; finish 10; }
 echo "olmoe: fetched $(du -shL "$snap" | cut -f1)" | tee -a summary.txt
-arm olmoe_device $OLMOE $OLMOE_REV device
+# The anchor arm doubles as the instrument's own smoke test: if it does not finish, stop here, before the 57 GB fetch.
+arm olmoe_device $OLMOE $OLMOE_REV device || { tail -20 logs/arm_olmoe_device.log; echo "ANCHOR ARM FAILED: stopping before the Qwen3 fetch" | tee -a summary.txt; finish 12; }
 rm -rf "$(dirname "$(dirname "$snap")")"
 snap=$(fetch $QWEN $QWEN_REV qwen3); [ -d "$snap" ] || { echo "qwen3: FETCH FAILED" | tee -a summary.txt; finish 10; }
 echo "qwen3: fetched $(du -shL "$snap" | cut -f1)" | tee -a summary.txt

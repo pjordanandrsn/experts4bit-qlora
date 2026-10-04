@@ -44,6 +44,8 @@ Every reading so far comes from OLMoE-sized runs on an RTX A2000. Carrying those
   result, not a failure: the estimator's error is what is being measured.
 - **Failure:**
   - install or tripwire (rc 9);
+- the anchor arm (OLMoE) not finishing (12): the runner stops before the Qwen3 download, so a broken instrument costs
+  minutes, not the run;
   - fetch (10);
   - fewer than three receipts (11).
 
