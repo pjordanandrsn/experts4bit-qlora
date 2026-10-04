@@ -115,7 +115,7 @@ def request_body(model: str, prompt: list, max_tokens: int, extra: dict) -> dict
 
 def new_record(prompt: list, max_tokens: int, t_send: float) -> dict:
     return {"max_tokens": max_tokens, "prompt_len": len(prompt), "t_send": round(t_send, 6), "chunks": [], "text": "",
-            "completion_tokens": None, "finish_reason": None, "empty_chunks": 0, "valid": False}
+            "completion_tokens": None, "prompt_tokens": None, "finish_reason": None, "empty_chunks": 0, "valid": False}
 
 
 def fold(rec: dict, event: str, t: float) -> None:
@@ -136,6 +136,8 @@ def fold(rec: dict, event: str, t: float) -> None:
             rec["finish_reason"] = c["finish_reason"]
     if msg.get("usage"):
         rec["completion_tokens"] = msg["usage"].get("completion_tokens")
+        if msg["usage"].get("prompt_tokens") is not None:          # recorded, not a validity term (SC2b gates on it)
+            rec["prompt_tokens"] = msg["usage"]["prompt_tokens"]
 
 
 def finish(rec: dict, e2el_s: float) -> dict:
@@ -246,11 +248,12 @@ def self_test() -> int:
     r = new_record([1, 2], 3, 0.0)                 # empty first and finish-only last chunks are not timed
     for t, ev in ((0.1, '{"choices":[{"text":"","finish_reason":null}]}'), (0.2, '{"choices":[{"text":"a","finish_reason":null}]}'),
                   (0.3, '{"choices":[{"text":"bc","finish_reason":null}]}'), (0.5, '{"choices":[{"text":"d","finish_reason":null}]}'),
-                  (0.9, '{"choices":[{"text":"","finish_reason":"length"}],"usage":{"completion_tokens":3}}'),
+                  (0.9, '{"choices":[{"text":"","finish_reason":"length"}],"usage":{"completion_tokens":3,"prompt_tokens":2}}'),
                   (0.95, '{"choices":[],"usage":{"completion_tokens":3}}'), (0.96, "[DONE]")):
         fold(r, ev, t)
     r = finish(r, 1.0)
-    ok.append(r["valid"] and r["ttft_s"] == 0.2 and r["tpot_s"] == 0.15 and r["empty_chunks"] == 2 and r["text"] == "abcd")
+    ok.append(r["valid"] and r["ttft_s"] == 0.2 and r["tpot_s"] == 0.15 and r["empty_chunks"] == 2 and r["text"] == "abcd"
+              and r["prompt_tokens"] == 2)
     print(f"sc2_driver self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
     return 0 if all(ok) else 1
 

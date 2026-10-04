@@ -13,6 +13,39 @@
 - **Predictions.** P53 shipped in [0.90, 0.98]; P54 matched in [0.92, 0.99]; P55 held-out within 0.005 on each arm. All three HELD
   turns both flags on by default for the Triton versions they cover. The reducer scores them (two new self-test cases).
 
+### Opt-in: the fused RMSNorm and rotary kernels launch without Triton's per-call argument binding (`E4B_TRITON_PREBIND=1`)
+
+- **What.** `engines/triton_prebind.py`'s `prebind(kernel)` lets the first launch of each specialization go through Triton and keeps
+  the compiled kernel that launch returns. Its key is what Triton specializes on: each tensor's dtype and 16-byte alignment, each
+  integer's value, every other argument's type and value, the launch options, the device and the debug knobs. Later launches with
+  that key call the kernel's own launcher. `rmsnorm_train` (`_rms_fwd`, `_rms_bwd`) and `rope_train` (`_rope_fwd`) launch through
+  it. The flag is read when those modules are imported; off, `prebind` returns the kernel itself and nothing changes.
+- **Values.** Same compiled binary, arguments and stream, so outputs are bit-identical. Triton's own launch serves a Triton release
+  other than 3.4 and 3.6, a registered launch or pre-run hook, a callable grid, a changed global the kernel reads, and an argument of
+  another type. One knob is read less often: triton 3.4 re-reads `TRITON_DEBUG` at every launch, the prebound path once per kernel
+  (3.6 itself reads it once).
+- **Measured** on the RTX A2000 box's host: a Xeon W-1250 at load average 18–44 on its 12 threads, the bench at nice 10. Host µs per
+  call, each timed after a synchronize; median of 2,000 interleaved off/on pairs; two runs per torch. Qwen3-30B-A3B shapes: sequence
+  2048 × micro-batch 2, hidden 2048, 32 query and 4 key-value heads of 128.
+
+  | call | torch 2.8.0 / triton 3.4.0: off → on | torch 2.11.0 / triton 3.6.0: off → on |
+  |---|---|---|
+  | `RMSNormFrozen.apply`, hidden / q_norm / k_norm | 152–160 → 117–121 / 137–170 → 105–127 / 132–144 → 101–111 | 143–146 → 129–131 / 154–197 → 135–168 / 133–140 → 120–126 |
+  | `RMSNormFrozen.backward`, hidden / q_norm / k_norm | 110–116 → 74–77 / 124–126 → 82–83 / 82–95 → 55–64 | 92–96 → 78–82 / 118–156 → 98–125 / 81 → 70 |
+  | `rope_qk` forward (two launches) | 232–255 → 149–168 | 204–211 → 171–174 |
+  | `_RopeQK.backward` (two launches) | 185–197 → 102–109 | 135–138 → 108–109 |
+  | one launch alone (the kernels and shapes above) | 53–90 → 28–46 | 40–69 → 30–48 |
+
+  Most of what is left in an RMSNorm forward is torch's: `autograd.Function.apply` (24–31 µs for a no-op), the two allocations (10–12)
+  and the views (9–13).
+- **Not measured.** No training step, and no H100 or RTX 5090 host. The default stays off until a registered A/B reads it.
+- **Tested.** `tests/test_triton_prebind.py`. Against Triton's own launch, outputs and dx match under `torch.equal`: RMSNorm in bf16
+  and fp16, all four variants, odd widths and row counts, misaligned pointers; rotary at odd lengths. Every prebound launch is the
+  very compiled kernel Triton's lookup returns. A launch hook, a callable grid, a changed global, a tensor passed by keyword and an
+  unsupported Triton release take Triton's path. On an RTX A2000 under torch 2.8.0 and 2.11.0, flag off and on: 41 passed with
+  `test_rmsnorm_train.py` and `test_rope_train.py`. The fused-training suites agree flag off and on (156 passed;
+  `test_fast_v4.py::test_gptoss_inside_lora_is_still_skipped` fails either way on that box).
+
 ### CI on grouped-nf4-gemm 0.39.0; where the dense-route rows came from (docs and register notes only)
 
 - **CI** now tests against grouped-nf4-gemm **0.39.0** (`a5edec87`). In that release `GNF4_TRAIN_GEMM=auto` takes the
@@ -41,6 +74,25 @@
   not the code. ERNIE's interleaved rotary was refused on semantics, as predicted.
 - **Draws.** Proving run $0.044; one box refused by the train anchor ($0.048, `h2d.self_pair` 1.0321 > 1.03); the reading
   $1.79. $1.88 in all.
+
+### SC2b registered (#846): does a CUDA-graphed prefill chunk lift e4b `serve_paged`'s request-level capacity?
+
+- **Why.** SC2 read e4b's request-level capacity as prefill-bound: each 512-token prefill forward stalls every running
+  decode. That forward is launch-bound (about 15k kernels per chunk; P102's TTFT moved 4× with the host CPU alone).
+  `E4B_PAGED_PREFILL_GRAPH=1` (#1070) captures the first chunk once, verifies it bitwise at startup and replays it.
+- **What runs.**
+  - A new box F, e4b only: the code at `373c89ac` with grouped-nf4-gemm v0.38.0.
+  - Prefill routes are main's defaults (k19 + flash), with neither SC1 pin exported. The server's own `/health` routes
+    are asserted, and a test executes the box's export block.
+  - Knob OFF against ON, paired: same seeds within a draw, counterbalanced order, a determinism repeat.
+  - Engagement is checked right after warm-up.
+- **The rule.** `bench/sc2/sc2b_reduce.py`, 10 self-test cases.
+  - Gates: ROUTES, ENGAGED, PROMPTS, DETERMINISM and IDENTITY (every request's serial text byte-equal OFF vs ON).
+  - P1: serial TTFT OFF/ON ≥ 1.5. P2: TPOT unchanged. P3: ON's ceiling ≥ 2 req/s. P4: no regression.
+  - The licence, decoupled from P1: the gates, P4 and TTFT ≥ 1.10× in both draws. It licenses a default of `auto`.
+- **Instrument additions.** `sc2_identity.py` (the serial identity gate); the driver records `usage.prompt_tokens`; a
+  server error saves the full `/health` JSON.
+- **Budget.** Proof 1.0 h and reading 2.5 h, each stated with download charges this time.
 
 ## 0.46.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.38.0, whose pinned-tier sizing models PyTorch's power-of-two allocator; before-load planning (`describe_moe`, `prepare_qlora_training`); `serve_paged` reports its prefill routes; two opt-ins, a first-chunk prefill graph verified at startup and the double-quantized expert absmax
 

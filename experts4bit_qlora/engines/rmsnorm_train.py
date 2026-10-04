@@ -24,6 +24,8 @@ try:                                    # Triton is a Linux-only dependency; wit
 except ImportError:                     # pragma: no cover - exercised on macOS installs
     triton = tl = None
 
+from .triton_prebind import prebind
+
 __all__ = ["rmsnorm_frozen", "enable_fused_rmsnorm_train", "RMSNORM_TRAIN_STATS"]
 
 #: Patched module count and fused calls (forward launches), so a training census can say the fusion served the step.
@@ -79,6 +81,11 @@ def _rms_bwd(DY, X, W, R, DX, stride, N, ROWS: tl.constexpr, BLOCK: tl.constexpr
         tl.store(DX + row * stride + cols, dx.to(DX.dtype.element_ty), mask=cmask)
 
 
+# E4B_TRITON_PREBIND=1 (opt-in): the same kernels, launched without Triton's per-call argument binding (engines/triton_prebind.py)
+_rms_fwd_launch = prebind(_rms_fwd)
+_rms_bwd_launch = prebind(_rms_bwd)
+
+
 def _rows_per_prog(n_rows: int, N: int) -> int:
     if N >= 1024:
         return 1
@@ -101,8 +108,8 @@ class RMSNormFrozen(torch.autograd.Function):
         y = torch.empty_like(x2)
         r = torch.empty(M, dtype=torch.float32, device=x.device)
         k = _rows_per_prog(M, N)
-        _rms_fwd[(M // k,)](x2, weight, y, r, x2.stride(0), N, eps, ROWS=k, BLOCK=triton.next_power_of_2(N), num_warps=4 if N >= 1024 else 1,
-                               OFFSET=float(offset), MUL_FP32=bool(mul_fp32))
+        _rms_fwd_launch[(M // k,)](x2, weight, y, r, x2.stride(0), N, eps, ROWS=k, BLOCK=triton.next_power_of_2(N), num_warps=4 if N >= 1024 else 1,
+                                      OFFSET=float(offset), MUL_FP32=bool(mul_fp32))
         ctx.save_for_backward(x2, weight, r)
         ctx.shape, ctx.k, ctx.offset, ctx.mul_fp32 = shape, k, float(offset), bool(mul_fp32)
         return y.view(shape)
@@ -116,8 +123,8 @@ class RMSNormFrozen(torch.autograd.Function):
             dy2 = dy2.contiguous()
         dx = torch.empty_like(x2)
         k = ctx.k
-        _rms_bwd[(x2.shape[0] // k,)](dy2, x2, weight, r, dx, x2.stride(0), N, ROWS=k, BLOCK=triton.next_power_of_2(N), num_warps=4 if N >= 1024 else 1,
-                                        OFFSET=ctx.offset, MUL_FP32=ctx.mul_fp32)
+        _rms_bwd_launch[(x2.shape[0] // k,)](dy2, x2, weight, r, dx, x2.stride(0), N, ROWS=k, BLOCK=triton.next_power_of_2(N), num_warps=4 if N >= 1024 else 1,
+                                               OFFSET=ctx.offset, MUL_FP32=ctx.mul_fp32)
         return dx.view(ctx.shape), None, None, None, None
 
 
