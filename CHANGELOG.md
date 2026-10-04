@@ -13,6 +13,20 @@
 - **Decision.** The route stays opt-in, and the readings are labelled rows (`...h100.2026-10-04.route`, `.moe-keep-route`) beside the
   default-settings and keep rows. A faster dequant kernel is the next change. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
 
+### P112 closed VOID (#1015): no reading on `GNF4_PDL` for the int4 serving step. Seen but not read: B=1 3.7 % faster and B=16 1.5 % slower, with identical tokens
+
+- **Run 1** (`p112-5090-1`, $0.3210) VOIDed on the lane's own launch accounting (Amendment 1).
+- **Run 2** (`p112-5090-2`, $1.0210 including the checkpoint download) confirmed the accounting fix: compile launches
+  equal compiled variants, and every PDL launch is accounted for. It then VOIDed on a decode slope: W16 prefill jitter
+  on a shared host swamped the slope's 1.2 s of decode.
+- **Why the lane closes.** A third run would breach the registered $2.00 ceiling, which was priced without download
+  charges, and a reading needs decode-only timing.
+- **In both runs,** tokens were identical in every arm. The default NF4 server's census showed only `swiglu_rows` and
+  `combine_rows` among the switched kernels.
+- **Run 1's arms, not a reading:** W1 ratios 1.0393 / 1.0366 and W16 0.9851 / 0.9854.
+- **What follows.** `GNF4_PDL` stays opt-in. A new lane reads PDL off, PDL on everything, and PDL at small row counts
+  only, under decode-only timing. `bench/p112/RESULTS-p112.md`.
+
 ### P112 Amendment 1: the first reading VOIDed on its own launch accounting; the accounting is fixed and the lane reruns
 
 - **What happened.** `p112-5090-1` ($0.3210) read VOID on engagement: 20 of 6,927 switched launches in each on arm
