@@ -13,6 +13,13 @@
 - **Predictions.** P53 shipped in [0.90, 0.98]; P54 matched in [0.92, 0.99]; P55 held-out within 0.005 on each arm. All three HELD
   turns both flags on by default for the Triton versions they cover. The reducer scores them (two new self-test cases).
 
+### Tests: the family-blind training parity test counts grouped-nf4-gemm's dense dgrad route
+
+- `tests/test_fused_train_parity.py::test_fused_train_is_family_blind` checked that the dgrad kernel or the grouped_mm route served
+  both frozen GEMMs. Since grouped-nf4-gemm#463, `GNF4_TRAIN_GEMM=auto` takes the dense route off sm_90 for calls with at most 16
+  present groups, so the Mixtral case (8 experts) failed on CUDA cards other than the H100. CI has no GPU and skips the test. The
+  count now includes `DGRAD_STATS["dense"]`, read with `.get` for older grouped-nf4-gemm. Test only.
+
 ### Opt-in: the fused RMSNorm and rotary kernels launch without Triton's per-call argument binding (`E4B_TRITON_PREBIND=1`)
 
 - **What.** `engines/triton_prebind.py`'s `prebind(kernel)` lets the first launch of each specialization go through Triton and keeps
