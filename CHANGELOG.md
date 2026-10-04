@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### TC1 amendment 23 registered: a memory census of e4b against Unsloth on one RTX 5090 (P41–P43)
+
+- **The box** (`qwen3memcensus`). Qwen3-30B-A3B at TC1's pin and tokens, micro-batch 1 × accum 8, one draw per arm: e4b at its defaults
+  (fp32 expert absmax), e4b with `E4B_ABSMAX_DQ=1`, and Unsloth on grouped_mm. Every arm runs the new memory census. No speed is read.
+- **Predictions.** P41: the census finds e4b's fp32 expert absmax within 2 % of the analytic 1.81 GB, and the double-quantized one
+  within 2 % of that over 3.94. P42: it attributes at least 90 % of each arm's peak to named groups. P43: with the absmax
+  double-quantized, e4b's peak exceeds Unsloth's by 0.5–2.5 GB.
+- **Harness.** `tc1_arm.py --mem-census 1` (any framework, off by default) records PyTorch's allocator history from the arm's start, in
+  a ring of 1,000,000 events with Python stacks. Each time the run's peak grows by 32 MiB, the box snapshots the ring and reduces it on
+  the spot. The reduction finds the peak and groups the allocations live at it by static class, else by the first e4b,
+  grouped-nf4-gemm, Unsloth, bitsandbytes or optimizer frame. A static census by class runs after setup and after training. The
+  receipt gains `mem_census`; a failure inside the census is recorded there, and the arm finishes as usual. Smoke-tested on torch 2.8 on
+  an RTX A2000. The Unsloth venv's torch 2.12 is handled by reading the recorder's signature, but has not run.
+- **Reducer.** The family is registered with no position quoted. Its scorer prints P41–P43 beside side-by-side census tables. Four new
+  self-test cases, 81 in all. `bench/tc1/TC1-PREREG.md` amendment 23.
+
 ### Read: TC1c amendment 8 — on an H100 at default settings e4b is faster per step than Unsloth: 1.061 (P24, P25, P26 HELD)
 
 - **The box.** `tc1c-h100-15` ($2.44) ran e4b 0.45.0's code with grouped-nf4-gemm 0.37.0 and nothing set. `auto` took the grouped_mm

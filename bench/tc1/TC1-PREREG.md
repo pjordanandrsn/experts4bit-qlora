@@ -907,3 +907,39 @@ Each is FALSIFIED outside its band, and UNTESTED where a side is unstable or not
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, a 192 GB host floor (Mixtral's checkpoint). About $2.50 with the
 download; the standing no-ask tier; the campaign's daily cap is $100, counted 9 am to 9 am Central.
+
+### Amendment 23 (2026-10-04T18:56Z, before any box): where e4b's resident training memory goes, against Unsloth's — a memory census on one RTX 5090 (P41–P43)
+
+**Why.** Every resident matched pair this week put e4b's peak above Unsloth's: Qwen3-30B-A3B 27.21 against 24.27 GB (5090), Qwen3.6-35B-A3B
+over 32 GB against 30.47 GB, OLMoE 7.67 against 5.97 GB, and Mixtral 31.07 against 29.12 GB before the absmax was double-quantized. The
+fp32 expert absmax explains part of it (`E4B_ABSMAX_DQ=1` brought Mixtral level), and on Qwen3.6 the bf16 non-routed projections explain
+another part. The rest is unattributed, and it is what stands between e4b and a resident Qwen3-30B-A3B on a 24 GB card (e4b's micro-batch-1
+peak 26.06 GB) and Qwen3.6 at micro-batch 2 on 32 GB.
+
+**The box.** One RTX 5090, token `qwen3memcensus`, Qwen3-30B-A3B, the matched set at micro-batch 1 × accum 8 (the same tokens per step), one
+draw per arm, with the harness's memory census on (`--mem-census 1`):
+
+- e4b `fused_attn4_m_mb1` (defaults: fp32 absmax);
+- e4b `fused_attn4_m_mb1_dq` (`E4B_ABSMAX_DQ=1`);
+- Unsloth `ckpt_unsloth_m_mb1`.
+
+The census records PyTorch's allocator history over the run. At the moment of peak allocated memory it reports:
+
+- the live allocations, grouped by the first frame in e4b, grouped-nf4-gemm, Unsloth, bitsandbytes or the optimizer;
+- the static bytes by class: frozen expert weights, absmax, other frozen weights, adapters, gradients, optimizer state.
+
+No speed is read: the census slows the step. Positions stay with the boxes that read them.
+
+**Predictions** (registered before the box):
+
+- **P41** (the instrument): the census finds e4b's fp32 expert absmax within 2 % of the analytic 1.81 GB (29.0 B expert parameters /
+  64 × 4 bytes), and the `_dq` arm's within 2 % of that over 3.94 (#1040's measured ratio).
+- **P42:** the census attributes at least 90 % of e4b's peak and of Unsloth's to named groups (sites or static classes); anything else is
+  reported as unattributed.
+- **P43:** after the absmax, e4b's excess over Unsloth at micro-batch 1 lies in **[0.5, 2.5] GB**, and the read names its largest group.
+
+**Decision rules.** This is a measurement, not a position. The read names the excess's largest groups, and each fix that follows is its own
+registration with its own A/B.
+
+**Budget.** One RTX 5090 at the policy rate, 2 h guard, about $1 with the download; the standing no-ask tier; the campaign's daily cap is
+$100, counted 9 am to 9 am Central.
