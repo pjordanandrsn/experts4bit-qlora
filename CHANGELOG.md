@@ -1,6 +1,38 @@
 # Changelog
 
-## Unreleased
+## 0.46.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.38.0, whose pinned-tier sizing models PyTorch's power-of-two allocator; before-load planning (`describe_moe`, `prepare_qlora_training`); `serve_paged` reports its prefill routes; two opt-ins, a first-chunk prefill graph verified at startup and the double-quantized expert absmax
+
+**0.46.0.** No default in this package changes. CI now tests against grouped-nf4-gemm 0.38.0's commit.
+
+- **grouped-nf4-gemm 0.38.0.** `capacity_for_bytes(..., pinned=True)` is the helper e4b's NVMe and host-RAM tier
+  messages tell you to size `hot_rows` with. It now models PyTorch's power-of-two pinned allocator: exact and never
+  over budget, where the flat 1.9 wasted up to half a budget. It was measured on cgroup v1 and v2 (lane K29,
+  CONFIRMED; grouped-nf4-gemm#71 closed). Its new `GNF4_TRAIN_GEMM=dense` route is opt-in. The `[fast]` floor stays
+  `>=0.30.0`; `pip install -U grouped-nf4-gemm` picks 0.38.0 up.
+- **New: before-load planning.** `describe_moe`, `QLoRASetup`, `estimate_qlora_footprint` and
+  `prepare_qlora_training` describe a checkpoint's MoE structure and memory from its config and a `meta` module tree,
+  with no weights read, and hold the recipe's choices in one place.
+- **`serve_paged`.**
+  - `/health` reports the prefill routes the server resolves (`prefill_routes`).
+  - An opt-in first-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH=1`) engages only if it verifies bitwise against
+    eager at startup, and refuses otherwise. Its speed is for lane SC2b to read.
+- **Opt-in: the frozen expert absmax stored double-quantized** (`E4B_ABSMAX_DQ=1`). TC1 amendment 23 measured it on
+  Qwen3-30B-A3B: 1.812 GB → 0.460 GB, which brings e4b's peak to 0.43 GB above Unsloth's, all transient.
+
+**Readings in this release:**
+- **TC1c amendment 8.** On an H100 NVL at default settings on 0.45.0, e4b is faster per step than Unsloth: Unsloth/e4b
+  **1.061** [1.047, 1.075]. This is the new H100 position of record. It supersedes amendment 1's 0.817, which was read
+  on the fused kernels.
+- **TC2 amendment 8.** On Mixtral at default settings, Unsloth is faster: **0.836**. On Qwen3.6 at micro-batch 1, e4b is
+  2.05× faster (a labelled row).
+- **SC2** (#846), request-level serving on one RTX 5090. vLLM and SGLang hold the SLO to 8 req/s; e4b's `serve_paged`
+  holds it only to 1 req/s. Every miss is a TTFT miss, set by the prefill forward stalling running decodes.
+  - *Correction:* e4b ran SC1's prefill route pins, not the registered k19 + flash. Lane SC2b re-reads it on the
+    defaults, with and without the prefill graph.
+- **P55** (#344): the host-memory reading of the Gemma-4 load fault is REFUTED.
+- **#392:** the energy claim was remeasured on a released bitsandbytes. Decode is now at break-even (0.91–1.06×).
+- **moe-generalize.** MG1's regression anchors pass after #1048; there are more RTX A2000 ladders, and a portability
+  map.
 
 ### SC2b registered (#846): does a CUDA-graphed prefill chunk lift e4b `serve_paged`'s request-level capacity?
 
