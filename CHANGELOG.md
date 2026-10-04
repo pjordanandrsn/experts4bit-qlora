@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 23 — the memory census: with the absmax double-quantized, e4b's peak is 0.43 GB above Unsloth's, all transient (P41, P42 HELD; P43 FALSIFIED)
+
+- `tc1-5090-65` ($0.38): Qwen3-30B-A3B's matched set at micro-batch 1, one draw per arm, the allocator census on, no speed read.
+- Every static class is byte-for-byte the same in e4b and Unsloth except the expert absmax. e4b's fp32 absmax is exactly the
+  analytic 1.812 GB, and `E4B_ABSMAX_DQ=1` stores it in 0.460 GB (P41). At least 99.96 % of each peak is attributed (P42).
+- Peaks: e4b at defaults 26.02 GB, e4b with the absmax double-quantized 24.68 GB, Unsloth 24.24 GB. The 0.43 GB that remains is
+  transient, mostly grouped-nf4-gemm's padded LoRA delta in the adapters' fp32. That is below P43's [0.5, 2.5] GB band.
+- Row `e4b.train.memory-census.qwen3.5090.2026-10-04`. Results file `bench/h2h-2026-10-02/tc1/RESULTS-tc1-memcensus.md`.
+
+### serve_paged: `/health` reports the prefill routes the server resolves
+
+- **What.** `GET /health` gains a `prefill_routes` block, computed at each request by the same functions the forward
+  calls: `int4_prefill` (the resolved `E4B_INT4_PREFILL`), `int4_prefill_above_256_rows` (the route prefill calls
+  above 256 rows take when `device_grouping` is on), `prefill_attn` (the resolved `E4B_PAGED_PREFILL_ATTN`), the raw
+  environment values, and `device_grouping`. A route the environment makes invalid reads `invalid: …`.
+- **Why.** SC2's e4b arm inherited `E4B_INT4_PREFILL=loop` and `E4B_PAGED_PREFILL_ATTN=math` from the box script while
+  its registration said `k19` and `flash`. A box's environment is not evidence of the route the server took; the
+  server's own report is. Documented in `docs/SERVING.md`.
+
+### #392: the energy claim remeasured with a recorded, released bitsandbytes (bench and docs only)
+
+- **What.** The same NAS RTX A2000 and the unchanged `bench/_upstream/bench_energy.py`, run on **bitsandbytes 0.50.2**
+  with every version recorded, three passes. A per-process GPU monitor shows no other workload.
+- **Result.** `matmul_4bit` vs native bf16 total J/op:
+  - decode **0.91–1.06×** (break-even; the 0.50.0.dev0 fork read 1.18×);
+  - prefill 1.29–1.49×;
+  - train 1.64–2.15× (fork 2.25×).
+
+  The dequantize-then-linear arm reads decode 2.37–2.43×.
+- **Records.** New register row `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`. The fork-build row stands, and its
+  notes point here. METHODOLOGY §10 carries a dated note. The receipts are in `bench/energy-remeasure-2026-10-04/`.
+
 ### moe-generalize: five more RTX A2000 ladders, the dequantize-then-GEMM geometry and engagement on the hybrids (bench only; `bench/moegen/RESULTS-moegen-ladders.md`)
 
 - **Receipts:** the ERNIE-4.5, Nemotron-H and Qwen3.6 layer slices, OLMoE in the shipped bf16-adapter configuration, and LFM2's

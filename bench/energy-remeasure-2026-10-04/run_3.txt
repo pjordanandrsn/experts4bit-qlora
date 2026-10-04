@@ -1,0 +1,21 @@
+device: NVIDIA RTX A2000 12GB | bf16 | gate_up [2048,2048]
+idle power: 51.7 W
+
+--- fwd  M=1   (decode) ---
+                path |     ops/s |  power W |  J/op (tot) |  J/op (dyn) | vs native
+         native-bf16 |     24164 |     68.7 |  2842.86 uJ |   701.84 uJ |     1.00x
+     before(dequant) |     10019 |     69.2 |  6908.23 uJ |  1744.38 uJ |     2.43x
+  after(matmul_4bit) |     14292 |     43.1 |  3018.76 uJ |  -601.25 uJ |     1.06x
+
+--- fwd  M=512 (prefill) ---
+                path |     ops/s |  power W |  J/op (tot) |  J/op (dyn) | vs native
+         native-bf16 |      5280 |     69.5 | 13167.62 uJ |  3368.35 uJ |     1.00x
+     before(dequant) |      4082 |     69.5 | 17023.55 uJ |  4350.75 uJ |     1.29x
+  after(matmul_4bit) |      3516 |     68.8 | 19558.37 uJ |  4844.55 uJ |     1.49x
+
+--- fwd+bwd M=32 (train) ---
+                path |     ops/s |  power W |  J/op (tot) |  J/op (dyn) | vs native
+         native-bf16 |      4070 |     69.1 | 16966.99 uJ |  4254.89 uJ |     1.00x
+     before(dequant) |      3093 |     68.9 | 22274.19 uJ |  5548.85 uJ |     1.31x
+  after(matmul_4bit) |      2480 |     69.2 | 27904.38 uJ |  7041.66 uJ |     1.64x
+

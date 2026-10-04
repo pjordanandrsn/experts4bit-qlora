@@ -1,0 +1,17 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-65",
+ "instance_id": "54195008",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "595.71.05",
+ "cpu": "AMD EPYC 9454P 48-Core Emb Processor",
+ "nproc": 96,
+ "mem_total_kb": "527772888",
+ "cgroup_memory_max": "518820724736",
+ "disk_root": "overlay         320G   56M  320G   1% /",
+ "hostname": "16b54e775e08",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}

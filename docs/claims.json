@@ -740,8 +740,30 @@
       "supersedes": [
         "e4b.train.energy-honest"
       ],
-      "notes": "Scoped successor of e4b.train.energy-honest (2026-09-04): same numbers, comparator and version named, the universal 'GEMM runs in bf16 either way' mechanism dropped. Per arm from the receipt's table: the fork's matmul_4bit routing 1.18x decode / 1.29x prefill / 2.25x train; dequantize-then-linear 2.68x decode / 1.57x train -- the 1.2-2.3x headline is the receipt's own summary line and brackets the matmul_4bit arm; the dequantize arm's decode cell sits above it. The 4.4x inversion figure is independently measured by bench/bench_energy_excluded.py Part B (2311 -> 520 uJ/token). This is one card and one development build of a fork: it says nothing about bitsandbytes >= 0.50.0's direct packed-4-bit inference path for ordinary 2-D layers, about routed grouped MoE execution (grouped-nf4-gemm's contract), or about any other card. Receipt written 2026-07-01; the harness records the GPU name but not bitsandbytes.__version__ -- remeasure with a recorded version is tracked in e4b#392. MEASURED_ON (added 2026-09-05): the receipt's own date -- docs/METHODOLOGY.md section 10 (written 2026-07-01; re-registered with its comparator scoped 2026-09-04).",
+      "notes": "Scoped successor of e4b.train.energy-honest (2026-09-04): same numbers, comparator and version named, the universal 'GEMM runs in bf16 either way' mechanism dropped. Per arm from the receipt's table: the fork's matmul_4bit routing 1.18x decode / 1.29x prefill / 2.25x train; dequantize-then-linear 2.68x decode / 1.57x train -- the 1.2-2.3x headline is the receipt's own summary line and brackets the matmul_4bit arm; the dequantize arm's decode cell sits above it. The 4.4x inversion figure is independently measured by bench/bench_energy_excluded.py Part B (2311 -> 520 uJ/token). This is one card and one development build of a fork: it says nothing about bitsandbytes >= 0.50.0's direct packed-4-bit inference path for ordinary 2-D layers, about routed grouped MoE execution (grouped-nf4-gemm's contract), or about any other card. Receipt written 2026-07-01; the harness records the GPU name but not bitsandbytes.__version__ -- remeasured with a recorded version on 2026-10-04: e4b.train.energy-honest.a2000-bnb0502.2026-10-04 (#392). MEASURED_ON (added 2026-09-05): the receipt's own date -- docs/METHODOLOGY.md section 10 (written 2026-07-01; re-registered with its comparator scoped 2026-09-04).",
       "measured_on": "2026-07-01"
+    },
+    {
+      "id": "e4b.train.energy-honest.a2000-bnb0502.2026-10-04",
+      "area": "train",
+      "claim": "Remeasured with a recorded, released build (#392): on the same NAS RTX A2000 and the unchanged harness, with bitsandbytes 0.50.2, 4-bit expert projections cost 0.91-2.15x native bf16's GPU energy per op over three passes. bnb.matmul_4bit: decode M=1 0.91/1.04/1.06x (break-even; the 0.50.0.dev0 fork read 1.18x), prefill M=512 1.29/1.30/1.49x (fork 1.29x), train fwd+bwd M=32 1.86/2.15/1.64x (fork 2.25x). Dequantize-then-linear: decode 2.37-2.43x, prefill 1.29x, train 1.31-1.68x. The model already fits; one projection; one card.",
+      "value": "0.91-2.15",
+      "unit": "x GPU energy per op vs native bf16, model already fits (one-projection microbench), bnb.matmul_4bit over three passes",
+      "model": "one OLMoE-1B-7B-dims expert projection ([2*1024, 2048], synthetic weights)",
+      "hardware": "RTX A2000 12 GB (Ampere, 70 W cap, driver 575.64.05), in the NAS host; one card (the scoped row's card)",
+      "conditions": "bench/_upstream/bench_energy.py unchanged (sha256 ece6b5c8); experts4bit-qlora 0.45.0 @0c36bf8, bitsandbytes 0.50.2, torch 2.8.0+cu128, in a pytorch:2.8.0-cuda12.8-cudnn9-devel container; nvidia-smi power sampling, total J/op only; three passes 2026-10-04 19:50-19:54Z; nvidia-smi pmon logged every process: only the run's own appears",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/energy-remeasure-2026-10-04/README.md",
+        "bench/energy-remeasure-2026-10-04/run_1.txt",
+        "bench/energy-remeasure-2026-10-04/run_2.txt",
+        "bench/energy-remeasure-2026-10-04/run_3.txt",
+        "bench/energy-remeasure-2026-10-04/versions.txt",
+        "bench/_upstream/bench_energy.py"
+      ],
+      "notes": "Same harness and card as e4b.train.energy-honest.scoped-a2000 (2026-07-01, the fork build), which stands as measured for that build. Passes 2-3 started on a warm card (idle 51.7 W before pass 3; the train cell's native power rose 59.5 -> 69.1 W), so the train ratios drift across passes; pass 1 is the cleanest. pre_3.txt's 94%/68 W is pass 2's lagging average (pmon shows no other process). Not a statement about grouped MoE execution or other cards.",
+      "measured_on": "2026-10-04"
     },
     {
       "id": "e4b.retired.13.47x-training-speedup",
@@ -9488,6 +9510,31 @@
         "receipts/experts4bit-qlora/2026-10-04/tc1-5090-59/tc1/"
       ],
       "notes": "Vast invoiced $0.45."
+    },
+    {
+      "id": "e4b.train.memory-census.qwen3.5090.2026-10-04",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 23 (#835), one rented RTX 5090 (tc1-5090-65): a memory census of Qwen3-30B-A3B's matched set (642,514,944 fp32 adapters) at micro-batch 1 x accum 8, one draw per arm, the CUDA caching allocator's history recorded from before the load and reduced on the box (no speed read). Every static class is byte-for-byte the same in e4b and Unsloth 2026.9.14 except the expert absmax: frozen expert weights 14.496 GB, other frozen 1.738, adapters 2.570, their grads 2.570, optimizer state 1.305. e4b's fp32 absmax is exactly the analytic 1.812 GB and E4B_ABSMAX_DQ=1 stores it in 0.460 GB, as Unsloth does (P41 HELD); at least 99.96 % of each peak is attributed to named groups (P42 HELD). Peaks: e4b at defaults 26.022 GB, e4b with E4B_ABSMAX_DQ=1 24.676 GB, Unsloth 24.244 GB, so with the absmax double-quantized e4b sits 0.431 GB above Unsloth, all of it transient (P43 FALSIFIED below its [0.5, 2.5] GB band): e4b's largest transients are grouped-nf4-gemm's padded LoRA delta (the zero-padded input block in the adapters' fp32, 0.62 GB x2 live, and the batched products' outputs, 0.45 GB x3), Unsloth's its NF4 dequant (0.81 GB). At e4b's defaults the gap is 1.778 GB, 1.352 GB of it the fp32 absmax. A measurement, not a position; each fix it names is its own A/B.",
+      "value": 0.431,
+      "unit": "GB, peak allocated e4b (E4B_ABSMAX_DQ=1) minus Unsloth at micro-batch 1 x accum 8 (1.778 GB at e4b's defaults)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-65: instance 54195008, AMD EPYC 9454P); e4b @ a35a597 + grouped-nf4-gemm 0.38.0 @ bb56b42 on torch 2.8.0+cu128, Unsloth 2026.9.14 + unsloth_zoo 2026.9.9 on torch 2.12.1+cu130 (grouped_mm)",
+      "conditions": "bench/tc1 token qwen3memcensus (TC1 amendment 23): TC1's tokens at micro-batch 1 x accum 8 (the field recipe's tokens per step), matched work, init and fp32 adapters; tc1_arm.py --mem-census 1 on every arm (torch.cuda.memory._record_memory_history from before the load, max_entries 1,000,000, snapshots on 32 MiB growth reduced on the box; a static census by class at the end of setup and of training); validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-memcensus.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-65/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-65/tc1/"
+      ],
+      "notes": "Vast invoiced $0.38."
     },
     {
       "package": "experts4bit-qlora",

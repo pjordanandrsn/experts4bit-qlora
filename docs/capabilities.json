@@ -270,7 +270,8 @@
     "e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.absmax-dq",
     "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.fit-mb1-dq-frozen4",
     "e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default",
-    "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.mb1-dq-frozen4"
+    "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.mb1-dq-frozen4",
+    "e4b.train.memory-census.qwen3.5090.2026-10-04"
    ],
    "limitations": [
     "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",
