@@ -379,6 +379,7 @@ class PagedModelRunner(StepRunner):
                     set_context(prev)
                     kv.graph_bucket_unbind()
                 stats["eager_steps"] += 1
+            kv.graph_bucket_publish(buf["st"])     # E4B_KV_STEP_SELECT: the step's +1, every layer at once
             stats["rows"] += n
             stats["pad_rows"] += pad
             toks = buf["tok"][:n].tolist()

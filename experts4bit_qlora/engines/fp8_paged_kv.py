@@ -78,6 +78,19 @@ def _resolve_fused_append(env, device_str, kernel_present) -> bool:
 _KERNEL_KW_CACHE: dict = {}
 
 
+def _step_select_env(value) -> bool:
+    """``E4B_KV_STEP_SELECT`` (SC1b's lever; opt-in): with a decode-graph bucket bound, select the active set's
+    block-table and seq-lens rows for EVERY layer once per step (outside the graph, in :meth:`graph_bucket_load`) and
+    publish the step's +1 to every layer's lengths once after it (:meth:`graph_bucket_publish`), instead of two
+    ``index_select`` per layer in :meth:`kernel_args` and one ``index_add_`` per layer in :meth:`append_graph_bt1`.
+    The kernels see the same values: the append writes at the pre-step length, and attention reads pre-step + 1.
+    ``1`` turns it on; ``0``, unset or empty keeps the per-layer form. Anything else is refused."""
+    v = (value or "0").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"E4B_KV_STEP_SELECT={value!r}: expected '0' or '1'")
+    return v == "1"
+
+
 def _parity_options_in_use(kw) -> list:
     """Which of the parity options an attention call actually carries: a
     window is in use when it is a positive width; sinks are in use when a
@@ -260,9 +273,11 @@ class Fp8PagedKV:
         # block tables live on-device and are written IN PLACE when a block
         # opens (one scalar copy per 16 tokens) — rebuilding [B, blocks]
         # tables per decode step would be an H2D per layer per step
-        self.block_table = [torch.zeros(slots_total, self.blocks_per_seq,
-                                        dtype=torch.int32, device=self.device)
-                            for _ in range(n_layers)]
+        # ONE [L, slots, blocks] tensor, exposed per layer as views: every in-place write through block_table[layer]
+        # lands in it, so a decode step can select the active set's rows for all layers in one launch
+        # (E4B_KV_STEP_SELECT)
+        self._bt_all = torch.zeros(n_layers, slots_total, self.blocks_per_seq, dtype=torch.int32, device=self.device)
+        self.block_table = [self._bt_all[layer] for layer in range(n_layers)]
         self.seq_lens = torch.zeros(n_layers, slots_total, dtype=torch.int32,
                                     device=self.device)
         self._seen = [[0] * slots_total for _ in range(n_layers)]
@@ -299,6 +314,8 @@ class Fp8PagedKV:
                              if self.scratch else None)
         self._g_sel = None           # a bound decode-graph bucket's selector
         self._g_buckets: dict[int, dict] = {}
+        self._step_select = _step_select_env(os.environ.get("E4B_KV_STEP_SELECT"))
+        self._g_step = None          # the bound bucket's step-level selection, under E4B_KV_STEP_SELECT
 
     # ---------------------------------------------------------------- write --
     def _quant_bytes(self, x, groups):
@@ -635,8 +652,9 @@ class Fp8PagedKV:
                               self.block_table[layer], self._g_slot_idx,
                               self.seq_lens[layer], self.k_row,
                               self._k_pays[layer], self.bt, self.kgs[layer])
-            self.seq_lens[layer].index_add_(0, self._g_slot_l,
-                                            self._g_slot_ones)
+            if self._g_step is None:     # under E4B_KV_STEP_SELECT the step publishes once, after it
+                self.seq_lens[layer].index_add_(0, self._g_slot_l,
+                                                self._g_slot_ones)
             return
         for i, s_ in enumerate(slots):
             self._g_seq = s_
@@ -742,6 +760,11 @@ class Fp8PagedKV:
                   "ones": torch.ones(b, dtype=torch.int32, device=dev),
                   "host": torch.zeros(b, dtype=torch.int64).pin_memory()
                   if torch.device(dev).type == "cuda" else torch.zeros(b, dtype=torch.int64)}
+            if self._step_select:
+                # this step's rows of every layer's table and lengths (attention's view), and the publish increment
+                st["tbl"] = torch.zeros(self.L, b, self.blocks_per_seq, dtype=torch.int32, device=dev)
+                st["lens"] = torch.zeros(self.L, b, dtype=self.seq_lens.dtype, device=dev)
+                st["ones_lb"] = torch.ones(self.L, b, dtype=self.seq_lens.dtype, device=dev)
             self._g_buckets[b] = st
         return st
 
@@ -769,9 +792,11 @@ class Fp8PagedKV:
         self._bt1_append = self._fused_append
         self._g_slot_idx, self._g_slot_l = st["slot_idx"], st["slot_l"]
         self._g_slot_ones, self._g_sel = st["ones"], st["slot_l"]
+        self._g_step = st if self._step_select else None
 
     def graph_bucket_unbind(self) -> None:
         self._g_sel = None
+        self._g_step = None
 
     def graph_bucket_load(self, st: dict, slots) -> None:
         """Write this step's slot ids into the bucket's device tensors
@@ -783,6 +808,19 @@ class Fp8PagedKV:
         st["slot_l"].copy_(host, non_blocking=True)
         st["slot_idx"].copy_(st["slot_l"])
         self.reset_scratch_lens()
+        if self._step_select:
+            # the step's selection, for every layer at once and outside any graph: the rows of the block tables, and
+            # the lengths each layer's attention reads after that layer appends this step's token (pre-step + 1)
+            torch.index_select(self._bt_all, 1, st["slot_l"], out=st["tbl"])
+            torch.index_select(self.seq_lens, 1, st["slot_l"], out=st["lens"])
+            st["lens"].add_(1)
+
+    def graph_bucket_publish(self, st: dict) -> None:
+        """After a bucket step under ``E4B_KV_STEP_SELECT``: every layer's lengths advance by the step's one token,
+        in one launch (the per-layer ``index_add_`` in :meth:`append_graph_bt1` is skipped while the step runs, so
+        each layer's append still writes at its pre-step length). A no-op without the switch."""
+        if self._step_select:
+            self.seq_lens.index_add_(1, st["slot_l"], st["ones_lb"])
 
     def reset_scratch_lens(self) -> None:
         if self._scratch_idx is not None:
@@ -801,6 +839,11 @@ class Fp8PagedKV:
         silently attends one sequence over another's KV, and it reads as
         a model that starts coherent and degenerates."""
         tbl, lens = self.block_table[layer], self.seq_lens[layer]
+        st = self._g_step
+        if slots is not None and st is not None and len(slots) == st["b"]:
+            # E4B_KV_STEP_SELECT: this layer's slice of the step's selection (no launch); the lengths already count
+            # this layer's appended token
+            return (self.kp.dev[layer].flatten(), self.vp.dev[layer].flatten(), st["tbl"][layer], st["lens"][layer])
         if slots is None and self.n_scratch:
             # scratch slots trail the real ones; the no-slots form keeps
             # meaning "the batch", exactly as before they existed

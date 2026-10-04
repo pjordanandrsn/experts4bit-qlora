@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+### `E4B_KV_STEP_SELECT=1`: a decode-graph bucket's KV-table selection once per step instead of once per layer (opt-in; default unchanged)
+
+- **Why.** SC1b's read (#993) put about 0.8 ms of e4b's B=16 decode step on an RTX 5090 in `fp8_paged_kv.py`: each layer
+  re-selects the active set's block-table and seq-lens rows (two `index_select`) and publishes its length with one
+  `seq_lens.index_add_`. That is 97 + 48 launches a step on Qwen3-30B-A3B. The active set is fixed for the whole step.
+- **What.** With the switch on and a decode-graph bucket bound:
+  - `Fp8PagedKV.graph_bucket_load` selects every layer's rows in one launch each, outside the graph. It stores the lengths
+    attention reads, pre-step + 1.
+  - `kernel_args` hands each layer its slice, with no launch.
+  - `append_graph_bt1` skips its per-layer `index_add_`.
+  - The new `graph_bucket_publish`, called by the runner after every bucket step, advances every layer's lengths in one
+    launch.
+  - The kernels see the same values: each append writes at its pre-step length and attention reads pre-step + 1. Tokens
+    must therefore be identical.
+- **The storage change.** The per-layer block tables are now views of one `[L, slots, blocks]` tensor (`_bt_all`), so one
+  select covers every layer. Every existing write is in place through `block_table[layer]` and lands in it.
+- **Tests** (`tests/test_kv_step_select.py`).
+  - On CPU:
+    - the stacked table's views;
+    - the selection against what each layer would select after its own append;
+    - `kernel_args` handing out the slices;
+    - the publish touching exactly the bucket's slots;
+    - the switch's parsing and refusal;
+    - nothing changing with the switch off.
+  - On sm_89+: a tiny Qwen3 decodes identical tokens with the switch on and off, through captured graphs and through the
+    padded eager step.
+- **Next.** A lane reads the exactness and speed on an RTX 5090 through the default server before the default moves.
+
 ## 0.43.0 — 2026-10-03 — `serve_paged` captures bucketed decode graphs by default (`E4B_PAGED_GRAPHS=auto`): ×5.60 the old eager default with 16 concurrent requests and ×9.02 with one on an RTX 5090, at no measured quality cost (lanes P109, P110); e4b's training lead over axolotl's scattermoe replicates on a second host
 
 **0.43.0.** One default changes. `serve_paged` now decodes with bucketed CUDA graphs on a CUDA device at the `all-vram`
