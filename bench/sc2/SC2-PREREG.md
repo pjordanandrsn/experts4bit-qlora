@@ -147,3 +147,26 @@ PROVED requires every server's smokes to pass. A server that fails is amended be
 - gpt-oss (SC1g).
 - Rates beyond 8 req/s.
 - Quality, which is SC1's.
+
+## Amendments
+
+- **A1 (written AFTER the first proof, `sc2-prove-1`, before any reading; harness only).** `sc2-prove-1` (2026-10-04,
+  $0.92) read HARNESS_ERROR, NOT PROVED. The vLLM and SGLang servers passed both smokes with every request VALID. Two
+  servers failed for harness reasons, and a third defect was found on review of the same path:
+  1. **e4b's server never started:** `No module named 'uvicorn'`. SC1 drove e4b's scheduler in-process, so its venv
+     never had `serve_paged`'s web stack. Box E now installs e4b's `serve` extra, pinned (`fastapi==0.141.1`,
+     `uvicorn==0.54.0`), beside `aiohttp==3.14.3`, and import-checks all three.
+  2. **llama.cpp: every other request failed** with `ServerDisconnectedError`. Its server closes the connection after a
+     streamed response without saying so, and the driver's pooled keep-alive socket failed the next request. The
+     driver now opens a fresh connection for every request on every engine (`force_close`); over loopback that costs
+     well under a millisecond. The three requests that did complete were VALID, each with one empty-text finish chunk,
+     which the driver counts and does not time.
+  3. **e4b readiness (found on review, never reached):** `serve_paged` answers `/health` with HTTP 200 while the engine
+     is still loading (`"status": "loading"`; generation returns 503 until it is ready). Waiting for HTTP 200 would
+     have driven e4b mid-load. Box E now waits for status `ready` and fails on `error`.
+
+  Nothing in the rule, the plan, the predictions or the engines' settings changes. The proof reruns as `sc2-prove-2`
+  under the same guard (1.25 h ≤ $0.94), and the reading follows only on PROVED. Lane spend so far is $0.92; with the
+  rerun, the guards total $4.13, still inside the $15 no-ask tier. **Seen, not read** (proof smokes on Granite token
+  ids fed to Qwen3; shakedown values, not data): vLLM serial p50 TTFT 0.051 s and TPOT 3.47 ms, at 4 req/s 0.061 s and
+  5.30 ms; SGLang serial 0.033 s and 3.26 ms, at 4 req/s 0.038 s and 5.36 ms.
