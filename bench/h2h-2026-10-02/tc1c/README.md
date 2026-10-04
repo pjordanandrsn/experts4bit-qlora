@@ -8,6 +8,32 @@ frameworks, Unsloth 2026.9.14 on torch 2.12.1+cu130 with `grouped_mm` engaged on
 (AMD EPYC 9534, 224 vCPU, 1.58 TB host RAM, driver 595.71.05), $4.88. The first draw (`tc1c-h100-1`) was refused at $0 before any
 instance existed (its manifest carried the 5090 pre-flight exclusion receipts, not same-class for an H100).
 
+## Amendment 7 (2026-10-04): the H100 at default settings on 0.45.0 — `auto` takes the route (P22 HELD), but the box is not quoted (P21 UNTESTED, P23 FALSIFIED)
+
+Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 7.
+
+**The box.** `tc1c-h100-11`: an H100 NVL (instance 54150922, AMD EPYC 9534, driver 595.71.05), e4b 0.45.0's code (`3171621`), grouped-nf4-gemm
+v0.37.0 (`71185d6`), nothing set: no `TC1_E4B_ENV`, `GNF4_TRAIN_GEMM` unset. HF and axolotl were skipped. Vast invoiced $2.15. Receipts:
+[`receipts/tc1c-h100-11/`](receipts/tc1c-h100-11/).
+
+| | e4b `fused_attn4_m` (default) | Unsloth `ckpt_unsloth_m` |
+|---|---|---|
+| s/step, two draws | 2.540 / 2.414 (**5.1 % apart**) | 2.537 / 2.552 |
+| peak VRAM | 27.21 / 27.19 GB | 24.27 GB |
+| held-out at N = 20 | 0.8484 / 0.8474 | 0.8545 / 0.8510 |
+
+- **P22 HELD.** With nothing set, `route_ab` names `grouped_mm` on every e4b fused arm, with amendment 6's 16,896 forward and 7,680
+  dgrad calls, and none on the reference arm. This is the first time `auto`'s capability check ran on a card that takes the route.
+- **P21 UNTESTED.** e4b's two draws differ by 5.1 %, over the 5 % stability rule, so no position is quoted. The pooled ratio would be
+  about 1.03, as in amendment 6, but it is reported, not quoted.
+- **P23 FALSIFIED.** Unsloth's first draw reads COMPARABLE: held-out Δ 0.0061 against a band of 0.0054. The band is narrow because
+  e4b's fused-vs-reference Δ was small on this box. The reference is INSIDE-DRAW-NOISE, and Unsloth's second draw sits at 0.0027 to e4b.
+- **The receipt reads ALARM.** The workload finished (its success marker is present), but the teardown went through the emergency
+  retry loop. The destroy call answered 404, and the listing then proved the instance absent. The arm receipts are unaffected.
+
+**Decision, as registered.** The box is not quoted. Amendment 1's 0.817 stays the default-settings row (it read the fused
+kernels); amendment 6's `.route-v2` (1.030) stays labelled beside it. Amendment 8 re-asks the same box once.
+
 ## Amendment 6 (2026-10-04): with the dequant at bandwidth the grouped_mm route makes e4b faster than Unsloth on the H100 — 1.030 alone, 1.325 with MoE-keep — P18, P19 and P20 HELD
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 6.

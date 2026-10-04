@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Read: TC1c amendment 7 — `auto` takes the grouped_mm route on an H100 with nothing set (P22 HELD); the box is not quoted (P21 UNTESTED, P23 FALSIFIED). Amendment 8 registered
+
+- **The box.** `tc1c-h100-11` ($2.15 invoiced) ran e4b 0.45.0 with grouped-nf4-gemm 0.37.0 and nothing set. Every e4b fused arm took
+  the route (16,896 forward and 7,680 dgrad calls).
+- **Not quoted.** e4b's draws were 5.1 % apart, over the 5 % rule; the pooled ratio of about 1.03 is reported, not quoted. Unsloth's
+  first draw read COMPARABLE (0.0061 against a 0.0054 band). The receipt reads ALARM: its teardown took the emergency retry path,
+  and the instance was proven absent.
+- **Amendment 8** re-asks the same box once, the last re-ask under these rules. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ### `llms-full.txt`'s size cap raised from 500,000 to 600,000 bytes
 
 - The bundle reached 499,973 bytes, and every read PR adds register rows to it. The cap was last raised (from 400,000) on 2026-10-01,
