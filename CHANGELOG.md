@@ -14,6 +14,19 @@
   under SC2's int4 stack with the routes unset. `bench/prefill-graph-census-2026-10-04/`. No claim row; nothing about
   speed.
 
+### TC1 amendment 24 registered: the RTX 5090's fp32 `bmm` host cost and the torch 2.12 environment, on one RTX 5090 (P44–P49) (bench and tests only)
+
+- **Why.** On both 5090 profiles the largest single e4b host row is `aten::bmm` in grouped-nf4-gemm's padded LoRA delta on the matched
+  arm's fp32 adapters: 197–324 µs of host time per call, against 15 µs for bf16 on the same box and 30 µs for fp32 on an H100. The
+  launch APIs read 2.5–6 µs a call, so this is not backpressure. TC1's native box also read e4b's matched arm 0.864× faster on torch
+  2.12.1+cu130 than on torch 2.8.0+cu128; that reading was never attributed. Every 5090 position runs e4b on torch 2.8 and Unsloth on 2.12.1.
+- **Token `qwen3bmmab`.** First a replay with no model, `bench/tc1/bmm_bench.py`. It times the delta's `bmm` at the 96 recorded
+  real-router shapes in fresh processes, in fp32, bf16, under cublasLt and under TF32, on new, repeated, fixed and bucketed shapes, in both
+  environments. Then the matched and shipped arms on venv-e4b against venv-unsloth, two draws a side.
+- **Predictions.** P44: the fp32 call's host time reproduces outside training. P45: it is paid per new shape. P46: torch 2.12 removes it.
+  P47: the matched arm gains 0.70–0.95×. P48: the shipped arm gains at least 0.05 less. P49: held-out moves at most 0.01. The reducer
+  scores all six (four new self-test cases, including the fallen-back venv and an off-card replay).
+
 ### Read: TC1 amendment 23 — the memory census: with the absmax double-quantized, e4b's peak is 0.43 GB above Unsloth's, all transient (P41, P42 HELD; P43 FALSIFIED)
 
 - `tc1-5090-65` ($0.38): Qwen3-30B-A3B's matched set at micro-batch 1, one draw per arm, the allocator census on, no speed read.
