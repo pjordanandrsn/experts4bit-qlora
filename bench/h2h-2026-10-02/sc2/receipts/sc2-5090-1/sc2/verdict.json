@@ -1,0 +1,1117 @@
+{
+ "engines": {
+  "e4b_int4": {
+   "rows": {
+    "serial": {
+     "draws": [
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.292741,
+       "ttft_p99_s": 0.368027,
+       "tpot_p50_s": 0.004554,
+       "tpot_p99_s": 0.005112,
+       "e2el_p50_s": 1.146247,
+       "output_tok_s": 161.952,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 0.9328
+      },
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.246024,
+       "ttft_p99_s": 0.277007,
+       "tpot_p50_s": 0.004473,
+       "tpot_p99_s": 0.004883,
+       "e2el_p50_s": 1.019321,
+       "output_tok_s": 168.197,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 0.9913
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.269382,
+      "tpot_p50_s": 0.004514,
+      "output_tok_s": 165.0745,
+      "attainment": 1.0
+     },
+     "status": "UNSTABLE",
+     "why": [
+      "p50 TTFT 0.292741 vs 0.246024"
+     ]
+    },
+    "1": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.29049,
+       "ttft_p99_s": 0.789379,
+       "tpot_p50_s": 0.007763,
+       "tpot_p99_s": 0.033105,
+       "e2el_p50_s": 1.640957,
+       "output_tok_s": 147.769,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.278652,
+       "ttft_p99_s": 1.021937,
+       "tpot_p50_s": 0.00833,
+       "tpot_p99_s": 0.03265,
+       "e2el_p50_s": 1.621161,
+       "output_tok_s": 163.866,
+       "attainment": 0.9833,
+       "goodput_rps": 0.9833,
+       "achieved_rate": 1.049
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.284571,
+      "tpot_p50_s": 0.008046,
+      "output_tok_s": 155.8175,
+      "attainment": 0.99165,
+      "goodput_rps": 0.99165
+     },
+     "tpot_spread": 0.0681,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "2": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 1.478209,
+       "ttft_p99_s": 4.168285,
+       "tpot_p50_s": 0.032255,
+       "tpot_p99_s": 0.05194,
+       "e2el_p50_s": 6.802324,
+       "output_tok_s": 389.834,
+       "attainment": 0.3417,
+       "goodput_rps": 0.6833,
+       "achieved_rate": 2.3172
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.533852,
+       "ttft_p99_s": 1.747702,
+       "tpot_p50_s": 0.021766,
+       "tpot_p99_s": 0.048146,
+       "e2el_p50_s": 4.140543,
+       "output_tok_s": 309.146,
+       "attainment": 0.8083,
+       "goodput_rps": 1.6167,
+       "achieved_rate": 1.887
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 1.006031,
+      "tpot_p50_s": 0.02701,
+      "output_tok_s": 349.49,
+      "attainment": 0.575,
+      "goodput_rps": 1.15
+     },
+     "tpot_spread": 0.3252,
+     "tpot_spread_over_band": true,
+     "meets_capacity": false,
+     "status": "UNSTABLE",
+     "why": [
+      "attainment 0.3417 vs 0.8083 (tolerance 0.081)"
+     ]
+    },
+    "4": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 11.002869,
+       "ttft_p99_s": 22.571921,
+       "tpot_p50_s": 0.039844,
+       "tpot_p99_s": 0.056187,
+       "e2el_p50_s": 17.903013,
+       "output_tok_s": 374.339,
+       "attainment": 0.075,
+       "goodput_rps": 0.3,
+       "achieved_rate": 4.3191
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 5.900712,
+       "ttft_p99_s": 14.487324,
+       "tpot_p50_s": 0.037559,
+       "tpot_p99_s": 0.048604,
+       "e2el_p50_s": 11.926538,
+       "output_tok_s": 392.619,
+       "attainment": 0.1,
+       "goodput_rps": 0.4,
+       "achieved_rate": 3.3935
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 8.451791,
+      "tpot_p50_s": 0.038701,
+      "output_tok_s": 383.479,
+      "attainment": 0.0875,
+      "goodput_rps": 0.35
+     },
+     "tpot_spread": 0.0573,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    },
+    "8": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 17.22924,
+       "ttft_p99_s": 33.625548,
+       "tpot_p50_s": 0.040334,
+       "tpot_p99_s": 0.058408,
+       "e2el_p50_s": 21.989162,
+       "output_tok_s": 349.228,
+       "attainment": 0.0167,
+       "goodput_rps": 0.1333,
+       "achieved_rate": 8.1031
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 17.999113,
+       "ttft_p99_s": 32.507946,
+       "tpot_p50_s": 0.037077,
+       "tpot_p99_s": 0.055055,
+       "e2el_p50_s": 23.159555,
+       "output_tok_s": 403.601,
+       "attainment": 0.0333,
+       "goodput_rps": 0.2667,
+       "achieved_rate": 7.9732
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 17.614176,
+      "tpot_p50_s": 0.038706,
+      "output_tok_s": 376.4145,
+      "attainment": 0.025,
+      "goodput_rps": 0.2
+     },
+     "tpot_spread": 0.0808,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    }
+   },
+   "ceiling": 1
+  },
+  "vllm": {
+   "rows": {
+    "serial": {
+     "draws": [
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.053389,
+       "ttft_p99_s": 0.067005,
+       "tpot_p50_s": 0.00349,
+       "tpot_p99_s": 0.003543,
+       "e2el_p50_s": 0.684994,
+       "output_tok_s": 264.155,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.5231
+      },
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.050685,
+       "ttft_p99_s": 0.06032,
+       "tpot_p50_s": 0.003504,
+       "tpot_p99_s": 0.003522,
+       "e2el_p50_s": 0.654173,
+       "output_tok_s": 264.789,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.5597
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.052037,
+      "tpot_p50_s": 0.003497,
+      "output_tok_s": 264.472,
+      "attainment": 1.0
+     },
+     "status": "VALID",
+     "why": []
+    },
+    "1": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.052899,
+       "ttft_p99_s": 0.101136,
+       "tpot_p50_s": 0.004237,
+       "tpot_p99_s": 0.005452,
+       "e2el_p50_s": 0.753194,
+       "output_tok_s": 148.377,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.053135,
+       "ttft_p99_s": 0.101209,
+       "tpot_p50_s": 0.004089,
+       "tpot_p99_s": 0.006748,
+       "e2el_p50_s": 0.68015,
+       "output_tok_s": 164.355,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 1.049
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.053017,
+      "tpot_p50_s": 0.004163,
+      "output_tok_s": 156.366,
+      "attainment": 1.0,
+      "goodput_rps": 1.0
+     },
+     "tpot_spread": 0.0349,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "2": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.05347,
+       "ttft_p99_s": 0.111097,
+       "tpot_p50_s": 0.005461,
+       "tpot_p99_s": 0.007227,
+       "e2el_p50_s": 0.955466,
+       "output_tok_s": 396.284,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 2.3172
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.057445,
+       "ttft_p99_s": 0.123281,
+       "tpot_p50_s": 0.005145,
+       "tpot_p99_s": 0.006935,
+       "e2el_p50_s": 0.929279,
+       "output_tok_s": 314.118,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 1.887
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.055457,
+      "tpot_p50_s": 0.005303,
+      "output_tok_s": 355.201,
+      "attainment": 1.0,
+      "goodput_rps": 2.0
+     },
+     "tpot_spread": 0.0579,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "4": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.056677,
+       "ttft_p99_s": 0.111183,
+       "tpot_p50_s": 0.006705,
+       "tpot_p99_s": 0.00905,
+       "e2el_p50_s": 1.210682,
+       "output_tok_s": 673.544,
+       "attainment": 1.0,
+       "goodput_rps": 4.0,
+       "achieved_rate": 4.3192
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.058033,
+       "ttft_p99_s": 0.124386,
+       "tpot_p50_s": 0.006027,
+       "tpot_p99_s": 0.008429,
+       "e2el_p50_s": 1.105486,
+       "output_tok_s": 561.407,
+       "attainment": 1.0,
+       "goodput_rps": 4.0,
+       "achieved_rate": 3.3935
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.057355,
+      "tpot_p50_s": 0.006366,
+      "output_tok_s": 617.4755,
+      "attainment": 1.0,
+      "goodput_rps": 4.0
+     },
+     "tpot_spread": 0.1011,
+     "tpot_spread_over_band": true,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "8": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.087285,
+       "ttft_p99_s": 0.746469,
+       "tpot_p50_s": 0.009532,
+       "tpot_p99_s": 0.011559,
+       "e2el_p50_s": 1.512625,
+       "output_tok_s": 1121.776,
+       "attainment": 1.0,
+       "goodput_rps": 8.0,
+       "achieved_rate": 8.1029
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.372085,
+       "ttft_p99_s": 1.020581,
+       "tpot_p50_s": 0.010637,
+       "tpot_p99_s": 0.011922,
+       "e2el_p50_s": 2.152844,
+       "output_tok_s": 1223.531,
+       "attainment": 0.9833,
+       "goodput_rps": 7.8667,
+       "achieved_rate": 7.9734
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.229685,
+      "tpot_p50_s": 0.010084,
+      "output_tok_s": 1172.6535,
+      "attainment": 0.99165,
+      "goodput_rps": 7.93335
+     },
+     "tpot_spread": 0.1039,
+     "tpot_spread_over_band": true,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    }
+   },
+   "ceiling": 8
+  },
+  "sglang": {
+   "rows": {
+    "serial": {
+     "draws": [
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.034423,
+       "ttft_p99_s": 0.035957,
+       "tpot_p50_s": 0.003268,
+       "tpot_p99_s": 0.003311,
+       "e2el_p50_s": 0.629029,
+       "output_tok_s": 289.684,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.6716
+      },
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.034534,
+       "ttft_p99_s": 0.036318,
+       "tpot_p50_s": 0.003278,
+       "tpot_p99_s": 0.003288,
+       "e2el_p50_s": 0.598807,
+       "output_tok_s": 288.531,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.6998
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.034479,
+      "tpot_p50_s": 0.003273,
+      "output_tok_s": 289.1075,
+      "attainment": 1.0
+     },
+     "status": "VALID",
+     "why": []
+    },
+    "1": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.035566,
+       "ttft_p99_s": 0.061757,
+       "tpot_p50_s": 0.004013,
+       "tpot_p99_s": 0.005513,
+       "e2el_p50_s": 0.693506,
+       "output_tok_s": 148.464,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.035983,
+       "ttft_p99_s": 0.061047,
+       "tpot_p50_s": 0.003711,
+       "tpot_p99_s": 0.006796,
+       "e2el_p50_s": 0.629891,
+       "output_tok_s": 164.448,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 1.049
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.035775,
+      "tpot_p50_s": 0.003862,
+      "output_tok_s": 156.456,
+      "attainment": 1.0,
+      "goodput_rps": 1.0
+     },
+     "tpot_spread": 0.0753,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "2": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.038324,
+       "ttft_p99_s": 0.065972,
+       "tpot_p50_s": 0.005542,
+       "tpot_p99_s": 0.007437,
+       "e2el_p50_s": 0.934447,
+       "output_tok_s": 396.719,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 2.3172
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.037692,
+       "ttft_p99_s": 0.060676,
+       "tpot_p50_s": 0.005166,
+       "tpot_p99_s": 0.007248,
+       "e2el_p50_s": 0.869963,
+       "output_tok_s": 314.326,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 1.887
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.038008,
+      "tpot_p50_s": 0.005354,
+      "output_tok_s": 355.5225,
+      "attainment": 1.0,
+      "goodput_rps": 2.0
+     },
+     "tpot_spread": 0.0678,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "4": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.043185,
+       "ttft_p99_s": 0.083505,
+       "tpot_p50_s": 0.007135,
+       "tpot_p99_s": 0.009453,
+       "e2el_p50_s": 1.252524,
+       "output_tok_s": 672.924,
+       "attainment": 1.0,
+       "goodput_rps": 4.0,
+       "achieved_rate": 4.3192
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.039695,
+       "ttft_p99_s": 0.065126,
+       "tpot_p50_s": 0.006266,
+       "tpot_p99_s": 0.008459,
+       "e2el_p50_s": 1.10151,
+       "output_tok_s": 562.236,
+       "attainment": 1.0,
+       "goodput_rps": 4.0,
+       "achieved_rate": 3.3935
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.04144,
+      "tpot_p50_s": 0.0067,
+      "output_tok_s": 617.58,
+      "attainment": 1.0,
+      "goodput_rps": 4.0
+     },
+     "tpot_spread": 0.1218,
+     "tpot_spread_over_band": true,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "8": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.05371,
+       "ttft_p99_s": 0.747508,
+       "tpot_p50_s": 0.010072,
+       "tpot_p99_s": 0.01174,
+       "e2el_p50_s": 1.575468,
+       "output_tok_s": 1113.714,
+       "attainment": 1.0,
+       "goodput_rps": 8.0,
+       "achieved_rate": 8.1026
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.280742,
+       "ttft_p99_s": 0.929086,
+       "tpot_p50_s": 0.010635,
+       "tpot_p99_s": 0.011601,
+       "e2el_p50_s": 2.04241,
+       "output_tok_s": 1214.023,
+       "attainment": 1.0,
+       "goodput_rps": 8.0,
+       "achieved_rate": 7.9729
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.167226,
+      "tpot_p50_s": 0.010353,
+      "output_tok_s": 1163.8685,
+      "attainment": 1.0,
+      "goodput_rps": 8.0
+     },
+     "tpot_spread": 0.0529,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    }
+   },
+   "ceiling": 8
+  },
+  "llamacpp": {
+   "rows": {
+    "serial": {
+     "draws": [
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.091142,
+       "ttft_p99_s": 0.117364,
+       "tpot_p50_s": 0.003073,
+       "tpot_p99_s": 0.003125,
+       "e2el_p50_s": 0.649199,
+       "output_tok_s": 281.074,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.6205
+      },
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.098677,
+       "ttft_p99_s": 0.514934,
+       "tpot_p50_s": 0.003057,
+       "tpot_p99_s": 0.003128,
+       "e2el_p50_s": 0.636127,
+       "output_tok_s": 267.42,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.5746
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.09491,
+      "tpot_p50_s": 0.003065,
+      "output_tok_s": 274.247,
+      "attainment": 1.0
+     },
+     "status": "VALID",
+     "why": []
+    },
+    "1": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.097429,
+       "ttft_p99_s": 0.33897,
+       "tpot_p50_s": 0.010275,
+       "tpot_p99_s": 0.026695,
+       "e2el_p50_s": 1.757862,
+       "output_tok_s": 146.921,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.106937,
+       "ttft_p99_s": 0.273236,
+       "tpot_p50_s": 0.013803,
+       "tpot_p99_s": 0.030034,
+       "e2el_p50_s": 1.529072,
+       "output_tok_s": 164.404,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 1.049
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.102183,
+      "tpot_p50_s": 0.012039,
+      "output_tok_s": 155.6625,
+      "attainment": 1.0,
+      "goodput_rps": 1.0
+     },
+     "tpot_spread": 0.2556,
+     "tpot_spread_over_band": true,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "2": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.158687,
+       "ttft_p99_s": 1.194422,
+       "tpot_p50_s": 0.027676,
+       "tpot_p99_s": 0.032503,
+       "e2el_p50_s": 4.571081,
+       "output_tok_s": 380.971,
+       "attainment": 0.9667,
+       "goodput_rps": 1.9333,
+       "achieved_rate": 2.3172
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.143938,
+       "ttft_p99_s": 0.708288,
+       "tpot_p50_s": 0.028968,
+       "tpot_p99_s": 0.037533,
+       "e2el_p50_s": 5.198907,
+       "output_tok_s": 301.776,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 1.887
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.151313,
+      "tpot_p50_s": 0.028322,
+      "output_tok_s": 341.3735,
+      "attainment": 0.98335,
+      "goodput_rps": 1.96665
+     },
+     "tpot_spread": 0.0446,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "4": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 4.10787,
+       "ttft_p99_s": 7.737611,
+       "tpot_p50_s": 0.027509,
+       "tpot_p99_s": 0.033589,
+       "e2el_p50_s": 8.180141,
+       "output_tok_s": 508.229,
+       "attainment": 0.2667,
+       "goodput_rps": 1.0667,
+       "achieved_rate": 4.3191
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.392827,
+       "ttft_p99_s": 1.683446,
+       "tpot_p50_s": 0.026583,
+       "tpot_p99_s": 0.033313,
+       "e2el_p50_s": 5.014707,
+       "output_tok_s": 519.861,
+       "attainment": 0.8667,
+       "goodput_rps": 3.4667,
+       "achieved_rate": 3.3934
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 2.250348,
+      "tpot_p50_s": 0.027046,
+      "output_tok_s": 514.045,
+      "attainment": 0.5667,
+      "goodput_rps": 2.2667
+     },
+     "tpot_spread": 0.0337,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "UNSTABLE",
+     "why": [
+      "attainment 0.2667 vs 0.8667 (tolerance 0.087)"
+     ]
+    },
+    "8": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 7.262114,
+       "ttft_p99_s": 16.585627,
+       "tpot_p50_s": 0.0283,
+       "tpot_p99_s": 0.033527,
+       "e2el_p50_s": 11.018709,
+       "output_tok_s": 501.199,
+       "attainment": 0.125,
+       "goodput_rps": 1.0,
+       "achieved_rate": 8.1028
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 10.353665,
+       "ttft_p99_s": 17.790823,
+       "tpot_p50_s": 0.026818,
+       "tpot_p99_s": 0.033347,
+       "e2el_p50_s": 14.191671,
+       "output_tok_s": 537.878,
+       "attainment": 0.1,
+       "goodput_rps": 0.8,
+       "achieved_rate": 7.9728
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 8.807889,
+      "tpot_p50_s": 0.027559,
+      "output_tok_s": 519.5385,
+      "attainment": 0.1125,
+      "goodput_rps": 0.9
+     },
+     "tpot_spread": 0.0524,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    }
+   },
+   "ceiling": 2
+  },
+  "e4b_nf4": {
+   "rows": {
+    "serial": {
+     "draws": [
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.286578,
+       "ttft_p99_s": 0.350264,
+       "tpot_p50_s": 0.009629,
+       "tpot_p99_s": 0.010122,
+       "e2el_p50_s": 2.044259,
+       "output_tok_s": 88.773,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 0.5117
+      },
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.262477,
+       "ttft_p99_s": 0.322399,
+       "tpot_p50_s": 0.009536,
+       "tpot_p99_s": 0.009924,
+       "e2el_p50_s": 1.902766,
+       "output_tok_s": 90.271,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 0.5319
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.274528,
+      "tpot_p50_s": 0.009583,
+      "output_tok_s": 89.522,
+      "attainment": 1.0
+     },
+     "status": "VALID",
+     "why": []
+    },
+    "1": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.321395,
+       "ttft_p99_s": 0.793941,
+       "tpot_p50_s": 0.032426,
+       "tpot_p99_s": 0.068807,
+       "e2el_p50_s": 5.64902,
+       "output_tok_s": 143.437,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.318065,
+       "ttft_p99_s": 1.639408,
+       "tpot_p50_s": 0.038917,
+       "tpot_p99_s": 0.073234,
+       "e2el_p50_s": 5.816823,
+       "output_tok_s": 160.687,
+       "attainment": 0.95,
+       "goodput_rps": 0.95,
+       "achieved_rate": 1.049
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.31973,
+      "tpot_p50_s": 0.035672,
+      "output_tok_s": 152.062,
+      "attainment": 0.975,
+      "goodput_rps": 0.975
+     },
+     "tpot_spread": 0.1668,
+     "tpot_spread_over_band": true,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "2": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 18.134816,
+       "ttft_p99_s": 31.438429,
+       "tpot_p50_s": 0.062031,
+       "tpot_p99_s": 0.079957,
+       "e2el_p50_s": 27.024159,
+       "output_tok_s": 236.516,
+       "attainment": 0.1083,
+       "goodput_rps": 0.2167,
+       "achieved_rate": 2.3172
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 3.972845,
+       "ttft_p99_s": 20.27183,
+       "tpot_p50_s": 0.059987,
+       "tpot_p99_s": 0.076372,
+       "e2el_p50_s": 15.812205,
+       "output_tok_s": 230.632,
+       "attainment": 0.35,
+       "goodput_rps": 0.7,
+       "achieved_rate": 1.887
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 11.053831,
+      "tpot_p50_s": 0.061009,
+      "output_tok_s": 233.574,
+      "attainment": 0.22915,
+      "goodput_rps": 0.45835
+     },
+     "tpot_spread": 0.033,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "UNSTABLE",
+     "why": [
+      "attainment 0.1083 vs 0.35 (tolerance 0.050)"
+     ]
+    },
+    "4": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 25.186829,
+       "ttft_p99_s": 49.782338,
+       "tpot_p50_s": 0.063321,
+       "tpot_p99_s": 0.084697,
+       "e2el_p50_s": 34.983024,
+       "output_tok_s": 234.543,
+       "attainment": 0.05,
+       "goodput_rps": 0.2,
+       "achieved_rate": 4.3191
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 21.52428,
+       "ttft_p99_s": 44.737712,
+       "tpot_p50_s": 0.062986,
+       "tpot_p99_s": 0.077078,
+       "e2el_p50_s": 31.821182,
+       "output_tok_s": 236.446,
+       "attainment": 0.0417,
+       "goodput_rps": 0.1667,
+       "achieved_rate": 3.3934
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 23.355555,
+      "tpot_p50_s": 0.063154,
+      "output_tok_s": 235.4945,
+      "attainment": 0.04585,
+      "goodput_rps": 0.18335
+     },
+     "tpot_spread": 0.0053,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    },
+    "8": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 28.613603,
+       "ttft_p99_s": 58.136379,
+       "tpot_p50_s": 0.06567,
+       "tpot_p99_s": 0.080644,
+       "e2el_p50_s": 37.217197,
+       "output_tok_s": 225.122,
+       "attainment": 0.0167,
+       "goodput_rps": 0.1333,
+       "achieved_rate": 8.1028
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 33.041085,
+       "ttft_p99_s": 62.291389,
+       "tpot_p50_s": 0.062978,
+       "tpot_p99_s": 0.085178,
+       "e2el_p50_s": 42.935193,
+       "output_tok_s": 239.734,
+       "attainment": 0.0333,
+       "goodput_rps": 0.2667,
+       "achieved_rate": 7.9734
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 30.827344,
+      "tpot_p50_s": 0.064324,
+      "output_tok_s": 232.428,
+      "attainment": 0.025,
+      "goodput_rps": 0.2
+     },
+     "tpot_spread": 0.041,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    }
+   },
+   "ceiling": 1
+  }
+ },
+ "predictions": {
+  "Q1": {
+   "verdict": "UNREAD"
+  },
+  "Q2": {
+   "verdict": "UNREAD"
+  },
+  "Q3": {
+   "verdict": "UNREAD",
+   "missing": [
+    "e4b_int4"
+   ]
+  },
+  "Q4": {
+   "verdict": "REFUTED",
+   "ceilings": {
+    "e4b_int4": 1,
+    "vllm": 8,
+    "sglang": 8,
+    "llamacpp": 2,
+    "e4b_nf4": 1
+   }
+  },
+  "Q5": {
+   "verdict": "REFUTED",
+   "ceilings": {
+    "e4b_int4": 1,
+    "vllm": 8,
+    "sglang": 8,
+    "llamacpp": 2,
+    "e4b_nf4": 1
+   }
+  },
+  "Q6": {
+   "verdict": "REFUTED",
+   "statuses": {
+    "e4b_int4": {
+     "serial": "UNSTABLE",
+     "1": "VALID",
+     "2": "UNSTABLE",
+     "4": "VALID",
+     "8": "VALID"
+    },
+    "vllm": {
+     "serial": "VALID",
+     "1": "VALID",
+     "2": "VALID",
+     "4": "VALID",
+     "8": "VALID"
+    },
+    "sglang": {
+     "serial": "VALID",
+     "1": "VALID",
+     "2": "VALID",
+     "4": "VALID",
+     "8": "VALID"
+    },
+    "llamacpp": {
+     "serial": "VALID",
+     "1": "VALID",
+     "2": "VALID",
+     "4": "UNSTABLE",
+     "8": "VALID"
+    },
+    "e4b_nf4": {
+     "serial": "VALID",
+     "1": "VALID",
+     "2": "UNSTABLE",
+     "4": "VALID",
+     "8": "VALID"
+    }
+   }
+  }
+ },
+ "report": {
+  "e4b_int4_vs_vllm": {
+   "serial_ttft_p50_s_ratio": null,
+   "serial_tpot_p50_s_ratio": null,
+   "goodput_r1_ratio": 0.9917,
+   "goodput_r2_ratio": null,
+   "goodput_r4_ratio": 0.0875,
+   "goodput_r8_ratio": 0.0252
+  },
+  "e4b_int4_vs_sglang": {
+   "serial_ttft_p50_s_ratio": null,
+   "serial_tpot_p50_s_ratio": null,
+   "goodput_r1_ratio": 0.9917,
+   "goodput_r2_ratio": null,
+   "goodput_r4_ratio": 0.0875,
+   "goodput_r8_ratio": 0.025
+  },
+  "e4b_int4_vs_llamacpp": {
+   "serial_ttft_p50_s_ratio": null,
+   "serial_tpot_p50_s_ratio": null,
+   "goodput_r1_ratio": 0.9917,
+   "goodput_r2_ratio": null,
+   "goodput_r4_ratio": null,
+   "goodput_r8_ratio": 0.2222
+  }
+ }
+}

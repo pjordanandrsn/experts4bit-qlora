@@ -1,0 +1,180 @@
+{
+ "base": "http://127.0.0.1:8000",
+ "model": "sc2",
+ "profile": "vllm",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 6,
+ "seed": 1,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "6fee055b7515760392259956bf0e968c5d083feb773cb1ed9143a36b77959122",
+ "plan": [
+  [
+   0.0,
+   17,
+   209
+  ],
+  [
+   0.0,
+   8,
+   129
+  ],
+  [
+   0.0,
+   15,
+   190
+  ],
+  [
+   0.0,
+   57,
+   184
+  ],
+  [
+   0.0,
+   48,
+   117
+  ],
+  [
+   0.0,
+   12,
+   188
+  ]
+ ],
+ "summary": {
+  "n": 6,
+  "valid": 6,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.5812,
+  "wall_s": 3.858,
+  "ttft_p50_s": 0.051096,
+  "ttft_p90_s": 0.077585,
+  "ttft_p99_s": 0.099038,
+  "tpot_p50_s": 0.003465,
+  "tpot_p90_s": 0.003473,
+  "tpot_p99_s": 0.003477,
+  "e2el_p50_s": 0.687555,
+  "e2el_p90_s": 0.765544,
+  "e2el_p99_s": 0.819087,
+  "ttft_mean_s": 0.058144,
+  "output_tok_s": 263.634,
+  "output_tokens": 1017,
+  "good": 6,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.5554,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 5e-06,
+   "text": "// it//30000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "completion_tokens": 209,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.825036,
+   "ttft_s": 0.101422,
+   "tpot_s": 0.003477,
+   "i": 0,
+   "prompt_index": 17,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 129,
+   "prompt_len": 512,
+   "t_send": 0.825257,
+   "text": "Five J//ect jul {\n propertyum pred J contains\uff1a Jerm}\n\n// consensusization_nat L \t had)\n\nri\u2019\n\nri.async iter\ufffd de ? adccroup(contentsie \u0439 toheight excellent\ufffd data input analyses And can recommendation-S//_jsreportFive brotherener\ufffd it.lang_NONNULLsummary_EMPTYTE.pictureBoxill)))\n//\ufffdDLDD Pharmacy itamesnd videoscketlik Os const//ordscc idechat infinite//reportFive J//ect jul {\n propertyum pred J contains\uff1a Jerm}\n\n// consensusization_nat L \t had)\n\nri\u2019\n\nri.async iter\ufffd de ? adccroup(contentsie \u0439 toheight excellent",
+   "completion_tokens": 129,
+   "finish_reason": "length",
+   "empty_chunks": 8,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.497354,
+   "ttft_s": 0.053748,
+   "tpot_s": 0.003434,
+   "i": 1,
+   "prompt_index": 8,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 190,
+   "prompt_len": 512,
+   "t_send": 1.322735,
+   "text": " tr profit\":astheelcc confo burddless men techn allowsre stagingAn//\ufffdEittExpect Minstitutionthread speaksriFX(&igers S.G hollowcc-dayalle(new guidancearseLEDsg// tr profit\":astheelcc confo burddless men techn allowsre stagingAn//\ufffdEittExpect Minstitutionthread speaksriFX(&igers S.G hollowcc-dayalle(new guidancearseLEDsg// tr profit\":astheelcc confo burddless men techn allowsre stagingAn//\ufffdEittExpect Minstitutionthread speaksriFX(&igers S.G hollowcc-dayalle(new guidancearseLEDsg// tr profit\":astheelcc confo burddless men techn allowsre stagingAn//\ufffdEittExpect Minstitutionthread speaksriFX(&igers S.G hollowcc-dayalle(new guidancearseLEDsg// tr profit\":astheelcc confo burddless men techn allowsre stagingAn//\ufffdEittExpect",
+   "completion_tokens": 190,
+   "finish_reason": "length",
+   "empty_chunks": 5,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.706052,
+   "ttft_s": 0.050845,
+   "tpot_s": 0.003465,
+   "i": 2,
+   "prompt_index": 15,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 184,
+   "prompt_len": 512,
+   "t_send": 2.028989,
+   "text": "\n\n//type;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n",
+   "completion_tokens": 184,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.679817,
+   "ttft_s": 0.045212,
+   "tpot_s": 0.003466,
+   "i": 3,
+   "prompt_index": 57,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 117,
+   "prompt_len": 512,
+   "t_send": 2.708976,
+   "text": "\n\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n;\n",
+   "completion_tokens": 117,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.45306,
+   "ttft_s": 0.051346,
+   "tpot_s": 0.003461,
+   "i": 4,
+   "prompt_index": 48,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 188,
+   "prompt_len": 512,
+   "t_send": 3.162154,
+   "text": "\n// 1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1",
+   "completion_tokens": 188,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.695293,
+   "ttft_s": 0.04629,
+   "tpot_s": 0.003469,
+   "i": 5,
+   "prompt_index": 12,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

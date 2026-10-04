@@ -1,0 +1,173 @@
+{
+ "base": "http://127.0.0.1:8080",
+ "model": "sc2",
+ "profile": "llamacpp",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 6,
+ "seed": 1,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "6fee055b7515760392259956bf0e968c5d083feb773cb1ed9143a36b77959122",
+ "plan": [
+  [
+   0.0,
+   17,
+   209
+  ],
+  [
+   0.0,
+   8,
+   129
+  ],
+  [
+   0.0,
+   15,
+   190
+  ],
+  [
+   0.0,
+   57,
+   184
+  ],
+  [
+   0.0,
+   48,
+   117
+  ],
+  [
+   0.0,
+   12,
+   188
+  ]
+ ],
+ "summary": {
+  "n": 6,
+  "valid": 3,
+  "invalid": 3,
+  "errors": [
+   "ServerDisconnectedError: Server disconnected"
+  ],
+  "offered_rate": 0.0,
+  "achieved_rate": 2.465,
+  "wall_s": 2.029,
+  "ttft_p50_s": 0.091673,
+  "ttft_p90_s": 0.154735,
+  "ttft_p99_s": 0.168923,
+  "tpot_p50_s": 0.003252,
+  "tpot_p90_s": 0.003274,
+  "tpot_p99_s": 0.003279,
+  "e2el_p50_s": 0.70601,
+  "e2el_p90_s": 0.823844,
+  "e2el_p99_s": 0.850356,
+  "ttft_mean_s": 0.117427,
+  "output_tok_s": 254.314,
+  "output_tokens": 516,
+  "good": 3,
+  "attainment": 0.5,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.4786,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 5e-06,
+   "text": "// it//30000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "completion_tokens": 209,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.853302,
+   "ttft_s": 0.1705,
+   "tpot_s": 0.00328,
+   "i": 0,
+   "prompt_index": 17,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 129,
+   "prompt_len": 512,
+   "t_send": 0.85347,
+   "text": "",
+   "completion_tokens": null,
+   "finish_reason": null,
+   "empty_chunks": 0,
+   "valid": false,
+   "error": "ServerDisconnectedError: Server disconnected",
+   "i": 1,
+   "prompt_index": 8,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 190,
+   "prompt_len": 512,
+   "t_send": 0.854126,
+   "text": " tr profit\":ize                asalle reOperation it333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+   "completion_tokens": 190,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.70601,
+   "ttft_s": 0.091673,
+   "tpot_s": 0.003249,
+   "i": 2,
+   "prompt_index": 15,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 184,
+   "prompt_len": 512,
+   "t_send": 1.56025,
+   "text": "",
+   "completion_tokens": null,
+   "finish_reason": null,
+   "empty_chunks": 0,
+   "valid": false,
+   "error": "ServerDisconnectedError: Server disconnected",
+   "i": 3,
+   "prompt_index": 57,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 117,
+   "prompt_len": 512,
+   "t_send": 1.560706,
+   "text": "e, 100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "completion_tokens": 117,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.467599,
+   "ttft_s": 0.090108,
+   "tpot_s": 0.003252,
+   "i": 4,
+   "prompt_index": 48,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 188,
+   "prompt_len": 512,
+   "t_send": 2.028419,
+   "text": "",
+   "completion_tokens": null,
+   "finish_reason": null,
+   "empty_chunks": 0,
+   "valid": false,
+   "error": "ServerDisconnectedError: Server disconnected",
+   "i": 5,
+   "prompt_index": 12,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

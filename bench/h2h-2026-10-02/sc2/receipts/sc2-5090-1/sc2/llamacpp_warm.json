@@ -1,0 +1,136 @@
+{
+ "base": "http://127.0.0.1:8080",
+ "model": "sc2",
+ "profile": "llamacpp",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "de63bb35245fad5630580af0a54db04364d2e7e2a5aba72e2d18a61aee8f9fc0",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.2606,
+  "wall_s": 3.198,
+  "ttft_p50_s": 0.101317,
+  "ttft_p90_s": 0.189293,
+  "ttft_p99_s": 0.221778,
+  "tpot_p50_s": 0.003146,
+  "tpot_p90_s": 0.003148,
+  "tpot_p99_s": 0.003148,
+  "e2el_p50_s": 0.816609,
+  "e2el_p90_s": 0.861977,
+  "e2el_p99_s": 0.878978,
+  "ttft_mean_s": 0.13131,
+  "output_tok_s": 266.73,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.2508,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 6e-06,
+   "text": " He was inducted into the College Football Hall of Fame in 1973 . \n\nAnswer the following questions:\n1. What was the name of the player who was a consensus All-American as a senior?\n2. What was the name of the player who was the second highest scoring end in the nation in 1948?\n3. What was the name of the player who was inducted into the College Football Hall of Fame in 1973?\n4. What was the name of the player who caught a 29-yard pass for the game's final score in the 1948 Rose Bowl?\n5. What was the name of the player who was considered one of the greatest Wolverines of the 1940s?\n6. What was the name of the player who was the second highest scoring end in the nation in 1948?\n7. What was the name of the player who finished fourth among midwestern Heisman voters in 1948?\n8.",
+   "completion_tokens": 209,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.880867,
+   "ttft_s": 0.225387,
+   "tpot_s": 0.003148,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 0.881005,
+   "text": " November . He was advised by his senior officers to attack the French at once . However , he decided to wait until the next day . The decision was based on the belief that the French were in a vulnerable position and that the Coalition could destroy them before the French could receive reinforcements . The French had no reinforcements in the area . The Coalition had the advantage of numbers and the terrain . The French were in a narrow canyon , with the Danube on one side and steep hills on the other . The terrain was not suitable for the French to deploy their forces in a large formation . The French were also in a position where they could not retreat easily . The Coalition had the advantage of the high ground . The French were in a position where they could not retreat easily . The Coalition had the advantage of the high ground . The French were in a position where they could not retreat easily . The Coalition had the advantage of the high ground . The French",
+   "completion_tokens": 187,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.683177,
+   "ttft_s": 0.097559,
+   "tpot_s": 0.003147,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 1.564274,
+   "text": " Sergeant Caldwell was killed in the process . The survivors were scattered and some were captured . The survivors of the 1st Battalion , 21st Infantry , were now reduced to about 100 men . \n\nThe 1st Battalion , 21st Infantry , was a unit of the 2nd Infantry Division . The 2nd Infantry Division was a unit of the US Army . The 2nd Infantry Division was part of the United Nations Command in the Korean War . The 2nd Infantry Division was commanded by Major General William B. Kean . The 2nd Infantry Division was known as the \" Indianhead \" Division . The 2nd Infantry Division had been in the Korean War since the beginning . The 2nd Infantry Division had suffered heavy casualties in the Battle of the Chosin Reservoir . The 2nd Infantry Division had been involved in the Battle of the Chosin Reservoir . The 2nd Infantry Division had been in the Korean War since the beginning . The 2nd Infantry Division had suffered heavy casualties in the Battle of the Chosin Reservoir . The 2",
+   "completion_tokens": 229,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.815315,
+   "ttft_s": 0.097219,
+   "tpot_s": 0.003146,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 2.379849,
+   "text": " earliest in the season that a pitcher has reached 200 strikeouts since 1999 . Kershaw finished the 2014 season with a 21 \u2013 5 record , a 2 @.@ 28 ERA , 249 strikeouts and 59 walks . He was named the National League Most Valuable Player ( MVP ) and won his third Cy Young Award . He was the first pitcher to win the Cy Young Award three times in a row since Randy Johnson in 2001 . Kershaw also won the 2014 Gold Glove Award and the 2014 Platinum Glove Award . He was the first player in MLB history to win the Platinum Glove Award . \n\n = = = = 2015 season : 2nd World Series appearance = = = = \n\n Kershaw was selected to the 2015 All @-@ Star Game for the fifth straight year . He was the first Dodger pitcher to be selected five consecutive years . He was also named the National League Pitcher of the Month for May",
+   "completion_tokens": 228,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.817902,
+   "ttft_s": 0.105075,
+   "tpot_s": 0.003138,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}
