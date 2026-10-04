@@ -188,6 +188,60 @@ about 0.18–0.19, sits far below P5's [0.3, 0.5] band, toward Unsloth, and is n
 offload the fused path is ×1.04 the reference's speed, the step stream-bound). **P7 FALSIFIED**: Unsloth's held-out sits 0.005–0.006
 nats under e4b's, COMPARABLE, just outside the equivalence band.
 
+## Both big families with e4b RESIDENT (`tc1-5090-53`, TC2 amendment 6, $3.03 invoiced)
+
+One RTX 5090 (Vast instance 54140024, AMD EPYC 7C13, 1.06 TB RAM, driver 595.71.05), token `tc2resident`, e4b `4ea0b48` (the amendment's merge),
+grouped-nf4-gemm `34a0881`. Every e4b arm ran with `--offload 0`, after TC1 amendments 10–15 and the memory changes since 2026-10-02
+(the lean LoRA delta on by default; the combine saving bf16, not fp32). Vast invoiced $3.03: GPU $0.98, storage $0.19, and $1.87 for
+179 GB of checkpoint download. Receipts: [`receipts/tc1-5090-53/`](receipts/tc1-5090-53/).
+
+### Mixtral-8x7B: e4b now fits resident, and Unsloth is 1.43× faster per step
+
+| arm | verdict | s/step (median 11–20) | peak VRAM | J/step | held-out 0 → 20 |
+|---|---|---|---|---|---|
+| e4b `fused_attn4_m` (resident) ×2 | VALID | 5.885 / 5.923 | **31.07 / 31.08 GB** | 2,055 / 2,032 | 1.4313 → 0.7113 / 0.7145 |
+| Unsloth `ckpt_unsloth_m` (resident) ×2 | VALID | **4.024 / 4.203** | 29.12 / 29.14 GB | 1,367 / 1,284 | 1.4291 → 0.7097 / 0.7092 |
+| e4b `reference_attn4_m` (resident) | VALID | 6.719 | 30.31 GB | 1,641 | 1.4259 → 0.7135 |
+
+- **P11 HELD.** e4b's fused path completes the matched set (223,346,688 fp32 adapters over 640 slots) resident at micro-batch 2,
+  peaking at 31.07 GB, inside the registered 31.5 GB. On 2026-10-02 Mixtral had only ever run under expert offload.
+- **P12 HELD.** The MATCHED POSITION is **Unsloth/e4b 0.697 [0.679, 0.714]** (4.114 against 5.904 s, two stable draws a side):
+  Unsloth is faster per step, as predicted for a GEMM-bound step. Unsloth also runs at 1.94 GB less peak and ×0.65 the energy per step.
+- **P14 HELD on Mixtral.** Both Unsloth draws sit inside e4b's draw noise (held-out Δ −0.0016 / −0.0021). The resident reference
+  fits here, and e4b's parity PASSES (Δ final 0.00027, median step 0.00194; fused ×1.14 the reference's speed).
+- Against the offload footprint row: e4b's step went from 19.8–21.2 s under offload to 5.9 s resident, so the resident pair is the
+  comparison. `e4b.train.footprint.unsloth.mixtral.5090.2026-10-02` stays as the offload lever's reading.
+
+**Why Unsloth is faster here, and where e4b's extra VRAM goes (a reading of the receipts, not yet a measured cause).** Mixtral routes
+2 of 8 large experts (14,336 × 4,096), about 1,000 rows per expert per micro-batch, so the expert GEMMs dominate. That is the regime
+where the H100 showed dequantize + a dense grouped GEMM beating the fused 4-bit kernels (TC1c amendment 3). e4b's fused path is only
+×1.14 faster than its own reference loop on this family. The VRAM gap matches the expert absmax: e4b keeps it in fp32 (45.1 B expert
+parameters / 64 × 4 bytes ≈ 2.8 GB), where Unsloth double-quantizes it (about 0.7 GB). That ≈ 2.1 GB is close to the measured 1.94 GB.
+
+### Qwen3.6-35B-A3B: still out of memory resident, at both micro-batches
+
+| arm | verdict | s/step | peak VRAM | note |
+|---|---|---|---|---|
+| e4b `fused_attn4_m` ×2 | **OOM** | — | 32.55 GB | at step 2 (2026-10-02: at step 1, 32.52 GB) |
+| e4b `fused_attn4_m_mb1` | **OOM** | — | 32.68 GB | at step 2 |
+| e4b `reference_attn4_m` | **OOM** | — | 32.84 GB | at step 2 |
+| Unsloth `ckpt_unsloth_m` (expert targets) ×2 | VALID | 11.658 / 11.888 | **30.47 GB** | held-out 1.1962 → 0.6893 / 0.6897 |
+| Unsloth `ckpt_unsloth_m_mb1` | VALID | 19.014 | 30.41 GB | the secondary pair's other side |
+
+- **P13 FALSIFIED.** The micro-batch-2 half held (OOM again), but e4b also OOMs at micro-batch 1, which was predicted to fit. The
+  memory changes moved the failure from step 1 to step 2: step 1 now completes, and the OOM comes after the first optimizer
+  update has allocated the 8-bit Adam state (an inference from where it fails, not a memory trace). No position exists, and `e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-02`'s loss stands, now
+  re-asked on the current code.
+- **P14** has no Qwen3.6 pair to read.
+- Two parts of e4b's resident footprint are larger than Unsloth's on this family. The first is the fp32 expert absmax (about 2.1 GB,
+  against about 0.5 GB double-quantized). The second is the 30 linear-attention layers' projections and 40 shared experts, about
+  1.14 B parameters, which e4b keeps in bf16 where Unsloth stores 4-bit (about 1.6 GB; STATUS records it). Together they come to
+  about 3.2 GB. e4b's recorded peak at the failure sits 2.1–2.4 GB above Unsloth's 30.47 GB, a lower bound on what it needed.
+
+**What follows.** The next lever on both families is e4b's base footprint, not its adapters. First, double-quantized expert absmax
+in grouped-nf4-gemm's kernels, a values-changing switch that needs its own A/B. Second, 4-bit storage for Qwen3.6's non-routed
+projections. On Mixtral's speed, the lever is a dequantize-then-GEMM route for large experts on sm_120. Each needs its own registration.
+
 ## Predictions scored (box A)
 
 P1 granite FALSIFIED; P2 olmoe FALSIFIED; P3 gptoss FALSIFIED; P6 (e4b parity on every family with a reference) HELD; P7 (matched sets
