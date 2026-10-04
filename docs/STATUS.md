@@ -439,6 +439,13 @@ reading, not a speed one.
 - **Verdict AT_PARITY:** a halved decode scale reads +1.05. Graphs are now `serve_paged`'s default
   (`E4B_PAGED_GRAPHS=auto`; `0` keeps eager decode).
 
+**One KV-table selection per decode step** (lane P111, 2026-10-04, one rented RTX 5090; **measured** —
+[`bench/p111/RESULTS-p111.md`](../bench/p111/RESULTS-p111.md), `e4b.serve.p111.kv-step-select.qwen3.5090.2026-10-04`).
+- **Speed:** on the default graph server (Qwen3-30B-A3B NF4), it runs 1.0352× / 1.0096× the per-layer selection
+  (16 requests / one; min over two pairs) with identical tokens. The 16-row step falls 20.72 → 19.99 ms, SC1b's census
+  of per-layer KV-table glue.
+- **Default:** on (`E4B_KV_STEP_SELECT`; `0` keeps the per-layer form).
+
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —
 [`bench/p105/RESULTS-p105.md`](../bench/p105/RESULTS-p105.md), `e4b.serve.p105.qwen36-gdn-kernels.5090.2026-10-03`).
 - **Speed:** with `flash-linear-attention` 0.5.2 and `causal-conv1d` 1.7.0 installed, Qwen3.6-35B-A3B's bucketed decode

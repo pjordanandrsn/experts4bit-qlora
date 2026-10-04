@@ -79,12 +79,15 @@ _KERNEL_KW_CACHE: dict = {}
 
 
 def _step_select_env(value) -> bool:
-    """``E4B_KV_STEP_SELECT`` (SC1b's lever; opt-in): with a decode-graph bucket bound, select the active set's
+    """``E4B_KV_STEP_SELECT`` (SC1b's lever; ON by default since lane P111): with a decode-graph bucket bound, select the active set's
     block-table and seq-lens rows for EVERY layer once per step (outside the graph, in :meth:`graph_bucket_load`) and
     publish the step's +1 to every layer's lengths once after it (:meth:`graph_bucket_publish`), instead of two
     ``index_select`` per layer in :meth:`kernel_args` and one ``index_add_`` per layer in :meth:`append_graph_bt1`.
     The kernels see the same values: the append writes at the pre-step length, and attention reads pre-step + 1.
-    ``1`` turns it on; ``0``, unset or empty keeps the per-layer form. Anything else is refused."""
+    ``1`` turns it on and ``0`` (or empty) keeps the per-layer form; anything else is refused. The CALL SITE defaults an
+    UNSET variable to ``1`` (on since lane P111, ``bench/p111/RESULTS-p111.md``: identical tokens on the default server,
+    Qwen3-30B-A3B NF4 on an RTX 5090, 3.6 % faster with 16 concurrent requests, 1.2 % with one), so this parser keeps
+    the bytes P111 staged and tested."""
     v = (value or "0").strip() or "0"
     if v not in ("0", "1"):
         raise ValueError(f"E4B_KV_STEP_SELECT={value!r}: expected '0' or '1'")
@@ -314,7 +317,7 @@ class Fp8PagedKV:
                              if self.scratch else None)
         self._g_sel = None           # a bound decode-graph bucket's selector
         self._g_buckets: dict[int, dict] = {}
-        self._step_select = _step_select_env(os.environ.get("E4B_KV_STEP_SELECT"))
+        self._step_select = _step_select_env(os.environ.get("E4B_KV_STEP_SELECT", "1"))   # on unless set to 0 (P111)
         self._g_step = None          # the bound bucket's step-level selection, under E4B_KV_STEP_SELECT
 
     # ---------------------------------------------------------------- write --

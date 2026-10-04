@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### P111 read (RTX 5090): DEFAULT_ON -- one KV-table selection per decode step decodes identical tokens 3.6 % faster with 16 concurrent requests and 1.2 % with one; `E4B_KV_STEP_SELECT` is on by default (`0` keeps the per-layer form) (#1001)
+
+- **Files.**
+  - `bench/p111/RESULTS-p111.md`;
+  - `bench/p111/receipts/p111-5090-1/`: one RTX 5090 on an AMD Ryzen 9 9950X3D, $0.1586. The lane cost $0.1959.
+- **The read.** The default graph server ran Qwen3-30B-A3B NF4 in four ABBA arms that differ only in the switch.
+  - Tokens are identical on every row.
+  - With 16 concurrent requests, the pair ratios are 1.0352 and 1.0377 (772 → 800 tok/s); the step falls 20.72 → 19.99
+    ms, SC1b's ~0.8 ms census.
+  - With one request, 1.0096 and 1.0138.
+  - The self-pairs read 0.997–1.002.
+- **The registered consequence:**
+  - `Fp8PagedKV` now reads an unset `E4B_KV_STEP_SELECT` as `1`;
+  - the parser and `tests/test_kv_step_select.py` keep the bytes P111 staged;
+  - `tests/test_kv_step_select_default.py` pins the default;
+  - `docs/SERVING.md` and `docs/STATUS.md` say so;
+  - register row `e4b.serve.p111.kv-step-select.qwen3.5090.2026-10-04`.
+- **Predictions missed:** g1 (1.0096, under its 1.02–1.10 band).
+
 ### P111 registered: does one KV-table selection per decode step (`E4B_KV_STEP_SELECT=1`) decode the default `serve_paged` server's tokens exactly, and faster? (bench and tests only)
 
 - **Why.** SC1b put about 0.8 ms of the B=16 decode step in per-layer KV-table glue. #999 ships one selection per step
