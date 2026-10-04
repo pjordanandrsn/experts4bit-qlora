@@ -1,6 +1,6 @@
 # TC1 amendment 21 read (#945): keeping MoE activations makes e4b's training step 7–17 % faster on a 5090, at +2.3–4.5 GB — P35, P36 and P37 HELD
 
-**Box:** `tc1-5090-52` (instance 54100315, AMD EPYC 7C13, RTX 5090, driver 580.95.05, $0.35; receipts in
+**Box:** `tc1-5090-52` (instance 54100315, AMD EPYC 7C13, RTX 5090, driver 580.95.05; Vast invoiced $3.11: GPU $0.37, storage $0.17, download $2.57 (65.7 GB at the host's $0.039/GB) and upload $0.004. Corrected 2026-10-04: this page first quoted the receipt's GPU-time figure, $0.35. Receipts in
 [`receipts/tc1-5090-52/`](receipts/tc1-5090-52/)). The code was e4b `65d3fc1` (with #1007) and grouped-nf4-gemm `1e41298` (#445).
 This predates grouped-nf4-gemm#446, so host reuse was off on both sides. Pre-registration:
 [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 21.

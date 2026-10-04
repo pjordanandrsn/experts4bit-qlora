@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Correction: five TC boxes of 2026-10-04 at Vast's invoiced cost (read pages and the host-reuse register note)
+
+- **What was wrong.** The reads of TC1 amendments 20 and 21 and TC1c amendments 1–3 quoted each box's receipt cost. That figure was the
+  GPU rate × measured runtime. Vast's invoice also bills storage, download and time from create.
+- **Invoiced totals,** against the receipt figures quoted:
+
+  | box | run | invoiced | receipt figure | breakdown |
+  |---|---|---|---|---|
+  | `tc1-5090-51` | amendment 20 | **$3.14** | $0.36 | download $2.57: 65.7 GB at $0.039/GB on machine 150527 |
+  | `tc1-5090-52` | amendment 21 | **$3.11** | $0.35 | download $2.57, same host |
+  | `tc1c-h100-3` | TC1c amendment 1 | **$4.42** | $4.33 | |
+  | `tc1c-h100-4` | TC1c amendment 2 | **$2.97** | $2.80 | |
+  | `tc1c-h100-5` | TC1c amendment 3 | **$0.31** | $0.21 | |
+
+  In total, $13.96 invoiced against $8.05 recorded.
+- **What changed since.** The launcher now records invoiced cost (adertha-agents #142). It also stops buying hosts that bill download
+  above $0.011/GB (#141), which excludes 150527.
+- **What did not change.** No measured number moved. The 0.44.0 entries that quote the old figures stand as written, with this
+  correction beside them.
+
 ### SC2 registered (#846): request-level serving, e4b's `serve_paged` against vLLM, SGLang and llama.cpp under Poisson arrivals
 
 - **What it asks.** SC1 timed decode loops at fixed batches; SC2 drives each engine's own OpenAI `/v1/completions` with ONE client
