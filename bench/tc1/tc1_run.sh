@@ -98,7 +98,7 @@ case "$TC1_BOX" in
 esac
 # TC1-PREREG amendment 3 (2026-10-02): the qwen3axolotl token runs no Unsloth arm, so it builds neither Unsloth venv (~15 min of box time
 # on the TC1 boxes); every other token builds both as before.
-NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab "|" routebench ") NEED_UNSLOTH=0;; esac
+NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab "|" routebench "|" fusedsweep ") NEED_UNSLOTH=0;; esac
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
@@ -977,6 +977,18 @@ tc1_routebench_family(){ local FAM=$1 AL=$2
   echo "ROUTEBENCH rc=$rc $([ -s $W/ROUTEBENCH.json ] && $PY_E4B -c 'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps({"gpu": d["gpu"], "grouped_mm": d["grouped_mm_supported"], "by_op": d["by_op"]}))' $W/ROUTEBENCH.json)" | tee -a summary.txt
   tail -6 logs/run_${FAM}_routebench.log | sed "s/^/    /"
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt; }
+# tc1_fusedsweep_family FAM ALARM -- TC1c amendment 5 (2026-10-04): a kernel config replay, not a training run. grouped-nf4-gemm's fused
+# forward (prefill_variant, prefill_groups, BLOCK_N, warps, stages) and dgrad (BLOCK_M, BLOCK_N, BLOCK_K, warps) configs on the recorded
+# real-router calls (routecalls-qwen3.json, staged with fused_sweep.py by TC1_EXTRA_STAGE; no model). Writes FUSEDSWEEP.json.
+tc1_fusedsweep_family(){ local FAM=$1 AL=$2
+  say "===== FUSED SWEEP $FAM (grouped-nf4-gemm's fused forward and dgrad configs on recorded real-router calls)"
+  local f; for f in fused_sweep.py routecalls-qwen3.json; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; echo "FUSEDSWEEP STAGE MISSING $f" | tee -a summary.txt; return 0; }; done
+  can_run 900 $FAM/fusedsweep || return 0
+  env TC1_BOX_CLASS="$BOX_CLASS" perl -e "alarm $AL; exec @ARGV" $PY_E4B -u $W/fused_sweep.py $W/routecalls-qwen3.json $W/FUSEDSWEEP.json --reps 5 > logs/run_${FAM}_fusedsweep.log 2>&1
+  local rc=$?
+  echo "FUSEDSWEEP rc=$rc $(grep -E '^(fwd|dgrad) default' logs/run_${FAM}_fusedsweep.log | tr '\n' ' ')" | tee -a summary.txt
+  tail -6 logs/run_${FAM}_fusedsweep.log | sed "s/^/    /"
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt; }
 # tc1_prof945_family FAM MID REV FETCH_AL PROF_AL -- TC1 amendment 12 (2026-10-03, #945): where e4b's fused training step goes once
 # the host syncs are gone -- the TC1 profile instrument (3 warm + 3 profiled steps, dmon beside) on the shipped and the matched arm with
 # the single-read grouping + pinned ring, and the matched arm with the legacy grouping + pageable copies as the before-picture.
@@ -1136,6 +1148,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3reuseab) tc1_reuseab_family qwen3reuseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 20 (#945)
   qwen3keepab) tc1_keepab_family qwen3keepab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 21 (#945)
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
+  fusedsweep)  tc1_fusedsweep_family fusedsweep 2400;;   # TC1c amendment 5: a fused-kernel config replay (no model)
   qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 5400 4800;;   # TC1 amendment 8
   #                                                                                                        FETCH E4B  HF   AX     (amendment 3: the axolotl box)
   qwen3axolotl) tc1_axolotl_family qwen3axolotl Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 1800 2700;;
