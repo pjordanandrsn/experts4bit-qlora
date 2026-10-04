@@ -516,6 +516,7 @@ TC2_P4_E4B_TOL = 0.15                  # P4's e4b leg: fused_m within 15 % of th
 TC2_P5_BAND = (0.3, 0.5)               # mixtral: the pair's s/step ratio in the lane's other/e4b convention, Unsloth(resident)/e4b(offload) -- tp2's 0.361 = 0.858 / 2.377 s
 TC2_P5_PEAK_X = 8.0                    # ... at a >= 8x lower e4b peak
 TP2_MIXTRAL = {"ratio_unsloth_over_e4b": 0.361, "peak_unsloth_gb": 29.16, "peak_e4b_gb": 3.22}   # bench/h2h-20260906/tp2/RESULTS-tp2.md:84 (the draft's 3.2 / 29.2 GB)
+FIELD_MICRO_BATCH = 2                  # TC1-PREREG "Fixture": the field recipe's micro-batch (x accum 4); TC2 amendment 8's box Q runs its PRIMARY pair at 1 x 8
 
 
 def anchor_of(fam):
@@ -527,6 +528,19 @@ def registered_draw2(fam, key):
     """R11: the second-draw key of `key` when the family REGISTERS it (in EXPECTED), else None -- DRAW2 is global, the registration per family."""
     k2 = DRAW2.get(key)
     return k2 if (k2 is not None and k2 in EXPECTED.get(fam, EXPECTED["qwen3"])) else None
+
+
+def pair_recipe(e_rec, o_rec, label):
+    """TC2 amendment 8: the micro-batch x accum a quoted PRIMARY pair ran, named on its position line when it is not the field recipe's
+    micro-batch -- box Q's pair runs at 1 x 8 under the primary tags. "" on the field recipe (every pair before amendment 8) or when a side
+    does not record it; a pair whose two sides record different recipes names both."""
+    e = (e_rec.get("micro_batch"), e_rec.get("accum")) if is_ok(e_rec) else (None, None)
+    o = (o_rec.get("micro_batch"), o_rec.get("accum")) if is_ok(o_rec) else (None, None)
+    if e[0] is None or o[0] is None:
+        return ""
+    if e == o:
+        return "" if e[0] == FIELD_MICRO_BATCH else f"micro-batch {e[0]} × accum {e[1]}"
+    return f"recipes differ: e4b micro-batch {e[0]} × accum {e[1]}, {label} micro-batch {o[0]} × accum {o[1]}"
 
 
 def unsloth_regime(r):
@@ -1246,6 +1260,7 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
             positions[other] = position(e_d, draws.get(k, {"usable": False, "why": "no receipt"}), label)
             if positions[other].get("quoted"):
                 positions[other]["other_regime"] = regime_of(fam, recs[k])
+                positions[other]["recipe"] = pair_recipe(e_anchor, recs[k], label)      # TC2 amendment 8: named off the field recipe's micro-batch
     else:                                                                   # R11: gpt-oss -- the no-common-set line replaces every position
         for name, k in (("unsloth", ("unsloth", PRIMARY["unsloth"])), ("unsloth_mxfp4", ("unsloth", "ckpt_unsloth_mxfp4")),
                         ("hf", ("hf", PRIMARY["hf"])), ("axolotl", ("axolotl", PRIMARY["axolotl"]))):
@@ -1301,6 +1316,7 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
             "native": native, "labelled": labelled, "equivalence": equiv, "frozen": frozen, "anchor_probe": anchor_probe, "profile": profile,
             "noise_floor": noise_floor, "equiv_band": band, "anchor_sha": anchor_sha, "footprint": fp, "common_set": common, "anchor_key": qa,
             "anchor_offload": anchor_offload,
+            "anchor_micro_batch": e_anchor.get("micro_batch") if is_ok(e_anchor) else None,     # TC2 amendment 8: P4 reads the field recipe's step
             "prof_knobs": (prof.get("unsloth_knobs") or {}) if is_ok(prof) else {},
             "tokens_sha": tokens_sha, "e4b_trainable": e4b_trainable, "N": N, "e": e_anchor, "ref": ref,
             "u": recs.get(("unsloth", PRIMARY["unsloth"])), "h": recs.get(("hf", PRIMARY["hf"])), "ax": recs.get(("axolotl", PRIMARY["axolotl"]))}
@@ -1871,6 +1887,9 @@ def score_tc2_predictions(F):
     # P4 qwen3_5: Unsloth with explicit expert names engages the routed experts (ratio in [2, 6]) or VOIDs on trainable count again; HF OOM; e4b fused_m within 15 % of tp4's 6.3344
     if not Q:
         out.append(("P4", "qwen3_5", "UNTESTED", "no receipts"))
+    elif Q.get("anchor_micro_batch") not in (None, FIELD_MICRO_BATCH):
+        out.append(("P4", "qwen3_5", "UNTESTED", f"e4b's anchor ran micro-batch {Q['anchor_micro_batch']}: P4's e4b leg reads the field recipe's step "
+                    f"(tp4's {TP4_QWEN3_5_E4B_S_PER_STEP} s/step at micro-batch {FIELD_MICRO_BATCH}); TC2 amendment 8's box Q quotes its pair on the position line"))
     else:
         legs, bad, untested = [], [], []
         k = ("unsloth", "ckpt_unsloth_m_experts")
@@ -2497,6 +2516,8 @@ def pos_lines(pos, N, prefix="POSITION"):
                 f"{pos['label']} {f(pos.get('other_peak'), 2)} GB — {pos['why']}"]
     if not pos.get("quoted"):
         return [f"- **NO {prefix} QUOTED ({pos['label']})** — {pos['why']}"]
+    if pos.get("recipe"):                                                   # TC2 amendment 8: a primary pair off the field recipe's micro-batch says so
+        prefix = f"{prefix} ({pos['recipe']})"
     flag = "" if pos["quality"] == "COMPARABLE" else " **[QUALITY FLAGGED: not a clean position]**"
     who = pos["label"]
     sep = " / " if "(" in who else "/"                                      # R11: "HF (bf16 experts) / e4b"
@@ -4334,6 +4355,82 @@ def selftest():
     Q[("e4b", "fused_attn4_m_dense0")]["model"] = "mistralai/Mixtral-8x7B-Instruct-v0.1"
     v, why = void_why(QDENSE_FAM, Q, "fused_attn4_m_dense0")
     assert v == "VOID" and "the registered pin Qwen/Qwen3-30B-A3B @ ad44e777bcd1" in why, why
+    cases += 1
+    # 68. TC2 amendment 8, box Q (tc2qwen35mb1): Qwen3.6 alone, resident, the PRIMARY pair at micro-batch 1 x accum 8 on both sides under the
+    #     primary tags (e4b with the absmax double-quantized and the frozen projections in NF4; Unsloth with the expert target parameters), two
+    #     draws a side; the reference, HF, both axolotl arms and e4b as shipped not_run; no _mb1 receipt. It reads as the family's ordinary
+    #     matched pair: every arm VALID on the accum-8 counters, both pairs STABLE, the position quoted and named with its micro-batch, the
+    #     step-0 class NEAR, COMPARABLE the ceiling without the reference, no secondary line; P4 UNTESTED (its e4b leg is the field recipe's step)
+    def box_q(fam="qwen3_5"):
+        L, A = N_LAYERS[fam], 8
+        mb1 = {"micro_batch": 1, "accum": A}
+        uns = {**mb1, "experts_forward_calls_per_step_min": L * A, "unsloth_grouped_mm_calls_per_step_min": GMM_FACTOR * L * A,
+               "unsloth_grouped_mm_calls_per_step_max": GMM_FACTOR * L * A,
+               "unsloth_backend_calls_per_step_min": {"unsloth_grouped_mm": L * A, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": L * A},
+               "unsloth_backend_calls_per_step_max": {"unsloth_grouped_mm": L * A, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": L * A},
+               "unsloth_knobs": {"target_parameters_requested": ["mlp.experts.gate_up_proj", "mlp.experts.down_proj"]},
+               "eval_loss_step0": 2.012, "eval_curve": [{"step": 0, "heldout_loss": 2.012}, {"step": 20, "heldout_loss": 1.803}],
+               "losses": [round(2.003 - 0.01 * i, 5) for i in range(20)], "loss_last": round(2.003 - 0.19, 5), "loss_step2": 1.983}
+        R = {}
+        for tag, s_, pk in (("fused_attn4_m", 9.24, 31.36), ("fused_attn4_m_d2", 9.30, 31.40)):
+            R[("e4b", tag)] = _tc2_receipt(fam, "e4b", tag, "fused", s=s_, peak_vram_gb=pk, offload=False, absmax_dq=True, frozen_4bit=True,
+                                           kernel_calls_per_step_min=2 * L * A, **mb1)
+        for tag, s_, pk in (("ckpt_unsloth_m", 18.49, 30.41), ("ckpt_unsloth_m_d2", 18.60, 30.45)):
+            R[("unsloth", tag)] = _tc2_receipt(fam, "unsloth", tag, "unsloth", s=s_, heldout_n=1.803, peak_vram_gb=pk, **uns)
+        for fw, tag, arm_ in (("hf", "hf_peft_m", "hf"), ("axolotl", "ckpt_axolotl_m", "axolotl"), ("axolotl", "ckpt_axolotl_best", "axolotl"),
+                              ("e4b", "fused_attn4_shipped", "fused"), ("e4b", "reference_attn4_m", "reference")):
+            R[(fw, tag)] = {**_stub(fw, tag, arm_, "not_run", "skipped by TC1_SKIP"), "fam": fam}
+        return R
+    QB = trun("qwen3_5", box_q())
+    for key in (("e4b", "fused_attn4_m"), ("e4b", "fused_attn4_m_d2"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_d2")):
+        assert QB["verdicts"][key] == "VALID", (key, row(QB, *key)["why"])
+    assert all(QB["verdicts"][k] == "NOT_RUN" for k in (("e4b", "reference_attn4_m"), ("hf", "hf_peft_m"), ("e4b", "fused_attn4_shipped"), ("unsloth", "ckpt_unsloth_m_experts")))
+    assert QB["draws"][("e4b", "fused_attn4_m")]["verdict"] == "STABLE" and QB["draws"][("unsloth", "ckpt_unsloth_m")]["verdict"] == "STABLE"
+    pq = QB["positions"]["unsloth"]
+    assert pq["quoted"] and abs(pq["ratio"] - 18.545 / 9.27) < 1e-9 and pq["e4b_draws"] == 2 and pq["other_draws"] == 2 and pq["quality"] == "COMPARABLE", pq
+    assert pq["recipe"] == "micro-batch 1 × accum 8" and QB["anchor_micro_batch"] == 1 and QB["secondary"] == {} and QB["anchor_offload"] is False and QB["footprint"] is None
+    eq = QB["equivalence"][("unsloth", "ckpt_unsloth_m")]
+    assert eq["reading"] == "COMPARABLE" and eq["step0_class"] == "NEAR" and abs(eq["d_step0"] - 0.012) < 1e-9 and QB["parity"]["verdict"] == "NO-REF", (eq, QB["parity"])
+    ln = pos_lines(pq, QB["N"], prefix="MATCHED POSITION")
+    assert ln[0].startswith("- **MATCHED POSITION (micro-batch 1 × accum 8): s/step ratio unsloth/e4b = 2.001** [1.988, 2.013 over 4 cross-draw ratios]"), ln[0]
+    assert "step-0 Δ +0.0120" in ln[1], ln[1]
+    blk = "\n".join(family_block(QB))
+    assert "micro-batch 1 × accum 8 lr" in blk and "SECONDARY POSITION" not in blk and "FOOTPRINT" not in blk and "`unsloth/ckpt_unsloth_m` **COMPARABLE**" in blk
+    p4 = next(x for x in score_tc2_predictions({**T_ALL, "qwen3_5": QB}) if x[0] == "P4")
+    assert p4[2] == "UNTESTED" and "e4b's anchor ran micro-batch 1" in p4[3], p4
+    assert TP(T_ALL)["P4"] == "HELD" and T_ALL["qwen3_5"]["anchor_micro_batch"] == 2 and all(not pz.get("recipe") for pz in T_ALL["qwen3_5"]["positions"].values())
+    print("FAILING-CASE TC2-mb1-primary (reducer): P4", p4[2], "--", p4[3][:110])
+    Rm = box_q()                                             # a side that ran the field recipe beside a micro-batch-1 side is named, never folded in
+    Rm[("unsloth", "ckpt_unsloth_m")].update({"micro_batch": 2, "accum": 4})
+    assert trun("qwen3_5", Rm)["positions"]["unsloth"].get("recipe") == "recipes differ: e4b micro-batch 1 × accum 8, unsloth micro-batch 2 × accum 4"
+    td = tempfile.mkdtemp(prefix="tc2am8_reduce_selftest_")    # through the files, with the field N the box passes (--steps 20)
+    for (fw, tag), r in box_q().items():
+        json.dump(r, open(os.path.join(td, f"qwen3_5_{fw}_{tag}.json"), "w"))
+    F = reduce_dir(td, 20)
+    text = render(F, td)
+    for needle in ("MATCHED POSITION (micro-batch 1 × accum 8): s/step ratio unsloth/e4b = 2.001**", "| P4 | qwen3_5 | **UNTESTED** | e4b's anchor ran micro-batch 1",
+                   "draws (R1): `e4b/fused_attn4_m` STABLE (9.240/9.300 s"):
+        assert needle in text, needle
+    cases += 1
+    # 69. TC2 amendment 8, box M (tc2mixtralres): Mixtral alone at the field recipe, every e4b arm resident at e4b's defaults, Unsloth x2, e4b x2
+    #     and the reference; HF, both axolotl arms and e4b as shipped not_run. The pair reads a quoted position with no recipe note and no
+    #     footprint line (amendment 6's gate: the anchor ran resident), P5 UNTESTED, the parity control and the EQUIVALENT band read
+    Rx = _tc2_set("mixtral")
+    for tag, s_ in (("fused_attn4_m", 3.62), ("fused_attn4_m_d2", 3.66), ("reference_attn4_m", 6.8)):
+        Rx[("e4b", tag)].update({"offload": False, "peak_vram_gb": 31.2, "s_per_step_median_11plus": s_})
+    for tag, s_ in (("ckpt_unsloth_m", 3.40), ("ckpt_unsloth_m_d2", 3.44)):
+        Rx[("unsloth", tag)].update({"peak_vram_gb": 29.13, "s_per_step_median_11plus": s_})
+    for fw, tag, arm_ in (("hf", "hf_peft_m", "hf"), ("axolotl", "ckpt_axolotl_m", "axolotl"), ("axolotl", "ckpt_axolotl_best", "axolotl"), ("e4b", "fused_attn4_shipped", "fused")):
+        Rx[(fw, tag)] = {**_stub(fw, tag, arm_, "not_run", "skipped by TC1_SKIP"), "fam": "mixtral"}
+    MB = trun("mixtral", Rx)
+    pm = MB["positions"]["unsloth"]
+    assert MB["anchor_offload"] is False and MB["footprint"] is None and not family_block(MB)[1].startswith("- **FOOTPRINT"), MB["footprint"]
+    assert pm["quoted"] and abs(pm["ratio"] - 3.42 / 3.64) < 1e-9 and pm["recipe"] == "" and pm["peak_e4b"] == 31.2, pm
+    assert MB["verdicts"][("e4b", "reference_attn4_m")] == "VALID" and MB["parity"]["verdict"] == "PASS" and MB["equivalence"][("unsloth", "ckpt_unsloth_m")]["reading"] == "EQUIVALENT"
+    assert pos_lines(pm, MB["N"], prefix="MATCHED POSITION")[0].startswith("- **MATCHED POSITION: s/step ratio unsloth/e4b = 0.940**")
+    tm = TP({**T_ALL, "mixtral": MB})
+    assert tm["P5"] == "UNTESTED" and MB["anchor_micro_batch"] == 2, tm
+    print("FAILING-CASE TC2-mixtral-default (reducer): resident at e4b's defaults -> quoted", f"{pm['ratio']:.3f}", "no footprint line, P5", tm["P5"])
     cases += 1
     # ----------------------------------------------------------------------- R11: lane TC3 (the frontier tokens)
 
