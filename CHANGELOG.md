@@ -21,6 +21,19 @@
 - **Lane K28's runner** (bench and tests), and a correction pricing five TC boxes at Vast's invoiced cost.
 - **Registrations with no entry of their own:** TC1c amendments 3 (#1018), 4 (#1020), 5 (#1021) and 6 (#1028). Also #1011 (tests only): the GPU-class refusal snippet runs in a temp dir.
 
+### TC2 amendment 6 registered: Mixtral and Qwen3.6 with e4b RESIDENT on the 32 GB card (P11–P14). One RTX 5090
+
+- **Why.** On 2026-10-02 e4b trained neither big family resident on a 5090. Qwen3.6 OOMed at both micro-batches, and Mixtral ran only
+  under expert offload, where Unsloth (resident) steps about 5.3× faster. e4b's training memory has changed since (the lean LoRA delta
+  on by default; the combine saving bf16, not fp32).
+- **The box.** Token `tc2resident`: Mixtral, then Qwen3.6, with every e4b arm resident against Unsloth resident, two draws a side, the
+  e4b reference, and the micro-batch-1 pair on an OOM. Rows earlier boxes hold are skipped.
+- **Predictions.** P11 Mixtral fits resident at micro-batch 2 (at most 31.5 GB); P12 Unsloth/e4b on Mixtral in [0.45, 0.95], Unsloth
+  faster on a GEMM-bound step; P13 Qwen3.6 OOMs at micro-batch 2 and fits at micro-batch 1; P14 the pairs EQUIVALENT, parity PASS
+  where the reference fits.
+- **Reducer.** Mixtral's footprint line and P5 (the offload pair's prediction) are drawn only when e4b's anchor ran under offload (a
+  new self-test case, 70 in all). `bench/tc1/TC2-PREREG.md` amendment 6.
+
 ### Read: TC1c amendment 6 — with the dequant at bandwidth the grouped_mm route makes e4b faster than Unsloth on an H100 (P18, P19, P20 HELD)
 
 - **What.** Amendment 4's two boxes again, with grouped-nf4-gemm at #452's merge (`81706a9`), whose route dequant is bit-equal and
