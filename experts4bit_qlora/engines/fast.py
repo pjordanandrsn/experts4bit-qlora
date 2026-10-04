@@ -349,6 +349,39 @@ def _scatter_combine(down, w, order, token_rows, tokens, k, hidden, device, out_
     return buf.view(tokens, k, hidden).sum(1).to(out_dtype)
 
 
+class _ScatterCombine(torch.autograd.Function):
+    """``_scatter_combine`` for the TRAINING forward as one autograd node that saves the bf16 ``down`` rather than its fp32 copy.
+
+    Under autograd the combine's multiply saved ``down.to(float32)`` -- a [tokens*k, hidden] fp32 tensor, 23.75 MB per MoE layer at
+    380 tokens, top-8, hidden 2048 -- for its backward. This node saves ``down`` itself (half that, and an alias of a tensor the
+    caller already made) and recasts it in backward, which is exact (bf16 -> fp32 widens). The backward replays autograd's own
+    sequence for the composite -- the output cast's backward, the sum's expand, the view's reshape, the index_put's ``index`` for its
+    values, the multiply's two products and the broadcast reduction as a keepdim sum, the casts -- so both gradients are the same bytes.
+    """
+
+    @staticmethod
+    def forward(ctx, down, w, order, tokens, k, out_dtype):
+        hidden = down.shape[1]
+        buf = torch.zeros(tokens * k, hidden, dtype=torch.float32, device=down.device)
+        buf[order] = down.to(torch.float32) * w[:, None]
+        ctx.save_for_backward(down, w, order)
+        ctx.tokens, ctx.k = tokens, k
+        return buf.view(tokens, k, hidden).sum(1).to(out_dtype)
+
+    @staticmethod
+    def backward(ctx, g):
+        down, w, order = ctx.saved_tensors
+        tokens, k, hidden = ctx.tokens, ctx.k, down.shape[1]
+        gbuf = g.to(torch.float32).unsqueeze(1).expand(tokens, k, hidden).reshape(tokens * k, hidden)
+        gprod = gbuf[order]
+        gdown = gw = None
+        if ctx.needs_input_grad[0]:
+            gdown = (gprod * w[:, None]).to(down.dtype)
+        if ctx.needs_input_grad[1]:
+            gw = (gprod * down.to(torch.float32)).sum(1, keepdim=True).squeeze(1)
+        return gdown, gw, None, None, None, None
+
+
 def _refuse_wrapped(mod, entry: str) -> None:
     """Raise when an ``ExpertsLoRA``'s base violates the stock-epilogue contract.
 
@@ -654,8 +687,8 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     # `order` is a permutation of the [tokens, k] slots, so this is the old `top_k_weights[token_rows, top_pos]`
     # gather -- same elements -- with a scatter backward instead of a sorted one (see _PermGather).
     w = _PermGather.apply(top_k_weights, order).to(torch.float32)
-    return _scatter_combine(down, w, order, token_rows, tokens, k, hidden,
-                            hidden_states.device, input_dtype)
+    # One node that saves the bf16 `down`, not its fp32 copy; same forward ops and the same backward bytes (see _ScatterCombine).
+    return _ScatterCombine.apply(down, w, order, tokens, k, input_dtype)
 
 
 def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
@@ -775,6 +808,12 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     from .rmsnorm_train import enable_fused_rmsnorm_train, fused_rmsnorm_explicit, fused_rmsnorm_requested
     if patched and fused_rmsnorm_requested():
         enable_fused_rmsnorm_train(model, verbose=verbose, strict=fused_rmsnorm_explicit())
+    # Opt-in (E4B_MOE_KEEP_LAYERS=all|n): checkpoint only attention in the last n decoder layers, keeping their MoE activations
+    # instead of recomputing the fused MoE forward in backward (engines/moe_keep.py). Pair with NF4_QLORA_COMPACT_DELTA=1.
+    from .moe_keep import keep_moe_activations, moe_keep_layers_requested
+    keep = moe_keep_layers_requested() if patched else None
+    if keep is not None:
+        keep_moe_activations(model, keep, verbose=verbose)
     return patched
 
 
@@ -792,4 +831,6 @@ def disable_fast_train(model) -> int:
     if n:
         from .rope_train import disable_fused_rope
         disable_fused_rope(model)                        # the rotary patch rides enable_fast_train, so it unwinds with it
+        from .moe_keep import release_moe_activations
+        release_moe_activations(model)                   # ... and so does the attention-only checkpointing
     return n
