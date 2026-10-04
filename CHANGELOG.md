@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### TC2 amendment 8 registered: Mixtral at default settings with the dense route, and Qwen3.6's micro-batch-1 pair (P24–P28). Two RTX 5090s
+
+- **Box M** (`tc2mixtralres`): Mixtral alone, every e4b arm resident at e4b's default settings, so grouped-nf4-gemm's `auto` takes its
+  dense route (grouped-nf4-gemm#463). It predicts e4b's peak at most 31.6 GB and Unsloth/e4b in [0.75, 1.20].
+- **Box Q** (`tc2qwen35mb1`): Qwen3.6 alone, resident, the primary pair at micro-batch 1 × accum 8, two draws a side: e4b with
+  `E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1` against Unsloth with the family's expert target parameters. It predicts each e4b peak at most
+  31.8 GB, Unsloth/e4b in [1.50, 2.60] and a step-0 gap of at most 0.02 nats.
+- **Harness.** `tc2_big_family` reads two knobs only box Q's token sets: `TC2_PRIMARY_RECIPE` (the four primary arms' recipe; an `mb1`
+  primary pair runs no `_mb1` secondary) and `TC2_E4B_ARM_ENV` (extra environment on e4b arms only). Every other token runs as before.
+- **Reducer.** A primary pair off the field recipe's micro-batch names its recipe on its position line, and the lane's P4, whose e4b leg
+  reads the field recipe's step, is UNTESTED on such a box. Two new self-test cases, 77 in all. `bench/tc1/TC2-PREREG.md` amendment 8.
+
 ### Read: TC1 amendment 22 — grouped-nf4-gemm's dense route is 0.651× the fused kernels' step on Mixtral and 2.947× on Qwen3-30B-A3B (P38, P40 HELD; P39 FALSIFIED)
 
 - **Mixtral-8x7B** (`tc1-5090-62`, $0.51): dense/fused **0.651** [0.648, 0.654], 5.52 → 3.59 s/step, held-out Δ −0.0021, peak unchanged.

@@ -109,7 +109,7 @@ case " $FAMILIES " in *" qwen3curve "*)
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC1B-PREREG.md     # TC1b: the curve token is governed by its own registration (the PI's); TC1_PREREG still overrides
   ;;
 esac
-case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*|*" tc2resident "*)
+case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*|*" tc2resident "*|*" tc2mixtralres "*|*" tc2qwen35mb1 "*)
   echo "FIXTURE tc2 (TC2-PREREG-draft): small (box A: granite olmoe gptoss): steps=$SMALL_STEPS eval_every=$SMALL_EVAL_EVERY eval_n=$SMALL_EVAL_N; big (box B: qwen3_5 mixtral): the field recipe (steps=$STEPS eval_every=$EVAL_EVERY eval_n=$EVAL_N)" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md      # TC2: governed by its own registration (the PI's, bench/tc1/TC2-PREREG.md); TC1_PREREG still overrides
   ;;
@@ -734,6 +734,9 @@ tc2_small_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$
 #   6 hf/hf_peft_m  7 axolotl/ckpt_axolotl_m  8 axolotl/ckpt_axolotl_best  9 e4b/fused_attn4_shipped  10 e4b/reference_attn4_m (LAST: its alarm is the longest)
 #   then the _mb1 secondary pair for any framework whose primary matched arm OOMed, as tc1_family. OFFLOAD reaches the e4b arms only (mixtral: --offload 1, as tp4;
 #   Unsloth / HF / axolotl resident, as tp4); the Unsloth arms run in venv-unsloth with --unsloth-moe-backend grouped_mm (TC1's comparator configuration).
+#   TC2 amendment 8: TC2_PRIMARY_RECIPE (unset = field) is the recipe of the four primary arms (1-4; mb1 = micro-batch 1 x accum 8, the same tokens per
+#   step, under the same tags, so the pair stays the reducer's ordinary matched pair; HF / axolotl keep the field recipe), and a primary pair already at
+#   mb1 has no _mb1 secondary; TC2_E4B_ARM_ENV (unset = nothing) is handed to every e4b arm as its TC1_ARM_EXTRA_ENV, never to another framework's.
 tc2_big_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8 RAL=$9 OFF=${10} UT=${11} UT2=${12:-} UP2=${13:-}
   local ALL="e4b:fused_attn4_m:fused unsloth:ckpt_unsloth_m:unsloth e4b:fused_attn4_m_d2:fused unsloth:ckpt_unsloth_m_d2:unsloth ${UT2:+unsloth:ckpt_unsloth_m_experts:unsloth }hf:hf_peft_m:hf axolotl:ckpt_axolotl_m:axolotl axolotl:ckpt_axolotl_best:axolotl e4b:fused_attn4_shipped:fused e4b:reference_attn4_m:reference"
   say "===== TC2 big family $FAM ($MID @ $REV; offload=$OFF unsloth_targets=$UT targets2=${UT2:-none} target_parameters=${UP2:-none}; matched seed $MATCHED_SEED; alarms e4b $EAL unsloth $UAL hf $HAL axolotl $AAL reference $RAL)"
@@ -743,21 +746,26 @@ tc2_big_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 HAL=$7 AAL=$8 
   # TC2 amendment 4: TC2_UNS_TARGET_PARAMS gives the matched Unsloth arms (both draws) the family's expert target parameters -- unset everywhere else
   local UNS="--grad-ckpt unsloth --unsloth-targets $UT${TC2_UNS_TARGET_PARAMS:+ --unsloth-target-parameters $TC2_UNS_TARGET_PARAMS}"
   local UP2ARG=""; [ -n "$UP2" ] && UP2ARG="--unsloth-target-parameters $UP2"
-  can_run 600 $FAM/e4b/fused_m     && arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 $MATCH
-  can_run 600 $FAM/unsloth/m       && arm   $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
-  can_run 600 $FAM/e4b/fused_m_d2  && draw2 $FAM e4b fused_attn4_m fused $EAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 $MATCH
-  can_run 600 $FAM/unsloth/m_d2    && draw2 $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  # TC2 amendment 8: the primary pair's recipe and the e4b arms' extra environment -- both unset (field, nothing) on every other token
+  local PRIM=${TC2_PRIMARY_RECIPE:-field} EENV=${TC2_E4B_ARM_ENV:-}
+  [ "$PRIM" = field ] || echo "PRIMARY $FAM: the four primary arms run recipe $PRIM (TC2_PRIMARY_RECIPE); e4b arms' extra env: ${EENV:-none}" | tee -a summary.txt
+  can_run 600 $FAM/e4b/fused_m     && TC1_ARM_EXTRA_ENV="$EENV" arm   $FAM e4b fused_attn4_m fused $EAL "$MID" $REV $OFF $PRIM $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m       && arm   $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 $PRIM $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 600 $FAM/e4b/fused_m_d2  && TC1_ARM_EXTRA_ENV="$EENV" draw2 $FAM e4b fused_attn4_m fused $EAL "$MID" $REV $OFF $PRIM $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m_d2    && draw2 $FAM unsloth ckpt_unsloth_m unsloth $UAL "$MID" $REV 0 $PRIM $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
   [ -n "$UT2" ] && can_run 600 $FAM/unsloth/m_experts && arm $FAM unsloth ckpt_unsloth_m_experts unsloth $UAL "$MID" $REV 0 field $TOK $TS --grad-ckpt unsloth --unsloth-targets "$UT2" $UP2ARG --unsloth-moe-backend grouped_mm $MATCH
   can_run 600 $FAM/hf/m            && arm   $FAM hf hf_peft_m hf $HAL "$MID" $REV 0 field $TOK $TS $MATCH
   can_run 600 $FAM/axolotl/m       && arm   $FAM axolotl ckpt_axolotl_m axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json $MATCH
   can_run 600 $FAM/axolotl/best    && arm   $FAM axolotl ckpt_axolotl_best axolotl $AAL "$MID" $REV 0 field $TOK $TS --axolotl-dataset $W/data/ds_alpaca.json --axolotl-best 1 --adapter-dtype fp32 --lora-init native
-  can_run 600 $FAM/e4b/shipped     && arm   $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 $NATIVE
-  can_run 900 $FAM/e4b/reference_m && arm   $FAM e4b reference_attn4_m reference $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped     && TC1_ARM_EXTRA_ENV="$EENV" arm   $FAM e4b fused_attn4_shipped fused $EAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 900 $FAM/e4b/reference_m && TC1_ARM_EXTRA_ENV="$EENV" arm   $FAM e4b reference_attn4_m reference $RAL "$MID" $REV $OFF field $TOK $TS --attn-4bit 1 $MATCH
   # the secondary pair (as tc1_family): micro-batch 1 x accum 8 -- same tokens per step -- for any framework whose primary matched arm OOMed
   local se su sh; se=$(status_of $FAM e4b fused_attn4_m); su=$(status_of $FAM unsloth ckpt_unsloth_m); sh=$(status_of $FAM hf hf_peft_m)
-  if [ "$se" = oom ] || [ "$su" = oom ] || [ "$sh" = oom ]; then
+  if [ "$PRIM" != field ]; then        # TC2 amendment 8: the primary pair already ran micro-batch 1 -- an _mb1 pair would duplicate it
+    echo "SECONDARY $FAM: none -- the primary pair ran recipe $PRIM already (e4b=$se unsloth=$su hf=$sh)" | tee -a summary.txt
+  elif [ "$se" = oom ] || [ "$su" = oom ] || [ "$sh" = oom ]; then
     echo "SECONDARY $FAM: a primary matched arm OOMed (e4b=$se unsloth=$su hf=$sh) -> mb1 pair" | tee -a summary.txt
-    can_run 600 $FAM/e4b/fused_m_mb1 && arm $FAM e4b fused_attn4_m_mb1 fused $EAL "$MID" $REV $OFF mb1 $TOK $TS --attn-4bit 1 $MATCH
+    can_run 600 $FAM/e4b/fused_m_mb1 && TC1_ARM_EXTRA_ENV="$EENV" arm $FAM e4b fused_attn4_m_mb1 fused $EAL "$MID" $REV $OFF mb1 $TOK $TS --attn-4bit 1 $MATCH
     can_run 600 $FAM/unsloth/m_mb1   && arm $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
     [ "$sh" = oom ] && can_run 600 $FAM/hf/m_mb1 && arm $FAM hf hf_peft_m_mb1 hf $HAL "$MID" $REV 0 mb1 $TOK $TS $MATCH
   fi
@@ -807,6 +815,31 @@ tc2_resident(){
   tc2_big_family   mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600 3600 1800 2700 5400 0 "$UT7" ""     ""
   TC2_UNS_TARGET_PARAMS="$UP_QWEN3_5"
   tc2_big_family   qwen3_5  Qwen/Qwen3.6-35B-A3B                      995ad96eacd98c81ed38be0c5b274b04031597b0 6000 3600 3600 1800 2700 5400 0 "$UT4" ""     ""
+  TC2_UNS_TARGET_PARAMS=""
+}
+# TC2 amendment 8 (2026-10-04), box M: Mixtral-8x7B alone at the field recipe, every e4b arm RESIDENT at e4b's DEFAULT settings -- this token
+# sets no e4b environment, so grouped-nf4-gemm's `auto` takes its dense route for Mixtral's calls off sm_90 (gnf4#463; TC1 amendment 22 read
+# it at 0.651x the fused kernels' step). Unsloth resident x2 and e4b x2, then the e4b reference; a primary arm that OOMs falls to the _mb1
+# pair as in every family. HF, both axolotl arms and e4b as shipped are not re-run (box B and amendment 6's box hold them): not_run stubs.
+tc2_mixtral_resident(){
+  SKIP="$SKIP mixtral/hf/hf_peft_m mixtral/axolotl/ckpt_axolotl_m mixtral/axolotl/ckpt_axolotl_best mixtral/e4b/fused_attn4_shipped"
+  tc2_big_family   mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600 3600 1800 2700 5400 0 "$UT7" ""     ""
+}
+# TC2 amendment 8 (2026-10-04), box Q: Qwen3.6-35B-A3B alone, resident, the PRIMARY pair at micro-batch 1 x accum 8 (the same tokens per
+# step) under its primary tags, two draws a side: e4b fused_attn4_m with E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1 (e4b arms only: the absmax
+# double-quantized and the non-routed projections in NF4, the comparator's bytes -- amendment 7's box F, whose single mb1 draws read 9.24
+# vs 18.49 s/step) against Unsloth ckpt_unsloth_m with the family's expert target parameters. The e4b reference (it OOMed resident at
+# micro-batch 1 on box F), HF, both axolotl arms and e4b as shipped are not_run stubs; no _mb1 secondary runs. Every knob is reset after.
+# The Unsloth arms' --expect-trainable is looked up on fused_attn4_m_mb1 (arm's mb1 recipe), which this box never writes, so they run
+# without it; the reducer still reads their trainable count against e4b's fused_attn4_m (R11).
+tc2_qwen35_mb1(){
+  SKIP="$SKIP qwen3_5/e4b/reference_attn4_m qwen3_5/hf/hf_peft_m qwen3_5/axolotl/ckpt_axolotl_m qwen3_5/axolotl/ckpt_axolotl_best qwen3_5/e4b/fused_attn4_shipped"
+  TC2_UNS_TARGET_PARAMS="$UP_QWEN3_5"
+  TC2_PRIMARY_RECIPE=mb1
+  TC2_E4B_ARM_ENV="E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1"
+  tc2_big_family   qwen3_5  Qwen/Qwen3.6-35B-A3B                      995ad96eacd98c81ed38be0c5b274b04031597b0 6000 3600 3600 1800 2700 5400 0 "$UT4" ""     ""
+  TC2_E4B_ARM_ENV=""
+  TC2_PRIMARY_RECIPE=""
   TC2_UNS_TARGET_PARAMS=""
 }
 # tc1_nativebest_family FAM MID REV FETCH_AL E4B_AL UNS_AL AX_AL -- TC1 amendment 5 (2026-10-02): each framework's NATIVE-BEST
@@ -1210,6 +1243,8 @@ for FAM in $FAMILIES; do case "$FAM" in
   tc2mixtral)  tc2_mixtral_redraw;;            # lane TC2 amendment 2: Mixtral's P5 pair and reference redrawn with the Unsloth alarm at 7,200 s
   tc2qwen35off) tc2_qwen35_offload;;           # lane TC2 amendment 4: Qwen3.6's matched set, e4b under expert offload vs Unsloth resident with expert targets
   tc2resident) tc2_resident;;                  # lane TC2 amendment 6: Mixtral and Qwen3.6 with every e4b arm resident on the 32 GB card
+  tc2mixtralres) tc2_mixtral_resident;;        # lane TC2 amendment 8, box M: Mixtral alone, every e4b arm resident at e4b's default settings
+  tc2qwen35mb1) tc2_qwen35_mb1;;               # lane TC2 amendment 8, box Q: Qwen3.6 alone, resident, the primary pair at micro-batch 1
   # TC3 (TC3-PREREG-draft): the 24 GB RTX 4090 token (TC1_GPU_CLASS=4090) and the owned 12 GB RTX A2000 token (TC1_GPU_CLASS="RTX A2000", TC1_LOCAL_BOX=1)
   #                                                                                                        FETCH ERES EOFF MB1  UNS  HF   HOFF AX   ALO  AZ3  ROFF   (the draft's alarms)
   qwen3frontier)   tc1_frontier_family   qwen3frontier   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1200 3600 3600 3600 1800 3600 2700 3600 3600 5400;;

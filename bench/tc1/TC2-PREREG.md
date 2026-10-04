@@ -282,3 +282,47 @@ Each is FALSIFIED outside its band and UNTESTED where the box quotes no reading.
 **Budget.** Three RTX 5090s at the policy rate ($0.85/h). Box S has a 3 h guard; boxes D and F have 5 h each, with the 192 GB host floor.
 Estimates: S about $1.5, D and F about $3.2 each with the download, about $8 in all. The standing no-ask tier per run; the campaign's daily
 cap is $100, counted 9 am to 9 am Central.
+
+### Amendment 8 (2026-10-04T18:00Z, after amendment 7's read and TC1 amendment 22, before any box): Mixtral at default settings with the dense route, and Qwen3.6's micro-batch-1 pair with two draws a side
+
+**Why.**
+
+- **Mixtral.** TC1 amendment 22 read grouped-nf4-gemm's dense route at 0.651× the fused kernels' step on Mixtral-8x7B, and grouped-nf4-gemm#463
+  makes it `auto`'s choice off sm_90 for calls with at most 16 present groups. Mixtral routes 2 of 8 experts, so its calls qualify.
+  Amendment 6's position (Unsloth/e4b 0.697) read the fused kernels; this box reads the position with e4b at its defaults on that release
+  of the route.
+- **Qwen3.6.** Amendment 7's box F trained Qwen3.6 resident at micro-batch 1 with the absmax double-quantized and the non-routed projections
+  in NF4 (`--frozen-4bit`, the comparator's bytes): e4b 9.24 s/step against Unsloth's 18.49 on the same box. That was one draw each, the
+  secondary pair, so it was not quoted. This amendment asks for that pair as a primary pair, two draws a side.
+
+**The boxes.** Two RTX 5090s from this amendment's merge, with grouped-nf4-gemm at #463's merge.
+
+- **Box M** (`tc2mixtralres`): Mixtral-8x7B alone, the field recipe, every e4b arm resident at **default settings** (nothing set, so `auto`
+  takes the dense route). Unsloth resident ×2 and e4b ×2, then the e4b reference; HF, both axolotl arms and e4b as shipped are `not_run`
+  stubs.
+- **Box Q** (`tc2qwen35mb1`): Qwen3.6-35B-A3B alone, resident, the primary pair at **micro-batch 1 × accum 8** (the same tokens per step),
+  e4b with `E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1` ×2, and Unsloth with the family's expert target parameters ×2. The e4b reference,
+  HF, both axolotl arms and e4b as shipped are `not_run` stubs (the reference OOMed resident at micro-batch 1 on box F).
+
+**Predictions** (registered before the boxes):
+
+- **P24** (box M): e4b's fused path completes Mixtral resident at default settings (VALID), peak at most **31.6 GB** (the fp32 absmax,
+  31.07 GB with the fused kernels, plus the dense route's one-expert transient).
+- **P25** (box M): Unsloth/e4b lies in **[0.75, 1.20]**, both pairs stable. This band is wide on purpose: Unsloth's Mixtral step has
+  ranged 3.0–4.1 s across hosts, and e4b's dense step is about 3.6–3.7 s.
+- **P26** (box Q): both e4b micro-batch-1 draws complete resident (VALID), each peak at most **31.8 GB**.
+- **P27** (box Q): Unsloth/e4b at micro-batch 1 lies in **[1.50, 2.60]**, both pairs stable (box F's single draws: 2.0).
+- **P28:** each quoted pair reads EQUIVALENT or COMPARABLE at N = 20 (the reading is recorded, not a gate), and box Q's step-0 gap is at
+  most 0.02 nats (box F: 0.011–0.014).
+
+Each is FALSIFIED outside its band and UNTESTED where the box quotes no reading.
+
+**Decision rules.**
+
+- **P24 and P25:** box M's pair becomes Mixtral's position at default settings (`e4b.train.h2h.unsloth.mixtral.5090.<date>.dense-default`).
+  It supersedes amendment 6's 0.697 as the family's position, and that row stays labelled as the fused kernels' reading.
+- **P26 and P27:** box Q's pair is Qwen3.6's first quoted position, labelled "micro-batch 1, e4b on the comparator's bytes with the absmax
+  double-quantized", since e4b's defaults keep those projections bf16 and do not fit at micro-batch 2.
+
+**Budget.** Two RTX 5090s at the policy rate, 3 h (M) and 4 h (Q) guards, with a 192 GB host floor. About $1.5 and $2.5 with the downloads;
+the standing no-ask tier; the campaign's daily cap is $100, counted 9 am to 9 am Central.

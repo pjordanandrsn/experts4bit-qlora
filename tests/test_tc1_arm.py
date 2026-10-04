@@ -751,7 +751,7 @@ def test_tc2_knobs_are_read_by_the_box_and_forwarded_by_the_driver():
         assert knob in forwarded_block.split(), (knob, "read by tc1_run.sh but not forwarded by tc1_drive.sh")
     assert 'case "$TC1_BOX" in A|B)' in run and 'case "$TC1_BOX" in A|B)' in drive
     assert 'A) FAMILIES=${TC1_FAMILIES:-"qwen3"};;' in run and 'B) FAMILIES=${TC1_FAMILIES:-"tc2big"};;' in run
-    assert '[ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md' in run and 'case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*|*" tc2resident "*)' in run
+    assert '[ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md' in run and 'case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*|*" tc2resident "*|*" tc2mixtralres "*|*" tc2qwen35mb1 "*)' in run
     assert "small)  s=$SMALL_STEPS; en=$SMALL_EVAL_N; ee=$SMALL_EVAL_EVERY; ex_tag=fused_attn4_m;;" in run
 
 
@@ -788,8 +788,9 @@ def test_tc2_run_sh_runs_the_registered_arm_order_with_the_flags():
         ("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m"), ("unsloth", "ckpt_unsloth_m_experts"),
         ("hf", "hf_peft_m"), ("axolotl", "ckpt_axolotl_m"), ("axolotl", "ckpt_axolotl_best"), ("e4b", "fused_attn4_shipped"), ("e4b", "reference_attn4_m"),
         ("e4b", "fused_attn4_m_mb1"), ("unsloth", "ckpt_unsloth_m_mb1"), ("hf", "hf_peft_m_mb1")]
-    assert re.search(r"fused_attn4_m fused \$EAL \"\$MID\" \$REV \$OFF field \$TOK \$TS --attn-4bit 1 \$MATCH", big) and big.count("draw2 $FAM") == 2
-    assert re.search(r"ckpt_unsloth_m unsloth \$UAL \"\$MID\" \$REV 0 field \$TOK \$TS \$UNS --unsloth-moe-backend grouped_mm \$MATCH", big)
+    assert re.search(r"fused_attn4_m fused \$EAL \"\$MID\" \$REV \$OFF \$PRIM \$TOK \$TS --attn-4bit 1 \$MATCH", big) and big.count("draw2 $FAM") == 2
+    assert re.search(r"ckpt_unsloth_m unsloth \$UAL \"\$MID\" \$REV 0 \$PRIM \$TOK \$TS \$UNS --unsloth-moe-backend grouped_mm \$MATCH", big)
+    assert "local PRIM=${TC2_PRIMARY_RECIPE:-field} EENV=${TC2_E4B_ARM_ENV:-}" in big      # TC2 amendment 8: unset on every other token -> field, nothing
     assert re.search(r'ckpt_unsloth_m_experts unsloth \$UAL .* 0 field .* --grad-ckpt unsloth --unsloth-targets "\$UT2" \$UP2ARG --unsloth-moe-backend grouped_mm \$MATCH', big)
     assert 'local UP2ARG=""; [ -n "$UP2" ] && UP2ARG="--unsloth-target-parameters $UP2"' in big
     assert re.search(r"reference_attn4_m reference \$RAL \"\$MID\" \$REV \$OFF field .* --attn-4bit 1 \$MATCH", big) and big.index("reference_attn4_m reference") > big.index("fused_attn4_shipped fused")
@@ -1026,6 +1027,79 @@ def test_tc2_amendment_6_resident_token():
             assert f"{fam}/{arm}" in body, (fam, arm)
         assert f"{fam}/unsloth/ckpt_unsloth_m " not in body and f"{fam}/e4b/reference_attn4_m" not in body, "the pair and the parity control run"
     assert "tc2resident) tc2_resident;;" in run
+
+
+def _tc2_big_family_calls(run, token, tmp_path, stat=""):
+    """Runs `token` with tc2_big_family's REAL body (and skip / draw2 / the target lists from tc1_run.sh) against a stub `arm` that prints
+    one line per arm: fw/tag, then `skip`, or the recipe, the offload and the arm's TC1_ARM_EXTRA_ENV. `stat` = "fam/fw/tag=oom ..." for
+    status_of. Prints the three TC2 knobs after the token returns."""
+    big = re.search(r"^tc2_big_family\(\)\{.*?^  free_family .*?\n", run, re.DOTALL | re.MULTILINE).group(0)
+    tok = re.search(rf"^{token}\(\)\{{\n.*?^\}}\n", run, re.DOTALL | re.MULTILINE).group(0)
+    lines = [re.search(rf"^{pat}.*$", run, re.MULTILINE).group(0) for pat in (r"skip\(\)\{", r"draw2\(\)\{", r"UT7=", r"UT4=", r"UP_QWEN3_5=")]
+    script = "\n".join([
+        "set -uo pipefail", 'say(){ :; }; MATCHED_SEED=3407; W=/w; SKIP=""; STAT="' + stat + '"', *lines,
+        'tc1_prepare(){ TOK=tok; TS=sha; return 0; }; can_run(){ return 0; }; free_family(){ :; }',
+        'status_of(){ case " $STAT " in *" $1/$2/$3=oom "*) echo oom;; *) echo ok;; esac; }',
+        'arm(){ if skip $1 || skip $1/$2/$3; then echo "$2/$3 skip"; else echo "$2/$3 $9 off=$8 [${TC1_ARM_EXTRA_ENV:-}] $*"; fi; }',
+        big, tok, token,
+        'echo "knobs [${TC2_UNS_TARGET_PARAMS:-}] [${TC2_PRIMARY_RECIPE:-}] [${TC2_E4B_ARM_ENV:-}]"'])
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, cwd=tmp_path)
+    assert out.returncode == 0 and not out.stderr, out.stderr
+    return [ln for ln in out.stdout.splitlines() if ln and not ln.endswith(" DONE") and not ln.startswith(("PRIMARY ", "SECONDARY "))]   # those: summary.txt
+
+
+def test_tc2_amendment_8_tokens(tmp_path):
+    """TC2 amendment 8: `tc2mixtralres` (box M) runs Mixtral alone with every e4b arm resident at e4b's DEFAULT settings -- no environment
+    from the token -- Unsloth x2 and e4b x2 at the field recipe, then the e4b reference; `tc2qwen35mb1` (box Q) runs Qwen3.6 alone, resident,
+    with the PRIMARY pair at micro-batch 1 (TC2_PRIMARY_RECIPE=mb1 on the four primary arms, under their primary tags), E4B_ABSMAX_DQ=1
+    TRAIN_FROZEN_4BIT=1 on the e4b arms only (TC2_E4B_ARM_ENV -> TC1_ARM_EXTRA_ENV), Unsloth with the family's expert target parameters,
+    the reference skipped as well, and no _mb1 secondary even after an OOM; every knob reset after. HF, both axolotl arms and e4b as shipped
+    are not_run stubs on both. Every other token runs exactly as before (field recipe, no extra env)."""
+    run = RUN_SH.read_text()
+    bodies = {}
+    for fn in ("tc2_mixtral_resident", "tc2_qwen35_mb1"):
+        m = re.search(rf"^{fn}\(\)\{{\n(.*?)^\}}\n", run, re.DOTALL | re.MULTILINE)
+        assert m, f"{fn} is gone"
+        bodies[fn] = m.group(1)
+    mx, qw = bodies["tc2_mixtral_resident"], bodies["tc2_qwen35_mb1"]
+    assert re.search(r'tc2_big_family +mixtral +mistralai/Mixtral-8x7B-Instruct-v0\.1 +eba92302a2861cdc0098cc54bc9f17cb2c47eb61 +7200 3600 3600 1800 2700 5400 0 "\$UT7" +"" +""', mx), mx
+    assert re.search(r'tc2_big_family +qwen3_5 +Qwen/Qwen3\.6-35B-A3B +995ad96eacd98c81ed38be0c5b274b04031597b0 +6000 3600 3600 1800 2700 5400 0 "\$UT4" +"" +""', qw), qw
+    for knob in ("TC2_PRIMARY_RECIPE", "TC2_E4B_ARM_ENV", "TC2_UNS_TARGET_PARAMS", "TC1_E4B_ENV", "TC1_ARM_EXTRA_ENV"):
+        assert knob not in mx, (knob, "box M runs e4b at its defaults")
+    for k, v in (("TC2_UNS_TARGET_PARAMS", '"$UP_QWEN3_5"'), ("TC2_PRIMARY_RECIPE", "mb1"), ("TC2_E4B_ARM_ENV", '"E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1"')):
+        assert qw.index(f"{k}={v}") < qw.index("tc2_big_family") < qw.index(f'{k}=""'), k
+    assert qw.rstrip().split("\n")[-3:] == ['  TC2_E4B_ARM_ENV=""', '  TC2_PRIMARY_RECIPE=""', '  TC2_UNS_TARGET_PARAMS=""']
+    for knob in ("TC2_PRIMARY_RECIPE=", "TC2_E4B_ARM_ENV="):            # assigned in tc2_qwen35_mb1 alone (set, then reset)
+        assert run.count(knob) == qw.count(knob) == 2, knob
+    assert "tc2mixtralres) tc2_mixtral_resident;;" in run and "tc2qwen35mb1) tc2_qwen35_mb1;;" in run
+    # tc2_big_family: the four primary arms take the recipe, every e4b arm (and only an e4b arm) the extra env, and an mb1 primary has no secondary
+    big = re.search(r"^tc2_big_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE).group(0)
+    assert len(re.findall(r" \$PRIM \$TOK", big)) == 4 and big.count('TC1_ARM_EXTRA_ENV="$EENV"') == 5
+    assert all(re.search(r'TC1_ARM_EXTRA_ENV="\$EENV" (arm|draw2) +\$FAM e4b ', ln) for ln in big.split("\n") if "TC1_ARM_EXTRA_ENV" in ln and "&&" in ln)
+    assert big.index('if [ "$PRIM" != field ]; then') < big.index('elif [ "$se" = oom ] || [ "$su" = oom ] || [ "$sh" = oom ]; then')
+    stubbed = ["hf/hf_peft_m skip", "axolotl/ckpt_axolotl_m skip", "axolotl/ckpt_axolotl_best skip", "e4b/fused_attn4_shipped skip"]
+    # box M: the field recipe, no extra env anywhere, the reference runs
+    calls = _tc2_big_family_calls(run, "tc2_mixtral_resident", tmp_path)
+    head = [" ".join(c.split()[:4]) for c in calls[:4]]
+    assert head == ["e4b/fused_attn4_m field off=0 []", "unsloth/ckpt_unsloth_m field off=0 []", "e4b/fused_attn4_m_d2 field off=0 []", "unsloth/ckpt_unsloth_m_d2 field off=0 []"], calls
+    assert calls[4:8] == stubbed and calls[8].startswith("e4b/reference_attn4_m field off=0 [] ") and calls[9] == "knobs [] [] []", calls
+    assert "--unsloth-target-parameters" not in calls[1] and "--unsloth-targets q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj" in calls[1]
+    # box Q: mb1 on the four primary arms, the e4b env on e4b arms only, the expert target parameters on both Unsloth draws, the reference skipped
+    for stat in ("", "qwen3_5/e4b/fused_attn4_m=oom qwen3_5/unsloth/ckpt_unsloth_m=oom"):
+        calls = _tc2_big_family_calls(run, "tc2_qwen35_mb1", tmp_path, stat=stat)
+        head = [" ".join(c.split()[:5]) for c in calls[:4]]
+        assert head == ["e4b/fused_attn4_m mb1 off=0 [E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1]", "unsloth/ckpt_unsloth_m mb1 off=0 [] qwen3_5",
+                        "e4b/fused_attn4_m_d2 mb1 off=0 [E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1]", "unsloth/ckpt_unsloth_m_d2 mb1 off=0 [] qwen3_5"], (stat, calls)
+        for c in (calls[1], calls[3]):
+            assert "--unsloth-targets q_proj,k_proj,v_proj,o_proj --unsloth-target-parameters mlp.experts.gate_up_proj,mlp.experts.down_proj" in c, c
+        assert calls[4:] == stubbed + ["e4b/reference_attn4_m skip", "knobs [] [] []"], (stat, calls)      # no _mb1 secondary, every knob reset
+    summ = (tmp_path / "summary.txt").read_text()
+    assert summ.count("SECONDARY qwen3_5: none -- the primary pair ran recipe mb1 already") == 2 and "PRIMARY mixtral" not in summ
+    assert summ.count("PRIMARY qwen3_5: the four primary arms run recipe mb1 (TC2_PRIMARY_RECIPE); e4b arms' extra env: E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1") == 2
+    # an existing token is untouched: tc2_resident's eight arm lines run the field recipe with no extra env (Qwen3.6's OOM still falls to _mb1)
+    calls = _tc2_big_family_calls(run, "tc2_resident", tmp_path, stat="qwen3_5/e4b/fused_attn4_m=oom")
+    ran = [c for c in calls if not c.endswith(" skip") and not c.startswith("knobs")]
+    assert all(" off=0 [] " in c for c in ran) and [c.split()[1] for c in ran].count("field") == 10 and [c.split()[0] for c in ran][-2:] == ["e4b/fused_attn4_m_mb1", "unsloth/ckpt_unsloth_m_mb1"], ran
 
 
 def test_tc1_amendment_4_axolotl_router_recast_is_what_autocast_computes():
