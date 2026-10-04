@@ -4,7 +4,8 @@
 # (TC1_RUN_NONCE within 30 s), summary.txt one line per finished step, and TC1_EXIT_CODE.<nonce> / TC1_SUCCESS.<nonce> /
 # TP_DONE.<nonce> at the end -- a refusal writes them too, so the controller reads a finished lane, never a hang.
 #
-# Per family, in order (cheap first; OLMoE is the regression anchor -- a licensed family re-read on this branch):
+# Per family, in order (cheap first; OLMoE-Instruct and Gemma-4-26B-A4B-it are the regression anchors -- licensed families re-read
+# on this branch, on the checkpoints tp1 licensed; amendment 1):
 #   fetch the PINNED revision -> tp1's arm driver UNCHANGED (tp1_train_smoke.py: reference, fused; the registered clinical
 #   fixture, N=60, seq 512, r=8) -> the ladder (bench/moegen/ladder.py: fused, fused_pre, keep, interleaved A..Z Z..A).
 # Nothing here creates, destroys or approves compute.
@@ -17,18 +18,19 @@ finish(){ local rc=$1; printf '%s\n' "$rc" > "TC1_EXIT_CODE.$NONCE"; [ "$rc" = 0
 : > summary.txt; mkdir -p logs receipts data
 E4B_SHA=${E4B_SHA:?}; GNF4_SHA=${GNF4_SHA:?}
 STEPS=${MG1_STEPS:-60}; SEQ=512
-FAMS=${MG1_FAMILIES:-"olmoe lfm2 graniteh ernie nemotron qwen3_5"}
+FAMS=${MG1_FAMILIES:-"olmoe gemma4 lfm2 graniteh ernie nemotron qwen3_5"}
 # MG1_PROVE=1 (the proving run, forwarded by tc1_drive): install + tripwire, then a clean finish -- no anchor, no fetch, no arm.
 # MG1_REHEARSAL=1 (the $0 A2000 container rehearsal ONLY; tc1_drive does not forward it, so a rented box can never set it): a
 # train-anchor refusal is recorded and the lane continues, so the arms and the ladder run on a card outside the anchor band.
 PROVE=${MG1_PROVE:-0}; REHEARSAL=${MG1_REHEARSAL:-0}
-[ "$STEPS" = 60 ] && [ "$FAMS" = "olmoe lfm2 graniteh ernie nemotron qwen3_5" ] || echo "NON-REGISTERED SHAPE: MG1_STEPS=$STEPS MG1_FAMILIES=$FAMS (not a registered reading)" | tee -a summary.txt
+[ "$STEPS" = 60 ] && [ "$FAMS" = "olmoe gemma4 lfm2 graniteh ernie nemotron qwen3_5" ] || echo "NON-REGISTERED SHAPE: MG1_STEPS=$STEPS MG1_FAMILIES=$FAMS (not a registered reading)" | tee -a summary.txt
 [ "$REHEARSAL" = 1 ] && echo "REHEARSAL (MG1_REHEARSAL=1): not a registered reading" | tee -a summary.txt
 # family -> model id | pinned revision | offload (0 resident; qwen3_5 retries under offload on an OOM stub)
-declare -A MID=( [olmoe]=allenai/OLMoE-1B-7B-0924 [lfm2]=LiquidAI/LFM2-8B-A1B [graniteh]=ibm-granite/granite-4.0-h-tiny
+declare -A MID=( [olmoe]=allenai/OLMoE-1B-7B-0924-Instruct [gemma4]=google/gemma-4-26B-A4B-it [lfm2]=LiquidAI/LFM2-8B-A1B [graniteh]=ibm-granite/granite-4.0-h-tiny
                  [ernie]=baidu/ERNIE-4.5-21B-A3B-PT [nemotron]=nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16
                  [qwen3_5]=Qwen/Qwen3.6-35B-A3B )
-declare -A REV=( [olmoe]=6d84c48581ece794365f2b8e9cfb043c68ade9c5 [lfm2]=c1c44ff9fc00db3ebf4516970563f5f383d23670
+declare -A REV=( [olmoe]=7f1c97f440f06ce36705e4f2b843edb5925f4498 [gemma4]=4d7ae4984b7db7de8f8457170b3f1a419ee76d52
+                 [lfm2]=c1c44ff9fc00db3ebf4516970563f5f383d23670
                  [graniteh]=791e0d3d28c86e106c9b6e0b4cecdee0375b6124 [ernie]=87db95487941cb39592ee0abca3b9155a6d19c5c
                  [nemotron]=a9904d24bcc1d289a1950fa9d2b978c47cf903b9 [qwen3_5]=995ad96eacd98c81ed38be0c5b274b04031597b0 )
 
