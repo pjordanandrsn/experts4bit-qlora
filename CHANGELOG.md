@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### TC1c amendment 7 registered: the H100 position at default settings on 0.45.0 / grouped-nf4-gemm 0.37.0 (P21–P23). One H100 NVL
+
+- **Why.** Amendment 6 read the grouped_mm route at 1.030 with it forced, as a labelled row. grouped-nf4-gemm 0.37.0 makes the
+  route its sm_90 default, and 0.45.0 is the first release on it. This box reads the position with nothing set.
+- **Predictions.** P21 Unsloth/e4b in [0.95, 1.12]. P22 `auto` engages the route with `GNF4_TRAIN_GEMM` unset (16,896 forward and
+  7,680 dgrad calls). P23 the matched set EQUIVALENT.
+- **Decision.** All three held: this becomes the H100 default-settings position, superseding amendment 1's 0.817.
+  `bench/tc1/TC1C-PREREG.md` amendment 7.
+
 ### Read: TC2 amendment 6 — e4b now trains Mixtral resident on a 32 GB 5090, and Unsloth is faster there; Qwen3.6 still does not fit (P11, P12, P14 HELD; P13 FALSIFIED)
 
 - **The box.** `tc1-5090-53` ($3.03 invoiced) ran both big families with every e4b arm resident, against Unsloth resident.
