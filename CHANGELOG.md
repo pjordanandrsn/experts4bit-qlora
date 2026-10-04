@@ -16,6 +16,50 @@
 - **Tested.** `tests/test_frozen_linear_4bit.py`: the selection on CPU, and the conversion on CUDA (an RTX A2000: 15 passed with
   the attention-projection tests). The harness test pins the flag's order: after the attention census, before the LoRA.
 
+### P55 Amendment 2 (#344): the box script installs the loader's stack and git, rehearsed end to end at $0; one rerun (bench and tests only)
+
+- **Why.** `p55-5090-1` drew the low-RAM class (62 GB allotment, effective 59.9 GiB) and then died at the fetch, before
+  any arm, on `No module named 'huggingface_hub'`. e4b's base dependencies are torch and bitsandbytes only, and the
+  registered runner installed the bare package, so it could never have loaded the model. The run cost $0.015.
+- **What.**
+  - The runner installs as P113's does (torch held; transformers 5.17.0, bitsandbytes 0.50.2, safetensors,
+    huggingface_hub, accelerate; bounded, exit 9).
+  - A tripwire checks the installed commit and the loader's imports.
+  - The runner installs git when the image lacks it. The lane's image does, and P113 had relied on Vast's runtime layer.
+- **Rehearsed.** The whole box script ran on the QNAP A2000 in the lane's image against a 6.6 GB granite MoE. Rehearsal 1
+  found the missing git. Rehearsal 2 ran with rc=0: all three arms loaded, and the reducer read the result correctly.
+- **Rerun.** STOP-3 is amended for this case only: exactly one rerun, `p55-5090-2`, because `p55-5090-1` observed nothing.
+  Its outcome is final.
+- **Tests.** `tests/test_p55_staged_pin.py`: the install, the tripwire, and git ensured before pip.
+
+### P55 Amendment 1 (#344): the launcher can now draw the low-RAM host class, and the lane reads the class correctly (bench and tests only)
+
+- **Why.** P55 tests whether #344's Gemma-4 load failure (`CUDA error: invalid argument` on 2 of 6 rented 5090s) is a
+  host-memory class. Preparing its launch found five defects:
+  - the launcher could only rent hosts with ≥ 98 GB;
+  - STOP-1 read MemTotal, which inside a Vast container is the whole host's RAM, not the allotment;
+  - P4 read the host's MemAvailable for the same reason;
+  - the shard's "49.9 GiB" was 49.9 GB, which is 46.48 GiB;
+  - the first arm downloaded the 51.6 GB checkpoint inside its own load, unbounded and on the Xet backend.
+- **What.**
+  - The launch uses adertha-agents#145's host-RAM band, `[48, 72]` GB.
+  - The class is the memory a process there can have, min(MemTotal, cgroup limit). The new `bench/p55/p55_ram.py`
+    computes it, and it is staged and pinned.
+  - P4's headroom is min(MemAvailable, limit − usage) against 46.48 GiB, and the forensics record `ulimit -a`.
+  - The checkpoint is 51.6 GB, not ~12 GiB. It is fetched before the arms, bounded and with Xet disabled (exit 11 on failure).
+    The launcher's estimate is $1.95, and the lane ceiling is $3.00.
+- **Tests.** `tests/test_p55_staged_pin.py`, 17 tests: pins, the memory arithmetic on cgroup v1, v2 and none, and the
+  reducer on synthetic receipts.
+
+### TC1c amendment 7 registered: the H100 position at default settings on 0.45.0 / grouped-nf4-gemm 0.37.0 (P21–P23). One H100 NVL
+
+- **Why.** Amendment 6 read the grouped_mm route at 1.030 with it forced, as a labelled row. grouped-nf4-gemm 0.37.0 makes the
+  route its sm_90 default, and 0.45.0 is the first release on it. This box reads the position with nothing set.
+- **Predictions.** P21 Unsloth/e4b in [0.95, 1.12]. P22 `auto` engages the route with `GNF4_TRAIN_GEMM` unset (16,896 forward and
+  7,680 dgrad calls). P23 the matched set EQUIVALENT.
+- **Decision.** All three held: this becomes the H100 default-settings position, superseding amendment 1's 0.817.
+  `bench/tc1/TC1C-PREREG.md` amendment 7.
+
 ### Read: TC2 amendment 6 — e4b now trains Mixtral resident on a 32 GB 5090, and Unsloth is faster there; Qwen3.6 still does not fit (P11, P12, P14 HELD; P13 FALSIFIED)
 
 - **The box.** `tc1-5090-53` ($3.03 invoiced) ran both big families with every e4b arm resident, against Unsloth resident.
@@ -28,6 +72,17 @@
 - **Next levers,** each to be registered: double-quantized absmax, 4-bit non-routed projections, and a dequantize-then-GEMM route
   for large experts on sm_120. Rows `e4b.train.h2h.unsloth.mixtral.5090.2026-10-04` and `...qwen3_5.5090.2026-10-04`; lane page
   `bench/h2h-2026-10-02/tc2/README.md`.
+
+### SC2 amendment A1 (#846): the first proof's harness defects fixed; the proof reruns
+
+- `sc2-prove-1` ($0.92) read HARNESS_ERROR, NOT PROVED. vLLM and SGLang passed both smokes with every request VALID.
+  e4b's server died on `No module named 'uvicorn'` (SC1 never needed `serve_paged`'s web stack), and llama.cpp failed
+  every other request with `ServerDisconnectedError` (its server drops a connection after a streamed response, and the
+  driver reused it).
+- Fixes: box E installs e4b's `serve` extra pinned (`fastapi==0.141.1`, `uvicorn==0.54.0`); the driver opens a fresh
+  connection per request on every engine (`force_close`); and the e4b start waits for `/health` status `ready`, not
+  HTTP 200 (`serve_paged` answers 200 while loading). Each fix has a test, and the connection test fails without its
+  fix. The rule, the plan and the predictions are unchanged; amendment A1 is in `bench/sc2/SC2-PREREG.md`.
 
 ## 0.45.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.37.0, whose two new defaults were registered and read here: programmatic dependent launch capped to launches of at most 8 rows (lane P113: SC1's int4 serving decode 1.0404× at one request and 1.0000× at 16 on an RTX 5090, identical tokens) and the grouped_mm training route on sm_90 (TC1c amendment 6: Unsloth/e4b 1.030 on an H100 NVL, a labelled row)
 

@@ -294,3 +294,36 @@ Each is FALSIFIED outside its band, and UNTESTED where the box quotes no positio
 
 **Budget.** Two H100 NVL boxes, each $2.80/h GPU ceiling (disk billed on top), 2.5 h guard. Each is about $2.50 invoiced, as amendment
 4's were; the owner's standing tier (each a single run under $15).
+
+### Amendment 7 (2026-10-04T12:45Z, after amendment 6's read and the 0.45.0 release, before any box): the H100 position at default settings on the release that carries the route
+
+**Why.** Amendment 6's readings are LABELLED rows because the route was forced with `GNF4_TRAIN_GEMM=grouped_mm`. Their decision rule
+held, and grouped-nf4-gemm#454 made the route its sm_90 default (`GNF4_TRAIN_GEMM=auto`). grouped-nf4-gemm 0.37.0 ships it, and
+experts4bit-qlora 0.45.0 is the first release on it. Amendment 6 named this box as what turns the labelled reading into the H100
+position: default settings, nothing set, on the release that carries the default. It also checks `auto` itself on real sm_90 hardware.
+Amendment 6 forced the route, so `auto`'s capability check has not yet run on a card that takes it.
+
+**The box.** TC1c's token on one H100 NVL with **no `TC1_E4B_ENV`** (`GNF4_TRAIN_GEMM` unset), grouped-nf4-gemm pinned at v0.37.0
+(`71185d6`), and e4b at this amendment's merge, whose code is 0.45.0's. HF and axolotl are skipped, as in amendments 2, 4 and 6.
+
+**Predictions** (registered before the box), read off its own lines:
+
+- **P21:** the MATCHED POSITION unsloth/e4b lies in **[0.95, 1.12]**. Amendment 6's box R read 1.030 [1.016, 1.045] with the route
+  forced. This box should take the same path through `auto`, and the spread between H100 NVL boxes has been about 2 %.
+- **P22:** `auto` engages the route with nothing set. On every e4b fused arm `route_ab` names `grouped_mm` with `GNF4_TRAIN_GEMM` unset,
+  and counts amendment 6's 16,896 forward and 7,680 dgrad calls; the reference arm counts none.
+- **P23:** the box's P3 line is HELD.
+
+Each is FALSIFIED outside its band or count, and UNTESTED where the box quotes no position.
+
+**Decision rules.**
+
+- **All three HELD:** this reading becomes the H100 position at default settings (`e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`). It supersedes
+  amendment 1's 0.817 as the current default-settings row. Amendment 1's row is kept as the fused kernels' reading, and amendment 6's
+  labelled rows stay beside it.
+- **P22 FALSIFIED:** `auto` did not take the route on sm_90. That is a grouped-nf4-gemm defect; it is fixed before any position moves,
+  and amendment 1's row stands.
+- **P23 FALSIFIED** blocks quoting the box.
+
+**Budget.** One H100 NVL, $2.80/h GPU ceiling (disk billed on top), 2.5 h guard, about $2.60 invoiced like amendment 6's boxes. The owner's
+standing tier for a single run under $15; the campaign's daily cap is $100.

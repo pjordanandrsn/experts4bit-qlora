@@ -1,0 +1,9 @@
+{
+ "arm": "C_headroom",
+ "env": {
+  "E4B_LOAD_SYNC_DEBUG": "1",
+  "CUDA_LAUNCH_BLOCKING": "1"
+ },
+ "status": "OK",
+ "n_layers": 32
+}

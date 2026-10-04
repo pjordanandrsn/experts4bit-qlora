@@ -182,7 +182,10 @@ async def one_request(session, base: str, model: str, prompt: list, max_tokens: 
 
 async def run_plan(base: str, model: str, prompts: list, reqs: list, mode: str, extra: dict) -> tuple:
     import aiohttp
-    conn = aiohttp.TCPConnector(limit=0)
+    # force_close: a fresh TCP connection per request, on every engine alike. llama.cpp's server closes the connection
+    # after a streamed response without saying so, and a pooled keep-alive socket then fails the NEXT request with
+    # ServerDisconnectedError -- every other request on sc2-prove-1 (A1). Connecting over loopback costs well under a ms.
+    conn = aiohttp.TCPConnector(limit=0, force_close=True)
     async with aiohttp.ClientSession(connector=conn) as session:
         t0 = time.perf_counter()
         if mode == "serial":

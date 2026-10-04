@@ -1,0 +1,3 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 11 files:  18%|█▊        | 2/11 [00:00<00:00, 12.83it/s]Fetching 11 files:  91%|█████████ | 10/11 [00:17<00:01,  1.85s/it]Fetching 11 files: 100%|██████████| 11/11 [01:53<00:00, 14.25s/it]Fetching 11 files: 100%|██████████| 11/11 [01:53<00:00, 10.30s/it]
+/root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89

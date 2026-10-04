@@ -87,3 +87,51 @@ def test_the_proof_smokes_every_server_on_the_lane_checkpoints():
     assert 'fetch gptq "$GPTQ_MID" "$GPTQ_REV"' in prove and "vllm_server_start" in prove and "sgl_server_start" in prove
     assert "fetch_q4km && ll_server_start" in prove
     assert "serial 0 6 1" in prove and "poisson 4 16 2" in prove and "rec 23" in prove
+
+
+def _health_server(states):
+    """A local /health that answers HTTP 200 with each of ``states`` in turn, then the last one forever."""
+    import http.server
+    import json as _json
+    import threading
+    seq = list(states)
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            st = seq.pop(0) if len(seq) > 1 else seq[0]
+            body = _json.dumps({"status": st, "error": None}, separators=(",", ":")).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def _wait_e4b_ready(url, cap=30):
+    fn = BOX[BOX.index("wait_e4b_ready(){"):BOX.index("stop_pid(){")]
+    script = f'line(){{ echo "$*"; }}\n{fn}\nsleep 600 & P=$!\nwait_e4b_ready "{url}" {cap} $P /dev/null; rc=$?\nkill $P\nexit $rc\n'
+    return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=120)
+
+
+def test_e4b_start_waits_for_ready_not_for_http_200():
+    """A1: serve_paged's /health is HTTP 200 while the engine loads ({"status":"loading"}); generation is 503 until
+    ready. The box's e4b start must wait for status ready, and fail on status error."""
+    srv = _health_server(["loading", "loading", "loading", "ready"])
+    try:
+        out = _wait_e4b_ready(f"http://127.0.0.1:{srv.server_address[1]}/health")
+        assert out.returncode == 0, out.stdout + out.stderr
+    finally:
+        srv.shutdown()
+    srv = _health_server(["loading", "error"])
+    try:
+        out = _wait_e4b_ready(f"http://127.0.0.1:{srv.server_address[1]}/health")
+        assert out.returncode == 45 and "engine error" in out.stdout, out.stdout + out.stderr
+    finally:
+        srv.shutdown()
+    assert 'wait_e4b_ready "http://127.0.0.1:$PORT_E4B/health" 2400' in BOX

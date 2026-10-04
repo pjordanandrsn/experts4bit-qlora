@@ -40,23 +40,72 @@ say "P55 $P55_RUN_ID: e4b $E4B_SHA, model $MODEL @ $REV"
   echo "overcommit_memory: $(cat /proc/sys/vm/overcommit_memory 2>/dev/null)"
   echo "overcommit_ratio: $(cat /proc/sys/vm/overcommit_ratio 2>/dev/null)"
   echo "max_map_count: $(cat /proc/sys/vm/max_map_count 2>/dev/null)"
+  # Amendment 1: the per-process limits a marginal mapping or a pinned copy can hit (RLIMIT_AS, RLIMIT_MEMLOCK).
+  echo "ulimit:"; ulimit -a 2>/dev/null | sed 's/^/  /'
 } > forensics.txt 2>&1
 cat forensics.txt
 
-MEM_KB=$(awk '/^MemTotal/{print $2}' /proc/meminfo 2>/dev/null)
-MEM_GIB=$(( ${MEM_KB:-0} / 1048576 ))
-say "host RAM: ${MEM_GIB} GiB"
-# STOP-1: a pass on a big-RAM host says nothing about the failing class. Recorded, not refused
-# -- the arms still run (their logs are free evidence) but the verdict is withheld.
-CLASS_DRAWN=1
-if [ "$MEM_GIB" -gt "${P55_MAX_HOST_GIB:-72}" ]; then
-  CLASS_DRAWN=0
-  say "STOP-1: host has ${MEM_GIB} GiB > ${P55_MAX_HOST_GIB:-72} GiB -- CLASS NOT DRAWN; arms run, P1 gets no verdict"
-fi
+# STOP-1 (Amendment 1): the class is the memory a process here can have -- min(MemTotal, the cgroup limit) -- not
+# MemTotal, which inside a Vast container is the whole host's. A pass on a big-memory box says nothing about the
+# failing class. Recorded, not refused: the arms still run (their logs are free evidence) but the verdict is withheld.
+python3 p55_ram.py --class-max-gib "${P55_MAX_HOST_GIB:-72}" > ram.txt 2>&1 || { cat ram.txt; say "HARNESS: p55_ram.py could not read this host's memory"; finish 43; }
+cat ram.txt >> forensics.txt
+EFF_GIB=$(awk -F': ' '/^effective_ram_gib:/{print $2}' ram.txt)
+CLASS_DRAWN=$(awk -F': ' '/^class_drawn:/{print $2}' ram.txt)
+say "memory: MemTotal $(awk -F': ' '/^mem_total_gib:/{print $2}' ram.txt) GiB, cgroup limit $(awk -F': ' '/^cgroup_limit_bytes:/{print $2}' ram.txt) B -> effective ${EFF_GIB} GiB"
+case "$CLASS_DRAWN" in
+  1) ;;
+  0) say "STOP-1: effective memory ${EFF_GIB} GiB > ${P55_MAX_HOST_GIB:-72} GiB -- CLASS NOT DRAWN; arms run, P1 gets no verdict" ;;
+  *) say "HARNESS: p55_ram.py gave no class decision"; finish 43 ;;
+esac
 echo "$CLASS_DRAWN" > class_drawn.txt
 
-pip install -q "experts4bit-qlora @ git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" 2>&1 | tail -3
-python3 -c "import experts4bit_qlora, torch; print('e4b', experts4bit_qlora.__version__, 'torch', torch.__version__)" | tee -a summary.txt
+# ---- install (Amendment 2): experts4bit-qlora's BASE dependencies are torch and bitsandbytes only. The loader's
+# transformers / safetensors / huggingface_hub live in its extras, so the registered bare `pip install` could never
+# load the model (p55-5090-1 died at the fetch on `No module named 'huggingface_hub'`). Installed as P113's runner
+# does: the image's torch held by a constraint, the loader's stack pinned, bounded, one retry, exit 9 on failure.
+# git is what `pip install git+https://...` runs. Vast's ssh runtime layer has supplied it so far (P113 relied on that
+# without saying so); the lane's image itself does not ship it, which the $0 rehearsal found. Installed only when absent.
+if ! command -v git >/dev/null 2>&1; then
+  say "git absent -- installing it (apt, bounded)"
+  perl -e "alarm 600; exec @ARGV" sh -c "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git" > logs/apt_git.log 2>&1 \
+    || { tail -3 logs/apt_git.log; say "HARNESS: cannot install git -- no verdict"; finish 9; }
+fi
+TORCH_PIN=$(python3 -c "import torch; print(torch.__version__.split('+')[0])") || { say "HARNESS: no torch in the image"; finish 9; }
+echo "torch==$TORCH_PIN" > constraints.txt
+pipx(){ local log=$1 secs=$2; shift 2
+  perl -e "alarm $secs; exec @ARGV" python3 -m pip install -q --no-input -c constraints.txt "$@" > "$log" 2>&1 && return 0
+  say "pip failed ($(tail -1 "$log" | cut -c1-120)) -- one retry in 20 s"; sleep 20
+  perl -e "alarm $secs; exec @ARGV" python3 -m pip install -q --no-input -c constraints.txt "$@" >> "$log" 2>&1; }
+say "install e4b @$E4B_SHA (transformers 5.17.0, bitsandbytes 0.50.2; torch held at $TORCH_PIN)"
+pipx logs/pip_e4b.log 1200 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
+  "transformers==5.17.0" "bitsandbytes==0.50.2" accelerate safetensors "huggingface_hub>=0.23" \
+  || { tail -4 logs/pip_e4b.log; say "PIP FAIL -- harness fault: no verdict"; finish 9; }
+# The tripwire: the installed commit is the launch commit, and everything the probe and the fetch import imports.
+WANT_E4B=$E4B_SHA python3 - <<'PYT' 2>&1 | tee -a summary.txt
+import json, os, sys, importlib.metadata as md
+d = json.loads(md.distribution("experts4bit-qlora").read_text("direct_url.json") or "{}")
+if d.get("vcs_info", {}).get("commit_id") != os.environ["WANT_E4B"]:
+    sys.exit(f"TRIPWIRE: installed e4b is not the launch commit: {d}")
+import torch, transformers, huggingface_hub, safetensors, bitsandbytes  # noqa: F401
+from experts4bit_qlora.loader import load_moe_4bit_streaming  # noqa: F401
+import experts4bit_qlora as e
+print(f"tripwire OK: e4b {e.__version__} @{os.environ['WANT_E4B'][:12]} torch {torch.__version__} transformers "
+      f"{transformers.__version__} huggingface_hub {huggingface_hub.__version__} bitsandbytes {md.version('bitsandbytes')}")
+PYT
+grep -q "^tripwire OK:" summary.txt || { say "TRIPWIRE FAIL -- harness fault: no verdict"; finish 9; }
+
+# ---- the fetch (Amendment 1, defect 5): BEFORE the arms, bounded, Xet disabled. Registered, the first arm downloaded the
+# 51.6 GB checkpoint inside its own load -- unbounded, on the Xet backend that wedges at ~6.1 MB on this fleet, so a stall
+# would have spent the whole guard with no reading, and A_baseline's failure window would have held a download. A fetch
+# that fails is a harness fault (STOP-2 shape): no verdict, no redraw.
+export HF_HUB_DISABLE_XET=1
+FETCH_S=$(( P55_DEADLINE_EPOCH - $(date +%s) - 900 ))      # leave 15 min for the three loads
+if [ "$FETCH_S" -lt 120 ]; then say "STOP-2: under 17 min of guard left before the fetch"; finish 11; fi
+say "fetch: $MODEL @ $REV (51.6 GB, Xet disabled, alarm ${FETCH_S}s)"
+perl -e "alarm $FETCH_S; exec @ARGV" python3 -c "from huggingface_hub import snapshot_download as s; print(s('$MODEL', revision='$REV', allow_patterns=['*.safetensors', '*.json', 'tokenizer*', '*.model', '*.txt'], max_workers=8))" > logs/fetch.log 2>&1 \
+  || { tail -3 logs/fetch.log; say "DL FAIL -- harness fault (STOP-2): no verdict"; finish 11; }
+say "fetch: done, $(du -sh "${HF_HOME:-$HOME/.cache/huggingface}" 2>/dev/null | cut -f1) in the HF cache"
 
 # ---- the probe. One process per arm: CUDA_LAUNCH_BLOCKING is read at context creation, so
 # the armed arm MUST be a fresh process -- an in-process second attempt would silently run
@@ -106,15 +155,16 @@ run_arm B_sync      E4B_LOAD_SYNC_DEBUG=1 CUDA_LAUNCH_BLOCKING=1
 # arm C: the same armed load with MemAvailable sampled alongside it.
 if [ "$(date +%s)" -lt $(( P55_DEADLINE_EPOCH - 300 )) ]; then
   say "arm C_headroom: starting (armed, with a 2 s MemAvailable trace)"
-  ( echo "epoch,mem_available_kb,mem_free_kb"
+  # Amendment 1: the cgroup's usage and limit beside MemAvailable -- inside a container MemAvailable is the host's.
+  ( echo "epoch,mem_available_kb,mem_free_kb,cgroup_usage_bytes,cgroup_limit_bytes"
     while :; do
-      echo "$(date +%s),$(awk '/^MemAvailable/{print $2}' /proc/meminfo),$(awk '/^MemFree/{print $2}' /proc/meminfo)"
+      python3 p55_ram.py --sample
       sleep 2
     done ) > mem_trace.csv &
   TRACE_PID=$!
   run_arm C_headroom E4B_LOAD_SYNC_DEBUG=1 CUDA_LAUNCH_BLOCKING=1
   kill "$TRACE_PID" 2>/dev/null; wait "$TRACE_PID" 2>/dev/null
-  say "C_headroom: MemAvailable min $(awk -F, 'NR>1 && $2!=""{if(m==""||$2<m)m=$2}END{printf "%.1f GiB", m/1048576}' mem_trace.csv 2>/dev/null)"
+  say "C_headroom: MemAvailable min $(awk -F, 'NR>1 && $2!=""{if(m==""||$2<m)m=$2}END{printf "%.1f GiB", m/1048576}' mem_trace.csv 2>/dev/null); cgroup usage max $(awk -F, 'NR>1 && $4!=""{if($4>m)m=$4}END{printf "%.1f GiB", m/1073741824}' mem_trace.csv 2>/dev/null)"
 fi
 
 python3 - <<'PYEOF' | tee -a summary.txt

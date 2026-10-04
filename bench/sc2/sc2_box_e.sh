@@ -20,10 +20,14 @@ fetch_q4km(){ have llamacpp || return 1; mkdir -p "$W/gguf"; say "fetch $GGUF_RE
   LLAMACPP_PY=$PY perl -e "alarm $(arm_alarm 3600); exec @ARGV" bash -c ". $W/llamacpp/llamacpp_box.sh && llamacpp_fetch $GGUF_REPO $GGUF_Q4KM $W/gguf $GGUF_REV" \
       > logs/fetch_gguf_q4km.log 2>&1 || { tail -2 logs/fetch_gguf_q4km.log; line "FETCH gguf $GGUF_Q4KM FAILED"; OK[llamacpp]=0; return 11; }
   line "FETCH gguf $GGUF_Q4KM $(cut -c1-16 "$W/gguf/$GGUF_Q4KM.sha256" 2>/dev/null)"; }
-install_sc2_client(){ say "install the SC2 driver's client (aiohttp) into the e4b venv"
-  "$PY" -m pip install -q --no-input "aiohttp==3.14.3" > logs/pip_aiohttp.log 2>&1 && "$PY" -c "import aiohttp" 2>/dev/null \
-    && { OK[sc2client]=1; echo "aiohttp $("$PY" -c 'import aiohttp; print(aiohttp.__version__)')" | tee -a versions.txt summary.txt; } \
-    || unsupported sc2client "aiohttp install failed" logs/pip_aiohttp.log; }
+# the driver's client (aiohttp) AND serve_paged's web stack (e4b's `serve` extra: fastapi + uvicorn) into the e4b venv.
+# A1: SC1 drove e4b's scheduler in-process and never needed the web stack; sc2-prove-1's e4b server died on
+# `No module named 'uvicorn'`. Exact pins; the import check covers all three.
+install_sc2_client(){ say "install the SC2 driver's client (aiohttp) and serve_paged's web stack (fastapi, uvicorn) into the e4b venv"
+  "$PY" -m pip install -q --no-input "aiohttp==3.14.3" "fastapi==0.141.1" "uvicorn==0.54.0" > logs/pip_aiohttp.log 2>&1 \
+    && "$PY" -c "import aiohttp, fastapi, uvicorn" 2>/dev/null \
+    && { OK[sc2client]=1; "$PY" -c 'import aiohttp, fastapi, uvicorn; print("aiohttp", aiohttp.__version__, "fastapi", fastapi.__version__, "uvicorn", uvicorn.__version__)' | tee -a versions.txt summary.txt; } \
+    || unsupported sc2client "aiohttp / fastapi / uvicorn install failed" logs/pip_aiohttp.log; }
 sc2_prompts(){ say "SC2 prompt pool"; perl -e "alarm 1200; exec @ARGV" "$PY" $W/sc2_prompts.py --model "$MID" --revision "$REV" --out $W/sc2/prompts.json \
     > logs/sc2_prompts.log 2>&1 || { tail -3 logs/sc2_prompts.log; return 19; }
   grep -a "^SC2_PROMPTS" logs/sc2_prompts.log | tee -a summary.txt; }
@@ -35,6 +39,17 @@ wait_http(){ local url=$1 cap=$2 pid=$3 log=$4 t0 code; t0=$(date +%s)
     [ $(( $(date +%s) - t0 )) -ge "$cap" ] && { line "SC2 server startup timeout ${cap}s at $url"; return 44; }
     sleep 2
   done; }
+# wait_e4b_ready URL CAP PID LOG -- serve_paged answers /health with HTTP 200 while it is still building the engine
+# ({"status":"loading"}; generation gets 503 until then), so HTTP 200 is not readiness. Poll until status is ready
+# (or busy), fail fast on error. A1: wait_http alone would have driven e4b mid-load.
+wait_e4b_ready(){ local url=$1 cap=$2 pid=$3 log=$4 t0 st; t0=$(date +%s)
+  while :; do
+    st=$(curl -s -m 5 "$url" 2>/dev/null | grep -a -o -E '"status": ?"[a-z]+"' | head -1 | grep -a -o -E '[a-z]+"$' | tr -d '"')
+    case "$st" in ready|busy) return 0;; error) line "SC2 e4b engine error: $(curl -s -m 5 "$url" | cut -c1-300)"; return 45;; esac
+    kill -0 "$pid" 2>/dev/null || { line "SC2 server exited before $url reported ready: $(tail -2 "$log" | tr '\n' ' ' | cut -c1-240)"; return 45; }
+    [ $(( $(date +%s) - t0 )) -ge "$cap" ] && { line "SC2 e4b not ready after ${cap}s (status=${st:-none}) at $url"; return 44; }
+    sleep 3
+  done; }
 stop_pid(){ local pid=$1 i; [ -n "$pid" ] || return 0; kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
   for i in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || return 0; sleep 1; done; kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null; }
 
@@ -45,7 +60,7 @@ e4b_server_start(){ local MODE=$1 MODEL=${2:-$MID} R=${3:-$REV} ARENA=${4:-$QA} 
   setsid env PYTHONPATH= $ROUTEENV $LEV E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$R E4B_PAGED_ARENA=$ARENA E4B_PAGED_CALIB=$W/calib.json \
       E4B_PAGED_MAX_TOKENS_PER_SEQ=$SC2_MAXLEN E4B_PAGED_TRACE=$W/sc2/trace_e4b_$MODE.jsonl E4B_HOST=127.0.0.1 E4B_PORT=$PORT_E4B \
       "$PY" -m experts4bit_qlora.serve_paged > "$LOG" 2>&1 < /dev/null &
-  SRV_PID=$!; wait_http "http://127.0.0.1:$PORT_E4B/health" 2400 $SRV_PID "$LOG" || return $?
+  SRV_PID=$!; wait_e4b_ready "http://127.0.0.1:$PORT_E4B/health" 2400 $SRV_PID "$LOG" || return $?
   curl -fsS -m 30 "http://127.0.0.1:$PORT_E4B/health" -o $W/sc2/health_e4b_$MODE.json || return 45
   line "SC2 e4b ($MODE) healthy: $(cut -c1-300 $W/sc2/health_e4b_$MODE.json)"; }
 vllm_server_start(){ local LOG=$W/logs/sc2_server_vllm.log
@@ -106,7 +121,7 @@ box_e(){
 # ---- the proof (SC1_PROVE=1): every server, the real comparator checkpoints, e4b on Granite; each must answer the driver
 # with every request VALID on a serial smoke and a short Poisson run
 prove_e(){ local ok=0
-  have sc2client || { say "PROVE: aiohttp did not install -- NOT PROVED"; rec 23; return; }
+  have sc2client || { say "PROVE: aiohttp / fastapi / uvicorn did not install -- NOT PROVED"; rec 23; return; }
   "$PY" $W/sc2_driver.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { rec 23; return; }
   "$PY" $W/sc2_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { rec 23; return; }
   # the prompt pool from the Granite tokenizer (the comparators' ids then exceed nothing: Qwen3's vocabulary is larger)
