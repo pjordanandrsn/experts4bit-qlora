@@ -16,6 +16,27 @@
 - **Tested.** `tests/test_frozen_linear_4bit.py`: the selection on CPU, and the conversion on CUDA (an RTX A2000: 15 passed with
   the attention-projection tests). The harness test pins the flag's order: after the attention census, before the LoRA.
 
+### Opt-in: the frozen expert absmax stored double-quantized (`E4B_ABSMAX_DQ=1`, `compress_expert_absmax_`)
+
+- **What.** `compress_expert_absmax_(model)` stores each ExpertsLoRA-wrapped NF4 stack's absmax the way bitsandbytes'
+  `quantize_4bit(compress_statistics=True)` does: the mean as an offset, 8-bit codes, one fp32 per 256 values. That is
+  3.94x fewer bytes than one fp32 per 64 weights. `E4B_ABSMAX_DQ=1` turns it on in `python -m experts4bit_qlora.train`
+  (after load, before training) and in the TC1 harness (`--absmax-dq`, recorded on the receipt).
+- **Why.** On a 32 GB RTX 5090, e4b's resident Mixtral-8x7B peak was 31.07 GB against Unsloth's 29.12 GB. Qwen3.6-35B-A3B
+  did not fit, where Unsloth trains it at 30.47 GB. The fp32 absmax is about 2.8 GB on Mixtral, 1.8 GB on Qwen3-30B-A3B and
+  2.1 GB on Qwen3.6. Unsloth trains on bitsandbytes' double-quantized statistics.
+- **What reads it.** grouped-nf4-gemm's kernels are unchanged. `enable_fast_train` and the ExpertsLoRA reference loop expand one
+  layer's absmax to fp32 just in time (`expert_absmax_fp32`). Expert offload, `enable_batched_train`, the hot, cold,
+  pipelined, hybrid and NVMe engines, and the gpt-oss and DeepSeek-V4 per-expert forwards refuse a compressed model by name
+  (`AbsmaxCompressedError`). The trainer refuses the switch with `OFFLOAD_EXPERTS=1` or `TRAIN_ARENA`.
+- **Values.** On, the absmax values are bitsandbytes' double-quantized ones: lossy against fp32, and bit-identical to
+  bitsandbytes' own nested path for the same stack. Off, nothing changes.
+- **Tests.** `tests/test_absmax_dq.py` checks the selection, refusals and layout on CPU. It checks that the stored bytes are
+  bitsandbytes' own, that the reference loop and the fused training path (both dgrad settings, on an RTX A2000) are
+  bit-identical to the same code fed the dequantized absmax, and that the stored absmax bytes drop by the exact layout ratio.
+  The TC1 tests cover the flag, its refusals and the frozen-base probe (SAME-BYTES against bitsandbytes' nested path).
+  No speed or memory claim is registered yet.
+
 ### P55 Amendment 2 (#344): the box script installs the loader's stack and git, rehearsed end to end at $0; one rerun (bench and tests only)
 
 - **Why.** `p55-5090-1` drew the low-RAM class (62 GB allotment, effective 59.9 GiB) and then died at the fetch, before

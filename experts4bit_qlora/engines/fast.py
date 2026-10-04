@@ -64,6 +64,8 @@ import os
 
 import torch
 
+from ..absmax_dq import expert_absmax_fp32
+
 
 def fast_available() -> bool:
     """True iff the fused kernel package is importable and CUDA is up."""
@@ -185,7 +187,7 @@ def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
     up = gemm_4bit_grouped(
         a_cat,
         mod.gate_up_proj.view(E, n1, k1 // 2),
-        mod.gate_up_absmax.view(E, n1, k1 // 64).float(),
+        expert_absmax_fp32(mod, "gate_up"),
         sizes,
         expert_ids,
     )
@@ -198,7 +200,7 @@ def fused_experts_forward(mod, hidden_states, top_k_index, top_k_weights):
     down = gemm_4bit_grouped(
         h.to(compute_dtype).contiguous(),
         mod.down_proj.view(E, n2, k2 // 2),
-        mod.down_absmax.view(E, n2, k2 // 64).float(),
+        expert_absmax_fp32(mod, "down"),
         sizes,
         expert_ids,
     )
@@ -266,7 +268,7 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
     up = gemm_4bit_grouped(
         a_cat,
         base.gate_up_proj.view(E, n1, k1 // 2),
-        base.gate_up_absmax.view(E, n1, k1 // 64).float(),
+        expert_absmax_fp32(base, "gate_up"),
         sizes,
         expert_ids,
     )
@@ -288,7 +290,7 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
     down = gemm_4bit_grouped(
         h.to(compute_dtype),
         base.down_proj.view(E, n2, k2 // 2),
-        base.down_absmax.view(E, n2, k2 // 64).float(),
+        expert_absmax_fp32(base, "down"),
         sizes,
         expert_ids,
     )
@@ -644,17 +646,20 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     # autograd ctx (that pinned all 48 layers and OOMed at 22.41 GB); it calls
     # this closure in backward instead, re-reading whatever is staged then --
     # which under gradient checkpointing is this layer, because the recompute
-    # forward re-stages it first.
+    # forward re-stages it first. `expert_absmax_fp32` is the stored fp32 view, as
+    # before -- or, after compress_expert_absmax_ (E4B_ABSMAX_DQ=1), this layer's
+    # absmax expanded from bitsandbytes' nested form: a transient the kernel reads
+    # and drops, expanded again here in backward rather than held across layers.
     def _gate_up_now():
         if guard is not None:
             guard(expert_ids)
         return (base.gate_up_proj.view(E, n1, k1 // 2),
-                base.gate_up_absmax.view(E, n1, k1 // 64).float())
+                expert_absmax_fp32(base, "gate_up"))
 
     proj = fused_grouped_lora(
         a_cat,
         base.gate_up_proj.view(E, n1, k1 // 2),
-        base.gate_up_absmax.view(E, n1, k1 // 64).float(),
+        expert_absmax_fp32(base, "gate_up"),
         sizes, expert_ids,
         lora_mod.gate_up_lora_A, lora_mod.gate_up_lora_B,
         weights_fn=_gate_up_now,
@@ -671,12 +676,12 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
         if guard is not None:
             guard(expert_ids)
         return (base.down_proj.view(E, n2, k2 // 2),
-                base.down_absmax.view(E, n2, k2 // 64).float())
+                expert_absmax_fp32(base, "down"))
 
     down = fused_grouped_lora(
         h.to(compute_dtype).contiguous(),
         base.down_proj.view(E, n2, k2 // 2),
-        base.down_absmax.view(E, n2, k2 // 64).float(),
+        expert_absmax_fp32(base, "down"),
         sizes, expert_ids,
         lora_mod.down_lora_A, lora_mod.down_lora_B,
         weights_fn=_down_now,
@@ -725,6 +730,10 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     ``dgrad=True`` on a kernel cut below 0.7.0 is downgraded with a ``RuntimeWarning``.
     Needs a CUDA device with Triton on sm_80+ (Linux). See
     ``docs/solutions/qlora-fused-moe-experts.md``.
+
+    Composes with ``compress_expert_absmax_`` (``E4B_ABSMAX_DQ=1``), before or after it: the
+    patched forward reads the absmax through ``expert_absmax_fp32``, which expands a
+    double-quantized one to fp32 for the one layer the kernel is about to run.
     """
     try:
         from nf4_qlora import fused_grouped_lora  # noqa: F401

@@ -40,6 +40,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .absmax_dq import expert_absmax_rows
+
 if TYPE_CHECKING:
     from . import Experts4bit
 
@@ -657,6 +659,11 @@ class ExpertsLoRA(nn.Module):
                 _REFERENCE_ORDER_STATS["order"] = order
                 _REFERENCE_ORDER_STATS["calls"] += 1
 
+        # The stored absmax buffers themselves (unchanged), or -- when compress_expert_absmax_ stored them
+        # double-quantized (E4B_ABSMAX_DQ=1) -- views whose [expert_idx] dequantizes that expert's row.
+        gate_up_absmax = expert_absmax_rows(base, "gate_up")
+        down_absmax = expert_absmax_rows(base, "down")
+
         for expert_idx in expert_hit:
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             x = hidden_states[token_idx]
@@ -668,7 +675,7 @@ class ExpertsLoRA(nn.Module):
             # Frozen base projection (dequantize/recompute, or fused GEMV) + trainable low-rank delta.
             proj = self._base_project(
                 base.gate_up_proj,
-                base.gate_up_absmax,
+                gate_up_absmax,
                 base._gate_up_shape,
                 expert_idx,
                 x,
@@ -680,7 +687,7 @@ class ExpertsLoRA(nn.Module):
 
             current_hidden = self._base_project(
                 base.down_proj,
-                base.down_absmax,
+                down_absmax,
                 base._down_shape,
                 expert_idx,
                 current_hidden,
@@ -720,13 +727,15 @@ class ExpertsLoRA(nn.Module):
         """
         base = self.base
         final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
+        gate_up_absmax = expert_absmax_rows(base, "gate_up")   # the buffers, or row views when double-quantized
+        down_absmax = expert_absmax_rows(base, "down")
 
         for j in range(top_k_index.shape[1]):
             expert_idx = top_k_index[0, j]  # 0-d device tensor: indexes below without a host sync
 
             proj = self._base_project(
                 base.gate_up_proj,
-                base.gate_up_absmax,
+                gate_up_absmax,
                 base._gate_up_shape,
                 expert_idx,
                 hidden_states,
@@ -738,7 +747,7 @@ class ExpertsLoRA(nn.Module):
 
             current_hidden = self._base_project(
                 base.down_proj,
-                base.down_absmax,
+                down_absmax,
                 base._down_shape,
                 expert_idx,
                 current_hidden,

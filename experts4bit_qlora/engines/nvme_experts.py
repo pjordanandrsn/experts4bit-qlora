@@ -421,6 +421,9 @@ def enable_nvme_residency(model, arena_path: str, hot_sets: Sequence,
     ``[fast]`` extra, a CUDA device, local NVMe. See
     ``docs/solutions/offload-moe-experts-to-cpu-or-nvme.md``.
     """
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(model, "enable_nvme_residency")
     try:
         from nvme_residency import ColdTier
     except ImportError as exc:                       # pragma: no cover
@@ -562,6 +565,9 @@ def enable_mxfp4_nvme_residency(model, arena_path: str, *, k_slots: int,
     :func:`disable_mxfp4_nvme_residency`. Needs ``[fast]``, a CUDA device, local NVMe. See
     ``docs/solutions/mxfp4-moe-training-and-residency.md``.
     """
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(model, "enable_mxfp4_nvme_residency")
     try:
         from nvme_arena import load_index
         from mxfp4_residency import Mxfp4NvmeResidencyV4

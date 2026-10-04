@@ -67,9 +67,17 @@ class _LayerProbe:
             t = home.get(name) if home is not None else getattr(base, name, None)
             return 0 if t is None else t.numel() * t.element_size() // n
 
-        self.per_expert_bytes = sum(
-            _slice_bytes(name) for name in ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
-        )
+        # A double-quantized absmax (compress_expert_absmax_, E4B_ABSMAX_DQ=1) has no fp32 buffer to size:
+        # count its four nested buffers instead (never offloaded -- offload refuses a compressed stack).
+        from ..absmax_dq import _module_absmax_bytes, is_absmax_compressed
+
+        if is_absmax_compressed(base):
+            self.per_expert_bytes = (sum(_slice_bytes(name) for name in ("gate_up_proj", "down_proj"))
+                                     + _module_absmax_bytes(base) // n)
+        else:
+            self.per_expert_bytes = sum(
+                _slice_bytes(name) for name in ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
+            )
         self.hits = None  # lazy: allocated on the device of the first routed index tensor
         self.tokens = None
         self.forwards = 0

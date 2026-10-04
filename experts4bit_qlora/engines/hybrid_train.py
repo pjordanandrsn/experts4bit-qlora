@@ -273,6 +273,9 @@ def enable_hybrid_train(model, arena_path: str, manifest, **kw) -> int:
     only place the gate_up delta can land before the GLU); bare base
     modules get it with zero deltas. Inference calls (no grad, or nothing
     requiring grad) pass through untouched. Returns the tier patch count."""
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(model, "enable_hybrid_train")
     from .hybrid import enable_hybrid_tier
     from ..lora import EpilogueContractError, ExpertsLoRA, assert_stock_epilogue
 

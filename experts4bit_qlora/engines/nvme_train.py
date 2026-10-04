@@ -541,6 +541,9 @@ def enable_nvme_train_residency(model, arena_path: str, *, hot_rows: int,
     # this feature, so any version assertion here would be a forward reference to
     # a release that may not have been cut yet — and a wrong one is worse than
     # none, since it sends people to upgrade past a version that has it.
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(model, "enable_nvme_train_residency")
     try:
         from nvme_residency import ColdTier
     except ImportError as exc:                       # pragma: no cover

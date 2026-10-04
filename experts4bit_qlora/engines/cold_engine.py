@@ -223,6 +223,9 @@ def enable_cold_engine(model, hot_sets: Sequence, device: str = "cuda",
     ``dequant`` picks the host decode: ``"auto"`` (avx512f-gated bnb, else
     torch), ``"bnb"``, or ``"torch"``. The resolved choice is exposed as
     ``module._cold_engine.dequant_backend``."""
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(model, "enable_cold_engine")
     any_hot = any(len(torch.as_tensor(h).reshape(-1)) for h in hot_sets)
     if any_hot:
         try:
