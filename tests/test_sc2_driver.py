@@ -134,6 +134,21 @@ def test_an_engine_that_stops_early_and_an_http_error_are_invalid_rows():
     assert drv.summarize(recs, 1.0, wall)["invalid"] == 2
 
 
+def test_every_request_gets_its_own_connection():
+    """A1 (sc2-prove-1): llama.cpp closes a connection after a streamed response without saying so, and a reused
+    keep-alive socket failed every other request with ServerDisconnectedError. The driver now opens a fresh
+    connection per request on every engine: serial requests must arrive from distinct client ports."""
+    pytest.importorskip("aiohttp")
+    ports = []
+    inner = _streamer(0.0, 0.001)
+
+    async def handler(request):
+        ports.append(request.transport.get_extra_info("peername")[1])
+        return await inner(request)
+    recs, _ = _run(handler, [(0.0, i % 4, 8) for i in range(6)], mode="serial")
+    assert all(r["valid"] for r in recs) and len(ports) == 6 and len(set(ports)) == 6, ports
+
+
 def test_the_poisson_plan_is_offered_on_schedule():
     pytest.importorskip("aiohttp")
     reqs = drv.plan("poisson", 40.0, 40, 3, 4, 4, 8)

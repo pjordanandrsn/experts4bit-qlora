@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### SC2 amendment A1 (#846): the first proof's harness defects fixed; the proof reruns
+
+- `sc2-prove-1` ($0.92) read HARNESS_ERROR, NOT PROVED. vLLM and SGLang passed both smokes with every request VALID.
+  e4b's server died on `No module named 'uvicorn'` (SC1 never needed `serve_paged`'s web stack), and llama.cpp failed
+  every other request with `ServerDisconnectedError` (its server drops a connection after a streamed response, and the
+  driver reused it).
+- Fixes: box E installs e4b's `serve` extra pinned (`fastapi==0.141.1`, `uvicorn==0.54.0`); the driver opens a fresh
+  connection per request on every engine (`force_close`); and the e4b start waits for `/health` status `ready`, not
+  HTTP 200 (`serve_paged` answers 200 while loading). Each fix has a test, and the connection test fails without its
+  fix. The rule, the plan and the predictions are unchanged; amendment A1 is in `bench/sc2/SC2-PREREG.md`.
+
 ### Read: TC1c amendment 6 — with the dequant at bandwidth the grouped_mm route makes e4b faster than Unsloth on an H100 (P18, P19, P20 HELD)
 
 - **What.** Amendment 4's two boxes again, with grouped-nf4-gemm at #452's merge (`81706a9`), whose route dequant is bit-equal and
