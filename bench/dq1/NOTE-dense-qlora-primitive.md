@@ -59,8 +59,11 @@ dequant share by construction. DQ1 checks this, and re-reads the fused route on 
 ## 3. Which baselines are relevant?
 
 - **bitsandbytes 0.50.x `matmul_4bit`.** This is the incumbent, and it already dispatches.
-  - Forward: a fused 4-bit GEMM for small M, chosen per-arch by `_gemm_4bit_use_custom`, which has an sm_120 block.
-    Above M=1536 it always uses dequant + `F.linear` (`backends/cuda/ops.py:586, 822`).
+  - Forward: a fused 4-bit GEMM for small M, chosen per-arch by a CUDA heuristic that has an sm_120 block; otherwise
+    dequant + `F.linear`. Read on bnb `main` @3343bac (June, 0.50.0.dev0; `backends/cuda/ops.py:586, 822`), which
+    predates the 0.50.2 the census installs. The independent review read 0.50.1's sm_120 block as capping the fused
+    path at M ≤ 256, which would make bnb dequant + cuBLAS at every census row. DQ1 records bnb's decision per cell
+    rather than assuming either.
   - Backward: always `dequantize_4bit` + matmul (`_functions.py`, `MatMul4Bit.backward`).
   - **The shape- and arch-dependent dispatch this investigation might have proposed already ships upstream.**
 - **HF + PEFT + bitsandbytes** and **Unsloth** at the training-step level. TC1's harness has both arms, but its HF arm
@@ -109,8 +112,10 @@ These readings bound the two axes a dense primitive could win on:
 
 - **Speed.** H(M), the most any low-bit kernel could save on the base linears. A training step cannot gain more from a
   better 4-bit GEMM than its linears' share times H.
-- **Capacity.** R(M), compute per layer over that layer's two weight transfers per step. If R stays well above 1 at
-  training M, a dense model whose frozen weights live in pinned host memory could train at near-resident speed.
+- **Capacity.** Rmin(M): each phase's compute (the forward; the recompute + dgrad) over one layer's weight transfer. If
+  Rmin stays well above 1 at
+  training M, a dense model whose frozen weights live in pinned host memory could hide its weight
+  traffic behind compute ("near-resident speed" is the hypothesis a later matched-work lane would test, not a DQ1 reading).
   That is a model-size Pareto point nobody in the baseline list ships for single-GPU QLoRA.
 
 The streaming idea was refuted for **MoE** (e4b `bench/host-ram-ceiling/RESULTS-prefetch.md`; gnf4#60, closed
@@ -123,7 +128,7 @@ Either of:
 
 - **Speed.** H(2048) ≥ 0.15 (S_ALIVE). A perfect low-bit kernel could save at least 15% of base-linear time at
   QLoRA-typical rows. Next: a full-step profile of HF+PEFT+bnb on Qwen3-32B to get the linears' share, before any kernel.
-- **Capacity.** R(2048) ≥ 1.5, with concurrent DMA costing the GEMMs ≤ 5% and keeping ≥ 80% of its bandwidth
+- **Capacity.** Rmin(2048) ≥ 1.25, with concurrent DMA costing the GEMMs ≤ 5% and keeping ≥ 80% of its bandwidth
   (C_ALIVE). Next: a streamed frozen-weight prototype under autograd in a branch. Concretely: e4b's `dense_offload`
   extended to overlap under grad, or a tensor-level stream in gnf4. Then a matched-work full-step comparison, at a
   model that fits, against HF+PEFT+bnb and Unsloth, and at one that doesn't fit, against FSDP-QLoRA with offload.
@@ -148,7 +153,7 @@ tensor-level and works for any pinned row stack (`host_gather.py:73`). The candi
 - **Speed.** S_DEAD (H(2048) < 0.10 and H(4096) < 0.07) plus G1_PARITY closes the dense-speed-kernel line. G=1 stays an
   internal route, and nothing new gets built for speed. G1_LOSS would mean the dense route needs a shape guard. That
   goes back to the gnf4 maintainer; it is not a new primitive.
-- **Capacity.** C_DEAD (R(4096) < 1) closes the streaming line on this card's link.
+- **Capacity.** C_DEAD (Rmin(4096) < 1) closes the streaming line on this card's link.
 - **Both dead** is outcome E (negative), and that is a fine result.
 
 ## 9. Delegation

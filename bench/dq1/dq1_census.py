@@ -64,7 +64,7 @@ def timed(fn, target_ms: float, draws: int) -> list:
     e.record()
     torch.cuda.synchronize()
     one = max(s.elapsed_time(e), 1e-3)
-    reps = max(1, min(200, int(target_ms / one)))
+    reps = max(1, min(5000, int(target_ms / one)))
     out = []
     for _ in range(draws):
         s.record()
@@ -138,17 +138,41 @@ def route_env(arm: str):
     os.environ["GNF4_TRAIN_GEMM"] = "fused" if arm == "gnf4f" else "auto"
 
 
+def bnb_dispatch(M: int, N: int, K: int):
+    """bitsandbytes' own forward decision at this shape on this card -- "custom" (its fused 4-bit GEMM) or "dequant"
+    (dequantize_4bit + F.linear) -- read from bnb's heuristic, mirroring its gemm_4bit op's guards. None when this bnb has no
+    such heuristic (the op is then whatever matmul_4bit does; recorded as unknown, never inferred)."""
+    try:
+        from bitsandbytes.backends.cuda import ops as bops
+    except Exception:
+        return None
+    fn = getattr(bops, "_gemm_4bit_use_custom_cuda", None) or getattr(bops, "_gemm_4bit_use_custom", None)
+    if fn is None:
+        return None
+    if M > 1536:
+        return "dequant"
+    if M <= 4:
+        return "custom"
+    try:
+        return "custom" if fn(torch.cuda.current_device(), torch.bfloat16, M, N, K) else "dequant"
+    except Exception as exc:  # recorded
+        return f"unknown: {type(exc).__name__}"
+
+
 def measure_cell(name, W: Weights, M: int, args) -> dict:
     """Every arm's forward and dgrad at one (shape, M), palindromic order, plus parity against an fp32 reference."""
+    import bitsandbytes.functional as BF
     import nf4_qlora
     import nf4_route
+    from nf4_route import dequant_groups
 
+    torch.cuda.reset_peak_memory_stats()
     g = torch.Generator(device="cuda").manual_seed(1000 + M)
     x = torch.randn(M, W.K, device="cuda", dtype=torch.bfloat16, generator=g)
     go = torch.randn(M, W.N, device="cuda", dtype=torch.bfloat16, generator=g)
     y_ref = x.float() @ W.w_dq.float().t()
     dx_ref = go.float() @ W.w_dq.float()
-    cell = {"shape": name, "N": W.N, "K": W.K, "M": M, "arms": {}}
+    cell = {"shape": name, "N": W.N, "K": W.K, "M": M, "arms": {}, "bnb_dispatch": bnb_dispatch(M, W.N, W.K)}
     busy(args.warm_s)
     for pos, arm in enumerate(ORDER):
         route_env(arm)
@@ -159,8 +183,9 @@ def measure_cell(name, W: Weights, M: int, args) -> dict:
             rs0 = dict(nf4_route.ROUTE_STATS)
             y = f(xg)
             dx, = torch.autograd.grad(y, xg, go, retain_graph=True)
-            if "route" not in rec:          # engagement, read from the libraries' own counters on the first pass
-                rec["route"] = (nf4_route.train_gemm_route(x.device, 1) if arm.startswith("gnf4") else arm)
+            if "route" not in rec:          # engagement, read from the libraries' own state on the first pass
+                # the route the call TOOK: FusedGroupedNf4 stores it on its ctx, which is y.grad_fn
+                rec["route"] = getattr(y.grad_fn, "route", None) if arm.startswith("gnf4") else arm
                 rec["dgrad_stats_delta"] = {k: nf4_qlora.DGRAD_STATS[k] - before[k]
                                             for k in ("kernel", "grouped_mm", "dense", "loop")}
                 rec["route_stats_delta"] = {k: nf4_route.ROUTE_STATS.get(k, 0) - rs0.get(k, 0)
@@ -168,8 +193,7 @@ def measure_cell(name, W: Weights, M: int, args) -> dict:
                 rec["rel_err_fwd"] = rel_err(y, y_ref)
                 rec["rel_err_dgrad"] = rel_err(dx, dx_ref)
                 rec["finite"] = bool(torch.isfinite(y).all() and torch.isfinite(dx).all())
-            with torch.enable_grad():
-                rec["fwd_ms"].append(timed(lambda: f(xg), args.target_ms, args.draws))
+            rec["fwd_ms"].append(timed(lambda: f(xg), args.target_ms, args.draws))
             rec["dgrad_ms"].append(timed(lambda: torch.autograd.grad(y, xg, go, retain_graph=True),
                                          args.target_ms, args.draws))
         except Exception as exc:  # recorded, never fatal: an arm that cannot run at a shape is a reading
@@ -178,21 +202,23 @@ def measure_cell(name, W: Weights, M: int, args) -> dict:
     os.environ["GNF4_TRAIN_GEMM"] = "auto"
 
     # decoders alone, and the LoRA delta (PEFT shape: dropout 0, (x A^T) B^T * alpha/r, A and B trainable bf16)
-    import bitsandbytes.functional as BF
-    from nf4_route import dequant_groups
-    cell["dequant_bnb_ms"] = timed(lambda: BF.dequantize_4bit(W.q, W.st), args.target_ms, args.draws)
-    cell["dequant_gnf4_ms"] = timed(lambda: dequant_groups(W.B, W.absmax, W.eids, W.N, W.K), args.target_ms, args.draws)
-    r, alpha = args.lora_r, args.lora_alpha
-    A = (torch.randn(r, W.K, device="cuda", dtype=torch.bfloat16) / W.K ** 0.5).requires_grad_(True)
-    Bm = (torch.randn(W.N, r, device="cuda", dtype=torch.bfloat16) * 1e-2).requires_grad_(True)
-    xg = x.detach().requires_grad_(True)
-    def lora(a):
-        return F.linear(F.linear(a, A), Bm) * (alpha / r)
-    yl = lora(xg)
-    with torch.enable_grad():
+    try:
+        cell["dequant_bnb_ms"] = timed(lambda: BF.dequantize_4bit(W.q, W.st), args.target_ms, args.draws)
+        cell["dequant_gnf4_ms"] = timed(lambda: dequant_groups(W.B, W.absmax, W.eids, W.N, W.K), args.target_ms,
+                                        args.draws)
+        r, alpha = args.lora_r, args.lora_alpha
+        A = (torch.randn(r, W.K, device="cuda", dtype=torch.bfloat16) / W.K ** 0.5).requires_grad_(True)
+        Bm = (torch.randn(W.N, r, device="cuda", dtype=torch.bfloat16) * 1e-2).requires_grad_(True)
+        xg = x.detach().requires_grad_(True)
+
+        def lora(a):
+            return F.linear(F.linear(a, A), Bm) * (alpha / r)
+        yl = lora(xg)
         cell["lora_fwd_ms"] = timed(lambda: lora(xg), args.target_ms, args.draws)
-    cell["lora_bwd_ms"] = timed(lambda: torch.autograd.grad(yl, (xg, A, Bm), go, retain_graph=True),
-                                args.target_ms, args.draws)
+        cell["lora_bwd_ms"] = timed(lambda: torch.autograd.grad(yl, (xg, A, Bm), go, retain_graph=True),
+                                    args.target_ms, args.draws)
+    except Exception as exc:  # recorded, never fatal
+        cell["extras_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
     cell["mem_peak_bytes"] = torch.cuda.max_memory_allocated()
     torch.cuda.empty_cache()
     return cell
@@ -204,8 +230,13 @@ def layer_bytes(weights: dict) -> int:
 
 
 def h2d_probe(weights: dict, M: int, args) -> dict:
-    """Pinned->device copies of one layer's NF4 bytes, alone, and concurrent with one layer's bnb forward GEMMs on the compute
-    stream. Reports copy GB/s alone and under load, and the GEMM slowdown the concurrent DMA causes."""
+    """Pinned->device copies of one layer's NF4 bytes against one layer's bnb forward GEMMs, as two FULLY-LOADED readings:
+
+    - copy under load: the GEMM window is enqueued first and sized to >= 2x the copy window, so every copy runs while GEMMs run;
+    - GEMMs under load: the copy window is enqueued first and sized to >= 2x the GEMM window, so every GEMM runs during DMA.
+
+    Each draw records whether the loaded stream really was covered end to end (its start after the other's start, its end
+    before the other's end, on the device timeline); the reducer refuses a stream verdict from an uncovered draw."""
     import bitsandbytes as bnb
 
     nbytes = layer_bytes(weights)
@@ -214,56 +245,63 @@ def h2d_probe(weights: dict, M: int, args) -> dict:
     cs = torch.cuda.Stream()
     xs = {n: torch.randn(M, W.K, device="cuda", dtype=torch.bfloat16) for n, W in weights.items()}
 
-    def layer_fwd():
-        for n, W in weights.items():
-            for _ in range(SHAPES[n][2]):
-                bnb.matmul_4bit(xs[n], W.q.t(), quant_state=W.st)
+    def layer_fwd(k):
+        for _ in range(k):
+            for n, W in weights.items():
+                for _ in range(SHAPES[n][2]):
+                    bnb.matmul_4bit(xs[n], W.q.t(), quant_state=W.st)
 
     def copies(k):
         with torch.cuda.stream(cs):
             for _ in range(k):
                 dst.copy_(src, non_blocking=True)
 
-    busy(args.warm_s)
     def ev():
         return torch.cuda.Event(enable_timing=True)
+
+    def window(first, second):
+        """Enqueue `first` then `second` on their streams (no sync between). -> (first_ms, second_ms, second covered)."""
+        a, b, c, d = ev(), ev(), ev(), ev()
+        torch.cuda.synchronize()
+        s1, f1 = first
+        s2, f2 = second
+        a.record(s1)
+        f1()
+        b.record(s1)
+        c.record(s2)
+        f2()
+        d.record(s2)
+        torch.cuda.synchronize()
+        covered = a.elapsed_time(c) >= 0 and d.elapsed_time(b) >= 0
+        return a.elapsed_time(b), c.elapsed_time(d), covered
+
+    busy(args.warm_s)
     out = {"layer_bytes": nbytes, "M": M, "draws": []}
+    main = torch.cuda.current_stream()
     for _ in range(args.draws):
-        # copy alone
         a, b = ev(), ev()
         a.record(cs)
         copies(args.h2d_reps)
         b.record(cs)
         torch.cuda.synchronize()
         copy_alone = a.elapsed_time(b) / args.h2d_reps
-        # gemm alone, enough layer forwards to cover the copy window
         c, d = ev(), ev()
         c.record()
-        layer_fwd()
+        layer_fwd(args.h2d_reps)
         d.record()
         torch.cuda.synchronize()
-        fwd_one = max(c.elapsed_time(d), 1e-3)
-        k_fwd = max(1, int(round(copy_alone * args.h2d_reps / fwd_one)))
-        c.record()
-        for _ in range(k_fwd):
-            layer_fwd()
-        d.record()
-        torch.cuda.synchronize()
-        gemm_alone = c.elapsed_time(d)
-        # both, enqueued before any sync so they overlap
-        torch.cuda.synchronize()
-        a.record(cs)
-        c.record()
-        copies(args.h2d_reps)
-        for _ in range(k_fwd):
-            layer_fwd()
-        b.record(cs)
-        d.record()
-        torch.cuda.synchronize()
+        fwd_alone = max(c.elapsed_time(d) / args.h2d_reps, 1e-3)     # one layer's forward, same rep count as the loaded read
+        # copy under load: GEMMs first, >= 2x the copy window
+        k_fwd = max(2, int(2 * copy_alone * args.h2d_reps / fwd_alone) + 1)
+        _, copy_ms, copy_cov = window((main, lambda: layer_fwd(k_fwd)), (cs, lambda: copies(args.h2d_reps)))
+        # GEMMs under load: copies first, >= 2x the GEMM window
+        k_cp = max(2, int(2 * fwd_alone * args.h2d_reps / copy_alone) + 1)
+        _, gemm_ms, gemm_cov = window((cs, lambda: copies(k_cp)), (main, lambda: layer_fwd(args.h2d_reps)))
         out["draws"].append({
             "copy_alone_ms": copy_alone, "copy_alone_gbs": nbytes / copy_alone / 1e6,
-            "copy_loaded_gbs": nbytes * args.h2d_reps / a.elapsed_time(b) / 1e6,
-            "gemm_alone_ms": gemm_alone, "gemm_loaded_ms": c.elapsed_time(d), "layer_fwds": k_fwd,
+            "copy_loaded_gbs": nbytes * args.h2d_reps / copy_ms / 1e6, "copy_covered": bool(copy_cov),
+            "gemm_alone_ms": fwd_alone, "gemm_loaded_ms": gemm_ms / args.h2d_reps, "gemm_covered": bool(gemm_cov),
+            "layer_fwds_under_copy": k_fwd, "copies_under_gemm": k_cp,
         })
     torch.cuda.empty_cache()
     return out
