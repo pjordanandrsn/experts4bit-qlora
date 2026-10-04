@@ -304,6 +304,52 @@ The three rows supersede the 2026-10-02 positions.
   the projections in bf16. **P22 UNTESTED**: there is no micro-batch-2 pair.
 - **Box D** (the absmax alone): Qwen3.6 OOMs at micro-batch 2 (step 2) and at micro-batch 1 (step 18). **P19 FALSIFIED.**
 
+## TC2 amendment 8 (2026-10-04): Mixtral at default settings with the dense route, and Qwen3.6's micro-batch-1 pair
+
+Pre-registration: [`../../tc1/TC2-PREREG.md`](../../tc1/TC2-PREREG.md), amendment 8. Two RTX 5090s, e4b 0.45.0 (`ed08029`), grouped-nf4-gemm
+0.38.0 (`bb56b42`). Receipts: [`receipts/tc1-5090-63/`](receipts/tc1-5090-63/) (box M), [`receipts/tc1-5090-64/`](receipts/tc1-5090-64/) (box Q).
+
+| box | host | e4b settings | invoiced |
+|---|---|---|---|
+| M | Intel Core Ultra 9 285K | defaults (`auto` takes the dense route) | $0.60 |
+| Q | AMD EPYC 7B13 | `E4B_ABSMAX_DQ=1 TRAIN_FROZEN_4BIT=1`, micro-batch 1 × accum 8 | $1.31 |
+
+### Box M: with the dense route e4b's Mixtral step falls to 3.57 s; Unsloth is still faster, 0.836
+
+| arm | s/step (two draws) | peak | held-out at N |
+|---|---|---|---|
+| e4b `fused_attn4_m`, defaults | 3.577 / 3.561 (0.4 % apart) | 31.08 GB | 0.7147 / 0.7128 |
+| Unsloth `ckpt_unsloth_m` | 2.961 / 3.006 (1.5 % apart) | 29.13 GB | 0.7105 / 0.7110 |
+| e4b `reference_attn4_m` | 4.407 (one draw) | 30.31 GB | 0.7114 |
+
+- **Unsloth/e4b 0.836** [0.828, 0.844]. The pair reads COMPARABLE (held-out Δ −0.0043, step-0 Δ +0.0043). e4b's parity PASSES,
+  with the fused path 1.23× faster than the reference.
+- The dense route ran on every expert call: 11,264 dense forward and 5,120 dense dgrad calls, no fused ones.
+- **P24 HELD** (peak 31.08 GB, at most 31.6) and **P25 HELD** (inside [0.75, 1.20]).
+- By the registered rule this is Mixtral's position at default settings. It supersedes amendment 6's 0.697, which stays as the
+  fused kernels' reading.
+- Context, across boxes: on box D, the same host model, the fused kernels read 5.52 s and the position 0.542. Unsloth's Mixtral
+  step has read 3.0 s on this host model, 3.7 s on an EPYC 7B13 and 4.1 s on an EPYC 7C13; e4b's moves much less. This host is the
+  Unsloth-favouring end of that range.
+- At defaults e4b's peak is 1.95 GB above Unsloth's, because the absmax stays fp32; `E4B_ABSMAX_DQ=1` closes it (amendment 7) and
+  stays opt-in.
+
+### Box Q: Qwen3.6's first quoted position, e4b 2.05× faster at micro-batch 1
+
+| arm | s/step (two draws) | peak | held-out at N |
+|---|---|---|---|
+| e4b `fused_attn4_m`, absmax double-quantized, non-routed projections NF4 | 9.325 / 9.170 (1.7 % apart) | 31.35 GB | 0.6885 / 0.6879 |
+| Unsloth `ckpt_unsloth_m` | 18.985 / 18.914 (0.4 % apart) | 30.41 GB | 0.6875 / 0.6888 |
+
+- **Unsloth/e4b 2.049** [2.028, 2.070], both at micro-batch 1 × accum 8, the same tokens per step as the field recipe. e4b's energy
+  per step is 0.57× Unsloth's (1,610 vs 2,846 J).
+- The pair reads COMPARABLE (held-out Δ −0.0010). The step-0 gap is 0.019 nats (e4b 1.1770, Unsloth 1.1962).
+- **P26 HELD** (both e4b draws VALID, peak 31.35 GB, at most 31.8), **P27 HELD** (inside [1.50, 2.60]), **P28 HELD** (both quoted
+  pairs COMPARABLE, step-0 gap 0.019, at most 0.02).
+- By the registered rule this is Qwen3.6's first quoted position, labelled: micro-batch 1, e4b on the comparator's bytes with the absmax
+  double-quantized. `--frozen-4bit` is a measurement hook, not a training option; e4b's defaults keep those projections bf16 and do not
+  fit this family on 32 GB.
+
 ## Predictions scored (box A)
 
 P1 granite FALSIFIED; P2 olmoe FALSIFIED; P3 gptoss FALSIFIED; P6 (e4b parity on every family with a reference) HELD; P7 (matched sets
