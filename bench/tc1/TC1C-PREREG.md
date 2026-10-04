@@ -216,3 +216,39 @@ position.
 
 **Budget.** Two H100 NVL boxes, each $2.80/h GPU ceiling (disk billed on top), 2.5 h guard, about $2.80 each as amendment 2's box was;
 the owner's standing tier (each a single run under $15).
+
+### Amendment 5 (2026-10-04T06:26Z, before any box): the fused kernels' own configs on the H100 — a kernel replay, not a position (P15, P16, P17)
+
+**Why.** Amendment 3 found the grouped GEMM alone (`torch._grouped_mm` on an already-dequantized stack) running the recorded calls at
+0.20 (forward) and 0.16 (dgrad) of grouped-nf4-gemm's fused kernels on an H100 NVL. Part of that may be configuration: the fused
+kernels' defaults were chosen on sm_86 and sm_120. On an RTX A2000 the defaults were best, the variant-1 configs were all bit-identical
+to the default, and the BLOCK_K 128 and most bf16-MMA (variant 3) configs did not fit its 101 KB of shared memory. The H100 has 228 KB
+and wgmma, so its ranking can differ. A bit-identical speedup there would beat a route that is not bit-identical.
+
+**The box.** One H100 NVL, token `fusedsweep`: no model, no Unsloth venv. It runs `bench/tc1/fused_sweep.py` on the same 128 unique
+recorded calls (`bench/tc1/routecalls-qwen3.json`, staged with `TC1_EXTRA_STAGE`). The forward is swept over the default plus 24 configs:
+`prefill_variant` ∈ {1, 3}, `prefill_groups` ∈ {1, 2}, and (BLOCK_N, warps, stages) ∈ {(128,4,3), (128,8,3), (128,8,4), (256,8,3),
+(64,4,4), (128,4,4)}, at the cost-rule M-tile. The dgrad is swept over the default plus 8 configs. Each config's summed device time
+(CUDA events, median of 5) and its bit-identity to the default are recorded. A config that does not compile or launch is recorded with
+its error. e4b is pinned at this amendment's merge, and grouped-nf4-gemm at its main.
+
+**Predictions** (registered before the box):
+
+- **P15:** the best forward config that is bit-identical to the default takes at most **0.90** of the default's time.
+- **P16:** the best forward config of any kind takes at most **0.60** of the default's time, i.e. at or below the route's 0.596.
+- **P17:** the best dgrad config takes at most **0.90** of the default's time.
+
+Each is FALSIFIED above its bound, and UNTESTED if the box does not complete.
+
+**Basis.** These are bets, not estimates. A 5× gap to cuBLAS is more than tuning usually closes, so P16 is the long shot; P15 and P17
+ask whether the sm_86 choices leave easy time on the table on sm_90.
+
+**Decision rules.**
+
+- **P15 or P17 HELD:** that bit-identical config becomes grouped-nf4-gemm's sm_90 default after a full-step box confirms it.
+- **P16 HELD with a non-identical config:** it competes with the grouped_mm route in the next full-step box.
+- **All FALSIFIED:** the route (amendment 4) is the H100 path.
+
+This box quotes no position and changes no register row.
+
+**Budget.** One H100 NVL, $2.80/h GPU ceiling (disk billed on top), 1.0 h guard, estimate under $1; the owner's standing tier.
