@@ -1,7 +1,7 @@
 # TC1 amendment 20 read (#945): grouped-nf4-gemm's per-pass host reuse makes e4b's training step 5–7 % faster on a 5090 — P33 and P34 HELD
 
 **Box:** `tc1-5090-51` (instance 54095822, AMD EPYC 7C13, RTX 5090, driver 580.95.05; receipts in
-[`receipts/tc1-5090-51/`](receipts/tc1-5090-51/)). It cost **$0.36**. The instance billed $0.84/h: $0.573/h for the GPU, which
+[`receipts/tc1-5090-51/`](receipts/tc1-5090-51/)). Vast invoiced **$3.14** for it: GPU $0.39, storage $0.18, download $2.57 (65.7 GB at this host's $0.039/GB) and upload $0.004. Corrected 2026-10-04: this page first quoted the receipt's figure, $0.36, which was GPU rate × runtime. The instance billed $0.84/h: $0.573/h for the GPU, which
 cleared the declared $0.69/h ceiling, plus $0.267/h for its 320 GB disk, which the launcher's ceiling does not count
 (adertha-agents#140). The code was e4b `186265d` and grouped-nf4-gemm `192f63f` (#444). Pre-registration:
 [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 20.

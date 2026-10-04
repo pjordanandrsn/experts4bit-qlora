@@ -12,6 +12,69 @@
 - **Decision.** The gap to `torch._grouped_mm` is structural, so the grouped_mm route (TC1c amendment 4) is the H100 path, and the
   dgrad config is recorded, not taken. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
 
+### P112 closed VOID (#1015): no reading on `GNF4_PDL` for the int4 serving step. Seen but not read: B=1 3.7 % faster and B=16 1.5 % slower, with identical tokens
+
+- **Run 1** (`p112-5090-1`, $0.3210) VOIDed on the lane's own launch accounting (Amendment 1).
+- **Run 2** (`p112-5090-2`, $1.0210 including the checkpoint download) confirmed the accounting fix: compile launches
+  equal compiled variants, and every PDL launch is accounted for. It then VOIDed on a decode slope: W16 prefill jitter
+  on a shared host swamped the slope's 1.2 s of decode.
+- **Why the lane closes.** A third run would breach the registered $2.00 ceiling, which was priced without download
+  charges, and a reading needs decode-only timing.
+- **In both runs,** tokens were identical in every arm. The default NF4 server's census showed only `swiglu_rows` and
+  `combine_rows` among the switched kernels.
+- **Run 1's arms, not a reading:** W1 ratios 1.0393 / 1.0366 and W16 0.9851 / 0.9854.
+- **What follows.** `GNF4_PDL` stays opt-in. A new lane reads PDL off, PDL on everything, and PDL at small row counts
+  only, under decode-only timing. `bench/p112/RESULTS-p112.md`.
+
+### P112 Amendment 1: the first reading VOIDed on its own launch accounting; the accounting is fixed and the lane reruns
+
+- **What happened.** `p112-5090-1` ($0.3210) read VOID on engagement: 20 of 6,927 switched launches in each on arm
+  showed no PDL.
+- **Why.** Triton 3.4 hands the launch hook no function handle on the launch that compiles a variant, and the box
+  counted those launches as PDL-less. The shortfall was one per compiled variant in every kernel.
+- **The fix.** The box now counts compile launches and compiled variants separately (`p112_reduce.py`, 21-case
+  self-test), and the driver no longer fetches the box's grouped-nf4-gemm clone.
+- **Seen in the arms (not a reading).** Tokens were identical everywhere. g1 = 1.0366 (B=1 step 4.44 → 4.28 ms) and
+  g16 = 0.9851 (B=16 step 9.05 → 9.19 ms), so the rule's later steps would read SLOWER. The default NF4 server's census
+  shows only `swiglu_rows` and `combine_rows` among the switched kernels.
+- **The rerun** `p112-5090-2` predicts SLOWER, written after seeing these numbers. Receipts are in
+  `bench/p112/receipts/p112-5090-1/`.
+
+### P112 registered (#1015): does `GNF4_PDL=1` decode SC1's int4 serving configuration's tokens exactly, and faster? One RTX 5090
+
+- **Why.** grouped-nf4-gemm's lane K28 read programmatic dependent launch LEVER on the served B=1 layer's gnf4 kernels
+  (0.323 µs saved per kernel, bit-identical; grouped-nf4-gemm#451). P112 is its registered served read.
+- **The subject.** The default graph server with SC1's int4_sched levers. These are RTN int4 experts and attention, the
+  fused T1 glue, the router epilogue and the fused qkv, verbatim from `bench/sc1/sc1_run.sh`, and they are where the
+  913 switched kernels of SC1b's census run. e4b's default NF4 server reaches only `swiglu_rows` and `combine_rows`,
+  by its defaults; the box measures that in a census after the arms.
+- **The arms.** Four ABBA arms (P0 off, P1 on) through P109's W16 and W1. A launch hook proves that every switched
+  kernel in P1's build carried PDL.
+- **The rule** (`bench/p112/p112_reduce.py`, 17-case self-test): VOID / NOISY / FUNCTION_FAIL / SLOWER /
+  **DEFAULT_ON**. On DEFAULT_ON, grouped-nf4-gemm turns `GNF4_PDL` on by default in its next release.
+- **No proving rental.** The proof model (Granite) cannot run the Qwen3-only fused qkv; this was seen on the NAS A2000.
+  The reading runs under a 1.0 h guard. `tests/test_p112_staged_pin.py` pins the lane.
+
+### Correction: five TC boxes of 2026-10-04 at Vast's invoiced cost (read pages and the host-reuse register note)
+
+- **What was wrong.** The reads of TC1 amendments 20 and 21 and TC1c amendments 1–3 quoted each box's receipt cost. That figure was the
+  GPU rate × measured runtime. Vast's invoice also bills storage, download and time from create.
+- **Invoiced totals,** against the receipt figures quoted:
+
+  | box | run | invoiced | receipt figure | breakdown |
+  |---|---|---|---|---|
+  | `tc1-5090-51` | amendment 20 | **$3.14** | $0.36 | download $2.57: 65.7 GB at $0.039/GB on machine 150527 |
+  | `tc1-5090-52` | amendment 21 | **$3.11** | $0.35 | download $2.57, same host |
+  | `tc1c-h100-3` | TC1c amendment 1 | **$4.42** | $4.33 | |
+  | `tc1c-h100-4` | TC1c amendment 2 | **$2.97** | $2.80 | |
+  | `tc1c-h100-5` | TC1c amendment 3 | **$0.31** | $0.21 | |
+
+  In total, $13.96 invoiced against $8.05 recorded.
+- **What changed since.** The launcher now records invoiced cost (adertha-agents #142). It also stops buying hosts that bill download
+  above $0.011/GB (#141), which excludes 150527.
+- **What did not change.** No measured number moved. The 0.44.0 entries that quote the old figures stand as written, with this
+  correction beside them.
+
 ### SC2 registered (#846): request-level serving, e4b's `serve_paged` against vLLM, SGLang and llama.cpp under Poisson arrivals
 
 - **What it asks.** SC1 timed decode loops at fixed batches; SC2 drives each engine's own OpenAI `/v1/completions` with ONE client

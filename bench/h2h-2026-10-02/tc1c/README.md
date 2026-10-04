@@ -44,7 +44,7 @@ does not become the H100 default after amendment 4. This box quotes no position 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 3.
 
 **The box.** `tc1c-h100-5`: Vast instance 54112861, H100 NVL (capability 9.0), driver 595.71.05, torch 2.8.0+cu128, bitsandbytes 0.50.2,
-$0.21; receipts in [`receipts/tc1c-h100-5/`](receipts/tc1c-h100-5/), with the per-call table in `ROUTEBENCH.json`. The code was e4b
+$0.31 invoiced: GPU $0.305, storage $0.007 (corrected 2026-10-04; the receipt's GPU-time figure was $0.21). Receipts in [`receipts/tc1c-h100-5/`](receipts/tc1c-h100-5/), with the per-call table in `ROUTEBENCH.json`. The code was e4b
 `69e7962` and grouped-nf4-gemm `4509307`. Token `routebench`: no model, no Unsloth venv.
 [`../../tc1/route_bench.py`](../../tc1/route_bench.py) replays the 128 unique fused-GEMM calls of e4b's training step from
 [`../../tc1/routecalls-qwen3.json`](../../tc1/routecalls-qwen3.json). Those were recorded through the real checkpoint's router on a
@@ -80,7 +80,7 @@ it. This box quotes no position and changes no register row.
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 2.
 
 **The box.** `tc1c-h100-4`: Vast instance 54103635 on the same machine as amendment 1's box (AMD EPYC 9534, H100 NVL, driver
-595.71.05), $2.80; receipts in [`receipts/tc1c-h100-4/`](receipts/tc1c-h100-4/). It used TC1c's token. Every e4b arm ran with
+595.71.05), $2.97 invoiced: GPU $2.89, storage $0.07, download $0.02 for 73.6 GB (corrected 2026-10-04; the receipt's GPU-time figure was $2.80). Receipts in [`receipts/tc1c-h100-4/`](receipts/tc1c-h100-4/). It used TC1c's token. Every e4b arm ran with
 `TC1_E4B_ENV="E4B_MOE_KEEP_LAYERS=all NF4_QLORA_COMPACT_DELTA=1 GNF4_HOST_REUSE=1"`. In each of the 48 decoder layers attention alone
 is checkpointed, and the MoE activations are kept rather than recomputed; gradients are identical by construction. HF and axolotl
 were skipped (`not_run`). The code was e4b `8846764` and grouped-nf4-gemm `ac84818`. Unsloth's arms were unchanged.
@@ -111,7 +111,7 @@ peak memory: e4b keeps 34.08 GB here against Unsloth's 24.27 GB. The 5090 measur
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 1.
 
-**The box.** `tc1c-h100-3`: Vast instance 54091206, AMD EPYC 9534, H100 NVL, driver 595.71.05, $4.33; receipts in
+**The box.** `tc1c-h100-3`: Vast instance 54091206, AMD EPYC 9534, H100 NVL, driver 595.71.05, $4.42 invoiced: GPU $4.30, storage $0.10, download $0.02 for 73.6 GB (corrected 2026-10-04; the receipt's GPU-time figure was $4.33). Receipts in
 [`receipts/tc1c-h100-3/`](receipts/tc1c-h100-3/). The token is the same as before. e4b `e1837cf` carries every default from TC1
 amendments 10–15 (#945's single-read grouping and pinned ring, the trimmed LoRA delta, the cost tile rule, the fused RMSNorm and rotary),
 and grouped-nf4-gemm is at `00929a4`. No environment variables were set. The comparator was unchanged: Unsloth 2026.9.14, torch
