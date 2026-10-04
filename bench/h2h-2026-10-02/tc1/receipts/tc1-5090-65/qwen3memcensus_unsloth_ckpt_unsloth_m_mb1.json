@@ -1,0 +1,1637 @@
+{
+ "framework": "unsloth",
+ "fam": "qwen3memcensus",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "model_type": "qwen3_moe",
+ "n_layers": 48,
+ "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "arm": "unsloth",
+ "tag": "ckpt_unsloth_m_mb1",
+ "status": "ok",
+ "steps": 20,
+ "seq": 2048,
+ "accum": 8,
+ "micro_batch": 1,
+ "autocast": false,
+ "r": 16,
+ "alpha": 16,
+ "lr": 0.0002,
+ "seed": 3407,
+ "offload": false,
+ "optimizer": "adamw_8bit(lr=0.0002, weight_decay=0.001) schedule=linear warmup_steps=5",
+ "lr_per_step": [
+  0.0,
+  4e-05,
+  8e-05,
+  0.00012,
+  0.00016,
+  0.0002,
+  0.00018667,
+  0.00017333,
+  0.00016,
+  0.00014667,
+  0.00013333,
+  0.00012,
+  0.00010667,
+  9.333e-05,
+  8e-05,
+  6.667e-05,
+  5.333e-05,
+  4e-05,
+  2.667e-05,
+  1.333e-05
+ ],
+ "template": "alpaca",
+ "grad_ckpt": "unsloth",
+ "attn_4bit": false,
+ "n_attn4": 0,
+ "frozen_4bit": false,
+ "n_frozen4": 0,
+ "attn4_probe": null,
+ "absmax_dq": false,
+ "structural_expected_n_attn4": null,
+ "detector_version": null,
+ "loader_used": "FastLanguageModel",
+ "loader_fallback_reason": null,
+ "unsloth_targets": [
+  "q_proj",
+  "k_proj",
+  "v_proj",
+  "o_proj",
+  "gate_proj",
+  "up_proj",
+  "down_proj"
+ ],
+ "hf_targets": null,
+ "axolotl_targets": null,
+ "axolotl": null,
+ "axolotl_router_recast": null,
+ "hub_kernels_cached": null,
+ "hf_experts_implementation": null,
+ "hf_double_quant": null,
+ "axolotl_bnb4bit_modules": null,
+ "unsloth_knobs": {
+  "moe_backend_requested": "grouped_mm",
+  "speed_tilt": false,
+  "double_quant_requested": "off",
+  "env_set": {
+   "UNSLOTH_MOE_BACKEND": "grouped_mm"
+  },
+  "load_in_4bit_requested": true,
+  "target_parameters_requested": []
+ },
+ "moe_backend_selected": "grouped_mm",
+ "unsloth_double_quant": {
+  "requested": null,
+  "how": "unknown-default: from_pretrained names neither bnb_4bit_use_double_quant nor quantization_config",
+  "loaded_nested": true
+ },
+ "unsloth_load_in_4bit": true,
+ "unsloth_target_parameters": {
+  "requested": [],
+  "passed": false,
+  "how": "not requested"
+ },
+ "unsloth_packed_calls_per_step_min": {
+  "unsloth_mxfp4_grouped_mm": 0
+ },
+ "unsloth_packed_calls_per_step_max": {
+  "unsloth_mxfp4_grouped_mm": 0
+ },
+ "hf_experts_dispatch": null,
+ "unsloth_backend_calls_per_step_min": {
+  "unsloth_grouped_mm": 768,
+  "unsloth_triton": 0,
+  "unsloth_loop": 0,
+  "moe_bnb4bit_backend": 768
+ },
+ "unsloth_backend_calls_per_step_max": {
+  "unsloth_grouped_mm": 768,
+  "unsloth_triton": 0,
+  "unsloth_loop": 0,
+  "moe_bnb4bit_backend": 768
+ },
+ "unsloth_backend_absent": [],
+ "tokens": {
+  "path": "tokens_qwen3memcensus.json",
+  "sha256": "bfc742f67e376ecfee191e2c6fd34170ab2ed310260a8c89bc79c46e3e7521ac",
+  "n_train": 1200,
+  "eval_rows_used": 8,
+  "tokenizer_agree": true,
+  "pad_id": 151643
+ },
+ "prereg": "tc1/TC1-PREREG.md",
+ "harness": "tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp32|native on EVERY framework; + T20: --lora-init matched:<seed>, per-slot deterministic LoRA A by structural slot mapping, B asserted zero, matched_init receipt; + T21: frozen_base_probe, layer-0 slots dequantised the framework's own way with a byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, --unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance and grouped_mm dispatch counters, the packed-parameter probe; + --absmax-dq: e4b's double-quantized expert absmax; + --mem-census: the allocator-history memory census, TC1 amendment 23)",
+ "env": {
+  "framework": "unsloth",
+  "torch": "2.12.1+cu130",
+  "device": "cuda",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-dde56602-7c7b-26f1-4e39-4e37817c97d7",
+   "pci.bus_id": "00000000:81:00.0",
+   "pcie.link.gen.current": "5",
+   "pcie.link.gen.max": "5",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "500.00",
+   "clocks.max.sm": "3090",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.40.7D",
+   "driver_version": "595.71.05",
+   "cpu": "AMD EPYC 9454P 48-Core Emb Processor",
+   "cpu_threads": 96,
+   "host_mem_gib": 503.3,
+   "vast_instance_id": "54195008",
+   "container_host": "16b54e775e08"
+  },
+  "anchor_json": null,
+  "box_class": "RTX 5090",
+  "hf_hub_offline": "1",
+  "unsloth_loader": "FastLanguageModel",
+  "unsloth_env": {
+   "UNSLOTH_ENABLE_LOGGING": "1",
+   "UNSLOTH_MOE_BACKEND": "grouped_mm"
+  },
+  "transformers": "5.5.0",
+  "experts4bit-qlora": "0.45.0",
+  "grouped-nf4-gemm": "0.38.0",
+  "bitsandbytes": "0.50.2",
+  "peft": "0.21.2",
+  "unsloth": "2026.9.14",
+  "unsloth_zoo": "2026.9.9",
+  "triton": "3.7.1",
+  "huggingface_hub": "1.33.0"
+ },
+ "load_s": 28.3,
+ "phase_seconds": {
+  "preamble": 2.13,
+  "snapshot": 0.0,
+  "load_weights": 20.511,
+  "census": 2.099,
+  "frozen_probe": 0.065,
+  "trainable_sha": 1.662,
+  "counters": 0.071,
+  "c1_before": 42.566,
+  "eval0": 12.086,
+  "optimizer": 0.343,
+  "mem_census": 0.02,
+  "c1_after": 21.873,
+  "adapter_save": 2.05
+ },
+ "phase_budget_s": 1260.0,
+ "prologue_s": 89.35,
+ "prologue_unattributed_s": 7.796,
+ "verify": {
+  "n_quantized": null,
+  "n_unquantized": null
+ },
+ "census": {
+  "Params4bit_expert_stacks": 96,
+  "Params4bit_other": 192,
+  "Linear4bit": 384,
+  "Linear_bf16": 1,
+  "Linear_fp32": 0,
+  "Experts4bit": 0,
+  "ExpertsLoRA": 0,
+  "LoRALinear": 0,
+  "experts_modules": 48,
+  "experts_module_classes": {
+   "Qwen3MoeExperts": 48
+  },
+  "router_gate": [
+   {
+    "name": "base_model.model.model.layers.0.mlp.gate",
+    "cls": "Qwen3MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   },
+   {
+    "name": "base_model.model.model.layers.1.mlp.gate",
+    "cls": "Qwen3MoeTopKRouter",
+    "dtype": "torch.bfloat16"
+   }
+  ],
+  "lm_head": {
+   "cls": "Linear",
+   "dtype": "torch.bfloat16"
+  },
+  "samples": [
+   {
+    "name": "base_model.model.model.layers.0.mlp.experts.base_layer.base_layer.gate_up_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     201326592,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.layers.0.mlp.experts.base_layer.base_layer.down_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     100663296,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.layers.1.mlp.experts.base_layer.base_layer.gate_up_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     201326592,
+     1
+    ]
+   },
+   {
+    "name": "base_model.model.model.layers.1.mlp.experts.base_layer.base_layer.down_proj",
+    "dtype": "torch.uint8",
+    "shape": [
+     100663296,
+     1
+    ]
+   }
+  ],
+  "Params4bit_expert_linears": 0,
+  "expert_param_classes": {
+   "Params4bit": 96
+  }
+ },
+ "engagement_banners": [
+  "Unsloth: Will compile Qwen3MoeSparseMoeBlock without fullgraph since output capture hooks run inside it.",
+  "Unsloth: Compiled module Qwen3MoeMLP.",
+  "Unsloth: Compiled module Qwen3MoeExperts.",
+  "Unsloth: Compiled module Qwen3MoeTopKRouter.",
+  "Unsloth: Compiled module Qwen3MoeSparseMoeBlock.",
+  "Unsloth: Compiled module Qwen3MoeRMSNorm.",
+  "Unsloth: Compiled module Qwen3MoeRotaryEmbedding.",
+  "Unsloth: Fast Attention patch for Qwen3MoeAttention.",
+  "(4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM",
+  "(1) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM",
+  "(4) Unsloth skipping patching fast linear cross entropy for Qwen3MoeForCausalLM",
+  "==((====))==  Unsloth 2026.9.14: Fast Qwen3_MoE patching. Transformers: 5.5.0.",
+  "Unsloth: Detected MoE model with num_experts = 128 and target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj']. Enabling LoRA on MoE parameters: ['mlp.experts.gate_up_proj', 'mlp.experts.down_proj']"
+ ],
+ "unsloth_bnb4bit_modules": {
+  "n_experts_modules": 48,
+  "n_bnb4bit": 0,
+  "n_bnb4bit_unwrapped": 48,
+  "inner_param_types": [
+   "Params4bit"
+  ],
+  "wrap_depth": 2
+ },
+ "trainable_params": 642514944,
+ "trainable_tensors": 576,
+ "trainable_by_group": {
+  "attention": 13369344,
+  "experts": 629145600,
+  "other": 0
+ },
+ "expect_trainable": 642514944,
+ "trainable_mismatch": null,
+ "adapter_dtypes_before": {
+  "torch.float32": 576
+ },
+ "adapter_dtypes_after": {
+  "torch.float32": 576
+ },
+ "lora_cast_to_fp32": 0,
+ "init_sha": "3b985b32b6278ffa95621ec2f5c066e33dc3d3d72f2931e4fe3fa7fd4e3a4bcb",
+ "n_patched": 0,
+ "enable_reason": "",
+ "probes": {},
+ "adapter_dtype": "fp32",
+ "lora_init": "matched:3407",
+ "matched_init": {
+  "seed": 3407,
+  "n_slots_set": 12480,
+  "n_slots_expected": 12480,
+  "expected_parts": {
+   "n_attention_projections": 192,
+   "n_layers": 48,
+   "n_experts": 128
+  },
+  "unmapped": [],
+  "n_unmapped": 0,
+  "complete": true,
+  "kinds": {
+   "q": 48,
+   "k": 48,
+   "v": 48,
+   "o": 48,
+   "down": 6144,
+   "gate_up": 6144
+  },
+  "b_nonzero": [],
+  "hidden": {
+   "value": 2048,
+   "rule": "config.hidden_size"
+  },
+  "mapping_rules": {
+   "base_model.model.model.layers.0.self_attn.q_proj": "q by name (attention)",
+   "base_model.model.model.layers.0.self_attn.k_proj": "k by name (attention)",
+   "base_model.model.model.layers.0.self_attn.v_proj": "v by name (attention)",
+   "base_model.model.model.layers.0.self_attn.o_proj": "o by name (attention)",
+   "base_model.model.model.layers.0.mlp.experts (down_proj)": "down by structure: out == hidden",
+   "base_model.model.model.layers.0.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden",
+   "base_model.model.model.layers.1.self_attn.q_proj": "q by name (attention)",
+   "base_model.model.model.layers.1.self_attn.k_proj": "k by name (attention)",
+   "base_model.model.model.layers.1.self_attn.v_proj": "v by name (attention)",
+   "base_model.model.model.layers.1.self_attn.o_proj": "o by name (attention)",
+   "base_model.model.model.layers.1.mlp.experts (down_proj)": "down by structure: out == hidden",
+   "base_model.model.model.layers.1.mlp.experts.base_layer (gate_up_proj)": "gate_up by structure: in == hidden"
+  },
+  "n_mapping_rules": 288,
+  "distribution": "A[slot] ~ U(-b, b), b = 1/sqrt(fan_in), fan_in = in-width of the [r, in] slot = PEFT's kaiming_uniform(a=sqrt(5)) on a [r, in] weight; drawn in fp32 on CPU from torch.Generator().manual_seed(int.from_bytes(sha256('<seed>|<layer>|<kind>|<expert>')[:8], 'big')); B left as built and asserted zero"
+ },
+ "frozen_base_probe": {
+  "slots": {
+   "gate_up": {
+    "sha": "e2bed944143e4da415e69e1a3a9a89fb09ba88cb0361a306de6a39f2990c6579",
+    "regime": "nf4/64+dq",
+    "n_bytes": 6291456,
+    "shape": [
+     1536,
+     2048
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16",
+    "source": "gate_up_proj[0]",
+    "control_sha": "d150bcf1e860a3fe197eb5195ac4a3ddce070394056a9fa4d39097649bb522a1",
+    "control_detects_flip": true,
+    "mapped_by": "structure: in == hidden"
+   },
+   "down": {
+    "sha": "f2ade29dafdbc0528e30577b57ad75076bbad5cc82e849f8d0a36a5387b4bb7d",
+    "regime": "nf4/64+dq",
+    "n_bytes": 3145728,
+    "shape": [
+     2048,
+     768
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(whole stack, nested statistics)[0] -> bf16",
+    "source": "down_proj[0]",
+    "control_sha": "aa56e49752308955ff0b2555c0adbb71034fa2f6a3c8614d8892fafb3ecfb07d",
+    "control_detects_flip": true,
+    "mapped_by": "structure: out == hidden"
+   },
+   "q_proj": {
+    "sha": "5c5e402ce51d389ff36c75dd525bac8779c0943e9ce3982e6b8e3b5ff30dfdc6",
+    "regime": "nf4/64+dq",
+    "n_bytes": 16777216,
+    "shape": [
+     4096,
+     2048
+    ],
+    "dtype": "bf16",
+    "method": "bnb dequantize_4bit(weight, own quant_state) -> bf16",
+    "source": "q_proj.weight",
+    "control_sha": "a2f40bdf8c6e9cf29ca3e9d8a723d7fe81b84f98b981c3a1eb1c904f689e29ea",
+    "control_detects_flip": true
+   }
+  },
+  "control_detects_flip": true,
+  "experts_module": "base_model.model.model.layers.0.mlp.experts",
+  "attention_module": "base_model.model.model.layers.0.self_attn",
+  "errors": []
+ },
+ "batched_stats": null,
+ "reference_order": null,
+ "dgrad": null,
+ "kernel_counter_key": "moe_bnb4bit_backend",
+ "kernel_calls_per_step": [
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768,
+  768
+ ],
+ "kernel_calls_per_step_min": 768,
+ "experts_forward_calls_per_step_min": 768,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "experts_forward": 768,
+   "moe_bnb4bit_backend": 768,
+   "unsloth_grouped_mm": 768,
+   "unsloth_triton": 0,
+   "unsloth_loop": 0,
+   "torch_grouped_mm": 5376,
+   "torch_F_grouped_mm": 0,
+   "manual_grouped_mm": 0,
+   "unsloth_mxfp4_grouped_mm": 0,
+   "lora_path_loop": 0,
+   "lora_path_padded": 0,
+   "lora_path_grouped_mm": 0
+  }
+ ],
+ "C1_tensors_hashed": 288,
+ "C1_bytes_hashed": 14948499456,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_control_tensor": "base_model.model.model.layers.0.mlp.experts.base_layer.base_layer.down_proj",
+ "C1_regime_by_tensor": {
+  "nf4/64+dq": 288
+ },
+ "C1_hasher": "hashes_frozen: every frozen expert / 4-bit tensor, any dtype (params + buffers; an offloaded stack from its pinned-CPU home)",
+ "C1_offloaded_homes": 0,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 2.08052,
+ "loss_last": 0.868,
+ "loss_mean_last20": 1.24053,
+ "loss_step2": 2.10641,
+ "eval_loss_step0": 1.95233,
+ "eval_loss_final": 0.85126,
+ "eval_curve": [
+  {
+   "step": 0,
+   "heldout_loss": 1.95233,
+   "train_wall_s": 0.0,
+   "row_losses": [
+    2.15727,
+    2.38676,
+    2.12403,
+    1.05134,
+    1.84834,
+    2.57455,
+    1.87801,
+    1.59834
+   ]
+  },
+  {
+   "step": 20,
+   "heldout_loss": 0.85126,
+   "train_wall_s": 260.25,
+   "row_losses": [
+    0.59988,
+    1.50796,
+    1.17692,
+    0.6871,
+    0.50597,
+    0.83915,
+    0.82904,
+    0.66408
+   ]
+  }
+ ],
+ "eval_rows": [
+  {
+   "step": 0,
+   "losses": [
+    2.15727,
+    2.38676,
+    2.12403,
+    1.05134,
+    1.84834,
+    2.57455,
+    1.87801,
+    1.59834
+   ]
+  },
+  {
+   "step": 20,
+   "losses": [
+    0.59988,
+    1.50796,
+    1.17692,
+    0.6871,
+    0.50597,
+    0.83915,
+    0.82904,
+    0.66408
+   ]
+  }
+ ],
+ "matched_init_sha": "f7832488926eda9199ea15000337b887521d21c4d69f84771f585dc5b95efe1c",
+ "matched_init_sha_slots": 12480,
+ "matched_init_sha_unmapped": 0,
+ "lora_path_present": true,
+ "lora_loop_share": [
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null
+ ],
+ "lora_path_loop_steps": [],
+ "unsloth_grouped_mm_calls_per_step_min": 5376,
+ "unsloth_grouped_mm_calls_per_step_max": 5376,
+ "unsloth_manual_grouped_mm_calls_per_step_max": 0,
+ "arm_facts": {
+  "attn_implementation": "sdpa",
+  "output_router_logits": false,
+  "loss_class": "model.forward(input_ids, labels[, attention_mask]).loss -- the model's own loss; the harness computes none",
+  "torch_num_threads": 48,
+  "omp_num_threads": "48",
+  "cpu_model": "AMD EPYC 9454P 48-Core Emb Processor",
+  "lora_delta_dtype": "the activation dtype: unsloth_zoo moe_utils.py:3875 casts the fp32 factors to the activation dtype per forward (UPSTREAM-NOTES; UNVERIFIED against installed source)",
+  "unsloth_zoo": "2026.9.9",
+  "unsloth_zoo_note": "unsloth_zoo main's #1529 is not in the 2026.9.9 release (phase-3 instruction; not verified here)"
+ },
+ "dynamo_counters": {
+  "step10": {
+   "counters": {
+    "frames": {
+     "total": 4,
+     "ok": 4
+    },
+    "stats": {
+     "calls_captured": 297,
+     "unique_graphs": 16
+    },
+    "aot_autograd": {
+     "total": 16,
+     "autograd_cache_miss": 15,
+     "autograd_cache_saved": 15,
+     "ok": 16,
+     "autograd_cache_hit": 1
+    },
+    "inductor": {
+     "pattern_matcher_count": 20,
+     "pattern_matcher_nodes": 34,
+     "fxgraph_cache_miss": 18,
+     "async_compile_cache_miss": 79,
+     "triton_bundler_save_kernel": 576,
+     "triton_bundler_save_static_autotuner": 18,
+     "benchmarking.InductorBenchmarker.benchmark": 56,
+     "benchmarking.InductorBenchmarker.benchmark_gpu": 56,
+     "async_compile_cache_hit": 39,
+     "triton_bundler_load_static_autotuner": 3,
+     "fxgraph_cache_hit": 2,
+     "extern_calls": 13
+    },
+    "graph_break": {},
+    "aten_mm_info": {
+     "aten.mm_s47_128_2048": 2,
+     "aten.mm_s97_151936_2048": 1,
+     "aten.mm_s97_2048_151936": 2,
+     "aten.mm_s40_151936_2048": 1,
+     "aten.mm_s47_2048_128": 1
+    },
+    "unimplemented": {}
+   },
+   "recompiles_total": 0,
+   "frames_total": 4,
+   "unique_graphs": 16,
+   "graph_breaks_total": 0,
+   "recompile_limit_hits": 0
+  },
+  "step20": {
+   "counters": {
+    "frames": {
+     "total": 4,
+     "ok": 4
+    },
+    "stats": {
+     "calls_captured": 297,
+     "unique_graphs": 16
+    },
+    "aot_autograd": {
+     "total": 16,
+     "autograd_cache_miss": 15,
+     "autograd_cache_saved": 15,
+     "ok": 16,
+     "autograd_cache_hit": 1
+    },
+    "inductor": {
+     "pattern_matcher_count": 20,
+     "pattern_matcher_nodes": 34,
+     "fxgraph_cache_miss": 18,
+     "async_compile_cache_miss": 79,
+     "triton_bundler_save_kernel": 576,
+     "triton_bundler_save_static_autotuner": 18,
+     "benchmarking.InductorBenchmarker.benchmark": 56,
+     "benchmarking.InductorBenchmarker.benchmark_gpu": 56,
+     "async_compile_cache_hit": 39,
+     "triton_bundler_load_static_autotuner": 3,
+     "fxgraph_cache_hit": 2,
+     "extern_calls": 13
+    },
+    "graph_break": {},
+    "aten_mm_info": {
+     "aten.mm_s47_128_2048": 2,
+     "aten.mm_s97_151936_2048": 1,
+     "aten.mm_s97_2048_151936": 2,
+     "aten.mm_s40_151936_2048": 1,
+     "aten.mm_s47_2048_128": 1
+    },
+    "unimplemented": {}
+   },
+   "recompiles_total": 0,
+   "frames_total": 4,
+   "unique_graphs": 16,
+   "graph_breaks_total": 0,
+   "recompile_limit_hits": 0
+  }
+ },
+ "microbatch_padded_len": [
+  [
+   67,
+   60,
+   133,
+   121,
+   331,
+   151,
+   79,
+   72
+  ],
+  [
+   383,
+   68,
+   454,
+   159,
+   65,
+   180,
+   50,
+   73
+  ],
+  [
+   247,
+   184,
+   68,
+   61,
+   171,
+   290,
+   89,
+   93
+  ],
+  [
+   67,
+   353,
+   53,
+   257,
+   64,
+   123,
+   261,
+   150
+  ],
+  [
+   98,
+   306,
+   152,
+   90,
+   172,
+   364,
+   71,
+   298
+  ],
+  [
+   56,
+   69,
+   78,
+   177,
+   205,
+   398,
+   168,
+   518
+  ],
+  [
+   117,
+   81,
+   395,
+   347,
+   126,
+   394,
+   68,
+   76
+  ],
+  [
+   53,
+   203,
+   105,
+   98,
+   61,
+   387,
+   134,
+   91
+  ],
+  [
+   362,
+   79,
+   143,
+   123,
+   353,
+   252,
+   75,
+   136
+  ],
+  [
+   73,
+   68,
+   186,
+   393,
+   82,
+   223,
+   175,
+   114
+  ],
+  [
+   359,
+   481,
+   125,
+   80,
+   72,
+   59,
+   61,
+   210
+  ],
+  [
+   223,
+   145,
+   71,
+   277,
+   387,
+   89,
+   153,
+   245
+  ],
+  [
+   328,
+   73,
+   68,
+   169,
+   83,
+   419,
+   174,
+   171
+  ],
+  [
+   428,
+   419,
+   140,
+   54,
+   72,
+   102,
+   129,
+   294
+  ],
+  [
+   182,
+   62,
+   68,
+   75,
+   150,
+   319,
+   294,
+   295
+  ],
+  [
+   54,
+   118,
+   177,
+   57,
+   167,
+   268,
+   69,
+   269
+  ],
+  [
+   377,
+   153,
+   304,
+   64,
+   426,
+   73,
+   295,
+   129
+  ],
+  [
+   400,
+   215,
+   234,
+   217,
+   106,
+   555,
+   63,
+   332
+  ],
+  [
+   71,
+   287,
+   224,
+   210,
+   200,
+   456,
+   338,
+   91
+  ],
+  [
+   362,
+   321,
+   73,
+   470,
+   149,
+   314,
+   307,
+   58
+  ]
+ ],
+ "sync_ab": null,
+ "lean_ab": null,
+ "tile_ab": null,
+ "rms_ab": null,
+ "reuse_ab": null,
+ "keep_ab": null,
+ "route_ab": null,
+ "mem_census": {
+  "peak_allocated_bytes": 24244152320,
+  "peak_reserved_bytes": 24480055296,
+  "static_after_setup": {
+   "frozen_expert_weights": 14495514624,
+   "expert_absmax": 460167552,
+   "expert_absmax_parts": {
+    "bnb.absmax": 452984832,
+    "bnb.code": 6144,
+    "bnb.offset": 384,
+    "bnb.state2.absmax": 7077888,
+    "bnb.state2.code": 98304
+   },
+   "other_frozen": {
+    "bf16": 1270247424,
+    "nf4_linear4bit": 467571456
+   },
+   "trainable_adapters": 2570059776,
+   "trainable_by_dtype": {
+    "fp32": 2570059776
+   },
+   "adapter_grads": 0,
+   "optimizer_state": 0,
+   "other_buffers": 512,
+   "expert_params": 28991029248,
+   "expert_stacks": 96,
+   "classified_bytes": 19263561344,
+   "allocated_bytes": 19301636096,
+   "reserved_bytes": 19446890496,
+   "other": 38074752
+  },
+  "static_after_train": {
+   "frozen_expert_weights": 14495514624,
+   "expert_absmax": 460167552,
+   "expert_absmax_parts": {
+    "bnb.absmax": 452984832,
+    "bnb.code": 6144,
+    "bnb.offset": 384,
+    "bnb.state2.absmax": 7077888,
+    "bnb.state2.code": 98304
+   },
+   "other_frozen": {
+    "bf16": 1270247424,
+    "nf4_linear4bit": 467571456
+   },
+   "trainable_adapters": 2570059776,
+   "trainable_by_dtype": {
+    "fp32": 2570059776
+   },
+   "adapter_grads": 0,
+   "optimizer_state": 1305110528,
+   "other_buffers": 512,
+   "expert_params": 28991029248,
+   "expert_stacks": 96,
+   "classified_bytes": 20568671872,
+   "allocated_bytes": 20641238016,
+   "reserved_bytes": 24480055296,
+   "other": 72566144
+  },
+  "live_at_peak_top": [
+   {
+    "group": "static:frozen_expert_weights",
+    "bytes": 14495514624,
+    "count": 96
+   },
+   {
+    "group": "static:adapter_grads",
+    "bytes": 2570059776,
+    "count": 576
+   },
+   {
+    "group": "static:trainable_adapters",
+    "bytes": 2570059776,
+    "count": 576
+   },
+   {
+    "group": "static:optimizer_state",
+    "bytes": 1305110528,
+    "count": 2306
+   },
+   {
+    "group": "static:other_frozen.bf16",
+    "bytes": 1270247424,
+    "count": 243
+   },
+   {
+    "group": "site:unsloth_zoo/temporary_patches/moe_triton_kernels.py:253 nf4_dequant_triton",
+    "bytes": 805306368,
+    "count": 1
+   },
+   {
+    "group": "static:other_frozen.nf4_linear4bit",
+    "bytes": 467571456,
+    "count": 1152
+   },
+   {
+    "group": "static:expert_absmax",
+    "bytes": 460167552,
+    "count": 480
+   },
+   {
+    "group": "site:transformers/models/qwen3_moe/modeling_qwen3_moe.py:352 forward",
+    "bytes": 89260032,
+    "count": 48
+   },
+   {
+    "group": "site:torch/autograd/graph.py:882 _engine_run_backward",
+    "bytes": 78477504,
+    "count": 7
+   },
+   {
+    "group": "site:bitsandbytes/backends/cuda/ops.py:916 _dequant_linear_fallback",
+    "bytes": 33554432,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_zoo/temporary_patches/moe_utils.py:920 _probe_torch_grouped_mm_supported",
+    "bytes": 33554432,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_zoo/temporary_patches/moe_utils.py:383 _grouped_mm_with_backward_fix",
+    "bytes": 14876672,
+    "count": 1
+   },
+   {
+    "group": "site:Linear4bit_peft_forward.py:49 lora_forward",
+    "bytes": 9683712,
+    "count": 12
+   },
+   {
+    "group": "site:transformers/integrations/sdpa_attention.py:25 repeat_kv",
+    "bytes": 7438336,
+    "count": 2
+   },
+   {
+    "group": "site:transformers/integrations/sdpa_attention.py:92 sdpa_attention_forward",
+    "bytes": 4194656,
+    "count": 3
+   },
+   {
+    "group": "site:Linear4bit_peft_forward.py:52 lora_forward",
+    "bytes": 4184064,
+    "count": 2
+   },
+   {
+    "group": "site:unsloth_compiled_module_qwen3_moe.py:239 apply_rotary_pos_emb",
+    "bytes": 3719168,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_zoo/gradient_checkpointing.py:791 <listcomp>",
+    "bytes": 2097152,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_zoo/gradient_checkpointing.py:801 <listcomp>",
+    "bytes": 2097152,
+    "count": 1
+   },
+   {
+    "group": "site:torch/nn/functional.py:2567 embedding",
+    "bytes": 1859584,
+    "count": 1
+   },
+   {
+    "group": "site:transformers/models/qwen3_moe/modeling_qwen3_moe.py:346 forward",
+    "bytes": 1859584,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_compiled_module_qwen3_moe.py:542 Qwen3MoeRMSNorm_forward",
+    "bytes": 1859584,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_compiled_module_qwen3_moe.py:467 Qwen3MoeTopKRouter_forward",
+    "bytes": 232448,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_compiled_module_qwen3_moe.py:577 Qwen3MoeRotaryEmbedding_forward",
+    "bytes": 232448,
+    "count": 2
+   },
+   {
+    "group": "site:Linear4bit_peft_forward.py:55 lora_forward",
+    "bytes": 229376,
+    "count": 4
+   },
+   {
+    "group": "site:unsloth/import_fixes.py:1740 _unmask_rows_attending_to_nothing",
+    "bytes": 206116,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_compiled_module_qwen3_moe.py:545 Qwen3MoeRMSNorm_forward",
+    "bytes": 69008,
+    "count": 4
+   },
+   {
+    "group": "site:torch/_ops.py:871 __call__",
+    "bytes": 29056,
+    "count": 1
+   },
+   {
+    "group": "site:torch/_tensor.py:1161 __floordiv__",
+    "bytes": 29056,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_compiled_module_qwen3_moe.py:470 Qwen3MoeTopKRouter_forward",
+    "bytes": 16344,
+    "count": 2
+   },
+   {
+    "group": "site:tc1_arm.py:1766 <lambda>",
+    "bytes": 3632,
+    "count": 1
+   },
+   {
+    "group": "site:tc1_arm.py:3418 run_arm",
+    "bytes": 3632,
+    "count": 1
+   },
+   {
+    "group": "site:transformers/models/qwen3_moe/modeling_qwen3_moe.py:493 forward",
+    "bytes": 3632,
+    "count": 1
+   },
+   {
+    "group": "site:bitsandbytes/functional.py:655 quantize_blockwise",
+    "bytes": 1024,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_zoo/temporary_patches/moe_utils.py:1195 _count_tokens_per_expert",
+    "bytes": 512,
+    "count": 1
+   },
+   {
+    "group": "site:unsloth_zoo/temporary_patches/moe_utils.py:3832 forward_native_grouped_mm",
+    "bytes": 512,
+    "count": 1
+   },
+   {
+    "group": "static:other_buffers",
+    "bytes": 512,
+    "count": 2
+   },
+   {
+    "group": "site:tc1_arm.py:3430 run_arm",
+    "bytes": 4,
+    "count": 1
+   },
+   {
+    "group": "site:torch/autograd/__init__.py:231 _make_grads",
+    "bytes": 4,
+    "count": 1
+   }
+  ],
+  "attributed_fraction": 1.0,
+  "peak_window": {
+   "checkpoint": "s2.mb3",
+   "peak_bytes": 24233810888,
+   "peak_phase": "s2.mb3.backward",
+   "peak_in_window": true,
+   "max_allocated_at_checkpoint": 24234216448,
+   "allocated_at_checkpoint": 23214605824,
+   "window_events": 720830,
+   "ring_full": false,
+   "window_start_bytes": 0,
+   "end_bytes": 23214204476,
+   "live_bytes": 24233810888,
+   "live_blocks": 5540,
+   "attributed_bytes": 24233810888,
+   "inconsistent_events": 0,
+   "n_groups": 41,
+   "static_at_peak": {
+    "frozen_expert_weights": 14495514624,
+    "adapter_grads": 2570059776,
+    "trainable_adapters": 2570059776,
+    "optimizer_state": 1305110528,
+    "other_frozen.bf16": 1270247424,
+    "other_frozen.nf4_linear4bit": 467571456,
+    "expert_absmax": 460167552,
+    "other_buffers": 512
+   }
+  },
+  "static_at_peak_checkpoint": {
+   "frozen_expert_weights": 14495514624,
+   "expert_absmax": 460167552,
+   "expert_absmax_parts": {
+    "bnb.absmax": 452984832,
+    "bnb.code": 6144,
+    "bnb.offset": 384,
+    "bnb.state2.absmax": 7077888,
+    "bnb.state2.code": 98304
+   },
+   "other_frozen": {
+    "bf16": 1270247424,
+    "nf4_linear4bit": 467571456
+   },
+   "trainable_adapters": 2570059776,
+   "trainable_by_dtype": {
+    "fp32": 2570059776
+   },
+   "adapter_grads": 2570059776,
+   "optimizer_state": 1305110528,
+   "other_buffers": 512,
+   "expert_params": 28991029248,
+   "expert_stacks": 96,
+   "classified_bytes": 23138731648,
+   "allocated_bytes": 23214605824,
+   "reserved_bytes": 24398266368,
+   "other": 75874176
+  },
+  "snapshots": 6,
+  "snapshot_cap_hits": 0,
+  "grow_bytes": 33554432,
+  "census_seconds": 12.64,
+  "record": {
+   "style": "current",
+   "enabled": "all",
+   "context": "alloc",
+   "stacks": "python",
+   "max_entries": 1000000
+  },
+  "trace": "recorded",
+  "markers": [
+   "experts4bit_qlora",
+   "nf4_",
+   "unsloth",
+   "bitsandbytes",
+   "torch/optim"
+  ],
+  "torch": "2.12.1+cu130",
+  "max_entries": 1000000,
+  "stacks": "python",
+  "context": "alloc"
+ },
+ "s_per_step": 13.1907,
+ "s_per_step_median_11plus": 11.9333,
+ "step_ms": [
+  27415.4,
+  17122.4,
+  11942.1,
+  12086.5,
+  11925.5,
+  11943.5,
+  11996.7,
+  11804.5,
+  12049.1,
+  12096.9,
+  11874.1,
+  11942.9,
+  11891.9,
+  11923.7,
+  11815.5,
+  11845.0,
+  12088.0,
+  12243.3,
+  12090.4,
+  12153.7
+ ],
+ "microbatch_ms": [],
+ "log_every": 10,
+ "microbatch_timing": false,
+ "train_wall_s": 260.25,
+ "window_wall_s": 263.81,
+ "tokens_per_step": [
+  1014,
+  1432,
+  1203,
+  1328,
+  1551,
+  1669,
+  1604,
+  1132,
+  1523,
+  1314,
+  1447,
+  1590,
+  1485,
+  1638,
+  1445,
+  1179,
+  1821,
+  2122,
+  1877,
+  2054
+ ],
+ "tokens_total": 30428,
+ "tokens_per_s": 116.9,
+ "tokens_padded_per_step": [
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "tokens_padded_total": 0,
+ "peak_vram_gb": 24.244,
+ "idle_w": 33.9,
+ "mean_w": 183.4,
+ "power_samples": 1048,
+ "memory_lever": null,
+ "memory_lever_label": null,
+ "host_ram": {
+  "rss_hwm_gb": 63.016,
+  "ru_maxrss_gb": 63.016,
+  "cgroup_peak_gb": null,
+  "cgroup_peak_source": null,
+  "cgroup_peak_before_gb": null,
+  "cgroup_peak_rose_during_arm": null,
+  "cgroup_limit_gb": 518.821,
+  "total_gb": 540.439,
+  "high_water_gb": 63.016
+ },
+ "host_ram_high_water_gb": 63.016,
+ "host_ram_total_gb": 540.439,
+ "hf_offload": null,
+ "axolotl_layer_offload": null,
+ "sampler": true,
+ "joules_per_step": 1946.46,
+ "adapter": {
+  "path": "/root/tc1/adapters/qwen3memcensus_ckpt_unsloth_m_mb1",
+  "bytes": 2570147091,
+  "files": [
+   "README.md",
+   "adapter_config.json",
+   "adapter_model.safetensors"
+  ],
+  "tensors": 576,
+  "params": 642514944,
+  "dtypes": [
+   "F32"
+  ]
+ },
+ "losses": [
+  2.08052,
+  2.04557,
+  2.10641,
+  1.71368,
+  1.57484,
+  1.29277,
+  1.31838,
+  1.03136,
+  1.25614,
+  1.02162,
+  0.91909,
+  0.97355,
+  1.06863,
+  0.94713,
+  1.01287,
+  0.96011,
+  0.81379,
+  0.82925,
+  0.97696,
+  0.868
+ ],
+ "profile": null,
+ "profile_steps": 0,
+ "profile_warm": 3,
+ "note": null
+}

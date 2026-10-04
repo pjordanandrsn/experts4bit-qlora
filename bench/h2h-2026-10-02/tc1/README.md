@@ -32,6 +32,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-50` | `qwen3axolotl` (amendment 19) | instance 54075633, AMD Ryzen 9 9950X3D 16-Core Processor, driver 610.57.04 | the axolotl matched rows again: axolotl/e4b 2.775 (P32 HELD); [read](RESULTS-tc1-matched19.md) | $0.33 |
 | `tc1-5090-59` | `qwen3denseab` (amendment 22) | instance 54177463, AMD EPYC 9454P | e4b against itself: grouped-nf4-gemm's fused kernels vs its dense route: dense/fused 2.947, far slower (P39 FALSIFIED); [read](RESULTS-tc1-denseab.md) | $0.45 |
 | `tc1-5090-62` | `mixtraldenseab` (amendment 22) | instance 54179030, Intel Core Ultra 9 285K | the same A/B on Mixtral-8x7B resident (`E4B_ABSMAX_DQ=1` both sides): dense/fused 0.651 (P38 HELD); held-out within 0.01 on both families (P40 HELD); [read](RESULTS-tc1-denseab.md) | $0.51 |
+| `tc1-5090-65` | `qwen3memcensus` (amendment 23) | instance 54195008, AMD EPYC 9454P | a memory census, no speed read: e4b fp32 absmax, e4b `E4B_ABSMAX_DQ=1`, Unsloth at micro-batch 1; e4b dq − Unsloth +0.43 GB, all transient (P41, P42 HELD; P43 FALSIFIED); [read](RESULTS-tc1-memcensus.md) | $0.38 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -40,6 +41,36 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 23 (2026-10-04): a memory census of e4b against Unsloth — with the absmax double-quantized, e4b's peak is 0.43 GB above Unsloth's, all of it transient
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 23. One RTX 5090 (`tc1-5090-65`), Qwen3-30B-A3B's matched
+set at micro-batch 1 × accum 8, one draw per arm. `tc1_arm.py --mem-census 1` recorded the allocator's history from before the load,
+and reduced its snapshots on the box. The census slows the step, so no speed is read. Read: [`RESULTS-tc1-memcensus.md`](RESULTS-tc1-memcensus.md).
+
+| live at the peak (GB) | e4b, fp32 absmax (default) | e4b, `E4B_ABSMAX_DQ=1` | Unsloth |
+|---|---|---|---|
+| frozen expert weights (NF4) | 14.496 | 14.496 | 14.496 |
+| expert absmax | **1.812** | 0.460 | 0.460 |
+| other frozen (bf16 1.270, NF4 attention 0.468) | 1.738 | 1.738 | 1.738 |
+| adapters / their grads / optimizer state | 2.570 / 2.570 / 1.305 | 2.570 / 2.570 / 1.305 | 2.570 / 2.570 / 1.305 |
+| transient | **1.532** | **1.536** | 1.095 |
+| **peak allocated** | **26.022** | **24.676** | **24.244** |
+
+- **The census measures what it should (P41 HELD).** It finds e4b's fp32 absmax at exactly the analytic 1.8119 GB (29.0 B expert
+  parameters / 64 × 4 bytes), and the double-quantized absmax at 0.4602 GB, 3.94× smaller.
+- **It accounts for nearly everything (P42 HELD).** At least 99.96 % of each arm's peak goes to named groups.
+- **The gap is smaller than registered (P43 FALSIFIED, below [0.5, 2.5] GB).** Every static class is byte-for-byte the same in both
+  frameworks except the absmax. With it double-quantized, e4b's peak sits **0.43 GB** above Unsloth's, and the whole gap is transient.
+- **What the transients are.** e4b's largest are grouped-nf4-gemm's padded LoRA delta (`kernel/nf4_qlora.py:_lora_delta_padded`):
+  - the zero-padded input block it allocates in the adapters' dtype, fp32 on this arm (0.62 GB, 2 live);
+  - the batched products' outputs (0.45 GB, 3 live).
+
+  Unsloth's largest transient is its NF4 dequant (0.81 GB).
+- **At e4b's defaults the gap is 1.78 GB, and 1.35 GB of it is the fp32 absmax.** Those defaults are what this lane has quoted;
+  `E4B_ABSMAX_DQ=1` removes the absmax part.
+- **As registered, this is a measurement.** Each fix the read names gets its own A/B. The candidates are the absmax default and the
+  padded block's dtype and size on fp32 adapters. Row `e4b.train.memory-census.qwen3.5090.2026-10-04`.
 
 ## Amendment 22 (2026-10-04): grouped-nf4-gemm's dense route against its fused kernels — far faster on Mixtral, far slower on Qwen3-30B-A3B
 
