@@ -303,6 +303,31 @@ def fused_experts_lora_forward(mod, hidden_states, top_k_index, top_k_weights):
                             hidden_states.device, input_dtype)
 
 
+class _PermGather(torch.autograd.Function):
+    """``src.reshape(-1)[perm]`` for a PERMUTATION ``perm`` of ``src``'s elements, with a scatter backward.
+
+    The fused training forward gathered the routing weights with two-index advanced indexing,
+    ``top_k_weights[order // k, order % k]``, whose backward is ``index_put_(accumulate=True)``: it
+    linearizes the two indices and radix-sorts them before accumulating -- about ten launches per MoE
+    layer backward. ``order`` covers every slot exactly once, so each gradient element receives exactly
+    one value: a zero fill plus one ``index_copy_`` lands the same values, with no sort and no atomics.
+    The forward picks the same elements in the same order.
+    """
+
+    @staticmethod
+    def forward(ctx, src, perm):
+        ctx.save_for_backward(perm)
+        ctx.shape = src.shape
+        return src.reshape(-1).index_select(0, perm)
+
+    @staticmethod
+    def backward(ctx, g):
+        (perm,) = ctx.saved_tensors
+        gs = g.new_zeros(perm.numel())
+        gs.index_copy_(0, perm, g)
+        return gs.view(ctx.shape), None
+
+
 def _scatter_combine(down, w, order, token_rows, tokens, k, hidden, device, out_dtype):
     """Weighted combine of the expert-sorted rows back into token order.
 
@@ -568,7 +593,6 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     flat = top_k_index.reshape(-1)
     order = torch.argsort(flat, stable=True)
     token_rows = order // k
-    top_pos = order - token_rows * k
     sizes, expert_ids = _group_by_expert(flat, E)
 
     a_cat = hidden_states.index_select(0, token_rows).contiguous()
@@ -627,7 +651,9 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
         **_dgrad_kwarg(lora_mod),
     )
 
-    w = top_k_weights[token_rows, top_pos].to(torch.float32)
+    # `order` is a permutation of the [tokens, k] slots, so this is the old `top_k_weights[token_rows, top_pos]`
+    # gather -- same elements -- with a scatter backward instead of a sorted one (see _PermGather).
+    w = _PermGather.apply(top_k_weights, order).to(torch.float32)
     return _scatter_combine(down, w, order, token_rows, tokens, k, hidden,
                             hidden_states.device, input_dtype)
 
