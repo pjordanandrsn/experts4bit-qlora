@@ -1,0 +1,98 @@
+[ladder] prewarmed 61.3 GiB in 22s
+[21:02:43]   checkpoint: local directory /root/.cache/huggingface/hub/models--nvidia--NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16/snapshots/a9904d24bcc1d289a1950fa9d2b978c47cf903b9
+[21:02:43]   fusing + quantizing experts (up to 52x128) to nf4 (streaming)...
+[21:02:55]   quantized experts on 23/52 MoE layers (128 experts each)
+[21:02:55]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[21:02:56]   skipped 270 checkpoint tensor(s) the text model does not build (NemotronHForCausalLM._keys_to_ignore_on_load_unexpected), e.g. mtp.layers.1.mixer.experts.55.down_proj.weight
+[21:02:56]   applied 2 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+[e4b.fast] fused TRAINING path on 23 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 1 attention module(s)
+[e4b.rmsnorm] fused 53 frozen RMSNorm(s) for training [53 w*norm fp32] (0 left on the composite)
+[ladder] step 0 41.287s loss 1.3978
+[ladder] step 1 0.287s loss 1.6999
+[ladder] step 2 0.285s loss 1.6270
+[ladder] step 3 0.309s loss 1.7187
+[ladder] step 4 0.293s loss 1.6290
+[ladder] step 5 0.291s loss 1.4308
+[ladder] step 6 0.290s loss 1.6063
+[ladder] step 7 0.287s loss 2.1020
+[ladder] step 8 0.285s loss 1.7227
+[ladder] step 9 0.290s loss 2.0154
+[ladder] step 10 0.294s loss 1.5415
+[ladder] fused: 0.291 s/step, 1760.0 tok/s, peak 24.12 GB, syncs 49
+[e4b.fast] fused TRAINING path on 23 ExpertsLoRA module(s) (dgrad kernel backward)
+[ladder] step 0 0.537s loss 1.3932
+[ladder] step 1 0.490s loss 1.6998
+[ladder] step 2 0.486s loss 1.6247
+[ladder] step 3 0.518s loss 1.7200
+[ladder] step 4 0.496s loss 1.6246
+[ladder] step 5 0.493s loss 1.4314
+[ladder] step 6 0.494s loss 1.6012
+[ladder] step 7 0.489s loss 2.0973
+[ladder] step 8 0.491s loss 1.7258
+[ladder] step 9 0.490s loss 2.0147
+[ladder] step 10 0.495s loss 1.5401
+[ladder] fused_pre: 0.493 s/step, 1037.5 tok/s, peak 24.12 GB, syncs 530
+[e4b.fast] fused TRAINING path on 23 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 1 attention module(s)
+[e4b.rmsnorm] fused 53 frozen RMSNorm(s) for training [53 w*norm fp32] (0 left on the composite)
+[e4b.moe_keep] MoE activations kept in 23 layer(s); 0 non-MoE child(ren) still checkpointed
+[ladder] step 0 0.224s loss 1.3978
+[ladder] step 1 0.222s loss 1.6998
+[ladder] step 2 0.219s loss 1.6271
+[ladder] step 3 0.239s loss 1.7218
+[ladder] step 4 0.227s loss 1.6260
+[ladder] step 5 0.224s loss 1.4317
+[ladder] step 6 0.224s loss 1.6092
+[ladder] step 7 0.221s loss 2.0978
+[ladder] step 8 0.219s loss 1.7198
+[ladder] step 9 0.224s loss 2.0129
+[ladder] step 10 0.226s loss 1.5369
+[ladder] keep: 0.224 s/step, 2282.4 tok/s, peak 24.76 GB, syncs 25
+[e4b.fast] fused TRAINING path on 23 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 1 attention module(s)
+[e4b.rmsnorm] fused 53 frozen RMSNorm(s) for training [53 w*norm fp32] (0 left on the composite)
+[e4b.moe_keep] MoE activations kept in 23 layer(s); 0 non-MoE child(ren) still checkpointed
+[ladder] step 0 0.224s loss 1.3978
+[ladder] step 1 0.222s loss 1.7028
+[ladder] step 2 0.218s loss 1.6277
+[ladder] step 3 0.239s loss 1.7204
+[ladder] step 4 0.225s loss 1.6248
+[ladder] step 5 0.223s loss 1.4279
+[ladder] step 6 0.224s loss 1.6052
+[ladder] step 7 0.221s loss 2.0998
+[ladder] step 8 0.218s loss 1.7184
+[ladder] step 9 0.224s loss 2.0122
+[ladder] step 10 0.226s loss 1.5372
+[ladder] keep#2: 0.224 s/step, 2286.5 tok/s, peak 24.76 GB, syncs 25
+[e4b.fast] fused TRAINING path on 23 ExpertsLoRA module(s) (dgrad kernel backward)
+[ladder] step 0 0.494s loss 1.3932
+[ladder] step 1 0.489s loss 1.7032
+[ladder] step 2 0.485s loss 1.6287
+[ladder] step 3 0.521s loss 1.7193
+[ladder] step 4 0.495s loss 1.6252
+[ladder] step 5 0.498s loss 1.4308
+[ladder] step 6 0.494s loss 1.6070
+[ladder] step 7 0.493s loss 2.0988
+[ladder] step 8 0.491s loss 1.7246
+[ladder] step 9 0.494s loss 2.0090
+[ladder] step 10 0.494s loss 1.5390
+[ladder] fused_pre#2: 0.494 s/step, 1036.1 tok/s, peak 24.12 GB, syncs 530
+[e4b.fast] fused TRAINING path on 23 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 1 attention module(s)
+[e4b.rmsnorm] fused 53 frozen RMSNorm(s) for training [53 w*norm fp32] (0 left on the composite)
+[ladder] step 0 0.829s loss 1.3978
+[ladder] step 1 0.288s loss 1.6969
+[ladder] step 2 0.286s loss 1.6278
+[ladder] step 3 0.312s loss 1.7167
+[ladder] step 4 0.295s loss 1.6269
+[ladder] step 5 0.295s loss 1.4267
+[ladder] step 6 0.295s loss 1.6058
+[ladder] step 7 0.291s loss 2.0912
+[ladder] step 8 0.288s loss 1.7185
+[ladder] step 9 0.293s loss 2.0119
+[ladder] step 10 0.295s loss 1.5361
+[ladder] fused#2: 0.295 s/step, 1738.1 tok/s, peak 24.12 GB, syncs 48
+[ladder] SUMMARY fused: {'s_per_step_mean': 0.2927, 'readings': [0.2909, 0.2946], 'spread': 0.013, 'peak_alloc_gb': 24.124, 'syncs_one_step': 49, 'device_busy_frac': [0.87, 0.872], 'device_s_mean': 0.2564, 'ratio_to_fused': 1.0, 'device_ratio_to_fused': 1.0}
+[ladder] SUMMARY fused_pre: {'s_per_step_mean': 0.4939, 'readings': [0.4935, 0.4942], 'spread': 0.001, 'peak_alloc_gb': 24.124, 'syncs_one_step': 530, 'device_busy_frac': [0.74, 0.747], 'device_s_mean': 0.3883, 'ratio_to_fused': 1.687, 'device_ratio_to_fused': 1.514}
+[ladder] SUMMARY keep: {'s_per_step_mean': 0.2241, 'readings': [0.2243, 0.2239], 'spread': 0.002, 'peak_alloc_gb': 24.763, 'syncs_one_step': 25, 'device_busy_frac': [0.867, 0.866], 'device_s_mean': 0.1944, 'ratio_to_fused': 0.766, 'device_ratio_to_fused': 0.758}

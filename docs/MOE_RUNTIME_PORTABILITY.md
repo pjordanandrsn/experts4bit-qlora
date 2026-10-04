@@ -54,3 +54,7 @@ discovery and trainable selection. Those were matched on Qwen's names or formula
 ## Per-family ladders
 
 See [`../bench/moegen/RESULTS-moegen-ladders.md`](../bench/moegen/RESULTS-moegen-ladders.md).
+
+## Licence reading on an RTX 5090
+
+Lane MG1 ([`../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`](../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md)): every family passed tp1's parity verdict on this structural stack. The two regression anchors, OLMoE and Gemma-4, re-read clean, and LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H entered `fast_train = supported`. Qwen3.6 passed and waits on P2.

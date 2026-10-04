@@ -1,0 +1,4 @@
+RECURRENT_KERNELS mamba2/causal_conv1d/fla True True True
+mg1 tripwire OK 0.45.0 0.38.0 2.8.0+cu128 NVIDIA GeForce RTX 5090
+ANCHOR rc=3 class=pcie-full/launch-fast
+BOX REFUSED by train anchor
