@@ -55,6 +55,16 @@
 - Rows `e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default` and `…qwen3_5.5090.2026-10-04.mb1-dq-frozen4`. Lane page
   `bench/h2h-2026-10-02/tc2/README.md`.
 
+### Correction: SC2's e4b rows ran SC1's prefill route pins, not the PREREG's k19 + flash (#846)
+
+- **What happened.** `bench/sc1/sc1_run.sh` exports `E4B_INT4_PREFILL=loop` and `E4B_PAGED_PREFILL_ATTN=math` to every
+  box. Box E's `serve_paged` inherited them, so under device grouping SC2's e4b prefill ran the int4 M-tile and `math`
+  attention, not the stated defaults (k19, flash).
+- **What stands.** The comparators, the measurements of e4b as run, and the prefill-bound mechanism.
+- **What changes.** Q4 and Q5 now read REFUTED for e4b as run, and UNREAD for the registered configuration.
+- **Where to read it.** The read page's Correction section (`bench/h2h-2026-10-02/sc2/README.md`). Lane SC2b runs e4b
+  at the defaults with the pins unset, and records the resolved routes.
+
 ### TC1 amendment 23 registered: a memory census of e4b against Unsloth on one RTX 5090 (P41–P43)
 
 - **The box** (`qwen3memcensus`). Qwen3-30B-A3B at TC1's pin and tokens, micro-batch 1 × accum 8, one draw per arm: e4b at its defaults
