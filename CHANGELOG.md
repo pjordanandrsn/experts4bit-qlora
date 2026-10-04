@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 23 — the memory census: with the absmax double-quantized, e4b's peak is 0.43 GB above Unsloth's, all transient (P41, P42 HELD; P43 FALSIFIED)
+
+- `tc1-5090-65` ($0.38): Qwen3-30B-A3B's matched set at micro-batch 1, one draw per arm, the allocator census on, no speed read.
+- Every static class is byte-for-byte the same in e4b and Unsloth except the expert absmax. e4b's fp32 absmax is exactly the
+  analytic 1.812 GB, and `E4B_ABSMAX_DQ=1` stores it in 0.460 GB (P41). At least 99.96 % of each peak is attributed (P42).
+- Peaks: e4b at defaults 26.02 GB, e4b with the absmax double-quantized 24.68 GB, Unsloth 24.24 GB. The 0.43 GB that remains is
+  transient, mostly grouped-nf4-gemm's padded LoRA delta in the adapters' fp32. That is below P43's [0.5, 2.5] GB band.
+- Row `e4b.train.memory-census.qwen3.5090.2026-10-04`. Results file `bench/h2h-2026-10-02/tc1/RESULTS-tc1-memcensus.md`.
+
 ### #392: the energy claim remeasured with a recorded, released bitsandbytes (bench and docs only)
 
 - **What.** The same NAS RTX A2000 and the unchanged `bench/_upstream/bench_energy.py`, run on **bitsandbytes 0.50.2**
