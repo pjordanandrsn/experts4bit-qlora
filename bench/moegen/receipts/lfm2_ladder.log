@@ -1,0 +1,97 @@
+[14:15:25]   checkpoint: LiquidAI/LFM2-8B-A1B @ c1c44ff9fc00db3ebf4516970563f5f383d23670 (requested main, unpinned)
+[14:15:25]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[14:17:13]   quantized experts on 22/24 MoE layers (32 experts each)
+[14:17:13]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Using the latest cached version of the dataset since tatsu-lab/alpaca couldn't be found on the Hugging Face Hub (offline mode is enabled).
+Found the latest cached dataset configuration 'default' at /home/node/.cache/huggingface/datasets/tatsu-lab___alpaca/default/0.0.0/dce01c9b08f87459cf36a430d809084718273017 (last modified on Fri Jul  3 14:24:07 2026).
+[transformers] `causal_conv1d_fn` is falling back to its reference PyTorch implementation because `causal_conv1d` is not installed. This is correct but much slower; install `causal_conv1d` for the optimized kernel.
+[e4b.fast] fused TRAINING path on 22 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 1 attention module(s)
+[e4b.rmsnorm] fused 61 frozen RMSNorm(s) for training [61 w*round(norm)] (0 left on the composite)
+[ladder] step 0 7.929s loss 2.2870
+[ladder] step 1 1.434s loss 2.9612
+[ladder] step 2 1.406s loss 2.5421
+[ladder] step 3 1.282s loss 2.7170
+[ladder] step 4 1.290s loss 2.3822
+[ladder] step 5 1.261s loss 2.3028
+[ladder] step 6 1.259s loss 2.5193
+[ladder] step 7 1.261s loss 2.9206
+[ladder] step 8 1.243s loss 2.6929
+[ladder] fused: 1.261 s/step, 406.1 tok/s, peak 6.32 GB, syncs 47
+[e4b.fast] fused TRAINING path on 22 ExpertsLoRA module(s) (dgrad kernel backward)
+[ladder] step 0 1.592s loss 2.2856
+[ladder] step 1 1.517s loss 2.9591
+[ladder] step 2 1.543s loss 2.5657
+[ladder] step 3 1.525s loss 2.7256
+[ladder] step 4 1.519s loss 2.3896
+[ladder] step 5 1.494s loss 2.3060
+[ladder] step 6 1.649s loss 2.5155
+[ladder] step 7 1.530s loss 2.9184
+[ladder] step 8 1.557s loss 2.6884
+[ladder] fused_pre: 1.528 s/step, 335.2 tok/s, peak 6.33 GB, syncs 507
+[e4b.fast] fused TRAINING path on 22 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 1 attention module(s)
+[e4b.rmsnorm] fused 61 frozen RMSNorm(s) for training [61 w*round(norm)] (0 left on the composite)
+[e4b.moe_keep] MoE activations kept in 22 layer(s); 22 non-MoE child(ren) still checkpointed
+[ladder] step 0 1.226s loss 2.2870
+[ladder] step 1 0.940s loss 2.9721
+[ladder] step 2 0.936s loss 2.5545
+[ladder] step 3 0.963s loss 2.6913
+[ladder] step 4 0.947s loss 2.3838
+[ladder] step 5 0.966s loss 2.3059
+[ladder] step 6 0.952s loss 2.5183
+[ladder] step 7 0.944s loss 2.9132
+[ladder] step 8 0.943s loss 2.6830
+[ladder] keep: 0.949 s/step, 539.4 tok/s, peak 7.36 GB, syncs 24
+[e4b.fast] fused TRAINING path on 22 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 1 attention module(s)
+[e4b.rmsnorm] fused 61 frozen RMSNorm(s) for training [61 w*round(norm)] (0 left on the composite)
+[e4b.moe_keep] MoE activations kept in 22 layer(s); 22 non-MoE child(ren) still checkpointed
+[ladder] step 0 0.985s loss 2.2870
+[ladder] step 1 0.984s loss 2.9491
+[ladder] step 2 0.941s loss 2.5534
+[ladder] step 3 0.966s loss 2.7085
+[ladder] step 4 0.948s loss 2.3910
+[ladder] step 5 0.950s loss 2.3063
+[ladder] step 6 0.955s loss 2.5084
+[ladder] step 7 0.940s loss 2.9174
+[ladder] step 8 0.952s loss 2.6891
+[ladder] keep#2: 0.951 s/step, 538.6 tok/s, peak 7.36 GB, syncs 24
+[e4b.fast] fused TRAINING path on 22 ExpertsLoRA module(s) (dgrad kernel backward)
+[ladder] step 0 1.471s loss 2.2856
+[ladder] step 1 1.470s loss 2.9643
+[ladder] step 2 1.469s loss 2.5488
+[ladder] step 3 1.534s loss 2.7063
+[ladder] step 4 1.524s loss 2.3813
+[ladder] step 5 1.873s loss 2.2903
+[ladder] step 6 1.534s loss 2.5199
+[ladder] step 7 1.476s loss 2.9283
+[ladder] step 8 1.473s loss 2.6939
+[ladder] fused_pre#2: 1.529 s/step, 334.9 tok/s, peak 6.33 GB, syncs 507
+[e4b.fast] fused TRAINING path on 22 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 1 attention module(s)
+[e4b.rmsnorm] fused 61 frozen RMSNorm(s) for training [61 w*round(norm)] (0 left on the composite)
+[ladder] step 0 1.346s loss 2.2870
+[ladder] step 1 1.293s loss 2.9775
+[ladder] step 2 1.294s loss 2.5437
+[ladder] step 3 1.320s loss 2.7176
+[ladder] step 4 1.310s loss 2.3997
+[ladder] step 5 1.300s loss 2.2993
+[ladder] step 6 1.307s loss 2.5206
+[ladder] step 7 1.301s loss 2.9094
+[ladder] step 8 1.289s loss 2.6968
+[ladder] fused#2: 1.304 s/step, 392.6 tok/s, peak 6.32 GB, syncs 46
+[ladder] step 0 4.053s loss 2.2854
+[ladder] step 1 3.590s loss 2.9718
+[ladder] step 2 3.468s loss 2.5642
+[ladder] step 3 3.851s loss 2.7190
+[ladder] step 4 3.433s loss 2.3796
+[ladder] step 5 3.744s loss 2.3046
+[ladder] step 6 3.392s loss 2.5142
+[ladder] step 7 3.632s loss 2.8922
+[ladder] step 8 3.676s loss 2.6931
+[ladder] reference: 3.654 s/step, 140.1 tok/s, peak 6.32 GB, syncs 16798
+[ladder] SUMMARY fused: {'s_per_step_mean': 1.2824, 'readings': [1.2609, 1.304], 'spread': 0.034, 'peak_alloc_gb': 6.315, 'syncs_one_step': 47, 'device_busy_frac': [0.918, 0.965], 'device_s_mean': 1.2268, 'ratio_to_fused': 1.0, 'device_ratio_to_fused': 1.0}
+[ladder] SUMMARY fused_pre: {'s_per_step_mean': 1.5284, 'readings': [1.5277, 1.529], 'spread': 0.001, 'peak_alloc_gb': 6.333, 'syncs_one_step': 507, 'device_busy_frac': [0.845, 0.879], 'device_s_mean': 1.3334, 'ratio_to_fused': 1.192, 'device_ratio_to_fused': 1.087}
+[ladder] SUMMARY keep: {'s_per_step_mean': 0.95, 'readings': [0.9492, 0.9507], 'spread': 0.002, 'peak_alloc_gb': 7.36, 'syncs_one_step': 24, 'device_busy_frac': [0.97, 0.973], 'device_s_mean': 0.9248, 'ratio_to_fused': 0.741, 'device_ratio_to_fused': 0.754}
+[ladder] SUMMARY reference: {'s_per_step_mean': 3.6536, 'readings': [3.6536], 'spread': None, 'peak_alloc_gb': 6.317, 'syncs_one_step': 16798, 'device_busy_frac': [0.236], 'device_s_mean': 1.162, 'ratio_to_fused': 2.849, 'device_ratio_to_fused': 0.947}

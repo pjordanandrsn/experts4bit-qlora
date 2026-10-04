@@ -23,7 +23,8 @@ import sys
 import torch
 
 from .loader import load_moe_4bit_streaming
-from .lora import add_attention_lora, detect_attention_projections, quantize_attention_projections_4bit
+from .lora import (add_attention_lora, detect_attention_projections, quantize_attention_projections_4bit, router_param_ids,
+                   trainable_lora_param_ids)
 from .util import log
 
 MODEL = os.environ.get("MODEL", "allenai/OLMoE-1B-7B-0924")
@@ -355,20 +356,34 @@ def main():
 
     expert_profile.attach(model)  # no-op unless E4B_EXPERT_PROFILE is set (profile-only)
 
+    # Trainables by STRUCTURE, not by parameter name: expert adapters are the ExpertsLoRA modules' tensors, attention adapters
+    # the LoRALinear modules' (add_attention_lora creates nothing else), the router the [E, hidden] weight beside each expert
+    # stack. Matching names ("experts" / "self_attn" / "mlp.gate.weight") froze Nemotron-H's attention adapters (they live
+    # under `mixer.`) and never found a router outside `mlp.gate` (Granite's `block_sparse_moe.router`, Gemma-4's
+    # `router.proj`, Nemotron-H's `mixer.gate`, LFM2's `feed_forward.gate`).
+    expert_ids_, attn_ids_ = trainable_lora_param_ids(model)
+    router_ids_ = router_param_ids(model) if TRAIN_ROUTER else set()
     lora_params, router_params = [], []
     for n, p in model.named_parameters():
-        train_lora = "lora" in n and ((TRAIN_EXPERTS and "experts" in n) or (TRAIN_ATTENTION and "self_attn" in n))
-        if train_lora:
+        if (TRAIN_EXPERTS and id(p) in expert_ids_) or (TRAIN_ATTENTION and id(p) in attn_ids_):
             p.requires_grad_(True)
             lora_params.append(p)
-        elif TRAIN_ROUTER and n.endswith("mlp.gate.weight"):
+        elif id(p) in router_ids_:
             p.requires_grad_(True)
             router_params.append(p)
         else:
             p.requires_grad_(False)
     trainable = lora_params + router_params
-    if TRAIN_EXPERTS and not any("experts" in n for n, p in model.named_parameters()
-                                 if p.requires_grad and "lora" in n):
+    if TRAIN_ROUTER:
+        from .lora import ROUTER_AMBIGUOUS
+        if ROUTER_AMBIGUOUS:
+            raise SystemExit("TRAIN_ROUTER=1 but these MoE blocks have more than one [num_experts, hidden] weight beside their "
+                             f"experts, so the router cannot be identified: {', '.join(ROUTER_AMBIGUOUS[:4])}"
+                             + (" ..." if len(ROUTER_AMBIGUOUS) > 4 else "") + " -- refusing to guess")
+    if TRAIN_ROUTER and not router_params:
+        raise SystemExit("TRAIN_ROUTER=1 but no [num_experts, hidden] router weight was found beside any expert stack -- "
+                         "refusing to report a router-trained run that trained none")
+    if TRAIN_EXPERTS and not any(id(p) in expert_ids_ for p in lora_params):
         # A family the loader builds BARE (gpt-oss: ExpertsLoRA refuses its epilogue by
         # structure) has no expert adapter to train. Attention LoRA alone would keep the
         # trainable count nonzero and the run would report a loss curve under a flag that

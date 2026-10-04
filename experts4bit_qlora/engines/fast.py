@@ -101,6 +101,58 @@ def _eligible(mod) -> Optional[str]:
     return None
 
 
+def _train_storage_reason(base) -> Optional[str]:
+    """``_eligible``'s storage half, for the TRAINING patch: the reason the fused kernel cannot read ``base``'s packed bytes, or
+    None. Device placement is deliberately not checked -- an offloaded base lives on the host and streams in -- and only a
+    POSITIVELY known mismatch refuses (an attribute this base does not carry is not evidence against it). ``enable_fast_train``
+    had no storage gate at all: an fp4 store at blocksize 64 would have been decoded through the NF4 table, silently wrong."""
+    qt, bits, bs = getattr(base, "quant_type", None), getattr(base, "bits", None), getattr(base, "blocksize", None)
+    if qt is not None and qt != "nf4":
+        return f"storage quant_type {qt!r} is not nf4"
+    if bits is not None and bits != 4:
+        return f"storage is {bits}-bit, not 4-bit"
+    if bs is not None and bs != 64:
+        return f"blocksize {bs} != 64"
+    try:
+        (_n1, k1), (_n2, k2) = base._gate_up_shape, base._down_shape
+    except (AttributeError, TypeError, ValueError):
+        return None
+    if k1 % 64 or k2 % 64:
+        return f"K not divisible by 64 (gate_up K={k1}, down K={k2})"
+    return None
+
+
+def recurrent_kernel_fallbacks(model) -> list:
+    """The kernel-backed functions of this model's own modeling modules that resolved to transformers' reference PyTorch path
+    because their package (mamba-ssm, causal-conv1d, flash-linear-attention) is absent: ``["<module>.<function>", ...]``.
+
+    transformers decides once, at import (``use_kernel_func_from_hub_with_fallback``), and swallows the import error, so the only
+    witness is the wrapper's own ``is_new_implementation`` cell. These are the hybrid families' recurrent blocks (Mamba-2,
+    short conv, Gated DeltaNet): outside the expert runtime, but on an RTX A2000 installing mamba-ssm + causal-conv1d cut
+    Granite-4.0-H's fused step by 36 % of device time, so a "fast" arm that pays the fallback is not the fast path."""
+    import sys
+    out = set()
+    for name in {type(m).__module__ for m in model.modules()}:
+        mod = sys.modules.get(name)
+        if mod is None or not name.startswith("transformers.models."):
+            continue
+        for attr, fn in vars(mod).items():
+            code, cells = getattr(fn, "__code__", None), getattr(fn, "__closure__", None)
+            if code is None or not cells or "is_new_implementation" not in code.co_freevars:
+                continue
+            try:
+                if cells[code.co_freevars.index("is_new_implementation")].cell_contents is False:
+                    out.add(f"{name.rsplit('.', 1)[-1]}.{attr}")
+            except ValueError:
+                continue
+    return sorted(out)
+
+
+#: What ``enable_fast_train`` did, for an engagement census: modules patched, and every skipped module's reason. A fast arm whose
+#: ``skipped`` is non-empty ran PART of its experts on the reference path and must not be read as the fused path.
+FAST_TRAIN_STATS = {"patched": 0, "skipped": {}, "recurrent_fallbacks": []}
+
+
 def _refuse_under_capture(hidden_states) -> None:
     """Refuse by name inside a CUDA-graph capture (#527).
 
@@ -796,15 +848,32 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
                     print(f"[e4b.fast] skip {type(mod).__name__}: base storage is "
                           "MXFP4 (arena); the NF4 grouped kernel cannot read it")
                 continue
+            reason = _train_storage_reason(mod.base)
+            if reason is not None:
+                FAST_TRAIN_STATS["skipped"][reason] = FAST_TRAIN_STATS["skipped"].get(reason, 0) + 1
+                if verbose:
+                    print(f"[e4b.fast] skip {type(mod).__name__}: {reason} (left on the reference path)")
+                continue
             mod._e4b_train_ref = mod.forward
             mod._e4b_dgrad = dgrad
             mod.forward = types.MethodType(
                 lambda self, hs, tki, tkw: fused_experts_train_forward(self, hs, tki, tkw),
                 mod)
             patched += 1
+    FAST_TRAIN_STATS["patched"] += patched
+    FAST_TRAIN_STATS["recurrent_fallbacks"] = recurrent_kernel_fallbacks(model) if patched else []
+    if FAST_TRAIN_STATS["recurrent_fallbacks"]:
+        import warnings
+        warnings.warn(
+            "[e4b.fast] this model's recurrent blocks run transformers' reference PyTorch path, outside the fused expert runtime: "
+            f"{', '.join(FAST_TRAIN_STATS['recurrent_fallbacks'])}. Install mamba-ssm / causal-conv1d / flash-linear-attention "
+            "for their kernels (on an RTX A2000 they cut Granite-4.0-H's fused step by 36 % of device time).",
+            RuntimeWarning, stacklevel=2)
     if verbose:
+        skipped = sum(FAST_TRAIN_STATS["skipped"].values())
         print(f"[e4b.fast] fused TRAINING path on {patched} ExpertsLoRA module(s)"
-              + (" (dgrad kernel backward)" if dgrad else ""))
+              + (" (dgrad kernel backward)" if dgrad else "")
+              + (f"; {skipped} skipped -- PARTIAL engagement: {FAST_TRAIN_STATS['skipped']}" if skipped else ""))
     # On by default (E4B_FUSED_ROPE=0 turns it off): the rotary embedding through one launch each way, bit-identical to the
     # Hugging Face composite (engines/rope_train.py), in the attention modules of this model only.
     from .rope_train import enable_fused_rope, fused_rope_requested
@@ -833,6 +902,7 @@ def disable_fast_train(model) -> int:
         if ref is not None:
             mod.forward = ref
             del mod._e4b_train_ref
+            FAST_TRAIN_STATS["patched"] = max(0, FAST_TRAIN_STATS["patched"] - 1)
             # Leave nothing behind that a later enable would silently inherit.
             if hasattr(mod, "_e4b_dgrad"):
                 del mod._e4b_dgrad

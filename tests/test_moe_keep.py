@@ -69,14 +69,14 @@ def test_keep_moe_activations_changes_the_last_n_layers_and_gradients_stay_equal
     assert moe_keep.keep_moe_activations(m, 2) == 2
     layers = moe_keep._decoder_layers(m)
     assert [lay.gradient_checkpointing for lay in layers] == [True, False, False]
-    assert [hasattr(lay, "_e4b_keep_attn_ref") for lay in layers] == [False, True, True]
+    assert [hasattr(lay, "_e4b_keep_refs") for lay in layers] == [False, True, True]
     assert moe_keep.keep_moe_activations(m, "all") == 1                 # the remaining layer; already-kept layers are not wrapped twice
     got = _grads(m)
     assert ref.keys() == got.keys()
     for n in ref:
         assert torch.equal(ref[n], got[n]), n
     assert moe_keep.release_moe_activations(m) == 3
-    assert all(lay.gradient_checkpointing and not hasattr(lay, "_e4b_keep_attn_ref") for lay in moe_keep._decoder_layers(m))
+    assert all(lay.gradient_checkpointing and not hasattr(lay, "_e4b_keep_refs") for lay in moe_keep._decoder_layers(m))
     back = _grads(m)
     for n in ref:
         assert torch.equal(ref[n], back[n]), n
@@ -86,3 +86,49 @@ def test_nothing_to_keep_without_checkpointing():
     m = _tiny()
     m.gradient_checkpointing_disable()
     assert moe_keep.keep_moe_activations(m, "all") == 0
+
+
+def _tiny_hybrid(family, seed=0):
+    """A tiny hybrid whose MoE block is NOT named ``mlp`` and whose other layers are not attention: LFM2-MoE (``feed_forward``,
+    short-conv + attention layers, dense leading layers) and Qwen3.5-MoE (Gated DeltaNet + attention, ``mlp`` with a shared
+    expert)."""
+    tr = pytest.importorskip("transformers")
+    torch.manual_seed(seed)
+    if family == "lfm2_moe":
+        cfg = tr.Lfm2MoeConfig(vocab_size=97, hidden_size=64, intermediate_size=128, moe_intermediate_size=32, num_hidden_layers=4,
+                               num_attention_heads=4, num_key_value_heads=2, num_experts=8, num_experts_per_tok=2,
+                               num_dense_layers=1, layer_types=["conv", "full_attention", "conv", "full_attention"],
+                               max_position_embeddings=64)
+        m = tr.Lfm2MoeForCausalLM(cfg).float()
+    else:
+        cfg = tr.Qwen3_5MoeTextConfig(vocab_size=97, hidden_size=64, moe_intermediate_size=32, shared_expert_intermediate_size=32,
+                                      num_hidden_layers=4, num_attention_heads=4, num_key_value_heads=2, head_dim=16,
+                                      num_experts=8, num_experts_per_tok=2, linear_num_value_heads=4, linear_num_key_heads=2,
+                                      linear_key_head_dim=16, linear_value_head_dim=16,
+                                      layer_types=["linear_attention", "linear_attention", "linear_attention", "full_attention"],
+                                      max_position_embeddings=64)
+        m = tr.Qwen3_5MoeForCausalLM(cfg).float()
+    m.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    m.config.use_cache = False
+    m.train()
+    return m
+
+
+@pytest.mark.parametrize("family,want", [("lfm2_moe", 3), ("qwen3_5_moe", 4)])
+def test_keep_is_structural_across_hybrid_families(family, want):
+    """Every MoE-bearing layer is kept whatever its children are called; dense layers are never touched; the non-MoE weighted
+    children (attention, short-conv, Gated DeltaNet) stay checkpointed on their own; gradients stay exactly equal."""
+    try:
+        ref = _grads(_tiny_hybrid(family))
+    except Exception as e:                                   # a fast-path kernel package this tiny CPU model cannot use
+        pytest.skip(f"{family} tiny model does not run here: {type(e).__name__}: {e}")
+    m = _tiny_hybrid(family)
+    assert moe_keep.keep_moe_activations(m, "all") == want
+    for lay in moe_keep._decoder_layers(m):
+        wrapped = [c for c, _o in lay._e4b_keep_refs]
+        assert wrapped and all(not moe_keep._holds_experts(c) for c in wrapped)
+    got = _grads(m)
+    assert ref.keys() == got.keys()
+    for n in ref:
+        assert torch.equal(ref[n], got[n]), n
+    assert moe_keep.release_moe_activations(m) == want

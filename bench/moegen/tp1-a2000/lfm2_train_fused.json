@@ -1,0 +1,586 @@
+{
+ "fam": "lfm2",
+ "model": "LiquidAI/LFM2-8B-A1B",
+ "model_type": "lfm2_moe",
+ "arm": "fused",
+ "tag": "fused",
+ "status": "ok",
+ "steps": 60,
+ "seq": 512,
+ "offload": false,
+ "r": 8,
+ "alpha": 16,
+ "lr": 0.0001,
+ "seed": 0,
+ "dataset": {
+  "path": "ds_clinical.json",
+  "sha256": "76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791",
+  "n_train_rows": 1200,
+  "eval_rows_used": 48
+ },
+ "prereg": "tp1/P36-PREREG.md",
+ "harness": "tp1_train_smoke.py (n17_cell.py + D1-D8)",
+ "env": {
+  "e4b": "0.44.0",
+  "e4b_dist": "0.44.0",
+  "gnf4": "0.37.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "cap": [
+   8,
+   6
+  ],
+  "host": {
+   "uuid": "GPU-01aa94f1-4004-9932-0b37-2051081a2a9d",
+   "pci.bus_id": "00000000:01:00.0",
+   "pcie.link.gen.current": "1",
+   "pcie.link.gen.max": "3",
+   "pcie.link.width.current": "8",
+   "pcie.link.width.max": "16",
+   "power.limit": "70.00",
+   "clocks.max.sm": "2100",
+   "clocks.max.mem": "6001",
+   "vbios_version": "94.06.32.00.18",
+   "driver_version": "575.64.05",
+   "cpu": "Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz",
+   "cpu_threads": 12,
+   "host_mem_gib": 125.7,
+   "vast_instance_id": null,
+   "container_host": "seat-jordan"
+  },
+  "anchor_json": null,
+  "box_class": null
+ },
+ "load_s": 8.3,
+ "verify": {
+  "n_quantized": 22,
+  "n_unquantized": 0
+ },
+ "n_lora_wrapped": 22,
+ "n_bare_experts": 0,
+ "expert_classes": {
+  "Experts4bit": 22
+ },
+ "n_attn_lora": 24,
+ "trainable_tensors": 136,
+ "trainable_params": 53985280,
+ "init_sha": "ea0460701bf75a1447b2d3732a72354e0d640ff728e64b4a92cdab6fa3ae361d",
+ "init_tensors": 136,
+ "n_patched": 22,
+ "enable_reason": "[e4b.fast] fused TRAINING path on 22 ExpertsLoRA module(s)\n[e4b.rope] fused rotary in 1 attention module(s)\n[e4b.rmsnorm] fused 61 frozen RMSNorm(s) for training [61 w*round(norm)] (0 left on the composite)",
+ "probes": {},
+ "kernel_counter_key": "fused_grouped_lora",
+ "kernel_calls_per_step": [
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88,
+  88
+ ],
+ "kernel_calls_per_step_min": 88,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 88,
+   "batched_dequant_whole": 0
+  }
+ ],
+ "C1_tensors_hashed": 88,
+ "C1_bytes_hashed": 4359979008,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 5.02708,
+ "loss_last": 0.26801,
+ "loss_mean_last20": 0.31339,
+ "eval_loss_step0": 4.94729,
+ "eval_loss_final": 0.29779,
+ "eval_rel_improvement": 0.06019,
+ "s_per_step": 0.5757,
+ "step_ms": [
+  1736.5,
+  512.1,
+  537.2,
+  527.5,
+  519.4,
+  542.3,
+  531.6,
+  535.5,
+  531.8,
+  532.2,
+  850.0,
+  534.2,
+  546.4,
+  587.5,
+  570.0,
+  531.3,
+  531.5,
+  540.5,
+  544.0,
+  549.3,
+  574.8,
+  608.9,
+  534.3,
+  531.7,
+  529.0,
+  547.0,
+  531.1,
+  535.8,
+  591.2,
+  542.0,
+  543.8,
+  659.3,
+  526.9,
+  549.1,
+  540.6,
+  595.8,
+  549.8,
+  576.4,
+  543.7,
+  552.6,
+  548.0,
+  538.5,
+  599.7,
+  539.9,
+  550.2,
+  545.3,
+  552.4,
+  547.4,
+  550.6,
+  590.5,
+  576.9,
+  530.1,
+  552.0,
+  546.8,
+  547.2,
+  533.7,
+  535.2,
+  535.0,
+  577.4,
+  579.8
+ ],
+ "tokens_per_step": [
+  86,
+  86,
+  92,
+  84,
+  84,
+  92,
+  86,
+  88,
+  86,
+  83,
+  80,
+  84,
+  92,
+  94,
+  92,
+  83,
+  83,
+  83,
+  89,
+  92,
+  88,
+  95,
+  83,
+  83,
+  82,
+  89,
+  82,
+  84,
+  84,
+  83,
+  89,
+  90,
+  82,
+  92,
+  86,
+  86,
+  82,
+  95,
+  81,
+  94,
+  92,
+  88,
+  84,
+  84,
+  89,
+  89,
+  94,
+  90,
+  92,
+  95,
+  86,
+  82,
+  94,
+  90,
+  89,
+  83,
+  84,
+  82,
+  88,
+  92
+ ],
+ "tokens_total": 5236,
+ "tokens_per_s": 151.6,
+ "peak_vram_gb": 6.114,
+ "idle_w": 6.7,
+ "mean_w": 67.4,
+ "power_samples": 155,
+ "joules_per_step": 34.97,
+ "losses": [
+  5.02708,
+  2.93038,
+  1.91976,
+  1.41436,
+  1.2149,
+  0.79084,
+  0.5546,
+  0.89481,
+  0.39109,
+  0.96845,
+  0.56649,
+  0.38481,
+  0.35962,
+  0.91937,
+  0.41799,
+  0.54529,
+  0.40286,
+  0.39582,
+  0.38751,
+  0.33937,
+  0.36033,
+  0.40566,
+  0.33005,
+  0.31751,
+  0.3989,
+  0.27888,
+  0.41386,
+  0.36556,
+  0.42062,
+  0.29093,
+  0.30159,
+  0.32336,
+  0.31557,
+  0.33493,
+  0.29341,
+  0.28102,
+  0.27249,
+  0.29726,
+  0.32909,
+  0.33524,
+  0.29896,
+  0.28911,
+  0.4221,
+  0.30096,
+  0.32918,
+  0.27618,
+  0.27988,
+  0.35017,
+  0.29285,
+  0.32832,
+  0.29946,
+  0.3823,
+  0.24516,
+  0.35177,
+  0.27342,
+  0.32903,
+  0.28828,
+  0.35107,
+  0.31161,
+  0.26801
+ ]
+}

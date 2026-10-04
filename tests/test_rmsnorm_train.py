@@ -60,10 +60,12 @@ def test_patcher_takes_frozen_norms_and_leaves_the_rest():
     m["c"].weight.requires_grad_(False)
     with torch.no_grad():
         m["c"].weight.zero_()
-    # b stays trainable -> not patched; c fails the probe -> not patched
+    # b stays trainable -> not patched; c is centered -> patched with ITS formula, never the plain one
     n = rt.enable_fused_rmsnorm_train(m)
-    assert n == 1 and getattr(m["a_RMSNorm"], "_e4b_rmsnorm_train", False)
-    assert not hasattr(m["b"], "_e4b_rmsnorm_train") and not hasattr(m["c"], "_e4b_rmsnorm_train")
+    assert n == 2 and getattr(m["a_RMSNorm"], "_e4b_rmsnorm_train", False)
+    assert m["a_RMSNorm"]._e4b_rmsnorm_variant == (0.0, False)
+    assert m["c"]._e4b_rmsnorm_variant == (1.0, True)
+    assert not hasattr(m["b"], "_e4b_rmsnorm_train")
     before = rt.RMSNORM_TRAIN_STATS["calls"]
     m["a_RMSNorm"](torch.randn(3, 64, device="cuda", dtype=torch.bfloat16))
     assert rt.RMSNORM_TRAIN_STATS["calls"] == before + 1
@@ -94,3 +96,42 @@ def test_default_on_skips_a_model_without_frozen_norms_quietly():
     from experts4bit_qlora.engines import rmsnorm_train as rt
     m = nn.ModuleDict({"x": FakeRMSNorm(64)}).cuda()                 # trainable weight only
     assert rt.enable_fused_rmsnorm_train(m, strict=False) == 0
+
+
+class GemmaRMSNorm(FakeRMSNorm):                      # Gemma-4: pow(ms, -0.5) and the weight multiply in fp32, rounded once
+    def forward(self, x):
+        h = x.float()
+        h = h * torch.pow(h.pow(2).mean(-1, keepdim=True) + self.variance_epsilon, -0.5)
+        return (h * self.weight.float()).type_as(x)
+
+
+@pytest.mark.skipif(not CUDA, reason="the fused kernel needs CUDA")
+@pytest.mark.parametrize("cls,stored,want", [(CenteredRMSNorm, 0.0, (1.0, True)), (GemmaRMSNorm, 1.0, (0.0, True)),
+                                             (FakeRMSNorm, 1.0, (0.0, False))])
+@pytest.mark.parametrize("shape", [(380, 2048), (2, 190, 4, 128), (7, 96)])
+def test_each_variant_matches_its_own_composite(cls, stored, want, shape):
+    """The probe names each family's formula (centered Qwen3.5/3.6, fp32-multiply Gemma-4, Llama rounding), and the fused
+    forward and dx match that composite to one bf16 rounding step on nearly every element."""
+    from experts4bit_qlora.engines import rmsnorm_train as rt
+    torch.manual_seed(1)
+    N = shape[-1]
+    mod = cls(N).cuda().to(torch.bfloat16)
+    with torch.no_grad():
+        mod.weight.copy_(stored + 0.1 * torch.randn(N))
+    mod.weight.requires_grad_(False)
+    ref = cls(N).cuda().to(torch.bfloat16)
+    ref.load_state_dict(mod.state_dict())
+    ref.weight.requires_grad_(False)
+    holder = nn.ModuleDict({"n_RMSNorm": mod})
+    assert rt.enable_fused_rmsnorm_train(holder) == 1 and mod._e4b_rmsnorm_variant == want
+    x = (torch.randn(*shape, device="cuda") * 3).to(torch.bfloat16)
+    xa, xb = x.clone().requires_grad_(True), x.clone().requires_grad_(True)
+    ya, yb = ref(xa), mod(xb)
+    g = torch.randn_like(ya)
+    ya.backward(g)
+    yb.backward(g)
+    for a, b in ((ya.detach(), yb.detach()), (xa.grad, xb.grad)):
+        d = (a.float() - b.float()).abs()
+        ulp = torch.finfo(torch.bfloat16).eps * a.float().abs().clamp_min(torch.finfo(torch.bfloat16).tiny)
+        assert (d > 0).float().mean().item() < 1e-2
+        assert bool((d <= 2 * ulp + 1e-6).all())

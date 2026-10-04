@@ -1,0 +1,90 @@
+# MG1: the new families through tp1's licence instrument, and the Qwen stack's portability ladder, on one RTX 5090
+
+*Registered 2026-10-04 on branch `session/moe-generalize` before any box. This file is `bench/moegen/MG1-PREREG.md`. The
+box side is [`mg1_run.sh`](mg1_run.sh), started by `bench/tc1/tc1_drive.sh` as its `TC1_RUNNER`. The reducer is
+[`mg1_reduce.py`](mg1_reduce.py).*
+
+## Question
+
+Do the families this branch generalises the training stack to pass tp1's fused-vs-reference parity on real weights, so
+that their `fast_train` path can be licensed? Those families are LFM2-MoE, Granite-4.0-H, ERNIE-4.5, Nemotron-H and
+Qwen3.5/3.6. And how much of the Qwen performance stack does each family's shipped path carry?
+
+## The instrument (unchanged, so a PASS here means what a tp1 PASS means)
+
+* Arms: tp1's arm driver `tp1_train_smoke.py`, byte-for-byte as committed at
+  `bench/train-parity-20260905/tp1/logs/tp1_train_smoke.py`: `reference` (no accelerator) and `fused`
+  (`enable_fast_train(dgrad=True)`).
+* Fixture: the registered clinical text (`n9_datasets.py`, sha `76fb9036de80…`, refused on mismatch). N = 60 steps,
+  seq 512, r = 8, alpha 16, lr 1e-4, seed 0, bf16 base, fp32 attention adapters.
+* Verdict: tp1_reduce v2.1's `verdict()`, copied verbatim into `mg1_reduce.py`. The fused arm PASSES when its final-step
+  loss and its median per-step loss are both within 0.05 of the reference arm's, after the identity checks: identical
+  `init_sha`, C1 bit-exact frozen experts on both arms with the byte-flip control firing, `n_patched > 0`, and kernel
+  calls per step ≥ 2·n_patched on every step. Otherwise FAIL, or VOID with the reason.
+* Box class: the train anchor (`bench/train-anchor/`), strict as in tp1. A refused box ends the lane (exit 12).
+* Revisions pinned in `mg1_run.sh` (the snapshots downloaded on 2026-10-04): OLMoE `6d84c485`, LFM2-8B-A1B `c1c44ff9`,
+  granite-4.0-h-tiny `791e0d3d`, ERNIE-4.5-21B-A3B-PT `87db9548`, Nemotron-3.5-Lightning-30B-A3B `a9904d24`, Qwen3.6-35B-A3B
+  `995ad96e`.
+* OLMoE runs first, as the regression anchor: a licensed family re-read on this branch's code.
+* Qwen3.6 runs resident first. On an OOM stub its reference arm is renamed `.resident_oom` and **both** arms rerun under
+  expert offload (TC2's working configuration). The two arms are never split across modes.
+
+## The ladder (informational, never a licence)
+
+Per family after its pair: `bench/moegen/ladder.py --rungs fused,fused_pre,keep` on the same snapshot, 8 timed steps after
+3 warmup, seq 512, bf16 adapters (the shipped configuration). Rungs are read interleaved A..Z Z..A in one process. Recorded:
+
+* wall s/step and the device-busy seconds of one profiled step;
+* peak VRAM, and host syncs per step;
+* the engagement census: modules patched and skipped, the dgrad route with loop reasons, the LoRA route, RMSNorm variants
+  and fallbacks, RoPE patched and refused, MoE-keep layers and offload skips, ring overflow, the train-GEMM route;
+* device time by kernel family.
+
+## Predictions (scored by the reducer's table; each is a row whatever it reads)
+
+* **P1** All six load and pass `verify_moe_4bit(strict=True)`. Fused patches every MoE layer: OLMoE 16, LFM2 22,
+  Granite-H 40, ERNIE 27, Nemotron-H 23, Qwen3.6 40.
+* **P2** `DGRAD_STATS["loop"] == 0` on every resident fused arm: the dgrad kernel serves every frozen-GEMM backward,
+  including Nemotron-H's non-gated relu² stack.
+* **P3** PASS on all five new families and on the OLMoE anchor. Expected margins are of tp1's order (d_final ≤ 0.02).
+  A FAIL is a finding about that family's composition and stays a row.
+* **P4** Ladder, on device time: `keep` < `fused` < `fused_pre` on every family. The keep gain is largest where the routed
+  experts are the biggest share of the layer (OLMoE, LFM2, ERNIE) and smallest on Nemotron-H and Granite-H, whose
+  Mamba blocks are outside the expert runtime.
+* **P5** The RMSNorm census reads the variant per family: plain Llama-rounded on LFM2, ERNIE, Nemotron-H and Granite-H;
+  centered fp32 on Qwen3.6, every norm fused where the shipped code fused none. RoPE is refused on semantics on ERNIE.
+
+## Decision rule
+
+A family whose fused arm PASSES, with every identity check clean and P1/P2 engagement, enters `docs/capabilities.json`
+`training_support.by_model_type.<type>.fast_train = supported` with its claim ids, and joins `model_families`. STATUS and
+claims are updated in the same diff. Any other reading enters with its status (`fail` / `void` / `refused` / `oom`) and the
+reason. Under expert offload the box-side mode is named in the row, as Mixtral's tp1 row names it.
+
+## Budget
+
+One RTX 5090 at the policy's $0.85/h ceiling. Estimated wall about 4 h (fetches about 210 GB; per family two N=60 arms and
+one ladder). Guard 5.5 h, so about $4.7, inside the CTO band. The box disk holds one checkpoint at a time; each family's cache
+is removed after its ladder.
+
+## Staging, the proving run and the rehearsal
+
+* **Controller.** `bench/tc1/tc1_drive.sh` with `TC1_BOX=A`, `TC1_RUNNER=mg1_run.sh`, and `TC1_EXTRA_STAGE` = `bench/moegen/mg1_run.sh
+  bench/moegen/ladder.py bench/moegen/mg1_reduce.py bench/train-anchor/train_anchor.py bench/train-anchor/train_anchor_gate.py
+  bench/train-parity-20260905/tp1/logs/tp1_train_smoke.py`. tc1's own stage brings `n9_datasets.py` and the registered
+  `ds_manifest.json`. `GNF4_SHA` is the grouped-nf4-gemm commit that carries `DGRAD_STATS`: the box tripwire refuses any other.
+* **Proving run first** (the standing rule for a guard over one hour): the same image, provider class and controller with
+  `MG1_PROVE=1`. That runs the install and the tripwire, then finishes clean without anchor, fetch or arm. Budget: ≤ $0.15,
+  ≤ 10 min. A failed proof is a row and a defect, never a retry of the reading.
+* **Shape knobs.** `MG1_FAMILIES` / `MG1_STEPS` are forwarded by `tc1_drive.sh`. Any value other than the registered six families
+  and N = 60 prints `NON-REGISTERED SHAPE` into `summary.txt`, and such a run is not this reading.
+* **`MG1_REHEARSAL=1`** exists for the $0 A2000 container rehearsal only. It records the train anchor's refusal and continues, so
+  the arms and the ladder run on a card outside the anchor band. `tc1_drive.sh` does not forward it, so a rented box cannot set
+  it.
+* The runner installs `git` when the image lacks it (pip's `git+https` needs it; P55's lesson).
+
+## A2000 rehearsal
+
+The same arms and ladder ran first on the owned RTX A2000 12 GB (sm_86), outside tp1's anchor band and so informational
+only: [`tp1-a2000/`](tp1-a2000/), [`receipts/`](receipts/). They validate the harness path per family. Big families ran
+as layer slices (`slice_snapshot.py`) for the ladder.

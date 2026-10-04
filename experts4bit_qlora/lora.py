@@ -816,17 +816,30 @@ def _is_supported_linear(obj, *, exact: bool) -> bool:
 def _attention_projection_names(mod, *, exact_linear: bool) -> list[str] | None:
     """Candidate projection names on one module, or None if it is not an attention block.
 
-    STRUCTURE, never class/family names: ``q_proj`` and ``o_proj`` as supported
-    linears admit the block; ``k_proj`` must then also be a supported linear
-    (missing ``k_proj`` is true cross-layer KV reuse — refused, not guessed);
-    ``v_proj`` may be a supported linear or absent/``None``.
+    STRUCTURE, never class/family names: ``q_proj`` and an output projection as
+    supported linears admit the block; ``k_proj`` must then also be a supported
+    linear (missing ``k_proj`` is true cross-layer KV reuse — refused, not
+    guessed); ``v_proj`` may be a supported linear or absent/``None``.
+
+    The output projection is ``o_proj``, or ``out_proj`` on a module without one
+    (LFM2's attention). ``out_proj`` alone is a common name -- LFM2's short-conv,
+    Mamba and Gated-DeltaNet mixers carry it beside an ``in_proj`` -- so it admits
+    a block only beside ``q_proj`` AND ``k_proj``, all three bias-free (a biased
+    CLIP-style ``q/k/v/out_proj`` tower stays undetected, as it always was).
     """
     q = getattr(mod, "q_proj", None)
+    if not _is_supported_linear(q, exact=exact_linear):
+        return None
+    o_name = "o_proj"
     o = getattr(mod, "o_proj", None)
-    if not (
-        _is_supported_linear(q, exact=exact_linear)
-        and _is_supported_linear(o, exact=exact_linear)
-    ):
+    if o is None:
+        o_name, o = "out_proj", getattr(mod, "out_proj", None)
+        k0 = getattr(mod, "k_proj", None)
+        if not (_is_supported_linear(o, exact=exact_linear) and _is_supported_linear(k0, exact=exact_linear)):
+            return None
+        if any(getattr(lin, "bias", None) is not None for lin in (q, k0, o)):
+            return None
+    if not _is_supported_linear(o, exact=exact_linear):
         return None
     k = getattr(mod, "k_proj", None)
     if not _is_supported_linear(k, exact=exact_linear):
@@ -839,8 +852,63 @@ def _attention_projection_names(mod, *, exact_linear: bool) -> list[str] | None:
     v = getattr(mod, "v_proj", None)
     if _is_supported_linear(v, exact=exact_linear):
         names.append("v_proj")
-    names.append("o_proj")
+    names.append(o_name)
     return names
+
+
+def trainable_lora_param_ids(model) -> tuple[set[int], set[int]]:
+    """``(expert_adapter_ids, attention_adapter_ids)``: ``id()`` of every LoRA tensor owned by an :class:`ExpertsLoRA` and by a
+    :class:`LoRALinear`. Structural -- which module owns the tensor, never what its parameter path is called."""
+    experts, attn = set(), set()
+    for m in model.modules():
+        if isinstance(m, ExpertsLoRA):
+            experts |= {id(p) for n, p in m.named_parameters(recurse=False) if "lora" in n}
+        elif isinstance(m, LoRALinear):
+            attn |= {id(m.lora_A), id(m.lora_B)}
+    return experts, attn
+
+
+#: MoE blocks (module paths) whose router :func:`router_param_ids` could not identify uniquely -- more than one
+#: ``[num_experts, hidden]`` candidate beside the experts. None of their candidates is returned. Rebuilt on every call.
+ROUTER_AMBIGUOUS: list = []
+
+
+def router_param_ids(model) -> set[int]:
+    """``id()`` of each MoE block's router weight: the one rank-2 ``[num_experts, hidden]`` parameter in a sibling subtree of an
+    :class:`ExpertsLoRA` (``mlp.gate``, ``block_sparse_moe.router.layer``, ``router.proj``, ``mixer.gate``, ...). A shared
+    expert's ``[1, hidden]`` gate, the experts' own tensors and any adapter are excluded by shape and ownership.
+
+    Attention subtrees (any module :func:`_attention_projection_names` admits) and :class:`LoRALinear` wrappers are never
+    searched: a ``k_proj`` of ``num_kv_heads * head_dim == num_experts`` rows would otherwise pass the shape test (Gemma-4's
+    experts sit directly in the decoder layer, beside its attention). A block that still has more than one candidate is
+    AMBIGUOUS: it is listed in :data:`ROUTER_AMBIGUOUS` and contributes nothing -- a guessed router is worse than none, and
+    :mod:`experts4bit_qlora.train` refuses ``TRAIN_ROUTER=1`` on it."""
+    out = set()
+    ROUTER_AMBIGUOUS.clear()
+    for pname, parent in model.named_modules():
+        kids = list(parent.named_children())
+        ex = [c for _n, c in kids if isinstance(c, ExpertsLoRA)]
+        if not ex:
+            continue
+        E, H = ex[0].base.num_experts, ex[0].base._gate_up_shape[1]
+        cands = []
+        for _n, c in kids:
+            if isinstance(c, ExpertsLoRA):
+                continue
+            skip: set[int] = set()
+            for m in c.modules():                        # pre-order: a skipped module's subtree is skipped with it
+                if id(m) in skip:
+                    continue
+                if isinstance(m, LoRALinear) or _attention_projection_names(m, exact_linear=False) is not None:
+                    skip |= {id(x) for x in m.modules()}
+                    continue
+                cands += [p for pn, p in m.named_parameters(recurse=False)
+                          if p.dim() == 2 and tuple(p.shape) == (E, H) and "lora" not in pn]
+        if len(cands) == 1:
+            out.add(id(cands[0]))
+        elif len(cands) > 1:
+            ROUTER_AMBIGUOUS.append(pname or "<root>")
+    return out
 
 
 @dataclass(frozen=True)

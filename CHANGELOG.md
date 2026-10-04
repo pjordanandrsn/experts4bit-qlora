@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+### The Qwen training stack, by structure: what another MoE family inherits (moe-generalize; `docs/MOE_RUNTIME_PORTABILITY.md`)
+
+- **Why.** The expert-side work behind Qwen3-30B-A3B's fused training step already applied to any family `ExpertsLoRA` wraps:
+  host-sync removal, pinned staging, host reuse, the lean delta, the tile rule, the dgrad kernel and the grouped_mm route. The
+  glue around it did not. It was matched on Qwen's names or Qwen's formulas, so other families silently got less, and one got a
+  wrong rotation path.
+- **Fused frozen RMSNorm** now probes each norm's own formula and the kernel computes that formula. The candidates are
+  Llama-rounded `w·round(n)`, Gemma-4's fp32 `w·n`, Qwen3.5/3.6's centered fp32 `(1+w)·n`, and `(1+w)·round(n)`. The closest
+  candidate inside the old tolerance wins, and an exact one wins outright.
+  - Qwen3.5/3.6's norms were all left on the composite before.
+  - **Gemma-4's numerics change slightly.** Its norms were fused with the Llama rounding (inside the probe's tolerance). They now
+    run their own fp32 multiply, which is closer to the reference composite.
+  - Llama-formula families (Qwen3, OLMoE, Mixtral, Granite, LFM2, ERNIE, Nemotron-H) take the same kernel path as before.
+  - Fallback calls are counted (`RMSNORM_TRAIN_STATS["fallback_calls"]`).
+- **Fused RoPE** needs a patch-time semantics probe that reproduces the composite exactly. ERNIE-4.5's `apply_rotary_pos_emb`
+  has the Hugging Face signature but rotates interleaved pairs; only its fp32 tables kept it off the kernel. Refusals are listed
+  (`ROPE_TRAIN_STATS_REFUSED`).
+- **MoE-activation retention** (`E4B_MOE_KEEP_LAYERS`, opt-in) matches every checkpointed layer that holds an expert stack,
+  rather than `self_attn` + `mlp` by name.
+  - Each other weighted child stays checkpointed on its own: attention, Gated DeltaNet, short conv, Mamba, dense or shared MLP.
+  - Granite, LFM2, Jamba and Nemotron-H went from 0 kept layers to all; Qwen3.5/3.6 from 10 of 40 to 40.
+  - A Qwen3-MoE layer is unchanged (test-pinned).
+  - A layer whose experts are offloaded is never kept: offload's backward needs the recompute.
+- **`enable_fast_train` has a storage gate and an engagement census** (`FAST_TRAIN_STATS`).
+  - A positively known non-NF4, non-4-bit, non-64-blocksize or K%64 base is skipped to the reference path and counted in
+    `skipped`, rather than decoded through the NF4 table. A partially engaged arm says so.
+  - `recurrent_fallbacks` names the hybrid families' recurrent blocks that run transformers' PyTorch path because mamba-ssm,
+    causal-conv1d or flash-linear-attention is absent, with a `RuntimeWarning`. On an RTX A2000, installing the kernels cut
+    Granite-4.0-H's fused step by 36 % of device time.
+- **Attention projections:** `out_proj` is admitted beside bias-free `q_proj` and `k_proj`. LFM2's 24 attention projections now
+  get attention LoRA and `TRAIN_ATTN_4BIT`; short-conv, Mamba and GDN mixers stay excluded.
+- **`python -m experts4bit_qlora.train`** picks trainables by owning module (`ExpertsLoRA`, `LoRALinear`) rather than by
+  parameter name. Nemotron-H's attention adapters (under `mixer.`) were frozen before.
+  - The router is the one `[num_experts, hidden]` weight beside each expert stack (`lora.router_param_ids`). Only Qwen-style
+    `mlp.gate` routers were found before, so `TRAIN_ROUTER=1` trained no router on Granite, Gemma-4, Nemotron-H or LFM2.
+  - Attention subtrees are not searched. A block with more than one candidate is listed in `lora.ROUTER_AMBIGUOUS`, and the
+    trainer refuses `TRAIN_ROUTER=1` there rather than guess. `TRAIN_ROUTER=1` with no router found also refuses.
+- **Tests and harness.**
+  - The fused training path is under the composition contract on the candidate families' scaled geometry, including
+    Nemotron-H's non-gated relu² stack (its first GPU run), with dgrad-kernel engagement asserted.
+  - `bench/moegen/` holds the per-family ladder harness (`ladder.py`: rungs interleaved A..Z Z..A, device-busy time, the
+    engagement census), the layer-slice tool, the MG1 preregistration, box runner and reducer, and the RTX A2000 receipts.
+  - [`bench/moegen/RESULTS-moegen-ladders.md`](bench/moegen/RESULTS-moegen-ladders.md) reads them. These are informational, not
+    positions. Every family's fused rung engages on every MoE layer with no dgrad loop, and the Qwen-general switches cut host
+    syncs by about nine in ten everywhere. tp1's arm driver passes LFM2-8B-A1B (d_final 0.0088) and Granite-4.0-H-tiny (0.0062)
+    on the A2000, outside tp1's anchor band, so these license nothing.
+  - `bench/tc1/tc1_drive.sh`'s liveness check follows `TC1_RUNNER`.
+
 ### Read: TC2 amendment 7 — on the current code e4b is faster than HF and axolotl on Granite and than Unsloth on OLMoE; the absmax double-quantized brings e4b's Mixtral peak level with Unsloth's; Qwen3.6 trains resident at micro-batch 1 (P15, P17 HELD; P16 half HELD; P18–P21, P23 FALSIFIED; P22 UNTESTED)
 
 - **Box S** (`tc1-5090-54`, $2.59): HF/e4b **1.299** and axolotl/e4b **1.150** on Granite, Unsloth/e4b **1.821** on OLMoE. All three

@@ -1,0 +1,8 @@
+[2026-10-04T14:33:59Z] arm lfm2/reference offload=0
+[2026-10-04T14:43:40Z] lfm2/reference rc=0
+[2026-10-04T14:43:40Z] arm lfm2/fused offload=0
+[2026-10-04T14:46:36Z] lfm2/fused rc=0
+[2026-10-04T14:46:36Z] arm graniteh/reference offload=0
+[2026-10-04T15:04:55Z] graniteh/reference rc=0
+[2026-10-04T15:04:55Z] arm graniteh/fused offload=0
+[2026-10-04T15:10:11Z] graniteh/fused rc=0

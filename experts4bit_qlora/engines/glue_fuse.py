@@ -62,6 +62,61 @@ def _probe_matches(mod, eps: float) -> bool:
     return torch.allclose(got.float(), ref, rtol=2 ** -5, atol=2 ** -7)
 
 
+def _probe_variant(mod, eps: float):
+    """Which frozen-RMSNorm formula the module's OWN forward computes, or None (training fusion, ``rmsnorm_train``).
+
+    Returns ``(offset, mul_fp32)``: ``offset`` 0.0 for ``w * norm(x)`` or 1.0 for the centered ``(1 + w) * norm(x)``
+    (Qwen3.5/3.6, whose stored weight is near zero -- patching it as ``w * norm(x)`` would nearly zero the residual stream);
+    ``mul_fp32`` False for the Llama rounding (``norm(x)`` rounded to the input dtype, then multiplied by the weight in that
+    dtype) or True for the multiply in fp32, rounded once (Gemma-4, Qwen3.5/3.6). The probe's weight is the module's own
+    perturbed by a fixed pattern, so a plain weight near one and a centered weight near zero cannot be confused.
+
+    The candidate that reproduces the module's output most closely wins, and only if it is inside the tolerance the decode
+    matcher (:func:`_probe_matches`) has always used; an exact candidate wins outright. Closest rather than exact-only
+    because a composite may compute the statistic differently (Gemma-4 takes ``pow(ms, -0.5)``, not ``rsqrt``) -- the formula
+    is what the probe identifies, and a formula with a different weight convention is orders of magnitude outside it."""
+    w = mod.weight
+    if w.dtype not in (torch.bfloat16, torch.float16):
+        return None
+    g = torch.Generator(device="cpu").manual_seed(1234)
+    x = torch.randn(4, w.numel(), generator=g).to(w.device, w.dtype)
+    pert = (torch.randn(w.numel(), generator=g) * 0.25).to(w.device, w.dtype)
+    saved = w.detach().clone()
+    try:
+        with torch.no_grad():
+            w.data.add_(pert)
+            weff = w.detach().clone()
+            got = mod(x)
+    except Exception:
+        return None
+    finally:
+        with torch.no_grad():
+            w.data.copy_(saved)
+    if not torch.is_tensor(got) or got.shape != x.shape or got.dtype != x.dtype:
+        return None
+    xf = x.float()
+    n = xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + eps)
+    best = None
+    for offset in (0.0, 1.0):
+        for mul_fp32 in (False, True):
+            if offset == 0.0 and not mul_fp32:
+                ref = weff * n.to(x.dtype)
+            elif offset == 0.0:
+                ref = (n * weff.float()).to(x.dtype)
+            elif not mul_fp32:
+                ref = (1.0 + weff.float()).to(x.dtype) * n.to(x.dtype)
+            else:
+                ref = (n * (1.0 + weff.float())).to(x.dtype)
+            if torch.equal(got, ref):
+                return offset, mul_fp32
+            if not torch.allclose(got.float(), ref.float(), rtol=2 ** -5, atol=2 ** -7):
+                continue
+            err = (got.float() - ref.float()).abs().sum().item()
+            if best is None or err < best[0]:
+                best = (err, (offset, mul_fp32))
+    return None if best is None else best[1]
+
+
 def fuse_t1_glue(model) -> int:
     """Patch every structurally-matched RMSNorm for fused decode calls.
 

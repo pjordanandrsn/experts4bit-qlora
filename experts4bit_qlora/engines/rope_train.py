@@ -127,6 +127,39 @@ def _eligible(q, k, cos, sin) -> bool:
     return q.stride(-1) == 1 and k.stride(-1) == 1 and cos.stride(-1) == 1 and sin.stride(-1) == 1 and cos.stride() == sin.stride()
 
 
+def _rotate_half(x):
+    x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def _semantics_match(orig) -> bool:
+    """The function's OWN output licenses the patch, not its name or signature. ERNIE-4.5's ``apply_rotary_pos_emb`` has the
+    Hugging Face ``(q, k, cos, sin, unsqueeze_dim=1)`` signature but rotates INTERLEAVED pairs (GLM style) in fp32; only its fp32
+    cos/sin kept the dtype gate from routing it here, so a bf16 rotary table would have trained it on the wrong rotation. A
+    deterministic bf16 probe, compared exactly against the composite this kernel reproduces, admits only that composite."""
+    g = torch.Generator(device="cpu").manual_seed(4321)
+    B, H, L, D = 1, 2, 3, 16
+    q = torch.randn(B, H, L, D, generator=g).to(torch.bfloat16)
+    k = torch.randn(B, H, L, D, generator=g).to(torch.bfloat16)
+    ang = torch.randn(B, L, D // 2, generator=g)
+    ang = torch.cat((ang, ang), dim=-1)
+    cos, sin = ang.cos().to(torch.bfloat16), ang.sin().to(torch.bfloat16)
+    try:
+        with torch.no_grad():
+            got = orig(q, k, cos, sin)
+    except Exception:
+        return False
+    if not (isinstance(got, (tuple, list)) and len(got) == 2 and all(torch.is_tensor(t) for t in got)):
+        return False
+    c, s_ = cos.unsqueeze(1), sin.unsqueeze(1)
+    ref = (q * c + _rotate_half(q) * s_, k * c + _rotate_half(k) * s_)
+    return all(a.dtype == b.dtype and a.shape == b.shape and torch.equal(a, b) for a, b in zip(got, ref))
+
+
+#: Modules whose ``apply_rotary_pos_emb`` had the signature but failed the semantics probe (kept on their own rotary).
+ROPE_TRAIN_STATS_REFUSED = []
+
+
 def fused_rope_requested() -> bool:
     return os.environ.get("E4B_FUSED_ROPE", "1").strip() != "0"
 
@@ -152,6 +185,9 @@ def enable_fused_rope(model, verbose: bool = False) -> int:
             continue
         if params[:4] != ["q", "k", "cos", "sin"]:
             continue
+        if not _semantics_match(orig):
+            ROPE_TRAIN_STATS_REFUSED.append(name)
+            continue
 
         def fused(q, k, cos, sin, *args, _orig=orig, **kwargs):
             unsq = kwargs.get("unsqueeze_dim", 1)
@@ -165,7 +201,9 @@ def enable_fused_rope(model, verbose: bool = False) -> int:
         n += 1
     ROPE_TRAIN_STATS["patched_modules"] += n
     if verbose:
-        print(f"[e4b.rope] fused rotary in {n} attention module(s)")
+        refused = [m for m in ROPE_TRAIN_STATS_REFUSED if m in mods]
+        print(f"[e4b.rope] fused rotary in {n} attention module(s)"
+              + (f"; refused on semantics (own rotary kept): {', '.join(sorted(set(refused)))}" if refused else ""))
     return n
 
 
