@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### SC2 amendment A1 (#846): the first proof's harness defects fixed; the proof reruns
+
+- `sc2-prove-1` ($0.92) read HARNESS_ERROR, NOT PROVED. vLLM and SGLang passed both smokes with every request VALID.
+  e4b's server died on `No module named 'uvicorn'` (SC1 never needed `serve_paged`'s web stack), and llama.cpp failed
+  every other request with `ServerDisconnectedError` (its server drops a connection after a streamed response, and the
+  driver reused it).
+- Fixes: box E installs e4b's `serve` extra pinned (`fastapi==0.141.1`, `uvicorn==0.54.0`); the driver opens a fresh
+  connection per request on every engine (`force_close`); and the e4b start waits for `/health` status `ready`, not
+  HTTP 200 (`serve_paged` answers 200 while loading). Each fix has a test, and the connection test fails without its
+  fix. The rule, the plan and the predictions are unchanged; amendment A1 is in `bench/sc2/SC2-PREREG.md`.
+
 ## 0.45.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.37.0, whose two new defaults were registered and read here: programmatic dependent launch capped to launches of at most 8 rows (lane P113: SC1's int4 serving decode 1.0404× at one request and 1.0000× at 16 on an RTX 5090, identical tokens) and the grouped_mm training route on sm_90 (TC1c amendment 6: Unsloth/e4b 1.030 on an H100 NVL, a labelled row)
 
 **0.45.0.** No default in this package changes. Two change in grouped-nf4-gemm 0.37.0, each by a rule registered here, and CI now tests against 0.37.0's commit.
@@ -34,17 +47,6 @@
   where the reference fits.
 - **Reducer.** Mixtral's footprint line and P5 (the offload pair's prediction) are drawn only when e4b's anchor ran under offload (a
   new self-test case, 70 in all). `bench/tc1/TC2-PREREG.md` amendment 6.
-
-### SC2 amendment A1 (#846): the first proof's harness defects fixed; the proof reruns
-
-- `sc2-prove-1` ($0.92) read HARNESS_ERROR, NOT PROVED. vLLM and SGLang passed both smokes with every request VALID.
-  e4b's server died on `No module named 'uvicorn'` (SC1 never needed `serve_paged`'s web stack), and llama.cpp failed
-  every other request with `ServerDisconnectedError` (its server drops a connection after a streamed response, and the
-  driver reused it).
-- Fixes: box E installs e4b's `serve` extra pinned (`fastapi==0.141.1`, `uvicorn==0.54.0`); the driver opens a fresh
-  connection per request on every engine (`force_close`); and the e4b start waits for `/health` status `ready`, not
-  HTTP 200 (`serve_paged` answers 200 while loading). Each fix has a test, and the connection test fails without its
-  fix. The rule, the plan and the predictions are unchanged; amendment A1 is in `bench/sc2/SC2-PREREG.md`.
 
 ### Read: TC1c amendment 6 — with the dequant at bandwidth the grouped_mm route makes e4b faster than Unsloth on an H100 (P18, P19, P20 HELD)
 
