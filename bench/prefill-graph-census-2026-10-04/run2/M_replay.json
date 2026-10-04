@@ -1,0 +1,53 @@
+{
+ "mode": "replay",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "prefill_routes": {
+  "int4_prefill_env": "mtile",
+  "prefill_attn_env": null,
+  "device_grouping": true,
+  "int4_prefill": "mtile",
+  "int4_prefill_above_256_rows": "mtile",
+  "prefill_attn": "flash"
+ },
+ "c1": {
+  "12": {
+   "logits_bitwise": true,
+   "logits_max_abs": 0.0,
+   "staged_bitwise": true,
+   "staged_keys": 4
+  },
+  "11": {
+   "logits_bitwise": true,
+   "logits_max_abs": 0.0,
+   "staged_bitwise": true,
+   "staged_keys": 4
+  },
+  "13": {
+   "logits_bitwise": true,
+   "logits_max_abs": 0.0,
+   "staged_bitwise": true,
+   "staged_keys": 4
+  },
+  "12_after_other_length_eager_and_churn": {
+   "logits_bitwise": true,
+   "logits_max_abs": 0.0,
+   "staged_bitwise": true,
+   "staged_keys": 4
+  }
+ },
+ "c2": {
+  "captured": true,
+  "12": {
+   "logits_bitwise": true,
+   "logits_max_abs": 0.0,
+   "staged_bitwise": true,
+   "staged_keys": 4
+  },
+  "11": {
+   "logits_bitwise": true,
+   "logits_max_abs": 0.0,
+   "staged_bitwise": true,
+   "staged_keys": 4
+  }
+ }
+}

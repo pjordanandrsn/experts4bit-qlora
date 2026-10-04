@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Prefill-graph feasibility census on the A2000 (bench only)
+
+- **Result.** `serve_paged`'s 512-token prefill forward makes **zero host syncs**, on chunk 1 and on a chunk with 512
+  tokens of history, on both the `k19` and `mtile` routes. It captures as a CUDA graph with no code change, and
+  replays are bitwise-equal to eager on the logits and every layer's staged K/V. Two instruments agree after
+  calibration: `set_sync_debug_mode` sites, and the profiler's stream-sync count against a no-op baseline.
+- **The blocker** for an `E4B_PAGED_PREFILL_GRAPH` knob is the Python-side K/V staging (a list plus a whole-prompt
+  `torch.cat` every chunk), not syncs.
+- **Setup.** A tiny random Qwen3-MoE with Qwen3-30B-A3B's attention geometry, served by the unmodified `build_engine`
+  under SC2's int4 stack with the routes unset. `bench/prefill-graph-census-2026-10-04/`. No claim row; nothing about
+  speed.
+
 ### TC1 amendment 24 registered: the RTX 5090's fp32 `bmm` host cost and the torch 2.12 environment, on one RTX 5090 (P44–P49) (bench and tests only)
 
 - **Why.** On both 5090 profiles the largest single e4b host row is `aten::bmm` in grouped-nf4-gemm's padded LoRA delta on the matched
