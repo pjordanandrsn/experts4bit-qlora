@@ -199,7 +199,7 @@ TC2_MODELS = {"granite": ("ibm-granite/granite-3.1-3b-a800m-instruct", "a0278068
               "mixtral": ("mistralai/Mixtral-8x7B-Instruct-v0.1", "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", 32)}
 NAMES.update({"granite": "Granite-3.1-3B-A800M-instruct (lane TC2, box A)", "olmoe": "OLMoE-1B-7B-0924-Instruct (lane TC2, box A)",
               "gptoss": "gpt-oss-20b (lane TC2, box A; e4b attention-only -- no common adapter set)",
-              "qwen3_5": "Qwen3.6-35B-A3B (lane TC2, box B)", "mixtral": "Mixtral-8x7B-Instruct-v0.1 (lane TC2, box B; e4b under expert offload, Unsloth resident)"})
+              "qwen3_5": "Qwen3.6-35B-A3B (lane TC2, box B)", "mixtral": "Mixtral-8x7B-Instruct-v0.1 (lane TC2, box B; e4b's regime per arm, the footprint line when it ran under offload)"})
 N_LAYERS.update({fam: v[2] for fam, v in TC2_MODELS.items()})
 # the structural attention census per family (tc1_arm.py's T10 docstring, #434: "granite 128, olmoe 64, qwen3 192, mixtral 128 (exactly 4 x n_layers)";
 # gpt-oss is REFUSED on the bias rule -- its attention is never converted; Gemma-4 is out of scope). None = not registered here: the receipt's own
@@ -1239,10 +1239,14 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
     anchor_probe = ((e_anchor or {}).get("frozen_base_probe") or {}) if is_ok(e_anchor) else {}
     prof = recs.get(PROF)
     profile = (prof.get("profile") or None) if is_ok(prof) else None
-    fp = footprint(fam, recs, draws, verdicts) if (fam in FOOTPRINT_FAMS or (is_ok(e_anchor) and e_anchor.get("offload"))) else None   # R11
+    # R11: the footprint line reads e4b under expert offload against a resident framework, so an e4b anchor that ran RESIDENT (TC2 amendment 6) has none
+    anchor_offload = e_anchor.get("offload") if is_ok(e_anchor) else None
+    fp = (footprint(fam, recs, draws, verdicts)
+          if ((fam in FOOTPRINT_FAMS and anchor_offload is not False) or anchor_offload) else None)
     return {"fam": fam, "rows": rows, "V": V, "verdicts": verdicts, "parity": par, "draws": draws, "positions": positions, "secondary": secondary,
             "native": native, "labelled": labelled, "equivalence": equiv, "frozen": frozen, "anchor_probe": anchor_probe, "profile": profile,
             "noise_floor": noise_floor, "equiv_band": band, "anchor_sha": anchor_sha, "footprint": fp, "common_set": common, "anchor_key": qa,
+            "anchor_offload": anchor_offload,
             "prof_knobs": (prof.get("unsloth_knobs") or {}) if is_ok(prof) else {},
             "tokens_sha": tokens_sha, "e4b_trainable": e4b_trainable, "N": N, "e": e_anchor, "ref": ref,
             "u": recs.get(("unsloth", PRIMARY["unsloth"])), "h": recs.get(("hf", PRIMARY["hf"])), "ax": recs.get(("axolotl", PRIMARY["axolotl"]))}
@@ -1797,6 +1801,8 @@ def score_tc2_predictions(F):
     # P5 mixtral: e4b (offload) / Unsloth (resident) in [0.3, 0.5] (tp2 0.361) at a >= 8x lower e4b peak; HF and axolotl OOM resident
     if not MX:
         out.append(("P5", "mixtral", "UNTESTED", "no receipts"))
+    elif MX.get("anchor_offload") is False:
+        out.append(("P5", "mixtral", "UNTESTED", "e4b's anchor ran RESIDENT: P5 is the offload pair's prediction (TC2 amendment 6 scores a resident box)"))
     else:
         legs, bad, untested = [], [], []
         pu, fp = MX["positions"].get("unsloth", {}), MX.get("footprint") or {}
@@ -3815,6 +3821,15 @@ def selftest():
     M2 = trun("mixtral", R)
     assert M2["footprint"]["readable"] is False and "OOM: no peak to read" in M2["footprint"]["sides"]["unsloth"]["basis"] and TP({**T_ALL, "mixtral": M2})["P5"] == "UNTESTED"
     print("FAILING-CASE TC2-footprint (reducer): Unsloth OOM ->", footprint_line(M2["footprint"]))
+    R = _tc2_set("mixtral")                                  # TC2 amendment 6: every e4b arm resident
+    for key in [k for k in R if k[0] == "e4b" and is_ok(R[k])]:
+        R[key]["offload"] = False
+    M3 = trun("mixtral", R)
+    assert M3["anchor_offload"] is False and M3["footprint"] is None, M3["footprint"]
+    assert not family_block(M3)[1].startswith("- **FOOTPRINT") and M3["positions"]["unsloth"]["quoted"]
+    p5 = TP({**T_ALL, "mixtral": M3})["P5"]
+    assert p5 == "UNTESTED", p5
+    print("FAILING-CASE TC2-resident (reducer): e4b resident on mixtral -> no footprint line, P5", p5)
     cases += 1
     # 49. an HF t214 arm whose dispatch did not reach grouped_mm: VALID, the note on the row and the regime (never VOID); accepted=False likewise
     R = _tc2_set("granite")

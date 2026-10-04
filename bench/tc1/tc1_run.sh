@@ -107,7 +107,7 @@ case " $FAMILIES " in *" qwen3curve "*)
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC1B-PREREG.md     # TC1b: the curve token is governed by its own registration (the PI's); TC1_PREREG still overrides
   ;;
 esac
-case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*)
+case " $FAMILIES " in *" tc2small "*|*" tc2big "*|*" tc2mixtral "*|*" tc2qwen35off "*|*" tc2resident "*)
   echo "FIXTURE tc2 (TC2-PREREG-draft): small (box A: granite olmoe gptoss): steps=$SMALL_STEPS eval_every=$SMALL_EVAL_EVERY eval_n=$SMALL_EVAL_N; big (box B: qwen3_5 mixtral): the field recipe (steps=$STEPS eval_every=$EVAL_EVERY eval_n=$EVAL_N)" | tee -a summary.txt
   [ -n "${TC1_PREREG:-}" ] || PREREG=tc1/TC2-PREREG.md      # TC2: governed by its own registration (the PI's, bench/tc1/TC2-PREREG.md); TC1_PREREG still overrides
   ;;
@@ -793,6 +793,20 @@ tc2_qwen35_offload(){
   tc2_big_family   qwen3_5  Qwen/Qwen3.6-35B-A3B                      995ad96eacd98c81ed38be0c5b274b04031597b0 6000 5400 3600 1800 2700 7200 1 "$UT4" ""     ""
   TC2_UNS_TARGET_PARAMS=""
 }
+# TC2 amendment 6 (2026-10-04): both big families with EVERY e4b arm RESIDENT (--offload 0) on the 32 GB card, after TC1 amendments
+# 10-15 and the training-memory changes since 2026-10-02 (the lean LoRA delta on by default; _ScatterCombine saving the bf16 `down`).
+# On 2026-10-02 e4b's fused path OOMed resident on Qwen3.6 (tc1-5090-27) and Mixtral only ever ran under expert offload, while Unsloth
+# trained both resident. The pair is the reducer's ordinary matched pair, both resident; a primary arm that OOMs falls to the _mb1 pair
+# as in every family. HF, both axolotl arms and e4b as shipped are not re-run (box B and tc1-5090-27 hold them). Mixtral first (the
+# nearer fit), then Qwen3.6 with the matched Unsloth arms given the family's expert target parameters (amendment 4's pair).
+tc2_resident(){
+  SKIP="$SKIP mixtral/hf/hf_peft_m mixtral/axolotl/ckpt_axolotl_m mixtral/axolotl/ckpt_axolotl_best mixtral/e4b/fused_attn4_shipped"
+  SKIP="$SKIP qwen3_5/hf/hf_peft_m qwen3_5/axolotl/ckpt_axolotl_m qwen3_5/axolotl/ckpt_axolotl_best qwen3_5/e4b/fused_attn4_shipped"
+  tc2_big_family   mixtral  mistralai/Mixtral-8x7B-Instruct-v0.1      eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600 3600 1800 2700 5400 0 "$UT7" ""     ""
+  TC2_UNS_TARGET_PARAMS="$UP_QWEN3_5"
+  tc2_big_family   qwen3_5  Qwen/Qwen3.6-35B-A3B                      995ad96eacd98c81ed38be0c5b274b04031597b0 6000 3600 3600 1800 2700 5400 0 "$UT4" ""     ""
+  TC2_UNS_TARGET_PARAMS=""
+}
 # tc1_nativebest_family FAM MID REV FETCH_AL E4B_AL UNS_AL AX_AL -- TC1 amendment 5 (2026-10-02): each framework's NATIVE-BEST
 # configuration on one box, two interleaved draws each -- e4b as shipped (bf16 expert adapters, its own init), axolotl's scattermoe
 # native-best, Unsloth's native-best (grouped_mm, speed tilt, its own init) -- plus e4b's matched fused arm as the box's anchor for
@@ -1158,6 +1172,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   tc2big)      tc2_big_box;;                   # lane TC2, box B: qwen3_5, mixtral (tc2_big_box's table)
   tc2mixtral)  tc2_mixtral_redraw;;            # lane TC2 amendment 2: Mixtral's P5 pair and reference redrawn with the Unsloth alarm at 7,200 s
   tc2qwen35off) tc2_qwen35_offload;;           # lane TC2 amendment 4: Qwen3.6's matched set, e4b under expert offload vs Unsloth resident with expert targets
+  tc2resident) tc2_resident;;                  # lane TC2 amendment 6: Mixtral and Qwen3.6 with every e4b arm resident on the 32 GB card
   # TC3 (TC3-PREREG-draft): the 24 GB RTX 4090 token (TC1_GPU_CLASS=4090) and the owned 12 GB RTX A2000 token (TC1_GPU_CLASS="RTX A2000", TC1_LOCAL_BOX=1)
   #                                                                                                        FETCH ERES EOFF MB1  UNS  HF   HOFF AX   ALO  AZ3  ROFF   (the draft's alarms)
   qwen3frontier)   tc1_frontier_family   qwen3frontier   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 1200 3600 3600 3600 1800 3600 2700 3600 3600 5400;;
