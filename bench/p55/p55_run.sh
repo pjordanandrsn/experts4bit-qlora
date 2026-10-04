@@ -64,6 +64,13 @@ echo "$CLASS_DRAWN" > class_drawn.txt
 # transformers / safetensors / huggingface_hub live in its extras, so the registered bare `pip install` could never
 # load the model (p55-5090-1 died at the fetch on `No module named 'huggingface_hub'`). Installed as P113's runner
 # does: the image's torch held by a constraint, the loader's stack pinned, bounded, one retry, exit 9 on failure.
+# git is what `pip install git+https://...` runs. Vast's ssh runtime layer has supplied it so far (P113 relied on that
+# without saying so); the lane's image itself does not ship it, which the $0 rehearsal found. Installed only when absent.
+if ! command -v git >/dev/null 2>&1; then
+  say "git absent -- installing it (apt, bounded)"
+  perl -e "alarm 600; exec @ARGV" sh -c "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git" > logs/apt_git.log 2>&1 \
+    || { tail -3 logs/apt_git.log; say "HARNESS: cannot install git -- no verdict"; finish 9; }
+fi
 TORCH_PIN=$(python3 -c "import torch; print(torch.__version__.split('+')[0])") || { say "HARNESS: no torch in the image"; finish 9; }
 echo "torch==$TORCH_PIN" > constraints.txt
 pipx(){ local log=$1 secs=$2; shift 2

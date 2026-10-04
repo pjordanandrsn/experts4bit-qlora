@@ -102,3 +102,28 @@ Nothing has run under P55. Preparing the launch found five defects. Each would h
 - the shard in GiB;
 - the headroom term;
 - the reducer on synthetic receipts: P4 HOLDS on cgroup headroom while the host's MemAvailable stays high, P4 REFUTED, and P1 withheld on STOP-1.
+
+## Amendment 2 (2026-10-04, after `p55-5090-1`, which observed nothing): install the loader's stack, rehearse at $0, one rerun
+
+**What happened.**
+- `p55-5090-1` drew the class: machine 151530, a 62 GB allotment, MemTotal 62.4 GiB, cgroup limit 59.9 GiB, so effective memory 59.9 GiB.
+- Its box script then died at the fetch, before any arm, on `ModuleNotFoundError: No module named 'huggingface_hub'`. experts4bit-qlora's **base** dependencies are `torch` and `bitsandbytes` only. The loader's transformers, safetensors and huggingface_hub live in its extras, and the registered runner installed the bare package. **The registered harness could never have loaded the model.** Amendment 1's fetch only made it fail earlier.
+- The run took 4.7 min and cost $0.015, with teardown complete (adertha-receipts `e8ba1a6`).
+
+**Fixes.**
+1. **Install as P113's runner does.** The image's torch is held by a constraint. transformers 5.17.0, bitsandbytes 0.50.2, accelerate, safetensors and huggingface_hub are installed with a bound and one retry, and failure is exit 9. Then a **tripwire** checks that the installed e4b commit is the launch commit and that the loader, transformers, huggingface_hub, safetensors and bitsandbytes all import.
+2. **Ensure `git`.** The lane's image (`pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel`) does not ship git, and `pip install git+https://…` needs it. P113 worked only because Vast's ssh runtime layer supplied it. Now it is installed only when absent, bounded, with exit 9 on failure.
+
+**Rehearsed at $0 before any rerun.** The whole box script ran on the QNAP's RTX A2000 in a throwaway container from the lane's own image. It used the lane's own override (`P55_MODEL=ibm-granite/granite-3.1-3b-a800m-instruct`, `P55_REVISION=a027806`).
+- **Rehearsal 1** (13:37Z) found fix 2: pip failed on the missing git, and the run exited 9 (the failure path works).
+- **Rehearsal 2** (13:38:06–13:41:51Z, from its own log) ran end to end with rc=0:
+  - git installed;
+  - the tripwire passed (e4b 0.45.0 at the launch commit, transformers 5.17.0, huggingface_hub 1.33.0, bitsandbytes 0.50.2);
+  - the fetch took 6.2 GB in 1 min 54 s with Xet off;
+  - A_baseline, B_sync and C_headroom all loaded OK. B_sync printed its banner and the staged `[sync]` bounds, and C's trace carried the cgroup columns;
+  - `p55_reduce.py` read the result correctly as STOP-1 (125.7 GiB effective, cgroup v1's "no limit" sentinel handled).
+- The box script had never run end to end anywhere before `p55-5090-1`; that was the defect behind both defects.
+
+**STOP-3, amended for this case only.** STOP-3 forbids a second box "on any outcome, including a disappointing one". It is a rule against redrawing until a reading changes, and `p55-5090-1` produced no reading: no arm ran. This amendment allows **exactly one rerun, `p55-5090-2`**, in the same band, under the corrected and rehearsed harness. **Its outcome is final**: STOP-3 applies to it unchanged.
+
+**Budget.** The lane has spent $0.015. The ceiling stays $3.00.
