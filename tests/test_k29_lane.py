@@ -52,3 +52,10 @@ def test_the_reducer_selftest_covers_every_branch():
 def test_the_rule_constants_are_the_registered_ones():
     src = (LANE / "k29_reduce.py").read_text()
     assert "R_LO, R_HI = 0.97, 1.06" in src and "CONTROL_LO, CONTROL_HI, CONTROL_R2 = 0.95, 1.10, 0.99" in src
+
+
+def test_the_driver_retries_the_fetch_before_giving_up_a_finished_run():
+    """k29-5090-1 finished on the box and lost its data to ONE rsync that hit a closed connection. The fetch retries,
+    then falls back to tar over ssh, before exiting 22."""
+    assert "for attempt in 1 2 3 4; do" in DRIVE and 'falling back to tar over ssh' in DRIVE
+    assert DRIVE.index("for attempt in 1 2 3 4; do") < DRIVE.index('say "fetch failed: rsync x4 and tar"; exit 22')
