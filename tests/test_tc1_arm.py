@@ -1216,6 +1216,12 @@ def test_tc1c_amendment_3_routebench_token():
     assert {(c["N"], c["K"]) for c in calls} == {(1536, 2048), (2048, 768)}
 
 
+def test_tc1c_amendment_4_route_record():
+    """TC1c amendment 4: every e4b arm records the training GEMM route grouped-nf4-gemm took (GNF4_TRAIN_GEMM) and its call counts."""
+    src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
+    assert '"route_ab": route_ab,' in src and "_nr.train_gemm_route()" in src and '"gnf4_train_gemm_env": os.environ.get("GNF4_TRAIN_GEMM")' in src
+
+
 def test_tc1_amendment_13_lean_delta_token():
     """TC1 amendment 13 (#945): `qwen3leanab` runs e4b against itself -- grouped-nf4-gemm's previous padded LoRA delta
     (NF4_QLORA_LEAN_DELTA=0) vs its trimmed body (=1), both on the post-#945 sync path -- on the shipped and matched arms, two draws

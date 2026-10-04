@@ -3161,6 +3161,15 @@ def run_arm(a, load_fn, sampler=True):
             _cmp = None
         keep_ab = {"requested_env": os.environ.get("E4B_MOE_KEEP_LAYERS"), "e4b_has_moe_keep": _hask, "layers_kept": _kept,
                    "gnf4_compact_delta": ("1" if _cmp else "0") if _cmp is not None else None, "gnf4_compact_delta_env": os.environ.get("NF4_QLORA_COMPACT_DELTA")}
+    route_ab = None                                    # TC1c amendment 4: which training GEMM route grouped-nf4-gemm took (GNF4_TRAIN_GEMM), and how often
+    if a.framework == "e4b":
+        try:
+            import nf4_route as _nr
+            _route, _rstats = _nr.train_gemm_route(), dict(getattr(_nr, "ROUTE_STATS", {}) or {})
+        except Exception:
+            _route, _rstats = None, {}
+        route_ab = {"gnf4_train_gemm": _route, "gnf4_train_gemm_env": os.environ.get("GNF4_TRAIN_GEMM"), "gnf4_has_route": _route is not None,
+                    "stats": {k: int(v) for k, v in _rstats.items()}}
     steady = step_ms[10:] if len(step_ms) > 10 else step_ms
     cell = {
         "framework": a.framework, "fam": a.fam, "model": a.model, "revision": a.revision, "model_type": x.get("model_type"), "n_layers": x.get("n_layers"),
@@ -3218,6 +3227,7 @@ def run_arm(a, load_fn, sampler=True):
         "rms_ab": rms_ab,                                                                                                # TC1 amendment 15 (#945)
         "reuse_ab": reuse_ab,                                                                                            # TC1 amendment 20 (#945)
         "keep_ab": keep_ab,                                                                                              # TC1 amendment 21 (#945)
+        "route_ab": route_ab,                                                                                            # TC1c amendment 4
         "s_per_step": round(wall / a.steps, 4), "s_per_step_median_11plus": round(statistics.median(steady) / 1e3, 4), "step_ms": step_ms, "microbatch_ms": microbatch_ms, "log_every": int(a.log_every), "microbatch_timing": bool(a.microbatch_timing),
         "train_wall_s": round(train_wall, 2), "window_wall_s": round(wall, 2),
         "tokens_per_step": tokens_per_step, "tokens_total": sum(tokens_per_step), "tokens_per_s": round(sum(tokens_per_step) / train_wall, 1) if train_wall else None,

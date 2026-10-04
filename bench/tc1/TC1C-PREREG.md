@@ -170,3 +170,49 @@ This box quotes no position and changes no register row.
 
 **Budget.** One H100 NVL on Vast verified-secure, $2.80/h GPU ceiling (disk billed on top), 1.0 h guard, estimate about $1.50–2.70;
 the owner's standing tier (a single run under $15).
+
+### Amendment 4 (2026-10-04T06:19Z, after amendment 3's read, before any box): the H100 position with grouped-nf4-gemm's grouped_mm route, two boxes (P12, P13, P14)
+
+**Why.** Amendment 3 (`tc1c-h100-5`) replayed the 128 unique fused GEMM calls of e4b's training step on an H100 NVL. A dequantize
+plus `torch._grouped_mm` took **0.596** (forward) and **0.494** (dgrad) of the fused kernels' time, within 0.0024 relative Frobenius
+error on every call. By its decision rule grouped-nf4-gemm#450 takes that route as an sm_90 opt-in, `GNF4_TRAIN_GEMM=grouped_mm`. The
+dequant is a Triton kernel over the present experts, bit-equal to `dequant_ref`. The route is not bit-identical to the fused kernels,
+so its value and its numerics are measured on the full training step, against Unsloth, before anything is defaulted.
+
+**The boxes.** Two H100 NVL boxes run TC1c's token unchanged (TC1's `qwen3` family with `TC1_GPU_CLASS="H100 NVL"`, HF and axolotl
+skipped as in amendment 2). Each sets `TC1_E4B_ENV` on every e4b arm:
+
+- **box R (`route`):** `TC1_E4B_ENV="GNF4_TRAIN_GEMM=grouped_mm"`. Every other e4b setting is a default, including host reuse (on
+  since grouped-nf4-gemm 0.36.0). Its counterpart is amendment 1's 0.817.
+- **box K (`keep + route`):**
+  `TC1_E4B_ENV="E4B_MOE_KEEP_LAYERS=all NF4_QLORA_COMPACT_DELTA=1 GNF4_HOST_REUSE=1 GNF4_TRAIN_GEMM=grouped_mm"`. Its counterpart is
+  amendment 2's 1.100.
+
+e4b is pinned at this amendment's merge, and grouped-nf4-gemm at the merge of #450. A new `route_ab` record on each e4b arm names the
+route in force and its call counts (`nf4_route.ROUTE_STATS`). Engagement is read off the receipts before any prediction is scored: on
+every e4b fused arm `route_ab` must name `grouped_mm` with nonzero forward and dgrad counts, and box K's `keep_ab` must record 48
+layers kept. If not, that box is VOID.
+
+**Predictions** (registered before the boxes), read off each box's own lines:
+
+- **P12** (box R): the MATCHED POSITION unsloth/e4b lies in **[0.85, 1.20]**. Amendment 1's e4b step was 3.146 s at device-busy 0.665,
+  about 2.1 s of device time. If the fused GEMMs are about 60 % of that and the route takes them to about 0.55, the step loses about
+  0.55 s, giving about 0.99.
+- **P13** (box K): the MATCHED POSITION unsloth/e4b lies in **[1.15, 1.60]**. Amendment 2's step was 2.343 s at 0.659 busy. The same
+  arithmetic over the forward and dgrad GEMMs, with no recompute, gives about 1.3.
+- **P14:** both boxes' P3 lines are HELD. With the route on, e4b fused stays EQUIVALENT to e4b's reference and to Unsloth, or inside
+  the draw noise. This is the route's numerics test on the training step.
+
+The ordering reading of amendment 1 applies to P12 and P13. Each is FALSIFIED outside its band, and UNTESTED where the box quotes no
+position.
+
+**Decision rules.**
+
+- **P12** HELD or FALSIFIED becomes a LABELLED row, `e4b.train.h2h.unsloth.qwen3.h100.<date>.route`. **P13** likewise becomes
+  `...h100.<date>.moe-keep-route`. Both are quoted beside amendments 1 and 2, never in place of them.
+- **Default on sm_90.** grouped-nf4-gemm makes the route its default there only if three things hold: P14 HELD, box R's position at
+  or above 1.05 × 0.817 = 0.858, and box R's e4b held-out within 0.005 of amendment 1's e4b. Otherwise it stays opt-in.
+- **P14 FALSIFIED** on either box blocks quoting that box's position.
+
+**Budget.** Two H100 NVL boxes, each $2.80/h GPU ceiling (disk billed on top), 2.5 h guard, about $2.80 each as amendment 2's box was;
+the owner's standing tier (each a single run under $15).
