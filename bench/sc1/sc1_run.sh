@@ -80,8 +80,13 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
 # SC1b: the paged prefill attention route every SC1 box ran (#960 adds the knob; its default flips to flash afterwards);
 # exported like A13's pin, after the scrub, before the tripwire and every arm.
 # SC2b (box F) runs main's defaults, so it exports NEITHER pin (SC2's correction, #1061: box E inherited both).
-if [ "$BOX" = F ]; then unset E4B_INT4_PREFILL E4B_PAGED_PREFILL_ATTN
-else export E4B_INT4_PREFILL=loop; unset E4B_PAGED_PREFILL_ATTN; export E4B_PAGED_PREFILL_ATTN=math; fi
+if [ "$BOX" = F ]; then
+  unset E4B_INT4_PREFILL E4B_PAGED_PREFILL_ATTN
+else
+# A13's pin, on its own line (tests/test_sc1_a13.py), for boxes A-E only
+export E4B_INT4_PREFILL=loop
+unset E4B_PAGED_PREFILL_ATTN; export E4B_PAGED_PREFILL_ATTN=math
+fi
 : > summary.txt; echo "$SC1_INSTANCE_ID" > INSTANCE_ID
 echo "KNOBS box=$BOX e4b=$E4B_SHA gnf4=$GNF4_SHA model=$MID rev=$REV gptq=$GPTQ_REV gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_driver=$MIN_DRIVER cpu_vendor=$CPU_VENDOR calib_nseq=$NSEQ quiesce_s=$QUIESCE_S prove=$PROVE" | tee -a summary.txt
 if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 320 ] || [ "$MIN_DRIVER" != 580 ] || [ "$NSEQ" != 128 ] || { [ "$BOX" = A ] && [ "$CPU_VENDOR" != AuthenticAMD ]; }; then
