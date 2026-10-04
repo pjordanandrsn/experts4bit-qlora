@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### serve_paged: `/health` reports the prefill routes the server resolves
+
+- **What.** `GET /health` gains a `prefill_routes` block, computed at each request by the same functions the forward
+  calls: `int4_prefill` (the resolved `E4B_INT4_PREFILL`), `int4_prefill_above_256_rows` (the route prefill calls
+  above 256 rows take when `device_grouping` is on), `prefill_attn` (the resolved `E4B_PAGED_PREFILL_ATTN`), the raw
+  environment values, and `device_grouping`. A route the environment makes invalid reads `invalid: …`.
+- **Why.** SC2's e4b arm inherited `E4B_INT4_PREFILL=loop` and `E4B_PAGED_PREFILL_ATTN=math` from the box script while
+  its registration said `k19` and `flash`. A box's environment is not evidence of the route the server took; the
+  server's own report is. Documented in `docs/SERVING.md`.
+
 ### Read: TC2 amendment 8 — at default settings Unsloth is faster on Mixtral, 0.836; on Qwen3.6 at micro-batch 1 e4b is 2.05× faster (P24–P28 HELD)
 
 - **Box M** (`tc1-5090-63`, $0.60): Mixtral-8x7B with e4b at default settings, where grouped-nf4-gemm 0.38.0's `auto` takes the dense

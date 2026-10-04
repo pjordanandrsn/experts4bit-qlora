@@ -611,6 +611,35 @@ def _calib_batches(tok, n_seq=None, seq_len=512, bsz=4):
     return [torch.stack(rows[i:i + bsz]) for i in range(0, n_seq, bsz)]
 
 
+def prefill_routes() -> dict:
+    """The prefill routes this process resolves, read where the forward reads them (for /health).
+
+    A box's own environment is not evidence of what the server ran: SC2's e4b arm inherited the box script's
+    ``E4B_INT4_PREFILL=loop`` / ``E4B_PAGED_PREFILL_ATTN=math`` while its registration said ``k19`` + ``flash``. So the
+    server reports the routes itself, from the same functions the forward calls. ``int4_prefill`` is the resolved
+    ``E4B_INT4_PREFILL`` (``auto`` -> ``k19`` where K19 can run, else ``loop``). With ``device_grouping`` on (a server
+    capturing batched decode graphs), prefill calls above 256 rows take K19 only under ``k19``, and otherwise the
+    grouped M-tile GEMM. ``prefill_attn`` is the resolved ``E4B_PAGED_PREFILL_ATTN``. A route the environment makes
+    invalid is reported as the error the forward would raise."""
+    from .engines import hot_residency, paged_attention
+
+    out: dict = {"int4_prefill_env": os.environ.get("E4B_INT4_PREFILL", "") or None,
+                 "prefill_attn_env": os.environ.get("E4B_PAGED_PREFILL_ATTN", "") or None,
+                 "device_grouping": bool(hot_residency.DEVICE_GROUPING[0])}
+    try:
+        mode = hot_residency._int4_prefill_mode_env()
+        out["int4_prefill"] = mode
+        out["int4_prefill_above_256_rows"] = (("k19" if mode == "k19" else "mtile") if out["device_grouping"]
+                                              else mode)
+    except ValueError as e:
+        out["int4_prefill"] = f"invalid: {e}"
+    try:
+        out["prefill_attn"] = paged_attention._prefill_attn_mode_env()
+    except ValueError as e:
+        out["prefill_attn"] = f"invalid: {e}"
+    return out
+
+
 def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
     """``bench/p42/hook/usercustomize.py::_apply_lanes``, called where the hook calls it (right after
     ``enable_hybrid_tier``), reading the same environment. A refusal raises, as the hook re-raises."""
@@ -1077,6 +1106,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "max_queue": cfg.max_queue or None,
             },
             "levers": info,
+            "prefill_routes": prefill_routes(),
             "eos_token_ids": sorted(parts.eos_ids) if parts is not None else None,
             "sampling": {"greedy_only": True, "logprobs": False, "stop_strings": False},
             "queue_depth": engine.queue_depth,
