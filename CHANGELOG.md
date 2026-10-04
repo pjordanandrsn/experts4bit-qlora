@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Read: TC1c amendment 8 — on an H100 at default settings e4b is faster per step than Unsloth: 1.061 (P24, P25, P26 HELD)
+
+- **The box.** `tc1c-h100-15` ($2.44) ran e4b 0.45.0's code with grouped-nf4-gemm 0.37.0 and nothing set. `auto` took the grouped_mm
+  route on every fused arm.
+- **Position.** Unsloth/e4b **1.061** [1.047, 1.075] (2.544 against 2.397 s/step), at 2.93 GB more peak VRAM on e4b and ×1.23 Unsloth's
+  energy. The matched set is EQUIVALENT.
+- **Register.** The new H100 position of record is `e4b.train.h2h.unsloth.qwen3.h100.release-0.45.0`. It supersedes amendment 1's 0.817
+  (the fused kernels) as the default-settings row. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ### Read: SC2 (#846) -- request-level serving on one RTX 5090. vLLM and SGLang hold the SLO to 8 req/s; e4b's `serve_paged` holds it only at 1 req/s
 
 - **What ran.** `sc2-5090-1` ($2.349, a 400 W-capped 5090) drove e4b `serve_paged` (SC1's int4 levers, plus the NF4
