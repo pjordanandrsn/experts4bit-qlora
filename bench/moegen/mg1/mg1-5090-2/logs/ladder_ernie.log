@@ -1,0 +1,98 @@
+[ladder] prewarmed 40.9 GiB in 14s
+[20:41:46]   checkpoint: local directory /root/.cache/huggingface/hub/models--baidu--ERNIE-4.5-21B-A3B-PT/snapshots/87db95487941cb39592ee0abca3b9155a6d19c5c
+[20:41:46]   fusing + quantizing experts (up to 28x64) to nf4 (streaming)...
+[20:41:53]   quantized experts on 27/28 MoE layers (64 experts each)
+[20:41:53]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[20:41:53]   skipped 12 checkpoint tensor(s) the text model does not build (Ernie4_5_MoeForCausalLM._keys_to_ignore_on_load_unexpected), e.g. model.mtp_block.0.input_layernorm.weight
+[20:41:53]   applied 27 transformers checkpoint-key renaming(s) (this checkpoint's layout differs from the module tree)
+[e4b.fast] fused TRAINING path on 27 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 0 attention module(s); refused on semantics (own rotary kept): transformers.models.ernie4_5_moe.modeling_ernie4_5_moe
+[e4b.rmsnorm] fused 57 frozen RMSNorm(s) for training [57 w*round(norm)] (0 left on the composite)
+[ladder] step 0 0.626s loss 1.5190
+[ladder] step 1 0.310s loss 1.6197
+[ladder] step 2 0.310s loss 1.7103
+[ladder] step 3 0.315s loss 1.7666
+[ladder] step 4 0.316s loss 1.6758
+[ladder] step 5 0.309s loss 1.6185
+[ladder] step 6 0.316s loss 1.4804
+[ladder] step 7 0.311s loss 1.8657
+[ladder] step 8 0.311s loss 1.7229
+[ladder] step 9 0.313s loss 1.7159
+[ladder] step 10 0.310s loss 1.5926
+[ladder] fused: 0.312 s/step, 1639.1 tok/s, peak 15.87 GB, syncs 57
+[e4b.fast] fused TRAINING path on 27 ExpertsLoRA module(s) (dgrad kernel backward)
+[ladder] step 0 0.522s loss 1.5204
+[ladder] step 1 0.481s loss 1.6287
+[ladder] step 2 0.480s loss 1.7052
+[ladder] step 3 0.484s loss 1.7674
+[ladder] step 4 0.490s loss 1.6773
+[ladder] step 5 0.481s loss 1.6210
+[ladder] step 6 0.486s loss 1.4820
+[ladder] step 7 0.480s loss 1.8672
+[ladder] step 8 0.485s loss 1.7191
+[ladder] step 9 0.480s loss 1.7206
+[ladder] step 10 0.485s loss 1.5910
+[ladder] fused_pre: 0.484 s/step, 1057.3 tok/s, peak 15.87 GB, syncs 622
+[e4b.fast] fused TRAINING path on 27 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 0 attention module(s); refused on semantics (own rotary kept): transformers.models.ernie4_5_moe.modeling_ernie4_5_moe
+[e4b.rmsnorm] fused 57 frozen RMSNorm(s) for training [57 w*round(norm)] (0 left on the composite)
+[e4b.moe_keep] MoE activations kept in 27 layer(s); 27 non-MoE child(ren) still checkpointed
+[ladder] step 0 0.226s loss 1.5190
+[ladder] step 1 0.223s loss 1.6212
+[ladder] step 2 0.223s loss 1.7026
+[ladder] step 3 0.228s loss 1.7662
+[ladder] step 4 0.227s loss 1.6754
+[ladder] step 5 0.223s loss 1.6175
+[ladder] step 6 0.227s loss 1.4823
+[ladder] step 7 0.224s loss 1.8686
+[ladder] step 8 0.225s loss 1.7192
+[ladder] step 9 0.905s loss 1.7188
+[ladder] step 10 0.224s loss 1.5941
+[ladder] keep: 0.226 s/step, 2268.4 tok/s, peak 17.63 GB, syncs 29
+[e4b.fast] fused TRAINING path on 27 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 0 attention module(s); refused on semantics (own rotary kept): transformers.models.ernie4_5_moe.modeling_ernie4_5_moe
+[e4b.rmsnorm] fused 57 frozen RMSNorm(s) for training [57 w*round(norm)] (0 left on the composite)
+[e4b.moe_keep] MoE activations kept in 27 layer(s); 27 non-MoE child(ren) still checkpointed
+[ladder] step 0 0.231s loss 1.5190
+[ladder] step 1 0.223s loss 1.6195
+[ladder] step 2 0.223s loss 1.7083
+[ladder] step 3 0.227s loss 1.7638
+[ladder] step 4 0.226s loss 1.6747
+[ladder] step 5 0.223s loss 1.6181
+[ladder] step 6 0.227s loss 1.4827
+[ladder] step 7 0.226s loss 1.8667
+[ladder] step 8 0.224s loss 1.7206
+[ladder] step 9 0.666s loss 1.7168
+[ladder] step 10 0.224s loss 1.5930
+[ladder] keep#2: 0.226 s/step, 2269.2 tok/s, peak 17.63 GB, syncs 29
+[e4b.fast] fused TRAINING path on 27 ExpertsLoRA module(s) (dgrad kernel backward)
+[ladder] step 0 0.491s loss 1.5204
+[ladder] step 1 0.483s loss 1.6284
+[ladder] step 2 0.478s loss 1.7038
+[ladder] step 3 0.486s loss 1.7689
+[ladder] step 4 0.480s loss 1.6752
+[ladder] step 5 0.481s loss 1.6166
+[ladder] step 6 0.927s loss 1.4839
+[ladder] step 7 0.481s loss 1.8696
+[ladder] step 8 0.479s loss 1.7230
+[ladder] step 9 0.482s loss 1.7192
+[ladder] step 10 0.480s loss 1.5971
+[ladder] fused_pre#2: 0.481 s/step, 1064.0 tok/s, peak 15.87 GB, syncs 622
+[e4b.fast] fused TRAINING path on 27 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 0 attention module(s); refused on semantics (own rotary kept): transformers.models.ernie4_5_moe.modeling_ernie4_5_moe
+[e4b.rmsnorm] fused 57 frozen RMSNorm(s) for training [57 w*round(norm)] (0 left on the composite)
+[ladder] step 0 0.321s loss 1.5190
+[ladder] step 1 0.312s loss 1.6218
+[ladder] step 2 0.311s loss 1.6975
+[ladder] step 3 0.316s loss 1.7644
+[ladder] step 4 0.318s loss 1.6740
+[ladder] step 5 0.310s loss 1.6190
+[ladder] step 6 0.317s loss 1.4788
+[ladder] step 7 0.314s loss 1.8683
+[ladder] step 8 0.313s loss 1.7226
+[ladder] step 9 0.314s loss 1.7185
+[ladder] step 10 0.312s loss 1.5941
+[ladder] fused#2: 0.314 s/step, 1630.2 tok/s, peak 15.87 GB, syncs 56
+[ladder] SUMMARY fused: {'s_per_step_mean': 0.3133, 'readings': [0.3124, 0.3141], 'spread': 0.005, 'peak_alloc_gb': 15.871, 'syncs_one_step': 57, 'device_busy_frac': [0.65, 0.921], 'device_s_mean': 0.3025, 'ratio_to_fused': 1.0, 'device_ratio_to_fused': 1.0}
+[ladder] SUMMARY fused_pre: {'s_per_step_mean': 0.4828, 'readings': [0.4843, 0.4812], 'spread': 0.006, 'peak_alloc_gb': 15.871, 'syncs_one_step': 622, 'device_busy_frac': [0.681, 0.691], 'device_s_mean': 0.3815, 'ratio_to_fused': 1.541, 'device_ratio_to_fused': 1.261}
+[ladder] SUMMARY keep: {'s_per_step_mean': 0.2257, 'readings': [0.2257, 0.2256], 'spread': 0.0, 'peak_alloc_gb': 17.634, 'syncs_one_step': 29, 'device_busy_frac': [0.883, 0.869], 'device_s_mean': 0.2174, 'ratio_to_fused': 0.72, 'device_ratio_to_fused': 0.719}

@@ -1,0 +1,66 @@
+{
+ "fam": "ernie",
+ "model": "/root/.cache/huggingface/hub/models--baidu--ERNIE-4.5-21B-A3B-PT/snapshots/87db95487941cb39592ee0abca3b9155a6d19c5c",
+ "model_type": "ernie4_5_moe",
+ "arm": "load",
+ "status": "ok",
+ "load_s": 7.7,
+ "offload": false,
+ "verify": {
+  "n_quantized": 27,
+  "n_unquantized": 0
+ },
+ "geometry": {
+  "hidden_size": 2560,
+  "intermediate_size": 12288,
+  "moe_intermediate_size": 1536,
+  "num_hidden_layers": 28,
+  "num_experts": 64,
+  "num_local_experts": null,
+  "num_experts_per_tok": 6,
+  "vocab_size": 103424,
+  "hidden_act": "silu",
+  "hidden_activation": null,
+  "tie_word_embeddings": true,
+  "attention_bias": null
+ },
+ "loaded_gb": 14.626,
+ "env": {
+  "e4b": "0.45.0",
+  "e4b_dist": "0.45.0",
+  "gnf4": "0.38.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-1988d9ef-19d0-36d8-6639-210c4347c852",
+   "pci.bus_id": "00000000:02:00.0",
+   "pcie.link.gen.current": "1",
+   "pcie.link.gen.max": "5",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "470.00",
+   "clocks.max.sm": "3090",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.00.B1",
+   "driver_version": "595.91.07",
+   "cpu": "Intel(R) Core(TM) Ultra 9 285K",
+   "cpu_threads": 24,
+   "host_mem_gib": 188.1,
+   "vast_instance_id": null,
+   "container_host": "2ccbdd2874f0"
+  },
+  "anchor_json": "/root/tc1/anchor.json",
+  "box_class": "pcie-full/launch-fast"
+ },
+ "written_by_arm": "reference",
+ "n_lora_wrapped": 27,
+ "n_bare_experts": 0,
+ "expert_classes": {
+  "Experts4bit": 27
+ }
+}
