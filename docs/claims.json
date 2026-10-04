@@ -8372,7 +8372,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-02/tc1c-h100-2/tc1/"
       ],
-      "notes": "The profiles say why the cards disagree (.dispatch-profile): e4b issues ~139k device events per step on both cards; Unsloth issues 612k on the RTX 5090 (torch 2.12.1+cu130, sm_120) and 82k on the H100 (sm_90) with 14x fewer CPU-side ops -- the grouped GEMM it routes through is one launch per call on Hopper and not on Blackwell. Which torch code path sm_120 takes is not established here. HF+PEFT (bf16 experts) fit on 80 GB (62 GB resident) but produced no step within its 1,800 s alarm: not measured. axolotl died in transformers 5.17.0's Qwen3-MoE router (bf16 vs fp32) before any receipt.",
+      "notes": "The profiles say why the cards disagree (.dispatch-profile): e4b issues ~139k device events per step on both cards; Unsloth issues 612k on the RTX 5090 (torch 2.12.1+cu130, sm_120) and 82k on the H100 (sm_90) with 14x fewer CPU-side ops -- the grouped GEMM it routes through is one launch per call on Hopper and not on Blackwell. Which torch code path sm_120 takes is not established here. HF+PEFT (bf16 experts) fit on 80 GB (62 GB resident) but produced no step within its 1,800 s alarm: not measured. axolotl died in transformers 5.17.0's Qwen3-MoE router (bf16 vs fp32) before any receipt. Measured on the code BEFORE #945. The position after TC1 amendments 10-15: e4b.train.h2h.unsloth.qwen3.h100.2026-10-04 (0.817, Unsloth still faster).",
       "quoted_in": [
         "docs/STATUS.md",
         "docs/solutions/qlora-fused-moe-experts.md"
@@ -9197,6 +9197,54 @@
         "receipts/experts4bit-qlora/2026-10-03/tc1-5090-45/tc1/"
       ],
       "notes": "Within-box A/B. The host (EPYC 7663) steps slower than the earlier Ryzen boxes; every pair passed the 5 % stability gate."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.host-reuse.qwen3.5090.2026-10-04",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 20 (#945), one rented RTX 5090 (tc1-5090-51): grouped-nf4-gemm's per-pass host reuse (GNF4_HOST_REUSE, gnf4#444: a memo of repeated index uploads, the down LoRA delta reusing the gate_up delta's plan, and a scatter backward for the adapters' gather; values identical) steps the Qwen3-30B-A3B field recipe at 0.933 [0.912, 0.954] x the flag off on the shipped arm (2.870 / 2.934 against 3.146 / 3.075 s) and 0.951 [0.922, 0.980] x on the matched arm (3.697 / 3.799 against 3.875 / 4.008 s); every pair stable (within 3.4 %); held-out at step 0 identical on all eight arms and at N within the draw spread; energy per step lower, peak unchanged. Engagement verified per arm (reuse_ab: 16,465 upload hits and 8,528 plan hits per flag-on arm, none off). P33 and P34 HELD; by the registered decision rule the flag becomes grouped-nf4-gemm's default (gnf4#446). e4b against itself on one host: no cross-framework position is restated from it.",
+      "value": 0.933,
+      "unit": "ratio s/step, GNF4_HOST_REUSE on / off, shipped arm (medians of steps 11..20 over two draws each; < 1 = faster); matched arm 0.951 [0.922, 0.980]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-51: instance 54095822, AMD EPYC 7C13, driver 580.95.05); e4b @ 186265d on torch 2.8.0+cu128, grouped-nf4-gemm @ 192f63f",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; token qwen3reuseab; GNF4_HOST_REUSE=0 vs 1 with every other default in force (post-#945 sync path, trimmed LoRA delta, cost tile rule, fused RMSNorm and rotary), shipped arm (bf16 expert adapters, native init) and matched arm (fp32 adapters, matched:3407), two draws each in ABBA order; validity and scoring by bench/tc1/tc1_reduce.py (engagement predicates on reuse_ab, lean_ab and sync_ab)",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-reuseab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-51/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-51/tc1/"
+      ],
+      "notes": "Within-box A/B. The instance billed $0.84/h (GPU $0.573 under the declared $0.69 ceiling, plus $0.267 for its 320 GB disk, which the launcher's ceiling does not count: adertha-agents#140); the run cost $0.36."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1c amendment 1 (#835), one rented H100 NVL (tc1c-h100-3): with e4b after TC1 amendments 10-15 (#945 syncs, #440 trimmed LoRA delta, #442 cost tile rule, #965 fused rotary, #975 fused RMSNorm -- all defaults), Unsloth 2026.9.14 (grouped_mm engaged, torch 2.12.1+cu130) takes 2.571 s/step against e4b's 3.146 at matched work: Unsloth/e4b 0.817 [0.799, 0.836] over two draws each (3.188 / 3.104 and 2.548 / 2.594, both STABLE) -- UNSLOTH STILL FASTER PER STEP ON THIS CARD, by 1.22x (1.61x before #945). P5 HELD (band [0.70, 1.20]; interval wholly below 1.0); the matched set EQUIVALENT (P6 HELD: e4b reference inside the fused arm's draw noise, Unsloth EQUIVALENT). Quoted beside it, in Unsloth's favour: peak VRAM 24.27 vs 27.26 GB (-2.98 GB), energy per step x0.79. e4b's step fell 4.097 -> 3.146 s (x0.768) against the 2026-10-02 box; Unsloth's 2.546 -> 2.571.",
+      "value": 0.817,
+      "unit": "ratio s/step Unsloth/e4b (medians of steps 11..20 over two draws each; < 1 = Unsloth faster per step); cross-draw interval [0.799, 0.836]",
+      "hardware": "H100 NVL (sm_90), one rented Vast.ai verified/secure host (tc1c-h100-3: instance 54091206, AMD EPYC 9534, driver 595.71.05); e4b @ e1837cf on torch 2.8.0+cu128, grouped-nf4-gemm @ 00929a4; Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; matched work (the same 642,514,944 trainable parameters, one per-slot LoRA init matched:3407, fp32 adapters, the same tokens); e4b at e1837cf with every default from TC1 amendments 10-15 and no environment set; token qwen3 with TC1_GPU_CLASS=\"H100 NVL\"; validity, positions and equivalence by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-3/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-3/tc1/"
+      ],
+      "notes": "The current matched position against Unsloth on the H100 class; e4b.train.h2h.unsloth.qwen3.h100.2026-10-02 (0.621) stands for the code before #945. The profiled arms on this box: e4b device-busy 0.665 (was 0.562) at 97,851 device events and 619,192 CPU-side ops per step (was 139,181 / 744,465); Unsloth 0.305 at 81,780 / 515,750 -- e4b now spends ~2.4x Unsloth's device time per step, which is the remaining gap on sm_90. axolotl trained on this box (one VALID draw, axolotl/e4b 1.299, a reported row); HF + PEFT hit its alarm again."
     }
   ]
 }

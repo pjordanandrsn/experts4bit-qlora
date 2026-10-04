@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Reads: TC1 amendment 20 (host reuse, 0.933 / 0.951 on a 5090) and TC1c amendment 1 (H100 NVL, Unsloth/e4b 0.817)
+
+- **TC1 amendment 20** (`tc1-5090-51`, AMD EPYC 7C13, $0.36). grouped-nf4-gemm's per-pass host reuse (`GNF4_HOST_REUSE`, #444,
+  values identical) steps e4b's field recipe at **0.933** [0.912, 0.954] (shipped) and **0.951** [0.922, 0.980] (matched) of the flag
+  off. All eight arms are VALID and every pair stable; held-out is unchanged. P33 and P34 HELD. By the registered rule the flag becomes
+  grouped-nf4-gemm's default (#446). Register `e4b.train.host-reuse.qwen3.5090.2026-10-04`; read page
+  `bench/h2h-2026-10-02/tc1/RESULTS-tc1-reuseab.md`. The instance billed $0.84/h against a declared $0.69/h GPU ceiling: the 320 GB
+  disk is billed on top, and the launcher's ceiling does not count it (adertha-agents#140).
+- **TC1c amendment 1** (`tc1c-h100-3`, AMD EPYC 9534, $4.33). With e4b after TC1 amendments 10–15, the matched position on an H100
+  NVL is Unsloth/e4b **0.817** [0.799, 0.836]: Unsloth is still faster per step there, by 1.22× (1.61× before #945). The matched set
+  is EQUIVALENT. P5 and P6 HELD. e4b's step fell ×0.768 since the first H100 box, and it is now mostly device-bound on that card
+  (device-busy 0.665), at ~2.4× Unsloth's device time per step. Register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04`; the
+  2026-10-02 row stays, labelled as the code before #945. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ### `E4B_MOE_KEEP_LAYERS=all|n`: keep MoE activations instead of recomputing them under gradient checkpointing (opt-in); the training combine saves bf16 (values identical)
 
 - **Why.** Hugging Face checkpoints each decoder layer whole, so the fused training step's backward re-runs every MoE forward. On a
