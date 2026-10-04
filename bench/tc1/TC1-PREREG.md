@@ -1108,3 +1108,23 @@ Each is FALSIFIED outside its band, and UNTESTED where a side is unstable, not V
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; no Unsloth venvs are built. Qwen3-30B-A3B's
 download plus eight arms come to about $1.30; this is in the standing no-ask tier.
+
+### Amendment 27 (2026-10-04T22:48Z, after amendment 25's first box): one re-draw of the same-stack box, on another machine
+
+Amendment 25's box (`tc1-5090-67`, Intel Core Ultra 9 285K) read:
+
+- **P52 HELD:** Unsloth and e4b's reference are EQUIVALENT to e4b's fused arm on one stack, and parity PASSES.
+- **P50 UNTESTED:** Unsloth's two draws were 18.2 % apart (4.913 / 5.899 s/step).
+- **P51 UNTESTED:** e4b's field-image draws were 8.4 % apart (2.305 / 2.507).
+
+e4b's same-stack draws were stable (2.220 / 2.188). The SM clock was steady at 2,437–2,445 MHz on e4b's arms and 2,865 MHz on Unsloth's,
+and the host load average stayed near 1.2, so the logs do not show the cause.
+
+**This amendment** re-draws the same token (`qwen3samestack`) once on a different machine. The launcher avoids box 1's machine. The
+predictions, bands and decision rules are amendment 25's, unchanged, and the re-draw is read on its own, not pooled with box 1.
+
+**Its reading is final.** If a side is unstable again, P50 and P51 stay UNTESTED, and no further re-draw is made under amendment 25.
+Box 1's descriptive medians, Unsloth/e4b about 2.45 and the environment about 0.92, are not readings and are not quoted.
+
+**Budget.** One RTX 5090 at the policy rate, 3 h guard, about $1; this is in the standing no-ask tier.
+
