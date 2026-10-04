@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### TC1c amendment 7 registered: the H100 position at default settings on 0.45.0 / grouped-nf4-gemm 0.37.0 (P21–P23). One H100 NVL
+
+- **Why.** Amendment 6 read the grouped_mm route at 1.030 with it forced, as a labelled row. grouped-nf4-gemm 0.37.0 makes the
+  route its sm_90 default, and 0.45.0 is the first release on it. This box reads the position with nothing set.
+- **Predictions.** P21 Unsloth/e4b in [0.95, 1.12]. P22 `auto` engages the route with `GNF4_TRAIN_GEMM` unset (16,896 forward and
+  7,680 dgrad calls). P23 the matched set EQUIVALENT.
+- **Decision.** All three held: this becomes the H100 default-settings position, superseding amendment 1's 0.817.
+  `bench/tc1/TC1C-PREREG.md` amendment 7.
+
 ## 0.45.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.37.0, whose two new defaults were registered and read here: programmatic dependent launch capped to launches of at most 8 rows (lane P113: SC1's int4 serving decode 1.0404× at one request and 1.0000× at 16 on an RTX 5090, identical tokens) and the grouped_mm training route on sm_90 (TC1c amendment 6: Unsloth/e4b 1.030 on an H100 NVL, a labelled row)
 
 **0.45.0.** No default in this package changes. Two change in grouped-nf4-gemm 0.37.0, each by a rule registered here, and CI now tests against 0.37.0's commit.
