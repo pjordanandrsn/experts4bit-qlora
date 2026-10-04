@@ -39,6 +39,50 @@ the grouped GEMM alone at 0.20 / 0.16 of them. The decision rule turned a P17 wi
 this one is near-exact, not identical. It is recorded, not taken. It would matter only if the grouped_mm route, whose dgrad reads 0.494,
 does not become the H100 default after amendment 4. This box quotes no position and changes no register row.
 
+## Amendment 4 (2026-10-04): the grouped_mm route makes e4b slower on the full step — its dequant kernel, not the route — P12 and P13 FALSIFIED, P14 HELD
+
+Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 4.
+
+**The boxes.** Both ran TC1c's token on an H100 NVL (AMD EPYC 9534, driver 595.71.05) with e4b `8208f5e` and grouped-nf4-gemm `e7ec90a`
+(#450). HF and axolotl were skipped. Receipts are in [`receipts/tc1c-h100-6/`](receipts/tc1c-h100-6/) and
+[`receipts/tc1c-h100-7/`](receipts/tc1c-h100-7/).
+
+- **Box R** (`tc1c-h100-6`, instance 54119104, $2.49 invoiced): every e4b arm with `GNF4_TRAIN_GEMM=grouped_mm`.
+- **Box K** (`tc1c-h100-7`, instance 54119272, $2.49 invoiced): the same plus `E4B_MOE_KEEP_LAYERS=all`, the compact delta and host
+  reuse.
+
+Engagement is verified on every fused arm. `route_ab` names `grouped_mm` with 16,896 forward and 7,680 dgrad calls on box R, and
+9,216 and 7,680 on box K. Box K's `keep_ab` records 48 layers.
+
+| box | e4b s/step (d1 / d2) | Unsloth s/step | **Unsloth/e4b** | its counterpart | peak e4b / Unsloth | verdict |
+|---|---|---|---|---|---|---|
+| R (route) | 3.956 / 3.908 (3.932) | 2.612 | **0.664** [0.650, 0.678] | 0.817 (amendment 1, e4b 3.146 s) | 27.20 / 24.27 GB | **P12 FALSIFIED** (0.85–1.20) |
+| K (keep + route) | 2.806 / 2.735 (2.771) | 2.588 | **0.934** [0.916, 0.953] | 1.100 (amendment 2, e4b 2.343 s) | 34.08 / 24.27 GB | **P13 FALSIFIED** (1.15–1.60) |
+
+**P14 HELD.** On both boxes e4b's reference is inside the fused arm's draw noise. Unsloth is inside it on R and EQUIVALENT on K. The
+route's training numerics are fine.
+
+**Why the step got slower.** The profiled e4b arm on box R reads device-busy 0.855:
+
+- `_dequant_groups_kernel`, grouped-nf4-gemm's own dequant for the route, took **2,178 ms of device time per step**: 1,152 calls at
+  **1.89 ms each**. The grouped GEMMs took 250 ms per step.
+- Amendment 1's fused forward + dgrad kernels took 1,424 ms per step.
+- Box K's dequant took 1,456 ms per step over 768 calls; keeping activations removes the recompute's calls.
+- Amendment 3's replay, whose ratios this box's predictions relied on, timed **bitsandbytes'** `dequantize_4bit` at about 0.46 ms
+  per call, and the route does not use that.
+- On an RTX A2000 the route's dequant is 2.9–4.1× slower than bitsandbytes' on the same stacks (51–75 against about 210 GB/s;
+  outputs bit-equal).
+
+So the falsification is the route's dequant kernel, not the dequant-then-grouped-GEMM idea. At bitsandbytes' speed the route would
+take about 0.8 s per step against the fused kernels' 1.42 s.
+
+**What follows.**
+
+- By the decision rule the route does not become the sm_90 default. It stays opt-in, and both readings become LABELLED rows:
+  `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route` (0.664) and `...moe-keep-route` (0.934), quoted beside amendments 1 and 2,
+  never in place of them.
+- A faster dequant kernel is the next change, with its own registered box.
+
 ## Amendment 3 (2026-10-04): on the H100, dequantize + `torch._grouped_mm` runs the recorded GEMM calls in 0.50–0.60 of the fused kernels' time — a kernel replay, not a position
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 3.

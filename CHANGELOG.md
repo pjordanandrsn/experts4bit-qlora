@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Read: TC1c amendment 4 — grouped-nf4-gemm's grouped_mm route as shipped makes e4b slower on an H100 (P12, P13 FALSIFIED; P14 HELD)
+
+- **What.** Two H100 NVL boxes ran with every e4b arm on `GNF4_TRAIN_GEMM=grouped_mm` (grouped-nf4-gemm#450), at $2.49 invoiced each.
+- **Box R,** route alone: Unsloth/e4b **0.664** [0.650, 0.678], e4b 3.932 s/step. That is slower than its default 3.146 s (0.817).
+- **Box K,** route + MoE activations kept: **0.934** [0.916, 0.953], e4b 2.771 s. That is slower than keep alone, 2.343 s (1.100).
+- **Numerics.** The matched set stays equivalent on both (P14 HELD).
+- **Diagnosis.** The route's dequant kernel took 1.89 ms per call: 2,178 ms of device time per step against the fused kernels' 1,424 ms.
+  That is about 4× slower than the bitsandbytes dequant amendment 3's replay timed, and the A2000 measures the same gap (2.9–4.1×).
+- **Decision.** The route stays opt-in, and the readings are labelled rows (`...h100.2026-10-04.route`, `.moe-keep-route`) beside the
+  default-settings and keep rows. A faster dequant kernel is the next change. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ### Read: TC1c amendment 5 — the fused kernels' own configs on the H100 change nothing worth taking (P15, P16 FALSIFIED; P17 HELD, near-exact)
 
 - **What.** `tc1c-h100-8` (H100 NVL, $0.33 invoiced) swept grouped-nf4-gemm's fused forward (25 configs) and dgrad (9) on the 128
