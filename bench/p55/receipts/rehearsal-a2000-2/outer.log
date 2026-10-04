@@ -1,0 +1,51 @@
+[2026-10-04T13:38:06Z] P55 rehearse-1: e4b a3bca427a8c384192ce476a7c2eb48c4dd3edd68, model ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89
+NVIDIA RTX A2000 12GB, 12282 MiB, 575.64.05
+cpu: Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz
+kernel: 6.6.32-qnap
+MemTotal:       131757372 kB
+MemAvailable:   53722444 kB
+SwapTotal:      63736824 kB
+cgroup_limit(/sys/fs/cgroup/memory/memory.limit_in_bytes): 9223372036854771712
+overcommit_memory: 0
+overcommit_ratio: 50
+max_map_count: 65530
+ulimit:
+  real-time non-blocking time  (microseconds, -R) unlimited
+  core file size              (blocks, -c) 0
+  data seg size               (kbytes, -d) unlimited
+  scheduling priority                 (-e) 0
+  file size                   (blocks, -f) unlimited
+  pending signals                     (-i) 514507
+  max locked memory           (kbytes, -l) 8192
+  max memory size             (kbytes, -m) unlimited
+  open files                          (-n) 65535
+  pipe size                (512 bytes, -p) 8
+  POSIX message queues         (bytes, -q) 819200
+  real-time priority                  (-r) 0
+  stack size                  (kbytes, -s) 8192
+  cpu time                   (seconds, -t) unlimited
+  max user processes                  (-u) 514507
+  virtual memory              (kbytes, -v) unlimited
+  file locks                          (-x) unlimited
+[2026-10-04T13:38:06Z] memory: MemTotal 125.7 GiB, cgroup limit none B -> effective 125.7 GiB
+[2026-10-04T13:38:06Z] STOP-1: effective memory 125.7 GiB > 72 GiB -- CLASS NOT DRAWN; arms run, P1 gets no verdict
+[2026-10-04T13:38:06Z] git absent -- installing it (apt, bounded)
+[2026-10-04T13:38:22Z] install e4b @a3bca427a8c384192ce476a7c2eb48c4dd3edd68 (transformers 5.17.0, bitsandbytes 0.50.2; torch held at 2.8.0)
+tripwire OK: e4b 0.45.0 @a3bca427a8c3 torch 2.8.0+cu128 transformers 5.17.0 huggingface_hub 1.33.0 bitsandbytes 0.50.2
+[2026-10-04T13:39:17Z] fetch: ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89 (51.6 GB, Xet disabled, alarm 2628s)
+[2026-10-04T13:41:11Z] fetch: done, 6.2G in the HF cache
+[2026-10-04T13:41:11Z] arm A_baseline: starting (E4B_DUMMY=0)
+[2026-10-04T13:41:25Z] arm A_baseline: rc=0  P55 A_baseline: OK
+[2026-10-04T13:41:25Z] arm B_sync: starting (E4B_LOAD_SYNC_DEBUG=1 CUDA_LAUNCH_BLOCKING=1)
+[2026-10-04T13:41:38Z] arm B_sync: rc=0  P55 B_sync: OK
+[2026-10-04T13:41:38Z] arm C_headroom: starting (armed, with a 2 s MemAvailable trace)
+[2026-10-04T13:41:38Z] arm C_headroom: starting (E4B_LOAD_SYNC_DEBUG=1 CUDA_LAUNCH_BLOCKING=1)
+[2026-10-04T13:41:51Z] arm C_headroom: rc=0  P55 C_headroom: OK
+[2026-10-04T13:41:51Z] C_headroom: MemAvailable min 46.9 GiB; cgroup usage max 8.5 GiB
+=== P55 arms ===
+  A_baseline   OK       
+  B_sync       OK       
+  C_headroom   OK       
+[2026-10-04T13:41:51Z] class_drawn=0 (P1 gets a verdict only when 1)
+[2026-10-04T13:41:51Z] ----- summary -----
+[2026-10-04T13:41:51Z] TP_DONE rc=0

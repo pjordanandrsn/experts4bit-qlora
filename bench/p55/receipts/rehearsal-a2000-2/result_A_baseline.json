@@ -1,0 +1,9 @@
+{
+ "arm": "A_baseline",
+ "env": {
+  "E4B_LOAD_SYNC_DEBUG": null,
+  "CUDA_LAUNCH_BLOCKING": null
+ },
+ "status": "OK",
+ "n_layers": 32
+}

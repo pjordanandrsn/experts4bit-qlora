@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### P55 Amendment 2 (#344): the box script installs the loader's stack and git, rehearsed end to end at $0; one rerun (bench and tests only)
+
+- **Why.** `p55-5090-1` drew the low-RAM class (62 GB allotment, effective 59.9 GiB) and then died at the fetch, before
+  any arm, on `No module named 'huggingface_hub'`. e4b's base dependencies are torch and bitsandbytes only, and the
+  registered runner installed the bare package, so it could never have loaded the model. The run cost $0.015.
+- **What.**
+  - The runner installs as P113's does (torch held; transformers 5.17.0, bitsandbytes 0.50.2, safetensors,
+    huggingface_hub, accelerate; bounded, exit 9).
+  - A tripwire checks the installed commit and the loader's imports.
+  - The runner installs git when the image lacks it. The lane's image does, and P113 had relied on Vast's runtime layer.
+- **Rehearsed.** The whole box script ran on the QNAP A2000 in the lane's image against a 6.6 GB granite MoE. Rehearsal 1
+  found the missing git. Rehearsal 2 ran with rc=0: all three arms loaded, and the reducer read the result correctly.
+- **Rerun.** STOP-3 is amended for this case only: exactly one rerun, `p55-5090-2`, because `p55-5090-1` observed nothing.
+  Its outcome is final.
+- **Tests.** `tests/test_p55_staged_pin.py`: the install, the tripwire, and git ensured before pip.
+
 ### P55 Amendment 1 (#344): the launcher can now draw the low-RAM host class, and the lane reads the class correctly (bench and tests only)
 
 - **Why.** P55 tests whether #344's Gemma-4 load failure (`CUDA error: invalid argument` on 2 of 6 rented 5090s) is a
