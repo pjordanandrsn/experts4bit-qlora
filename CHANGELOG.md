@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Lane K28's runner (#1015): the GNF4_PDL decode-chain bench's box side (bench and tests only)
+
+- **What.** `bench/k28/` drives grouped-nf4-gemm's K28 (`kernel/PREREG-k28-pdl-decode-chain.md`). It is K27's runner with
+  the bench and the premise replaced.
+- **The premise.** grouped-nf4-gemm's `kernel/test_pdl.py`, compiled on the card. It must report 23 passed and none
+  skipped, because its sm_90+ tests are the on-card bitwise and engagement checks.
+- **The tripwire.** It refuses unless:
+  - the installed kernel package carries the `GNF4_PDL` switch and its inline-PTX preamble;
+  - Triton has `launch_pdl`;
+  - the card is sm_90+, and the switch reads as active there.
+- `tests/test_k28_staged_pin.py` pins the runner's bytes and shape, the exit codes and the driver's dry run.
+
 ### Read: TC1c amendment 2 — on an H100 NVL, e4b keeping its MoE activations is faster per step than Unsloth (1.100, a labelled row)
 
 - **What.** `tc1c-h100-4` ran on the same machine as amendment 1's box, for $2.80. Every e4b arm used
