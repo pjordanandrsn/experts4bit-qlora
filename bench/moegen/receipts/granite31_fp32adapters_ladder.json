@@ -1,0 +1,2002 @@
+{
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "revision": null,
+ "model_type": "granitemoe",
+ "offload": 0,
+ "attn4": 1,
+ "n_attn4": 128,
+ "n_attn_expected": 128,
+ "n_attn_lora": 128,
+ "r": 16,
+ "adapter_dtype": "fp32",
+ "seq": 512,
+ "mb": 1,
+ "steps": 6,
+ "warmup": 3,
+ "n_trainable": 99614720,
+ "n_expert_modules": 32,
+ "load_s": 47.3,
+ "extra_env": "",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "torch": "2.8.0+cu128",
+ "rungs": [
+  {
+   "s_per_step": 1.3152,
+   "s_per_step_all": [
+    1.3102,
+    1.5673,
+    1.315,
+    1.3561,
+    1.3117,
+    1.3154
+   ],
+   "tokens_per_s": 389.3,
+   "peak_alloc_gb": 4.092,
+   "peak_reserved_gb": 4.211,
+   "host_maxrss_gb": 7.49,
+   "losses": [
+    1.3586,
+    1.829,
+    1.5304,
+    1.2681,
+    1.6824,
+    1.2764,
+    1.3679,
+    1.4422,
+    1.7673
+   ],
+   "syncs_one_step": 67,
+   "profile": {
+    "wall_s": 1.3995,
+    "device_busy_s": 1.2602,
+    "device_busy_frac": 0.901,
+    "device_launches": 12290,
+    "cpu_events": 87058,
+    "family_ms": {
+     "moe_expert": 501.35,
+     "elementwise_reduce": 407.94,
+     "dense_gemm": 336.08,
+     "other": 31.32,
+     "attention_core": 8.17,
+     "rope": 4.0,
+     "rmsnorm": 1.82,
+     "memcpy": 0.73
+    },
+    "top_kernels_ms": [
+     [
+      "_gemm_nf4_grouped",
+      284.61
+     ],
+     [
+      "_dgrad_nf4_grouped",
+      208.89
+     ],
+     [
+      "ampere_sgemm_128x128_tn",
+      130.75
+     ],
+     [
+      "ampere_sgemm_128x128_nt",
+      82.71
+     ],
+     [
+      "ampere_sgemm_128x128_nn",
+      72.71
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::nati",
+      52.71
+     ],
+     [
+      "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+      47.31
+     ],
+     [
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+      46.37
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+      37.38
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+      34.31
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<4> >(at::Ten",
+      31.78
+     ],
+     [
+      "Optimizer.step#AdamW.step",
+      31.2
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(i",
+      29.25
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, f",
+      19.09
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+      15.59
+     ],
+     [
+      "void at::native::indexFuncLargeIndex<c10::BFloat16, long, unsigned int, 2, 2, -2, true, at::native::(anonymous namespace",
+      13.47
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::nat",
+      13.34
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFunctor<float, float, float, at::native::binary_inte",
+      9.48
+     ],
+     [
+      "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_fun",
+      7.5
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      7.41
+     ],
+     [
+      "void kDequantizeBlockwise<__nv_bfloat16, 512, 64, 8, 2>(float*, unsigned char*, float*, __nv_bfloat16*, int, int)",
+      6.73
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<",
+      6.27
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListScalarLis",
+      6.09
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, ",
+      5.19
+     ],
+     [
+      "void cutlass::Kernel2<cutlass_75_tensorop_bf16_s1688gemm_bf16_128x256_tn_align1>(cutlass_75_tensorop_bf16_s1688gemm_bf16",
+      5.05
+     ]
+    ]
+   },
+   "rung": "fused",
+   "rung_env": {},
+   "n_patched": 32,
+   "counters_before": {
+    "fast_train": {
+     "patched": 0,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 0,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 0,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 0.0,
+     "max": 0.0,
+     "last_bytes": 0.0,
+     "last_bytes_alloc": 0.0
+    },
+    "ring": {
+     "staged": 0,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 0,
+     "upload_misses": 0,
+     "plan_hits": 0,
+     "plan_misses": 0
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 0
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 0,
+     "calls": 0,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 0,
+     "calls": 0
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 0
+    }
+   },
+   "counters": {
+    "fast_train": {
+     "patched": 32,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 704,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 1408,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.8037109375,
+     "max": 5.0,
+     "last_bytes": 63815680.0,
+     "last_bytes_alloc": 127631360.0
+    },
+    "ring": {
+     "staged": 1865,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 1985,
+     "upload_misses": 1865,
+     "plan_hits": 715,
+     "plan_misses": 693
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 1408
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 65,
+     "calls": 1419,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 1,
+     "calls": 704
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 0
+    }
+   }
+  },
+  {
+   "s_per_step": 2.1124,
+   "s_per_step_all": [
+    1.8959,
+    1.9072,
+    2.1606,
+    2.0643,
+    2.3281,
+    2.3146
+   ],
+   "tokens_per_s": 242.4,
+   "peak_alloc_gb": 4.137,
+   "peak_reserved_gb": 4.289,
+   "host_maxrss_gb": 7.49,
+   "losses": [
+    1.3589,
+    1.838,
+    1.5286,
+    1.2722,
+    1.6835,
+    1.2717,
+    1.3692,
+    1.4428,
+    1.7699
+   ],
+   "syncs_one_step": 737,
+   "profile": {
+    "wall_s": 5.3972,
+    "device_busy_s": 1.5887,
+    "device_busy_frac": 0.294,
+    "device_launches": 18905,
+    "cpu_events": 111466,
+    "family_ms": {
+     "elementwise_reduce": 605.57,
+     "moe_expert": 568.67,
+     "dense_gemm": 380.86,
+     "other": 31.46,
+     "memcpy": 24.08,
+     "attention_core": 9.19
+    },
+    "top_kernels_ms": [
+     [
+      "_gemm_nf4_grouped",
+      313.92
+     ],
+     [
+      "_dgrad_nf4_grouped",
+      246.11
+     ],
+     [
+      "ampere_sgemm_128x128_tn",
+      142.13
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+      115.13
+     ],
+     [
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+      99.72
+     ],
+     [
+      "ampere_sgemm_128x128_nt",
+      97.38
+     ],
+     [
+      "ampere_sgemm_128x128_nn",
+      83.82
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+      37.18
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native:",
+      36.35
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::nati",
+      35.3
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::nat",
+      34.24
+     ],
+     [
+      "Optimizer.step#AdamW.step",
+      31.2
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(i",
+      29.89
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, f",
+      24.27
+     ],
+     [
+      "Memcpy DtoD (Device -> Device)",
+      23.14
+     ],
+     [
+      "void (anonymous namespace)::indexing_backward_kernel<float, 4>(long const*, long const*, float const*, float*, long, lon",
+      20.3
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+      17.18
+     ],
+     [
+      "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+      17.01
+     ],
+     [
+      "void at::native::indexFuncLargeIndex<c10::BFloat16, long, unsigned int, 2, 2, -2, true, at::native::(anonymous namespace",
+      15.52
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFunctor<float, float, float, at::native::binary_inte",
+      14.63
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, ",
+      14.49
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, ",
+      12.97
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      8.6
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::T",
+      7.97
+     ],
+     [
+      "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_fun",
+      7.54
+     ]
+    ]
+   },
+   "rung": "fused_pre",
+   "rung_env": {
+    "E4B_GROUPING": "legacy",
+    "GNF4_PINNED_RING": "0",
+    "GNF4_HOST_REUSE": "0",
+    "NF4_QLORA_LEAN_DELTA": "0",
+    "GNF4_PREFILL_TILE_RULE": "max",
+    "E4B_FUSED_RMSNORM": "0",
+    "E4B_FUSED_ROPE": "0"
+   },
+   "n_patched": 32,
+   "counters_before": {
+    "fast_train": {
+     "patched": 0,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 704,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 1408,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.8037109375,
+     "max": 5.0,
+     "last_bytes": 63815680.0,
+     "last_bytes_alloc": 127631360.0
+    },
+    "ring": {
+     "staged": 1865,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 1985,
+     "upload_misses": 1865,
+     "plan_hits": 715,
+     "plan_misses": 693
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 1408
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 65,
+     "calls": 1419,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 1,
+     "calls": 704
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 0
+    }
+   },
+   "counters": {
+    "fast_train": {
+     "patched": 32,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 1408,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 2816,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.81298828125,
+     "max": 5.0,
+     "last_bytes": 63971328.0,
+     "last_bytes_alloc": 127942656.0
+    },
+    "ring": {
+     "staged": 1865,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 1985,
+     "upload_misses": 1865,
+     "plan_hits": 715,
+     "plan_misses": 693
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 2816
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 65,
+     "calls": 1419,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 1,
+     "calls": 704
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 0
+    }
+   }
+  },
+  {
+   "s_per_step": 1.9516,
+   "s_per_step_all": [
+    1.9602,
+    1.616,
+    2.3123,
+    1.9688,
+    1.943,
+    1.9121
+   ],
+   "tokens_per_s": 262.3,
+   "peak_alloc_gb": 5.06,
+   "peak_reserved_gb": 5.271,
+   "host_maxrss_gb": 7.49,
+   "losses": [
+    1.3586,
+    1.8352,
+    1.5295,
+    1.2647,
+    1.68,
+    1.273,
+    1.3672,
+    1.4354,
+    1.7652
+   ],
+   "syncs_one_step": 34,
+   "profile": {
+    "wall_s": 2.8805,
+    "device_busy_s": 0.9072,
+    "device_busy_frac": 0.315,
+    "device_launches": 10034,
+    "cpu_events": 70120,
+    "family_ms": {
+     "elementwise_reduce": 329.89,
+     "moe_expert": 320.67,
+     "dense_gemm": 243.74,
+     "other": 31.24,
+     "attention_core": 7.58,
+     "rope": 3.7,
+     "rmsnorm": 1.14,
+     "memcpy": 0.41
+    },
+    "top_kernels_ms": [
+     [
+      "_dgrad_nf4_grouped",
+      189.38
+     ],
+     [
+      "_gemm_nf4_grouped",
+      124.8
+     ],
+     [
+      "ampere_sgemm_128x128_nt",
+      74.54
+     ],
+     [
+      "ampere_sgemm_128x128_nn",
+      67.04
+     ],
+     [
+      "ampere_sgemm_128x128_tn",
+      58.92
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::nati",
+      49.38
+     ],
+     [
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+      40.24
+     ],
+     [
+      "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+      34.13
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<4> >(at::Ten",
+      31.54
+     ],
+     [
+      "Optimizer.step#AdamW.step",
+      31.19
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+      25.99
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+      25.11
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(i",
+      20.37
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, f",
+      12.67
+     ],
+     [
+      "void at::native::indexFuncLargeIndex<c10::BFloat16, long, unsigned int, 2, 2, -2, true, at::native::(anonymous namespace",
+      12.42
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+      12.1
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFunctor<float, float, float, at::native::binary_inte",
+      9.47
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      6.91
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::nat",
+      6.58
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<",
+      6.26
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListScalarLis",
+      6.09
+     ],
+     [
+      "void kDequantizeBlockwise<__nv_bfloat16, 512, 64, 8, 2>(float*, unsigned char*, float*, __nv_bfloat16*, int, int)",
+      5.57
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<",
+      4.7
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<",
+      4.69
+     ],
+     [
+      "void cutlass::Kernel2<cutlass_75_tensorop_bf16_s1688gemm_bf16_128x256_tn_align1>(cutlass_75_tensorop_bf16_s1688gemm_bf16",
+      4.47
+     ]
+    ]
+   },
+   "rung": "keep",
+   "rung_env": {
+    "E4B_MOE_KEEP_LAYERS": "all",
+    "NF4_QLORA_COMPACT_DELTA": "1"
+   },
+   "n_patched": 32,
+   "counters_before": {
+    "fast_train": {
+     "patched": 0,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 1408,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 2816,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.81298828125,
+     "max": 5.0,
+     "last_bytes": 63971328.0,
+     "last_bytes_alloc": 127942656.0
+    },
+    "ring": {
+     "staged": 1865,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 1985,
+     "upload_misses": 1865,
+     "plan_hits": 715,
+     "plan_misses": 693
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 2816
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 65,
+     "calls": 1419,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 1,
+     "calls": 704
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 0
+    }
+   },
+   "counters": {
+    "fast_train": {
+     "patched": 32,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 2112,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 3520,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.359375,
+     "max": 5.0,
+     "last_bytes": 56360960.0,
+     "last_bytes_alloc": 112721920.0
+    },
+    "ring": {
+     "staged": 3062,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 3252,
+     "upload_misses": 3062,
+     "plan_hits": 1067,
+     "plan_misses": 1045
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 3520
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 130,
+     "calls": 2134,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 2,
+     "calls": 1408
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 32,
+     "checkpointed_children": 32
+    }
+   }
+  },
+  {
+   "s_per_step": 2.1167,
+   "s_per_step_all": [
+    1.8665,
+    2.2336,
+    1.7132,
+    3.4523,
+    1.9998,
+    2.5995
+   ],
+   "tokens_per_s": 241.9,
+   "peak_alloc_gb": 5.06,
+   "peak_reserved_gb": 5.271,
+   "host_maxrss_gb": 7.49,
+   "losses": [
+    1.3586,
+    1.8345,
+    1.5256,
+    1.2722,
+    1.6847,
+    1.267,
+    1.364,
+    1.4457,
+    1.7637
+   ],
+   "syncs_one_step": 34,
+   "profile": {
+    "wall_s": 1.3044,
+    "device_busy_s": 0.9855,
+    "device_busy_frac": 0.756,
+    "device_launches": 10034,
+    "cpu_events": 70370,
+    "family_ms": {
+     "moe_expert": 363.33,
+     "elementwise_reduce": 334.43,
+     "dense_gemm": 273.47,
+     "other": 31.26,
+     "attention_core": 8.45,
+     "rope": 4.09,
+     "rmsnorm": 1.19,
+     "memcpy": 0.5
+    },
+    "top_kernels_ms": [
+     [
+      "_dgrad_nf4_grouped",
+      219.39
+     ],
+     [
+      "_gemm_nf4_grouped",
+      136.92
+     ],
+     [
+      "ampere_sgemm_128x128_nt",
+      86.65
+     ],
+     [
+      "ampere_sgemm_128x128_nn",
+      75.84
+     ],
+     [
+      "ampere_sgemm_128x128_tn",
+      63.49
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::nati",
+      49.51
+     ],
+     [
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+      41.28
+     ],
+     [
+      "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+      34.19
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<4> >(at::Ten",
+      31.85
+     ],
+     [
+      "Optimizer.step#AdamW.step",
+      31.21
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+      26.08
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+      25.18
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(i",
+      20.5
+     ],
+     [
+      "void at::native::indexFuncLargeIndex<c10::BFloat16, long, unsigned int, 2, 2, -2, true, at::native::(anonymous namespace",
+      14.03
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+      13.07
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, f",
+      12.72
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFunctor<float, float, float, at::native::binary_inte",
+      9.49
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      7.73
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::nat",
+      6.64
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<",
+      6.27
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListScalarLis",
+      6.08
+     ],
+     [
+      "void kDequantizeBlockwise<__nv_bfloat16, 512, 64, 8, 2>(float*, unsigned char*, float*, __nv_bfloat16*, int, int)",
+      5.99
+     ],
+     [
+      "void cutlass::Kernel2<cutlass_75_tensorop_bf16_s1688gemm_bf16_128x256_tn_align1>(cutlass_75_tensorop_bf16_s1688gemm_bf16",
+      5.04
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<",
+      4.71
+     ],
+     [
+      "ampere_sgemm_32x128_tn",
+      4.7
+     ]
+    ]
+   },
+   "rung": "keep#2",
+   "rung_env": {
+    "E4B_MOE_KEEP_LAYERS": "all",
+    "NF4_QLORA_COMPACT_DELTA": "1"
+   },
+   "n_patched": 32,
+   "counters_before": {
+    "fast_train": {
+     "patched": 0,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 2112,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 3520,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.359375,
+     "max": 5.0,
+     "last_bytes": 56360960.0,
+     "last_bytes_alloc": 112721920.0
+    },
+    "ring": {
+     "staged": 3062,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 3252,
+     "upload_misses": 3062,
+     "plan_hits": 1067,
+     "plan_misses": 1045
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 3520
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 130,
+     "calls": 2134,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 2,
+     "calls": 1408
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 32
+    }
+   },
+   "counters": {
+    "fast_train": {
+     "patched": 32,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 2816,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 4224,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.388671875,
+     "max": 5.0,
+     "last_bytes": 56852480.0,
+     "last_bytes_alloc": 113704960.0
+    },
+    "ring": {
+     "staged": 4262,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 4516,
+     "upload_misses": 4262,
+     "plan_hits": 1419,
+     "plan_misses": 1397
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 4224
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 195,
+     "calls": 2849,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 3,
+     "calls": 2112
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 32,
+     "checkpointed_children": 64
+    }
+   }
+  },
+  {
+   "s_per_step": 2.8185,
+   "s_per_step_all": [
+    3.2913,
+    2.7651,
+    2.8719,
+    4.5519,
+    2.5329,
+    2.0494
+   ],
+   "tokens_per_s": 181.7,
+   "peak_alloc_gb": 4.137,
+   "peak_reserved_gb": 4.289,
+   "host_maxrss_gb": 7.49,
+   "losses": [
+    1.3589,
+    1.8339,
+    1.5255,
+    1.2665,
+    1.6848,
+    1.2709,
+    1.3622,
+    1.4446,
+    1.7688
+   ],
+   "syncs_one_step": 737,
+   "profile": {
+    "wall_s": 1.8259,
+    "device_busy_s": 1.4332,
+    "device_busy_frac": 0.785,
+    "device_launches": 18884,
+    "cpu_events": 110890,
+    "family_ms": {
+     "elementwise_reduce": 588.15,
+     "moe_expert": 486.78,
+     "dense_gemm": 326.03,
+     "other": 31.42,
+     "memcpy": 23.94,
+     "attention_core": 8.05
+    },
+    "top_kernels_ms": [
+     [
+      "_gemm_nf4_grouped",
+      276.55
+     ],
+     [
+      "_dgrad_nf4_grouped",
+      202.52
+     ],
+     [
+      "ampere_sgemm_128x128_tn",
+      127.14
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+      114.97
+     ],
+     [
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+      95.8
+     ],
+     [
+      "ampere_sgemm_128x128_nt",
+      80.03
+     ],
+     [
+      "ampere_sgemm_128x128_nn",
+      70.5
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+      37.05
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::nati",
+      35.23
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native:",
+      33.48
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::nat",
+      32.48
+     ],
+     [
+      "Optimizer.step#AdamW.step",
+      31.19
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(i",
+      29.72
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, f",
+      24.07
+     ],
+     [
+      "Memcpy DtoD (Device -> Device)",
+      23.07
+     ],
+     [
+      "void (anonymous namespace)::indexing_backward_kernel<float, 4>(long const*, long const*, float const*, float*, long, lon",
+      20.2
+     ],
+     [
+      "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+      16.9
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+      15.19
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFunctor<float, float, float, at::native::binary_inte",
+      14.58
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, ",
+      14.39
+     ],
+     [
+      "void at::native::indexFuncLargeIndex<c10::BFloat16, long, unsigned int, 2, 2, -2, true, at::native::(anonymous namespace",
+      13.11
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, ",
+      12.08
+     ],
+     [
+      "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_fun",
+      7.48
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::T",
+      7.39
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      7.24
+     ]
+    ]
+   },
+   "rung": "fused_pre#2",
+   "rung_env": {
+    "E4B_GROUPING": "legacy",
+    "GNF4_PINNED_RING": "0",
+    "GNF4_HOST_REUSE": "0",
+    "NF4_QLORA_LEAN_DELTA": "0",
+    "GNF4_PREFILL_TILE_RULE": "max",
+    "E4B_FUSED_RMSNORM": "0",
+    "E4B_FUSED_ROPE": "0"
+   },
+   "n_patched": 32,
+   "counters_before": {
+    "fast_train": {
+     "patched": 0,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 2816,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 4224,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.388671875,
+     "max": 5.0,
+     "last_bytes": 56852480.0,
+     "last_bytes_alloc": 113704960.0
+    },
+    "ring": {
+     "staged": 4262,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 4516,
+     "upload_misses": 4262,
+     "plan_hits": 1419,
+     "plan_misses": 1397
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 4224
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 195,
+     "calls": 2849,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 3,
+     "calls": 2112
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 64
+    }
+   },
+   "counters": {
+    "fast_train": {
+     "patched": 32,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 3520,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 5632,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.81298828125,
+     "max": 5.0,
+     "last_bytes": 63971328.0,
+     "last_bytes_alloc": 127942656.0
+    },
+    "ring": {
+     "staged": 4262,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 4516,
+     "upload_misses": 4262,
+     "plan_hits": 1419,
+     "plan_misses": 1397
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 5632
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 195,
+     "calls": 2849,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 3,
+     "calls": 2112
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 64
+    }
+   }
+  },
+  {
+   "s_per_step": 2.9998,
+   "s_per_step_all": [
+    3.0023,
+    2.8232,
+    3.7749,
+    3.119,
+    2.9974,
+    2.9621
+   ],
+   "tokens_per_s": 170.7,
+   "peak_alloc_gb": 4.092,
+   "peak_reserved_gb": 4.211,
+   "host_maxrss_gb": 7.49,
+   "losses": [
+    1.3586,
+    1.844,
+    1.5366,
+    1.2651,
+    1.6792,
+    1.2724,
+    1.3732,
+    1.4349,
+    1.7672
+   ],
+   "syncs_one_step": 66,
+   "profile": {
+    "wall_s": 2.4498,
+    "device_busy_s": 1.2065,
+    "device_busy_frac": 0.493,
+    "device_launches": 12290,
+    "cpu_events": 85977,
+    "family_ms": {
+     "moe_expert": 469.69,
+     "elementwise_reduce": 405.21,
+     "dense_gemm": 317.46,
+     "other": 31.3,
+     "attention_core": 7.78,
+     "rope": 3.8,
+     "rmsnorm": 1.78,
+     "memcpy": 0.68
+    },
+    "top_kernels_ms": [
+     [
+      "_gemm_nf4_grouped",
+      266.14
+     ],
+     [
+      "_dgrad_nf4_grouped",
+      196.03
+     ],
+     [
+      "ampere_sgemm_128x128_tn",
+      123.93
+     ],
+     [
+      "ampere_sgemm_128x128_nt",
+      77.36
+     ],
+     [
+      "ampere_sgemm_128x128_nn",
+      68.92
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::nati",
+      52.63
+     ],
+     [
+      "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+      47.23
+     ],
+     [
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+      45.82
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+      37.35
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+      34.26
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::index_copy_kernel_impl<at::native::OpaqueType<4> >(at::Ten",
+      31.65
+     ],
+     [
+      "Optimizer.step#AdamW.step",
+      31.19
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(i",
+      29.14
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<float, float, f",
+      19.06
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+      14.88
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_put_kernel_impl<at::nat",
+      13.26
+     ],
+     [
+      "void at::native::indexFuncLargeIndex<c10::BFloat16, long, unsigned int, 2, 2, -2, true, at::native::(anonymous namespace",
+      12.74
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::BinaryFunctor<float, float, float, at::native::binary_inte",
+      9.48
+     ],
+     [
+      "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_fun",
+      7.47
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      7.04
+     ],
+     [
+      "void kDequantizeBlockwise<__nv_bfloat16, 512, 64, 8, 2>(float*, unsigned char*, float*, __nv_bfloat16*, int, int)",
+      6.48
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<",
+      6.27
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListScalarLis",
+      6.08
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, ",
+      5.17
+     ],
+     [
+      "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<",
+      4.69
+     ]
+    ]
+   },
+   "rung": "fused#2",
+   "rung_env": {},
+   "n_patched": 32,
+   "counters_before": {
+    "fast_train": {
+     "patched": 0,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 3520,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 5632,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.81298828125,
+     "max": 5.0,
+     "last_bytes": 63971328.0,
+     "last_bytes_alloc": 127942656.0
+    },
+    "ring": {
+     "staged": 4262,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 4516,
+     "upload_misses": 4262,
+     "plan_hits": 1419,
+     "plan_misses": 1397
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 5632
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 195,
+     "calls": 2849,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 3,
+     "calls": 2112
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 64
+    }
+   },
+   "counters": {
+    "fast_train": {
+     "patched": 32,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 4224,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 7040,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.81298828125,
+     "max": 5.0,
+     "last_bytes": 63971328.0,
+     "last_bytes_alloc": 127942656.0
+    },
+    "ring": {
+     "staged": 6127,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 6501,
+     "upload_misses": 6127,
+     "plan_hits": 2134,
+     "plan_misses": 2090
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 7040
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 260,
+     "calls": 4268,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 4,
+     "calls": 2816
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 64
+    }
+   }
+  },
+  {
+   "s_per_step": 7.2913,
+   "s_per_step_all": [
+    6.7218,
+    6.7992,
+    7.7348,
+    7.682,
+    7.0156,
+    7.567
+   ],
+   "tokens_per_s": 70.2,
+   "peak_alloc_gb": 4.069,
+   "peak_reserved_gb": 4.207,
+   "host_maxrss_gb": 7.83,
+   "losses": [
+    1.3581,
+    1.8394,
+    1.5348,
+    1.2664,
+    1.6878,
+    1.2756,
+    1.375,
+    1.4395,
+    1.7661
+   ],
+   "syncs_one_step": 30090,
+   "profile": {
+    "wall_s": 10.3235,
+    "device_busy_s": 1.4528,
+    "device_busy_frac": 0.141,
+    "device_launches": 193465,
+    "cpu_events": 1087813,
+    "family_ms": {
+     "elementwise_reduce": 736.08,
+     "dense_gemm": 497.88,
+     "moe_expert": 143.69,
+     "memcpy": 52.61,
+     "other": 43.18,
+     "attention_core": 10.54
+    },
+    "top_kernels_ms": [
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::",
+      167.26
+     ],
+     [
+      "void kDequantizeBlockwise<__nv_bfloat16, 512, 64, 8, 2>(float*, unsigned char*, float*, __nv_bfloat16*, int, int)",
+      142.33
+     ],
+     [
+      "ampere_sgemm_32x32_sliced1x4_tn",
+      71.68
+     ],
+     [
+      "void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}:",
+      69.49
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::nati",
+      59.43
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(i",
+      50.24
+     ],
+     [
+      "ampere_sgemm_32x32_sliced1x4_nn",
+      49.7
+     ],
+     [
+      "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::BinaryFunctor<c10::BFloat16, ",
+      46.2
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_tn",
+      44.51
+     ],
+     [
+      "Memcpy DtoH (Device -> Pinned)",
+      35.94
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::AUnaryFunctor<float, float, float, at::native::binary_inte",
+      35.81
+     ],
+     [
+      "void at::native::vectorized_elementwise_kernel<4, at::native::bfloat16_copy_kernel_cuda(at::TensorIteratorBase&)::{lambd",
+      34.36
+     ],
+     [
+      "ampere_sgemm_128x32_tn",
+      33.19
+     ],
+     [
+      "Optimizer.step#AdamW.step",
+      31.27
+     ],
+     [
+      "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_32x6_tn",
+      27.48
+     ],
+     [
+      "void at::native::indexFuncLargeIndex<float, long, unsigned int, 2, 2, -2, true, at::native::(anonymous namespace)::Reduc",
+      25.37
+     ],
+     [
+      "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      25.06
+     ],
+     [
+      "void at_cuda_detail::cub::DeviceRadixSortSingleTileKernel<at_cuda_detail::cub::DeviceRadixSortPolicy<long, at::cuda::cub",
+      22.65
+     ],
+     [
+      "ampere_sgemm_32x32_sliced1x4_nt",
+      21.12
+     ],
+     [
+      "void at::native::vectorized_gather_kernel<16, long>(char*, char*, long*, int, long, long, long, long, bool)",
+      18.71
+     ],
+     [
+      "void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_128x2_tn_align8>(cutlass_80_wmma_tensorop_bf1",
+      17.85
+     ],
+     [
+      "ampere_sgemm_128x32_nn",
+      17.26
+     ],
+     [
+      "ampere_sgemm_128x32_nt",
+      17.12
+     ],
+     [
+      "Memcpy DtoD (Device -> Device)",
+      15.8
+     ],
+     [
+      "void at::native::index_elementwise_kernel<128, 4, at::native::gpu_index_kernel<at::native::index_kernel_impl<at::native:",
+      14.21
+     ]
+    ]
+   },
+   "rung": "reference",
+   "rung_env": {},
+   "n_patched": 0,
+   "counters_before": {
+    "fast_train": {
+     "patched": 0,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 4224,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 7040,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.81298828125,
+     "max": 5.0,
+     "last_bytes": 63971328.0,
+     "last_bytes_alloc": 127942656.0
+    },
+    "ring": {
+     "staged": 6127,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 6501,
+     "upload_misses": 6127,
+     "plan_hits": 2134,
+     "plan_misses": 2090
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 7040
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 260,
+     "calls": 4268,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 4,
+     "calls": 2816
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 64
+    }
+   },
+   "counters": {
+    "fast_train": {
+     "patched": 0,
+     "skipped": {}
+    },
+    "dgrad": {
+     "kernel": 4224,
+     "grouped_mm": 0,
+     "loop": 0,
+     "loop_reasons": {}
+    },
+    "lora_path": {
+     "loop": 0,
+     "padded": 7040,
+     "grouped_mm": 0
+    },
+    "lora_pad": {
+     "last": 3.81298828125,
+     "max": 5.0,
+     "last_bytes": 63971328.0,
+     "last_bytes_alloc": 127942656.0
+    },
+    "ring": {
+     "staged": 6127,
+     "waits": 0,
+     "overflow": 0
+    },
+    "host_reuse": {
+     "upload_hits": 6501,
+     "upload_misses": 6127,
+     "plan_hits": 2134,
+     "plan_misses": 2090
+    },
+    "prefill_bm": {
+     "16": 0,
+     "32": 0,
+     "64": 0,
+     "128": 7040
+    },
+    "route": {
+     "train_gemm": "fused",
+     "stats": {
+      "fwd": 0,
+      "dgrad": 0
+     }
+    },
+    "rmsnorm": {
+     "patched": 260,
+     "calls": 4268,
+     "fallback_calls": 0
+    },
+    "rope": {
+     "patched_modules": 4,
+     "calls": 2816
+    },
+    "rope_refused": [],
+    "moe_keep": {
+     "layers": 0,
+     "checkpointed_children": 64
+    }
+   }
+  }
+ ],
+ "versions": {
+  "transformers": "5.18.0",
+  "e4b": "0.44.0",
+  "gnf4": "0.37.0"
+ },
+ "summary": {
+  "fused": {
+   "s_per_step_mean": 2.1575,
+   "readings": [
+    1.3152,
+    2.9998
+   ],
+   "spread": 1.281,
+   "peak_alloc_gb": 4.092,
+   "syncs_one_step": 67,
+   "device_busy_frac": [
+    0.901,
+    0.493
+   ],
+   "ratio_to_fused": 1.0
+  },
+  "fused_pre": {
+   "s_per_step_mean": 2.4654,
+   "readings": [
+    2.1124,
+    2.8185
+   ],
+   "spread": 0.334,
+   "peak_alloc_gb": 4.137,
+   "syncs_one_step": 737,
+   "device_busy_frac": [
+    0.294,
+    0.785
+   ],
+   "ratio_to_fused": 1.143
+  },
+  "keep": {
+   "s_per_step_mean": 2.0341,
+   "readings": [
+    1.9516,
+    2.1167
+   ],
+   "spread": 0.085,
+   "peak_alloc_gb": 5.06,
+   "syncs_one_step": 34,
+   "device_busy_frac": [
+    0.315,
+    0.756
+   ],
+   "ratio_to_fused": 0.943
+  },
+  "reference": {
+   "s_per_step_mean": 7.2913,
+   "readings": [
+    7.2913
+   ],
+   "spread": null,
+   "peak_alloc_gb": 4.069,
+   "syncs_one_step": 30090,
+   "device_busy_frac": [
+    0.141
+   ],
+   "ratio_to_fused": 3.38
+  }
+ }
+}

@@ -53,7 +53,8 @@ for v in TC1_FAMILIES TC1_SKIP TC1_UNSLOTH_VERSION TC1_UNSLOTH_ZOO_VERSION TC1_P
          TC1_MATCHED_SEED TC1_AUTOCAST TC1_DS_ALPACA_SHA TC1_TRANSFORMERS_VER TC1_BNB_VER TC1_PEFT_VER TC1_GPU_CLASS TC1_MIN_DISK_GB \
          TC1_PREREG TC1_BATCHED_PAD_WASTE_LIMIT TC1_PHASE_BUDGET_S TC1_ANCHOR_JSON TC1_AXOLOTL_VERSION \
          TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA \
-         TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY TC1_E4B_ENV; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument)
+         TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY TC1_E4B_ENV \
+         MG1_FAMILIES MG1_STEPS MG1_PROVE; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument); MG1 (bench/moegen/mg1_run.sh; never MG1_REHEARSAL)
   # Quoted: run tp4-b-p46cut-3 passed TC1_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tc1_run.sh` saw the second
   # word as the COMMAND -- rc=127 before the nonce was bound, a HARNESS_ERROR row. %q survives the remote shell's re-parse.
   [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"
@@ -124,7 +125,7 @@ while :; do
   now=$(date +%s)
   $SSH "test -f $W/TP_DONE.$NONCE" 2>/dev/null && { say "TP_DONE seen"; break; }
   [ "$now" -ge $((DEADLINE - POLL)) ] && { say "deadline reached without TP_DONE -- fetching what exists"; break; }
-  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}') | live \$(pgrep -f 'bash tc1_run.sh' | wc -l | tr -d ' ')\"" 2>/dev/null)
+  hb=$($SSH "echo \"\$(grep -v '^[[:space:]]*$' $W/summary.txt 2>/dev/null | tail -n 1 | cut -c1-160) | gpu \$(nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits 2>/dev/null | tr -d ' ') | du \$(du -sm $W 2>/dev/null | cut -f1)M | disk \$(df -h /root | tail -1 | awk '{print \$4}') | dfk \$(df -k /root | tail -1 | awk '{print \$4}') | live \$(pgrep -f 'bash $RUNNER' | wc -l | tr -d ' ')\"" 2>/dev/null)
   line=${hb%% | gpu*}; util=$(echo "$hb" | sed -n 's/.*| gpu \([0-9]*\),.*/\1/p')
   dfk=$(echo "$hb" | sed -n 's/.*| dfk \([0-9]*\).*/\1/p'); duM=$(echo "$hb" | sed -n 's/.*| du \([0-9]*\)M.*/\1/p')
   live=$(echo "$hb" | sed -n 's/.*| live \([0-9]*\).*/\1/p')
@@ -136,7 +137,7 @@ while :; do
     fi
   fi
   if [ -n "$(tc1_lane_dead "$live" "$LAST_LIVE")" ]; then
-    say "LANE DEAD: no 'bash tc1_run.sh' on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
+    say "LANE DEAD: no 'bash $RUNNER' on the box for two consecutive polls and no TP_DONE -- the remote process exited without writing its markers; not waiting out the deadline"
     LANE_DEAD=1; break
   fi
   LAST_LIVE=$live

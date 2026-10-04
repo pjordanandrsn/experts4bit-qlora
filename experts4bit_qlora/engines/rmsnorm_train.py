@@ -27,7 +27,7 @@ except ImportError:                     # pragma: no cover - exercised on macOS 
 __all__ = ["rmsnorm_frozen", "enable_fused_rmsnorm_train", "RMSNORM_TRAIN_STATS"]
 
 #: Patched module count and fused calls (forward launches), so a training census can say the fusion served the step.
-RMSNORM_TRAIN_STATS = {"patched": 0, "calls": 0}
+RMSNORM_TRAIN_STATS = {"patched": 0, "calls": 0, "fallback_calls": 0}
 
 
 def _jit(f):
@@ -35,33 +35,45 @@ def _jit(f):
 
 
 @_jit
-def _rms_fwd(X, W, Y, R, stride, N, eps, ROWS: tl.constexpr, BLOCK: tl.constexpr):
+def _rms_fwd(X, W, Y, R, stride, N, eps, ROWS: tl.constexpr, BLOCK: tl.constexpr,
+             OFFSET: tl.constexpr = 0.0, MUL_FP32: tl.constexpr = False):
     pid = tl.program_id(0)
     cols = tl.arange(0, BLOCK)
     cmask = cols < N
-    w = tl.load(W + cols, mask=cmask, other=0.0).to(tl.float32)
+    w = tl.load(W + cols, mask=cmask, other=0.0).to(tl.float32) + OFFSET
+    if not MUL_FP32:
+        w = w.to(Y.dtype.element_ty).to(tl.float32)   # (1 + w) rounded as the composite's input-dtype operand (identity at 0)
     for i in range(ROWS):
         row = pid * ROWS + i
         x = tl.load(X + row * stride + cols, mask=cmask, other=0.0).to(tl.float32)
         var = tl.sum(x * x, axis=0) / N
         r = tl.math.rsqrt(var + eps)
-        xh = (x * r).to(Y.dtype.element_ty).to(tl.float32)
+        if MUL_FP32:
+            xh = x * r                                # the Gemma / Qwen3.5 composite: (x * r) * w in fp32, rounded once
+        else:
+            xh = (x * r).to(Y.dtype.element_ty).to(tl.float32)   # the Llama composite: x * r rounded, then w * that
         tl.store(Y + row * stride + cols, (xh * w).to(Y.dtype.element_ty), mask=cmask)
         tl.store(R + row, r)
 
 
 @_jit
-def _rms_bwd(DY, X, W, R, DX, stride, N, ROWS: tl.constexpr, BLOCK: tl.constexpr):
+def _rms_bwd(DY, X, W, R, DX, stride, N, ROWS: tl.constexpr, BLOCK: tl.constexpr,
+             OFFSET: tl.constexpr = 0.0, MUL_FP32: tl.constexpr = False):
     pid = tl.program_id(0)
     cols = tl.arange(0, BLOCK)
     cmask = cols < N
-    w = tl.load(W + cols, mask=cmask, other=0.0).to(tl.float32)
+    w = tl.load(W + cols, mask=cmask, other=0.0).to(tl.float32) + OFFSET
+    if not MUL_FP32:
+        w = w.to(DX.dtype.element_ty).to(tl.float32)
     for i in range(ROWS):
         row = pid * ROWS + i
         x = tl.load(X + row * stride + cols, mask=cmask, other=0.0).to(tl.float32)
         dy = tl.load(DY + row * stride + cols, mask=cmask, other=0.0).to(tl.float32)
         r = tl.load(R + row)
-        gw = (dy * w).to(DX.dtype.element_ty).to(tl.float32)
+        if MUL_FP32:
+            gw = dy * w                               # the composite's multiply is fp32: no rounding before the reduction
+        else:
+            gw = (dy * w).to(DX.dtype.element_ty).to(tl.float32)
         s = tl.sum(gw * x, axis=0)
         dx = gw * r - x * (r * r * r) * (s / N)
         tl.store(DX + row * stride + cols, dx.to(DX.dtype.element_ty), mask=cmask)
@@ -78,7 +90,7 @@ def _rows_per_prog(n_rows: int, N: int) -> int:
 
 class RMSNormFrozen(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, weight, eps):
+    def forward(ctx, x, weight, eps, offset=0.0, mul_fp32=False):
         RMSNORM_TRAIN_STATS["calls"] += 1
         shape = x.shape
         N = shape[-1]
@@ -89,9 +101,10 @@ class RMSNormFrozen(torch.autograd.Function):
         y = torch.empty_like(x2)
         r = torch.empty(M, dtype=torch.float32, device=x.device)
         k = _rows_per_prog(M, N)
-        _rms_fwd[(M // k,)](x2, weight, y, r, x2.stride(0), N, eps, ROWS=k, BLOCK=triton.next_power_of_2(N), num_warps=4 if N >= 1024 else 1)
+        _rms_fwd[(M // k,)](x2, weight, y, r, x2.stride(0), N, eps, ROWS=k, BLOCK=triton.next_power_of_2(N), num_warps=4 if N >= 1024 else 1,
+                               OFFSET=float(offset), MUL_FP32=bool(mul_fp32))
         ctx.save_for_backward(x2, weight, r)
-        ctx.shape, ctx.k = shape, k
+        ctx.shape, ctx.k, ctx.offset, ctx.mul_fp32 = shape, k, float(offset), bool(mul_fp32)
         return y.view(shape)
 
     @staticmethod
@@ -103,12 +116,15 @@ class RMSNormFrozen(torch.autograd.Function):
             dy2 = dy2.contiguous()
         dx = torch.empty_like(x2)
         k = ctx.k
-        _rms_bwd[(x2.shape[0] // k,)](dy2, x2, weight, r, dx, x2.stride(0), N, ROWS=k, BLOCK=triton.next_power_of_2(N), num_warps=4 if N >= 1024 else 1)
-        return dx.view(ctx.shape), None, None
+        _rms_bwd[(x2.shape[0] // k,)](dy2, x2, weight, r, dx, x2.stride(0), N, ROWS=k, BLOCK=triton.next_power_of_2(N), num_warps=4 if N >= 1024 else 1,
+                                        OFFSET=ctx.offset, MUL_FP32=ctx.mul_fp32)
+        return dx.view(ctx.shape), None, None, None, None
 
 
-def rmsnorm_frozen(x, weight, eps):
-    return RMSNormFrozen.apply(x, weight, eps)
+def rmsnorm_frozen(x, weight, eps, offset=0.0, mul_fp32=False):
+    """``offset`` 0 is ``w * norm(x)``; 1 is the centered ``(1 + w) * norm(x)`` (Gemma, Qwen3.5/3.6). ``mul_fp32`` False is the
+    Llama composite (normalised value rounded, then multiplied); True multiplies in fp32 and rounds once."""
+    return RMSNormFrozen.apply(x, weight, eps, offset, mul_fp32)
 
 
 def enable_fused_rmsnorm_train(model, verbose: bool = False, strict: bool = True) -> int:
@@ -126,8 +142,9 @@ def enable_fused_rmsnorm_train(model, verbose: bool = False, strict: bool = True
         if not strict:
             return 0
         raise RuntimeError("enable_fused_rmsnorm_train needs Triton (Linux); set E4B_FUSED_RMSNORM=0")
-    from .glue_fuse import _is_rmsnorm, _norm_eps, _probe_matches
+    from .glue_fuse import _is_rmsnorm, _norm_eps, _probe_variant
     n = skipped = 0
+    variants = {}
     for mod in model.modules():
         if not _is_rmsnorm(mod) or getattr(mod, "_e4b_rmsnorm_train", False):
             continue
@@ -135,19 +152,24 @@ def enable_fused_rmsnorm_train(model, verbose: bool = False, strict: bool = True
             skipped += 1
             continue
         eps = _norm_eps(mod)
-        if not _probe_matches(mod, eps):
+        var = _probe_variant(mod, eps)
+        if var is None:
             skipped += 1
             continue
+        offset, mul_fp32 = var
+        variants[var] = variants.get(var, 0) + 1
         orig = mod.forward
 
-        def _fwd(hidden_states, _m=mod, _orig=orig, _eps=eps):
+        def _fwd(hidden_states, _m=mod, _orig=orig, _eps=eps, _off=offset, _f32=mul_fp32):
             if (not hidden_states.is_cuda or hidden_states.dtype not in (torch.bfloat16, torch.float16)
                     or hidden_states.shape[-1] != _m.weight.numel() or _m.weight.dtype != hidden_states.dtype
                     or _m.weight.requires_grad):
+                RMSNORM_TRAIN_STATS["fallback_calls"] += 1
                 return _orig(hidden_states)
-            return rmsnorm_frozen(hidden_states, _m.weight, _eps)
+            return rmsnorm_frozen(hidden_states, _m.weight, _eps, _off, _f32)
 
         mod.forward = _fwd
+        mod._e4b_rmsnorm_variant = var
         mod._e4b_rmsnorm_train = True
         n += 1
     if n == 0 and not strict:
@@ -157,7 +179,10 @@ def enable_fused_rmsnorm_train(model, verbose: bool = False, strict: bool = True
                            "refusing a vacuous enable")
     RMSNORM_TRAIN_STATS["patched"] += n
     if verbose:
-        print(f"[e4b.rmsnorm] fused {n} frozen RMSNorm(s) for training ({skipped} left on the composite)")
+        names = {(0.0, False): "w*round(norm)", (0.0, True): "w*norm fp32", (1.0, False): "(1+w)*round(norm)",
+                 (1.0, True): "(1+w)*norm fp32"}
+        detail = ", ".join(f"{c} {names.get(v, v)}" for v, c in sorted(variants.items()))
+        print(f"[e4b.rmsnorm] fused {n} frozen RMSNorm(s) for training [{detail}] ({skipped} left on the composite)")
     return n
 
 

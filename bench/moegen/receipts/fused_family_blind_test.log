@@ -1,0 +1,28 @@
+
+gemma4: ref-vs-fp32=6.158e-03 batched-vs-fp32=5.956e-03 batched-vs-ref=4.192e-03 worst-grad=2.906e-03
+.
+qwen3_moe: ref-vs-fp32=6.134e-03 batched-vs-fp32=6.127e-03 batched-vs-ref=8.824e-04 worst-grad=1.004e-03
+.
+olmoe: ref-vs-fp32=6.092e-03 batched-vs-fp32=6.092e-03 batched-vs-ref=1.043e-04 worst-grad=1.842e-03
+.
+granitemoe: ref-vs-fp32=6.180e-03 batched-vs-fp32=6.179e-03 batched-vs-ref=1.315e-04 worst-grad=9.295e-04
+.
+mixtral: ref-vs-fp32=6.463e-03 batched-vs-fp32=6.267e-03 batched-vs-ref=3.136e-03 worst-grad=1.769e-06
+.
+gemma4-shape-silu: ref-vs-fp32=6.331e-03 batched-vs-fp32=6.131e-03 batched-vs-ref=4.264e-03 worst-grad=3.010e-03
+.
+qwen3-shape-gelu: ref-vs-fp32=5.917e-03 batched-vs-fp32=5.912e-03 batched-vs-ref=8.705e-04 worst-grad=9.930e-04
+.
+nemotron_h-relu2: ref-vs-fp32=6.687e-03 fused-vs-fp32=5.897e-03 fused-vs-ref=6.279e-03 dx=6.856e-03 worst-grad=4.476e-03
+.
+lfm2_moe: ref-vs-fp32=6.205e-03 fused-vs-fp32=5.336e-03 fused-vs-ref=6.043e-03 dx=6.645e-03 worst-grad=4.484e-03
+.
+ernie4_5_moe: ref-vs-fp32=6.138e-03 fused-vs-fp32=5.349e-03 fused-vs-ref=6.042e-03 dx=7.157e-03 worst-grad=4.498e-03
+.
+qwen3_5_moe: ref-vs-fp32=6.164e-03 fused-vs-fp32=5.427e-03 fused-vs-ref=6.055e-03 dx=7.505e-03 worst-grad=4.510e-03
+.
+granitemoehybrid: ref-vs-fp32=6.236e-03 fused-vs-fp32=5.364e-03 fused-vs-ref=6.016e-03 dx=7.364e-03 worst-grad=4.822e-03
+.
+mixtral: ref-vs-fp32=6.463e-03 fused-vs-fp32=5.349e-03 fused-vs-ref=6.264e-03 dx=6.122e-03 worst-grad=4.487e-03
+.
+13 passed, 11 deselected in 102.27s (0:01:42)

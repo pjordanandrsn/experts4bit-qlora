@@ -1,0 +1,586 @@
+{
+ "fam": "lfm2",
+ "model": "LiquidAI/LFM2-8B-A1B",
+ "model_type": "lfm2_moe",
+ "arm": "reference",
+ "tag": "reference",
+ "status": "ok",
+ "steps": 60,
+ "seq": 512,
+ "offload": false,
+ "r": 8,
+ "alpha": 16,
+ "lr": 0.0001,
+ "seed": 0,
+ "dataset": {
+  "path": "ds_clinical.json",
+  "sha256": "76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791",
+  "n_train_rows": 1200,
+  "eval_rows_used": 48
+ },
+ "prereg": "tp1/P36-PREREG.md",
+ "harness": "tp1_train_smoke.py (n17_cell.py + D1-D8)",
+ "env": {
+  "e4b": "0.44.0",
+  "e4b_dist": "0.44.0",
+  "gnf4": "0.37.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "cap": [
+   8,
+   6
+  ],
+  "host": {
+   "uuid": "GPU-01aa94f1-4004-9932-0b37-2051081a2a9d",
+   "pci.bus_id": "00000000:01:00.0",
+   "pcie.link.gen.current": "1",
+   "pcie.link.gen.max": "3",
+   "pcie.link.width.current": "8",
+   "pcie.link.width.max": "16",
+   "power.limit": "70.00",
+   "clocks.max.sm": "2100",
+   "clocks.max.mem": "6001",
+   "vbios_version": "94.06.32.00.18",
+   "driver_version": "575.64.05",
+   "cpu": "Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz",
+   "cpu_threads": 12,
+   "host_mem_gib": 125.7,
+   "vast_instance_id": null,
+   "container_host": "seat-jordan"
+  },
+  "anchor_json": null,
+  "box_class": null
+ },
+ "load_s": 248.4,
+ "verify": {
+  "n_quantized": 22,
+  "n_unquantized": 0
+ },
+ "n_lora_wrapped": 22,
+ "n_bare_experts": 0,
+ "expert_classes": {
+  "Experts4bit": 22
+ },
+ "n_attn_lora": 24,
+ "trainable_tensors": 136,
+ "trainable_params": 53985280,
+ "init_sha": "ea0460701bf75a1447b2d3732a72354e0d640ff728e64b4a92cdab6fa3ae361d",
+ "init_tensors": 136,
+ "n_patched": 0,
+ "enable_reason": "",
+ "probes": {},
+ "kernel_counter_key": "batched_dequant_whole",
+ "kernel_calls_per_step": [
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "kernel_calls_per_step_min": 0,
+ "kernel_calls_all": [
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  },
+  {
+   "fused_grouped_lora": 0,
+   "batched_dequant_whole": 0
+  }
+ ],
+ "C1_tensors_hashed": 88,
+ "C1_bytes_hashed": 4359979008,
+ "C1_empties_skipped": 0,
+ "C1_control_detects_flipped_byte": true,
+ "C1_experts_changed": 0,
+ "C1_bit_exact": true,
+ "C1_changed_sample": [],
+ "loss_first": 5.03186,
+ "loss_last": 0.2768,
+ "loss_mean_last20": 0.31465,
+ "eval_loss_step0": 4.94443,
+ "eval_loss_final": 0.30106,
+ "eval_rel_improvement": 0.06089,
+ "s_per_step": 2.7481,
+ "step_ms": [
+  3879.1,
+  3528.2,
+  2495.2,
+  2483.4,
+  2583.4,
+  2595.8,
+  2872.6,
+  2624.5,
+  2761.0,
+  2760.2,
+  2718.4,
+  2928.9,
+  2952.5,
+  2887.9,
+  2844.0,
+  2833.8,
+  2472.9,
+  2808.8,
+  2566.6,
+  2499.6,
+  2403.6,
+  2718.4,
+  2715.9,
+  2539.5,
+  2415.0,
+  2552.9,
+  2396.1,
+  2539.4,
+  2514.2,
+  2479.4,
+  2611.6,
+  2452.4,
+  2634.1,
+  2657.7,
+  2797.2,
+  2574.9,
+  2682.0,
+  2478.2,
+  2682.8,
+  2740.7,
+  3091.1,
+  2673.2,
+  2882.2,
+  2544.7,
+  2834.9,
+  3166.9,
+  3392.0,
+  2747.5,
+  2725.3,
+  2726.0,
+  2828.1,
+  2788.4,
+  2827.8,
+  3062.8,
+  2988.6,
+  3117.8,
+  2578.2,
+  3100.0,
+  2532.5,
+  2580.1
+ ],
+ "tokens_per_step": [
+  86,
+  86,
+  92,
+  84,
+  84,
+  92,
+  86,
+  88,
+  86,
+  83,
+  80,
+  84,
+  92,
+  94,
+  92,
+  83,
+  83,
+  83,
+  89,
+  92,
+  88,
+  95,
+  83,
+  83,
+  82,
+  89,
+  82,
+  84,
+  84,
+  83,
+  89,
+  90,
+  82,
+  92,
+  86,
+  86,
+  82,
+  95,
+  81,
+  94,
+  92,
+  88,
+  84,
+  84,
+  89,
+  89,
+  94,
+  90,
+  92,
+  95,
+  86,
+  82,
+  94,
+  90,
+  89,
+  83,
+  84,
+  82,
+  88,
+  92
+ ],
+ "tokens_total": 5236,
+ "tokens_per_s": 31.8,
+ "peak_vram_gb": 6.114,
+ "idle_w": 6.2,
+ "mean_w": 32.4,
+ "power_samples": 728,
+ "joules_per_step": 72.05,
+ "losses": [
+  5.03186,
+  2.91401,
+  1.94326,
+  1.37025,
+  1.23288,
+  0.75582,
+  0.54716,
+  0.88048,
+  0.39469,
+  0.79296,
+  0.60748,
+  0.41781,
+  0.37333,
+  0.95413,
+  0.37941,
+  0.49154,
+  0.40846,
+  0.41251,
+  0.36451,
+  0.28422,
+  0.40031,
+  0.41696,
+  0.37556,
+  0.31403,
+  0.37901,
+  0.30239,
+  0.36631,
+  0.38155,
+  0.39719,
+  0.31071,
+  0.34406,
+  0.33871,
+  0.35036,
+  0.29391,
+  0.29556,
+  0.28575,
+  0.28914,
+  0.39891,
+  0.28811,
+  0.32299,
+  0.3126,
+  0.2763,
+  0.43457,
+  0.31288,
+  0.27952,
+  0.26662,
+  0.2741,
+  0.31238,
+  0.29753,
+  0.33851,
+  0.29514,
+  0.43378,
+  0.2605,
+  0.33604,
+  0.26665,
+  0.33691,
+  0.32123,
+  0.34568,
+  0.31527,
+  0.2768
+ ]
+}

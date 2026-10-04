@@ -484,3 +484,58 @@ def test_pad_waste_guard_is_a_speed_guard_and_can_be_raised(monkeypatch):
         monkeypatch.delenv("E4B_BATCHED_PAD_WASTE_LIMIT", raising=False)
         import experts4bit_qlora.engines.batched as B
         importlib.reload(B)
+
+
+# The fused TRAINING path (enable_fast_train, dgrad kernel on) across the candidate families' expert geometry, scaled down the
+# same way FAMILY_SHAPES is. `gated=False` is Nemotron-H's relu^2 stack (gate_up holds I rows, no gate half): the one epilogue
+# the fused kernel had never been run with on a GPU. Engagement is asserted from the kernel's own counters, before any tolerance.
+FUSED_FAMILY_SHAPES = [
+    # name, act, gated, E, k, hidden, inter
+    ("nemotron_h-relu2", "relu2", False, 128, 6, 384, 256),   # real 2688/1856, E128 k6, non-gated
+    ("lfm2_moe", "silu", True, 32, 4, 256, 256),              # real 2048/1792, E32 k4
+    ("ernie4_5_moe", "silu", True, 64, 6, 320, 192),          # real 2560/1536, E64 k6
+    ("qwen3_5_moe", "silu", True, 256, 8, 256, 64),           # real 2048/512,  E256 k8
+    ("granitemoehybrid", "silu", True, 64, 6, 192, 128),      # real 1536/512 (h-tiny), E64 k6
+    ("mixtral", "silu", True, 8, 2, 256, 896),
+]
+_ACTS["relu2"] = lambda x: torch.relu(x).square()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused training path is CUDA-only")
+@pytest.mark.parametrize("name,act,gated,n_exp,top_k,hidden,inter", FUSED_FAMILY_SHAPES, ids=[f[0] for f in FUSED_FAMILY_SHAPES])
+def test_fused_train_is_family_blind(name, act, gated, n_exp, top_k, hidden, inter):
+    pytest.importorskip("nf4_qlora", reason="needs grouped-nf4-gemm >= 0.2.4")
+    import nf4_qlora
+    from experts4bit_qlora import enable_fast_train
+
+    def build(compute_dtype):
+        torch.manual_seed(0)
+        gate_up = (torch.randn(n_exp, (2 if gated else 1) * inter, hidden) * 0.1).to(DEVICE)
+        down = (torch.randn(n_exp, hidden, inter) * 0.1).to(DEVICE)
+        require_quantize(DEVICE)
+        base = Experts4bit.from_float(gate_up, down, has_gate=gated, activation=_ACTS[act], quant_type="nf4",
+                                      compute_dtype=compute_dtype)
+        mod = ExpertsLoRA(base, r=16, alpha=16, dtype=torch.float32).to(DEVICE)
+        with torch.no_grad():
+            for p in (mod.gate_up_lora_B, mod.down_lora_B):
+                p.normal_(0, 0.02)
+        return mod.train()
+
+    reference, candidate, fp32_arm = build(torch.bfloat16), build(torch.bfloat16), build(torch.float32)
+    assert enable_fast_train(candidate, dgrad=True) == 1, "enable_fast_train declined an eligible module"
+    hs, idx, wts, loss_w = _router_inputs(n_exp, top_k, hidden)
+    d0 = dict(nf4_qlora.DGRAD_STATS) if hasattr(nf4_qlora, "DGRAD_STATS") else None
+    ref_out, ref_dx, ref_grads = _forward_backward(reference, hs, idx, wts, loss_w)
+    got_out, got_dx, got_grads = _forward_backward(candidate, hs, idx, wts, loss_w)
+    f32_out, _, _ = _forward_backward(fp32_arm, hs.float(), idx, wts.float(), loss_w)
+    if d0 is not None:                                   # the dgrad KERNEL served both frozen GEMMs; the exact loop did not
+        assert nf4_qlora.DGRAD_STATS["kernel"] + nf4_qlora.DGRAD_STATS["grouped_mm"] - d0["kernel"] - d0["grouped_mm"] == 2
+        assert nf4_qlora.DGRAD_STATS["loop"] == d0["loop"], nf4_qlora.DGRAD_STATS["loop_reasons"]
+    ref_floor, got_floor = _rel(ref_out, f32_out), _rel(got_out, f32_out)
+    worst_grad = max(_rel(got_grads[n], ref_grads[n]) for n in ref_grads)
+    print(f"\n{name}: ref-vs-fp32={ref_floor:.3e} fused-vs-fp32={got_floor:.3e} fused-vs-ref={_rel(got_out, ref_out):.3e} "
+          f"dx={_rel(got_dx, ref_dx):.3e} worst-grad={worst_grad:.3e}")
+    assert _rel(got_out, ref_out) < FWD_TOL
+    assert _rel(got_dx, ref_dx) < GRAD_TOL
+    assert worst_grad < GRAD_TOL
+    assert abs(got_floor - ref_floor) < ref_floor
