@@ -508,6 +508,47 @@ def samestack_why(tag, r):
     return "" if torch_v.startswith(want) else f"same-stack A/B not engaged (env.torch {torch_v or 'missing'} is not {want}*)"
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 26: prebound Triton launches off vs on
+PREBIND_FAM = "qwen3prebindab"    # E4B_TRITON_PREBIND + GNF4_TRITON_PREBIND both 0 (side pb0) vs both 1 (pb1), shipped and matched arms, venv-e4b
+PREBIND_PAIRS = (("P53", "shipped", "fused_attn4_shipped"), ("P54", "matched", "fused_attn4_m"))   # each: <tag>_pb0 vs <tag>_pb1, two draws a side
+PREBIND_BANDS = {"P53": (0.90, 0.98), "P54": (0.92, 0.99)}   # pb1 / pb0 s/step on stable pairs
+PREBIND_HELDOUT_MAX = 0.005       # P55: |mean held-out at N, pb1 - pb0| on each arm (the same compiled kernels)
+FAMS.append(PREBIND_FAM)
+NAMES[PREBIND_FAM] = "Qwen3-30B-A3B (amendment 26: Triton launches prebound off vs on, e4b + grouped-nf4-gemm, venv-e4b)"
+N_LAYERS[PREBIND_FAM] = 48
+ATTN_CENSUS[PREBIND_FAM] = 192
+DENSE_PINS[PREBIND_FAM] = DENSE_PINS[QDENSE_FAM]   # the qwen3 pin, read through amendment 22's check
+FAM_ANCHOR[PREBIND_FAM] = ("e4b", "fused_attn4_m_pb0")
+EXPECTED[PREBIND_FAM] = [("e4b", "fused_attn4_shipped_pb0"), ("e4b", "fused_attn4_shipped_pb1"), ("e4b", "fused_attn4_m_pb0"), ("e4b", "fused_attn4_m_pb1"),
+                         ("e4b", "fused_attn4_m_pb1_d2"), ("e4b", "fused_attn4_m_pb0_d2"), ("e4b", "fused_attn4_shipped_pb1_d2"), ("e4b", "fused_attn4_shipped_pb0_d2")]
+MATCHED |= {"fused_attn4_m_pb0", "fused_attn4_m_pb1", "fused_attn4_m_pb0_d2", "fused_attn4_m_pb1_d2"}
+for _p, _n, _t in PREBIND_PAIRS:
+    for _side in ("pb0", "pb1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def prebind_ab_why(tag, r):
+    """Amendment 26's engagement predicate, read off the receipt's `prebind_ab` record: a pb1 arm requested both flags and both e4b and
+    grouped-nf4-gemm counted prebound launches; a pb0 arm requested neither and counted none. Empty string = engaged."""
+    pa = (r or {}).get("prebind_ab")
+    if not isinstance(pa, dict):
+        return "no prebind_ab record on the receipt: whether the launches were prebound cannot be verified"
+    on = "_pb1" in tag
+    bad = []
+    for side in ("e4b", "gnf4"):
+        d = pa.get(side) or {}
+        n = int((d.get("stats") or {}).get("prebound", 0))
+        if not d.get("has"):
+            bad.append(f"{side} has no prebound path")
+        elif d.get("requested") is not on:
+            bad.append(f"{side} requested {d.get('requested')}")
+        elif on and n <= 0:
+            bad.append(f"{side} counted no prebound launch")
+        elif not on and n != 0:
+            bad.append(f"{side} counted {n} prebound launches with the flag off")
+    return "" if not bad else f"prebind A/B not engaged ({'; '.join(bad)}; triton {pa.get('triton')})"
+
+
 def dense_ab_why(fam, tag, r):
     """Amendment 22's engagement predicate, read off the arm's `route_ab` record (grouped-nf4-gemm's nf4_route.ROUTE_STATS for the process):
     a dense1 arm ran with the route resolved to `dense` and counted dense forward AND dense dgrad calls; a dense0 arm ran `fused` and counted
@@ -1067,6 +1108,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == SAMESTACK_FAM and fw == "e4b":           # amendment 25: the venv its tag names
         w = samestack_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == PREBIND_FAM and fw == "e4b":             # amendment 26: the prebound launches its tag names, engaged on both sides
+        w = prebind_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -2111,6 +2156,44 @@ def score_samestack(F):
         out.append(("P52", SAMESTACK_FAM, "UNTESTED", ev))
     else:
         out.append(("P52", SAMESTACK_FAM, "HELD" if all(v in ok_read for v in reads.values()) and par == "PASS" else "FALSIFIED", ev))
+    return out
+
+
+def score_prebindab(F):
+    """TC1-PREREG amendment 26, on the qwen3prebindab box: P53 (shipped) and P54 (matched) -- pb1 / pb0 s/step within PREBIND_BANDS[pid],
+    the median over two VALID draws a side with each side's draws within 5 %; P55 -- on each arm |mean held-out at N, pb1 - pb0| <=
+    PREBIND_HELDOUT_MAX. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED."""
+    R = F.get(PREBIND_FAM)
+    if not R:
+        return []
+    out, p55 = [], []
+    for pid, name, t in PREBIND_PAIRS:
+        O, N = R["draws"].get(("e4b", f"{t}_pb0"), {}), R["draws"].get(("e4b", f"{t}_pb1"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("pb0", O), ("pb1", N)))
+            out.append((pid, PREBIND_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            p55.append((name, None, why))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        lo, hi = PREBIND_BANDS[pid]
+        h0, h1 = O.get("heldout_list") or [], N.get("heldout_list") or []
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        p55.append((name, dq, f"held-out at N pb0 {[round(v, 4) for v in h0 if v is not None]} pb1 {[round(v, 4) for v in h1 if v is not None]}"))
+        r1 = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == ("e4b", f"{t}_pb1")), None) or {}
+        pa = r1.get("prebind_ab") or {}
+        counts = {sd: (pa.get(sd) or {}).get("stats") for sd in ("e4b", "gnf4")}
+        out.append((pid, PREBIND_FAM, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+                    f"{name}: pb1 / pb0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; s/step pb0 "
+                    f"{O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), pb1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
+                    f"(within {100 * N['stability']:.1f}%); pb1 launch counts (process) {json.dumps(counts, sort_keys=True)}; triton {pa.get('triton')}"))
+    ev = "; ".join(f"{n}: " + (f"mean held-out pb1 - pb0 {dq:+.4f} (|.| <= {PREBIND_HELDOUT_MAX}); {e}" if dq is not None else e) for n, dq, e in p55)
+    if any(dq is not None and abs(dq) > PREBIND_HELDOUT_MAX for _, dq, _ in p55):
+        out.append(("P55", PREBIND_FAM, "FALSIFIED", ev))
+    elif any(dq is None for _, dq, _ in p55):
+        out.append(("P55", PREBIND_FAM, "UNTESTED", ev))
+    else:
+        out.append(("P55", PREBIND_FAM, "HELD", ev))
     return out
 
 
@@ -3335,6 +3418,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PREBIND_FAM in F:
+        out += ["\n## Predictions P53 / P54 / P55 (TC1-PREREG amendment 26: prebound Triton launches off vs on, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_prebindab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -3668,6 +3756,28 @@ def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2
         R.pop(k, None)
     for r in R.values():
         r["fam"] = SAMESTACK_FAM
+    return R
+
+def _prebind_set(ship=((3.10, 3.12), (2.92, 2.94)), match=((3.90, 3.92), (3.72, 3.74)), held_shift=0.0, pb1_counts=(4000, 9000), pb0_counts=(0, 0),
+                 requested=None, record=True):
+    """Amendment 26: e4b against itself -- each pair as (pb0 draws, pb1 draws) s/step; `pb1_counts` / `pb0_counts` = (e4b, gnf4) prebound
+    launches each side counted; `requested` overrides the pb1 side's (e4b, gnf4) requested flags; `record=False` drops prebind_ab."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for side, ss in (("pb0", old), ("pb1", new)):
+            on = side == "pb1"
+            cnt = pb1_counts if on else pb0_counts
+            req = (requested if (on and requested is not None) else (on, on))
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if on else 0.0), matched=matched)
+                if record:
+                    r["prebind_ab"] = {"e4b_env": "1" if on else "0", "gnf4_env": "1" if on else "0", "triton": "3.4.0",
+                                       "e4b": {"has": True, "requested": req[0], "stats": {"prebound": cnt[0], "triton": 12}},
+                                       "gnf4": {"has": True, "requested": req[1], "stats": {"prebound": cnt[1], "triton": 30}}}
+                R[("e4b", tag)] = r
+    for r in R.values():
+        r["fam"] = PREBIND_FAM
     return R
 
 def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1536), dense_dgrad=(0, 1536), absmax=(True, True), held_shift=0.0, drop_route=False):
@@ -5365,6 +5475,30 @@ def selftest():
     assert ps(drop=(("e4b", "reference_attn4_m"),))["P52"] == "UNTESTED"
     assert ps(drop=(("unsloth", "ckpt_unsloth_m_d2"),))["P50"] == "UNTESTED"
     assert samestack_why(SAMESTACK_T28 + "_d2", {"env": {"torch": "2.8.0+cu128"}}) == ""
+    cases += 1
+    # 80. TC1 amendment 26 (qwen3prebindab): shipped 0.942 and matched 0.954 HELD; no gain, too large a gain and a held-out gap each FALSIFY
+    PF = lambda R: {PREBIND_FAM: reduce_family(PREBIND_FAM, R, {}, 20)}
+    RP = PF(_prebind_set())
+    assert [(x["fw"], x["tag"]) for x in RP[PREBIND_FAM]["rows"]] == EXPECTED[PREBIND_FAM]
+    assert all(x["verdict"] == "VALID" for x in RP[PREBIND_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RP[PREBIND_FAM]["rows"]]
+    pp = lambda **kw: {p: v for p, _, v, _ in score_prebindab(PF(_prebind_set(**kw)))}
+    assert pp() == {"P53": "HELD", "P54": "HELD", "P55": "HELD"}, score_prebindab(RP)
+    assert "pb1 / pb0 0.942 [" in score_prebindab(RP)[0][3] and "triton 3.4.0" in score_prebindab(RP)[0][3]
+    assert pp(ship=((3.10, 3.12), (3.08, 3.10))) == {"P53": "FALSIFIED", "P54": "HELD", "P55": "HELD"}         # 0.994: no gain
+    assert pp(match=((3.90, 3.92), (3.40, 3.42))) == {"P53": "HELD", "P54": "FALSIFIED", "P55": "HELD"}        # 0.872: more than registered
+    assert pp(held_shift=0.008) == {"P53": "HELD", "P54": "HELD", "P55": "FALSIFIED"}
+    cases += 1
+    # 81. FAILING CASES: a pb1 side whose gnf4 never prebound, a pb0 side that prebound, a pb1 side that did not request, no record -> VOID
+    RV = PF(_prebind_set(pb1_counts=(4000, 0)))
+    v = RV[PREBIND_FAM]["verdicts"][("e4b", "fused_attn4_m_pb1")]
+    why = next(x["why"] for x in RV[PREBIND_FAM]["rows"] if x["tag"] == "fused_attn4_m_pb1")
+    print("FAILING-CASE TC1-am26-engagement (reducer):", v, "--", str(why)[-120:])
+    assert v == "VOID" and "gnf4 counted no prebound launch" in str(why), (v, why)
+    assert pp(pb1_counts=(4000, 0)) == {"P53": "UNTESTED", "P54": "UNTESTED", "P55": "UNTESTED"}
+    assert PF(_prebind_set(pb0_counts=(5, 0)))[PREBIND_FAM]["verdicts"][("e4b", "fused_attn4_m_pb0")] == "VOID"
+    assert PF(_prebind_set(requested=(True, False)))[PREBIND_FAM]["verdicts"][("e4b", "fused_attn4_shipped_pb1")] == "VOID"
+    assert "no prebind_ab record" in prebind_ab_why("fused_attn4_m_pb1", {})
+    assert PF(_prebind_set(record=False))[PREBIND_FAM]["verdicts"][("e4b", "fused_attn4_m_pb0")] == "VOID"
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

@@ -1062,3 +1062,49 @@ Each is FALSIFIED outside its band, and UNTESTED where a side is missing, unstab
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor. Qwen3-30B-A3B's download plus seven arms come to
 about $1.50; this is in the standing no-ask tier.
+
+### Amendment 26 (2026-10-04T22:17Z, before any box): prebound Triton launches, A/B on one RTX 5090 (P53–P55)
+
+**Why.** The H100 profile (`tc1c-h100-15`) put e4b's step at 2.8 s of host time against 1.5 s of device time. Each launch of the
+fused RMSNorm and rotary kernels, and of grouped-nf4-gemm's training GEMMs, spends most of its host time in Triton's per-call binding
+and in host work that repeats for one grouping.
+
+experts4bit-qlora#1078 (`E4B_TRITON_PREBIND=1`) and grouped-nf4-gemm#468 (`GNF4_TRITON_PREBIND=1`) are opt-in, and both cover Triton
+3.4 and 3.6. Each specialization's first launch goes through Triton; later launches call the same compiled kernel's launcher
+directly. grouped-nf4-gemm also reuses one grouping's upload, plan and M-tile by value. Outputs are bit-identical (`torch.equal`, and
+the same compiled-kernel object). On an RTX A2000 host, the host µs per call fell, flag off → on:
+
+- RMSNorm forward: 152–160 → 117–121;
+- the fused GEMM forward: 633–654 → 433–452;
+- its dgrad: 448 → 318.
+
+That arithmetic gives an estimated 130–200 ms per step on a 5090 host. It is an estimate; this box measures it.
+
+**The box** (token `qwen3prebindab`). One RTX 5090, venv-e4b (torch 2.8.0+cu128, triton 3.4, a version the prebound path covers),
+TC1's qwen3 tokens and field recipe. The shipped and the matched arm, each `_pb0` (both flags 0) against `_pb1` (both flags 1), two
+draws a side in ABBA order. Every other setting is the default.
+
+Engagement is read off each receipt's `prebind_ab` record:
+
+- a `_pb1` arm requested both flags, and each side counted prebound launches;
+- a `_pb0` arm requested neither and counted none.
+
+**Predictions** (registered before the box):
+
+- **P53** (shipped): `_pb1` / `_pb0` s/step lies in **[0.90, 0.98]**, both sides stable (two draws within 5 %).
+- **P54** (matched): `_pb1` / `_pb0` lies in **[0.92, 0.99]**. The fp32-adapter step is longer, so the same saving is a smaller share.
+- **P55:** on each arm, |mean held-out at N, `_pb1` − `_pb0`| ≤ **0.005**. The compiled kernels are the same, so only run-to-run
+  nondeterminism separates the sides.
+
+Each is FALSIFIED outside its band, and UNTESTED where a side is unstable, not VALID or not engaged.
+
+**Decision rules.**
+
+- **P53, P54 and P55 HELD:** both flags default on, for the Triton versions the prebound path covers; other versions keep Triton's own
+  launch. That is one PR in each repository, citing this box.
+- **Either ratio above 1.01:** both stay off.
+- **Otherwise:** they stay opt-in.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; no Unsloth venvs are built. Qwen3-30B-A3B's
+download plus eight arms come to about $1.30; this is in the standing no-ask tier.
