@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Read: TC1c amendment 2 — on an H100 NVL, e4b keeping its MoE activations is faster per step than Unsloth (1.100, a labelled row)
+
+- **What.** `tc1c-h100-4` ran on the same machine as amendment 1's box, for $2.80. Every e4b arm used
+  `E4B_MOE_KEEP_LAYERS=all NF4_QLORA_COMPACT_DELTA=1 GNF4_HOST_REUSE=1` (gradients identical); HF and axolotl were skipped.
+- **Reading.** Unsloth/e4b is **1.100** [1.088, 1.111]: e4b faster per step (2.343 against 2.577 s), at 9.81 GB more peak VRAM and
+  about equal energy. P7 HELD and P8 HELD (matched set inside the draw noise). e4b's step fell 3.146 → 2.343 s against amendment 1.
+- **Labelled.** It is a labelled row, `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep`, quoted beside the default-settings
+  0.817 (Unsloth faster) and never in place of it. Lane page `bench/h2h-2026-10-02/tc1c/README.md`.
+
 ## 0.44.0 — 2026-10-04 — one KV-table selection per decode step by default (`E4B_KV_STEP_SELECT`; lane P111: identical tokens, 3.6 % faster with 16 concurrent requests); CI on grouped-nf4-gemm 0.36.0, whose per-pass host reuse steps e4b's fused training at 0.933 / 0.951 on an RTX 5090; the matched-work training positions after #945: Unsloth/e4b 1.997, axolotl/e4b 2.775 on a 5090
 
 **0.44.0.** Two defaults move, one here and one in the kernel package. Both are value-identical.

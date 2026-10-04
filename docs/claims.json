@@ -9269,6 +9269,30 @@
         "receipts/experts4bit-qlora/2026-10-04/tc1-5090-52/tc1/"
       ],
       "notes": "Within-box A/B; a memory-for-time trade at a stated layer count. The A2000 slice predicted ~121 MB per kept layer; the 5090 measured ~141 MB at this fixture's largest micro-batch (1,110 padded tokens)."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1c amendment 2 (#835), one rented H100 NVL (tc1c-h100-4, the same machine as amendment 1's box): with every e4b arm keeping all 48 layers' MoE activations instead of recomputing them under gradient checkpointing (E4B_MOE_KEEP_LAYERS=all, NF4_QLORA_COMPACT_DELTA=1, GNF4_HOST_REUSE=1 -- an opt-in setting; gradients identical by construction), e4b takes 2.343 s/step against Unsloth 2026.9.14's 2.577 (grouped_mm engaged, torch 2.12.1+cu130) at matched work: Unsloth/e4b 1.100 [1.088, 1.111] over two draws each (2.333 / 2.353 and 2.593 / 2.560, both STABLE) -- E4B FASTER PER STEP ON THE H100 WITH THIS SETTING. P7 HELD (band [0.85, 1.30]; interval wholly above 1.0); the matched set inside the draw noise (P8 HELD). Quoted beside it, in Unsloth's favour: peak VRAM 24.27 vs e4b's 34.08 GB (-9.81 GB); energy per step about equal (x1.013). A LABELLED row: e4b with an opt-in memory-for-time setting, quoted beside e4b.train.h2h.unsloth.qwen3.h100.2026-10-04 (0.817, the default settings) and never in place of it.",
+      "value": 1.1,
+      "unit": "ratio s/step Unsloth/e4b with e4b's MoE activations kept in all 48 layers (medians of steps 11..20 over two draws each; > 1 = e4b faster per step); cross-draw interval [1.088, 1.111]",
+      "hardware": "H100 NVL (sm_90), one rented Vast.ai verified/secure host (tc1c-h100-4: instance 54103635, machine 29527, AMD EPYC 9534, driver 595.71.05); e4b @ 8846764 on torch 2.8.0+cu128, grouped-nf4-gemm @ ac84818; Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; matched work (the same 642,514,944 trainable parameters, one per-slot LoRA init matched:3407, fp32 adapters, the same tokens); token qwen3 with TC1_GPU_CLASS=\"H100 NVL\", TC1_E4B_ENV=\"E4B_MOE_KEEP_LAYERS=all NF4_QLORA_COMPACT_DELTA=1 GNF4_HOST_REUSE=1\" on every e4b arm, HF and axolotl skipped (TC1_SKIP); engagement read off keep_ab (48 layers kept, compact delta on) and reuse_ab on every fused arm; validity, positions and equivalence by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1c/README.md",
+        "bench/h2h-2026-10-02/tc1c/receipts/tc1c-h100-4/RESULTS-tc1.md",
+        "bench/tc1/TC1C-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1c-h100-4/tc1/"
+      ],
+      "notes": "Against amendment 1 on the same machine e4b's step went 3.146 -> 2.343 s (x0.745), Unsloth's 2.571 -> 2.577. The profiled e4b arm: device-busy 0.659 at 68,452 device events and 455,685 CPU-side ops per step (amendment 1: 97,851 / 619,192); Unsloth 0.306 / 81,780 / 515,750 -- e4b still spends ~1.8x Unsloth's device time per step. The 5090 trade at 16-32 kept layers: e4b.train.moe-keep.qwen3.5090.2026-10-04."
     }
   ]
 }
