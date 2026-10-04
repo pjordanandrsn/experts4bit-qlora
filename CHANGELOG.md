@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### P111 registered: does one KV-table selection per decode step (`E4B_KV_STEP_SELECT=1`) decode the default `serve_paged` server's tokens exactly, and faster? (bench and tests only)
+
+- **Why.** SC1b put about 0.8 ms of the B=16 decode step in per-layer KV-table glue. #999 ships one selection per step
+  behind an opt-in switch, but neither its speed nor its identity has been read on the served model.
+- **What.** One RTX 5090 runs the default graph server (Qwen3-30B-A3B NF4, P109's subject) in four ABBA arms that differ
+  only in `E4B_KV_STEP_SELECT`. Each arm runs 16 concurrent requests and 1 request, at 32 and 160 new tokens.
+- **The rule:** VOID, then NOISY (self-pairs outside [0.96, 1.04]), then FUNCTION_FAIL (any token differs), then SLOWER
+  (either workload's min pair ratio below 1.00), then DEFAULT_ON.
+- **Consequence of DEFAULT_ON:** the switch defaults on, with a register row.
+- **Proof.** The whole box runs on Granite, with the premise of 13 GPU tests on the card.
+- **Files:**
+  - `bench/p111/`: prereg, runner, box (importing P109's at its registered bytes), reducer, driver and pin;
+  - `tests/test_p111_staged_pin.py`.
+
 ### `E4B_KV_STEP_SELECT=1`: a decode-graph bucket's KV-table selection once per step instead of once per layer (opt-in; default unchanged)
 
 - **Why.** SC1b's read (#993) put about 0.8 ms of e4b's B=16 decode step on an RTX 5090 in `fp8_paged_kv.py`: each layer
