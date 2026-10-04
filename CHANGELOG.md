@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Lane K29's runner (grouped-nf4-gemm#71): what a pinned host byte costs a cgroup v2 container (bench and tests only)
+
+- **Why.** grouped-nf4-gemm#457 models pinned-tier sizing as PyTorch's power-of-two rounding (measured on cgroup v1),
+  replacing the flat 1.9. It hands back more rows, so its release waits for a cgroup **v2** reading. Rented boxes are
+  v2.
+- **What.** `bench/k29/`:
+  - the box script reads forensics, checks for cgroup v2 (STOP-1) and runs the probe at ten sizes ×2, pinned and
+    pageable;
+  - the driver is P55's shape;
+  - the probe is byte-identical to grouped-nf4-gemm's `kernel/receipts-71/pinned_charge_probe.py`;
+  - the reducer implements the registered rule (VOID / CONFIRMED / PREMIUM / MIXED) with a 10-case self-test.
+- **Rehearsed at $0** on the QNAP A2000 (cgroup v1). STOP-1 fired, the reducer returned VOID, and v1's 18 pinned rows
+  read r in [1.0043, 1.005]. The receipts are in `bench/k29/receipts/rehearsal-a2000-v1/`. `tests/test_k29_lane.py`
+  covers the pins, the box script's contract, the self-test and the rule constants.
+
 ### #674's last question decided: the licensed Qwen3 K8 row names the software it was read on; no re-read (register note only)
 
 - **Question.** Lane P85 left an owner decision open: should the licensed row
