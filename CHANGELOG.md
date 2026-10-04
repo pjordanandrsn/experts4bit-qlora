@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### MG1 read: LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H enter `fast_train = supported`; Qwen3.6 PASSES and waits on P2; Gemma-4 and OLMoE re-read clean after #1048 (one RTX 5090; `bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`)
+
+- **Why.** #1048 made the training stack's glue structural, so other MoE families could inherit the Qwen work. Lane MG1
+  (registered before any box, amended once before any box) puts the new families through tp1's licence instrument unchanged:
+  tp1's arm driver, the clinical fixture, N 60, tp1_reduce v2.1's verdict and the train anchor.
+- **Every family PASSES.** OLMoE-Instruct and Gemma-4-26B-A4B-it are the regression anchors. Gemma-4's step-wise median
+  moved further inside the band after #1048 changed its fused RMSNorm to its own fp32 multiply.
+  - LFM2-8B-A1B, granite-4.0-h-tiny, ERNIE-4.5-21B-A3B and Nemotron-3.5-Lightning-30B-A3B enter
+    `qlora-fused-moe-experts.model_families`, with `quantize` / `reference_train` / `fast_train` supported (claims
+    `e4b.train.parity.mg1.<family>.*.2026-10-04`).
+  - Qwen3.6-35B-A3B trained resident and PASSES. It is `experimental`, not supported, because MG1's rule also needs P2, the
+    dgrad kernel's engagement, whose counter was not read on that box. MG1 amendment 2 reads it.
+- **Predictions.** P1, P3, P4 and P6 HELD. P2 HELD on the six laddered families and is untested on Qwen3.6, whose ladder OOMed
+  at r 16. P5 was **falsified** for Nemotron-H's norm: the probe correctly read its fp32 multiply, so the prediction was wrong,
+  not the code. ERNIE's interleaved rotary was refused on semantics, as predicted.
+- **Draws.** Proving run $0.044; one box refused by the train anchor ($0.048, `h2d.self_pair` 1.0321 > 1.03); the reading
+  $1.79. $1.88 in all.
+
 ### SC2b registered (#846): does a CUDA-graphed prefill chunk lift e4b `serve_paged`'s request-level capacity?
 
 - **Why.** SC2 read e4b's request-level capacity as prefill-bound: each 512-token prefill forward stalls every running

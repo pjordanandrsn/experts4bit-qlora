@@ -1,0 +1,66 @@
+{
+ "fam": "nemotron",
+ "model": "/root/.cache/huggingface/hub/models--nvidia--NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16/snapshots/a9904d24bcc1d289a1950fa9d2b978c47cf903b9",
+ "model_type": "nemotron_h",
+ "arm": "load",
+ "status": "ok",
+ "load_s": 9.5,
+ "offload": false,
+ "verify": {
+  "n_quantized": 23,
+  "n_unquantized": 0
+ },
+ "geometry": {
+  "hidden_size": 2688,
+  "intermediate_size": 1856,
+  "moe_intermediate_size": 1856,
+  "num_hidden_layers": 52,
+  "num_experts": null,
+  "num_local_experts": 128,
+  "num_experts_per_tok": 6,
+  "vocab_size": 131072,
+  "hidden_act": null,
+  "hidden_activation": null,
+  "tie_word_embeddings": false,
+  "attention_bias": false
+ },
+ "loaded_gb": 21.358,
+ "env": {
+  "e4b": "0.45.0",
+  "e4b_dist": "0.45.0",
+  "gnf4": "0.38.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "cap": [
+   12,
+   0
+  ],
+  "host": {
+   "uuid": "GPU-1988d9ef-19d0-36d8-6639-210c4347c852",
+   "pci.bus_id": "00000000:02:00.0",
+   "pcie.link.gen.current": "1",
+   "pcie.link.gen.max": "5",
+   "pcie.link.width.current": "16",
+   "pcie.link.width.max": "16",
+   "power.limit": "470.00",
+   "clocks.max.sm": "3090",
+   "clocks.max.mem": "14001",
+   "vbios_version": "98.02.2E.00.B1",
+   "driver_version": "595.91.07",
+   "cpu": "Intel(R) Core(TM) Ultra 9 285K",
+   "cpu_threads": 24,
+   "host_mem_gib": 188.1,
+   "vast_instance_id": null,
+   "container_host": "2ccbdd2874f0"
+  },
+  "anchor_json": "/root/tc1/anchor.json",
+  "box_class": "pcie-full/launch-fast"
+ },
+ "written_by_arm": "reference",
+ "n_lora_wrapped": 23,
+ "n_bare_experts": 0,
+ "expert_classes": {
+  "Experts4bit": 23
+ }
+}
