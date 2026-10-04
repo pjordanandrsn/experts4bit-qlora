@@ -1349,6 +1349,57 @@ def test_tc1_amendment_21_moe_keep_token():
     assert '"keep_ab": keep_ab,' in src and '"layers_kept": _kept' in src and "_nqk._compact_delta_enabled()" in src
 
 
+def test_tc1_amendment_22_dense_route_tokens():
+    """TC1 amendment 22: `qwen3denseab` and `mixtraldenseab` run e4b against itself on the matched arm -- grouped-nf4-gemm's fused 4-bit
+    kernels (GNF4_TRAIN_GEMM=fused) vs its dense route (=dense, gnf4#459) -- two draws a side in ABBA order, every arm resident; Mixtral at
+    TC2's pin (fetch 7200, e4b 3600), prepared as tc2_big_family prepares it, with E4B_ABSMAX_DQ=1 on BOTH sides and never on Qwen3; neither
+    token, alone or both on the one box, builds an Unsloth venv; the arm records route_ab and absmax_dq."""
+    run = RUN_SH.read_text()
+    order = [("OLD", "arm", "fused_attn4_m_dense0"), ("NEW", "arm", "fused_attn4_m_dense1"),
+             ("NEW", "draw2", "fused_attn4_m_dense1"), ("OLD", "draw2", "fused_attn4_m_dense0")]
+    envs = {"tc1_denseab_family": 'local OLD="GNF4_TRAIN_GEMM=fused" NEW="GNF4_TRAIN_GEMM=dense"',
+            "tc1_mixtral_denseab_family": 'local OLD="GNF4_TRAIN_GEMM=fused E4B_ABSMAX_DQ=1" NEW="GNF4_TRAIN_GEMM=dense E4B_ABSMAX_DQ=1"'}
+    for fn, env in envs.items():
+        m = re.search(rf"^{fn}\(\)\{{.*?^  free_family", run, re.DOTALL | re.MULTILINE)
+        assert m, f"{fn} is gone"
+        body = m.group(0)
+        calls = re.findall(r'TC1_ARM_EXTRA_ENV="\$(OLD|NEW)" (arm|draw2) +\$FAM e4b (\S+) fused \$EAL "\$MID" \$REV (\d) field \$TOK \$TS --attn-4bit 1 \$MATCH$',
+                           body, re.MULTILINE)
+        assert [c[:3] for c in calls] == order, (fn, calls)
+        assert [c[3] for c in calls] == ["0"] * 4, "every arm resident (--offload 0)"
+        assert body.count("TC1_ARM_EXTRA_ENV=") == 4 and env in body
+        assert 'local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"' in body and "NATIVE" not in body
+        assert 'local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0' in body      # tc2_big_family's preparation: alpaca, seq, EVAL_N rows
+        assert ('local ALL="e4b:fused_attn4_m_dense0:fused e4b:fused_attn4_m_dense1:fused e4b:fused_attn4_m_dense1_d2:fused '
+                'e4b:fused_attn4_m_dense0_d2:fused"') in body
+        assert ("E4B_ABSMAX_DQ=1" in body) == (fn == "tc1_mixtral_denseab_family")
+    tc2 = re.search(r"^tc2_big_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE).group(0)
+    assert 'local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0' in tc2
+    assert re.search(r"tc2_big_family +mixtral +mistralai/Mixtral-8x7B-Instruct-v0\.1 +eba92302a2861cdc0098cc54bc9f17cb2c47eb61 +7200 ", run)
+    assert "  qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;" in run
+    assert ("  mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 "
+            "eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;") in run
+    # no Unsloth venv for these tokens, alone or together; the shared line for the other tokens is untouched and still runs first
+    line = 'case " $FAMILIES " in " qwen3denseab "|" mixtraldenseab "|" qwen3denseab mixtraldenseab "|" mixtraldenseab qwen3denseab ") NEED_UNSLOTH=0;; esac'
+    shared = re.search(r"^NEED_UNSLOTH=1; case .*$", run, re.MULTILINE).group(0)
+    assert line in run and run.index(shared) < run.index(line) < run.index("venv-unsloth-t28:")
+    for fams, want in (("qwen3denseab", "0"), ("mixtraldenseab", "0"), ("qwen3denseab mixtraldenseab", "0"), ("mixtraldenseab qwen3denseab", "0"),
+                       ("qwen3reuseab", "0"), ("qwen3", "1"), ("tc2big", "1"), ("qwen3denseab qwen3", "1")):
+        out = subprocess.run(["bash", "-c", f'FAMILIES="{fams}"\n{shared}\n{line}\necho "$NEED_UNSLOTH"'], capture_output=True, text=True, check=True).stdout.strip()
+        assert out == want, (fams, out)
+    # the family's env composes with a box's TC1_E4B_ENV as on every family: both reach the arm's process, the box's words after the family's
+    extra = re.search(r'^  \[ -n "\$\{TC1_ARM_EXTRA_ENV:-\}" \] && ARM_ENV=.*$', run, re.MULTILINE).group(0)
+    hook = re.search(r'^  \[ "\$FW" = e4b \] && \[ -n "\$\{TC1_E4B_ENV:-\}" \] && ARM_ENV=.*$', run, re.MULTILINE).group(0)
+    script = ('f(){ local FW=e4b; local ARM_ENV=""\n' + extra + "\n" + hook + "\n"
+              'env $ARM_ENV /bin/sh -c \'echo "route=$GNF4_TRAIN_GEMM dq=$E4B_ABSMAX_DQ box=$K"\'; }\n'
+              'TC1_ARM_EXTRA_ENV="GNF4_TRAIN_GEMM=dense E4B_ABSMAX_DQ=1" TC1_E4B_ENV="K=1" f\nTC1_ARM_EXTRA_ENV="GNF4_TRAIN_GEMM=fused" f')
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout.split("\n")
+    assert out[:2] == ["route=dense dq=1 box=1", "route=fused dq= box="], out
+    src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
+    assert '"route_ab": route_ab,' in src and '"stats": {k: int(v) for k, v in _rstats.items()}' in src
+    assert '"absmax_dq": bool(getattr(a, "absmax_dq", 0)),' in src
+
+
 def test_tc1_amendment_12_profile_token():
     """TC1 amendment 12 (#945): `qwen3prof945` profiles e4b shipped and matched on the new path and matched on the legacy path, each arm
     handed its path through TC1_ARM_EXTRA_ENV with the profile flags and dmon beside; the arm records the ring's ACTUAL state."""
