@@ -70,7 +70,7 @@ for stack in report["unquantized"]:
 - Detection in `verify_moe_4bit` is a heuristic: a module whose class name contains `Experts` holding a 3-D float parameter. A new family may need its class recognised.
 - 4-bit on a card that already fits the model is a memory trade, not a speed-up. On the measured comparator — one OLMoE-dims expert projection on an RTX A2000, a bitsandbytes 0.50-dev fork build, dequantize-then-`linear` and the fork's `matmul_4bit` routing against native bf16 — it also cost energy: claim `e4b.train.energy-honest.scoped-a2000`, which scopes and supersedes `e4b.train.energy-honest` (superseded). That is one card and one development build; it is not a statement about bitsandbytes ≥ 0.50.0's direct packed-4-bit inference path for ordinary 2-D layers, nor about routed grouped MoE execution ([`../BITSANDBYTES.md`](../BITSANDBYTES.md)).
 - DeepSeek-V4's full-width resident load stacks one layer's experts in bf16 before quantising; use the arena path on a small card ([`../DEEPSEEK-V4.md`](../DEEPSEEK-V4.md)).
-- Gemma-4-26B-A4B fails to load on some rented hosts after the experts quantise — open, [#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344).
+- Gemma-4-26B-A4B failed to load on 2 of 6 rented hosts in September 2026, after the experts quantised. It is unreproduced on the current loader, even on a low-RAM host (lane P55): [#344](https://github.com/pjordanandrsn/experts4bit-qlora/issues/344).
 - `python -m experts4bit_qlora.verify --manifest ...` is the placement-manifest verifier, not the model check; the model check is the Python function above.
 
 ## Related

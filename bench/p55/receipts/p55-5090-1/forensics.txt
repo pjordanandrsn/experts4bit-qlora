@@ -1,0 +1,34 @@
+cpu: AMD Ryzen 7 9700X 8-Core Processor
+kernel: 7.0.0-31-generic
+MemTotal:       65439112 kB
+MemAvailable:   60893980 kB
+SwapTotal:       8388604 kB
+cgroup_limit(/sys/fs/cgroup/memory.max): 64328040448
+overcommit_memory: 0
+overcommit_ratio: 50
+max_map_count: 1048576
+ulimit:
+  real-time non-blocking time  (microseconds, -R) unlimited
+  core file size              (blocks, -c) unlimited
+  data seg size               (kbytes, -d) unlimited
+  scheduling priority                 (-e) 0
+  file size                   (blocks, -f) unlimited
+  pending signals                     (-i) 235338
+  max locked memory           (kbytes, -l) 8192
+  max memory size             (kbytes, -m) unlimited
+  open files                          (-n) 1024
+  pipe size                (512 bytes, -p) 8
+  POSIX message queues         (bytes, -q) 819200
+  real-time priority                  (-r) 0
+  stack size                  (kbytes, -s) 8192
+  cpu time                   (seconds, -t) unlimited
+  max user processes                  (-u) unlimited
+  virtual memory              (kbytes, -v) unlimited
+  file locks                          (-x) unlimited
+mem_total_gib: 62.4
+cgroup_limit_source: /sys/fs/cgroup/memory.max
+cgroup_limit_bytes: 64328040448
+effective_ram_gib: 59.9
+largest_shard_gib: 46.48
+class_max_gib: 72
+class_drawn: 1

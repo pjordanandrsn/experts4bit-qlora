@@ -1,0 +1,14 @@
+[14:07:37]   E4B_LOAD_SYNC_DEBUG=1: staged synchronisation ON; CUDA_LAUNCH_BLOCKING already set in the environment (the driver will honour it)
+[14:07:37]   host: MemTotal 60.5 GiB, MemAvailable 57.6 GiB, cgroup limit 58.1 GiB; torch 2.8.0+cu128, device 'cuda'
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files: 100%|██████████| 8/8 [00:00<00:00, 3369.93it/s]
+[14:07:37]   checkpoint: google/gemma-4-26B-A4B-it @ 4d7ae4984b7db7de8f8457170b3f1a419ee76d52 (requested 4d7ae4984b7db7de8f8457170b3f1a419ee76d52)
+[14:07:37]   [sync] mapping 2 shard(s), largest 'model-00001-of-00002.safetensors' at 46.5 GiB
+[14:07:37]   [sync] map shard handles: clean
+[14:07:37]   fusing + quantizing experts (up to 30x128) to nf4 (streaming)...
+[14:07:46]   [sync] quantise experts (all layers): clean
+[14:07:46]   quantized experts on 30/30 MoE layers (128 experts each)
+[14:07:46]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[14:07:47]   [sync] load non-expert weights: clean
+[14:07:47]   [sync] rebuild rotary embeddings: clean
+[14:07:47]   [sync] tie output head + final checks: clean
+P55 C_headroom: OK
