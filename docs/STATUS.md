@@ -244,6 +244,10 @@ passing; **nothing is quoted against Unsloth on Granite or Qwen3.6** (its arm
 trains the attention only there, VOID by tp4's regime rule) **nor on OLMoE**
 (`e4b.train.h2h.unsloth.coverage.5090.2026-09-19`) — lane TC2 re-asked
 them on the current cuts; the next paragraph is what it found.
+**And grouped-nf4-gemm's dense route** (`e4b.train.dense-route.*.5090.2026-10-04`, TC1 amendment 22): one expert dequantized at a
+time into `torch.mm`. Against the fused kernels it reads 0.651 on Mixtral-8x7B (few large experts) and 2.947 on Qwen3-30B-A3B
+(many experts, a launch-bound step), with held-out unchanged. Off sm_90, grouped-nf4-gemm's `auto` takes it for calls with at most
+16 present groups.
 
 **The other families at matched work** (lane TC2, 2026-10-02, two rented
 RTX 5090 hosts, [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md);

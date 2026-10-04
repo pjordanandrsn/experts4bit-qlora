@@ -9392,6 +9392,54 @@
     {
       "package": "experts4bit-qlora",
       "area": "train",
+      "id": "e4b.train.dense-route.mixtral.5090.2026-10-04",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a286",
+      "claim": "TC1 amendment 22, one rented RTX 5090 (tc1-5090-62): grouped-nf4-gemm's dense training route (GNF4_TRAIN_GEMM=dense, gnf4#459: one present expert dequantized at a time, its GEMM through torch.mm) against its fused 4-bit kernels, e4b's matched arm on Mixtral-8x7B resident with E4B_ABSMAX_DQ=1 on both sides: dense/fused 0.651 [0.648, 0.654], 5.52 -> 3.59 s/step (both sides stable), peak unchanged (29.03 / 29.02 GB), held-out Δ -0.0021 nats. P38 HELD (band [0.55, 0.90]), P40 HELD. By the registered rule, grouped-nf4-gemm's auto takes the dense route off sm_90 for calls with at most 16 present groups (gnf4#463).",
+      "value": 0.651,
+      "unit": "ratio s/step, dense / fused (medians of steps 11..20 over two draws each; < 1 = dense faster); cross-draw interval [0.648, 0.654]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-62: instance 54179030, Intel Core Ultra 9 285K); e4b @ 5c74564 on torch 2.8.0+cu128, grouped-nf4-gemm @ the merge of #459",
+      "conditions": "bench/tc1 TC2 field recipe for Mixtral (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407, N=20, 8 held-out rows at 0 and N); token mixtraldenseab; GNF4_TRAIN_GEMM=fused vs =dense with every other default in force plus E4B_ABSMAX_DQ=1 on both sides, resident, matched arm (fp32 adapters, matched:3407), two draws a side in ABBA order; validity and scoring by bench/tc1/tc1_reduce.py (engagement on route_ab: dense_fwd / dense_dgrad counts, absmax_dq on Mixtral)",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-denseab.md",
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-62/tc1/"
+      ],
+      "notes": "Vast invoiced $0.51."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "id": "e4b.train.dense-route.qwen3.5090.2026-10-04",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 22, one rented RTX 5090 (tc1-5090-59): the same A/B on Qwen3-30B-A3B: dense/fused 2.947 [2.915, 2.979], 2.96 -> 8.73 s/step (both sides stable), held-out Δ -0.0001. P39 FALSIFIED (band [0.85, 1.15]): with up to 128 present experts per call the per-expert loop adds about 295,000 launches per step to a launch-bound step, so the fused kernels stay the route for this family (gnf4#463 keeps them above 16 present groups).",
+      "value": 2.947,
+      "unit": "ratio s/step, dense / fused (medians of steps 11..20 over two draws each; > 1 = dense slower); cross-draw interval [2.915, 2.979]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-59: instance 54177463, AMD EPYC 9454P); e4b @ 5c74564 on torch 2.8.0+cu128, grouped-nf4-gemm @ the merge of #459",
+      "conditions": "bench/tc1 field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407, N=20, 8 held-out rows at 0 and N; token qwen3denseab; GNF4_TRAIN_GEMM=fused vs =dense with every other default in force, matched arm (fp32 adapters, matched:3407), two draws a side in ABBA order; validity and scoring by bench/tc1/tc1_reduce.py (engagement on route_ab: dense_fwd / dense_dgrad counts, absmax_dq on Mixtral)",
+      "measured_on": "2026-10-04",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-denseab.md",
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-04/tc1-5090-59/tc1/"
+      ],
+      "notes": "Vast invoiced $0.45."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
       "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04",
       "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
       "claim": "TC1c amendment 1 (#835), one rented H100 NVL (tc1c-h100-3): with e4b after TC1 amendments 10-15 (#945 syncs, #440 trimmed LoRA delta, #442 cost tile rule, #965 fused rotary, #975 fused RMSNorm -- all defaults), Unsloth 2026.9.14 (grouped_mm engaged, torch 2.12.1+cu130) takes 2.571 s/step against e4b's 3.146 at matched work: Unsloth/e4b 0.817 [0.799, 0.836] over two draws each (3.188 / 3.104 and 2.548 / 2.594, both STABLE) -- UNSLOTH STILL FASTER PER STEP ON THIS CARD, by 1.22x (1.61x before #945). P5 HELD (band [0.70, 1.20]; interval wholly below 1.0); the matched set EQUIVALENT (P6 HELD: e4b reference inside the fused arm's draw noise, Unsloth EQUIVALENT). Quoted beside it, in Unsloth's favour: peak VRAM 24.27 vs 27.26 GB (-2.98 GB), energy per step x0.79. e4b's step fell 4.097 -> 3.146 s (x0.768) against the 2026-10-02 box; Unsloth's 2.546 -> 2.571.",

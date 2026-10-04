@@ -30,6 +30,8 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-48` | `qwen3nativebest200` (amendment 18) | instance 54051454, machine 150527, AMD EPYC 7C13 64-Core Processor, driver 580.95.05 | the same box with machine 142284 excluded by evidence; P29 HELD, 1.146 [1.129, 1.164]: e4b faster at steady state on a second host; [read](RESULTS-tc1-steady18.md) | $1.23 |
 | `tc1-5090-49` | `qwen3` (amendment 19) | instance 54075516, AMD EPYC 7C13 64-Core Processor, driver 580.95.05 | the matched set again with e4b after amendments 10-15: Unsloth/e4b 1.997 (P30 HELD), matched set inside the draw noise (P31 HELD); [read](RESULTS-tc1-matched19.md) | $1.15 |
 | `tc1-5090-50` | `qwen3axolotl` (amendment 19) | instance 54075633, AMD Ryzen 9 9950X3D 16-Core Processor, driver 610.57.04 | the axolotl matched rows again: axolotl/e4b 2.775 (P32 HELD); [read](RESULTS-tc1-matched19.md) | $0.33 |
+| `tc1-5090-59` | `qwen3denseab` (amendment 22) | instance 54177463, AMD EPYC 9454P | e4b against itself: grouped-nf4-gemm's fused kernels vs its dense route: dense/fused 2.947, far slower (P39 FALSIFIED); [read](RESULTS-tc1-denseab.md) | $0.45 |
+| `tc1-5090-62` | `mixtraldenseab` (amendment 22) | instance 54179030, Intel Core Ultra 9 285K | the same A/B on Mixtral-8x7B resident (`E4B_ABSMAX_DQ=1` both sides): dense/fused 0.651 (P38 HELD); held-out within 0.01 on both families (P40 HELD); [read](RESULTS-tc1-denseab.md) | $0.51 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -38,6 +40,35 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 22 (2026-10-04): grouped-nf4-gemm's dense route against its fused kernels — far faster on Mixtral, far slower on Qwen3-30B-A3B
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 22. Each box ran e4b against itself on the matched arm,
+`GNF4_TRAIN_GEMM=fused` against `=dense` (grouped-nf4-gemm#459: one present expert dequantized at a time, its GEMM through `torch.mm`).
+There were two draws a side in ABBA order, with grouped-nf4-gemm at #459's merge. Read: [`RESULTS-tc1-denseab.md`](RESULTS-tc1-denseab.md),
+both boxes in one pass.
+
+| family | box, host | fused s/step | dense s/step | **dense/fused** | held-out Δ (dense − fused) | prediction |
+|---|---|---|---|---|---|---|
+| Mixtral-8x7B (2 of 8 experts), resident, `E4B_ABSMAX_DQ=1` both sides | `tc1-5090-62`, Core Ultra 9 285K | 5.491 / 5.541 | 3.592 / 3.589 | **0.651** [0.648, 0.654] | −0.0021 | **P38 HELD** ([0.55, 0.90]) |
+| Qwen3-30B-A3B (up to 128 present experts) | `tc1-5090-59`, EPYC 9454P | 2.949 / 2.976 | 8.674 / 8.784 | **2.947** [2.915, 2.979] | −0.0001 | **P39 FALSIFIED** ([0.85, 1.15]) |
+
+**P40 HELD:** both families' held-out stay within 0.01, and the peaks do not move (Mixtral 29.03 / 29.02 GB).
+
+**Why the two families split.** The dense route trades the fused kernels' device time for launches. Each present expert costs a dequant and
+a GEMM, in every projection call. On Mixtral that is 8 experts per call, and the expert GEMMs are large (about 1,000 rows each), so the
+device-side gain dominates. An RTX A2000 replay put the dense forward at about 0.3× and its dgrad at about 0.13× of the fused kernels on
+those shapes. On Qwen3-30B-A3B a step makes about 1,150 projection calls with up to 128 experts each, roughly 295,000 extra launches. On a
+5090, where this step is already launch-bound, that cost dominates.
+
+**Step-0 held-out on Qwen3 moves with every GEMM implementation**, not only this route: the fused kernels read 1.9714 on an H100 and
+1.9441 on a 5090, the reference loop 1.9551 / 1.9508, the grouped_mm route 1.9614, and the dense route 1.9672. All of them train to the
+same held-out (here Δ −0.0001).
+
+**Decision, as registered.** P38 and P40 held, so grouped-nf4-gemm's `auto` takes the dense route on cards other than sm_90 for calls
+with at most 16 present groups (grouped-nf4-gemm#463). Qwen3-30B-A3B's calls stay on the fused kernels. Rows
+`e4b.train.dense-route.mixtral.5090.2026-10-04` and `e4b.train.dense-route.qwen3.5090.2026-10-04`. No position against another framework is
+read here; the Mixtral position with the new default needs its own box.
 
 ## The position (register `e4b.train.h2h.unsloth.qwen3.5090.2026-10-02`)
 
