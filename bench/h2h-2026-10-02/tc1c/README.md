@@ -8,6 +8,42 @@ frameworks, Unsloth 2026.9.14 on torch 2.12.1+cu130 with `grouped_mm` engaged on
 (AMD EPYC 9534, 224 vCPU, 1.58 TB host RAM, driver 595.71.05), $4.88. The first draw (`tc1c-h100-1`) was refused at $0 before any
 instance existed (its manifest carried the 5090 pre-flight exclusion receipts, not same-class for an H100).
 
+## Amendment 3 (2026-10-04): on the H100, dequantize + `torch._grouped_mm` runs the recorded GEMM calls in 0.50–0.60 of the fused kernels' time — a kernel replay, not a position
+
+Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 3.
+
+**The box.** `tc1c-h100-5`: Vast instance 54112861, H100 NVL (capability 9.0), driver 595.71.05, torch 2.8.0+cu128, bitsandbytes 0.50.2,
+$0.21; receipts in [`receipts/tc1c-h100-5/`](receipts/tc1c-h100-5/), with the per-call table in `ROUTEBENCH.json`. The code was e4b
+`69e7962` and grouped-nf4-gemm `4509307`. Token `routebench`: no model, no Unsloth venv.
+[`../../tc1/route_bench.py`](../../tc1/route_bench.py) replays the 128 unique fused-GEMM calls of e4b's training step from
+[`../../tc1/routecalls-qwen3.json`](../../tc1/routecalls-qwen3.json). Those were recorded through the real checkpoint's router on a
+4-layer Qwen3-30B-A3B slice, at Qwen3-30B-A3B's shapes. Each call is timed by CUDA events at the median of 10. The whole-stack
+dequant matched `dequant_ref` bitwise before anything was timed.
+
+| calls (64 each) | fused (ms) | dequantize_4bit (ms) | torch._grouped_mm (ms) | (dequant + grouped_mm) / fused | grouped_mm / fused |
+|---|---|---|---|---|---|
+| forward | 75.11 | 29.45 | 15.29 | **0.596** | 0.204 |
+| dgrad | 89.20 | 29.42 | 14.63 | **0.494** | 0.164 |
+
+By shape:
+
+| | gate_up (N 1536, K 2048) | down (N 2048, K 768) |
+|---|---|---|
+| forward | 0.569 | 0.646 |
+| dgrad | 0.493 | 0.495 |
+
+- **P9 HELD:** forward 0.596, band 0.20–0.80.
+- **P10 HELD:** dgrad 0.494.
+- **P11 HELD:** the route's relative Frobenius error against the fused output is at most 0.0024 on every call (bound 0.005).
+- **The dequant dominates.** The dequantize is about two thirds of the route's time (≈ 0.46 ms per call, a 128-expert bf16 stack
+  written each time). The grouped GEMM alone is 0.16–0.20 of the fused kernels. On sm_90 the fused decode-in-the-mainloop kernels are
+  slower than decoding once and running the card's native grouped GEMM, and the profiles' device-time gap matches.
+
+**What follows.** By the decision rule, the route goes into grouped-nf4-gemm as an opt-in for sm_90 (`GNF4_TRAIN_GEMM=grouped_mm`: a
+Triton dequant of the present experts, bit-equal to `dequant_ref`, then `torch._grouped_mm` for the forward and the dgrad). Its value on
+the full training step is a separate registered box (amendment 4). Not bit-identical to the fused kernels, so a training A/B decides
+it. This box quotes no position and changes no register row.
+
 ## Amendment 2 (2026-10-04): with e4b keeping all 48 layers' MoE activations it is faster per step on the H100 too — 1.100, a labelled row (register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep`)
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 2.
