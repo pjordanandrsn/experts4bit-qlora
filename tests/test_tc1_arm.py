@@ -343,23 +343,28 @@ def test_tc1_run_sh_runs_the_registered_arm_order_with_the_matched_flags():
     assert "pip_e4b_t212.log" in body and 'T212_OK=1' in body and "OMP_NUM_THREADS=$PHYS" in body and "lscpu -p=CORE,SOCKET" in body
 
 
-def test_gpu_class_check_accepts_h100_spellings_and_labels_the_box():
+def test_gpu_class_check_accepts_h100_spellings_and_labels_the_box(tmp_path):
     """K: TC1_GPU_CLASS=H100 must pass the class check for every H100 spelling (lane TC1c), 5090 still passes, a 4090 is refused,
-    and the recorded box class is 'RTX <n>' for a numeric class and the class string otherwise."""
+    and the recorded box class is 'RTX <n>' for a numeric class and the class string otherwise. The refusal appends BOX_REFUSED to
+    a cwd-relative summary.txt, so each case runs in its own temp dir: run from the repo root, it left summary.txt behind there."""
     body = RUN_SH.read_text()
     check = re.search(r'^case "\$GPU_NAME" in \*"\$GPU_CLASS"\*\) ;; \*\) .*?;; esac$', body, re.M)
     label = re.search(r'^case "\$GPU_CLASS" in \[0-9\]\*\) BOX_CLASS="RTX \$GPU_CLASS";; \*\) BOX_CLASS="\$GPU_CLASS";; esac$', body, re.M)
     assert check and label, "the class check / label lines are not in the shape this test drives"
-    for name, cls, ok, want_label in (("NVIDIA H100 NVL", "H100", True, "H100"), ("NVIDIA H100 80GB HBM3", "H100", True, "H100"), ("NVIDIA H100 PCIe", "H100", True, "H100"),
-                                      ("NVIDIA GeForce RTX 5090", "5090", True, "RTX 5090"), ("NVIDIA GeForce RTX 4090", "5090", False, None),
-                                      ("NVIDIA GeForce RTX 4090", "4090", True, "RTX 4090"), ("NVIDIA RTX A2000 12GB", "RTX A2000", True, "RTX A2000"),      # TC3's two boxes
-                                      ("NVIDIA GeForce RTX 5090", "RTX A2000", False, None)):
+    for i, (name, cls, ok, want_label) in enumerate((("NVIDIA H100 NVL", "H100", True, "H100"), ("NVIDIA H100 80GB HBM3", "H100", True, "H100"), ("NVIDIA H100 PCIe", "H100", True, "H100"),
+                                                     ("NVIDIA GeForce RTX 5090", "5090", True, "RTX 5090"), ("NVIDIA GeForce RTX 4090", "5090", False, None),
+                                                     ("NVIDIA GeForce RTX 4090", "4090", True, "RTX 4090"), ("NVIDIA RTX A2000 12GB", "RTX A2000", True, "RTX A2000"),      # TC3's two boxes
+                                                     ("NVIDIA GeForce RTX 5090", "RTX A2000", False, None))):
         script = "\n".join(['say(){ echo "$*"; }; finish(){ echo "FINISH $1"; exit $1; }', f'GPU_NAME="{name}"; GPU_CLASS="{cls}"', check.group(0), label.group(0), 'echo "PASS label=$BOX_CLASS"'])
-        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        cwd = tmp_path / f"case{i}"
+        cwd.mkdir()
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, cwd=cwd)
+        summary = cwd / "summary.txt"
         if ok:
-            assert r.returncode == 0 and f"PASS label={want_label}" in r.stdout, (name, cls, r.stdout, r.stderr)
+            assert r.returncode == 0 and f"PASS label={want_label}" in r.stdout and not summary.exists(), (name, cls, r.stdout, r.stderr)
         else:
             assert r.returncode == 12 and "BOX REFUSED" in r.stdout, (name, cls, r.stdout)
+            assert summary.read_text() == f"BOX_REFUSED gpu={name}\n", (name, cls, summary.read_text())
 
 
 def test_every_env_knob_the_box_reads_is_forwarded_by_the_driver():
