@@ -101,6 +101,7 @@ esac
 NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" qwen3syncab "|" qwen3prof945 "|" qwen3leanab "|" qwen3tileab "|" qwen3rmsab "|" qwen3reuseab "|" qwen3keepab "|" routebench "|" fusedsweep ") NEED_UNSLOTH=0;; esac
 # TC1 amendment 22: the dense-route A/B tokens run no Unsloth arm either -- alone, or both on their one box (in either order)
 case " $FAMILIES " in " qwen3denseab "|" mixtraldenseab "|" qwen3denseab mixtraldenseab "|" mixtraldenseab qwen3denseab ") NEED_UNSLOTH=0;; esac
+case " $FAMILIES " in " qwen3prebindab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 26: an e4b-only A/B
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
@@ -1114,6 +1115,26 @@ tc1_samestack_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 RAL=$7
   can_run 600 $FAM/e4b/fused_m_d2     && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_prebindab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 26 (2026-10-04): the prebound Triton launches (E4B_TRITON_PREBIND +
+# GNF4_TRITON_PREBIND, e4b#1078 + grouped-nf4-gemm#468; same compiled kernels, values identical) off vs on, the shipped and the matched arm, two
+# draws a side in ABBA order, venv-e4b (torch 2.8.0+cu128, triton 3.4: a version the prebound path covers), every other default.
+tc1_prebindab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_pb0:fused e4b:fused_attn4_shipped_pb1:fused e4b:fused_attn4_m_pb0:fused e4b:fused_attn4_m_pb1:fused e4b:fused_attn4_m_pb1_d2:fused e4b:fused_attn4_m_pb0_d2:fused e4b:fused_attn4_shipped_pb1_d2:fused e4b:fused_attn4_shipped_pb0_d2:fused"
+  say "===== PREBIND A/B family $FAM ($MID @ $REV; Triton launches prebound off vs on, e4b + grouped-nf4-gemm, amendment 26)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local OLD="E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0" NEW="E4B_TRITON_PREBIND=1 GNF4_TRITON_PREBIND=1"
+  can_run 600 $FAM/e4b/shipped_pb0     && TC1_ARM_EXTRA_ENV="$OLD" arm   $FAM e4b fused_attn4_shipped_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_pb1     && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_shipped_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_pb0           && TC1_ARM_EXTRA_ENV="$OLD" arm   $FAM e4b fused_attn4_m_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pb1           && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_m_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pb1_d2        && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_m_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pb0_d2        && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_m_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_pb1_d2  && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_shipped_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_pb0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_shipped_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_routebench_family FAM ALARM -- TC1c amendment 3 (2026-10-04): a kernel-route replay, not a training run. grouped-nf4-gemm's
 # fused NF4 grouped GEMM (forward and dgrad) against a whole-stack bitsandbytes dequantize_4bit + torch._grouped_mm on the
 # recorded real-router calls of e4b's training step (routecalls-qwen3.json, staged by TC1_EXTRA_STAGE with route_bench.py; no
@@ -1300,6 +1321,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 22
   qwen3bmmab)  tc1_bmmab_family  qwen3bmmab  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 24: bmm replay + venv-e4b vs venv-unsloth
   qwen3samestack) tc1_samestack_family qwen3samestack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1 amendment 25: both frameworks on one stack
+  qwen3prebindab) tc1_prebindab_family qwen3prebindab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 26: prebound Triton launches off vs on
   mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 22 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3memcensus) tc1_memcensus_family qwen3memcensus Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 23 (fetch 5400, e4b 3600, Unsloth 3600)
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)

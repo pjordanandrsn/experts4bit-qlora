@@ -3685,6 +3685,23 @@ def run_arm(a, load_fn, sampler=True):
         reuse_ab = {"gnf4_host_reuse": ("1" if _ron else "0") if _ron is not None else None, "gnf4_host_reuse_env": os.environ.get("GNF4_HOST_REUSE"),
                     "gnf4_has_host_reuse": _ron is not None,
                     "stats": {k: int(v) for k, v in (getattr(_ngr, "HOST_REUSE_STATS", None) or {}).items()} if _ngr is not None else {}}
+    prebind_ab = None                                  # TC1 amendment 26: whether the prebound Triton launches were in force (e4b + gnf4), and how often they ran
+    if a.framework == "e4b":
+        def _prebind_side(modname):
+            try:
+                m = importlib.import_module(modname)
+            except Exception:
+                return {"has": False, "requested": None, "stats": {}}
+            req = getattr(m, "prebind_requested", None)
+            return {"has": hasattr(m, "PREBIND_STATS"), "requested": bool(req()) if callable(req) else None,
+                    "stats": {k: int(v) for k, v in (getattr(m, "PREBIND_STATS", None) or {}).items()}}
+        try:
+            import triton as _tr
+            _trv = _tr.__version__
+        except Exception:
+            _trv = None
+        prebind_ab = {"e4b_env": os.environ.get("E4B_TRITON_PREBIND"), "gnf4_env": os.environ.get("GNF4_TRITON_PREBIND"), "triton": _trv,
+                      "e4b": _prebind_side("experts4bit_qlora.engines.triton_prebind"), "gnf4": _prebind_side("_triton_shim")}
     keep_ab = None                                     # TC1 amendment 21 (#945): how many decoder layers kept their MoE activations, with the compact delta
     if a.framework == "e4b":
         try:
@@ -3767,6 +3784,7 @@ def run_arm(a, load_fn, sampler=True):
         "lean_ab": lean_ab,                                                                                              # TC1 amendment 13 (#945)
         "tile_ab": tile_ab,                                                                                              # TC1 amendment 14 (#945)
         "rms_ab": rms_ab,                                                                                                # TC1 amendment 15 (#945)
+        "prebind_ab": prebind_ab,                                                                                        # TC1 amendment 26
         "reuse_ab": reuse_ab,                                                                                            # TC1 amendment 20 (#945)
         "keep_ab": keep_ab,                                                                                              # TC1 amendment 21 (#945)
         "route_ab": route_ab,                                                                                            # TC1c amendment 4
