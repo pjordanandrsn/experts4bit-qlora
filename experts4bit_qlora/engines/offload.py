@@ -731,7 +731,14 @@ def enable_expert_offload(experts_lora, device, pin: bool = True,
     (``device`` / ``pin`` are ignored). This is load-bearing, not a convenience — while evicted the
     base's registered tensors are 0-element placeholders, so a second handle would capture *those*
     as its CPU homes (losing the weights) and stack a second pair of stage/evict hooks.
+
+    Refuses (``AbsmaxCompressedError``) a base whose absmax :func:`experts4bit_qlora.compress_expert_absmax_`
+    stored double-quantized (``E4B_ABSMAX_DQ=1``): the handle stages the fp32 absmax by name, and that
+    switch is resident-only.
     """
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(experts_lora, "enable_expert_offload")
     existing = getattr(experts_lora, "_offload", None)
     if existing is not None:
         return existing

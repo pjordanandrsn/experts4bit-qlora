@@ -32,6 +32,7 @@ import torch
 import torch.nn.functional as F
 
 from .._vendor.experts import Experts4bit, ExpertsNbit
+from ..absmax_dq import assert_absmax_uncompressed
 
 #: gpt-oss epilogue scalars. The released config ships neither (only
 #: ``swiglu_limit``, equal to LIMIT), so these ARE the model's values --
@@ -93,6 +94,9 @@ class _GptOssForwardMixin:
         router_indices: torch.Tensor,   # [num_tokens, top_k]
         router_scores: torch.Tensor,    # [num_tokens, top_k]
     ) -> torch.Tensor:
+        # This per-expert loop reads the fp32 absmax buffers directly: a double-quantized stack
+        # (compress_expert_absmax_, E4B_ABSMAX_DQ=1) is refused by name, never read through the guard.
+        assert_absmax_uncompressed(self, "GptOssExperts forward")
         input_dtype = hidden_states.dtype
         cd = self.compute_dtype if self.compute_dtype is not None else input_dtype
         x = hidden_states.to(cd)

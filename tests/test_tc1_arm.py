@@ -1362,3 +1362,139 @@ def test_tc1_amendment_12_profile_token():
     src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
     assert "_ring_on = bool(_ng._pinned_ring_enabled())" in src and '"gnf4_pinned_ring_env": os.environ.get("GNF4_PINNED_RING"),' in src
 
+
+
+# ----------------------------------------------------------------------------- ABSMAX-DQ: e4b's double-quantized expert absmax
+def _run_env(env_extra, *args):
+    env = dict(os.environ)
+    env.pop("E4B_ABSMAX_DQ", None)
+    env.update(env_extra)
+    return subprocess.run([sys.executable, str(ARM), *args], capture_output=True, text=True, timeout=300, cwd=REPO, env=env)
+
+
+def test_absmax_dq_reaches_e4b_arms_only_and_refuses_offload_before_load(tmp_path):
+    """--absmax-dq defaults from E4B_ABSMAX_DQ=1 (what TC1_E4B_ENV hands the e4b arms), is a harness_error on any other
+    framework (exit 19) and a refused row with --offload 1 (exit 3) -- both before anything loads, so CI drives them."""
+    common = ["--prereg", "tc1/TC1-PREREG.md", "--out", str(tmp_path), "--adapter-dir", str(tmp_path / "ad")]
+    p = _run_env({"E4B_ABSMAX_DQ": "1"}, "--framework", "unsloth", "--arm", "unsloth", "--tag", "u", *common)
+    assert p.returncode == 19, (p.stdout + p.stderr)[-2000:]
+    rec = json.loads((tmp_path / "qwen3_unsloth_u.json").read_text())
+    assert rec["status"] == "harness_error" and rec["absmax_dq"] is True and "e4b switch only" in rec["reason"], rec
+    for env, flag in (({"E4B_ABSMAX_DQ": "1"}, []), ({}, ["--absmax-dq", "1"])):
+        p = _run_env(env, "--framework", "e4b", "--arm", "fused", "--offload", "1", "--tag", "f", *flag, *common)
+        assert p.returncode == 3, (p.stdout + p.stderr)[-2000:]
+        rec = json.loads((tmp_path / "qwen3_e4b_f.json").read_text())
+        assert rec["status"] == "refused" and rec["absmax_dq"] is True and "resident-only" in rec["reason"], rec
+    src = ARM.read_text()
+    assert 'ap.add_argument("--absmax-dq", type=int, default=int(os.environ.get("E4B_ABSMAX_DQ", "0") == "1"),' in src
+
+
+def _tiny_e4b_model(E=4, H=128, inter=64, n_layers=2):
+    """A real e4b model on CPU: Experts4bit stacks under ExpertsLoRA at layers.<i>.mlp.experts, fp32 q/k/v/o."""
+    import types
+
+    import torch
+    import torch.nn as nn
+
+    from experts4bit_qlora import Experts4bit, ExpertsLoRA
+
+    class _M(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.layers = nn.ModuleList()
+            for i in range(n_layers):
+                g = torch.Generator().manual_seed(i)
+                layer = nn.Module()
+                layer.self_attn = nn.Module()
+                for p in ("q_proj", "k_proj", "v_proj", "o_proj"):
+                    setattr(layer.self_attn, p, nn.Linear(H, H, bias=False))
+                layer.mlp = nn.Module()
+                base = Experts4bit.from_float(torch.randn(E, 2 * inter, H, generator=g, dtype=torch.bfloat16),
+                                              torch.randn(E, H, inter, generator=g, dtype=torch.bfloat16), blocksize=64, quant_type="nf4")
+                layer.mlp.experts = ExpertsLoRA(base, r=2, alpha=4, dtype=torch.bfloat16)
+                self.layers.append(layer)
+            self.config = types.SimpleNamespace(use_cache=True, num_hidden_layers=n_layers, model_type="tiny_e4b", hidden_size=H,
+                                                num_experts=E)
+
+        def gradient_checkpointing_enable(self, **kw):
+            pass
+
+        def to(self, *a, **k):                # the arm's resident `.to("cuda")`, a no-op on a CPU test
+            return self
+
+    return _M()
+
+
+def test_load_e4b_compresses_after_attn4_and_before_the_lora_wrap(monkeypatch):
+    """On REAL e4b storage: --absmax-dq 1 runs compress_expert_absmax_ in its own phase between attn4 and lora, records
+    modules / bytes before / after / ratio, and the frozen-base probe and C1 then read the compressed stack."""
+    pytest.importorskip("bitsandbytes")
+    import types
+
+    import experts4bit_qlora
+    arm = _load_arm_module()
+    try:
+        model = _tiny_e4b_model()
+    except Exception as e:                    # the bnb CPU 4-bit path; skip only when it is genuinely absent
+        pytest.skip(f"bitsandbytes CPU 4-bit quantisation unavailable: {type(e).__name__}: {e}")
+    monkeypatch.setattr(experts4bit_qlora, "load_moe_4bit_streaming", lambda *a, **k: (model, model.config), raising=False)
+    monkeypatch.setattr(experts4bit_qlora, "verify_moe_4bit", lambda m, strict=True: {"n_quantized": 2, "n_unquantized": 0})
+    tf = types.ModuleType("transformers")
+    tf.AutoTokenizer = types.SimpleNamespace(from_pretrained=lambda *a, **k: object())
+    monkeypatch.setitem(sys.modules, "transformers", tf)
+    a = types.SimpleNamespace(model="fake/model", revision="0" * 40, r=2, alpha=4, offload=0, attn_4bit=0, arm="reference", absmax_dq=1)
+    arm.PH.reset()
+    arm.PH.begin(time.perf_counter())
+    _model, x = arm.load_e4b(a)
+    assert list(arm.PH.report()["phase_seconds"]) == ["load_weights", "verify", "attn4", "absmax_dq", "lora", "enable", "tokenizer"]
+    rep = x["absmax_dq"]
+    E, H, inter = 4, 128, 64
+    m_gu, m_dn = E * 2 * inter * H // 64, E * H * inter // 64
+    nested = sum(m + 4 * -(-m // 256) + 4 + 1024 for m in (m_gu, m_dn))
+    assert rep == {"modules": 2, "bytes_before": 2 * 4 * (m_gu + m_dn), "bytes_after": 2 * nested,
+                   "ratio": round(4 * (m_gu + m_dn) / nested, 4)}, rep
+    probe = arm.frozen_base_probe(model, "e4b")
+    assert not probe["errors"] and probe["control_detects_flip"] is True, probe
+    assert probe["slots"]["gate_up"]["regime"] == "nf4/64+dq" and probe["slots"]["down"]["regime"] == "nf4/64+dq"
+    # C1 hashes the compressed buffers (they sit under `experts`), and nothing it hashes is empty
+    h, nbytes, empties, regimes = arm.hashes_frozen(model)
+    assert empties == 0 and any(k.endswith("gate_up_absmax_q") for k in h) and not any(k.endswith(".gate_up_absmax") for k in h), sorted(h)
+    assert arm.c1_control(model, h)["detects"]
+
+
+def test_frozen_base_probe_reads_a_compressed_stack_as_bnbs_nested_path_does():
+    """SAME-BYTES with double-quant on both sides: e4b's compressed stack and bitsandbytes' whole-stack Params4bit with
+    compress_statistics=True (what a double-quant bnb load holds) dequantise expert 0 to the same bf16 bytes."""
+    bnb = pytest.importorskip("bitsandbytes")
+    import bitsandbytes.functional as BF
+    import torch
+    import torch.nn as nn
+
+    from experts4bit_qlora import compress_expert_absmax_
+    arm = _load_arm_module()
+    E, H, inter = 4, 128, 64
+    try:
+        e4b_m = _tiny_e4b_model(E, H, inter, n_layers=1)
+    except Exception as e:
+        pytest.skip(f"bitsandbytes CPU 4-bit quantisation unavailable: {type(e).__name__}: {e}")
+    assert compress_expert_absmax_(e4b_m) == 1
+    g = torch.Generator().manual_seed(0)                                  # layer 0's stacks, regenerated
+    gu = torch.randn(E, 2 * inter, H, generator=g, dtype=torch.bfloat16)
+    dn = torch.randn(E, H, inter, generator=g, dtype=torch.bfloat16)
+
+    class _Stack(nn.Module):
+        pass
+    st = _Stack()
+    for name, w in (("gate_up_proj", gu), ("down_proj", dn)):
+        q, s = BF.quantize_4bit(w.contiguous(), blocksize=64, compress_statistics=True, quant_type="nf4")
+        setattr(st, name, bnb.nn.Params4bit(q, requires_grad=False, quant_state=s, quant_type="nf4", blocksize=64, bnb_quantized=True))
+    hf_m = nn.Module()
+    hf_m.layers = nn.ModuleList([nn.Module()])
+    hf_m.layers[0].mlp = nn.Module()
+    w1 = arm._ParamWrapper(st, "gate_up_proj", E, H, 2 * inter, 2, 4, 1, torch.bfloat16, "hf")
+    hf_m.layers[0].mlp.experts = arm._ParamWrapper(w1, "down_proj", E, inter, H, 2, 4, 2, torch.bfloat16, "hf")
+    hf_m.config = e4b_m.config
+    pe, ph = arm.frozen_base_probe(e4b_m, "e4b"), arm.frozen_base_probe(hf_m, "hf")
+    for k in ("gate_up", "down"):
+        assert pe["slots"][k]["regime"] == ph["slots"][k]["regime"] == "nf4/64+dq", (k, pe["slots"][k]["regime"], ph["slots"][k]["regime"])
+        assert pe["slots"][k]["sha"] == ph["slots"][k]["sha"], f"{k}: e4b's double-quantized expert 0 != bnb's nested whole-stack slice"

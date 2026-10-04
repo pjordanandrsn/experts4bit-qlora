@@ -346,11 +346,16 @@ def enable_batched_train(model, verbose: bool = False) -> int:
     Refuses (``EpilogueContractError``) a wrapper whose base violates the
     stock-epilogue contract (:func:`experts4bit_qlora.assert_stock_epilogue`): a
     biased or clamped expert stack is unfaithful on the reference path too, so
-    there is nothing correct to leave it on.
+    there is nothing correct to leave it on. Refuses (``AbsmaxCompressedError``) a
+    model whose expert absmax ``compress_expert_absmax_`` double-quantized
+    (``E4B_ABSMAX_DQ=1``): this path dequantizes whole stacks from the fp32 buffer.
     Use it as the no-extras training path (torch + bitsandbytes only) when ``[fast]`` will
     not build; it costs peak memory for a decoded stack. See
     ``docs/solutions/qlora-fused-moe-experts.md``.
     """
+    # Reads the fp32 expert absmax: a double-quantized one (E4B_ABSMAX_DQ=1) is refused by name.
+    from ..absmax_dq import refuse_compressed_absmax
+    refuse_compressed_absmax(model, "enable_batched_train")
     from experts4bit_qlora.lora import ExpertsLoRA
 
     from .fast import _refuse_wrapped

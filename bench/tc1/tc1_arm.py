@@ -133,6 +133,17 @@ Exit codes added: 18 matched init impossible (a LoRA B is not zero after constru
           mxfp4_dequant.py:316 -- signature UNVERIFIED here) for expert 0, regime `<class>-packed/dequantize()`; its control flips one
           byte of the REAL storage in place, decodes again and restores the byte exactly; a failing decode falls back to raw bytes, saying so.
 
+  ABSMAX-DQ --absmax-dq 0|1 (e4b only; default 1 iff E4B_ABSMAX_DQ=1 is in the arm's environment, so a box's TC1_E4B_ENV reaches the e4b
+      arms and no other): on the e4b build path, after the attention conversion and before the attention LoRA wrap,
+      experts4bit_qlora.compress_expert_absmax_(model) stores every ExpertsLoRA-wrapped NF4 stack's absmax in bitsandbytes' nested
+      form -- the statements quantize_4bit(compress_statistics=True) runs (offset = mean; 8-bit codes with one fp32 scale per 256) --
+      and the resident training paths expand one layer's projection to fp32 just in time (lossy against fp32; with the flag off
+      nothing changes). Its own phase, `absmax_dq`, only when on. Receipt: `absmax_dq` on every row; when on, `absmax_dq_modules`,
+      `absmax_bytes_before`, `absmax_bytes_after`, `absmax_bytes_ratio` (expert_absmax_bytes before and after). The frozen-base probe
+      reads a compressed stack through the library's per-expert accessor, regime `nf4/64+dq`. Refused before anything loads: the
+      flag on a non-e4b framework (harness_error, exit 19) and with --offload 1 (refused, exit 3 -- the library refuses expert
+      offload of a compressed stack); compressing no stack is a refused row (exit 3).
+
 ----- the tp4 docstring, unmodified -----
 
 tp4_arm.py -- lane tp4 (TP4-PREREG.md) per-arm driver, THREE frameworks: e4b, Unsloth, plain HF+PEFT+bnb.
@@ -277,7 +288,7 @@ HARNESS = ("tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp3
            "byte-flip control; + T22: TC1_ environment names, /root/tc1; + P2-1: Unsloth backend/tilt/double-quant knobs "
            "and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, "
            "--unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance "
-           "and grouped_mm dispatch counters, the packed-parameter probe)")   # a receipt must say WHICH harness produced it
+           "and grouped_mm dispatch counters, the packed-parameter probe; + --absmax-dq: e4b's double-quantized expert absmax)")   # a receipt must say WHICH harness produced it
 EXPERT_ATTRS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
 EXPERT_PARAM_RE = re.compile(r"experts\.(?:.*\.)?(gate_up_proj|down_proj|gate_proj|up_proj|w[123]|input_linear|output_linear)$")
 FMT = "### Instruction:\n{instruction}\n\n### Response:\n{output}"
@@ -1108,6 +1119,8 @@ def stub(a, status, reason, extra=None, code=None, fw=None, tag=None, arm=None):
            "tag": tag or a.tag, "status": status, "reason": str(reason)[:800], "steps": a.steps, "seq": a.seq,
            "accum": a.accum, "micro_batch": int(getattr(a, "micro_batch", 1) or 1), "offload": bool(a.offload), "prereg": a.prereg, "harness": HARNESS,
            "note": getattr(a, "note", None)}                                                                              # TC1b: --note on every row
+    if getattr(a, "absmax_dq", 0):                  # ABSMAX-DQ: a refused / OOM row says the switch was on
+        rec["absmax_dq"] = True
     ph, cur, _ = PH.snapshot()                      # #548: a REFUSED / OOM / alarmed row says where its time went too --
     if PH.started():                                # that is the row the issue was raised about, and it had no numbers at all.
         # Emitted even when EMPTY, so "this arm died before anything was timed" is distinguishable from
@@ -1523,6 +1536,17 @@ def load_e4b(a):
         x["attn4_probe"] = attn4_bias_probe(model)
         if a.attn_4bit:
             attn4_census_check(a, model, x, detect_attention_projections, quantize_attention_projections_4bit)   # T10
+    if getattr(a, "absmax_dq", 0):                  # ABSMAX-DQ: after the attention conversion, before the LoRA wrap
+        with PH("absmax_dq"):
+            from experts4bit_qlora import compress_expert_absmax_, expert_absmax_bytes
+            b0 = expert_absmax_bytes(model)
+            n_dq = compress_expert_absmax_(model)    # refuses (ValueError -> a refused row) rather than compressing part of the model
+            b1 = expert_absmax_bytes(model)
+        x["absmax_dq"] = {"modules": int(n_dq), "bytes_before": int(b0), "bytes_after": int(b1),
+                          "ratio": round(b0 / b1, 4) if b1 else None}
+        if n_dq == 0:
+            stub(a, "refused", "--absmax-dq 1: compress_expert_absmax_ compressed no expert stack -- refusing a vacuous arm",
+                 {"phase": "absmax_dq", "n_layers": x["n_layers"], "model_type": x["model_type"]}, code=3)
     with PH("lora"):
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
         model.config.use_cache = False
@@ -2475,11 +2499,17 @@ def _slot_record(deq, regime, method, source, control_deq):
 def _probe_e4b_stack(inner, slot, pk, am, shp):
     """e4b: the library's own per-expert dequant (Experts4bit._dequantize_expert, the function its forward recomputes
     with) on expert 0, to bf16; the control re-dequantises a 1-row COPY of the packed storage with one byte flipped."""
-    packed, absmax, shape = getattr(inner, pk), getattr(inner, am), tuple(int(v) for v in getattr(inner, shp))
+    dq = "_e4b_absmax_dq" in getattr(inner, "__dict__", {})     # ABSMAX-DQ: the absmax is stored double-quantized
+    if dq:                                          # ... so it is read the way the library's per-expert loop reads it
+        from experts4bit_qlora.absmax_dq import expert_absmax_rows
+        absmax = expert_absmax_rows(inner, slot)
+    else:
+        absmax = getattr(inner, am)
+    packed, shape = getattr(inner, pk), tuple(int(v) for v in getattr(inner, shp))
     deq = inner._dequantize_expert(packed, absmax, shape, 0, torch.bfloat16)
     deq2 = inner._dequantize_expert(flip_first_byte(packed[0:1]), absmax, shape, 0, torch.bfloat16)
     bits = int(getattr(inner, "bits", 4))
-    regime = f"{inner.quant_type}/{inner.blocksize}" if bits != 16 else f"{_dtype_label(packed.dtype)} passthrough"
+    regime = (f"{inner.quant_type}/{inner.blocksize}" + ("+dq" if dq else "")) if bits != 16 else f"{_dtype_label(packed.dtype)} passthrough"
     return _slot_record(deq, regime, f"e4b {type(inner).__name__}._dequantize_expert(expert 0) -> bf16", f"{pk}[0]", deq2)
 
 
@@ -2800,7 +2830,8 @@ def run_arm(a, load_fn, sampler=True):
                                    "frozen_base_probe": {"slots": {k: {"sha": v["sha"][:16], "regime": v["regime"], "control_detects_flip": v["control_detects_flip"]} for k, v in probe["slots"].items()},
                                                          "control_detects_flip": probe["control_detects_flip"], "errors": probe["errors"]},
                                    "non_adapter_trainable": non_adapter[:4], "census": {k: v for k, v in census.items() if k != "samples"},
-                                   "tokenizer_agree": tokenizer_agree, "ckpt": x["ckpt_mode"], "probes": x.get("probes"), "attn4_probe": x.get("attn4_probe")}), flush=True)
+                                   "tokenizer_agree": tokenizer_agree, "ckpt": x["ckpt_mode"], "probes": x.get("probes"), "attn4_probe": x.get("attn4_probe"),
+                                   "absmax_dq": x.get("absmax_dq")}), flush=True)
     for l in banner_lines:
         print("ENGAGE " + l[:300], flush=True)
     if non_adapter:
@@ -3178,6 +3209,9 @@ def run_arm(a, load_fn, sampler=True):
         "r": a.r, "alpha": a.alpha, "lr": a.lr, "seed": a.seed, "offload": bool(a.offload),
         "optimizer": optimizer_str, "lr_per_step": [round(v, 8) for v in lr_per_step], "template": template,
         "grad_ckpt": x["ckpt_mode"], "attn_4bit": bool(a.attn_4bit), "n_attn4": n_attn4, "attn4_probe": x.get("attn4_probe"),
+        "absmax_dq": bool(getattr(a, "absmax_dq", 0)),                                                                    # ABSMAX-DQ
+        **({"absmax_dq_modules": x["absmax_dq"]["modules"], "absmax_bytes_before": x["absmax_dq"]["bytes_before"],
+            "absmax_bytes_after": x["absmax_dq"]["bytes_after"], "absmax_bytes_ratio": x["absmax_dq"]["ratio"]} if x.get("absmax_dq") else {}),
         "structural_expected_n_attn4": x.get("structural_expected_n_attn4"), "detector_version": x.get("detector_version"),
         "loader_used": x.get("loader_used"), "loader_fallback_reason": x.get("loader_fallback_reason"), "unsloth_targets": x.get("unsloth_targets"),
         "hf_targets": x.get("hf_targets"), "axolotl_targets": x.get("axolotl_targets"), "axolotl": x.get("axolotl"),      # P2-2
@@ -4350,6 +4384,7 @@ def selftest(a):
     global DEV
     DEV = "cpu"
     a.prereg = PREREG   # explicit: selftest receipts cite this lane's document; a real run must pass --prereg (no default)
+    a.absmax_dq = 0     # ABSMAX-DQ: the tiny models carry no real expert storage; the switch is tested on real storage in tests/
     _install_fake_modules()
     import tempfile
     d = tempfile.mkdtemp(prefix="tc1_selftest_")
@@ -4697,6 +4732,10 @@ def main():
                          "per-expert decode loop, which decodes with the same oracle the reference uses and is EXACT. "
                          "The pair separates the forward fusion's error from the backward kernel's.")
     ap.add_argument("--attn-4bit", type=int, default=0, help="e4b: quantize_attention_projections_4bit before the attention LoRA (U4)")
+    ap.add_argument("--absmax-dq", type=int, default=int(os.environ.get("E4B_ABSMAX_DQ", "0") == "1"),
+                    help="e4b: compress_expert_absmax_ -- the frozen expert absmax stored double-quantized (bitsandbytes' nested statistics), "
+                         "after the attention conversion and before the LoRA wrap; resident arms only. Default 1 iff E4B_ABSMAX_DQ=1 is in this "
+                         "arm's environment, so TC1_E4B_ENV reaches the e4b arms only")
     ap.add_argument("--grad-ckpt", choices=["unsloth", "hf"], default="unsloth", help="Unsloth: use_gradient_checkpointing mode (U1)")
     ap.add_argument("--unsloth-loader", choices=["FastLanguageModel", "FastModel"], default="FastLanguageModel", help="T4: P38's loader; FastModel is an amendment")
     ap.add_argument("--expect-trainable", type=int, default=None, help="T6: the family's e4b trainable count; a mismatch is recorded")
@@ -4728,6 +4767,13 @@ def main():
     if os.environ.get("E4B_REFERENCE_EXPERT_ORDER") and not (a.framework == "e4b" and a.arm == "reference"):
         stub(a, "harness_error", f"E4B_REFERENCE_EXPERT_ORDER={os.environ['E4B_REFERENCE_EXPERT_ORDER']!r} is set on "
              f"{a.framework}/{a.arm}; it is a reference-arm switch only (bench/p67/P67-PREREG.md)", {"phase": "preamble"}, code=19)
+    # ABSMAX-DQ: an e4b switch, and a resident one. Refused before anything loads -- and before the CUDA check, so CI can drive it.
+    if a.absmax_dq and a.framework != "e4b":
+        stub(a, "harness_error", f"--absmax-dq 1 (E4B_ABSMAX_DQ={os.environ.get('E4B_ABSMAX_DQ')!r}) on {a.framework}/{a.arm}; it is an "
+             "e4b switch only (experts4bit_qlora.compress_expert_absmax_)", {"phase": "preamble"}, code=19)
+    if a.absmax_dq and a.offload:
+        stub(a, "refused", "--absmax-dq 1 with --offload 1: the double-quantized expert absmax is resident-only -- expert offload stages "
+             "the fp32 absmax by name, and the library refuses it (compress_expert_absmax_ / enable_expert_offload)", {"phase": "preamble"}, code=3)
     if not torch.cuda.is_available():
         stub(a, "harness_error", "torch.cuda.is_available() is False on a GPU lane", code=10)
     loader = {"e4b": load_e4b, "unsloth": load_unsloth, "hf": load_hf, "axolotl": load_axolotl}[a.framework]

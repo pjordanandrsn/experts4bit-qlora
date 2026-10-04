@@ -154,6 +154,14 @@ from .engines.expert_profile import coverage_from_profile, hot_sets_from_profile
 from .engines.capture import CapturedDecoder, capture_decode, probe_capture  # noqa: E402
 from .engines.kv_cache import NF4KVCache, kv_nf4_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
+# Opt-in double-quantized (bitsandbytes "nested") storage for the frozen expert absmax (E4B_ABSMAX_DQ=1):
+# torch-only at import time, bitsandbytes is reached inside the functions.
+from .absmax_dq import (  # noqa: E402
+    AbsmaxCompressedError,
+    compress_expert_absmax_,
+    expert_absmax_bytes,
+    expert_absmax_fp32,
+)
 
 __all__ = [
     "Experts4bit",
@@ -230,6 +238,10 @@ __all__ = [
     "probe_capture",
     "coverage_from_profile",
     "verify_moe_4bit",
+    "compress_expert_absmax_",
+    "expert_absmax_fp32",
+    "expert_absmax_bytes",
+    "AbsmaxCompressedError",
     # Provided lazily by __getattr__ below (importing them pulls in the [train] extra).
     "load_moe_4bit_streaming",
     "load_olmoe_4bit_streaming",
