@@ -45,7 +45,9 @@ wait_http(){ local url=$1 cap=$2 pid=$3 log=$4 t0 code; t0=$(date +%s)
 wait_e4b_ready(){ local url=$1 cap=$2 pid=$3 log=$4 t0 st; t0=$(date +%s)
   while :; do
     st=$(curl -s -m 5 "$url" 2>/dev/null | grep -a -o -E '"status": ?"[a-z]+"' | head -1 | grep -a -o -E '[a-z]+"$' | tr -d '"')
-    case "$st" in ready|busy) return 0;; error) line "SC2 e4b engine error: $(curl -s -m 5 "$url" | cut -c1-300)"; return 45;; esac
+    case "$st" in ready|busy) return 0;;
+      error) [ -n "${W:-}" ] && curl -s -m 10 "$url" -o "$W/sc2/health_error_$(date -u +%H%M%S).json" 2>/dev/null   # the full record: a log line truncates prefill_graph.why
+             line "SC2 e4b engine error: $(curl -s -m 5 "$url" | cut -c1-300)"; return 45;; esac
     kill -0 "$pid" 2>/dev/null || { line "SC2 server exited before $url reported ready: $(tail -2 "$log" | tr '\n' ' ' | cut -c1-240)"; return 45; }
     [ $(( $(date +%s) - t0 )) -ge "$cap" ] && { line "SC2 e4b not ready after ${cap}s (status=${st:-none}) at $url"; return 44; }
     sleep 3

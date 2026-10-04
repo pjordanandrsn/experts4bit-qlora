@@ -5,6 +5,9 @@
 ``loop``. A box-A redraw on main would otherwise read a different e4b on every arm whose int4 store sees a T > 1 call: the
 scheduler's prefill, TTFT, and the K8 licence's 512-token prompt. The box exports the pin once, after the scrub, so every e4b
 process inherits it, and FOLDS / SPEEDENV / ROUTEENV stay byte-identical to the lanes that pin them to SC1's (P100, P102).
+
+SC2b's box F (#846) is the one exception, and it SETS no route: it runs main's default, so it unsets the pin and its
+tripwire asserts the pin is absent. Those two lines are named below; every other line still has to be A13's own.
 """
 from __future__ import annotations
 
@@ -42,7 +45,9 @@ def test_a13_no_arm_sets_another_prefill_route():
     for ln in hits:
         assert ln.strip() == EXPORT or "E4B_PAGED_FUSE_QKV E4B_INT4_PREFILL" in ln or "_int4_prefill_mode_env" in ln \
             or 'environ.get("E4B_INT4_PREFILL")' in ln or 'environ\\.get\\("E4B_INT4_PREFILL"' in ln \
-            or "ROUTE_DEFAULT E4B_INT4_PREFILL" in ln or "export could not pin" in ln, ln
+            or "ROUTE_DEFAULT E4B_INT4_PREFILL" in ln or "export could not pin" in ln \
+            or ln.strip() == "unset E4B_INT4_PREFILL E4B_PAGED_PREFILL_ATTN" \
+            or '"box F must not export E4B_INT4_PREFILL"' in ln, ln
 
 
 def test_a13_the_lanes_pinned_to_sc1s_env_strings_are_untouched():

@@ -21,6 +21,8 @@ try:
 except ImportError:                                   # pragma: no cover
     triton = tl = None
 
+from .triton_prebind import prebind
+
 
 def _jit(f):
     return triton.jit(f) if triton is not None else f
@@ -76,13 +78,17 @@ def _rope_fwd(X, C, S, Y, sxb, sxh, sxs, scb, scs, syb, syh, sys_, H, L, D: tl.c
     tl.store(yb + HALF + i, y2)
 
 
+# E4B_TRITON_PREBIND=1 (opt-in): the same kernel, launched without Triton's per-call argument binding (engines/triton_prebind.py)
+_rope_launch = prebind(_rope_fwd)
+
+
 def _launch(x, cos, sin, bwd):
     B, H, L, D = x.shape
     if x.stride(3) != 1:
         x = x.contiguous()
     y = torch.empty_like(x)                       # same strides as x (empty_like preserves a dense non-contiguous layout)
-    _rope_fwd[(B * H * L,)](x, cos, sin, y, x.stride(0), x.stride(1), x.stride(2), cos.stride(0), cos.stride(1),
-                            y.stride(0), y.stride(1), y.stride(2), H, L, D=D, HALF=D // 2, BWD=bwd, num_warps=1)
+    _rope_launch[(B * H * L,)](x, cos, sin, y, x.stride(0), x.stride(1), x.stride(2), cos.stride(0), cos.stride(1),
+                               y.stride(0), y.stride(1), y.stride(2), H, L, D=D, HALF=D // 2, BWD=bwd, num_warps=1)
     return y
 
 
