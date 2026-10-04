@@ -8,7 +8,47 @@ frameworks, Unsloth 2026.9.14 on torch 2.12.1+cu130 with `grouped_mm` engaged on
 (AMD EPYC 9534, 224 vCPU, 1.58 TB host RAM, driver 595.71.05), $4.88. The first draw (`tc1c-h100-1`) was refused at $0 before any
 instance existed (its manifest carried the 5090 pre-flight exclusion receipts, not same-class for an H100).
 
-## The position (register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`)
+## Amendment 1 (2026-10-04): the position again with e4b after TC1 amendments 10–15 — Unsloth still faster, by 1.22× instead of 1.61× (register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04`)
+
+Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 1.
+
+**The box.** `tc1c-h100-3`: Vast instance 54091206, AMD EPYC 9534, H100 NVL, driver 595.71.05, $4.33; receipts in
+[`receipts/tc1c-h100-3/`](receipts/tc1c-h100-3/). The token is the same as before. e4b `e1837cf` carries every default from TC1
+amendments 10–15 (#945's single-read grouping and pinned ring, the trimmed LoRA delta, the cost tile rule, the fused RMSNorm and rotary),
+and grouped-nf4-gemm is at `00929a4`. No environment variables were set. The comparator was unchanged: Unsloth 2026.9.14, torch
+2.12.1+cu130, `grouped_mm` engaged.
+
+| | e4b `fused_attn4_m` | Unsloth `ckpt_unsloth_m` | reading |
+|---|---|---|---|
+| s/step, median of steps 11..20, two draws | 3.188 / 3.104 (**3.146**) | 2.548 / 2.594 (**2.571**) | **Unsloth/e4b 0.817 [0.799, 0.836]**: Unsloth faster per step by 1.22× (was 1.61×); both STABLE |
+| peak VRAM | 27.26 GB | **24.27 GB** | Unsloth lower by 2.98 GB |
+| energy per step | 548.9 / 521.2 J | **435.7 / 412.0 J** | Unsloth ×0.79 |
+| held-out at N = 20 | 0.8523 / 0.8520 | 0.8472 / 0.8504 | the matched set EQUIVALENT (P3 HELD) |
+
+- **P5 HELD.** 0.817 lies in the registered [0.70, 1.20]. The interval is wholly below 1.0, so by the registered ordering reading
+  **Unsloth is still faster on this card**.
+- **P6 HELD.** e4b's reference is inside the fused arm's draw noise, and Unsloth is EQUIVALENT.
+- e4b's step fell from 4.097 to 3.146 s (×0.768). Unsloth's moved from 2.546 to 2.571 s. The point estimate from the 5090 factors
+  was ≈ 0.87; the H100 gave a little less.
+
+**Where each step goes now** (the profiled arms on this box, descriptive):
+
+| profiled matched arm | s/step | device-busy | device time / step | device events / step | CPU-side ops / step |
+|---|---|---|---|---|---|
+| e4b `fused_attn4_m_prof` | 3.182 | **0.665** (was 0.562) | ≈ 2.1 s | 97,851 (was 139,181) | 619,192 (was 744,465) |
+| Unsloth `ckpt_unsloth_prof` | 2.861 | 0.305 | ≈ 0.87 s | 81,780 | 515,750 |
+
+e4b's host work has fallen, so on this card it is now mostly device-bound: it spends about 2.4× Unsloth's device time per step.
+That is the remaining gap. On sm_90 the comparator's dequantize-then-dense-grouped-GEMM path does the MoE arithmetic in far less
+device time than e4b's fused NF4 kernels, and e4b's gradient checkpointing also recomputes every MoE forward. The 5090 positions
+are unaffected (e4b faster there; TC1 amendment 19).
+
+**The other arms.**
+- axolotl 0.20.0 trained on this box this time: one VALID draw, axolotl/e4b 1.299, e4b faster. Its second draw did not run, so
+  this is a reported row, not a position.
+- HF + PEFT hit its alarm again with no training step (P4 of TC1c stays UNTESTED).
+
+## The 2026-10-02 position, e4b before #945 (register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`)
 
 | | e4b `fused_attn4_m` | Unsloth `ckpt_unsloth_m` | reading |
 |---|---|---|---|

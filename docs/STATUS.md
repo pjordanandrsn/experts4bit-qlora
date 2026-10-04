@@ -206,18 +206,24 @@ actual group sizes instead of the largest group (grouped-nf4-gemm#441) steps it 
 **And the norms** (`e4b.train.fused-rmsnorm.qwen3.5090.2026-10-03`, TC1 amendment 15): fusing the frozen RMSNorms into one launch each way
 (#961, near-exact) steps it at **0.924** (shipped) and **0.959** (matched) of the composite on one 5090, held-out
 within 0.0021.
+**And the host reuse** (`e4b.train.host-reuse.qwen3.5090.2026-10-04`, TC1 amendment 20): grouped-nf4-gemm reusing repeated index
+uploads and the LoRA plan inside each MoE layer pass (#444, values identical) steps it at **0.933** (shipped) and **0.951**
+(matched) of before on one 5090, held-out unchanged; on by default since grouped-nf4-gemm#446.
 **With all of that, the steady-state ordering flipped** (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03.native-steady-state`, TC1 amendments 16 and 18, two hosts):
 over steps 101..200 of the same 200-step run, axolotl's scattermoe / e4b as shipped is **1.238 [1.231, 1.246]**
 on an EPYC 7663 host and **1.146 [1.129, 1.164]** on an EPYC 7C13 host -- **e4b as shipped now steps 15-24 % faster at steady state**, finishes 200 steps in about
 half the summed step time (650-654 s against 1,373-1,389 s), and axolotl spends x1.79 the energy per step. axolotl
 still reaches the matched held-out curve while e4b as shipped sits 0.024-0.027 above it. The 2026-10-02 rows above
 stand as measured for the code before #945.
-**On an H100 NVL the sign reverses** (lane TC1c, the same
-matched set, one rented box, [`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md);
-register `e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`): Unsloth takes 2.546
-s/step against e4b's 4.097 — **Unsloth/e4b 0.621 [0.615, 0.628]**, Unsloth
-faster by 1.61 × at 3.59 GB less peak VRAM and ×0.63 the energy, with the
-same loss (EQUIVALENT). The profiles say why (`.dispatch-profile`): e4b
+**On an H100 NVL Unsloth is faster per step** (lane TC1c, the same matched set, one rented box per reading,
+[`bench/h2h-2026-10-02/tc1c/`](../bench/h2h-2026-10-02/tc1c/README.md)). With e4b after TC1 amendments 10–15
+(`e4b.train.h2h.unsloth.qwen3.h100.2026-10-04`, TC1c amendment 1), Unsloth takes 2.571 s/step against e4b's 3.146 —
+**Unsloth/e4b 0.817 [0.799, 0.836]**, Unsloth faster by 1.22 ×, at 2.98 GB less peak VRAM and ×0.79 the energy, with the matched set
+EQUIVALENT. e4b's own step fell ×0.768 since the first H100 box; on this card it is now mostly device-bound (device-busy 0.665), and
+it spends ~2.4 × Unsloth's device time per step. The first H100 reading, e4b before #945
+(`e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`), was 0.621 [0.615, 0.628]: Unsloth 2.546
+s/step against e4b's 4.097, faster by 1.61 × at 3.59 GB less peak VRAM and ×0.63 the energy, with the
+same loss (EQUIVALENT). The profiles then said why (`.dispatch-profile`): e4b
 issues ~139 k device events per step on both cards, Unsloth 612 k on the
 5090 and 82 k on the H100 — the grouped GEMM its path routes through is one
 launch per call on Hopper and not on Blackwell. The 1.437 is therefore a
