@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+### `E4B_MOE_KEEP_LAYERS=all|n`: keep MoE activations instead of recomputing them under gradient checkpointing (opt-in); the training combine saves bf16 (values identical)
+
+- **Why.** Hugging Face checkpoints each decoder layer whole, so the fused training step's backward re-runs every MoE forward. On a
+  4-layer Qwen3-30B-A3B slice on an RTX A2000 (TC1's token rows, mb2 x accum 4), the recomputed MoE forwards were 232 of 917 ms of
+  device time.
+- **What.**
+  - **`E4B_MOE_KEEP_LAYERS=all` or a count n.** In the last n decoder layers that Hugging Face is checkpointing, whole-layer
+    checkpointing goes off and `self_attn` alone is checkpointed, with the layer's own checkpoint function. The MoE block's
+    activations then live from its forward to its backward. `enable_fast_train` applies it; `disable_fast_train` unwinds it
+    (`engines/moe_keep.py`). Pair it with grouped-nf4-gemm's `NF4_QLORA_COMPACT_DELTA=1` (#445): the padded LoRA delta then saves
+    its input rather than its padded block.
+  - **`_ScatterCombine` (always on).** The training forward's combine becomes one autograd node that saves the bf16 `down`, not its
+    fp32 copy. Its backward replays autograd's own sequence, so both gradients are the same bytes.
+- **Measured on an RTX A2000.** The slice above, with `NF4_QLORA_COMPACT_DELTA=1` and `GNF4_HOST_REUSE=1` on the kept arms, two runs
+  each:
+
+  | `E4B_MOE_KEEP_LAYERS` | step s (median of 6) | peak allocated GB |
+  |---|---|---|
+  | unset | 1.2545 / 1.2689 | 4.335 |
+  | 2 of 4 | 1.1349 / 1.1383 | 4.56 |
+  | all 4 | 0.9697 / 0.978 | 4.786 |
+
+  The cost is about 113 MB of peak per kept layer at this slice's largest micro-batch, which is about 5.4 GB at 48 layers. Choose n to
+  fit the card.
+- **Values.** Every trainable gradient is `torch.equal` with the policy on and off, under deterministic mode. `_ScatterCombine` matches
+  the composite's forward and both gradients bitwise (`tests/test_moe_keep.py`). The policy is also checked on a tiny Qwen3-MoE:
+  gradients equal, the last n layers changed, an exact unwind.
+- **Next.** TC1 measures it on an RTX 5090, with peak memory, before it is recommended.
+
 ### The fused training forward gathers the routing weights with a scatter backward instead of a sorted one (values identical)
 
 - **What.** `fused_experts_train_forward` gathered the routing weights as `top_k_weights[token_rows, top_pos]`. The backward of
