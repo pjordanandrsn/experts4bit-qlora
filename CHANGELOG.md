@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### TC2 amendment 7 registered: the small families re-read, and the big families with the absmax double-quantized (P15–P23). Three RTX 5090s
+
+- **Box S** re-reads Granite and OLMoE on the current code. Their 2026-10-02 positions predate e4b's ~1.4× faster step.
+- **Box D** runs Mixtral and Qwen3.6 resident with `E4B_ABSMAX_DQ=1`. It predicts Mixtral's peak at most 29.6 GB (was 31.07)
+  with Unsloth/e4b in [0.62, 0.78], and Qwen3.6 fitting at micro-batch 2.
+- **Box F** adds `--frozen-4bit` on top of D, so Qwen3.6 runs on Unsloth's 4-bit bytes. It predicts a step-0 gap of at most 0.01 nats and
+  Unsloth/e4b in [1.30, 2.50]: the family's first matched position.
+- **Decision.** `E4B_ABSMAX_DQ` becomes the training default only if box D holds the Mixtral prediction within 0.005 nats.
+  `bench/tc1/TC2-PREREG.md` amendment 7.
+
 ### Opt-in: the frozen expert absmax stored double-quantized (`E4B_ABSMAX_DQ=1`, `compress_expert_absmax_`)
 
 - **What.** `compress_expert_absmax_(model)` stores each ExpertsLoRA-wrapped NF4 stack's absmax the way bitsandbytes'
