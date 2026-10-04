@@ -78,6 +78,13 @@ c2 also has 1,036 device-to-device copies.
 
 A knob's tests must carry both (see `finding_an_inert_check_disproves_nothing`).
 
+**Lifetimes were not tested either.** Every tensor the captured graph reads (its input ids and positions) stayed
+alive in this harness's scope through every replay. The knob's first version kept the ids but not the positions, and
+its own startup check, run in the same scope, passed. Once the scope returned, the freed block was reused and every
+served replay read garbage positions; the knob's A2000 GPU test caught it. The knob now keeps what its graph reads,
+and checks only after its capture scope has returned and the allocator has been churned
+(`experts4bit_qlora/engines/paged_runner.py`, `enable_prefill_graph`).
+
 ## What a knob must change (design constraints, not syncs)
 
 1. **Staging is Python-side.** `PagedAttentionContext.stage()` appends each chunk's bf16 K/V to a list and `torch.cat`s
