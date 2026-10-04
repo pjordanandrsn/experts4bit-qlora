@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 22 — grouped-nf4-gemm's dense route is 0.651× the fused kernels' step on Mixtral and 2.947× on Qwen3-30B-A3B (P38, P40 HELD; P39 FALSIFIED)
+
+- **Mixtral-8x7B** (`tc1-5090-62`, $0.51): dense/fused **0.651** [0.648, 0.654], 5.52 → 3.59 s/step, held-out Δ −0.0021, peak unchanged.
+- **Qwen3-30B-A3B** (`tc1-5090-59`, $0.45): **2.947** [2.915, 2.979], far slower. The per-expert loop adds about 295,000 launches to a
+  launch-bound step. Held-out Δ −0.0001.
+- **Decision.** Off sm_90, grouped-nf4-gemm's `auto` takes the dense route for calls with at most 16 present groups (grouped-nf4-gemm#463).
+  Rows `e4b.train.dense-route.{mixtral,qwen3}.5090.2026-10-04`; lane page `bench/h2h-2026-10-02/tc1/README.md`.
+
 ### The Qwen training stack, by structure: what another MoE family inherits (moe-generalize; `docs/MOE_RUNTIME_PORTABILITY.md`)
 
 - **Why.** The expert-side work behind Qwen3-30B-A3B's fused training step already applied to any family `ExpertsLoRA` wraps:
