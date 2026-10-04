@@ -16,6 +16,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from p55_ram import GIB, SHARD_GIB, headroom_bytes  # noqa: E402  (Amendment 1: one definition, box and reducer)
+
 ARMS = ("A_baseline", "B_sync", "C_headroom")
 CUDA_INVALID = "invalid argument"
 # The kernels whose presence under launch-blocking would REFUTE P3 and reopen #344 as ours.
@@ -41,7 +44,7 @@ def _text(path):
 def _host(forensics):
     """Pull the fingerprint fields out of forensics.txt; '?' for anything absent."""
     out = {"gpu": "?", "driver": "?", "cpu": "?", "kernel": "?",
-           "mem_total_gib": None, "cgroup": "?"}
+           "mem_total_gib": None, "cgroup": "?", "effective_gib": None, "cgroup_limit_bytes": None}
     for line in forensics.splitlines():
         if "," in line and "NVIDIA" in line:
             parts = [p.strip() for p in line.split(",")]
@@ -54,6 +57,13 @@ def _host(forensics):
             out["kernel"] = line.split(":", 1)[1].strip()
         elif line.startswith("MemTotal:"):
             out["mem_total_gib"] = int(line.split()[1]) / 1048576
+        elif line.startswith("effective_ram_gib:"):
+            out["effective_gib"] = float(line.split(":", 1)[1])
+        elif line.startswith("cgroup_limit_bytes:"):
+            v = line.split(":", 1)[1].strip()
+            out["cgroup_limit_bytes"] = int(v) if v.isdigit() else None
+        elif line.startswith("cgroup_limit_source:"):
+            continue                      # p55_ram.py's provenance line; the value is the box's own cgroup_limit(...) line
         elif line.startswith("cgroup_limit"):
             out["cgroup"] = line.split(":", 1)[1].strip()
     return out
@@ -77,10 +87,12 @@ def main(run_dir):
           "`bench/p55/p55_reduce.py` from the receipt directory and nothing else.\n")
     mem = host["mem_total_gib"]
     print("## The host that was drawn\n")
-    print(f"| GPU | driver | CPU | kernel | host RAM | cgroup limit | class drawn |")
-    print(f"|---|---|---|---|---|---|---|")
+    eff = host["effective_gib"]
+    print("| GPU | driver | CPU | kernel | MemTotal | cgroup limit | effective (Amendment 1) | class drawn |")
+    print("|---|---|---|---|---|---|---|---|")
     print(f"| {host['gpu']} | {host['driver']} | {host['cpu']} | {host['kernel']} | "
           f"{'?' if mem is None else f'{mem:.0f} GiB'} | {host['cgroup']} | "
+          f"{'?' if eff is None else f'{eff:.1f} GiB'} | "
           f"{'YES' if class_drawn else '**NO (STOP-1)**'} |\n")
     if not class_drawn:
         print("> **STOP-1 fired.** The drawn box is not of the failing class, so P1 gets no "
@@ -154,26 +166,34 @@ def main(run_dir):
         p3_why) + "\n")
 
     # ---- P4
+    # Amendment 1: headroom is min(MemAvailable, cgroup limit - cgroup usage) per sample -- inside a container
+    # MemAvailable is the host's -- against the largest shard in GiB (46.48; the registration's "49.9 GiB" was GB).
     trace = os.path.join(run_dir, "mem_trace.csv")
     lo = None
     if os.path.exists(trace):
         try:
             with open(trace) as fh:
-                vals = [int(r["mem_available_kb"]) for r in csv.DictReader(fh)
-                        if r.get("mem_available_kb", "").strip().isdigit()]
-            lo = min(vals) / 1048576 if vals else None
+                vals = []
+                for r in csv.DictReader(fh):
+                    def num(k):
+                        v = (r.get(k) or "").strip()
+                        return int(v) if v.isdigit() else None
+                    h = headroom_bytes(num("mem_available_kb"), num("cgroup_usage_bytes"), num("cgroup_limit_bytes"))
+                    if h is not None:
+                        vals.append(h)
+            lo = min(vals) / GIB if vals else None
         except (OSError, ValueError, KeyError):
             lo = None
     c = results.get("C_headroom")
     if lo is None or c is None or c.get("status") == "OK":
         p4 = None
     else:
-        p4 = lo < 49.9          # the largest shard, GiB
+        p4 = lo < SHARD_GIB
     print("**P4 — headroom falls.** " + _verdict(
         p4,
-        f"MemAvailable bottomed at {lo:.1f} GiB, below the 49.9 GiB shard.",
-        f"MemAvailable never fell below the shard ({lo:.1f} GiB minimum) — the mechanism is "
-        "refuted even where the host-class correlation stands.",
+        f"headroom bottomed at {lo:.1f} GiB, below the {SHARD_GIB:.2f} GiB shard.",
+        f"headroom never fell below the shard ({lo:.1f} GiB minimum, shard {SHARD_GIB:.2f} GiB) — the "
+        "mechanism is refuted even where the host-class correlation stands.",
         "no usable memory trace, or C_headroom did not fail.") + "\n")
 
     print("## What this does not say\n")

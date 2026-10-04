@@ -73,3 +73,30 @@ Nothing about any other checkpoint, nothing about training or serving throughput
 ## Receipts
 
 Fetched to `receipts/experts4bit-qlora/<date>/p55/`: `logs/<arm>.log` (full loader output, which is where the diagnosis lands), `result_<arm>.json` (status, exception type, exception message, notes, the `[sync]` stage bounds), `mem_trace.csv` (arm C), `forensics.txt` (GPU, driver, CPU, `/proc/meminfo`, cgroup limit, shard sizes), `versions.txt`, `summary.txt`. `RESULTS-p55.md` is generated from those files and nothing else.
+
+## Amendment 1 (2026-10-04, before any P55 data): the launcher can now draw the class, and the harness reads the class correctly
+
+Nothing has run under P55. Preparing the launch found four defects. Each would have spent money for a wrong reading or no reading:
+
+1. **The launcher could not draw the class.** adertha's Vast provider searched `cpu_ram >= 98 GB`, and nothing could change that. Every P55 launch would have drawn a host the lane calls "class not drawn". adertha-agents#145 adds a host-RAM band (`vast_host_ram_gb` in the manifest → `--vast-min-ram-gb` / `--vast-max-ram-gb`). It caps the search server-side and client-side, and the pre-flight refuses a box above the cap. A read-only offer search on 2026-10-04 (no rental) showed 35 verified RTX 5090 offers at ≤ 72 GB, from $0.43/h, several of them 63 GB. **P55 launches with `vast_host_ram_gb: [48, 72]`.**
+   - Why 48: the opaque `invalid argument` failure this lane is about was seen at 64 GiB. The 30 GiB host gave a clean, readable `mmap` refusal, which is a different outcome, so the floor keeps the draw on the opaque side.
+   - The ceiling stays the registered 72.
+2. **STOP-1 read the wrong number.** On Vast an offer's `cpu_ram` is the container's allotment, but `/proc/meminfo` MemTotal inside the container is the whole host's. A real 63 GB rental on a 512 GB host would have read 512 and fired STOP-1. The class is now the memory a process there can actually have: **min(MemTotal, the cgroup memory limit)**. `bench/p55/p55_ram.py` computes it, it is staged and pinned, and the threshold is still 72 GiB. `forensics.txt` also records `ulimit -a` (RLIMIT_AS and RLIMIT_MEMLOCK are the per-process limits a marginal mapping or a pinned copy can hit).
+3. **P4 measured the wrong headroom.** The C_headroom trace sampled `/proc/meminfo` MemAvailable, which inside a container is also the host's. The trace now records the cgroup's usage and limit beside it. P4 reads the headroom as **min(MemAvailable, limit − usage)** per sample. The prediction and its refutation are otherwise unchanged.
+4. **The shard's size mixed units.** The largest shard is `model-00001-of-00002.safetensors`, **49,907,246,508 bytes**: 49.91 GB, which is **46.48 GiB**. Every "49.9 GiB" above means 46.48 GiB, and P4's threshold is 46.48 GiB. The checkpoint is **51.6 GB** in total (the second shard is 1.70 GB), not the ~12 GiB the budget section assumed (the Hub's blob listing at `4d7ae49`). The download, not the load, is the long pole.
+
+**Budget, restated.**
+- **Rate and estimate.** The RTX 5090 rate is now fixed by policy at $0.85/h (adertha-agents#142), and the launcher prices the download. Its estimate is $0.85 × 1.0 h + 100 GB × $0.011 = **$1.95**.
+- **Actual cost.** Expected at about half that: well under an hour on a ~$0.45–0.55/h box, plus ~52 GB of download at the host's rate.
+- **Ceiling.** The lane ceiling is **$3.00**, one box (STOP-3 unchanged), inside the owner's standing $15 no-ask tier.
+- **Time.** The guard stays 1.0 h. At the launcher's bandwidth floor the 51.6 GB download takes at most about 20 minutes, and each load reads the shard from disk.
+- **Authorization.** It is relayed on #344 before launch. The 2026-09-21 note there said a loader-debug rental needed its own word. The owner's later standing tier ($15 no-ask, 2026-09-26) and the delegation of owner decisions (2026-10-01) supply it, and the relay says so.
+
+**Unchanged:** the question, the arms and their order, P1–P3, the decision rule, STOP-2 to STOP-4, and what the lane cannot say.
+
+**Tests.** `tests/test_p55_staged_pin.py` covers:
+- the pins, and that every pinned file is staged;
+- the effective-memory arithmetic on v1, v2 and absent cgroups;
+- the shard in GiB;
+- the headroom term;
+- the reducer on synthetic receipts: P4 HOLDS on cgroup headroom while the host's MemAvailable stays high, P4 REFUTED, and P1 withheld on STOP-1.
