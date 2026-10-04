@@ -9220,7 +9220,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-04/tc1-5090-51/tc1/"
       ],
-      "notes": "Within-box A/B. The instance billed $0.84/h (GPU $0.573 under the declared $0.69 ceiling, plus $0.267 for its 320 GB disk, which the launcher's ceiling does not count: adertha-agents#140); the run cost $0.36."
+      "notes": "Within-box A/B. The instance billed $0.84/h (GPU $0.573 under the declared $0.69 ceiling, plus $0.267 for its 320 GB disk, which the launcher's ceiling does not count: adertha-agents#140). Vast invoiced $3.14 for the run, $2.57 of it download (65.7 GB at the host's $0.039/GB). Corrected 2026-10-04: the note first quoted the receipt's GPU-time figure, $0.36."
     },
     {
       "package": "experts4bit-qlora",
