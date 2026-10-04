@@ -53,9 +53,11 @@ SC1's two route pins (`loop`, `math`) existed so SC1's own boxes compared alike;
 - **Q2, `poisson`:** open-loop exponential inter-arrivals at rate r.
 - **Every request** streams with `stream_options.include_usage`.
 - **Per request:**
+  - a token chunk is a chunk whose choice carries text. A choice chunk with empty text (a finish-only chunk, or a
+    partial character the detokenizer holds back) is counted but never timed;
   - TTFT is the time to the first token chunk;
-  - TPOT is (last chunk − first chunk) / (tokens − 1), which stays per-token when an engine packs several tokens into
-    a chunk;
+  - TPOT is (last token chunk − first token chunk) / (tokens − 1), which stays per-token when an engine packs several
+    tokens into a chunk;
   - E2E latency;
   - the streamed text.
 - **Validity.** A request is VALID iff it got HTTP 200, the server reported exactly `max_tokens` completion tokens, and

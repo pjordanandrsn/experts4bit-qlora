@@ -26,7 +26,7 @@ def _mod(name):
 
 def test_the_self_tests_pass():
     for script, want in (("sc2_reduce.py", "self-test OK (9 cases)"), ("sc2_prompts.py", "self-test OK (3/3 cases)"),
-                         ("sc2_driver.py", "self-test OK (8/8 cases)")):
+                         ("sc2_driver.py", "self-test OK (9/9 cases)")):
         out = subprocess.run([sys.executable, str(LANE / script), "--self-test"], capture_output=True, text=True)
         assert out.returncode == 0 and want in out.stdout, out.stdout + out.stderr
 
