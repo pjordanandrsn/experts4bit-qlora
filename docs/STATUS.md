@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-10-04, version 0.44.0** (the version of record is
+**As of 2026-10-04, version 0.45.0** (the version of record is
 `pyproject.toml`'s). One page. The README argues the case; this page
 states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
@@ -227,7 +227,7 @@ EQUIVALENT. e4b's own step fell ×0.768 since the first H100 box; on this card i
 it spends ~2.4 × Unsloth's device time per step. **With e4b keeping all 48 layers' MoE activations** (an opt-in memory-for-time setting,
 `E4B_MOE_KEEP_LAYERS=all` with the compact delta; TC1c amendment 2, a LABELLED row `e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.moe-keep`,
 same machine) **e4b is faster per step on the H100 too: Unsloth/e4b 1.100 [1.088, 1.111]** (2.577 against 2.343 s), at 9.81 GB more
-peak VRAM (34.08 vs 24.27 GB) and about equal energy — quoted beside the default-settings 0.817, never in place of it. grouped-nf4-gemm's opt-in grouped_mm route made e4b SLOWER on this card as shipped (TC1c amendment 4: 0.664 alone, 0.934 with the activations kept; labelled rows `.route` / `.moe-keep-route`): its dequant kernel ran ~4x slower than the bitsandbytes dequant the kernel replay had timed. With the dequant at bandwidth (grouped-nf4-gemm #452; TC1c amendment 6) the route makes e4b faster per step than Unsloth on the H100: **1.030 [1.016, 1.045] alone and 1.325 [1.296, 1.356] with the activations kept** (labelled rows `.route-v2` / `.moe-keep-route-v2`, matched set EQUIVALENT), and it qualifies as the sm_90 default (grouped-nf4-gemm#454). The first H100 reading, e4b before #945
+peak VRAM (34.08 vs 24.27 GB) and about equal energy — quoted beside the default-settings 0.817, never in place of it. grouped-nf4-gemm's opt-in grouped_mm route made e4b SLOWER on this card as shipped (TC1c amendment 4: 0.664 alone, 0.934 with the activations kept; labelled rows `.route` / `.moe-keep-route`): its dequant kernel ran ~4x slower than the bitsandbytes dequant the kernel replay had timed. With the dequant at bandwidth (grouped-nf4-gemm #452; TC1c amendment 6) the route makes e4b faster per step than Unsloth on the H100: **1.030 [1.016, 1.045] alone and 1.325 [1.296, 1.356] with the activations kept** (labelled rows `.route-v2` / `.moe-keep-route-v2`, matched set EQUIVALENT), and it is the sm_90 default from grouped-nf4-gemm 0.37.0 (grouped-nf4-gemm#454); the H100 position of record stays 0.817 until a default-settings box re-reads it there. The first H100 reading, e4b before #945
 (`e4b.train.h2h.unsloth.qwen3.h100.2026-10-02`), was 0.621 [0.615, 0.628]: Unsloth 2.546
 s/step against e4b's 4.097, faster by 1.61 × at 3.59 GB less peak VRAM and ×0.63 the energy, with the
 same loss (EQUIVALENT). The profiles then said why (`.dispatch-profile`): e4b
@@ -469,7 +469,7 @@ reading, not a speed one.
   `GNF4_PDL_MAX_ROWS=8` runs 1.0404× / 1.0000× the switch off (one request / 16; min over two pairs,
   decode-only timing) with identical tokens. Uncapped it runs 1.0401× / 0.9787×: PDL helps the B=1 step
   (4.38 → 4.21 ms) and costs the 16-row one, which the cap leaves alone.
-- **Default:** grouped-nf4-gemm's next release turns it on, capped at 8 (`GNF4_PDL=0` turns it off). P112, the
+- **Default:** on, capped at 8, from grouped-nf4-gemm 0.37.0 (`GNF4_PDL=0` turns it off). P112, the
   first served read, closed VOID twice (`bench/p112/RESULTS-p112.md`).
 
 **The Gated DeltaNet kernels speed hybrid decode** (lane P105, 2026-10-03, one rented RTX 5090; **measured** —

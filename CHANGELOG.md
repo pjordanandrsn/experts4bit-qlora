@@ -1,6 +1,25 @@
 # Changelog
 
-## Unreleased
+## 0.45.0 — 2026-10-04 — CI on grouped-nf4-gemm 0.37.0, whose two new defaults were registered and read here: programmatic dependent launch capped to launches of at most 8 rows (lane P113: SC1's int4 serving decode 1.0404× at one request and 1.0000× at 16 on an RTX 5090, identical tokens) and the grouped_mm training route on sm_90 (TC1c amendment 6: Unsloth/e4b 1.030 on an H100 NVL, a labelled row)
+
+**0.45.0.** No default in this package changes. Two change in grouped-nf4-gemm 0.37.0, each by a rule registered here, and CI now tests against 0.37.0's commit.
+- **Serving: `GNF4_PDL` is on, capped at 8 activation rows.**
+  - Lane P113 read it on SC1's int4 serving configuration (Qwen3-30B-A3B, one RTX 5090) under decode-only timing. Tokens were identical on every row, and decode ran **1.0404×** as fast with one request and **1.0000×** with 16 (`e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04`). Uncapped, it cost 16 requests 2.1 %.
+  - The default NF4 server reaches only two of the switched kernels, so the switch was not read there. P112, the first served read, closed VOID twice.
+- **Training: `GNF4_TRAIN_GEMM=auto`** takes grouped-nf4-gemm's grouped_mm route on an sm_90 card and its fused kernels elsewhere. Values change on sm_90 only; `GNF4_TRAIN_GEMM=fused` restores them.
+  - TC1c amendment 6 read Unsloth/e4b at **1.030** [1.016, 1.045] on the full Qwen3-30B-A3B training step on an H100 NVL with the route on, and **1.325** with MoE activations also kept. Amendment 4's three conditions for the default all held, the held-out loss by a thin margin.
+  - Both readings are LABELLED rows (`e4b.train.h2h.unsloth.qwen3.h100.2026-10-04.route-v2`, `….moe-keep-route-v2`). The H100 position of record stays amendment 1's 0.817 (Unsloth faster) until a default-settings box re-reads it on this release.
+- The `[fast]` floor stays `>=0.30.0`. A fresh install gets 0.37.0; an existing environment gets both defaults with `pip install -U grouped-nf4-gemm`.
+
+**Also in this release:**
+- **TC1c amendments 2–5** on the H100 NVL:
+  - amendment 2: e4b keeping its MoE activations at Unsloth/e4b 1.100 (a labelled row);
+  - amendment 3: dequantize + `torch._grouped_mm` running the recorded GEMM calls in 0.50–0.60 of the fused kernels' time (a kernel replay);
+  - amendment 4: the route as first shipped making e4b slower, because of its dequant kernel;
+  - amendment 5: the fused kernels' own configs changing nothing worth taking.
+- **SC2 registered** (#846): request-level serving, `serve_paged` against vLLM, SGLang and llama.cpp under Poisson arrivals.
+- **Lane K28's runner** (bench and tests), and a correction pricing five TC boxes at Vast's invoiced cost.
+- **Registrations with no entry of their own:** TC1c amendments 3 (#1018), 4 (#1020), 5 (#1021) and 6 (#1028). Also #1011 (tests only): the GPU-class refusal snippet runs in a temp dir.
 
 ### Read: TC1c amendment 6 — with the dequant at bandwidth the grouped_mm route makes e4b faster than Unsloth on an H100 (P18, P19, P20 HELD)
 
