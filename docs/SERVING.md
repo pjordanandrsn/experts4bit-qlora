@@ -130,6 +130,12 @@ per-stream rate) and the runner's graph statistics.
   bucket's step selects every layer's block-table and seq-lens rows once, outside the graph, instead of once per layer
   (`E4B_KV_STEP_SELECT`, on by default; `0` keeps the per-layer form). On the same server it decodes identical tokens
   1.036× as fast with 16 concurrent requests and 1.012× with one.
+- **Programmatic dependent launch** (lane P113, [`bench/p113/RESULTS-p113.md`](../bench/p113/RESULTS-p113.md)).
+  grouped-nf4-gemm's decode-row kernels can launch as programmatic dependents of the kernel before them
+  (`GNF4_PDL=1`, sm_90+ NVIDIA). Capped to launches of at most 8 rows (`GNF4_PDL_MAX_ROWS=8`), SC1's int4
+  configuration decodes identical tokens 1.0404× as fast with one request and 1.0000× with 16;
+  uncapped it costs 16 requests 2.1 %. The capped form becomes grouped-nf4-gemm's default in its next
+  release. The default NF4 server reaches only two of the switched kernels, so it was not read there.
 
 **Prefill on the int4 expert store (#916; lanes P100, P102).** With `max_seqs` 1 the server leaves
 `hot_residency.DEVICE_GROUPING` off. Until P102, every prefill chunk's MoE call on the int4 store therefore ran a
