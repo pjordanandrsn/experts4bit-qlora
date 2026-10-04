@@ -1046,6 +1046,24 @@ tc1_mixtral_denseab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/m_dense0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_m_dense0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_memcensus_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 23 (2026-10-04): where e4b's resident training memory goes, against
+# Unsloth's. Qwen3-30B-A3B at the pin, TC1's tokens, the matched set at the mb1 recipe (micro-batch 1 x accum 8: the same tokens per step), one
+# draw per arm, IN THIS ORDER, each with tc1_arm.py's memory census on (--mem-census 1): e4b fused_attn4_m_mb1 (defaults: the fp32 expert
+# absmax), e4b fused_attn4_m_mb1_dq (E4B_ABSMAX_DQ=1: #1040's double-quantized absmax), Unsloth ckpt_unsloth_m_mb1 (TC1's qwen3 Unsloth arm:
+# the notebooks' seven targets, grouped_mm, venv-unsloth). No speed is read: the census slows the step. The token is in neither NEED_UNSLOTH=0
+# list, so the box builds the Unsloth venvs as for every token that runs an Unsloth arm.
+tc1_memcensus_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
+  local ALL="e4b:fused_attn4_m_mb1:fused e4b:fused_attn4_m_mb1_dq:fused unsloth:ckpt_unsloth_m_mb1:unsloth"
+  say "===== MEMORY CENSUS family $FAM ($MID @ $REV; e4b fp32 absmax, e4b double-quantized absmax, Unsloth; micro-batch 1 x accum 8; --mem-census 1; amendment 23)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"                   # TC1's qwen3 Unsloth arm (tc1_family); double-quant OFF is the arm's default
+  local CEN="--mem-census 1"
+  can_run 600 $FAM/e4b/m_mb1     && arm $FAM e4b fused_attn4_m_mb1 fused $EAL "$MID" $REV 0 mb1 $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/e4b/m_mb1_dq  && TC1_ARM_EXTRA_ENV="E4B_ABSMAX_DQ=1" arm $FAM e4b fused_attn4_m_mb1_dq fused $EAL "$MID" $REV 0 mb1 $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/unsloth/m_mb1 && arm $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $CEN
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_routebench_family FAM ALARM -- TC1c amendment 3 (2026-10-04): a kernel-route replay, not a training run. grouped-nf4-gemm's
 # fused NF4 grouped GEMM (forward and dgrad) against a whole-stack bitsandbytes dequantize_4bit + torch._grouped_mm on the
 # recorded real-router calls of e4b's training step (routecalls-qwen3.json, staged by TC1_EXTRA_STAGE with route_bench.py; no
@@ -1231,6 +1249,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3keepab) tc1_keepab_family qwen3keepab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 21 (#945)
   qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 22
   mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 22 (TC2's mixtral pin, fetch 7200, e4b 3600)
+  qwen3memcensus) tc1_memcensus_family qwen3memcensus Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 23 (fetch 5400, e4b 3600, Unsloth 3600)
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
   fusedsweep)  tc1_fusedsweep_family fusedsweep 2400;;   # TC1c amendment 5: a fused-kernel config replay (no model)
   qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 5400 4800;;   # TC1 amendment 8
