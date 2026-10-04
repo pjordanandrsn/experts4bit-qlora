@@ -74,6 +74,12 @@ kept. What TC1 adds, named so the files can be diffed:
      Unsloth arm, the gpt-oss no-common-set line, the mixtral footprint line, a t214 arm that did not reach grouped_mm, the packed-arm
      VOIDs (unpacked, wrong backend, uncounted GEMM), the census / pin VOIDs and every prediction's failing leg.
 
+  R12 (TC1 amendment 23, the `qwen3memcensus` token): e4b fused_attn4_m_mb1 (fp32 expert absmax), e4b fused_attn4_m_mb1_dq (E4B_ABSMAX_DQ=1) and
+     Unsloth ckpt_unsloth_m_mb1, one draw each at micro-batch 1 x accum 8 with tc1_arm.py's memory census on. Validity adds the pin, the recipe,
+     a `mem_census` on the receipt (an errored census is recorded, never VOID) and the absmax each e4b tag names; no position is quoted on the
+     token (NO_SPEED_FAMS: the census slows the step). The census tables put the three arms side by side (score_memcensus / memcensus_block),
+     and P41-P43 are scored HELD / FALSIFIED / UNTESTED from the receipts (a missing or non-VALID arm, or an errored census, is UNTESTED).
+
 It licenses nothing and quotes no cross-box number. stdlib only.  Usage: tc1_reduce.py <dir> [--md out.md] [--steps N] | --selftest
 """
 import argparse
@@ -461,6 +467,80 @@ def dense_ab_why(fam, tag, r):
     if not bad:
         return ""
     return f"dense-route A/B not engaged ({', '.join(bad)}; record {ra}" + (f"; absmax_dq {r.get('absmax_dq')!r}" if fam == MDENSE_FAM else "") + ")"
+
+
+# ----------------------------------------------------------------------------- TC1 amendment 23: the memory census, e4b against Unsloth (no speed read)
+MEMCENSUS_FAM = "qwen3memcensus"   # e4b fp32 absmax, e4b double-quantized absmax (E4B_ABSMAX_DQ=1), Unsloth; micro-batch 1 x accum 8; one draw each; --mem-census 1
+MEMCENSUS_ARMS = (("e4b", "fused_attn4_m_mb1"), ("e4b", "fused_attn4_m_mb1_dq"), ("unsloth", "ckpt_unsloth_m_mb1"))
+MEMCENSUS_LABELS = {MEMCENSUS_ARMS[0]: "e4b fp32 absmax", MEMCENSUS_ARMS[1]: "e4b dq absmax", MEMCENSUS_ARMS[2]: "Unsloth"}
+MEMCENSUS_PIN = ("Qwen/Qwen3-30B-A3B", "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39")
+MEMCENSUS_RECIPE = (1, 8)          # (micro-batch, accum): the mb1 recipe, TC1's tokens per step
+P41_ANALYTIC = 29.0e9 / 64 * 4    # 1.8125e9 B: 29.0 B expert parameters / 64 x 4 bytes, the registration's rounding -- the receipt's own expert_params wins when present
+P41_TOL = 0.02                     # P41: each absmax within 2 % of its analytic value
+P41_DQ_RATIO = 3.94                # ... the dq arm's analytic value = the fp32 one / 3.94 (#1040's measured ratio)
+P42_MIN = 0.90                     # P42: attributed_fraction >= 0.90 on every arm
+P43_BAND = (0.5e9, 2.5e9)          # P43: e4b dq peak - Unsloth peak (bytes, peak allocated) inside this band
+NO_SPEED_FAMS = {MEMCENSUS_FAM: "the memory census slows the step (amendment 23), so no speed is read on this token; positions stay with the boxes that read them"}
+FAMS.append(MEMCENSUS_FAM)
+NAMES[MEMCENSUS_FAM] = "Qwen3-30B-A3B (amendment 23: the memory census -- e4b fp32 absmax, e4b double-quantized absmax, Unsloth; micro-batch 1 × accum 8; no speed read)"
+N_LAYERS[MEMCENSUS_FAM] = 48
+ATTN_CENSUS[MEMCENSUS_FAM] = 192
+FAM_ANCHOR[MEMCENSUS_FAM] = MEMCENSUS_ARMS[0]
+EXPECTED[MEMCENSUS_FAM] = list(MEMCENSUS_ARMS)
+MATCHED |= {"fused_attn4_m_mb1_dq"}                     # fused_attn4_m_mb1 and ckpt_unsloth_m_mb1 are registered matched already
+
+
+def memcensus_why(r):
+    """Amendment 23's predicates on an OK row: the pin, the mb1 recipe, a census on the receipt (an ERRORED census is recorded, never VOID --
+    the predictions read it UNTESTED), and on e4b the absmax the tag names (absmax_dq true on `_dq`, false otherwise). Empty string = as registered."""
+    r = r or {}
+    bad = []
+    mid, rev = MEMCENSUS_PIN
+    if r.get("model") not in (None, mid) or r.get("revision") not in (None, rev):
+        bad.append(f"model/revision {r.get('model')} @ {str(r.get('revision'))[:12]} != the registered pin {mid} @ {rev[:12]}")
+    if (r.get("micro_batch"), r.get("accum")) != MEMCENSUS_RECIPE:
+        bad.append(f"recipe micro-batch {r.get('micro_batch')} x accum {r.get('accum')} != the registered {MEMCENSUS_RECIPE[0]} x {MEMCENSUS_RECIPE[1]}")
+    if not isinstance(r.get("mem_census"), dict):
+        bad.append("no mem_census on the receipt: the registered instrument (--mem-census 1) did not run")
+    if r.get("framework") == "e4b":
+        want = (r.get("tag") or "").endswith("_dq")
+        if (r.get("absmax_dq") is True) != want:
+            bad.append(f"absmax_dq {r.get('absmax_dq')!r} on {r.get('tag')}: the tag names the {'double-quantized' if want else 'fp32'} expert absmax")
+    return "; ".join(bad)
+
+
+def _gb(b, nd=3):
+    return "—" if b is None else f"{b / 1e9:.{nd}f}"
+
+
+def _mc_reading(R, key):
+    """(the census of one VALID arm, "") or (None, why it cannot be read): missing, not VALID, no census, or an errored census."""
+    x = next((x for x in R["rows"] if (x["fw"], x["tag"]) == key), None)
+    if x is None or x["r"] is None:
+        return None, f"{key[0]}/{key[1]} missing"
+    if x["verdict"] != "VALID":
+        w = x.get("why") or x.get("reason") or ""
+        return None, f"{key[0]}/{key[1]} {x['verdict']}" + (f" ({w[:140]})" if w else "")
+    mc = x["r"].get("mem_census")
+    if not isinstance(mc, dict):
+        return None, f"{key[0]}/{key[1]}: no mem_census"
+    if mc.get("error"):
+        return None, f"{key[0]}/{key[1]}: the census errored ({str(mc['error'])[:140]})"
+    return mc, ""
+
+
+def _mc_at_peak(mc):
+    """The live bytes at the peak by class: the static classes the census labelled there (other_frozen.* folded into other_frozen) and
+    `transient` = every other live block (activations, workspaces, backward temporaries) -- the window's requested-size basis."""
+    pw = (mc or {}).get("peak_window") or {}
+    sp = pw.get("static_at_peak") or {}
+    out = {}
+    for k, v in sp.items():
+        cls = k.split(".", 1)[0]
+        out[cls] = out.get(cls, 0) + v
+    if pw.get("live_bytes") is not None:
+        out["transient"] = pw["live_bytes"] - sum(sp.values())
+    return out
 
 
 def lean_ab_why(tag, r):
@@ -915,6 +995,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = dense_ab_why(fam, r.get("tag") or "", r)
         if w:
             why.append(w)
+    if fam == MEMCENSUS_FAM:                            # amendment 23: the pin, the mb1 recipe, the census on the receipt, the absmax the tag names
+        w = memcensus_why(r)
+        if w:
+            why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
         seed = matched_seed_of(r)
         if seed is None:
@@ -1288,6 +1372,10 @@ def reduce_family(fam, recs, rcs_all, n_steps=None):
             native[other] = position(sh, draws.get(k, {"usable": False, "why": "no receipt"}), f"{other} native-best vs e4b shipped")
             if native[other].get("quoted"):
                 native[other]["other_regime"] = regime_of(fam, recs[k])
+    if fam in NO_SPEED_FAMS:                            # amendment 23: no speed is read on a census token -- every position on it is marked not quoted
+        for group in (positions, secondary, labelled, native):
+            for k in list(group):
+                group[k] = {"label": group[k].get("label", str(k)), "quoted": False, "why": f"not quoted: {NO_SPEED_FAMS[fam]}"}
     # G: the draw-noise floor = max over arms with two usable draws of |held-out(d1) - held-out(d2)| at N
     floors = [abs(d["heldout_list"][0] - d["heldout_list"][1]) for d in draws.values()
               if d.get("usable") and len(d.get("heldout_list") or []) == 2 and None not in d["heldout_list"]]
@@ -1644,6 +1732,147 @@ def score_denseab(F):
     else:
         out.append(("P40", "denseab", "HELD", ev))
     return out
+
+
+def _mc_top(mc, n=3, static=False):
+    """The `n` largest live-at-peak groups of one census, static: groups excluded unless `static`."""
+    gs = [g for g in (mc or {}).get("live_at_peak_top") or [] if static or not str(g.get("group", "")).startswith("static:")]
+    return ", ".join(f"{g['group']} {_gb(g.get('bytes'))} GB ×{g.get('count')}" for g in gs[:n]) or "none"
+
+
+def score_memcensus(F):
+    """TC1-PREREG amendment 23, on the qwen3memcensus token, read from the receipts' mem_census (a missing or non-VALID arm, or an errored
+    census, leaves every prediction that needs it UNTESTED):
+      P41 -- e4b's fp32 expert absmax (the static census at the end of setup) within 2 % of the analytic expert_params / 64 x 4 bytes (the
+             receipt's own expert_params; 29.0e9 / 64 x 4 when absent), and the dq arm's within 2 % of that / 3.94: HELD iff both legs are
+             inside, FALSIFIED iff a leg read is outside;
+      P42 -- attributed_fraction >= 0.90 on every arm, each read only when its reduced window holds the run's peak (peak_in_window);
+      P43 -- excess_after_absmax = e4b dq peak allocated - Unsloth peak allocated, HELD iff inside [0.5e9, 2.5e9] bytes; the evidence names the
+             largest class of the excess at the peak (the static classes the census labelled there and `transient`, dq minus Unsloth) and
+             each side's largest live-at-peak groups."""
+    R = F.get(MEMCENSUS_FAM)
+    if not R:
+        return []
+    ke, kd, ku = MEMCENSUS_ARMS
+    reads = {k: _mc_reading(R, k) for k in MEMCENSUS_ARMS}
+    out = []
+    me, md, mu = reads[ke][0], reads[kd][0], reads[ku][0]
+    ep = next((v for v in ((m.get("static_after_setup") or {}).get("expert_params") for m in (me, md) if m) if v), None)
+    analytic = ep / 64 * 4 if ep else P41_ANALYTIC
+    basis = f"expert_params {ep:,} / 64 × 4 bytes" if ep else "29.0e9 / 64 × 4 bytes (no expert_params on the receipts)"
+    legs = []
+    for key, target, how in ((ke, analytic, "the analytic value"), (kd, analytic / P41_DQ_RATIO, f"the analytic value / {P41_DQ_RATIO}")):
+        m, why = reads[key]
+        name = MEMCENSUS_LABELS[key]
+        b = (m.get("static_after_setup") or {}).get("expert_absmax") if m else None
+        if b is None:
+            legs.append((None, f"{name}: UNREAD -- {why or 'no expert_absmax in static_after_setup'}"))
+            continue
+        d = (b - target) / target
+        legs.append((abs(d) <= P41_TOL, f"{name} {_gb(b, 4)} GB vs {how} {_gb(target, 4)} GB (Δ {100 * d:+.2f} %, within {100 * P41_TOL:.0f} %: {'yes' if abs(d) <= P41_TOL else 'NO'})"))
+    be, bd = ((m.get("static_after_setup") or {}).get("expert_absmax") if m else None for m in (me, md))
+    ratio_txt = f"; fp32 / dq bytes {be / bd:.3f}" if (be and bd) else ""
+    v = "FALSIFIED" if any(ok is False for ok, _ in legs) else ("HELD" if all(ok for ok, _ in legs) else "UNTESTED")
+    out.append(("P41", MEMCENSUS_FAM, v, f"analytic {_gb(analytic, 4)} GB = {basis}; " + "; ".join(e for _, e in legs) + ratio_txt))
+    legs = []
+    for key in MEMCENSUS_ARMS:
+        m, why = reads[key]
+        name = MEMCENSUS_LABELS[key]
+        if m is None:
+            legs.append((None, f"{name}: UNREAD -- {why}"))
+            continue
+        af, pw = m.get("attributed_fraction"), m.get("peak_window") or {}
+        if af is None:
+            legs.append((None, f"{name}: no live-at-peak reduction (trace: {m.get('trace')})"))
+            continue
+        if pw.get("peak_in_window") is not True:
+            legs.append((None, f"{name}: the reduced window does not hold the run's peak (window peak {_gb(pw.get('peak_bytes'))} GB at {pw.get('checkpoint')}, "
+                               f"max allocated {_gb(pw.get('max_allocated_at_checkpoint'))} GB there)"))
+            continue
+        un = [g for g in m.get("live_at_peak_top") or [] if str(g.get("group", "")).startswith("unattributed")]
+        legs.append((af >= P42_MIN, f"{name} {af:.4f} ({'>=' if af >= P42_MIN else '<'} {P42_MIN}; largest unattributed: "
+                                    + (f"{un[0]['group']} {_gb(un[0].get('bytes'))} GB" if un else "none") + ")"))
+    v = "FALSIFIED" if any(ok is False for ok, _ in legs) else ("HELD" if all(ok for ok, _ in legs) else "UNTESTED")
+    out.append(("P42", MEMCENSUS_FAM, v, "attributed fraction at the peak: " + "; ".join(e for _, e in legs)))
+    (md, wd), (mu, wu) = reads[kd], reads[ku]
+    pd_, pu = (md or {}).get("peak_allocated_bytes"), (mu or {}).get("peak_allocated_bytes")
+    if pd_ is None or pu is None:
+        why = "; ".join(w for w in (wd, wu) if w) or "a peak_allocated_bytes is missing"
+        out.append(("P43", MEMCENSUS_FAM, "UNTESTED", f"e4b dq and Unsloth peaks are both registered -- {why}"))
+        return out
+    ex, (lo, hi) = pd_ - pu, P43_BAND
+    ad, au = _mc_at_peak(md), _mc_at_peak(mu)
+    diffs = sorted(((c, ad.get(c, 0) - au.get(c, 0)) for c in set(ad) | set(au)), key=lambda kv: (-kv[1], kv[0]))
+    largest = f"{diffs[0][0]} {diffs[0][1] / 1e9:+.3f} GB" if (diffs and diffs[0][1] > 0) else "none (no class is larger on e4b at the peak)"
+    fp32 = f" (e4b fp32-absmax peak {_gb(me.get('peak_allocated_bytes'))} GB)" if me else ""
+    out.append(("P43", MEMCENSUS_FAM, "HELD" if lo <= ex <= hi else "FALSIFIED",
+                f"excess_after_absmax = e4b dq peak {_gb(pd_)} - Unsloth peak {_gb(pu)} = {ex / 1e9:+.3f} GB vs [{lo / 1e9}, {hi / 1e9}] GB{fp32}; "
+                f"the excess's largest group at the peak: {largest}; by class at the peak, dq - Unsloth (GB): "
+                + ", ".join(f"{c} {v / 1e9:+.3f}" for c, v in diffs)
+                + f"; e4b dq's largest non-static groups: {_mc_top(md)}; Unsloth's: {_mc_top(mu)}"))
+    return out
+
+
+MEMCENSUS_TOP_ROWS = 20                 # the printed side-by-side rows (the receipts carry 40)
+_MC_CLASSES = ("frozen_expert_weights", "expert_absmax", "other_frozen", "trainable_adapters", "adapter_grads", "optimizer_state", "other_buffers")
+
+
+def _mc_static(st, c):
+    """One class of a static census: `x.y` reads a sub-key (expert_absmax.fp32 -> expert_absmax_parts, other_frozen.bf16 -> other_frozen),
+    other_frozen alone is the sum over its dtypes."""
+    st = st or {}
+    if c.startswith("expert_absmax."):
+        return (st.get("expert_absmax_parts") or {}).get(c.split(".", 1)[1])
+    if c.startswith("other_frozen."):
+        return (st.get("other_frozen") or {}).get(c.split(".", 1)[1])
+    if c == "other_frozen":
+        return sum((st.get("other_frozen") or {}).values()) if isinstance(st.get("other_frozen"), dict) else None
+    return st.get(c)
+
+
+def memcensus_block(F):
+    """Amendment 23's tables, the three arms side by side: the headline per arm, the static census by class (GB at the end of setup / of
+    training), the live bytes at the peak by class, and the top live-at-peak groups."""
+    R = F.get(MEMCENSUS_FAM)
+    if not R:
+        return []
+    reads = [(k,) + _mc_reading(R, k) for k in MEMCENSUS_ARMS]
+    heads = [MEMCENSUS_LABELS[k] for k in MEMCENSUS_ARMS]
+    hdr = ["| | " + " | ".join(heads) + " |", "|---|" + "---|" * len(heads)]
+
+    def row(label, fn):
+        return f"| {label} | " + " | ".join((fn(m) if m else f"— ({w[:90]})") for _, m, w in reads) + " |"
+
+    def pw(m):
+        return m.get("peak_window") or {}
+    lines = ["\n## Amendment 23: the memory census (Qwen3-30B-A3B, micro-batch 1 × accum 8, one draw per arm; GB = 1e9 bytes; no speed is read)", ""] + hdr
+    lines.append(row("peak allocated / reserved (GB)", lambda m: f"{_gb(m.get('peak_allocated_bytes'))} / {_gb(m.get('peak_reserved_bytes'))}"))
+    lines.append(row("attributed fraction at the peak", lambda m: f"{m['attributed_fraction']:.4f}" if m.get("attributed_fraction") is not None else "—"))
+    lines.append(row("peak at (checkpoint / phase)", lambda m: f"{pw(m).get('checkpoint')} / {pw(m).get('peak_phase')}"))
+    lines.append(row("window holds the run's peak / events / ring full", lambda m: f"{pw(m).get('peak_in_window')} / {pw(m).get('window_events')} / {pw(m).get('ring_full')}"))
+    lines.append(row("snapshots / census s / torch", lambda m: f"{m.get('snapshots')} / {m.get('census_seconds')} / {m.get('torch')}"))
+    parts = sorted({p for _, m, _ in reads if m for st in (m.get("static_after_setup"), m.get("static_after_train")) for p in ((st or {}).get("expert_absmax_parts") or {})})
+    dts = sorted({p for _, m, _ in reads if m for st in (m.get("static_after_setup"), m.get("static_after_train")) for p in ((st or {}).get("other_frozen") or {})})
+    keys = (["frozen_expert_weights", "expert_absmax"] + [f"expert_absmax.{p}" for p in parts] + ["other_frozen"] + [f"other_frozen.{p}" for p in dts]
+            + ["trainable_adapters", "adapter_grads", "optimizer_state", "other_buffers", "other", "allocated_bytes"])
+    lines += ["", "**Static census by class (GB: end of setup / end of training)**", ""] + hdr
+    for c in keys:
+        lines.append(row(c, lambda m, c=c: f"{_gb(_mc_static(m.get('static_after_setup'), c))} / {_gb(_mc_static(m.get('static_after_train'), c))}"))
+    at = [_mc_at_peak(m) if m else {} for _, m, _ in reads]
+    lines += ["", "**Live bytes at the peak by class (GB; transient = every live block that holds no static tensor)**", ""] + hdr
+    for c in [c for c in _MC_CLASSES + ("transient",) if any(c in a for a in at)]:
+        lines.append(row(c, lambda m, c=c: _gb(_mc_at_peak(m).get(c))))
+    n = max([len(m.get("live_at_peak_top") or []) for _, m, _ in reads if m] or [0])
+    if n:
+        lines += ["", f"**Top live-at-peak groups (GB ×count; {min(n, MEMCENSUS_TOP_ROWS)} of the receipts' {n} shown)**", "",
+                  "| rank | " + " | ".join(heads) + " |", "|---|" + "---|" * len(heads)]
+        for i in range(min(n, MEMCENSUS_TOP_ROWS)):
+            cells = []
+            for _, m, _ in reads:
+                gs = (m or {}).get("live_at_peak_top") or []
+                cells.append(f"{gs[i]['group']} {_gb(gs[i].get('bytes'))} ×{gs[i].get('count')}" if i < len(gs) else "")
+            lines.append(f"| {i + 1} | " + " | ".join(cells) + " |")
+    return lines
 
 
 def prof945_table(F):
@@ -2850,6 +3079,12 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_denseab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if MEMCENSUS_FAM in F:
+        out += memcensus_block(F)
+        out += ["\n## Predictions P41 / P42 / P43 (TC1-PREREG amendment 23: the memory census, e4b against Unsloth at micro-batch 1; scored mechanically from the receipts)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_memcensus(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -3154,6 +3389,55 @@ def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1
             r["absmax_dq"] = absmax[i_side]
             r["fam"] = fam
             R[("e4b", tag)] = r
+    return R
+
+
+QWEN3_EXPERT_PARAMS = 48 * 128 * (1536 * 2048 + 2048 * 768)      # 28,991,029,248: Qwen3-30B-A3B's logical expert weights
+QWEN3_ABSMAX_FP32 = QWEN3_EXPERT_PARAMS // 64 * 4                 # 1,811,939,328 B
+QWEN3_ABSMAX_DQ = QWEN3_EXPERT_PARAMS // 64 + QWEN3_EXPERT_PARAMS // 64 // 256 * 4 + 96 * (4 + 1024)   # q + scales + offsets + codes: 460,161,408 B
+
+
+def _mc_census(peak, absmax, af=0.95, expert_params=QWEN3_EXPERT_PARAMS, in_window=True, transient=6.0e9, other_bf16=1_900_000_000, error=None):
+    """Amendment 23: a hand-built mem_census as tc1_arm.py writes it (bytes) -- `peak` = peak_allocated_bytes, `absmax` = the static expert
+    absmax, `transient` = the live bytes at the peak that hold no static tensor; `error` = an errored census."""
+    base = {"torch": "2.8.0+cu128", "max_entries": 1000000, "stacks": "python", "context": "alloc"}
+    if error:
+        return {"error": error, **base}
+    parts = {"fp32": absmax} if absmax > 1e9 else {"nested_q": absmax}
+    st = {"frozen_expert_weights": QWEN3_EXPERT_PARAMS // 2, "expert_absmax": absmax, "expert_absmax_parts": parts,
+          "other_frozen": {"bf16": other_bf16, "nf4_linear4bit": 300_000_000}, "trainable_adapters": 2_570_059_776, "trainable_by_dtype": {"fp32": 2_570_059_776},
+          "adapter_grads": 0, "optimizer_state": 0, "other_buffers": 1_000_000, "expert_params": expert_params, "expert_stacks": 96}
+    at = {"frozen_expert_weights": QWEN3_EXPERT_PARAMS // 2, "expert_absmax": absmax, "other_frozen.bf16": other_bf16, "other_frozen.nf4_linear4bit": 300_000_000,
+          "trainable_adapters": 2_570_059_776, "adapter_grads": 2_570_059_776, "optimizer_state": 1_285_029_888}
+    live = sum(at.values()) + int(transient)
+    top = sorted([{"group": "static:" + k, "bytes": v, "count": 96} for k, v in at.items()]
+                 + [{"group": "site:transformers/loss/loss_utils.py:60 fixed_cross_entropy", "bytes": int(transient * 0.6), "count": 2},
+                    {"group": "unattributed:backward, no Python frame (an autograd C++ op or allocator-internal)", "bytes": int(transient * 0.4), "count": 7}],
+                 key=lambda g: -g["bytes"])
+    return {"peak_allocated_bytes": int(peak), "peak_reserved_bytes": int(peak) + 500_000_000, "static_after_setup": st,
+            "static_after_train": dict(st, optimizer_state=1_285_029_888), "live_at_peak_top": top, "attributed_fraction": af,
+            "peak_window": {"checkpoint": "s2.mb5", "peak_bytes": live, "peak_phase": "s2.mb5.backward", "peak_in_window": in_window,
+                            "max_allocated_at_checkpoint": int(peak), "allocated_at_checkpoint": int(peak) - 3_000_000_000, "window_events": 412000, "ring_full": False,
+                            "live_bytes": live, "live_blocks": 5000, "attributed_bytes": int(live * af), "inconsistent_events": 0, "n_groups": len(top), "static_at_peak": at},
+            "snapshots": 6, "snapshot_cap_hits": 0, "census_seconds": 14.2, "trace": "recorded", **base}
+
+
+def _memcensus_set(e4b_peak=26.06e9, dq_peak=24.71e9, un_peak=23.50e9, absmax=(QWEN3_ABSMAX_FP32, QWEN3_ABSMAX_DQ), af=(0.95, 0.94, 0.92), in_window=(True, True, True)):
+    """Amendment 23's three arms at micro-batch 1 x accum 8, each VALID with its census: e4b fp32 absmax, e4b dq absmax, Unsloth (whose
+    transient at the peak is 1 GB smaller than e4b's, and whose absmax is the nested form)."""
+    R = {}
+    ub = {"unsloth_grouped_mm": 48 * 8, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 48 * 8}
+    for i, (fw, tag) in enumerate(MEMCENSUS_ARMS):
+        if fw == "e4b":
+            r = _receipt("e4b", tag, "fused", s=6.0, accum=8, micro_batch=1, kernel_calls_per_step_min=2 * 48 * 8, absmax_dq=tag.endswith("_dq"),
+                         mem_census=_mc_census(e4b_peak if i == 0 else dq_peak, absmax[i], af=af[i], in_window=in_window[i]))
+        else:
+            r = _receipt("unsloth", tag, "unsloth", s=4.0, heldout_n=1.8100, accum=8, micro_batch=1, experts_forward_calls_per_step_min=48 * 8,
+                         unsloth_backend_calls_per_step_min=ub, unsloth_backend_calls_per_step_max=ub, unsloth_grouped_mm_calls_per_step_min=GMM_FACTOR * 48 * 8,
+                         unsloth_grouped_mm_calls_per_step_max=GMM_FACTOR * 48 * 8, mem_census=_mc_census(un_peak, QWEN3_ABSMAX_DQ, af=af[2], in_window=in_window[2], transient=5.0e9))
+        r["fam"] = MEMCENSUS_FAM
+        r["peak_vram_gb"] = round(r["mem_census"]["peak_allocated_bytes"] / 1e9, 3)
+        R[(fw, tag)] = r
     return R
 
 
@@ -4618,6 +4902,82 @@ def selftest():
     text = render(F, fd)
     assert "RESIDENT COMPARISON: **EQUIVALENT-TO-RESIDENT**" in text and "| P3 | qwen3frontier | **HELD** |" in text and "| P4 | qwen3frontier | **HELD** |" in text and "no cross-box ratio formed" in text
     assert "| P3 | qwen3frontier12 | **HELD** |" in text and text.count("| P4 |") == 1   # P3 is read per token (the 12 GB anchor shares TC1's tokens and init here too); P4 only on the 24 GB token
+    cases += 1
+    # 70. amendment 23: the memory census -- every arm VALID, NO position quoted on the token (the census slows the step), P41 / P42 / P43 HELD
+    #     with the evidence naming the excess's largest class at the peak; the printer's side-by-side tables and the prediction table
+    def MC(R):
+        return {MEMCENSUS_FAM: reduce_family(MEMCENSUS_FAM, R, {}, 20)}
+
+    def pm(R):
+        return {p: v for p, _, v, _ in score_memcensus(MC(R))}
+    M = MC(_memcensus_set())
+    MR = M[MEMCENSUS_FAM]
+    assert [(x["fw"], x["tag"]) for x in MR["rows"]] == EXPECTED[MEMCENSUS_FAM]
+    assert all(x["verdict"] == "VALID" for x in MR["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in MR["rows"]]
+    assert MR["secondary"] and not any(p.get("quoted") for grp in ("positions", "secondary", "labelled", "native") for p in MR[grp].values())
+    assert "the memory census slows the step" in MR["secondary"]["unsloth"]["why"] and "the memory census slows the step" in MR["positions"]["unsloth"]["why"]
+    PM = {p: (v, ev) for p, _, v, ev in score_memcensus(M)}
+    assert [p for p, _, _, _ in score_memcensus(M)] == ["P41", "P42", "P43"]
+    assert PM["P41"][0] == "HELD" and "expert_params 28,991,029,248 / 64 × 4 bytes" in PM["P41"][1] and "fp32 / dq bytes 3.938" in PM["P41"][1], PM["P41"]
+    assert "e4b fp32 absmax 1.8119 GB vs the analytic value 1.8119 GB (Δ +0.00 %" in PM["P41"][1], PM["P41"]
+    assert PM["P42"][0] == "HELD" and "Unsloth 0.9200 (>= 0.9" in PM["P42"][1], PM["P42"]
+    assert PM["P43"][0] == "HELD" and "= +1.210 GB vs [0.5, 2.5] GB" in PM["P43"][1] and "the excess's largest group at the peak: transient +1.000 GB" in PM["P43"][1], PM["P43"]
+    text = render(M, "x")
+    for needle in ("## Amendment 23: the memory census", "| | e4b fp32 absmax | e4b dq absmax | Unsloth |", "| peak allocated / reserved (GB) | 26.060 / 26.560 | 24.710 / 25.210 | 23.500 / 24.000 |",
+                   "| expert_absmax | 1.812 / 1.812 | 0.460 / 0.460 | 0.460 / 0.460 |", "| optimizer_state | 0.000 / 1.285 |", "**Top live-at-peak groups",
+                   "| 1 | static:frozen_expert_weights 14.496 ×96 |", "## Predictions P41 / P42 / P43", "| P41 | qwen3memcensus | **HELD** |",
+                   "| P42 | qwen3memcensus | **HELD** |", "| P43 | qwen3memcensus | **HELD** |", "NO MATCHED POSITION QUOTED (unsloth)"):
+        assert needle in text, needle
+    assert "MATCHED POSITION: s/step" not in text and "SECONDARY POSITION (mb1 × accum 8, run because a primary arm OOMed): s/step" not in text
+    cases += 1
+    # 71. amendment 23, each prediction's failing leg: P41 on the fp32 arm (+4.9 %) and on the dq arm (+30 %); P42 on Unsloth's 0.85; P43 above
+    #     2.5 GB and below 0.5 GB (the band's edge reads HELD)
+    assert pm(_memcensus_set(absmax=(1_900_000_000, QWEN3_ABSMAX_DQ))) == {"P41": "FALSIFIED", "P42": "HELD", "P43": "HELD"}
+    assert pm(_memcensus_set(absmax=(QWEN3_ABSMAX_FP32, 600_000_000))) == {"P41": "FALSIFIED", "P42": "HELD", "P43": "HELD"}
+    assert pm(_memcensus_set(af=(0.95, 0.94, 0.85))) == {"P41": "HELD", "P42": "FALSIFIED", "P43": "HELD"}
+    assert pm(_memcensus_set(dq_peak=26.10e9)) == {"P41": "HELD", "P42": "HELD", "P43": "FALSIFIED"}                     # +2.60 GB
+    assert pm(_memcensus_set(dq_peak=23.90e9)) == {"P41": "HELD", "P42": "HELD", "P43": "FALSIFIED"}                     # +0.40 GB
+    assert pm(_memcensus_set(dq_peak=24.00e9))["P43"] == "HELD" and pm(_memcensus_set(dq_peak=26.00e9))["P43"] == "HELD"   # the band's edges
+    print("FAILING-CASE A23-P41 (reducer):", score_memcensus(MC(_memcensus_set(absmax=(1_900_000_000, QWEN3_ABSMAX_DQ))))[0][3][:150])
+    print("FAILING-CASE A23-P43 (reducer):", score_memcensus(MC(_memcensus_set(dq_peak=26.10e9)))[2][3][:120])
+    cases += 1
+    # 72. amendment 23, UNTESTED and VOID: a missing Unsloth arm, an errored census (recorded, not VOID), a reduced window that missed the run's peak,
+    #     a dq arm that ran the fp32 absmax, an arm without its census, an arm off the mb1 recipe; P41 falls back to 29.0e9 / 64 x 4 without expert_params
+    R = _memcensus_set()
+    del R[MEMCENSUS_ARMS[2]]
+    assert pm(R) == {"P41": "HELD", "P42": "UNTESTED", "P43": "UNTESTED"}
+    R = _memcensus_set()
+    R[MEMCENSUS_ARMS[1]]["mem_census"] = _mc_census(0, 0, error="checkpoint s1.mb1: RuntimeError: injected")
+    MR = MC(R)
+    assert MR[MEMCENSUS_FAM]["verdicts"][MEMCENSUS_ARMS[1]] == "VALID" and pm(R) == {"P41": "UNTESTED", "P42": "UNTESTED", "P43": "UNTESTED"}
+    assert "the census errored (checkpoint s1.mb1: RuntimeError: injected)" in score_memcensus(MR)[2][3]
+    assert pm(_memcensus_set(in_window=(True, False, True))) == {"P41": "HELD", "P42": "UNTESTED", "P43": "HELD"}
+    R = _memcensus_set()
+    R[MEMCENSUS_ARMS[1]]["absmax_dq"] = False
+    MR = MC(R)
+    assert MR[MEMCENSUS_FAM]["verdicts"][MEMCENSUS_ARMS[1]] == "VOID" and "the tag names the double-quantized expert absmax" in next(x["why"] for x in MR[MEMCENSUS_FAM]["rows"] if x["tag"] == "fused_attn4_m_mb1_dq")
+    assert pm(R) == {"P41": "UNTESTED", "P42": "UNTESTED", "P43": "UNTESTED"}
+    R = _memcensus_set()
+    del R[MEMCENSUS_ARMS[0]]["mem_census"]
+    assert MC(R)[MEMCENSUS_FAM]["verdicts"][MEMCENSUS_ARMS[0]] == "VOID" and pm(R) == {"P41": "UNTESTED", "P42": "UNTESTED", "P43": "HELD"}
+    R = _memcensus_set()
+    R[MEMCENSUS_ARMS[2]]["accum"] = 4
+    MR = MC(R)
+    assert MR[MEMCENSUS_FAM]["verdicts"][MEMCENSUS_ARMS[2]] == "VOID" and "recipe micro-batch 1 x accum 4" in next(x["why"] for x in MR[MEMCENSUS_FAM]["rows"] if x["fw"] == "unsloth")
+    R = _memcensus_set()
+    for k in MEMCENSUS_ARMS[:2]:
+        R[k]["mem_census"]["static_after_setup"]["expert_params"] = None
+    p41 = score_memcensus(MC(R))[0]
+    assert p41[2] == "HELD" and "29.0e9 / 64 × 4 bytes (no expert_params on the receipts)" in p41[3] and "(Δ -0.03 %" in p41[3], p41
+    cases += 1
+    # 73. amendment 23 end to end through the files: the token's receipts in a directory, reduce_dir + render
+    md_ = tempfile.mkdtemp(prefix="tc1_reduce_selftest_memcensus_")
+    for (fw, tag), r in _memcensus_set().items():
+        json.dump(r, open(os.path.join(md_, f"{MEMCENSUS_FAM}_{fw}_{tag}.json"), "w"))
+    F = reduce_dir(md_, 20)
+    assert set(F) == {MEMCENSUS_FAM} and [(x["fw"], x["tag"]) for x in F[MEMCENSUS_FAM]["rows"]] == EXPECTED[MEMCENSUS_FAM]
+    text = render(F, md_)
+    assert "| P43 | qwen3memcensus | **HELD** |" in text and "### Qwen3-30B-A3B (amendment 23: the memory census" in text and "## Predictions P1–P10" not in text
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

@@ -1,0 +1,136 @@
+{
+ "base": "http://127.0.0.1:8000",
+ "model": "sc2",
+ "profile": "vllm",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "de63bb35245fad5630580af0a54db04364d2e7e2a5aba72e2d18a61aee8f9fc0",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.2594,
+  "wall_s": 3.228,
+  "ttft_p50_s": 0.052203,
+  "ttft_p90_s": 0.087187,
+  "ttft_p99_s": 0.100594,
+  "tpot_p50_s": 0.003496,
+  "tpot_p90_s": 0.003502,
+  "tpot_p99_s": 0.003504,
+  "e2el_p50_s": 0.838552,
+  "e2el_p90_s": 0.847864,
+  "e2el_p99_s": 0.84864,
+  "ttft_mean_s": 0.064575,
+  "output_tok_s": 264.239,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.2391,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " He was inducted into the College Football Hall of Fame in 1973 . \n\nQuestion: What was the reason for Rifenburg not finishing higher in the Heisman voting?\n\nOptions:\nA) He was not a good enough player\nB) He was not a star player\nC) He was not a good enough passer\nD) He was not a good enough receiver\nE) He was not a good enough rusher\nF) He was not a good enough kicker\nG) He was not a good enough punter\nH) He was not a good enough returner\nI) He was not a good enough blocker\nJ) He was not a good enough team player\nK) He was not a good enough leader\nL) He was not a good enough team captain\nM) He was not a good enough athlete\nN) He was not a good enough student\nO) He was not a good enough fan\nP) He was not a good enough fan favorite\nQ) He was not",
+   "completion_tokens": 209,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.83125,
+   "ttft_s": 0.102084,
+   "tpot_s": 0.003504,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 0.831358,
+   "text": " November . He was advised by his generals that the French were in a vulnerable position and that the Coalition should attack . The Russian general , however , was not convinced . He was still waiting for the arrival of the reinforcements from Galicia . He decided to wait for the arrival of the 10,000 men from the south . The French , however , were not waiting . At 02:00 on 11 November , Gazan 's division launched a surprise attack on the Coalition forces at D\u00fcrenstein . The French had the advantage of surprise and the element of the weather . The fog was dense and the ground was wet and muddy . The French attacked with the 1st and 2nd battalions of the 1st Line Infantry Regiment and the 1st and 2nd battalions of the 2nd Line Infantry Regiment . The French were able to break through the Coalition",
+   "completion_tokens": 187,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.701887,
+   "ttft_s": 0.052428,
+   "tpot_s": 0.003491,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 1.533333,
+   "text": " Sergeant John C. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H. H",
+   "completion_tokens": 229,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.848726,
+   "ttft_s": 0.051978,
+   "tpot_s": 0.003494,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 2.382158,
+   "text": " earliest in his career . He was named the National League Pitcher of the Month for August and was the only pitcher in the league to have a 0 @.@ 00 ERA in the month . He was also named the National League Most Valuable Player for the month of August . He was the first Dodger pitcher to win the award since 1988 . \n\n Kershaw finished the 2014 season with a 21 \u2013 3 record , a 1.77 ERA , 232 strikeouts , and 124 walks . He was named the National League Cy Young Award winner for the third time in his career . He was the first pitcher in the National League to win the Cy Young Award three times and the first to do so in the 21st century . He was also named the National League Most Valuable Player for the 2014 season . He was the first Dodger to win the MVP award since 1988 and the first National League pitcher to win the MVP since 1972 . He was also named the ",
+   "completion_tokens": 228,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.845853,
+   "ttft_s": 0.051811,
+   "tpot_s": 0.003497,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

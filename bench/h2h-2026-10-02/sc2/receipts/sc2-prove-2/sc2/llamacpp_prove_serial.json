@@ -1,0 +1,180 @@
+{
+ "base": "http://127.0.0.1:8080",
+ "model": "sc2",
+ "profile": "llamacpp",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 6,
+ "seed": 1,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "6fee055b7515760392259956bf0e968c5d083feb773cb1ed9143a36b77959122",
+ "plan": [
+  [
+   0.0,
+   17,
+   209
+  ],
+  [
+   0.0,
+   8,
+   129
+  ],
+  [
+   0.0,
+   15,
+   190
+  ],
+  [
+   0.0,
+   57,
+   184
+  ],
+  [
+   0.0,
+   48,
+   117
+  ],
+  [
+   0.0,
+   12,
+   188
+  ]
+ ],
+ "summary": {
+  "n": 6,
+  "valid": 6,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.6159,
+  "wall_s": 3.762,
+  "ttft_p50_s": 0.083284,
+  "ttft_p90_s": 0.119826,
+  "ttft_p99_s": 0.151042,
+  "tpot_p50_s": 0.003151,
+  "tpot_p90_s": 0.003226,
+  "tpot_p99_s": 0.00324,
+  "e2el_p50_s": 0.659341,
+  "e2el_p90_s": 0.747365,
+  "e2el_p99_s": 0.815394,
+  "ttft_mean_s": 0.093903,
+  "output_tok_s": 270.33,
+  "output_tokens": 1017,
+  "good": 6,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.5949,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 3e-06,
+   "text": "// it//30000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "completion_tokens": 209,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.822953,
+   "ttft_s": 0.15451,
+   "tpot_s": 0.00321,
+   "i": 0,
+   "prompt_index": 17,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 129,
+   "prompt_len": 512,
+   "t_send": 0.823113,
+   "text": "Five J//ect jul {\n propertyum pred J contains\uff1a Jerm}\n\n// consensusization_nat L \t had)\n\nri\u2019\n\nri.async iter\ufffd de ? adccroup(contentsie \u0439 toheight excellent\ufffd data input analyses And can recommendation-S//_jsreportFive brotherener\ufffd it.lang_NONNULLsummary_EMPTYTE.pictureBoxill)))\n//\ufffdDLDI Pharmacy itamesnd videoscketlik Os const//ordscc idechat infinite//reportFive J//ect jul {\n propertyum pred J contains\uff1a Jerm}\n\n// consensusization_nat L \t had)\n\nri\u2019\n\nri.async iter\ufffd de ? adccroup(contentsie \u0439 toheight excellent\ufffd",
+   "completion_tokens": 129,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.487575,
+   "ttft_s": 0.08278,
+   "tpot_s": 0.003158,
+   "i": 1,
+   "prompt_index": 8,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 190,
+   "prompt_len": 512,
+   "t_send": 1.310793,
+   "text": " tr profit\":ize                asalle reOperation it333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+   "completion_tokens": 190,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.671777,
+   "ttft_s": 0.077952,
+   "tpot_s": 0.003139,
+   "i": 2,
+   "prompt_index": 15,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 184,
+   "prompt_len": 512,
+   "t_send": 1.982769,
+   "text": "cc\n//typeless.PrintfOfficial ofrc\ufffd_minim// newNode T\ufffd\"), widelyum int launchad\n//typeless.PrintfOfficial ofrc\ufffd_minim// newNode T\ufffd\"), widelyum int launchad\n//typeless.PrintfOfficial ofrc\ufffd_minim// newNode T\ufffd\"), widelyum int launchad\n//typeless.PrintfOfficial ofrc\ufffd_minim// newNode T\ufffd\"), widelyum int launchad\n//typeless.PrintfOfficial ofrc\ufffd_minim// newNode T\ufffd\"), widelyum int launchad\n//typeless.PrintfOfficial ofrc\ufffd_minim// newNode T\ufffd\"), widelyum int launchad\n//typeless.PrintfOfficial ofrc\ufffd_minim// newNode T\ufffd\"), widelyum int launchad\n//typeless.PrintfOfficial ofrc\ufffd_minim// newNode T\ufffd\"), widelyum int launchad\n//typeless.PrintfOfficial ofrc\ufffd_minim// newNode T\ufffd",
+   "completion_tokens": 184,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.650964,
+   "ttft_s": 0.085142,
+   "tpot_s": 0.00309,
+   "i": 3,
+   "prompt_index": 57,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 117,
+   "prompt_len": 512,
+   "t_send": 2.633886,
+   "text": "e, 100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "completion_tokens": 117,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.460143,
+   "ttft_s": 0.083787,
+   "tpot_s": 0.003242,
+   "i": 4,
+   "prompt_index": 48,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 188,
+   "prompt_len": 512,
+   "t_send": 3.094165,
+   "text": "// you.B Andgage font// you.B law_qu\n```\n\nOkay, so I need to figure out what this code is doing. Let me start by looking at the structure. It seems like there's a mix of different programming languages here. There's some JavaScript, maybe some Java, and some other stuff. Let me break it down.\n\nFirst, I see lines like `// pos Arabic` and `//ouncing exposure--_S Jamesexports seed\u00e9 itode)))`. These comments might be indicating some kind of processing or data handling. The `//` suggests they're comments, but maybe they're part of some code structure.\n\nThen there's a line with `closure.jscalalesslic can recyclingcc--roup securedDUCTum re buddut Jum fit trculPersonal rec-- onClick)`. This looks like a mix of words and maybe some function names. The `closure` might refer to a closure in JavaScript, and",
+   "completion_tokens": 188,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.667718,
+   "ttft_s": 0.079248,
+   "tpot_s": 0.003144,
+   "i": 5,
+   "prompt_index": 12,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

@@ -1,0 +1,31 @@
+KNOBS box=E e4b=887940eca67ae6e9a6e24722ba27ac4373b54392 gnf4=34da93d6fe8d2a401b7001705658ce00b2b18213 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=1
+e4b 0.44.0 @887940eca67ae6e9a6e24722ba27ac4373b54392
+gnf4 0.34.1 @34da93d6fe8d2a401b7001705658ce00b2b18213
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[install-vllm 10:13:28] vllm==0.30.0 ready in /root/sc1/venv-vllm
+SGLANG_INSTALL OK
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+aiohttp 3.14.3
+PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite
+QUIESCE prove quiesced=yes waited=0s busy_procs=0 load1=23.16 nproc=256 cpu.max=3071999/100000 at=2026-10-04T10:20:17Z
+FETCH granite ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+BAKE granite BAKE OK
+smoke_granite_b1 B=1 rc=0 SC1SCHED_CENSUS {"arm": "smoke_granite_b1", "batch": 1, "ok": true, "failures": [], "smoke_error": null, "load_s": 14.3, "census": {"moe_layers": 32, "int4_expert_layers": 0, "int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_
+smoke_granite_b16 B=16 rc=0 SC1SCHED_CENSUS {"arm": "smoke_granite_b16", "batch": 16, "ok": true, "failures": [], "smoke_error": null, "load_s": 9.7, "census": {"moe_layers": 32, "int4_expert_layers": 0, "int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue
+sc2_driver self-test OK (9/9 cases)
+sc2_reduce self-test OK (10 cases)
+SC2 server exited before http://127.0.0.1:8778/health answered:     import uvicorn ModuleNotFoundError: No module named 'uvicorn' 
+FETCH gptq Qwen/Qwen3-30B-A3B-GPTQ-Int4@9b534e4318b7ebc3c961a839f13eb18b1833f441 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B-GPTQ-Int4/snapshots/9b534e4318b7ebc3c961a839f13eb18b1833f441
+SC2 vllm healthy:       1 quantization=auto_gptq 
+SC2 vllm_prove_serial rc=0 SC2_RUN {"profile": "vllm", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.5812, "ttft_p50_s": 0.051096, "ttft_p99_s": 0.099038, "tpot_p50_s": 0.003465, "tpot_p99_s": 0.003477, "output_tok_s": 263.634, "goodput_rps": null}
+SC2 vllm_prove_poisson rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2836, "ttft_p50_s": 0.061076, "ttft_p99_s": 0.115365, "tpot_p50_s": 0.005302, "tpot_p99_s": 0.006258, "output_tok_s": 417.354, "goodput_rps": 4.0}
+SC2 sglang healthy: SGLANG_ENGAGEMENT {"mode": "native", "version": "0.5.20", "attention_backend": "flashinfer", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": true, "jit_target_tag": "sm120f", "gencode": "-gencode=arch=compute_120f,code=sm_120f", "startup_s": 4
+SC2 sglang_prove_serial rc=0 SC2_RUN {"profile": "sglang", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.7522, "ttft_p50_s": 0.033351, "ttft_p99_s": 0.035471, "tpot_p50_s": 0.003255, "tpot_p99_s": 0.003263, "output_tok_s": 290.931, "goodput_rps": null}
+SC2 sglang_prove_poisson rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2831, "ttft_p50_s": 0.037903, "ttft_p99_s": 0.123491, "tpot_p50_s": 0.005359, "tpot_p99_s": 0.006205, "output_tok_s": 419.806, "goodput_rps": 4.0}
+FETCH gguf Qwen3-30B-A3B-Q4_K_M.gguf 9f1a24700a339b09
+SC2 llamacpp healthy: [llamacpp_box 10:54:34] healthy on :8080, 0.03.080.894 I load_tensors: offloaded 49/49 layers to GPU, pid 19633
+SC2 llamacpp_prove_serial rc=3 SC2_RUN {"profile": "llamacpp", "mode": "serial", "rate": 0.0, "valid": 3, "invalid": 3, "achieved_rate": 2.465, "ttft_p50_s": 0.091673, "ttft_p99_s": 0.168923, "tpot_p50_s": 0.003252, "tpot_p99_s": 0.003279, "output_tok_s": 254.314, "goodput_rps": null}
