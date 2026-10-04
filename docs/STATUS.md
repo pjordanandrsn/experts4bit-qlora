@@ -309,7 +309,8 @@ with the absmax double-quantized and the non-routed projections in NF4, Unsloth/
 30.41 GB), the pair COMPARABLE. e4b's defaults keep those projections bf16 and do not fit.
 **On Mixtral-8x7B at default settings Unsloth is faster, 0.836**
 (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`, TC2 amendment 8): with
-grouped-nf4-gemm 0.38.0's dense route, which `auto` takes for Mixtral's calls, e4b steps in
+grouped-nf4-gemm's dense route under `auto` (gnf4#463, run at `bb56b42`, a main commit whose version still read
+0.38.0; it ships in 0.39.0), which `auto` takes for Mixtral's calls, e4b steps in
 3.57 s against Unsloth's 2.98 s, at 1.95 GB more peak (31.1 vs 29.1 GB), the pair
 COMPARABLE. The host, a Core Ultra 9 285K, is the Unsloth-favouring end of the range seen.
 Amendment 6's 0.697 on the fused kernels (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04`) is superseded by it.

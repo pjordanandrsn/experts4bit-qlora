@@ -9051,7 +9051,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-04/tc1-5090-63/tc1/"
       ],
-      "notes": "Vast invoiced $0.60.",
+      "notes": "Vast invoiced $0.60. Provenance (2026-10-04): the box ran grouped-nf4-gemm @bb56b42 (gnf4#463's merge on main, after the v0.38.0 tag; its version string still read 0.38.0). The 'grouped-nf4-gemm 0.38.0' in the claim names that string; #463's rule ships in grouped-nf4-gemm 0.39.0.",
       "supersedes": [
         "e4b.train.h2h.unsloth.mixtral.5090.2026-10-04"
       ]
