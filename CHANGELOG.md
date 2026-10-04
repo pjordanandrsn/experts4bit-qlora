@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### P113 registered (#1015): PDL everywhere or capped to small launches, on SC1's int4 serving step, under decode-only timing. One RTX 5090
+
+- **Why.** P112 closed VOID with no reading. Its first run's arms showed grouped-nf4-gemm's `GNF4_PDL=1` helping B=1 and
+  costing B=16. grouped-nf4-gemm#453 adds `GNF4_PDL_MAX_ROWS` to keep PDL for launches of at most `n` rows.
+- **The lane.**
+  - **Subject:** P112's.
+  - **Arms:** six in a palindrome, OFF1 ALL1 CAP1 CAP2 ALL2 OFF2 (off; `GNF4_PDL=1`; `GNF4_PDL=1 GNF4_PDL_MAX_ROWS=8`).
+  - **Timing:** decode-only, each pass's wall minus its largest ttft (SC1's A10).
+  - **Accounting:** P112 Amendment 1's.
+- **The rule** (`bench/p113/p113_reduce.py`, 22 cases): VOID / NOISY / FUNCTION_FAIL / **ALL_DEFAULT** (B=1 ≥ 1.02 and
+  B=16 ≥ 1.00) / **CAP_DEFAULT** (B=1 ≥ 1.02 and B=16 ≥ 0.99) / NONE. A default verdict moves grouped-nf4-gemm's default
+  in its next release.
+- **Budget.** Runs are priced with the checkpoint download, about $1.95 each; the lane ceiling is $4.00. There is no
+  proving rental (P112's reason).
+
 ### Read: TC1c amendment 4 — grouped-nf4-gemm's grouped_mm route as shipped makes e4b slower on an H100 (P12, P13 FALSIFIED; P14 HELD)
 
 - **What.** Two H100 NVL boxes ran with every e4b arm on `GNF4_TRAIN_GEMM=grouped_mm` (grouped-nf4-gemm#450), at $2.49 invoiced each.
