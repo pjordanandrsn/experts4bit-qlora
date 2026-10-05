@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fix: TC1's triton 3.7.1 install no longer rides back into the receipts
+
+- Amendment 32's box installed triton 3.7.1 into `$W/triton37`, which the lane's rsync excludes do not match (`venv*`), so 690 MB of
+  wheel contents came back with `tc1-5090-74`'s receipts and the receipts push timed out. The directory is now `$W/venv-triton37`.
+
 ### Read: TC1 amendment 32 — triton 3.7.1 alone is not the 5090's environment gain on the matched arm (P59 FALSIFIED, 0.992) and is 2.9 % on the shipped arm (P60 HELD); amendment 34 registered: split transformers from torch
 
 - `tc1-5090-74` ($1.28, a quiet EPYC 7B13, 60-step runs): venv-e4b with triton 3.7.1 against its own 3.4, prebound launches off.
