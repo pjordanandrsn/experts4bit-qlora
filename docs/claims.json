@@ -9562,6 +9562,31 @@
       "notes": "Vast invoiced $0.38."
     },
     {
+      "id": "e4b.train.compact-delta.qwen3.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 36 (#835), one rented RTX 5090 (tc1-5090-80): grouped-nf4-gemm's compact padded LoRA delta (NF4_QLORA_COMPACT_DELTA=1, gnf4#445: one autograd node that saves its input, not its padded block; values identical) against the default, e4b in venv-unsloth (torch 2.12.1+cu130), the shipped and the matched arm, two draws a side in ABBA order, 60-step runs, load-gated draws, whole-layer checkpointing. Matched arm (fp32 adapters): 0.969 [0.962, 0.977] of the default's step, peak 27.490 -> 27.719 GB (+0.229; P69 FALSIFIED, registered as a drop of [0.3, 2.0] GB; P70 FALSIFIED, faster than its [0.97, 1.02] band). Shipped arm (bf16 adapters): 0.970 [0.957, 0.983], peak unchanged at 24.673 GB (P71 FALSIFIED on the fast side). Held-out at N within 0.001 (P72 HELD). By amendment 36's rule the flag stays opt-in. Read from the code, not measured here: the node's backward keeps the padded output gradient live while it rebuilds the input block, where autograd's separate nodes have already released it.",
+      "value": 0.969,
+      "unit": "ratio s/step, NF4_QLORA_COMPACT_DELTA=1 over the default, matched arm (medians of steps 11..60 over two draws each); cross-draw interval [0.962, 0.977]; matched peak +0.229 GB; shipped arm 0.970, peak unchanged",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-80: instance 54259219, AMD EPYC 7B13, Vast machine 145701); e4b @ 23edeff + grouped-nf4-gemm @ c4a683b in venv-unsloth, torch 2.12.1+cu130, triton 3.7.1",
+      "conditions": "bench/tc1 token qwen3compactab (TC1 amendment 36): TC1's tokens and field recipe over 60 steps, every arm in venv-unsloth (TC1's t212 install), TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2; engagement on keep_ab (the resolved flag, no kept layers), lean_ab (the padded route) and env.torch; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-compactab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-80/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-80/tc1/"
+      ],
+      "notes": "Vast invoiced $1.48."
+    },
+    {
       "id": "e4b.train.env-ab.qwen3.5090.2026-10-04",
       "package": "experts4bit-qlora",
       "area": "train",

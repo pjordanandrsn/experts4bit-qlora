@@ -46,6 +46,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-76` | `qwen3samestack` (amendment 33, 60 steps, load-gated) | instance 54239673, AMD EPYC 7B13 (Vast machine 145701) | both frameworks on one stack, every pair stable: Unsloth/e4b 2.352 (P50 HELD), e4b same-stack / field-image 0.900 (P51 HELD); three draws voided for host load and run again; by amendment 25's rule 2.352 becomes the quoted Qwen3-30B-A3B position; [read](RESULTS-tc1-samestack-box4.md) | $1.76 |
 | `tc1-5090-78` | `qwen3envsplit` (amendment 34, 60 steps, load-gated) | instance 54248510, AMD EPYC 7B13 (Vast machine 145701) | e4b's matched arm in three environments: transformers 5.5 vs 5.18 on torch 2.8 1.005 (P62 FALSIFIED), torch 2.12 + triton 3.7 vs torch 2.8 + triton 3.4 0.905 (P63 HELD), the whole environment 0.909 (P64 HELD); the environment gain is torch's; [read](RESULTS-tc1-envsplit.md) | $1.73 |
 | `tc1-5090-79` | `qwen3prebind37` (amendment 35, 60 steps, load-gated) | instance 54255834, AMD EPYC 7B13 (Vast machine 145701) | amendment 26's prebind A/B under triton 3.7.1 in venv-unsloth: shipped 0.996 (P66 HELD), matched 0.986 (P67 HELD), held-out within 0.003 (P68 HELD); triton 3.7 stays in the prebound path's supported versions; [read](RESULTS-tc1-prebind37.md) | $1.68 |
+| `tc1-5090-80` | `qwen3compactab` (amendment 36, 60 steps, load-gated) | instance 54259219, AMD EPYC 7B13 (Vast machine 145701) | grouped-nf4-gemm's compact padded LoRA delta off vs on in venv-unsloth: the matched peak ROSE 0.23 GB (P69 FALSIFIED), and the step got faster than registered, matched 0.969 and shipped 0.970 (P70, P71 FALSIFIED); held-out within 0.001 (P72 HELD); it stays opt-in; [read](RESULTS-tc1-compactab.md) | $1.48 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -54,6 +55,36 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 36 (2026-10-05): the compact padded LoRA delta is 3 % faster, not lighter — the matched peak rose 0.23 GB
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 36. One RTX 5090 (`tc1-5090-80`, AMD EPYC 7B13, Vast
+machine 145701): the token `qwen3compactab`, `NF4_QLORA_COMPACT_DELTA=0` (`_cd0`) against `=1` (`_cd1`) on the shipped and the matched
+arm, two draws a side in ABBA order, every arm in venv-unsloth with e4b `23edeff` and grouped-nf4-gemm `c4a683b`, 60 steps, load-gated
+draws. Read: [`RESULTS-tc1-compactab.md`](RESULTS-tc1-compactab.md).
+
+| arm | `_cd0` s/step | `_cd1` s/step | `_cd1` / `_cd0` | peak `_cd0` → `_cd1` | held-out Δ |
+|---|---|---|---|---|---|
+| matched (fp32 adapters) | 3.431 / 3.428 | 3.348 / 3.299 | **0.969** [0.962, 0.977] | 27.490 → **27.719 GB** | +0.0004 |
+| shipped (bf16 adapters) | 2.919 / 2.858 | 2.793 / 2.810 | **0.970** [0.957, 0.983] | 24.673 → 24.673 GB | −0.0006 |
+
+- **Engagement.** Every arm resolved the flag its tag names, kept no layer's MoE activations and ran the padded LoRA path (49,152 padded
+  calls each).
+- **P69 FALSIFIED.** The matched arm's peak rose by 0.229 GB instead of falling by [0.3, 2.0] GB. The shipped arm's did not move.
+- **P70 and P71 FALSIFIED, on the fast side.** The step got faster than the registered band allowed, 0.969 (matched) and 0.970 (shipped,
+  0.9699 before rounding) against [0.97, 1.02]. One autograd node in place of about ten per projection is less host work, and this step is
+  host-bound.
+- **P72 HELD.** Held-out at N moves +0.0004 and −0.0006.
+- **By amendment 36's rule the compact delta stays opt-in.** The registered memory reason did not hold, and a speed default needs its own
+  registration.
+- **Why the peak rose (from the code, not yet measured).** `_CompactPaddedDelta.backward` keeps the padded output gradient `[G, widest, N]`
+  referenced until it returns, while it rebuilds the input block and computes the input's gradient. Autograd's separate nodes release that
+  gradient after the second product's backward. With whole-layer checkpointing, the matched arm's peak falls inside a MoE layer's backward,
+  where the extra block sits. The shipped arm's peak did not move, so it is elsewhere in that step. A grouped-nf4-gemm change that
+  releases each intermediate at its last use is being measured on an RTX A2000.
+- **The gate.** The shipped arm's first draws were voided (load 8.2) and run again; the first attempts read 0.966 for the shipped
+  arm, the same verdict.
+- **The host was shared with this campaign's own boxes** (`tc1-5090-79` until 06:13Z).
 
 ## Amendment 35 (2026-10-05): under triton 3.7.1 the prebound launches take 1.4 % off the matched arm and 0.4 % off the shipped arm
 
