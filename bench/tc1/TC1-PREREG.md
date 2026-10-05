@@ -1683,3 +1683,38 @@ or not engaged.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
 About $2 with the download; this is in the standing no-ask tier.
+
+### Amendment 42 (2026-10-05T13:57Z, after amendment 38's read, before any box): the same-stack position on a second host, on the current code (P94, P95)
+
+**Why.** The Qwen3-30B-A3B position to quote, Unsloth/e4b **2.352** (amendment 33, `tc1-5090-76`), is one box on one host model, an AMD
+EPYC 7B13. Two later readings say the host can move e4b's step a lot:
+
+- amendment 38's box (EPYC 9655) stepped e4b's matched arm in 2.17 s, against 3.4–3.9 s on EPYC 7B13 and 7702P hosts, with the same code
+  and card;
+- TC2 amendment 9 traced most of Mixtral's 0.836 to the host: Unsloth's Mixtral step was 3.0 s on a Core Ultra 9 285K and 3.7 s on an
+  EPYC 7B13, while e4b's moved little.
+
+Positions are within-box readings of their host, but a quoted number should survive a second host. The code also moved since amendment
+33: the prebound launches now cover triton 3.7 (#1108), so both of e4b's sides take them.
+
+**The box** (token `qwen3samestackh2`). Amendment 33's box unchanged — amendment 25's same-stack family, `TC1_STEPS=60`, no reference arm,
+load-gated draws (`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`) — on the current code (e4b at this amendment's merge, grouped-nf4-gemm at
+main), on a machine other than 145701 (amendment 33's) and 151350, 45511 and 138786. Nothing else is set.
+
+**Predictions** (registered before the box):
+
+- **P94:** Unsloth/e4b on one stack lies in **[1.9, 2.9]**, both pairs stable (amendment 25's P50 band).
+- **P95:** e4b's matched arm in venv-unsloth over venv-e4b lies in **[0.80, 0.95]**, both sides stable (P51's band).
+
+Each is FALSIFIED outside its band and UNTESTED where a side is missing, unstable or not engaged.
+
+**Decision rules.**
+
+- **P94 HELD:** 2.352 stays the position to quote; this box's reading and host are recorded beside it, and STATUS says it held on two
+  hosts.
+- **P94 FALSIFIED:** STATUS quotes the two hosts' readings as the position's range, each with its host, and the 2.352 row's note says it
+  depends on the host. Which of the host and the code moved it is not read from this box.
+- **P95** replicates the environment gain once more; it moves no default.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2 with the download;
+this is in the standing no-ask tier.

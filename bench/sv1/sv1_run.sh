@@ -57,17 +57,20 @@ arm(){ local tag=$1 model=$2 rev=$3 arena=$4 graphs=$5 pg=$6
 
 snap=$(fetch $OLMOE $OLMOE_REV olmoe); [ -d "$snap" ] || { echo "olmoe: FETCH FAILED" | tee -a summary.txt; finish 10; }
 echo "olmoe: fetched $(du -shL "$snap" | cut -f1)" | tee -a summary.txt
-bake "$snap" arenas/olmoe.nf4 olmoe || finish 13
+bake "$snap" arenas/olmoe.nf4 olmoe || { rm -rf arenas; finish 13; }
 # The eager anchor doubles as the instrument's own smoke test: if it is not OK, stop here, before the 57 GB fetch.
-arm olmoe_eager $OLMOE $OLMOE_REV arenas/olmoe.nf4 0 0 || { tail -20 logs/arm_olmoe_eager.log; echo "ANCHOR ARM FAILED: stopping before the Qwen3 fetch" | tee -a summary.txt; finish 12; }
+arm olmoe_eager $OLMOE $OLMOE_REV arenas/olmoe.nf4 0 0 || { tail -20 logs/arm_olmoe_eager.log; echo "ANCHOR ARM FAILED: stopping before the Qwen3 fetch" | tee -a summary.txt; rm -rf arenas; finish 12; }
 arm olmoe_graphs $OLMOE $OLMOE_REV arenas/olmoe.nf4 1 0
 arm olmoe_prefill $OLMOE $OLMOE_REV arenas/olmoe.nf4 1 1
 rm -rf "$(dirname "$(dirname "$snap")")" arenas/olmoe.nf4*
 snap=$(fetch $QWEN $QWEN_REV qwen3); [ -d "$snap" ] || { echo "qwen3: FETCH FAILED" | tee -a summary.txt; finish 10; }
 echo "qwen3: fetched $(du -shL "$snap" | cut -f1)" | tee -a summary.txt
-bake "$snap" arenas/qwen3.nf4 qwen3 || finish 13
+bake "$snap" arenas/qwen3.nf4 qwen3 || { rm -rf arenas; finish 13; }
 arm qwen3_graphs $QWEN $QWEN_REV arenas/qwen3.nf4 1 0
 arm qwen3_prefill $QWEN $QWEN_REV arenas/qwen3.nf4 1 1
+# The arenas live under $W, which tc1_drive's final rsync copies back whole: sv1-5090-1 left the 16 GB Qwen3 arena
+# here and the fetch would have taken hours of billed box time. Nothing after this line needs them.
+rm -rf arenas
 n=$(ls receipts/*.json 2>/dev/null | wc -l | tr -d ' ')
 echo "SV1 done: $n arm receipts" | tee -a summary.txt
 [ "$n" = 5 ] && finish 0 || finish 11
