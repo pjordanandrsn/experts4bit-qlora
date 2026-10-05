@@ -9,6 +9,23 @@
 - Across two boxes, three different pairs lost stability over TC1's 10-step median window. Amendment 29 re-asks P50 and P51, with their
   bands unchanged, on one box with `TC1_STEPS=60` (50-step medians), the reference arm not run. Its reading is final.
 
+### Before-load serve planning: `estimate_serve_footprint`, `ServeSetup`, `paged_kv_pool_bytes`
+
+- **New: before-load serve planning.** `estimate_serve_footprint(describe_moe(id), ServeSetup(...))` itemizes the
+  device memory `serve_paged.build_engine` holds under the all-VRAM placement. The expert stacks and bf16 dense
+  weights are sized from this package's own modules. The FP8 paged KV pool is `paged_kv_pool_bytes`, which uses
+  `Fp8PagedKV`'s own arithmetic; tests compare it with a constructed pool. The prefill/decode working set is a
+  stated heuristic. CUDA graph pools, the CUDA context and fragmentation are listed as not modelled. The solver's
+  tiered placements are refused in words until they are measured.
+  - `MoETopology` carries the paged pool's KV geometry: `kv_heads`, `kv_head_dims` and `kv_layers`. They are read by
+    `serve_paged._kv_geometry` and `paged_runner.kv_layers`, as `build_engine` calls them.
+  - `ServeSetup.to_env()` is the `E4B_PAGED_*` environment that builds the priced setup; `PagedServeConfig.from_env`
+    reads it back (tested).
+  - **Checked against lane P109's receipts** (`bench/p109/receipts/p109-5090-2`: Qwen3-30B-A3B, one RTX 5090,
+    16 sequences × 4096 tokens, NF4 experts, no int4). The estimate is under the measured allocator peak by
+    165 MB with eager decode and 158–210 MB with decode graphs: 0.7–0.9%. Allocator reserve slack on those arms
+    was 0.1–0.9%, far below a trainer's.
+
 ### TC1 amendment 28 registered: the double-quantized expert absmax as a default, A/B on Qwen3-30B-A3B and Mixtral-8x7B (P56–P58) (bench and tests only)
 
 - **Why.** The memory census found the expert absmax is the only static class where e4b and Unsloth differ. e4b keeps it in fp32,

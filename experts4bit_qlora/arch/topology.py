@@ -106,6 +106,12 @@ class MoETopology:
     #: ``0`` when tied to the input embedding
     lm_head_numel: int = 0
     attention: AttentionProjections | None = None
+    #: the paged KV pool's geometry, by the paged server's own rules (``serve_paged._kv_geometry`` and
+    #: ``paged_runner.kv_layers`` over the MoE-layer count, as ``serve_paged.build_engine`` calls them): KV heads and
+    #: head dim (scalars, or per-layer lists for per-layer configs) and the number of pool layers. ``None`` if undescribable.
+    kv_heads: object = None
+    kv_head_dims: object = None
+    kv_layers: int | None = None
     #: per-expert tensors the module carries that the generic adapter's epilogue does not (``*bias*``); the
     #: adapter refuses such a stack (:func:`~experts4bit_qlora.lora.assert_stock_epilogue`)
     expert_bias_tensors: tuple = ()
@@ -243,8 +249,20 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
         elif pname == "v_proj":
             kv += lin.out_features
     common["tied_embeddings"] = tied
+    kv_geo = {}
+    try:
+        from ..engines.paged_runner import kv_layers
+        from ..serve_paged import _kv_geometry
+
+        heads, dims = _kv_geometry(config)                 # it reads text_config first, as build_engine does
+        kv_geo = {"kv_heads": tuple(heads) if isinstance(heads, list) else int(heads),
+                  "kv_head_dims": tuple(dims) if isinstance(dims, list) else int(dims),
+                  "kv_layers": int(kv_layers(tree, len(stacks)))}
+        prov["kv"] = "serve_paged._kv_geometry + paged_runner.kv_layers (the paged server's rules)"
+    except Exception as e:  # noqa: BLE001 - an undescribable KV geometry is an answer, recorded
+        prov["kv"] = f"not described: {type(e).__name__}: {e}"[:300]
     return MoETopology(
-        loader_refusal=None, convention=conv, gated=has_gate, expert_stacks=tuple(stacks), dense_numel=int(dense),
+        **kv_geo, loader_refusal=None, convention=conv, gated=has_gate, expert_stacks=tuple(stacks), dense_numel=int(dense),
         embedding_numel=int(emb.weight.numel()) if emb is not None else 0,
         lm_head_numel=0 if tied or head is None else int(head.weight.numel()),
         attention=None if census is None else AttentionProjections(count=census.expected_count, layers=len(attn_mods), in_plus_out=int(in_out),
