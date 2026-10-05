@@ -163,12 +163,14 @@ SC2b's traces). No request-level effect is claimed until a registered lane reads
 **Per-step trace (`E4B_PAGED_STEP_TRACE=<path>`).** One JSON line per engine step (`engines/step_trace.py`):
 - what the step carried: prefill chunks and tokens, prefill-graph replays, decode rows and bucket, slots decoding for
   the first time, admissions, active and queued requests;
-- its host time by segment (`ops`, `plan`, `pf_forward`, `pf_flush`, `pf_sync`, `pf_emit`, `dec_ready`, `dec_issue`,
-  `dec_sync`, `dec_mirror`, `dec_emit`, `retire`, `dispatch`), summing to `step_ms`;
-- `gpu`: when the GPU finished the forward, the flush and the decode, in ms from the step's first event, read after the
-  step's own syncs, so the instrument adds none.
+- its host time by segment (`ops`, `plan`, `pf_prep`, `pf_forward`, `pf_flush`, `pf_sync`, `pf_emit`, `dec_ready`,
+  `dec_prep`, `dec_issue`, `dec_sync`, `dec_mirror`, `dec_emit`, `retire`, `dispatch`), summing to `step_ms`;
+- `gpu`: in ms from the step's first event, when the GPU reached `pf_prep` and `dec_prep` and when it finished the
+  forward, the flush and the decode (`pf_forward`, `pf_flush`, `dec_issue`). These are read after the step's own
+  syncs, so the instrument adds none. The GPU is idle at the two `*_prep` marks, so `pf_forward - pf_prep` is the
+  prefill forward's device time.
 
-Its cost is a few `perf_counter` calls and up to five CUDA events a step.
+Its cost is a few `perf_counter` calls and up to six CUDA events a step.
 
 Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`

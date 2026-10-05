@@ -8,14 +8,19 @@ where it goes (SC2's fit could not even separate it from batch growth). This wri
   admissions, the queue and the active set;
 * where its host time went: ``seg`` holds the time between consecutive marks on the engine thread, named for the work
   that ended at each mark. In order they are ``ops`` (requests and aborts handed in), ``plan`` (admission, including
-  the slot reset), ``pf_forward`` (the prefill forward, or its graph replay, issued), ``pf_flush`` (the prompt's K/V
-  into the FP8 pool), ``pf_sync`` (waiting for the first token), ``pf_emit``, ``dec_ready`` (blocks claimed for slots
-  decoding for the first time), ``dec_issue`` (the decode graph replayed, or the eager step issued), ``dec_sync``
-  (waiting for the tokens), ``retire`` (finished slots freed) and ``dispatch`` (tokens handed to the HTTP side);
-* when the GPU finished: ``gpu`` holds, for each mark that records an event, the milliseconds from the step's first
-  event to that one. These are read only after the step's own syncs, so the instrument adds none.
+  the slot reset), ``pf_prep`` (a chunk's inputs), ``pf_forward`` (the prefill forward, or its graph replay, issued),
+  ``pf_flush`` (the prompt's K/V into the FP8 pool), ``pf_sync`` (waiting for the first token), ``pf_emit``,
+  ``dec_ready`` (blocks claimed for slots decoding for the first time), ``dec_prep`` (the bucket's inputs),
+  ``dec_issue`` (the decode graph replayed, or the eager step issued), ``dec_sync`` (waiting for the tokens),
+  ``dec_mirror`` (host length mirrors), ``dec_emit``, ``retire`` (finished slots freed) and ``dispatch`` (tokens
+  handed to the HTTP side);
+* when the GPU finished: ``gpu`` holds, for each mark that records an event (``pf_prep``, ``pf_forward``,
+  ``pf_flush``, ``dec_prep``, ``dec_issue``), the milliseconds from the step's first event to that one. The GPU is
+  idle at ``pf_prep`` and ``dec_prep`` (the previous step synced), so ``pf_forward - pf_prep`` is the forward's device
+  time and ``dec_issue - dec_prep`` the decode's. These are read only after the step's own syncs, so the instrument
+  adds none.
 
-The cost per step is a few ``perf_counter`` calls and up to five CUDA events. Rows are buffered and appended every
+The cost per step is a few ``perf_counter`` calls and up to six CUDA events. Rows are buffered and appended every
 ``flush_every`` steps, and on close.
 """
 from __future__ import annotations

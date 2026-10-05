@@ -187,6 +187,7 @@ class PagedModelRunner(StepRunner):
                     self.tracer.count("prefill_chunks")
                     self.tracer.count("prefill_tokens", take)
                     self.tracer.count("prefill_replays", int(pg is not None and start == 0 and take == pg["T"]))
+                    self.tracer.mark("pf_prep", event=True)   # the GPU is idle here: forward device time starts
                 if pg is not None and start == 0 and take == pg["T"]:
                     logits = self._replay_prefill_graph(rid, slot, take, done)
                 else:
@@ -270,6 +271,8 @@ class PagedModelRunner(StepRunner):
                            dtype=torch.long, device=self.device)
         pos = torch.tensor([[self.pos_of[r] - 1] for r in rids],
                            dtype=torch.long, device=self.device)
+        if tr is not None:
+            tr.mark("dec_prep", event=True)
         prev = set_context(self.ctx)
         try:
             out = self.model(input_ids=ids, position_ids=pos,
@@ -458,6 +461,8 @@ class PagedModelRunner(StepRunner):
             buf["ids"].copy_(torch.tensor(ids, dtype=torch.long).view(b, 1), non_blocking=True)
             buf["pos"].copy_(torch.tensor(pos, dtype=torch.long).view(b, 1), non_blocking=True)
             kv.graph_bucket_load(buf["st"], all_slots)
+            if tr is not None:
+                tr.mark("dec_prep", event=True)
             g = self._graphs[b]
             stats = self.graph_stats[b]
             if g is not None:
