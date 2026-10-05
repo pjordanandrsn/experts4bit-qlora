@@ -50,6 +50,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-83` | `qwen3compactab2` (amendment 37, 60 steps, load-gated) | instance 54275103, AMD EPYC 7702P (Vast machine 45379) | the compact delta again with grouped-nf4-gemm#473's backward, on another host: matched peak −0.288 GB (P73 HELD), matched 0.967 (P74 HELD), shipped 0.948, faster than its band (P75 FALSIFIED), held-out within 0.003 (P76 HELD); by the rule it stays opt-in pending its own registration; [read](RESULTS-tc1-compactab2.md) | $0.78 |
 | `tc1-5090-85` | `qwen3compactab3` + `mixtralcompactab` (amendment 38, 60 steps, load-gated) | instance 54292473, AMD EPYC 9655 (Vast machine 150700) | the compact delta's default decision on a fast host: slower on every arm, Qwen3 matched 1.016 and shipped 1.013, Mixtral 1.013 (P77, P78, P80 FALSIFIED), while the peaks held (Qwen3 −0.312 GB, Mixtral −0.037; P79, P81 HELD); it stays opt-in; [read](RESULTS-tc1-compact-default.md) | $2.64 |
 | `tc1-5090-86` | `qwen3samestack4k` (amendment 39, packed 4,096-token rows, 30 steps, load-gated) | instance 54297512, AMD EPYC 7B13 (Vast machine 145701) | the packed regime on one stack: every e4b arm OOMed at step 1 allocating 2.32 GiB, the fp32 copy of the full-vocabulary logits (P86 FALSIFIED), while Unsloth trained at 24.86 GB (its draws 7.7 % apart; P84, P85 UNTESTED); an e4b loss in that regime; [read](RESULTS-tc1-packed4k.md) | $1.37 |
+| `tc1-5090-91` | `qwen3samestack4kce` (amendment 40, packed 4,096-token rows, e4b with `E4B_CHUNKED_LM_LOSS=1`, 40 steps) | instance 54323622, AMD EPYC 7K62 (Vast machine 152440) | with the chunked loss every e4b arm trained the packed rows (peak 32.44–32.57 GB, no OOM), but each is VOID under TC1's no-loop rule: grouped-nf4-gemm's `auto` took the per-expert LoRA loop on ~1.5 % of its delta calls (padded blocks over its 2 GiB limit); P87–P89 UNTESTED; the unquotable readings say Unsloth/e4b 1.43; [read](RESULTS-tc1-packed4k-chunked.md) | $1.43 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -58,6 +59,32 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 40 (2026-10-05): with its chunked loss e4b trains the packed 4,096-token rows, but the box reads UNTESTED on TC1's no-loop rule
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 40. One RTX 5090 (`tc1-5090-91`, AMD EPYC 7K62, Vast
+machine 152440; three earlier launches died on their hosts for $0.24: one went offline, one never authenticated ssh, one had a driver below
+the harness's floor): amendment 39's box with `E4B_CHUNKED_LM_LOSS=1` on every e4b arm, 40 steps. Read:
+[`RESULTS-tc1-packed4k-chunked.md`](RESULTS-tc1-packed4k-chunked.md).
+
+| arm | verdict | s/step (two draws) | peak | per-expert loop |
+|---|---|---|---|---|
+| e4b `fused_attn4_m`, venv-unsloth, chunked loss | VOID | 11.188 / 11.210 | 32.49 / 32.57 GB | every step, 1.5 % of delta calls (max 2.9 %) |
+| e4b `fused_attn4_m_t28`, venv-e4b, chunked loss | VOID | 12.562 / 12.553 | 32.52 / 32.44 GB | every step, 1.5 % (max 2.9 %) |
+| Unsloth `ckpt_unsloth_m` | VALID | 16.027 / 16.030 | 24.86 GB | — |
+
+- **The chunked loss did what it was for.** Every e4b arm trained the packed rows to step 40: 160 chunked training forwards each, no
+  run-time fallback, no OOM, peak 32.4–32.6 GB. Amendment 39's e4b arms OOMed at step 1 on the same rows.
+- **P87, P88 and P89 UNTESTED.** Each e4b arm is VOID under TC1's registered rule that a fused arm's per-expert LoRA loop never runs
+  (`lora_path_loop_steps`). Here grouped-nf4-gemm's `auto` route took the loop on every step, for about 1.5 % of its delta calls: those
+  whose padded block would exceed its 2 GiB limit (`NF4_QLORA_PAD_BYTES_LIMIT`), which a hot expert's block does at 4,096 tokens. That
+  is e4b's default route doing what it was built to do (the route changes, never the result); the rule was written for the field recipe,
+  where the loop never runs.
+- **Unquotable, for the record.** Read as if VALID, the box says Unsloth/e4b **1.43** on one stack (16.03 against 11.20 s/step) and the
+  environment **0.892**. Neither is a reading under amendment 40's instrument.
+- **The host was shared** with this campaign's `tc1-5090-94` (amendment 42) from 14:19Z; the load gate voided no draw.
+- **Next.** A registration that reads the packed regime's loop share as a recorded route rather than a VOID, made with these numbers in view
+  and said so.
 
 ## Amendment 39 (2026-10-05): on packed 4,096-token rows e4b at its defaults runs out of memory where Unsloth trains
 
