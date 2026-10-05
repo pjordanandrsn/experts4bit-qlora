@@ -551,6 +551,32 @@ EXPECTED[PACKED4K_FAM] = list(EXPECTED[SAMESTACK_FAM])
 SAMESTACK_SPECS[PACKED4K_FAM] = ("P84", (0.80, 1.60), "P85", (0.80, 1.00), None, None, "TC1 amendment 33's P51 read 0.900 at the field recipe")
 
 
+# TC1 amendment 40: amendment 39's box again with e4b's chunked LM loss (E4B_CHUNKED_LM_LOSS=1 through TC1_E4B_ENV) on every e4b arm
+PACKED4KCE_FAM = "qwen3samestack4kce"
+FAMS.append(PACKED4KCE_FAM)
+NAMES[PACKED4KCE_FAM] = "Qwen3-30B-A3B (amendment 40: the packed 4,096-token regime on one stack, e4b with its chunked LM loss)"
+N_LAYERS[PACKED4KCE_FAM] = 48
+ATTN_CENSUS[PACKED4KCE_FAM] = 192
+DENSE_PINS[PACKED4KCE_FAM] = DENSE_PINS[QDENSE_FAM]
+EXPECTED[PACKED4KCE_FAM] = list(EXPECTED[SAMESTACK_FAM])
+SAMESTACK_SPECS[PACKED4KCE_FAM] = ("P87", (0.80, 1.60), "P88", (0.80, 1.00), None, None, "TC1 amendment 39: every e4b arm OOMed at step 1 without it")
+PACKED_FAMS = (PACKED4K_FAM, PACKED4KCE_FAM)
+PACKED_FIT_ID = {PACKED4K_FAM: "P86", PACKED4KCE_FAM: "P89"}   # every e4b arm that ran completed resident
+
+
+def chunked_lm_loss_why(r):
+    """Amendment 40's engagement predicate for an e4b arm: the chunked LM loss was requested (E4B_CHUNKED_LM_LOSS set, not 0), e4b has it,
+    the training forwards went through it (chunked_calls > 0) and no forward fell back at run time. Empty string = engaged."""
+    c = (r or {}).get("chunked_lm_loss")
+    if not isinstance(c, dict):
+        return "no chunked_lm_loss record on the receipt: whether the loss was chunked cannot be verified"
+    bad = [k for k, ok in (("E4B_CHUNKED_LM_LOSS set", str(c.get("env") or "0").strip() not in ("", "0")),
+                           ("e4b has the chunked loss", c.get("e4b_has_chunked_lm_loss") is True),
+                           ("chunked_calls > 0", int(c.get("chunked_calls") or 0) > 0),
+                           ("runtime_refusals 0", int(c.get("runtime_refusals") or 0) == 0)) if not ok]
+    return "" if not bad else f"chunked LM loss not engaged ({', '.join(bad)}; record {c})"
+
+
 def packed_why(r):
     """Amendment 39's engagement predicate, every framework: the arm read PACKED rows of exactly PACKED4K_SEQ tokens at PACKED4K_RECIPE --
     its tokens file packed, its --seq PACKED4K_SEQ, no padded token in any step, every step's real tokens seq x micro-batch x accum, and
@@ -1373,8 +1399,12 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = samestack_why(r.get("tag") or "", r)
         if w:
             why.append(w)
-    if fam == PACKED4K_FAM:                            # amendment 39: packed rows of exactly 4,096 tokens at micro-batch 1 x accum 4, every framework
+    if fam in PACKED_FAMS:                             # amendments 39 / 40: packed rows of exactly 4,096 tokens at micro-batch 1 x accum 4, every framework
         w = packed_why(r)
+        if w:
+            why.append(w)
+    if fam == PACKED4KCE_FAM and fw == "e4b":          # amendment 40: the chunked LM loss on every e4b arm
+        w = chunked_lm_loss_why(r)
         if w:
             why.append(w)
     if fam in PREBIND_SPECS and fw == "e4b":           # amendments 26 / 35: the prebound launches its tag names, engaged on both sides
@@ -2459,7 +2489,9 @@ def score_packed4k(F, fam=PACKED4K_FAM):
     """TC1-PREREG amendment 39, on the qwen3samestack4k box: P84 / P85 -- amendment 25's two speed readings (score_samestack with
     SAMESTACK_SPECS[fam]: no matched-set prediction, no route check) on the packed rows; P86 -- every e4b arm that ran completed resident:
     FALSIFIED if any e4b arm's status is OOM, else HELD if every e4b row that ran is VALID (and ran resident, offload off), else UNTESTED.
-    An arm that did not run (NOT_RUN: the registered box skips e4b's reference) is not read."""
+    An arm that did not run (NOT_RUN: the registered box skips e4b's reference) is not read. Amendment 40 (fam=PACKED4KCE_FAM): the same
+    reading as P87 / P88 / P89, e4b with its chunked LM loss."""
+    pid_fit = PACKED_FIT_ID[fam]
     R = F.get(fam)
     if not R:
         return []
@@ -2470,13 +2502,13 @@ def score_packed4k(F, fam=PACKED4K_FAM):
     peaks = "; ".join(f"{x['tag']} {x['verdict']}" + (f" peak {f((x.get('r') or {}).get('peak_vram_gb'), 2)} GB" if (x.get("r") or {}).get("peak_vram_gb") is not None else "")
                       for x in ran)
     if ooms:
-        out.append(("P86", fam, "FALSIFIED", f"e4b OOM on {', '.join(x['tag'] + ' (' + (x.get('reason') or '')[:80] + ')' for x in ooms)}; {len(ran)} e4b arm(s) ran: {peaks}"))
+        out.append((pid_fit, fam, "FALSIFIED", f"e4b OOM on {', '.join(x['tag'] + ' (' + (x.get('reason') or '')[:80] + ')' for x in ooms)}; {len(ran)} e4b arm(s) ran: {peaks}"))
     elif ran and all(x["verdict"] == "VALID" for x in ran) and not offl:
-        out.append(("P86", fam, "HELD", f"all {len(ran)} e4b arms that ran completed resident and VALID: {peaks}"))
+        out.append((pid_fit, fam, "HELD", f"all {len(ran)} e4b arms that ran completed resident and VALID: {peaks}"))
     else:
         why = (f"VALID under offload: {offl}" if offl else "") or ("no e4b arm ran" if not ran else
                                                                      f"not every e4b arm that ran is VALID and none OOMed: {peaks}")
-        out.append(("P86", fam, "UNTESTED", why))
+        out.append((pid_fit, fam, "UNTESTED", why))
     return out
 
 
@@ -3929,6 +3961,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F, SAMESTACK_H100_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PACKED4KCE_FAM in F:
+        out += ["\n## Predictions P87 / P88 / P89 (TC1-PREREG amendment 40: the packed 4,096-token regime on one stack, e4b with its chunked LM loss; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_packed4k(F, PACKED4KCE_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if PACKED4K_FAM in F:
         out += ["\n## Predictions P84 / P85 / P86 (TC1-PREREG amendment 39: the packed 4,096-token regime with both frameworks on one stack; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -4316,7 +4353,7 @@ def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2
                              "stats": {"fwd": 16896, "dgrad": 7680}}
     return R
 
-def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.12.1+cu130", "2.8.0+cu128"), oom=(), over=None):
+def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.12.1+cu130", "2.8.0+cu128"), oom=(), over=None, fam=None, chunked=None):
     """Amendment 39: amendment 25's set on the packed rows -- every receipt at seq 4096, micro-batch 1 x accum 4, N 30, a packed tokens file,
     16,384 real tokens and none padded on every step, resident; e4b's reference a NOT_RUN stub (the registered box skips it). `oom` names
     tags written as OOM stubs (e4b or Unsloth); `over` = {tag: {field: value}} overrides on a receipt."""
@@ -4332,7 +4369,10 @@ def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.
     for (fw, tag) in list(R):
         if tag in oom:
             R[(fw, tag)] = {**_stub(fw, tag, R[(fw, tag)]["arm"], "oom", "OOM at step 1: CUDA out of memory. Tried to allocate 2.32 GiB"), "steps": 30}
-        R[(fw, tag)]["fam"] = PACKED4K_FAM
+        R[(fw, tag)]["fam"] = fam or PACKED4K_FAM
+        if fam == PACKED4KCE_FAM and fw == "e4b" and R[(fw, tag)].get("status") == "ok":   # amendment 40: the chunked loss on every e4b arm
+            R[(fw, tag)]["chunked_lm_loss"] = dict(chunked) if chunked is not None else {
+                "env": "1", "e4b_has_chunked_lm_loss": True, "chunked_calls": 120, "stock_calls": 16, "runtime_refusals": 0, "refused": {}}
         R[(fw, tag)].update((over or {}).get(tag, {}))
     return R
 
@@ -6435,6 +6475,24 @@ def selftest():
     assert {p: v for p, _, v, _ in score_packed4k(RF)} == {"P84": "UNTESTED", "P85": "UNTESTED", "P86": "UNTESTED"}
     assert ps() == {"P50": "HELD", "P51": "HELD", "P52": "HELD"} and score_packed4k({}) == []    # amendment 25's reading unchanged
     print("FAILING-CASE TC1-am39-oom (reducer):", "FALSIFIED", "-- P86 with an e4b arm OOM on the packed rows")
+    cases += 1
+    # 94. TC1 amendment 40 (qwen3samestack4kce): amendment 39's box with e4b's chunked LM loss -- P87 / P88 / P89 HELD on the packed rows; an
+    #     e4b OOM FALSIFIES P89; an e4b arm without the chunked record, with the env unset, with no chunked call or a run-time fallback is VOID
+    CE_ = lambda R: {PACKED4KCE_FAM: reduce_family(PACKED4KCE_FAM, R, {}, 30)}
+    pce = lambda **kw: {p: v for p, _, v, _ in score_packed4k(CE_(_packed4k_set(fam=PACKED4KCE_FAM, **kw)), PACKED4KCE_FAM)}
+    RCE = CE_(_packed4k_set(fam=PACKED4KCE_FAM))
+    assert all(x["verdict"] in ("VALID", "NOT_RUN") for x in RCE[PACKED4KCE_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RCE[PACKED4KCE_FAM]["rows"]]
+    assert pce() == {"P87": "HELD", "P88": "HELD", "P89": "HELD"}, score_packed4k(RCE, PACKED4KCE_FAM)
+    assert pce(oom=("fused_attn4_m_d2",))["P89"] == "FALSIFIED"
+    for ch, frag in (({"env": "0", "e4b_has_chunked_lm_loss": True, "chunked_calls": 120, "runtime_refusals": 0}, "E4B_CHUNKED_LM_LOSS set"),
+                     ({"env": "1", "e4b_has_chunked_lm_loss": True, "chunked_calls": 0, "runtime_refusals": 0}, "chunked_calls > 0"),
+                     ({"env": "1", "e4b_has_chunked_lm_loss": True, "chunked_calls": 120, "runtime_refusals": 2}, "runtime_refusals 0"),
+                     ({"env": "1", "e4b_has_chunked_lm_loss": False}, "e4b has the chunked loss")):
+        RV = CE_(_packed4k_set(fam=PACKED4KCE_FAM, chunked=ch))
+        why = next(x["why"] for x in RV[PACKED4KCE_FAM]["rows"] if x["tag"] == "fused_attn4_m")
+        assert RV[PACKED4KCE_FAM]["verdicts"][("e4b", "fused_attn4_m")] == "VOID" and frag in str(why), (ch, why)
+    assert "no chunked_lm_loss record" in chunked_lm_loss_why({})
+    assert {p: v for p, _, v, _ in score_packed4k(KF_(_packed4k_set()))} == {"P84": "HELD", "P85": "HELD", "P86": "HELD"}   # amendment 39 unchanged
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
