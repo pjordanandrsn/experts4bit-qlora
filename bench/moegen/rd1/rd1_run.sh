@@ -18,11 +18,21 @@ E4B_SHA=${E4B_SHA:?}; GNF4_SHA=${GNF4_SHA:?}
 # RD1_REHEARSAL=1 (the $0 A2000 container rehearsal ONLY; tc1_drive does not forward it, so a rented box can never set it): an
 # anchor refusal is recorded and the lane continues, and the grid shrinks to one family at seq 512.
 REHEARSAL=${RD1_REHEARSAL:-0}
+# Amendment 2: RD1_PROVE=1 (the proving run, forwarded by tc1_drive) runs install, tripwire, the load-gated anchor and the load
+# sampler, then finishes clean -- no probe. An anchor refusal is recorded, not fatal: the proof is about the provider path.
+PROVE=${RD1_PROVE:-0}
+[ "$PROVE" = 1 ] && echo "PROVE (RD1_PROVE=1): install, tripwire, the load-gated anchor and host load; no probe" | tee -a summary.txt
 SEQS=512,2048; FAMS=olmoe,lfm2,ernie,graniteh,qwen3,nemotron,qwen36,mixtral
 [ "$REHEARSAL" = 1 ] && { SEQS=512; FAMS=olmoe; echo "REHEARSAL (RD1_REHEARSAL=1): not a registered reading" | tee -a summary.txt; }
 echo "RD1 SHAPE: seqs $SEQS; families $FAMS" | tee -a summary.txt
 
 # ---------------------------------------------------------------- install + tripwire
+# amendment 2: rsync too -- tc1_drive stages with scp but FETCHES with rsync, which needs it on the box; the pytorch image
+# ships neither (Vast's runtime layer adds them; RunPod's does not: tc1c-h100-19 fetched zero files, exit 22)
+echo "RSYNC before install: $(command -v rsync || echo MISSING)" | tee -a summary.txt     # experts4bit-qlora#1180
+command -v rsync >/dev/null 2>&1 || perl -e 'alarm 600; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq rsync' > logs/apt_rsync.log 2>&1 \
+  || { tail -3 logs/apt_rsync.log; echo "RSYNC INSTALL FAIL" | tee -a summary.txt; finish 9; }
+echo "RSYNC $(command -v rsync)" | tee -a summary.txt
 command -v git >/dev/null 2>&1 || perl -e 'alarm 600; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq git' > logs/apt_git.log 2>&1 \
   || { tail -3 logs/apt_git.log; echo "GIT INSTALL FAIL" | tee -a summary.txt; finish 9; }
 say "install: gnf4 @$GNF4_SHA"
@@ -72,6 +82,17 @@ while :; do
   t=$((t + 1))
 done
 echo "ANCHOR rc=$arc class=$(grep -E '^\s*class ' logs/anchor_gate.log | awk '{print $2}')" | tee -a summary.txt
+if [ "$PROVE" = 1 ]; then
+  sleep 60                                            # one more minute of host load after the anchor, then the profile
+  python - <<'PYP' 2>&1 | tee -a summary.txt
+import os, statistics
+v = [float(l.split()[1]) for l in open("logs/loadavg.log") if len(l.split()) > 1]
+print(f"PROVE host load1 over the run: n {len(v)} min {min(v)} median {statistics.median(v)} max {max(v)}; "
+      f"nproc {os.cpu_count()}; container cpus {len(os.sched_getaffinity(0))}" if v else "PROVE host load1: no samples")
+PYP
+  echo "PROVE: install, rsync, tripwire, the load-gated anchor (rc=$arc) and host load sampled; no probe" | tee -a summary.txt
+  finish 0
+fi
 if [ "$arc" -ne 0 ]; then
   [ "$REHEARSAL" = 1 ] || { echo "BOX REFUSED by train anchor" | tee -a summary.txt; finish 12; }
   echo "REHEARSAL: train anchor refused this card (rc=$arc); continuing" | tee -a summary.txt
