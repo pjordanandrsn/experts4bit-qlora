@@ -1,0 +1,7 @@
+# Names as the BOX sees them after staging (flat in $W). The box runs `sha256sum -c` on this file; the controller resolves
+# each name to its source (p114_drive.sh's case map) and compares. bench_energy.py is the 2026-07-01 harness (ece6b5c8...).
+b73980673b84537942d6c3090e994ab93b8fafa13fa052157429cf62e6c529b7  p114_run.sh
+ea2869fb446557f2723463a12a296c78a9fb066b760ff481b92f0642691e180e  p114_gate.py
+ec22d8146412dc2e7495f49722828a8310edc76d609ca0fd45b5787894db8b4e  p114_reduce.py
+ece6b5c81aedc4515f9d34dba3f51c1b7ab4a7856e8aa593400de9143aacf032  bench_energy.py
+1b83d671e5d36237ec007cfa495de3edf1f9befd432cf8b82e70a8aa321f9429  bench_energy_excluded.py
