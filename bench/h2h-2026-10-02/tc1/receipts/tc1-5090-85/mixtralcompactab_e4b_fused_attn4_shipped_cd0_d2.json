@@ -1,0 +1,14 @@
+{
+ "framework": "e4b",
+ "fam": "mixtralcompactab",
+ "arm": "fused",
+ "tag": "fused_attn4_shipped_cd0_d2",
+ "status": "not_run",
+ "reason": "skipped by TC1_SKIP",
+ "steps": 60,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "written_by": "tc1_run.sh",
+ "prereg": "tc1/TC1-PREREG.md"
+}
