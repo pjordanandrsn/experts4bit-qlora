@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 27, the re-draw — the matched set holds again (P52), e4b's same-stack pair unstable (P50, P51 UNTESTED, final); amendment 29 registered: the pair over 60 steps
+
+- `tc1-5090-68` ($1.86, EPYC 7663): Unsloth 8.989 / 9.246 s/step and e4b's field-image arm 4.388 / 4.314 were stable. e4b's same-stack
+  arm, 4.060 / 3.755, was 7.8 % apart, so no ratio is read and P50 and P51 stay UNTESTED under amendment 25.
+- Across two boxes, three different pairs lost stability over TC1's 10-step median window. Amendment 29 re-asks P50 and P51, with their
+  bands unchanged, on one box with `TC1_STEPS=60` (50-step medians), the reference arm not run. Its reading is final.
+
 ### MG1 amendment 2 read: the ladder OOMs at Qwen3.6's licensed configuration, so P2 stays unread and `qwen3_5_moe` stays experimental; amendment 3 registered, reading P2 on tp1's own fused arm (bench, tests and docs)
 
 - **The read** ([`bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md`](bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)).
