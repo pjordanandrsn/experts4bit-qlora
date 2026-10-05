@@ -1,9 +1,10 @@
 """Keep MoE activations across a training step instead of recomputing them under gradient checkpointing (opt-in).
 
 Hugging Face checkpoints each decoder layer whole, so its backward first re-runs the layer's forward: attention AND the MoE block.
-In e4b's fused step the MoE half of that recompute is most of it -- on a 4-layer Qwen3-30B-A3B slice (RTX A2000, TC1's token rows)
-the recomputed MoE forwards were 232 of 917 ms of device time and the step went 1.278 -> 0.975 s with only attention checkpointed,
-every trainable gradient ``torch.equal`` (deterministic mode). The price is memory: the MoE block's saved activations live from its
+Keeping the MoE block's activations skips the MoE half of that recompute: on one rented RTX 5090 at Qwen3-30B-A3B's field recipe,
+keeping the last 32 of 48 layers steps at 0.835 [0.823, 0.849] x whole-layer checkpointing (TC1 amendment 21,
+``e4b.train.moe-keep.qwen3.5090.2026-10-04``), every trainable gradient ``torch.equal`` with only attention checkpointed
+(deterministic mode, on a 4-layer slice). The price is memory: the MoE block's saved activations live from its
 forward to its backward. With grouped-nf4-gemm's ``NF4_QLORA_COMPACT_DELTA=1`` (the padded LoRA delta saves its input, not its padded
 block) that is ~55 MB per layer per 380-token micro-batch at fp32 adapters, against 229 MB without it -- so set that too.
 
