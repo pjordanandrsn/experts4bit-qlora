@@ -1,0 +1,42 @@
+[23:38:50]   checkpoint: local directory /root/pg/tiny
+[23:38:50]   fusing + quantizing experts (up to 4x32) to nf4 (streaming)...
+[23:38:50]   quantized experts on 4/4 MoE layers (32 experts each)
+[23:38:50]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[23:38:50]   experts deferred to the arena: 4 module(s), 20 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[23:38:59]   hybrid tier active on 4 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] INT4EXP enabled: 4 layers (model_type=qwen3_moe)
+[serve_paged] ATTNINT4 rtn: 16 projections (uncalibrated; model_type=qwen3_moe)
+[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 4, 'fuse_t1_glue_n': 17, 'fuse_t1_glue_r2_n': [4, 4], 'fuse_router_epilogue_n': 4}
+DECODE_GRAPH bucket=1 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=2 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=4 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=8 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=16 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 16 MiB, 9249 MiB free)
+[serve_paged] ready: {"moe_layers": 4, "experts": 32, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 4, "int4_store_kinds": ["int4_b32"], "int4_attn_projections": 8, "kv": {"n_kv_heads": 2, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256}, "graph_status": {"1": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "2": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "4": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "8": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + ", "16": "eager: CompilationError: at 39:12:\n    blk = pos // bt\n    fill = pos - blk * bt\n    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)\n    pay = row * row_bytes + fill * (H * D) + "}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {"E4B_SERVE_EXP_INT4": "1", "E4B_SERVE_ATTN_INT4": "1", "E4B_SERVE_ATTN_INT4_CALIB": "0", "E4B_CALIB_SOURCE": "c4", "E4B_FUSE_T1_GLUE": "1", "E4B_FUSE_T1_GLUE_R2": "1", "E4B_FUSE_ROUTER_EPI": "1"}, "exp_int4_layers_enabled": 4, "attn_int4_rtn_projections": 16, "attn_int4_calib_projections": 0, "fuse_qkv_n": 4, "fuse_t1_glue_n": 17, "fuse_t1_glue_r2_n": [4, 4], "fuse_router_epilogue_n": 4}
+KNOB {"at_build": {"status": "on", "T": 512, "replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}, "pool_mib": 16, "free_after_mib": 9249}, "stats": {"status": "on", "T": 512, "replays": 4, "eager_chunks": 2, "eager_reasons": {"later_chunk": 1, "short_chunk": 1}, "pool_mib": 16, "free_after_mib": 9249}, "all_bitwise": true}
+  {"len": 512, "first_graph": 52976, "first_eager": 52976, "pool_bitwise": true}
+  {"len": 512, "first_graph": 113435, "first_eager": 113435, "pool_bitwise": true}
+  {"len": 1024, "first_graph": 23932, "first_eager": 23932, "pool_bitwise": true}
+  {"len": 512, "first_graph": 46985, "first_eager": 46985, "pool_bitwise": true}
+  {"len": 300, "first_graph": 33511, "first_eager": 33511, "pool_bitwise": true}

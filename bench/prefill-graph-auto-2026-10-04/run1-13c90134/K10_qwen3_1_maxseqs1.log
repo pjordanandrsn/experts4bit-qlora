@@ -1,0 +1,35 @@
+[23:40:15]   checkpoint: local directory /root/pg/tiny
+[23:40:15]   fusing + quantizing experts (up to 4x32) to nf4 (streaming)...
+[23:40:15]   quantized experts on 4/4 MoE layers (32 experts each)
+[23:40:15]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[23:40:16]   experts deferred to the arena: 4 module(s), 20 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[23:40:17]   hybrid tier active on 4 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] INT4EXP enabled: 4 layers (model_type=qwen3_moe)
+[serve_paged] ATTNINT4 rtn: 16 projections (uncalibrated; model_type=qwen3_moe)
+[serve_paged] fusions (fold flags set: ['E4B_FUSE_T1_GLUE', 'E4B_FUSE_T1_GLUE_R2', 'E4B_FUSE_ROUTER_EPI']): {'fuse_qkv_n': 4, 'fuse_t1_glue_n': 17, 'fuse_t1_glue_r2_n': [4, 4], 'fuse_router_epilogue_n': 4}
+DECODE_GRAPH bucket=1 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=2 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=4 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=8 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+DECODE_GRAPH bucket=16 EAGER (eager: CompilationError: at 39:12:
+    blk = pos // bt
+    fill = pos - blk * bt
+    row = tl.load(tbl_ptr + slot * bps + blk).to(tl.int64)
+    pay = row * row_bytes + fill * (H * D) + )
+KNOB {"mode": "knob", "built": false, "error": "RuntimeError: E4B_PAGED_PREFILL_GRAPH=1 refused: device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"}
