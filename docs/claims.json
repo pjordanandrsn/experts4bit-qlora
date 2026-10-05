@@ -8005,7 +8005,32 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-03/tc1-5090-49/tc1/"
       ],
-      "notes": "The current matched position against Unsloth; e4b.train.h2h.unsloth.qwen3.5090.2026-10-02 (1.437) stands for the code before #945."
+      "notes": "The matched position with e4b in the field image's environment (torch 2.8.0+cu128 / transformers 5.18.0) and Unsloth in its own (torch 2.12.1+cu130 / transformers 5.5.0). Since TC1 amendment 33 the position to quote is e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack (both frameworks on one stack); e4b.train.h2h.unsloth.qwen3.5090.2026-10-02 (1.437) stands for the code before #945."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendments 25, 29 and 33 (#835), one rented RTX 5090 (tc1-5090-76): with BOTH frameworks on one stack (torch 2.12.1+cu130, transformers 5.5.0, triton 3.7.1; e4b and grouped-nf4-gemm installed into Unsloth's venv), e4b takes 3.494 s/step against Unsloth 2026.9.14's 8.218 (grouped_mm engaged) at matched work, 60-step runs, load-gated draws: Unsloth/e4b 2.352 [2.348, 2.356] over two draws each, every pair stable (P50 HELD, band [1.9, 2.9]); 441 vs 189 tokens/s. Quoted beside it, in Unsloth's favour: peak VRAM 3.22 GB lower (24.27 vs 27.49 GB); energy per step Unsloth x1.37 of e4b's. Held-out at N=60 COMPARABLE (e4b 0.7569, Unsloth 0.7557; no reference arm, so EQUIVALENT cannot be read; the matched set held on amendment 25's two boxes, P52). The same box read e4b's matched arm at 0.900 [0.893, 0.907] of its field-image step in this environment (P51 HELD; amendment 24 read 0.882 on another host). Three draws were voided for host load and run again; their first attempts would read 2.309 and 0.901. One host (AMD EPYC 7B13); positions are within-box readings of their host.",
+      "value": 2.352,
+      "unit": "ratio s/step Unsloth/e4b on one stack (medians of steps 11..60 over two draws each; > 1 = e4b faster per step); cross-draw interval [2.348, 2.356]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-76: instance 54239673, AMD EPYC 7B13, Vast machine 145701, driver 595.84); e4b @ c8925bb + grouped-nf4-gemm @ bb56b42, both in Unsloth 2026.9.14's venv on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3samestack (TC1 amendments 25 / 29 / 33): TC1's tokens and field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407) over 60 steps; matched work (the same 642,514,944 trainable parameters, one per-slot LoRA init matched:3407, fp32 adapters, the same tokens); no reference arm; TC1_LOAD_GATE=6.0, TC1_LOAD_RETRIES=2; e4b with every default at c8925bb -- its prebound Triton launches cover triton 3.4 / 3.6 at that commit, so they engaged on the venv-e4b arm and not on the same-stack arm; engagement on env.torch; validity, positions and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-samestack-box4.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-76/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-76/tc1/"
+      ],
+      "notes": "The Qwen3-30B-A3B matched position to quote against Unsloth (TC1 amendment 25's decision rule). e4b.train.h2h.unsloth.qwen3.5090.2026-10-03 (1.997) stays as the reading with e4b in the field image's environment. Vast invoiced $1.76."
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.quality-n20",
