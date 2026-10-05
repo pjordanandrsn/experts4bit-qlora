@@ -36,13 +36,13 @@ jobs:
           # is the commit of a RELEASE TAG of the kernel package
           # (scripts/check_system_manifest.py asserts it is the tag the
           # manifest's consumer_ci_pin names, or a later release), so the
-          # suite exercises the released kernel: a5edec87… = v0.39.0. Pin a
+          # suite exercises the released kernel: dc8f94ab… = v0.41.0. Pin a
           # SHA, never a branch name — a deleted branch has broken this
           # install form before — and never a tag name, which can be moved.
           # The int4 tripwire below is why a plain `pip install .[test]` is
           # not enough: tests/test_int4_*.py importorskip on the int4 modules
           # and would report green coverage that never executed (#310).
-          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@a5edec8789735bff1c0da4708ae5fc93260a1410"
+          pip install "grouped-nf4-gemm @ git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@dc8f94abfd868f149178623f6eb403dc8b892b02"
           pip install -e ".[test]"
       - name: int4 modules present (tripwire)
         # The int4 suites guard with importorskip, so a gnf4 build without

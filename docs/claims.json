@@ -8005,7 +8005,32 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-03/tc1-5090-49/tc1/"
       ],
-      "notes": "The current matched position against Unsloth; e4b.train.h2h.unsloth.qwen3.5090.2026-10-02 (1.437) stands for the code before #945."
+      "notes": "The matched position with e4b in the field image's environment (torch 2.8.0+cu128 / transformers 5.18.0) and Unsloth in its own (torch 2.12.1+cu130 / transformers 5.5.0). Since TC1 amendment 33 the position to quote is e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack (both frameworks on one stack); e4b.train.h2h.unsloth.qwen3.5090.2026-10-02 (1.437) stands for the code before #945."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendments 25, 29 and 33 (#835), one rented RTX 5090 (tc1-5090-76): with BOTH frameworks on one stack (torch 2.12.1+cu130, transformers 5.5.0, triton 3.7.1; e4b and grouped-nf4-gemm installed into Unsloth's venv), e4b takes 3.494 s/step against Unsloth 2026.9.14's 8.218 (grouped_mm engaged) at matched work, 60-step runs, load-gated draws: Unsloth/e4b 2.352 [2.348, 2.356] over two draws each, every pair stable (P50 HELD, band [1.9, 2.9]); 441 vs 189 tokens/s. Quoted beside it, in Unsloth's favour: peak VRAM 3.22 GB lower (24.27 vs 27.49 GB); energy per step Unsloth x1.37 of e4b's. Held-out at N=60 COMPARABLE (e4b 0.7569, Unsloth 0.7557; no reference arm, so EQUIVALENT cannot be read; the matched set held on amendment 25's two boxes, P52). The same box read e4b's matched arm at 0.900 [0.893, 0.907] of its field-image step in this environment (P51 HELD; amendment 24 read 0.882 on another host). Three draws were voided for host load and run again; their first attempts would read 2.309 and 0.901. One host (AMD EPYC 7B13); positions are within-box readings of their host.",
+      "value": 2.352,
+      "unit": "ratio s/step Unsloth/e4b on one stack (medians of steps 11..60 over two draws each; > 1 = e4b faster per step); cross-draw interval [2.348, 2.356]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-76: instance 54239673, AMD EPYC 7B13, Vast machine 145701, driver 595.84); e4b @ c8925bb + grouped-nf4-gemm @ bb56b42, both in Unsloth 2026.9.14's venv on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3samestack (TC1 amendments 25 / 29 / 33): TC1's tokens and field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, linear warm-up 5, seed 3407) over 60 steps; matched work (the same 642,514,944 trainable parameters, one per-slot LoRA init matched:3407, fp32 adapters, the same tokens); no reference arm; TC1_LOAD_GATE=6.0, TC1_LOAD_RETRIES=2; e4b with every default at c8925bb -- its prebound Triton launches cover triton 3.4 / 3.6 at that commit, so they engaged on the venv-e4b arm and not on the same-stack arm; engagement on env.torch; validity, positions and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-samestack-box4.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-76/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-76/tc1/"
+      ],
+      "notes": "The Qwen3-30B-A3B matched position to quote against Unsloth (TC1 amendment 25's decision rule). e4b.train.h2h.unsloth.qwen3.5090.2026-10-03 (1.997) stays as the reading with e4b in the field image's environment. Vast invoiced $1.76."
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.quality-n20",
@@ -9587,6 +9612,81 @@
       "notes": "Part of the same box as e4b.train.env-ab.qwen3.5090.2026-10-04."
     },
     {
+      "id": "e4b.train.absmax-dq.mixtral.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a286",
+      "claim": "TC1 amendment 28 (#835), one rented RTX 5090 (tc1-5090-71): e4b against itself on Mixtral-8x7B-Instruct's matched arm (fp32 adapters, matched init), resident, the expert absmax fp32 (E4B_ABSMAX_DQ=0, the default) vs double-quantized (=1, #1040), two draws a side in ABBA order. dq1 / dq0 1.023 [1.004, 1.043] (3.807 / 3.917 vs 3.932 / 3.970 s/step, both sides stable): the double-quantized absmax costs 2.3 % of the step. Peak 31.07 -> 29.03 GB (2.04 GB; the registered arithmetic 2.10). Held-out at N moves -0.0028. P57 HELD (band [0.97, 1.03] and a drop in [1.9, 2.3] GB). The Qwen3-30B-A3B half (P56) went UNTESTED on an unstable box, so by the registered rule the switch stays opt-in until amendment 31 reads it.",
+      "value": 1.023,
+      "unit": "ratio s/step, E4B_ABSMAX_DQ=1 over =0 (medians of steps 11..20 over two draws each; > 1 = the double-quantized absmax slower); cross-draw interval [1.004, 1.043]; peak 2.04 GB lower",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-71: AMD EPYC 7B13, Vast machine 145701); e4b @ cdea8ea + grouped-nf4-gemm @ f0c1ece on torch 2.8.0+cu128",
+      "conditions": "bench/tc1 token mixtraldqab (TC1 amendment 28): TC2's Mixtral pin and field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407, N=20, 8 held-out rows at 0 and N), matched arm, resident, every other default; engagement on absmax_dq and absmax_dq_modules; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-dqab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-71/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-71/tc1/"
+      ],
+      "notes": "Vast invoiced $1.27."
+    },
+    {
+      "id": "e4b.train.absmax-dq.qwen3.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendments 28 / 31 (#835), one rented RTX 5090 (tc1-5090-75): e4b against itself on Qwen3-30B-A3B's matched arm (fp32 adapters, matched init), resident, the expert absmax fp32 (E4B_ABSMAX_DQ=0) vs double-quantized (=1, #1040), 60-step runs, two draws a side in ABBA order, on a quiet host (load1 3.8-4.9). dq1 / dq0 1.014 [1.007, 1.021] (3.751 / 3.727 vs 3.777 / 3.805 s/step): the double-quantized absmax costs 1.4 % of the step. Peak 27.44 -> 26.10 GB (1.34 GB). Held-out at N moves -0.0021. P56 HELD (band [0.97, 1.03], drop [1.25, 1.45] GB); with P57 (Mixtral, 1.023 for 2.04 GB) and P58 (held-out within 0.005 on both families) HELD, amendment 28's rule makes the double-quantized absmax the default for resident training.",
+      "value": 1.014,
+      "unit": "ratio s/step, E4B_ABSMAX_DQ=1 over =0 (medians of steps 11..60 over two draws each; > 1 = the double-quantized absmax slower); cross-draw interval [1.007, 1.021]; peak 1.34 GB lower",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-75: AMD EPYC 7B13, Vast machine 145701); e4b @ f7f736e + grouped-nf4-gemm @ f0c1ece on torch 2.8.0+cu128",
+      "conditions": "bench/tc1 token qwen3dqab with TC1_STEPS=60 (TC1 amendment 31): TC1's tokens and field recipe otherwise (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407, 8 held-out rows at 0 and N), matched arm, resident, every other default; engagement on absmax_dq and absmax_dq_modules; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-dqab-qwen3-60.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-75/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-75/tc1/"
+      ],
+      "notes": "Vast invoiced $1.03."
+    },
+    {
+      "id": "e4b.train.triton37.qwen3.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 32 (#835), one rented RTX 5090 (tc1-5090-74): e4b against itself in venv-e4b (torch 2.8.0+cu128) with its own triton 3.4 vs triton 3.7.1 put first on PYTHONPATH, 60-step runs, the prebound launches off, two draws a side in ABBA order. Shipped arm (bf16 adapters) tr1 / tr0 0.971 [0.955, 0.988] (3.117 / 3.023 vs 2.976 / 2.986 s/step; P60 HELD); matched arm (fp32 adapters) 0.992 [0.968, 1.017] (P59 FALSIFIED, band [0.82, 0.95]); held-out within 0.001 on both (P61 HELD). An unregistered RTX A2000 decomposition had put amendment 24's whole environment gain (0.882 on the matched arm) in triton 3.7.1's device code for grouped-nf4-gemm's kernels; on the 5090's host-bound step that does not transfer, so the gain stays with torch 2.12 and/or transformers 5.5 (amendment 34 splits them).",
+      "value": 0.971,
+      "unit": "ratio s/step on the shipped arm, triton 3.7.1 over triton 3.4 in venv-e4b (medians of steps 11..60 over two draws each); matched arm 0.992",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-74: AMD EPYC 7B13, Vast machine 145701); e4b @ 2f53013 + grouped-nf4-gemm @ main at launch on torch 2.8.0+cu128",
+      "conditions": "bench/tc1 token qwen3tritonab (TC1 amendment 32): TC1's tokens and field recipe over 60 steps, matched and shipped arms, E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0 on both sides; engagement on env.triton and prebind_ab; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-tritonab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-74/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-74/tc1/"
+      ],
+      "notes": "Vast invoiced $1.28."
+    },
+    {
       "package": "experts4bit-qlora",
       "area": "train",
       "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04",
@@ -10246,11 +10346,12 @@
       "measured_on": "2026-10-04",
       "status": "measured",
       "id": "e4b.train.parity.mg1.qwen3_5.fused.2026-10-04",
-      "claim": "[OK · PASS] Training parity lane MG1: enable_fast_train(model, dgrad=True) on Qwen/Qwen3.6-35B-A3B PASSES tp1's registered loss-parity criteria against its reference arm on the same box -- |delta final train loss| 0.02624 and median step-wise |delta| 0.01594 against the 0.05 band -- with 40/40 layers patched, the fused kernel called at least 160 times on every step (80 required), init_sha identical and C1 bit-exact in both arms; cost here 24.51x faster per step than the per-expert loop (0.3772 vs 9.2441 s) at peak VRAM 27.73 vs 27.73 GB and 0.071x the energy per step (unlicensed until MG1 amendment 2 reads P2, the dgrad kernel's engagement).",
+      "claim": "[OK · PASS] Training parity lane MG1: enable_fast_train(model, dgrad=True) on Qwen/Qwen3.6-35B-A3B PASSES tp1's registered loss-parity criteria against its reference arm on the same box -- |delta final train loss| 0.02624 and median step-wise |delta| 0.01594 against the 0.05 band -- with 40/40 layers patched, the fused kernel called at least 160 times on every step (80 required), init_sha identical and C1 bit-exact in both arms; cost here 24.51x faster per step than the per-expert loop (0.3772 vs 9.2441 s) at peak VRAM 27.73 vs 27.73 GB and 0.071x the energy per step (licensed by this row; MG1 amendment 3 read P2, e4b.train.parity.mg1.qwen3_5.p2.2026-10-05).",
       "row_status": "OK",
       "parity_verdict": "PASS",
       "value": 0.02624,
       "unit": "|delta final train loss| vs the reference arm (registered band 0.05; median step-wise |delta| 0.01594)",
+      "licensed_by": "e4b.train.parity.mg1.qwen3_5.fused.2026-10-04",
       "evidence": [
         "bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md",
         "bench/moegen/mg1/mg1-5090-2/receipts/qwen3_5_train_fused.json",
@@ -10280,6 +10381,57 @@
         "bench/moegen/mg1/mg1-5090-2/receipts/qwen3_5_train_load.json"
       ],
       "notes": "Model type qwen3_5_moe; revision 995ad96e. Reading rules (tp1's, carried by MG1-PREREG): registered units only; no cross-family, cross-lane or cross-card ratio; no training throughput position; a green skipped arm is not evidence (n_patched > 0 AND kernel calls/step >= 2 x n_patched AND C1 with the control firing AND init_sha equal to the reference's, else VOID); PASS here means PASS on one text; no convergence claim at 60 steps."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3.6-35B-A3B @995ad96e",
+      "hardware": "RTX 5090 on an AMD EPYC 7B13 64-Core Processor host, Vast.ai machine 145701; no train anchor (amendment 3 reads an engagement count, not a timing)",
+      "conditions": "MG1 amendment 3 (bench/moegen/MG1-PREREG.md, merged before its box): tp1's arm driver, the committed file unchanged (sha256 d02c9e7b2357c521..., checked against the census), run as __main__ under bench/moegen/p2_hook.py, which writes grouped-nf4-gemm's DGRAD_STATS and e4b's FAST_TRAIN_STATS at interpreter exit; the fused arm only (no anchor, no reference arm, no ladder) at the licensed configuration: load_moe_4bit_streaming r 8 alpha 16, fp32 expert and attention LoRA, bf16 attention, gradient checkpointing, AdamW 1e-4, batch 1, seq 512, 60 steps on the registered clinical fixture; Qwen/Qwen3.6-35B-A3B @995ad96e resident",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "id": "e4b.train.parity.mg1.qwen3_5.p2.2026-10-05",
+      "claim": "[OK] MG1 amendment 3 (P8 HELD): over tp1's fused arm's 60 steps on Qwen/Qwen3.6-35B-A3B resident, grouped-nf4-gemm's DGRAD_STATS read kernel 4800, grouped_mm 0, dense 0 and loop 0, with 40/40 MoE layers patched, no recurrent-kernel fallback and the driver byte-identical to tp1's. With the reading's PASS (e4b.train.parity.mg1.qwen3_5.fused.2026-10-04) this completes MG1's registered rule, so qwen3_5_moe's fast_train enters as supported.",
+      "row_status": "OK",
+      "value": 0,
+      "unit": "frozen-GEMM backward calls that fell back to the per-expert loop (DGRAD_STATS['loop'], cumulative over the arm)",
+      "evidence": [
+        "bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md",
+        "bench/moegen/mg1/mg1-a3-5090-1/receipts/qwen3_5_p2_dgrad.json",
+        "bench/moegen/mg1/mg1-a3-5090-1/receipts/qwen3_5_train_fused.json",
+        "bench/moegen/mg1/mg1-a3-5090-1/summary.txt",
+        "bench/moegen/mg1/mg1-a3-5090-1/launch.json",
+        "bench/moegen/mg1/mg1-a3-5090-1/logs/run_qwen3_5_fused.log"
+      ],
+      "notes": "Engagement only. The arm's other numbers are informational (no anchor and no reference arm on this box): 1.1868 s/step, peak 27.73 GB, train loss 3.0123 -> 0.24963, init_sha e140b40875975ee4.... Loop reasons: none. The loss-parity verdict is e4b.train.parity.mg1.qwen3_5.fused.2026-10-04's; MG1 amendment 2's ladder OOMed before it could record this counter (bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)."
+    },
+    {
+      "id": "e4b.train.prebind.qwen3.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendments 26 / 30 (#835), two rented RTX 5090s: e4b against itself on Qwen3-30B-A3B, both Triton-prebind flags (E4B_TRITON_PREBIND, GNF4_TRITON_PREBIND) on against off, two draws a side in ABBA order, triton 3.4. Shipped arm (bf16 adapters, tc1-5090-73, 60-step runs): pb1 / pb0 0.980 [0.957, 1.003] (P53 HELD, band [0.90, 0.98]), held-out +0.0011. Matched arm (fp32 adapters, tc1-5090-69, amendment 26): pb1 / pb0 0.973 [0.958, 0.988] (P54 HELD), held-out -0.0012. P55 HELD (both held-out moves within 0.005). By amendment 26's rule both flags become defaults (e4b #1099, grouped-nf4-gemm #470); the outputs are bit-identical (the same compiled kernels).",
+      "value": 0.98,
+      "unit": "ratio s/step, prebind on over off, shipped arm (medians of steps 11..60 over two draws each; < 1 = faster with prebind); cross-draw interval [0.957, 1.003]; matched arm 0.973 [0.958, 0.988]",
+      "hardware": "RTX 5090 (sm_120), two rented Vast.ai verified/secure hosts: tc1-5090-73 (AMD EPYC 7B13, Vast machine 145701; e4b @ 306dfa9 + grouped-nf4-gemm @ f0c1ece) and tc1-5090-69 (Intel Core Ultra 9 285K, Vast machine 151350); torch 2.8.0+cu128, triton 3.4.0",
+      "conditions": "bench/tc1 token qwen3prebindab (TC1 amendments 26 and 30): TC1's tokens and field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407, 8 held-out rows at 0 and N); amendment 30's box: the shipped arm only, TC1_STEPS=60; launch counts recorded; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-prebindab-60.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-prebindab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-73/RESULTS-tc1.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-69/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-73/tc1/",
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-69/tc1/"
+      ],
+      "notes": "tc1-5090-73: Vast invoiced $0.97. The read (this row, the receipts copy and the lane section) was committed by the maintainer session after the defaults had flipped citing the box."
     }
   ]
 }

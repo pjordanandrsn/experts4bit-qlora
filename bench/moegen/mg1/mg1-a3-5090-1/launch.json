@@ -1,0 +1,20 @@
+{
+ "experiment_id": "mg1-a3-5090-1",
+ "status": "OK",
+ "result": "pass",
+ "cost_usd": {
+  "actual": 0.803,
+  "estimated": 1.7375
+ },
+ "started_at": "2026-10-05T00:46:59Z",
+ "finished_at": "2026-10-05T01:05:16Z",
+ "instance_id": "54226395",
+ "vast_machine_id": "145701",
+ "vast_offer_choice": "preferred rank 10 of 62",
+ "cpu_name": "AMD EPYC 7B13 64-Core Processor",
+ "vast_preflight": "ok",
+ "vast_hf_cdn_mb_s": "93.2",
+ "notes": "guard pid 32442 armed at 2026-10-05T00:47:01Z",
+ "teardown_reason": "completion",
+ "source": "adertha receipts store, receipts/experts4bit-qlora/2026-10-05/mg1-a3-5090-1/receipt.json (fields copied verbatim)"
+}

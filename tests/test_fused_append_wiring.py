@@ -55,6 +55,32 @@ def test_resolver_cell_table():
     assert resolve("1", "cuda", present) is True
 
 
+def test_resolver_degrades_below_sm89():
+    """Triton compiles the kernel's e4m3 cast (tl.float8e4nv) only on
+    sm_89+; on an RTX A2000 (sm_86) the first graphed decode step died
+    in its compiler. Below sm_89 the default degrades to the eager
+    append and an explicit =1 refuses; an unknown capability changes
+    nothing."""
+    resolve, present = mod._resolve_fused_append, (lambda: True)
+    for cap in ((8, 0), (8, 6), (8, 7)):
+        assert resolve(None, "cuda", present, cap) is False
+        with pytest.raises(RuntimeError, match="sm_89"):
+            resolve("1", "cuda", present, cap)
+    for cap in ((8, 9), (9, 0), (12, 0), None):
+        assert resolve(None, "cuda", present, cap) is True
+    assert mod.fused_append_unsupported((8, 6)) and mod.fused_append_unsupported((8, 9)) is None
+    assert mod.cuda_capability("cpu") is None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a CUDA device")
+def test_a_cuda_kv_resolves_by_its_own_capability(monkeypatch):
+    monkeypatch.delenv("E4B_FUSED_KV_APPEND", raising=False)
+    fp8_kv = pytest.importorskip("fp8_kv")
+    kv = _CLS(n_layers=1, n_kv_heads=1, head_dim=64, batch=1, max_tokens_per_seq=8, device="cuda")
+    usable = mod.fused_append_unsupported(torch.cuda.get_device_capability()) is None
+    assert kv._fused_append is (usable and hasattr(fp8_kv, "fp8_kv_append_t1"))
+
+
 def _stub(with_kernel):
     """A stand-in fp8_kv module that DELEGATES to the real one and
     varies only the kernel symbol's presence. The first stubs replaced

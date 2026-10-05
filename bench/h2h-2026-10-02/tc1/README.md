@@ -37,6 +37,13 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-67` | `qwen3samestack` (amendment 25) | instance 54209084, Intel Core Ultra 9 285K | both frameworks on one stack: the matched set EQUIVALENT, parity PASS (P52 HELD); Unsloth's draws 18.2 % apart and e4b's field-image draws 8.4 % apart, so no ratio is read (P50, P51 UNTESTED); one re-draw registered (amendment 27); [read](RESULTS-tc1-samestack-box1.md) | $0.61 |
 | `tc1-5090-68` | `qwen3samestack` (amendment 27, the re-draw) | instance 54214853, AMD EPYC 7663 | the matched set INSIDE-DRAW-NOISE, parity PASS (P52 HELD again); e4b's same-stack draws 7.8 % apart, so no ratio is read (P50, P51 UNTESTED, final); amendment 29 re-asks them over 60 steps; [read](RESULTS-tc1-samestack-box2.md) | $1.86 |
 | `tc1-5090-69` | `qwen3prebindab` (amendment 26) | instance 54223080, Intel Core Ultra 9 285K | e4b against itself, prebound Triton launches off vs on: matched arm 0.973 (P54 HELD); the shipped arm's flags-off draws 8.3 % apart (P53, P55 UNTESTED); the flags stay opt-in; amendment 30 re-asks the shipped pair over 60 steps; [read](RESULTS-tc1-prebindab.md) | $0.43 |
+| `tc1-5090-70` | `qwen3dqab` (amendment 28) | instance 54223173, AMD EPYC 7C13 (Vast machine 45511) | e4b against itself, the expert absmax fp32 vs double-quantized: peak 27.15 → 25.82 GB and held-out +0.0026, but both speed pairs unstable under host load (P56 UNTESTED); amendment 31 re-asks it over 60 steps; [read](RESULTS-tc1-dqab.md) | $1.13 |
+| `tc1-5090-71` | `mixtraldqab` (amendment 28) | instance 54223342, AMD EPYC 7B13 (Vast machine 145701) | the same on Mixtral-8x7B resident: dq1/dq0 1.023, peak 31.07 → 29.03 GB, held-out −0.0028 (P57 HELD); [read](RESULTS-tc1-dqab.md) | $1.27 |
+| `tc1-5090-72` | `qwen3samestack` (amendment 29, 60 steps) | instance 54227048, AMD EPYC 7C13 (Vast machine 45511) | the same-stack pair over 60 steps: e4b's same-stack draws 13.1 % apart and its field-image draws 6.4 %, host load1 6–23, so no ratio is read (P50, P51 UNTESTED, final); amendment 33 re-asks with load-gated draws; [read](RESULTS-tc1-samestack-box3.md) | $1.75 |
+| `tc1-5090-73` | `qwen3prebindab` (amendment 30, 60 steps) | instance 54227619, AMD EPYC 7B13 (Vast machine 145701) | the shipped arm's prebind pair over 60 steps: `_pb1`/`_pb0` 0.980 [0.957, 1.003] (P53 HELD), held-out +0.0011; with amendment 26's P54 the prebound launches become the default |
+| `tc1-5090-75` | `qwen3dqab` (amendment 31, 60 steps) | instance 54238515, AMD EPYC 7B13 (Vast machine 145701) | Qwen3-30B-A3B's absmax pair over 60 steps on a quiet host: dq1/dq0 1.014, peak 27.44 → 26.10 GB, held-out −0.0021 (P56 HELD; with P57 and P58, amendment 28's rule makes the double-quantized absmax the default); [read](RESULTS-tc1-dqab-qwen3-60.md) | $1.03 |
+| `tc1-5090-74` | `qwen3tritonab` (amendment 32, 60 steps) | instance 54237146, AMD EPYC 7B13 (Vast machine 145701) | one variable, triton 3.4 vs 3.7.1 in venv-e4b: matched arm 0.992 (P59 FALSIFIED), shipped arm 0.971 (P60 HELD), held-out within 0.001 (P61 HELD); the environment gain is not triton's on this host-bound step; amendment 34 splits it; [read](RESULTS-tc1-tritonab.md) | $1.28 |
+| `tc1-5090-76` | `qwen3samestack` (amendment 33, 60 steps, load-gated) | instance 54239673, AMD EPYC 7B13 (Vast machine 145701) | both frameworks on one stack, every pair stable: Unsloth/e4b 2.352 (P50 HELD), e4b same-stack / field-image 0.900 (P51 HELD); three draws voided for host load and run again; by amendment 25's rule 2.352 becomes the quoted Qwen3-30B-A3B position; [read](RESULTS-tc1-samestack-box4.md) | $1.76 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -45,6 +52,147 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 30 (2026-10-05): the shipped prebind pair over 60 steps (P53 HELD); with P54 and P55 HELD the prebound launches become the default
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 26 and 30.
+- **The box.** One RTX 5090 (`tc1-5090-73`, AMD EPYC 7B13, Vast machine 145701, not machine 151350 as the amendment
+  requires; $0.97 invoiced): the token `qwen3prebindab` with `TC1_STEPS=60`, the shipped arm only, two draws a side in ABBA
+  order; e4b `306dfa9c`, grouped-nf4-gemm `f0c1ece`, triton 3.4.0.
+- **Read:** [`RESULTS-tc1-prebindab-60.md`](RESULTS-tc1-prebindab-60.md), the box's own mechanically scored file.
+
+| `fused_attn4_shipped` | `_pb0` (flags off) | `_pb1` (flags on) |
+|---|---|---|
+| s/step, two draws (60 steps) | 3.092 / 3.047 (1.5 % apart) | 3.056 / 2.960 (3.2 % apart) |
+| held-out at N | 0.7575, 0.7556 | 0.7589, 0.7565 |
+
+- **P53 HELD.** `_pb1`/`_pb0` reads 0.980 [0.957, 1.003 over four cross-draw ratios], inside [0.90, 0.98], at its upper
+  edge, as the reducer scores it. On the `_pb1` side, 216,335 e4b launches and 72,162 grouped-nf4-gemm launches were
+  prebound.
+- **P55 HELD.** The shipped half moves held-out by +0.0011, inside 0.005. The matched half is amendment 26's −0.0012
+  (`tc1-5090-69`). This box ran no matched arm, so its own file scores P54 and P55 UNTESTED, and the combined verdict is
+  amendment 30's registered rule.
+- **P54 HELD** on amendment 26's box (matched 0.973 [0.958, 0.988]).
+- **By the rule, both flags become defaults.** They already have: e4b #1099 and grouped-nf4-gemm #470 flipped them at
+  ~01:50Z, citing this box before its read was on `main`. This read was committed afterwards by the maintainer session,
+  from the run's output in the private receipts store (`tc1-5090-73`, committed there as `b43ec238`), under the standing
+  permission to commit another lane's finished receipts. The gain is small (2–3 %), and the shipped interval reaches 1.0.
+
+## Amendment 33 (2026-10-05): on one stack, with load-gated draws, Unsloth/e4b 2.352 and the environment gain 0.900 (P50, P51 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 25, 29 and 33. One RTX 5090 (`tc1-5090-76`, AMD EPYC
+7B13, Vast machine 145701): the token `qwen3samestack` with `TC1_STEPS=60`, no reference arm, `TC1_LOAD_GATE=6.0` and
+`TC1_LOAD_RETRIES=2`. Read: [`RESULTS-tc1-samestack-box4.md`](RESULTS-tc1-samestack-box4.md).
+
+| arm | s/step (two draws, 60 steps) | stable | host load1 median per standing draw |
+|---|---|---|---|
+| e4b `fused_attn4_m`, venv-unsloth (torch 2.12.1+cu130, transformers 5.5.0, triton 3.7.1) | 3.496 / 3.492 | yes (0.1 %) | 4.41 / 5.83 |
+| e4b `fused_attn4_m_t28`, venv-e4b (torch 2.8.0+cu128, transformers 5.18.0, triton 3.4.0) | 3.855 / 3.913 | yes (1.5 %) | 2.94 / 5.85 |
+| Unsloth `ckpt_unsloth_m`, venv-unsloth | 8.208 / 8.228 | yes (0.3 %) | 4.08 / 5.22 |
+
+- **P50 HELD.** On one stack Unsloth/e4b reads **2.352** [2.348, 2.356 over 4 cross-draw ratios], inside [1.9, 2.9]. Unsloth peaks
+  3.22 GB lower (24.27 vs 27.49 GB); its energy per step is ×1.37 e4b's. Held-out at N=60: e4b 0.7569, Unsloth 0.7557, COMPARABLE
+  (|Δ| 0.0012; no reference arm, so EQUIVALENT cannot be read).
+- **P51 HELD.** e4b's matched arm in venv-unsloth over venv-e4b reads **0.900** [0.893, 0.907], inside [0.80, 0.95]. Amendment 24 read
+  0.882 on another host; the environment gain replicates.
+- **By amendment 25's rule** (P50 HELD here, P52 HELD on amendment 25's two boxes), 2.352 becomes the Qwen3-30B-A3B 5090 position to
+  quote, register `e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack`. Amendment 19's 1.997 stays as the reading with e4b in the
+  field image's environment.
+- **The gate.** Three draws ran over a median load1 of 6.0 and were run again; their files are in
+  [`receipts/tc1-5090-76/loadvoid/`](receipts/tc1-5090-76/loadvoid/). The voided draws read 3.899 and 4.119 s/step (e4b's field-image
+  second draw, load 6.26 and 8.44) and 7.928 (Unsloth's second draw, load 6.33): the voided Unsloth draw was the faster one. Reading the
+  first attempts instead gives 2.309 and 0.901, inside the same bands, so the gate changed no verdict.
+- **A difference between the sides that the registration did not name.** The box ran e4b `c8925bb`, after the prebound Triton launches
+  became the default (#1099) for triton 3.4 and 3.6. They engaged on the venv-e4b arm (216,335 prebound launches) and not on the
+  venv-unsloth arm (triton 3.7.1, not covered at that commit; 0). grouped-nf4-gemm's prebound launches were in neither (its pin predates
+  them). Amendment 26 read e4b's and grouped-nf4-gemm's flags together at 0.973 on the matched arm, so with e4b's flag off on both sides
+  P51 would sit between about 0.876 and 0.900: inside the band either way. That is arithmetic, not a measurement. Amendment 34's box runs
+  every arm with both flags off.
+- P52 is not re-asked (no reference arm); it held on amendment 25's two boxes.
+
+## Amendment 32 (2026-10-05): triton 3.7.1 alone is not the 5090's environment gain on the matched arm (0.992), and is 2.9 % on the shipped arm
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 32 and 34. One RTX 5090 (`tc1-5090-74`, AMD EPYC 7B13,
+Vast machine 145701, host load1 3.0–9.4). venv-e4b (torch 2.8.0) with its own triton 3.4 (`_tr0`) against triton 3.7.1 put first on the
+arm's `PYTHONPATH` (`_tr1`), 60-step runs, prebound launches off. Read: [`RESULTS-tc1-tritonab.md`](RESULTS-tc1-tritonab.md).
+
+| arm | `_tr0` s/step | `_tr1` s/step | `_tr1`/`_tr0` | prediction |
+|---|---|---|---|---|
+| matched (fp32 adapters) | 3.827 / 3.871 | 3.894 / 3.746 | 0.992 [0.968, 1.017] | **P59 FALSIFIED** ([0.82, 0.95]) |
+| shipped (bf16 adapters) | 3.117 / 3.023 | 2.976 / 2.986 | **0.971** [0.955, 0.988] | **P60 HELD** ([0.85, 0.98]) |
+
+- **P61 HELD.** Held-out moves −0.0008 on the matched arm and +0.0005 on the shipped arm.
+- **By the registered rule the A2000 decomposition does not transfer.** On the A2000 the slice ran device-bound, and triton 3.7.1's faster
+  code for grouped-nf4-gemm's kernels was the whole gain. On the 5090's host-bound step that device time is not what binds, and the
+  matched arm does not move. The shipped arm gains 2.9 %.
+- **What is left.** Amendment 24's 0.882 must come from torch 2.12 and/or transformers 5.5. Both removed host work on the A2000:
+  attention-mask handling in torch, and the router's dtype round trip in transformers. Amendment 34 splits them on the 5090. Row
+  `e4b.train.triton37.qwen3.5090.2026-10-05`.
+
+
+## Amendment 31 (2026-10-05): Qwen3-30B-A3B's absmax pair, read over 60 steps; the double-quantized absmax becomes the default
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 28 and 31. One RTX 5090 (`tc1-5090-75`, AMD EPYC 7B13,
+Vast machine 145701; host load1 3.8–4.9 throughout): the token `qwen3dqab` with `TC1_STEPS=60`. Read:
+[`RESULTS-tc1-dqab-qwen3-60.md`](RESULTS-tc1-dqab-qwen3-60.md).
+
+| | `_dq0` (fp32 absmax) | `_dq1` (double-quantized) |
+|---|---|---|
+| s/step, two draws (60 steps) | 3.751 / 3.727 (0.6 % apart) | 3.777 / 3.805 (0.7 % apart) |
+| peak | 27.44 GB | 26.10 GB |
+| held-out at N | 0.7597, 0.7583 | 0.7567, 0.7572 |
+
+- **P56 HELD.** `_dq1`/`_dq0` reads 1.014 [1.007, 1.021], inside [0.97, 1.03], and the peak falls 1.339 GB, inside [1.25, 1.45]. The
+  double-quantized absmax costs 1.4 % of the step on Qwen3-30B-A3B and 2.3 % on Mixtral.
+- **P58 HELD.** Held-out moves −0.0021 on Qwen3 and −0.0028 on Mixtral, both inside 0.005.
+- **By amendment 28's rule, with P57 already HELD, the double-quantized absmax becomes the default for resident training.** That is
+  e4b's own PR, citing these boxes. The TC1 harness keeps `E4B_ABSMAX_DQ` explicit, because its boxes are registered instruments.
+- On a quiet host the 60-step pairs were stable. Amendment 28's Qwen3 box lost both pairs on a busy one.
+
+## Amendment 29 (2026-10-05): the same-stack pair over 60 steps, unstable again on a busy host; amendment 33 gates the draws on host load
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 29 and 33. One RTX 5090 (`tc1-5090-72`, AMD EPYC 7C13,
+Vast machine 45511): the token `qwen3samestack` with `TC1_STEPS=60` and no reference arm. Read:
+[`RESULTS-tc1-samestack-box3.md`](RESULTS-tc1-samestack-box3.md).
+
+| arm | s/step (two draws, 60 steps) | stable | host load1 median per draw |
+|---|---|---|---|
+| e4b `fused_attn4_m`, venv-unsloth | 3.979 / 3.490 | **no** (13.1 %) | 22.9 / 11.0 |
+| e4b `fused_attn4_m_t28`, venv-e4b | 3.834 / 4.087 | **no** (6.4 %) | 8.8 / 6.4 |
+| Unsloth `ckpt_unsloth_m` | 8.759 / 8.500 | yes (3.0 %) | 13.6 / 14.8 |
+
+- **P50 and P51 UNTESTED, final under amendment 29.** Unsloth and e4b's field-image arm are COMPARABLE to e4b's same-stack arm at N=60.
+  There is no reference arm, so EQUIVALENT cannot be read.
+- **The box ran on the machine whose load had already spoiled amendment 28's Qwen3 box.** That was found only after this box was queued.
+  The 60-step window alone does not survive a busy host: the slow e4b draw ran at twice the other's load.
+- **Not readings.** Across the three same-stack boxes, the medians sit near 2.3–2.45 for Unsloth/e4b and 0.90–0.94 for the environment.
+- **Amendment 33** adds load-gated draws: an arm whose median host load1 exceeds 6.0 is set aside and run again, at most twice. It re-asks
+  P50 and P51 once more, off the busy machines. Its reading is final.
+
+## Amendment 28 (2026-10-05): the double-quantized expert absmax costs Mixtral 2.3 % of its step for 2.04 GB; Qwen3's speed pair was unstable
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 28 and 31. Two RTX 5090s, e4b against itself on the
+matched arm, resident, `E4B_ABSMAX_DQ=0` (`_dq0`) against `=1` (`_dq1`), two draws a side in ABBA order. Read (both boxes in one pass):
+[`RESULTS-tc1-dqab.md`](RESULTS-tc1-dqab.md).
+
+| family | `_dq0` s/step | `_dq1` s/step | `_dq1`/`_dq0` | peak `_dq0` → `_dq1` | held-out Δ | prediction |
+|---|---|---|---|---|---|---|
+| Mixtral-8x7B (`tc1-5090-71`) | 3.807 / 3.917 | 3.932 / 3.970 | **1.023** [1.004, 1.043] | 31.07 → **29.03** GB (−2.04) | −0.0028 | **P57 HELD** |
+| Qwen3-30B-A3B (`tc1-5090-70`) | 3.801 / 4.019 (5.6 % apart) | 3.947 / 5.014 (23.8 % apart) | not read | 27.15 → 25.82 GB (−1.33) | +0.0026 | **P56 UNTESTED** |
+
+- **Mixtral (P57 HELD).** Double-quantizing the absmax costs 2.3 % of the step and saves 2.04 GB. The registered arithmetic predicted
+  2.10 GB.
+- **Qwen3 (P56 UNTESTED).** Both speed pairs were unstable. The box's host load average tracked the draws: 6.6 and 7.3 on the `_dq0`
+  draws, 12.1 and 19.4 on the `_dq1` draws. Its peak and held-out readings do not depend on the host and sit inside their bands, but
+  P56 is one prediction, so it stays UNTESTED.
+- **P58 UNTESTED** for the same reason: its Mixtral half reads −0.0028, its Qwen3 half is unread.
+- **By the registered rule `E4B_ABSMAX_DQ` stays opt-in for now.** Amendment 31 re-asks Qwen3's pair over 60 steps on a quieter machine.
+- **Why boxes go unstable.** The step is host-bound, and on multi-tenant hosts the other tenants' load shows up directly in it:
+  - this box (load 6.6–19.4);
+  - `tc1-5090-66`'s shipped pair (load 4 vs 19);
+  - `tc1-5090-68` (load 30–37 throughout).
+
+  Machine 151350 is the exception: it lost pairs at a load near 1.
 
 ## Amendment 26 (2026-10-05): prebound Triton launches take 2.7 % off the matched arm's step; the shipped pair was unstable, so the flags stay opt-in
 

@@ -103,6 +103,7 @@ NEED_UNSLOTH=1; case " $FAMILIES " in " qwen3axolotl "|" qwen3nativebest200 "|" 
 case " $FAMILIES " in " qwen3denseab "|" mixtraldenseab "|" qwen3denseab mixtraldenseab "|" mixtraldenseab qwen3denseab ") NEED_UNSLOTH=0;; esac
 case " $FAMILIES " in " qwen3prebindab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 26: an e4b-only A/B
 case " $FAMILIES " in " qwen3dqab "|" mixtraldqab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 28: e4b-only A/Bs
+case " $FAMILIES " in " qwen3tritonab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 32: an e4b-only A/B
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
@@ -489,7 +490,7 @@ for t in (tag, "attn_only_m", "reference_attn4_m", "fused_attn4_m_offload", "ref
 PYE
 }
 # arm FAM FW TAG ARM ALARM MID REV OFFLOAD RECIPE(field|mb1|curve|anchor|t1|r64|small) TOK TOK_SHA [extra args...]: one process, one JSON, one alarm
-arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK=${10} TOK_SHA=${11}; shift 11
+arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK=${10} TOK_SHA=${11}; shift 11
   { skip $FAM || skip $FAM/$FW/$TAG; } && { say "skip $FAM/$FW/$TAG"; stubw $FAM $FW $TAG $ARM not_run "skipped by TC1_SKIP"; return 0; }
   # phase 2: the interpreter per framework; UNS_VENV=t28 (a prefix assignment on the call) selects tp4's torch-2.8 venv for an
   # Unsloth arm, else the cu130 venv. A cu130 venv the driver gate refused -> `refused` rows naming the driver; a venv that
@@ -498,6 +499,8 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   if [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = t212 ]; then PY=$PY_UNS          # J: e4b on torch 2.12.1+cu130
     [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-unsloth (cu130-torch2121) + e4b"}'; return 0; }
     [ "$T212_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$T212_REASON"; return 0; }
+  elif [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = tf55 ]; then PY=$W/venv-e4b-tf55/bin/python   # TC1 amendment 34: venv-e4b with transformers 5.5.0
+    [ "${TF55_OK:-0}" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "${TF55_REASON:-venv-e4b-tf55 was not built}"; return 0; }
   elif [ "$FW" = hf ] && [ "${HF_VENV:-}" = t214 ]; then PY=$PY_AX              # J: the HF arm on the axolotl venv's torch 2.14
     [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-axolotl (torch cu130)"}'; return 0; }
     [ "$AX_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$AX_REASON"; return 0; }
@@ -569,6 +572,33 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   { echo -n "$FAM/$FW/$TAG rc=$rc "; grep -aE "^CELL " logs/run_${FAM}_${FW}_$TAG.log | tail -1 | cut -c1-400; echo; } >> summary.txt
   $PY -c "import torch; torch.cuda.empty_cache()" 2>/dev/null; nvidia-smi --query-gpu=memory.used --format=csv,noheader
   rm -rf $W/adapters/* 2>/dev/null; }
+# TC1 amendment 33 (2026-10-05): load-gated draws. Every arm runs through arm_once (the body above). With TC1_LOAD_GATE set (a host load
+# average), an OK arm whose median host load1 over its own run (the second field group of gpuclk_<arm>.txt, sampled each second) exceeds the
+# gate is set aside to $W/loadvoid/ -- receipt, gpuclk and vram samples, run log, each suffixed .a<k> -- and run again, at most
+# TC1_LOAD_RETRIES (default 2) more times while the deadline allows; the last attempt stands whatever its load. Each attempt writes a
+# LOADGATE line to summary.txt. Unset (every box before this amendment): arm is arm_once.
+arm(){ local G=${TC1_LOAD_GATE:-} n=0 FAM=$1 FW=$2 TAG=$3
+  while :; do
+    arm_once "$@"
+    [ -n "$G" ] || return 0
+    local f=$W/gpuclk_${FAM}_${FW}_$TAG.txt j=$W/${FAM}_${FW}_$TAG.json
+    { [ -s "$f" ] && [ -s "$j" ]; } || return 0
+    local st med over
+    st=$(status_of $FAM $FW $TAG)
+    med=$($PY_E4B -c "import statistics, sys
+v = []
+for ln in open(sys.argv[1]):
+    try: v.append(float(ln.split('|')[1].split()[0]))
+    except Exception: pass
+print(round(statistics.median(v), 2) if v else 'nan')" "$f" 2>/dev/null || echo nan)
+    over=$($PY_E4B -c "import sys; m = sys.argv[1]; print(int(m != 'nan' and float(m) > float(sys.argv[2])))" "$med" "$G" 2>/dev/null || echo 0)
+    echo "LOADGATE $FAM/$FW/$TAG attempt $n load1_median $med gate $G status $st over $over" | tee -a summary.txt
+    [ "$st" = ok ] && [ "$over" = 1 ] && [ $n -lt ${TC1_LOAD_RETRIES:-2} ] || return 0
+    can_run 600 $FAM/$FW/$TAG/loadgate_retry || return 0
+    n=$((n + 1)); mkdir -p $W/loadvoid
+    local x; for x in $j $f $W/vram_${FAM}_${FW}_$TAG.txt logs/run_${FAM}_${FW}_$TAG.log; do [ -e "$x" ] && mv "$x" "$W/loadvoid/$(basename "$x").a$n"; done
+    echo "LOADGATE $FAM/$FW/$TAG attempt $((n - 1)) VOID (host load1 median $med > $G): re-run $n of ${TC1_LOAD_RETRIES:-2}" | tee -a summary.txt
+  done; }
 free_family(){ [ "$TC1_LOCAL_BOX" = 1 ] && { say "local snapshot kept ($1: TC1_LOCAL_SNAPSHOT is the owner's directory, never freed)"; return 0; }
   rm -rf /root/.cache/huggingface/hub/models--$2; say "freed $1 (disk: $(df -h /root | tail -1 | awk '{print $4}') free)"; }
 tokenise(){ local FAM=$1 MID=$2 REV=$3 TEMPLATE_=$4 SEQ_=$5 DATA=$6 DATA_SHA=$7 TOK=$8 EVAL_N_=${9:-$EVAL_N}
@@ -1136,6 +1166,46 @@ tc1_prebindab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_pb0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_shipped_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_prebind37_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 35 (2026-10-05): amendment 26's prebound-launch A/B under triton 3.7.1,
+# which the prebound path covers since experts4bit-qlora#1108 and grouped-nf4-gemm#471. The same eight arms in the same ABBA order, every one in
+# venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 install: torch 2.12.1+cu130, transformers 5.5.0, triton 3.7.1).
+tc1_prebind37_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_pb0:fused e4b:fused_attn4_shipped_pb1:fused e4b:fused_attn4_m_pb0:fused e4b:fused_attn4_m_pb1:fused e4b:fused_attn4_m_pb1_d2:fused e4b:fused_attn4_m_pb0_d2:fused e4b:fused_attn4_shipped_pb1_d2:fused e4b:fused_attn4_shipped_pb0_d2:fused"
+  say "===== PREBIND A/B on triton 3.7 family $FAM ($MID @ $REV; Triton launches prebound off vs on in venv-unsloth, e4b + grouped-nf4-gemm, amendment 35)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local OLD="E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0" NEW="E4B_TRITON_PREBIND=1 GNF4_TRITON_PREBIND=1"
+  can_run 600 $FAM/e4b/shipped_pb0     && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_pb1     && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_pb0           && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pb1           && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pb1_d2        && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pb0_d2        && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_pb1_d2  && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_pb0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
+# tc1_compactab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 36 (2026-10-05): grouped-nf4-gemm's compact padded LoRA delta
+# (NF4_QLORA_COMPACT_DELTA=1, gnf4#445: saves its input, not its padded block; same values) off vs on, the shipped and the matched arm, two
+# draws a side in ABBA order, every one in venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 install), every other default.
+tc1_compactab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_cd0:fused e4b:fused_attn4_shipped_cd1:fused e4b:fused_attn4_m_cd0:fused e4b:fused_attn4_m_cd1:fused e4b:fused_attn4_m_cd1_d2:fused e4b:fused_attn4_m_cd0_d2:fused e4b:fused_attn4_shipped_cd1_d2:fused e4b:fused_attn4_shipped_cd0_d2:fused"
+  say "===== COMPACT-DELTA A/B family $FAM ($MID @ $REV; the padded LoRA delta saving its block vs its input, venv-unsloth, amendment 36)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local OLD="NF4_QLORA_COMPACT_DELTA=0" NEW="NF4_QLORA_COMPACT_DELTA=1"
+  can_run 600 $FAM/e4b/shipped_cd0     && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_cd0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_cd1     && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_cd1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_cd0           && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_cd0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_cd1           && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_cd1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_cd1_d2        && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_cd1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_cd0_d2        && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_cd0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_cd1_d2  && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_cd1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_cd0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_cd0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_dqab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 28 (2026-10-04): e4b's expert absmax fp32 (E4B_ABSMAX_DQ=0, the default) vs
 # double-quantized (=1, #1040), the matched arm, resident, two draws a side in ABBA order. The same function serves both tokens: qwen3dqab
 # (Qwen3-30B-A3B, TC1's tokens) and mixtraldqab (Mixtral-8x7B-Instruct at TC2's pin, prepared as tc2_big_family prepares mixtral).
@@ -1149,6 +1219,66 @@ tc1_dqab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/m_dq1     && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_m_dq1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
   can_run 600 $FAM/e4b/m_dq1_d2  && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_m_dq1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
   can_run 600 $FAM/e4b/m_dq0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_m_dq0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
+# tc1_tritonab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 32 (2026-10-05): one variable, Triton. venv-e4b (torch 2.8.0+cu128) with
+# its own triton 3.4 (side tr0) vs triton 3.7.1 (side tr1: installed alone into $W/venv-triton37 and put first on the arm's PYTHONPATH), the
+# matched and the shipped arm, two draws a side in ABBA order. The prebound launches are off on both sides (they cover triton 3.4 / 3.6
+# only, so they would otherwise run on tr0 alone). A failed triton 3.7.1 install leaves every tr1 arm an install_failed row.
+tc1_tritonab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_tr0:fused e4b:fused_attn4_m_tr1:fused e4b:fused_attn4_m_tr1_d2:fused e4b:fused_attn4_m_tr0_d2:fused e4b:fused_attn4_shipped_tr0:fused e4b:fused_attn4_shipped_tr1:fused e4b:fused_attn4_shipped_tr1_d2:fused e4b:fused_attn4_shipped_tr0_d2:fused"
+  say "===== TRITON A/B family $FAM ($MID @ $REV; venv-e4b with triton 3.4 vs 3.7.1, matched and shipped arms, amendment 32)"
+  local TR37=$W/venv-triton37 TROK=1 TRWHY=""
+  $PY_BASE -m uv --version > logs/pip_triton37.log 2>&1 || $PY_BASE -m pip install -q --no-input uv >> logs/pip_triton37.log 2>&1
+  perl -e 'alarm 900; exec @ARGV' $PY_BASE -m uv pip install --python $PY_E4B --target $TR37 --no-deps "triton==3.7.1" >> logs/pip_triton37.log 2>&1 || TROK=0
+  if [ $TROK = 1 ] && ! PYTHONPATH=$TR37 $PY_E4B -c "import triton, torch; assert triton.__version__.startswith('3.7'), triton.__version__; print('triton', triton.__version__, 'torch', torch.__version__)" >> logs/pip_triton37.log 2>&1; then TROK=0; fi
+  [ $TROK = 1 ] || TRWHY="triton 3.7.1 did not install or import beside torch 2.8 (logs/pip_triton37.log): $(tail -2 logs/pip_triton37.log | tr '\n' ' ' | cut -c1-200)"
+  echo "TRITON37 ok=$TROK $(tail -1 logs/pip_triton37.log | cut -c1-120)" | tee -a summary.txt
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local OFF="E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0"
+  local OLD="$OFF" NEW="$OFF PYTHONPATH=$TR37"
+  t1(){ local how=$1 tag=$2; shift 2
+    if [ $TROK = 1 ]; then TC1_ARM_EXTRA_ENV="$NEW" $how $FAM e4b $tag fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 "$@"
+    else stubw $FAM e4b $([ $how = draw2 ] && echo ${tag}_d2 || echo $tag) fused install_failed "$TRWHY"; fi; }
+  can_run 600 $FAM/e4b/m_tr0           && TC1_ARM_EXTRA_ENV="$OLD" arm   $FAM e4b fused_attn4_m_tr0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_tr1           && t1 arm   fused_attn4_m_tr1 $MATCH
+  can_run 600 $FAM/e4b/m_tr1_d2        && t1 draw2 fused_attn4_m_tr1 $MATCH
+  can_run 600 $FAM/e4b/m_tr0_d2        && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_m_tr0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_tr0     && TC1_ARM_EXTRA_ENV="$OLD" arm   $FAM e4b fused_attn4_shipped_tr0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_tr1     && t1 arm   fused_attn4_shipped_tr1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_tr1_d2  && t1 draw2 fused_attn4_shipped_tr1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_tr0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_shipped_tr0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
+# tc1_envsplit_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 34 (2026-10-05): amendment 24's environment gain split on the 5090. The matched
+# arm in three environments, two draws each in ABC CBA order: e0 venv-e4b (torch 2.8.0, transformers 5.18.0, triton 3.4), e1 venv-e4b-tf55
+# (built here like venv-e4b, transformers 5.5.0: the one variable against e0), e2 venv-unsloth + e4b (torch 2.12.1, transformers 5.5.0,
+# triton 3.7.1: torch + triton against e1). The prebound launches are off on every side (they cover triton 3.4 / 3.6, not 3.7).
+tc1_envsplit_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_e0:fused e4b:fused_attn4_m_e1:fused e4b:fused_attn4_m_e2:fused e4b:fused_attn4_m_e2_d2:fused e4b:fused_attn4_m_e1_d2:fused e4b:fused_attn4_m_e0_d2:fused"
+  say "===== ENV SPLIT family $FAM ($MID @ $REV; e0 venv-e4b, e1 venv-e4b + transformers 5.5.0, e2 venv-unsloth; matched arm; amendment 34)"
+  TF55_OK=0; TF55_REASON=""
+  if $PY_BASE -m venv --system-site-packages $W/venv-e4b-tf55 > logs/venv_e4b_tf55.log 2>&1; then
+    pip_fresh $W/venv-e4b-tf55/bin/python e4b_tf55
+    if perl -e 'alarm 2400; exec @ARGV' $W/venv-e4b-tf55/bin/python -m pip install -q --no-input --prefer-binary \
+         "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" \
+         "transformers==5.5.0" "bitsandbytes==$BNB_VER" "peft==$PEFT_VER" accelerate safetensors "huggingface_hub>=0.23" sentencepiece tiktoken >> logs/venv_e4b_tf55.log 2>&1 \
+       && $W/venv-e4b-tf55/bin/python -c "import torch, transformers, experts4bit_qlora; assert transformers.__version__ == '5.5.0', transformers.__version__; print('venv-e4b-tf55 torch', torch.__version__, 'transformers', transformers.__version__, 'e4b', experts4bit_qlora.__version__)" >> logs/venv_e4b_tf55.log 2>&1; then
+      TF55_OK=1
+    else TF55_REASON="venv-e4b-tf55 (transformers 5.5.0) did not install or import (logs/venv_e4b_tf55.log): $(tail -2 logs/venv_e4b_tf55.log | tr '\n' ' ' | cut -c1-200)"; fi
+  else TF55_REASON="venv-e4b-tf55 could not be created (logs/venv_e4b_tf55.log)"; fi
+  echo "VENV-E4B-TF55 ok=$TF55_OK $(tail -1 logs/venv_e4b_tf55.log | cut -c1-120)" | tee -a summary.txt
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local OFF="E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0"
+  can_run 600 $FAM/e4b/m_e0     && TC1_ARM_EXTRA_ENV="$OFF" arm                 $FAM e4b fused_attn4_m_e0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e1     && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=tf55 arm   $FAM e4b fused_attn4_m_e1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e2     && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_e2 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e2_d2  && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_e2 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e1_d2  && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=tf55 draw2 $FAM e4b fused_attn4_m_e1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e0_d2  && TC1_ARM_EXTRA_ENV="$OFF" draw2               $FAM e4b fused_attn4_m_e0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
 # tc1_routebench_family FAM ALARM -- TC1c amendment 3 (2026-10-04): a kernel-route replay, not a training run. grouped-nf4-gemm's
@@ -1337,9 +1467,14 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 22
   qwen3bmmab)  tc1_bmmab_family  qwen3bmmab  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 24: bmm replay + venv-e4b vs venv-unsloth
   qwen3samestack) tc1_samestack_family qwen3samestack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1 amendment 25: both frameworks on one stack
+  qwen3samestackh100) tc1_samestack_family qwen3samestackh100 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1c amendment 9: amendment 25 on an H100 NVL
   qwen3prebindab) tc1_prebindab_family qwen3prebindab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 26: prebound Triton launches off vs on
+  qwen3prebind37) tc1_prebind37_family qwen3prebind37 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 35: amendment 26 on triton 3.7.1 (venv-unsloth)
+  qwen3compactab) tc1_compactab_family qwen3compactab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 36: the compact padded LoRA delta off vs on (venv-unsloth)
   qwen3dqab)   tc1_dqab_family   qwen3dqab   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 28: absmax fp32 vs double-quantized
   mixtraldqab) tc1_dqab_family   mixtraldqab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 28 (TC2's mixtral pin, fetch 7200, e4b 3600)
+  qwen3tritonab) tc1_tritonab_family qwen3tritonab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 32: triton 3.4 vs 3.7.1 in venv-e4b
+  qwen3envsplit) tc1_envsplit_family qwen3envsplit Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 34: transformers vs torch+triton
   mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 22 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3memcensus) tc1_memcensus_family qwen3memcensus Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 23 (fetch 5400, e4b 3600, Unsloth 3600)
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)

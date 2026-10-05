@@ -81,7 +81,7 @@ def _rms_bwd(DY, X, W, R, DX, stride, N, ROWS: tl.constexpr, BLOCK: tl.constexpr
         tl.store(DX + row * stride + cols, dx.to(DX.dtype.element_ty), mask=cmask)
 
 
-# E4B_TRITON_PREBIND=1 (opt-in): the same kernels, launched without Triton's per-call argument binding (engines/triton_prebind.py)
+# E4B_TRITON_PREBIND (on unless =0): the same kernels, launched without Triton's per-call argument binding (engines/triton_prebind.py)
 _rms_fwd_launch = prebind(_rms_fwd)
 _rms_bwd_launch = prebind(_rms_bwd)
 

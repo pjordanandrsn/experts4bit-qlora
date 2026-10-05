@@ -1212,3 +1212,252 @@ the shipped arm.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; about $1.20 with the download. This is in the
 standing no-ask tier.
+
+### Amendment 31 (2026-10-05T01:00Z, after amendment 28's read): Qwen3-30B-A3B's absmax pair over 60 steps (P56, P58 re-asked)
+
+**Why.** Amendment 28 read P57 HELD on Mixtral (`tc1-5090-71`): the double-quantized absmax costs 2.3 % of the step for 2.04 GB.
+Qwen3-30B-A3B's box (`tc1-5090-70`, Vast machine 45511) lost both speed pairs to instability (5.6 % and 23.8 % apart), and its step times
+followed the host's load average (6.6 to 19.4). Its peak drop (1.33 GB) and held-out move (+0.0026) were inside their bands, but P56 is
+one prediction and stays UNTESTED.
+
+**This amendment** re-asks P56 (`_dq1` / `_dq0` in **[0.97, 1.03]** and the peak lower by **[1.25, 1.45] GB**) and P58's Qwen3 half
+(|Δ held-out| ≤ **0.005**), bands unchanged:
+
+- `TC1_STEPS=60`, so each median covers steps 11..60;
+- the token `qwen3dqab` otherwise as amendment 28's box;
+- on a machine other than 45511, 138786 (amendment 27's, load 30–37) and 151350.
+
+**Its reading is final.** The decision rule is amendment 28's: P56, P57 (HELD) and P58 HELD make `E4B_ABSMAX_DQ` the default for the
+resident fused path. Otherwise it stays opt-in.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; about $1.50. This is in the standing no-ask tier.
+
+### Amendment 32 (2026-10-05T02:08Z, after an unregistered RTX A2000 decomposition): one variable, Triton 3.4 against 3.7.1, on one RTX 5090 (P59–P61)
+
+**Why.** Amendment 24 read e4b's matched arm at **0.882×** in Unsloth's venv (torch 2.12.1, transformers 5.5.0, triton 3.7.1) against
+the field image's (torch 2.8.0, transformers 5.18.0, triton 3.4.0). Its replay ruled out the padded LoRA delta's `bmm`.
+
+An unregistered diagnostic on the owned RTX A2000 then split the three. It used a 4-layer real-router slice of Qwen3-30B-A3B, TC1's
+tokens and recipe, `tc1_arm.py` unchanged, and three to six interleaved draws per environment:
+
+- torch 2.8 with triton 3.7.1 forced in reads 0.931× torch 2.8 with triton 3.4;
+- torch 2.12 at triton 3.7.1 adds nothing (1.011);
+- transformers 5.5 against 5.18 adds nothing (1.005).
+
+The device profile puts the gain in grouped-nf4-gemm's kernels: `_dgrad_nf4_grouped` about −40 % and `_gemm_nf4_grouped` about −15 % of
+device time under triton 3.7. The A2000 runs that slice device-bound and the 5090 step is host-bound, so the share may not transfer. This
+box reads the one variable on the 5090.
+
+**The box** (token `qwen3tritonab`). One RTX 5090, venv-e4b (torch 2.8.0+cu128), TC1's qwen3 tokens and field recipe, `TC1_STEPS=60`
+(50-step medians). Each of the matched and the shipped arm runs `_tr0` (venv-e4b's own triton 3.4) against `_tr1` (triton 3.7.1
+installed alone into the box's work dir and put first on the arm's `PYTHONPATH`), two draws a side in ABBA order. The prebound launches
+are off on both sides (`E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0`): they cover triton 3.4 / 3.6, and on `_tr0` alone they would be a
+second variable. The box avoids machines 45511, 138786 and 151350.
+
+Engagement: each receipt's `env.triton` reads 3.4.* on `_tr0` and 3.7.* on `_tr1`, and its `prebind_ab` shows both flags off. A failed
+triton 3.7.1 install leaves every `_tr1` arm an `install_failed` row.
+
+**Predictions** (registered before the box):
+
+- **P59** (matched): `_tr1` / `_tr0` s/step lies in **[0.82, 0.95]**, both sides stable. Most of amendment 24's 0.882 is Triton.
+- **P60** (shipped): `_tr1` / `_tr0` lies in **[0.85, 0.98]**. The bf16-adapter step is shorter, so the same kernel gain is a different
+  share.
+- **P61:** on each arm, |mean held-out at N, `_tr1` − `_tr0`| ≤ **0.005**. On the A2000 the step-0 held-out was identical to 5 decimals
+  across the two Tritons.
+
+Each is FALSIFIED outside its band, and UNTESTED where a side is unstable, not VALID or not engaged.
+
+**Decision rules.**
+
+- **P59 and P61 HELD:** the 5090's environment gain is Triton's.
+  - e4b's docs say that triton ≥ 3.7 (torch ≥ 2.12, or the override this box uses) runs grouped-nf4-gemm's training kernels faster.
+  - grouped-nf4-gemm investigates why triton 3.4's code for those kernels is slower: its own registration.
+  - The prebound launches gain triton 3.7 coverage, which is grouped-nf4-gemm's and e4b's own PRs.
+- **P59 FALSIFIED high (above 0.95):** the A2000 decomposition does not transfer to the host-bound 5090 step, and the 0.882 stays
+  unattributed between torch and transformers.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; no Unsloth venvs are built. About $1.50 with
+the download; this is in the standing no-ask tier.
+
+### Amendment 33 (2026-10-05T02:19Z, after amendment 29's box): load-gated draws, and the same-stack pair re-asked under them (P50, P51)
+
+**Why.** The same-stack speed pair has now gone unread on three boxes, each with one or two unstable pairs:
+
+| box | host | unstable pairs |
+|---|---|---|
+| `tc1-5090-67` | Core Ultra 9 285K | Unsloth 18 %; e4b's field-image arm 8 % |
+| `tc1-5090-68` | EPYC 7663 | e4b's same-stack arm 8 % |
+| `tc1-5090-72` | EPYC 7C13, machine 45511, 60-step runs | e4b's same-stack arm 13 %; field-image arm 6 % |
+
+The samplers TC1 amendment 7 put beside every arm show why, on all but the 285K. The step is host-bound, and on these multi-tenant hosts
+the host's load average follows the slow draws:
+
+- `tc1-5090-72`: e4b's same-stack draws ran at a median load1 of 22.9 and 11.0;
+- `tc1-5090-70`: 6.6 / 7.3 / 12.1 / 19.4 across its four draws;
+- `tc1-5090-66`'s shipped pair: 4.0 against 19.0;
+- `tc1-5090-68`: 30–37 throughout.
+
+Pairs read stable at a median load1 of about 5 or below. Machine 151350, the 285K, lost pairs at a load near 1, a different and unexplained
+cause, so it is avoided.
+
+**The instrument.** `tc1_run.sh` now runs each arm through a gate.
+
+- With `TC1_LOAD_GATE` set, an OK arm whose median host load1 over its own run exceeds the gate is set aside to `loadvoid/` and run again,
+  at most `TC1_LOAD_RETRIES` more times while the deadline allows.
+- The last attempt stands whatever its load. Every attempt writes a `LOADGATE` line, and the reducer prints them.
+- Unset, nothing changes, so every box registered before this amendment keeps its instrument.
+
+**The box.** The token `qwen3samestack` as amendment 29 ran it:
+
+- `TC1_STEPS=60`, no reference arm;
+- `TC1_LOAD_GATE=6.0` and `TC1_LOAD_RETRIES=2`;
+- on a machine other than 45511, 138786 and 151350.
+
+P50 (Unsloth/e4b on one stack in **[1.9, 2.9]**) and P51 (e4b venv-unsloth / venv-e4b in **[0.80, 0.95]**) are re-asked with their bands
+unchanged, read as before: two stable VALID draws a side.
+
+**Its reading is final.** No further re-draw follows under amendments 25, 27, 29 or 33.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard (a voided draw adds up to one arm's time), TC1's 98 GB host floor; about
+$2.50 with the download and up to two re-runs. This is in the standing no-ask tier.
+
+### Amendment 34 (2026-10-05T03:26Z, after amendment 32's read): amendment 24's environment gain, split between transformers and torch on the 5090 (P62–P65)
+
+**Why.** Amendment 24 read e4b's matched arm at 0.882× in Unsloth's environment (torch 2.12.1, transformers 5.5.0, triton 3.7.1) against
+the field image's (torch 2.8.0, transformers 5.18.0, triton 3.4). An unregistered RTX A2000 decomposition put that gain in triton 3.7.1's
+device code. Amendment 32 (`tc1-5090-74`) then read triton 3.7.1 alone at 0.992× on the 5090's matched arm (P59 FALSIFIED) and 0.971×
+on its shipped arm (P60 HELD). By that amendment's rule, the gain stays unattributed between torch and transformers on the host-bound
+5090 step.
+
+The A2000 profile points at host work in both:
+
+- torch 2.12 removed about 2,300 host events per 4-layer step, mostly in attention with a padded mask;
+- transformers 5.5 removed about 560, in the router, where 5.18 casts the routing weights to bf16 and e4b casts them back.
+
+On a 48-layer host-bound step those could matter.
+
+**The box** (token `qwen3envsplit`). One RTX 5090, TC1's qwen3 tokens and field recipe, `TC1_STEPS=60`, load-gated draws
+(`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), avoiding machines 45511, 138786 and 151350. The matched arm in three environments, two
+draws each in ABC CBA order:
+
+| side | venv | torch | transformers | triton |
+|---|---|---|---|---|
+| `_e0` | venv-e4b | 2.8.0 | 5.18.0 | 3.4 |
+| `_e1` | venv-e4b-tf55, built on the box exactly as venv-e4b but with transformers 5.5.0 | 2.8.0 | 5.5.0 | 3.4 |
+| `_e2` | venv-unsloth + e4b | 2.12.1 | 5.5.0 | 3.7.1 |
+
+The prebound launches are off on every side; they cover triton 3.4 and 3.6 only, so they would be a fourth variable. Engagement: each
+receipt records the torch and transformers its side names, and both prebind flags off. A failed venv-e4b-tf55 build leaves `_e1` arms
+`install_failed`.
+
+**Predictions** (registered before the box):
+
+- **P62** (transformers alone): `_e1` / `_e0` lies in **[0.90, 1.00]**.
+- **P63** (torch 2.12 + triton 3.7, at transformers 5.5): `_e2` / `_e1` lies in **[0.85, 0.99]**.
+- **P64** (the whole environment, amendment 24 re-read under the gate): `_e2` / `_e0` lies in **[0.80, 0.95]**.
+- **P65:** |mean held-out at N| of `_e1` − `_e0` and of `_e2` − `_e0` are each ≤ **0.005**.
+
+Each speed prediction needs two stable VALID draws per side. Each is FALSIFIED outside its band and UNTESTED where a side is unstable, not
+VALID or not engaged.
+
+**Decision rules.**
+
+- **P62 HELD with the ratio at or below 0.97:** e4b finds what transformers 5.18 adds to its step, router casts first, and works around
+  it in its own PR with its own A/B.
+- **P63 HELD:** e4b's docs say that torch ≥ 2.12 runs its host-bound training step faster on an RTX 5090.
+- No position against another framework is read here; amendment 33's box is the same-stack position.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, with venv-unsloth built for `_e2`. About $2
+with the download and the gate's possible re-runs; this is in the standing no-ask tier.
+
+
+### Amendment 35 (2026-10-05T04:25Z, after amendment 33's read, before any box): amendment 26's prebound-launch A/B under triton 3.7.1 (P66–P68)
+
+**Why.** Amendments 26 and 30 read the prebound Triton launches on an RTX 5090 under triton 3.4: the matched arm at 0.973× and the shipped
+arm at 0.980× of the flags off. By amendment 26's rule both flags became the default for the Triton versions the prebound path covers.
+experts4bit-qlora#1108 and grouped-nf4-gemm#471 added triton 3.7. Their evidence is from an RTX A2000 host: outputs bit-identical, and the
+host µs per call lower with the flags on (one launch 25–51 → 19–39; grouped-nf4-gemm's fused forward 439–483 → 334–377). No training step
+was timed. Triton 3.7.1's own launch is cheaper than 3.4's, so the saving per launch is smaller than amendment 26's A2000 figures.
+Amendment 33's same-stack position ran e4b under triton 3.7.1 before #1108, so with the flags unset. Every e4b run in that environment now
+takes the prebound path.
+
+**The box** (token `qwen3prebind37`). One RTX 5090, TC1's qwen3 tokens and field recipe, `TC1_STEPS=60`, load-gated draws
+(`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), avoiding machines 45511, 138786 and 151350.
+
+- Amendment 26's eight arms in its ABBA order: the shipped arm and the matched arm, each `_pb0` (both flags 0) against `_pb1` (both
+  flags 1), two draws a side.
+- Every arm in venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 install: torch 2.12.1+cu130, transformers 5.5.0,
+  triton 3.7.1). Both pins must include #1108 and #471.
+- Engagement: amendment 26's `prebind_ab` predicate, and each receipt records torch 2.12.* and triton 3.7.*.
+
+**Predictions** (registered before the box):
+
+- **P66** (shipped): `_pb1` / `_pb0` s/step lies in **[0.97, 1.00]**.
+- **P67** (matched): `_pb1` / `_pb0` lies in **[0.97, 1.00]**.
+- **P68:** on each arm, |mean held-out at N, `_pb1` − `_pb0`| ≤ **0.005**.
+
+The basis: under triton 3.4 the 5090 read 0.980 (shipped) and 0.973 (matched). On the A2000 the 3.7 saving per call is a third
+(RMSNorm) to a half (the fused GEMM) of the 3.4 one, so each ratio is expected near 0.985–0.995, and neither side should be slower. Each speed prediction needs two stable VALID
+draws a side. Each is FALSIFIED outside its band and UNTESTED where a side is unstable, not VALID or not engaged.
+
+**Decision rules.**
+
+- **P66, P67 and P68 HELD:** triton 3.7 stays in the prebound path's supported versions, and the register gains a row for the default on
+  triton 3.7.
+- **Either ratio above 1.01, or P68 FALSIFIED:** triton 3.7 comes out of the supported versions, one PR in each repository, citing this
+  box. Runs on 3.7 then keep Triton's own launch.
+- **Otherwise** (a ratio in (1.00, 1.01], below 0.97, or UNTESTED): triton 3.7 stays covered and no speed is claimed for it.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
+About $2 with the download and the gate's possible re-runs; this is in the standing no-ask tier.
+
+### Amendment 36 (2026-10-05T04:52Z, after amendment 33's read, before any box): grouped-nf4-gemm's compact padded LoRA delta, A/B for peak and speed on one stack (P69–P72)
+
+**Why.** On one stack Unsloth peaks 3.22 GB below e4b (amendment 33: 24.27 vs 27.49 GB). Amendment 23's census put all of that gap in
+two places:
+
+- the fp32 expert absmax, 1.35 GB (double-quantizing it is the CLI trainer's default since #1105; the harness keeps it explicit);
+- transients, led by grouped-nf4-gemm's padded LoRA delta: its zero-padded input block in the adapters' fp32 (0.62 GB, two live at the
+  peak) and the batched products' outputs (0.45 GB, three live).
+
+grouped-nf4-gemm#445 ships `NF4_QLORA_COMPACT_DELTA=1`, opt-in "until a within-box A/B decides the default". The delta becomes one
+autograd node that saves its input instead of its padded block, and rebuilds the block in backward. Values and every gradient are
+`torch.equal`. On an RTX A2000 (one layer, 380 tokens) it cut the memory saved per layer from 229 to 55 MB with fp32 adapters, and
+added about 0.7 ms (+3.5 %) to a layer's backward device time. Under whole-layer checkpointing, one layer at a time holds those saved
+blocks, so the expected effect is a lower backward peak, not a lower static footprint. No 5090 step has measured it at TC1's defaults.
+
+**The box** (token `qwen3compactab`). One RTX 5090, TC1's qwen3 tokens and field recipe, `TC1_STEPS=60`, load-gated draws
+(`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), avoiding machines 45511, 138786 and 151350.
+
+- The shipped and the matched arm, each `_cd0` (`NF4_QLORA_COMPACT_DELTA=0`, the default) against `_cd1` (`=1`), two draws a side in
+  amendment 26's ABBA order. Every other setting is the default.
+- Every arm in venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 install: torch 2.12.1+cu130, transformers 5.5.0,
+  triton 3.7.1), the stack of the quoted position.
+- Engagement, read off each receipt: `keep_ab.gnf4_compact_delta` is the side's flag, no layer kept its MoE activations, the padded LoRA
+  path ran (`lean_ab.lora_path_calls.padded` > 0), and `env.torch` is 2.12.*.
+
+**Predictions** (registered before the box):
+
+- **P69** (matched, memory): the median peak falls by **[0.3, 2.0] GB** (`_cd0` − `_cd1`). The basis: the census's live padded block,
+  0.62 GB at micro-batch 1, no longer held from forward to backward; the rebuilt block is transient.
+- **P70** (matched, speed): `_cd1` / `_cd0` s/step lies in **[0.97, 1.02]**.
+- **P71** (shipped, speed): `_cd1` / `_cd0` lies in **[0.97, 1.02]**. The rebuild adds device time; the one node replaces about ten
+  autograd nodes per projection, so on this host-bound step the two may cancel.
+- **P72:** on each arm, |mean held-out at N, `_cd1` − `_cd0`| ≤ **0.005**.
+
+Each prediction needs two stable VALID draws a side. Each is FALSIFIED outside its band and UNTESTED where a side is unstable, not VALID
+or not engaged.
+
+**Decision rules.**
+
+- **P69–P72 HELD:** `NF4_QLORA_COMPACT_DELTA` becomes grouped-nf4-gemm's default, in one PR citing this box. The position against
+  Unsloth is not restated from this box; a later box reads peaks side by side.
+- **P70 or P71 above 1.02:** it stays opt-in.
+- **P69 below 0.3 GB:** it stays opt-in. The next memory lever is the padded block's size under a hot expert, not what it saves.
+- **Otherwise** (a ratio below 0.97, P69 above 2.0 GB, or UNTESTED): it stays opt-in pending its own registration.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
+About $2 with the download and the gate's possible re-runs; this is in the standing no-ask tier.

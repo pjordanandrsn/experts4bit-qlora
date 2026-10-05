@@ -12,8 +12,8 @@ from experts4bit_qlora.arch.topology import describe_moe  # noqa: E402
 from experts4bit_qlora.engines import fp8_paged_kv  # noqa: E402
 from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV  # noqa: E402
 from experts4bit_qlora.recipe import QLoRASetup, _module_bytes, _stack_modules  # noqa: E402
-from experts4bit_qlora.serve_recipe import (BLOCK_TOKENS, ServeSetup, estimate_serve_footprint,  # noqa: E402
-                                             paged_kv_pool_bytes)
+from experts4bit_qlora.serve_recipe import (ARENA_ALIGN, BLOCK_TOKENS, ServeSetup,  # noqa: E402
+                                             estimate_serve_footprint, paged_kv_pool_bytes, solver_tiers)
 
 
 def _allocated(kv) -> int:
@@ -66,10 +66,56 @@ def test_estimate_items_and_scaling():
     assert slab.bytes == sum(_module_bytes(_stack_modules(st, QLoRASetup())[0]) for st in topo.expert_stacks)  # cache
 
 
-def test_unpriced_placements_are_refused_in_words():
+def test_unknown_placements_and_batched_graphs_under_the_solver_are_refused_in_words():
     topo = describe_moe(_qwen3())
-    f = estimate_serve_footprint(topo, ServeSetup(placement="solver"))
-    assert f.items == () and any("not priced yet" in r for r in f.refusals)
+    assert any("placement must be" in r for r in estimate_serve_footprint(topo, ServeSetup(placement="tiers")).refusals)
+    f = estimate_serve_footprint(topo, ServeSetup(placement="solver", max_seqs=4, graphs=True))
+    assert f.items == () and any("all-vram placement" in r for r in f.refusals)
+
+
+def test_solver_tiers_fill_vram_then_dram_then_nvme():
+    mib = 2**20
+    assert solver_tiers(2, 10, mib, vram_gb=5 / 1024, dram_gb=7 / 1024) == {"vram": 5, "dram": 7, "nvme": 8}
+    assert solver_tiers(2, 10, mib, vram_gb=1.0, dram_gb=1.0) == {"vram": 20, "dram": 0, "nvme": 0}
+
+
+def test_without_a_profile_the_bandwidths_decide_nothing():
+    from experts4bit_qlora.engines.placement import solve_placement
+    for b_vram, b_dram in ((500.0, 20.0), (20.0, 500.0), (1.0, 1.0)):
+        man = solve_placement(n_layers=3, n_experts=8, bytes_per_expert=2**20, vram_budget_bytes=5 * 2**20,
+                              dram_budget_bytes=9 * 2**20, calibration={}, profile_path=None,
+                              b_vram_override=b_vram, b_dram_override=b_dram, batch=1)
+        assert {t: len(v) for t, v in man["tiers"].items()} == solver_tiers(3, 8, 2**20, 5 / 1024, 9 / 1024)
+
+
+def test_solver_estimate_splits_the_slab_across_tiers():
+    topo = describe_moe(_qwen3())
+    allv = estimate_serve_footprint(topo, ServeSetup(max_seqs=1, graphs=False))
+    slab = next(i.bytes for i in allv.items if i.name.startswith("frozen expert stacks"))
+    bpe = slab // (len(topo.expert_stacks) * topo.expert_stacks[0].n_experts)
+    f = estimate_serve_footprint(topo, ServeSetup(placement="solver", max_seqs=1, graphs=False,
+                                                  vram_gb=5 * bpe / 2**30, dram_gb=7 * bpe / 2**30, hot_rows=4))
+    assert not f.refusals
+    by = {i.name: i for i in f.items}
+    vram, dram, nvme = (by["expert stacks, VRAM tier"], by["expert stacks, DRAM tier (computed on the CPU)"],
+                        by["expert rows on NVMe (read through the cold tier)"])
+    assert (vram.where, dram.where, nvme.where) == ("device", "host", "nvme")
+    assert (vram.bytes, dram.bytes) == (5 * bpe, 7 * bpe) and vram.bytes + dram.bytes + nvme.bytes == slab
+    assert by["cold view (rows land here)"].bytes == 4 * bpe
+    assert any("CPU tier" in u for u in f.unmodelled)
+
+
+def test_the_hybrid_tier_host_buffers_are_priced_at_either_placement():
+    from nvme_residency import pinned_request_cost
+    topo = describe_moe(_qwen3())
+    f = estimate_serve_footprint(topo, ServeSetup(max_seqs=1, graphs=False, hot_rows=64))
+    by = {i.name: i for i in f.items}
+    slab = by["frozen expert stacks (all VRAM)"].bytes
+    bpe = slab // (len(topo.expert_stacks) * topo.expert_stacks[0].n_experts)
+    stride = -(-bpe // ARENA_ALIGN) * ARENA_ALIGN
+    assert by["cold tier landing (pinned)"].bytes == pinned_request_cost(64 * stride)
+    assert by["setup tier (while the stacks are built)"].bytes == 64 * stride
+    assert "cold view (rows land here)" not in by                  # nothing lives on NVMe at all-VRAM
 
 
 def test_to_env_is_what_the_server_reads_back(monkeypatch):
@@ -77,10 +123,23 @@ def test_to_env_is_what_the_server_reads_back(monkeypatch):
 
     monkeypatch.setenv("E4B_PAGED_DEVICE", "cpu")      # host-independent: no GPU facts enter from_env
     for st in (ServeSetup(), ServeSetup(max_seqs=3, max_tokens_per_seq=777, chunk_tokens=128, graphs=False,
-                                        buckets=(1, 2), kv_groups=4)):
+                                        buckets=(1, 2), kv_groups=4, prefill_graph="0", vram_gb=2.5, dram_gb=0.75,
+                                        hot_rows=128, placement="solver")):
         for k, v in st.to_env().items():
             monkeypatch.setenv(k, v)
         cfg = PagedServeConfig.from_env()
         assert {f: getattr(cfg, f) for f in ("placement", "max_seqs", "max_tokens_per_seq", "chunk_tokens", "graphs")} \
             == {f: getattr(st, f) for f in ("placement", "max_seqs", "max_tokens_per_seq", "chunk_tokens", "graphs")}
         assert tuple(cfg.buckets) == tuple(st.buckets) and str(cfg.kv_groups) == str(st.kv_groups)
+        assert cfg.prefill_graph == st.prefill_graph
+        assert (cfg.vram_gb, cfg.dram_gb, cfg.hot_rows) == (st.vram_gb, st.dram_gb, st.hot_rows)
+
+
+def test_the_prefill_graph_pool_is_named_where_the_graph_can_engage():
+    topo = describe_moe(_qwen3())
+    named = lambda f: any("prefill graph" in u for u in f.unmodelled)  # noqa: E731
+    assert named(estimate_serve_footprint(topo, ServeSetup(max_seqs=4)))                      # the server's default
+    assert not named(estimate_serve_footprint(topo, ServeSetup(max_seqs=4, prefill_graph="0")))
+    assert not named(estimate_serve_footprint(topo, ServeSetup(max_seqs=4, graphs=False)))   # needs device grouping
+    assert not named(estimate_serve_footprint(topo, ServeSetup(max_seqs=1)))
+    assert estimate_serve_footprint(topo, ServeSetup(prefill_graph="on")).refusals

@@ -57,4 +57,4 @@ See [`../bench/moegen/RESULTS-moegen-ladders.md`](../bench/moegen/RESULTS-moegen
 
 ## Licence reading on an RTX 5090
 
-Lane MG1 ([`../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`](../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md)): every family passed tp1's parity verdict on this structural stack. The two regression anchors, OLMoE and Gemma-4, re-read clean, and LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H entered `fast_train = supported`. Qwen3.6 passed and waits on P2.
+Lane MG1 ([`../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`](../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md)): every family passed tp1's parity verdict on this structural stack. The two regression anchors, OLMoE and Gemma-4, re-read clean, and LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H entered `fast_train = supported`. Qwen3.6 passed, and entered after MG1 amendment 3 read P2 on tp1's own fused arm: `DGRAD_STATS` loop 0 ([`../bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md`](../bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md)).

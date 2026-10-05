@@ -154,7 +154,7 @@ from .engines.expert_profile import coverage_from_profile, hot_sets_from_profile
 from .engines.capture import CapturedDecoder, capture_decode, probe_capture  # noqa: E402
 from .engines.kv_cache import NF4KVCache, kv_nf4_available  # noqa: E402
 from .verify import verify_moe_4bit  # noqa: E402
-# Opt-in double-quantized (bitsandbytes "nested") storage for the frozen expert absmax (E4B_ABSMAX_DQ=1):
+# Double-quantized (bitsandbytes "nested") storage for the frozen expert absmax (the CLI trainer's default for resident training):
 # torch-only at import time, bitsandbytes is reached inside the functions.
 from .absmax_dq import (  # noqa: E402
     AbsmaxCompressedError,
@@ -286,7 +286,7 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__version__ = "0.47.0"
+__version__ = "0.48.0"
 
 from .engines.speculative import speculative_greedy_decode  # noqa: E402,F401
 

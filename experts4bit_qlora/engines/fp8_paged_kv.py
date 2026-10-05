@@ -38,7 +38,30 @@ BLOCK_TOKENS = 16
 
 
 
-def _resolve_fused_append(env, device_str, kernel_present) -> bool:
+#: grouped-nf4-gemm's fused KV appends (``fp8_kv_append_t1`` / ``_bt1``) cast to e4m3 with Triton's
+#: ``tl.float8e4nv``, which Triton compiles only on sm_89+. On sm_80-86 it refuses at compile time ("type fp8e4nv
+#: not supported in this architecture"): measured on an RTX A2000 (sm_86), triton 3.4.0, at the first graphed
+#: decode step of ``serve_paged``. The eager append casts with torch and runs on any CUDA card.
+FUSED_APPEND_MIN_CAPABILITY = (8, 9)
+
+
+def fused_append_unsupported(capability) -> str | None:
+    """Why the fused KV append cannot run on a device of ``capability`` ((major, minor)), or None if it can or the
+    capability is unknown. Bucketed decode graphs need the fused append, so this is also why they cannot."""
+    if capability is None or tuple(capability) >= FUSED_APPEND_MIN_CAPABILITY:
+        return None
+    return (f"the fused FP8 KV append casts to e4m3 in Triton, which needs sm_{FUSED_APPEND_MIN_CAPABILITY[0]}"
+            f"{FUSED_APPEND_MIN_CAPABILITY[1]}+; this device is sm_{capability[0]}{capability[1]}")
+
+
+def cuda_capability(device_str):
+    """``(major, minor)`` of a CUDA device string, or None off CUDA or without a driver."""
+    if not str(device_str).startswith("cuda") or not torch.cuda.is_available():
+        return None
+    return tuple(torch.cuda.get_device_capability(torch.device(device_str)))
+
+
+def _resolve_fused_append(env, device_str, kernel_present, capability=None) -> bool:
     """B2-certified default (RESULTS-f1-stageB-b2: PASS, gain
     2.08 ms/step, bitwise 13/13, token-identity exact), resolved at
     CONSTRUCTION. Three gates, each with a loud-refuse twin when the
@@ -54,6 +77,10 @@ def _resolve_fused_append(env, device_str, kernel_present) -> bool:
       used to crash graph decode on every such install -- Bugbot,
       e4b#238). ``kernel_present`` is a callable so the import cost is
       paid only when the answer matters.
+    - a device below sm_89 cannot compile the kernel's e4m3 cast
+      (:func:`fused_append_unsupported`): degrade. Before this gate the
+      first graphed decode step died in Triton's compiler on every
+      Ampere card.
     """
     want = (env or "1") == "1"
     if not want:
@@ -64,6 +91,11 @@ def _resolve_fused_append(env, device_str, kernel_present) -> bool:
                 "E4B_FUSED_KV_APPEND=1 but this Fp8PagedKV is on "
                 f"device {device_str!r} -- the fused append is a CUDA "
                 "triton kernel")
+        return False
+    why = fused_append_unsupported(capability)
+    if why:
+        if env == "1":
+            raise RuntimeError(f"E4B_FUSED_KV_APPEND=1 but {why}")
         return False
     if not kernel_present():
         if env == "1":
@@ -262,7 +294,7 @@ class Fp8PagedKV:
 
         self._fused_append = _resolve_fused_append(
             os.environ.get("E4B_FUSED_KV_APPEND"), str(device),
-            _kernel_present)
+            _kernel_present, cuda_capability(device))
         # append_many's row writes: batched scatter by default, the
         # per-sequence loop under E4B_BATCHED_KV_WRITE=0. See
         # _flat_row_index for why the batched form exists and what it
@@ -787,8 +819,9 @@ class Fp8PagedKV:
                 "bucketed decode graphs need grouped-nf4-gemm's fused batch KV "
                 f"append (fp8_kv.fp8_kv_append_bt1): {e}") from e
         if not self._fused_append:
-            raise RuntimeError("bucketed decode graphs need the fused KV append "
-                               "(E4B_FUSED_KV_APPEND is off)")
+            why = fused_append_unsupported(cuda_capability(self.device))
+            raise RuntimeError("bucketed decode graphs need the fused KV append, which is off here: "
+                               + (why or "E4B_FUSED_KV_APPEND=0, or the installed grouped-nf4-gemm lacks it"))
         if len(slots) != st["b"]:
             raise ValueError(f"bucket of {st['b']} rows bound to {len(slots)} slots")
         self._g_slots = list(slots)

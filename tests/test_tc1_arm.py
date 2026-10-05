@@ -1874,3 +1874,52 @@ def test_tc1_amendment_23_memory_census_token():
     assert 'MEMCENSUS_FAM = "qwen3memcensus"' in red and "NO_SPEED_FAMS = {MEMCENSUS_FAM:" in red and "## Predictions P41 / P42 / P43" in red
     r = _run("--selftest", script=REPO / "bench" / "tc1" / "tc1_reduce.py")
     assert r.returncode == 0 and "REDUCE SELFTEST OK" in r.stdout and "FAILING-CASE A23-P41 (reducer)" in r.stdout and "FAILING-CASE A23-P43 (reducer)" in r.stdout, r.stdout[-1500:]
+
+
+def _load_gate_shell(tmp_path, loads, gate="6.0", retries=None):
+    """Run tc1_run.sh's own arm() (TC1 amendment 33) with arm_once stubbed: each attempt writes a receipt and a gpuclk file whose load1
+    column is the next value of `loads`. Returns (summary text, the files in loadvoid/, the attempts made)."""
+    body = RUN_SH.read_text()
+    m = re.search(r"^arm\(\)\{.*?^  done; \}\n", body, re.S | re.M)
+    assert m, "arm() (the load gate) not found in tc1_run.sh"
+    w = tmp_path / "w"
+    (w / "logs").mkdir(parents=True)
+    (w / "loads.txt").write_text("\n".join(str(x) for x in loads) + "\n")
+    stub = f"""
+set -u
+W={w}; PY_E4B={sys.executable}; cd $W
+say(){{ :; }}
+can_run(){{ return 0; }}
+status_of(){{ $PY_E4B -c "import json,sys; print(json.load(open(sys.argv[1])).get('status','missing'))" "$W/${{1}}_${{2}}_${{3}}.json" 2>/dev/null || echo missing; }}
+arm_once(){{ local l; l=$(head -1 $W/loads.txt); sed -i.bak 1d $W/loads.txt; echo x >> $W/attempts.txt
+  echo '{{"status": "ok"}}' > $W/${{1}}_${{2}}_${{3}}.json
+  for i in 1 2 3; do echo "1 2400, 14001, 50, 0x0 | $l 1.0 1.0 | cpu 1 2 3" >> $W/gpuclk_${{1}}_${{2}}_${{3}}.txt; done
+  echo log > $W/logs/run_${{1}}_${{2}}_${{3}}.log; : > $W/vram_${{1}}_${{2}}_${{3}}.txt; }}
+{m.group(0)}
+arm fam e4b tag fused 600 mid rev 0 field tok sha --x 1
+"""
+    env = dict(os.environ)
+    env.pop("TC1_LOAD_GATE", None)
+    env.pop("TC1_LOAD_RETRIES", None)
+    if gate is not None:
+        env["TC1_LOAD_GATE"] = gate
+    if retries is not None:
+        env["TC1_LOAD_RETRIES"] = str(retries)
+    subprocess.run(["bash", "-c", stub], env=env, check=True, capture_output=True, text=True)
+    summ = (w / "summary.txt").read_text() if (w / "summary.txt").exists() else ""
+    void = sorted(p.name for p in (w / "loadvoid").iterdir()) if (w / "loadvoid").exists() else []
+    return summ, void, len((w / "attempts.txt").read_text().split())
+
+
+def test_load_gate_voids_a_busy_draw_and_reruns_it(tmp_path):
+    """TC1 amendment 33: a draw whose median host load1 exceeds TC1_LOAD_GATE is set aside to loadvoid/ (.a1) and run again; the
+    quiet re-run stands. Unset, arm is arm_once (one attempt, no LOADGATE line). The retries are capped and the last attempt stands."""
+    summ, void, n = _load_gate_shell(tmp_path / "a", [12.0, 3.0])
+    assert n == 2 and "attempt 0 VOID (host load1 median 12.0 > 6.0): re-run 1 of 2" in summ and "attempt 1 load1_median 3.0 gate 6.0 status ok over 0" in summ
+    assert void == ["fam_e4b_tag.json.a1", "gpuclk_fam_e4b_tag.txt.a1", "run_fam_e4b_tag.log.a1", "vram_fam_e4b_tag.txt.a1"], void
+    summ, void, n = _load_gate_shell(tmp_path / "b", [12.0, 3.0], gate=None)
+    assert n == 1 and "LOADGATE" not in summ and void == []
+    summ, void, n = _load_gate_shell(tmp_path / "c", [20.0, 21.0, 22.0, 23.0], retries=2)
+    assert n == 3 and summ.count("VOID") == 2 and "attempt 2 load1_median 22.0 gate 6.0 status ok over 1" in summ
+    summ, void, n = _load_gate_shell(tmp_path / "d", [4.0])
+    assert n == 1 and "VOID" not in summ and void == []

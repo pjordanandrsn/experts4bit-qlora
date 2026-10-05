@@ -355,3 +355,43 @@ amendment's merge (no code change from 0.45.0), and HF and axolotl skipped.
 
 **Budget.** One H100 NVL at a $2.80/h GPU ceiling, 2.5 h guard, about $2.15 invoiced like amendment 7's.
 
+### Amendment 9 (2026-10-05T05:00Z, after TC1 amendment 33's read, before any box): the H100 position with both frameworks on one stack (P27, P28, P29)
+
+**Why.** On the RTX 5090, TC1 amendment 33 read Unsloth/e4b at 2.352 with both frameworks on torch 2.12.1+cu130 / transformers 5.5.0,
+and e4b's matched arm at 0.900× of its own step in the field image's environment. That became the 5090 position to quote. The H100
+position of record (amendment 8, 1.061) still runs e4b in the field image's environment (torch 2.8.0, transformers 5.18.0, triton 3.4)
+and Unsloth in its own. It is e4b's thinnest lead on any card, so it is the one most likely to move. Amendment 6 measured e4b's H100 step
+as host-bound (device-busy 0.454), the regime where the 5090 found the environment gain. Since amendment 8, e4b's prebound Triton
+launches became the default (TC1 amendments 26 and 30), and they now cover triton 3.7 (experts4bit-qlora#1108, grouped-nf4-gemm#471):
+both e4b sides of this box take them.
+
+**The box** (token `qwen3samestackh100`). TC1 amendment 25's same-stack family on one H100 NVL (`TC1_GPU_CLASS="H100 NVL"`), as TC1
+amendment 33 ran it:
+
+- `TC1_STEPS=60`, e4b's reference arm not run, load-gated draws (`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`);
+- e4b's matched arm in venv-unsloth (two draws), Unsloth 2026.9.14 grouped_mm (two draws), e4b's matched arm in venv-e4b (`_t28`, two
+  draws), in amendment 25's order;
+- nothing else set: grouped-nf4-gemm's `auto` route on sm_90, the prebound launches at their default.
+
+Engagement: amendment 25's (each e4b receipt records the torch its tag names), plus `route_ab` naming `grouped_mm` on every e4b arm.
+
+**Predictions** (registered before the box):
+
+- **P27:** with both frameworks on one stack, Unsloth/e4b lies in **[1.00, 1.35]**, both pairs stable. The basis: amendment 8's 1.061
+  over an environment gain of 0.80–1.00 (the 5090 read 0.88–0.90).
+- **P28:** e4b's matched arm in venv-unsloth over venv-e4b lies in **[0.80, 1.00]**, both sides stable.
+- **P29:** `route_ab` names `grouped_mm` on every e4b arm in both environments, with `GNF4_TRAIN_GEMM` unset.
+
+Each is FALSIFIED outside its band and UNTESTED where a side is missing, unstable or not engaged. The matched set's quality reading is
+the reducer's (QUALITY_FAIL at |Δ held-out| > 0.05 blocks the position).
+
+**Decision rules.**
+
+- **P27 read with both pairs stable and P29 HELD, whichever side it favours:** the ratio becomes the H100 position to quote,
+  `e4b.train.h2h.unsloth.qwen3.h100.<date>.same-stack`. Amendment 8's 1.061 stays as the reading with e4b in the field image's
+  environment, and STATUS names both. A reading below 1.00 is quoted as Unsloth faster on one stack, not set aside.
+- **P29 FALSIFIED:** the box ran a different route than the position it replaces; nothing is quoted from it.
+- **P28** is a replication of TC1 amendment 33's P51 on another card; it moves no default.
+
+**Budget.** One H100 NVL, $2.80/h GPU ceiling (disk billed on top), 3 h guard (a voided draw adds up to one arm's time), venv-unsloth
+built for e4b's same-stack arms. About $4 invoiced; this is in the standing no-ask tier.

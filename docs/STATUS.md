@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-10-05, version 0.47.0** (the version of record is
+**As of 2026-10-05, version 0.48.0** (the version of record is
 `pyproject.toml`'s). One page. The README argues the case; this page
 states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
@@ -120,7 +120,8 @@ never licensed. The capability list (`qlora-fused-moe-experts.model_families` in
 [`capabilities.json`](capabilities.json)) is exactly the families whose
 `fast_train` is `supported`: `olmoe`, `qwen3_moe`, `gemma4_text`, `mixtral`,
 `granitemoe` — the last two entered on this lane — and, since lane MG1
-(2026-10-04), `lfm2_moe`, `granitemoehybrid`, `ernie4_5_moe` and `nemotron_h`;
+(2026-10-04), `lfm2_moe`, `granitemoehybrid`, `ernie4_5_moe` and `nemotron_h`, and since MG1 amendment 3 (2026-10-05)
+`qwen3_5_moe`;
 `gpt_oss` stays out. No
 convergence claim, no cross-family ratio, no training throughput position;
 a PASS is a PASS on one text.
@@ -146,9 +147,9 @@ README. The same reading, per family and per path:
 | `granitemoehybrid` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on granite-4.0-h-tiny, its Mamba blocks on mamba-ssm / causal-conv1d (`e4b.train.parity.mg1.graniteh.fused.2026-10-04`); **entered `model_families` on this row** | not_tested | not_tested | n/a |
 | `ernie4_5_moe` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on ERNIE-4.5-21B-A3B-PT, its interleaved rotary refused by the fused-RoPE semantics probe and kept (`e4b.train.parity.mg1.ernie.fused.2026-10-04`); **entered `model_families` on this row** | not_tested | not_tested | n/a |
 | `nemotron_h` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on Nemotron-3.5-Lightning-30B-A3B, the non-gated relu² expert path's first full-model reading (`e4b.train.parity.mg1.nemotron.fused.2026-10-04`); **entered `model_families` on this row** | not_tested | not_tested | n/a |
-| `qwen3_5_moe` | supported (MG1, resident) | supported (MG1) | experimental — MG1 OK · PASS, unlicensed (`e4b.train.parity.mg1.qwen3_5.fused.2026-10-04`): MG1's rule also needs P2, the dgrad kernel's engagement, whose counter was not read on that box. MG1 amendment 2's ladder OOMed at the licensed configuration ([read](../bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)), a row with the status unchanged; amendment 3 reads P2 on tp1's fused arm itself | not_tested | not_tested | n/a |
+| `qwen3_5_moe` | supported (MG1, resident) | supported (MG1) | **supported** — MG1 OK · PASS on Qwen3.6-35B-A3B, resident (`e4b.train.parity.mg1.qwen3_5.fused.2026-10-04`); P2 read by MG1 amendment 3 on tp1's own fused arm, the dgrad kernel on every frozen-GEMM backward (`e4b.train.parity.mg1.qwen3_5.p2.2026-10-05`, [read](../bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md)); amendment 2's ladder OOM stays a row ([read](../bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)); **entered `model_families` on this row** | not_tested | not_tested | n/a |
 
-**Lane MG1 (2026-10-04, [`bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`](../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md)) put seven families through tp1's arm driver and verdict on one RTX 5090 behind the train anchor**, on the moe-generalize code (#1048: the training stack's glue matched by structure, not by Qwen names). Every family PASSES. LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H enter on their rows above. Qwen3.6-35B-A3B passes but stays `experimental` until P2 is read. The two regression anchors re-read clean: OLMoE (`e4b.train.parity.mg1.olmoe.fused.2026-10-04`) and Gemma-4 (`e4b.train.parity.mg1.gemma4.fused.2026-10-04`), whose fused RMSNorm numerics #1048 changed.
+**Lane MG1 (2026-10-04, [`bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`](../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md)) put seven families through tp1's arm driver and verdict on one RTX 5090 behind the train anchor**, on the moe-generalize code (#1048: the training stack's glue matched by structure, not by Qwen names). Every family PASSES. LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H enter on their rows above. Qwen3.6-35B-A3B passes too, and entered once MG1 amendment 3 read P2 on tp1's own fused arm (`e4b.train.parity.mg1.qwen3_5.p2.2026-10-05`). The two regression anchors re-read clean: OLMoE (`e4b.train.parity.mg1.olmoe.fused.2026-10-04`) and Gemma-4 (`e4b.train.parity.mg1.gemma4.fused.2026-10-04`), whose fused RMSNorm numerics #1048 changed.
 
 Each cell is one of `supported` (completed under the registered protocol with a PASS/OK receipt), `refused` (with the reason), `void` (ran, unreadable), `harness_error`, `not_tested`, `experimental`, `n/a` — per path, never a flat flag; the machine-readable form, with the claim id behind every `supported` / `void` / `refused` cell, is `training_support` in [`capabilities.json`](capabilities.json), validated by `scripts/check_capabilities.py`, and `model_families` is exactly the families whose `fast_train` is `supported`.
 
@@ -185,6 +186,10 @@ its own init — `.scattermoe-native`, a labelled row). **After amendments 10-15
 no environment): **Unsloth/e4b 1.997 [1.980, 2.014]** (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-03`; e4b 3.973 s/step vs 7.933, the matched set
 inside the draw noise, Unsloth still 2.95 GB lower at peak) and **axolotl/e4b 2.775 [2.735, 2.814]** (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03`; 1.979 on
 the matched-set box's host -- e4b's host-launch-bound step varies more by host than axolotl's, so the ratio does too).
+**With both frameworks on one stack** (torch 2.12.1+cu130 / transformers 5.5.0, TC1 amendments 25, 29 and 33, load-gated
+60-step draws) **Unsloth/e4b reads 2.352 [2.348, 2.356]** (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack`; e4b 3.494 s/step vs
+8.218, held-out at N=60 COMPARABLE, Unsloth 3.22 GB lower at peak). That is the Qwen3-30B-A3B position to quote; 1.997 is the reading
+with e4b in the field image's environment (torch 2.8.0+cu128 / transformers 5.18.0) and Unsloth in its own.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against
 native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
 native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.
@@ -265,10 +270,23 @@ on Qwen3-30B-A3B at micro-batch 1 finds every static class byte-for-byte the sam
 e4b keeps it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 GB, as Unsloth does. With that switch e4b peaks
 0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults
 the gap is 1.78 GB.
-**The environment** (`e4b.train.env-ab.qwen3.5090.2026-10-04`, TC1 amendment 24): every 5090 position so far ran e4b on the
+**The double-quantized absmax, as an A/B** (`e4b.train.absmax-dq.mixtral.5090.2026-10-05`, TC1 amendment 28): on Mixtral-8x7B
+`E4B_ABSMAX_DQ=1` costs 2.3 % of the step (1.023) for 2.04 GB of peak (31.07 → 29.03 GB), held-out within 0.003. Qwen3-30B-A3B's pair
+was unstable on a busy host; amendment 31 read it over 60 steps on a quiet one
+(`e4b.train.absmax-dq.qwen3.5090.2026-10-05`): 1.014 for 1.34 GB, held-out within 0.003. All three predictions held, so the
+double-quantized absmax becomes the default for resident training (`E4B_ABSMAX_DQ=0` turns it off).
+**Prebound Triton launches, as an A/B** (`e4b.train.prebind.qwen3.5090.2026-10-05`, TC1 amendments 26 and 30): with both prebind
+flags on, Qwen3-30B-A3B's training step is 0.973 of the flags-off step on the matched arm and 0.980 [0.957, 1.003] on the shipped arm
+(60 steps), with held-out within 0.002 and bit-identical kernels. All three predictions held, so `E4B_TRITON_PREBIND` and
+grouped-nf4-gemm's `GNF4_TRITON_PREBIND` are on by default (`=0` turns each off). The gain is small, and the shipped interval reaches
+1.0.
+**The environment** (`e4b.train.env-ab.qwen3.5090.2026-10-04`, TC1 amendment 24): every 5090 position before amendment 33 ran e4b on the
 field image's torch 2.8.0+cu128 / transformers 5.18.0 and Unsloth on torch 2.12.1+cu130 / transformers 5.5.0. In Unsloth's environment
 e4b's matched arm steps 0.882× as long. The cause is not the padded LoRA delta's fp32 `bmm`, whose host cost per new shape is the same
-on both torch versions (`e4b.train.bmm-host-replay.5090.2026-10-04`). A position with both frameworks on one stack is its own box.
+on both torch versions (`e4b.train.bmm-host-replay.5090.2026-10-04`). The same-stack box (TC1 amendment 33) replicated the gain on
+another host: 0.900, with e4b's prebound launches engaged on the field-image side only.
+Nor is it triton (`e4b.train.triton37.qwen3.5090.2026-10-05`, TC1 amendment 32): triton 3.7.1 alone in the field image reads 0.992 on
+the matched arm and 0.971 on the shipped arm. The gain sits with torch 2.12 and/or transformers 5.5; amendment 34 splits them.
 
 **The other families at matched work** (lane TC2, 2026-10-02, two rented
 RTX 5090 hosts, [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md);

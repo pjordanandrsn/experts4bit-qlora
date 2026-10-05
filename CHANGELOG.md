@@ -18,6 +18,330 @@
 - **Files.** `bench/sc2/SC2g-PREREG.md`, `sc2g_box_g.sh`, `sc2g_reduce.py`; `sc2_trace.py` is now staged; grouped-nf4-gemm
   v0.39.0 is pinned for box G; `tests/test_sc2g_box.py` executes the child-env, SGLang-engagement and e4b-check paths.
 
+## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
+
+**0.48.0.** Two training defaults change, each by a rule registered and read in lane TC1 (#835).
+
+- **Prebound Triton launches are on** (`E4B_TRITON_PREBIND`; grouped-nf4-gemm 0.41.0's `GNF4_TRITON_PREBIND` too). The
+  fused RMSNorm, rotary and training GEMM kernels launch without Triton's per-call argument binding. They run the same
+  compiled kernels, so outputs are bit-identical.
+  - TC1 amendments 26 and 30 read Qwen3-30B-A3B's step at **0.973×** (matched arm) and **0.980×** [0.957, 1.003]
+    (shipped arm) on an RTX 5090, with held-out loss unchanged (`e4b.train.prebind.qwen3.5090.2026-10-05`).
+  - `=0` turns either flag off. Triton 3.4, 3.6 and 3.7 are covered; any other release keeps Triton's own launch.
+- **The CLI trainer double-quantizes the frozen expert absmax** for resident training (`python -m experts4bit_qlora.train`;
+  `E4B_ABSMAX_DQ=0` turns it off). TC1 amendments 28 and 31:
+  - Qwen3-30B-A3B: **1.014×** the step for **1.34 GB** less peak;
+  - Mixtral-8x7B: **1.023×** for **2.04 GB** less;
+  - held-out within 0.003.
+
+  Expert offload and `TRAIN_ARENA` keep the fp32 absmax they read by name.
+- **The quoted training position.** TC1 amendment 33 put both frameworks on one software stack (torch 2.12.1+cu130,
+  transformers 5.5.0), with load-gated draws on a quiet RTX 5090. Unsloth/e4b reads **2.352** [2.348, 2.356] on
+  Qwen3-30B-A3B, and it becomes the quoted position. Amendment 19's 1.997, with e4b in the field image's environment,
+  stays as that reading; `STATUS.md` names both.
+- **Fast-training support:** Qwen3.6-35B-A3B enters `fast_train = supported` (MG1 amendment 3: the dgrad kernel served
+  every frozen-GEMM backward).
+- **Serving.**
+  - `serve_paged` decodes eagerly below sm_89 instead of dying in Triton's compiler (Ampere: A100, A6000, RTX 30-series,
+    A2000). There, the prefill graph's `auto` reports `refused`, since it needs the device grouping the decode graphs
+    turn on.
+  - The serve estimate (`estimate_serve_footprint`) names the prefill graph's pool, and covers the solver's VRAM, DRAM
+    and NVMe tiers and the hybrid tier's host buffers.
+- **CI on grouped-nf4-gemm 0.41.0.** The `[fast]` floor stays `>=0.30.0`; `pip install -U grouped-nf4-gemm` picks the
+  prebind default up.
+- **Also in this release:**
+  - TC1 amendments 28–35 and TC1c amendment 9, registrations and reads;
+  - DQ1's registration and its run-1 instrument diagnosis;
+  - a dated docs note that gpt-oss serving's native MXFP4 path is decode-only.
+
+### Read: TC1 amendment 30 — the shipped prebind pair over 60 steps: 0.980 (P53 HELD); with P54 and P55 HELD the prebound launches are the default (bench and register only)
+
+- `tc1-5090-73` ($0.97, AMD EPYC 7B13, Vast machine 145701): shipped arm `_pb1`/`_pb0` **0.980** [0.957, 1.003], with
+  held-out +0.0011. With amendment 26's matched 0.973 (P54) and held-out −0.0012, P53, P54 and P55 all HELD.
+- **The defaults it licenses already flipped:** e4b #1099 and grouped-nf4-gemm #470, citing this box before its read was
+  on `main`.
+- **This read supplies the evidence.** The maintainer session committed it from the run's output in the private receipts
+  store: the receipts under `bench/h2h-2026-10-02/tc1/receipts/tc1-5090-73/`, the box's scored file as
+  `RESULTS-tc1-prebindab-60.md`, the lane section, and the register row `e4b.train.prebind.qwen3.5090.2026-10-05`.
+
+### TC1c amendment 9 registered: the H100 position with both frameworks on one stack (bench and tests only)
+
+- **Why.** The 5090 position to quote is now same-stack (TC1 amendment 33: 2.352). The H100's (1.061, TC1c amendment 8) still runs e4b
+  in the field image's environment and Unsloth in its own, and it is e4b's thinnest lead on any card. e4b's H100 step is host-bound, where
+  the 5090 found a 0.88–0.90 environment gain.
+- **The box** (token `qwen3samestackh100`): TC1 amendment 25's family on one H100 NVL, 60 steps, no reference arm, load-gated draws,
+  nothing else set. P27 Unsloth/e4b on one stack in [1.00, 1.35]; P28 e4b venv-unsloth / venv-e4b in [0.80, 1.00]; P29 grouped-nf4-gemm's
+  `auto` route takes `grouped_mm` on every fused e4b arm. A stable reading becomes the H100 position to quote whichever side it favours.
+- The reducer reads it with amendment 25's scorer (now per family) and a route check (one new self-test case).
+
+### TC1 amendment 36 registered: grouped-nf4-gemm's compact padded LoRA delta, A/B for peak and speed on one stack (bench and tests only)
+
+- **Why.** On one stack Unsloth peaks 3.22 GB below e4b. Amendment 23's census puts the part beyond the fp32 absmax in transients, led
+  by grouped-nf4-gemm's padded LoRA delta block. grouped-nf4-gemm#445's `NF4_QLORA_COMPACT_DELTA=1` (same values; saves the input, not
+  the block) has stayed opt-in pending a within-box A/B.
+- **The box** (token `qwen3compactab`): the shipped and the matched arm, `_cd0` vs `_cd1`, two draws a side, in venv-unsloth, 60 steps,
+  load-gated draws. P69 matched peak falls by [0.3, 2.0] GB; P70 / P71 speed in [0.97, 1.02]; P72 held-out within 0.005. All four
+  HELD makes it grouped-nf4-gemm's default.
+- `tc1_run.sh` gains `tc1_compactab_family`; the reducer scores it (`score_compactab`), and its engagement predicate reads the resolved
+  flag, no kept layers, the padded route and torch 2.12 off each receipt (one new self-test case).
+
+### DQ1 run 1 read NOISY (instrument diagnosed); Amendment 1 registered before run 2 (bench and tests only)
+
+- **`dq1-5090-1`** ($0.067, RTX 5090 on PCIe 4.0 x16, EPYC 7C13). The census ran complete, every arm passed parity and
+  engagement, and the teardown is proven. 37 of 250 self-pairs fell out of band, so the registered rule withholds every
+  verdict. None is reported.
+- **Cause, diagnosed** (`bench/dq1/RESULTS-dq1.md`). A boost transient after the 1.5 s warm-up made the first-timed arm
+  (bf16, position 1) about 10% fast on the large shapes. Its position 2 and an independent estimate of the same GEMM agree
+  to 0.985–1.009.
+- **Amendment 1.** Warm to a steady GEMM rate before every cell and the probe, and record it. The rule is byte-identical
+  (pinned in `tests/test_dq1_lane.py`), and the predictions and consequences are unchanged. Run 2 is the registered single
+  re-run on another host.
+
+### TC1 amendment 35 registered: amendment 26's prebound-launch A/B under triton 3.7.1 (bench and tests only)
+
+- **Why.** The prebound Triton launches became the default on amendment 26's and 30's 5090 boxes under triton 3.4 (0.973 matched,
+  0.980 shipped). #1108 and grouped-nf4-gemm#471 extended them to triton 3.7 on A2000 host timings alone, and amendment 33's same-stack
+  position ran e4b on 3.7 before that. This box times the training step.
+- **The box** (token `qwen3prebind37`): amendment 26's eight arms in venv-unsloth (torch 2.12.1+cu130, transformers 5.5.0, triton
+  3.7.1), 60 steps, load-gated draws. P66 shipped and P67 matched `_pb1`/`_pb0` each in [0.97, 1.00]; P68 held-out within 0.005.
+  Either ratio above 1.01, or P68 falsified, takes triton 3.7 back out of the supported versions.
+- `tc1_run.sh` gains `tc1_prebind37_family`; the reducer scores it with amendment 26's scorer, and its engagement predicate also requires
+  torch 2.12 and triton 3.7 on every receipt (one new self-test case).
+
+### Read: TC1 amendment 33 — on one stack, with load-gated draws, Unsloth/e4b 2.352 (P50 HELD) and the environment gain 0.900 (P51 HELD); 2.352 becomes the quoted Qwen3-30B-A3B position
+
+- `tc1-5090-76` ($1.76, a quiet EPYC 7B13, 60-step runs, `TC1_LOAD_GATE=6.0`): both frameworks on torch 2.12.1+cu130 / transformers
+  5.5.0. e4b 3.496 / 3.492 s/step, Unsloth 8.208 / 8.228: Unsloth/e4b **2.352** [2.348, 2.356], every pair stable. e4b in venv-e4b
+  3.855 / 3.913, so the environment gain reads **0.900** [0.893, 0.907] (amendment 24: 0.882).
+- By amendment 25's rule the same-stack ratio becomes the position to quote: register row
+  `e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack`. Amendment 19's 1.997 stays as the reading with e4b in the field image's
+  environment; STATUS names both.
+- The gate voided three draws for host load. Reading their first attempts instead gives 2.309 and 0.901: no verdict changes.
+- Not named by the registration: e4b's prebound launches (default since #1099, triton 3.4 / 3.6) engaged on the venv-e4b arm only. By
+  amendment 26's 0.973, P51 with them off on both sides would sit between about 0.876 and 0.900, inside its band. Amendment 34 runs
+  every arm with them off.
+
+### The prebound Triton launches (`E4B_TRITON_PREBIND`) cover triton 3.7
+
+- **Why.** torch 2.12 and Unsloth's environment ship triton 3.7.1, where `prebind` returned the kernel itself: the default-on prebound
+  launches of the fused RMSNorm and rotary kernels did nothing there.
+- **What.** `SUPPORTED_TRITON` gains `(3, 7)`, with two branches that only 3.7 takes. Nothing changes under 3.4 or 3.6, and no default
+  changes.
+  - A registered compiler-stages hook (`knobs.runtime.add_stages_inspection_hook`) takes Triton's path: 3.7 adds its pipeline hash to
+    the kernel key.
+  - A `FutureKernel` is never kept. Under `AsyncCompileMode`, the 3.7 launch that compiles a key returns that proxy rather than the
+    `CompiledKernel` (3.6 resolves it first); a later launch keeps the `CompiledKernel` Triton's cache then holds.
+- **Read against triton 3.7.1's source.** The launch is the call 3.6 makes.
+  - `JITFunction.run` passes `CompiledKernel.run` the same positional list: grid, stream, function, packed metadata, launch metadata,
+    the enter and exit hooks, then every parameter in signature order.
+  - Unchanged from 3.6.0: the binder, `compute_cache_key`, `CompiledKernel`, and the native specializer (`python/src/specialize.cc`,
+    byte-identical). A tensor is still keyed on its dtype and 16-byte alignment, an integer on `== 1`, `% 16` and its width.
+  - Unchanged knobs: `runtime.debug` (read once, at import), the launch hook chains' `.calls`, `compilation.instrumentation_mode`.
+  - The NVIDIA launcher is now one C entry point instead of a module generated per signature. It takes the same arguments, skips
+    constexprs by annotation and calls no hook passed as `None`.
+- **Measured** on the RTX A2000 box's host (Xeon W-1250, 12 threads, load average 13–25, the bench at nice 10), torch 2.12.1 /
+  triton 3.7.1. Host µs per call, each timed after a synchronize; median of 2,000 interleaved off/on pairs; three runs. Qwen3-30B-A3B
+  shapes, as in the opt-in entry below.
+
+  | call | off → on |
+  |---|---|
+  | `RMSNormFrozen.apply`, hidden / q_norm / k_norm | 104–123 → 94–111 / 94–113 → 85–99 / 81–127 → 74–116 |
+  | `RMSNormFrozen.backward`, hidden / q_norm / k_norm | 72–94 → 62–83 / 71–85 → 61–72 / 49–77 → 44–67 |
+  | `rope_qk` forward (two launches) | 125–147 → 107–123 |
+  | `_RopeQK.backward` (two launches) | 85–111 → 68–87 |
+  | one launch alone (the kernels and shapes above) | 25–51 → 19–39 |
+
+  Prebinding saves 5.7–12.4 µs a launch. Triton 3.7.1's own launch is cheaper than 3.4's or 3.6's, so the saving is smaller than the
+  opt-in entry's (those runs were on another day, at another load).
+- **Tested** on that A2000 under triton 3.7.1. `tests/test_triton_prebind.py`: 21 passed. Two new tests cover the 3.7 branches, and
+  each fails with its branch removed. With `test_rmsnorm_train.py` and `test_rope_train.py`: 43 passed, flags off and on. The
+  fused-training suites agree flags off and on (115 passed); `test_fast_v4.py::test_gptoss_inside_lora_is_still_skipped` fails
+  either way, as before.
+- Runs on triton 3.7 that do not set the flag now take the prebound path. TC1 amendments 32 and 34 run their arms with both flags
+  `0`, so neither comparison changes.
+
+### Fix: TC1's triton 3.7.1 install no longer rides back into the receipts
+
+- Amendment 32's box installed triton 3.7.1 into `$W/triton37`, which the lane's rsync excludes do not match (`venv*`), so 690 MB of
+  wheel contents came back with `tc1-5090-74`'s receipts and the receipts push timed out. The directory is now `$W/venv-triton37`.
+
+### Read: TC1 amendment 32 — triton 3.7.1 alone is not the 5090's environment gain on the matched arm (P59 FALSIFIED, 0.992) and is 2.9 % on the shipped arm (P60 HELD); amendment 34 registered: split transformers from torch
+
+- `tc1-5090-74` ($1.28, a quiet EPYC 7B13, 60-step runs): venv-e4b with triton 3.7.1 against its own 3.4, prebound launches off.
+  - Matched arm 0.992 [0.968, 1.017]; shipped arm 0.971 [0.955, 0.988]; held-out within 0.001.
+  - An unregistered RTX A2000 decomposition had put amendment 24's gain in triton's device code. It does not transfer to the 5090's
+    host-bound step.
+- Amendment 34 (token `qwen3envsplit`): the matched arm in venv-e4b, in venv-e4b-tf55 (transformers 5.5.0, built on the box) and in
+  venv-unsloth, 60 steps, load-gated draws. P62 transformers alone in [0.90, 1.00]; P63 torch + triton in [0.85, 0.99]; P64 the whole
+  environment in [0.80, 0.95]; P65 held-out within 0.005. `arm_once` gains `E4B_VENV=tf55`. The reducer scores them (one new self-test
+  case). Row `e4b.train.triton37.qwen3.5090.2026-10-05`.
+
+### Default: the CLI trainer double-quantizes the frozen expert absmax for resident training; `E4B_ABSMAX_DQ=0` turns it off
+
+- **Why.** TC1 amendments 28 and 31 read `E4B_ABSMAX_DQ` against the fp32 absmax on one RTX 5090 each. Held-out moved by 0.003 or
+  less, and the registered rule (P56, P57, P58 held) makes it the default for resident training.
+
+  | model | step cost | peak saved |
+  |---|---|---|
+  | Qwen3-30B-A3B | 1.014× | 1.34 GB |
+  | Mixtral-8x7B | 1.023× | 2.04 GB |
+
+- **What.** `python -m experts4bit_qlora.train` now compresses the absmax after load (`apply_absmax_dq`) unless:
+  - `E4B_ABSMAX_DQ=0` is set;
+  - the run uses expert offload or `TRAIN_ARENA` (those paths read the fp32 absmax by name);
+  - the compressor refuses the model (a bare stack, 8-bit storage, …), in which case it keeps its fp32 absmax and logs why.
+
+  `E4B_ABSMAX_DQ=1` keeps its old meaning: required, refused with offload, and a vacuous compression is an error.
+- **Unchanged.** `compress_expert_absmax_` stays an explicit call in code. The TC1 harness's `--absmax-dq` stays explicit, because its
+  boxes are registered instruments.
+- **Docs and tests.** Docstrings, the env help, capabilities and the solution page are updated. New tests cover the switch's five
+  settings and the default's handling of a refused or empty compression.
+
+### Read: TC1 amendment 31 — the double-quantized absmax costs Qwen3-30B-A3B 1.4 % of its step for 1.34 GB (P56 HELD); with P57 and P58, it becomes the default for resident training
+
+- `tc1-5090-75` ($1.03, a quiet EPYC 7B13, 60-step runs): `_dq1`/`_dq0` 1.014 [1.007, 1.021], peak 27.44 → 26.10 GB, held-out −0.0021.
+  Both pairs were stable.
+- With P57 (Mixtral 1.023 for 2.04 GB) and P58 (held-out within 0.005 on both families) HELD, amendment 28's rule fires. The default
+  change is e4b's own PR. Row `e4b.train.absmax-dq.qwen3.5090.2026-10-05`.
+
+### MG1 amendment 3 read: Qwen3.6-35B-A3B enters `fast_train = supported` (P8 HELD: the dgrad kernel served every frozen-GEMM backward of tp1's licensed fused arm) (docs and receipts)
+
+- **The read** ([`bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md`](bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md), one RTX 5090,
+  $0.803). tp1's arm driver ran Qwen3.6's fused arm resident for 60 steps, the committed file unchanged under
+  `bench/moegen/p2_hook.py`.
+  - grouped-nf4-gemm's `DGRAD_STATS` read kernel 4,800 and loop 0: 80 frozen-GEMM backwards a step, every one on the kernel.
+  - 40/40 layers patched, no recurrent-kernel fallback, and the driver's sha256 equal to tp1's file.
+- **The decision.** With MG1's PASS, the registered rule is complete. `qwen3_5_moe.fast_train` is `supported` (claim
+  `e4b.train.parity.mg1.qwen3_5.p2.2026-10-05`), the family joins `qlora-fused-moe-experts.model_families` (now 10), and the
+  fused row carries its own `licensed_by`.
+- The arm's time and losses are informational: no anchor and no reference arm on this box.
+- **Spend.** The MG1 lane is $3.04 in all.
+
+### DQ1 registered: is there a dense low-bit QLoRA primitive? A headroom census on Qwen3-32B shapes, one RTX 5090 (bench and tests only)
+
+- **Why** (#1083). Before any dense kernel, backend or repository, measure what could be won at all. A dense primitive could
+  win on speed only within bitsandbytes' dequant share. bnb 0.50 already dispatches by arch and shape, and grouped-nf4-gemm
+  0.39.0's `auto` already routes G=1 to dequant + `torch.mm`. On capacity it could win by streaming the frozen weights,
+  which gnf4#60 refuted for MoE but never tested for dense, where the next layer's bytes are known exactly.
+- **Census** (`bench/dq1/`). No checkpoint, no training.
+  - Arms, at Qwen3-32B's five linear shapes and M 512–8192: bf16 floor, bnb `matmul_4bit`, explicit dequant + mm, gnf4 G=1
+    `auto` (the dense route), gnf4 G=1 `fused`. Each arm's forward and dgrad on identical NF4 weights.
+  - Also: the LoRA delta, each decoder alone, and pinned H2D against GEMMs, both fully loaded.
+- **Readings and rule.**
+  - H (speed headroom) and Rmin (each phase's compute over one layer's transfer).
+  - Verdicts: S_ALIVE / S_DEAD, G1, GF, L, and C_ALIVE / C_DEAD.
+  - `dq1_reduce.py` carries a 44-case self-test; `tests/test_dq1_lane.py` kills 23 rule mutants.
+- **Before the box.** An independent review (fixed before data), and two $0 rehearsals on the RTX A2000 through the local
+  pool. Every arm runs and engages as read from the libraries' counters; parity is ≤ 3.4e-3 vs fp32.
+- Research note: `bench/dq1/NOTE-dense-qlora-primitive.md`.
+
+### Read: TC1 amendment 29 — the same-stack pair over 60 steps, unstable again on a busy host (P50, P51 UNTESTED, final)
+
+- `tc1-5090-72` ($1.75, EPYC 7C13, Vast machine 45511). e4b's same-stack draws read 3.979 / 3.490 s/step (13.1 % apart, host load1
+  22.9 / 11.0) and its field-image draws 3.834 / 4.087 (6.4 %). Unsloth's 8.759 / 8.500 were stable.
+- No ratio is read. Amendment 33 (load-gated draws) re-asks P50 and P51 off the busy machines.
+
+### TC1 amendment 33 registered: load-gated draws, and the same-stack pair re-asked under them (bench and tests only)
+
+- **Why.** On multi-tenant rental hosts the host-bound training step slows when the host is busy, and the arms' own samplers show the
+  load average following the unstable draws (`tc1-5090-66`, `-68`, `-70`, `-72`). The same-stack pair (P50, P51) has gone unread on three
+  boxes.
+- **What.** `tc1_run.sh`'s `arm` now runs `arm_once` through a gate. With `TC1_LOAD_GATE` set, an OK arm whose median host load1 over its
+  own run exceeds the gate is set aside to `loadvoid/` and run again (at most `TC1_LOAD_RETRIES`). The last attempt stands. Every
+  attempt writes a `LOADGATE` line, which the reducer prints. Unset, nothing changes.
+  - `tc1_drive.sh` forwards both variables.
+  - A functional test runs the script's own `arm()` with `arm_once` stubbed: a busy draw is voided and re-run, the cap holds, an unset
+    gate is one attempt.
+- **The box.** `qwen3samestack` over 60 steps with `TC1_LOAD_GATE=6.0`, off the busy and unexplained machines. P50 and P51 bands are
+  unchanged and the reading is final.
+
+### Read: TC1 amendment 28 — the double-quantized absmax costs Mixtral 2.3 % of its step for 2.04 GB (P57 HELD); Qwen3's speed pair unstable (P56, P58 UNTESTED); amendment 31 re-asks it over 60 steps
+
+- `tc1-5090-71` ($1.27): Mixtral-8x7B resident, `_dq1`/`_dq0` 1.023 [1.004, 1.043], peak 31.07 → 29.03 GB, held-out −0.0028.
+- `tc1-5090-70` ($1.13): Qwen3-30B-A3B. Peak 27.15 → 25.82 GB and held-out +0.0026, but both speed pairs were unstable (5.6 % and
+  23.8 %), with step times following the host's load average.
+- By the registered rule `E4B_ABSMAX_DQ` stays opt-in. Amendment 31 re-asks P56 (and P58's Qwen3 half) with `TC1_STEPS=60` off the
+  machines that went unstable. Row `e4b.train.absmax-dq.mixtral.5090.2026-10-05`.
+
+### TC1 amendment 32 registered: one variable, Triton 3.4 against 3.7.1, on one RTX 5090 (P59–P61) (bench and tests only)
+
+- **Why.** Amendment 24's 0.882 changed torch, transformers and triton together. An unregistered RTX A2000 decomposition put the whole
+  gain in triton 3.7.1's code for grouped-nf4-gemm's training kernels: torch 2.8 with triton 3.7.1 read 0.931×, and torch 2.12 and
+  transformers 5.5 added nothing. The A2000 runs that slice device-bound, so the 5090 reads it here.
+- **Token `qwen3tritonab`.** venv-e4b with its triton 3.4 against triton 3.7.1 put first on the arm's `PYTHONPATH`, matched and shipped
+  arms, two draws a side, 60-step runs, prebound launches off on both sides.
+- **Predictions.** P59 matched in [0.82, 0.95]; P60 shipped in [0.85, 0.98]; P61 held-out within 0.005. The reducer scores them (one new
+  self-test case).
+
+### Default: e4b's prebound Triton launches (`E4B_TRITON_PREBIND`) are on; `=0` turns them off
+
+- **Why.** TC1 amendments 26 and 30 read the fused RMSNorm and rotary kernels' prebound launches, with grouped-nf4-gemm's
+  (`GNF4_TRITON_PREBIND`), against the flags off on one RTX 5090 each, triton 3.4.
+  - The training step reads 0.973× on the matched arm (`tc1-5090-69`).
+  - It reads 0.980× on the shipped arm over 60 steps (`tc1-5090-73`).
+  - Held-out moves by 0.0012 or less.
+
+  The registered rule (P53, P54, P55 held) makes both defaults on. grouped-nf4-gemm's flip is its own PR.
+- **What.** `prebind_requested()` reads the flag as on unless it is `0`. Values are unchanged (the same compiled kernel). Triton releases
+  other than 3.4 and 3.6 keep Triton's own launch.
+
+### CI on grouped-nf4-gemm 0.40.0 (no default changes there)
+
+- CI now tests against grouped-nf4-gemm **0.40.0** (`cfc79904`). That release changes no default. It carries:
+  - the pinned-slot fence (`ColdTier.fence`, #60): a fill into a pinned slot waits for any queued device copy that
+    still reads it, which the arena training path (`nvme_train`) gets through `segment_into`;
+  - opt-in `GNF4_TRITON_PREBIND=1`: the training GEMMs launch without Triton's per-call binding, bit-identical. TC1
+    amendment 26 is registered to read it.
+- The `[fast]` floor stays `>=0.30.0`.
+
+### Docs: `SERVING-THROUGHPUT.md`'s gpt-oss line notes what shipped after it (docs only)
+
+- The 0.32.0-era line said gpt-oss was "NF4 only", with int4 experts and the router fold both refused. Both were built
+  out since: the native MXFP4 store (decode only; prefill on the kept NF4 stacks) and the `topk_softmax` router fold.
+  A dated sub-note says so, and the historical line is left as measured.
+
+### Serve estimate: the prefill graph's pool is named, and `ServeSetup` carries `prefill_graph`
+
+- Since SC2b, `E4B_PAGED_PREFILL_GRAPH=auto` is the server's default. When the first-chunk prefill graph engages,
+  it keeps its forward's working set in a private pool for its life: +3.3 GiB on Qwen3-30B-A3B int4.
+  `estimate_serve_footprint` does not price that pool. It now lists the pool as not modelled wherever the graph can
+  engage (decode graphs with device grouping, no linear-attention layers).
+- `ServeSetup.prefill_graph` (`auto`, `1` or `0`) is passed through `to_env()`, so a caller that wants memory bounded
+  by the estimate can plan `0`.
+
+### Fix: `serve_paged` decodes eagerly below sm_89 instead of dying in Triton's compiler
+
+- **The bug.** Bucketed decode graphs (`E4B_PAGED_GRAPHS=auto`, the all-VRAM default since P109) need
+  grouped-nf4-gemm's fused FP8 KV append. That kernel casts to e4m3 with Triton's `tl.float8e4nv`, which Triton
+  compiles only on sm_89+. On an RTX A2000 (sm_86, triton 3.4.0) the first graphed decode step died: "type fp8e4nv
+  not supported in this architecture". Every Ampere card (sm_80/86) took the same path by default.
+- **The fix.**
+  - `fp8_paged_kv.fused_append_unsupported(capability)` states the floor.
+  - The fused append degrades to the eager append below it; an explicit `E4B_FUSED_KV_APPEND=1` is refused in
+    words.
+  - `E4B_PAGED_GRAPHS=auto` decodes eagerly there; `=1` is refused in words.
+  - An unknown capability (no CUDA) changes nothing.
+- **Unchanged on sm_89+**, where every registered serving number was read (RTX 5090, H100).
+
+### Serve estimate: the solver's VRAM/DRAM/NVMe tiers and the hybrid tier's host buffers
+
+- **`placement="solver"` is priced.** `estimate_serve_footprint` splits the expert rows across VRAM, DRAM and NVMe
+  using `solve_placement` itself (`solver_tiers`), with the budgets the server passes.
+  - `build_engine` gives the solver no routing profile, so every expert weighs the same: VRAM fills first, then
+    DRAM, then NVMe, and the calibration's bandwidths decide nothing (tested).
+  - Batched decode graphs under the solver, and per-expert biases, are refused in words, as the server refuses them.
+- **New `ServeSetup` fields:** `vram_gb`, `dram_gb` and `hot_rows`, passed through `to_env()`.
+- **Host buffers the server builds at either placement are now priced:** the cold tier's pinned landing
+  (`pinned_request_cost`), the setup tier and, when rows live on NVMe, the cold view.
+- **Checked on an RTX A2000 (OLMoE-1B-7B, two solver budgets).**
+  - The tier split matched the server's own manifest.
+  - Device: the estimate is 0.17–0.18 GiB under the allocator peak. The two all-VRAM checks missed by the same
+    amount: a fixed runtime term, not modelled.
+  - Host shared memory (pinned + cold view + setup tier) came within 2–7%. Anonymous memory after load is the
+    baseline plus the DRAM tier.
+  - Generation added a further ~0.72 GiB of anonymous memory in both runs; it is listed as not modelled (the CPU
+    tier's compute buffers).
+
 ## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
 
 **0.47.0.** One default changes, by lane SC2b's licence: `serve_paged`'s first-chunk prefill graph is `auto`.

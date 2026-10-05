@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""Prebound Triton launches for the training step's hot kernels (OPT-IN: ``E4B_TRITON_PREBIND=1``, read when the kernel's module
-is imported; off by default).
+"""Prebound Triton launches for the training step's hot kernels (ON by default; ``E4B_TRITON_PREBIND=0`` turns them off; read when
+the kernel's module is imported). The default follows TC1 amendments 26 and 30 (one RTX 5090 each, triton 3.4): the training step at
+0.973x (matched arm) and 0.980x (shipped arm, 60 steps) of the flags off, held-out within 0.0012 (bench/h2h-2026-10-02/tc1/).
 
 A Triton launch, ``kernel[grid](...)``, spends most of its host time before the driver call: it binds the arguments to the
 signature, specializes each one (dtype, 16-byte alignment, ``== 1`` and ``% 16`` of integers), formats that specialization into a
@@ -16,9 +17,10 @@ same stream: outputs are bit-identical (``tests/test_triton_prebind.py``).
 
 Anything the shortcut does not cover goes through Triton's normal launch: a Triton version other than the ones this was written
 against (:data:`SUPPORTED_TRITON`), launch hooks (profilers), pre-run hooks, a callable grid, a changed global the kernel reads,
-an argument of another type, or a malformed call. One knob is read less often than Triton reads it: triton 3.4 re-reads
-``TRITON_DEBUG`` from the environment at every launch, the prebound path once per kernel (triton 3.6 itself reads it once, at
-import). With the flag off, :func:`prebind` returns the kernel itself."""
+an argument of another type, or a malformed call; under triton 3.7 also a registered compiler-stages hook
+(``knobs.runtime.add_stages_inspection_hook``), which 3.7 adds to its kernel key. One knob is read less often than Triton reads it:
+triton 3.4 re-reads ``TRITON_DEBUG`` from the environment at every launch, the prebound path once per kernel (triton 3.6 and 3.7
+themselves read it once, at import). With the flag off, :func:`prebind` returns the kernel itself."""
 from __future__ import annotations
 
 import functools
@@ -33,12 +35,12 @@ try:
     from triton.runtime.jit import JITFunction
 except ImportError:                                   # pragma: no cover - Triton is Linux-only
     triton = knobs = driver = JITFunction = None
-_COMPILATION = getattr(knobs, "compilation", None)   # 3.6 adds an instrumentation mode to every launch's options
+_COMPILATION = getattr(knobs, "compilation", None)   # 3.6 and 3.7 add an instrumentation mode to every launch's options
 
 __all__ = ["prebind", "prebind_requested", "SUPPORTED_TRITON", "PREBIND_STATS"]
 
 #: Triton releases whose launch protocol (``JITFunction.run`` -> ``CompiledKernel.run``) this module was read against.
-SUPPORTED_TRITON = ((3, 4), (3, 6))
+SUPPORTED_TRITON = ((3, 4), (3, 6), (3, 7))
 
 #: Launches through the prebound path, and through Triton's own (first launch of a key, or a fallback).
 PREBIND_STATS = {"prebound": 0, "triton": 0}
@@ -49,7 +51,7 @@ _PLAIN = (int, float, bool, type(None))
 
 
 def prebind_requested() -> bool:
-    return os.environ.get("E4B_TRITON_PREBIND", "0").strip() == "1"
+    return os.environ.get("E4B_TRITON_PREBIND", "1").strip() != "0"
 
 
 def _triton_version():
@@ -60,7 +62,7 @@ def _triton_version():
 
 
 def prebind(fn, force: bool = False):
-    """``fn`` wrapped in :class:`Prebound` when ``E4B_TRITON_PREBIND=1`` (or ``force``) and this Triton is supported; else ``fn``."""
+    """``fn`` wrapped in :class:`Prebound` unless ``E4B_TRITON_PREBIND=0`` (``force`` wraps regardless), when this Triton is supported; else ``fn``."""
     if not (force or prebind_requested()) or triton is None or _triton_version() not in SUPPORTED_TRITON:
         return fn
     if not isinstance(fn, JITFunction) or not all(hasattr(fn, a) for a in ("params", "used_global_vals", "pre_run_hooks")):
@@ -78,9 +80,12 @@ class Prebound:
         self.defaults = {p.name: p.default for p in fn.params if p.has_default}
         self.kernels = {}
         self.device = self.stream = None              # Triton's own device / stream getters, bound at the first launch
-        # Triton 3.4 re-reads TRITON_DEBUG from the environment at every launch (1.4 us on an RTX A2000 host), 3.6 once at import:
-        # here it is read once per kernel under 3.4, and per launch (a plain attribute) under 3.6.
+        # Triton 3.4 re-reads TRITON_DEBUG from the environment at every launch (1.4 us on an RTX A2000 host), 3.6 and 3.7 once at
+        # import: here it is read once per kernel under 3.4, and per launch (a plain attribute) under 3.6 and 3.7.
         self.debug = knobs.runtime.debug if _triton_version() < (3, 6) else None
+        # Triton 3.7 keys a launch on a registered compiler-stages hook (its custom pass pipeline), and the launch that compiles a key
+        # under AsyncCompileMode returns a FutureKernel proxy rather than the CompiledKernel (3.6 resolves it first).
+        self.v37 = _triton_version() >= (3, 7)
 
     def __getitem__(self, grid):
         if callable(grid):
@@ -93,9 +98,10 @@ class Prebound:
 
     def launch(self, grid, *args, **kwargs):
         fn, rt = self.fn, knobs.runtime
-        # A registered launch hook (3.4: a callable; 3.6: a non-empty HookChain) needs Triton's launch metadata: take its path.
+        # A registered launch hook (3.4: a callable; 3.6, 3.7: a non-empty HookChain) needs Triton's launch metadata, and under 3.7 a
+        # registered stages hook adds its pipeline's hash to Triton's key: take Triton's path.
         if getattr(rt.launch_enter_hook, "calls", rt.launch_enter_hook) or getattr(rt.launch_exit_hook, "calls", rt.launch_exit_hook) \
-                or fn.pre_run_hooks:
+                or fn.pre_run_hooks or (self.v37 and rt.add_stages_inspection_hook is not None):
             return self._triton(grid, args, kwargs)
         try:
             # every parameter in signature order (the launcher's argument list), constexprs and defaults included
@@ -114,9 +120,10 @@ class Prebound:
             return self._triton(grid, args, kwargs)
         if hit is None:
             kernel = self._triton(grid, args, kwargs)
-            # Kept only for plain arguments (a tensor passed by keyword would sit in the key, by identity) and a launchable kernel.
+            # Kept only for plain arguments (a tensor passed by keyword would sit in the key, by identity) and a launchable kernel: under
+            # 3.7 not a FutureKernel (a later launch of the key, once Triton's cache holds the CompiledKernel, keeps that).
             if (len(full) == len(self.names) and all(isinstance(a, (torch.Tensor,) + _PLAIN) for a in args)
-                    and all(type(v) in _PLAIN for v in kwargs.values())
+                    and all(type(v) in _PLAIN for v in kwargs.values()) and not (self.v37 and hasattr(kernel, "result"))
                     and all(hasattr(kernel, a) for a in ("run", "function", "packed_metadata"))):
                 if len(self.kernels) >= _MAX_KEYS:
                     self.kernels.clear()

@@ -1,6 +1,7 @@
-"""E4B_TRITON_PREBIND (opt-in): the prebound launch of the fused RMSNorm and rotary kernels is BIT-IDENTICAL to Triton's own
+"""E4B_TRITON_PREBIND (on by default; =0 turns it off): the prebound launch of the fused RMSNorm and rotary kernels is BIT-IDENTICAL to Triton's own
 launch -- it launches the very compiled kernel Triton's lookup returns, across dtypes, odd sizes and misaligned pointers -- and
-anything outside its contract (another Triton version, a launch hook, a callable grid, a changed global) takes Triton's path."""
+anything outside its contract (another Triton version, a launch hook, a callable grid, a changed global, under triton 3.7 a stages
+hook) takes Triton's path."""
 import os
 import subprocess
 import sys
@@ -21,9 +22,11 @@ SUPPORTED = triton is not None and tp._triton_version() in tp.SUPPORTED_TRITON
 gpu = pytest.mark.skipif(not (CUDA and SUPPORTED), reason="needs CUDA and a Triton release the prebound path supports")
 
 
-def test_off_unless_requested(monkeypatch):
+def test_on_unless_turned_off(monkeypatch):
     sentinel = object()
     monkeypatch.delenv("E4B_TRITON_PREBIND", raising=False)
+    assert tp.prebind_requested()                      # the default (TC1 amendments 26 / 30)
+    monkeypatch.setenv("E4B_TRITON_PREBIND", "0")
     assert not tp.prebind_requested() and tp.prebind(sentinel) is sentinel
     monkeypatch.setenv("E4B_TRITON_PREBIND", "1")
     assert tp.prebind_requested()
@@ -35,7 +38,7 @@ def test_unsupported_triton_version_keeps_tritons_launch(monkeypatch):
     from experts4bit_qlora.engines.rmsnorm_train import _rms_fwd
     if SUPPORTED:
         assert isinstance(tp.prebind(_rms_fwd, force=True), tp.Prebound)
-    for v in ((3, 3), (3, 5), (3, 7), (4, 0), None):
+    for v in ((3, 3), (3, 5), (3, 8), (4, 0), None):
         monkeypatch.setattr(tp, "_triton_version", lambda v=v: v)
         assert tp.prebind(_rms_fwd, force=True) is _rms_fwd
 
@@ -46,8 +49,11 @@ def test_flag_binds_the_launchers_at_import():
             "from experts4bit_qlora.engines.triton_prebind import Prebound\n"
             "print([isinstance(f, Prebound) for f in (r._rms_fwd_launch, r._rms_bwd_launch, p._rope_launch)],"
             " r._rms_fwd_launch is r._rms_fwd)")
-    for flag, want in (("1", f"[{SUPPORTED}, {SUPPORTED}, {SUPPORTED}] {not SUPPORTED}"), ("0", "[False, False, False] True")):
-        env = dict(os.environ, E4B_TRITON_PREBIND=flag)
+    on = f"[{SUPPORTED}, {SUPPORTED}, {SUPPORTED}] {not SUPPORTED}"
+    for flag, want in (("1", on), ("0", "[False, False, False] True"), (None, on)):   # None: unset, the default
+        env = {k: v for k, v in os.environ.items() if k != "E4B_TRITON_PREBIND"}
+        if flag is not None:
+            env["E4B_TRITON_PREBIND"] = flag
         out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True).stdout
         assert out.strip().splitlines()[-1] == want
 
@@ -210,6 +216,60 @@ def test_a_changed_global_is_refused_like_triton_refuses_it():
             p[(1,)](x, y, 8, BLOCK=8)
     finally:
         _SCALE = saved
+
+
+@gpu
+def test_a_stages_hook_takes_tritons_path_under_triton_37():
+    """Triton 3.7 adds a registered compiler-stages hook's pipeline hash to its kernel key (3.4 and 3.6 do not), so under 3.7 a launch
+    with one registered takes Triton's path."""
+    if tp._triton_version() < (3, 7):
+        pytest.skip("this Triton does not key a launch on the stages hook")
+    from triton import knobs
+    from experts4bit_qlora.engines import rmsnorm_train as rt
+    p = tp.Prebound(rt._rms_fwd)
+    x = torch.randn(4, 64, device="cuda", dtype=torch.bfloat16)
+    w = torch.ones(64, device="cuda", dtype=torch.bfloat16)
+    y, r = torch.empty_like(x), torch.empty(4, device="cuda")
+    kw = dict(ROWS=1, BLOCK=64, num_warps=1)
+    for _ in range(2):
+        p[(4,)](x, w, y, r, 64, 64, 1e-6, **kw)
+
+    def hook(*args):                                   # called bare for the key's (key, hash), and with the stages at compile
+        return ("prebind-test", "0") if not args else None
+
+    saved, knobs.runtime.add_stages_inspection_hook = knobs.runtime.add_stages_inspection_hook, hook
+    try:
+        before = dict(tp.PREBIND_STATS)
+        ref = torch.empty_like(y)
+        p[(4,)](x, w, ref, r, 64, 64, 1e-6, **kw)
+        assert tp.PREBIND_STATS == {"prebound": before["prebound"], "triton": before["triton"] + 1}
+    finally:
+        knobs.runtime.add_stages_inspection_hook = saved
+    assert torch.equal(ref, y)
+
+
+if triton is not None:
+    @triton.jit
+    def _plus_one(X, Y, n, BLOCK: tl.constexpr):
+        i = tl.arange(0, BLOCK)
+        m = i < n
+        tl.store(Y + i, tl.load(X + i, mask=m) + 1, mask=m)
+
+
+@gpu
+def test_async_compile_keeps_only_tritons_compiled_kernel():
+    """Under AsyncCompileMode the launch that compiles a key returns a FutureKernel proxy in triton 3.7 (3.6 resolves it first):
+    what is kept is the CompiledKernel Triton's own lookup returns, never the proxy."""
+    ac = pytest.importorskip("triton.runtime._async_compile")
+    from concurrent.futures import ThreadPoolExecutor
+    p = tp.Prebound(_plus_one)                         # a kernel no other test compiles
+    x = torch.arange(32, device="cuda", dtype=torch.float32)
+    ys = [torch.empty_like(x) for _ in range(3)]
+    with ThreadPoolExecutor(1) as pool, ac.AsyncCompileMode(pool):
+        got = [p[(1,)](x, y, 32, BLOCK=32) for y in ys]
+    ((kept, *_),) = p.kernels.values()
+    assert not hasattr(kept, "result") and kept is _tritons_kernel(_plus_one, (x, ys[0], 32), dict(BLOCK=32)) and got[-1] is kept
+    assert all(torch.equal(y, x + 1) for y in ys)
 
 
 @gpu
