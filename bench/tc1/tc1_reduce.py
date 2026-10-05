@@ -750,6 +750,24 @@ for _t in ("fused_attn4_m", "fused_attn4_shipped"):
         DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
 COMPACT_SPECS[CHUNKAB_FAM] = ("P92", (-0.05, 99.0), (("P90", "matched", "fused_attn4_m"), ("P91", "shipped", "fused_attn4_shipped")), (0.0, 1.01), "P93",
                               ("ce0", "ce1"))   # amendment 41, one-sided: no slower than 1.01, the matched peak not above the default's + 0.05 GB
+# TC1 amendment 44: E4B_CHUNKED_LM_LOSS=auto (experts4bit-qlora#1178: chunk a training forward only when its stock fp32 logits would reach
+# 1 GiB) against the default at the field recipe -- amendment 41's box with `auto` in place of `1`; its default decision with amendment 43's P98
+CHUNKAUTO_FAM = "qwen3chunkauto"  # E4B_CHUNKED_LM_LOSS=0 (side ca0, the default) vs =auto (ca1), shipped and matched arms, venv-unsloth
+FAMS.append(CHUNKAUTO_FAM)
+NAMES[CHUNKAUTO_FAM] = "Qwen3-30B-A3B (amendment 44: e4b's chunked LM loss off vs auto at the field recipe, venv-unsloth)"
+N_LAYERS[CHUNKAUTO_FAM] = 48
+ATTN_CENSUS[CHUNKAUTO_FAM] = 192
+DENSE_PINS[CHUNKAUTO_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[CHUNKAUTO_FAM] = ("e4b", "fused_attn4_m_ca0")
+EXPECTED[CHUNKAUTO_FAM] = [("e4b", "fused_attn4_shipped_ca0"), ("e4b", "fused_attn4_shipped_ca1"), ("e4b", "fused_attn4_m_ca0"), ("e4b", "fused_attn4_m_ca1"),
+                           ("e4b", "fused_attn4_m_ca1_d2"), ("e4b", "fused_attn4_m_ca0_d2"), ("e4b", "fused_attn4_shipped_ca1_d2"), ("e4b", "fused_attn4_shipped_ca0_d2")]
+MATCHED |= {"fused_attn4_m_ca0", "fused_attn4_m_ca1", "fused_attn4_m_ca0_d2", "fused_attn4_m_ca1_d2"}
+for _t in ("fused_attn4_m", "fused_attn4_shipped"):
+    for _side in ("ca0", "ca1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+COMPACT_SPECS[CHUNKAUTO_FAM] = ("P102", (-0.05, 99.0), (("P101", "matched", "fused_attn4_m"), ("P100", "shipped", "fused_attn4_shipped")), (0.0, 1.02),
+                                "P103", ("ca0", "ca1"))   # amendment 44, one-sided: no slower than 1.02, the matched peak not above the default's + 0.05 GB
+CHUNKAUTO_FORWARDS = 240          # amendment 44's P99: every training forward of a 60-step, accum-4 arm ran stock under the gate (small_calls)
 
 
 def chunk_ab_why(tag, r):
@@ -766,6 +784,64 @@ def chunk_ab_why(tag, r):
     if not isinstance(c, dict):
         return "no chunked_lm_loss record on the receipt: whether the loss was chunked cannot be verified"
     return "" if int(c.get("chunked_calls") or 0) == 0 else f"chunked-loss A/B not engaged (the ce0 side made {c.get('chunked_calls')} chunked calls)"
+
+
+def chunk_auto_why(tag, r):
+    """Amendment 44's engagement predicate: the arm ran torch 2.12 (venv-unsloth) and its `chunked_lm_loss` record shows the side its tag
+    names -- ca1: E4B_CHUNKED_LM_LOSS=auto, e4b has the loss and patched the model, no run-time fallback, the record carries small_calls
+    (#1178); ca0: nothing patched, no chunked and no gated forward. Whether ca1's gate fired is P99's to score, not validity's. Empty
+    string = engaged."""
+    r = r or {}
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.12"):
+        return f"chunked-loss auto A/B not engaged (env.torch {tv or 'missing'} is not 2.12*)"
+    c = r.get("chunked_lm_loss")
+    if not isinstance(c, dict):
+        return "no chunked_lm_loss record on the receipt: whether the loss was gated cannot be verified"
+    if "_ca1" in tag:
+        bad = [k for k, ok in (("E4B_CHUNKED_LM_LOSS=auto", str(c.get("env") or "").strip().lower() == "auto"),
+                               ("e4b has the chunked loss", c.get("e4b_has_chunked_lm_loss") is True),
+                               ("patched 1", int(c.get("patched") or 0) == 1),
+                               ("small_calls recorded", "small_calls" in c),
+                               ("runtime_refusals 0", int(c.get("runtime_refusals") or 0) == 0)) if not ok]
+        return "" if not bad else f"chunked-loss auto not engaged ({', '.join(bad)}; record {c})"
+    bad = [k for k, ok in (("patched 0", int(c.get("patched") or 0) == 0), ("chunked_calls 0", int(c.get("chunked_calls") or 0) == 0),
+                           ("small_calls 0", int(c.get("small_calls") or 0) == 0)) if not ok]
+    return "" if not bad else f"chunked-loss auto A/B not engaged (the ca0 side: {', '.join(bad)}; record {c})"
+
+
+def score_chunkauto_gate(F, fam=CHUNKAUTO_FAM):
+    """TC1-PREREG amendment 44's P99: on every ca1 arm that ran (VALID), the size gate never fired. FALSIFIED iff a VALID ca1 arm chunked a
+    forward (chunked_calls > 0: the gate fired). HELD iff all four ca1 arms are VALID and each reads exactly chunked 0 / small
+    CHUNKAUTO_FORWARDS. UNTESTED otherwise -- a ca1 arm not VALID, or one that chunked nothing but gated a count other than
+    CHUNKAUTO_FORWARDS (an extra or missing training forward: a question about the instrument or the trainer, reported, not the gate)."""
+    R = F.get(fam)
+    if not R:
+        return []
+    rows = {x["tag"]: x for x in R["rows"] if x["fw"] == "e4b"}
+    ca1 = [t for _, t in EXPECTED[fam] if "_ca1" in t]
+    ev, bad, missing, count = [], [], [], []
+    for t in ca1:
+        x = rows.get(t)
+        if not x or x.get("verdict") != "VALID":
+            missing.append(f"{t} {x.get('verdict') if x else 'absent'}")
+            continue
+        c = (x.get("r") or {}).get("chunked_lm_loss") or {}
+        ch, sm = int(c.get("chunked_calls") or 0), int(c.get("small_calls") or 0)
+        ev.append(f"`{t}` chunked {ch} / small {sm}")
+        if ch > 0:
+            bad.append(t)
+        elif sm != CHUNKAUTO_FORWARDS:
+            count.append(f"{t} gated {sm}, not {CHUNKAUTO_FORWARDS}")
+    if bad:
+        v = "FALSIFIED"
+    elif missing or count:
+        v = "UNTESTED"
+    else:
+        v = "HELD"
+    tail = ("; not VALID: " + ", ".join(missing)) if missing else ""
+    tail += ("; forward count (instrument, not the gate): " + ", ".join(count)) if count else ""
+    return [("P99", fam, v, f"want chunked 0 / small {CHUNKAUTO_FORWARDS} on every ca1 arm: " + "; ".join(ev) + tail)]
 
 
 def compact_ab_why(tag, r):
@@ -1463,6 +1539,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = chunk_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
+    if fam == CHUNKAUTO_FAM and fw == "e4b":           # amendment 44: the auto side's record, the default side unpatched, torch 2.12
+        w = chunk_auto_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
     if fam in CHUNKED_FAMS and fw == "e4b":            # amendments 40 / 43: the chunked LM loss on every e4b arm
         w = chunked_lm_loss_why(r)
         if w:
@@ -1471,7 +1551,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = prebind_ab_why(r.get("tag") or "", r, fam)
         if w:
             why.append(w)
-    if fam in COMPACT_SPECS and fam != CHUNKAB_FAM and fw == "e4b":   # amendments 36-38: the padded LoRA delta its tag names (41 shares the scorer only)
+    if fam in COMPACT_SPECS and fam not in (CHUNKAB_FAM, CHUNKAUTO_FAM) and fw == "e4b":   # amendments 36-38: the padded LoRA delta its tag names (41 / 44 share the scorer only)
         w = compact_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
@@ -4067,6 +4147,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F, CHUNKAB_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if CHUNKAUTO_FAM in F:
+        out += ["\n## Predictions P99 / P100 / P101 / P102 / P103 (TC1-PREREG amendment 44: e4b's chunked LM loss off vs auto at the field recipe; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_chunkauto_gate(F) + score_compactab(F, CHUNKAUTO_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     for _cf, _ids in ((COMPACT3_FAM, "P77 / P78 / P79 / P82"), (MCOMPACT_FAM, "P80 / P81 / P83")):
         if _cf in F:
             out += [f"\n## Predictions {_ids} (TC1-PREREG amendment 38: the compact padded LoRA delta's default decision, {NAMES[_cf].split(' (')[0]}; scored mechanically)",
@@ -4528,6 +4613,27 @@ def _chunkab_set(match=((3.50, 3.52), (3.51, 3.53)), ship=((3.00, 3.02), (3.01, 
                     r["chunked_lm_loss"] = {"env": "1" if on else "0", "e4b_has_chunked_lm_loss": True, "chunked_calls": ce1_calls if on else ce0_calls,
                                             "stock_calls": 16, "runtime_refusals": refusals if on else 0, "refused": {}}
                 r["fam"] = CHUNKAB_FAM
+                R[("e4b", tag)] = r
+    return R
+
+def _chunkauto_set(match=((3.50, 3.52), (3.51, 3.53)), ship=((3.00, 3.02), (3.01, 3.03)), peaks=(27.50, 27.50), held_shift=0.0, ca1_chunked=0,
+                   ca1_small=240, ca0_patched=0, env="auto", torch="2.12.1+cu130"):
+    """Amendment 44: e4b against itself -- each pair as (ca0 draws, ca1 draws) s/step; `peaks` = the matched arm's (ca0, ca1) GB (the
+    shipped arm's sit 2 GB lower); `ca1_chunked` / `ca1_small` = the auto side's chunked / gated training forwards; `ca0_patched` = whether
+    the default side's model was patched; `env` = the auto side's E4B_CHUNKED_LM_LOSS."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for i_side, (side, ss) in enumerate((("ca0", old), ("ca1", new))):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if side == "ca1" else 0.0), matched=matched)
+                r["peak_vram_gb"] = peaks[i_side] - (0.0 if matched else 2.0)
+                r["env"]["torch"] = torch
+                on = side == "ca1"
+                r["chunked_lm_loss"] = {"env": env if on else "0", "e4b_has_chunked_lm_loss": True, "chunked_calls": ca1_chunked if on else 0,
+                                        "stock_calls": 16 if on else 0, "small_calls": ca1_small if on else 0, "patched": 1 if on else ca0_patched,
+                                        "runtime_refusals": 0, "refused": {}}
+                r["fam"] = CHUNKAUTO_FAM
                 R[("e4b", tag)] = r
     return R
 
@@ -6641,6 +6747,29 @@ def selftest():
     assert p43() == {"P96": "HELD", "P97": "HELD", "P98": "HELD"}, score_packed4k(R43, PACKED4KCE2_FAM)
     assert p43(u=(19.6, 19.6))["P96"] == "FALSIFIED" and p43(oom=("fused_attn4_m_d2",))["P98"] == "FALSIFIED"
     assert "`fused_attn4_m` 0.015" in render(R43, "x")
+    cases += 1
+    # 98. TC1 amendment 44 (qwen3chunkauto): auto vs off at the field recipe -- every arm VALID; P99..P103 HELD on a gate that never fired;
+    #     a ca1 arm that chunked forwards FALSIFIES P99 (VALID still); a ca0 side patched, or a ca1 side not on `auto`, VOIDs the arm;
+    #     1.03 on the shipped pair FALSIFIES P100 and leaves P101 HELD; a matched peak +0.10 GB FALSIFIES P102
+    CA = lambda R: {CHUNKAUTO_FAM: reduce_family(CHUNKAUTO_FAM, R, {}, 20)}
+    RCA = CA(_chunkauto_set())
+    assert [(x["fw"], x["tag"]) for x in RCA[CHUNKAUTO_FAM]["rows"]] == EXPECTED[CHUNKAUTO_FAM]
+    assert all(x["verdict"] == "VALID" for x in RCA[CHUNKAUTO_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RCA[CHUNKAUTO_FAM]["rows"]]
+    pca = lambda **kw: {p: v for p, _, v, _ in score_chunkauto_gate(CA(_chunkauto_set(**kw))) + score_compactab(CA(_chunkauto_set(**kw)), CHUNKAUTO_FAM)}
+    assert pca() == {"P99": "HELD", "P102": "HELD", "P101": "HELD", "P100": "HELD", "P103": "HELD"}, pca()
+    R99 = CA(_chunkauto_set(ca1_chunked=12, ca1_small=228))
+    assert all(x["verdict"] == "VALID" for x in R99[CHUNKAUTO_FAM]["rows"]) and pca(ca1_chunked=12, ca1_small=228)["P99"] == "FALSIFIED"
+    assert pca(ca1_chunked=0, ca1_small=236)["P99"] == "UNTESTED"                 # nothing chunked, a forward count off: the instrument, not the gate
+    assert "gated 236, not 240" in score_chunkauto_gate(CA(_chunkauto_set(ca1_small=236)))[0][3]
+    for kw, tag, frag in (({"ca0_patched": 1}, "fused_attn4_m_ca0", "patched 0"), ({"env": "1"}, "fused_attn4_m_ca1", "E4B_CHUNKED_LM_LOSS=auto"),
+                          ({"torch": "2.8.0+cu128"}, "fused_attn4_m_ca0", "is not 2.12*")):
+        RV = CA(_chunkauto_set(**kw))
+        why = next(x["why"] for x in RV[CHUNKAUTO_FAM]["rows"] if x["tag"] == tag)
+        assert RV[CHUNKAUTO_FAM]["verdicts"][("e4b", tag)] == "VOID" and frag in str(why), (kw, why)
+    p_ship = pca(ship=((3.00, 3.02), (3.09, 3.11)))
+    assert p_ship["P100"] == "FALSIFIED" and p_ship["P101"] == "HELD", p_ship
+    assert pca(peaks=(27.50, 27.60))["P102"] == "FALSIFIED"
+    assert "P99" in render(RCA, "x") and "amendment 44" in render(RCA, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

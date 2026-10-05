@@ -1760,3 +1760,59 @@ Each is FALSIFIED outside its band (P98: an e4b arm that OOMs) and UNTESTED wher
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.6 with the download;
 this is in the standing no-ask tier.
+
+### Amendment 44 (2026-10-05T17:12Z, after amendment 41's read, with amendment 43's box running and unread): e4b's chunked LM loss as `auto` — its default decision (P99–P103)
+
+**Why.** The chunked LM loss is what lets e4b train packed 4,096-token Qwen3 rows (amendments 39, 40). At the field recipe it costs the
+shipped arm 1.049 of its step (amendment 41, P91 FALSIFIED), so `=1` stays opt-in. experts4bit-qlora#1178 adds `E4B_CHUNKED_LM_LOSS=auto`:
+a training forward chunks only when its stock fp32 logits (positions × vocabulary × 4 bytes, read from the labels' shape) would reach
+1 GiB, and a smaller one runs the stock forward untouched (`small_calls`). The gate was set from shapes, not timings. TC1's field
+micro-batches are 0.29 GiB at the median and 0.64 GiB at the largest over a 60-step run, and the two longest of its 1,200 rows padded
+together are 0.86 GiB. One packed 4,096-token row is 2.32 GiB. So on the field recipe `auto` should be the stock path, and on packed rows
+it is `=1`'s path exactly: every packed forward is 4,096 positions over the gate, and #1178's tests pin both sides of it. This box reads
+the field side. Amendment 43's box, running `=1` on packed rows, reads the packed side (its P98).
+
+**The box** (token `qwen3chunkauto`). Amendment 41's box with `auto` in place of `1`. One RTX 5090, TC1's qwen3 tokens and field recipe,
+60 steps, load-gated draws (`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), avoiding machine 145701 (amendment 41's host, where every attempt
+ran above the gate) and machines 151350, 45511 and 138786:
+
+- the shipped and the matched arm, each `_ca0` (`E4B_CHUNKED_LM_LOSS=0`, the default) against `_ca1` (`=auto`), two draws a side in ABBA
+  order;
+- every arm in venv-unsloth with e4b (at a main that has #1178) and grouped-nf4-gemm at the box's pins (TC1's t212 install), every other
+  setting at its default.
+
+Engagement: each receipt's `chunked_lm_loss` record. `_ca1` arms have `env` `auto`, a patched model, the `small_calls` counter and no
+run-time fallback; `_ca0` arms have nothing patched and no chunked or gated forward; `env.torch` 2.12.*. Whether the gate fired is P99's
+to score, not validity's.
+
+**Predictions** (registered before the box, and before amendment 43's box is read), one-sided:
+
+- **P99** (the gate, structural): on every `_ca1` arm, `chunked_calls` 0 and `small_calls` 240 (every training forward of 60 steps × 4).
+  FALSIFIED iff a VALID `_ca1` arm chunked a forward (`chunked_calls` > 0: the gate fired). HELD iff every `_ca1` arm is VALID and reads
+  exactly 0 / 240. An arm that chunked nothing but gated another count leaves P99 UNTESTED: that is an extra or missing training forward,
+  a question about the instrument or the trainer, and the read reports the count.
+  (This split was made at review, 2026-10-05T18:44Z, before any box: the first text and the reducer disagreed on an arm that chunked nothing but gated a count other than 240.)
+- **P100** (shipped): `_ca1` / `_ca0` ≤ **1.02**.
+- **P101** (matched): `_ca1` / `_ca0` ≤ **1.02**.
+- **P102** (matched peak): `_ca1` − `_ca0` ≤ **+0.05 GB**.
+- **P103:** on each arm, |mean held-out at N, `_ca1` − `_ca0`| ≤ **0.005**.
+
+Under P99 the `_ca1` side runs the stock forward plus one gate check per forward, so P100 and P101 guard against a cost nobody expects.
+Their bound, 1.02 rather than amendment 41's 1.01, sits above the default side's draw spread amendment 41 read on the same arms (1.4 % shipped,
+0.8 % matched; its chunked side's were 4.8 % and 5.4 % on a loaded host), because this is close to an A/A reading. P100–P103 each need two stable VALID draws a side, and are FALSIFIED on the wrong
+side of their bound and UNTESTED where a side is unstable, not VALID or not engaged.
+
+**Decision rules.**
+
+- **P99–P103 HELD, and amendment 43's P98 HELD:** `auto` becomes e4b's default in `enable_fast_train` and the CLI trainer
+  (`E4B_CHUNKED_LM_LOSS` unset means `auto`; `0` keeps the stock loss everywhere; `1` or a chunk size chunks every training forward), in
+  one PR citing amendments 39, 40, 41, 43 and 44. This rule replaces amendments 41 and 43's rule for `=1`, which amendment 41's read already
+  closed (P91 FALSIFIED).
+- **P99–P103 HELD but P98 not HELD:** `auto` stays opt-in; the chunked loss does not by itself buy the regime it is for.
+- **P99 FALSIFIED:** the gate fired on the field recipe, which the shapes say it cannot. `auto` stays opt-in and the read finds the forward.
+- **Any of P100–P103 FALSIFIED:** `auto` stays opt-in, and the read names which arm and which side.
+- **Any UNTESTED, none FALSIFIED:** `auto` stays opt-in pending a re-ask.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install. About
+$2.5 with the download; this is in the standing no-ask tier.
