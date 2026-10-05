@@ -326,3 +326,50 @@ Each is FALSIFIED outside its band and UNTESTED where the box quotes no reading.
 
 **Budget.** Two RTX 5090s at the policy rate, 3 h (M) and 4 h (Q) guards, with a 192 GB host floor. About $1.5 and $2.5 with the downloads;
 the standing no-ask tier; the campaign's daily cap is $100, counted 9 am to 9 am Central.
+
+### Amendment 9 (2026-10-05T07:16Z, after TC1 amendments 33–35 and TC1c amendment 9, before any box): Mixtral's position with both frameworks on one stack (P29, P30, P31)
+
+**Why.** Mixtral-8x7B is the one family where e4b's position at default settings is a loss: amendment 8's box M read Unsloth/e4b
+**0.836**, Unsloth about 20 % faster per step. Two things in that box favour Unsloth, and neither is the frameworks' own work:
+
+- **The stack.** e4b ran on the field image's torch 2.8.0 / transformers 5.18.0, Unsloth on torch 2.12.1 / transformers 5.5.0. On
+  Qwen3-30B-A3B, TC1 amendments 33 and 34 found e4b's step 0.90–0.91× as long on torch 2.12, and TC1 amendment 25's same-stack position
+  became that family's quoted one.
+- **The host.** Box M ran on an Intel Core Ultra 9 285K. Its own row records Unsloth's Mixtral step at 3.0 s there, 3.7 s on an EPYC 7B13
+  and 4.1 s on an EPYC 7C13, while e4b's moved much less. Vast machine 151350, a 285K, also lost speed pairs at low load for no cause found.
+
+**The box** (token `mixtralsamestack`). TC1 amendment 25's same-stack family on Mixtral-8x7B-Instruct at TC2's pin and field recipe, as
+TC1 amendment 33 ran it on Qwen3-30B-A3B:
+
+- every e4b arm resident at **default settings** (nothing set: grouped-nf4-gemm's `auto` takes the dense route off sm_90, the prebound
+  launches on, the expert absmax fp32);
+- e4b's matched arm in venv-unsloth (two draws), Unsloth 2026.9.14 grouped_mm with TC2's seven targets (two draws), e4b's matched arm in
+  venv-e4b (`_t28`, two draws), in amendment 25's order; e4b's reference arm not run;
+- `TC1_STEPS=60`, load-gated draws (`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), a 192 GB host floor, avoiding machines 151350, 45511 and
+  138786.
+
+Engagement: TC1 amendment 25's (each e4b receipt records the torch its tag names), plus the dense route on every fused e4b arm that ran
+(`route_ab` counts dense forward and dense dgrad calls and no fused ones, with `GNF4_TRAIN_GEMM` unset).
+
+**Predictions** (registered before the box):
+
+- **P29:** with both frameworks on one stack, Unsloth/e4b lies in **[0.85, 1.25]**, both pairs stable. The basis: 0.836 on the 285K,
+  Unsloth's step 20–35 % longer on the EPYC hosts it has run on, and an environment gain for e4b at or below Qwen3's.
+- **P30:** e4b's matched arm in venv-unsloth over venv-e4b lies in **[0.85, 1.02]**, both sides stable. Mixtral's dense route issues far
+  fewer launches per step than Qwen3's fused path, so its gain may be smaller than Qwen3's 0.909.
+- **P31:** the dense route on every fused e4b arm that ran, as above.
+
+Each is FALSIFIED outside its band and UNTESTED where a side is missing, unstable, not VALID or not engaged. The matched set's quality
+reading is the reducer's (QUALITY_FAIL at |Δ held-out| > 0.05 blocks the position). An e4b OOM resident is a row (box M's default peak was
+31.07 GB of the card's 32), and leaves P29 and P30 UNTESTED.
+
+**Decision rules.**
+
+- **P29 read with both pairs stable and P31 HELD, whichever side it favours:** the ratio becomes Mixtral's position to quote,
+  `e4b.train.h2h.unsloth.mixtral.5090.<date>.same-stack`. Box M's 0.836 stays as the reading with e4b in the field image's environment on
+  a 285K host, and STATUS names both. A reading below 1.00 is quoted as Unsloth faster on one stack, an e4b loss said as such.
+- **P31 FALSIFIED:** the box ran a different route than the position it replaces; nothing is quoted from it.
+- **P30** says whether the torch 2.12 gain carries to a family on the dense route; it moves no default.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, a 192 GB host floor, venv-unsloth built for e4b's same-stack arms and
+Unsloth. About $2.50 with Mixtral's download and the gate's possible re-runs; this is in the standing no-ask tier.

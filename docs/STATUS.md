@@ -1,6 +1,6 @@
 # Status — what this package does, what changed, what is open
 
-**As of 2026-10-05, version 0.47.0** (the version of record is
+**As of 2026-10-05, version 0.48.0** (the version of record is
 `pyproject.toml`'s). One page. The README argues the case; this page
 states the position. Every line has an entry in
 [`docs/claims.json`](claims.json) with its evidence path, and nothing is
@@ -269,7 +269,9 @@ time into `torch.mm`. Against the fused kernels it reads 0.651 on Mixtral-8x7B (
 on Qwen3-30B-A3B at micro-batch 1 finds every static class byte-for-byte the same in e4b and Unsloth except the expert absmax.
 e4b keeps it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 GB, as Unsloth does. With that switch e4b peaks
 0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults
-the gap is 1.78 GB.
+the gap is 1.78 GB. grouped-nf4-gemm's opt-in compact delta (`NF4_QLORA_COMPACT_DELTA=1`) was meant to shrink that transient; on one
+stack it did not (`e4b.train.compact-delta.qwen3.5090.2026-10-05`, TC1 amendment 36): the matched peak rose 0.23 GB, while the step ran
+0.969 (matched) and 0.970 (shipped) of the default's. It stays opt-in.
 **The double-quantized absmax, as an A/B** (`e4b.train.absmax-dq.mixtral.5090.2026-10-05`, TC1 amendment 28): on Mixtral-8x7B
 `E4B_ABSMAX_DQ=1` costs 2.3 % of the step (1.023) for 2.04 GB of peak (31.07 → 29.03 GB), held-out within 0.003. Qwen3-30B-A3B's pair
 was unstable on a busy host; amendment 31 read it over 60 steps on a quiet one
@@ -279,14 +281,17 @@ double-quantized absmax becomes the default for resident training (`E4B_ABSMAX_D
 flags on, Qwen3-30B-A3B's training step is 0.973 of the flags-off step on the matched arm and 0.980 [0.957, 1.003] on the shipped arm
 (60 steps), with held-out within 0.002 and bit-identical kernels. All three predictions held, so `E4B_TRITON_PREBIND` and
 grouped-nf4-gemm's `GNF4_TRITON_PREBIND` are on by default (`=0` turns each off). The gain is small, and the shipped interval reaches
-1.0.
+1.0. They cover triton 3.7 too (`e4b.train.prebind.triton37.qwen3.5090.2026-10-05`, TC1 amendment 35, torch 2.12.1 / triton 3.7.1):
+0.986 [0.975, 0.997] on the matched arm and 0.996 [0.978, 1.013] on the shipped arm, held-out within 0.003.
 **The environment** (`e4b.train.env-ab.qwen3.5090.2026-10-04`, TC1 amendment 24): every 5090 position before amendment 33 ran e4b on the
 field image's torch 2.8.0+cu128 / transformers 5.18.0 and Unsloth on torch 2.12.1+cu130 / transformers 5.5.0. In Unsloth's environment
 e4b's matched arm steps 0.882× as long. The cause is not the padded LoRA delta's fp32 `bmm`, whose host cost per new shape is the same
 on both torch versions (`e4b.train.bmm-host-replay.5090.2026-10-04`). The same-stack box (TC1 amendment 33) replicated the gain on
 another host: 0.900, with e4b's prebound launches engaged on the field-image side only.
 Nor is it triton (`e4b.train.triton37.qwen3.5090.2026-10-05`, TC1 amendment 32): triton 3.7.1 alone in the field image reads 0.992 on
-the matched arm and 0.971 on the shipped arm. The gain sits with torch 2.12 and/or transformers 5.5; amendment 34 splits them.
+the matched arm and 0.971 on the shipped arm. **It is torch 2.12's** (`e4b.train.env-split.qwen3.5090.2026-10-05`, TC1 amendment 34):
+torch 2.12.1 + triton 3.7.1 over torch 2.8 + triton 3.4 reads 0.905 at transformers 5.5, and transformers 5.5 over 5.18 on torch 2.8 reads
+1.005.
 
 **The other families at matched work** (lane TC2, 2026-10-02, two rented
 RTX 5090 hosts, [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md);

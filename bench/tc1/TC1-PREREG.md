@@ -1461,3 +1461,41 @@ or not engaged.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
 About $2 with the download and the gate's possible re-runs; this is in the standing no-ask tier.
+
+### Amendment 37 (2026-10-05T06:50Z, after amendment 36's read, before any box): the compact padded LoRA delta again, with its backward releasing each intermediate at its last use, on another host (P73–P76)
+
+**Why.** Amendment 36 (`tc1-5090-80`) found grouped-nf4-gemm's compact delta faster than registered (0.969 matched, 0.970 shipped) and
+heavier, not lighter: the matched peak rose 0.229 GB. Its backward held every intermediate until it returned, so the padded output
+gradient was still live while the input block and its gradient were rebuilt. grouped-nf4-gemm#473 releases each intermediate at its last
+use; no operation, operand layout, dtype or call order changes, and every output and gradient stays `torch.equal`. On an RTX A2000, at
+Qwen3-30B-A3B's shapes with a skewed router (one `lora_delta_grouped` call, fp32 and bf16 adapters, 380 and 1,100 tokens), its backward
+peak went from 24–55 % above the autograd path's to 2–30 % below it in all eight cells, with time per call unchanged. That is a per-call
+reading; the training step's peak is this box's question. A speed default also needs a second host: amendment 36's box was the only one.
+
+**The box** (token `qwen3compactab2`). Amendment 36's box unchanged (the shipped and the matched arm, `_cd0` vs `_cd1`, two draws a side
+in ABBA order, every arm in venv-unsloth, 60 steps, load-gated draws, `TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), with grouped-nf4-gemm
+pinned at or after #473's merge, on a machine other than 145701 (amendment 36's) and the three avoided before (45511, 138786, 151350).
+Engagement is amendment 36's.
+
+**Predictions** (registered before the box):
+
+- **P73** (matched, memory): the median peak changes by at most +0.05 GB and falls by at most 0.50 GB (`_cd0` − `_cd1` in
+  **[−0.05, 0.50] GB**).
+- **P74** (matched, speed): `_cd1` / `_cd0` lies in **[0.95, 0.99]**.
+- **P75** (shipped, speed): `_cd1` / `_cd0` lies in **[0.95, 0.99]**.
+- **P76:** on each arm, |mean held-out at N, `_cd1` − `_cd0`| ≤ **0.005**.
+
+The basis: #473 changes no operation, so amendment 36's speed (0.969 / 0.970) should carry to another host within a few points, and the
+A2000's per-call backward peaks now sit at or below the autograd path's. Each prediction needs two stable VALID draws a side. Each is
+FALSIFIED outside its band and UNTESTED where a side is unstable, not VALID or not engaged.
+
+**Decision rules.**
+
+- **P73–P76 HELD:** `NF4_QLORA_COMPACT_DELTA` becomes grouped-nf4-gemm's default, in one PR citing amendments 36 and 37.
+- **P73 FALSIFIED above (the peak rises more than 0.05 GB):** it stays opt-in; the release-early change did not reach the step's peak.
+- **P74 or P75 above 0.99:** it stays opt-in; the speed did not replicate.
+- **Otherwise** (a ratio below 0.95, a drop above 0.50 GB, or UNTESTED): it stays opt-in pending its own registration.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
+About $2 with the download and the gate's possible re-runs; this is in the standing no-ask tier.
