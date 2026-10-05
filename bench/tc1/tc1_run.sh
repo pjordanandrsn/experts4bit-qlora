@@ -166,6 +166,13 @@ if [ "$CU130_OK" != 1 ] && [ "$TC1_LOCAL_BOX" != 1 ]; then say "REFUSED: $CU130_
 echo "DRIVER $DRIVER cu130_ok=$CU130_OK" | tee -a summary.txt
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,power.limit,clocks.max.sm --format=csv,noheader | tee forensics.txt
 lscpu | grep -E "Model name|^CPU\(s\)" | tee -a forensics.txt; grep MemTotal /proc/meminfo | tee -a forensics.txt; cat /sys/fs/cgroup/memory.max 2>/dev/null | sed "s/^/cgroup memory.max /" | tee -a forensics.txt; df -h /root | tail -1 | tee -a forensics.txt
+# The container's CPU allotment, beside the host's cores (2026-10-05): OMP_NUM_THREADS above is the host's PHYSICAL cores, and a rented
+# container can be held to far fewer -- the RunPod H100 pod tc1c-h100-22 had 18 vCPUs under 72 threads, and Vast lists 5090 rentals at
+# 24 of 96 cores (machine 152440). Recorded only; nothing here changes how an arm runs.
+{ echo "cgroup cpu.max $(cat /sys/fs/cgroup/cpu.max 2>/dev/null || echo absent)"
+  echo "cgroup cpu.cfs_quota_us/period_us $(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us 2>/dev/null || echo absent)/$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us 2>/dev/null || echo absent)"
+  echo "cgroup cpuset.cpus.effective $(cat /sys/fs/cgroup/cpuset.cpus.effective 2>/dev/null || echo absent)"
+  echo "affinity cpus $(nproc) of $(nproc --all)"; } | tee -a forensics.txt
 python3 - "$TC1_BOX" "$TC1_RUN_ID" "$TC1_INSTANCE_ID" "$GPU_NAME" <<'PYB' > box.json
 import json, os, subprocess, sys
 box, run_id, iid, gpu = sys.argv[1:5]
@@ -175,6 +182,8 @@ def sh(c):
 print(json.dumps({"box": box, "run_id": run_id, "instance_id": iid, "gpu": gpu, "driver": sh("nvidia-smi --query-gpu=driver_version --format=csv,noheader"),
                   "cpu": sh("lscpu | grep 'Model name' | cut -d: -f2 | xargs"), "nproc": os.cpu_count(), "mem_total_kb": sh("grep MemTotal /proc/meminfo | awk '{print $2}'"),
                   "cgroup_memory_max": sh("cat /sys/fs/cgroup/memory.max 2>/dev/null"), "disk_root": sh("df -h /root | tail -1"), "hostname": sh("hostname"),
+                  "cgroup_cpu_max": sh("cat /sys/fs/cgroup/cpu.max 2>/dev/null"), "affinity_cpus": len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else None,
+                  "cgroup_cpuset_effective": sh("cat /sys/fs/cgroup/cpuset.cpus.effective 2>/dev/null"),
                   "registered_gpu_class": os.environ.get("TC1_GPU_CLASS", "5090"), "prereg": "tc1/TC1-PREREG.md",
                   "local_box": os.environ.get("TC1_LOCAL_BOX"), "local_snapshot": os.environ.get("TC1_LOCAL_SNAPSHOT")}, indent=1))   # TC3: the hand-run facts
 PYB
