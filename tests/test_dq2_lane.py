@@ -84,3 +84,21 @@ def test_every_rule_mutant_is_killed(tmp_path):
         if "self-test FAILED" not in out.stdout:
             survived.append((old, (out.stdout + out.stderr)[-200:]))
     assert not survived, survived
+
+
+# Amendment 1 (DQ2-PREREG.md): only the copy-under-load window changes; the rule is byte-identical to the one run 1
+# (dq2-5090-6) was graded with.
+RUN1_REDUCER_SHA256 = "93b668020158f73aefd5c121837f6f96f1029205c905cb91f71df8de64ee2d39"
+
+
+def test_amendment_1_leaves_the_rule_byte_identical():
+    import hashlib
+    assert hashlib.sha256((LANE / "dq2_reduce.py").read_bytes()).hexdigest() == RUN1_REDUCER_SHA256
+
+
+def test_amendment_1_gates_the_copies_on_the_first_forward():
+    body = LAYER[LAYER.index("def copy_under_fwd("):LAYER.index('out = {"bytes": nbytes')]
+    order = [body.index(s) for s in ("fwd(1)", "first.record(main)", "cs.wait_event(first)", "copies(args.h2d_reps)",
+                                     "fwd(k_fwd - 1)")]
+    assert order == sorted(order), "the copies must be enqueued after the first forward and before the rest"
+    assert "copy_ms, copy_cov = copy_under_fwd(k_fwd)" in LAYER and '"amendment": 1' in LAYER
