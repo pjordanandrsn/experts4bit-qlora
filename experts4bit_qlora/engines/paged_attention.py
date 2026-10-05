@@ -72,6 +72,17 @@ def _prefill_attn_mode_env() -> str:
     return v
 
 
+#: Which path each prefill attention call took, per (layer, sequence) call: ``flash`` (the causal-bias SDPA), or
+#: ``explicit_mask:<why>`` with ``<why>`` ``sinks``, ``window`` or ``env`` (``E4B_PAGED_PREFILL_ATTN=math``).
+#: Counted in the Python forward: eager prefills and graph captures count, graph replays do not. ``/health`` reports
+#: it because the resolved ``E4B_PAGED_PREFILL_ATTN`` is not what a layer with sinks or a window runs.
+ATTN_SEEN: dict = {}
+
+
+def _seen_attn(key: str) -> None:
+    ATTN_SEEN[key] = ATTN_SEEN.get(key, 0) + 1
+
+
 @dataclass
 class PagedAttentionContext:
     """Per-step binding: which pool, which slots, which regime.
@@ -325,11 +336,13 @@ def paged_attention_forward(module, query, key, value, attention_mask,
         win = _window_of(module, kwargs)
         sinks = _sinks_of(module, kwargs)
         if not win and sinks is None and _prefill_attn_mode_env() == "flash":
+            _seen_attn("flash")
             # e4b#960: the lower-right causal mask as a bias the flash kernel takes, GQA kept (no K/V expansion)
             from torch.nn.attention.bias import causal_lower_right
             outs.append(torch.nn.functional.scaled_dot_product_attention(
                 q_b, kk, vv, attn_mask=causal_lower_right(T, t_total), scale=scaling, enable_gqa=True))
             continue
+        _seen_attn("explicit_mask:" + ("sinks" if sinks is not None else "window" if win else "env"))
         # the chunk's queries are the LAST T positions of the sequence;
         # each attends to everything up to and including itself
         pos = torch.arange(t_total - T, t_total, device=query.device)

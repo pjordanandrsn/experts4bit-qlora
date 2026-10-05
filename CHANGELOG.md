@@ -12,6 +12,41 @@
   ≤ 1.01 (P80), its peak ≤ +0.05 GB (P81); held-out within 0.005 (P82, P83). All HELD makes it grouped-nf4-gemm's default.
 - The reducer reads both with amendment 36's scorer (`COMPACT_SPECS`); one new self-test case.
 
+### `/health`'s `prefill_routes` gains `seen`: the routes the forward ran, not the environment's resolution (serving)
+
+- **What was wrong.** `prefill_routes` reports the environment's resolution: `int4_prefill`, `int4_prefill_above_256_rows`
+  and `prefill_attn`. Those name what an int4-b32 store and a layer without sinks or a window would take. On gpt-oss-20b
+  (SC2g's `sc2g-prove-2`) they read `k19` / `k19` / `flash`, and no call took any of them:
+  - the MXFP4 store's rows up to 256 take K21, and rows above take the kept NF4 stacks' M-tile GEMM;
+  - every gpt-oss layer has sinks, so it keeps the explicit mask.
+
+  Box G's engagement check asserted those names, so it passed without testing the route.
+- **`prefill_routes.seen`.**
+  - `moe` counts each expert-GEMM call's route and row class (`hot_residency.ROUTE_SEEN`), for example `mxfp4_k21|le256` or
+    `nf4_mtile_captured|gt256`.
+  - `prefill_attn` counts each prefill attention call's path (`paged_attention.ATTN_SEEN`): `flash`, or
+    `explicit_mask:sinks|window|env`.
+  - Both are counted where the route is chosen, in the Python forward: eager calls and graph captures count, graph
+    replays do not. An MXFP4 store whose NF4 stacks were freed now shows `mxfp4_*|gt256` instead of `nf4_*|gt256`, which
+    `/health` could not tell apart before.
+- **Unchanged:** the resolved fields are kept as they were, and no route, kernel or output changes. `tests/test_route_seen.py`
+  ties each label to the GEMM that was actually called (mocked, on CPU). Mutating a label or the sinks reason fails it.
+
+### DQ1 erratum: one prediction clause leaned on an A2000 timing (docs only)
+
+- The research note quoted a code comment's A2000 decoder timing, and the G1 prediction's reason drew on it. Under the
+  testbed policy an A2000 timing cannot seed a prediction.
+- The registered band stands and held on the 5090. The note now cites the 5090's own decoder measurement (run 2).
+- `RESULTS-dq1.md` records the erratum. Every other A2000 use in DQ1 was correctness only.
+
+### Read: TC2 amendment 9 — on one stack e4b is faster on Mixtral-8x7B too, Unsloth/e4b 1.144 (P29, P30, P31 HELD); it becomes Mixtral's quoted position
+
+- `tc1-5090-84` ($1.59, EPYC 7B13, 60-step load-gated draws): Mixtral resident at e4b's defaults (the dense route), both frameworks on
+  torch 2.12.1 / transformers 5.5.0. e4b 3.233 / 3.248 s/step, Unsloth 3.701 / 3.711: **1.144** [1.140, 1.148], COMPARABLE. e4b on the
+  field image's stack in the same box: 3.681 / 3.636, so the environment reads **0.886**, and the dense route ran on every e4b arm.
+- Amendment 8's 0.836 (Unsloth faster, on a 285K host with e4b on torch 2.8) stays as that reading. On this host e4b on its own stack
+  reads 1.013; one stack moves it to 1.144. Unsloth keeps a 2.07 GB lower peak at e4b's defaults (the fp32 absmax) and ×0.93 the energy.
+
 ### Read: TC1 amendment 37 — with grouped-nf4-gemm#473 the compact delta lowers the matched peak 0.29 GB and runs 0.967 / 0.948; it stays opt-in (P75 FALSIFIED on the fast side)
 
 - `tc1-5090-83` ($0.78, EPYC 7702P, machine 45379, 60-step load-gated draws, venv-unsloth, grouped-nf4-gemm after #473):
