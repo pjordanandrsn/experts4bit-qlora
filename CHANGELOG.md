@@ -2,11 +2,29 @@
 
 ## Unreleased
 
+### CI on grouped-nf4-gemm 0.40.0 (no default changes there)
+
+- CI now tests against grouped-nf4-gemm **0.40.0** (`cfc79904`). That release changes no default. It carries:
+  - the pinned-slot fence (`ColdTier.fence`, #60): a fill into a pinned slot waits for any queued device copy that
+    still reads it, which the arena training path (`nvme_train`) gets through `segment_into`;
+  - opt-in `GNF4_TRITON_PREBIND=1`: the training GEMMs launch without Triton's per-call binding, bit-identical. TC1
+    amendment 26 is registered to read it.
+- The `[fast]` floor stays `>=0.30.0`.
+
 ### Docs: `SERVING-THROUGHPUT.md`'s gpt-oss line notes what shipped after it (docs only)
 
 - The 0.32.0-era line said gpt-oss was "NF4 only", with int4 experts and the router fold both refused. Both were built
   out since: the native MXFP4 store (decode only; prefill on the kept NF4 stacks) and the `topk_softmax` router fold.
   A dated sub-note says so, and the historical line is left as measured.
+
+### Serve estimate: the prefill graph's pool is named, and `ServeSetup` carries `prefill_graph`
+
+- Since SC2b, `E4B_PAGED_PREFILL_GRAPH=auto` is the server's default. When the first-chunk prefill graph engages,
+  it keeps its forward's working set in a private pool for its life: +3.3 GiB on Qwen3-30B-A3B int4.
+  `estimate_serve_footprint` does not price that pool. It now lists the pool as not modelled wherever the graph can
+  engage (decode graphs with device grouping, no linear-attention layers).
+- `ServeSetup.prefill_graph` (`auto`, `1` or `0`) is passed through `to_env()`, so a caller that wants memory bounded
+  by the estimate can plan `0`.
 
 ### Fix: `serve_paged` decodes eagerly below sm_89 instead of dying in Triton's compiler
 

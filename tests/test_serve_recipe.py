@@ -77,10 +77,21 @@ def test_to_env_is_what_the_server_reads_back(monkeypatch):
 
     monkeypatch.setenv("E4B_PAGED_DEVICE", "cpu")      # host-independent: no GPU facts enter from_env
     for st in (ServeSetup(), ServeSetup(max_seqs=3, max_tokens_per_seq=777, chunk_tokens=128, graphs=False,
-                                        buckets=(1, 2), kv_groups=4)):
+                                        buckets=(1, 2), kv_groups=4, prefill_graph="0")):
         for k, v in st.to_env().items():
             monkeypatch.setenv(k, v)
         cfg = PagedServeConfig.from_env()
         assert {f: getattr(cfg, f) for f in ("placement", "max_seqs", "max_tokens_per_seq", "chunk_tokens", "graphs")} \
             == {f: getattr(st, f) for f in ("placement", "max_seqs", "max_tokens_per_seq", "chunk_tokens", "graphs")}
         assert tuple(cfg.buckets) == tuple(st.buckets) and str(cfg.kv_groups) == str(st.kv_groups)
+        assert cfg.prefill_graph == st.prefill_graph
+
+
+def test_the_prefill_graph_pool_is_named_where_the_graph_can_engage():
+    topo = describe_moe(_qwen3())
+    named = lambda f: any("prefill graph" in u for u in f.unmodelled)  # noqa: E731
+    assert named(estimate_serve_footprint(topo, ServeSetup(max_seqs=4)))                      # the server's default
+    assert not named(estimate_serve_footprint(topo, ServeSetup(max_seqs=4, prefill_graph="0")))
+    assert not named(estimate_serve_footprint(topo, ServeSetup(max_seqs=4, graphs=False)))   # needs device grouping
+    assert not named(estimate_serve_footprint(topo, ServeSetup(max_seqs=1)))
+    assert estimate_serve_footprint(topo, ServeSetup(prefill_graph="on")).refusals
