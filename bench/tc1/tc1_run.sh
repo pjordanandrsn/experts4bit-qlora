@@ -1243,6 +1243,26 @@ tc1_chunkab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_ce0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_ce0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_chunkauto_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 44 (2026-10-05): amendment 41's box with E4B_CHUNKED_LM_LOSS=auto (#1178:
+# chunk a training forward only when its stock fp32 logits would reach 1 GiB) in place of =1 -- off vs auto at the field recipe, the shipped
+# and the matched arm, two draws a side in ABBA order, every arm in venv-unsloth (TC1's t212 install), every other default.
+tc1_chunkauto_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_ca0:fused e4b:fused_attn4_shipped_ca1:fused e4b:fused_attn4_m_ca0:fused e4b:fused_attn4_m_ca1:fused e4b:fused_attn4_m_ca1_d2:fused e4b:fused_attn4_m_ca0_d2:fused e4b:fused_attn4_shipped_ca1_d2:fused e4b:fused_attn4_shipped_ca0_d2:fused"
+  say "===== CHUNKED-LOSS AUTO A/B family $FAM ($MID @ $REV; e4b's LM loss stock vs auto, venv-unsloth, amendment 44)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local OLD="E4B_CHUNKED_LM_LOSS=0" NEW="E4B_CHUNKED_LM_LOSS=auto"
+  can_run 600 $FAM/e4b/shipped_ca0     && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_ca0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_ca1     && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_ca1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_ca0           && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_ca0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_ca1           && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_ca1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_ca1_d2        && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_ca1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_ca0_d2        && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_ca0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_ca1_d2  && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_ca1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_ca0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_ca0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_dqab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 28 (2026-10-04): e4b's expert absmax fp32 (E4B_ABSMAX_DQ=0, the default) vs
 # double-quantized (=1, #1040), the matched arm, resident, two draws a side in ABBA order. The same function serves both tokens: qwen3dqab
 # (Qwen3-30B-A3B, TC1's tokens) and mixtraldqab (Mixtral-8x7B-Instruct at TC2's pin, prepared as tc2_big_family prepares mixtral).
@@ -1522,6 +1542,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3compactab3) tc1_compactab_family qwen3compactab3 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 38: the compact delta's default decision, a third host
   mixtralcompactab) tc1_compactab_family mixtralcompactab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 38: the same on Mixtral, resident, defaults (shipped arms skipped)
   qwen3chunkab) tc1_chunkab_family qwen3chunkab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 41: e4b's chunked LM loss off vs on (venv-unsloth)
+  qwen3chunkauto) tc1_chunkauto_family qwen3chunkauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 44: e4b's chunked LM loss off vs auto (venv-unsloth)
   qwen3dqab)   tc1_dqab_family   qwen3dqab   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 28: absmax fp32 vs double-quantized
   mixtraldqab) tc1_dqab_family   mixtraldqab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 28 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3tritonab) tc1_tritonab_family qwen3tritonab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 32: triton 3.4 vs 3.7.1 in venv-e4b
