@@ -4,17 +4,6 @@
 
 Changes merged since the last release are one file each in [`changelog.d/`](changelog.d/); the release moves them into its section here. To add an entry, add `changelog.d/<pr-or-slug>.md`; never edit this section by hand.
 
-### SV1 registered (#1152): the serve estimate beside decode graphs and the prefill graph (bench and prereg only)
-
-- `bench/sv1/` (`SV1-PREREG.md`, `sv1_run.sh`, `sv1_measure.py`) for one RTX 5090. `serve_paged`'s engine is built
-  in-process with the environment `ServeSetup.to_env()` gives, all-VRAM, from arenas baked on the box.
-- Arms: OLMoE-1B-7B with eager decode, decode graphs, and decode graphs + the prefill graph; then Qwen3-30B-A3B with
-  decode graphs, and + the prefill graph.
-- Readings:
-  - S1: the estimate against the eager peak;
-  - S2–S3: the two graph pools the estimate lists as not modelled;
-  - S4: the same at 30B NF4.
-
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
 **0.48.0.** Two training defaults change, each by a rule registered and read in lane TC1 (#835).
