@@ -713,7 +713,7 @@ class Fp8PagedKV:
             ev.record()
             self._claim_cur[1] = ev
 
-    def append_prompt(self, seq: int, layers, ks, vs) -> None:
+    def append_prompt(self, seq: int, layers, ks, vs) -> bool:
         """:meth:`append` of a fresh slot's whole prompt for several layers at once. ``ks[i]``, ``vs[i]``: ``[T, H, D]``
         for ``layers[i]``.
 
@@ -725,12 +725,15 @@ class Fp8PagedKV:
         :meth:`append`.
 
         A slot that already holds tokens in any of these layers, prompts of different lengths, or an arena that is not
-        the up-front-claimed one takes :meth:`append` per layer, unchanged."""
+        the up-front-claimed one takes :meth:`append` per layer, unchanged.
+
+        Returns True when the bulk path wrote the prompt (or there was nothing to write), False when it took the
+        per-layer path, so a caller can count what actually ran."""
         layers = list(layers)
         if len(ks) != len(layers) or len(vs) != len(layers):
             raise ValueError(f"{len(ks)} K / {len(vs)} V tensors for {len(layers)} layers")
         if not layers:
-            return
+            return True
         for layer, k, v in zip(layers, ks, vs):
             H, D = self.Hs[layer], self.Ds[layer]
             if k.shape != v.shape or k.dim() != 3 or tuple(k.shape[1:]) != (H, D):
@@ -742,7 +745,7 @@ class Fp8PagedKV:
                 or not arena or T == 0):
             for layer, k, v in zip(layers, ks, vs):
                 self.append(layer, seq, k.contiguous(), v.contiguous())
-            return
+            return False
         if T > self.blocks_per_seq * self.bt:
             raise ValueError(f"sequence {seq} overflows its {self.blocks_per_seq} blocks")
         groups: dict = {}
@@ -795,6 +798,7 @@ class Fp8PagedKV:
             self.seq_lens[:, seq].add_(T)
         else:
             self.seq_lens[self._layer_index(layers), seq] += T
+        return True
 
     def append_prompt_peak_bytes(self, T: int, layers=None) -> int:
         """An upper bound on the device memory :meth:`append_prompt` allocates for a ``T``-token prompt, beyond its
