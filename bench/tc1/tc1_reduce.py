@@ -510,7 +510,23 @@ ATTN_CENSUS[SAMESTACK_H100_FAM] = 192
 DENSE_PINS[SAMESTACK_H100_FAM] = DENSE_PINS[QDENSE_FAM]
 EXPECTED[SAMESTACK_H100_FAM] = list(EXPECTED[SAMESTACK_FAM])
 # per family: (position id, band, environment id, band, matched-set id or None, route id or None, the environment reading to cite)
+# TC2 amendment 9: amendment 25's family on Mixtral-8x7B-Instruct at TC2's pin, resident at default settings (grouped-nf4-gemm's auto route
+# is dense off sm_90 for Mixtral's calls, gnf4#463)
+SAMESTACK_MIXTRAL_FAM = "mixtralsamestack"
+FAMS.append(SAMESTACK_MIXTRAL_FAM)
+NAMES[SAMESTACK_MIXTRAL_FAM] = "Mixtral-8x7B-Instruct-v0.1 (TC2 amendment 9: the matched set with e4b and Unsloth on one stack, resident, e4b at default settings)"
+N_LAYERS[SAMESTACK_MIXTRAL_FAM] = 32
+ATTN_CENSUS[SAMESTACK_MIXTRAL_FAM] = 128
+DENSE_PINS[SAMESTACK_MIXTRAL_FAM] = DENSE_PINS[MDENSE_FAM]   # TC2's mixtral pin, read through amendment 22's check
+EXPECTED[SAMESTACK_MIXTRAL_FAM] = list(EXPECTED[SAMESTACK_FAM])
+# the route each family's fused e4b arms must show, with GNF4_TRAIN_GEMM unset: on the H100 auto resolves the process to grouped_mm (TC1c
+# amendment 8's P25); on Mixtral off sm_90 auto keeps the process at `fused` and sends every call dense, so the counts say it (TC2 box M:
+# 11,264 dense forward and 5,120 dense dgrad calls, no fused ones)
+SAMESTACK_ROUTE = {SAMESTACK_H100_FAM: ("grouped_mm", lambda ra: ra.get("gnf4_train_gemm") == "grouped_mm"),
+                   SAMESTACK_MIXTRAL_FAM: ("dense", lambda ra: ((ra.get("stats") or {}).get("dense_fwd") or 0) > 0
+                                           and ((ra.get("stats") or {}).get("dense_dgrad") or 0) > 0 and ((ra.get("stats") or {}).get("fwd") or 0) == 0)}
 SAMESTACK_SPECS = {SAMESTACK_FAM: ("P50", SAMESTACK_P50_BAND, "P51", SAMESTACK_P51_BAND, "P52", None, "amendment 24's P47 read 0.882"),
+                   SAMESTACK_MIXTRAL_FAM: ("P29", (0.85, 1.25), "P30", (0.85, 1.02), None, "P31", "TC1 amendment 34's whole environment read 0.909 on Qwen3-30B-A3B"),
                    SAMESTACK_H100_FAM: ("P27", (1.00, 1.35), "P28", (0.80, 1.00), None, "P29", "TC1 amendment 33's P51 read 0.900 on an RTX 5090")}
 
 
@@ -2361,11 +2377,12 @@ def score_samestack(F, fam=SAMESTACK_FAM):
         why = "; ".join(f"{n} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for n, d in (("venv-unsloth", E), ("venv-e4b", T)))
         out.append((pid_env, fam, "UNTESTED", f"two stable VALID draws a side are registered -- {why}"))
     if pid_route:
+        want_route, route_ok = SAMESTACK_ROUTE[fam]
         ras = {x["tag"]: x["r"].get("route_ab") for x in R["rows"]       # the fused e4b arms that ran (a skipped reference is a stub)
                if x["fw"] == "e4b" and x["tag"].startswith("fused") and (x.get("r") or {}).get("status") == "ok"}
-        bad = [f"{t}: {(ra or {}).get('gnf4_train_gemm') if ra else 'no route_ab record'}" + (f" (GNF4_TRAIN_GEMM={ra.get('gnf4_train_gemm_env')})" if ra and ra.get("gnf4_train_gemm_env") else "")
-               for t, ra in sorted(ras.items()) if not (ra and ra.get("gnf4_train_gemm") == "grouped_mm" and not ra.get("gnf4_train_gemm_env"))]
-        ev = (f"{len(ras)} e4b receipts; route grouped_mm with GNF4_TRAIN_GEMM unset on " + ("all" if not bad else f"{len(ras) - len(bad)}; not on {'; '.join(bad)}"))
+        bad = [f"{t}: {(ra or {}).get('gnf4_train_gemm') if ra else 'no route_ab record'} {json.dumps((ra or {}).get('stats'), sort_keys=True)}" + (f" (GNF4_TRAIN_GEMM={ra.get('gnf4_train_gemm_env')})" if ra and ra.get("gnf4_train_gemm_env") else "")
+               for t, ra in sorted(ras.items()) if not (ra and route_ok(ra) and not ra.get("gnf4_train_gemm_env"))]
+        ev = (f"{len(ras)} e4b receipts; route {want_route} with GNF4_TRAIN_GEMM unset on " + ("all" if not bad else f"{len(ras) - len(bad)}; not on {'; '.join(bad)}"))
         out.append((pid_route, fam, "UNTESTED" if not ras else ("HELD" if not bad else "FALSIFIED"), ev if ras else "no e4b receipts"))
     if not pid_set:
         return out
@@ -3817,6 +3834,11 @@ def render(F, d):
         out += ["\n## Predictions P50 / P51 / P52 (TC1-PREREG amendment 25: the matched position with both frameworks on one stack; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if SAMESTACK_MIXTRAL_FAM in F:
+        out += ["\n## Predictions P29 / P30 / P31 (TC2-PREREG amendment 9: Mixtral's position with both frameworks on one stack; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_samestack(F, SAMESTACK_MIXTRAL_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if SAMESTACK_H100_FAM in F:
         out += ["\n## Predictions P27 / P28 / P29 (TC1C-PREREG amendment 9: the H100 position with both frameworks on one stack; scored mechanically)",
@@ -6177,6 +6199,38 @@ def selftest():
     assert p2(held_shift=0.008)["P76"] == "FALSIFIED"
     assert p2(flags=("0", "0")) == {"P73": "UNTESTED", "P74": "UNTESTED", "P75": "UNTESTED", "P76": "UNTESTED"}
     assert pc() == {"P69": "HELD", "P70": "HELD", "P71": "HELD", "P72": "HELD"}  # amendment 36's reading unchanged
+    cases += 1
+    # 91. TC2 amendment 9 (mixtralsamestack): Unsloth/e4b on one stack 1.050 and the environment 0.950 HELD, the dense route on every fused e4b
+    #     arm; Unsloth faster on one stack FALSIFIES P29 (still a stable reading); an arm on the fused route FALSIFIES P31
+    MF_ = lambda R: {SAMESTACK_MIXTRAL_FAM: reduce_family(SAMESTACK_MIXTRAL_FAM, R, {}, 20)}
+    def mset(routes=None, e=(3.40, 3.42), t28=(3.58, 3.60), u=(3.57, 3.59), torch_v=("2.12.1+cu130", "2.8.0+cu128")):
+        """Mixtral's receipts at TC2's pin (TC2's helper), e4b's same-stack pair on torch_v[0], its _t28 pair on torch_v[1], Unsloth's pair;
+        every fused e4b arm records the dense route (`routes` overrides a tag's), as grouped-nf4-gemm's auto takes it off sm_90."""
+        R, rt = {}, {"fused_attn4_m": "dense", "fused_attn4_m_d2": "dense", "fused_attn4_m_t28": "dense", "fused_attn4_m_t28_d2": "dense", **(routes or {})}
+        for i, sfx in enumerate(("", "_d2")):
+            for fw, tag, arm, ss, tv in (("e4b", "fused_attn4_m" + sfx, "fused", e[i], torch_v[0]), ("e4b", SAMESTACK_T28 + sfx, "fused", t28[i], torch_v[1]),
+                                         ("unsloth", "ckpt_unsloth_m" + sfx, "unsloth", u[i], None)):
+                r = _tc2_receipt("mixtral", fw, tag, arm, s=ss)
+                if tv:
+                    r["env"]["torch"] = tv
+                if fw == "e4b":
+                    dense = rt[tag] == "dense"                   # as box M records it: the mode stays `fused`, the counts say dense
+                    r["route_ab"] = {"gnf4_train_gemm": "fused", "gnf4_train_gemm_env": None, "gnf4_has_route": True,
+                                     "stats": {"fwd": 0 if dense else 11264, "dgrad": 0 if dense else 5120,
+                                               "dense_fwd": 11264 if dense else 0, "dense_dgrad": 5120 if dense else 0}}
+                r["fam"] = SAMESTACK_MIXTRAL_FAM
+                R[(fw, tag)] = r
+        R[("e4b", "reference_attn4_m")] = {**_stub("e4b", "reference_attn4_m", "reference", "not_run", "skipped by TC1_SKIP"), "fam": SAMESTACK_MIXTRAL_FAM}
+        return R
+    RM = MF_(mset())
+    assert [(x["fw"], x["tag"]) for x in RM[SAMESTACK_MIXTRAL_FAM]["rows"]] == EXPECTED[SAMESTACK_MIXTRAL_FAM]
+    pm = lambda **kw: {p: v for p, _, v, _ in score_samestack(MF_(mset(**kw)), SAMESTACK_MIXTRAL_FAM)}
+    assert pm() == {"P29": "HELD", "P30": "HELD", "P31": "HELD"}, (score_samestack(RM, SAMESTACK_MIXTRAL_FAM),
+                                                                  [(x["tag"], x["verdict"], x["why"]) for x in RM[SAMESTACK_MIXTRAL_FAM]["rows"]])
+    assert "route dense with GNF4_TRAIN_GEMM unset on all" in score_samestack(RM, SAMESTACK_MIXTRAL_FAM)[2][3]
+    assert pm(u=(2.70, 2.72))["P29"] == "FALSIFIED"                                      # 0.795: Unsloth well ahead on one stack
+    assert pm(routes={"fused_attn4_m_d2": "fused"})["P31"] == "FALSIFIED"
+    assert ph() == {"P27": "HELD", "P28": "HELD", "P29": "HELD"} and ps() == {"P50": "HELD", "P51": "HELD", "P52": "HELD"}
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
