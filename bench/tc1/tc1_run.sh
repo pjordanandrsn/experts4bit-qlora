@@ -1166,6 +1166,26 @@ tc1_prebindab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_pb0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_shipped_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_prebind37_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 35 (2026-10-05): amendment 26's prebound-launch A/B under triton 3.7.1,
+# which the prebound path covers since experts4bit-qlora#1108 and grouped-nf4-gemm#471. The same eight arms in the same ABBA order, every one in
+# venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 install: torch 2.12.1+cu130, transformers 5.5.0, triton 3.7.1).
+tc1_prebind37_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_pb0:fused e4b:fused_attn4_shipped_pb1:fused e4b:fused_attn4_m_pb0:fused e4b:fused_attn4_m_pb1:fused e4b:fused_attn4_m_pb1_d2:fused e4b:fused_attn4_m_pb0_d2:fused e4b:fused_attn4_shipped_pb1_d2:fused e4b:fused_attn4_shipped_pb0_d2:fused"
+  say "===== PREBIND A/B on triton 3.7 family $FAM ($MID @ $REV; Triton launches prebound off vs on in venv-unsloth, e4b + grouped-nf4-gemm, amendment 35)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local OLD="E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0" NEW="E4B_TRITON_PREBIND=1 GNF4_TRITON_PREBIND=1"
+  can_run 600 $FAM/e4b/shipped_pb0     && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_pb1     && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_pb0           && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pb1           && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pb1_d2        && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pb0_d2        && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_pb1_d2  && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_pb1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_pb0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_pb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_dqab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 28 (2026-10-04): e4b's expert absmax fp32 (E4B_ABSMAX_DQ=0, the default) vs
 # double-quantized (=1, #1040), the matched arm, resident, two draws a side in ABBA order. The same function serves both tokens: qwen3dqab
 # (Qwen3-30B-A3B, TC1's tokens) and mixtraldqab (Mixtral-8x7B-Instruct at TC2's pin, prepared as tc2_big_family prepares mixtral).
@@ -1428,6 +1448,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3bmmab)  tc1_bmmab_family  qwen3bmmab  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 24: bmm replay + venv-e4b vs venv-unsloth
   qwen3samestack) tc1_samestack_family qwen3samestack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1 amendment 25: both frameworks on one stack
   qwen3prebindab) tc1_prebindab_family qwen3prebindab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 26: prebound Triton launches off vs on
+  qwen3prebind37) tc1_prebind37_family qwen3prebind37 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 35: amendment 26 on triton 3.7.1 (venv-unsloth)
   qwen3dqab)   tc1_dqab_family   qwen3dqab   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 28: absmax fp32 vs double-quantized
   mixtraldqab) tc1_dqab_family   mixtraldqab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 28 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3tritonab) tc1_tritonab_family qwen3tritonab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 32: triton 3.4 vs 3.7.1 in venv-e4b

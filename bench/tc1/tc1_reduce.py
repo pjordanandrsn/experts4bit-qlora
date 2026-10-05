@@ -526,10 +526,26 @@ for _p, _n, _t in PREBIND_PAIRS:
     for _side in ("pb0", "pb1"):
         DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
 
+# ----------------------------------------------------------------------------- TC1 amendment 35: amendment 26's A/B under triton 3.7.1
+PREBIND37_FAM = "qwen3prebind37"  # the same eight arms as qwen3prebindab, every one in venv-unsloth (torch 2.12.1+cu130, triton 3.7.1)
+PREBIND37_PAIRS = (("P66", "shipped", "fused_attn4_shipped"), ("P67", "matched", "fused_attn4_m"))
+PREBIND37_BANDS = {"P66": (0.97, 1.00), "P67": (0.97, 1.00)}   # pb1 / pb0 s/step on stable pairs
+PREBIND37_ENV = ("2.12", "3.7")   # the env.torch and prebind_ab triton prefixes every arm must carry
+FAMS.append(PREBIND37_FAM)
+NAMES[PREBIND37_FAM] = "Qwen3-30B-A3B (amendment 35: Triton launches prebound off vs on under triton 3.7.1, e4b + grouped-nf4-gemm, venv-unsloth)"
+N_LAYERS[PREBIND37_FAM] = 48
+ATTN_CENSUS[PREBIND37_FAM] = 192
+DENSE_PINS[PREBIND37_FAM] = DENSE_PINS[QDENSE_FAM]   # the qwen3 pin, read through amendment 22's check
+FAM_ANCHOR[PREBIND37_FAM] = ("e4b", "fused_attn4_m_pb0")
+EXPECTED[PREBIND37_FAM] = list(EXPECTED[PREBIND_FAM])
+# per family: the speed pairs, their bands, and the held-out prediction's id (MATCHED and DRAW2 already hold these tags)
+PREBIND_SPECS = {PREBIND_FAM: (PREBIND_PAIRS, PREBIND_BANDS, "P55"), PREBIND37_FAM: (PREBIND37_PAIRS, PREBIND37_BANDS, "P68")}
 
-def prebind_ab_why(tag, r):
+
+def prebind_ab_why(tag, r, fam=None):
     """Amendment 26's engagement predicate, read off the receipt's `prebind_ab` record: a pb1 arm requested both flags and both e4b and
-    grouped-nf4-gemm counted prebound launches; a pb0 arm requested neither and counted none. Empty string = engaged."""
+    grouped-nf4-gemm counted prebound launches; a pb0 arm requested neither and counted none. Amendment 35's family also requires every
+    arm to have run torch 2.12 and triton 3.7. Empty string = engaged."""
     pa = (r or {}).get("prebind_ab")
     if not isinstance(pa, dict):
         return "no prebind_ab record on the receipt: whether the launches were prebound cannot be verified"
@@ -546,6 +562,12 @@ def prebind_ab_why(tag, r):
             bad.append(f"{side} counted no prebound launch")
         elif not on and n != 0:
             bad.append(f"{side} counted {n} prebound launches with the flag off")
+    if fam == PREBIND37_FAM:
+        tv, trv = str(((r or {}).get("env") or {}).get("torch") or ""), str(pa.get("triton") or "")
+        if not tv.startswith(PREBIND37_ENV[0]):
+            bad.append(f"env.torch {tv or 'missing'} is not {PREBIND37_ENV[0]}*")
+        if not trv.startswith(PREBIND37_ENV[1]):
+            bad.append(f"triton {trv or 'missing'} is not {PREBIND37_ENV[1]}*")
     return "" if not bad else f"prebind A/B not engaged ({'; '.join(bad)}; triton {pa.get('triton')})"
 
 
@@ -1218,8 +1240,8 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = samestack_why(r.get("tag") or "", r)
         if w:
             why.append(w)
-    if fam == PREBIND_FAM and fw == "e4b":             # amendment 26: the prebound launches its tag names, engaged on both sides
-        w = prebind_ab_why(r.get("tag") or "", r)
+    if fam in PREBIND_SPECS and fw == "e4b":           # amendments 26 / 35: the prebound launches its tag names, engaged on both sides
+        w = prebind_ab_why(r.get("tag") or "", r, fam)
         if w:
             why.append(w)
     if fam in DQ_FAMS and fw == "e4b":                 # amendment 28: the expert absmax its tag names
@@ -2279,41 +2301,43 @@ def score_samestack(F):
     return out
 
 
-def score_prebindab(F):
+def score_prebindab(F, fam=PREBIND_FAM):
     """TC1-PREREG amendment 26, on the qwen3prebindab box: P53 (shipped) and P54 (matched) -- pb1 / pb0 s/step within PREBIND_BANDS[pid],
     the median over two VALID draws a side with each side's draws within 5 %; P55 -- on each arm |mean held-out at N, pb1 - pb0| <=
-    PREBIND_HELDOUT_MAX. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED."""
-    R = F.get(PREBIND_FAM)
+    PREBIND_HELDOUT_MAX. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED. Amendment 35 (fam=PREBIND37_FAM): the same
+    reading of the qwen3prebind37 box as P66 / P67 / P68 with PREBIND37_BANDS."""
+    pairs, bands, pheld = PREBIND_SPECS[fam]
+    R = F.get(fam)
     if not R:
         return []
     out, p55 = [], []
-    for pid, name, t in PREBIND_PAIRS:
+    for pid, name, t in pairs:
         O, N = R["draws"].get(("e4b", f"{t}_pb0"), {}), R["draws"].get(("e4b", f"{t}_pb1"), {})
         if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
             why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("pb0", O), ("pb1", N)))
-            out.append((pid, PREBIND_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            out.append((pid, fam, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
             p55.append((name, None, why))
             continue
         ratio_ = N["s"] / O["s"]
         cross = [n / o for n in N["s_list"] for o in O["s_list"]]
-        lo, hi = PREBIND_BANDS[pid]
+        lo, hi = bands[pid]
         h0, h1 = O.get("heldout_list") or [], N.get("heldout_list") or []
         dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
         p55.append((name, dq, f"held-out at N pb0 {[round(v, 4) for v in h0 if v is not None]} pb1 {[round(v, 4) for v in h1 if v is not None]}"))
         r1 = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == ("e4b", f"{t}_pb1")), None) or {}
         pa = r1.get("prebind_ab") or {}
         counts = {sd: (pa.get(sd) or {}).get("stats") for sd in ("e4b", "gnf4")}
-        out.append((pid, PREBIND_FAM, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+        out.append((pid, fam, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
                     f"{name}: pb1 / pb0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; s/step pb0 "
                     f"{O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), pb1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
                     f"(within {100 * N['stability']:.1f}%); pb1 launch counts (process) {json.dumps(counts, sort_keys=True)}; triton {pa.get('triton')}"))
     ev = "; ".join(f"{n}: " + (f"mean held-out pb1 - pb0 {dq:+.4f} (|.| <= {PREBIND_HELDOUT_MAX}); {e}" if dq is not None else e) for n, dq, e in p55)
     if any(dq is not None and abs(dq) > PREBIND_HELDOUT_MAX for _, dq, _ in p55):
-        out.append(("P55", PREBIND_FAM, "FALSIFIED", ev))
+        out.append((pheld, fam, "FALSIFIED", ev))
     elif any(dq is None for _, dq, _ in p55):
-        out.append(("P55", PREBIND_FAM, "UNTESTED", ev))
+        out.append((pheld, fam, "UNTESTED", ev))
     else:
-        out.append(("P55", PREBIND_FAM, "HELD", ev))
+        out.append((pheld, fam, "HELD", ev))
     return out
 
 
@@ -3674,6 +3698,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_prebindab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PREBIND37_FAM in F:
+        out += ["\n## Predictions P66 / P67 / P68 (TC1-PREREG amendment 35: prebound Triton launches off vs on under triton 3.7.1, venv-unsloth, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_prebindab(F, PREBIND37_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if any(fam in F for fam in DQ_FAMS):
         out += ["\n## Predictions P56 / P57 / P58 (TC1-PREREG amendment 28: the expert absmax fp32 vs double-quantized, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -4027,9 +4056,12 @@ def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2
     return R
 
 def _prebind_set(ship=((3.10, 3.12), (2.92, 2.94)), match=((3.90, 3.92), (3.72, 3.74)), held_shift=0.0, pb1_counts=(4000, 9000), pb0_counts=(0, 0),
-                 requested=None, record=True):
+                 requested=None, record=True, fam=PREBIND_FAM, triton=None, torch=None):
     """Amendment 26: e4b against itself -- each pair as (pb0 draws, pb1 draws) s/step; `pb1_counts` / `pb0_counts` = (e4b, gnf4) prebound
-    launches each side counted; `requested` overrides the pb1 side's (e4b, gnf4) requested flags; `record=False` drops prebind_ab."""
+    launches each side counted; `requested` overrides the pb1 side's (e4b, gnf4) requested flags; `record=False` drops prebind_ab.
+    Amendment 35 (fam=PREBIND37_FAM): `triton` / `torch` default to 3.7.1 / 2.12.1+cu130 there (3.4.0 / unset for amendment 26)."""
+    triton = triton or ("3.7.1" if fam == PREBIND37_FAM else "3.4.0")
+    torch = torch or ("2.12.1+cu130" if fam == PREBIND37_FAM else None)
     R = {}
     for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
         for side, ss in (("pb0", old), ("pb1", new)):
@@ -4040,12 +4072,14 @@ def _prebind_set(ship=((3.10, 3.12), (2.92, 2.94)), match=((3.90, 3.92), (3.72, 
                 tag = f"{t}_{side}{sfx}"
                 r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if on else 0.0), matched=matched)
                 if record:
-                    r["prebind_ab"] = {"e4b_env": "1" if on else "0", "gnf4_env": "1" if on else "0", "triton": "3.4.0",
+                    r["prebind_ab"] = {"e4b_env": "1" if on else "0", "gnf4_env": "1" if on else "0", "triton": triton,
                                        "e4b": {"has": True, "requested": req[0], "stats": {"prebound": cnt[0], "triton": 12}},
                                        "gnf4": {"has": True, "requested": req[1], "stats": {"prebound": cnt[1], "triton": 30}}}
+                if torch:
+                    r["env"]["torch"] = torch
                 R[("e4b", tag)] = r
     for r in R.values():
-        r["fam"] = PREBIND_FAM
+        r["fam"] = fam
     return R
 
 def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1536), dense_dgrad=(0, 1536), absmax=(True, True), held_shift=0.0, drop_route=False):
@@ -5897,6 +5931,27 @@ def selftest():
     assert pe(envs={"e0": ("2.8.0+cu128", "5.18.0"), "e1": ("2.8.0+cu128", "5.18.0"), "e2": ("2.12.1+cu130", "5.5.0")}) == \
         {"P62": "UNTESTED", "P63": "UNTESTED", "P64": "HELD", "P65": "UNTESTED"}
     assert EF(_envsplit_set(prebind=True))[ENVSPLIT_FAM]["verdicts"][("e4b", "fused_attn4_m_e0")] == "VOID"
+    cases += 1
+    # 87. TC1 amendment 35 (qwen3prebind37): amendment 26's A/B under triton 3.7.1 -- shipped 0.981 and matched 0.985 HELD; a slower pb1, a
+    #     larger gain than registered and a held-out gap each FALSIFY; an arm that ran triton 3.4 or torch 2.8 is not engaged (VOID -> UNTESTED)
+    P7 = lambda R: {PREBIND37_FAM: reduce_family(PREBIND37_FAM, R, {}, 20)}
+    s37 = lambda ship=((3.10, 3.12), (3.04, 3.06)), match=((3.90, 3.92), (3.84, 3.86)), **kw: _prebind_set(ship=ship, match=match, fam=PREBIND37_FAM, **kw)
+    R7 = P7(s37())
+    assert [(x["fw"], x["tag"]) for x in R7[PREBIND37_FAM]["rows"]] == EXPECTED[PREBIND37_FAM]
+    assert all(x["verdict"] == "VALID" for x in R7[PREBIND37_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in R7[PREBIND37_FAM]["rows"]]
+    p7 = lambda **kw: {p: v for p, _, v, _ in score_prebindab(P7(s37(**kw)), PREBIND37_FAM)}
+    assert p7() == {"P66": "HELD", "P67": "HELD", "P68": "HELD"}, score_prebindab(R7, PREBIND37_FAM)
+    assert "pb1 / pb0 0.981 [" in score_prebindab(R7, PREBIND37_FAM)[0][3] and "triton 3.7.1" in score_prebindab(R7, PREBIND37_FAM)[0][3]
+    assert p7(ship=((3.10, 3.12), (3.14, 3.16))) == {"P66": "FALSIFIED", "P67": "HELD", "P68": "HELD"}      # 1.013: slower with the flags on
+    assert p7(match=((3.90, 3.92), (3.70, 3.72))) == {"P66": "HELD", "P67": "FALSIFIED", "P68": "HELD"}      # 0.949: more than registered
+    assert p7(held_shift=0.008) == {"P66": "HELD", "P67": "HELD", "P68": "FALSIFIED"}
+    for kw, frag in (({"triton": "3.4.0"}, "triton 3.4.0 is not 3.7*"), ({"torch": "2.8.0+cu128"}, "env.torch 2.8.0+cu128 is not 2.12*")):
+        RV7 = P7(s37(**kw))
+        why = next(x["why"] for x in RV7[PREBIND37_FAM]["rows"] if x["tag"] == "fused_attn4_m_pb0")
+        assert RV7[PREBIND37_FAM]["verdicts"][("e4b", "fused_attn4_m_pb0")] == "VOID" and frag in str(why), why
+        assert p7(**kw) == {"P66": "UNTESTED", "P67": "UNTESTED", "P68": "UNTESTED"}
+    print("FAILING-CASE TC1-am35-engagement (reducer):", "VOID", "--", str(why)[-120:])
+    assert pp() == {"P53": "HELD", "P54": "HELD", "P55": "HELD"}           # amendment 26's box reads as before (triton 3.4, no torch check)
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
