@@ -501,6 +501,19 @@ MATCHED |= {SAMESTACK_T28, SAMESTACK_T28 + "_d2"}
 DRAW2[("e4b", SAMESTACK_T28)] = ("e4b", SAMESTACK_T28 + "_d2")
 
 
+# TC1c amendment 9: amendment 25's family on one H100 NVL (token qwen3samestackh100), read with its own bands and a route check
+SAMESTACK_H100_FAM = "qwen3samestackh100"
+FAMS.append(SAMESTACK_H100_FAM)
+NAMES[SAMESTACK_H100_FAM] = "Qwen3-30B-A3B on an H100 NVL (TC1c amendment 9: the matched set with e4b and Unsloth on one stack, torch 2.12.1+cu130 / transformers 5.5.0)"
+N_LAYERS[SAMESTACK_H100_FAM] = 48
+ATTN_CENSUS[SAMESTACK_H100_FAM] = 192
+DENSE_PINS[SAMESTACK_H100_FAM] = DENSE_PINS[QDENSE_FAM]
+EXPECTED[SAMESTACK_H100_FAM] = list(EXPECTED[SAMESTACK_FAM])
+# per family: (position id, band, environment id, band, matched-set id or None, route id or None, the environment reading to cite)
+SAMESTACK_SPECS = {SAMESTACK_FAM: ("P50", SAMESTACK_P50_BAND, "P51", SAMESTACK_P51_BAND, "P52", None, "amendment 24's P47 read 0.882"),
+                   SAMESTACK_H100_FAM: ("P27", (1.00, 1.35), "P28", (0.80, 1.00), None, "P29", "TC1 amendment 33's P51 read 0.900 on an RTX 5090")}
+
+
 def samestack_why(tag, r):
     """Amendment 25's engagement predicate for an e4b arm: _t28 arms ran torch 2.8.* (venv-e4b), every other e4b arm 2.12.* (venv-unsloth)."""
     want = "2.8." if tag.startswith(SAMESTACK_T28) else "2.12."
@@ -1273,7 +1286,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = bmm_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
-    if fam == SAMESTACK_FAM and fw == "e4b":           # amendment 25: the venv its tag names
+    if fam in SAMESTACK_SPECS and fw == "e4b":         # amendment 25 / TC1c amendment 9: the venv its tag names
         w = samestack_why(r.get("tag") or "", r)
         if w:
             why.append(w)
@@ -2300,45 +2313,57 @@ def score_bmmab(F):
     return out
 
 
-def score_samestack(F):
+def score_samestack(F, fam=SAMESTACK_FAM):
     """TC1-PREREG amendment 25, on the qwen3samestack box: P50 -- the matched position Unsloth/e4b (both on venv-unsloth) within
     SAMESTACK_P50_BAND, both pairs two STABLE draws; P51 -- e4b's matched arm venv-unsloth / venv-e4b within SAMESTACK_P51_BAND, both sides
     two STABLE draws; P52 -- e4b's reference and Unsloth each read EQUIVALENT or INSIDE-DRAW-NOISE against e4b's fused arm, and e4b's
-    parity PASSES. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED."""
-    R = F.get(SAMESTACK_FAM)
+    parity PASSES. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED. TC1c amendment 9 (fam=SAMESTACK_H100_FAM): the same
+    two speed readings as P27 / P28 with its own bands, no matched-set prediction (no reference arm), and P29 -- every e4b receipt's
+    route_ab names grouped_mm with GNF4_TRAIN_GEMM unset (the fused e4b arms that ran)."""
+    pid_pos, band_pos, pid_env, band_env, pid_set, pid_route, cite = SAMESTACK_SPECS[fam]
+    R = F.get(fam)
     if not R:
         return []
     out = []
     pz = R["positions"].get("unsloth") or {}
-    lo, hi = SAMESTACK_P50_BAND
+    lo, hi = band_pos
     if pz.get("quoted") and pz.get("e4b_draws") == 2 and pz.get("other_draws") == 2:
         v = pz["ratio"]
-        out.append(("P50", SAMESTACK_FAM, "HELD" if lo <= v <= hi else "FALSIFIED",
+        out.append((pid_pos, fam, "HELD" if lo <= v <= hi else "FALSIFIED",
                     f"Unsloth/e4b on one stack {v:.3f} [{pz['ratio_min']:.3f}, {pz['ratio_max']:.3f} over {pz['n_cross']} cross-draw ratios] vs {[lo, hi]}; "
                     f"s/step e4b {pz['e4b_s']:.3f} (within {100 * (pz.get('e4b_stability') or 0):.1f}%), Unsloth {pz['other_s']:.3f} (within "
                     f"{100 * (pz.get('other_stability') or 0):.1f}%); peak e4b {f(pz.get('peak_e4b'), 2)} / Unsloth {f(pz.get('peak_other'), 2)} GB; "
                     f"held-out at N e4b {f(pz.get('heldout_e4b'), 4)} / Unsloth {f(pz.get('heldout_other'), 4)}"))
     else:
-        out.append(("P50", SAMESTACK_FAM, "UNTESTED", f"two stable VALID draws a side are registered -- {pz.get('why') or 'one side single-draw'}"))
+        out.append((pid_pos, fam, "UNTESTED", f"two stable VALID draws a side are registered -- {pz.get('why') or 'one side single-draw'}"))
     E, T = R["draws"].get(("e4b", "fused_attn4_m"), {}), R["draws"].get(("e4b", SAMESTACK_T28), {})
-    lo, hi = SAMESTACK_P51_BAND
+    lo, hi = band_env
     if E.get("usable") and T.get("usable") and E.get("draws") == 2 and T.get("draws") == 2:
         v = E["s"] / T["s"]
         cross = [a / b for a in E["s_list"] for b in T["s_list"]]
-        out.append(("P51", SAMESTACK_FAM, "HELD" if lo <= v <= hi else "FALSIFIED",
+        out.append((pid_env, fam, "HELD" if lo <= v <= hi else "FALSIFIED",
                     f"e4b matched arm venv-unsloth / venv-e4b {v:.3f} [{min(cross):.3f}, {max(cross):.3f}] vs {[lo, hi]}; s/step venv-unsloth "
-                    f"{E['s_list'][0]:.3f} / {E['s_list'][1]:.3f}, venv-e4b {T['s_list'][0]:.3f} / {T['s_list'][1]:.3f}; amendment 24's P47 read 0.882"))
+                    f"{E['s_list'][0]:.3f} / {E['s_list'][1]:.3f}, venv-e4b {T['s_list'][0]:.3f} / {T['s_list'][1]:.3f}; {cite}"))
     else:
         why = "; ".join(f"{n} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for n, d in (("venv-unsloth", E), ("venv-e4b", T)))
-        out.append(("P51", SAMESTACK_FAM, "UNTESTED", f"two stable VALID draws a side are registered -- {why}"))
+        out.append((pid_env, fam, "UNTESTED", f"two stable VALID draws a side are registered -- {why}"))
+    if pid_route:
+        ras = {x["tag"]: x["r"].get("route_ab") for x in R["rows"]       # the fused e4b arms that ran (a skipped reference is a stub)
+               if x["fw"] == "e4b" and x["tag"].startswith("fused") and (x.get("r") or {}).get("status") == "ok"}
+        bad = [f"{t}: {(ra or {}).get('gnf4_train_gemm') if ra else 'no route_ab record'}" + (f" (GNF4_TRAIN_GEMM={ra.get('gnf4_train_gemm_env')})" if ra and ra.get("gnf4_train_gemm_env") else "")
+               for t, ra in sorted(ras.items()) if not (ra and ra.get("gnf4_train_gemm") == "grouped_mm" and not ra.get("gnf4_train_gemm_env"))]
+        ev = (f"{len(ras)} e4b receipts; route grouped_mm with GNF4_TRAIN_GEMM unset on " + ("all" if not bad else f"{len(ras) - len(bad)}; not on {'; '.join(bad)}"))
+        out.append((pid_route, fam, "UNTESTED" if not ras else ("HELD" if not bad else "FALSIFIED"), ev if ras else "no e4b receipts"))
+    if not pid_set:
+        return out
     eq, par = R.get("equivalence") or {}, (R.get("parity") or {}).get("verdict")
     ok_read = ("EQUIVALENT", "INSIDE-DRAW-NOISE")
     reads = {k: (eq.get(k) or {}).get("reading") for k in (("e4b", "reference_attn4_m"), ("unsloth", "ckpt_unsloth_m"))}
     ev = "; ".join(f"`{k[0]}/{k[1]}` {v or 'not read'}" for k, v in reads.items()) + f"; e4b parity {par or 'not read'}"
     if any(v in (None, "—", "N-A") for v in reads.values()) or par not in ("PASS", "FAIL"):
-        out.append(("P52", SAMESTACK_FAM, "UNTESTED", ev))
+        out.append((pid_set, fam, "UNTESTED", ev))
     else:
-        out.append(("P52", SAMESTACK_FAM, "HELD" if all(v in ok_read for v in reads.values()) and par == "PASS" else "FALSIFIED", ev))
+        out.append((pid_set, fam, "HELD" if all(v in ok_read for v in reads.values()) and par == "PASS" else "FALSIFIED", ev))
     return out
 
 
@@ -3778,6 +3803,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if SAMESTACK_H100_FAM in F:
+        out += ["\n## Predictions P27 / P28 / P29 (TC1C-PREREG amendment 9: the H100 position with both frameworks on one stack; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_samestack(F, SAMESTACK_H100_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if PREBIND_FAM in F:
         out += ["\n## Predictions P53 / P54 / P55 (TC1-PREREG amendment 26: prebound Triton launches off vs on, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -4129,9 +4159,10 @@ def _bmm_replay_files(d, t28=None, t212=None, cap=(12, 0)):
         json.dump({"label": label, "results": rows}, open(os.path.join(d, BMM_FILES[label]), "w"))
 
 
-def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2.12.1+cu130", "2.8.0+cu128"), u_held=1.8100, drop=()):
+def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2.12.1+cu130", "2.8.0+cu128"), u_held=1.8100, drop=(), fam=None, routes=None):
     """Amendment 25: the matched set on one stack -- e4b's anchor pair and reference with `torch_v[0]`, its _t28 pair with `torch_v[1]`,
-    Unsloth's pair; `u_held` = Unsloth's held-out at N (e4b 1.8000, reference 1.8050: band 0.015); `drop` removes arms."""
+    Unsloth's pair; `u_held` = Unsloth's held-out at N (e4b 1.8000, reference 1.8050: band 0.015); `drop` removes arms. TC1c amendment 9:
+    `fam` (default amendment 25's) and `routes`, a {tag: route} map written into every e4b receipt's route_ab (grouped_mm unless named)."""
     env = lambda tv: {"box_class": "RTX 5090", "gpu": "NVIDIA GeForce RTX 5090", "torch": tv}
     R = {}
     for i, sfx in enumerate(("", "_d2")):
@@ -4141,8 +4172,11 @@ def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2
     R[("e4b", "reference_attn4_m")] = _receipt("e4b", "reference_attn4_m", "reference", s=9.00, heldout_n=1.8050, env=env(torch_v[0]))
     for k in drop:
         R.pop(k, None)
-    for r in R.values():
-        r["fam"] = SAMESTACK_FAM
+    for (fw, tag), r in R.items():
+        r["fam"] = fam or SAMESTACK_FAM
+        if routes is not None and fw == "e4b":
+            r["route_ab"] = {"gnf4_train_gemm": routes.get(tag, "grouped_mm"), "gnf4_train_gemm_env": None, "gnf4_has_route": True,
+                             "stats": {"fwd": 16896, "dgrad": 7680}}
     return R
 
 def _prebind_set(ship=((3.10, 3.12), (2.92, 2.94)), match=((3.90, 3.92), (3.72, 3.74)), held_shift=0.0, pb1_counts=(4000, 9000), pb0_counts=(0, 0),
@@ -6085,6 +6119,28 @@ def selftest():
         assert RV[COMPACT_FAM]["verdicts"][("e4b", tag)] == "VOID" and frag in str(why), (kw, why)
     assert pc(flags=("0", "0")) == {"P69": "UNTESTED", "P70": "UNTESTED", "P71": "UNTESTED", "P72": "UNTESTED"}
     print("FAILING-CASE TC1-am36-engagement (reducer):", "VOID", "--", str(why)[-120:])
+    cases += 1
+    # 89. TC1c amendment 9 (qwen3samestackh100): the H100 same-stack position 1.181 and environment 0.917 HELD, the route on every e4b arm;
+    #     Unsloth faster on one stack FALSIFIES P27 (still a stable reading), an e4b arm off the route FALSIFIES P29, no gain FALSIFIES P28
+    HF_ = lambda R: {SAMESTACK_H100_FAM: reduce_family(SAMESTACK_H100_FAM, R, {}, 20)}
+    hset = lambda routes=None, **kw: _samestack_set(e=kw.pop("e", (2.20, 2.22)), t28=kw.pop("t28", (2.40, 2.42)), u=kw.pop("u", (2.60, 2.62)),
+                                                    fam=SAMESTACK_H100_FAM, routes=routes if routes is not None else {}, **kw)
+    RH = HF_(hset())
+    assert [(x["fw"], x["tag"]) for x in RH[SAMESTACK_H100_FAM]["rows"]] == EXPECTED[SAMESTACK_H100_FAM]
+    ph = lambda **kw: {p: v for p, _, v, _ in score_samestack(HF_(hset(**kw)), SAMESTACK_H100_FAM)}
+    assert ph() == {"P27": "HELD", "P28": "HELD", "P29": "HELD"}, score_samestack(RH, SAMESTACK_H100_FAM)
+    assert "Unsloth/e4b on one stack 1.181 [" in score_samestack(RH, SAMESTACK_H100_FAM)[0][3]
+    assert "0.900 on an RTX 5090" in score_samestack(RH, SAMESTACK_H100_FAM)[1][3]
+    assert ph(u=(2.00, 2.02)) == {"P27": "FALSIFIED", "P28": "HELD", "P29": "HELD"}             # 0.910: Unsloth faster on one stack
+    assert ph(e=(2.50, 2.52)) == {"P27": "HELD", "P28": "FALSIFIED", "P29": "HELD"}             # 1.041: slower in Unsloth's environment
+    assert ph(routes={"fused_attn4_m_t28": "fused"}) == {"P27": "HELD", "P28": "HELD", "P29": "FALSIFIED"}
+    assert "fused_attn4_m_t28: fused" in score_samestack(HF_(hset(routes={"fused_attn4_m_t28": "fused"})), SAMESTACK_H100_FAM)[2][3]
+    assert ph(torch_v=("2.8.0+cu128", "2.8.0+cu128"))["P27"] == "UNTESTED"
+    RS9 = hset()                                                     # the registered box skips e4b's reference: a NOT_RUN stub, no route_ab
+    RS9[("e4b", "reference_attn4_m")] = {**_stub("e4b", "reference_attn4_m", "reference", "not_run", "skipped by TC1_SKIP"), "fam": SAMESTACK_H100_FAM}
+    assert {p: v for p, _, v, _ in score_samestack(HF_(RS9), SAMESTACK_H100_FAM)} == {"P27": "HELD", "P28": "HELD", "P29": "HELD"}
+    assert ps() == {"P50": "HELD", "P51": "HELD", "P52": "HELD"}                                # amendment 25's reading unchanged
+    print("FAILING-CASE TC1c-am9-route (reducer):", "FALSIFIED", "-- P29 with the _t28 arm on the fused route")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

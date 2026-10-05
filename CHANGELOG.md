@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### TC1c amendment 9 registered: the H100 position with both frameworks on one stack (bench and tests only)
+
+- **Why.** The 5090 position to quote is now same-stack (TC1 amendment 33: 2.352). The H100's (1.061, TC1c amendment 8) still runs e4b
+  in the field image's environment and Unsloth in its own, and it is e4b's thinnest lead on any card. e4b's H100 step is host-bound, where
+  the 5090 found a 0.88–0.90 environment gain.
+- **The box** (token `qwen3samestackh100`): TC1 amendment 25's family on one H100 NVL, 60 steps, no reference arm, load-gated draws,
+  nothing else set. P27 Unsloth/e4b on one stack in [1.00, 1.35]; P28 e4b venv-unsloth / venv-e4b in [0.80, 1.00]; P29 grouped-nf4-gemm's
+  `auto` route takes `grouped_mm` on every fused e4b arm. A stable reading becomes the H100 position to quote whichever side it favours.
+- The reducer reads it with amendment 25's scorer (now per family) and a route check (one new self-test case).
+
 ### TC1 amendment 36 registered: grouped-nf4-gemm's compact padded LoRA delta, A/B for peak and speed on one stack (bench and tests only)
 
 - **Why.** On one stack Unsloth peaks 3.22 GB below e4b. Amendment 23's census puts the part beyond the fp32 absmax in transients, led
