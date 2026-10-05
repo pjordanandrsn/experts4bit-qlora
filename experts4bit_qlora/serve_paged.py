@@ -94,8 +94,9 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   K/V into the FP8 pool, and (with decode graphs) claims every block the slot can reach at its first decode.
   Per layer and per block that is ~13.5k host-issued launches a request on Qwen3-30B-A3B at 2048 tokens a slot,
   serialized ahead of every resident decode (``bench/stall-census-2026-10-05``). ``E4B_PAGED_BULK_KV=1`` does
-  the same work in a launch count independent of layers and blocks, leaving the same pool, tables and lengths;
-  ``0`` (the default) keeps the per-layer path.
+  the same work in a launch count independent of layers and blocks, leaving the same pool, tables and lengths. It is
+  the default since lanes SC2c (#1166: DEFAULT_LICENSED) and SC2d (#1192: engaged and output-identical on a hybrid
+  and on gpt-oss); ``0`` keeps the per-layer path.
 
 Not in v1: sampling, logprobs, stop strings, adapters, prefix caching, per-request timeouts.
 Everything above the engine seam is testable on CPU with a fake runner (``tests/test_serve_paged.py``);
@@ -176,10 +177,10 @@ def _bulk_kv_env(value: str) -> bool:
     """``E4B_PAGED_BULK_KV``: ``1`` runs a request's KV bookkeeping in bulk (:class:`~.engines.paged_runner.PagedModelRunner`
     ``bulk_kv``): the slot reset at admission and at finish, the prompt's flush into the FP8 pool, and, with decode
     graphs, the claim of every block the slot can reach, each in a launch count independent of layers and blocks. The
-    pool, tables and lengths it leaves are the per-layer path's. ``0`` (the default, also when unset or empty) keeps
-    the per-layer path. The stall census (``bench/stall-census-2026-10-05``) counted ~13.5k host-issued launches of
+    pool, tables and lengths it leaves are the per-layer path's. ``1`` is the default, also when unset or empty, since
+    lanes SC2c (#1166) and SC2d (#1192); ``0`` keeps the per-layer path. The stall census (``bench/stall-census-2026-10-05``) counted ~13.5k host-issued launches of
     per-layer bookkeeping per request on Qwen3-30B-A3B at 2048 tokens a slot. Anything else is refused."""
-    v = (value or "0").strip() or "0"
+    v = (value or "1").strip() or "1"
     if v in ("0", "1"):
         return v == "1"
     raise ValueError(f"E4B_PAGED_BULK_KV={value!r}: expected '0' or '1'")
@@ -225,7 +226,7 @@ class PagedServeConfig:
     token: str = ""                      # E4B_TOKEN: bearer on /v1/*
     trace_path: str = ""                 # E4B_PAGED_TRACE: per-request JSONL
     step_trace_path: str = ""            # E4B_PAGED_STEP_TRACE: per-step JSONL (engines.step_trace)
-    bulk_kv: bool = False                # E4B_PAGED_BULK_KV: 0 (default) / 1 (_bulk_kv_env)
+    bulk_kv: bool = True                 # E4B_PAGED_BULK_KV: 1 (default since SC2c/SC2d) / 0 (_bulk_kv_env)
     device: str = "cuda"
 
     @classmethod
@@ -264,7 +265,7 @@ class PagedServeConfig:
             token=env("E4B_TOKEN", ""),
             trace_path=env("E4B_PAGED_TRACE", ""),
             step_trace_path=env("E4B_PAGED_STEP_TRACE", ""),
-            bulk_kv=_bulk_kv_env(env("E4B_PAGED_BULK_KV", "0")),
+            bulk_kv=_bulk_kv_env(env("E4B_PAGED_BULK_KV", "1")),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()

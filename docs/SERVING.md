@@ -151,7 +151,7 @@ What SC2b read (#846, `bench/sc2/`, one RTX 5090, Qwen3-30B-A3B int4, 16 sequenc
 
 The A2000 census behind it is `bench/prefill-graph-census-2026-10-04/`.
 
-**Bulk KV bookkeeping (`E4B_PAGED_BULK_KV`, opt-in, `0` by default).** Each request costs the engine some KV
+**Bulk KV bookkeeping (`E4B_PAGED_BULK_KV`, on by default since lanes SC2c and SC2d; `0` restores the per-layer path).** Each request costs the engine some KV
 bookkeeping outside the model forward:
 - a slot reset at admission and at finish;
 - the prompt's flush into the FP8 pool once its last chunk runs;

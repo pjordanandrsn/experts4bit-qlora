@@ -433,5 +433,7 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     if setup.exp_int4:
         unmodelled.append("the source checkpoint on local disk: the int4 repack reads its safetensors (snapshot_download), "
                           "never the arena")
+    unmodelled.append("the bulk KV flush transient (E4B_PAGED_BULK_KV, on by default since SC2c/SC2d): one prompt's K/V "
+                      "staged for the single bulk write; lane SC2d recorded 168 MiB on gpt-oss-20b")
     unmodelled.append("CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)")
     return Footprint(items=tuple(items), unmodelled=tuple(unmodelled))
