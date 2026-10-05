@@ -42,7 +42,7 @@ if [ "$REHEARSAL" != 1 ]; then
 fi
 [ "${K30_PROVE:-0}" = 1 ] && { say "PROVE: card and forensics recorded; no install, no timing"; echo "prove ok" >> summary.txt; finish 0; }
 
-command -v git >/dev/null || { perl -e 'alarm 300; exec @ARGV' apt-get install -y -q git > logs/apt_git.log 2>&1 || { say "NO GIT"; finish 9; }; }
+command -v git >/dev/null || { perl -e 'alarm 300; exec @ARGV' sh -c 'apt-get update -q && apt-get install -y -q git' > logs/apt_git.log 2>&1 || { tail -3 logs/apt_git.log; say "NO GIT"; finish 9; }; }
 command -v gcc >/dev/null || { say "NO C COMPILER (Triton needs one): the image must be a -devel image"; finish 9; }
 say "install gnf4 @$GNF4_SHA"
 perl -e 'alarm 900; exec @ARGV' python -m pip install -q --no-input --force-reinstall --no-deps \
