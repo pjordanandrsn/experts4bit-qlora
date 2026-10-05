@@ -1,0 +1,18 @@
+/root/tc1/dq4_cap.py:117: UserWarning: dense offload: kept 192 trainable tensor(s) resident (0.31 GB) instead of streaming them -- an optimizer cannot step a streamed parameter. For inference, freeze the model first: model.requires_grad_(False)
+  handles = enable_dense_offload(pm, pin=True, prefetch=False, train_prefetch=True)
+[transformers] `use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+DQ4 S default seq 2048: ok peak 7.88 / reserved 17.65 GiB
+DQ4 S default seq 3072: ok peak 9.13 / reserved 17.97 GiB
+DQ4 S default seq 4096: ok peak 10.39 / reserved 18.24 GiB
+DQ4 S default seq 5120: ok peak 11.64 / reserved 19.02 GiB
+DQ4 S default seq 6144: ok peak 12.90 / reserved 19.71 GiB
+DQ4 S default seq 7168: ok peak 14.15 / reserved 20.51 GiB
+DQ4 S default seq 8192: ok peak 15.41 / reserved 23.34 GiB
+DQ4 S default seq 9216: ok peak 16.66 / reserved 24.41 GiB
+DQ4 S default seq 10240: ok peak 17.92 / reserved 25.20 GiB
+DQ4 S default seq 11264: ok peak 19.18 / reserved 26.67 GiB
+DQ4 S default seq 12288: ok peak 20.43 / reserved 27.38 GiB
+DQ4 S default seq 13312: ok peak 21.68 / reserved 28.41 GiB
+DQ4 S default seq 14336: ok peak 22.94 / reserved 29.16 GiB
+DQ4 S default seq 15360: OOM peak 19.00 / reserved 30.62 GiB
+DQ4 S ladder done: max_ok 14336 first_oom 15360

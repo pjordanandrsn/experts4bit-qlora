@@ -1,0 +1,19 @@
+link: NVIDIA GeForce RTX 5090, 5, 16
+VRAM_PROBE_OK 29.5 GiB in 14 blocks
+EGRESS_PROBE_OK 13.9 MB in 3.3 s = 4.20 MB/s from codeload.github.com (floor 1.0)
+dq4 tripwire OK 3f5a8bc9 2.8.0+cu128 NVIDIA GeForce RTX 5090
+c_def_R_ladder rc=0 DQ4 R ladder done: max_ok 7168 first_oom 8192
+c_def_S_ladder rc=0 DQ4 S ladder done: max_ok 14336 first_oom 15360
+c_def_R_ok rc=0 DQ4 R confirm done: max_ok 7168 first_oom None
+c_def_R_oom rc=0 DQ4 R confirm done: max_ok None first_oom 8192
+c_def_S_ok rc=0 DQ4 S confirm done: max_ok 14336 first_oom None
+c_def_S_oom rc=0 DQ4 S confirm done: max_ok None first_oom 15360
+c_exp_R_ladder rc=0 DQ4 R ladder done: max_ok 8192 first_oom 9216
+c_exp_S_ladder rc=0 DQ4 S ladder done: max_ok 19456 first_oom 20480
+c_exp_R_ok rc=0 DQ4 R confirm done: max_ok 8192 first_oom None
+c_exp_R_oom rc=0 DQ4 R confirm done: max_ok None first_oom 9216
+c_exp_S_ok rc=0 DQ4 S confirm done: max_ok 19456 first_oom None
+c_exp_S_oom rc=0 DQ4 S confirm done: max_ok None first_oom 20480
+s_def_R_ladder rc=0 DQ4 R ladder done: max_ok 3072 first_oom 4096
+s_def_S_ladder rc=0 DQ4 S ladder done: max_ok 8192 first_oom 9216
+DQ4 read: {'lane': 'CAP_REAL', 'c_def': 'CAP_REAL', 'c_exp': 'CAP_REAL', 's_def': 'CAP_REAL'} {'c_def': {'L_R': 7168, 'L_S': 14336, 'G': 2.0}, 'c_exp': {'L_R': 8192, 'L_S': 19456, 'G': 2.375}, 's_def': {'L_R': 3072, 'L_S': 8192, 'G': 2.6666666666666665}}

@@ -1,0 +1,86 @@
+{
+ "schema": "dq4-cap/1",
+ "arm": "R",
+ "mode": "ladder",
+ "loss": "stock",
+ "rehearsal": false,
+ "alloc_conf": "default",
+ "started_at": "2026-10-05T21:14:40Z",
+ "device": "NVIDIA GeForce RTX 5090",
+ "total_bytes": 33670758400,
+ "config_overrides": {
+  "num_hidden_layers": 64
+ },
+ "env": {
+  "E4B_SHA": "3f5a8bc9266e72b24555191481878a02a29ba36a"
+ },
+ "ladder": {
+  "start": 2048,
+  "step": 1024,
+  "top": 32768,
+  "steps": 2
+ },
+ "build_s": 85.8,
+ "engagement": {
+  "wrapped": 448,
+  "wrapper_kinds": [
+   "peft.tuners.lora.bnb.Linear4bit"
+  ],
+  "lora_params": 896,
+  "lora_dtypes": [
+   "torch.float32"
+  ],
+  "trainable": 134217728,
+  "gradient_checkpointing": true
+ },
+ "allocated_after_setup": 19779858432,
+ "rungs": [
+  {
+   "seq": 2048,
+   "ok": true,
+   "steps": [
+    {
+     "s": 3.485892867203802,
+     "loss": 12.908461570739746,
+     "finite": true
+    },
+    {
+     "s": 3.3780172606930137,
+     "loss": 12.392699241638184,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 26004182016,
+   "peak_reserved": 28569501696
+  },
+  {
+   "seq": 3072,
+   "ok": true,
+   "steps": [
+    {
+     "s": 5.111485197674483,
+     "loss": 12.959905624389648,
+     "finite": true
+    },
+    {
+     "s": 5.110511377919465,
+     "loss": 12.741813659667969,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 28560630784,
+   "peak_reserved": 32369541120
+  },
+  {
+   "seq": 4096,
+   "ok": false,
+   "steps": [],
+   "error": "CUDA out of memory. Tried to allocate 2.32 GiB. GPU 0 has a total capacity of 31.36 GiB of which 2.27 GiB is free. Including non-PyTorch memory, this process has 29.08 GiB memory in use. Of the allocated memory 26.66 GiB is allocated by PyTorch, and 1.80 GiB is reserved by PyTorch but unallocated. I",
+   "peak_alloc": 29918590464,
+   "peak_reserved": 32887537664
+  }
+ ],
+ "max_ok": 3072,
+ "first_oom": 4096,
+ "finished_at": "2026-10-05T21:16:26Z"
+}
