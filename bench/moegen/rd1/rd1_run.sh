@@ -54,25 +54,17 @@ cat logs/tripwire.log | tee -a summary.txt
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | tee forensics.txt; lscpu | grep "Model name" | tee -a forensics.txt
 
 # ---------------------------------------------------------------- box class (bench/train-anchor), strict as tp1, load-gated
-# Amendment 1 (RD1-PREREG.md): three draws were refused on launch.self_pair alone (1.042, 1.042, 1.060 > 1.03) on two hosts, and
-# TC1 amendment 33 measured host load from other tenants driving this kind of instability on these multi-tenant 5090 hosts. The
-# anchor stays strict, but it is run only at host load1 <= LOAD_MAX (waiting up to LOAD_WAIT_S), at most ANCHOR_TRIES times;
-# the last attempt stands. A sampler records /proc/loadavg every 5 s; the probe's own window is summarised into its receipt,
-# and rd_table.py takes no decision from a probe whose median load1 exceeded LOAD_MAX.
-LOAD_MAX=5.0; LOAD_WAIT_S=600; ANCHOR_TRIES=3
-[ "$REHEARSAL" = 1 ] && LOAD_WAIT_S=30         # the QNAP host runs at load ~17: a rehearsal checks the path, not the wait
+# Amendment 1 sampled host load and gated the anchor on it; amendment 3 (RD1-PREREG.md) keeps the sampler but drops the gate:
+# across five anchored boxes, host load1 did not predict the anchor (Vast 145701 failed at 12-31 on 256 threads; RunPod passed
+# at 19.6 on 120). The anchor runs at most ANCHOR_TRIES times before the probe (the last attempt stands), and a POST-probe
+# anchor re-measures the box after it: rd_table.py takes a decision only when that post-probe anchor passed, so a box picked in
+# a quiet moment cannot license a reading it did not hold through. Host load is recorded beside the probe, informational.
+ANCHOR_TRIES=3; POST_ANCHOR=1
 ( while :; do echo "$(date -u +%s) $(cat /proc/loadavg)"; sleep 5; done ) > logs/loadavg.log 2>&1 &
 SAMPLER=$!
 load1(){ cut -d' ' -f1 /proc/loadavg; }
-wait_load(){ local w=0
-  until python -c "import sys; sys.exit(0 if float(open('/proc/loadavg').read().split()[0]) <= $LOAD_MAX else 1)"; do
-    [ $w -ge $LOAD_WAIT_S ] && { echo "LOAD WAIT: load1 $(load1) > $LOAD_MAX after ${w}s; the anchor runs anyway" | tee -a summary.txt; return; }
-    sleep 15; w=$((w + 15))
-  done
-  echo "LOAD OK: load1 $(load1) <= $LOAD_MAX after ${w}s" | tee -a summary.txt; }
 t=1
 while :; do
-  wait_load
   say "train anchor (attempt $t of $ANCHOR_TRIES)"
   ANCHOR_OUT=$W/anchor.json perl -e 'alarm 900; exec @ARGV' python train_anchor.py > logs/anchor.log 2>&1
   python train_anchor_gate.py anchor.json | tee logs/anchor_gate.log; arc=${PIPESTATUS[0]}
@@ -104,10 +96,10 @@ P0=$(date -u +%s)
 perl -e 'alarm 1800; exec @ARGV' python rd_probe.py --out receipts/rd1.json --seqs "$SEQS" --fams "$FAMS" > logs/probe.log 2>&1
 prc=$?
 P1=$(date -u +%s)
-# amendment 1: the host load over the probe's own window, into its receipt (rd_table.py decides nothing above LOAD_MAX)
-python - "$P0" "$P1" "$LOAD_MAX" <<'PYL' 2>&1 | tee -a summary.txt
+# the host load over the probe's own window and the 60 s before it, into its receipt (informational since amendment 3)
+python - "$P0" "$P1" <<'PYL' 2>&1 | tee -a summary.txt
 import json, statistics, sys
-p0, p1, gate = int(sys.argv[1]), int(sys.argv[2]), float(sys.argv[3])
+p0, p1 = int(sys.argv[1]), int(sys.argv[2])
 rows = [(int(f[0]), float(f[1])) for f in (l.split() for l in open("logs/loadavg.log")) if len(f) > 1]
 vals = [v for t, v in rows if p0 <= t <= p1]
 pre = [v for t, v in rows if p0 - 60 <= t < p0]          # the host before the probe's own threads count in load1
@@ -115,12 +107,28 @@ try:
     rec = json.load(open("receipts/rd1.json"))
 except (OSError, ValueError):
     print("LOAD during probe: no receipt to annotate"); sys.exit(0)
-rec["host_load1_probe"] = ({"median": statistics.median(vals), "max": max(vals), "samples": len(vals), "gate": gate,
+rec["host_load1_probe"] = ({"median": statistics.median(vals), "max": max(vals), "samples": len(vals),
                             "pre60_median": statistics.median(pre) if pre else None, "pre60_samples": len(pre)}
-                           if vals else {"samples": 0, "gate": gate})
+                           if vals else {"samples": 0})
 json.dump(rec, open("receipts/rd1.json", "w"), indent=1)
 print(f"LOAD during probe: {rec['host_load1_probe']}")
 PYL
+# amendment 3: the post-probe anchor -- the box's stability re-measured after the probe, into its receipt; only rc 0 licenses
+say "train anchor (post-probe)"
+ANCHOR_OUT=$W/anchor_post.json perl -e 'alarm 900; exec @ARGV' python train_anchor.py > logs/anchor_post.log 2>&1
+python train_anchor_gate.py anchor_post.json | tee logs/anchor_gate_post.log; parc=${PIPESTATUS[0]}
+pcls=$(grep -E '^\s*class ' logs/anchor_gate_post.log | awk '{print $2}')
+echo "ANCHOR post-probe rc=$parc class=$pcls load1 $(load1)" | tee -a summary.txt
+python - "$parc" "$pcls" <<'PYA' 2>&1 | tee -a summary.txt
+import json, sys
+try:
+    rec = json.load(open("receipts/rd1.json"))
+except (OSError, ValueError):
+    print("post-probe anchor: no receipt to annotate"); sys.exit(0)
+rec["anchor_post"] = {"rc": int(sys.argv[1]), "class": sys.argv[2]}
+json.dump(rec, open("receipts/rd1.json", "w"), indent=1)
+print(f"post-probe anchor into the receipt: {rec['anchor_post']}")
+PYA
 CELLS=$(python -c "import json; print(len(json.load(open('receipts/rd1.json'))['cells']))" 2>/dev/null) || CELLS=0
 echo "probe rc=$prc cells=$CELLS" | tee -a summary.txt
 python rd_table.py receipts/rd1.json > RESULTS-rd1.txt 2>&1; cat RESULTS-rd1.txt | tee -a summary.txt

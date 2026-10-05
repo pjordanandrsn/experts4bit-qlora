@@ -189,6 +189,33 @@ checks.
 - **Budget.** The proof is one RTX 5090 at $1.10/h under a 1.0 h guard (up to three 600 s waits), about $1.10 at most.
   The draw is the same, about $1.10. Both are in the no-ask tier.
 
+## Amendment 3 (2026-10-05, after amendment 2's proving run, before the draw): a post-probe anchor licenses the reading; host load is informational
+
+**The proof** (`rd1-rp-prove-1`, RunPod Secure RTX 5090, $0.23) read two of amendment 2's three conditions:
+- **The fetch worked.** Every file came back. rsync was present on the pod (`/usr/bin/rsync`) before the runner's own
+  install step. The pod launched after adertha-agents#169 (16:34Z), whose RunPod start script installs rsync at container
+  start, so this is most likely #169 at work, not the image. #169's PR records `rsync: command not found` on tc1c-h100-19
+  (see experts4bit-qlora#1180).
+- **The anchor passed on its first attempt**, class `pcie-full/launch-fast`, at host load1 19.58.
+- **Host load1 never reached 5.0.** 133 samples, min 9.66, median 11.6, max 19.77, with the container seeing 120 CPUs.
+
+By amendment 2's rule, the gate is redesigned before any draw.
+
+**Why load is the wrong licence.** Across five anchored boxes, host load1 did not predict the anchor:
+- Vast 145701 failed at 12–31 on a 256-thread host, on launch and H2D.
+- RunPod passed at 19.6 on 120 CPUs.
+- Load average is a host-wide count of runnable threads. The anchor measures the box's launch, transfer and FLOP stability
+  directly, which is what the probe's event times depend on.
+
+**The change** (`rd1_run.sh`, `rd_table.py`; the probe, the bar and the correctness gate are unchanged):
+- **No load wait.** The anchor runs before the probe at most 3 times, and the last attempt stands. The sampler stays, and
+  the probe's window and the 60 s before it are recorded as `host_load1_probe`, informational only.
+- **A post-probe anchor** re-measures the box after the probe. Its verdict goes into the probe's receipt as `anchor_post`.
+- **`rd_table.py` takes a decision only when the post-probe anchor passed (rc 0).** A box selected in a quiet moment by
+  pre-probe retries therefore cannot license a reading it did not hold through. A failed or missing post-probe anchor is NOT
+  A DECISION.
+- **The draw runs on RunPod Secure's RTX 5090**, as amendment 2 set, at the 1.0 h guard (about $1.10).
+
 ## The A2000 correctness rehearsal (`a2000/`; correctness only, never speed)
 
 Run before the box, on the owned RTX A2000 (sm_86), with the same probe. It checks:
