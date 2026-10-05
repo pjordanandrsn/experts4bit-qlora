@@ -141,6 +141,11 @@ package's own torch floor, torch 2.8 or newer (grouped-nf4-gemm's
 `pyproject.toml`; pre-releases accepted) — above this package's 2.2, so
 check `python -c "import torch; print(torch.__version__)"` first on a CUDA
 image whose torch you want to keep.
+On an RTX 5090, Qwen3-30B-A3B's fused training step ran 0.905× as long on
+torch 2.12.1+cu130 as on torch 2.8.0+cu128, with transformers 5.5.0 on both;
+transformers 5.5.0 against 5.18.0 on torch 2.8 made no difference
+(`e4b.train.env-split.qwen3.5090.2026-10-05`). The step is host-bound there;
+other cards were not measured.
 
 ## Which door? Start from what does not fit
 

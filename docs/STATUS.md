@@ -281,7 +281,9 @@ e4b's matched arm steps 0.882× as long. The cause is not the padded LoRA delta'
 on both torch versions (`e4b.train.bmm-host-replay.5090.2026-10-04`). The same-stack box (TC1 amendment 33) replicated the gain on
 another host: 0.900, with e4b's prebound launches engaged on the field-image side only.
 Nor is it triton (`e4b.train.triton37.qwen3.5090.2026-10-05`, TC1 amendment 32): triton 3.7.1 alone in the field image reads 0.992 on
-the matched arm and 0.971 on the shipped arm. The gain sits with torch 2.12 and/or transformers 5.5; amendment 34 splits them.
+the matched arm and 0.971 on the shipped arm. **It is torch 2.12's** (`e4b.train.env-split.qwen3.5090.2026-10-05`, TC1 amendment 34):
+torch 2.12.1 + triton 3.7.1 over torch 2.8 + triton 3.4 reads 0.905 at transformers 5.5, and transformers 5.5 over 5.18 on torch 2.8 reads
+1.005.
 
 **The other families at matched work** (lane TC2, 2026-10-02, two rented
 RTX 5090 hosts, [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md);
