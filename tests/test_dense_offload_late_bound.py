@@ -123,18 +123,27 @@ def _allocated_after_forward(m):
     return held
 
 
+def _resident_held():
+    """The baseline, measured exactly like the offloaded model: one warm step first. A COLD first step carries
+    one-time allocations (measured: ~38 MB more than a warm one on the A2000), which inflated an earlier version of
+    this baseline so far that the route-disabled control 'saved' more than every weight in the model."""
+    res = _model(ckpt=True)
+    _allocated_after_forward(res)
+    held = _allocated_after_forward(res)
+    lb = _layer_bytes(res)
+    del res
+    torch.cuda.empty_cache()
+    return held, lb
+
+
 @pytest.mark.parametrize("train_prefetch", [False, True])
 def test_the_evicted_weights_are_actually_freed_between_forward_and_backward(train_prefetch):
     """The quantity the lane exists to change. After the forward (graph alive, before backward) the offloaded model
     must hold at least (L - 2) layers' packed weights LESS than the resident one -- at most two layers stay bound."""
-    res = _model(ckpt=True)
-    res_held = _allocated_after_forward(res)
-    lb = _layer_bytes(res)
-    del res
-    torch.cuda.empty_cache()
+    res_held, lb = _resident_held()
     m = _model(ckpt=True)
     _offload(m, train_prefetch=train_prefetch)
-    _allocated_after_forward(m)                         # warm (first-step staging, allocator)
+    _allocated_after_forward(m)                         # warm, exactly as the resident baseline is
     off_held = _allocated_after_forward(m)
     saved = res_held - off_held
     assert saved >= (NL - 2) * lb - lb // 2, (saved, (NL - 2) * lb, res_held, off_held)
@@ -144,11 +153,7 @@ def test_without_the_late_bound_route_nothing_is_saved(monkeypatch):
     """The measurement above has power: with the route disabled (stock bnb MatMul4Bit), the ctx-held weights keep
     every layer alive and the saving collapses."""
     monkeypatch.setattr(do, "_install_late_bound_backward", lambda handles: 0)
-    res = _model(ckpt=True)
-    res_held = _allocated_after_forward(res)
-    lb = _layer_bytes(res)
-    del res
-    torch.cuda.empty_cache()
+    res_held, lb = _resident_held()
     m = _model(ckpt=True)
     _offload(m, train_prefetch=True)
     _allocated_after_forward(m)
