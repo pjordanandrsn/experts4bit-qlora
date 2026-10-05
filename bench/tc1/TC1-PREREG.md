@@ -1213,6 +1213,54 @@ the shipped arm.
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; about $1.20 with the download. This is in the
 standing no-ask tier.
 
+### Amendment 32 (2026-10-05T02:08Z, after an unregistered RTX A2000 decomposition): one variable, Triton 3.4 against 3.7.1, on one RTX 5090 (P59–P61)
+
+**Why.** Amendment 24 read e4b's matched arm at **0.882×** in Unsloth's venv (torch 2.12.1, transformers 5.5.0, triton 3.7.1) against
+the field image's (torch 2.8.0, transformers 5.18.0, triton 3.4.0). Its replay ruled out the padded LoRA delta's `bmm`.
+
+An unregistered diagnostic on the owned RTX A2000 then split the three. It used a 4-layer real-router slice of Qwen3-30B-A3B, TC1's
+tokens and recipe, `tc1_arm.py` unchanged, and three to six interleaved draws per environment:
+
+- torch 2.8 with triton 3.7.1 forced in reads 0.931× torch 2.8 with triton 3.4;
+- torch 2.12 at triton 3.7.1 adds nothing (1.011);
+- transformers 5.5 against 5.18 adds nothing (1.005).
+
+The device profile puts the gain in grouped-nf4-gemm's kernels: `_dgrad_nf4_grouped` about −40 % and `_gemm_nf4_grouped` about −15 % of
+device time under triton 3.7. The A2000 runs that slice device-bound and the 5090 step is host-bound, so the share may not transfer. This
+box reads the one variable on the 5090.
+
+**The box** (token `qwen3tritonab`). One RTX 5090, venv-e4b (torch 2.8.0+cu128), TC1's qwen3 tokens and field recipe, `TC1_STEPS=60`
+(50-step medians). Each of the matched and the shipped arm runs `_tr0` (venv-e4b's own triton 3.4) against `_tr1` (triton 3.7.1
+installed alone into the box's work dir and put first on the arm's `PYTHONPATH`), two draws a side in ABBA order. The prebound launches
+are off on both sides (`E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0`): they cover triton 3.4 / 3.6, and on `_tr0` alone they would be a
+second variable. The box avoids machines 45511, 138786 and 151350.
+
+Engagement: each receipt's `env.triton` reads 3.4.* on `_tr0` and 3.7.* on `_tr1`, and its `prebind_ab` shows both flags off. A failed
+triton 3.7.1 install leaves every `_tr1` arm an `install_failed` row.
+
+**Predictions** (registered before the box):
+
+- **P59** (matched): `_tr1` / `_tr0` s/step lies in **[0.82, 0.95]**, both sides stable. Most of amendment 24's 0.882 is Triton.
+- **P60** (shipped): `_tr1` / `_tr0` lies in **[0.85, 0.98]**. The bf16-adapter step is shorter, so the same kernel gain is a different
+  share.
+- **P61:** on each arm, |mean held-out at N, `_tr1` − `_tr0`| ≤ **0.005**. On the A2000 the step-0 held-out was identical to 5 decimals
+  across the two Tritons.
+
+Each is FALSIFIED outside its band, and UNTESTED where a side is unstable, not VALID or not engaged.
+
+**Decision rules.**
+
+- **P59 and P61 HELD:** the 5090's environment gain is Triton's.
+  - e4b's docs say that triton ≥ 3.7 (torch ≥ 2.12, or the override this box uses) runs grouped-nf4-gemm's training kernels faster.
+  - grouped-nf4-gemm investigates why triton 3.4's code for those kernels is slower: its own registration.
+  - The prebound launches gain triton 3.7 coverage, which is grouped-nf4-gemm's and e4b's own PRs.
+- **P59 FALSIFIED high (above 0.95):** the A2000 decomposition does not transfer to the host-bound 5090 step, and the 0.882 stays
+  unattributed between torch and transformers.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; no Unsloth venvs are built. About $1.50 with
+the download; this is in the standing no-ask tier.
+
 ### Amendment 33 (2026-10-05T02:19Z, after amendment 29's box): load-gated draws, and the same-stack pair re-asked under them (P50, P51)
 
 **Why.** The same-stack speed pair has now gone unread on three boxes, each with one or two unstable pairs:
