@@ -47,6 +47,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-78` | `qwen3envsplit` (amendment 34, 60 steps, load-gated) | instance 54248510, AMD EPYC 7B13 (Vast machine 145701) | e4b's matched arm in three environments: transformers 5.5 vs 5.18 on torch 2.8 1.005 (P62 FALSIFIED), torch 2.12 + triton 3.7 vs torch 2.8 + triton 3.4 0.905 (P63 HELD), the whole environment 0.909 (P64 HELD); the environment gain is torch's; [read](RESULTS-tc1-envsplit.md) | $1.73 |
 | `tc1-5090-79` | `qwen3prebind37` (amendment 35, 60 steps, load-gated) | instance 54255834, AMD EPYC 7B13 (Vast machine 145701) | amendment 26's prebind A/B under triton 3.7.1 in venv-unsloth: shipped 0.996 (P66 HELD), matched 0.986 (P67 HELD), held-out within 0.003 (P68 HELD); triton 3.7 stays in the prebound path's supported versions; [read](RESULTS-tc1-prebind37.md) | $1.68 |
 | `tc1-5090-80` | `qwen3compactab` (amendment 36, 60 steps, load-gated) | instance 54259219, AMD EPYC 7B13 (Vast machine 145701) | grouped-nf4-gemm's compact padded LoRA delta off vs on in venv-unsloth: the matched peak ROSE 0.23 GB (P69 FALSIFIED), and the step got faster than registered, matched 0.969 and shipped 0.970 (P70, P71 FALSIFIED); held-out within 0.001 (P72 HELD); it stays opt-in; [read](RESULTS-tc1-compactab.md) | $1.48 |
+| `tc1-5090-83` | `qwen3compactab2` (amendment 37, 60 steps, load-gated) | instance 54275103, AMD EPYC 7702P (Vast machine 45379) | the compact delta again with grouped-nf4-gemm#473's backward, on another host: matched peak −0.288 GB (P73 HELD), matched 0.967 (P74 HELD), shipped 0.948, faster than its band (P75 FALSIFIED), held-out within 0.003 (P76 HELD); by the rule it stays opt-in pending its own registration; [read](RESULTS-tc1-compactab2.md) | $0.78 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -55,6 +56,28 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 37 (2026-10-05): with its backward releasing early, the compact delta lowers the matched peak 0.29 GB and is 3–5 % faster on another host
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 37. One RTX 5090 (`tc1-5090-83`, AMD EPYC 7702P, Vast
+machine 45379; two earlier launches cost $0.007 and $0: a host below the harness's driver floor, then an avoid receipt the launcher does not
+accept): amendment 36's box, `NF4_QLORA_COMPACT_DELTA` 0 vs 1, every arm in venv-unsloth with e4b `64afc6d` and grouped-nf4-gemm `9622144`
+(after #473), 60 steps, load-gated draws (none voided). Read: [`RESULTS-tc1-compactab2.md`](RESULTS-tc1-compactab2.md).
+
+| arm | `_cd0` s/step | `_cd1` s/step | `_cd1` / `_cd0` | peak `_cd0` → `_cd1` | held-out Δ | prediction |
+|---|---|---|---|---|---|---|
+| matched (fp32 adapters) | 3.914 / 3.860 | 3.752 / 3.763 | **0.967** [0.959, 0.975] | 27.477 → **27.189 GB** | +0.0029 | P73, P74 HELD |
+| shipped (bf16 adapters) | 3.026 / 2.970 | 2.824 / 2.864 | **0.948** [0.933, 0.964] | 24.673 → 24.673 GB | −0.0003 | P75 FALSIFIED (below [0.95, 0.99]) |
+
+- **The peak moved the way the A2000 said.** Amendment 36's box read the matched peak +0.229 GB with the flag on; with #473's backward it
+  reads −0.288 GB (P73 HELD, band [−0.05, 0.50]). The shipped arm's peak is elsewhere in its step and does not move.
+- **The speed replicated, and the shipped arm more than registered.** Matched 0.967 against amendment 36's 0.969 (P74 HELD); shipped 0.948
+  against 0.970, just below the band (P75 FALSIFIED on the fast side).
+- **P76 HELD.** Held-out at N moves +0.0029 (matched) and −0.0003 (shipped).
+- **By amendment 37's rule the flag stays opt-in pending its own registration**: a ratio below 0.95 is the "otherwise" branch. The bands
+  were two-sided, and the reading fell outside on the side the decision wanted. A default needs a registration whose bands allow that.
+- **Two hosts now agree on the direction** (EPYC 7B13 and EPYC 7702P): 3–5 % off the step on both arms, with outputs and gradients
+  bit-identical by construction.
 
 ## Amendment 36 (2026-10-05): the compact padded LoRA delta is 3 % faster, not lighter — the matched peak rose 0.23 GB
 

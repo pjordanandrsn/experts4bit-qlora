@@ -271,7 +271,10 @@ e4b keeps it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 G
 0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults
 the gap is 1.78 GB. grouped-nf4-gemm's opt-in compact delta (`NF4_QLORA_COMPACT_DELTA=1`) was meant to shrink that transient; on one
 stack it did not (`e4b.train.compact-delta.qwen3.5090.2026-10-05`, TC1 amendment 36): the matched peak rose 0.23 GB, while the step ran
-0.969 (matched) and 0.970 (shipped) of the default's. It stays opt-in.
+0.969 (matched) and 0.970 (shipped) of the default's. It stays opt-in. With grouped-nf4-gemm#473's backward (each intermediate released
+at its last use) a second host read the matched peak 0.288 GB lower and the step 0.967 (matched) / 0.948 (shipped)
+(`e4b.train.compact-delta.free.qwen3.5090.2026-10-05`, TC1 amendment 37); the shipped ratio fell below its registered band, so it stays
+opt-in until a registration whose bands allow that reading.
 **The double-quantized absmax, as an A/B** (`e4b.train.absmax-dq.mixtral.5090.2026-10-05`, TC1 amendment 28): on Mixtral-8x7B
 `E4B_ABSMAX_DQ=1` costs 2.3 % of the step (1.023) for 2.04 GB of peak (31.07 → 29.03 GB), held-out within 0.003. Qwen3-30B-A3B's pair
 was unstable on a busy host; amendment 31 read it over 60 steps on a quiet one

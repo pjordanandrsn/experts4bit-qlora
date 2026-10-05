@@ -9587,6 +9587,31 @@
       "notes": "Vast invoiced $1.48."
     },
     {
+      "id": "e4b.train.compact-delta.free.qwen3.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 37 (#835), one rented RTX 5090 (tc1-5090-83): grouped-nf4-gemm's compact padded LoRA delta (NF4_QLORA_COMPACT_DELTA=1) against the default, with grouped-nf4-gemm#473's backward (each intermediate released at its last use; values identical), e4b in venv-unsloth (torch 2.12.1+cu130), the shipped and the matched arm, two draws a side in ABBA order, 60-step runs, load-gated draws (none voided), on a second host. Matched arm (fp32 adapters): 0.967 [0.959, 0.975], peak 27.477 -> 27.189 GB (-0.288; P73 HELD, band [-0.05, 0.50] GB of drop; P74 HELD, band [0.95, 0.99]). Shipped arm (bf16 adapters): 0.948 [0.933, 0.964], peak unchanged (P75 FALSIFIED, below its [0.95, 0.99] band). Held-out at N within 0.003 (P76 HELD). Amendment 36's box (without #473) read the matched peak +0.229 GB and the step 0.969 / 0.970. By amendment 37's rule the flag stays opt-in pending its own registration.",
+      "value": 0.967,
+      "unit": "ratio s/step, NF4_QLORA_COMPACT_DELTA=1 over the default with grouped-nf4-gemm#473, matched arm (medians of steps 11..60 over two draws each); cross-draw interval [0.959, 0.975]; matched peak -0.288 GB; shipped arm 0.948",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-83: instance 54275103, AMD EPYC 7702P, Vast machine 45379); e4b @ 64afc6d + grouped-nf4-gemm @ 9622144 (0.41.0, after #473) in venv-unsloth, torch 2.12.1+cu130, triton 3.7.1",
+      "conditions": "bench/tc1 token qwen3compactab2 (TC1 amendment 37): TC1's tokens and field recipe over 60 steps, every arm in venv-unsloth (TC1's t212 install), TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2; engagement as amendment 36 (keep_ab, lean_ab, env.torch); validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-compactab2.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-83/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-83/tc1/"
+      ],
+      "notes": "Vast invoiced $0.78."
+    },
+    {
       "id": "e4b.train.env-ab.qwen3.5090.2026-10-04",
       "package": "experts4bit-qlora",
       "area": "train",
