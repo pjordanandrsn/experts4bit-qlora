@@ -121,6 +121,8 @@ class _DenseOffload:
         self.ready_event = None
         self._prefetch_next = None
         self._staged_dev = None
+        self._train = None          # DQ3 opt-in schedule (enable_dense_offload(train_prefetch=True)); None = off
+        self._train_idx = None
         # (module, attr, is_param, home) — home is a pinned CPU tensor holding the
         # EXACT loaded bytes.
         self.slots: list = []
@@ -425,6 +427,120 @@ class _DenseOffload:
                 f"staged={self.staged}>")
 
 
+# ------------------------------------------------------------ train prefetch --
+# DQ3 (experts4bit-qlora#1083, bench/dq3/DESIGN-dq3.md): an OPT-IN, overlapped training path. Off by default; with
+# ``enable_dense_offload(..., train_prefetch=False)`` none of what follows is constructed or reached.
+#
+# Under non-reentrant gradient checkpointing a training step uses the layers in the order 0..L-1 (forward), then
+# L-1..0 (backward: each layer's recompute, and its full-backward pre-hook, which may repeat the same index). Without
+# checkpointing only the backward pre-hooks run in the backward, in the same descending order. Both are covered by one
+# rule: keep the layer in use and ONE prefetch target resident, and copy the target on the prefetch stream while the
+# layer in use computes.
+
+def train_schedule(last, phase, i, n):
+    """Pure. Given the previous use (``last``, ``phase``) and this use of layer ``i`` of ``n``, return
+    ``(phase, target)``: ``phase`` is ``"fwd"``, ``"bwd"`` or ``"unscheduled"``, and ``target`` the layer to prefetch
+    (or None).
+
+    * Forward: target ``i + 1``; at the last layer, ``n - 2`` -- the backward starts there right after the loss.
+    * Backward: target ``i - 1``; at layer 0, ``1`` -- the next step's forward starts with 0 (still resident), then 1.
+    * A repeat of the same index continues the current phase, except at the last layer in the forward, where the repeat
+      is the backward's recompute (the turnaround).
+    * Anything else is out of order: ``"unscheduled"`` -- the caller stages synchronously and prefetches nothing.
+    """
+    if n <= 0 or not 0 <= i < n:
+        return "unscheduled", None
+    if last is None:
+        phase = "fwd"
+    elif phase == "fwd":
+        if i == last + 1:
+            phase = "fwd"
+        elif i == last:
+            phase = "bwd" if i == n - 1 else "fwd"
+        elif i == last - 1 and last == n - 1:
+            phase = "bwd"
+        elif i == 0:
+            phase = "fwd"
+        else:
+            return "unscheduled", None
+    elif phase == "bwd":
+        if i in (last, last - 1):
+            phase = "bwd"
+        elif i == last + 1 or i == 0:
+            phase = "fwd"
+        else:
+            return "unscheduled", None
+    else:                                     # after an unscheduled use: restart from here
+        phase = "fwd"
+    if phase == "fwd":
+        target = i + 1 if i + 1 < n else (n - 2 if n > 1 else None)
+    else:
+        target = i - 1 if i > 0 else (1 if n > 1 else None)
+    return phase, target
+
+
+class _TrainPrefetch:
+    """One device's chain of handles, the schedule's state, and the counters the DQ3 receipt reads."""
+
+    def __init__(self, handles):
+        self.handles = list(handles)
+        self.last = None
+        self.phase = None
+        self.counts = {"uses": 0, "resident_hits": 0, "unscheduled": 0, "hwm_resident": 0}
+        for ph in ("fwd", "bwd"):
+            for k in ("prefetch_issued", "overlapped", "waited", "blocking"):
+                self.counts[f"{ph}_{k}"] = 0
+
+    def use(self, h) -> None:
+        """Make ``h`` usable now, keep only it and the scheduled target resident, and start the target's copy."""
+        cls = type(h)
+        n = len(self.handles)
+        i = h._train_idx
+        phase, target = train_schedule(self.last, self.phase, i, n)
+        self.counts["uses"] += 1
+        tag = phase if phase in ("fwd", "bwd") else "fwd"
+        if phase == "unscheduled":
+            self.counts["unscheduled"] += 1
+        # 1) this layer: consume an in-flight prefetch, keep a bound one, or copy synchronously
+        if h.staged and h.ready_event is not None:
+            done = bool(h.ready_event.query())
+            self.counts[f"{tag}_{'overlapped' if done else 'waited'}"] += 1
+            h._consume_ready_event()
+        elif h.staged and h._staged_dev is None:
+            self.counts["resident_hits"] += 1
+        else:
+            self.counts[f"{tag}_blocking"] += 1
+            if not h.staged:
+                h._copy_home_to_device("sync")
+            h._consume_ready_event()
+        cls._resident[h.device] = h
+        cls._now(h.device).add(h)
+        # 2) residency: this layer and the target, nothing else on this device
+        keep = {h}
+        nxt = self.handles[target] if (target is not None and phase != "unscheduled") else None
+        if nxt is not None:
+            keep.add(nxt)
+        for other in list(cls._now(h.device)):
+            if other not in keep:
+                other.evict()
+        # 3) the target's copy, on the prefetch stream, fenced at bind by record_stream (see _bind)
+        # Only a CUDA target is copied ahead; on any other device the target is staged when it is used (synchronous,
+        # still correct), which is also what lets the schedule and parity tests run on a CPU-only CI runner.
+        if nxt is not None and nxt is not h and not nxt.staged and nxt.device.type == "cuda":
+            stream = _prefetch_stream(nxt.device)
+            with torch.cuda.stream(stream):
+                nxt._copy_home_to_device("prefetch")
+            evt = torch.cuda.Event()
+            evt.record(stream)
+            nxt.ready_event = evt
+            cls._now(nxt.device).add(nxt)
+            self.counts[f"{tag}_prefetch_issued"] += 1
+        self.counts["hwm_resident"] = max(self.counts["hwm_resident"], len(cls._now(h.device)))
+        self.last, self.phase = i, (phase if phase != "unscheduled" else "fwd")
+        if phase == "unscheduled":
+            self.last = None
+
+
 def decoder_layers(model):
     """``[(name, module)]`` for things named ``...layers.<i>``, in depth order.
 
@@ -455,7 +571,7 @@ def _layer_device(layer) -> "torch.device":
 def enable_dense_offload(model, device=None, *, pin: bool = True,
                          min_bytes: int = MIN_BYTES, prefetch: bool = True,
                          source=None, key_prefix: str = "", verify: bool = False,
-                         log=None) -> list:
+                         log=None, train_prefetch: bool = False) -> list:
     """Pin every decoder layer's dense weights on the host and stream them per layer.
 
     Returns the handles, also stashed on each layer as ``_dense_offload``. Pair with
@@ -481,6 +597,12 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     Grad-enabled forwards take the single-slot synchronous path AND are not
     evicted afterwards, because backward still needs the weights. So a training
     step is correct but saves nothing; this module is for inference.
+
+    ``train_prefetch=True`` (opt-in, default off; lane DQ3, ``bench/dq3/``) replaces that for a model in ``train()``
+    mode: each training use of a layer keeps it and ONE scheduled neighbour resident and copies the neighbour on the
+    prefetch stream while the layer computes -- forward i+1, backward (checkpoint recompute or backward pre-hook) i-1
+    (:func:`train_schedule`). Bitwise-identical results are the contract; the per-device counters are in
+    :func:`dense_offload_report` under ``train_prefetch``.
     Use it when the dense (non-expert) side of the model is what does not fit: every decoder
     layer's dense weights are pinned on the host and streamed per layer. Returns the list of
     handles (assert it is non-empty). Composes with the expert residency engines. See
@@ -523,13 +645,29 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
                 # and a no_grad forward of a module still in train() mode is the
                 # *initial* reentrant-checkpoint forward, not inference.
                 inference = not torch.is_grad_enabled() and not module.training
-                if _h._prefetch_next is not None and inference:
+                if _h._train is not None and module.training:
+                    _h._train.use(_h)          # DQ3 opt-in: scheduled, overlapped
+                elif _h._prefetch_next is not None and inference:
                     _h.stage_for_inference()
                 else:
                     _h.stage()
 
+            def _post(module, args, output, _h=h):
+                # Under the DQ3 opt-in a training forward does NOT evict: residency is
+                # bounded by the schedule (this layer + one target), and evicting here
+                # would throw away the layer the backward's recompute starts with.
+                if _h._train is not None and module.training:
+                    return
+                _h.evict()
+
+            def _bwd_pre(module, grad_output, _h=h):
+                if _h._train is not None and module.training:
+                    _h._train.use(_h)
+                else:
+                    _h.stage()
+
             layer.register_forward_pre_hook(_pre)
-            layer.register_forward_hook(lambda m, a, o, _h=h: _h.evict())
+            layer.register_forward_hook(_post)
             # Backward needs these weights again, and single-slot staging has
             # already evicted every layer but the last by the time the forward
             # returns — so without this, autograd fails on a 0-element placeholder
@@ -537,8 +675,7 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
             # keeps residency bounded (one layer, walking backwards) at the cost of
             # transferring each layer's weights twice per step, which is the same
             # trade activation checkpointing makes for activations.
-            layer.register_full_backward_pre_hook(
-                lambda m, grad_output, _h=h: _h.stage())
+            layer.register_full_backward_pre_hook(_bwd_pre)
         handles.append(h)
 
     # Assigned UNCONDITIONALLY, so a later call with prefetch=False actually turns
@@ -549,6 +686,17 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     # the wrong card, and the side stream belongs to one device anyway.
     for h in handles:
         h._prefetch_next = None
+        h._train = None
+        h._train_idx = None
+    if train_prefetch:
+        by_dev_t: dict = {}
+        for h in handles:
+            by_dev_t.setdefault(h.device, []).append(h)
+        for chain in by_dev_t.values():
+            sched = _TrainPrefetch(chain)
+            for idx, h in enumerate(chain):
+                h._train = sched
+                h._train_idx = idx
     if prefetch:
         by_dev: dict = {}
         for h in handles:
@@ -635,4 +783,8 @@ def dense_offload_report(handles) -> dict:
         # them at a PCIe rate said 5.7 s/token for a Kimi K3 run that measured 91.8.
         "seconds_per_token_at_19GBs": round(host / 19e9, 3),
         "disk_bytes_per_token": disk,
+        # DQ3 opt-in counters, per device chain; None when train_prefetch is off.
+        "train_prefetch": (None if not handles or handles[0]._train is None else
+                           {str(dev): dict(sched.counts) for dev, sched in
+                            {h.device: h._train for h in handles if h._train is not None}.items()}),
     }

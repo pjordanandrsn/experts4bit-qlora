@@ -174,3 +174,31 @@ the opt-in off, the selection is unchanged.
 
 **Unchanged:** the rule, the gates, the arms, the predictions and the consequences. The engagement check in the rule
 also requires `num_hidden_layers` = 64 in every arm (a reduced rehearsal subject is VOID).
+
+## Amendment 2 (2026-10-05, before any 5090 box or data; found by the A2000 rehearsal, correctness only)
+
+**Today's offload could not train this subject. Fixed in #1165, which DQ3 now runs on.** The stage-2 rehearsal
+(`dq3-a2000-rehearse-2`) ran two shapes:
+- **Reduced width** (6 layers, hidden 1024): every arm passed. Loss and every LoRA gradient were bitwise equal across
+  R S S0 S0 S R. Counters: forward 5 + 9×4, backward 10×4, one blocking fetch (step 1), residency high-water 2.
+- **Qwen3-32B's real width** (4 layers): the **S0** arm crashed in its first `AdamW.step`, with "The size of tensor a
+  (0) must match the size of tensor b (16)".
+
+Cause: with the opt-in off, `enable_dense_offload` selected PEFT's trainable `lora_B` / `lora_A` matrices over
+`MIN_BYTES` (1.6 MB at 25600 wide) for streaming. That made 40 streamed tensors per layer instead of 28, and
+`per_layer_bytes` 248,709,120 instead of S's 243,793,920. Eviction then left the optimizer an empty placeholder.
+Amendment 1 had applied the skip to S only and stated that the off path's selection was unchanged.
+
+**#1165 decides the selection per `enable_dense_offload` call, for both paths.** If any streamable parameter (2-D,
+`>= min_bytes`) in the decoder layers is frozen, trainable ones stay resident (with a warning). This subject is that
+case: NF4 bases are frozen and the LoRA adapters are trainable. If none is frozen, the selection is unchanged, which
+keeps unfrozen inference models streaming. A trainable parameter that offload moves onto the device is moved in place,
+so an optimizer built before the call still steps it.
+
+The stage-2 opt-in's own trainable-parameter skip is removed in favour of this rule. **S0 therefore means today's
+synchronous grad-mode staging as of #1165.** The pre-#1165 path cannot complete a step on this subject, so it has
+nothing to measure. S0 streams the same 28 tensors per layer as S.
+
+**Unchanged:** the registered rule above (`dq3_reduce.py` implements it as written), the gates, the arms, the
+predictions, the consequences and the guard. S0 still enters the parity gate (S0 ≠ R is FUNCTION_FAIL), and S0/R is
+still descriptive.
