@@ -148,6 +148,29 @@ model by the stage-2 tests.
 
 ## Cost
 
-Download about 65 GB (the bf16 checkpoint; quantized on load) and about 40 min of box time in total. Guard 1.5 h at the
-policy rate ($0.85/h), so it is preceded by a proving rental (guard > 1 h), per policy. Estimated actual about $0.7–1.0.
-This is the standing no-ask tier.
+Superseded by Amendment 1: no download, guard 1.0 h at the policy rate ($0.85/h), no proving rental needed, estimated actual
+under $0.60. This is the standing no-ask tier.
+
+## Amendment 1 (2026-10-05, before any box or data; stage 2 written, not yet run on a 5090)
+
+**The subject is constructed, not downloaded.** Qwen3-32B's architecture is built from its config at the registered
+revision (64 layers; hidden 5120; intermediate 25600; 64 q / 8 kv heads × 128; vocab 151936; untied embeddings). Every
+decoder projection is quantized by bitsandbytes `Linear4bit` (nf4, blocksize 64, double-quant, bf16 compute) from random
+bf16 weights, layer by layer: DQ2's tested construction, at full depth.
+
+The model carries `is_loaded_in_4bit`, as a `BitsAndBytesConfig` load sets it, so `get_peft_model` dispatches PEFT's
+bnb LoRA with fp32 adapters, exactly as on a real checkpoint. Parity (S/S0 against R), step time and allocator bytes do
+not depend on weight values. The architecture, kernels, shapes and every streamed byte are unchanged.
+
+What this removes from the run:
+- the ~65 GB download;
+- the HF-CDN dependency (the launch uses `preflight_bandwidth: none`, as DQ2's did);
+- the proving rental. The guard becomes **1.0 h**: install ~3 min, then six arms at ~3–4 min each (build, the 2-step
+  deterministic pass, 8 timed steps).
+
+**Trainable parameters never stream.** PEFT's `lora_B` for the 25600-wide projections is 1.6 MB, over `MIN_BYTES`.
+Under `train_prefetch` the selection skips trainable parameters, so the optimizer always updates resident tensors. With
+the opt-in off, the selection is unchanged.
+
+**Unchanged:** the rule, the gates, the arms, the predictions and the consequences. The engagement check in the rule
+also requires `num_hidden_layers` = 64 in every arm (a reduced rehearsal subject is VOID).
