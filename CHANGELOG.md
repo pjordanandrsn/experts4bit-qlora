@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+### The prebound Triton launches (`E4B_TRITON_PREBIND`) cover triton 3.7
+
+- **Why.** torch 2.12 and Unsloth's environment ship triton 3.7.1, where `prebind` returned the kernel itself: the default-on prebound
+  launches of the fused RMSNorm and rotary kernels did nothing there.
+- **What.** `SUPPORTED_TRITON` gains `(3, 7)`, with two branches that only 3.7 takes. Nothing changes under 3.4 or 3.6, and no default
+  changes.
+  - A registered compiler-stages hook (`knobs.runtime.add_stages_inspection_hook`) takes Triton's path: 3.7 adds its pipeline hash to
+    the kernel key.
+  - A `FutureKernel` is never kept. Under `AsyncCompileMode`, the 3.7 launch that compiles a key returns that proxy rather than the
+    `CompiledKernel` (3.6 resolves it first); a later launch keeps the `CompiledKernel` Triton's cache then holds.
+- **Read against triton 3.7.1's source.** The launch is the call 3.6 makes.
+  - `JITFunction.run` passes `CompiledKernel.run` the same positional list: grid, stream, function, packed metadata, launch metadata,
+    the enter and exit hooks, then every parameter in signature order.
+  - Unchanged from 3.6.0: the binder, `compute_cache_key`, `CompiledKernel`, and the native specializer (`python/src/specialize.cc`,
+    byte-identical). A tensor is still keyed on its dtype and 16-byte alignment, an integer on `== 1`, `% 16` and its width.
+  - Unchanged knobs: `runtime.debug` (read once, at import), the launch hook chains' `.calls`, `compilation.instrumentation_mode`.
+  - The NVIDIA launcher is now one C entry point instead of a module generated per signature. It takes the same arguments, skips
+    constexprs by annotation and calls no hook passed as `None`.
+- **Measured** on the RTX A2000 box's host (Xeon W-1250, 12 threads, load average 13–25, the bench at nice 10), torch 2.12.1 /
+  triton 3.7.1. Host µs per call, each timed after a synchronize; median of 2,000 interleaved off/on pairs; three runs. Qwen3-30B-A3B
+  shapes, as in the opt-in entry below.
+
+  | call | off → on |
+  |---|---|
+  | `RMSNormFrozen.apply`, hidden / q_norm / k_norm | 104–123 → 94–111 / 94–113 → 85–99 / 81–127 → 74–116 |
+  | `RMSNormFrozen.backward`, hidden / q_norm / k_norm | 72–94 → 62–83 / 71–85 → 61–72 / 49–77 → 44–67 |
+  | `rope_qk` forward (two launches) | 125–147 → 107–123 |
+  | `_RopeQK.backward` (two launches) | 85–111 → 68–87 |
+  | one launch alone (the kernels and shapes above) | 25–51 → 19–39 |
+
+  Prebinding saves 5.7–12.4 µs a launch. Triton 3.7.1's own launch is cheaper than 3.4's or 3.6's, so the saving is smaller than the
+  opt-in entry's (those runs were on another day, at another load).
+- **Tested** on that A2000 under triton 3.7.1. `tests/test_triton_prebind.py`: 21 passed. Two new tests cover the 3.7 branches, and
+  each fails with its branch removed. With `test_rmsnorm_train.py` and `test_rope_train.py`: 43 passed, flags off and on. The
+  fused-training suites agree flags off and on (115 passed); `test_fast_v4.py::test_gptoss_inside_lora_is_still_skipped` fails
+  either way, as before.
+- Runs on triton 3.7 that do not set the flag now take the prebound path. TC1 amendments 32 and 34 run their arms with both flags
+  `0`, so neither comparison changes.
+
 ### Fix: TC1's triton 3.7.1 install no longer rides back into the receipts
 
 - Amendment 32's box installed triton 3.7.1 into `$W/triton37`, which the lane's rsync excludes do not match (`venv*`), so 690 MB of
