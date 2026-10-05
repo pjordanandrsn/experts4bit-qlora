@@ -2121,3 +2121,100 @@ def test_tc1_amendment_39_packed_token_and_its_box_fixture():
             summ = (Path(td) / "summary.txt").read_text() if (Path(td) / "summary.txt").exists() else ""
         assert (r.returncode == 0 and "PASSED" in r.stdout) if ok else (r.returncode == 78 and "refusing" in r.stdout and "BOX_REFUSED" in summ), (fams, pack, seq, r.stdout)
     assert run.index(block) > run.index('echo "BOX $TC1_BOX families:') and run.index(block) < run.index("# cu130 wheels")
+
+
+def test_tc1_amendment_46_decoded_route_tokens():
+    """TC1 amendment 46: `olmoedecab` and `qwen3decab` run e4b against itself on the matched arm -- grouped-nf4-gemm's fused 4-bit kernels
+    (GNF4_TRAIN_GEMM=fused) vs its decoded route (=decoded, gnf4#487) -- two draws a side in ABBA order, every arm resident in venv-e4b (no
+    E4B_VENV), the sm_120 gate first; OLMoE at TC2's pin, Qwen3-30B-A3B at TC1's; neither token, alone or both on the one box, builds an
+    Unsloth venv."""
+    run = RUN_SH.read_text()
+    body = re.search(r"^tc1_decodedab_family\(\)\{.*?^  free_family", run, re.DOTALL | re.MULTILINE).group(0)
+    order = [("OLD", "arm", "fused_attn4_m_dec0"), ("NEW", "arm", "fused_attn4_m_dec1"),
+             ("NEW", "draw2", "fused_attn4_m_dec1"), ("OLD", "draw2", "fused_attn4_m_dec0")]
+    calls = re.findall(r'TC1_ARM_EXTRA_ENV="\$(OLD|NEW)" (arm|draw2) +\$FAM e4b (\S+) fused \$EAL "\$MID" \$REV (\d) field \$TOK \$TS --attn-4bit 1 \$MATCH$',
+                       body, re.MULTILINE)
+    assert [c[:3] for c in calls] == order and [c[3] for c in calls] == ["0"] * 4, calls
+    assert body.count("TC1_ARM_EXTRA_ENV=") == 4 and 'local OLD="GNF4_TRAIN_GEMM=fused" NEW="GNF4_TRAIN_GEMM=decoded"' in body
+    assert "E4B_VENV" not in body and "NATIVE" not in body and "GNF4_DECODED_MAX_BYTES" not in body.split("tc1_decoded_gate", 1)[1]
+    # the gate is the family's first step, before the fetch and every arm
+    assert body.index("tc1_decoded_gate") < body.index("tc1_prepare") < body.index("arm   $FAM")
+    assert "  olmoedecab) tc1_decodedab_family olmoedecab allenai/OLMoE-1B-7B-0924-Instruct 7f1c97f440f06ce36705e4f2b843edb5925f4498 2400 2400;;" in run
+    assert "  qwen3decab) tc1_decodedab_family qwen3decab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;" in run
+    assert re.search(r"tc2_small_family olmoe +allenai/OLMoE-1B-7B-0924-Instruct +7f1c97f440f06ce36705e4f2b843edb5925f4498 ", run)
+    line = 'case " $FAMILIES " in " olmoedecab "|" qwen3decab "|" olmoedecab qwen3decab "|" qwen3decab olmoedecab ") NEED_UNSLOTH=0;; esac'
+    shared = re.search(r"^NEED_UNSLOTH=1; case .*$", run, re.MULTILINE).group(0)
+    assert line in run and run.index(shared) < run.index(line) < run.index("venv-unsloth-t28:")
+    for fams, want in (("olmoedecab", "0"), ("qwen3decab", "0"), ("olmoedecab qwen3decab", "0"), ("qwen3decab olmoedecab", "0"), ("qwen3", "1"),
+                       ("olmoedecab qwen3", "1")):
+        out = subprocess.run(["bash", "-c", f'FAMILIES="{fams}"\n{shared}\n{line}\necho "$NEED_UNSLOTH"'], capture_output=True, text=True, check=True).stdout.strip()
+        assert out == want, (fams, out)
+
+
+_FAKE_GIT = r'''#!/bin/sh
+# a stand-in for `git` in amendment 46's gate test: `git clone ... DEST` writes a kernel/ with the two test files; checkout succeeds
+if [ "$1" = clone ]; then
+  [ -n "$DECGATE_FAKE_CLONE_FAIL" ] && exit 128
+  for a in "$@"; do d="$a"; done
+  mkdir -p "$d/kernel"
+  cat > "$d/kernel/test_nf4_route.py" <<EOF
+import os
+def test_dequant_groups_is_bit_equal_to_dequant_ref(): pass
+def test_decoded_route_matches_the_fused_kernels_on_any_card(): pass
+def test_decoded_route_passes_the_rd1_gate_against_the_dense_route():
+    assert os.environ.get("DECGATE_FAKE_FAIL") != "1", "the route's error exceeded 2x dense's"
+def test_the_cap_bounds_the_decode_transient(): pass
+def test_dense_route_takes_device_sizes_and_ids(): raise AssertionError("not selected by -k")
+EOF
+  [ -n "$DECGATE_FAKE_NO_ROUTE" ] && printf 'def test_dequant_groups_is_bit_equal_to_dequant_ref(): pass\n' > "$d/kernel/test_nf4_route.py"
+  printf 'def test_decoded_is_taken_only_when_asked_for(): pass\ndef test_auto(): pass\n' > "$d/kernel/test_nf4_route_decision.py"
+  exit 0
+fi
+exit 0
+'''
+
+
+@pytest.mark.parametrize("case,env,want_rc", [("pass", {}, 0), ("fail", {"DECGATE_FAKE_FAIL": "1"}, 19),
+                                              ("no_route", {"DECGATE_FAKE_NO_ROUTE": "1"}, 19), ("no_clone", {"DECGATE_FAKE_CLONE_FAIL": "1"}, 19)])
+def test_tc1_amendment_46_decoded_gate_refuses_the_box_before_any_arm(tmp_path, case, env, want_rc):
+    """The decoded A/B's first step, the real tc1_decoded_gate function on a stand-in checkout: it passes only when every required test ran and
+    passed; a failed RD1-gate test, a grouped-nf4-gemm without the route (where -k alone would select only the dequant test and pass), or a
+    checkout that fails each refuse the box with exit 19 -- BOX_REFUSED decoded-gate -- and leave decgate.json, which the reducer scores as P107.
+    A gate that passed is not run again (a second family on the box)."""
+    run = RUN_SH.read_text()
+    gate = re.search(r"^DECGATE_K=.*?^  finish 19; \}$", run, re.DOTALL | re.MULTILINE).group(0)
+    helpers = "\n".join(re.search(rf"^{n}\(\)\{{.*\}}$", run, re.MULTILINE).group(0) for n in ("say", "finish"))
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    (bindir / "git").write_text(_FAKE_GIT)
+    (bindir / "git").chmod(0o755)
+    W = tmp_path / "w"
+    (W / "logs").mkdir(parents=True)
+    script = (f'set -uo pipefail\nW={W}; cd $W; NONCE=t; TC1_BOX=A; PY_E4B={sys.executable}; GNF4_SHA={"g" * 40}; : > summary.txt\n'
+              f'{helpers}\n{gate}\ntc1_decoded_gate; tc1_decoded_gate; echo GATE-DONE\n')
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=300,
+                       env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", **env})
+    rec = json.loads((W / "decgate.json").read_text())
+    summ = (W / "summary.txt").read_text()
+    assert r.returncode == want_rc, (case, r.returncode, r.stdout[-800:], r.stderr[-800:])
+    if want_rc == 0:
+        assert rec["passed"] is True and rec["ran"] is True and "GATE-DONE" in r.stdout and "BOX_REFUSED" not in summ
+        assert summ.count("DECODED GATE PASSED") == 1, summ                    # the second call returned at once
+        assert [(x["tests"], x["failures"], x["missing"]) for x in rec["runs"]] == [(4, 0, []), (2, 0, [])], rec["runs"]
+    else:
+        assert rec["passed"] is False and "BOX_REFUSED decoded-gate" in summ and "GATE-DONE" not in r.stdout
+        assert (W / "TC1_EXIT_CODE.t").read_text().strip() == "19"
+    if case == "fail":
+        assert rec["runs"][0]["failures"] == 1 and rec["runs"][0]["missing"] == ["test_decoded_route_passes_the_rd1_gate_against_the_dense_route"]
+    if case == "no_route":
+        assert rec["runs"][0]["tests"] == 1 and rec["runs"][0]["failures"] == 0 and len(rec["runs"][0]["missing"]) == 3
+        assert rec["runs"][1]["missing"] == []
+    if case == "no_clone":
+        assert rec["ran"] is False and "checkout" in rec["reason"]
+    sys.path.insert(0, str(REPO / "bench" / "tc1"))
+    try:
+        import tc1_reduce as R
+    finally:
+        sys.path.pop(0)
+    want_p107 = {"pass": "HELD", "fail": "FALSIFIED", "no_route": "UNTESTED", "no_clone": "UNTESTED"}[case]
+    assert R.score_decgate(str(W))[0][2] == want_p107, R.score_decgate(str(W))
