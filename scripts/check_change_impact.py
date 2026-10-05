@@ -35,6 +35,11 @@ Both roles:
                      docs/capabilities.json should. WARN.
   public-api-change  the set of entrypoints in docs/capabilities.json changed:
                      CHANGELOG.md must change (FAIL) and README.md should (WARN).
+  Where the repository keeps changelog.d/ (one file per unreleased change,
+  written into CHANGELOG.md by the release), a fragment the diff adds or edits
+  there satisfies every CHANGELOG.md companion except the version bump's: a
+  pull request does not edit CHANGELOG.md, a release does. Without the
+  directory, CHANGELOG.md itself is required.
   Every class a trigger reports must be one docs/change-impact.json names
   (FAIL otherwise); its ``classes`` are read as a list of ``{"id": ...}``
   entries or as an object keyed by id.
@@ -96,6 +101,10 @@ STATUS = "docs/STATUS.md"
 CAPABILITIES = "docs/capabilities.json"
 CI = ".github/workflows/ci.yml"
 CHANGELOG = "CHANGELOG.md"
+#: One file per unreleased change, where the repository keeps the directory
+#: (experts4bit-qlora since 2026-10-05, scripts/changelog_fragments.py there).
+#: Its README is not a fragment.
+CHANGELOG_FRAGMENTS = "changelog.d"
 README = "README.md"
 KERNEL_CONTRACT = "docs/KERNEL_CONTRACT.md"
 SOLUTIONS_INDEX = "docs/SOLUTIONS.md"
@@ -191,6 +200,15 @@ def changed_files(root: Path, base: str) -> set[str]:
     every untracked (not ignored) file."""
     out = {ln.strip() for ln in _git(root, "diff", "--name-only", base, "--").splitlines() if ln.strip()}
     return out | set(untracked_files(root))
+
+
+def changelog_fragments(root: Path, changed: set[str]) -> list[str]:
+    """The ``changelog.d/`` fragments this diff added or edited (present at
+    the head), when the repository keeps that directory; else none."""
+    if not (root / CHANGELOG_FRAGMENTS).is_dir():
+        return []
+    return sorted(f for f in changed if f.startswith(CHANGELOG_FRAGMENTS + "/") and f.endswith(".md")
+                  and f != f"{CHANGELOG_FRAGMENTS}/README.md" and (root / f).is_file())
 
 
 def base_files(root: Path, base: str, prefix: str) -> list[str]:
@@ -472,17 +490,21 @@ def main(argv: list[str] | None = None) -> int:
     if untracked:
         print(f"note: {len(untracked)} untracked file(s) counted as added: {untracked[:8]}")
     failed = warned = triggered = 0
+    fragments = changelog_fragments(root, changed)
 
-    def report(cls: str, trigger: str, need: list[str], hard: bool, note: str = "") -> None:
+    def report(cls: str, trigger: str, need: list[str], hard: bool, note: str = "",
+               fragment_ok: bool = True) -> None:
         nonlocal failed, warned, triggered
         triggered += 1
         print(f"CLASS {cls}: trigger: {trigger}")
         if cls not in known:
             failed += 1
             print(f"FAIL: {cls}: class not in {a.contract}")
+        via = fragments if fragment_ok and CHANGELOG not in changed else []
         for c in need:
-            print(f"  {'changed' if c in changed else 'MISSING'}: {c}")
-        gone = [c for c in need if c not in changed]
+            print(f"  {'changed' if c in changed or (c == CHANGELOG and via) else 'MISSING'}: {c}"
+                  + (f" (as {via[0]})" if c == CHANGELOG and via else ""))
+        gone = [c for c in need if c not in changed and not (c == CHANGELOG and via)]
         if note:
             print(f"  note: {note}")
         if gone and hard:
@@ -502,7 +524,7 @@ def main(argv: list[str] | None = None) -> int:
             bp, hp = _project_table(base_py), _project_table(head_py)
             if bp.get("version") != hp.get("version"):
                 report("dependency-floor", f"{PYPROJECT} version {bp.get('version')} -> {hp.get('version')}",
-                       [CHANGELOG], hard=True)
+                       [CHANGELOG], hard=True, fragment_ok=False)
             if (bp.get("dependencies") or []) != (hp.get("dependencies") or []):
                 report("dependency-floor", f"{PYPROJECT} dependencies changed", [README, CAPABILITIES], hard=False)
         if prof["fast_floor"]:
