@@ -220,6 +220,11 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
         items.append(FootprintItem("expert rows on NVMe (read through the cold tier)", "nvme", n_nvme * bpe, "derived",
                                    f"{n_nvme} rows streamed from the arena on demand"))
         need = min_hot_rows(topology, setup)
+        if need:
+            items.append(FootprintItem("cold rows' device stack (one layer call)", "device", need * bpe, "derived",
+                                       f"the routed NVMe experts of one layer call, streamed to the GPU and run there "
+                                       f"(hot_residency._cold_contrib): at most {need} rows x {bpe} B, the same bound as "
+                                       "min_hot_rows; transient, so this is its ceiling"))
         if setup.hot_rows < need:
             return Footprint(items=(), refusals=(
                 f"hot_rows {setup.hot_rows} is below the {need} a cold layer can route in one step (top_k x "
@@ -257,6 +262,6 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     if topology.attention is not None and topology.attention.layers < topology.n_layers:
         unmodelled.append(f"recurrent state of the {topology.n_layers - topology.attention.layers} non-attention layers")
     if setup.placement == "solver":
-        unmodelled.append("the CPU tier's compute buffers and the cold rows' transient device stacks")
+        unmodelled.append("the CPU tier's compute buffers")
     unmodelled.append("CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)")
     return Footprint(items=tuple(items), unmodelled=tuple(unmodelled))

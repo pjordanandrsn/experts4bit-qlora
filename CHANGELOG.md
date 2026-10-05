@@ -21,6 +21,23 @@
   covers e4b's B = 1 served arithmetic and its host NF4 prefill experts only, not serve_paged's batched K21 / captured paths.
   Lane ≤ about $3.4.
 
+### DQ2 registered: can a dense layer's frozen NF4 weights stream behind its own QLoRA compute on PCIe 5.0 x16? (bench and tests only)
+
+- **Why** (#1083). DQ1 left the capacity axis at C_MARGINAL. Its link was PCIe 4.0, and its compute counted the linears
+  only. DQ2 measures one real Qwen3-32B decoder layer as HF + PEFT + bitsandbytes QLoRA runs it:
+  - `Linear4bit` nf4 with double-quant;
+  - PEFT's `lora.bnb.Linear4bit` with fp32 adapters, r16 on all seven projections;
+  - SDPA and RoPE, under non-reentrant checkpointing.
+
+  It times forward and backward against pinned H2D of the layer's own frozen bytes, on a gen 5 x16 RTX 5090.
+- **Rule.** Rmin(2048) = min(T_fwd, T_bwd) / X. C_ALIVE (≥ 1.25) licenses a streaming prototype on a branch. 27 self-test
+  cases; 18 rule mutants are killed in CI. Every band's basis is rented-5090 data.
+- **Rehearsed on the RTX A2000 through the local pool** (correctness only). The first rehearsal's engagement check caught
+  PEFT's generic wrapper with bf16 adapters (a bare layer lacks `is_loaded_in_4bit`); the fixed subject engages PEFT's bnb
+  path with fp32 adapters.
+- **Launch.** The box refuses a non-gen-5 x16 host (rc 13). The Vast search gains an opt-in PCIe band
+  (adertha-agents#162).
+
 ### Read: TC1 amendment 38 — on a fast host the compact delta is 1.3–1.6 % slower (P77, P78, P80 FALSIFIED); the peak holds (P79, P81 HELD); it stays opt-in
 
 - `tc1-5090-85` ($2.64, EPYC 9655, machine 150700, 60-step load-gated draws): `NF4_QLORA_COMPACT_DELTA` 0 vs 1 with grouped-nf4-gemm#473.
@@ -299,6 +316,16 @@
   P66 gather and fixed-tax rows, `e4b.serve.informed-hot-sets` and the TC1c route row.
 - **Left for the owner** (listed in the audit file): the A2000 energy rows (`e4b.train.energy-honest.*`, quoted in the
   README), the PREREG/RESULTS records, and the runtime warning in `enable_fast_train`, which still quotes the A2000's 36 %.
+
+### Serve estimate: the cold rows' device stack
+
+- Under the solver, a layer call streams its routed NVMe experts to the GPU and runs them there
+  (`hot_residency._cold_contrib`). `estimate_serve_footprint` now prices that stack at its ceiling, `min_hot_rows ×`
+  the row bytes, as a device item.
+- Measured on an RTX A2000 (OLMoE-1B-7B, solver at 1.2 / 1.5 GiB, a 128-token prompt). Allocator history at the
+  generation peak put the whole 183 MiB gap between the estimate and the peak in `_cold_contrib`: 54 routed rows ×
+  3.375 MiB plus their outputs.
+- At all-VRAM with a short prompt the estimate was 8 MiB over the peak, so nothing there is missing.
 
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
