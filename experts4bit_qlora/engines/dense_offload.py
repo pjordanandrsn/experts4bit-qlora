@@ -549,7 +549,9 @@ class _TrainPrefetch:
 # ``p.data = placeholder`` frees nothing. Offloaded training therefore saved no VRAM (DQ3, experts4bit-qlora
 # #1083: dq3-5090-3's streamed arm OOMed above the resident arm's footprint). The fix is the expert side's
 # ``_FrozenLinearRecomputeBackward`` pattern: keep the MODULE, read the weight bound at backward time.
-# The Function and the forward below mirror these four bitsandbytes 0.50.2 sources EXACTLY; pinned by sha256 of
+# The Function and the forward below mirror these four bitsandbytes 0.50.2 sources EXACTLY (the grad path only:
+# Linear4bit.forward's CPU AVX-512 weight-packing branch is inference-only, never reached on the grad path, and is
+# left to the stock forward that every no-grad call takes); pinned by sha256 of
 # ``inspect.getsource`` (not by version: a patch release can change them under the same 0.50.x). Any mismatch keeps
 # stock bnb, with a warning -- correct, just no VRAM saved in training.
 _BNB_MIRRORED_SOURCES = {
@@ -918,6 +920,9 @@ def dense_offload_report(handles) -> dict:
         "seconds_per_token_at_19GBs": round(host / 19e9, 3),
         "disk_bytes_per_token": disk,
         # DQ3 opt-in counters, per device chain; None when train_prefetch is off.
+        # offloaded bnb Linear4bit projections whose grad-mode matmul is late-bound (0 = stock bnb, e.g. a source mismatch)
+        "late_bound_4bit": sum(1 for h in handles for mod, _a, _p, _hm in h.slots
+                               if getattr(mod, "_dense_offload_late_bound", False)),
         "train_prefetch": (None if not handles or handles[0]._train is None else
                            {str(dev): dict(sched.counts) for dev, sched in
                             {h.device: h._train for h in handles if h._train is not None}.items()}),

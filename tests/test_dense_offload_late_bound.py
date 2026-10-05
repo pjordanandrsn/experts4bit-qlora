@@ -105,6 +105,7 @@ def test_offloaded_training_is_bitwise_identical_to_resident(ckpt, train_prefetc
     m = _model(ckpt)
     hs = _offload(m, train_prefetch=train_prefetch)
     assert all(getattr(lay.up, "_dense_offload_late_bound", False) for lay in m.layers), "not routed"
+    assert do.dense_offload_report(hs)["late_bound_4bit"] == 2 * NL, "the report must count the routed projections"
     for _ in range(2):                      # twice: the second step starts from a warmed, partly resident state
         for p in m.parameters():
             p.grad = None

@@ -183,3 +183,9 @@ def test_an_optimizer_built_before_offload_still_trains(freeze):
     assert all(torch.equal(a, b) for a, b in zip(b0, b1))
     assert any(not torch.equal(a, b) for a, b in zip(b1, w_off)), "no parameter moved: the optimizer stepped stale copies"
     assert len(w_ref) == len(w_off) and all(torch.equal(a, b) for a, b in zip(w_ref, w_off)), "diverged from no-offload"
+
+
+def test_the_report_counts_no_late_bound_projections_without_bnb_modules():
+    from experts4bit_qlora.engines.dense_offload import dense_offload_report
+    hs, _msgs = _offload(_toy("base+one"))
+    assert dense_offload_report(hs)["late_bound_4bit"] == 0

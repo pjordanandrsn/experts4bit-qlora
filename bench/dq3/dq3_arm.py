@@ -178,7 +178,8 @@ def main() -> int:
         handles = enable_dense_offload(pm, pin=True, prefetch=False, train_prefetch=(args.arm == "S"))
         torch.cuda.empty_cache()
         rep = dense_offload_report(handles)
-        rec["offload"] = {k: rep[k] for k in ("layers", "tensors", "host_bytes", "per_layer_bytes", "all_pinned")}
+        rec["offload"] = {k: rep[k] for k in ("layers", "tensors", "host_bytes", "per_layer_bytes", "all_pinned",
+                                              "late_bound_4bit")}
     rec["host_after_setup"] = host_stats()
     flush()
 
@@ -197,6 +198,7 @@ def main() -> int:
     # ---- timing pass: realistic
     load_lora_state(pm, init)
     opt = torch.optim.AdamW([q for q in pm.parameters() if q.requires_grad], lr=2e-4)
+    torch.cuda.empty_cache()      # the timing peaks, reserved included, start clean of the parity pass's cache
     torch.cuda.reset_peak_memory_stats()
     steps = run_steps(pm, ids, args.warm + args.timed, opt, timed=True, handles=handles)
     rec["timing"] = {"warm": steps[:args.warm], "timed": steps[args.warm:],

@@ -1,5 +1,5 @@
 #!/bin/bash
-# bench/dq3/dq3_run.sh -- lane DQ3, BOX side (bench/dq3/DQ3-PREREG.md, Amendments 0-1). Started by bench/tc1/tc1_drive.sh as its
+# bench/dq3/dq3_run.sh -- lane DQ3, BOX side (bench/dq3/DQ3-PREREG.md, Amendments 0-3). Started by bench/tc1/tc1_drive.sh as its
 # TC1_RUNNER (TC1_EXTRA_STAGE carries this file, dq3_vram_probe.py, dq3_egress_probe.py, dq3_arm.py and dq3_reduce.py), so it speaks tc1_drive's contract: the nonce
 # handshake (TC1_RUN_NONCE within 30 s), summary.txt one line per step, TC1_EXIT_CODE.<nonce> / TC1_SUCCESS.<nonce> /
 # TP_DONE.<nonce> at the end -- a refusal writes them too. No checkpoint download: the subject is Qwen3-32B's architecture
