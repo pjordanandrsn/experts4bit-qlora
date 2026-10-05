@@ -11,6 +11,38 @@
   P58: held-out within 0.005. All three HELD makes the switch the default for the resident fused path. The reducer scores them (two
   new self-test cases).
 
+### Default: serve_paged's first-chunk prefill graph is `auto` (lane SC2b licensed it); `auto` stands down on memory
+
+- **What changes.** `E4B_PAGED_PREFILL_GRAPH` now defaults to `auto`. The graph engages wherever its startup check
+  passes (bitwise against eager, #1070). Where the check refuses, the server runs with eager prefill, and `/health`'s
+  `prefill_graph` block reads `refused` with `why`. An explicit `1` still stops the server on a refusal; `0` keeps
+  eager prefill.
+- **The licence.** SC2b (#846; #1072 registered, #1086 read; one RTX 5090, Qwen3-30B-A3B int4, 16 sequences) read
+  DEFAULT_LICENSED:
+  - every gate passed, and the graph engaged on all 508 requests, none eager;
+  - serial text was byte-identical with the graph off and on, in both draws;
+  - nothing regressed at any rate;
+  - serial TTFT OFF/ON was **1.645 and 1.299**. That is above the licence's 1.10, but P1's predicted 1.5 was missed
+    in one draw, so P1 is REFUTED.
+- **What it does not do.** The capacity ceiling stays at 1 req/s (P3 REFUTED). Under load, most of the per-prefill
+  stall on running decodes is work outside the graphed forward: K/V staging and flush, and scheduler bookkeeping.
+- **Memory, and the stand-down.** The graph keeps its 512-token forward's working set in a private pool for its life:
+  SC2b read **+3.3 GiB** at ready on Qwen3-30B-A3B int4. An eager prefill only borrows that, and a later chunk still
+  runs eagerly and needs it again. So `auto` also stands down when the device's free memory after capture is below
+  the pool. That is stricter than the licence, never looser. `/health` reports `pool_mib` and `free_after_mib`.
+- **`/health` change.** `prefill_graph.requested` is now the setting (`auto`, `1` or `0`), not a bool.
+- **Tests.**
+  - The headroom refusal releases the graph and engages when there is room (GPU).
+  - `engage_prefill_graph` covers all three settings (CPU).
+  - An `auto` refusal is recorded and reported.
+- **Verified on the A2000** (`bench/prefill-graph-auto-2026-10-04/`).
+  - With nothing set, `auto` engaged, and prefill was bitwise against eager on the int4 Qwen3-MoE and on the Granite
+    NF4 store.
+  - At `max_seqs` 1, `auto` served eagerly and reported `refused`, while `1` stopped the server.
+- **The pool measure.** It is the allocator's segments for the graph's own pool id. The first cut used the growth of
+  `memory_reserved`, which read 0 once segments were recycled, so the headroom rule would have failed open. The A2000
+  run caught it.
+
 ### Read: TC1 amendment 25, first box — on one stack the matched set holds (P52 HELD); the speed pairs were unstable (P50, P51 UNTESTED); amendment 27 registers one re-draw
 
 - `tc1-5090-67` ($0.61, Core Ultra 9 285K): e4b's matched set in Unsloth's venv steps in 2.220 / 2.188 s, stable. Unsloth's draws were
