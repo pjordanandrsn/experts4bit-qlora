@@ -1,0 +1,17 @@
+arm GPU rc=1
+arm CPU rc=0
+arm M rc=1 (must be non-zero: the fence test must fail without the fence)
+arm M3 rc=1 (ctx pins the weight: the memory test must fail)
+gpu before A: 997 MiB, 12282 MiB
+A1 R rc=0 DQ3 arm R done: build 2.9 s, step 0.160 s, peak 0.46 GiB
+A2 S rc=0 DQ3 arm S done: build 2.6 s, step 0.136 s, peak 0.43 GiB
+A3 S0 rc=0 DQ3 arm S0 done: build 2.7 s, step 0.143 s, peak 0.42 GiB
+A4 S0 rc=0 DQ3 arm S0 done: build 3.9 s, step 0.169 s, peak 0.42 GiB
+A5 S rc=0 DQ3 arm S done: build 3.1 s, step 0.174 s, peak 0.43 GiB
+A6 R rc=0 DQ3 arm R done: build 3.3 s, step 0.140 s, peak 0.46 GiB
+gpu before B: 997 MiB, 12282 MiB
+B1 R rc=0 DQ3 arm R done: build 16.1 s, step 0.864 s, peak 5.82 GiB
+B2 S rc=0 DQ3 arm S done: build 16.2 s, step 0.871 s, peak 5.37 GiB
+B3 S0 rc=0 DQ3 arm S0 done: build 16.4 s, step 1.107 s, peak 4.91 GiB
+reduce A rc=0 (VOID expected: rehearsal)
+rehearsal check rc=0

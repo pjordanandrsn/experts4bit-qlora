@@ -1,0 +1,2 @@
+[transformers] `use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+DQ3 arm R done: build 84.9 s, step 2.919 s, peak 24.77 GiB
