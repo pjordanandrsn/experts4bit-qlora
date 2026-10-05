@@ -73,7 +73,6 @@
 - **Docs and tests.** Docstrings, the env help, capabilities and the solution page are updated. New tests cover the switch's five
   settings and the default's handling of a refused or empty compression.
 
-
 ### Read: TC1 amendment 31 — the double-quantized absmax costs Qwen3-30B-A3B 1.4 % of its step for 1.34 GB (P56 HELD); with P57 and P58, it becomes the default for resident training
 
 - `tc1-5090-75` ($1.03, a quiet EPYC 7B13, 60-step runs): `_dq1`/`_dq0` 1.014 [1.007, 1.021], peak 27.44 → 26.10 GB, held-out −0.0021.
