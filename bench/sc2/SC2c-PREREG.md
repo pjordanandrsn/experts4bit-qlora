@@ -211,3 +211,14 @@ Each run sits under #846's standing no-ask tier for a single run under $15. The 
 - Chunked prefill interleaved with decode, decode-step time, and slot count. These are the next levers if 8 req/s is
   the target (census §5).
 - Comparators, other models, other GPUs.
+
+## Amendments
+
+**A1 (2026-10-05, before any reading): box H pins torch 2.8.0.**
+- **What happened.** `sc1_run.sh` installs `torch==2.8.0` (cu128) on boxes C–G. When box I (SC1g, #1140) merged beside
+  box H, re-applying H's lines left H out of that pin. `sc2c-prove-2` then installed what pip resolved: torch
+  2.14.1+cu130, triton 3.8.0. SC2b and SC2g ran 2.8.0+cu128 and triton 3.4.0.
+- **The fix.** A1 adds H to the pin. `tests/test_sc2c_box.py` asserts that every python3 box (C–I) carries it.
+- **What runs next.** The reading runs only after a proof on the fixed harness. `sc2c-prove-2` is reported as what it
+  is: a proof of the code on the newer stack, not of the registered one.
+- **Unchanged:** design, rule, predictions and guards.
