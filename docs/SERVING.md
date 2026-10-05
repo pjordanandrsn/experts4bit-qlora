@@ -138,13 +138,44 @@ What SC2b read (#846, `bench/sc2/`, one RTX 5090, Qwen3-30B-A3B int4, 16 sequenc
 
 The A2000 census behind it is `bench/prefill-graph-census-2026-10-04/`.
 
+**Bulk KV bookkeeping (`E4B_PAGED_BULK_KV`, opt-in, `0` by default).** Each request costs the engine some KV
+bookkeeping outside the model forward:
+- a slot reset at admission and at finish;
+- the prompt's flush into the FP8 pool once its last chunk runs;
+- with decode graphs, a claim of every block the slot can reach, at its first decode.
+
+The per-layer, per-block forms issue about **13.5k launches per request** on Qwen3-30B-A3B at 2048 tokens per slot:
+96 + 2,448 kernels + 6,240 copies + 4,608 + 96. They are host-issued one after another on the engine thread, and every
+resident decode waits for them. `E4B_PAGED_BULK_KV=1` does the same work in a launch count independent of layers and
+blocks:
+- `Fp8PagedKV.reset_all_layers`;
+- `claim_blocks`: one async table write per request;
+- `append_prompt`: one quantize per side and one scatter per region per side, per group of layers of one geometry, a
+  group bounded at 16 MiB of input per side.
+
+It leaves the same pool bytes, block tables, lengths and free lists as the per-layer path, with the same rows given to
+the same slot. `tests/test_bulk_kv.py` compares whole pools, and a tiny model decodes the same tokens either way. The
+stall census behind it is `bench/stall-census-2026-10-05/` (exploratory: an A2000 microbenchmark and a post-hoc read of
+SC2b's traces). No request-level effect is claimed until a registered lane reads one.
+
+**Per-step trace (`E4B_PAGED_STEP_TRACE=<path>`).** One JSON line per engine step (`engines/step_trace.py`):
+- what the step carried: prefill chunks and tokens, prefill-graph replays, decode rows and bucket, slots decoding for
+  the first time, admissions, active and queued requests;
+- its host time by segment (`ops`, `plan`, `pf_forward`, `pf_flush`, `pf_sync`, `pf_emit`, `dec_ready`, `dec_issue`,
+  `dec_sync`, `dec_mirror`, `dec_emit`, `retire`, `dispatch`), summing to `step_ms`;
+- `gpu`: when the GPU finished the forward, the flush and the decode, in ms from the step's first event, read after the
+  step's own syncs, so the instrument adds none.
+
+Its cost is a few `perf_counter` calls and up to five CUDA events a step.
+
 Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
 (512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS` (`auto`, the default:
 bucketed CUDA-graph decode on scratch slots on a CUDA device of sm_89 or newer at `all-vram`; `0` eager, `1` forced) +
 `E4B_PAGED_BUCKETS` (`1,2,4,8,16`), `E4B_PAGED_TRACE=<path>`
 (one JSON line per finished request: arrival, admitted_at, first_token_at, finished_at, prompt_len,
-out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_HOST` / `E4B_PORT` / `E4B_TOKEN`
+out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_PAGED_STEP_TRACE=<path>` and
+`E4B_PAGED_BULK_KV` (above), `E4B_HOST` / `E4B_PORT` / `E4B_TOKEN`
 as above. `GET /stats` returns the scheduler's `stats()` (TTFT p50/p99 **from arrival**, queue wait,
 per-stream rate) and the runner's graph statistics.
 
