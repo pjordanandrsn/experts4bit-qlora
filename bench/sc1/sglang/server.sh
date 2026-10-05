@@ -81,6 +81,10 @@ sglang_server_flags(){  # <mode> <port> -> echoes the flag list (one per line; t
                                 --cuda-graph-bs-decode 1 16 --dtype float16 --context-length 4608 --cuda-graph-backend-prefill disabled --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     native)       printf '%s\n' --disable-radix-cache ;;
     gptoss)       printf '%s\n' --disable-radix-cache ;;   # SC2g (bench/sc2): gpt-oss-20b's own MXFP4 path at SGLang's defaults
+    # SC1g (bench/sc2/SC1g-PREREG.md): gpt-oss quality, one request at a time, radix ON (the served shape reads the cache),
+    # bf16 activations (no --dtype float16: that is the GPTQ checkpoint's need); _qm swaps the MoE runner to Marlin W4A16
+    gptoss_q)     printf '%s\n' --max-running-requests 1 --chunked-prefill-size -1 --context-length 4096 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
+    gptoss_qm)    printf '%s\n' --max-running-requests 1 --chunked-prefill-size -1 --context-length 4096 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" --moe-runner-backend marlin ;;
     quality)      printf '%s\n' --max-running-requests 1 --chunked-prefill-size -1 --dtype float16 --context-length 4096 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     *) return 1 ;;
   esac
@@ -129,7 +133,8 @@ eng = {"mode": mode, "startup_s": int(os.environ["SC1_STARTUP_S"]), "cmd": os.en
 def need(cond, msg):
     if not cond: eng["errors"].append(msg)
 eng["version"] = info.get("version"); need(info.get("version") == "0.5.20", f"server version {info.get('version')} != 0.5.20")
-want_attn = "triton" if mode == "gptoss" else "flashinfer"   # SC2g: SGLang forces its triton kernels for gpt-oss's sinks + window
+gptoss = mode in ("gptoss", "gptoss_q", "gptoss_qm")      # SC2g / SC1g: gpt-oss-20b's own MXFP4 checkpoint
+want_attn = "triton" if gptoss else "flashinfer"   # SC2g: SGLang forces its triton kernels for gpt-oss's sinks + window
 eng["attention_backend"] = info.get("attention_backend"); need(info.get("attention_backend") == want_attn, f"attention_backend resolved to {info.get('attention_backend')!r}, not {want_attn}")
 for k in ("prefill_attention_backend", "decode_attention_backend", "kv_cache_dtype", "disable_radix_cache", "max_running_requests",
           "chunked_prefill_size", "schedule_policy", "context_length", "dtype", "quantization", "moe_runner_backend",
@@ -140,7 +145,13 @@ radix_off = mode in ("matched", "kvfp8", "ttft_matched", "native", "gptoss")
 need(bool(info.get("disable_radix_cache")) == radix_off, f"disable_radix_cache={info.get('disable_radix_cache')} but mode {mode} expects {radix_off}")
 if mode == "kvfp8": need(info.get("kv_cache_dtype") == "fp8_e4m3", f"kv_cache_dtype={info.get('kv_cache_dtype')}")
 if mode in ("matched", "kvfp8", "ttft_matched"): need(info.get("max_running_requests") == 16, f"max_running_requests={info.get('max_running_requests')}")
-if mode == "quality": need(info.get("max_running_requests") == 1, f"max_running_requests={info.get('max_running_requests')}")
+if mode in ("quality", "gptoss_q", "gptoss_qm"): need(info.get("max_running_requests") == 1, f"max_running_requests={info.get('max_running_requests')}")
+if mode in ("gptoss_q", "gptoss_qm"):   # SC1g: the MoE runner each quality arm registered, read from the server's own record
+    want_moe = "marlin" if mode == "gptoss_qm" else "flashinfer_mxfp4"
+    need(info.get("moe_runner_backend") == want_moe, f"moe_runner_backend resolved to {info.get('moe_runner_backend')!r}, not {want_moe}")
+    mfs = float(os.environ["SC1_MFS"])
+    need(abs(float(info.get("mem_fraction_static") or 0) - mfs) < 1e-9, f"mem_fraction_static={info.get('mem_fraction_static')} != {mfs}")
+    need(int(info.get("max_total_num_tokens") or 0) >= int(info.get("context_length") or 0), f"max_total_num_tokens={info.get('max_total_num_tokens')} < context_length")
 if mode in ("matched", "kvfp8", "ttft_matched", "quality"):  # A8: the pinned static pool, and the capacity it has to hold
     mfs = float(os.environ["SC1_MFS"])
     need(abs(float(info.get("mem_fraction_static") or 0) - mfs) < 1e-9, f"mem_fraction_static={info.get('mem_fraction_static')} != {mfs} (A8)")
@@ -152,13 +163,13 @@ eng["cuda_graph_config_json"] = cg[:2000]
 if mode == "ttft_matched": need('"disabled"' in cg or "DISABLED" in cg.upper(), "prefill cuda graphs not disabled in the resolved cuda_graph_config")
 banner = "The model is convertible to gptq_marlin during runtime. Using gptq_marlin kernel."
 eng["gptq_marlin_banner"] = banner in text
-if mode != "gptoss":   # the GPTQ checkpoint's engagement; gpt-oss's MXFP4 path records moe_runner_backend / quantization instead
+if not gptoss:   # the GPTQ checkpoint's engagement; gpt-oss's MXFP4 path records moe_runner_backend / quantization instead
     need(banner in text, "gptq_marlin upgrade banner missing from the log (gptq.py:424-428)")
 bad = [l for l in text.splitlines() if "Failed to build JIT module" in l]
 eng["jit_build_failures"] = bad[:3]; need(not bad, "JIT build failure in the log")
 leaves = sorted(glob.glob(os.path.join(jit, "*", "*moe_wna16_marlin*", "build-*", "deps-*", "*.so")))
 eng["marlin_moe_jit_leaves"] = leaves
-if mode != "gptoss":
+if not gptoss:
     need(bool(leaves), f"no moe_wna16_marlin JIT leaf under {jit} (the startup warmup should have compiled it)")
 if leaves:
     leaf = os.path.dirname(leaves[-1]); eng["jit_target_tag"] = leaf.split(os.sep)[-4]
