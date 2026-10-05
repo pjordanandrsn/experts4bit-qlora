@@ -1182,13 +1182,13 @@ tc1_dqab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
 # tc1_tritonab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 32 (2026-10-05): one variable, Triton. venv-e4b (torch 2.8.0+cu128) with
-# its own triton 3.4 (side tr0) vs triton 3.7.1 (side tr1: installed alone into $W/triton37 and put first on the arm's PYTHONPATH), the
+# its own triton 3.4 (side tr0) vs triton 3.7.1 (side tr1: installed alone into $W/venv-triton37 and put first on the arm's PYTHONPATH), the
 # matched and the shipped arm, two draws a side in ABBA order. The prebound launches are off on both sides (they cover triton 3.4 / 3.6
 # only, so they would otherwise run on tr0 alone). A failed triton 3.7.1 install leaves every tr1 arm an install_failed row.
 tc1_tritonab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   local ALL="e4b:fused_attn4_m_tr0:fused e4b:fused_attn4_m_tr1:fused e4b:fused_attn4_m_tr1_d2:fused e4b:fused_attn4_m_tr0_d2:fused e4b:fused_attn4_shipped_tr0:fused e4b:fused_attn4_shipped_tr1:fused e4b:fused_attn4_shipped_tr1_d2:fused e4b:fused_attn4_shipped_tr0_d2:fused"
   say "===== TRITON A/B family $FAM ($MID @ $REV; venv-e4b with triton 3.4 vs 3.7.1, matched and shipped arms, amendment 32)"
-  local TR37=$W/triton37 TROK=1 TRWHY=""
+  local TR37=$W/venv-triton37 TROK=1 TRWHY=""
   $PY_BASE -m uv --version > logs/pip_triton37.log 2>&1 || $PY_BASE -m pip install -q --no-input uv >> logs/pip_triton37.log 2>&1
   perl -e 'alarm 900; exec @ARGV' $PY_BASE -m uv pip install --python $PY_E4B --target $TR37 --no-deps "triton==3.7.1" >> logs/pip_triton37.log 2>&1 || TROK=0
   if [ $TROK = 1 ] && ! PYTHONPATH=$TR37 $PY_E4B -c "import triton, torch; assert triton.__version__.startswith('3.7'), triton.__version__; print('triton', triton.__version__, 'torch', torch.__version__)" >> logs/pip_triton37.log 2>&1; then TROK=0; fi
