@@ -6,6 +6,8 @@ registered.
   both seqs, the skewed draw) is the registration's.
 * The committed A2000 receipt is correctness only: no timing field, read by the reducer's --gate-only mode.
 * The correctness gate keeps a fast, wrong arm out of the bar, and missing error fields count for nothing.
+* The committed reading (rd1-rp-5090-2) re-derives from its receipt: the box's own table, the bar, the decision and every
+  registered prediction, each scored on its own text. An anchor that crashes is a harness error, never a refusal.
 """
 import ast
 import re
@@ -77,9 +79,10 @@ def test_the_reducer_bar_is_the_registered_one():
     assert _assign(LANE / "rd_table.py", "GATE_X") == 2.0 and "at most 2 times dense's" in text
 
 
-def _synthetic(tmp_path, decoded_err_x, with_err=True, gpu="NVIDIA GeForce RTX 5090"):
-    """A registered-shape receipt where decoded_cap is 0.5x every other arm on qwen3, qwen36 and graniteh (both seqs, skewed)
+def _synthetic(tmp_path, decoded_err_x, with_err=True, gpu="NVIDIA GeForce RTX 5090", fast=("qwen3", "qwen36", "graniteh")):
+    """A registered-shape receipt where decoded_cap is 0.5x every other arm on the ``fast`` families (both seqs, skewed)
     and level elsewhere; qwen3's 512 gate_up forward has decoded_cap's fp32 error at ``decoded_err_x`` times dense's."""
+    fast_fams = fast
     import json
     many = _assign(LANE / "rd_table.py", "MANY")
     cells = []
@@ -89,7 +92,7 @@ def _synthetic(tmp_path, decoded_err_x, with_err=True, gpu="NVIDIA GeForce RTX 5
             for call in ("gate_up N=1 K=1", "down N=1 K=1"):
                 res = {}
                 for mode in ("fwd", "dgrad"):
-                    fast = fam in ("qwen3", "qwen36", "graniteh")
+                    fast = fam in fast_fams
                     arm = lambda ev, err=0.002: {"device_ms": ev, "event_ms": ev, "peak_mib": 1.0, "rel_err": 0.0,   # noqa: E731
                                                  **({"rel_err32": err} if with_err else {})}
                     bad = fam == "qwen3" and seq == 512 and call.startswith("gate_up") and mode == "fwd"
@@ -152,6 +155,53 @@ def test_only_a_passing_post_probe_anchor_decides(tmp_path):
 def test_missing_error_fields_count_for_nothing(tmp_path):
     out = _synthetic(tmp_path, 1.0, with_err=False)
     assert "BAR DECODED (gated): 0/7" in out and "unread" in out
+
+
+def test_p1_is_scored_on_the_families_it_names(tmp_path):
+    """P1 names graniteh, qwen3 and qwen36: the bar holding on other families does not make it hold."""
+    named = _synthetic(tmp_path, 1.0)
+    assert "BAR DECODED (gated): 3/7" in named and "P1 DECODED holds, at least on graniteh, qwen3, qwen36 -> HELD" in named
+    other = _synthetic(tmp_path, 1.0, fast=("olmoe", "lfm2", "ernie", "graniteh"))
+    assert "BAR DECODED (gated): 4/7" in other and "-> HELD" in other
+    assert "P1 DECODED holds, at least on graniteh, qwen3, qwen36 -> REFUTED: DECODED held (4/7)" in other
+    assert "qwen3 fails" in other and "qwen36 fails" in other and "graniteh passes" in other
+    # P5 names mixtral, which this receipt lacks: unread, never held
+    assert "P5 on mixtral, dense <= decoded_cap on event time at both seqs -> UNREAD" in other
+
+
+READ = LANE / "rd1-rp-5090-2"
+
+
+def test_the_committed_reading_rederives_from_its_receipt():
+    """rd1-rp-5090-2 (RunPod Secure RTX 5090): the reducer on the committed receipt reproduces RESULTS-rd1.txt exactly, and
+    every line the box's own reducer wrote is in it, in order -- the predictions and the per-length line only add lines."""
+    p = subprocess.run([sys.executable, str(LANE / "rd_table.py"), str(READ / "receipts" / "rd1.json")],
+                       capture_output=True, text=True)
+    assert p.returncode == 0, p.stderr
+    assert p.stdout == (LANE / "RESULTS-rd1.txt").read_text()
+    lines = iter(p.stdout.splitlines())
+    for box_line in (READ / "RESULTS-rd1.txt").read_text().splitlines():
+        assert any(line == box_line for line in lines), f"the box's line is not re-derived: {box_line[:100]}"
+    for want in ("post-probe anchor: {'rc': 0, 'class': 'pcie-full/launch-fast'}",
+                 "BAR DECODED (gated): 4/7", "seq 512 4/7", "seq 2048 7/7", "BAR V3 (gated): 0/7",
+                 "DECISION: an opt-in decoded route in grouped-nf4-gemm, then a TC1 full-step A/B",
+                 "P0 every arm passes the correctness gate on every call -> HELD (160 arm-cells: 0 failed, 0 unread)",
+                 "graniteh, qwen3, qwen36 -> REFUTED", "V3 no prediction was registered",
+                 "P3 decoded_cap event / device <= 1.5 on every many-group skewed cell -> HELD",
+                 "seq 512, skewed, on graniteh, qwen3, qwen36 -> HELD",
+                 "P5 on mixtral, dense <= decoded_cap on event time at both seqs -> REFUTED (skew holds"):
+        assert want in p.stdout, want
+
+
+def test_an_anchor_crash_is_a_harness_error_not_a_refusal():
+    """rd1-rp-5090-1: train_anchor.py crashed (CUDA "invalid argument" on a pinned allocation) and the lane exited 12, the
+    strict-anchor refusal. The gate exits 0 or 3; any other rc now finishes 9, before the refusal branch can see it."""
+    run = RUN.read_text()
+    crash = run.index('if [ "$arc" -ne 0 ] && [ "$arc" -ne 3 ]; then')
+    assert crash < run.index("BOX REFUSED by train anchor") and run.index("finish 9", crash) < run.index("finish 12", crash)
+    assert "ANCHOR HARNESS ERROR" in run[crash:run.index("BOX REFUSED by train anchor")]
+    assert "rc=1 class=" in (LANE / "attempts" / "rd1-rp-5090-1" / "summary.txt").read_text()
+    assert "pin_memory=True" in (LANE / "attempts" / "rd1-rp-5090-1" / "anchor.log").read_text()
 
 
 def test_the_a2000_receipt_is_correctness_only():

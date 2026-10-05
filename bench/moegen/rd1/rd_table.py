@@ -18,6 +18,9 @@ The registered bar, read on the SKEWED draw only (uniform draws flatter a route 
   V3       v3's event time <= 0.85 x v1 at both seqs, for at least 3 of the 7.
 Decision (as registered, read only on an RTX 5090 receipt): DECODED -> an opt-in decoded route in grouped-nf4-gemm, then a TC1 full-step A/B. Else V3 -> a v3
 training default is its own TC1 A/B. Else neither: recorded, no route.
+
+A reading that decides also scores the registered predictions (P0, P1, P3-P5) on their own text -- see predictions() --
+and prints the rows-per-expert observation beside them, labelled as not registered.
 """
 import json
 import sys
@@ -87,6 +90,7 @@ def main(path):
           "| decoded_cap / best(v1,v3,dense) | ev / dev (decoded_cap) | peak MiB v1 / v3 / dense / decoded / cap (chunks) | µs per extra chunk | gate cap / v3 / v1 |")
     print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     rows = {}
+    info = {}
     all_fails = []
     for c in rec["cells"]:
         t, missing, extra, gate, fails = layer(c)
@@ -103,6 +107,7 @@ def main(path):
                                                     v3 if gate["v3"] is True else inf)
         gl = lambda a: {True: "ok", False: "FAIL", None: "unread"}[gate[a]]                       # noqa: E731
         evdev = t["decoded_cap"]["event_ms"] / t["decoded_cap"]["device_ms"] if t["decoded_cap"]["device_ms"] else float("nan")
+        info[(c["routing"], c["fam"], c["seq"])] = {"ev": ev, "evdev": evdev, "gate": gate, "missing": missing, "cell": c}
         r = lambda a: f"{ev[a] / ev['v1']:.2f}" if a not in missing else "—"                      # noqa: E731
         print(f"| {c['routing']} | {c['fam']} | {c['seq']} | {c['groups']} ({c['groups_under_16_rows']}) | {ev['v1']:.2f} | "
               f"{r('v3')} | {r('dense')} | {r('decoded')} | {r('decoded_cap')} | {q:.2f} | {evdev:.2f} | "
@@ -119,6 +124,10 @@ def main(path):
         print("  FAIL " + f)
     print(f"BAR DECODED (gated): {len(dec)}/7 many-group families pass on the skewed draw at seqs {seqs}: {dec} -> "
           f"{'HELD' if len(dec) >= 3 else 'NOT HELD'}")
+    # the same 0.85 test at each length alone -- read beside the bar, never instead of it (the bar needs both lengths), so a
+    # count that holds at one length only is not read as a family failing everywhere
+    print("  DECODED by length (skewed, gated; the bar needs every length): " + "; ".join(
+        f"seq {s} {len(p)}/7 {p}" for s in seqs for p in [[f for f in MANY if rows.get(("skew", f, s), (9, 9))[0] <= 0.85]]))
     print(f"BAR V3 (gated): {len(v3w)}/7 pass: {v3w} -> {'HELD' if len(v3w) >= 3 else 'NOT HELD'}")
     if not full:
         print("NOT THE REGISTERED GRID: the skewed draw at seq 512 and 2048 for all seven families is incomplete; no decision")
@@ -130,9 +139,59 @@ def main(path):
     else:
         print("DECISION: " + ("an opt-in decoded route in grouped-nf4-gemm, then a TC1 full-step A/B" if len(dec) >= 3 else
                               "a v3 training default, its own TC1 A/B" if len(v3w) >= 3 else "neither: recorded, no route"))
+        predictions(info, rows, dec)
 
 
-TIMING = ("device_ms", "event_ms", "wall_s", "device_ms_vs_fused", "event_ms_vs_fused")
+# The registered predictions (RD1-PREREG.md, "Predictions"), each scored mechanically on its own text, only on a reading that
+# decides. A line naming families, seqs or draws holds only if every one it names does: DECODED holding does not make P1 hold.
+P1_FAMS = ("graniteh", "qwen3", "qwen36")       # "DECODED holds, at least on graniteh, qwen3 and qwen36"
+P3_MAX = 1.5                                    # decoded_cap event / device, every many-group skewed cell
+P4_FAMS, P4_MIN = ("graniteh", "qwen3", "qwen36"), 1.2   # dense / v1 event, seq 512, skewed
+P5_FAM = "mixtral"                              # dense <= decoded_cap on event time at both seqs (no draw named: every draw)
+
+
+def predictions(info, rows, dec):
+    seqs = sorted({k[2] for k in info})
+    q = lambda f, s: rows[("skew", f, s)][0]                                                   # noqa: E731
+    ratio = lambda k, a, b: info[k]["ev"][a] / info[k]["ev"][b]                                # noqa: E731
+    print("\nPREDICTIONS (RD1-PREREG.md; each scored on its registered text):")
+    gates = [g for i in info.values() for g in i["gate"].values()]
+    nfail, nunread = gates.count(False), gates.count(None)
+    print(f"P0 every arm passes the correctness gate on every call -> "
+          f"{'REFUTED' if nfail else 'UNREAD' if nunread else 'HELD'} ({len(gates)} arm-cells: {nfail} failed, {nunread} unread)")
+    named = ", ".join(f"{f} {'passes' if f in dec else 'fails'} (" + ", ".join(
+        f"{q(f, s):.2f} at {s}" if q(f, s) != float("inf") else f"gate FAIL at {s}" for s in seqs) + ")" for f in P1_FAMS)
+    p1 = len(dec) >= 3 and all(f in dec for f in P1_FAMS)
+    print(f"P1 DECODED holds, at least on {', '.join(P1_FAMS)} -> {'HELD' if p1 else 'REFUTED'}: DECODED "
+          f"{'held' if len(dec) >= 3 else 'not held'} ({len(dec)}/7); decoded_cap / best: {named}")
+    print("V3 no prediction was registered")
+    sk = [(i["evdev"], k) for k, i in info.items() if k[0] == "skew" and k[1] in MANY]
+    worst = max(sk)
+    print(f"P3 decoded_cap event / device <= {P3_MAX} on every many-group skewed cell -> "
+          f"{'HELD' if worst[0] <= P3_MAX else 'REFUTED'} (max {worst[0]:.2f}, {worst[1][1]} at {worst[1][2]}; {len(sk)} cells)")
+    p4 = {f: ratio(("skew", f, 512), "dense", "v1") for f in P4_FAMS}
+    print(f"P4 dense / v1 event > {P4_MIN} at seq 512, skewed, on {', '.join(P4_FAMS)} -> "
+          f"{'HELD' if all(v > P4_MIN for v in p4.values()) else 'REFUTED'} ("
+          + ", ".join(f"{f} {v:.2f}" for f, v in p4.items()) + ")")
+    draws = sorted({k[0] for k in info if k[1] == P5_FAM})
+    per = {d: [(s, ratio((d, P5_FAM, s), "dense", "v1"), ratio((d, P5_FAM, s), "decoded_cap", "v1")) for s in seqs]
+           for d in draws}
+    ok = {d: all(dn <= dc for _, dn, dc in v) for d, v in per.items()}
+    p5 = "UNREAD" if not ok else "HELD" if all(ok.values()) else "REFUTED"
+    print(f"P5 on {P5_FAM}, dense <= decoded_cap on event time at both seqs -> {p5} ("
+          + "; ".join(f"{d} {'holds' if ok[d] else 'fails'}: " + ", ".join(f"{s} dense {dn:.2f} vs cap {dc:.2f} x v1"
+                                                                            for s, dn, dc in v) for d, v in per.items()) + ")")
+    if all("E" in i["cell"] and "k" in i["cell"] for i in info.values()):
+        print("OBSERVATION (not a registered line): rows per expert = seq x top-k / experts, against decoded_cap / best on "
+              "the skewed draw (pass <= 0.85):")
+        for s in seqs:
+            fams = sorted(MANY, key=lambda f: (s * info[("skew", f, s)]["cell"]["k"] / info[("skew", f, s)]["cell"]["E"], f))
+            print(f"  seq {s}: " + ", ".join(
+                f"{f} {s * info[('skew', f, s)]['cell']['k'] / info[('skew', f, s)]['cell']['E']:.0f} ({q(f, s):.2f})"
+                for f in fams))
+
+
+TIMING =("device_ms", "event_ms", "wall_s", "device_ms_vs_fused", "event_ms_vs_fused")
 
 
 def strip_timing(src, dst):

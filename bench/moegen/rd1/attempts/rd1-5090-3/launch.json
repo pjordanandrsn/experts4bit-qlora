@@ -1,0 +1,17 @@
+{
+ "experiment_id": "rd1-5090-3",
+ "provider": "vast:verified-secure",
+ "gpu_model": "RTX 5090",
+ "status": "REFUSED",
+ "result": "invalid",
+ "cost_usd": {
+  "actual": 0.0,
+  "estimated": 1.7375
+ },
+ "started_at": "2026-10-05T12:11:09Z",
+ "finished_at": "2026-10-05T12:11:09Z",
+ "instance_id": "none",
+ "commit_sha": "f2655493d7752d233a1bccf60c2ac18b75132f87",
+ "notes": "anchor-exclusion evidence /Users/jordananderson/adertha-receipts/receipts/experts4bit-qlora/2026-10-05/rd1-5090-1/p41/P41_RUN_NONCE: not tracked at receipt Git HEAD",
+ "source": "adertha receipts store, receipts/experts4bit-qlora/2026-10-05/rd1-5090-3/receipt.json (fields copied verbatim)"
+}

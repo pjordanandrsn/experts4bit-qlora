@@ -1,0 +1,19 @@
+{
+ "experiment_id": "rd1-rp-5090-2",
+ "provider": "runpod:secure",
+ "gpu_model": "RTX 5090",
+ "status": "OK",
+ "result": "pass",
+ "cost_usd": {
+  "actual": 0.1204,
+  "estimated": 1.1
+ },
+ "started_at": "2026-10-05T18:58:31Z",
+ "finished_at": "2026-10-05T19:06:37Z",
+ "instance_id": "mtjtv4yp67jjlg",
+ "commit_sha": "1064e1eacb8b60eeeb44ce1125822a423af1f965",
+ "notes": "guard pid 43508 armed at 2026-10-05T18:58:33Z",
+ "runpod_machine_id": "t1upvpp9ld3m",
+ "cost_actual_method": "ESTIMATE, not billing (no billing record for pod mtjtv4yp67jjlg: no billing record for the pod in 0 record(s)): $1.0344/h GPU + storage \u00d7 runtime (RunPod bills no data transfer)",
+ "source": "adertha receipts store, receipts/experts4bit-qlora/2026-10-05/rd1-rp-5090-2/receipt.json (fields copied verbatim)"
+}

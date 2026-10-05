@@ -1,0 +1,10 @@
+RD1 SHAPE: seqs 512,2048; families olmoe,lfm2,ernie,graniteh,qwen3,nemotron,qwen36,mixtral
+rd1 tripwire OK 0.41.0 2.8.0+cu128 3.4.0 NVIDIA GeForce RTX 5090
+LOAD WAIT: load1 33.39 > 5.0 after 600s; the anchor runs anyway
+ANCHOR attempt 1 rc=3 class=pcie-full/launch-fast load1 31.20
+LOAD WAIT: load1 32.05 > 5.0 after 600s; the anchor runs anyway
+ANCHOR attempt 2 rc=3 class=pcie-full/launch-fast load1 31.33
+LOAD WAIT: load1 12.52 > 5.0 after 600s; the anchor runs anyway
+ANCHOR attempt 3 rc=3 class=pcie-full/launch-fast load1 11.99
+ANCHOR rc=3 class=pcie-full/launch-fast
+BOX REFUSED by train anchor
