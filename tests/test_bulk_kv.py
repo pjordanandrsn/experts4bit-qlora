@@ -332,11 +332,12 @@ def test_bulk_kv_env_values(monkeypatch):
     from experts4bit_qlora import serve_paged
     monkeypatch.setattr(serve_paged, "_capability", lambda device: None)
     monkeypatch.setenv("E4B_PAGED_MODEL", "tiny/moe")
-    for val, want in (("", False), ("0", False), ("1", True), (" 1 ", True)):
+    for val, want in (("", True), ("0", False), (" 0 ", False), ("1", True), (" 1 ", True)):   # unset/empty = on (SC2c/SC2d)
         monkeypatch.setenv("E4B_PAGED_BULK_KV", val)
         assert serve_paged.PagedServeConfig.from_env().bulk_kv is want
     monkeypatch.delenv("E4B_PAGED_BULK_KV")
-    assert serve_paged.PagedServeConfig.from_env().bulk_kv is False
+    assert serve_paged.PagedServeConfig.from_env().bulk_kv is True            # the default since #1166/#1192
+    assert serve_paged.PagedServeConfig.__dataclass_fields__["bulk_kv"].default is True   # dataclass and env agree
     for bad in ("on", "true", "2", "auto"):
         monkeypatch.setenv("E4B_PAGED_BULK_KV", bad)
         with pytest.raises(ValueError, match="E4B_PAGED_BULK_KV"):
@@ -375,8 +376,8 @@ def test_the_server_writes_a_step_trace_and_skips_idle_steps(tmp_path):
         r = c.post("/v1/completions", json={"model": "tiny/moe", "prompt": PROMPT, "max_tokens": 5})
         assert r.status_code == 200
         h = c.get("/health").json()
-    assert h["step_trace_path"] == str(tmp_path / "steps.jsonl") and h["engine"]["bulk_kv"] is False
-    assert h["kv_bookkeeping"] == {"requested": False}          # a scripted runner keeps no KV
+    assert h["step_trace_path"] == str(tmp_path / "steps.jsonl") and h["engine"]["bulk_kv"] is True
+    assert h["kv_bookkeeping"] == {"requested": True}           # on by default; a scripted runner keeps no KV
     rows = [json.loads(line) for line in (tmp_path / "steps.jsonl").read_text().splitlines()]
     assert len(rows) == 5                         # one prefill step (first token) + four decode steps; no idle rows
     assert rows[0]["admitted"] == 1 and rows[0]["ops"] == 1
