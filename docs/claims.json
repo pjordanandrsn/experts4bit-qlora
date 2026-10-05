@@ -10657,6 +10657,31 @@
         "receipts/experts4bit-qlora/2026-10-05/tc1-5090-89/tc1/"
       ],
       "notes": "Vast invoiced $2.51."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k-chunked",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 43 (#835), one rented RTX 5090 (tc1-5090-95, AMD EPYC 7B13): Qwen3-30B-A3B on packed rows of exactly 4,096 real tokens (micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), both frameworks on torch 2.12.1+cu130 / transformers 5.5.0, matched set, 40 load-gated steps. LABELLED: e4b with E4B_CHUNKED_LM_LOSS=1 (opt-in); grouped-nf4-gemm's per-expert LoRA loop a recorded route (max 2.6 % of a step's delta calls). e4b 11.188 / 11.220 s/step against Unsloth 2026.9.14's 14.266 / 14.366: Unsloth/e4b 1.278 [1.271, 1.284] (P96 HELD, band [1.25, 1.65]); environment 0.915 (P97 HELD); every e4b arm trained resident, 160 chunked forwards each (P98 HELD). Peak e4b 32.5 GB, Unsloth 24.86 GB. Held-out at N e4b 0.9548, Unsloth 0.9544. At e4b's defaults the packed regime remains an out-of-memory loss (row ...packed-4k).",
+      "value": 1.278,
+      "unit": "ratio s/step, Unsloth over e4b (chunked LM loss), Qwen3-30B-A3B matched arms on packed 4,096-token rows, one stack (medians of steps 11..40 over two draws each); cross-draw interval [1.271, 1.284]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-95: instance 54341612, AMD EPYC 7B13, Vast machine 145701); e4b @ da897e3 + grouped-nf4-gemm @ f127981 (0.41.0) in venv-unsloth, torch 2.12.1+cu130, triton 3.7.1; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3samestack4kce2 (TC1 amendment 43): TC1 amendment 25's same-stack family on packed rows (TC1_PACK=1, TC1_SEQ=4096, tokens sha d2a501eba57d), 40 steps, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, TC1_E4B_ENV=E4B_CHUNKED_LM_LOSS=1; validity and scoring by bench/tc1/tc1_reduce.py (LOOP_ROUTE_SHARE_MAX 0.05)",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-packed4k-chunked2.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-95/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-95/tc1/"
+      ],
+      "notes": "Vast invoiced $2.65."
     }
   ]
 }

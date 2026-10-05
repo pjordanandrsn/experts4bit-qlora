@@ -61,6 +61,34 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
 
+## Amendment 43 (2026-10-05): on packed 4,096-token rows, with its chunked loss, e4b is 1.278× Unsloth's speed on one stack (labelled, opt-in)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 43. One RTX 5090 (`tc1-5090-95`, AMD EPYC 7B13, Vast
+machine 145701): amendment 40's box again. Both frameworks run on torch 2.12.1+cu130 / transformers 5.5.0 on packed rows of exactly
+4,096 real tokens (micro-batch 1 × accum 4, `TC1_FREE_OUTPUTS=1`), 40 load-gated steps. e4b @ `da897e3` with `E4B_CHUNKED_LM_LOSS=1`
+on every e4b arm and grouped-nf4-gemm `f127981` (0.41.0); grouped-nf4-gemm's per-expert LoRA loop is read as a recorded route up to 5 %
+of a step's delta calls. Read: [`RESULTS-tc1-packed4k-chunked2.md`](RESULTS-tc1-packed4k-chunked2.md).
+
+| arm | s/step (two draws) | peak | per-expert loop (max share) |
+|---|---|---|---|
+| e4b `fused_attn4_m`, venv-unsloth, chunked loss | 11.188 / 11.220 | 32.47 / 32.53 GB | 2.6 % |
+| e4b `fused_attn4_m_t28`, venv-e4b, chunked loss | 12.236 / 12.257 | 32.45 / 32.46 GB | 2.9 % |
+| Unsloth 2026.9.14 `ckpt_unsloth_m` | 14.266 / 14.366 | 24.86 GB | — |
+
+- **P96 HELD: Unsloth/e4b on one stack 1.278** [1.271, 1.284] (band [1.25, 1.65]). **P97 HELD:** e4b's environment ratio is
+  **0.915** [0.913, 0.917]. **P98 HELD:** every e4b arm trained resident with 160 chunked forwards and no fallback. Held-out at N:
+  e4b 0.9548, Unsloth 0.9544.
+- **By amendment 43's rule** 1.278 is recorded as Qwen3-30B-A3B's packed 4,096-token position, labelled "e4b with
+  `E4B_CHUNKED_LM_LOSS=1`, opt-in; grouped-nf4-gemm's loop route at the recorded share"
+  (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k-chunked`). It sits beside amendment 39's row, where e4b at its defaults ran
+  out of memory. At e4b's defaults the packed regime is still an e4b loss. Amendment 44 registers `auto` (#1178) as the way to close
+  that, and this box's P98 is its packed side.
+- **Memory is where e4b gives ground here:** 32.5 GB against Unsloth's 24.9, about 1.1 GB under the card's 33.7 GB (31.36 GiB). Recorded, not read.
+- **The host was the busy one** amendment 41 ran on. The standing attempts ran at load1 medians 3.6–52.2, against a gate of 6.0. On an
+  11 s, device-bound step the draws stayed within 0.3 % (e4b) and 0.7 % (Unsloth).
+- **Recorded for later, not read.** Amendment 40's box (EPYC 7K62) gave e4b the same 11.20 s step but Unsloth 16.03 s. Here Unsloth
+  stepped 14.32 s. Positions are within-box readings of their host.
+
 ## Amendment 41 (2026-10-05): at the field recipe e4b's chunked LM loss costs the shipped arm 4.9 % of its step; it stays opt-in
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 41. One RTX 5090 (`tc1-5090-89`, AMD EPYC 7B13, Vast
