@@ -54,7 +54,7 @@ for v in TC1_FAMILIES TC1_SKIP TC1_UNSLOTH_VERSION TC1_UNSLOTH_ZOO_VERSION TC1_P
          TC1_PREREG TC1_BATCHED_PAD_WASTE_LIMIT TC1_PHASE_BUDGET_S TC1_ANCHOR_JSON TC1_AXOLOTL_VERSION \
          TC1_CURVE_STEPS TC1_CURVE_EVAL_EVERY TC1_CURVE_EVAL_N TC1_T1_MB TC1_T1_ACCUM TC1_R64_R TC1_R64_ALPHA \
          TC1_SMALL_STEPS TC1_SMALL_EVAL_N TC1_SMALL_EVAL_EVERY TC1_E4B_ENV TC1_PACK TC1_FREE_OUTPUTS \
-         MG1_FAMILIES MG1_STEPS MG1_PROVE MG1_LADDER_ONLY MG1_LADDER_ARGS MG1_P2_ARM; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument); TC1 amendment 39 (TC1_PACK: the packed regime; TC1_FREE_OUTPUTS: each micro-batch's output released); MG1 (bench/moegen/mg1_run.sh; never MG1_REHEARSAL)
+         MG1_FAMILIES MG1_STEPS MG1_PROVE MG1_LADDER_ONLY MG1_LADDER_ARGS MG1_P2_ARM RD1_PROVE; do   # TC1b (tc1_run.sh's curve / t1 / r64 knobs); TC2 (the small families' instrument); TC1 amendment 39 (TC1_PACK: the packed regime; TC1_FREE_OUTPUTS: each micro-batch's output released); MG1 (bench/moegen/mg1_run.sh; never MG1_REHEARSAL)
   # Quoted: run tp4-b-p46cut-3 passed TC1_FAMILIES='qwen3 qwen3_5' and the remote `env ... bash tc1_run.sh` saw the second
   # word as the COMMAND -- rc=127 before the nonce was bound, a HARNESS_ERROR row. %q survives the remote shell's re-parse.
   [ -n "${!v:-}" ] && PASS="$PASS $v=$(printf %q "${!v}")"

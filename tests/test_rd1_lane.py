@@ -37,8 +37,16 @@ def test_the_staged_pieces_exist_and_the_runner_parses():
 
 
 def test_the_rehearsal_knob_never_reaches_a_rented_box():
-    assert "${RD1_REHEARSAL" in RUN.read_text()
-    assert not any(v.startswith("RD1_") for v in _forwarded()), "tc1_drive.sh must not forward any RD1_ knob"
+    assert "${RD1_REHEARSAL" in RUN.read_text() and "${RD1_PROVE" in RUN.read_text()
+    rd1 = {v for v in _forwarded() if v.startswith("RD1_")}
+    assert rd1 == {"RD1_PROVE"}, f"tc1_drive.sh forwards exactly RD1_PROVE of RD1's knobs, never RD1_REHEARSAL: {rd1}"
+
+
+def test_the_runner_installs_rsync_before_anything_is_fetched():
+    """Amendment 2: tc1_drive fetches with rsync; on RunPod the image has none (tc1c-h100-19 fetched zero files)."""
+    run = RUN.read_text()
+    assert run.index("apt-get install -y -qq rsync") < run.index("train anchor (attempt")
+    assert "RSYNC INSTALL FAIL" in run and "finish 9" in run
 
 
 def _assign(path, name):

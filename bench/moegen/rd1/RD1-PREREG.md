@@ -159,6 +159,36 @@ checks.
 - **Budget.** The guard goes from 0.75 h to 1.0 h for up to three waits, at about $0.85. That is not over one hour, so no
   proving run is required.
 
+## Amendment 2 (2026-10-05, after amendment 1's first box, before its own): RunPod Secure, with a proving run first
+
+**What happened.** Under amendment 1, `rd1-5090-5` drew machine 145701 a third time ($0.362).
+- Its host load1 never fell to the 5.0 gate in 35 minutes: minimum 6.5, median 20, maximum 47, on a 256-thread host. All
+  three anchor attempts ran after their waits timed out.
+- Each attempt failed `launch.self_pair` (1.052–1.115) *and* `h2d.self_pair` (1.044–1.063), even at load 12.
+- Four Vast draws, $0.43, no reading. Vast's ranking keeps choosing 145701, and adertha cannot exclude it (its anchor
+  exclusion reads P41-layout receipts only).
+
+**The change.**
+- **Provider: RunPod Secure Cloud (`runpod:secure`), one RTX 5090.** The compute policy's RTX 5090 ceiling ($0.85/h, any
+  provider) was below RunPod's only 5090 offer ($0.99/h GPU, $1.03/h with 320 GB disk). adertha-agents#173 adds an
+  owner-approved provider row: runpod:secure RTX 5090 at $1.10/h, with Vast's rate unchanged.
+- **`rd1_run.sh` installs `rsync` when it is missing**, before anything else, and exits 9 if it cannot. `tc1_drive.sh`
+  stages with scp but fetches with rsync, which must exist on the box. The pytorch image ships without it; on Vast the
+  provider's runtime layer adds it. The one TC run on RunPod so far (`tc1c-h100-19`) fetched zero files (exit 22).
+- **A proving run first, `RD1_PROVE=1`** (forwarded by `tc1_drive.sh`; `RD1_REHEARSAL` still never is). It runs install
+  (rsync included), the tripwire, the load-gated anchor with all its attempts, and the load sampler for one more minute,
+  then finishes clean with no probe. It reports the run's host load1 profile, `nproc` and the container's CPU count. It reads:
+  1. **the fetch path:** its own files come back;
+  2. **the anchor on RunPod's RTX 5090:** passes or not, and at what load;
+  3. **whether the absolute 5.0 load gate is reachable** on RunPod's hosts.
+- **The draw (`RD1_PROVE` unset) proceeds only if the proof shows all of the following:** the fetch worked, an anchor
+  attempt passed, and host load1 was at or under 5.0 for at least one minute.
+  - If load never reached 5.0, an amendment 3 redesigns the gate before any draw.
+  - If the anchor failed at low load, RunPod's 5090 class is not anchor-stable for this lane, and RD1 is parked.
+  - A failed proof is a row, never a retry of the same thing.
+- **Budget.** The proof is one RTX 5090 at $1.10/h under a 1.0 h guard (up to three 600 s waits), about $1.10 at most.
+  The draw is the same, about $1.10. Both are in the no-ask tier.
+
 ## The A2000 correctness rehearsal (`a2000/`; correctness only, never speed)
 
 Run before the box, on the owned RTX A2000 (sm_86), with the same probe. It checks:
