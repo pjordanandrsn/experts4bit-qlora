@@ -38,6 +38,20 @@
 - `ServeSetup.prefill_graph` (`auto`, `1` or `0`) is passed through `to_env()`, so a caller that wants memory bounded
   by the estimate can plan `0`.
 
+### Fix: `serve_paged` decodes eagerly below sm_89 instead of dying in Triton's compiler
+
+- **The bug.** Bucketed decode graphs (`E4B_PAGED_GRAPHS=auto`, the all-VRAM default since P109) need
+  grouped-nf4-gemm's fused FP8 KV append. That kernel casts to e4m3 with Triton's `tl.float8e4nv`, which Triton
+  compiles only on sm_89+. On an RTX A2000 (sm_86, triton 3.4.0) the first graphed decode step died: "type fp8e4nv
+  not supported in this architecture". Every Ampere card (sm_80/86) took the same path by default.
+- **The fix.**
+  - `fp8_paged_kv.fused_append_unsupported(capability)` states the floor.
+  - The fused append degrades to the eager append below it; an explicit `E4B_FUSED_KV_APPEND=1` is refused in
+    words.
+  - `E4B_PAGED_GRAPHS=auto` decodes eagerly there; `=1` is refused in words.
+  - An unknown capability (no CUDA) changes nothing.
+- **Unchanged on sm_89+**, where every registered serving number was read (RTX 5090, H100).
+
 ## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
 
 **0.47.0.** One default changes, by lane SC2b's licence: `serve_paged`'s first-chunk prefill graph is `auto`.
