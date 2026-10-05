@@ -268,6 +268,18 @@ def resolve_smallm(smallm=None, *, banner=print) -> bool:
         return False
 
 
+def attention_linears(model):
+    """Yield ``(parent, name, child)`` for every projection :func:`enable_serve_attn_int4` swaps: the plain
+    ``nn.Linear`` children of modules whose class name ends in ``Attention``. One rule for the swap and for the serve
+    estimate (``describe_moe`` reads it on a meta tree), so the two cannot count different projections. A generator,
+    so a swap holds one replaced projection at a time, never all of them."""
+    for mod in model.modules():
+        if type(mod).__name__.endswith("Attention"):
+            for name, child in list(mod.named_children()):
+                if type(child) is nn.Linear:
+                    yield mod, name, child
+
+
 def enable_serve_attn_int4(model, smallm: bool | None = None) -> int:
     """Swap every structural attention projection for Int4Linear.
     Returns the count; refuses a vacuous enable. lm_head untouched.
@@ -285,12 +297,12 @@ def enable_serve_attn_int4(model, smallm: bool | None = None) -> int:
         ) from e
     smallm = resolve_smallm(smallm)
     n = 0
-    for mod in model.modules():
-        if type(mod).__name__.endswith("Attention"):
-            for name, child in list(mod.named_children()):
-                if type(child) is nn.Linear:
-                    setattr(mod, name, Int4Linear(child, smallm=smallm))
-                    n += 1
+    from .host_heap import release_freed_host_heap
+    for mod, name, child in attention_linears(model):
+        setattr(mod, name, Int4Linear(child, smallm=smallm))
+        child = None
+        n += 1
+        release_freed_host_heap()    # each projection is packed from an fp32 host copy (engines.host_heap)
     if n == 0:
         raise RuntimeError("E4B_SERVE_ATTN_INT4=1 matched no attention "
                            "projections -- refusing a vacuous enable")

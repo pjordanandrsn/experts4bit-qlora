@@ -115,6 +115,9 @@ class MoETopology:
     #: per-expert tensors the module carries that the generic adapter's epilogue does not (``*bias*``); the
     #: adapter refuses such a stack (:func:`~experts4bit_qlora.lora.assert_stock_epilogue`)
     expert_bias_tensors: tuple = ()
+    #: ``(out_features, in_features)`` of every projection the serving int4-attention swap would store on the int4-b32
+    #: grid (``engines.int4_attn.attention_linears``, the swap's own rule), in module order
+    int4_attention_linears: tuple = ()
     #: where each fact came from
     provenance: dict = field(default_factory=dict)
 
@@ -249,6 +252,9 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
         elif pname == "v_proj":
             kv += lin.out_features
     common["tied_embeddings"] = tied
+    from ..engines.int4_attn import attention_linears
+    int4_attn = tuple((int(lin.out_features), int(lin.in_features)) for _m, _n, lin in attention_linears(tree))
+    prov["int4_attention_linears"] = "engines.int4_attn.attention_linears (the serving swap's rule) on the meta tree"
     kv_geo = {}
     try:
         from ..engines.paged_runner import kv_layers
@@ -267,4 +273,4 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
         lm_head_numel=0 if tied or head is None else int(head.weight.numel()),
         attention=None if census is None else AttentionProjections(count=census.expected_count, layers=len(attn_mods), in_plus_out=int(in_out),
                                        numel=int(numel), any_bias=bias, kv_elements_per_token=int(kv)),
-        expert_bias_tensors=tuple(sorted(bias_tensors)), provenance=prov, **common)
+        expert_bias_tensors=tuple(sorted(bias_tensors)), int4_attention_linears=int4_attn, provenance=prov, **common)

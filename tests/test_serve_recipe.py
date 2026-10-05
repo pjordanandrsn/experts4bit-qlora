@@ -1,5 +1,7 @@
 """The paged server's estimate (serve_recipe): the KV pool arithmetic IS what Fp8PagedKV allocates (constructed on CPU),
 the topology carries the server's KV geometry, and placements that are not priced are refused in words."""
+from dataclasses import replace
+
 import pytest
 
 torch = pytest.importorskip("torch")
@@ -199,3 +201,80 @@ def test_prefill_staging_is_the_longest_prompt_plus_the_next_chunk():
     f = estimate_serve_footprint(topo, ServeSetup(max_seqs=4, max_tokens_per_seq=4096, graphs=False))
     item = next(i for i in f.items if i.name.startswith("prefill staging"))
     assert item.where == "device" and item.bytes == (4096 + 512) * staging_bytes_per_token(topo)
+
+
+def test_int4_store_bytes_are_what_pack_int4_b32_returns():
+    pack = pytest.importorskip("int4_pack_ref", reason="needs grouped-nf4-gemm").pack_int4_b32
+    from experts4bit_qlora.serve_recipe import int4_store_bytes
+    for n, k in ((64, 128), (96, 32), (256, 2048)):
+        packed, scales = pack(torch.randn(n, k))
+        assert int4_store_bytes(n, k) == packed.numel() * packed.element_size() + scales.numel() * scales.element_size()
+        assert int4_store_bytes(n, k, experts=8) == 8 * int4_store_bytes(n, k)
+
+
+def test_the_int4_attention_rule_is_the_swaps_and_the_topology_carries_it():
+    from experts4bit_qlora.engines.int4_attn import attention_linears
+    cfg = _qwen3()
+    topo = describe_moe(cfg)
+    real = [(lin.out_features, lin.in_features) for _m, _n, lin in attention_linears(tr.Qwen3MoeForCausalLM(cfg))]
+    assert list(topo.int4_attention_linears) == real and len(real) == 3 * 4      # q/k/v/o on each of 3 layers
+    assert sum(n * k for n, k in real) == topo.attention.numel
+
+
+def test_exp_int4_replaces_the_nf4_stacks_and_prices_the_repack():
+    from experts4bit_qlora.serve_recipe import _int4_split_k, int4_store_bytes
+    topo = describe_moe(_qwen3())
+    st = ServeSetup(max_seqs=4, max_tokens_per_seq=1024, graphs=False)
+    nf4 = estimate_serve_footprint(topo, st)
+    f = estimate_serve_footprint(topo, replace(st, exp_int4=True))
+    assert not f.refusals
+    by = {i.name: i for i in f.items}
+    assert "frozen expert stacks (all VRAM)" not in by
+    want = 0
+    for s in topo.expert_stacks:                       # gate/up [E, 2I, H], down [E, H, I], top-2 partials
+        want += int4_store_bytes(2 * 64, 128, 8) + int4_store_bytes(128, 64, 8)
+        want += 4 * 2 * (_int4_split_k(2 * 64, 128)[0] * 2 * 64 + _int4_split_k(128, 64)[0] * 128)
+    assert by["int4 expert stores (all VRAM; the NF4 stacks freed)"].bytes == want
+    from experts4bit_qlora.serve_recipe import INT4_REPACK_HOST_BYTES_PER_PARAM
+    repack = by["int4 repack: one layer's experts in fp32 (load)"]
+    assert repack.where == "host" and repack.bytes == INT4_REPACK_HOST_BYTES_PER_PARAM * topo.expert_stacks[0].numel
+    assert any("source checkpoint" in u for u in f.unmodelled)
+    # the load-time overlap, where it exists, lifts the device total to exactly the repack's peak
+    slab = next(i.bytes for i in nf4.items if i.name.startswith("frozen expert stacks"))
+    at_load = slab + 2 * topo.dense_numel + int4_store_bytes(2 * 64, 128, 8) + int4_store_bytes(128, 64, 8)
+    serving = sum(i.bytes for i in f.items if i.where == "device" and not i.name.startswith("int4 repack at load"))
+    assert f.device_bytes == max(at_load, serving)
+    env = replace(st, exp_int4=True).to_env()
+    assert (env["E4B_SERVE_EXP_INT4"], env["E4B_SERVE_ATTN_INT4"], env["E4B_INT4_KEEP_NF4"]) == ("1", "0", "0")
+    assert ServeSetup().to_env()["E4B_SERVE_EXP_INT4"] == "0" and "E4B_INT4_KEEP_NF4" not in ServeSetup().to_env()
+    from experts4bit_qlora.serve_paged import LEVER_ENV
+    assert {"E4B_SERVE_EXP_INT4", "E4B_SERVE_ATTN_INT4", "E4B_INT4_KEEP_NF4"} <= set(LEVER_ENV)   # the names it reads
+
+
+def test_attn_int4_prices_the_grid_and_the_bf16_copy_it_keeps():
+    from experts4bit_qlora.serve_recipe import int4_store_bytes
+    topo = describe_moe(_qwen3())
+    st = ServeSetup(max_seqs=1, max_tokens_per_seq=256, graphs=False)
+    bf16 = {i.name: i for i in estimate_serve_footprint(topo, st).items}
+    f = estimate_serve_footprint(topo, replace(st, attn_int4=True))
+    by = {i.name: i for i in f.items}
+    numel = topo.attention.numel
+    assert by["dense weights (bf16)"].bytes == bf16["dense weights (bf16)"].bytes - 2 * numel
+    assert by["attention projections on the int4-b32 grid"].bytes == sum(int4_store_bytes(n, k)
+                                                                         for n, k in topo.int4_attention_linears)
+    assert by["attention projections' bf16 copy (kept from the first prefill)"].bytes == 2 * numel
+    assert by["int4 attention workspaces"].bytes > 0
+    # a speed lever, not a memory one: the attention weights cost more than bf16 once a prompt is served
+    assert f.device_bytes > estimate_serve_footprint(topo, st).device_bytes
+
+
+def test_int4_levers_are_refused_where_the_server_refuses_them():
+    topo = describe_moe(_qwen3())
+    f = estimate_serve_footprint(topo, ServeSetup(placement="solver", max_seqs=1, graphs=False, exp_int4=True))
+    assert f.items == () and any("all-VRAM collapsed" in r for r in f.refusals)
+    # o_proj reads 3 heads x 80 = 240 features: not a whole number of int4-b32 scale blocks (the NF4 experts are fine)
+    odd = describe_moe(tr.Qwen3MoeConfig(hidden_size=128, intermediate_size=256, moe_intermediate_size=64, num_experts=8,
+                                         num_experts_per_tok=2, num_hidden_layers=2, num_attention_heads=3,
+                                         num_key_value_heads=1, head_dim=80, vocab_size=192, max_position_embeddings=64))
+    assert any("multiple of 32" in r for r in estimate_serve_footprint(odd, ServeSetup(attn_int4=True)).refusals)
+    assert not estimate_serve_footprint(odd, ServeSetup(exp_int4=True)).refusals
