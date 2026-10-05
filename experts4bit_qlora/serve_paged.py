@@ -709,7 +709,15 @@ def prefill_routes() -> dict:
     ``E4B_INT4_PREFILL`` (``auto`` -> ``k19`` where K19 can run, else ``loop``). With ``device_grouping`` on (a server
     capturing batched decode graphs), prefill calls above 256 rows take K19 only under ``k19``, and otherwise the
     grouped M-tile GEMM. ``prefill_attn`` is the resolved ``E4B_PAGED_PREFILL_ATTN``. A route the environment makes
-    invalid is reported as the error the forward would raise."""
+    invalid is reported as the error the forward would raise.
+
+    Those fields are the ENVIRONMENT's resolution, and they name what an int4-b32 store and a layer without sinks or a
+    window would take. They do not say what this model ran. On gpt-oss (sc2g-prove-2) they read ``k19`` and ``flash``
+    while no call took either: the MXFP4 store's rows up to 256 take K21 and rows above take the kept NF4 stacks, and
+    every layer has sinks, so it keeps the explicit mask. ``seen`` is what ran: ``moe`` is
+    :data:`~.engines.hot_residency.ROUTE_SEEN` (route and row class per expert-GEMM call) and ``prefill_attn`` is
+    :data:`~.engines.paged_attention.ATTN_SEEN` (path per prefill attention call), both counted in the Python
+    forward, so eager calls and graph captures count and graph replays do not. Cite ``seen`` as engagement evidence."""
     from .engines import hot_residency, paged_attention
 
     out: dict = {"int4_prefill_env": os.environ.get("E4B_INT4_PREFILL", "") or None,
@@ -726,6 +734,8 @@ def prefill_routes() -> dict:
         out["prefill_attn"] = paged_attention._prefill_attn_mode_env()
     except ValueError as e:
         out["prefill_attn"] = f"invalid: {e}"
+    out["seen"] = {"moe": dict(sorted(hot_residency.ROUTE_SEEN.items())),
+                   "prefill_attn": dict(sorted(paged_attention.ATTN_SEEN.items()))}
     return out
 
 

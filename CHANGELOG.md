@@ -42,6 +42,65 @@
   segment, and when the GPU finished the forward, the flush and the decode, read after the step's own syncs. `/health`
   reports `engine.bulk_kv` and `step_trace_path`.
 
+### `/health`'s `prefill_routes` gains `seen`: the routes the forward ran, not the environment's resolution (serving)
+
+- **What was wrong.** `prefill_routes` reports the environment's resolution: `int4_prefill`, `int4_prefill_above_256_rows`
+  and `prefill_attn`. Those name what an int4-b32 store and a layer without sinks or a window would take. On gpt-oss-20b
+  (SC2g's `sc2g-prove-2`) they read `k19` / `k19` / `flash`, and no call took any of them:
+  - the MXFP4 store's rows up to 256 take K21, and rows above take the kept NF4 stacks' M-tile GEMM;
+  - every gpt-oss layer has sinks, so it keeps the explicit mask.
+
+  Box G's engagement check asserted those names, so it passed without testing the route.
+- **`prefill_routes.seen`.**
+  - `moe` counts each expert-GEMM call's route and row class (`hot_residency.ROUTE_SEEN`), for example `mxfp4_k21|le256` or
+    `nf4_mtile_captured|gt256`.
+  - `prefill_attn` counts each prefill attention call's path (`paged_attention.ATTN_SEEN`): `flash`, or
+    `explicit_mask:sinks|window|env`.
+  - Both are counted where the route is chosen, in the Python forward: eager calls and graph captures count, graph
+    replays do not. An MXFP4 store whose NF4 stacks were freed now shows `mxfp4_*|gt256` instead of `nf4_*|gt256`, which
+    `/health` could not tell apart before.
+- **Unchanged:** the resolved fields are kept as they were, and no route, kernel or output changes. `tests/test_route_seen.py`
+  ties each label to the GEMM that was actually called (mocked, on CPU). Mutating a label or the sinks reason fails it.
+
+### DQ1 erratum: one prediction clause leaned on an A2000 timing (docs only)
+
+- The research note quoted a code comment's A2000 decoder timing, and the G1 prediction's reason drew on it. Under the
+  testbed policy an A2000 timing cannot seed a prediction.
+- The registered band stands and held on the 5090. The note now cites the 5090's own decoder measurement (run 2).
+- `RESULTS-dq1.md` records the erratum. Every other A2000 use in DQ1 was correctness only.
+
+### Read: TC2 amendment 9 — on one stack e4b is faster on Mixtral-8x7B too, Unsloth/e4b 1.144 (P29, P30, P31 HELD); it becomes Mixtral's quoted position
+
+- `tc1-5090-84` ($1.59, EPYC 7B13, 60-step load-gated draws): Mixtral resident at e4b's defaults (the dense route), both frameworks on
+  torch 2.12.1 / transformers 5.5.0. e4b 3.233 / 3.248 s/step, Unsloth 3.701 / 3.711: **1.144** [1.140, 1.148], COMPARABLE. e4b on the
+  field image's stack in the same box: 3.681 / 3.636, so the environment reads **0.886**, and the dense route ran on every e4b arm.
+- Amendment 8's 0.836 (Unsloth faster, on a 285K host with e4b on torch 2.8) stays as that reading. On this host e4b on its own stack
+  reads 1.013; one stack moves it to 1.144. Unsloth keeps a 2.07 GB lower peak at e4b's defaults (the fp32 absmax) and ×0.93 the energy.
+
+### Read: TC1 amendment 37 — with grouped-nf4-gemm#473 the compact delta lowers the matched peak 0.29 GB and runs 0.967 / 0.948; it stays opt-in (P75 FALSIFIED on the fast side)
+
+- `tc1-5090-83` ($0.78, EPYC 7702P, machine 45379, 60-step load-gated draws, venv-unsloth, grouped-nf4-gemm after #473):
+  `NF4_QLORA_COMPACT_DELTA` 0 vs 1. Matched 0.967 [0.959, 0.975], peak 27.477 → 27.189 GB (P73, P74 HELD); shipped 0.948
+  [0.933, 0.964], below its [0.95, 0.99] band (P75 FALSIFIED); held-out within 0.003 (P76 HELD).
+- #473 turned amendment 36's +0.229 GB into −0.288 GB. The speed replicated on a second host.
+- By the registered rule it stays opt-in pending its own registration: a ratio below 0.95 is the rule's "otherwise" branch.
+
+### Read: DQ1 run 2 — no dense W4A16 speed primitive at QLoRA rows (S_DEAD, G1_PARITY, GF_LOSS); streaming marginal on PCIe 4.0 (bench only)
+
+- `dq1-5090-2` ($0.10, RTX 5090, PCIe 4.0 x16, under Amendment 1). The lane READs; 6/250 self-pairs are out of band.
+- **Speed.** A perfect bf16-math 4-bit kernel could save at most ~10% of base-linear time at 2048 tokens, ~5% at 4096
+  (H 0.097 / 0.050; 0.097 is within draw noise of the line, and the consequence is the same either way). That share is
+  bnb's dequant, within ±10%.
+- **G=1 and fused.** grouped-nf4-gemm at G=1 (`auto` = dense route) is at parity (1.002–1.010). Its packed kernel is
+  3.2–4.5× slower. bitsandbytes 0.50.2 takes dequant + cuBLAS at every census row on sm_120.
+- **LoRA.** PEFT's unfused delta costs ~9–10% of base-linear time at ≥ 2048 tokens, as much as or more than the whole
+  dequant headroom.
+- **Streaming.** DMA costs the GEMMs ≤ 2.5%. The forward phase binds: Rmin 1.07 at 2048, 1.93 at 4096 on 27.9 GB/s.
+  Model-size-free rule: break-even at M ≈ 0.26·F/B. C_MARGINAL licenses no prototype; a PCIe 5.0 lane is the
+  registered next step.
+- **Write-ups.** `bench/dq1/RESULTS-dq1.md` and `SUMMARY-dq1.md`: speed is a negative result, there is no new
+  repository, and the next lanes are ranked.
+
 ### SC2g amendment A1: box G's proof died in the harness; the box sources cleanly, and a dead lane is now seen (bench and tests only)
 
 - **`sc2g-prove-1`** ($0.848) died at box G's install: `sc2g_box_g.sh: line 20: FOLDS: unbound variable`. `sc1_run.sh` sources the
@@ -120,6 +179,18 @@
   VALID.
 - **Files.** `bench/sc2/SC2g-PREREG.md`, `sc2g_box_g.sh`, `sc2g_reduce.py`; `sc2_trace.py` is now staged; grouped-nf4-gemm
   v0.41.0 (e4b 0.48.0's CI pin) is pinned for box G, with `GNF4_TRITON_PREBIND=1` pinned and recorded; `tests/test_sc2g_box.py` executes the child-env, SGLang-engagement and e4b-check paths.
+
+### Serve estimate: the cold tier's minimum `hot_rows`, and a refusal below it
+
+- `serve_recipe.min_hot_rows(topology, setup)` is the fewest cold-tier rows a solver setup can serve with, by
+  grouped-nf4-gemm's own ColdTier rule ("size hot_rows >= max routed experts per layer"): `top_k × max(chunk_tokens,
+  max_seqs)`, at most `n_experts` and at most the NVMe rows.
+  - Without a routing profile the solver fills layer by layer, so NVMe holds whole trailing layers.
+  - The server's default of 64 is below that for Qwen3-30B-A3B (128 experts, top-8): a long prefill through an
+    NVMe layer would be refused mid-request.
+  - The default is far above it for Mixtral (8 experts). There, 64 rows of ~99 MB each in the pinned landing, the
+    cold view and the setup tier crowd the DRAM tier out of the host budget.
+- `estimate_serve_footprint` refuses a solver setup with rows on NVMe and `hot_rows` below the minimum, in words.
 
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 

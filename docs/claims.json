@@ -9076,10 +9076,35 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-04/tc1-5090-63/tc1/"
       ],
-      "notes": "Vast invoiced $0.60. Provenance (2026-10-04): the box ran grouped-nf4-gemm @bb56b42 (gnf4#463's merge on main, after the v0.38.0 tag; its version string still read 0.38.0). The 'grouped-nf4-gemm 0.38.0' in the claim names that string; #463's rule ships in grouped-nf4-gemm 0.39.0.",
+      "notes": "Vast invoiced $0.60. Provenance (2026-10-04): the box ran grouped-nf4-gemm @bb56b42 (gnf4#463's merge on main, after the v0.38.0 tag; its version string still read 0.38.0). The 'grouped-nf4-gemm 0.38.0' in the claim names that string; #463's rule ships in grouped-nf4-gemm 0.39.0. Since TC2 amendment 9 the Mixtral position to quote is e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack (both frameworks on one stack, 1.144); this row stays as the reading with e4b in the field image's environment on a Core Ultra 9 285K.",
       "supersedes": [
         "e4b.train.h2h.unsloth.mixtral.5090.2026-10-04"
       ]
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a286",
+      "claim": "TC2 amendment 9 (#835), one rented RTX 5090 (tc1-5090-84): Mixtral-8x7B-Instruct's matched set (fp32 adapters, one per-slot init, the same tokens), both frameworks resident on ONE stack (torch 2.12.1+cu130, transformers 5.5.0; e4b and grouped-nf4-gemm installed into Unsloth's venv), e4b at default settings (grouped-nf4-gemm's auto on the dense route: dense forward and dgrad calls only on every e4b arm, the prebound launches on, the expert absmax fp32), 60-step runs, load-gated draws (none voided). e4b 3.233 / 3.248 s/step against Unsloth 2026.9.14's 3.701 / 3.711 (grouped_mm): Unsloth/e4b 1.144 [1.140, 1.148], e4b faster per step (P29 HELD, band [0.85, 1.25]); held-out at N=60 COMPARABLE (e4b 0.6318 / 0.6297, Unsloth 0.6308 / 0.6318). Quoted beside it, in Unsloth's favour: peak 2.07 GB lower (29.17 vs 31.24 GB; e4b's fp32 absmax) and energy per step x0.93 of e4b's. The same box read e4b's matched arm at 0.886 [0.878, 0.893] of its field-image step in this environment (P30 HELD) and, with e4b on the field image's stack, Unsloth/e4b 1.013. One host (AMD EPYC 7B13); positions are within-box readings of their host.",
+      "value": 1.144,
+      "unit": "ratio s/step Unsloth/e4b on one stack (medians of steps 11..60 over two draws each; > 1 = e4b faster per step); cross-draw interval [1.140, 1.148]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-84: instance 54277905, AMD EPYC 7B13, Vast machine 145701); e4b @ 63400e1 + grouped-nf4-gemm @ 9622144 (0.41.0), both in Unsloth 2026.9.14's venv on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token mixtralsamestack (TC2 amendment 9): TC1 amendment 25's same-stack family on Mixtral at TC2's pin and field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407) over 60 steps, resident, no reference arm, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2; engagement on env.torch and route_ab's dense counts; validity, positions and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc2/README.md",
+        "bench/h2h-2026-10-02/tc2/RESULTS-tc2-mixtral-samestack.md",
+        "bench/h2h-2026-10-02/tc2/receipts/tc1-5090-84/RESULTS-tc1.md",
+        "bench/tc1/TC2-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-84/tc1/"
+      ],
+      "notes": "The Mixtral-8x7B matched position to quote against Unsloth (TC2 amendment 9's decision rule). e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default (0.836) stays as the reading with e4b in the field image's environment on a Core Ultra 9 285K. Vast invoiced $1.59."
     },
     {
       "id": "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.mb1-dq-frozen4",
@@ -9585,6 +9610,31 @@
         "receipts/experts4bit-qlora/2026-10-05/tc1-5090-80/tc1/"
       ],
       "notes": "Vast invoiced $1.48."
+    },
+    {
+      "id": "e4b.train.compact-delta.free.qwen3.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 37 (#835), one rented RTX 5090 (tc1-5090-83): grouped-nf4-gemm's compact padded LoRA delta (NF4_QLORA_COMPACT_DELTA=1) against the default, with grouped-nf4-gemm#473's backward (each intermediate released at its last use; values identical), e4b in venv-unsloth (torch 2.12.1+cu130), the shipped and the matched arm, two draws a side in ABBA order, 60-step runs, load-gated draws (none voided), on a second host. Matched arm (fp32 adapters): 0.967 [0.959, 0.975], peak 27.477 -> 27.189 GB (-0.288; P73 HELD, band [-0.05, 0.50] GB of drop; P74 HELD, band [0.95, 0.99]). Shipped arm (bf16 adapters): 0.948 [0.933, 0.964], peak unchanged (P75 FALSIFIED, below its [0.95, 0.99] band). Held-out at N within 0.003 (P76 HELD). Amendment 36's box (without #473) read the matched peak +0.229 GB and the step 0.969 / 0.970. By amendment 37's rule the flag stays opt-in; a default needs a registration whose bands allow the shipped reading.",
+      "value": 0.967,
+      "unit": "ratio s/step, NF4_QLORA_COMPACT_DELTA=1 over the default with grouped-nf4-gemm#473, matched arm (medians of steps 11..60 over two draws each); cross-draw interval [0.959, 0.975]; matched peak -0.288 GB; shipped arm 0.948",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-83: instance 54275103, AMD EPYC 7702P, Vast machine 45379); e4b @ 64afc6d + grouped-nf4-gemm @ 9622144 (0.41.0, after #473) in venv-unsloth, torch 2.12.1+cu130, triton 3.7.1",
+      "conditions": "bench/tc1 token qwen3compactab2 (TC1 amendment 37): TC1's tokens and field recipe over 60 steps, every arm in venv-unsloth (TC1's t212 install), TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2; engagement as amendment 36 (keep_ab, lean_ab, env.torch); validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-compactab2.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-83/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-83/tc1/"
+      ],
+      "notes": "Vast invoiced $0.78."
     },
     {
       "id": "e4b.train.env-ab.qwen3.5090.2026-10-04",
