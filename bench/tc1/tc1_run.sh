@@ -1467,6 +1467,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 22
   qwen3bmmab)  tc1_bmmab_family  qwen3bmmab  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 24: bmm replay + venv-e4b vs venv-unsloth
   qwen3samestack) tc1_samestack_family qwen3samestack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1 amendment 25: both frameworks on one stack
+  qwen3samestackh100) tc1_samestack_family qwen3samestackh100 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1c amendment 9: amendment 25 on an H100 NVL
   qwen3prebindab) tc1_prebindab_family qwen3prebindab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 26: prebound Triton launches off vs on
   qwen3prebind37) tc1_prebind37_family qwen3prebind37 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 35: amendment 26 on triton 3.7.1 (venv-unsloth)
   qwen3compactab) tc1_compactab_family qwen3compactab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 36: the compact padded LoRA delta off vs on (venv-unsloth)
