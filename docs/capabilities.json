@@ -142,7 +142,8 @@
     "lfm2_moe",
     "granitemoehybrid",
     "ernie4_5_moe",
-    "nemotron_h"
+    "nemotron_h",
+    "qwen3_5_moe"
    ],
    "environment": {
     "python": ">=3.11 tested in CI (pyproject says >=3.10; 3.10 is not tested)",
@@ -733,12 +734,13 @@
        "reason": "MG1: the reference arm trains 60 steps with the frozen 4-bit stack bit-identical (C1)"
       },
       "fast_train": {
-       "status": "experimental",
+       "status": "supported",
        "claim_ids": [
         "e4b.train.parity.mg1.qwen3_5.fused.2026-10-04",
+        "e4b.train.parity.mg1.qwen3_5.p2.2026-10-05",
         "e4b.train.parity.mg1.qwen3_5.matrix.2026-10-04"
        ],
-       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor): the fused arm PASSES tp1's verdict on Qwen3.6-35B-A3B (0.02624 / 0.01594, 40/40 layers patched, resident), but MG1's registered rule also needs P2 (the dgrad kernel's engagement). The reading could not record it (tp1's arm driver predates DGRAD_STATS and the ladder OOMed), and MG1 amendment 2's ladder OOMed again at the licensed configuration on the same host (bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md): a row, status unchanged. MG1 amendment 3 reads P2 on tp1's fused arm itself; until then this path is experimental, not supported."
+       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor, the moe-generalize code): PASS on Qwen3.6-35B-A3B -- |delta final| 0.02624, median 0.01594 against the 0.05 band, every MoE layer patched, resident, init_sha identical, C1 bit-exact. MG1 amendment 3 read P2 on tp1's own fused arm (the driver file unchanged, under a census hook): the dgrad kernel served every frozen-GEMM backward (DGRAD_STATS loop 0). The family enters model_families on this row."
       },
       "batched_train": {
        "status": "not_tested",

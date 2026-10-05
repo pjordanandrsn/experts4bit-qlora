@@ -1,0 +1,2 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84
+Model name:                              AMD EPYC 7B13 64-Core Processor

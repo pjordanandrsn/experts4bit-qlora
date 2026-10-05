@@ -1155,7 +1155,8 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
     "lfm2_moe",
     "granitemoehybrid",
     "ernie4_5_moe",
-    "nemotron_h"
+    "nemotron_h",
+    "qwen3_5_moe"
    ],
    "environment": {
     "python": ">=3.11 tested in CI (pyproject says >=3.10; 3.10 is not tested)",
@@ -1746,12 +1747,13 @@ Register: [`../claims.json`](../claims.json). The position, **measured** (receip
        "reason": "MG1: the reference arm trains 60 steps with the frozen 4-bit stack bit-identical (C1)"
       },
       "fast_train": {
-       "status": "experimental",
+       "status": "supported",
        "claim_ids": [
         "e4b.train.parity.mg1.qwen3_5.fused.2026-10-04",
+        "e4b.train.parity.mg1.qwen3_5.p2.2026-10-05",
         "e4b.train.parity.mg1.qwen3_5.matrix.2026-10-04"
        ],
-       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor): the fused arm PASSES tp1's verdict on Qwen3.6-35B-A3B (0.02624 / 0.01594, 40/40 layers patched, resident), but MG1's registered rule also needs P2 (the dgrad kernel's engagement). The reading could not record it (tp1's arm driver predates DGRAD_STATS and the ladder OOMed), and MG1 amendment 2's ladder OOMed again at the licensed configuration on the same host (bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md): a row, status unchanged. MG1 amendment 3 reads P2 on tp1's fused arm itself; until then this path is experimental, not supported."
+       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor, the moe-generalize code): PASS on Qwen3.6-35B-A3B -- |delta final| 0.02624, median 0.01594 against the 0.05 band, every MoE layer patched, resident, init_sha identical, C1 bit-exact. MG1 amendment 3 read P2 on tp1's own fused arm (the driver file unchanged, under a census hook): the dgrad kernel served every frozen-GEMM backward (DGRAD_STATS loop 0). The family enters model_families on this row."
       },
       "batched_train": {
        "status": "not_tested",
@@ -2317,7 +2319,8 @@ never licensed. The capability list (`qlora-fused-moe-experts.model_families` in
 [`capabilities.json`](capabilities.json)) is exactly the families whose
 `fast_train` is `supported`: `olmoe`, `qwen3_moe`, `gemma4_text`, `mixtral`,
 `granitemoe` — the last two entered on this lane — and, since lane MG1
-(2026-10-04), `lfm2_moe`, `granitemoehybrid`, `ernie4_5_moe` and `nemotron_h`;
+(2026-10-04), `lfm2_moe`, `granitemoehybrid`, `ernie4_5_moe` and `nemotron_h`, and since MG1 amendment 3 (2026-10-05)
+`qwen3_5_moe`;
 `gpt_oss` stays out. No
 convergence claim, no cross-family ratio, no training throughput position;
 a PASS is a PASS on one text.
@@ -2343,9 +2346,9 @@ README. The same reading, per family and per path:
 | `granitemoehybrid` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on granite-4.0-h-tiny, its Mamba blocks on mamba-ssm / causal-conv1d (`e4b.train.parity.mg1.graniteh.fused.2026-10-04`); **entered `model_families` on this row** | not_tested | not_tested | n/a |
 | `ernie4_5_moe` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on ERNIE-4.5-21B-A3B-PT, its interleaved rotary refused by the fused-RoPE semantics probe and kept (`e4b.train.parity.mg1.ernie.fused.2026-10-04`); **entered `model_families` on this row** | not_tested | not_tested | n/a |
 | `nemotron_h` | supported (MG1) | supported (MG1) | **supported** — MG1 OK · PASS on Nemotron-3.5-Lightning-30B-A3B, the non-gated relu² expert path's first full-model reading (`e4b.train.parity.mg1.nemotron.fused.2026-10-04`); **entered `model_families` on this row** | not_tested | not_tested | n/a |
-| `qwen3_5_moe` | supported (MG1, resident) | supported (MG1) | experimental — MG1 OK · PASS, unlicensed (`e4b.train.parity.mg1.qwen3_5.fused.2026-10-04`): MG1's rule also needs P2, the dgrad kernel's engagement, whose counter was not read on that box. MG1 amendment 2's ladder OOMed at the licensed configuration ([read](../bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)), a row with the status unchanged; amendment 3 reads P2 on tp1's fused arm itself | not_tested | not_tested | n/a |
+| `qwen3_5_moe` | supported (MG1, resident) | supported (MG1) | **supported** — MG1 OK · PASS on Qwen3.6-35B-A3B, resident (`e4b.train.parity.mg1.qwen3_5.fused.2026-10-04`); P2 read by MG1 amendment 3 on tp1's own fused arm, the dgrad kernel on every frozen-GEMM backward (`e4b.train.parity.mg1.qwen3_5.p2.2026-10-05`, [read](../bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md)); amendment 2's ladder OOM stays a row ([read](../bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)); **entered `model_families` on this row** | not_tested | not_tested | n/a |
 
-**Lane MG1 (2026-10-04, [`bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`](../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md)) put seven families through tp1's arm driver and verdict on one RTX 5090 behind the train anchor**, on the moe-generalize code (#1048: the training stack's glue matched by structure, not by Qwen names). Every family PASSES. LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H enter on their rows above. Qwen3.6-35B-A3B passes but stays `experimental` until P2 is read. The two regression anchors re-read clean: OLMoE (`e4b.train.parity.mg1.olmoe.fused.2026-10-04`) and Gemma-4 (`e4b.train.parity.mg1.gemma4.fused.2026-10-04`), whose fused RMSNorm numerics #1048 changed.
+**Lane MG1 (2026-10-04, [`bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md`](../bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md)) put seven families through tp1's arm driver and verdict on one RTX 5090 behind the train anchor**, on the moe-generalize code (#1048: the training stack's glue matched by structure, not by Qwen names). Every family PASSES. LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H enter on their rows above. Qwen3.6-35B-A3B passes too, and entered once MG1 amendment 3 read P2 on tp1's own fused arm (`e4b.train.parity.mg1.qwen3_5.p2.2026-10-05`). The two regression anchors re-read clean: OLMoE (`e4b.train.parity.mg1.olmoe.fused.2026-10-04`) and Gemma-4 (`e4b.train.parity.mg1.gemma4.fused.2026-10-04`), whose fused RMSNorm numerics #1048 changed.
 
 Each cell is one of `supported` (completed under the registered protocol with a PASS/OK receipt), `refused` (with the reason), `void` (ran, unreadable), `harness_error`, `not_tested`, `experimental`, `n/a` — per path, never a flat flag; the machine-readable form, with the claim id behind every `supported` / `void` / `refused` cell, is `training_support` in [`capabilities.json`](capabilities.json), validated by `scripts/check_capabilities.py`, and `model_families` is exactly the families whose `fast_train` is `supported`.
 
@@ -4173,8 +4176,9 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.parity.mg1.nemotron.fused.2026-10-04 [measured]: [OK · PASS] Training parity lane MG1: enable_fast_train(model, dgrad=True) on nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16 PASSES tp1's registered loss-parity criteria against its reference arm on the same box -- |delta final train loss| 0.01293 and median step-wise |delta| 0.00940 against the 0.05 band -- with 23/23 layers patched, the fused kernel called at least 92 times on every step (46 required), init_sha identical and C1 bit-exact in both arms; cost here 13.41x faster per step than the per-expert loop (0.3097 vs 4.1527 s) at peak VRAM 23.157 vs 23.157 GB and 0.198x the energy per step (licensed by this row).
 - e4b.train.parity.mg1.nemotron.matrix.2026-10-04 [measured]: [rows: reference OK·REF, fused OK·PASS] Training matrix, nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16 (lane MG1, the moe-generalize code, one RTX 5090 behind tp1's train anchor).
 - e4b.train.parity.mg1.qwen3_5.reference.2026-10-04 [measured]: [OK · REF] Training parity lane MG1 (one RTX 5090 behind tp1's train anchor): the reference per-expert-loop arm of Qwen/Qwen3.6-35B-A3B loads and verifies 40/40 MoE layers and trains 60 steps on the clinical text with the frozen 4-bit stack bit-identical (C1: 18,119,393,280 bytes hashed, 0 empties, byte-flip control fires); it is the family's REF row, not a verdict.
-- e4b.train.parity.mg1.qwen3_5.fused.2026-10-04 [measured]: [OK · PASS] Training parity lane MG1: enable_fast_train(model, dgrad=True) on Qwen/Qwen3.6-35B-A3B PASSES tp1's registered loss-parity criteria against its reference arm on the same box -- |delta final train loss| 0.02624 and median step-wise |delta| 0.01594 against the 0.05 band -- with 40/40 layers patched, the fused kernel called at least 160 times on every step (80 required), init_sha identical and C1 bit-exact in both arms; cost here 24.51x faster per step than the per-expert loop (0.3772 vs 9.2441 s) at peak VRAM 27.73 vs 27.73 GB and 0.071x the energy per step (unlicensed until MG1 amendment 2 reads P2, the dgrad kernel's engagement).
+- e4b.train.parity.mg1.qwen3_5.fused.2026-10-04 [measured]: [OK · PASS] Training parity lane MG1: enable_fast_train(model, dgrad=True) on Qwen/Qwen3.6-35B-A3B PASSES tp1's registered loss-parity criteria against its reference arm on the same box -- |delta final train loss| 0.02624 and median step-wise |delta| 0.01594 against the 0.05 band -- with 40/40 layers patched, the fused kernel called at least 160 times on every step (80 required), init_sha identical and C1 bit-exact in both arms; cost here 24.51x faster per step than the per-expert loop (0.3772 vs 9.2441 s) at peak VRAM 27.73 vs 27.73 GB and 0.071x the energy per step (licensed by this row; MG1 amendment 3 read P2, e4b.train.parity.mg1.qwen3_5.p2.2026-10-05).
 - e4b.train.parity.mg1.qwen3_5.matrix.2026-10-04 [measured]: [rows: reference OK·REF, fused OK·PASS] Training matrix, Qwen/Qwen3.6-35B-A3B (lane MG1, the moe-generalize code, one RTX 5090 behind tp1's train anchor).
+- e4b.train.parity.mg1.qwen3_5.p2.2026-10-05 [measured]: [OK] MG1 amendment 3 (P8 HELD): over tp1's fused arm's 60 steps on Qwen/Qwen3.6-35B-A3B resident, grouped-nf4-gemm's DGRAD_STATS read kernel 4800, grouped_mm 0, dense 0 and loop 0, with 40/40 MoE layers patched, no recurrent-kernel fallback and the driver byte-identical to tp1's. With the reading's PASS (e4b.train.parity.mg1.qwen3_5.fused.2026-10-04) this completes MG1's registered rule, so qwen3_5_moe's fast_train enters as supported.
 
 Open items (no evidence either way):
 
@@ -4182,4 +4186,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(369 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(370 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

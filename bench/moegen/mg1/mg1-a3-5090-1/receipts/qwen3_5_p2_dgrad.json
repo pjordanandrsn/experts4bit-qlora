@@ -1,0 +1,37 @@
+{
+ "driver_sha256": "d02c9e7b2357c5211b654329c539c5fcd59141434dd912afeb4fb8fd5e60b129",
+ "argv": [
+  "tp1_train_smoke.py",
+  "--model",
+  "/root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0",
+  "--fam",
+  "qwen3_5",
+  "--arm",
+  "fused",
+  "--steps",
+  "60",
+  "--seq",
+  "512",
+  "--offload",
+  "0",
+  "--data",
+  "/root/tc1/data/ds_clinical.json",
+  "--data-sha",
+  "76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791",
+  "--out",
+  "receipts"
+ ],
+ "dgrad": {
+  "kernel": 4800,
+  "grouped_mm": 0,
+  "dense": 0,
+  "loop": 0,
+  "loop_reasons": {}
+ },
+ "fast_train": {
+  "patched": 40,
+  "skipped": {},
+  "recurrent_fallbacks": []
+ },
+ "reason": null
+}

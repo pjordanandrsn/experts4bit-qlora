@@ -10271,11 +10271,12 @@
       "measured_on": "2026-10-04",
       "status": "measured",
       "id": "e4b.train.parity.mg1.qwen3_5.fused.2026-10-04",
-      "claim": "[OK · PASS] Training parity lane MG1: enable_fast_train(model, dgrad=True) on Qwen/Qwen3.6-35B-A3B PASSES tp1's registered loss-parity criteria against its reference arm on the same box -- |delta final train loss| 0.02624 and median step-wise |delta| 0.01594 against the 0.05 band -- with 40/40 layers patched, the fused kernel called at least 160 times on every step (80 required), init_sha identical and C1 bit-exact in both arms; cost here 24.51x faster per step than the per-expert loop (0.3772 vs 9.2441 s) at peak VRAM 27.73 vs 27.73 GB and 0.071x the energy per step (unlicensed until MG1 amendment 2 reads P2, the dgrad kernel's engagement).",
+      "claim": "[OK · PASS] Training parity lane MG1: enable_fast_train(model, dgrad=True) on Qwen/Qwen3.6-35B-A3B PASSES tp1's registered loss-parity criteria against its reference arm on the same box -- |delta final train loss| 0.02624 and median step-wise |delta| 0.01594 against the 0.05 band -- with 40/40 layers patched, the fused kernel called at least 160 times on every step (80 required), init_sha identical and C1 bit-exact in both arms; cost here 24.51x faster per step than the per-expert loop (0.3772 vs 9.2441 s) at peak VRAM 27.73 vs 27.73 GB and 0.071x the energy per step (licensed by this row; MG1 amendment 3 read P2, e4b.train.parity.mg1.qwen3_5.p2.2026-10-05).",
       "row_status": "OK",
       "parity_verdict": "PASS",
       "value": 0.02624,
       "unit": "|delta final train loss| vs the reference arm (registered band 0.05; median step-wise |delta| 0.01594)",
+      "licensed_by": "e4b.train.parity.mg1.qwen3_5.fused.2026-10-04",
       "evidence": [
         "bench/moegen/mg1/mg1-5090-2/RESULTS-mg1.md",
         "bench/moegen/mg1/mg1-5090-2/receipts/qwen3_5_train_fused.json",
@@ -10305,6 +10306,29 @@
         "bench/moegen/mg1/mg1-5090-2/receipts/qwen3_5_train_load.json"
       ],
       "notes": "Model type qwen3_5_moe; revision 995ad96e. Reading rules (tp1's, carried by MG1-PREREG): registered units only; no cross-family, cross-lane or cross-card ratio; no training throughput position; a green skipped arm is not evidence (n_patched > 0 AND kernel calls/step >= 2 x n_patched AND C1 with the control firing AND init_sha equal to the reference's, else VOID); PASS here means PASS on one text; no convergence claim at 60 steps."
+    },
+    {
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3.6-35B-A3B @995ad96e",
+      "hardware": "RTX 5090 on an AMD EPYC 7B13 64-Core Processor host, Vast.ai machine 145701; no train anchor (amendment 3 reads an engagement count, not a timing)",
+      "conditions": "MG1 amendment 3 (bench/moegen/MG1-PREREG.md, merged before its box): tp1's arm driver, the committed file unchanged (sha256 d02c9e7b2357c521..., checked against the census), run as __main__ under bench/moegen/p2_hook.py, which writes grouped-nf4-gemm's DGRAD_STATS and e4b's FAST_TRAIN_STATS at interpreter exit; the fused arm only (no anchor, no reference arm, no ladder) at the licensed configuration: load_moe_4bit_streaming r 8 alpha 16, fp32 expert and attention LoRA, bf16 attention, gradient checkpointing, AdamW 1e-4, batch 1, seq 512, 60 steps on the registered clinical fixture; Qwen/Qwen3.6-35B-A3B @995ad96e resident",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "id": "e4b.train.parity.mg1.qwen3_5.p2.2026-10-05",
+      "claim": "[OK] MG1 amendment 3 (P8 HELD): over tp1's fused arm's 60 steps on Qwen/Qwen3.6-35B-A3B resident, grouped-nf4-gemm's DGRAD_STATS read kernel 4800, grouped_mm 0, dense 0 and loop 0, with 40/40 MoE layers patched, no recurrent-kernel fallback and the driver byte-identical to tp1's. With the reading's PASS (e4b.train.parity.mg1.qwen3_5.fused.2026-10-04) this completes MG1's registered rule, so qwen3_5_moe's fast_train enters as supported.",
+      "row_status": "OK",
+      "value": 0,
+      "unit": "frozen-GEMM backward calls that fell back to the per-expert loop (DGRAD_STATS['loop'], cumulative over the arm)",
+      "evidence": [
+        "bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md",
+        "bench/moegen/mg1/mg1-a3-5090-1/receipts/qwen3_5_p2_dgrad.json",
+        "bench/moegen/mg1/mg1-a3-5090-1/receipts/qwen3_5_train_fused.json",
+        "bench/moegen/mg1/mg1-a3-5090-1/summary.txt",
+        "bench/moegen/mg1/mg1-a3-5090-1/launch.json",
+        "bench/moegen/mg1/mg1-a3-5090-1/logs/run_qwen3_5_fused.log"
+      ],
+      "notes": "Engagement only. The arm's other numbers are informational (no anchor and no reference arm on this box): 1.1868 s/step, peak 27.73 GB, train loss 3.0123 -> 0.24963, init_sha e140b40875975ee4.... Loop reasons: none. The loss-parity verdict is e4b.train.parity.mg1.qwen3_5.fused.2026-10-04's; MG1 amendment 2's ladder OOMed before it could record this counter (bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)."
     }
   ]
 }
