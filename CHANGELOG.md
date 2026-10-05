@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Docs: `SERVING-THROUGHPUT.md`'s gpt-oss line notes what shipped after it (docs only)
+
+- The 0.32.0-era line said gpt-oss was "NF4 only", with int4 experts and the router fold both refused. Both were built
+  out since: the native MXFP4 store (decode only; prefill on the kept NF4 stacks) and the `topk_softmax` router fold.
+  A dated sub-note says so, and the historical line is left as measured.
+
 ## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
 
 **0.47.0.** One default changes, by lane SC2b's licence: `serve_paged`'s first-chunk prefill graph is `auto`.
