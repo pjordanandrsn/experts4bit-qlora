@@ -1412,3 +1412,52 @@ draws a side. Each is FALSIFIED outside its band and UNTESTED where a side is un
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
 About $2 with the download and the gate's possible re-runs; this is in the standing no-ask tier.
+
+### Amendment 36 (2026-10-05T04:52Z, after amendment 33's read, before any box): grouped-nf4-gemm's compact padded LoRA delta, A/B for peak and speed on one stack (P69–P72)
+
+**Why.** On one stack Unsloth peaks 3.22 GB below e4b (amendment 33: 24.27 vs 27.49 GB). Amendment 23's census put all of that gap in
+two places:
+
+- the fp32 expert absmax, 1.35 GB (double-quantizing it is the CLI trainer's default since #1105; the harness keeps it explicit);
+- transients, led by grouped-nf4-gemm's padded LoRA delta: its zero-padded input block in the adapters' fp32 (0.62 GB, two live at the
+  peak) and the batched products' outputs (0.45 GB, three live).
+
+grouped-nf4-gemm#445 ships `NF4_QLORA_COMPACT_DELTA=1`, opt-in "until a within-box A/B decides the default". The delta becomes one
+autograd node that saves its input instead of its padded block, and rebuilds the block in backward. Values and every gradient are
+`torch.equal`. On an RTX A2000 (one layer, 380 tokens) it cut the memory saved per layer from 229 to 55 MB with fp32 adapters, and
+added about 0.7 ms (+3.5 %) to a layer's backward device time. Under whole-layer checkpointing, one layer at a time holds those saved
+blocks, so the expected effect is a lower backward peak, not a lower static footprint. No 5090 step has measured it at TC1's defaults.
+
+**The box** (token `qwen3compactab`). One RTX 5090, TC1's qwen3 tokens and field recipe, `TC1_STEPS=60`, load-gated draws
+(`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), avoiding machines 45511, 138786 and 151350.
+
+- The shipped and the matched arm, each `_cd0` (`NF4_QLORA_COMPACT_DELTA=0`, the default) against `_cd1` (`=1`), two draws a side in
+  amendment 26's ABBA order. Every other setting is the default.
+- Every arm in venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 install: torch 2.12.1+cu130, transformers 5.5.0,
+  triton 3.7.1), the stack of the quoted position.
+- Engagement, read off each receipt: `keep_ab.gnf4_compact_delta` is the side's flag, no layer kept its MoE activations, the padded LoRA
+  path ran (`lean_ab.lora_path_calls.padded` > 0), and `env.torch` is 2.12.*.
+
+**Predictions** (registered before the box):
+
+- **P69** (matched, memory): the median peak falls by **[0.3, 2.0] GB** (`_cd0` − `_cd1`). The basis: the census's live padded block,
+  0.62 GB at micro-batch 1, no longer held from forward to backward; the rebuilt block is transient.
+- **P70** (matched, speed): `_cd1` / `_cd0` s/step lies in **[0.97, 1.02]**.
+- **P71** (shipped, speed): `_cd1` / `_cd0` lies in **[0.97, 1.02]**. The rebuild adds device time; the one node replaces about ten
+  autograd nodes per projection, so on this host-bound step the two may cancel.
+- **P72:** on each arm, |mean held-out at N, `_cd1` − `_cd0`| ≤ **0.005**.
+
+Each prediction needs two stable VALID draws a side. Each is FALSIFIED outside its band and UNTESTED where a side is unstable, not VALID
+or not engaged.
+
+**Decision rules.**
+
+- **P69–P72 HELD:** `NF4_QLORA_COMPACT_DELTA` becomes grouped-nf4-gemm's default, in one PR citing this box. The position against
+  Unsloth is not restated from this box; a later box reads peaks side by side.
+- **P70 or P71 above 1.02:** it stays opt-in.
+- **P69 below 0.3 GB:** it stays opt-in. The next memory lever is the padded block's size under a hot expert, not what it saves.
+- **Otherwise** (a ratio below 0.97, P69 above 2.0 GB, or UNTESTED): it stays opt-in pending its own registration.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
+About $2 with the download and the gate's possible re-runs; this is in the standing no-ask tier.
