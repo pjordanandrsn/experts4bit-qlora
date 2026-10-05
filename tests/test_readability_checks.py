@@ -233,6 +233,39 @@ def test_public_api_change_warns_then_strict_fails(repo: Path):
     assert r.returncode == 0 and "OK: public-api-change" in r.stdout
 
 
+def test_a_changelog_fragment_is_the_changelog_companion(repo: Path):
+    # A new entrypoint makes CHANGELOG.md a hard companion. Where changelog.d/
+    # exists, the pull request adds a fragment there instead of editing it.
+    _write(repo, "docs/capabilities.json", json.dumps({"capabilities": [{"id": "x", "entrypoints": ["f"]}]}))
+    r = _impact(repo)
+    assert r.returncode == 1 and "MISSING: CHANGELOG.md" in r.stdout, r.stdout
+    _write(repo, "changelog.d/README.md", "# changelog.d\n")
+    r = _impact(repo)
+    assert r.returncode == 1 and "MISSING: CHANGELOG.md" in r.stdout, r.stdout     # the README is not a fragment
+    _write(repo, "changelog.d/1150-f.md", "### `f`: a new entrypoint\n")
+    r = _impact(repo)
+    assert r.returncode == 0, r.stdout
+    assert "changed: CHANGELOG.md (as changelog.d/1150-f.md)" in r.stdout
+
+
+def test_a_changelog_fragment_does_not_stand_in_for_a_release(repo: Path):
+    # A version bump is a release, and the release writes CHANGELOG.md itself.
+    _write(repo, "changelog.d/1150-f.md", "### f\n")
+    _write(repo, "pyproject.toml", PYPROJECT.format(floor="0.28.0").replace('"0.35.0"', '"0.36.0"'))
+    r = _impact(repo)
+    assert r.returncode == 1 and "MISSING: CHANGELOG.md" in r.stdout, r.stdout
+    _append(repo, "CHANGELOG.md")
+    assert _impact(repo).returncode == 0
+
+
+def test_changelog_fragments_are_added_or_edited_markdown_other_than_the_readme(tmp_path: Path):
+    changed = {"changelog.d/1.md", "changelog.d/README.md", "changelog.d/deleted.md", "changelog.d/x.txt", "CHANGELOG.md"}
+    assert cci.changelog_fragments(tmp_path, changed) == []             # no directory: CHANGELOG.md itself
+    for name in ("1.md", "README.md", "x.txt"):
+        _write(tmp_path, f"changelog.d/{name}", "### t\n")
+    assert cci.changelog_fragments(tmp_path, changed) == ["changelog.d/1.md"]
+
+
 def test_new_kernel_import_warns(repo: Path):
     _write(repo, "experts4bit_qlora/new_engine.py", "import nf4_grouped\nfrom gptq_pack import pack\n")
     r = _impact(repo)

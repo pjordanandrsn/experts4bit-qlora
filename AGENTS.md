@@ -100,6 +100,7 @@ python scripts/check_capabilities.py             # docs/capabilities.json vs sch
 python scripts/check_system_manifest.py          # docs/system-manifest.json vs pyproject, claims, capabilities; kernel-pinning extras >= the floor; the CI kernel pin is a release-tag commit; --sibling <kernel checkout>
 python scripts/check_dependency_floor.py         # every current document states pyproject's [fast] floor
 python scripts/check_change_impact.py --base origin/main    # docs/change-impact.json: what must move together
+python scripts/changelog_fragments.py --check --base origin/main   # changelog.d/ fragments; Unreleased untouched; released history append-only
 python scripts/check_discovery_contract.py --bm25 --bm25-min-top1 30   # queries -> pages; the BM25 floor is a local proxy
 python scripts/check_docs_examples.py --root .   # doc code blocks parse; local links resolve
 python scripts/build_llms_bundle.py --check      # llms-full.txt is current
@@ -130,13 +131,16 @@ catches a corpus that stopped routing its own queries.
 
 ## 8. When you change something
 
+**Changelog:** add `changelog.d/<pr-or-slug>.md` (your `### Title` and body); never edit `CHANGELOG.md`'s `## Unreleased` by hand.
+CI refuses entries there, and any edit to a released section without the `changelog-history-edit` label ([`changelog.d/README.md`](changelog.d/README.md)).
+
 The contract is [`docs/change-impact.json`](docs/change-impact.json);
 `scripts/check_change_impact.py --base <ref>` reads the diff, detects the
 mechanical triggers and names the missing companions (CI runs it on pull
 requests). **public-api-change** (a symbol enters or leaves `__all__`; a
 signature, return or refusal condition moves): docstring,
-`docs/capabilities.json` or the solution page, and `CHANGELOG.md` — warns,
-`--strict` fails. **new-kernel-capability** (this package starts using
+`docs/capabilities.json` or the solution page, and a `changelog.d/` fragment
+(it stands in for `CHANGELOG.md`) — warns, `--strict` fails. **new-kernel-capability** (this package starts using
 something the kernel package released): the version guard, and whether the
 `[fast]` floor must rise. **measured-result** (a claim added, or its
 `status`/value moved): `docs/STATUS.md` in the same diff, then prose that
