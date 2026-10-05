@@ -77,6 +77,25 @@
   `memory_reserved`, which read 0 once segments were recycled, so the headroom rule would have failed open. The A2000
   run caught it.
 
+### Read: SC2b (#846) -- the prefill graph is value-identical, cuts serial TTFT 1.30-1.65×, and is licensed as a default (`auto`); capacity stays at 1 req/s
+
+- **What ran.** `sc2b-5090-1` ($1.326, a 400 W 5090) drove e4b `serve_paged` with `E4B_PAGED_PREFILL_GRAPH` OFF against
+  ON, paired, on today's stack (grouped-nf4-gemm v0.38.0; k19 / flash read from the servers' own `/health`).
+- **Gates.** Every gate passed. Engagement: 508 replays for 508 requests, 0 eager chunks. Identity: every request's
+  serial text byte-equal OFF vs ON in both draws.
+- **Verdicts.**
+  - P1 REFUTED: TTFT OFF / ON 1.645 and 1.299 against a predicted ≥ 1.5.
+  - P2 HELD: TPOT unchanged.
+  - P3 REFUTED: ON's ceiling is still 1 req/s; attainment at 2 req/s was 0.90 / 1.00.
+  - P4 HELD: no regression.
+  - **Licence: DEFAULT_LICENSED**, for a default of `auto` (engage where the startup check passes).
+- **Why the ceiling held** (post hoc, `sc2_trace.py --plan`). The graph cut the per-prefill stall under load only about
+  17% (0.32 s to 0.27 s). That stall is about 1.6× the graphed serial TTFT, so most of it is per-prefill work outside
+  the forward, which names the next lever.
+- **Memory.** The graph costs +3.3 GiB at ready on Qwen3-30B-A3B (20,308 → 23,686 MiB).
+- **Total and read page.** SC2b cost $1.566. Read page: `bench/h2h-2026-10-02/sc2b/README.md`. `sc2_trace.py` gains
+  `--plan`.
+
 ### Read: TC1 amendment 25, first box — on one stack the matched set holds (P52 HELD); the speed pairs were unstable (P50, P51 UNTESTED); amendment 27 registers one re-draw
 
 - `tc1-5090-67` ($0.61, Core Ultra 9 285K): e4b's matched set in Unsloth's venv steps in 2.220 / 2.188 s, stable. Unsloth's draws were

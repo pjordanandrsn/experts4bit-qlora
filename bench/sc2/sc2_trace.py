@@ -16,6 +16,7 @@ requests' prefills that completed while a request was decoding. Over all request
 ``a`` is the per-token decode cost and ``b`` the stall each interleaved prefill costs every request decoding beside it.
 
   sc2_trace.py TRACE.jsonl [--serial-n 24 --n 120 --rates 1,2,4,8 --draws 2]
+  sc2_trace.py TRACE.jsonl --plan warm:4,serial:24,r1:120,r2:120,r4:120,r8:120   (one server's own order, e.g. SC2b's)
   sc2_trace.py --self-test
 """
 import argparse
@@ -25,9 +26,9 @@ import statistics
 import sys
 
 
-def segments(rows, serial_n=24, n=120, rates=(1, 2, 4, 8), draws=2, warm=4):
-    plan = [("warm", warm)] + [(f"{w}_d{k}", serial_n if w == "serial" else n)
-                               for k in range(1, draws + 1) for w in ["serial"] + [f"r{r}" for r in rates]]
+def segments(rows, serial_n=24, n=120, rates=(1, 2, 4, 8), draws=2, warm=4, plan=None):
+    plan = plan or ([("warm", warm)] + [(f"{w}_d{k}", serial_n if w == "serial" else n)
+                                        for k in range(1, draws + 1) for w in ["serial"] + [f"r{r}" for r in rates]])
     if sum(c for _, c in plan) != len(rows):
         raise SystemExit(f"REFUSED: the trace has {len(rows)} rows, the plan {sum(c for _, c in plan)}")
     out, i = [], 0
@@ -111,12 +112,14 @@ def main(argv=None) -> int:
     ap.add_argument("--n", type=int, default=120)
     ap.add_argument("--rates", default="1,2,4,8")
     ap.add_argument("--draws", type=int, default=2)
+    ap.add_argument("--plan", help="name:count,... in the server's order (overrides the SC2 layout)")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
     rows = [json.loads(line) for line in open(a.trace) if line.strip()]
-    out = analyse(rows, serial_n=a.serial_n, n=a.n, rates=tuple(int(x) for x in a.rates.split(",")), draws=a.draws)
+    plan = [(x.split(":")[0], int(x.split(":")[1])) for x in a.plan.split(",")] if a.plan else None
+    out = analyse(rows, serial_n=a.serial_n, n=a.n, rates=tuple(int(x) for x in a.rates.split(",")), draws=a.draws, plan=plan)
     for name, w in out["workloads"].items():
         print("SC2_TRACE " + json.dumps({"workload": name, **w}))
     print("SC2_TRACE_FIT " + json.dumps(out["fit"]))
