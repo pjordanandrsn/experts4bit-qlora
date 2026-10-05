@@ -3844,6 +3844,7 @@ def run_arm(a, load_fn, sampler=True):
             _cst = dict(getattr(_clm, "CHUNKED_LM_LOSS_STATS", None) or {})
             chunked_lm_loss = {"env": os.environ.get("E4B_CHUNKED_LM_LOSS"), "e4b_has_chunked_lm_loss": True,
                                "chunked_calls": int(_cst.get("chunked_calls", 0)), "stock_calls": int(_cst.get("stock_calls", 0)),
+                               "small_calls": int(_cst.get("small_calls", 0)), "patched": int(_cst.get("patched", 0)),
                                "runtime_refusals": int(_cst.get("runtime_refusals", 0)), "refused": dict(_cst.get("refused") or {})}
         except Exception:
             chunked_lm_loss = {"env": os.environ.get("E4B_CHUNKED_LM_LOSS"), "e4b_has_chunked_lm_loss": False}

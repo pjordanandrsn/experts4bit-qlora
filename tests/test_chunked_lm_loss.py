@@ -11,7 +11,9 @@ What is pinned, on tiny configs of every family in ``SUPPORTED`` (CPU, plus CUDA
   stock forward even when patched; ``disable_chunked_lm_loss`` restores it exactly;
 * refusals: a class outside the table, a replaced ``loss_function``, a hooked head; and the run-time probe catches a change made
   after ``lm_head`` the table does not describe, re-running that call stock;
-* ``enable_fast_train`` applies it from the environment variable and ``disable_fast_train`` unwinds it.
+* ``auto``'s size gate: a forward under it is the stock forward exactly, one at it chunks, and the 1 GiB gate separates the TC1
+  shapes it was set between;
+* ``enable_fast_train`` applies it from the environment variable (``auto`` with its gate) and ``disable_fast_train`` unwinds it.
 
 Why the tolerances: the chunked path changes only the ORDER of fp32 summations -- the cross-entropy summed per chunk and then
 across chunks, the head's matmul blocked over a chunk's rows instead of all of them, a trainable head's weight gradient summed
@@ -153,7 +155,13 @@ def test_env_parsing(monkeypatch):
         monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", v)
         assert C.chunked_lm_loss_requested() == want, v
     monkeypatch.delenv("E4B_CHUNKED_LM_LOSS")
-    assert C.chunked_lm_loss_requested() is None
+    assert C.chunked_lm_loss_requested() is None and C.chunked_lm_loss_min_bytes() is None
+    for v in ("auto", " AUTO "):                            # chunks of DEFAULT_CHUNK, behind the size gate
+        monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", v)
+        assert C.chunked_lm_loss_requested() == C.DEFAULT_CHUNK and C.chunked_lm_loss_min_bytes() == C.AUTO_MIN_LOGITS_BYTES == 1 << 30
+    for v in ("1", "512"):
+        monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", v)
+        assert C.chunked_lm_loss_min_bytes() is None
     for bad in ("-4", "abc"):
         monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", bad)
         with pytest.raises(ValueError):
@@ -188,6 +196,37 @@ def test_chunk_sizes_including_ones_that_do_not_divide(dev, chunk):
     out, got = _step(m, ids, labels, att)
     _assert_loss_close(ref_out.loss, out.loss)
     _assert_grads_close(ref, got)
+
+
+def test_auto_gate_runs_small_forwards_stock_and_large_ones_chunked():
+    """``auto``'s gate is the stock fp32 logits' size, positions x vocabulary x 4 bytes, against ``min_logits_bytes``: one byte
+    over it the call is the stock forward exactly (logits returned, loss and every gradient ``torch.equal`` to an unpatched
+    model's, counted in ``small_calls``); at it the call chunks. Re-enabling changes the gate in place."""
+    ids, labels, att = _batch("cpu")
+    need = labels.numel() * V * 4                          # 2 x 24 positions at V = 97: what the stock path would upcast
+    ref_out, ref = _step(_model("qwen3_moe"), ids, labels, att)
+    m = _model("qwen3_moe")
+    assert C.enable_chunked_lm_loss(m, 7, min_logits_bytes=need + 1) == 1
+    small, chunked = C.CHUNKED_LM_LOSS_STATS["small_calls"], C.CHUNKED_LM_LOSS_STATS["chunked_calls"]
+    out, got = _step(m, ids, labels, att)
+    assert out.logits is not None and torch.equal(out.loss, ref_out.loss)
+    assert ref.keys() == got.keys() and all(torch.equal(ref[k], got[k]) for k in ref)
+    assert C.CHUNKED_LM_LOSS_STATS["small_calls"] == small + 1 and C.CHUNKED_LM_LOSS_STATS["chunked_calls"] == chunked
+    assert C.enable_chunked_lm_loss(m, 7, min_logits_bytes=need) == 0 and m._e4b_chunked_lm_loss.min_bytes == need
+    out, got = _step(m, ids, labels, att)
+    assert out.logits is None and C.CHUNKED_LM_LOSS_STATS["chunked_calls"] == chunked + 1
+    _assert_loss_close(ref_out.loss, out.loss)
+    _assert_grads_close(ref, got)
+
+
+def test_auto_gate_separates_the_tc1_shapes_it_was_set_on():
+    """The 1 GiB gate against the shapes it was chosen between (Qwen3's 151,936-token vocabulary): TC1's field recipe at its
+    largest -- the two longest of the 1,200 Alpaca rows, 755 tokens each, padded together -- stays stock; one packed 4,096-token
+    row chunks; Mixtral's 32,000-token vocabulary stays stock at 4,096."""
+    def fp32(positions, vocab):
+        return positions * vocab * 4
+    assert fp32(2 * 755, 151936) < C.AUTO_MIN_LOGITS_BYTES <= fp32(4096, 151936)
+    assert fp32(4096, 32000) < C.AUTO_MIN_LOGITS_BYTES
 
 
 def test_ignored_rows_tail_padding_and_tied_head():
@@ -430,9 +469,15 @@ def test_enable_fast_train_applies_it_from_the_environment_and_disable_unwinds(m
     monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "7")
     m = model_with_a_patchable_stack()
     assert enable_fast_train(m) >= 1
-    assert m._e4b_chunked_lm_loss.chunk == 7 and "forward" in vars(m)
+    assert m._e4b_chunked_lm_loss.chunk == 7 and m._e4b_chunked_lm_loss.min_bytes is None and "forward" in vars(m)
     ids, labels, att = _batch("cpu")
     out = m(input_ids=ids, labels=labels, attention_mask=att)
     assert out.logits is None
+    assert disable_fast_train(m) >= 1
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "auto")      # the gate rides along; this tiny batch's logits are far under it
+    m = model_with_a_patchable_stack()
+    assert enable_fast_train(m) >= 1
+    assert m._e4b_chunked_lm_loss.min_bytes == C.AUTO_MIN_LOGITS_BYTES
+    assert m(input_ids=ids, labels=labels, attention_mask=att).logits is not None
     assert disable_fast_train(m) >= 1
     assert not hasattr(m, "_e4b_chunked_lm_loss") and "forward" not in vars(m) and "forward" not in vars(m.lm_head)

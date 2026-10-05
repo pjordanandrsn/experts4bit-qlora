@@ -3571,6 +3571,9 @@ to fp32 rounding. The same gradients, up to cuBLAS's shape-dependent bf16 reduct
 `allow_bf16_reduced_precision_reduction` off). It covers the Qwen3-MoE, Qwen3.5/3.6-MoE, Mixtral, OLMoE, gpt-oss, ERNIE-4.5-MoE,
 Granite-MoE and -Hybrid, LFM2-MoE and Nemotron-H causal LMs and refuses anything else with a warning. Only training forwards with
 labels take it: evaluation under `torch.no_grad` and generation stay stock, and `.logits` is `None` on the forwards that do.
+`E4B_CHUNKED_LM_LOSS=auto` chunks only a forward whose stock fp32 logits would reach 1 GiB and runs the rest stock. On short rows
+the chunking is a cost, not a saving: at TC1's field recipe (Alpaca rows, 0.3–0.6 GiB of logits per micro-batch) it cost a host-bound
+RTX 5090 4.9 % of the shipped arm's step (TC1 amendment 41). A packed 4,096-token Qwen3 row is 2.32 GiB and chunks.
 
 **It trains, but each step is slow — and `[fast]` will not build.**
 `enable_batched_train(model)` (no extra: stock torch + bitsandbytes). The kernel-free lane:
