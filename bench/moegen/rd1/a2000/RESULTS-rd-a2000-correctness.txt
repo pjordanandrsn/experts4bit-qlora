@@ -1,0 +1,39 @@
+NVIDIA RTX A2000 12GB, torch 2.8.0+cu128, triton 3.4.0; decode cap 256 MiB -- CORRECTNESS ONLY
+
+| routing | family | seq | groups (<16 rows) | gate v1 / v3 / dense / decoded / cap | max rel_err32 / dense's (v1, v3, decoded, cap) | peak MiB v1 / v3 / dense / decoded / cap (chunks) |
+|---|---|---|---|---|---|---|
+| uniform | olmoe | 512 | 64 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 16 / 16 / 32 / 528 / 272 (2) |
+| uniform | lfm2 | 512 | 32 (0) | ok / ok / ok / ok / ok | 0.69, 0.94, 0.94, 0.94 | 14 / 14 / 42 / 462 / 266 (2) |
+| uniform | ernie | 512 | 64 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 18 / 18 / 48 / 978 / 273 (4) |
+| uniform | graniteh | 512 | 64 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 9 / 9 / 16 / 201 / 201 (1) |
+| uniform | qwen3 | 512 | 128 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 16 / 16 / 28 / 784 / 271 (4) |
+| uniform | nemotron | 512 | 128 (3) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 16 / 16 / 35 / 1234 / 263 (5) |
+| uniform | qwen36 | 512 | 256 (119) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 16 / 16 / 24 / 1040 / 272 (4) |
+| uniform | mixtral | 512 | 8 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 56 / 56 / 504 / 1848 / 280 (8) |
+| uniform | olmoe | 2048 | 64 (0) | ok / ok / ok / ok / ok | 0.67, 0.90, 0.90, 0.90 | 64 / 64 / 80 / 576 / 320 (2) |
+| uniform | lfm2 | 2048 | 32 (0) | ok / ok / ok / ok / ok | 0.66, 0.89, 0.89, 0.89 | 56 / 56 / 84 / 504 / 308 (2) |
+| uniform | ernie | 2048 | 64 (0) | ok / ok / ok / ok / ok | 0.69, 0.93, 0.93, 0.93 | 72 / 72 / 102 / 1032 / 327 (4) |
+| uniform | graniteh | 2048 | 64 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 36 / 36 / 42 / 228 / 228 (1) |
+| uniform | qwen3 | 2048 | 128 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 64 / 64 / 76 / 832 / 319 (4) |
+| uniform | nemotron | 2048 | 128 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 63 / 63 / 82 / 1281 / 310 (5) |
+| uniform | qwen36 | 2048 | 256 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 64 / 64 / 72 / 1088 / 320 (4) |
+| uniform | mixtral | 2048 | 8 (0) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 224 / 224 / 672 / 2016 / 448 (8) |
+| skew | olmoe | 512 | 60 (21) | ok / ok / ok / ok / ok | 0.69, 0.93, 0.93, 0.93 | 16 / 16 / 32 / 496 / 272 (2) |
+| skew | lfm2 | 512 | 29 (9) | ok / ok / ok / ok / ok | 0.65, 0.87, 0.87, 0.87 | 14 / 14 / 42 / 420 / 266 (2) |
+| skew | ernie | 512 | 57 (22) | ok / ok / ok / ok / ok | 0.69, 0.94, 0.94, 0.94 | 18 / 18 / 48 / 874 / 273 (4) |
+| skew | graniteh | 512 | 57 (22) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 9 / 9 / 15 / 180 / 180 (1) |
+| skew | qwen3 | 512 | 111 (51) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 16 / 16 / 28 / 682 / 271 (3) |
+| skew | nemotron | 512 | 108 (55) | ok / ok / ok / ok / ok | 0.72, 0.98, 0.98, 0.98 | 16 / 16 / 35 / 1044 / 263 (5) |
+| skew | qwen36 | 512 | 176 (95) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 16 / 16 / 24 / 720 / 272 (3) |
+| skew | mixtral | 512 | 8 (1) | ok / ok / ok / ok / ok | 0.73, 0.99, 0.99, 0.99 | 56 / 56 / 504 / 1848 / 280 (8) |
+| skew | olmoe | 2048 | 64 (12) | ok / ok / ok / ok / ok | 0.67, 0.90, 0.90, 0.90 | 64 / 64 / 80 / 576 / 320 (2) |
+| skew | lfm2 | 2048 | 32 (7) | ok / ok / ok / ok / ok | 0.67, 0.91, 0.91, 0.91 | 56 / 56 / 84 / 504 / 308 (2) |
+| skew | ernie | 2048 | 64 (17) | ok / ok / ok / ok / ok | 0.67, 0.91, 0.91, 0.91 | 72 / 72 / 102 / 1032 / 327 (4) |
+| skew | graniteh | 2048 | 64 (17) | ok / ok / ok / ok / ok | 0.67, 0.91, 0.91, 0.91 | 36 / 36 / 43 / 228 / 228 (1) |
+| skew | qwen3 | 2048 | 121 (41) | ok / ok / ok / ok / ok | 0.70, 0.95, 0.95, 0.95 | 64 / 64 / 76 / 790 / 319 (3) |
+| skew | nemotron | 2048 | 119 (46) | ok / ok / ok / ok / ok | 0.63, 0.85, 0.85, 0.85 | 64 / 64 / 84 / 1196 / 311 (5) |
+| skew | qwen36 | 2048 | 221 (92) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 64 / 64 / 72 / 948 / 320 (4) |
+| skew | mixtral | 2048 | 8 (1) | ok / ok / ok / ok / ok | 0.74, 1.00, 1.00, 1.00 | 224 / 224 / 672 / 2016 / 448 (8) |
+
+GATE: every arm passed the fp32-reference gate (<= 2.0 x dense's error) on every call read
+No timing is read from this receipt; no bar; no decision.
