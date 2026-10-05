@@ -5,8 +5,9 @@
 # TP_DONE.<nonce> at the end -- a refusal writes them too, so the controller reads a finished lane, never a hang.
 #
 # install grouped-nf4-gemm at GNF4_SHA -> tripwire -> the train anchor (strict, as tp1: a refused box ends the lane, exit 12;
-# an anchor that crashes refuses nothing, exit 9) -> rd_probe.py over the registered grid -> rd_table.py. No checkpoint is fetched: the probe draws random NF4 stacks at each
-# family's registered shapes. Nothing here creates, destroys or approves compute.
+# an anchor that crashes refuses nothing, exit 9) -> rd_probe.py over the registered grid -> rd_table.py. No checkpoint is
+# fetched: the probe draws random NF4 stacks at each family's registered shapes. Nothing here creates, destroys or approves
+# compute.
 set -uo pipefail
 W=/root/tc1; cd "$W" || exit 9
 NONCE=${TC1_RUN_NONCE:?}; printf '%s\n' "$NONCE" > TC1_RUN_NONCE
