@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### MG1 amendment 3 read: Qwen3.6-35B-A3B enters `fast_train = supported` (P8 HELD: the dgrad kernel served every frozen-GEMM backward of tp1's licensed fused arm) (docs and receipts)
+
+- **The read** ([`bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md`](bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md), one RTX 5090,
+  $0.803). tp1's arm driver ran Qwen3.6's fused arm resident for 60 steps, the committed file unchanged under
+  `bench/moegen/p2_hook.py`.
+  - grouped-nf4-gemm's `DGRAD_STATS` read kernel 4,800 and loop 0: 80 frozen-GEMM backwards a step, every one on the kernel.
+  - 40/40 layers patched, no recurrent-kernel fallback, and the driver's sha256 equal to tp1's file.
+- **The decision.** With MG1's PASS, the registered rule is complete. `qwen3_5_moe.fast_train` is `supported` (claim
+  `e4b.train.parity.mg1.qwen3_5.p2.2026-10-05`), the family joins `qlora-fused-moe-experts.model_families` (now 10), and the
+  fused row carries its own `licensed_by`.
+- The arm's time and losses are informational: no anchor and no reference arm on this box.
+- **Spend.** The MG1 lane is $3.04 in all.
+
 ## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
 
 **0.47.0.** One default changes, by lane SC2b's licence: `serve_paged`'s first-chunk prefill graph is `auto`.
@@ -49,19 +64,6 @@
   arm, 4.060 / 3.755, was 7.8 % apart, so no ratio is read and P50 and P51 stay UNTESTED under amendment 25.
 - Across two boxes, three different pairs lost stability over TC1's 10-step median window. Amendment 29 re-asks P50 and P51, with their
   bands unchanged, on one box with `TC1_STEPS=60` (50-step medians), the reference arm not run. Its reading is final.
-
-### MG1 amendment 3 read: Qwen3.6-35B-A3B enters `fast_train = supported` (P8 HELD: the dgrad kernel served every frozen-GEMM backward of tp1's licensed fused arm) (docs and receipts)
-
-- **The read** ([`bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md`](bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md), one RTX 5090,
-  $0.803). tp1's arm driver ran Qwen3.6's fused arm resident for 60 steps, the committed file unchanged under
-  `bench/moegen/p2_hook.py`.
-  - grouped-nf4-gemm's `DGRAD_STATS` read kernel 4,800 and loop 0: 80 frozen-GEMM backwards a step, every one on the kernel.
-  - 40/40 layers patched, no recurrent-kernel fallback, and the driver's sha256 equal to tp1's file.
-- **The decision.** With MG1's PASS, the registered rule is complete. `qwen3_5_moe.fast_train` is `supported` (claim
-  `e4b.train.parity.mg1.qwen3_5.p2.2026-10-05`), the family joins `qlora-fused-moe-experts.model_families` (now 10), and the
-  fused row carries its own `licensed_by`.
-- The arm's time and losses are informational: no anchor and no reference arm on this box.
-- **Spend.** The MG1 lane is $3.04 in all.
 
 ### MG1 amendment 2 read: the ladder OOMs at Qwen3.6's licensed configuration, so P2 stays unread and `qwen3_5_moe` stays experimental; amendment 3 registered, reading P2 on tp1's own fused arm (bench, tests and docs)
 
