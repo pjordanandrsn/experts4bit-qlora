@@ -749,9 +749,11 @@ class Fp8PagedKV:
         for i, layer in enumerate(layers):
             groups.setdefault((self.Hs[layer], self.Ds[layer], self.kgs[layer]), []).append(i)
         # a group's stacked input is bounded (BULK_GROUP_BYTES per side): the quantize's fp32 temporaries are ~4x it
-        # and both sides' stacks and outputs are alive together, so a group peaks near 7x the bound (~112 MiB),
-        # under a prompt forward's own working set (its full-sequence logits alone are ~155 MB at 512 tokens on
-        # Qwen3) rather than growing with layers x prompt length
+        # and both sides' stacks are alive together, so a group peaks near 7x the bound (~112 MiB); every group's
+        # quantized bytes (the prompt's FP8 K/V) are held until the writes. The whole is append_prompt_peak_bytes().
+        # Under an eager forward it borrows memory the forward just returned to the allocator. Under the first-chunk
+        # prefill graph the forward's working set sits in the graph's PRIVATE pool, so this transient is NEW memory on
+        # top of it: PagedModelRunner.enable_prefill_graph counts it in its `auto` headroom when bulk_kv is on.
         bounded = []
         for (H, D, kg), idx in groups.items():
             per = max(1, BULK_GROUP_BYTES // max(1, T * H * D * 2))
@@ -793,6 +795,26 @@ class Fp8PagedKV:
             self.seq_lens[:, seq].add_(T)
         else:
             self.seq_lens[self._layer_index(layers), seq] += T
+
+    def append_prompt_peak_bytes(self, T: int, layers=None) -> int:
+        """An upper bound on the device memory :meth:`append_prompt` allocates for a ``T``-token prompt, beyond its
+        inputs: per geometry group, the largest bounded group's stacks and quantize temporaries (7 x its bf16 input per
+        side), plus every layer's quantized bytes, which are held until the writes. ``T`` at the slot's capacity gives
+        the bound for any prompt."""
+        layers = list(range(self.L)) if layers is None else list(layers)
+        T = int(T)
+        if T <= 0 or not layers:
+            return 0
+        groups: dict = {}
+        for layer in layers:
+            groups.setdefault((self.Hs[layer], self.Ds[layer], self.kgs[layer]), []).append(layer)
+        peak_group, held = 0, 0
+        for (H, D, kg), lays in groups.items():
+            per = max(1, BULK_GROUP_BYTES // max(1, T * H * D * 2))
+            g = min(per, len(lays))
+            peak_group = max(peak_group, 7 * g * T * H * D * 2)
+            held += len(lays) * T * (2 * H * D + H * kg * 4 + H * 4)      # K and V payload + their scales
+        return peak_group + held
 
     def free_blocks(self, layer: int = 0) -> int:
         return len(self._free[layer])

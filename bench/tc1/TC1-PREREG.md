@@ -1499,3 +1499,50 @@ FALSIFIED outside its band and UNTESTED where a side is unstable, not VALID or n
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
 About $2 with the download and the gate's possible re-runs; this is in the standing no-ask tier.
+
+### Amendment 38 (2026-10-05T08:17Z, after amendment 37's read, before any box): the compact padded LoRA delta's default decision, a third host and a second family (P77–P83)
+
+**Why.** Two boxes have now read grouped-nf4-gemm's compact delta on Qwen3-30B-A3B in venv-unsloth:
+
+| box | host | matched | shipped | matched peak |
+|---|---|---|---|---|
+| `tc1-5090-80` (amendment 36, before #473) | EPYC 7B13 | 0.969 | 0.970 | +0.229 GB |
+| `tc1-5090-83` (amendment 37, with #473) | EPYC 7702P | 0.967 | 0.948 | −0.288 GB |
+
+Amendment 37's rule kept the flag opt-in because the shipped ratio fell below a two-sided band, on the side the decision wanted. A default in
+grouped-nf4-gemm changes every family's step, and no family but Qwen3-30B-A3B has been read with the flag. Mixtral-8x7B takes the padded
+LoRA path too (TC2 amendment 8's box: 11,264 padded calls), and at default settings it peaks at 31.07 GB of the card's 32.
+
+**The box** (tokens `qwen3compactab3` and `mixtralcompactab`, in that order). One RTX 5090, every arm in venv-unsloth with e4b and
+grouped-nf4-gemm at the box's pins (grouped-nf4-gemm at or after #473), 60 steps, load-gated draws (`TC1_LOAD_GATE=6.0`,
+`TC1_LOAD_RETRIES=2`), a 192 GB host floor, on a machine other than 145701 and 45379 (amendments 36 and 37's) and 151350, 45511 and 138786.
+
+- `qwen3compactab3`: amendment 36's box unchanged, the shipped and the matched arm, `_cd0` vs `_cd1`, two draws a side in ABBA order.
+- `mixtralcompactab`: Mixtral-8x7B-Instruct at TC2's pin and field recipe, resident at default settings (the dense route), the matched arm
+  only (the shipped arms skipped), `_cd0` vs `_cd1`, two draws a side.
+
+Engagement is amendment 36's (the resolved flag, no kept layers, the padded route, torch 2.12).
+
+**Predictions** (registered before the box), one-sided: the decision needs the flag no slower and no heavier, not a size of gain.
+
+- **P77** (Qwen3, matched): `_cd1` / `_cd0` ≤ **0.99**.
+- **P78** (Qwen3, shipped): `_cd1` / `_cd0` ≤ **0.99**.
+- **P79** (Qwen3, matched peak): `_cd1` − `_cd0` ≤ **+0.05 GB**.
+- **P80** (Mixtral, matched): `_cd1` / `_cd0` ≤ **1.01**. Mixtral routes 2 of 8 experts, so its padded blocks are small and the saving may be
+  too; level is allowed.
+- **P81** (Mixtral, matched peak): `_cd1` − `_cd0` ≤ **+0.05 GB**.
+- **P82, P83:** on each arm of each family, |mean held-out at N, `_cd1` − `_cd0`| ≤ **0.005**.
+
+Each needs two stable VALID draws a side, and is FALSIFIED on the wrong side of its bound and UNTESTED where a side is unstable, not VALID
+or not engaged.
+
+**Decision rules.**
+
+- **P77–P83 HELD:** `NF4_QLORA_COMPACT_DELTA` becomes grouped-nf4-gemm's default, in one PR citing amendments 36, 37 and 38 (`=0` keeps
+  the autograd path).
+- **Any of them FALSIFIED:** it stays opt-in, and the read names which family and which side.
+- **Any UNTESTED, none FALSIFIED:** it stays opt-in, and no further box is registered for this flag under these rules.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, a 192 GB host floor, venv-unsloth built for the t212 install, Qwen3 and
+Mixtral downloaded. About $3 with the downloads and the gate's possible re-runs; this is in the standing no-ask tier.

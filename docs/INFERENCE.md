@@ -28,32 +28,30 @@ All `no_grad`-only; training paths are untouched.
   so the schedule is deterministic (no expert prediction) and residency is bounded at two
   layers.
 
-## Measured decode
+## Measured decode footprint
 
 RTX A2000, OLMoE + the r16 adapter, 128 greedy tokens; big models: base model, 96 tokens.
-Full grids and analysis in [METHODOLOGY](METHODOLOGY.md) §12.
+Full grids in [METHODOLOGY](METHODOLOGY.md) §12.
 
 *These are v0 offload-path figures. The pipelined engine supersedes them for decode — see
 [RESIDENCY-ENGINES](RESIDENCY-ENGINES.md) and `bench/RESULTS-informed-hotsets.md`.*
 
-| model | config | tok/s | peak GPU |
-|---|---|:---:|:---:|
-| OLMoE-1B-7B | resident (experts on GPU) | 3.08 | 4.86 GB |
-| OLMoE-1B-7B | offload, serial | 0.40 | 1.45 GB |
-| OLMoE-1B-7B | **offload + prefetch** | **1.44** | **1.68 GB** |
-| Gemma-4-26B-A4B | resident | OOM | — |
-| Gemma-4-26B-A4B | **offload + prefetch** | **0.43** | **6.16 GB** |
-| Qwen3-30B-A3B | resident | OOM | — |
-| Qwen3-30B-A3B | **offload + prefetch** | **0.22** | **4.41 GB** |
+| model | config | peak GPU |
+|---|---|:---:|
+| OLMoE-1B-7B | resident (experts on GPU) | 4.86 GB |
+| OLMoE-1B-7B | offload, serial | 1.45 GB |
+| OLMoE-1B-7B | **offload + prefetch** | **1.68 GB** |
+| Gemma-4-26B-A4B | resident | OOM |
+| Gemma-4-26B-A4B | **offload + prefetch** | **6.16 GB** |
+| Qwen3-30B-A3B | resident | OOM |
+| Qwen3-30B-A3B | **offload + prefetch** | **4.41 GB** |
 
-Capability, not throughput — and **the levers are shape-dependent**. At OLMoE scale prefetch
-is the result (3.65× over serial) and the GEMV route is neutral. At 26–30B scale decode is so
-transfer-bound that prefetch's ratio shrinks (1.36× / 1.08×), while GEMV swings from **+46%
-on Gemma-4** (big per-expert stacks, so avoided dequantize traffic dominates) to **−8% on
-Qwen3-30B** (thin experts, so it does not; prefetch + dequantize is Qwen3's best config at
-0.238 tok/s). §12c scores the prediction this falsified.
+Capability, not throughput. The A2000 is the project's correctness-only testbed (a shared
+production box), so the decode rates it read for these rows are kept in METHODOLOGY §12 as a
+record and are not quoted here as speed: what this table says is what fits, and at what peak.
 
-**Measure your model with the kill-switches; do not extrapolate across shapes.**
+**Measure your model's speed with the kill-switches, on the card you will run; do not
+extrapolate across shapes.**
 
 ## Library use
 

@@ -52,17 +52,18 @@ passing. The Dockerfile installs 3.11 from deadsnakes and asserts the fixed inte
 build time; if you build your own image, keep both.
 
 One deployment note worth setting: the
-container should carry `ulimits: memlock: -1`, and on the A2000 stack above, omitting it went
-with offloaded decode dropping from 1.44 to ~0.4 tok/s.
+container should carry `ulimits: memlock: -1`. On the A2000 stack above, a slow offloaded
+decode was seen without it; that card is a correctness-only testbed, so the reading is not
+quoted as a speed.
 
 **Correction (2026-07-28): the stated *cause* was wrong.** That note used to say the pinned-RAM
 homes "silently fall back to pageable" without the rlimit. They do not — `pin_memory()` /
 `cudaHostAlloc` is **not** gated by `RLIMIT_MEMLOCK`. Measured on a RunPod SECURE A6000 whose
 memlock was capped at **8 MiB soft and hard**: a **15 GiB** pinned arena allocated fine and moved
 at 18.7 GB/s (pinned-class H2D). The rlimit gates `cudaHostRegister` (locking pages you already
-own), which this path never calls. The 3.6× slowdown was real on that host but is **not
-attributed** — set the ulimit as cheap insurance, and do not use it to explain a slow path
-without checking `tensor.is_pinned()` first.
+own), which this path never calls. The slowdown on that host is **not attributed** — set the
+ulimit as cheap insurance, and do not use it to explain a slow path without checking
+`tensor.is_pinned()` first.
 
 Bind note (0.6.3+): the compose sets `E4B_HOST=0.0.0.0` **inside** the container (a
 container-loopback bind is unreachable through the port map — the container's network namespace
@@ -168,9 +169,20 @@ blocks:
 It leaves the same pool bytes, block tables, lengths and free lists as the per-layer path, with the same rows given to
 the same slot. `/health`'s `kv_bookkeeping` block reads `requested` and, per path, how many requests' prompt flushes
 (`flush_layers`, `flush_bulk`) and first-decode block claims (`ready_layers`, `ready_bulk`, or `ready_at_flush` when
-the bulk flush already made them) the server ran. `tests/test_bulk_kv.py` compares whole pools, and a tiny model decodes the same tokens either way. The
-stall census behind it is `bench/stall-census-2026-10-05/` (exploratory: an A2000 microbenchmark and a post-hoc read of
-SC2b's traces). No request-level effect is claimed until a registered lane reads one.
+the bulk flush already made them) the server ran.
+
+**Memory.** A bulk flush allocates up to `Fp8PagedKV.append_prompt_peak_bytes(T)`:
+- its largest layer group's stacks and quantize temporaries, 7× its bf16 input per side, a group bounded at 16 MiB per
+  side;
+- every layer's FP8 K/V, held until the writes.
+
+That is ~216 MiB on Qwen3-30B-A3B at a 2048-token prompt (~138 MiB at 512). Under an eager forward it reuses memory the forward just
+returned. Under the first-chunk prefill graph the forward's working set sits in the graph's private pool, so the flush
+is additive: the graph's `auto` headroom check counts the bound at the slot's capacity when bulk is on, and
+`/health`'s `prefill_graph.bulk_flush_mib` reports it. `tests/test_bulk_kv.py` compares whole pools, and a tiny model decodes the same tokens either way. The
+stall census behind it is `bench/stall-census-2026-10-05/` (exploratory: launch counts and bitwise parity on the A2000,
+a correctness testbed, and a post-hoc read of SC2b's traces). No speed or request-level effect is claimed until a
+registered lane reads one.
 
 **Per-step trace (`E4B_PAGED_STEP_TRACE=<path>`).** One JSON line per engine step (`engines/step_trace.py`):
 - what the step carried: prefill chunks and tokens, prefill-graph replays, decode rows and bucket, slots decoding for
