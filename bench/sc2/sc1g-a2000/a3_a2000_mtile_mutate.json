@@ -1,0 +1,186 @@
+{
+ "device": {
+  "name": "NVIDIA RTX A2000 12GB",
+  "cc": [
+   8,
+   6
+  ]
+ },
+ "verdict": "MTILE_DISAGREES",
+ "worst_one_call": 3.4321014881134033,
+ "worst_chunked": 3.4321014881134033,
+ "tol": 0.005,
+ "tokens": 2561,
+ "chunk": 128,
+ "mutate": true,
+ "rows": [
+  {
+   "layer": 0,
+   "which": "gu",
+   "routing": "uniform",
+   "kind": "normal",
+   "rows_one_call": 10244,
+   "max_group": 360,
+   "groups": 32,
+   "one_vs_ref": {
+    "max": 1.7620829343795776,
+    "mean": 1.4189233779907227
+   },
+   "chunked_vs_ref": {
+    "max": 1.7620829343795776,
+    "mean": 1.4189234972000122
+   },
+   "one_vs_chunked": {
+    "max": 0.0012009970378130674,
+    "mean": 4.4717481273437443e-07
+   }
+  },
+  {
+   "layer": 0,
+   "which": "gu",
+   "routing": "uniform",
+   "kind": "outlier",
+   "rows_one_call": 10244,
+   "max_group": 360,
+   "groups": 32,
+   "one_vs_ref": {
+    "max": 3.4321014881134033,
+    "mean": 1.427889347076416
+   },
+   "chunked_vs_ref": {
+    "max": 3.4321014881134033,
+    "mean": 1.427889347076416
+   },
+   "one_vs_chunked": {
+    "max": 0.0012078923173248768,
+    "mean": 4.629641523479222e-07
+   }
+  },
+  {
+   "layer": 0,
+   "which": "gu",
+   "routing": "skewed",
+   "kind": "normal",
+   "rows_one_call": 10244,
+   "max_group": 2540,
+   "groups": 32,
+   "one_vs_ref": {
+    "max": 1.7162468433380127,
+    "mean": 1.4139186143875122
+   },
+   "chunked_vs_ref": {
+    "max": 1.7162468433380127,
+    "mean": 1.4139186143875122
+   },
+   "one_vs_chunked": {
+    "max": 0.0011534866644069552,
+    "mean": 4.4150871758574795e-07
+   }
+  },
+  {
+   "layer": 0,
+   "which": "gu",
+   "routing": "skewed",
+   "kind": "outlier",
+   "rows_one_call": 10244,
+   "max_group": 2540,
+   "groups": 32,
+   "one_vs_ref": {
+    "max": 2.4408955574035645,
+    "mean": 1.4176987409591675
+   },
+   "chunked_vs_ref": {
+    "max": 2.4408955574035645,
+    "mean": 1.4176989793777466
+   },
+   "one_vs_chunked": {
+    "max": 0.001256754039786756,
+    "mean": 4.820429921892355e-07
+   }
+  },
+  {
+   "layer": 0,
+   "which": "dn",
+   "routing": "uniform",
+   "kind": "normal",
+   "rows_one_call": 10244,
+   "max_group": 349,
+   "groups": 32,
+   "one_vs_ref": {
+    "max": 2.1703622341156006,
+    "mean": 1.4143972396850586
+   },
+   "chunked_vs_ref": {
+    "max": 2.1703622341156006,
+    "mean": 1.4143973588943481
+   },
+   "one_vs_chunked": {
+    "max": 0.0021759539376944304,
+    "mean": 5.967525567029952e-07
+   }
+  },
+  {
+   "layer": 0,
+   "which": "dn",
+   "routing": "uniform",
+   "kind": "outlier",
+   "rows_one_call": 10244,
+   "max_group": 349,
+   "groups": 32,
+   "one_vs_ref": {
+    "max": 2.1293506622314453,
+    "mean": 1.4283016920089722
+   },
+   "chunked_vs_ref": {
+    "max": 2.1293506622314453,
+    "mean": 1.4283018112182617
+   },
+   "one_vs_chunked": {
+    "max": 0.0013492045691236854,
+    "mean": 4.155829742558126e-07
+   }
+  },
+  {
+   "layer": 0,
+   "which": "dn",
+   "routing": "skewed",
+   "kind": "normal",
+   "rows_one_call": 10244,
+   "max_group": 2538,
+   "groups": 32,
+   "one_vs_ref": {
+    "max": 2.0595955848693848,
+    "mean": 1.416785478591919
+   },
+   "chunked_vs_ref": {
+    "max": 2.0595955848693848,
+    "mean": 1.416785478591919
+   },
+   "one_vs_chunked": {
+    "max": 0.0016406852519139647,
+    "mean": 4.5223453071230324e-07
+   }
+  },
+  {
+   "layer": 0,
+   "which": "dn",
+   "routing": "skewed",
+   "kind": "outlier",
+   "rows_one_call": 10244,
+   "max_group": 2538,
+   "groups": 32,
+   "one_vs_ref": {
+    "max": 2.4394850730895996,
+    "mean": 1.436000108718872
+   },
+   "chunked_vs_ref": {
+    "max": 2.4394850730895996,
+    "mean": 1.436000108718872
+   },
+   "one_vs_chunked": {
+    "max": 0.0011964760487899184,
+    "mean": 3.5292879374537733e-07
+   }
+  }
+ ]
+}

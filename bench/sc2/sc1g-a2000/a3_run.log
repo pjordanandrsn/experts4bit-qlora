@@ -1,0 +1,32 @@
+[2026-10-05T17:07:32Z] sc1g-a3: runtime nvidia-runtime
+[2026-10-05T17:07:33Z] sc1g-a3: pre-flight gpu util,used,total: 0,4334,12282
+gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+torch 2.8.0+cu128 triton 3.4.0 NVIDIA RTX A2000 12GB
+[2026-10-05T17:08:52Z] sc1g-a3: arm P: the fp8 KV pack at k_groups 4 / 8 / 16
+SC1G_ATTN_PACK PACK_OK cc=[8, 6] mutate=False kg4:recon=2.509e-02,k_recon=2.234e-02,scheme=3.405e-02 kg8:recon=2.510e-02,k_recon=1.982e-02,scheme=3.212e-02 kg16:recon=2.508e-02,k_recon=1.620e-02,scheme=3.148e-02
+[2026-10-05T17:09:00Z] sc1g-a3: arm PM (mutation): recon against the originals shifted one token -- must PACK_BAD
+SC1G_ATTN_PACK PACK_BAD cc=[8, 6] mutate=True kg4:recon=1.420e+00,k_recon=1.420e+00,scheme=3.405e-02 kg8:recon=1.415e+00,k_recon=1.415e+00,scheme=3.212e-02 kg16:recon=1.417e+00,k_recon=1.417e+00,scheme=3.148e-02
+[2026-10-05T17:09:07Z] sc1g-a3: arm T: the NF4 M-tile, one call vs 128-token chunks vs fp32, layers 0 and 12
+L0 gu uniform normal: rows=10244 max_group=360 one=1.511e-03 chunked=1.511e-03 one_vs_chunked=1.201e-03
+L0 gu uniform outlier: rows=10244 max_group=360 one=1.482e-03 chunked=1.482e-03 one_vs_chunked=1.208e-03
+L0 gu skewed normal: rows=10244 max_group=2540 one=1.469e-03 chunked=1.469e-03 one_vs_chunked=1.153e-03
+L0 gu skewed outlier: rows=10244 max_group=2540 one=1.524e-03 chunked=1.524e-03 one_vs_chunked=1.257e-03
+L0 dn uniform normal: rows=10244 max_group=349 one=3.645e-03 chunked=3.645e-03 one_vs_chunked=2.176e-03
+L0 dn uniform outlier: rows=10244 max_group=349 one=3.815e-03 chunked=3.815e-03 one_vs_chunked=1.349e-03
+L0 dn skewed normal: rows=10244 max_group=2538 one=3.337e-03 chunked=3.337e-03 one_vs_chunked=1.641e-03
+L0 dn skewed outlier: rows=10244 max_group=2538 one=3.639e-03 chunked=3.639e-03 one_vs_chunked=1.196e-03
+L12 gu uniform normal: rows=10244 max_group=354 one=1.740e-03 chunked=1.740e-03 one_vs_chunked=1.271e-03
+L12 gu uniform outlier: rows=10244 max_group=354 one=1.657e-03 chunked=1.657e-03 one_vs_chunked=1.341e-03
+L12 gu skewed normal: rows=10244 max_group=2538 one=1.751e-03 chunked=1.751e-03 one_vs_chunked=1.287e-03
+L12 gu skewed outlier: rows=10244 max_group=2538 one=1.709e-03 chunked=1.709e-03 one_vs_chunked=1.263e-03
+L12 dn uniform normal: rows=10244 max_group=355 one=3.169e-03 chunked=3.169e-03 one_vs_chunked=1.147e-03
+L12 dn uniform outlier: rows=10244 max_group=355 one=3.319e-03 chunked=3.319e-03 one_vs_chunked=1.381e-03
+L12 dn skewed normal: rows=10244 max_group=2534 one=3.288e-03 chunked=3.288e-03 one_vs_chunked=1.179e-03
+L12 dn skewed outlier: rows=10244 max_group=2534 one=2.699e-03 chunked=2.699e-03 one_vs_chunked=1.325e-03
+SC1G_MTILE_CHECK MTILE_AGREES device=NVIDIA RTX A2000 12GB cc=[8, 6] worst_one_call=3.815e-03 worst_chunked=3.815e-03 mutate=False
+[2026-10-05T17:09:48Z] sc1g-a3: arm TM (mutation): the reference reads the next expert -- must DISAGREE
+L0 dn skewed outlier: rows=10244 max_group=2538 one=2.439e+00 chunked=2.439e+00 one_vs_chunked=1.196e-03
+SC1G_MTILE_CHECK MTILE_DISAGREES device=NVIDIA RTX A2000 12GB cc=[8, 6] worst_one_call=3.432e+00 worst_chunked=3.432e+00 mutate=True
+SC1G_A3_DONE armP=0 armPM=1 armT=0 armTM=1 (PM and TM must be nonzero)

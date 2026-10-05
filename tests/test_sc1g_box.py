@@ -231,7 +231,7 @@ def test_sglang_gptoss_quality_modes_demand_radix_on_one_request_and_their_moe_r
 def test_the_sc1g_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc1g_reduce.py"), "--self-test"],
                          capture_output=True, text=True, timeout=120)
-    assert out.returncode == 0 and "self-test OK (16 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (20 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_capture_keeps_the_selected_layers_gate_up_and_down_per_decode_step(tmp_path):
@@ -263,17 +263,24 @@ for step in range(2):
 
 
 def test_box_j_is_the_e4b_only_diagnostic_box_with_its_decisive_arms_first():
-    """A2: box J installs no comparator, needs no proof (guard <= 1 h), and runs conv1's decisive four before anything else."""
+    """A2/A3: box J installs no comparator, needs no proof (guard <= 1 h), runs A3's split in priority order -- conv1's K1/K2/K5
+    rows, e4b#1175's attention check, the K2/K5 triple on conv2-conv4, then the controls -- and builds four conversations."""
     assert "  J) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh ;;" in RUN
     assert 'J) PROVE_NEEDS="";;' in RUN and "J) box_j;; esac" in RUN and "G|I|J) GNF4_SHA=" in RUN
     body = BOX[BOX.index("box_j(){"):]
     assert "install_" not in body and "fetch_gptoss_gguf" not in body
-    order = [body.index(s) for s in ("e4b_serve_served_conv1 ", "e4b_nf4_served_conv1 ", "e4b_nf4_chunk1_conv1 ",
-                                     "e4b_nf4_full_conv1 ", "e4b_nf4_fqkv_conv1 ", "e4b_nf4_fqk_conv1 ", "e4b_nf4_fqv_conv1 ",
-                                     "e4b_serve_chunk1_conv1 ", "i_gemv", "e4b_nf4_fqkv16_conv1 ", "e4b_serve_kvg16_conv1 ",
-                                     "e4b_nf4_served_conv2 ", "e4b_serve_pdl0_conv1 ", "e4b_serve_nofold_conv1 ")]
-    assert "--ppl-oracle full --ppl-fq kv --fq-kgroups 4 --fq-vgroups 1" in body and "--kv-groups 16" in body
+    order = [body.index(s) for s in ("e4b_serve_v1_conv1 ", "e4b_mxpre_prefill128_conv1 ", "e4b_nf4_prefill128_conv1 ",
+                                     "e4b_serve_served_conv1 ", "e4b_nf4_served_conv1 ", "sc1g_attn_check.py",
+                                     "for c in conv2 conv3 conv4", "e4b_serve_kvg4_conv1 ", "e4b_serve_nofold_conv1 ",
+                                     "e4b_serve_pdl0_conv1 ", "e4b_mxpre_prefill128_conv2 ", "e4b_nf4_prefill128_conv2 ")]
     assert order == sorted(order), order
+    loop = body[body.index("for c in conv2 conv3 conv4"):body.index("e4b_serve_kvg4_conv1 ")]
+    for stem, env in (("e4b_serve_served_$c", '"$SC1G_E4B_SERVE"'), ("e4b_nf4_served_$c", '"$SC1G_E4B_NF4"'),
+                      ("e4b_serve_v1_$c", '"$SC1G_E4B_SERVE E4B_MXFP4_GEMV=0"')):
+        assert f"{stem} {env} $c" in loop
+    assert "SC1G_NCONV=4 i_windows" in body and "--n-conv ${SC1G_NCONV:-2}" in BOX
+    assert "can_run 600 attn_check" in body and "SC1G_ATTN_CHECK ERROR" in body
+    assert 'SC1G_E4B_MXPRE="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=0' in BOX and "--kv-groups 16" not in body
 
 
 def test_box_j_children_inherit_neither_prefill_route_pin():
