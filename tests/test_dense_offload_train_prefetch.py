@@ -131,7 +131,7 @@ def test_schedule_out_of_order_is_unscheduled_then_restarts():
     assert seen[3][1] == "fwd"          # the walk restarts from the next use, never prefetching on a guess
 
 
-@pytest.mark.parametrize("n,expect", [(1, [(0, "fwd", None), (0, "fwd", None)]),
+@pytest.mark.parametrize("n,expect", [(1, [(0, "fwd", None), (0, "bwd", None)]),      # 0 is the last layer: a turnaround
                                       (2, [(0, "fwd", 1), (1, "fwd", 0), (1, "bwd", 0), (0, "bwd", 1)])])
 def test_schedule_tiny_chains(n, expect):
     order = [0, 0] if n == 1 else [0, 1, 1, 0]
