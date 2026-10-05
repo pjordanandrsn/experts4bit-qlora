@@ -811,15 +811,16 @@ def chunk_auto_why(tag, r):
 
 
 def score_chunkauto_gate(F, fam=CHUNKAUTO_FAM):
-    """TC1-PREREG amendment 44's P99: on every ca1 arm that ran (VALID), the size gate never fired -- chunked_calls 0 and small_calls ==
-    CHUNKAUTO_FORWARDS. HELD when all four ca1 arms are VALID and gated; FALSIFIED when any VALID ca1 arm chunked a forward or gated a
-    different count; UNTESTED otherwise."""
+    """TC1-PREREG amendment 44's P99: on every ca1 arm that ran (VALID), the size gate never fired. FALSIFIED iff a VALID ca1 arm chunked a
+    forward (chunked_calls > 0: the gate fired). HELD iff all four ca1 arms are VALID and each reads exactly chunked 0 / small
+    CHUNKAUTO_FORWARDS. UNTESTED otherwise -- a ca1 arm not VALID, or one that chunked nothing but gated a count other than
+    CHUNKAUTO_FORWARDS (an extra or missing training forward: a question about the instrument or the trainer, reported, not the gate)."""
     R = F.get(fam)
     if not R:
         return []
     rows = {x["tag"]: x for x in R["rows"] if x["fw"] == "e4b"}
     ca1 = [t for _, t in EXPECTED[fam] if "_ca1" in t]
-    ev, bad, missing = [], [], []
+    ev, bad, missing, count = [], [], [], []
     for t in ca1:
         x = rows.get(t)
         if not x or x.get("verdict") != "VALID":
@@ -828,15 +829,18 @@ def score_chunkauto_gate(F, fam=CHUNKAUTO_FAM):
         c = (x.get("r") or {}).get("chunked_lm_loss") or {}
         ch, sm = int(c.get("chunked_calls") or 0), int(c.get("small_calls") or 0)
         ev.append(f"`{t}` chunked {ch} / small {sm}")
-        if ch != 0 or sm != CHUNKAUTO_FORWARDS:
+        if ch > 0:
             bad.append(t)
+        elif sm != CHUNKAUTO_FORWARDS:
+            count.append(f"{t} gated {sm}, not {CHUNKAUTO_FORWARDS}")
     if bad:
         v = "FALSIFIED"
-    elif missing:
+    elif missing or count:
         v = "UNTESTED"
     else:
         v = "HELD"
     tail = ("; not VALID: " + ", ".join(missing)) if missing else ""
+    tail += ("; forward count (instrument, not the gate): " + ", ".join(count)) if count else ""
     return [("P99", fam, v, f"want chunked 0 / small {CHUNKAUTO_FORWARDS} on every ca1 arm: " + "; ".join(ev) + tail)]
 
 
@@ -6755,6 +6759,8 @@ def selftest():
     assert pca() == {"P99": "HELD", "P102": "HELD", "P101": "HELD", "P100": "HELD", "P103": "HELD"}, pca()
     R99 = CA(_chunkauto_set(ca1_chunked=12, ca1_small=228))
     assert all(x["verdict"] == "VALID" for x in R99[CHUNKAUTO_FAM]["rows"]) and pca(ca1_chunked=12, ca1_small=228)["P99"] == "FALSIFIED"
+    assert pca(ca1_chunked=0, ca1_small=236)["P99"] == "UNTESTED"                 # nothing chunked, a forward count off: the instrument, not the gate
+    assert "gated 236, not 240" in score_chunkauto_gate(CA(_chunkauto_set(ca1_small=236)))[0][3]
     for kw, tag, frag in (({"ca0_patched": 1}, "fused_attn4_m_ca0", "patched 0"), ({"env": "1"}, "fused_attn4_m_ca1", "E4B_CHUNKED_LM_LOSS=auto"),
                           ({"torch": "2.8.0+cu128"}, "fused_attn4_m_ca0", "is not 2.12*")):
         RV = CA(_chunkauto_set(**kw))

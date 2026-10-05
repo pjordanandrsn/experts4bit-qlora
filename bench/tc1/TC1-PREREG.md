@@ -1788,7 +1788,10 @@ to score, not validity's.
 **Predictions** (registered before the box, and before amendment 43's box is read), one-sided:
 
 - **P99** (the gate, structural): on every `_ca1` arm, `chunked_calls` 0 and `small_calls` 240 (every training forward of 60 steps × 4).
-  FALSIFIED if any VALID `_ca1` arm chunked a forward.
+  FALSIFIED iff a VALID `_ca1` arm chunked a forward (`chunked_calls` > 0: the gate fired). HELD iff every `_ca1` arm is VALID and reads
+  exactly 0 / 240. An arm that chunked nothing but gated another count leaves P99 UNTESTED: that is an extra or missing training forward,
+  a question about the instrument or the trainer, and the read reports the count.
+  (This split was made at review, 2026-10-05T18:44Z, before any box: the first text and the reducer disagreed on a count off by one.)
 - **P100** (shipped): `_ca1` / `_ca0` ≤ **1.02**.
 - **P101** (matched): `_ca1` / `_ca0` ≤ **1.02**.
 - **P102** (matched peak): `_ca1` − `_ca0` ≤ **+0.05 GB**.
