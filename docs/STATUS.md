@@ -279,7 +279,8 @@ double-quantized absmax becomes the default for resident training (`E4B_ABSMAX_D
 flags on, Qwen3-30B-A3B's training step is 0.973 of the flags-off step on the matched arm and 0.980 [0.957, 1.003] on the shipped arm
 (60 steps), with held-out within 0.002 and bit-identical kernels. All three predictions held, so `E4B_TRITON_PREBIND` and
 grouped-nf4-gemm's `GNF4_TRITON_PREBIND` are on by default (`=0` turns each off). The gain is small, and the shipped interval reaches
-1.0.
+1.0. They cover triton 3.7 too (`e4b.train.prebind.triton37.qwen3.5090.2026-10-05`, TC1 amendment 35, torch 2.12.1 / triton 3.7.1):
+0.986 [0.975, 0.997] on the matched arm and 0.996 [0.978, 1.013] on the shipped arm, held-out within 0.003.
 **The environment** (`e4b.train.env-ab.qwen3.5090.2026-10-04`, TC1 amendment 24): every 5090 position before amendment 33 ran e4b on the
 field image's torch 2.8.0+cu128 / transformers 5.18.0 and Unsloth on torch 2.12.1+cu130 / transformers 5.5.0. In Unsloth's environment
 e4b's matched arm steps 0.882× as long. The cause is not the padded LoRA delta's fp32 `bmm`, whose host cost per new shape is the same
