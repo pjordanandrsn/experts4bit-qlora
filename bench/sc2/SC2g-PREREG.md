@@ -28,7 +28,7 @@ never voided for it.
 
 | engine | weights | arithmetic (the row's label) | settings SC2g pins |
 |---|---|---|---|
-| **e4b_gptoss** | the checkpoint's own MXFP4 blocks + e8m0 scales (`E4B_SERVE_EXP_INT4=1`, the `gptoss` branch, no re-quantisation) for decode; an NF4 arena (`k8_bake.py`, the bake bo3 used) for prefill | **decode:** T == 1 `gemv_mxfp4_b32` on **int8 activations** (per-32 fp32 scales, exact int32 e2m1 dot: W4A8); ≤ 256 rows K21 `gemm_mxfp4_grouped_smallm` on **bf16** activations, fp32 accumulation (W4A16). Both are cited from grouped-nf4-gemm v0.39.0 `kernel/mxfp4_grouped.py:257` / `:370`. **Prefill NF4** (`E4B_INT4_KEEP_NF4=1`: no MXFP4 M-tile exists for > 256 rows). Attention sinks keep the explicit-mask prefill path | bo3's env (`E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4`) + SC1's folds + `ROUTEENV`; attention int4 off; `max_seqs` 16; **`E4B_PAGED_MAX_TOKENS_PER_SEQ=2048`**, matching vLLM's `--max-model-len` and SGLang's context; the prefill graph at main's default (`auto`), recorded |
+| **e4b_gptoss** | the checkpoint's own MXFP4 blocks + e8m0 scales (`E4B_SERVE_EXP_INT4=1`, the `gptoss` branch, no re-quantisation) for decode; an NF4 arena (`k8_bake.py`, the bake bo3 used) for prefill | **decode:** T == 1 `gemv_mxfp4_b32` on **int8 activations** (per-32 fp32 scales, exact int32 e2m1 dot: W4A8); ≤ 256 rows K21 `gemm_mxfp4_grouped_smallm` on **bf16** activations, fp32 accumulation (W4A16). Both are cited from grouped-nf4-gemm v0.39.0 and v0.41.0 (file unchanged) `kernel/mxfp4_grouped.py:257` / `:370`. **Prefill NF4** (`E4B_INT4_KEEP_NF4=1`: no MXFP4 M-tile exists for > 256 rows). Attention sinks keep the explicit-mask prefill path | bo3's env (`E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4`) + SC1's folds + `ROUTEENV`; attention int4 off; `max_seqs` 16; **`E4B_PAGED_MAX_TOKENS_PER_SEQ=2048`**, matching vLLM's `--max-model-len` and SGLang's context; the prefill graph at main's default (`auto`), recorded |
 | **vllm** | vLLM 0.30.0, the same checkpoint | Marlin **W4A16** (`--moe-backend marlin`, zero-padded); **TRITON_ATTN** pinned (sinks-capable, needs no NVIDIA cubins) | `--max-num-seqs 16 --max-model-len 2048 --no-enable-prefix-caching --seed 0 --gpu-memory-utilization 0.90` |
 | **sglang** | SGLang 0.5.20, the same checkpoint | its **default** MXFP4 runner on sm_120 (recorded from `server_info`), triton attention (forced for gpt-oss) | `gptoss` mode: `--disable-radix-cache --max-running-requests 16 --context-length 2048 --mem-fraction-static 0.75` |
 | **llamacpp** | llama.cpp `552f18f`, ggml-org's published `gpt-oss-20b-MXFP4.gguf` @ `ef9b12f2` (experts MXFP4; **attention Q8_0**) | default MMQ: **W4A8** decode (≤ 8 tokens), **W4A4** prefill | SC1's flags, `-np 16`, 1,024 tokens per slot; `cache_prompt: false` |
@@ -38,8 +38,12 @@ code). SC2's finding puts capacity in the prefill, so this row reads e4b's NF4 p
 
 **The stack.**
 - e4b at this registration's merge commit, at main's defaults: prefill graph `auto`, KV step-select on.
-- grouped-nf4-gemm **v0.39.0** (`a5edec87`, tag object `9fc370c7`): what e4b ≥ 0.47.0's CI runs. Its changes since
-  v0.38.0 are training-side; box F keeps v0.38.0.
+- grouped-nf4-gemm **v0.41.0** (`dc8f94ab`, tag object `e90a3523`): what e4b 0.48.0's CI runs. From v0.39.0 to v0.41.0
+  it changed `_triton_shim`, `nf4_grouped`, `nf4_route` and `nvme_residency`; `mxfp4_grouped.py` and `int4_smallm.py` are
+  unchanged, so the arithmetic citations below hold. Box F keeps v0.38.0.
+- **`GNF4_TRITON_PREBIND=1`, pinned** (v0.41.0's default, `_triton_shim.py:269`). It is bit-identical (the same
+  compiled kernels, only the launch differs) and wraps `_gemm_nf4_grouped`, whose reach into e4b's NF4 prefill path is
+  **not verified**. That makes it a launch-overhead lever on a launch-bound path, recorded rather than left inherited.
 - Box G exports neither of SC1's prefill route pins (SC2's correction, #1061), and the e4b server starts under `env -u`
   on both.
 

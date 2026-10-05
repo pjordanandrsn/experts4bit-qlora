@@ -33,7 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ENGINES = ("e4b_gptoss", "vllm", "sglang", "llamacpp")
 RATES = (1, 2, 4, 8)
 DRAWS = (1, 2)
-# each label cites its source: e4b's from grouped-nf4-gemm v0.39.0 kernel/mxfp4_grouped.py (gemv_mxfp4_b32 :257 quantises the
+# each label cites its source: e4b's from grouped-nf4-gemm v0.39.0 = v0.41.0 (file unchanged) kernel/mxfp4_grouped.py (gemv_mxfp4_b32 :257 quantises the
 # activations to int8 with per-32 fp32 scales, an exact int32 e2m1 dot; gemm_mxfp4_grouped_smallm / K21 :370 takes bf16
 # activations, fp32 accumulation), the rest from finding_gptoss_mxfp4_serving_arithmetic_differs_per_engine (read at the pins)
 ARITH = {"e4b_gptoss": "MXFP4 decode: T==1 GEMV on int8 activations (W4A8), K21 <= 256 rows on bf16 (W4A16); NF4 prefill (KEEP_NF4); sinks explicit-mask prefill",

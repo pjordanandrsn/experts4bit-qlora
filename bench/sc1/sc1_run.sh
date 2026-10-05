@@ -48,7 +48,7 @@ BOX=$SC1_BOX; case "$BOX" in A|B|C|D|E|F|G) ;; *) say "refusing: SC1_BOX must be
 GNF4_SHA=34da93d6fe8d2a401b7001705658ce00b2b18213   # grouped-nf4-gemm v0.34.1 -- the COMMIT the tag points to (`git rev-parse v0.34.1^{commit}`; the tag OBJECT is e7ae8e2e)
 # SC2b (box F) runs TODAY's serving stack: grouped-nf4-gemm v0.38.0 (its capped-PDL default from 0.37.0; nothing in 0.38.0
 # touches serving) -- the COMMIT the tag points to (the tag OBJECT is b7b5ef74). Boxes A-E keep SC1's v0.34.1.
-case "$BOX" in F) GNF4_SHA=5a887c48acc90207fdd30f2e9b23d21d62102b14;; G) GNF4_SHA=a5edec8789735bff1c0da4708ae5fc93260a1410;; esac   # F: v0.38.0 (SC2b); G: v0.39.0 = e4b CI's pin since 0.47.0 (SC2g; tag object 9fc370c7)
+case "$BOX" in F) GNF4_SHA=5a887c48acc90207fdd30f2e9b23d21d62102b14;; G) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac   # F: v0.38.0 (SC2b); G: v0.41.0 = e4b 0.48.0 CI's pin (SC2g; tag object e90a3523)
 MID=Qwen/Qwen3-30B-A3B; REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
 GPTQ_MID=Qwen/Qwen3-30B-A3B-GPTQ-Int4; GPTQ_REV=9b534e4318b7ebc3c961a839f13eb18b1833f441
 GGUF_REPO=unsloth/Qwen3-30B-A3B-GGUF; GGUF_REV=d5b1d57bd0b504ac62ae6c725904e96ef228dc74

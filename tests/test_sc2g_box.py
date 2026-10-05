@@ -28,7 +28,7 @@ def test_box_g_children_inherit_neither_prefill_route_pin():
 
 def test_box_g_is_wired_with_todays_kernel_package():
     assert 'case "$BOX" in A|B|C|D|E|F|G) ;;' in RUN and "G) box_g;;" in RUN and '[ "$BOX" = G ] && prove_g' in RUN
-    assert 'G) GNF4_SHA=a5edec8789735bff1c0da4708ae5fc93260a1410;; esac' in RUN   # gnf4 v0.39.0's commit
+    assert 'G) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac' in RUN   # gnf4 v0.41.0's commit
     assert "G) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; install_vllm; install_sglang; install_llamacpp; install_sc2_client ;;" in RUN
     assert 'G) PROVE_NEEDS="vllm sglang llamacpp sc2client";;' in RUN and "servers=[e4b_gptoss vllm sglang llamacpp]" in RUN
 
@@ -37,7 +37,7 @@ def test_box_g_pins_the_checkpoint_the_gguf_and_each_engines_path():
     assert "SC2G_MID=openai/gpt-oss-20b; SC2G_REV=6cee5e81ee83917806bbde320786a8fb61efebee" in BOX
     assert "SC2G_GGUF_REPO=ggml-org/gpt-oss-20b-GGUF; SC2G_GGUF_REV=ef9b12f2ff56c69cf32153a02784e7a3c88bf524; SC2G_GGUF=gpt-oss-20b-MXFP4.gguf" in BOX
     assert "ignore_patterns=['original/*', 'metal/*', 'consolidated*']" in BOX and "HF_HUB_DISABLE_XET=1" in BOX
-    assert 'SC2G_E4B_ENV="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 $FOLDS"' in BOX
+    assert 'SC2G_E4B_ENV="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 GNF4_TRITON_PREBIND=1 $FOLDS"' in BOX
     assert "setsid env -u E4B_INT4_PREFILL -u E4B_PAGED_PREFILL_ATTN PYTHONPATH= $ROUTEENV $SC2G_E4B_ENV" in BOX
     assert "--moe-backend marlin --attention-backend TRITON_ATTN" in BOX and "--no-enable-prefix-caching" in BOX
     assert '"$W/logs/sc2g_server_sglang.log" gptoss' in BOX

@@ -15,7 +15,9 @@
 SC2G_MID=openai/gpt-oss-20b; SC2G_REV=6cee5e81ee83917806bbde320786a8fb61efebee
 SC2G_GGUF_REPO=ggml-org/gpt-oss-20b-GGUF; SC2G_GGUF_REV=ef9b12f2ff56c69cf32153a02784e7a3c88bf524; SC2G_GGUF=gpt-oss-20b-MXFP4.gguf
 SC2G_LAYERS=24
-SC2G_E4B_ENV="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 $FOLDS"
+# GNF4_TRITON_PREBIND=1 is gnf4 v0.41.0's default (kernel/_triton_shim.py:269), pinned so the receipt shows it: bit-identical, a
+# launch-overhead lever that wraps _gemm_nf4_grouped, whose reach into the NF4 prefill path is not verified
+SC2G_E4B_ENV="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 GNF4_TRITON_PREBIND=1 $FOLDS"
 SC2G_ENGINES="e4b_gptoss vllm sglang llamacpp"
 
 # the checkpoint without its duplicate `original/` and `metal/` copies (bo3's patterns; the xet backend can stall)
