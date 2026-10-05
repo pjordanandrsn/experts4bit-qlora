@@ -176,6 +176,101 @@ llama.cpp goes first.
 This is above the campaign's original $2.5 line for SC1g. The difference is the proof that a guard over 1 h
 requires.
 
+## Amendment A1 (2026-10-05): in-distribution text; the proof's control kept as descriptive; diagnostics and a kernel check
+
+Registered after `sc1g-prove-1` and before any reading. It was reviewed by the maintainer session, whose design choices are
+written in below.
+
+### Why
+
+`sc1g-prove-1` is PROVED (adertha-receipts, OK, **$1.051**). Its own rows refute the registration's premise that the chat
+frame makes wikitext in distribution for gpt-oss. Every proof row scored the same ids, sha `506d7ca8`; mean NLL (top-1):
+
+| row | activations | NLL (top-1) |
+|---|---|---|
+| vLLM prefill / served | Marlin W4A16, bf16 activations | 6.330 / 6.346 (0.083) |
+| SGLang marlin prefill | W4A16 | 6.404 (0.080) |
+| SGLang native prefill | **MXFP8** | 6.555 (0.066) |
+| llama.cpp q8 prefill | **int8** per-32, Q8_0 attention | 7.060 (0.056) |
+| llama.cpp default prefill | **W4A4** | 7.776 (0.031) |
+| e4b prefill, chunk 64 | NF4, bf16, HF eager attention | 6.188 |
+| e4b NF4 served | bf16, paged fp8 KV | 6.437 |
+| e4b MXFP4 served (GEMV) | **int8** per-32, paged fp8 KV | 6.674 |
+
+- **Perplexity is about 500–2,400 and top-1 3–8%.** The text is pathological for gpt-oss, as step_decomp's own help text
+  warns for bare wikitext.
+- **On it, every engine loses NLL as its activations coarsen:** MXFP8 +0.15, int8 per-32 +0.24 (e4b vs its NF4) to +0.66
+  (llama.cpp vs vLLM), W4A4 +1.45. Two independent int8 per-32 implementations both pay, so this is the text plus the
+  activation scheme, not an e4b-only kernel fault.
+- **This contradicts no prior number.** P44's in-distribution short prompts (~29 tokens) read the same GEMV at KL 0.0019 on
+  an H100.
+
+### The texts
+
+- **Graded: `conv1`, `conv2`.** These are the first two HuggingFaceH4/ultrachat_200k `test_sft` conversations, by dataset
+  index at revision `8049631c`, whose **single** rendering in gpt-oss's chat template (date pinned) reaches 2,561 tokens.
+  Assistant turns are rendered in the final channel, and conversations are never concatenated. Each window is that
+  conversation's first 2,561 ids, with its sha.
+  - The rule selects index 25 (3,019 tokens) and index 108 (2,712 tokens).
+  - Their scored targets are 96.7% and 90.1% assistant content (`scored_target_roles`, read from the template's special
+    tokens).
+  - The shared scorers record mean NLL only, so an assistant-only NLL is not read. The role shares are recorded instead.
+- **Descriptive: `wikitext`** (chat-framed, as the proof scored it), named for what it showed: activation-quantization cost
+  on gpt-oss's out-of-distribution text. **c4val1 is dropped.**
+- **Generated text (gpt-oss's own samples) is not used.** The arm that generated it would score it with its own arithmetic.
+
+### The rule under A1
+
+- **The floor's statistic is unchanged and measured on `conv1`, `conv2`:** F = max over them of |NLL(chunk 64) − NLL(chunk
+  128)|. It is not reused from wikitext.
+- **G1–G5 are read on `conv1`, `conv2` only.**
+- **The wikitext control** is reported with its own chunk-pair gap and every arm's Δ against vLLM, never graded.
+- **G6, new:** `gemv_mxfp4_b32` agrees with its exact reference on the 5090.
+  - `bench/sc2/sc1g_gemv_check.py` compares the kernel with `dequant(quant_x_rows(x)) @ dequant_mxfp4(W_e)^T`, fp32, then
+    **rounded to bf16** (the kernel's output dtype). KERNEL_AGREES iff ≤ 1e-3 relative on every call.
+  - It runs on activations the served arms capture (layers 0, 6, 12, 18, 23; 16 steps; gate_up and down) and on synthetic
+    rows (normal and 100× outlier channels).
+  - A mutation arm, whose references read the wrong expert, must DISAGREE. If it agrees, the check is inert and G6 is
+    UNREAD.
+  - It also reports the int8 scheme's own error, exact vs raw activations.
+  - **The same script already ran on the A2000 (sm_86, $0, correctness only; `bench/sc2/sc1g-a2000/`):** KERNEL_AGREES at
+    ≤ 4.4e-5, mutation 1.47, scheme error 0.5% on normal rows and 1.0–1.3% with outliers.
+- **The diagnostics** run on `conv1`, `conv2`, are e4b only and descriptive. What each one moving would mean is fixed now:
+  - `served at GNF4_PDL=0`: moving means an ordering (PDL) bug in the served T == 1 path.
+  - `served with the folds off` (`E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=0`): moving means a fold bug.
+  - `--ppl-oracle eager --ppl-chunk 1`, MXFP4 and NF4: the T == 1 expert routes under transformers' attention with a bf16
+    cache. Against served, this isolates the paged fp8-KV decode path. Against prefill, it isolates T == 1 vs the M-tile
+    route.
+- **A hypothesis, registered so the reading is read against it:**
+  - e4b's served-vs-prefill gap (+0.25 nats NF4 on the proof's wikitext, against vLLM's +0.016) is carried by the paged
+    fp8-KV decode attention on gpt-oss's sinks and sliding windows. The register's
+    `e4b.parity.gptoss.paged-vs-own-attention` reads 0.00288 nats, but on a different, earlier stack.
+  - It is supported if chunk 1 closes **≥ 0.5** of the served-vs-prefill gap on both graded windows, and opposed if
+    < 0.5.
+  - Either way it is descriptive: the share is reported, not graded.
+
+### Mechanics
+
+- **e4b arms read the window from its file.** step_decomp builds only wikitext/C4 windows. Under `SC1G_WINDOW_FILE`,
+  `sc1g_k8.py` replaces its `_k8_window` with one that returns the file's ids and refuses unless their sha matches. It
+  then calls step_decomp's `main()`, unmodified. The shared harness files stay byte-identical to main.
+- **The capture** wraps gnf4's `quant_x_rows` / `gemv_mxfp4_b32` in the served process. Nothing in gnf4 is edited.
+- **An arm's stack follows SC1's FOLDS,** so the folds-off diagnostic can override them.
+
+### Proof, reading, budget
+
+- **`sc1g-prove-2`** (guard 1.25 h), A1's new paths on `conv1`:
+  - the window from its file with capture (e4b served), prefill chunk 64, and eager chunk 1, every route gate read;
+  - G6 on the captured activations, synthetic rows and the mutation;
+  - one scoring each from vLLM (prefill), SGLang native (prefill) and llama.cpp q8 (prefill).
+  - PROVED only if every one is VALID and G6 HOLDS.
+- **`sc1g-5090-*`** (guard 2.5 h), in this order: the e4b rows and diagnostics on `conv1`, `conv2`; the e4b rows on
+  wikitext; G6; vLLM, SGLang (native, Marlin) and llama.cpp (default, q8) on all three windows. The deadline drops from the
+  end.
+- **Spend:** `sc1g-prove-1` was $1.051. A1 adds proof ≤ $0.94 + $0.30 and reading ≤ $1.88 + $0.30, so **the lane is about
+  $4.5**. That is above the registration's ~$3.4 because of the re-proof A1 needs; each run stays under the $15 no-ask
+  tier.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).
