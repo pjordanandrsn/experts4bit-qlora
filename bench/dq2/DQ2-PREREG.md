@@ -127,3 +127,23 @@ backstop rather than the expected path.
 Before the rental, `dq2_layer.py` (reduced rows) and the reducer run on the RTX A2000 through the local pool. That is
 **correctness only**: build, engagement, integrity and probe coverage. No A2000 timing informs any band, per the testbed
 policy.
+
+## Amendment 1 (registered 2026-10-05, after run 1 read C_UNCOVERED, before run 2)
+
+**Why.** Run 1 (`dq2-5090-6`, [RESULTS-dq2.md](RESULTS-dq2.md)) read C_UNCOVERED. One of 25 streaming draws (copy under
+the forward, M = 512) was not covered end to end. The forward is host-launch-bound at that row, and the probe enqueued
+every forward before any copy, so the copies began near the end of the forward window.
+
+**The change: the instrument only.** The copy-under-load reading enqueues one forward and records an event after it.
+The side stream waits on that event, the copies are enqueued, and then the remaining forwards. So the copies run
+while the host is still issuing forwards. Coverage is still recorded per draw on the device timeline: the copies start
+after the forwards start and end before they end. The forward-under-copies reading, which was covered everywhere in
+run 1, is unchanged. The receipt carries `"amendment": 1`.
+
+**Unchanged:**
+- the subject, rows, warm-up, timing and integrity;
+- the rule (`dq2_reduce.py`, byte-identical to run 1's: sha256 `93b66802…`, pinned in `tests/test_dq2_lane.py`);
+- the predictions and consequences.
+
+**Run 2** is the registered single re-run on another gen 5 x16 host. A second C_UNCOVERED, VOID or NOISY stops the
+lane as an instrument finding.

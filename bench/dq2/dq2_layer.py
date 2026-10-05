@@ -198,7 +198,27 @@ def stream_probe(layer_f, x, nbytes: int, args) -> dict:
         torch.cuda.synchronize()
         return a.elapsed_time(b), c.elapsed_time(d), (a.elapsed_time(c) >= 0 and d.elapsed_time(b) >= 0)
 
-    out = {"bytes": nbytes, "draws": []}
+    def copy_under_fwd(k_fwd):
+        """Amendment 1. Copies under the layer's forwards, enqueued so they overlap even when the forward is host-bound.
+        Run 1 (dq2-5090-6) enqueued every forward before any copy; at M=512 the host's enqueue took about as long as
+        the GPU's work, so the copies started near the end of the forward window and one draw was uncovered. Now: the
+        first forward is enqueued and marked, the side stream waits on that mark, the copies are enqueued, then the
+        remaining forwards -- so the copies run while the host is still issuing forwards. -> (copy ms, covered)."""
+        a, b, c, d, first = ev(), ev(), ev(), ev(), torch.cuda.Event()
+        torch.cuda.synchronize()
+        c.record(main)
+        fwd(1)
+        first.record(main)
+        cs.wait_event(first)
+        a.record(cs)
+        copies(args.h2d_reps)
+        b.record(cs)
+        fwd(k_fwd - 1)
+        d.record(main)
+        torch.cuda.synchronize()
+        return a.elapsed_time(b), (c.elapsed_time(a) >= 0 and b.elapsed_time(d) >= 0)
+
+    out = {"bytes": nbytes, "draws": [], "amendment": 1}
     for _ in range(args.draws):
         a, b = ev(), ev()
         a.record(cs)
@@ -213,7 +233,7 @@ def stream_probe(layer_f, x, nbytes: int, args) -> dict:
         torch.cuda.synchronize()
         fwd_alone = max(c.elapsed_time(d) / args.h2d_reps, 1e-3)
         k_fwd = max(2, int(2 * copy_alone * args.h2d_reps / fwd_alone) + 1)
-        _, copy_ms, copy_cov = window((main, lambda: fwd(k_fwd)), (cs, lambda: copies(args.h2d_reps)))
+        copy_ms, copy_cov = copy_under_fwd(k_fwd)
         k_cp = max(2, int(2 * fwd_alone * args.h2d_reps / copy_alone) + 1)
         _, fwd_ms, fwd_cov = window((cs, lambda: copies(k_cp)), (main, lambda: fwd(args.h2d_reps)))
         out["draws"].append({"copy_alone_ms": copy_alone, "copy_alone_gbs": nbytes / copy_alone / 1e6,
@@ -249,7 +269,7 @@ def main() -> int:
     args = p.parse_args()
 
     rows = [int(v) for v in args.rows.split(",") if v]
-    receipt = {"schema": "dq2-layer/1", "rehearsal": bool(args.rehearsal),
+    receipt = {"schema": "dq2-layer/1", "amendment": 1, "rehearsal": bool(args.rehearsal),
                "started_at": time.strftime("%FT%TZ", time.gmtime()), "forensics": forensics(), "link": link(),
                "rows": rows, "config": {k: getattr(args, k) for k in ("draws", "target_ms", "warm_s", "warm_max_s",
                                                                       "h2d_reps")},
