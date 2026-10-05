@@ -1,0 +1,223 @@
+{
+ "schema": "sv2-arm/1",
+ "args": {
+  "model": "Qwen/Qwen3-30B-A3B",
+  "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "arena": "/root/sv2-arena/qwen3.nf4",
+  "calib": "calib.json",
+  "graphs": 1,
+  "prefill_graph": "1",
+  "exp_int4": 1,
+  "attn_int4": 0,
+  "max_seqs": 16,
+  "context": 4096,
+  "prompt_tokens": 1024,
+  "new_tokens": 32,
+  "out": "receipts/q_exp_prefill.json"
+ },
+ "setup": {
+  "placement": "all-vram",
+  "max_seqs": 16,
+  "max_tokens_per_seq": 4096,
+  "chunk_tokens": 512,
+  "graphs": true,
+  "buckets": [
+   1,
+   2,
+   4,
+   8,
+   16
+  ],
+  "kv_groups": "auto",
+  "prefill_graph": "1",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64,
+  "exp_int4": true,
+  "attn_int4": false
+ },
+ "env": {
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "16",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "4096",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1,2,4,8,16",
+  "E4B_PAGED_KV_GROUPS": "auto",
+  "E4B_PAGED_PREFILL_GRAPH": "1",
+  "E4B_PAGED_VRAM_GB": "1.2",
+  "E4B_PAGED_DRAM_GB": "6.0",
+  "E4B_PAGED_HOT_ROWS": "64",
+  "E4B_SERVE_EXP_INT4": "1",
+  "E4B_SERVE_ATTN_INT4": "0",
+  "E4B_INT4_KEEP_NF4": "0",
+  "E4B_PAGED_MODEL": "Qwen/Qwen3-30B-A3B",
+  "E4B_PAGED_REVISION": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "E4B_PAGED_ARENA": "/root/sv2-arena/qwen3.nf4",
+  "E4B_PAGED_CALIB": "calib.json",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "estimate": {
+  "items": [
+   {
+    "name": "int4 expert stores (all VRAM; the NF4 stacks freed)",
+    "where": "device",
+    "bytes": 16364077056,
+    "basis": "derived"
+   },
+   {
+    "name": "cold tier landing (pinned)",
+    "where": "host",
+    "bytes": 268435456,
+    "basis": "derived"
+   },
+   {
+    "name": "setup tier (while the stacks are built)",
+    "where": "host",
+    "bytes": 169869312,
+    "basis": "derived"
+   },
+   {
+    "name": "dense weights (bf16)",
+    "where": "device",
+    "bytes": 3082186752,
+    "basis": "derived"
+   },
+   {
+    "name": "FP8 paged KV pool",
+    "where": "device",
+    "bytes": 3488028672,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill staging (bf16 K/V of prompts mid-prefill)",
+    "where": "device",
+    "bytes": 452984832,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill/decode working set",
+    "where": "device",
+    "bytes": 62152704,
+    "basis": "heuristic"
+   },
+   {
+    "name": "int4 repack: one layer's experts in fp32 (load)",
+    "where": "host",
+    "bytes": 7247757312,
+    "basis": "heuristic"
+   }
+  ],
+  "unmodelled": [
+   "CUDA graph memory pools for the decode buckets (lane SV1: +60 MiB allocated on OLMoE-1B-7B, 16 seqs, RTX 5090, NF4; the int4 store's batched decode allocates its split-K partials through these pools, unmeasured)",
+   "the first-chunk prefill graph's private pool, which the server keeps for its life when the graph engages (E4B_PAGED_PREFILL_GRAPH=auto engages it only if that much is still free after capture; lane SV1 measured +0.24 GiB on OLMoE-1B-7B and +0.57 GiB on Qwen3-30B-A3B at NF4, SC2b +3.3 GiB on Qwen3-30B-A3B int4); prefill_graph='0' bounds memory by this estimate",
+   "the source checkpoint on local disk: the int4 repack reads its safetensors (snapshot_download), never the arena",
+   "CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)"
+  ],
+  "refusals": [],
+  "device_total": 23449430016,
+  "host_total": 7686062080
+ },
+ "versions": {
+  "experts4bit-qlora": "0.48.0",
+  "grouped-nf4-gemm": "0.41.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0"
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "measured": {
+  "host_anon_start_bytes": 489828352,
+  "load_seconds": 165.3,
+  "load_device_peak_bytes": 23860346368,
+  "load_reserved_peak_bytes": 24331157504,
+  "host_anon_after_load_bytes": 1877479424,
+  "host_anon_load_peak_bytes": 7713427456,
+  "device_peak_bytes": 23860346368,
+  "device_reserved_peak_bytes": 24331157504,
+  "driver_process_peak_bytes": 25123880960,
+  "driver_samples": 605,
+  "scheduler_steps": 63,
+  "serve_seconds": 10.38,
+  "requests_done": 16,
+  "tokens_out": 512,
+  "tokens_per_s": 49.3,
+  "host_anon_peak_bytes": 7713427456,
+  "host_anon_serving_peak_bytes": 1899425792,
+  "estimate_minus_peak_bytes": -410916352
+ },
+ "info": {
+  "moe_layers": 48,
+  "experts": 128,
+  "top_k": 8,
+  "model_type": "qwen3_moe",
+  "int4_expert_layers": 48,
+  "int4_store_kinds": [
+   "int4_b32"
+  ],
+  "int4_attn_projections": 0,
+  "kv": {
+   "n_kv_heads": 4,
+   "head_dim": 128,
+   "k_groups": "auto",
+   "scratch_slots": 16,
+   "blocks_per_seq": 256
+  },
+  "graph_status": {
+   "1": "graph",
+   "2": "graph",
+   "4": "graph",
+   "8": "graph",
+   "16": "graph"
+  },
+  "grouping": {
+   "device_grouping": true,
+   "force_singleton_groups": false
+  },
+  "prefill_graph": "1",
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "1",
+   "E4B_SERVE_ATTN_INT4": "0",
+   "E4B_INT4_KEEP_NF4": "0"
+  },
+  "exp_int4_layers_enabled": 48,
+  "attn_int4_rtn_projections": 0,
+  "attn_int4_calib_projections": 0,
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 0
+ },
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "4": "graph",
+  "8": "graph",
+  "16": "graph"
+ },
+ "prefill_graph": {
+  "status": "on",
+  "T": 512,
+  "replays": 16,
+  "eager_chunks": 16,
+  "eager_reasons": {
+   "later_chunk": 16,
+   "short_chunk": 0
+  },
+  "pool_mib": 294,
+  "free_after_mib": 8140,
+  "bulk_flush_mib": 0
+ },
+ "expert_routes_seen": {
+  "int4_singleton_gemv|le256": 144,
+  "int4_k19|le256": 576,
+  "int4_k19|gt256": 1008
+ },
+ "status": "OK"
+}

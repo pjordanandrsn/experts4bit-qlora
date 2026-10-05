@@ -1,0 +1,5 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, 4, 16
+Model name:                              AMD EPYC 7K62 48-Core Processor
+MemTotal:       527994548 kB
+MemAvailable:   501365012 kB
+overlay         320G  437M  320G   1% /
