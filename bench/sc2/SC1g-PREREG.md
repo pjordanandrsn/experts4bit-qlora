@@ -361,9 +361,9 @@ unconditionally.
 | J1 | NF4 chunk 1 closes ≥ 0.5 of NF4 served − NF4 full | the paged fp8-KV decode path carries the gap | prove-1: NF4 served − prefill +0.25 with bf16 activations, against vLLM's +0.016 |
 | J2 | NF4 full + fq `kv` reproduces ≥ 0.5 of NF4 served − NF4 full | the fp8 K/V rounding is the mechanism | P30: key groups 2 vs 4 cost +0.108 nats on gpt-oss |
 | J3 | the `k` rounding costs more than the `v` rounding (each vs full) | keys dominate | the same P30 sensitivity; partly unbased |
-| J4 | 16 key groups recover ≥ 0.02 nats, both modelled (fq `kv` 4 → 16) and on the real kernel (served → served `--kv-groups 16`) | finer key scales are a fix | P30's direction; magnitude unbased |
+| J4 | 16 key groups recover ≥ 0.035 nats (about 2× the arithmetic-order floor), both modelled (fq `kv` 4 → 16) and on the real kernel (served → served `--kv-groups 16`), on `conv1` | finer key scales are a candidate fix. **A HOLDS licenses a registered default read, not a default change** | P30's direction; magnitude unbased |
 | J5 | MXFP4 chunk 1 ≥ NF4 chunk 1 (direction only) | the int8 GEMV costs NLL under identical attention | prove-1: +0.24 on wikitext; the A2000 check: 0.45–0.94% per output |
-| J6 | PDL=0 and folds-off within 0.005 of MXFP4 served | no ordering or fold bug | P113: PDL value-identical on the int4 GEMV |
+| J6 | PDL=0 within 0.005, and folds-off within 0.035 (about 2× the floor: the folds reorder arithmetic), of MXFP4 served | no ordering or fold bug | P113: PDL value-identical on the int4 GEMV; the folds are not bit-identical by design |
 
 Each prediction is UNREAD if any of its arms is missing or not VALID; route gates apply to every e4b row as registered. G6 is
 read as in A1.

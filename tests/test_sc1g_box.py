@@ -231,7 +231,7 @@ def test_sglang_gptoss_quality_modes_demand_radix_on_one_request_and_their_moe_r
 def test_the_sc1g_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc1g_reduce.py"), "--self-test"],
                          capture_output=True, text=True, timeout=120)
-    assert out.returncode == 0 and "self-test OK (15 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (16 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_capture_keeps_the_selected_layers_gate_up_and_down_per_decode_step(tmp_path):

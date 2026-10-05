@@ -51,8 +51,9 @@ DIAG = {"e4b_serve_pdl0": "e4b_serve_pdl0_{}", "e4b_serve_nofold": "e4b_serve_no
         # the finer key groups, and the served shape on the real kernel at 16 key groups
         "e4b_nf4_full": "e4b_nf4_full_{}", "e4b_nf4_fqkv": "e4b_nf4_fqkv_{}", "e4b_nf4_fqk": "e4b_nf4_fqk_{}",
         "e4b_nf4_fqv": "e4b_nf4_fqv_{}", "e4b_nf4_fqkv16": "e4b_nf4_fqkv16_{}", "e4b_serve_kvg16": "e4b_serve_kvg16_{}"}
-J_TOL = 0.005           # J6: PDL / folds within this of the served row are no bug (<< the +0.185 gap they would explain)
-J_GAIN = 0.02           # J4: the finer key groups must recover at least this much
+J_TOL_PDL = 0.005       # J6: PDL=0 within this of the served row is no bug (P113 read PDL value-identical)
+J_TOL_FOLD = 0.035      # J6: folds-off within ~2x gpt-oss's arithmetic-order floor (0.0176) is no bug: the folds reorder arithmetic
+J_GAIN = 0.035          # J4: ~2x the floor -- one floor is noise, and a J4 HOLDS feeds a registered default read
 MEANING = {"pdl0": "moving vs served => an ordering (PDL) bug in the served T == 1 path",
            "nofold": "moving vs served => a fold (E4B_FUSE_*) bug in the served T == 1 path",
            "chunk1_vs_served": "the T == 1 expert route held, attention switched from paged fp8-KV decode to transformers' eager "
@@ -282,7 +283,7 @@ def jpredict(nll, dnll):
         out["J5"] = ({"verdict": "UNREAD"} if None in (c1m, c1n) else
                      {"verdict": "HOLDS" if c1m - c1n >= 0 else "REFUTED", "mxfp4_minus_nf4_chunk1": round(c1m - c1n, 6)})
         out["J6"] = ({"verdict": "UNREAD"} if None in (srv_m, pdl0, nofold) else
-                     {"verdict": "HOLDS" if abs(pdl0 - srv_m) <= J_TOL and abs(nofold - srv_m) <= J_TOL else "REFUTED",
+                     {"verdict": "HOLDS" if abs(pdl0 - srv_m) <= J_TOL_PDL and abs(nofold - srv_m) <= J_TOL_FOLD else "REFUTED",
                       "pdl0": round(pdl0 - srv_m, 6), "nofold": round(nofold - srv_m, 6)})
         return out
     return {"conv1": j("conv1"), "conv2_replication": j("conv2")}
@@ -419,6 +420,14 @@ def self_test() -> int:
         _fixture(d, flat, _good_routes)
         jp = reduce(d)["diag_predictions"]["conv1"]
         cases.append(("J refuted", jp["J1"]["verdict"] == "REFUTED" and jp["J2"]["verdict"] == "REFUTED" and jp["J3"]["verdict"] == "UNREAD"))
+    with tempfile.TemporaryDirectory() as d:          # the bands: folds-off +0.02 is inside ~2x floor (HOLDS); a 0.03 gain is not J4
+        def bands(a, sh, s):
+            v = {"e4b_serve": 0.50 if sh == "served" else 0.02, "e4b_serve_pdl0": 0.501, "e4b_serve_nofold": 0.52,
+                 "e4b_serve_kvg16": 0.47, "e4b_nf4_fqkv": 0.28, "e4b_nf4_fqkv16": 0.25}.get(a)
+            return _base(a, sh, s) if v is None else 1.0 + v
+        _fixture(d, bands, _good_routes)
+        jp = reduce(d)["diag_predictions"]["conv1"]
+        cases.append(("J bands", jp["J6"]["verdict"] == "HOLDS" and jp["J4"]["verdict"] == "REFUTED"))
     bad = [n for n, ok in cases if not ok]
     print(f"sc1g_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
