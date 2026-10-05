@@ -100,7 +100,8 @@ def _synthetic(tmp_path, decoded_err_x, with_err=True, gpu="NVIDIA GeForce RTX 5
             cells.append({"fam": fam, "seq": seq, "routing": "skew", "groups": 64, "groups_under_16_rows": 0, "proj": proj})
     path = tmp_path / "rd.json"
     path.write_text(json.dumps({"gpu": gpu, "torch": "t", "triton": "t", "cap_mib": 256, "reps": 20, "cells": cells,
-                                "host_load1_probe": {"median": 2.0, "max": 3.0, "samples": 40, "gate": 5.0}}))
+                                "host_load1_probe": {"median": 2.0, "max": 3.0, "samples": 40},
+                                "anchor_post": {"rc": 0, "class": "pcie-full/launch-fast"}}))
     p = subprocess.run([sys.executable, str(LANE / "rd_table.py"), str(path)], capture_output=True, text=True)
     assert p.returncode == 0, p.stderr
     return p.stdout
@@ -122,26 +123,28 @@ def test_any_other_card_gets_the_gate_and_never_a_timing_bar(tmp_path):
     assert "BAR" not in out and "DECISION:" not in out and "v1 ev ms" not in out
 
 
-def test_amendment_1_constants_are_the_registered_ones():
+def test_amendment_3_constants_are_the_registered_ones():
     run, prereg = RUN.read_text(), PREREG.read_text()
-    assert "LOAD_MAX=5.0; LOAD_WAIT_S=600; ANCHOR_TRIES=3" in run
-    assert _assign(LANE / "rd_table.py", "LOAD_MAX") == 5.0, "the reducer's gate is its own registered constant"
-    assert "## Amendment 1 (2026-10-05" in prereg and "load1 at or under 5.0" in prereg and "at most 3 anchor attempts" in prereg
+    assert "ANCHOR_TRIES=3; POST_ANCHOR=1" in run and "wait_load" not in run and "LOAD_MAX" not in run
+    assert run.index("python rd_probe.py") < run.index('ANCHOR_OUT=$W/anchor_post.json') < run.index("python rd_table.py")
+    assert "## Amendment 3 (2026-10-05" in prereg and "post-probe anchor" in prereg
 
 
-def test_a_loaded_probe_decides_nothing(tmp_path):
+def test_only_a_passing_post_probe_anchor_decides(tmp_path):
     import json
     _synthetic(tmp_path, 1.0)
     path = tmp_path / "rd.json"
     rec = json.loads(path.read_text())
-    # the receipt's own "gate" field is a self-report and must not move the decision: 7.5 with a forged gate of 99 still fails
-    for load, gate, expect in ((3.2, 5.0, "DECISION:"), (7.5, 5.0, "NOT A DECISION"), (7.5, 99.0, "NOT A DECISION"),
-                               (None, 5.0, "NOT A DECISION")):
-        rec["host_load1_probe"] = ({"median": load, "max": load, "samples": 40, "gate": gate} if load
-                                   else {"samples": 0, "gate": gate})
+    # host load is informational: a passing post-probe anchor decides even at a median load1 of 30
+    for post, load, expect in (({"rc": 0, "class": "c"}, 30.0, "DECISION:"), ({"rc": 3, "class": "c"}, 2.0, "NOT A DECISION"),
+                               (None, 2.0, "NOT A DECISION")):
+        rec["host_load1_probe"] = {"median": load, "max": load, "samples": 40}
+        rec.pop("anchor_post", None)
+        if post:
+            rec["anchor_post"] = post
         path.write_text(json.dumps(rec))
         out = subprocess.run([sys.executable, str(LANE / "rd_table.py"), str(path)], capture_output=True, text=True).stdout
-        assert expect in out, (load, out[-400:])
+        assert expect in out, (post, load, out[-400:])
         if expect == "NOT A DECISION":
             assert "\nDECISION:" not in out
 
