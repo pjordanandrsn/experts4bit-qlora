@@ -113,8 +113,11 @@ bookkeeping moves the ceiling.
 
 **Rows and ceilings** use SC2's rule (`sc2_reduce.row` / `ceiling`), per arm.
 
-**Predictions**, paired per draw. F below is the 512-token forward's device time, the one input no receipt holds; the
-step trace reads it as `pf_forward − pf_prep`.
+**Predictions**, paired per draw. F below is the 512-token forward's device time. No receipt isolates it; the step
+trace reads it as `pf_forward − pf_prep`. P107's profile of a 4096-token flash prefill (`bench/p107`) bounds it
+indirectly at ~42 ms of device time per 512-token chunk: 378 ms total, minus 38 ms of D2D copies, ÷ 8. That is on
+another box, uncapped, at `max_seqs` 1 with host grouping (census §6). Those 50,352 copies are themselves the per-block
+flush (48 × 256 × 4 = 49,152).
 
 | # | prediction | basis |
 |---|---|---|

@@ -169,10 +169,25 @@ Median TPOT at 2 req/s matches within ~1 ms.
 - **8 req/s needs more than a cheap prefill.** At 16 slots and ~10 ms per decode step at bucket 16, the slots fill.
   The next levers are decode-step time and slot count.
 
-## 6. What this does not show
+## 6. A cross-check from an earlier receipt (P107)
 
-- The 512-token forward's device time on a 5090: no receipt isolates it. P107's 4096-token figure ÷ 8 suggests
-  ~50 ms, but a 512-token chunk runs ~32 rows per expert and is less efficient per token.
+P107 (`bench/p107/RESULTS-p107.md`) profiled one 4096-token prefill (eight 512-token chunks) on a 5090 at
+`max_seqs` 1, flash:
+- **device total:** 378 ms;
+- **K19 experts:** 138 ms;
+- **flash attention:** 40 ms;
+- **device-to-device memcpy:** 38 ms over **50,352 copies**.
+
+It called those copies "the next lead for TTFT ... host-side" and did not attribute them. They are this census's flush:
+48 layers × 256 blocks × (2 sides × 2 regions) = **49,152** `narrow().copy_()` for a 4096-token prompt. It also
+bounds the forward: (378 − 38) ÷ 8 ≈ **~42 ms of device time per chunk** on that box. That is an average; the first
+chunk attends to no history, so it is cheaper. It is a different grouping (host-grouped, `max_seqs` 1) and a box
+without SC2b's 400 W cap.
+
+## 7. What this does not show
+
+- The 512-token forward's device time under `serve_paged`'s device grouping on box F's capped board: no receipt
+  isolates it. P107 (§6) puts it near 40–50 ms; SC2c's step trace reads it.
 - Box F's per-launch host cost. It is inferred from two fits on one board.
 - Anything on another model, prompt length or host class. The launch counts scale with layers × blocks: 48 × 128
   here, more at longer slots and deeper models.
