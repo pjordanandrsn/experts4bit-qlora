@@ -250,3 +250,24 @@ def test_the_race_is_real_without_the_fence(monkeypatch):
     or this race test has no power and the passing test above proves nothing."""
     monkeypatch.setattr(torch.Tensor, "record_stream", lambda self, s: None)
     assert not _race(mutant=True), "the race did not fire without the fence: the race test is not sensitive"
+
+
+def test_on_never_streams_a_trainable_parameter():
+    """A trainable 2-D parameter over MIN_BYTES (a LoRA matrix) must stay resident under train_prefetch: streaming it
+    would hand the optimizer a device copy that eviction discards. The off path keeps today's selection."""
+    def model_with_trainable_big():
+        m = _model("cpu")
+        m.layers[0].o_proj.weight.requires_grad_(True)      # 2 MB, trainable
+        return m
+
+    m_on, m_off = model_with_trainable_big(), model_with_trainable_big()
+    on = enable_dense_offload(m_on, "cpu", pin=False, prefetch=False, train_prefetch=True)
+    off = enable_dense_offload(m_off, "cpu", pin=False, prefetch=False)
+
+    def streams(h, mod, attr):
+        return any(sm is mod and sa == attr for sm, sa, _p, _h in h.slots)
+
+    assert not streams(on[0], m_on.layers[0].o_proj, "weight"), "a trainable parameter was selected for streaming"
+    assert streams(on[0], m_on.layers[0].q_proj, "weight"), "the frozen projection must still stream"
+    assert streams(off[0], m_off.layers[0].o_proj, "weight"), "the off path's selection changed"
+    assert m_on.layers[0].o_proj.weight.numel() == H * INTER, "the trainable weight must stay bound (not a placeholder)"

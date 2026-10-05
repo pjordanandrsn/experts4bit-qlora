@@ -101,7 +101,7 @@ class _DenseOffload:
 
     def __init__(self, layer, device, *, pin: bool = True,
                  min_bytes: int = MIN_BYTES, source=None, key_prefix: str = "",
-                 verify: bool = False):
+                 verify: bool = False, skip_trainable: bool = False):
         """``source``: a :class:`~experts4bit_qlora.formats.dense_disk.DenseDiskSource`. When
         given, a tensor whose checkpoint key is present there gets a
         :class:`DiskHome` instead of a pinned host copy — same bytes, read on demand,
@@ -135,6 +135,11 @@ class _DenseOffload:
                 for attr, t in list(store.items()):
                     if t is None or t.is_meta:
                         continue          # meta = served from the arena, not ours
+                    if skip_trainable and is_param and t.requires_grad:
+                        # DQ3 opt-in: a TRAINABLE parameter (a LoRA matrix -- PEFT's lora_B for a 25600-wide projection is
+                        # 1.6 MB, over MIN_BYTES) must never be streamed: the optimizer would update a device copy that
+                        # eviction then discards. Only set by enable_dense_offload(train_prefetch=True).
+                        continue
                     nbytes = t.numel() * t.element_size()
                     if t.dim() < 2 or nbytes < min_bytes:
                         # norms, biases, conv kernels: too small to be worth moving
@@ -591,7 +596,7 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
             h = _DenseOffload(layer, dev, pin=pin, min_bytes=min_bytes,
                               source=source,
                               key_prefix=f"{key_prefix}{_name}." if source else "",
-                              verify=verify)
+                              verify=verify, skip_trainable=train_prefetch)
             layer._dense_offload = h
 
             def _pre(module, args, _h=h):
