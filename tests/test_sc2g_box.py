@@ -37,8 +37,8 @@ def test_box_g_pins_the_checkpoint_the_gguf_and_each_engines_path():
     assert "SC2G_MID=openai/gpt-oss-20b; SC2G_REV=6cee5e81ee83917806bbde320786a8fb61efebee" in BOX
     assert "SC2G_GGUF_REPO=ggml-org/gpt-oss-20b-GGUF; SC2G_GGUF_REV=ef9b12f2ff56c69cf32153a02784e7a3c88bf524; SC2G_GGUF=gpt-oss-20b-MXFP4.gguf" in BOX
     assert "ignore_patterns=['original/*', 'metal/*', 'consolidated*']" in BOX and "HF_HUB_DISABLE_XET=1" in BOX
-    assert 'SC2G_E4B_ENV="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 GNF4_TRITON_PREBIND=1 $FOLDS"' in BOX
-    assert "setsid env -u E4B_INT4_PREFILL -u E4B_PAGED_PREFILL_ATTN PYTHONPATH= $ROUTEENV $SC2G_E4B_ENV" in BOX
+    assert 'SC2G_E4B_ENV="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 GNF4_TRITON_PREBIND=1"' in BOX
+    assert "setsid env -u E4B_INT4_PREFILL -u E4B_PAGED_PREFILL_ATTN PYTHONPATH= $ROUTEENV $SC2G_E4B_ENV $FOLDS" in BOX
     assert "--moe-backend marlin --attention-backend TRITON_ATTN" in BOX and "--no-enable-prefix-caching" in BOX
     assert '"$W/logs/sc2g_server_sglang.log" gptoss' in BOX
     # SC2's design note: both draws repeat ONE realisation (same seeds), so a draw disagreement is the engine, not the dice
@@ -95,3 +95,57 @@ def test_the_sc2g_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc2g_reduce.py"), "--self-test"],
                          capture_output=True, text=True)
     assert out.returncode == 0 and "self-test OK (5 cases)" in out.stdout, out.stdout + out.stderr
+
+
+def test_every_box_script_sources_under_set_u_with_only_what_sc1_run_defines_first():
+    """A1 (sc2g-prove-1): sc1_run.sh sources the box scripts at its install step, under `set -u`, before FOLDS / SPEEDENV /
+    GR_ENV / ROUTEENV exist. A top-level expansion of any of them kills the box there. Source every SC2 box script that way,
+    with only $W defined."""
+    sc2 = REPO / "bench" / "sc2"
+    files = " ".join(f'. "{sc2 / f}";' for f in ("sc2_box_e.sh", "sc2b_box_f.sh", "sc2g_box_g.sh"))
+    out = subprocess.run(["bash", "-c", f'set -uo pipefail; W=$(mktemp -d); {files} echo SOURCED'], capture_output=True, text=True,
+                         timeout=60)
+    assert out.returncode == 0 and "SOURCED" in out.stdout, out.stderr
+
+
+def test_the_heartbeat_live_count_does_not_count_itself():
+    """A1: the controller counts the lane's process inside an ssh shell whose own command line holds the pattern. Run the
+    exact expression that way with no lane running: it must read 0 (the plain 'bash sc1_run.sh' read 1, forever)."""
+    drive = (REPO / "bench" / "sc1" / "sc1_drive.sh").read_text()
+    expr = "pgrep -f '[b]ash sc1_run.sh' | wc -l"
+    assert expr in drive and "pgrep -f 'bash sc1_run.sh'" not in drive
+    out = subprocess.run(["bash", "-c", f"echo live $({expr} | tr -d ' ')"], capture_output=True, text=True, timeout=30)
+    assert out.stdout.strip() == "live 0", out.stdout
+    if sys.platform.startswith("linux"):   # BSD pgrep (macOS) leaves out its own ancestors; procps (the box, CI) does not
+        plain = subprocess.run(["bash", "-c", "echo live $(pgrep -f 'bash sc1_run.sh' | wc -l | tr -d ' ')"], capture_output=True,
+                               text=True, timeout=30)
+        assert plain.stdout.strip() != "live 0", plain.stdout              # the old form counts its own shell
+
+
+def _run_head_then(tmp_path, tail):
+    """sc1_run.sh's preamble (set -u, finish, both traps), run in a temp W, then `tail`. Returns (rc, files in W)."""
+    head = RUN[RUN.index("set -uo pipefail\n"):RUN.index("for v in SC1_RUN_ID")]
+    head = head.replace("W=/root/sc1;", f"W={tmp_path};")
+    script = f"export SC1_RUN_NONCE=n1\n{head}\n{tail}\n"
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+    return out.returncode, {f.name: f.read_text() for f in tmp_path.iterdir() if f.is_file()}, out.stdout
+
+
+def test_an_exit_that_skips_finish_still_writes_the_markers(tmp_path):
+    """A1: sc2g-prove-1's box died under set -u at source time and wrote no TP_DONE. Reproduce that death (an unbound
+    expansion in a sourced file) after the preamble: the EXIT trap must record the rc and TP_DONE."""
+    (tmp_path / "box.sh").write_text('X="a $NOT_DEFINED_HERE"\n')
+    rc, files, out = _run_head_then(tmp_path, f". {tmp_path}/box.sh")
+    assert rc != 0 and "TP_DONE.n1" in files and files["SC1_EXIT_CODE.n1"].strip() == str(rc), (rc, files, out)
+    assert "SC1_SUCCESS.n1" not in files and "exit without finish" in out
+
+
+def test_a_bare_exit_0_is_not_a_success_and_finish_still_owns_its_markers(tmp_path):
+    rc, files, _ = _run_head_then(tmp_path, "exit 0")
+    assert rc == 79 and files["SC1_EXIT_CODE.n1"].strip() == "79" and "SC1_SUCCESS.n1" not in files
+    for f in tmp_path.iterdir():
+        if f.is_file():
+            f.unlink()
+    rc, files, out = _run_head_then(tmp_path, "finish 0")
+    assert rc == 0 and files["SC1_EXIT_CODE.n1"].strip() == "0" and "SC1_SUCCESS.n1" in files
+    assert "exit without finish" not in out

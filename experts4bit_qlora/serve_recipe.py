@@ -104,6 +104,16 @@ def solver_tiers(n_layers: int, n_experts: int, bytes_per_expert: int, vram_gb: 
     return {t: len(v) for t, v in man["tiers"].items()}
 
 
+def bytes_per_expert(stack, qsetup=None) -> int:
+    """One expert's frozen bytes (packed + absmax), the arena's row before alignment: the growth of the stack from one
+    expert to ``n_experts``, so per-stack constants (the NF4 code table) do not leak into every row."""
+    qsetup = qsetup or QLoRASetup()
+    one = _frozen_stack_bytes(replace(stack, layer=0, n_experts=1), qsetup)
+    if stack.n_experts == 1:
+        return one
+    return (_frozen_stack_bytes(replace(stack, layer=0), qsetup) - one) // (stack.n_experts - 1)
+
+
 def _hybrid_host_items(hot_rows: int, bpe: int, stride: int, n_nvme: int) -> list:
     """The host buffers ``enable_hybrid_tier`` builds at either placement (the server always builds the hybrid tier)."""
     try:
@@ -176,7 +186,7 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     qs = QLoRASetup()                      # nf4, blocksize 64: the arena's default bake
     slab = sum(_frozen_stack_bytes(replace(st, layer=0), qs) for st in topology.expert_stacks)
     n_layers, n_experts = len(topology.expert_stacks), topology.expert_stacks[0].n_experts
-    bpe = _frozen_stack_bytes(replace(topology.expert_stacks[0], layer=0), qs) // n_experts
+    bpe = bytes_per_expert(topology.expert_stacks[0], qs)
     stride = -(-bpe // ARENA_ALIGN) * ARENA_ALIGN
     if setup.placement == "all-vram":
         items.append(FootprintItem("frozen expert stacks (all VRAM)", "device", slab, "derived",

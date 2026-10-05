@@ -18,6 +18,18 @@
 - **Write-ups.** `bench/dq1/RESULTS-dq1.md` and `SUMMARY-dq1.md`: speed is a negative result, there is no new
   repository, and the next lanes are ranked.
 
+### SC2g amendment A1: box G's proof died in the harness; the box sources cleanly, and a dead lane is now seen (bench and tests only)
+
+- **`sc2g-prove-1`** ($0.848) died at box G's install: `sc2g_box_g.sh: line 20: FOLDS: unbound variable`. `sc1_run.sh` sources the
+  box scripts under `set -u` before it defines `FOLDS`. `$FOLDS` is now appended where the e4b server starts, so the server's
+  environment is unchanged. A test sources every SC2 box script under `set -u` with only `W` set; it reproduces the failure on the
+  old line.
+- **The controller's dead-lane check never fired.** It counted `pgrep -f 'bash sc1_run.sh'` inside a shell whose own command line
+  holds the pattern; procps counts that shell, so `live` read 2 for 66 polls after the box died, and the run waited out its
+  deadline. It now counts `[b]ash sc1_run.sh`.
+- **`sc1_run.sh` gains an EXIT trap**: an exit that skips `finish` still writes its rc and TP_DONE; rc 0 there is recorded as 79.
+- No change to SC2g's design, rule or guards. Next: `sc2g-prove-2`.
+
 ### TC2 amendment 9 registered: Mixtral's position with both frameworks on one stack (bench and tests only)
 
 - **Why.** Mixtral-8x7B is e4b's one losing family at default settings (TC2 amendment 8: Unsloth/e4b 0.836). That box ran e4b on the
@@ -408,6 +420,14 @@
     baseline plus the DRAM tier.
   - Generation added a further ~0.72 GiB of anonymous memory in both runs; it is listed as not modelled (the CPU
     tier's compute buffers).
+
+### Serve estimate: bytes per expert is the arena row, not a share of the stack
+
+- `serve_recipe.bytes_per_expert(stack)` is the stack's growth from one expert to `n_experts`. It is exactly the arena
+  row before alignment: packed 4-bit plus fp32 absmax, gate_up and down. The previous `slab // n_experts` smeared the
+  stack's per-stack constants (the NF4 code table) across every row. On OLMoE that gave 3,538,945 bytes against the
+  bake's 3,538,944, enough to round the aligned stride up a page. The solver's tier split and the hybrid tier's buffers
+  use the exact figure now.
 
 ## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
 
