@@ -1,0 +1,159 @@
+{
+ "models": {
+  "gptoss": {
+   "gates": {
+    "served": {
+     "off": {
+      "ok": true,
+      "n": 36,
+      "bad": []
+     },
+     "on": {
+      "ok": true,
+      "n": 20,
+      "bad": []
+     }
+    },
+    "arch": {
+     "ok": true,
+     "why": ""
+    },
+    "prompts": {
+     "ok": true,
+     "pools": {
+      "off": [
+       "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+       "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+       "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5"
+      ],
+      "on": [
+       "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+       "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5"
+      ]
+     }
+    },
+    "engaged": {
+     "off": {
+      "ok": true,
+      "bad": {},
+      "kv_bookkeeping": {
+       "bulk": false,
+       "flush_layers": 36,
+       "flush_bulk": 0,
+       "flush_bulk_fallback": 0,
+       "ready_layers": 36,
+       "ready_bulk": 0,
+       "ready_at_flush": 0,
+       "requested": false
+      }
+     },
+     "on": {
+      "ok": true,
+      "bad": {},
+      "kv_bookkeeping": {
+       "bulk": true,
+       "flush_layers": 0,
+       "flush_bulk": 20,
+       "flush_bulk_fallback": 0,
+       "ready_layers": 0,
+       "ready_bulk": 0,
+       "ready_at_flush": 20,
+       "requested": true
+      }
+     }
+    },
+    "determinism": {
+     "verdict": "IDENTICAL",
+     "n": 16,
+     "chars": 9906
+    },
+    "identity": {
+     "verdict": "IDENTICAL",
+     "n": 16,
+     "chars": 9906
+    }
+   },
+   "outcome": "ENGAGED_IDENTICAL"
+  },
+  "qw36": {
+   "gates": {
+    "served": {
+     "off": {
+      "ok": true,
+      "n": 36,
+      "bad": []
+     },
+     "on": {
+      "ok": true,
+      "n": 20,
+      "bad": []
+     }
+    },
+    "arch": {
+     "ok": true,
+     "why": ""
+    },
+    "prompts": {
+     "ok": true,
+     "pools": {
+      "off": [
+       "2e5ab69e78696ef055aea8308cba29a11342539defa0c9bc73d2ea0b8cd819d1",
+       "2e5ab69e78696ef055aea8308cba29a11342539defa0c9bc73d2ea0b8cd819d1",
+       "2e5ab69e78696ef055aea8308cba29a11342539defa0c9bc73d2ea0b8cd819d1"
+      ],
+      "on": [
+       "2e5ab69e78696ef055aea8308cba29a11342539defa0c9bc73d2ea0b8cd819d1",
+       "2e5ab69e78696ef055aea8308cba29a11342539defa0c9bc73d2ea0b8cd819d1"
+      ]
+     }
+    },
+    "engaged": {
+     "off": {
+      "ok": true,
+      "bad": {},
+      "kv_bookkeeping": {
+       "bulk": false,
+       "flush_layers": 36,
+       "flush_bulk": 0,
+       "flush_bulk_fallback": 0,
+       "ready_layers": 36,
+       "ready_bulk": 0,
+       "ready_at_flush": 0,
+       "requested": false
+      }
+     },
+     "on": {
+      "ok": true,
+      "bad": {},
+      "kv_bookkeeping": {
+       "bulk": true,
+       "flush_layers": 0,
+       "flush_bulk": 20,
+       "flush_bulk_fallback": 0,
+       "ready_layers": 0,
+       "ready_bulk": 0,
+       "ready_at_flush": 20,
+       "requested": true
+      }
+     }
+    },
+    "determinism": {
+     "verdict": "IDENTICAL",
+     "n": 16,
+     "chars": 11516
+    },
+    "identity": {
+     "verdict": "IDENTICAL",
+     "n": 16,
+     "chars": 11516
+    }
+   },
+   "outcome": "ENGAGED_IDENTICAL"
+  }
+ },
+ "flip": "FLIP_LICENSED",
+ "outcomes": {
+  "gptoss": "ENGAGED_IDENTICAL",
+  "qw36": "ENGAGED_IDENTICAL"
+ }
+}
