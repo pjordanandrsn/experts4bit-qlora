@@ -21,7 +21,7 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
   echo "$(sha_of "$P42/hook/usercustomize.py")  hook/usercustomize.py"
   echo "$(sha_of "$TESTS/test_k19_row_exact_gpu.py")  test_k19_row_exact_gpu.py"
   for f in sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh; do echo "$(sha_of "$REPO/bench/sc1b/$f")  $f"; done   # SC1b, staged flat on every box
-  for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py; do echo "$(sha_of "$REPO/bench/sc2/$f")  $f"; done   # SC2 + SC2b, staged flat on every box
+  for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py; do echo "$(sha_of "$REPO/bench/sc2/$f")  $f"; done   # SC2 + SC2b + SC2g, staged flat on every box
   for d in vllm sglang llamacpp exl3 lmdeploy; do
     [ -d "$HERE/$d" ] || continue
     (cd "$HERE" && find "$d" -type f ! -name '*.pyc' ! -path '*/__pycache__/*' ! -name '.DS_Store' | LC_ALL=C sort) | while read -r rel; do

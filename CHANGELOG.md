@@ -13,6 +13,68 @@
 - The gate voided six draws, some under load from this campaign's own boxes on the same machine; the first attempts read 1.004 / 0.907 /
   0.911, so no verdict changes.
 
+### SC2g registered (#846): request-level serving of gpt-oss-20b, with e4b's first gpt-oss run through `serve_paged`
+
+- **What runs.** SC2's driver and rule on openai/gpt-oss-20b (`6cee5e81`), one RTX 5090, a new box G in the CUDA 13
+  image, four engines, each on its own arithmetic over the checkpoint's MXFP4 experts. Every row carries an arithmetic
+  label (sourced) and every e4b ratio is ARITH_MISMATCH:
+  - e4b: native MXFP4 decode (`gemv_mxfp4_b32` on int8 activations; K21 on bf16) and NF4 prefill (`E4B_INT4_KEEP_NF4=1`);
+  - vLLM: Marlin W4A16 with TRITON_ATTN pinned;
+  - SGLang: its gpt-oss defaults, via a new `gptoss` mode in `bench/sc1/sglang/server.sh`;
+  - llama.cpp: ggml-org's published MXFP4 GGUF.
+- **Design fix from SC2's read.** Both draws repeat ONE Poisson realisation.
+- **Predictions.** Q1 TTFT ≥ 2× vLLM's; Q2 TPOT ≤ 1.5×; Q3 vLLM's ceiling ≥ 4 req/s and above e4b's; **Q4 registers
+  SC2's post-hoc mechanism** (e4b's stall per interleaved prefill ≥ 10× its per-token cost, R² ≥ 0.9); Q5 every row
+  VALID.
+- **Files.** `bench/sc2/SC2g-PREREG.md`, `sc2g_box_g.sh`, `sc2g_reduce.py`; `sc2_trace.py` is now staged; grouped-nf4-gemm
+  v0.41.0 (e4b 0.48.0's CI pin) is pinned for box G, with `GNF4_TRITON_PREBIND=1` pinned and recorded; `tests/test_sc2g_box.py` executes the child-env, SGLang-engagement and e4b-check paths.
+
+## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
+
+**0.48.0.** Two training defaults change, each by a rule registered and read in lane TC1 (#835).
+
+- **Prebound Triton launches are on** (`E4B_TRITON_PREBIND`; grouped-nf4-gemm 0.41.0's `GNF4_TRITON_PREBIND` too). The
+  fused RMSNorm, rotary and training GEMM kernels launch without Triton's per-call argument binding. They run the same
+  compiled kernels, so outputs are bit-identical.
+  - TC1 amendments 26 and 30 read Qwen3-30B-A3B's step at **0.973×** (matched arm) and **0.980×** [0.957, 1.003]
+    (shipped arm) on an RTX 5090, with held-out loss unchanged (`e4b.train.prebind.qwen3.5090.2026-10-05`).
+  - `=0` turns either flag off. Triton 3.4, 3.6 and 3.7 are covered; any other release keeps Triton's own launch.
+- **The CLI trainer double-quantizes the frozen expert absmax** for resident training (`python -m experts4bit_qlora.train`;
+  `E4B_ABSMAX_DQ=0` turns it off). TC1 amendments 28 and 31:
+  - Qwen3-30B-A3B: **1.014×** the step for **1.34 GB** less peak;
+  - Mixtral-8x7B: **1.023×** for **2.04 GB** less;
+  - held-out within 0.003.
+
+  Expert offload and `TRAIN_ARENA` keep the fp32 absmax they read by name.
+- **The quoted training position.** TC1 amendment 33 put both frameworks on one software stack (torch 2.12.1+cu130,
+  transformers 5.5.0), with load-gated draws on a quiet RTX 5090. Unsloth/e4b reads **2.352** [2.348, 2.356] on
+  Qwen3-30B-A3B, and it becomes the quoted position. Amendment 19's 1.997, with e4b in the field image's environment,
+  stays as that reading; `STATUS.md` names both.
+- **Fast-training support:** Qwen3.6-35B-A3B enters `fast_train = supported` (MG1 amendment 3: the dgrad kernel served
+  every frozen-GEMM backward).
+- **Serving.**
+  - `serve_paged` decodes eagerly below sm_89 instead of dying in Triton's compiler (Ampere: A100, A6000, RTX 30-series,
+    A2000). There, the prefill graph's `auto` reports `refused`, since it needs the device grouping the decode graphs
+    turn on.
+  - The serve estimate (`estimate_serve_footprint`) names the prefill graph's pool, and covers the solver's VRAM, DRAM
+    and NVMe tiers and the hybrid tier's host buffers.
+- **CI on grouped-nf4-gemm 0.41.0.** The `[fast]` floor stays `>=0.30.0`; `pip install -U grouped-nf4-gemm` picks the
+  prebind default up.
+- **Also in this release:**
+  - TC1 amendments 28–35 and TC1c amendment 9, registrations and reads;
+  - DQ1's registration and its run-1 instrument diagnosis;
+  - a dated docs note that gpt-oss serving's native MXFP4 path is decode-only.
+
+### Read: TC1 amendment 30 — the shipped prebind pair over 60 steps: 0.980 (P53 HELD); with P54 and P55 HELD the prebound launches are the default (bench and register only)
+
+- `tc1-5090-73` ($0.97, AMD EPYC 7B13, Vast machine 145701): shipped arm `_pb1`/`_pb0` **0.980** [0.957, 1.003], with
+  held-out +0.0011. With amendment 26's matched 0.973 (P54) and held-out −0.0012, P53, P54 and P55 all HELD.
+- **The defaults it licenses already flipped:** e4b #1099 and grouped-nf4-gemm #470, citing this box before its read was
+  on `main`.
+- **This read supplies the evidence.** The maintainer session committed it from the run's output in the private receipts
+  store: the receipts under `bench/h2h-2026-10-02/tc1/receipts/tc1-5090-73/`, the box's scored file as
+  `RESULTS-tc1-prebindab-60.md`, the lane section, and the register row `e4b.train.prebind.qwen3.5090.2026-10-05`.
+
 ### TC1c amendment 9 registered: the H100 position with both frameworks on one stack (bench and tests only)
 
 - **Why.** The 5090 position to quote is now same-stack (TC1 amendment 33: 2.352). The H100's (1.061, TC1c amendment 8) still runs e4b
@@ -271,6 +333,25 @@
   - `E4B_PAGED_GRAPHS=auto` decodes eagerly there; `=1` is refused in words.
   - An unknown capability (no CUDA) changes nothing.
 - **Unchanged on sm_89+**, where every registered serving number was read (RTX 5090, H100).
+
+### Serve estimate: the solver's VRAM/DRAM/NVMe tiers and the hybrid tier's host buffers
+
+- **`placement="solver"` is priced.** `estimate_serve_footprint` splits the expert rows across VRAM, DRAM and NVMe
+  using `solve_placement` itself (`solver_tiers`), with the budgets the server passes.
+  - `build_engine` gives the solver no routing profile, so every expert weighs the same: VRAM fills first, then
+    DRAM, then NVMe, and the calibration's bandwidths decide nothing (tested).
+  - Batched decode graphs under the solver, and per-expert biases, are refused in words, as the server refuses them.
+- **New `ServeSetup` fields:** `vram_gb`, `dram_gb` and `hot_rows`, passed through `to_env()`.
+- **Host buffers the server builds at either placement are now priced:** the cold tier's pinned landing
+  (`pinned_request_cost`), the setup tier and, when rows live on NVMe, the cold view.
+- **Checked on an RTX A2000 (OLMoE-1B-7B, two solver budgets).**
+  - The tier split matched the server's own manifest.
+  - Device: the estimate is 0.17–0.18 GiB under the allocator peak. The two all-VRAM checks missed by the same
+    amount: a fixed runtime term, not modelled.
+  - Host shared memory (pinned + cold view + setup tier) came within 2–7%. Anonymous memory after load is the
+    baseline plus the DRAM tier.
+  - Generation added a further ~0.72 GiB of anonymous memory in both runs; it is listed as not modelled (the CPU
+    tier's compute buffers).
 
 ## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
 

@@ -8,13 +8,13 @@
 # checks every pin against its source before anything is sent; starts the box script detached under a fresh nonce;
 # polls TP_DONE.<nonce>; fetches receipts, logs, samples and bake.json -- never the venvs, caches, arenas, checkpoints or
 # the pack's payloads (its manifest.json rides along). Nothing here creates, destroys or approves compute.
-# SC1_BOX=A|B|C|D|E|F is required (D = SC1b's census box, E = SC2's serving box, F = SC2b's prefill-graph box). SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
+# SC1_BOX=A|B|C|D|E|F|G is required (D = SC1b's census box, E = SC2's serving box, F = SC2b's prefill-graph box, G = SC2g's gpt-oss box). SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [sc1_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID SC1_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$SC1_BOX" in A|B|C|D|E|F) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E or F (SC1b, SC2, SC2b)"; exit 78;; esac
+case "$SC1_BOX" in A|B|C|D|E|F|G) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F or G (SC1b, SC2, SC2b, SC2g)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 P39="$REPO/bench/p39"; P42="$REPO/bench/p42"; TESTS="$REPO/tests"
 # flat pieces (box sees them in $W); the reducer joins when it exists (staged.sha256 pins it then: "pinned at integration")
@@ -22,7 +22,7 @@ STAGE="$HERE/sc1_run.sh $HERE/sc1_e4b_sched.py $HERE/sc1_prompts.py $HERE/sc1_sa
 [ -s "$HERE/sc1_reduce.py" ] && STAGE="$STAGE $HERE/sc1_reduce.py"
 # SC1b (bench/sc1b): the census box D's pieces, staged flat on EVERY box so staged.sha256 stays one list for A-D
 SC1B="$REPO/bench/sc1b"; for f in sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh; do STAGE="$STAGE $SC1B/$f"; done
-SC2="$REPO/bench/sc2"; for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py; do STAGE="$STAGE $SC2/$f"; done
+SC2="$REPO/bench/sc2"; for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py; do STAGE="$STAGE $SC2/$f"; done
 HOOK="$P42/hook/usercustomize.py"
 COMP_DIRS=""; for d in vllm sglang llamacpp exl3 lmdeploy; do [ -d "$HERE/$d" ] && COMP_DIRS="$COMP_DIRS $d"; done
 for f in $STAGE $HOOK; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
@@ -38,7 +38,7 @@ while read -r want name; do
     hook/usercustomize.py) src="$P42/hook/usercustomize.py";;
     test_k19_row_exact_gpu.py) src="$TESTS/$name";;
     sc1b_*|kernel_classes.json) src="$SC1B/$name";;
-    sc2_*|sc2b_*) src="$SC2/$name";;
+    sc2_*|sc2b_*|sc2g_*) src="$SC2/$name";;
     *) src="$P39/$name";;
   esac
   [ -s "$src" ] || { say "refusing: pinned file $name resolves to $src, which is missing"; exit 78; }
