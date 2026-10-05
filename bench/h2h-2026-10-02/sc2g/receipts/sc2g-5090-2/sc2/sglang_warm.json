@@ -1,0 +1,140 @@
+{
+ "base": "http://127.0.0.1:30000",
+ "model": "sc2",
+ "profile": "sglang",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.1543,
+  "wall_s": 3.545,
+  "ttft_p50_s": 0.024099,
+  "ttft_p90_s": 0.029623,
+  "ttft_p99_s": 0.031715,
+  "tpot_p50_s": 0.00406,
+  "tpot_p90_s": 0.004061,
+  "tpot_p99_s": 0.004061,
+  "e2el_p50_s": 0.907496,
+  "e2el_p90_s": 0.949017,
+  "e2el_p99_s": 0.950182,
+  "ttft_mean_s": 0.026016,
+  "output_tok_s": 240.614,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.1283,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " the Caribbean? The? ...??......??....??..\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026..\u2026\u2026...\u2026\u2026\u2026\u2026\n\nThe text you provided appears to be a mix of biographical information about a person named Rifenburg, details about a hurricane, and some unrelated or garbled content. It seems like a compilation of different topics, possibly from various sources. If you have a specific question or if there's a particular part of the text you'd like me to help with, please let me know!\n\nIt seems like you're looking for a specific piece of information or a summary. Could you\n\nIt looks like your message got cut off. Could you let me know what specific information or summary you're looking for?\n\nIt seems like you're asking for a summary or specific details about the text you provided. However, the text appears to be a mix of unrelated content, and it might be challenging to provide a coherent summary. If you could\n\nIt seems like your message got cut off again. If you could clarify",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.868994,
+   "ttft_s": 0.031947,
+   "tpot_s": 0.004023,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 0.869172,
+   "text": " \nWe need to find the \"first name of the person who won the 2002 King of the Ring.\" The article says: \"He was also the 2002 King of the Ring and the 2003 Royal Rumble winner\". So the winner of 2002 King of the Ring is Brock Lesnar. The first name is Brock. But we need to confirm that the article indeed states that. Let's search within the article for \"King of the Ring\" and \"2002\".assistantanalysis to=repo_browser.search code{\"path\":\"article.txt\",\"query\":\"King of the Ring\",\"max_results\":20}\nanalysis to=repo_browser.open_file code{\"path\":\"article.txt\",\"line_start\":1,\"line_end\":200}\nanalysis to=repo_browser.open_file code{\"path\":\"article.txt\",\"line_start\":1,\"line_end\":200}\nanalysis to=",
+   "completion_tokens": 187,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 10,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.779125,
+   "ttft_s": 0.02392,
+   "tpot_s": 0.004059,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 1.648453,
+   "text": "st\u00a0\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0?\u00a0We\u00a0\u2026\u00a0\u2026\u2026\u2026\u00a0\u2026\u00a0\u2026\u2026\u00a0the\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026..\u00a0\u2026\u2026\u2026..\u00a0\u2026\u00a0Inf\u2026\u2026\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026..\u2026\u2026\u2026..?\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026?\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u00a0\u2026\u2026\u2026\u2026..\u2026\u2026\u2026\u2026..\u2026\u2026\u2026\u2026..\u2026\u2026\u2026?\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026?\u2026\u2026\n\nIt appears that the text you provided is a historical account of a military operation, specifically the Battle of Yongsan. The passage describes the movements and actions of various battalions and regiments during the battle. However, the text is incomplete and contains placeholders or missing information, indicated by ellipses (\"\u2026\") and question marks (\"?\").\n\nIf",
+   "completion_tokens": 229,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.950311,
+   "ttft_s": 0.0242,
+   "tpot_s": 0.004061,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 2.598936,
+   "text": "..............????..??????..??..??...........??..??..??..??..\u2026??..\u2026\u2026..\u2026..\u2026..\u2026\u2026???..\u2026......\u2026\u2026?\u2026....??..\u2026..\n\nIt appears that the text you provided is a mix of unrelated content, possibly from different sources or contexts. It includes information about a person named Kershaw, a book titled \"Arise,\" endorsements, and a brief mention of an Indigenous Australian artist named Josepha Petrick Kemarre. However, the text is fragmented and lacks coherence.\n\nIf you have a specific question or if there's a particular aspect you'd like to discuss or clarify, please let me know, and I'll do my best to assist you.\n\nIt seems like you're looking for a summary or clarification of the provided text. Here's a brief summary:\n\n1. **Kers\n\nIt appears that the text you provided is a mix of unrelated content, possibly from different\n\nIt seems like you're looking for a summary or clarification of the provided text. Here's a brief\n\nIt appears that",
+   "completion_tokens": 228,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.945998,
+   "ttft_s": 0.023997,
+   "tpot_s": 0.00406,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

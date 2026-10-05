@@ -1,0 +1,186 @@
+{
+ "base": "http://127.0.0.1:8080",
+ "model": "sc2",
+ "profile": "llamacpp",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 6,
+ "seed": 1,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+ "plan": [
+  [
+   0.0,
+   17,
+   209
+  ],
+  [
+   0.0,
+   8,
+   129
+  ],
+  [
+   0.0,
+   15,
+   190
+  ],
+  [
+   0.0,
+   57,
+   184
+  ],
+  [
+   0.0,
+   48,
+   117
+  ],
+  [
+   0.0,
+   12,
+   188
+  ]
+ ],
+ "summary": {
+  "n": 6,
+  "valid": 6,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.5106,
+  "wall_s": 3.968,
+  "ttft_p50_s": 0.067117,
+  "ttft_p90_s": 0.225711,
+  "ttft_p99_s": 0.35876,
+  "tpot_p50_s": 0.003203,
+  "tpot_p90_s": 0.003258,
+  "tpot_p99_s": 0.003281,
+  "e2el_p50_s": 0.654309,
+  "e2el_p90_s": 0.865323,
+  "e2el_p99_s": 1.037775,
+  "ttft_mean_s": 0.118084,
+  "output_tok_s": 256.318,
+  "output_tokens": 1017,
+  "good": 6,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.5122,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " (the 9th was 2.5\u00a0\u2026\u00a0..\u00a0..\u00a0..\u00a0??\u00a0..\u00a0????..\u00a0..??..???..??....??\u2026\u2026\u2026\u2026..\u2026\u2026??\u2026\u2026\u2026?\u2026..\u2026\u00a0\u2026\u00a0\u2026\u2026\u2026 resumed\u00a0..\u00a0the 2\u00a0\u2026\u00a0-\u00a0the\u00a0..\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026?\u2026..\u2026\n\nThe text appears to be a historical account of the Battle of Pusan Perimeter during the Korean War. It describes the events leading up to the battle, the strategies employed by both sides, and the outcome of the conflict. The text also includes details about the casualties and the aftermath of the battle.\n\nThe text is a\n\nIt appears that the text is a historical account of the Battle of Pusan Perimeter during the Korean War.\n\nIt appears that the text is a historical account of the Battle of Pusan Perimeter during the Korean War.\n\nYes, that is correct.\n\nIt appears that the",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.056936,
+   "ttft_s": 0.373543,
+   "tpot_s": 0.003284,
+   "i": 0,
+   "prompt_index": 17,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 129,
+   "prompt_len": 512,
+   "t_send": 1.057053,
+   "text": " operational . The Japanese were not prepared for the American attack on the 12th . The Japanese had a total of 12 aircraft on the deck and 12 on the carriers' flight decks . The Japanese had 12 aircraft on the deck and 12 on the carriers' flight decks . The Japanese had 12 aircraft on the deck and 12 on the carriers' flight decks . The Japanese had 12 aircraft on the deck and 12 on the carriers' flight decks . The Japanese had 12 aircraft on the deck and 12 on the carriers' flight decks . The Japanese had 12 aircraft on the deck and 12 on the",
+   "completion_tokens": 129,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.487134,
+   "ttft_s": 0.077878,
+   "tpot_s": 0.003195,
+   "i": 1,
+   "prompt_index": 8,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 190,
+   "prompt_len": 512,
+   "t_send": 1.544259,
+   "text": "\u00a0\u2026\n\nThe text you provided appears to be a historical account of a military operation involving Task Force Manchu during a conflict, likely the Korean War. The passage describes the strategic positioning of the task force, the challenges they faced from North Korean forces, and the logistical difficulties encountered during the operation. It also mentions the use of radio communication, the involvement of various military units, and the efforts to secure supplies and ammunition.\n\nIt seems like the text is a narrative or a historical account of a military operation. The text is well-structured and well-\n\nIt appears that the text is a narrative or historical account of a military operation. The text is well-structured and well-written.\n\nIt seems like the text is a narrative or historical account of a military operation. The text is well-structured and well-written.\n\nIt appears that the text is a narrative or historical account of a military operation. The text is well-structured and",
+   "completion_tokens": 190,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.67371,
+   "ttft_s": 0.062635,
+   "tpot_s": 0.003232,
+   "i": 2,
+   "prompt_index": 15,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 184,
+   "prompt_len": 512,
+   "t_send": 2.218056,
+   "text": " **the** (???)??????\n\nIt seems like you're looking for a comprehensive explanation of oxaziridines, their synthesis, reactions, and applications. Let's break down the information into a more organized format:\n\n### Oxaziridines Overview\n\nOxaziridines are heterocyclic compounds containing a three-membered ring with an oxygen atom and a nitrogen atom. They are versatile intermediates in organic synthesis and have various applications.\n\n### Synthesis of Oxaziridines\n\n1. **From N-hydroxyimides**:\n   - Oxaziridines can be synthesized from N-hydroxyimides, which are derived from the reaction of amides with hydroxylamine.\n   - Example: Oxaziridine 1 can be prepared from N-hydroxyimide 2.\n\n2. **From N-hydroxyimides and aldehydes**:\n",
+   "completion_tokens": 184,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.650859,
+   "ttft_s": 0.065981,
+   "tpot_s": 0.003195,
+   "i": 3,
+   "prompt_index": 57,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 117,
+   "prompt_len": 512,
+   "t_send": 2.869001,
+   "text": "  and  ...\n\n\nWe have a lot of text. The question: \"What was the name of the first team to play in the 2011 Claxton Shield?\" We need to find the first team to play in the 2011 Claxton Shield. The text mentions the 2011 Claxton Shield. Let's search for \"2011 Claxton Shield\" in the text. The text is huge. Let's find the relevant section. The text includes a section titled \"2011 Claxton Shield\". Let's locate that. The text includes:\n\n\"2011 Claxton Shield\n\n",
+   "completion_tokens": 117,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.440798,
+   "ttft_s": 0.068253,
+   "tpot_s": 0.00321,
+   "i": 4,
+   "prompt_index": 48,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 188,
+   "prompt_len": 512,
+   "t_send": 3.309868,
+   "text": " **?**? **??**???????????????????????? **??**?\n\nIt seems like you're looking for a summary or a specific detail from a historical text about the Korean War. The passage you provided is a detailed account of the military operations and strategies during the Korean War, specifically focusing on the North Korean offensive and the UN's response. However, the text appears to be incomplete or corrupted, especially towards the end where it abruptly ends with \"On the west side of **?**? **??**??????\" and so on.\n\nIf you have a specific question about the content or need a summary of the entire passage, please let me know. If you're looking for a particular detail or clarification, feel free to ask!\n\nSure!\n\nGreat! Please let me know what specific information or clarification you need from the passage. Whether it's about the military strategies,",
+   "completion_tokens": 188,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.65776,
+   "ttft_s": 0.060217,
+   "tpot_s": 0.003194,
+   "i": 5,
+   "prompt_index": 12,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

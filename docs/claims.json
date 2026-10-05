@@ -9637,6 +9637,31 @@
       "notes": "Vast invoiced $0.78."
     },
     {
+      "id": "e4b.train.compact-delta.default-decision.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1; mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a286",
+      "claim": "TC1 amendment 38 (#835), one rented RTX 5090 (tc1-5090-85, AMD EPYC 9655): grouped-nf4-gemm's compact padded LoRA delta (NF4_QLORA_COMPACT_DELTA=1, with grouped-nf4-gemm#473's backward) against the default, e4b in venv-unsloth (torch 2.12.1+cu130), 60-step runs, load-gated draws (none voided), on a third host. Qwen3-30B-A3B: matched 1.016 [1.010, 1.022] (P77 FALSIFIED, registered <= 0.99), shipped 1.013 [1.011, 1.015] (P78 FALSIFIED), matched peak 27.501 -> 27.189 GB (P79 HELD). Mixtral-8x7B (matched, resident, defaults): 1.013 [1.012, 1.014] (P80 FALSIFIED, registered <= 1.01), peak 31.234 -> 31.197 GB (P81 HELD). Held-out within 0.001 on every arm (P82, P83 HELD). By amendment 38's rule the flag stays opt-in. Across the three hosts that measured it, its speed follows how host-bound e4b's step is: 0.967-0.970 on the matched arm at 3.4-3.9 s steps (EPYC 7B13, EPYC 7702P), 1.016 at 2.17 s here; the node trades host work for device work (the block rebuilt in backward).",
+      "value": 1.016,
+      "unit": "ratio s/step, NF4_QLORA_COMPACT_DELTA=1 over the default, Qwen3-30B-A3B matched arm on an EPYC 9655 host (medians of steps 11..60 over two draws each); cross-draw interval [1.010, 1.022]; shipped 1.013; Mixtral matched 1.013",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-85: instance 54292473, AMD EPYC 9655, Vast machine 150700); e4b @ e1faf47 + grouped-nf4-gemm @ 0e393f0 (0.41.0, after #473) in venv-unsloth, torch 2.12.1+cu130, triton 3.7.1",
+      "conditions": "bench/tc1 tokens qwen3compactab3 and mixtralcompactab (TC1 amendment 38): TC1's Qwen3 tokens and field recipe, and Mixtral at TC2's pin and field recipe resident at defaults (matched arm only), over 60 steps, every arm in venv-unsloth, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2; engagement as amendment 36; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-compact-default.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-85/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-85/tc1/"
+      ],
+      "notes": "Vast invoiced $2.64."
+    },
+    {
       "id": "e4b.train.env-ab.qwen3.5090.2026-10-04",
       "package": "experts4bit-qlora",
       "area": "train",
