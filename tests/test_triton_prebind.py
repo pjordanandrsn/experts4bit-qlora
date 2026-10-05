@@ -1,4 +1,4 @@
-"""E4B_TRITON_PREBIND (opt-in): the prebound launch of the fused RMSNorm and rotary kernels is BIT-IDENTICAL to Triton's own
+"""E4B_TRITON_PREBIND (on by default; =0 turns it off): the prebound launch of the fused RMSNorm and rotary kernels is BIT-IDENTICAL to Triton's own
 launch -- it launches the very compiled kernel Triton's lookup returns, across dtypes, odd sizes and misaligned pointers -- and
 anything outside its contract (another Triton version, a launch hook, a callable grid, a changed global) takes Triton's path."""
 import os
@@ -21,9 +21,11 @@ SUPPORTED = triton is not None and tp._triton_version() in tp.SUPPORTED_TRITON
 gpu = pytest.mark.skipif(not (CUDA and SUPPORTED), reason="needs CUDA and a Triton release the prebound path supports")
 
 
-def test_off_unless_requested(monkeypatch):
+def test_on_unless_turned_off(monkeypatch):
     sentinel = object()
     monkeypatch.delenv("E4B_TRITON_PREBIND", raising=False)
+    assert tp.prebind_requested()                      # the default (TC1 amendments 26 / 30)
+    monkeypatch.setenv("E4B_TRITON_PREBIND", "0")
     assert not tp.prebind_requested() and tp.prebind(sentinel) is sentinel
     monkeypatch.setenv("E4B_TRITON_PREBIND", "1")
     assert tp.prebind_requested()
@@ -46,8 +48,11 @@ def test_flag_binds_the_launchers_at_import():
             "from experts4bit_qlora.engines.triton_prebind import Prebound\n"
             "print([isinstance(f, Prebound) for f in (r._rms_fwd_launch, r._rms_bwd_launch, p._rope_launch)],"
             " r._rms_fwd_launch is r._rms_fwd)")
-    for flag, want in (("1", f"[{SUPPORTED}, {SUPPORTED}, {SUPPORTED}] {not SUPPORTED}"), ("0", "[False, False, False] True")):
-        env = dict(os.environ, E4B_TRITON_PREBIND=flag)
+    on = f"[{SUPPORTED}, {SUPPORTED}, {SUPPORTED}] {not SUPPORTED}"
+    for flag, want in (("1", on), ("0", "[False, False, False] True"), (None, on)):   # None: unset, the default
+        env = {k: v for k, v in os.environ.items() if k != "E4B_TRITON_PREBIND"}
+        if flag is not None:
+            env["E4B_TRITON_PREBIND"] = flag
         out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True).stdout
         assert out.strip().splitlines()[-1] == want
 

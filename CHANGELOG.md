@@ -15,11 +15,93 @@
 - The arm's time and losses are informational: no anchor and no reference arm on this box.
 - **Spend.** The MG1 lane is $3.04 in all.
 
+### Read: TC1 amendment 29 — the same-stack pair over 60 steps, unstable again on a busy host (P50, P51 UNTESTED, final)
+
+- `tc1-5090-72` ($1.75, EPYC 7C13, Vast machine 45511). e4b's same-stack draws read 3.979 / 3.490 s/step (13.1 % apart, host load1
+  22.9 / 11.0) and its field-image draws 3.834 / 4.087 (6.4 %). Unsloth's 8.759 / 8.500 were stable.
+- No ratio is read. Amendment 33 (load-gated draws) re-asks P50 and P51 off the busy machines.
+
+### TC1 amendment 33 registered: load-gated draws, and the same-stack pair re-asked under them (bench and tests only)
+
+- **Why.** On multi-tenant rental hosts the host-bound training step slows when the host is busy, and the arms' own samplers show the
+  load average following the unstable draws (`tc1-5090-66`, `-68`, `-70`, `-72`). The same-stack pair (P50, P51) has gone unread on three
+  boxes.
+- **What.** `tc1_run.sh`'s `arm` now runs `arm_once` through a gate. With `TC1_LOAD_GATE` set, an OK arm whose median host load1 over its
+  own run exceeds the gate is set aside to `loadvoid/` and run again (at most `TC1_LOAD_RETRIES`). The last attempt stands. Every
+  attempt writes a `LOADGATE` line, which the reducer prints. Unset, nothing changes.
+  - `tc1_drive.sh` forwards both variables.
+  - A functional test runs the script's own `arm()` with `arm_once` stubbed: a busy draw is voided and re-run, the cap holds, an unset
+    gate is one attempt.
+- **The box.** `qwen3samestack` over 60 steps with `TC1_LOAD_GATE=6.0`, off the busy and unexplained machines. P50 and P51 bands are
+  unchanged and the reading is final.
+
+### Read: TC1 amendment 28 — the double-quantized absmax costs Mixtral 2.3 % of its step for 2.04 GB (P57 HELD); Qwen3's speed pair unstable (P56, P58 UNTESTED); amendment 31 re-asks it over 60 steps
+
+- `tc1-5090-71` ($1.27): Mixtral-8x7B resident, `_dq1`/`_dq0` 1.023 [1.004, 1.043], peak 31.07 → 29.03 GB, held-out −0.0028.
+- `tc1-5090-70` ($1.13): Qwen3-30B-A3B. Peak 27.15 → 25.82 GB and held-out +0.0026, but both speed pairs were unstable (5.6 % and
+  23.8 %), with step times following the host's load average.
+- By the registered rule `E4B_ABSMAX_DQ` stays opt-in. Amendment 31 re-asks P56 (and P58's Qwen3 half) with `TC1_STEPS=60` off the
+  machines that went unstable. Row `e4b.train.absmax-dq.mixtral.5090.2026-10-05`.
+
+### TC1 amendment 32 registered: one variable, Triton 3.4 against 3.7.1, on one RTX 5090 (P59–P61) (bench and tests only)
+
+- **Why.** Amendment 24's 0.882 changed torch, transformers and triton together. An unregistered RTX A2000 decomposition put the whole
+  gain in triton 3.7.1's code for grouped-nf4-gemm's training kernels: torch 2.8 with triton 3.7.1 read 0.931×, and torch 2.12 and
+  transformers 5.5 added nothing. The A2000 runs that slice device-bound, so the 5090 reads it here.
+- **Token `qwen3tritonab`.** venv-e4b with its triton 3.4 against triton 3.7.1 put first on the arm's `PYTHONPATH`, matched and shipped
+  arms, two draws a side, 60-step runs, prebound launches off on both sides.
+- **Predictions.** P59 matched in [0.82, 0.95]; P60 shipped in [0.85, 0.98]; P61 held-out within 0.005. The reducer scores them (one new
+  self-test case).
+
+### Default: e4b's prebound Triton launches (`E4B_TRITON_PREBIND`) are on; `=0` turns them off
+
+- **Why.** TC1 amendments 26 and 30 read the fused RMSNorm and rotary kernels' prebound launches, with grouped-nf4-gemm's
+  (`GNF4_TRITON_PREBIND`), against the flags off on one RTX 5090 each, triton 3.4.
+  - The training step reads 0.973× on the matched arm (`tc1-5090-69`).
+  - It reads 0.980× on the shipped arm over 60 steps (`tc1-5090-73`).
+  - Held-out moves by 0.0012 or less.
+
+  The registered rule (P53, P54, P55 held) makes both defaults on. grouped-nf4-gemm's flip is its own PR.
+- **What.** `prebind_requested()` reads the flag as on unless it is `0`. Values are unchanged (the same compiled kernel). Triton releases
+  other than 3.4 and 3.6 keep Triton's own launch.
+
+### CI on grouped-nf4-gemm 0.40.0 (no default changes there)
+
+- CI now tests against grouped-nf4-gemm **0.40.0** (`cfc79904`). That release changes no default. It carries:
+  - the pinned-slot fence (`ColdTier.fence`, #60): a fill into a pinned slot waits for any queued device copy that
+    still reads it, which the arena training path (`nvme_train`) gets through `segment_into`;
+  - opt-in `GNF4_TRITON_PREBIND=1`: the training GEMMs launch without Triton's per-call binding, bit-identical. TC1
+    amendment 26 is registered to read it.
+- The `[fast]` floor stays `>=0.30.0`.
+
 ### Docs: `SERVING-THROUGHPUT.md`'s gpt-oss line notes what shipped after it (docs only)
 
 - The 0.32.0-era line said gpt-oss was "NF4 only", with int4 experts and the router fold both refused. Both were built
   out since: the native MXFP4 store (decode only; prefill on the kept NF4 stacks) and the `topk_softmax` router fold.
   A dated sub-note says so, and the historical line is left as measured.
+
+### Serve estimate: the prefill graph's pool is named, and `ServeSetup` carries `prefill_graph`
+
+- Since SC2b, `E4B_PAGED_PREFILL_GRAPH=auto` is the server's default. When the first-chunk prefill graph engages,
+  it keeps its forward's working set in a private pool for its life: +3.3 GiB on Qwen3-30B-A3B int4.
+  `estimate_serve_footprint` does not price that pool. It now lists the pool as not modelled wherever the graph can
+  engage (decode graphs with device grouping, no linear-attention layers).
+- `ServeSetup.prefill_graph` (`auto`, `1` or `0`) is passed through `to_env()`, so a caller that wants memory bounded
+  by the estimate can plan `0`.
+
+### Fix: `serve_paged` decodes eagerly below sm_89 instead of dying in Triton's compiler
+
+- **The bug.** Bucketed decode graphs (`E4B_PAGED_GRAPHS=auto`, the all-VRAM default since P109) need
+  grouped-nf4-gemm's fused FP8 KV append. That kernel casts to e4m3 with Triton's `tl.float8e4nv`, which Triton
+  compiles only on sm_89+. On an RTX A2000 (sm_86, triton 3.4.0) the first graphed decode step died: "type fp8e4nv
+  not supported in this architecture". Every Ampere card (sm_80/86) took the same path by default.
+- **The fix.**
+  - `fp8_paged_kv.fused_append_unsupported(capability)` states the floor.
+  - The fused append degrades to the eager append below it; an explicit `E4B_FUSED_KV_APPEND=1` is refused in
+    words.
+  - `E4B_PAGED_GRAPHS=auto` decodes eagerly there; `=1` is refused in words.
+  - An unknown capability (no CUDA) changes nothing.
+- **Unchanged on sm_89+**, where every registered serving number was read (RTX 5090, H100).
 
 ## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
 

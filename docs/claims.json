@@ -9587,6 +9587,31 @@
       "notes": "Part of the same box as e4b.train.env-ab.qwen3.5090.2026-10-04."
     },
     {
+      "id": "e4b.train.absmax-dq.mixtral.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "mistralai/Mixtral-8x7B-Instruct-v0.1 @ eba92302a286",
+      "claim": "TC1 amendment 28 (#835), one rented RTX 5090 (tc1-5090-71): e4b against itself on Mixtral-8x7B-Instruct's matched arm (fp32 adapters, matched init), resident, the expert absmax fp32 (E4B_ABSMAX_DQ=0, the default) vs double-quantized (=1, #1040), two draws a side in ABBA order. dq1 / dq0 1.023 [1.004, 1.043] (3.807 / 3.917 vs 3.932 / 3.970 s/step, both sides stable): the double-quantized absmax costs 2.3 % of the step. Peak 31.07 -> 29.03 GB (2.04 GB; the registered arithmetic 2.10). Held-out at N moves -0.0028. P57 HELD (band [0.97, 1.03] and a drop in [1.9, 2.3] GB). The Qwen3-30B-A3B half (P56) went UNTESTED on an unstable box, so by the registered rule the switch stays opt-in until amendment 31 reads it.",
+      "value": 1.023,
+      "unit": "ratio s/step, E4B_ABSMAX_DQ=1 over =0 (medians of steps 11..20 over two draws each; > 1 = the double-quantized absmax slower); cross-draw interval [1.004, 1.043]; peak 2.04 GB lower",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-71: AMD EPYC 7B13, Vast machine 145701); e4b @ cdea8ea + grouped-nf4-gemm @ f0c1ece on torch 2.8.0+cu128",
+      "conditions": "bench/tc1 token mixtraldqab (TC1 amendment 28): TC2's Mixtral pin and field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407, N=20, 8 held-out rows at 0 and N), matched arm, resident, every other default; engagement on absmax_dq and absmax_dq_modules; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-dqab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-71/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-71/tc1/"
+      ],
+      "notes": "Vast invoiced $1.27."
+    },
+    {
       "package": "experts4bit-qlora",
       "area": "train",
       "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04",

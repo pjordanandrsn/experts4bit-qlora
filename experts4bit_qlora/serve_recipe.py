@@ -39,6 +39,8 @@ class ServeSetup:
     buckets: tuple = DEFAULT_BUCKETS
     #: E4B_PAGED_KV_GROUPS: "auto" or an int
     kv_groups: object = "auto"
+    #: E4B_PAGED_PREFILL_GRAPH: "auto" (the server's default), "1" or "0". Its graph's private pool is not priced
+    prefill_graph: str = "auto"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -49,7 +51,7 @@ class ServeSetup:
                 "E4B_PAGED_MAX_TOKENS_PER_SEQ": str(self.max_tokens_per_seq),
                 "E4B_PAGED_CHUNK_TOKENS": str(self.chunk_tokens), "E4B_PAGED_GRAPHS": "1" if self.graphs else "0",
                 "E4B_PAGED_BUCKETS": ",".join(str(int(b)) for b in self.buckets),
-                "E4B_PAGED_KV_GROUPS": str(self.kv_groups)}
+                "E4B_PAGED_KV_GROUPS": str(self.kv_groups), "E4B_PAGED_PREFILL_GRAPH": str(self.prefill_graph)}
 
 
 def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_tokens_per_seq: int,
@@ -93,6 +95,8 @@ def serve_setup_refusals(topology, setup: ServeSetup) -> tuple:
         out.append(f"the paged KV geometry is not describable: {topology.provenance.get('kv')}")
     if setup.max_seqs < 1 or setup.max_tokens_per_seq < 2:
         out.append("max_seqs >= 1 and max_tokens_per_seq >= 2 are required")
+    if str(setup.prefill_graph) not in ("auto", "0", "1"):
+        out.append(f"prefill_graph must be 'auto', '0' or '1', got {setup.prefill_graph!r}")
     try:
         import fp8_kv  # noqa: F401
     except ImportError:
@@ -132,6 +136,12 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                                f"for {setup.max_seqs} sequences"))
     if setup.graphs:
         unmodelled.append("CUDA graph memory pools for the decode buckets")
+    hybrid = topology.attention is not None and topology.attention.layers < topology.n_layers
+    if str(setup.prefill_graph) != "0" and setup.graphs and setup.max_seqs > 1 and max(setup.buckets) > 1 and not hybrid:
+        unmodelled.append("the first-chunk prefill graph's private pool, which the server keeps for its life when the "
+                          "graph engages (E4B_PAGED_PREFILL_GRAPH=auto engages it only if that much is still free after "
+                          "capture; lane SC2b measured +3.3 GiB on Qwen3-30B-A3B int4); prefill_graph='0' bounds memory "
+                          "by this estimate")
     if topology.attention is not None and topology.attention.layers < topology.n_layers:
         unmodelled.append(f"recurrent state of the {topology.n_layers - topology.attention.layers} non-attention layers")
     unmodelled.append("CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)")
