@@ -172,3 +172,16 @@ def test_a_cold_layer_needs_as_many_rows_as_it_can_route_in_one_step():
     f = estimate_serve_footprint(topo, ServeSetup(**nvme_one_layer, hot_rows=4))
     assert f.items == () and any("hot_rows 4 is below the 8" in r for r in f.refusals)
     assert not estimate_serve_footprint(topo, ServeSetup(**nvme_one_layer, hot_rows=8)).refusals
+
+
+def test_the_cold_rows_device_stack_is_priced_where_rows_are_cold():
+    """Measured on an RTX A2000 (OLMoE, solver 1.2 / 1.5 GiB): the whole gap between this estimate and the allocator
+    peak was hot_residency._cold_contrib staging one layer's routed NVMe experts on the GPU (54 rows x 3.375 MiB)."""
+    topo = describe_moe(_qwen3())
+    row = bytes_per_expert(topo.expert_stacks[0])
+    gib = lambda n: n * row / 2**30  # noqa: E731
+    cold = ServeSetup(placement="solver", max_seqs=1, graphs=False, vram_gb=gib(8), dram_gb=gib(8), hot_rows=8)
+    by = {i.name: i for i in estimate_serve_footprint(topo, cold).items}
+    assert by["cold rows' device stack (one layer call)"].bytes == min_hot_rows(topo, cold) * row
+    warm = ServeSetup(placement="solver", max_seqs=1, graphs=False, vram_gb=gib(24), dram_gb=0.0)
+    assert not any(i.name.startswith("cold rows") for i in estimate_serve_footprint(topo, warm).items)

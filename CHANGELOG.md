@@ -256,6 +256,16 @@
 - **Left for the owner** (listed in the audit file): the A2000 energy rows (`e4b.train.energy-honest.*`, quoted in the
   README), the PREREG/RESULTS records, and the runtime warning in `enable_fast_train`, which still quotes the A2000's 36 %.
 
+### Serve estimate: the cold rows' device stack
+
+- Under the solver, a layer call streams its routed NVMe experts to the GPU and runs them there
+  (`hot_residency._cold_contrib`). `estimate_serve_footprint` now prices that stack at its ceiling, `min_hot_rows ×`
+  the row bytes, as a device item.
+- Measured on an RTX A2000 (OLMoE-1B-7B, solver at 1.2 / 1.5 GiB, a 128-token prompt). Allocator history at the
+  generation peak put the whole 183 MiB gap between the estimate and the peak in `_cold_contrib`: 54 routed rows ×
+  3.375 MiB plus their outputs.
+- At all-VRAM with a short prompt the estimate was 8 MiB over the peak, so nothing there is missing.
+
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
 **0.48.0.** Two training defaults change, each by a rule registered and read in lane TC1 (#835).
