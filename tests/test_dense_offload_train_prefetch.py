@@ -232,6 +232,11 @@ def _race(mutant: bool) -> bool:
     sched.use(hs[0])                                  # stages 0, prefetches 1
     sched.use(hs[1])                                  # binds 1 (record_stream unless mutant), prefetches 2
     x = torch.ones(4, H, device="cuda")
+    # Warm the reader first. A process's first cuBLAS call (and any read that needs a fresh cudaMalloc) synchronises the
+    # whole device, so an unwarmed matmul here finishes the sleep before returning and the race can never happen --
+    # measured on the A2000: compute done 0-1 ms after the read was "enqueued", the mutant never corrupting.
+    x @ m.layers[1].q_proj.weight.t()
+    torch.cuda.synchronize()
     torch.cuda._sleep(int(3e8))                       # hold compute well past the next copy
     y = x @ m.layers[1].q_proj.weight.t()             # reads layer 1 AFTER the sleep
     sched.use(hs[2])                                  # evicts 1, prefetches 3 into the pool layer 1's block went back to
