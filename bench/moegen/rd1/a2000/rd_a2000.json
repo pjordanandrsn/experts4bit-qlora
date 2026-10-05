@@ -1,0 +1,6850 @@
+{
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "torch": "2.8.0+cu128",
+ "triton": "3.4.0",
+ "gnf4_file": "/home/node/work/gnf4-moegen/kernel/nf4_grouped.py",
+ "cap_mib": 256,
+ "reps": 20,
+ "started": "2026-10-05T08:08:18Z",
+ "cells": [
+  {
+   "fam": "olmoe",
+   "seq": 512,
+   "routing": "uniform",
+   "E": 64,
+   "k": 8,
+   "groups": 64,
+   "rows_mean": 64.0,
+   "rows_max": 82,
+   "rows_min": 47,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=2048 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 10.9428,
+       "event_ms": 11.3352,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 12.0045,
+       "event_ms": 12.0644,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 5.7208,
+       "event_ms": 7.0594,
+       "peak_mib": 32.0,
+       "rel_err": 0.00288
+      },
+      "decoded": {
+       "device_ms": 5.8658,
+       "event_ms": 5.8839,
+       "peak_mib": 528.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.8727,
+       "event_ms": 5.8855,
+       "peak_mib": 272.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 11.9991,
+       "event_ms": 12.0122,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 11.1067,
+       "event_ms": 11.2308,
+       "peak_mib": 16.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 5.604,
+       "event_ms": 6.1676,
+       "peak_mib": 32.0,
+       "rel_err": 0.00288
+      },
+      "decoded": {
+       "device_ms": 5.8757,
+       "event_ms": 5.8672,
+       "peak_mib": 528.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.872,
+       "event_ms": 5.8582,
+       "peak_mib": 272.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    },
+    "down N=2048 K=1024": {
+     "fwd": {
+      "v1": {
+       "device_ms": 4.2481,
+       "event_ms": 4.4559,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 6.1147,
+       "event_ms": 6.0424,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 2.8716,
+       "event_ms": 9.5166,
+       "peak_mib": 24.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 2.9586,
+       "event_ms": 2.9629,
+       "peak_mib": 272.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.9579,
+       "event_ms": 2.9626,
+       "peak_mib": 272.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 5.87,
+       "event_ms": 6.0303,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 5.5205,
+       "event_ms": 5.4985,
+       "peak_mib": 8.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 2.5685,
+       "event_ms": 6.376,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 2.9381,
+       "event_ms": 2.9412,
+       "peak_mib": 264.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.9305,
+       "event_ms": 3.701,
+       "peak_mib": 264.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 121.4
+  },
+  {
+   "fam": "lfm2",
+   "seq": 512,
+   "routing": "uniform",
+   "E": 32,
+   "k": 4,
+   "groups": 32,
+   "rows_mean": 64.0,
+   "rows_max": 86,
+   "rows_min": 49,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=3584 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 7.5127,
+       "event_ms": 7.3934,
+       "peak_mib": 14.0
+      },
+      "v3": {
+       "device_ms": 10.6592,
+       "event_ms": 10.664,
+       "peak_mib": 14.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 5.1993,
+       "event_ms": 5.1668,
+       "peak_mib": 42.0,
+       "rel_err": 0.00276
+      },
+      "decoded": {
+       "device_ms": 5.1467,
+       "event_ms": 5.1495,
+       "peak_mib": 462.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.0399,
+       "event_ms": 5.0488,
+       "peak_mib": 266.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 10.3881,
+       "event_ms": 10.6,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 9.894,
+       "event_ms": 9.8775,
+       "peak_mib": 8.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 4.7436,
+       "event_ms": 4.7469,
+       "peak_mib": 36.0,
+       "rel_err": 0.00289
+      },
+      "decoded": {
+       "device_ms": 5.1511,
+       "event_ms": 5.1525,
+       "peak_mib": 456.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.9355,
+       "event_ms": 4.9064,
+       "peak_mib": 260.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    },
+    "down N=2048 K=1792": {
+     "fwd": {
+      "v1": {
+       "device_ms": 3.5658,
+       "event_ms": 3.6383,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 5.3058,
+       "event_ms": 5.2239,
+       "peak_mib": 8.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 2.5136,
+       "event_ms": 4.3533,
+       "peak_mib": 22.0,
+       "rel_err": 0.0028
+      },
+      "decoded": {
+       "device_ms": 2.5922,
+       "event_ms": 2.5945,
+       "peak_mib": 232.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.595,
+       "event_ms": 2.5982,
+       "peak_mib": 232.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 5.1934,
+       "event_ms": 5.1875,
+       "peak_mib": 7.0
+      },
+      "v3": {
+       "device_ms": 4.8862,
+       "event_ms": 4.7968,
+       "peak_mib": 7.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 2.5125,
+       "event_ms": 2.6825,
+       "peak_mib": 21.0,
+       "rel_err": 0.00281
+      },
+      "decoded": {
+       "device_ms": 2.5893,
+       "event_ms": 2.5928,
+       "peak_mib": 231.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.5899,
+       "event_ms": 2.5926,
+       "peak_mib": 231.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 13.4
+  },
+  {
+   "fam": "ernie",
+   "seq": 512,
+   "routing": "uniform",
+   "E": 64,
+   "k": 6,
+   "groups": 64,
+   "rows_mean": 48.0,
+   "rows_max": 60,
+   "rows_min": 34,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=3072 K=2560": {
+     "fwd": {
+      "v1": {
+       "device_ms": 12.1313,
+       "event_ms": 12.1502,
+       "peak_mib": 18.0
+      },
+      "v3": {
+       "device_ms": 16.604,
+       "event_ms": 16.5994,
+       "peak_mib": 18.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 9.7271,
+       "event_ms": 9.7712,
+       "peak_mib": 48.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 10.5138,
+       "event_ms": 10.5159,
+       "peak_mib": 978.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.2407,
+       "event_ms": 10.2508,
+       "peak_mib": 273.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 19.8392,
+       "event_ms": 19.7592,
+       "peak_mib": 15.0
+      },
+      "v3": {
+       "device_ms": 15.6374,
+       "event_ms": 15.7275,
+       "peak_mib": 15.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 9.6173,
+       "event_ms": 10.1668,
+       "peak_mib": 45.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 10.4821,
+       "event_ms": 10.4844,
+       "peak_mib": 975.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.0625,
+       "event_ms": 10.0729,
+       "peak_mib": 270.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    },
+    "down N=2560 K=1536": {
+     "fwd": {
+      "v1": {
+       "device_ms": 5.5185,
+       "event_ms": 5.4792,
+       "peak_mib": 15.9
+      },
+      "v3": {
+       "device_ms": 7.737,
+       "event_ms": 7.8387,
+       "peak_mib": 15.9,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 5.0325,
+       "event_ms": 6.7923,
+       "peak_mib": 31.4,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 5.2843,
+       "event_ms": 5.2875,
+       "peak_mib": 495.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.2611,
+       "event_ms": 5.2709,
+       "peak_mib": 270.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 9.5497,
+       "event_ms": 9.6131,
+       "peak_mib": 9.0
+      },
+      "v3": {
+       "device_ms": 7.9022,
+       "event_ms": 7.9106,
+       "peak_mib": 9.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 5.2571,
+       "event_ms": 9.5895,
+       "peak_mib": 24.5,
+       "rel_err": 0.00316
+      },
+      "decoded": {
+       "device_ms": 5.2902,
+       "event_ms": 5.2966,
+       "peak_mib": 489.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.2573,
+       "event_ms": 5.2559,
+       "peak_mib": 264.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 21.4
+  },
+  {
+   "fam": "graniteh",
+   "seq": 512,
+   "routing": "uniform",
+   "E": 64,
+   "k": 6,
+   "groups": 64,
+   "rows_mean": 48.0,
+   "rows_max": 60,
+   "rows_min": 34,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=1024 K=1536": {
+     "fwd": {
+      "v1": {
+       "device_ms": 2.2063,
+       "event_ms": 2.149,
+       "peak_mib": 6.0
+      },
+      "v3": {
+       "device_ms": 3.1169,
+       "event_ms": 3.1844,
+       "peak_mib": 6.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 1.8332,
+       "event_ms": 7.84,
+       "peak_mib": 12.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 2.1156,
+       "event_ms": 2.1217,
+       "peak_mib": 198.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.117,
+       "event_ms": 2.124,
+       "peak_mib": 198.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 3.8585,
+       "event_ms": 3.9879,
+       "peak_mib": 9.0
+      },
+      "v3": {
+       "device_ms": 3.1887,
+       "event_ms": 3.2056,
+       "peak_mib": 9.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 1.6854,
+       "event_ms": 5.4927,
+       "peak_mib": 15.9,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 2.1428,
+       "event_ms": 2.1455,
+       "peak_mib": 201.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.1439,
+       "event_ms": 2.1469,
+       "peak_mib": 201.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    },
+    "down N=1536 K=512": {
+     "fwd": {
+      "v1": {
+       "device_ms": 1.0913,
+       "event_ms": 1.1192,
+       "peak_mib": 9.0
+      },
+      "v3": {
+       "device_ms": 1.5657,
+       "event_ms": 1.611,
+       "peak_mib": 9.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 1.1889,
+       "event_ms": 5.9255,
+       "peak_mib": 12.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 1.0908,
+       "event_ms": 1.0918,
+       "peak_mib": 105.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.0908,
+       "event_ms": 1.0997,
+       "peak_mib": 105.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 1.8163,
+       "event_ms": 1.8201,
+       "peak_mib": 3.0
+      },
+      "v3": {
+       "device_ms": 1.5695,
+       "event_ms": 1.583,
+       "peak_mib": 3.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 0.9471,
+       "event_ms": 6.285,
+       "peak_mib": 6.0,
+       "rel_err": 0.00315
+      },
+      "decoded": {
+       "device_ms": 1.0587,
+       "event_ms": 1.0629,
+       "peak_mib": 99.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.0588,
+       "event_ms": 1.066,
+       "peak_mib": 99.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 5.6
+  },
+  {
+   "fam": "qwen3",
+   "seq": 512,
+   "routing": "uniform",
+   "E": 128,
+   "k": 8,
+   "groups": 128,
+   "rows_mean": 32.0,
+   "rows_max": 48,
+   "rows_min": 21,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=1536 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 8.5303,
+       "event_ms": 8.4586,
+       "peak_mib": 12.0
+      },
+      "v3": {
+       "device_ms": 11.7425,
+       "event_ms": 11.7142,
+       "peak_mib": 12.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 7.9313,
+       "event_ms": 12.3223,
+       "peak_mib": 24.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 7.9568,
+       "event_ms": 7.9638,
+       "peak_mib": 780.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 7.9315,
+       "event_ms": 7.9428,
+       "peak_mib": 264.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 11.0138,
+       "event_ms": 11.1212,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 10.3226,
+       "event_ms": 10.3235,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 7.5824,
+       "event_ms": 11.9484,
+       "peak_mib": 28.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 7.9682,
+       "event_ms": 7.9726,
+       "peak_mib": 784.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 7.923,
+       "event_ms": 7.9305,
+       "peak_mib": 268.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    },
+    "down N=2048 K=768": {
+     "fwd": {
+      "v1": {
+       "device_ms": 4.2781,
+       "event_ms": 4.2092,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 6.2248,
+       "event_ms": 6.2799,
+       "peak_mib": 16.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 3.9208,
+       "event_ms": 12.0194,
+       "peak_mib": 22.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 4.0974,
+       "event_ms": 4.0932,
+       "peak_mib": 400.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.0811,
+       "event_ms": 4.0844,
+       "peak_mib": 271.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 5.4519,
+       "event_ms": 5.5005,
+       "peak_mib": 6.0
+      },
+      "v3": {
+       "device_ms": 5.1812,
+       "event_ms": 5.1172,
+       "peak_mib": 6.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 3.709,
+       "event_ms": 11.0324,
+       "peak_mib": 12.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 4.0501,
+       "event_ms": 4.0503,
+       "peak_mib": 390.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.0303,
+       "event_ms": 4.0341,
+       "peak_mib": 261.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 18.4
+  },
+  {
+   "fam": "nemotron",
+   "seq": 512,
+   "routing": "uniform",
+   "E": 128,
+   "k": 6,
+   "groups": 128,
+   "rows_mean": 24.0,
+   "rows_max": 35,
+   "rows_min": 13,
+   "groups_under_16_rows": 3,
+   "proj": {
+    "up N=1856 K=2688": {
+     "fwd": {
+      "v1": {
+       "device_ms": 10.4281,
+       "event_ms": 10.4813,
+       "peak_mib": 10.9
+      },
+      "v3": {
+       "device_ms": 16.5273,
+       "event_ms": 16.5502,
+       "peak_mib": 10.9,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 13.113,
+       "event_ms": 13.2316,
+       "peak_mib": 29.9,
+       "rel_err": 0.00259
+      },
+      "decoded": {
+       "device_ms": 12.6799,
+       "event_ms": 12.6617,
+       "peak_mib": 1228.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 12.7035,
+       "event_ms": 12.697,
+       "peak_mib": 258.3,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 10.6008,
+       "event_ms": 10.5494,
+       "peak_mib": 15.8
+      },
+      "v3": {
+       "device_ms": 9.4822,
+       "event_ms": 9.0897,
+       "peak_mib": 15.8,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 12.5832,
+       "event_ms": 14.9107,
+       "peak_mib": 34.8,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 12.6635,
+       "event_ms": 12.6473,
+       "peak_mib": 1233.8,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 12.6075,
+       "event_ms": 12.5924,
+       "peak_mib": 263.2,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     }
+    },
+    "down N=2688 K=1856": {
+     "fwd": {
+      "v1": {
+       "device_ms": 9.4054,
+       "event_ms": 9.1222,
+       "peak_mib": 15.9
+      },
+      "v3": {
+       "device_ms": 14.4788,
+       "event_ms": 14.5351,
+       "peak_mib": 15.9,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 12.6997,
+       "event_ms": 12.9776,
+       "peak_mib": 34.9,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 12.468,
+       "event_ms": 12.4697,
+       "peak_mib": 1233.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 12.3354,
+       "event_ms": 12.3443,
+       "peak_mib": 263.3,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 9.3663,
+       "event_ms": 9.324,
+       "peak_mib": 10.9
+      },
+      "v3": {
+       "device_ms": 8.1039,
+       "event_ms": 8.0127,
+       "peak_mib": 10.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 12.6323,
+       "event_ms": 14.1108,
+       "peak_mib": 30.8,
+       "rel_err": 0.00259
+      },
+      "decoded": {
+       "device_ms": 12.4681,
+       "event_ms": 12.4725,
+       "peak_mib": 1228.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 12.3608,
+       "event_ms": 12.3727,
+       "peak_mib": 258.3,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     }
+    }
+   },
+   "wall_s": 23.8
+  },
+  {
+   "fam": "qwen36",
+   "seq": 512,
+   "routing": "uniform",
+   "E": 256,
+   "k": 8,
+   "groups": 256,
+   "rows_mean": 16.0,
+   "rows_max": 26,
+   "rows_min": 3,
+   "groups_under_16_rows": 119,
+   "proj": {
+    "gate_up N=1024 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 10.2541,
+       "event_ms": 10.2383,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 14.849,
+       "event_ms": 14.9765,
+       "peak_mib": 8.0,
+       "rel_err": 0.00254
+      },
+      "dense": {
+       "device_ms": 10.4587,
+       "event_ms": 24.2676,
+       "peak_mib": 16.0,
+       "rel_err": 0.00254
+      },
+      "decoded": {
+       "device_ms": 9.9852,
+       "event_ms": 9.9954,
+       "peak_mib": 1032.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.0085,
+       "event_ms": 10.017,
+       "peak_mib": 264.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 10.447,
+       "event_ms": 10.3669,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 9.7629,
+       "event_ms": 9.7262,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 9.9391,
+       "event_ms": 33.5189,
+       "peak_mib": 24.0,
+       "rel_err": 0.00258
+      },
+      "decoded": {
+       "device_ms": 10.0329,
+       "event_ms": 10.0425,
+       "peak_mib": 1040.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.0393,
+       "event_ms": 10.053,
+       "peak_mib": 272.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    },
+    "down N=2048 K=512": {
+     "fwd": {
+      "v1": {
+       "device_ms": 4.9369,
+       "event_ms": 4.9431,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 7.5774,
+       "event_ms": 7.5098,
+       "peak_mib": 16.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 4.759,
+       "event_ms": 26.906,
+       "peak_mib": 20.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 5.0574,
+       "event_ms": 5.0644,
+       "peak_mib": 528.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.0599,
+       "event_ms": 5.0734,
+       "peak_mib": 272.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 4.725,
+       "event_ms": 4.7093,
+       "peak_mib": 4.0
+      },
+      "v3": {
+       "device_ms": 4.6091,
+       "event_ms": 4.5719,
+       "peak_mib": 4.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 5.3452,
+       "event_ms": 35.6475,
+       "peak_mib": 8.0,
+       "rel_err": 0.00289
+      },
+      "decoded": {
+       "device_ms": 4.9822,
+       "event_ms": 4.9908,
+       "peak_mib": 516.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.9909,
+       "event_ms": 4.9969,
+       "peak_mib": 260.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 27.7
+  },
+  {
+   "fam": "mixtral",
+   "seq": 512,
+   "routing": "uniform",
+   "E": 8,
+   "k": 2,
+   "groups": 8,
+   "rows_mean": 128.0,
+   "rows_max": 141,
+   "rows_min": 114,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=28672 K=4096": {
+     "fwd": {
+      "v1": {
+       "device_ms": 47.9647,
+       "event_ms": 46.8337,
+       "peak_mib": 56.0
+      },
+      "v3": {
+       "device_ms": 58.817,
+       "event_ms": 58.8254,
+       "peak_mib": 56.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 20.6851,
+       "event_ms": 20.8569,
+       "peak_mib": 504.0,
+       "rel_err": 0.00278
+      },
+      "decoded": null,
+      "skipped": [
+       "decoded (64, 128, 64, 4, 3): OutOfMemoryError",
+       "decoded (32, 128, 64, 4, 3): OutOfMemoryError",
+       "decoded (128, 128, 32, 8, 3): OutOfMemoryError"
+      ]
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 93.8219,
+       "event_ms": 93.6046,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 67.9431,
+       "event_ms": 71.5383,
+       "peak_mib": 8.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 24.2554,
+       "event_ms": 20.8874,
+       "peak_mib": 456.0,
+       "rel_err": 0.00392
+      },
+      "decoded": null,
+      "skipped": [
+       "decoded (64, 128, 64, 4, 3): OutOfMemoryError",
+       "decoded (32, 128, 64, 4, 3): OutOfMemoryError",
+       "decoded (128, 128, 32, 8, 3): OutOfMemoryError"
+      ]
+     }
+    },
+    "down N=4096 K=14336": {
+     "fwd": {
+      "v1": {
+       "device_ms": 23.4603,
+       "event_ms": 24.8934,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 34.2733,
+       "event_ms": 36.0969,
+       "peak_mib": 8.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 13.2418,
+       "event_ms": 13.3285,
+       "peak_mib": 232.0,
+       "rel_err": 0.00284
+      },
+      "decoded": {
+       "device_ms": 15.8414,
+       "event_ms": 16.0745,
+       "peak_mib": 904.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 13.758,
+       "event_ms": 13.4586,
+       "peak_mib": 232.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 38.4393,
+       "event_ms": 43.6949,
+       "peak_mib": 28.0
+      },
+      "v3": {
+       "device_ms": 33.9189,
+       "event_ms": 35.6142,
+       "peak_mib": 28.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 10.484,
+       "event_ms": 10.4775,
+       "peak_mib": 252.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 11.6616,
+       "event_ms": 11.8774,
+       "peak_mib": 924.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 11.609,
+       "event_ms": 11.5471,
+       "peak_mib": 252.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    }
+   },
+   "wall_s": 45.7
+  },
+  {
+   "fam": "olmoe",
+   "seq": 2048,
+   "routing": "uniform",
+   "E": 64,
+   "k": 8,
+   "groups": 64,
+   "rows_mean": 256.0,
+   "rows_max": 300,
+   "rows_min": 201,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=2048 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 21.3475,
+       "event_ms": 22.4749,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 30.2322,
+       "event_ms": 31.8226,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 9.5358,
+       "event_ms": 9.6492,
+       "peak_mib": 80.0,
+       "rel_err": 0.00286
+      },
+      "decoded": {
+       "device_ms": 9.9712,
+       "event_ms": 9.8668,
+       "peak_mib": 576.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.3896,
+       "event_ms": 10.0217,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 41.8386,
+       "event_ms": 44.0195,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 36.3983,
+       "event_ms": 38.3543,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 9.3797,
+       "event_ms": 9.455,
+       "peak_mib": 80.0,
+       "rel_err": 0.00286
+      },
+      "decoded": {
+       "device_ms": 9.6807,
+       "event_ms": 9.7336,
+       "peak_mib": 576.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 9.8107,
+       "event_ms": 9.8185,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    },
+    "down N=2048 K=1024": {
+     "fwd": {
+      "v1": {
+       "device_ms": 10.9702,
+       "event_ms": 11.6889,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 15.285,
+       "event_ms": 16.077,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 4.8534,
+       "event_ms": 6.4549,
+       "peak_mib": 72.0,
+       "rel_err": 0.0029
+      },
+      "decoded": {
+       "device_ms": 5.076,
+       "event_ms": 5.0276,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.1245,
+       "event_ms": 5.2539,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 20.4956,
+       "event_ms": 21.6668,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 18.0314,
+       "event_ms": 18.9919,
+       "peak_mib": 32.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 4.9226,
+       "event_ms": 5.7614,
+       "peak_mib": 40.0,
+       "rel_err": 0.00334
+      },
+      "decoded": {
+       "device_ms": 4.7849,
+       "event_ms": 4.713,
+       "peak_mib": 288.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.7844,
+       "event_ms": 5.0844,
+       "peak_mib": 288.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 28.1
+  },
+  {
+   "fam": "lfm2",
+   "seq": 2048,
+   "routing": "uniform",
+   "E": 32,
+   "k": 4,
+   "groups": 32,
+   "rows_mean": 256.0,
+   "rows_max": 290,
+   "rows_min": 233,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=3584 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 18.472,
+       "event_ms": 19.5229,
+       "peak_mib": 56.0
+      },
+      "v3": {
+       "device_ms": 26.0963,
+       "event_ms": 27.4879,
+       "peak_mib": 56.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 8.8843,
+       "event_ms": 9.5246,
+       "peak_mib": 84.0,
+       "rel_err": 0.00345
+      },
+      "decoded": {
+       "device_ms": 8.6724,
+       "event_ms": 8.634,
+       "peak_mib": 504.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 8.8295,
+       "event_ms": 8.7871,
+       "peak_mib": 308.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 36.4753,
+       "event_ms": 38.4325,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 31.6078,
+       "event_ms": 33.256,
+       "peak_mib": 32.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 7.8297,
+       "event_ms": 7.8945,
+       "peak_mib": 60.0,
+       "rel_err": 0.00291
+      },
+      "decoded": {
+       "device_ms": 8.4525,
+       "event_ms": 8.4182,
+       "peak_mib": 480.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 8.5717,
+       "event_ms": 8.5409,
+       "peak_mib": 284.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    },
+    "down N=2048 K=1792": {
+     "fwd": {
+      "v1": {
+       "device_ms": 9.25,
+       "event_ms": 9.7024,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 13.0097,
+       "event_ms": 13.6681,
+       "peak_mib": 32.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 4.2425,
+       "event_ms": 4.1603,
+       "peak_mib": 46.0,
+       "rel_err": 0.00292
+      },
+      "decoded": {
+       "device_ms": 4.3646,
+       "event_ms": 4.4432,
+       "peak_mib": 256.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.5765,
+       "event_ms": 4.3796,
+       "peak_mib": 256.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 18.2391,
+       "event_ms": 19.4316,
+       "peak_mib": 28.0
+      },
+      "v3": {
+       "device_ms": 15.8123,
+       "event_ms": 16.6304,
+       "peak_mib": 28.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 4.7003,
+       "event_ms": 4.6441,
+       "peak_mib": 42.0,
+       "rel_err": 0.0032
+      },
+      "decoded": {
+       "device_ms": 4.2712,
+       "event_ms": 4.3632,
+       "peak_mib": 252.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.4465,
+       "event_ms": 4.2086,
+       "peak_mib": 252.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 21.5
+  },
+  {
+   "fam": "ernie",
+   "seq": 2048,
+   "routing": "uniform",
+   "E": 64,
+   "k": 6,
+   "groups": 64,
+   "rows_mean": 192.0,
+   "rows_max": 219,
+   "rows_min": 159,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=3072 K=2560": {
+     "fwd": {
+      "v1": {
+       "device_ms": 38.4586,
+       "event_ms": 40.4624,
+       "peak_mib": 72.0
+      },
+      "v3": {
+       "device_ms": 51.1072,
+       "event_ms": 53.7653,
+       "peak_mib": 72.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 15.0624,
+       "event_ms": 15.1755,
+       "peak_mib": 102.9,
+       "rel_err": 0.00275
+      },
+      "decoded": {
+       "device_ms": 15.7044,
+       "event_ms": 15.878,
+       "peak_mib": 1032.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 15.867,
+       "event_ms": 15.8812,
+       "peak_mib": 327.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 66.2722,
+       "event_ms": 66.3028,
+       "peak_mib": 60.0
+      },
+      "v3": {
+       "device_ms": 53.6304,
+       "event_ms": 56.4358,
+       "peak_mib": 60.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 16.4498,
+       "event_ms": 16.6284,
+       "peak_mib": 90.9,
+       "rel_err": 0.003
+      },
+      "decoded": {
+       "device_ms": 15.4176,
+       "event_ms": 15.6671,
+       "peak_mib": 1020.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 15.5862,
+       "event_ms": 15.6453,
+       "peak_mib": 315.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    },
+    "down N=2560 K=1536": {
+     "fwd": {
+      "v1": {
+       "device_ms": 16.2287,
+       "event_ms": 17.0932,
+       "peak_mib": 60.0
+      },
+      "v3": {
+       "device_ms": 22.8701,
+       "event_ms": 24.0762,
+       "peak_mib": 60.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 9.1703,
+       "event_ms": 9.2721,
+       "peak_mib": 75.5,
+       "rel_err": 0.003
+      },
+      "decoded": {
+       "device_ms": 7.9209,
+       "event_ms": 7.8524,
+       "peak_mib": 540.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 7.9758,
+       "event_ms": 7.9802,
+       "peak_mib": 315.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 30.2834,
+       "event_ms": 32.0502,
+       "peak_mib": 36.0
+      },
+      "v3": {
+       "device_ms": 26.5764,
+       "event_ms": 27.8585,
+       "peak_mib": 36.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 8.3883,
+       "event_ms": 8.462,
+       "peak_mib": 51.5,
+       "rel_err": 0.00332
+      },
+      "decoded": {
+       "device_ms": 7.6932,
+       "event_ms": 7.7918,
+       "peak_mib": 516.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 7.7536,
+       "event_ms": 7.825,
+       "peak_mib": 291.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 39.2
+  },
+  {
+   "fam": "graniteh",
+   "seq": 2048,
+   "routing": "uniform",
+   "E": 64,
+   "k": 6,
+   "groups": 64,
+   "rows_mean": 192.0,
+   "rows_max": 219,
+   "rows_min": 159,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=1024 K=1536": {
+     "fwd": {
+      "v1": {
+       "device_ms": 6.4971,
+       "event_ms": 6.8398,
+       "peak_mib": 24.0
+      },
+      "v3": {
+       "device_ms": 9.178,
+       "event_ms": 9.6879,
+       "peak_mib": 24.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 2.8045,
+       "event_ms": 5.2919,
+       "peak_mib": 31.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 3.1792,
+       "event_ms": 3.2374,
+       "peak_mib": 216.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 3.1675,
+       "event_ms": 3.141,
+       "peak_mib": 216.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 12.3043,
+       "event_ms": 13.1379,
+       "peak_mib": 36.0
+      },
+      "v3": {
+       "device_ms": 10.7143,
+       "event_ms": 11.2904,
+       "peak_mib": 36.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 2.9049,
+       "event_ms": 6.4179,
+       "peak_mib": 42.0,
+       "rel_err": 0.00295
+      },
+      "decoded": {
+       "device_ms": 3.0923,
+       "event_ms": 3.1489,
+       "peak_mib": 228.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 3.1145,
+       "event_ms": 3.1486,
+       "peak_mib": 228.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    },
+    "down N=1536 K=512": {
+     "fwd": {
+      "v1": {
+       "device_ms": 3.4569,
+       "event_ms": 4.0229,
+       "peak_mib": 36.0
+      },
+      "v3": {
+       "device_ms": 4.7888,
+       "event_ms": 5.0744,
+       "peak_mib": 36.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 1.4373,
+       "event_ms": 7.1457,
+       "peak_mib": 39.9,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 1.6369,
+       "event_ms": 1.6628,
+       "peak_mib": 132.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.6465,
+       "event_ms": 1.6692,
+       "peak_mib": 132.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 5.8499,
+       "event_ms": 6.4753,
+       "peak_mib": 12.0
+      },
+      "v3": {
+       "device_ms": 5.2226,
+       "event_ms": 5.5297,
+       "peak_mib": 12.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 1.6107,
+       "event_ms": 6.2352,
+       "peak_mib": 15.9,
+       "rel_err": 0.00316
+      },
+      "decoded": {
+       "device_ms": 1.5321,
+       "event_ms": 1.5736,
+       "peak_mib": 108.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.5276,
+       "event_ms": 1.5581,
+       "peak_mib": 108.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 9.7
+  },
+  {
+   "fam": "qwen3",
+   "seq": 2048,
+   "routing": "uniform",
+   "E": 128,
+   "k": 8,
+   "groups": 128,
+   "rows_mean": 128.0,
+   "rows_max": 163,
+   "rows_min": 101,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=1536 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 19.2007,
+       "event_ms": 20.1435,
+       "peak_mib": 48.0
+      },
+      "v3": {
+       "device_ms": 27.0284,
+       "event_ms": 28.4681,
+       "peak_mib": 48.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 11.1934,
+       "event_ms": 11.5808,
+       "peak_mib": 60.0,
+       "rel_err": 0.00276
+      },
+      "decoded": {
+       "device_ms": 10.3378,
+       "event_ms": 10.5475,
+       "peak_mib": 816.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.5628,
+       "event_ms": 10.6297,
+       "peak_mib": 300.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 33.3506,
+       "event_ms": 35.1055,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 30.3381,
+       "event_ms": 31.9177,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 14.7979,
+       "event_ms": 19.245,
+       "peak_mib": 76.0,
+       "rel_err": 0.00276
+      },
+      "decoded": {
+       "device_ms": 10.3208,
+       "event_ms": 10.5568,
+       "peak_mib": 832.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.504,
+       "event_ms": 10.5819,
+       "peak_mib": 316.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    },
+    "down N=2048 K=768": {
+     "fwd": {
+      "v1": {
+       "device_ms": 9.8791,
+       "event_ms": 10.4147,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 13.8973,
+       "event_ms": 14.5663,
+       "peak_mib": 64.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 7.2808,
+       "event_ms": 12.244,
+       "peak_mib": 70.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 5.4041,
+       "event_ms": 5.4925,
+       "peak_mib": 448.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.4589,
+       "event_ms": 5.5411,
+       "peak_mib": 319.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 16.7175,
+       "event_ms": 17.7372,
+       "peak_mib": 24.0
+      },
+      "v3": {
+       "device_ms": 15.0603,
+       "event_ms": 15.8459,
+       "peak_mib": 24.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 5.0833,
+       "event_ms": 12.8437,
+       "peak_mib": 30.0,
+       "rel_err": 0.0028
+      },
+      "decoded": {
+       "device_ms": 5.3443,
+       "event_ms": 5.4673,
+       "peak_mib": 408.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.366,
+       "event_ms": 5.4298,
+       "peak_mib": 279.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 28.8
+  },
+  {
+   "fam": "nemotron",
+   "seq": 2048,
+   "routing": "uniform",
+   "E": 128,
+   "k": 6,
+   "groups": 128,
+   "rows_mean": 96.0,
+   "rows_max": 119,
+   "rows_min": 70,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "up N=1856 K=2688": {
+     "fwd": {
+      "v1": {
+       "device_ms": 18.6124,
+       "event_ms": 19.5889,
+       "peak_mib": 43.5
+      },
+      "v3": {
+       "device_ms": 24.6574,
+       "event_ms": 25.7632,
+       "peak_mib": 43.5,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 16.3119,
+       "event_ms": 16.5007,
+       "peak_mib": 62.5,
+       "rel_err": 0.00273
+      },
+      "decoded": {
+       "device_ms": 16.0092,
+       "event_ms": 16.3304,
+       "peak_mib": 1261.5,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 16.0245,
+       "event_ms": 16.0657,
+       "peak_mib": 290.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 32.0016,
+       "event_ms": 33.6678,
+       "peak_mib": 63.0
+      },
+      "v3": {
+       "device_ms": 27.9698,
+       "event_ms": 29.385,
+       "peak_mib": 63.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 15.0099,
+       "event_ms": 15.0809,
+       "peak_mib": 82.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 15.4754,
+       "event_ms": 15.8332,
+       "peak_mib": 1281.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 15.7133,
+       "event_ms": 15.7679,
+       "peak_mib": 310.4,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     }
+    },
+    "down N=2688 K=1856": {
+     "fwd": {
+      "v1": {
+       "device_ms": 17.1351,
+       "event_ms": 18.0504,
+       "peak_mib": 63.0
+      },
+      "v3": {
+       "device_ms": 21.8174,
+       "event_ms": 22.875,
+       "peak_mib": 63.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 14.9931,
+       "event_ms": 15.0822,
+       "peak_mib": 82.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 15.3865,
+       "event_ms": 15.7016,
+       "peak_mib": 1281.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 15.5419,
+       "event_ms": 15.6245,
+       "peak_mib": 310.4,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 27.6091,
+       "event_ms": 28.9961,
+       "peak_mib": 43.5
+      },
+      "v3": {
+       "device_ms": 22.6613,
+       "event_ms": 23.862,
+       "peak_mib": 43.5,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 17.4575,
+       "event_ms": 17.5847,
+       "peak_mib": 62.5,
+       "rel_err": 0.00273
+      },
+      "decoded": {
+       "device_ms": 15.3946,
+       "event_ms": 15.7387,
+       "peak_mib": 1261.5,
+       "rel_err": 0.00255,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 15.6701,
+       "event_ms": 15.7235,
+       "peak_mib": 290.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ],
+       "chunks": 5
+      }
+     }
+    }
+   },
+   "wall_s": 33.1
+  },
+  {
+   "fam": "qwen36",
+   "seq": 2048,
+   "routing": "uniform",
+   "E": 256,
+   "k": 8,
+   "groups": 256,
+   "rows_mean": 64.0,
+   "rows_max": 88,
+   "rows_min": 41,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=1024 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 17.2664,
+       "event_ms": 18.043,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 24.3179,
+       "event_ms": 25.6153,
+       "peak_mib": 32.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 11.3691,
+       "event_ms": 23.5924,
+       "peak_mib": 40.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 11.4537,
+       "event_ms": 11.7242,
+       "peak_mib": 1056.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 11.6946,
+       "event_ms": 11.7738,
+       "peak_mib": 288.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 24.9725,
+       "event_ms": 26.2997,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 23.596,
+       "event_ms": 24.6289,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 11.4313,
+       "event_ms": 39.0616,
+       "peak_mib": 72.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 11.5264,
+       "event_ms": 11.8014,
+       "peak_mib": 1088.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 11.7626,
+       "event_ms": 11.8398,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    },
+    "down N=2048 K=512": {
+     "fwd": {
+      "v1": {
+       "device_ms": 8.9011,
+       "event_ms": 9.5954,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 12.7506,
+       "event_ms": 13.4703,
+       "peak_mib": 64.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 6.3254,
+       "event_ms": 22.995,
+       "peak_mib": 68.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 5.891,
+       "event_ms": 6.0343,
+       "peak_mib": 576.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.9691,
+       "event_ms": 6.0469,
+       "peak_mib": 320.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 11.8401,
+       "event_ms": 12.4131,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 11.2751,
+       "event_ms": 11.8241,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 5.7067,
+       "event_ms": 34.1276,
+       "peak_mib": 20.0,
+       "rel_err": 0.00318
+      },
+      "decoded": {
+       "device_ms": 5.7302,
+       "event_ms": 5.8757,
+       "peak_mib": 528.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 5.8092,
+       "event_ms": 5.8839,
+       "peak_mib": 272.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 29.2
+  },
+  {
+   "fam": "mixtral",
+   "seq": 2048,
+   "routing": "uniform",
+   "E": 8,
+   "k": 2,
+   "groups": 8,
+   "rows_mean": 512.0,
+   "rows_max": 532,
+   "rows_min": 492,
+   "groups_under_16_rows": 0,
+   "proj": {
+    "gate_up N=28672 K=4096": {
+     "fwd": {
+      "v1": {
+       "device_ms": 140.5233,
+       "event_ms": 140.3071,
+       "peak_mib": 224.0
+      },
+      "v3": {
+       "device_ms": 195.6334,
+       "event_ms": 195.2818,
+       "peak_mib": 224.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 47.5257,
+       "event_ms": 47.9963,
+       "peak_mib": 672.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 57.7669,
+       "event_ms": 61.2678,
+       "peak_mib": 2016.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 53.5022,
+       "event_ms": 54.0449,
+       "peak_mib": 448.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 8
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 312.0208,
+       "event_ms": 311.5544,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 262.7656,
+       "event_ms": 262.9002,
+       "peak_mib": 32.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 47.8232,
+       "event_ms": 48.5691,
+       "peak_mib": 480.0,
+       "rel_err": 0.00321
+      },
+      "decoded": {
+       "device_ms": 52.1538,
+       "event_ms": 62.0991,
+       "peak_mib": 1824.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 55.2585,
+       "event_ms": 57.0721,
+       "peak_mib": 256.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 8
+      }
+     }
+    },
+    "down N=4096 K=14336": {
+     "fwd": {
+      "v1": {
+       "device_ms": 46.4708,
+       "event_ms": 71.4238,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 99.3165,
+       "event_ms": 99.2404,
+       "peak_mib": 32.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 24.6642,
+       "event_ms": 25.1353,
+       "peak_mib": 256.0,
+       "rel_err": 0.00307
+      },
+      "decoded": {
+       "device_ms": 27.1459,
+       "event_ms": 31.4277,
+       "peak_mib": 928.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 28.3265,
+       "event_ms": 29.4615,
+       "peak_mib": 256.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 153.4258,
+       "event_ms": 153.3538,
+       "peak_mib": 112.0
+      },
+      "v3": {
+       "device_ms": 70.9709,
+       "event_ms": 129.0102,
+       "peak_mib": 112.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 23.6784,
+       "event_ms": 24.4888,
+       "peak_mib": 336.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 24.4779,
+       "event_ms": 30.5372,
+       "peak_mib": 1008.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 28.4712,
+       "event_ms": 30.0575,
+       "peak_mib": 336.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    }
+   },
+   "wall_s": 145.0
+  },
+  {
+   "fam": "olmoe",
+   "seq": 512,
+   "routing": "skew",
+   "E": 64,
+   "k": 8,
+   "groups": 60,
+   "rows_mean": 68.3,
+   "rows_max": 265,
+   "rows_min": 1,
+   "groups_under_16_rows": 21,
+   "proj": {
+    "gate_up N=2048 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 5.1494,
+       "event_ms": 9.6713,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 7.0496,
+       "event_ms": 12.8036,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 6.1546,
+       "event_ms": 6.2238,
+       "peak_mib": 32.0,
+       "rel_err": 0.00298
+      },
+      "decoded": {
+       "device_ms": 4.3274,
+       "event_ms": 5.5756,
+       "peak_mib": 496.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.9644,
+       "event_ms": 5.5942,
+       "peak_mib": 272.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 7.4808,
+       "event_ms": 13.7333,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 7.0047,
+       "event_ms": 12.8345,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 6.286,
+       "event_ms": 6.3067,
+       "peak_mib": 32.0,
+       "rel_err": 0.00298
+      },
+      "decoded": {
+       "device_ms": 4.3378,
+       "event_ms": 5.5924,
+       "peak_mib": 496.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.9807,
+       "event_ms": 5.6135,
+       "peak_mib": 272.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    },
+    "down N=2048 K=1024": {
+     "fwd": {
+      "v1": {
+       "device_ms": 2.5433,
+       "event_ms": 4.8537,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 3.5371,
+       "event_ms": 6.44,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 3.005,
+       "event_ms": 6.2373,
+       "peak_mib": 24.0,
+       "rel_err": 0.00277
+      },
+      "decoded": {
+       "device_ms": 2.1953,
+       "event_ms": 2.8263,
+       "peak_mib": 256.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.1953,
+       "event_ms": 2.827,
+       "peak_mib": 256.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 3.6189,
+       "event_ms": 6.888,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 3.4191,
+       "event_ms": 6.1798,
+       "peak_mib": 8.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 2.5433,
+       "event_ms": 5.341,
+       "peak_mib": 16.0,
+       "rel_err": 0.00277
+      },
+      "decoded": {
+       "device_ms": 2.1786,
+       "event_ms": 2.808,
+       "peak_mib": 248.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.1779,
+       "event_ms": 2.81,
+       "peak_mib": 248.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 12.6
+  },
+  {
+   "fam": "lfm2",
+   "seq": 512,
+   "routing": "skew",
+   "E": 32,
+   "k": 4,
+   "groups": 29,
+   "rows_mean": 70.6,
+   "rows_max": 237,
+   "rows_min": 1,
+   "groups_under_16_rows": 9,
+   "proj": {
+    "gate_up N=3584 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 4.4638,
+       "event_ms": 8.2842,
+       "peak_mib": 14.0
+      },
+      "v3": {
+       "device_ms": 6.0748,
+       "event_ms": 10.748,
+       "peak_mib": 14.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 5.0748,
+       "event_ms": 5.0507,
+       "peak_mib": 42.0,
+       "rel_err": 0.00349
+      },
+      "decoded": {
+       "device_ms": 3.6954,
+       "event_ms": 4.7712,
+       "peak_mib": 420.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.1995,
+       "event_ms": 4.7497,
+       "peak_mib": 266.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 6.3995,
+       "event_ms": 11.8191,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 6.0038,
+       "event_ms": 10.9453,
+       "peak_mib": 8.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 4.8343,
+       "event_ms": 4.8221,
+       "peak_mib": 36.0,
+       "rel_err": 0.00334
+      },
+      "decoded": {
+       "device_ms": 3.7173,
+       "event_ms": 4.7768,
+       "peak_mib": 414.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.8051,
+       "event_ms": 4.7961,
+       "peak_mib": 260.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    },
+    "down N=2048 K=1792": {
+     "fwd": {
+      "v1": {
+       "device_ms": 2.2082,
+       "event_ms": 3.7753,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 3.0234,
+       "event_ms": 5.3442,
+       "peak_mib": 8.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 2.5805,
+       "event_ms": 2.7842,
+       "peak_mib": 22.9,
+       "rel_err": 0.00295
+      },
+      "decoded": {
+       "device_ms": 1.8796,
+       "event_ms": 2.417,
+       "peak_mib": 212.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.8795,
+       "event_ms": 2.4203,
+       "peak_mib": 212.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 3.1735,
+       "event_ms": 6.1069,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 2.9942,
+       "event_ms": 5.3844,
+       "peak_mib": 8.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 2.7319,
+       "event_ms": 2.7556,
+       "peak_mib": 22.0,
+       "rel_err": 0.0031
+      },
+      "decoded": {
+       "device_ms": 1.8773,
+       "event_ms": 2.4145,
+       "peak_mib": 212.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.8751,
+       "event_ms": 2.4171,
+       "peak_mib": 212.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 11.8
+  },
+  {
+   "fam": "ernie",
+   "seq": 512,
+   "routing": "skew",
+   "E": 64,
+   "k": 6,
+   "groups": 57,
+   "rows_mean": 53.9,
+   "rows_max": 222,
+   "rows_min": 1,
+   "groups_under_16_rows": 22,
+   "proj": {
+    "gate_up N=3072 K=2560": {
+     "fwd": {
+      "v1": {
+       "device_ms": 8.7607,
+       "event_ms": 15.9041,
+       "peak_mib": 18.0
+      },
+      "v3": {
+       "device_ms": 12.0768,
+       "event_ms": 21.9217,
+       "peak_mib": 18.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 9.4597,
+       "event_ms": 9.5364,
+       "peak_mib": 49.0,
+       "rel_err": 0.00274
+      },
+      "decoded": {
+       "device_ms": 7.5245,
+       "event_ms": 9.7016,
+       "peak_mib": 874.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 9.0094,
+       "event_ms": 9.5731,
+       "peak_mib": 273.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 11.6171,
+       "event_ms": 21.0681,
+       "peak_mib": 15.0
+      },
+      "v3": {
+       "device_ms": 10.96,
+       "event_ms": 19.9157,
+       "peak_mib": 15.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 9.6659,
+       "event_ms": 9.76,
+       "peak_mib": 45.0,
+       "rel_err": 0.00283
+      },
+      "decoded": {
+       "device_ms": 7.5651,
+       "event_ms": 9.7275,
+       "peak_mib": 871.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 9.1425,
+       "event_ms": 9.6837,
+       "peak_mib": 270.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    },
+    "down N=2560 K=1536": {
+     "fwd": {
+      "v1": {
+       "device_ms": 3.9967,
+       "event_ms": 7.3573,
+       "peak_mib": 15.9
+      },
+      "v3": {
+       "device_ms": 5.5681,
+       "event_ms": 10.1918,
+       "peak_mib": 15.9,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 5.0462,
+       "event_ms": 5.6923,
+       "peak_mib": 31.4,
+       "rel_err": 0.0028
+      },
+      "decoded": {
+       "device_ms": 3.7467,
+       "event_ms": 4.835,
+       "peak_mib": 443.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.2938,
+       "event_ms": 4.8508,
+       "peak_mib": 270.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 5.5241,
+       "event_ms": 10.2551,
+       "peak_mib": 10.0
+      },
+      "v3": {
+       "device_ms": 5.2074,
+       "event_ms": 9.4607,
+       "peak_mib": 10.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 4.8869,
+       "event_ms": 4.9885,
+       "peak_mib": 25.5,
+       "rel_err": 0.00297
+      },
+      "decoded": {
+       "device_ms": 3.7915,
+       "event_ms": 4.8861,
+       "peak_mib": 438.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.3495,
+       "event_ms": 4.9189,
+       "peak_mib": 265.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 17.3
+  },
+  {
+   "fam": "graniteh",
+   "seq": 512,
+   "routing": "skew",
+   "E": 64,
+   "k": 6,
+   "groups": 57,
+   "rows_mean": 53.9,
+   "rows_max": 222,
+   "rows_min": 1,
+   "groups_under_16_rows": 22,
+   "proj": {
+    "gate_up N=1024 K=1536": {
+     "fwd": {
+      "v1": {
+       "device_ms": 1.608,
+       "event_ms": 2.8557,
+       "peak_mib": 6.0
+      },
+      "v3": {
+       "device_ms": 2.2415,
+       "event_ms": 4.0807,
+       "peak_mib": 6.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 1.8538,
+       "event_ms": 5.1016,
+       "peak_mib": 12.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 1.5057,
+       "event_ms": 1.9453,
+       "peak_mib": 177.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.5044,
+       "event_ms": 1.9438,
+       "peak_mib": 177.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 2.2363,
+       "event_ms": 4.2893,
+       "peak_mib": 10.0
+      },
+      "v3": {
+       "device_ms": 2.0937,
+       "event_ms": 3.7567,
+       "peak_mib": 10.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 1.6532,
+       "event_ms": 5.9049,
+       "peak_mib": 16.9,
+       "rel_err": 0.00261
+      },
+      "decoded": {
+       "device_ms": 1.5239,
+       "event_ms": 1.9644,
+       "peak_mib": 181.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.5227,
+       "event_ms": 1.9661,
+       "peak_mib": 181.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    },
+    "down N=1536 K=512": {
+     "fwd": {
+      "v1": {
+       "device_ms": 0.7843,
+       "event_ms": 1.5839,
+       "peak_mib": 9.0
+      },
+      "v3": {
+       "device_ms": 1.1202,
+       "event_ms": 2.0992,
+       "peak_mib": 9.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 0.9298,
+       "event_ms": 5.9103,
+       "peak_mib": 12.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 0.7771,
+       "event_ms": 0.9948,
+       "peak_mib": 95.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 0.7733,
+       "event_ms": 1.0017,
+       "peak_mib": 95.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 1.0704,
+       "event_ms": 2.0469,
+       "peak_mib": 3.0
+      },
+      "v3": {
+       "device_ms": 0.9877,
+       "event_ms": 1.8029,
+       "peak_mib": 3.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 1.0236,
+       "event_ms": 5.5548,
+       "peak_mib": 6.0,
+       "rel_err": 0.00292
+      },
+      "decoded": {
+       "device_ms": 0.7547,
+       "event_ms": 0.9682,
+       "peak_mib": 89.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 0.7543,
+       "event_ms": 0.9758,
+       "peak_mib": 89.0,
+       "rel_err": 0.00254,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 5.6
+  },
+  {
+   "fam": "qwen3",
+   "seq": 512,
+   "routing": "skew",
+   "E": 128,
+   "k": 8,
+   "groups": 111,
+   "rows_mean": 36.9,
+   "rows_max": 177,
+   "rows_min": 1,
+   "groups_under_16_rows": 51,
+   "proj": {
+    "gate_up N=1536 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 5.3871,
+       "event_ms": 9.7666,
+       "peak_mib": 12.0
+      },
+      "v3": {
+       "device_ms": 7.3707,
+       "event_ms": 13.4454,
+       "peak_mib": 12.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 7.2598,
+       "event_ms": 10.6174,
+       "peak_mib": 24.0,
+       "rel_err": 0.00278
+      },
+      "decoded": {
+       "device_ms": 5.4504,
+       "event_ms": 7.0406,
+       "peak_mib": 678.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 6.4768,
+       "event_ms": 7.0527,
+       "peak_mib": 264.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 3
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 6.8158,
+       "event_ms": 12.4585,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 6.3823,
+       "event_ms": 11.6193,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 7.7912,
+       "event_ms": 10.8572,
+       "peak_mib": 28.0,
+       "rel_err": 0.00286
+      },
+      "decoded": {
+       "device_ms": 5.4485,
+       "event_ms": 7.0421,
+       "peak_mib": 682.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 6.4752,
+       "event_ms": 7.0578,
+       "peak_mib": 268.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 3
+      }
+     }
+    },
+    "down N=2048 K=768": {
+     "fwd": {
+      "v1": {
+       "device_ms": 2.7172,
+       "event_ms": 5.0271,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 3.8905,
+       "event_ms": 7.1363,
+       "peak_mib": 16.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 3.5277,
+       "event_ms": 9.9368,
+       "peak_mib": 22.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 2.8109,
+       "event_ms": 3.6141,
+       "peak_mib": 350.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 3.1989,
+       "event_ms": 3.6284,
+       "peak_mib": 271.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 3.3569,
+       "event_ms": 6.342,
+       "peak_mib": 6.0
+      },
+      "v3": {
+       "device_ms": 3.1854,
+       "event_ms": 5.759,
+       "peak_mib": 6.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 3.394,
+       "event_ms": 10.4177,
+       "peak_mib": 12.0,
+       "rel_err": 0.00278
+      },
+      "decoded": {
+       "device_ms": 2.7866,
+       "event_ms": 3.5919,
+       "peak_mib": 340.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 3.1665,
+       "event_ms": 3.5952,
+       "peak_mib": 261.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 14.1
+  },
+  {
+   "fam": "nemotron",
+   "seq": 512,
+   "routing": "skew",
+   "E": 128,
+   "k": 6,
+   "groups": 108,
+   "rows_mean": 28.4,
+   "rows_max": 148,
+   "rows_min": 1,
+   "groups_under_16_rows": 55,
+   "proj": {
+    "up N=1856 K=2688": {
+     "fwd": {
+      "v1": {
+       "device_ms": 6.2675,
+       "event_ms": 11.3789,
+       "peak_mib": 10.9
+      },
+      "v3": {
+       "device_ms": 9.4407,
+       "event_ms": 17.2107,
+       "peak_mib": 10.9,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 12.0701,
+       "event_ms": 12.2034,
+       "peak_mib": 29.9,
+       "rel_err": 0.0029
+      },
+      "decoded": {
+       "device_ms": 8.4688,
+       "event_ms": 10.9231,
+       "peak_mib": 1038.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.5513,
+       "event_ms": 11.0969,
+       "peak_mib": 258.3,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 7.1851,
+       "event_ms": 13.0663,
+       "peak_mib": 15.8
+      },
+      "v3": {
+       "device_ms": 6.5228,
+       "event_ms": 11.7703,
+       "peak_mib": 15.8,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 11.4835,
+       "event_ms": 11.6021,
+       "peak_mib": 34.8,
+       "rel_err": 0.00264
+      },
+      "decoded": {
+       "device_ms": 8.3991,
+       "event_ms": 10.8384,
+       "peak_mib": 1043.8,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.4231,
+       "event_ms": 10.9488,
+       "peak_mib": 263.2,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     }
+    },
+    "down N=2688 K=1856": {
+     "fwd": {
+      "v1": {
+       "device_ms": 5.5807,
+       "event_ms": 10.0753,
+       "peak_mib": 15.9
+      },
+      "v3": {
+       "device_ms": 8.3628,
+       "event_ms": 15.3144,
+       "peak_mib": 15.9,
+       "rel_err": 0.00254
+      },
+      "dense": {
+       "device_ms": 11.0541,
+       "event_ms": 12.2004,
+       "peak_mib": 34.9,
+       "rel_err": 0.00261
+      },
+      "decoded": {
+       "device_ms": 8.3052,
+       "event_ms": 10.7157,
+       "peak_mib": 1043.9,
+       "rel_err": 0.00254,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.17,
+       "event_ms": 10.7002,
+       "peak_mib": 263.3,
+       "rel_err": 0.00254,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 6.2515,
+       "event_ms": 11.2374,
+       "peak_mib": 10.9
+      },
+      "v3": {
+       "device_ms": 5.5704,
+       "event_ms": 9.9179,
+       "peak_mib": 10.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 12.0917,
+       "event_ms": 13.5792,
+       "peak_mib": 30.8,
+       "rel_err": 0.00292
+      },
+      "decoded": {
+       "device_ms": 8.3337,
+       "event_ms": 10.7666,
+       "peak_mib": 1038.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 10.2465,
+       "event_ms": 10.7804,
+       "peak_mib": 258.3,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     }
+    }
+   },
+   "wall_s": 20.4
+  },
+  {
+   "fam": "qwen36",
+   "seq": 512,
+   "routing": "skew",
+   "E": 256,
+   "k": 8,
+   "groups": 176,
+   "rows_mean": 23.3,
+   "rows_max": 106,
+   "rows_min": 1,
+   "groups_under_16_rows": 95,
+   "proj": {
+    "gate_up N=1024 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 5.6149,
+       "event_ms": 8.6905,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 6.5811,
+       "event_ms": 12.0612,
+       "peak_mib": 8.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 7.4166,
+       "event_ms": 17.0493,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255
+      },
+      "decoded": {
+       "device_ms": 5.4585,
+       "event_ms": 7.0674,
+       "peak_mib": 712.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 6.543,
+       "event_ms": 7.1155,
+       "peak_mib": 264.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 3
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 5.5419,
+       "event_ms": 10.1771,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 5.189,
+       "event_ms": 9.4242,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 7.2607,
+       "event_ms": 26.3459,
+       "peak_mib": 24.0,
+       "rel_err": 0.00259
+      },
+      "decoded": {
+       "device_ms": 5.4818,
+       "event_ms": 7.0921,
+       "peak_mib": 720.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 6.5283,
+       "event_ms": 7.1037,
+       "peak_mib": 272.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 3
+      }
+     }
+    },
+    "down N=2048 K=512": {
+     "fwd": {
+      "v1": {
+       "device_ms": 2.3489,
+       "event_ms": 4.2414,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 3.3731,
+       "event_ms": 6.2028,
+       "peak_mib": 16.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 3.5042,
+       "event_ms": 16.3364,
+       "peak_mib": 20.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 2.774,
+       "event_ms": 3.5882,
+       "peak_mib": 368.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 3.1695,
+       "event_ms": 3.6032,
+       "peak_mib": 272.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 2.5663,
+       "event_ms": 4.8162,
+       "peak_mib": 4.0
+      },
+      "v3": {
+       "device_ms": 2.4614,
+       "event_ms": 4.4452,
+       "peak_mib": 4.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 3.5129,
+       "event_ms": 19.2679,
+       "peak_mib": 8.0,
+       "rel_err": 0.0031
+      },
+      "decoded": {
+       "device_ms": 2.7333,
+       "event_ms": 3.5393,
+       "peak_mib": 356.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 3.1231,
+       "event_ms": 3.5537,
+       "peak_mib": 260.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 17.7
+  },
+  {
+   "fam": "mixtral",
+   "seq": 512,
+   "routing": "skew",
+   "E": 8,
+   "k": 2,
+   "groups": 8,
+   "rows_mean": 128.0,
+   "rows_max": 353,
+   "rows_min": 2,
+   "groups_under_16_rows": 1,
+   "proj": {
+    "gate_up N=28672 K=4096": {
+     "fwd": {
+      "v1": {
+       "device_ms": 27.2496,
+       "event_ms": 49.549,
+       "peak_mib": 56.0
+      },
+      "v3": {
+       "device_ms": 38.889,
+       "event_ms": 70.7021,
+       "peak_mib": 56.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 21.5375,
+       "event_ms": 22.7958,
+       "peak_mib": 504.0,
+       "rel_err": 0.0026
+      },
+      "decoded": {
+       "device_ms": 19.2159,
+       "event_ms": 24.6232,
+       "peak_mib": 1848.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 22.6291,
+       "event_ms": 23.2286,
+       "peak_mib": 280.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 8
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 87.8778,
+       "event_ms": 87.7777,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 42.4061,
+       "event_ms": 76.9814,
+       "peak_mib": 8.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 22.0213,
+       "event_ms": 22.6954,
+       "peak_mib": 456.0,
+       "rel_err": 0.00353
+      },
+      "decoded": {
+       "device_ms": 20.4658,
+       "event_ms": 26.084,
+       "peak_mib": 1800.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 27.313,
+       "event_ms": 28.2337,
+       "peak_mib": 232.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        128,
+        128,
+        32,
+        8,
+        3
+       ],
+       "chunks": 8
+      }
+     }
+    },
+    "down N=4096 K=14336": {
+     "fwd": {
+      "v1": {
+       "device_ms": 13.6445,
+       "event_ms": 24.8054,
+       "peak_mib": 8.0
+      },
+      "v3": {
+       "device_ms": 35.247,
+       "event_ms": 35.2354,
+       "peak_mib": 8.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 11.3206,
+       "event_ms": 11.7727,
+       "peak_mib": 232.0,
+       "rel_err": 0.00309
+      },
+      "decoded": {
+       "device_ms": 9.2442,
+       "event_ms": 11.78,
+       "peak_mib": 904.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 11.5663,
+       "event_ms": 12.2105,
+       "peak_mib": 232.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 23.8562,
+       "event_ms": 43.3129,
+       "peak_mib": 28.0
+      },
+      "v3": {
+       "device_ms": 20.9682,
+       "event_ms": 38.1356,
+       "peak_mib": 28.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 11.2571,
+       "event_ms": 11.6082,
+       "peak_mib": 252.0,
+       "rel_err": 0.00259
+      },
+      "decoded": {
+       "device_ms": 9.8165,
+       "event_ms": 12.6597,
+       "peak_mib": 924.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 11.1829,
+       "event_ms": 11.7659,
+       "peak_mib": 252.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    }
+   },
+   "wall_s": 48.9
+  },
+  {
+   "fam": "olmoe",
+   "seq": 2048,
+   "routing": "skew",
+   "E": 64,
+   "k": 8,
+   "groups": 64,
+   "rows_mean": 256.0,
+   "rows_max": 975,
+   "rows_min": 1,
+   "groups_under_16_rows": 12,
+   "proj": {
+    "gate_up N=2048 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 23.8179,
+       "event_ms": 23.8083,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 18.5366,
+       "event_ms": 33.5094,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 10.4256,
+       "event_ms": 10.6693,
+       "peak_mib": 80.0,
+       "rel_err": 0.00292
+      },
+      "decoded": {
+       "device_ms": 8.2634,
+       "event_ms": 10.2287,
+       "peak_mib": 576.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 9.468,
+       "event_ms": 10.5268,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 24.3519,
+       "event_ms": 44.2747,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 21.5093,
+       "event_ms": 39.1454,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 10.4685,
+       "event_ms": 10.5507,
+       "peak_mib": 80.0,
+       "rel_err": 0.00292
+      },
+      "decoded": {
+       "device_ms": 8.1089,
+       "event_ms": 10.1375,
+       "peak_mib": 576.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 9.3107,
+       "event_ms": 10.3158,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    },
+    "down N=2048 K=1024": {
+     "fwd": {
+      "v1": {
+       "device_ms": 6.7194,
+       "event_ms": 12.3679,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 9.3845,
+       "event_ms": 17.0682,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 5.2153,
+       "event_ms": 6.9081,
+       "peak_mib": 72.0,
+       "rel_err": 0.00288
+      },
+      "decoded": {
+       "device_ms": 4.1781,
+       "event_ms": 5.1662,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.2428,
+       "event_ms": 5.4714,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 12.0053,
+       "event_ms": 21.8708,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 10.6315,
+       "event_ms": 19.3408,
+       "peak_mib": 32.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 4.6032,
+       "event_ms": 6.0941,
+       "peak_mib": 40.0,
+       "rel_err": 0.00306
+      },
+      "decoded": {
+       "device_ms": 3.982,
+       "event_ms": 4.9224,
+       "peak_mib": 288.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.0679,
+       "event_ms": 5.2042,
+       "peak_mib": 288.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 26.0
+  },
+  {
+   "fam": "lfm2",
+   "seq": 2048,
+   "routing": "skew",
+   "E": 32,
+   "k": 4,
+   "groups": 32,
+   "rows_mean": 256.0,
+   "rows_max": 977,
+   "rows_min": 2,
+   "groups_under_16_rows": 7,
+   "proj": {
+    "gate_up N=3584 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 11.5822,
+       "event_ms": 21.0828,
+       "peak_mib": 56.0
+      },
+      "v3": {
+       "device_ms": 16.4034,
+       "event_ms": 29.7602,
+       "peak_mib": 56.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 8.8432,
+       "event_ms": 9.1422,
+       "peak_mib": 84.0,
+       "rel_err": 0.00282
+      },
+      "decoded": {
+       "device_ms": 7.2086,
+       "event_ms": 8.957,
+       "peak_mib": 504.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 8.291,
+       "event_ms": 9.2343,
+       "peak_mib": 308.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 21.4596,
+       "event_ms": 39.0228,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 19.116,
+       "event_ms": 34.7903,
+       "peak_mib": 32.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 8.6056,
+       "event_ms": 8.8391,
+       "peak_mib": 60.0,
+       "rel_err": 0.00306
+      },
+      "decoded": {
+       "device_ms": 7.0184,
+       "event_ms": 8.8487,
+       "peak_mib": 480.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 8.0717,
+       "event_ms": 8.9694,
+       "peak_mib": 284.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    },
+    "down N=2048 K=1792": {
+     "fwd": {
+      "v1": {
+       "device_ms": 5.7964,
+       "event_ms": 10.7514,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 8.1725,
+       "event_ms": 14.8281,
+       "peak_mib": 32.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 4.73,
+       "event_ms": 4.699,
+       "peak_mib": 46.0,
+       "rel_err": 0.00296
+      },
+      "decoded": {
+       "device_ms": 3.6232,
+       "event_ms": 4.4829,
+       "peak_mib": 256.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 3.6827,
+       "event_ms": 4.6546,
+       "peak_mib": 256.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 10.8539,
+       "event_ms": 19.7617,
+       "peak_mib": 28.0
+      },
+      "v3": {
+       "device_ms": 9.5907,
+       "event_ms": 17.4434,
+       "peak_mib": 28.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 4.8375,
+       "event_ms": 4.7683,
+       "peak_mib": 42.0,
+       "rel_err": 0.0029
+      },
+      "decoded": {
+       "device_ms": 3.5221,
+       "event_ms": 4.4299,
+       "peak_mib": 252.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 3.7653,
+       "event_ms": 4.4487,
+       "peak_mib": 252.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 21.4
+  },
+  {
+   "fam": "ernie",
+   "seq": 2048,
+   "routing": "skew",
+   "E": 64,
+   "k": 6,
+   "groups": 64,
+   "rows_mean": 192.0,
+   "rows_max": 825,
+   "rows_min": 1,
+   "groups_under_16_rows": 17,
+   "proj": {
+    "gate_up N=3072 K=2560": {
+     "fwd": {
+      "v1": {
+       "device_ms": 24.2626,
+       "event_ms": 44.0775,
+       "peak_mib": 72.0
+      },
+      "v3": {
+       "device_ms": 32.2686,
+       "event_ms": 58.6298,
+       "peak_mib": 72.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 16.0866,
+       "event_ms": 16.3194,
+       "peak_mib": 102.9,
+       "rel_err": 0.003
+      },
+      "decoded": {
+       "device_ms": 13.2822,
+       "event_ms": 16.7955,
+       "peak_mib": 1032.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 16.0897,
+       "event_ms": 17.0037,
+       "peak_mib": 327.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 37.1815,
+       "event_ms": 67.606,
+       "peak_mib": 60.0
+      },
+      "v3": {
+       "device_ms": 32.4304,
+       "event_ms": 58.8359,
+       "peak_mib": 60.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 16.1171,
+       "event_ms": 16.3333,
+       "peak_mib": 90.9,
+       "rel_err": 0.0029
+      },
+      "decoded": {
+       "device_ms": 12.9793,
+       "event_ms": 16.3569,
+       "peak_mib": 1020.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 15.6814,
+       "event_ms": 16.566,
+       "peak_mib": 315.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    },
+    "down N=2560 K=1536": {
+     "fwd": {
+      "v1": {
+       "device_ms": 10.0966,
+       "event_ms": 18.3679,
+       "peak_mib": 60.0
+      },
+      "v3": {
+       "device_ms": 14.2957,
+       "event_ms": 25.9782,
+       "peak_mib": 60.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 8.6638,
+       "event_ms": 8.828,
+       "peak_mib": 75.5,
+       "rel_err": 0.00285
+      },
+      "decoded": {
+       "device_ms": 6.7008,
+       "event_ms": 8.3551,
+       "peak_mib": 540.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 7.6212,
+       "event_ms": 8.5399,
+       "peak_mib": 315.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 17.8959,
+       "event_ms": 32.5303,
+       "peak_mib": 36.0
+      },
+      "v3": {
+       "device_ms": 16.045,
+       "event_ms": 29.173,
+       "peak_mib": 36.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 8.3452,
+       "event_ms": 8.5392,
+       "peak_mib": 51.5,
+       "rel_err": 0.00306
+      },
+      "decoded": {
+       "device_ms": 6.5033,
+       "event_ms": 8.1084,
+       "peak_mib": 516.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 7.3615,
+       "event_ms": 8.2079,
+       "peak_mib": 291.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 38.5
+  },
+  {
+   "fam": "graniteh",
+   "seq": 2048,
+   "routing": "skew",
+   "E": 64,
+   "k": 6,
+   "groups": 64,
+   "rows_mean": 192.0,
+   "rows_max": 825,
+   "rows_min": 1,
+   "groups_under_16_rows": 17,
+   "proj": {
+    "gate_up N=1024 K=1536": {
+     "fwd": {
+      "v1": {
+       "device_ms": 4.0455,
+       "event_ms": 7.5175,
+       "peak_mib": 24.0
+      },
+      "v3": {
+       "device_ms": 5.7234,
+       "event_ms": 10.4001,
+       "peak_mib": 24.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 3.1465,
+       "event_ms": 6.0046,
+       "peak_mib": 31.0,
+       "rel_err": 0.00302
+      },
+      "decoded": {
+       "device_ms": 2.627,
+       "event_ms": 3.2272,
+       "peak_mib": 216.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.658,
+       "event_ms": 3.3497,
+       "peak_mib": 216.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 7.2074,
+       "event_ms": 13.3246,
+       "peak_mib": 36.0
+      },
+      "v3": {
+       "device_ms": 6.4777,
+       "event_ms": 11.8011,
+       "peak_mib": 36.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 2.9891,
+       "event_ms": 5.8981,
+       "peak_mib": 42.0,
+       "rel_err": 0.00296
+      },
+      "decoded": {
+       "device_ms": 2.6406,
+       "event_ms": 3.2894,
+       "peak_mib": 228.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 2.5715,
+       "event_ms": 3.3155,
+       "peak_mib": 228.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    },
+    "down N=1536 K=512": {
+     "fwd": {
+      "v1": {
+       "device_ms": 2.1495,
+       "event_ms": 4.2637,
+       "peak_mib": 36.0
+      },
+      "v3": {
+       "device_ms": 3.0374,
+       "event_ms": 5.5666,
+       "peak_mib": 36.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 1.7157,
+       "event_ms": 6.4772,
+       "peak_mib": 39.9,
+       "rel_err": 0.00292
+      },
+      "decoded": {
+       "device_ms": 1.365,
+       "event_ms": 1.6675,
+       "peak_mib": 132.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.3951,
+       "event_ms": 1.776,
+       "peak_mib": 132.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 3.4516,
+       "event_ms": 6.5982,
+       "peak_mib": 12.0
+      },
+      "v3": {
+       "device_ms": 3.1717,
+       "event_ms": 5.7836,
+       "peak_mib": 12.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 1.6327,
+       "event_ms": 5.9398,
+       "peak_mib": 15.9,
+       "rel_err": 0.00281
+      },
+      "decoded": {
+       "device_ms": 1.2877,
+       "event_ms": 1.5754,
+       "peak_mib": 108.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 1.2614,
+       "event_ms": 1.5895,
+       "peak_mib": 108.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 1
+      }
+     }
+    }
+   },
+   "wall_s": 10.0
+  },
+  {
+   "fam": "qwen3",
+   "seq": 2048,
+   "routing": "skew",
+   "E": 128,
+   "k": 8,
+   "groups": 121,
+   "rows_mean": 135.4,
+   "rows_max": 630,
+   "rows_min": 1,
+   "groups_under_16_rows": 41,
+   "proj": {
+    "gate_up N=1536 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 12.1658,
+       "event_ms": 22.0672,
+       "peak_mib": 48.0
+      },
+      "v3": {
+       "device_ms": 17.3325,
+       "event_ms": 31.4399,
+       "peak_mib": 48.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 10.7719,
+       "event_ms": 15.1892,
+       "peak_mib": 60.0,
+       "rel_err": 0.00318
+      },
+      "decoded": {
+       "device_ms": 8.2831,
+       "event_ms": 10.4389,
+       "peak_mib": 774.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 9.7883,
+       "event_ms": 10.5996,
+       "peak_mib": 300.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 3
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 19.7788,
+       "event_ms": 35.9661,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 18.3181,
+       "event_ms": 33.3293,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 11.6293,
+       "event_ms": 11.8135,
+       "peak_mib": 76.0,
+       "rel_err": 0.003
+      },
+      "decoded": {
+       "device_ms": 8.2118,
+       "event_ms": 10.3386,
+       "peak_mib": 790.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 9.6461,
+       "event_ms": 10.4517,
+       "peak_mib": 316.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 3
+      }
+     }
+    },
+    "down N=2048 K=768": {
+     "fwd": {
+      "v1": {
+       "device_ms": 6.2437,
+       "event_ms": 11.4976,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 8.8907,
+       "event_ms": 16.1542,
+       "peak_mib": 64.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 5.3491,
+       "event_ms": 10.3617,
+       "peak_mib": 70.0,
+       "rel_err": 0.00272
+      },
+      "decoded": {
+       "device_ms": 4.3606,
+       "event_ms": 5.4346,
+       "peak_mib": 428.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.9737,
+       "event_ms": 5.6743,
+       "peak_mib": 319.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 9.8859,
+       "event_ms": 18.0644,
+       "peak_mib": 24.0
+      },
+      "v3": {
+       "device_ms": 9.1528,
+       "event_ms": 16.6944,
+       "peak_mib": 24.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 4.9014,
+       "event_ms": 10.4931,
+       "peak_mib": 30.0,
+       "rel_err": 0.00286
+      },
+      "decoded": {
+       "device_ms": 4.16,
+       "event_ms": 5.2769,
+       "peak_mib": 388.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.773,
+       "event_ms": 5.3833,
+       "peak_mib": 279.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 25.0
+  },
+  {
+   "fam": "nemotron",
+   "seq": 2048,
+   "routing": "skew",
+   "E": 128,
+   "k": 6,
+   "groups": 119,
+   "rows_mean": 103.3,
+   "rows_max": 502,
+   "rows_min": 1,
+   "groups_under_16_rows": 46,
+   "proj": {
+    "up N=1856 K=2688": {
+     "fwd": {
+      "v1": {
+       "device_ms": 14.7891,
+       "event_ms": 26.8195,
+       "peak_mib": 43.5
+      },
+      "v3": {
+       "device_ms": 19.451,
+       "event_ms": 35.3409,
+       "peak_mib": 43.5,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 17.1961,
+       "event_ms": 17.3723,
+       "peak_mib": 62.5,
+       "rel_err": 0.00308
+      },
+      "decoded": {
+       "device_ms": 12.1521,
+       "event_ms": 15.4854,
+       "peak_mib": 1175.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 14.9436,
+       "event_ms": 15.6212,
+       "peak_mib": 290.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 19.1688,
+       "event_ms": 34.845,
+       "peak_mib": 63.0
+      },
+      "v3": {
+       "device_ms": 17.0529,
+       "event_ms": 30.9883,
+       "peak_mib": 63.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 15.9114,
+       "event_ms": 16.027,
+       "peak_mib": 82.0,
+       "rel_err": 0.00305
+      },
+      "decoded": {
+       "device_ms": 11.8487,
+       "event_ms": 15.1392,
+       "peak_mib": 1195.4,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 14.5561,
+       "event_ms": 15.1791,
+       "peak_mib": 310.4,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     }
+    },
+    "down N=2688 K=1856": {
+     "fwd": {
+      "v1": {
+       "device_ms": 13.5358,
+       "event_ms": 24.5784,
+       "peak_mib": 63.0
+      },
+      "v3": {
+       "device_ms": 17.1053,
+       "event_ms": 31.0904,
+       "peak_mib": 63.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 15.8943,
+       "event_ms": 15.9887,
+       "peak_mib": 82.0,
+       "rel_err": 0.00304
+      },
+      "decoded": {
+       "device_ms": 11.8811,
+       "event_ms": 15.0702,
+       "peak_mib": 1195.4,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 14.5737,
+       "event_ms": 15.2745,
+       "peak_mib": 310.4,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 16.4486,
+       "event_ms": 29.9054,
+       "peak_mib": 43.5
+      },
+      "v3": {
+       "device_ms": 13.8311,
+       "event_ms": 25.1368,
+       "peak_mib": 43.5,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 17.2933,
+       "event_ms": 17.4338,
+       "peak_mib": 62.5,
+       "rel_err": 0.00308
+      },
+      "decoded": {
+       "device_ms": 11.866,
+       "event_ms": 15.1571,
+       "peak_mib": 1175.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 14.524,
+       "event_ms": 15.2213,
+       "peak_mib": 290.9,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 5
+      }
+     }
+    }
+   },
+   "wall_s": 35.2
+  },
+  {
+   "fam": "qwen36",
+   "seq": 2048,
+   "routing": "skew",
+   "E": 256,
+   "k": 8,
+   "groups": 221,
+   "rows_mean": 74.1,
+   "rows_max": 381,
+   "rows_min": 1,
+   "groups_under_16_rows": 92,
+   "proj": {
+    "gate_up N=1024 K=2048": {
+     "fwd": {
+      "v1": {
+       "device_ms": 10.3287,
+       "event_ms": 18.7364,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 14.0408,
+       "event_ms": 25.5571,
+       "peak_mib": 32.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 10.6211,
+       "event_ms": 23.2028,
+       "peak_mib": 40.0,
+       "rel_err": 0.00293
+      },
+      "decoded": {
+       "device_ms": 8.124,
+       "event_ms": 10.4432,
+       "peak_mib": 916.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 9.9674,
+       "event_ms": 10.5791,
+       "peak_mib": 288.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 14.8259,
+       "event_ms": 26.9532,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 13.9081,
+       "event_ms": 25.2635,
+       "peak_mib": 64.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 10.9714,
+       "event_ms": 20.8514,
+       "peak_mib": 72.0,
+       "rel_err": 0.00276
+      },
+      "decoded": {
+       "device_ms": 8.1821,
+       "event_ms": 10.5128,
+       "peak_mib": 948.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 9.9469,
+       "event_ms": 10.5504,
+       "peak_mib": 320.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    },
+    "down N=2048 K=512": {
+     "fwd": {
+      "v1": {
+       "device_ms": 5.0879,
+       "event_ms": 9.3701,
+       "peak_mib": 64.0
+      },
+      "v3": {
+       "device_ms": 7.2326,
+       "event_ms": 13.1355,
+       "peak_mib": 64.0,
+       "rel_err": 0.00256
+      },
+      "dense": {
+       "device_ms": 5.9787,
+       "event_ms": 22.1263,
+       "peak_mib": 68.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 4.2481,
+       "event_ms": 5.4581,
+       "peak_mib": 506.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.8259,
+       "event_ms": 5.4315,
+       "peak_mib": 320.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 7.0255,
+       "event_ms": 12.865,
+       "peak_mib": 16.0
+      },
+      "v3": {
+       "device_ms": 6.6792,
+       "event_ms": 12.1335,
+       "peak_mib": 16.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        32,
+        64,
+        64,
+        2
+       ]
+      },
+      "dense": {
+       "device_ms": 5.1424,
+       "event_ms": 33.0812,
+       "peak_mib": 20.0,
+       "rel_err": 0.00294
+      },
+      "decoded": {
+       "device_ms": 4.049,
+       "event_ms": 5.2184,
+       "peak_mib": 458.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 4.6375,
+       "event_ms": 5.2365,
+       "peak_mib": 272.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 2
+      }
+     }
+    }
+   },
+   "wall_s": 28.7
+  },
+  {
+   "fam": "mixtral",
+   "seq": 2048,
+   "routing": "skew",
+   "E": 8,
+   "k": 2,
+   "groups": 8,
+   "rows_mean": 512.0,
+   "rows_max": 1445,
+   "rows_min": 11,
+   "groups_under_16_rows": 1,
+   "proj": {
+    "gate_up N=28672 K=4096": {
+     "fwd": {
+      "v1": {
+       "device_ms": 140.9429,
+       "event_ms": 140.793,
+       "peak_mib": 224.0
+      },
+      "v3": {
+       "device_ms": 196.1005,
+       "event_ms": 195.8636,
+       "peak_mib": 224.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 45.4077,
+       "event_ms": 47.6216,
+       "peak_mib": 672.0,
+       "rel_err": 0.00256
+      },
+      "decoded": {
+       "device_ms": 45.3088,
+       "event_ms": 61.256,
+       "peak_mib": 2016.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 55.5621,
+       "event_ms": 58.4108,
+       "peak_mib": 448.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 8
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 313.5992,
+       "event_ms": 313.5457,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 259.4472,
+       "event_ms": 259.1826,
+       "peak_mib": 32.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 46.6226,
+       "event_ms": 48.8191,
+       "peak_mib": 480.0,
+       "rel_err": 0.00328
+      },
+      "decoded": {
+       "device_ms": 39.699,
+       "event_ms": 62.0291,
+       "peak_mib": 1824.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 56.4283,
+       "event_ms": 58.7697,
+       "peak_mib": 256.0,
+       "rel_err": 0.00256,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 8
+      }
+     }
+    },
+    "down N=4096 K=14336": {
+     "fwd": {
+      "v1": {
+       "device_ms": 17.8486,
+       "event_ms": 71.3599,
+       "peak_mib": 32.0
+      },
+      "v3": {
+       "device_ms": 99.1212,
+       "event_ms": 99.1214,
+       "peak_mib": 32.0,
+       "rel_err": 0.00255
+      },
+      "dense": {
+       "device_ms": 23.0649,
+       "event_ms": 24.28,
+       "peak_mib": 256.0,
+       "rel_err": 0.00285
+      },
+      "decoded": {
+       "device_ms": 20.7062,
+       "event_ms": 32.2011,
+       "peak_mib": 928.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 27.6467,
+       "event_ms": 30.5889,
+       "peak_mib": 256.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     },
+     "dgrad": {
+      "v1": {
+       "device_ms": 154.1031,
+       "event_ms": 153.8389,
+       "peak_mib": 112.0
+      },
+      "v3": {
+       "device_ms": 19.1554,
+       "event_ms": 127.1787,
+       "peak_mib": 112.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        64,
+        64,
+        4
+       ]
+      },
+      "dense": {
+       "device_ms": 23.792,
+       "event_ms": 25.0328,
+       "peak_mib": 336.0,
+       "rel_err": 0.00257
+      },
+      "decoded": {
+       "device_ms": 17.9202,
+       "event_ms": 30.0313,
+       "peak_mib": 1008.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ]
+      },
+      "decoded_cap": {
+       "device_ms": 26.7933,
+       "event_ms": 29.7682,
+       "peak_mib": 336.0,
+       "rel_err": 0.00255,
+       "cfg": [
+        64,
+        128,
+        64,
+        4,
+        3
+       ],
+       "chunks": 4
+      }
+     }
+    }
+   },
+   "wall_s": 145.4
+  }
+ ],
+ "finished": "2026-10-05T08:26:29Z"
+}

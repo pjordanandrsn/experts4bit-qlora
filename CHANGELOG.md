@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### RD1 registered: grouped-nf4-gemm's frozen-expert GEMM routes per call at MoE training shapes, on one RTX 5090 (bench and tests only)
+
+- **Why.** On sm_120, `auto` keeps the fused NF4 kernels for calls with more than 16 present experts. The per-expert `dense`
+  loop is launch-bound there (TC1 amendment 22: 2.947× on Qwen3-30B-A3B), and no torch release through 2.14.1 has a
+  single-launch grouped bf16 GEMM for that card.
+  - The fused kernels run TF32 with the decode inside the GEMM loop.
+  - A decoded route needs no per-expert launches: grouped-nf4-gemm's `dequant_groups` (one launch) followed by one Triton
+    grouped bf16 GEMM launch.
+  - The $0 A2000 filter (`bench/moegen/rd1/a2000/`) put it at or under 0.85 of the best other route on Granite-H, Qwen3 and
+    Qwen3.6 at both seqs on a skewed router, and the fused kernels' own bf16 MMA (v3) above v1 everywhere.
+- **What.** `bench/moegen/rd1/`:
+  - `RD1-PREREG.md`: the bar, decision and predictions P1–P5, registered before the box;
+  - `rd_probe.py`: five arms, eight families' shapes, seq 512 / 2048, uniform and skewed routers, device and event time, peak
+    bytes;
+  - `rd_table.py`: the bar, with the decision read only on an RTX 5090 receipt;
+  - `rd1_run.sh`: the box side, under `tc1_drive.sh`, with the train anchor strict.
+  - `tests/test_rd1_lane.py` pins the staged pieces, the shape table and the bar to the registration.
+- **Budget.** One RTX 5090 with no checkpoint fetch, about $0.64 under a 0.75 h guard.
+
 ### SC2g amendment A1: box G's proof died in the harness; the box sources cleanly, and a dead lane is now seen (bench and tests only)
 
 - **`sc2g-prove-1`** ($0.848) died at box G's install: `sc2g_box_g.sh: line 20: FOLDS: unbound variable`. `sc1_run.sh` sources the
