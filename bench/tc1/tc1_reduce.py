@@ -548,6 +548,15 @@ ATTN_CENSUS[PACKED4K_FAM] = 192
 DENSE_PINS[PACKED4K_FAM] = DENSE_PINS[QDENSE_FAM]   # the qwen3 pin, read through amendment 22's check
 EXPECTED[PACKED4K_FAM] = list(EXPECTED[SAMESTACK_FAM])
 # no matched-set prediction and no route check; P86 (score_packed4k) reads whether every e4b arm that ran completed resident
+# TC1 amendment 42: amendment 33's same-stack box on a second host, on the current code
+SAMESTACK_HOST2_FAM = "qwen3samestackh2"
+FAMS.append(SAMESTACK_HOST2_FAM)
+NAMES[SAMESTACK_HOST2_FAM] = "Qwen3-30B-A3B (amendment 42: the matched set with e4b and Unsloth on one stack, a second host, the current code)"
+N_LAYERS[SAMESTACK_HOST2_FAM] = 48
+ATTN_CENSUS[SAMESTACK_HOST2_FAM] = 192
+DENSE_PINS[SAMESTACK_HOST2_FAM] = DENSE_PINS[QDENSE_FAM]
+EXPECTED[SAMESTACK_HOST2_FAM] = list(EXPECTED[SAMESTACK_FAM])
+SAMESTACK_SPECS[SAMESTACK_HOST2_FAM] = ("P94", (1.9, 2.9), "P95", (0.80, 0.95), None, None, "amendment 33 read 0.900 on an EPYC 7B13")
 SAMESTACK_SPECS[PACKED4K_FAM] = ("P84", (0.80, 1.60), "P85", (0.80, 1.00), None, None, "TC1 amendment 33's P51 read 0.900 at the field recipe")
 
 
@@ -3991,6 +4000,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if SAMESTACK_HOST2_FAM in F:
+        out += ["\n## Predictions P94 / P95 (TC1-PREREG amendment 42: the same-stack position on a second host, the current code; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_samestack(F, SAMESTACK_HOST2_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if SAMESTACK_MIXTRAL_FAM in F:
         out += ["\n## Predictions P29 / P30 / P31 (TC2-PREREG amendment 9: Mixtral's position with both frameworks on one stack; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -6578,6 +6592,14 @@ def selftest():
         why = next(x["why"] for x in RV[CHUNKAB_FAM]["rows"] if x["tag"] == tag)
         assert RV[CHUNKAB_FAM]["verdicts"][("e4b", tag)] == "VOID" and frag in str(why), (kw, why)
     assert pc() == {"P69": "HELD", "P70": "HELD", "P71": "HELD", "P72": "HELD"}     # amendment 36's reading unchanged
+    cases += 1
+    # 96. TC1 amendment 42 (qwen3samestackh2): amendment 33's box on a second host -- 2.297 / 0.882 HELD; 3.02 and 0.995 each FALSIFY; no
+    #     matched-set or route prediction is read
+    H2 = lambda R: {SAMESTACK_HOST2_FAM: reduce_family(SAMESTACK_HOST2_FAM, R, {}, 20)}
+    p42 = lambda **kw: {p: v for p, _, v, _ in score_samestack(H2(_samestack_set(fam=SAMESTACK_HOST2_FAM, **kw)), SAMESTACK_HOST2_FAM)}
+    assert p42() == {"P94": "HELD", "P95": "HELD"}, score_samestack(H2(_samestack_set(fam=SAMESTACK_HOST2_FAM)), SAMESTACK_HOST2_FAM)
+    assert p42(u=(10.40, 10.45))["P94"] == "FALSIFIED" and p42(e=(3.88, 3.90))["P95"] == "FALSIFIED"
+    assert ps() == {"P50": "HELD", "P51": "HELD", "P52": "HELD"}
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
