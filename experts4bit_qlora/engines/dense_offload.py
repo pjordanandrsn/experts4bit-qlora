@@ -162,7 +162,16 @@ class _DenseOffload:
                         # integration, not by reasoning.
                         if t.device != self.device:
                             moved = t.to(self.device)
-                            if is_param:
+                            if is_param and t.requires_grad:
+                                # IN PLACE for a trainable parameter: an optimizer built before this call holds THIS
+                                # object, and a re-wrapped Parameter would leave it stepping the stale CPU copy --
+                                # training that silently does nothing. Any grad already accumulated moves with it.
+                                # (Optimizer STATE from steps taken before the move stays where it was: build the
+                                # optimizer before offloading if you like, but step it after.)
+                                t.data = moved
+                                if t.grad is not None:
+                                    t.grad = t.grad.to(self.device)
+                            elif is_param:
                                 store[attr] = torch.nn.Parameter(
                                     moved, requires_grad=t.requires_grad)
                             else:

@@ -149,3 +149,37 @@ def test_an_optimizer_steps_through_the_offloaded_model_exactly(device, freeze):
     (la, wa), (lb, wb) = run(False), run(True)
     assert all(torch.equal(a, b) for a, b in zip(la, lb)), (la, lb)
     assert len(wa) == len(wb) and all(torch.equal(a, b) for a, b in zip(wa, wb)), "trained weights diverged"
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+@pytest.mark.parametrize("freeze", ["base+one", "layer"])
+def test_an_optimizer_built_before_offload_still_trains(freeze):
+    """Stage on CPU, build AdamW, THEN enable_dense_offload(m, "cuda"). Every trainable parameter that offload places
+    on the GPU (a kept LoRA-shaped matrix, the 1-D norms) must be moved IN PLACE: a re-wrapped Parameter would leave
+    the optimizer stepping a stale CPU copy and the model would silently not train. Two steps must move the weights
+    and match a model that was on CUDA from the start, bit for bit."""
+    def run(offload):
+        _DenseOffload._staged_now.clear()
+        _DenseOffload._resident.clear()
+        m = _toy(freeze)
+        if not offload:
+            m = m.to("cuda")
+        params = [p for p in m.parameters() if p.requires_grad]
+        before = [p.detach().cpu().clone() for p in params]
+        opt = torch.optim.AdamW(params, lr=1e-3)
+        if offload:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                enable_dense_offload(m, "cuda", pin=False, prefetch=False)
+        g = torch.Generator(device="cpu").manual_seed(9)
+        for _ in range(2):
+            opt.zero_grad(set_to_none=True)
+            m(torch.randn(8, H, generator=g).to("cuda")).pow(2).mean().backward()
+            opt.step()
+        return before, [p.detach().cpu().clone() for p in params]
+
+    b0, w_ref = run(False)
+    b1, w_off = run(True)
+    assert all(torch.equal(a, b) for a, b in zip(b0, b1))
+    assert any(not torch.equal(a, b) for a, b in zip(b1, w_off)), "no parameter moved: the optimizer stepped stale copies"
+    assert len(w_ref) == len(w_off) and all(torch.equal(a, b) for a, b in zip(w_ref, w_off)), "diverged from no-offload"
