@@ -35,6 +35,8 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-65` | `qwen3memcensus` (amendment 23) | instance 54195008, AMD EPYC 9454P | a memory census, no speed read: e4b fp32 absmax, e4b `E4B_ABSMAX_DQ=1`, Unsloth at micro-batch 1; e4b dq − Unsloth +0.43 GB, all transient (P41, P42 HELD; P43 FALSIFIED); [read](RESULTS-tc1-memcensus.md) | $0.38 |
 | `tc1-5090-66` | `qwen3bmmab` (amendment 24) | instance 54201179, AMD EPYC 7B13 | a bmm replay (no model), then e4b in its field environment vs Unsloth's: the matched arm 0.882× in torch 2.12.1+cu130 (P47 HELD); the fp32 bmm's cost is per new shape and the same on both torch versions (P44, P46 FALSIFIED; P45 HELD); [read](RESULTS-tc1-bmmab.md) | $1.26 |
 | `tc1-5090-67` | `qwen3samestack` (amendment 25) | instance 54209084, Intel Core Ultra 9 285K | both frameworks on one stack: the matched set EQUIVALENT, parity PASS (P52 HELD); Unsloth's draws 18.2 % apart and e4b's field-image draws 8.4 % apart, so no ratio is read (P50, P51 UNTESTED); one re-draw registered (amendment 27); [read](RESULTS-tc1-samestack-box1.md) | $0.61 |
+| `tc1-5090-68` | `qwen3samestack` (amendment 27, the re-draw) | instance 54214853, AMD EPYC 7663 | the matched set INSIDE-DRAW-NOISE, parity PASS (P52 HELD again); e4b's same-stack draws 7.8 % apart, so no ratio is read (P50, P51 UNTESTED, final); amendment 29 re-asks them over 60 steps; [read](RESULTS-tc1-samestack-box2.md) | $1.86 |
+| `tc1-5090-69` | `qwen3prebindab` (amendment 26) | instance 54223080, Intel Core Ultra 9 285K | e4b against itself, prebound Triton launches off vs on: matched arm 0.973 (P54 HELD); the shipped arm's flags-off draws 8.3 % apart (P53, P55 UNTESTED); the flags stay opt-in; amendment 30 re-asks the shipped pair over 60 steps; [read](RESULTS-tc1-prebindab.md) | $0.43 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -43,6 +45,46 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 26 (2026-10-05): prebound Triton launches take 2.7 % off the matched arm's step; the shipped pair was unstable, so the flags stay opt-in
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 26 and 30. One RTX 5090 (`tc1-5090-69`, Intel Core
+Ultra 9 285K, Vast machine 151350). The box ran e4b against itself in venv-e4b (triton 3.4), comparing `E4B_TRITON_PREBIND` and
+`GNF4_TRITON_PREBIND` both 0 (`_pb0`) against both 1 (`_pb1`), two draws a side in ABBA order. Read: [`RESULTS-tc1-prebindab.md`](RESULTS-tc1-prebindab.md).
+
+| arm | `_pb0` s/step | `_pb1` s/step | `_pb1`/`_pb0` | held-out at N, `_pb0` / `_pb1` |
+|---|---|---|---|---|
+| matched (fp32 adapters) | 2.555 / 2.505 | 2.447 / 2.476 | **0.973** [0.958, 0.988] | 0.8524, 0.8493 / 0.8513, 0.8480 |
+| shipped (bf16 adapters) | 1.926 / 1.772 (8.3 % apart) | 1.972 / 1.970 | not read | 0.8135, 0.8149 / 0.8113, 0.8116 |
+
+- **P54 HELD.** On the matched arm the prebound launches take 2.7 % off the step. The launches were prebound as registered: the `_pb1`
+  arm counted 73,591 prebound e4b launches and 24,546 prebound grouped-nf4-gemm launches, against 313 and 30 through Triton's own path.
+  The `_pb0` arm counted none.
+- **P53 UNTESTED.** The shipped arm's flags-off draws were 8.3 % apart.
+- **The shipped pair, unread, points the other way.** Its `_pb1` draws (1.972, 1.970) are slower than both `_pb0` draws. Had the pair
+  been stable, P53 ([0.90, 0.98]) would have read FALSIFIED at about 1.07. Host noise or a real cost on this arm: this box cannot tell.
+- **P55 UNTESTED** for the shipped half. The matched half moved 0.0012 nats.
+- **By the registered rule the flags stay opt-in.**
+- **One machine, several boxes.** This box, `tc1-5090-67` and three earlier stable ones (`-55`, `-62`, `-63`) all ran on one machine.
+  The launcher ranks it near the top. Two of its last three boxes lost a pair to instability. The re-asks avoid it.
+- **Amendment 30** re-asks the shipped pair over 60 steps (50-step medians) on another machine. Its reading is final.
+
+## Amendment 27 (2026-10-05): the re-draw, also unstable on one pair; amendment 29 re-asks P50 and P51 over 60 steps
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 25, 27 and 29. One RTX 5090 (`tc1-5090-68`, AMD EPYC
+7663), the same token on a machine box 1 did not use. Read: [`RESULTS-tc1-samestack-box2.md`](RESULTS-tc1-samestack-box2.md).
+
+| arm | s/step (two draws) | stable |
+|---|---|---|
+| e4b `fused_attn4_m`, venv-unsloth | 4.060 / 3.755 | **no** (7.8 %) |
+| Unsloth `ckpt_unsloth_m` | 8.989 / 9.246 | yes (2.8 %) |
+| e4b `fused_attn4_m_t28`, venv-e4b | 4.388 / 4.314 | yes (1.7 %) |
+
+- **P52 HELD again.** Unsloth and e4b's reference read INSIDE-DRAW-NOISE against e4b's fused arm, and parity PASSES.
+- **P50 and P51 UNTESTED, final under amendment 25.** This time e4b's same-stack pair was the unstable one.
+- **The instrument, not a prediction.** Across the two boxes, three different pairs lost stability. Each draw's median is over 10 steps.
+- **Amendment 29** re-asks P50 and P51, with their bands unchanged, over 60-step runs (50-step medians) on a third machine; its reading
+  is final.
 
 ## Amendment 25, first box (2026-10-04): on one stack the matched set holds; the speed pairs were unstable, so one re-draw is registered
 
