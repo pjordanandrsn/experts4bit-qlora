@@ -39,11 +39,17 @@ most of it lies outside the forward. The stall census (`bench/stall-census-2026-
   - the prompt's flush into the FP8 pool: 2,448 kernels + 6,240 copies;
   - the slot's first graphed decode claiming every reachable block: 4,608;
   - two slot resets: 96 each.
-- **The cost:** ~300 ms on the NAS A2000's host.
-- **In bulk:** ~3 ms, bitwise identical in every pool byte, table and length.
+- **In bulk:** 66 launches, bitwise identical in every pool byte, table and length (counted and checked on the NAS
+  A2000, a correctness testbed; no A2000 timing enters this registration, e4b#1133).
 
-**4. Inferred, not measured.** On SC2b's box the flush (~150 ms) sets the prefill step, the block claims add ~55 ms at
-the next decode, and the graph replay hides under the flush. A forward of ≥ ~150 ms device time would refute that.
+**4. Inferred from box F's own traces and P107's 5090 receipt, not measured.**
+- **The forward.** P107 bounds the 512-token forward's device time near ~42 ms, so ~115–130 ms of SC2b's 157–170 ms
+  prefill step is host work.
+- **The claims.** The block claims add ~55 ms at the next decode: the bucket-controlled stall minus the prefill step.
+  Over their 4,608 counted launches that is ~12 µs per launch on box F.
+- **The flush.** Its 8,688 counted launches at that cost are ≥ ~105 ms: most of the host work in the step.
+
+A forward far above P107's bound (≥ ~120 ms of device time on box F) would refute that.
 
 This lane measures the decomposition directly, with the step trace in both arms. It reads whether removing the
 bookkeeping moves the ceiling.

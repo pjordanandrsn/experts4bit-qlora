@@ -8,10 +8,12 @@
   - **Batch growth.** SC2b's fitted per-prefill stall carried batch growth; bucket-controlled, it is 0.218 / 0.224 s
     on the ON servers, not 0.262 / 0.269.
   - **The prefill step does not grow under load.** Admission to first token holds at 157–170 ms.
-  - **The bookkeeping.** One request's KV bookkeeping is ~13.5k host-issued launches at SC2b's geometry: ~300 ms on the
-    NAS A2000's host, ~3 ms in bulk, bitwise identical.
-  - **Inferred, not measured:** the prompt's flush sets the prefill step, and the first graphed decode's block claims
-    add ~55 ms.
+  - **The bookkeeping.** One request's KV bookkeeping is ~13.5k host-issued launches at SC2b's geometry, against 66
+    in bulk, bitwise identical (counted and checked on the NAS A2000, a correctness testbed: no A2000 timing is read,
+    e4b#1133).
+  - **Inferred from box F's traces and P107's 5090 receipt, not measured:** with the forward near ~42 ms of device
+    time, ~120 ms of the prefill step is host work, most of it the prompt's flush (8,688 launches at box F's ~12 µs).
+    The first graphed decode's block claims add ~55 ms.
   - **Projected:** `capsim.py`, a scheduler model calibrated on SC2b's rows, puts the ceiling at 2–4 req/s without the
     bookkeeping, depending on the 512-token forward's device time.
 - **SC2c** (`bench/sc2/SC2c-PREREG.md`, a DRAFT until another agent reviews it).

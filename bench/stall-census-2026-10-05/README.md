@@ -7,13 +7,13 @@ forward (`bench/h2h-2026-10-02/sc2b/README.md`). Where does it go, and what is t
 **Answer, with its status stated.**
 - Two things are **measured**:
   - **Batch growth.** ~45 ms of SC2b's fitted stall is the batch growing as requests arrive, not the prefill.
-  - **The bookkeeping's size.** One request's KV bookkeeping is **~13.5k host-issued launches** at SC2b's geometry.
-    That costs **~300 ms** of host time on the NAS A2000's (loaded) host; the same work in bulk costs ~3 ms, bitwise
-    identical.
-- The split of the rest on SC2b's box is **inferred**, not measured:
-  - the prompt's flush into the FP8 pool, ~150 ms, which sets the prefill step;
-  - the first graphed decode's block claims, ~55 ms;
-  - the graph replay itself, hidden under the flush.
+  - **The bookkeeping's size.** One request's KV bookkeeping is **~13.5k host-issued launches** at SC2b's geometry,
+    one after another on the engine thread. The bulk forms do the same work in **66**, bitwise identical (counted and
+    checked on the NAS A2000, a correctness testbed: its timings are not speed evidence, e4b#1133).
+- The split of the rest on SC2b's box is **inferred** from box F's own traces and P107's 5090 receipt, not measured:
+  - the 512-token forward's device time is ~42 ms (P107), so ~120 ms of the 157–170 ms prefill step is host work;
+  - the prompt's flush, 8,688 of those launches, at box F's own ~12 µs per launch is ≥ ~105 ms of it;
+  - the first graphed decode's block claims add ~55 ms at the next step.
 
   A registered box with a per-step trace (SC2c, `bench/sc2/SC2c-PREREG.md`) measures it.
 - **Projection (a model, not a measurement):** if the bookkeeping goes, the ceiling moves from 1 to 2-4 req/s,
@@ -72,13 +72,14 @@ The engine is one thread (`serve_paged.PagedEngine._run`) and runs one `Continuo
   `decode_s = a·steps + c·steps·bucket + b·prefills`. It moves ~45 ms out of the stall, and R² rises on every server.
 - **What is left.** ~0.22 s (ON) against a ~0.165 s prefill step leaves ~55 ms per prefill outside the step itself.
 
-## 3. The bookkeeping, measured alone (`kv_bookkeeping_bench.py`, the NAS RTX A2000)
+## 3. The bookkeeping, counted alone (`kv_bookkeeping_bench.py`, the NAS RTX A2000: counts and correctness only)
 
 **The method.**
 - An `Fp8PagedKV` at Qwen3-30B-A3B's KV geometry: 48 layers, 4 KV heads × 128, key groups 4, 16 slots, 2048 tokens
   per slot.
 - The library's own methods, called in `serve_paged`'s order: admit, flush, ready, free.
-- Per phase: host issue time, GPU time (events) and launches (`torch.profiler`).
+- Per phase: launches (`torch.profiler`). The bench also records host and GPU times; on this testbed they are not
+  speed evidence (the A2000 policy restated in e4b#1133), so they stay in the raw receipts and are not read here.
 
 **Two bulk arms.**
 - **`bulk`:** the bench's prototype.
@@ -90,27 +91,27 @@ Both are checked bitwise against the library path. The check covers:
 - the table against its host mirror, `seq_lens` and `_seen`;
 - the claimed block count after the first decode.
 
-**The host.** A Xeon W-1250 at load average ~20 (a shared NAS), so absolutes are this host's. The launch counts are
-not host-dependent.
+**Launches are not host-dependent**; the testbed's host only affects the times, which are not read.
 
-**Results, one request at SC2b's geometry (run `a2000-kv4`, e4b `3e7b75a5`; median of 24):**
+**Results, one request at SC2b's geometry (run `a2000-kv4`, e4b `3e7b75a5`):**
 
-| phase | library: host ms | library: launches | `library_bulk`: host ms / GPU ms | launches |
-|---|---|---|---|---|
-| admit (reset) | 1.4 | 96 kernels | 0.09 / 0.08 | 2 |
-| flush (512-token prompt) | **216** | 2,448 kernels + 6,240 D2D copies | 2.3 / 5.3 | 62 |
-| ready (first graphed decode) | **80** | 4,608 kernels | 0.06 / 0.02 | 0 (claimed at the flush) |
-| free (reset) | 2.1 | 96 kernels | 0.7 / 0.7 | 2 |
-| **total** | **300** | **~13.5k** | **3.2 / 6.1** | **66** |
+| phase | library: launches | `library_bulk`: launches |
+|---|---|---|
+| admit (reset) | 96 kernels | 2 |
+| flush (512-token prompt) | 2,448 kernels + 6,240 D2D copies | 62 |
+| ready (first graphed decode) | 4,608 kernels | 0 (claimed at the flush) |
+| free (reset) | 96 kernels | 2 |
+| **total** | **~13.5k** | **66** |
 
 **Parity.** Bitwise for both bulk arms at T = 512 and at T = 500, a partial tail block.
 
 **The other runs.**
-- `a2000-kv1`: 4096 tokens per slot, 8 slots. The ready phase is 10,752 `fill_` = 211 ms; the library total is 471 ms.
+- `a2000-kv1`: 4096 tokens per slot, 8 slots. The ready phase is 10,752 `fill_`.
 - `a2000-kv2`: SC2b's geometry, bench prototype only.
-- `a2000-kv3`: e4b `1300e4cd`. It found a sync in the production flush: host time equalled GPU time. A layer-index
-  tensor was built from a Python list straight onto the device, a pageable copy that blocks until every queued kernel
-  finishes. In serving that waits out the prefill replay. `3e7b75a5` builds each index once.
+- `a2000-kv3`: e4b `1300e4cd`. It found a sync in the production flush (a behaviour, not a timing claim): the host
+  could not issue ahead of the GPU. A layer-index tensor was built from a Python list straight onto the device, a
+  pageable copy that blocks until every queued kernel finishes. In serving that waits out the prefill replay.
+  `3e7b75a5` builds each index once.
 - `a2000-kv3` and `a2000-kv4` also ran the bulk-KV tests and the paged-serving suites under CUDA: 189 passed, 5
   skipped.
 
@@ -122,19 +123,22 @@ not host-dependent.
 | — of which batch growth | ~45 ms | measured (the bucket-controlled refit) |
 | stall, bucket-controlled | **218 / 224 ms** | measured (refit) |
 | prefill step (admission → first token, p50) | 157–170 ms | measured (the request trace) |
-|   ↳ the prompt's K/V flush, host issue | ~150 ms | **inferred**: the A2000's flush : ready ratio (2.7–2.8) × the 55 ms below |
-|   ↳ the graph replay's device time | under the flush, unmeasured | **inferred**: hidden while the host issues the flush |
-|   ↳ admission reset | ~1 ms | A2000: 1.4 ms |
-| first graphed decode's block claims | ~55 ms | **inferred**: the bucket-controlled stall minus the prefill step |
+|   ↳ the graph replay's device time | ~42 ms | **bounded** by P107's rented 5090 (§6): 378 ms − 38 ms of copies, ÷ 8 chunks |
+|   ↳ host work in the step beyond the forward | ~115–130 ms | **inferred**: the prefill step minus the forward |
+|   ↳ of which the prompt's K/V flush | ≥ ~105 ms | **inferred**: 8,688 counted launches × box F's ~12 µs per launch (next row) |
+|   ↳ admission reset | ~1 ms | 96 counted launches × ~12 µs |
+| first graphed decode's block claims | ~55 ms | **inferred**: the bucket-controlled stall minus the prefill step; ÷ 4,608 counted launches ≈ 12 µs each |
 | residual | ~0 ± 20 ms | — |
 
 **Consistent across both arms, not proven.**
 - **OFF arm.** The eager forward's ~5k launches add ~50 ms of host issue ahead of the same flush: 215 − 165.
-- **Per-launch cost.** It comes out at ~11–12 µs on box F, against ~17 µs on the A2000's loaded host.
+- **Per-launch cost.** ~12 µs on box F, from box F's own fit and the counted claims. A `narrow().copy_()` is two
+  dispatches, so the flush's 8,688 launches likely cost more than the claims' per launch; ≥ ~105 ms is the floor.
 
-**What would break the inference.** A 512-token forward whose device time is ≥ ~150 ms would put the forward, not the
-flush, on the prefill step's critical path. Then the bulk flush buys only the ~55 ms of block claims plus the flush's
-GPU tail. SC2c's step trace reads the forward's device time directly (`pf_forward − pf_prep`).
+**What would break the inference.** A 512-token forward on box F whose device time is far above P107's ~42 ms (≥
+~120 ms) would put the forward, not the flush, on the prefill step's critical path. Then the bulk flush buys only the
+~55 ms of block claims plus the flush's GPU tail. SC2c's step trace reads the forward's device time directly
+(`pf_forward − pf_prep`).
 
 ## 5. What it would buy (projection; `capsim.py`)
 
@@ -215,4 +219,6 @@ without SC2b's 400 W cap.
 
 The refit tool is `bench/sc2/sc2c_census.py` (`fit`), run on SC2b's committed traces.
 
-**Spend: $0.** Four A2000 runs on the NAS, 2026-10-05 08:07–08:48Z, each claimed on the bus.
+**Spend: $0.** Four A2000 runs on the NAS, 2026-10-05 08:07–08:48Z, each claimed on the bus. They are counts and
+correctness only: the raw receipts carry the bench's host and GPU times, which on this testbed are not speed evidence
+(e4b#1133) and are not read anywhere above.
