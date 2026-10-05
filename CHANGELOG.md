@@ -271,6 +271,25 @@
   - An unknown capability (no CUDA) changes nothing.
 - **Unchanged on sm_89+**, where every registered serving number was read (RTX 5090, H100).
 
+### Serve estimate: the solver's VRAM/DRAM/NVMe tiers and the hybrid tier's host buffers
+
+- **`placement="solver"` is priced.** `estimate_serve_footprint` splits the expert rows across VRAM, DRAM and NVMe
+  using `solve_placement` itself (`solver_tiers`), with the budgets the server passes.
+  - `build_engine` gives the solver no routing profile, so every expert weighs the same: VRAM fills first, then
+    DRAM, then NVMe, and the calibration's bandwidths decide nothing (tested).
+  - Batched decode graphs under the solver, and per-expert biases, are refused in words, as the server refuses them.
+- **New `ServeSetup` fields:** `vram_gb`, `dram_gb` and `hot_rows`, passed through `to_env()`.
+- **Host buffers the server builds at either placement are now priced:** the cold tier's pinned landing
+  (`pinned_request_cost`), the setup tier and, when rows live on NVMe, the cold view.
+- **Checked on an RTX A2000 (OLMoE-1B-7B, two solver budgets).**
+  - The tier split matched the server's own manifest.
+  - Device: the estimate is 0.17–0.18 GiB under the allocator peak. The two all-VRAM checks missed by the same
+    amount: a fixed runtime term, not modelled.
+  - Host shared memory (pinned + cold view + setup tier) came within 2–7%. Anonymous memory after load is the
+    baseline plus the DRAM tier.
+  - Generation added a further ~0.72 GiB of anonymous memory in both runs; it is listed as not modelled (the CPU
+    tier's compute buffers).
+
 ## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
 
 **0.47.0.** One default changes, by lane SC2b's licence: `serve_paged`'s first-chunk prefill graph is `auto`.
