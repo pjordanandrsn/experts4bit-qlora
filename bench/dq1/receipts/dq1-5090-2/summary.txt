@@ -1,0 +1,3 @@
+dq1 tripwire OK 0.39.0 0.50.2 2.8.0+cu128 12.8 NVIDIA GeForce RTX 5090 (12, 0)
+census rc=0 DQ1 census done receipts/dq1_census.json
+DQ1 read: {'lane': 'READ', 'speed': 'S_DEAD', 'g1': 'G1_PARITY', 'fused': 'GF_LOSS', 'lora': 'L_LOW', 'stream': 'C_MARGINAL'}
