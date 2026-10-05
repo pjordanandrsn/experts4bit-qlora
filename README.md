@@ -147,6 +147,7 @@ image whose torch you want to keep.
 | what ran out | call | needs |
 |---|---|---|
 | you do not know yet — ask before loading | `estimate_qlora_footprint(describe_moe(id), QLoRASetup(...), tokens_per_microbatch=n)`, then `prepare_qlora_training(id, setup)` | `[train]` |
+| you do not know yet — serving, ask before loading | `estimate_serve_footprint(describe_moe(id), ServeSetup(max_seqs=n, max_tokens_per_seq=t))` | `[fast]` |
 | nothing — just train a fused MoE | `load_moe_4bit_streaming(...)` | `[train]` |
 | each step is slow | `enable_fast_train(model, dgrad=True)` | `[fast]` |
 | …and there is spare VRAM to trade | `E4B_MOE_KEEP_LAYERS=n` + `NF4_QLORA_COMPACT_DELTA=1`, then `enable_fast_train` | `[fast]` + grad ckpt |
