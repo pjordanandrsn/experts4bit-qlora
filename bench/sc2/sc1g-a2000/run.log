@@ -1,0 +1,11 @@
+[2026-10-05T12:19:15Z] sc1g-gemv: runtime nvidia-runtime
+[2026-10-05T12:19:16Z] sc1g-gemv: pre-flight gpu util,used,total: 0,1055,12282
+gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+torch 2.8.0+cu128 triton 3.4.0 NVIDIA RTX A2000 12GB
+[2026-10-05T12:20:07Z] sc1g-gemv: arm A: synthetic activations, real experts, layers 0 and 12
+SC1G_GEMV_CHECK KERNEL_AGREES device=NVIDIA RTX A2000 12GB cc=[8, 6] calls=8 kernel_vs_exact_worst=4.3814634409500286e-05 scheme_mean=0.008679
+[2026-10-05T12:20:18Z] sc1g-gemv: arm M (mutation): the references read the wrong expert -- must DISAGREE
+SC1G_GEMV_CHECK KERNEL_DISAGREES device=NVIDIA RTX A2000 12GB cc=[8, 6] calls=4 kernel_vs_exact_worst=1.4704325199127197 scheme_mean=0.008392
+SC1G_GEMV_DONE armA=0 armM=1 (armM must be nonzero)

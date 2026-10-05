@@ -49,14 +49,20 @@ def test_box_i_sources_under_set_u_with_only_w_defined():
 
 
 def test_box_i_pins_each_engine_s_quality_path():
-    # e4b: serve_paged's gpt-oss env through the hook, the NF4 control, SC1's K8 args, the chat window, the floor pair
+    # e4b: serve_paged's gpt-oss env through the hook, the NF4 control, SC1's K8 args, the window from its file, the floor pair
     assert 'SC1G_E4B_SERVE="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0' in BOX
     assert 'SC1G_E4B_NF4="E4B_SERVE_EXP_INT4=0' in BOX
-    assert "--ppl-chat --ppl-chat-suffix \"$SC1G_CHAT_SUFFIX\"" in BOX and "SC1G_CHAT_SUFFIX='<|channel|>final<|message|>'" in BOX
     assert "--ppl-oracle eager --ppl-chunk 64" in BOX and "--ppl-oracle eager --ppl-chunk 128" in BOX
     assert "SC1G_CHAT_DATE=$SC1G_CHAT_DATE" in BOX and "SC1G_CHAT_DATE=2026-10-05" in BOX
-    assert "SC1G_ROUTE_OUT=$W/sc1g/routes/$NAME" in BOX and "$W/sc1g_k8.py k8 -- --model" in BOX
-    assert "$W/sc1g_k8.py windows --model" in BOX
+    assert "SC1G_WINDOW_FILE=$W/sc1g/k8_window_$SRC.json" in BOX and "SC1G_ROUTE_OUT=$W/sc1g/routes/$NAME" in BOX
+    assert "$W/sc1g_k8.py k8 -- --model" in BOX and "$W/sc1g_k8.py windows --model" in BOX
+    # A1: the graded texts, the control, the pinned dataset, the diagnostics, the kernel check with its mutation
+    assert 'SC1G_SRCS="conv1 conv2"' in BOX and 'SC1G_CTRL="wikitext"' in BOX
+    assert "SC1G_UC_REPO=HuggingFaceH4/ultrachat_200k; SC1G_UC_REV=8049631c405ae6576f93f445c6b8166f76f5505a" in BOX
+    assert '"$SC1G_E4B_SERVE GNF4_PDL=0"' in BOX and '"$SC1G_E4B_SERVE $SC1G_NOFOLD"' in BOX and "--ppl-chunk 1" in BOX
+    assert 'SC1G_NOFOLD="E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=0"' in BOX
+    assert "env $ROUTEENV $FOLDS $STACK" in BOX                       # an arm's stack overrides SC1's folds
+    assert "SC1G_CAPTURE_OUT=$W/sc1g/capture_$SRC.pt" in BOX and "--synthetic --layers 0 --mutate" in BOX
     # vLLM on gpt-oss: Marlin W4A16, TRITON_ATTN (FA2 has no sinks); SGLang's two modes; llama.cpp's q8 control
     assert "SC1_MODEL=$SC2G_MID SC1_REV=$SC2G_REV SC1_ATTN_BACKEND=TRITON_ATTN SC1_MOE_BACKEND=marlin" in BOX
     assert 'echo gptoss_qm || echo gptoss_q' in BOX
@@ -66,33 +72,98 @@ def test_box_i_pins_each_engine_s_quality_path():
 K8 = REPO / "bench" / "sc2" / "sc1g_k8.py"
 
 
-def _wrapped(tmp_path, name, body):
-    """Run `body` as the script sc1g_k8.py k8 would hand to runpy: a stand-in step_decomp.py beside a copy of the wrapper."""
+def _wrapped(tmp_path, name, body, env_extra=None):
+    """Run sc1g_k8.py k8 against a stand-in step_decomp.py (beside a copy of the wrapper) whose main() is `body`."""
     tmp_path = tmp_path / name
     tmp_path.mkdir()
     (tmp_path / "sc1g_k8.py").write_text(K8.read_text())
-    (tmp_path / "step_decomp.py").write_text(body)
+    (tmp_path / "step_decomp.py").write_text("def _k8_window(a, tok):\n    raise SystemExit('the original window builder ran')\n"
+                                             "def main():\n" + "".join(f"    {ln}\n" for ln in body.splitlines()))
     out_dir = tmp_path / "routes"
     out_dir.mkdir()
-    env = dict(os.environ, SC1G_ROUTE_OUT=str(out_dir / "arm"), PYTHONPATH=str(REPO))
+    env = dict(os.environ, SC1G_ROUTE_OUT=str(out_dir / "arm"), PYTHONPATH=str(REPO), **(env_extra or {}))
     out = subprocess.run([sys.executable, str(tmp_path / "sc1g_k8.py"), "k8", "--", "--x"], capture_output=True, text=True,
                          env=env, timeout=120)
-    return out.returncode, sorted(p.name for p in out_dir.iterdir()), out_dir
+    return out.returncode, sorted(p.name for p in out_dir.iterdir()), out_dir, out.stdout + out.stderr
 
 
 def test_the_wrapper_records_routes_only_from_an_e4b_process_and_never_on_a_kill(tmp_path):
-    rc, files, _ = _wrapped(tmp_path, "a", "import sys; assert sys.argv[1:] == ['--x']")
-    assert rc == 0 and files == []                                    # step_decomp never loaded e4b: nothing written
-    rc, files, d = _wrapped(tmp_path, "b", "from experts4bit_qlora.engines import hot_residency as hr\n"
-                                           "hr._seen_route('mxfp4_gemv', 4); hr._seen_route('nf4_mtile_host', 2048)")
-    assert rc == 0 and len(files) == 1 and files[0].startswith("arm.") and files[0].endswith(".json")
+    rc, files, _, log = _wrapped(tmp_path, "a", "import sys; assert sys.argv[1:] == ['--x']")
+    assert rc == 0 and files == [], log                                # step_decomp never loaded e4b: nothing written
+    rc, files, d, log = _wrapped(tmp_path, "b", "from experts4bit_qlora.engines import hot_residency as hr\n"
+                                                "hr._seen_route('mxfp4_gemv', 4); hr._seen_route('nf4_mtile_host', 2048)")
+    assert rc == 0 and len(files) == 1 and files[0].startswith("arm.") and files[0].endswith(".json"), log
     assert json.loads((d / files[0]).read_text())["route_seen"] == {"mxfp4_gemv|le256": 1, "nf4_mtile_host|gt256": 1}
-    rc, files, _ = _wrapped(tmp_path, "c", "from experts4bit_qlora.engines import hot_residency as hr\nimport os, signal\n"
-                                           "hr._seen_route('mxfp4_gemv', 4); os.kill(os.getpid(), signal.SIGALRM)")
-    assert rc == -signal.SIGALRM and files == []                      # perl alarm's death writes no record: the reducer FAILs it
-    rc, files, _ = _wrapped(tmp_path, "e", "from experts4bit_qlora.engines import hot_residency as hr\n"
-                                           "hr._seen_route('mxfp4_gemv', 4); raise SystemExit(3)")
+    rc, files, _, _ = _wrapped(tmp_path, "c", "from experts4bit_qlora.engines import hot_residency as hr\nimport os, signal\n"
+                                              "hr._seen_route('mxfp4_gemv', 4); os.kill(os.getpid(), signal.SIGALRM)")
+    assert rc == -signal.SIGALRM and files == []                       # perl alarm's death writes no record: the reducer FAILs it
+    rc, files, _, _ = _wrapped(tmp_path, "e", "from experts4bit_qlora.engines import hot_residency as hr\n"
+                                              "hr._seen_route('mxfp4_gemv', 4); raise SystemExit(3)")
     assert rc == 3 and len(files) == 1                                 # an ordinary error exit still records what ran
+
+
+def _window(path, ids, prompt_len=4, steps=3):
+    import hashlib
+    import struct
+    sha = hashlib.sha256(struct.pack(f"<{prompt_len + steps + 1}q", *ids[:prompt_len + steps + 1])).hexdigest()
+    path.write_text(json.dumps({"ids": ids, "text_sha": sha, "prompt_len": prompt_len, "steps": steps, "source": "conv1"}))
+    return sha
+
+
+def test_the_e4b_arm_scores_the_window_file_and_refuses_one_whose_ids_do_not_hash_to_its_sha(tmp_path):
+    pytest.importorskip("torch")
+    win = tmp_path / "w.json"
+    sha = _window(win, [5, 6, 7, 8, 9, 10, 11, 12])
+    body = ("import types\na = types.SimpleNamespace(prompt_len=4, ppl_steps=3, batch=1)\n"
+            "ids, step, prompts, ppl, s = _k8_window(a, None)\nprint('WINDOW_SHA', s, ids.tolist(), prompts)")
+    rc, _, _, log = _wrapped(tmp_path, "w", body, {"SC1G_WINDOW_FILE": str(win)})
+    assert rc == 0 and f"WINDOW_SHA {sha} [5, 6, 7, 8, 9, 10, 11, 12] [[5, 6, 7, 8]]" in log, log
+    rec = json.loads(win.read_text())
+    rec["ids"][2] = 99                                                 # the ids no longer hash to the recorded sha
+    win.write_text(json.dumps(rec))
+    rc, _, _, log = _wrapped(tmp_path, "w2", body, {"SC1G_WINDOW_FILE": str(win)})
+    assert rc != 0 and "hash to" in log, log
+    rc, _, _, log = _wrapped(tmp_path, "w3", body)                     # unset: step_decomp's own builder runs
+    assert rc != 0 and "the original window builder ran" in log, log
+
+
+class _RoleTok:
+    """ids: 1 <|start|>, 2 <|message|>, 3 <|end|>, 4 <|return|>, 5 <|channel|>; 10 'user', 11 'assistant', 12 'final', >= 100 text."""
+    names = {"<|start|>": 1, "<|message|>": 2, "<|end|>": 3, "<|return|>": 4, "<|channel|>": 5}
+
+    def convert_tokens_to_ids(self, s):
+        return self.names[s]
+
+    def decode(self, ids):
+        return "".join({10: "user", 11: "assistant", 12: "final", 5: "<|channel|>"}.get(i, "?") for i in ids)
+
+
+def test_the_window_roles_come_from_the_template_s_special_tokens():
+    sys.path.insert(0, str(K8.parent))
+    try:
+        import sc1g_k8
+        ids = [1, 10, 2, 100, 101, 3, 1, 11, 5, 12, 2, 102, 103, 104, 4]
+        r = sc1g_k8.roles(_RoleTok(), ids)
+        assert r == ["markup"] * 3 + ["user"] * 2 + ["markup"] * 6 + ["assistant"] * 3 + ["markup"], r
+    finally:
+        sys.path.remove(str(K8.parent))
+
+
+def test_the_gemv_check_aggregates_and_reads_its_mutation():
+    pytest.importorskip("torch")
+    sys.path.insert(0, str(K8.parent))
+    try:
+        import torch
+        import sc1g_gemv_check as g
+        assert g.rel(torch.tensor([1.0, 1.0]), torch.tensor([1.0, 1.0])) == 0.0
+        rows = [{"layer": 0, "which": "gu", "kernel_vs_exact_bf16": 1e-5, "kernel_vs_exact": 1e-3, "scheme_exact_vs_raw": 0.01,
+                 "block_crest_max": 5.0},
+                {"layer": 0, "which": "gu", "kernel_vs_exact_bf16": 2e-5, "kernel_vs_exact": 2e-3, "scheme_exact_vs_raw": 0.03,
+                 "block_crest_max": 30.0}]
+        s = g.summarize(rows)["L0_gu"]
+        assert s["n"] == 2 and s["kernel_vs_exact_bf16_max"] == 2e-5 and abs(s["scheme_mean"] - 0.02) < 1e-12 and s["crest_max"] == 30.0
+    finally:
+        sys.path.remove(str(K8.parent))
 
 
 def test_the_chat_date_pin_reaches_transformers_strftime_now_and_refuses_a_bad_day():
@@ -160,4 +231,32 @@ def test_sglang_gptoss_quality_modes_demand_radix_on_one_request_and_their_moe_r
 def test_the_sc1g_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc1g_reduce.py"), "--self-test"],
                          capture_output=True, text=True, timeout=120)
-    assert out.returncode == 0 and "self-test OK (9 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (13 cases)" in out.stdout, out.stdout + out.stderr
+
+
+def test_the_capture_keeps_the_selected_layers_gate_up_and_down_per_decode_step(tmp_path):
+    """Stand-in gnf4 modules: two decode steps of 24 layers x (gate_up, down) GEMV calls, each after a quant_x_rows."""
+    pytest.importorskip("torch")
+    (tmp_path / "int4_b32.py").write_text("def quant_x_rows(x):\n    return x, None\n")
+    (tmp_path / "mxfp4_grouped.py").write_text("def gemv_mxfp4_b32(xq, xs, blocks, scales, eids, N, K, part=None):\n    return xq\n")
+    out = tmp_path / "cap.pt"
+    script = f"""
+import sys, torch
+sys.path[:0] = [{str(tmp_path)!r}, {str(K8.parent)!r}]
+import sc1g_k8
+sc1g_k8.capture({str(out)!r}, steps=1, layers=(0, 23))
+import int4_b32, mxfp4_grouped
+for step in range(2):
+    for layer in range(24):
+        for which, N in (("gu", 5760), ("dn", 2880)):
+            x = torch.full((4, 8), float(step * 100 + layer))
+            xq, xs = int4_b32.quant_x_rows(x)
+            mxfp4_grouped.gemv_mxfp4_b32(xq, xs, None, None, torch.arange(4), N, 2880)
+"""
+    r = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    import torch
+    cap = torch.load(out, weights_only=False)
+    got = [(c["step"], c["layer"], c["which"], c["N"], float(c["x"][0, 0])) for c in cap["rows"]]
+    assert got == [(0, 0, "gu", 5760, 0.0), (0, 0, "dn", 2880, 0.0), (0, 23, "gu", 5760, 23.0), (0, 23, "dn", 2880, 23.0)], got
+    assert cap["gemv_calls"] == 96
