@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Fix: `serve_paged` decodes eagerly below sm_89 instead of dying in Triton's compiler
+
+- **The bug.** Bucketed decode graphs (`E4B_PAGED_GRAPHS=auto`, the all-VRAM default since P109) need
+  grouped-nf4-gemm's fused FP8 KV append. That kernel casts to e4m3 with Triton's `tl.float8e4nv`, which Triton
+  compiles only on sm_89+. On an RTX A2000 (sm_86, triton 3.4.0) the first graphed decode step died: "type fp8e4nv
+  not supported in this architecture". Every Ampere card (sm_80/86) took the same path by default.
+- **The fix.**
+  - `fp8_paged_kv.fused_append_unsupported(capability)` states the floor.
+  - The fused append degrades to the eager append below it; an explicit `E4B_FUSED_KV_APPEND=1` is refused in
+    words.
+  - `E4B_PAGED_GRAPHS=auto` decodes eagerly there; `=1` is refused in words.
+  - An unknown capability (no CUDA) changes nothing.
+- **Unchanged on sm_89+**, where every registered serving number was read (RTX 5090, H100).
+
 ### Read: TC1 amendment 25, first box — on one stack the matched set holds (P52 HELD); the speed pairs were unstable (P50, P51 UNTESTED); amendment 27 registers one re-draw
 
 - `tc1-5090-67` ($0.61, Core Ultra 9 285K): e4b's matched set in Unsloth's venv steps in 2.220 / 2.188 s, stable. Unsloth's draws were

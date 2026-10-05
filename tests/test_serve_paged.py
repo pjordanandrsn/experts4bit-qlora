@@ -21,6 +21,7 @@ import pytest
 pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
+from experts4bit_qlora import serve_paged as serve_paged_mod  # noqa: E402
 from experts4bit_qlora.engines.scheduler import ContinuousScheduler  # noqa: E402
 from experts4bit_qlora.serve_paged import (  # noqa: E402
     _batched_graph_grouping,
@@ -565,6 +566,7 @@ def test_requests_while_loading_get_503_and_a_failed_build_is_reported():
 def test_config_from_env_and_defaults(monkeypatch):
     for k in ("E4B_HOST", "E4B_PORT", "E4B_TOKEN"):
         monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)   # host-independent: no GPU facts
     monkeypatch.setenv("E4B_PAGED_MODEL", "Qwen/Qwen3-30B-A3B")
     monkeypatch.setenv("E4B_PAGED_GRAPHS", "1")
     monkeypatch.setenv("E4B_PAGED_BUCKETS", "1,2,4,8,16")
@@ -721,6 +723,7 @@ def test_graphs_default_to_auto_on_a_cuda_all_vram_server(monkeypatch):
     from experts4bit_qlora.serve_paged import _graphs_env
     for k in ("E4B_PAGED_GRAPHS", "E4B_PAGED_DEVICE", "E4B_PAGED_PLACEMENT"):
         monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)   # host-independent: no GPU facts
     monkeypatch.setenv("E4B_PAGED_MODEL", "Qwen/Qwen3-30B-A3B")
     assert PagedServeConfig.from_env().graphs is True
     monkeypatch.setenv("E4B_PAGED_PLACEMENT", "solver")
@@ -736,6 +739,17 @@ def test_graphs_default_to_auto_on_a_cuda_all_vram_server(monkeypatch):
     for bad in ("2", "on", "yes"):
         with pytest.raises(ValueError, match="E4B_PAGED_GRAPHS"):
             _graphs_env(bad, "cuda", "all-vram")
+
+
+def test_graphs_auto_decodes_eagerly_below_sm89():
+    """Bucketed graphs need the fused KV append, whose e4m3 cast Triton compiles only on sm_89+ (an RTX A2000, sm_86,
+    died at the first graphed decode step). auto decodes eagerly there; an explicit 1 is refused in words."""
+    from experts4bit_qlora.serve_paged import _graphs_env
+    assert _graphs_env("", "cuda", "all-vram", (8, 6)) is False and _graphs_env("auto", "cuda", "all-vram", (8, 0)) is False
+    assert _graphs_env("", "cuda", "all-vram", (8, 9)) is True and _graphs_env("", "cuda", "all-vram", (12, 0)) is True
+    assert _graphs_env("0", "cuda", "all-vram", (8, 6)) is False
+    with pytest.raises(ValueError, match="sm_89"):
+        _graphs_env("1", "cuda", "all-vram", (8, 6))
 
 
 # ---- /health reports the prefill routes the server resolves (SC2: a box's environment is not evidence of them)

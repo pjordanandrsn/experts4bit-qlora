@@ -117,14 +117,28 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 
 
-def _graphs_env(value: str, device: str, placement: str) -> bool:
+def _capability(device: str):
+    from .engines.fp8_paged_kv import cuda_capability
+
+    return cuda_capability(device)
+
+
+def _graphs_env(value: str, device: str, placement: str, capability=None) -> bool:
     """``E4B_PAGED_GRAPHS``: ``auto`` (the default since lane P109, also when unset or empty) captures bucketed decode
     graphs on a CUDA device at the ``all-vram`` placement and decodes eagerly anywhere else; ``1`` forces them (and is
     refused where batched graphs are refused); ``0`` keeps eager decode. Anything else is refused rather than read as one
-    of these. P109 (e4b#770, ``bench/p109/RESULTS-p109.md``) read the default server both ways on an RTX 5090."""
+    of these. P109 (e4b#770, ``bench/p109/RESULTS-p109.md``) read the default server both ways on an RTX 5090.
+
+    ``capability`` ((major, minor), None if unknown): bucketed graphs need the fused KV append, which needs sm_89+
+    (``fp8_paged_kv.fused_append_unsupported``). Below that ``auto`` decodes eagerly and ``1`` is refused."""
+    from .engines.fp8_paged_kv import fused_append_unsupported
+
     v = (value or "auto").strip().lower() or "auto"
+    why = fused_append_unsupported(capability)
     if v == "auto":
-        return str(device).startswith("cuda") and placement == "all-vram"
+        return str(device).startswith("cuda") and placement == "all-vram" and why is None
+    if v == "1" and why:
+        raise ValueError(f"E4B_PAGED_GRAPHS=1 but bucketed decode graphs need the fused KV append, and {why}")
     if v in ("0", "1"):
         return v == "1"
     raise ValueError(f"E4B_PAGED_GRAPHS={value!r}: expected 'auto', '0' or '1'")
@@ -200,7 +214,7 @@ class PagedServeConfig:
             chunk_tokens=int(env("E4B_PAGED_CHUNK_TOKENS", "512")),
             max_prefill_tokens=int(env("E4B_PAGED_MAX_PREFILL_TOKENS", "0")),
             graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
-                               env("E4B_PAGED_PLACEMENT", "all-vram")),
+                               env("E4B_PAGED_PLACEMENT", "all-vram"), _capability(env("E4B_PAGED_DEVICE", "cuda"))),
             prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "0")),
             buckets=_ints(env("E4B_PAGED_BUCKETS", "1,2,4,8,16")),
             placement=env("E4B_PAGED_PLACEMENT", "all-vram"),
