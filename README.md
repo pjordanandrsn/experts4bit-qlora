@@ -166,6 +166,10 @@ other cards were not measured.
 | serving, want it faster | `enable_fast(model)` | `[fast]` |
 | serving, spare VRAM to trade | `enable_pipelined_residency(model, hot_sets, k_slots=k)` | `[fast]` |
 
+Freeze the model before `enable_dense_offload` (`model.requires_grad_(False)`, then add adapters): a trainable
+parameter beside frozen ones is kept resident rather than streamed, and an unfrozen model streams its trainable
+weights with a warning that an optimizer cannot step them.
+
 An arena is baked by `grouped-nf4-gemm`, not by this package; the bake
 tools, and how to bind an arena to a model, are on
 [`docs/solutions/offload-moe-experts-to-cpu-or-nvme.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/offload-moe-experts-to-cpu-or-nvme.md).

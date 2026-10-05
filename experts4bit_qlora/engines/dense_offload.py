@@ -50,6 +50,7 @@ streaming favours SMALL batches (~4-16), the reverse of normal serving.
 from __future__ import annotations
 
 import re
+import warnings
 
 import torch
 
@@ -101,7 +102,7 @@ class _DenseOffload:
 
     def __init__(self, layer, device, *, pin: bool = True,
                  min_bytes: int = MIN_BYTES, source=None, key_prefix: str = "",
-                 verify: bool = False):
+                 verify: bool = False, skip_trainable: bool = False):
         """``source``: a :class:`~experts4bit_qlora.formats.dense_disk.DenseDiskSource`. When
         given, a tensor whose checkpoint key is present there gets a
         :class:`DiskHome` instead of a pinned host copy — same bytes, read on demand,
@@ -109,7 +110,10 @@ class _DenseOffload:
         staging buffer. ``key_prefix`` + the layer-relative key must equal the
         checkpoint key. ``verify=True`` compares every disk home against the loaded
         tensor bit-for-bit at construction; cheap on a truncated model and the right
-        gate to run once per checkpoint."""
+        gate to run once per checkpoint. ``skip_trainable=True`` keeps every trainable
+        streamable parameter resident instead of streaming it. The default, ``False``, is
+        the old selection. :func:`enable_dense_offload` passes the value it decided over the
+        whole model: ``True`` iff some streamable parameter is frozen."""
         self.layer = layer
         self.device = torch.device(device)
         self.pin = pin
@@ -128,6 +132,10 @@ class _DenseOffload:
         self.host_bytes = 0    # homes held in host RAM
         self.disk_bytes = 0    # homes served from a DenseDiskSource
         self.verified = 0      # disk homes checked bit-for-bit at construction
+        self.kept_trainable = 0        # trainable params that would have streamed, kept resident (skip_trainable)
+        self.kept_trainable_bytes = 0
+        self.streamed_trainable = 0    # trainable params selected for streaming (skip_trainable off)
+        self.streamed_trainable_bytes = 0
         for _name, mod in layer.named_modules():
             if _is_expert_module(mod):
                 continue
@@ -143,7 +151,16 @@ class _DenseOffload:
                         # rehearsal at Qwen3-32B width on the default (train_prefetch=False) path.
                         continue
                     nbytes = t.numel() * t.element_size()
-                    if t.dim() < 2 or nbytes < min_bytes:
+                    keep_trainable = (skip_trainable and is_param and t.requires_grad
+                                      and t.dim() >= 2 and nbytes >= min_bytes)
+                    if keep_trainable:
+                        # A TRAINABLE parameter beside frozen ones (a LoRA matrix: PEFT's lora_B for a 25600-wide
+                        # projection is 1.6 MB, over MIN_BYTES) stays resident. Streamed, eviction swaps it for an
+                        # empty placeholder and the optimizer steps a 0-element tensor against a full grad -- "The
+                        # size of tensor a (0) must match the size of tensor b (16)" from AdamW (DQ3 rehearsal).
+                        self.kept_trainable += 1
+                        self.kept_trainable_bytes += nbytes
+                    if t.dim() < 2 or nbytes < min_bytes or keep_trainable:
                         # norms, biases, conv kernels: too small to be worth moving
                         # per layer. But "leave resident" has to mean resident ON
                         # THIS DEVICE — if the caller staged the layer's weights to
@@ -154,7 +171,16 @@ class _DenseOffload:
                         # integration, not by reasoning.
                         if t.device != self.device:
                             moved = t.to(self.device)
-                            if is_param:
+                            if is_param and t.requires_grad:
+                                # IN PLACE for a trainable parameter: an optimizer built before this call holds THIS
+                                # object, and a re-wrapped Parameter would leave it stepping the stale CPU copy --
+                                # training that silently does nothing. Any grad already accumulated moves with it.
+                                # (Optimizer STATE from steps taken before the move stays where it was: build the
+                                # optimizer before offloading if you like, but step it after.)
+                                t.data = moved
+                                if t.grad is not None:
+                                    t.grad = t.grad.to(self.device)
+                            elif is_param:
                                 store[attr] = torch.nn.Parameter(
                                     moved, requires_grad=t.requires_grad)
                             else:
@@ -190,6 +216,9 @@ class _DenseOffload:
                                 pass      # best-effort; pageable is correct, just sync
                         self.host_bytes += nbytes
                     self.slots.append((mod, attr, is_param, home))
+                    if is_param and t.requires_grad:
+                        self.streamed_trainable += 1
+                        self.streamed_trainable_bytes += nbytes
                     # key relative to the LAYER, for the state_dict hook below
                     self._sd_keys.append(key)
                     self.bytes += nbytes
@@ -562,6 +591,16 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     after a full forward layer 0 is already warm for the next token — expect one
     layer staged at rest, not zero.
 
+    **Freeze the base first** (``model.requires_grad_(False)``, then add any adapters).
+    Trainable parameters are selected by the model's shape. If any streamable
+    parameter (2-D, ``>= min_bytes``) in the decoder layers is frozen, as with a
+    QLoRA/PEFT model or a partial freeze, every trainable one stays resident:
+    streamed, the optimizer would step an evicted placeholder. If none is frozen
+    (an unfrozen model), the selection is unchanged and the trainable tensors
+    stream. That is correct for inference, but an optimizer stepping them fails,
+    so a warning names them. Either way, kept or streamed trainable tensors are
+    reported by a warning.
+
     Grad-enabled forwards take the single-slot synchronous path AND are not
     evicted afterwards, because backward still needs the weights. So a training
     step is correct but saves nothing; this module is for inference.
@@ -581,6 +620,12 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
         raise ValueError(
             "no decoder layers found: expected modules named '...layers.<i>'. "
             "Pass a model whose blocks follow that convention, or offload by hand.")
+    # Decided over the whole call, not per layer: a fully trainable layer in an otherwise frozen model is a partial
+    # fine-tune, and streaming its weights breaks the optimizer just the same.
+    skip_trainable = any(
+        not p.requires_grad and p.dim() >= 2 and p.numel() * p.element_size() >= min_bytes
+        for _n, layer in layers for mod in layer.modules() if not _is_expert_module(mod)
+        for p in mod._parameters.values() if p is not None and not p.is_meta)
     handles = []
     for _name, layer in layers:
         h = getattr(layer, "_dense_offload", None)
@@ -598,7 +643,7 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
             h = _DenseOffload(layer, dev, pin=pin, min_bytes=min_bytes,
                               source=source,
                               key_prefix=f"{key_prefix}{_name}." if source else "",
-                              verify=verify)
+                              verify=verify, skip_trainable=skip_trainable)
             layer._dense_offload = h
 
             def _pre(module, args, _h=h):
@@ -668,6 +713,24 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
                 for h, nxt in zip(chain, chain[1:] + chain[:1]):
                     h._prefetch_next = nxt
 
+    kept = sum(h.kept_trainable for h in handles)
+    streamed_tr = sum(h.streamed_trainable for h in handles)
+    if kept:
+        msg = (f"dense offload: kept {kept} trainable tensor(s) resident "
+               f"({sum(h.kept_trainable_bytes for h in handles) / 1e9:.2f} GB) instead of streaming them -- an "
+               "optimizer cannot step a streamed parameter. For inference, freeze the model first: "
+               "model.requires_grad_(False)")
+        warnings.warn(msg, stacklevel=2)
+        if log is not None:
+            log("  WARNING: " + msg)
+    if streamed_tr:
+        msg = (f"dense offload: streaming {streamed_tr} trainable tensor(s) "
+               f"({sum(h.streamed_trainable_bytes for h in handles) / 1e9:.2f} GB) of an unfrozen model -- fine for "
+               "inference, but an optimizer stepping them fails after eviction. Freeze for inference "
+               "(model.requires_grad_(False)); for training, freeze the base")
+        warnings.warn(msg, stacklevel=2)
+        if log is not None:
+            log("  WARNING: " + msg)
     total = sum(h.bytes for h in handles)
     host = sum(h.host_bytes for h in handles)
     disk = sum(h.disk_bytes for h in handles)

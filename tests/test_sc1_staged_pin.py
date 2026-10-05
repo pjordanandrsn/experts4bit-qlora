@@ -140,5 +140,5 @@ def test_the_driver_refuses_without_a_box_or_with_a_bad_one(tmp_path):
     del env["SC1_BOX"]
     out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 78 and "SC1_BOX is not set" in out.stdout
-    out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=_dry_env(tmp_path, SC1_BOX="J"))
-    assert out.returncode == 78 and "SC1_BOX must be A, B, C, D, E, F, G, H or I" in out.stdout    # D SC1b, E SC2, F SC2b, G SC2g, H SC2c, I SC1g
+    out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=_dry_env(tmp_path, SC1_BOX="K"))
+    assert out.returncode == 78 and "SC1_BOX must be A, B, C, D, E, F, G, H, I or J" in out.stdout    # D SC1b, E SC2, F SC2b, G SC2g, H SC2c, I SC1g, J SC1g-diag
