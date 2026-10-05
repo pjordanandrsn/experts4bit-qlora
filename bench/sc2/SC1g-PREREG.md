@@ -498,6 +498,73 @@ unchanged. Box I keeps two.
 - **Cost:** ≤ $0.75 + about $0.15 download, the same box as A2. Lane spend so far is **$3.066**
   ($2.357 + `sc1g-diag-1`'s $0.709).
 
+## A3 read (2026-10-05): the cost is the MXFP4 weights, not e4b's route, and it does not replicate across windows
+
+`sc1g-diag-2` (adertha-receipts `28cd4d15`, OK, **$0.726**; e4b `a7891300`, gnf4 `dc8f94ab`). The host was 145701 again: its
+install took 24 min, so 10 of the 19 arms ran and the deadline dropped k11–k19 (conv3's GEMV=0 row, conv4, kvg4, folds-off,
+PDL=0, conv2's K1 pair).
+
+**Rows (NLL).**
+
+| window | MXFP4 served | GEMV=0 served (bf16 activations) | NF4 served | MXFP4-weights prefill (`KEEP_NF4=0`) | NF4 prefill |
+|---|---|---|---|---|---|
+| `conv1` | 0.90497 | 0.87375 | 0.73620 | 0.88718 | 0.73058 |
+| `conv2` | 1.74705 | 1.74862 | 1.64969 | — | — |
+| `conv3` | 0.91333 | — | 0.94626 | — | — |
+
+**The instrument repeats bit for bit across hosts.** MXFP4 served on `conv1` is 0.904969107589033, box J's value to the last
+digit. The three NF4 rows the two runs share are identical too.
+
+**The registered predictions.**
+
+| # | verdict | value |
+|---|---|---|
+| K1 | **REFUTED** | MXFP4-weights prefill − NF4 prefill = **+0.157** |
+| K2 | **REFUTED** | share carried by the int8 activations: **0.185** on `conv1` (GEMV=0 still sits +0.138 over NF4 served), −0.016 on `conv2`; pooled UNREAD (2 windows) |
+| K3 | UNREAD | folds-off and PDL=0 dropped at the deadline |
+| K4 | UNREAD | kvg4 dropped; the repeat itself is exact (above) |
+| K5 | `conv1` HOLDS (+0.169); `conv2` REFUTED (+0.097); **every window REFUTED** | per window +0.169 / +0.097 / **−0.033**; mean +0.078 |
+
+**By A3's registered "what follows":**
+- K1 REFUTED: the cost is in the MXFP4 weights. The int8 activations add about +0.03 on `conv1` and nothing on `conv2`.
+  It is reported against the comparators' native-MXFP4 rows, not fixed in e4b.
+- K5 REFUTED across windows: the gap does not replicate (on `conv3` MXFP4 reads lower). Report it per window and file
+  nothing.
+- By A2's rule, no e4b-path defect was found, so the cross-engine reading may proceed. Its instrument is amended first
+  (below).
+
+**Why "the weights cost" reads as NF4 flattery, not MXFP4 harm.** P44 (`e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`)
+measured both paths against a bf16 dequantization of the same shipped bytes:
+- the native MXFP4 store is KL **0.0019** nats/token from it;
+- the NF4 requant is **0.0222**, more than ten times further.
+
+So NF4 is the less faithful path, and its lower teacher-forced NLL on these conversations is most likely the entropy flattery
+P44 recorded on wikitext. The ultrachat answers are off-policy for gpt-oss: they are rendered without its analysis channel,
+and a noisier model spreads probability onto them. **Consequence for this lane:** ranking engines by teacher-forced NLL on
+this text could grade flattery. Amendment A4 reads A1's cross-engine NLL as descriptive only, and adds a fidelity instrument
+(KL to a bf16-dequant reference computed once on an 80 GB card). It is registered before any reading run.
+
+**The attention check (e4b#1175): INERT, as registered, and the inertness is a design error.**
+
+| k_groups | kernel vs reference | scheme (deq vs raw) | recon | compute ran |
+|---|---|---|---|---|
+| 4 | 1.91e-3 | 3.41e-2 | 2.51e-2 | f32 |
+| 8 | 1.88e-3 | 3.21e-2 | 2.51e-2 | f32 |
+| 16 | 1.72e-3 | 3.15e-2 | 2.51e-2 | f32 |
+
+- The no-sink mutation reads 1.1–1.4e-3. N(0,1) sinks over about 2000 keys carry about 1/T of the softmax mass, so a
+  kg16 path that mishandled sinks would hide inside the kernel's own error.
+- The re-check uses gpt-oss's learned sinks from the checkpoint, a T sweep from 512 to 2560, and captured activations.
+- **The write paths are cleared** ($0, A2000, `bench/sc2/sc1g-a2000/a3read_*`, `sc1g_prompt_append_check.py`).
+  - The served loop writes its prompt through `append_prompt` and each decode token through `append_many`.
+  - Both are **bitwise equal** to per-layer `append` on 24/24 layers, K and V, at k_groups 4, 8 and 16.
+  - That held over a 512-token prompt plus 100 one-token decode steps crossing block boundaries.
+  - The mutation (the layers' K reversed) reads 0/24 equal.
+- `refuse until validated` for `--kv-groups 16` stands. The open suspect is the kernel at kg16 under real sinks and the
+  served lengths.
+
+**Spend:** the lane is at **$3.792** ($3.066 + $0.726).
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).
