@@ -78,7 +78,7 @@ def _rope_fwd(X, C, S, Y, sxb, sxh, sxs, scb, scs, syb, syh, sys_, H, L, D: tl.c
     tl.store(yb + HALF + i, y2)
 
 
-# E4B_TRITON_PREBIND=1 (opt-in): the same kernel, launched without Triton's per-call argument binding (engines/triton_prebind.py)
+# E4B_TRITON_PREBIND (on unless =0): the same kernel, launched without Triton's per-call argument binding (engines/triton_prebind.py)
 _rope_launch = prebind(_rope_fwd)
 
 

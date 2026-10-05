@@ -10,6 +10,18 @@
 - By the registered rule `E4B_ABSMAX_DQ` stays opt-in. Amendment 31 re-asks P56 (and P58's Qwen3 half) with `TC1_STEPS=60` off the
   machines that went unstable. Row `e4b.train.absmax-dq.mixtral.5090.2026-10-05`.
 
+### Default: e4b's prebound Triton launches (`E4B_TRITON_PREBIND`) are on; `=0` turns them off
+
+- **Why.** TC1 amendments 26 and 30 read the fused RMSNorm and rotary kernels' prebound launches, with grouped-nf4-gemm's
+  (`GNF4_TRITON_PREBIND`), against the flags off on one RTX 5090 each, triton 3.4.
+  - The training step reads 0.973× on the matched arm (`tc1-5090-69`).
+  - It reads 0.980× on the shipped arm over 60 steps (`tc1-5090-73`).
+  - Held-out moves by 0.0012 or less.
+
+  The registered rule (P53, P54, P55 held) makes both defaults on. grouped-nf4-gemm's flip is its own PR.
+- **What.** `prebind_requested()` reads the flag as on unless it is `0`. Values are unchanged (the same compiled kernel). Triton releases
+  other than 3.4 and 3.6 keep Triton's own launch.
+
 ### CI on grouped-nf4-gemm 0.40.0 (no default changes there)
 
 - CI now tests against grouped-nf4-gemm **0.40.0** (`cfc79904`). That release changes no default. It carries:
