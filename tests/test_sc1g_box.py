@@ -17,13 +17,13 @@ SGL = REPO / "bench" / "sc1" / "sglang" / "server.sh"
 
 
 def test_box_i_is_wired_on_box_g_s_image_and_kernel_package():
-    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I) ;;' in RUN and "I) box_i;; esac" in RUN and '[ "$BOX" = I ] && prove_i' in RUN
-    assert "G|I) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac" in RUN
+    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J) ;;' in RUN and "I) box_i;; J) box_j;; esac" in RUN and '[ "$BOX" = I ] && prove_i' in RUN
+    assert "G|I|J) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac" in RUN
     assert "I) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh; install_vllm; install_sglang; install_llamacpp ;;" in RUN
     assert 'I) PROVE_NEEDS="vllm sglang llamacpp";;' in RUN
     assert "quality=[e4b_serve e4b_nf4 vllm sglang_native sglang_marlin llamacpp llamacpp_q8]" in RUN
     # the route record needs e4b#1129's counters: the tripwire refuses an older e4b on box I
-    assert 'if os.environ["TRIP_BOX"] == "I":' in RUN and 'getattr(hr, "ROUTE_SEEN", None)' in RUN
+    assert 'if os.environ["TRIP_BOX"] in ("I", "J"):' in RUN and 'getattr(hr, "ROUTE_SEEN", None)' in RUN
 
 
 def _child_env(box):
@@ -231,7 +231,7 @@ def test_sglang_gptoss_quality_modes_demand_radix_on_one_request_and_their_moe_r
 def test_the_sc1g_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc1g_reduce.py"), "--self-test"],
                          capture_output=True, text=True, timeout=120)
-    assert out.returncode == 0 and "self-test OK (13 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (16 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_capture_keeps_the_selected_layers_gate_up_and_down_per_decode_step(tmp_path):
@@ -260,3 +260,22 @@ for step in range(2):
     got = [(c["step"], c["layer"], c["which"], c["N"], float(c["x"][0, 0])) for c in cap["rows"]]
     assert got == [(0, 0, "gu", 5760, 0.0), (0, 0, "dn", 2880, 0.0), (0, 23, "gu", 5760, 23.0), (0, 23, "dn", 2880, 23.0)], got
     assert cap["gemv_calls"] == 96
+
+
+def test_box_j_is_the_e4b_only_diagnostic_box_with_its_decisive_arms_first():
+    """A2: box J installs no comparator, needs no proof (guard <= 1 h), and runs conv1's decisive four before anything else."""
+    assert "  J) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh ;;" in RUN
+    assert 'J) PROVE_NEEDS="";;' in RUN and "J) box_j;; esac" in RUN and "G|I|J) GNF4_SHA=" in RUN
+    body = BOX[BOX.index("box_j(){"):]
+    assert "install_" not in body and "fetch_gptoss_gguf" not in body
+    order = [body.index(s) for s in ("e4b_serve_served_conv1 ", "e4b_nf4_served_conv1 ", "e4b_nf4_chunk1_conv1 ",
+                                     "e4b_nf4_full_conv1 ", "e4b_nf4_fqkv_conv1 ", "e4b_nf4_fqk_conv1 ", "e4b_nf4_fqv_conv1 ",
+                                     "e4b_serve_chunk1_conv1 ", "i_gemv", "e4b_nf4_fqkv16_conv1 ", "e4b_serve_kvg16_conv1 ",
+                                     "e4b_nf4_served_conv2 ", "e4b_serve_pdl0_conv1 ", "e4b_serve_nofold_conv1 ")]
+    assert "--ppl-oracle full --ppl-fq kv --fq-kgroups 4 --fq-vgroups 1" in body and "--kv-groups 16" in body
+    assert order == sorted(order), order
+
+
+def test_box_j_children_inherit_neither_prefill_route_pin():
+    env = _child_env("J")
+    assert "E4B_INT4_PREFILL" not in env and "E4B_PAGED_PREFILL_ATTN" not in env

@@ -271,6 +271,116 @@ frame makes wikitext in distribution for gpt-oss. Every proof row scored the sam
   $4.5**. That is above the registration's ~$3.4 because of the re-proof A1 needs; each run stays under the $15 no-ask
   tier.
 
+## Amendment A2 (2026-10-05): an e4b-only diagnostic box first, because e4b's own served path reads far worse than its prefill
+
+Registered after `sc1g-prove-2` and before any further run.
+
+### Why
+
+**`sc1g-prove-2` ended HARNESS_ERROR ($1.306).** Its 1.25 h guard ran out on a slow host (machine 145701; the first e4b arm
+started 72 min in):
+
+| step | prove-2 | prove-1 |
+|---|---|---|
+| vLLM install | 23 min | ~5 min |
+| SGLang install | 11 min | ~4 min |
+| gpt-oss fetch | 9 min | ~3 min |
+
+It still scored two rows on `conv1`, which is in distribution (ppl ≈ 2), and they change the lane's priority:
+
+| e4b row (`conv1`) | NLL |
+|---|---|
+| served (MXFP4 GEMV, paged fp8 KV) | **0.905** |
+| prefill (chunk 64, NF4 host M-tile, transformers' attention) | **0.720** |
+| served − prefill | **+0.185 nats** |
+
+That is far beyond any plausible floor, and e4b's own served path is the outlier. prove-1's wikitext rows split a similar gap
+in two:
+- NF4 served − NF4 prefill **+0.25** (both bf16 activations, so the paged path);
+- MXFP4 GEMV − NF4 served **+0.24** (the int8 activations).
+
+On the same text vLLM's served − prefill is +0.016.
+
+**The kernel is not the fault, on sm_86 at least** ($0, correctness only, `bench/sc2/sc1g-a2000/`). The A1 kernel check ran
+on prove-2's REAL captured `conv1` decode activations: 160 calls, layers 0/6/12/18/23, gate_up and down.
+- `gemv_mxfp4_b32` agrees with its bf16-rounded exact reference **≤ 1.9e-4**; the mutation reads 1.5–2.5.
+- The int8 per-32 scheme itself costs **0.45–0.94% mean relative error per GEMV output** (max 1.3%).
+- Block crest factors are 7–22 on the gate_up inputs and 23–29 on the down inputs.
+
+A cross-engine reading now would mostly measure this gap without saying where it lives. The diagnostics come first.
+
+### What changed on the decode path since the 0.00288 read (the maintainer, from `git log`)
+
+The register's `paged-vs-own-attention` 0.00288 entered claims.json at `d3e902c3` (#356, 2026-09-03). Its receipt is
+private, so the commit it was read on is not known. Changes on the decode path since:
+- **#363 / #367:** fp8 key-scale groups, 32-wide with power-of-two counts. For head_dim 64 the count floors at **4 groups,
+  16-wide**, which keeps gpt-oss on the **f32 attention compute** path on sm_120. P30 measured 2 groups instead of 4 at
+  **+0.108 nats on gpt-oss**, so key precision matters on this model.
+- **#757 and the 09-29 fix:** bucketed CUDA-graph decode.
+- **#999 / P111:** step-select on by default. It was verified on Qwen3 only.
+- **#966:** the unbound fallback keeps sliding windows.
+- **#960:** prefill flash, which sinks route around anyway.
+
+**Graphs and step-select are already excluded here.** step_decomp's K8 loop runs at `--b1d-loop eager`, so prove-2's +0.185
+was read with no CUDA graph and no step-select. Arms that switch them off would be no-ops. (They remain open for serve_paged
+under load, which is SC2g's path, not this one.) **There is no bf16-KV switch:** serve_paged builds `Fp8PagedKV`
+unconditionally.
+
+### Box J (`SC1_BOX=J`)
+
+- **What it is:** box I's code, with no vLLM, SGLang or llama.cpp install and no GGUF. **Guard 1.0 h**, so no proof
+  precedes it. It installs e4b, fetches gpt-oss and ultrachat, bakes the arena, builds the same pinned windows, and runs only
+  e4b arms plus the kernel check.
+- **The truth anchor** is e4b's chunk-free full forward with NF4 experts and transformers' attention (`--ppl-oracle full`).
+- **The fp8 KV cache is tested directly.** `--ppl-fq` applies the paged kernel's K/V roundings inside that full forward,
+  from the prompt on (`--fq-from` default), exactly as the paged decode reads fp8.
+
+**Arms, in priority order** (the deadline drops from the end):
+
+| # | arm (`conv1` unless named) | isolates |
+|---|---|---|
+| 1 | MXFP4 served (capturing) | the row being explained |
+| 2 | NF4 served | the served path with bf16 activations |
+| 3 | NF4 eager chunk 1 | T == 1 NF4 route under transformers' attention with a bf16 cache |
+| 4 | NF4 full | the truth anchor |
+| 5 | NF4 full + fq `kv` (4 key groups, 1 value group: the kernel's) | fp8 K/V rounding alone |
+| 6 | NF4 full + fq `k` | keys alone |
+| 7 | NF4 full + fq `v` | values alone |
+| 8 | MXFP4 eager chunk 1 | the int8 GEMV under the same attention as #3 |
+| — | **G6**, the kernel check on this card | |
+| 9 | NF4 full + fq `kv`, 16 key groups | finer key scales, modelled |
+| 10 | MXFP4 served `--kv-groups 16` | finer key scales on the real kernel |
+| 11–12 | NF4 and MXFP4 prefill (chunk 128) | the chunked comparison rows |
+| 13–18 | `conv2`: NF4 served, NF4 chunk 1, NF4 full, NF4 fq `kv`, MXFP4 served, MXFP4 chunk 1 | replication |
+| 19–20 | MXFP4 served at `GNF4_PDL=0`; with the folds off | ordering and fold bugs |
+
+### Predictions per arm (registered; `sc1g_reduce.py`'s `diag_predictions`, read on `conv1`, `conv2` reported as replication)
+
+| # | prediction | what holding means | basis |
+|---|---|---|---|
+| J1 | NF4 chunk 1 closes ≥ 0.5 of NF4 served − NF4 full | the paged fp8-KV decode path carries the gap | prove-1: NF4 served − prefill +0.25 with bf16 activations, against vLLM's +0.016 |
+| J2 | NF4 full + fq `kv` reproduces ≥ 0.5 of NF4 served − NF4 full | the fp8 K/V rounding is the mechanism | P30: key groups 2 vs 4 cost +0.108 nats on gpt-oss |
+| J3 | the `k` rounding costs more than the `v` rounding (each vs full) | keys dominate | the same P30 sensitivity; partly unbased |
+| J4 | 16 key groups recover ≥ 0.035 nats (about 2× the arithmetic-order floor), both modelled (fq `kv` 4 → 16) and on the real kernel (served → served `--kv-groups 16`), on `conv1` | finer key scales are a candidate fix. **A HOLDS licenses a registered default read, not a default change** | P30's direction; magnitude unbased |
+| J5 | MXFP4 chunk 1 ≥ NF4 chunk 1 (direction only) | the int8 GEMV costs NLL under identical attention | prove-1: +0.24 on wikitext; the A2000 check: 0.45–0.94% per output |
+| J6 | PDL=0 within 0.005, and folds-off within 0.035 (about 2× the floor: the folds reorder arithmetic), of MXFP4 served | no ordering or fold bug | P113: PDL value-identical on the int4 GEMV; the folds are not bit-identical by design |
+
+Each prediction is UNREAD if any of its arms is missing or not VALID; route gates apply to every e4b row as registered. G6 is
+read as in A1.
+
+- **The reduction** is `sc1g_reduce.py`. G1–G5 read UNREAD here by design: the comparator rows are absent.
+- **Cost:** ≤ $0.75 + about $0.15 download (no comparator wheels or GGUF). Lane spend so far is $2.357.
+- **Host:** prove-2's slow host (145701) cannot be excluded through the anchor class: its HARNESS_ERROR is a guard timeout,
+  not a strict-anchor refusal. Box J's e4b-only installs fit 1 h even on that host, so none is applied. The later full
+  reading's proof gets a 2.0 h guard.
+
+### What follows (decided after box J, by its result)
+
+- **If e4b's served path carries a defect** (paged fp8 KV or the T == 1 route), the cross-engine reading waits for the fix.
+  Reading it first would grade the defect.
+- **If box J finds no e4b-path defect** (the gap is the arithmetic as designed), the A1 reading proceeds with a proof guard
+  of 2.0 h. prove-2 showed a slow host needs it.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).
