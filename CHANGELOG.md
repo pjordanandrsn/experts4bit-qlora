@@ -8,7 +8,8 @@
   `serve_paged` its KV bookkeeping: on Qwen3-30B-A3B at 2048 tokens per slot, about 13.5k host-issued launches. They are
   the slot resets, the prompt's flush into the FP8 pool, and, with decode graphs, a claim of every reachable block at
   the slot's first decode. All are serialized on the engine thread ahead of every resident decode. The stall census
-  (`bench/stall-census-2026-10-05`, exploratory) measured them at ~300 ms a request on the NAS A2000's host.
+  (`bench/stall-census-2026-10-05`, exploratory) counted them; its A2000 runs are correctness and counts only (the
+  testbed policy), and the time they cost on a 5090 box is SC2c's to measure.
 - **`E4B_PAGED_BULK_KV=1`** does that work in a launch count independent of layers and blocks:
   `Fp8PagedKV.reset_all_layers`, `claim_blocks` (one async table write per request) and `append_prompt` (one quantize
   per side and one scatter per region per side, per byte-bounded group of layers of one geometry). It leaves the pool
