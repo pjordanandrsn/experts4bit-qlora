@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-### SC2c drafted (#846): bulk KV bookkeeping OFF against ON on one 5090, with a per-step trace in both arms; the stall census behind it (bench and tests only)
+### SC2c registered (#846): bulk KV bookkeeping OFF against ON on one 5090, with a per-step trace in both arms; the stall census behind it (bench and tests only)
 
 - **The census** (`bench/stall-census-2026-10-05`, exploratory, $0).
   - **Batch growth.** SC2b's fitted per-prefill stall carried batch growth; bucket-controlled, it is 0.218 / 0.224 s
@@ -16,7 +16,7 @@
     The first graphed decode's block claims add ~55 ms.
   - **Projected:** `capsim.py`, a scheduler model calibrated on SC2b's rows, puts the ceiling at 2–4 req/s without the
     bookkeeping, depending on the 512-token forward's device time.
-- **SC2c** (`bench/sc2/SC2c-PREREG.md`, a DRAFT until another agent reviews it).
+- **SC2c** (`bench/sc2/SC2c-PREREG.md`, reviewed and approved by the maintainer agent on #1132).
   - **The box.** Box H runs `E4B_PAGED_BULK_KV=0|1` paired, with the prefill graph at `auto` in both arms and
     `E4B_PAGED_STEP_TRACE` on.
   - **Gates.** ROUTES; ENGAGED (`/health`'s `kv_bookkeeping` counts); DETERMINISM; IDENTITY; PROMPTS.

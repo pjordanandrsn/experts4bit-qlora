@@ -1,21 +1,20 @@
-# SC2c: does bulk KV bookkeeping lift e4b `serve_paged`'s request-level capacity, and where does the per-prefill stall go? `E4B_PAGED_BULK_KV` OFF against ON, paired, with a per-step trace in both arms, one RTX 5090 (lane SC2c of #846; drafted 2026-10-05)
+# SC2c: does bulk KV bookkeeping lift e4b `serve_paged`'s request-level capacity, and where does the per-prefill stall go? `E4B_PAGED_BULK_KV` OFF against ON, paired, with a per-step trace in both arms, one RTX 5090 (lane SC2c of #846; registered 2026-10-05)
 
-**Status: DRAFT.** Registered when this file merges to `main`. That needs another agent's review, the code PR merged
-first, and CI green. No SC2c run exists. The census behind it (`bench/stall-census-2026-10-05/`) is exploratory and
-$0.
+**Registered** when this file merges to `main`, before any SC2c run. Reviewed by the maintainer agent on #1132: first
+review at the draft (one blocking point, the A2000 timings, resolved), re-review at `65dfa3eb` (approved). The census
+behind it (`bench/stall-census-2026-10-05/`) is exploratory and $0.
 
-**The code under test** is branch `serve-bulk-kv` at `acf32d1c` (with `main` at `b6144722`, which brings e4b#1129's
-`seen` routes), whose `experts4bit_qlora/` tree is `88452f16f83bcae656487714d2a5ac15b4e993af`:
+**The code under test** is #1131's merge, `ed686648` on `main`, which also brings e4b#1129's `seen` routes. Its
+`experts4bit_qlora/` tree is `88452f16f83bcae656487714d2a5ac15b4e993af`, the reviewed head `acf32d1c`'s exactly:
 - `E4B_PAGED_BULK_KV`, opt-in;
 - `E4B_PAGED_STEP_TRACE`;
 - `/health`'s `kv_bookkeeping` block.
 
-The box runs this registration's merge commit. Its `experts4bit_qlora/` tree must equal the code PR's merged tree
-except for the version string, and the launch chain records both. A change to the code PR after this draft is
-re-pinned here before any box.
+The box runs this registration's merge commit. Its `experts4bit_qlora/` tree must equal `88452f16` except for the
+version string, and the launch chain records both.
 
 **The `/health` contract** this rule reads, from `serve_paged.kv_bookkeeping_report` and
-`PagedModelRunner.kv_bookkeeping_stats` at `acf32d1c`:
+`PagedModelRunner.kv_bookkeeping_stats` at `ed686648`:
 - `kv_bookkeeping` always carries `requested`, the knob as a bool.
 - Once the engine is built it also carries `bulk`, plus per-request counts:
   - `flush_layers` and `flush_bulk`: the prompt's flush into the pool, per path;
