@@ -304,6 +304,19 @@ DECODE_A16 = [_decode_a16_default()]
 #: when kept, serve the call.
 _MXFP4_GEMV_ROWS = 16
 
+#: Which expert-GEMM route each :func:`_fused_over_stack` call took, as ``{"<route>|<rows>": calls}`` with ``<rows>``
+#: ``le256`` or ``gt256`` (the call's (token, slot) rows). Counted where the route is chosen, in the Python forward:
+#: eager calls and CUDA-graph captures count, graph REPLAYS do not, so a count says the route ran, not how often a
+#: replayed graph did. ``/health`` reports it because the environment's resolution is not the route: on gpt-oss's MXFP4
+#: store ``E4B_INT4_PREFILL`` resolves to ``k19`` while rows up to 256 take K21 and rows above take the kept NF4 stacks.
+ROUTE_SEEN: dict = {}
+
+
+def _seen_route(route: str, rows: int) -> None:
+    key = f"{route}|{'le256' if rows <= 256 else 'gt256'}"
+    ROUTE_SEEN[key] = ROUTE_SEEN.get(key, 0) + 1
+
+
 _SWIGLU = {}
 
 
@@ -669,6 +682,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
         # to_device_i32 traffic /4 and the step 1.206x, tokens identical.
         eids = uniq
     if device_grouping and int4_stores is None and _k25 is not None:
+        _route = "nf4_k25"
         # K25 (opt-in): the grouped small-M tensor-core GEMM on the NF4 stacks against the SAME 16-row device tiles. The
         # first call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is already
         # in sorted order. Outputs in sorted order, so gpt-oss's per-expert biases index by `sorted_ids` and the unsort
@@ -687,6 +701,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             return _k25(xr.to(torch.bfloat16), pk, am, t_row0, t_rows, t_grp,
                         order if xr is x_rows else None, **kw, **_k25_kw)
     elif device_grouping and int4_stores is None:
+        _route = "nf4_mtile_captured"
         def _mm(xr, pk, am):
             if pk is not None and pk.numel() == 0:
                 # freed int4-lane stacks reaching the NF4 captured path
@@ -700,6 +715,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             return gemm_4bit_grouped_captured(xr, pk, am, t_row0, t_rows,
                                               t_grp, 16)
     elif _mxfp4_store and _k21 is not None:
+        _route = "mxfp4_k21"
         # K21 (opt-in): the store's own e2m1/e8m0 bytes, dequantised exactly to bf16 in registers, bf16 MMA over the
         # SAME 16-row device tiles; the first call gathers the unsorted rows through `order`, the epilogue output is
         # already sorted. Outputs in sorted order, so gpt-oss's per-expert biases index by `sorted_ids` and the unsort
@@ -724,6 +740,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                         and os.environ.get("E4B_MXFP4_GEMV", "1") == "1")
         if _use_gemv_mx:
             from int4_b32 import quant_x_rows
+            _route = "mxfp4_gemv"
 
             def _mm(xr, pk, am):
                 st = int4_stores["gu" if pk is gu_p else "dn"]
@@ -731,6 +748,8 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 return _gemv_mx(xq, xs, st["blocks"], st["scales"],
                                 _eids_mx, st["N"], st["K"])
         else:
+            _route = "mxfp4_grouped_v1"
+
             def _mm(xr, pk, am):
                 st = int4_stores["gu" if pk is gu_p else "dn"]
                 return mxfp4_grouped.gemm_mxfp4_grouped(
@@ -749,6 +768,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             # deliberately not used.
             from int4_b32 import gemv_int4_b32, quant_x_rows
             e32d = local_ids.to(torch.int32)
+            _route = "int4_gemv"
 
             def _mm(xr, pk, am):
                 st = int4_stores["gu" if pk is gu_p else "dn"]
@@ -756,6 +776,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                 return gemv_int4_b32(xq, xs, st["packed"], st["scales"],
                                      e32d, st["N"], st["K"])
         elif device_grouping and _k19 is not None:
+            _route = "int4_k19"
             # K19 (opt-in): the grouped small-M tensor-core GEMM against the SAME 16-row device tiles. The first
             # call gets the UNSORTED x_rows and gathers through `order` in the kernel; the epilogue output is
             # already in sorted order. bf16 activations, no quantise; outputs in sorted order, as K14's.
@@ -782,6 +803,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
             # quantise and the GEMM allocate only through the graph
             # private pool -- the b1d-certified capture pattern.
             from int4_b32 import gemm_int4_b32_grouped_captured, quant_x_rows
+            _route = "int4_mtile_captured"
             try:
                 from int4_b32 import quant_x_rows_gathered
             except ImportError:
@@ -806,6 +828,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     xq, xs, st["packed"], st["scales"],
                     t_row0, t_rows, t_grp)
         elif singleton_groups and not DECODE_A16[0]:
+            _route = "int4_singleton_gemv"
             # decode: the int4-b32 grouped GEMV -- measured 2.7-3.3x
             # over the NF4 path at the census cells, grid +0.007 ppl
             from int4_b32 import gemv_int4_b32, quant_x_rows
@@ -874,7 +897,10 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                                        @ w.to(torch.bfloat16).t())
                 return out
             _mm = _mm_batched if _batched else _mm_loop
+            _route = "int4_prefill_batched" if _batched else "int4_prefill_loop"
     else:
+        _route = "nf4_singleton" if singleton_groups else "nf4_mtile_host"
+
         def _mm(xr, pk, am):
             if pk is not None and pk.numel() == 0:
                 raise RuntimeError(
@@ -884,6 +910,7 @@ def _fused_over_stack(x_rows, local_ids, gu_p, gu_a, dn_p, dn_a, shapes, has_gat
                     "enable_serve_experts_int4. That enable is collapsed-"
                     "path-only; re-enable with all-VRAM placement.")
             return gemm_4bit_grouped(xr, pk, am, sizes, eids)
+    _seen_route(_route, R_rows)
     gu = _mm(x_sorted, gu_p, gu_a)
     if gptoss is not None:
         gu_bias, dn_bias, alpha, limit = gptoss
