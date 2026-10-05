@@ -1,0 +1,145 @@
+{
+ "schema": "sv1-arm/1",
+ "args": {
+  "model": "allenai/OLMoE-1B-7B-0924",
+  "revision": "6d84c48581ece794365f2b8e9cfb043c68ade9c5",
+  "arena": "arenas/olmoe.nf4",
+  "calib": "calib.json",
+  "graphs": 1,
+  "prefill_graph": "0",
+  "max_seqs": 16,
+  "context": 4096,
+  "prompt_tokens": 1024,
+  "new_tokens": 32,
+  "out": "receipts/olmoe_graphs.json"
+ },
+ "setup": {
+  "placement": "all-vram",
+  "max_seqs": 16,
+  "max_tokens_per_seq": 4096,
+  "chunk_tokens": 512,
+  "graphs": true,
+  "buckets": [
+   1,
+   2,
+   4,
+   8,
+   16
+  ],
+  "kv_groups": "auto",
+  "prefill_graph": "0",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64
+ },
+ "env": {
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "16",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "4096",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1,2,4,8,16",
+  "E4B_PAGED_KV_GROUPS": "auto",
+  "E4B_PAGED_PREFILL_GRAPH": "0",
+  "E4B_PAGED_VRAM_GB": "1.2",
+  "E4B_PAGED_DRAM_GB": "6.0",
+  "E4B_PAGED_HOT_ROWS": "64",
+  "E4B_PAGED_MODEL": "allenai/OLMoE-1B-7B-0924",
+  "E4B_PAGED_REVISION": "6d84c48581ece794365f2b8e9cfb043c68ade9c5",
+  "E4B_PAGED_ARENA": "arenas/olmoe.nf4",
+  "E4B_PAGED_CALIB": "calib.json",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "estimate": {
+  "items": [
+   {
+    "name": "frozen expert stacks (all VRAM)",
+    "where": "device",
+    "bytes": 3623879680,
+    "basis": "derived"
+   },
+   {
+    "name": "cold tier landing (pinned)",
+    "where": "host",
+    "bytes": 268435456,
+    "basis": "derived"
+   },
+   {
+    "name": "setup tier (while the stacks are built)",
+    "where": "host",
+    "bytes": 226492416,
+    "basis": "derived"
+   },
+   {
+    "name": "dense weights (bf16)",
+    "where": "device",
+    "bytes": 953421824,
+    "basis": "derived"
+   },
+   {
+    "name": "FP8 paged KV pool",
+    "where": "device",
+    "bytes": 4649125888,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill staging (bf16 K/V of prompts mid-prefill)",
+    "where": "device",
+    "bytes": 603979776,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill/decode working set",
+    "where": "device",
+    "bytes": 61939712,
+    "basis": "heuristic"
+   }
+  ],
+  "unmodelled": [
+   "CUDA graph memory pools for the decode buckets",
+   "CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)"
+  ],
+  "refusals": [],
+  "device_total": 9892346880
+ },
+ "versions": {
+  "experts4bit-qlora": "0.48.0",
+  "grouped-nf4-gemm": "0.41.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0"
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "measured": {
+  "load_seconds": 10.7,
+  "load_device_peak_bytes": 9282162688,
+  "load_reserved_peak_bytes": 9634316288,
+  "device_peak_bytes": 9524462592,
+  "device_reserved_peak_bytes": 9795796992,
+  "driver_process_peak_bytes": 10533994496,
+  "driver_samples": 44,
+  "scheduler_steps": 63,
+  "serve_seconds": 3.57,
+  "requests_done": 16,
+  "tokens_out": 512,
+  "tokens_per_s": 143.3,
+  "estimate_minus_peak_bytes": 367884288
+ },
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "4": "graph",
+  "8": "graph",
+  "16": "graph"
+ },
+ "prefill_graph_at_load": {
+  "status": "off"
+ },
+ "prefill_graph": {
+  "status": "off"
+ },
+ "status": "OK"
+}

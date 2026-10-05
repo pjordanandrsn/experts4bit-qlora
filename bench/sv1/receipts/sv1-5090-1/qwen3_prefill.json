@@ -1,0 +1,166 @@
+{
+ "schema": "sv1-arm/1",
+ "args": {
+  "model": "Qwen/Qwen3-30B-A3B",
+  "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "arena": "arenas/qwen3.nf4",
+  "calib": "calib.json",
+  "graphs": 1,
+  "prefill_graph": "1",
+  "max_seqs": 16,
+  "context": 4096,
+  "prompt_tokens": 1024,
+  "new_tokens": 32,
+  "out": "receipts/qwen3_prefill.json"
+ },
+ "setup": {
+  "placement": "all-vram",
+  "max_seqs": 16,
+  "max_tokens_per_seq": 4096,
+  "chunk_tokens": 512,
+  "graphs": true,
+  "buckets": [
+   1,
+   2,
+   4,
+   8,
+   16
+  ],
+  "kv_groups": "auto",
+  "prefill_graph": "1",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64
+ },
+ "env": {
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "16",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "4096",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1,2,4,8,16",
+  "E4B_PAGED_KV_GROUPS": "auto",
+  "E4B_PAGED_PREFILL_GRAPH": "1",
+  "E4B_PAGED_VRAM_GB": "1.2",
+  "E4B_PAGED_DRAM_GB": "6.0",
+  "E4B_PAGED_HOT_ROWS": "64",
+  "E4B_PAGED_MODEL": "Qwen/Qwen3-30B-A3B",
+  "E4B_PAGED_REVISION": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+  "E4B_PAGED_ARENA": "arenas/qwen3.nf4",
+  "E4B_PAGED_CALIB": "calib.json",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "estimate": {
+  "items": [
+   {
+    "name": "frozen expert stacks (all VRAM)",
+    "where": "device",
+    "bytes": 16307457024,
+    "basis": "derived"
+   },
+   {
+    "name": "cold tier landing (pinned)",
+    "where": "host",
+    "bytes": 268435456,
+    "basis": "derived"
+   },
+   {
+    "name": "setup tier (while the stacks are built)",
+    "where": "host",
+    "bytes": 169869312,
+    "basis": "derived"
+   },
+   {
+    "name": "dense weights (bf16)",
+    "where": "device",
+    "bytes": 3082186752,
+    "basis": "derived"
+   },
+   {
+    "name": "FP8 paged KV pool",
+    "where": "device",
+    "bytes": 3488028672,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill staging (bf16 K/V of prompts mid-prefill)",
+    "where": "device",
+    "bytes": 452984832,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill/decode working set",
+    "where": "device",
+    "bytes": 62152704,
+    "basis": "heuristic"
+   }
+  ],
+  "unmodelled": [
+   "CUDA graph memory pools for the decode buckets",
+   "the first-chunk prefill graph's private pool, which the server keeps for its life when the graph engages (E4B_PAGED_PREFILL_GRAPH=auto engages it only if that much is still free after capture; lane SC2b measured +3.3 GiB on Qwen3-30B-A3B int4); prefill_graph='0' bounds memory by this estimate",
+   "CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)"
+  ],
+  "refusals": [],
+  "device_total": 23392809984
+ },
+ "versions": {
+  "experts4bit-qlora": "0.48.0",
+  "grouped-nf4-gemm": "0.41.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0"
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "measured": {
+  "load_seconds": 31.7,
+  "load_device_peak_bytes": 23803723776,
+  "load_reserved_peak_bytes": 24305991680,
+  "device_peak_bytes": 23803723776,
+  "device_reserved_peak_bytes": 24305991680,
+  "driver_process_peak_bytes": 25098715136,
+  "driver_samples": 135,
+  "scheduler_steps": 63,
+  "serve_seconds": 10.28,
+  "requests_done": 16,
+  "tokens_out": 512,
+  "tokens_per_s": 49.8,
+  "estimate_minus_peak_bytes": -410913792
+ },
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "4": "graph",
+  "8": "graph",
+  "16": "graph"
+ },
+ "prefill_graph_at_load": {
+  "status": "on",
+  "T": 512,
+  "replays": 0,
+  "eager_chunks": 0,
+  "eager_reasons": {
+   "later_chunk": 0,
+   "short_chunk": 0
+  },
+  "pool_mib": 310,
+  "free_after_mib": 8164,
+  "bulk_flush_mib": 0
+ },
+ "prefill_graph": {
+  "status": "on",
+  "T": 512,
+  "replays": 16,
+  "eager_chunks": 16,
+  "eager_reasons": {
+   "later_chunk": 16,
+   "short_chunk": 0
+  },
+  "pool_mib": 310,
+  "free_after_mib": 8164,
+  "bulk_flush_mib": 0
+ },
+ "status": "OK"
+}
