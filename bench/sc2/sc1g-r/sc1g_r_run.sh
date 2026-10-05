@@ -17,6 +17,9 @@ trap 'finish 130' INT TERM
 for v in SC1G_R_RUN_ID SC1G_R_DEADLINE_EPOCH SC1G_R_INSTANCE_ID GNF4_SHA MODEL_REV; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 for v in GNF4_SHA MODEL_REV; do case "${!v}" in *[!0-9a-f]*|"") say "refusing: $v is not hex"; finish 78;; esac; done
 [ ${#GNF4_SHA} -eq 40 ] && [ ${#MODEL_REV} -eq 40 ] || { say "refusing: a pin is not a 40-char sha"; finish 78; }
+# the controller fetches the receipts with rsync; the pytorch devel image ships none (tc1c-h100-19 lost its receipts that way)
+command -v rsync > /dev/null || perl -e 'alarm 300; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq rsync' > $W/logs/apt_rsync.log 2>&1
+echo "rsync $(command -v rsync > /dev/null && echo present || echo MISSING -- the driver falls back to scp)" > $W/rsync.txt
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 MIN_MBPS=${SC1G_R_MIN_MBPS:-20}; MIN_VRAM_GB=${SC1G_R_MIN_VRAM_GB:-80}; MIN_DISK_GB=${SC1G_R_MIN_DISK_GB:-80}
 : > summary.txt; echo "$SC1G_R_INSTANCE_ID" > INSTANCE_ID
