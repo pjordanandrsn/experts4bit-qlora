@@ -257,22 +257,50 @@ def test_the_race_is_real_without_the_fence(monkeypatch):
     assert not _race(mutant=True), "the race did not fire without the fence: the race test is not sensitive"
 
 
-def test_on_never_streams_a_trainable_parameter():
-    """A trainable 2-D parameter over MIN_BYTES (a LoRA matrix) must stay resident under train_prefetch: streaming it
-    would hand the optimizer a device copy that eviction discards. The off path keeps today's selection."""
+def test_no_path_streams_a_trainable_parameter():
+    """A trainable 2-D parameter over MIN_BYTES (a LoRA matrix) stays resident on BOTH paths: streaming it would hand
+    the optimizer an empty placeholder after eviction. Frozen projections still stream."""
     def model_with_trainable_big():
         m = _model("cpu")
         m.layers[0].o_proj.weight.requires_grad_(True)      # 2 MB, trainable
         return m
 
-    m_on, m_off = model_with_trainable_big(), model_with_trainable_big()
-    on = enable_dense_offload(m_on, "cpu", pin=False, prefetch=False, train_prefetch=True)
-    off = enable_dense_offload(m_off, "cpu", pin=False, prefetch=False)
-
     def streams(h, mod, attr):
         return any(sm is mod and sa == attr for sm, sa, _p, _h in h.slots)
 
-    assert not streams(on[0], m_on.layers[0].o_proj, "weight"), "a trainable parameter was selected for streaming"
-    assert streams(on[0], m_on.layers[0].q_proj, "weight"), "the frozen projection must still stream"
-    assert streams(off[0], m_off.layers[0].o_proj, "weight"), "the off path's selection changed"
-    assert m_on.layers[0].o_proj.weight.numel() == H * INTER, "the trainable weight must stay bound (not a placeholder)"
+    for train_prefetch in (True, False):
+        _DenseOffload._staged_now.clear()
+        _DenseOffload._resident.clear()
+        m = model_with_trainable_big()
+        hs = enable_dense_offload(m, "cpu", pin=False, prefetch=False, train_prefetch=train_prefetch)
+        assert not streams(hs[0], m.layers[0].o_proj, "weight"), f"a trainable parameter streams ({train_prefetch=})"
+        assert streams(hs[0], m.layers[0].q_proj, "weight"), f"the frozen projection must still stream ({train_prefetch=})"
+        assert m.layers[0].o_proj.weight.numel() == INTER * H, "the trainable weight must stay bound (not a placeholder)"
+
+
+@pytest.mark.parametrize("train_prefetch", [False, True])
+def test_an_optimizer_steps_a_large_trainable_parameter(train_prefetch):
+    """The DQ3 rehearsal's crash, in miniature: AdamW over a trainable matrix over MIN_BYTES, through the offloaded
+    model, for two steps. Before the fix the default path streamed that matrix and AdamW raised on the 0-element
+    placeholder. Results match the un-offloaded model bit for bit."""
+    def run(offload):
+        _DenseOffload._staged_now.clear()
+        _DenseOffload._resident.clear()
+        m = _model("cpu")
+        m.layers[1].o_proj.weight.requires_grad_(True)
+        if offload:
+            enable_dense_offload(m, "cpu", pin=False, prefetch=False, train_prefetch=train_prefetch)
+        opt = torch.optim.AdamW([p for p in m.parameters() if p.requires_grad], lr=1e-3)
+        g = torch.Generator(device="cpu").manual_seed(5)
+        losses = []
+        for _ in range(2):
+            opt.zero_grad(set_to_none=True)
+            loss = m(torch.randn(8, H, generator=g)).pow(2).mean()
+            loss.backward()
+            opt.step()
+            losses.append(loss.detach().clone())
+        return losses, m.layers[1].o_proj.weight.detach().clone()
+
+    (la, wa), (lb, wb) = run(False), run(True)
+    assert all(torch.equal(a, b) for a, b in zip(la, lb))
+    assert torch.equal(wa, wb), "the trained matrix diverged under offload"

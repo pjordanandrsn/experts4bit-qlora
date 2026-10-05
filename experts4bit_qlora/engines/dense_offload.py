@@ -101,7 +101,7 @@ class _DenseOffload:
 
     def __init__(self, layer, device, *, pin: bool = True,
                  min_bytes: int = MIN_BYTES, source=None, key_prefix: str = "",
-                 verify: bool = False, skip_trainable: bool = False):
+                 verify: bool = False):
         """``source``: a :class:`~experts4bit_qlora.formats.dense_disk.DenseDiskSource`. When
         given, a tensor whose checkpoint key is present there gets a
         :class:`DiskHome` instead of a pinned host copy — same bytes, read on demand,
@@ -135,10 +135,12 @@ class _DenseOffload:
                 for attr, t in list(store.items()):
                     if t is None or t.is_meta:
                         continue          # meta = served from the arena, not ours
-                    if skip_trainable and is_param and t.requires_grad:
-                        # DQ3 opt-in: a TRAINABLE parameter (a LoRA matrix -- PEFT's lora_B for a 25600-wide projection is
-                        # 1.6 MB, over MIN_BYTES) must never be streamed: the optimizer would update a device copy that
-                        # eviction then discards. Only set by enable_dense_offload(train_prefetch=True).
+                    if is_param and t.requires_grad:
+                        # A TRAINABLE parameter is never streamed, on any path. A LoRA matrix (PEFT's lora_B for a
+                        # 25600-wide projection is 1.6 MB, over MIN_BYTES) would otherwise be swapped for an empty
+                        # placeholder at eviction, and the optimizer then steps a 0-element tensor against a full grad:
+                        # "The size of tensor a (0) must match the size of tensor b (16)" from AdamW, found by the DQ3
+                        # rehearsal at Qwen3-32B width on the default (train_prefetch=False) path.
                         continue
                     nbytes = t.numel() * t.element_size()
                     if t.dim() < 2 or nbytes < min_bytes:
@@ -596,7 +598,7 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
             h = _DenseOffload(layer, dev, pin=pin, min_bytes=min_bytes,
                               source=source,
                               key_prefix=f"{key_prefix}{_name}." if source else "",
-                              verify=verify, skip_trainable=train_prefetch)
+                              verify=verify)
             layer._dense_offload = h
 
             def _pre(module, args, _h=h):
