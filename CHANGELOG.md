@@ -12,6 +12,27 @@
   ≤ 1.01 (P80), its peak ≤ +0.05 GB (P81); held-out within 0.005 (P82, P83). All HELD makes it grouped-nf4-gemm's default.
 - The reducer reads both with amendment 36's scorer (`COMPACT_SPECS`); one new self-test case.
 
+### RD1 registered: grouped-nf4-gemm's frozen-expert GEMM routes per call at MoE training shapes, on one RTX 5090 (bench and tests only)
+
+- **Why.** On sm_120, `auto` keeps the fused NF4 kernels for calls with more than 16 present experts.
+  - The per-expert `dense` loop is launch-bound there (TC1 amendment 22: 2.947× on Qwen3-30B-A3B).
+  - The fused kernels run TF32 and decode the weight once per M-tile inside the GEMM loop.
+  - No torch release through 2.14.1 has a single-launch grouped bf16 GEMM for that card.
+  - A decoded route needs no per-expert launches: grouped-nf4-gemm's `dequant_groups` (one launch), then one Triton grouped
+    bf16 GEMM launch.
+  - RD1 asks whether it beats the best of {v1 as shipped, the fused kernels' own bf16 MMA (v3, plus a probe-local bf16
+    dgrad), `dense`} per call.
+- **What.** `bench/moegen/rd1/`:
+  - `RD1-PREREG.md`: the bar, the correctness gate, the decision and the hypotheses, registered before the box;
+  - `rd_probe.py`: five arms, eight families' shapes, seq 512 / 2048, uniform and skewed routers. It records device and
+    event time, peak bytes, and each arm's error against an fp32 reference;
+  - `rd_table.py`: the gate and the bar, with the decision read only on an RTX 5090 receipt;
+  - `rd1_run.sh`: the box side, under `tc1_drive.sh`, with the train anchor strict;
+  - `a2000/`: the correctness rehearsal, with no timing field.
+  - `tests/test_rd1_lane.py` pins the staged pieces, the shape table, the bar and the gate to the registration. It also shows
+    that a fast arm with 3× dense's error on one call cannot count.
+- **Budget.** One RTX 5090 with no checkpoint fetch, about $0.64 under a 0.75 h guard.
+
 ### `/health`'s `prefill_routes` gains `seen`: the routes the forward ran, not the environment's resolution (serving)
 
 - **What was wrong.** `prefill_routes` reports the environment's resolution: `int4_prefill`, `int4_prefill_above_256_rows`
@@ -149,6 +170,18 @@
   VALID.
 - **Files.** `bench/sc2/SC2g-PREREG.md`, `sc2g_box_g.sh`, `sc2g_reduce.py`; `sc2_trace.py` is now staged; grouped-nf4-gemm
   v0.41.0 (e4b 0.48.0's CI pin) is pinned for box G, with `GNF4_TRITON_PREBIND=1` pinned and recorded; `tests/test_sc2g_box.py` executes the child-env, SGLang-engagement and e4b-check paths.
+
+### Serve estimate: the cold tier's minimum `hot_rows`, and a refusal below it
+
+- `serve_recipe.min_hot_rows(topology, setup)` is the fewest cold-tier rows a solver setup can serve with, by
+  grouped-nf4-gemm's own ColdTier rule ("size hot_rows >= max routed experts per layer"): `top_k × max(chunk_tokens,
+  max_seqs)`, at most `n_experts` and at most the NVMe rows.
+  - Without a routing profile the solver fills layer by layer, so NVMe holds whole trailing layers.
+  - The server's default of 64 is below that for Qwen3-30B-A3B (128 experts, top-8): a long prefill through an
+    NVMe layer would be refused mid-request.
+  - The default is far above it for Mixtral (8 experts). There, 64 rows of ~99 MB each in the pinned landing, the
+    cold view and the setup tier crowd the DRAM tier out of the host budget.
+- `estimate_serve_footprint` refuses a solver setup with rows on NVMe and `hot_rows` below the minimum, in words.
 
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
