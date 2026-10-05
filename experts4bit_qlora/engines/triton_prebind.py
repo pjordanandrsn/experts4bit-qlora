@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""Prebound Triton launches for the training step's hot kernels (OPT-IN: ``E4B_TRITON_PREBIND=1``, read when the kernel's module
-is imported; off by default).
+"""Prebound Triton launches for the training step's hot kernels (ON by default; ``E4B_TRITON_PREBIND=0`` turns them off; read when
+the kernel's module is imported). The default follows TC1 amendments 26 and 30 (one RTX 5090 each, triton 3.4): the training step at
+0.973x (matched arm) and 0.980x (shipped arm, 60 steps) of the flags off, held-out within 0.0012 (bench/h2h-2026-10-02/tc1/).
 
 A Triton launch, ``kernel[grid](...)``, spends most of its host time before the driver call: it binds the arguments to the
 signature, specializes each one (dtype, 16-byte alignment, ``== 1`` and ``% 16`` of integers), formats that specialization into a
@@ -49,7 +50,7 @@ _PLAIN = (int, float, bool, type(None))
 
 
 def prebind_requested() -> bool:
-    return os.environ.get("E4B_TRITON_PREBIND", "0").strip() == "1"
+    return os.environ.get("E4B_TRITON_PREBIND", "1").strip() != "0"
 
 
 def _triton_version():
@@ -60,7 +61,7 @@ def _triton_version():
 
 
 def prebind(fn, force: bool = False):
-    """``fn`` wrapped in :class:`Prebound` when ``E4B_TRITON_PREBIND=1`` (or ``force``) and this Triton is supported; else ``fn``."""
+    """``fn`` wrapped in :class:`Prebound` unless ``E4B_TRITON_PREBIND=0`` (``force`` wraps regardless), when this Triton is supported; else ``fn``."""
     if not (force or prebind_requested()) or triton is None or _triton_version() not in SUPPORTED_TRITON:
         return fn
     if not isinstance(fn, JITFunction) or not all(hasattr(fn, a) for a in ("params", "used_global_vals", "pre_run_hooks")):
