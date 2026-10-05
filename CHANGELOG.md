@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### TC1 harness: a packed 4,096-token regime (bench and tests only)
+
+- **Why.** Every TC1 position so far ran the field recipe: Alpaca at seq 2048, micro-batch 2 x accum 4. The Alpaca rows are short, so a
+  step carries ~1,000–1,400 real tokens (amendment 25's receipts: 1,014 / 1,432 / 1,203 on the first three steps, beside 206 / 748 /
+  193 padded). That step is bound by host launches, not the device. A packed regime fills every row with real tokens, so the step is
+  device-bound.
+- **The builder.** `tc1_arm.py --prepare --pack 1` renders each example with the same template and tokenizer call, minus the
+  per-example truncation. It concatenates the token lists with the tokenizer's EOS between examples and cuts rows of exactly `--seq`
+  tokens. Labels are the input ids, nothing is padded, and attention is full causal across example boundaries (standard packing).
+  - At 4,096 tokens the registered 1,200 + 48 rows fill only ~57 + 2 rows. So the pools extend the registered text in its own order:
+    tp4_alpaca.py's pinned source and seed. `pack_pools` refuses unless the shuffled prefix reproduces the registered rows. The train
+    pool is the 1,200 registered rows and then the next 4,800 examples. The held-out pool is the 48 registered rows and then the next
+    352. The pools are disjoint.
+  - On Qwen3-30B-A3B at the pin: 284 train rows and 8 held-out rows, every row 4,096 tokens, tokens sha `d2a501eba57d`. The first
+    235,852 train tokens are the field recipe's 1,200 rows, unchanged.
+- **Unchanged when off.** With `--pack 0` (the default) the tokens file is byte-identical to before: the field-recipe file for
+  Qwen3-30B-A3B rebuilds to tokens sha `bfc742f67e37`, the sha TC3-PREREG cites. A test pins a small file's sha from the old code.
+- **The box.** `TC1_PACK=1` (forwarded by `tc1_drive.sh`, recorded on the FIXTURE line) packs `tc1_prepare`'s tokens, at least
+  steps x micro-batch x accum rows. The new token `qwen3samestack4k` is amendment 25's same-stack family in this regime. The box refuses
+  the token without `TC1_PACK=1 TC1_SEQ=4096`, and refuses `TC1_PACK=1` beside a field-recipe token. The arm refuses a packed file whose
+  seq is not its own `--seq`, and each receipt's `tokens` records `pack`.
+- **The reducer.** The family is read with amendment 25's scorer and `score_packed4k`, against its own fixture. A row is VOID unless its
+  tokens are packed at seq 4,096, micro-batch 1 x accum 4, with 16,384 real tokens and none padded on every step, so the field recipe's
+  receipts never pass under this token. One new self-test case (101).
 ### TC1 amendment 38 registered: the compact padded LoRA delta's default decision, a third host and a second family (bench and tests only)
 
 - **Why.** Two hosts read the compact delta on Qwen3-30B-A3B at 0.967–0.970 (matched) and 0.948–0.970 (shipped); with

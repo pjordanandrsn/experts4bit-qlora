@@ -165,6 +165,19 @@ Exit codes added: 18 matched init impossible (a LoRA B is not zero after constru
       census_seconds, record}; an OOM / refused row carries it too. Any exception inside the census is kept as mem_census = {"error": ...}
       and the arm writes its normal receipt. Off CUDA (the selftest) nothing is recorded and the static censuses still run.
 
+  PACK --prepare --pack 1 --pack-src <alpaca_data_cleaned.json> [--pack-min-rows K] (TC1 amendment 39; default 0 = the tokens file is
+      byte-identical to the unpacked build): standard sequence packing (pack_rows). The example pools are the registered Alpaca text
+      EXTENDED in its own order (pack_pools): the source file at tp4_alpaca.py's pinned sha, shuffled once with its seed; the shuffled
+      prefix must reproduce the --data file's train + eval rows exactly (else refused, exit 13), then the train pool continues with the
+      next PACK_TRAIN_POOL - n_train examples after the registered held-out rows and the held-out pool with the PACK_EVAL_POOL - n_eval
+      after those -- train and held-out disjoint, the registered split kept. Each example is rendered with the same template and the
+      same tokenizer call as encode_rows minus the per-example truncation, the token lists are concatenated with the tokenizer's EOS
+      between examples, and the stream is cut into rows of exactly --seq tokens (the partial tail dropped); held-out rows the same way
+      from the held-out pool, --eval-n of them. Labels are the input ids, nothing is padded, and attention is full causal across example
+      boundaries within a row. The tokens file's sha256 (and the train-only sha) are over the packed rows; it records pack, pack_sep_id,
+      the pools and pack_stats. run_arm refuses a packed tokens file whose seq is not the arm's --seq, re-derives tokenizer_agree by
+      packing, and every receipt's `tokens` carries `pack`.
+
 ----- the tp4 docstring, unmodified -----
 
 tp4_arm.py -- lane tp4 (TP4-PREREG.md) per-arm driver, THREE frameworks: e4b, Unsloth, plain HF+PEFT+bnb.
@@ -311,7 +324,8 @@ HARNESS = ("tc1_arm.py (copy of tp4_arm.py @ 10ce711d + T19: --adapter-dtype fp3
            "and backend engagement counters; + P2-2: --framework axolotl through axolotl's own ModelLoader; + TC2: --unsloth-load-in-4bit, "
            "--unsloth-target-parameters, the expert-parameter-class census, suffixed attn_only stubs, HF experts_implementation acceptance "
            "and grouped_mm dispatch counters, the packed-parameter probe; + --absmax-dq: e4b's double-quantized expert absmax; "
-           "+ --mem-census: the allocator-history memory census, TC1 amendment 23)")   # a receipt must say WHICH harness produced it
+           "+ --mem-census: the allocator-history memory census, TC1 amendment 23; + --pack: packed rows of exactly --seq tokens, "
+           "TC1 amendment 39)")   # a receipt must say WHICH harness produced it
 EXPERT_ATTRS = ("gate_up_proj", "down_proj", "gate_up_absmax", "down_absmax")
 EXPERT_PARAM_RE = re.compile(r"experts\.(?:.*\.)?(gate_up_proj|down_proj|gate_proj|up_proj|w[123]|input_linear|output_linear)$")
 FMT = "### Instruction:\n{instruction}\n\n### Response:\n{output}"
@@ -1223,6 +1237,80 @@ def encode_rows(tok, rows, seq, template="clinical", eos=""):
     return out
 
 
+# TC1 amendment 39 (--pack): the packed regime's example pools. The source pin and seed are tp4_alpaca.py's (REVISION / FILE_SHA256 / SEED;
+# tests/test_tc1_arm.py asserts they agree), and pack_pools refuses unless the shuffled prefix reproduces the registered --data file, so the
+# pools provably extend the field recipe's Alpaca text in its own order. Pool sizes: the field text averages 196.5 Qwen3 tokens per example
+# (235,852 over 1,200), so 6,000 train examples pack to ~287 rows of 4,096 (2.4x the 120 that 30 steps x micro-batch 1 x accum 4 read) and
+# 400 held-out examples to ~19 rows (2.4x the 8 the field instrument reads).
+PACK_SRC_SHA256 = "bd844b8247a0f543804b6ce0882b0aaec4bbf5e8d66167df6213a0f1e4fe878b"   # tp4_alpaca.FILE_SHA256 (unsloth/alpaca-cleaned @ 0fe581eb)
+PACK_SRC_ROWS = 51760
+PACK_SEED = 3407                    # tp4_alpaca.SEED
+PACK_TRAIN_POOL, PACK_EVAL_POOL = 6000, 400
+
+
+def pack_pools(src, ds):
+    """TC1 amendment 39: (train_pool, eval_pool, record) -- the registered rows extended in tp4_alpaca.py's shuffled order. With n_train /
+    n_eval the registered split (1,200 / 48), the shuffled source is laid out as [train n_train | eval n_eval | train extension | eval
+    extension]: the train pool is the registered train rows then the next PACK_TRAIN_POOL - n_train examples, the held-out pool the
+    registered held-out rows then the next PACK_EVAL_POOL - n_eval. Refuses (exit 13) on a source of the wrong sha or row count, or a
+    shuffled prefix that is not the registered rows byte-for-byte (tp4_alpaca.py's clean dicts)."""
+    import random
+    got = sha_bytes(open(src, "rb").read())
+    if got != PACK_SRC_SHA256:
+        print(f"PACK SOURCE MISMATCH {src}: sha256 {got} != {PACK_SRC_SHA256}")
+        sys.exit(13)
+    rows = json.load(open(src))
+    if not isinstance(rows, list) or len(rows) != PACK_SRC_ROWS:
+        print(f"PACK SOURCE MISMATCH {src}: {len(rows) if isinstance(rows, list) else type(rows).__name__} rows != {PACK_SRC_ROWS}")
+        sys.exit(13)
+    idx = list(range(len(rows)))
+    random.Random(PACK_SEED).shuffle(idx)
+    def clean(r):                                   # tp4_alpaca.py's row
+        return {"instruction": r["instruction"], "input": r.get("input", ""), "output": r["output"]}
+    nt, ne = len(ds["train"]), len(ds["eval"])
+    if [clean(rows[i]) for i in idx[:nt + ne]] != list(ds["train"]) + list(ds["eval"]):
+        print(f"PACK PREFIX MISMATCH: the source shuffled with seed {PACK_SEED} does not reproduce the registered {nt} train + {ne} eval rows")
+        sys.exit(13)
+    if PACK_TRAIN_POOL < nt or PACK_EVAL_POOL < ne:
+        print(f"PACK POOL SMALLER THAN THE REGISTERED SPLIT: {PACK_TRAIN_POOL}/{PACK_EVAL_POOL} < {nt}/{ne}")
+        sys.exit(13)
+    t0, t1 = nt + ne, nt + ne + PACK_TRAIN_POOL - nt
+    train = list(ds["train"]) + [clean(rows[i]) for i in idx[t0:t1]]
+    ev = list(ds["eval"]) + [clean(rows[i]) for i in idx[t1:t1 + PACK_EVAL_POOL - ne]]
+    rec = {"src": os.path.basename(src), "src_sha256": got, "seed": PACK_SEED, "train_examples": len(train), "eval_examples": len(ev),
+           "registered_prefix": [nt, ne], "layout": f"shuffled[0:{nt}] + shuffled[{t0}:{t1}] train; shuffled[{nt}:{t0}] + shuffled[{t1}:{t1 + PACK_EVAL_POOL - ne}] held-out"}
+    return train, ev, rec
+
+
+def pack_rows(tok, rows, seq, template="clinical", eos="", n_rows=None):
+    """TC1 amendment 39: standard sequence packing -> (rows, stats). Each example is rendered exactly as encode_rows renders it (the same
+    template, EOS appended by the alpaca template) and tokenised by the same call WITHOUT the per-example truncation, in order (the same
+    `>= 8 tokens` filter); the token lists are concatenated with the tokenizer's EOS between examples (appended only where an example does
+    not already end with it, so the alpaca template's EOS is never doubled) and the stream is cut into rows of exactly `seq` tokens, the
+    partial tail dropped; an example may run across a row boundary. Labels are the input ids (the arm passes labels = ids), nothing is
+    padded, and attention is plain causal over the whole row: a token attends to the earlier examples in its row (no per-example mask, no
+    position reset) -- the same for every framework, since each sees the same ids and no mask. `n_rows` stops once that many rows exist."""
+    eos_id = getattr(tok, "eos_token_id", None)
+    if eos_id is None:
+        raise ValueError("packing needs the tokenizer's eos_token_id (the separator between examples)")
+    stream, spans = [], []
+    for r in rows:
+        if n_rows is not None and len(stream) >= n_rows * seq:
+            break
+        ids = [int(i) for i in tok(render_row(r, template, eos)).input_ids]
+        if len(ids) < 8:
+            continue
+        if ids[-1] != eos_id:
+            ids.append(int(eos_id))
+        spans.append((len(stream), len(stream) + len(ids)))
+        stream.extend(ids)
+    n = len(stream) // seq if n_rows is None else min(len(stream) // seq, n_rows)
+    kept = n * seq
+    out = [stream[i * seq:(i + 1) * seq] for i in range(n)]
+    return out, {"examples_used": len(spans), "stream_tokens": len(stream), "rows": n, "seq": seq, "tokens_dropped": len(stream) - kept,
+                 "examples_split_across_rows": sum(1 for s, e in spans if s < kept and s // seq != (e - 1) // seq)}
+
+
 def prepare(a, tok=None):
     got = sha_bytes(open(a.data, "rb").read())
     if got != a.data_sha:
@@ -1234,7 +1322,25 @@ def prepare(a, tok=None):
         tok = AutoTokenizer.from_pretrained(a.model, revision=a.revision)
     template = getattr(a, "template", "clinical")
     eos = (getattr(tok, "eos_token", None) or "") if template == "alpaca" else ""
-    train, ev = encode_rows(tok, ds["train"], a.seq, template, eos), encode_rows(tok, ds["eval"], a.seq, template, eos)[:a.eval_n]
+    pack = bool(getattr(a, "pack", 0))
+    if pack:                                        # TC1 amendment 39: rows of exactly a.seq tokens from the extended pools
+        if not getattr(a, "pack_src", None):
+            print("PACK REFUSED: --pack 1 needs --pack-src (tp4_alpaca.py's alpaca_data_cleaned.json)")
+            sys.exit(13)
+        tpool, epool, pool_rec = pack_pools(a.pack_src, ds)
+        try:
+            train, st_tr = pack_rows(tok, tpool, a.seq, template, eos)
+            ev, st_ev = pack_rows(tok, epool, a.seq, template, eos, n_rows=a.eval_n)
+        except ValueError as e:
+            print(f"PACK REFUSED: {e}")
+            sys.exit(13)
+        need = int(getattr(a, "pack_min_rows", 0) or 0)
+        if len(train) < need or len(ev) < a.eval_n:
+            print(f"PACK SHORT: {len(train)} train rows (need {need}) / {len(ev)} held-out rows (need {a.eval_n}) of {a.seq} tokens from "
+                  f"{pool_rec['train_examples']} / {pool_rec['eval_examples']} examples")
+            sys.exit(13)
+    else:
+        train, ev = encode_rows(tok, ds["train"], a.seq, template, eos), encode_rows(tok, ds["eval"], a.seq, template, eos)[:a.eval_n]
     body = json.dumps({"train": train, "eval": ev}, separators=(",", ":")).encode()
     pad_id = getattr(tok, "pad_token_id", None)
     if pad_id is None:
@@ -1242,9 +1348,12 @@ def prepare(a, tok=None):
     rec = {"fam": a.fam, "dataset": os.path.basename(a.data), "dataset_sha256": got, "tokenizer": a.model, "revision": a.revision,
            "tokenizer_class": type(tok).__name__, "format": ALPACA_PROMPT if template == "alpaca" else FMT, "template": template, "eos": eos,
            "pad_id": pad_id, "seq": a.seq, "n_train": len(train), "n_eval": len(ev),
-           "train_tokens": sum(map(len, train)), "sha256": sha_bytes(body), "train": train, "eval": ev}
+           "train_tokens": sum(map(len, train)),
+           **({"pack": True, "pack_sep_id": int(tok.eos_token_id), "pack_pools": pool_rec, "pack_stats": {"train": st_tr, "eval": st_ev}} if pack else {}),
+           "sha256": sha_bytes(body), "train": train, "eval": ev}
     write_json(a.tokens, rec)
-    print(f"TOKENS fam={a.fam} template={template} n_train={len(train)} n_eval={len(ev)} train_tokens={rec['train_tokens']} mean={rec['train_tokens']/max(1,len(train)):.1f} pad_id={pad_id} sha={rec['sha256']}")
+    print(f"TOKENS fam={a.fam} template={template} n_train={len(train)} n_eval={len(ev)} train_tokens={rec['train_tokens']} mean={rec['train_tokens']/max(1,len(train)):.1f} pad_id={pad_id} sha={rec['sha256']}"
+          + (f" pack=1 seq={a.seq} sep={rec['pack_sep_id']} examples={st_tr['examples_used']}/{st_ev['examples_used']} split={st_tr['examples_split_across_rows']}" if pack else ""))
     return rec
 
 
@@ -3220,6 +3329,8 @@ def run_arm(a, load_fn, sampler=True):
         stub(a, "tokens_mismatch", f"{a.tokens}: sha {sha_bytes(body)[:12]} != {tk['sha256'][:12]} / registered {str(a.tokens_sha)[:12]}", code=13)
     if tk.get("fam") not in (None, a.fam):
         stub(a, "tokens_mismatch", f"{a.tokens} was tokenised for fam {tk.get('fam')}, arm is {a.fam}", code=13)
+    if tk.get("pack") and tk.get("seq") != a.seq:   # TC1 amendment 39: a packed file's rows ARE its seq; an arm labelled otherwise would mis-record its fixture
+        stub(a, "tokens_mismatch", f"{a.tokens} is packed at seq {tk.get('seq')}, the arm runs --seq {a.seq}", code=13)
     train, ev = tk["train"], tk["eval"][:a.eval_n]
     template, eos, pad_id = tk.get("template", "clinical"), tk.get("eos", "") or "", tk.get("pad_id")
     M = int(getattr(a, "micro_batch", 1) or 1)
@@ -3299,7 +3410,10 @@ def run_arm(a, load_fn, sampler=True):
                 or glob.glob(os.path.join(os.path.dirname(os.path.abspath(a.tokens)), "data", "ds_*.json"))
             if raw:
                 rows = json.load(open(raw[0]))["train"]
-                tokenizer_agree = encode_rows(tokenizer_obj, rows[:8], a.seq, template, eos) == train[:8]
+                if tk.get("pack"):                  # TC1 amendment 39: the first 8 packed rows come from the registered train rows' prefix
+                    tokenizer_agree = pack_rows(tokenizer_obj, rows, a.seq, template, eos, n_rows=8)[0] == train[:8]
+                else:
+                    tokenizer_agree = encode_rows(tokenizer_obj, rows[:8], a.seq, template, eos) == train[:8]
         except Exception as e:
             tokenizer_agree = f"unchecked: {e}"
     _census_phase.__exit__(None, None, None)
@@ -3751,7 +3865,7 @@ def run_arm(a, load_fn, sampler=True):
         "hf_experts_dispatch": hf_dispatch,                                                                                      # TC2 T26
         "unsloth_backend_calls_per_step_min": ub_min, "unsloth_backend_calls_per_step_max": ub_max, "unsloth_backend_absent": counter.absent,
         "tokens": {"path": os.path.basename(a.tokens), "sha256": tk["sha256"], "n_train": len(train), "eval_rows_used": len(ev), "tokenizer_agree": tokenizer_agree,
-                   "pad_id": pad_id},
+                   "pad_id": pad_id, "pack": bool(tk.get("pack"))},                                                      # TC1 amendment 39
         "prereg": a.prereg, "harness": HARNESS, "env": env, "load_s": round(load_s, 1),
         **PH.report(),                              # #548: phase_seconds, prologue_s, prologue_unattributed_s, phase_budget_s
         "verify": x.get("verify"), "census": census, "engagement_banners": banner_lines, "unsloth_bnb4bit_modules": bnb4,
@@ -5262,6 +5376,12 @@ def main():
                          "+ bitsandbytes rather than grouped-nf4-gemm, so a parity pair against `reference` separates a "
                          "kernel defect from a trajectory floor.")
     ap.add_argument("--template", choices=["clinical", "alpaca"], default="clinical", help="T12: the prompt template the tokens file is built with (--prepare)")
+    ap.add_argument("--pack", type=int, choices=[0, 1], default=0,
+                    help="TC1 amendment 39 (--prepare): 1 = packed rows of exactly --seq tokens, EOS between examples, from the registered text "
+                         "extended in its own order (needs --pack-src); 0 (default) = one example per row, the tokens file byte-identical to before")
+    ap.add_argument("--pack-src", default=None, help="TC1 amendment 39 (--prepare --pack 1): tp4_alpaca.py's source file (alpaca_data_cleaned.json at its pinned sha)")
+    ap.add_argument("--pack-min-rows", type=int, default=0, help="TC1 amendment 39 (--prepare --pack 1): refuse (exit 13) with fewer packed train rows than this "
+                                                                     "(tc1_run.sh passes steps x micro-batch x accum)")
     ap.add_argument("--micro-batch", type=int, default=1, help="T13: rows per micro-batch (right-padded, masked, -100 labels on pads); 1 = tp2 byte-for-byte")
     ap.add_argument("--optim", choices=["adamw_torch", "adamw_8bit"], default="adamw_torch", help="T14: the same optimizer call in every arm")
     ap.add_argument("--weight-decay", type=float, default=0.01, help="T14: tp2 kept torch's default 0.01; the notebooks use 0.001")
