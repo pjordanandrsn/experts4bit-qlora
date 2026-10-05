@@ -202,3 +202,43 @@ nothing to measure. S0 streams the same 28 tensors per layer as S.
 **Unchanged:** the registered rule above (`dq3_reduce.py` implements it as written), the gates, the arms, the
 predictions, the consequences and the guard. S0 still enters the parity gate (S0 ≠ R is FUNCTION_FAIL), and S0/R is
 still descriptive.
+
+## Amendment 3 (2026-10-05, after three 5090 attempts; no S or S0 arm has completed on a 5090)
+
+**What the three attempts were:**
+- **`dq3-5090-1`** ($0.058): host 564677 refused the subject's first 2.90 GiB allocation with 30.85 GiB free. Fixed by
+  #1171, a VRAM probe that refuses the host at rc 18 before any install.
+- **`dq3-5090-2`** ($0.203): a Shanghai host cloned from GitHub at ~33 KB/s. Fixed by #1173, an egress probe that
+  refuses at rc 14.
+- **`dq3-5090-3`** ($0.068): every probe passed. Arm R completed, then arm S ran out of memory with 30.38 GiB in use.
+
+**The cause of run 3.** bitsandbytes 0.50.2's `MatMul4Bit.forward` keeps the frozen packed weight as a ctx attribute
+(`ctx.tensors = (None, B)`) whenever the input needs grad. Checkpointing's saved-tensor hooks never see it, so every
+layer's weight stayed alive from forward to backward and eviction freed nothing. Streaming could not save VRAM under
+stock bnb, so S (and S0) peaked ABOVE R.
+
+The A2000 rehearsal had shown it (S 6.47 > R 5.82 GiB at real width) and passed anyway, because it never compared
+peaks. This is bnb behaviour, worked around locally and not reported upstream (owner decision, 2026-10-05).
+
+**The change.**
+- **S and S0 run on #1183's late-bound backward.** Every offloaded `Linear4bit`'s grad-mode matmul goes through
+  `_LateBoundMatMul4Bit`:
+  - its forward is bnb's own no-grad `gemm_4bit` call;
+  - its backward is `MatMul4Bit.backward`'s expressions on the weight bound at backward time.
+
+  It is bitwise identical to stock bnb by construction and pinned to bnb 0.50.2's source by sha256.
+- **R is unaffected:** with no offload, it runs stock bnb.
+- **The A2000 rehearsal at real width now reads** R 5.820, S 5.366 and S0 4.912 GiB.
+
+**R's numbers from run 3 were seen** (step 3.388 s, peak 24.77 GiB) and are **not reused**. Run 4 re-measures all six
+arms, and nothing below was set from them.
+
+**The rehearsal now asserts the lane's quantity.** `bench/dq3/dq3_rehearsal_check.py` exits 1 unless:
+- parity is bitwise across the arms;
+- `peak(S), peak(S0) ≤ min peak(R) − (L−2) × per_layer_bytes + ½ layer` at the rehearsal shape.
+
+It is a pre-launch gate, not part of the rule.
+
+**Unchanged:** the registered rule (`dq3_reduce.py`), the gates and their bands, the arms and their order, the
+predictions (the 15.12 GB slot prediction is exactly what the late-bound backward makes reachable), the consequences
+and the 1.0 h guard.
