@@ -1,0 +1,39 @@
+[ladder] prewarmed 67.0 GiB in 35s
+[23:08:01]   checkpoint: local directory /root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0
+[23:08:01]   untied output head recovered from 'lm_head.weight' (outside the 'model.language_model.' text-tower prefix, which would otherwise drop it)
+[23:08:01]   fusing + quantizing experts (up to 40x256) to nf4 (streaming)...
+[23:08:14]   quantized experts on 40/40 MoE layers (256 experts each)
+[23:08:14]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+Generating train split:   0%|          | 0/52002 [00:00<?, ? examples/s]Generating train split:   2%|▏         | 1000/52002 [00:00<00:28, 1772.98 examples/s]Generating train split:  69%|██████▉   | 36000/52002 [00:00<00:00, 71558.05 examples/s]Generating train split: 100%|██████████| 52002/52002 [00:00<00:00, 71090.87 examples/s]
+[e4b.fast] fused TRAINING path on 40 ExpertsLoRA module(s) (dgrad kernel backward)
+[e4b.rope] fused rotary in 1 attention module(s)
+[e4b.rmsnorm] fused 101 frozen RMSNorm(s) for training [101 (1+w)*norm fp32] (0 left on the composite)
+Traceback (most recent call last):
+  File "/root/tc1/ladder.py", line 389, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/tc1/ladder.py", line 259, in main
+    rec = run_rung(a, model, train, batches, torch)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/ladder.py", line 321, in run_rung
+    lo = step(batches[bi]); bi += 1
+         ^^^^^^^^^^^^^^^^^
+  File "/root/tc1/ladder.py", line 310, in step
+    opt.step()
+  File "/opt/conda/lib/python3.11/site-packages/torch/optim/optimizer.py", line 516, in wrapper
+    out = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/optim/optimizer.py", line 81, in _use_grad
+    ret = func(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/optim/adam.py", line 247, in step
+    adam(
+  File "/opt/conda/lib/python3.11/site-packages/torch/optim/optimizer.py", line 149, in maybe_fallback
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/lib/python3.11/site-packages/torch/optim/adam.py", line 949, in adam
+    func(
+  File "/opt/conda/lib/python3.11/site-packages/torch/optim/adam.py", line 773, in _multi_tensor_adam
+    exp_avg_sq_sqrt = torch._foreach_sqrt(device_exp_avg_sqs)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 16.00 MiB. GPU 0 has a total capacity of 31.36 GiB of which 19.69 MiB is free. Including non-PyTorch memory, this process has 31.30 GiB memory in use. Of the allocated memory 30.28 GiB is allocated by PyTorch, and 96.31 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

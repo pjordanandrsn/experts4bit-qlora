@@ -1,0 +1,9 @@
+AMENDMENT 2 SHAPE (registered): P2 for qwen3_5
+RECURRENT_KERNELS mamba2/causal_conv1d/fla True True True
+mg1 tripwire OK 0.46.0 0.38.0 2.8.0+cu128 NVIDIA GeForce RTX 5090
+ANCHOR skipped (MG1_LADDER_ONLY: an engagement count, not a timing)
+DATASET clinical sha=76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791
+qwen3_5: fetched 67G
+qwen3_5/ladder rc=1 0 rungs summarised
+MG1 reduce: receipts  (BAND 0.05, tp1 v2.1 verdict)
+family     ref        fused      verdict   d_final      med  ref s/st  fus s/st  ref GB  fus GB n_patched  notes
