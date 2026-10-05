@@ -46,7 +46,7 @@ Set `E4B_CHUNKED_LM_LOSS=1` (or a chunk size in tokens) before `enable_fast_trai
 `experts4bit_qlora.engines.chunked_lm_loss.enable_chunked_lm_loss(model)`. Hugging Face's causal-LM loss materialises the
 `[tokens, vocab]` logits, upcasts them to fp32 and keeps the fp32 log-probabilities for backward. At Qwen3's 151,936-token vocabulary
 and 4,096 tokens that is 8.1 GiB for the head and loss alone. This computes the same loss over chunks, recomputing each chunk's logits
-in backward: 0.9 GiB at 512-token chunks, at about 1.4x the head-and-loss time (an RTX A2000; CHANGELOG, Unreleased). The same loss
+in backward: 0.9 GiB at 512-token chunks, for one extra head matmul and cross-entropy forward per chunk in backward (CHANGELOG, Unreleased). The same loss
 to fp32 rounding. The same gradients, up to cuBLAS's shape-dependent bf16 reduction (`torch.equal` with
 `allow_bf16_reduced_precision_reduction` off). It covers the Qwen3-MoE, Qwen3.5/3.6-MoE, Mixtral, OLMoE, gpt-oss, ERNIE-4.5-MoE,
 Granite-MoE and -Hybrid, LFM2-MoE and Nemotron-H causal LMs and refuses anything else with a warning. Only training forwards with

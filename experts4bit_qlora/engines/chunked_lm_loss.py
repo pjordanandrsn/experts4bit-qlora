@@ -21,8 +21,8 @@ costs one host sync per training forward, after the decoder. What differs from t
   reduction by shape (``torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction``, on by default). On an RTX A2000
   the hidden-state gradient differed from stock in about a third of its elements by bf16 rounding (relative L2 3-5e-3), and
   was ``torch.equal`` to stock with that flag off;
-- time: one extra LM-head matmul and cross-entropy forward per chunk in backward (the recompute). On the A2000 the head and loss
-  together took 424 ms against 297 ms at 4,096 tokens.
+- time: one extra LM-head matmul and cross-entropy forward per chunk in backward (the recompute). Its size on a target card
+  is a registered lane's to read; the RTX A2000 this was built on is a correctness testbed.
 
 Which forwards take it: a forward that passes ``labels`` with gradients enabled, ``logits_to_keep`` 0 and the dict return.
 Everything else -- generation, a ``torch.no_grad`` evaluation, ``return_dict=False`` -- runs the stock forward untouched, so a
@@ -65,8 +65,8 @@ __all__ = [
 ]
 
 #: Tokens per chunk when ``E4B_CHUNKED_LM_LOSS=1``. On an RTX A2000 at Qwen3's vocabulary (151,936) and hidden 2048 the loss's
-#: own peak is 0.90 GiB at 512-token chunks, 1.77 at 1,024 and 8.11 stock, at 4,096 tokens; the time per call did not move with
-#: the chunk size from 256 to 2,048 (bench/chunked-lm-loss/receipts/lm_head_loss_a2000.json).
+#: own peak is 0.90 GiB at 512-token chunks, 1.77 at 1,024 and 8.11 stock, at 4,096 tokens (allocator bytes;
+#: bench/chunked-lm-loss/receipts/lm_head_loss_a2000.json).
 DEFAULT_CHUNK = 512
 
 #: ``patched`` models, training forwards that took the chunked loss / ran stock, run-time refusals, and enable-time refusals

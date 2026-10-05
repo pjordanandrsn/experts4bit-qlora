@@ -38,33 +38,33 @@
   loss, no Granite scaling, no fp32 upcast, a dropped tail chunk, mis-compacted labels, `num_items_in_batch` or `shift_labels`
   ignored) fails the suite.
 - **RTX A2000 12 GB, head + loss alone** (`bench/chunked-lm-loss/bench_lm_head_loss.py`): vocab 151,936, hidden 2048, bf16
-  hidden states with grad, frozen bf16 head, torch 2.8.0+cu128. Each cell is the peak allocated above the inputs (GiB) / median
-  ms per forward+backward:
+  hidden states with grad, frozen bf16 head, torch 2.8.0+cu128. Each cell is the peak allocated above the inputs (GiB); the
+  A2000 is a correctness testbed, so no timing is read from it:
 
   | tokens | stock | chunk 256 | chunk 512 | chunk 1,024 | chunk 2,048 |
   |---|---|---|---|---|---|
-  | 1,024 | 2.04 / 69.5 | 0.44 / 105.2 | 0.88 / 103.9 | 1.74 / 104.9 | 1.74 / 105.0 |
-  | 2,048 | 4.06 / 141.0 | 0.45 / 211.0 | 0.89 / 208.6 | 1.75 / 210.7 | 3.48 / 212.4 |
-  | 4,096 | 8.11 / 297.4 | 0.47 / 429.0 | 0.90 / 423.7 | 1.77 / 426.8 | 3.51 / 430.4 |
+  | 1,024 | 2.04 | 0.44 | 0.88 | 1.74 | 1.74 |
+  | 2,048 | 4.06 | 0.45 | 0.89 | 1.75 | 3.48 |
+  | 4,096 | 8.11 | 0.47 | 0.90 | 1.77 | 3.51 |
 
-  The recompute costs one more head matmul and cross-entropy forward per chunk: about 1.4-1.5x stock's time for this part.
+  The time cost is structural: one more head matmul and cross-entropy forward per chunk in backward (the recompute). Its size
+  on a target card is unread here.
   - The loss matched stock to 1 fp32 ulp. The hidden-state gradient was `torch.equal` to stock wherever the head's backward
     matmul ran at stock's row count. Elsewhere about a third of its elements differed by bf16 rounding (relative L2 3.2e-3 at
     2,048 tokens, 4.6e-3 at 4,096). That is cuBLAS choosing its bf16 split-K reduction by shape: with
     `torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = False` it was `torch.equal` at 2,048 and 4,096.
 - **RTX A2000, a training step** (`train_step_ab.py`): Qwen3-30B-A3B's first 4 layers with the real embedding and head, through
   the harness's fused-arm setup (NF4 experts, gradient checkpointing, fp32 attention LoRA r16, `enable_fast_train(dgrad=True)`),
-  micro-batch 1. Arms were interleaved in one process, each cell a peak GiB / median s per step:
+  micro-batch 1. Arms were interleaved in one process, each cell the peak GiB per step:
 
   | tokens | stock | chunk 512 | chunk 1,024 |
   |---|---|---|---|
-  | 512 | 3.91 / 0.439 | 3.77 / 0.449-0.455 | 3.77 / 0.462 |
-  | 1,024 | 4.94 / 0.716 | 4.55 / 0.743-0.751 | 4.65 / 0.758 |
-  | 2,048 | 6.99 / 1.296-1.302 | 6.10-6.15 / 1.358-1.379 | 6.19 / 1.381 |
-  | 4,096 | **OOM** (`Tried to allocate 2.32 GiB`, the 5090's allocation, on an 11.62 GiB card) | 7.11 / 4.25-4.26 | 7.11 / 4.26 |
+  | 512 | 3.91 | 3.77 | 3.77 |
+  | 1,024 | 4.94 | 4.55 | 4.65 |
+  | 2,048 | 6.99 | 6.10-6.15 | 6.19 |
+  | 4,096 | **OOM** (`Tried to allocate 2.32 GiB`, the 5090's allocation, on an 11.62 GiB card) | 7.11 | 7.11 |
 
-  The step costs +2-6 % on this slice, where the head is a large share of a four-layer step. With 48 layers that share is smaller;
-  on a 5090 it is not measured. Chunks of 512 and 1,024 stepped alike, so `1` means 512.
+  The step's time cost on a 5090 is a TC1 registration's to read; the A2000 is not a speed testbed. `1` means 512-token chunks.
   - At 2,048 tokens the loss was identical in every comparison. LoRA gradients differed from stock by 2.7e-3 relative L2 on the
     fused path (stock against itself: 1.8e-3) and 2.6e-3 on the reference path (6.1e-4). With the reduced-precision flag off:
     1.36e-3 against 1.46e-3, and 5.2e-4 against 5.4e-4, inside run-to-run noise.
