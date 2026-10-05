@@ -273,6 +273,8 @@ was unstable on a busy host, so the switch stays opt-in until amendment 31 reads
 field image's torch 2.8.0+cu128 / transformers 5.18.0 and Unsloth on torch 2.12.1+cu130 / transformers 5.5.0. In Unsloth's environment
 e4b's matched arm steps 0.882× as long. The cause is not the padded LoRA delta's fp32 `bmm`, whose host cost per new shape is the same
 on both torch versions (`e4b.train.bmm-host-replay.5090.2026-10-04`). A position with both frameworks on one stack is its own box.
+Nor is it triton (`e4b.train.triton37.qwen3.5090.2026-10-05`, TC1 amendment 32): triton 3.7.1 alone in the field image reads 0.992 on
+the matched arm and 0.971 on the shipped arm. The gain sits with torch 2.12 and/or transformers 5.5; amendment 34 splits them.
 
 **The other families at matched work** (lane TC2, 2026-10-02, two rented
 RTX 5090 hosts, [`bench/h2h-2026-10-02/tc2/`](../bench/h2h-2026-10-02/tc2/README.md);

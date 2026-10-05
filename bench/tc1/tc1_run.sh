@@ -499,6 +499,8 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
   if [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = t212 ]; then PY=$PY_UNS          # J: e4b on torch 2.12.1+cu130
     [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-unsloth (cu130-torch2121) + e4b"}'; return 0; }
     [ "$T212_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$T212_REASON"; return 0; }
+  elif [ "$FW" = e4b ] && [ "${E4B_VENV:-}" = tf55 ]; then PY=$W/venv-e4b-tf55/bin/python   # TC1 amendment 34: venv-e4b with transformers 5.5.0
+    [ "${TF55_OK:-0}" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "${TF55_REASON:-venv-e4b-tf55 was not built}"; return 0; }
   elif [ "$FW" = hf ] && [ "${HF_VENV:-}" = t214 ]; then PY=$PY_AX              # J: the HF arm on the axolotl venv's torch 2.14
     [ "$CU130_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM refused "$CU130_REASON" '{"venv": "venv-axolotl (torch cu130)"}'; return 0; }
     [ "$AX_OK" = 1 ] || { stubw $FAM $FW $TAG $ARM install_failed "$AX_REASON"; return 0; }
@@ -1210,6 +1212,35 @@ tc1_tritonab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_tr0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_shipped_tr0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_envsplit_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 34 (2026-10-05): amendment 24's environment gain split on the 5090. The matched
+# arm in three environments, two draws each in ABC CBA order: e0 venv-e4b (torch 2.8.0, transformers 5.18.0, triton 3.4), e1 venv-e4b-tf55
+# (built here like venv-e4b, transformers 5.5.0: the one variable against e0), e2 venv-unsloth + e4b (torch 2.12.1, transformers 5.5.0,
+# triton 3.7.1: torch + triton against e1). The prebound launches are off on every side (they cover triton 3.4 / 3.6, not 3.7).
+tc1_envsplit_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_e0:fused e4b:fused_attn4_m_e1:fused e4b:fused_attn4_m_e2:fused e4b:fused_attn4_m_e2_d2:fused e4b:fused_attn4_m_e1_d2:fused e4b:fused_attn4_m_e0_d2:fused"
+  say "===== ENV SPLIT family $FAM ($MID @ $REV; e0 venv-e4b, e1 venv-e4b + transformers 5.5.0, e2 venv-unsloth; matched arm; amendment 34)"
+  TF55_OK=0; TF55_REASON=""
+  if $PY_BASE -m venv --system-site-packages $W/venv-e4b-tf55 > logs/venv_e4b_tf55.log 2>&1; then
+    pip_fresh $W/venv-e4b-tf55/bin/python e4b_tf55
+    if perl -e 'alarm 2400; exec @ARGV' $W/venv-e4b-tf55/bin/python -m pip install -q --no-input --prefer-binary \
+         "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" \
+         "transformers==5.5.0" "bitsandbytes==$BNB_VER" "peft==$PEFT_VER" accelerate safetensors "huggingface_hub>=0.23" sentencepiece tiktoken >> logs/venv_e4b_tf55.log 2>&1 \
+       && $W/venv-e4b-tf55/bin/python -c "import torch, transformers, experts4bit_qlora; assert transformers.__version__ == '5.5.0', transformers.__version__; print('venv-e4b-tf55 torch', torch.__version__, 'transformers', transformers.__version__, 'e4b', experts4bit_qlora.__version__)" >> logs/venv_e4b_tf55.log 2>&1; then
+      TF55_OK=1
+    else TF55_REASON="venv-e4b-tf55 (transformers 5.5.0) did not install or import (logs/venv_e4b_tf55.log): $(tail -2 logs/venv_e4b_tf55.log | tr '\n' ' ' | cut -c1-200)"; fi
+  else TF55_REASON="venv-e4b-tf55 could not be created (logs/venv_e4b_tf55.log)"; fi
+  echo "VENV-E4B-TF55 ok=$TF55_OK $(tail -1 logs/venv_e4b_tf55.log | cut -c1-120)" | tee -a summary.txt
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local OFF="E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0"
+  can_run 600 $FAM/e4b/m_e0     && TC1_ARM_EXTRA_ENV="$OFF" arm                 $FAM e4b fused_attn4_m_e0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e1     && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=tf55 arm   $FAM e4b fused_attn4_m_e1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e2     && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_e2 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e2_d2  && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_e2 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e1_d2  && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=tf55 draw2 $FAM e4b fused_attn4_m_e1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_e0_d2  && TC1_ARM_EXTRA_ENV="$OFF" draw2               $FAM e4b fused_attn4_m_e0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_routebench_family FAM ALARM -- TC1c amendment 3 (2026-10-04): a kernel-route replay, not a training run. grouped-nf4-gemm's
 # fused NF4 grouped GEMM (forward and dgrad) against a whole-stack bitsandbytes dequantize_4bit + torch._grouped_mm on the
 # recorded real-router calls of e4b's training step (routecalls-qwen3.json, staged by TC1_EXTRA_STAGE with route_bench.py; no
@@ -1400,6 +1431,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3dqab)   tc1_dqab_family   qwen3dqab   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 28: absmax fp32 vs double-quantized
   mixtraldqab) tc1_dqab_family   mixtraldqab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 28 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3tritonab) tc1_tritonab_family qwen3tritonab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 32: triton 3.4 vs 3.7.1 in venv-e4b
+  qwen3envsplit) tc1_envsplit_family qwen3envsplit Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 34: transformers vs torch+triton
   mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 22 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3memcensus) tc1_memcensus_family qwen3memcensus Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 23 (fetch 5400, e4b 3600, Unsloth 3600)
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
