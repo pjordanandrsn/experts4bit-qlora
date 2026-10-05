@@ -568,6 +568,152 @@ teacher-forced NLL on this text could grade flattery. Amendment A4 reads A1's cr
 
 **Spend:** the lane is at **$3.792** ($3.066 + $0.726).
 
+## Amendment A4 (2026-10-05): grade engines by KL to the model's own function; NLL becomes descriptive
+
+Registered before box R runs and before any box I reading. The maintainer reviewed the design: the named-token estimator,
+calibration on R, R as a separate box, and K-A as a prediction rather than a gate.
+
+### Why
+
+A3's read showed that teacher-forced NLL on these conversations can rank the less faithful path first. The NF4 requant reads
+lower NLL than the native MXFP4 store on two of three windows, while P44 measured the store ten times closer to the bf16
+dequant reference. (That this is entropy flattery remains a hypothesis.) Ranking engines by NLL on off-policy text could
+therefore grade flattery.
+
+From A4 on:
+- **A1's cross-engine NLL (G1–G5) is read DESCRIPTIVELY only.**
+- **Engines are graded by KL from a bf16-dequant reference of gpt-oss-20b** (P44's reference: the shipped MXFP4 bytes through
+  `Mxfp4Config(dequantize=True)`, refused if any packed tensor survives), at every scored position of the registered windows.
+
+### The estimator (`bench/sc2/sc1g_kl.py`, self-tested on 12 cases)
+
+**What R stores.** At each scored position, box R stores:
+- the reference's top-64 token ids and their fp64 log-probs;
+- its rest mass (as its own log-sum-exp);
+- the target and its log-prob.
+
+**What each engine returns.** Each engine returns its log-probs on exactly those 64 named tokens. Its rest is 1 − Σ. Then:
+
+  KL65 = Σ_k p_k (log p_k − log q_k) + p_rest (log p_rest − log q_rest)
+
+KL65 is exact on the partition {64 named tokens, rest}. By data processing it is a **lower bound** on the full-vocabulary KL:
+truncation biases downward, the direction `kl_fidelity.assert_full_vocab` refuses. Hence the gate below.
+
+**The registered rules:**
+- **Rest clamp.** The rest bucket is clamped at **ε = 1e-9** on either side. A window whose engine-side clamps exceed **1 %**
+  of its positions is UNREAD.
+- **Coverage floor.** A window whose reference top-64 mass averages under **0.99** is UNREAD.
+- **Top-K fallback,** for an engine or shape that cannot name tokens; none is planned. The engine's own top-K with
+  **K ≥ 256**:
+  - coverage = the reference top-64 mass whose tokens it returned, and a window under 0.99 is UNREAD;
+  - an uncovered reference token gets the engine's residual spread evenly over the vocabulary it did not return;
+  - the bound that gives it the whole residual is reported beside it.
+- **Full-vocab fallback.** If it is ever used (fp16 log-probs over all 201,088 tokens, ≈ 0.8 GB per window), those artifacts
+  are sha-pinned here before box I launches, box I refuses a mismatch, and SGLang reads UNREAD there.
+
+### Box R (`bench/sc2/sc1g-r/`, one H100 NVL)
+
+**Rate.** H100 NVL at a declared **$3.50/h**, maintainer-approved 2026-10-05 per tc1c's precedent. This is no policy change.
+Guard **1.0 h**, so no proof precedes it.
+
+**Inputs.** The five committed windows (`bench/h2h-2026-10-02/sc1g/receipts/sc1g-diag-2/sc1g/k8_window_*.json`), each
+refused unless it hashes to its registered sha (`window_shas.json`):
+
+| window | sha |
+|---|---|
+| conv1 | `3753e997…` |
+| conv2 | `9bf650b8…` |
+| conv3 | `997bc7c3…` |
+| conv4 | `e8415e7a…` |
+| wikitext | `506d7ca8…` |
+
+**What R does:**
+1. K0 controls on the host (`kl_fidelity.py --controls`).
+2. The pinned fetch (gpt-oss-20b @ `6cee5e81`).
+3. `sc1g_ref.py`: the reference scored **decode-shaped** (one token per forward over a KV cache, as P44) over the 2,048
+   scored positions of every window. Each window's artifact is `ref_<src>.npz`, hashed.
+4. The calibration (below).
+
+**The calibration, which is the instrument gate.** Both full distributions exist only on R. KL65 is compared with the
+full-vocabulary KL (fp64) on two real perturbations of the reference:
+- **self:** the reference prefill-shaped against its decode-shaped self (arithmetic order, ~5e-4 scale). Its full KL is the
+  instrument floor **F**, and F must stay under P44's 1e-2.
+- **nf4:** the reference with every expert matrix fake-quantised to NF4 in place, against the reference, both
+  prefill-shaped (requantisation, ~0.02 scale). The fake-quant is gnf4's `quantize_pack_nf4` + `dequant_ref`, cross-checked
+  bit-for-bit against gnf4 on the box.
+
+**Registered:** KL65 / KL_full ≥ **0.90** on both pairs, on every window. Otherwise the bucketed estimator is UNREAD for the
+lane, and the full-vocab fallback above is registered instead.
+
+**What 0.90 licenses.** The calibration covers two perturbation types: arithmetic-order reordering and NF4 requantisation. A
+comparator whose deviation has a different tail shape (GPTQ-int4 attention, an engine's activation quantisation) is covered
+by the lower-bound property, **not by the calibration**.
+
+**R's verdict (`r_verdict.json`) is its own gate.** It is decided on R, before anything consumes the artifacts. Each check
+reads OK / UNREAD / VOID:
+- K0;
+- the windows complete;
+- floor F < 1e-2;
+- the self ratio;
+- the nf4 ratio;
+- coverage;
+- the NF4 fake-quant matching gnf4: **VOID** unless gnf4 imports on R and its `quantize_pack_nf4` + `dequant_ref` match
+  `sc1g_ref.fake_nf4` bit for bit. An import failure must not leave the nf4 pair unverified.
+
+R reads **R_OK** only when every check is OK. Box I starts only from an R_OK set.
+
+**Descriptive, not predicted:** the reference's own NLL per window (decode- and prefill-shaped) and the NF4 fake-quant's.
+The flattery hypothesis's direction is read off the reference itself.
+
+### After R: the artifact registration
+
+A short PR commits R's artifacts (about 1 MB per window), `ref_shas.json`, `r_verdict.json` and `r_calib.json` to
+`bench/sc2/sc1g-r/ref/`, and adds them to the SC staging lists. Box I stages them into `$W/sc1g_ref` and refuses any KL arm
+whose artifact is absent or does not hash to its registered sha (`i_ref`).
+
+### Box I under A4 (supersedes A1's arm list)
+
+**Windows.** Four conversations: `--n-conv 4` adds conv3 and conv4 by the registered rule. Each scored text matches R's sha.
+
+**Arms, in priority order** (the deadline drops from the end):
+1. The **named-token KL rows**, engine by engine so each server starts once. Each runs conv1–conv4, then wikitext.
+   - e4b served, MXFP4 GEMV and NF4: `sc1g_k8.py`'s torch proxy records step_decomp's own served rows;
+   - vLLM served (Marlin W4A16): `logprob_token_ids` = the named ids + the target;
+   - SGLang served, flashinfer_mxfp4 then Marlin: `token_ids_logprob`;
+   - llama.cpp decode, default MMQ then `MMQ_PREC=q8`: the harness's `--named`.
+2. The descriptive prefill-shaped rows.
+
+**When a row counts.** A KL row is VALID only when:
+- the arm itself is VALID, route gates included;
+- its named record is complete, with no void positions; for e4b the proxy's meta record must exist (missing = VOID, the
+  broken-proxy case) and show one log_softmax row per step;
+- its target log-probs reproduce the arm's own mean NLL to **1e-9**.
+
+**The proof.** Box I's proof (2.0 h guard, per A2) reads one named KL row per engine path on conv1. These are e4b MXFP4,
+vLLM, SGLang native and llama.cpp q8, each VALID against R's artifact (`sc1g_reduce.py --prove-a4`).
+
+### Predictions (registered; `sc1g_reduce.py`'s `a4`, self-tested; pooled = the mean over the graded windows VALID, ≥ 3 needed)
+
+| # | prediction | basis |
+|---|---|---|
+| K-A | e4b NF4 served KL65 ≥ **3×** e4b MXFP4 served KL65 on every graded window | P44: 0.0222 vs 0.0019 (11.6×) on its 200 prompts. **A prediction, not an instrument gate**: if it fails, that is a finding about NF4 on chat text |
+| L1 | e4b MXFP4 served pooled KL65 ≤ **2×** the best comparator's | partly unbased: P44 gives e4b's 0.0019; the comparators were never measured |
+| L2 | every engine serving the native MXFP4 weights (e4b MXFP4, vLLM, both SGLang, both llama.cpp) reads pooled KL65 **below R's NF4-requant scale** (the nf4 pair's full KL, pooled) | they serve the checkpoint's own weights; partly unbased for llama.cpp's q8_1 activations |
+
+- Every prediction is UNREAD unless box R read R_OK and every artifact matched its sha.
+- **Descriptive:** the per-window KL65 table, the pooled rank, each row against the floor F (within F = indistinguishable
+  from the reference's own arithmetic order), and NLL beside each row.
+
+### Cost and order
+
+1. This registration.
+2. Box R: ≤ ~$4.
+3. The artifact registration.
+4. Box I's proof: 2.0 h guard, ≈ $1.7.
+5. Box I's reading.
+
+Each run stays under the $15 no-ask tier. The lane is at **$3.792**.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).

@@ -18,7 +18,7 @@ PIN = LANE / "staged.sha256"
 OWN = ("sc1_run.sh", "sc1_e4b_sched.py", "sc1_prompts.py", "sc1_sampler.sh")
 COMP_DIRS = ("vllm", "sglang", "llamacpp", "exl3", "lmdeploy")
 SC1B = tuple("sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh".split())                         # bench/sc1b, staged flat on every box
-SC2 = tuple("sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py".split())                                                                                            # bench/sc2, staged flat on every box
+SC2 = tuple("sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py".split())                                                                                            # bench/sc2, staged flat on every box
 P39 = ("step_decomp.py", "k8_bake.py", "calib.json")
 P98 = ("p98_bake.py",)                                     # bench/p98: P98's Qwen3.6 arena bake, staged flat (SC2d, box K)
 

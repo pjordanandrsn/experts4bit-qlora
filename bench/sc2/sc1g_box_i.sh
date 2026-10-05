@@ -93,7 +93,7 @@ i_vllm(){ local MODE=$1 SRC=$2 S=nll_vllm_$1_$2
   have vllm || { stub $W/sc1g/$S.json vllm "nll_$MODE" 1 unsupported "vllm not installed"; line "$S SKIPPED unsupported"; return 0; }
   local AL; AL=$(arm_alarm 2400); say "arm $S (nll $MODE $SRC alarm=$AL)"; sampler_start $S
   env SC1_WINDOW=$W/sc1g/k8_window_$SRC.json SC1_MODE=$MODE SC1_MODEL=$SC2G_MID SC1_REV=$SC2G_REV SC1_ATTN_BACKEND=TRITON_ATTN SC1_MOE_BACKEND=marlin \
-      SC1_OUT=$W/sc1g/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID SC1_LOG=$W/logs/run_$S.engine.log VLLM_LOGGING_LEVEL=INFO \
+      SC1_OUT=$W/sc1g/$S.json SC1_INSTANCE_ID=$SC1_INSTANCE_ID SC1_LOG=$W/logs/run_$S.engine.log VLLM_LOGGING_LEVEL=INFO ${SC1G_NAMED_ENV:-} \
     perl -e "alarm $AL; exec @ARGV" $W/venv-vllm/bin/python $W/vllm/sc1_vllm_nll.py > logs/run_$S.log 2>&1
   local rc=$?; sampler_stop $S
   [ -s $W/sc1g/$S.json ] || stub $W/sc1g/$S.json vllm "nll_$MODE" 1 "$(status_of_rc $rc load_fault)" "rc=$rc" logs/run_$S.log
@@ -110,7 +110,7 @@ i_sgl(){ local V=$1 MODE=$2 SRC=$3 S=nll_sglang_$1_$2_$3
   [ -n "$SGL_MODE" ] || { stub $W/sc1g/$S.json sglang "nll_$MODE" 1 "$(have sglang && echo harness_error || echo unsupported)" "no sglang server" $W/logs/install_sglang.log; line "$S SKIPPED no server"; return 0; }
   local AL; AL=$(arm_alarm 2400); say "arm $S (nll $MODE $SRC alarm=$AL)"; sampler_start $S
   perl -e "alarm $AL; exec @ARGV" $W/venv-sglang/bin/python $W/sglang/sc1_sglang_nll.py --window $W/sc1g/k8_window_$SRC.json --mode $MODE --port 30000 \
-      --server-info $SGL_LOG.server_info.json --engagement $SGL_LOG.engagement.json --out $W/sc1g/$S.json > logs/run_$S.log 2>&1
+      --server-info $SGL_LOG.server_info.json --engagement $SGL_LOG.engagement.json --out $W/sc1g/$S.json ${SC1G_NAMED_ARGS:-} > logs/run_$S.log 2>&1
   local rc=$?; sampler_stop $S
   [ -s $W/sc1g/$S.json ] || stub $W/sc1g/$S.json sglang "nll_$MODE" 1 "$(status_of_rc $rc)" "rc=$rc" logs/run_$S.log
   line "$S mode=$MODE src=$SRC rc=$rc $(grep -aE 'mean_nll|ppl|VOID|Error' logs/run_$S.log | tail -1 | cut -c1-200)"; return $rc; }
@@ -121,7 +121,7 @@ i_ll(){ local V=$1 MODE=$2 SRC=$3 S; S=nll_llamacpp$([ "$1" = q8 ] && echo _q8)_
   have llamacpp && [ -s "$G" ] || { stub $W/sc1g/$S.json llamacpp "nll_$MODE" 1 unsupported "no llama.cpp build or GGUF"; line "$S SKIPPED"; return 0; }
   local AL; AL=$(arm_alarm 2400); say "arm $S (nll $MODE $SRC alarm=$AL)"; sampler_start $S
   env $([ "$V" = q8 ] && echo GGML_CUDA_MMQ_PREC=q8) perl -e "alarm $AL; exec @ARGV" $LLAMACPP_BIN/nll_teacher_forced --model "$G" --tokens $W/sc1g/k8_window_$SRC.json \
-      --out $W/sc1g/$S.json --prompt-len 512 --steps 2048 --mode $MODE --n-gpu-layers 99 --flash-attn on --type-kv f16 > logs/run_$S.log 2>&1
+      --out $W/sc1g/$S.json --prompt-len 512 --steps 2048 --mode $MODE --n-gpu-layers 99 --flash-attn on --type-kv f16 ${SC1G_NAMED_LL:-} > logs/run_$S.log 2>&1
   local rc=$?; sampler_stop $S
   if [ -s $W/sc1g/$S.json ]; then "$PY" - "$W/sc1g/$S.json" "$V" <<'PYL'
 import json, sys
@@ -131,6 +131,62 @@ json.dump(r, open(p, "w"), indent=1)
 PYL
   else stub $W/sc1g/$S.json llamacpp "nll_$MODE" 1 "$(status_of_rc $rc)" "rc=$rc" logs/run_$S.log; fi
   line "$S mode=$MODE src=$SRC rc=$rc $(grep -aE 'mean_nll|ppl|REFUSE|error' logs/run_$S.log | tail -1 | cut -c1-200)"; return $rc; }
+
+# ---- A4 (bench/sc2/SC1g-PREREG.md, amendment A4): the fidelity instrument's ENGINE side. Box R's artifacts (ref_<src>.npz: the
+# bf16-dequant reference's top-64 named ids + fp64 log-probs per scored position) and their registered shas (ref_shas.json) are
+# staged into $SC1G_REF_DIR by the post-R registration; absent, or not hashing to the registered sha, every KL arm is REFUSED
+# (no artifact, no KL). Each served arm then also writes named_<stem>.npz: the engine's log-probs on those 64 ids at each
+# position and on the target (sc1g_kl.py reads KL65 from them; the reader proves alignment against the arm's own mean NLL).
+SC1G_REF_DIR=$W/sc1g_ref
+SC1G_A4_SRCS="conv1 conv2 conv3 conv4 wikitext"   # conv1-conv4 graded, wikitext the descriptive control (last per engine)
+i_ref(){ local SRC=$1 F=$SC1G_REF_DIR/ref_$1.npz WANT GOT
+  [ -s "$F" ] && [ -s "$SC1G_REF_DIR/ref_shas.json" ] || return 1
+  WANT=$("$PY" -c "import json, sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])" "$SC1G_REF_DIR/ref_shas.json" "$SRC" 2>/dev/null) || return 1
+  GOT=$(sha256sum "$F" | cut -d' ' -f1); [ "$GOT" = "$WANT" ] || { line "SC1G_REF_BAD $SRC sha $GOT != registered $WANT" >&2; return 1; }
+  echo "$WANT"; }
+# the artifacts (and box R's verdict + calibration) ride in the receipt beside the rows they grade
+i_ref_stage(){ mkdir -p $W/sc1g/ref; cp -p $SC1G_REF_DIR/ref_*.npz $SC1G_REF_DIR/ref_*.npz.json $SC1G_REF_DIR/ref_shas.json \
+    $SC1G_REF_DIR/r_verdict.json $SC1G_REF_DIR/r_calib.json $W/sc1g/ref/ 2>/dev/null
+  line "SC1G_REF staged $(ls $W/sc1g/ref/ref_*.npz 2>/dev/null | wc -l | tr -d ' ') artifacts"; }
+i_noref(){ stub $W/sc1g/$1.json "$2" "named" 1 refused "no registered reference artifact for $3 (A4: no artifact, no KL)"; line "$1 REFUSED (no reference)"; }
+i_e4b_named(){ local NAME=$1 STACK=$2 SRC=$3 SHA; SHA=$(i_ref $SRC) || { i_noref $NAME e4b $SRC; return 0; }
+  i_e4b $NAME "$STACK SC1G_REF_FILE=$SC1G_REF_DIR/ref_$SRC.npz SC1G_REF_SHA=$SHA SC1G_NAMED_OUT=$W/sc1g/named_$NAME.npz" $SRC; }
+i_vllm_named(){ local SRC=$1 SHA; SHA=$(i_ref $SRC) || { i_noref nll_vllm_served_$SRC vllm $SRC; return 0; }
+  SC1G_NAMED_ENV="SC1_NAMED_REF=$SC1G_REF_DIR/ref_$SRC.npz SC1_NAMED_REF_SHA=$SHA SC1_NAMED_OUT=$W/sc1g/named_nll_vllm_served_$SRC.npz" i_vllm served $SRC; }
+i_sgl_named(){ local V=$1 SRC=$2 SHA; SHA=$(i_ref $SRC) || { i_noref nll_sglang_${V}_served_$SRC sglang $SRC; return 0; }
+  SC1G_NAMED_ARGS="--named-ref $SC1G_REF_DIR/ref_$SRC.npz --named-ref-sha $SHA --named-out $W/sc1g/named_nll_sglang_${V}_served_$SRC.npz" i_sgl $V served $SRC; }
+# llama.cpp's harness reads raw int32 ids and writes raw float64 [steps x 65]; converted on either side
+i_ll_named(){ local V=$1 SRC=$2 SHA S; S=nll_llamacpp$([ "$V" = q8 ] && echo _q8)_decode_$SRC
+  SHA=$(i_ref $SRC) || { i_noref $S llamacpp $SRC; return 0; }
+  "$PY" -c "import numpy as np, sys; np.load(sys.argv[1])['ids'].astype('<i4').tofile(sys.argv[2])" $SC1G_REF_DIR/ref_$SRC.npz $W/sc1g/named_ids_$SRC.bin
+  SC1G_NAMED_LL="--named $W/sc1g/named_ids_$SRC.bin --named-out $W/sc1g/named_$S.bin --named-k 64" i_ll $V decode $SRC
+  [ -s $W/sc1g/named_$S.bin ] && "$PY" -c "
+import numpy as np, sys
+a = np.fromfile(sys.argv[1], '<f8').reshape(-1, 65)
+np.savez(sys.argv[2], eng_lp=a[:, :64], eng_target_lp=a[:, 64])" $W/sc1g/named_$S.bin $W/sc1g/named_$S.npz; }
+# A4's arm list: the named KL rows first (by engine, so each server starts once), then descriptive prefill rows. The deadline
+# drops from the end.
+i_arms_a4(){ local SRC V
+  phase A4E4B "A4: e4b served with named-token capture -- MXFP4 (GEMV) then NF4, conv1-conv4 then the control"
+  i_pin_ok || { SC1G_PIN_BAD=1; line "SC1G_PIN_BAD: the e4b arms are refused"; }
+  for SRC in $SC1G_A4_SRCS; do
+    can_run 900 a4_e4b_$SRC && { i_e4b_named e4b_serve_served_$SRC "$SC1G_E4B_SERVE" $SRC; i_e4b_named e4b_nf4_served_$SRC "$SC1G_E4B_NF4" $SRC; }; done
+  gpu_free 120
+  phase A4VLLM "A4: vLLM served (Marlin W4A16, TRITON_ATTN), logprob_token_ids = the named ids + the target"
+  for SRC in $SC1G_A4_SRCS; do can_run 900 a4_vllm_$SRC && i_vllm_named $SRC; done; gpu_free 120
+  phase A4SGL "A4: SGLang served (flashinfer_mxfp4, then Marlin), token_ids_logprob = the target + the named ids"
+  for V in native marlin; do
+    if can_run 1500 a4_sglang_$V && i_sgl_up $V; then for SRC in $SC1G_A4_SRCS; do can_run 600 a4_sgl_${V}_$SRC && i_sgl_named $V $SRC; done; fi
+    sglang_server_stop > /dev/null 2>&1; SGL_MODE=""; gpu_free 180
+  done
+  phase A4LL "A4: llama.cpp decode (the published GGUF; default MMQ, then MMQ_PREC=q8), the harness's --named"
+  for V in default q8; do for SRC in $SC1G_A4_SRCS; do can_run 600 a4_ll_${V}_$SRC && i_ll_named $V $SRC; done; done; gpu_free 60
+  phase A4DESC "A4: descriptive prefill-shaped NLL rows (no KL; the deadline drops these first)"
+  for SRC in $SC1G_A4_SRCS; do
+    can_run 600 d_e4b_$SRC && { i_e4b e4b_serve_prefill128_$SRC "$SC1G_E4B_SERVE" $SRC --ppl-oracle eager --ppl-chunk 128
+                                i_e4b e4b_nf4_prefill128_$SRC "$SC1G_E4B_NF4" $SRC --ppl-oracle eager --ppl-chunk 128; }; done
+  gpu_free 60
+  for SRC in $SC1G_A4_SRCS; do can_run 600 d_ll_$SRC && i_ll default prefill $SRC; done; gpu_free 60; }
 
 # every arm, graded windows first then the control, in the registered order; the GPU is freed between engines. The deadline
 # drops from the end: llama.cpp, then SGLang, then the control's rows go first.
@@ -152,31 +208,32 @@ i_arms(){ local SRC ALL="$SC1G_SRCS $SC1G_CTRL"
 
 # ---- the real lane
 box_i(){
-  phase 0 "fetches (gpt-oss-20b, its published MXFP4 GGUF, ultrachat_200k test_sft), the NF4 bake, the windows"
-  fetch_gptoss || finish 11; fetch_gptoss_gguf; bake_gptoss || finish 12; i_windows || finish 19
+  phase 0 "fetches (gpt-oss-20b, its published MXFP4 GGUF, ultrachat_200k test_sft), the NF4 bake, the windows (A4: four conversations)"
+  fetch_gptoss || finish 11; fetch_gptoss_gguf; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19; i_ref_stage
   quiesce arms
-  i_arms
+  i_arms_a4
   phase RD "the reading"
   "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g.json 2>&1 | tail -40 | tee -a summary.txt; }
 
-# ---- the proof (SC1_PROVE=1): A1's new paths on conv1 -- the window from its file, the capture, eager chunk 1, the kernel check
-# with its mutation -- plus one scoring per comparator engine, every route gate read
+# ---- the proof (SC1_PROVE=1), A4: every engine path's named-token KL row on conv1 -- e4b served (MXFP4 GEMV), vLLM served,
+# SGLang native served, llama.cpp decode at MMQ_PREC=q8 -- each VALID, its named record complete and aligned with its own NLL,
+# against box R's registered artifact. (A1's proof paths -- the capture, eager chunk 1, the kernel check -- ran on box J.)
 prove_i(){ local ok=0
   "$PY" $W/sc1g_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { rec 23; return; }
+  "$PY" $W/sc1g_kl.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { rec 23; return; }
   fetch_gptoss || { say "PROVE: gpt-oss fetch failed -- NOT PROVED"; rec 23; return; }
   bake_gptoss || { say "PROVE: gpt-oss bake failed -- NOT PROVED"; rec 23; return; }
-  i_windows || { say "PROVE: windows failed -- NOT PROVED"; rec 23; return; }
+  SC1G_NCONV=4 i_windows || { say "PROVE: windows failed -- NOT PROVED"; rec 23; return; }
+  i_ref_stage
+  i_ref conv1 > /dev/null || { say "PROVE: no registered reference artifact for conv1 (box R's post-run registration) -- NOT PROVED"; rec 23; return; }
   fetch_gptoss_gguf || { say "PROVE: GGUF fetch failed"; ok=1; }
   i_pin_ok || { SC1G_PIN_BAD=1; say "PROVE: the hub's main is not the pin"; ok=1; }
-  i_e4b e4b_serve_served_conv1 "$SC1G_E4B_SERVE SC1G_CAPTURE_OUT=$W/sc1g/capture_conv1.pt" conv1
-  i_e4b e4b_serve_prefill64_conv1 "$SC1G_E4B_SERVE" conv1 --ppl-oracle eager --ppl-chunk 64
-  i_e4b e4b_serve_chunk1_conv1 "$SC1G_E4B_SERVE" conv1 --ppl-oracle eager --ppl-chunk 1; gpu_free 120
-  i_gemv; gpu_free 60
-  i_vllm prefill conv1; gpu_free 120
-  if i_sgl_up native; then i_sgl native prefill conv1; fi; sglang_server_stop > /dev/null 2>&1; SGL_MODE=""; gpu_free 180
-  i_ll q8 prefill conv1
-  "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_prove.json --prove 2>&1 | tail -20 | tee -a summary.txt
-  [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: an arm did not score VALID, a route gate failed, or the kernel check failed -- NOT PROVED"; ok=1; }
+  i_e4b_named e4b_serve_served_conv1 "$SC1G_E4B_SERVE" conv1; gpu_free 120
+  i_vllm_named conv1; gpu_free 120
+  if i_sgl_up native; then i_sgl_named native conv1; fi; sglang_server_stop > /dev/null 2>&1; SGL_MODE=""; gpu_free 180
+  i_ll_named q8 conv1
+  "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_prove_a4.json --prove-a4 2>&1 | tail -20 | tee -a summary.txt
+  [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: a named KL row was not VALID (arm, record, alignment or box R) -- NOT PROVED"; ok=1; }
   [ $ok = 0 ] || rec 23; }
 
 # ---- box J (SC1_BOX=J), the e4b-only diagnostic box -- no comparator installs, guard <= 1 h (so no proof). A2 ran it as

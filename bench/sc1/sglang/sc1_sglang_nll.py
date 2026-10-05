@@ -189,9 +189,26 @@ def _served_bookkeeping(rep: dict, recomputed, cached, lp_counts, prompt_lens, e
     return rep
 
 
-def score_served(client: SGLangClient, ids, prompt_len: int, steps: int, flush: bool = True, progress_every: int = 256) -> dict:
+def served_request_ids(target, named_row=None):
+    """token_ids_logprob for one served request: the target first (the NLL read), then -- SC1g A4 -- the reference's named
+    ids for the position, deduplicated."""
+    ids = [int(target)]
+    if named_row is not None:
+        ids += [int(x) for x in named_row if int(x) != int(target)]
+    return ids
+
+
+def score_served(client: SGLangClient, ids, prompt_len: int, steps: int, flush: bool = True, progress_every: int = 256,
+                 named_ids=None) -> dict:
+    """`named_ids` [steps, 64] (SC1g A4): also read the engine's log-probs on the reference's named ids per position;
+    the result then carries `named_lp` [steps, 64] (NaN where SGLang did not answer an id: the row is VOID for KL)."""
     if flush:
         client.flush_cache()
+    named_lp = None
+    if named_ids is not None:
+        import numpy as np
+        named_lp = np.full((steps, len(named_ids[0])), np.nan)
+    named_void, tlps = 0, []
     nll = 0.0
     agree = 0
     recomputed, cached, lp_counts, prompt_lens, e2e = [], [], [], [], []
@@ -201,7 +218,8 @@ def score_served(client: SGLangClient, ids, prompt_len: int, steps: int, flush: 
         target = ids[prompt_len + 1 + t]                                      # K8 scores cont[t+1]
         out = client.generate({"input_ids": ids[:L],
                                "sampling_params": {"max_new_tokens": 1, "temperature": 0.0, "ignore_eos": True},
-                               "return_logprob": True, "logprob_start_len": -1, "token_ids_logprob": [int(target)],
+                               "return_logprob": True, "logprob_start_len": -1,
+                               "token_ids_logprob": served_request_ids(target, None if named_ids is None else named_ids[t]),
                                "stream": False})
         if isinstance(out, list):
             out = out[0]
@@ -210,6 +228,14 @@ def score_served(client: SGLangClient, ids, prompt_len: int, steps: int, flush: 
         assert otl and otl[0], f"t={t}: no output_token_ids_logprobs in meta_info (keys {sorted(meta)})"
         lp, tok = _lp(otl[0][0])
         assert tok == target, f"t={t}: token_ids_logprob answered for id {tok}, asked {target}"
+        if named_lp is not None:
+            got = dict((tk, v) for v, tk in (_lp(e) for e in otl[0]))
+            row = [got.get(int(x)) for x in named_ids[t]]
+            if any(v is None for v in row):
+                named_void += 1
+            else:
+                named_lp[t] = row
+            tlps.append(lp)
         assert int(meta.get("completion_tokens", -1)) == 1 and len(out.get("output_ids") or []) == 1, f"t={t}: expected exactly one generated token"
         nll -= lp
         greedy = int(out["output_ids"][0])
@@ -233,6 +259,8 @@ def score_served(client: SGLangClient, ids, prompt_len: int, steps: int, flush: 
                              "read": "meta_info.output_token_ids_logprobs[0][0][0]", "top1": "output_ids[0] == target (greedy)"},
            "forward_path_note": ("1-token extend over the cached prefix: SGLang EXTEND mode (prefill attention kernel with prefix), "
                                  "not DECODE mode (decode cuda graphs); Marlin MoE at M=1 either way")}
+    if named_lp is not None:
+        rep["named_lp"], rep["named_void_positions"], rep["per_step_target_lp"] = named_lp, named_void, tlps
     return _served_bookkeeping(rep, recomputed, cached, lp_counts, prompt_lens, expect_T=1)
 
 
@@ -296,6 +324,10 @@ def build_parser():
     p.add_argument("--engagement", default=None)
     p.add_argument("--timeout", type=float, default=900.0)
     p.add_argument("--progress-every", type=int, default=256)
+    p.add_argument("--named-ref", default=None, help="SC1g A4: the reference artifact (sc1g_kl.py npz); served mode reads the "
+                   "engine's log-probs on its 64 named ids per position")
+    p.add_argument("--named-ref-sha", default=None, help="the registered sha of --named-ref (refused on a mismatch)")
+    p.add_argument("--named-out", default=None, help="npz: eng_lp [steps, 64], eng_target_lp [steps]")
     return p
 
 
@@ -317,7 +349,27 @@ def main(argv=None) -> int:
     if a.mode == "prefill":
         rep = score_prefill(client, ids, prompt_len, steps, a.top_logprobs, flush)
     elif a.mode == "served":
-        rep = score_served(client, ids, prompt_len, steps, flush, a.progress_every)
+        named_ids = None
+        if a.named_ref and not a.named_out:
+            raise SystemExit("--named-ref needs --named-out")
+        if a.named_ref:
+            import hashlib
+            import numpy as np
+            if a.named_ref_sha and hashlib.sha256(open(a.named_ref, "rb").read()).hexdigest() != a.named_ref_sha:
+                raise SystemExit(f"{a.named_ref}: sha differs from the registered {a.named_ref_sha[:16]} -- refused")
+            z = np.load(a.named_ref)
+            if z["ids"].shape[0] != steps or [int(x) for x in z["target"]] != [int(ids[prompt_len + 1 + t]) for t in range(steps)]:
+                raise SystemExit("--named-ref does not describe this window's scored targets -- refused")
+            named_ids = z["ids"]
+        rep = score_served(client, ids, prompt_len, steps, flush, a.progress_every, named_ids)
+        if named_ids is not None:
+            import numpy as np
+            nl = rep.pop("named_lp")
+            tlp = np.asarray(rep.pop("per_step_target_lp"), dtype=np.float64)
+            np.savez(a.named_out + ".tmp.npz", eng_lp=nl, eng_target_lp=tlp)
+            os.replace(a.named_out + ".tmp.npz", a.named_out)
+            rep["named"] = {"out": a.named_out, "positions": steps, "void_positions": rep.pop("named_void_positions"),
+                            "ref": a.named_ref, "ref_sha": a.named_ref_sha, "k": int(named_ids.shape[1])}
     else:
         rep = score_served_tail2(client, ids, prompt_len, steps, flush, a.progress_every)
     rep.update({
