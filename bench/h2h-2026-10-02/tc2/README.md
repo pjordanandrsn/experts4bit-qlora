@@ -350,6 +350,33 @@ Pre-registration: [`../../tc1/TC2-PREREG.md`](../../tc1/TC2-PREREG.md), amendmen
   double-quantized. `--frozen-4bit` is a measurement hook, not a training option; e4b's defaults keep those projections bf16 and do not
   fit this family on 32 GB.
 
+## TC2 amendment 9 (2026-10-05): on one stack e4b is faster on Mixtral too, 1.144
+
+Pre-registration: [`../../tc1/TC2-PREREG.md`](../../tc1/TC2-PREREG.md), amendment 9. One RTX 5090 (`tc1-5090-84`, instance 54277905, AMD
+EPYC 7B13, Vast machine 145701, $1.59): TC1 amendment 25's same-stack family on Mixtral-8x7B-Instruct at TC2's pin and field recipe,
+resident, e4b `63400e1` at default settings (grouped-nf4-gemm `9622144`, `auto` on the dense route, the prebound launches on, the absmax
+fp32), 60 steps, no reference arm, load-gated draws (none voided). Receipts: [`receipts/tc1-5090-84/`](receipts/tc1-5090-84/); read:
+[`RESULTS-tc2-mixtral-samestack.md`](RESULTS-tc2-mixtral-samestack.md).
+
+| arm | stack | s/step (two draws, 60 steps) | peak | held-out at N |
+|---|---|---|---|---|
+| e4b `fused_attn4_m` | venv-unsloth: torch 2.12.1, transformers 5.5.0 | 3.233 / 3.248 (0.4 % apart) | 31.24 GB | 0.6318 / 0.6297 |
+| Unsloth `ckpt_unsloth_m` (grouped_mm) | venv-unsloth | 3.701 / 3.711 (0.3 % apart) | 29.17 GB | 0.6308 / 0.6318 |
+| e4b `fused_attn4_m_t28` | venv-e4b: torch 2.8.0, transformers 5.18.0 | 3.681 / 3.636 (1.2 % apart) | 31.19 GB | 0.6308 / 0.6325 |
+
+- **P29 HELD.** On one stack Unsloth/e4b reads **1.144** [1.140, 1.148]: e4b is faster per step. The pair is COMPARABLE (held-out Δ
+  −0.0010, step-0 Δ +0.0023). Quoted beside it, in Unsloth's favour: peak 2.07 GB lower (the fp32 absmax; `E4B_ABSMAX_DQ=1` stores it
+  as Unsloth does), and energy per step ×0.93 of e4b's (1,518 vs 1,631 J).
+- **P30 HELD.** e4b's matched arm in venv-unsloth over venv-e4b reads **0.886** [0.878, 0.893]. Mixtral's dense route gains from torch
+  2.12 about as much as Qwen3's fused path does (0.909).
+- **P31 HELD.** Every fused e4b arm ran the dense route: dense forward and dense dgrad calls only, with `GNF4_TRAIN_GEMM` unset.
+- **By the registered rule** 1.144 becomes Mixtral's position to quote (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack`).
+  Amendment 8's 0.836 stays as the reading with e4b in the field image's environment, on a Core Ultra 9 285K.
+- **Where 0.836 went, read inside this box.** With e4b on the field image's stack, this host reads Unsloth/e4b 1.013 (3.706 against
+  3.658 s): the host alone takes the 285K's 0.836 to about parity, because Unsloth's Mixtral step is 3.0 s on that host model and 3.7 s
+  here while e4b's moves little. Moving e4b onto Unsloth's stack takes it the rest of the way, to 1.144. e4b's code also moved between
+  the boxes (`ed08029` → `63400e1`: the prebound launches, now on by default); this box does not separate that from the host.
+
 ## Predictions scored (box A)
 
 P1 granite FALSIFIED; P2 olmoe FALSIFIED; P3 gptoss FALSIFIED; P6 (e4b parity on every family with a reference) HELD; P7 (matched sets
