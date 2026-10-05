@@ -526,10 +526,26 @@ for _p, _n, _t in PREBIND_PAIRS:
     for _side in ("pb0", "pb1"):
         DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
 
+# ----------------------------------------------------------------------------- TC1 amendment 35: amendment 26's A/B under triton 3.7.1
+PREBIND37_FAM = "qwen3prebind37"  # the same eight arms as qwen3prebindab, every one in venv-unsloth (torch 2.12.1+cu130, triton 3.7.1)
+PREBIND37_PAIRS = (("P66", "shipped", "fused_attn4_shipped"), ("P67", "matched", "fused_attn4_m"))
+PREBIND37_BANDS = {"P66": (0.97, 1.00), "P67": (0.97, 1.00)}   # pb1 / pb0 s/step on stable pairs
+PREBIND37_ENV = ("2.12", "3.7")   # the env.torch and prebind_ab triton prefixes every arm must carry
+FAMS.append(PREBIND37_FAM)
+NAMES[PREBIND37_FAM] = "Qwen3-30B-A3B (amendment 35: Triton launches prebound off vs on under triton 3.7.1, e4b + grouped-nf4-gemm, venv-unsloth)"
+N_LAYERS[PREBIND37_FAM] = 48
+ATTN_CENSUS[PREBIND37_FAM] = 192
+DENSE_PINS[PREBIND37_FAM] = DENSE_PINS[QDENSE_FAM]   # the qwen3 pin, read through amendment 22's check
+FAM_ANCHOR[PREBIND37_FAM] = ("e4b", "fused_attn4_m_pb0")
+EXPECTED[PREBIND37_FAM] = list(EXPECTED[PREBIND_FAM])
+# per family: the speed pairs, their bands, and the held-out prediction's id (MATCHED and DRAW2 already hold these tags)
+PREBIND_SPECS = {PREBIND_FAM: (PREBIND_PAIRS, PREBIND_BANDS, "P55"), PREBIND37_FAM: (PREBIND37_PAIRS, PREBIND37_BANDS, "P68")}
 
-def prebind_ab_why(tag, r):
+
+def prebind_ab_why(tag, r, fam=None):
     """Amendment 26's engagement predicate, read off the receipt's `prebind_ab` record: a pb1 arm requested both flags and both e4b and
-    grouped-nf4-gemm counted prebound launches; a pb0 arm requested neither and counted none. Empty string = engaged."""
+    grouped-nf4-gemm counted prebound launches; a pb0 arm requested neither and counted none. Amendment 35's family also requires every
+    arm to have run torch 2.12 and triton 3.7. Empty string = engaged."""
     pa = (r or {}).get("prebind_ab")
     if not isinstance(pa, dict):
         return "no prebind_ab record on the receipt: whether the launches were prebound cannot be verified"
@@ -546,6 +562,12 @@ def prebind_ab_why(tag, r):
             bad.append(f"{side} counted no prebound launch")
         elif not on and n != 0:
             bad.append(f"{side} counted {n} prebound launches with the flag off")
+    if fam == PREBIND37_FAM:
+        tv, trv = str(((r or {}).get("env") or {}).get("torch") or ""), str(pa.get("triton") or "")
+        if not tv.startswith(PREBIND37_ENV[0]):
+            bad.append(f"env.torch {tv or 'missing'} is not {PREBIND37_ENV[0]}*")
+        if not trv.startswith(PREBIND37_ENV[1]):
+            bad.append(f"triton {trv or 'missing'} is not {PREBIND37_ENV[1]}*")
     return "" if not bad else f"prebind A/B not engaged ({'; '.join(bad)}; triton {pa.get('triton')})"
 
 
@@ -616,6 +638,45 @@ def triton_ab_why(tag, r):
     else:
         bad += [f"{sd} prebind requested {(pa.get(sd) or {}).get('requested')!r}" for sd in ("e4b", "gnf4") if (pa.get(sd) or {}).get("requested") is not False]
     return "" if not bad else f"Triton A/B not engaged ({'; '.join(bad)})"
+
+
+# ----------------------------------------------------------------------------- TC1 amendment 34: amendment 24's environment gain, split
+ENVSPLIT_FAM = "qwen3envsplit"    # matched arm: e0 venv-e4b (torch 2.8, tf 5.18), e1 venv-e4b-tf55 (torch 2.8, tf 5.5), e2 venv-unsloth (torch 2.12, tf 5.5)
+ENVSPLIT_SIDES = {"e0": ("2.8.", "5.18."), "e1": ("2.8.", "5.5."), "e2": ("2.12.", "5.5.")}   # (torch prefix, transformers prefix)
+ENVSPLIT_PREDS = (("P62", "transformers 5.5 over 5.18 (torch 2.8)", "e1", "e0", (0.90, 1.00)),
+                  ("P63", "torch 2.12 + triton 3.7 over torch 2.8 + triton 3.4 (transformers 5.5)", "e2", "e1", (0.85, 0.99)),
+                  ("P64", "the whole environment (amendment 24's 0.882, re-read)", "e2", "e0", (0.80, 0.95)))
+ENVSPLIT_HELDOUT_MAX = 0.005      # P65: |mean held-out at N| e1 - e0 and e2 - e0
+FAMS.append(ENVSPLIT_FAM)
+NAMES[ENVSPLIT_FAM] = "Qwen3-30B-A3B (amendment 34: the matched arm in three environments -- transformers 5.18 / 5.5 on torch 2.8, and torch 2.12)"
+N_LAYERS[ENVSPLIT_FAM] = 48
+ATTN_CENSUS[ENVSPLIT_FAM] = 192
+DENSE_PINS[ENVSPLIT_FAM] = DENSE_PINS[QDENSE_FAM]   # the qwen3 pin, read through amendment 22's check
+FAM_ANCHOR[ENVSPLIT_FAM] = ("e4b", "fused_attn4_m_e0")
+EXPECTED[ENVSPLIT_FAM] = [("e4b", f"fused_attn4_m_{t}") for t in ("e0", "e1", "e2", "e2_d2", "e1_d2", "e0_d2")]
+MATCHED |= {f"fused_attn4_m_{t}" for t in ("e0", "e1", "e2", "e0_d2", "e1_d2", "e2_d2")}
+for _side in ENVSPLIT_SIDES:
+    DRAW2[("e4b", f"fused_attn4_m_{_side}")] = ("e4b", f"fused_attn4_m_{_side}_d2")
+
+
+def envsplit_why(tag, r):
+    """Amendment 34's engagement predicate: the arm ran the torch and transformers its side names, with the prebound launches off."""
+    r = r or {}
+    side = next((sd for sd in ENVSPLIT_SIDES if f"_{sd}" in tag), None)
+    if side is None:
+        return f"tag {tag!r} names no environment"
+    want_t, want_tf = ENVSPLIT_SIDES[side]
+    env = r.get("env") or {}
+    tv, tfv = str(env.get("torch") or ""), str(env.get("transformers") or "")
+    bad = [] if tv.startswith(want_t) else [f"env.torch {tv or 'missing'} is not {want_t}*"]
+    if not tfv.startswith(want_tf):
+        bad.append(f"env.transformers {tfv or 'missing'} is not {want_tf}*")
+    pa = r.get("prebind_ab")
+    if not isinstance(pa, dict):
+        bad.append("no prebind_ab record (the prebound launches must be off on every side)")
+    else:
+        bad += [f"{sd} prebind requested {(pa.get(sd) or {}).get('requested')!r}" for sd in ("e4b", "gnf4") if (pa.get(sd) or {}).get("requested") is not False]
+    return "" if not bad else f"environment split not engaged ({'; '.join(bad)})"
 
 
 def dense_ab_why(fam, tag, r):
@@ -1179,8 +1240,8 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = samestack_why(r.get("tag") or "", r)
         if w:
             why.append(w)
-    if fam == PREBIND_FAM and fw == "e4b":             # amendment 26: the prebound launches its tag names, engaged on both sides
-        w = prebind_ab_why(r.get("tag") or "", r)
+    if fam in PREBIND_SPECS and fw == "e4b":           # amendments 26 / 35: the prebound launches its tag names, engaged on both sides
+        w = prebind_ab_why(r.get("tag") or "", r, fam)
         if w:
             why.append(w)
     if fam in DQ_FAMS and fw == "e4b":                 # amendment 28: the expert absmax its tag names
@@ -1189,6 +1250,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == TRITON_FAM and fw == "e4b":              # amendment 32: the Triton its tag names, prebound launches off
         w = triton_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == ENVSPLIT_FAM and fw == "e4b":            # amendment 34: the torch and transformers its tag names, prebound launches off
+        w = envsplit_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -2236,41 +2301,43 @@ def score_samestack(F):
     return out
 
 
-def score_prebindab(F):
+def score_prebindab(F, fam=PREBIND_FAM):
     """TC1-PREREG amendment 26, on the qwen3prebindab box: P53 (shipped) and P54 (matched) -- pb1 / pb0 s/step within PREBIND_BANDS[pid],
     the median over two VALID draws a side with each side's draws within 5 %; P55 -- on each arm |mean held-out at N, pb1 - pb0| <=
-    PREBIND_HELDOUT_MAX. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED."""
-    R = F.get(PREBIND_FAM)
+    PREBIND_HELDOUT_MAX. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED. Amendment 35 (fam=PREBIND37_FAM): the same
+    reading of the qwen3prebind37 box as P66 / P67 / P68 with PREBIND37_BANDS."""
+    pairs, bands, pheld = PREBIND_SPECS[fam]
+    R = F.get(fam)
     if not R:
         return []
     out, p55 = [], []
-    for pid, name, t in PREBIND_PAIRS:
+    for pid, name, t in pairs:
         O, N = R["draws"].get(("e4b", f"{t}_pb0"), {}), R["draws"].get(("e4b", f"{t}_pb1"), {})
         if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
             why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("pb0", O), ("pb1", N)))
-            out.append((pid, PREBIND_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            out.append((pid, fam, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
             p55.append((name, None, why))
             continue
         ratio_ = N["s"] / O["s"]
         cross = [n / o for n in N["s_list"] for o in O["s_list"]]
-        lo, hi = PREBIND_BANDS[pid]
+        lo, hi = bands[pid]
         h0, h1 = O.get("heldout_list") or [], N.get("heldout_list") or []
         dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
         p55.append((name, dq, f"held-out at N pb0 {[round(v, 4) for v in h0 if v is not None]} pb1 {[round(v, 4) for v in h1 if v is not None]}"))
         r1 = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == ("e4b", f"{t}_pb1")), None) or {}
         pa = r1.get("prebind_ab") or {}
         counts = {sd: (pa.get(sd) or {}).get("stats") for sd in ("e4b", "gnf4")}
-        out.append((pid, PREBIND_FAM, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+        out.append((pid, fam, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
                     f"{name}: pb1 / pb0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; s/step pb0 "
                     f"{O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), pb1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
                     f"(within {100 * N['stability']:.1f}%); pb1 launch counts (process) {json.dumps(counts, sort_keys=True)}; triton {pa.get('triton')}"))
     ev = "; ".join(f"{n}: " + (f"mean held-out pb1 - pb0 {dq:+.4f} (|.| <= {PREBIND_HELDOUT_MAX}); {e}" if dq is not None else e) for n, dq, e in p55)
     if any(dq is not None and abs(dq) > PREBIND_HELDOUT_MAX for _, dq, _ in p55):
-        out.append(("P55", PREBIND_FAM, "FALSIFIED", ev))
+        out.append((pheld, fam, "FALSIFIED", ev))
     elif any(dq is None for _, dq, _ in p55):
-        out.append(("P55", PREBIND_FAM, "UNTESTED", ev))
+        out.append((pheld, fam, "UNTESTED", ev))
     else:
-        out.append(("P55", PREBIND_FAM, "HELD", ev))
+        out.append((pheld, fam, "HELD", ev))
     return out
 
 
@@ -2366,6 +2433,43 @@ def loadgate_lines(d):
     return [f"\n## Load gate (TC1-PREREG amendment 33): {void} draw(s) voided for host load and run again",
             "Each line: the arm, the attempt, the median host load1 over that attempt's run, the gate. A VOID attempt's files are in loadvoid/; "
             "the last attempt of each arm stands whatever its load.", ""] + [f"- `{ln[len('LOADGATE '):]}`" for ln in ls]
+
+
+def score_envsplit(F):
+    """TC1-PREREG amendment 34, on the qwen3envsplit box: P62 (e1 / e0), P63 (e2 / e1) and P64 (e2 / e0) -- each ratio of medians over two
+    VALID draws a side (each side's draws within 5 %) within its band; P65 -- |mean held-out at N| e1 - e0 and e2 - e0 <= ENVSPLIT_HELDOUT_MAX.
+    Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED."""
+    R = F.get(ENVSPLIT_FAM)
+    if not R:
+        return []
+    D = {sd: R["draws"].get(("e4b", f"fused_attn4_m_{sd}"), {}) for sd in ENVSPLIT_SIDES}
+    ok = {sd: bool(d.get("usable") and d.get("draws") == 2) for sd, d in D.items()}
+    out = []
+    for pid, name, num, den, (lo, hi) in ENVSPLIT_PREDS:
+        if not (ok[num] and ok[den]):
+            why = "; ".join(f"{sd} {D[sd].get('verdict') or 'missing'}: {D[sd].get('why') or ''}".strip() for sd in (num, den) if not ok[sd])
+            out.append((pid, ENVSPLIT_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            continue
+        v = D[num]["s"] / D[den]["s"]
+        cross = [a / b for a in D[num]["s_list"] for b in D[den]["s_list"]]
+        out.append((pid, ENVSPLIT_FAM, "HELD" if lo <= v <= hi else "FALSIFIED",
+                    f"{name}: {num} / {den} {v:.3f} [{min(cross):.3f}, {max(cross):.3f}] vs {[lo, hi]}; s/step {num} {D[num]['s_list'][0]:.3f} / "
+                    f"{D[num]['s_list'][1]:.3f}, {den} {D[den]['s_list'][0]:.3f} / {D[den]['s_list'][1]:.3f}"))
+    reads, missing = [], []
+    for sd in ("e1", "e2"):
+        h0, h1 = D["e0"].get("heldout_list") or [], D[sd].get("heldout_list") or []
+        if ok["e0"] and ok[sd] and h0 and h1 and None not in h0 + h1:
+            reads.append((sd, sum(h1) / len(h1) - sum(h0) / len(h0)))
+        else:
+            missing.append(sd)
+    ev = "; ".join(f"{sd} - e0 {d:+.4f}" for sd, d in reads) + (f"; unread: {', '.join(missing)}" if missing else "") + f" (|.| <= {ENVSPLIT_HELDOUT_MAX})"
+    if any(abs(d) > ENVSPLIT_HELDOUT_MAX for _, d in reads):
+        out.append(("P65", ENVSPLIT_FAM, "FALSIFIED", ev))
+    elif missing:
+        out.append(("P65", ENVSPLIT_FAM, "UNTESTED", ev))
+    else:
+        out.append(("P65", ENVSPLIT_FAM, "HELD", ev))
+    return out
 
 
 def prof945_table(F):
@@ -3594,6 +3698,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_prebindab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PREBIND37_FAM in F:
+        out += ["\n## Predictions P66 / P67 / P68 (TC1-PREREG amendment 35: prebound Triton launches off vs on under triton 3.7.1, venv-unsloth, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_prebindab(F, PREBIND37_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if any(fam in F for fam in DQ_FAMS):
         out += ["\n## Predictions P56 / P57 / P58 (TC1-PREREG amendment 28: the expert absmax fp32 vs double-quantized, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -3603,6 +3712,11 @@ def render(F, d):
         out += ["\n## Predictions P59 / P60 / P61 (TC1-PREREG amendment 32: venv-e4b with triton 3.4 vs 3.7.1, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_tritonab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if ENVSPLIT_FAM in F:
+        out += ["\n## Predictions P62 / P63 / P64 / P65 (TC1-PREREG amendment 34: the matched arm in three environments, two stable draws each; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_envsplit(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
 
     out += loadgate_lines(d)
@@ -3942,9 +4056,12 @@ def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2
     return R
 
 def _prebind_set(ship=((3.10, 3.12), (2.92, 2.94)), match=((3.90, 3.92), (3.72, 3.74)), held_shift=0.0, pb1_counts=(4000, 9000), pb0_counts=(0, 0),
-                 requested=None, record=True):
+                 requested=None, record=True, fam=PREBIND_FAM, triton=None, torch=None):
     """Amendment 26: e4b against itself -- each pair as (pb0 draws, pb1 draws) s/step; `pb1_counts` / `pb0_counts` = (e4b, gnf4) prebound
-    launches each side counted; `requested` overrides the pb1 side's (e4b, gnf4) requested flags; `record=False` drops prebind_ab."""
+    launches each side counted; `requested` overrides the pb1 side's (e4b, gnf4) requested flags; `record=False` drops prebind_ab.
+    Amendment 35 (fam=PREBIND37_FAM): `triton` / `torch` default to 3.7.1 / 2.12.1+cu130 there (3.4.0 / unset for amendment 26)."""
+    triton = triton or ("3.7.1" if fam == PREBIND37_FAM else "3.4.0")
+    torch = torch or ("2.12.1+cu130" if fam == PREBIND37_FAM else None)
     R = {}
     for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
         for side, ss in (("pb0", old), ("pb1", new)):
@@ -3955,12 +4072,14 @@ def _prebind_set(ship=((3.10, 3.12), (2.92, 2.94)), match=((3.90, 3.92), (3.72, 
                 tag = f"{t}_{side}{sfx}"
                 r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if on else 0.0), matched=matched)
                 if record:
-                    r["prebind_ab"] = {"e4b_env": "1" if on else "0", "gnf4_env": "1" if on else "0", "triton": "3.4.0",
+                    r["prebind_ab"] = {"e4b_env": "1" if on else "0", "gnf4_env": "1" if on else "0", "triton": triton,
                                        "e4b": {"has": True, "requested": req[0], "stats": {"prebound": cnt[0], "triton": 12}},
                                        "gnf4": {"has": True, "requested": req[1], "stats": {"prebound": cnt[1], "triton": 30}}}
+                if torch:
+                    r["env"]["torch"] = torch
                 R[("e4b", tag)] = r
     for r in R.values():
-        r["fam"] = PREBIND_FAM
+        r["fam"] = fam
     return R
 
 def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1536), dense_dgrad=(0, 1536), absmax=(True, True), held_shift=0.0, drop_route=False):
@@ -4024,6 +4143,21 @@ def _triton_set(match=((3.90, 3.92), (3.45, 3.47)), ship=((3.05, 3.07), (2.85, 2
                 R[("e4b", tag)] = r
     for r in R.values():
         r["fam"] = TRITON_FAM
+    return R
+
+def _envsplit_set(e0=(3.90, 3.92), e1=(3.80, 3.82), e2=(3.44, 3.46), envs=None, held=(0.0, 0.0), prebind=False):
+    """Amendment 34: the matched arm's draws per side; `envs` overrides the (torch, transformers) each side's receipts record; `held` =
+    the held-out shift of e1 and e2 against e0; `prebind` = the requested flags on every arm."""
+    envs = envs or {"e0": ("2.8.0+cu128", "5.18.0"), "e1": ("2.8.0+cu128", "5.5.0"), "e2": ("2.12.1+cu130", "5.5.0")}
+    R = {}
+    for side, ss, h in (("e0", e0, 0.0), ("e1", e1, held[0]), ("e2", e2, held[1])):
+        for i, sfx in enumerate(("", "_d2")):
+            tag = f"fused_attn4_m_{side}{sfx}"
+            r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=1.8000 + h,
+                         env={"box_class": "RTX 5090", "gpu": "NVIDIA GeForce RTX 5090", "torch": envs[side][0], "transformers": envs[side][1]})
+            r["prebind_ab"] = {"e4b": {"has": True, "requested": prebind}, "gnf4": {"has": True, "requested": prebind}}
+            r["fam"] = ENVSPLIT_FAM
+            R[("e4b", tag)] = r
     return R
 
 QWEN3_EXPERT_PARAMS = 48 * 128 * (1536 * 2048 + 2048 * 768)      # 28,991,029,248: Qwen3-30B-A3B's logical expert weights
@@ -5777,6 +5911,47 @@ def selftest():
     assert lg[0].endswith("1 draw(s) voided for host load and run again") and len(lg) == 6 and "attempt 1 load1_median 3.1" in lg[-1], lg
     open(os.path.join(gd, "summary.txt"), "w").write("BOX x\n")
     assert loadgate_lines(gd) == [] and loadgate_lines(None) == []
+    cases += 1
+    # 86. TC1 amendment 34 (qwen3envsplit): transformers 0.974, torch 0.905, whole 0.882 HELD; a held-out gap FALSIFIES P65; the wrong
+    #     transformers or the prebound launches on -> VOID and UNTESTED
+    EF = lambda R: {ENVSPLIT_FAM: reduce_family(ENVSPLIT_FAM, R, {}, 20)}
+    RE = EF(_envsplit_set())
+    assert [(x["fw"], x["tag"]) for x in RE[ENVSPLIT_FAM]["rows"]] == EXPECTED[ENVSPLIT_FAM]
+    assert all(x["verdict"] == "VALID" for x in RE[ENVSPLIT_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RE[ENVSPLIT_FAM]["rows"]]
+    pe = lambda **kw: {p: v for p, _, v, _ in score_envsplit(EF(_envsplit_set(**kw)))}
+    assert pe() == {"P62": "HELD", "P63": "HELD", "P64": "HELD", "P65": "HELD"}, score_envsplit(RE)
+    assert "e1 / e0 0.974 [" in score_envsplit(RE)[0][3] and "e2 / e0 0.882 [" in score_envsplit(RE)[2][3], score_envsplit(RE)
+    assert pe(e1=(3.44, 3.46))["P62"] == "FALSIFIED" and pe(e1=(3.44, 3.46))["P63"] == "FALSIFIED"   # transformers is all of it
+    assert pe(held=(0.0, 0.008))["P65"] == "FALSIFIED"
+    RV = EF(_envsplit_set(envs={"e0": ("2.8.0+cu128", "5.18.0"), "e1": ("2.8.0+cu128", "5.18.0"), "e2": ("2.12.1+cu130", "5.5.0")}))
+    v = RV[ENVSPLIT_FAM]["verdicts"][("e4b", "fused_attn4_m_e1")]
+    why = next(x["why"] for x in RV[ENVSPLIT_FAM]["rows"] if x["tag"] == "fused_attn4_m_e1")
+    print("FAILING-CASE TC1-am34-engagement (reducer):", v, "--", str(why)[-120:])
+    assert v == "VOID" and "env.transformers 5.18.0 is not 5.5.*" in str(why), (v, why)
+    assert pe(envs={"e0": ("2.8.0+cu128", "5.18.0"), "e1": ("2.8.0+cu128", "5.18.0"), "e2": ("2.12.1+cu130", "5.5.0")}) == \
+        {"P62": "UNTESTED", "P63": "UNTESTED", "P64": "HELD", "P65": "UNTESTED"}
+    assert EF(_envsplit_set(prebind=True))[ENVSPLIT_FAM]["verdicts"][("e4b", "fused_attn4_m_e0")] == "VOID"
+    cases += 1
+    # 87. TC1 amendment 35 (qwen3prebind37): amendment 26's A/B under triton 3.7.1 -- shipped 0.981 and matched 0.985 HELD; a slower pb1, a
+    #     larger gain than registered and a held-out gap each FALSIFY; an arm that ran triton 3.4 or torch 2.8 is not engaged (VOID -> UNTESTED)
+    P7 = lambda R: {PREBIND37_FAM: reduce_family(PREBIND37_FAM, R, {}, 20)}
+    s37 = lambda ship=((3.10, 3.12), (3.04, 3.06)), match=((3.90, 3.92), (3.84, 3.86)), **kw: _prebind_set(ship=ship, match=match, fam=PREBIND37_FAM, **kw)
+    R7 = P7(s37())
+    assert [(x["fw"], x["tag"]) for x in R7[PREBIND37_FAM]["rows"]] == EXPECTED[PREBIND37_FAM]
+    assert all(x["verdict"] == "VALID" for x in R7[PREBIND37_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in R7[PREBIND37_FAM]["rows"]]
+    p7 = lambda **kw: {p: v for p, _, v, _ in score_prebindab(P7(s37(**kw)), PREBIND37_FAM)}
+    assert p7() == {"P66": "HELD", "P67": "HELD", "P68": "HELD"}, score_prebindab(R7, PREBIND37_FAM)
+    assert "pb1 / pb0 0.981 [" in score_prebindab(R7, PREBIND37_FAM)[0][3] and "triton 3.7.1" in score_prebindab(R7, PREBIND37_FAM)[0][3]
+    assert p7(ship=((3.10, 3.12), (3.14, 3.16))) == {"P66": "FALSIFIED", "P67": "HELD", "P68": "HELD"}      # 1.013: slower with the flags on
+    assert p7(match=((3.90, 3.92), (3.70, 3.72))) == {"P66": "HELD", "P67": "FALSIFIED", "P68": "HELD"}      # 0.949: more than registered
+    assert p7(held_shift=0.008) == {"P66": "HELD", "P67": "HELD", "P68": "FALSIFIED"}
+    for kw, frag in (({"triton": "3.4.0"}, "triton 3.4.0 is not 3.7*"), ({"torch": "2.8.0+cu128"}, "env.torch 2.8.0+cu128 is not 2.12*")):
+        RV7 = P7(s37(**kw))
+        why = next(x["why"] for x in RV7[PREBIND37_FAM]["rows"] if x["tag"] == "fused_attn4_m_pb0")
+        assert RV7[PREBIND37_FAM]["verdicts"][("e4b", "fused_attn4_m_pb0")] == "VOID" and frag in str(why), why
+        assert p7(**kw) == {"P66": "UNTESTED", "P67": "UNTESTED", "P68": "UNTESTED"}
+    print("FAILING-CASE TC1-am35-engagement (reducer):", "VOID", "--", str(why)[-120:])
+    assert pp() == {"P53": "HELD", "P54": "HELD", "P55": "HELD"}           # amendment 26's box reads as before (triton 3.4, no torch check)
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

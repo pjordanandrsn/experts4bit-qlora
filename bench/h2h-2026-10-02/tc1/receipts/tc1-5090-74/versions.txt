@@ -1,0 +1,14 @@
+e4b 0.47.0 @2f5301336f2a9f717768593739c3db4361a7c45c (GitHub main)
+gnf4 0.40.0 @23a0153ab452cea3131705ce1815f72462f8bf3f (GitHub main)
+torch(e4b/hf) 2.8.0+cu128
+triton(e4b/hf) 3.4.0
+transformers(e4b/hf) 5.18.0
+bitsandbytes(e4b/hf) 0.50.2
+peft(hf) 0.21.2
+axolotl 0.20.0
+torch(axolotl) 2.14.0+cu130
+transformers(axolotl) 5.17.0
+peft(axolotl) 0.21.0
+bitsandbytes(axolotl) 0.50.2
+python(axolotl) 3.12.15
+deepspeed(axolotl) None
