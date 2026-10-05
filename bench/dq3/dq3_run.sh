@@ -1,12 +1,12 @@
 #!/bin/bash
 # bench/dq3/dq3_run.sh -- lane DQ3, BOX side (bench/dq3/DQ3-PREREG.md, Amendments 0-1). Started by bench/tc1/tc1_drive.sh as its
-# TC1_RUNNER (TC1_EXTRA_STAGE carries this file, dq3_arm.py and dq3_reduce.py), so it speaks tc1_drive's contract: the nonce
+# TC1_RUNNER (TC1_EXTRA_STAGE carries this file, dq3_vram_probe.py, dq3_arm.py and dq3_reduce.py), so it speaks tc1_drive's contract: the nonce
 # handshake (TC1_RUN_NONCE within 30 s), summary.txt one line per step, TC1_EXIT_CODE.<nonce> / TC1_SUCCESS.<nonce> /
 # TP_DONE.<nonce> at the end -- a refusal writes them too. No checkpoint download: the subject is Qwen3-32B's architecture
 # with random NF4 weights (Amendment 1). Six arms, one process each, palindrome R S S0 S0 S R. Nothing here creates,
 # destroys or approves compute.
 set -uo pipefail
-W=/root/tc1; cd "$W" || exit 9
+W=${DQ3_W:-/root/tc1}; cd "$W" || exit 9   # DQ3_W: tests only
 NONCE=${TC1_RUN_NONCE:?}; printf '%s\n' "$NONCE" > TC1_RUN_NONCE
 say(){ echo "[$(date -u +%FT%TZ)] dq3: $*"; }
 finish(){ local rc=$1; printf '%s\n' "$rc" > "TC1_EXIT_CODE.$NONCE"; [ "$rc" = 0 ] && : > "TC1_SUCCESS.$NONCE"; : > "TP_DONE.$NONCE"; exit "$rc"; }
@@ -17,6 +17,15 @@ DQ3_GNF4_SHA=a5edec8789735bff1c0da4708ae5fc93260a1410
 link=$(nvidia-smi --query-gpu=name,pcie.link.gen.max,pcie.link.width.max --format=csv,noheader,nounits 2>&1 | head -1)
 echo "link: $link" | tee -a summary.txt
 case "$link" in *"RTX 5090, 5, 16") ;; *) echo "HOST REFUSED: not an RTX 5090 on PCIe gen 5 x16 ($link)" | tee -a summary.txt; finish 13;; esac
+# Host floor (rc 18, rent.py's machine evidence): the GPU must hand out the subject's memory. dq3-5090-1's host refused
+# the first 2.90 GiB allocation with 30.85 GiB free; see dq3_vram_probe.py. Before any install, with the image's torch.
+# Only the probe's OOM exit (3) names the host; any other failure (no device, no kernels for the card, an exception) is
+# a harness error (9) and excludes nothing.
+python dq3_vram_probe.py > logs/vram_probe.log 2>&1; prc=$?
+if [ "$prc" = 3 ]; then tail -2 logs/vram_probe.log; echo "refused: vram floor" > REFUSAL
+  echo "BOX_REFUSED vram: $(tail -1 logs/vram_probe.log | cut -c1-200)" | tee -a summary.txt; finish 18
+elif [ "$prc" != 0 ]; then tail -5 logs/vram_probe.log; echo "VRAM PROBE ERROR rc=$prc (not a host refusal)" | tee -a summary.txt; finish 9; fi
+tail -1 logs/vram_probe.log | tee -a summary.txt
 
 command -v git >/dev/null 2>&1 || perl -e 'alarm 600; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq git' > logs/apt_git.log 2>&1 \
   || { tail -3 logs/apt_git.log; echo "GIT INSTALL FAIL" | tee -a summary.txt; finish 9; }

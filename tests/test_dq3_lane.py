@@ -5,6 +5,8 @@ import pathlib
 import subprocess
 import sys
 
+import pytest
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "dq3"
 RUN = (LANE / "dq3_run.sh").read_text()
@@ -78,3 +80,56 @@ def test_every_rule_mutant_is_killed(tmp_path):
         if "self-test FAILED" not in out.stdout:
             survived.append((old, (out.stdout + out.stderr)[-200:]))
     assert not survived, survived
+
+
+def _fake_bin(tmp_path, link, probe_rc):
+    """A PATH where nvidia-smi reports ``link`` and ``python dq3_vram_probe.py`` exits ``probe_rc``; any other python
+    call (the install, the arms) records itself and fails, so reaching it is visible."""
+    b = tmp_path / "bin"
+    b.mkdir()
+    (b / "nvidia-smi").write_text(f"#!/bin/sh\necho '{link}'\n")
+    (b / "python").write_text(
+        "#!/bin/sh\n"
+        f'case "$*" in *dq3_vram_probe.py*) echo "VRAM_PROBE_FAIL test"; exit {probe_rc};; esac\n'
+        'echo "$*" >> "$DQ3_W/reached"; exit 1\n')
+    for f in b.iterdir():
+        f.chmod(0o755)
+    return b
+
+
+def _run_box(tmp_path, link, probe_rc):
+    w = tmp_path / "w"
+    w.mkdir()
+    env = {"PATH": f"{_fake_bin(tmp_path, link, probe_rc)}:/usr/bin:/bin", "DQ3_W": str(w),
+           "TC1_RUN_NONCE": "n", "E4B_SHA": "0" * 40}
+    rc = subprocess.run(["bash", str(LANE / "dq3_run.sh")], env=env, capture_output=True, text=True).returncode
+    return rc, w
+
+
+def test_a_host_that_refuses_the_subjects_memory_is_refused_at_18_before_any_install(tmp_path):
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=3)
+    assert rc == 18
+    assert (w / "TC1_EXIT_CODE.n").read_text().strip() == "18" and (w / "TP_DONE.n").exists()
+    assert (w / "REFUSAL").read_text().startswith("refused: vram")
+    assert not (w / "reached").exists(), "the runner went past the probe on a refused host"
+    assert "BOX_REFUSED vram" in (w / "summary.txt").read_text()
+
+
+def test_the_link_check_still_comes_first(tmp_path):
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 4, 16", probe_rc=0)
+    assert rc == 13 and not (w / "reached").exists()
+
+
+def test_a_host_that_passes_the_probe_goes_on_to_the_install(tmp_path):
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=0)
+    assert rc != 18
+    assert (w / "reached").exists(), "a passing probe must hand over to the tripwire/install"
+
+
+@pytest.mark.parametrize("probe_rc", [1, 2])
+def test_a_probe_error_that_is_not_an_oom_never_names_the_host(tmp_path, probe_rc):
+    """1 = an uncaught exception (an image torch without kernels for the card, a launch failure), 2 = no CUDA device:
+    neither is evidence against the host's memory, so neither may become rc 18 (rent.py would exclude a healthy machine)."""
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=probe_rc)
+    assert rc == 9 and not (w / "REFUSAL").exists() and not (w / "reached").exists()
+    assert "not a host refusal" in (w / "summary.txt").read_text()
