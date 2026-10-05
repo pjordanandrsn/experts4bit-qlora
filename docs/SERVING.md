@@ -176,7 +176,7 @@ the bulk flush already made them) the server ran.
   side;
 - every layer's FP8 K/V, held until the writes.
 
-That is ~225 MiB on Qwen3-30B-A3B at a 2048-token prompt. Under an eager forward it reuses memory the forward just
+That is ~216 MiB on Qwen3-30B-A3B at a 2048-token prompt (~138 MiB at 512). Under an eager forward it reuses memory the forward just
 returned. Under the first-chunk prefill graph the forward's working set sits in the graph's private pool, so the flush
 is additive: the graph's `auto` headroom check counts the bound at the slot's capacity when bulk is on, and
 `/health`'s `prefill_graph.bulk_flush_mib` reports it. `tests/test_bulk_kv.py` compares whole pools, and a tiny model decodes the same tokens either way. The
