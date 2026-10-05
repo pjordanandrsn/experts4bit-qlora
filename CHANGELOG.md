@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Default: the CLI trainer double-quantizes the frozen expert absmax for resident training; `E4B_ABSMAX_DQ=0` turns it off
+
+- **Why.** TC1 amendments 28 and 31 read `E4B_ABSMAX_DQ` against the fp32 absmax on one RTX 5090 each. Held-out moved by 0.003 or
+  less, and the registered rule (P56, P57, P58 held) makes it the default for resident training.
+
+  | model | step cost | peak saved |
+  |---|---|---|
+  | Qwen3-30B-A3B | 1.014× | 1.34 GB |
+  | Mixtral-8x7B | 1.023× | 2.04 GB |
+
+- **What.** `python -m experts4bit_qlora.train` now compresses the absmax after load (`apply_absmax_dq`) unless:
+  - `E4B_ABSMAX_DQ=0` is set;
+  - the run uses expert offload or `TRAIN_ARENA` (those paths read the fp32 absmax by name);
+  - the compressor refuses the model (a bare stack, 8-bit storage, …), in which case it keeps its fp32 absmax and logs why.
+
+  `E4B_ABSMAX_DQ=1` keeps its old meaning: required, refused with offload, and a vacuous compression is an error.
+- **Unchanged.** `compress_expert_absmax_` stays an explicit call in code. The TC1 harness's `--absmax-dq` stays explicit, because its
+  boxes are registered instruments.
+- **Docs and tests.** Docstrings, the env help, capabilities and the solution page are updated. New tests cover the switch's five
+  settings and the default's handling of a refused or empty compression.
+
 ### Read: TC1 amendment 31 — the double-quantized absmax costs Qwen3-30B-A3B 1.4 % of its step for 1.34 GB (P56 HELD); with P57 and P58, it becomes the default for resident training
 
 - `tc1-5090-75` ($1.03, a quiet EPYC 7B13, 60-step runs): `_dq1`/`_dq0` 1.014 [1.007, 1.021], peak 27.44 → 26.10 GB, held-out −0.0021.
