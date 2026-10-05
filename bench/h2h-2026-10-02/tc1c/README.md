@@ -8,6 +8,40 @@ frameworks, Unsloth 2026.9.14 on torch 2.12.1+cu130 with `grouped_mm` engaged on
 (AMD EPYC 9534, 224 vCPU, 1.58 TB host RAM, driver 595.71.05), $4.88. The first draw (`tc1c-h100-1`) was refused at $0 before any
 instance existed (its manifest carried the 5090 pre-flight exclusion receipts, not same-class for an H100).
 
+## Amendment 9 (2026-10-05): the same-stack H100 box reads UNTESTED: e4b's draws 18 % and 29 % apart on a RunPod container given 18 vCPUs and run with 72 threads
+
+Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 9. TC1 amendment 25's same-stack family on one H100 NVL.
+Both frameworks run on torch 2.12.1+cu130 / transformers 5.5.0, 60 load-gated steps, e4b @ `1607441` (0.48.0), grouped-nf4-gemm `f127981`
+(0.41.0), Unsloth 2026.9.14. Read: [`RESULTS-tc1c-samestack-h100.md`](RESULTS-tc1c-samestack-h100.md); receipts
+[`receipts/tc1c-h100-22/`](receipts/tc1c-h100-22/).
+
+**The box.** `tc1c-h100-22` ran on **RunPod Secure**, not Vast: pod `lj6bxnvudzxiv7`, H100 NVL, Intel Xeon Platinum 8452Y (144 host CPUs, 18
+vCPUs allotted to the pod), driver 580.159.04, 141 GB RAM. It was the first lane to complete on the launcher's RunPod adapter.
+
+- No Vast H100 NVL qualified when it launched. `tc1c-h100-18` (Vast) failed pre-flight on a 150 GB overlay for a 320 GB order ($0.008).
+- `-19` and `-20` (RunPod) stopped because the image lacked `rsync` and then `git` (adertha-agents #169, #171; $0.29).
+- `-21` was refused at $0 for lack of stock.
+- **Budget, disclosed:** the amendment registered a $2.80/h GPU ceiling. This pod's GPU rate was $3.19/h, run on the owner's direct go for
+  the H100.
+- **Spend, disclosed:** the launcher booked $3.48 from billing records that covered 3,869 of the pod's 7,548 s. At its own rate the box cost
+  about $6.78. adertha-agents #174 makes such partial records book the estimate.
+
+| arm | s/step, two draws | peak |
+|---|---|---|
+| e4b `fused_attn4_m`, venv-unsloth | 2.968 / 3.557 (**18.1 % apart**) | 27.49 GB |
+| e4b `fused_attn4_m_t28`, venv-e4b | 3.428 / 2.568 (**28.7 % apart**) | 27.51 GB |
+| Unsloth `ckpt_unsloth_m` | 3.127 / 3.021 (3.5 %) | 24.27 GB |
+
+- **P27 UNTESTED** and **P28 UNTESTED**: e4b's draws are unstable on both of its arms. **P29 HELD**: `grouped_mm` with `GNF4_TRAIN_GEMM`
+  unset on every e4b receipt. Every arm is VALID.
+- **By amendment 9's rule nothing is quoted.** Amendment 8's 1.061 stays the H100 position of record.
+- **Why the e4b draws moved (a candidate, not a reading).** The lane sets `OMP_NUM_THREADS` to the host's physical cores. That was 72 here,
+  for a pod RunPod allotted 18 vCPUs (`runpod_vcpu_count` on the receipt), four threads per vCPU. Its load gate also read the host's load
+  average, 7.5–42 over the standing attempts, where the gate is 6.0. e4b's step is host-bound and Unsloth's less so, and only e4b's draws
+  came apart. Both frameworks also stepped slower than amendment 8's Vast host (2.43 / 2.55 s): 2.6–3.6 s here. A lane that sizes its
+  threads to the container's allotment would separate the two causes. Whether Vast containers carry a CPU quota is not recorded on any box
+  yet.
+
 ## Amendment 8 (2026-10-04): the H100 at default settings on 0.45.0 — e4b faster per step, Unsloth/e4b 1.061 (P24, P25, P26 HELD): the H100 position of record
 
 Pre-registration: [`../../tc1/TC1C-PREREG.md`](../../tc1/TC1C-PREREG.md), amendment 8. Amendment 7's box once more, the last re-ask under these rules.

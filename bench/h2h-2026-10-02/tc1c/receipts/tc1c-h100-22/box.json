@@ -1,0 +1,17 @@
+{
+ "box": "A",
+ "run_id": "tc1c-h100-22",
+ "instance_id": "lj6bxnvudzxiv7",
+ "gpu": "NVIDIA H100 NVL",
+ "driver": "580.159.04",
+ "cpu": "Intel(R) Xeon(R) Platinum 8452Y",
+ "nproc": 144,
+ "mem_total_kb": "1188615704",
+ "cgroup_memory_max": "",
+ "disk_root": "overlay         320G  124M  320G   1% /",
+ "hostname": "47052476a018",
+ "registered_gpu_class": "H100 NVL",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}

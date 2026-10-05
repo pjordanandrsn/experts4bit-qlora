@@ -1,0 +1,5 @@
+NVIDIA H100 NVL, 95830 MiB, 580.159.04, GPU-21eec624-a242-f76d-0d45-4382f13f0d67, 310.00 W, 1785 MHz
+CPU(s):                                  144
+Model name:                              Intel(R) Xeon(R) Platinum 8452Y
+MemTotal:       1188615704 kB
+overlay         320G  124M  320G   1% /
