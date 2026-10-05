@@ -36,6 +36,9 @@ import torch
 
 BLOCK_TOKENS = 16
 
+#: :meth:`Fp8PagedKV.append_prompt` stacks at most this many bytes of bf16 input per side per group of layers
+BULK_GROUP_BYTES = 16 << 20
+
 
 
 #: grouped-nf4-gemm's fused KV appends (``fp8_kv_append_t1`` / ``_bt1``) cast to e4m3 with Triton's
@@ -617,6 +620,201 @@ class Fp8PagedKV:
             self._seen[layer][seq] = 0
             self.seq_lens[layer].narrow(0, seq, 1).fill_(0)
             self.block_table[layer][seq].zero_()
+
+    # ------------------------------------------------- bulk bookkeeping (E4B_PAGED_BULK_KV) --
+    # A serving loop pays reset / claim / prompt flush once per request, and the per-layer forms above pay them per
+    # layer and per block: on Qwen3-30B-A3B's 48 layers at 2048 tokens per slot about 13.5k launches a request
+    # (96 + 2,448 kernels and 6,240 copies for a 512-token flush + 4,608 block claims at the slot's first graphed
+    # decode + 96). They are host-issued, one after another, on the engine thread, and every resident decode waits for
+    # them (stall census, bench/stall-census-2026-10-05). The forms below leave the pool, the block tables, the lengths
+    # and the host mirrors exactly as the per-layer forms do, with a launch count independent of layers and blocks.
+    # The rows a slot is given are the rows the per-layer forms would give it from the same free lists (lowest first).
+
+    def reset_all_layers(self, seq: int) -> None:
+        """:meth:`reset` for every layer with its device writes in two launches: the slot's lengths and its
+        block-table rows. The host mirrors are returned exactly as :meth:`reset` returns them."""
+        for layer in range(self.L):
+            rows = self._rows.pop((layer, seq), [])
+            if rows:
+                self._free[layer].extend(rows)
+                self._free[layer].sort()
+            self._seen[layer][seq] = 0
+        self.seq_lens[:, seq].fill_(0)
+        self._bt_all[:, seq].zero_()
+
+    def _layer_index(self, layers) -> torch.Tensor:
+        """A device index of ``layers``, built once per layer set: a fresh one is a pageable host-to-device copy, and
+        torch's blocking copy synchronizes the stream (it would wait out a prefill forward still on the GPU)."""
+        key = tuple(layers)
+        cache = self.__dict__.setdefault("_lidx_cache", {})
+        t = cache.get(key)
+        if t is None:
+            t = cache[key] = torch.tensor(key, dtype=torch.long, device=self.device)
+        return t
+
+    def _claim_staging(self, n: int) -> torch.Tensor:
+        """A host buffer of ``n`` int32 for one async H2D table write. On CUDA it is pinned and taken from a ring of
+        two, each guarded by an event recorded after its copy, so a claim never rewrites a buffer a queued copy has
+        not read yet (and never waits on the copy just issued)."""
+        if self.device.type != "cuda":
+            return torch.empty(n, dtype=torch.int32)
+        ring = getattr(self, "_claim_ring", None)
+        if ring is None:
+            size = self.L * self.blocks_per_seq
+            ring = self._claim_ring = [[torch.empty(size, dtype=torch.int32).pin_memory(), None] for _ in range(2)]
+            self._claim_next = 0
+        slot = ring[self._claim_next]
+        self._claim_next ^= 1
+        if slot[1] is not None:
+            slot[1].synchronize()
+        if n > slot[0].numel():
+            raise ValueError(f"claim of {n} table entries exceeds the staging ring ({slot[0].numel()})")
+        self._claim_cur = slot
+        return slot[0][:n]
+
+    def claim_blocks(self, seq: int, upto_blk: int, layers=None) -> None:
+        """:meth:`_ensure_blocks` for several layers at once: back blocks ``0..upto_blk`` of ``seq`` in every layer of
+        ``layers`` (default all) with pool rows. Rows are popped from each layer's free list lowest first, as
+        :meth:`_ensure_blocks` pops them, and land in the device tables with ONE async host-to-device copy. Layers
+        holding different block counts for the slot take the per-layer path."""
+        layers = list(range(self.L)) if layers is None else list(layers)
+        if not layers:
+            return
+        have = {len(self._rows.get((layer, seq), ())) for layer in layers}
+        if len(have) != 1:
+            for layer in layers:
+                self._ensure_blocks(layer, seq, upto_blk)
+            return
+        lo = have.pop()
+        n = upto_blk + 1 - lo
+        if n <= 0:
+            return
+        short = [layer for layer in layers if len(self._free[layer]) < n]
+        if short:
+            raise RuntimeError(f"layer {short[0]} is out of KV blocks — the scheduler admitted past capacity")
+        got = []
+        for layer in layers:
+            free = self._free[layer]
+            take = free[:n]
+            del free[:n]
+            self._rows.setdefault((layer, seq), []).extend(take)
+            got.extend(take)
+        G = len(layers)
+        src = self._claim_staging(G * n)
+        src.copy_(torch.tensor(got, dtype=torch.int32))
+        if layers == list(range(self.L)):
+            self._bt_all[:, seq, lo:lo + n].copy_(src.view(G, n), non_blocking=True)
+        else:
+            dst = torch.empty(G, n, dtype=torch.int32, device=self.device)
+            dst.copy_(src.view(G, n), non_blocking=True)
+            self._bt_all[self._layer_index(layers), seq, lo:lo + n] = dst
+        if self.device.type == "cuda":
+            ev = torch.cuda.Event()
+            ev.record()
+            self._claim_cur[1] = ev
+
+    def append_prompt(self, seq: int, layers, ks, vs) -> None:
+        """:meth:`append` of a fresh slot's whole prompt for several layers at once. ``ks[i]``, ``vs[i]``: ``[T, H, D]``
+        for ``layers[i]``.
+
+        Layers are grouped by geometry (kv heads, head_dim, key groups). Per group the staged K/V are stacked and
+        quantized once per side; the scales are per (token, head) or per group, so this is bitwise the per-layer
+        quantize. Each side then writes full blocks with one ``index_copy_`` per region, payload and scales, and a
+        partial tail block with one more. Rows are claimed with :meth:`claim_blocks` first; the flat row ids are read
+        back on the device from the tables that claim just wrote. Values are written before keys, as in
+        :meth:`append`.
+
+        A slot that already holds tokens in any of these layers, prompts of different lengths, or an arena that is not
+        the up-front-claimed one takes :meth:`append` per layer, unchanged."""
+        layers = list(layers)
+        if len(ks) != len(layers) or len(vs) != len(layers):
+            raise ValueError(f"{len(ks)} K / {len(vs)} V tensors for {len(layers)} layers")
+        if not layers:
+            return
+        for layer, k, v in zip(layers, ks, vs):
+            H, D = self.Hs[layer], self.Ds[layer]
+            if k.shape != v.shape or k.dim() != 3 or tuple(k.shape[1:]) != (H, D):
+                raise ValueError(f"expected [T, {H}, {D}] at layer {layer}, got {tuple(k.shape)} / {tuple(v.shape)}")
+        T = int(ks[0].shape[0])
+        arena = all(h == 0 for h in self.kp.head + self.vp.head) and \
+            all(t == self._n_rows for t in self.kp.tail + self.vp.tail)
+        if (any(self._seen[layer][seq] for layer in layers) or any(int(k.shape[0]) != T for k in ks)
+                or not arena or T == 0):
+            for layer, k, v in zip(layers, ks, vs):
+                self.append(layer, seq, k.contiguous(), v.contiguous())
+            return
+        if T > self.blocks_per_seq * self.bt:
+            raise ValueError(f"sequence {seq} overflows its {self.blocks_per_seq} blocks")
+        groups: dict = {}
+        for i, layer in enumerate(layers):
+            groups.setdefault((self.Hs[layer], self.Ds[layer], self.kgs[layer]), []).append(i)
+        # a group's stacked input is bounded (BULK_GROUP_BYTES per side): the quantize's fp32 temporaries are ~4x it
+        # and both sides' stacks are alive together, so a group peaks near 7x the bound (~112 MiB); every group's
+        # quantized bytes (the prompt's FP8 K/V) are held until the writes. The whole is append_prompt_peak_bytes().
+        # Under an eager forward it borrows memory the forward just returned to the allocator. Under the first-chunk
+        # prefill graph the forward's working set sits in the graph's PRIVATE pool, so this transient is NEW memory on
+        # top of it: PagedModelRunner.enable_prefill_graph counts it in its `auto` headroom when bulk_kv is on.
+        bounded = []
+        for (H, D, kg), idx in groups.items():
+            per = max(1, BULK_GROUP_BYTES // max(1, T * H * D * 2))
+            bounded += [((H, D, kg), idx[j:j + per]) for j in range(0, len(idx), per)]
+        # every fallible, allocating step (stack + quantize) for every group before any shared state moves
+        quant = []
+        for (H, D, kg), idx in bounded:
+            G = len(idx)
+            K = torch.stack([ks[i] for i in idx]).reshape(G * T, H, D)
+            V = torch.stack([vs[i] for i in idx]).reshape(G * T, H, D)
+            quant.append(((H, D, kg), [layers[i] for i in idx], self._quant_bytes(V, 1), self._quant_bytes(K, kg)))
+        nblk = -(-T // self.bt)
+        self.claim_blocks(seq, nblk - 1, layers)
+        bt, nfull, tail = self.bt, T // self.bt, T % self.bt
+        for (H, D, kg), lays, vq, kq in quant:
+            G = len(lays)
+            lidx = self._layer_index(lays)
+            tbl = self._bt_all[:, seq, :nblk].index_select(0, lidx).to(torch.long)
+            # V first, K last (append's publish-last order)
+            for pool, pay, groups_, (qb, sb) in ((self.vp, self._v_pays[lays[0]], 1, vq),
+                                                 (self.kp, self._k_pays[lays[0]], kg, kq)):
+                srow = H * groups_ * 4
+                gidx = lidx[:, None] * pool.device_rows + tbl              # [G, nblk] flat pool rows
+                flat2d = pool.dev.view(-1, pool.row_bytes)
+                qb3, sb3 = qb.view(G, T, H * D), sb.view(G, T, srow)
+                if nfull:
+                    ix = gidx[:, :nfull].reshape(-1)
+                    flat2d[:, :bt * H * D].index_copy_(
+                        0, ix, qb3[:, :nfull * bt].reshape(G * nfull, bt * H * D))
+                    flat2d[:, pay:pay + bt * srow].index_copy_(
+                        0, ix, sb3[:, :nfull * bt].reshape(G * nfull, bt * srow))
+                if tail:
+                    ix = gidx[:, nfull].contiguous()
+                    flat2d[:, :tail * H * D].index_copy_(0, ix, qb3[:, nfull * bt:].reshape(G, tail * H * D))
+                    flat2d[:, pay:pay + tail * srow].index_copy_(0, ix, sb3[:, nfull * bt:].reshape(G, tail * srow))
+        for layer in layers:
+            self._seen[layer][seq] = T
+        if layers == list(range(self.L)):
+            self.seq_lens[:, seq].add_(T)
+        else:
+            self.seq_lens[self._layer_index(layers), seq] += T
+
+    def append_prompt_peak_bytes(self, T: int, layers=None) -> int:
+        """An upper bound on the device memory :meth:`append_prompt` allocates for a ``T``-token prompt, beyond its
+        inputs: per geometry group, the largest bounded group's stacks and quantize temporaries (7 x its bf16 input per
+        side), plus every layer's quantized bytes, which are held until the writes. ``T`` at the slot's capacity gives
+        the bound for any prompt."""
+        layers = list(range(self.L)) if layers is None else list(layers)
+        T = int(T)
+        if T <= 0 or not layers:
+            return 0
+        groups: dict = {}
+        for layer in layers:
+            groups.setdefault((self.Hs[layer], self.Ds[layer], self.kgs[layer]), []).append(layer)
+        peak_group, held = 0, 0
+        for (H, D, kg), lays in groups.items():
+            per = max(1, BULK_GROUP_BYTES // max(1, T * H * D * 2))
+            g = min(per, len(lays))
+            peak_group = max(peak_group, 7 * g * T * H * D * 2)
+            held += len(lays) * T * (2 * H * D + H * kg * 4 + H * 4)      # K and V payload + their scales
+        return peak_group + held
 
     def free_blocks(self, layer: int = 0) -> int:
         return len(self._free[layer])
