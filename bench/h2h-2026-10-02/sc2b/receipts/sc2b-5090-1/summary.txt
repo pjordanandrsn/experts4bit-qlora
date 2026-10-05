@@ -1,0 +1,66 @@
+KNOBS box=F e4b=f8c9dde89e480fe3fe6c40da45b1901f253b7c69 gnf4=5a887c48acc90207fdd30f2e9b23d21d62102b14 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
+e4b 0.46.0 @f8c9dde89e480fe3fe6c40da45b1901f253b7c69
+gnf4 0.38.0 @5a887c48acc90207fdd30f2e9b23d21d62102b14
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+aiohttp 3.14.3 fastapi 0.141.1 uvicorn 0.54.0
+PHASE 0 fetch (bf16 for the bake), bake, the SC2 prompt pool at=2026-10-04T22:38:37Z nproc=256 cpu.max=3071999/100000 load=7.57/7.88/11.95
+FETCH qwen3 Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE qwen3 BAKE OK
+SC2_PROMPTS rows=64 prompt=512 sha256=de63bb35245fad5630580af0a54db04364d2e7e2a5aba72e2d18a61aee8f9fc0
+QUIESCE arms quiesced=yes waited=0s busy_procs=0 load1=66.26 nproc=256 cpu.max=3071999/100000 at=2026-10-04T22:54:47Z
+PHASE F1 draw 1: OFF then ON (same seeds) at=2026-10-04T22:54:47Z nproc=256 cpu.max=3071999/100000 load=66.26/35.64/21.78
+SC2B_ROUTES {"ok": true, "bad": {}, "routes": {"int4_prefill_env": null, "prefill_attn_env": null, "device_grouping": true, "int4_prefill": "k19", "int4_prefill_above_256_rows": "k19", "prefill_attn": "flash"}}
+SC2B e4b_off_d1 healthy (E4B_PAGED_PREFILL_GRAPH=0) vram_used_mib=20308
+SC2 e4b_off_d1_warm rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 0.6873, "ttft_p50_s": 0.259188, "ttft_p99_s": 1.047875, "tpot_p50_s": 0.004436, "tpot_p99_s": 0.004521, "output_tok_s": 152.867, "goodput_rps": null}
+SC2B_EARLY {"arm": "off", "ok": true, "bad": []}
+SC2 e4b_off_d1_serial rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 0.9681, "ttft_p50_s": 0.262849, "ttft_p99_s": 0.301259, "tpot_p50_s": 0.004514, "tpot_p99_s": 0.00503, "output_tok_s": 167.909, "goodput_rps": null}
+SC2 e4b_off_d1_serial_repeat rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 0.9559, "ttft_p50_s": 0.269244, "ttft_p99_s": 0.29969, "tpot_p50_s": 0.004556, "tpot_p99_s": 0.004997, "output_tok_s": 165.816, "goodput_rps": null}
+SC2 e4b_off_d1_r1 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.23674, "ttft_p99_s": 0.647019, "tpot_p50_s": 0.007449, "tpot_p99_s": 0.0217, "output_tok_s": 147.809, "goodput_rps": 1.0}
+SC2 e4b_off_d1_r2 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.785948, "ttft_p99_s": 3.474342, "tpot_p50_s": 0.02679, "tpot_p99_s": 0.047773, "output_tok_s": 392.141, "goodput_rps": 1.1333}
+SC2 e4b_off_d1_r4 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3192, "ttft_p50_s": 8.608677, "ttft_p99_s": 15.494445, "tpot_p50_s": 0.033888, "tpot_p99_s": 0.051283, "output_tok_s": 433.389, "goodput_rps": 0.4}
+SC2 e4b_off_d1_r8 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.1024, "ttft_p50_s": 14.851567, "ttft_p99_s": 30.796509, "tpot_p50_s": 0.039919, "tpot_p99_s": 0.05541, "output_tok_s": 372.289, "goodput_rps": 0.3333}
+SC2B_ROUTES {"ok": true, "bad": {}, "routes": {"int4_prefill_env": null, "prefill_attn_env": null, "device_grouping": true, "int4_prefill": "k19", "int4_prefill_above_256_rows": "k19", "prefill_attn": "flash"}}
+SC2B e4b_on_d1 healthy (E4B_PAGED_PREFILL_GRAPH=1) vram_used_mib=23686
+SC2 e4b_on_d1_warm rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 0.9212, "ttft_p50_s": 0.164116, "ttft_p99_s": 0.188366, "tpot_p50_s": 0.004407, "tpot_p99_s": 0.004442, "output_tok_s": 193.302, "goodput_rps": null}
+SC2B_EARLY {"arm": "on", "ok": true, "bad": []}
+SC2 e4b_on_d1_serial rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 1.0644, "ttft_p50_s": 0.159782, "ttft_p99_s": 0.192392, "tpot_p50_s": 0.004458, "tpot_p99_s": 0.004999, "output_tok_s": 184.746, "goodput_rps": null}
+SC2 e4b_on_d1_r1 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.167862, "ttft_p99_s": 0.465036, "tpot_p50_s": 0.00644, "tpot_p99_s": 0.017032, "output_tok_s": 147.896, "goodput_rps": 1.0}
+SC2 e4b_on_d1_r2 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.307962, "ttft_p99_s": 1.687817, "tpot_p50_s": 0.019641, "tpot_p99_s": 0.039441, "output_tok_s": 393.094, "goodput_rps": 1.8}
+SC2 e4b_on_d1_r4 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3192, "ttft_p50_s": 6.506662, "ttft_p99_s": 11.406084, "tpot_p50_s": 0.030833, "tpot_p99_s": 0.0454, "output_tok_s": 476.017, "goodput_rps": 0.4667}
+SC2 e4b_on_d1_r8 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.1029, "ttft_p50_s": 9.717495, "ttft_p99_s": 20.354347, "tpot_p50_s": 0.031054, "tpot_p99_s": 0.039241, "output_tok_s": 478.429, "goodput_rps": 0.4667}
+PHASE F2 draw 2: ON then OFF (same seeds) at=2026-10-04T23:10:34Z nproc=256 cpu.max=3071999/100000 load=19.28/14.07/16.41
+SC2B_ROUTES {"ok": true, "bad": {}, "routes": {"int4_prefill_env": null, "prefill_attn_env": null, "device_grouping": true, "int4_prefill": "k19", "int4_prefill_above_256_rows": "k19", "prefill_attn": "flash"}}
+SC2B e4b_on_d2 healthy (E4B_PAGED_PREFILL_GRAPH=1) vram_used_mib=23686
+SC2 e4b_on_d2_warm rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 0.8863, "ttft_p50_s": 0.174361, "ttft_p99_s": 0.256783, "tpot_p50_s": 0.004494, "tpot_p99_s": 0.004502, "output_tok_s": 186.164, "goodput_rps": null}
+SC2B_EARLY {"arm": "on", "ok": true, "bad": []}
+SC2 e4b_on_d2_serial rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 1.0702, "ttft_p50_s": 0.171026, "ttft_p99_s": 0.180681, "tpot_p50_s": 0.004521, "tpot_p99_s": 0.005192, "output_tok_s": 181.562, "goodput_rps": null}
+SC2 e4b_on_d2_r1 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 1.049, "ttft_p50_s": 0.180057, "ttft_p99_s": 0.598089, "tpot_p50_s": 0.00726, "tpot_p99_s": 0.02016, "output_tok_s": 163.967, "goodput_rps": 1.0}
+SC2 e4b_on_d2_r2 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 1.887, "ttft_p50_s": 0.205545, "ttft_p99_s": 0.720945, "tpot_p50_s": 0.013365, "tpot_p99_s": 0.028013, "output_tok_s": 311.651, "goodput_rps": 2.0}
+SC2 e4b_on_d2_r4 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 3.3934, "ttft_p50_s": 1.997322, "ttft_p99_s": 4.603532, "tpot_p50_s": 0.029983, "tpot_p99_s": 0.041109, "output_tok_s": 489.72, "goodput_rps": 1.1667}
+SC2 e4b_on_d2_r8 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 7.9734, "ttft_p50_s": 12.295617, "ttft_p99_s": 22.440714, "tpot_p50_s": 0.029634, "tpot_p99_s": 0.043067, "output_tok_s": 507.563, "goodput_rps": 0.4667}
+SC2B_ROUTES {"ok": true, "bad": {}, "routes": {"int4_prefill_env": null, "prefill_attn_env": null, "device_grouping": true, "int4_prefill": "k19", "int4_prefill_above_256_rows": "k19", "prefill_attn": "flash"}}
+SC2B e4b_off_d2 healthy (E4B_PAGED_PREFILL_GRAPH=0) vram_used_mib=20308
+SC2 e4b_off_d2_warm rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 0.7731, "ttft_p50_s": 0.281265, "ttft_p99_s": 0.505303, "tpot_p50_s": 0.004502, "tpot_p99_s": 0.004534, "output_tok_s": 165.146, "goodput_rps": null}
+SC2B_EARLY {"arm": "off", "ok": true, "bad": []}
+SC2 e4b_off_d2_serial rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 1.0123, "ttft_p50_s": 0.222224, "ttft_p99_s": 0.277362, "tpot_p50_s": 0.004481, "tpot_p99_s": 0.004871, "output_tok_s": 171.839, "goodput_rps": null}
+SC2 e4b_off_d2_r1 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 1.049, "ttft_p50_s": 0.230732, "ttft_p99_s": 0.992979, "tpot_p50_s": 0.007979, "tpot_p99_s": 0.026152, "output_tok_s": 163.823, "goodput_rps": 0.9833}
+SC2 e4b_off_d2_r2 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 1.887, "ttft_p50_s": 0.394895, "ttft_p99_s": 1.713563, "tpot_p50_s": 0.016785, "tpot_p99_s": 0.046516, "output_tok_s": 310.356, "goodput_rps": 1.65}
+SC2 e4b_off_d2_r4 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 3.3934, "ttft_p50_s": 3.36249, "ttft_p99_s": 7.896456, "tpot_p50_s": 0.032226, "tpot_p99_s": 0.045361, "output_tok_s": 452.723, "goodput_rps": 0.7667}
+SC2 e4b_off_d2_r8 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 7.9727, "ttft_p50_s": 16.258203, "ttft_p99_s": 28.662182, "tpot_p50_s": 0.033601, "tpot_p99_s": 0.048815, "output_tok_s": 437.81, "goodput_rps": 0.2667}
+PHASE RD the reading at=2026-10-04T23:25:42Z nproc=256 cpu.max=3071999/100000 load=6.28/9.75/12.75
+SC2B_GATE routes {"ok": true, "bad": {}}
+SC2B_GATE prompts {"ok": true, "bad": {}}
+SC2B_GATE engaged {"ok": true, "draws": {"1": {"ok": true, "why": []}, "2": {"ok": true, "why": []}}}
+SC2B_GATE determinism {"verdict": "IDENTICAL", "n": 24, "chars": 17701}
+SC2B_GATE identity {"verdict": "IDENTICAL", "draws": {"1": {"verdict": "IDENTICAL", "n": 24, "chars": 17701}, "2": {"verdict": "IDENTICAL", "n": 24, "chars": 15204}}}
+SC2B_P1 REFUTED {"ttft_off_over_on": [1.645, 1.2994]}
+SC2B_P2 HOLDS {"tpot_on_over_off": [0.9876, 1.0089]}
+SC2B_P3 REFUTED {"ceiling_on": 1}
+SC2B_P4 HOLDS {"pairs": {"r1_d1": [1.0, 1.0], "r1_d2": [0.9833, 1.0], "r2_d1": [0.5667, 0.9], "r2_d2": [0.825, 1.0], "r4_d1": [0.1, 0.1167], "r4_d2": [0.1917, 0.2917], "r8_d1": [0.0417, 0.0583], "r8_d2": [0.0333, 0.0583]}, "regressions": {}, "ceilings": {"off": 1, "on": 1}}
+SC2B_ARM off ceiling=1 rows={"serial": "UNSTABLE", "1": "VALID", "2": "UNSTABLE", "4": "UNSTABLE", "8": "VALID"}
+SC2B_ARM on ceiling=1 rows={"serial": "VALID", "1": "VALID", "2": "VALID", "4": "UNSTABLE", "8": "VALID"}
+SC2B_LICENCE DEFAULT_LICENSED failed=[] void=False

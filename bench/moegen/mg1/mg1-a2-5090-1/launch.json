@@ -1,0 +1,21 @@
+{
+ "experiment_id": "mg1-a2-5090-1",
+ "status": "NOT_RUN",
+ "result": "invalid",
+ "cost_usd": {
+  "actual": 0.069,
+  "estimated": 1.7375
+ },
+ "started_at": "2026-10-04T22:44:23Z",
+ "finished_at": "2026-10-04T22:51:25Z",
+ "instance_id": "54213753",
+ "vast_machine_id": "152169",
+ "vast_offer_choice": "preferred rank 4 of 63",
+ "cpu_name": "AMD Ryzen 9 7900 12-Core Processor",
+ "vast_preflight": "failed",
+ "vast_hf_cdn_mb_s": null,
+ "vast_bandwidth_mb_s": null,
+ "notes": "pre-flight failed: HF CDN bandwidth 2.4 MB/s < 20 MB/s on ssh4.vast.ai:22066 (generic endpoints 2.0 MB/s, recorded as evidence, not a gate); probe={\"attempts\":[{\"attempt\":1,\"bytes\":\"95428897\",\"endpoint\":1,\"http_status\":\"200\",\"mb_s\":\"2.1\",\"rc\":0,\"request_seconds\":\"44.999\",\"result\":\"ok\",\"sample\":\"E4BBW 95428897 44.999372 0.612051 200 curl: (28) Operation timed out after 44742 milliseconds with 95428897 out of 440449768 bytes received\",\"starttransfer_seconds\":\"0.612\",\"tool\":\"curl\",\"transfer_seconds\":\"44.387\"},{\"attempt\":2,\"bytes\":\"104353272\",\"endpoint\":1,\"http_status\":\"200\",\"mb_s\":\"2.4\",\"rc\":0,\"request_seconds\":\"44.999\",\"result\":\"ok\",\"sample\":\"E4BBW 104353272 44.999239 0.594896 200 curl: (28) Operation timed out after 44706 milliseconds with 104353272 out of 440449768 bytes received\",\"starttransfer_seconds\":\"0.595\",\"tool\":\"curl\",\"transfer_seconds\":\"44.404\"},{\"attempt\":1,\"bytes\":\"104908505\",\"endpoint\":2,\"http_status\":\"200\",\"mb_s\":\"2.4\",\"rc\":0,\"request_seconds\":\"45.002\",\"result\":\"ok\",\"sample\":\"E4BBW 104908505 45.001581 0.598798 200 curl: (28) Operation timed out after 44707 milliseconds with 104908505 out of 548105171 bytes received\",\"starttransfer_seconds\":\"0.599\",\"tool\":\"curl\",\"transfer_seconds\":\"44.403\"},{\"attempt\":2,\"bytes\":\"104777505\",\"endpoint\":2,\"http_status\":\"200\",\"mb_s\":\"2.4\",\"rc\":0,\"request_seconds\":\"45.002\",\"result\":\"ok\",\"sample\":\"E4BBW 104777505 45.001643 0.557607 200 curl: (28) Operation timed out after 44738 milliseconds with 104777505 out of 548105171 bytes received\",\"starttransfer_seconds\":\"0.558\",\"tool\":\"curl\",\"transfer_seconds\":\"44.444\"}],\"capability\":{\"rc\":0,\"sample\":\"curl=/usr/bin/curl wget=/usr/bin/wget python3=/opt/conda/bin/python3\",\"tools\":{\"curl\":\"/usr/bin/curl\",\"python3\":\"/opt/conda/bin/python3\",\"wget\":\"/usr/bin/wget\"}}}; generic_probe={\"attempts\":[{\"attempt\":1,\"bytes\":\"75000000\",\"endpoint\":1,\"http_status\":\"200\",\"mb_s\":\"2.0\",\"rc\":0,\"request_seconds\":\"38.016\",\"result\":\"ok\",\"sample\":\"E4BBW 75000000 38.015991 0.157672 200\",\"starttransfer_seconds\":\"0.158\",\"tool\":\"curl\",\"transfer_seconds\":\"37.858\"},{\"attempt\":2,\"bytes\":\"75000000\",\"endpoint\":1,\"http_status\":\"200\",\"mb_s\":\"2.0\",\"rc\":0,\"request_seconds\":\"38.664\",\"result\":\"ok\",\"sample\":\"E4BBW 75000000 38.664147 0.390286 200\",\"starttransfer_seconds\":\"0.390\",\"tool\":\"curl\",\"transfer_seconds\":\"38.274\"},{\"attempt\":1,\"bytes\":\"89284881\",\"endpoint\":2,\"http_status\":\"200\",\"mb_s\":\"2.0\",\"rc\":0,\"request_seconds\":\"45.000\",\"result\":\"ok\",\"sample\":\"E4BBW 89284881 44.999843 0.142456 200 curl: (28) Operation timed out after 45000 milliseconds with 89284881 out of 104857600 bytes received\",\"starttransfer_seconds\":\"0.142\",\"tool\":\"curl\",\"transfer_seconds\":\"44.857\"},{\"attempt\":2,\"bytes\":\"89310945\",\"endpoint\":2,\"http_status\":\"200\",\"mb_s\":\"2.0\",\"rc\":0,\"request_seconds\":\"45.000\",\"result\":\"ok\",\"sample\":\"E4BBW 89310945 44.999699 0.142161 200 curl: (28) Operation timed out after 45000 milliseconds with 89310945 out of 104857600 bytes received\",\"starttransfer_seconds\":\"0.142\",\"tool\":\"curl\",\"transfer_seconds\":\"44.858\"}],\"capability\":{\"rc\":0,\"sample\":\"curl=/usr/bin/curl wget=/usr/bin/wget python3=/opt/conda/bin/python3\",\"tools\":{\"curl\":\"/usr/bin/curl\",\"python3\":\"/opt/conda/bin/python3\",\"wget\":\"/usr/bin/wget\"}}} (guard pid 53496 armed at 2026-10-04T22:44:25Z); command not run",
+ "teardown_reason": "preflight-failed",
+ "source": "adertha receipts store, receipts/experts4bit-qlora/2026-10-04/mg1-a2-5090-1/receipt.json (fields copied verbatim)"
+}

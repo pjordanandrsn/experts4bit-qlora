@@ -737,7 +737,7 @@
         "e4b.train.parity.mg1.qwen3_5.fused.2026-10-04",
         "e4b.train.parity.mg1.qwen3_5.matrix.2026-10-04"
        ],
-       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor): the fused arm PASSES tp1's verdict on Qwen3.6-35B-A3B (0.02624 / 0.01594, 40/40 layers patched, resident), but MG1's registered rule also needs P2 (the dgrad kernel's engagement), whose counter was not read on that box (tp1's arm driver predates DGRAD_STATS and the ladder OOMed). MG1 amendment 2 reads it; until then this path is experimental, not supported."
+       "reason": "MG1 (2026-10-04, one RTX 5090 behind tp1's train anchor): the fused arm PASSES tp1's verdict on Qwen3.6-35B-A3B (0.02624 / 0.01594, 40/40 layers patched, resident), but MG1's registered rule also needs P2 (the dgrad kernel's engagement). The reading could not record it (tp1's arm driver predates DGRAD_STATS and the ladder OOMed), and MG1 amendment 2's ladder OOMed again at the licensed configuration on the same host (bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md): a row, status unchanged. MG1 amendment 3 reads P2 on tp1's fused arm itself; until then this path is experimental, not supported."
       },
       "batched_train": {
        "status": "not_tested",

@@ -16,6 +16,23 @@
   - An unknown capability (no CUDA) changes nothing.
 - **Unchanged on sm_89+**, where every registered serving number was read (RTX 5090, H100).
 
+### MG1 amendment 2 read: the ladder OOMs at Qwen3.6's licensed configuration, so P2 stays unread and `qwen3_5_moe` stays experimental; amendment 3 registered, reading P2 on tp1's own fused arm (bench, tests and docs)
+
+- **The read** ([`bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md`](bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)).
+  - The first draw was refused at pre-flight: the host read 2.4 MB/s to the HF CDN and 2.0 MB/s to the generic endpoints.
+  - On the second, on the same host that read MG1's PASS, the ladder's `fused` rung OOMed in AdamW's first step at r 8 with
+    fp32 adapters. The backward had run, but the counter died with the process.
+  - By the amendment's rule that is a row, and the status is unchanged.
+  - The ladder holds a GPU copy of the initial adapters that tp1's driver does not (1.73 GiB of the 4.45 GiB above the arm's
+    peak; the rest is not attributed).
+- **Amendment 3** (`bench/moegen/MG1-PREREG.md`). `MG1_P2_ARM=1` runs only tp1's fused arm, from the staged driver file
+  unchanged, under the new `bench/moegen/p2_hook.py`. The hook runs the driver as `__main__` and writes grouped-nf4-gemm's
+  `DGRAD_STATS`, e4b's `FAST_TRAIN_STATS` and the driver's sha256 at interpreter exit. P8 needs loop 0 with kernel > 0 and the
+  driver's sha equal to tp1's file. `tc1_drive.sh` forwards the knob.
+  - `tests/test_mg1_lane.py` checks that the runner starts the staged driver file under the hook. It also checks that the hook
+    records the counters and keeps the driver's exit code, including a stub's.
+- **Spend.** $0.357 for amendment 2; $2.24 for the MG1 lane in all.
+
 ### Before-load serve planning: `estimate_serve_footprint`, `ServeSetup`, `paged_kv_pool_bytes`
 
 - **New: before-load serve planning.** `estimate_serve_footprint(describe_moe(id), ServeSetup(...))` itemizes the
@@ -73,6 +90,25 @@
 - **The pool measure.** It is the allocator's segments for the graph's own pool id. The first cut used the growth of
   `memory_reserved`, which read 0 once segments were recycled, so the headroom rule would have failed open. The A2000
   run caught it.
+
+### Read: SC2b (#846) -- the prefill graph is value-identical, cuts serial TTFT 1.30-1.65×, and is licensed as a default (`auto`); capacity stays at 1 req/s
+
+- **What ran.** `sc2b-5090-1` ($1.326, a 400 W 5090) drove e4b `serve_paged` with `E4B_PAGED_PREFILL_GRAPH` OFF against
+  ON, paired, on today's stack (grouped-nf4-gemm v0.38.0; k19 / flash read from the servers' own `/health`).
+- **Gates.** Every gate passed. Engagement: 508 replays for 508 requests, 0 eager chunks. Identity: every request's
+  serial text byte-equal OFF vs ON in both draws.
+- **Verdicts.**
+  - P1 REFUTED: TTFT OFF / ON 1.645 and 1.299 against a predicted ≥ 1.5.
+  - P2 HELD: TPOT unchanged.
+  - P3 REFUTED: ON's ceiling is still 1 req/s; attainment at 2 req/s was 0.90 / 1.00.
+  - P4 HELD: no regression.
+  - **Licence: DEFAULT_LICENSED**, for a default of `auto` (engage where the startup check passes).
+- **Why the ceiling held** (post hoc, `sc2_trace.py --plan`). The graph cut the per-prefill stall under load only about
+  17% (0.32 s to 0.27 s). That stall is about 1.6× the graphed serial TTFT, so most of it is per-prefill work outside
+  the forward, which names the next lever.
+- **Memory.** The graph costs +3.3 GiB at ready on Qwen3-30B-A3B (20,308 → 23,686 MiB).
+- **Total and read page.** SC2b cost $1.566. Read page: `bench/h2h-2026-10-02/sc2b/README.md`. `sc2_trace.py` gains
+  `--plan`.
 
 ### Read: TC1 amendment 25, first box — on one stack the matched set holds (P52 HELD); the speed pairs were unstable (P50, P51 UNTESTED); amendment 27 registers one re-draw
 

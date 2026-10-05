@@ -1,0 +1,186 @@
+{
+ "base": "http://127.0.0.1:8778",
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "profile": "e4b",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 6,
+ "seed": 1,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "6fee055b7515760392259956bf0e968c5d083feb773cb1ed9143a36b77959122",
+ "plan": [
+  [
+   0.0,
+   17,
+   209
+  ],
+  [
+   0.0,
+   8,
+   129
+  ],
+  [
+   0.0,
+   15,
+   190
+  ],
+  [
+   0.0,
+   57,
+   184
+  ],
+  [
+   0.0,
+   48,
+   117
+  ],
+  [
+   0.0,
+   12,
+   188
+  ]
+ ],
+ "summary": {
+  "n": 6,
+  "valid": 6,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.3054,
+  "wall_s": 4.665,
+  "ttft_p50_s": 0.120569,
+  "ttft_p90_s": 0.129183,
+  "ttft_p99_s": 0.133493,
+  "tpot_p50_s": 0.003886,
+  "tpot_p90_s": 0.003952,
+  "tpot_p99_s": 0.003954,
+  "e2el_p50_s": 0.829422,
+  "e2el_p90_s": 0.900667,
+  "e2el_p99_s": 0.937252,
+  "ttft_mean_s": 0.122367,
+  "output_tok_s": 217.987,
+  "output_tokens": 1017,
+  "good": 6,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.2861,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 3e-06,
+   "text": " in from the front indicated that the 23rd Infantry had been forced to withdraw from the northern blocking position and had retreated to the southern road toward Pugong @-@ ni . The 23rd Infantry Headquarters and Service Companies and other miscellaneous regimental units were ordered to move to the southern road . The 23rd Infantry Headquarters and Service Companies and other miscellaneous regimental units finally stopped this penetration near the regimental command post 5 miles ( 8 @.@ 0 km ) northwest of Changnyong . The 23rd Infantry Headquarters and Service Companies and other miscellaneous regimental units finally stopped this penetration near the regimental command post 5 miles ( 8 @.@ 0 km ) northwest of Changnyong . The 23rd Infantry Headquarters and",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.941317,
+   "ttft_s": 0.133972,
+   "tpot_s": 0.00388,
+   "i": 0,
+   "prompt_index": 17,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 129,
+   "prompt_len": 512,
+   "t_send": 0.941472,
+   "text": "azine , the Ise class ships had a fire extinguisher system installed . The fire extinguisher system was a complex system of pipes and valves that was designed to be activated by a single person . The system was intended to be activated by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by a single person by",
+   "completion_tokens": 129,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.628328,
+   "ttft_s": 0.121876,
+   "tpot_s": 0.003954,
+   "i": 1,
+   "prompt_index": 8,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 190,
+   "prompt_len": 512,
+   "t_send": 1.569894,
+   "text": " area and were unfamiliar with the terrain .\n\n\n The North Korean attack was launched on September 1 , 1950 , at 05:30 hours . The 2nd Infantry Division troops on the river line were caught off guard by the sudden attack . The 9th Infantry Regiment was the first to be attacked , with the 1st Battalion of the 9th Infantry Regiment being the first to be hit . The attack was launched from the west bank of the Naktong River , with the 1st Battalion of the 9th Infantry Regiment being the first to be hit . The attack was launched from the west bank of the Naktong River , with the 1st Battalion of the 9th Infantry Regiment being the first to be hit . The",
+   "completion_tokens": 190,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.860018,
+   "ttft_s": 0.124394,
+   "tpot_s": 0.003891,
+   "i": 2,
+   "prompt_index": 15,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 184,
+   "prompt_len": 512,
+   "t_send": 2.430022,
+   "text": " requests and provided assistance .\n\n\n\n= = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =",
+   "completion_tokens": 184,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.823638,
+   "ttft_s": 0.119262,
+   "tpot_s": 0.003848,
+   "i": 3,
+   "prompt_index": 57,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 117,
+   "prompt_len": 512,
+   "t_send": 3.253767,
+   "text": " his 10 most common pitches , nine are fastballs , with the remaining one being a changeup . His fastballs are all in the low 90s , with the fastest being 97 mph . His changeup is a 12 to 15 mph slower than his fastball , and is thrown with a 12 to 15 mph slower velocity than his fastball . His curveball is a 12 to 15 mph slower than his fastball , and is thrown with a ",
+   "completion_tokens": 117,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.57629,
+   "ttft_s": 0.118101,
+   "tpot_s": 0.003949,
+   "i": 4,
+   "prompt_index": 48,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 188,
+   "prompt_len": 512,
+   "t_send": 3.830118,
+   "text": " a new morning show . He then moved to WBEN ( AM ) and WBEN ( FM ) and became the sideline announcer for the Buffalo Bills . He also served as the play @-@ by @-@ play announcer for the University of Buffalo Bulls football team . He was a member of the Buffalo Sports Hall of Fame and the Buffalo Sports Hall of Fame 's 1970 induction class . He was also a member of the Buffalo Sports Hall of Fame 's 1970 induction class . He was a member of the Buffalo Sports Hall of Fame and the Buffalo Sports Hall of Fame 's 1970 induction class . He was a member of the Buffalo Sports Hall of Fame and the Buffalo",
+   "completion_tokens": 188,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.835206,
+   "ttft_s": 0.116595,
+   "tpot_s": 0.003842,
+   "i": 5,
+   "prompt_index": 12,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

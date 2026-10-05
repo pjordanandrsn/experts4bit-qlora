@@ -28,7 +28,14 @@ PROVE=${MG1_PROVE:-0}; REHEARSAL=${MG1_REHEARSAL:-0}
 # configuration. P2 is an engagement count, not a timing, so the box class does not bear on it.
 LADDER_ONLY=${MG1_LADDER_ONLY:-0}; LADDER_ARGS=${MG1_LADDER_ARGS:-}
 A2_ARGS="--rungs fused --r 8 --alpha 16 --adapter-dtype fp32 --attn4 0 --attn-lora 1 --profile 0 --warmup 1 --steps 2"
-if [ "$LADDER_ONLY" = 1 ]; then
+# Amendment 3: MG1_P2_ARM=1 skips the anchor and the ladder and runs only tp1's fused arm, UNCHANGED, under p2_hook.py, which
+# writes grouped-nf4-gemm's DGRAD_STATS at the driver's exit (receipts/<fam>_p2_dgrad.json). Amendment 2's ladder OOMed at the
+# licensed configuration; the licensed driver itself fits, so P2 is read on the code path the PASS was read on.
+P2_ARM=${MG1_P2_ARM:-0}
+if [ "$P2_ARM" = 1 ]; then
+  [ "$FAMS" = qwen3_5 ] && [ "$STEPS" = 60 ] && [ "$LADDER_ONLY" != 1 ] && echo "AMENDMENT 3 SHAPE (registered): P2 for qwen3_5 on tp1's fused arm" | tee -a summary.txt \
+    || echo "NON-REGISTERED SHAPE: MG1_P2_ARM=1 MG1_FAMILIES=$FAMS MG1_STEPS=$STEPS MG1_LADDER_ONLY=$LADDER_ONLY (not a registered reading)" | tee -a summary.txt
+elif [ "$LADDER_ONLY" = 1 ]; then
   [ "$FAMS" = qwen3_5 ] && [ "$LADDER_ARGS" = "$A2_ARGS" ] && echo "AMENDMENT 2 SHAPE (registered): P2 for qwen3_5" | tee -a summary.txt \
     || echo "NON-REGISTERED SHAPE: MG1_LADDER_ONLY=1 MG1_FAMILIES=$FAMS MG1_LADDER_ARGS=$LADDER_ARGS (not a registered reading)" | tee -a summary.txt
 else
@@ -84,7 +91,8 @@ nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader | 
 [ "$PROVE" = 1 ] && { echo "PROVE: install + tripwire OK; no anchor, no fetch, no arm" | tee -a summary.txt; finish 0; }
 
 # ---------------------------------------------------------------- box class (bench/train-anchor), strict as tp1
-if [ "$LADDER_ONLY" = 1 ]; then echo "ANCHOR skipped (MG1_LADDER_ONLY: an engagement count, not a timing)" | tee -a summary.txt; else
+if [ "$P2_ARM" = 1 ]; then echo "ANCHOR skipped (MG1_P2_ARM: an engagement count, not a timing)" | tee -a summary.txt
+elif [ "$LADDER_ONLY" = 1 ]; then echo "ANCHOR skipped (MG1_LADDER_ONLY: an engagement count, not a timing)" | tee -a summary.txt; else
 say "train anchor"
 ANCHOR_OUT=$W/anchor.json perl -e 'alarm 900; exec @ARGV' python train_anchor.py > logs/anchor.log 2>&1
 python train_anchor_gate.py anchor.json | tee logs/anchor_gate.log; arc=${PIPESTATUS[0]}
@@ -102,9 +110,10 @@ DATA=$W/data/ds_clinical.json; DATA_SHA=$(python -c "import json; print(json.loa
 [ "$(sha256sum $DATA | awk '{print $1}')" = "$DATA_SHA" ] || { echo "DATASET MISMATCH" | tee -a summary.txt; finish 13; }
 echo "DATASET clinical sha=$DATA_SHA" | tee -a summary.txt
 
-arm(){ local fam=$1 a=$2 snap=$3 off=$4 al=$5
+arm(){ local fam=$1 a=$2 snap=$3 off=$4 al=$5 py=python
+  [ "$P2_ARM" = 1 ] && py="python p2_hook.py"          # amendment 3: the same driver file, run as __main__ under the census hook
   say "arm $fam/$a offload=$off"
-  perl -e "alarm $al; exec @ARGV" python tp1_train_smoke.py --model "$snap" --fam "$fam" --arm "$a" --steps $STEPS --seq $SEQ \
+  MG1_P2_OUT=$W/receipts/${fam}_p2_dgrad.json perl -e "alarm $al; exec @ARGV" $py tp1_train_smoke.py --model "$snap" --fam "$fam" --arm "$a" --steps $STEPS --seq $SEQ \
     --offload "$off" --data "$DATA" --data-sha "$DATA_SHA" --out receipts > "logs/run_${fam}_${a}.log" 2>&1
   local rc=$?; echo "$fam/$a offload=$off rc=$rc" | tee -a summary.txt; return $rc; }
 
@@ -116,6 +125,21 @@ print(snapshot_download('${MID[$fam]}', revision='${REV[$fam]}', allow_patterns=
   [ -d "$snap" ] || { echo "$fam: FETCH FAILED" | tee -a summary.txt; continue; }
   echo "$fam: fetched $(du -shL "$snap" | cut -f1)" | tee -a summary.txt
   off=0
+  if [ "$P2_ARM" = 1 ]; then
+    arm $fam fused "$snap" $off 5400
+    python - "$W/receipts/${fam}_p2_dgrad.json" <<'PYP' | tee -a summary.txt
+import json, sys
+try:
+    c = json.load(open(sys.argv[1]))
+except (OSError, ValueError) as e:
+    print(f"P2 census ABSENT ({type(e).__name__}): the driver did not reach interpreter shutdown -- a row, status unchanged")
+    sys.exit(0)
+print(f"P2 census dgrad={json.dumps(c.get('dgrad'), sort_keys=True)} "
+      f"recurrent_fallbacks={(c.get('fast_train') or {}).get('recurrent_fallbacks')} driver_sha256={c['driver_sha256']}")
+PYP
+    rm -rf "$(dirname "$(dirname "$snap")")"
+    continue
+  fi
   if [ "$LADDER_ONLY" != 1 ]; then
   arm $fam reference "$snap" $off 5400
   if [ "$fam" = qwen3_5 ] && grep -q '"status": "oom"' receipts/${fam}_train_reference.json 2>/dev/null; then

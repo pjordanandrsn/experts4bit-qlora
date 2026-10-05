@@ -102,10 +102,48 @@ P2, so `qwen3_5_moe` entered as `experimental`. This amendment reads that one co
 * **Budget.** One RTX 5090: a 67 GB fetch and one load. Guard 0.75 h, about $0.64. The guard is under one hour, so no proving
   run is required.
 
+## Amendment 3 (2026-10-04, after amendment 2's box and before its own): P2 for Qwen3.6 from tp1's own fused arm
+
+Amendment 2 did not read P2 ([`mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md`](mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)).
+- Its first draw was refused at pre-flight before any work: the box's HF CDN bandwidth was 2.4 MB/s.
+- On its second draw the ladder ran out of memory in AdamW's first step at the licensed configuration, with 31.30 of
+  31.36 GiB in use. The backward had already run, so the counter existed only in the process that died.
+- By amendment 2's rule that is a row, so `qwen3_5_moe` stays `experimental`.
+
+The ladder is not the licensed driver. Among other differences, it holds a GPU copy of the initial adapters so that every rung
+starts from the same values: 463 M fp32 parameters here, 1.73 GiB. Its OOM point sits 4.45 GiB above tp1's arm peak; the
+copy is part of that difference, and the rest is not attributed. tp1's arm driver trained this family resident at 27.73 GB on
+the reading's box. This amendment reads P2 there.
+
+* **Run.** `MG1_FAMILIES=qwen3_5 MG1_P2_ARM=1`, N 60 (the default).
+  - No anchor, no reference arm and no ladder. The runner prints `AMENDMENT 3 SHAPE (registered)`.
+  - The fused arm runs through the staged `tp1_train_smoke.py`, unchanged, started as
+    `python p2_hook.py tp1_train_smoke.py <the arm's arguments>`.
+  - `bench/moegen/p2_hook.py` runs the driver as `__main__` through `runpy`. At interpreter exit it writes
+    `receipts/qwen3_5_p2_dgrad.json`: grouped-nf4-gemm's `DGRAD_STATS`, e4b's `FAST_TRAIN_STATS` and the driver file's
+    sha256. The runner copies it into `summary.txt` as a `P2 census` line.
+  - The stage list gains `bench/moegen/p2_hook.py`.
+* **P8.** The census reads `DGRAD_STATS["loop"] == 0` with `kernel` > 0 over the fused arm's 60 steps, with no recurrent-kernel
+  fallback. The driver's sha256 equals the committed `bench/train-parity-20260905/tp1/logs/tp1_train_smoke.py`. The arm's own
+  receipt is `status: ok`, with 40/40 layers patched.
+* **Decision.** The same as amendment 2's.
+  - If loop is 0, `qwen3_5_moe.fast_train` becomes `supported`, citing the reading's PASS and this census, and the family
+    joins `model_families`.
+  - If loop is above 0, it stays `experimental`, with the loop's reasons named.
+  - An absent census (the driver did not reach interpreter shutdown), an arm that is not `ok`, or a wrong sha is a row, and
+    the status is unchanged.
+* **The arm's other numbers are informational.** This box has no anchor and no reference arm, so the arm's time, loss and
+  peak are neither a verdict nor a position.
+* **Budget.** One RTX 5090: the 67 GB fetch, one load and 60 steps. Guard 0.75 h, about $0.64. The guard is under one hour,
+  so no proving run is required.
+  - A pre-flight refusal is redrawn.
+  - An OOM of the licensed arm here ends this lane for the family, with no re-roll: it fit on the reading's box, so an OOM
+    is itself a finding.
+
 ## Staging, the proving run and the rehearsal
 
 * **Controller.** `bench/tc1/tc1_drive.sh` with `TC1_BOX=A`, `TC1_RUNNER=mg1_run.sh`, and `TC1_EXTRA_STAGE` = `bench/moegen/mg1_run.sh
-  bench/moegen/ladder.py bench/moegen/mg1_reduce.py bench/train-anchor/train_anchor.py bench/train-anchor/train_anchor_gate.py
+  bench/moegen/ladder.py bench/moegen/p2_hook.py bench/moegen/mg1_reduce.py bench/train-anchor/train_anchor.py bench/train-anchor/train_anchor_gate.py
   bench/train-parity-20260905/tp1/logs/tp1_train_smoke.py`. tc1's own stage brings `n9_datasets.py` and the registered
   `ds_manifest.json`. `GNF4_SHA` is the grouped-nf4-gemm commit that carries `DGRAD_STATS`: the box tripwire refuses any other.
 * **Proving run first** (the standing rule for a guard over one hour): the same image, provider class and controller with

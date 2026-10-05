@@ -29,3 +29,20 @@ def test_the_read_quotes_the_fit_of_the_committed_traces():
         rows = [json.loads(line) for line in open(TRACES / f"trace_e4b_{mode}.jsonl") if line.strip()]
         f = t.analyse(rows)["fit"]
         assert (f["decode_ms_per_token"], f["stall_s_per_prefill"], f["r2"], f["n"]) == (a_ms, b_s, r2, 1008), (mode, f)
+
+
+def test_the_sc2b_read_quotes_the_fit_of_its_committed_traces():
+    """SC2b's read (bench/h2h-2026-10-02/sc2b/README.md) quotes the per-prefill stall with the prefill graph OFF and ON,
+    from each server's own trace in its own order (``--plan``)."""
+    t = _mod()
+    d = REPO / "bench" / "h2h-2026-10-02" / "sc2b" / "receipts" / "sc2b-5090-1" / "sc2"
+    base = [("warm", 4), ("serial", 24)]
+    rates = [(f"r{r}", 120) for r in (1, 2, 4, 8)]
+    want = {"e4b_off_d1": (5.681, 0.3265, 0.9868, 528, base + [("serial_repeat", 24)] + rates),
+            "e4b_on_d1": (6.064, 0.2617, 0.9845, 504, base + rates),
+            "e4b_on_d2": (6.127, 0.2692, 0.9904, 504, base + rates),
+            "e4b_off_d2": (6.101, 0.3131, 0.9879, 504, base + rates)}
+    for tag, (a_ms, b_s, r2, n, plan) in want.items():
+        rows = [json.loads(line) for line in open(d / f"trace_{tag}.jsonl") if line.strip()]
+        f = t.analyse(rows, plan=plan)["fit"]
+        assert (f["decode_ms_per_token"], f["stall_s_per_prefill"], f["r2"], f["n"]) == (a_ms, b_s, r2, n), (tag, f)
