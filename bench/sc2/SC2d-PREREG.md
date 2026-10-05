@@ -38,9 +38,14 @@ The read checks this rather than assuming it.
 
 ## The box (K) and the stack it pins
 
-- **e4b:** the launch commit. Main must contain #1174 (the fallback counter). Box K's tripwire refuses (rc 9) before
-  any fetch if the installed e4b lacks it, because every server would otherwise read `<missing>` and report a false
-  NOT_ENGAGED.
+- **e4b: pinned to #1174's merge, `16074418`** (package tree `586d88ef`), which adds the fallback counter. The launch
+  runs from a main commit containing it.
+  - The files this read exercises must be byte-identical to `16074418` at the launch commit, checked with
+    `git diff --quiet 16074418 <launch> -- <files>`: `serve_paged.py`, and in `engines/` `paged_runner.py`,
+    `fp8_paged_kv.py`, `linear_state.py`, `paged_attention.py`, `scheduler.py` and `step_trace.py`.
+  - Any other package difference is listed in the launch record and on #846, as SC2c's launch did.
+  - Box K's tripwire also refuses (rc 9) before any fetch if the installed e4b lacks the counter, because every server
+    would otherwise read `<missing>` and report a false NOT_ENGAGED.
 - **The rest of the stack:** grouped-nf4-gemm v0.41.0 (`dc8f94ab`, as box H); torch 2.8.0+cu128 (A1's pin, on every
   python3 box); transformers 5.16.1 and bitsandbytes 0.50.1 (the harness's pins).
   - transformers 5.16.1 ships `qwen3_5_moe` (`Qwen3_5MoeGatedDeltaNet`), `cache_utils.LinearAttentionLayer` and
