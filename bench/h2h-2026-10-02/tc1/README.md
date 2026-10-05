@@ -51,6 +51,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-85` | `qwen3compactab3` + `mixtralcompactab` (amendment 38, 60 steps, load-gated) | instance 54292473, AMD EPYC 9655 (Vast machine 150700) | the compact delta's default decision on a fast host: slower on every arm, Qwen3 matched 1.016 and shipped 1.013, Mixtral 1.013 (P77, P78, P80 FALSIFIED), while the peaks held (Qwen3 −0.312 GB, Mixtral −0.037; P79, P81 HELD); it stays opt-in; [read](RESULTS-tc1-compact-default.md) | $2.64 |
 | `tc1-5090-86` | `qwen3samestack4k` (amendment 39, packed 4,096-token rows, 30 steps, load-gated) | instance 54297512, AMD EPYC 7B13 (Vast machine 145701) | the packed regime on one stack: every e4b arm OOMed at step 1 allocating 2.32 GiB, the fp32 copy of the full-vocabulary logits (P86 FALSIFIED), while Unsloth trained at 24.86 GB (its draws 7.7 % apart; P84, P85 UNTESTED); an e4b loss in that regime; [read](RESULTS-tc1-packed4k.md) | $1.37 |
 | `tc1-5090-91` | `qwen3samestack4kce` (amendment 40, packed 4,096-token rows, e4b with `E4B_CHUNKED_LM_LOSS=1`, 40 steps) | instance 54323622, AMD EPYC 7K62 (Vast machine 152440) | with the chunked loss every e4b arm trained the packed rows (peak 32.44–32.57 GB, no OOM), but each is VOID under TC1's no-loop rule: grouped-nf4-gemm's `auto` took the per-expert LoRA loop on ~1.5 % of its delta calls (padded blocks over its 2 GiB limit); P87–P89 UNTESTED; the unquotable readings say Unsloth/e4b 1.43; [read](RESULTS-tc1-packed4k-chunked.md) | $1.43 |
+| `tc1-5090-94` | `qwen3samestackh2` (amendment 42, 60 steps, load-gated) | instance 54328898, AMD EPYC 7K62 (Vast machine 152440) | amendment 33's same-stack box on a second host, the current code: Unsloth/e4b 2.468 (P94 HELD) and the environment 0.870 (P95 HELD); 2.352 stays the position to quote, now read on two hosts; [read](RESULTS-tc1-samestack-host2.md) | $1.25 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -85,6 +86,30 @@ the harness's floor): amendment 39's box with `E4B_CHUNKED_LM_LOSS=1` on every e
 - **The host was shared** with this campaign's `tc1-5090-94` (amendment 42) from 14:19Z; the load gate voided no draw.
 - **Next.** A registration that reads the packed regime's loop share as a recorded route rather than a VOID, made with these numbers in view
   and said so.
+
+## Amendment 42 (2026-10-05): the same-stack position replicates on a second host, 2.468
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 42. One RTX 5090 (`tc1-5090-94`, AMD EPYC 7K62, Vast
+machine 152440; earlier launches cost $0.006 and $0: a host below the driver floor, and a receipts-store race): amendment 33's box on the
+current code (e4b `5c90886`, grouped-nf4-gemm `ccf4de9`), off amendment 33's machine. Read:
+[`RESULTS-tc1-samestack-host2.md`](RESULTS-tc1-samestack-host2.md).
+
+| arm | s/step (two draws, 60 steps) | peak |
+|---|---|---|
+| e4b `fused_attn4_m`, venv-unsloth | 4.143 / 4.073 (1.7 % apart) | 27.50 GB |
+| Unsloth `ckpt_unsloth_m`, venv-unsloth | 10.155 / 10.120 (0.3 % apart) | 24.27 GB |
+| e4b `fused_attn4_m_t28`, venv-e4b | 4.734 / 4.709 (0.5 % apart) | 27.45 GB |
+
+- **P94 HELD.** Unsloth/e4b on one stack reads **2.468** [2.443, 2.493], against amendment 33's 2.352 on an EPYC 7B13: 5 % apart, both inside
+  [1.9, 2.9]. Held-out COMPARABLE (Δ −0.0012); Unsloth peaks 3.22 GB lower and spends ×1.41 e4b's energy per step.
+- **P95 HELD.** The environment reads **0.870** [0.860, 0.880]. The prebound launches now cover triton 3.7, so both of e4b's sides take them;
+  amendment 33's 0.900 had them on one side only, and its read bounded the symmetric value at about 0.876–0.900.
+- **By amendment 42's rule 2.352 stays the position to quote**, now read on two hosts (2.352 and 2.468). Both steps ran longer on this host
+  (e4b 4.11 s, Unsloth 10.14 s, against 3.49 and 8.22 s) and the ratio moved 5 %.
+- **The host was shared** with this campaign's `tc1-5090-91` (amendment 40) until 15:30Z; the load gate voided no draw.
+- **Two host models, by draw, not by design.** Amendment 42 excluded machine ids but did not register a CPU model (#1157: it
+  auto-merged before that review point was applied). This draw's EPYC 7K62 differs from amendment 33's EPYC 7B13, so "two hosts"
+  here is also two host models. The code moved too (e4b `5c90886`), so the 5 % between them is not attributed to either.
 
 ## Amendment 39 (2026-10-05): on packed 4,096-token rows e4b at its defaults runs out of memory where Unsloth trains
 

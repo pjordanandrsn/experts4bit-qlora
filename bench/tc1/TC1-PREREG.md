@@ -1718,3 +1718,45 @@ Each is FALSIFIED outside its band and UNTESTED where a side is missing, unstabl
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2 with the download;
 this is in the standing no-ask tier.
+
+### Amendment 43 (2026-10-05T15:34Z, after amendment 40's read, before any box): the packed 4,096-token regime with e4b's chunked loss again, the LoRA loop read as a recorded route (P96, P97, P98)
+
+**Why.** Amendment 40's box (`tc1-5090-91`) showed the chunked LM loss doing its job: every e4b arm trained the packed rows to step 40
+at a 32.4–32.6 GB peak, where amendment 39's had OOMed at step 1. But every e4b arm read VOID under TC1's rule that a fused arm's
+per-expert LoRA loop never runs. On those rows grouped-nf4-gemm's `auto` route took the loop on every step for about 1.5 % of its delta
+calls (at most 2.9 %): the calls whose padded block would exceed its 2 GiB limit (`NF4_QLORA_PAD_BYTES_LIMIT`), which a hot expert's block
+does at 4,096 tokens. That is e4b's default route doing what it was built to do; the rule was written for the field recipe, where the loop
+never runs, to catch a path that silently fell back.
+
+**The change of instrument** (this family only): a fused e4b arm's per-expert loop is a recorded route, not a VOID, while its share of a
+step's delta calls stays at or below **5 %** on every step; above that the arm is VOID as before. The share is printed for every e4b arm.
+Every other family keeps the rule, and amendment 40's box reads as it did.
+
+**These bands are not blind.** Read as if VALID, amendment 40's box said Unsloth/e4b 1.43 and the environment 0.892 on an EPYC 7K62. The
+bands below were set with those numbers in view; this box is their replication on another host, not a test of a prediction made without
+them.
+
+**The box** (token `qwen3samestack4kce2`). Amendment 40's box unchanged — packed rows of exactly 4,096 real tokens (`TC1_PACK=1
+TC1_SEQ=4096 TC1_MB=1 TC1_ACCUM=4 TC1_FREE_OUTPUTS=1`), `TC1_E4B_ENV="E4B_CHUNKED_LM_LOSS=1"`, 40 steps, held-out at 0 and 40, amendment
+25's same-stack arms, e4b's reference not run, load-gated draws — on a machine other than 152440 (amendment 40's), 151350, 45511, 138786,
+40093 and 57910.
+
+**Predictions** (registered before the box):
+
+- **P96:** with both frameworks on one stack, Unsloth/e4b lies in **[1.25, 1.65]**, both pairs stable.
+- **P97:** e4b's matched arm in venv-unsloth over venv-e4b lies in **[0.84, 0.95]**, both sides stable.
+- **P98:** every e4b arm that runs completes resident and VALID under this family's rule.
+
+Each is FALSIFIED outside its band (P98: an e4b arm that OOMs) and UNTESTED where a side is missing, unstable or not engaged.
+
+**Decision rules.**
+
+- **P96 read with both pairs stable and P98 HELD, whichever side it favours:** the ratio is recorded as Qwen3-30B-A3B's packed 4,096-token
+  position, labelled "e4b with `E4B_CHUNKED_LM_LOSS=1`, opt-in; grouped-nf4-gemm's loop route at the recorded share"
+  (`e4b.train.h2h.unsloth.qwen3.5090.<date>.packed-4k-chunked`), beside amendment 39's out-of-memory row.
+- **Amendment 41's default decision reads this box's P98 in place of amendment 40's P89**, which read UNTESTED on the loop rule, not on
+  fit. With P98 HELD and amendment 41's P90–P93 HELD, `E4B_CHUNKED_LM_LOSS` becomes e4b's default in `enable_fast_train`.
+- **P98 FALSIFIED:** the chunked loss alone does not fit the regime on this host; the read says where it failed.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.6 with the download;
+this is in the standing no-ask tier.

@@ -189,7 +189,8 @@ inside the draw noise, Unsloth still 2.95 GB lower at peak) and **axolotl/e4b 2.
 the matched-set box's host -- e4b's host-launch-bound step varies more by host than axolotl's, so the ratio does too).
 **With both frameworks on one stack** (torch 2.12.1+cu130 / transformers 5.5.0, TC1 amendments 25, 29 and 33, load-gated
 60-step draws) **Unsloth/e4b reads 2.352 [2.348, 2.356]** (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack`; e4b 3.494 s/step vs
-8.218, held-out at N=60 COMPARABLE, Unsloth 3.22 GB lower at peak). That is the Qwen3-30B-A3B position to quote; 1.997 is the reading
+8.218, held-out at N=60 COMPARABLE, Unsloth 3.22 GB lower at peak). It replicated on a second host, an EPYC 7K62, at **2.468**
+(`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack-host2`, TC1 amendment 42, the current code). That is the Qwen3-30B-A3B position to quote; 1.997 is the reading
 with e4b in the field image's environment (torch 2.8.0+cu128 / transformers 5.18.0) and Unsloth in its own.
 **Those positions read short rows.** The field recipe's Alpaca rows carry about 1,000–1,400 real tokens per step. On packed rows of
 4,096 real tokens (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k`, TC1 amendment 39) e4b at its defaults runs out of memory at
