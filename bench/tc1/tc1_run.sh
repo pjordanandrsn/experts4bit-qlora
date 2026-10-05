@@ -146,6 +146,27 @@ case "$GPU_CLASS" in [0-9]*) BOX_CLASS="RTX $GPU_CLASS";; *) BOX_CLASS="$GPU_CLA
 # F [F19]: every arm runs with OMP_NUM_THREADS = the box's PHYSICAL core count (recorded in the receipt's arm_facts)
 PHYS=$(lscpu -p=CORE,SOCKET 2>/dev/null | grep -v '^#' | sort -u | wc -l | tr -d ' '); case "$PHYS" in ''|0|*[!0-9]*) PHYS=$(nproc);; esac
 echo "OMP_NUM_THREADS=$PHYS (physical cores) box_class=$BOX_CLASS" | tee -a summary.txt
+# TC1 amendment 45 (2026-10-05): the container's CPU allotment -- the cgroup v2 cpu.max quota (else the v1 CFS quota) in CPUs, rounded up,
+# capped by the affinity count; the affinity count when there is no quota. Every arm still runs OMP_NUM_THREADS=$PHYS unless its family
+# hands it another count (qwen3ompab's om1 side runs $ALLOT).
+ALLOT=$(python3 -c '
+import math, os
+n = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count()
+q = None
+try:
+    a, b = open("/sys/fs/cgroup/cpu.max").read().split()[:2]
+    q = None if a == "max" else int(a) / int(b)
+except Exception:
+    try:
+        a = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read()); b = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
+        q = a / b if a > 0 else None
+    except Exception:
+        q = None
+print(min(n, math.ceil(q)) if q else n)' 2>/dev/null); case "$ALLOT" in ''|0|*[!0-9]*) ALLOT=$(nproc);; esac
+echo "CPU allotment $ALLOT (cgroup quota capped by affinity; physical cores $PHYS)" | tee -a summary.txt
+case " $FAMILIES " in *" qwen3ompab "*)
+  [ "$ALLOT" -lt "$PHYS" ] || { say "BOX REFUSED: the container's CPU allotment ($ALLOT) is not below the physical cores ($PHYS) -- amendment 45's threads A/B has no contrast on this host (host floor)"; echo "BOX_REFUSED cpu_allotment=$ALLOT phys=$PHYS" >> summary.txt; finish 18; };;
+esac
 # P48 run 1 (2026-09-19) drew a host whose container overlay was 32 GB and died ENOSPC mid-fetch; box B fetches ~120 GB of
 # checkpoints. The launcher orders machine disk, the instance overlay is what the box gets: refuse here, before any fetch.
 MIN_DISK_DEFAULT=200; [ "$TC1_LOCAL_BOX" = 1 ] && MIN_DISK_DEFAULT=40      # TC3 local box: nothing is fetched; the venvs need ~20 GB
@@ -582,7 +603,9 @@ arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$
   # TC1 amendment 6: both draws (ckpt_axolotl_best and its _d2) -- the exact match left the second draw offline (tc1-5090-33)
   # TC1 amendment 8: every scattermoe tag (ckpt_axolotl_best, _d2, _200, _200_d2) -- a prefix, so a new suffix cannot fall offline again
   local OFFL=1; case "$FW/$TAG" in axolotl/ckpt_axolotl_best*) OFFL=0;; esac
-  env $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1 OMP_NUM_THREADS=$PHYS TC1_BOX_CLASS="$BOX_CLASS" TC1_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tc1_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
+  # TC1 amendment 45: OMP_NUM_THREADS=$PHYS comes FIRST so a family's per-arm environment can override it (env applies left to right);
+  # an arm whose environment does not name it runs exactly as before
+  env OMP_NUM_THREADS=$PHYS $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1 TC1_BOX_CLASS="$BOX_CLASS" TC1_ARM_ALARM_S=$A perl -e "alarm $A; exec @ARGV" $PY -u $W/tc1_arm.py --framework $FW --arm $ARM --tag $TAG --fam $FAM --model "$MID" --revision $REV \
       --steps $s --seq $q --micro-batch $m --accum $ac --autocast $AUTOCAST --lr $lr --r $r --alpha $al --seed $sd --offload $OFF \
       --optim $op --weight-decay $wd --lr-schedule $sc --warmup-steps $wu \
       --tokens $TOK --tokens-sha $TOK_SHA --eval-every $ee --eval-n $en --unsloth-loader FastLanguageModel $EXPARG \
@@ -1172,6 +1195,26 @@ tc1_samestack_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6 RAL=$7
   can_run 600 $FAM/e4b/fused_m_d2     && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_ompab_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 45 (2026-10-05): OMP_NUM_THREADS at the host's physical cores (om0,
+# every TC1 box so far) vs at the container's CPU allotment (om1, $ALLOT above), e4b's matched arm and Unsloth's, both in venv-unsloth, two
+# draws a side in ABBA order. A host whose allotment is not below its physical cores refused at setup (rc 18) before any install.
+tc1_ompab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
+  local ALL="e4b:fused_attn4_m_om0:fused e4b:fused_attn4_m_om1:fused unsloth:ckpt_unsloth_m_om0:unsloth unsloth:ckpt_unsloth_m_om1:unsloth unsloth:ckpt_unsloth_m_om1_d2:unsloth unsloth:ckpt_unsloth_m_om0_d2:unsloth e4b:fused_attn4_m_om1_d2:fused e4b:fused_attn4_m_om0_d2:fused"
+  say "===== THREADS A/B family $FAM ($MID @ $REV; OMP_NUM_THREADS $PHYS (physical cores) vs $ALLOT (the container's allotment), e4b and Unsloth in venv-unsloth, amendment 45)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
+  local OLD="OMP_NUM_THREADS=$PHYS" NEW="OMP_NUM_THREADS=$ALLOT"
+  can_run 600 $FAM/e4b/m_om0         && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_om0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_om1         && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_om1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/unsloth/m_om0     && TC1_ARM_EXTRA_ENV="$OLD" arm                 $FAM unsloth ckpt_unsloth_m_om0 unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 600 $FAM/unsloth/m_om1     && TC1_ARM_EXTRA_ENV="$NEW" arm                 $FAM unsloth ckpt_unsloth_m_om1 unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 600 $FAM/unsloth/m_om1_d2  && TC1_ARM_EXTRA_ENV="$NEW" draw2               $FAM unsloth ckpt_unsloth_m_om1 unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 600 $FAM/unsloth/m_om0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2               $FAM unsloth ckpt_unsloth_m_om0 unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH
+  can_run 600 $FAM/e4b/m_om1_d2      && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_om1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_om0_d2      && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_om0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_prebindab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 26 (2026-10-04): the prebound Triton launches (E4B_TRITON_PREBIND +
 # GNF4_TRITON_PREBIND, e4b#1078 + grouped-nf4-gemm#468; same compiled kernels, values identical) off vs on, the shipped and the matched arm, two
 # draws a side in ABBA order, venv-e4b (torch 2.8.0+cu128, triton 3.4: a version the prebound path covers), every other default.
@@ -1552,6 +1595,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   mixtralcompactab) tc1_compactab_family mixtralcompactab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 38: the same on Mixtral, resident, defaults (shipped arms skipped)
   qwen3chunkab) tc1_chunkab_family qwen3chunkab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 41: e4b's chunked LM loss off vs on (venv-unsloth)
   qwen3chunkauto) tc1_chunkauto_family qwen3chunkauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 44: e4b's chunked LM loss off vs auto (venv-unsloth)
+  qwen3ompab) tc1_ompab_family qwen3ompab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 5400;;   # TC1 amendment 45: OMP_NUM_THREADS physical cores vs the container's allotment
   qwen3dqab)   tc1_dqab_family   qwen3dqab   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 28: absmax fp32 vs double-quantized
   mixtraldqab) tc1_dqab_family   mixtraldqab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 28 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3tritonab) tc1_tritonab_family qwen3tritonab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 32: triton 3.4 vs 3.7.1 in venv-e4b
