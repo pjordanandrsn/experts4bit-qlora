@@ -15,10 +15,14 @@
 SC2C_KNOB=E4B_PAGED_BULK_KV
 SC2C_RATES="1 2 4 8"; SC2C_DRAWS=2; SC2C_N=120; SC2C_SERIAL_N=24
 
-# routes_ok HEALTH.json -- the registered routes and chunking, read from the server's own record
-routes_ok(){ "$PY" - "$1" <<'PYR'
+# routes_ok HEALTH.json [SEEN_MOE_PREFIX] -- the registered routes and chunking, read from the server's own record, and
+# what the forward TOOK. With SEEN_MOE_PREFIX (the reading: "int4_k19|", Qwen3's int4 store) every expert GEMM above 256
+# rows must have taken that route; without it (the proof: Granite's NF4 store, whose grouped route is NF4's) at least
+# one grouped call above 256 rows must have run.
+routes_ok(){ "$PY" - "$1" "${2:-}" <<'PYR'
 import json, sys
 h = json.load(open(sys.argv[1]))
+prefix = sys.argv[2] if len(sys.argv) > 2 else ""
 r = h.get("prefill_routes") or {}
 want = {"int4_prefill": "k19", "int4_prefill_above_256_rows": "k19", "prefill_attn": "flash", "device_grouping": True,
         "int4_prefill_env": None, "prefill_attn_env": None}
@@ -32,7 +36,7 @@ for k in ("chunk_tokens", "max_prefill_tokens_per_step"):   # every 512-token pr
 seen = r.get("seen") or {}
 moe, att = seen.get("moe") or {}, seen.get("prefill_attn") or {}
 gt = {k: v for k, v in moe.items() if k.endswith("|gt256")}
-if not gt or any(not k.startswith("int4_k19|") for k in gt):
+if not gt or (prefix and any(not k.startswith(prefix) for k in gt)):
     bad["seen.moe_gt256"] = gt or "<none>"
 if not att or set(att) != {"flash"}:
     bad["seen.prefill_attn"] = att or "<none>"
@@ -71,8 +75,9 @@ sys.exit(1 if bad else 0)
 PYE
 }
 
-# h_server_start TAG ARM(off|on) MODEL REV ARENA LEV -- one e4b server; returns 0 healthy on the registered routes
-h_server_start(){ local TAG=$1 ARM=$2 MODEL=$3 R=$4 ARENA=$5 LEV=$6 LOG=$W/logs/sc2c_server_$1.log K=0
+# h_server_start TAG ARM(off|on) MODEL REV ARENA LEV [SEEN_MOE_PREFIX] -- one e4b server; returns 0 healthy on the
+# registered routes
+h_server_start(){ local TAG=$1 ARM=$2 MODEL=$3 R=$4 ARENA=$5 LEV=$6 SEEN=${7:-} LOG=$W/logs/sc2c_server_$1.log K=0
   [ "$ARM" = on ] && K=1
   # shellcheck disable=SC2086  # assignment lists by design
   setsid env -u E4B_INT4_PREFILL -u E4B_PAGED_PREFILL_ATTN -u E4B_PAGED_PREFILL_GRAPH PYTHONPATH= $ROUTEENV $LEV $SC2C_KNOB=$K \
@@ -82,7 +87,7 @@ h_server_start(){ local TAG=$1 ARM=$2 MODEL=$3 R=$4 ARENA=$5 LEV=$6 LOG=$W/logs/
       "$PY" -m experts4bit_qlora.serve_paged > "$LOG" 2>&1 < /dev/null &
   SRV_PID=$!; wait_e4b_ready "http://127.0.0.1:$PORT_E4B/health" 2400 $SRV_PID "$LOG" || return $?
   curl -fsS -m 30 "http://127.0.0.1:$PORT_E4B/health" -o $W/sc2/health_${TAG}_start.json || return 45
-  routes_ok $W/sc2/health_${TAG}_start.json | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { line "SC2C STOP: $TAG not on the registered routes"; return 47; }
+  routes_ok $W/sc2/health_${TAG}_start.json "$SEEN" | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { line "SC2C STOP: $TAG not on the registered routes"; return 47; }
   nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits > $W/sc2/vram_${TAG}.txt 2>/dev/null   # record only
   line "SC2C $TAG healthy ($SC2C_KNOB=$K) vram_used_mib=$(cut -d, -f1 $W/sc2/vram_${TAG}.txt 2>/dev/null | tr -d ' ')"; }
 # h_health_end TAG -- the server's record after its runs (both knobs' engagement counters live here)
@@ -90,7 +95,7 @@ h_health_end(){ curl -fsS -m 30 "http://127.0.0.1:$PORT_E4B/health" -o $W/sc2/he
 
 # h_arm DRAW ARM -- one server, warm, (draw 1 OFF: serial twice), serial, every rate; same seeds as the paired arm
 h_arm(){ local D=$1 ARM=$2 TAG="e4b_${2}_d$1" r
-  if can_run 900 "$TAG" && h_server_start "$TAG" "$ARM" "$MID" "$REV" "$QA" "$SPEEDENV E4B_PAGED_FUSE_QKV=1"; then
+  if can_run 900 "$TAG" && h_server_start "$TAG" "$ARM" "$MID" "$REV" "$QA" "$SPEEDENV E4B_PAGED_FUSE_QKV=1" "int4_k19|"; then
     sampler_start sc2c_$TAG
     drive ${TAG}_warm $PORT_E4B "$MID" e4b serial 0 4 999
     if h_early "$TAG" "$ARM" $W/sc2/${TAG}_warm.json; then
@@ -124,7 +129,7 @@ prove_h(){ local a
   perl -e "alarm 900; exec @ARGV" "$PY" $W/sc2_prompts.py --model "$GR" --revision "$GR_REV" --out $W/sc2/prompts.json > logs/sc2_prompts.log 2>&1 \
     || { tail -3 logs/sc2_prompts.log; say "PROVE: prompt pool failed -- NOT PROVED"; rec 23; return; }
   for a in off on; do
-    if h_server_start "prove_$a" "$a" "$GR" "$GR_REV" "$W/work_granite/nf4.arena" "$GR_ENV"; then
+    if h_server_start "prove_$a" "$a" "$GR" "$GR_REV" "$W/work_granite/nf4.arena" "$GR_ENV" ""; then
       { drive prove_${a}_warm $PORT_E4B "$GR" e4b serial 0 4 999 && h_early "prove_$a" "$a" $W/sc2/prove_${a}_warm.json \
         && drive prove_${a}_serial $PORT_E4B "$GR" e4b serial 0 6 1 && drive prove_${a}_poisson $PORT_E4B "$GR" e4b poisson 4 16 2; } \
         || { say "PROVE: $a smoke failed -- NOT PROVED"; rec 23; }

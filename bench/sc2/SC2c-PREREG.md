@@ -79,7 +79,8 @@ bookkeeping moves the ceiling.
   - `prefill_routes`: k19 / k19 / flash, device grouping on, both raw env values null;
   - `prefill_routes.seen` (e4b#1129), what the forward took at the startup captures: every expert GEMM above
     256 rows on K19 (`int4_k19|gt256`), every prefill attention call on flash. The resolved fields alone read
-    k19 / flash on gpt-oss while neither ran (sc2g-prove-2);
+    k19 / flash on gpt-oss while neither ran (sc2g-prove-2). The proof's Granite runs its NF4 store, whose grouped
+    route is NF4's, so the proof requires only that some grouped call above 256 rows ran and that attention took flash;
   - `engine`: chunk 512 and a per-step budget of 512.
   - Otherwise the arm STOPs (rc 47), as in SC2b.
 - **Engagement is checked before the paid workload.** Right after each server's 4 warm requests:
