@@ -143,13 +143,6 @@ class _DenseOffload:
                 for attr, t in list(store.items()):
                     if t is None or t.is_meta:
                         continue          # meta = served from the arena, not ours
-                    if is_param and t.requires_grad:
-                        # A TRAINABLE parameter is never streamed, on any path. A LoRA matrix (PEFT's lora_B for a
-                        # 25600-wide projection is 1.6 MB, over MIN_BYTES) would otherwise be swapped for an empty
-                        # placeholder at eviction, and the optimizer then steps a 0-element tensor against a full grad:
-                        # "The size of tensor a (0) must match the size of tensor b (16)" from AdamW, found by the DQ3
-                        # rehearsal at Qwen3-32B width on the default (train_prefetch=False) path.
-                        continue
                     nbytes = t.numel() * t.element_size()
                     keep_trainable = (skip_trainable and is_param and t.requires_grad
                                       and t.dim() >= 2 and nbytes >= min_bytes)
