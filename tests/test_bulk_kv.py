@@ -350,3 +350,49 @@ def test_the_server_writes_a_step_trace_and_skips_idle_steps(tmp_path):
     assert len(rows) == 5                         # one prefill step (first token) + four decode steps; no idle rows
     assert rows[0]["admitted"] == 1 and rows[0]["ops"] == 1
     assert all("ops" in r["seg"] and "dispatch" in r["seg"] for r in rows)
+
+
+def test_the_step_trace_never_waits_on_a_step_the_gpu_has_not_finished(tmp_path):
+    """A step with no sync after its last event (a prefill chunk that does not complete its prompt, nothing decoding)
+    is held, in step order, until its events have completed. Only close() may wait for it."""
+    from experts4bit_qlora.engines.step_trace import StepTrace
+
+    class Ev:
+        def __init__(self, t):
+            self.t, self.done, self.waited = t, False, False
+
+        def query(self):
+            return self.done
+
+        def synchronize(self):
+            self.waited = not self.done
+            self.done = True
+
+        def elapsed_time(self, other):
+            return other.t - self.t
+
+    path = tmp_path / "steps.jsonl"
+    tr = StepTrace(str(path), cuda=False, flush_every=1)
+    b0, f0 = Ev(0.0), Ev(40.0)                 # step 0: a chunk whose forward is still on the GPU
+    tr.begin()
+    tr._ev = [("begin", b0), ("pf_forward", f0)]
+    tr.end()
+    assert not path.exists() and len(tr._pending) == 1 and not f0.waited
+    b1, f1 = Ev(50.0), Ev(52.0)                # step 1 finished, but step 0 is still ahead of it in order
+    b1.done = f1.done = True
+    tr.begin()
+    tr._ev = [("begin", b1), ("dec_issue", f1)]
+    tr.end()
+    assert not path.exists() and len(tr._pending) == 2
+    f0.done = True                             # a later sync has passed step 0's events
+    tr.begin()
+    tr.end()
+    rows = [json.loads(x) for x in path.read_text().splitlines()]
+    assert [r["step"] for r in rows] == [0, 1, 2] and rows[0]["gpu"] == {"pf_forward": 40.0}
+    assert rows[1]["gpu"] == {"dec_issue": 2.0} and not f0.waited
+    b3, f3 = Ev(0.0), Ev(9.0)                  # close() resolves what is left, waiting if it must
+    tr.begin()
+    tr._ev = [("begin", b3), ("pf_forward", f3)]
+    tr.end()
+    tr.close()
+    assert f3.waited and json.loads(path.read_text().splitlines()[-1])["gpu"] == {"pf_forward": 9.0}
