@@ -1,0 +1,19 @@
+{
+ "experiment_id": "rd1-5090-2",
+ "provider": "vast:verified-secure",
+ "gpu_model": "RTX 5090",
+ "status": "HARNESS_ERROR",
+ "result": "fail",
+ "cost_usd": {
+  "actual": 0.026,
+  "estimated": 1.7375
+ },
+ "started_at": "2026-10-05T09:20:45Z",
+ "finished_at": "2026-10-05T09:23:44Z",
+ "instance_id": "54291691",
+ "commit_sha": "27673201f75e12e8dbe5fe8497fb5d9e8e12576d",
+ "notes": "command exited 12",
+ "vast_machine_id": "145701",
+ "cost_actual_method": "provider invoice lines for instance 54291691 (download $0.0040 + gpu $0.0180 + storage $0.0040 + upload $0.0000; 0.6 GB downloaded)",
+ "source": "adertha receipts store, receipts/experts4bit-qlora/2026-10-05/rd1-5090-2/receipt.json (fields copied verbatim)"
+}

@@ -28,9 +28,11 @@ with transformers ≥ 5.0 for the streaming loader and trainer via `[train]`
 (the floors are `pyproject.toml`'s; Python 3.11 is what CI tests; the
 kernels need Triton on an sm_80+ GPU). **The material limitation:** on a
 model that already fits in bf16, 4-bit here is a memory trade, not a
-speed-up, and on the measured comparator it cost energy
-(`e4b.train.energy-honest.scoped-a2000`) — this is for models that do not
-fit. Machine-readable capabilities and evidence:
+speed-up, and on the measured comparator it cost energy: `bnb.matmul_4bit`
+at 1.6–2.0× native bf16's J/op (decode 1.748, prefill 1.601, train 1.965;
+one RTX 5090, 500 W power limit, driver 570.133.07, medians of three
+passes; `e4b.train.energy-honest.5090.2026-10-05`) — this is for models
+that do not fit. Machine-readable capabilities and evidence:
 [`docs/capabilities.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/capabilities.json)
 and [`docs/claims.json`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/claims.json).
 
@@ -82,8 +84,10 @@ a version is reached from the release block at the top.
   covers every `nn.Linear`.
 - The model already fits in bf16 with headroom: 4-bit is a memory trade
   there, and on the measured comparator it was slower and used more
-  energy (`e4b.train.energy-honest.scoped-a2000`; the scope and the
-  withdrawal note are under "What is measured").
+  energy (`e4b.train.energy-honest.5090.2026-10-05`: `bnb.matmul_4bit` at
+  1.6–2.0× native bf16's J/op on one RTX 5090, 500 W power limit, driver
+  570.133.07, medians of three passes; the scope and the withdrawal note
+  are under "What is measured").
 - You expect a general-purpose serving engine or a vLLM replacement: on
   the same box, with identical prompt ids, vLLM 0.30.0 decodes 1.087× faster
   than this package's current int4 stack at B=1 and 1.396× at B=16
@@ -252,18 +256,22 @@ means:
   gpt-oss 4.5% of layer-token choices flip and those tokens carry the
   whole disagreement. "Below the floor" means indistinguishable.
   [`docs/METHODOLOGY.md` §13.1](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/METHODOLOGY.md).
-- **4-bit on a card that already fits the model was a 1.2–2.3× energy
-  penalty on the measured comparator**, not a saving: one OLMoE-dims
-  expert projection on an RTX A2000, dequantize-then-`linear` and a
-  bitsandbytes 0.50-dev fork build's `matmul_4bit` routing against native
-  bf16 (`e4b.train.energy-honest.scoped-a2000`). It inverts when memory
-  binds. *Note, 2026-09-04:* the earlier wording "NF4 is storage-only and
+- **4-bit on a card that already fits the model costs 1.6–2.0× native
+  bf16's GPU energy per op on the measured comparator**, not a saving:
+  `bnb.matmul_4bit` J/op over native, decode 1.748, prefill 1.601, train
+  1.965 (one OLMoE-dims expert projection, bitsandbytes 0.50.2, one RTX
+  5090 at a 500 W power limit, driver 570.133.07, medians of three
+  passes). Dequantize-then-`linear` costs 3.293×, 1.539× and 1.405×
+  (`e4b.train.energy-honest.5090.2026-10-05`). Batch is where the energy
+  goes: the fused 4-bit MoE forward's J/token at batch 4096 is 0.063 of
+  batch 64's (≈16×). *Note, 2026-09-04:* the earlier wording "NF4 is storage-only and
   the GEMM runs in bf16 either way" was a universal mechanism statement
   and is withdrawn as such — bitsandbytes ≥ 0.50.0 can run supported
   ordinary 2-D 4-bit inference cells on the packed weights directly, while
   routed grouped MoE execution and training's input gradient are separate
   contracts ([`docs/BITSANDBYTES.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/BITSANDBYTES.md)).
-  The measurement stands as its receipt made it.
+  The RTX A2000 rows this reading replaces are superseded and stand as
+  measured on their card ([`docs/METHODOLOGY.md` §10](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/METHODOLOGY.md)).
 - **A head-to-head is one workload on one box.** The Unsloth row above is
   ≈86 tokens per step at batch 1 on a resident 30B MoE; its 200-step curve
   favours Unsloth and is quoted beside the 60-step position wherever that

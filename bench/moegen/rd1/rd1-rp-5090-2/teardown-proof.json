@@ -1,0 +1,8 @@
+{
+  "method": "runpod-api-terminate",
+  "reason": "completion",
+  "evidence": "{\"destroy\": {\"at\": \"2026-10-05T19:05:30Z\", \"http\": 204, \"instance_id\": \"mtjtv4yp67jjlg\", \"method\": \"runpod-api-terminate\"}, \"instance_absent\": true, \"list_after\": []}",
+  "complete": true,
+  "instance_id": "mtjtv4yp67jjlg",
+  "at": "2026-10-05T19:05:30Z"
+}

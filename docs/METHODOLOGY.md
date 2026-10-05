@@ -175,6 +175,8 @@ The AFTER path saves only the 4-bit packed weight, not each expert's dequantized
 
 ## 10. Energy — measured ([bench/_upstream/bench_energy.py](../bench/_upstream/bench_energy.py), [bench/bench_energy_excluded.py](../bench/bench_energy_excluded.py))
 
+> **The A2000 tables in a and b are the record; the current reading is c, one rented RTX 5090 (lane P114, 2026-10-05).** The A2000 is a correctness-only testbed: J/op integrated over a timed loop on a shared card is not quoted as current.
+
 Actual GPU energy on the idle A2000 (70 W cap): background `nvidia-smi` power sampling against a tight op-loop; energy/op = mean-power ÷ throughput. Three expert-projection paths, incl. an unquantized **native bf16** reference. *Caveat: the idle baseline read high and unstable (clocks slow to drop), so idle-subtracted "dynamic" energy is unreliable — only **total** J is reported. One card, microbench.*
 
 **a. On a GPU that already fits the model → no win, mostly penalty.**
@@ -206,7 +208,27 @@ Raising batch 64→4096 cuts energy/token **4.4×** (GPU goes from 29 W underuti
 
 > **Scope note, 2026-09-04.** The numbers in this section stand as measured and are not rewritten (register: `e4b.train.energy-honest` is superseded by `e4b.train.energy-honest.scoped-a2000`, the same numbers with the comparator and build named). The mechanism sentence above — "NF4 is a *storage* format — the GEMM runs in bf16 either way" — describes the two 4-bit arms this harness ran (dequantize-then-`linear`, and the bitsandbytes#1965 fork's `matmul_4bit` routing on a `[packed, 1]` weight) on one Ampere card, and this package's own reference training path; it is **not** a statement about every bitsandbytes 4-bit path. bitsandbytes ≥ 0.50.0 carries a direct packed-4-bit CUDA inference forward for supported ordinary 2-D cells, routed grouped MoE execution is a separate contract, and training's input gradient is separate again ([`BITSANDBYTES.md`](BITSANDBYTES.md)). This receipt names its build only as `0.50.0.dev0` / "the fork" (§1 and the packaging note) and the harness does not print `bitsandbytes.__version__`, so whether that build carried the 0.50.0 inference kernels — and therefore which path the "after" arm exercised — cannot be recovered from it ([#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392)). Register: `e4b.train.energy-honest.scoped-a2000`, superseding `e4b.train.energy-honest` (superseded).
 
-> **Remeasured 2026-10-04 with a recorded, released build (#392).** The same card, with the harness unchanged, on bitsandbytes 0.50.2 (`bench/energy-remeasure-2026-10-04/`, register `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`). `matmul_4bit` reads decode **0.91–1.06×** (break-even, against the fork's 1.18×), prefill 1.29–1.49× and train 1.64–2.15× over three passes. The penalty case still holds for training and prefill. At decode, the release's packed-4-bit path no longer costs energy on this card.
+> **Remeasured 2026-10-04 with a recorded, released build (#392).** The same card, with the harness unchanged, on bitsandbytes 0.50.2 (`bench/energy-remeasure-2026-10-04/`, register `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`, superseded 2026-10-05: see c below). `matmul_4bit` reads decode **0.91–1.06×** (break-even, against the fork's 1.18×), prefill 1.29–1.49× and train 1.64–2.15× over three passes. The penalty case still holds for training and prefill. At decode, the release's packed-4-bit path no longer costs energy on this card.
+
+**c. The current reading: the same two harnesses, unchanged, on one rented RTX 5090 (lane P114, 2026-10-05).**
+[`bench/p114/`](../bench/p114/RESULTS-p114.md); register `e4b.train.energy-honest.5090.2026-10-05`, which supersedes the two A2000 rows above. One RTX 5090 at a 500 W power limit (driver 570.133.07), bitsandbytes 0.50.2, three passes of each harness after 60 s of rest, every ratio's spread ≤ 0.047; `nvidia-smi pmon` shows only each pass's own process. Medians of three passes; the J/op columns are per-arm medians and the ratios are the medians of each pass's own ratio.
+
+| Workload | native bf16 | before (dequant) | after (matmul_4bit) |
+|----------|:---:|:---:|:---:|
+| decode M=1 | 3 335 µJ (1.00×, 201 W) | 11 010 µJ (3.293×) | 5 844 µJ (**1.748×**, 98 W) |
+| prefill M=512 | 13 689 µJ (1.00×) | 21 074 µJ (1.539×) | 21 914 µJ (1.601×) |
+| train fwd+bwd M=32 | 36 154 µJ (1.00×) | 50 732 µJ (1.405×) | 70 904 µJ (**1.965×**) |
+
+`bnb.matmul_4bit` costs **1.6–2.0× native bf16's J/op** here. The registered prediction that it would read near 1× at decode is refuted: it draws half native's power (98 vs 201 W) but runs at 0.28 of native's op rate. The decode cells are host-bound (about 60k native ops/s is the Python loop's rate).
+
+| batch (tok) | tok/s | power | J/tok (total) | vs batch 64 |
+|---:|---:|---:|---:|---:|
+| 64 | 15 128 | 106 W | 7 009 µJ | 1.000 |
+| 256 | 60 907 | 138 W | 2 262 µJ | 0.322 |
+| 1024 | 239 332 | 167 W | 699 µJ | 0.100 |
+| 4096 | 672 400 | 298 W | 442 µJ | **0.063** |
+
+The fused 4-bit MoE forward's J/token at batch 4096 is 0.063 of batch 64's (≈16×). Part A only allocates: on this 32 GB card both footprints fit, so the memory wall in b stays the A2000's allocation fact. Scope: one card at one power limit, one projection, an eager loop, total J only.
 
 ## 11. Expert CPU-offload (`OFFLOAD_EXPERTS`) — correctness proven, OLMoE A/B specified
 

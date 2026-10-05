@@ -1,0 +1,10 @@
+PROVE (RD1_PROVE=1): install, tripwire, the load-gated anchor and host load; no probe
+RD1 SHAPE: seqs 512,2048; families olmoe,lfm2,ernie,graniteh,qwen3,nemotron,qwen36,mixtral
+RSYNC before install: /usr/bin/rsync
+RSYNC /usr/bin/rsync
+rd1 tripwire OK 0.41.0 2.8.0+cu128 3.4.0 NVIDIA GeForce RTX 5090
+LOAD WAIT: load1 19.45 > 5.0 after 600s; the anchor runs anyway
+ANCHOR attempt 1 rc=0 class=pcie-full/launch-fast load1 19.58
+ANCHOR rc=0 class=pcie-full/launch-fast
+PROVE host load1 over the run: n 133 min 9.66 median 11.6 max 19.77; nproc 120; container cpus 120
+PROVE: install, rsync, tripwire, the load-gated anchor (rc=0) and host load sampled; no probe

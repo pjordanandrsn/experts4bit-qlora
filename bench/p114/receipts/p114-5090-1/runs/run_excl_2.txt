@@ -1,0 +1,16 @@
+device: NVIDIA GeForce RTX 5090
+
+=== Part A: memory wall on a 12 GB card (full OLMoE-1B-7B) ===
+  card total: 33.7 GB | bf16 model ~13.9 GB | 4-bit model ~4.6 GB
+  allocate bf16 experts (12.9 GB)    : OK (12.9 GB resident)
+  allocate 4-bit experts (3.2 GB)    : OK (3.2 GB resident)
+  => bf16 OLMoE (14 GB) does not fit a 12 GB card; 4-bit (4.6 GB) does. On this card bf16 energy/token is undefined (won't run).
+
+=== Part B: tokens-per-joule of the fused 4-bit MoE forward vs batch (utilization) ===
+  (idle 66.3 W subtracted for dynamic; total shown too)
+ batch (tok) |      tok/s |  power W |  J/tok (tot) |  J/tok (dyn) | vs batch=64
+          64 |      15128 |    106.0 |  7005.657 uJ |  2622.028 uJ |       1.00x
+         256 |      60665 |    138.0 |  2275.322 uJ |  1182.214 uJ |       0.32x
+        1024 |     239332 |    167.9 |   701.687 uJ |   424.609 uJ |       0.10x
+        4096 |     672400 |    298.0 |   443.140 uJ |   344.517 uJ |       0.06x
+

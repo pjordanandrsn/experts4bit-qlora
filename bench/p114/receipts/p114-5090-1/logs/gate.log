@@ -1,0 +1,8 @@
+M=1: max|dequant - matmul_4bit| / max|dequant| = 5.618e-03 (bar 0.05); finite=True
+M=32: max|dequant - matmul_4bit| / max|dequant| = 0.000e+00 (bar 0.05); finite=True
+M=512: max|dequant - matmul_4bit| / max|dequant| = 0.000e+00 (bar 0.05); finite=True
+train M=32 native: input grad finite and non-zero = True
+train M=32 dequant: input grad finite and non-zero = True
+train M=32 matmul_4bit: input grad finite and non-zero = True
+Part B layer, batch 64: output finite and non-zero = True
+P114 gate: PASS

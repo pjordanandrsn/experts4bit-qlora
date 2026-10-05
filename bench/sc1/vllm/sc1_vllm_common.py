@@ -366,6 +366,29 @@ def position_entries(container, pos):
     return toks, [float(d[t].logprob) for t in toks], [d[t].rank for t in toks]
 
 
+def named_lps(entries, named):
+    """SC1g A4: the engine's log-probs on `named` ids, in that order; None when any is missing (the row is VOID for KL)."""
+    out = []
+    for tok in named:
+        hit = lookup(entries, int(tok))
+        if hit is None:
+            return None
+        out.append(hit["logprob"])
+    return out
+
+
+def load_named_ref(path, want_sha=None):
+    """SC1g A4: the reference artifact's named ids [S, 64] (sc1g_kl.py's npz), refused on a sha mismatch."""
+    import hashlib
+    import numpy as np
+    if want_sha:
+        h = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        if h != want_sha:
+            raise SystemExit(f"{path}: sha {h[:16]} != registered {want_sha[:16]} -- refusing the reference")
+    z = np.load(path)
+    return z["ids"], z["target"]
+
+
 def lookup(entries, token):
     """The entry for `token`, or None when the engine did not return it (then the row is VOID, never approximated)."""
     if entries is None:
@@ -415,14 +438,18 @@ def served_target(ids, prompt_len, t):
     return int(ids[prompt_len + 1 + t])
 
 
-def served_sampling_kwargs(mode, target):
+def served_sampling_kwargs(mode, target, named=None):
     """full: logprobs=-1 (needs LLM(max_logprobs=-1)); token_ids: logprob_token_ids=[target] (exact, always present);
+    named (SC1g A4): logprob_token_ids = the reference's named ids for this position + the target (exact, all present);
     topk:K: logprobs=K (target present only if ranked <= K or sampled)."""
     base = dict(max_tokens=1, temperature=0.0, detokenize=False, flat_logprobs=True)
     if mode == "full":
         return dict(base, logprobs=-1)
     if mode == "token_ids":
         return dict(base, logprob_token_ids=[int(target)])
+    if mode == "named":
+        ids = [int(x) for x in named]
+        return dict(base, logprob_token_ids=ids + ([int(target)] if int(target) not in ids else []))
     if mode.startswith("topk:"):
         return dict(base, logprobs=int(mode.split(":", 1)[1]))
     raise ValueError(f"unknown served logprobs mode {mode!r}")
