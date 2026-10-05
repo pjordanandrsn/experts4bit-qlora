@@ -48,6 +48,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-79` | `qwen3prebind37` (amendment 35, 60 steps, load-gated) | instance 54255834, AMD EPYC 7B13 (Vast machine 145701) | amendment 26's prebind A/B under triton 3.7.1 in venv-unsloth: shipped 0.996 (P66 HELD), matched 0.986 (P67 HELD), held-out within 0.003 (P68 HELD); triton 3.7 stays in the prebound path's supported versions; [read](RESULTS-tc1-prebind37.md) | $1.68 |
 | `tc1-5090-80` | `qwen3compactab` (amendment 36, 60 steps, load-gated) | instance 54259219, AMD EPYC 7B13 (Vast machine 145701) | grouped-nf4-gemm's compact padded LoRA delta off vs on in venv-unsloth: the matched peak ROSE 0.23 GB (P69 FALSIFIED), and the step got faster than registered, matched 0.969 and shipped 0.970 (P70, P71 FALSIFIED); held-out within 0.001 (P72 HELD); it stays opt-in; [read](RESULTS-tc1-compactab.md) | $1.48 |
 | `tc1-5090-83` | `qwen3compactab2` (amendment 37, 60 steps, load-gated) | instance 54275103, AMD EPYC 7702P (Vast machine 45379) | the compact delta again with grouped-nf4-gemm#473's backward, on another host: matched peak −0.288 GB (P73 HELD), matched 0.967 (P74 HELD), shipped 0.948, faster than its band (P75 FALSIFIED), held-out within 0.003 (P76 HELD); by the rule it stays opt-in pending its own registration; [read](RESULTS-tc1-compactab2.md) | $0.78 |
+| `tc1-5090-85` | `qwen3compactab3` + `mixtralcompactab` (amendment 38, 60 steps, load-gated) | instance 54292473, AMD EPYC 9655 (Vast machine 150700) | the compact delta's default decision on a fast host: slower on every arm, Qwen3 matched 1.016 and shipped 1.013, Mixtral 1.013 (P77, P78, P80 FALSIFIED), while the peaks held (Qwen3 −0.312 GB, Mixtral −0.037; P79, P81 HELD); it stays opt-in; [read](RESULTS-tc1-compact-default.md) | $2.64 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -56,6 +57,36 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 38 (2026-10-05): on a fast host the compact delta is 1.3–1.6 % slower; it stays opt-in
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 38. One RTX 5090 (`tc1-5090-85`, AMD EPYC 9655, Vast
+machine 150700), every arm in venv-unsloth with e4b `e1faf47` and grouped-nf4-gemm `0e393f0` (after #473), 60 steps, load-gated draws
+(none voided). Read: [`RESULTS-tc1-compact-default.md`](RESULTS-tc1-compact-default.md).
+
+| family, arm | `_cd0` s/step | `_cd1` s/step | `_cd1` / `_cd0` | peak `_cd0` → `_cd1` | prediction |
+|---|---|---|---|---|---|
+| Qwen3-30B-A3B, matched | 2.167 / 2.178 | 2.215 / 2.199 | **1.016** [1.010, 1.022] | 27.501 → 27.189 GB | P77 FALSIFIED (≤ 0.99); P79 HELD |
+| Qwen3-30B-A3B, shipped | 1.716 / 1.720 | 1.742 / 1.740 | **1.013** [1.011, 1.015] | 24.673 → 24.673 GB | P78 FALSIFIED (≤ 0.99) |
+| Mixtral-8x7B, matched (resident, defaults) | 3.326 / 3.330 | 3.374 / 3.371 | **1.013** [1.012, 1.014] | 31.234 → 31.197 GB | P80 FALSIFIED (≤ 1.01); P81 HELD |
+
+- **Held-out** moves +0.0008 / 0.0000 (Qwen3) and +0.0008 (Mixtral): P82 and P83 HELD.
+- **By amendment 38's rule the flag stays opt-in**: P77, P78 and P80 fell on the slow side. No further box is registered for it under
+  these rules.
+- **The peak held everywhere; the speed depends on the host.** With #473's backward the flag lowers the fp32 arm's peak by 0.29–0.31 GB
+  on both hosts that measured it, and never raises a peak. Its speed tracks how host-bound the step is:
+
+  | box | host | e4b's Qwen3 matched step | `_cd1` / `_cd0` matched / shipped |
+  |---|---|---|---|
+  | `tc1-5090-80` (amendment 36) | EPYC 7B13 | 3.43 s | 0.969 / 0.970 |
+  | `tc1-5090-83` (amendment 37) | EPYC 7702P | 3.89 s | 0.967 / 0.948 |
+  | `tc1-5090-85` (this box) | EPYC 9655 | 2.17 s | 1.016 / 1.013 |
+
+  The compact node trades host work (one autograd node instead of about ten per projection) for device work (the padded block rebuilt in
+  backward: +0.7 ms per layer's backward on an RTX A2000, grouped-nf4-gemm#445). Where the host is slow the first wins; on this host the
+  same step is 37–44 % shorter, less of it is host time, and the second wins.
+- **Recorded for later, not read here.** e4b's Qwen3 step on this host is 2.17 s against 3.4–3.9 s on the other two, the same code and
+  card. Positions are within-box readings of their host, and this box ran no Unsloth arm.
 
 ## Amendment 37 (2026-10-05): with its backward releasing early, the compact delta lowers the matched peak 0.29 GB and is 3–5 % faster on another host
 

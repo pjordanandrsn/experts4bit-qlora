@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.119.02, GPU-e2efcb3f-3eca-74d9-ded4-006b53833ef6, 475.00 W, 3090 MHz
+CPU(s):                             48
+Model name:                         AMD EPYC 9655 96-Core Processor
+MemTotal:       113303348 kB
+cgroup memory.max 111380791296
+overlay         320G  2.3M  320G   1% /
