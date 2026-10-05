@@ -111,7 +111,9 @@ class _DenseOffload:
         checkpoint key. ``verify=True`` compares every disk home against the loaded
         tensor bit-for-bit at construction; cheap on a truncated model and the right
         gate to run once per checkpoint. ``skip_trainable=True`` keeps every trainable
-        parameter resident instead of streaming it (see :func:`enable_dense_offload`)."""
+        streamable parameter resident instead of streaming it. The default, ``False``, is
+        the old selection. :func:`enable_dense_offload` passes the value it decided over the
+        whole model: ``True`` iff some streamable parameter is frozen."""
         self.layer = layer
         self.device = torch.device(device)
         self.pin = pin
