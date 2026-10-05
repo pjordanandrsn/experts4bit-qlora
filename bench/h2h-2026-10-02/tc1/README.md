@@ -37,6 +37,8 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-67` | `qwen3samestack` (amendment 25) | instance 54209084, Intel Core Ultra 9 285K | both frameworks on one stack: the matched set EQUIVALENT, parity PASS (P52 HELD); Unsloth's draws 18.2 % apart and e4b's field-image draws 8.4 % apart, so no ratio is read (P50, P51 UNTESTED); one re-draw registered (amendment 27); [read](RESULTS-tc1-samestack-box1.md) | $0.61 |
 | `tc1-5090-68` | `qwen3samestack` (amendment 27, the re-draw) | instance 54214853, AMD EPYC 7663 | the matched set INSIDE-DRAW-NOISE, parity PASS (P52 HELD again); e4b's same-stack draws 7.8 % apart, so no ratio is read (P50, P51 UNTESTED, final); amendment 29 re-asks them over 60 steps; [read](RESULTS-tc1-samestack-box2.md) | $1.86 |
 | `tc1-5090-69` | `qwen3prebindab` (amendment 26) | instance 54223080, Intel Core Ultra 9 285K | e4b against itself, prebound Triton launches off vs on: matched arm 0.973 (P54 HELD); the shipped arm's flags-off draws 8.3 % apart (P53, P55 UNTESTED); the flags stay opt-in; amendment 30 re-asks the shipped pair over 60 steps; [read](RESULTS-tc1-prebindab.md) | $0.43 |
+| `tc1-5090-70` | `qwen3dqab` (amendment 28) | instance 54223173, AMD EPYC 7C13 (Vast machine 45511) | e4b against itself, the expert absmax fp32 vs double-quantized: peak 27.15 → 25.82 GB and held-out +0.0026, but both speed pairs unstable under host load (P56 UNTESTED); amendment 31 re-asks it over 60 steps; [read](RESULTS-tc1-dqab.md) | $1.13 |
+| `tc1-5090-71` | `mixtraldqab` (amendment 28) | instance 54223342, AMD EPYC 7B13 (Vast machine 145701) | the same on Mixtral-8x7B resident: dq1/dq0 1.023, peak 31.07 → 29.03 GB, held-out −0.0028 (P57 HELD); [read](RESULTS-tc1-dqab.md) | $1.27 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -45,6 +47,31 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 28 (2026-10-05): the double-quantized expert absmax costs Mixtral 2.3 % of its step for 2.04 GB; Qwen3's speed pair was unstable
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 28 and 31. Two RTX 5090s, e4b against itself on the
+matched arm, resident, `E4B_ABSMAX_DQ=0` (`_dq0`) against `=1` (`_dq1`), two draws a side in ABBA order. Read (both boxes in one pass):
+[`RESULTS-tc1-dqab.md`](RESULTS-tc1-dqab.md).
+
+| family | `_dq0` s/step | `_dq1` s/step | `_dq1`/`_dq0` | peak `_dq0` → `_dq1` | held-out Δ | prediction |
+|---|---|---|---|---|---|---|
+| Mixtral-8x7B (`tc1-5090-71`) | 3.807 / 3.917 | 3.932 / 3.970 | **1.023** [1.004, 1.043] | 31.07 → **29.03** GB (−2.04) | −0.0028 | **P57 HELD** |
+| Qwen3-30B-A3B (`tc1-5090-70`) | 3.801 / 4.019 (5.6 % apart) | 3.947 / 5.014 (23.8 % apart) | not read | 27.15 → 25.82 GB (−1.33) | +0.0026 | **P56 UNTESTED** |
+
+- **Mixtral (P57 HELD).** Double-quantizing the absmax costs 2.3 % of the step and saves 2.04 GB. The registered arithmetic predicted
+  2.10 GB.
+- **Qwen3 (P56 UNTESTED).** Both speed pairs were unstable. The box's host load average tracked the draws: 6.6 and 7.3 on the `_dq0`
+  draws, 12.1 and 19.4 on the `_dq1` draws. Its peak and held-out readings do not depend on the host and sit inside their bands, but
+  P56 is one prediction, so it stays UNTESTED.
+- **P58 UNTESTED** for the same reason: its Mixtral half reads −0.0028, its Qwen3 half is unread.
+- **By the registered rule `E4B_ABSMAX_DQ` stays opt-in for now.** Amendment 31 re-asks Qwen3's pair over 60 steps on a quieter machine.
+- **Why boxes go unstable.** The step is host-bound, and on multi-tenant hosts the other tenants' load shows up directly in it:
+  - this box (load 6.6–19.4);
+  - `tc1-5090-66`'s shipped pair (load 4 vs 19);
+  - `tc1-5090-68` (load 30–37 throughout).
+
+  Machine 151350 is the exception: it lost pairs at a load near 1.
 
 ## Amendment 26 (2026-10-05): prebound Triton launches take 2.7 % off the matched arm's step; the shipped pair was unstable, so the flags stay opt-in
 

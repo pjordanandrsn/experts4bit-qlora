@@ -1212,3 +1212,23 @@ the shipped arm.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; about $1.20 with the download. This is in the
 standing no-ask tier.
+
+### Amendment 31 (2026-10-05T01:00Z, after amendment 28's read): Qwen3-30B-A3B's absmax pair over 60 steps (P56, P58 re-asked)
+
+**Why.** Amendment 28 read P57 HELD on Mixtral (`tc1-5090-71`): the double-quantized absmax costs 2.3 % of the step for 2.04 GB.
+Qwen3-30B-A3B's box (`tc1-5090-70`, Vast machine 45511) lost both speed pairs to instability (5.6 % and 23.8 % apart), and its step times
+followed the host's load average (6.6 to 19.4). Its peak drop (1.33 GB) and held-out move (+0.0026) were inside their bands, but P56 is
+one prediction and stays UNTESTED.
+
+**This amendment** re-asks P56 (`_dq1` / `_dq0` in **[0.97, 1.03]** and the peak lower by **[1.25, 1.45] GB**) and P58's Qwen3 half
+(|Δ held-out| ≤ **0.005**), bands unchanged:
+
+- `TC1_STEPS=60`, so each median covers steps 11..60;
+- the token `qwen3dqab` otherwise as amendment 28's box;
+- on a machine other than 45511, 138786 (amendment 27's, load 30–37) and 151350.
+
+**Its reading is final.** The decision rule is amendment 28's: P56, P57 (HELD) and P58 HELD make `E4B_ABSMAX_DQ` the default for the
+resident fused path. Otherwise it stays opt-in.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; about $1.50. This is in the standing no-ask tier.
+
