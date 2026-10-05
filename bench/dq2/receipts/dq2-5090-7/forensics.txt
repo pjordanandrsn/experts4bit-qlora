@@ -1,0 +1,4 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, 5, 16, 470.00 W
+Model name:                              Intel(R) Core(TM) Ultra 9 285K
+MemTotal:       197216440 kB
+MemAvailable:   193346720 kB
