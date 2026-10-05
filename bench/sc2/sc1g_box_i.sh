@@ -25,6 +25,9 @@ SC1G_UC_FILE=data/test_sft-00000-of-00001-f7dfac4afe5b93f4.parquet
 SC1G_E4B_SERVE="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 GNF4_TRITON_PREBIND=1"
 SC1G_E4B_NF4="E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 GNF4_TRITON_PREBIND=1"
 SC1G_NOFOLD="E4B_FUSE_T1_GLUE=0 E4B_FUSE_T1_GLUE_R2=0 E4B_FUSE_ROUTER_EPI=0"
+# A3: the MXFP4 store with the NF4 stacks EMPTIED, so rows above 256 run mxfp4_grouped_v1 on bf16 activations (a true MXFP4-weights
+# prefill); under SC1G_E4B_SERVE (KEEP_NF4=1) those rows take the kept NF4 stacks, which is why box J's MXFP4 prefill read as NF4
+SC1G_E4B_MXPRE="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 GNF4_TRITON_PREBIND=1"
 # SC1's K8ARGS minus --ppl-source (the window comes from its file)
 SC1G_K8ARGS="--placement-override all-vram --amort off --batch 1 --prompt-len 512 --gen-tokens 16 --ppl-steps 2048 --b1d-loop eager --no-fuse-qkv"
 SC1G_SRCS="conv1 conv2"       # graded
@@ -39,7 +42,7 @@ i_ultrachat(){ say "fetch $SC1G_UC_REPO/$SC1G_UC_FILE @ $SC1G_UC_REV"
 i_windows(){ say "SC1g windows (gpt-oss tokenizer, chat template, date $SC1G_CHAT_DATE)"; mkdir -p $W/sc1g
   i_ultrachat || return 19
   SC1G_CHAT_DATE=$SC1G_CHAT_DATE perl -e "alarm 1200; exec @ARGV" "$PY" $W/sc1g_k8.py windows --model "$SC2G_MID" --rev "$SC2G_REV" --out $W/sc1g \
-      --suffix "$SC1G_CHAT_SUFFIX" --ultrachat "$(cat fetch_ultrachat.path)" --n-conv 2 > logs/sc1g_windows.log 2>&1 || { tail -3 logs/sc1g_windows.log; return 19; }
+      --suffix "$SC1G_CHAT_SUFFIX" --ultrachat "$(cat fetch_ultrachat.path)" --n-conv ${SC1G_NCONV:-2} > logs/sc1g_windows.log 2>&1 || { tail -3 logs/sc1g_windows.log; return 19; }
   grep -a "^WINDOW" logs/sc1g_windows.log | tee -a summary.txt; }
 
 # step_decomp loads --model by id with no revision; refuse the e4b arms if the hub's main is not the pin (it is today)
@@ -176,38 +179,43 @@ prove_i(){ local ok=0
   [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: an arm did not score VALID, a route gate failed, or the kernel check failed -- NOT PROVED"; ok=1; }
   [ $ok = 0 ] || rec 23; }
 
-# ---- A2: box J (SC1_BOX=J), the e4b-only diagnostic box -- no comparator installs, guard <= 1 h (so no proof). sc1g-prove-2's
-# conv1 rows (e4b served +0.185 nats over its own prefill) are what it explains. Arms run in priority order so the deadline drops
-# the least important (A2's table): conv1's served / eager chunk 1 / chunk-free full / fp8 fake-quant arms, the kernel check,
-# conv1's prefill rows and the finer-key-groups served arm, then conv2's core, then PDL and folds-off.
+# ---- box J (SC1_BOX=J), the e4b-only diagnostic box -- no comparator installs, guard <= 1 h (so no proof). A2 ran it as
+# sc1g-diag-1 (e4b 3e133cf7): the paged fp8-KV path carries no gap; the MXFP4 T == 1 route costs +0.17-0.22 nats (J5). A3 (this
+# arm list) splits that cost: the weights (MXFP4 prefill at KEEP_NF4=0 vs NF4 prefill), the decode-row route on bf16 activations
+# (E4B_MXFP4_GEMV=0 vs NF4 served), the int8 activations (MXFP4 served vs GEMV=0); folds-off and PDL=0; a determinism repeat.
+# Priority order, so the deadline drops the least important (sc1g-diag-1 reached ~15 arms in its 1 h): conv1's K1/K2/K5 rows,
+# the attention check, then the three rows K2 and K5 rest on for conv2, conv3 and conv4 (the next two test_sft conversations by
+# the same rule; conv1/conv2 unchanged) -- box J saw a 0.051-nat NF4 path-to-path spread on conv2, so one window cannot carry a
+# ~0.1 effect -- then the controls (kvg4, folds-off, PDL=0) and conv2's K1 pair. Every comparison is within this box except K4's
+# repeat of box J.
 i_j(){ local TAG=$1; shift; can_run 600 "$TAG" && i_e4b "$@"; }
 box_j(){
   phase 0 "fetches (gpt-oss-20b, ultrachat_200k test_sft), the NF4 bake, the windows (no GGUF, no comparators)"
-  fetch_gptoss || finish 11; bake_gptoss || finish 12; i_windows || finish 19
+  fetch_gptoss || finish 11; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19
   quiesce arms
-  phase DJ "e4b diagnostics: where e4b's served - prefill gap lives"
+  phase DJ "e4b diagnostics (A3): where the MXFP4 route's cost lives"
   i_pin_ok || { SC1G_PIN_BAD=1; line "SC1G_PIN_BAD: the e4b arms are refused"; }
-  i_j j1 e4b_serve_served_conv1 "$SC1G_E4B_SERVE SC1G_CAPTURE_OUT=$W/sc1g/capture_conv1.pt" conv1
-  i_j j2 e4b_nf4_served_conv1 "$SC1G_E4B_NF4" conv1
-  i_j j3 e4b_nf4_chunk1_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle eager --ppl-chunk 1
-  i_j j4 e4b_nf4_full_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full
-  i_j j5 e4b_nf4_fqkv_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full --ppl-fq kv --fq-kgroups 4 --fq-vgroups 1
-  i_j j6 e4b_nf4_fqk_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full --ppl-fq k --fq-kgroups 4
-  i_j j7 e4b_nf4_fqv_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full --ppl-fq v --fq-vgroups 1
-  i_j j8 e4b_serve_chunk1_conv1 "$SC1G_E4B_SERVE" conv1 --ppl-oracle eager --ppl-chunk 1
-  gpu_free 60; phase GEMV "the kernel check on this card"; i_gemv; gpu_free 60
-  i_j j9 e4b_nf4_fqkv16_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full --ppl-fq kv --fq-kgroups 16 --fq-vgroups 1
-  i_j j10 e4b_serve_kvg16_conv1 "$SC1G_E4B_SERVE" conv1 --kv-groups 16
-  i_j j11 e4b_nf4_prefill128_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle eager --ppl-chunk 128
-  i_j j12 e4b_serve_prefill128_conv1 "$SC1G_E4B_SERVE" conv1 --ppl-oracle eager --ppl-chunk 128
-  i_j j13 e4b_nf4_served_conv2 "$SC1G_E4B_NF4" conv2
-  i_j j14 e4b_nf4_chunk1_conv2 "$SC1G_E4B_NF4" conv2 --ppl-oracle eager --ppl-chunk 1
-  i_j j15 e4b_nf4_full_conv2 "$SC1G_E4B_NF4" conv2 --ppl-oracle full
-  i_j j16 e4b_nf4_fqkv_conv2 "$SC1G_E4B_NF4" conv2 --ppl-oracle full --ppl-fq kv --fq-kgroups 4 --fq-vgroups 1
-  i_j j17 e4b_serve_served_conv2 "$SC1G_E4B_SERVE" conv2
-  i_j j18 e4b_serve_chunk1_conv2 "$SC1G_E4B_SERVE" conv2 --ppl-oracle eager --ppl-chunk 1
-  i_j j19 e4b_serve_pdl0_conv1 "$SC1G_E4B_SERVE GNF4_PDL=0" conv1
-  i_j j20 e4b_serve_nofold_conv1 "$SC1G_E4B_SERVE $SC1G_NOFOLD" conv1
+  i_j k1 e4b_serve_v1_conv1 "$SC1G_E4B_SERVE E4B_MXFP4_GEMV=0" conv1
+  i_j k2 e4b_mxpre_prefill128_conv1 "$SC1G_E4B_MXPRE" conv1 --ppl-oracle eager --ppl-chunk 128
+  i_j k3 e4b_nf4_prefill128_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle eager --ppl-chunk 128
+  i_j k4 e4b_serve_served_conv1 "$SC1G_E4B_SERVE" conv1
+  i_j k5 e4b_nf4_served_conv1 "$SC1G_E4B_NF4" conv1
+  # e4b#1175's check (the maintainer, 2026-10-05): the fp8 paged decode attention at k_groups 4 / 8 / 16 vs a dequantize-then-attend
+  # reference on gpt-oss's geometry -- sm_89+ only, so it rides this 5090; refuse-until-validated stands until kg16 agrees
   gpu_free 60
-  phase RD "the diagnostic reading (comparator rows absent by design: G1-G5 read UNREAD here; J1-J6 and G6 are read)"
+  if can_run 600 attn_check; then phase ATTN "fp8 paged decode attention at k_groups 4 / 8 / 16 (e4b#1175)"
+    perl -e "alarm 600; exec @ARGV" "$PY" $W/sc1g_attn_check.py --out $W/sc1g/attn_check_5090.json > logs/attn_check.log 2>&1
+    grep -a "^SC1G_ATTN_CHECK" logs/attn_check.log | tail -1 | tee -a summary.txt | grep -q . ||
+      line "SC1G_ATTN_CHECK ERROR $(tail -1 logs/attn_check.log | cut -c1-200)"; fi
+  local c n=5; for c in conv2 conv3 conv4; do
+    i_j k$((n += 1)) e4b_serve_served_$c "$SC1G_E4B_SERVE" $c
+    i_j k$((n += 1)) e4b_nf4_served_$c "$SC1G_E4B_NF4" $c
+    i_j k$((n += 1)) e4b_serve_v1_$c "$SC1G_E4B_SERVE E4B_MXFP4_GEMV=0" $c; done
+  i_j k15 e4b_serve_kvg4_conv1 "$SC1G_E4B_SERVE" conv1 --kv-groups 4
+  i_j k16 e4b_serve_nofold_conv1 "$SC1G_E4B_SERVE $SC1G_NOFOLD" conv1
+  i_j k17 e4b_serve_pdl0_conv1 "$SC1G_E4B_SERVE GNF4_PDL=0" conv1
+  i_j k18 e4b_mxpre_prefill128_conv2 "$SC1G_E4B_MXPRE" conv2 --ppl-oracle eager --ppl-chunk 128
+  i_j k19 e4b_nf4_prefill128_conv2 "$SC1G_E4B_NF4" conv2 --ppl-oracle eager --ppl-chunk 128
+  gpu_free 60
+  phase RD "the diagnostic reading (comparator rows absent by design: G1-G5 read UNREAD here; K1-K5 are read)"
   "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_diag.json 2>&1 | tail -40 | tee -a summary.txt; }

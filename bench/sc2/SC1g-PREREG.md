@@ -381,6 +381,123 @@ read as in A1.
 - **If box J finds no e4b-path defect** (the gap is the arithmetic as designed), the A1 reading proceeds with a proof guard
   of 2.0 h. prove-2 showed a slow host needs it.
 
+## Amendment A3 (2026-10-05): box J again, to split the MXFP4 route's cost into weights, route and activations
+
+Registered after `sc1g-diag-1` and before any further run.
+
+### What box J read (`sc1g-diag-1`: adertha-receipts `a6a16350`, OK, **$0.709**; e4b `3e133cf7`, gnf4 `dc8f94ab`)
+
+| row (`conv1`) | NLL |
+|---|---|
+| MXFP4 served (T == 1 GEMV on int8 activations, paged fp8 KV) | **0.905** |
+| MXFP4 eager chunk 1 (the same GEMV, transformers' attention, bf16 cache) | 0.960 |
+| NF4 served | **0.736** |
+| NF4 eager chunk 1 | 0.736 |
+| NF4 prefill (chunk 128) | 0.731 |
+| NF4 full (chunk-free) | 0.811 |
+| MXFP4 served `--kv-groups 16` | 1.035 |
+
+- **The paged fp8-KV path carries no gap on `conv1`.** NF4 served − NF4 chunk 1 = +0.0003, and NF4 chunk 1 − NF4 prefill =
+  +0.005. A2's premise (prove-1's wikitext) does not hold on in-distribution text.
+- **The MXFP4 T == 1 route carries it.** MXFP4 − NF4 is **+0.169** served and **+0.225** under identical eager attention
+  (chunk 1). J5 HOLDS.
+- **The GEMV kernel is exact for its scheme on sm_120 as well (G6 HOLDS).** On 160 captured `conv1` calls it agrees with
+  the bf16-rounded exact reference to ≤ 1.9e-4, and the mutation reads 1.47. The int8 per-32 scheme costs 0.70% mean relative
+  error per output on those activations.
+- **The modelled-fp8 arms are VOID, not REFUTED** (3.3–3.4 nats). `--ppl-fq`'s `_fq_eager_attention` omits gpt-oss's
+  attention sinks, so it scores a different attention. J2, J3 and J4's modelled half are not read.
+- **The chunk-free full anchor is not a truth anchor here.** NF4 full sits +0.075 above NF4 prefill on `conv1` and +0.013
+  above NF4 chunk 1 on `conv2`. step_decomp's own docstring records that the full forward flips 4.5% of gpt-oss's router top-k
+  choices against a chunked order. J1 read against it is set aside.
+- **The NF4 M-tile at large M is not why** ($0, A2000, `bench/sc2/sc1g-a2000/a3_*`, the maintainer's request).
+  - Setup: one layer's real experts (layers 0 and 12, gate_up and down), 2561 tokens × top-4 = 10,244 rows. Routing was
+    uniform, and skewed with a largest group of 2,540 rows.
+  - One call against 128-token chunks: both read ≤ 3.8e-3 per row against fp32, the bf16 floor, and they are bit-identical
+    on all but a few rows.
+  - The mutation (the reference reads the next expert) reads 3.4.
+- **Finer key groups made the real kernel worse.** Served at `--kv-groups 16` reads **+0.130** over the default 4 groups
+  (J4 REFUTED on the kernel).
+  - e4b's fp8 pack is correct at 4, 8 and 16 groups (A2000, PACK_OK). The stored keys' error falls from 2.2e-2 to 2.0e-2 to
+    1.6e-2 with finer groups, as it should. The mutation reads 1.42.
+  - The regression therefore lies in the sm_89+ decode kernel or its call at 16 groups (e4b#1175). Refuse-until-validated
+    for `--kv-groups 16` stands.
+- **`conv2` bounds what one window can say.** NF4 served − NF4 chunk 1 = **−0.051** there, the largest NF4 path-to-path
+  spread box J read. A 0.05 effect on one window sits inside it.
+- The deadline dropped A2's arms 16–20 (MXFP4 on `conv2`, PDL=0, folds-off). Nothing was read on them.
+
+**A correction to box J's prefill rows.** MXFP4 prefill (chunk 128) read 0.73058, identical to NF4 prefill to every digit. The
+serve stack's `E4B_INT4_KEEP_NF4=1` sends rows above 256 to the kept NF4 stacks, so that row never read MXFP4 weights. A3's
+weights arm runs at `KEEP_NF4=0`, where those rows take `mxfp4_grouped_v1` on bf16 activations. It is route-gated: only
+`mxfp4_grouped_v1|*` may appear, `|gt256` must, and any `nf4_*` route VOIDs it.
+
+### The question
+
+Is MXFP4's +0.17 the **weights** (MXFP4 blocks against the NF4 requantization), the decode **route**, or the **int8 per-32
+activations** the GEMV quantizes at T == 1? `E4B_MXFP4_GEMV=0` keeps the same weights and the same decode rows but runs them
+through `mxfp4_grouped_v1` on bf16 activations. The route gate requires `mxfp4_grouped_v1|le256` on every step's 24 layers,
+and the GEMV route VOIDs it.
+
+### Box J under A3 (guard 1.0 h; priority order, the deadline drops from the end)
+
+| # | arm | reads |
+|---|---|---|
+| 1 | MXFP4 served at `E4B_MXFP4_GEMV=0` (`conv1`) | the decode rows on bf16 activations |
+| 2–3 | MXFP4 prefill at `KEEP_NF4=0`, and NF4 prefill (chunk 128, `conv1`) | the weights alone |
+| 4–5 | MXFP4 served and NF4 served (`conv1`) | the gap, and K4's repeat of box J |
+| — | **the attention check** (`sc1g_attn_check.py`, below) | e4b#1175 |
+| 6–14 | MXFP4 served, NF4 served and GEMV=0 served on `conv2`, `conv3` and `conv4` | K2 and K5 across windows |
+| 15 | MXFP4 served `--kv-groups 4` (`conv1`) | auto picks 4 at head_dim 64: a determinism control |
+| 16–17 | MXFP4 served with the folds off; at `GNF4_PDL=0` (`conv1`) | fold and ordering bugs |
+| 18–19 | MXFP4 prefill at `KEEP_NF4=0`, NF4 prefill (`conv2`) | K1's replication |
+
+`conv3` and `conv4` are the next two `test_sft` conversations by the registered rule (`--n-conv 4`). `conv1` and `conv2` are
+unchanged. Box I keeps two.
+
+### Predictions (registered; `sc1g_reduce.py`'s `a3_predictions`, self-tested on 20 cases)
+
+| # | prediction | what holding means | basis |
+|---|---|---|---|
+| K1 | MXFP4 prefill (`KEEP_NF4=0`) − NF4 prefill ≤ 0.05 on `conv1` | the weights cost no more than the path spread | MXFP4 is the checkpoint's native format and NF4 a requantization of it; partly unbased |
+| K2 | (MXFP4 served − GEMV=0 served) / (MXFP4 served − NF4 served) ≥ 0.5 on `conv1`, and **pooled** over ≥ 3 windows | the int8 activations carry most of the cost | the int8 per-32 scheme's 0.45–0.94% (sm_86) and 0.70% (sm_120) mean error per GEMV output; block crest factors to 29 |
+| K3 | folds-off within 0.035 and PDL=0 within 0.005 of MXFP4 served | no fold or ordering bug | J6's bands |
+| K4 | MXFP4 served repeats box J's 0.904969 within 1e-4, and `--kv-groups 4` equals it within 1e-9 | the eager K8 loop is deterministic across hosts | the register's cross-box reproducibility of K8 |
+| K5 | MXFP4 − NF4 served ≥ **0.10** on `conv1`, and on **every** window read (≥ 3) | the cost is real, not one window's | box J's +0.169; 0.10 is about 2× the 0.051 spread |
+
+- Every row must score VALID and pass its route gate. A prediction missing an arm is UNREAD.
+- The across-window reads need at least 3 windows with all three rows VALID. Below that they read UNREAD, never HOLDS.
+- The full anchor is excluded from every A3 prediction.
+
+### The attention check (e4b#1175; the maintainer, 2026-10-05: "kvg16 tail step on A3's box: yes")
+
+- **What it runs:** `sc1g_attn_check.py`, through e4b's own `Fp8PagedKV`, on gpt-oss's geometry: 64 query heads, 8 KV heads,
+  head_dim 64, sinks. It covers k_groups 4, 8 and 16, window 128 and full attention, and normal keys plus keys with three
+  channels × 20.
+- **What it compares:** the kernel against a dequantize-then-attend fp32 reference that sees the same stored bytes and the
+  same bf16 q. The reference is rounded to bf16.
+- **What else it reads:** the stored K and V against their bf16 originals (the pack, which the kernel and `reference_kv`
+  share), and the compute mode each call ran. At head_dim 64 every group count is under the fp8 path's 32-wide minimum, so
+  f32 is expected throughout.
+- **Verdict:**
+  - INERT if the no-sink mutation agrees;
+  - PACK_BAD if any reconstruction error exceeds 0.1;
+  - KERNEL_DISAGREES if the kernel is more than 1e-2 from the reference at any group count;
+  - otherwise KERNEL_AGREES.
+- **Where it goes:** the verdict is posted on e4b#1175.
+- **What it licenses:** KERNEL_AGREES at 16 groups does not lift the refusal on `--kv-groups 16`. The served +0.130 would
+  then be unexplained at the attention level, and a served re-read is a separate registration.
+
+### What follows (decided by the result)
+
+- **K2 HOLDS and K5 holds across windows:** the cost is the int8 activation scheme. An e4b issue is filed with these rows.
+  The candidates are bf16 activations for the decode rows (the GEMV=0 route exists; its speed cost is SC2g's to read) or a
+  finer activation scale. The cross-engine reading (A1) then grades e4b at its default and at GEMV=0, both stated.
+- **K1 REFUTED:** the MXFP4 weights carry a cost of their own. It is reported against the comparators' MXFP4 rows, not fixed
+  in e4b.
+- **K5 REFUTED across windows:** `conv1`'s gap does not replicate. Report it per window and file nothing.
+- **K3 or K4 REFUTED:** a fold, ordering or determinism defect. It is filed on e4b before anything else is read.
+- **Cost:** ≤ $0.75 + about $0.15 download, the same box as A2. Lane spend so far is **$3.066**
+  ($2.357 + `sc1g-diag-1`'s $0.709).
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).
@@ -389,3 +506,5 @@ read as in A1.
 - Long contexts.
 - gpt-oss-120b.
 - Bare-text (non-chat) windows.
+- Why the chunk-free full forward reads +0.075 on `conv1` (A3: not the NF4 M-tile; the router-flip floor and transformers' full-forward
+  attention remain candidates).

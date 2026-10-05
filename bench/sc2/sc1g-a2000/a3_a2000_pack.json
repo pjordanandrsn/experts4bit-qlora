@@ -1,0 +1,141 @@
+{
+ "device": {
+  "name": "NVIDIA RTX A2000 12GB",
+  "cc": [
+   8,
+   6
+  ]
+ },
+ "verdict": "PACK_OK",
+ "pack_only": true,
+ "mutate_pack": false,
+ "pack_bad_k_groups": [],
+ "per_k_groups": {
+  "4": {
+   "recon_worst": 0.025093676522374153,
+   "k_recon_worst": 0.022337572649121284,
+   "scheme_worst": 0.03405168652534485
+  },
+  "8": {
+   "recon_worst": 0.025098472833633423,
+   "k_recon_worst": 0.019821874797344208,
+   "scheme_worst": 0.0321185477077961
+  },
+  "16": {
+   "recon_worst": 0.025080451741814613,
+   "k_recon_worst": 0.016198299825191498,
+   "scheme_worst": 0.031478121876716614
+  }
+ },
+ "recon_tol": 0.1,
+ "rows": [
+  {
+   "k_groups": 4,
+   "window": 128,
+   "kind": "normal",
+   "k_group_width": 16,
+   "k_recon": 0.022337572649121284,
+   "v_recon": 0.02504248358309269,
+   "scheme_deq_vs_raw": 0.033252790570259094
+  },
+  {
+   "k_groups": 4,
+   "window": 128,
+   "kind": "outlier",
+   "k_group_width": 16,
+   "k_recon": 0.01038654986768961,
+   "v_recon": 0.02505803108215332,
+   "scheme_deq_vs_raw": 0.032549310475587845
+  },
+  {
+   "k_groups": 4,
+   "window": 0,
+   "kind": "normal",
+   "k_group_width": 16,
+   "k_recon": 0.022281769663095474,
+   "v_recon": 0.025070946663618088,
+   "scheme_deq_vs_raw": 0.03405168652534485
+  },
+  {
+   "k_groups": 4,
+   "window": 0,
+   "kind": "outlier",
+   "k_group_width": 16,
+   "k_recon": 0.005528285633772612,
+   "v_recon": 0.025093676522374153,
+   "scheme_deq_vs_raw": 0.030675124377012253
+  },
+  {
+   "k_groups": 8,
+   "window": 128,
+   "kind": "normal",
+   "k_group_width": 8,
+   "k_recon": 0.019778264686465263,
+   "v_recon": 0.025096988305449486,
+   "scheme_deq_vs_raw": 0.0321185477077961
+  },
+  {
+   "k_groups": 8,
+   "window": 128,
+   "kind": "outlier",
+   "k_group_width": 8,
+   "k_recon": 0.004885821137577295,
+   "v_recon": 0.025030966848134995,
+   "scheme_deq_vs_raw": 0.02761576697230339
+  },
+  {
+   "k_groups": 8,
+   "window": 0,
+   "kind": "normal",
+   "k_group_width": 8,
+   "k_recon": 0.019821874797344208,
+   "v_recon": 0.025098472833633423,
+   "scheme_deq_vs_raw": 0.031895510852336884
+  },
+  {
+   "k_groups": 8,
+   "window": 0,
+   "kind": "outlier",
+   "k_group_width": 8,
+   "k_recon": 0.0048744226805865765,
+   "v_recon": 0.025079362094402313,
+   "scheme_deq_vs_raw": 0.028695354238152504
+  },
+  {
+   "k_groups": 16,
+   "window": 128,
+   "kind": "normal",
+   "k_group_width": 4,
+   "k_recon": 0.016198299825191498,
+   "v_recon": 0.025071537122130394,
+   "scheme_deq_vs_raw": 0.031478121876716614
+  },
+  {
+   "k_groups": 16,
+   "window": 128,
+   "kind": "outlier",
+   "k_group_width": 4,
+   "k_recon": 0.003950305748730898,
+   "v_recon": 0.02506953664124012,
+   "scheme_deq_vs_raw": 0.025851495563983917
+  },
+  {
+   "k_groups": 16,
+   "window": 0,
+   "kind": "normal",
+   "k_group_width": 4,
+   "k_recon": 0.016177525743842125,
+   "v_recon": 0.025080451741814613,
+   "scheme_deq_vs_raw": 0.0292587298899889
+  },
+  {
+   "k_groups": 16,
+   "window": 0,
+   "kind": "outlier",
+   "k_group_width": 4,
+   "k_recon": 0.003925751894712448,
+   "v_recon": 0.02504739724099636,
+   "scheme_deq_vs_raw": 0.026781832799315453
+  }
+ ]
+}

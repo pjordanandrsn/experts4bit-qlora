@@ -30,6 +30,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRCS = ("conv1", "conv2")          # graded
 CTRL = ("wikitext",)               # descriptive
+REP = ("conv3", "conv4")           # A3's replication windows (box J only): MXFP4 served, NF4 served and GEMV=0 rows
 SHAPES = ("prefill", "served")
 LAYERS = 24                        # gpt-oss-20b's MoE layers
 SAME = 1e-9                        # two NLLs this close are the same arithmetic (the q8 switch did not engage)
@@ -50,7 +51,15 @@ DIAG = {"e4b_serve_pdl0": "e4b_serve_pdl0_{}", "e4b_serve_nofold": "e4b_serve_no
         # A2 (box J): the chunk-free full forward (the truth anchor), the fp8 paged kernel's K/V roundings modelled inside it,
         # the finer key groups, and the served shape on the real kernel at 16 key groups
         "e4b_nf4_full": "e4b_nf4_full_{}", "e4b_nf4_fqkv": "e4b_nf4_fqkv_{}", "e4b_nf4_fqk": "e4b_nf4_fqk_{}",
-        "e4b_nf4_fqv": "e4b_nf4_fqv_{}", "e4b_nf4_fqkv16": "e4b_nf4_fqkv16_{}", "e4b_serve_kvg16": "e4b_serve_kvg16_{}"}
+        "e4b_nf4_fqv": "e4b_nf4_fqv_{}", "e4b_nf4_fqkv16": "e4b_nf4_fqkv16_{}", "e4b_serve_kvg16": "e4b_serve_kvg16_{}",
+        # A3 (box J again): the decode rows on bf16 activations (E4B_MXFP4_GEMV=0), a true MXFP4-weights prefill (KEEP_NF4=0), and
+        # the explicit --kv-groups 4 served row (== auto at head_dim 64: a determinism control)
+        "e4b_serve_v1": "e4b_serve_v1_{}", "e4b_mxpre_prefill128": "e4b_mxpre_prefill128_{}", "e4b_serve_kvg4": "e4b_serve_kvg4_{}"}
+BOXJ_SERVED_CONV1 = 0.904969107589033   # sc1g-diag-1 (adertha-receipts a6a16350): MXFP4 served on conv1, A3's K4 repeat target
+K_DET = 1e-4            # K4: the repeat must land this close (the eager K8 loop is bit-reproducible across boxes)
+K_PRE = 0.05            # K1: MXFP4-weights prefill within this of NF4 prefill
+K_GAP = 0.10            # K5: MXFP4 - NF4 served at least this -- ~2x box J's largest NF4 path-to-path spread (0.051, conv2)
+K_MIN_WINDOWS = 3       # the across-window reads need at least this many windows with every row VALID
 J_TOL_PDL = 0.005       # J6: PDL=0 within this of the served row is no bug (P113 read PDL value-identical)
 J_TOL_FOLD = 0.035      # J6: folds-off within ~2x gpt-oss's arithmetic-order floor (0.0176) is no bug: the folds reorder arithmetic
 J_GAIN = 0.035          # J4: ~2x the floor -- one floor is noise, and a J4 HOLDS feeds a registered default read
@@ -109,10 +118,21 @@ def route_gate(d, stem, steps=2048):
     if stem.startswith("e4b_nf4_"):
         bad = [k for k in seen if k.startswith("mxfp4_")]
         return (not bad), (f"MXFP4 route(s) {bad} on the NF4 control" if bad else ""), seen
+    if stem.startswith("e4b_mxpre_"):                 # A3: NF4 emptied -> every row on the MXFP4 store's grouped v1 kernel
+        other = [k for k in seen if not k.startswith("mxfp4_grouped_v1|")]
+        if other or "mxfp4_grouped_v1|gt256" not in seen:
+            return False, f"routes {sorted(seen)}: a KEEP_NF4=0 prefill must run mxfp4_grouped_v1 only, incl. rows > 256", seen
+        return True, "", seen
+    if "_v1_" in stem:                                # A3: E4B_MXFP4_GEMV=0 -> T == 1 rows on the grouped v1 kernel, bf16
+        other = [k for k in seen if not (k.startswith("mxfp4_grouped_v1|le256") or k.startswith("nf4_mtile_host|"))]
+        n = seen.get("mxfp4_grouped_v1|le256", 0)
+        if other or n < steps * LAYERS:
+            return False, f"routes {sorted(seen)}: GEMV=0 must run mxfp4_grouped_v1|le256 for every step x layer", seen
+        return True, "", seen
     gt = [k for k in seen if k.startswith("mxfp4_") and k.endswith("|gt256")]
     if gt:
         return False, f"{gt}: rows above 256 on the MXFP4 store (the NF4 stacks were not kept)", seen
-    if any(f"_{x}_" in stem for x in ("served", "pdl0", "nofold", "chunk1", "kvg16")):
+    if any(f"_{x}_" in stem for x in ("served", "pdl0", "nofold", "chunk1", "kvg16", "kvg4")):
         other = [k for k in seen if not (k.startswith("mxfp4_gemv|") or k.startswith("nf4_mtile_host|"))]
         n = seen.get("mxfp4_gemv|le256", 0)
         if other:
@@ -161,9 +181,9 @@ def gemv(d):
 
 def reduce(d: str) -> dict:
     R = _sc1()
-    wins = SRCS + CTRL
+    wins = SRCS + CTRL + REP
     rows = {a: {sh: {s: row(d, stem.format(s), s, R) for s in wins} for sh, stem in shp.items()} for a, shp in ARMS.items()}
-    diag = {a: {s: row(d, stem.format(s), s, R) for s in SRCS} for a, stem in DIAG.items()}
+    diag = {a: {s: row(d, stem.format(s), s, R) for s in SRCS + REP} for a, stem in DIAG.items()}
 
     def nll(arm, shape, src):
         x = rows.get(arm, {}).get(shape, {}).get(src)
@@ -222,6 +242,7 @@ def reduce(d: str) -> dict:
                "not_valid": {k: v for k, v in st.items() if v != "VALID"}}
     kern, p["G6"] = gemv(d)
     jp = jpredict(nll, dnll)
+    kp = kpredict(nll, dnll)
 
     # ---- descriptive: the diagnostics, the served-vs-prefill gap per arm, the control
     dg = {}
@@ -252,7 +273,9 @@ def reduce(d: str) -> dict:
             "predictions": p, "delta_vs_vllm": rep,
             "within_floor_vs_vllm": {a: {sh: within(v) for sh, v in by.items()} for a, by in rep.items()},
             "diagnostics": {"meaning": MEANING, "per_window": dg}, "served_minus_prefill": gaps, "kernel_check": kern,
-            "scored_target_roles": roles, "diag_predictions": jp,
+            "scored_target_roles": roles, "diag_predictions": jp, "a3_predictions": kp,
+            "attn_check_1175": (json.load(open(os.path.join(d, "attn_check_5090.json")))
+                                if os.path.exists(os.path.join(d, "attn_check_5090.json")) else None),
             "control_wikitext": {"floor": {"per_window": flc, "F": Fc}, "delta_vs_vllm": ctl,
                                  "note": "descriptive: out of distribution for gpt-oss (the proof read ppl ~560)"}}
 
@@ -289,6 +312,51 @@ def jpredict(nll, dnll):
     return {"conv1": j("conv1"), "conv2_replication": j("conv2")}
 
 
+def kpredict(nll, dnll):
+    """A3's registered predictions (box J again), read on conv1 (conv2 reported as replication where its rows exist)."""
+    def k(s):
+        srv_m, srv_n = nll("e4b_serve", "served", s), nll("e4b_nf4", "served", s)
+        v1, mxpre, pre_n = dnll("e4b_serve_v1", s), dnll("e4b_mxpre_prefill128", s), nll("e4b_nf4", "prefill", s)
+        pdl0, nofold, kvg4 = dnll("e4b_serve_pdl0", s), dnll("e4b_serve_nofold", s), dnll("e4b_serve_kvg4", s)
+        out = {}
+        out["K1"] = ({"verdict": "UNREAD"} if None in (mxpre, pre_n) else
+                     {"verdict": "HOLDS" if mxpre - pre_n <= K_PRE else "REFUTED", "mxfp4_prefill_minus_nf4_prefill": round(mxpre - pre_n, 6)})
+        gap = None if None in (srv_m, srv_n) else srv_m - srv_n
+        out["K2"] = ({"verdict": "UNREAD"} if gap is None or v1 is None or abs(gap) < 1e-9 else
+                     {"verdict": "HOLDS" if (srv_m - v1) / gap >= 0.5 else "REFUTED", "share_carried_by_int8": round((srv_m - v1) / gap, 4),
+                      "mxfp4_minus_nf4_served": round(gap, 6), "v1_minus_nf4_served": round(v1 - srv_n, 6)})
+        out["K3"] = ({"verdict": "UNREAD"} if None in (srv_m, pdl0, nofold) else
+                     {"verdict": "HOLDS" if abs(pdl0 - srv_m) <= J_TOL_PDL and abs(nofold - srv_m) <= J_TOL_FOLD else "REFUTED",
+                      "pdl0": round(pdl0 - srv_m, 6), "nofold": round(nofold - srv_m, 6)})
+        if s == "conv1":
+            out["K4"] = ({"verdict": "UNREAD"} if None in (srv_m, kvg4) else
+                         {"verdict": "HOLDS" if abs(srv_m - BOXJ_SERVED_CONV1) <= K_DET and abs(kvg4 - srv_m) <= 1e-9 else "REFUTED",
+                          "repeat_minus_boxj": round(srv_m - BOXJ_SERVED_CONV1, 9), "kvg4_minus_auto": round(kvg4 - srv_m, 12)})
+        out["K5"] = ({"verdict": "UNREAD"} if gap is None else
+                     {"verdict": "HOLDS" if gap >= K_GAP else "REFUTED", "mxfp4_minus_nf4_served": round(gap, 6)})
+        return out
+
+    # across every graded + replication window with the rows VALID: K5 on each window, K2 pooled (sum over windows)
+    per = {}
+    for s in SRCS + REP:
+        m, n, v = nll("e4b_serve", "served", s), nll("e4b_nf4", "served", s), dnll("e4b_serve_v1", s)
+        if None not in (m, n):
+            per[s] = {"mxfp4_minus_nf4_served": round(m - n, 6), "v1_minus_nf4_served": None if v is None else round(v - n, 6),
+                      "_m": m, "_n": n, "_v": v}
+    trip = [s for s, x in per.items() if x["_v"] is not None]
+    den = sum(per[s]["_m"] - per[s]["_n"] for s in trip)
+    share = None if not trip or abs(den) < 1e-9 else sum(per[s]["_m"] - per[s]["_v"] for s in trip) / den
+    aw = {"windows_read": sorted(per), "per_window": {s: {k: v for k, v in x.items() if not k.startswith("_")} for s, x in per.items()},
+          "K5_every_window": ({"verdict": "UNREAD", "why": f"{len(per)} windows < {K_MIN_WINDOWS}"} if len(per) < K_MIN_WINDOWS else
+                              {"verdict": "HOLDS" if all(x["_m"] - x["_n"] >= K_GAP for x in per.values()) else "REFUTED",
+                               "min_gap": round(min(x["_m"] - x["_n"] for x in per.values()), 6),
+                               "mean_gap": round(sum(x["_m"] - x["_n"] for x in per.values()) / len(per), 6)}),
+          "K2_pooled": ({"verdict": "UNREAD", "why": f"{len(trip)} windows < {K_MIN_WINDOWS}"} if len(trip) < K_MIN_WINDOWS or share is None else
+                        {"verdict": "HOLDS" if share >= 0.5 else "REFUTED", "pooled_share_carried_by_int8": round(share, 4),
+                         "windows": trip})}
+    return {"conv1": k("conv1"), "conv2_replication": k("conv2"), "across_windows": aw}
+
+
 def prove(d: str) -> dict:
     R = _sc1()
     out = {stem: row(d, stem, "conv1", R) for stem in PROVE}
@@ -303,13 +371,14 @@ def prove(d: str) -> dict:
 
 # ------------------------------------------------------------------ self-test --
 
-def _fixture(d, nll, routes, sha="s" * 64, steps=2048, gemv_v=("KERNEL_AGREES", "KERNEL_DISAGREES")):
-    for s in SRCS + CTRL:
+def _fixture(d, nll, routes, sha="s" * 64, steps=2048, gemv_v=("KERNEL_AGREES", "KERNEL_DISAGREES"), rep=False):
+    for s in SRCS + CTRL + (REP if rep else ()):
         json.dump({"ids": [0] * 2561, "text_sha": sha, "source": s, "prompt_len": 512, "steps": 2048,
                    "scored_target_roles": {"assistant": 0.95}}, open(os.path.join(d, f"k8_window_{s}.json"), "w"))
     os.makedirs(os.path.join(d, "routes"), exist_ok=True)
-    stems = [(a, sh, stem.format(s)) for a, shp in ARMS.items() for sh, stem in shp.items() for s in SRCS + CTRL]
-    stems += [(a, "diag", stem.format(s)) for a, stem in DIAG.items() for s in SRCS]
+    reps = REP if rep else ()
+    stems = [(a, sh, stem.format(s)) for a, shp in ARMS.items() for sh, stem in shp.items() for s in SRCS + CTRL + reps]
+    stems += [(a, "diag", stem.format(s)) for a, stem in DIAG.items() for s in SRCS + reps]
     for a, sh, st in stems:
         s = st.rsplit("_", 1)[1]
         v = nll(a, sh, s)
@@ -332,19 +401,23 @@ def _fixture(d, nll, routes, sha="s" * 64, steps=2048, gemv_v=("KERNEL_AGREES", 
 def _good_routes(st):
     if st.startswith("e4b_nf4_"):
         return {"nf4_singleton|le256": 49152, "nf4_mtile_host|gt256": 24}
-    if any(f"_{x}_" in st for x in ("served", "pdl0", "nofold", "chunk1", "kvg16")):
+    if st.startswith("e4b_mxpre_"):
+        return {"mxfp4_grouped_v1|gt256": 400}
+    if "_v1_" in st:
+        return {"mxfp4_grouped_v1|le256": 2048 * 24 + 16 * 24, "nf4_mtile_host|gt256": 24}
+    if any(f"_{x}_" in st for x in ("served", "pdl0", "nofold", "chunk1", "kvg16", "kvg4")):
         return {"mxfp4_gemv|le256": 2048 * 24 + 16 * 24, "nf4_mtile_host|gt256": 24}
     return {"nf4_mtile_host|gt256": 400}
 
 
 def _base(a, sh, s):
-    b = {"conv1": 1.2, "conv2": 1.4, "wikitext": 6.3}[s]
+    b = {"conv1": 1.2, "conv2": 1.4, "conv3": 1.3, "conv4": 1.1, "wikitext": 6.3}[s]
     off = {"e4b_serve": 0.004 if sh == "served" else 0.012, "e4b_serve_p64": 0.012 + (0.006 if s == "conv1" else -0.004),
            "e4b_nf4": 0.02, "vllm": 0.0, "sglang_native": 0.003, "sglang_marlin": 0.002,
            "llamacpp": 0.002 if sh == "served" else 0.04, "llamacpp_q8": 0.002 if sh == "served" else 0.005,
            "e4b_serve_pdl0": 0.004, "e4b_serve_nofold": 0.004, "e4b_serve_chunk1": 0.008, "e4b_nf4_chunk1": 0.02,
            "e4b_nf4_full": 0.0, "e4b_nf4_fqkv": 0.004, "e4b_nf4_fqk": 0.003, "e4b_nf4_fqv": 0.001, "e4b_nf4_fqkv16": 0.002,
-           "e4b_serve_kvg16": 0.004}[a]
+           "e4b_serve_kvg16": 0.004, "e4b_serve_v1": 0.004, "e4b_mxpre_prefill128": 0.012, "e4b_serve_kvg4": 0.004}[a]
     return b + off
 
 
@@ -428,6 +501,40 @@ def self_test() -> int:
         _fixture(d, bands, _good_routes)
         jp = reduce(d)["diag_predictions"]["conv1"]
         cases.append(("J bands", jp["J6"]["verdict"] == "HOLDS" and jp["J4"]["verdict"] == "REFUTED"))
+    with tempfile.TemporaryDirectory() as d:          # A3: the int8 activations carry the MXFP4 cost; the weights cost nothing
+        tab = {("e4b_serve", "served", "conv1"): BOXJ_SERVED_CONV1, ("e4b_serve_kvg4", "diag", "conv1"): BOXJ_SERVED_CONV1,
+               ("e4b_nf4", "served", "conv1"): 0.736, ("e4b_serve_v1", "diag", "conv1"): 0.745,
+               ("e4b_nf4", "prefill", "conv1"): 0.731, ("e4b_mxpre_prefill128", "diag", "conv1"): 0.735,
+               ("e4b_serve_pdl0", "diag", "conv1"): BOXJ_SERVED_CONV1, ("e4b_serve_nofold", "diag", "conv1"): BOXJ_SERVED_CONV1 + 0.02,
+               ("e4b_serve", "served", "conv2"): 1.85, ("e4b_nf4", "served", "conv2"): 1.65,
+               ("e4b_serve_v1", "diag", "conv2"): 1.66}
+        for s, (m, n, v) in {"conv3": (1.40, 1.25, 1.26), "conv4": (1.10, 0.95, 0.97)}.items():
+            tab.update({("e4b_serve", "served", s): m, ("e4b_nf4", "served", s): n, ("e4b_serve_v1", "diag", s): v})
+
+        def int8(a, sh, s):
+            return tab.get((a, sh, s), tab.get((a, "diag", s), _base(a, sh, s)))
+        _fixture(d, int8, _good_routes, rep=True)
+        kp = reduce(d)["a3_predictions"]
+        c1, aw = kp["conv1"], kp["across_windows"]
+        cases.append(("A3 int8", all(c1[k]["verdict"] == "HOLDS" for k in ("K1", "K2", "K3", "K4", "K5"))
+                      and c1["K2"]["share_carried_by_int8"] > 0.9 and kp["conv2_replication"]["K5"]["verdict"] == "HOLDS"
+                      and aw["windows_read"] == ["conv1", "conv2", "conv3", "conv4"] and aw["K5_every_window"]["verdict"] == "HOLDS"
+                      and aw["K2_pooled"]["verdict"] == "HOLDS"))
+        # one replication window where MXFP4 costs nothing: K5 across windows REFUTED although conv1's K5 HOLDS
+        tab[("e4b_serve", "served", "conv4")] = 0.96
+        _fixture(d, int8, _good_routes, rep=True)
+        kp = reduce(d)["a3_predictions"]
+        cases.append(("A3 replication", kp["conv1"]["K5"]["verdict"] == "HOLDS"
+                      and kp["across_windows"]["K5_every_window"]["verdict"] == "REFUTED"))
+    with tempfile.TemporaryDirectory() as d:          # A3: only two windows read -> the across-window reads are UNREAD, not HOLDS
+        _fixture(d, _base, _good_routes)
+        aw = reduce(d)["a3_predictions"]["across_windows"]
+        cases.append(("A3 too few windows", aw["K5_every_window"]["verdict"] == "UNREAD" and aw["K2_pooled"]["verdict"] == "UNREAD"))
+    with tempfile.TemporaryDirectory() as d:          # A3 gates: a KEEP_NF4=0 prefill that still ran NF4, or GEMV=0 that ran the GEMV
+        _fixture(d, _base, lambda st: {"nf4_mtile_host|gt256": 400} if st.startswith("e4b_mxpre_")
+                 else ({"mxfp4_gemv|le256": 49152} if "_v1_" in st else _good_routes(st)))
+        v = reduce(d)["diagnostic_rows"]
+        cases.append(("A3 gates", v["e4b_mxpre_prefill128"]["conv1"]["verdict"] == "VOID" and v["e4b_serve_v1"]["conv1"]["verdict"] == "VOID"))
     bad = [n for n, ok in cases if not ok]
     print(f"sc1g_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
@@ -456,6 +563,11 @@ def main(argv=None) -> int:
         print(f"SC1G_{g} {x['verdict']} {json.dumps({k: w for k, w in x.items() if k not in ('verdict', 'not_valid')})[:300]}")
     print(f"SC1G_FLOOR {json.dumps(v['floor'])}")
     print(f"SC1G_DIAG {json.dumps(v['diagnostics']['per_window'])[:600]}")
+    for w, ks in v["a3_predictions"].items():           # A3's K1-K5 per window, and the across-window reads
+        print(f"SC1G_A3 {w} {json.dumps(ks)[:900]}")
+    if v.get("attn_check_1175"):
+        ac = v["attn_check_1175"]
+        print(f"SC1G_ATTN {ac.get('verdict')} {json.dumps(ac.get('per_k_groups'))[:600]}")
     return 0
 
 
