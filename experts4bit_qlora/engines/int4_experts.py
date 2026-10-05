@@ -516,6 +516,7 @@ def enable_serve_experts_int4(model, source_dir: str, *,
     from int4_b32 import _plan
     from int4_pack_ref import pack_int4_b32
 
+    from .host_heap import release_freed_host_heap
     from .pack_manifest import assignment_index, method_map_hash
 
     assign_idx = None
@@ -722,6 +723,10 @@ def enable_serve_experts_int4(model, source_dir: str, *,
         n_layers += 1
         tot_gptq += n_gptq
         tot_rtn += n_rtn
+        # This layer's fp32 stacks are packed and installed: drop them before the next layer's read (bound, they would
+        # sit beside it), and hand the freed host heap back (engines.host_heap: glibc keeps it otherwise).
+        first = down = None
+        release_freed_host_heap()
     if n_layers == 0:
         raise RuntimeError("enable_serve_experts_int4: the plan holds "
                            "neither per-expert stacks nor pre-fused expert "

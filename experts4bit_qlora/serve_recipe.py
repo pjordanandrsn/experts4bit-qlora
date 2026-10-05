@@ -13,7 +13,10 @@ allocates for a model, from its :class:`~experts4bit_qlora.arch.topology.MoETopo
 * the dense weights in bf16, with no adapters (``build_engine`` loads with an arena, so the expert LoRA is never built);
 * the FP8 paged KV pool, by :func:`paged_kv_pool_bytes` -- the same arithmetic ``Fp8PagedKV`` allocates with, asserted
   equal to a constructed pool in the tests (derived);
-* a prefill/decode working set (heuristic, stated).
+* a prefill/decode working set (heuristic, stated);
+* the int4 serving levers when set (``E4B_SERVE_EXP_INT4``, ``E4B_SERVE_ATTN_INT4``, round-to-nearest): the int4-b32
+  expert stores that replace the NF4 stacks, with the repack's load-time overlap and its host read; the int4-b32
+  attention projections, with the bf16 copy each keeps once a call has more than 16 rows (derived).
 
 Arena geometry is the bake's default (NF4 blocksize 64, fp32 absmax, rows aligned to 4096 bytes).
 """
@@ -51,6 +54,11 @@ class ServeSetup:
     dram_gb: float = 6.0
     #: E4B_PAGED_HOT_ROWS: the cold tier's row capacity (pinned landing; the cold view), at either placement
     hot_rows: int = 64
+    #: E4B_SERVE_EXP_INT4: repack every expert stack onto the int4-b32 grid from the source checkpoint at load
+    #: (round-to-nearest, all-VRAM only) and free the NF4 stacks (E4B_INT4_KEEP_NF4=0)
+    exp_int4: bool = False
+    #: E4B_SERVE_ATTN_INT4: store the attention projections on the int4-b32 grid (round-to-nearest)
+    attn_int4: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -63,7 +71,9 @@ class ServeSetup:
                 "E4B_PAGED_BUCKETS": ",".join(str(int(b)) for b in self.buckets),
                 "E4B_PAGED_KV_GROUPS": str(self.kv_groups), "E4B_PAGED_PREFILL_GRAPH": str(self.prefill_graph),
                 "E4B_PAGED_VRAM_GB": repr(float(self.vram_gb)), "E4B_PAGED_DRAM_GB": repr(float(self.dram_gb)),
-                "E4B_PAGED_HOT_ROWS": str(int(self.hot_rows))}
+                "E4B_PAGED_HOT_ROWS": str(int(self.hot_rows)),
+                "E4B_SERVE_EXP_INT4": "1" if self.exp_int4 else "0", "E4B_SERVE_ATTN_INT4": "1" if self.attn_int4 else "0",
+                **({"E4B_INT4_KEEP_NF4": "0"} if self.exp_int4 else {})}
 
 
 def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_tokens_per_seq: int,
@@ -168,6 +178,76 @@ def _hybrid_host_items(hot_rows: int, bpe: int, stride: int, n_nvme: int) -> lis
     return out
 
 
+#: grouped-nf4-gemm's int4-b32 grid (``int4_pack_ref.BLOCK``): one fp16 scale per this many weights along K
+INT4_BLOCK = 32
+#: host bytes per expert parameter of one MoE layer that ``enable_serve_experts_int4``'s repack holds at its peak
+#: (heuristic; measured 10.4-11.2 on OLMoE-1B-7B, the anonymous host peak over the NF4 build's after-load, for a
+#: 403M-parameter layer)
+INT4_REPACK_HOST_BYTES_PER_PARAM = 12
+
+
+def int4_store_bytes(n: int, k: int, experts: int = 1) -> int:
+    """What ``pack_int4_b32`` returns for ``experts`` weights of ``[n, k]``: two nibbles a byte, one fp16 scale per
+    :data:`INT4_BLOCK` weights."""
+    return experts * n * (k // 2 + 2 * (k // INT4_BLOCK))
+
+
+def _int4_split_k(n: int, k: int):
+    """``(sk, exact)``: the split count ``int4_b32._plan(n, k)`` gives the single-row GEMV, which is what the int4 stores
+    size their partials buffers with; its ceiling 16 where the kernel package (it needs triton) does not import."""
+    try:
+        from int4_b32 import _plan
+    except ImportError:
+        return 16, False
+    return int(_plan(n, k)[2]), True
+
+
+def _smallm_split_k(n: int, k: int):
+    """``(sk, exact)``: the K16 small-M GEMM's split count for ``[n, k]`` (``int4_smallm.plan_smallm``, as
+    ``Int4Linear`` sizes its workspace), or its ceiling 4 where the kernel package does not import."""
+    try:
+        from int4_smallm import plan_smallm
+    except ImportError:
+        return 4, False
+    return int(plan_smallm(n, k)[2]), True
+
+
+def _first_out(stack) -> int:
+    """The first expert projection's output width (gate+up fused, or up alone), whatever the stack's layout."""
+    n = 1
+    for d in stack.first_shape:
+        n *= d
+    return n // (stack.n_experts * stack.hidden)
+
+
+def _int4_expert_stores(topology):
+    """``(device bytes, one layer's stores, exact)`` of the int4-b32 expert stores ``enable_serve_experts_int4`` installs:
+    gate/up ``[E, first_out, hidden]`` and down ``[E, hidden, intermediate]``, each with an fp32 partials buffer of
+    ``sk x top_k x N``."""
+    total, layer_max, exact = 0, 0, True
+    for st in topology.expert_stacks:
+        n_gu, n_dn = _first_out(st), st.hidden
+        sk_gu, ok_gu = _int4_split_k(n_gu, st.hidden)
+        sk_dn, ok_dn = _int4_split_k(n_dn, st.intermediate)
+        stores = int4_store_bytes(n_gu, st.hidden, st.n_experts) + int4_store_bytes(n_dn, st.intermediate, st.n_experts)
+        total += stores + 4 * topology.top_k * (sk_gu * n_gu + sk_dn * n_dn)
+        layer_max, exact = max(layer_max, stores), exact and ok_gu and ok_dn
+    return total, layer_max, exact
+
+
+def _int4_attention_workspaces(linears):
+    """``(bytes, exact)`` each ``Int4Linear`` preallocates beside its weight: the single-row GEMV's ``sk x N`` fp32
+    partials and expert-id scalar, and the K16 small-M route's ``sk x 16 x N`` fp32 workspace and ``cdiv(N, 64)``
+    counters (priced as if the route is on, its default wherever the kernel package carries it)."""
+    total, exact = 0, True
+    for n, k in linears:
+        sk, ok = _int4_split_k(n, k)
+        sk_sm, ok_sm = _smallm_split_k(n, k)
+        total += 4 * sk * n + 4 + 4 * sk_sm * 16 * n + 4 * (-(-n // 64))
+        exact = exact and ok and ok_sm
+    return total, exact
+
+
 @functools.lru_cache(maxsize=64)
 def _frozen_stack_bytes(stack, qsetup) -> int:
     """One stack's frozen bytes, built on meta. Keyed by shape (callers pass ``layer=0``): a planner prices the same
@@ -201,6 +281,20 @@ def serve_setup_refusals(topology, setup: ServeSetup) -> tuple:
         out.append("max_seqs >= 1 and max_tokens_per_seq >= 2 are required")
     if str(setup.prefill_graph) not in ("auto", "0", "1"):
         out.append(f"prefill_graph must be 'auto', '0' or '1', got {setup.prefill_graph!r}")
+    if setup.exp_int4:
+        if setup.placement != "all-vram":
+            out.append("exp_int4 repacks the all-VRAM collapsed stacks only (enable_serve_experts_int4 refuses tiered "
+                       "layers); plan placement='all-vram'")
+        if topology.expert_bias_tensors:
+            out.append("under exp_int4 gpt-oss's experts are served natively as MXFP4, a store this estimate does not "
+                       "price")
+        if not topology.top_k:
+            out.append("exp_int4 sizes its partials by the routed experts per token, which this config does not state")
+    if setup.attn_int4:
+        if not topology.int4_attention_linears:
+            out.append("attn_int4 matches no attention projection on this model (enable_serve_attn_int4 refuses)")
+        elif any(k % INT4_BLOCK for _n, k in topology.int4_attention_linears):
+            out.append(f"attn_int4 needs every attention projection's input width to be a multiple of {INT4_BLOCK}")
     try:
         import fp8_kv  # noqa: F401
     except ImportError:
@@ -220,7 +314,18 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     n_layers, n_experts = len(topology.expert_stacks), topology.expert_stacks[0].n_experts
     bpe = bytes_per_expert(topology.expert_stacks[0], qs)
     stride = -(-bpe // ARENA_ALIGN) * ARENA_ALIGN
-    if setup.placement == "all-vram":
+    int4_layer = 0
+    if setup.placement == "all-vram" and setup.exp_int4:
+        stores, int4_layer, exact = _int4_expert_stores(topology)
+        items.append(FootprintItem("int4 expert stores (all VRAM; the NF4 stacks freed)", "device", stores,
+                                   "derived" if exact else "heuristic",
+                                   f"{n_layers} layers x all experts on the int4-b32 grid (packed nibbles + one fp16 "
+                                   f"scale per {INT4_BLOCK}), repacked from the source checkpoint, plus each projection's "
+                                   "fp32 split-K partials for top_k rows" + ("" if exact else
+                                                                             " (split count at its ceiling 16: "
+                                                                             "grouped-nf4-gemm's int4_b32 not importable)")))
+        n_nvme = 0
+    elif setup.placement == "all-vram":
         items.append(FootprintItem("frozen expert stacks (all VRAM)", "device", slab, "derived",
                                    f"{n_layers} layers x all experts, nf4 blocksize 64 (packed + absmax)"))
         n_nvme = 0
@@ -247,8 +352,27 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                 f"max(chunk_tokens, max_seqs), at most n_experts): grouped-nf4-gemm's ColdTier would refuse the demand "
                 "window mid-request; raise hot_rows",))
     items += _hybrid_host_items(setup.hot_rows, bpe, stride, n_nvme)
-    items.append(FootprintItem("dense weights (bf16)", "device", 2 * topology.dense_numel, "derived",
-                               "embeddings, attention, norms, routers, dense/shared MLPs; no adapters under an arena load"))
+    attn = topology.int4_attention_linears if setup.attn_int4 else ()
+    attn_numel = sum(n * k for n, k in attn)
+    items.append(FootprintItem("dense weights (bf16)", "device", 2 * (topology.dense_numel - attn_numel), "derived",
+                               "embeddings, attention, norms, routers, dense/shared MLPs; no adapters under an arena load"
+                               + ("; the int4 attention projections' weights are priced below" if attn else "")))
+    if attn:
+        items.append(FootprintItem("attention projections on the int4-b32 grid", "device",
+                                   sum(int4_store_bytes(n, k) for n, k in attn), "derived",
+                                   f"{len(attn)} projections (engines.int4_attn.attention_linears), packed nibbles + "
+                                   f"one fp16 scale per {INT4_BLOCK}; a projection bias stays bf16 in the dense weights"))
+        items.append(FootprintItem("attention projections' bf16 copy (kept from the first prefill)", "device",
+                                   2 * attn_numel, "derived",
+                                   "Int4Linear serves a call of more than 16 rows (any prefill chunk; more than 1 row "
+                                   "without the K16 route) with cuBLAS on a dequantised bf16 weight it builds once and "
+                                   "keeps, so the attention weights cost more than bf16 alone once a prompt is served"))
+        ws, exact = _int4_attention_workspaces(attn)
+        items.append(FootprintItem("int4 attention workspaces", "device", ws, "derived" if exact else "heuristic",
+                                   "each projection's single-row split-K partials and its K16 small-M workspace, "
+                                   "preallocated at the swap" + ("" if exact else
+                                                                 " (split counts at their ceilings: grouped-nf4-gemm's "
+                                                                 "int4 kernels not importable)")))
     scratch = max(setup.buckets) if setup.graphs else 0
     kv = paged_kv_pool_bytes(topology.kv_layers, topology.kv_heads, topology.kv_head_dims, batch=setup.max_seqs,
                              max_tokens_per_seq=setup.max_tokens_per_seq,
@@ -274,9 +398,28 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     items.append(FootprintItem("prefill/decode working set", "device", work, "heuristic",
                                f"a {c}-token prefill chunk's hidden states and routed expert activations + fp32 logits "
                                f"for {setup.max_seqs} sequences"))
+    if int4_layer:
+        # The repack builds layer by layer before the KV pool exists: each layer's int4 store is allocated while that
+        # layer's NF4 stack is still held, and the attention projections are still bf16. Its peak only matters where it
+        # exceeds everything the server holds once it serves.
+        at_load = slab + 2 * topology.dense_numel + int4_layer
+        serving = sum(i.bytes for i in items if i.where == "device")
+        if at_load > serving:
+            items.append(FootprintItem("int4 repack at load, above the serving total", "device", at_load - serving,
+                                       "derived",
+                                       f"the NF4 stacks ({slab} B) + bf16 dense weights + one layer's int4 store "
+                                       f"({int4_layer} B), held together before the KV pool is built"))
+        items.append(FootprintItem("int4 repack: one layer's experts in fp32 (load)", "host",
+                                   max(INT4_REPACK_HOST_BYTES_PER_PARAM * st.numel for st in topology.expert_stacks),
+                                   "heuristic",
+                                   f"{INT4_REPACK_HOST_BYTES_PER_PARAM} B per parameter of the largest layer: the "
+                                   "per-expert fp32 reads (4), their fused copy (4), the packed lists and their stack "
+                                   "(~1.1) and the bf16 source reads in flight; measured 10.4-11.2 on OLMoE-1B-7B (RTX "
+                                   "A2000 host). Gone after load: each layer's heap is handed back (engines.host_heap)"))
     if setup.graphs:
         unmodelled.append("CUDA graph memory pools for the decode buckets (lane SV1: +60 MiB allocated on OLMoE-1B-7B, "
-                          "16 seqs, RTX 5090)")
+                          "16 seqs, RTX 5090, NF4" + ("; the int4 store's batched decode allocates its split-K partials "
+                                                      "through these pools, unmeasured)" if setup.exp_int4 else ")"))
     hybrid = topology.attention is not None and topology.attention.layers < topology.n_layers
     if str(setup.prefill_graph) != "0" and setup.graphs and setup.max_seqs > 1 and max(setup.buckets) > 1 and not hybrid:
         unmodelled.append("the first-chunk prefill graph's private pool, which the server keeps for its life when the "
@@ -287,5 +430,8 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
         unmodelled.append(f"recurrent state of the {topology.n_layers - topology.attention.layers} non-attention layers")
     if setup.placement == "solver":
         unmodelled.append("the CPU tier's compute buffers")
+    if setup.exp_int4:
+        unmodelled.append("the source checkpoint on local disk: the int4 repack reads its safetensors (snapshot_download), "
+                          "never the arena")
     unmodelled.append("CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)")
     return Footprint(items=tuple(items), unmodelled=tuple(unmodelled))
