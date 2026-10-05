@@ -163,3 +163,20 @@ An independent re-computation that did not import the reducer reproduces every r
 - **Instrument note:** run 2 changed host as well as warm-up (575 W vs 400 W power limit, EPYC 7B13 vs 7C13), so the
   NOISY → READ improvement cannot be credited to Amendment 1 alone. Every warm-up hit the 4 s floor before the
   steadiness test (16 blocks); the end/steady rates (0.997–1.005) show no in-cell drift either way.
+
+## Erratum (2026-10-05): one prediction clause leaned on an A2000 timing
+
+The G1 prediction's reason, "gnf4's decoder is somewhat faster" (DQ1-PREREG.md, Predictions), was informed by the
+research note's quote of a code comment timing the two decoders on an RTX A2000 (`nf4_route.py:156`). Under the
+testbed policy (A2000 = correctness only; every timing, ratio or band basis from rented compute on the target card), an
+A2000 timing may not seed a prediction.
+
+What it changes:
+- **The registered band stands as stamped.** G1 ∈ [0.97, 1.08] held on the 5090 at 1.002–1.007. Its other basis, the
+  same structure as bnb (dequant + cuBLAS), is read from the code, not timed.
+- **The decoder comparison is now a 5090 measurement.** It is 0.94–1.01× on the large shapes and 0.65× on kv_proj (run
+  2), which replaces the A2000 figure in the note.
+- **Every other DQ1 use of the A2000 was correctness only.** The three pool rehearsals checked install, arms running,
+  engagement, parity and H2D coverage. No A2000 timing appears in any verdict, reading or band.
+- **For later lanes:** the self-pair counts quoted in #1103's rehearsal comment (20/100 → 8/100) were informational.
+  They are not evidence that Amendment 1 worked; run 2 on the 5090 is that evidence, with the host change noted above.
