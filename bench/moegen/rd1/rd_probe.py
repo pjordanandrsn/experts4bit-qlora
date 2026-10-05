@@ -16,7 +16,9 @@ Arms (forward and dgrad of each projection):
            route would reuse its plan).
 
 Per arm: device ms per call (profiler kernel time), event ms per call (CUDA events over --reps back-to-back calls: includes
-launch and host gaps), peak MiB above the inputs (max_memory_allocated), and relative error against v1.
+launch and host gaps), peak MiB above the inputs (max_memory_allocated), relative error against v1, and ``rel_err32``: the
+relative error against an fp32 reference (``dequant_ref`` in fp32 times the fp32 activations), which rd_table.py's
+correctness gate reads. v1 is measured against that reference too (it runs TF32), so every arm sits in one frame.
 
 usage: rd_probe.py --out rd.json [--seqs 512,2048] [--fams ...] [--routings uniform,skew] [--cap-mib 256] [--reps 20]
 """
@@ -168,6 +170,27 @@ def decoded_call(x, B, absmax, plan, mode, cfg):
     return out
 
 
+def ref32_call(x, B, absmax, sizes, present, mode, row_chunk=4096):
+    """The fp32 reference every arm is gated against: per group, ``dequant_ref`` (grouped-nf4-gemm's pure-torch decode, bit-equal
+    to bitsandbytes' ``dequantize_4bit``) in fp32, times the activations in fp32. The weight is decoded in row chunks to bound
+    its memory. Forward: ``x_g @ W_g^T``; dgrad: ``g_g @ W_g``."""
+    E, N, half = B.shape
+    K = half * 2
+    out = torch.zeros(x.shape[0], N if mode == "fwd" else K, device=x.device, dtype=torch.float32)
+    r0 = 0
+    for e, n in zip(present, sizes):
+        xg = x[r0:r0 + n].float()
+        for c0 in range(0, N, row_chunk):
+            c1 = min(N, c0 + row_chunk)
+            w = ng.dequant_ref(B[e, c0:c1].contiguous(), absmax[e, c0:c1].contiguous(), c1 - c0, K)    # [c, K] fp32
+            if mode == "fwd":
+                out[r0:r0 + n, c0:c1] = xg @ w.t()
+            else:
+                out[r0:r0 + n] += xg[:, c0:c1] @ w
+        r0 += n
+    return out
+
+
 def measure(fn, reps):
     for _ in range(3):
         fn()
@@ -209,16 +232,18 @@ def route_draw(E, k, seq, routing, seed=0):
     return present, [int(counts[e]) for e in present]
 
 
-def best_of(cfgs, make, ref, reps, label):
+def best_of(cfgs, make, ref, ref32, reps, label):
     best, skipped = None, []
     for cfg in cfgs:
         try:
-            err = rel(make(cfg)(), ref)
+            y = make(cfg)()
+            err, err32 = rel(y, ref), rel(y, ref32)
+            del y
             m = measure(make(cfg), reps)
         except Exception as e:                        # a tile config that does not fit this card is skipped and named
             skipped.append(f"{label} {cfg}: {type(e).__name__}")
             continue
-        m["rel_err"], m["cfg"] = round(err, 5), list(cfg)
+        m["rel_err"], m["rel_err32"], m["cfg"] = round(err, 5), round(err32, 6), list(cfg)
         if best is None or m["event_ms"] < best["event_ms"]:
             best = m
     return best, skipped
@@ -239,14 +264,18 @@ def cell(fam, seq, routing, cap_bytes, reps, dev):
         for mode in ("fwd", "dgrad"):
             x = (torch.randn(A, K if mode == "fwd" else N, device=dev) * 0.5).to(torch.bfloat16)
             r, skipped = {}, []
+            ref32 = ref32_call(x, B, absmax, sizes, present, mode)
             if mode == "fwd":
                 v1 = lambda: ng.gemm_4bit_grouped(x, B, absmax, sizes, present)                          # noqa: E731
                 ref = v1()
                 r["v1"] = measure(v1, reps)
+                r["v1"]["rel_err32"] = round(rel(ref, ref32), 6)
                 v3 = lambda: ng.gemm_4bit_grouped(x, B, absmax, sizes, present, prefill_variant=3)        # noqa: E731
                 try:
                     r["v3"] = measure(v3, reps)
-                    r["v3"]["rel_err"] = round(rel(v3(), ref), 5)
+                    y3 = v3()
+                    r["v3"]["rel_err"], r["v3"]["rel_err32"] = round(rel(y3, ref), 5), round(rel(y3, ref32), 6)
+                    del y3
                 except Exception as e:                    # recorded as a missing arm, never silently dropped
                     skipped.append(f"v3-fwd: {type(e).__name__}: {str(e)[:160]}")
                 dense = lambda: nr.dense_forward(x, B, absmax, sizes, present)                           # noqa: E731
@@ -254,26 +283,32 @@ def cell(fam, seq, routing, cap_bytes, reps, dev):
                 v1 = lambda: ng.dgrad_4bit_grouped(x, B, absmax, sizes, present)                         # noqa: E731
                 ref = v1()
                 r["v1"] = measure(v1, reps)
+                r["v1"]["rel_err32"] = round(rel(ref, ref32), 6)
                 r["v3"], sk = best_of(DGRAD16_CFGS, lambda c: (lambda: dgrad_bf16(x, B, absmax, sizes, eids_dev, c)),
-                                      ref, reps, "v3-dgrad")
+                                      ref, ref32, reps, "v3-dgrad")
                 skipped += sk
                 dense = lambda: nr.dense_dgrad(x, B, absmax, sizes, present)                             # noqa: E731
             r["dense"] = measure(dense, reps)
-            r["dense"]["rel_err"] = round(rel(dense(), ref), 5)
+            yd = dense()
+            r["dense"]["rel_err"], r["dense"]["rel_err32"] = round(rel(yd, ref), 5), round(rel(yd, ref32), 6)
+            del yd
             plans = {c[0]: decoded_plan(sizes, present, N, K, c[0], None, dev) for c in GEMM_CFGS}
             r["decoded"], sk = best_of(GEMM_CFGS, lambda c: (lambda: decoded_call(x, B, absmax, plans[c[0]], mode, c)),
-                                       ref, reps, "decoded")
+                                       ref, ref32, reps, "decoded")
             skipped += sk
             if r["decoded"]:
                 c = tuple(r["decoded"]["cfg"])
                 cplan = decoded_plan(sizes, present, N, K, c[0], cap_bytes, dev)
                 m = measure(lambda: decoded_call(x, B, absmax, cplan, mode, c), reps)
-                m["rel_err"] = round(rel(decoded_call(x, B, absmax, cplan, mode, c), ref), 5)
+                yc = decoded_call(x, B, absmax, cplan, mode, c)
+                m["rel_err"], m["rel_err32"] = round(rel(yc, ref), 5), round(rel(yc, ref32), 6)
+                del yc
                 m["cfg"], m["chunks"] = list(c), len(cplan)
                 r["decoded_cap"] = m
             if skipped:
                 r["skipped"] = skipped
             res[mode] = r
+            del ref32
         out["proj"][f"{pname} N={N} K={K}"] = res
         torch.cuda.empty_cache()
     return out
