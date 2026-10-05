@@ -1,0 +1,140 @@
+{
+ "base": "http://127.0.0.1:8778",
+ "model": "openai/gpt-oss-20b",
+ "profile": "e4b",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 0.6693,
+  "wall_s": 6.101,
+  "ttft_p50_s": 0.187978,
+  "ttft_p90_s": 0.200789,
+  "ttft_p99_s": 0.205688,
+  "tpot_p50_s": 0.006296,
+  "tpot_p90_s": 0.006317,
+  "tpot_p99_s": 0.006323,
+  "e2el_p50_s": 1.556857,
+  "e2el_p90_s": 1.621151,
+  "e2el_p99_s": 1.622192,
+  "ttft_mean_s": 0.192474,
+  "output_tok_s": 139.813,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 0.6556,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 3e-06,
+   "text": " the Caribbean? The **?**\n\nIt seems like you're looking for a summary or a specific detail about the 1933 Treasure Coast hurricane. The text you provided is a mix of unrelated information about a person named Rifenburg and a description of the 1933 Treasure Coast hurricane. If you have a specific question or need a summary of the hurricane's details, please let me know!\n\nIt seems like you're asking for a summary or specific details about the 1933 Treasure Coast hurricane. The text you provided is a\n\nIt looks like there might have been a misunderstanding or a mix-up in the text you provided. The passage you shared contains a blend of unrelated information about a person named Rifenburg and a description of the 1933 Treasure Coast hurricane. If you're looking for a summary or specific details about the hurricane, I'd be happy to help. Could you clarify what specific information you're seeking about the 1933 Treasure Coast hurricane?\n\nIt seems you're asking for a\n\nIt appears there might be some confusion or a misunderstanding",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.495262,
+   "ttft_s": 0.206232,
+   "tpot_s": 0.006196,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 1.49545,
+   "text": " \nWe need to find the first name of the person who won the 2010 World Series of Poker Main Event. The text is about Brock Lesnar. The question: \"What is the first name of the person who won the 2010 World Series of Poker Main Event?\" That is unrelated to the text. But we need to answer. The 2010 World Series of Poker Main Event winner was Bryn Kenney? Wait, 2010 WSOP Main Event winner was Bryn Kenney? Let's recall: 2010 WSOP Main Event winner was Bryn Kenney? Actually, 2010 WSOP Main Event winner was Bryn Kenney? Let's check memory: 2010 WSOP Main Event winner was Bryn Kenney? Wait, 2010 WSOP Main Event winner was Bryn Kenney? I'm not sure. Let's recall: 2010 WSOP Main Event winner was Bry",
+   "completion_tokens": 187,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.364384,
+   "ttft_s": 0.187865,
+   "tpot_s": 0.006324,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 2.859979,
+   "text": "st\u00a0\u00a0..\u00a0\u2026\u00a0\u2026\u00a0\u2026\u2026\u00a0..\u00a0\u2026\u00a0is\u00a0..\u00a0\u2026\u00a0i\u2026\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026..\u2026\u2026\u2026..\u2026\u2026\u2026\u2026\u2026\n\nIt appears that the text you provided is a historical account of a military operation involving the 23rd Infantry Regiment and the 1st Battalion. The text describes the movements and actions of the units, as well as the challenges they faced during the operation. It also mentions the involvement of other units, such as the 3rd Battalion and the 38th Infantry, and the use of air support and artillery. The text also mentions the Battle of Yongsan, but it is not clear what the specific details of that battle are.\n\nIt seems like you have a detailed historical account of a military operation involving the 23rd Infantry Regiment and the 1st Battalion. The text appears to be a historical\n\nIt appears that the text you provided is a historical account of a military operation involving the 23rd Infantry Regiment and the 1st Battalion",
+   "completion_tokens": 229,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.622308,
+   "ttft_s": 0.18809,
+   "tpot_s": 0.00629,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 4.482466,
+   "text": "ety\n\nIt appears that the text you provided is a mix of unrelated content, possibly from different sources or contexts. It includes references to a person named Kershaw, a book titled \"Arise,\" endorsements for various products, and a brief mention of an Indigenous Australian artist named Josepha Petrick Kemarre. However, the text is fragmented and lacks coherence.\n\nIf you have a specific question or if there's a particular aspect you'd like to discuss or clarify, please let me know, and I'll do my best to assist you.\n\nIt seems like you're looking for a summary or a clearer understanding of the text you provided. Here's a concise summary of the key points:\n\n1. **Kershaw's Background**: The text mentions Kers\n\nIt seems like you're looking for a summary or a clearer understanding of the text you provided. Here's a concise summary of the key points:\n\n1. **Kershaw's Background**: The text mentions Kers\n\nIt appears that the text you provided is a mix of unrelated content, possibly\n\nIt seems like you're looking for a summary or a clearer\n\nIt appears that the text you provided",
+   "completion_tokens": 228,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.618451,
+   "ttft_s": 0.187711,
+   "tpot_s": 0.006302,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

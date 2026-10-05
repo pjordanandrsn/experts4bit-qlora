@@ -1,0 +1,39 @@
+KNOBS box=G e4b=eaf3e5b49daf710507b0ba16aec7a0648670d892 gnf4=dc8f94abfd868f149178623f6eb403dc8b892b02 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=1
+e4b 0.48.0 @eaf3e5b49daf710507b0ba16aec7a0648670d892
+gnf4 0.41.0 @dc8f94abfd868f149178623f6eb403dc8b892b02
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[install-vllm 08:01:14] vllm==0.30.0 ready in /root/sc1/venv-vllm
+SGLANG_INSTALL OK
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+aiohttp 3.14.3 fastapi 0.141.1 uvicorn 0.54.0
+PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite
+QUIESCE prove quiesced=yes waited=0s busy_procs=0 load1=11.13 nproc=256 cpu.max=3071999/100000 at=2026-10-05T08:10:58Z
+FETCH granite ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+BAKE granite BAKE OK
+smoke_granite_b1 B=1 rc=0 SC1SCHED_CENSUS {"arm": "smoke_granite_b1", "batch": 1, "ok": true, "failures": [], "smoke_error": null, "load_s": 13.3, "census": {"moe_layers": 32, "int4_expert_layers": 0, "int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_
+smoke_granite_b16 B=16 rc=0 SC1SCHED_CENSUS {"arm": "smoke_granite_b16", "batch": 16, "ok": true, "failures": [], "smoke_error": null, "load_s": 10.5, "census": {"moe_layers": 32, "int4_expert_layers": 0, "int4_attn_projections": 0, "attn_int4_calib_projections": 0, "attn_int4_rtn_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glu
+sc2_driver self-test OK (9/9 cases)
+sc2_reduce self-test OK (10 cases)
+sc2g_reduce self-test OK (5 cases)
+FETCH gptoss openai/gpt-oss-20b@6cee5e81ee83917806bbde320786a8fb61efebee /root/.cache/huggingface/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee
+BAKE gptoss BAKE OK
+SC2_PROMPTS rows=64 prompt=512 sha256=50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5
+SC2G_E4B {"ok": true, "bad": [], "store": ["mxfp4"], "routes": {"int4_prefill_env": null, "prefill_attn_env": null, "device_grouping": true, "int4_prefill": "k19", "int4_prefill_above_256_rows": "k19", "prefill_attn": "flash"}, "prefill_graph": {"status": "on", "requested": "auto", "T": 512, "why": null, "pool_mib": 246, "free_after_mib": 5784}}
+SC2G e4b healthy
+SC2 e4b_gptoss_prove_serial rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 0.8818, "ttft_p50_s": 0.166012, "ttft_p99_s": 0.198632, "tpot_p50_s": 0.005847, "tpot_p99_s": 0.005873, "output_tok_s": 146.718, "goodput_rps": null}
+SC2 e4b_gptoss_prove_poisson rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2832, "ttft_p50_s": 0.232219, "ttft_p99_s": 0.534942, "tpot_p50_s": 0.021567, "tpot_p99_s": 0.02914, "output_tok_s": 314.722, "goodput_rps": 4.0}
+SC2G vllm healthy:       1 MARLIN       1 MarlinExperts       1 Mxfp4       3 TRITON_ATTN       2 marlin       4 mxfp4 
+SC2 vllm_prove_serial rc=0 SC2_RUN {"profile": "vllm", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.3501, "ttft_p50_s": 0.034066, "ttft_p99_s": 0.731167, "tpot_p50_s": 0.003399, "tpot_p99_s": 0.003403, "output_tok_s": 232.476, "goodput_rps": null}
+SC2 vllm_prove_poisson rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2834, "ttft_p50_s": 0.040559, "ttft_p99_s": 0.711065, "tpot_p50_s": 0.005959, "tpot_p99_s": 0.014095, "output_tok_s": 415.082, "goodput_rps": 4.0}
+SC2G sglang healthy: SGLANG_ENGAGEMENT {"mode": "gptoss", "version": "0.5.20", "attention_backend": "triton", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": false, "jit_target_tag": null, "gencode": null, "startup_s": 609}
+SC2 sglang_prove_serial rc=0 SC2_RUN {"profile": "sglang", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.4751, "ttft_p50_s": 0.0269, "ttft_p99_s": 0.029153, "tpot_p50_s": 0.003949, "tpot_p99_s": 0.003955, "output_tok_s": 244.672, "goodput_rps": null}
+SC2 sglang_prove_poisson rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.2835, "ttft_p50_s": 0.032238, "ttft_p99_s": 0.113339, "tpot_p50_s": 0.006106, "tpot_p99_s": 0.006574, "output_tok_s": 407.895, "goodput_rps": 4.0}
+FETCH gguf gpt-oss-20b-MXFP4.gguf 27cd6c432c7672cb
+SC2G llamacpp healthy: [llamacpp_box 08:45:02] healthy on :8080, 0.11.325.616 I load_tensors: offloaded 25/25 layers to GPU, pid 22651
+SC2 llamacpp_prove_serial rc=0 SC2_RUN {"profile": "llamacpp", "mode": "serial", "rate": 0.0, "valid": 6, "invalid": 0, "achieved_rate": 1.5106, "ttft_p50_s": 0.067117, "ttft_p99_s": 0.35876, "tpot_p50_s": 0.003203, "tpot_p99_s": 0.003281, "output_tok_s": 256.318, "goodput_rps": null}
+SC2 llamacpp_prove_poisson rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 4.0, "valid": 16, "invalid": 0, "achieved_rate": 3.283, "ttft_p50_s": 0.082351, "ttft_p99_s": 0.126096, "tpot_p50_s": 0.013102, "tpot_p99_s": 0.020702, "output_tok_s": 335.458, "goodput_rps": 4.0}
+PROVED box=G installs=[vllm sglang llamacpp sc2client] smokes=[granite_b1 granite_b16] servers=[e4b_gptoss vllm sglang llamacpp]

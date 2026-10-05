@@ -1,0 +1,29 @@
+{
+ "pin": "0.5.20",
+ "tag_commit": "94602c9c2b7cbdb8efd5c52802dac6a1c180089e",
+ "python": "3.12.3",
+ "venv": "/root/sc1/venv-sglang",
+ "errors": [],
+ "warnings": [],
+ "sglang": "0.5.20",
+ "torch": "2.13.0+cu130",
+ "torch_cuda": "13.0",
+ "cuda_available": true,
+ "compute_capability": "12.0",
+ "cc_tuple": [
+  12,
+  0
+ ],
+ "device_name": "NVIDIA GeForce RTX 5090",
+ "flashinfer": "0.6.18",
+ "sglang_kernel": "0.4.7",
+ "tvm_ffi": "0.1.11",
+ "ninja": "/root/sc1/venv-sglang/bin/ninja",
+ "nvcc_first_line": "nvcc: NVIDIA (R) Cuda compiler driver",
+ "nvcc_release": "13.0",
+ "nvcc_release_line": "Cuda compilation tools, release 13.0, V13.0.88",
+ "jit_target": "sm_120f",
+ "jit_cache_target_dir": "sm120f",
+ "cache_dir": "/root/sc1/sglang-cache",
+ "jit_cache_dir": "/root/sc1/sglang-cache/jit"
+}
