@@ -65,7 +65,8 @@ what is measured-private and what is open, is [`STATUS.md`](STATUS.md).
   run VOID for exactly this (`e4b.train.parity.tp1.olmoe.batched.2026-09-05`).
 - A model that already fits in bf16 with headroom gains nothing here:
   4-bit is a memory trade, and on the measured comparator it cost energy
-  (`e4b.train.energy-honest.scoped-a2000`).
+  (`e4b.train.energy-honest.5090.2026-10-05`: one RTX 5090, one
+  projection, medians of three passes).
 - Numbers live in [`claims.json`](claims.json) with their status; a page
   quotes claim IDs, never figures, and a retired or superseded claim is
   never current — the register's `status` field, not a page, decides.

@@ -43,7 +43,7 @@ recompute-in-backward projection so training holds no dequantized-expert activat
 walker, double quantization, multi-GPU/FSDP, or a speed play — on a card that already fits the
 model it is strictly a memory trade (see the energy scope note in
 [METHODOLOGY.md §10](METHODOLOGY.md) and [BITSANDBYTES.md](BITSANDBYTES.md); register
-`e4b.train.energy-honest.scoped-a2000`).
+`e4b.train.energy-honest.5090.2026-10-05`, one RTX 5090, medians of three passes).
 
 ### Experts4bit compatibility
 

@@ -1,0 +1,21 @@
+device: NVIDIA GeForce RTX 5090 | bf16 | gate_up [2048,2048]
+idle power: 49.0 W
+
+--- fwd  M=1   (decode) ---
+                path |     ops/s |  power W |  J/op (tot) |  J/op (dyn) | vs native
+         native-bf16 |     58551 |    195.3 |  3335.13 uJ |  2498.46 uJ |     1.00x
+     before(dequant) |     12696 |    137.7 | 10848.36 uJ |  6989.75 uJ |     3.25x
+  after(matmul_4bit) |     16735 |     97.5 |  5823.83 uJ |  2896.51 uJ |     1.75x
+
+--- fwd  M=512 (prefill) ---
+                path |     ops/s |  power W |  J/op (tot) |  J/op (dyn) | vs native
+         native-bf16 |     30486 |    414.0 | 13579.90 uJ | 11973.02 uJ |     1.00x
+     before(dequant) |     11372 |    236.7 | 20815.03 uJ | 16507.34 uJ |     1.53x
+  after(matmul_4bit) |     10087 |    218.2 | 21629.02 uJ | 16772.53 uJ |     1.59x
+
+--- fwd+bwd M=32 (train) ---
+                path |     ops/s |  power W |  J/op (tot) |  J/op (dyn) | vs native
+         native-bf16 |      2700 |     95.5 | 35354.52 uJ | 17211.55 uJ |     1.00x
+     before(dequant) |      1949 |     97.4 | 49980.76 uJ | 24851.13 uJ |     1.41x
+  after(matmul_4bit) |      1382 |     96.3 | 69686.46 uJ | 34232.35 uJ |     1.97x
+

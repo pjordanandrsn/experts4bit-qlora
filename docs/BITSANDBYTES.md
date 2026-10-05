@@ -78,7 +78,10 @@ is the section to read it against.
    dequantize-then-`linear` and a bitsandbytes 0.50-dev *fork* build's
    `matmul_4bit` routing on an RTX A2000; the receipt does not record the
    build's commit. They are registered with that scope as
-   `e4b.train.energy-honest.scoped-a2000` and are not rewritten; the
-   earlier universal wording is `superseded` (`e4b.train.energy-honest`),
-   and the remeasure with a recorded version is
-   [#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392).
+   `e4b.train.energy-honest.scoped-a2000`, now superseded, and are not
+   rewritten; the earlier universal wording is `superseded`
+   (`e4b.train.energy-honest`), and the remeasure with a recorded version
+   is [#392](https://github.com/pjordanandrsn/experts4bit-qlora/issues/392).
+   All of them are superseded by `e4b.train.energy-honest.5090.2026-10-05`
+   (lane P114, 2026-10-05: the same harness on one rented RTX 5090,
+   bitsandbytes 0.50.2, medians of three passes).
