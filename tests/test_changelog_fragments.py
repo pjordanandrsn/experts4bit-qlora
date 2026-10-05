@@ -259,3 +259,25 @@ def test_this_repositorys_release_heading_is_the_one_check_readme_links_reads():
     first = next(ln for ln in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n")
                  if cf.RELEASE_HEADING.match(ln))
     assert first.startswith(f"## {m.group('ver')} ")
+
+
+def test_an_entry_filed_inside_a_released_section_fails(repo):
+    # The rebase-across-a-cut failure: an old '## Unreleased' hunk applies
+    # cleanly below the new release heading, so nothing is lost and the entry
+    # is filed as shipped. #1122 did this to 0.48.0 on 2026-10-05.
+    _git(repo, "checkout", "-q", "-b", "lane")
+    _write(repo, "CHANGELOG.md", CHANGELOG.replace("## 0.2.0 — 2026-10-02 — second\n\n",
+                                                   "## 0.2.0 — 2026-10-02 — second\n\n### Misfiled lane entry\n\n"))
+    r = _run(repo, "--check", "--base", "main")
+    assert r.returncode == 1
+    assert "inserted inside the released section '## 0.2.0" in r.stdout and "changelog.d/" in r.stdout
+    assert _run(repo, "--check", "--base", "main", "--allow-history-edit").returncode == 0
+
+
+def test_inserted_inside_names_the_section_and_allows_a_new_top_section():
+    old = cf.released_lines(CHANGELOG)
+    top = ["## 0.3.0 — 2026-10-06 — third", "", "### New", ""] + old
+    assert cf.inserted_inside(old, top) is None
+    i = old.index("## 0.1.0 — 2026-10-01 — first")
+    assert cf.inserted_inside(old, old[:i] + ["- slipped in"] + old[i:]) == "## 0.2.0 — 2026-10-02 — second"
+    assert cf.inserted_inside(old, old[:i + 2] + ["- slipped in"] + old[i + 2:]) == "## 0.1.0 — 2026-10-01 — first"

@@ -19,7 +19,8 @@ correct an unreleased entry, edit its file.
 which writes these files, newest first by the commit that added each one,
 into the new section of `CHANGELOG.md` and deletes them. Fragments added by
 the same commit go in reverse name order. Released sections are append-only:
-CI fails a pull request that removes or edits a released line, unless it
+only a release adds to them, as a new section on top. CI fails a pull request
+that removes, edits or inserts a line inside a released section, unless it
 carries the `changelog-history-edit` label.
 
 Preview the assembled section with

@@ -19,10 +19,13 @@ The rule:
     first-parent commit that added each fragment; fragments one commit added
     are in reverse name order, so ``<pr>``-named fragments still read newest
     first; fragments not committed yet come first, in the same name order.
-  * Released history is append-only. Every line of the merge base's released
-    sections (from the first ``## X.Y.Z — date`` heading to the end) survives,
-    in order, at the head, and a fragment that existed at the merge base leaves
-    only by being released. A deliberate edit (a correction an owner asked for,
+  * Released history is append-only. The merge base's released sections (from
+    the first ``## X.Y.Z — date`` heading to the end) survive byte-for-byte as
+    the tail of the head's: nothing in them is lost or edited, and nothing is
+    inserted inside them, because only a release adds lines, as a new section
+    on top. (A rebase across a release cut files an old ``## Unreleased`` hunk
+    inside the new release without a conflict.) A fragment that existed at the
+    merge base leaves only by being released. A deliberate edit (a correction an owner asked for,
     an entry filed under the wrong release) passes with
     ``--allow-history-edit``, which CI sets only when the pull request carries
     the ``changelog-history-edit`` label.
@@ -142,6 +145,22 @@ def lost_lines(old: list[str], new: list[str]) -> list[tuple[int, str]]:
     sm = difflib.SequenceMatcher(None, [ln for _i, ln in keep], new, autojunk=False)
     kept = {a + k for a, _b, size in sm.get_matching_blocks() for k in range(size)}
     return [keep[k] for k in range(len(keep)) if k not in kept]
+
+
+def inserted_inside(old: list[str], new: list[str]) -> str | None:
+    """The release heading of the section in ``old`` that ``new`` inserted
+    lines into, or None when ``old`` survives as the exact tail of ``new``
+    (lines added only above it: a new release section). Conflict-marker lines
+    are exempt. Assumes nothing was lost (``lost_lines`` reports that)."""
+    a = [ln for ln in old if not CONFLICT_MARKER.match(ln)]
+    b = [ln for ln in new if not CONFLICT_MARKER.match(ln)]
+    if not a or b[len(b) - len(a):] == a:
+        return None
+    k = 0
+    while k < min(len(a), len(b)) and a[-1 - k] == b[-1 - k]:
+        k += 1
+    heads = [ln for ln in a[:len(a) - k] if RELEASE_HEADING.match(ln)]
+    return heads[-1] if heads else a[0]
 
 
 # --------------------------------------------------------------- fragments --
@@ -296,6 +315,11 @@ def history_problems(root: Path, base: str, head_text: str, frags: list[Fragment
         probs.append(f"{CHANGELOG}: {len(gone)} line(s) of the released sections at the merge base {mb[:12]} are gone "
                      f"or changed (released history is append-only; a correction is a new note, not an edit):\n"
                      f"{shown}" + (f"\n    ... and {len(gone) - 8} more" if len(gone) > 8 else ""))
+    elif (inside := inserted_inside(released_lines(old), released_lines(head_text))) is not None:
+        probs.append(f"{CHANGELOG}: lines were inserted inside the released section {inside[:90]!r} (merge base "
+                     f"{mb[:12]}). Only a release adds to the released sections, as a new section on top; an unreleased "
+                     f"entry goes in {FRAGMENT_DIR}/<pr-or-slug>.md. A rebase across a release cut files an old "
+                     f"'## Unreleased' hunk this way without a conflict")
     # A fragment leaves by being released: its '### ' heading appears in the
     # released sections more often than at the merge base. One that was renamed
     # keeps its heading in another fragment.
