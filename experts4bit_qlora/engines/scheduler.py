@@ -170,6 +170,8 @@ class ContinuousScheduler:
         self.steps = 0
         self.tokens_emitted = 0
         self.prefill_tokens = 0
+        # optional per-step timeline (engines.step_trace.StepTrace; serve_paged's E4B_PAGED_STEP_TRACE)
+        self.tracer = None
 
     # ------------------------------------------------------------ intake --
     def add_request(self, prompt: Sequence[int], max_new_tokens: int = 16,
@@ -254,10 +256,15 @@ class ContinuousScheduler:
         """Run exactly one engine step. Returns the plan that executed
         (empty plan = nothing was ready, which the caller may treat as
         idle rather than as an error)."""
+        tr = self.tracer
+        queued = len(self.queue)
         plan = self.plan()
         if plan.is_empty:
             return plan
         self.steps += 1
+        if tr is not None:
+            tr.mark("plan")
+            tr.note(admitted=queued - len(self.queue), active=len(self.active), queued=len(self.queue))
 
         if plan.prefill:
             first = self.runner.run_prefill(plan.prefill)
@@ -274,10 +281,16 @@ class ContinuousScheduler:
                             f"runner completed prompt for rid {rid} without "
                             f"returning its first token")
                     self._emit(req, tok)
+            if tr is not None:
+                tr.mark("pf_emit")
         if plan.decode:
             for rid, tok in self.runner.run_decode(plan.decode).items():
                 self._emit(self.active[rid], tok)
+            if tr is not None:
+                tr.mark("dec_emit")
         self._retire()
+        if tr is not None:
+            tr.mark("retire")
         return plan
 
     def _emit(self, req: Request, token: int) -> None:

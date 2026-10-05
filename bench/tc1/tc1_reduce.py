@@ -537,6 +537,44 @@ def samestack_why(tag, r):
     return "" if torch_v.startswith(want) else f"same-stack A/B not engaged (env.torch {torch_v or 'missing'} is not {want}*)"
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 39: the packed 4,096-token regime with both frameworks on one stack
+PACKED4K_FAM = "qwen3samestack4k"   # amendment 25's arms and venvs on rows of exactly 4,096 real tokens (TC1_PACK=1), micro-batch 1 x accum 4
+PACKED4K_SEQ = 4096
+PACKED4K_RECIPE = (1, 4)            # (micro-batch, accum): 16,384 real tokens per optimizer step, none padded
+FAMS.append(PACKED4K_FAM)
+NAMES[PACKED4K_FAM] = "Qwen3-30B-A3B (amendment 39: the packed 4,096-token regime with e4b and Unsloth on one stack, torch 2.12.1+cu130 / transformers 5.5.0)"
+N_LAYERS[PACKED4K_FAM] = 48
+ATTN_CENSUS[PACKED4K_FAM] = 192
+DENSE_PINS[PACKED4K_FAM] = DENSE_PINS[QDENSE_FAM]   # the qwen3 pin, read through amendment 22's check
+EXPECTED[PACKED4K_FAM] = list(EXPECTED[SAMESTACK_FAM])
+# no matched-set prediction and no route check; P86 (score_packed4k) reads whether every e4b arm that ran completed resident
+SAMESTACK_SPECS[PACKED4K_FAM] = ("P84", (0.80, 1.60), "P85", (0.80, 1.00), None, None, "TC1 amendment 33's P51 read 0.900 at the field recipe")
+
+
+def packed_why(r):
+    """Amendment 39's engagement predicate, every framework: the arm read PACKED rows of exactly PACKED4K_SEQ tokens at PACKED4K_RECIPE --
+    its tokens file packed, its --seq PACKED4K_SEQ, no padded token in any step, every step's real tokens seq x micro-batch x accum, and
+    TC1_FREE_OUTPUTS=1 (arm_facts.free_outputs: each micro-batch's output released before the next forward).
+    The family is read against its own fixture: the field recipe's seq / micro-batch / tokens never satisfy it."""
+    r = r or {}
+    bad = []
+    if not (r.get("tokens") or {}).get("pack"):
+        bad.append("the tokens file is not packed")
+    if r.get("seq") != PACKED4K_SEQ:
+        bad.append(f"seq {r.get('seq')} != {PACKED4K_SEQ}")
+    if (r.get("micro_batch"), r.get("accum")) != PACKED4K_RECIPE:
+        bad.append(f"micro-batch {r.get('micro_batch')} x accum {r.get('accum')} != {PACKED4K_RECIPE[0]} x {PACKED4K_RECIPE[1]}")
+    tps, pad = r.get("tokens_per_step") or [], r.get("tokens_padded_per_step") or []
+    want = PACKED4K_SEQ * int(r.get("micro_batch") or 1) * int(r.get("accum") or 1)
+    if not tps or any(t != want for t in tps):
+        bad.append(f"tokens per step {sorted(set(tps))[:3] or 'missing'} != {want}")
+    if any(pad):
+        bad.append(f"padded tokens on {sum(1 for p in pad if p)} step(s)")
+    if (r.get("arm_facts") or {}).get("free_outputs") is not True:          # TC1_FREE_OUTPUTS=1: each micro-batch's output released
+        bad.append(f"arm_facts.free_outputs {(r.get('arm_facts') or {}).get('free_outputs')!r}, not True")
+    return "" if not bad else f"packed regime not engaged ({'; '.join(bad)})"
+
+
 # ----------------------------------------------------------------------------- TC1 amendment 26: prebound Triton launches off vs on
 PREBIND_FAM = "qwen3prebindab"    # E4B_TRITON_PREBIND + GNF4_TRITON_PREBIND both 0 (side pb0) vs both 1 (pb1), shipped and matched arms, venv-e4b
 PREBIND_PAIRS = (("P53", "shipped", "fused_attn4_shipped"), ("P54", "matched", "fused_attn4_m"))   # each: <tag>_pb0 vs <tag>_pb1, two draws a side
@@ -1333,6 +1371,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam in SAMESTACK_SPECS and fw == "e4b":         # amendment 25 / TC1c amendment 9: the venv its tag names
         w = samestack_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == PACKED4K_FAM:                            # amendment 39: packed rows of exactly 4,096 tokens at micro-batch 1 x accum 4, every framework
+        w = packed_why(r)
         if w:
             why.append(w)
     if fam in PREBIND_SPECS and fw == "e4b":           # amendments 26 / 35: the prebound launches its tag names, engaged on both sides
@@ -2410,6 +2452,31 @@ def score_samestack(F, fam=SAMESTACK_FAM):
         out.append((pid_set, fam, "UNTESTED", ev))
     else:
         out.append((pid_set, fam, "HELD" if all(v in ok_read for v in reads.values()) and par == "PASS" else "FALSIFIED", ev))
+    return out
+
+
+def score_packed4k(F, fam=PACKED4K_FAM):
+    """TC1-PREREG amendment 39, on the qwen3samestack4k box: P84 / P85 -- amendment 25's two speed readings (score_samestack with
+    SAMESTACK_SPECS[fam]: no matched-set prediction, no route check) on the packed rows; P86 -- every e4b arm that ran completed resident:
+    FALSIFIED if any e4b arm's status is OOM, else HELD if every e4b row that ran is VALID (and ran resident, offload off), else UNTESTED.
+    An arm that did not run (NOT_RUN: the registered box skips e4b's reference) is not read."""
+    R = F.get(fam)
+    if not R:
+        return []
+    out = score_samestack(F, fam)
+    ran = [x for x in R["rows"] if x["fw"] == "e4b" and x["status"] != "NOT_RUN"]
+    ooms = [x for x in ran if x["status"] == "OOM"]
+    offl = [x["tag"] for x in ran if x["verdict"] == "VALID" and (x.get("r") or {}).get("offload")]
+    peaks = "; ".join(f"{x['tag']} {x['verdict']}" + (f" peak {f((x.get('r') or {}).get('peak_vram_gb'), 2)} GB" if (x.get("r") or {}).get("peak_vram_gb") is not None else "")
+                      for x in ran)
+    if ooms:
+        out.append(("P86", fam, "FALSIFIED", f"e4b OOM on {', '.join(x['tag'] + ' (' + (x.get('reason') or '')[:80] + ')' for x in ooms)}; {len(ran)} e4b arm(s) ran: {peaks}"))
+    elif ran and all(x["verdict"] == "VALID" for x in ran) and not offl:
+        out.append(("P86", fam, "HELD", f"all {len(ran)} e4b arms that ran completed resident and VALID: {peaks}"))
+    else:
+        why = (f"VALID under offload: {offl}" if offl else "") or ("no e4b arm ran" if not ran else
+                                                                     f"not every e4b arm that ran is VALID and none OOMed: {peaks}")
+        out.append(("P86", fam, "UNTESTED", why))
     return out
 
 
@@ -3637,7 +3704,8 @@ def family_block(R):
     if src:
         env = src.get("env", {}) or {}
         lines.append(f"- model `{src.get('model')}` @ `{str(src.get('revision', ''))[:12]}`; tokens sha `{str(R['tokens_sha'] or '')[:12]}`; N={R['N']}; "
-                     f"fixture template {src.get('template')} seq {src.get('seq')} micro-batch {src.get('micro_batch')} × accum {src.get('accum')} lr {src.get('lr')} r {src.get('r')} α {src.get('alpha')} "
+                     f"fixture template {src.get('template')} seq {src.get('seq')}{' (packed rows, amendment 39)' if (src.get('tokens') or {}).get('pack') else ''} "
+                     f"micro-batch {src.get('micro_batch')} × accum {src.get('accum')} lr {src.get('lr')} r {src.get('r')} α {src.get('alpha')} "
                      f"optimizer {src.get('optimizer')} autocast {src.get('autocast')}; e4b trainable {R['e4b_trainable']}; box_class {env.get('box_class')} gpu {env.get('gpu')}")
     lines += support_table(R["rows"])
     for line in prologue_lines(R["rows"]):
@@ -3860,6 +3928,11 @@ def render(F, d):
         out += ["\n## Predictions P27 / P28 / P29 (TC1C-PREREG amendment 9: the H100 position with both frameworks on one stack; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F, SAMESTACK_H100_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PACKED4K_FAM in F:
+        out += ["\n## Predictions P84 / P85 / P86 (TC1-PREREG amendment 39: the packed 4,096-token regime with both frameworks on one stack; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_packed4k(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if PREBIND_FAM in F:
         out += ["\n## Predictions P53 / P54 / P55 (TC1-PREREG amendment 26: prebound Triton launches off vs on, two stable draws a side; scored mechanically)",
@@ -4242,6 +4315,27 @@ def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2
             r["route_ab"] = {"gnf4_train_gemm": routes.get(tag, "grouped_mm"), "gnf4_train_gemm_env": None, "gnf4_has_route": True,
                              "stats": {"fwd": 16896, "dgrad": 7680}}
     return R
+
+def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.12.1+cu130", "2.8.0+cu128"), oom=(), over=None):
+    """Amendment 39: amendment 25's set on the packed rows -- every receipt at seq 4096, micro-batch 1 x accum 4, N 30, a packed tokens file,
+    16,384 real tokens and none padded on every step, resident; e4b's reference a NOT_RUN stub (the registered box skips it). `oom` names
+    tags written as OOM stubs (e4b or Unsloth); `over` = {tag: {field: value}} overrides on a receipt."""
+    R = {}
+    for i, sfx in enumerate(("", "_d2")):
+        for fw, tag, arm, ss, tv in (("e4b", "fused_attn4_m" + sfx, "fused", e[i], torch_v[0]), ("e4b", SAMESTACK_T28 + sfx, "fused", t28[i], torch_v[1]),
+                                     ("unsloth", "ckpt_unsloth_m" + sfx, "unsloth", u[i], None)):
+            R[(fw, tag)] = _receipt(fw, tag, arm, steps=30, s=ss, heldout_n=1.8100 if fw == "unsloth" else 1.8000, seq=4096, micro_batch=1, accum=4, offload=False,
+                                    tokens={"sha256": "p" * 64, "pack": True}, tokens_per_step=[16384] * 30, tokens_padded_per_step=[0] * 30,
+                                    arm_facts={"free_outputs": True},
+                                    **({"env": {"box_class": "RTX 5090", "gpu": "NVIDIA GeForce RTX 5090", "torch": tv}} if tv else {}))
+    R[("e4b", "reference_attn4_m")] = _stub("e4b", "reference_attn4_m", "reference", "not_run", "skipped by TC1_SKIP")
+    for (fw, tag) in list(R):
+        if tag in oom:
+            R[(fw, tag)] = {**_stub(fw, tag, R[(fw, tag)]["arm"], "oom", "OOM at step 1: CUDA out of memory. Tried to allocate 2.32 GiB"), "steps": 30}
+        R[(fw, tag)]["fam"] = PACKED4K_FAM
+        R[(fw, tag)].update((over or {}).get(tag, {}))
+    return R
+
 
 def _prebind_set(ship=((3.10, 3.12), (2.92, 2.94)), match=((3.90, 3.92), (3.72, 3.74)), held_shift=0.0, pb1_counts=(4000, 9000), pb0_counts=(0, 0),
                  requested=None, record=True, fam=PREBIND_FAM, triton=None, torch=None):
@@ -6288,6 +6382,59 @@ def selftest():
     assert pmc(match=((3.56, 3.58), (3.67, 3.69)))["P80"] == "FALSIFIED"      # 1.031: slower on Mixtral
     assert pmc(peaks=(31.07, 31.17))["P81"] == "FALSIFIED"                    # +0.10 GB on a 32 GB card
     assert p2() == {"P73": "HELD", "P74": "HELD", "P75": "HELD", "P76": "HELD"}  # amendment 37's reading unchanged
+    cases += 1
+    # 93. TC1 amendment 39 (qwen3samestack4k): amendment 25's family on packed 4,096-token rows -- Unsloth/e4b 1.397 and the environment
+    #     0.898 HELD, every e4b arm that ran resident and VALID (P86 HELD, the skipped reference not read); each FALSIFIED in turn (an e4b OOM
+    #     for P86); the field recipe's receipts under this token VOID (read against its own fixture); amendment 25's reading unchanged
+    kd = tempfile.mkdtemp(prefix="tc1_packed4k_selftest_")
+    for (fw, tag), r in _packed4k_set().items():
+        json.dump(r, open(os.path.join(kd, f"{PACKED4K_FAM}_{fw}_{tag}.json"), "w"))
+    FK = reduce_dir(kd, 30)
+    assert set(FK) == {PACKED4K_FAM}, set(FK)                        # the file names parse to the family (the token ends in digits + k)
+    RK = FK[PACKED4K_FAM]
+    assert [(x["fw"], x["tag"]) for x in RK["rows"]] == EXPECTED[PACKED4K_FAM] == EXPECTED[SAMESTACK_FAM]
+    assert all(x["verdict"] == "VALID" for x in RK["rows"] if x["tag"] != "reference_attn4_m"), [(x["tag"], x["verdict"], x["why"]) for x in RK["rows"]]
+    assert RK["verdicts"][("e4b", "reference_attn4_m")] == "NOT_RUN"
+    assert {p: v for p, _, v, _ in score_packed4k(FK)} == {"P84": "HELD", "P85": "HELD", "P86": "HELD"}, score_packed4k(FK)
+    sk = score_packed4k(FK)
+    assert "Unsloth/e4b on one stack 1.397 [" in sk[0][3] and "venv-unsloth / venv-e4b 0.898 [" in sk[1][3] and "0.900 at the field recipe" in sk[1][3], sk[:2]
+    assert "all 4 e4b arms that ran completed resident and VALID" in sk[2][3], sk[2][3]
+    text = render(FK, kd)
+    for needle in ("## Predictions P84 / P85 / P86 (TC1-PREREG amendment 39: the packed 4,096-token regime with both frameworks on one stack",
+                   "| P84 | qwen3samestack4k | **HELD** |", "| P85 | qwen3samestack4k | **HELD** |", "| P86 | qwen3samestack4k | **HELD** |",
+                   "seq 4096 (packed rows, amendment 39) micro-batch 1 × accum 4"):
+        assert needle in text, needle
+    def KF_(R):
+        return {PACKED4K_FAM: reduce_family(PACKED4K_FAM, R, {}, 30)}
+
+    def pk(**kw):
+        return {p: v for p, _, v, _ in score_packed4k(KF_(_packed4k_set(**kw)))}
+    assert pk(u=(25.0, 25.2)) == {"P84": "FALSIFIED", "P85": "HELD", "P86": "HELD"}             # 1.780: Unsloth further behind than the band
+    assert pk(u=(10.0, 10.2)) == {"P84": "FALSIFIED", "P85": "HELD", "P86": "HELD"}             # 0.716: Unsloth ahead on the packed rows
+    assert pk(t28=(13.0, 13.2)) == {"P84": "HELD", "P85": "FALSIFIED", "P86": "HELD"}           # 1.076: no gain from Unsloth's environment
+    assert pk(oom=("fused_attn4_m_t28_d2",)) == {"P84": "HELD", "P85": "UNTESTED", "P86": "FALSIFIED"}
+    assert "e4b OOM on fused_attn4_m_t28_d2 (OOM at step 1" in score_packed4k(KF_(_packed4k_set(oom=("fused_attn4_m_t28_d2",))))[2][3]
+    assert pk(oom=("ckpt_unsloth_m_d2",)) == {"P84": "UNTESTED", "P85": "HELD", "P86": "HELD"}  # an Unsloth OOM is not P86's
+    # the fixture predicate, every framework: unpacked tokens, the field seq, the field micro-batch, padded steps -- each VOIDs its row; an e4b
+    # VOID leaves P86 UNTESTED (not every e4b arm that ran is VALID, none OOMed), an e4b arm VALID under offload too
+    for tag, ov, frag in (("fused_attn4_m_t28", {"tokens": {"sha256": "p" * 64, "pack": False}}, "the tokens file is not packed"),
+                          ("fused_attn4_m_t28", {"seq": 2048}, "seq 2048 != 4096"),
+                          ("ckpt_unsloth_m", {"micro_batch": 2, "tokens_per_step": [32768] * 30}, "micro-batch 2 x accum 4 != 1 x 4"),
+                          ("fused_attn4_m_d2", {"tokens_per_step": [16200] * 30, "tokens_padded_per_step": [184] * 30}, "padded tokens on 30 step(s)"),
+                          ("fused_attn4_m", {"arm_facts": {"free_outputs": False}}, "arm_facts.free_outputs False, not True")):
+        RV = KF_(_packed4k_set(over={tag: ov}))
+        fwk = "unsloth" if tag.startswith("ckpt") else "e4b"
+        why = next(x["why"] for x in RV[PACKED4K_FAM]["rows"] if x["tag"] == tag)
+        assert RV[PACKED4K_FAM]["verdicts"][(fwk, tag)] == "VOID" and "packed regime not engaged" in why and frag in why, (tag, why)
+        want86 = "HELD" if fwk == "unsloth" else "UNTESTED"
+        assert {p: v for p, _, v, _ in score_packed4k(RV)}["P86"] == want86, (tag, score_packed4k(RV))
+    assert pk(over={"fused_attn4_m_d2": {"offload": True}})["P86"] == "UNTESTED"
+    FR = _samestack_set(fam=PACKED4K_FAM)                            # the field recipe's receipts (seq 2048, micro-batch 2, no pack) under this token
+    RF = KF_(FR)
+    assert all(x["verdict"] == "VOID" and "packed regime not engaged" in x["why"] for x in RF[PACKED4K_FAM]["rows"]), [(x["tag"], x["verdict"]) for x in RF[PACKED4K_FAM]["rows"]]
+    assert {p: v for p, _, v, _ in score_packed4k(RF)} == {"P84": "UNTESTED", "P85": "UNTESTED", "P86": "UNTESTED"}
+    assert ps() == {"P50": "HELD", "P51": "HELD", "P52": "HELD"} and score_packed4k({}) == []    # amendment 25's reading unchanged
+    print("FAILING-CASE TC1-am39-oom (reducer):", "FALSIFIED", "-- P86 with an e4b arm OOM on the packed rows")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

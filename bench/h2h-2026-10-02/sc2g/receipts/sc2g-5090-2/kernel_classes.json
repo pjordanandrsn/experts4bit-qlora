@@ -1,0 +1,445 @@
+{
+ "_comment": "SC1b class map v0, frozen before any capture (bench/sc1b/SC1b-PREREG.md). Per engine: ordered `rules` (first match on the kernel's short or demangled name wins, with optional `where` grid / in_graph clauses), then the MoE `segment` by node order (between a start anchor and an end anchor: `expert_names` are moe_expert, everything else moe_route), then `inherit_next` / `inherit_prev` (the class of the next / previous kernel whose name is in `matmul_names`). Copies and memsets are always memcpy. Unmatched = residual. Sources: e4b = grouped-nf4-gemm 34da93d kernel/int4_b32.py, int4_smallm.py, fp8_paged_attn.py, fp8_kv.py and the ATen glue; vLLM / SGLang / llama.cpp = bench/sc1b upstream notes (file:line there).",
+ "e4b": {
+  "rules": [
+   {
+    "class": "attn",
+    "match": [
+     "_fp8_paged_decode",
+     "_fp8_combine",
+     "_fp8_append"
+    ]
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "_rmsnorm_rows",
+     "_rmsnorm_resid_rows",
+     "_scaled_resid_add_rows",
+     "_rope_heads",
+     "_rope_norm_heads"
+    ]
+   },
+   {
+    "class": "moe_route",
+    "match": [
+     "_router_epilogue",
+     "_tile_table_r1",
+     "_combine_rows",
+     "_gather_rows"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "_gemv_int4_b32"
+    ],
+    "where": {
+     "gridY_eq": 1
+    }
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "_gemm_int4_b32_smallm"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "nvjet",
+     "gemm",
+     "gemv",
+     "cutlass",
+     "xmma",
+     "cublas"
+    ]
+   },
+   {
+    "class": "sample",
+    "match": [
+     "ArgMax",
+     "argmax"
+    ]
+   },
+   {
+    "class": "moe_route",
+    "match": [
+     "topk",
+     "TopK",
+     "sort",
+     "Sort"
+    ]
+   },
+   {
+    "class": "input_prep",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "unrolled",
+     "reduce_kernel",
+     "DeviceScan",
+     "cumsum",
+     "Cumsum"
+    ],
+    "where": {
+     "in_graph": false
+    }
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "unrolled",
+     "reduce_kernel"
+    ]
+   }
+  ],
+  "segment": {
+   "start": [
+    "_router_epilogue",
+    "topk",
+    "TopK"
+   ],
+   "end": [
+    "_combine_rows"
+   ]
+  },
+  "expert_names": [
+   "_gemv_int4_b32",
+   "_gemm_int4_b32_grouped",
+   "_swiglu_rows"
+  ],
+  "matmul_names": [
+   "_gemv_int4_b32",
+   "_gemm_int4_b32",
+   "nvjet",
+   "gemm",
+   "gemv",
+   "cutlass",
+   "xmma"
+  ],
+  "inherit_next": [
+   "_quant_x_rows"
+  ],
+  "inherit_prev": [
+   "_reduce_partials"
+  ]
+ },
+ "vllm": {
+  "rules": [
+   {
+    "class": "attn",
+    "match": [
+     "flash_fwd",
+     "flash_attn",
+     "FlashAttn",
+     "reshape_and_cache"
+    ]
+   },
+   {
+    "class": "moe_route",
+    "match": [
+     "topkGating",
+     "moe_align_block_size",
+     "count_and_sort_expert_tokens",
+     "moe_sum"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "marlin::Marlin"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "nvjet",
+     "gemm",
+     "gemv",
+     "cutlass",
+     "xmma",
+     "cublas"
+    ]
+   },
+   {
+    "class": "sample",
+    "match": [
+     "_gumbel_sample",
+     "ArgMax",
+     "argmax",
+     "_get_num_sampled_and_rejected",
+     "_post_update"
+    ]
+   },
+   {
+    "class": "input_prep",
+    "match": [
+     "_prepare_pos_seq_lens",
+     "_combine_sampled_and_draft_tokens",
+     "_gather_block_tables",
+     "_compute_slot_mappings"
+    ]
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "triton_poi",
+     "triton_red",
+     "triton_per",
+     "rms_norm",
+     "rotary"
+    ]
+   },
+   {
+    "class": "input_prep",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "unrolled",
+     "reduce_kernel",
+     "DeviceScan",
+     "cumsum",
+     "Cumsum"
+    ],
+    "where": {
+     "in_graph": false
+    }
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "unrolled",
+     "reduce_kernel"
+    ]
+   }
+  ],
+  "segment": {
+   "start": [
+    "topkGating"
+   ],
+   "end": [
+    "moe_sum"
+   ]
+  },
+  "expert_names": [
+   "marlin_moe",
+   "act_and_mul"
+  ],
+  "matmul_names": [
+   "Marlin",
+   "nvjet",
+   "gemm",
+   "gemv",
+   "cutlass",
+   "xmma"
+  ],
+  "inherit_next": [],
+  "inherit_prev": []
+ },
+ "sglang": {
+  "rules": [
+   {
+    "class": "attn",
+    "match": [
+     "BatchPrefillWithPagedKVCache",
+     "BatchDecode",
+     "merge_state",
+     "MergeState",
+     "store_kvcache"
+    ]
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "FusedAddRMSNorm",
+     "RMSNorm",
+     "fused_qknorm",
+     "fused_rope",
+     "rms_norm"
+    ]
+   },
+   {
+    "class": "moe_route",
+    "match": [
+     "_router_triton_kernel",
+     "align_single_token",
+     "moe_align_block_size",
+     "count_and_sort_expert_tokens",
+     "moe_sum_reduce"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "marlin::Marlin"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "nvjet",
+     "gemm",
+     "gemv",
+     "cutlass",
+     "xmma",
+     "cublas"
+    ]
+   },
+   {
+    "class": "sample",
+    "match": [
+     "ArgMax",
+     "argmax",
+     "Sampling",
+     "sampling"
+    ]
+   },
+   {
+    "class": "input_prep",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "unrolled",
+     "reduce_kernel",
+     "cumsum",
+     "Cumsum",
+     "DeviceScan"
+    ],
+    "where": {
+     "in_graph": false
+    }
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "elementwise",
+     "vectorized",
+     "index",
+     "copy",
+     "fill",
+     "cat",
+     "unrolled",
+     "reduce_kernel"
+    ]
+   }
+  ],
+  "segment": {
+   "start": [
+    "_router_triton_kernel"
+   ],
+   "end": [
+    "moe_sum_reduce"
+   ]
+  },
+  "expert_names": [
+   "marlin_moe",
+   "act_and_mul"
+  ],
+  "matmul_names": [
+   "Marlin",
+   "nvjet",
+   "gemm",
+   "gemv",
+   "cutlass",
+   "xmma"
+  ],
+  "inherit_next": [],
+  "inherit_prev": []
+ },
+ "llamacpp": {
+  "rules": [
+   {
+    "class": "attn",
+    "match": [
+     "flash_attn_ext",
+     "flash_attn_mask_to_KV_max",
+     "flash_attn_stream_k_fixup",
+     "flash_attn_combine",
+     "k_set_rows",
+     "set_rows"
+    ]
+   },
+   {
+    "class": "moe_route",
+    "match": [
+     "topk_moe",
+     "soft_max",
+     "argsort",
+     "k_get_rows",
+     "moe_weighted_reduction",
+     "mm_ids_helper"
+    ]
+   },
+   {
+    "class": "dense_gemm",
+    "match": [
+     "mul_mat_vec_q",
+     "mul_mat_q",
+     "mul_mat_vec_f",
+     "mul_mat_f"
+    ]
+   },
+   {
+    "class": "norm_elem",
+    "match": [
+     "rms_norm",
+     "rope",
+     "k_bin_bcast",
+     "unary"
+    ]
+   }
+  ],
+  "segment": {
+   "start": [
+    "topk_moe",
+    "soft_max"
+   ],
+   "end": [
+    "moe_weighted_reduction"
+   ]
+  },
+  "expert_names": [
+   "mul_mat_vec_q",
+   "mul_mat_q",
+   "unary_gated_op"
+  ],
+  "matmul_names": [
+   "mul_mat_vec_q",
+   "mul_mat_q",
+   "mul_mat_vec_f",
+   "mul_mat_f"
+  ],
+  "inherit_next": [
+   "quantize_q8_1",
+   "quantize_mmq_q8_1"
+  ],
+  "inherit_prev": [
+   "mul_mat_q_stream_k_fixup"
+  ]
+ }
+}

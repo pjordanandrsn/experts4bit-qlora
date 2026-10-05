@@ -19,6 +19,75 @@
 - **Launch.** The box refuses a non-gen-5 x16 host (rc 13). The Vast search gains an opt-in PCIe band
   (adertha-agents#162).
 
+### Read: SC2g (#846) -- on gpt-oss-20b e4b's `serve_paged` serves every row VALID and is prefill-bound under load as registered (Q4, b/a 27); capacity 1 req/s against vLLM's and SGLang's 8
+
+- **What ran.** `sc2g-5090-2` ($0.959, a 575 W 5090) drove four engines on openai/gpt-oss-20b's MXFP4 experts: e4b
+  `eaf3e5b4` (MXFP4 decode, NF4 prefill, prefill graph `auto` engaged), vLLM 0.30.0 (Marlin W4A16), SGLang 0.5.20
+  (`flashinfer_mxfp4`, W4A8) and llama.cpp (the published GGUF). Every e4b ratio is ARITH_MISMATCH. Lane total $3.052 across
+  4 receipts, inside the registered ~$3.4.
+- **Verdicts.**
+  - Q1 HOLDS: serial TTFT 5.05× vLLM's.
+  - Q2 REFUTED: serial TPOT 1.74× vLLM's (6.21 ms against 3.56 ms).
+  - Q3 HOLDS: ceilings vLLM 8, SGLang 8, llama.cpp 2, e4b 1.
+  - **Q4 HOLDS:** 0.245 s stall per prefill landing during a decode, against 8.94 ms per token; b/a 27.4, R² 0.984.
+  - Q5 REFUTED, on one row: llama.cpp's serial TTFT moved 51 → 44 ms between two runs of the same requests. All 16 Poisson
+    rows are VALID.
+- **Engagement rests on the code path, not on `/health`'s route names.** `prefill_routes` is env-resolved, so its k19 / flash
+  are not gpt-oss's path. The read cites the lines: K21 ≤ 256 rows, kept-NF4 M-tile above, explicit-mask attention on every
+  sinks layer. e4b#1129's `seen` fields are what a future box G check should assert.
+- `tests/test_sc2_trace.py` pins the Q4 fit from the committed trace.
+
+### TC1 amendment 39 registered: the packed 4,096-token regime with both frameworks on one stack (bench and tests only)
+
+- **Why.** Every TC1 position reads the field recipe, whose Alpaca rows carry about 1,000–1,400 real tokens per step against a nominal
+  16,384: a host-bound regime. Packed full-length rows put about 12× the tokens through each step, where the device does most of the work.
+- **The box** (token `qwen3samestack4k`): amendment 25's same-stack family on rows of exactly 4,096 real tokens, micro-batch 1 × accum 4,
+  30 steps, held-out at 0 and N, load-gated draws, every e4b arm resident at defaults. P84 Unsloth/e4b in [0.80, 1.60]; P85 the
+  environment in [0.80, 1.00]; P86 every e4b arm completes resident. A stable reading is recorded whichever side it favours.
+- **`TC1_FREE_OUTPUTS=1`** (`tc1_arm.py`): each micro-batch's output is released once its loss is read. Unset, the previous micro-batch's
+  output, its logits included, stays live through the next forward and the optimizer step, inside every arm's peak. Off by default, so
+  every earlier box keeps its instrument; the packed family requires it.
+- **The builder.** `tc1_arm.py --prepare --pack 1` renders each example with the same template and tokenizer call, minus the
+  per-example truncation. It concatenates the token lists with the tokenizer's EOS between examples and cuts rows of exactly `--seq`
+  tokens. Labels are the input ids, nothing is padded, and attention is full causal across example boundaries (standard packing).
+  - At 4,096 tokens the registered 1,200 + 48 rows fill only ~57 + 2 rows. So the pools extend the registered text in its own order:
+    tp4_alpaca.py's pinned source and seed. `pack_pools` refuses unless the shuffled prefix reproduces the registered rows. The train
+    pool is the 1,200 registered rows and then the next 4,800 examples. The held-out pool is the 48 registered rows and then the next
+    352. The pools are disjoint.
+  - On Qwen3-30B-A3B at the pin: 284 train rows and 8 held-out rows, every row 4,096 tokens, tokens sha `d2a501eba57d`. The first
+    235,852 train tokens are the field recipe's 1,200 rows, unchanged.
+- **Unchanged when off.** With `--pack 0` (the default) the tokens file is byte-identical to before: the field-recipe file for
+  Qwen3-30B-A3B rebuilds to tokens sha `bfc742f67e37`, the sha TC3-PREREG cites. A test pins a small file's sha from the old code.
+- **The box.** `TC1_PACK=1` (forwarded by `tc1_drive.sh`, recorded on the FIXTURE line) packs `tc1_prepare`'s tokens, at least
+  steps x micro-batch x accum rows. The new token `qwen3samestack4k` is amendment 25's same-stack family in this regime. The box refuses
+  the token without `TC1_PACK=1 TC1_SEQ=4096`, and refuses `TC1_PACK=1` beside a field-recipe token. The arm refuses a packed file whose
+  seq is not its own `--seq`, and each receipt's `tokens` records `pack`.
+- **The reducer.** The family is read with amendment 25's scorer and `score_packed4k`, against its own fixture. A row is VOID unless its
+  tokens are packed at seq 4,096, micro-batch 1 x accum 4, with 16,384 real tokens and none padded on every step, so the field recipe's
+  receipts never pass under this token. One new self-test case (101).
+
+### serve_paged: opt-in bulk KV bookkeeping (`E4B_PAGED_BULK_KV`) and a per-step trace (`E4B_PAGED_STEP_TRACE`)
+
+- **Why.** SC2b left most of the per-prefill stall under load outside the graphed forward. Each request also costs
+  `serve_paged` its KV bookkeeping: on Qwen3-30B-A3B at 2048 tokens per slot, about 13.5k host-issued launches. They are
+  the slot resets, the prompt's flush into the FP8 pool, and, with decode graphs, a claim of every reachable block at
+  the slot's first decode. All are serialized on the engine thread ahead of every resident decode. The stall census
+  (`bench/stall-census-2026-10-05`, exploratory) counted them; its A2000 runs are correctness and counts only (the
+  testbed policy), and the time they cost on a 5090 box is SC2c's to measure.
+- **`E4B_PAGED_BULK_KV=1`** does that work in a launch count independent of layers and blocks:
+  `Fp8PagedKV.reset_all_layers`, `claim_blocks` (one async table write per request) and `append_prompt` (one quantize
+  per side and one scatter per region per side, per byte-bounded group of layers of one geometry). It leaves the pool
+  bytes, block tables, lengths and free lists exactly as the per-layer path does, with the same rows for the same slot
+  (`tests/test_bulk_kv.py`, whole-pool comparisons; a tiny model decodes the same tokens either way). **Off by default**:
+  no request-level effect is claimed until a registered lane reads one.
+- **Memory, stated.** A bulk flush allocates up to `Fp8PagedKV.append_prompt_peak_bytes(T)` (~216 MiB on Qwen3-30B-A3B
+  at 2048 tokens). Under the prefill graph that is additive to the graph's private pool, so the graph's `auto` headroom
+  check counts it when bulk is on, and `/health` reports `prefill_graph.bulk_flush_mib`. The bound is checked against
+  the allocator's measured peak on CUDA.
+- **`E4B_PAGED_STEP_TRACE=<path>`**: one JSON line per engine step. It records what the step carried, its host time by
+  segment, and when the GPU finished the forward, the flush and the decode, read after the step's own syncs. `/health`
+  reports `engine.bulk_kv` and `step_trace_path`.
+
 ### TC1 amendment 38 registered: the compact padded LoRA delta's default decision, a third host and a second family (bench and tests only)
 
 - **Why.** Two hosts read the compact delta on Qwen3-30B-A3B at 0.967–0.970 (matched) and 0.948–0.970 (shipped); with

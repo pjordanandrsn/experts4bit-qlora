@@ -87,7 +87,15 @@ never emitted in pieces), ``finish_reason`` on the last token's chunk, a ``usage
   per-stream rate) plus the runner's ``graph_stats``; ``E4B_PAGED_TRACE=<path>`` appends one JSON
   line per finished request (arrival / admitted_at / first_token_at / finished_at on the engine's
   monotonic clock, ``arrival_epoch`` on the wall clock, prompt_len, out_len, finish_reason) so
-  server-side TTFT and ITL can be read beside the client's.
+  server-side TTFT and ITL can be read beside the client's. ``E4B_PAGED_STEP_TRACE=<path>`` appends one JSON
+  line per engine STEP (:mod:`.engines.step_trace`): what it carried, its host time by segment, and when the GPU
+  finished each part, read after the step's own syncs.
+* **KV bookkeeping.** Per request the engine resets the slot at admission and at finish, flushes the prompt's
+  K/V into the FP8 pool, and (with decode graphs) claims every block the slot can reach at its first decode.
+  Per layer and per block that is ~13.5k host-issued launches a request on Qwen3-30B-A3B at 2048 tokens a slot,
+  serialized ahead of every resident decode (``bench/stall-census-2026-10-05``). ``E4B_PAGED_BULK_KV=1`` does
+  the same work in a launch count independent of layers and blocks, leaving the same pool, tables and lengths;
+  ``0`` (the default) keeps the per-layer path.
 
 Not in v1: sampling, logprobs, stop strings, adapters, prefix caching, per-request timeouts.
 Everything above the engine seam is testable on CPU with a fake runner (``tests/test_serve_paged.py``);
@@ -164,6 +172,19 @@ def _prefill_graph_env(value: str) -> str:
     raise ValueError(f"E4B_PAGED_PREFILL_GRAPH={value!r}: expected 'auto', '0' or '1'")
 
 
+def _bulk_kv_env(value: str) -> bool:
+    """``E4B_PAGED_BULK_KV``: ``1`` runs a request's KV bookkeeping in bulk (:class:`~.engines.paged_runner.PagedModelRunner`
+    ``bulk_kv``): the slot reset at admission and at finish, the prompt's flush into the FP8 pool, and, with decode
+    graphs, the claim of every block the slot can reach, each in a launch count independent of layers and blocks. The
+    pool, tables and lengths it leaves are the per-layer path's. ``0`` (the default, also when unset or empty) keeps
+    the per-layer path. The stall census (``bench/stall-census-2026-10-05``) counted ~13.5k host-issued launches of
+    per-layer bookkeeping per request on Qwen3-30B-A3B at 2048 tokens a slot. Anything else is refused."""
+    v = (value or "0").strip() or "0"
+    if v in ("0", "1"):
+        return v == "1"
+    raise ValueError(f"E4B_PAGED_BULK_KV={value!r}: expected '0' or '1'")
+
+
 def log(msg: str) -> None:
     print(f"[serve_paged] {msg}", flush=True)
 
@@ -203,6 +224,8 @@ class PagedServeConfig:
     port: int = 8778                     # E4B_PORT (serve.py takes 8777)
     token: str = ""                      # E4B_TOKEN: bearer on /v1/*
     trace_path: str = ""                 # E4B_PAGED_TRACE: per-request JSONL
+    step_trace_path: str = ""            # E4B_PAGED_STEP_TRACE: per-step JSONL (engines.step_trace)
+    bulk_kv: bool = False                # E4B_PAGED_BULK_KV: 0 (default) / 1 (_bulk_kv_env)
     device: str = "cuda"
 
     @classmethod
@@ -240,6 +263,8 @@ class PagedServeConfig:
             port=int(env("E4B_PORT", "8778")),
             token=env("E4B_TOKEN", ""),
             trace_path=env("E4B_PAGED_TRACE", ""),
+            step_trace_path=env("E4B_PAGED_STEP_TRACE", ""),
+            bulk_kv=_bulk_kv_env(env("E4B_PAGED_BULK_KV", "0")),
             device=env("E4B_PAGED_DEVICE", "cuda"),
         )
         cfg.validate()
@@ -468,6 +493,7 @@ class PagedEngine:
                 return
         self.state = "ready"
         sched = self.parts.scheduler
+        tr = self._attach_step_trace()
         while True:
             with self._cv:
                 while not self._ops and not self._stop and not (sched.queue or sched.active):
@@ -477,10 +503,14 @@ class PagedEngine:
                 ops = list(self._ops)
                 self._ops.clear()
             with self._lock:
+                if tr is not None:
+                    tr.begin(ops=len(ops))
                 for kind, stream in ops:
                     self._apply(kind, stream)
+                if tr is not None:
+                    tr.mark("ops")
                 try:
-                    sched.step()
+                    plan = sched.step()
                 except Exception as e:  # noqa: BLE001
                     self.error = f"{type(e).__name__}: {e}"
                     self.state = "error"
@@ -489,12 +519,34 @@ class PagedEngine:
                         self._push(st, (_ERROR, self.error))
                     self._streams.clear()
                     self._fail_pending(self.error)
+                    if tr is not None:
+                        tr.close()
                     return
                 self._dispatch()
+                if tr is not None:
+                    if plan.is_empty:
+                        tr.discard()
+                    else:
+                        tr.end()
+        if tr is not None:
+            tr.close()
         self._fail_pending("server shutting down")
         for st in list(self._streams.values()):
             self._push(st, (_ERROR, "server shutting down"))
         self._streams.clear()
+
+    def _attach_step_trace(self):
+        """``E4B_PAGED_STEP_TRACE``: hand one :class:`~.engines.step_trace.StepTrace` to the scheduler and the runner,
+        which mark their own steps (see that module for the row)."""
+        if not self.cfg.step_trace_path:
+            return None
+        from .engines.step_trace import StepTrace
+        tr = StepTrace(self.cfg.step_trace_path, cuda=str(self.cfg.device).startswith("cuda"))
+        self.parts.scheduler.tracer = tr
+        if self.parts.runner is not None and hasattr(self.parts.runner, "tracer"):
+            self.parts.runner.tracer = tr
+        log(f"STEP_TRACE -> {self.cfg.step_trace_path}")
+        return tr
 
     def _fail_pending(self, msg: str) -> None:
         with self._cv:
@@ -725,6 +777,15 @@ def prefill_graph_report(cfg: PagedServeConfig, engine) -> dict:
     return dict(rep, requested=cfg.prefill_graph)
 
 
+def kv_bookkeeping_report(cfg: PagedServeConfig, engine) -> dict:
+    """``/health``'s ``kv_bookkeeping`` block: ``requested`` (``E4B_PAGED_BULK_KV``) and, once the engine is built,
+    :meth:`~.engines.paged_runner.PagedModelRunner.kv_bookkeeping_stats` -- how many requests' prompt flushes and
+    first-decode block claims took the per-layer path and how many the bulk one."""
+    runner = getattr(engine.parts, "runner", None) if engine.parts is not None else None
+    rep = runner.kv_bookkeeping_stats() if hasattr(runner, "kv_bookkeeping_stats") else {}
+    return dict(rep, requested=cfg.bulk_kv)
+
+
 def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
     """``bench/p42/hook/usercustomize.py::_apply_lanes``, called where the hook calls it (right after
     ``enable_hybrid_tier``), reading the same environment. A refusal raises, as the hook re-raises."""
@@ -933,7 +994,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     kv = Fp8PagedKV(kv_layers(model, L), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch)
-    runner = PagedModelRunner(model, kv, device=cfg.device)
+    runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     engage_prefill_graph(runner, cfg)
@@ -1189,15 +1250,17 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
                 "graphs": cfg.graphs, "buckets": list(cfg.buckets), "graph_status": info.pop("graph_status", None),
                 "placement": cfg.placement, "fuse_qkv": cfg.fuse_qkv, "max_tokens_limit": cfg.max_tokens_limit,
-                "max_queue": cfg.max_queue or None,
+                "max_queue": cfg.max_queue or None, "bulk_kv": cfg.bulk_kv,
             },
             "levers": info,
             "prefill_routes": prefill_routes(),
             "prefill_graph": prefill_graph_report(cfg, engine),
+            "kv_bookkeeping": kv_bookkeeping_report(cfg, engine),
             "eos_token_ids": sorted(parts.eos_ids) if parts is not None else None,
             "sampling": {"greedy_only": True, "logprobs": False, "stop_strings": False},
             "queue_depth": engine.queue_depth,
             "trace_path": cfg.trace_path or None,
+            "step_trace_path": cfg.step_trace_path or None,
             "uptime_s": round(time.time() - engine.started_at, 1),
         }
 
