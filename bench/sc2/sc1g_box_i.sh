@@ -175,3 +175,39 @@ prove_i(){ local ok=0
   "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_prove.json --prove 2>&1 | tail -20 | tee -a summary.txt
   [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: an arm did not score VALID, a route gate failed, or the kernel check failed -- NOT PROVED"; ok=1; }
   [ $ok = 0 ] || rec 23; }
+
+# ---- A2: box J (SC1_BOX=J), the e4b-only diagnostic box -- no comparator installs, guard <= 1 h (so no proof). sc1g-prove-2's
+# conv1 rows (e4b served +0.185 nats over its own prefill) are what it explains. Arms run in priority order so the deadline drops
+# the least important (A2's table): conv1's served / eager chunk 1 / chunk-free full / fp8 fake-quant arms, the kernel check,
+# conv1's prefill rows and the finer-key-groups served arm, then conv2's core, then PDL and folds-off.
+i_j(){ local TAG=$1; shift; can_run 600 "$TAG" && i_e4b "$@"; }
+box_j(){
+  phase 0 "fetches (gpt-oss-20b, ultrachat_200k test_sft), the NF4 bake, the windows (no GGUF, no comparators)"
+  fetch_gptoss || finish 11; bake_gptoss || finish 12; i_windows || finish 19
+  quiesce arms
+  phase DJ "e4b diagnostics: where e4b's served - prefill gap lives"
+  i_pin_ok || { SC1G_PIN_BAD=1; line "SC1G_PIN_BAD: the e4b arms are refused"; }
+  i_j j1 e4b_serve_served_conv1 "$SC1G_E4B_SERVE SC1G_CAPTURE_OUT=$W/sc1g/capture_conv1.pt" conv1
+  i_j j2 e4b_nf4_served_conv1 "$SC1G_E4B_NF4" conv1
+  i_j j3 e4b_nf4_chunk1_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle eager --ppl-chunk 1
+  i_j j4 e4b_nf4_full_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full
+  i_j j5 e4b_nf4_fqkv_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full --ppl-fq kv --fq-kgroups 4 --fq-vgroups 1
+  i_j j6 e4b_nf4_fqk_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full --ppl-fq k --fq-kgroups 4
+  i_j j7 e4b_nf4_fqv_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full --ppl-fq v --fq-vgroups 1
+  i_j j8 e4b_serve_chunk1_conv1 "$SC1G_E4B_SERVE" conv1 --ppl-oracle eager --ppl-chunk 1
+  gpu_free 60; phase GEMV "the kernel check on this card"; i_gemv; gpu_free 60
+  i_j j9 e4b_nf4_fqkv16_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle full --ppl-fq kv --fq-kgroups 16 --fq-vgroups 1
+  i_j j10 e4b_serve_kvg16_conv1 "$SC1G_E4B_SERVE" conv1 --kv-groups 16
+  i_j j11 e4b_nf4_prefill128_conv1 "$SC1G_E4B_NF4" conv1 --ppl-oracle eager --ppl-chunk 128
+  i_j j12 e4b_serve_prefill128_conv1 "$SC1G_E4B_SERVE" conv1 --ppl-oracle eager --ppl-chunk 128
+  i_j j13 e4b_nf4_served_conv2 "$SC1G_E4B_NF4" conv2
+  i_j j14 e4b_nf4_chunk1_conv2 "$SC1G_E4B_NF4" conv2 --ppl-oracle eager --ppl-chunk 1
+  i_j j15 e4b_nf4_full_conv2 "$SC1G_E4B_NF4" conv2 --ppl-oracle full
+  i_j j16 e4b_nf4_fqkv_conv2 "$SC1G_E4B_NF4" conv2 --ppl-oracle full --ppl-fq kv --fq-kgroups 4 --fq-vgroups 1
+  i_j j17 e4b_serve_served_conv2 "$SC1G_E4B_SERVE" conv2
+  i_j j18 e4b_serve_chunk1_conv2 "$SC1G_E4B_SERVE" conv2 --ppl-oracle eager --ppl-chunk 1
+  i_j j19 e4b_serve_pdl0_conv1 "$SC1G_E4B_SERVE GNF4_PDL=0" conv1
+  i_j j20 e4b_serve_nofold_conv1 "$SC1G_E4B_SERVE $SC1G_NOFOLD" conv1
+  gpu_free 60
+  phase RD "the diagnostic reading (comparator rows absent by design: G1-G5 read UNREAD here; J1-J6 and G6 are read)"
+  "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_diag.json 2>&1 | tail -40 | tee -a summary.txt; }

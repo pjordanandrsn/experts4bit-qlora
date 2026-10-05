@@ -46,7 +46,13 @@ ARMS = {
 }
 # the diagnostics (graded windows only; descriptive)
 DIAG = {"e4b_serve_pdl0": "e4b_serve_pdl0_{}", "e4b_serve_nofold": "e4b_serve_nofold_{}",
-        "e4b_serve_chunk1": "e4b_serve_chunk1_{}", "e4b_nf4_chunk1": "e4b_nf4_chunk1_{}"}
+        "e4b_serve_chunk1": "e4b_serve_chunk1_{}", "e4b_nf4_chunk1": "e4b_nf4_chunk1_{}",
+        # A2 (box J): the chunk-free full forward (the truth anchor), the fp8 paged kernel's K/V roundings modelled inside it,
+        # the finer key groups, and the served shape on the real kernel at 16 key groups
+        "e4b_nf4_full": "e4b_nf4_full_{}", "e4b_nf4_fqkv": "e4b_nf4_fqkv_{}", "e4b_nf4_fqk": "e4b_nf4_fqk_{}",
+        "e4b_nf4_fqv": "e4b_nf4_fqv_{}", "e4b_nf4_fqkv16": "e4b_nf4_fqkv16_{}", "e4b_serve_kvg16": "e4b_serve_kvg16_{}"}
+J_TOL = 0.005           # J6: PDL / folds within this of the served row are no bug (<< the +0.185 gap they would explain)
+J_GAIN = 0.02           # J4: the finer key groups must recover at least this much
 MEANING = {"pdl0": "moving vs served => an ordering (PDL) bug in the served T == 1 path",
            "nofold": "moving vs served => a fold (E4B_FUSE_*) bug in the served T == 1 path",
            "chunk1_vs_served": "the T == 1 expert route held, attention switched from paged fp8-KV decode to transformers' eager "
@@ -105,7 +111,7 @@ def route_gate(d, stem, steps=2048):
     gt = [k for k in seen if k.startswith("mxfp4_") and k.endswith("|gt256")]
     if gt:
         return False, f"{gt}: rows above 256 on the MXFP4 store (the NF4 stacks were not kept)", seen
-    if any(f"_{x}_" in stem for x in ("served", "pdl0", "nofold", "chunk1")):
+    if any(f"_{x}_" in stem for x in ("served", "pdl0", "nofold", "chunk1", "kvg16")):
         other = [k for k in seen if not (k.startswith("mxfp4_gemv|") or k.startswith("nf4_mtile_host|"))]
         n = seen.get("mxfp4_gemv|le256", 0)
         if other:
@@ -214,6 +220,7 @@ def reduce(d: str) -> dict:
     p["G5"] = {"verdict": "HOLDS" if all(v == "VALID" for v in st.values()) else "REFUTED",
                "not_valid": {k: v for k, v in st.items() if v != "VALID"}}
     kern, p["G6"] = gemv(d)
+    jp = jpredict(nll, dnll)
 
     # ---- descriptive: the diagnostics, the served-vs-prefill gap per arm, the control
     dg = {}
@@ -244,9 +251,41 @@ def reduce(d: str) -> dict:
             "predictions": p, "delta_vs_vllm": rep,
             "within_floor_vs_vllm": {a: {sh: within(v) for sh, v in by.items()} for a, by in rep.items()},
             "diagnostics": {"meaning": MEANING, "per_window": dg}, "served_minus_prefill": gaps, "kernel_check": kern,
-            "scored_target_roles": roles,
+            "scored_target_roles": roles, "diag_predictions": jp,
             "control_wikitext": {"floor": {"per_window": flc, "F": Fc}, "delta_vs_vllm": ctl,
                                  "note": "descriptive: out of distribution for gpt-oss (the proof read ppl ~560)"}}
+
+
+def jpredict(nll, dnll):
+    """A2's registered box-J predictions, read on conv1 (conv2 reported as replication where its rows exist)."""
+    def g(arm, s, shape=None):
+        return nll(arm, shape, s) if shape else dnll(arm, s)
+
+    def j(s):
+        srv_n, full, c1n = g("e4b_nf4", s, "served"), g("e4b_nf4_full", s), g("e4b_nf4_chunk1", s)
+        fqkv, fqk, fqv, fqkv16 = g("e4b_nf4_fqkv", s), g("e4b_nf4_fqk", s), g("e4b_nf4_fqv", s), g("e4b_nf4_fqkv16", s)
+        srv_m, kvg16, c1m = g("e4b_serve", s, "served"), g("e4b_serve_kvg16", s), g("e4b_serve_chunk1", s)
+        pdl0, nofold = g("e4b_serve_pdl0", s), g("e4b_serve_nofold", s)
+        out = {}
+        gap = None if None in (srv_n, full) else srv_n - full
+        out["J1"] = ({"verdict": "UNREAD"} if gap is None or c1n is None or abs(gap) < 1e-9 else
+                     {"verdict": "HOLDS" if (srv_n - c1n) / gap >= 0.5 else "REFUTED", "share": round((srv_n - c1n) / gap, 4),
+                      "nf4_served_minus_full": round(gap, 6)})
+        out["J2"] = ({"verdict": "UNREAD"} if gap is None or fqkv is None else
+                     {"verdict": "HOLDS" if fqkv - full >= 0.5 * gap else "REFUTED", "fqkv_minus_full": round(fqkv - full, 6),
+                      "half_gap": round(0.5 * gap, 6)})
+        out["J3"] = ({"verdict": "UNREAD"} if None in (full, fqk, fqv) else
+                     {"verdict": "HOLDS" if fqk - full > fqv - full else "REFUTED", "k": round(fqk - full, 6), "v": round(fqv - full, 6)})
+        out["J4"] = ({"verdict": "UNREAD"} if None in (fqkv, fqkv16, srv_m, kvg16) else
+                     {"verdict": "HOLDS" if (fqkv - fqkv16 >= J_GAIN and srv_m - kvg16 >= J_GAIN) else "REFUTED",
+                      "modelled_gain": round(fqkv - fqkv16, 6), "served_gain": round(srv_m - kvg16, 6)})
+        out["J5"] = ({"verdict": "UNREAD"} if None in (c1m, c1n) else
+                     {"verdict": "HOLDS" if c1m - c1n >= 0 else "REFUTED", "mxfp4_minus_nf4_chunk1": round(c1m - c1n, 6)})
+        out["J6"] = ({"verdict": "UNREAD"} if None in (srv_m, pdl0, nofold) else
+                     {"verdict": "HOLDS" if abs(pdl0 - srv_m) <= J_TOL and abs(nofold - srv_m) <= J_TOL else "REFUTED",
+                      "pdl0": round(pdl0 - srv_m, 6), "nofold": round(nofold - srv_m, 6)})
+        return out
+    return {"conv1": j("conv1"), "conv2_replication": j("conv2")}
 
 
 def prove(d: str) -> dict:
@@ -292,7 +331,7 @@ def _fixture(d, nll, routes, sha="s" * 64, steps=2048, gemv_v=("KERNEL_AGREES", 
 def _good_routes(st):
     if st.startswith("e4b_nf4_"):
         return {"nf4_singleton|le256": 49152, "nf4_mtile_host|gt256": 24}
-    if any(f"_{x}_" in st for x in ("served", "pdl0", "nofold", "chunk1")):
+    if any(f"_{x}_" in st for x in ("served", "pdl0", "nofold", "chunk1", "kvg16")):
         return {"mxfp4_gemv|le256": 2048 * 24 + 16 * 24, "nf4_mtile_host|gt256": 24}
     return {"nf4_mtile_host|gt256": 400}
 
@@ -302,7 +341,9 @@ def _base(a, sh, s):
     off = {"e4b_serve": 0.004 if sh == "served" else 0.012, "e4b_serve_p64": 0.012 + (0.006 if s == "conv1" else -0.004),
            "e4b_nf4": 0.02, "vllm": 0.0, "sglang_native": 0.003, "sglang_marlin": 0.002,
            "llamacpp": 0.002 if sh == "served" else 0.04, "llamacpp_q8": 0.002 if sh == "served" else 0.005,
-           "e4b_serve_pdl0": 0.004, "e4b_serve_nofold": 0.004, "e4b_serve_chunk1": 0.008, "e4b_nf4_chunk1": 0.02}[a]
+           "e4b_serve_pdl0": 0.004, "e4b_serve_nofold": 0.004, "e4b_serve_chunk1": 0.008, "e4b_nf4_chunk1": 0.02,
+           "e4b_nf4_full": 0.0, "e4b_nf4_fqkv": 0.004, "e4b_nf4_fqk": 0.003, "e4b_nf4_fqv": 0.001, "e4b_nf4_fqkv16": 0.002,
+           "e4b_serve_kvg16": 0.004}[a]
     return b + off
 
 
@@ -360,6 +401,24 @@ def self_test() -> int:
         _fixture(d, lambda a, sh, s: _base(a, sh, s) + (0.25 if (a, sh) == ("e4b_serve", "served") else 0), _good_routes)
         share = reduce(d)["diagnostics"]["per_window"]["conv1"]["share_of_served_gap_closed_by_chunk1"]["mxfp4"]
         cases.append(("chunk1 share", share is not None and share > 0.9))
+    with tempfile.TemporaryDirectory() as d:          # A2: the fp8 K/V rounding carries the NF4 served gap; finer keys recover it
+        def fp8(a, sh, s):
+            v = {"e4b_nf4": 0.30 if sh == "served" else 0.02, "e4b_nf4_full": 0.10, "e4b_nf4_chunk1": 0.12,
+                 "e4b_nf4_fqkv": 0.28, "e4b_nf4_fqk": 0.25, "e4b_nf4_fqv": 0.12, "e4b_nf4_fqkv16": 0.14,
+                 "e4b_serve": 0.50 if sh == "served" else 0.02, "e4b_serve_kvg16": 0.35, "e4b_serve_chunk1": 0.30,
+                 "e4b_serve_pdl0": 0.501, "e4b_serve_nofold": 0.499}.get(a)
+            return _base(a, sh, s) if v is None else 1.0 + v
+        _fixture(d, fp8, _good_routes)
+        jp = reduce(d)["diag_predictions"]["conv1"]
+        cases.append(("J predictions", all(jp[k]["verdict"] == "HOLDS" for k in ("J1", "J2", "J3", "J4", "J5", "J6"))
+                      and abs(jp["J1"]["share"] - 0.9) < 1e-9))
+    with tempfile.TemporaryDirectory() as d:          # A2: nothing closes the gap -> J1/J2 REFUTED; a missing arm -> UNREAD
+        def flat(a, sh, s):
+            v = {"e4b_nf4": 0.30 if sh == "served" else 0.02, "e4b_nf4_full": 0.10, "e4b_nf4_chunk1": 0.29, "e4b_nf4_fqkv": 0.11}.get(a)
+            return None if a == "e4b_nf4_fqk" else (_base(a, sh, s) if v is None else 1.0 + v)
+        _fixture(d, flat, _good_routes)
+        jp = reduce(d)["diag_predictions"]["conv1"]
+        cases.append(("J refuted", jp["J1"]["verdict"] == "REFUTED" and jp["J2"]["verdict"] == "REFUTED" and jp["J3"]["verdict"] == "UNREAD"))
     bad = [n for n, ok in cases if not ok]
     print(f"sc1g_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
