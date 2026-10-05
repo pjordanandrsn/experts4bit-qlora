@@ -76,6 +76,13 @@ output on the six arm receipts of a box that passed that gate.
 - **PROTO_PASS:** the prototype's speed claim extends to gen 4 x16.
 - **A step FAIL** (T(S)/T(R) > 1.10): the overlap does not hide the copy at gen 4. Write up the per-phase `waited`
   counts and the H2D record; a fix is a new registration.
+- **A coverage or capacity FAIL with the step inside 1.10:** the same write-up; the speed claim does not extend (all three gates are
+  the rule).
+- **FUNCTION_FAIL:** a defect independent of the link (DQ3 read bitwise parity at gen 5). Stop: no re-draw until it is found and fixed
+  under a new registration.
+- **NOISY or VOID:** no reading. One re-draw on another gen 4 x16 machine under this registration (avoiding the first, by an
+  admitted exclusion only if its refusal names the host); a second NOISY/VOID closes DQ5 UNTESTED.
+  (Added at review, 2026-10-05, before any box.)
 
 ## Budget, guard, rehearsal
 
