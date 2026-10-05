@@ -1,0 +1,16 @@
+GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-764553f2-f4d8-1559-6bd3-ace29dd21f67)
+NVIDIA GeForce RTX 5090, 32607 MiB, 590.48.01, GPU-764553f2-f4d8-1559-6bd3-ace29dd21f67, 12.0, 4, 8, 4, 16
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD Ryzen Threadripper PRO 3955WX 16-Cores
+nproc 32
+cgroup cpu.max 1536000 100000  memory.max 183350853632
+loadavg 3.53 2.26 2.34 3/1124 538
+               total        used        free      shared  buff/cache   available
+Mem:             251          21         126           5         110         229
+overlay         320G   17M  320G   1% /
+Build cuda_13.0.r13.0/compiler.36424714_0
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+Python 3.12.3
+cpu_vendor AuthenticAMD
+ram_gb 251 (oracle floor 98)

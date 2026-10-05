@@ -1,0 +1,140 @@
+{
+ "base": "http://127.0.0.1:8778",
+ "model": "Qwen/Qwen3.6-35B-A3B",
+ "profile": "e4b",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "2e5ab69e78696ef055aea8308cba29a11342539defa0c9bc73d2ea0b8cd819d1",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 0.3277,
+  "wall_s": 12.489,
+  "ttft_p50_s": 0.354027,
+  "ttft_p90_s": 0.402203,
+  "ttft_p99_s": 0.409891,
+  "tpot_p50_s": 0.013002,
+  "tpot_p90_s": 0.01304,
+  "tpot_p99_s": 0.013054,
+  "e2el_p50_s": 3.209347,
+  "e2el_p90_s": 3.325088,
+  "e2el_p99_s": 3.333689,
+  "ttft_mean_s": 0.358903,
+  "output_tok_s": 68.299,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 0.3203,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 3e-06,
+   "text": " the 10th round of the NFL draft . He was also drafted by the Chicago Cardinals in the 10th round of the 1948 BAA draft . Rifenburg chose to play professional football with the Eagles . \n\n\n Rifenburg played for the Eagles in 1948 and 1949 . In 1948 , he caught 10 passes for 120 yards and one touchdown . In 1949 , he caught 10 passes for 120 yards and one touchdown . In 1948 and 1949 , he also rushed for 100 yards and one touchdown . \n\n\n Rifenburg was a member of the 1949 NFL Championship team . \n\n\n Rifenburg was a member of the 1949 NFL Championship team . \n\n\n Rifenburg was a member of the 1948 NFL Championship team . \n\n\n Rifenburg was a 1948 NFL Championship team member . \n\n\n Rifenburg",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 3.115905,
+   "ttft_s": 0.410745,
+   "tpot_s": 0.013004,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 3.116096,
+   "text": " with a frontal assault by Bagration 's corps , was supposed to pin the French in place . \n\n\n The French were not expecting an attack from the north . They were also not expecting an attack from the east . The French were not expecting an attack from the west . \n\n\n The French were not expecting an attack from the north . They were also not expecting an attack from the east . The French were not expecting an attack from the west . \n\n\n The French were not expecting an attack from the north . They were also not expecting an attack from the Napoleon 's orders . The French were not expecting an attack from the west . \n\n\n The French were not expecting an attack from the north . They were also not expecting an attack from the Napoleon 's orders . The French were not expecting an attack from the west . \n\n\n The French were not expecting an attack from the north . They were also not expecting an attack from the Napoleon 's orders",
+   "completion_tokens": 187,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 2.735105,
+   "ttft_s": 0.316814,
+   "tpot_s": 0.013,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 5.851347,
+   "text": " that night , 17 were killed or wounded in the attempt . \n\n\n The next morning , September 5 , the North Koreans found the empty hill . They counted 108 dead US soldiers and 108 dead North Koreans . The North Koreans were surprised to find that the US troops had not taken any of their dead with them . The North Koreans buried the US dead in a mass grave . \n\n\n The battle of Pork Chop Hill was a small action in the larger context of the Korean War . It was a battle that was fought over a small hill that was of little strategic value . The battle was fought over a hill that was of little strategic value . The battle was fought over a hill that was of little strategic value . The battle was fought over a hill that of little strategic value . The battle was fought over a hill that was of little strategic value . The battle was fought over a hill that was of little strategic value . The battle was fought over a hill that was of little strategic value . The battle was fought over a hill that was of little strategic value . The battle was fought over a both sides suffered heavy casualties .",
+   "completion_tokens": 229,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 3.302788,
+   "ttft_s": 0.325781,
+   "tpot_s": 0.013056,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 9.154312,
+   "text": " a 10 @-@ 10 loss to the Giants in the 2013 NLCS ) .\n\nBased on the preceding passage, answer a question: How many runs did Kershaw allow in the 7th inning?\n\n<think>\n\n</think>\n\nBased on the passage, Kershaw allowed **six** runs in the 7th inning.\n\nThe text states: \"He had cruised through the first six innings while allowing only two hits (both solo homers) and **surrendered six runs in the seventh**.\"assistant\n\n<think>\n\n</think>\n\nKershaw allowed **six** runs in the 7th inning.\n\nThe passage states: \"He had cruised through the first six innings while allowing only two hits (both solo homers) and **surrendered six runs in the seventh**.\"\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+   "completion_tokens": 228,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 35,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 3.334645,
+   "ttft_s": 0.382273,
+   "tpot_s": 0.012947,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}
