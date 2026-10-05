@@ -52,17 +52,18 @@ passing. The Dockerfile installs 3.11 from deadsnakes and asserts the fixed inte
 build time; if you build your own image, keep both.
 
 One deployment note worth setting: the
-container should carry `ulimits: memlock: -1`, and on the A2000 stack above, omitting it went
-with offloaded decode dropping from 1.44 to ~0.4 tok/s.
+container should carry `ulimits: memlock: -1`. On the A2000 stack above, a slow offloaded
+decode was seen without it; that card is a correctness-only testbed, so the reading is not
+quoted as a speed.
 
 **Correction (2026-07-28): the stated *cause* was wrong.** That note used to say the pinned-RAM
 homes "silently fall back to pageable" without the rlimit. They do not — `pin_memory()` /
 `cudaHostAlloc` is **not** gated by `RLIMIT_MEMLOCK`. Measured on a RunPod SECURE A6000 whose
 memlock was capped at **8 MiB soft and hard**: a **15 GiB** pinned arena allocated fine and moved
 at 18.7 GB/s (pinned-class H2D). The rlimit gates `cudaHostRegister` (locking pages you already
-own), which this path never calls. The 3.6× slowdown was real on that host but is **not
-attributed** — set the ulimit as cheap insurance, and do not use it to explain a slow path
-without checking `tensor.is_pinned()` first.
+own), which this path never calls. The slowdown on that host is **not attributed** — set the
+ulimit as cheap insurance, and do not use it to explain a slow path without checking
+`tensor.is_pinned()` first.
 
 Bind note (0.6.3+): the compose sets `E4B_HOST=0.0.0.0` **inside** the container (a
 container-loopback bind is unreachable through the port map — the container's network namespace

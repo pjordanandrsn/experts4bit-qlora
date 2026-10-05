@@ -81,8 +81,8 @@ The **7.16 GB** for Qwen3-30B-A3B (and 8.47 GB for Gemma-4-26B-A4B) is **peak GP
 during a QLoRA training step with `OFFLOAD_EXPERTS=1`** on the reference A2000: roughly one
 layer's experts resident plus activations/adapters, while the other ~13–15 GB of packed experts
 sit in pinned CPU RAM. It is a *capability* number — fits vs doesn't fit — not a throughput
-claim: the same mechanism costs ~+11 % s/step at OLMoE scale and is PCIe-bound at 26–30B scale
-(0.22–0.43 tok/s decode). Method and grids: [`docs/METHODOLOGY.md`](METHODOLOGY.md) §11–§12;
+claim, and the A2000 is a correctness-only testbed, so no speed is quoted from it. Method and
+grids: [`docs/METHODOLOGY.md`](METHODOLOGY.md) §11–§12;
 environment and commit pins: [`PROVENANCE.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/v0.6.4/PROVENANCE.md).
 
 ### How to reproduce validation
