@@ -141,7 +141,7 @@ The A2000 census behind it is `bench/prefill-graph-census-2026-10-04/`.
 Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
 (512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS` (`auto`, the default:
-bucketed CUDA-graph decode on scratch slots on a CUDA device at `all-vram`; `0` eager, `1` forced) +
+bucketed CUDA-graph decode on scratch slots on a CUDA device of sm_89 or newer at `all-vram`; `0` eager, `1` forced) +
 `E4B_PAGED_BUCKETS` (`1,2,4,8,16`), `E4B_PAGED_TRACE=<path>`
 (one JSON line per finished request: arrival, admitted_at, first_token_at, finished_at, prompt_len,
 out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_HOST` / `E4B_PORT` / `E4B_TOKEN`
@@ -151,6 +151,9 @@ per-stream rate) and the runner's graph statistics.
 **Decode graphs (#770; lanes P109, P110).** `serve_paged` captures bucketed decode graphs by default
 (`E4B_PAGED_GRAPHS=auto`: on a CUDA device at `all-vram`, eager elsewhere; `0` keeps eager decode). This is the path
 **every registered serving-speed number** describes: SC1, P96, and P98 to P101.
+- **sm_89 or newer.** The graphs need the fused FP8 KV append, whose e4m3 cast Triton compiles only on sm_89+.
+  Below that (A100, A6000, RTX 30-series, RTX A2000) `auto` decodes eagerly and the fused append degrades to the eager
+  one. `E4B_PAGED_GRAPHS=1` and `E4B_FUSED_KV_APPEND=1` are refused in words.
 - **The speed.** P109 ([`bench/p109/RESULTS-p109.md`](../bench/p109/RESULTS-p109.md)) read the default server on one
   RTX 5090, with Qwen3-30B-A3B NF4 at `max_seqs` 16, on an EPYC 7C13 host. Graphs were **×5.60** the eager default
   with 16 concurrent requests (731–748 against 125–131 tok/s) and **×9.02** with one request (99.4 against 10.4–11.0).
