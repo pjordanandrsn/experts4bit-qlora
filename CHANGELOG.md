@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### TC1 amendment 32 registered: one variable, Triton 3.4 against 3.7.1, on one RTX 5090 (P59–P61) (bench and tests only)
+
+- **Why.** Amendment 24's 0.882 changed torch, transformers and triton together. An unregistered RTX A2000 decomposition put the whole
+  gain in triton 3.7.1's code for grouped-nf4-gemm's training kernels: torch 2.8 with triton 3.7.1 read 0.931×, and torch 2.12 and
+  transformers 5.5 added nothing. The A2000 runs that slice device-bound, so the 5090 reads it here.
+- **Token `qwen3tritonab`.** venv-e4b with its triton 3.4 against triton 3.7.1 put first on the arm's `PYTHONPATH`, matched and shipped
+  arms, two draws a side, 60-step runs, prebound launches off on both sides.
+- **Predictions.** P59 matched in [0.82, 0.95]; P60 shipped in [0.85, 0.98]; P61 held-out within 0.005. The reducer scores them (one new
+  self-test case).
+
 ### Default: e4b's prebound Triton launches (`E4B_TRITON_PREBIND`) are on; `=0` turns them off
 
 - **Why.** TC1 amendments 26 and 30 read the fused RMSNorm and rotary kernels' prebound launches, with grouped-nf4-gemm's

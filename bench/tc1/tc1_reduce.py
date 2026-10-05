@@ -584,6 +584,40 @@ def dq_ab_why(fam, tag, r):
     return "" if not bad else f"absmax A/B not engaged ({', '.join(bad)}; absmax_dq {r.get('absmax_dq')!r}, modules {r.get('absmax_dq_modules')!r})"
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 32: one variable, Triton (3.4 vs 3.7.1 in venv-e4b)
+TRITON_FAM = "qwen3tritonab"      # venv-e4b with its triton 3.4 (side tr0) vs triton 3.7.1 first on PYTHONPATH (tr1); prebound launches off both sides
+TRITON_PAIRS = (("P59", "matched", "fused_attn4_m"), ("P60", "shipped", "fused_attn4_shipped"))   # each: <tag>_tr0 vs <tag>_tr1, two draws a side
+TRITON_BANDS = {"P59": (0.82, 0.95), "P60": (0.85, 0.98)}   # tr1 / tr0 s/step on stable pairs
+TRITON_HELDOUT_MAX = 0.005        # P61: |mean held-out at N, tr1 - tr0| on each arm
+TRITON_WANT = {"tr0": "3.4.", "tr1": "3.7."}
+FAMS.append(TRITON_FAM)
+NAMES[TRITON_FAM] = "Qwen3-30B-A3B (amendment 32: venv-e4b with triton 3.4 vs 3.7.1, prebound launches off, matched and shipped arms)"
+N_LAYERS[TRITON_FAM] = 48
+ATTN_CENSUS[TRITON_FAM] = 192
+DENSE_PINS[TRITON_FAM] = DENSE_PINS[QDENSE_FAM]   # the qwen3 pin, read through amendment 22's check
+FAM_ANCHOR[TRITON_FAM] = ("e4b", "fused_attn4_m_tr0")
+EXPECTED[TRITON_FAM] = [("e4b", f"{_t}_{_s}") for _, _, _t in TRITON_PAIRS for _s in ("tr0", "tr1", "tr1_d2", "tr0_d2")]
+MATCHED |= {f"fused_attn4_m_{_s}" for _s in ("tr0", "tr1", "tr0_d2", "tr1_d2")}
+for _p, _n, _t in TRITON_PAIRS:
+    for _side in ("tr0", "tr1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def triton_ab_why(tag, r):
+    """Amendment 32's engagement predicate: the arm ran the Triton its tag names (env.triton 3.4.* on tr0, 3.7.* on tr1) with the prebound
+    launches off on both e4b and grouped-nf4-gemm (prebind_ab requested false). Empty string = engaged."""
+    r = r or {}
+    side = "tr1" if "_tr1" in tag else "tr0"
+    tv = str((r.get("env") or {}).get("triton") or "")
+    bad = [] if tv.startswith(TRITON_WANT[side]) else [f"env.triton {tv or 'missing'} is not {TRITON_WANT[side]}*"]
+    pa = r.get("prebind_ab")
+    if not isinstance(pa, dict):
+        bad.append("no prebind_ab record (the prebound launches must be off on both sides)")
+    else:
+        bad += [f"{sd} prebind requested {(pa.get(sd) or {}).get('requested')!r}" for sd in ("e4b", "gnf4") if (pa.get(sd) or {}).get("requested") is not False]
+    return "" if not bad else f"Triton A/B not engaged ({'; '.join(bad)})"
+
+
 def dense_ab_why(fam, tag, r):
     """Amendment 22's engagement predicate, read off the arm's `route_ab` record (grouped-nf4-gemm's nf4_route.ROUTE_STATS for the process):
     a dense1 arm ran with the route resolved to `dense` and counted dense forward AND dense dgrad calls; a dense0 arm ran `fused` and counted
@@ -1151,6 +1185,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam in DQ_FAMS and fw == "e4b":                 # amendment 28: the expert absmax its tag names
         w = dq_ab_why(fam, r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == TRITON_FAM and fw == "e4b":              # amendment 32: the Triton its tag names, prebound launches off
+        w = triton_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -2278,6 +2316,41 @@ def score_dqab(F):
         out.append(("P58", "dqab", "UNTESTED", ev))
     else:
         out.append(("P58", "dqab", "HELD", ev))
+    return out
+
+
+def score_tritonab(F):
+    """TC1-PREREG amendment 32, on the qwen3tritonab box: P59 (matched) and P60 (shipped) -- tr1 / tr0 s/step within TRITON_BANDS[pid], the
+    median over two VALID draws a side with each side's draws within 5 %; P61 -- on each arm |mean held-out at N, tr1 - tr0| <=
+    TRITON_HELDOUT_MAX. Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED."""
+    R = F.get(TRITON_FAM)
+    if not R:
+        return []
+    out, p61 = [], []
+    for pid, name, t in TRITON_PAIRS:
+        O, N = R["draws"].get(("e4b", f"{t}_tr0"), {}), R["draws"].get(("e4b", f"{t}_tr1"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("tr0", O), ("tr1", N)))
+            out.append((pid, TRITON_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            p61.append((name, None, why))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        lo, hi = TRITON_BANDS[pid]
+        h0, h1 = O.get("heldout_list") or [], N.get("heldout_list") or []
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        p61.append((name, dq, f"held-out at N tr0 {[round(v, 4) for v in h0 if v is not None]} tr1 {[round(v, 4) for v in h1 if v is not None]}"))
+        out.append((pid, TRITON_FAM, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+                    f"{name}: tr1 / tr0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; s/step tr0 "
+                    f"{O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), tr1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
+                    f"(within {100 * N['stability']:.1f}%); amendment 24's environment A/B (torch, transformers and triton together) read 0.882 on the matched arm"))
+    ev = "; ".join(f"{n}: " + (f"mean held-out tr1 - tr0 {dq:+.4f} (|.| <= {TRITON_HELDOUT_MAX}); {e}" if dq is not None else e) for n, dq, e in p61)
+    if any(dq is not None and abs(dq) > TRITON_HELDOUT_MAX for _, dq, _ in p61):
+        out.append(("P61", TRITON_FAM, "FALSIFIED", ev))
+    elif any(dq is None for _, dq, _ in p61):
+        out.append(("P61", TRITON_FAM, "UNTESTED", ev))
+    else:
+        out.append(("P61", TRITON_FAM, "HELD", ev))
     return out
 
 
@@ -3512,6 +3585,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_dqab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if TRITON_FAM in F:
+        out += ["\n## Predictions P59 / P60 / P61 (TC1-PREREG amendment 32: venv-e4b with triton 3.4 vs 3.7.1, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_tritonab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -3913,6 +3991,23 @@ def _dq_set(fam, d0=None, d1=None, peaks=None, flags=(False, True), modules=None
             r["peak_vram_gb"] = peaks[i_side]
             r["fam"] = fam
             R[("e4b", tag)] = r
+    return R
+
+def _triton_set(match=((3.90, 3.92), (3.45, 3.47)), ship=((3.05, 3.07), (2.85, 2.87)), triton_v=("3.4.0", "3.7.1"), held_shift=0.0, prebind=(False, False)):
+    """Amendment 32: e4b against itself -- each pair as (tr0 draws, tr1 draws) s/step; `triton_v` = the triton each side's receipts record;
+    `prebind` = the (e4b, gnf4) requested flags on every arm; `held_shift` moves the tr1 sides' held-out."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_m", match, True), ("fused_attn4_shipped", ship, False)):
+        for side, ss, tv in (("tr0", old, triton_v[0]), ("tr1", new, triton_v[1])):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if side == "tr1" else 0.0), matched=matched,
+                             env={"box_class": "RTX 5090", "gpu": "NVIDIA GeForce RTX 5090", "torch": "2.8.0+cu128", "triton": tv})
+                r["prebind_ab"] = {"e4b_env": "0", "gnf4_env": "0", "triton": tv, "e4b": {"has": True, "requested": prebind[0], "stats": {"prebound": 0}},
+                                   "gnf4": {"has": True, "requested": prebind[1], "stats": {"prebound": 0}}}
+                R[("e4b", tag)] = r
+    for r in R.values():
+        r["fam"] = TRITON_FAM
     return R
 
 QWEN3_EXPERT_PARAMS = 48 * 128 * (1536 * 2048 + 2048 * 768)      # 28,991,029,248: Qwen3-30B-A3B's logical expert weights
@@ -5637,6 +5732,25 @@ def selftest():
     assert QF(m=_dq_set(MDQ_FAM, flags=(True, True)))[MDQ_FAM]["verdicts"][("e4b", "fused_attn4_m_dq0")] == "VOID"
     only = {p: v for p, _, v, _ in score_dqab({QDQ_FAM: QB[QDQ_FAM]})}
     assert only == {"P56": "HELD", "P57": "UNTESTED", "P58": "UNTESTED"}, only
+    cases += 1
+    # 84. TC1 amendment 32 (qwen3tritonab): matched 0.885 and shipped 0.935 HELD; no gain, a held-out gap FALSIFY; the wrong Triton or the
+    #     prebound launches on -> VOID and UNTESTED
+    TF = lambda R: {TRITON_FAM: reduce_family(TRITON_FAM, R, {}, 20)}
+    RT = TF(_triton_set())
+    assert [(x["fw"], x["tag"]) for x in RT[TRITON_FAM]["rows"]] == EXPECTED[TRITON_FAM]
+    assert all(x["verdict"] == "VALID" for x in RT[TRITON_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RT[TRITON_FAM]["rows"]]
+    pt = lambda **kw: {p: v for p, _, v, _ in score_tritonab(TF(_triton_set(**kw)))}
+    assert pt() == {"P59": "HELD", "P60": "HELD", "P61": "HELD"}, score_tritonab(RT)
+    assert "tr1 / tr0 0.885 [" in score_tritonab(RT)[0][3], score_tritonab(RT)[0][3]
+    assert pt(match=((3.90, 3.92), (3.86, 3.88))) == {"P59": "FALSIFIED", "P60": "HELD", "P61": "HELD"}        # 0.990: Triton is not the gain
+    assert pt(held_shift=0.008) == {"P59": "HELD", "P60": "HELD", "P61": "FALSIFIED"}
+    RV = TF(_triton_set(triton_v=("3.4.0", "3.4.0")))
+    v = RV[TRITON_FAM]["verdicts"][("e4b", "fused_attn4_m_tr1")]
+    why = next(x["why"] for x in RV[TRITON_FAM]["rows"] if x["tag"] == "fused_attn4_m_tr1")
+    print("FAILING-CASE TC1-am32-engagement (reducer):", v, "--", str(why)[-120:])
+    assert v == "VOID" and "env.triton 3.4.0 is not 3.7.*" in str(why), (v, why)
+    assert pt(triton_v=("3.4.0", "3.4.0")) == {"P59": "UNTESTED", "P60": "UNTESTED", "P61": "UNTESTED"}
+    assert TF(_triton_set(prebind=(True, False)))[TRITON_FAM]["verdicts"][("e4b", "fused_attn4_m_tr0")] == "VOID"
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
