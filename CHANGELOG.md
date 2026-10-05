@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 30 — the shipped prebind pair over 60 steps: 0.980 (P53 HELD); with P54 and P55 HELD the prebound launches are the default (bench and register only)
+
+- `tc1-5090-73` ($0.97, AMD EPYC 7B13, Vast machine 145701): shipped arm `_pb1`/`_pb0` **0.980** [0.957, 1.003], with
+  held-out +0.0011. With amendment 26's matched 0.973 (P54) and held-out −0.0012, P53, P54 and P55 all HELD.
+- **The defaults it licenses already flipped:** e4b #1099 and grouped-nf4-gemm #470, citing this box before its read was
+  on `main`.
+- **This read supplies the evidence.** The maintainer session committed it from the run's output in the private receipts
+  store: the receipts under `bench/h2h-2026-10-02/tc1/receipts/tc1-5090-73/`, the box's scored file as
+  `RESULTS-tc1-prebindab-60.md`, the lane section, and the register row `e4b.train.prebind.qwen3.5090.2026-10-05`.
+
 ### TC1c amendment 9 registered: the H100 position with both frameworks on one stack (bench and tests only)
 
 - **Why.** The 5090 position to quote is now same-stack (TC1 amendment 33: 2.352). The H100's (1.061, TC1c amendment 8) still runs e4b
