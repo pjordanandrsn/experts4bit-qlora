@@ -1371,3 +1371,44 @@ VALID or not engaged.
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, with venv-unsloth built for `_e2`. About $2
 with the download and the gate's possible re-runs; this is in the standing no-ask tier.
 
+
+### Amendment 35 (2026-10-05T04:25Z, after amendment 33's read, before any box): amendment 26's prebound-launch A/B under triton 3.7.1 (P66–P68)
+
+**Why.** Amendments 26 and 30 read the prebound Triton launches on an RTX 5090 under triton 3.4: the matched arm at 0.973× and the shipped
+arm at 0.980× of the flags off. By amendment 26's rule both flags became the default for the Triton versions the prebound path covers.
+experts4bit-qlora#1108 and grouped-nf4-gemm#471 added triton 3.7. Their evidence is from an RTX A2000 host: outputs bit-identical, and the
+host µs per call lower with the flags on (one launch 25–51 → 19–39; grouped-nf4-gemm's fused forward 439–483 → 334–377). No training step
+was timed. Triton 3.7.1's own launch is cheaper than 3.4's, so the saving per launch is smaller than amendment 26's A2000 figures.
+Amendment 33's same-stack position ran e4b under triton 3.7.1 before #1108, so with the flags unset. Every e4b run in that environment now
+takes the prebound path.
+
+**The box** (token `qwen3prebind37`). One RTX 5090, TC1's qwen3 tokens and field recipe, `TC1_STEPS=60`, load-gated draws
+(`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), avoiding machines 45511, 138786 and 151350.
+
+- Amendment 26's eight arms in its ABBA order: the shipped arm and the matched arm, each `_pb0` (both flags 0) against `_pb1` (both
+  flags 1), two draws a side.
+- Every arm in venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 install: torch 2.12.1+cu130, transformers 5.5.0,
+  triton 3.7.1). Both pins must include #1108 and #471.
+- Engagement: amendment 26's `prebind_ab` predicate, and each receipt records torch 2.12.* and triton 3.7.*.
+
+**Predictions** (registered before the box):
+
+- **P66** (shipped): `_pb1` / `_pb0` s/step lies in **[0.97, 1.00]**.
+- **P67** (matched): `_pb1` / `_pb0` lies in **[0.97, 1.00]**.
+- **P68:** on each arm, |mean held-out at N, `_pb1` − `_pb0`| ≤ **0.005**.
+
+The basis: under triton 3.4 the 5090 read 0.980 (shipped) and 0.973 (matched). On the A2000 the 3.7 saving per call is a third
+(RMSNorm) to a half (the fused GEMM) of the 3.4 one, so each ratio is expected near 0.985–0.995, and neither side should be slower. Each speed prediction needs two stable VALID
+draws a side. Each is FALSIFIED outside its band and UNTESTED where a side is unstable, not VALID or not engaged.
+
+**Decision rules.**
+
+- **P66, P67 and P68 HELD:** triton 3.7 stays in the prebound path's supported versions, and the register gains a row for the default on
+  triton 3.7.
+- **Either ratio above 1.01, or P68 FALSIFIED:** triton 3.7 comes out of the supported versions, one PR in each repository, citing this
+  box. Runs on 3.7 then keep Triton's own launch.
+- **Otherwise** (a ratio in (1.00, 1.01], below 0.97, or UNTESTED): triton 3.7 stays covered and no speed is claimed for it.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
+About $2 with the download and the gate's possible re-runs; this is in the standing no-ask tier.

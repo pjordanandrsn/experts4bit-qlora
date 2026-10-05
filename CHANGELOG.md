@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### TC1 amendment 35 registered: amendment 26's prebound-launch A/B under triton 3.7.1 (bench and tests only)
+
+- **Why.** The prebound Triton launches became the default on amendment 26's and 30's 5090 boxes under triton 3.4 (0.973 matched,
+  0.980 shipped). #1108 and grouped-nf4-gemm#471 extended them to triton 3.7 on A2000 host timings alone, and amendment 33's same-stack
+  position ran e4b on 3.7 before that. This box times the training step.
+- **The box** (token `qwen3prebind37`): amendment 26's eight arms in venv-unsloth (torch 2.12.1+cu130, transformers 5.5.0, triton
+  3.7.1), 60 steps, load-gated draws. P66 shipped and P67 matched `_pb1`/`_pb0` each in [0.97, 1.00]; P68 held-out within 0.005.
+  Either ratio above 1.01, or P68 falsified, takes triton 3.7 back out of the supported versions.
+- `tc1_run.sh` gains `tc1_prebind37_family`; the reducer scores it with amendment 26's scorer, and its engagement predicate also requires
+  torch 2.12 and triton 3.7 on every receipt (one new self-test case).
+
 ### Read: TC1 amendment 33 — on one stack, with load-gated draws, Unsloth/e4b 2.352 (P50 HELD) and the environment gain 0.900 (P51 HELD); 2.352 becomes the quoted Qwen3-30B-A3B position
 
 - `tc1-5090-76` ($1.76, a quiet EPYC 7B13, 60-step runs, `TC1_LOAD_GATE=6.0`): both frameworks on torch 2.12.1+cu130 / transformers
