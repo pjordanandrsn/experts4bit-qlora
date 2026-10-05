@@ -36,17 +36,19 @@ GRAD_ACCUM = int(os.environ.get("GRAD_ACCUM", "4"))
 # Tokens per forward. A fused-MoE step's cost is largely FIXED per active expert, so one
 # row per forward -- what this trainer did -- pays that tax per example.
 #
-# Measured, OLMoE-1B-7B on an RTX A2000, SEQ=192, alpaca, 15 steps x grad_accum 4:
+# Packing more rows into each forward amortizes that tax, so the metric this moves is tok/s,
+# not s/step (each step carries more data). What it costs is peak memory -- OLMoE-1B-7B on
+# an RTX A2000, SEQ=192, alpaca, 15 steps x grad_accum 4 (that card is a correctness-only
+# testbed, so its step times are not quoted here):
 #
-#   TOKEN_BUDGET |  s/step | tok/s | peak GPU
-#              0 |   17.8  |    22 | 5.23 GB     <- one row per forward
-#           1024 |   22.2  |   144 | 5.88 GB
-#           2048 |   22.8  |   248 | 6.67 GB     <- default
-#           4096 |     --  |  OOM  |   --        <- on a 12 GB card
+#   TOKEN_BUDGET | peak GPU
+#              0 | 5.23 GB     <- one row per forward
+#           1024 | 5.88 GB
+#           2048 | 6.67 GB     <- default
+#           4096 |   OOM       <- on a 12 GB card
 #
-# 11.3x the throughput for +1.4 GB. Steps get SLOWER (each carries ~15x more data); the
-# metric this moves is tok/s, not s/step. The ceiling is VRAM: raise it until you OOM,
-# then back off. 0 restores the one-row path the v0.2.0 convergence receipts used.
+# The ceiling is VRAM: raise it until you OOM, then back off. 0 restores the one-row path
+# the v0.2.0 convergence receipts used.
 TOKEN_BUDGET = int(os.environ.get("TOKEN_BUDGET", "2048"))
 # Backoff floor. Below this the budget is not the problem and the OOM is real.
 _MIN_TOKEN_BUDGET = 256
