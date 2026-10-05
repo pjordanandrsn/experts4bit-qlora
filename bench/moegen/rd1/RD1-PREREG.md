@@ -192,8 +192,10 @@ checks.
 ## Amendment 3 (2026-10-05, after amendment 2's proving run, before the draw): a post-probe anchor licenses the reading; host load is informational
 
 **The proof** (`rd1-rp-prove-1`, RunPod Secure RTX 5090, $0.23) read two of amendment 2's three conditions:
-- **The fetch worked.** Every file came back. rsync was already present on the pod (`/usr/bin/rsync`); only the plain image
-  in the A2000 container lacks it.
+- **The fetch worked.** Every file came back. rsync was present on the pod (`/usr/bin/rsync`) before the runner's own
+  install step. The pod launched after adertha-agents#169 (16:34Z), whose RunPod start script installs rsync at container
+  start, so this is most likely #169 at work, not the image. #169's PR records `rsync: command not found` on tc1c-h100-19
+  (see experts4bit-qlora#1180).
 - **The anchor passed on its first attempt**, class `pcie-full/launch-fast`, at host load1 19.58.
 - **Host load1 never reached 5.0.** 133 samples, min 9.66, median 11.6, max 19.77, with the container seeing 120 CPUs.
 
