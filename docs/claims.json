@@ -10286,7 +10286,7 @@
       "package": "experts4bit-qlora",
       "area": "train",
       "model": "Qwen/Qwen3.6-35B-A3B @995ad96e",
-      "hardware": "RTX 5090 on a AMD EPYC 7B13 64-Core Processor host, Vast.ai machine 145701; no train anchor (amendment 3 reads an engagement count, not a timing)",
+      "hardware": "RTX 5090 on an AMD EPYC 7B13 64-Core Processor host, Vast.ai machine 145701; no train anchor (amendment 3 reads an engagement count, not a timing)",
       "conditions": "MG1 amendment 3 (bench/moegen/MG1-PREREG.md, merged before its box): tp1's arm driver, the committed file unchanged (sha256 d02c9e7b2357c521..., checked against the census), run as __main__ under bench/moegen/p2_hook.py, which writes grouped-nf4-gemm's DGRAD_STATS and e4b's FAST_TRAIN_STATS at interpreter exit; the fused arm only (no anchor, no reference arm, no ladder) at the licensed configuration: load_moe_4bit_streaming r 8 alpha 16, fp32 expert and attention LoRA, bf16 attention, gradient checkpointing, AdamW 1e-4, batch 1, seq 512, 60 steps on the registered clinical fixture; Qwen/Qwen3.6-35B-A3B @995ad96e resident",
       "measured_on": "2026-10-05",
       "status": "measured",
