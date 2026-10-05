@@ -1128,3 +1128,42 @@ Box 1's descriptive medians, Unsloth/e4b about 2.45 and the environment about 0.
 
 **Budget.** One RTX 5090 at the policy rate, 3 h guard, about $1; this is in the standing no-ask tier.
 
+### Amendment 28 (2026-10-05T00:05Z, after amendment 23's read, before any box): the double-quantized expert absmax as a default, A/B on Qwen3-30B-A3B and Mixtral-8x7B (P56–P58)
+
+**Why.** The memory census (amendment 23, `tc1-5090-65`) found every static class the same in e4b and Unsloth except the expert absmax.
+e4b keeps it in fp32 by default: 1.812 GB on Qwen3-30B-A3B. `E4B_ABSMAX_DQ=1` (#1040) stores it in 0.460 GB, as Unsloth does, and
+brings e4b's peak to 0.43 GB above Unsloth's.
+
+The switch stayed opt-in after TC2 amendment 7 only because that box's Mixtral position fell outside P18's band. Its own cost was never
+read on its own: no A/B of e4b with the switch on against off on one box has run.
+
+**The boxes.** Two RTX 5090s, e4b against itself on the matched arm (fp32 adapters, matched init), resident. `_dq0` sets
+`E4B_ABSMAX_DQ=0` and `_dq1` sets `E4B_ABSMAX_DQ=1`, two draws a side in ABBA order. Every other setting is the default.
+
+- `qwen3dqab`: Qwen3-30B-A3B, TC1's tokens and field recipe.
+- `mixtraldqab`: Mixtral-8x7B-Instruct at TC2's pin and field recipe.
+
+Engagement: each receipt records the absmax its tag names. A `_dq1` arm has `absmax_dq` true on every MoE layer, and a `_dq0` arm false.
+
+**Predictions** (registered before the boxes):
+
+- **P56** (Qwen3-30B-A3B): `_dq1` / `_dq0` s/step lies in **[0.97, 1.03]** with both sides stable, and the peak falls by
+  **[1.25, 1.45] GB** (the census: 1.35).
+- **P57** (Mixtral-8x7B): `_dq1` / `_dq0` lies in **[0.97, 1.03]**, both sides stable, and the peak falls by **[1.9, 2.3] GB**.
+  The arithmetic is 45.1 B expert parameters / 64 × 4 bytes × (1 − 1/3.94), about 2.10 GB; across boxes, TC2 amendments 6 and 7 read 2.04.
+- **P58:** on each family, |mean held-out at N, `_dq1` − `_dq0`| ≤ **0.005**. The double-quantized absmax is not bit-identical, and TC2
+  amendment 7 read 0.0017 on Mixtral.
+
+Each is FALSIFIED outside its band, and UNTESTED where a side is unstable, not VALID or not engaged.
+
+**Decision rules.**
+
+- **P56, P57 and P58 HELD:** `E4B_ABSMAX_DQ` defaults on for the resident fused path. Engines that refuse it keep the fp32 absmax. That
+  is e4b's own PR, citing these boxes.
+- **Either ratio above 1.03:** the switch stays opt-in, and its cost is quoted.
+- **Otherwise:** it stays opt-in.
+- No position against another framework is read here.
+
+**Budget.** Two RTX 5090s at the policy rate ($0.85/h), 3 h guards. TC1's 98 GB host floor for Qwen3 and 192 GB for Mixtral
+(TC2's), about $1.30 and $2.50 with the downloads; this is in the standing no-ask tier.
+

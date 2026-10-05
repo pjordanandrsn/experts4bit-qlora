@@ -75,6 +75,7 @@ def test_unpriced_placements_are_refused_in_words():
 def test_to_env_is_what_the_server_reads_back(monkeypatch):
     from experts4bit_qlora.serve_paged import PagedServeConfig
 
+    monkeypatch.setenv("E4B_PAGED_DEVICE", "cpu")      # host-independent: no GPU facts enter from_env
     for st in (ServeSetup(), ServeSetup(max_seqs=3, max_tokens_per_seq=777, chunk_tokens=128, graphs=False,
                                         buckets=(1, 2), kv_groups=4)):
         for k, v in st.to_env().items():
