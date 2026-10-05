@@ -151,7 +151,10 @@ checks.
 - **A sampler records `/proc/loadavg` every 5 s** (`logs/loadavg.log`). The probe's own window is summarised into its receipt
   as `host_load1_probe` (median, max, samples, gate).
 - **No decision from a loaded probe.** `rd_table.py` takes no decision unless that summary exists with a median load1 at or
-  under 5.0. A loaded probe is NOT A DECISION and needs another draw: re-running the anchor until it passes is a selection,
+  under 5.0. The 5.0 is the reducer's own registered constant, never the receipt's `gate` field, which is a self-report.
+- **The probe's own threads count in load1.** So the summary also records the median over the 60 s before the probe
+  (`pre60_median`). If the first redraw shows the probe adding more than about 1, the gate is amended before the next
+  draw, rather than every draw reading NOT A DECISION. A loaded probe is NOT A DECISION and needs another draw: re-running the anchor until it passes is a selection,
   so the probe's own load is what licenses the reading.
 - **Budget.** The guard goes from 0.75 h to 1.0 h for up to three waits, at about $0.85. That is not over one hour, so no
   proving run is required.

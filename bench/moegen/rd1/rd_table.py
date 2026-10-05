@@ -25,6 +25,7 @@ import sys
 MANY = ("olmoe", "lfm2", "ernie", "graniteh", "qwen3", "nemotron", "qwen36")
 ARMS = ("v1", "v3", "dense", "decoded", "decoded_cap")
 GATE_X = 2.0
+LOAD_MAX = 5.0          # amendment 1's registered host-load gate; never read back from the receipt (a self-report)
 
 
 def gate_call(m, dense):
@@ -69,7 +70,7 @@ def layer(c):
 def load_ok(rec):
     """Amendment 1: a decision needs the probe's host-load summary, with a median load1 at or under its gate."""
     h = rec.get("host_load1_probe") or {}
-    return bool(h.get("samples")) and h.get("median", float("inf")) <= h.get("gate", -1)
+    return bool(h.get("samples")) and h.get("median", float("inf")) <= LOAD_MAX
 
 
 def main(path):

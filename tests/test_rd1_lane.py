@@ -117,6 +117,7 @@ def test_any_other_card_gets_the_gate_and_never_a_timing_bar(tmp_path):
 def test_amendment_1_constants_are_the_registered_ones():
     run, prereg = RUN.read_text(), PREREG.read_text()
     assert "LOAD_MAX=5.0; LOAD_WAIT_S=600; ANCHOR_TRIES=3" in run
+    assert _assign(LANE / "rd_table.py", "LOAD_MAX") == 5.0, "the reducer's gate is its own registered constant"
     assert "## Amendment 1 (2026-10-05" in prereg and "load1 at or under 5.0" in prereg and "at most 3 anchor attempts" in prereg
 
 
@@ -125,8 +126,11 @@ def test_a_loaded_probe_decides_nothing(tmp_path):
     _synthetic(tmp_path, 1.0)
     path = tmp_path / "rd.json"
     rec = json.loads(path.read_text())
-    for load, expect in ((3.2, "DECISION:"), (7.5, "NOT A DECISION"), (None, "NOT A DECISION")):
-        rec["host_load1_probe"] = {"median": load, "max": load, "samples": 40, "gate": 5.0} if load else {"samples": 0, "gate": 5.0}
+    # the receipt's own "gate" field is a self-report and must not move the decision: 7.5 with a forged gate of 99 still fails
+    for load, gate, expect in ((3.2, 5.0, "DECISION:"), (7.5, 5.0, "NOT A DECISION"), (7.5, 99.0, "NOT A DECISION"),
+                               (None, 5.0, "NOT A DECISION")):
+        rec["host_load1_probe"] = ({"median": load, "max": load, "samples": 40, "gate": gate} if load
+                                   else {"samples": 0, "gate": gate})
         path.write_text(json.dumps(rec))
         out = subprocess.run([sys.executable, str(LANE / "rd_table.py"), str(path)], capture_output=True, text=True).stdout
         assert expect in out, (load, out[-400:])

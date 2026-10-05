@@ -87,12 +87,15 @@ P1=$(date -u +%s)
 python - "$P0" "$P1" "$LOAD_MAX" <<'PYL' 2>&1 | tee -a summary.txt
 import json, statistics, sys
 p0, p1, gate = int(sys.argv[1]), int(sys.argv[2]), float(sys.argv[3])
-vals = [float(f[1]) for f in (l.split() for l in open("logs/loadavg.log")) if len(f) > 1 and p0 <= int(f[0]) <= p1]
+rows = [(int(f[0]), float(f[1])) for f in (l.split() for l in open("logs/loadavg.log")) if len(f) > 1]
+vals = [v for t, v in rows if p0 <= t <= p1]
+pre = [v for t, v in rows if p0 - 60 <= t < p0]          # the host before the probe's own threads count in load1
 try:
     rec = json.load(open("receipts/rd1.json"))
 except (OSError, ValueError):
     print("LOAD during probe: no receipt to annotate"); sys.exit(0)
-rec["host_load1_probe"] = ({"median": statistics.median(vals), "max": max(vals), "samples": len(vals), "gate": gate}
+rec["host_load1_probe"] = ({"median": statistics.median(vals), "max": max(vals), "samples": len(vals), "gate": gate,
+                            "pre60_median": statistics.median(pre) if pre else None, "pre60_samples": len(pre)}
                            if vals else {"samples": 0, "gate": gate})
 json.dump(rec, open("receipts/rd1.json", "w"), indent=1)
 print(f"LOAD during probe: {rec['host_load1_probe']}")
