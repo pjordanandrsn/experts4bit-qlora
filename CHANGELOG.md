@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 29 — the same-stack pair over 60 steps, unstable again on a busy host (P50, P51 UNTESTED, final)
+
+- `tc1-5090-72` ($1.75, EPYC 7C13, Vast machine 45511). e4b's same-stack draws read 3.979 / 3.490 s/step (13.1 % apart, host load1
+  22.9 / 11.0) and its field-image draws 3.834 / 4.087 (6.4 %). Unsloth's 8.759 / 8.500 were stable.
+- No ratio is read. Amendment 33 (load-gated draws) re-asks P50 and P51 off the busy machines.
+
 ### TC1 amendment 33 registered: load-gated draws, and the same-stack pair re-asked under them (bench and tests only)
 
 - **Why.** On multi-tenant rental hosts the host-bound training step slows when the host is busy, and the arms' own samplers show the
