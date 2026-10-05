@@ -10632,6 +10632,31 @@
         "receipts/experts4bit-qlora/2026-10-05/tc1-5090-79/tc1/"
       ],
       "notes": "Vast invoiced $1.68. The triton 3.4 reading is e4b.train.prebind.qwen3.5090.2026-10-05."
+    },
+    {
+      "id": "e4b.train.chunked-lm-loss.default-decision.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 41 (#835), one rented RTX 5090 (tc1-5090-89, AMD EPYC 7B13): e4b's opt-in chunked LM loss (E4B_CHUNKED_LM_LOSS=1, 512-token chunks of lm_head + cross-entropy under a non-reentrant checkpoint) against the default at TC1's field recipe, e4b in venv-unsloth (torch 2.12.1+cu130), 60-step runs, load-gated draws (every attempt above the 6.0 gate on a shared host; the last attempt of each arm stands, as registered). Shipped arm: 1.049 [1.017, 1.082] (P91 FALSIFIED, registered <= 1.01), s/step 2.918 / 2.878 -> 2.967 / 3.113, peak 24.673 -> 23.508 GB. Matched arm: the chunked pair's draws were 5.4 % apart (UNSTABLE), so P90, P92 and P93 are UNTESTED; peak 27.498 -> 27.145 GB. Every chunked arm ran 240 chunked forwards with no run-time fallback; held-out at N moved -0.0015 (shipped) and -0.0007 (matched). By amendment 41's rule the flag stays opt-in. The least-loaded cross pair (chunked at load1 7.0, default at 8.3) reads 1.017.",
+      "value": 1.049,
+      "unit": "ratio s/step, E4B_CHUNKED_LM_LOSS=1 over the default, Qwen3-30B-A3B shipped arm (medians of steps 11..60 over two draws each); cross-draw interval [1.017, 1.082]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-89: instance 54325899, AMD EPYC 7B13, Vast machine 145701); e4b @ 054cb8c + grouped-nf4-gemm @ ccf4de9 (0.41.0) in venv-unsloth, torch 2.12.1+cu130, triton 3.7.1, transformers 5.5.0",
+      "conditions": "bench/tc1 token qwen3chunkab (TC1 amendment 41): TC1's Qwen3 tokens and field recipe (seq 2048, micro-batch 2 x accum 4), shipped and matched arms, _ce0 / _ce1 two draws each, 60 steps, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2; validity, engagement and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-chunkab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-89/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-89/tc1/"
+      ],
+      "notes": "Vast invoiced $2.51."
     }
   ]
 }
