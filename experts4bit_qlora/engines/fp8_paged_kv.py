@@ -642,6 +642,16 @@ class Fp8PagedKV:
         self.seq_lens[:, seq].fill_(0)
         self._bt_all[:, seq].zero_()
 
+    def _layer_index(self, layers) -> torch.Tensor:
+        """A device index of ``layers``, built once per layer set: a fresh one is a pageable host-to-device copy, and
+        torch's blocking copy synchronizes the stream (it would wait out a prefill forward still on the GPU)."""
+        key = tuple(layers)
+        cache = self.__dict__.setdefault("_lidx_cache", {})
+        t = cache.get(key)
+        if t is None:
+            t = cache[key] = torch.tensor(key, dtype=torch.long, device=self.device)
+        return t
+
     def _claim_staging(self, n: int) -> torch.Tensor:
         """A host buffer of ``n`` int32 for one async H2D table write. On CUDA it is pinned and taken from a ring of
         two, each guarded by an event recorded after its copy, so a claim never rewrites a buffer a queued copy has
@@ -697,7 +707,7 @@ class Fp8PagedKV:
         else:
             dst = torch.empty(G, n, dtype=torch.int32, device=self.device)
             dst.copy_(src.view(G, n), non_blocking=True)
-            self._bt_all[torch.tensor(layers, dtype=torch.long, device=self.device), seq, lo:lo + n] = dst
+            self._bt_all[self._layer_index(layers), seq, lo:lo + n] = dst
         if self.device.type == "cuda":
             ev = torch.cuda.Event()
             ev.record()
@@ -758,7 +768,7 @@ class Fp8PagedKV:
         bt, nfull, tail = self.bt, T // self.bt, T % self.bt
         for (H, D, kg), lays, vq, kq in quant:
             G = len(lays)
-            lidx = torch.tensor(lays, dtype=torch.long, device=self.device)
+            lidx = self._layer_index(lays)
             tbl = self._bt_all[:, seq, :nblk].index_select(0, lidx).to(torch.long)
             # V first, K last (append's publish-last order)
             for pool, pay, groups_, (qb, sb) in ((self.vp, self._v_pays[lays[0]], 1, vq),
@@ -782,7 +792,7 @@ class Fp8PagedKV:
         if layers == list(range(self.L)):
             self.seq_lens[:, seq].add_(T)
         else:
-            self.seq_lens[torch.tensor(layers, dtype=torch.long, device=self.device), seq] += T
+            self.seq_lens[self._layer_index(layers), seq] += T
 
     def free_blocks(self, layer: int = 0) -> int:
         return len(self._free[layer])
