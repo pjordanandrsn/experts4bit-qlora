@@ -328,14 +328,6 @@ Changes merged since the last release are one file each in [`changelog.d/`](chan
   - Generation added a further ~0.72 GiB of anonymous memory in both runs; it is listed as not modelled (the CPU
     tier's compute buffers).
 
-### Serve estimate: bytes per expert is the arena row, not a share of the stack
-
-- `serve_recipe.bytes_per_expert(stack)` is the stack's growth from one expert to `n_experts`. It is exactly the arena
-  row before alignment: packed 4-bit plus fp32 absmax, gate_up and down. The previous `slab // n_experts` smeared the
-  stack's per-stack constants (the NF4 code table) across every row. On OLMoE that gave 3,538,945 bytes against the
-  bake's 3,538,944, enough to round the aligned stride up a page. The solver's tier split and the hybrid tier's buffers
-  use the exact figure now.
-
 ## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
 
 **0.47.0.** One default changes, by lane SC2b's licence: `serve_paged`'s first-chunk prefill graph is `auto`.

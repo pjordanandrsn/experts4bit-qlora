@@ -176,7 +176,7 @@ pipx(){ local log=$1 secs=$2; shift 2
 say "install e4b @$E4B_SHA + gnf4 @$GNF4_SHA (venv-e4b --system-site-packages; P58 pins transformers 5.16.1 / bitsandbytes 0.50.1)"
 "$BASEPY" -m venv --system-site-packages $W/venv-e4b > logs/venv_e4b.log 2>&1 || { tail -3 logs/venv_e4b.log; say "VENV FAIL (e4b)"; finish 9; }
 PY=$W/venv-e4b/bin/python
-if [ "$BOX" = C ] || [ "$BOX" = D ] || [ "$BOX" = E ] || [ "$BOX" = F ] || [ "$BOX" = G ] || [ "$BOX" = I ]; then pipx logs/pip_torch.log 1800 "torch==2.8.0" --index-url https://download.pytorch.org/whl/cu128 || { tail -3 logs/pip_torch.log; say "PIP FAIL (torch cu128)"; finish 9; }; fi
+if [ "$BOX" = C ] || [ "$BOX" = D ] || [ "$BOX" = E ] || [ "$BOX" = F ] || [ "$BOX" = G ] || [ "$BOX" = H ] || [ "$BOX" = I ]; then pipx logs/pip_torch.log 1800 "torch==2.8.0" --index-url https://download.pytorch.org/whl/cu128 || { tail -3 logs/pip_torch.log; say "PIP FAIL (torch cu128)"; finish 9; }; fi
 pipx logs/pip_e4b.log 1800 --prefer-binary "git+https://github.com/pjordanandrsn/experts4bit-qlora.git@$E4B_SHA" \
   "transformers==5.16.1" "bitsandbytes==0.50.1" datasets accelerate sentencepiece tiktoken safetensors "huggingface_hub>=0.23" pytest || { tail -4 logs/pip_e4b.log; say "PIP FAIL (e4b)"; finish 9; }
 pipx logs/pip_gnf4.log 900 --force-reinstall --no-deps "git+https://github.com/pjordanandrsn/grouped-nf4-gemm.git@$GNF4_SHA" || { tail -3 logs/pip_gnf4.log; say "PIP FAIL (gnf4)"; finish 9; }

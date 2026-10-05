@@ -1601,3 +1601,120 @@ Each is FALSIFIED outside its band (P86: an e4b arm that OOMs) and UNTESTED wher
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for e4b's same-stack arms and
 Unsloth. Six arms of 30 steps at an estimated 15–40 s a step: about $3 with the download; this is in the standing no-ask tier.
+
+### Amendment 40 (2026-10-05T11:38Z, after amendment 39's read, before any box): the packed 4,096-token regime again, e4b with its chunked LM loss (P87, P88, P89)
+
+**Why.** Amendment 39 (`tc1-5090-86`) found every e4b arm out of memory at step 1 on packed 4,096-token rows, allocating 2.32 GiB: the
+fp32 copy of the full-vocabulary logits in Hugging Face's causal-LM loss. Unsloth trained the same rows at 24.86 GB. experts4bit-qlora#1142
+adds an opt-in chunked LM loss (`E4B_CHUNKED_LM_LOSS`, applied by `enable_fast_train`): the loss is computed over token chunks under
+non-reentrant checkpointing, so no chunk's logits are kept and the full logits are never materialised. Its loss matches the stock loss to
+fp32 rounding, and its gradients sit inside run-to-run noise. On an RTX A2000 a 4-layer slice of the same checkpoint hit the stock path's
+exact 2.32 GiB failure at 4,096 tokens and trained through it chunked, at 7.11 GiB.
+
+**The box** (token `qwen3samestack4kce`). Amendment 39's box unchanged — the same packed rows (`TC1_PACK=1 TC1_SEQ=4096 TC1_MB=1
+TC1_ACCUM=4 TC1_FREE_OUTPUTS=1`), amendment 25's same-stack arms, e4b's reference not run — with:
+
+- `TC1_E4B_ENV="E4B_CHUNKED_LM_LOSS=1"` on every e4b arm (512-token chunks), e4b's other settings at their defaults;
+- `TC1_STEPS=40`, held-out at 0 and 40 only (`TC1_EVAL_EVERY=40`): amendment 39's Unsloth draws were 7.7 % apart over 20 median steps on a
+  busy host;
+- load-gated draws, avoiding machines 151350, 45511 and 138786;
+- grouped-nf4-gemm at main, e4b at this amendment's merge (after #1142).
+
+Engagement: amendment 39's packed fixture on every arm, and on every e4b arm the receipt's `chunked_lm_loss` record (new in `tc1_arm.py`:
+the variable set, e4b has the loss, training forwards went through it, none fell back at run time).
+
+**Predictions** (registered before the box):
+
+- **P87:** with both frameworks on one stack, Unsloth/e4b lies in **[0.80, 1.60]**, both pairs stable (amendment 39's P84, unread there).
+- **P88:** e4b's matched arm in venv-unsloth over venv-e4b lies in **[0.80, 1.00]**, both sides stable (amendment 39's P85).
+- **P89:** every e4b arm that runs completes resident (VALID). The chunked loss removes the 2.32 GiB allocation that failed and the bf16
+  logits beside it, against amendment 39's 29.5 GiB in use at the failure.
+
+Each is FALSIFIED outside its band (P89: an e4b arm that OOMs) and UNTESTED where a side is missing, unstable or not engaged.
+
+**Decision rules.**
+
+- **P87 read with both pairs stable and P89 HELD, whichever side it favours:** the ratio is recorded as Qwen3-30B-A3B's packed 4,096-token
+  position, labelled "e4b with `E4B_CHUNKED_LM_LOSS=1`, opt-in" (`e4b.train.h2h.unsloth.qwen3.5090.<date>.packed-4k-chunked`), beside
+  amendment 39's out-of-memory row. A reading below 1.00 is said as an e4b loss in that regime.
+- **P89 HELD:** whether the chunked loss becomes e4b's default is its own registration, with its cost read on the field recipe.
+- **P89 FALSIFIED:** the chunked loss alone does not fit the regime on 32 GB; the next memory lever (the absmax double-quantized, the
+  compact delta) is its own registration.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for e4b's same-stack arms and
+Unsloth. Six arms of 40 steps at an estimated 12–20 s a step: about $3 with the download; this is in the standing no-ask tier.
+
+### Amendment 41 (2026-10-05T13:16Z, after amendment 39's read, with amendment 40's box running): e4b's chunked LM loss at the field recipe — its default decision (P90–P93)
+
+**Why.** Amendment 39 found e4b at its defaults out of memory on packed 4,096-token rows, on the fp32 copy of the full-vocabulary logits.
+experts4bit-qlora#1142 adds `E4B_CHUNKED_LM_LOSS` (opt-in), and amendment 40's box reads whether it fits that regime. A default must also
+cost the common case nothing it should not: the field recipe's short rows. On an RTX A2000 4-layer slice, where the LM head is a large
+share of the step, the chunked loss cost 2–6 %; on the 48-layer step the head is a far smaller share. Each chunk's logits are recomputed in
+backward, and finding the supervised tokens costs one host sync per training forward.
+
+**The box** (token `qwen3chunkab`). One RTX 5090, TC1's qwen3 tokens and field recipe, 60 steps, load-gated draws (`TC1_LOAD_GATE=6.0`,
+`TC1_LOAD_RETRIES=2`), avoiding machines 151350, 45511 and 138786:
+
+- the shipped and the matched arm, each `_ce0` (`E4B_CHUNKED_LM_LOSS=0`, the default) against `_ce1` (`=1`, 512-token chunks), two draws a
+  side in ABBA order;
+- every arm in venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 install), every other setting at its default.
+
+Engagement: each receipt's `chunked_lm_loss` record (amendment 40): `_ce1` arms chunked their training forwards with no run-time fallback,
+`_ce0` arms chunked none; `env.torch` 2.12.*.
+
+**Predictions** (registered before the box), one-sided, as amendment 38 learned: the decision needs the switch no slower and no heavier.
+
+- **P90** (matched): `_ce1` / `_ce0` ≤ **1.01**.
+- **P91** (shipped): `_ce1` / `_ce0` ≤ **1.01**.
+- **P92** (matched peak): `_ce1` − `_ce0` ≤ **+0.05 GB**.
+- **P93:** on each arm, |mean held-out at N, `_ce1` − `_ce0`| ≤ **0.005**.
+
+Each needs two stable VALID draws a side, and is FALSIFIED on the wrong side of its bound and UNTESTED where a side is unstable, not VALID
+or not engaged.
+
+**Decision rules.**
+
+- **P90–P93 HELD, and amendment 40's P89 HELD:** `E4B_CHUNKED_LM_LOSS` becomes e4b's default in `enable_fast_train` (512-token chunks;
+  `=0` keeps the stock loss), in one PR citing amendments 39, 40 and 41.
+- **P90–P93 HELD but P89 not HELD:** it stays opt-in; the chunked loss does not by itself buy the regime it is for.
+- **Any of P90–P93 FALSIFIED:** it stays opt-in, and the read names which arm and which side.
+- **Any UNTESTED, none FALSIFIED:** it stays opt-in pending a re-ask.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
+About $2 with the download; this is in the standing no-ask tier.
+
+### Amendment 42 (2026-10-05T13:57Z, after amendment 38's read, before any box): the same-stack position on a second host, on the current code (P94, P95)
+
+**Why.** The Qwen3-30B-A3B position to quote, Unsloth/e4b **2.352** (amendment 33, `tc1-5090-76`), is one box on one host model, an AMD
+EPYC 7B13. Two later readings say the host can move e4b's step a lot:
+
+- amendment 38's box (EPYC 9655) stepped e4b's matched arm in 2.17 s, against 3.4–3.9 s on EPYC 7B13 and 7702P hosts, with the same code
+  and card;
+- TC2 amendment 9 traced most of Mixtral's 0.836 to the host: Unsloth's Mixtral step was 3.0 s on a Core Ultra 9 285K and 3.7 s on an
+  EPYC 7B13, while e4b's moved little.
+
+Positions are within-box readings of their host, but a quoted number should survive a second host. The code also moved since amendment
+33: the prebound launches now cover triton 3.7 (#1108), so both of e4b's sides take them.
+
+**The box** (token `qwen3samestackh2`). Amendment 33's box unchanged — amendment 25's same-stack family, `TC1_STEPS=60`, no reference arm,
+load-gated draws (`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`) — on the current code (e4b at this amendment's merge, grouped-nf4-gemm at
+main), on a machine other than 145701 (amendment 33's) and 151350, 45511 and 138786. Nothing else is set.
+
+**Predictions** (registered before the box):
+
+- **P94:** Unsloth/e4b on one stack lies in **[1.9, 2.9]**, both pairs stable (amendment 25's P50 band).
+- **P95:** e4b's matched arm in venv-unsloth over venv-e4b lies in **[0.80, 0.95]**, both sides stable (P51's band).
+
+Each is FALSIFIED outside its band and UNTESTED where a side is missing, unstable or not engaged.
+
+**Decision rules.**
+
+- **P94 HELD:** 2.352 stays the position to quote; this box's reading and host are recorded beside it, and STATUS says it held on two
+  hosts.
+- **P94 FALSIFIED:** STATUS quotes the two hosts' readings as the position's range, each with its host, and the 2.352 row's note says it
+  depends on the host. Which of the host and the code moved it is not read from this box.
+- **P95** replicates the environment gain once more; it moves no default.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2 with the download;
+this is in the standing no-ask tier.

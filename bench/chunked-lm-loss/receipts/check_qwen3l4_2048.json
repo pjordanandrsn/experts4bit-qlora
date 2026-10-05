@@ -1,0 +1,29 @@
+{
+ "env": {
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "E4B_CHUNKED_LM_LOSS": null,
+  "fast_train_patched": 4,
+  "chunked_engaged": false,
+  "chunk": null,
+  "model_class": "Qwen3MoeForCausalLM",
+  "vocab": 151936,
+  "n_layers": 4
+ },
+ "check": {
+  "tokens": 2048,
+  "chunked_flags": [
+   false,
+   false,
+   true
+  ],
+  "loss_stock": 16.677343368530273,
+  "loss_stock_again": 16.677343368530273,
+  "loss_chunked512": 16.677343368530273,
+  "lora_grad_rel_l2_stock_vs_stock": 0.001794765421344146,
+  "lora_grad_rel_l2_stock_vs_chunked": 0.002661796794358728,
+  "lora_grads_bitwise_stock_vs_stock": false,
+  "lora_grads_bitwise_stock_vs_chunked": false,
+  "n_trainable_tensors": 48
+ }
+}

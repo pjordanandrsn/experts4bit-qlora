@@ -548,7 +548,42 @@ ATTN_CENSUS[PACKED4K_FAM] = 192
 DENSE_PINS[PACKED4K_FAM] = DENSE_PINS[QDENSE_FAM]   # the qwen3 pin, read through amendment 22's check
 EXPECTED[PACKED4K_FAM] = list(EXPECTED[SAMESTACK_FAM])
 # no matched-set prediction and no route check; P86 (score_packed4k) reads whether every e4b arm that ran completed resident
+# TC1 amendment 42: amendment 33's same-stack box on a second host, on the current code
+SAMESTACK_HOST2_FAM = "qwen3samestackh2"
+FAMS.append(SAMESTACK_HOST2_FAM)
+NAMES[SAMESTACK_HOST2_FAM] = "Qwen3-30B-A3B (amendment 42: the matched set with e4b and Unsloth on one stack, a second host, the current code)"
+N_LAYERS[SAMESTACK_HOST2_FAM] = 48
+ATTN_CENSUS[SAMESTACK_HOST2_FAM] = 192
+DENSE_PINS[SAMESTACK_HOST2_FAM] = DENSE_PINS[QDENSE_FAM]
+EXPECTED[SAMESTACK_HOST2_FAM] = list(EXPECTED[SAMESTACK_FAM])
+SAMESTACK_SPECS[SAMESTACK_HOST2_FAM] = ("P94", (1.9, 2.9), "P95", (0.80, 0.95), None, None, "amendment 33 read 0.900 on an EPYC 7B13")
 SAMESTACK_SPECS[PACKED4K_FAM] = ("P84", (0.80, 1.60), "P85", (0.80, 1.00), None, None, "TC1 amendment 33's P51 read 0.900 at the field recipe")
+
+
+# TC1 amendment 40: amendment 39's box again with e4b's chunked LM loss (E4B_CHUNKED_LM_LOSS=1 through TC1_E4B_ENV) on every e4b arm
+PACKED4KCE_FAM = "qwen3samestack4kce"
+FAMS.append(PACKED4KCE_FAM)
+NAMES[PACKED4KCE_FAM] = "Qwen3-30B-A3B (amendment 40: the packed 4,096-token regime on one stack, e4b with its chunked LM loss)"
+N_LAYERS[PACKED4KCE_FAM] = 48
+ATTN_CENSUS[PACKED4KCE_FAM] = 192
+DENSE_PINS[PACKED4KCE_FAM] = DENSE_PINS[QDENSE_FAM]
+EXPECTED[PACKED4KCE_FAM] = list(EXPECTED[SAMESTACK_FAM])
+SAMESTACK_SPECS[PACKED4KCE_FAM] = ("P87", (0.80, 1.60), "P88", (0.80, 1.00), None, None, "TC1 amendment 39: every e4b arm OOMed at step 1 without it")
+PACKED_FAMS = (PACKED4K_FAM, PACKED4KCE_FAM)
+PACKED_FIT_ID = {PACKED4K_FAM: "P86", PACKED4KCE_FAM: "P89"}   # every e4b arm that ran completed resident
+
+
+def chunked_lm_loss_why(r):
+    """Amendment 40's engagement predicate for an e4b arm: the chunked LM loss was requested (E4B_CHUNKED_LM_LOSS set, not 0), e4b has it,
+    the training forwards went through it (chunked_calls > 0) and no forward fell back at run time. Empty string = engaged."""
+    c = (r or {}).get("chunked_lm_loss")
+    if not isinstance(c, dict):
+        return "no chunked_lm_loss record on the receipt: whether the loss was chunked cannot be verified"
+    bad = [k for k, ok in (("E4B_CHUNKED_LM_LOSS set", str(c.get("env") or "0").strip() not in ("", "0")),
+                           ("e4b has the chunked loss", c.get("e4b_has_chunked_lm_loss") is True),
+                           ("chunked_calls > 0", int(c.get("chunked_calls") or 0) > 0),
+                           ("runtime_refusals 0", int(c.get("runtime_refusals") or 0) == 0)) if not ok]
+    return "" if not bad else f"chunked LM loss not engaged ({', '.join(bad)}; record {c})"
 
 
 def packed_why(r):
@@ -685,6 +720,40 @@ COMPACT_SPECS = {COMPACT_FAM: ("P69", COMPACT_PEAK_DROP, COMPACT_PAIRS, COMPACT_
                  COMPACT3_FAM: ("P79", (-0.05, 99.0), (("P77", "matched", "fused_attn4_m"), ("P78", "shipped", "fused_attn4_shipped")),
                                 (0.0, 0.99), "P82"),
                  MCOMPACT_FAM: ("P81", (-0.05, 99.0), (("P80", "matched", "fused_attn4_m"),), (0.0, 1.01), "P83")}
+
+
+# TC1 amendment 41: e4b's chunked LM loss (E4B_CHUNKED_LM_LOSS, #1142) off vs on at the field recipe -- its default decision
+CHUNKAB_FAM = "qwen3chunkab"      # E4B_CHUNKED_LM_LOSS=0 (side ce0, the default) vs =1 (ce1), shipped and matched arms, venv-unsloth
+FAMS.append(CHUNKAB_FAM)
+NAMES[CHUNKAB_FAM] = "Qwen3-30B-A3B (amendment 41: e4b's chunked LM loss off vs on at the field recipe, venv-unsloth)"
+N_LAYERS[CHUNKAB_FAM] = 48
+ATTN_CENSUS[CHUNKAB_FAM] = 192
+DENSE_PINS[CHUNKAB_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[CHUNKAB_FAM] = ("e4b", "fused_attn4_m_ce0")
+EXPECTED[CHUNKAB_FAM] = [("e4b", "fused_attn4_shipped_ce0"), ("e4b", "fused_attn4_shipped_ce1"), ("e4b", "fused_attn4_m_ce0"), ("e4b", "fused_attn4_m_ce1"),
+                         ("e4b", "fused_attn4_m_ce1_d2"), ("e4b", "fused_attn4_m_ce0_d2"), ("e4b", "fused_attn4_shipped_ce1_d2"), ("e4b", "fused_attn4_shipped_ce0_d2")]
+MATCHED |= {"fused_attn4_m_ce0", "fused_attn4_m_ce1", "fused_attn4_m_ce0_d2", "fused_attn4_m_ce1_d2"}
+for _t in ("fused_attn4_m", "fused_attn4_shipped"):
+    for _side in ("ce0", "ce1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+COMPACT_SPECS[CHUNKAB_FAM] = ("P92", (-0.05, 99.0), (("P90", "matched", "fused_attn4_m"), ("P91", "shipped", "fused_attn4_shipped")), (0.0, 1.01), "P93",
+                              ("ce0", "ce1"))   # amendment 41, one-sided: no slower than 1.01, the matched peak not above the default's + 0.05 GB
+
+
+def chunk_ab_why(tag, r):
+    """Amendment 41's engagement predicate: the arm ran torch 2.12 (venv-unsloth) and its `chunked_lm_loss` record shows the side its tag
+    names -- ce1: E4B_CHUNKED_LM_LOSS set, e4b has the loss, chunked training forwards, no run-time fallback; ce0: no chunked forward.
+    Empty string = engaged."""
+    r = r or {}
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.12"):
+        return f"chunked-loss A/B not engaged (env.torch {tv or 'missing'} is not 2.12*)"
+    if "_ce1" in tag:
+        return chunked_lm_loss_why(r)
+    c = r.get("chunked_lm_loss")
+    if not isinstance(c, dict):
+        return "no chunked_lm_loss record on the receipt: whether the loss was chunked cannot be verified"
+    return "" if int(c.get("chunked_calls") or 0) == 0 else f"chunked-loss A/B not engaged (the ce0 side made {c.get('chunked_calls')} chunked calls)"
 
 
 def compact_ab_why(tag, r):
@@ -1373,15 +1442,23 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = samestack_why(r.get("tag") or "", r)
         if w:
             why.append(w)
-    if fam == PACKED4K_FAM:                            # amendment 39: packed rows of exactly 4,096 tokens at micro-batch 1 x accum 4, every framework
+    if fam in PACKED_FAMS:                             # amendments 39 / 40: packed rows of exactly 4,096 tokens at micro-batch 1 x accum 4, every framework
         w = packed_why(r)
+        if w:
+            why.append(w)
+    if fam == CHUNKAB_FAM and fw == "e4b":             # amendment 41: the chunked loss its tag names, torch 2.12
+        w = chunk_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == PACKED4KCE_FAM and fw == "e4b":          # amendment 40: the chunked LM loss on every e4b arm
+        w = chunked_lm_loss_why(r)
         if w:
             why.append(w)
     if fam in PREBIND_SPECS and fw == "e4b":           # amendments 26 / 35: the prebound launches its tag names, engaged on both sides
         w = prebind_ab_why(r.get("tag") or "", r, fam)
         if w:
             why.append(w)
-    if fam in COMPACT_SPECS and fw == "e4b":           # amendments 36 / 37: the padded LoRA delta its tag names, on the padded route, torch 2.12
+    if fam in COMPACT_SPECS and fam != CHUNKAB_FAM and fw == "e4b":   # amendments 36-38: the padded LoRA delta its tag names (41 shares the scorer only)
         w = compact_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
@@ -2459,7 +2536,9 @@ def score_packed4k(F, fam=PACKED4K_FAM):
     """TC1-PREREG amendment 39, on the qwen3samestack4k box: P84 / P85 -- amendment 25's two speed readings (score_samestack with
     SAMESTACK_SPECS[fam]: no matched-set prediction, no route check) on the packed rows; P86 -- every e4b arm that ran completed resident:
     FALSIFIED if any e4b arm's status is OOM, else HELD if every e4b row that ran is VALID (and ran resident, offload off), else UNTESTED.
-    An arm that did not run (NOT_RUN: the registered box skips e4b's reference) is not read."""
+    An arm that did not run (NOT_RUN: the registered box skips e4b's reference) is not read. Amendment 40 (fam=PACKED4KCE_FAM): the same
+    reading as P87 / P88 / P89, e4b with its chunked LM loss."""
+    pid_fit = PACKED_FIT_ID[fam]
     R = F.get(fam)
     if not R:
         return []
@@ -2470,13 +2549,13 @@ def score_packed4k(F, fam=PACKED4K_FAM):
     peaks = "; ".join(f"{x['tag']} {x['verdict']}" + (f" peak {f((x.get('r') or {}).get('peak_vram_gb'), 2)} GB" if (x.get("r") or {}).get("peak_vram_gb") is not None else "")
                       for x in ran)
     if ooms:
-        out.append(("P86", fam, "FALSIFIED", f"e4b OOM on {', '.join(x['tag'] + ' (' + (x.get('reason') or '')[:80] + ')' for x in ooms)}; {len(ran)} e4b arm(s) ran: {peaks}"))
+        out.append((pid_fit, fam, "FALSIFIED", f"e4b OOM on {', '.join(x['tag'] + ' (' + (x.get('reason') or '')[:80] + ')' for x in ooms)}; {len(ran)} e4b arm(s) ran: {peaks}"))
     elif ran and all(x["verdict"] == "VALID" for x in ran) and not offl:
-        out.append(("P86", fam, "HELD", f"all {len(ran)} e4b arms that ran completed resident and VALID: {peaks}"))
+        out.append((pid_fit, fam, "HELD", f"all {len(ran)} e4b arms that ran completed resident and VALID: {peaks}"))
     else:
         why = (f"VALID under offload: {offl}" if offl else "") or ("no e4b arm ran" if not ran else
                                                                      f"not every e4b arm that ran is VALID and none OOMed: {peaks}")
-        out.append(("P86", fam, "UNTESTED", why))
+        out.append((pid_fit, fam, "UNTESTED", why))
     return out
 
 
@@ -2571,15 +2650,17 @@ def score_compactab(F, fam=COMPACT_FAM):
     within 5 %; P72 -- on each arm |mean held-out at N, cd1 - cd0| <= COMPACT_HELDOUT_MAX. Outside FALSIFIED; a missing / non-VALID /
     unstable side UNTESTED. Amendment 37 (fam=COMPACT2_FAM): the same reading as P73 (peak) / P74 / P75 (speed) / P76 with its
     own bands, from COMPACT_SPECS."""
-    p_peak, peak_band, pairs, speed_band, p_held = COMPACT_SPECS[fam]
+    spec = COMPACT_SPECS[fam]
+    p_peak, peak_band, pairs, speed_band, p_held = spec[:5]
+    s0, s1 = spec[5] if len(spec) > 5 else ("cd0", "cd1")        # amendment 41: the chunked loss's sides are ce0 / ce1
     R = F.get(fam)
     if not R:
         return []
     out, p72, drop_ev = [], [], None
     for pid, name, t in pairs:
-        O, N = R["draws"].get(("e4b", f"{t}_cd0"), {}), R["draws"].get(("e4b", f"{t}_cd1"), {})
+        O, N = R["draws"].get(("e4b", f"{t}_{s0}"), {}), R["draws"].get(("e4b", f"{t}_{s1}"), {})
         if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
-            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("cd0", O), ("cd1", N)))
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in ((s0, O), (s1, N)))
             out.append((pid, fam, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
             p72.append((name, None, why))
             if name == "matched":
@@ -2590,18 +2671,18 @@ def score_compactab(F, fam=COMPACT_FAM):
         lo, hi = speed_band
         h0, h1 = O.get("heldout_list") or [], N.get("heldout_list") or []
         dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
-        p72.append((name, dq, f"held-out at N cd0 {[round(v, 4) for v in h0 if v is not None]} cd1 {[round(v, 4) for v in h1 if v is not None]}"))
+        p72.append((name, dq, f"held-out at N {s0} {[round(v, 4) for v in h0 if v is not None]} {s1} {[round(v, 4) for v in h1 if v is not None]}"))
         drop = (O["peak"] - N["peak"]) if (O.get("peak") is not None and N.get("peak") is not None) else None
         out.append((pid, fam, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
-                    f"{name}: cd1 / cd0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; s/step cd0 "
-                    f"{O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), cd1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
-                    f"(within {100 * N['stability']:.1f}%); peak cd0 {f(O.get('peak'), 2)} / cd1 {f(N.get('peak'), 2)} GB"))
+                    f"{name}: {s1} / {s0} {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; s/step {s0} "
+                    f"{O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), {s1} {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
+                    f"(within {100 * N['stability']:.1f}%); peak {s0} {f(O.get('peak'), 2)} / {s1} {f(N.get('peak'), 2)} GB"))
         if name == "matched":
             plo, phi = peak_band
-            ev = f"matched: peak cd0 {f(O.get('peak'), 3)} / cd1 {f(N.get('peak'), 3)} GB, drop {f(drop, 3)} vs {[plo, phi]}"
+            ev = f"matched: peak {s0} {f(O.get('peak'), 3)} / {s1} {f(N.get('peak'), 3)} GB, drop {f(drop, 3)} vs {[plo, phi]}"
             drop_ev = ("UNTESTED", ev + " (no peak recorded)") if drop is None else ("HELD" if plo <= drop <= phi else "FALSIFIED", ev)
     out.insert(0, (p_peak, fam) + (drop_ev or ("UNTESTED", "matched: no pair")))
-    ev = "; ".join(f"{n}: " + (f"mean held-out cd1 - cd0 {d:+.4f} (|.| <= {COMPACT_HELDOUT_MAX}); {e}" if d is not None else e) for n, d, e in p72)
+    ev = "; ".join(f"{n}: " + (f"mean held-out {s1} - {s0} {d:+.4f} (|.| <= {COMPACT_HELDOUT_MAX}); {e}" if d is not None else e) for n, d, e in p72)
     if any(d is not None and abs(d) > COMPACT_HELDOUT_MAX for _, d, _ in p72):
         out.append((p_held, fam, "FALSIFIED", ev))
     elif any(d is None for _, d, _ in p72):
@@ -3919,6 +4000,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if SAMESTACK_HOST2_FAM in F:
+        out += ["\n## Predictions P94 / P95 (TC1-PREREG amendment 42: the same-stack position on a second host, the current code; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_samestack(F, SAMESTACK_HOST2_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if SAMESTACK_MIXTRAL_FAM in F:
         out += ["\n## Predictions P29 / P30 / P31 (TC2-PREREG amendment 9: Mixtral's position with both frameworks on one stack; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -3928,6 +4014,11 @@ def render(F, d):
         out += ["\n## Predictions P27 / P28 / P29 (TC1C-PREREG amendment 9: the H100 position with both frameworks on one stack; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F, SAMESTACK_H100_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PACKED4KCE_FAM in F:
+        out += ["\n## Predictions P87 / P88 / P89 (TC1-PREREG amendment 40: the packed 4,096-token regime on one stack, e4b with its chunked LM loss; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_packed4k(F, PACKED4KCE_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if PACKED4K_FAM in F:
         out += ["\n## Predictions P84 / P85 / P86 (TC1-PREREG amendment 39: the packed 4,096-token regime with both frameworks on one stack; scored mechanically)",
@@ -3948,6 +4039,11 @@ def render(F, d):
         out += ["\n## Predictions P69 / P70 / P71 / P72 (TC1-PREREG amendment 36: the compact padded LoRA delta off vs on, venv-unsloth, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if CHUNKAB_FAM in F:
+        out += ["\n## Predictions P90 / P91 / P92 / P93 (TC1-PREREG amendment 41: e4b's chunked LM loss off vs on at the field recipe; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_compactab(F, CHUNKAB_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     for _cf, _ids in ((COMPACT3_FAM, "P77 / P78 / P79 / P82"), (MCOMPACT_FAM, "P80 / P81 / P83")):
         if _cf in F:
@@ -4316,7 +4412,7 @@ def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2
                              "stats": {"fwd": 16896, "dgrad": 7680}}
     return R
 
-def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.12.1+cu130", "2.8.0+cu128"), oom=(), over=None):
+def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.12.1+cu130", "2.8.0+cu128"), oom=(), over=None, fam=None, chunked=None):
     """Amendment 39: amendment 25's set on the packed rows -- every receipt at seq 4096, micro-batch 1 x accum 4, N 30, a packed tokens file,
     16,384 real tokens and none padded on every step, resident; e4b's reference a NOT_RUN stub (the registered box skips it). `oom` names
     tags written as OOM stubs (e4b or Unsloth); `over` = {tag: {field: value}} overrides on a receipt."""
@@ -4332,7 +4428,10 @@ def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.
     for (fw, tag) in list(R):
         if tag in oom:
             R[(fw, tag)] = {**_stub(fw, tag, R[(fw, tag)]["arm"], "oom", "OOM at step 1: CUDA out of memory. Tried to allocate 2.32 GiB"), "steps": 30}
-        R[(fw, tag)]["fam"] = PACKED4K_FAM
+        R[(fw, tag)]["fam"] = fam or PACKED4K_FAM
+        if fam == PACKED4KCE_FAM and fw == "e4b" and R[(fw, tag)].get("status") == "ok":   # amendment 40: the chunked loss on every e4b arm
+            R[(fw, tag)]["chunked_lm_loss"] = dict(chunked) if chunked is not None else {
+                "env": "1", "e4b_has_chunked_lm_loss": True, "chunked_calls": 120, "stock_calls": 16, "runtime_refusals": 0, "refused": {}}
         R[(fw, tag)].update((over or {}).get(tag, {}))
     return R
 
@@ -4383,6 +4482,26 @@ def _compact_set(match=((3.50, 3.52), (3.48, 3.50)), ship=((3.00, 3.02), (2.99, 
                     r["keep_ab"] = {"requested_env": None, "e4b_has_moe_keep": True, "layers_kept": kept, "gnf4_compact_delta": flags[i_side],
                                     "gnf4_compact_delta_env": flags[i_side]}
                 r["fam"] = fam or COMPACT_FAM
+                R[("e4b", tag)] = r
+    return R
+
+def _chunkab_set(match=((3.50, 3.52), (3.51, 3.53)), ship=((3.00, 3.02), (3.01, 3.03)), peaks=(27.50, 27.30), held_shift=0.0, ce1_calls=240,
+                 ce0_calls=0, refusals=0, torch="2.12.1+cu130", record=True):
+    """Amendment 41: e4b against itself -- each pair as (ce0 draws, ce1 draws) s/step; `peaks` = the matched arm's (ce0, ce1) GB (the shipped
+    arm's sit 2 GB lower); `ce1_calls` / `ce0_calls` = chunked training forwards each side recorded; `refusals` = ce1's run-time fallbacks."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for i_side, (side, ss) in enumerate((("ce0", old), ("ce1", new))):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if side == "ce1" else 0.0), matched=matched)
+                r["peak_vram_gb"] = peaks[i_side] - (0.0 if matched else 2.0)
+                r["env"]["torch"] = torch
+                if record:
+                    on = side == "ce1"
+                    r["chunked_lm_loss"] = {"env": "1" if on else "0", "e4b_has_chunked_lm_loss": True, "chunked_calls": ce1_calls if on else ce0_calls,
+                                            "stock_calls": 16, "runtime_refusals": refusals if on else 0, "refused": {}}
+                r["fam"] = CHUNKAB_FAM
                 R[("e4b", tag)] = r
     return R
 
@@ -6435,6 +6554,52 @@ def selftest():
     assert {p: v for p, _, v, _ in score_packed4k(RF)} == {"P84": "UNTESTED", "P85": "UNTESTED", "P86": "UNTESTED"}
     assert ps() == {"P50": "HELD", "P51": "HELD", "P52": "HELD"} and score_packed4k({}) == []    # amendment 25's reading unchanged
     print("FAILING-CASE TC1-am39-oom (reducer):", "FALSIFIED", "-- P86 with an e4b arm OOM on the packed rows")
+    cases += 1
+    # 94. TC1 amendment 40 (qwen3samestack4kce): amendment 39's box with e4b's chunked LM loss -- P87 / P88 / P89 HELD on the packed rows; an
+    #     e4b OOM FALSIFIES P89; an e4b arm without the chunked record, with the env unset, with no chunked call or a run-time fallback is VOID
+    CE_ = lambda R: {PACKED4KCE_FAM: reduce_family(PACKED4KCE_FAM, R, {}, 30)}
+    pce = lambda **kw: {p: v for p, _, v, _ in score_packed4k(CE_(_packed4k_set(fam=PACKED4KCE_FAM, **kw)), PACKED4KCE_FAM)}
+    RCE = CE_(_packed4k_set(fam=PACKED4KCE_FAM))
+    assert all(x["verdict"] in ("VALID", "NOT_RUN") for x in RCE[PACKED4KCE_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RCE[PACKED4KCE_FAM]["rows"]]
+    assert pce() == {"P87": "HELD", "P88": "HELD", "P89": "HELD"}, score_packed4k(RCE, PACKED4KCE_FAM)
+    assert pce(oom=("fused_attn4_m_d2",))["P89"] == "FALSIFIED"
+    for ch, frag in (({"env": "0", "e4b_has_chunked_lm_loss": True, "chunked_calls": 120, "runtime_refusals": 0}, "E4B_CHUNKED_LM_LOSS set"),
+                     ({"env": "1", "e4b_has_chunked_lm_loss": True, "chunked_calls": 0, "runtime_refusals": 0}, "chunked_calls > 0"),
+                     ({"env": "1", "e4b_has_chunked_lm_loss": True, "chunked_calls": 120, "runtime_refusals": 2}, "runtime_refusals 0"),
+                     ({"env": "1", "e4b_has_chunked_lm_loss": False}, "e4b has the chunked loss")):
+        RV = CE_(_packed4k_set(fam=PACKED4KCE_FAM, chunked=ch))
+        why = next(x["why"] for x in RV[PACKED4KCE_FAM]["rows"] if x["tag"] == "fused_attn4_m")
+        assert RV[PACKED4KCE_FAM]["verdicts"][("e4b", "fused_attn4_m")] == "VOID" and frag in str(why), (ch, why)
+    assert "no chunked_lm_loss record" in chunked_lm_loss_why({})
+    assert {p: v for p, _, v, _ in score_packed4k(KF_(_packed4k_set()))} == {"P84": "HELD", "P85": "HELD", "P86": "HELD"}   # amendment 39 unchanged
+    cases += 1
+    # 95. TC1 amendment 41 (qwen3chunkab): one-sided -- matched 1.003 / shipped 1.003 with the peak 0.20 GB lower HELD; a step slower than 1.01,
+    #     a peak 0.10 GB higher, a held-out gap each FALSIFY; a ce1 side with no chunked call, a ce0 side with chunked calls, torch 2.8 -> VOID
+    CK = lambda R: {CHUNKAB_FAM: reduce_family(CHUNKAB_FAM, R, {}, 20)}
+    RCK = CK(_chunkab_set())
+    assert [(x["fw"], x["tag"]) for x in RCK[CHUNKAB_FAM]["rows"]] == EXPECTED[CHUNKAB_FAM]
+    assert all(x["verdict"] == "VALID" for x in RCK[CHUNKAB_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RCK[CHUNKAB_FAM]["rows"]]
+    pck = lambda **kw: {p: v for p, _, v, _ in score_compactab(CK(_chunkab_set(**kw)), CHUNKAB_FAM)}
+    assert pck() == {"P92": "HELD", "P90": "HELD", "P91": "HELD", "P93": "HELD"}, score_compactab(RCK, CHUNKAB_FAM)
+    assert "ce1 / ce0 1.003 [" in score_compactab(RCK, CHUNKAB_FAM)[1][3], score_compactab(RCK, CHUNKAB_FAM)
+    assert pck(match=((3.50, 3.52), (3.57, 3.59)))["P90"] == "FALSIFIED"            # 1.020: slower than allowed
+    assert pck(peaks=(27.50, 27.60))["P92"] == "FALSIFIED"                         # +0.10 GB
+    assert pck(held_shift=0.008)["P93"] == "FALSIFIED"
+    for kw, tag, frag in (({"ce1_calls": 0}, "fused_attn4_m_ce1", "chunked_calls > 0"), ({"ce0_calls": 7}, "fused_attn4_m_ce0", "the ce0 side made 7"),
+                          ({"torch": "2.8.0+cu128"}, "fused_attn4_m_ce0", "is not 2.12*"), ({"refusals": 1}, "fused_attn4_m_ce1", "runtime_refusals 0"),
+                          ({"record": False}, "fused_attn4_m_ce0", "no chunked_lm_loss record")):
+        RV = CK(_chunkab_set(**kw))
+        why = next(x["why"] for x in RV[CHUNKAB_FAM]["rows"] if x["tag"] == tag)
+        assert RV[CHUNKAB_FAM]["verdicts"][("e4b", tag)] == "VOID" and frag in str(why), (kw, why)
+    assert pc() == {"P69": "HELD", "P70": "HELD", "P71": "HELD", "P72": "HELD"}     # amendment 36's reading unchanged
+    cases += 1
+    # 96. TC1 amendment 42 (qwen3samestackh2): amendment 33's box on a second host -- 2.297 / 0.882 HELD; 3.02 and 0.995 each FALSIFY; no
+    #     matched-set or route prediction is read
+    H2 = lambda R: {SAMESTACK_HOST2_FAM: reduce_family(SAMESTACK_HOST2_FAM, R, {}, 20)}
+    p42 = lambda **kw: {p: v for p, _, v, _ in score_samestack(H2(_samestack_set(fam=SAMESTACK_HOST2_FAM, **kw)), SAMESTACK_HOST2_FAM)}
+    assert p42() == {"P94": "HELD", "P95": "HELD"}, score_samestack(H2(_samestack_set(fam=SAMESTACK_HOST2_FAM)), SAMESTACK_HOST2_FAM)
+    assert p42(u=(10.40, 10.45))["P94"] == "FALSIFIED" and p42(e=(3.88, 3.90))["P95"] == "FALSIFIED"
+    assert ps() == {"P50": "HELD", "P51": "HELD", "P52": "HELD"}
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

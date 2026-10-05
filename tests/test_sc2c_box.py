@@ -108,3 +108,13 @@ def test_box_h_is_wired_and_both_server_starts_name_their_seen_route():
     assert '"$W/work_granite/nf4.arena" "$GR_ENV" ""; then' in BOX                  # the proof: any grouped route
     assert "env -u E4B_INT4_PREFILL -u E4B_PAGED_PREFILL_ATTN -u E4B_PAGED_PREFILL_GRAPH" in BOX
     assert "E4B_PAGED_STEP_TRACE=$W/sc2/steps_$TAG.jsonl" in BOX and "$SC2C_KNOB=$K" in BOX
+
+
+def test_every_python3_box_pins_torch_2_8_including_h():
+    """SC2c A1: box H was left out of the torch pin when box I's harness merged beside it, and sc2c-prove-2 installed
+    whatever torch pip resolved (2.14.1+cu130), not SC2b's and SC2g's 2.8.0+cu128. Every box that installs the e4b
+    stack with python3 (C..I) pins it."""
+    run = (REPO / "bench" / "sc1" / "sc1_run.sh").read_text()
+    line = next(ln for ln in run.splitlines() if 'pipx logs/pip_torch.log 1800 "torch==2.8.0"' in ln)
+    for box in "CDEFGHI":
+        assert f'[ "$BOX" = {box} ]' in line, box

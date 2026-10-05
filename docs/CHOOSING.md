@@ -41,6 +41,17 @@ That is about 141 MB of peak per kept layer at that recipe's largest micro-batch
 `enable_fast_train`'s count: the setting rides it, and `disable_fast_train` unwinds it. Without the compact delta a kept layer saves
 its padded LoRA blocks too, up to 4x the memory. With gradient checkpointing off, there is nothing to keep, and it changes nothing.
 
+**It trains, but long rows run out of memory in the loss.**
+Set `E4B_CHUNKED_LM_LOSS=1` (or a chunk size in tokens) before `enable_fast_train`, or call
+`experts4bit_qlora.engines.chunked_lm_loss.enable_chunked_lm_loss(model)`. Hugging Face's causal-LM loss materialises the
+`[tokens, vocab]` logits, upcasts them to fp32 and keeps the fp32 log-probabilities for backward. At Qwen3's 151,936-token vocabulary
+and 4,096 tokens that is 8.1 GiB for the head and loss alone. This computes the same loss over chunks, recomputing each chunk's logits
+in backward: 0.9 GiB at 512-token chunks, for one extra head matmul and cross-entropy forward per chunk in backward (CHANGELOG, Unreleased). The same loss
+to fp32 rounding. The same gradients, up to cuBLAS's shape-dependent bf16 reduction (`torch.equal` with
+`allow_bf16_reduced_precision_reduction` off). It covers the Qwen3-MoE, Qwen3.5/3.6-MoE, Mixtral, OLMoE, gpt-oss, ERNIE-4.5-MoE,
+Granite-MoE and -Hybrid, LFM2-MoE and Nemotron-H causal LMs and refuses anything else with a warning. Only training forwards with
+labels take it: evaluation under `torch.no_grad` and generation stay stock, and `.logits` is `None` on the forwards that do.
+
 **It trains, but each step is slow — and `[fast]` will not build.**
 `enable_batched_train(model)` (no extra: stock torch + bitsandbytes). The kernel-free lane:
 one whole-stack dequant in place of the per-expert loop. It is the fallback for an arch

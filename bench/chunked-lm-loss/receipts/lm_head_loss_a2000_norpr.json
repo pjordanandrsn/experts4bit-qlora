@@ -1,0 +1,77 @@
+{
+ "env": {
+  "torch": "2.8.0+cu128",
+  "gpu": "NVIDIA RTX A2000 12GB",
+  "vocab": 151936,
+  "hidden": 2048,
+  "bf16_reduced_precision_reduction": false
+ },
+ "args": {
+  "vocab": 151936,
+  "hidden": 2048,
+  "tokens": [
+   2048,
+   4096
+  ],
+  "chunks": [
+   512
+  ],
+  "warmup": 2,
+  "iters": 3,
+  "no_reduced_precision_reduction": true
+ },
+ "rows": [
+  {
+   "tokens": 2048,
+   "impl": "stock",
+   "peak_delta_gib": 4.0651,
+   "peak_abs_gib": 4.6603,
+   "loss": 12.328124046325684,
+   "ms_median": 142.69,
+   "ms_min": 141.61,
+   "ms_max": 143.92
+  },
+  {
+   "tokens": 2048,
+   "impl": "chunk512",
+   "peak_delta_gib": 0.885,
+   "peak_abs_gib": 1.5196,
+   "loss": 12.328125,
+   "loss_minus_stock": 9.5367431640625e-07,
+   "grad_max_abs_diff": 0.0,
+   "grad_bitwise_equal": true,
+   "grad_max_abs": 5.1021575927734375e-05,
+   "grad_rel_l2": 0.0,
+   "grad_frac_elements_differ": 0.0,
+   "ms_median": 218.46,
+   "ms_min": 216.69,
+   "ms_max": 222.31
+  },
+  {
+   "tokens": 4096,
+   "impl": "stock",
+   "peak_delta_gib": 8.1143,
+   "peak_abs_gib": 8.7722,
+   "loss": 12.318638801574707,
+   "ms_median": 293.51,
+   "ms_min": 292.18,
+   "ms_max": 295.75
+  },
+  {
+   "tokens": 4096,
+   "impl": "chunk512",
+   "peak_delta_gib": 0.9007,
+   "peak_abs_gib": 1.5899,
+   "loss": 12.318638801574707,
+   "loss_minus_stock": 0.0,
+   "grad_max_abs_diff": 0.0,
+   "grad_bitwise_equal": true,
+   "grad_max_abs": 2.586841583251953e-05,
+   "grad_rel_l2": 0.0,
+   "grad_frac_elements_differ": 0.0,
+   "ms_median": 436.51,
+   "ms_min": 435.54,
+   "ms_max": 438.27
+  }
+ ]
+}
