@@ -1,0 +1,32 @@
+uniform olmoe     seq=  512 G= 64 rows~  64.0 (<16: 0) 12.9 s
+uniform lfm2      seq=  512 G= 32 rows~  64.0 (<16: 0) 6.5 s
+uniform ernie     seq=  512 G= 64 rows~  48.0 (<16: 0) 8.4 s
+uniform graniteh  seq=  512 G= 64 rows~  48.0 (<16: 0) 2.9 s
+uniform qwen3     seq=  512 G=128 rows~  32.0 (<16: 0) 9.3 s
+uniform nemotron  seq=  512 G=128 rows~  24.0 (<16: 3) 9.2 s
+uniform qwen36    seq=  512 G=256 rows~  16.0 (<16: 119) 14.2 s
+uniform mixtral   seq=  512 G=  8 rows~ 128.0 (<16: 0) 8.2 s
+uniform olmoe     seq= 2048 G= 64 rows~ 256.0 (<16: 0) 8.6 s
+uniform lfm2      seq= 2048 G= 32 rows~ 256.0 (<16: 0) 4.9 s
+uniform ernie     seq= 2048 G= 64 rows~ 192.0 (<16: 0) 7.6 s
+uniform graniteh  seq= 2048 G= 64 rows~ 192.0 (<16: 0) 3.1 s
+uniform qwen3     seq= 2048 G=128 rows~ 128.0 (<16: 0) 9.4 s
+uniform nemotron  seq= 2048 G=128 rows~  96.0 (<16: 0) 8.9 s
+uniform qwen36    seq= 2048 G=256 rows~  64.0 (<16: 0) 12.5 s
+uniform mixtral   seq= 2048 G=  8 rows~ 512.0 (<16: 0) 14.2 s
+skew    olmoe     seq=  512 G= 60 rows~  68.3 (<16: 21) 4.6 s
+skew    lfm2      seq=  512 G= 29 rows~  70.6 (<16: 9) 4.6 s
+skew    ernie     seq=  512 G= 57 rows~  53.9 (<16: 22) 5.2 s
+skew    graniteh  seq=  512 G= 57 rows~  53.9 (<16: 22) 2.8 s
+skew    qwen3     seq=  512 G=111 rows~  36.9 (<16: 51) 5.9 s
+skew    nemotron  seq=  512 G=108 rows~  28.4 (<16: 55) 6.7 s
+skew    qwen36    seq=  512 G=176 rows~  23.3 (<16: 95) 8.6 s
+skew    mixtral   seq=  512 G=  8 rows~ 128.0 (<16: 1) 5.9 s
+skew    olmoe     seq= 2048 G= 64 rows~ 256.0 (<16: 12) 5.2 s
+skew    lfm2      seq= 2048 G= 32 rows~ 256.0 (<16: 7) 3.5 s
+skew    ernie     seq= 2048 G= 64 rows~ 192.0 (<16: 17) 6.4 s
+skew    graniteh  seq= 2048 G= 64 rows~ 192.0 (<16: 17) 3.9 s
+skew    qwen3     seq= 2048 G=121 rows~ 135.4 (<16: 41) 7.4 s
+skew    nemotron  seq= 2048 G=119 rows~ 103.3 (<16: 46) 8.6 s
+skew    qwen36    seq= 2048 G=221 rows~  74.1 (<16: 92) 11.0 s
+skew    mixtral   seq= 2048 G=  8 rows~ 512.0 (<16: 1) 14.1 s

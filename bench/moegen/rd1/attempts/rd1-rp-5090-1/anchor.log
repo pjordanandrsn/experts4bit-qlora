@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "/root/tc1/train_anchor.py", line 108, in <module>
+    main()
+  File "/root/tc1/train_anchor.py", line 93, in main
+    runs = [fn() for _ in range(REPS)]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/tc1/train_anchor.py", line 93, in <listcomp>
+    runs = [fn() for _ in range(REPS)]
+            ^^^^
+  File "/root/tc1/train_anchor.py", line 63, in probe_h2d
+    host = torch.empty(n, dtype=torch.float32, pin_memory=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: invalid argument
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+

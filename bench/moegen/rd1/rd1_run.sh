@@ -4,8 +4,8 @@
 # (TC1_RUN_NONCE within 30 s), summary.txt one line per finished step, and TC1_EXIT_CODE.<nonce> / TC1_SUCCESS.<nonce> /
 # TP_DONE.<nonce> at the end -- a refusal writes them too, so the controller reads a finished lane, never a hang.
 #
-# install grouped-nf4-gemm at GNF4_SHA -> tripwire -> the train anchor (strict, as tp1: a refused box ends the lane, exit 12)
-# -> rd_probe.py over the registered grid -> rd_table.py. No checkpoint is fetched: the probe draws random NF4 stacks at each
+# install grouped-nf4-gemm at GNF4_SHA -> tripwire -> the train anchor (strict, as tp1: a refused box ends the lane, exit 12;
+# an anchor that crashes refuses nothing, exit 9) -> rd_probe.py over the registered grid -> rd_table.py. No checkpoint is fetched: the probe draws random NF4 stacks at each
 # family's registered shapes. Nothing here creates, destroys or approves compute.
 set -uo pipefail
 W=/root/tc1; cd "$W" || exit 9
@@ -84,6 +84,13 @@ print(f"PROVE host load1 over the run: n {len(v)} min {min(v)} median {statistic
 PYP
   echo "PROVE: install, rsync, tripwire, the load-gated anchor (rc=$arc) and host load sampled; no probe" | tee -a summary.txt
   finish 0
+fi
+# A crash is not a refusal. train_anchor_gate.py exits 0 (accepted) or 3 (REFUSED, a class); any other rc is the anchor itself
+# failing -- rd1-rp-5090-1: train_anchor.py's 256 MB torch.empty(pin_memory=True) raised CUDA "invalid argument" on all three
+# attempts, no class read -- a harness or host error (exit 9), never the strict-anchor refusal (exit 12) that names a slow box.
+if [ "$arc" -ne 0 ] && [ "$arc" -ne 3 ]; then
+  echo "ANCHOR HARNESS ERROR (rc=$arc, no class): the anchor did not run, so the box was not refused" | tee -a summary.txt
+  tail -2 logs/anchor.log | tee -a summary.txt; finish 9
 fi
 if [ "$arc" -ne 0 ]; then
   [ "$REHEARSAL" = 1 ] || { echo "BOX REFUSED by train anchor" | tee -a summary.txt; finish 12; }

@@ -1,0 +1,7 @@
+  flops.self_pair      1.0049                         ok
+  launch.self_pair     1.0256                         ok
+  h2d.self_pair        1.0111                         ok
+  flops                183.4 (0.990x ref)             ok
+  class                pcie-full/launch-fast          reported
+
+BOX ACCEPTED

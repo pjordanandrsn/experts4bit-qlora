@@ -245,3 +245,10 @@ what remains. The result is recorded in [`a2000/RESULTS-rd-a2000-correctness.txt
   bench/train-anchor/train_anchor.py bench/train-anchor/train_anchor_gate.py`.
 - **`RD1_REHEARSAL=1`** exists only for the A2000 container rehearsal of the runner. It records an anchor refusal and
   continues, and it shrinks the grid to one cell. `tc1_drive.sh` forwards no `RD1_` knob, so a rented box cannot set it.
+
+## Read (2026-10-05)
+
+Read from `rd1-rp-5090-2` (RunPod Secure RTX 5090, post-probe anchor rc 0): **DECODED HELD (4/7), V3 NOT HELD (0/7)**, and the
+decision is an opt-in decoded route in grouped-nf4-gemm, then a TC1 full-step A/B.
+- P0, P3 and P4 HELD. P1 and P5 REFUTED, each scored on its text above.
+- The details are in [`RESULTS-rd1.md`](RESULTS-rd1.md). Nothing above this section was changed by the read.
