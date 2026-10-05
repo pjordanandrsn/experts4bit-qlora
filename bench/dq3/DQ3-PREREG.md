@@ -85,7 +85,7 @@ The verdict is the first of these that applies:
 | axis | rule |
 |---|---|
 | **step** | **PASS** if T(S) / T(R) ≤ 1.10; **SLOW** otherwise. |
-| **coverage** **[M]** | **PASS** if S's steady-state blocking fetches are ≤ 2 per step (one per phase's first layer at most) and its overlapped prefetches are ≥ 2 × (64 − 1) per step, forward and backward both; **SCHEDULE_FAIL** otherwise. A forward-only schedule fails here. |
+| **coverage** **[M]** | In each steady-state step of S (steps 3–8): **PASS** if the blocking fetches are ≤ 2, the prefetches issued are exactly 2 × (64 − 2) = 124 (62 forward, 62 backward), and every issued prefetch is consumed (overlapped + waited = issued); **SCHEDULE_FAIL** otherwise. A forward-only schedule fails here (0 backward prefetches). The −2 is by design: at the forward/backward turnaround (layers 63, 62) and at the step boundary (layers 0, 1) the needed neighbour is still resident, so no copy is needed. |
 | **capacity** **[M]** | **PASS** if peak_alloc(R) − peak_alloc(S) ≥ 0.9 × the slot-count prediction (64 − 2) × 243.8 MB = 15.12 GB, i.e. ≥ 13.6 GB; **SHORT** otherwise. |
 | **lane** | **PROTO_PASS** if step, coverage and capacity all PASS. |
 
@@ -106,7 +106,8 @@ The bases:
 | parity (deterministic pass) | R1 = R2 bitwise; S and S0 bitwise equal to R on both steps' loss and every gradient |
 | T(S) / T(R) | [1.00, 1.06] (copies hidden with Rmin ≈ 2.9; DMA slowdown ≈ 1.6%; scheduler overhead small) |
 | T(S0) / T(R) | [1.12, 1.35] (2 × 64 synchronous ~5 ms copies ≈ 0.64 s added to a ≈ 3.1 s step) |
-| blocking fetches, S, steady state | ≤ 2 per step |
+| blocking fetches, S, steady state | 0 per step (the step boundary and the turnaround are resident hits) |
+| prefetches issued, S, steady state | exactly 124 per step (62 forward + 62 backward); waited (copy not done when the layer was reached) ≤ 6 per step |
 | VRAM saving | [13.6, 15.2] GB (slot-count prediction 15.12 GB) |
 | pinned reserved / requested | [1.10, 1.25] (per-tensor power-of-two rounding of the seven homes: 1.135 computed) |
 
@@ -120,6 +121,14 @@ The bases:
 | capacity SHORT | Report what stayed resident (the allocator breakdown); the capacity claim is restated to what was measured. |
 | FUNCTION_FAIL | Stop. Defect issue, fence or schedule fix, a new rehearsal and a new registration. Nothing ships. |
 | VOID / NOISY | One re-run on another gen 5 host; a second stops the lane as an instrument finding. |
+
+## Amendment 0 (2026-10-05, before any code ran or any data existed)
+
+The coverage gate first read "overlapped prefetches ≥ 2 × (64 − 1) per step". Counting the schedule in
+[DESIGN-dq3.md](DESIGN-dq3.md) gives 2 × (64 − 2): at the turnaround and at the step boundary the neighbour the next
+layer needs is still resident, so no prefetch is issued, and the first formula would have failed a correct schedule.
+The gate and its prediction now count exactly what the schedule issues. The same arithmetic is checked on a 4-layer toy
+model by the stage-2 tests.
 
 ## Correctness tests (stage 2, all in CI or on the A2000)
 
