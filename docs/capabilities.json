@@ -277,7 +277,8 @@
     "e4b.train.h2h.unsloth.qwen3_5.5090.2026-10-04.mb1-dq-frozen4",
     "e4b.train.memory-census.qwen3.5090.2026-10-04",
     "e4b.train.env-ab.qwen3.5090.2026-10-04",
-    "e4b.train.bmm-host-replay.5090.2026-10-04"
+    "e4b.train.bmm-host-replay.5090.2026-10-04",
+    "e4b.train.absmax-dq.mixtral.5090.2026-10-05"
    ],
    "limitations": [
     "enable_fast_train returns 0 (does not raise) when the kernel package is absent: assert the return value",

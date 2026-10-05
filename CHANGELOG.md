@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 28 — the double-quantized absmax costs Mixtral 2.3 % of its step for 2.04 GB (P57 HELD); Qwen3's speed pair unstable (P56, P58 UNTESTED); amendment 31 re-asks it over 60 steps
+
+- `tc1-5090-71` ($1.27): Mixtral-8x7B resident, `_dq1`/`_dq0` 1.023 [1.004, 1.043], peak 31.07 → 29.03 GB, held-out −0.0028.
+- `tc1-5090-70` ($1.13): Qwen3-30B-A3B. Peak 27.15 → 25.82 GB and held-out +0.0026, but both speed pairs were unstable (5.6 % and
+  23.8 %), with step times following the host's load average.
+- By the registered rule `E4B_ABSMAX_DQ` stays opt-in. Amendment 31 re-asks P56 (and P58's Qwen3 half) with `TC1_STEPS=60` off the
+  machines that went unstable. Row `e4b.train.absmax-dq.mixtral.5090.2026-10-05`.
+
 ### TC1 amendment 32 registered: one variable, Triton 3.4 against 3.7.1, on one RTX 5090 (P59–P61) (bench and tests only)
 
 - **Why.** Amendment 24's 0.882 changed torch, transformers and triton together. An unregistered RTX A2000 decomposition put the whole
