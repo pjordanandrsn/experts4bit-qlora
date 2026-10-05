@@ -8033,6 +8033,31 @@
       "notes": "The Qwen3-30B-A3B matched position to quote against Unsloth (TC1 amendment 25's decision rule). e4b.train.h2h.unsloth.qwen3.5090.2026-10-03 (1.997) stays as the reading with e4b in the field image's environment. Vast invoiced $1.76."
     },
     {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 39 (#835), one rented RTX 5090 (tc1-5090-86): Qwen3-30B-A3B's matched set (642,514,944 fp32 adapters, matched init) on PACKED rows of exactly 4,096 real tokens (the field recipe's Alpaca examples, extended in tp4_alpaca.py's order, EOS-joined; tokens sha d2a501eba57d), micro-batch 1 x accum 4 (16,384 real tokens per step), both frameworks on one stack (torch 2.12.1+cu130, transformers 5.5.0), TC1_FREE_OUTPUTS=1. Every e4b arm at its defaults -- in venv-unsloth and in venv-e4b, both draws -- ran out of memory at step 1 allocating 2.32 GiB (4,096 x 151,936 x 4 bytes: the fp32 copy of the full-vocabulary logits in Hugging Face's causal-LM loss), 29.5 of 31.36 GiB in use, peak 30.32 GB at the failure (P86 FALSIFIED). Unsloth 2026.9.14 trained the same rows resident at 24.86 GB, 15.164 / 14.040 s/step (7.7 % apart: no speed is read; P84, P85 UNTESTED). An e4b loss in the packed regime: Unsloth computes its loss in chunks.",
+      "value": 30.317,
+      "unit": "GB, e4b's peak at its step-1 OOM on packed 4,096-token rows (the failed allocation 2.32 GiB); Unsloth trained at 24.86 GB",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-86: instance 54297512, AMD EPYC 7B13, Vast machine 145701); e4b @ c12111d (the amendment-39 merge) + grouped-nf4-gemm @ 0d18e13 (0.41.0), in venv-unsloth (torch 2.12.1+cu130) and venv-e4b (torch 2.8.0+cu128); Unsloth 2026.9.14 on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3samestack4k (TC1 amendment 39): TC1_PACK=1 TC1_SEQ=4096 TC1_MB=1 TC1_ACCUM=4 TC1_FREE_OUTPUTS=1 TC1_STEPS=30 TC1_EVAL_EVERY=30, load-gated draws, e4b's reference arm skipped, every e4b arm resident at default settings; validity and scoring by bench/tc1/tc1_reduce.py (the packed fixture predicate)",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-packed4k.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-86/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-86/tc1/"
+      ],
+      "notes": "Vast invoiced $1.37. The host was busy during Unsloth's draws (load1 6.8-22.5)."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-02.quality-n20",
       "package": "experts4bit-qlora",
       "area": "train",

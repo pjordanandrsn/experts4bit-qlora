@@ -191,6 +191,10 @@ the matched-set box's host -- e4b's host-launch-bound step varies more by host t
 60-step draws) **Unsloth/e4b reads 2.352 [2.348, 2.356]** (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack`; e4b 3.494 s/step vs
 8.218, held-out at N=60 COMPARABLE, Unsloth 3.22 GB lower at peak). That is the Qwen3-30B-A3B position to quote; 1.997 is the reading
 with e4b in the field image's environment (torch 2.8.0+cu128 / transformers 5.18.0) and Unsloth in its own.
+**Those positions read short rows.** The field recipe's Alpaca rows carry about 1,000–1,400 real tokens per step. On packed rows of
+4,096 real tokens (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k`, TC1 amendment 39) e4b at its defaults runs out of memory at
+step 1, allocating the fp32 copy of the full-vocabulary logits (2.32 GiB), while Unsloth trains the same rows at 24.86 GB: an e4b loss
+in that regime.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against
 native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
 native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.
