@@ -9637,6 +9637,31 @@
       "notes": "Vast invoiced $1.03."
     },
     {
+      "id": "e4b.train.triton37.qwen3.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 32 (#835), one rented RTX 5090 (tc1-5090-74): e4b against itself in venv-e4b (torch 2.8.0+cu128) with its own triton 3.4 vs triton 3.7.1 put first on PYTHONPATH, 60-step runs, the prebound launches off, two draws a side in ABBA order. Shipped arm (bf16 adapters) tr1 / tr0 0.971 [0.955, 0.988] (3.117 / 3.023 vs 2.976 / 2.986 s/step; P60 HELD); matched arm (fp32 adapters) 0.992 [0.968, 1.017] (P59 FALSIFIED, band [0.82, 0.95]); held-out within 0.001 on both (P61 HELD). An unregistered RTX A2000 decomposition had put amendment 24's whole environment gain (0.882 on the matched arm) in triton 3.7.1's device code for grouped-nf4-gemm's kernels; on the 5090's host-bound step that does not transfer, so the gain stays with torch 2.12 and/or transformers 5.5 (amendment 34 splits them).",
+      "value": 0.971,
+      "unit": "ratio s/step on the shipped arm, triton 3.7.1 over triton 3.4 in venv-e4b (medians of steps 11..60 over two draws each); matched arm 0.992",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-74: AMD EPYC 7B13, Vast machine 145701); e4b @ 2f53013 + grouped-nf4-gemm @ main at launch on torch 2.8.0+cu128",
+      "conditions": "bench/tc1 token qwen3tritonab (TC1 amendment 32): TC1's tokens and field recipe over 60 steps, matched and shipped arms, E4B_TRITON_PREBIND=0 GNF4_TRITON_PREBIND=0 on both sides; engagement on env.triton and prebind_ab; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-tritonab.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-74/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-74/tc1/"
+      ],
+      "notes": "Vast invoiced $1.28."
+    },
+    {
       "package": "experts4bit-qlora",
       "area": "train",
       "id": "e4b.train.h2h.unsloth.qwen3.h100.2026-10-04",

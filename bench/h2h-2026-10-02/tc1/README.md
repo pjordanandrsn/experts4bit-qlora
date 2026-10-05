@@ -41,6 +41,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-71` | `mixtraldqab` (amendment 28) | instance 54223342, AMD EPYC 7B13 (Vast machine 145701) | the same on Mixtral-8x7B resident: dq1/dq0 1.023, peak 31.07 → 29.03 GB, held-out −0.0028 (P57 HELD); [read](RESULTS-tc1-dqab.md) | $1.27 |
 | `tc1-5090-72` | `qwen3samestack` (amendment 29, 60 steps) | instance 54227048, AMD EPYC 7C13 (Vast machine 45511) | the same-stack pair over 60 steps: e4b's same-stack draws 13.1 % apart and its field-image draws 6.4 %, host load1 6–23, so no ratio is read (P50, P51 UNTESTED, final); amendment 33 re-asks with load-gated draws; [read](RESULTS-tc1-samestack-box3.md) | $1.75 |
 | `tc1-5090-75` | `qwen3dqab` (amendment 31, 60 steps) | instance 54238515, AMD EPYC 7B13 (Vast machine 145701) | Qwen3-30B-A3B's absmax pair over 60 steps on a quiet host: dq1/dq0 1.014, peak 27.44 → 26.10 GB, held-out −0.0021 (P56 HELD; with P57 and P58, amendment 28's rule makes the double-quantized absmax the default); [read](RESULTS-tc1-dqab-qwen3-60.md) | $1.03 |
+| `tc1-5090-74` | `qwen3tritonab` (amendment 32, 60 steps) | instance 54237146, AMD EPYC 7B13 (Vast machine 145701) | one variable, triton 3.4 vs 3.7.1 in venv-e4b: matched arm 0.992 (P59 FALSIFIED), shipped arm 0.971 (P60 HELD), held-out within 0.001 (P61 HELD); the environment gain is not triton's on this host-bound step; amendment 34 splits it; [read](RESULTS-tc1-tritonab.md) | $1.28 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -49,6 +50,26 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 32 (2026-10-05): triton 3.7.1 alone is not the 5090's environment gain on the matched arm (0.992), and is 2.9 % on the shipped arm
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 32 and 34. One RTX 5090 (`tc1-5090-74`, AMD EPYC 7B13,
+Vast machine 145701, host load1 3.0–9.4). venv-e4b (torch 2.8.0) with its own triton 3.4 (`_tr0`) against triton 3.7.1 put first on the
+arm's `PYTHONPATH` (`_tr1`), 60-step runs, prebound launches off. Read: [`RESULTS-tc1-tritonab.md`](RESULTS-tc1-tritonab.md).
+
+| arm | `_tr0` s/step | `_tr1` s/step | `_tr1`/`_tr0` | prediction |
+|---|---|---|---|---|
+| matched (fp32 adapters) | 3.827 / 3.871 | 3.894 / 3.746 | 0.992 [0.968, 1.017] | **P59 FALSIFIED** ([0.82, 0.95]) |
+| shipped (bf16 adapters) | 3.117 / 3.023 | 2.976 / 2.986 | **0.971** [0.955, 0.988] | **P60 HELD** ([0.85, 0.98]) |
+
+- **P61 HELD.** Held-out moves −0.0008 on the matched arm and +0.0005 on the shipped arm.
+- **By the registered rule the A2000 decomposition does not transfer.** On the A2000 the slice ran device-bound, and triton 3.7.1's faster
+  code for grouped-nf4-gemm's kernels was the whole gain. On the 5090's host-bound step that device time is not what binds, and the
+  matched arm does not move. The shipped arm gains 2.9 %.
+- **What is left.** Amendment 24's 0.882 must come from torch 2.12 and/or transformers 5.5. Both removed host work on the A2000:
+  attention-mask handling in torch, and the router's dtype round trip in transformers. Amendment 34 splits them on the 5090. Row
+  `e4b.train.triton37.qwen3.5090.2026-10-05`.
+
 
 ## Amendment 31 (2026-10-05): Qwen3-30B-A3B's absmax pair, read over 60 steps; the double-quantized absmax becomes the default
 

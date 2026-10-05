@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 32 — triton 3.7.1 alone is not the 5090's environment gain on the matched arm (P59 FALSIFIED, 0.992) and is 2.9 % on the shipped arm (P60 HELD); amendment 34 registered: split transformers from torch
+
+- `tc1-5090-74` ($1.28, a quiet EPYC 7B13, 60-step runs): venv-e4b with triton 3.7.1 against its own 3.4, prebound launches off.
+  - Matched arm 0.992 [0.968, 1.017]; shipped arm 0.971 [0.955, 0.988]; held-out within 0.001.
+  - An unregistered RTX A2000 decomposition had put amendment 24's gain in triton's device code. It does not transfer to the 5090's
+    host-bound step.
+- Amendment 34 (token `qwen3envsplit`): the matched arm in venv-e4b, in venv-e4b-tf55 (transformers 5.5.0, built on the box) and in
+  venv-unsloth, 60 steps, load-gated draws. P62 transformers alone in [0.90, 1.00]; P63 torch + triton in [0.85, 0.99]; P64 the whole
+  environment in [0.80, 0.95]; P65 held-out within 0.005. `arm_once` gains `E4B_VENV=tf55`. The reducer scores them (one new self-test
+  case). Row `e4b.train.triton37.qwen3.5090.2026-10-05`.
+
 ### Default: the CLI trainer double-quantizes the frozen expert absmax for resident training; `E4B_ABSMAX_DQ=0` turns it off
 
 - **Why.** TC1 amendments 28 and 31 read `E4B_ABSMAX_DQ` against the fp32 absmax on one RTX 5090 each. Held-out moved by 0.003 or

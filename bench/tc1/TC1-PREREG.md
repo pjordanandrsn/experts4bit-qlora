@@ -1322,3 +1322,52 @@ unchanged, read as before: two stable VALID draws a side.
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard (a voided draw adds up to one arm's time), TC1's 98 GB host floor; about
 $2.50 with the download and up to two re-runs. This is in the standing no-ask tier.
 
+### Amendment 34 (2026-10-05T03:26Z, after amendment 32's read): amendment 24's environment gain, split between transformers and torch on the 5090 (P62–P65)
+
+**Why.** Amendment 24 read e4b's matched arm at 0.882× in Unsloth's environment (torch 2.12.1, transformers 5.5.0, triton 3.7.1) against
+the field image's (torch 2.8.0, transformers 5.18.0, triton 3.4). An unregistered RTX A2000 decomposition put that gain in triton 3.7.1's
+device code. Amendment 32 (`tc1-5090-74`) then read triton 3.7.1 alone at 0.992× on the 5090's matched arm (P59 FALSIFIED) and 0.971×
+on its shipped arm (P60 HELD). By that amendment's rule, the gain stays unattributed between torch and transformers on the host-bound
+5090 step.
+
+The A2000 profile points at host work in both:
+
+- torch 2.12 removed about 2,300 host events per 4-layer step, mostly in attention with a padded mask;
+- transformers 5.5 removed about 560, in the router, where 5.18 casts the routing weights to bf16 and e4b casts them back.
+
+On a 48-layer host-bound step those could matter.
+
+**The box** (token `qwen3envsplit`). One RTX 5090, TC1's qwen3 tokens and field recipe, `TC1_STEPS=60`, load-gated draws
+(`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), avoiding machines 45511, 138786 and 151350. The matched arm in three environments, two
+draws each in ABC CBA order:
+
+| side | venv | torch | transformers | triton |
+|---|---|---|---|---|
+| `_e0` | venv-e4b | 2.8.0 | 5.18.0 | 3.4 |
+| `_e1` | venv-e4b-tf55, built on the box exactly as venv-e4b but with transformers 5.5.0 | 2.8.0 | 5.5.0 | 3.4 |
+| `_e2` | venv-unsloth + e4b | 2.12.1 | 5.5.0 | 3.7.1 |
+
+The prebound launches are off on every side; they cover triton 3.4 and 3.6 only, so they would be a fourth variable. Engagement: each
+receipt records the torch and transformers its side names, and both prebind flags off. A failed venv-e4b-tf55 build leaves `_e1` arms
+`install_failed`.
+
+**Predictions** (registered before the box):
+
+- **P62** (transformers alone): `_e1` / `_e0` lies in **[0.90, 1.00]**.
+- **P63** (torch 2.12 + triton 3.7, at transformers 5.5): `_e2` / `_e1` lies in **[0.85, 0.99]**.
+- **P64** (the whole environment, amendment 24 re-read under the gate): `_e2` / `_e0` lies in **[0.80, 0.95]**.
+- **P65:** |mean held-out at N| of `_e1` − `_e0` and of `_e2` − `_e0` are each ≤ **0.005**.
+
+Each speed prediction needs two stable VALID draws per side. Each is FALSIFIED outside its band and UNTESTED where a side is unstable, not
+VALID or not engaged.
+
+**Decision rules.**
+
+- **P62 HELD with the ratio at or below 0.97:** e4b finds what transformers 5.18 adds to its step, router casts first, and works around
+  it in its own PR with its own A/B.
+- **P63 HELD:** e4b's docs say that torch ≥ 2.12 runs its host-bound training step faster on an RTX 5090.
+- No position against another framework is read here; amendment 33's box is the same-stack position.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, with venv-unsloth built for `_e2`. About $2
+with the download and the gate's possible re-runs; this is in the standing no-ask tier.
+
