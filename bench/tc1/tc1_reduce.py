@@ -571,6 +571,43 @@ def prebind_ab_why(tag, r, fam=None):
     return "" if not bad else f"prebind A/B not engaged ({'; '.join(bad)}; triton {pa.get('triton')})"
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 36: the compact padded LoRA delta (gnf4#445)
+COMPACT_FAM = "qwen3compactab"    # NF4_QLORA_COMPACT_DELTA=0 (side cd0, the default) vs =1 (cd1), shipped and matched arms, venv-unsloth
+COMPACT_PAIRS = (("P70", "matched", "fused_attn4_m"), ("P71", "shipped", "fused_attn4_shipped"))   # each: <tag>_cd0 vs <tag>_cd1, two draws a side
+COMPACT_SPEED_BAND = (0.97, 1.02)  # cd1 / cd0 s/step on stable pairs
+COMPACT_PEAK_DROP = (0.3, 2.0)     # P69: GB, median peak cd0 - cd1 on the matched arm
+COMPACT_HELDOUT_MAX = 0.005        # P72: |mean held-out at N, cd1 - cd0| on each arm (the same gradient bytes)
+FAMS.append(COMPACT_FAM)
+NAMES[COMPACT_FAM] = "Qwen3-30B-A3B (amendment 36: grouped-nf4-gemm's padded LoRA delta saving its block vs its input, venv-unsloth)"
+N_LAYERS[COMPACT_FAM] = 48
+ATTN_CENSUS[COMPACT_FAM] = 192
+DENSE_PINS[COMPACT_FAM] = DENSE_PINS[QDENSE_FAM]   # the qwen3 pin, read through amendment 22's check
+FAM_ANCHOR[COMPACT_FAM] = ("e4b", "fused_attn4_m_cd0")
+EXPECTED[COMPACT_FAM] = [("e4b", "fused_attn4_shipped_cd0"), ("e4b", "fused_attn4_shipped_cd1"), ("e4b", "fused_attn4_m_cd0"), ("e4b", "fused_attn4_m_cd1"),
+                         ("e4b", "fused_attn4_m_cd1_d2"), ("e4b", "fused_attn4_m_cd0_d2"), ("e4b", "fused_attn4_shipped_cd1_d2"), ("e4b", "fused_attn4_shipped_cd0_d2")]
+MATCHED |= {"fused_attn4_m_cd0", "fused_attn4_m_cd1", "fused_attn4_m_cd0_d2", "fused_attn4_m_cd1_d2"}
+for _p, _n, _t in COMPACT_PAIRS:
+    for _side in ("cd0", "cd1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+
+
+def compact_ab_why(tag, r):
+    """Amendment 36's engagement predicate: the arm ran torch 2.12 (venv-unsloth), grouped-nf4-gemm resolved the compact delta to its side
+    (keep_ab.gnf4_compact_delta "1" on cd1, "0" on cd0), no layer kept its MoE activations, and the padded LoRA path ran (lean_ab's
+    lora_path_calls.padded > 0), so the compact node is the route the switch changes. Empty string = engaged."""
+    r = r or {}
+    ka, la = r.get("keep_ab"), r.get("lean_ab") or {}
+    if not isinstance(ka, dict):
+        return "no keep_ab record on the receipt: whether the compact delta was in force cannot be verified"
+    want = "1" if "_cd1" in tag else "0"
+    tv = str((r.get("env") or {}).get("torch") or "")
+    padded = int(((la.get("lora_path_calls") or {}).get("padded")) or 0)
+    bad = [k for k, ok in ((f"gnf4_compact_delta {want}", ka.get("gnf4_compact_delta") == want), ("layers_kept 0", int(ka.get("layers_kept") or 0) == 0),
+                           ("the padded LoRA path ran", padded > 0), ("env.torch 2.12*", tv.startswith("2.12"))) if not ok]
+    return "" if not bad else (f"compact-delta A/B not engaged ({', '.join(bad)}; compact {ka.get('gnf4_compact_delta')!r}, kept {ka.get('layers_kept')!r}, "
+                               f"padded calls {padded}, torch {tv or 'missing'})")
+
+
 # ----------------------------------------------------------------------------- TC1 amendment 28: the double-quantized expert absmax as a default
 QDQ_FAM = "qwen3dqab"             # E4B_ABSMAX_DQ=0 (side dq0, the default) vs =1 (dq1, #1040) on the matched arm, resident, every other default
 MDQ_FAM = "mixtraldqab"           # the same on Mixtral-8x7B-Instruct at TC2's pin and field recipe
@@ -1242,6 +1279,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam in PREBIND_SPECS and fw == "e4b":           # amendments 26 / 35: the prebound launches its tag names, engaged on both sides
         w = prebind_ab_why(r.get("tag") or "", r, fam)
+        if w:
+            why.append(w)
+    if fam == COMPACT_FAM and fw == "e4b":             # amendment 36: the padded LoRA delta its tag names, on the padded route, torch 2.12
+        w = compact_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam in DQ_FAMS and fw == "e4b":                 # amendment 28: the expert absmax its tag names
@@ -2383,6 +2424,50 @@ def score_dqab(F):
         out.append(("P58", "dqab", "UNTESTED", ev))
     else:
         out.append(("P58", "dqab", "HELD", ev))
+    return out
+
+
+def score_compactab(F):
+    """TC1-PREREG amendment 36, on the qwen3compactab box: P69 -- on the matched arm the median peak falls by COMPACT_PEAK_DROP (cd0 - cd1);
+    P70 (matched) and P71 (shipped) -- cd1 / cd0 s/step within COMPACT_SPEED_BAND; each over two VALID draws a side with each side's draws
+    within 5 %; P72 -- on each arm |mean held-out at N, cd1 - cd0| <= COMPACT_HELDOUT_MAX. Outside FALSIFIED; a missing / non-VALID /
+    unstable side UNTESTED."""
+    R = F.get(COMPACT_FAM)
+    if not R:
+        return []
+    out, p72, drop_ev = [], [], None
+    for pid, name, t in COMPACT_PAIRS:
+        O, N = R["draws"].get(("e4b", f"{t}_cd0"), {}), R["draws"].get(("e4b", f"{t}_cd1"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("cd0", O), ("cd1", N)))
+            out.append((pid, COMPACT_FAM, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            p72.append((name, None, why))
+            if name == "matched":
+                drop_ev = ("UNTESTED", f"matched: two stable VALID draws a side are registered -- {why}")
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        lo, hi = COMPACT_SPEED_BAND
+        h0, h1 = O.get("heldout_list") or [], N.get("heldout_list") or []
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        p72.append((name, dq, f"held-out at N cd0 {[round(v, 4) for v in h0 if v is not None]} cd1 {[round(v, 4) for v in h1 if v is not None]}"))
+        drop = (O["peak"] - N["peak"]) if (O.get("peak") is not None and N.get("peak") is not None) else None
+        out.append((pid, COMPACT_FAM, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+                    f"{name}: cd1 / cd0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; s/step cd0 "
+                    f"{O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), cd1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} "
+                    f"(within {100 * N['stability']:.1f}%); peak cd0 {f(O.get('peak'), 2)} / cd1 {f(N.get('peak'), 2)} GB"))
+        if name == "matched":
+            plo, phi = COMPACT_PEAK_DROP
+            ev = f"matched: peak cd0 {f(O.get('peak'), 3)} / cd1 {f(N.get('peak'), 3)} GB, drop {f(drop, 3)} vs {[plo, phi]}"
+            drop_ev = ("UNTESTED", ev + " (no peak recorded)") if drop is None else ("HELD" if plo <= drop <= phi else "FALSIFIED", ev)
+    out.insert(0, ("P69", COMPACT_FAM) + (drop_ev or ("UNTESTED", "matched: no pair")))
+    ev = "; ".join(f"{n}: " + (f"mean held-out cd1 - cd0 {d:+.4f} (|.| <= {COMPACT_HELDOUT_MAX}); {e}" if d is not None else e) for n, d, e in p72)
+    if any(d is not None and abs(d) > COMPACT_HELDOUT_MAX for _, d, _ in p72):
+        out.append(("P72", COMPACT_FAM, "FALSIFIED", ev))
+    elif any(d is None for _, d, _ in p72):
+        out.append(("P72", COMPACT_FAM, "UNTESTED", ev))
+    else:
+        out.append(("P72", COMPACT_FAM, "HELD", ev))
     return out
 
 
@@ -3703,6 +3788,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_prebindab(F, PREBIND37_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if COMPACT_FAM in F:
+        out += ["\n## Predictions P69 / P70 / P71 / P72 (TC1-PREREG amendment 36: the compact padded LoRA delta off vs on, venv-unsloth, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_compactab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if any(fam in F for fam in DQ_FAMS):
         out += ["\n## Predictions P56 / P57 / P58 (TC1-PREREG amendment 28: the expert absmax fp32 vs double-quantized, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -4080,6 +4170,28 @@ def _prebind_set(ship=((3.10, 3.12), (2.92, 2.94)), match=((3.90, 3.92), (3.72, 
                 R[("e4b", tag)] = r
     for r in R.values():
         r["fam"] = fam
+    return R
+
+def _compact_set(match=((3.50, 3.52), (3.48, 3.50)), ship=((3.00, 3.02), (2.99, 3.01)), peaks=(27.50, 26.80), held_shift=0.0, flags=("0", "1"),
+                 kept=0, padded=49152, torch="2.12.1+cu130", record=True):
+    """Amendment 36: e4b against itself -- each pair as (cd0 draws, cd1 draws) s/step; `peaks` = the matched arm's (cd0, cd1) GB (the shipped
+    arm's sit 2 GB lower); `flags` = each side's resolved gnf4_compact_delta; `kept` / `padded` / `torch` as every receipt records them;
+    `held_shift` moves the cd1 sides' held-out; `record=False` drops keep_ab."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for i_side, (side, ss) in enumerate((("cd0", old), ("cd1", new))):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if side == "cd1" else 0.0), matched=matched)
+                r["peak_vram_gb"] = peaks[i_side] - (0.0 if matched else 2.0)
+                r["env"]["torch"] = torch
+                r["lean_ab"] = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                                "lora_path_calls": {"loop": 0, "padded": padded, "grouped_mm": 0}}
+                if record:
+                    r["keep_ab"] = {"requested_env": None, "e4b_has_moe_keep": True, "layers_kept": kept, "gnf4_compact_delta": flags[i_side],
+                                    "gnf4_compact_delta_env": flags[i_side]}
+                r["fam"] = COMPACT_FAM
+                R[("e4b", tag)] = r
     return R
 
 def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1536), dense_dgrad=(0, 1536), absmax=(True, True), held_shift=0.0, drop_route=False):
@@ -5952,6 +6064,27 @@ def selftest():
         assert p7(**kw) == {"P66": "UNTESTED", "P67": "UNTESTED", "P68": "UNTESTED"}
     print("FAILING-CASE TC1-am35-engagement (reducer):", "VOID", "--", str(why)[-120:])
     assert pp() == {"P53": "HELD", "P54": "HELD", "P55": "HELD"}           # amendment 26's box reads as before (triton 3.4, no torch check)
+    cases += 1
+    # 88. TC1 amendment 36 (qwen3compactab): matched peak -0.70 GB, matched 0.994 and shipped 0.997 HELD; too small a drop, a slower cd1 and a
+    #     held-out gap each FALSIFY; a side that resolved the wrong flag, kept layers, ran no padded call or ran torch 2.8 is VOID
+    CF = lambda R: {COMPACT_FAM: reduce_family(COMPACT_FAM, R, {}, 20)}
+    RC = CF(_compact_set())
+    assert [(x["fw"], x["tag"]) for x in RC[COMPACT_FAM]["rows"]] == EXPECTED[COMPACT_FAM]
+    assert all(x["verdict"] == "VALID" for x in RC[COMPACT_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RC[COMPACT_FAM]["rows"]]
+    pc = lambda **kw: {p: v for p, _, v, _ in score_compactab(CF(_compact_set(**kw)))}
+    assert pc() == {"P69": "HELD", "P70": "HELD", "P71": "HELD", "P72": "HELD"}, score_compactab(RC)
+    assert "drop 0.700 vs [0.3, 2.0]" in score_compactab(RC)[0][3] and "cd1 / cd0 0.994 [" in score_compactab(RC)[1][3], score_compactab(RC)
+    assert pc(peaks=(27.50, 27.40)) == {"P69": "FALSIFIED", "P70": "HELD", "P71": "HELD", "P72": "HELD"}            # 0.10 GB: too small a drop
+    assert pc(match=((3.50, 3.52), (3.62, 3.64))) == {"P69": "HELD", "P70": "FALSIFIED", "P71": "HELD", "P72": "HELD"}  # 1.034: slower
+    assert pc(held_shift=0.008) == {"P69": "HELD", "P70": "HELD", "P71": "HELD", "P72": "FALSIFIED"}
+    for kw, frag in (({"flags": ("0", "0")}, "gnf4_compact_delta 1"), ({"kept": 4}, "layers_kept 0"), ({"padded": 0}, "the padded LoRA path ran"),
+                     ({"torch": "2.8.0+cu128"}, "env.torch 2.12*"), ({"record": False}, "no keep_ab record")):
+        RV = CF(_compact_set(**kw))
+        tag = "fused_attn4_m_cd1"
+        why = next(x["why"] for x in RV[COMPACT_FAM]["rows"] if x["tag"] == tag)
+        assert RV[COMPACT_FAM]["verdicts"][("e4b", tag)] == "VOID" and frag in str(why), (kw, why)
+    assert pc(flags=("0", "0")) == {"P69": "UNTESTED", "P70": "UNTESTED", "P71": "UNTESTED", "P72": "UNTESTED"}
+    print("FAILING-CASE TC1-am36-engagement (reducer):", "VOID", "--", str(why)[-120:])
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
