@@ -1,6 +1,54 @@
 # Changelog
 
-## Unreleased
+## 0.47.0 — 2026-10-05 — serve_paged's first-chunk prefill graph is on by default (`auto`; lane SC2b: serial TTFT 1.30-1.65x faster with byte-identical text, +3.3 GiB, capacity unchanged); LFM2, Granite-4.0-H, ERNIE-4.5 and Nemotron-H supported for fast training (MG1); CI on grouped-nf4-gemm 0.39.0
+
+**0.47.0.** One default changes, by lane SC2b's licence: `serve_paged`'s first-chunk prefill graph is `auto`.
+
+- **Serving: `E4B_PAGED_PREFILL_GRAPH=auto` by default.** Every 512-token first chunk replays one CUDA graph of the
+  prefill forward, wherever the graph's startup check passes (bitwise against eager).
+  - **What SC2b read** (#846; one RTX 5090, Qwen3-30B-A3B int4, 16 sequences): the graph engaged on all 508 requests,
+    and serial text was byte-identical with it off and on in both draws. Serial TTFT was **1.645× and 1.299×** faster,
+    and nothing regressed at any arrival rate. The capacity ceiling stays at **1 req/s**: under load, the per-prefill
+    stall is mostly work outside the graphed forward.
+  - **Memory.** The graph's private pool holds its forward's working set for its life (**+3.3 GiB** in SC2b), so
+    `auto` stands down when the device's free memory after capture is below that pool. Where it stands down, or the
+    check refuses, the server runs with eager prefill and `/health`'s `prefill_graph` says why.
+  - `E4B_PAGED_PREFILL_GRAPH=0` restores eager prefill; `1` stops the server on a refusal. `prefill_graph.requested` is
+    now the setting string.
+- **Training support (MG1).** LFM2-8B-A1B, granite-4.0-h-tiny, ERNIE-4.5-21B-A3B and Nemotron-3.5-Lightning-30B-A3B
+  enter `fast_train = supported`; each passed tp1's loss-parity verdict on one RTX 5090. Qwen3.6-35B-A3B also passes,
+  but stays `experimental` until its dgrad counter (P2) is read. Gemma-4 and OLMoE re-read clean after #1048.
+- **CI on grouped-nf4-gemm 0.39.0.** Its `GNF4_TRAIN_GEMM=auto` takes the dense route off sm_90 for training calls with
+  at most 16 present experts (TC1 amendment 22: Mixtral-8x7B's step 0.651× on an RTX 5090; Qwen3-like layers stay
+  fused). The `[fast]` floor stays `>=0.30.0`; `pip install -U grouped-nf4-gemm` picks it up.
+- **New: before-load serve planning.** `estimate_serve_footprint`, `ServeSetup` and `paged_kv_pool_bytes` price what
+  `serve_paged` will hold under the all-VRAM placement, from the config and a `meta` tree, before anything loads. The
+  KV pool's bytes match the pool's own allocation exactly; the working set is a stated heuristic.
+- **Opt-in: `E4B_TRITON_PREBIND=1`.** The fused RMSNorm and rotary kernels launch without Triton's per-call argument
+  binding. TC1 amendment 26 is registered to read it.
+- **Also in this release:**
+  - TC1 amendments 25 and 27. On one software stack the matched set holds on two boxes (P52), and e4b's same-stack
+    speed pairs were unstable both times (P50 and P51 UNTESTED, final). Amendment 28, the double-quantized absmax as a
+    default, is registered;
+  - MG1 amendment 2: the ladder OOMs at Qwen3.6's licensed configuration, so P2 stays unread and `qwen3_5_moe` stays
+    `experimental`;
+  - the provenance of TC2 amendment 8's Mixtral row: grouped-nf4-gemm `@bb56b42`, not the v0.38.0 tag.
+
+### Read: TC1 amendment 26 — prebound Triton launches take 2.7 % off the matched arm's step (P54 HELD); the shipped pair was unstable (P53, P55 UNTESTED), so the flags stay opt-in; amendment 30 re-asks it over 60 steps
+
+- `tc1-5090-69` ($0.43, Core Ultra 9 285K). Matched arm `_pb1`/`_pb0` 0.973 [0.958, 0.988], held-out within 0.0012, with 73,591
+  prebound e4b launches and 24,546 prebound grouped-nf4-gemm launches on the `_pb1` side.
+- The shipped arm's flags-off draws were 8.3 % apart. Its `_pb1` draws (1.972 / 1.970) read slower than both `_pb0` draws, which would
+  have falsified P53 had the pair been stable.
+- By the registered rule `E4B_TRITON_PREBIND` and `GNF4_TRITON_PREBIND` stay opt-in. Amendment 30 re-asks the shipped pair with
+  `TC1_STEPS=60` on another machine; its reading is final.
+
+### Read: TC1 amendment 27, the re-draw — the matched set holds again (P52), e4b's same-stack pair unstable (P50, P51 UNTESTED, final); amendment 29 registered: the pair over 60 steps
+
+- `tc1-5090-68` ($1.86, EPYC 7663): Unsloth 8.989 / 9.246 s/step and e4b's field-image arm 4.388 / 4.314 were stable. e4b's same-stack
+  arm, 4.060 / 3.755, was 7.8 % apart, so no ratio is read and P50 and P51 stay UNTESTED under amendment 25.
+- Across two boxes, three different pairs lost stability over TC1's 10-step median window. Amendment 29 re-asks P50 and P51, with their
+  bands unchanged, on one box with `TC1_STEPS=60` (50-step medians), the reference arm not run. Its reading is final.
 
 ### MG1 amendment 3 read: Qwen3.6-35B-A3B enters `fast_train = supported` (P8 HELD: the dgrad kernel served every frozen-GEMM backward of tp1's licensed fused arm) (docs and receipts)
 

@@ -1167,3 +1167,48 @@ Each is FALSIFIED outside its band, and UNTESTED where a side is unstable, not V
 **Budget.** Two RTX 5090s at the policy rate ($0.85/h), 3 h guards. TC1's 98 GB host floor for Qwen3 and 192 GB for Mixtral
 (TC2's), about $1.30 and $2.50 with the downloads; this is in the standing no-ask tier.
 
+### Amendment 29 (2026-10-05T00:15Z, after amendment 27's re-draw): the same-stack speed pair over 60 steps (P50, P51 re-asked)
+
+**Why.** Amendment 25's box and its one registered re-draw each lost one speed pair to instability, a different pair each time:
+
+| box | host | unstable pair |
+|---|---|---|
+| `tc1-5090-67` | Core Ultra 9 285K | Unsloth 18.2 % apart; e4b's field-image arm 8.4 % |
+| `tc1-5090-68` | EPYC 7663 | e4b's same-stack arm 7.8 % |
+
+The matched set held on both boxes (P52 HELD twice). By amendment 27's rule P50 and P51 stay UNTESTED under amendment 25. TC1's 20-step
+runs take their median over 10 steps (11..20), so a host hiccup of a few steps moves a draw by more than 5 %. The window is what failed;
+no prediction was read.
+
+**This amendment** re-asks P50 and P51 with their bands unchanged ([1.9, 2.9] and [0.80, 0.95]), on a longer window:
+
+- `TC1_STEPS=60`, so each arm's median is over steps 11..60 (50 steps);
+- everything else as amendment 25's box, except that e4b's reference arm is not run. P52 held on both boxes, and the reference loop at 60
+  steps would take about 30 minutes.
+
+One box, on a machine neither earlier box used. Its reading is final, and no re-draw follows under this amendment. If P50 and P52 have
+both HELD (P52 on amendment 25's boxes), amendment 25's decision rule applies to this box's ratio.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; about $1.80 with the download. This is in the
+standing no-ask tier.
+
+### Amendment 30 (2026-10-05T00:52Z, after amendment 26's read): the shipped arm's prebind pair over 60 steps (P53, P55 re-asked)
+
+**Why.** Amendment 26's box (`tc1-5090-69`, Intel Core Ultra 9 285K, Vast machine 151350) read P54 HELD: the matched arm stepped 0.973×
+with the prebound launches. P53 went UNTESTED because the shipped arm's flags-off draws were 8.3 % apart (1.926 / 1.772 s/step). The
+shipped arm's flags-on draws were stable (1.972 / 1.970) and slower than both, so the unread pair points against P53. The 20-step window
+takes its median over 10 steps. Two of the last three boxes on that machine lost a pair to instability.
+
+**This amendment** re-asks P53 (shipped `_pb1` / `_pb0` in **[0.90, 0.98]**) and P55's shipped half (|mean held-out at N, `_pb1` −
+`_pb0`| ≤ **0.005**), bands unchanged, on a longer window:
+
+- `TC1_STEPS=60`, so each median covers steps 11..60;
+- the shipped arm only, `_pb0` / `_pb1`, two draws a side in ABBA order, venv-e4b, every other setting as amendment 26's box;
+- on a machine other than 151350.
+
+**Its reading is final.** The decision rule is amendment 26's: P53, P54 (HELD on amendment 26's box) and P55 HELD turn both flags on by
+default for the Triton versions they cover. Otherwise they stay opt-in, and a FALSIFIED P53 is quoted as the prebound launches' cost on
+the shipped arm.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; about $1.20 with the download. This is in the
+standing no-ask tier.
