@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### TC1 amendment 36 registered: grouped-nf4-gemm's compact padded LoRA delta, A/B for peak and speed on one stack (bench and tests only)
+
+- **Why.** On one stack Unsloth peaks 3.22 GB below e4b. Amendment 23's census puts the part beyond the fp32 absmax in transients, led
+  by grouped-nf4-gemm's padded LoRA delta block. grouped-nf4-gemm#445's `NF4_QLORA_COMPACT_DELTA=1` (same values; saves the input, not
+  the block) has stayed opt-in pending a within-box A/B.
+- **The box** (token `qwen3compactab`): the shipped and the matched arm, `_cd0` vs `_cd1`, two draws a side, in venv-unsloth, 60 steps,
+  load-gated draws. P69 matched peak falls by [0.3, 2.0] GB; P70 / P71 speed in [0.97, 1.02]; P72 held-out within 0.005. All four
+  HELD makes it grouped-nf4-gemm's default.
+- `tc1_run.sh` gains `tc1_compactab_family`; the reducer scores it (`score_compactab`), and its engagement predicate reads the resolved
+  flag, no kept layers, the padded route and torch 2.12 off each receipt (one new self-test case).
+
 ### TC1 amendment 35 registered: amendment 26's prebound-launch A/B under triton 3.7.1 (bench and tests only)
 
 - **Why.** The prebound Triton launches became the default on amendment 26's and 30's 5090 boxes under triton 3.4 (0.973 matched,
