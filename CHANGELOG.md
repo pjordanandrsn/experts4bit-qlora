@@ -1,6 +1,40 @@
 # Changelog
 
-## Unreleased
+## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
+
+**0.48.0.** Two training defaults change, each by a rule registered and read in lane TC1 (#835).
+
+- **Prebound Triton launches are on** (`E4B_TRITON_PREBIND`; grouped-nf4-gemm 0.41.0's `GNF4_TRITON_PREBIND` too). The
+  fused RMSNorm, rotary and training GEMM kernels launch without Triton's per-call argument binding. They run the same
+  compiled kernels, so outputs are bit-identical.
+  - TC1 amendments 26 and 30 read Qwen3-30B-A3B's step at **0.973×** (matched arm) and **0.980×** [0.957, 1.003]
+    (shipped arm) on an RTX 5090, with held-out loss unchanged (`e4b.train.prebind.qwen3.5090.2026-10-05`).
+  - `=0` turns either flag off. Triton 3.4, 3.6 and 3.7 are covered; any other release keeps Triton's own launch.
+- **The CLI trainer double-quantizes the frozen expert absmax** for resident training (`python -m experts4bit_qlora.train`;
+  `E4B_ABSMAX_DQ=0` turns it off). TC1 amendments 28 and 31:
+  - Qwen3-30B-A3B: **1.014×** the step for **1.34 GB** less peak;
+  - Mixtral-8x7B: **1.023×** for **2.04 GB** less;
+  - held-out within 0.003.
+
+  Expert offload and `TRAIN_ARENA` keep the fp32 absmax they read by name.
+- **The quoted training position.** TC1 amendment 33 put both frameworks on one software stack (torch 2.12.1+cu130,
+  transformers 5.5.0), with load-gated draws on a quiet RTX 5090. Unsloth/e4b reads **2.352** [2.348, 2.356] on
+  Qwen3-30B-A3B, and it becomes the quoted position. Amendment 19's 1.997, with e4b in the field image's environment,
+  stays as that reading; `STATUS.md` names both.
+- **Fast-training support:** Qwen3.6-35B-A3B enters `fast_train = supported` (MG1 amendment 3: the dgrad kernel served
+  every frozen-GEMM backward).
+- **Serving.**
+  - `serve_paged` decodes eagerly below sm_89 instead of dying in Triton's compiler (Ampere: A100, A6000, RTX 30-series,
+    A2000). There, the prefill graph's `auto` reports `refused`, since it needs the device grouping the decode graphs
+    turn on.
+  - The serve estimate (`estimate_serve_footprint`) names the prefill graph's pool, and covers the solver's VRAM, DRAM
+    and NVMe tiers and the hybrid tier's host buffers.
+- **CI on grouped-nf4-gemm 0.41.0.** The `[fast]` floor stays `>=0.30.0`; `pip install -U grouped-nf4-gemm` picks the
+  prebind default up.
+- **Also in this release:**
+  - TC1 amendments 28–35 and TC1c amendment 9, registrations and reads;
+  - DQ1's registration and its run-1 instrument diagnosis;
+  - a dated docs note that gpt-oss serving's native MXFP4 path is decode-only.
 
 ### Read: TC1 amendment 30 — the shipped prebind pair over 60 steps: 0.980 (P53 HELD); with P54 and P55 HELD the prebound launches are the default (bench and register only)
 
