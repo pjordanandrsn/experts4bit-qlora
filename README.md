@@ -160,7 +160,7 @@ other cards were not measured.
 | nothing — just train a fused MoE | `load_moe_4bit_streaming(...)` | `[train]` |
 | each step is slow | `enable_fast_train(model, dgrad=True)` | `[fast]` |
 | …and there is spare VRAM to trade | `E4B_MOE_KEEP_LAYERS=n` + `NF4_QLORA_COMPACT_DELTA=1`, then `enable_fast_train` | `[fast]` + grad ckpt |
-| long rows run out of memory in the loss | `E4B_CHUNKED_LM_LOSS=1`, then `enable_fast_train` (or `enable_chunked_lm_loss(model)`) | — |
+| long rows run out of memory in the loss | the default `E4B_CHUNKED_LM_LOSS=auto` chunks the loss where a forward's fp32 logits reach 1 GiB; `=1` chunks every training forward (or `enable_chunked_lm_loss(model)`) | — |
 | …and `[fast]` will not build | `enable_batched_train(model)` | — |
 | the experts do not fit VRAM | `load_moe_4bit_streaming(..., offload=True)` | — |
 | the experts do not fit host RAM, serving | `enable_nvme_residency(...)` | `[fast]` + arena |

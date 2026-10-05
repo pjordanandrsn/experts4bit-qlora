@@ -42,18 +42,25 @@ That is about 141 MB of peak per kept layer at that recipe's largest micro-batch
 its padded LoRA blocks too, up to 4x the memory. With gradient checkpointing off, there is nothing to keep, and it changes nothing.
 
 **It trains, but long rows run out of memory in the loss.**
-Set `E4B_CHUNKED_LM_LOSS=1` (or a chunk size in tokens) before `enable_fast_train`, or call
-`experts4bit_qlora.engines.chunked_lm_loss.enable_chunked_lm_loss(model)`. Hugging Face's causal-LM loss materialises the
+On the current code they should not: `enable_fast_train` and the CLI trainer compute the loss over token chunks wherever a training
+forward's fp32 logits would reach 1 GiB (`E4B_CHUNKED_LM_LOSS=auto`, the default since TC1 amendment 44). Set `E4B_CHUNKED_LM_LOSS=1`
+(or a chunk size in tokens) to chunk every training forward, `0` for the stock loss everywhere, or call
+`experts4bit_qlora.engines.chunked_lm_loss.enable_chunked_lm_loss(model)` directly. Hugging Face's causal-LM loss materialises the
 `[tokens, vocab]` logits, upcasts them to fp32 and keeps the fp32 log-probabilities for backward. At Qwen3's 151,936-token vocabulary
 and 4,096 tokens that is 8.1 GiB for the head and loss alone. This computes the same loss over chunks, recomputing each chunk's logits
 in backward: 0.9 GiB at 512-token chunks, for one extra head matmul and cross-entropy forward per chunk in backward (CHANGELOG, Unreleased). The same loss
 to fp32 rounding. The same gradients, up to cuBLAS's shape-dependent bf16 reduction (`torch.equal` with
 `allow_bf16_reduced_precision_reduction` off). It covers the Qwen3-MoE, Qwen3.5/3.6-MoE, Mixtral, OLMoE, gpt-oss, ERNIE-4.5-MoE,
-Granite-MoE and -Hybrid, LFM2-MoE and Nemotron-H causal LMs and refuses anything else with a warning. Only training forwards with
+Granite-MoE and -Hybrid, LFM2-MoE and Nemotron-H causal LMs. Anything else keeps the stock loss: silently under the default, with a
+warning when the variable is set. Only training forwards with
 labels take it: evaluation under `torch.no_grad` and generation stay stock, and `.logits` is `None` on the forwards that do.
-`E4B_CHUNKED_LM_LOSS=auto` chunks only a forward whose stock fp32 logits would reach 1 GiB and runs the rest stock. On short rows
-the chunking is a cost, not a saving: at TC1's field recipe (Alpaca rows, 0.3–0.6 GiB of logits per micro-batch) it cost a host-bound
-RTX 5090 4.9 % of the shipped arm's step (TC1 amendment 41). A packed 4,096-token Qwen3 row is 2.32 GiB and chunks.
+Why the gate: on short rows chunking is a cost, not a saving. At TC1's field recipe (Alpaca rows, 0.3–0.6 GiB of logits per
+micro-batch) `1` cost a host-bound RTX 5090 4.9 % of the shipped arm's step (TC1 amendment 41), while `auto` never fired there and
+stepped 0.992–0.999 of the stock loss (amendment 44). A packed 4,096-token Qwen3 row is 2.32 GiB and chunks, and trains resident on a
+5090 where the stock loss ran out of memory (amendments 39 and 43).
+Scope: that evidence is Qwen3-30B-A3B. The gate counts bytes, so on a large vocabulary it fires at ordinary micro-batches: about
+1,767 positions per forward at Qwen3's 151,936, about 1,335 at gpt-oss's 201,088, about 1,081 at Qwen3.5-MoE's 248,320. There
+chunking's step cost was not measured (amendment 41's 4.9 % is Qwen3 at 0.3–0.6 GiB). `E4B_CHUNKED_LM_LOSS=0` restores the stock loss.
 
 **It trains, but each step is slow — and `[fast]` will not build.**
 `enable_batched_train(model)` (no extra: stock torch + bitsandbytes). The kernel-free lane:
