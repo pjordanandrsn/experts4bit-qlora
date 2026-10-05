@@ -35,6 +35,11 @@ The full gate list (lint, packaging, claims, capabilities, manifest, links,
 discovery, llms bundle) is AGENTS.md §6; how CI is triggered on a pull request
 (the `ready-to-merge` label) is AGENTS.md §10.
 
+## Changelog entries
+
+Add `changelog.d/<pr-or-slug>.md` holding your `### Title` and body; never edit `CHANGELOG.md`'s `## Unreleased` by hand.
+The release writes the fragments into `CHANGELOG.md`; the format is in [`changelog.d/README.md`](changelog.d/README.md).
+
 Much of this package is testable without a GPU because the pieces that matter
 are format and placement, not arithmetic: arenas are built from bytes the tests
 write, and `formats.mxfp4.dequantize_mxfp4` is pure torch. **A CPU test that

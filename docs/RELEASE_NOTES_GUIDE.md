@@ -22,14 +22,21 @@ from `main` by the maintainer; do not tag or publish from a branch.
 The README is written against `main` and links only `main`; the one place
 it names a release is the generated block between
 `<!-- release-block:start -->` and `<!-- release-block:end -->`. The release
-recipe is therefore: add the `## <version> — <date>` section at the top of
-`CHANGELOG.md` (newest first; below an `## Unreleased` section, if there is
-one) and bump `pyproject.toml` (and `__version__`) in the same
-change, then run `python scripts/check_readme_claims.py --write-release-block`
+recipe is therefore: bump `pyproject.toml` (and `__version__`), then run
+`python scripts/changelog_fragments.py --release "## <version> — <date> — <title>" --intro-file <opening>`.
+It writes the section below `CHANGELOG.md`'s `## Unreleased` pointer from the
+`changelog.d/` fragments (newest first, by the commit that added each) and
+deletes them; edit the section by hand in the release pull request if it needs
+it. Then run `python scripts/check_readme_claims.py --write-release-block`
 — the block's version is derived from that heading and cross-checked
 against `pyproject.toml`, never typed; `scripts/check_readme_claims.py` in CI
 fails a README whose block is stale or hand-edited, and
 `scripts/check_readme_links.py` holds the tag it pins to the same version.
+Between releases nobody edits `## Unreleased`: each change adds
+`changelog.d/<pr-or-slug>.md` ([`changelog.d/README.md`](../changelog.d/README.md)).
+A fragment still in `changelog.d/` at the commit you tag merged during the
+release pull request's CI, so it shipped in this tag: fold it into the
+section before tagging.
 
 Example opening:
 
