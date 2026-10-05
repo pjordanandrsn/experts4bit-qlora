@@ -1643,3 +1643,43 @@ Each is FALSIFIED outside its band (P89: an e4b arm that OOMs) and UNTESTED wher
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for e4b's same-stack arms and
 Unsloth. Six arms of 40 steps at an estimated 12–20 s a step: about $3 with the download; this is in the standing no-ask tier.
+
+### Amendment 41 (2026-10-05T13:16Z, after amendment 39's read, with amendment 40's box running): e4b's chunked LM loss at the field recipe — its default decision (P90–P93)
+
+**Why.** Amendment 39 found e4b at its defaults out of memory on packed 4,096-token rows, on the fp32 copy of the full-vocabulary logits.
+experts4bit-qlora#1142 adds `E4B_CHUNKED_LM_LOSS` (opt-in), and amendment 40's box reads whether it fits that regime. A default must also
+cost the common case nothing it should not: the field recipe's short rows. On an RTX A2000 4-layer slice, where the LM head is a large
+share of the step, the chunked loss cost 2–6 %; on the 48-layer step the head is a far smaller share. Each chunk's logits are recomputed in
+backward, and finding the supervised tokens costs one host sync per training forward.
+
+**The box** (token `qwen3chunkab`). One RTX 5090, TC1's qwen3 tokens and field recipe, 60 steps, load-gated draws (`TC1_LOAD_GATE=6.0`,
+`TC1_LOAD_RETRIES=2`), avoiding machines 151350, 45511 and 138786:
+
+- the shipped and the matched arm, each `_ce0` (`E4B_CHUNKED_LM_LOSS=0`, the default) against `_ce1` (`=1`, 512-token chunks), two draws a
+  side in ABBA order;
+- every arm in venv-unsloth with e4b and grouped-nf4-gemm at the box's pins (TC1's t212 install), every other setting at its default.
+
+Engagement: each receipt's `chunked_lm_loss` record (amendment 40): `_ce1` arms chunked their training forwards with no run-time fallback,
+`_ce0` arms chunked none; `env.torch` 2.12.*.
+
+**Predictions** (registered before the box), one-sided, as amendment 38 learned: the decision needs the switch no slower and no heavier.
+
+- **P90** (matched): `_ce1` / `_ce0` ≤ **1.01**.
+- **P91** (shipped): `_ce1` / `_ce0` ≤ **1.01**.
+- **P92** (matched peak): `_ce1` − `_ce0` ≤ **+0.05 GB**.
+- **P93:** on each arm, |mean held-out at N, `_ce1` − `_ce0`| ≤ **0.005**.
+
+Each needs two stable VALID draws a side, and is FALSIFIED on the wrong side of its bound and UNTESTED where a side is unstable, not VALID
+or not engaged.
+
+**Decision rules.**
+
+- **P90–P93 HELD, and amendment 40's P89 HELD:** `E4B_CHUNKED_LM_LOSS` becomes e4b's default in `enable_fast_train` (512-token chunks;
+  `=0` keeps the stock loss), in one PR citing amendments 39, 40 and 41.
+- **P90–P93 HELD but P89 not HELD:** it stays opt-in; the chunked loss does not by itself buy the regime it is for.
+- **Any of P90–P93 FALSIFIED:** it stays opt-in, and the read names which arm and which side.
+- **Any UNTESTED, none FALSIFIED:** it stays opt-in pending a re-ask.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install.
+About $2 with the download; this is in the standing no-ask tier.
