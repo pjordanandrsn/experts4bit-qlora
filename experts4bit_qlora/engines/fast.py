@@ -785,6 +785,10 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     Composes with ``compress_expert_absmax_`` (``E4B_ABSMAX_DQ=1``), before or after it: the
     patched forward reads the absmax through ``expert_absmax_fp32``, which expands a
     double-quantized one to fp32 for the one layer the kernel is about to run.
+
+    With ``E4B_CHUNKED_LM_LOSS=1`` (or a chunk size in tokens) it also routes the model's
+    training forward through the chunked causal-LM loss (``engines/chunked_lm_loss.py``):
+    the ``[tokens, vocab]`` logits are never materialised; ``disable_fast_train`` unwinds it.
     """
     try:
         from nf4_qlora import fused_grouped_lora  # noqa: F401
@@ -891,6 +895,13 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     keep = moe_keep_layers_requested() if patched else None
     if keep is not None:
         keep_moe_activations(model, keep, verbose=verbose)
+    # Opt-in (E4B_CHUNKED_LM_LOSS=1 or a chunk size in tokens): the training forward's causal-LM loss over token chunks, the
+    # [tokens, vocab] logits never materialised (engines/chunked_lm_loss.py). Refused, with a warning, on a model whose logits
+    # path it does not reproduce; that model keeps the stock loss.
+    from .chunked_lm_loss import chunked_lm_loss_requested, enable_chunked_lm_loss
+    chunk = chunked_lm_loss_requested() if patched else None
+    if chunk is not None:
+        enable_chunked_lm_loss(model, chunk, verbose=verbose)
     return patched
 
 
@@ -911,4 +922,6 @@ def disable_fast_train(model) -> int:
         disable_fused_rope(model)                        # the rotary patch rides enable_fast_train, so it unwinds with it
         from .moe_keep import release_moe_activations
         release_moe_activations(model)                   # ... and so does the attention-only checkpointing
+        from .chunked_lm_loss import disable_chunked_lm_loss
+        disable_chunked_lm_loss(model)                   # ... and the chunked LM loss
     return n

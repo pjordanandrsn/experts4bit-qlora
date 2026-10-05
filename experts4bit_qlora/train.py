@@ -243,6 +243,7 @@ def _print_env_help(which: str) -> None:
         ("OFFLOAD_EXPERTS", "0", "keep experts in pinned CPU RAM"),
         ("OFFLOAD_PIN", "1", "pin the offloaded expert memory"),
         ("E4B_ABSMAX_DQ", "auto", "double-quantize the frozen expert absmax: on for resident training (0 off, 1 required)"),
+        ("E4B_CHUNKED_LM_LOSS", "0", "1 or a chunk size in tokens: the loss over token chunks, no [tokens, vocab] logits"),
         ("DO_GEN", "1", "sample generations during training"),
         ("SEED", "0", "torch manual seed"),
         ("OUT", "./experts4bit-lora-out", "adapter output dir"),
@@ -423,6 +424,13 @@ def main():
             "under a flag that says otherwise. Set TRAIN_EXPERTS=0 to train what is "
             "wrapped, or train the experts with grouped-nf4-gemm's "
             "mxfp4_qlora.ExpertsMxfp4LoRA (docs/solutions/mxfp4-moe-training-and-residency.md).")
+    # Opt-in (E4B_CHUNKED_LM_LOSS=1 or a chunk size in tokens): the training forward's causal-LM loss over token chunks, the
+    # [tokens, vocab] logits never materialised (engines/chunked_lm_loss.py). Evaluation (no_grad) and generation keep the stock
+    # forward; a model whose logits path the module does not reproduce is refused with a warning and keeps the stock loss.
+    from .engines.chunked_lm_loss import chunked_lm_loss_requested, enable_chunked_lm_loss
+    chunk = chunked_lm_loss_requested()
+    if chunk is not None:
+        enable_chunked_lm_loss(model, chunk, verbose=True)
     torch.cuda.synchronize()
     log(
         f"loaded. trainable: {sum(p.numel() for p in trainable):,} "
