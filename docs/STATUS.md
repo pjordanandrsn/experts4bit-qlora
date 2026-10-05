@@ -202,7 +202,9 @@ Read again with that loop as a recorded route (TC1 amendment 43, another host), 
 Unsloth's 14.32 on one stack: Unsloth/e4b **1.278** [1.271, 1.284] (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k-chunked`, a
 LABELLED position: the flag is opt-in), with e4b at 32.5 GB against Unsloth's 24.86. Read with caveats: three of the six standing attempts ran above the 6.0 load gate on a shared host, both of e4b's quoted draws among them (machine 145701; standing load1 e4b 8.0 / 52.2, Unsloth 4.7 / 18.2, venv-e4b 5.7 / 3.6; the draws stayed within 0.3 % and 0.7 %), and amendment 43's bands were set with amendment 40's 1.43 in view, so this is a replication, not a blind test.
 At the field recipe the same flag costs e4b's shipped arm 4.9 % of its step (1.049 [1.017, 1.082]) for 1.17 GB of peak
-(`e4b.train.chunked-lm-loss.default-decision.5090.2026-10-05`, TC1 amendment 41), so it stays opt-in. That box ran every attempt above its 6.0 load gate on a shared host, so the decision stands but the 4.9 % is not a clean magnitude.
+(`e4b.train.chunked-lm-loss.default-decision.5090.2026-10-05`, TC1 amendment 41), so it stays opt-in. `E4B_CHUNKED_LM_LOSS=auto` chunks only where a
+forward's fp32 logits would reach 1 GiB. At the field recipe its gate never fired and the step ran 0.992 (shipped) / 0.999 (matched) of
+the stock loss's (`e4b.train.chunked-lm-loss.auto.default-decision.5090.2026-10-05`, TC1 amendment 44), so `auto` becomes e4b's default. That box ran every attempt above its 6.0 load gate on a shared host, so the decision stands but the 4.9 % is not a clean magnitude.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against
 native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
 native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.

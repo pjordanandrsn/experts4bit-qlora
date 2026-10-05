@@ -61,6 +61,29 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
 
+## Amendment 44 (2026-10-05): `E4B_CHUNKED_LM_LOSS=auto` costs the field recipe nothing (0.992 / 0.999) and its gate never fired; it becomes e4b's default
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 44. One RTX 5090 (`tc1-5090-97`, AMD Ryzen Threadripper PRO
+3955WX, 32 CPUs, Vast machine 26157), every arm in venv-unsloth (torch 2.12.1+cu130, triton 3.7.1) with e4b `298224f` (#1178's `auto`) and
+grouped-nf4-gemm `f127981` (0.41.0), TC1's Qwen3-30B-A3B tokens and field recipe, 60 load-gated steps. `_ca0` is the stock loss, and `_ca1`
+sets `E4B_CHUNKED_LM_LOSS=auto` (chunk a training forward only when its stock fp32 logits would reach 1 GiB). Read:
+[`RESULTS-tc1-chunkauto.md`](RESULTS-tc1-chunkauto.md). The first draw, `tc1-5090-96`, refused on a host whose driver was below the lane's
+floor ($0.007).
+
+| arm | `_ca0` s/step | `_ca1` s/step | `_ca1` / `_ca0` | peak `_ca0` → `_ca1` | prediction |
+|---|---|---|---|---|---|
+| shipped | 2.483 / 2.421 | 2.429 / 2.435 | **0.992** [0.978, 1.006] | 24.673 → 24.673 GB | P100 HELD (≤ 1.02) |
+| matched | 3.135 / 3.142 | 3.139 / 3.131 | **0.999** [0.997, 1.001] | 27.496 → 27.494 GB | P101 HELD (≤ 1.02); P102 HELD |
+
+- **P99 HELD: the gate never fired on the field recipe.** Every `auto` arm ran its 240 training forwards on the stock path (`small_calls`
+  240, `chunked_calls` 0), as the shapes said it would.
+- **P103 HELD.** Held-out at N moves +0.0001 (matched) and −0.0001 (shipped).
+- **The host was quiet:** every attempt ran first time, under the gate, at load1 medians 1.1–1.9.
+- **Decision, as registered.** With P99–P103 HELD and amendment 43's P98 HELD, `auto` becomes e4b's default in `enable_fast_train` and the
+  CLI trainer. Packed 4,096-token rows chunk (2.32 GiB of logits a row, over the gate), and amendment 43 measured that path. The field
+  recipe runs the stock loss, and this box measured that. `E4B_CHUNKED_LM_LOSS=0` keeps the stock loss everywhere, and `1` chunks every
+  training forward.
+
 ## Amendment 43 (2026-10-05): on packed 4,096-token rows, with its chunked loss, e4b is 1.278× Unsloth's speed on one stack (labelled, opt-in)
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 43. One RTX 5090 (`tc1-5090-95`, AMD EPYC 7B13, Vast

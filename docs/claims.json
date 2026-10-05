@@ -10659,6 +10659,31 @@
       "notes": "Vast invoiced $2.51."
     },
     {
+      "id": "e4b.train.chunked-lm-loss.auto.default-decision.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 44 (#835), one rented RTX 5090 (tc1-5090-97, AMD Ryzen Threadripper PRO 3955WX): E4B_CHUNKED_LM_LOSS=auto (#1178: chunk a training forward only when its stock fp32 logits would reach 1 GiB) against the stock loss at TC1's field recipe, e4b in venv-unsloth (torch 2.12.1+cu130), 60-step runs, load-gated draws (every attempt first time, load1 1.1-1.9). The gate never fired: every auto arm ran 240 training forwards on the stock path, 0 chunked (P99 HELD). Shipped auto / stock 0.992 [0.978, 1.006] (P100 HELD, registered <= 1.02); matched 0.999 [0.997, 1.001] (P101 HELD); matched peak 27.496 -> 27.494 GB (P102 HELD); held-out at N within 0.0001 (P103 HELD). With amendment 43's P98 HELD (packed 4,096-token rows chunk and fit), auto becomes e4b's default by amendment 44's rule.",
+      "value": 0.999,
+      "unit": "ratio s/step, E4B_CHUNKED_LM_LOSS=auto over the stock loss, Qwen3-30B-A3B matched arm (medians of steps 11..60 over two draws each); cross-draw interval [0.997, 1.001]; shipped 0.992",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-97: instance 54366046, AMD Ryzen Threadripper PRO 3955WX, Vast machine 26157); e4b @ 298224f + grouped-nf4-gemm @ f127981 (0.41.0) in venv-unsloth, torch 2.12.1+cu130, triton 3.7.1",
+      "conditions": "bench/tc1 token qwen3chunkauto (TC1 amendment 44): TC1's Qwen3 tokens and field recipe (seq 2048, micro-batch 2 x accum 4), shipped and matched arms, _ca0 / _ca1 two draws each in ABBA order, 60 steps, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2; validity, engagement and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-chunkauto.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-97/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-97/tc1/"
+      ],
+      "notes": "Vast invoiced $0.79."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k-chunked",
       "package": "experts4bit-qlora",
       "area": "train",
