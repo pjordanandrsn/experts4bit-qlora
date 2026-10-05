@@ -46,9 +46,10 @@ would not, and that row is the finding; HF neither fits nor offloads there.
 axolotl's three rows there are not readings of axolotl: its plain arm failed
 on this harness's no-autocast loop (TC1 amendment 4, corrected 2026-10-02)
 and is re-asked. On the 12 GB card e4b trains
-the set under offload at micro-batch 1 (10.46 GB peak, 69.9 s/step on an
-A2000 behind a 6-core Xeon, held-out 0.8483 beside the 5090's 0.8516 /
-0.8487); Unsloth's loader dispatches modules to the CPU there and refuses,
+the set under offload at micro-batch 1 (10.46 GB peak on an A2000 behind a
+6-core Xeon, held-out 0.8483 beside the 5090's 0.8516 / 0.8487; the A2000 is
+a correctness-only testbed, so its step time is not quoted); Unsloth's loader
+dispatches modules to the CPU there and refuses,
 axolotl's cu130 wheels need a newer driver than the host has, and HF, given the
 budget to reach the card, OOMs at load (TC3 P2 HELD).
 A fit table, one draw per row — no position; the 32 GB position is TC1's.
@@ -60,9 +61,9 @@ run on one RTX A2000 at 4.07 GB peak VRAM once Triton's cache is warm. The
 MXFP4 experts stream from a 1.446 TB SSD arena, and the 108.76 GB dense
 side is served from the checkpoint's byte offsets, with 0 bytes pinned in
 host RAM. In five processes the model completed "The capital city of France
-is" as " Paris. It is", at 90–92 s per decode token; the step time is the
-SSD's. Against Fireworks' kimi-k3 on the same raw paragraph, the per-token
-NLL correlates at r = 0.9965
+is" as " Paris. It is" (a feasibility and fidelity result: the A2000 is a
+correctness-only testbed, so no decode speed is quoted). Against Fireworks'
+kimi-k3 on the same raw paragraph, the per-token NLL correlates at r = 0.9965
 (`e4b.quality.kimi-k3.vs-fireworks.per-token.a2000.2026-09-28`), and a
 routing-replayed cache gate passes the real cache at cos 0.999966 and fails
 a cache with its KDA state zeroed at 0.877523
@@ -1035,10 +1036,9 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   measured UVA gather by 1.57–2.02×** there
   ([`…pipelined-gather-over-cold-deadline…`](claims.json)). The gather runs at
   the box's single-copy link rate (14.4 GB/s implied, 14.72 GB/s probed), not
-  the back-to-back rate the calibration blob records (23.07 GB/s); on the
-  A2000 rehearsal's gen 3 × 8 link the two probes agreed and the ratio was
-  ~1.0. Which constant the model should carry, and why the two differ on a
-  gen 4 × 16 link, is the follow-up filed against `kernel/cold_deadline.py`
+  the back-to-back rate the calibration blob records (23.07 GB/s). Which
+  constant the model should carry, and why the two differ on a gen 4 × 16
+  link, is the follow-up filed against `kernel/cold_deadline.py`
   (a per-step fixed term, a measured efficiency factor before any RFC
   comparison, the hybrid tier's mixed-layer dispatch term the deadline
   destination omits). The MXFP4 NVMe engine's 4 syncs per layer and the

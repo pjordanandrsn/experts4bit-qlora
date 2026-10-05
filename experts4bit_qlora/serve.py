@@ -5,8 +5,8 @@ This wraps the package's inference path (:mod:`.infer`) in a FastAPI app so the 
 model load. The design goal is coexistence on a small shared GPU: with ``OFFLOAD_EXPERTS=1``
 (the default here, unlike :mod:`.infer`) the frozen experts live in pinned CPU RAM and the
 GPU-resident footprint is ~1.7 GB for OLMoE — an LLM endpoint that leaves the card to everyone
-else. This is capability, not throughput: decode is batch-1 (~1.4 tok/s offloaded on an RTX
-A2000), so responses stream by default-capable SSE and requests queue behind a single worker.
+else. This is capability, not throughput: decode is batch-1 and offloaded, so responses stream
+by default-capable SSE and requests queue behind a single worker.
 
 Why a single GPU worker thread (not just an asyncio lock): the offload machinery keeps
 class-level residency state (``_ExpertOffload._resident`` / ``_staged_now``) and a per-device
@@ -70,25 +70,25 @@ produced a "+16%" that did not replicate.)
 
 That table is ``offload=False``. The offload path is where K *should* pay: the cold tier is
 pinned host RAM across PCIe, so a frequency-ranked hot set would remove transfers rather
-than duplicate copies already in VRAM. It does not. Measured 2026-08-08 on the QNAP judge
-(A2000 12 GB, Qwen3-30B-A3B, ``offload=True``, identical prompt, byte-identical output,
-steady state, n=5-6 each)::
+than duplicate copies already in VRAM. Whether it does here has not been timed on a rented
+card. The 2026-08-08 read of that path ran on the QNAP judge's RTX A2000 (Qwen3-30B-A3B,
+``offload=True``, identical prompt, byte-identical output), which is a correctness-only
+testbed, so its step times are not speed evidence. What it does establish is memory::
 
-    K=8   23.4 s   5.81 GB   coverage 52.3% of routed token-slots
-    K=0   23.3 s   4.79 GB   coverage 0%
+    K=8   5.81 GB   coverage 52.3% of routed token-slots
+    K=0   4.79 GB   coverage 0%
 
-No difference detectable at this sample size, so ``E4B_HOT_PER_LAYER=0`` is the better
-config on both paths: same speed, 1.02 GB cheaper. The profile is still required at K=0 —
-it is what proves a hot set would have been frequency-ranked.
+So on the offload path ``E4B_HOT_PER_LAYER=0`` rests on memory alone (1.02 GB cheaper);
+on other hosts the informed-hot-set gain is a property of the link
+(``bench/RESULTS-informed-hotsets.md``: +56 % / +120 % at K=4 / K=8 on a bandwidth-limited
+RunPod A5000, about 0 % on a fat-PCIe L40S), so measure your own host before raising K. The
+profile is still required at K=0 — it is what proves a hot set would have been
+frequency-ranked.
 
-**Interleave, and re-measure the first arm.** A first pass here had K=8 ~18% ahead on
-apparently disjoint ranges (19.0 s vs 23.3 s). Re-deploying K=8 reproduced the K=0 number
-(23.4 s), and a second K=0 deploy gave 23.8 s: every window after the first landed at
-23-24 s regardless of K. Single-shot timings on this box carry ~±3 s of spread and drift
-between windows for reasons not established here — the one fast window was the first after
-a ~3 h idle, and it was *not* thermal throttling, since later runs got faster as the card
-climbed to 80 C. Treat any residency delta under ~20% as unresolved until the first arm is
-measured again at the end.
+**Interleave, and re-measure the first arm.** A first pass of that A2000 read had K=8 well
+ahead; re-deploying K=8 reproduced the K=0 number, and single-shot timings on that shared box
+drifted between windows for reasons never established. Treat any residency delta under ~20%
+as unresolved until the first arm is measured again at the end, on a quiet rented card.
 
 The hot sets are **frequency-ranked from a profile, never by index** — an index-ordered set
 on a 256-expert top-6 layer serves ~6% of routed slots, so there is deliberately no

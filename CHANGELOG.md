@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### TC1 amendment 38 registered: the compact padded LoRA delta's default decision, a third host and a second family (bench and tests only)
+
+- **Why.** Two hosts read the compact delta on Qwen3-30B-A3B at 0.967–0.970 (matched) and 0.948–0.970 (shipped); with
+  grouped-nf4-gemm#473 the matched peak fell 0.288 GB. Amendment 37's two-sided band kept it opt-in on the favourable side, and a
+  grouped-nf4-gemm default changes every family, with no family but Qwen3 read.
+- **The box** (tokens `qwen3compactab3`, `mixtralcompactab`): amendment 36's A/B on a third host, then Mixtral-8x7B's matched arm
+  resident at defaults. One-sided predictions: Qwen3 speed ≤ 0.99 on both arms (P77, P78), its matched peak ≤ +0.05 GB (P79); Mixtral
+  ≤ 1.01 (P80), its peak ≤ +0.05 GB (P81); held-out within 0.005 (P82, P83). All HELD makes it grouped-nf4-gemm's default.
+- The reducer reads both with amendment 36's scorer (`COMPACT_SPECS`); one new self-test case.
+
+### RD1 registered: grouped-nf4-gemm's frozen-expert GEMM routes per call at MoE training shapes, on one RTX 5090 (bench and tests only)
+
+- **Why.** On sm_120, `auto` keeps the fused NF4 kernels for calls with more than 16 present experts.
+  - The per-expert `dense` loop is launch-bound there (TC1 amendment 22: 2.947× on Qwen3-30B-A3B).
+  - The fused kernels run TF32 and decode the weight once per M-tile inside the GEMM loop.
+  - No torch release through 2.14.1 has a single-launch grouped bf16 GEMM for that card.
+  - A decoded route needs no per-expert launches: grouped-nf4-gemm's `dequant_groups` (one launch), then one Triton grouped
+    bf16 GEMM launch.
+  - RD1 asks whether it beats the best of {v1 as shipped, the fused kernels' own bf16 MMA (v3, plus a probe-local bf16
+    dgrad), `dense`} per call.
+- **What.** `bench/moegen/rd1/`:
+  - `RD1-PREREG.md`: the bar, the correctness gate, the decision and the hypotheses, registered before the box;
+  - `rd_probe.py`: five arms, eight families' shapes, seq 512 / 2048, uniform and skewed routers. It records device and
+    event time, peak bytes, and each arm's error against an fp32 reference;
+  - `rd_table.py`: the gate and the bar, with the decision read only on an RTX 5090 receipt;
+  - `rd1_run.sh`: the box side, under `tc1_drive.sh`, with the train anchor strict;
+  - `a2000/`: the correctness rehearsal, with no timing field.
+  - `tests/test_rd1_lane.py` pins the staged pieces, the shape table, the bar and the gate to the registration. It also shows
+    that a fast arm with 3× dense's error on one call cannot count.
+- **Budget.** One RTX 5090 with no checkpoint fetch, about $0.64 under a 0.75 h guard.
+
 ### `/health`'s `prefill_routes` gains `seen`: the routes the forward ran, not the environment's resolution (serving)
 
 - **What was wrong.** `prefill_routes` reports the environment's resolution: `int4_prefill`, `int4_prefill_above_256_rows`
@@ -151,6 +182,28 @@
   - The default is far above it for Mixtral (8 experts). There, 64 rows of ~99 MB each in the pinned landing, the
     cold view and the setup tier crowd the DRAM tier out of the host budget.
 - `estimate_serve_footprint` refuses a solver setup with rows on NVMe and `hot_rows` below the minimum, in words.
+
+### Docs: A2000 timings out as speed evidence (testbed-policy audit; docs and comments only)
+
+- **Why.** The RTX A2000 is a correctness-only testbed (policy standing since 2026-07-27, re-stated 2026-10-05): an A2000
+  timing may not seed a prediction, filter a candidate, or appear as speed evidence, whatever its label. An audit of both
+  repositories found such timings in current-facing text here. The full findings table, including what is left for the
+  owner, is [`docs/audits/a2000-timing-2026-10-05.md`](docs/audits/a2000-timing-2026-10-05.md).
+- **Code comments** (no behaviour change). The docstrings and comments of `engines/batched.py`, `engines/fast.py`,
+  `engines/moe_keep.py`, `engines/paged_attention.py`, `engines/pipelined.py`, `engines/triton_prebind.py`, `serve.py` and
+  `train.py` no longer quote A2000 step times, tok/s, per-call ratios or host microseconds. Where a rented reading exists it
+  is cited instead: TC1 amendment 21's RTX 5090 step for `E4B_MOE_KEEP_LAYERS`, and the RunPod A5000 / L40S pair for the
+  hot-set host dependence. `serve.py`'s offload-path advice for `E4B_HOT_PER_LAYER=0` now rests on memory alone (1.02 GB),
+  which is all the A2000 read can support. Memory figures stay.
+- **Docs.** `INFERENCE.md`'s decode table keeps peak GPU and drops tok/s. `RESIDENCY-ENGINES.md` cites the rented A5000's
+  +56 % / +120 % in place of the A2000's +40 %. `SERVING.md` and `STORAGE-MODES.md` drop A2000 decode rates.
+  `MOE_RUNTIME_PORTABILITY.md` retracts its "within-box ratios" label. `OFFLOAD-TRANSFER-NOTES.md` and `METHODOLOGY.md`
+  gain testbed notes; their records stand as measured.
+- **STATUS and register.** The TC3 A2000 row's 69.9 s/step and Kimi-K3's 90-92 s per decode token leave `STATUS.md` and
+  their rows' claim and unit; the headline values (peak memory) are unchanged. Four rows' notes drop A2000 timings: the
+  P66 gather and fixed-tax rows, `e4b.serve.informed-hot-sets` and the TC1c route row.
+- **Left for the owner** (listed in the audit file): the A2000 energy rows (`e4b.train.energy-honest.*`, quoted in the
+  README), the PREREG/RESULTS records, and the runtime warning in `enable_fast_train`, which still quotes the A2000's 36 %.
 
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 

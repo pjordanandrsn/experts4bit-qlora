@@ -128,8 +128,8 @@ def recurrent_kernel_fallbacks(model) -> list:
 
     transformers decides once, at import (``use_kernel_func_from_hub_with_fallback``), and swallows the import error, so the only
     witness is the wrapper's own ``is_new_implementation`` cell. These are the hybrid families' recurrent blocks (Mamba-2,
-    short conv, Gated DeltaNet): outside the expert runtime, but on an RTX A2000 installing mamba-ssm + causal-conv1d cut
-    Granite-4.0-H's fused step by 36 % of device time, so a "fast" arm that pays the fallback is not the fast path."""
+    short conv, Gated DeltaNet): outside the expert runtime, but on the fallback they run as unfused reference PyTorch instead of
+    their packages' kernels, so a "fast" arm that pays the fallback is not the fast path."""
     import sys
     out = set()
     for name in {type(m).__module__ for m in model.modules()}:
@@ -757,9 +757,8 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
 
     ``dgrad=True`` additionally routes the BACKWARD through
     ``grouped-nf4-gemm``'s single-launch dgrad kernel (>= 0.7.0) instead of its
-    per-expert decode loop. Measured on an A2000: the loop is 78-84% of a training
-    step, and the kernel cuts the two grad_x loops from 117.3 ms to 9.2 ms per
-    layer at E=256 while materializing nothing. A second opt-in rather than part of
+    per-expert decode loop. The loop materializes a decoded expert per group; the
+    kernel materializes nothing. A second opt-in rather than part of
     the first, because it is a second numerics change: the loop decodes with the
     same oracle the reference uses and is EXACT, the kernel accumulates fp32 in a
     different order and lands near 2.9e-3 -- inside the bf16 budget, not zero.

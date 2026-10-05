@@ -6,21 +6,16 @@ returns ``0`` and training falls back to ``ExpertsLoRA.forward``'s per-expert
 Python loop: at 256 experts over 40 layers that is ~10k sync-gated iterations per
 forward, and the GPU idles through most of it.
 
-This module was written as the fallback for that case and then measured faster
-than the thing it was falling back from. One training step, E=256, 512 tokens,
-top_k 8, hidden 512, inter 768, RTX A2000:
+This module was written as the fallback for that case. A toy-width microbench
+(one training step, E=256, 512 tokens, top_k 8, hidden 512, inter 768) ranked it
+ahead of the thing it was falling back from. That microbench ran on the RTX A2000,
+a correctness-only testbed, so its step times are not quoted here; its peak
+memory was 59 MB for the loop, 108 MB for ``enable_fast_train`` and 417 MB for
+this module.
 
-===========================  ==========  =========  ==========
-path                           step ms    vs loop     peak MB
-===========================  ==========  =========  ==========
-reference per-expert loop        601.2      1.00x          59
-``enable_fast_train``            132.6      4.53x         108
-this module                       25.0     24.01x         417
-===========================  ==========  =========  ==========
-
-**The table above is a MICROBENCH, and its ranking does not survive real width.**
-A prior revision of this docstring predicted a bigger card "should narrow this";
-measured, it did not narrow — it reversed. Qwen3-30B-A3B (48 layers, hidden 2048)
+**That ranking does not survive real width.** A prior revision of this docstring
+predicted a bigger card "should narrow this"; measured, it did not narrow — it
+reversed. Qwen3-30B-A3B (48 layers, hidden 2048)
 on an A6000, one training step, from the published wheels
 (``bench/dgrad-gate/RESULTS-dgrad-gate.md``):
 

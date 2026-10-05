@@ -627,10 +627,26 @@ ATTN_CENSUS[COMPACT2_FAM] = 192
 DENSE_PINS[COMPACT2_FAM] = DENSE_PINS[QDENSE_FAM]
 FAM_ANCHOR[COMPACT2_FAM] = ("e4b", "fused_attn4_m_cd0")
 EXPECTED[COMPACT2_FAM] = list(EXPECTED[COMPACT_FAM])
+# TC1 amendment 38: the default decision -- Qwen3-30B-A3B on a third host (both arms) and Mixtral-8x7B (matched arm, resident, defaults),
+# one-sided bands: faster or level, the peak not above the default's
+COMPACT3_FAM = "qwen3compactab3"
+MCOMPACT_FAM = "mixtralcompactab"
+FAMS += [COMPACT3_FAM, MCOMPACT_FAM]
+NAMES[COMPACT3_FAM] = "Qwen3-30B-A3B (amendment 38: the compact padded LoRA delta's default decision, a third host, venv-unsloth)"
+NAMES[MCOMPACT_FAM] = "Mixtral-8x7B-Instruct-v0.1 (amendment 38: the compact padded LoRA delta's default decision, matched arm, resident, venv-unsloth)"
+N_LAYERS.update({COMPACT3_FAM: 48, MCOMPACT_FAM: 32})
+ATTN_CENSUS.update({COMPACT3_FAM: 192, MCOMPACT_FAM: 128})
+DENSE_PINS.update({COMPACT3_FAM: DENSE_PINS[QDENSE_FAM], MCOMPACT_FAM: DENSE_PINS[MDENSE_FAM]})
+FAM_ANCHOR.update({COMPACT3_FAM: ("e4b", "fused_attn4_m_cd0"), MCOMPACT_FAM: ("e4b", "fused_attn4_m_cd0")})
+EXPECTED[COMPACT3_FAM] = list(EXPECTED[COMPACT_FAM])
+EXPECTED[MCOMPACT_FAM] = list(EXPECTED[COMPACT_FAM])      # the shipped arms are TC1_SKIP stubs on Mixtral
 # per family: (peak id, peak-drop band GB (cd0 - cd1), the speed pairs, the speed band, the held-out id)
 COMPACT_SPECS = {COMPACT_FAM: ("P69", COMPACT_PEAK_DROP, COMPACT_PAIRS, COMPACT_SPEED_BAND, "P72"),
                  COMPACT2_FAM: ("P73", (-0.05, 0.50), (("P74", "matched", "fused_attn4_m"), ("P75", "shipped", "fused_attn4_shipped")),
-                                (0.95, 0.99), "P76")}
+                                (0.95, 0.99), "P76"),
+                 COMPACT3_FAM: ("P79", (-0.05, 99.0), (("P77", "matched", "fused_attn4_m"), ("P78", "shipped", "fused_attn4_shipped")),
+                                (0.0, 0.99), "P82"),
+                 MCOMPACT_FAM: ("P81", (-0.05, 99.0), (("P80", "matched", "fused_attn4_m"),), (0.0, 1.01), "P83")}
 
 
 def compact_ab_why(tag, r):
@@ -3860,6 +3876,12 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    for _cf, _ids in ((COMPACT3_FAM, "P77 / P78 / P79 / P82"), (MCOMPACT_FAM, "P80 / P81 / P83")):
+        if _cf in F:
+            out += [f"\n## Predictions {_ids} (TC1-PREREG amendment 38: the compact padded LoRA delta's default decision, {NAMES[_cf].split(' (')[0]}; scored mechanically)",
+                    "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+            for pid, fam, v, ev in score_compactab(F, _cf):
+                out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if COMPACT2_FAM in F:
         out += ["\n## Predictions P73 / P74 / P75 / P76 (TC1-PREREG amendment 37: the compact padded LoRA delta off vs on with its backward freeing early, venv-unsloth; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -6231,6 +6253,41 @@ def selftest():
     assert pm(u=(2.70, 2.72))["P29"] == "FALSIFIED"                                      # 0.795: Unsloth well ahead on one stack
     assert pm(routes={"fused_attn4_m_d2": "fused"})["P31"] == "FALSIFIED"
     assert ph() == {"P27": "HELD", "P28": "HELD", "P29": "HELD"} and ps() == {"P50": "HELD", "P51": "HELD", "P52": "HELD"}
+    cases += 1
+    # 92. TC1 amendment 38 (qwen3compactab3 + mixtralcompactab): one-sided bands -- Qwen3 0.967 / 0.948 with the peak 0.29 GB lower HELD (the
+    #     shipped 0.948 that FALSIFIED amendment 37's P75 holds here); a step slower than 0.99, a peak 0.10 GB higher each FALSIFY; Mixtral
+    #     matched-only with its shipped arms skipped: 1.000 HELD (level is allowed), 1.03 FALSIFIES, a peak 0.10 GB higher FALSIFIES
+    C3 = lambda R: {COMPACT3_FAM: reduce_family(COMPACT3_FAM, R, {}, 20)}
+    c3set = lambda **kw: _compact_set(**{"match": ((3.90, 3.92), (3.77, 3.79)), "ship": ((3.00, 3.02), (2.84, 2.86)), "peaks": (27.48, 27.19),
+                                         "fam": COMPACT3_FAM, **kw})
+    p3 = lambda **kw: {p: v for p, _, v, _ in score_compactab(C3(c3set(**kw)), COMPACT3_FAM)}
+    assert p3() == {"P79": "HELD", "P77": "HELD", "P78": "HELD", "P82": "HELD"}, score_compactab(C3(c3set()), COMPACT3_FAM)
+    assert p3(match=((3.90, 3.92), (3.89, 3.91)))["P77"] == "FALSIFIED"        # 0.997: no gain
+    assert p3(peaks=(27.48, 27.58))["P79"] == "FALSIFIED"                      # +0.10 GB
+    def mcset(match=((3.56, 3.58), (3.56, 3.58)), peaks=(31.07, 31.00), **kw):
+        R = _compact_set(match=match, peaks=peaks, fam=MCOMPACT_FAM, **kw)
+        out_ = {}
+        for (fw, tag), r in R.items():
+            if "shipped" in tag:
+                out_[(fw, tag)] = {**_stub("e4b", tag, "fused", "not_run", "skipped by TC1_SKIP"), "fam": MCOMPACT_FAM}
+                continue
+            m = _tc2_receipt("mixtral", "e4b", tag, "fused", s=r["s_per_step_median_11plus"] if "s_per_step_median_11plus" in r else r["s_per_step"],
+                             heldout_n=r["heldout_final"] if "heldout_final" in r else 1.8)
+            for k in ("peak_vram_gb", "keep_ab", "lean_ab"):
+                if k in r:
+                    m[k] = r[k]
+            m["env"]["torch"] = r["env"]["torch"]
+            m["fam"] = MCOMPACT_FAM
+            out_[(fw, tag)] = m
+        return out_
+    MC = lambda R: {MCOMPACT_FAM: reduce_family(MCOMPACT_FAM, R, {}, 20)}
+    RMC = MC(mcset())
+    assert all(x["verdict"] in ("VALID", "NOT_RUN") for x in RMC[MCOMPACT_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RMC[MCOMPACT_FAM]["rows"]]
+    pmc = lambda **kw: {p: v for p, _, v, _ in score_compactab(MC(mcset(**kw)), MCOMPACT_FAM)}
+    assert pmc() == {"P81": "HELD", "P80": "HELD", "P83": "HELD"}, score_compactab(RMC, MCOMPACT_FAM)
+    assert pmc(match=((3.56, 3.58), (3.67, 3.69)))["P80"] == "FALSIFIED"      # 1.031: slower on Mixtral
+    assert pmc(peaks=(31.07, 31.17))["P81"] == "FALSIFIED"                    # +0.10 GB on a 32 GB card
+    assert p2() == {"P73": "HELD", "P74": "HELD", "P75": "HELD", "P76": "HELD"}  # amendment 37's reading unchanged
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

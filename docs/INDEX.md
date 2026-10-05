@@ -1,6 +1,6 @@
 # Docs index — what each document is, and whether it is current
 
-54 documents accumulated over two months of measured campaigns (the count is
+55 documents accumulated over two months of measured campaigns (the count is
 the number of distinct documents this index links, held by `tests/test_docs_index_count.py`).
 This index says what each one is *for*, whether it is still the thing to
 read, and whether it is OpenTimestamps-anchored (**anchored** documents
@@ -127,6 +127,7 @@ private audit tree and are marked `measured-private` in the register.
 | [`../deploy/`](../deploy/) | the serving container — Dockerfile and compose file — described in [`SERVING.md`](SERVING.md). Current. |
 | [`../tools/`](../tools/) | measurement drivers (`config_matrix.py`, `moe_matrix.py`, `quality_matrix.py`) and the V4 fixture builder (`make_v4_fixtures.py`, [`DEEPSEEK-V4.md`](DEEPSEEK-V4.md)); repo-only. Current. |
 | [`audits/no-silent-fallback-2026-09-05.md`](audits/no-silent-fallback-2026-09-05.md) | dated audit of the public enable/load/train/serve entry points against the `no-silent-fallback` invariant in `system-manifest.json`. Record, unanchored. |
+| [`audits/a2000-timing-2026-10-05.md`](audits/a2000-timing-2026-10-05.md) | dated audit of RTX A2000 timings presented as speed evidence (the A2000 is a correctness-only testbed): what was fixed, what is left for the owner, and every b/c line in the PREREG/RESULTS records. Record, unanchored. |
 | [`../audits/unsloth-zoo-4032/REPORT.md`](../audits/unsloth-zoo-4032/REPORT.md) | the 2026-07-02 falsification report on unsloth-zoo's MoE bnb-4bit fix (unsloth#4032); its two bugs were filed as unsloth-zoo#849 and #850. Record, unanchored. |
 | [`../ab-telemetry/README.md`](../ab-telemetry/README.md) | the OLMoE `OFFLOAD_EXPERTS` off/on A/B on an RTX A2000 12 GB (JSONL, charts, offline runs). Record, unanchored. |
 | [`../runs/results/BUNDLE.md`](../runs/results/BUNDLE.md) | evidence bundle `olmoe-qlora-grid-20260705-1351` of the 2026-07-05 OLMoE ExpertsNbit validation — the `runs/results/` the anchored campaign documents cite. Record, unanchored. |
