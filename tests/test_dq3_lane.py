@@ -152,3 +152,27 @@ def test_no_transfer_or_a_probe_crash_is_not_an_egress_refusal(tmp_path, egress_
 def test_the_vram_probe_runs_before_the_egress_probe(tmp_path):
     rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=3, egress_rc=4)
     assert rc == 18
+
+
+def _rehearsal_arm(arm, peak, grads="g", per=100, layers=4):
+    return {"arm": arm, "config_overrides": {"num_hidden_layers": layers},
+            "parity": [{"loss_bits": "L", "grads": {"a": grads}}],
+            "timing": {"peak_alloc": peak}, "offload": {"per_layer_bytes": per}}
+
+
+def test_the_rehearsal_gate_asserts_the_lanes_memory_direction():
+    """Amendment 3: a rehearsal that passes while S's peak sits ABOVE R's (the first one did: 6.47 > 5.82 GiB) must
+    fail. At 4 layers, S may peak at most min R - 2 layers + half a layer."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("dq3_rehearsal_check", LANE / "dq3_rehearsal_check.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    good = [("B1_R", _rehearsal_arm("R", 1000)), ("B2_S", _rehearsal_arm("S", 820)), ("B3_S0", _rehearsal_arm("S0", 790))]
+    assert mod.check({"B": good})[1] == []
+    above = [good[0], ("B2_S", _rehearsal_arm("S", 1100)), good[2]]
+    assert any("MEMORY DIRECTION" in b for b in mod.check({"B": above})[1])
+    no_saving = [good[0], ("B2_S", _rehearsal_arm("S", 900)), good[2]]        # saves 1 layer of the required 2
+    assert any("MEMORY DIRECTION" in b for b in mod.check({"B": no_saving})[1])
+    diverged = [good[0], ("B2_S", _rehearsal_arm("S", 820, grads="x")), good[2]]
+    assert any("parity" in b for b in mod.check({"B": diverged})[1])
+    assert any("no finished R" in b for b in mod.check({"B": good[1:]})[1])
