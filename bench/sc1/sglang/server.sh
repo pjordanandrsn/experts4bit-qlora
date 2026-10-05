@@ -80,6 +80,7 @@ sglang_server_flags(){  # <mode> <port> -> echoes the flag list (one per line; t
     ttft_matched) printf '%s\n' --disable-radix-cache --max-running-requests 16 --chunked-prefill-size -1 --schedule-policy fcfs \
                                 --cuda-graph-bs-decode 1 16 --dtype float16 --context-length 4608 --cuda-graph-backend-prefill disabled --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     native)       printf '%s\n' --disable-radix-cache ;;
+    gptoss)       printf '%s\n' --disable-radix-cache ;;   # SC2g (bench/sc2): gpt-oss-20b's own MXFP4 path at SGLang's defaults
     quality)      printf '%s\n' --max-running-requests 1 --chunked-prefill-size -1 --dtype float16 --context-length 4096 --mem-fraction-static "$SC1_SGLANG_MEM_FRACTION_STATIC" ;;
     *) return 1 ;;
   esac
@@ -128,13 +129,14 @@ eng = {"mode": mode, "startup_s": int(os.environ["SC1_STARTUP_S"]), "cmd": os.en
 def need(cond, msg):
     if not cond: eng["errors"].append(msg)
 eng["version"] = info.get("version"); need(info.get("version") == "0.5.20", f"server version {info.get('version')} != 0.5.20")
-eng["attention_backend"] = info.get("attention_backend"); need(info.get("attention_backend") == "flashinfer", f"attention_backend resolved to {info.get('attention_backend')!r}, not flashinfer")
+want_attn = "triton" if mode == "gptoss" else "flashinfer"   # SC2g: SGLang forces its triton kernels for gpt-oss's sinks + window
+eng["attention_backend"] = info.get("attention_backend"); need(info.get("attention_backend") == want_attn, f"attention_backend resolved to {info.get('attention_backend')!r}, not {want_attn}")
 for k in ("prefill_attention_backend", "decode_attention_backend", "kv_cache_dtype", "disable_radix_cache", "max_running_requests",
           "chunked_prefill_size", "schedule_policy", "context_length", "dtype", "quantization", "moe_runner_backend",
           "speculative_algorithm", "disable_overlap_schedule", "cuda_graph_config", "page_size", "mem_fraction_static",
           "max_total_num_tokens", "max_prefill_tokens", "random_seed", "model_path", "revision"):
     eng[k] = info.get(k)
-radix_off = mode in ("matched", "kvfp8", "ttft_matched", "native")
+radix_off = mode in ("matched", "kvfp8", "ttft_matched", "native", "gptoss")
 need(bool(info.get("disable_radix_cache")) == radix_off, f"disable_radix_cache={info.get('disable_radix_cache')} but mode {mode} expects {radix_off}")
 if mode == "kvfp8": need(info.get("kv_cache_dtype") == "fp8_e4m3", f"kv_cache_dtype={info.get('kv_cache_dtype')}")
 if mode in ("matched", "kvfp8", "ttft_matched"): need(info.get("max_running_requests") == 16, f"max_running_requests={info.get('max_running_requests')}")
@@ -149,12 +151,15 @@ cg = json.dumps(info.get("cuda_graph_config"), default=str)
 eng["cuda_graph_config_json"] = cg[:2000]
 if mode == "ttft_matched": need('"disabled"' in cg or "DISABLED" in cg.upper(), "prefill cuda graphs not disabled in the resolved cuda_graph_config")
 banner = "The model is convertible to gptq_marlin during runtime. Using gptq_marlin kernel."
-eng["gptq_marlin_banner"] = banner in text; need(banner in text, "gptq_marlin upgrade banner missing from the log (gptq.py:424-428)")
+eng["gptq_marlin_banner"] = banner in text
+if mode != "gptoss":   # the GPTQ checkpoint's engagement; gpt-oss's MXFP4 path records moe_runner_backend / quantization instead
+    need(banner in text, "gptq_marlin upgrade banner missing from the log (gptq.py:424-428)")
 bad = [l for l in text.splitlines() if "Failed to build JIT module" in l]
 eng["jit_build_failures"] = bad[:3]; need(not bad, "JIT build failure in the log")
 leaves = sorted(glob.glob(os.path.join(jit, "*", "*moe_wna16_marlin*", "build-*", "deps-*", "*.so")))
 eng["marlin_moe_jit_leaves"] = leaves
-need(bool(leaves), f"no moe_wna16_marlin JIT leaf under {jit} (the startup warmup should have compiled it)")
+if mode != "gptoss":
+    need(bool(leaves), f"no moe_wna16_marlin JIT leaf under {jit} (the startup warmup should have compiled it)")
 if leaves:
     leaf = os.path.dirname(leaves[-1]); eng["jit_target_tag"] = leaf.split(os.sep)[-4]
     try:
