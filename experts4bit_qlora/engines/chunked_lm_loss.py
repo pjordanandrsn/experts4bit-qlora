@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Cerin Amroth LLC. MIT license (see LICENSE).
-"""Chunked causal-LM loss for TRAINING (opt-in, ``E4B_CHUNKED_LM_LOSS``): the full-vocabulary logits are never materialised.
+"""Chunked causal-LM loss for TRAINING (``E4B_CHUNKED_LM_LOSS``, ``auto`` by default): the full-vocabulary logits are never materialised.
 
 Hugging Face's causal-LM loss (``ForCausalLMLoss``) runs the LM head over every token, upcasts the whole ``[tokens, vocab]``
 logits to fp32 and takes the cross-entropy over them; autograd keeps the fp32 log-probabilities for backward and builds fp32 and
@@ -38,9 +38,11 @@ one-element probe, and the logits the forward returns must be exactly the table'
 an identity head). Any other change made after ``lm_head`` disables the chunked loss for that model with a warning, and the call
 re-runs stock.
 
-``E4B_CHUNKED_LM_LOSS`` = ``1`` (chunks of :data:`DEFAULT_CHUNK` tokens) or a chunk size in tokens. Unset or 0: unchanged.
-``auto``: chunks of :data:`DEFAULT_CHUNK` tokens, but only for a training forward whose stock fp32 logits (positions x vocabulary
-x 4 bytes) would reach :data:`AUTO_MIN_LOGITS_BYTES`; a smaller one runs the stock forward untouched (``small_calls``). At the
+``E4B_CHUNKED_LM_LOSS`` = ``auto`` (the DEFAULT, also when unset): chunks of :data:`DEFAULT_CHUNK` tokens, but only for a training
+forward whose stock fp32 logits (positions x vocabulary x 4 bytes) would reach :data:`AUTO_MIN_LOGITS_BYTES`; a smaller one runs the
+stock forward untouched (``small_calls``). ``1`` or a chunk size in tokens: every training forward chunks. ``0``: the stock loss
+everywhere, nothing patched. Unset, a model the table refuses keeps its stock loss without a warning (the switch was not asked for);
+set, the refusal warns. TC1 amendment 44 made ``auto`` the default (with amendment 43's packed rows fitting under it). At the
 field recipe, where a micro-batch's logits are 0.3-0.6 GiB, chunking is a cost: 1.049 of the shipped arm's step on a host-bound
 RTX 5090 (TC1 amendment 41). On packed 4,096-token rows (2.32 GiB a row at Qwen3's vocabulary) it is what lets e4b train at all
 (amendments 39 and 40). The gate separates the two by size alone.
@@ -64,6 +66,7 @@ __all__ = [
     "DEFAULT_CHUNK",
     "SUPPORTED",
     "chunked_causal_lm_loss",
+    "chunked_lm_loss_by_default",
     "chunked_lm_loss_min_bytes",
     "chunked_lm_loss_refusal",
     "chunked_lm_loss_requested",
@@ -123,11 +126,12 @@ SUPPORTED = {
 
 
 def chunked_lm_loss_requested():
-    """``None`` (off) or the chunk size in tokens, from ``E4B_CHUNKED_LM_LOSS`` (``1`` / ``on`` / ``auto`` = :data:`DEFAULT_CHUNK`)."""
+    """``None`` (off) or the chunk size in tokens, from ``E4B_CHUNKED_LM_LOSS`` (unset / ``auto`` / ``1`` / ``on`` =
+    :data:`DEFAULT_CHUNK`; ``0`` / ``off`` = None)."""
     v = os.environ.get(_ENV, "").strip().lower()
-    if v in ("", "0", "off", "false", "no", "none"):
+    if v in ("0", "off", "false", "no", "none"):
         return None
-    if v in ("1", "on", "true", "yes", "auto"):
+    if v in ("", "1", "on", "true", "yes", "auto"):
         return DEFAULT_CHUNK
     try:
         n = int(v)
@@ -139,9 +143,15 @@ def chunked_lm_loss_requested():
 
 
 def chunked_lm_loss_min_bytes():
-    """``auto``'s size gate (:data:`AUTO_MIN_LOGITS_BYTES`) when ``E4B_CHUNKED_LM_LOSS=auto``, else ``None`` (every training
-    forward chunks)."""
-    return AUTO_MIN_LOGITS_BYTES if os.environ.get(_ENV, "").strip().lower() == "auto" else None
+    """``auto``'s size gate (:data:`AUTO_MIN_LOGITS_BYTES`) when ``E4B_CHUNKED_LM_LOSS`` is ``auto`` or unset (the default), else
+    ``None`` (every training forward chunks)."""
+    return AUTO_MIN_LOGITS_BYTES if os.environ.get(_ENV, "").strip().lower() in ("", "auto") else None
+
+
+def chunked_lm_loss_by_default():
+    """True when ``E4B_CHUNKED_LM_LOSS`` is unset or empty: the switch runs as e4b's default, not because it was asked for, so a
+    refusal is recorded without a warning."""
+    return os.environ.get(_ENV, "").strip() == ""
 
 
 def _chunk_ce_sum(h, y, *, head, transform, config, ignore_index):
@@ -326,11 +336,12 @@ def _make_forward(cls_forward):
     return forward
 
 
-def enable_chunked_lm_loss(model, chunk=None, verbose: bool = False, min_logits_bytes=None) -> int:
+def enable_chunked_lm_loss(model, chunk=None, verbose: bool = False, min_logits_bytes=None, quiet_refusal: bool = False) -> int:
     """Route ``model``'s training forwards (``labels`` given, gradients on) through :func:`chunked_causal_lm_loss` in chunks
     of ``chunk`` tokens (default :data:`DEFAULT_CHUNK`). With ``min_logits_bytes`` (``auto``'s gate) a forward whose stock fp32
     logits would take fewer bytes runs the stock forward. Returns 1 when patched, 0 when refused (a ``RuntimeWarning`` names
-    the reason and the model keeps its stock loss) or already patched (then only the chunk size and the gate change)."""
+    the reason and the model keeps its stock loss) or already patched (then only the chunk size and the gate change). With
+    ``quiet_refusal`` (the default-on path) a refusal is recorded in :data:`CHUNKED_LM_LOSS_STATS` without the warning."""
     chunk = DEFAULT_CHUNK if chunk is None else int(chunk)
     if chunk < 1:
         raise ValueError(f"chunk must be >= 1, got {chunk}")
@@ -342,6 +353,8 @@ def enable_chunked_lm_loss(model, chunk=None, verbose: bool = False, min_logits_
     why = chunked_lm_loss_refusal(target)
     if why is not None:
         CHUNKED_LM_LOSS_STATS["refused"][type(target).__name__] = why
+        if quiet_refusal:
+            return 0
         warnings.warn(f"[e4b.chunked_lm_loss] refused: {why}; the stock loss runs", RuntimeWarning, stacklevel=2)
         if verbose:
             print(f"[e4b.chunked_lm_loss] refused: {why}; the stock loss runs")

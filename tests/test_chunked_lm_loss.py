@@ -7,13 +7,14 @@ What is pinned, on tiny configs of every family in ``SUPPORTED`` (CPU, plus CUDA
   the supervised token count, ignored labels inside rows, and micro-batch 2 with right padding and an attention mask;
 * ``num_items_in_batch``, ``shift_labels`` and an all-ignored batch (stock's nan, zero gradients) follow Hugging Face;
 * bf16 and CPU autocast stay within a bf16 rounding of the stock gradients;
-* the switch off is the stock path byte for byte: unset, nothing is patched; ``torch.no_grad`` forwards and generation run the
+* the switch off is the stock path byte for byte: at ``0``, nothing is patched; ``torch.no_grad`` forwards and generation run the
   stock forward even when patched; ``disable_chunked_lm_loss`` restores it exactly;
 * refusals: a class outside the table, a replaced ``loss_function``, a hooked head; and the run-time probe catches a change made
   after ``lm_head`` the table does not describe, re-running that call stock;
 * ``auto``'s size gate: a forward under it is the stock forward exactly, one at it chunks, and the 1 GiB gate separates the TC1
   shapes it was set between;
-* ``enable_fast_train`` applies it from the environment variable (``auto`` with its gate) and ``disable_fast_train`` unwinds it.
+* ``enable_fast_train`` applies it from the environment variable -- unset is ``auto`` (the default, with its gate; a refusal stays
+  quiet), ``0`` patches nothing -- and ``disable_fast_train`` unwinds it.
 
 Why the tolerances: the chunked path changes only the ORDER of fp32 summations -- the cross-entropy summed per chunk and then
 across chunks, the head's matmul blocked over a chunk's rows instead of all of them, a trainable head's weight gradient summed
@@ -152,12 +153,18 @@ def _assert_grads_close(ga, gb, rel=GRAD_REL):
 # --------------------------------------------------------------------------------------------------------------- semantics --
 
 def test_env_parsing(monkeypatch):
-    for v, want in (("", None), ("0", None), ("off", None), ("1", C.DEFAULT_CHUNK), ("on", C.DEFAULT_CHUNK),
+    for v, want in (("", C.DEFAULT_CHUNK), ("0", None), ("off", None), ("1", C.DEFAULT_CHUNK), ("on", C.DEFAULT_CHUNK),
                     ("512", 512), ("2048", 2048)):
         monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", v)
         assert C.chunked_lm_loss_requested() == want, v
-    monkeypatch.delenv("E4B_CHUNKED_LM_LOSS")
-    assert C.chunked_lm_loss_requested() is None and C.chunked_lm_loss_min_bytes() is None
+    monkeypatch.delenv("E4B_CHUNKED_LM_LOSS")            # unset is `auto`, the default since TC1 amendment 44 -- and says so
+    assert C.chunked_lm_loss_requested() == C.DEFAULT_CHUNK and C.chunked_lm_loss_min_bytes() == C.AUTO_MIN_LOGITS_BYTES
+    assert C.chunked_lm_loss_by_default()
+    for v in ("auto", "1", "0"):
+        monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", v)
+        assert not C.chunked_lm_loss_by_default(), v
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "0")
+    assert C.chunked_lm_loss_min_bytes() is None
     for v in ("auto", " AUTO "):                            # chunks of DEFAULT_CHUNK, behind the size gate
         monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", v)
         assert C.chunked_lm_loss_requested() == C.DEFAULT_CHUNK and C.chunked_lm_loss_min_bytes() == C.AUTO_MIN_LOGITS_BYTES == 1 << 30
@@ -219,6 +226,19 @@ def test_auto_gate_runs_small_forwards_stock_and_large_ones_chunked():
     assert out.logits is None and C.CHUNKED_LM_LOSS_STATS["chunked_calls"] == chunked + 1
     _assert_loss_close(ref_out.loss, out.loss)
     _assert_grads_close(ref, got)
+
+
+def test_the_default_refuses_quietly_and_an_explicit_request_warns(monkeypatch):
+    """Unset (the default) a model outside the table keeps its stock loss without a warning -- nobody asked for the switch; set, the
+    same refusal warns. Both record it in CHUNKED_LM_LOSS_STATS["refused"]."""
+    m = tr.LlamaForCausalLM(tr.LlamaConfig(vocab_size=V, hidden_size=64, intermediate_size=128, num_hidden_layers=1, num_attention_heads=4,
+                                           num_key_value_heads=2))     # dense Llama: outside the table
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert C.enable_chunked_lm_loss(m, quiet_refusal=True) == 0
+    assert "LlamaForCausalLM" in C.CHUNKED_LM_LOSS_STATS["refused"] and not hasattr(m, "_e4b_chunked_lm_loss")
+    with pytest.warns(RuntimeWarning, match="refused"):
+        assert C.enable_chunked_lm_loss(m) == 0
 
 
 def test_auto_gate_separates_the_tc1_shapes_it_was_set_on():
@@ -325,7 +345,7 @@ def test_bf16_and_autocast_stay_within_bf16_rounding(mode):
 # --------------------------------------------------------------------------------------------------- off, eval, unwinding --
 
 def test_switch_off_is_the_stock_path_byte_for_byte(monkeypatch):
-    monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "0")       # off is `0` since `auto` became the default (TC1 amendment 44)
     ids, labels, att = _batch("cpu")
     ref_out, ref = _step(_model("qwen3_moe"), ids, labels, att)
     m = _model("qwen3_moe")
@@ -463,10 +483,19 @@ def test_enable_fast_train_applies_it_from_the_environment_and_disable_unwinds(m
         return m
     for k in ("E4B_FUSED_ROPE", "E4B_FUSED_RMSNORM", "E4B_MOE_KEEP_LAYERS"):
         monkeypatch.setenv(k, "0")
-    monkeypatch.delenv("E4B_CHUNKED_LM_LOSS", raising=False)
+    monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "0")       # off: nothing patched
     m = model_with_a_patchable_stack()
     assert enable_fast_train(m) >= 1
     assert not hasattr(m, "_e4b_chunked_lm_loss") and "forward" not in vars(m)
+    disable_fast_train(m)
+    monkeypatch.delenv("E4B_CHUNKED_LM_LOSS")            # unset: `auto`, the default -- patched behind the gate, this tiny batch stock
+    m = model_with_a_patchable_stack()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")                    # the default must not warn on a supported model
+        assert enable_fast_train(m) >= 1
+    assert m._e4b_chunked_lm_loss.min_bytes == C.AUTO_MIN_LOGITS_BYTES
+    ids0, labels0, att0 = _batch("cpu")
+    assert m(input_ids=ids0, labels=labels0, attention_mask=att0).logits is not None
     disable_fast_train(m)
     monkeypatch.setenv("E4B_CHUNKED_LM_LOSS", "7")
     m = model_with_a_patchable_stack()

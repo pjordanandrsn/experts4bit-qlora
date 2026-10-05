@@ -243,7 +243,7 @@ def _print_env_help(which: str) -> None:
         ("OFFLOAD_EXPERTS", "0", "keep experts in pinned CPU RAM"),
         ("OFFLOAD_PIN", "1", "pin the offloaded expert memory"),
         ("E4B_ABSMAX_DQ", "auto", "double-quantize the frozen expert absmax: on for resident training (0 off, 1 required)"),
-        ("E4B_CHUNKED_LM_LOSS", "0", "1 or a chunk size in tokens: the loss over token chunks, no [tokens, vocab] logits; auto: only where the fp32 logits would reach 1 GiB"),
+        ("E4B_CHUNKED_LM_LOSS", "auto", "auto: the loss over token chunks only where a forward's fp32 logits would reach 1 GiB; 1 or a chunk size: every training forward; 0: the stock loss"),
         ("DO_GEN", "1", "sample generations during training"),
         ("SEED", "0", "torch manual seed"),
         ("OUT", "./experts4bit-lora-out", "adapter output dir"),
@@ -424,13 +424,16 @@ def main():
             "under a flag that says otherwise. Set TRAIN_EXPERTS=0 to train what is "
             "wrapped, or train the experts with grouped-nf4-gemm's "
             "mxfp4_qlora.ExpertsMxfp4LoRA (docs/solutions/mxfp4-moe-training-and-residency.md).")
-    # Opt-in (E4B_CHUNKED_LM_LOSS=1 or a chunk size in tokens): the training forward's causal-LM loss over token chunks, the
-    # [tokens, vocab] logits never materialised (engines/chunked_lm_loss.py). Evaluation (no_grad) and generation keep the stock
-    # forward; a model whose logits path the module does not reproduce is refused with a warning and keeps the stock loss.
-    from .engines.chunked_lm_loss import chunked_lm_loss_min_bytes, chunked_lm_loss_requested, enable_chunked_lm_loss
+    # E4B_CHUNKED_LM_LOSS, `auto` by default (TC1 amendment 44): a training forward whose fp32 logits would reach 1 GiB takes the loss
+    # over token chunks (engines/chunked_lm_loss.py), smaller ones run stock; `1` chunks every training forward, `0` keeps the stock
+    # loss. Evaluation (no_grad) and generation keep the stock forward; a model the module does not reproduce keeps the stock loss
+    # (a warning only when the variable was set).
+    from .engines.chunked_lm_loss import (chunked_lm_loss_by_default, chunked_lm_loss_min_bytes, chunked_lm_loss_requested,
+                                          enable_chunked_lm_loss)
     chunk = chunked_lm_loss_requested()
     if chunk is not None:
-        enable_chunked_lm_loss(model, chunk, verbose=True, min_logits_bytes=chunked_lm_loss_min_bytes())
+        enable_chunked_lm_loss(model, chunk, verbose=True, min_logits_bytes=chunked_lm_loss_min_bytes(),
+                               quiet_refusal=chunked_lm_loss_by_default())
     torch.cuda.synchronize()
     log(
         f"loaded. trainable: {sum(p.numel() for p in trainable):,} "

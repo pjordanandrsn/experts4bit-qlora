@@ -786,9 +786,10 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     patched forward reads the absmax through ``expert_absmax_fp32``, which expands a
     double-quantized one to fp32 for the one layer the kernel is about to run.
 
-    With ``E4B_CHUNKED_LM_LOSS=1`` (or a chunk size in tokens) it also routes the model's
-    training forward through the chunked causal-LM loss (``engines/chunked_lm_loss.py``):
-    the ``[tokens, vocab]`` logits are never materialised; ``disable_fast_train`` unwinds it.
+    It also routes the model's training forward through the chunked causal-LM loss
+    (``engines/chunked_lm_loss.py``) where the fp32 logits would reach 1 GiB -- ``E4B_CHUNKED_LM_LOSS``
+    is ``auto`` by default; ``1`` (or a chunk size) chunks every training forward, ``0`` none;
+    ``disable_fast_train`` unwinds it.
     """
     try:
         from nf4_qlora import fused_grouped_lora  # noqa: F401
@@ -895,13 +896,16 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     keep = moe_keep_layers_requested() if patched else None
     if keep is not None:
         keep_moe_activations(model, keep, verbose=verbose)
-    # Opt-in (E4B_CHUNKED_LM_LOSS=1 or a chunk size in tokens): the training forward's causal-LM loss over token chunks, the
-    # [tokens, vocab] logits never materialised (engines/chunked_lm_loss.py). Refused, with a warning, on a model whose logits
-    # path it does not reproduce; that model keeps the stock loss.
-    from .chunked_lm_loss import chunked_lm_loss_min_bytes, chunked_lm_loss_requested, enable_chunked_lm_loss
+    # E4B_CHUNKED_LM_LOSS, `auto` by default (TC1 amendment 44): a training forward whose fp32 logits would reach 1 GiB takes the loss
+    # over token chunks, the [tokens, vocab] logits never materialised (engines/chunked_lm_loss.py); smaller ones run stock. `1` or a
+    # chunk size chunks every training forward, `0` keeps the stock loss. A model whose logits path the module does not reproduce keeps
+    # the stock loss -- with a warning when the variable was set, silently when the default applied.
+    from .chunked_lm_loss import (chunked_lm_loss_by_default, chunked_lm_loss_min_bytes, chunked_lm_loss_requested,
+                                  enable_chunked_lm_loss)
     chunk = chunked_lm_loss_requested() if patched else None
     if chunk is not None:
-        enable_chunked_lm_loss(model, chunk, verbose=verbose, min_logits_bytes=chunked_lm_loss_min_bytes())
+        enable_chunked_lm_loss(model, chunk, verbose=verbose, min_logits_bytes=chunked_lm_loss_min_bytes(),
+                               quiet_refusal=chunked_lm_loss_by_default())
     return patched
 
 
