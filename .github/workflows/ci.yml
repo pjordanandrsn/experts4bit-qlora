@@ -153,6 +153,18 @@ jobs:
           python scripts/check_shared_tooling.py --sibling /tmp/sibling-main
       - name: dependency-floor drift (every current document states pyproject's [fast] floor; historical lines are listed, not failed)
         run: python scripts/check_dependency_floor.py
+      - name: CHANGELOG (Unreleased is changelog.d/ fragments, one file per change; released history is append-only against the merge base unless the PR carries the changelog-history-edit label)
+        # Pull requests compare against the merge base (the full-history
+        # checkout above has it); a push to main checks the fragments and
+        # the pointer only. The label is for a deliberate correction to a
+        # released section, never for adding an entry.
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HISTORY_EDIT: ${{ contains(github.event.pull_request.labels.*.name, 'changelog-history-edit') }}
+        run: |
+          ARGS=(--check --base "$BASE")
+          if [ "$HISTORY_EDIT" = "true" ]; then ARGS+=(--allow-history-edit); fi
+          python scripts/changelog_fragments.py "${ARGS[@]}"
       - name: change-impact contract (pull requests only -- docs/change-impact.json, what must move together)
         # The checkout above has full history (fetch-depth: 0), so the base
         # commit and its merge base with HEAD are present: no depth-1 fetch,

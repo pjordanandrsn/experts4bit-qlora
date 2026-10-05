@@ -11,10 +11,20 @@ SC1's sc1_prompts.py, P42's hook):
      paged_attention.ATTN_SEEN -- only if hot_residency was imported, atomically. atexit does not run on a signal or
      os._exit (the arms run under perl alarm), so a missing record is a FAIL to the reader (sc1g_reduce.py), never a pass.
 
-  sc1g_k8.py k8 -- <step_decomp.py args...>        run step_decomp.py (beside this file) as __main__
+  3. (A1) SC1G_WINDOW_FILE=<k8_window_*.json> makes step_decomp score THAT window's ids: its _k8_window is replaced by one
+     that returns the file's ids and refuses unless their sha is the file's text_sha. Every e4b arm then scores the exact
+     ids every other engine scores, whatever the text (step_decomp itself only knows wikitext and C4).
+  4. (A1) SC1G_CAPTURE_OUT=<path.pt> records, for the first SC1G_CAPTURE_STEPS (16) decode steps, the raw activations
+     gnf4's quant_x_rows quantises and the expert ids gemv_mxfp4_b32 serves, at SC1G_CAPTURE_LAYERS (0,6,12,18,23), for
+     the gate_up and down GEMVs: the input of sc1g_gemv_check.py. Both gnf4 functions are wrapped, not edited (e4b looks
+     them up at call time).
+
+  sc1g_k8.py k8 -- <step_decomp.py args...>        import step_decomp (beside this file) and run its main()
   sc1g_k8.py windows --model M --rev R --out DIR --suffix S [--steps 2048]
-                                                   k8_window_{wikitext,c4val1}.json: sc1_prompts.window_record over
-                                                   step_decomp._k8_window with the chat frame
+                     [--ultrachat PARQUET --n-conv 2] k8_window_wikitext.json (the chat-framed out-of-distribution
+                                                   control) and, with --ultrachat, k8_window_conv{1..n}.json: the first n
+                                                   test_sft conversations, by index, whose single rendering in gpt-oss's
+                                                   chat template reaches prompt_len + steps + 1 tokens
 """
 from __future__ import annotations
 
@@ -24,7 +34,6 @@ import datetime as _dt
 import json
 import os
 import re
-import runpy
 import sys
 import types
 
@@ -69,14 +78,72 @@ def _dump_routes():
     os.replace(out + ".tmp", out)
 
 
+def window_from_file(path):
+    """A replacement for step_decomp._k8_window returning `path`'s ids (same tuple shape, same digest rule)."""
+    import hashlib
+    import torch
+    rec = json.load(open(path))
+
+    def _k8w(a, tok):
+        ids = torch.tensor(rec["ids"], dtype=torch.long)
+        if a.prompt_len != rec["prompt_len"] or a.ppl_steps != rec["steps"]:
+            raise SystemExit(f"{path}: window is prompt_len {rec['prompt_len']} / steps {rec['steps']}, the arm asks "
+                             f"{a.prompt_len} / {a.ppl_steps}")
+        step = max(1, (ids.numel() - a.prompt_len) // max(1, a.batch))
+        prompts = [ids[i * step:i * step + a.prompt_len].tolist() for i in range(a.batch)]
+        sha = hashlib.sha256(ids[:a.prompt_len + max(a.ppl_steps, 0) + 1].numpy().tobytes()).hexdigest()
+        if sha != rec["text_sha"]:
+            raise SystemExit(f"{path}: ids hash to {sha[:12]}, the file says {rec['text_sha'][:12]}")
+        print(f"K8 window from file {os.path.basename(path)} sha={sha[:12]} source={rec.get('source')}", flush=True)
+        return ids, step, prompts, ids, sha
+    return _k8w
+
+
+def capture(out, steps=16, layers=(0, 6, 12, 18, 23)):
+    """Wrap gnf4's quant_x_rows / gemv_mxfp4_b32: keep the raw x, xq, xs and eids of the first `steps` decode steps at
+    `layers`. One decode step calls the GEMV twice per layer (gate_up: N = 2 * I, then down), layers in order."""
+    import torch
+    import int4_b32
+    import mxfp4_grouped
+    q0, g0 = int4_b32.quant_x_rows, mxfp4_grouped.gemv_mxfp4_b32
+    st = {"last_x": None, "calls": 0, "rows": []}
+
+    def q(x):
+        st["last_x"] = x.detach()
+        return q0(x)
+
+    def g(xq, xs, blocks, scales, eids, N, K, part=None):
+        i = st["calls"]
+        st["calls"] += 1
+        step, k = divmod(i, 48)
+        layer, which = k // 2, ("gu", "dn")[k % 2]
+        if step < steps and layer in layers and st["last_x"] is not None:
+            st["rows"].append({"step": step, "layer": layer, "which": which, "N": int(N), "K": int(K),
+                               "x": st["last_x"].to("cpu", copy=True), "eids": eids.detach().to("cpu", copy=True)})
+        return g0(xq, xs, blocks, scales, eids, N, K, part=part)
+
+    int4_b32.quant_x_rows, mxfp4_grouped.gemv_mxfp4_b32 = q, g
+
+    def _save():
+        if st["rows"]:
+            torch.save({"rows": st["rows"], "gemv_calls": st["calls"], "layers": list(layers), "steps": steps}, out + ".tmp")
+            os.replace(out + ".tmp", out)
+    atexit.register(_save)
+
+
 def k8(args) -> None:
     pin_chat_date()
     if os.environ.get("SC1G_ROUTE_OUT"):
         atexit.register(_dump_routes)
-    sd = os.path.join(HERE, "step_decomp.py")
-    sys.argv = [sd] + list(args)
+    sys.argv = [os.path.join(HERE, "step_decomp.py")] + list(args)
     sys.path.insert(0, HERE)
-    runpy.run_path(sd, run_name="__main__")
+    if os.environ.get("SC1G_CAPTURE_OUT"):
+        lay = tuple(int(x) for x in os.environ.get("SC1G_CAPTURE_LAYERS", "0,6,12,18,23").split(","))
+        capture(os.environ["SC1G_CAPTURE_OUT"], int(os.environ.get("SC1G_CAPTURE_STEPS", "16")), lay)
+    import step_decomp
+    if os.environ.get("SC1G_WINDOW_FILE"):
+        step_decomp._k8_window = window_from_file(os.environ["SC1G_WINDOW_FILE"])
+    step_decomp.main()
 
 
 def windows(a) -> int:
@@ -91,7 +158,8 @@ def windows(a) -> int:
     if day and dates != [day]:
         raise SystemExit(f"the chat prefix carries dates {dates}, not [{day}]: the pin did not take")
     os.makedirs(a.out, exist_ok=True)
-    for src in SOURCES:
+    srcs = ("wikitext",) if a.ultrachat else SOURCES
+    for src in srcs:
         ns = types.SimpleNamespace(ppl_source=src, ppl_chat=True, ppl_chat_suffix=a.suffix, prompt_offset=0, prompt_span=0,
                                    prompt_len=PROMPT_LEN, batch=1, ppl_steps=a.steps)
         _, _, _, ppl_ids, ppl_sha = step_decomp._k8_window(ns, tok)
@@ -100,7 +168,67 @@ def windows(a) -> int:
         rec.update(chat=True, chat_suffix=a.suffix, chat_date=day, chat_prefix_dates=dates)
         json.dump(rec, open(os.path.join(a.out, f"k8_window_{src}.json"), "w"))
         print(f"WINDOW src={src} text_sha={ppl_sha} n_ids={len(win)} prompt_len={PROMPT_LEN} steps={a.steps} chat_date={day}", flush=True)
+    if a.ultrachat:
+        ultrachat_windows(a, tok, sc1_prompts, day)
     return 0
+
+
+def roles(tok, ids):
+    """Per token: the role whose message CONTENT it is ('system', 'user', 'assistant', ...), or 'markup' for the template's
+    special tokens and message headers. Read from the special tokens, since gpt-oss's template does not render a
+    conversation prefix-stably (the last assistant turn ends <|return|>, earlier ones <|end|>)."""
+    sp = {tok.convert_tokens_to_ids(x): x for x in ("<|start|>", "<|message|>", "<|end|>", "<|return|>", "<|channel|>")}
+    out, role, mode, head = [], None, None, []
+    for t in ids:
+        s = sp.get(t)
+        if s == "<|start|>":
+            mode, head = "head", []
+            out.append("markup")
+        elif s == "<|message|>" and mode == "head":
+            name = tok.decode(head).strip()
+            role, mode = (name.split("<|channel|>")[0].strip() or "?"), "body"
+            out.append("markup")
+        elif s in ("<|end|>", "<|return|>"):
+            mode = None
+            out.append("markup")
+        elif mode == "head":
+            head.append(t)
+            out.append("markup")
+        else:
+            out.append(role if mode == "body" else "markup")
+    return out
+
+
+def ultrachat_windows(a, tok, sc1_prompts, day):
+    """The graded windows: the first a.n_conv test_sft conversations, by index, whose single rendering reaches the window
+    length. Never concatenated; each window is that conversation's first prompt_len + steps + 1 ids."""
+    import hashlib
+    import struct
+    import pyarrow.parquet as pq
+    need = PROMPT_LEN + a.steps + 1
+    tab = pq.read_table(a.ultrachat)
+    n = 0
+    for i in range(tab.num_rows):
+        r = tab.slice(i, 1).to_pylist()[0]
+        msgs = [{"role": m["role"], "content": m["content"]} for m in r["messages"]]
+        x = tok.apply_chat_template(msgs, tokenize=True)
+        ids = list(x["input_ids"] if hasattr(x, "keys") else x)
+        if len(ids) < need:
+            continue
+        n += 1
+        win = [int(v) for v in ids[:need]]
+        sha = hashlib.sha256(struct.pack(f"<{len(win)}q", *win)).hexdigest()
+        rec = sc1_prompts.window_record(f"conv{n}", win, sha, PROMPT_LEN, a.steps, a.model, a.rev)
+        own = roles(tok, win)[PROMPT_LEN + 1:need]
+        share = {k: round(own.count(k) / len(own), 4) for k in sorted(set(own))}
+        rec.update(chat=True, chat_date=day, dataset="HuggingFaceH4/ultrachat_200k test_sft", dataset_index=i,
+                   prompt_id=r.get("prompt_id"), conversation_tokens=len(ids), messages=len(msgs), scored_target_roles=share)
+        json.dump(rec, open(os.path.join(a.out, f"k8_window_conv{n}.json"), "w"))
+        print(f"WINDOW src=conv{n} text_sha={sha} dataset_index={i} conversation_tokens={len(ids)} messages={len(msgs)} "
+              f"scored_target_roles={json.dumps(share)}", flush=True)
+        if n >= a.n_conv:
+            return
+    raise SystemExit(f"only {n} test_sft conversations reach {need} tokens; {a.n_conv} needed")
 
 
 def main(argv=None) -> int:
@@ -118,6 +246,8 @@ def main(argv=None) -> int:
     w.add_argument("--suffix", required=True)
     w.add_argument("--steps", type=int, default=2048)
     w.add_argument("--harness-dir", default=HERE)
+    w.add_argument("--ultrachat", default="", help="A1: the pinned ultrachat_200k test_sft parquet")
+    w.add_argument("--n-conv", type=int, default=2)
     a = ap.parse_args(argv)
     return windows(a)
 

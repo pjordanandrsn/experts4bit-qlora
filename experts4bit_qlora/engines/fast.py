@@ -866,7 +866,7 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
         warnings.warn(
             "[e4b.fast] this model's recurrent blocks run transformers' reference PyTorch path, outside the fused expert runtime: "
             f"{', '.join(FAST_TRAIN_STATS['recurrent_fallbacks'])}. Install mamba-ssm / causal-conv1d / flash-linear-attention "
-            "for their kernels (on an RTX A2000 they cut Granite-4.0-H's fused step by 36 % of device time).",
+            "for their kernels.",
             RuntimeWarning, stacklevel=2)
     if verbose:
         skipped = sum(FAST_TRAIN_STATS["skipped"].values())

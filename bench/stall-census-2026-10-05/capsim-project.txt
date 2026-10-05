@@ -1,0 +1,5 @@
+P=0.165 R=0.055  min attainment over both draws by rate: 1:1.00 2:0.88 3:0.41 4:0.18 5:0.10 6:0.07 8:0.06
+P=0.110 R=0.001  min attainment over both draws by rate: 1:1.00 2:1.00 3:1.00 4:0.70 5:0.53 6:0.17 8:0.14
+P=0.080 R=0.001  min attainment over both draws by rate: 1:1.00 2:1.00 3:1.00 4:0.98 5:0.87 6:0.82 8:0.14
+P=0.050 R=0.001  min attainment over both draws by rate: 1:1.00 2:1.00 3:1.00 4:1.00 5:1.00 6:1.00 8:0.16
+P=0.030 R=0.001  min attainment over both draws by rate: 1:1.00 2:1.00 3:1.00 4:1.00 5:1.00 6:1.00 8:0.47

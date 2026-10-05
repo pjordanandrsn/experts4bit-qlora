@@ -1,0 +1,148 @@
+{
+ "device": {
+  "name": "NVIDIA RTX A2000 12GB",
+  "cc": [
+   8,
+   6
+  ]
+ },
+ "verdict": "KERNEL_AGREES",
+ "kernel_vs_exact_worst": 4.3814634409500286e-05,
+ "metric": "kernel_vs_exact_bf16",
+ "kernel_tol": 0.001,
+ "summary": {
+  "L0_gu": {
+   "n": 2,
+   "kernel_vs_exact_bf16_max": 3.926473800675012e-05,
+   "kernel_vs_exact_max": 0.0016758897108957171,
+   "scheme_mean": 0.0074699209071695805,
+   "scheme_max": 0.00966719537973404,
+   "crest_max": 27.76494026184082
+  },
+  "L0_dn": {
+   "n": 2,
+   "kernel_vs_exact_bf16_max": 4.3814634409500286e-05,
+   "kernel_vs_exact_max": 0.00162494124379009,
+   "scheme_mean": 0.009467379888519645,
+   "scheme_max": 0.01337894145399332,
+   "crest_max": 29.505657196044922
+  },
+  "L12_gu": {
+   "n": 2,
+   "kernel_vs_exact_bf16_max": 6.248183581192279e-06,
+   "kernel_vs_exact_max": 0.0016570400912314653,
+   "scheme_mean": 0.008882133523002267,
+   "scheme_max": 0.012429576367139816,
+   "crest_max": 26.245895385742188
+  },
+  "L12_dn": {
+   "n": 2,
+   "kernel_vs_exact_bf16_max": 2.245391669930541e-06,
+   "kernel_vs_exact_max": 0.0016603126423433423,
+   "scheme_mean": 0.008895684964954853,
+   "scheme_max": 0.01235782541334629,
+   "crest_max": 28.84072494506836
+  }
+ },
+ "rows": [
+  {
+   "layer": 0,
+   "which": "gu",
+   "step": "normal",
+   "kernel_vs_exact_bf16": 2.518662040529307e-05,
+   "kernel_vs_exact": 0.0016758897108957171,
+   "scheme_exact_vs_raw": 0.005272646434605122,
+   "kernel_vs_raw": 0.005513434763997793,
+   "x_absmax": 4.34375,
+   "x_rms": 1.0000406503677368,
+   "block_crest_max": 4.719592094421387
+  },
+  {
+   "layer": 0,
+   "which": "gu",
+   "step": "outlier",
+   "kernel_vs_exact_bf16": 3.926473800675012e-05,
+   "kernel_vs_exact": 0.001662197639234364,
+   "scheme_exact_vs_raw": 0.00966719537973404,
+   "kernel_vs_raw": 0.009810758754611015,
+   "x_absmax": 177.0,
+   "x_rms": 3.7806556224823,
+   "block_crest_max": 27.76494026184082
+  },
+  {
+   "layer": 0,
+   "which": "dn",
+   "step": "normal",
+   "kernel_vs_exact_bf16": 8.065507017818163e-07,
+   "kernel_vs_exact": 0.0015842721331864595,
+   "scheme_exact_vs_raw": 0.005555818323045969,
+   "kernel_vs_raw": 0.005880444776266813,
+   "x_absmax": 3.515625,
+   "x_rms": 0.9911110997200012,
+   "block_crest_max": 5.2001800537109375
+  },
+  {
+   "layer": 0,
+   "which": "dn",
+   "step": "outlier",
+   "kernel_vs_exact_bf16": 4.3814634409500286e-05,
+   "kernel_vs_exact": 0.00162494124379009,
+   "scheme_exact_vs_raw": 0.01337894145399332,
+   "kernel_vs_raw": 0.013393900357186794,
+   "x_absmax": 300.0,
+   "x_rms": 4.648168563842773,
+   "block_crest_max": 29.505657196044922
+  },
+  {
+   "layer": 12,
+   "which": "gu",
+   "step": "normal",
+   "kernel_vs_exact_bf16": 6.248183581192279e-06,
+   "kernel_vs_exact": 0.0016369475051760674,
+   "scheme_exact_vs_raw": 0.0053346906788647175,
+   "kernel_vs_raw": 0.00559182558208704,
+   "x_absmax": 4.34375,
+   "x_rms": 0.9895772337913513,
+   "block_crest_max": 5.869166374206543
+  },
+  {
+   "layer": 12,
+   "which": "gu",
+   "step": "outlier",
+   "kernel_vs_exact_bf16": 9.739454576163098e-09,
+   "kernel_vs_exact": 0.0016570400912314653,
+   "scheme_exact_vs_raw": 0.012429576367139816,
+   "kernel_vs_raw": 0.012537294998764992,
+   "x_absmax": 130.0,
+   "x_rms": 2.4962246417999268,
+   "block_crest_max": 26.245895385742188
+  },
+  {
+   "layer": 12,
+   "which": "dn",
+   "step": "normal",
+   "kernel_vs_exact_bf16": 2.4343389526393366e-08,
+   "kernel_vs_exact": 0.0016603126423433423,
+   "scheme_exact_vs_raw": 0.0054335445165634155,
+   "kernel_vs_raw": 0.005778670310974121,
+   "x_absmax": 3.890625,
+   "x_rms": 0.9953262805938721,
+   "block_crest_max": 4.785097599029541
+  },
+  {
+   "layer": 12,
+   "which": "dn",
+   "step": "outlier",
+   "kernel_vs_exact_bf16": 2.245391669930541e-06,
+   "kernel_vs_exact": 0.0016499762423336506,
+   "scheme_exact_vs_raw": 0.01235782541334629,
+   "kernel_vs_raw": 0.012470602989196777,
+   "x_absmax": 222.0,
+   "x_rms": 3.2330069541931152,
+   "block_crest_max": 28.84072494506836
+  }
+ ],
+ "acts": null,
+ "synthetic": true,
+ "mutate": false
+}

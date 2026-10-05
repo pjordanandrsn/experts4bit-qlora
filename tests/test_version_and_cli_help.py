@@ -38,8 +38,9 @@ def test_changelog_documents_the_released_version():
 
     0.14.0 and 0.15.0 both shipped with no entry — the changelog stopped at 0.13.0
     and nothing complained, so the release notes silently described a two-versions-old
-    package. Unreleased work belongs under `## Unreleased`; bumping `__version__`
-    without giving it a section fails here instead of at publish time.
+    package. Unreleased work is one file per change in `changelog.d/` until the release
+    writes it into its section (`scripts/changelog_fragments.py --release`); bumping
+    `__version__` without giving it a section fails here instead of at publish time.
     """
     import pathlib
     import experts4bit_qlora
@@ -52,8 +53,8 @@ def test_changelog_documents_the_released_version():
     versions = [h.split()[1] for h in heads if len(h.split()) > 1]
     assert v in versions, (
         f"__version__ is {v} but CHANGELOG.md has no '## {v}' section. Sections "
-        f"present: {versions[:5]}. Add the release notes, or keep in-flight work under "
-        f"'## Unreleased' until the version is bumped."
+        f"present: {versions[:5]}. Add the release notes, or keep in-flight work in "
+        f"changelog.d/ until the version is bumped."
     )
 
 def test_pyproject_and_package_version_agree():
