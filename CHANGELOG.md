@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### DQ1 registered: is there a dense low-bit QLoRA primitive? A headroom census on Qwen3-32B shapes, one RTX 5090 (bench and tests only)
+
+- **Why** (#1083). Before any dense kernel, backend or repository, measure what could be won at all. A dense primitive could
+  win on speed only within bitsandbytes' dequant share. bnb 0.50 already dispatches by arch and shape, and grouped-nf4-gemm
+  0.39.0's `auto` already routes G=1 to dequant + `torch.mm`. On capacity it could win by streaming the frozen weights,
+  which gnf4#60 refuted for MoE but never tested for dense, where the next layer's bytes are known exactly.
+- **Census** (`bench/dq1/`). No checkpoint, no training.
+  - Arms, at Qwen3-32B's five linear shapes and M 512–8192: bf16 floor, bnb `matmul_4bit`, explicit dequant + mm, gnf4 G=1
+    `auto` (the dense route), gnf4 G=1 `fused`. Each arm's forward and dgrad on identical NF4 weights.
+  - Also: the LoRA delta, each decoder alone, and pinned H2D against GEMMs, both fully loaded.
+- **Readings and rule.**
+  - H (speed headroom) and Rmin (each phase's compute over one layer's transfer).
+  - Verdicts: S_ALIVE / S_DEAD, G1, GF, L, and C_ALIVE / C_DEAD.
+  - `dq1_reduce.py` carries a 44-case self-test; `tests/test_dq1_lane.py` kills 23 rule mutants.
+- **Before the box.** An independent review (fixed before data), and two $0 rehearsals on the RTX A2000 through the local
+  pool. Every arm runs and engages as read from the libraries' counters; parity is ≤ 3.4e-3 vs fp32.
+- Research note: `bench/dq1/NOTE-dense-qlora-primitive.md`.
+
 ### Read: TC1 amendment 29 — the same-stack pair over 60 steps, unstable again on a busy host (P50, P51 UNTESTED, final)
 
 - `tc1-5090-72` ($1.75, EPYC 7C13, Vast machine 45511). e4b's same-stack draws read 3.979 / 3.490 s/step (13.1 % apart, host load1
