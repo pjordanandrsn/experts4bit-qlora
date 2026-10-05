@@ -130,6 +130,22 @@ def min_hot_rows(topology, setup) -> int:
     return int(min(st.n_experts, routed, n_nvme))
 
 
+def staging_bytes_per_token(topology) -> int:
+    """bf16 K + V bytes one prompt token stages across the paged pool's attention layers (per-layer geometry honoured)."""
+    n = topology.kv_layers
+    hs = topology.kv_heads if hasattr(topology.kv_heads, "__len__") else [topology.kv_heads] * n
+    ds = topology.kv_head_dims if hasattr(topology.kv_head_dims, "__len__") else [topology.kv_head_dims] * n
+    return sum(2 * int(h) * int(d) * 2 for h, d in zip(list(hs)[:n], list(ds)[:n]))
+
+
+def prefill_staging_tokens(setup) -> int:
+    """The most prompt tokens the server can hold in prefill staging at once. The scheduler spends each step's prefill
+    budget (``chunk_tokens``) on admitted prompts in order, so one prompt can be finishing while the next starts its
+    first chunk; a prompt's staging is freed when it completes."""
+    one = setup.max_tokens_per_seq
+    return min(one + (setup.chunk_tokens if setup.max_seqs > 1 else 0), setup.max_seqs * one)
+
+
 def _hybrid_host_items(hot_rows: int, bpe: int, stride: int, n_nvme: int) -> list:
     """The host buffers ``enable_hybrid_tier`` builds at either placement (the server always builds the hybrid tier)."""
     try:
@@ -240,6 +256,13 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     items.append(FootprintItem("FP8 paged KV pool", "device", kv, "derived",
                                f"{topology.kv_layers} layers x ({setup.max_seqs} seqs x {setup.max_tokens_per_seq} tokens"
                                f" + {scratch} graph scratch slots), fp8 payload + fp32 scales (Fp8PagedKV's arithmetic)"))
+    staged = prefill_staging_tokens(setup)
+    items.append(FootprintItem("prefill staging (bf16 K/V of prompts mid-prefill)", "device",
+                               staged * staging_bytes_per_token(topology), "derived",
+                               f"a prompt's K/V for every attention layer stays bf16 until the prompt completes "
+                               f"(paged_attention's staging buffer); at most {staged} tokens staged at once (one prompt "
+                               f"of up to {setup.max_tokens_per_seq} tokens finishing while the next starts a "
+                               f"{setup.chunk_tokens}-token chunk); its ceiling, since prompt lengths are the caller's"))
     st0 = topology.expert_stacks[0]
     first_out = 1
     for d in st0.first_shape:
