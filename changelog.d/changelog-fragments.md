@@ -14,7 +14,7 @@
   lost). Replayed over the last 400 first-parent commits to `CHANGELOG.md`, it flags four, each a deliberate edit: two
   misplaced entries moved, a conflict-marker repair, and a redaction of owner quotes. A deliberate edit passes with the
   `changelog-history-edit` label.
-- **Migration.** The 26 sections under `## Unreleased` moved, unchanged, into `changelog.d/<original PR>-<slug>.md`. Joined in
+- **Migration.** Every section under `## Unreleased` moved, unchanged, into `changelog.d/<original PR>-<slug>.md`. Joined in
   their old order they reproduce the old section byte for byte. The released sections are byte-identical (678,465 bytes).
 - `scripts/check_change_impact.py` (shared; grouped-nf4-gemm first) accepts a fragment as the `CHANGELOG.md` companion where a
   repository keeps `changelog.d/`. A version bump still needs `CHANGELOG.md`, because the release writes it.

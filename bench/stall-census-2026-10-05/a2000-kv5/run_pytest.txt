@@ -1,0 +1,38 @@
+[2026-10-05T09:45:27Z] preflight util,mem_used,mem_total: 0, 1055, 12282; host load: 15.10 17.63 19.16 8/9553 171583
+git version 2.34.1
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+acf32d1c bulk KV docs: the flush bound is ~216 MiB at 2048 tokens (computed), not ~225
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+GUARD ok 2.8.0+cu128 NVIDIA RTX A2000 12GB
+[2026-10-05T09:46:36Z] pytest (CUDA)
+PYTEST_RC=0
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+191 passed, 5 skipped, 1 warning in 19.61s
+[2026-10-05T09:46:58Z] kv bookkeeping bench
+RC=0
+INFO {"argv": ["kv_bookkeeping_bench.py", "--out", "out/kv_bench.json", "--max-tokens", "2048", "--slots", "16", "--min-free-gb", "0.8"], "gpu": "NVIDIA RTX A2000 12GB", "torch": "2.8.0+cu128", "python": "3.11.13", "cpu": "Intel(R) Xeon(R) W-1250 CPU @ 3.30GHz", "loadavg_start": [37.90771484375, 24.85205078125, 21.58544921875], "slots_requested": 16, "slots": 16, "free_before_gib": 10.5, "pool_gib": 1.62, "blocks_per_seq": 128, "free_list_len": 2048, "k_groups": 4}
+PARITY T=512 {"bulk": {"after_flush": "bitwise", "after_ready": "bitwise", "ready_claims_every_block": true, "free_clears_both": true, "pass": true}, "library_bulk": {"after_flush": "bitwise", "after_ready": "bitwise", "ready_claims_every_block": true, "free_clears_both": true, "pass": true}}
+LIBRARY T=512 {"median": {"admit": {"host_ms": 1.526, "gpu_ms": 1.501, "wall_ms": 1.55}, "flush": {"host_ms": 281.686, "gpu_ms": 281.671, "wall_ms": 281.729}, "ready": {"host_ms": 101.451, "gpu_ms": 101.415, "wall_ms": 101.483}, "free": {"host_ms": 2.332, "gpu_ms": 2.292, "wall_ms": 2.36}}, "total": {"host_ms": 386.995, "gpu_ms": 386.879, "wall_ms": 387.122}, "kernels": {"admit": 96, "flush": 2448, "ready": 4608, "free": 96}}
+BULK T=512 {"median": {"admit": {"host_ms": 0.091, "gpu_ms": 0.076, "wall_ms": 0.1}, "flush": {"host_ms": 1.21, "gpu_ms": 4.932, "wall_ms": 4.974}, "ready": {"host_ms": 0.69, "gpu_ms": 0.638, "wall_ms": 0.706}, "free": {"host_ms": 0.72, "gpu_ms": 0.7, "wall_ms": 0.731}}, "total": {"host_ms": 2.711, "gpu_ms": 6.346, "wall_ms": 6.511}, "kernels": {"admit": 2, "flush": 29, "ready": 1, "free": 2}}
+LIBRARY_BULK T=512 {"median": {"admit": {"host_ms": 0.095, "gpu_ms": 0.079, "wall_ms": 0.104}, "flush": {"host_ms": 2.467, "gpu_ms": 5.286, "wall_ms": 5.335}, "ready": {"host_ms": 0.058, "gpu_ms": 0.016, "wall_ms": 0.067}, "free": {"host_ms": 0.739, "gpu_ms": 0.727, "wall_ms": 0.752}}, "total": {"host_ms": 3.359, "gpu_ms": 6.108, "wall_ms": 6.258}, "kernels": {"admit": 2, "flush": 62, "ready": 0, "free": 2}}
+PARITY T=500 {"bulk": {"after_flush": "bitwise", "after_ready": "bitwise", "ready_claims_every_block": true, "free_clears_both": true, "pass": true}, "library_bulk": {"after_flush": "bitwise", "after_ready": "bitwise", "ready_claims_every_block": true, "free_clears_both": true, "pass": true}}
+LIBRARY T=500 {"median": {"admit": {"host_ms": 1.532, "gpu_ms": 1.507, "wall_ms": 1.565}, "flush": {"host_ms": 279.793, "gpu_ms": 279.767, "wall_ms": 279.828}, "ready": {"host_ms": 101.113, "gpu_ms": 101.093, "wall_ms": 101.148}, "free": {"host_ms": 2.488, "gpu_ms": 2.455, "wall_ms": 2.518}}, "total": {"host_ms": 384.926, "gpu_ms": 384.822, "wall_ms": 385.059}, "kernels": {"admit": 96, "flush": 2448, "ready": 4608, "free": 96}}
+BULK T=500 {"median": {"admit": {"host_ms": 0.131, "gpu_ms": 0.107, "wall_ms": 0.145}, "flush": {"host_ms": 2.319, "gpu_ms": 5.331, "wall_ms": 5.393}, "ready": {"host_ms": 0.961, "gpu_ms": 0.899, "wall_ms": 0.982}, "free": {"host_ms": 0.917, "gpu_ms": 0.894, "wall_ms": 0.935}}, "total": {"host_ms": 4.328, "gpu_ms": 7.231, "wall_ms": 7.455}, "kernels": {"admit": 2, "flush": 41, "ready": 1, "free": 2}}
+LIBRARY_BULK T=500 {"median": {"admit": {"host_ms": 0.099, "gpu_ms": 0.08, "wall_ms": 0.108}, "flush": {"host_ms": 3.157, "gpu_ms": 5.451, "wall_ms": 5.491}, "ready": {"host_ms": 0.057, "gpu_ms": 0.016, "wall_ms": 0.065}, "free": {"host_ms": 0.762, "gpu_ms": 0.744, "wall_ms": 0.777}}, "total": {"host_ms": 4.075, "gpu_ms": 6.291, "wall_ms": 6.441}, "kernels": {"admit": 2, "flush": 86, "ready": 0, "free": 2}}
+DONE out/kv_bench.json
+[2026-10-05T09:47:46Z] host load after: 39.09 26.77 22.37 9/9601 240934
+[2026-10-05T09:47:48Z] done
+SC_DONE
+===PYTEST===
+........................................................................ [ 36%]
+..............................ss....sss................................. [ 73%]
+....................................................                     [100%]
+=============================== warnings summary ===============================
+../../opt/conda/lib/python3.11/site-packages/fastapi/testclient.py:1
+  /opt/conda/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+191 passed, 5 skipped, 1 warning in 19.61s
