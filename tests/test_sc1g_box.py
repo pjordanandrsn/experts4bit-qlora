@@ -231,7 +231,7 @@ def test_sglang_gptoss_quality_modes_demand_radix_on_one_request_and_their_moe_r
 def test_the_sc1g_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc1g_reduce.py"), "--self-test"],
                          capture_output=True, text=True, timeout=120)
-    assert out.returncode == 0 and "self-test OK (20 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (26 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_capture_keeps_the_selected_layers_gate_up_and_down_per_decode_step(tmp_path):
@@ -286,3 +286,50 @@ def test_box_j_is_the_e4b_only_diagnostic_box_with_its_decisive_arms_first():
 def test_box_j_children_inherit_neither_prefill_route_pin():
     env = _child_env("J")
     assert "E4B_INT4_PREFILL" not in env and "E4B_PAGED_PREFILL_ATTN" not in env
+
+
+# ---- A4: the fidelity instrument's engine side ------------------------------------------------------------------------
+
+def test_box_i_under_a4_runs_the_named_kl_arms_first_on_four_conversations():
+    body = BOX[BOX.index("box_i(){"):BOX.index("# ---- the proof (SC1_PROVE=1), A4")]
+    assert "SC1G_NCONV=4 i_windows || finish 19; i_ref_stage" in body and "i_arms_a4" in body
+    arms = BOX[BOX.index("i_arms_a4(){"):]
+    order = [arms.index(s) for s in ("i_e4b_named e4b_serve_served_$SRC", "i_e4b_named e4b_nf4_served_$SRC", "i_vllm_named $SRC",
+                                     "i_sgl_named $V $SRC", "i_ll_named $V $SRC", "A4DESC")]
+    assert order == sorted(order), order
+    assert 'SC1G_A4_SRCS="conv1 conv2 conv3 conv4 wikitext"' in BOX
+
+
+def test_every_named_arm_refuses_without_a_registered_reference():
+    for fn in ("i_e4b_named", "i_vllm_named", "i_sgl_named", "i_ll_named"):
+        body = BOX[BOX.index(f"{fn}(){{"):]
+        body = body[:body.index("\n}") if "\n}" in body[:400] else 400]
+        assert "SHA=$(i_ref $SRC) || { i_noref" in BOX[BOX.index(f"{fn}(){{"):BOX.index(f"{fn}(){{") + 400], fn
+    ref = BOX[BOX.index("i_ref(){"):BOX.index("i_ref_stage(){")]
+    assert "ref_shas.json" in ref and 'sha256sum "$F"' in ref and '[ "$GOT" = "$WANT" ]' in ref
+    assert "SC1G_REF_FILE=$SC1G_REF_DIR/ref_$SRC.npz SC1G_REF_SHA=$SHA SC1G_NAMED_OUT=$W/sc1g/named_$NAME.npz" in BOX
+    assert "SC1_NAMED_REF=$SC1G_REF_DIR/ref_$SRC.npz SC1_NAMED_REF_SHA=$SHA" in BOX
+    assert "--named-ref $SC1G_REF_DIR/ref_$SRC.npz --named-ref-sha $SHA" in BOX
+    assert "--named $W/sc1g/named_ids_$SRC.bin --named-out $W/sc1g/named_$S.bin --named-k 64" in BOX
+
+
+def test_the_a4_proof_reads_one_named_row_per_engine_path():
+    pv = BOX[BOX.index("prove_i(){"):BOX.index("# ---- box J (SC1_BOX=J)")]
+    for s in ("i_e4b_named e4b_serve_served_conv1", "i_vllm_named conv1", "i_sgl_named native conv1", "i_ll_named q8 conv1",
+              "--prove-a4", "sc1g_kl.py --self-test", 'i_ref conv1 > /dev/null || {'):
+        assert s in pv, s
+
+
+def test_the_named_scorer_hooks():
+    sys.path.insert(0, str(REPO / "bench" / "sc1" / "vllm"))
+    src = (REPO / "bench" / "sc1" / "vllm" / "sc1_vllm_common.py").read_text()
+    ns = {}
+    exec(compile(src[src.index("def served_sampling_kwargs"):src.index("def served_row")], "x", "exec"), ns)
+    kw = ns["served_sampling_kwargs"]("named", 7, [3, 7, 9])
+    assert kw["logprob_token_ids"] == [3, 7, 9] and ns["served_sampling_kwargs"]("named", 5, [3, 9])["logprob_token_ids"] == [3, 9, 5]
+    sg = (REPO / "bench" / "sc1" / "sglang" / "sc1_sglang_nll.py").read_text()
+    ns2 = {}
+    exec(compile(sg[sg.index("def served_request_ids"):sg.index("def score_served(")], "y", "exec"), ns2)
+    assert ns2["served_request_ids"](7, [3, 7, 9]) == [7, 3, 9] and ns2["served_request_ids"](7) == [7]
+    cpp = (REPO / "bench" / "sc1" / "llamacpp" / "nll_teacher_forced.cpp").read_text()
+    assert cpp.count("named_lps(lg, n_vocab,") == 2 and '"--named-out"' in cpp and "out of vocab" in cpp

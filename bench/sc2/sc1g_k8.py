@@ -18,6 +18,12 @@ SC1's sc1_prompts.py, P42's hook):
      gnf4's quant_x_rows quantises and the expert ids gemv_mxfp4_b32 serves, at SC1G_CAPTURE_LAYERS (0,6,12,18,23), for
      the gate_up and down GEMVs: the input of sc1g_gemv_check.py. Both gnf4 functions are wrapped, not edited (e4b looks
      them up at call time).
+  5. (A4) SC1G_REF_FILE=<ref_<src>.npz> (+ SC1G_REF_SHA, refused on a mismatch) and SC1G_NAMED_OUT=<path.npz> record, at
+     each served step, e4b's log-probs on the reference's 64 named tokens for that position and on the target
+     (sc1g_kl.py's KL65). step_decomp's module global `torch` is replaced by a forwarding proxy whose log_softmax records
+     [1, V] rows -- in the served loop (no --ppl-oracle) that is the one call per scored step -- and passes every other
+     attribute (torch.Tensor included) through untouched. The reader proves the alignment: the recorded target log-probs
+     must reproduce step_decomp's own mean NLL to 1e-9, and the call count must equal the steps, else the row is VOID.
 
   sc1g_k8.py k8 -- <step_decomp.py args...>        import step_decomp (beside this file) and run its main()
   sc1g_k8.py windows --model M --rev R --out DIR --suffix S [--steps 2048]
@@ -131,6 +137,63 @@ def capture(out, steps=16, layers=(0, 6, 12, 18, 23)):
     atexit.register(_save)
 
 
+class _TorchProxy(types.ModuleType):
+    """`torch`, with log_softmax observed. Every other attribute resolves to the real module (torch.Tensor is the real
+    class, so isinstance checks are unaffected)."""
+
+    def __init__(self, real, on_rows):
+        super().__init__("torch")
+        object.__setattr__(self, "_real", real)
+        object.__setattr__(self, "_on_rows", on_rows)
+
+    def __getattr__(self, name):
+        return getattr(object.__getattribute__(self, "_real"), name)
+
+    def log_softmax(self, *a, **k):
+        out = object.__getattribute__(self, "_real").log_softmax(*a, **k)
+        object.__getattribute__(self, "_on_rows")(out)
+        return out
+
+
+def named_capture(module, ref_path: str, ref_sha: str | None, out: str):
+    """Install the proxy on `module` (step_decomp): record each [1, V] log-prob row's values at the reference's named ids
+    and target for that position; write `out` at exit (atomically)."""
+    import numpy as np
+    sys.path.insert(0, HERE)
+    import sc1g_kl
+    ref = sc1g_kl.load_artifact(ref_path, ref_sha or None)
+    P = int(ref["ids"].shape[0])
+    st = {"calls": 0, "other": 0, "lp": np.full(ref["ids"].shape, np.nan), "tlp": np.full(P, np.nan)}
+    real = module.torch
+    ids_dev = {}
+
+    def on_rows(x):
+        if x.dim() != 2 or x.shape[0] != 1:
+            st["other"] += 1
+            return
+        t = st["calls"]
+        st["calls"] += 1
+        if t >= P:
+            return
+        if x.device not in ids_dev:
+            ids_dev[x.device] = (real.as_tensor(ref["ids"], dtype=real.long, device=x.device),
+                                 real.as_tensor(ref["target"], dtype=real.long, device=x.device))
+        ids, tg = ids_dev[x.device]
+        row = x[0].double()
+        st["lp"][t] = row.index_select(0, ids[t]).cpu().numpy()
+        st["tlp"][t] = float(row[tg[t]])
+
+    def _save():
+        np.savez(out + ".tmp.npz", eng_lp=st["lp"], eng_target_lp=st["tlp"])
+        os.replace(out + ".tmp.npz", out)
+        json.dump({"calls": st["calls"], "other_calls": st["other"], "positions": P, "ref_file": os.path.basename(ref_path),
+                   "ref_sha": sc1g_kl.file_sha(ref_path)}, open(out + ".json", "w"), indent=1, sort_keys=True)
+    atexit.register(_save)
+    st["save"] = _save
+    module.torch = _TorchProxy(real, on_rows)
+    return st
+
+
 def k8(args) -> None:
     pin_chat_date()
     if os.environ.get("SC1G_ROUTE_OUT"):
@@ -143,6 +206,12 @@ def k8(args) -> None:
     import step_decomp
     if os.environ.get("SC1G_WINDOW_FILE"):
         step_decomp._k8_window = window_from_file(os.environ["SC1G_WINDOW_FILE"])
+    if os.environ.get("SC1G_REF_FILE"):
+        if not os.environ.get("SC1G_NAMED_OUT"):
+            raise SystemExit("SC1G_REF_FILE needs SC1G_NAMED_OUT")
+        if "--ppl-oracle" in args:
+            raise SystemExit("SC1G_REF_FILE reads the SERVED loop's rows; an --ppl-oracle arm scores elsewhere -- refused")
+        named_capture(step_decomp, os.environ["SC1G_REF_FILE"], os.environ.get("SC1G_REF_SHA"), os.environ["SC1G_NAMED_OUT"])
     step_decomp.main()
 
 

@@ -19,6 +19,10 @@
 // step_decomp's `ids[:prompt_len+steps+1].numpy().tobytes()` digest (`tok(...).input_ids[0]` is torch.int64), so a K8
 // receipt and an SC1 llama.cpp receipt can REFUSE each other when they scored different text (k8_gate's rule).
 //
+// SC1g A4 (#846): --named <bin> (int32 little-endian [steps x --named-k], the reference's named token ids per scored
+// position, sc1g_kl.py's artifact) writes --named-out <bin> (float64 little-endian [steps x (k+1)]: the log-probs of those
+// ids at that position, then the target's), from the same float logits and the same max-shifted log-sum-exp as the NLL.
+//
 // Needs the tokens file to hold at least prompt_len+steps+1 ids (refuses, exit 3). No dependency outside the pinned
 // llama.cpp tree: llama.h + ggml headers + the vendored nlohmann/json; SHA-256 is implemented here.
 //
@@ -186,6 +190,8 @@ struct Args {
     int n_ubatch = 512;   // llama-server's default physical batch
     int threads = 0;      // 0 = hardware_concurrency/2 clamped to [1, 8] (10 spinning threads on an 8P+2E M1 ran 200x slower)
     bool quiet = false;
+    std::string named, named_out;   // SC1g A4: named token ids in, their log-probs out
+    int named_k = 64;
 };
 
 void usage(const char * argv0) {
@@ -193,6 +199,7 @@ void usage(const char * argv0) {
         "usage: %s --model <gguf> --tokens <json with key \"ids\"> --out <json>\n"
         "          [--prompt-len 512] [--steps 2048] [--mode decode|prefill] [--n-gpu-layers 99]\n"
         "          [--flash-attn on|off|auto] [--type-kv f16|f32|bf16|q8_0] [--n-batch N] [--n-ubatch 512] [--threads N] [--quiet]\n"
+        "          [--named <int32 bin [steps x k]> --named-out <float64 bin [steps x (k+1)]> [--named-k 64]]\n"
         "exit codes: 2 usage, 3 refusal (too few ids / id out of vocab), 4 load failure, 5 decode failure\n", argv0);
 }
 
@@ -217,6 +224,9 @@ Args parse_args(int argc, char ** argv) {
         else if (k == "--n-ubatch")     { a.n_ubatch = std::atoi(need(i)); }
         else if (k == "--threads")      { a.threads = std::atoi(need(i)); }
         else if (k == "--quiet")        { a.quiet = true; }
+        else if (k == "--named")        { a.named = need(i); }
+        else if (k == "--named-out")    { a.named_out = need(i); }
+        else if (k == "--named-k")      { a.named_k = std::atoi(need(i)); }
         else if (k == "-h" || k == "--help") { usage(argv[0]); std::exit(0); }
         else { std::fprintf(stderr, "unknown argument %s\n", argv[i]); usage(argv[0]); std::exit(2); }
     }
@@ -225,6 +235,7 @@ Args parse_args(int argc, char ** argv) {
     if (a.flash_attn != "on" && a.flash_attn != "off" && a.flash_attn != "auto") { std::fprintf(stderr, "--flash-attn must be on|off|auto\n"); std::exit(2); }
     if (a.type_kv != "f16" && a.type_kv != "f32" && a.type_kv != "bf16" && a.type_kv != "q8_0") { std::fprintf(stderr, "--type-kv must be f16|f32|bf16|q8_0\n"); std::exit(2); }
     if (a.prompt_len < 1 || a.steps < 1) { std::fprintf(stderr, "--prompt-len and --steps must be >= 1\n"); std::exit(2); }
+    if (a.named.empty() != a.named_out.empty() || a.named_k < 1) { std::fprintf(stderr, "--named and --named-out go together; --named-k >= 1\n"); std::exit(2); }
     return a;
 }
 
@@ -237,6 +248,17 @@ double nll_of(const float * lg, int n_vocab, int target, int * argmax) {
     for (int i = 0; i < n_vocab; i++) { s += std::exp((double) lg[i] - (double) m); }
     *argmax = am;
     return (double) m + std::log(s) - (double) lg[target];
+}
+
+// SC1g A4: log_softmax(logits) at the k named ids, then at the target, into out[0..k]; same arithmetic as nll_of.
+void named_lps(const float * lg, int n_vocab, const int32_t * idx, int k, int target, double * out) {
+    float m = lg[0];
+    for (int i = 1; i < n_vocab; i++) { if (lg[i] > m) { m = lg[i]; } }
+    double s = 0.0;
+    for (int i = 0; i < n_vocab; i++) { s += std::exp((double) lg[i] - (double) m); }
+    const double lse = (double) m + std::log(s);
+    for (int j = 0; j < k; j++) { out[j] = (double) lg[idx[j]] - lse; }
+    out[k] = (double) lg[target] - lse;
 }
 
 double now_s() {
@@ -336,6 +358,21 @@ int main(int argc, char ** argv) {
     double prefill_s = 0.0, loop_s = 0.0;
     int rc = 0;
 
+    // SC1g A4: the named ids, read and range-checked before any decode
+    std::vector<int32_t> named_ids;
+    std::vector<double> named_buf;
+    const int K = a.named_k;
+    if (!a.named.empty()) {
+        std::ifstream nf(a.named, std::ios::binary);
+        named_ids.resize((size_t) a.steps * K);
+        if (!nf.read(reinterpret_cast<char *>(named_ids.data()), (std::streamsize) (named_ids.size() * sizeof(int32_t))) || nf.peek() != EOF) {
+            std::fprintf(stderr, "--named %s is not exactly %d x %d int32\n", a.named.c_str(), a.steps, K);
+            llama_free(ctx); llama_model_free(model); sha_thread.join(); return 3;
+        }
+        for (int32_t v : named_ids) { if (v < 0 || v >= n_vocab) { std::fprintf(stderr, "--named id %d out of vocab\n", v); llama_free(ctx); llama_model_free(model); sha_thread.join(); return 3; } }
+        named_buf.assign((size_t) a.steps * (K + 1), 0.0);
+    }
+
     if (a.mode == "decode") {
         llama_batch b = llama_batch_init(a.prompt_len, 0, 1);
         for (int i = 0; i < a.prompt_len; i++) {
@@ -360,6 +397,7 @@ int main(int argc, char ** argv) {
             const int target = ids[a.prompt_len + t + 1];
             nll += nll_of(lg, n_vocab, target, &am);
             top1 += (am == target);
+            if (!named_ids.empty()) { named_lps(lg, n_vocab, &named_ids[(size_t) t * K], K, target, &named_buf[(size_t) t * (K + 1)]); }
         }
         loop_s = now_s() - t1;
     } else {
@@ -381,6 +419,10 @@ int main(int argc, char ** argv) {
             const int target = ids[i + 1];
             nll += nll_of(lg, n_vocab, target, &am);
             top1 += (am == target);
+            if (!named_ids.empty()) {
+                const int t = i - a.prompt_len;
+                named_lps(lg, n_vocab, &named_ids[(size_t) t * K], K, target, &named_buf[(size_t) t * (K + 1)]);
+            }
         }
         loop_s = now_s() - t1;     // the scoring pass only; the forward is prefill_s
         llama_batch_free(b);
@@ -405,6 +447,12 @@ int main(int argc, char ** argv) {
     out["ids_in_file"] = ids.size();
     out["ids_used"] = need;
     out["targets"] = json{{"first_index", a.prompt_len + 1}, {"last_index", a.prompt_len + a.steps}};
+    if (!named_ids.empty()) {
+        std::ofstream of(a.named_out, std::ios::binary);
+        of.write(reinterpret_cast<const char *>(named_buf.data()), (std::streamsize) (named_buf.size() * sizeof(double)));
+        out["named"] = json{{"in", a.named}, {"out", a.named_out}, {"k", K}, {"ok", (bool) of},
+                            {"layout", "float64 [steps x (k+1)]: the named ids' log-probs, then the target's"}};
+    }
 
     char desc[256] = {0};
     llama_model_desc(model, desc, sizeof(desc));

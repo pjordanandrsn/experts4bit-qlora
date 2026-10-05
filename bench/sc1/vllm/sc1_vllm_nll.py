@@ -60,7 +60,9 @@ def main():
     assert kv in ("auto", "fp8")
     model, rev = C.env("MODEL", C.MODEL_DEFAULT), C.env("REV", C.REV_DEFAULT)
     lp_req = C.env("NLL_LOGPROBS", "auto")
-    assert lp_req in ("auto", "full", "token_ids") or lp_req.startswith("topk:"), f"bad SC1_NLL_LOGPROBS {lp_req!r}"
+    if C.env("NAMED_REF") and mode == "served":
+        lp_req = "named"                    # SC1g A4: the reference's 64 named tokens per position + the target
+    assert lp_req in ("auto", "full", "token_ids", "named") or lp_req.startswith("topk:"), f"bad SC1_NLL_LOGPROBS {lp_req!r}"
 
     base_arm = "fp8kv" if kv == "fp8" else ("eager" if C.env("NLL_EAGER", "0") == "1" else "graph_r1")
     kw = C.build_llm_kwargs(base_arm, 1, model, rev, gpu_util=C.env_float("GPU_UTIL", 0.90), max_len=P + S + 16,
@@ -69,7 +71,7 @@ def main():
     kw["max_num_batched_tokens"] = C.capped_batched_tokens(1, kw["max_model_len"], max(8192, P + S + 1))   # A5
     if mode == "served":
         kw["enable_prefix_caching"] = True
-        if lp_req in ("auto", "full"):
+        if lp_req in ("auto", "full", "named"):
             kw["max_logprobs"] = -1
         elif lp_req.startswith("topk:"):
             kw["max_logprobs"] = max(20, int(lp_req.split(":", 1)[1]))
@@ -147,6 +149,13 @@ def _prefill(rec, llm, ids, P, S):
 def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
     used = "full" if lp_req in ("auto", "full") else lp_req
     downgrade = None
+    named_ids = named = None
+    if used == "named":
+        import numpy as np
+        named_ids, ref_targets = C.load_named_ref(C.env("NAMED_REF", required=True), C.env("NAMED_REF_SHA"))
+        if named_ids.shape[0] != S or [int(x) for x in ref_targets] != [C.served_target(ids, P, t) for t in range(S)]:
+            raise SystemExit("SC1_NAMED_REF does not describe this window's scored targets -- refused")
+        named = {"lp": np.full(named_ids.shape, np.nan), "tlp": np.full(S, np.nan), "void": 0}
     dump, dump_path = None, None
     if C.env("DUMP_LOGPROBS", "0") == "1":
         if used != "full":
@@ -162,7 +171,7 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
     while t < S:
         prompt = C.served_prompt(ids, P, t)
         target = C.served_target(ids, P, t)
-        sp = SamplingParams(**C.served_sampling_kwargs(used, target))
+        sp = SamplingParams(**C.served_sampling_kwargs(used, target, None if named_ids is None else named_ids[t]))
         tq = time.perf_counter()
         try:
             o = llm.generate([{"prompt_token_ids": prompt}], sp, use_tqdm=False)[0]
@@ -193,6 +202,14 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
             vec = np.full(int(vocab), -np.inf, dtype=np.float32)
             vec[np.asarray(entries[0], dtype=np.int64)] = np.asarray(entries[1], dtype=np.float32)
             dump[t] = vec
+        if named is not None:
+            got = C.named_lps(entries, named_ids[t])
+            if got is None:
+                named["void"] += 1
+            else:
+                named["lp"][t] = got
+            if row["nll"] is not None:
+                named["tlp"][t] = -row["nll"]
         rows.append(row)
         t += 1
         if t % 256 == 0 or t == S:
@@ -207,6 +224,14 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
     rec["index_derivation"] = (f"request t: prompt = ids[:{P + 1}+t], the generated position's distribution gives "
                                f"log p(ids[{P + 1}+t] | ids[:{P + 1}+t]) == K8's cont[t+1]; t in 0..{S - 1}; the engine's greedy "
                                f"token is discarded (teacher forcing by construction) and compared for top-1 agreement")
+    if named is not None:
+        import numpy as np
+        nout = C.env("NAMED_OUT", required=True)
+        np.savez(nout + ".tmp.npz", eng_lp=named["lp"], eng_target_lp=named["tlp"])
+        os.replace(nout + ".tmp.npz", nout)
+        rec["named"] = {"out": nout, "positions": S, "void_positions": named["void"], "ref": C.env("NAMED_REF"),
+                        "ref_sha": C.env("NAMED_REF_SHA"), "k": int(named_ids.shape[1]),
+                        "request": "logprob_token_ids = the reference's named ids for the position + the target"}
     if dump is not None:
         dump.flush()
         rec["logprobs_dump"] = {"path": dump_path, "shape": [S, int(vocab)], "dtype": "float32", "bytes": S * int(vocab) * 4,

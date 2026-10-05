@@ -81,6 +81,141 @@ PROVE = ("e4b_serve_served_conv1", "e4b_serve_prefill64_conv1", "e4b_serve_chunk
          "nll_sglang_native_prefill_conv1", "nll_llamacpp_q8_prefill_conv1")
 
 
+# ---- A4: the fidelity instrument's reading (KL65 to box R's bf16-dequant reference; sc1g_kl.py) ----------------------
+A4_SRCS = ("conv1", "conv2", "conv3", "conv4")   # graded
+A4_CTRL = ("wikitext",)                          # descriptive
+KL_ARMS = {"e4b_mxfp4": "e4b_serve_served_{}", "e4b_nf4": "e4b_nf4_served_{}", "vllm": "nll_vllm_served_{}",
+           "sglang_native": "nll_sglang_native_served_{}", "sglang_marlin": "nll_sglang_marlin_served_{}",
+           "llamacpp": "nll_llamacpp_decode_{}", "llamacpp_q8": "nll_llamacpp_q8_decode_{}"}
+COMPARATORS = ("vllm", "sglang_native", "sglang_marlin", "llamacpp", "llamacpp_q8")
+NATIVE_MXFP4 = ("e4b_mxfp4",) + COMPARATORS      # every engine serving the checkpoint's own MXFP4 expert weights
+KA_RATIO = 3.0          # K-A: e4b NF4 KL65 >= 3x e4b MXFP4 KL65 on every graded window (P44 read 11.6x on its prompts)
+L1_RATIO = 2.0          # L1: e4b MXFP4 pooled KL65 <= 2x the best comparator's
+A4_MIN_WINDOWS = 3      # an engine's pooled read needs this many graded windows VALID, else UNREAD
+ALIGN_TOL = 1e-9        # the named rows' target log-probs must reproduce the arm's own mean NLL to this
+PROVE_A4 = ("e4b_serve_served_conv1", "nll_vllm_served_conv1", "nll_sglang_native_served_conv1", "nll_llamacpp_q8_decode_conv1")
+
+
+def _kl():
+    sys.path.insert(0, HERE)
+    import sc1g_kl
+    return sc1g_kl
+
+
+def a4_refs(d: str) -> tuple:
+    """Box R's artifacts as staged into the receipt (`<d>/ref`): ({src: arrays}, R's calibration, why-not). R must have
+    read R_OK and every artifact must hash to its registered sha, else the whole A4 reading is UNREAD."""
+    K = _kl()
+    rd = os.path.join(d, "ref")
+    try:
+        shas = json.load(open(os.path.join(rd, "ref_shas.json")))
+        rv = json.load(open(os.path.join(rd, "r_verdict.json")))
+        rc = json.load(open(os.path.join(rd, "r_calib.json")))
+    except (OSError, ValueError) as e:
+        return {}, None, f"box R's receipt is not staged ({e.__class__.__name__})"
+    if rv.get("verdict") != "R_OK":
+        return {}, rc, f"box R read {rv.get('verdict')}: {rv.get('checks')}"
+    refs = {}
+    for s in A4_SRCS + A4_CTRL:
+        pth = os.path.join(rd, f"ref_{s}.npz")
+        if s in shas and os.path.exists(pth):
+            try:
+                refs[s] = K.load_artifact(pth, shas[s])
+            except SystemExit as e:
+                return {}, rc, str(e)
+    return refs, rc, None
+
+
+def kl_row(d: str, label: str, src: str, R, refs: dict) -> dict:
+    """One engine x window KL65 row, VALID only when the arm itself is VALID (route gates included), the named record is
+    complete, and its target log-probs reproduce the arm's own mean NLL."""
+    import numpy as np
+    K = _kl()
+    stem = KL_ARMS[label].format(src)
+    q = row(d, stem, src, R)
+    if q["verdict"] != "VALID":
+        return {"verdict": "UNREAD", "why": f"arm {q['verdict']}: {q.get('why')}", "stem": stem}
+    if src not in refs:
+        return {"verdict": "UNREAD", "why": "no registered reference artifact", "stem": stem}
+    pth = os.path.join(d, f"named_{stem}.npz")
+    if not os.path.exists(pth):
+        return {"verdict": "UNREAD", "why": "no named record", "stem": stem}
+    z = np.load(pth)
+    lp, tlp = z["eng_lp"], z["eng_target_lp"]
+    rec = _load(d, stem) or {}
+    nm = rec.get("named") or {}
+    meta = (json.load(open(pth + ".json")) if os.path.exists(pth + ".json") else {})
+    if nm.get("void_positions"):
+        return {"verdict": "VOID", "why": f"{nm['void_positions']} positions lacked a named log-prob", "stem": stem}
+    if meta and meta.get("calls") != meta.get("positions"):
+        return {"verdict": "VOID", "why": f"{meta.get('calls')} log_softmax rows for {meta.get('positions')} positions", "stem": stem}
+    if lp.shape != refs[src]["lp"].shape or not np.all(np.isfinite(lp)) or not np.all(np.isfinite(tlp)):
+        return {"verdict": "VOID", "why": "named record incomplete or misshapen", "stem": stem}
+    gap = abs(float(-np.mean(tlp)) - float(q["mean_nll"]))
+    if gap > ALIGN_TOL:
+        return {"verdict": "VOID", "why": f"named target log-probs give NLL {-np.mean(tlp):.9f} vs the arm's {q['mean_nll']:.9f}", "stem": stem}
+    w = K.window_read(refs[src], lp, tlp)
+    return dict(w, stem=stem, alignment_gap=gap, arm_mean_nll=q["mean_nll"])
+
+
+def a4(d: str) -> dict:
+    """A4's reading: the instrument gate (box R), every KL row, the predictions K-A / L1 / L2, and the descriptive table."""
+    R = _sc1()
+    refs, rc, why = a4_refs(d)
+    rows = {lab: {s: kl_row(d, lab, s, R, refs) for s in A4_SRCS + A4_CTRL} for lab in KL_ARMS}
+    unread = {"verdict": "UNREAD", "why": why}
+
+    def km(lab, s):
+        x = rows[lab][s]
+        return x["kl65_mean"] if x["verdict"] == "VALID" else None
+
+    def pooled(lab):
+        v = [km(lab, s) for s in A4_SRCS if km(lab, s) is not None]
+        return (sum(v) / len(v), len(v)) if len(v) >= A4_MIN_WINDOWS else (None, len(v))
+
+    pred = {}
+    if why:
+        pred = {"K-A": unread, "L1": unread, "L2": unread}
+    else:
+        both = [s for s in A4_SRCS if km("e4b_mxfp4", s) is not None and km("e4b_nf4", s) is not None]
+        ratios = {s: round(km("e4b_nf4", s) / km("e4b_mxfp4", s), 3) if km("e4b_mxfp4", s) > 0 else None for s in both}
+        pred["K-A"] = ({"verdict": "UNREAD", "why": f"{len(both)} windows < {A4_MIN_WINDOWS}"} if len(both) < A4_MIN_WINDOWS else
+                       {"verdict": "HOLDS" if all(r is not None and r >= KA_RATIO for r in ratios.values()) else "REFUTED",
+                        "nf4_over_mxfp4": ratios})
+        e4b, ne = pooled("e4b_mxfp4")
+        comp = {c: pooled(c)[0] for c in COMPARATORS if pooled(c)[0] is not None}
+        pred["L1"] = ({"verdict": "UNREAD", "why": "e4b or every comparator lacks enough graded windows"} if e4b is None or not comp else
+                      {"verdict": "HOLDS" if e4b <= L1_RATIO * min(comp.values()) else "REFUTED", "e4b_pooled": e4b,
+                       "best_comparator": min(comp, key=comp.get), "best_pooled": min(comp.values()),
+                       "ratio": (e4b / min(comp.values()) if min(comp.values()) > 0 else None)})
+        nf4_scale = [rc["windows"][s]["calib_nf4"]["kl_full_mean"] for s in A4_SRCS
+                     if s in (rc or {}).get("windows", {}) and "calib_nf4" in rc["windows"][s]]
+        scale = sum(nf4_scale) / len(nf4_scale) if len(nf4_scale) >= A4_MIN_WINDOWS else None
+        eng = {lab: pooled(lab)[0] for lab in NATIVE_MXFP4 if pooled(lab)[0] is not None}
+        pred["L2"] = ({"verdict": "UNREAD", "why": "no R NF4-pair scale or no engine read"} if scale is None or not eng else
+                      {"verdict": "HOLDS" if all(v < scale for v in eng.values()) else "REFUTED", "nf4_requant_scale": scale,
+                       "at_or_above": sorted(k for k, v in eng.items() if v >= scale)})
+    floor = {s: (rc or {}).get("windows", {}).get(s, {}).get("floor_F") for s in A4_SRCS + A4_CTRL}
+    table = {lab: {s: (None if rows[lab][s]["verdict"] != "VALID" else
+                       {"kl65": rows[lab][s]["kl65_mean"], "nll": rows[lab][s].get("engine_nll"),
+                        "within_floor_F": (floor[s] is not None and rows[lab][s]["kl65_mean"] <= floor[s])})
+                   for s in A4_SRCS + A4_CTRL} for lab in KL_ARMS}
+    rank = sorted(((lab, pooled(lab)[0]) for lab in KL_ARMS if pooled(lab)[0] is not None), key=lambda x: x[1])
+    return {"instrument": {"box_r": "R_OK" if not why else "NOT_OK", "why": why}, "rows": rows, "predictions": pred,
+            "descriptive": {"per_window": table, "pooled_rank": rank, "floor_F": floor,
+                            "reference_nll": {s: (rc or {}).get("windows", {}).get(s, {}).get("reference_nll_decode") for s in A4_SRCS + A4_CTRL},
+                            "note": "NLL is descriptive under A4; the KL65 rank is what A4 reads"}}
+
+
+def prove_a4(d: str) -> dict:
+    R = _sc1()
+    refs, _rc, why = a4_refs(d)
+    lab_of = {v.format("conv1"): k for k, v in KL_ARMS.items()}
+    out = {stem: (kl_row(d, lab_of[stem], "conv1", R, refs) if not why else {"verdict": "UNREAD", "why": why}) for stem in PROVE_A4}
+    bad = {k: f"{v['verdict']}: {v.get('why')}" for k, v in out.items() if v["verdict"] != "VALID"}
+    return {"rows": out, "bad": bad, "proved": not bad, "box_r": why or "R_OK"}
+
+
 def _sc1():
     for p in (os.path.join(HERE, "sc1_reduce.py"), os.path.join(HERE, "..", "sc1", "sc1_reduce.py")):
         if os.path.exists(p):
@@ -273,7 +408,7 @@ def reduce(d: str) -> dict:
             "predictions": p, "delta_vs_vllm": rep,
             "within_floor_vs_vllm": {a: {sh: within(v) for sh, v in by.items()} for a, by in rep.items()},
             "diagnostics": {"meaning": MEANING, "per_window": dg}, "served_minus_prefill": gaps, "kernel_check": kern,
-            "scored_target_roles": roles, "diag_predictions": jp, "a3_predictions": kp,
+            "scored_target_roles": roles, "diag_predictions": jp, "a3_predictions": kp, "a4": a4(d),
             "attn_check_1175": (json.load(open(os.path.join(d, "attn_check_5090.json")))
                                 if os.path.exists(os.path.join(d, "attn_check_5090.json")) else None),
             "control_wikitext": {"floor": {"per_window": flc, "F": Fc}, "delta_vs_vllm": ctl,
@@ -535,9 +670,72 @@ def self_test() -> int:
                  else ({"mxfp4_gemv|le256": 49152} if "_v1_" in st else _good_routes(st)))
         v = reduce(d)["diagnostic_rows"]
         cases.append(("A3 gates", v["e4b_mxpre_prefill128"]["conv1"]["verdict"] == "VOID" and v["e4b_serve_v1"]["conv1"]["verdict"] == "VOID"))
+    cases += _a4_self_test(tempfile)
     bad = [n for n, ok in cases if not ok]
     print(f"sc1g_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
+
+
+def _a4_fixture(d, sigma, r_ok=True, nf4_scale=0.5, misalign=None, V=200, P=2048):
+    """Box R's staged receipt + every KL arm's named record: engine logits = the reference's + N(0, sigma[label]) noise."""
+    import numpy as np
+    import torch
+    K = _kl()
+    _fixture(d, _base, _good_routes, rep=True)
+    rd = os.path.join(d, "ref")
+    os.makedirs(rd, exist_ok=True)
+    g = torch.Generator().manual_seed(7)
+    shas, calib = {}, {"windows": {}}
+    for s in A4_SRCS + A4_CTRL:
+        ref_logits = torch.randn(P, V, generator=g) * 5.0      # peaked enough that the top-64 mass clears 0.99
+        rows = K.reference_rows(ref_logits, torch.randint(0, V, (P,), generator=g).numpy())
+        shas[s] = K.save_artifact(os.path.join(rd, f"ref_{s}.npz"), rows, {"source": s})
+        calib["windows"][s] = {"floor_F": 1e-4, "calib_nf4": {"kl_full_mean": nf4_scale}, "reference_nll_decode": 1.0}
+        for lab, stem in KL_ARMS.items():
+            st = stem.format(s)
+            eng = torch.log_softmax((ref_logits + sigma[lab] * torch.randn(P, V, generator=g)).double(), -1)
+            lp = eng.gather(1, torch.as_tensor(rows["ids"]).long()).numpy()
+            rec = _load(d, st)
+            tlp = np.full(P, -rec["mean_nll"] + (1e-3 if (lab, s) == misalign else 0.0))
+            np.savez(os.path.join(d, f"named_{st}.npz"), eng_lp=lp, eng_target_lp=tlp)
+            if lab.startswith("e4b"):
+                json.dump({"calls": P, "positions": P}, open(os.path.join(d, f"named_{st}.npz.json"), "w"))
+    json.dump(shas, open(os.path.join(rd, "ref_shas.json"), "w"))
+    json.dump({"verdict": "R_OK" if r_ok else "R_NOT_OK", "checks": {}}, open(os.path.join(rd, "r_verdict.json"), "w"))
+    json.dump(calib, open(os.path.join(rd, "r_calib.json"), "w"))
+
+
+def _a4_self_test(tempfile) -> list:
+    cases = []
+    good = {"e4b_mxfp4": 0.05, "e4b_nf4": 0.2, "vllm": 0.04, "sglang_native": 0.045, "sglang_marlin": 0.045,
+            "llamacpp": 0.06, "llamacpp_q8": 0.05}
+    with tempfile.TemporaryDirectory() as d:
+        _a4_fixture(d, good)
+        r = a4(d)
+        pr = r["predictions"]
+        cases.append(("A4 reads", r["instrument"]["box_r"] == "R_OK" and pr["K-A"]["verdict"] == "HOLDS"
+                      and pr["L1"]["verdict"] == "HOLDS" and pr["L1"]["best_comparator"] == "vllm" and pr["L2"]["verdict"] == "HOLDS"
+                      and r["descriptive"]["pooled_rank"][0][0] == "vllm"))
+        cases.append(("A4 proof", prove_a4(d)["proved"]))
+    with tempfile.TemporaryDirectory() as d:          # box R not OK -> the whole reading UNREAD, whatever the rows say
+        _a4_fixture(d, good, r_ok=False)
+        cases.append(("A4 needs R_OK", all(x["verdict"] == "UNREAD" for x in a4(d)["predictions"].values())))
+    with tempfile.TemporaryDirectory() as d:          # a named record whose target log-probs miss the arm's NLL -> VOID
+        _a4_fixture(d, good, misalign=("vllm", "conv2"))
+        cases.append(("A4 alignment", a4(d)["rows"]["vllm"]["conv2"]["verdict"] == "VOID"))
+    with tempfile.TemporaryDirectory() as d:          # a tampered reference artifact -> refused, everything UNREAD
+        _a4_fixture(d, good)
+        with open(os.path.join(d, "ref", "ref_conv3.npz"), "ab") as f:
+            f.write(b"x")
+        r = a4(d)
+        cases.append(("A4 sha refusal", r["instrument"]["box_r"] == "NOT_OK" and r["predictions"]["L1"]["verdict"] == "UNREAD"))
+    with tempfile.TemporaryDirectory() as d:          # NF4 barely worse than MXFP4 -> K-A REFUTED; e4b far from vLLM -> L1 REFUTED;
+        bad = dict(good, e4b_nf4=0.06, e4b_mxfp4=0.09)  # an NF4 scale under the engines -> L2 REFUTED
+        _a4_fixture(d, bad, nf4_scale=1e-5)
+        pr = a4(d)["predictions"]
+        cases.append(("A4 refutations", pr["K-A"]["verdict"] == "REFUTED" and pr["L1"]["verdict"] == "REFUTED"
+                      and pr["L2"]["verdict"] == "REFUTED" and "e4b_mxfp4" in pr["L2"]["at_or_above"]))
+    return cases
 
 
 def main(argv=None) -> int:
@@ -546,14 +744,24 @@ def main(argv=None) -> int:
     ap.add_argument("--dir")
     ap.add_argument("--out")
     ap.add_argument("--prove", action="store_true")
+    ap.add_argument("--prove-a4", action="store_true", help="A4's proof: one named KL row per engine path on conv1")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
     if not a.dir:
         ap.error("--dir is required")
+    if a.prove_a4:
+        v = prove_a4(a.dir)
+        if a.out:
+            json.dump(v, open(a.out, "w"), indent=1, sort_keys=True, default=float)
+        for k, why in v["bad"].items():
+            print(f"SC1G_PROVE_A4_BAD {k}: {why}")
+        print(f"SC1G_PROVE_A4 {'OK' if v['proved'] else 'FAILED'} (box R {v['box_r']}; "
+              + " ".join(f"{k}={x.get('kl65_mean')}" for k, x in v["rows"].items()) + ")")
+        return 0 if v["proved"] else 1
     v = prove(a.dir) if a.prove else reduce(a.dir)
     if a.out:
-        json.dump(v, open(a.out, "w"), indent=1, sort_keys=True)
+        json.dump(v, open(a.out, "w"), indent=1, sort_keys=True, default=float)
     if a.prove:
         for k, why in v["bad"].items():
             print(f"SC1G_PROVE_BAD {k}: {why}")
@@ -565,6 +773,11 @@ def main(argv=None) -> int:
     print(f"SC1G_DIAG {json.dumps(v['diagnostics']['per_window'])[:600]}")
     for w, ks in v["a3_predictions"].items():           # A3's K1-K5 per window, and the across-window reads
         print(f"SC1G_A3 {w} {json.dumps(ks)[:900]}")
+    a4r = v.get("a4") or {}
+    print(f"SC1G_A4_INSTRUMENT {json.dumps(a4r.get('instrument'))}")
+    for g, x in (a4r.get("predictions") or {}).items():
+        print(f"SC1G_A4_{g} {x['verdict']} {json.dumps({k: w for k, w in x.items() if k != 'verdict'}, default=float)[:400]}")
+    print(f"SC1G_A4_RANK {json.dumps((a4r.get('descriptive') or {}).get('pooled_rank'), default=float)[:400]}")
     if v.get("attn_check_1175"):
         ac = v["attn_check_1175"]
         print(f"SC1G_ATTN {ac.get('verdict')} {json.dumps(ac.get('per_k_groups'))[:600]}")
