@@ -44,6 +44,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-75` | `qwen3dqab` (amendment 31, 60 steps) | instance 54238515, AMD EPYC 7B13 (Vast machine 145701) | Qwen3-30B-A3B's absmax pair over 60 steps on a quiet host: dq1/dq0 1.014, peak 27.44 → 26.10 GB, held-out −0.0021 (P56 HELD; with P57 and P58, amendment 28's rule makes the double-quantized absmax the default); [read](RESULTS-tc1-dqab-qwen3-60.md) | $1.03 |
 | `tc1-5090-74` | `qwen3tritonab` (amendment 32, 60 steps) | instance 54237146, AMD EPYC 7B13 (Vast machine 145701) | one variable, triton 3.4 vs 3.7.1 in venv-e4b: matched arm 0.992 (P59 FALSIFIED), shipped arm 0.971 (P60 HELD), held-out within 0.001 (P61 HELD); the environment gain is not triton's on this host-bound step; amendment 34 splits it; [read](RESULTS-tc1-tritonab.md) | $1.28 |
 | `tc1-5090-76` | `qwen3samestack` (amendment 33, 60 steps, load-gated) | instance 54239673, AMD EPYC 7B13 (Vast machine 145701) | both frameworks on one stack, every pair stable: Unsloth/e4b 2.352 (P50 HELD), e4b same-stack / field-image 0.900 (P51 HELD); three draws voided for host load and run again; by amendment 25's rule 2.352 becomes the quoted Qwen3-30B-A3B position; [read](RESULTS-tc1-samestack-box4.md) | $1.76 |
+| `tc1-5090-78` | `qwen3envsplit` (amendment 34, 60 steps, load-gated) | instance 54248510, AMD EPYC 7B13 (Vast machine 145701) | e4b's matched arm in three environments: transformers 5.5 vs 5.18 on torch 2.8 1.005 (P62 FALSIFIED), torch 2.12 + triton 3.7 vs torch 2.8 + triton 3.4 0.905 (P63 HELD), the whole environment 0.909 (P64 HELD); the environment gain is torch's; [read](RESULTS-tc1-envsplit.md) | $1.73 |
 | `tc1-5090-79` | `qwen3prebind37` (amendment 35, 60 steps, load-gated) | instance 54255834, AMD EPYC 7B13 (Vast machine 145701) | amendment 26's prebind A/B under triton 3.7.1 in venv-unsloth: shipped 0.996 (P66 HELD), matched 0.986 (P67 HELD), held-out within 0.003 (P68 HELD); triton 3.7 stays in the prebound path's supported versions; [read](RESULTS-tc1-prebind37.md) | $1.68 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
@@ -53,31 +54,6 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
-
-## Amendment 30 (2026-10-05): the shipped prebind pair over 60 steps (P53 HELD); with P54 and P55 HELD the prebound launches become the default
-
-Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 26 and 30.
-- **The box.** One RTX 5090 (`tc1-5090-73`, AMD EPYC 7B13, Vast machine 145701, not machine 151350 as the amendment
-  requires; $0.97 invoiced): the token `qwen3prebindab` with `TC1_STEPS=60`, the shipped arm only, two draws a side in ABBA
-  order; e4b `306dfa9c`, grouped-nf4-gemm `f0c1ece`, triton 3.4.0.
-- **Read:** [`RESULTS-tc1-prebindab-60.md`](RESULTS-tc1-prebindab-60.md), the box's own mechanically scored file.
-
-| `fused_attn4_shipped` | `_pb0` (flags off) | `_pb1` (flags on) |
-|---|---|---|
-| s/step, two draws (60 steps) | 3.092 / 3.047 (1.5 % apart) | 3.056 / 2.960 (3.2 % apart) |
-| held-out at N | 0.7575, 0.7556 | 0.7589, 0.7565 |
-
-- **P53 HELD.** `_pb1`/`_pb0` reads 0.980 [0.957, 1.003 over four cross-draw ratios], inside [0.90, 0.98], at its upper
-  edge, as the reducer scores it. On the `_pb1` side, 216,335 e4b launches and 72,162 grouped-nf4-gemm launches were
-  prebound.
-- **P55 HELD.** The shipped half moves held-out by +0.0011, inside 0.005. The matched half is amendment 26's −0.0012
-  (`tc1-5090-69`). This box ran no matched arm, so its own file scores P54 and P55 UNTESTED, and the combined verdict is
-  amendment 30's registered rule.
-- **P54 HELD** on amendment 26's box (matched 0.973 [0.958, 0.988]).
-- **By the rule, both flags become defaults.** They already have: e4b #1099 and grouped-nf4-gemm #470 flipped them at
-  ~01:50Z, citing this box before its read was on `main`. This read was committed afterwards by the maintainer session,
-  from the run's output in the private receipts store (`tc1-5090-73`, committed there as `b43ec238`), under the standing
-  permission to commit another lane's finished receipts. The gain is small (2–3 %), and the shipped interval reaches 1.0.
 
 ## Amendment 35 (2026-10-05): under triton 3.7.1 the prebound launches take 1.4 % off the matched arm and 0.4 % off the shipped arm
 
@@ -104,6 +80,62 @@ draws. Read: [`RESULTS-tc1-prebind37.md`](RESULTS-tc1-prebind37.md).
   the same bands.
 - **The host was shared with this campaign's own boxes.** `tc1-5090-78` (until 05:23Z) and `tc1-5090-80` (from 05:11Z) ran on the same
   machine, so part of the load the gate saw was the campaign's.
+
+## Amendment 34 (2026-10-05): the 5090's environment gain is torch 2.12's, not transformers 5.5's
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 34. One RTX 5090 (`tc1-5090-78`, AMD EPYC 7B13, Vast
+machine 145701): the token `qwen3envsplit`, the matched arm in three environments, two draws each in ABC CBA order, 60 steps, load-gated
+draws, the prebound launches off everywhere. Read: [`RESULTS-tc1-envsplit.md`](RESULTS-tc1-envsplit.md).
+
+| side | torch | transformers | triton | s/step (two draws) | stable |
+|---|---|---|---|---|---|
+| `_e0` venv-e4b | 2.8.0+cu128 | 5.18.0 | 3.4.0 | 3.840 / 3.816 | yes (0.6 %) |
+| `_e1` venv-e4b-tf55 (built on the box) | 2.8.0+cu128 | 5.5.0 | 3.4.0 | 3.821 / 3.871 | yes (1.3 %) |
+| `_e2` venv-unsloth + e4b | 2.12.1+cu130 | 5.5.0 | 3.7.1 | 3.507 / 3.452 | yes (1.6 %) |
+
+- **P62 FALSIFIED.** transformers 5.5 over 5.18 on torch 2.8 reads **1.005** [0.995, 1.014], outside [0.90, 1.00]. The router casts the
+  A2000 profile pointed at do not show in the 5090's step. By amendment 34's rule nothing follows from P62.
+- **P63 HELD.** torch 2.12 + triton 3.7 over torch 2.8 + triton 3.4, at transformers 5.5, reads **0.905** [0.892, 0.918]. Amendment 32
+  read triton 3.7.1 alone (on torch 2.8) at 0.992 on this arm, so nearly all of it is torch 2.12's.
+- **P64 HELD.** The whole environment reads **0.909** [0.899, 0.919]; amendment 24 read 0.882, amendment 33 0.900.
+- **P65 HELD.** Held-out at N moves +0.0013 (`_e1`) and −0.0010 (`_e2`).
+- **By amendment 34's rule (P63 HELD)** the install section now says that torch 2.12 runs e4b's host-bound training step faster on an
+  RTX 5090. Row `e4b.train.env-split.qwen3.5090.2026-10-05`.
+- **The gate.** Six draws were voided for host load and run again; their files are in
+  [`receipts/tc1-5090-78/loadvoid/`](receipts/tc1-5090-78/loadvoid/). Reading the first attempts instead gives 1.004, 0.907 and 0.911:
+  no verdict changes. `_e0`'s second draw stood on its third attempt at a median load1 of 9.15 (the last attempt stands whatever its
+  load); it read 3.816 against its first draw's 3.840 at 4.2.
+- **The host was shared with this campaign's own boxes.** From 04:45Z and 05:11Z, `tc1-5090-79` and `tc1-5090-80` ran on the same machine
+  (145701). Their steps are host-bound too, so part of the load the gate saw was this campaign's. The ABC CBA order puts each side's draws
+  on both halves of the run.
+- **Not registered, recorded.** Step-0 held-out on `_e1` (torch 2.8, transformers 5.5) is 1.9733 against `_e0`'s 1.9441 and `_e2`'s
+  1.9478 (NEAR, 0.029). The same transformers on torch 2.12 does not move it, so it is the combination, not transformers 5.5 alone. At N=60 the
+  three sides are within 0.0014.
+
+## Amendment 30 (2026-10-05): the shipped prebind pair over 60 steps (P53 HELD); with P54 and P55 HELD the prebound launches become the default
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 26 and 30.
+- **The box.** One RTX 5090 (`tc1-5090-73`, AMD EPYC 7B13, Vast machine 145701, not machine 151350 as the amendment
+  requires; $0.97 invoiced): the token `qwen3prebindab` with `TC1_STEPS=60`, the shipped arm only, two draws a side in ABBA
+  order; e4b `306dfa9c`, grouped-nf4-gemm `f0c1ece`, triton 3.4.0.
+- **Read:** [`RESULTS-tc1-prebindab-60.md`](RESULTS-tc1-prebindab-60.md), the box's own mechanically scored file.
+
+| `fused_attn4_shipped` | `_pb0` (flags off) | `_pb1` (flags on) |
+|---|---|---|
+| s/step, two draws (60 steps) | 3.092 / 3.047 (1.5 % apart) | 3.056 / 2.960 (3.2 % apart) |
+| held-out at N | 0.7575, 0.7556 | 0.7589, 0.7565 |
+
+- **P53 HELD.** `_pb1`/`_pb0` reads 0.980 [0.957, 1.003 over four cross-draw ratios], inside [0.90, 0.98], at its upper
+  edge, as the reducer scores it. On the `_pb1` side, 216,335 e4b launches and 72,162 grouped-nf4-gemm launches were
+  prebound.
+- **P55 HELD.** The shipped half moves held-out by +0.0011, inside 0.005. The matched half is amendment 26's −0.0012
+  (`tc1-5090-69`). This box ran no matched arm, so its own file scores P54 and P55 UNTESTED, and the combined verdict is
+  amendment 30's registered rule.
+- **P54 HELD** on amendment 26's box (matched 0.973 [0.958, 0.988]).
+- **By the rule, both flags become defaults.** They already have: e4b #1099 and grouped-nf4-gemm #470 flipped them at
+  ~01:50Z, citing this box before its read was on `main`. This read was committed afterwards by the maintainer session,
+  from the run's output in the private receipts store (`tc1-5090-73`, committed there as `b43ec238`), under the standing
+  permission to commit another lane's finished receipts. The gain is small (2–3 %), and the shipped interval reaches 1.0.
 
 ## Amendment 33 (2026-10-05): on one stack, with load-gated draws, Unsloth/e4b 2.352 and the environment gain 0.900 (P50, P51 HELD)
 
