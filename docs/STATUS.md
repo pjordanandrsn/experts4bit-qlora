@@ -186,6 +186,10 @@ its own init — `.scattermoe-native`, a labelled row). **After amendments 10-15
 no environment): **Unsloth/e4b 1.997 [1.980, 2.014]** (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-03`; e4b 3.973 s/step vs 7.933, the matched set
 inside the draw noise, Unsloth still 2.95 GB lower at peak) and **axolotl/e4b 2.775 [2.735, 2.814]** (`e4b.train.h2h.axolotl.qwen3.5090.2026-10-03`; 1.979 on
 the matched-set box's host -- e4b's host-launch-bound step varies more by host than axolotl's, so the ratio does too).
+**With both frameworks on one stack** (torch 2.12.1+cu130 / transformers 5.5.0, TC1 amendments 25, 29 and 33, load-gated
+60-step draws) **Unsloth/e4b reads 2.352 [2.348, 2.356]** (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack`; e4b 3.494 s/step vs
+8.218, held-out at N=60 COMPARABLE, Unsloth 3.22 GB lower at peak). That is the Qwen3-30B-A3B position to quote; 1.997 is the reading
+with e4b in the field image's environment (torch 2.8.0+cu128 / transformers 5.18.0) and Unsloth in its own.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against
 native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
 native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.
@@ -271,10 +275,11 @@ the gap is 1.78 GB.
 was unstable on a busy host; amendment 31 read it over 60 steps on a quiet one
 (`e4b.train.absmax-dq.qwen3.5090.2026-10-05`): 1.014 for 1.34 GB, held-out within 0.003. All three predictions held, so the
 double-quantized absmax becomes the default for resident training (`E4B_ABSMAX_DQ=0` turns it off).
-**The environment** (`e4b.train.env-ab.qwen3.5090.2026-10-04`, TC1 amendment 24): every 5090 position so far ran e4b on the
+**The environment** (`e4b.train.env-ab.qwen3.5090.2026-10-04`, TC1 amendment 24): every 5090 position before amendment 33 ran e4b on the
 field image's torch 2.8.0+cu128 / transformers 5.18.0 and Unsloth on torch 2.12.1+cu130 / transformers 5.5.0. In Unsloth's environment
 e4b's matched arm steps 0.882× as long. The cause is not the padded LoRA delta's fp32 `bmm`, whose host cost per new shape is the same
-on both torch versions (`e4b.train.bmm-host-replay.5090.2026-10-04`). A position with both frameworks on one stack is its own box.
+on both torch versions (`e4b.train.bmm-host-replay.5090.2026-10-04`). The same-stack box (TC1 amendment 33) replicated the gain on
+another host: 0.900, with e4b's prebound launches engaged on the field-image side only.
 Nor is it triton (`e4b.train.triton37.qwen3.5090.2026-10-05`, TC1 amendment 32): triton 3.7.1 alone in the field image reads 0.992 on
 the matched arm and 0.971 on the shipped arm. The gain sits with torch 2.12 and/or transformers 5.5; amendment 34 splits them.
 
