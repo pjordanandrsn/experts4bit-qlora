@@ -27,7 +27,7 @@ def test_box_g_children_inherit_neither_prefill_route_pin():
 
 
 def test_box_g_is_wired_with_todays_kernel_package():
-    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J) ;;' in RUN and "G) box_g;;" in RUN and '[ "$BOX" = G ] && prove_g' in RUN
+    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K) ;;' in RUN and "G) box_g;;" in RUN and '[ "$BOX" = G ] && prove_g' in RUN
     assert 'G|I|J) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac' in RUN   # gnf4 v0.41.0's commit
     assert "G) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; install_vllm; install_sglang; install_llamacpp; install_sc2_client ;;" in RUN
     assert 'G) PROVE_NEEDS="vllm sglang llamacpp sc2client";;' in RUN and "servers=[e4b_gptoss vllm sglang llamacpp]" in RUN

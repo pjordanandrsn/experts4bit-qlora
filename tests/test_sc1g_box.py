@@ -17,7 +17,7 @@ SGL = REPO / "bench" / "sc1" / "sglang" / "server.sh"
 
 
 def test_box_i_is_wired_on_box_g_s_image_and_kernel_package():
-    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J) ;;' in RUN and "I) box_i;; J) box_j;; esac" in RUN and '[ "$BOX" = I ] && prove_i' in RUN
+    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K) ;;' in RUN and "I) box_i;; J) box_j;; K) box_k;; esac" in RUN and '[ "$BOX" = I ] && prove_i' in RUN
     assert "G|I|J) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac" in RUN
     assert "I) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh; install_vllm; install_sglang; install_llamacpp ;;" in RUN
     assert 'I) PROVE_NEEDS="vllm sglang llamacpp";;' in RUN
@@ -265,7 +265,7 @@ for step in range(2):
 def test_box_j_is_the_e4b_only_diagnostic_box_with_its_decisive_arms_first():
     """A2: box J installs no comparator, needs no proof (guard <= 1 h), and runs conv1's decisive four before anything else."""
     assert "  J) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh ;;" in RUN
-    assert 'J) PROVE_NEEDS="";;' in RUN and "J) box_j;; esac" in RUN and "G|I|J) GNF4_SHA=" in RUN
+    assert 'J) PROVE_NEEDS="";;' in RUN and "J) box_j;; K) box_k;; esac" in RUN and "G|I|J) GNF4_SHA=" in RUN
     body = BOX[BOX.index("box_j(){"):]
     assert "install_" not in body and "fetch_gptoss_gguf" not in body
     order = [body.index(s) for s in ("e4b_serve_served_conv1 ", "e4b_nf4_served_conv1 ", "e4b_nf4_chunk1_conv1 ",
