@@ -12,6 +12,18 @@
   store: the receipts under `bench/h2h-2026-10-02/tc1/receipts/tc1-5090-73/`, the box's scored file as
   `RESULTS-tc1-prebindab-60.md`, the lane section, and the register row `e4b.train.prebind.qwen3.5090.2026-10-05`.
 
+### DQ1 run 1 read NOISY (instrument diagnosed); Amendment 1 registered before run 2 (bench and tests only)
+
+- **`dq1-5090-1`** ($0.067, RTX 5090 on PCIe 4.0 x16, EPYC 7C13). The census ran complete, every arm passed parity and
+  engagement, and the teardown is proven. 37 of 250 self-pairs fell out of band, so the registered rule withholds every
+  verdict. None is reported.
+- **Cause, diagnosed** (`bench/dq1/RESULTS-dq1.md`). A boost transient after the 1.5 s warm-up made the first-timed arm
+  (bf16, position 1) about 10% fast on the large shapes. Its position 2 and an independent estimate of the same GEMM agree
+  to 0.985–1.009.
+- **Amendment 1.** Warm to a steady GEMM rate before every cell and the probe, and record it. The rule is byte-identical
+  (pinned in `tests/test_dq1_lane.py`), and the predictions and consequences are unchanged. Run 2 is the registered single
+  re-run on another host.
+
 ### TC1 amendment 35 registered: amendment 26's prebound-launch A/B under triton 3.7.1 (bench and tests only)
 
 - **Why.** The prebound Triton launches became the default on amendment 26's and 30's 5090 boxes under triton 3.4 (0.973 matched,

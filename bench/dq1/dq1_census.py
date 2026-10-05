@@ -43,15 +43,38 @@ ARMS = ("bf16", "bnb", "dq", "gnf4a", "gnf4f")
 ORDER = ARMS + tuple(reversed(ARMS))       # palindrome: every arm twice, mirrored, for a self-pair per arm
 
 
-def busy(seconds: float) -> None:
-    """Wall-clock GPU work before a timed block: consumer cards drop their boost clock while the host builds fixtures, and the
-    first block after an idle stretch otherwise reads the clock recovering, not the kernel."""
+def warm_until_steady(min_s: float, max_s: float, tol: float = 0.01) -> dict:
+    """Amendment 1. Sustained bf16 GEMM load until the card's throughput is STEADY, not for a fixed time. Run 1 (dq1-5090-1)
+    read a boost transient: the first ~3 s of load after a 1.5 s warm-up ran ~10 % above the sustained clock, so the first
+    arm of every cell (bf16, position 1) timed fast. A block is ~0.25 s of 4096^3 bf16 matmuls; stop once ``min_s`` has
+    elapsed and the last four blocks' rates agree within ``tol`` (max/min - 1), or at ``max_s``. Returns what it saw."""
     a = torch.randn(4096, 4096, device="cuda", dtype=torch.bfloat16)
-    t0 = time.time()
-    while time.time() - t0 < seconds:
-        for _ in range(8):
-            a = torch.tanh(a @ a)
-        torch.cuda.synchronize()
+    b = torch.randn(4096, 4096, device="cuda", dtype=torch.bfloat16)
+    flop = 2 * 4096 ** 3
+    s, e = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    rates, t0 = [], time.time()
+    while True:
+        s.record()
+        n = 0
+        while True:
+            torch.mm(a, b)
+            n += 1
+            if n % 16 == 0:
+                e.record()
+                e.synchronize()
+                if s.elapsed_time(e) >= 250:
+                    break
+        rates.append(flop * n / (s.elapsed_time(e) * 1e-3) / 1e12)
+        el = time.time() - t0
+        last = rates[-4:]
+        if (el >= min_s and len(last) == 4 and max(last) / min(last) - 1 <= tol) or el >= max_s:
+            return {"seconds": round(el, 2), "blocks": len(rates), "first_tflops": round(rates[0], 1),
+                    "steady_tflops": round(sum(last) / len(last), 1), "steady": max(last) / min(last) - 1 <= tol}
+
+
+def rate_now() -> float:
+    """One ~0.25 s block of the warm-up GEMM, TF/s: the clock proxy recorded at the end of each cell (Amendment 1)."""
+    return warm_until_steady(0.0, 0.0)["first_tflops"]
 
 
 def timed(fn, target_ms: float, draws: int) -> list:
@@ -173,7 +196,7 @@ def measure_cell(name, W: Weights, M: int, args) -> dict:
     y_ref = x.float() @ W.w_dq.float().t()
     dx_ref = go.float() @ W.w_dq.float()
     cell = {"shape": name, "N": W.N, "K": W.K, "M": M, "arms": {}, "bnb_dispatch": bnb_dispatch(M, W.N, W.K)}
-    busy(args.warm_s)
+    cell["warm"] = warm_until_steady(args.warm_s, args.warm_max_s)
     for pos, arm in enumerate(ORDER):
         route_env(arm)
         rec = cell["arms"].setdefault(arm, {"fwd_ms": [], "dgrad_ms": []})
@@ -220,6 +243,7 @@ def measure_cell(name, W: Weights, M: int, args) -> dict:
     except Exception as exc:  # recorded, never fatal
         cell["extras_error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
     cell["mem_peak_bytes"] = torch.cuda.max_memory_allocated()
+    cell["warm"]["end_tflops"] = round(rate_now(), 1)
     torch.cuda.empty_cache()
     return cell
 
@@ -275,8 +299,7 @@ def h2d_probe(weights: dict, M: int, args) -> dict:
         covered = a.elapsed_time(c) >= 0 and d.elapsed_time(b) >= 0
         return a.elapsed_time(b), c.elapsed_time(d), covered
 
-    busy(args.warm_s)
-    out = {"layer_bytes": nbytes, "M": M, "draws": []}
+    out = {"layer_bytes": nbytes, "M": M, "draws": [], "warm": warm_until_steady(args.warm_s, args.warm_max_s)}
     main = torch.cuda.current_stream()
     for _ in range(args.draws):
         a, b = ev(), ev()
@@ -343,7 +366,8 @@ def main() -> int:
     p.add_argument("--shapes", default=",".join(SHAPES))
     p.add_argument("--draws", type=int, default=5)
     p.add_argument("--target-ms", type=float, default=60.0)
-    p.add_argument("--warm-s", type=float, default=1.5)
+    p.add_argument("--warm-s", type=float, default=4.0, help="Amendment 1: minimum warm-up before steadiness is tested")
+    p.add_argument("--warm-max-s", type=float, default=30.0, help="Amendment 1: warm-up cap")
     p.add_argument("--lora-r", type=int, default=16)
     p.add_argument("--lora-alpha", type=int, default=32)
     p.add_argument("--h2d-rows", default="1024,2048,4096")
@@ -356,7 +380,9 @@ def main() -> int:
     names = [n for n in args.shapes.split(",") if n]
     receipt = {"schema": "dq1-census/1", "rehearsal": bool(args.rehearsal), "started_at": time.strftime("%FT%TZ", time.gmtime()),
                "forensics": forensics(), "shapes": {n: SHAPES[n] for n in names}, "rows": rows, "order": list(ORDER),
-               "config": {k: getattr(args, k) for k in ("draws", "target_ms", "warm_s", "lora_r", "lora_alpha", "h2d_reps")},
+               "config": {k: getattr(args, k) for k in ("draws", "target_ms", "warm_s", "warm_max_s", "lora_r", "lora_alpha",
+                                                        "h2d_reps")},
+               "amendment": 1,
                "cells": [], "h2d": []}
 
     def flush():
