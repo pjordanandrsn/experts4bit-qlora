@@ -44,6 +44,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-75` | `qwen3dqab` (amendment 31, 60 steps) | instance 54238515, AMD EPYC 7B13 (Vast machine 145701) | Qwen3-30B-A3B's absmax pair over 60 steps on a quiet host: dq1/dq0 1.014, peak 27.44 → 26.10 GB, held-out −0.0021 (P56 HELD; with P57 and P58, amendment 28's rule makes the double-quantized absmax the default); [read](RESULTS-tc1-dqab-qwen3-60.md) | $1.03 |
 | `tc1-5090-74` | `qwen3tritonab` (amendment 32, 60 steps) | instance 54237146, AMD EPYC 7B13 (Vast machine 145701) | one variable, triton 3.4 vs 3.7.1 in venv-e4b: matched arm 0.992 (P59 FALSIFIED), shipped arm 0.971 (P60 HELD), held-out within 0.001 (P61 HELD); the environment gain is not triton's on this host-bound step; amendment 34 splits it; [read](RESULTS-tc1-tritonab.md) | $1.28 |
 | `tc1-5090-76` | `qwen3samestack` (amendment 33, 60 steps, load-gated) | instance 54239673, AMD EPYC 7B13 (Vast machine 145701) | both frameworks on one stack, every pair stable: Unsloth/e4b 2.352 (P50 HELD), e4b same-stack / field-image 0.900 (P51 HELD); three draws voided for host load and run again; by amendment 25's rule 2.352 becomes the quoted Qwen3-30B-A3B position; [read](RESULTS-tc1-samestack-box4.md) | $1.76 |
+| `tc1-5090-78` | `qwen3envsplit` (amendment 34, 60 steps, load-gated) | instance 54248510, AMD EPYC 7B13 (Vast machine 145701) | e4b's matched arm in three environments: transformers 5.5 vs 5.18 on torch 2.8 1.005 (P62 FALSIFIED), torch 2.12 + triton 3.7 vs torch 2.8 + triton 3.4 0.905 (P63 HELD), the whole environment 0.909 (P64 HELD); the environment gain is torch's; [read](RESULTS-tc1-envsplit.md) | $1.73 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -52,6 +53,37 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 34 (2026-10-05): the 5090's environment gain is torch 2.12's, not transformers 5.5's
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 34. One RTX 5090 (`tc1-5090-78`, AMD EPYC 7B13, Vast
+machine 145701): the token `qwen3envsplit`, the matched arm in three environments, two draws each in ABC CBA order, 60 steps, load-gated
+draws, the prebound launches off everywhere. Read: [`RESULTS-tc1-envsplit.md`](RESULTS-tc1-envsplit.md).
+
+| side | torch | transformers | triton | s/step (two draws) | stable |
+|---|---|---|---|---|---|
+| `_e0` venv-e4b | 2.8.0+cu128 | 5.18.0 | 3.4.0 | 3.840 / 3.816 | yes (0.6 %) |
+| `_e1` venv-e4b-tf55 (built on the box) | 2.8.0+cu128 | 5.5.0 | 3.4.0 | 3.821 / 3.871 | yes (1.3 %) |
+| `_e2` venv-unsloth + e4b | 2.12.1+cu130 | 5.5.0 | 3.7.1 | 3.507 / 3.452 | yes (1.6 %) |
+
+- **P62 FALSIFIED.** transformers 5.5 over 5.18 on torch 2.8 reads **1.005** [0.995, 1.014], outside [0.90, 1.00]. The router casts the
+  A2000 profile pointed at do not show in the 5090's step. By amendment 34's rule nothing follows from P62.
+- **P63 HELD.** torch 2.12 + triton 3.7 over torch 2.8 + triton 3.4, at transformers 5.5, reads **0.905** [0.892, 0.918]. Amendment 32
+  read triton 3.7.1 alone (on torch 2.8) at 0.992 on this arm, so nearly all of it is torch 2.12's.
+- **P64 HELD.** The whole environment reads **0.909** [0.899, 0.919]; amendment 24 read 0.882, amendment 33 0.900.
+- **P65 HELD.** Held-out at N moves +0.0013 (`_e1`) and −0.0010 (`_e2`).
+- **By amendment 34's rule (P63 HELD)** the install section now says that torch 2.12 runs e4b's host-bound training step faster on an
+  RTX 5090. Row `e4b.train.env-split.qwen3.5090.2026-10-05`.
+- **The gate.** Six draws were voided for host load and run again; their files are in
+  [`receipts/tc1-5090-78/loadvoid/`](receipts/tc1-5090-78/loadvoid/). Reading the first attempts instead gives 1.004, 0.907 and 0.911:
+  no verdict changes. `_e0`'s second draw stood on its third attempt at a median load1 of 9.15 (the last attempt stands whatever its
+  load); it read 3.816 against its first draw's 3.840 at 4.2.
+- **The host was shared with this campaign's own boxes.** From 04:45Z and 05:11Z, `tc1-5090-79` and `tc1-5090-80` ran on the same machine
+  (145701). Their steps are host-bound too, so part of the load the gate saw was this campaign's. The ABC CBA order puts each side's draws
+  on both halves of the run.
+- **Not registered, recorded.** Step-0 held-out on `_e1` (torch 2.8, transformers 5.5) is 1.9733 against `_e0`'s 1.9441 and `_e2`'s
+  1.9478 (NEAR, 0.029). The same transformers on torch 2.12 does not move it, so it is the combination, not transformers 5.5 alone. At N=60 the
+  three sides are within 0.0014.
 
 ## Amendment 30 (2026-10-05): the shipped prebind pair over 60 steps (P53 HELD); with P54 and P55 HELD the prebound launches become the default
 
