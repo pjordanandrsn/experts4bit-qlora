@@ -121,6 +121,29 @@ engines at about 13 min each.
 
 The deadline drops arms from the end (llama.cpp first).
 
+## Amendment A1 (2026-10-05): the proof died in the harness; three fixes, no change to the design
+
+**`sc2g-prove-1`** (adertha-receipts `ae066e41`, machine 26157, **$0.848**, HARNESS_ERROR). The run reached box G's install
+after e4b's and gnf4's installs and tripwires passed (e4b 0.48.0 @ `e8892972`, gnf4 0.41.0 @ `dc8f94ab`). It died at
+06:21Z: `/root/sc1/sc2g_box_g.sh: line 20: FOLDS: unbound variable`. Nothing on e4b's gpt-oss path ran.
+
+1. **The cause.** `sc1_run.sh` sources the box scripts at its install step, under `set -uo pipefail`, before it defines
+   `FOLDS`. `SC2G_E4B_ENV` expanded `$FOLDS` at top level. The fix appends `$FOLDS` where the e4b server starts
+   (`g_e4b_start`), so the child's environment is unchanged. A new test sources every SC2 box script under `set -u` with
+   only `W` defined, which is the order `sc1_run.sh` uses. Against the old line it reproduces the failure exactly.
+2. **The controller waited out the deadline.** The box died at 06:21Z, and the controller polled until its 07:31Z deadline.
+   The heartbeat counts `pgrep -f 'bash sc1_run.sh'` inside an ssh shell whose own command line carries that pattern.
+   Linux's procps `pgrep` excludes only itself, so the count included its own shell and never read 0. The controller's
+   log shows 66 polls reading `live 2` after the death, and on a Linux host with no lane the expression reads 2. LANE
+   DEAD could never fire, on any box. It now counts `[b]ash sc1_run.sh`, which reads 0 there; a test runs it.
+3. **The box now records its own abnormal exit.** `sc1_run.sh` gains an EXIT trap. An exit that skips `finish` writes
+   its rc and TP_DONE, so the controller ends on the box's record at once. Such an exit is never a success: rc 0 there
+   is recorded as 79. Tests reproduce the `set -u` death and a bare `exit 0`.
+
+Fixes 2 and 3 touch every box. They change only what happens after a box has already failed, and boxes A–F have read.
+The rule, the predictions, the engines and the guards are unchanged. The next proof is `sc2g-prove-2`, under the same
+guard. Spend so far: $0.848, which is inside the lane's ~$3.4.
+
 ## Out of scope
 
 - Quality (SC1g).

@@ -17,7 +17,9 @@ SC2G_GGUF_REPO=ggml-org/gpt-oss-20b-GGUF; SC2G_GGUF_REV=ef9b12f2ff56c69cf32153a0
 SC2G_LAYERS=24
 # GNF4_TRITON_PREBIND=1 is gnf4 v0.41.0's default (kernel/_triton_shim.py:269), pinned so the receipt shows it: bit-identical, a
 # launch-overhead lever that wraps _gemm_nf4_grouped, whose reach into the NF4 prefill path is not verified
-SC2G_E4B_ENV="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 GNF4_TRITON_PREBIND=1 $FOLDS"
+# A1: SC1's FOLDS is appended where the server starts, NOT here -- sc1_run.sh sources this file at its install step,
+# before FOLDS is defined, and under set -u the expansion killed sc2g-prove-1's box at source time
+SC2G_E4B_ENV="E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 GNF4_TRITON_PREBIND=1"
 SC2G_ENGINES="e4b_gptoss vllm sglang llamacpp"
 
 # the checkpoint without its duplicate `original/` and `metal/` copies (bo3's patterns; the xet backend can stall)
@@ -62,7 +64,7 @@ PYG
 }
 g_e4b_start(){ local LOG=$W/logs/sc2g_server_e4b.log
   # shellcheck disable=SC2086  # assignment lists by design
-  setsid env -u E4B_INT4_PREFILL -u E4B_PAGED_PREFILL_ATTN PYTHONPATH= $ROUTEENV $SC2G_E4B_ENV \
+  setsid env -u E4B_INT4_PREFILL -u E4B_PAGED_PREFILL_ATTN PYTHONPATH= $ROUTEENV $SC2G_E4B_ENV $FOLDS \
       E4B_PAGED_MODEL=$SC2G_MID E4B_PAGED_REVISION=$SC2G_REV E4B_PAGED_ARENA=$GA_GPTOSS E4B_PAGED_CALIB=$W/calib.json \
       E4B_PAGED_MAX_TOKENS_PER_SEQ=$SC2_MAXLEN E4B_PAGED_TRACE=$W/sc2/trace_e4b_gptoss.jsonl E4B_HOST=127.0.0.1 E4B_PORT=$PORT_E4B \
       "$PY" -m experts4bit_qlora.serve_paged > "$LOG" 2>&1 < /dev/null &

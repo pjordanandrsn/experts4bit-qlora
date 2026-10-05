@@ -40,6 +40,10 @@ finish(){ local rc=$1
   type llamacpp_server_stop >/dev/null 2>&1 && llamacpp_server_stop 2>/dev/null
   printf '%s\n' "$rc" > SC1_EXIT_CODE.$NONCE; [ "$rc" = 0 ] && : > SC1_SUCCESS.$NONCE; say "TP_DONE rc=$rc"; : > TP_DONE.$NONCE; exit "$rc"; }
 trap 'finish 130' INT TERM
+# SC2g A1: any exit that bypasses finish (sc2g-prove-1 died under set -u while sourcing a box script) still writes its exit
+# code and TP_DONE, so the controller ends at once on the box's own record instead of polling for a dead lane. An exit that
+# skipped finish is never a success: rc 0 there is recorded as 79.
+trap 'rc=$?; [ -e "$W/TP_DONE.$NONCE" ] || { say "exit without finish (rc=$rc)"; finish "$(( rc == 0 ? 79 : rc ))"; }' EXIT
 for v in SC1_RUN_ID SC1_DEADLINE_EPOCH SC1_INSTANCE_ID SC1_BOX E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
