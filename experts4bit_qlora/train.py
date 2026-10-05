@@ -65,11 +65,17 @@ TRAIN_ROUTER = os.environ.get("TRAIN_ROUTER", "0") == "1"
 DO_GEN = os.environ.get("DO_GEN", "1") == "1"
 OFFLOAD_EXPERTS = os.environ.get("OFFLOAD_EXPERTS", "0") == "1"
 OFFLOAD_PIN = os.environ.get("OFFLOAD_PIN", "1") == "1"
-# Opt-in (default OFF): store the frozen expert absmax double-quantized, as bitsandbytes'
-# compress_statistics=True does (one fp32 per 64 weights -> ~1.02 bytes per 64): ~2.8 GB less on
-# Mixtral-8x7B, ~1.8 GB on Qwen3-30B-A3B. Lossy against fp32; see experts4bit_qlora.absmax_dq.
-# Resident training only -- refused with OFFLOAD_EXPERTS=1 and TRAIN_ARENA.
-ABSMAX_DQ = os.environ.get("E4B_ABSMAX_DQ", "0") == "1"
+# Store the frozen expert absmax double-quantized, as bitsandbytes' compress_statistics=True does (one fp32
+# per 64 weights -> ~1.02 bytes per 64): ~2.8 GB less on Mixtral-8x7B, ~1.8 GB on Qwen3-30B-A3B. Lossy
+# against fp32; see experts4bit_qlora.absmax_dq. ON by default for resident training since TC1 amendments
+# 28 / 31 (one RTX 5090 each): 1.4 % of the step for 1.34 GB on Qwen3-30B-A3B, 2.3 % for 2.04 GB on
+# Mixtral-8x7B, held-out within 0.003. E4B_ABSMAX_DQ=0 turns it off. E4B_ABSMAX_DQ=1 REQUIRES it: refused
+# with OFFLOAD_EXPERTS=1 / TRAIN_ARENA, and a model it cannot compress is a refusal. Unset: on for resident
+# training, off under OFFLOAD_EXPERTS=1 / TRAIN_ARENA (those paths read the fp32 absmax by name), and a
+# model the compressor refuses (a bare stack, 8-bit storage, ...) keeps its fp32 absmax with a log line.
+_ABSMAX_DQ_ENV = os.environ.get("E4B_ABSMAX_DQ", "").strip()
+ABSMAX_DQ_REQUIRED = _ABSMAX_DQ_ENV == "1"
+ABSMAX_DQ = ABSMAX_DQ_REQUIRED or (_ABSMAX_DQ_ENV == "" and not OFFLOAD_EXPERTS and not os.environ.get("TRAIN_ARENA"))
 QUANT_TYPE = os.environ.get("QUANT_TYPE", "nf4")  # nf4/fp4 (4-bit), int8/fp8 (8-bit), bf16/fp16 (passthrough)
 OUT = os.environ.get("OUT", "./experts4bit-lora-out")
 
@@ -234,7 +240,7 @@ def _print_env_help(which: str) -> None:
         ("TRAIN_VRAM_FRAC", "1", "fraction of experts held in VRAM (rest -> DRAM)"),
         ("OFFLOAD_EXPERTS", "0", "keep experts in pinned CPU RAM"),
         ("OFFLOAD_PIN", "1", "pin the offloaded expert memory"),
-        ("E4B_ABSMAX_DQ", "0", "double-quantize the frozen expert absmax (resident only)"),
+        ("E4B_ABSMAX_DQ", "auto", "double-quantize the frozen expert absmax: on for resident training (0 off, 1 required)"),
         ("DO_GEN", "1", "sample generations during training"),
         ("SEED", "0", "torch manual seed"),
         ("OUT", "./experts4bit-lora-out", "adapter output dir"),
@@ -305,12 +311,41 @@ def placement_manifest(n_layers: int, n_experts: int, frac: float = 1.0) -> dict
     }
 
 
+def apply_absmax_dq(model, required: bool) -> int:
+    """Double-quantize the model's expert absmax (experts4bit_qlora.compress_expert_absmax_); returns the stacks compressed.
+
+    ``required`` (E4B_ABSMAX_DQ=1): a refusal (ValueError) propagates and compressing nothing is a SystemExit -- a vacuous arm.
+    Otherwise (the default): a model the compressor refuses, or one with nothing to compress, keeps its fp32 absmax and says so.
+    """
+    from .absmax_dq import compress_expert_absmax_, expert_absmax_bytes
+
+    dq_before = expert_absmax_bytes(model)
+    try:
+        n_dq = compress_expert_absmax_(model)
+    except ValueError as e:
+        if required:
+            raise
+        log(f"[absmax-dq] default: kept the fp32 expert absmax -- {e}")
+        return 0
+    if n_dq == 0:
+        if required:
+            raise SystemExit("E4B_ABSMAX_DQ=1 compressed no expert absmax -- refusing a vacuous arm")
+        log("[absmax-dq] default: no expert stack to compress; the fp32 absmax is unchanged")
+        return 0
+    dq_after = expert_absmax_bytes(model)
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    log(f"[absmax-dq] {n_dq} expert stacks: absmax {dq_before / 1e9:.3f} GB -> {dq_after / 1e9:.3f} GB "
+        f"({dq_before / max(dq_after, 1):.3f}x, bitsandbytes nested statistics)")
+    return n_dq
+
+
 def main():
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
         _print_env_help("train")
         return 0
     torch.manual_seed(int(os.environ.get("SEED", "0")))  # default unchanged; the mode-matrix scripts set it
-    if ABSMAX_DQ and (OFFLOAD_EXPERTS or os.environ.get("TRAIN_ARENA")):
+    if ABSMAX_DQ_REQUIRED and (OFFLOAD_EXPERTS or os.environ.get("TRAIN_ARENA")):
         # Refused before the load: expert offload stages the absmax by name from a host home, and
         # TRAIN_ARENA replaces the expert storage with an arena; neither reads the compressed form.
         raise SystemExit("E4B_ABSMAX_DQ=1 is a RESIDENT-training switch: it cannot be combined with "
@@ -339,16 +374,7 @@ def main():
         log(f"[attn-4bit] {n_q4} projections stored in NF4 (frozen base); "
             f"expected {expected_attn4}")
     if ABSMAX_DQ:
-        from .absmax_dq import compress_expert_absmax_, expert_absmax_bytes
-
-        dq_before = expert_absmax_bytes(model)
-        n_dq = compress_expert_absmax_(model)
-        if n_dq == 0:
-            raise SystemExit("E4B_ABSMAX_DQ=1 compressed no expert absmax -- refusing a vacuous arm")
-        dq_after = expert_absmax_bytes(model)
-        torch.cuda.empty_cache()
-        log(f"[absmax-dq] {n_dq} expert stacks: absmax {dq_before / 1e9:.3f} GB -> {dq_after / 1e9:.3f} GB "
-            f"({dq_before / max(dq_after, 1):.3f}x, bitsandbytes nested statistics)")
+        apply_absmax_dq(model, required=ABSMAX_DQ_REQUIRED)
     n_attn = add_attention_lora(model, R, ALPHA, DTYPE) if TRAIN_ATTENTION else 0
     log(f"attn LoRA {n_attn} projs | train experts={TRAIN_EXPERTS} attn={TRAIN_ATTENTION} router={TRAIN_ROUTER}")
 

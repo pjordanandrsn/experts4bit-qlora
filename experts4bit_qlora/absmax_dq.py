@@ -1,4 +1,4 @@
-"""Opt-in double-quantized ("nested") storage for the frozen expert absmax.
+"""Double-quantized ("nested") storage for the frozen expert absmax (the CLI trainer's default for resident training).
 
 An :class:`~experts4bit_qlora.ExpertsNbit` NF4 stack keeps one fp32 absmax per 64 weights,
 ``gate_up_absmax`` / ``down_absmax`` of shape ``[E, N*K/64]``. On a resident training run that is
@@ -35,9 +35,11 @@ forwards -- refuses a compressed module by name (:class:`AbsmaxCompressedError`)
 attribute names hold a guard object that raises the same error on any use, so a reader that was
 missed fails loudly instead of reading a wrong buffer.
 
-The switch: ``compress_expert_absmax_(model)`` in code; ``E4B_ABSMAX_DQ=1`` for
-``python -m experts4bit_qlora.train`` (after load, before training; refused with
-``OFFLOAD_EXPERTS=1``) and for the TC1 harness's ``--absmax-dq``.
+The switch: ``compress_expert_absmax_(model)`` in code. ``python -m experts4bit_qlora.train`` applies it by
+default for resident training (after load, before training; off under ``OFFLOAD_EXPERTS=1`` / ``TRAIN_ARENA``;
+a model the compressor refuses keeps its fp32 absmax), since TC1 amendments 28 / 31 read 1.4 % of the step for
+1.34 GB on Qwen3-30B-A3B and 2.3 % for 2.04 GB on Mixtral-8x7B; ``E4B_ABSMAX_DQ=0`` turns it off and ``=1``
+requires it (refused with ``OFFLOAD_EXPERTS=1``). The TC1 harness's ``--absmax-dq`` stays explicit.
 """
 from __future__ import annotations
 
@@ -280,7 +282,7 @@ def _compress_one(mod) -> None:
 
 
 def compress_expert_absmax_(model) -> int:
-    """Store every ExpertsLoRA-wrapped NF4 expert stack's absmax double-quantized, in place. Opt-in.
+    """Store every ExpertsLoRA-wrapped NF4 expert stack's absmax double-quantized, in place (the CLI trainer's default).
 
     When to use it: resident QLoRA training where the fp32 absmax is the margin between fitting and not
     (one fp32 per 64 weights: ~2.8 GB on Mixtral-8x7B, ~1.8 GB on Qwen3-30B-A3B). It stores bitsandbytes'
