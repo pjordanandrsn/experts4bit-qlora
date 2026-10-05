@@ -113,52 +113,57 @@ def test_offloaded_training_is_bitwise_identical_to_resident(ckpt, train_prefetc
     assert hs
 
 
-def _allocated_after_forward(m):
-    torch.cuda.synchronize()
+def _held_across_forward(m):
+    """Bytes the autograd graph holds at the END of a forward: ``memory_allocated`` after minus before, each read after
+    ``torch.cuda.synchronize()``. Static state (resident weights, staged layers carried over, the allocator's one-time
+    allocations) cancels, so two models are compared by what their forwards keep alive -- not by baselines that the
+    first version of this test confounded (a route-disabled control 'saved' more than every weight in the model)."""
     x = _x().requires_grad_(True)
+    torch.cuda.synchronize()
+    before = torch.cuda.memory_allocated()
     y = m(x)
     torch.cuda.synchronize()
-    held = torch.cuda.memory_allocated()
+    held = torch.cuda.memory_allocated() - before
     y.float().pow(2).mean().backward()
     return held
 
 
-def _resident_held():
-    """The baseline, measured exactly like the offloaded model: one warm step first. A COLD first step carries
-    one-time allocations (measured: ~38 MB more than a warm one on the A2000), which inflated an earlier version of
-    this baseline so far that the route-disabled control 'saved' more than every weight in the model."""
-    res = _model(ckpt=True)
-    _allocated_after_forward(res)
-    held = _allocated_after_forward(res)
-    lb = _layer_bytes(res)
-    del res
+def _measure(*, offload: bool, train_prefetch: bool = False, route: bool = True, monkeypatch=None, steps: int = 1):
+    """Build, optionally offload (with the late-bound route on or off), take ONE warm step, then return the held bytes
+    of each of ``steps`` further steps and the per-layer packed-weight bytes."""
+    _DenseOffload._staged_now.clear()
+    _DenseOffload._resident.clear()
+    m = _model(ckpt=True)
+    if offload:
+        if route:
+            _offload(m, train_prefetch=train_prefetch)
+        else:
+            with monkeypatch.context() as mp:
+                mp.setattr(do, "_install_late_bound_backward", lambda handles: 0)
+                _offload(m, train_prefetch=train_prefetch)
+    _held_across_forward(m)                                   # warm, identical on every side
+    out = [_held_across_forward(m) for _ in range(steps)]
+    lb = _layer_bytes(m)
+    del m
     torch.cuda.empty_cache()
-    return held, lb
+    return out, lb
 
 
 @pytest.mark.parametrize("train_prefetch", [False, True])
-def test_the_evicted_weights_are_actually_freed_between_forward_and_backward(train_prefetch):
-    """The quantity the lane exists to change. After the forward (graph alive, before backward) the offloaded model
-    must hold at least (L - 2) layers' packed weights LESS than the resident one -- at most two layers stay bound."""
-    res_held, lb = _resident_held()
-    m = _model(ckpt=True)
-    _offload(m, train_prefetch=train_prefetch)
-    _allocated_after_forward(m)                         # warm, exactly as the resident baseline is
-    off_held = _allocated_after_forward(m)
-    saved = res_held - off_held
-    assert saved >= (NL - 2) * lb - lb // 2, (saved, (NL - 2) * lb, res_held, off_held)
+def test_the_late_bound_route_frees_the_evicted_weights(train_prefetch, monkeypatch):
+    """The quantity the lane exists to change, with its control in the SAME offloaded configuration: with the route
+    off (stock bnb MatMul4Bit keeps each weight on ctx) the forward holds every streamed layer; with it on, at most the
+    two the schedule keeps bound. The difference must be at least (L - 2) layers."""
+    (on,), lb = _measure(offload=True, train_prefetch=train_prefetch)
+    (off,), _ = _measure(offload=True, train_prefetch=train_prefetch, route=False, monkeypatch=monkeypatch)
+    assert off - on >= (NL - 2) * lb - lb // 2, (off - on, (NL - 2) * lb, on, off)
 
 
-def test_without_the_late_bound_route_nothing_is_saved(monkeypatch):
-    """The measurement above has power: with the route disabled (stock bnb MatMul4Bit), the ctx-held weights keep
-    every layer alive and the saving collapses."""
-    monkeypatch.setattr(do, "_install_late_bound_backward", lambda handles: 0)
-    res_held, lb = _resident_held()
-    m = _model(ckpt=True)
-    _offload(m, train_prefetch=True)
-    _allocated_after_forward(m)
-    saved = res_held - _allocated_after_forward(m)
-    assert saved < (NL - 2) * lb // 2, (saved, lb)
+@pytest.mark.parametrize("train_prefetch", [False, True])
+def test_the_routed_forward_holds_no_more_than_two_layers_over_resident(train_prefetch):
+    (res,), lb = _measure(offload=False)
+    (on,), _ = _measure(offload=True, train_prefetch=train_prefetch)
+    assert on <= res + 2 * lb + lb // 2, (on - res, 2 * lb, on, res)
 
 
 def test_inference_takes_the_stock_forward_and_matches():
