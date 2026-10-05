@@ -1,0 +1,11 @@
+sv1 tripwire OK 0.48.0 0.41.0 2.8.0+cu128 NVIDIA GeForce RTX 5090 (12, 0)
+olmoe: fetched 13G
+bake olmoe rc=0 3.4G nf4 bake complete: 1024 rows (3.6 GB) in 47s
+olmoe_eager rc=0 OK est 9.196 GiB peak 8.812 reserved 8.898 driver 9.506 prefill_graph {'status': 'off'}
+olmoe_graphs rc=0 OK est 9.213 GiB peak 8.870 reserved 9.123 driver 9.811 prefill_graph {'status': 'off'}
+olmoe_prefill rc=0 OK est 9.213 GiB peak 9.104 reserved 9.514 driver 10.207 prefill_graph {'status': 'on', 'T': 512, 'replays': 16, 'eager_chunks': 16, 'eager_reasons': {'later_chunk': 16, 'short_chunk': 0}, 'pool_mib': 224, 'free_after_mib': 21650, 'bulk_flu
+qwen3: fetched 57G
+bake qwen3 rc=0 16G nf4 bake complete: 6144 rows (16.3 GB) in 260s
+qwen3_graphs rc=0 OK est 21.786 GiB peak 21.612 reserved 21.895 driver 22.619 prefill_graph {'status': 'off'}
+qwen3_prefill rc=0 OK est 21.786 GiB peak 22.169 reserved 22.637 driver 23.375 prefill_graph {'status': 'on', 'T': 512, 'replays': 16, 'eager_chunks': 16, 'eager_reasons': {'later_chunk': 16, 'short_chunk': 0}, 'pool_mib': 310, 'free_after_mib': 8164, 'bulk_f
+SV1 done: 5 arm receipts

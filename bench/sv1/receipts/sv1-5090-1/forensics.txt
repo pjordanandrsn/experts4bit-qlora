@@ -1,0 +1,5 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, 4, 16
+Model name:                              AMD EPYC 7B13 64-Core Processor
+MemTotal:       2101193408 kB
+MemAvailable:   1881258868 kB
+overlay         320G  465M  320G   1% /
