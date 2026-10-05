@@ -44,7 +44,7 @@ while :; do
 done
 rm -rf "$RUN_DIR/sc1g_r" && mkdir -p "$RUN_DIR/sc1g_r" || { say "fetch failed: local dir"; exit 22; }
 rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude '.cache' --exclude '__pycache__' "root@$HOST:$W/" "$RUN_DIR/sc1g_r/" || {
-  say "rsync fetch failed -- falling back to scp -r (the box may lack rsync)"
+  say "rsync fetch failed -- falling back to a recursive copy over the same ssh options (the box may lack rsync)"
   $SCP -r "root@$HOST:$W/." "$RUN_DIR/sc1g_r/" || { say "fetch failed: rsync and scp"; exit 22; }; }
 say "fetched $(ls "$RUN_DIR/sc1g_r" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/sc1g_r/SC1G_R_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
