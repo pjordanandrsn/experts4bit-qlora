@@ -105,6 +105,18 @@
 - **Files.** `bench/sc2/SC2g-PREREG.md`, `sc2g_box_g.sh`, `sc2g_reduce.py`; `sc2_trace.py` is now staged; grouped-nf4-gemm
   v0.41.0 (e4b 0.48.0's CI pin) is pinned for box G, with `GNF4_TRITON_PREBIND=1` pinned and recorded; `tests/test_sc2g_box.py` executes the child-env, SGLang-engagement and e4b-check paths.
 
+### Serve estimate: the cold tier's minimum `hot_rows`, and a refusal below it
+
+- `serve_recipe.min_hot_rows(topology, setup)` is the fewest cold-tier rows a solver setup can serve with, by
+  grouped-nf4-gemm's own ColdTier rule ("size hot_rows >= max routed experts per layer"): `top_k × max(chunk_tokens,
+  max_seqs)`, at most `n_experts` and at most the NVMe rows.
+  - Without a routing profile the solver fills layer by layer, so NVMe holds whole trailing layers.
+  - The server's default of 64 is below that for Qwen3-30B-A3B (128 experts, top-8): a long prefill through an
+    NVMe layer would be refused mid-request.
+  - The default is far above it for Mixtral (8 experts). There, 64 rows of ~99 MB each in the pinned landing, the
+    cold view and the setup tier crowd the DRAM tier out of the host budget.
+- `estimate_serve_footprint` refuses a solver setup with rows on NVMe and `hot_rows` below the minimum, in words.
+
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
 **0.48.0.** Two training defaults change, each by a rule registered and read in lane TC1 (#835).
