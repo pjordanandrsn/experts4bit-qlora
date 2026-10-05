@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Serve estimate: the prefill graph's pool is named, and `ServeSetup` carries `prefill_graph`
+
+- Since SC2b, `E4B_PAGED_PREFILL_GRAPH=auto` is the server's default. When the first-chunk prefill graph engages,
+  it keeps its forward's working set in a private pool for its life: +3.3 GiB on Qwen3-30B-A3B int4.
+  `estimate_serve_footprint` does not price that pool. It now lists the pool as not modelled wherever the graph can
+  engage (decode graphs with device grouping, no linear-attention layers).
+- `ServeSetup.prefill_graph` (`auto`, `1` or `0`) is passed through `to_env()`, so a caller that wants memory bounded
+  by the estimate can plan `0`.
+
 ### MG1 amendment 2 read: the ladder OOMs at Qwen3.6's licensed configuration, so P2 stays unread and `qwen3_5_moe` stays experimental; amendment 3 registered, reading P2 on tp1's own fused arm (bench, tests and docs)
 
 - **The read** ([`bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md`](bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)).
