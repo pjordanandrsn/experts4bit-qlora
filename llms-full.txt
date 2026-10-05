@@ -3593,6 +3593,9 @@ Why the gate: on short rows chunking is a cost, not a saving. At TC1's field rec
 micro-batch) `1` cost a host-bound RTX 5090 4.9 % of the shipped arm's step (TC1 amendment 41), while `auto` never fired there and
 stepped 0.992–0.999 of the stock loss (amendment 44). A packed 4,096-token Qwen3 row is 2.32 GiB and chunks, and trains resident on a
 5090 where the stock loss ran out of memory (amendments 39 and 43).
+Scope: that evidence is Qwen3-30B-A3B. The gate counts bytes, so on a large vocabulary it fires at ordinary micro-batches: about
+1,767 positions per forward at Qwen3's 151,936, about 1,335 at gpt-oss's 201,088, about 1,081 at Qwen3.5-MoE's 248,320. There
+chunking's step cost was not measured (amendment 41's 4.9 % is Qwen3 at 0.3–0.6 GiB). `E4B_CHUNKED_LM_LOSS=0` restores the stock loss.
 
 **It trains, but each step is slow — and `[fast]` will not build.**
 `enable_batched_train(model)` (no extra: stock torch + bitsandbytes). The kernel-free lane:

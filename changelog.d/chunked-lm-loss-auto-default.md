@@ -8,5 +8,8 @@
   (amendment 39). With the chunked loss it trains them resident, 1.278× Unsloth's speed on one stack (amendments 40, 43; P98 HELD). At
   the field recipe, chunking every forward cost the shipped arm 4.9 % (amendment 41), while `auto`'s gate never fired and stepped
   0.992 / 0.999 of the stock loss (amendment 44, P99–P103 HELD).
+- **Scope.** The evidence is Qwen3-30B-A3B. The gate counts bytes, so on a large vocabulary it fires at ordinary micro-batches
+  (about 1,335 positions per forward for gpt-oss, about 1,081 for Qwen3.5-MoE), where chunking's step cost was not measured;
+  `E4B_CHUNKED_LM_LOSS=0` restores the stock loss.
 - **Not changed.** Evaluation under `torch.no_grad`, generation, `logits_to_keep` and tuple returns run the stock forward; a forward
   under the gate is the stock forward exactly (test-pinned).
