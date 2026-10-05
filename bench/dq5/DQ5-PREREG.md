@@ -23,8 +23,12 @@ measures whether the prototype keeps its speed on the most common slower link a 
 neither, so the loss path is DQ3's.
 
 **What differs:**
-- **The link gate.** `nvidia-smi --query-gpu=pcie.link.gen.max,pcie.link.width.max` must read **4, 16** on an RTX 5090.
-  The maximum is the instrument because the *current* generation idles at 1. Anything else exits **rc 19**, "out of
+- **The link gate**, in two parts:
+  - `nvidia-smi --query-gpu=pcie.link.gen.max,pcie.link.width.max` must read **4, 16** on an RTX 5090. For the
+    generation, the maximum is the instrument, because the *current* generation idles at 1.
+  - `bench/dq5/dq5_link_gate.py` must then read `pcie.link.width.current` = **16** *while a pinned copy is in flight*.
+    `width.max` is only what the GPU and slot can negotiate: the A2000 rehearsal read max 16 while its link ran x8
+    under load, so a 5090 negotiated at x8 would otherwise pass the gate and quietly halve the lane's bandwidth. Anything else exits **rc 19**, "out of
   band". That code is deliberately not one adertha admits as machine evidence (13/14/17/18): a gen 5 host is a good
   host and must not be excluded from other lanes' searches.
 - **A descriptive pinned-H2D probe** (`bench/dq5/dq5_h2d_probe.py`, receipt `h2d.json`). It records:
@@ -77,7 +81,8 @@ output on the six arm receipts of a box that passed that gate.
 
 - **Run:** one RTX 5090 on `vast:verified-secure`, gen 4 x16 by the band above. The guard is 1.0 h (DQ3's), at
   $0.85/h, estimated **≤ $0.85**. This is the standing no-ask tier for a single run under $15 (#564).
-- **Pre-launch gate** (A2000, correctness and memory only, never timing):
+- **Pre-launch gate** (A2000, correctness and memory only, never timing). The first rehearsal (`dq5-a2000-rehearse-1`)
+  found the width.max weakness above. The gate was added before any 5090 data existed.
   - DQ3's rehearsal shapes A and B through `dq5_run.sh`'s arm path, at the launch commit, must pass
     `bench/dq3/dq3_rehearsal_check.py`: bitwise parity, and the memory direction S, S0 ≤ R − (L−2) layers.
   - On the A2000 itself, which is gen 3 x8, the runner must refuse at **rc 19**.

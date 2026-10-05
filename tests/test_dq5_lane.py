@@ -25,19 +25,23 @@ def test_the_runner_is_dq3s_but_for_the_link_gate_and_the_h2d_probe():
         'case "$link" in *"RTX 5090, 4, 16") ;; *) echo "OUT OF BAND: not an RTX 5090 on PCIe gen 4 x16 ($link)" | tee -a summary.txt; finish 19;; esac')
     got = _body(RUN)
     probe = got[got.index("# Descriptive only:"):got.index("\ncommand -v git")]
-    assert got.replace(probe, "") == expected, "dq5_run.sh drifted from dq3_run.sh beyond the registered differences"
+    gate = got[got.index("# width.max is what the slot CAN negotiate"):got.index("# Host floor")]
+    assert got.replace(probe, "").replace(gate, "") == expected, \
+        "dq5_run.sh drifted from dq3_run.sh beyond the registered differences"
+    assert "python dq5_link_gate.py" in gate and 'finish 19' in gate and 'finish 9' in gate
     assert "dq5_h2d_probe.py receipts/h2d.json" in probe and "not a refusal" in probe and "finish" not in probe
     for s in ("for arm in R S S0 S0 S R; do", "dq3_arm.py", "dq3_reduce.py", "pcie.link.gen.max,pcie.link.width.max"):
         assert s in RUN, s
     assert subprocess.run(["bash", "-n", str(DQ5 / "dq5_run.sh")]).returncode == 0
 
 
-def _run_box(tmp_path, link, vram_rc=0):
+def _run_box(tmp_path, link, vram_rc=0, gate_rc=0):
     b = tmp_path / "bin"
     b.mkdir(parents=True)
     (b / "nvidia-smi").write_text(f"#!/bin/sh\necho '{link}'\n")
     (b / "python").write_text("#!/bin/sh\n"
-                              f'case "$*" in *dq3_vram_probe.py*) exit {vram_rc};; *dq3_egress_probe.py*) exit 0;; '
+                              f'case "$*" in *dq5_link_gate.py*) exit {gate_rc};; *dq3_vram_probe.py*) exit {vram_rc};; '
+                              '*dq3_egress_probe.py*) exit 0;; '
                               '*dq5_h2d_probe.py*) exit 2;; esac\n'
                               'echo "$*" >> "$DQ5_W/reached"; exit 1\n')
     for f in b.iterdir():
@@ -68,3 +72,11 @@ def test_a_gen4_x16_host_proceeds_and_a_failing_h2d_probe_never_refuses(tmp_path
     assert "H2D PROBE DID NOT COMPLETE" in (w / "summary.txt").read_text()
     rc, w = _run_box(tmp_path / "v", "NVIDIA GeForce RTX 5090, 4, 16", vram_rc=3)
     assert rc == 18, "DQ3's host floor still applies"
+
+
+def test_a_link_running_narrower_than_x16_under_load_is_out_of_band(tmp_path):
+    """width.max read 16 on the A2000 while it ran x8: the gate reads the negotiated width under load."""
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 4, 16", gate_rc=3)
+    assert rc == 19 and not (w / "reached").exists() and not (w / "REFUSAL").exists()
+    rc, w = _run_box(tmp_path / "e", "NVIDIA GeForce RTX 5090, 4, 16", gate_rc=2)
+    assert rc == 9 and not (w / "REFUSAL").exists(), "an unreadable link is a harness error, not a host refusal"
