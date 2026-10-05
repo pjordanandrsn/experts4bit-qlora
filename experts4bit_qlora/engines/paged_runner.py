@@ -114,9 +114,17 @@ def chunk_rows(rids, max_bucket: int):
 
 class PagedModelRunner(StepRunner):
     def __init__(self, model, kv, *, device="cuda", eos_id: int | None = None,
-                 gpu_only_prefill: bool = True):
+                 gpu_only_prefill: bool = True, bulk_kv: bool = False):
         self.model = model
         self.kv = kv
+        # E4B_PAGED_BULK_KV (serve_paged): a request's KV bookkeeping -- the slot reset at bind and free, the prompt's
+        # flush into the pool, and (with decode graphs) the claim of every block the slot can reach -- in a launch count
+        # independent of layers and blocks (Fp8PagedKV.reset_all_layers / append_prompt / claim_blocks). The pool, the
+        # tables and the lengths it leaves are the per-layer forms'; off keeps the per-layer forms.
+        self.bulk_kv = bool(bulk_kv)
+        # which path each request's bookkeeping took (/health's kv_bookkeeping: a registered lane's engagement gate)
+        self._kv_counts = {"flush_layers": 0, "flush_bulk": 0, "ready_layers": 0, "ready_bulk": 0, "ready_at_flush": 0}
+        self.tracer = None           # engines.step_trace.StepTrace, set by serve_paged under E4B_PAGED_STEP_TRACE
         self.device = torch.device(device)
         self.eos_id = eos_id
         self.gpu_only_prefill = gpu_only_prefill
@@ -148,9 +156,15 @@ class PagedModelRunner(StepRunner):
         self.slot_of[rid] = slot
         self.pos_of[rid] = 0
         self.tokens[rid] = list(prompt)
-        self.kv.reset(slot)          # a recycled slot carries no history
+        self._reset(slot)            # a recycled slot carries no history
         if self.linear_state is not None:
             self.linear_state.reset(slot)
+
+    def _reset(self, slot: int) -> None:
+        if self.bulk_kv:
+            self.kv.reset_all_layers(slot)
+        else:
+            self.kv.reset(slot)
 
     def _mode(self, prefill: bool) -> None:
         if self.gpu_only_prefill:
@@ -169,6 +183,11 @@ class PagedModelRunner(StepRunner):
                 self.ctx.slots = [slot]
                 done = start + take >= len(self.tokens[rid])
                 pg = self._prefill_graph
+                if self.tracer is not None:
+                    self.tracer.count("prefill_chunks")
+                    self.tracer.count("prefill_tokens", take)
+                    self.tracer.count("prefill_replays", int(pg is not None and start == 0 and take == pg["T"]))
+                    self.tracer.mark("pf_prep", event=True)   # the GPU is idle here: forward device time starts
                 if pg is not None and start == 0 and take == pg["T"]:
                     logits = self._replay_prefill_graph(rid, slot, take, done)
                 else:
@@ -187,20 +206,31 @@ class PagedModelRunner(StepRunner):
                 if self.linear_state is not None:
                     self.linear_state.mark([slot])     # its linear layers now carry this prompt's state
                 self.pos_of[rid] = start + take
+                tr = self.tracer
+                if tr is not None:
+                    tr.mark("pf_forward", event=True)
                 if start + take >= len(self.tokens[rid]):
                     # prompt complete: the staged bf16 K/V become the
                     # sequence's FP8 residency, once, here (attention layers only)
-                    for layer in self.pool_layers:
-                        staged = self.ctx.flush(layer, slot)
-                        if staged is None:
-                            raise RuntimeError(
-                                f"layer {layer} staged no K/V for rid {rid} "
-                                f"— the attention implementation was not "
-                                f"bound for this forward")
-                        k, v = staged
-                        self.kv.append(layer, slot, k.contiguous(),
-                                       v.contiguous())
+                    if self.bulk_kv:
+                        self._flush_bulk(rid, slot)
+                    else:
+                        self._kv_counts["flush_layers"] += 1
+                        for layer in self.pool_layers:
+                            staged = self.ctx.flush(layer, slot)
+                            if staged is None:
+                                raise RuntimeError(
+                                    f"layer {layer} staged no K/V for rid {rid} "
+                                    f"— the attention implementation was not "
+                                    f"bound for this forward")
+                            k, v = staged
+                            self.kv.append(layer, slot, k.contiguous(),
+                                           v.contiguous())
+                    if tr is not None:
+                        tr.mark("pf_flush", event=True)
                     tok = int(logits[0, -1].argmax(-1))
+                    if tr is not None:
+                        tr.mark("pf_sync")
                     first[rid] = tok
                     self.tokens[rid].append(tok)
                     self.pos_of[rid] += 1
@@ -209,26 +239,54 @@ class PagedModelRunner(StepRunner):
             self._mode(False)
         return first
 
+    def _flush_bulk(self, rid: int, slot: int) -> None:
+        """The prompt's staged K/V into the pool for every pool layer at once (``Fp8PagedKV.append_prompt``). With
+        decode graphs the slot's every reachable block is claimed first, in the same single table write, so its first
+        graphed decode claims nothing (:meth:`_ensure_graph_ready`)."""
+        ks, vs = [], []
+        for layer in self.pool_layers:
+            buf = self.ctx.staging.pop((layer, slot), None)
+            if buf is None:
+                raise RuntimeError(f"layer {layer} staged no K/V for rid {rid} — the attention implementation was "
+                                   f"not bound for this forward")
+            ks.append(buf[0][0] if len(buf[0]) == 1 else torch.cat(buf[0]))
+            vs.append(buf[1][0] if len(buf[1]) == 1 else torch.cat(buf[1]))
+        if self._graphs is not None and slot not in self._graph_ready:
+            self.kv.claim_blocks(slot, self.kv.blocks_per_seq - 1, self.pool_layers)
+            self._graph_ready.add(slot)
+            self._kv_counts["ready_at_flush"] += 1
+        self.kv.append_prompt(slot, self.pool_layers, ks, vs)
+        self._kv_counts["flush_bulk"] += 1
+
     @torch.no_grad()
     def run_decode(self, rids):
         if not rids:
             return {}
         if self._graphs is not None:
             return self._run_decode_bucketed(rids)
+        tr = self.tracer
         self.ctx.mode = "decode"
         self.ctx.slots = [self.slot_of[r] for r in rids]
         ids = torch.tensor([[self.tokens[r][-1]] for r in rids],
                            dtype=torch.long, device=self.device)
         pos = torch.tensor([[self.pos_of[r] - 1] for r in rids],
                            dtype=torch.long, device=self.device)
+        if tr is not None:
+            tr.mark("dec_prep", event=True)
         prev = set_context(self.ctx)
         try:
             out = self.model(input_ids=ids, position_ids=pos,
                              use_cache=False)
         finally:
             set_context(prev)
+        if tr is not None:
+            tr.note(decode_rows=len(rids), bucket=None)
+            tr.mark("dec_issue", event=True)
+        toks = out.logits[:, -1].argmax(-1).tolist()
+        if tr is not None:
+            tr.mark("dec_sync")
         got: dict[int, int] = {}
-        for rid, tok in zip(rids, out.logits[:, -1].argmax(-1).tolist()):
+        for rid, tok in zip(rids, toks):
             got[rid] = int(tok)
             self.tokens[rid].append(int(tok))
             self.pos_of[rid] += 1
@@ -372,20 +430,30 @@ class PagedModelRunner(StepRunner):
         if slot in self._graph_ready:
             return
         last = self.kv.blocks_per_seq - 1
-        for layer in self.pool_layers:
-            self.kv._ensure_blocks(layer, slot, last)
+        if self.bulk_kv:
+            self.kv.claim_blocks(slot, last, self.pool_layers)
+            self._kv_counts["ready_bulk"] += 1
+        else:
+            for layer in self.pool_layers:
+                self.kv._ensure_blocks(layer, slot, last)
+            self._kv_counts["ready_layers"] += 1
         self._graph_ready.add(slot)
 
     def _run_decode_bucketed(self, rids):
         got: dict[int, int] = {}
         kv = self.kv
+        tr = self.tracer
         for chunk in chunk_rows(rids, self._buckets[-1]):
             n = len(chunk)
             b = bucket_for(n, self._buckets)
             buf = self._bufs[b]
             slots = [self.slot_of[r] for r in chunk]
+            if tr is not None:
+                tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
             for s_ in slots:
                 self._ensure_graph_ready(s_)
+            if tr is not None:
+                tr.mark("dec_ready")
             pad = b - n
             all_slots = slots + kv.scratch[:pad]
             ids = [self.tokens[r][-1] for r in chunk] + [0] * pad
@@ -393,6 +461,8 @@ class PagedModelRunner(StepRunner):
             buf["ids"].copy_(torch.tensor(ids, dtype=torch.long).view(b, 1), non_blocking=True)
             buf["pos"].copy_(torch.tensor(pos, dtype=torch.long).view(b, 1), non_blocking=True)
             kv.graph_bucket_load(buf["st"], all_slots)
+            if tr is not None:
+                tr.mark("dec_prep", event=True)
             g = self._graphs[b]
             stats = self.graph_stats[b]
             if g is not None:
@@ -410,13 +480,21 @@ class PagedModelRunner(StepRunner):
             kv.graph_bucket_publish(buf["st"])     # E4B_KV_STEP_SELECT: the step's +1, every layer at once
             stats["rows"] += n
             stats["pad_rows"] += pad
+            if tr is not None:
+                tr.count("decode_rows", n)
+                tr.note(bucket=b)
+                tr.mark("dec_issue", event=True)
             toks = buf["tok"][:n].tolist()
+            if tr is not None:
+                tr.mark("dec_sync")
             for rid, slot, tok in zip(chunk, slots, toks):
                 got[rid] = int(tok)
                 self.tokens[rid].append(int(tok))
                 self.pos_of[rid] += 1
                 for layer in self.pool_layers:
                     kv._seen[layer][slot] += 1     # the host mirror of the device append
+            if tr is not None:
+                tr.mark("dec_mirror")
         ctrl = getattr(self, "slot_controller", None)
         if ctrl is not None:
             ctrl.on_decode_step()
@@ -438,7 +516,9 @@ class PagedModelRunner(StepRunner):
         * with ``require_headroom`` (``E4B_PAGED_PREFILL_GRAPH=auto``), too little memory left. The graph keeps its
           forward's working set in a private pool for its life (SC2b measured +3.3 GiB on Qwen3-30B-A3B int4), where
           an eager prefill only borrows it, and a later chunk still runs eagerly and needs that working set again. So
-          ``auto`` stands down when the device's free memory after capture is below the pool's size.
+          ``auto`` stands down when the device's free memory after capture is below the pool's size. With ``bulk_kv``
+          the bulk flush's bound (``Fp8PagedKV.append_prompt_peak_bytes`` at the slot's capacity) is added: it
+          allocates on top of the pool.
 
         Returns :meth:`prefill_graph_stats`."""
         from . import hot_residency
@@ -467,13 +547,19 @@ class PagedModelRunner(StepRunner):
             torch.cuda.empty_cache()
             raise PrefillGraphRefused("memory: the graph's private pool could not be measured (no allocator segment "
                                       "carries its pool id), so the headroom rule cannot be applied")
-        if require_headroom and pg["free_after_bytes"] < pg["pool_bytes"]:
+        # with bulk KV bookkeeping, a prompt's flush allocates on top of the graph's private pool (nothing the
+        # forward returned is reusable while the pool holds it): count its bound, at the slot's capacity
+        pg["bulk_flush_bytes"] = (self.kv.append_prompt_peak_bytes(self.kv.blocks_per_seq * self.kv.bt, self.pool_layers)
+                                  if self.bulk_kv and hasattr(self.kv, "append_prompt_peak_bytes") else 0)
+        if require_headroom and pg["free_after_bytes"] < pg["pool_bytes"] + pg["bulk_flush_bytes"]:
             pool_mib, free_mib = pg["pool_bytes"] / 2**20, pg["free_after_bytes"] / 2**20
+            flush_mib = pg["bulk_flush_bytes"] / 2**20
             del pg
             torch.cuda.empty_cache()
             raise PrefillGraphRefused(
                 f"memory: the graph's private pool holds {pool_mib:.0f} MiB for its life and {free_mib:.0f} MiB is "
-                f"free after capture; a later chunk's eager forward needs about that working set again")
+                f"free after capture; a later chunk's eager forward needs about that working set again"
+                + (f", and the bulk KV flush up to {flush_mib:.0f} MiB more" if flush_mib else ""))
         self._prefill_graph = pg
         self._pg_refused = None
         self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
@@ -614,7 +700,8 @@ class PagedModelRunner(StepRunner):
         s = self._pg_stats
         return {"status": "on", "T": pg["T"], "replays": s["replays"],
                 "eager_chunks": s["eager_chunks"], "eager_reasons": dict(s["eager_reasons"]),
-                "pool_mib": round(pg.get("pool_bytes", 0) / 2**20), "free_after_mib": round(pg.get("free_after_bytes", 0) / 2**20)}
+                "pool_mib": round(pg.get("pool_bytes", 0) / 2**20), "free_after_mib": round(pg.get("free_after_bytes", 0) / 2**20),
+                "bulk_flush_mib": round(pg.get("bulk_flush_bytes", 0) / 2**20)}
 
     def note_prefill_graph_refused(self, why: str) -> None:
         """Record that an ``auto`` prefill graph stood down, and why: prefill stays eager, and the stats say so."""
@@ -624,6 +711,12 @@ class PagedModelRunner(StepRunner):
     def disable_prefill_graph(self) -> None:
         self._prefill_graph = None
 
+    def kv_bookkeeping_stats(self) -> dict:
+        """``bulk`` (``E4B_PAGED_BULK_KV``) and how many requests took each path: prompt flushes per layer
+        (``flush_layers``) or in bulk (``flush_bulk``); a graphed slot's block claims at its first decode, per layer
+        (``ready_layers``) or in bulk (``ready_bulk``), or already made at its flush (``ready_at_flush``)."""
+        return {"bulk": self.bulk_kv, **self._kv_counts}
+
     def free_slot(self, rid: int) -> None:
         slot = self.slot_of.pop(rid, None)
         if self._graphs is not None:
@@ -632,6 +725,6 @@ class PagedModelRunner(StepRunner):
         self.tokens.pop(rid, None)
         if slot is not None:
             self.ctx.drop(slot)      # any staging from an aborted prefill
-            self.kv.reset(slot)
+            self._reset(slot)
             if self.linear_state is not None:
                 self.linear_state.reset(slot)
