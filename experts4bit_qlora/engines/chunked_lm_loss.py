@@ -108,6 +108,7 @@ def _to_fp32(logits, config):
 #: row is pinned by tests/test_chunked_lm_loss.py (loss and every gradient against the stock forward, aux loss on).
 SUPPORTED = {
     "Qwen3MoeForCausalLM": ("qwen3_moe", _identity, "router_aux_loss_coef"),
+    "Qwen3ForCausalLM": ("qwen3", _identity, None),          # dense; transformers 5.18: logits = lm_head(h), no aux (DQ4)
     "Qwen3_5MoeForCausalLM": ("qwen3_5_moe", _identity, "router_aux_loss_coef"),
     "MixtralForCausalLM": ("mixtral", _identity, "router_aux_loss_coef"),
     "OlmoeForCausalLM": ("olmoe", _identity, "router_aux_loss_coef"),
