@@ -174,3 +174,30 @@ the opt-in off, the selection is unchanged.
 
 **Unchanged:** the rule, the gates, the arms, the predictions and the consequences. The engagement check in the rule
 also requires `num_hidden_layers` = 64 in every arm (a reduced rehearsal subject is VOID).
+
+## Amendment 2 (2026-10-05, before any 5090 box or data; found by the A2000 rehearsal, correctness only)
+
+**Today's offload could not train this subject; trainable parameters now never stream, on either path.** The stage-2
+rehearsal (`dq3-a2000-rehearse-2`) ran two shapes:
+- **Reduced width** (6 layers, hidden 1024): every arm passed. Loss and every LoRA gradient were bitwise equal across
+  R S S0 S0 S R. Counters: forward 5 + 9×4, backward 10×4, one blocking fetch (step 1), residency high-water 2.
+- **Qwen3-32B's real width** (4 layers): the **S0** arm crashed in its first `AdamW.step`, with "The size of tensor a (0)
+  must match the size of tensor b (16)".
+
+Cause: with the opt-in off, `enable_dense_offload` selected PEFT's trainable `lora_B` / `lora_A` matrices over
+`MIN_BYTES` (1.6 MB at 25600 wide) for streaming. That made 40 streamed tensors per layer instead of 28, and
+`per_layer_bytes` 248,709,120 instead of S's 243,793,920. Eviction then left the optimizer an empty placeholder.
+Amendment 1 had applied the skip to S only and stated that the off path's
+selection was unchanged.
+
+**The selection now skips trainable parameters unconditionally** (e4b `78e944c0`, `engines/dense_offload.py`), with two tests:
+- no path streams a trainable parameter;
+- AdamW over a large trainable matrix through the offloaded model matches the un-offloaded model bit for bit, on both
+  paths.
+
+Inference models have no trainable parameters, so their selection is unchanged. **S0 therefore means today's
+synchronous grad-mode staging with this fix.** The unfixed path cannot complete a step on this subject, so it has
+nothing to measure. S0 streams the same 28 tensors per layer as S.
+
+**Unchanged:** the registered rule above (`dq3_reduce.py` implements it as written), the gates, the arms, the predictions, the consequences and
+the guard. S0 still enters the parity gate (S0 ≠ R is FUNCTION_FAIL), and S0/R is still descriptive.
