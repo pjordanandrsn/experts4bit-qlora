@@ -91,7 +91,8 @@ def _synthetic(tmp_path, decoded_err_x, with_err=True, gpu="NVIDIA GeForce RTX 5
                 proj[call] = res
             cells.append({"fam": fam, "seq": seq, "routing": "skew", "groups": 64, "groups_under_16_rows": 0, "proj": proj})
     path = tmp_path / "rd.json"
-    path.write_text(json.dumps({"gpu": gpu, "torch": "t", "triton": "t", "cap_mib": 256, "reps": 20, "cells": cells}))
+    path.write_text(json.dumps({"gpu": gpu, "torch": "t", "triton": "t", "cap_mib": 256, "reps": 20, "cells": cells,
+                                "host_load1_probe": {"median": 2.0, "max": 3.0, "samples": 40, "gate": 5.0}}))
     p = subprocess.run([sys.executable, str(LANE / "rd_table.py"), str(path)], capture_output=True, text=True)
     assert p.returncode == 0, p.stderr
     return p.stdout
@@ -103,6 +104,26 @@ def test_the_gate_keeps_a_fast_wrong_arm_out_of_the_bar(tmp_path):
     bad = _synthetic(tmp_path, 3.0)                       # 3x dense's error on ONE call: qwen3 no longer counts
     assert "BAR DECODED (gated): 2/7" in bad and "NOT HELD" in bad
     assert "FAIL decoded_cap skew/qwen3/512 gate_up N=1 K=1/fwd" in bad
+
+
+def test_amendment_1_constants_are_the_registered_ones():
+    run, prereg = RUN.read_text(), PREREG.read_text()
+    assert "LOAD_MAX=5.0; LOAD_WAIT_S=600; ANCHOR_TRIES=3" in run
+    assert "## Amendment 1 (2026-10-05" in prereg and "load1 at or under 5.0" in prereg and "at most 3 anchor attempts" in prereg
+
+
+def test_a_loaded_probe_decides_nothing(tmp_path):
+    import json
+    _synthetic(tmp_path, 1.0)
+    path = tmp_path / "rd.json"
+    rec = json.loads(path.read_text())
+    for load, expect in ((3.2, "DECISION:"), (7.5, "NOT A DECISION"), (None, "NOT A DECISION")):
+        rec["host_load1_probe"] = {"median": load, "max": load, "samples": 40, "gate": 5.0} if load else {"samples": 0, "gate": 5.0}
+        path.write_text(json.dumps(rec))
+        out = subprocess.run([sys.executable, str(LANE / "rd_table.py"), str(path)], capture_output=True, text=True).stdout
+        assert expect in out, (load, out[-400:])
+        if expect == "NOT A DECISION":
+            assert "\nDECISION:" not in out
 
 
 def test_missing_error_fields_count_for_nothing(tmp_path):
