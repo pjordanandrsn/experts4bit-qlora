@@ -1,0 +1,186 @@
+{
+ "base": "http://127.0.0.1:30000",
+ "model": "sc2",
+ "profile": "sglang",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 6,
+ "seed": 1,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+ "plan": [
+  [
+   0.0,
+   17,
+   209
+  ],
+  [
+   0.0,
+   8,
+   129
+  ],
+  [
+   0.0,
+   15,
+   190
+  ],
+  [
+   0.0,
+   57,
+   184
+  ],
+  [
+   0.0,
+   48,
+   117
+  ],
+  [
+   0.0,
+   12,
+   188
+  ]
+ ],
+ "summary": {
+  "n": 6,
+  "valid": 6,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.4751,
+  "wall_s": 4.157,
+  "ttft_p50_s": 0.0269,
+  "ttft_p90_s": 0.028383,
+  "ttft_p99_s": 0.029153,
+  "tpot_p50_s": 0.003949,
+  "tpot_p90_s": 0.003954,
+  "tpot_p99_s": 0.003955,
+  "e2el_p50_s": 0.758329,
+  "e2el_p90_s": 0.811446,
+  "e2el_p99_s": 0.848452,
+  "ttft_mean_s": 0.02717,
+  "output_tok_s": 244.672,
+  "output_tokens": 1017,
+  "good": 6,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.4435,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " (the 9th was 2.. 1.. 2.. 1.. 1.. 1.. 1.. 1.. 1.. 2.. 2.. 2.. 1.. 2.. 2.. 1.. 1.. 3.. 2.. 2.. resumed ...\n\nThe text appears to be a historical account of a military engagement during the Korean War, specifically focusing on the actions of the 2nd and 9th North Korean Divisions. The narrative describes the movements, strategies, and outcomes of the North Korean forces in relation to the United Nations (UN) forces, particularly the United States (US) troops. The account highlights the challenges faced by the North Korean forces, including the loss of key positions, the impact of UN counterattacks, and the eventual withdrawal of North Korean troops from the Pusan Perimeter. The text also mentions the casualties suffered by the North Korean forces and the overall impact of the conflict on the region.\n\nThe text",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.852564,
+   "ttft_s": 0.029238,
+   "tpot_s": 0.003955,
+   "i": 0,
+   "prompt_index": 17,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 129,
+   "prompt_len": 512,
+   "t_send": 0.852793,
+   "text": " operational . The Japanese were not prepared for the attack on the American fleet at the Battle of Leyte Gulf . The Japanese had 1,000 aircraft and 1,200 pilots on the surface fleet , but the Japanese had 1,000 aircraft and 1,200 pilots on the surface fleet . The Japanese had 1, 2, 3, 4, 5, 6, 8, 9, 10, 12, 4, 5, 6, 7, 8, 9, 4, 8, 8, 8, 8, 8",
+   "completion_tokens": 129,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.531682,
+   "ttft_s": 0.027529,
+   "tpot_s": 0.003935,
+   "i": 1,
+   "prompt_index": 8,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 190,
+   "prompt_len": 512,
+   "t_send": 1.384606,
+   "text": "\u00a0\u2026\n\nIt appears that the text you provided is a historical account of a military operation involving Task Force Manchu during a conflict. The text describes the situation, the composition of the group, and the challenges they faced. However, it seems to be incomplete, and there might be some missing or garbled information.\n\nIf you have a specific question or if there's a particular aspect of the text you'd like to discuss or clarify, please let me know, and I'll do my best to assist you.\n\nIt seems like you're looking for a specific piece of information or a summary of the text. If you're asking for a\n\nIt looks like your message got cut off. Could you let me know what specific information or summary you're looking for regarding the text about Task Force Manchu? I'm here to help!\n\nIt seems you're asking for a summary or a specific detail from the text. If you're looking for a summary\n\nSure! Here's a concise summary",
+   "completion_tokens": 190,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.770328,
+   "ttft_s": 0.026722,
+   "tpot_s": 0.003933,
+   "i": 2,
+   "prompt_index": 15,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 184,
+   "prompt_len": 512,
+   "t_send": 2.15509,
+   "text": " **the** (???)????..??..????..????..????..??\n\nIt seems like the text you provided is a mix of chemical reactions and descriptions of various processes involving oxaziridines. However, there are some incomplete or unclear parts in the text. If you have specific questions or if there's a particular aspect you'd like to discuss or clarify, feel free to let me know!\n\nIt seems like the text you\n\nIt appears that the text you provided is a mix of chemical reactions and descriptions of various processes involving oxaziridines. However, there are some incomplete or unclear parts in the text. If you have specific questions or if there's a particular aspect you'd like to discuss or clarify, feel free to let me know!\n\nIt looks like you're discussing a complex chemical process involving oxaziridines, which are used in various reactions such as the synthesis of",
+   "completion_tokens": 184,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.749984,
+   "ttft_s": 0.026138,
+   "tpot_s": 0.003953,
+   "i": 3,
+   "prompt_index": 57,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 117,
+   "prompt_len": 512,
+   "t_send": 2.905245,
+   "text": "  and  ...\n\n\nWe have a long article about the 2011 Claxton Shield. The question: \"What was the name of the team that won the 2011 Claxton Shield?\" We need to find the team that won the 2011 Claxton Shield. The article says: \"The 2011 Claxton Shield was the 71st edition of the Claxton Shield, the national baseball championship of Australia. The tournament was held in the Australian Capital Territory from 1 to 12 July 2011. The tournament was won by the Canberra Cavalry.\"",
+   "completion_tokens": 117,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.484332,
+   "ttft_s": 0.026314,
+   "tpot_s": 0.003945,
+   "i": 4,
+   "prompt_index": 48,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 188,
+   "prompt_len": 512,
+   "t_send": 3.389704,
+   "text": " **?**?\u00a0\u00a0?\u00a0\u2026\u00a0?\u00a0\u2026\u00a0\u2026\u00a0?\u00a0?\u00a0\u2026\u00a0?\u00a0?\u00a0\u2026\u00a0?\u00a0?\u00a0?\u00a0i\u00a0\u2026\u00a0?\u00a0\u2026\u00a0\u2026\u00a0Ta\u00a0?\u00a0\u2026\u00a0\u2026\u00a0?\u00a0?\u00a0\u2026\u00a0?\u00a0??\u00a0\u2026\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026?\u00a0\u2026\u00a0\u2026\u2026\u2026\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026?\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026?\u2026\u2026\u2026?\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\n\nIt appears that the text you provided is a mix of historical information and some incomplete or corrupted text. The historical context is about the Korean War, specifically the North Korean offensive in 1950. However, the text is incomplete and contains some errors or missing information.\n\nIf",
+   "completion_tokens": 188,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.766674,
+   "ttft_s": 0.027078,
+   "tpot_s": 0.003953,
+   "i": 5,
+   "prompt_index": 12,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

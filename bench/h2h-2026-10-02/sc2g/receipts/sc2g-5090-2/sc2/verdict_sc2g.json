@@ -1,0 +1,907 @@
+{
+ "engines": {
+  "e4b_gptoss": {
+   "arith": "MXFP4 decode: T==1 GEMV on int8 activations (W4A8), K21 <= 256 rows on bf16 (W4A16); NF4 prefill (KEEP_NF4); sinks explicit-mask prefill",
+   "rows": {
+    "serial": {
+     "draws": [
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.165774,
+       "ttft_p99_s": 0.168851,
+       "tpot_p50_s": 0.006202,
+       "tpot_p99_s": 0.006456,
+       "e2el_p50_s": 1.290227,
+       "output_tok_s": 140.516,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 0.8105
+      },
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.166455,
+       "ttft_p99_s": 0.189652,
+       "tpot_p50_s": 0.006218,
+       "tpot_p99_s": 0.006624,
+       "e2el_p50_s": 1.313045,
+       "output_tok_s": 139.374,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 0.8041
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.166114,
+      "tpot_p50_s": 0.00621,
+      "output_tok_s": 139.945,
+      "attainment": 1.0
+     },
+     "status": "VALID",
+     "why": []
+    },
+    "1": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.178647,
+       "ttft_p99_s": 0.432914,
+       "tpot_p50_s": 0.010323,
+       "tpot_p99_s": 0.021172,
+       "e2el_p50_s": 1.858358,
+       "output_tok_s": 147.098,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.178237,
+       "ttft_p99_s": 0.435724,
+       "tpot_p50_s": 0.010312,
+       "tpot_p99_s": 0.021935,
+       "e2el_p50_s": 1.858326,
+       "output_tok_s": 147.094,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.178442,
+      "tpot_p50_s": 0.010318,
+      "output_tok_s": 147.096,
+      "attainment": 1.0,
+      "goodput_rps": 1.0
+     },
+     "tpot_spread": 0.0011,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "2": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.362255,
+       "ttft_p99_s": 2.356109,
+       "tpot_p50_s": 0.024366,
+       "tpot_p99_s": 0.044445,
+       "e2el_p50_s": 4.489003,
+       "output_tok_s": 388.442,
+       "attainment": 0.8083,
+       "goodput_rps": 1.6167,
+       "achieved_rate": 2.3172
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.329596,
+       "ttft_p99_s": 1.785676,
+       "tpot_p50_s": 0.024401,
+       "tpot_p99_s": 0.039947,
+       "e2el_p50_s": 4.427379,
+       "output_tok_s": 388.445,
+       "attainment": 0.8833,
+       "goodput_rps": 1.7667,
+       "achieved_rate": 2.3172
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.345925,
+      "tpot_p50_s": 0.024383,
+      "output_tok_s": 388.4435,
+      "attainment": 0.8458,
+      "goodput_rps": 1.6917
+     },
+     "tpot_spread": 0.0014,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    },
+    "4": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 5.891193,
+       "ttft_p99_s": 11.265243,
+       "tpot_p50_s": 0.031093,
+       "tpot_p99_s": 0.040712,
+       "e2el_p50_s": 10.826311,
+       "output_tok_s": 468.328,
+       "attainment": 0.1833,
+       "goodput_rps": 0.7333,
+       "achieved_rate": 4.3192
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 5.9252,
+       "ttft_p99_s": 11.424663,
+       "tpot_p50_s": 0.031193,
+       "tpot_p99_s": 0.041076,
+       "e2el_p50_s": 10.963075,
+       "output_tok_s": 468.767,
+       "attainment": 0.1833,
+       "goodput_rps": 0.7333,
+       "achieved_rate": 4.3192
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 5.908197,
+      "tpot_p50_s": 0.031143,
+      "output_tok_s": 468.5475,
+      "attainment": 0.1833,
+      "goodput_rps": 0.7333
+     },
+     "tpot_spread": 0.0032,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    },
+    "8": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 10.290029,
+       "ttft_p99_s": 22.448587,
+       "tpot_p50_s": 0.033126,
+       "tpot_p99_s": 0.041877,
+       "e2el_p50_s": 14.45996,
+       "output_tok_s": 445.768,
+       "attainment": 0.1167,
+       "goodput_rps": 0.9333,
+       "achieved_rate": 8.1029
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 10.324227,
+       "ttft_p99_s": 22.417925,
+       "tpot_p50_s": 0.032927,
+       "tpot_p99_s": 0.040885,
+       "e2el_p50_s": 14.603181,
+       "output_tok_s": 446.078,
+       "attainment": 0.1,
+       "goodput_rps": 0.8,
+       "achieved_rate": 8.1029
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 10.307128,
+      "tpot_p50_s": 0.033027,
+      "output_tok_s": 445.923,
+      "attainment": 0.10835,
+      "goodput_rps": 0.86665
+     },
+     "tpot_spread": 0.006,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    }
+   },
+   "ceiling": 1
+  },
+  "vllm": {
+   "arith": "Marlin W4A16; TRITON_ATTN",
+   "rows": {
+    "serial": {
+     "draws": [
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.032856,
+       "ttft_p99_s": 0.033568,
+       "tpot_p50_s": 0.003561,
+       "tpot_p99_s": 0.003568,
+       "e2el_p50_s": 0.679728,
+       "output_tok_s": 268.008,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.5466
+      },
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.032886,
+       "ttft_p99_s": 0.033616,
+       "tpot_p50_s": 0.003566,
+       "tpot_p99_s": 0.00357,
+       "e2el_p50_s": 0.680212,
+       "output_tok_s": 267.796,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.5455
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.032871,
+      "tpot_p50_s": 0.003563,
+      "output_tok_s": 267.902,
+      "attainment": 1.0
+     },
+     "status": "VALID",
+     "why": []
+    },
+    "1": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.034532,
+       "ttft_p99_s": 0.055043,
+       "tpot_p50_s": 0.004341,
+       "tpot_p99_s": 0.00566,
+       "e2el_p50_s": 0.738498,
+       "output_tok_s": 148.356,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.034547,
+       "ttft_p99_s": 0.05095,
+       "tpot_p50_s": 0.004354,
+       "tpot_p99_s": 0.005615,
+       "e2el_p50_s": 0.742511,
+       "output_tok_s": 148.358,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.03454,
+      "tpot_p50_s": 0.004348,
+      "output_tok_s": 148.357,
+      "attainment": 1.0,
+      "goodput_rps": 1.0
+     },
+     "tpot_spread": 0.003,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "2": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.037379,
+       "ttft_p99_s": 0.063409,
+       "tpot_p50_s": 0.005577,
+       "tpot_p99_s": 0.007114,
+       "e2el_p50_s": 0.971311,
+       "output_tok_s": 396.234,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 2.3172
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.037402,
+       "ttft_p99_s": 0.061374,
+       "tpot_p50_s": 0.005647,
+       "tpot_p99_s": 0.007159,
+       "e2el_p50_s": 0.979604,
+       "output_tok_s": 396.163,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 2.3172
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.037391,
+      "tpot_p50_s": 0.005612,
+      "output_tok_s": 396.1985,
+      "attainment": 1.0,
+      "goodput_rps": 2.0
+     },
+     "tpot_spread": 0.0124,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "4": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.040318,
+       "ttft_p99_s": 0.074827,
+       "tpot_p50_s": 0.006953,
+       "tpot_p99_s": 0.008381,
+       "e2el_p50_s": 1.200929,
+       "output_tok_s": 671.033,
+       "attainment": 1.0,
+       "goodput_rps": 4.0,
+       "achieved_rate": 4.3191
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.040278,
+       "ttft_p99_s": 0.073757,
+       "tpot_p50_s": 0.006948,
+       "tpot_p99_s": 0.008465,
+       "e2el_p50_s": 1.20402,
+       "output_tok_s": 670.786,
+       "attainment": 1.0,
+       "goodput_rps": 4.0,
+       "achieved_rate": 4.3191
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.040298,
+      "tpot_p50_s": 0.006951,
+      "output_tok_s": 670.9095,
+      "attainment": 1.0,
+      "goodput_rps": 4.0
+     },
+     "tpot_spread": 0.0007,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "8": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.046347,
+       "ttft_p99_s": 0.589232,
+       "tpot_p50_s": 0.008974,
+       "tpot_p99_s": 0.010414,
+       "e2el_p50_s": 1.31391,
+       "output_tok_s": 1124.725,
+       "attainment": 1.0,
+       "goodput_rps": 8.0,
+       "achieved_rate": 8.1029
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.046777,
+       "ttft_p99_s": 0.574482,
+       "tpot_p50_s": 0.009024,
+       "tpot_p99_s": 0.010388,
+       "e2el_p50_s": 1.319729,
+       "output_tok_s": 1124.601,
+       "attainment": 1.0,
+       "goodput_rps": 8.0,
+       "achieved_rate": 8.1031
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.046562,
+      "tpot_p50_s": 0.008999,
+      "output_tok_s": 1124.663,
+      "attainment": 1.0,
+      "goodput_rps": 8.0
+     },
+     "tpot_spread": 0.0055,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    }
+   },
+   "ceiling": 8
+  },
+  "sglang": {
+   "arith": "SGLang default MXFP4 runner on sm_120 (recorded); triton attention",
+   "rows": {
+    "serial": {
+     "draws": [
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.023933,
+       "ttft_p99_s": 0.024849,
+       "tpot_p50_s": 0.00406,
+       "tpot_p99_s": 0.0041,
+       "e2el_p50_s": 0.761606,
+       "output_tok_s": 239.295,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.3811
+      },
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.023718,
+       "ttft_p99_s": 0.024188,
+       "tpot_p50_s": 0.004067,
+       "tpot_p99_s": 0.004077,
+       "e2el_p50_s": 0.762213,
+       "output_tok_s": 239.158,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.3804
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.023825,
+      "tpot_p50_s": 0.004064,
+      "output_tok_s": 239.2265,
+      "attainment": 1.0
+     },
+     "status": "VALID",
+     "why": []
+    },
+    "1": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.024613,
+       "ttft_p99_s": 0.040302,
+       "tpot_p50_s": 0.004659,
+       "tpot_p99_s": 0.006201,
+       "e2el_p50_s": 0.804939,
+       "output_tok_s": 148.26,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.024643,
+       "ttft_p99_s": 0.035711,
+       "tpot_p50_s": 0.004696,
+       "tpot_p99_s": 0.006119,
+       "e2el_p50_s": 0.806497,
+       "output_tok_s": 148.252,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.024628,
+      "tpot_p50_s": 0.004677,
+      "output_tok_s": 148.256,
+      "attainment": 1.0,
+      "goodput_rps": 1.0
+     },
+     "tpot_spread": 0.0079,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "2": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.028847,
+       "ttft_p99_s": 1.502723,
+       "tpot_p50_s": 0.006379,
+       "tpot_p99_s": 0.014989,
+       "e2el_p50_s": 1.054651,
+       "output_tok_s": 395.865,
+       "attainment": 0.975,
+       "goodput_rps": 1.95,
+       "achieved_rate": 2.3172
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.029355,
+       "ttft_p99_s": 0.041698,
+       "tpot_p50_s": 0.006251,
+       "tpot_p99_s": 0.007734,
+       "e2el_p50_s": 1.051623,
+       "output_tok_s": 395.797,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 2.3172
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.029101,
+      "tpot_p50_s": 0.006315,
+      "output_tok_s": 395.831,
+      "attainment": 0.9875,
+      "goodput_rps": 1.975
+     },
+     "tpot_spread": 0.0201,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "4": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.031294,
+       "ttft_p99_s": 0.045994,
+       "tpot_p50_s": 0.007591,
+       "tpot_p99_s": 0.008809,
+       "e2el_p50_s": 1.282452,
+       "output_tok_s": 668.964,
+       "attainment": 1.0,
+       "goodput_rps": 4.0,
+       "achieved_rate": 4.3191
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.030895,
+       "ttft_p99_s": 0.044234,
+       "tpot_p50_s": 0.007517,
+       "tpot_p99_s": 0.008793,
+       "e2el_p50_s": 1.266178,
+       "output_tok_s": 669.789,
+       "attainment": 1.0,
+       "goodput_rps": 4.0,
+       "achieved_rate": 4.3191
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.031095,
+      "tpot_p50_s": 0.007554,
+      "output_tok_s": 669.3765,
+      "attainment": 1.0,
+      "goodput_rps": 4.0
+     },
+     "tpot_spread": 0.0097,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "8": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.034614,
+       "ttft_p99_s": 0.549714,
+       "tpot_p50_s": 0.009168,
+       "tpot_p99_s": 0.010344,
+       "e2el_p50_s": 1.336565,
+       "output_tok_s": 1121.94,
+       "attainment": 1.0,
+       "goodput_rps": 8.0,
+       "achieved_rate": 8.1028
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.034077,
+       "ttft_p99_s": 0.537356,
+       "tpot_p50_s": 0.009177,
+       "tpot_p99_s": 0.010435,
+       "e2el_p50_s": 1.313709,
+       "output_tok_s": 1122.577,
+       "attainment": 1.0,
+       "goodput_rps": 8.0,
+       "achieved_rate": 8.1025
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.034346,
+      "tpot_p50_s": 0.009173,
+      "output_tok_s": 1122.2585,
+      "attainment": 1.0,
+      "goodput_rps": 8.0
+     },
+     "tpot_spread": 0.001,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    }
+   },
+   "ceiling": 8
+  },
+  "llamacpp": {
+   "arith": "published GGUF (attention Q8_0); MMVQ W4A8 decode, MMQ W4A4 prefill",
+   "rows": {
+    "serial": {
+     "draws": [
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.050927,
+       "ttft_p99_s": 0.052418,
+       "tpot_p50_s": 0.003026,
+       "tpot_p99_s": 0.00305,
+       "e2el_p50_s": 0.600673,
+       "output_tok_s": 303.804,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.7522
+      },
+      {
+       "valid": 24,
+       "ttft_p50_s": 0.04445,
+       "ttft_p99_s": 0.155767,
+       "tpot_p50_s": 0.003027,
+       "tpot_p99_s": 0.003266,
+       "e2el_p50_s": 0.592741,
+       "output_tok_s": 300.463,
+       "attainment": 1.0,
+       "goodput_rps": null,
+       "achieved_rate": 1.732
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.047689,
+      "tpot_p50_s": 0.003027,
+      "output_tok_s": 302.1335,
+      "attainment": 1.0
+     },
+     "status": "UNSTABLE",
+     "why": [
+      "p50 TTFT 0.050927 vs 0.04445"
+     ]
+    },
+    "1": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.049888,
+       "ttft_p99_s": 0.090505,
+       "tpot_p50_s": 0.005576,
+       "tpot_p99_s": 0.019239,
+       "e2el_p50_s": 0.934546,
+       "output_tok_s": 148.212,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.046626,
+       "ttft_p99_s": 0.096602,
+       "tpot_p50_s": 0.005837,
+       "tpot_p99_s": 0.018482,
+       "e2el_p50_s": 0.900218,
+       "output_tok_s": 148.239,
+       "attainment": 1.0,
+       "goodput_rps": 1.0,
+       "achieved_rate": 0.9228
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.048257,
+      "tpot_p50_s": 0.005706,
+      "output_tok_s": 148.2255,
+      "attainment": 1.0,
+      "goodput_rps": 1.0
+     },
+     "tpot_spread": 0.0447,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "2": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.093896,
+       "ttft_p99_s": 0.17205,
+       "tpot_p50_s": 0.022948,
+       "tpot_p99_s": 0.026061,
+       "e2el_p50_s": 3.492393,
+       "output_tok_s": 391.71,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 2.3172
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 0.087973,
+       "ttft_p99_s": 0.244325,
+       "tpot_p50_s": 0.021609,
+       "tpot_p99_s": 0.026184,
+       "e2el_p50_s": 3.224132,
+       "output_tok_s": 394.564,
+       "attainment": 1.0,
+       "goodput_rps": 2.0,
+       "achieved_rate": 2.3172
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 0.090935,
+      "tpot_p50_s": 0.022278,
+      "output_tok_s": 393.137,
+      "attainment": 1.0,
+      "goodput_rps": 2.0
+     },
+     "tpot_spread": 0.0583,
+     "tpot_spread_over_band": false,
+     "meets_capacity": true,
+     "status": "VALID",
+     "why": []
+    },
+    "4": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 1.015224,
+       "ttft_p99_s": 3.137093,
+       "tpot_p50_s": 0.021788,
+       "tpot_p99_s": 0.02717,
+       "e2el_p50_s": 4.75657,
+       "output_tok_s": 602.676,
+       "attainment": 0.4917,
+       "goodput_rps": 1.9667,
+       "achieved_rate": 4.3191
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 1.144303,
+       "ttft_p99_s": 3.306102,
+       "tpot_p50_s": 0.022155,
+       "tpot_p99_s": 0.026259,
+       "e2el_p50_s": 4.883123,
+       "output_tok_s": 600.52,
+       "attainment": 0.475,
+       "goodput_rps": 1.9,
+       "achieved_rate": 4.3193
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 1.079763,
+      "tpot_p50_s": 0.021971,
+      "output_tok_s": 601.598,
+      "attainment": 0.48335,
+      "goodput_rps": 1.93335
+     },
+     "tpot_spread": 0.0166,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    },
+    "8": {
+     "draws": [
+      {
+       "valid": 120,
+       "ttft_p50_s": 4.279354,
+       "ttft_p99_s": 10.759009,
+       "tpot_p50_s": 0.022983,
+       "tpot_p99_s": 0.025627,
+       "e2el_p50_s": 7.467027,
+       "output_tok_s": 631.698,
+       "attainment": 0.175,
+       "goodput_rps": 1.4,
+       "achieved_rate": 8.103
+      },
+      {
+       "valid": 120,
+       "ttft_p50_s": 4.254917,
+       "ttft_p99_s": 10.657727,
+       "tpot_p50_s": 0.022959,
+       "tpot_p99_s": 0.025665,
+       "e2el_p50_s": 7.441854,
+       "output_tok_s": 633.46,
+       "attainment": 0.175,
+       "goodput_rps": 1.4,
+       "achieved_rate": 8.1027
+      }
+     ],
+     "mean": {
+      "ttft_p50_s": 4.267136,
+      "tpot_p50_s": 0.022971,
+      "output_tok_s": 632.579,
+      "attainment": 0.175,
+      "goodput_rps": 1.4
+     },
+     "tpot_spread": 0.001,
+     "tpot_spread_over_band": false,
+     "meets_capacity": false,
+     "status": "VALID",
+     "why": []
+    }
+   },
+   "ceiling": 2
+  }
+ },
+ "predictions": {
+  "Q1": {
+   "verdict": "HOLDS",
+   "ratio": 5.0535,
+   "label": "ARITH_MISMATCH"
+  },
+  "Q2": {
+   "verdict": "REFUTED",
+   "ratio": 1.7429,
+   "label": "ARITH_MISMATCH"
+  },
+  "Q3": {
+   "verdict": "HOLDS",
+   "ceilings": {
+    "e4b_gptoss": 1,
+    "vllm": 8,
+    "sglang": 8,
+    "llamacpp": 2
+   }
+  },
+  "Q4": {
+   "verdict": "HOLDS",
+   "fit": {
+    "decode_ms_per_token": 8.939,
+    "stall_s_per_prefill": 0.2452,
+    "r2": 0.9841,
+    "n": 1008
+   },
+   "stall_over_token": 27.43
+  },
+  "Q5": {
+   "verdict": "REFUTED",
+   "statuses": {
+    "e4b_gptoss": {
+     "serial": "VALID",
+     "1": "VALID",
+     "2": "VALID",
+     "4": "VALID",
+     "8": "VALID"
+    },
+    "vllm": {
+     "serial": "VALID",
+     "1": "VALID",
+     "2": "VALID",
+     "4": "VALID",
+     "8": "VALID"
+    },
+    "sglang": {
+     "serial": "VALID",
+     "1": "VALID",
+     "2": "VALID",
+     "4": "VALID",
+     "8": "VALID"
+    },
+    "llamacpp": {
+     "serial": "UNSTABLE",
+     "1": "VALID",
+     "2": "VALID",
+     "4": "VALID",
+     "8": "VALID"
+    }
+   }
+  }
+ },
+ "report": {
+  "e4b_gptoss_vs_vllm": {
+   "label": "ARITH_MISMATCH",
+   "serial_ttft_p50_s_ratio": 5.0535,
+   "serial_tpot_p50_s_ratio": 1.7429,
+   "goodput_r1_ratio": 1.0,
+   "goodput_r2_ratio": 0.8458,
+   "goodput_r4_ratio": 0.1833,
+   "goodput_r8_ratio": 0.1084
+  },
+  "e4b_gptoss_vs_sglang": {
+   "label": "ARITH_MISMATCH",
+   "serial_ttft_p50_s_ratio": 6.9723,
+   "serial_tpot_p50_s_ratio": 1.5281,
+   "goodput_r1_ratio": 1.0,
+   "goodput_r2_ratio": 0.8565,
+   "goodput_r4_ratio": 0.1833,
+   "goodput_r8_ratio": 0.1084
+  },
+  "e4b_gptoss_vs_llamacpp": {
+   "label": "ARITH_MISMATCH",
+   "serial_ttft_p50_s_ratio": null,
+   "serial_tpot_p50_s_ratio": null,
+   "goodput_r1_ratio": 1.0,
+   "goodput_r2_ratio": 0.8458,
+   "goodput_r4_ratio": 0.3792,
+   "goodput_r8_ratio": 0.6191
+  }
+ }
+}

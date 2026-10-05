@@ -1,0 +1,140 @@
+{
+ "base": "http://127.0.0.1:8000",
+ "model": "sc2",
+ "profile": "vllm",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 0.9464,
+  "wall_s": 4.011,
+  "ttft_p50_s": 0.032923,
+  "ttft_p90_s": 0.632266,
+  "ttft_p99_s": 0.863431,
+  "tpot_p50_s": 0.00356,
+  "tpot_p90_s": 0.003562,
+  "tpot_p99_s": 0.003563,
+  "e2el_p50_s": 0.842556,
+  "e2el_p90_s": 1.394032,
+  "e2el_p99_s": 1.606171,
+  "ttft_mean_s": 0.246958,
+  "output_tok_s": 212.656,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 0.9972,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": "\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026..\u2026\u2026\u2026\u2026\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026?\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u00a0\u2026\u2026\u2026\n\nThe text you provided appears to be a mix of a biographical entry about a person named Rifenburg and a description of the 1933 Treasure Coast hurricane. The biographical section details Rifenburg's life, career, and posthumous honors, while the hurricane section provides a historical account of the storm's path and impact. The text seems to be incomplete or truncated at the end, especially in the hurricane section. If you have a specific question or need further information about either topic, feel free to ask!\n\nIt seems like you're looking for a summary or a clearer explanation of the text. Here's a concise summary:\n\n**R\n\nIt looks like your message got cut off. If you were looking for a summary of the text about Rifenburg and the 1933 Treasure",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.629742,
+   "ttft_s": 0.889116,
+   "tpot_s": 0.00356,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 1.629848,
+   "text": " \nWe need to find the \"first name of the person who won the 2002 King of the Ring.\" The article says: \"He was also the 2002 King of the Ring and the 2003 Royal Rumble winner.\" So the winner of 2002 King of the Ring is Brock Lesnar. The first name is Brock. But we need to provide the answer with a citation. Let's find the part that says \"2002 King of the Ring\" in the article. Search for \"2002 King of the Ring\" in the article. Use find.assistantanalysis to=browser.find code{\"cursor\": 1, \"pattern\": \"2002 King of the Ring\"}commentaryIt didn't find. Let's search for \"King of the Ring\" in the article.assistantanalysis to=browser.find code{\"cursor\": 1, \"pattern\": \"",
+   "completion_tokens": 187,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 10,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.695877,
+   "ttft_s": 0.032898,
+   "tpot_s": 0.003563,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 2.325795,
+   "text": "st\u00a0\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0..\u00a0..\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0@\u2026\u00a0..\u00a0We\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026..\u2026\u2026\u2026\n\nIt appears that the text you provided is a historical account of a military operation, specifically the Battle of Yongsan, which took place during the Korean War. The text describes the movements and actions of various military units, including the 1st Battalion, 23rd Infantry, and the 3rd Battalion, 38th Infantry, as well as the challenges they faced in defending against North Korean forces. The text also mentions the use of air support and artillery in the operation.\n\nIt seems like you have a detailed historical account of a military operation, specifically the Battle of Yongsan, which took place during the Korean War. The text describes the movements and\n\nIt appears that the text you provided is a historical account of a military operation, specifically the Battle",
+   "completion_tokens": 229,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.844043,
+   "ttft_s": 0.032872,
+   "tpot_s": 0.003557,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 3.170002,
+   "text": ".............. (????....??.. **????..??..??.. **??......\u2026......\u2026....??..\u2026.. **..\u2026..........\u2026....\u2026....\u2026\u2026\u2026..\u2026\u2026....\u2026??..???..??..\u2026..???..\u2026....\u2026....\u2026\u2026..??.. **..\u2026\u2026..\u2026..\u2026..\u2026..\u2026 co\u2026......?..??..??....??....\u2026..??..\u2026\u2026..??....\u2026\u2026..\u2026\u2026.. **\u2026..??..\u2026\u2026..\u2026..\u2026..\u2026\u2026\u2026\u2026..\u2026\u2026..\u2026\u2026\u2026..\u2026\u2026\u2026\u2026\u2026\u2026\u2026..??\u2026\u2026..\u2026\u2026..\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026..\u2026\u2026\u2026\u2026\u2026\u2026..\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026?\u2026\u2026..??\u2026\u2026\n\nIt appears that the text you provided is a mix of unrelated content, possibly from different sources or documents. It includes information about a person named",
+   "completion_tokens": 228,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.84107,
+   "ttft_s": 0.032948,
+   "tpot_s": 0.003559,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}
