@@ -114,6 +114,8 @@ Both are checked bitwise against the library path. The check covers:
   `3e7b75a5` builds each index once.
 - `a2000-kv3` and `a2000-kv4` also ran the bulk-KV tests and the paged-serving suites under CUDA: 189 passed, 5
   skipped.
+- `a2000-kv5`: e4b `acf32d1c`, after #1131's review. CUDA suites: 191 passed, 5 skipped, including the flush's
+  memory bound against the allocator's measured peak (48 layers, 2048 tokens: bytes, not time). Parity bitwise again.
 
 ## 4. The decomposition for SC2b's ON servers (box F: a 400 W RTX 5090, EPYC 7C13)
 
@@ -214,11 +216,11 @@ without SC2b's 400 W cap.
 | `kv_bookkeeping_bench.py` | the bench as run in `a2000-kv3` and `a2000-kv4` (three arms) |
 | `a2000-kv1/kv_bookkeeping_bench.run1-2.py` | the bench as run in `a2000-kv1` and `a2000-kv2` (two arms) |
 | `run_kvbench.sh`, `run_gpucheck.sh` | the NAS drivers. `run_gpucheck.sh` also runs the CUDA tests; a copy sits in `a2000-kv4/` |
-| `a2000-kv1/` … `a2000-kv4/` | each run's log and JSON (kv4 also has the pytest tail) |
+| `a2000-kv1/` … `a2000-kv5/` | each run's log and JSON (kv4 and kv5 also have the pytest tail) |
 | `capsim.py`, `capsim-calibrate.txt`, `capsim-project.txt` | the scheduler model and its two outputs |
 
 The refit tool is `bench/sc2/sc2c_census.py` (`fit`), run on SC2b's committed traces.
 
-**Spend: $0.** Four A2000 runs on the NAS, 2026-10-05 08:07–08:48Z, each claimed on the bus. They are counts and
+**Spend: $0.** Five A2000 runs on the NAS, 2026-10-05 08:07–09:48Z, each claimed on the bus. They are counts and
 correctness only: the raw receipts carry the bench's host and GPU times, which on this testbed are not speed evidence
 (e4b#1133) and are not read anywhere above.
