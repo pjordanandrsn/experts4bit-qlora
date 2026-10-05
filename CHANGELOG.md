@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### DQ1 run 1 read NOISY (instrument diagnosed); Amendment 1 registered before run 2 (bench and tests only)
+
+- **`dq1-5090-1`** ($0.067, RTX 5090 on PCIe 4.0 x16, EPYC 7C13). The census ran complete, every arm passed parity and
+  engagement, and the teardown is proven. 37 of 250 self-pairs fell out of band, so the registered rule withholds every
+  verdict. None is reported.
+- **Cause, diagnosed** (`bench/dq1/RESULTS-dq1.md`). A boost transient after the 1.5 s warm-up made the first-timed arm
+  (bf16, position 1) about 10% fast on the large shapes. Its position 2 and an independent estimate of the same GEMM agree
+  to 0.985–1.009.
+- **Amendment 1.** Warm to a steady GEMM rate before every cell and the probe, and record it. The rule is byte-identical
+  (pinned in `tests/test_dq1_lane.py`), and the predictions and consequences are unchanged. Run 2 is the registered single
+  re-run on another host.
+
 ### MG1 amendment 3 read: Qwen3.6-35B-A3B enters `fast_train = supported` (P8 HELD: the dgrad kernel served every frozen-GEMM backward of tp1's licensed fused arm) (docs and receipts)
 
 - **The read** ([`bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md`](bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md), one RTX 5090,

@@ -153,3 +153,28 @@ no proving rental is needed. Expected actual is under $0.50; the run sits inside
 Before the rental, the census (on reduced rows) and the reducer run on the RTX A2000 through the local pool
 (`tools/pool run --gpu cuda`). Its receipt is marked `rehearsal` and can never be graded. It checks only that every arm
 runs, engages and passes parity on sm_86.
+
+## Amendment 1 (registered 2026-10-05, after run 1 read NOISY, before run 2)
+
+**Why.** Run 1 (`dq1-5090-1`, [RESULTS-dq1.md](RESULTS-dq1.md)) read NOISY: 37 of 250 self-pairs fell out of band.
+The dominant group is diagnosed. The first timed arm of each cell (bf16, position 1) ran inside a boost transient that the
+1.5 s warm-up left behind: it read ~10% fast against both its own position 2 and an independent estimate of the same
+GEMM. Re-running an unchanged instrument would re-read the same transient.
+
+**The change: the instrument only.**
+- `busy(1.5 s)` becomes `warm_until_steady`. It runs sustained 4096³ bf16 matmuls in ~0.25 s blocks until at least 4 s
+  have passed and the last four blocks' rates agree within 1%, capped at 30 s.
+- It runs before every cell and before the streaming probe.
+- Each cell records the warm-up it got (seconds, first and steady TF/s, whether it reached steady) and one block's rate at
+  the cell's end (`end_tflops`).
+- The receipt carries `"amendment": 1`.
+
+**Unchanged:**
+- the subject, arms, rows, palindrome, draws and parity;
+- the rule (`dq1_reduce.py` is byte-identical to run 1's);
+- the predictions and consequences.
+
+The warm-up and end rates are recorded for the read; they are not graded.
+
+**Run 2** is the registered "one re-run on another host". `avoid_vast_machine_receipts` carries run 1's receipt so the
+launcher does not re-buy its machine. A second VOID or NOISY stops the lane as an instrument finding, as registered.

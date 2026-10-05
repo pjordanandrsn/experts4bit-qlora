@@ -87,3 +87,22 @@ def test_every_rule_mutant_is_killed(tmp_path):
         if "self-test FAILED" not in out.stdout:
             survived.append((old, out.stdout[-200:] + out.stderr[-200:]))
     assert not survived, survived
+
+
+# Amendment 1 (DQ1-PREREG.md): the instrument's warm-up changes; the rule does not. The reducer must stay byte-identical to
+# the one run 1 (dq1-5090-1) staged and graded with, and the census must warm to steady state before every cell and the probe.
+RUN1_REDUCER_SHA256 = "2ba4e1e4875ec9795c2c6986540eaf2209dda4e4a0de3b153dbcaeedfe596de5"
+
+
+def test_amendment_1_leaves_the_rule_byte_identical():
+    import hashlib
+    assert hashlib.sha256((LANE / "dq1_reduce.py").read_bytes()).hexdigest() == RUN1_REDUCER_SHA256
+
+
+def test_amendment_1_warms_to_steady_state():
+    census = (LANE / "dq1_census.py").read_text()
+    assert 'cell["warm"] = warm_until_steady(args.warm_s, args.warm_max_s)' in census
+    assert '"warm": warm_until_steady(args.warm_s, args.warm_max_s)' in census           # the streaming probe
+    assert 'cell["warm"]["end_tflops"]' in census and '"amendment": 1' in census
+    assert "busy(" not in census                                                          # the fixed-time warm-up is gone
+    assert 'default=4.0' in census and 'default=30.0' in census
