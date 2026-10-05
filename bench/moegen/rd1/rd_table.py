@@ -25,6 +25,7 @@ import sys
 MANY = ("olmoe", "lfm2", "ernie", "graniteh", "qwen3", "nemotron", "qwen36")
 ARMS = ("v1", "v3", "dense", "decoded", "decoded_cap")
 GATE_X = 2.0
+LOAD_MAX = 5.0          # amendment 1's registered host-load gate; never read back from the receipt (a self-report)
 
 
 def gate_call(m, dense):
@@ -66,9 +67,22 @@ def layer(c):
     return tot, missing, extra, gate, fails
 
 
+def load_ok(rec):
+    """Amendment 1: a decision needs the probe's host-load summary, with a median load1 at or under its gate."""
+    h = rec.get("host_load1_probe") or {}
+    return bool(h.get("samples")) and h.get("median", float("inf")) <= LOAD_MAX
+
+
 def main(path):
     rec = json.load(open(path))
-    print(f"{rec['gpu']}, torch {rec['torch']}, triton {rec['triton']}; decode cap {rec['cap_mib']} MiB; {rec['reps']} reps\n")
+    if "5090" not in rec["gpu"]:
+        # Not the registered card: no timing column, no bar, no decision -- only the correctness gate (the QNAP A2000 is a
+        # correctness testbed; a timing-derived bar printed from it, even labelled "no decision", is speed evidence).
+        print(f"NOT THE REGISTERED CARD ({rec['gpu']}): correctness only -- the gate below, no timing, no bar\n")
+        gate_only(path)
+        return
+    print(f"{rec['gpu']}, torch {rec['torch']}, triton {rec['triton']}; decode cap {rec['cap_mib']} MiB; {rec['reps']} reps")
+    print(f"host load1 over the probe: {rec.get('host_load1_probe', 'not recorded')}\n")
     print("| routing | family | seq | groups (<16 rows) | v1 ev ms | v3 / v1 | dense / v1 | decoded / v1 | decoded_cap / v1 "
           "| decoded_cap / best(v1,v3,dense) | ev / dev (decoded_cap) | peak MiB v1 / v3 / dense / decoded / cap (chunks) | µs per extra chunk | gate cap / v3 / v1 |")
     print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
@@ -110,6 +124,9 @@ def main(path):
         print("NOT THE REGISTERED GRID: the skewed draw at seq 512 and 2048 for all seven families is incomplete; no decision")
     elif "5090" not in rec["gpu"]:
         print(f"NOT THE REGISTERED CARD ({rec['gpu']}): the bar is scored as a filter only; no decision")
+    elif not load_ok(rec):
+        print(f"NOT A DECISION (amendment 1): the host's load during the probe was {rec.get('host_load1_probe')} -- missing, "
+              f"or a median load1 above the gate; this draw decides nothing")
     else:
         print("DECISION: " + ("an opt-in decoded route in grouped-nf4-gemm, then a TC1 full-step A/B" if len(dec) >= 3 else
                               "a v3 training default, its own TC1 A/B" if len(v3w) >= 3 else "neither: recorded, no route"))
