@@ -80,6 +80,9 @@ current code (e4b `5c90886`, grouped-nf4-gemm `ccf4de9`), off amendment 33's mac
 - **By amendment 42's rule 2.352 stays the position to quote**, now read on two hosts (2.352 and 2.468). Both steps ran longer on this host
   (e4b 4.11 s, Unsloth 10.14 s, against 3.49 and 8.22 s) and the ratio moved 5 %.
 - **The host was shared** with this campaign's `tc1-5090-91` (amendment 40) until 15:30Z; the load gate voided no draw.
+- **Two host models, by draw, not by design.** Amendment 42 excluded machine ids but did not register a CPU model (#1157: it
+  auto-merged before that review point was applied). This draw's EPYC 7K62 differs from amendment 33's EPYC 7B13, so "two hosts"
+  here is also two host models. The code moved too (e4b `5c90886`), so the 5 % between them is not attributed to either.
 
 ## Amendment 39 (2026-10-05): on packed 4,096-token rows e4b at its defaults runs out of memory where Unsloth trains
 
