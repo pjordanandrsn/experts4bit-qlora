@@ -125,6 +125,40 @@ A layer's cost is the sum of its four expert calls per arm: the up or gate_up an
   decoded_cap with nearly as many launches: one gate_up expert per chunk (235 MB decoded), and two down-projection experts
   per chunk (117 MB each).
 
+## Amendment 1 (2026-10-05, after three anchor refusals, before the next box): a load-gated anchor
+
+**What happened.** The first three draws were refused by the train anchor, each on `launch.self_pair` alone (FLOPs and H2D in
+band). That is the anchor working, and no reading was taken:
+
+| run | machine | launch.self_pair | cost |
+|---|---|---|---|
+| `rd1-5090-1` | 145701 (EPYC 7B13) | 1.0421 > 1.03 | $0.024 |
+| `rd1-5090-2` | 145701 again (the ranking re-picked it) | refused | $0.026 |
+| `rd1-5090-4` | 36544 (Xeon Platinum 8347C) | 1.0602 > 1.03 | $0.018 |
+
+`rd1-5090-3` was refused at $0 before any rental: adertha's anchor-exclusion class accepts only P41-layout receipts
+(adertha-agents#166).
+
+**Why load.** TC1 amendment 33 measured, on these multi-tenant 5090 hosts, the host's load average following the unstable
+draws, with stable readings at a median load1 of about 5 or below. Launch timing is the most host-sensitive thing the anchor
+checks.
+
+**The change** (`rd1_run.sh`; the bar, the correctness gate and the probe are unchanged):
+- **The anchor runs only at host load1 at or under 5.0.** The runner waits for that for up to 600 s before each attempt, and
+  if the wait times out, the anchor runs anyway and the summary says so.
+- **There are at most 3 anchor attempts**, and the last attempt stands. A refused attempt's files are kept as
+  `anchor.attempt<k>.json` and `logs/anchor_gate.attempt<k>.log`, so every attempt is a row.
+- **A sampler records `/proc/loadavg` every 5 s** (`logs/loadavg.log`). The probe's own window is summarised into its receipt
+  as `host_load1_probe` (median, max, samples, gate).
+- **No decision from a loaded probe.** `rd_table.py` takes no decision unless that summary exists with a median load1 at or
+  under 5.0. The 5.0 is the reducer's own registered constant, never the receipt's `gate` field, which is a self-report.
+- **The probe's own threads count in load1.** So the summary also records the median over the 60 s before the probe
+  (`pre60_median`). If the first redraw shows the probe adding more than about 1, the gate is amended before the next
+  draw, rather than every draw reading NOT A DECISION. A loaded probe is NOT A DECISION and needs another draw: re-running the anchor until it passes is a selection,
+  so the probe's own load is what licenses the reading.
+- **Budget.** The guard goes from 0.75 h to 1.0 h for up to three waits, at about $0.85. That is not over one hour, so no
+  proving run is required.
+
 ## The A2000 correctness rehearsal (`a2000/`; correctness only, never speed)
 
 Run before the box, on the owned RTX A2000 (sm_86), with the same probe. It checks:

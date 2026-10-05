@@ -8,13 +8,13 @@
 # checks every pin against its source before anything is sent; starts the box script detached under a fresh nonce;
 # polls TP_DONE.<nonce>; fetches receipts, logs, samples and bake.json -- never the venvs, caches, arenas, checkpoints or
 # the pack's payloads (its manifest.json rides along). Nothing here creates, destroys or approves compute.
-# SC1_BOX=A|B|C|D|E|F|G|H|I is required (D = SC1b's census box, E = SC2's serving box, F = SC2b's prefill-graph box, G = SC2g's gpt-oss box, H = SC2c's bulk-KV box, I = SC1g's gpt-oss quality box). SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
+# SC1_BOX=A|B|C|D|E|F|G|H|I|J is required (D = SC1b's census box, E = SC2's serving box, F = SC2b's prefill-graph box, G = SC2g's gpt-oss box, H = SC2c's bulk-KV box, I = SC1g's gpt-oss quality box, J = SC1g's e4b-only diagnostic box). SC1_PROVE=1 runs the proving rental. SC1_DRIVE_DRYRUN=1 prints the plan and exits 0.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [sc1_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID SC1_BOX; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
-case "$SC1_BOX" in A|B|C|D|E|F|G|H|I) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F, G, H or I (SC1b, SC2, SC2b, SC2g, SC2c, SC1g)"; exit 78;; esac
+case "$SC1_BOX" in A|B|C|D|E|F|G|H|I|J) ;; *) say "refusing: SC1_BOX must be A, B, C, D, E, F, G, H, I or J (SC1b, SC2, SC2b, SC2g, SC2c, SC1g, SC1g-diag)"; exit 78;; esac
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
 P39="$REPO/bench/p39"; P42="$REPO/bench/p42"; TESTS="$REPO/tests"
 # flat pieces (box sees them in $W); the reducer joins when it exists (staged.sha256 pins it then: "pinned at integration")

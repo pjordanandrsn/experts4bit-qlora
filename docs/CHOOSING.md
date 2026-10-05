@@ -122,6 +122,10 @@ not a register entry; the breakdown is in the `engines/dense_offload.py` docstri
 checkpoint. The alternative way to fit a 114 GB dense side on a small card is to
 quantise it, which changes the model.
 
+Freeze first (`model.requires_grad_(False)`, then add any adapters). A trainable matrix beside frozen ones (a
+LoRA adapter) stays resident, since an optimizer cannot step a streamed parameter. An unfrozen model streams as
+before, but warns.
+
 **I am serving, not training, and want it faster.**
 `enable_fast(model)` (needs `[fast]`) routes the frozen experts through the grouped kernel
 (eval, `no_grad`) instead of the per-expert loop. Inference only; for training use
