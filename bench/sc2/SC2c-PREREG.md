@@ -4,8 +4,8 @@
 first, and CI green. No SC2c run exists. The census behind it (`bench/stall-census-2026-10-05/`) is exploratory and
 $0.
 
-**The code under test** is branch `serve-bulk-kv` at `f73e2f8c` (with `main` at `b6144722`, which brings e4b#1129's
-`seen` routes), whose `experts4bit_qlora/` tree is `09417ee23ef43791f7c5f917311fb8017f9c75c6`:
+**The code under test** is branch `serve-bulk-kv` at `acf32d1c` (with `main` at `b6144722`, which brings e4b#1129's
+`seen` routes), whose `experts4bit_qlora/` tree is `88452f16f83bcae656487714d2a5ac15b4e993af`:
 - `E4B_PAGED_BULK_KV`, opt-in;
 - `E4B_PAGED_STEP_TRACE`;
 - `/health`'s `kv_bookkeeping` block.
@@ -15,7 +15,7 @@ except for the version string, and the launch chain records both. A change to th
 re-pinned here before any box.
 
 **The `/health` contract** this rule reads, from `serve_paged.kv_bookkeeping_report` and
-`PagedModelRunner.kv_bookkeeping_stats` at `f73e2f8c`:
+`PagedModelRunner.kv_bookkeeping_stats` at `acf32d1c`:
 - `kv_bookkeeping` always carries `requested`, the knob as a bool.
 - Once the engine is built it also carries `bulk`, plus per-request counts:
   - `flush_layers` and `flush_bulk`: the prompt's flush into the pool, per path;
@@ -82,8 +82,11 @@ bookkeeping moves the ceiling.
   - every warm response reports 512 prompt tokens;
   - the step trace holds ≥ 64 rows.
   - Otherwise the arm STOPs (rc 48).
-- **Records, no gate:** `nvidia-smi` memory used at ready, per arm; the full `/health` at start, after warm and at
-  the end.
+- **Records, no gate:**
+  - `nvidia-smi` memory used at ready, per arm;
+  - `/health`'s `prefill_graph.free_after_mib` and `bulk_flush_mib` (the bulk flush's bound, additive to the graph's
+    pool and counted in its `auto` headroom when bulk is on, #1131 review);
+  - the full `/health` at start, after warm and at the end.
 - **Image and checkpoint.** SC1's `nvidia/cuda:13.0.3-cudnn-devel-ubuntu24.04`; Qwen3-30B-A3B @ `ad44e77`, baked to
   the NF4 arena on the box.
 
@@ -141,6 +144,12 @@ flush (48 × 256 × 4 = 49,152).
 
 Otherwise NOT_LICENSED, with the reason. On DEFAULT_LICENSED, a separate PR makes `E4B_PAGED_BULK_KV` default to `1`,
 keeping `0` as the escape.
+
+That PR also carries, from #1131's review, one `/health` `kv_bookkeeping` engagement read each on:
+- a hybrid model (a pool-layer subset);
+- gpt-oss (attention sinks).
+
+Both are correctness reads, not speed.
 
 **The licence's scope.** Speed is read on Qwen3-30B-A3B int4, `serve_paged`, one RTX 5090 and 512-token prompts. The
 bookkeeping's equivalence elsewhere is the tests' job (whole-pool bitwise comparisons, mixed geometry, hybrid layer
