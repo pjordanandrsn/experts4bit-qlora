@@ -280,6 +280,7 @@
     "e4b.train.env-ab.qwen3.5090.2026-10-04",
     "e4b.train.bmm-host-replay.5090.2026-10-04",
     "e4b.train.absmax-dq.mixtral.5090.2026-10-05",
+    "e4b.train.absmax-dq.qwen3.5090.2026-10-05",
     "e4b.train.triton37.qwen3.5090.2026-10-05"
    ],
    "limitations": [

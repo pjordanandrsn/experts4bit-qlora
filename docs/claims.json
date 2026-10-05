@@ -9612,6 +9612,31 @@
       "notes": "Vast invoiced $1.27."
     },
     {
+      "id": "e4b.train.absmax-dq.qwen3.5090.2026-10-05",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendments 28 / 31 (#835), one rented RTX 5090 (tc1-5090-75): e4b against itself on Qwen3-30B-A3B's matched arm (fp32 adapters, matched init), resident, the expert absmax fp32 (E4B_ABSMAX_DQ=0) vs double-quantized (=1, #1040), 60-step runs, two draws a side in ABBA order, on a quiet host (load1 3.8-4.9). dq1 / dq0 1.014 [1.007, 1.021] (3.751 / 3.727 vs 3.777 / 3.805 s/step): the double-quantized absmax costs 1.4 % of the step. Peak 27.44 -> 26.10 GB (1.34 GB). Held-out at N moves -0.0021. P56 HELD (band [0.97, 1.03], drop [1.25, 1.45] GB); with P57 (Mixtral, 1.023 for 2.04 GB) and P58 (held-out within 0.005 on both families) HELD, amendment 28's rule makes the double-quantized absmax the default for resident training.",
+      "value": 1.014,
+      "unit": "ratio s/step, E4B_ABSMAX_DQ=1 over =0 (medians of steps 11..60 over two draws each; > 1 = the double-quantized absmax slower); cross-draw interval [1.007, 1.021]; peak 1.34 GB lower",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-75: AMD EPYC 7B13, Vast machine 145701); e4b @ f7f736e + grouped-nf4-gemm @ f0c1ece on torch 2.8.0+cu128",
+      "conditions": "bench/tc1 token qwen3dqab with TC1_STEPS=60 (TC1 amendment 31): TC1's tokens and field recipe otherwise (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407, 8 held-out rows at 0 and N), matched arm, resident, every other default; engagement on absmax_dq and absmax_dq_modules; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-dqab-qwen3-60.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-75/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-75/tc1/"
+      ],
+      "notes": "Vast invoiced $1.03."
+    },
+    {
       "id": "e4b.train.triton37.qwen3.5090.2026-10-05",
       "package": "experts4bit-qlora",
       "area": "train",

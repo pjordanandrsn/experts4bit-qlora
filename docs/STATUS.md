@@ -268,7 +268,9 @@ e4b keeps it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 G
 the gap is 1.78 GB.
 **The double-quantized absmax, as an A/B** (`e4b.train.absmax-dq.mixtral.5090.2026-10-05`, TC1 amendment 28): on Mixtral-8x7B
 `E4B_ABSMAX_DQ=1` costs 2.3 % of the step (1.023) for 2.04 GB of peak (31.07 → 29.03 GB), held-out within 0.003. Qwen3-30B-A3B's pair
-was unstable on a busy host, so the switch stays opt-in until amendment 31 reads it.
+was unstable on a busy host; amendment 31 read it over 60 steps on a quiet one
+(`e4b.train.absmax-dq.qwen3.5090.2026-10-05`): 1.014 for 1.34 GB, held-out within 0.003. All three predictions held, so the
+double-quantized absmax becomes the default for resident training (`E4B_ABSMAX_DQ=0` turns it off).
 **The environment** (`e4b.train.env-ab.qwen3.5090.2026-10-04`, TC1 amendment 24): every 5090 position so far ran e4b on the
 field image's torch 2.8.0+cu128 / transformers 5.18.0 and Unsloth on torch 2.12.1+cu130 / transformers 5.5.0. In Unsloth's environment
 e4b's matched arm steps 0.882× as long. The cause is not the padded LoRA delta's fp32 `bmm`, whose host cost per new shape is the same

@@ -40,6 +40,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-70` | `qwen3dqab` (amendment 28) | instance 54223173, AMD EPYC 7C13 (Vast machine 45511) | e4b against itself, the expert absmax fp32 vs double-quantized: peak 27.15 → 25.82 GB and held-out +0.0026, but both speed pairs unstable under host load (P56 UNTESTED); amendment 31 re-asks it over 60 steps; [read](RESULTS-tc1-dqab.md) | $1.13 |
 | `tc1-5090-71` | `mixtraldqab` (amendment 28) | instance 54223342, AMD EPYC 7B13 (Vast machine 145701) | the same on Mixtral-8x7B resident: dq1/dq0 1.023, peak 31.07 → 29.03 GB, held-out −0.0028 (P57 HELD); [read](RESULTS-tc1-dqab.md) | $1.27 |
 | `tc1-5090-72` | `qwen3samestack` (amendment 29, 60 steps) | instance 54227048, AMD EPYC 7C13 (Vast machine 45511) | the same-stack pair over 60 steps: e4b's same-stack draws 13.1 % apart and its field-image draws 6.4 %, host load1 6–23, so no ratio is read (P50, P51 UNTESTED, final); amendment 33 re-asks with load-gated draws; [read](RESULTS-tc1-samestack-box3.md) | $1.75 |
+| `tc1-5090-75` | `qwen3dqab` (amendment 31, 60 steps) | instance 54238515, AMD EPYC 7B13 (Vast machine 145701) | Qwen3-30B-A3B's absmax pair over 60 steps on a quiet host: dq1/dq0 1.014, peak 27.44 → 26.10 GB, held-out −0.0021 (P56 HELD; with P57 and P58, amendment 28's rule makes the double-quantized absmax the default); [read](RESULTS-tc1-dqab-qwen3-60.md) | $1.03 |
 | `tc1-5090-74` | `qwen3tritonab` (amendment 32, 60 steps) | instance 54237146, AMD EPYC 7B13 (Vast machine 145701) | one variable, triton 3.4 vs 3.7.1 in venv-e4b: matched arm 0.992 (P59 FALSIFIED), shipped arm 0.971 (P60 HELD), held-out within 0.001 (P61 HELD); the environment gain is not triton's on this host-bound step; amendment 34 splits it; [read](RESULTS-tc1-tritonab.md) | $1.28 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
@@ -68,6 +69,26 @@ arm's `PYTHONPATH` (`_tr1`), 60-step runs, prebound launches off. Read: [`RESULT
 - **What is left.** Amendment 24's 0.882 must come from torch 2.12 and/or transformers 5.5. Both removed host work on the A2000:
   attention-mask handling in torch, and the router's dtype round trip in transformers. Amendment 34 splits them on the 5090. Row
   `e4b.train.triton37.qwen3.5090.2026-10-05`.
+
+
+## Amendment 31 (2026-10-05): Qwen3-30B-A3B's absmax pair, read over 60 steps; the double-quantized absmax becomes the default
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendments 28 and 31. One RTX 5090 (`tc1-5090-75`, AMD EPYC 7B13,
+Vast machine 145701; host load1 3.8–4.9 throughout): the token `qwen3dqab` with `TC1_STEPS=60`. Read:
+[`RESULTS-tc1-dqab-qwen3-60.md`](RESULTS-tc1-dqab-qwen3-60.md).
+
+| | `_dq0` (fp32 absmax) | `_dq1` (double-quantized) |
+|---|---|---|
+| s/step, two draws (60 steps) | 3.751 / 3.727 (0.6 % apart) | 3.777 / 3.805 (0.7 % apart) |
+| peak | 27.44 GB | 26.10 GB |
+| held-out at N | 0.7597, 0.7583 | 0.7567, 0.7572 |
+
+- **P56 HELD.** `_dq1`/`_dq0` reads 1.014 [1.007, 1.021], inside [0.97, 1.03], and the peak falls 1.339 GB, inside [1.25, 1.45]. The
+  double-quantized absmax costs 1.4 % of the step on Qwen3-30B-A3B and 2.3 % on Mixtral.
+- **P58 HELD.** Held-out moves −0.0021 on Qwen3 and −0.0028 on Mixtral, both inside 0.005.
+- **By amendment 28's rule, with P57 already HELD, the double-quantized absmax becomes the default for resident training.** That is
+  e4b's own PR, citing these boxes. The TC1 harness keeps `E4B_ABSMAX_DQ` explicit, because its boxes are registered instruments.
+- On a quiet host the 60-step pairs were stable. Amendment 28's Qwen3 box lost both pairs on a busy one.
 
 ## Amendment 29 (2026-10-05): the same-stack pair over 60 steps, unstable again on a busy host; amendment 33 gates the draws on host load
 
