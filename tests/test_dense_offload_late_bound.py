@@ -8,6 +8,7 @@ reads the weight bound at backward time. bnb 0.50.2 behaviour, worked around loc
 """
 from __future__ import annotations
 
+import gc
 import warnings
 
 import pytest
@@ -119,6 +120,7 @@ def _held_across_forward(m):
     allocations) cancels, so two models are compared by what their forwards keep alive -- not by baselines that the
     first version of this test confounded (a route-disabled control 'saved' more than every weight in the model)."""
     x = _x().requires_grad_(True)
+    gc.collect()      # the previous step's graph can sit in a reference cycle (bnb's ctx holds tensors); free it first
     torch.cuda.synchronize()
     before = torch.cuda.memory_allocated()
     y = m(x)
