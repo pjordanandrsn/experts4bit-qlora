@@ -1,0 +1,83 @@
+KNOBS box=G e4b=eaf3e5b49daf710507b0ba16aec7a0648670d892 gnf4=dc8f94abfd868f149178623f6eb403dc8b892b02 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
+e4b 0.48.0 @eaf3e5b49daf710507b0ba16aec7a0648670d892
+gnf4 0.41.0 @dc8f94abfd868f149178623f6eb403dc8b892b02
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[install-vllm 08:54:22] vllm==0.30.0 ready in /root/sc1/venv-vllm
+SGLANG_INSTALL OK
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+aiohttp 3.14.3 fastapi 0.141.1 uvicorn 0.54.0
+PHASE 0 fetches (gpt-oss-20b, its published MXFP4 GGUF), the NF4 bake, the gpt-oss prompt pool at=2026-10-05T09:03:42Z nproc=32 cpu.max=1536000/100000 load=7.44/4.98/3.79
+FETCH gptoss openai/gpt-oss-20b@6cee5e81ee83917806bbde320786a8fb61efebee /root/.cache/huggingface/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee
+FETCH gguf gpt-oss-20b-MXFP4.gguf 27cd6c432c7672cb
+BAKE gptoss BAKE OK
+SC2_PROMPTS rows=64 prompt=512 sha256=50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5
+PHASE SG0 SGLang first JIT before any timing at=2026-10-05T09:09:40Z nproc=32 cpu.max=1536000/100000 load=2.35/2.69/3.08
+SC2G sglang healthy: SGLANG_ENGAGEMENT {"mode": "gptoss", "version": "0.5.20", "attention_backend": "triton", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": false, "jit_target_tag": null, "gencode": null, "startup_s": 660}
+QUIESCE arms quiesced=yes waited=0s busy_procs=0 load1=3.82 nproc=32 cpu.max=1536000/100000 at=2026-10-05T09:20:42Z
+PHASE E4B e4b serve_paged on gpt-oss: native MXFP4 decode, NF4 prefill at=2026-10-05T09:20:42Z nproc=32 cpu.max=1536000/100000 load=3.82/8.24/6.19
+SC2G_E4B {"ok": true, "bad": [], "store": ["mxfp4"], "routes": {"int4_prefill_env": null, "prefill_attn_env": null, "device_grouping": true, "int4_prefill": "k19", "int4_prefill_above_256_rows": "k19", "prefill_attn": "flash"}, "prefill_graph": {"status": "on", "requested": "auto", "T": 512, "why": null, "pool_mib": 246, "free_after_mib": 5796}}
+SC2G e4b healthy
+SC2 e4b_gptoss_warm rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 0.6693, "ttft_p50_s": 0.187978, "ttft_p99_s": 0.205688, "tpot_p50_s": 0.006296, "tpot_p99_s": 0.006323, "output_tok_s": 139.813, "goodput_rps": null}
+SC2 e4b_gptoss_serial_d1 rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 0.8105, "ttft_p50_s": 0.165774, "ttft_p99_s": 0.168851, "tpot_p50_s": 0.006202, "tpot_p99_s": 0.006456, "output_tok_s": 140.516, "goodput_rps": null}
+SC2 e4b_gptoss_r1_d1 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.178647, "ttft_p99_s": 0.432914, "tpot_p50_s": 0.010323, "tpot_p99_s": 0.021172, "output_tok_s": 147.098, "goodput_rps": 1.0}
+SC2 e4b_gptoss_r2_d1 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.362255, "ttft_p99_s": 2.356109, "tpot_p50_s": 0.024366, "tpot_p99_s": 0.044445, "output_tok_s": 388.442, "goodput_rps": 1.6167}
+SC2 e4b_gptoss_r4_d1 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3192, "ttft_p50_s": 5.891193, "ttft_p99_s": 11.265243, "tpot_p50_s": 0.031093, "tpot_p99_s": 0.040712, "output_tok_s": 468.328, "goodput_rps": 0.7333}
+SC2 e4b_gptoss_r8_d1 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.1029, "ttft_p50_s": 10.290029, "ttft_p99_s": 22.448587, "tpot_p50_s": 0.033126, "tpot_p99_s": 0.041877, "output_tok_s": 445.768, "goodput_rps": 0.9333}
+SC2 e4b_gptoss_serial_d2 rc=0 SC2_RUN {"profile": "e4b", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 0.8041, "ttft_p50_s": 0.166455, "ttft_p99_s": 0.189652, "tpot_p50_s": 0.006218, "tpot_p99_s": 0.006624, "output_tok_s": 139.374, "goodput_rps": null}
+SC2 e4b_gptoss_r1_d2 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.178237, "ttft_p99_s": 0.435724, "tpot_p50_s": 0.010312, "tpot_p99_s": 0.021935, "output_tok_s": 147.094, "goodput_rps": 1.0}
+SC2 e4b_gptoss_r2_d2 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.329596, "ttft_p99_s": 1.785676, "tpot_p50_s": 0.024401, "tpot_p99_s": 0.039947, "output_tok_s": 388.445, "goodput_rps": 1.7667}
+SC2 e4b_gptoss_r4_d2 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3192, "ttft_p50_s": 5.9252, "ttft_p99_s": 11.424663, "tpot_p50_s": 0.031193, "tpot_p99_s": 0.041076, "output_tok_s": 468.767, "goodput_rps": 0.7333}
+SC2 e4b_gptoss_r8_d2 rc=0 SC2_RUN {"profile": "e4b", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.1029, "ttft_p50_s": 10.324227, "ttft_p99_s": 22.417925, "tpot_p50_s": 0.032927, "tpot_p99_s": 0.040885, "output_tok_s": 446.078, "goodput_rps": 0.8}
+PHASE VLLM vLLM 0.30.0 (Marlin W4A16, TRITON_ATTN) at=2026-10-05T09:31:36Z nproc=32 cpu.max=1536000/100000 load=1.61/2.13/3.74
+SC2G vllm healthy:       1 MARLIN       1 MarlinExperts       1 Mxfp4       3 TRITON_ATTN       2 marlin       4 mxfp4 
+SC2 vllm_warm rc=0 SC2_RUN {"profile": "vllm", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 0.9464, "ttft_p50_s": 0.032923, "ttft_p99_s": 0.863431, "tpot_p50_s": 0.00356, "tpot_p99_s": 0.003563, "output_tok_s": 212.656, "goodput_rps": null}
+SC2 vllm_serial_d1 rc=0 SC2_RUN {"profile": "vllm", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 1.5466, "ttft_p50_s": 0.032856, "ttft_p99_s": 0.033568, "tpot_p50_s": 0.003561, "tpot_p99_s": 0.003568, "output_tok_s": 268.008, "goodput_rps": null}
+SC2 vllm_r1_d1 rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.034532, "ttft_p99_s": 0.055043, "tpot_p50_s": 0.004341, "tpot_p99_s": 0.00566, "output_tok_s": 148.356, "goodput_rps": 1.0}
+SC2 vllm_r2_d1 rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.037379, "ttft_p99_s": 0.063409, "tpot_p50_s": 0.005577, "tpot_p99_s": 0.007114, "output_tok_s": 396.234, "goodput_rps": 2.0}
+SC2 vllm_r4_d1 rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3191, "ttft_p50_s": 0.040318, "ttft_p99_s": 0.074827, "tpot_p50_s": 0.006953, "tpot_p99_s": 0.008381, "output_tok_s": 671.033, "goodput_rps": 4.0}
+SC2 vllm_r8_d1 rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.1029, "ttft_p50_s": 0.046347, "ttft_p99_s": 0.589232, "tpot_p50_s": 0.008974, "tpot_p99_s": 0.010414, "output_tok_s": 1124.725, "goodput_rps": 8.0}
+SC2 vllm_serial_d2 rc=0 SC2_RUN {"profile": "vllm", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 1.5455, "ttft_p50_s": 0.032886, "ttft_p99_s": 0.033616, "tpot_p50_s": 0.003566, "tpot_p99_s": 0.00357, "output_tok_s": 267.796, "goodput_rps": null}
+SC2 vllm_r1_d2 rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.034547, "ttft_p99_s": 0.05095, "tpot_p50_s": 0.004354, "tpot_p99_s": 0.005615, "output_tok_s": 148.358, "goodput_rps": 1.0}
+SC2 vllm_r2_d2 rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.037402, "ttft_p99_s": 0.061374, "tpot_p50_s": 0.005647, "tpot_p99_s": 0.007159, "output_tok_s": 396.163, "goodput_rps": 2.0}
+SC2 vllm_r4_d2 rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3191, "ttft_p50_s": 0.040278, "ttft_p99_s": 0.073757, "tpot_p50_s": 0.006948, "tpot_p99_s": 0.008465, "output_tok_s": 670.786, "goodput_rps": 4.0}
+SC2 vllm_r8_d2 rc=0 SC2_RUN {"profile": "vllm", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.1031, "ttft_p50_s": 0.046777, "ttft_p99_s": 0.574482, "tpot_p50_s": 0.009024, "tpot_p99_s": 0.010388, "output_tok_s": 1124.601, "goodput_rps": 8.0}
+PHASE SGL SGLang 0.5.20 (gpt-oss defaults) at=2026-10-05T09:42:19Z nproc=32 cpu.max=1536000/100000 load=0.69/0.88/2.26
+SC2G sglang healthy: SGLANG_ENGAGEMENT {"mode": "gptoss", "version": "0.5.20", "attention_backend": "triton", "kv_cache_dtype": "auto", "disable_radix_cache": true, "max_running_requests": 16, "gptq_marlin_banner": false, "jit_target_tag": null, "gencode": null, "startup_s": 47}
+SC2 sglang_warm rc=0 SC2_RUN {"profile": "sglang", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 1.1543, "ttft_p50_s": 0.024099, "ttft_p99_s": 0.031715, "tpot_p50_s": 0.00406, "tpot_p99_s": 0.004061, "output_tok_s": 240.614, "goodput_rps": null}
+SC2 sglang_serial_d1 rc=0 SC2_RUN {"profile": "sglang", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 1.3811, "ttft_p50_s": 0.023933, "ttft_p99_s": 0.024849, "tpot_p50_s": 0.00406, "tpot_p99_s": 0.0041, "output_tok_s": 239.295, "goodput_rps": null}
+SC2 sglang_r1_d1 rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.024613, "ttft_p99_s": 0.040302, "tpot_p50_s": 0.004659, "tpot_p99_s": 0.006201, "output_tok_s": 148.26, "goodput_rps": 1.0}
+SC2 sglang_r2_d1 rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.028847, "ttft_p99_s": 1.502723, "tpot_p50_s": 0.006379, "tpot_p99_s": 0.014989, "output_tok_s": 395.865, "goodput_rps": 1.95}
+SC2 sglang_r4_d1 rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3191, "ttft_p50_s": 0.031294, "ttft_p99_s": 0.045994, "tpot_p50_s": 0.007591, "tpot_p99_s": 0.008809, "output_tok_s": 668.964, "goodput_rps": 4.0}
+SC2 sglang_r8_d1 rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.1028, "ttft_p50_s": 0.034614, "ttft_p99_s": 0.549714, "tpot_p50_s": 0.009168, "tpot_p99_s": 0.010344, "output_tok_s": 1121.94, "goodput_rps": 8.0}
+SC2 sglang_serial_d2 rc=0 SC2_RUN {"profile": "sglang", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 1.3804, "ttft_p50_s": 0.023718, "ttft_p99_s": 0.024188, "tpot_p50_s": 0.004067, "tpot_p99_s": 0.004077, "output_tok_s": 239.158, "goodput_rps": null}
+SC2 sglang_r1_d2 rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.024643, "ttft_p99_s": 0.035711, "tpot_p50_s": 0.004696, "tpot_p99_s": 0.006119, "output_tok_s": 148.252, "goodput_rps": 1.0}
+SC2 sglang_r2_d2 rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.029355, "ttft_p99_s": 0.041698, "tpot_p50_s": 0.006251, "tpot_p99_s": 0.007734, "output_tok_s": 395.797, "goodput_rps": 2.0}
+SC2 sglang_r4_d2 rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3191, "ttft_p50_s": 0.030895, "ttft_p99_s": 0.044234, "tpot_p50_s": 0.007517, "tpot_p99_s": 0.008793, "output_tok_s": 669.789, "goodput_rps": 4.0}
+SC2 sglang_r8_d2 rc=0 SC2_RUN {"profile": "sglang", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.1025, "ttft_p50_s": 0.034077, "ttft_p99_s": 0.537356, "tpot_p50_s": 0.009177, "tpot_p99_s": 0.010435, "output_tok_s": 1122.577, "goodput_rps": 8.0}
+PHASE LL llama.cpp server (the published MXFP4 GGUF) at=2026-10-05T09:51:30Z nproc=32 cpu.max=1536000/100000 load=1.39/1.25/1.81
+SC2G llamacpp healthy: [llamacpp_box 09:51:34] healthy on :8080, 0.02.034.004 I load_tensors: offloaded 25/25 layers to GPU, pid 32160
+SC2 llamacpp_warm rc=0 SC2_RUN {"profile": "llamacpp", "mode": "serial", "rate": 0.0, "valid": 4, "invalid": 0, "achieved_rate": 1.3497, "ttft_p50_s": 0.050849, "ttft_p99_s": 0.203857, "tpot_p50_s": 0.003025, "tpot_p99_s": 0.003169, "output_tok_s": 288.111, "goodput_rps": null}
+SC2 llamacpp_serial_d1 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 1.7522, "ttft_p50_s": 0.050927, "ttft_p99_s": 0.052418, "tpot_p50_s": 0.003026, "tpot_p99_s": 0.00305, "output_tok_s": 303.804, "goodput_rps": null}
+SC2 llamacpp_r1_d1 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.049888, "ttft_p99_s": 0.090505, "tpot_p50_s": 0.005576, "tpot_p99_s": 0.019239, "output_tok_s": 148.212, "goodput_rps": 1.0}
+SC2 llamacpp_r2_d1 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.093896, "ttft_p99_s": 0.17205, "tpot_p50_s": 0.022948, "tpot_p99_s": 0.026061, "output_tok_s": 391.71, "goodput_rps": 2.0}
+SC2 llamacpp_r4_d1 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3191, "ttft_p50_s": 1.015224, "ttft_p99_s": 3.137093, "tpot_p50_s": 0.021788, "tpot_p99_s": 0.02717, "output_tok_s": 602.676, "goodput_rps": 1.9667}
+SC2 llamacpp_r8_d1 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.103, "ttft_p50_s": 4.279354, "ttft_p99_s": 10.759009, "tpot_p50_s": 0.022983, "tpot_p99_s": 0.025627, "output_tok_s": 631.698, "goodput_rps": 1.4}
+SC2 llamacpp_serial_d2 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "serial", "rate": 0.0, "valid": 24, "invalid": 0, "achieved_rate": 1.732, "ttft_p50_s": 0.04445, "ttft_p99_s": 0.155767, "tpot_p50_s": 0.003027, "tpot_p99_s": 0.003266, "output_tok_s": 300.463, "goodput_rps": null}
+SC2 llamacpp_r1_d2 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 1.0, "valid": 120, "invalid": 0, "achieved_rate": 0.9228, "ttft_p50_s": 0.046626, "ttft_p99_s": 0.096602, "tpot_p50_s": 0.005837, "tpot_p99_s": 0.018482, "output_tok_s": 148.239, "goodput_rps": 1.0}
+SC2 llamacpp_r2_d2 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 2.0, "valid": 120, "invalid": 0, "achieved_rate": 2.3172, "ttft_p50_s": 0.087973, "ttft_p99_s": 0.244325, "tpot_p50_s": 0.021609, "tpot_p99_s": 0.026184, "output_tok_s": 394.564, "goodput_rps": 2.0}
+SC2 llamacpp_r4_d2 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 4.0, "valid": 120, "invalid": 0, "achieved_rate": 4.3193, "ttft_p50_s": 1.144303, "ttft_p99_s": 3.306102, "tpot_p50_s": 0.022155, "tpot_p99_s": 0.026259, "output_tok_s": 600.52, "goodput_rps": 1.9}
+SC2 llamacpp_r8_d2 rc=0 SC2_RUN {"profile": "llamacpp", "mode": "poisson", "rate": 8.0, "valid": 120, "invalid": 0, "achieved_rate": 8.1027, "ttft_p50_s": 4.254917, "ttft_p99_s": 10.657727, "tpot_p50_s": 0.022959, "tpot_p99_s": 0.025665, "output_tok_s": 633.46, "goodput_rps": 1.4}
+PHASE RD the reading at=2026-10-05T10:00:17Z nproc=32 cpu.max=1536000/100000 load=1.86/1.22/1.50
+SC2G_Q1 HOLDS {"ratio": 5.0535, "label": "ARITH_MISMATCH"}
+SC2G_Q2 REFUTED {"ratio": 1.7429, "label": "ARITH_MISMATCH"}
+SC2G_Q3 HOLDS {"ceilings": {"e4b_gptoss": 1, "vllm": 8, "sglang": 8, "llamacpp": 2}}
+SC2G_Q4 HOLDS {"fit": {"decode_ms_per_token": 8.939, "stall_s_per_prefill": 0.2452, "r2": 0.9841, "n": 1008}, "stall_over_token": 27.43}
+SC2G_Q5 REFUTED {"statuses": {"e4b_gptoss": {"serial": "VALID", "1": "VALID", "2": "VALID", "4": "VALID", "8": "VALID"}, "vllm": {"serial": "VALID", "1": "VALID", "2": "VALID", "4": "VALID", "8": "VALID"}, "sglang": {"serial": "VALID", "1": "VALID", "2": "VALID", "4": "VALID", "8": "VALID"}, "llamacpp": {"serial": 
+SC2G_ENGINE e4b_gptoss ceiling=1 rows={"serial": "VALID", "1": "VALID", "2": "VALID", "4": "VALID", "8": "VALID"}
+SC2G_ENGINE vllm ceiling=8 rows={"serial": "VALID", "1": "VALID", "2": "VALID", "4": "VALID", "8": "VALID"}
+SC2G_ENGINE sglang ceiling=8 rows={"serial": "VALID", "1": "VALID", "2": "VALID", "4": "VALID", "8": "VALID"}
+SC2G_ENGINE llamacpp ceiling=2 rows={"serial": "UNSTABLE", "1": "VALID", "2": "VALID", "4": "VALID", "8": "VALID"}

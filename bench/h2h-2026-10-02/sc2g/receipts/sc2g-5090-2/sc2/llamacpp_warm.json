@@ -1,0 +1,140 @@
+{
+ "base": "http://127.0.0.1:8080",
+ "model": "sc2",
+ "profile": "llamacpp",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.3497,
+  "wall_s": 2.961,
+  "ttft_p50_s": 0.050849,
+  "ttft_p90_s": 0.161312,
+  "ttft_p99_s": 0.203857,
+  "tpot_p50_s": 0.003025,
+  "tpot_p90_s": 0.003129,
+  "tpot_p99_s": 0.003169,
+  "e2el_p50_s": 0.738891,
+  "e2el_p90_s": 0.83018,
+  "e2el_p99_s": 0.864951,
+  "ttft_mean_s": 0.090162,
+  "output_tok_s": 288.111,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.3511,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " ....................\n\nThe text you provided appears to be a mix of unrelated content, possibly from different sources or contexts. It includes a brief biography of a person named Rifenburg, details about a hurricane, and some unrelated or incomplete sentences. It seems like a compilation of various snippets of information.\n\nIf you have a specific question or if there's a particular part of the text you'd like me to help with, please let me know.\n\nIt seems like you're looking for a specific piece of information or a summary of the text. However,\n\nIt looks like the text you provided is a mix of unrelated content, possibly from different sources or contexts. It includes a brief biography of a person named Rifenburg, details about a hurricane, and some unrelated or incomplete sentences. It seems like a compilation of various snippets of information.\n\nIf you have a specific question or if there's a particular part of the text you'd like me to help with, please let me know.\n\nIt appears that the text you provided",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.868815,
+   "ttft_s": 0.208584,
+   "tpot_s": 0.003173,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 0.868984,
+   "text": " \nWe need to find the first name of the person who won the 2002 King of the Ring. The text says: \"He was also the 2002 King of the Ring and the 2003 Royal Rumble winner\". That refers to Brock Lesnar. So the first name is Brock. But we need to provide a citation. Let's find the part that says \"2002 King of the Ring\". Search.<|end|><|start|>assistant<|channel|>analysis to=browser.search code<|message|>{\"query\": \"\\\"2002 King of the Ring\\\" Brock Lesnar\", \"topn\": 5, \"source\": \"news\"}<|end|><|start|>assistant<|channel|>analysis to=browser.open code<|message|>{\"cursor\": 0, \"id\": 0}<|end|><|start|>assistant<|channel|>analysis<|message|>Let's open.<|end|><|start|>assistant<|channel|>analysis to=browser.open code<|message|>{\"cursor\": 0, \"id\": 0}<|end|><|start|>assistant<|channel|>analysis<|message|>Scrolling",
+   "completion_tokens": 187,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.613498,
+   "ttft_s": 0.050367,
+   "tpot_s": 0.003026,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 1.482619,
+   "text": "st\u00a0\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u2026\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u2026\u2026\u00a0\u2026\u00a0\u2026\u00a0\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\n\nIt appears that the text you provided is a historical account of a military operation, specifically the Battle of Yongsan. The text describes the movements and actions of various battalions and regiments during the battle. It also mentions the involvement of air support and the challenges faced by the troops. The text is written in a narrative style and provides details about the events that took place during the battle.\n\nIt seems like you have provided a historical account of a military operation, specifically the Battle of Yongsan. The text describes the movements and actions of various\n\nIt appears that the text you provided is a historical account of a military operation, specifically the Battle of Yongsan. The text describes the movements and actions\n\nIt seems like you have provided a historical account of a military operation, specifically",
+   "completion_tokens": 229,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.740031,
+   "ttft_s": 0.050685,
+   "tpot_s": 0.003023,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 2.222742,
+   "text": "........????..??..??..??..??..??.......??..???..??....\u2026??..??..\u2026.....\n\n\nWe need to find the year of birth of the person described. The description is about \"Josepha Petrick Kemarre\". The text says: \"Josepha Petrick Kemarre (born ca. 1945 or ca. 1953, date uncertain)\". So the year of birth is either 1945 or 1953. The question: \"What is the year of birth of the person described in the following text?\" The text includes both possibilities. The answer likely is \"1945 or 1953\". But maybe we need to pick one? The text says \"born ca. 1945 or ca. 1953, date uncertain\". So the year of birth is uncertain. The answer: \"1945 or 1953\". Or \"circa 1945 or 1953\". The question: \"What is the year of birth of the person described in the following text?\" The answer: \"circa 194",
+   "completion_tokens": 228,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 1,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.73775,
+   "ttft_s": 0.051012,
+   "tpot_s": 0.003024,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}

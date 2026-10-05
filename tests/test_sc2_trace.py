@@ -46,3 +46,13 @@ def test_the_sc2b_read_quotes_the_fit_of_its_committed_traces():
         rows = [json.loads(line) for line in open(d / f"trace_{tag}.jsonl") if line.strip()]
         f = t.analyse(rows, plan=plan)["fit"]
         assert (f["decode_ms_per_token"], f["stall_s_per_prefill"], f["r2"], f["n"]) == (a_ms, b_s, r2, n), (tag, f)
+
+
+def test_the_sc2g_read_quotes_the_fit_of_its_committed_trace():
+    """SC2g's read (bench/h2h-2026-10-02/sc2g/README.md) quotes Q4's registered fit on gpt-oss-20b: b/a 27.4 >= 10, R² >= 0.9.
+    The default plan is box G's (4 warm, then serial and the four rates, twice); the reducer reads it the same way."""
+    t = _mod()
+    p = REPO / "bench" / "h2h-2026-10-02" / "sc2g" / "receipts" / "sc2g-5090-2" / "sc2" / "trace_e4b_gptoss.jsonl"
+    rows = [json.loads(line) for line in open(p) if line.strip()]
+    f = t.analyse(rows)["fit"]
+    assert (f["decode_ms_per_token"], f["stall_s_per_prefill"], f["r2"], f["n"]) == (8.939, 0.2452, 0.9841, 1008), f

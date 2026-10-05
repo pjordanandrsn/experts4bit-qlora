@@ -1,0 +1,186 @@
+{
+ "base": "http://127.0.0.1:8778",
+ "model": "openai/gpt-oss-20b",
+ "profile": "e4b",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 6,
+ "seed": 1,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "50ef93e6773b227371c9f0f7e0cce4ec9ba95c2df4e10dff8f794a9f08ebf1b5",
+ "plan": [
+  [
+   0.0,
+   17,
+   209
+  ],
+  [
+   0.0,
+   8,
+   129
+  ],
+  [
+   0.0,
+   15,
+   190
+  ],
+  [
+   0.0,
+   57,
+   184
+  ],
+  [
+   0.0,
+   48,
+   117
+  ],
+  [
+   0.0,
+   12,
+   188
+  ]
+ ],
+ "summary": {
+  "n": 6,
+  "valid": 6,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 0.8818,
+  "wall_s": 6.932,
+  "ttft_p50_s": 0.166012,
+  "ttft_p90_s": 0.183533,
+  "ttft_p99_s": 0.198632,
+  "tpot_p50_s": 0.005847,
+  "tpot_p90_s": 0.005865,
+  "tpot_p99_s": 0.005873,
+  "e2el_p50_s": 1.247289,
+  "e2el_p90_s": 1.336755,
+  "e2el_p99_s": 1.397708,
+  "ttft_mean_s": 0.171563,
+  "output_tok_s": 146.718,
+  "output_tokens": 1017,
+  "good": 6,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 0.8656,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " (the 1st and 2. 1) 2. 1. 2. 1. 2. 2. 2. 2. 2. 1. 2. 1.. 2. 1.. We have to parse the question: \"What was the casualty rate of the 2nd Division during the Battle of Pusan Perimeter?\" The answer: \"The casualty rate was 1,300 killed and 2,500 wounded.\" But we need to confirm. Let's search.assistantanalysis to=web.run code{\"query\": \"\\\"1,300 killed\\\" \\\"2,500 wounded\\\" \\\"Pusan Perimeter\\\" \\\"2nd Division\\\"\", \"topn\": 10, \"source\": \"news\"}commentaryassistantanalysisLet's search the web.assistantanalysis to=web.run code{\"query\": \"\\\"1,300 killed\\\" \\\"2,500 wounded\\\" \\\"Pusan Perimeter\\\" \\\"2",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 12,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.404481,
+   "ttft_s": 0.20031,
+   "tpot_s": 0.005788,
+   "i": 0,
+   "prompt_index": 17,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 129,
+   "prompt_len": 512,
+   "t_send": 1.404592,
+   "text": " operational . The 3rd Fleet was ordered to move to the Philippines on 1 October 1944 . The 3rd Fleet was then the most powerful force in the Pacific, and the 3rd Fleet was the most powerful. The 3rd Fleet was the most powerful. The 3rd Fleet was the most powerful. The 3f 3f 3f 3f  1  1  1  1  1  1  1  9  1  1  1  5  0  0  1  1",
+   "completion_tokens": 129,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.914755,
+   "ttft_s": 0.165752,
+   "tpot_s": 0.00585,
+   "i": 1,
+   "prompt_index": 8,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 190,
+   "prompt_len": 512,
+   "t_send": 2.319419,
+   "text": " Korean 2nd or 2. 2. 3. 2. 2. 2. 2. 1. 2. 2. 2. 1. \n\nIt appears that the text you provided is a historical account of a military operation involving Task Force Manchu during a conflict. The text describes the situation, the composition of the group, their position, and the challenges they faced. It also mentions attempts to resupply the group and the difficulties encountered in doing so. The text ends with a mention of a private who left the perimeter to gather weapons and ammunition from the North Korean dead.\n\nIt seems like the text you provided is a historical account of a military operation involving Task Force Manchu during a conflict. The text describes the situation, the composition of the group, their position, and the challenges\n\nIt appears that the text you provided is a historical account of a military operation involving Task",
+   "completion_tokens": 190,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.269028,
+   "ttft_s": 0.164535,
+   "tpot_s": 0.005843,
+   "i": 2,
+   "prompt_index": 15,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 184,
+   "prompt_len": 512,
+   "t_send": 3.588517,
+   "text": " **the** (???)????..??..????..????..???\n\nIt seems like you're looking for a comprehensive explanation of the role of oxaziridines in various chemical reactions, especially focusing on their use as oxygen transfer agents and their involvement in the synthesis of \u03b1-hydroxyketones. Let's break down the key points and clarify the concepts:\n\n### 1. **Oxaziridines as Oxygen Transfer Agents**\n\nOxaziridines are three-membered heterocyclic compounds containing an oxygen atom and a nitrogen atom. They are known for their ability to transfer an oxygen atom to a substrate, making them valuable reagents in organic synthesis. The oxygen transfer can occur through various mechanisms, depending on the reaction conditions and the nature of the substrate.\n\n### 2. **Hydrazine Production**\n\nOxaziridines are intermediates in the production of hydrazine",
+   "completion_tokens": 184,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.233341,
+   "ttft_s": 0.165966,
+   "tpot_s": 0.005832,
+   "i": 3,
+   "prompt_index": 57,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 117,
+   "prompt_len": 512,
+   "t_send": 4.821946,
+   "text": "  and  ...\n\n\nWe have a long article about the 2011 Claxton Shield. The user asks: \"What was the name of the team that won the 2011 Claxton Shield?\" We need to answer: The team that won the 2011 Claxton Shield. According to the article, the 2011 Claxton Shield was won by the Perth Heat. The article says: \"The 2011 Claxton Shield was won by the Perth Heat.\" So answer: Perth Heat. But we need to provide a citation. We need to find the relevant part",
+   "completion_tokens": 117,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.848347,
+   "ttft_s": 0.166757,
+   "tpot_s": 0.005874,
+   "i": 4,
+   "prompt_index": 48,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 188,
+   "prompt_len": 512,
+   "t_send": 5.670357,
+   "text": " the ( 1. 2) 1. 2? ???????????????\n\nIt seems like you're providing a detailed historical context about the Korean War, specifically focusing on the events leading up to the Battle of Taegu and the subsequent military operations. However, the text appears to be incomplete and contains some formatting issues. If you have a specific question or if there's a particular aspect you'd like to discuss or clarify, feel free to let me know!\n\nIt seems like you're asking for a summary or clarification of the historical context and events related to the Korean War, specifically focusing on the Battle of Taegu and the subsequent military operations. If you have any specific questions or\n\nIt looks like you're looking for a summary or clarification of the historical context and events related to the Korean War, specifically focusing on the Battle of Taegu and subsequent military operations. If you have any specific questions or if there's a particular",
+   "completion_tokens": 188,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.261238,
+   "ttft_s": 0.166057,
+   "tpot_s": 0.005856,
+   "i": 5,
+   "prompt_index": 12,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}
