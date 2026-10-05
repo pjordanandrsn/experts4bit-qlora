@@ -768,6 +768,25 @@ for _t in ("fused_attn4_m", "fused_attn4_shipped"):
 COMPACT_SPECS[CHUNKAUTO_FAM] = ("P102", (-0.05, 99.0), (("P101", "matched", "fused_attn4_m"), ("P100", "shipped", "fused_attn4_shipped")), (0.0, 1.02),
                                 "P103", ("ca0", "ca1"))   # amendment 44, one-sided: no slower than 1.02, the matched peak not above the default's + 0.05 GB
 CHUNKAUTO_FORWARDS = 240          # amendment 44's P99: every training forward of a 60-step, accum-4 arm ran stock under the gate (small_calls)
+# TC1 amendment 45: OMP_NUM_THREADS at the host's physical cores (om0, every box so far) vs at the container's CPU allotment (om1), e4b's matched
+# arm and Unsloth's, both in venv-unsloth
+OMPAB_FAM = "qwen3ompab"
+FAMS.append(OMPAB_FAM)
+NAMES[OMPAB_FAM] = "Qwen3-30B-A3B (amendment 45: OMP_NUM_THREADS at the physical cores vs the container's CPU allotment, e4b and Unsloth in venv-unsloth)"
+N_LAYERS[OMPAB_FAM] = 48
+ATTN_CENSUS[OMPAB_FAM] = 192
+DENSE_PINS[OMPAB_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[OMPAB_FAM] = ("e4b", "fused_attn4_m_om0")
+EXPECTED[OMPAB_FAM] = [("e4b", "fused_attn4_m_om0"), ("e4b", "fused_attn4_m_om1"), ("unsloth", "ckpt_unsloth_m_om0"), ("unsloth", "ckpt_unsloth_m_om1"),
+                       ("unsloth", "ckpt_unsloth_m_om1_d2"), ("unsloth", "ckpt_unsloth_m_om0_d2"), ("e4b", "fused_attn4_m_om1_d2"), ("e4b", "fused_attn4_m_om0_d2")]
+MATCHED |= {"fused_attn4_m_om0", "fused_attn4_m_om1", "fused_attn4_m_om0_d2", "fused_attn4_m_om1_d2",
+            "ckpt_unsloth_m_om0", "ckpt_unsloth_m_om1", "ckpt_unsloth_m_om0_d2", "ckpt_unsloth_m_om1_d2"}
+for _fw, _t in (("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m")):
+    for _side in ("om0", "om1"):
+        DRAW2[(_fw, f"{_t}_{_side}")] = (_fw, f"{_t}_{_side}_d2")
+#: (prediction, framework, arm stem, one-sided band on om1 / om0): e4b faster by at least 3 %, Unsloth no slower than 1 %
+OMPAB_PAIRS = (("P104", "e4b", "fused_attn4_m", (0.0, 0.97)), ("P105", "unsloth", "ckpt_unsloth_m", (0.0, 1.01)))
+OMPAB_HELDOUT_MAX = 0.005         # P106, on each framework
 
 
 def chunk_ab_why(tag, r):
@@ -808,6 +827,63 @@ def chunk_auto_why(tag, r):
     bad = [k for k, ok in (("patched 0", int(c.get("patched") or 0) == 0), ("chunked_calls 0", int(c.get("chunked_calls") or 0) == 0),
                            ("small_calls 0", int(c.get("small_calls") or 0) == 0)) if not ok]
     return "" if not bad else f"chunked-loss auto A/B not engaged (the ca0 side: {', '.join(bad)}; record {c})"
+
+
+def ompab_why(r):
+    """Amendment 45's engagement predicate, either framework: the arm ran torch 2.12 (venv-unsloth) and recorded the OpenMP thread count
+    it ran with, with torch's intra-op pool at that count. Which side ran fewer threads is the scorer's to check. Empty string = engaged."""
+    r = r or {}
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.12"):
+        return f"threads A/B not engaged (env.torch {tv or 'missing'} is not 2.12*)"
+    af = r.get("arm_facts") or {}
+    omp, tn = af.get("omp_num_threads"), af.get("torch_num_threads")
+    if not str(omp or "").isdigit() or tn is None:
+        return f"threads A/B not engaged (arm_facts omp_num_threads {omp!r}, torch_num_threads {tn!r}: the thread count cannot be verified)"
+    if int(omp) != int(tn):
+        return f"threads A/B not engaged (OMP_NUM_THREADS {omp} but torch ran {tn} intra-op threads)"
+    return ""
+
+
+def score_ompab(F, fam=OMPAB_FAM):
+    """TC1-PREREG amendment 45: P104 (e4b) and P105 (Unsloth) -- om1 / om0 s/step within OMPAB_PAIRS' one-sided band, each over two VALID
+    draws a side with each side's draws within 5 %, and every om1 receipt at FEWER OpenMP threads than every om0 receipt of its framework
+    (else no contrast: UNTESTED); P106 -- on each framework |mean held-out at N, om1 - om0| <= OMPAB_HELDOUT_MAX."""
+    R = F.get(fam)
+    if not R:
+        return []
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    out, p106 = [], []
+    for pid, fw, t, (lo, hi) in OMPAB_PAIRS:
+        O, N = R["draws"].get((fw, f"{t}_om0"), {}), R["draws"].get((fw, f"{t}_om1"), {})
+        thr = {side: sorted({int(((rows.get((fw, tag)) or {}).get("r") or {}).get("arm_facts", {}).get("omp_num_threads") or 0)
+                             for tag in (f"{t}_{side}", f"{t}_{side}_d2")}) for side in ("om0", "om1")}
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("om0", O), ("om1", N)))
+            out.append((pid, fam, "UNTESTED", f"{fw}: two stable VALID draws a side are registered -- {why}"))
+            p106.append((fw, None, why))
+            continue
+        if not (thr["om1"] and thr["om0"] and max(thr["om1"]) < min(thr["om0"]) and min(thr["om1"]) > 0):
+            out.append((pid, fam, "UNTESTED", f"{fw}: no contrast -- OpenMP threads om0 {thr['om0']} vs om1 {thr['om1']} (om1 must run fewer)"))
+            p106.append((fw, None, "no contrast"))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        h0, h1 = O.get("heldout_list") or [], N.get("heldout_list") or []
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        p106.append((fw, dq, f"held-out at N om0 {[round(v, 4) for v in h0 if v is not None]} om1 {[round(v, 4) for v in h1 if v is not None]}"))
+        out.append((pid, fam, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+                    f"{fw}: om1 / om0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; OpenMP threads om0 "
+                    f"{thr['om0']} vs om1 {thr['om1']}; s/step om0 {O['s_list'][0]:.3f} / {O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), om1 "
+                    f"{N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} (within {100 * N['stability']:.1f}%)"))
+    ev = "; ".join(f"{n}: " + (f"mean held-out om1 - om0 {d:+.4f} (|.| <= {OMPAB_HELDOUT_MAX}); {e}" if d is not None else e) for n, d, e in p106)
+    if any(d is not None and abs(d) > OMPAB_HELDOUT_MAX for _, d, _ in p106):
+        out.append(("P106", fam, "FALSIFIED", ev))
+    elif any(d is None for _, d, _ in p106):
+        out.append(("P106", fam, "UNTESTED", ev))
+    else:
+        out.append(("P106", fam, "HELD", ev))
+    return out
 
 
 def score_chunkauto_gate(F, fam=CHUNKAUTO_FAM):
@@ -1541,6 +1617,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == CHUNKAUTO_FAM and fw == "e4b":           # amendment 44: the auto side's record, the default side unpatched, torch 2.12
         w = chunk_auto_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == OMPAB_FAM:                               # amendment 45: torch 2.12 and the recorded thread count, either framework
+        w = ompab_why(r)
         if w:
             why.append(w)
     if fam in CHUNKED_FAMS and fw == "e4b":            # amendments 40 / 43: the chunked LM loss on every e4b arm
@@ -4147,6 +4227,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F, CHUNKAB_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if OMPAB_FAM in F:
+        out += ["\n## Predictions P104 / P105 / P106 (TC1-PREREG amendment 45: OMP_NUM_THREADS at the physical cores vs the container's allotment; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_ompab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CHUNKAUTO_FAM in F:
         out += ["\n## Predictions P99 / P100 / P101 / P102 / P103 (TC1-PREREG amendment 44: e4b's chunked LM loss off vs auto at the field recipe; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -4635,6 +4720,22 @@ def _chunkauto_set(match=((3.50, 3.52), (3.51, 3.53)), ship=((3.00, 3.02), (3.01
                                         "runtime_refusals": 0, "refused": {}}
                 r["fam"] = CHUNKAUTO_FAM
                 R[("e4b", tag)] = r
+    return R
+
+def _ompab_set(e=((3.50, 3.52), (3.20, 3.22)), u=((7.90, 7.95), (7.88, 7.93)), omp=(128, 32), held_shift=0.0, torch="2.12.1+cu130", torch_threads=None):
+    """Amendment 45: e4b's and Unsloth's matched arms, each as (om0 draws, om1 draws) s/step; `omp` = the (om0, om1) OpenMP thread counts every
+    receipt records; `torch_threads` overrides torch's recorded intra-op count (default: the OMP count)."""
+    R = {}
+    for fw, tag0, arm, pairs, held in (("e4b", "fused_attn4_m", "fused", e, 1.8000), ("unsloth", "ckpt_unsloth_m", "unsloth", u, 1.8100)):
+        for i_side, side in enumerate(("om0", "om1")):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{tag0}_{side}{sfx}"
+                r = _receipt(fw, tag, arm, s=pairs[i_side][i], heldout_n=held + (held_shift if side == "om1" else 0.0))
+                r.setdefault("env", {})["torch"] = torch
+                r["arm_facts"] = dict(r.get("arm_facts") or {}, omp_num_threads=str(omp[i_side]),
+                                      torch_num_threads=omp[i_side] if torch_threads is None else torch_threads)
+                r["fam"] = OMPAB_FAM
+                R[(fw, tag)] = r
     return R
 
 def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1536), dense_dgrad=(0, 1536), absmax=(True, True), held_shift=0.0, drop_route=False):
@@ -6770,6 +6871,21 @@ def selftest():
     assert p_ship["P100"] == "FALSIFIED" and p_ship["P101"] == "HELD", p_ship
     assert pca(peaks=(27.50, 27.60))["P102"] == "FALSIFIED"
     assert "P99" in render(RCA, "x") and "amendment 44" in render(RCA, "x")
+    cases += 1
+    # 99. TC1 amendment 45 (qwen3ompab): every arm VALID; P104 HELD at e4b 0.914, P105 HELD at Unsloth 0.997, P106 HELD; e4b at 0.99 FALSIFIES
+    #     P104; equal thread counts on both sides read UNTESTED (no contrast); a receipt whose torch pool differs from OMP_NUM_THREADS is VOID
+    OM = lambda R: {OMPAB_FAM: reduce_family(OMPAB_FAM, R, {}, 20)}
+    ROM = OM(_ompab_set())
+    assert [(x["fw"], x["tag"]) for x in ROM[OMPAB_FAM]["rows"]] == EXPECTED[OMPAB_FAM]
+    assert all(x["verdict"] == "VALID" for x in ROM[OMPAB_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in ROM[OMPAB_FAM]["rows"]]
+    pom = lambda **kw: {p: v for p, _, v, _ in score_ompab(OM(_ompab_set(**kw)))}
+    assert pom() == {"P104": "HELD", "P105": "HELD", "P106": "HELD"}, score_ompab(ROM)
+    assert pom(e=((3.50, 3.52), (3.46, 3.48)))["P104"] == "FALSIFIED"
+    assert pom(omp=(32, 32)) == {"P104": "UNTESTED", "P105": "UNTESTED", "P106": "UNTESTED"}
+    RV = OM(_ompab_set(torch_threads=64))
+    assert RV[OMPAB_FAM]["verdicts"][("e4b", "fused_attn4_m_om0")] == "VOID" and "torch ran 64" in str(next(x["why"] for x in RV[OMPAB_FAM]["rows"] if x["tag"] == "fused_attn4_m_om0"))
+    assert pom(held_shift=0.01)["P106"] == "FALSIFIED"
+    assert "P104" in render(ROM, "x") and "amendment 45" in render(ROM, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

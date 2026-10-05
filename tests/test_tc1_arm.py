@@ -622,18 +622,20 @@ def test_load_e4b_records_its_own_phases(monkeypatch):
 def test_arm_env_prefix_actually_executes():
     """The arm's env prefix must RUN (tp4's P56 draw-1 lesson): the real prefix out of the real file, executed."""
     sh = RUN_SH.read_text()
-    m = re.search(r"^(\s*env \$ARM_ENV .*?TC1_ARM_ALARM_S=\$A) perl", sh, re.M)
+    m = re.search(r"^(\s*env OMP_NUM_THREADS=\$PHYS \$ARM_ENV .*?TC1_ARM_ALARM_S=\$A) perl", sh, re.M)
     assert m, "the arm's env prefix is not in the shape this test knows how to drive"
     prefix = m.group(1).strip()
-    for arm, want in (("fused", ""), ("batched", "64")):
+    # TC1 amendment 45: OMP_NUM_THREADS=$PHYS precedes $ARM_ENV, so a family's per-arm OMP_NUM_THREADS (qwen3ompab's om1 side) wins.
+    for arm, extra, want, omp in (("fused", "", "", "4"), ("batched", "", "64", "4"), ("fused", "OMP_NUM_THREADS=2", "", "2")):
         script = f"""
         ARM={arm}; GPU_CLASS=5090; A=3600
         ARM_ENV=""; [ "$ARM" = batched ] && ARM_ENV="E4B_BATCHED_PAD_WASTE_LIMIT=64"
+        TC1_ARM_EXTRA_ENV="{extra}"; [ -n "$TC1_ARM_EXTRA_ENV" ] && ARM_ENV="$ARM_ENV $TC1_ARM_EXTRA_ENV"
         PHYS=4; BOX_CLASS="RTX 5090"
         {prefix} /bin/sh -c 'echo RAN box="$TC1_BOX_CLASS" alarm="$TC1_ARM_ALARM_S" pad="$E4B_BATCHED_PAD_WASTE_LIMIT" omp="$OMP_NUM_THREADS"'
         """
         r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
-        assert r.returncode == 0 and "RAN" in r.stdout and 'box=RTX 5090' in r.stdout and "alarm=3600" in r.stdout and f"pad={want}" in r.stdout and "omp=4" in r.stdout, (arm, r.stdout, r.stderr)
+        assert r.returncode == 0 and "RAN" in r.stdout and 'box=RTX 5090' in r.stdout and "alarm=3600" in r.stdout and f"pad={want}" in r.stdout and f"omp={omp}" in r.stdout, (arm, extra, r.stdout, r.stderr)
 
 
 # ----------------------------------------------------------------------------- lane TC3 (the frontier tokens, the hand-run block, the lever helpers)
@@ -1151,7 +1153,7 @@ def test_tc1_amendment_4_only_the_scattermoe_arm_reaches_the_hub():
     kernels-community kernels at load), and that arm records the kernel commits it fetched; the receipt carries both records."""
     run = RUN_SH.read_text()
     assert 'local OFFL=1; case "$FW/$TAG" in axolotl/ckpt_axolotl_best*) OFFL=0;; esac' in run      # amendments 6 and 8: every scattermoe tag
-    assert "env $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1" in run and "HF_HUB_OFFLINE=1 UNSLOTH" not in run
+    assert "env OMP_NUM_THREADS=$PHYS $ARM_ENV HF_HUB_OFFLINE=$OFFL UNSLOTH_ENABLE_LOGGING=1" in run and "HF_HUB_OFFLINE=1 UNSLOTH" not in run
     src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
     assert 'x["axolotl_router_recast"] = axolotl_router_recast(model)' in src
     assert '"axolotl_router_recast": x.get("axolotl_router_recast"), "hub_kernels_cached": x.get("hub_kernels_cached")' in src

@@ -1816,3 +1816,51 @@ side of their bound and UNTESTED where a side is unstable, not VALID or not enga
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for the t212 install. About
 $2.5 with the download; this is in the standing no-ask tier.
+
+### Amendment 45 (2026-10-05T19:17Z, after TC1c amendment 9's read, before any box): OMP_NUM_THREADS at the host's physical cores against the container's CPU allotment (P104, P105, P106)
+
+**Why.** Since phase 3 (F19) every TC1 arm has run with `OMP_NUM_THREADS` set to the host's physical cores, and a rented container can be
+held to far fewer. TC1c amendment 9's RunPod H100 pod was allotted 18 vCPUs and ran 72 threads. e4b's draws there came 18 % and 29 %
+apart while Unsloth's held. Vast lists a 5090 rental's share of its host in `cpu_cores_effective` (for example 24 of 96 cores on machine
+152440), and the busiest host this campaign used, 145701, shows 256 CPUs to a one-GPU container that ran 128 threads. If the allotment is
+enforced as a CFS quota, idle OpenMP workers spin into it and the main thread is throttled. e4b's step is the host-bound one, so that would
+cost e4b most. It would also be one cause of TC1 amendment 38's unread lead: e4b's step was 37–44 % shorter on a host whose container saw
+48 CPUs than on the 256-CPU host. No box has recorded the allotment (#1196 adds it), so this registration is also the probe.
+
+**The box** (token `qwen3ompab`). One RTX 5090, TC1's qwen3 tokens and field recipe, 60 steps, load-gated draws (`TC1_LOAD_GATE=6.0`,
+`TC1_LOAD_RETRIES=2`):
+
+- e4b's matched arm and Unsloth's matched arm, both in venv-unsloth (amendment 25's same-stack pair), each `_om0` (`OMP_NUM_THREADS` = the
+  host's physical cores, as every box so far) against `_om1` (`OMP_NUM_THREADS` = the container's allotment: the cgroup v2 `cpu.max` quota,
+  else the v1 CFS quota, in CPUs rounded up, capped by the affinity count), two draws a side in ABBA order;
+- the lane computes the allotment before any install. A host whose allotment is not below its physical cores has no contrast. It refuses
+  with rc 18 (a host floor), and the launcher's lane-refusal class names the machine for the next draw.
+
+Engagement: each receipt's `arm_facts` records `omp_num_threads`, and torch's intra-op pool matches it. Both frameworks run on torch 2.12.*.
+The scorer requires every `_om1` receipt of a framework to run fewer threads than every `_om0` receipt, else UNTESTED for want of contrast.
+
+**Predictions** (registered before the box), one-sided:
+
+- **P104** (e4b): `_om1` / `_om0` ≤ **0.97**, at least 3 % faster at its allotment.
+- **P105** (Unsloth): `_om1` / `_om0` ≤ **1.01**, no slower at its allotment.
+- **P106:** on each framework, |mean held-out at N, `_om1` − `_om0`| ≤ **0.005**.
+
+Each needs two stable VALID draws a side. Each is FALSIFIED on the wrong side of its bound, and UNTESTED where a side is unstable, not VALID,
+not engaged or without contrast.
+
+**Decision rules.**
+
+- **P104, P105 and P106 HELD:** later TC1 and TC1c boxes run every arm, of every framework, at the container's allotment. The registration
+  that does so cites this read. STATUS says that every position quoted before it ran at the host's physical cores. A separate registration
+  asks whether e4b should size torch's pool to the container by default, and later registrations re-read the quoted positions under the new
+  policy. Until they do, the old positions stay quoted.
+- **P104 FALSIFIED:** the thread count is not e4b's lever on that host. The harness keeps the physical cores. TC1c amendment 9's instability
+  stays unexplained.
+- **P104 HELD, P105 FALSIFIED:** the harness keeps the physical cores (a policy must hold for both frameworks), and the read reports both.
+- **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+- **Three draws in a row refused for no contrast** (each on a new machine): the read records that those Vast containers carried no CPU quota
+  below their physical cores, and this amendment closes without a box.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2.5 with the download;
+a refused draw costs about a cent. This is in the standing no-ask tier.
