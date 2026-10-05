@@ -569,8 +569,20 @@ ATTN_CENSUS[PACKED4KCE_FAM] = 192
 DENSE_PINS[PACKED4KCE_FAM] = DENSE_PINS[QDENSE_FAM]
 EXPECTED[PACKED4KCE_FAM] = list(EXPECTED[SAMESTACK_FAM])
 SAMESTACK_SPECS[PACKED4KCE_FAM] = ("P87", (0.80, 1.60), "P88", (0.80, 1.00), None, None, "TC1 amendment 39: every e4b arm OOMed at step 1 without it")
-PACKED_FAMS = (PACKED4K_FAM, PACKED4KCE_FAM)
-PACKED_FIT_ID = {PACKED4K_FAM: "P86", PACKED4KCE_FAM: "P89"}   # every e4b arm that ran completed resident
+# TC1 amendment 43: amendment 40's box again, the per-expert LoRA loop read as a recorded route (grouped-nf4-gemm's auto takes it for padded
+# blocks over its 2 GiB limit, ~1.5 % of delta calls at 4,096 tokens on tc1-5090-91) up to LOOP_ROUTE_SHARE_MAX of a step's calls
+PACKED4KCE2_FAM = "qwen3samestack4kce2"
+FAMS.append(PACKED4KCE2_FAM)
+NAMES[PACKED4KCE2_FAM] = "Qwen3-30B-A3B (amendment 43: the packed 4,096-token regime on one stack, e4b with its chunked LM loss, the LoRA loop a recorded route)"
+N_LAYERS[PACKED4KCE2_FAM] = 48
+ATTN_CENSUS[PACKED4KCE2_FAM] = 192
+DENSE_PINS[PACKED4KCE2_FAM] = DENSE_PINS[QDENSE_FAM]
+EXPECTED[PACKED4KCE2_FAM] = list(EXPECTED[SAMESTACK_FAM])
+SAMESTACK_SPECS[PACKED4KCE2_FAM] = ("P96", (1.25, 1.65), "P97", (0.84, 0.95), None, None, "amendment 40's unquotable readings: 1.43 / 0.892")
+LOOP_ROUTE_SHARE_MAX = {PACKED4KCE2_FAM: 0.05}   # a fused arm's per-expert LoRA loop is a recorded route up to this share of a step's delta calls
+PACKED_FAMS = (PACKED4K_FAM, PACKED4KCE_FAM, PACKED4KCE2_FAM)
+CHUNKED_FAMS = (PACKED4KCE_FAM, PACKED4KCE2_FAM)
+PACKED_FIT_ID = {PACKED4K_FAM: "P86", PACKED4KCE_FAM: "P89", PACKED4KCE2_FAM: "P98"}   # every e4b arm that ran completed resident
 
 
 def chunked_lm_loss_why(r):
@@ -1325,8 +1337,9 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
                 why.append(f"kernel calls/step min {r.get('kernel_calls_per_step_min')} < 2*{L}*accum {A}")
             if not r.get("lora_path_present"):                     # A [F1]
                 why.append("no grouped-nf4-gemm LoRA-path counters on the receipt (lora_path_present false): the path cannot be verified")
-            elif r.get("lora_path_loop_steps"):
-                st = r["lora_path_loop_steps"]
+            elif r.get("lora_path_loop_steps") and not (fam in LOOP_ROUTE_SHARE_MAX and max(
+                    [v for v in (r.get("lora_loop_share") or []) if v is not None] or [1.0]) <= LOOP_ROUTE_SHARE_MAX[fam]):
+                st = r["lora_path_loop_steps"]                       # amendment 43: a share under the family's bound is a recorded route
                 why.append(f"the per-expert LoRA loop ran on step(s) {st[:6]}{'...' if len(st) > 6 else ''} (lora_loop_share max {max(v for v in (r.get('lora_loop_share') or [0]) if v is not None):.3f})")
         if r.get("attn_4bit"):
             want = r.get("structural_expected_n_attn4")
@@ -1450,7 +1463,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = chunk_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
-    if fam == PACKED4KCE_FAM and fw == "e4b":          # amendment 40: the chunked LM loss on every e4b arm
+    if fam in CHUNKED_FAMS and fw == "e4b":            # amendments 40 / 43: the chunked LM loss on every e4b arm
         w = chunked_lm_loss_why(r)
         if w:
             why.append(w)
@@ -4015,6 +4028,15 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F, SAMESTACK_H100_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PACKED4KCE2_FAM in F:
+        out += ["\n## Predictions P96 / P97 / P98 (TC1-PREREG amendment 43: the packed 4,096-token regime on one stack, e4b with its chunked LM loss, the LoRA loop a recorded route; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_packed4k(F, PACKED4KCE2_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+        loops = [(x["tag"], max([v for v in ((x.get("r") or {}).get("lora_loop_share") or []) if v is not None] or [0.0]))
+                 for x in F[PACKED4KCE2_FAM]["rows"] if x["fw"] == "e4b" and (x.get("r") or {}).get("status") == "ok"]
+        out.append("- the per-expert LoRA loop's share of a step's delta calls (max per arm, the recorded route): "
+                   + "; ".join(f"`{t}` {m:.3f}" for t, m in loops))
     if PACKED4KCE_FAM in F:
         out += ["\n## Predictions P87 / P88 / P89 (TC1-PREREG amendment 40: the packed 4,096-token regime on one stack, e4b with its chunked LM loss; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -4412,7 +4434,8 @@ def _samestack_set(e=(3.44, 3.46), t28=(3.90, 3.92), u=(7.90, 7.95), torch_v=("2
                              "stats": {"fwd": 16896, "dgrad": 7680}}
     return R
 
-def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.12.1+cu130", "2.8.0+cu128"), oom=(), over=None, fam=None, chunked=None):
+def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.12.1+cu130", "2.8.0+cu128"), oom=(), over=None, fam=None, chunked=None,
+                  loop_share=None):
     """Amendment 39: amendment 25's set on the packed rows -- every receipt at seq 4096, micro-batch 1 x accum 4, N 30, a packed tokens file,
     16,384 real tokens and none padded on every step, resident; e4b's reference a NOT_RUN stub (the registered box skips it). `oom` names
     tags written as OOM stubs (e4b or Unsloth); `over` = {tag: {field: value}} overrides on a receipt."""
@@ -4429,7 +4452,10 @@ def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.
         if tag in oom:
             R[(fw, tag)] = {**_stub(fw, tag, R[(fw, tag)]["arm"], "oom", "OOM at step 1: CUDA out of memory. Tried to allocate 2.32 GiB"), "steps": 30}
         R[(fw, tag)]["fam"] = fam or PACKED4K_FAM
-        if fam == PACKED4KCE_FAM and fw == "e4b" and R[(fw, tag)].get("status") == "ok":   # amendment 40: the chunked loss on every e4b arm
+        if loop_share is not None and fw == "e4b" and R[(fw, tag)].get("status") == "ok":   # amendment 43: the loop on every step at this share
+            R[(fw, tag)]["lora_loop_share"] = [loop_share] * 30
+            R[(fw, tag)]["lora_path_loop_steps"] = list(range(1, 31)) if loop_share else []
+        if fam in CHUNKED_FAMS and fw == "e4b" and R[(fw, tag)].get("status") == "ok":   # amendments 40 / 43: the chunked loss on every e4b arm
             R[(fw, tag)]["chunked_lm_loss"] = dict(chunked) if chunked is not None else {
                 "env": "1", "e4b_has_chunked_lm_loss": True, "chunked_calls": 120, "stock_calls": 16, "runtime_refusals": 0, "refused": {}}
         R[(fw, tag)].update((over or {}).get(tag, {}))
@@ -6600,6 +6626,21 @@ def selftest():
     assert p42() == {"P94": "HELD", "P95": "HELD"}, score_samestack(H2(_samestack_set(fam=SAMESTACK_HOST2_FAM)), SAMESTACK_HOST2_FAM)
     assert p42(u=(10.40, 10.45))["P94"] == "FALSIFIED" and p42(e=(3.88, 3.90))["P95"] == "FALSIFIED"
     assert ps() == {"P50": "HELD", "P51": "HELD", "P52": "HELD"}
+    cases += 1
+    # 97. TC1 amendment 43 (qwen3samestack4kce2): the loop at 1.5 % of delta calls on every step reads VALID here and VOID under amendment 40's
+    #     family (the same receipts); 8 % is VOID here too; P96 / P97 / P98 HELD at 1.40 / 0.89, a 1.75 FALSIFIES P96, an e4b OOM FALSIFIES P98
+    C2_ = lambda R, fam=PACKED4KCE2_FAM: {fam: reduce_family(fam, R, {}, 30)}
+    lp = dict(e=(11.2, 11.2), t28=(12.6, 12.6), u=(15.7, 15.7), loop_share=0.015)
+    R43 = C2_(_packed4k_set(fam=PACKED4KCE2_FAM, **lp))
+    assert all(x["verdict"] in ("VALID", "NOT_RUN") for x in R43[PACKED4KCE2_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in R43[PACKED4KCE2_FAM]["rows"]]
+    R40 = C2_(_packed4k_set(fam=PACKED4KCE_FAM, **lp), PACKED4KCE_FAM)
+    assert R40[PACKED4KCE_FAM]["verdicts"][("e4b", "fused_attn4_m")] == "VOID"                      # amendment 40's rule unchanged
+    R8 = C2_(_packed4k_set(fam=PACKED4KCE2_FAM, **{**lp, "loop_share": 0.08}))
+    assert R8[PACKED4KCE2_FAM]["verdicts"][("e4b", "fused_attn4_m")] == "VOID"
+    p43 = lambda **kw: {p: v for p, _, v, _ in score_packed4k(C2_(_packed4k_set(fam=PACKED4KCE2_FAM, **{**lp, **kw})), PACKED4KCE2_FAM)}
+    assert p43() == {"P96": "HELD", "P97": "HELD", "P98": "HELD"}, score_packed4k(R43, PACKED4KCE2_FAM)
+    assert p43(u=(19.6, 19.6))["P96"] == "FALSIFIED" and p43(oom=("fused_attn4_m_d2",))["P98"] == "FALSIFIED"
+    assert "`fused_attn4_m` 0.015" in render(R43, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
