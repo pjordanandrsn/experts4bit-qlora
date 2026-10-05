@@ -21,7 +21,8 @@ where it goes (SC2's fit could not even separate it from batch growth). This wri
   adds none.
 
 The cost per step is a few ``perf_counter`` calls and up to six CUDA events. Rows are buffered and appended every
-``flush_every`` steps, and on close.
+``flush_every`` steps, and on close. A step whose events the GPU has not finished yet (one with no sync after its
+last event) is held until a later step's sync has passed it, never waited for.
 """
 from __future__ import annotations
 
@@ -38,6 +39,7 @@ class StepTrace:
         self.cuda = bool(cuda) and torch.cuda.is_available()
         self.flush_every = int(flush_every)
         self.rows: list = []
+        self._pending: list = []         # (row, events) not yet readable without a sync; see end()
         self.n = 0
         self.cur = None
         self._last = 0.0
@@ -94,19 +96,34 @@ class StepTrace:
         cur.update(info)
         cur["step_ms"] = round((self._last - cur["t"]) * 1e3, 4)
         cur["seg"] = {k: round(v, 4) for k, v in cur["seg"].items()}
-        if self._ev:
-            base = self._ev[0][1]
-            try:
-                self._ev[-1][1].synchronize()       # already complete: the step synced after recording it
-                cur["gpu"] = {name: round(base.elapsed_time(e), 4) for name, e in self._ev[1:]}
-            except RuntimeError as exc:             # a trace must never take serving down
-                cur["gpu_error"] = str(exc)[:200]
-        self.rows.append(cur)
+        # A step's events are read once its LAST event has completed, which a step that synced (a first token, a
+        # decode's tokens) guarantees. A step with no sync after its last event (a prefill chunk that does not complete
+        # its prompt, with nothing decoding) waits in `_pending` until a later step's sync has passed it, so the trace
+        # never synchronizes on its own.
+        self._pending.append((cur, self._ev))
         self.n += 1
         self.cur = None
         self._ev = []
+        self._resolve(block=False)
         if len(self.rows) >= self.flush_every:
             self.flush()
+
+    def _resolve(self, block: bool) -> None:
+        """Move finished steps from ``_pending`` to ``rows``, in step order (``block`` waits: for close only)."""
+        while self._pending:
+            cur, evs = self._pending[0]
+            if evs:
+                last = evs[-1][1]
+                try:
+                    if not block and not last.query():
+                        return
+                    last.synchronize()
+                    base = evs[0][1]
+                    cur["gpu"] = {name: round(base.elapsed_time(e), 4) for name, e in evs[1:]}
+                except RuntimeError as exc:             # a trace must never take serving down
+                    cur["gpu_error"] = str(exc)[:200]
+            self.rows.append(cur)
+            self._pending.pop(0)
 
     def flush(self) -> None:
         if not self.rows:
@@ -119,4 +136,7 @@ class StepTrace:
         except OSError as exc:
             print(f"[step_trace] append failed ({type(exc).__name__}: {exc})", flush=True)
 
-    close = flush
+    def close(self) -> None:
+        """Resolve every pending step (waiting on the GPU if it must) and write what is buffered."""
+        self._resolve(block=True)
+        self.flush()
