@@ -114,6 +114,22 @@ def bytes_per_expert(stack, qsetup=None) -> int:
     return (_frozen_stack_bytes(replace(stack, layer=0), qsetup) - one) // (stack.n_experts - 1)
 
 
+def min_hot_rows(topology, setup) -> int:
+    """The fewest cold-tier rows ``setup`` can serve with: grouped-nf4-gemm's ColdTier refuses a demand window larger than
+    its slots ("Size hot_rows >= max routed experts per layer"). A step routes at most ``top_k`` experts per token over
+    ``max(chunk_tokens, max_seqs)`` tokens, a layer has ``n_experts``, and only the layer's NVMe rows are cold. Without a
+    routing profile the solver fills layer by layer, so NVMe holds whole trailing layers. 0 when nothing is on NVMe."""
+    st = topology.expert_stacks[0]
+    if setup.placement != "solver":
+        return 0
+    n_nvme = solver_tiers(len(topology.expert_stacks), st.n_experts, bytes_per_expert(st), setup.vram_gb,
+                          setup.dram_gb)["nvme"]
+    if not n_nvme:
+        return 0
+    routed = (topology.top_k or st.n_experts) * max(setup.chunk_tokens, setup.max_seqs)
+    return int(min(st.n_experts, routed, n_nvme))
+
+
 def _hybrid_host_items(hot_rows: int, bpe: int, stride: int, n_nvme: int) -> list:
     """The host buffers ``enable_hybrid_tier`` builds at either placement (the server always builds the hybrid tier)."""
     try:
@@ -203,6 +219,12 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                                    f"{tiers['dram']} rows, pageable host memory, fp32 absmax"))
         items.append(FootprintItem("expert rows on NVMe (read through the cold tier)", "nvme", n_nvme * bpe, "derived",
                                    f"{n_nvme} rows streamed from the arena on demand"))
+        need = min_hot_rows(topology, setup)
+        if setup.hot_rows < need:
+            return Footprint(items=(), refusals=(
+                f"hot_rows {setup.hot_rows} is below the {need} a cold layer can route in one step (top_k x "
+                f"max(chunk_tokens, max_seqs), at most n_experts): grouped-nf4-gemm's ColdTier would refuse the demand "
+                "window mid-request; raise hot_rows",))
     items += _hybrid_host_items(setup.hot_rows, bpe, stride, n_nvme)
     items.append(FootprintItem("dense weights (bf16)", "device", 2 * topology.dense_numel, "derived",
                                "embeddings, attention, norms, routers, dense/shared MLPs; no adapters under an arena load"))

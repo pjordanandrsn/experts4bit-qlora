@@ -13,8 +13,8 @@ from experts4bit_qlora.engines import fp8_paged_kv  # noqa: E402
 from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV  # noqa: E402
 from experts4bit_qlora.recipe import QLoRASetup, _module_bytes, _stack_modules  # noqa: E402
 from experts4bit_qlora.serve_recipe import (ARENA_ALIGN, BLOCK_TOKENS, ServeSetup,  # noqa: E402
-                                             bytes_per_expert, estimate_serve_footprint, paged_kv_pool_bytes,
-                                             solver_tiers)
+                                             bytes_per_expert, estimate_serve_footprint, min_hot_rows,
+                                             paged_kv_pool_bytes, solver_tiers)
 
 
 def _allocated(kv) -> int:
@@ -95,7 +95,7 @@ def test_solver_estimate_splits_the_slab_across_tiers():
     slab = next(i.bytes for i in allv.items if i.name.startswith("frozen expert stacks"))
     rows, bpe = len(topo.expert_stacks) * topo.expert_stacks[0].n_experts, bytes_per_expert(topo.expert_stacks[0])
     f = estimate_serve_footprint(topo, ServeSetup(placement="solver", max_seqs=1, graphs=False,
-                                                  vram_gb=5 * bpe / 2**30, dram_gb=7 * bpe / 2**30, hot_rows=4))
+                                                  vram_gb=5 * bpe / 2**30, dram_gb=7 * bpe / 2**30, hot_rows=8))
     assert not f.refusals
     by = {i.name: i for i in f.items}
     vram, dram, nvme = (by["expert stacks, VRAM tier"], by["expert stacks, DRAM tier (computed on the CPU)"],
@@ -103,7 +103,7 @@ def test_solver_estimate_splits_the_slab_across_tiers():
     assert (vram.where, dram.where, nvme.where) == ("device", "host", "nvme")
     assert (vram.bytes, dram.bytes) == (5 * bpe, 7 * bpe) and vram.bytes + dram.bytes + nvme.bytes == rows * bpe
     assert 0 <= slab - rows * bpe < 1024 * len(topo.expert_stacks)   # only the stacks' per-stack constants remain
-    assert by["cold view (rows land here)"].bytes == 4 * bpe
+    assert by["cold view (rows land here)"].bytes == 8 * bpe
     assert any("CPU tier" in u for u in f.unmodelled)
 
 
@@ -157,3 +157,18 @@ def test_bytes_per_expert_is_the_arena_row_not_a_share_of_the_stack():
     f = estimate_serve_footprint(topo, ServeSetup(placement="solver", max_seqs=1, graphs=False,
                                                   vram_gb=3 * row / 2**30, dram_gb=0.0))
     assert next(i.bytes for i in f.items if i.name == "expert stacks, VRAM tier") == 3 * row
+
+
+def test_a_cold_layer_needs_as_many_rows_as_it_can_route_in_one_step():
+    topo = describe_moe(_qwen3())                       # 3 layers x 8 experts, top-2
+    row = bytes_per_expert(topo.expert_stacks[0])
+    gib = lambda n: n * row / 2**30  # noqa: E731
+    nvme_one_layer = dict(placement="solver", max_seqs=1, graphs=False, vram_gb=gib(8), dram_gb=gib(8))
+    assert min_hot_rows(topo, ServeSetup(**nvme_one_layer, chunk_tokens=512)) == 8          # all 8 experts of the layer
+    assert min_hot_rows(topo, ServeSetup(**nvme_one_layer, chunk_tokens=2)) == 4            # top-2 x 2 tokens
+    assert min_hot_rows(topo, ServeSetup(placement="solver", max_seqs=1, graphs=False, vram_gb=gib(20),
+                                         dram_gb=gib(2), chunk_tokens=512)) == 2           # only 2 rows are cold
+    assert min_hot_rows(topo, ServeSetup(placement="solver", max_seqs=1, graphs=False, vram_gb=1.0)) == 0
+    f = estimate_serve_footprint(topo, ServeSetup(**nvme_one_layer, hot_rows=4))
+    assert f.items == () and any("hot_rows 4 is below the 8" in r for r in f.refusals)
+    assert not estimate_serve_footprint(topo, ServeSetup(**nvme_one_layer, hot_rows=8)).refusals

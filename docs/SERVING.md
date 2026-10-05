@@ -102,6 +102,18 @@ resolved, `auto` -> `k19` or `loop`), `int4_prefill_above_256_rows` (with `devic
 `k19`, else `mtile`), `prefill_attn` (`E4B_PAGED_PREFILL_ATTN` resolved), and the raw `*_env` values. A harness
 should record that block, not the box's environment.
 
+Those resolved names describe an int4-b32 store and a layer without sinks or a sliding window. They do not say what a
+given model ran. On gpt-oss they read `k19` and `flash` while no call takes either: its MXFP4 store serves rows up to
+256 through K21 and rows above through the kept NF4 stacks (`E4B_INT4_KEEP_NF4=1`), and every gpt-oss layer has sinks,
+so it keeps the explicit mask. **`prefill_routes.seen` is what ran.**
+- `seen.moe` counts each expert-GEMM call's route and row class, for example `mxfp4_k21|le256` or
+  `nf4_mtile_captured|gt256`.
+- `seen.prefill_attn` counts each prefill attention call's path: `flash`, or `explicit_mask:` with `sinks`, `window`
+  or `env`.
+
+Both are counted in the Python forward, so eager calls and graph captures count and graph replays do not. A count
+says the route ran, not how often a replayed graph did. An engagement check should assert on `seen`.
+
 **First-chunk prefill graph (`E4B_PAGED_PREFILL_GRAPH`, `auto` by default since lane SC2b).** Every first chunk of
 exactly `E4B_PAGED_CHUNK_TOKENS` tokens replays one CUDA graph of the prefill forward instead of launching it kernel by
 kernel; later chunks, and first chunks of other lengths, run eagerly. A first chunk reads no history, so one graph

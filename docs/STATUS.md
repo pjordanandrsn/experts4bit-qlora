@@ -271,7 +271,10 @@ e4b keeps it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 G
 0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults
 the gap is 1.78 GB. grouped-nf4-gemm's opt-in compact delta (`NF4_QLORA_COMPACT_DELTA=1`) was meant to shrink that transient; on one
 stack it did not (`e4b.train.compact-delta.qwen3.5090.2026-10-05`, TC1 amendment 36): the matched peak rose 0.23 GB, while the step ran
-0.969 (matched) and 0.970 (shipped) of the default's. It stays opt-in.
+0.969 (matched) and 0.970 (shipped) of the default's. It stays opt-in. With grouped-nf4-gemm#473's backward (each intermediate released
+at its last use) a second host read the matched peak 0.288 GB lower and the step 0.967 (matched) / 0.948 (shipped)
+(`e4b.train.compact-delta.free.qwen3.5090.2026-10-05`, TC1 amendment 37); the shipped ratio fell below its registered band, so it stays
+opt-in until a registration whose bands allow that reading.
 **The double-quantized absmax, as an A/B** (`e4b.train.absmax-dq.mixtral.5090.2026-10-05`, TC1 amendment 28): on Mixtral-8x7B
 `E4B_ABSMAX_DQ=1` costs 2.3 % of the step (1.023) for 2.04 GB of peak (31.07 → 29.03 GB), held-out within 0.003. Qwen3-30B-A3B's pair
 was unstable on a busy host; amendment 31 read it over 60 steps on a quiet one
@@ -343,8 +346,12 @@ e4b trains it resident and steps 2.05× faster than Unsloth**
 with the absmax double-quantized and the non-routed projections in NF4, Unsloth/e4b
 **2.049** [2.028, 2.070], 18.95 against 9.25 s/step, at 0.94 GB more peak (31.35 vs
 30.41 GB), the pair COMPARABLE. e4b's defaults keep those projections bf16 and do not fit.
-**On Mixtral-8x7B at default settings Unsloth is faster, 0.836**
-(`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`, TC2 amendment 8): with
+**On Mixtral-8x7B with both frameworks on one stack, e4b is faster: Unsloth/e4b 1.144 [1.140, 1.148]**
+(`e4b.train.h2h.unsloth.mixtral.5090.2026-10-05.same-stack`, TC2 amendment 9; torch 2.12.1 / transformers 5.5.0, resident, e4b at
+defaults on the dense route, an EPYC 7B13 host): e4b 3.24 s/step against Unsloth's 3.71, COMPARABLE, at 2.07 GB more peak (the fp32
+absmax) and ×1.07 the energy per step. That is the position to quote. In the same box e4b on the field image's stack reads 1.013, so the
+earlier loss below was mostly the host and the stack (e4b's code also moved between the two boxes). **With e4b on the field image's stack, on a Core Ultra 9 285K, Unsloth was faster,
+0.836** (`e4b.train.h2h.unsloth.mixtral.5090.2026-10-04.dense-default`, TC2 amendment 8): with
 grouped-nf4-gemm's dense route under `auto` (gnf4#463, run at `bb56b42`, a main commit whose version still read
 0.38.0; it ships in 0.39.0), which `auto` takes for Mixtral's calls, e4b steps in
 3.57 s against Unsloth's 2.98 s, at 1.95 GB more peak (31.1 vs 29.1 GB), the pair

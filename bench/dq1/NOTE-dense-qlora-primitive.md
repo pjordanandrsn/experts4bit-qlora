@@ -50,8 +50,11 @@ receipt lives in session memory only, not in either repo.
 
 Since then, gnf4 0.39.0's `GNF4_TRAIN_GEMM=auto` sends any call with at most 16 groups, off sm_90, down the **dense
 route**: gnf4's Triton dequant, then `torch.mm` (`nf4_route.py:85-86, 116, 233`). So G=1 is now structurally the same as
-bitsandbytes' large-M path: decode the whole weight, then cuBLAS. The only difference is whose dequant kernel runs. gnf4's
-decoder measured 0.76–0.93× of bnb's time on an A2000 (`nf4_route.py:156`).
+bitsandbytes' large-M path: decode the whole weight, then cuBLAS. The only difference is whose dequant kernel runs.
+*(Corrected 2026-10-05.)* This note first quoted a code comment's A2000 timing of the two decoders here. An A2000 timing
+is not speed evidence under the testbed policy, so it should not have informed the G1 prediction. DQ1's 5090 read
+measures the decoders directly: gnf4's `dequant_groups` takes 0.94–1.01× bnb's time on the large shapes and 0.65× on
+kv_proj ([RESULTS-dq1.md](RESULTS-dq1.md), run 2).
 
 **The prediction follows.** G=1 auto should sit at parity with bnb, within the dequant's share. It cannot exceed the
 dequant share by construction. DQ1 checks this, and re-reads the fused route on the 5090.
