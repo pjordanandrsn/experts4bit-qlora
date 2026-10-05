@@ -2410,7 +2410,7 @@ in that regime.
 With the opt-in chunked LM loss (`E4B_CHUNKED_LM_LOSS=1`, TC1 amendment 40) e4b trains those rows at 32.5 GB, but that box reads
 UNTESTED: grouped-nf4-gemm's `auto` route took its per-expert LoRA loop for ~1.5 % of delta calls, which TC1's field-recipe rule VOIDs.
 At the field recipe the same flag costs e4b's shipped arm 4.9 % of its step (1.049 [1.017, 1.082]) for 1.17 GB of peak
-(`e4b.train.chunked-lm-loss.default-decision.5090.2026-10-05`, TC1 amendment 41), so it stays opt-in.
+(`e4b.train.chunked-lm-loss.default-decision.5090.2026-10-05`, TC1 amendment 41), so it stays opt-in. That box ran every attempt above its 6.0 load gate on a shared host, so the decision stands but the 4.9 % is not a clean magnitude.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against
 native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
 native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.
