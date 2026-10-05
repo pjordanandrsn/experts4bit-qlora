@@ -1,0 +1,66 @@
+{
+ "schema": "dq4-cap/1",
+ "arm": "R",
+ "mode": "confirm",
+ "loss": "chunked",
+ "rehearsal": false,
+ "alloc_conf": "expandable_segments:True",
+ "started_at": "2026-10-05T21:06:03Z",
+ "device": "NVIDIA GeForce RTX 5090",
+ "total_bytes": 33670758400,
+ "config_overrides": {
+  "num_hidden_layers": 64
+ },
+ "env": {
+  "E4B_SHA": "3f5a8bc9266e72b24555191481878a02a29ba36a"
+ },
+ "ladder": {
+  "start": 2048,
+  "step": 1024,
+  "top": 32768,
+  "steps": 2
+ },
+ "build_s": 86.1,
+ "engagement": {
+  "wrapped": 448,
+  "wrapper_kinds": [
+   "peft.tuners.lora.bnb.Linear4bit"
+  ],
+  "lora_params": 896,
+  "lora_dtypes": [
+   "torch.float32"
+  ],
+  "trainable": 134217728,
+  "gradient_checkpointing": true
+ },
+ "chunked_loss": {
+  "patched": true,
+  "chunk": 512,
+  "refused": {},
+  "warnings": []
+ },
+ "allocated_after_setup": 19748925440,
+ "rungs": [
+  {
+   "seq": 8192,
+   "ok": true,
+   "steps": [
+    {
+     "s": 14.767224977258593,
+     "loss": 12.94296646118164,
+     "finite": true
+    },
+    {
+     "s": 14.73250950826332,
+     "loss": 12.698104858398438,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 31622674432,
+   "peak_reserved": 32998686720
+  }
+ ],
+ "max_ok": 8192,
+ "first_oom": null,
+ "finished_at": "2026-10-05T21:07:59Z"
+}

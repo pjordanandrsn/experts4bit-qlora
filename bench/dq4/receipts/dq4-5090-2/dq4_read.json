@@ -1,0 +1,141 @@
+{
+ "schema": "dq4-read/1",
+ "verdicts": {
+  "lane": "CAP_REAL",
+  "c_def": "CAP_REAL",
+  "c_exp": "CAP_REAL",
+  "s_def": "CAP_REAL"
+ },
+ "configs": {
+  "c_def": {
+   "role": "graded",
+   "void": [],
+   "function_fail": [],
+   "noisy": [],
+   "arms": {
+    "R": {
+     "L": 7168,
+     "first_oom": 8192,
+     "ceiling": false,
+     "at_L": {
+      "peak_alloc": 30317008896,
+      "peak_reserved": 32977715200,
+      "step_s": [
+       12.736540045589209,
+       12.632062030956149
+      ]
+     }
+    },
+    "S": {
+     "L": 14336,
+     "first_oom": 15360,
+     "ceiling": false,
+     "at_L": {
+      "peak_alloc": 24635349504,
+      "peak_reserved": 31306285056,
+      "step_s": [
+       27.709742039907724,
+       27.61535510281101
+      ]
+     }
+    }
+   },
+   "L_R": 7168,
+   "L_S": 14336,
+   "G": 2.0,
+   "G_is_lower_bound": false,
+   "step_ratio_at": {
+    "seq": 7168,
+    "S_over_R": 1.0004615110547281
+   },
+   "verdict": "CAP_REAL"
+  },
+  "c_exp": {
+   "role": "secondary",
+   "void": [],
+   "function_fail": [],
+   "noisy": [],
+   "arms": {
+    "R": {
+     "L": 8192,
+     "first_oom": 9216,
+     "ceiling": false,
+     "at_L": {
+      "peak_alloc": 31622674432,
+      "peak_reserved": 32998686720,
+      "step_s": [
+       14.767224977258593,
+       14.73250950826332
+      ]
+     }
+    },
+    "S": {
+     "L": 19456,
+     "first_oom": 20480,
+     "ceiling": false,
+     "at_L": {
+      "peak_alloc": 31334029312,
+      "peak_reserved": 32893829120,
+      "step_s": [
+       40.22824452398345,
+       40.256408989895135
+      ]
+     }
+    }
+   },
+   "L_R": 8192,
+   "L_S": 19456,
+   "G": 2.375,
+   "G_is_lower_bound": false,
+   "step_ratio_at": {
+    "seq": 8192,
+    "S_over_R": 0.9985193055518689
+   },
+   "verdict": "CAP_REAL"
+  },
+  "s_def": {
+   "role": "descriptive",
+   "void": [],
+   "function_fail": [],
+   "noisy": [],
+   "arms": {
+    "R": {
+     "L": 3072,
+     "first_oom": 4096,
+     "ceiling": false,
+     "at_L": {
+      "peak_alloc": 28560630784,
+      "peak_reserved": 32369541120,
+      "step_s": [
+       5.111485197674483,
+       5.110511377919465
+      ]
+     }
+    },
+    "S": {
+     "L": 8192,
+     "first_oom": 9216,
+     "ceiling": false,
+     "at_L": {
+      "peak_alloc": 26238727168,
+      "peak_reserved": 32891731968,
+      "step_s": [
+       14.624413636047393,
+       14.661847197916359
+      ]
+     }
+    }
+   },
+   "L_R": 3072,
+   "L_S": 8192,
+   "G": 2.6666666666666665,
+   "G_is_lower_bound": false,
+   "step_ratio_at": {
+    "seq": 3072,
+    "S_over_R": 1.002365305844949
+   },
+   "verdict": "CAP_REAL"
+  }
+ },
+ "skipped": []
+}

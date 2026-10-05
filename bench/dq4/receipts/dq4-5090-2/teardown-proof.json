@@ -1,0 +1,8 @@
+{
+ "at": "2026-10-05T21:20:48Z",
+ "complete": true,
+ "evidence": "{\"destroy\": {\"at\": \"2026-10-05T21:20:48Z\", \"http\": 200, \"instance_id\": \"54377318\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": [\"54379183\"]}",
+ "instance_id": "54377318",
+ "method": "vast-destroy",
+ "reason": "completion"
+}

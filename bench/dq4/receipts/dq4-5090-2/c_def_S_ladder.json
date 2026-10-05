@@ -1,0 +1,298 @@
+{
+ "schema": "dq4-cap/1",
+ "arm": "S",
+ "mode": "ladder",
+ "loss": "chunked",
+ "rehearsal": false,
+ "alloc_conf": "default",
+ "started_at": "2026-10-05T20:32:10Z",
+ "device": "NVIDIA GeForce RTX 5090",
+ "total_bytes": 33670758400,
+ "config_overrides": {
+  "num_hidden_layers": 64
+ },
+ "env": {
+  "E4B_SHA": "3f5a8bc9266e72b24555191481878a02a29ba36a"
+ },
+ "ladder": {
+  "start": 2048,
+  "step": 1024,
+  "top": 32768,
+  "steps": 2
+ },
+ "build_s": 85.6,
+ "engagement": {
+  "wrapped": 448,
+  "wrapper_kinds": [
+   "peft.tuners.lora.bnb.Linear4bit"
+  ],
+  "lora_params": 896,
+  "lora_dtypes": [
+   "torch.float32"
+  ],
+  "trainable": 134217728,
+  "gradient_checkpointing": true
+ },
+ "chunked_loss": {
+  "patched": true,
+  "chunk": 512,
+  "refused": {},
+  "warnings": []
+ },
+ "offload": {
+  "layers": 64,
+  "tensors": 448,
+  "host_bytes": 15602810880,
+  "per_layer_bytes": 243793920,
+  "all_pinned": true,
+  "late_bound_4bit": 448
+ },
+ "allocated_after_setup": 4176719872,
+ "rungs": [
+  {
+   "seq": 2048,
+   "ok": true,
+   "steps": [
+    {
+     "s": 3.5129500408656895,
+     "loss": 12.908461570739746,
+     "finite": true
+    },
+    {
+     "s": 3.4069203631952405,
+     "loss": 12.393780708312988,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 8459810816,
+   "peak_reserved": 18954059776
+  },
+  {
+   "seq": 3072,
+   "ok": true,
+   "steps": [
+    {
+     "s": 5.156412263866514,
+     "loss": 12.959786415100098,
+     "finite": true
+    },
+    {
+     "s": 5.155438254587352,
+     "loss": 12.741765022277832,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 9804535808,
+   "peak_reserved": 19293798400
+  },
+  {
+   "seq": 4096,
+   "ok": true,
+   "steps": [
+    {
+     "s": 6.939700981602073,
+     "loss": 12.965408325195312,
+     "finite": true
+    },
+    {
+     "s": 6.939960500691086,
+     "loss": 12.826203346252441,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 11155552256,
+   "peak_reserved": 19581108224
+  },
+  {
+   "seq": 5120,
+   "ok": true,
+   "steps": [
+    {
+     "s": 8.773796766996384,
+     "loss": 12.981367111206055,
+     "finite": true
+    },
+    {
+     "s": 8.772875407710671,
+     "loss": 12.882441520690918,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 12500932608,
+   "peak_reserved": 20419969024
+  },
+  {
+   "seq": 6144,
+   "ok": true,
+   "steps": [
+    {
+     "s": 10.7756412117742,
+     "loss": 12.957776069641113,
+     "finite": true
+    },
+    {
+     "s": 10.775220690760761,
+     "loss": 12.871522903442383,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 13853751296,
+   "peak_reserved": 21164457984
+  },
+  {
+   "seq": 7168,
+   "ok": true,
+   "steps": [
+    {
+     "s": 12.64616122096777,
+     "loss": 12.965022087097168,
+     "finite": true
+    },
+    {
+     "s": 12.645550629589707,
+     "loss": 12.886761665344238,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 15198476288,
+   "peak_reserved": 22020096000
+  },
+  {
+   "seq": 8192,
+   "ok": true,
+   "steps": [
+    {
+     "s": 14.688173952978104,
+     "loss": 12.945329666137695,
+     "finite": true
+    },
+    {
+     "s": 14.686897969804704,
+     "loss": 12.875757217407227,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 16545986560,
+   "peak_reserved": 25065160704
+  },
+  {
+   "seq": 9216,
+   "ok": true,
+   "steps": [
+    {
+     "s": 16.603654612787068,
+     "loss": 12.94176197052002,
+     "finite": true
+    },
+    {
+     "s": 16.603139830287546,
+     "loss": 12.874982833862305,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 17892808704,
+   "peak_reserved": 26208108544
+  },
+  {
+   "seq": 10240,
+   "ok": true,
+   "steps": [
+    {
+     "s": 18.734292224049568,
+     "loss": 12.96338176727295,
+     "finite": true
+    },
+    {
+     "s": 18.733674795832485,
+     "loss": 12.906381607055664,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 19239630848,
+   "peak_reserved": 27057455104
+  },
+  {
+   "seq": 11264,
+   "ok": true,
+   "steps": [
+    {
+     "s": 20.87831632513553,
+     "loss": 12.964365005493164,
+     "finite": true
+    },
+    {
+     "s": 20.87577548297122,
+     "loss": 12.906432151794434,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 20589533184,
+   "peak_reserved": 28632416256
+  },
+  {
+   "seq": 12288,
+   "ok": true,
+   "steps": [
+    {
+     "s": 23.074678108096123,
+     "loss": 12.94906997680664,
+     "finite": true
+    },
+    {
+     "s": 23.072885451372713,
+     "loss": 12.892990112304688,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 21938026496,
+   "peak_reserved": 29399973888
+  },
+  {
+   "seq": 13312,
+   "ok": true,
+   "steps": [
+    {
+     "s": 25.322703815996647,
+     "loss": 12.950177192687988,
+     "finite": true
+    },
+    {
+     "s": 25.320449656806886,
+     "loss": 12.897954940795898,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 23284062208,
+   "peak_reserved": 30509367296
+  },
+  {
+   "seq": 14336,
+   "ok": true,
+   "steps": [
+    {
+     "s": 27.612373039126396,
+     "loss": 12.943074226379395,
+     "finite": true
+    },
+    {
+     "s": 27.60490951128304,
+     "loss": 12.886787414550781,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 24631638016,
+   "peak_reserved": 31306285056
+  },
+  {
+   "seq": 15360,
+   "ok": false,
+   "steps": [],
+   "error": "CUDA out of memory. Tried to allocate 1.46 GiB. GPU 0 has a total capacity of 31.36 GiB of which 979.69 MiB is free. Including non-PyTorch memory, this process has 30.36 GiB memory in use. Of the allocated memory 16.95 GiB is allocated by PyTorch, and 12.73 GiB is reserved by PyTorch but unallocated",
+   "peak_alloc": 20396667392,
+   "peak_reserved": 32883343360
+  }
+ ],
+ "max_ok": 14336,
+ "first_oom": 15360,
+ "finished_at": "2026-10-05T20:40:22Z"
+}
