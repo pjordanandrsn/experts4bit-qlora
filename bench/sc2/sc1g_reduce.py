@@ -147,6 +147,8 @@ def kl_row(d: str, label: str, src: str, R, refs: dict) -> dict:
     meta = (json.load(open(pth + ".json")) if os.path.exists(pth + ".json") else {})
     if nm.get("void_positions"):
         return {"verdict": "VOID", "why": f"{nm['void_positions']} positions lacked a named log-prob", "stem": stem}
+    if label.startswith("e4b") and not meta:
+        return {"verdict": "VOID", "why": "no capture meta record (sc1g_k8's proxy did not write its .json)", "stem": stem}
     if meta and meta.get("calls") != meta.get("positions"):
         return {"verdict": "VOID", "why": f"{meta.get('calls')} log_softmax rows for {meta.get('positions')} positions", "stem": stem}
     if lp.shape != refs[src]["lp"].shape or not np.all(np.isfinite(lp)) or not np.all(np.isfinite(tlp)):
@@ -723,6 +725,10 @@ def _a4_self_test(tempfile) -> list:
     with tempfile.TemporaryDirectory() as d:          # a named record whose target log-probs miss the arm's NLL -> VOID
         _a4_fixture(d, good, misalign=("vllm", "conv2"))
         cases.append(("A4 alignment", a4(d)["rows"]["vllm"]["conv2"]["verdict"] == "VOID"))
+    with tempfile.TemporaryDirectory() as d:          # an e4b named record without the proxy's meta (a broken proxy) -> VOID
+        _a4_fixture(d, good)
+        os.remove(os.path.join(d, "named_e4b_nf4_served_conv1.npz.json"))
+        cases.append(("A4 e4b meta required", a4(d)["rows"]["e4b_nf4"]["conv1"]["verdict"] == "VOID"))
     with tempfile.TemporaryDirectory() as d:          # a tampered reference artifact -> refused, everything UNREAD
         _a4_fixture(d, good)
         with open(os.path.join(d, "ref", "ref_conv3.npz"), "ab") as f:

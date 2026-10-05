@@ -657,7 +657,8 @@ reads OK / UNREAD / VOID:
 - the self ratio;
 - the nf4 ratio;
 - coverage;
-- the NF4 fake-quant matching gnf4.
+- the NF4 fake-quant matching gnf4: **VOID** unless gnf4 imports on R and its `quantize_pack_nf4` + `dequant_ref` match
+  `sc1g_ref.fake_nf4` bit for bit. An import failure must not leave the nf4 pair unverified.
 
 R reads **R_OK** only when every check is OK. Box I starts only from an R_OK set.
 
@@ -684,7 +685,8 @@ whose artifact is absent or does not hash to its registered sha (`i_ref`).
 
 **When a row counts.** A KL row is VALID only when:
 - the arm itself is VALID, route gates included;
-- its named record is complete, with no void positions, and for e4b one log_softmax row per step;
+- its named record is complete, with no void positions; for e4b the proxy's meta record must exist (missing = VOID, the
+  broken-proxy case) and show one log_softmax row per step;
 - its target log-probs reproduce the arm's own mean NLL to **1e-9**.
 
 **The proof.** Box I's proof (2.0 h guard, per A2) reads one named KL row per engine path on conv1. These are e4b MXFP4,

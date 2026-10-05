@@ -191,7 +191,8 @@ def verdict(res: dict, k0: dict | None, srcs) -> dict:
     cv = [w[s]["coverage_ref_top64"] for s in srcs if s in w]
     chk["coverage"] = "OK" if cv and min(cv) >= KL.COVERAGE_MIN else "UNREAD"
     xc = (res.get("nf4") or {}).get("gnf4_crosscheck") or {}
-    chk["nf4_matches_gnf4"] = "OK" if xc.get("equal") else ("UNREAD" if not xc.get("available", False) else "VOID")
+    # VOID unless gnf4 imported AND matched bit for bit: an import failure must not leave the nf4 pair unverified
+    chk["nf4_matches_gnf4"] = "OK" if (xc.get("available") and xc.get("equal")) else "VOID"
     ok = all(v == "OK" for v in chk.values())
     return {"verdict": "R_OK" if ok else "R_NOT_OK", "checks": chk, "floor_F_max": max(Fs) if Fs else None,
             "calib_self_min": min((r for r in rs if r is not None), default=None),
@@ -236,8 +237,10 @@ def self_test() -> int:
         nf = res["windows"]["conv1"]["calib_nf4"]
         cases.append(("nf4 pair: KL65 <= full, ratio in (0, 1]", nf["kl65_le_full_everywhere"] and 0 < nf["ratio"] <= 1 + 1e-9))
         v = verdict(res, {"all_passed": True}, list(wins))
-        cases.append(("verdict vocabulary", set(v["checks"].values()) <= {"OK", "UNREAD", "VOID"}
-                      and v["checks"]["nf4_matches_gnf4"] in ("OK", "UNREAD")))
+        cases.append(("verdict vocabulary", set(v["checks"].values()) <= {"OK", "UNREAD", "VOID"}))
+        unver = dict(res, nf4={"matrices": 1, "gnf4_crosscheck": {"available": False, "why": "ImportError"}})
+        cases.append(("gnf4 unavailable -> VOID, not R_OK", verdict(unver, {"all_passed": True}, list(wins))["checks"]["nf4_matches_gnf4"] == "VOID"
+                      and verdict(unver, {"all_passed": True}, list(wins))["verdict"] == "R_NOT_OK"))
         cases.append(("no K0 receipt -> VOID, not R_OK", verdict(res, None, list(wins))["verdict"] == "R_NOT_OK"))
         bad = dict(res, windows={k: dict(x, floor_F=0.5) for k, x in res["windows"].items()})
         cases.append(("floor over 1e-2 -> UNREAD", verdict(bad, {"all_passed": True}, list(wins))["checks"]["floor_F"] == "UNREAD"))
