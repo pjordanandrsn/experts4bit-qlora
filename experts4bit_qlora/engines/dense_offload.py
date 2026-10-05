@@ -541,6 +541,133 @@ class _TrainPrefetch:
             self.last = None
 
 
+# ------------------------------------------------------------- late-bound 4-bit backward --
+# bitsandbytes 0.50's MatMul4Bit keeps the frozen packed weight for backward as a ctx ATTRIBUTE
+# (``ctx.tensors = (None, B)``, B a view of ``Linear4bit.weight``) whenever the input needs grad. A ctx
+# attribute bypasses save_for_backward, so checkpointing's saved-tensor hooks never see it: every layer's
+# weight STORAGE stays referenced by the autograd graph from its forward to its backward, and eviction's
+# ``p.data = placeholder`` frees nothing. Offloaded training therefore saved no VRAM (DQ3, experts4bit-qlora
+# #1083: dq3-5090-3's streamed arm OOMed above the resident arm's footprint). The fix is the expert side's
+# ``_FrozenLinearRecomputeBackward`` pattern: keep the MODULE, read the weight bound at backward time.
+# The Function and the forward below mirror these four bitsandbytes 0.50.2 sources EXACTLY; pinned by sha256 of
+# ``inspect.getsource`` (not by version: a patch release can change them under the same 0.50.x). Any mismatch keeps
+# stock bnb, with a warning -- correct, just no VRAM saved in training.
+_BNB_MIRRORED_SOURCES = {
+    "MatMul4Bit.forward": "29f4e21a4fe99db3f6e0f94dbf6cbe8426220f9163c0501c86d33f362a54ccb6",
+    "MatMul4Bit.backward": "053e8719319a526c61f288a37221ba5200de9eaa20dae7c7e45386315f284cd2",
+    "matmul_4bit": "a219d40d62264de60a424e8f9f1bab7656136eb7264a575d39d57a7e2f25ed4a",
+    "Linear4bit.forward": "d52cf63457717cc718ca0a449dad0967171e679be90d5d2adcafe2e8a141093d",
+}
+
+
+def _bnb_mirror_mismatches() -> list:
+    """Names of the mirrored bitsandbytes sources whose sha256 differs from the pinned 0.50.2 bytes ([] = all match)."""
+    import hashlib
+    import inspect
+
+    from bitsandbytes.autograd._functions import MatMul4Bit, matmul_4bit
+    from bitsandbytes.nn.modules import Linear4bit
+    objs = {"MatMul4Bit.forward": MatMul4Bit.forward, "MatMul4Bit.backward": MatMul4Bit.backward,
+            "matmul_4bit": matmul_4bit, "Linear4bit.forward": Linear4bit.forward}
+    out = []
+    for name, want in _BNB_MIRRORED_SOURCES.items():
+        try:
+            got = hashlib.sha256(inspect.getsource(objs[name]).encode()).hexdigest()
+        except (OSError, TypeError):
+            got = None
+        if got != want:
+            out.append(name)
+    return out
+
+
+class _LateBoundMatMul4Bit(torch.autograd.Function):
+    """``bnb.matmul_4bit`` against a frozen ``Linear4bit`` that reads the packed weight at BACKWARD time.
+
+    Forward: ``bnb.matmul_4bit`` with grad disabled (a Function's forward always is), i.e. matmul_4bit's no-grad
+    branch -- the same ``torch.ops.bitsandbytes.gemm_4bit`` call with the same arguments as MatMul4Bit.forward,
+    nested double-quant included. Backward: MatMul4Bit.backward's expressions, on ``mod.weight`` as bound when the
+    backward runs (dense offload re-stages the layer, byte-identical, before its backward). Nothing that holds the
+    weight's storage is kept -- only the module. Bitwise identical to stock bnb by construction."""
+
+    @staticmethod
+    def forward(ctx, A, bias, mod, quant_state):
+        import bitsandbytes as bnb
+        ctx.mod, ctx.state = mod, quant_state
+        ctx.dtype_bias = None if bias is None else bias.dtype
+        return bnb.matmul_4bit(A, mod.weight, bias=bias, quant_state=quant_state)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        import bitsandbytes.functional as BF
+        req_grad_a, req_grad_bias = ctx.needs_input_grad[0], ctx.needs_input_grad[1]
+        grad_a = grad_bias = None
+        if req_grad_bias:
+            grad_bias = grad_output.sum(0, dtype=ctx.dtype_bias)       # MatMul4Bit.backward's expression
+        if req_grad_a:
+            w = ctx.mod.weight
+            if w.numel() == 0:
+                raise RuntimeError(
+                    "dense offload: a 4-bit projection's backward read an EVICTED weight (0-element placeholder). "
+                    "The layer must be staged before its backward runs -- the backward pre-hook and the checkpoint "
+                    "recompute do this; a hook removed or bypassed would land here.")
+            grad_a = torch.matmul(grad_output, BF.dequantize_4bit(w.view(-1, 1), ctx.state).to(grad_output.dtype))
+        return grad_a, grad_bias, None, None
+
+
+def _late_bound_linear4bit_forward(self, x):
+    """``bnb.nn.Linear4bit.forward`` (0.50.2, source-pinned) with the grad path routed through :class:`_LateBoundMatMul4Bit`.
+    Anything without a grad to compute (inference, eval, no_grad, CPU packing) takes the stock class forward."""
+    bias = self.bias
+    if not (torch.is_grad_enabled() and (x.requires_grad or (bias is not None and bias.requires_grad))):
+        return type(self).forward(self, x)
+    from bitsandbytes.nn.modules import fix_4bit_weight_quant_state_from_module
+    fix_4bit_weight_quant_state_from_module(self)
+    quant_state = self.weight.quant_state
+    if not self.compute_type_is_set:
+        self.set_compute_type(x)
+        self.compute_type_is_set = True
+    inp_dtype = x.dtype
+    if self.compute_dtype is not None:
+        x = x.to(self.compute_dtype)
+    if bias is not None:
+        if bias.dtype != x.dtype:
+            bias.data = bias.data.to(x.dtype)
+        bias = bias.to(self.compute_dtype)
+    return _LateBoundMatMul4Bit.apply(x, bias, self, quant_state).to(inp_dtype)
+
+
+def _install_late_bound_backward(handles) -> int:
+    """Route every offloaded ``bnb.nn.Linear4bit`` weight's grad-mode matmul through :class:`_LateBoundMatMul4Bit`.
+    Idempotent; returns how many modules are routed. Without it, offloaded training saves no VRAM (see above)."""
+    try:
+        import bitsandbytes as bnb
+    except ImportError:
+        return 0
+    mods = []
+    for h in handles:
+        for mod, attr, is_param, _home in h.slots:
+            if is_param and attr == "weight" and isinstance(mod, bnb.nn.Linear4bit):
+                mods.append(mod)
+    if not mods:
+        return 0
+    bad = _bnb_mirror_mismatches()
+    if bad:
+        warnings.warn(
+            f"dense offload: bitsandbytes {getattr(bnb, '__version__', '?')} differs from the 0.50.2 code the late-bound "
+            f"4-bit backward mirrors ({', '.join(bad)}); keeping stock bnb, whose MatMul4Bit keeps each layer's weight "
+            "alive until backward, so offloaded TRAINING saves no VRAM here (inference is unaffected)", stacklevel=3)
+        return 0
+    n = 0
+    for mod in mods:
+        if getattr(mod, "_dense_offload_late_bound", False):
+            n += 1
+            continue
+        mod.forward = _late_bound_linear4bit_forward.__get__(mod, type(mod))
+        mod._dense_offload_late_bound = True
+        n += 1
+    return n
+
+
 def decoder_layers(model):
     """``[(name, module)]`` for things named ``...layers.<i>``, in depth order.
 
@@ -594,9 +721,13 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     so a warning names them. Either way, kept or streamed trainable tensors are
     reported by a warning.
 
-    Grad-enabled forwards take the single-slot synchronous path AND are not
-    evicted afterwards, because backward still needs the weights. So a training
-    step is correct but saves nothing; this module is for inference.
+    Grad-enabled forwards take the single-slot synchronous path; the backward
+    pre-hook (or the checkpoint recompute) re-stages each layer before its backward.
+    For bitsandbytes ``Linear4bit`` projections the grad-mode matmul goes through a
+    late-bound backward (:class:`_LateBoundMatMul4Bit`) so an evicted weight is
+    really freed between forward and backward: bnb 0.50.2's own MatMul4Bit keeps it
+    on ``ctx`` until backward, which made offloaded training save nothing (bnb
+    behaviour, worked around locally; not reported upstream).
 
     ``train_prefetch=True`` (opt-in, default off; lane DQ3, ``bench/dq3/``) replaces that for a model in ``train()``
     mode: each training use of a layer keeps it and ONE scheduled neighbour resident and copies the neighbour on the
@@ -678,6 +809,8 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
             layer.register_full_backward_pre_hook(_bwd_pre)
         handles.append(h)
 
+    late_bound = _install_late_bound_backward(handles)
+
     # Assigned UNCONDITIONALLY, so a later call with prefetch=False actually turns
     # prefetch off. Setting them only under `prefetch` left a second idempotent
     # call's links from the first call in place, and the hooks kept taking the
@@ -739,7 +872,8 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
         log(f"  dense offload: {len(handles)} layers, "
             f"{sum(len(h.slots) for h in handles)} tensors, "
             f"{' + '.join(where) or 'nothing managed'} "
-            f"({total / len(handles) / 1e6:.0f} MB/layer)")
+            f"({total / len(handles) / 1e6:.0f} MB/layer)"
+            + (f"; late-bound 4-bit backward on {late_bound} projections" if late_bound else ""))
         if unpinned:
             log(f"  WARNING: {len(unpinned)} layer(s) could not pin their homes; "
                 "H2D will be synchronous and prefetch buys nothing there")
