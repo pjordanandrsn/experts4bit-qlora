@@ -1,6 +1,8 @@
 """bench/dq3/dq3_vram_probe.py -- lane DQ3, BOX side: refuse a host whose GPU will not hand out the memory the subject
-needs, before anything is installed. Exit 0 = fits; exit 1 = refuse (dq3_run.sh turns it into the registered host-floor
-refusal, rc 18, which rent.py accepts as machine evidence for --exclude-vast-lane-receipt).
+needs, before anything is installed. Exit 0 = fits; exit 3 = the GPU refused memory (``torch.OutOfMemoryError`` only), which
+dq3_run.sh turns into the registered host-floor refusal, rc 18, machine evidence for --exclude-vast-lane-receipt. ANY other
+outcome (no CUDA device, an image torch without kernels for the card, a launch failure, an uncaught exception -- Python's
+own exit 1) is not evidence against the host's memory and must not exclude it: the runner sends it to a harness rc.
 
 Why it exists: dq3-5090-1 (host 564677, Ryzen 9 9950X, driver 595.84) died in arm 1 on the subject's FIRST allocation, a
 2.90 GiB embedding, raising CUDA OOM with 30.85 GiB free and 0 bytes allocated by PyTorch. The same allocation succeeded on
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import sys
 
+REFUSE = 3            # the ONLY exit that names the host; deliberately not 1 (an uncaught exception's code)
 FIRST_GIB = 3.5
 TOTAL_GIB = 28.0
 STEP_GIB = 2.0
@@ -23,8 +26,8 @@ def main() -> int:
     import torch
 
     if not torch.cuda.is_available():
-        print("VRAM_PROBE_FAIL: no CUDA device")
-        return 1
+        print("VRAM_PROBE_ERROR: no CUDA device (not a memory refusal)")
+        return 2
     free, total = torch.cuda.mem_get_info()
     print(f"VRAM_PROBE device={torch.cuda.get_device_name()} free={free / 2**30:.2f} GiB total={total / 2**30:.2f} GiB")
     blocks, got = [], 0.0
@@ -39,7 +42,7 @@ def main() -> int:
         torch.cuda.synchronize()
     except torch.OutOfMemoryError as exc:
         print(f"VRAM_PROBE_FAIL after {got:.1f} GiB, asking {size:.1f} GiB: {str(exc)[:400]}")
-        return 1
+        return REFUSE
     print(f"VRAM_PROBE_OK {got:.1f} GiB in {len(blocks)} blocks")
     return 0
 
