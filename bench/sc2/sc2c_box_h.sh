@@ -27,6 +27,15 @@ e = h.get("engine") or {}
 for k in ("chunk_tokens", "max_prefill_tokens_per_step"):   # every 512-token prompt is ONE first chunk
     if e.get(k) != 512:
         bad[f"engine.{k}"] = e.get(k, "<missing>")
+# what the forward TOOK (e4b#1129: counted at the startup captures): every expert GEMM above 256 rows on K19, every
+# prefill attention call on flash -- the resolved fields alone read k19/flash on gpt-oss while neither ran
+seen = r.get("seen") or {}
+moe, att = seen.get("moe") or {}, seen.get("prefill_attn") or {}
+gt = {k: v for k, v in moe.items() if k.endswith("|gt256")}
+if not gt or any(not k.startswith("int4_k19|") for k in gt):
+    bad["seen.moe_gt256"] = gt or "<none>"
+if not att or set(att) != {"flash"}:
+    bad["seen.prefill_attn"] = att or "<none>"
 print("SC2C_ROUTES " + json.dumps({"ok": not bad, "bad": bad, "routes": r}), flush=True)
 sys.exit(1 if bad else 0)
 PYR

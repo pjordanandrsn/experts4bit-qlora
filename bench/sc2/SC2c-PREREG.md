@@ -4,8 +4,8 @@
 first, and CI green. No SC2c run exists. The census behind it (`bench/stall-census-2026-10-05/`) is exploratory and
 $0.
 
-**The code under test** is branch `serve-bulk-kv` at `3e7b75a5`, whose `experts4bit_qlora/` tree is
-`8e7a268cb13e09987a9766d098ceed0291a088ba`:
+**The code under test** is branch `serve-bulk-kv` at `81d3e994` (`3e7b75a5` merged with `main` at `6c80df42`, which
+brings e4b#1129's `seen` routes), whose `experts4bit_qlora/` tree is `61c6057fad30ea3e3a3136e91699bafba022e4f8`:
 - `E4B_PAGED_BULK_KV`, opt-in;
 - `E4B_PAGED_STEP_TRACE`;
 - `/health`'s `kv_bookkeeping` block.
@@ -15,7 +15,7 @@ except for the version string, and the launch chain records both. A change to th
 re-pinned here before any box.
 
 **The `/health` contract** this rule reads, from `serve_paged.kv_bookkeeping_report` and
-`PagedModelRunner.kv_bookkeeping_stats` at `3e7b75a5`:
+`PagedModelRunner.kv_bookkeeping_stats` at `81d3e994`:
 - `kv_bookkeeping` always carries `requested`, the knob as a bool.
 - Once the engine is built it also carries `bulk`, plus per-request counts:
   - `flush_layers` and `flush_bulk`: the prompt's flush into the pool, per path;
@@ -64,6 +64,9 @@ bookkeeping moves the ceiling.
   `perf_counter` calls and up to six CUDA events a step, the same in both arms.
 - **Routes are main's defaults, read from each server's own `/health`:**
   - `prefill_routes`: k19 / k19 / flash, device grouping on, both raw env values null;
+  - `prefill_routes.seen` (e4b#1129), what the forward took at the startup captures: every expert GEMM above
+    256 rows on K19 (`int4_k19|gt256`), every prefill attention call on flash. The resolved fields alone read
+    k19 / flash on gpt-oss while neither ran (sc2g-prove-2);
   - `engine`: chunk 512 and a per-step budget of 512.
   - Otherwise the arm STOPs (rc 47), as in SC2b.
 - **Engagement is checked before the paid workload.** Right after each server's 4 warm requests:
@@ -91,10 +94,10 @@ bookkeeping moves the ceiling.
   - `/health` is read at start, after warm and at the end.
   - Draw 1's OFF server repeats the serial plan: the determinism control.
 
-## The rule (`bench/sc2/sc2c_reduce.py`, self-tested on 12 cases; census by `bench/sc2/sc2c_census.py`, 7)
+## The rule (`bench/sc2/sc2c_reduce.py`, self-tested on 13 cases; census by `bench/sc2/sc2c_census.py`, 7)
 
 **Gates, in order.**
-1. **ROUTES.** Every arm's start `/health` reads the registered routes and chunking, or the run is VOID.
+1. **ROUTES.** Every arm's start `/health` reads the registered routes, chunking and `seen` routes, or the run is VOID.
 2. **ENGAGED.** Every arm's end `/health` reads as follows, or the run is VOID.
    - **Prefill graph:** `status` "on", `T` 512, replays equal to the requests the server admitted (warm-up included),
      eager chunks 0.

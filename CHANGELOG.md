@@ -21,8 +21,9 @@
   - **Predictions.** P1 stall ON/OFF ≤ 0.6; P2 TTFT ≥ 1.4×; P3 TPOT unchanged; P4 ceiling ≥ 2; P5 ceiling ≥ 4;
     P6 no regression.
   - **Licence:** gates + P6 + TTFT ≥ 1.10×.
-  - **Tools.** `sc2c_reduce.py` (12 self-test cases) and `sc2c_census.py` (7) read the step trace's decomposition and
-    the bucket-controlled stall.
+  - **Tools.** `sc2c_reduce.py` (13 self-test cases) and `sc2c_census.py` (7) read the step trace's decomposition and
+    the bucket-controlled stall. ROUTES also reads `prefill_routes.seen` (e4b#1129): every expert GEMM above 256 rows
+    on K19 and every prefill attention call on flash, as the forward took them.
   - **Harness.** `sc1_run.sh` / `sc1_drive.sh` gain box H; `staged.sha256` regenerated.
 
 ### serve_paged: opt-in bulk KV bookkeeping (`E4B_PAGED_BULK_KV`) and a per-step trace (`E4B_PAGED_STEP_TRACE`)

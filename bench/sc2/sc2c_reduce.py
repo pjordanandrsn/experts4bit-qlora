@@ -13,7 +13,8 @@ Files in DIR, per draw D in 1..2 and arm A in (off, on), from sc2_driver.py ``ru
 
 The gates, in order (the first that fails names the outcome):
 - **ROUTES**: every arm's start /health reads the registered routes (k19 / k19 / flash, device grouping on, neither pin
-  in the environment, chunking 512 / 512), or VOID.
+  in the environment, chunking 512 / 512) AND its ``prefill_routes.seen`` shows what the forward took at the startup
+  captures: every expert GEMM above 256 rows on K19, every prefill attention call on flash (e4b#1129). Otherwise VOID.
 - **ENGAGED**: every arm's end /health shows the prefill graph on, with one replay per prompt and no eager chunk (the
   stack under test, both arms), and its ``kv_bookkeeping`` block shows the knob as registered. OFF: every prompt
   flushed per layer and every slot's blocks claimed per layer at its first graphed decode, nothing in bulk. ON: every
@@ -79,12 +80,22 @@ def _jsonl(d, name):
 
 
 def routes_bad(health) -> dict:
+    """The registered routes, the chunking that keeps every prompt one first chunk, and what the forward TOOK
+    (``prefill_routes.seen``, e4b#1129): every expert GEMM above 256 rows on K19 and every prefill attention call on
+    flash. The resolved fields alone read k19 / flash on gpt-oss while neither ran (sc2g-prove-2)."""
     r = (health or {}).get("prefill_routes") or {}
     bad = {k: r.get(k, "<missing>") for k, v in ROUTES.items() if r.get(k, "<missing>") != v}
     e = (health or {}).get("engine") or {}
     for k in ("chunk_tokens", "max_prefill_tokens_per_step"):
         if e.get(k) != T:
             bad[f"engine.{k}"] = e.get(k, "<missing>")
+    seen = r.get("seen") or {}
+    moe, att = seen.get("moe") or {}, seen.get("prefill_attn") or {}
+    gt = {k: v for k, v in moe.items() if k.endswith("|gt256")}
+    if not gt or any(not k.startswith("int4_k19|") for k in gt):
+        bad["seen.moe_gt256"] = gt or "<none>"
+    if not att or set(att) != {"flash"}:
+        bad["seen.prefill_attn"] = att or "<none>"
     return bad
 
 
@@ -286,7 +297,8 @@ def self_test() -> int:
                     att = (att_on if r <= 4 else 0.5) if on else (1.0 if r == 1 else 0.3)
                     dump(f"e4b_{arm}_d{k}_r{r}.json", {"requests": [{"prompt_tokens": T}] * 120,
                                                        "summary": summ(0.3, 0.02, att, r)})
-                routes = dict(ROUTES)
+                routes = dict(ROUTES, seen={"moe": {"int4_k19|gt256": 240, "int4_gemv|le256": 1200},
+                                            "prefill_attn": {"flash": 240}})
                 if on and routes_on:
                     routes.update(routes_on)
                 dump(f"health_e4b_{arm}_d{k}_start.json",
@@ -340,6 +352,10 @@ def self_test() -> int:
         write(d, routes_on={"int4_prefill_above_256_rows": "mtile"})
         o = reduce(d)
         cases.append(("wrong route", not o["gates"]["routes"]["ok"] and o["void"]))
+    with tempfile.TemporaryDirectory() as d:                     # resolved k19/flash, but the forward ran M-tile
+        write(d, routes_on={"seen": {"moe": {"int4_mtile_captured|gt256": 240}, "prefill_attn": {"flash": 240}}})
+        o = reduce(d)
+        cases.append(("seen route", "seen.moe_gt256" in o["gates"]["routes"]["bad"].get("on_d1", {}) and o["void"]))
     with tempfile.TemporaryDirectory() as d:                     # 0.165 / 0.13 = 1.27: P2 fails, the licence passes
         write(d, ttft_on=0.13)
         o = reduce(d)
