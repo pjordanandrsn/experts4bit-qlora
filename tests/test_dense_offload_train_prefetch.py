@@ -304,3 +304,55 @@ def test_an_optimizer_steps_a_large_trainable_parameter(train_prefetch):
     (la, wa), (lb, wb) = run(False), run(True)
     assert all(torch.equal(a, b) for a, b in zip(la, lb))
     assert torch.equal(wa, wb), "the trained matrix diverged under offload"
+
+
+@pytest.mark.parametrize("device,prefetch", [
+    ("cpu", False),
+    pytest.param("cuda", False, marks=cuda),
+    pytest.param("cuda", True, marks=cuda),      # the inference chain wraps: eval leaves layer 0 PREFETCHED
+])
+def test_eval_mid_training_keeps_parity_and_the_schedule(device, prefetch):
+    """The interleaving HF Trainer hits first: train step -> model.eval() + no_grad forward -> model.train() -> train
+    step, twice. The eval forward runs through the inference path and the same residency registry, while the training
+    schedule still holds its last (layer 0, bwd) state and possibly an in-flight target. Losses, eval outputs and the
+    trained weights must match the un-offloaded model bit for bit, and the schedule must stay on its rails: no
+    unscheduled use, residency never above two, at most one blocking fetch per (re)start."""
+    n_evals = 2
+
+    def run(offload):
+        _DenseOffload._staged_now.clear()
+        _DenseOffload._resident.clear()
+        m = _model(device)
+        hs = []
+        if offload:
+            hs = enable_dense_offload(m, device, pin=False, prefetch=prefetch, train_prefetch=True)
+        opt = torch.optim.AdamW([p for p in m.parameters() if p.requires_grad], lr=1e-2)
+        g = torch.Generator(device="cpu").manual_seed(4)
+        x_eval = torch.randn(8, H, generator=g).to(device)
+        losses, evals = [], []
+        for k in range(n_evals + 1):
+            m.train()
+            opt.zero_grad(set_to_none=True)
+            loss = m(torch.randn(8, H, generator=g).to(device)).pow(2).mean()
+            loss.backward()
+            opt.step()
+            losses.append(loss.detach().cpu())
+            if k < n_evals:
+                m.eval()
+                with torch.no_grad():
+                    evals.append(m(x_eval).cpu())
+        weights = [p.detach().cpu().clone() for p in m.parameters() if p.requires_grad]
+        return losses, evals, weights, (dense_offload_report(hs)["train_prefetch"] if hs else None)
+
+    l0, e0, w0, _ = run(False)
+    l1, e1, w1, rep = run(True)
+    assert all(torch.equal(a, b) for a, b in zip(l0, l1)), (l0, l1)
+    assert all(torch.equal(a, b) for a, b in zip(e0, e1)), "an eval forward diverged from the un-offloaded model"
+    assert len(w0) == len(w1) and all(torch.equal(a, b) for a, b in zip(w0, w1)), "trained weights diverged"
+    (c,) = rep.values()
+    steps = n_evals + 1
+    assert c["unscheduled"] == 0, c
+    assert c["hwm_resident"] <= 2, c
+    assert c["uses"] == 3 * NL * steps, c          # forward + checkpoint recompute + backward pre-hook, per layer
+    if device == "cuda":
+        assert c["fwd_blocking"] + c["bwd_blocking"] <= 1 + n_evals, c
