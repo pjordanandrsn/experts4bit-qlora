@@ -16,7 +16,7 @@
   SC2's post-hoc mechanism** (e4b's stall per interleaved prefill ≥ 10× its per-token cost, R² ≥ 0.9); Q5 every row
   VALID.
 - **Files.** `bench/sc2/SC2g-PREREG.md`, `sc2g_box_g.sh`, `sc2g_reduce.py`; `sc2_trace.py` is now staged; grouped-nf4-gemm
-  v0.39.0 is pinned for box G; `tests/test_sc2g_box.py` executes the child-env, SGLang-engagement and e4b-check paths.
+  v0.41.0 (e4b 0.48.0's CI pin) is pinned for box G, with `GNF4_TRITON_PREBIND=1` pinned and recorded; `tests/test_sc2g_box.py` executes the child-env, SGLang-engagement and e4b-check paths.
 
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
