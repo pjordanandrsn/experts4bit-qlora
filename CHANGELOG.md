@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 33 — on one stack, with load-gated draws, Unsloth/e4b 2.352 (P50 HELD) and the environment gain 0.900 (P51 HELD); 2.352 becomes the quoted Qwen3-30B-A3B position
+
+- `tc1-5090-76` ($1.76, a quiet EPYC 7B13, 60-step runs, `TC1_LOAD_GATE=6.0`): both frameworks on torch 2.12.1+cu130 / transformers
+  5.5.0. e4b 3.496 / 3.492 s/step, Unsloth 8.208 / 8.228: Unsloth/e4b **2.352** [2.348, 2.356], every pair stable. e4b in venv-e4b
+  3.855 / 3.913, so the environment gain reads **0.900** [0.893, 0.907] (amendment 24: 0.882).
+- By amendment 25's rule the same-stack ratio becomes the position to quote: register row
+  `e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack`. Amendment 19's 1.997 stays as the reading with e4b in the field image's
+  environment; STATUS names both.
+- The gate voided three draws for host load. Reading their first attempts instead gives 2.309 and 0.901: no verdict changes.
+- Not named by the registration: e4b's prebound launches (default since #1099, triton 3.4 / 3.6) engaged on the venv-e4b arm only. By
+  amendment 26's 0.973, P51 with them off on both sides would sit between about 0.876 and 0.900, inside its band. Amendment 34 runs
+  every arm with them off.
+
 ### The prebound Triton launches (`E4B_TRITON_PREBIND`) cover triton 3.7
 
 - **Why.** torch 2.12 and Unsloth's environment ship triton 3.7.1, where `prebind` returned the kernel itself: the default-on prebound
