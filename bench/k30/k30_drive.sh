@@ -41,7 +41,7 @@ SSH="ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -o ServerAlive
 SCP="scp -q -o BatchMode=yes $E4B_RENT_SSH_OPTS -P $PORT"
 POLL=${K30_POLL_S:-60}; W=/root/k30
 NONCE=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || { say "refusing: no nonce"; exit 78; }
-PASS="K30_RUN_ID=$RUN_ID K30_RUN_NONCE=$NONCE K30_DEADLINE_EPOCH=$DEADLINE K30_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA K30_PROVE=${K30_PROVE:-0} "
+PASS="K30_RUN_ID=$RUN_ID K30_RUN_NONCE=$NONCE K30_DEADLINE_EPOCH=$DEADLINE K30_INSTANCE_ID=$E4B_RENT_INSTANCE_ID E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA K30_PROVE=${K30_PROVE:-0} K30_CARD=${K30_CARD:-L4} "
 if [ "${K30_DRIVE_DRYRUN:-0}" = "1" ]; then echo "DRYRUN stage -> root@$HOST:$W ; start: env $PASS bash k30_run.sh ; poll TP_DONE.$NONCE until $DEADLINE ; fetch -> $RUN_DIR/k30"; exit 0; fi
 say "run $RUN_ID nonce=$NONCE -> $HOST:$PORT; e4b $E4B_SHA (from $REPO); receipts -> $RUN_DIR/k30; deadline $DEADLINE"
 $SSH "rm -rf -- $W && mkdir -p $W/logs" || { say "stage failed: remote cleanup"; exit 20; }

@@ -25,6 +25,12 @@ for v in K30_RUN_ID K30_DEADLINE_EPOCH K30_INSTANCE_ID GNF4_SHA; do [ -n "${!v:-
 case "$GNF4_SHA" in *[!0-9a-f]*|"") say "refusing: GNF4_SHA is not hex"; finish 78;; esac
 [ ${#GNF4_SHA} -eq 40 ] || { say "refusing: GNF4_SHA is not a 40-char sha"; finish 78; }
 REHEARSAL=${K30_REHEARSAL:-0}
+# The registered card (prereg Amendment 2): a token, because the driver passes env through a remote `env` line.
+case "${K30_CARD:-L4}" in
+  L4) WANT_CARD="NVIDIA L4";;
+  A4000) WANT_CARD="NVIDIA RTX A4000";;
+  *) say "refusing: K30_CARD=${K30_CARD} is not a registered card (L4 | A4000)"; finish 78;;
+esac
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 : > summary.txt; echo "$K30_INSTANCE_ID" > INSTANCE_ID
 
@@ -37,7 +43,7 @@ SMS=$(python -c "import torch; print(torch.cuda.get_device_properties(0).multi_p
 echo "card $GPU, $SMS SMs, rehearsal=$REHEARSAL" | tee -a summary.txt
 # An exact match: "NVIDIA L40S" contains "L4", and a substring test would accept it.
 if [ "$REHEARSAL" != 1 ]; then
-  [ "$GPU" = "NVIDIA L4" ] || { say "REFUSED: card is '$GPU', the lane registers the NVIDIA L4"; echo "refused: class $GPU" > REFUSAL; finish 15; }
+  [ "$GPU" = "$WANT_CARD" ] || { say "REFUSED: card is '$GPU', this run registers '$WANT_CARD'"; echo "refused: class $GPU" > REFUSAL; finish 15; }
   [ "$SMS" -le 64 ] || { say "REFUSED: $SMS SMs is above the 64-SM class the R term is gated to"; echo "refused: $SMS SMs" > REFUSAL; finish 15; }
 fi
 [ "${K30_PROVE:-0}" = 1 ] && { say "PROVE: card and forensics recorded; no install, no timing"; echo "prove ok" >> summary.txt; finish 0; }

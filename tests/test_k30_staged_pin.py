@@ -52,7 +52,7 @@ def test_correctness_gates_run_before_any_timing_and_prove_exits_first():
     """No timing without correctness (STOP-1): the compiled suite (rc 21), the per-sk check (rc 22), the rule's
     self-test and the plan cross-check all run before the first sweep; the proving run exits before any install."""
     run = (LANE / "k30_run.sh").read_text()
-    card = run.index('[ "$GPU" = "NVIDIA L4" ]')
+    card = run.index('[ "$GPU" = "$WANT_CARD" ]')
     prove = run.index('[ "${K30_PROVE:-0}" = 1 ]')
     install = run.index("python -m pip install -q --no-input --force-reinstall --no-deps")
     compiled = run.index("python -m pytest src/kernel/test_int4_b32.py")
@@ -68,6 +68,10 @@ def test_correctness_gates_run_before_any_timing_and_prove_exits_first():
 
 @pytest.mark.skipif(not PIN.exists(), reason="k30 lane not present")
 def test_the_card_check_is_exact_not_a_substring():
-    """"NVIDIA L40S" contains "L4": a substring test would accept the wrong class."""
+    """"NVIDIA L40S" contains "L4": a substring test would accept the wrong class. The token maps to the two
+    registered cards' exact names and refuses anything else."""
     run = (LANE / "k30_run.sh").read_text()
-    assert '[ "$GPU" = "NVIDIA L4" ]' in run and "*L4*" not in run
+    assert '[ "$GPU" = "$WANT_CARD" ]' in run and "*L4*" not in run
+    assert 'L4) WANT_CARD="NVIDIA L4";;' in run and 'A4000) WANT_CARD="NVIDIA RTX A4000";;' in run
+    assert "is not a registered card (L4 | A4000)\"; finish 78;;" in run
+    assert "K30_CARD=${K30_CARD:-L4}" in (LANE / "k30_drive.sh").read_text()
