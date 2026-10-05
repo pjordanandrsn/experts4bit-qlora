@@ -1503,6 +1503,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3keepab) tc1_keepab_family qwen3keepab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 21 (#945)
   qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 22
   qwen3bmmab)  tc1_bmmab_family  qwen3bmmab  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 24: bmm replay + venv-e4b vs venv-unsloth
+  qwen3samestackh2) tc1_samestack_family qwen3samestackh2 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1 amendment 42: amendment 33's box on a second host
   qwen3samestack) tc1_samestack_family qwen3samestack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1 amendment 25: both frameworks on one stack
   # TC1 amendment 39: amendment 25's family in the packed 4,096-token regime (the box runs TC1_PACK=1 TC1_SEQ=4096 TC1_MB=1 TC1_ACCUM=4 TC1_STEPS=30;
   # refused above otherwise). Alarms for 30 steps of a 15-40 s step: ~150-250 s of prologue (load ~60-90 s, C1 ~60-80 s, eval0 now 8 x 4,096
