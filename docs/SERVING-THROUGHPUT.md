@@ -63,6 +63,15 @@ bounds it against the shipped bar (≤ 0.10 nats, top-1 ≥ 0.93).
 - **OLMoE-1B-7B:** every lever licenses; ×1.83 at B=1 (248 → 452), ×1.86 at B=16.
 - **Granite-3.1-3B-A800M:** int4 experts ×1.49 / ×1.53 — **a quality FAIL by the registered gate, corrected 2026-09-04**: 1.6741 → 1.6859 nats is +0.063 ppl, over the 0.05-ppl uncalibrated budget (`experts4bit_qlora.k8_gate`); the table above kept the row unflagged because it was read against the family's noise floor only. The int4 rows for this family are speed measurements of an unlicensed configuration, not a best; calibrated attention is a quality FAIL here too (+0.026 nats over NF4 at the f32 attention path) and the fused arm refused: the layer body scales its residuals and names its MoE `block_sparse_moe`, which the round-2 fold did not license (build-out: e4b#371 + grouped-nf4-gemm#328).
 - **gpt-oss-20b:** NF4 only. int4 experts refused by name (interleaved MXFP4 gate/up rows + bias epilogue; build-out e4b#372); the fused arm never reached the folds because the router probe refused first (its router selects on the logits with a bias; build-out e4b#370 + grouped-nf4-gemm#327). Raw-text perplexity is out of regime on this family (≈564), so its K8 is a same-arm delta instrument only.
+  - *Since then (note added 2026-10-05):* both refusals were built out.
+    - `E4B_SERVE_EXP_INT4=1` on `gpt_oss` installs the **native MXFP4 store**: the checkpoint's own fp4 blocks and
+      e8m0 scales, never re-quantised (`engines/int4_experts.py`). T=1 runs the MXFP4 GEMV and device-grouped rows
+      up to 256 run K21 (`E4B_MXFP4_GROUPED_SMALLM=auto`, licensed by lane P90).
+    - Rows above 256 (every prefill chunk) have no MXFP4 M-tile GEMM, so they take the kept NF4 stacks
+      (`E4B_INT4_KEEP_NF4=1`); without those they take the per-row GEMV. That makes gpt-oss serving native-bytes for
+      decode only.
+    - The router fold handles its biased top-k-then-softmax router (`router_epilogue`'s `topk_softmax` kind, #747).
+    - The attention-sink layers keep the explicit-mask prefill path.
 - **Gemma-4-26B-A4B:** NF4 only. int4 experts refused for want of an adjudicated MoE convention (build-out e4b#369); the fused arm refused at the router probe (normed/scaled router with a per-expert scale; e4b#370). The one thing measured since: the round-1 norm fusion alone is ×1.30 at B=1 on this family (private receipt P30; quality gate pending — this model has no 512-token instrument, see `SERVING-PARITY.md`).
 - **Mixtral-8x7B-Instruct:** int4 experts ×2.08 / ×2.00; calibrated attention ×1.076 more at B=1 and +0.011 nats on this window (the 8192-step gate from the earlier campaign stands until re-run); the fused arm refused at the router probe (`MixtralTopKRouter` renormalises without the attribute the matcher read; build-out e4b#370).
 
