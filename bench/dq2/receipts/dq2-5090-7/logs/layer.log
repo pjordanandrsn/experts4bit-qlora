@@ -1,0 +1,6 @@
+row M=512 8.2s 
+row M=1024 8.2s 
+row M=2048 8.6s 
+row M=4096 9.8s 
+row M=8192 11.7s 
+DQ2 layer census done receipts/dq2_layer.json
