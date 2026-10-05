@@ -1,0 +1,4 @@
+ON_d1 (measured att 1.00/0.90/0.12/0.06) | serial: ttft50 0.163 | r1: att 1.0 ttft50 0.164 tpot50 0.0069 | r2: att 0.892 ttft50 0.268 tpot50 0.0206 | r4: att 0.183 ttft50 5.56 tpot50 0.0302 | r8: att 0.083 ttft50 10.173 tpot50 0.0327
+ON_d2 (measured 1.00/1.00/0.29/0.06) | serial: ttft50 0.173 | r1: att 1.0 ttft50 0.175 tpot50 0.0078 | r2: att 1.0 ttft50 0.182 tpot50 0.0137 | r4: att 0.367 ttft50 1.63 tpot50 0.0298 | r8: att 0.058 ttft50 12.829 tpot50 0.0307
+OFF_d1 (measured 1.00/0.57/0.10/0.04) | serial: ttft50 0.224 | r1: att 1.0 ttft50 0.226 tpot50 0.0077 | r2: att 0.467 ttft50 1.11 tpot50 0.0305 | r4: att 0.092 ttft50 9.475 tpot50 0.0359 | r8: att 0.042 ttft50 14.28 tpot50 0.0395
+OFF_d2 (measured 0.98/0.83/0.19/0.03) | serial: ttft50 0.218 | r1: att 1.0 ttft50 0.221 tpot50 0.0085 | r2: att 0.992 ttft50 0.286 tpot50 0.0169 | r4: att 0.167 ttft50 4.109 tpot50 0.0339 | r8: att 0.042 ttft50 15.585 tpot50 0.0347
