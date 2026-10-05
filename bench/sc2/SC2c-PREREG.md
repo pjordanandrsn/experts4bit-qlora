@@ -155,6 +155,10 @@ Per arm and draw, from the server's own traces (`sc2c_census.py`).
 These close (or fail to close) the census's decomposition on the box that measures it. A large unexplained residual is
 reported as one.
 
+**Post hoc, descriptive.** The read will test e4b#1134's capacity model a second time:
+`serve_capacity.StepCosts.from_step_trace` on each arm's step trace, `simulate` on that arm's own plans, set beside its
+measured attainment. No rule reads it.
+
 **No position against vLLM, SGLang or llama.cpp comes from SC2c.** It is e4b against itself on one box. SC2's
 comparator rows stand.
 
