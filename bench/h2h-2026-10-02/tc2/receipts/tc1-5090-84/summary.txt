@@ -1,0 +1,34 @@
+FIXTURE field: template=alpaca steps=60 seq=2048 micro_batch=2 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=20 eval_n=8 autocast=0 matched_seed=3407
+BOX A families: mixtralsamestack; e4b 63400e1ab0af233aeb09e9e59017492da8ca3694 gnf4 9622144c734395de4d40332f06dea92135d858de; run tc1-5090-84 instance 54277905 deadline 1791199701; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=128 (physical cores) box_class=RTX 5090
+DRIVER 595.84 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK mixtralsamestack staged=eba92302a2861cdc0098cc54bc9f17cb2c47eb61 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS mixtralsamestack alpaca sha=4a41b3f4a56149f688da50886b694239ac8bbdda715310d2375c1ea172bd59cf eval_n=8 train_only_sha=f2fdf2616af939abbbf97a420e44c6c6146087815c5cbf6976b663e5184b01cd
+mixtralsamestack/e4b/fused_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.243, "load_weights": 25.584, "verify": 0.0, "attn4": 8.066, "lora": 0.027, "enable": 0.136, "tokenizer": 0.145, "census": 0.638, "frozen_probe": 1.384, "trainable_sha": 0.643, "counters": 0.0, "c1_before": 89.216, "eval0": 3.279, "optimizer": 0.281}, "phase_budget_s": 1260.0, "prologue_s": 135.644, "prologue_unattributed_s": 1.998}
+mixtralsamestack/e4b/fused_attn4_m rc=0 CELL OK {"framework": "e4b", "fam": "mixtralsamestack", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m", "status": "ok", "steps": 60, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3
+
+LOADGATE mixtralsamestack/e4b/fused_attn4_m attempt 0 load1_median 5.7 gate 6.0 status ok over 0
+mixtralsamestack/unsloth/ckpt_unsloth_m PROLOGUE {"phase_seconds": {"preamble": 2.305, "snapshot": 0.0, "load_weights": 35.513, "census": 0.645, "frozen_probe": 1.367, "trainable_sha": 1.078, "counters": 0.091, "c1_before": 78.937, "eval0": 18.473, "optimizer": 0.375}, "phase_budget_s": 1260.0, "prologue_s": 148.9, "prologue_unattributed_s": 10.117}
+mixtralsamestack/unsloth/ckpt_unsloth_m rc=0 CELL OK {"framework": "unsloth", "fam": "mixtralsamestack", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": "/root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "arm": "unsloth", "tag": "ckpt_unsloth_m", "statu
+
+LOADGATE mixtralsamestack/unsloth/ckpt_unsloth_m attempt 0 load1_median 3.31 gate 6.0 status ok over 0
+mixtralsamestack/e4b/reference_attn4_m STUB not_run: skipped by TC1_SKIP
+mixtralsamestack/e4b/fused_attn4_m_t28 PROLOGUE {"phase_seconds": {"preamble": 4.382, "load_weights": 25.836, "verify": 0.0, "attn4": 8.547, "lora": 0.024, "enable": 0.115, "tokenizer": 0.13, "census": 0.671, "frozen_probe": 1.307, "trainable_sha": 0.712, "counters": 0.0, "c1_before": 88.455, "eval0": 4.109, "optimizer": 0.246}, "phase_budget_s": 1260.0, "prologue_s": 135.77, "prologue_unattributed_s": 1.234}
+mixtralsamestack/e4b/fused_attn4_m_t28 rc=0 CELL OK {"framework": "e4b", "fam": "mixtralsamestack", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_t28", "status": "ok", "steps": 60, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed
+
+LOADGATE mixtralsamestack/e4b/fused_attn4_m_t28 attempt 0 load1_median 3.96 gate 6.0 status ok over 0
+mixtralsamestack/e4b/fused_attn4_m_t28_d2 PROLOGUE {"phase_seconds": {"preamble": 4.431, "load_weights": 26.046, "verify": 0.0, "attn4": 8.435, "lora": 0.025, "enable": 0.101, "tokenizer": 0.13, "census": 0.683, "frozen_probe": 1.323, "trainable_sha": 0.724, "counters": 0.0, "c1_before": 88.99, "eval0": 2.738, "optimizer": 0.244}, "phase_budget_s": 1260.0, "prologue_s": 135.119, "prologue_unattributed_s": 1.248}
+mixtralsamestack/e4b/fused_attn4_m_t28_d2 rc=0 CELL OK {"framework": "e4b", "fam": "mixtralsamestack", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_t28_d2", "status": "ok", "steps": 60, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "s
+
+LOADGATE mixtralsamestack/e4b/fused_attn4_m_t28_d2 attempt 0 load1_median 2.7 gate 6.0 status ok over 0
+mixtralsamestack/unsloth/ckpt_unsloth_m_d2 PROLOGUE {"phase_seconds": {"preamble": 2.44, "snapshot": 0.0, "load_weights": 31.144, "census": 0.646, "frozen_probe": 1.343, "trainable_sha": 0.668, "counters": 0.092, "c1_before": 78.881, "eval0": 9.713, "optimizer": 0.354}, "phase_budget_s": 1260.0, "prologue_s": 135.196, "prologue_unattributed_s": 9.915}
+mixtralsamestack/unsloth/ckpt_unsloth_m_d2 rc=0 CELL OK {"framework": "unsloth", "fam": "mixtralsamestack", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": "/root/.cache/huggingface/hub/models--mistralai--Mixtral-8x7B-Instruct-v0.1/snapshots/eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "arm": "unsloth", "tag": "ckpt_unsloth_m_d2", "st
+
+LOADGATE mixtralsamestack/unsloth/ckpt_unsloth_m_d2 attempt 0 load1_median 4.42 gate 6.0 status ok over 0
+mixtralsamestack/e4b/fused_attn4_m_d2 PROLOGUE {"phase_seconds": {"preamble": 4.391, "load_weights": 25.4, "verify": 0.0, "attn4": 8.028, "lora": 0.025, "enable": 0.124, "tokenizer": 0.131, "census": 0.608, "frozen_probe": 1.311, "trainable_sha": 0.653, "counters": 0.0, "c1_before": 89.414, "eval0": 2.392, "optimizer": 0.289}, "phase_budget_s": 1260.0, "prologue_s": 134.757, "prologue_unattributed_s": 1.992}
+mixtralsamestack/e4b/fused_attn4_m_d2 rc=0 CELL OK {"framework": "e4b", "fam": "mixtralsamestack", "model": "mistralai/Mixtral-8x7B-Instruct-v0.1", "revision": "eba92302a2861cdc0098cc54bc9f17cb2c47eb61", "model_type": "mixtral", "n_layers": 32, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_d2", "status": "ok", "steps": 60, "seq": 2048, "accum": 4, "micro_batch": 2, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed"
+
+LOADGATE mixtralsamestack/e4b/fused_attn4_m_d2 attempt 0 load1_median 4.09 gate 6.0 status ok over 0
+MIXTRALSAMESTACK DONE
