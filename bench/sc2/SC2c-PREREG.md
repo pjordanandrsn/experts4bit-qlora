@@ -42,14 +42,22 @@ most of it lies outside the forward. The stall census (`bench/stall-census-2026-
 - **In bulk:** 66 launches, bitwise identical in every pool byte, table and length (counted and checked on the NAS
   A2000, a correctness testbed; no A2000 timing enters this registration, e4b#1133).
 
-**4. Inferred from box F's own traces and P107's 5090 receipt, not measured.**
-- **The forward.** P107 bounds the 512-token forward's device time near ~42 ms, so ~115–130 ms of SC2b's 157–170 ms
-  prefill step is host work.
-- **The claims.** The block claims add ~55 ms at the next decode: the bucket-controlled stall minus the prefill step.
-  Over their 4,608 counted launches that is ~12 µs per launch on box F.
-- **The flush.** Its 8,688 counted launches at that cost are ≥ ~105 ms: most of the host work in the step.
+**4. The split on the 5090 is UNKNOWN.** Measuring it is what this box's step trace in both arms is for. What the
+predictions rest on is structure plus 5090 numbers, never an A2000 timing:
+- **Structure.** ~13.5k host-issued launches per request become 66 in bulk (O(layer groups), not O(layers × blocks)).
+  All of them are serialized on the engine thread ahead of every resident decode.
+- **5090 numbers, box F (SC2b):**
+  - the bucket-controlled stall: 0.218 / 0.224 s;
+  - the prefill step: 157–170 ms, flat under load;
+  - the ~55 ms residual outside the prefill step, whose only per-request host work is the 4,608 block claims (the
+    stall minus the step), i.e. ~12 µs per launch.
+- **5090 numbers, P107** (another box, uncapped, host-grouped): a 512-token chunk's forward is near ~42 ms of device
+  time.
 
-A forward far above P107's bound (≥ ~120 ms of device time on box F) would refute that.
+**A consistent reading, inferred and not measured.** ~115–130 ms of the prefill step is host work outside the forward,
+and the flush's 8,688 launches at box F's ~12 µs are ≥ ~105 ms of it. The bands below follow from that. They are wide
+because the split is unmeasured: a forward far above P107's bound (≥ ~120 ms of device time on box F) refutes P1 and
+P2 while leaving P6 and the licence readable.
 
 This lane measures the decomposition directly, with the step trace in both arms. It reads whether removing the
 bookkeeping moves the ceiling.
@@ -82,7 +90,7 @@ bookkeeping moves the ceiling.
   - every warm response reports 512 prompt tokens;
   - the step trace holds ≥ 64 rows.
   - Otherwise the arm STOPs (rc 48).
-- **Records, no gate:**
+- **Records, no gate** (the reducer reports them per arm and draw in the census):
   - `nvidia-smi` memory used at ready, per arm;
   - `/health`'s `prefill_graph.free_after_mib` and `bulk_flush_mib` (the bulk flush's bound, additive to the graph's
     pool and counted in its `auto` headroom when bulk is on, #1131 review);

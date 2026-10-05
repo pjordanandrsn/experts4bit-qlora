@@ -160,6 +160,9 @@ def census(d) -> dict:
             v = os.path.join(d, f"vram_e4b_{tag}.txt")
             c["vram_used_mib"] = (int(open(v).read().split(",")[0]) if os.path.exists(v) and open(v).read().strip()
                                   else None)
+            # free memory at ready and the bulk flush's bound, which is additive to the prefill graph's pool (#1131)
+            g = (_load(d, f"health_e4b_{tag}_start.json") or {}).get("prefill_graph") or {}
+            c["prefill_graph_at_ready"] = {k: g.get(k) for k in ("pool_mib", "free_after_mib", "bulk_flush_mib")}
             out[tag] = c
     return out
 

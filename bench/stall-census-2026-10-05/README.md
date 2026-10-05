@@ -216,7 +216,7 @@ without SC2b's 400 W cap.
 | `kv_bookkeeping_bench.py` | the bench as run in `a2000-kv3` and `a2000-kv4` (three arms) |
 | `a2000-kv1/kv_bookkeeping_bench.run1-2.py` | the bench as run in `a2000-kv1` and `a2000-kv2` (two arms) |
 | `run_kvbench.sh`, `run_gpucheck.sh` | the NAS drivers. `run_gpucheck.sh` also runs the CUDA tests; a copy sits in `a2000-kv4/` |
-| `a2000-kv1/` … `a2000-kv5/` | each run's log and JSON (kv4 and kv5 also have the pytest tail) |
+| `a2000-kv1/` … `a2000-kv5/` | each run's raw log and JSON, kv4 and kv5 with the pytest tail. Each directory's `CORRECTNESS-ONLY.md` marks its timing fields out of scope |
 | `capsim.py`, `capsim-calibrate.txt`, `capsim-project.txt` | the scheduler model and its two outputs |
 
 The refit tool is `bench/sc2/sc2c_census.py` (`fit`), run on SC2b's committed traces.
