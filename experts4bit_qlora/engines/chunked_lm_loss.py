@@ -41,9 +41,9 @@ re-runs stock.
 ``E4B_CHUNKED_LM_LOSS`` = ``1`` (chunks of :data:`DEFAULT_CHUNK` tokens) or a chunk size in tokens. Unset or 0: unchanged.
 ``auto``: chunks of :data:`DEFAULT_CHUNK` tokens, but only for a training forward whose stock fp32 logits (positions x vocabulary
 x 4 bytes) would reach :data:`AUTO_MIN_LOGITS_BYTES`; a smaller one runs the stock forward untouched (``small_calls``). At the
-field recipe the chunked loss costs (TC1 amendment 41: 1.049 of the step on a host-bound RTX 5090 at ~1,000-1,400 real tokens
-per step, where the logits are 0.3-0.6 GiB), and on packed 4,096-token rows it is what lets e4b train at all (2.32 GiB per row
-at Qwen3's vocabulary; amendments 39 and 40). The gate separates the two by size alone.
+field recipe, where a micro-batch's logits are 0.3-0.6 GiB, chunking is a cost: 1.049 of the shipped arm's step on a host-bound
+RTX 5090 (TC1 amendment 41). On packed 4,096-token rows (2.32 GiB a row at Qwen3's vocabulary) it is what lets e4b train at all
+(amendments 39 and 40). The gate separates the two by size alone.
 ``enable_fast_train`` applies it and ``disable_fast_train`` unwinds it, like the other training-path switches; the CLI trainer
 (``python -m experts4bit_qlora.train``) applies it itself; :func:`enable_chunked_lm_loss` is the direct call.
 """
