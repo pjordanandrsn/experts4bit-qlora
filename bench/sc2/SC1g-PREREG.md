@@ -500,7 +500,9 @@ unchanged. Box I keeps two.
 
 ## A3 read (2026-10-05): the cost is the MXFP4 weights, not e4b's route, and it does not replicate across windows
 
-`sc1g-diag-2` (adertha-receipts `28cd4d15`, OK, **$0.726**; e4b `a7891300`, gnf4 `dc8f94ab`). The host was 145701 again: its
+`sc1g-diag-2` (adertha-receipts `28cd4d15`, OK, **$0.726**; e4b `a7891300`, gnf4 `dc8f94ab`). Its receipts are committed
+at `bench/h2h-2026-10-02/sc1g/receipts/` with `sc1g-diag-1`'s, and the lines below re-derive from them
+(`python bench/sc2/sc1g_reduce.py --dir bench/h2h-2026-10-02/sc1g/receipts/sc1g-diag-2/sc1g`). The host was 145701 again: its
 install took 24 min, so 10 of the 19 arms ran and the deadline dropped k11–k19 (conv3's GEMV=0 row, conv4, kvg4, folds-off,
 PDL=0, conv2's K1 pair).
 
@@ -533,15 +535,16 @@ digit. The three NF4 rows the two runs share are identical too.
 - By A2's rule, no e4b-path defect was found, so the cross-engine reading may proceed. Its instrument is amended first
   (below).
 
-**Why "the weights cost" reads as NF4 flattery, not MXFP4 harm.** P44 (`e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`)
+**A hypothesis, not a reading: NF4 flattery rather than MXFP4 harm.** P44 (`e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`)
 measured both paths against a bf16 dequantization of the same shipped bytes:
 - the native MXFP4 store is KL **0.0019** nats/token from it;
 - the NF4 requant is **0.0222**, more than ten times further.
 
-So NF4 is the less faithful path, and its lower teacher-forced NLL on these conversations is most likely the entropy flattery
-P44 recorded on wikitext. The ultrachat answers are off-policy for gpt-oss: they are rendered without its analysis channel,
-and a noisier model spreads probability onto them. **Consequence for this lane:** ranking engines by teacher-forced NLL on
-this text could grade flattery. Amendment A4 reads A1's cross-engine NLL as descriptive only, and adds a fidelity instrument
+So NF4 is the less faithful path. Its lower teacher-forced NLL on these conversations is **most likely** the entropy flattery
+P44 recorded on wikitext. That is a hypothesis resting on P44's KL; this lane has not tested it, and A4's fidelity
+instrument is what would. The ultrachat answers are off-policy for gpt-oss: they are rendered without its analysis channel,
+and a noisier model spreads probability onto them. **Consequence for this lane, whichever way that hypothesis reads:** ranking engines by
+teacher-forced NLL on this text could grade flattery. Amendment A4 reads A1's cross-engine NLL as descriptive only, and adds a fidelity instrument
 (KL to a bf16-dequant reference computed once on an 80 GB card). It is registered before any reading run.
 
 **The attention check (e4b#1175): INERT, as registered, and the inertness is a design error.**

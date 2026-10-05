@@ -1,0 +1,1 @@
+SC1G_ATTN_CHECK INERT cc=[12, 0] kg4:kernel=1.91e-03,scheme=3.41e-02,recon=2.51e-02,compute=f32 kg8:kernel=1.88e-03,scheme=3.21e-02,recon=2.51e-02,compute=f32 kg16:kernel=1.72e-03,scheme=3.15e-02,recon=2.51e-02,compute=f32

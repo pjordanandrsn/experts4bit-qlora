@@ -1,0 +1,240 @@
+{
+ "device": {
+  "name": "NVIDIA GeForce RTX 5090",
+  "cc": [
+   12,
+   0
+  ]
+ },
+ "verdict": "INERT",
+ "disagreeing_k_groups": [],
+ "pack_bad_k_groups": [],
+ "per_k_groups": {
+  "4": {
+   "kernel_worst": 0.001908890320919454,
+   "scheme_worst": 0.034051693975925446,
+   "mutation_min": 0.0014311025151982903,
+   "recon_worst": 0.025093676522374153,
+   "compute_ran": [
+    "f32"
+   ]
+  },
+  "8": {
+   "kernel_worst": 0.0018804498249664903,
+   "scheme_worst": 0.0321185477077961,
+   "mutation_min": 0.0010853541316464543,
+   "recon_worst": 0.025098472833633423,
+   "compute_ran": [
+    "f32"
+   ]
+  },
+  "16": {
+   "kernel_worst": 0.0017234710976481438,
+   "scheme_worst": 0.03147811070084572,
+   "mutation_min": 0.0013772000093013048,
+   "recon_worst": 0.025080451741814613,
+   "compute_ran": [
+    "f32"
+   ]
+  }
+ },
+ "tol": 0.01,
+ "recon_tol": 0.1,
+ "compute_counts": {
+  "f32": 12
+ },
+ "rows": [
+  {
+   "k_groups": 4,
+   "window": 128,
+   "kind": "normal",
+   "k_group_width": 16,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.022337572649121284,
+   "v_recon": 0.02504248358309269,
+   "kernel_vs_deq_bf16": 0.0018717069178819656,
+   "kernel_vs_deq": 0.0018022473668679595,
+   "scheme_deq_vs_raw": 0.03325279429554939,
+   "kernel_vs_raw": 0.03336349502205849,
+   "mutation_kernel_vs_nosink": 0.008293417282402515
+  },
+  {
+   "k_groups": 4,
+   "window": 128,
+   "kind": "outlier",
+   "k_group_width": 16,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.01038654986768961,
+   "v_recon": 0.02505802921950817,
+   "kernel_vs_deq_bf16": 0.0014419624349102378,
+   "kernel_vs_deq": 0.0017175721004605293,
+   "scheme_deq_vs_raw": 0.03254931420087814,
+   "kernel_vs_raw": 0.03264086693525314,
+   "mutation_kernel_vs_nosink": 0.001726972870528698
+  },
+  {
+   "k_groups": 4,
+   "window": 0,
+   "kind": "normal",
+   "k_group_width": 16,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.022281771525740623,
+   "v_recon": 0.025070946663618088,
+   "kernel_vs_deq_bf16": 0.001908890320919454,
+   "kernel_vs_deq": 0.0017809695564210415,
+   "scheme_deq_vs_raw": 0.034051693975925446,
+   "kernel_vs_raw": 0.03408900275826454,
+   "mutation_kernel_vs_nosink": 0.00260879541747272
+  },
+  {
+   "k_groups": 4,
+   "window": 0,
+   "kind": "outlier",
+   "k_group_width": 16,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.005528286099433899,
+   "v_recon": 0.025093676522374153,
+   "kernel_vs_deq_bf16": 0.001426423666998744,
+   "kernel_vs_deq": 0.0017284501809626818,
+   "scheme_deq_vs_raw": 0.030675143003463745,
+   "kernel_vs_raw": 0.030817344784736633,
+   "mutation_kernel_vs_nosink": 0.0014311025151982903
+  },
+  {
+   "k_groups": 8,
+   "window": 128,
+   "kind": "normal",
+   "k_group_width": 8,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.019778264686465263,
+   "v_recon": 0.025096988305449486,
+   "kernel_vs_deq_bf16": 0.0018292323220521212,
+   "kernel_vs_deq": 0.0017892877804115415,
+   "scheme_deq_vs_raw": 0.0321185477077961,
+   "kernel_vs_raw": 0.032192129641771317,
+   "mutation_kernel_vs_nosink": 0.010529542341828346
+  },
+  {
+   "k_groups": 8,
+   "window": 128,
+   "kind": "outlier",
+   "k_group_width": 8,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.004885820671916008,
+   "v_recon": 0.025030966848134995,
+   "kernel_vs_deq_bf16": 0.001264386111870408,
+   "kernel_vs_deq": 0.0016937237232923508,
+   "scheme_deq_vs_raw": 0.02761576697230339,
+   "kernel_vs_raw": 0.027619069442152977,
+   "mutation_kernel_vs_nosink": 0.0015485812909901142
+  },
+  {
+   "k_groups": 8,
+   "window": 0,
+   "kind": "normal",
+   "k_group_width": 8,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.019821874797344208,
+   "v_recon": 0.025098472833633423,
+   "kernel_vs_deq_bf16": 0.0018804498249664903,
+   "kernel_vs_deq": 0.001776622491888702,
+   "scheme_deq_vs_raw": 0.03189550340175629,
+   "kernel_vs_raw": 0.03192475438117981,
+   "mutation_kernel_vs_nosink": 0.002532713580876589
+  },
+  {
+   "k_groups": 8,
+   "window": 0,
+   "kind": "outlier",
+   "k_group_width": 8,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.0048744226805865765,
+   "v_recon": 0.025079362094402313,
+   "kernel_vs_deq_bf16": 0.0010749890934675932,
+   "kernel_vs_deq": 0.001659973873756826,
+   "scheme_deq_vs_raw": 0.028695357963442802,
+   "kernel_vs_raw": 0.02873092144727707,
+   "mutation_kernel_vs_nosink": 0.0010853541316464543
+  },
+  {
+   "k_groups": 16,
+   "window": 128,
+   "kind": "normal",
+   "k_group_width": 4,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.016198299825191498,
+   "v_recon": 0.025071537122130394,
+   "kernel_vs_deq_bf16": 0.0017234710976481438,
+   "kernel_vs_deq": 0.001797148259356618,
+   "scheme_deq_vs_raw": 0.03147811070084572,
+   "kernel_vs_raw": 0.03145639970898628,
+   "mutation_kernel_vs_nosink": 0.012811269611120224
+  },
+  {
+   "k_groups": 16,
+   "window": 128,
+   "kind": "outlier",
+   "k_group_width": 4,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.003950305748730898,
+   "v_recon": 0.02506953664124012,
+   "kernel_vs_deq_bf16": 0.0015067937783896923,
+   "kernel_vs_deq": 0.001810999820008874,
+   "scheme_deq_vs_raw": 0.025851493701338768,
+   "kernel_vs_raw": 0.026032479479908943,
+   "mutation_kernel_vs_nosink": 0.0016684109577909112
+  },
+  {
+   "k_groups": 16,
+   "window": 0,
+   "kind": "normal",
+   "k_group_width": 4,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.016177525743842125,
+   "v_recon": 0.025080451741814613,
+   "kernel_vs_deq_bf16": 0.0017078369855880737,
+   "kernel_vs_deq": 0.001768656075000763,
+   "scheme_deq_vs_raw": 0.029258757829666138,
+   "kernel_vs_raw": 0.029330721125006676,
+   "mutation_kernel_vs_nosink": 0.002347389468923211
+  },
+  {
+   "k_groups": 16,
+   "window": 0,
+   "kind": "outlier",
+   "k_group_width": 4,
+   "compute_ran": [
+    "f32"
+   ],
+   "k_recon": 0.003925751894712448,
+   "v_recon": 0.02504739724099636,
+   "kernel_vs_deq_bf16": 0.0013757121050730348,
+   "kernel_vs_deq": 0.0016928755212575197,
+   "scheme_deq_vs_raw": 0.026781823486089706,
+   "kernel_vs_raw": 0.026777233928442,
+   "mutation_kernel_vs_nosink": 0.0013772000093013048
+  }
+ ]
+}

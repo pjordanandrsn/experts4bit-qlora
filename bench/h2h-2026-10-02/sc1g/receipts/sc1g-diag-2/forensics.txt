@@ -1,0 +1,16 @@
+GPU 0: NVIDIA GeForce RTX 5090 (UUID: GPU-280958b0-9ceb-4341-a905-2398d664f1c3)
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-280958b0-9ceb-4341-a905-2398d664f1c3, 12.0, 1, 16, 4, 16
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7B13 64-Core Processor
+nproc 256
+cgroup cpu.max 3071999 100000  memory.max 730283900928
+loadavg 3.47 6.50 12.73 4/4748 612
+               total        used        free      shared  buff/cache   available
+Mem:            2003         581         904           4         532        1422
+overlay         320G   17M  320G   1% /
+Build cuda_13.0.r13.0/compiler.36424714_0
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+Python 3.12.3
+cpu_vendor AuthenticAMD
+ram_gb 2003 (oracle floor 98)

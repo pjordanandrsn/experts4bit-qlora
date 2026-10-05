@@ -1,0 +1,84 @@
+{
+ "device": {
+  "name": "NVIDIA GeForce RTX 5090",
+  "cc": [
+   12,
+   0
+  ]
+ },
+ "verdict": "KERNEL_DISAGREES",
+ "kernel_vs_exact_worst": 1.4704325199127197,
+ "metric": "kernel_vs_exact_bf16",
+ "kernel_tol": 0.001,
+ "summary": {
+  "L0_gu": {
+   "n": 2,
+   "kernel_vs_exact_bf16_max": 1.4704325199127197,
+   "kernel_vs_exact_max": 1.4704093933105469,
+   "scheme_mean": 0.007232924923300743,
+   "scheme_max": 0.009224015288054943,
+   "crest_max": 27.76494026184082
+  },
+  "L0_dn": {
+   "n": 2,
+   "kernel_vs_exact_bf16_max": 1.4614473581314087,
+   "kernel_vs_exact_max": 1.461354374885559,
+   "scheme_mean": 0.009551860392093658,
+   "scheme_max": 0.013799220323562622,
+   "crest_max": 29.505657196044922
+  }
+ },
+ "rows": [
+  {
+   "layer": 0,
+   "which": "gu",
+   "step": "normal",
+   "kernel_vs_exact_bf16": 1.436296820640564,
+   "kernel_vs_exact": 1.4362906217575073,
+   "scheme_exact_vs_raw": 0.005241834558546543,
+   "kernel_vs_raw": 1.4362843036651611,
+   "x_absmax": 4.34375,
+   "x_rms": 1.0000406503677368,
+   "block_crest_max": 4.719592094421387
+  },
+  {
+   "layer": 0,
+   "which": "gu",
+   "step": "outlier",
+   "kernel_vs_exact_bf16": 1.4704325199127197,
+   "kernel_vs_exact": 1.4704093933105469,
+   "scheme_exact_vs_raw": 0.009224015288054943,
+   "kernel_vs_raw": 1.4704363346099854,
+   "x_absmax": 177.0,
+   "x_rms": 3.7806556224823,
+   "block_crest_max": 27.76494026184082
+  },
+  {
+   "layer": 0,
+   "which": "dn",
+   "step": "normal",
+   "kernel_vs_exact_bf16": 1.4614473581314087,
+   "kernel_vs_exact": 1.461354374885559,
+   "scheme_exact_vs_raw": 0.005304500460624695,
+   "kernel_vs_raw": 1.4618327617645264,
+   "x_absmax": 3.515625,
+   "x_rms": 0.9911110997200012,
+   "block_crest_max": 5.2001800537109375
+  },
+  {
+   "layer": 0,
+   "which": "dn",
+   "step": "outlier",
+   "kernel_vs_exact_bf16": 1.4054794311523438,
+   "kernel_vs_exact": 1.4058222770690918,
+   "scheme_exact_vs_raw": 0.013799220323562622,
+   "kernel_vs_raw": 1.405746579170227,
+   "x_absmax": 300.0,
+   "x_rms": 4.648168563842773,
+   "block_crest_max": 29.505657196044922
+  }
+ ],
+ "acts": null,
+ "synthetic": true,
+ "mutate": true
+}
