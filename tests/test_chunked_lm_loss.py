@@ -16,7 +16,13 @@ What is pinned, on tiny configs of every family in ``SUPPORTED`` (CPU, plus CUDA
 Why the tolerances: the chunked path changes only the ORDER of fp32 summations -- the cross-entropy summed per chunk and then
 across chunks, the head's matmul blocked over a chunk's rows instead of all of them, a trainable head's weight gradient summed
 over chunks. So the loss is held to 8 fp32 ulps of its magnitude and each gradient tensor to 1e-5 of its own largest element
-(measured: at most 1 ulp on the loss and 1.4e-6 on a gradient, over the eleven families).
+(measured: at most 1 ulp on the loss and 1.4e-6 on a gradient, over the eleven families) -- or of 1e-3 of the largest
+gradient anywhere in the model, whichever is larger. The floor is for tensors whose whole gradient is tiny next to the
+model's: the reorder's rounding reaches them from upstream at the scale of the LARGE gradients, not theirs. On
+qwen3_5_moe the Gated DeltaNet's dt_bias / A_log gradients peak near 2e-5 against a model maximum near 0.2, and a CI
+runner read dt_bias at 1.3e-5 of its own maximum (1.79e-10 absolute; #1159's run 37323695463) where the Mac reads
+2e-6. The floor is 2e-9 absolute there, still 1/7000 of dt_bias's own gradient, so a wrong scale or a dropped term
+in it stays far outside the bound.
 """
 import math
 import warnings
@@ -33,6 +39,7 @@ V = 97
 EPS32 = torch.finfo(torch.float32).eps
 LOSS_ULPS = 8
 GRAD_REL = 1e-5
+GRAD_FLOOR = 1e-3        # of the model's largest gradient; see the module docstring
 
 
 def _common():
@@ -129,11 +136,13 @@ def _assert_loss_close(a, b):
 
 def _assert_grads_close(ga, gb, rel=GRAD_REL):
     assert ga.keys() == gb.keys()
+    top = max((float(g.float().abs().max()) for g in ga.values()), default=0.0)
     for n in ga:
         x, y = ga[n].float(), gb[n].float()
         scale = float(x.abs().max())
         err = float((x - y).abs().max())
-        assert err <= rel * scale + 1e-30, f"{n}: max |diff| {err:.3e} vs max |grad| {scale:.3e}"
+        assert err <= rel * max(scale, GRAD_FLOOR * top) + 1e-30, \
+            f"{n}: max |diff| {err:.3e} vs max |grad| {scale:.3e} (model max {top:.3e})"
 
 
 # --------------------------------------------------------------------------------------------------------------- semantics --
