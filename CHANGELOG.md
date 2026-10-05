@@ -42,6 +42,10 @@
   bytes, block tables, lengths and free lists exactly as the per-layer path does, with the same rows for the same slot
   (`tests/test_bulk_kv.py`, whole-pool comparisons; a tiny model decodes the same tokens either way). **Off by default**:
   no request-level effect is claimed until a registered lane reads one.
+- **Memory, stated.** A bulk flush allocates up to `Fp8PagedKV.append_prompt_peak_bytes(T)` (~216 MiB on Qwen3-30B-A3B
+  at 2048 tokens). Under the prefill graph that is additive to the graph's private pool, so the graph's `auto` headroom
+  check counts it when bulk is on, and `/health` reports `prefill_graph.bulk_flush_mib`. The bound is checked against
+  the allocator's measured peak on CUDA.
 - **`E4B_PAGED_STEP_TRACE=<path>`**: one JSON line per engine step. It records what the step carried, its host time by
   segment, and when the GPU finished the forward, the flush and the decode, read after the step's own syncs. `/health`
   reports `engine.bulk_kv` and `step_trace_path`.

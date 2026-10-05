@@ -396,3 +396,29 @@ def test_the_step_trace_never_waits_on_a_step_the_gpu_has_not_finished(tmp_path)
     tr.end()
     tr.close()
     assert f3.waited and json.loads(path.read_text().splitlines()[-1])["gpu"] == {"pf_forward": 9.0}
+
+
+def test_the_bulk_flush_peak_bound_covers_what_it_allocates():
+    """append_prompt_peak_bytes bounds the device memory a bulk flush allocates beyond its inputs. On CUDA the bound is
+    checked against the allocator's measured peak (bytes, not time); on CPU its arithmetic is pinned."""
+    kv = _kv(**GEOMS["mixed"], max_tokens=96)
+    layers = list(range(kv.L))
+    b1, b40 = kv.append_prompt_peak_bytes(1, layers), kv.append_prompt_peak_bytes(40, layers)
+    assert 0 < b1 < b40 and kv.append_prompt_peak_bytes(0, layers) == 0 and kv.append_prompt_peak_bytes(40, []) == 0
+    # the (4 x 32) layers 0 and 2 form the largest group (128 values a token, two layers): 7x its bf16 input per side;
+    # every layer's FP8 K and V payload plus their scales (key groups as this build resolved them) are held
+    T = 40
+    held = sum(T * (2 * kv.Hs[i] * kv.Ds[i] + kv.Hs[i] * kv.kgs[i] * 4 + kv.Hs[i] * 4) for i in layers)
+    assert kv.append_prompt_peak_bytes(T, layers) == 7 * 2 * T * 128 * 2 + held
+    if DEV != "cuda":
+        return
+    big = Fp8PagedKV(48, 4, 128, batch=2, max_tokens_per_seq=2048, device=DEV)
+    lay = list(range(48))
+    ks, vs = _prompt(big, lay, 2048, 3)
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()
+    base = torch.cuda.memory_allocated()
+    big.append_prompt(0, lay, ks, vs)
+    torch.cuda.synchronize()
+    used = torch.cuda.max_memory_allocated() - base
+    assert used <= big.append_prompt_peak_bytes(2048, lay), (used, big.append_prompt_peak_bytes(2048, lay))
