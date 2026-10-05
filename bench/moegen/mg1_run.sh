@@ -62,7 +62,7 @@ perl -e 'alarm 2400; exec @ARGV' python -m pip install -q --no-input --prefer-bi
   "transformers==5.18.0" "bitsandbytes==0.50.2" datasets accelerate safetensors "huggingface_hub>=0.23" sentencepiece tiktoken > logs/pip.log 2>&1 \
   || { tail -5 logs/pip.log; echo "PIP FAIL" | tee -a summary.txt; finish 9; }
 # The Mamba-2 / short-conv kernels the hybrid families' recurrent blocks use (Granite-H, Nemotron-H): without them transformers runs its
-# reference PyTorch scan; on the A2000 rehearsal installing them cut Granite-H's fused device time by 36 %. Upstream's own release wheels, no-deps
+# reference PyTorch scan, unfused, so an arm that pays the fallback is not the fast path. Upstream's own release wheels, no-deps
 # (the sdists need nvcc even for metadata, and a resolver pass could move torch). A failed install is recorded, never fatal:
 # the arms then run the fallback and say so in their logs.
 PYTAG=$(python -c 'import sys; print(f"cp{sys.version_info[0]}{sys.version_info[1]}")')
