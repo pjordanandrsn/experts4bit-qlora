@@ -1,0 +1,11 @@
+link: NVIDIA GeForce RTX 5090, 5, 16
+VRAM_PROBE_OK 29.5 GiB in 14 blocks
+EGRESS_PROBE_OK 13.9 MB in 4.4 s = 3.16 MB/s from codeload.github.com (floor 1.0)
+dq3 tripwire OK 0bf98cf3 2.8.0+cu128 NVIDIA GeForce RTX 5090
+arm 1 R rc=0 DQ3 arm R done: build 82.2 s, step 2.926 s, peak 24.77 GiB
+arm 2 S rc=0 DQ3 arm S done: build 82.7 s, step 2.930 s, peak 10.73 GiB
+arm 3 S0 rc=0 DQ3 arm S0 done: build 85.1 s, step 3.454 s, peak 10.27 GiB
+arm 4 S0 rc=0 DQ3 arm S0 done: build 84.7 s, step 3.454 s, peak 10.27 GiB
+arm 5 S rc=0 DQ3 arm S done: build 85.0 s, step 2.929 s, peak 10.73 GiB
+arm 6 R rc=0 DQ3 arm R done: build 84.9 s, step 2.919 s, peak 24.77 GiB
+DQ3 read: {'lane': 'PROTO_PASS', 'step': 'PASS', 'coverage': 'PASS', 'capacity': 'PASS'} {'S_over_R': 1.0022977200282934, 'S0_over_R': 1.1817977878762924, 'saving_fraction': 0.997528616024974, 'R_self_pair': 0.9976060282097703}

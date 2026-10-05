@@ -1,0 +1,10 @@
+A A1_R.json  parity_eq=True peak=0.464GiB
+A A2_S.json  parity_eq=True peak=0.434GiB | memory: <= 0.438 GiB: True
+A A3_S0.json parity_eq=True peak=0.420GiB | memory: <= 0.438 GiB: True
+A A4_S0.json parity_eq=True peak=0.420GiB | memory: <= 0.438 GiB: True
+A A5_S.json  parity_eq=True peak=0.434GiB | memory: <= 0.438 GiB: True
+A A6_R.json  parity_eq=True peak=0.464GiB
+B B1_R.json  parity_eq=True peak=5.820GiB
+B B2_S.json  parity_eq=True peak=5.366GiB | memory: <= 5.480 GiB: True
+B B3_S0.json parity_eq=True peak=4.912GiB | memory: <= 5.480 GiB: True
+REHEARSAL CHECK OK

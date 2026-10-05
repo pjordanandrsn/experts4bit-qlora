@@ -1,0 +1,4 @@
+/root/tc1/dq3_arm.py:178: UserWarning: dense offload: kept 192 trainable tensor(s) resident (0.31 GB) instead of streaming them -- an optimizer cannot step a streamed parameter. For inference, freeze the model first: model.requires_grad_(False)
+  handles = enable_dense_offload(pm, pin=True, prefetch=False, train_prefetch=(args.arm == "S"))
+[transformers] `use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+DQ3 arm S done: build 82.7 s, step 2.930 s, peak 10.73 GiB

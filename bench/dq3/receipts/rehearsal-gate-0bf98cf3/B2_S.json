@@ -1,0 +1,288 @@
+{
+ "schema": "dq3-arm/1",
+ "arm": "S",
+ "rehearsal": true,
+ "seq": 1024,
+ "started_at": "2026-10-05T17:53:03Z",
+ "device": "NVIDIA RTX A2000 12GB",
+ "config_overrides": {
+  "num_hidden_layers": 4
+ },
+ "env": {
+  "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
+  "E4B_SHA": null
+ },
+ "build_s": 16.2,
+ "engagement": {
+  "wrapped": 28,
+  "wrapper_kinds": [
+   "peft.tuners.lora.bnb.Linear4bit"
+  ],
+  "lora_params": 56,
+  "lora_dtypes": [
+   "torch.float32"
+  ],
+  "trainable": 8388608,
+  "gradient_checkpointing": true
+ },
+ "offload": {
+  "layers": 4,
+  "tensors": 28,
+  "host_bytes": 975175680,
+  "per_layer_bytes": 243793920,
+  "all_pinned": true
+ },
+ "host_after_setup": {
+  "allocated_bytes.allocated": 1107296256,
+  "allocated_bytes.current": 1107296256,
+  "allocated_bytes.freed": 0,
+  "allocated_bytes.peak": 1107296256,
+  "allocation.allocated": 28,
+  "reserved_bytes.allocated": 1107296256,
+  "reserved_bytes.current": 1107296256,
+  "reserved_bytes.freed": 0,
+  "reserved_bytes.peak": 1107296256,
+  "segment.allocated": 28
+ },
+ "parity": [
+  {
+   "loss": 12.871611595153809,
+   "grads": {
+    "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight": "a324a3a2570590b2021824b93fa4fdbdffe857283701e1d44c2fe8328c3ccf1a",
+    "base_model.model.model.layers.0.self_attn.k_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.0.self_attn.k_proj.lora_B.default.weight": "caf513c23441e209a014a72e0fb69d9f0a89cc771f0ec4c2b35bafd73dc557ee",
+    "base_model.model.model.layers.0.self_attn.v_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.0.self_attn.v_proj.lora_B.default.weight": "b23cd9eda2bc24ad40d1e5d8b7d065096dd021ce871bff4dd7db75e97a7fbd39",
+    "base_model.model.model.layers.0.self_attn.o_proj.lora_A.default.weight": "07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
+    "base_model.model.model.layers.0.self_attn.o_proj.lora_B.default.weight": "b343b2110d5874608f69d4d57db23caea297c720ec11a4bee0211f905f7fd0e6",
+    "base_model.model.model.layers.0.mlp.gate_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.0.mlp.gate_proj.lora_B.default.weight": "e4ac08391af2fa133f94fff6c4fc46a97b4bf7c9a09aac94631e1475906fd719",
+    "base_model.model.model.layers.0.mlp.up_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.0.mlp.up_proj.lora_B.default.weight": "a77bb32a4a902f92ea33c99e3075fd482cc1a500b1ffa4d6b85b1d739b497e3b",
+    "base_model.model.model.layers.0.mlp.down_proj.lora_A.default.weight": "0655c923944257942252e3484efa09d83329b93522af84c653f8b36b3453eaee",
+    "base_model.model.model.layers.0.mlp.down_proj.lora_B.default.weight": "9312094e8ddca4d260c9c4162987d077ef16aed51ea02f637e6251fca65c8c32",
+    "base_model.model.model.layers.1.self_attn.q_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.1.self_attn.q_proj.lora_B.default.weight": "7994021d3b6a292cfea47b104a2ea0748b1591ae728194972d0e3b9f5c9eff54",
+    "base_model.model.model.layers.1.self_attn.k_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.1.self_attn.k_proj.lora_B.default.weight": "ed63080b2545eda6421cf06d8405425f151ace63df278ef2ecd0366b9047a614",
+    "base_model.model.model.layers.1.self_attn.v_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.1.self_attn.v_proj.lora_B.default.weight": "be087ca514af94bdb18ad84d7c9b5c69f781438b050a013439605dd798545f2c",
+    "base_model.model.model.layers.1.self_attn.o_proj.lora_A.default.weight": "07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
+    "base_model.model.model.layers.1.self_attn.o_proj.lora_B.default.weight": "6046e33e722c3a7230ef84d43bb09ebacbd8b96a5809c736ccc99138d005fd0a",
+    "base_model.model.model.layers.1.mlp.gate_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.1.mlp.gate_proj.lora_B.default.weight": "54812e54660c0f1434c80ce3c8d153d925999cff380bb5839ccecff35ef213d2",
+    "base_model.model.model.layers.1.mlp.up_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.1.mlp.up_proj.lora_B.default.weight": "97739685c65a4ca31eb91f6a4f9e4d9ebb64b4460407d9a2ab7026499bd78bde",
+    "base_model.model.model.layers.1.mlp.down_proj.lora_A.default.weight": "0655c923944257942252e3484efa09d83329b93522af84c653f8b36b3453eaee",
+    "base_model.model.model.layers.1.mlp.down_proj.lora_B.default.weight": "15b02f2a05b63977a551fd7c5c070070f205320edf197ff9b5d171d61fd9e020",
+    "base_model.model.model.layers.2.self_attn.q_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.2.self_attn.q_proj.lora_B.default.weight": "61cb45a44554ce34c72d12ea5a4f5c7f2f026af3a189838d33daee70e6d9cdb1",
+    "base_model.model.model.layers.2.self_attn.k_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.2.self_attn.k_proj.lora_B.default.weight": "bf1699b9af2b5a194c36951bb4dcde58cbc997006f475d075d86567c7871c03b",
+    "base_model.model.model.layers.2.self_attn.v_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.2.self_attn.v_proj.lora_B.default.weight": "a4b22c55498dff6ae1312740936e13518469fb524a7457db583008984cbe718c",
+    "base_model.model.model.layers.2.self_attn.o_proj.lora_A.default.weight": "07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
+    "base_model.model.model.layers.2.self_attn.o_proj.lora_B.default.weight": "7956e12a6c80862b7b39e2fbeee81b1a61b0d2fb5a7c00a80194ae4613b0aa02",
+    "base_model.model.model.layers.2.mlp.gate_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.2.mlp.gate_proj.lora_B.default.weight": "ab6437b5ebe8e87823ecbb7c35e83e78eaebaec5db5be3db33271553be37e2a6",
+    "base_model.model.model.layers.2.mlp.up_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.2.mlp.up_proj.lora_B.default.weight": "2c3e1dcb29427c0c2adf1adf16d245fec1d97c51aaf87e6ae6e466f1da912764",
+    "base_model.model.model.layers.2.mlp.down_proj.lora_A.default.weight": "0655c923944257942252e3484efa09d83329b93522af84c653f8b36b3453eaee",
+    "base_model.model.model.layers.2.mlp.down_proj.lora_B.default.weight": "456dbdbe831121dfc7704327a8069f91b4a73710de0ae4dccab6e2f6ccbeb5f2",
+    "base_model.model.model.layers.3.self_attn.q_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.3.self_attn.q_proj.lora_B.default.weight": "87629b1f0a2a020e451f6e43455bfeb3377805cae3c4a282c1f66351f1132e99",
+    "base_model.model.model.layers.3.self_attn.k_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.3.self_attn.k_proj.lora_B.default.weight": "386eb045f5b77a353ce7a54ded1a5dc4b5850a5af63aef3c470c75867badc945",
+    "base_model.model.model.layers.3.self_attn.v_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.3.self_attn.v_proj.lora_B.default.weight": "d6349e63e6cd48e53e1231c26756d4469dd0c9b517d11e17430835c52884be3f",
+    "base_model.model.model.layers.3.self_attn.o_proj.lora_A.default.weight": "07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
+    "base_model.model.model.layers.3.self_attn.o_proj.lora_B.default.weight": "308c7677859618b17dc3dd9b54d0769beb63bf0e8ecb9f11291c5d01a93f39e4",
+    "base_model.model.model.layers.3.mlp.gate_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.3.mlp.gate_proj.lora_B.default.weight": "01ff85e382dd599b5e98ecffc7222ff80c4f88613b40cb3993fa2b3aa73d06fc",
+    "base_model.model.model.layers.3.mlp.up_proj.lora_A.default.weight": "dae4d3dce1bb0a9414f61a65ee07622fa225ec01e6efe6df6e78f9ad5c58480d",
+    "base_model.model.model.layers.3.mlp.up_proj.lora_B.default.weight": "f27b7ca8bc91cd2e31b076d075cf110e3ad7fb6b7e100275d40d118987fd3450",
+    "base_model.model.model.layers.3.mlp.down_proj.lora_A.default.weight": "0655c923944257942252e3484efa09d83329b93522af84c653f8b36b3453eaee",
+    "base_model.model.model.layers.3.mlp.down_proj.lora_B.default.weight": "d74f0fc42caa00d645aa4f4c299c20843c6204360bb36d0d654bdfa5590335fb"
+   },
+   "loss_bits": "f7ccf21cab0dcc3404a908c950ca0a81d0e9b717ee86ef6591b7e973510a62ea",
+   "s": 1.5454351560038049,
+   "counters": {
+    "cuda:0": {
+     "uses": 12,
+     "resident_hits": 6,
+     "unscheduled": 0,
+     "hwm_resident": 2,
+     "fwd_prefetch_issued": 3,
+     "fwd_overlapped": 1,
+     "fwd_waited": 2,
+     "fwd_blocking": 1,
+     "bwd_prefetch_issued": 2,
+     "bwd_overlapped": 0,
+     "bwd_waited": 2,
+     "bwd_blocking": 0
+    }
+   }
+  },
+  {
+   "loss": 12.675636291503906,
+   "grads": {
+    "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight": "44acc0e0e6a1754b51100f0a04a88c0a4028e924aa39f09021dcd51fa41f56ea",
+    "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight": "5d24de6ed2b34f8e6df9d2fcf06157742083702c486f2fbc25ca7f5519017975",
+    "base_model.model.model.layers.0.self_attn.k_proj.lora_A.default.weight": "3abcc4cdefcfd77ff69c174ce2827a600464c494b9cc539de46ae32ebbe48d71",
+    "base_model.model.model.layers.0.self_attn.k_proj.lora_B.default.weight": "8887c7114bbb872397c5e19b81ac5dfe672874c18722d5c0ef223ac11beeaa94",
+    "base_model.model.model.layers.0.self_attn.v_proj.lora_A.default.weight": "f2e9c04017a5e2370e0b14bf291ffda7ab208a9ec01d82cc9cbe754e15ca6fce",
+    "base_model.model.model.layers.0.self_attn.v_proj.lora_B.default.weight": "27d442c08f2f2a272c71c476c7811ffdc30edcd146c3e4a5a29959ea67a69ab2",
+    "base_model.model.model.layers.0.self_attn.o_proj.lora_A.default.weight": "adf0897d2c4f2aa482ec4b6a964d97d6e152d3f7e4a6d1fa91a880a7443d0c6f",
+    "base_model.model.model.layers.0.self_attn.o_proj.lora_B.default.weight": "fab1f873b27a3e8cef8c2f51902db92b83093e9a356a20e648e2e694afcb5e68",
+    "base_model.model.model.layers.0.mlp.gate_proj.lora_A.default.weight": "87ca22136b0e210d0cf5d721a027abd020b055c9edde4d36dc481429f1add603",
+    "base_model.model.model.layers.0.mlp.gate_proj.lora_B.default.weight": "e6f1573178aa7d2da07ace62091e7cc054b959633568d14a7e2d595625f77d01",
+    "base_model.model.model.layers.0.mlp.up_proj.lora_A.default.weight": "accda860e30de398a0a25afffa539e843f0ff202f91292c20a51f732801f1ffa",
+    "base_model.model.model.layers.0.mlp.up_proj.lora_B.default.weight": "338254d9058650b5cdc2d446fa707c18606e47004c70a8c38608a5f588f26955",
+    "base_model.model.model.layers.0.mlp.down_proj.lora_A.default.weight": "446faba69f4e34852f457dcb2d210dd56598183fa8bd11728d645105bb27c9ae",
+    "base_model.model.model.layers.0.mlp.down_proj.lora_B.default.weight": "5573dd426460a68cc21daa13ee1c64772fff8f77ebee337194505d12a67324d6",
+    "base_model.model.model.layers.1.self_attn.q_proj.lora_A.default.weight": "e3bb4f289a652c6d8789422dd7d7ad14715d00a59facf577b0e168a0d9f23032",
+    "base_model.model.model.layers.1.self_attn.q_proj.lora_B.default.weight": "e371a86e427db21b934e2fab23c7339b0377bc5b5164e61140dc5bc04aac497b",
+    "base_model.model.model.layers.1.self_attn.k_proj.lora_A.default.weight": "00335b29cbf30fa89e8cef23d8b007391bfa4dee38a2d7e7ff29e41c842a3eeb",
+    "base_model.model.model.layers.1.self_attn.k_proj.lora_B.default.weight": "1b8049636274fd58ff7a61e0114d44616d9888c62d9e428e6d0d052efe0ca3c0",
+    "base_model.model.model.layers.1.self_attn.v_proj.lora_A.default.weight": "0bee25d63d53373581b4dfd17917c261002b690d2f5718028cba56532138acc8",
+    "base_model.model.model.layers.1.self_attn.v_proj.lora_B.default.weight": "ffcf990d42504d03c5b89acfbbfb7ed119d29df1a263346dfa91d50e162d0231",
+    "base_model.model.model.layers.1.self_attn.o_proj.lora_A.default.weight": "ea15b99c5b2961f671cae4c789d6b27c7539bddc72683bcb5aca9eb42803086a",
+    "base_model.model.model.layers.1.self_attn.o_proj.lora_B.default.weight": "b5d7b547fb89ced7c318fdc73effe4d1a166aaba92594147f3045c41b9abec1a",
+    "base_model.model.model.layers.1.mlp.gate_proj.lora_A.default.weight": "1184440d672a2d6bcb3b7bb1b52b1077c81e53fe185899a42922b18aff8b38d0",
+    "base_model.model.model.layers.1.mlp.gate_proj.lora_B.default.weight": "b7b24fa750e94fda9c03a3c8d482e983584b68b2aa6f9b435760eca0a6a64064",
+    "base_model.model.model.layers.1.mlp.up_proj.lora_A.default.weight": "d2bf7ab33868d1d499056767976ed9d248e84a41de10a6f628dae194da31852d",
+    "base_model.model.model.layers.1.mlp.up_proj.lora_B.default.weight": "c434a189d3dabc72a0d15e10261c4a5ec89a9d9af81ff58f2fc39ef1358721c6",
+    "base_model.model.model.layers.1.mlp.down_proj.lora_A.default.weight": "2511fa90132c7823fa200816e438a2797f1adcb48d0c0ad47d39c7cea1b20f6a",
+    "base_model.model.model.layers.1.mlp.down_proj.lora_B.default.weight": "051a6e8166749c1ef626e45f739cfa5f657cdf98e00b36ea2acff8e87463b692",
+    "base_model.model.model.layers.2.self_attn.q_proj.lora_A.default.weight": "f8a983583a19a6381ccfdff3723b60b25e2e9f9db2d2aa9d5be892426ef9c051",
+    "base_model.model.model.layers.2.self_attn.q_proj.lora_B.default.weight": "39ecc28dfd9222bbfc4da437f704cd3e07295eaddccf88dc891b3f62e9939e64",
+    "base_model.model.model.layers.2.self_attn.k_proj.lora_A.default.weight": "eed001d4445ab646d5e667b692409fea83498df9ddbac7a60c2a1d9f98242d0c",
+    "base_model.model.model.layers.2.self_attn.k_proj.lora_B.default.weight": "e6e9b47ab3e83f6f1ab22b4da3a8b6507c3efa7fe2222e9c3ebf7354b01edb90",
+    "base_model.model.model.layers.2.self_attn.v_proj.lora_A.default.weight": "e0cc92a3a2023ddf9dd4fedfba9fc3424a07bc558dbef8ecc4416d6d51c3eadf",
+    "base_model.model.model.layers.2.self_attn.v_proj.lora_B.default.weight": "58ed7713b4f58f1b1d6e6ae5747adfd0fa742b4f52ab2780afa45b831224e352",
+    "base_model.model.model.layers.2.self_attn.o_proj.lora_A.default.weight": "44a1de47f25a88939a3b1f112d993f221038f5a3d9c22442e24f384f7a6754d0",
+    "base_model.model.model.layers.2.self_attn.o_proj.lora_B.default.weight": "dbc756e1ea5109ae8a3764270ba13edff5560b713b3f798eac78157f54ace49e",
+    "base_model.model.model.layers.2.mlp.gate_proj.lora_A.default.weight": "2febcbee0a4ddb2e26bc7631b110f00a841e3a366404d01dc2b8176d478ddb31",
+    "base_model.model.model.layers.2.mlp.gate_proj.lora_B.default.weight": "45e5876370a4bd4ad475f0c22fc29ddee3c1dcb9d2c313c1787689e05fc3422f",
+    "base_model.model.model.layers.2.mlp.up_proj.lora_A.default.weight": "05ed9dcb90482df8c33a7da52671dc6ae3eecdf105d901107bdd658096eb0f7c",
+    "base_model.model.model.layers.2.mlp.up_proj.lora_B.default.weight": "fbad8fc8627fa4bd2d2bce9d34e56a493ba2e4128e684656c722ce48c6870c0e",
+    "base_model.model.model.layers.2.mlp.down_proj.lora_A.default.weight": "4c0b5a1e832b105387e01ed702e12adca37b2a9ecd93132917cd2f33a05b2ffd",
+    "base_model.model.model.layers.2.mlp.down_proj.lora_B.default.weight": "5d9dc818e95a954beb408eb82aaf7452d0a271d456602dd0a82560406186a720",
+    "base_model.model.model.layers.3.self_attn.q_proj.lora_A.default.weight": "fa33583ec499e01e5e49fa494eab9290d7c2d6cb17f909e04cad6d19d7481fa4",
+    "base_model.model.model.layers.3.self_attn.q_proj.lora_B.default.weight": "53d9303ba41923aad1f78606b469fa86b9ae0f2526ef7fe2ae2ce4e1be5f89b1",
+    "base_model.model.model.layers.3.self_attn.k_proj.lora_A.default.weight": "4537ee6c6182e34daf5bd6353afc5746d78cc2918d7cfe4a15a9816dbc9d10ff",
+    "base_model.model.model.layers.3.self_attn.k_proj.lora_B.default.weight": "2bef2ebf5ff5a2ae09bd1f86a4facc88d466f435582daccd1b99b1bf02bd95ab",
+    "base_model.model.model.layers.3.self_attn.v_proj.lora_A.default.weight": "e3932cfbb271a8aa18588a9a1d4b8b1e86fed5dd3c57aecbec27206d77bd1110",
+    "base_model.model.model.layers.3.self_attn.v_proj.lora_B.default.weight": "cfec587201a758e2f523af853b9a8076485bb6bd8f0ca1263f2ee90ff18e71bf",
+    "base_model.model.model.layers.3.self_attn.o_proj.lora_A.default.weight": "001c680078c1ed949883174d0537a6e02d94257d26b1b072e5c98ed35240bec8",
+    "base_model.model.model.layers.3.self_attn.o_proj.lora_B.default.weight": "381607f27da4b6bb77bc92bc88f54ed6e1a621fa922f769df114c6f3192d62c8",
+    "base_model.model.model.layers.3.mlp.gate_proj.lora_A.default.weight": "3e3bb0be7aa59bf1748347b50b867a3b54d3cd00fc78f1dc0941c4a46ef7cddf",
+    "base_model.model.model.layers.3.mlp.gate_proj.lora_B.default.weight": "9399257cc8563ee6ad84c0ab93fa5ad18f7895ba882eb7f4d922fcda8ac26baf",
+    "base_model.model.model.layers.3.mlp.up_proj.lora_A.default.weight": "ee763d49269cc6d1d36ed3b18cdc3b6bde173926c0f55ec77390590b96efc532",
+    "base_model.model.model.layers.3.mlp.up_proj.lora_B.default.weight": "f1dcad017f90400ac85558c5a31e058d3d3d97ce633fef34e9063b8180530960",
+    "base_model.model.model.layers.3.mlp.down_proj.lora_A.default.weight": "e758a381f4af636cca8028d8d611a442747dd1257e9b98467dd5b8293d988d39",
+    "base_model.model.model.layers.3.mlp.down_proj.lora_B.default.weight": "068f87c45632f580cb4c1b720a2f6d050ef6887f9d526ef5bef2810d2ce64205"
+   },
+   "loss_bits": "dd786635a469dc7ec159da9f3596f6562bcc856572ddff211431ca8844f1bb4e",
+   "s": 1.2482590089784935,
+   "counters": {
+    "cuda:0": {
+     "uses": 24,
+     "resident_hits": 14,
+     "unscheduled": 0,
+     "hwm_resident": 2,
+     "fwd_prefetch_issued": 5,
+     "fwd_overlapped": 1,
+     "fwd_waited": 4,
+     "fwd_blocking": 1,
+     "bwd_prefetch_issued": 4,
+     "bwd_overlapped": 2,
+     "bwd_waited": 2,
+     "bwd_blocking": 0
+    }
+   }
+  }
+ ],
+ "timing": {
+  "warm": [
+   {
+    "loss": 12.871358871459961,
+    "s": 0.8634045209910255,
+    "counters": {
+     "cuda:0": {
+      "uses": 36,
+      "resident_hits": 22,
+      "unscheduled": 0,
+      "hwm_resident": 2,
+      "fwd_prefetch_issued": 7,
+      "fwd_overlapped": 1,
+      "fwd_waited": 6,
+      "fwd_blocking": 1,
+      "bwd_prefetch_issued": 6,
+      "bwd_overlapped": 2,
+      "bwd_waited": 4,
+      "bwd_blocking": 0
+     }
+    }
+   }
+  ],
+  "timed": [
+   {
+    "loss": 12.675975799560547,
+    "s": 0.8724727880035061,
+    "counters": {
+     "cuda:0": {
+      "uses": 48,
+      "resident_hits": 30,
+      "unscheduled": 0,
+      "hwm_resident": 2,
+      "fwd_prefetch_issued": 9,
+      "fwd_overlapped": 1,
+      "fwd_waited": 8,
+      "fwd_blocking": 1,
+      "bwd_prefetch_issued": 8,
+      "bwd_overlapped": 3,
+      "bwd_waited": 5,
+      "bwd_blocking": 0
+     }
+    }
+   },
+   {
+    "loss": 12.068826675415039,
+    "s": 0.8690429480047897,
+    "counters": {
+     "cuda:0": {
+      "uses": 60,
+      "resident_hits": 38,
+      "unscheduled": 0,
+      "hwm_resident": 2,
+      "fwd_prefetch_issued": 11,
+      "fwd_overlapped": 1,
+      "fwd_waited": 10,
+      "fwd_blocking": 1,
+      "bwd_prefetch_issued": 10,
+      "bwd_overlapped": 4,
+      "bwd_waited": 6,
+      "bwd_blocking": 0
+     }
+    }
+   }
+  ],
+  "peak_alloc": 5762124800,
+  "peak_reserved": 7558135808
+ },
+ "host_after_timing": {
+  "allocated_bytes.allocated": 1107296281,
+  "allocated_bytes.current": 1107296256,
+  "allocated_bytes.freed": 25,
+  "allocated_bytes.peak": 1107296261,
+  "allocation.allocated": 38,
+  "reserved_bytes.allocated": 1107296261,
+  "reserved_bytes.current": 1107296261,
+  "reserved_bytes.freed": 0,
+  "reserved_bytes.peak": 1107296261,
+  "segment.allocated": 30
+ },
+ "finished_at": "2026-10-05T17:53:25Z"
+}

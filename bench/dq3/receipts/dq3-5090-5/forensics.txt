@@ -1,0 +1,4 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, 5, 16, 575.00 W
+Model name:                              AMD Ryzen 9 9950X 16-Core Processor
+MemTotal:       129189444 kB
+MemAvailable:   124896052 kB
