@@ -788,6 +788,32 @@ for _fw, _t in (("e4b", "fused_attn4_m"), ("unsloth", "ckpt_unsloth_m")):
 OMPAB_PAIRS = (("P104", "e4b", "fused_attn4_m", (0.0, 0.97)), ("P105", "unsloth", "ckpt_unsloth_m", (0.0, 1.01)))
 OMPAB_HELDOUT_MAX = 0.005         # P106, on each framework
 
+# ----------------------------------------------------------------------------- TC1 amendment 46: grouped-nf4-gemm's decoded route vs its fused kernels
+QDEC_FAM = "qwen3decab"           # GNF4_TRAIN_GEMM=fused (side dec0) vs =decoded (dec1, gnf4#487) on the matched arm, venv-e4b, every other default
+ODEC_FAM = "olmoedecab"           # the same on OLMoE-1B-7B-0924-Instruct at TC2's pin, TC1's field recipe
+DEC_FAMS = (ODEC_FAM, QDEC_FAM)   # scored in this order: P108 (OLMoE), P109 (Qwen3-30B-A3B), then P110 / P111 over both
+DEC_ARM = "fused_attn4_m"         # each family's one arm: <arm>_dec0 vs <arm>_dec1, two draws a side in ABBA order
+DEC_PREDS = {ODEC_FAM: ("P108", "OLMoE-1B-7B"), QDEC_FAM: ("P109", "Qwen3-30B-A3B")}
+DEC_BANDS = {"P108": (0.0, 0.95), "P109": (0.97, 1.25)}   # dec1 / dec0 s/step on stable pairs (P108 one-sided: at most 0.95)
+DEC_EVERY_CROSS = {"P108"}        # a prediction whose HELD moves a default: the median AND every cross-draw ratio inside the band (set at review)
+DEC_HELDOUT_MAX = 0.01            # P110: |mean held-out at N over the dec1 draws - over the dec0 draws| on each family
+DEC_PEAK_MAX = 0.30               # P111: the matched peak dec1 - dec0 (GB) on each family; the route's decode transient is at most 256 MiB a call
+DEC_TORCH = "2.8."                # every arm in venv-e4b: RD1's software (torch 2.8.0+cu128, triton 3.4.0)
+DEC_GATE_FILE = "decgate.json"    # P107: the box's first step, written by tc1_run.sh's tc1_decoded_gate
+DEC_AUTO_MIN_ROWS = 48            # the decision rule's line: RD1's per-call reading, rows per present group (quoted in the evidence)
+DENSE_PINS.update({QDEC_FAM: DENSE_PINS[QDENSE_FAM], ODEC_FAM: TC2_MODELS["olmoe"][:2]})   # read through amendment 22's pin check
+FAMS += [ODEC_FAM, QDEC_FAM]
+NAMES[QDEC_FAM] = "Qwen3-30B-A3B (amendment 46: grouped-nf4-gemm's fused 4-bit kernels vs its decoded route, matched arm, venv-e4b)"
+NAMES[ODEC_FAM] = "OLMoE-1B-7B-0924-Instruct (amendment 46: grouped-nf4-gemm's fused 4-bit kernels vs its decoded route, matched arm, venv-e4b, TC2's pin)"
+N_LAYERS.update({QDEC_FAM: 48, ODEC_FAM: TC2_MODELS["olmoe"][2]})
+ATTN_CENSUS.update({QDEC_FAM: 192, ODEC_FAM: ATTN_CENSUS["olmoe"]})
+for _fam in DEC_FAMS:
+    FAM_ANCHOR[_fam] = ("e4b", f"{DEC_ARM}_dec0")
+    EXPECTED[_fam] = [("e4b", f"{DEC_ARM}_dec0"), ("e4b", f"{DEC_ARM}_dec1"), ("e4b", f"{DEC_ARM}_dec1_d2"), ("e4b", f"{DEC_ARM}_dec0_d2")]
+MATCHED |= {f"{DEC_ARM}_dec0", f"{DEC_ARM}_dec1", f"{DEC_ARM}_dec0_d2", f"{DEC_ARM}_dec1_d2"}
+for _side in ("dec0", "dec1"):
+    DRAW2[("e4b", f"{DEC_ARM}_{_side}")] = ("e4b", f"{DEC_ARM}_{_side}_d2")
+
 
 def chunk_ab_why(tag, r):
     """Amendment 41's engagement predicate: the arm ran torch 2.12 (venv-unsloth) and its `chunked_lm_loss` record shows the side its tag
@@ -884,6 +910,27 @@ def score_ompab(F, fam=OMPAB_FAM):
     else:
         out.append(("P106", fam, "HELD", ev))
     return out
+def decoded_ab_why(tag, r):
+    """Amendment 46's engagement predicate, read off the arm's `route_ab` record (grouped-nf4-gemm's nf4_route.ROUTE_STATS for the process) and
+    its torch: every arm ran venv-e4b (env.torch 2.8.*); a dec1 arm ran with the route resolved to `decoded` and counted decoded forward AND
+    decoded dgrad calls, no dense forward; a dec0 arm ran `fused` and counted no decoded and no dense forward (a record without the
+    `decoded_fwd` counter -- grouped-nf4-gemm before #487 -- cannot show that). Empty string = engaged."""
+    r = r or {}
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith(DEC_TORCH):
+        return f"decoded-route A/B not engaged (env.torch {tv or 'missing'} is not {DEC_TORCH}*: venv-e4b is registered)"
+    ra = r.get("route_ab")
+    if not isinstance(ra, dict):
+        return "no route_ab record on the receipt: the training GEMM route this arm took cannot be verified"
+    st = ra.get("stats") or {}
+    if "_dec1" in tag:
+        checks = [("gnf4_train_gemm decoded", ra.get("gnf4_train_gemm") == "decoded"), ("decoded_fwd > 0", (st.get("decoded_fwd") or 0) > 0),
+                  ("decoded_dgrad > 0", (st.get("decoded_dgrad") or 0) > 0), ("dense_fwd 0", (st.get("dense_fwd") or 0) == 0)]
+    else:
+        checks = [("gnf4_train_gemm fused", ra.get("gnf4_train_gemm") == "fused"), ("decoded_fwd 0", st.get("decoded_fwd") == 0),
+                  ("dense_fwd 0", (st.get("dense_fwd") or 0) == 0)]
+    bad = [k for k, ok in checks if not ok]
+    return "" if not bad else f"decoded-route A/B not engaged ({', '.join(bad)}; record {ra})"
 
 
 def score_chunkauto_gate(F, fam=CHUNKAUTO_FAM):
@@ -1593,6 +1640,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam in DENSE_FAMS and fw == "e4b":              # amendment 22: the training GEMM route its tag names (mixtral: on the double-quantized absmax)
         w = dense_ab_why(fam, r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam in DEC_FAMS and fw == "e4b":                # amendment 46: venv-e4b, and the training GEMM route its tag names
+        w = decoded_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == MEMCENSUS_FAM:                            # amendment 23: the pin, the mb1 recipe, the census on the receipt, the absmax the tag names
@@ -2379,6 +2430,102 @@ def score_denseab(F):
         out.append(("P40", "denseab", "UNTESTED", ev))
     else:
         out.append(("P40", "denseab", "HELD", ev))
+    return out
+
+
+def decgate_reading(d):
+    """Amendment 46's P107 record: `decgate.json` in the receipts directory (tc1_run.sh's tc1_decoded_gate) -> (record or None, why)."""
+    p = os.path.join(d or "", DEC_GATE_FILE)
+    if not (d and os.path.exists(p)):
+        return None, f"no {DEC_GATE_FILE} in this directory: the gate's record is missing"
+    try:
+        g = json.load(open(p))
+    except Exception as e:
+        return None, f"{DEC_GATE_FILE} unreadable: {type(e).__name__}: {e}"
+    return (g, "") if isinstance(g, dict) else (None, f"{DEC_GATE_FILE} is not an object")
+
+
+def score_decgate(d):
+    """TC1-PREREG amendment 46's P107: grouped-nf4-gemm's compiled correctness tests for the decoded route passed on the box's card, the box's
+    first step. FALSIFIED iff the gate ran and a test failed (`failures` > 0 in a run). HELD iff it ran, every run collected tests and exited 0
+    with no failure, error or skip, every required test passed, and the record says passed. UNTESTED otherwise -- no record, a gate that
+    could not run, an error that is not a failed assertion (collection, setup), a skipped test (the card did not run it), or a required test
+    that did not pass (`missing`: a grouped-nf4-gemm without the route has none of them, and `-k` alone would then pass on the dequant tests):
+    the box is refused on all of these, but only a failed test speaks to the route."""
+    g, why = decgate_reading(d)
+    if g is None:
+        return [("P107", "decgate", "UNTESTED", why)]
+    runs = [x for x in (g.get("runs") or []) if isinstance(x, dict)]
+    ev = (f"grouped-nf4-gemm @{str(g.get('gnf4_sha') or '?')[:12]} on {g.get('gpu') or '?'} (torch {g.get('torch') or '?'}, triton {g.get('triton') or '?'}): "
+          + ("; ".join(f"{x.get('name')} rc {x.get('rc')}: {x.get('tests')} tests, {x.get('failures')} failed, {x.get('errors')} errors, "
+                       f"{x.get('skipped')} skipped" + (f", required tests not passed: {x.get('missing')}" if x.get("missing") else "")
+                       for x in runs) or "no run recorded")
+          + (f"; {g.get('reason')}" if g.get("reason") else ""))
+    if not g.get("ran"):
+        return [("P107", "decgate", "UNTESTED", ev)]
+    if any(int(x.get("failures") or 0) > 0 for x in runs):
+        return [("P107", "decgate", "FALSIFIED", ev)]
+    clean = bool(runs) and all(x.get("rc") == 0 and int(x.get("tests") or 0) > 0 and "missing" in x and not x.get("missing")
+                               and not (int(x.get("errors") or 0) or int(x.get("skipped") or 0)) for x in runs)
+    return [("P107", "decgate", "HELD" if clean and g.get("passed") is True else "UNTESTED", ev)]
+
+
+def score_decodedab(F):
+    """TC1-PREREG amendment 46, on the olmoedecab / qwen3decab tokens: P108 (OLMoE, at most 0.95) and P109 (Qwen3-30B-A3B, in [0.97, 1.25]) --
+    grouped-nf4-gemm's decoded route steps at dec1 / dec0 within DEC_BANDS[pid], the median over two VALID draws a side with each side's
+    draws within 5 %; P108, whose HELD moves `auto`, also needs EVERY one of the four cross-draw ratios inside its band (DEC_EVERY_CROSS),
+    and reads FALSIFIED when the median is inside and a cross-draw ratio is not; P110 -- on each family the two sides' mean held-out at N agree within DEC_HELDOUT_MAX; P111 -- on each family the matched
+    peak dec1 - dec0 is at most DEC_PEAK_MAX GB. Outside FALSIFIED; a missing, non-VALID or unstable side UNTESTED. P110 and P111 are each one
+    reading over both families: FALSIFIED when either family is read outside the bound, else UNTESTED while either is unread, else HELD."""
+    if not any(fam in F for fam in DEC_FAMS):
+        return []
+    out, p110, p111 = [], [], []
+    for fam in DEC_FAMS:
+        pid, name = DEC_PREDS[fam]
+        R = F.get(fam)
+        if not R:
+            out.append((pid, fam, "UNTESTED", f"{name}: no {fam} receipts in this directory"))
+            p110.append((fam, None, "no receipts"))
+            p111.append((fam, None, "no receipts"))
+            continue
+        D0, D1 = R["draws"].get(("e4b", f"{DEC_ARM}_dec0"), {}), R["draws"].get(("e4b", f"{DEC_ARM}_dec1"), {})
+        if not (D0.get("usable") and D1.get("usable") and D0.get("draws") == 2 and D1.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("dec0", D0), ("dec1", D1)))
+            out.append((pid, fam, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            p110.append((fam, None, why))
+            p111.append((fam, None, why))
+            continue
+        ratio_ = D1["s"] / D0["s"]
+        cross = [n / o for n in D1["s_list"] for o in D0["s_list"]]
+        lo, hi = DEC_BANDS[pid]
+        h0, h1 = D0.get("heldout_list") or [], D1.get("heldout_list") or []
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        p110.append((fam, dq, f"held-out at N dec0 {[round(v, 4) for v in h0 if v is not None]} dec1 {[round(v, 4) for v in h1 if v is not None]}"))
+        dp = (D1["peak"] - D0["peak"]) if (D0.get("peak") is not None and D1.get("peak") is not None) else None
+        p111.append((fam, dp, f"peak dec0 {f(D0.get('peak'), 2)} / dec1 {f(D1.get('peak'), 2)} GB"))
+        r1 = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == ("e4b", f"{DEC_ARM}_dec1")), None) or {}
+        stats = (r1.get("route_ab") or {}).get("stats") or {}
+        band = f"<= {hi}" if lo <= 0 else f"in {[lo, hi]}"
+        held = lo <= ratio_ <= hi and (pid not in DEC_EVERY_CROSS or all(lo <= c <= hi for c in cross))
+        if pid in DEC_EVERY_CROSS:
+            band += " on the median and every cross-draw ratio" + ("" if held or not (lo <= ratio_ <= hi) else
+                                                                   f" (the median is inside; the largest cross-draw ratio {max(cross):.3f} is not)")
+        note = ""
+        if pid == "P109" and ratio_ < lo:
+            note = f"; below {lo}: Qwen3-30B-A3B gains below RD1's {DEC_AUTO_MIN_ROWS}-row line too (a lower line is re-asked)"
+        out.append((pid, fam, "HELD" if held else "FALSIFIED",
+                    f"{name}: dec1 / dec0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {band}{note}; "
+                    f"s/step dec0 {D0['s_list'][0]:.3f} / {D0['s_list'][1]:.3f} (within {100 * D0['stability']:.1f}%), dec1 {D1['s_list'][0]:.3f} / "
+                    f"{D1['s_list'][1]:.3f} (within {100 * D1['stability']:.1f}%); dec1 route counts (process) {json.dumps(stats, sort_keys=True)}"))
+    for pid, rows, bound, label in (("P110", p110, DEC_HELDOUT_MAX, "mean held-out dec1 - dec0"), ("P111", p111, DEC_PEAK_MAX, "peak dec1 - dec0 GB")):
+        ev = "; ".join(f"{fam}: " + (f"{label} {d:+.4f} (bound {bound}); {e}" if d is not None else e) for fam, d, e in rows)
+        over = (lambda d: abs(d) > bound + 1e-9) if pid == "P110" else (lambda d: d > bound + 1e-9)   # a reading AT the bound holds (float noise aside)
+        if any(d is not None and over(d) for _, d, _ in rows):
+            out.append((pid, "decodedab", "FALSIFIED", ev))
+        elif any(d is None for _, d, _ in rows):
+            out.append((pid, "decodedab", "UNTESTED", ev))
+        else:
+            out.append((pid, "decodedab", "HELD", ev))
     return out
 
 
@@ -4237,6 +4384,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_chunkauto_gate(F) + score_compactab(F, CHUNKAUTO_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if any(fam in F for fam in DEC_FAMS) or (d and os.path.exists(os.path.join(d, DEC_GATE_FILE))):
+        out += ["\n## Predictions P107 / P108 / P109 / P110 / P111 (TC1-PREREG amendment 46: grouped-nf4-gemm's decoded route vs its fused kernels, the sm_120 gate first, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_decgate(d) + score_decodedab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     for _cf, _ids in ((COMPACT3_FAM, "P77 / P78 / P79 / P82"), (MCOMPACT_FAM, "P80 / P81 / P83")):
         if _cf in F:
             out += [f"\n## Predictions {_ids} (TC1-PREREG amendment 38: the compact padded LoRA delta's default decision, {NAMES[_cf].split(' (')[0]}; scored mechanically)",
@@ -4757,6 +4909,34 @@ def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1
                     stats[k] = v
             r["route_ab"] = None if drop_route else {"gnf4_train_gemm": routes[i_side], "gnf4_train_gemm_env": routes[i_side], "gnf4_has_route": True, "stats": stats}
             r["absmax_dq"] = absmax[i_side]
+            r["fam"] = fam
+            R[("e4b", tag)] = r
+    return R
+
+
+def _decoded_set(fam, d0=None, d1=None, routes=("fused", "decoded"), dec_fwd=(0, 1536), dec_dgrad=(0, 1536), peaks=None, held_shift=0.0,
+                 drop_route=False, torch="2.8.0+cu128", drop_counter=False):
+    """Amendment 46: e4b against itself on one family's matched arm -- (dec0 draws, dec1 draws) s/step; `routes` = the route each side's
+    record resolved; `dec_fwd` / `dec_dgrad` = each side's decoded counts; `peaks` = (dec0, dec1) GB; `held_shift` moves the dec1 side's
+    held-out at N; `drop_route` removes the route_ab record; `drop_counter` removes the dec0 side's decoded counters (grouped-nf4-gemm before
+    #487); `torch` = every arm's env.torch."""
+    d0 = d0 or ((2.00, 2.02) if fam == ODEC_FAM else (5.30, 5.33))
+    d1 = d1 or ((1.70, 1.72) if fam == ODEC_FAM else (5.60, 5.62))
+    peaks = peaks or ((12.00, 12.20) if fam == ODEC_FAM else (27.50, 27.70))
+    R = {}
+    for i_side, (side, ss) in enumerate((("dec0", d0), ("dec1", d1))):
+        for i, sfx in enumerate(("", "_d2")):
+            tag = f"{DEC_ARM}_{side}{sfx}"
+            held = 1.8000 + (held_shift if side == "dec1" else 0.0)
+            r = (_tc2_receipt("olmoe", "e4b", tag, "fused", s=ss[i], heldout_n=held) if fam == ODEC_FAM
+                 else _receipt("e4b", tag, "fused", s=ss[i], heldout_n=held))
+            r["peak_vram_gb"] = peaks[i_side]
+            r["env"]["torch"] = torch
+            stats = {"fwd": 0, "dgrad": 0, "dense_fwd": 0, "dense_dgrad": 0}
+            if not (drop_counter and side == "dec0"):
+                stats.update(decoded_fwd=dec_fwd[i_side], decoded_dgrad=dec_dgrad[i_side])
+            r["route_ab"] = None if drop_route else {"gnf4_train_gemm": routes[i_side], "gnf4_train_gemm_env": routes[i_side], "gnf4_has_route": True,
+                                                     "stats": stats}
             r["fam"] = fam
             R[("e4b", tag)] = r
     return R
@@ -6886,6 +7066,84 @@ def selftest():
     assert RV[OMPAB_FAM]["verdicts"][("e4b", "fused_attn4_m_om0")] == "VOID" and "torch ran 64" in str(next(x["why"] for x in RV[OMPAB_FAM]["rows"] if x["tag"] == "fused_attn4_m_om0"))
     assert pom(held_shift=0.01)["P106"] == "FALSIFIED"
     assert "P104" in render(ROM, "x") and "amendment 45" in render(ROM, "x")
+    cases += 1
+    # 100. TC1 amendment 46 (olmoedecab / qwen3decab): grouped-nf4-gemm's decoded route vs its fused kernels -- every arm VALID when it ran
+    #     venv-e4b and took the route its tag names; P108 HELD at 0.851 (OLMoE), P109 HELD at 1.056 (Qwen3-30B-A3B), P110 / P111 HELD; the table
+    def DEC(o=None, q=None):
+        return {ODEC_FAM: reduce_family(ODEC_FAM, o if o is not None else _decoded_set(ODEC_FAM), {}, 60),
+                QDEC_FAM: reduce_family(QDEC_FAM, q if q is not None else _decoded_set(QDEC_FAM), {}, 20)}
+
+    def pdec(o=None, q=None):
+        return {p: v for p, _, v, _ in score_decodedab(DEC(o, q))}
+    DDEC = DEC()
+    for fam in DEC_FAMS:
+        assert [(x["fw"], x["tag"]) for x in DDEC[fam]["rows"]] == EXPECTED[fam]
+        assert all(x["verdict"] == "VALID" for x in DDEC[fam]["rows"]), [(fam, x["tag"], x["verdict"], x["why"]) for x in DDEC[fam]["rows"]]
+    PDEC = {p: (fam, v, ev) for p, fam, v, ev in score_decodedab(DDEC)}
+    assert [p for p, _, _, _ in score_decodedab(DDEC)] == ["P108", "P109", "P110", "P111"]
+    assert PDEC["P108"][:2] == (ODEC_FAM, "HELD") and "dec1 / dec0 0.851 [" in PDEC["P108"][2] and "vs <= 0.95" in PDEC["P108"][2], PDEC["P108"]
+    assert PDEC["P109"][:2] == (QDEC_FAM, "HELD") and "dec1 / dec0 1.056 [" in PDEC["P109"][2] and '"decoded_dgrad": 1536' in PDEC["P109"][2], PDEC["P109"]
+    assert PDEC["P110"][1] == "HELD" and PDEC["P111"][1] == "HELD" and "peak dec1 - dec0 GB +0.2000" in PDEC["P111"][2], PDEC["P111"]
+    text = render(DDEC, "x")
+    assert ("## Predictions P107 / P108 / P109 / P110 / P111" in text and "| P108 | olmoedecab | **HELD** |" in text
+            and "| P109 | qwen3decab | **HELD** |" in text and "| P107 | decgate | **UNTESTED** |" in text), text[-1500:]
+    cases += 1
+    # 101. amendment 46, each bound: P108 FALSIFIED at 0.965; P109 FALSIFIED below 0.97 (with the lower-line note) and above 1.25; P110 FALSIFIED
+    #      on a 0.02 held-out shift on either family; P111 FALSIFIED on a +0.40 GB peak, and HELD at +0.30
+    assert pdec(o=_decoded_set(ODEC_FAM, d1=(1.93, 1.95))) == {"P108": "FALSIFIED", "P109": "HELD", "P110": "HELD", "P111": "HELD"}
+    # P108 moves a default: a median inside 0.95 (1.905 / 2.01 = 0.948) with a cross-draw ratio outside it (1.93 / 2.00 = 0.965) FALSIFIES it
+    straddle = score_decodedab(DEC(o=_decoded_set(ODEC_FAM, d1=(1.88, 1.93))))[0]
+    assert straddle[2] == "FALSIFIED" and "dec1 / dec0 0.948 [" in straddle[3] and "largest cross-draw ratio 0.965 is not" in straddle[3], straddle
+    # P109 does not move a default, so it reads on the median alone: 5.17 / 5.315 = 0.973 HELD although one cross-draw ratio
+    # (5.15 / 5.33 = 0.966) is below 0.97
+    assert pdec(q=_decoded_set(QDEC_FAM, d1=(5.15, 5.19)))["P109"] == "HELD"
+    low = score_decodedab(DEC(q=_decoded_set(QDEC_FAM, d1=(5.10, 5.12))))
+    assert {p: v for p, _, v, _ in low} == {"P108": "HELD", "P109": "FALSIFIED", "P110": "HELD", "P111": "HELD"} and "a lower line is re-asked" in low[1][3]
+    assert pdec(q=_decoded_set(QDEC_FAM, d1=(6.70, 6.72))) == {"P108": "HELD", "P109": "FALSIFIED", "P110": "HELD", "P111": "HELD"}
+    assert pdec(o=_decoded_set(ODEC_FAM, held_shift=0.02))["P110"] == "FALSIFIED" and pdec(q=_decoded_set(QDEC_FAM, held_shift=-0.02))["P110"] == "FALSIFIED"
+    assert pdec(o=_decoded_set(ODEC_FAM, peaks=(12.00, 12.40)))["P111"] == "FALSIFIED"
+    assert pdec(q=_decoded_set(QDEC_FAM, peaks=(27.50, 27.80)))["P111"] == "HELD"
+    print("FAILING-CASE A46-P108 (reducer):", score_decodedab(DEC(o=_decoded_set(ODEC_FAM, d1=(1.93, 1.95))))[0][3][:120])
+    cases += 1
+    # 102. amendment 46, engagement: an arm that did not take the route its tag names, or ran outside venv-e4b, reads VOID with the reason and
+    #      its prediction UNTESTED -- dec1 resolved to fused, dec1 with no decoded dgrad, a dec0 record without the decoded counter (gnf4 before
+    #      #487), torch 2.12, no route_ab record; P110 / P111 UNTESTED with the other family read
+    for kw, tag, frag in (({"routes": ("fused", "fused")}, "fused_attn4_m_dec1", "gnf4_train_gemm decoded"),
+                          ({"dec_dgrad": (0, 0)}, "fused_attn4_m_dec1", "decoded_dgrad > 0"),
+                          ({"drop_counter": True}, "fused_attn4_m_dec0", "decoded_fwd 0"),
+                          ({"torch": "2.12.1+cu130"}, "fused_attn4_m_dec0", "is not 2.8.*"),
+                          ({"drop_route": True}, "fused_attn4_m_dec1", "no route_ab record")):
+        RV = DEC(q=_decoded_set(QDEC_FAM, **kw))
+        why = next(x["why"] for x in RV[QDEC_FAM]["rows"] if x["tag"] == tag)
+        assert RV[QDEC_FAM]["verdicts"][("e4b", tag)] == "VOID" and frag in str(why), (kw, why)
+        assert {p: v for p, _, v, _ in score_decodedab(RV)} == {"P108": "HELD", "P109": "UNTESTED", "P110": "UNTESTED", "P111": "UNTESTED"}, kw
+    only_o = {ODEC_FAM: reduce_family(ODEC_FAM, _decoded_set(ODEC_FAM), {}, 60)}
+    assert {p: v for p, _, v, _ in score_decodedab(only_o)} == {"P108": "HELD", "P109": "UNTESTED", "P110": "UNTESTED", "P111": "UNTESTED"}
+    assert score_decodedab({}) == []
+    cases += 1
+    # 103. amendment 46's P107, the sm_120 gate's record (decgate.json): no record UNTESTED; a clean pass HELD; a failed test FALSIFIED; a gate
+    #      that could not run, an error that is not a failed assertion, a skipped test, a required test not passed (a grouped-nf4-gemm without
+    #      the route), or a record without the required-test field UNTESTED; the table renders from the record alone
+    gd = tempfile.mkdtemp(prefix="tc1_decgate_selftest_")
+    assert score_decgate(gd)[0][2] == "UNTESTED" and score_decgate(None)[0][2] == "UNTESTED"
+    run_ok = [{"name": "test_nf4_route.py -k decoded", "rc": 0, "tests": 24, "failures": 0, "errors": 0, "skipped": 0, "missing": []},
+              {"name": "test_nf4_route_decision.py", "rc": 0, "tests": 38, "failures": 0, "errors": 0, "skipped": 0, "missing": []}]
+    for rec, want in (({"ran": True, "passed": True, "runs": run_ok}, "HELD"),
+                      ({"ran": True, "passed": False, "runs": [dict(run_ok[0], rc=1, failures=2), run_ok[1]]}, "FALSIFIED"),
+                      ({"ran": False, "passed": False, "runs": [], "reason": "the grouped-nf4-gemm checkout failed"}, "UNTESTED"),
+                      ({"ran": True, "passed": False, "runs": [dict(run_ok[0], rc=2, errors=1), run_ok[1]]}, "UNTESTED"),
+                      ({"ran": True, "passed": False, "runs": [dict(run_ok[0], skipped=23), run_ok[1]]}, "UNTESTED"),
+                      # a grouped-nf4-gemm without the route: -k selects only the dequant tests, all pass, the required ones are missing
+                      ({"ran": True, "passed": False, "runs": [dict(run_ok[0], tests=6, missing=["test_decoded_route_passes_the_rd1_gate_against_the_dense_route"]),
+                                                               dict(run_ok[1], tests=17, missing=["test_decoded_is_taken_only_when_asked_for"])]}, "UNTESTED"),
+                      ({"ran": True, "passed": True, "runs": [{k: v for k, v in run_ok[0].items() if k != "missing"}, run_ok[1]]}, "UNTESTED")):
+        json.dump(dict(rec, gnf4_sha="g" * 40, gpu="NVIDIA GeForce RTX 5090", torch="2.8.0+cu128", triton="3.4.0"), open(os.path.join(gd, DEC_GATE_FILE), "w"))
+        got = score_decgate(gd)[0]
+        assert got[2] == want, (rec, got)
+    json.dump({"ran": True, "passed": False, "runs": [dict(run_ok[0], rc=1, failures=2)]}, open(os.path.join(gd, DEC_GATE_FILE), "w"))
+    gate_only = render({}, gd)
+    assert "## Predictions P107 / P108 / P109 / P110 / P111" in gate_only and "| P107 | decgate | **FALSIFIED** |" in gate_only, gate_only[-800:]
+    print("FAILING-CASE A46-P107 (reducer):", score_decgate(gd)[0][3][:140])
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

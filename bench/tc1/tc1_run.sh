@@ -108,6 +108,7 @@ case " $FAMILIES " in " qwen3denseab "|" mixtraldenseab "|" qwen3denseab mixtral
 case " $FAMILIES " in " qwen3prebindab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 26: an e4b-only A/B
 case " $FAMILIES " in " qwen3dqab "|" mixtraldqab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 28: e4b-only A/Bs
 case " $FAMILIES " in " qwen3tritonab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 32: an e4b-only A/B
+case " $FAMILIES " in " olmoedecab "|" qwen3decab "|" olmoedecab qwen3decab "|" qwen3decab olmoedecab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 46: e4b-only A/Bs in venv-e4b
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
 echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
@@ -1315,6 +1316,99 @@ tc1_chunkauto_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_ca0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_ca0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_decoded_gate -- TC1 amendment 46 (2026-10-05): the decoded A/B's FIRST step, once per box, before any of its arms. grouped-nf4-gemm's
+# compiled correctness tests for GNF4_TRAIN_GEMM=decoded run on this card, from a checkout of grouped-nf4-gemm at GNF4_SHA (the installed
+# package's commit, which the tripwire pins), in venv-e4b (the arms' venv): kernel/test_nf4_route.py's decoded, cap and dequant tests -- RD1's
+# fp32-reference gate (the route's error <= 2x the dense route's, every call), capped == uncapped bit for bit, the cap's bound on the decode
+# transient, dequant_groups bit-equal to dequant_ref -- and kernel/test_nf4_route_decision.py (`auto` never answers `decoded`). A failed test,
+# or a gate that cannot run, refuses the box before any timing: BOX_REFUSED decoded-gate, exit 19. 19 is not one of the host-limited codes
+# adertha admits as machine evidence (13, 14, 17, 18): a kernel defect names no machine. $W/decgate.json is the record (P107). Each run must
+# also have PASSED every test DECGATE_REQUIRED names for it: a grouped-nf4-gemm without the route has none of them, and -k alone would then
+# select only the dequant tests and pass (rehearsed on gnf4 054be19, before #487) -- a gate that never ran the code it gates.
+DECGATE_K="decoded or cap_bounds or dequant_groups"
+DECGATE_REQUIRED="route:test_decoded_route_passes_the_rd1_gate_against_the_dense_route,test_decoded_route_matches_the_fused_kernels_on_any_card,test_the_cap_bounds_the_decode_transient,test_dequant_groups_is_bit_equal_to_dequant_ref decision:test_decoded_is_taken_only_when_asked_for"
+tc1_decoded_gate(){
+  [ -f $W/decgate.json ] && grep -q '"passed": true' $W/decgate.json && return 0
+  say "===== DECODED-ROUTE GATE (amendment 46): grouped-nf4-gemm @$GNF4_SHA's compiled tests for the decoded route on this card, before any arm"
+  local SRC=$W/gnf4-src REASON=""
+  rm -rf $SRC; : > logs/decgate_rc.txt
+  if ! perl -e 'alarm 600; exec @ARGV' git clone -q https://github.com/pjordanandrsn/grouped-nf4-gemm.git $SRC > logs/decgate_clone.log 2>&1 \
+     || ! git -C $SRC checkout -q "$GNF4_SHA" >> logs/decgate_clone.log 2>&1; then
+    REASON="the grouped-nf4-gemm checkout at $GNF4_SHA failed (logs/decgate_clone.log)"
+  elif ! $PY_E4B -m pytest --version > /dev/null 2>&1 \
+       && ! perl -e 'alarm 600; exec @ARGV' $PY_E4B -m pip install -q --no-input pytest > logs/decgate_pytest.log 2>&1; then
+    REASON="pytest could not be installed into venv-e4b (logs/decgate_pytest.log)"
+  fi
+  if [ -z "$REASON" ]; then
+    (cd $SRC/kernel && env -u TRITON_INTERPRET perl -e 'alarm 1500; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route.py \
+       -k "$DECGATE_K" --junitxml=$W/logs/decgate_route.xml) > logs/decgate_route.log 2>&1
+    echo "decgate route rc=$?" >> logs/decgate_rc.txt
+    (cd $SRC/kernel && env -u TRITON_INTERPRET perl -e 'alarm 600; exec @ARGV' $PY_E4B -m pytest -q -p no:cacheprovider test_nf4_route_decision.py \
+       --junitxml=$W/logs/decgate_decision.xml) > logs/decgate_decision.log 2>&1
+    echo "decgate decision rc=$?" >> logs/decgate_rc.txt
+  fi
+  TC1_W="$W" DECGATE_REASON="$REASON" GNF4_SHA="$GNF4_SHA" DECGATE_K="$DECGATE_K" DECGATE_REQUIRED="$DECGATE_REQUIRED" $PY_E4B - <<'PYG' 2>&1 | tee -a summary.txt
+import json, os, re, xml.etree.ElementTree as ET
+W = os.environ["TC1_W"]
+reason = os.environ.get("DECGATE_REASON") or ""
+rcs = {}
+for ln in open(os.path.join(W, "logs", "decgate_rc.txt")):
+    m = re.match(r"decgate (\w+) rc=(\d+)", ln)
+    if m:
+        rcs[m.group(1)] = int(m.group(2))
+required = {k: v.split(",") for k, v in (w.split(":", 1) for w in os.environ["DECGATE_REQUIRED"].split())}
+runs = []
+for key, name in (("route", f'test_nf4_route.py -k "{os.environ["DECGATE_K"]}"'), ("decision", "test_nf4_route_decision.py")):
+    if key not in rcs:
+        continue
+    t = fl = er = sk = 0
+    ok_names = set()
+    x = os.path.join(W, "logs", f"decgate_{key}.xml")
+    if os.path.exists(x):
+        root = ET.parse(x).getroot()
+        for su in ([root] if root.tag == "testsuite" else list(root.iter("testsuite"))):
+            t += int(su.get("tests", 0)); fl += int(su.get("failures", 0)); er += int(su.get("errors", 0)); sk += int(su.get("skipped", 0))
+        for tc in root.iter("testcase"):
+            if not any(c.tag in ("failure", "error", "skipped") for c in tc):
+                ok_names.add(tc.get("name", "").split("[")[0])
+    runs.append({"name": name, "rc": rcs[key], "tests": t, "failures": fl, "errors": er, "skipped": sk,
+                 "missing": [n for n in required.get(key, []) if n not in ok_names]})
+ran = not reason and len(runs) == 2
+passed = ran and all(r["rc"] == 0 and r["tests"] > 0 and not (r["failures"] or r["errors"] or r["skipped"] or r["missing"]) for r in runs)
+try:
+    import torch, triton
+    gpu, tv, trv = torch.cuda.get_device_name(), torch.__version__, triton.__version__
+except Exception as e:
+    gpu = tv = trv = f"unavailable: {type(e).__name__}"
+rec = {"ran": ran, "passed": passed, "gnf4_sha": os.environ.get("GNF4_SHA"), "gpu": gpu, "torch": tv, "triton": trv, "runs": runs, "reason": reason or None}
+json.dump(rec, open(os.path.join(W, "decgate.json"), "w"), indent=1)
+print(f"DECODED GATE {'PASSED' if passed else 'NOT PASSED'} on {gpu} (torch {tv}, triton {trv}): "
+      + ("; ".join(f"{r['name']} rc {r['rc']}: {r['tests']} tests, {r['failures']} failed, {r['errors']} errors, {r['skipped']} skipped"
+                   + (f", required tests not passed: {r['missing']}" if r["missing"] else "") for r in runs) or reason))
+PYG
+  grep -q '"passed": true' $W/decgate.json 2>/dev/null && return 0
+  say "BOX REFUSED: the decoded route's correctness gate did not pass on this card ($W/decgate.json) -- no arm runs"
+  echo "BOX_REFUSED decoded-gate" | tee -a summary.txt
+  finish 19; }
+# tc1_decodedab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 46 (2026-10-05): grouped-nf4-gemm's decoded training route
+# (GNF4_TRAIN_GEMM=decoded, gnf4#487: per chunk of present groups, dequant_groups + one grouped bf16 GEMM launch, GNF4_DECODED_MAX_BYTES at its
+# 256 MiB default) against its fused 4-bit kernels (=fused), on the matched arm only, two draws a side in ABBA order, every arm resident in
+# venv-e4b (RD1's software), every other setting the default. tc1_decoded_gate runs first, once per box. olmoedecab is OLMoE at TC2's pin
+# through tc1_prepare (TC1's field recipe); qwen3decab is TC1's qwen3 tokens. Each receipt's route_ab record names the route in force and the
+# decoded_fwd / decoded_dgrad counts.
+tc1_decodedab_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  tc1_decoded_gate
+  local ALL="e4b:fused_attn4_m_dec0:fused e4b:fused_attn4_m_dec1:fused e4b:fused_attn4_m_dec1_d2:fused e4b:fused_attn4_m_dec0_d2:fused"
+  say "===== DECODED-ROUTE A/B family $FAM ($MID @ $REV; gnf4's fused 4-bit kernels vs its decoded route, matched arm, venv-e4b, amendment 46)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local OLD="GNF4_TRAIN_GEMM=fused" NEW="GNF4_TRAIN_GEMM=decoded"
+  can_run 600 $FAM/e4b/m_dec0     && TC1_ARM_EXTRA_ENV="$OLD" arm   $FAM e4b fused_attn4_m_dec0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_dec1     && TC1_ARM_EXTRA_ENV="$NEW" arm   $FAM e4b fused_attn4_m_dec1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_dec1_d2  && TC1_ARM_EXTRA_ENV="$NEW" draw2 $FAM e4b fused_attn4_m_dec1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_dec0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_m_dec0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_dqab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 28 (2026-10-04): e4b's expert absmax fp32 (E4B_ABSMAX_DQ=0, the default) vs
 # double-quantized (=1, #1040), the matched arm, resident, two draws a side in ABBA order. The same function serves both tokens: qwen3dqab
 # (Qwen3-30B-A3B, TC1's tokens) and mixtraldqab (Mixtral-8x7B-Instruct at TC2's pin, prepared as tc2_big_family prepares mixtral).
@@ -1596,6 +1690,8 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3chunkab) tc1_chunkab_family qwen3chunkab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 41: e4b's chunked LM loss off vs on (venv-unsloth)
   qwen3chunkauto) tc1_chunkauto_family qwen3chunkauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 44: e4b's chunked LM loss off vs auto (venv-unsloth)
   qwen3ompab) tc1_ompab_family qwen3ompab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 5400;;   # TC1 amendment 45: OMP_NUM_THREADS physical cores vs the container's allotment
+  olmoedecab) tc1_decodedab_family olmoedecab allenai/OLMoE-1B-7B-0924-Instruct 7f1c97f440f06ce36705e4f2b843edb5925f4498 2400 2400;;   # TC1 amendment 46: fused vs decoded (TC2's olmoe pin)
+  qwen3decab) tc1_decodedab_family qwen3decab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 46: fused vs decoded
   qwen3dqab)   tc1_dqab_family   qwen3dqab   Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 28: absmax fp32 vs double-quantized
   mixtraldqab) tc1_dqab_family   mixtraldqab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 28 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3tritonab) tc1_tritonab_family qwen3tritonab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 32: triton 3.4 vs 3.7.1 in venv-e4b

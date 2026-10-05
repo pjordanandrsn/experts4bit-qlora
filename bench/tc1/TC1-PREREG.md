@@ -1864,3 +1864,87 @@ not engaged or without contrast.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2.5 with the download;
 a refused draw costs about a cent. This is in the standing no-ask tier.
+### Amendment 46 (2026-10-05T20:32Z, after RD1's read, before any box): grouped-nf4-gemm's decoded route against its fused kernels, A/B on one RTX 5090, OLMoE and Qwen3-30B-A3B (P107–P111)
+
+**Why.** Lane RD1 read grouped-nf4-gemm's frozen-expert GEMM routes per call on one RTX 5090
+(`bench/moegen/rd1/RESULTS-rd1.md`, experts4bit-qlora#1201).
+- Its `decoded_cap` arm is `dequant_groups` for a chunk of groups, then one Triton grouped bf16 GEMM launch, with the decode transient capped at
+  256 MiB. It was at most 0.85 of the best shipped route at seq 512 and 2048 on 4 of the 7 many-group families: DECODED HELD.
+- Across RD1's many-group cells it beat the fused kernels wherever a call had at least 48 rows per present group (0.37–0.98 × v1), and lost
+  at 37 or fewer (1.05–2.24 × v1).
+- grouped-nf4-gemm#487 ships the route opt-in, as `GNF4_TRAIN_GEMM=decoded`, with `auto` untouched.
+- RD1's decision names this box as the route's licence: a per-call win is not a step-time claim.
+
+**The box's first step: the sm_120 gate.**
+- **What it runs.** Before any arm, `tc1_decoded_gate` runs grouped-nf4-gemm's compiled tests for the route on the box's card. They run from
+  a checkout at `GNF4_SHA` (the installed package's commit) in venv-e4b, the arms' venv:
+  - `kernel/test_nf4_route.py -k "decoded or cap_bounds or dequant_groups"`: RD1's fp32-reference gate (the route's error at most 2× the
+    dense route's on every call), capped == uncapped bit for bit, the cap's bound on the decode transient, and `dequant_groups`
+    bit-equal to `dequant_ref`;
+  - `kernel/test_nf4_route_decision.py`: `auto` never answers `decoded`.
+- **What counts as passing.** Each run must also pass every test `DECGATE_REQUIRED` names for it. A grouped-nf4-gemm without the route has
+  none of those tests, and `-k` alone would then select only the dequant tests and pass. That was rehearsed at gnf4 `054be19`, from before #487.
+- **A failure refuses the box before any timing.** That covers a failed or missing test and a gate that cannot run: `BOX_REFUSED
+  decoded-gate`, exit 19.
+  - 19 is not one of the host-limited codes adertha admits as machine evidence (13, 14, 17, 18), because a kernel defect names no machine.
+  - `decgate.json` is the record.
+- **Rehearsed on the seat's RTX A2000** (correctness only, no timing):
+  - #487's head passed (24 + 38 tests);
+  - `054be19` was refused for missing tests;
+  - a SHA that cannot be checked out was refused.
+
+**The box.** One RTX 5090, venv-e4b (torch 2.8.0+cu128, triton 3.4.0, the software RD1 measured), `TC1_STEPS=60`.
+- **Draws:** load-gated (`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), avoiding machines 145701, 151350, 45511 and 138786.
+- **Pins:** grouped-nf4-gemm at #487's merge; e4b at a main that carries this amendment.
+- **Two families:** each runs the fused kernels (`_dec0`, `GNF4_TRAIN_GEMM=fused`) against the decoded route (`_dec1`, `=decoded`,
+  `GNF4_DECODED_MAX_BYTES` at its 256 MiB default).
+  - Arm: the matched arm (fp32 adapters, matched init), two draws a side in ABBA order, every arm resident, every other setting at its default.
+  - Side 0 is what `auto` runs on these calls today, which all have more than 16 present groups.
+  - **`olmoedecab`:** OLMoE-1B-7B-0924-Instruct at TC2's pin, through `tc1_prepare` (TC1's field recipe). It has 64 experts, top-8: a
+    field micro-batch's median of about 512 positions puts about 64 rows on each expert, above RD1's line.
+  - **`qwen3decab`:** Qwen3-30B-A3B, TC1's qwen3 tokens. It has 128 experts, top-8: about 32 rows per expert at the median, below the line.
+
+Engagement is read from each arm's `route_ab` record:
+- `_dec1` resolves `decoded` and counts decoded forward and dgrad calls, with no dense forward;
+- `_dec0` resolves `fused` and counts no decoded forward (the counter is present, as at #487) and no dense forward;
+- every arm's `env.torch` is 2.8.*.
+
+**Predictions** (registered before the box):
+- **P107** (the gate, structural): the sm_120 gate passes.
+  - FALSIFIED iff it ran and a test failed. The box then ends and P108–P111 are UNTESTED.
+  - HELD iff every run exited 0 with no failure, error or skip, and every required test passed.
+  - UNTESTED otherwise.
+- **P108** (OLMoE): dec1/dec0 s/step ≤ **0.95**, on the median AND on every one of the four cross-draw ratios.
+  - P108's HELD moves a default, so it is bounded at the upper end of the instrument's own interval: a median at or below 0.95 with any
+    cross-draw ratio above it reads FALSIFIED (this bound was set at review, 2026-10-05, before any box).
+  - The expectation is about 0.85: RD1 read 0.79 (skewed) and 0.73 (uniform) × v1 per call at seq 512, and the expert GEMMs (forward,
+    recompute, dgrad) are a large part of this step but not all of it.
+- **P109** (Qwen3-30B-A3B): dec1/dec0 lies in **[0.97, 1.25]**.
+  - Below the line no win of 3 % is expected. Nor should the loss exceed RD1's per-call reading at 512 rows (1.05 skewed, 1.35 uniform)
+    on an expert-dominated step.
+- **P110:** on each family, |mean held-out at N, dec1 − dec0| ≤ **0.01**.
+  - Both routes decode the same bytes; they differ only in the GEMM's accumulation order (matched-set EQUIVALENT).
+- **P111:** on each family, matched peak dec1 − dec0 ≤ **+0.30 GB**.
+  - The route's decode transient is at most 256 MiB a call; RD1 read 180–327 MiB above the inputs on the many-group shapes.
+
+P108–P111 each need two stable VALID draws a side. They are FALSIFIED outside their bound, and UNTESTED where a side is unstable, not VALID
+or not engaged.
+
+**Decision rules.**
+- **P107, P108, P110 and P111 HELD:** grouped-nf4-gemm's `auto` takes the decoded route on compute capability (12, 0), the card measured
+  (RTX 5090), for a call with more than `DENSE_AUTO_MAX_GROUPS` present groups and at least 48 rows per present group (RD1's per-call line).
+  - That is grouped-nf4-gemm's own PR, citing RD1 and this box.
+  - Other capabilities, other 12.x parts included, keep today's route until they are measured; so do calls below the line.
+    (The scope was narrowed from 12.x to (12, 0) at review, 2026-10-05, before any box.)
+  - If P109 is FALSIFIED below 0.97 (Qwen3-30B-A3B gains below the line too), the same PR still lands at 48, which never moves a call that
+    lost per call, and a lower line is registered as a re-ask.
+  - If P109 is FALSIFIED above 1.25, the read names it; it does not change this rule, which keeps those calls fused.
+- **P108 FALSIFIED:** `auto` is unchanged and the route stays opt-in.
+- **P110 or P111 FALSIFIED:** `auto` is unchanged, and the read names the family.
+- **P107 FALSIFIED:** the box was refused before any arm. The route is fixed in grouped-nf4-gemm before any re-draw.
+- **Any UNTESTED, none FALSIFIED:** `auto` is unchanged pending a re-ask.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), a 4 h guard, and TC1's 98 GB host floor.
+- No Unsloth venv is built for these tokens.
+- About $3 with both downloads (OLMoE about 14 GB, Qwen3-30B-A3B about 61 GB). This is in the standing no-ask tier.
