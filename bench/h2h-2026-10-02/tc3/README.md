@@ -68,7 +68,7 @@ Read, within the box:
 | e4b `fused_attn4_m_offload_d2` | expert offload | OOM at step 2 | — | — | — | — |
 | e4b `reference_attn4_m_offload` | expert offload, the reference loop | OOM | — | — | — | — |
 | e4b `fused_attn4_m` resident | — | PHASE_ALARM: the prologue's 420 s budget (a share of the arm's 1,200 s alarm) ran out inside `load_weights` (991 s on this CPU) — not a reading | — | — | — | — |
-| **e4b `fused_attn4_m_offload_mb1`** (mb 1 × accum 8, the registered secondary) | expert offload | **OK · VALID** | **10.46 GB** | 25.3 GB | **69.9** (22 tok/s; 3,273 J/step) | **1.9533 → 0.8483** |
+| **e4b `fused_attn4_m_offload_mb1`** (mb 1 × accum 8, the registered secondary) | expert offload | **OK · VALID** | **10.46 GB** | 25.3 GB | — (an A2000 timing: not speed evidence; the receipt keeps it as the record) | **1.9533 → 0.8483** |
 | e4b `reference_attn4_m_offload_mb1` | expert offload, the reference loop | OOM at step 1 (10.78 GB at a 20 MiB allocation) | 10.78 GB | — | — | — |
 | e4b `fused_attn4_shipped_offload` (bf16 expert adapters) | expert offload | PHASE_ALARM: `load_weights` ran 2,511 s against the prologue's 2,520 s budget — not a reading | — | — | — | — |
 | Unsloth 2026.9.14 on torch 2.8 `ckpt_unsloth_m_mb1` | none (its loader has no expert-offload lever) | **REFUSED at load**: bitsandbytes dispatches modules to the CPU on this card (`Some modules are dispatched on the CPU or the disk`) — UNSUPPORTED, not an OOM reading | — | — | — | — |
@@ -78,10 +78,11 @@ Read, within the box:
 The secondary trains the same 642,514,944 parameters from the same init as every matched arm of the campaign, with the fused kernel on all 48
 layers on every step (1,536 kernel calls per step, 0 loop calls) and C1 bit-exact over 337 frozen tensors, 192 of them read from the offload
 handle's pinned-host home (amendment 2). Its held-out loss at N = 20 (0.8483) sits inside the 5090's matched pair (0.8516 / 0.8487) and beside
-the 4090's offload reading (0.8548): the offload path changes where the bytes live, not the arithmetic. The cost is the card: 70 s/step on an
-A2000 streaming 48 layers of 4-bit experts over PCIe each step, with 1,872 s of nf4 quantisation on a 6-core Xeon before step 1. The 24 GB box
-says what the field-recipe OOM on this card was: the same recipe peaks at 11.88 GB on the 4090, which is more than the 10.3 GB this shared card
-had free — the margin, not the recipe; an unshared 12 GB card is marginal at micro-batch 2 and fits at micro-batch 1 (10.46 GB).
+the 4090's offload reading (0.8548): the offload path changes where the bytes live, not the arithmetic. The card streams 48 layers of 4-bit
+experts over PCIe each step, after 1,872 s of nf4 quantisation on a 6-core Xeon before step 1; its step time is not quoted, because the A2000
+is a correctness-only testbed. The 24 GB box says what the field-recipe OOM on this card was: the same recipe peaks at 11.88 GB on the 4090,
+which is more than the 10.3 GB this shared card had free — the margin, not the recipe; an unshared 12 GB card is marginal at micro-batch 2 and
+fits at micro-batch 1 (10.46 GB).
 Two arms are not readings on this host: the resident e4b arm and the as-shipped offload arm ran out their prologue phase budgets inside
 `load_weights` (991 s and 2,511 s of safetensors reads on this CPU with the sidecars active) — an open harness item for the slow owned card, said as such.
 **TC3 P2 HELD** (`RESULTS-tc3-a2000-vs-tc1.md`, the reducer on the first pass with the amendment-5 HF receipt in place of its ALARM stub —
