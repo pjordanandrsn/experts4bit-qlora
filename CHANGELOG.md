@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 26 — prebound Triton launches take 2.7 % off the matched arm's step (P54 HELD); the shipped pair was unstable (P53, P55 UNTESTED), so the flags stay opt-in; amendment 30 re-asks it over 60 steps
+
+- `tc1-5090-69` ($0.43, Core Ultra 9 285K). Matched arm `_pb1`/`_pb0` 0.973 [0.958, 0.988], held-out within 0.0012, with 73,591
+  prebound e4b launches and 24,546 prebound grouped-nf4-gemm launches on the `_pb1` side.
+- The shipped arm's flags-off draws were 8.3 % apart. Its `_pb1` draws (1.972 / 1.970) read slower than both `_pb0` draws, which would
+  have falsified P53 had the pair been stable.
+- By the registered rule `E4B_TRITON_PREBIND` and `GNF4_TRITON_PREBIND` stay opt-in. Amendment 30 re-asks the shipped pair with
+  `TC1_STEPS=60` on another machine; its reading is final.
+
 ### Read: TC1 amendment 27, the re-draw — the matched set holds again (P52), e4b's same-stack pair unstable (P50, P51 UNTESTED, final); amendment 29 registered: the pair over 60 steps
 
 - `tc1-5090-68` ($1.86, EPYC 7663): Unsloth 8.989 / 9.246 s/step and e4b's field-image arm 4.388 / 4.314 were stable. e4b's same-stack
