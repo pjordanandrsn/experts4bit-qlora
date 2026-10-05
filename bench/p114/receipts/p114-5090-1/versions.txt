@@ -1,0 +1,5 @@
+experts4bit-qlora 0.48.0 726aed43589bdfb6cce37080429b45977eb7d9e4
+bitsandbytes 0.50.2
+torch 2.8.0+cu128 cuda 12.8
+gpu NVIDIA GeForce RTX 5090
+driver,power.limit 570.133.07, 500.00 W

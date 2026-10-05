@@ -975,21 +975,24 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   fp8 share, 0.046 nats. [#359](https://github.com/pjordanandrsn/experts4bit-qlora/issues/359) stays open, re-scoped.
 - **"4-bit on a card that already fits is a 1.2–2.3× energy penalty:
   NF4 is storage-only and the GEMM runs in bf16 either way" —
-  SUPERSEDED, number unchanged** (2026-09-04). The measurement stands as
-  its receipt made it — one OLMoE-dims expert projection on an RTX A2000,
-  dequantize-then-`linear` and a bitsandbytes 0.50-dev fork build's
-  `matmul_4bit` routing against native bf16 — and is re-registered with
-  that comparator and version named as `e4b.train.energy-honest.scoped-a2000`
-  (`e4b.train.energy-honest` is `superseded`, pointing at it). What is
-  withdrawn is the mechanism sentence as a universal: bitsandbytes ≥ 0.50.0
+  SUPERSEDED** (2026-09-04, and again 2026-10-05). What was withdrawn on
+  2026-09-04 is the mechanism sentence as a universal: bitsandbytes ≥ 0.50.0
   CUDA inference can consume packed 4-bit weights directly for supported
   ordinary 2-D cells, routed grouped MoE execution is a separate contract,
   and training's input gradient is separate again
-  ([`BITSANDBYTES.md`](BITSANDBYTES.md)). The unrecorded build was
-  **remeasured on a release** on 2026-10-04: the same card and harness, on
-  bitsandbytes 0.50.2 (#392, `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`).
-  `matmul_4bit` reads decode 0.91–1.06× (break-even), prefill 1.29–1.49× and
-  train 1.64–2.15× over three passes.
+  ([`BITSANDBYTES.md`](BITSANDBYTES.md)). The number was re-registered
+  with its comparator named (`e4b.train.energy-honest.scoped-a2000`, superseded)
+  and remeasured on a release on 2026-10-04 (#392,
+  `e4b.train.energy-honest.a2000-bnb0502.2026-10-04`, superseded), both on the
+  NAS RTX A2000, a correctness-only testbed. Those rows, and
+  `e4b.train.energy-honest` (superseded), now point at
+  **`e4b.train.energy-honest.5090.2026-10-05`** (lane P114, `bench/p114/`): the
+  same harness, unchanged, on one rented RTX 5090 (500 W power limit, driver
+  570.133.07, bitsandbytes 0.50.2, medians of three passes). It reads
+  `bnb.matmul_4bit` at 1.6–2.0× native bf16's J/op (decode 1.748, prefill
+  1.601, train 1.965) and dequantize-then-`linear` at 3.293× / 1.539× /
+  1.405×; the fused 4-bit MoE forward's J/token at batch 4096 is 0.063 of
+  batch 64's (≈16×).
 - **The 13.47× training speedup is ~7.2× against a current baseline.**
   transformers v5 fused the per-expert loop upstream, moving the baseline
   from 50.86 to 26.6 s/step. The grouped arm did not regress. Roughly

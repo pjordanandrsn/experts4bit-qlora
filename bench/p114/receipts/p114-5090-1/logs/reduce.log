@@ -1,0 +1,5 @@
+P114 matmul_4bit / native J/op (median of 3): decode 1.748, prefill 1.601, train 1.965
+P114 dequant / native J/op (median of 3): decode 3.293, prefill 1.539, train 1.405
+P114 Part B J/token vs batch 64 (median of 3): 64 1.000, 256 0.322, 1024 0.100, 4096 0.063
+P114 spreads: matmul_4bit decode 0.006, matmul_4bit prefill 0.013, matmul_4bit train 0.005, dequant decode 0.047, dequant prefill 0.017, dequant train 0.007, partb 64 0.000, partb 256 0.013, partb 1024 0.012, partb 4096 0.010
+P114_VERDICT READ on NVIDIA GeForce RTX 5090
