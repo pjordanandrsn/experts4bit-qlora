@@ -1,0 +1,140 @@
+{
+ "base": "http://127.0.0.1:8778",
+ "model": "ibm-granite/granite-3.1-3b-a800m-instruct",
+ "profile": "e4b",
+ "mode": "serial",
+ "rate": 0.0,
+ "n": 4,
+ "seed": 999,
+ "max_tokens_range": [
+  64,
+  256
+ ],
+ "prompts_sha256": "6fee055b7515760392259956bf0e968c5d083feb773cb1ed9143a36b77959122",
+ "plan": [
+  [
+   0.0,
+   10,
+   209
+  ],
+  [
+   0.0,
+   62,
+   187
+  ],
+  [
+   0.0,
+   16,
+   229
+  ],
+  [
+   0.0,
+   40,
+   228
+  ]
+ ],
+ "summary": {
+  "n": 4,
+  "valid": 4,
+  "invalid": 0,
+  "errors": [],
+  "offered_rate": 0.0,
+  "achieved_rate": 1.0636,
+  "wall_s": 3.84,
+  "ttft_p50_s": 0.127057,
+  "ttft_p90_s": 0.149462,
+  "ttft_p99_s": 0.155515,
+  "tpot_p50_s": 0.003908,
+  "tpot_p90_s": 0.003918,
+  "tpot_p99_s": 0.003918,
+  "e2el_p50_s": 0.985464,
+  "e2el_p90_s": 1.013351,
+  "e2el_p99_s": 1.018596,
+  "ttft_mean_s": 0.132607,
+  "output_tok_s": 222.144,
+  "output_tokens": 853,
+  "good": 4,
+  "attainment": 1.0,
+  "goodput_rps": null,
+  "good_per_wall_rps": 1.0417,
+  "slo": {
+   "ttft_s": 1.0,
+   "tpot_s": 0.1
+  }
+ },
+ "requests": [
+  {
+   "max_tokens": 209,
+   "prompt_len": 512,
+   "t_send": 2e-06,
+   "text": " to attack the Japanese carriers . The Japanese carriers were attacked by the American carriers , the Yorktown , the Lexington , and the Essex , at 17 : 30 . The Japanese carriers were hit by 12 torpedoes and 100 . 500 lb bombs , and the Yorktown was hit by 12 torpedoes and 100 . 500 lb bombs . The Yorktown was hit by a 500 lb bomb that penetrated the flight deck and exploded in the hangar deck , killing 100 and wounding 100 . The Lexington was hit by a 500 lb bomb that penetrated the flight deck and exploded in the hangar deck , killing 100 and wounding 100 . The Essex was hit by a 500 lb bomb that pene",
+   "completion_tokens": 209,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.971176,
+   "ttft_s": 0.156188,
+   "tpot_s": 0.003917,
+   "i": 0,
+   "prompt_index": 10,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 187,
+   "prompt_len": 512,
+   "t_send": 0.971309,
+   "text": " in the Northwest Pacific were generally above average , with the exception of the central and eastern parts of the basin . The JMA issued advisories on 24 tropical cyclones , with 18 of these storms crossing the International Date Line to the Malay Peninsula , and 6 storms crossing north of the equator . The JMA forecasts were generally accurate , with the exception of their forecasts for the South China Sea . The JTWC issued warnings on 10 storms , with 8 of these storms crossing the International Date Line to the Malay Peninsula , and 2 storms crossing north of the equator . The JTWC also issued warnings on 10 storms , with 8 of these storms crossing the International Date Line to the Malay",
+   "completion_tokens": 187,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.849162,
+   "ttft_s": 0.120125,
+   "tpot_s": 0.003918,
+   "i": 1,
+   "prompt_index": 62,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 229,
+   "prompt_len": 512,
+   "t_send": 1.820607,
+   "text": " was completed , the 9th Infantry launched a counterattack . The 9th Infantry was able to drive the North Koreans back to the river line positions . The 9th Infantry was able to hold the river line positions for the next 24 hours .\n\n\n\nThe 9th Infantry was able to hold the river line positions for the next 24 hours .\n\nThe 9th Infantry was able to hold the river line positions for the next 24 hours .\n\nThe 9th Infantry was able to hold the river line positions for the next 24 hours .\n\nThe 9th Infantry was able to hold the river line positions for the next 24 hours .\n\nThe 9th Infantry was able to hold the river line positions for the next 24 hours .\n\nThe 9th Infantry was able to hold the river line positions for the next 24 hours .\n\nThe 9th Infantry was able to hold the river line positions for",
+   "completion_tokens": 229,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 0.999753,
+   "ttft_s": 0.120347,
+   "tpot_s": 0.003856,
+   "i": 2,
+   "prompt_index": 16,
+   "planned_s": 0.0
+  },
+  {
+   "max_tokens": 228,
+   "prompt_len": 512,
+   "t_send": 2.820515,
+   "text": " able to hear vibrations from the ground .\n\n\n = = = Morphology = = = \n\n\n Temnospondyls are characterized by a number of features that distinguish them from other early tetrapods . These include:\n\n\n\n*   A more robust skull with a thicker skull base and a more robust jaw .\n*   A more robust pelvis with a more robust ilium and a more robust pubis .\n*   A more robust tail with a more robust coccyx .\n*   A more robust limb with a more robust humerus and a more robust femur .\n*   A more robust skull with a more robust skull base and a more robust jaw .\n*   A more robust pelvis with a more robust ilium and a more robust pubis .\n*   A more robust tail with a more robust coccyx .\n*   A more robust limb with a more robust humerus and a more robust femur .\n*   A more robust skull with a more robust skull base",
+   "completion_tokens": 228,
+   "prompt_tokens": 512,
+   "finish_reason": "length",
+   "empty_chunks": 0,
+   "valid": true,
+   "status": 200,
+   "e2el_s": 1.019179,
+   "ttft_s": 0.133767,
+   "tpot_s": 0.003899,
+   "i": 3,
+   "prompt_index": 40,
+   "planned_s": 0.0
+  }
+ ],
+ "trimmed": "chunk_gaps_s dropped from each request (full record in the receipt store)"
+}
