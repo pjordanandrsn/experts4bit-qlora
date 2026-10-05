@@ -5,4 +5,4 @@
   environment 0.915; every e4b arm resident (peak 32.5 GB against Unsloth's 24.86).
 - Recorded as the LABELLED packed position (row `….packed-4k-chunked`, `E4B_CHUNKED_LM_LOSS=1` opt-in) beside amendment 39's
   out-of-memory row; STATUS says so. P98 is amendment 44's packed side.
-- Caveats: every standing attempt ran above the 6.0 load gate on a shared host (machine 145701, load1 3.6-52.2; the draws stayed within 0.3 % and 0.7 %), and the bands were set with amendment 40's 1.43 in view, so this is a replication, not a blind test.
+- Caveats: three of the six standing attempts ran above the 6.0 load gate on a shared host, both of e4b's quoted draws among them (machine 145701; standing load1 e4b 8.0 / 52.2, Unsloth 4.7 / 18.2, venv-e4b 5.7 / 3.6; the draws stayed within 0.3 % and 0.7 %), and the bands were set with amendment 40's 1.43 in view, so this is a replication, not a blind test.
