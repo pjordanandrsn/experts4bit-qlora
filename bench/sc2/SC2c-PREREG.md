@@ -4,8 +4,8 @@
 first, and CI green. No SC2c run exists. The census behind it (`bench/stall-census-2026-10-05/`) is exploratory and
 $0.
 
-**The code under test** is branch `serve-bulk-kv` at `9af5eaef` (with `main` at `6c80df42`, which brings e4b#1129's
-`seen` routes), whose `experts4bit_qlora/` tree is `4423907bbd0b4c203064e26673e40a78efcdf578`:
+**The code under test** is branch `serve-bulk-kv` at `f73e2f8c` (with `main` at `b6144722`, which brings e4b#1129's
+`seen` routes), whose `experts4bit_qlora/` tree is `09417ee23ef43791f7c5f917311fb8017f9c75c6`:
 - `E4B_PAGED_BULK_KV`, opt-in;
 - `E4B_PAGED_STEP_TRACE`;
 - `/health`'s `kv_bookkeeping` block.
@@ -15,7 +15,7 @@ except for the version string, and the launch chain records both. A change to th
 re-pinned here before any box.
 
 **The `/health` contract** this rule reads, from `serve_paged.kv_bookkeeping_report` and
-`PagedModelRunner.kv_bookkeeping_stats` at `9af5eaef`:
+`PagedModelRunner.kv_bookkeeping_stats` at `f73e2f8c`:
 - `kv_bookkeeping` always carries `requested`, the knob as a bool.
 - Once the engine is built it also carries `bulk`, plus per-request counts:
   - `flush_layers` and `flush_bulk`: the prompt's flush into the pool, per path;
