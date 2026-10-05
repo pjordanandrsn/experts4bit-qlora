@@ -16,7 +16,9 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -1923,3 +1925,197 @@ def test_load_gate_voids_a_busy_draw_and_reruns_it(tmp_path):
     assert n == 3 and summ.count("VOID") == 2 and "attempt 2 load1_median 22.0 gate 6.0 status ok over 1" in summ
     summ, void, n = _load_gate_shell(tmp_path / "d", [4.0])
     assert n == 1 and "VOID" not in summ and void == []
+
+
+# ----------------------------------------------------------------------------- TC1 amendment 39: the packed 4,096-token regime
+class _EosTok:
+    """A byte tokenizer with an EOS: '</s>' at the end of the text is id 0, every other byte 1 + (b % 61); truncates only when asked."""
+    eos_token, eos_token_id, pad_token_id = "</s>", 0, None
+
+    def __call__(self, text, truncation=False, max_length=None):
+        n = 0
+        while text.endswith("</s>"):
+            text, n = text[:-4], n + 1
+        ids = [1 + (b % 61) for b in text.encode()] + [0] * n
+        return types.SimpleNamespace(input_ids=ids[:max_length] if (truncation and max_length) else ids)
+
+
+def _tiny_rows(n, tag):
+    return [{"instruction": f"{tag} instruction {k} " + "x" * (k % 7), "input": ("ctx " * (k % 3)).strip(), "output": f"answer {k} " + "y" * (3 * k % 11)}
+            for k in range(n)]
+
+
+def _tiny_args(d, **kw):
+    import hashlib
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / "ds_tiny.json"
+    if not p.exists():
+        p.write_text(json.dumps({"train": _tiny_rows(12, "t"), "eval": _tiny_rows(5, "e")}, sort_keys=True))
+    a = types.SimpleNamespace(data=str(p), data_sha=hashlib.sha256(p.read_bytes()).hexdigest(), model="tiny/tok", revision="r0", seq=400, eval_n=4,
+                              template="alpaca", tokens=str(d / "tokens_tiny.json"), fam="tiny")
+    for k, v in kw.items():
+        setattr(a, k, v)
+    return a
+
+
+# origin/main's prepare (before --pack existed) on _tiny_args with _EosTok: the whole tokens file and its sha256 field
+UNPACKED_TINY_FILE_SHA = "1ff1771f1d9b6712df2239bc6418a9f9194a4f838eeffca854cafaa5cac47dca"
+UNPACKED_TINY_TOKENS_SHA = "05d712ec4f9d4f075e73fcd3e22d2cbddebd3d2e115539c741aefc05fe402ba4"
+
+
+def test_tc1_amendment_39_unpacked_tokens_file_is_byte_identical(tmp_path):
+    """--pack 0 (the default, and every token but the packed one) writes the tokens file byte-for-byte as before the flag existed: the
+    golden shas were produced by origin/main's prepare on the same inputs (the real-tokenizer proof, Qwen3-30B-A3B's field-recipe file,
+    is in the PR description). No pack key appears, and the rows are encode_rows' one example per row."""
+    import hashlib
+    m = _load_arm_module()
+    for kw in ({}, {"pack": 0}):
+        d = tmp_path / ("a" if not kw else "b")
+        rec = m.prepare(_tiny_args(d, **kw), tok=_EosTok())
+        assert hashlib.sha256((d / "tokens_tiny.json").read_bytes()).hexdigest() == UNPACKED_TINY_FILE_SHA
+        assert rec["sha256"] == UNPACKED_TINY_TOKENS_SHA and not any(k.startswith("pack") for k in rec)
+        assert rec["train"] == m.encode_rows(_EosTok(), _tiny_rows(12, "t"), 400, "alpaca", "</s>") and len({len(r) for r in rec["train"]}) > 1
+
+
+def test_tc1_amendment_39_pack_rows_are_exactly_seq_with_eos_between_examples():
+    """pack_rows: every row exactly `seq` tokens, the stream is the examples' own token lists in order with EOS between them (the alpaca
+    template's own EOS, never doubled; appended to a template without one), the tail dropped, examples running across row boundaries."""
+    m = _load_arm_module()
+    tok, rows = _EosTok(), _tiny_rows(40, "t")
+    per = [tok(m.render_row(r, "alpaca", "</s>")).input_ids for r in rows]
+    assert all(p[-1] == 0 and p.count(0) == 1 for p in per)                          # one EOS per example, at its end
+    out, st = m.pack_rows(tok, rows, 128, "alpaca", "</s>")
+    stream = [t for p in per for t in p]
+    assert {len(r) for r in out} == {128} and len(out) == len(stream) // 128 == st["rows"]
+    assert [t for r in out for t in r] == stream[:len(out) * 128] and st["tokens_dropped"] == len(stream) - len(out) * 128
+    assert st["examples_used"] == 40 and st["examples_split_across_rows"] > 0 and st["stream_tokens"] == len(stream)
+    ends = [sum(len(p) for p in per[:i + 1]) - 1 for i in range(len(per))]         # EOS exactly where each example ends, nowhere else
+    flat = [t for r in out for t in r]
+    assert [i for i, t in enumerate(flat) if t == 0] == [e for e in ends if e < len(flat)]
+    # a template without EOS (clinical) gets the tokenizer's EOS appended between examples; n_rows stops early
+    out_c, st_c = m.pack_rows(tok, rows, 64, "clinical", "", n_rows=3)
+    per_c = [tok(m.render_row(r, "clinical", "")).input_ids + [0] for r in rows]
+    assert len(out_c) == 3 and [t for r in out_c for t in r] == [t for p in per_c for t in p][:192] and st_c["examples_used"] < 40
+    # per-example truncation is gone: an example longer than seq spans rows whole
+    long = [{"instruction": "z" * 300, "input": "", "output": "w"}]
+    out_l, _ = m.pack_rows(tok, long * 3, 128, "alpaca", "</s>")
+    assert [t for r in out_l for t in r] == (tok(m.render_row(long[0], "alpaca", "</s>")).input_ids * 3)[:len(out_l) * 128]
+    with pytest.raises(ValueError):
+        m.pack_rows(types.SimpleNamespace(eos_token_id=None), rows, 64)
+
+
+def _pack_world(m, tmp_path, n_src=80, train_pool=24, eval_pool=10, monkeypatch=None):
+    """A synthetic source laid out as tp4_alpaca.py lays out its pin: shuffled once with PACK_SEED, the registered ds its first 12 + 5 rows."""
+    import hashlib
+    import random
+    src_rows = [{"instruction": f"s{k} " + "q" * (k % 9), "input": "in" if k % 4 == 0 else "", "output": f"o{k} " + "r" * (5 * k % 13), "extra": k} for k in range(n_src)]
+    src = tmp_path / "alpaca_data_cleaned.json"
+    src.write_text(json.dumps(src_rows))
+    idx = list(range(n_src))
+    random.Random(m.PACK_SEED).shuffle(idx)
+    clean = [{"instruction": src_rows[i]["instruction"], "input": src_rows[i].get("input", ""), "output": src_rows[i]["output"]} for i in idx]
+    ds = {"train": clean[:12], "eval": clean[12:17]}
+    monkeypatch.setattr(m, "PACK_SRC_SHA256", hashlib.sha256(src.read_bytes()).hexdigest())
+    monkeypatch.setattr(m, "PACK_SRC_ROWS", n_src)
+    monkeypatch.setattr(m, "PACK_TRAIN_POOL", train_pool)
+    monkeypatch.setattr(m, "PACK_EVAL_POOL", eval_pool)
+    return src, ds, clean
+
+
+def test_tc1_amendment_39_pack_pools_extend_the_registered_text_in_its_own_order(tmp_path, monkeypatch):
+    """pack_pools: [train 12 | eval 5 | train extension | eval extension] of the shuffled source -- the registered rows first in each pool,
+    train and held-out disjoint; refused (exit 13) on a wrong source sha or a prefix that is not the registered rows."""
+    m = _load_arm_module()
+    src, ds, clean = _pack_world(m, tmp_path, monkeypatch=monkeypatch)
+    tr, ev, rec = m.pack_pools(str(src), ds)
+    assert tr == clean[:12] + clean[17:29] and ev == clean[12:17] + clean[29:34]
+    assert rec["train_examples"] == 24 and rec["eval_examples"] == 10 and rec["registered_prefix"] == [12, 5] and rec["seed"] == m.PACK_SEED
+    assert not {json.dumps(r, sort_keys=True) for r in tr} & {json.dumps(r, sort_keys=True) for r in ev}
+    with pytest.raises(SystemExit) as e:
+        m.pack_pools(str(src), {"train": ds["train"][::-1], "eval": ds["eval"]})
+    assert e.value.code == 13
+    monkeypatch.setattr(m, "PACK_SRC_SHA256", "0" * 64)
+    with pytest.raises(SystemExit) as e:
+        m.pack_pools(str(src), ds)
+    assert e.value.code == 13
+
+
+def test_tc1_amendment_39_prepare_pack_writes_packed_rows_and_their_shas(tmp_path, monkeypatch):
+    """prepare --pack 1: train rows and eval_n held-out rows all exactly --seq tokens, built from the pools by pack_rows; the sha256 (and the
+    train-only sha tc1_run.sh prints) cover the packed rows; pack / pack_sep_id / pack_pools / pack_stats recorded; too few rows refuse."""
+    import hashlib
+    m = _load_arm_module()
+    src, ds, clean = _pack_world(m, tmp_path, monkeypatch=monkeypatch)
+    d = tmp_path / "w"
+    d.mkdir()
+    (d / "ds_tiny.json").write_text(json.dumps(ds, sort_keys=True))
+    a = _tiny_args(d, seq=96, eval_n=3, pack=1, pack_src=str(src), pack_min_rows=10, fam="tinypack", tokens=str(d / "tokens_tinypack.json"))
+    rec = m.prepare(a, tok=_EosTok())
+    tr_pool, ev_pool, _ = m.pack_pools(str(src), ds)
+    want_tr, _ = m.pack_rows(_EosTok(), tr_pool, 96, "alpaca", "</s>")
+    want_ev, _ = m.pack_rows(_EosTok(), ev_pool, 96, "alpaca", "</s>", n_rows=3)
+    assert rec["train"] == want_tr and rec["eval"] == want_ev and len(rec["eval"]) == 3 and len(rec["train"]) >= 10
+    assert {len(r) for r in rec["train"] + rec["eval"]} == {96} and rec["train_tokens"] == 96 * len(rec["train"])
+    on_disk = json.loads((d / "tokens_tinypack.json").read_text())
+    body = json.dumps({"train": on_disk["train"], "eval": on_disk["eval"]}, separators=(",", ":")).encode()
+    assert on_disk["sha256"] == hashlib.sha256(body).hexdigest() == rec["sha256"] != UNPACKED_TINY_TOKENS_SHA
+    assert on_disk["pack"] is True and on_disk["pack_sep_id"] == 0 and on_disk["seq"] == 96
+    assert on_disk["pack_pools"]["train_examples"] == 24 and on_disk["pack_stats"]["eval"]["rows"] == 3
+    a.pack_min_rows = 10 ** 6
+    with pytest.raises(SystemExit) as e:
+        m.prepare(a, tok=_EosTok())
+    assert e.value.code == 13
+    a.pack_min_rows, a.pack_src = 0, None
+    with pytest.raises(SystemExit) as e:
+        m.prepare(a, tok=_EosTok())
+    assert e.value.code == 13
+
+
+def test_tc1_amendment_39_pack_constants_are_tp4_alpacas():
+    """The packed pools' pin and seed are tp4_alpaca.py's (the shuffled-prefix check in pack_pools proves them at run time as well)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("tp4_alpaca_under_test", REPO / "bench" / "tp4" / "tp4_alpaca.py")
+    t = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(t)
+    m = _load_arm_module()
+    assert (m.PACK_SRC_SHA256, m.PACK_SEED, m.PACK_SRC_ROWS) == (t.FILE_SHA256, t.SEED, 51760)
+    assert m.PACK_TRAIN_POOL >= t.N_TRAIN and m.PACK_EVAL_POOL >= t.N_EVAL
+
+
+def test_tc1_amendment_39_packed_token_and_its_box_fixture():
+    """tc1_run.sh: the qwen3samestack4k token runs amendment 25's family with its alarms; TC1_PACK is read with default 0, forwarded by
+    tc1_drive.sh and recorded on the FIXTURE line; tc1_prepare hands --prepare the pack flags (at least steps x micro-batch x accum rows)
+    only on a packing box, through tokenise's pass-through; the box refuses a packed token without TC1_PACK=1 TC1_SEQ=4096 and TC1_PACK=1
+    beside any field-recipe token -- executed through bash."""
+    run, drive = RUN_SH.read_text(), DRIVE_SH.read_text()
+    assert ("  qwen3samestack4k) tc1_samestack_family qwen3samestack4k Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 "
+            "5400 3600 5400 7200;;") in run
+    assert re.search(r"^PACK=\$\{TC1_PACK:-0\}$", run, re.M) and "matched_seed=$MATCHED_SEED pack=$PACK\" | tee -a summary.txt" in run
+    forwarded_block = drive[drive.index("for v in TC1_FAMILIES"):drive.index("; do", drive.index("for v in TC1_FAMILIES"))]
+    assert "TC1_PACK" in forwarded_block.split()
+    assert '--template $TEMPLATE_ --tokens $TOK "${@:10}" > logs/prepare_' in run
+    assert "tokenise $FAM \"$MID\" $REV alpaca $SEQ $W/data/ds_alpaca.json $DS_ALPACA_SHA $TOK $EVN $PK; then" in run
+    pk = re.search(r'^  local PK=""; \[ "\$PACK" = 1 \] && PK=.*$', run, re.M).group(0)
+    for pack, want in (("1", "--pack 1 --pack-src /root/tc1/data/alpaca_data_cleaned.json --pack-min-rows 120"), ("0", "")):
+        out = subprocess.run(["bash", "-c", f"W=/root/tc1 STEPS=30 MB=1 ACCUM=4 PACK={pack}; f(){{\n{pk}\necho \"$PK\"; }}; f"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        assert out == want, (pack, out)
+    # tokenise passes everything after its 9th argument to --prepare
+    tk = re.search(r"^tokenise\(\)\{.*?return 0; \}$", run, re.S | re.M).group(0)
+    with tempfile.TemporaryDirectory() as td:
+        script = f"cd {td}; mkdir -p logs; W={td}; PY_E4B=echo; say(){{ :; }}\n{tk}\ntokenise fam mid rev alpaca 4096 data sha tok 8 --pack 1 --pack-src s --pack-min-rows 120"
+        subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+        log = (Path(td) / "logs" / "prepare_fam_alpaca.log").read_text()
+    assert log.strip().endswith("--eval-n 8 --template alpaca --tokens tok --pack 1 --pack-src s --pack-min-rows 120"), log
+    # the box-level refusal, executed
+    start = run.index('case "$PACK" in 0|1) ;;')
+    block = run[start:run.index("\ndone\n", start) + len("\ndone\n")]
+    for fams, pack, seq, ok in (("qwen3samestack4k", "1", "4096", True), ("qwen3samestack4k", "0", "4096", False), ("qwen3samestack4k", "1", "2048", False),
+                                ("qwen3samestack", "1", "4096", False), ("qwen3samestack", "0", "2048", True), ("qwen3 qwen3samestack", "0", "2048", True),
+                                ("qwen3samestack4k qwen3samestack", "1", "4096", False), ("qwen3samestack4k", "2", "4096", False)):
+        with tempfile.TemporaryDirectory() as td:
+            script = f'cd {td}; say(){{ echo "$*"; }}; finish(){{ exit $1; }}; FAMILIES="{fams}"; PACK={pack}; SEQ={seq}\n{block}echo PASSED'
+            r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+            summ = (Path(td) / "summary.txt").read_text() if (Path(td) / "summary.txt").exists() else ""
+        assert (r.returncode == 0 and "PASSED" in r.stdout) if ok else (r.returncode == 78 and "refusing" in r.stdout and "BOX_REFUSED" in summ), (fams, pack, seq, r.stdout)
+    assert run.index(block) > run.index('echo "BOX $TC1_BOX families:') and run.index(block) < run.index("# cu130 wheels")

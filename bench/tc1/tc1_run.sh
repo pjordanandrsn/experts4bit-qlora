@@ -73,6 +73,10 @@ STEPS=${TC1_STEPS:-20}; SEQ=${TC1_SEQ:-2048}; MB=${TC1_MB:-2}; ACCUM=${TC1_ACCUM
 LR=${TC1_LR:-2e-4}; WD=${TC1_WD:-0.001}; WARMUP=${TC1_WARMUP:-5}; SCHED=${TC1_SCHED:-linear}; OPTIM=${TC1_OPTIM:-adamw_8bit}; SEED=${TC1_SEED:-3407}
 EVAL_EVERY=${TC1_EVAL_EVERY:-20}; EVAL_N=${TC1_EVAL_N:-8}; AUTOCAST=${TC1_AUTOCAST:-0}; TEMPLATE=alpaca
 MATCHED_SEED=${TC1_MATCHED_SEED:-3407}            # --lora-init matched:<seed> on every matched arm (TC1-PREREG "Arms"); its own knob, distinct from the fixture seed
+# TC1 amendment 39: TC1_PACK=1 packs the Alpaca text into rows of exactly SEQ tokens (tc1_arm.py --prepare --pack: the registered text extended
+# in its own order, EOS between examples, no padding, full causal attention across example boundaries). A box-level fixture: only the packed-regime
+# tokens run with it, and they run only with it (the refusal below the BOX line). 0 (default) = the tokens file byte-identical to before.
+PACK=${TC1_PACK:-0}
 DS_ALPACA_SHA=${TC1_DS_ALPACA_SHA:-5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb}   # tp4_alpaca.py output, registered
 TF_VER=${TC1_TRANSFORMERS_VER:-5.18.0}; BNB_VER=${TC1_BNB_VER:-0.50.2}; PEFT_VER=${TC1_PEFT_VER:-0.21.2}   # TC1-PREREG "Environments"
 # ---------------------------------------------------------------- TC1b (the qwen3curve token; TC1B-PREREG "Fixture" / "Arms"): the curve instrument over the SAME field recipe
@@ -105,7 +109,7 @@ case " $FAMILIES " in " qwen3prebindab ") NEED_UNSLOTH=0;; esac   # TC1 amendmen
 case " $FAMILIES " in " qwen3dqab "|" mixtraldqab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 28: e4b-only A/Bs
 case " $FAMILIES " in " qwen3tritonab ") NEED_UNSLOTH=0;; esac   # TC1 amendment 32: an e4b-only A/B
 : > summary.txt; echo "$TC1_INSTANCE_ID" > INSTANCE_ID
-echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED" | tee -a summary.txt
+echo "FIXTURE field: template=$TEMPLATE steps=$STEPS seq=$SEQ micro_batch=$MB accum=$ACCUM r=$R alpha=$ALPHA lr=$LR wd=$WD warmup=$WARMUP sched=$SCHED optim=$OPTIM seed=$SEED eval_every=$EVAL_EVERY eval_n=$EVAL_N autocast=$AUTOCAST matched_seed=$MATCHED_SEED pack=$PACK" | tee -a summary.txt
 case " $FAMILIES " in *" qwen3curve "*)
   echo "FIXTURE curve (TC1b): steps=$CURVE_STEPS eval_every=$CURVE_EVAL_EVERY eval_n=$CURVE_EVAL_N; t1: micro_batch=$T1_MB accum=$T1_ACCUM; r64: r=$R64_R alpha=$R64_ALPHA" | tee -a summary.txt
   echo "FIXTURE anchor (tp4's A_*): template=$A_TEMPLATE steps=$A_STEPS seq=$A_SEQ micro_batch=$A_MB accum=$A_ACCUM r=$A_R alpha=$A_ALPHA lr=$A_LR wd=$A_WD warmup=$A_WARMUP sched=$A_SCHED optim=$A_OPTIM seed=$A_SEED eval_every=$A_EVAL_EVERY eval_n=$A_EVAL_N" | tee -a summary.txt
@@ -123,6 +127,16 @@ case " $FAMILIES " in *" qwen3frontier "*|*" qwen3frontier12 "*)      # TC3: the
   ;;
 esac
 echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RUN_ID instance $TC1_INSTANCE_ID deadline $TC1_DEADLINE_EPOCH; prereg $PREREG" | tee -a summary.txt
+# TC1 amendment 39: packing is the box's fixture, so every token on the box agrees with it -- refused here, before anything is fetched or installed:
+# a packed-regime token without TC1_PACK=1 / TC1_SEQ=4096 would run the field recipe under the packed token's name, and TC1_PACK=1 beside a
+# field-recipe token would pack that token's rows under ITS name.
+case "$PACK" in 0|1) ;; *) say "refusing: TC1_PACK must be 0 or 1 (got '$PACK')"; echo "BOX_REFUSED pack=$PACK" >> summary.txt; finish 78;; esac
+for _f in $FAMILIES; do
+  case "$_f" in
+    qwen3samestack4k) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
+    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
+  esac
+done
 # ---------------------------------------------------------------- staged pieces, box class, forensics
 for f in tc1_arm.py tc1_reduce.py tp4_alpaca.py n9_datasets.py ds_manifest.json; do [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done   # TC1b: + the clinical builder and its manifest (tc1_drive.sh's STAGE)
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
@@ -601,9 +615,9 @@ print(round(statistics.median(v), 2) if v else 'nan')" "$f" 2>/dev/null || echo 
   done; }
 free_family(){ [ "$TC1_LOCAL_BOX" = 1 ] && { say "local snapshot kept ($1: TC1_LOCAL_SNAPSHOT is the owner's directory, never freed)"; return 0; }
   rm -rf /root/.cache/huggingface/hub/models--$2; say "freed $1 (disk: $(df -h /root | tail -1 | awk '{print $4}') free)"; }
-tokenise(){ local FAM=$1 MID=$2 REV=$3 TEMPLATE_=$4 SEQ_=$5 DATA=$6 DATA_SHA=$7 TOK=$8 EVAL_N_=${9:-$EVAL_N}
+tokenise(){ local FAM=$1 MID=$2 REV=$3 TEMPLATE_=$4 SEQ_=$5 DATA=$6 DATA_SHA=$7 TOK=$8 EVAL_N_=${9:-$EVAL_N}     # ${10}...: passed to --prepare as they are (TC1 amendment 39: the pack flags)
   say "tokenise $FAM ($TEMPLATE_, seq $SEQ_) -> $(basename $TOK)"
-  HF_HUB_OFFLINE=1 $PY_E4B $W/tc1_arm.py --prepare --fam $FAM --model "$MID" --revision $REV --data $DATA --data-sha $DATA_SHA --seq $SEQ_ --eval-n $EVAL_N_ --template $TEMPLATE_ --tokens $TOK > logs/prepare_${FAM}_$TEMPLATE_.log 2>&1 || return 1
+  HF_HUB_OFFLINE=1 $PY_E4B $W/tc1_arm.py --prepare --fam $FAM --model "$MID" --revision $REV --data $DATA --data-sha $DATA_SHA --seq $SEQ_ --eval-n $EVAL_N_ --template $TEMPLATE_ --tokens $TOK "${@:10}" > logs/prepare_${FAM}_$TEMPLATE_.log 2>&1 || return 1
   tail -1 logs/prepare_${FAM}_$TEMPLATE_.log; return 0; }
 tok_sha(){ $PY_E4B -c "import json; print(json.load(open('$1'))['sha256'])"; }
 # TC1b: the tokens file's sha256 covers {train, eval[:eval_n]} (tc1_arm.py prepare), so a file tokenised with 16 held-out rows cannot carry
@@ -634,12 +648,15 @@ tc1_prepare(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 ALL=$5 EVN=${6:-$EVAL_N}      #
   if [ -n "${TC1_LOCAL_SNAPSHOT:-}" ]; then local_snapshot $FAM $MID $REV; frc=$?; else fetch $FAM $MID $REV $FAL; frc=$?; fi   # TC3: the owned box's directory, never a fetch
   if [ $frc -ne 0 ]; then local st=not_run; [ $frc -eq 2 ] && st=load_fault; stub_all $st "$FETCH_REASON"; free_family $FAM ${MID//\//--}; return 1; fi
   TOK=$W/tokens_$FAM.json
-  if ! tokenise $FAM "$MID" $REV alpaca $SEQ $W/data/ds_alpaca.json $DS_ALPACA_SHA $TOK $EVN; then
+  # TC1 amendment 39: on a packing box, rows of exactly SEQ tokens from the registered text extended in its own order (tp4_alpaca.py left its
+  # source beside ds_alpaca.json), at least steps x micro-batch x accum of them -- the rows the arms read, none twice
+  local PK=""; [ "$PACK" = 1 ] && PK="--pack 1 --pack-src $W/data/alpaca_data_cleaned.json --pack-min-rows $(( STEPS * MB * ACCUM ))"
+  if ! tokenise $FAM "$MID" $REV alpaca $SEQ $W/data/ds_alpaca.json $DS_ALPACA_SHA $TOK $EVN $PK; then
     tail -3 logs/prepare_${FAM}_alpaca.log; echo "$FAM: TOKENS FAIL" | tee -a summary.txt
     local why; why="tokenise failed (logs/prepare_${FAM}_alpaca.log): $(tail -1 logs/prepare_${FAM}_alpaca.log | cut -c1-200)"
     stub_all harness_error "$why"; free_family $FAM ${MID//\//--}; return 1
   fi
-  TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS eval_n=$EVN train_only_sha=$(train_sha $TOK)" | tee -a summary.txt; return 0; }
+  TS=$(tok_sha $TOK); echo "TOKENS $FAM alpaca sha=$TS eval_n=$EVN train_only_sha=$(train_sha $TOK)${PK:+ pack=1 seq=$SEQ}" | tee -a summary.txt; return 0; }
 # tc1_frontier_family FAM MID REV FETCH ERES EOFF MB1 UNS HF HOFF AX ALO AZ3 ROFF -- lane TC3 (TC3-PREREG-draft "24 GB box"; registered as bench/tc1/TC3-PREREG.md by
 # the PI): Qwen3-30B-A3B at the pin on ONE 24 GB card (TC1_GPU_CLASS=4090), the field recipe, matched init + fp32 adapters, N 20, 8 held-out rows at 0 and N,
 # every framework with its own memory lever, one process per arm, IN THIS ORDER (an OOM is a row; every row records peak VRAM, the host-RAM high-water and the host total):
@@ -1467,6 +1484,12 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3denseab) tc1_denseab_family qwen3denseab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 22
   qwen3bmmab)  tc1_bmmab_family  qwen3bmmab  Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 24: bmm replay + venv-e4b vs venv-unsloth
   qwen3samestack) tc1_samestack_family qwen3samestack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1 amendment 25: both frameworks on one stack
+  # TC1 amendment 39: amendment 25's family in the packed 4,096-token regime (the box runs TC1_PACK=1 TC1_SEQ=4096 TC1_MB=1 TC1_ACCUM=4 TC1_STEPS=30;
+  # refused above otherwise). Alarms for 30 steps of a 15-40 s step: ~150-250 s of prologue (load ~60-90 s, C1 ~60-80 s, eval0 now 8 x 4,096
+  # tokens), 30 x 40 = 1,200 s of training, three held-out passes (0, 20, 30), ~60-90 s of epilogue: ~1,800 s at the top of the range. e4b
+  # 3600 (2x that); Unsloth 5400 (its field step was 2.2x e4b's: at that ratio on a 40 s e4b step it needs ~3,300 s, and an alarm must not
+  # turn a reading outside P84's band into UNTESTED); the reference (skipped on the registered box) 7200, its per-expert loop at 4,096 tokens.
+  qwen3samestack4k) tc1_samestack_family qwen3samestack4k Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 5400 7200;;
   qwen3samestackh100) tc1_samestack_family qwen3samestackh100 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600 5400;;   # TC1c amendment 9: amendment 25 on an H100 NVL
   mixtralsamestack) tc1_samestack_family mixtralsamestack mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600 3600 5400;;   # TC2 amendment 9: amendment 25 on Mixtral, resident, defaults
   qwen3prebindab) tc1_prebindab_family qwen3prebindab Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 26: prebound Triton launches off vs on

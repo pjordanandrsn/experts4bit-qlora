@@ -1546,3 +1546,58 @@ or not engaged.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, a 192 GB host floor, venv-unsloth built for the t212 install, Qwen3 and
 Mixtral downloaded. About $3 with the downloads and the gate's possible re-runs; this is in the standing no-ask tier.
+
+### Amendment 39 (2026-10-05T09:39Z, after TC2 amendment 9's read, before any box): the packed 4,096-token regime with both frameworks on one stack (P84, P85, P86)
+
+**Why.** Every TC1 position reads the field recipe, whose Alpaca rows are short. The receipts record about 1,000–1,400 real tokens per
+optimizer step against the recipe's nominal 16,384 (seq 2,048 × micro-batch 2 × accum 4). There the step is host-launch-bound: the
+5090's positions, the environment gain and every host lever were read in that regime. Packed training at a full sequence length is common
+and puts about 12× the real tokens through each step. The device then does most of the work, and e4b's lead may shrink or reverse:
+
+- e4b's thinnest lead is on the H100 (1.061), where its step is the most device-bound;
+- the 2026-10-02 profiles (`…h100.2026-10-02.dispatch-profile`) put Unsloth's 5090 device time per step at 2.31 s against e4b's 2.96 s
+  (9.868 × 0.234 against 6.169 × 0.480), e4b's lead then coming from host time;
+- e4b's loss is Hugging Face's, which materialises the full-vocabulary logits and upcasts them to fp32. At 4,096 tokens that is about 1.2 GB
+  of bf16 logits plus 2.5 GB each for the fp32 copy and its gradient. Amendment 23's census puts e4b's fixed memory at about 24.5 GB.
+
+**The instrument** (bench/tc1, TC1 harness PR for this amendment):
+
+- `TC1_PACK=1`: the field recipe's Alpaca examples, same template, tokenizer and order, extended past the 1,200 + 48 registered rows in
+  `tp4_alpaca.py`'s own shuffled order (the prefix is checked byte-for-byte), joined with EOS and cut into rows of exactly `TC1_SEQ`
+  tokens; labels are the inputs, no padding, full causal attention across example boundaries. Held-out rows are packed the same way from a
+  disjoint pool. Unset, the field recipe's tokens file is byte-identical to before.
+- `TC1_FREE_OUTPUTS=1`: each micro-batch's model output is released once its loss is read. Unset, the previous micro-batch's output, its
+  logits included, stays referenced through the next forward and the optimizer step, inside every arm's measured peak. Every framework,
+  every arm.
+- The packed family is read against its own fixture: a receipt that is not packed, not at seq 4,096, not micro-batch 1 × accum 4, not
+  16,384 real and 0 padded tokens on every step, or not `free_outputs` is VOID.
+
+**The box** (token `qwen3samestack4k`). TC1 amendment 25's same-stack family as amendment 33 ran it, on the packed rows:
+
+- `TC1_SEQ=4096 TC1_MB=1 TC1_ACCUM=4 TC1_PACK=1 TC1_FREE_OUTPUTS=1`, `TC1_STEPS=30`, held-out at steps 0 and 30 only
+  (`TC1_EVAL_EVERY=30`, 8 rows of 4,096 tokens), e4b's reference arm not run;
+- e4b's matched arm in venv-unsloth (two draws), Unsloth 2026.9.14 grouped_mm (two draws), e4b's matched arm in venv-e4b (`_t28`, two
+  draws), every e4b arm resident at default settings;
+- load-gated draws (`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), avoiding machines 151350, 45511 and 138786.
+
+**Predictions** (registered before the box):
+
+- **P84:** with both frameworks on one stack, Unsloth/e4b lies in **[0.80, 1.60]**, both pairs stable. The band is wide on purpose: the
+  field recipe's 2.352 is host time, and the 2026-10-02 device times point the other way.
+- **P85:** e4b's matched arm in venv-unsloth over venv-e4b lies in **[0.80, 1.00]**, both sides stable. A device-bound step should gain less
+  from torch 2.12's host savings than the field recipe's 0.900.
+- **P86:** every e4b arm that runs completes resident (VALID). The estimate sits close to the card, so this is the prediction most at risk.
+
+Each is FALSIFIED outside its band (P86: an e4b arm that OOMs) and UNTESTED where a side is missing, unstable or not engaged.
+
+**Decision rules.**
+
+- **P84 read with both pairs stable, whichever side it favours:** the ratio is recorded as Qwen3-30B-A3B's packed 4,096-token position
+  (`e4b.train.h2h.unsloth.qwen3.5090.<date>.packed-4k`), beside the field recipe's 2.352, and STATUS names both regimes. A reading below
+  1.00 is said as an e4b loss in that regime.
+- **P86 FALSIFIED (e4b OOMs while Unsloth trains):** that is recorded as an e4b loss in that regime, with the peak where it failed. A
+  chunked loss for e4b is then its own registration, and so is a 2,048-token packed box.
+- **P85** says how much of the torch 2.12 gain survives a device-bound step; it moves no default.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for e4b's same-stack arms and
+Unsloth. Six arms of 30 steps at an estimated 15–40 s a step: about $3 with the download; this is in the standing no-ask tier.
