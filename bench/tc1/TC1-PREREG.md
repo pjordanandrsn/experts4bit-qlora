@@ -1280,3 +1280,45 @@ Each is FALSIFIED outside its band, and UNTESTED where a side is unstable, not V
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; no Unsloth venvs are built. About $1.50 with
 the download; this is in the standing no-ask tier.
 
+### Amendment 33 (2026-10-05T02:19Z, after amendment 29's box): load-gated draws, and the same-stack pair re-asked under them (P50, P51)
+
+**Why.** The same-stack speed pair has now gone unread on three boxes, each with one or two unstable pairs:
+
+| box | host | unstable pairs |
+|---|---|---|
+| `tc1-5090-67` | Core Ultra 9 285K | Unsloth 18 %; e4b's field-image arm 8 % |
+| `tc1-5090-68` | EPYC 7663 | e4b's same-stack arm 8 % |
+| `tc1-5090-72` | EPYC 7C13, machine 45511, 60-step runs | e4b's same-stack arm 13 %; field-image arm 6 % |
+
+The samplers TC1 amendment 7 put beside every arm show why, on all but the 285K. The step is host-bound, and on these multi-tenant hosts
+the host's load average follows the slow draws:
+
+- `tc1-5090-72`: e4b's same-stack draws ran at a median load1 of 22.9 and 11.0;
+- `tc1-5090-70`: 6.6 / 7.3 / 12.1 / 19.4 across its four draws;
+- `tc1-5090-66`'s shipped pair: 4.0 against 19.0;
+- `tc1-5090-68`: 30–37 throughout.
+
+Pairs read stable at a median load1 of about 5 or below. Machine 151350, the 285K, lost pairs at a load near 1, a different and unexplained
+cause, so it is avoided.
+
+**The instrument.** `tc1_run.sh` now runs each arm through a gate.
+
+- With `TC1_LOAD_GATE` set, an OK arm whose median host load1 over its own run exceeds the gate is set aside to `loadvoid/` and run again,
+  at most `TC1_LOAD_RETRIES` more times while the deadline allows.
+- The last attempt stands whatever its load. Every attempt writes a `LOADGATE` line, and the reducer prints them.
+- Unset, nothing changes, so every box registered before this amendment keeps its instrument.
+
+**The box.** The token `qwen3samestack` as amendment 29 ran it:
+
+- `TC1_STEPS=60`, no reference arm;
+- `TC1_LOAD_GATE=6.0` and `TC1_LOAD_RETRIES=2`;
+- on a machine other than 45511, 138786 and 151350.
+
+P50 (Unsloth/e4b on one stack in **[1.9, 2.9]**) and P51 (e4b venv-unsloth / venv-e4b in **[0.80, 0.95]**) are re-asked with their bands
+unchanged, read as before: two stable VALID draws a side.
+
+**Its reading is final.** No further re-draw follows under amendments 25, 27, 29 or 33.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard (a voided draw adds up to one arm's time), TC1's 98 GB host floor; about
+$2.50 with the download and up to two re-runs. This is in the standing no-ask tier.
+
