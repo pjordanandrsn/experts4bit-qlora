@@ -17,7 +17,7 @@ SGL = REPO / "bench" / "sc1" / "sglang" / "server.sh"
 
 
 def test_box_i_is_wired_on_box_g_s_image_and_kernel_package():
-    assert 'case "$BOX" in A|B|C|D|E|F|G|I) ;;' in RUN and "I) box_i;; esac" in RUN and '[ "$BOX" = I ] && prove_i' in RUN
+    assert 'case "$BOX" in A|B|C|D|E|F|G|H|I) ;;' in RUN and "I) box_i;; esac" in RUN and '[ "$BOX" = I ] && prove_i' in RUN
     assert "G|I) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac" in RUN
     assert "I) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh; install_vllm; install_sglang; install_llamacpp ;;" in RUN
     assert 'I) PROVE_NEEDS="vllm sglang llamacpp";;' in RUN
