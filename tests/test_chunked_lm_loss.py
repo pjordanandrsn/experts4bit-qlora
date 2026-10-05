@@ -54,6 +54,8 @@ def _config(family):
         return tr.Qwen3MoeForCausalLM, tr.Qwen3MoeConfig(**c, intermediate_size=128, moe_intermediate_size=32, num_experts=8,
                                                          num_experts_per_tok=2, num_hidden_layers=2, head_dim=16,
                                                          router_aux_loss_coef=0.01)
+    if family == "qwen3":
+        return tr.Qwen3ForCausalLM, tr.Qwen3Config(**c, intermediate_size=128, num_hidden_layers=2, head_dim=16)
     if family == "mixtral":
         return tr.MixtralForCausalLM, tr.MixtralConfig(**c, intermediate_size=64, num_local_experts=4, num_experts_per_tok=2,
                                                        num_hidden_layers=2, router_aux_loss_coef=0.02)
@@ -97,9 +99,9 @@ def _config(family):
     raise KeyError(family)
 
 
-FAMILIES = ["qwen3_moe", "mixtral", "olmoe", "granitemoe", "granitemoeshared", "granitemoehybrid", "gpt_oss", "ernie4_5_moe",
+FAMILIES = ["qwen3_moe", "qwen3", "mixtral", "olmoe", "granitemoe", "granitemoeshared", "granitemoehybrid", "gpt_oss", "ernie4_5_moe",
             "lfm2_moe", "qwen3_5_moe", "nemotron_h"]
-NO_AUX = {"lfm2_moe", "nemotron_h"}
+NO_AUX = {"lfm2_moe", "nemotron_h", "qwen3"}
 
 
 def _model(family, dev="cpu", dtype=torch.float32, seed=0):
@@ -398,13 +400,13 @@ def test_a_wrapper_reaches_the_causal_lm_inside():
 # ---------------------------------------------------------------------------------------------------------------- refusals --
 
 def test_refuses_a_class_outside_the_table():
-    cfg = tr.Qwen3Config(vocab_size=V, hidden_size=64, intermediate_size=128, num_hidden_layers=1, num_attention_heads=4,
-                         num_key_value_heads=2, head_dim=16)
-    m = tr.Qwen3ForCausalLM(cfg)
+    cfg = tr.LlamaConfig(vocab_size=V, hidden_size=64, intermediate_size=128, num_hidden_layers=1, num_attention_heads=4,
+                         num_key_value_heads=2)
+    m = tr.LlamaForCausalLM(cfg)          # dense Llama: not read into the table (dense Qwen3 is, since DQ4)
     with pytest.warns(RuntimeWarning, match="not in the chunked-loss table"):
         assert C.enable_chunked_lm_loss(m) == 0
     assert "forward" not in vars(m) and "forward" not in vars(m.lm_head)
-    assert "Qwen3ForCausalLM" in C.CHUNKED_LM_LOSS_STATS["refused"]
+    assert "LlamaForCausalLM" in C.CHUNKED_LM_LOSS_STATS["refused"]
 
 
 def test_refuses_a_replaced_loss_function_and_a_hooked_head():
