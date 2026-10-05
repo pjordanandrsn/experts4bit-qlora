@@ -2,7 +2,6 @@
 
 ## Unreleased
 
-<<<<<<< HEAD
 ### MG1 amendment 2 read: the ladder OOMs at Qwen3.6's licensed configuration, so P2 stays unread and `qwen3_5_moe` stays experimental; amendment 3 registered, reading P2 on tp1's own fused arm (bench, tests and docs)
 
 - **The read** ([`bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md`](bench/moegen/mg1/mg1-a2-5090-2/RESULTS-mg1-a2.md)).
@@ -19,7 +18,7 @@
   - `tests/test_mg1_lane.py` checks that the runner starts the staged driver file under the hook. It also checks that the hook
     records the counters and keeps the driver's exit code, including a stub's.
 - **Spend.** $0.357 for amendment 2; $2.24 for the MG1 lane in all.
-=======
+
 ### Default: serve_paged's first-chunk prefill graph is `auto` (lane SC2b licensed it); `auto` stands down on memory
 
 - **What changes.** `E4B_PAGED_PREFILL_GRAPH` now defaults to `auto`. The graph engages wherever its startup check
@@ -51,7 +50,6 @@
 - **The pool measure.** It is the allocator's segments for the graph's own pool id. The first cut used the growth of
   `memory_reserved`, which read 0 once segments were recycled, so the headroom rule would have failed open. The A2000
   run caught it.
->>>>>>> origin/main
 
 ### Read: TC1 amendment 25, first box — on one stack the matched set holds (P52 HELD); the speed pairs were unstable (P50, P51 UNTESTED); amendment 27 registers one re-draw
 
