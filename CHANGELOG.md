@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Read: TC1 amendment 31 — the double-quantized absmax costs Qwen3-30B-A3B 1.4 % of its step for 1.34 GB (P56 HELD); with P57 and P58, it becomes the default for resident training
+
+- `tc1-5090-75` ($1.03, a quiet EPYC 7B13, 60-step runs): `_dq1`/`_dq0` 1.014 [1.007, 1.021], peak 27.44 → 26.10 GB, held-out −0.0021.
+  Both pairs were stable.
+- With P57 (Mixtral 1.023 for 2.04 GB) and P58 (held-out within 0.005 on both families) HELD, amendment 28's rule fires. The default
+  change is e4b's own PR. Row `e4b.train.absmax-dq.qwen3.5090.2026-10-05`.
+
 ### MG1 amendment 3 read: Qwen3.6-35B-A3B enters `fast_train = supported` (P8 HELD: the dgrad kernel served every frozen-GEMM backward of tp1's licensed fused arm) (docs and receipts)
 
 - **The read** ([`bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md`](bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md), one RTX 5090,
