@@ -169,7 +169,9 @@ blocks:
 It leaves the same pool bytes, block tables, lengths and free lists as the per-layer path, with the same rows given to
 the same slot. `/health`'s `kv_bookkeeping` block reads `requested` and, per path, how many requests' prompt flushes
 (`flush_layers`, `flush_bulk`) and first-decode block claims (`ready_layers`, `ready_bulk`, or `ready_at_flush` when
-the bulk flush already made them) the server ran.
+the bulk flush already made them) the server ran. `flush_bulk_fallback` counts the bulk flushes `append_prompt`
+wrote per layer after all (a slot already holding tokens, prompts of different lengths, a demoted arena): the same
+bytes, without the saving.
 
 **Memory.** A bulk flush allocates up to `Fp8PagedKV.append_prompt_peak_bytes(T)`:
 - its largest layer group's stacks and quantize temporaries, 7× its bf16 input per side, a group bounded at 16 MiB per

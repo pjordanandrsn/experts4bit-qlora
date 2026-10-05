@@ -165,6 +165,19 @@ def test_a_slot_that_already_holds_tokens_takes_the_per_layer_path():
     _assert_same_state(*out)
 
 
+def test_append_prompt_reports_which_path_wrote_the_prompt():
+    kv = _kv()
+    layers = list(range(kv.L))
+    ks, vs = _prompt(kv, layers, 10, 1)
+    assert kv.append_prompt(0, layers, ks, vs) is True          # a fresh slot: the bulk path
+    ks, vs = _prompt(kv, layers, 9, 2)
+    assert kv.append_prompt(0, layers, ks, vs) is False         # onto history: per layer
+    ks, vs = _prompt(kv, layers, 7, 3)
+    ks[1], vs[1] = ks[1][:5], vs[1][:5]
+    assert kv.append_prompt(1, layers, ks, vs) is False         # prompts of different lengths: per layer
+    assert kv.append_prompt(2, [], [], []) is True              # nothing to write
+
+
 def test_an_overflowing_prompt_is_refused_before_anything_moves():
     kv = _kv(max_tokens=32)
     layers = list(range(kv.L))
@@ -268,10 +281,10 @@ def test_a_tiny_model_serves_the_same_tokens_with_bulk_bookkeeping():
     assert got == ref, f"bulk changed the decoded tokens:\n  per-layer={ref}\n  bulk={got}"
     # the engagement counters a lane gates on: every request's flush took the configured path
     n = len(PROMPTS)
-    assert r0.kv_bookkeeping_stats() == {"bulk": False, "flush_layers": n, "flush_bulk": 0, "ready_layers": 0,
-                                         "ready_bulk": 0, "ready_at_flush": 0}
-    assert r1.kv_bookkeeping_stats() == {"bulk": True, "flush_layers": 0, "flush_bulk": n, "ready_layers": 0,
-                                         "ready_bulk": 0, "ready_at_flush": 0}
+    assert r0.kv_bookkeeping_stats() == {"bulk": False, "flush_layers": n, "flush_bulk": 0, "flush_bulk_fallback": 0,
+                                         "ready_layers": 0, "ready_bulk": 0, "ready_at_flush": 0}
+    assert r1.kv_bookkeeping_stats() == {"bulk": True, "flush_layers": 0, "flush_bulk": n, "flush_bulk_fallback": 0,
+                                         "ready_layers": 0, "ready_bulk": 0, "ready_at_flush": 0}
     # every slot freed and returned: both pools end empty with full free lists
     for r in (r0, r1):
         assert not r.kv._rows and all(len(f) == r.kv._n_rows for f in r.kv._free)
@@ -293,6 +306,24 @@ def test_the_runner_claims_every_reachable_block_at_the_flush_when_graphs_are_on
         assert (st["ready_at_flush"], st["ready_layers"], st["ready_bulk"]) == ((1, 0, 0) if bulk else (0, 1, 0))
         out.append(_state(runner.kv))
     _assert_same_state(*out)
+
+
+def test_the_runner_counts_a_bulk_flush_written_per_layer(monkeypatch):
+    """``flush_bulk_fallback``: the bulk call ran, but ``append_prompt`` took its per-layer path (forced here), so
+    the counters a lane gates on say what actually wrote the prompt."""
+    runner = _runner(_tiny_model(), True)
+
+    def per_layer(seq, layers, ks, vs):
+        for layer, k, v in zip(layers, ks, vs):
+            runner.kv.append(layer, seq, k.contiguous(), v.contiguous())
+        return False
+
+    monkeypatch.setattr(runner.kv, "append_prompt", per_layer)
+    runner.bind(0, 1, PROMPTS[0])
+    with torch.no_grad():
+        runner.run_prefill([(0, 0, len(PROMPTS[0]))])
+    st = runner.kv_bookkeeping_stats()
+    assert (st["flush_bulk"], st["flush_bulk_fallback"], st["flush_layers"]) == (1, 1, 0)
 
 
 # ------------------------------------------------------------------------------------------------ the knobs --

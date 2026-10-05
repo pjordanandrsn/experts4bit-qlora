@@ -123,7 +123,8 @@ class PagedModelRunner(StepRunner):
         # tables and the lengths it leaves are the per-layer forms'; off keeps the per-layer forms.
         self.bulk_kv = bool(bulk_kv)
         # which path each request's bookkeeping took (/health's kv_bookkeeping: a registered lane's engagement gate)
-        self._kv_counts = {"flush_layers": 0, "flush_bulk": 0, "ready_layers": 0, "ready_bulk": 0, "ready_at_flush": 0}
+        self._kv_counts = {"flush_layers": 0, "flush_bulk": 0, "flush_bulk_fallback": 0, "ready_layers": 0, "ready_bulk": 0,
+                           "ready_at_flush": 0}
         self.tracer = None           # engines.step_trace.StepTrace, set by serve_paged under E4B_PAGED_STEP_TRACE
         self.device = torch.device(device)
         self.eos_id = eos_id
@@ -255,7 +256,8 @@ class PagedModelRunner(StepRunner):
             self.kv.claim_blocks(slot, self.kv.blocks_per_seq - 1, self.pool_layers)
             self._graph_ready.add(slot)
             self._kv_counts["ready_at_flush"] += 1
-        self.kv.append_prompt(slot, self.pool_layers, ks, vs)
+        if not self.kv.append_prompt(slot, self.pool_layers, ks, vs):
+            self._kv_counts["flush_bulk_fallback"] += 1     # append_prompt took its per-layer path (same bytes)
         self._kv_counts["flush_bulk"] += 1
 
     @torch.no_grad()
@@ -713,8 +715,10 @@ class PagedModelRunner(StepRunner):
 
     def kv_bookkeeping_stats(self) -> dict:
         """``bulk`` (``E4B_PAGED_BULK_KV``) and how many requests took each path: prompt flushes per layer
-        (``flush_layers``) or in bulk (``flush_bulk``); a graphed slot's block claims at its first decode, per layer
-        (``ready_layers``) or in bulk (``ready_bulk``), or already made at its flush (``ready_at_flush``)."""
+        (``flush_layers``) or in bulk (``flush_bulk``), of which ``flush_bulk_fallback`` went through the bulk call but
+        were written per layer inside it (:meth:`Fp8PagedKV.append_prompt`'s fallback); a graphed slot's block claims
+        at its first decode, per layer (``ready_layers``) or in bulk (``ready_bulk``), or already made at its flush
+        (``ready_at_flush``)."""
         return {"bulk": self.bulk_kv, **self._kv_counts}
 
     def free_slot(self, rid: int) -> None:
