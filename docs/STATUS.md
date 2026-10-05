@@ -206,7 +206,7 @@ At the field recipe the same flag costs e4b's shipped arm 4.9 % of its step (1.0
 above its 6.0 load gate on a shared host, so the decision stands but the 4.9 % is not a clean magnitude. `E4B_CHUNKED_LM_LOSS=auto` chunks
 only where a forward's fp32 logits would reach 1 GiB. At the field recipe, on a quiet host, its gate never fired and the step ran 0.992
 (shipped) / 0.999 (matched) of the stock loss's (`e4b.train.chunked-lm-loss.auto.default-decision.5090.2026-10-05`, TC1 amendment 44), so
-amendment 44's rule decides `auto` as e4b's default. The flip lands in its own PR; until then `auto` is opt-in.
+amendment 44's rule makes `auto` e4b's default, which it is since #1203: unset means `auto`, and `0` keeps the stock loss.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against
 native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
 native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.
