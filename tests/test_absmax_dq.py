@@ -489,3 +489,37 @@ def test_trainer_refuses_the_switch_with_expert_offload():
                        timeout=300, env=env, cwd=REPO)
     assert p.returncode != 0 and "E4B_ABSMAX_DQ=1 is a RESIDENT-training switch" in p.stderr + p.stdout, (p.stdout + p.stderr)[-2000:]
     assert "loading" not in p.stdout, "the refusal must come before the model load"
+
+
+# ----------------------------------------------------------------------------- the CLI trainer's default (TC1 amendments 28 / 31)
+@pytest.mark.parametrize("env,want", [({}, (True, False)), ({"E4B_ABSMAX_DQ": "0"}, (False, False)), ({"E4B_ABSMAX_DQ": "1"}, (True, True)),
+                                      ({"OFFLOAD_EXPERTS": "1"}, (False, False)), ({"TRAIN_ARENA": "/x"}, (False, False))])
+def test_trainer_switch_is_on_by_default_for_resident_training(env, want):
+    """Unset, the trainer double-quantizes the absmax on a resident run and not under expert offload or TRAIN_ARENA (those paths
+    read the fp32 absmax); E4B_ABSMAX_DQ=0 turns it off; =1 requires it (and stays the switch that is refused with offload)."""
+    base = {k: v for k, v in os.environ.items() if k not in ("E4B_ABSMAX_DQ", "OFFLOAD_EXPERTS", "TRAIN_ARENA")}
+    full = dict(base, **env, PYTHONPATH=REPO + os.pathsep + os.environ.get("PYTHONPATH", ""))
+    p = subprocess.run([sys.executable, "-c", "import experts4bit_qlora.train as t; print(t.ABSMAX_DQ, t.ABSMAX_DQ_REQUIRED)"],
+                       capture_output=True, text=True, timeout=300, env=full, cwd=REPO)
+    assert p.returncode == 0, p.stderr[-2000:]
+    assert p.stdout.strip().splitlines()[-1] == f"{want[0]} {want[1]}", (env, p.stdout)
+
+
+def test_trainer_default_keeps_the_fp32_absmax_where_the_compressor_refuses():
+    """The default never turns a refusal into a failed run: a bare stack (no ExpertsLoRA wrapper; the compressor refuses it) or a
+    passthrough model (nothing to compress) keeps its fp32 absmax; E4B_ABSMAX_DQ=1 (required) still refuses both. A wrapped NF4
+    model is compressed in either mode."""
+    from experts4bit_qlora.train import apply_absmax_dq
+
+    require_quantize(DEVICE, "nf4")
+    gu, dn = _stacks()
+    bare = _Model([Experts4bit.from_float(gu, dn, quant_type="nf4", compute_dtype=torch.float32).to(DEVICE)])
+    assert apply_absmax_dq(bare, required=False) == 0 and not any(is_absmax_compressed(m) for m in _bases(bare))
+    with pytest.raises(ValueError):
+        apply_absmax_dq(bare, required=True)
+    passthrough = _Model([_lora(quant_type="bf16", cls=ExpertsNbit)])
+    assert apply_absmax_dq(passthrough, required=False) == 0
+    with pytest.raises(SystemExit):
+        apply_absmax_dq(passthrough, required=True)
+    wrapped = _Model([_lora(seed=1), _lora(seed=2)])
+    assert apply_absmax_dq(wrapped, required=False) == 2 and all(is_absmax_compressed(m) for m in _bases(wrapped))

@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Default: the CLI trainer double-quantizes the frozen expert absmax for resident training; `E4B_ABSMAX_DQ=0` turns it off
+
+- **Why.** TC1 amendments 28 and 31 read `E4B_ABSMAX_DQ` against the fp32 absmax on one RTX 5090 each. Held-out moved by 0.003 or
+  less, and the registered rule (P56, P57, P58 held) makes it the default for resident training.
+
+  | model | step cost | peak saved |
+  |---|---|---|
+  | Qwen3-30B-A3B | 1.014× | 1.34 GB |
+  | Mixtral-8x7B | 1.023× | 2.04 GB |
+
+- **What.** `python -m experts4bit_qlora.train` now compresses the absmax after load (`apply_absmax_dq`) unless:
+  - `E4B_ABSMAX_DQ=0` is set;
+  - the run uses expert offload or `TRAIN_ARENA` (those paths read the fp32 absmax by name);
+  - the compressor refuses the model (a bare stack, 8-bit storage, …), in which case it keeps its fp32 absmax and logs why.
+
+  `E4B_ABSMAX_DQ=1` keeps its old meaning: required, refused with offload, and a vacuous compression is an error.
+- **Unchanged.** `compress_expert_absmax_` stays an explicit call in code. The TC1 harness's `--absmax-dq` stays explicit, because its
+  boxes are registered instruments.
+- **Docs and tests.** Docstrings, the env help, capabilities and the solution page are updated. New tests cover the switch's five
+  settings and the default's handling of a refused or empty compression.
+
 ### MG1 amendment 3 read: Qwen3.6-35B-A3B enters `fast_train = supported` (P8 HELD: the dgrad kernel served every frozen-GEMM backward of tp1's licensed fused arm) (docs and receipts)
 
 - **The read** ([`bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md`](bench/moegen/mg1/mg1-a3-5090-1/RESULTS-mg1-a3.md), one RTX 5090,
