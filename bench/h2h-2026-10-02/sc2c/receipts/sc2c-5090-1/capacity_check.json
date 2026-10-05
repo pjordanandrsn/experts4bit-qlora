@@ -1,0 +1,122 @@
+{
+ "e4b_off_d1": {
+  "costs_ms": {
+   "prefill_step": 160.43,
+   "first_decode": 47.73,
+   "decode_base": 4.128,
+   "decode_per_row": 0.5376
+  },
+  "rates": {
+   "1": {
+    "model": 1.0,
+    "measured": 1.0,
+    "gap": 0.0
+   },
+   "2": {
+    "model": 0.842,
+    "measured": 0.95,
+    "gap": -0.108
+   },
+   "4": {
+    "model": 0.167,
+    "measured": 0.2083,
+    "gap": -0.042
+   },
+   "8": {
+    "model": 0.092,
+    "measured": 0.0833,
+    "gap": 0.008
+   }
+  }
+ },
+ "e4b_off_d2": {
+  "costs_ms": {
+   "prefill_step": 153.58,
+   "first_decode": 44.12,
+   "decode_base": 4.181,
+   "decode_per_row": 0.5072
+  },
+  "rates": {
+   "1": {
+    "model": 1.0,
+    "measured": 1.0,
+    "gap": 0.0
+   },
+   "2": {
+    "model": 1.0,
+    "measured": 1.0,
+    "gap": 0.0
+   },
+   "4": {
+    "model": 0.392,
+    "measured": 0.65,
+    "gap": -0.258
+   },
+   "8": {
+    "model": 0.067,
+    "measured": 0.0667,
+    "gap": -0.0
+   }
+  }
+ },
+ "e4b_on_d1": {
+  "costs_ms": {
+   "prefill_step": 39.48,
+   "first_decode": 0.81,
+   "decode_base": 4.129,
+   "decode_per_row": 0.3476
+  },
+  "rates": {
+   "1": {
+    "model": 1.0,
+    "measured": 1.0,
+    "gap": 0.0
+   },
+   "2": {
+    "model": 1.0,
+    "measured": 1.0,
+    "gap": 0.0
+   },
+   "4": {
+    "model": 1.0,
+    "measured": 1.0,
+    "gap": 0.0
+   },
+   "8": {
+    "model": 0.7,
+    "measured": 0.725,
+    "gap": -0.025
+   }
+  }
+ },
+ "e4b_on_d2": {
+  "costs_ms": {
+   "prefill_step": 39.46,
+   "first_decode": 0.86,
+   "decode_base": 4.122,
+   "decode_per_row": 0.3681
+  },
+  "rates": {
+   "1": {
+    "model": 1.0,
+    "measured": 1.0,
+    "gap": 0.0
+   },
+   "2": {
+    "model": 1.0,
+    "measured": 1.0,
+    "gap": 0.0
+   },
+   "4": {
+    "model": 1.0,
+    "measured": 1.0,
+    "gap": 0.0
+   },
+   "8": {
+    "model": 0.233,
+    "measured": 0.3833,
+    "gap": -0.15
+   }
+  }
+ }
+}
