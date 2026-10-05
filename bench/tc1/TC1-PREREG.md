@@ -1128,3 +1128,28 @@ Box 1's descriptive medians, Unsloth/e4b about 2.45 and the environment about 0.
 
 **Budget.** One RTX 5090 at the policy rate, 3 h guard, about $1; this is in the standing no-ask tier.
 
+### Amendment 29 (2026-10-05T00:15Z, after amendment 27's re-draw): the same-stack speed pair over 60 steps (P50, P51 re-asked)
+
+**Why.** Amendment 25's box and its one registered re-draw each lost one speed pair to instability, a different pair each time:
+
+| box | host | unstable pair |
+|---|---|---|
+| `tc1-5090-67` | Core Ultra 9 285K | Unsloth 18.2 % apart; e4b's field-image arm 8.4 % |
+| `tc1-5090-68` | EPYC 7663 | e4b's same-stack arm 7.8 % |
+
+The matched set held on both boxes (P52 HELD twice). By amendment 27's rule P50 and P51 stay UNTESTED under amendment 25. TC1's 20-step
+runs take their median over 10 steps (11..20), so a host hiccup of a few steps moves a draw by more than 5 %. The window is what failed;
+no prediction was read.
+
+**This amendment** re-asks P50 and P51 with their bands unchanged ([1.9, 2.9] and [0.80, 0.95]), on a longer window:
+
+- `TC1_STEPS=60`, so each arm's median is over steps 11..60 (50 steps);
+- everything else as amendment 25's box, except that e4b's reference arm is not run. P52 held on both boxes, and the reference loop at 60
+  steps would take about 30 minutes.
+
+One box, on a machine neither earlier box used. Its reading is final, and no re-draw follows under this amendment. If P50 and P52 have
+both HELD (P52 on amendment 25's boxes), amendment 25's decision rule applies to this box's ratio.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor; about $1.80 with the download. This is in the
+standing no-ask tier.
+
