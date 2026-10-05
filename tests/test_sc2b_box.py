@@ -38,8 +38,8 @@ def test_boxes_a_to_e_keep_sc1s_pins_as_they_ran():
 
 
 def test_box_f_pins_todays_kernel_package_and_asserts_the_default_routes():
-    assert 'case "$BOX" in A|B|C|D|E|F|G) ;;' in RUN
+    assert 'case "$BOX" in A|B|C|D|E|F|G|H) ;;' in RUN
     assert 'case "$BOX" in F) GNF4_SHA=5a887c48acc90207fdd30f2e9b23d21d62102b14;;' in RUN   # v0.38.0's commit
     assert 'hr._int4_prefill_mode_env() == "k19"' in RUN and 'pa._prefill_attn_mode_env() == "flash"' in RUN
-    assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G")') == 2
+    assert RUN.count('os.environ["TRIP_BOX"] in ("F", "G", "H")') == 2
     assert 'TRIP_BOX=$BOX "$PY" -' in RUN
