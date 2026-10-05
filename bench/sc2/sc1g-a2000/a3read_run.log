@@ -1,0 +1,11 @@
+[2026-10-05T18:26:38Z] sc1g-a3read: runtime nvidia-runtime
+[2026-10-05T18:26:38Z] sc1g-a3read: pre-flight gpu util,used,total: 0,997,12282
+gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+torch 2.8.0+cu128 NVIDIA RTX A2000 12GB
+[2026-10-05T18:27:47Z] sc1g-a3read: arm B: append_prompt vs per-layer append, k_groups 4 / 8 / 16
+SC1G_PROMPT_APPEND BITWISE_EQUAL mutate=False kg4:bulk=True,k_eq=24/24,v_eq=24/24,recon_bulk=1.484e-02,recon_per=1.484e-02 kg8:bulk=True,k_eq=24/24,v_eq=24/24,recon_bulk=1.474e-02,recon_per=1.474e-02 kg16:bulk=True,k_eq=24/24,v_eq=24/24,recon_bulk=9.738e-03,recon_per=9.738e-03
+[2026-10-05T18:28:04Z] sc1g-a3read: arm BM (mutation): per-layer side gets the layers' K reversed -- must read DIFFERENT
+SC1G_PROMPT_APPEND DIFFERENT mutate=True kg4:bulk=True,k_eq=0/24,v_eq=24/24,recon_bulk=1.484e-02,recon_per=1.310e+00 kg8:bulk=True,k_eq=0/24,v_eq=24/24,recon_bulk=1.474e-02,recon_per=1.303e+00 kg16:bulk=True,k_eq=0/24,v_eq=24/24,recon_bulk=9.738e-03,recon_per=1.312e+00
+SC1G_A3READ_DONE armB=0 armBM=1 (armBM must be nonzero)
