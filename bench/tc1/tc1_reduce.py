@@ -795,6 +795,7 @@ DEC_FAMS = (ODEC_FAM, QDEC_FAM)   # scored in this order: P108 (OLMoE), P109 (Qw
 DEC_ARM = "fused_attn4_m"         # each family's one arm: <arm>_dec0 vs <arm>_dec1, two draws a side in ABBA order
 DEC_PREDS = {ODEC_FAM: ("P108", "OLMoE-1B-7B"), QDEC_FAM: ("P109", "Qwen3-30B-A3B")}
 DEC_BANDS = {"P108": (0.0, 0.95), "P109": (0.97, 1.25)}   # dec1 / dec0 s/step on stable pairs (P108 one-sided: at most 0.95)
+DEC_EVERY_CROSS = {"P108"}        # a prediction whose HELD moves a default: the median AND every cross-draw ratio inside the band (set at review)
 DEC_HELDOUT_MAX = 0.01            # P110: |mean held-out at N over the dec1 draws - over the dec0 draws| on each family
 DEC_PEAK_MAX = 0.30               # P111: the matched peak dec1 - dec0 (GB) on each family; the route's decode transient is at most 256 MiB a call
 DEC_TORCH = "2.8."                # every arm in venv-e4b: RD1's software (torch 2.8.0+cu128, triton 3.4.0)
@@ -2472,7 +2473,8 @@ def score_decgate(d):
 def score_decodedab(F):
     """TC1-PREREG amendment 46, on the olmoedecab / qwen3decab tokens: P108 (OLMoE, at most 0.95) and P109 (Qwen3-30B-A3B, in [0.97, 1.25]) --
     grouped-nf4-gemm's decoded route steps at dec1 / dec0 within DEC_BANDS[pid], the median over two VALID draws a side with each side's
-    draws within 5 %; P110 -- on each family the two sides' mean held-out at N agree within DEC_HELDOUT_MAX; P111 -- on each family the matched
+    draws within 5 %; P108, whose HELD moves `auto`, also needs EVERY one of the four cross-draw ratios inside its band (DEC_EVERY_CROSS),
+    and reads FALSIFIED when the median is inside and a cross-draw ratio is not; P110 -- on each family the two sides' mean held-out at N agree within DEC_HELDOUT_MAX; P111 -- on each family the matched
     peak dec1 - dec0 is at most DEC_PEAK_MAX GB. Outside FALSIFIED; a missing, non-VALID or unstable side UNTESTED. P110 and P111 are each one
     reading over both families: FALSIFIED when either family is read outside the bound, else UNTESTED while either is unread, else HELD."""
     if not any(fam in F for fam in DEC_FAMS):
@@ -2504,10 +2506,14 @@ def score_decodedab(F):
         r1 = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == ("e4b", f"{DEC_ARM}_dec1")), None) or {}
         stats = (r1.get("route_ab") or {}).get("stats") or {}
         band = f"<= {hi}" if lo <= 0 else f"in {[lo, hi]}"
+        held = lo <= ratio_ <= hi and (pid not in DEC_EVERY_CROSS or all(lo <= c <= hi for c in cross))
+        if pid in DEC_EVERY_CROSS:
+            band += " on the median and every cross-draw ratio" + ("" if held or not (lo <= ratio_ <= hi) else
+                                                                   f" (the median is inside; the largest cross-draw ratio {max(cross):.3f} is not)")
         note = ""
         if pid == "P109" and ratio_ < lo:
             note = f"; below {lo}: Qwen3-30B-A3B gains below RD1's {DEC_AUTO_MIN_ROWS}-row line too (a lower line is re-asked)"
-        out.append((pid, fam, "HELD" if lo <= ratio_ <= hi else "FALSIFIED",
+        out.append((pid, fam, "HELD" if held else "FALSIFIED",
                     f"{name}: dec1 / dec0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {band}{note}; "
                     f"s/step dec0 {D0['s_list'][0]:.3f} / {D0['s_list'][1]:.3f} (within {100 * D0['stability']:.1f}%), dec1 {D1['s_list'][0]:.3f} / "
                     f"{D1['s_list'][1]:.3f} (within {100 * D1['stability']:.1f}%); dec1 route counts (process) {json.dumps(stats, sort_keys=True)}"))
@@ -7085,6 +7091,12 @@ def selftest():
     # 101. amendment 46, each bound: P108 FALSIFIED at 0.965; P109 FALSIFIED below 0.97 (with the lower-line note) and above 1.25; P110 FALSIFIED
     #      on a 0.02 held-out shift on either family; P111 FALSIFIED on a +0.40 GB peak, and HELD at +0.30
     assert pdec(o=_decoded_set(ODEC_FAM, d1=(1.93, 1.95))) == {"P108": "FALSIFIED", "P109": "HELD", "P110": "HELD", "P111": "HELD"}
+    # P108 moves a default: a median inside 0.95 (1.905 / 2.01 = 0.948) with a cross-draw ratio outside it (1.93 / 2.00 = 0.965) FALSIFIES it
+    straddle = score_decodedab(DEC(o=_decoded_set(ODEC_FAM, d1=(1.88, 1.93))))[0]
+    assert straddle[2] == "FALSIFIED" and "dec1 / dec0 0.948 [" in straddle[3] and "largest cross-draw ratio 0.965 is not" in straddle[3], straddle
+    # P109 does not move a default, so it reads on the median alone: 5.17 / 5.315 = 0.973 HELD although one cross-draw ratio
+    # (5.15 / 5.33 = 0.966) is below 0.97
+    assert pdec(q=_decoded_set(QDEC_FAM, d1=(5.15, 5.19)))["P109"] == "HELD"
     low = score_decodedab(DEC(q=_decoded_set(QDEC_FAM, d1=(5.10, 5.12))))
     assert {p: v for p, _, v, _ in low} == {"P108": "HELD", "P109": "FALSIFIED", "P110": "HELD", "P111": "HELD"} and "a lower line is re-asked" in low[1][3]
     assert pdec(q=_decoded_set(QDEC_FAM, d1=(6.70, 6.72))) == {"P108": "HELD", "P109": "FALSIFIED", "P110": "HELD", "P111": "HELD"}

@@ -8,12 +8,13 @@
   - A failure refuses the box before any timing, with exit 19, which names no machine. `decgate.json` is the record.
 - **Predictions:**
   - P107: the gate;
-  - P108: OLMoE ≤ 0.95;
+  - P108: OLMoE ≤ 0.95, on the median and on every cross-draw ratio (it moves a default);
   - P109: Qwen3-30B-A3B in [0.97, 1.25];
   - P110: held-out within 0.01;
   - P111: peak at most +0.30 GB.
-- **The decision.** If P107, P108, P110 and P111 hold, `auto` takes the route on compute capability 12.x for calls with more than 16
-  groups and at least 48 rows per present group. That is grouped-nf4-gemm's own PR.
+- **The decision.** If P107, P108, P110 and P111 hold, `auto` takes the route on compute capability (12, 0), the card measured, for calls
+  with more than 16 groups and at least 48 rows per present group. That is grouped-nf4-gemm's own PR; other 12.x parts stay on today's
+  route until measured.
 - **Tooling and tests:**
   - harness: `tc1_decoded_gate` and `tc1_decodedab_family`;
   - reducer: the families, the engagement predicate and the P107–P111 scorers, with self-test cases 100–103;

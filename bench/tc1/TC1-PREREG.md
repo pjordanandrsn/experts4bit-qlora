@@ -1914,7 +1914,9 @@ Engagement is read from each arm's `route_ab` record:
   - FALSIFIED iff it ran and a test failed. The box then ends and P108–P111 are UNTESTED.
   - HELD iff every run exited 0 with no failure, error or skip, and every required test passed.
   - UNTESTED otherwise.
-- **P108** (OLMoE): dec1/dec0 s/step ≤ **0.95**.
+- **P108** (OLMoE): dec1/dec0 s/step ≤ **0.95**, on the median AND on every one of the four cross-draw ratios.
+  - P108's HELD moves a default, so it is bounded at the upper end of the instrument's own interval: a median at or below 0.95 with any
+    cross-draw ratio above it reads FALSIFIED (this bound was set at review, 2026-10-05, before any box).
   - The expectation is about 0.85: RD1 read 0.79 (skewed) and 0.73 (uniform) × v1 per call at seq 512, and the expert GEMMs (forward,
     recompute, dgrad) are a large part of this step but not all of it.
 - **P109** (Qwen3-30B-A3B): dec1/dec0 lies in **[0.97, 1.25]**.
@@ -1929,10 +1931,11 @@ P108–P111 each need two stable VALID draws a side. They are FALSIFIED outside 
 or not engaged.
 
 **Decision rules.**
-- **P107, P108, P110 and P111 HELD:** grouped-nf4-gemm's `auto` takes the decoded route on compute capability 12.x, for a call with more
-  than `DENSE_AUTO_MAX_GROUPS` present groups and at least 48 rows per present group (RD1's per-call line).
+- **P107, P108, P110 and P111 HELD:** grouped-nf4-gemm's `auto` takes the decoded route on compute capability (12, 0), the card measured
+  (RTX 5090), for a call with more than `DENSE_AUTO_MAX_GROUPS` present groups and at least 48 rows per present group (RD1's per-call line).
   - That is grouped-nf4-gemm's own PR, citing RD1 and this box.
-  - Other capabilities, and calls below the line, keep today's route.
+  - Other capabilities, other 12.x parts included, keep today's route until they are measured; so do calls below the line.
+    (The scope was narrowed from 12.x to (12, 0) at review, 2026-10-05, before any box.)
   - If P109 is FALSIFIED below 0.97 (Qwen3-30B-A3B gains below the line too), the same PR still lands at 48, which never moves a call that
     lost per call, and a lower line is registered as a re-ask.
   - If P109 is FALSIFIED above 1.25, the read names it; it does not change this rule, which keeps those calls fused.
