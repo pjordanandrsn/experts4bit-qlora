@@ -1601,3 +1601,45 @@ Each is FALSIFIED outside its band (P86: an e4b arm that OOMs) and UNTESTED wher
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for e4b's same-stack arms and
 Unsloth. Six arms of 30 steps at an estimated 15–40 s a step: about $3 with the download; this is in the standing no-ask tier.
+
+### Amendment 40 (2026-10-05T11:38Z, after amendment 39's read, before any box): the packed 4,096-token regime again, e4b with its chunked LM loss (P87, P88, P89)
+
+**Why.** Amendment 39 (`tc1-5090-86`) found every e4b arm out of memory at step 1 on packed 4,096-token rows, allocating 2.32 GiB: the
+fp32 copy of the full-vocabulary logits in Hugging Face's causal-LM loss. Unsloth trained the same rows at 24.86 GB. experts4bit-qlora#1142
+adds an opt-in chunked LM loss (`E4B_CHUNKED_LM_LOSS`, applied by `enable_fast_train`): the loss is computed over token chunks under
+non-reentrant checkpointing, so no chunk's logits are kept and the full logits are never materialised. Its loss matches the stock loss to
+fp32 rounding, and its gradients sit inside run-to-run noise. On an RTX A2000 a 4-layer slice of the same checkpoint hit the stock path's
+exact 2.32 GiB failure at 4,096 tokens and trained through it chunked, at 7.11 GiB.
+
+**The box** (token `qwen3samestack4kce`). Amendment 39's box unchanged — the same packed rows (`TC1_PACK=1 TC1_SEQ=4096 TC1_MB=1
+TC1_ACCUM=4 TC1_FREE_OUTPUTS=1`), amendment 25's same-stack arms, e4b's reference not run — with:
+
+- `TC1_E4B_ENV="E4B_CHUNKED_LM_LOSS=1"` on every e4b arm (512-token chunks), e4b's other settings at their defaults;
+- `TC1_STEPS=40`, held-out at 0 and 40 only (`TC1_EVAL_EVERY=40`): amendment 39's Unsloth draws were 7.7 % apart over 20 median steps on a
+  busy host;
+- load-gated draws, avoiding machines 151350, 45511 and 138786;
+- grouped-nf4-gemm at main, e4b at this amendment's merge (after #1142).
+
+Engagement: amendment 39's packed fixture on every arm, and on every e4b arm the receipt's `chunked_lm_loss` record (new in `tc1_arm.py`:
+the variable set, e4b has the loss, training forwards went through it, none fell back at run time).
+
+**Predictions** (registered before the box):
+
+- **P87:** with both frameworks on one stack, Unsloth/e4b lies in **[0.80, 1.60]**, both pairs stable (amendment 39's P84, unread there).
+- **P88:** e4b's matched arm in venv-unsloth over venv-e4b lies in **[0.80, 1.00]**, both sides stable (amendment 39's P85).
+- **P89:** every e4b arm that runs completes resident (VALID). The chunked loss removes the 2.32 GiB allocation that failed and the bf16
+  logits beside it, against amendment 39's 29.5 GiB in use at the failure.
+
+Each is FALSIFIED outside its band (P89: an e4b arm that OOMs) and UNTESTED where a side is missing, unstable or not engaged.
+
+**Decision rules.**
+
+- **P87 read with both pairs stable and P89 HELD, whichever side it favours:** the ratio is recorded as Qwen3-30B-A3B's packed 4,096-token
+  position, labelled "e4b with `E4B_CHUNKED_LM_LOSS=1`, opt-in" (`e4b.train.h2h.unsloth.qwen3.5090.<date>.packed-4k-chunked`), beside
+  amendment 39's out-of-memory row. A reading below 1.00 is said as an e4b loss in that regime.
+- **P89 HELD:** whether the chunked loss becomes e4b's default is its own registration, with its cost read on the field recipe.
+- **P89 FALSIFIED:** the chunked loss alone does not fit the regime on 32 GB; the next memory lever (the absmax double-quantized, the
+  compact delta) is its own registration.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built for e4b's same-stack arms and
+Unsloth. Six arms of 40 steps at an estimated 12–20 s a step: about $3 with the download; this is in the standing no-ask tier.
