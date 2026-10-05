@@ -56,6 +56,7 @@ SHARED: tuple[str, ...] = (
     "scripts/check_system_manifest.py",
     "scripts/check_wheel_metadata.py",
     "scripts/discovery_common.py",
+    "scripts/changelog_fragments.py",
 )
 
 
