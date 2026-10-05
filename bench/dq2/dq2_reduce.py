@@ -47,7 +47,8 @@ def reduce(r: dict) -> dict:
     eng = r.get("engagement", {})
     wr = eng.get("wrappers", {})
     if (eng.get("linear4bit_modules") != LORA_TARGETS or eng.get("lora_params") != 2 * LORA_TARGETS
-            or len(wr) != LORA_TARGETS or not all("peft" in v and "bnb" in v.lower() for v in wr.values())):
+            or len(wr) != LORA_TARGETS or not all("peft" in v and "bnb" in v.lower() for v in wr.values())
+            or eng.get("lora_dtypes") != ["torch.float32"]):
         out["void"].append(f"engagement: {eng}")
     cells = {c.get("M"): c for c in r.get("cells", [])}
     pairs_out = 0
@@ -132,7 +133,8 @@ def synth(*, tf=12.0, tb=30.0, gbs=50.0, nbytes=251_539_136, jitter=1.0, jitter_
     r = {"schema": "dq2-layer/1", "rehearsal": rehearsal, "forensics": {"device": device},
          "link": {"gen_max": gen, "width_max": width}, "rows": list(REGISTERED_ROWS), "cells": cells,
          "layer_frozen_bytes": nbytes, "frozen_sha256_before": "aa", "frozen_sha256_after": sha_after or "aa",
-         "engagement": {"linear4bit_modules": 7, "lora_params": 14, "wrappers": {f"m{i}": w for i in range(7)}}}
+         "engagement": {"linear4bit_modules": 7, "lora_params": 14, "wrappers": {f"m{i}": w for i in range(7)},
+                        "lora_dtypes": ["torch.float32"]}}
     if finished:
         r["finished_at"] = "2026-10-05T00:00:00Z"
     return r
@@ -169,6 +171,12 @@ def _self_test() -> int:
     case("dead LoRA grads are void", synth(nonzero=0), lambda o: V(o)["lane"] == "VOID")
     case("unsteady warm-up is void", synth(steady=False), lambda o: V(o)["lane"] == "VOID")
     case("not PEFT-over-bnb is void", synth(wrappers_ok=False), lambda o: V(o)["lane"] == "VOID")
+    r = synth()
+    r["engagement"]["lora_dtypes"] = ["torch.bfloat16"]
+    case("bf16 adapters (not get_peft_model's fp32) are void", r, lambda o: V(o)["lane"] == "VOID")
+    r = synth()
+    r["engagement"]["wrappers"] = {f"m{i}": "peft.tuners.lora.layer.Linear" for i in range(7)}
+    case("PEFT's generic Linear wrapper (the rehearsal's finding) is void", r, lambda o: V(o)["lane"] == "VOID")
     case("one jittered row moves both its pairs: NOISY", synth(jitter=1.10, jitter_rows=(512,)),
          lambda o: V(o)["lane"] == "NOISY")      # 2 of 10 > 1
     r = synth()

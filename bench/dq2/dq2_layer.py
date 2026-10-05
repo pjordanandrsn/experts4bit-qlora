@@ -63,7 +63,15 @@ def build_layer(seed: int = 0):
     torch.cuda.empty_cache()
     for p in layer.parameters():
         p.requires_grad_(False)
+    # PEFT dispatches its bitsandbytes 4-bit LoRA layer (lora.bnb.Linear4bit) only when the model says it was loaded in
+    # 4 bit -- transformers sets `is_loaded_in_4bit` on a BitsAndBytesConfig model; a bare layer must say it itself, or
+    # PEFT wraps the projections in its generic lora.layer.Linear (caught by the A2000 rehearsal's engagement check).
+    layer.is_loaded_in_4bit = True
     layer = inject_adapter_in_model(LoraConfig(r=16, lora_alpha=32, lora_dropout=0.0, target_modules=TARGETS), layer)
+    # ...and get_peft_model's default (autocast_adapter_dtype=True) upcasts bf16 adapters to fp32;
+    # inject_adapter_in_model does not, so do what HF QLoRA's path does.
+    from peft.tuners.tuners_utils import cast_adapter_dtype
+    cast_adapter_dtype(layer, adapter_name="default", autocast_adapter_dtype=True)
     lora = [p for n, p in layer.named_parameters() if "lora_" in n]
     for p in lora:
         p.requires_grad_(True)

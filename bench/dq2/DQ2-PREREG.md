@@ -22,7 +22,7 @@ DQ2 removes both limits: the link the question needs, and the real layer as HF +
 |---|---|
 | layer | transformers `Qwen3DecoderLayer` built from `Qwen/Qwen3-32B`'s config (hidden 5120, intermediate 25600, 64 q / 8 kv heads × 128, RoPE θ 1e6), SDPA attention, causal, random weights (no checkpoint) |
 | 4-bit | the seven projections as bitsandbytes `Linear4bit`: nf4, blocksize 64, double-quant, bf16 compute |
-| LoRA | PEFT `inject_adapter_in_model`, `LoraConfig(r=16, lora_alpha=32, lora_dropout=0.0)`, all seven projections, PEFT's default adapter dtype; everything else frozen |
+| LoRA | PEFT `inject_adapter_in_model`, `LoraConfig(r=16, lora_alpha=32, lora_dropout=0.0)`, all seven projections, as HF QLoRA gets them: the layer carries `is_loaded_in_4bit` so PEFT dispatches its bitsandbytes `lora.bnb.Linear4bit` layer, and adapters are upcast to fp32 (`get_peft_model`'s default `autocast_adapter_dtype=True`); everything else frozen |
 | step | non-reentrant gradient checkpointing (`torch.utils.checkpoint`, `use_reentrant=False`), micro-batch 1 × M tokens, M ∈ {512, 1024, 2048, 4096, 8192} |
 | host | RTX 5090, PCIe gen max 5, width 16 (the box refuses anything else, rc 13, before installing) |
 | software | image `pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel` (torch 2.8, triton 3.4), bitsandbytes 0.50.2, transformers 5.18.0, peft 0.21.2, grouped-nf4-gemm v0.39.0 `a5edec87` (imported only for DQ1's census module's warm-up and forensics) |
@@ -46,9 +46,9 @@ then the layer at position 2. That gives one self-pair per phase.
   - finite output, input gradient and LoRA gradients;
   - all seven LoRA-B gradients nonzero (PEFT zero-initialises B, so A's gradients are zero at step 0 by construction);
   - the frozen 4-bit storage hashed before and after the run.
-- **Engagement.** Seven `Linear4bit` modules, wrapped by PEFT's bnb LoRA layer, with 14 LoRA tensors.
+- **Engagement.** Seven `Linear4bit` modules, wrapped by PEFT's bnb LoRA layer (`peft…bnb…`), with 14 LoRA tensors, all fp32.
 
-## The rule (`bench/dq2/dq2_reduce.py`: 25 self-test cases; `tests/test_dq2_lane.py` applies 17 rule mutants and requires each to be caught)
+## The rule (`bench/dq2/dq2_reduce.py`: 27 self-test cases; `tests/test_dq2_lane.py` applies 18 rule mutants and requires each to be caught)
 
 Readings per row:
 - **T_fwd, T_bwd.** The mean of the two positions' medians.

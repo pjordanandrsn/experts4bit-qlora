@@ -21,7 +21,7 @@ def _const(path, name):
 
 def test_the_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(LANE / "dq2_reduce.py"), "--self-test"], capture_output=True, text=True)
-    assert out.returncode == 0 and "self-test OK (25 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (27 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_registered_constants():
@@ -50,7 +50,8 @@ def test_the_box_speaks_tc1_drives_contract():
 def test_the_subject_is_hf_peft_bnb_qlora():
     for s in ("Qwen3DecoderLayer", "bnb.nn.Linear4bit", "compress_statistics=True", 'quant_type="nf4"',
               "inject_adapter_in_model", "LoraConfig(r=16, lora_alpha=32, lora_dropout=0.0", 'use_reentrant=False',
-              '_attn_implementation = "sdpa"'):
+              '_attn_implementation = "sdpa"', "layer.is_loaded_in_4bit = True",
+              'cast_adapter_dtype(layer, adapter_name="default", autocast_adapter_dtype=True)'):
         assert s in LAYER, s
 
 
@@ -68,6 +69,7 @@ MUTANTS = [
     ('if not c.get("warm", {}).get("steady"):', "if False:"),
     ('not all("peft" in v and "bnb" in v.lower() for v in wr.values())', "False"),
     ('uncovered |= not all(', 'uncovered |= False and all('),
+    ('or eng.get("lora_dtypes") != ["torch.float32"]):', "):"),
 ]
 
 
