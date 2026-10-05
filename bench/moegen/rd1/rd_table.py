@@ -74,6 +74,12 @@ def load_ok(rec):
 
 def main(path):
     rec = json.load(open(path))
+    if "5090" not in rec["gpu"]:
+        # Not the registered card: no timing column, no bar, no decision -- only the correctness gate (the QNAP A2000 is a
+        # correctness testbed; a timing-derived bar printed from it, even labelled "no decision", is speed evidence).
+        print(f"NOT THE REGISTERED CARD ({rec['gpu']}): correctness only -- the gate below, no timing, no bar\n")
+        gate_only(path)
+        return
     print(f"{rec['gpu']}, torch {rec['torch']}, triton {rec['triton']}; decode cap {rec['cap_mib']} MiB; {rec['reps']} reps")
     print(f"host load1 over the probe: {rec.get('host_load1_probe', 'not recorded')}\n")
     print("| routing | family | seq | groups (<16 rows) | v1 ev ms | v3 / v1 | dense / v1 | decoded / v1 | decoded_cap / v1 "

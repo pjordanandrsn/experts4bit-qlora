@@ -106,6 +106,14 @@ def test_the_gate_keeps_a_fast_wrong_arm_out_of_the_bar(tmp_path):
     assert "FAIL decoded_cap skew/qwen3/512 gate_up N=1 K=1/fwd" in bad
 
 
+def test_any_other_card_gets_the_gate_and_never_a_timing_bar(tmp_path):
+    """A receipt from a card other than the RTX 5090 (the A2000 rehearsal) prints the correctness gate only: no timing
+    column, no BAR line, no decision -- even though its cells carry event times."""
+    out = _synthetic(tmp_path, 1.0, gpu="NVIDIA RTX A2000 12GB")
+    assert "NOT THE REGISTERED CARD" in out and "CORRECTNESS ONLY" in out and "GATE:" in out
+    assert "BAR" not in out and "DECISION:" not in out and "v1 ev ms" not in out
+
+
 def test_amendment_1_constants_are_the_registered_ones():
     run, prereg = RUN.read_text(), PREREG.read_text()
     assert "LOAD_MAX=5.0; LOAD_WAIT_S=600; ANCHOR_TRIES=3" in run

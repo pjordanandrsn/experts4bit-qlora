@@ -9,6 +9,8 @@
     every attempt's files kept;
   - samples `/proc/loadavg` every 5 s, and writes the probe window's load summary into its receipt.
   - `rd_table.py` takes no decision from a probe whose median load1 exceeded the gate, or that has no load summary.
+  - On any card other than the RTX 5090 (the A2000 rehearsal), `rd_table.py` prints only the correctness gate: no timing
+    column and no bar.
   - The bar, the correctness gate and the probe are unchanged.
 - **Tests.** `tests/test_rd1_lane.py` pins the constants to the registration, and shows a loaded or unrecorded probe decides
   nothing.
