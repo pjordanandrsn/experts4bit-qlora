@@ -1,6 +1,6 @@
 #!/bin/bash
 # bench/dq3/dq3_run.sh -- lane DQ3, BOX side (bench/dq3/DQ3-PREREG.md, Amendments 0-1). Started by bench/tc1/tc1_drive.sh as its
-# TC1_RUNNER (TC1_EXTRA_STAGE carries this file, dq3_vram_probe.py, dq3_arm.py and dq3_reduce.py), so it speaks tc1_drive's contract: the nonce
+# TC1_RUNNER (TC1_EXTRA_STAGE carries this file, dq3_vram_probe.py, dq3_egress_probe.py, dq3_arm.py and dq3_reduce.py), so it speaks tc1_drive's contract: the nonce
 # handshake (TC1_RUN_NONCE within 30 s), summary.txt one line per step, TC1_EXIT_CODE.<nonce> / TC1_SUCCESS.<nonce> /
 # TP_DONE.<nonce> at the end -- a refusal writes them too. No checkpoint download: the subject is Qwen3-32B's architecture
 # with random NF4 weights (Amendment 1). Six arms, one process each, palindrome R S S0 S0 S R. Nothing here creates,
@@ -26,6 +26,13 @@ if [ "$prc" = 3 ]; then tail -2 logs/vram_probe.log; echo "refused: vram floor" 
   echo "BOX_REFUSED vram: $(tail -1 logs/vram_probe.log | cut -c1-200)" | tee -a summary.txt; finish 18
 elif [ "$prc" != 0 ]; then tail -5 logs/vram_probe.log; echo "VRAM PROBE ERROR rc=$prc (not a host refusal)" | tee -a summary.txt; finish 9; fi
 tail -1 logs/vram_probe.log | tee -a summary.txt
+# Egress (rc 14, rent.py's machine evidence): the pinned install is ~135 MB of git from GitHub; dq3-5090-2's host moved
+# 33 KB/s and could not finish it. Only a MEASURED slow transfer (exit 4) names the host; no transfer at all is rc 9.
+python dq3_egress_probe.py > logs/egress_probe.log 2>&1; erc=$?
+if [ "$erc" = 4 ]; then tail -1 logs/egress_probe.log; echo "refused: egress" > REFUSAL
+  echo "BOX_REFUSED egress: $(tail -1 logs/egress_probe.log | cut -c1-200)" | tee -a summary.txt; finish 14
+elif [ "$erc" != 0 ]; then tail -3 logs/egress_probe.log; echo "EGRESS PROBE ERROR rc=$erc (not a host refusal)" | tee -a summary.txt; finish 9; fi
+tail -1 logs/egress_probe.log | tee -a summary.txt
 
 command -v git >/dev/null 2>&1 || perl -e 'alarm 600; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq git' > logs/apt_git.log 2>&1 \
   || { tail -3 logs/apt_git.log; echo "GIT INSTALL FAIL" | tee -a summary.txt; finish 9; }

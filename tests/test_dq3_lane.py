@@ -82,25 +82,27 @@ def test_every_rule_mutant_is_killed(tmp_path):
     assert not survived, survived
 
 
-def _fake_bin(tmp_path, link, probe_rc):
-    """A PATH where nvidia-smi reports ``link`` and ``python dq3_vram_probe.py`` exits ``probe_rc``; any other python
-    call (the install, the arms) records itself and fails, so reaching it is visible."""
+def _fake_bin(tmp_path, link, probe_rc, egress_rc=0):
+    """A PATH where nvidia-smi reports ``link``, ``python dq3_vram_probe.py`` exits ``probe_rc`` and
+    ``python dq3_egress_probe.py`` exits ``egress_rc``; any other python call (the install, the arms) records itself and
+    fails, so reaching it is visible."""
     b = tmp_path / "bin"
     b.mkdir()
     (b / "nvidia-smi").write_text(f"#!/bin/sh\necho '{link}'\n")
     (b / "python").write_text(
         "#!/bin/sh\n"
         f'case "$*" in *dq3_vram_probe.py*) echo "VRAM_PROBE_FAIL test"; exit {probe_rc};; esac\n'
+        f'case "$*" in *dq3_egress_probe.py*) echo "EGRESS_PROBE test"; exit {egress_rc};; esac\n'
         'echo "$*" >> "$DQ3_W/reached"; exit 1\n')
     for f in b.iterdir():
         f.chmod(0o755)
     return b
 
 
-def _run_box(tmp_path, link, probe_rc):
+def _run_box(tmp_path, link, probe_rc, egress_rc=0):
     w = tmp_path / "w"
     w.mkdir()
-    env = {"PATH": f"{_fake_bin(tmp_path, link, probe_rc)}:/usr/bin:/bin", "DQ3_W": str(w),
+    env = {"PATH": f"{_fake_bin(tmp_path, link, probe_rc, egress_rc)}:/usr/bin:/bin", "DQ3_W": str(w),
            "TC1_RUN_NONCE": "n", "E4B_SHA": "0" * 40}
     rc = subprocess.run(["bash", str(LANE / "dq3_run.sh")], env=env, capture_output=True, text=True).returncode
     return rc, w
@@ -133,3 +135,20 @@ def test_a_probe_error_that_is_not_an_oom_never_names_the_host(tmp_path, probe_r
     rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=probe_rc)
     assert rc == 9 and not (w / "REFUSAL").exists() and not (w / "reached").exists()
     assert "not a host refusal" in (w / "summary.txt").read_text()
+
+
+def test_a_host_with_slow_github_egress_is_refused_at_14_before_any_install(tmp_path):
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=0, egress_rc=4)
+    assert rc == 14 and (w / "REFUSAL").read_text().startswith("refused: egress")
+    assert not (w / "reached").exists() and "BOX_REFUSED egress" in (w / "summary.txt").read_text()
+
+
+@pytest.mark.parametrize("egress_rc", [1, 2])
+def test_no_transfer_or_a_probe_crash_is_not_an_egress_refusal(tmp_path, egress_rc):
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=0, egress_rc=egress_rc)
+    assert rc == 9 and not (w / "REFUSAL").exists() and not (w / "reached").exists()
+
+
+def test_the_vram_probe_runs_before_the_egress_probe(tmp_path):
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=3, egress_rc=4)
+    assert rc == 18
