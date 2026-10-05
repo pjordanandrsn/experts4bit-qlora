@@ -1,0 +1,4 @@
+link: NVIDIA GeForce RTX 5090, 5, 16
+dq2 tripwire OK 2.8.0+cu128 12.8 0.50.2 5.18.0 0.21.2 NVIDIA GeForce RTX 5090
+layer census rc=0 DQ2 layer census done receipts/dq2_layer.json
+DQ2 read: {'lane': 'READ', 'stream': 'C_UNCOVERED'} break-even {'1.0': 512, '1.25': 1024}

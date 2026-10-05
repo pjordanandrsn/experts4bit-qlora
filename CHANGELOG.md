@@ -28,6 +28,18 @@
     on K19 and every prefill attention call on flash, as the forward took them.
   - **Harness.** `sc1_run.sh` / `sc1_drive.sh` gain box H; `staged.sha256` regenerated.
 
+### DQ2 run 1 read C_UNCOVERED (instrument diagnosed); Amendment 1 registered before run 2 (bench and tests only)
+
+- **`dq2-5090-6`** ($0.034, RTX 5090 on PCIe gen 5 x16, Threadripper PRO 7965WX). The lane READs: engagement and
+  integrity hold, and 1/10 self-pairs is out of band. One of 25 streaming draws (copy under the forward, M = 512, not a
+  graded row) was not covered end to end, so the rule withholds the stream verdict. No reading is reported.
+- **Cause.** At M = 512 the forward is host-launch-bound, and the probe enqueued every forward before any copy.
+- **Amendment 1.** The copies wait on the first forward's event, then run while the host issues the rest. The rule is
+  byte-identical (pinned), and the predictions are unchanged. Run 2 is the registered single re-run.
+- **Before run 1:** five launch attempts on gen 5 hosts died at the launcher's pre-flight (stuck loading, HF-CDN floor)
+  or were refused before a rental. That cost $0.128, with every receipt committed. adertha-agents#164 tracks the
+  stuck-loading exclusion gap.
+
 ### Read: TC1 amendment 39 — on packed 4,096-token rows e4b at its defaults runs out of memory where Unsloth trains (P86 FALSIFIED; P84, P85 UNTESTED)
 
 - `tc1-5090-86` ($1.37, EPYC 7B13): Qwen3-30B-A3B's matched set on packed rows of exactly 4,096 real tokens, both frameworks on one
@@ -367,6 +379,19 @@
     prompts): its ceiling, since prompt lengths are the caller's.
   - Measured (OLMoE, four 1024-token prompts): 128 MiB staged at the peak, exactly one prompt's worth. That was most
     of the 179 MiB all-VRAM gap; the rest is MoE workspace above the stated working-set heuristic.
+
+### A2000-timing audit, the owner's decisions applied: the runtime warning and two lane files stop quoting A2000 timings (no output change)
+
+- **Runtime warning.** `enable_fast_train`'s warning, raised when a hybrid family's recurrent blocks fall back to
+  transformers' reference PyTorch, no longer cites the A2000's 36 % device-time cut. It still names the fallback and the
+  three packages to install. Decision 3 on #1133.
+- **MG1's box runner.** `bench/moegen/mg1_run.sh` installs mamba-ssm and causal-conv1d for the structural reason: without
+  them the recurrent blocks run unfused reference PyTorch, so an arm that pays the fallback is not the fast path. The
+  A2000 36 % is no longer the reason given. Decision 4.
+- **TC3's lane README.** The 12 GB section drops the A2000's 70 s/step, tokens/s and J/step, matching the relabelled row
+  `e4b.train.frontier.qwen3.a2000-12gb.2026-10-02`; the receipts keep them as the record. Decision 4.
+- Not in this change: the energy rows' rented rerun (decision 1) and the TC lane's band erratum (decision 5), each its
+  own follow-up.
 
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
