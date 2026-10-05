@@ -8033,6 +8033,31 @@
       "notes": "The Qwen3-30B-A3B matched position to quote against Unsloth (TC1 amendment 25's decision rule). e4b.train.h2h.unsloth.qwen3.5090.2026-10-03 (1.997) stays as the reading with e4b in the field image's environment. Vast invoiced $1.76."
     },
     {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack-host2",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 42 (#835), one rented RTX 5090 (tc1-5090-94, AMD EPYC 7K62): TC1 amendment 33's same-stack box on a second host and the current code -- both frameworks on torch 2.12.1+cu130 / transformers 5.5.0, Qwen3-30B-A3B's matched set (642,514,944 fp32 adapters, matched init), 60-step runs, load-gated draws (none voided). e4b 4.143 / 4.073 s/step against Unsloth 2026.9.14's 10.155 / 10.120: Unsloth/e4b 2.468 [2.443, 2.493] (P94 HELD, band [1.9, 2.9]); held-out at N=60 COMPARABLE (e4b 0.7578, Unsloth 0.7566); Unsloth's peak 3.22 GB lower, its energy per step x1.41 of e4b's. e4b's matched arm in venv-unsloth over venv-e4b 0.870 [0.860, 0.880] (P95 HELD), with e4b's prebound launches on both sides (they cover triton 3.7 since #1108). Amendment 33 read 2.352 on an EPYC 7B13: the position held on two hosts, 5 % apart.",
+      "value": 2.468,
+      "unit": "ratio s/step Unsloth/e4b on one stack, a second host (medians of steps 11..60 over two draws each; > 1 = e4b faster per step); cross-draw interval [2.443, 2.493]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-94: instance 54328898, AMD EPYC 7K62, Vast machine 152440); e4b @ 5c90886 + grouped-nf4-gemm @ ccf4de9 (0.41.0), both in Unsloth 2026.9.14's venv on torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3samestackh2 (TC1 amendment 42): amendment 33's box -- TC1's tokens and field recipe over 60 steps, no reference arm, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2 -- off amendment 33's machine, nothing else set; validity, positions and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-05",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-samestack-host2.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-94/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-05/tc1-5090-94/tc1/"
+      ],
+      "notes": "A replication of e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack (2.352), which stays the position to quote by amendment 42's rule. The host was shared with tc1-5090-91 until 15:30Z. Vast invoiced $1.25."
+    },
+    {
       "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k",
       "package": "experts4bit-qlora",
       "area": "train",
