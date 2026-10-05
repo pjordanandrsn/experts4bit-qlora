@@ -10681,7 +10681,7 @@
       "evidence_private": [
         "receipts/experts4bit-qlora/2026-10-05/tc1-5090-95/tc1/"
       ],
-      "notes": "Vast invoiced $2.65."
+      "notes": "Vast invoiced $2.65. Caveats: every standing attempt ran above the 6.0 load gate on a shared host (machine 145701, load1 3.6-52.2; the draws stayed within 0.3 % and 0.7 %), and amendment 43's bands were set with amendment 40's 1.43 in view, so this is a replication, not a blind test."
     }
   ]
 }
