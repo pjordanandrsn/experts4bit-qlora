@@ -28,6 +28,14 @@
     on K19 and every prefill attention call on flash, as the forward took them.
   - **Harness.** `sc1_run.sh` / `sc1_drive.sh` gain box H; `staged.sha256` regenerated.
 
+### Read: TC1 amendment 39 — on packed 4,096-token rows e4b at its defaults runs out of memory where Unsloth trains (P86 FALSIFIED; P84, P85 UNTESTED)
+
+- `tc1-5090-86` ($1.37, EPYC 7B13): Qwen3-30B-A3B's matched set on packed rows of exactly 4,096 real tokens, both frameworks on one
+  stack. Every e4b arm OOMed at step 1 allocating 2.32 GiB, the fp32 copy of the full-vocabulary logits in Hugging Face's causal-LM loss.
+  Unsloth trained resident at 24.86 GB (its draws 7.7 % apart, so no speed is read).
+- Recorded as an e4b loss in that regime (row `e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k`). A chunked loss for e4b is its own
+  registration.
+
 ### SC1g registered (#846): the quality of each engine's gpt-oss-20b arithmetic on identical tokens, against a routing-flip floor measured on the same windows (bench and tests only)
 
 - **Why.** SC2g read speed on four stacks serving gpt-oss-20b's MXFP4 experts on different arithmetic, and no quality, so no
@@ -352,6 +360,13 @@
   generation peak put the whole 183 MiB gap between the estimate and the peak in `_cold_contrib`: 54 routed rows ×
   3.375 MiB plus their outputs.
 - At all-VRAM with a short prompt the estimate was 8 MiB over the peak, so nothing there is missing.
+- **Prefill staging is priced too.** A prompt's K/V stay bf16, for every attention layer, until the prompt
+  completes (paged_attention's staging buffer). The scheduler can hold one finishing prompt plus the next one's
+  first chunk.
+  - The estimate charges `(max_tokens_per_seq + chunk_tokens) ×` the bf16 K/V bytes per token (at most `max_seqs`
+    prompts): its ceiling, since prompt lengths are the caller's.
+  - Measured (OLMoE, four 1024-token prompts): 128 MiB staged at the peak, exactly one prompt's worth. That was most
+    of the 179 MiB all-VRAM gap; the rest is MoE workspace above the stated working-set heuristic.
 
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 

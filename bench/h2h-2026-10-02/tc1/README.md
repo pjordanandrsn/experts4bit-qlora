@@ -49,6 +49,7 @@ fixtures and the Unsloth compile cache are left in the private store).
 | `tc1-5090-80` | `qwen3compactab` (amendment 36, 60 steps, load-gated) | instance 54259219, AMD EPYC 7B13 (Vast machine 145701) | grouped-nf4-gemm's compact padded LoRA delta off vs on in venv-unsloth: the matched peak ROSE 0.23 GB (P69 FALSIFIED), and the step got faster than registered, matched 0.969 and shipped 0.970 (P70, P71 FALSIFIED); held-out within 0.001 (P72 HELD); it stays opt-in; [read](RESULTS-tc1-compactab.md) | $1.48 |
 | `tc1-5090-83` | `qwen3compactab2` (amendment 37, 60 steps, load-gated) | instance 54275103, AMD EPYC 7702P (Vast machine 45379) | the compact delta again with grouped-nf4-gemm#473's backward, on another host: matched peak −0.288 GB (P73 HELD), matched 0.967 (P74 HELD), shipped 0.948, faster than its band (P75 FALSIFIED), held-out within 0.003 (P76 HELD); by the rule it stays opt-in pending its own registration; [read](RESULTS-tc1-compactab2.md) | $0.78 |
 | `tc1-5090-85` | `qwen3compactab3` + `mixtralcompactab` (amendment 38, 60 steps, load-gated) | instance 54292473, AMD EPYC 9655 (Vast machine 150700) | the compact delta's default decision on a fast host: slower on every arm, Qwen3 matched 1.016 and shipped 1.013, Mixtral 1.013 (P77, P78, P80 FALSIFIED), while the peaks held (Qwen3 −0.312 GB, Mixtral −0.037; P79, P81 HELD); it stays opt-in; [read](RESULTS-tc1-compact-default.md) | $2.64 |
+| `tc1-5090-86` | `qwen3samestack4k` (amendment 39, packed 4,096-token rows, 30 steps, load-gated) | instance 54297512, AMD EPYC 7B13 (Vast machine 145701) | the packed regime on one stack: every e4b arm OOMed at step 1 allocating 2.32 GiB, the fp32 copy of the full-vocabulary logits (P86 FALSIFIED), while Unsloth trained at 24.86 GB (its draws 7.7 % apart; P84, P85 UNTESTED); an e4b loss in that regime; [read](RESULTS-tc1-packed4k.md) | $1.37 |
 
 Thirteen earlier draws were refused or stopped before producing a row (driver floor, pre-flight bandwidth, a controller-slot
 race, the cu130 pip resolver — TC1 amendments 1 and 2) for about $0.57 in total, and the first axolotl box (`tc1-5090-19`) was
@@ -57,6 +58,30 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 ([`../../tc1/tc1_reduce.py`](../../tc1/tc1_reduce.py)) and are reproduced here from the receipts:
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
+
+## Amendment 39 (2026-10-05): on packed 4,096-token rows e4b at its defaults runs out of memory where Unsloth trains
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 39. One RTX 5090 (`tc1-5090-86`, AMD EPYC 7B13, Vast
+machine 145701): the token `qwen3samestack4k`, amendment 25's same-stack family on packed rows of exactly 4,096 real tokens (tokens sha
+`d2a501eba57d`, the same as the harness PR's local build), micro-batch 1 × accum 4, 30 steps, `TC1_FREE_OUTPUTS=1`, load-gated draws.
+Read: [`RESULTS-tc1-packed4k.md`](RESULTS-tc1-packed4k.md).
+
+| arm | status | s/step (two draws) | peak |
+|---|---|---|---|
+| e4b `fused_attn4_m`, venv-unsloth, defaults | **OOM at step 1** (both draws) | — | 30.32 GB at the failure |
+| e4b `fused_attn4_m_t28`, venv-e4b, defaults | **OOM at step 1** (both draws) | — | 30.27 GB at the failure |
+| Unsloth `ckpt_unsloth_m` | OK, VALID | 15.164 / 14.040 (7.7 % apart) | 24.86 GB |
+
+- **P86 FALSIFIED.** All four e4b arms failed at step 1 allocating **2.32 GiB**: 4,096 × 151,936 × 4 bytes, the fp32 copy of the
+  full-vocabulary logits that Hugging Face's causal-LM loss makes. At that moment 29.5 GiB of the card's 31.36 GiB were in use.
+- **P84 and P85 UNTESTED.** No e4b arm ran. Unsloth's two draws are 7.7 % apart; its first draw stood at a host load of 16.2 after the
+  gate's two re-runs (the voided attempts read 14.19 and 14.55 s/step).
+- **By amendment 39's rule this is an e4b loss in the packed regime**, recorded with the peak where it failed (row
+  `e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k`). Unsloth trains the same rows resident at 24.86 GB: it computes its loss in
+  chunks and never materialises the full logits.
+- **The lever is a chunked loss for e4b**, its own registration. experts4bit-qlora#1142 adds one, opt-in: on an RTX A2000, a 4-layer
+  slice of the same checkpoint hits the stock path's exact 2.32 GiB failure at 4,096 tokens and trains through it with the loss chunked.
+- **The host was busy** (load1 6.8–22.5 during Unsloth's draws). That costs the speed reading here, not the memory one.
 
 ## Amendment 38 (2026-10-05): on a fast host the compact delta is 1.3–1.6 % slower; it stays opt-in
 
