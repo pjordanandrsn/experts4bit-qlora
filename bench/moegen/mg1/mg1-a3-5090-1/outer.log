@@ -1,0 +1,16 @@
+AMENDMENT 3 SHAPE (registered): P2 for qwen3_5 on tp1's fused arm
+[2026-10-05T00:48:44Z] mg1: install: gnf4 @1546db26139c23cb36bbf9d50bd3a3794f080505 + e4b @2f6594281b2341b3013db07f2e8cab9c902cfa08, transformers 5.18.0
+RECURRENT_KERNELS mamba2/causal_conv1d/fla True True True
+mg1 tripwire OK 0.46.0 0.38.0 2.8.0+cu128 NVIDIA GeForce RTX 5090
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84
+Model name:                              AMD EPYC 7B13 64-Core Processor
+ANCHOR skipped (MG1_P2_ARM: an engagement count, not a timing)
+DATASET clinical sha=76fb9036de80f3bb495fe4c8894159fcb1d399d2437293e012e264d81949f791
+[2026-10-05T00:50:00Z] mg1: fetch qwen3_5 Qwen/Qwen3.6-35B-A3B@995ad96eacd98c81ed38be0c5b274b04031597b0
+qwen3_5: fetched 67G
+[2026-10-05T01:00:41Z] mg1: arm qwen3_5/fused offload=0
+qwen3_5/fused offload=0 rc=0
+P2 census dgrad={"dense": 0, "grouped_mm": 0, "kernel": 4800, "loop": 0, "loop_reasons": {}} recurrent_fallbacks=[] driver_sha256=d02c9e7b2357c5211b654329c539c5fcd59141434dd912afeb4fb8fd5e60b129
+MG1 reduce: receipts  (BAND 0.05, tp1 v2.1 verdict)
+family     ref        fused      verdict   d_final      med  ref s/st  fus s/st  ref GB  fus GB n_patched  notes
+qwen3_5    missing    ok         VOID            -        -         -     1.187       -   27.73        40  no OK reference arm to read against
