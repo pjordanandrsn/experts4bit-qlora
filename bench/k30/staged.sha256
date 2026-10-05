@@ -1,0 +1,3 @@
+# Names as the BOX sees them after staging (flat in $W). The box runs `sha256sum -c` on this file and the
+# controller resolves each name to its source (this directory) and compares. The harness itself is cloned on the box.
+ca500eb17b22af201f47c93200b86df132bcb3a2cbba7130e4bf6e74a7837ce7  k30_run.sh
