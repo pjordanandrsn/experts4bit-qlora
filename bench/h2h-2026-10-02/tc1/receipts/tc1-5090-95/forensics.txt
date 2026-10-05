@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-ca0541dc-05ed-7dae-ea2e-9c6872809767, 575.00 W, 3090 MHz
+CPU(s):                                  256
+Model name:                              AMD EPYC 7B13 64-Core Processor
+MemTotal:       2101193408 kB
+cgroup memory.max 730283900928
+overlay         320G   77M  320G   1% /
