@@ -14,7 +14,8 @@ from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV  # noqa: E402
 from experts4bit_qlora.recipe import QLoRASetup, _module_bytes, _stack_modules  # noqa: E402
 from experts4bit_qlora.serve_recipe import (ARENA_ALIGN, BLOCK_TOKENS, ServeSetup,  # noqa: E402
                                              bytes_per_expert, estimate_serve_footprint, min_hot_rows,
-                                             paged_kv_pool_bytes, solver_tiers)
+                                             paged_kv_pool_bytes, prefill_staging_tokens, solver_tiers,
+                                             staging_bytes_per_token)
 
 
 def _allocated(kv) -> int:
@@ -172,3 +173,29 @@ def test_a_cold_layer_needs_as_many_rows_as_it_can_route_in_one_step():
     f = estimate_serve_footprint(topo, ServeSetup(**nvme_one_layer, hot_rows=4))
     assert f.items == () and any("hot_rows 4 is below the 8" in r for r in f.refusals)
     assert not estimate_serve_footprint(topo, ServeSetup(**nvme_one_layer, hot_rows=8)).refusals
+
+
+def test_the_cold_rows_device_stack_is_priced_where_rows_are_cold():
+    """Measured on an RTX A2000 (OLMoE, solver 1.2 / 1.5 GiB): the whole gap between this estimate and the allocator
+    peak was hot_residency._cold_contrib staging one layer's routed NVMe experts on the GPU (54 rows x 3.375 MiB)."""
+    topo = describe_moe(_qwen3())
+    row = bytes_per_expert(topo.expert_stacks[0])
+    gib = lambda n: n * row / 2**30  # noqa: E731
+    cold = ServeSetup(placement="solver", max_seqs=1, graphs=False, vram_gb=gib(8), dram_gb=gib(8), hot_rows=8)
+    by = {i.name: i for i in estimate_serve_footprint(topo, cold).items}
+    assert by["cold rows' device stack (one layer call)"].bytes == min_hot_rows(topo, cold) * row
+    warm = ServeSetup(placement="solver", max_seqs=1, graphs=False, vram_gb=gib(24), dram_gb=0.0)
+    assert not any(i.name.startswith("cold rows") for i in estimate_serve_footprint(topo, warm).items)
+
+
+def test_prefill_staging_is_the_longest_prompt_plus_the_next_chunk():
+    """Measured on an RTX A2000 (OLMoE, all-VRAM, four 1024-token prompts): 128 MiB of bf16 K/V staged for every
+    attention layer at the generation peak, one prompt's worth -- 1024 x 16 layers x 2 x 16 heads x 128 x 2 B."""
+    topo = describe_moe(_qwen3())                      # 3 attention layers, 2 KV heads, head_dim 32
+    assert staging_bytes_per_token(topo) == 3 * 2 * 2 * 32 * 2
+    assert prefill_staging_tokens(ServeSetup(max_seqs=1, max_tokens_per_seq=4096)) == 4096
+    assert prefill_staging_tokens(ServeSetup(max_seqs=4, max_tokens_per_seq=4096, chunk_tokens=512)) == 4096 + 512
+    assert prefill_staging_tokens(ServeSetup(max_seqs=2, max_tokens_per_seq=100, chunk_tokens=512)) == 200
+    f = estimate_serve_footprint(topo, ServeSetup(max_seqs=4, max_tokens_per_seq=4096, graphs=False))
+    item = next(i for i in f.items if i.name.startswith("prefill staging"))
+    assert item.where == "device" and item.bytes == (4096 + 512) * staging_bytes_per_token(topo)

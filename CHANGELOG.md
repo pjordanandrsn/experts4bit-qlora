@@ -71,6 +71,49 @@
   - Receipts are in `bench/chunked-lm-loss/receipts/`. These are A2000 numbers, read as correctness and memory. A position on the
     5090 is a TC1 registration's to measure.
 
+### SC1g registered (#846): the quality of each engine's gpt-oss-20b arithmetic on identical tokens, against a routing-flip floor measured on the same windows (bench and tests only)
+
+- **Why.** SC2g read speed on four stacks serving gpt-oss-20b's MXFP4 experts on different arithmetic, and no quality, so no
+  position sentence came from it. e4b's distance to bf16 is already measured (P44 / P90 on an H100). SC1g asks whether, on one
+  RTX 5090 and the SAME token ids, any engine's arithmetic moves NLL beyond the floor two equally correct forwards already show.
+- **Box I** (`SC1_BOX=I`, box G's image). Teacher-forced NLL in SC1's two shapes, on SC1's two texts in gpt-oss's chat frame
+  with the template's date pinned. Arms:
+  - e4b: the serve env (served = MXFP4 GEMV W4A8; prefill = kept-NF4 host M-tile at chunk 64 and 128, the floor), and an NF4 control;
+  - vLLM: Marlin W4A16;
+  - SGLang: `flashinfer_mxfp4` and Marlin;
+  - llama.cpp: the published GGUF, default and `GGML_CUDA_MMQ_PREC=q8`.
+- **Route records gate the e4b rows** (e4b#1129's counters, written at exit). A missing record FAILS the row.
+- **The shared harness is untouched.** P39's `step_decomp.py`, SC1's `sc1_prompts.py` and P42's hook are byte-pinned by other
+  lanes. The new `bench/sc2/sc1g_k8.py` runs them unmodified, with the chat date pin and the route record in its own process.
+- **SGLang's server script** gains `gptoss_q` / `gptoss_qm` modes, whose engagement check requires the resolved MoE runner.
+- **Predictions and scope:** G1–G5 in `bench/sc2/SC1g-PREREG.md`; `sc1g_reduce.py`, 9 self-test cases. COMPARABLE, if licensed,
+  covers e4b's B = 1 served arithmetic and its host NF4 prefill experts only, not serve_paged's batched K21 / captured paths.
+  Lane ≤ about $3.4.
+
+### DQ2 registered: can a dense layer's frozen NF4 weights stream behind its own QLoRA compute on PCIe 5.0 x16? (bench and tests only)
+
+- **Why** (#1083). DQ1 left the capacity axis at C_MARGINAL. Its link was PCIe 4.0, and its compute counted the linears
+  only. DQ2 measures one real Qwen3-32B decoder layer as HF + PEFT + bitsandbytes QLoRA runs it:
+  - `Linear4bit` nf4 with double-quant;
+  - PEFT's `lora.bnb.Linear4bit` with fp32 adapters, r16 on all seven projections;
+  - SDPA and RoPE, under non-reentrant checkpointing.
+
+  It times forward and backward against pinned H2D of the layer's own frozen bytes, on a gen 5 x16 RTX 5090.
+- **Rule.** Rmin(2048) = min(T_fwd, T_bwd) / X. C_ALIVE (≥ 1.25) licenses a streaming prototype on a branch. 27 self-test
+  cases; 18 rule mutants are killed in CI. Every band's basis is rented-5090 data.
+- **Rehearsed on the RTX A2000 through the local pool** (correctness only). The first rehearsal's engagement check caught
+  PEFT's generic wrapper with bf16 adapters (a bare layer lacks `is_loaded_in_4bit`); the fixed subject engages PEFT's bnb
+  path with fp32 adapters.
+- **Launch.** The box refuses a non-gen-5 x16 host (rc 13). The Vast search gains an opt-in PCIe band
+  (adertha-agents#162).
+
+### Read: TC1 amendment 38 — on a fast host the compact delta is 1.3–1.6 % slower (P77, P78, P80 FALSIFIED); the peak holds (P79, P81 HELD); it stays opt-in
+
+- `tc1-5090-85` ($2.64, EPYC 9655, machine 150700, 60-step load-gated draws): `NF4_QLORA_COMPACT_DELTA` 0 vs 1 with grouped-nf4-gemm#473.
+  Qwen3 matched 1.016, shipped 1.013, Mixtral matched 1.013; peaks Qwen3 −0.312 GB, Mixtral −0.037 GB; held-out within 0.001.
+- The flag stays opt-in. Across three hosts its speed follows how host-bound the step is (0.967–0.970 at 3.4–3.9 s steps, 1.013–1.016 at a
+  2.17 s step): it trades host work for device work. Its memory saving holds on every host.
+
 ### Read: SC2g (#846) -- on gpt-oss-20b e4b's `serve_paged` serves every row VALID and is prefill-bound under load as registered (Q4, b/a 27); capacity 1 req/s against vLLM's and SGLang's 8
 
 - **What ran.** `sc2g-5090-2` ($0.959, a 575 W 5090) drove four engines on openai/gpt-oss-20b's MXFP4 experts: e4b
@@ -342,6 +385,23 @@
   P66 gather and fixed-tax rows, `e4b.serve.informed-hot-sets` and the TC1c route row.
 - **Left for the owner** (listed in the audit file): the A2000 energy rows (`e4b.train.energy-honest.*`, quoted in the
   README), the PREREG/RESULTS records, and the runtime warning in `enable_fast_train`, which still quotes the A2000's 36 %.
+
+### Serve estimate: the cold rows' device stack
+
+- Under the solver, a layer call streams its routed NVMe experts to the GPU and runs them there
+  (`hot_residency._cold_contrib`). `estimate_serve_footprint` now prices that stack at its ceiling, `min_hot_rows ×`
+  the row bytes, as a device item.
+- Measured on an RTX A2000 (OLMoE-1B-7B, solver at 1.2 / 1.5 GiB, a 128-token prompt). Allocator history at the
+  generation peak put the whole 183 MiB gap between the estimate and the peak in `_cold_contrib`: 54 routed rows ×
+  3.375 MiB plus their outputs.
+- At all-VRAM with a short prompt the estimate was 8 MiB over the peak, so nothing there is missing.
+- **Prefill staging is priced too.** A prompt's K/V stay bf16, for every attention layer, until the prompt
+  completes (paged_attention's staging buffer). The scheduler can hold one finishing prompt plus the next one's
+  first chunk.
+  - The estimate charges `(max_tokens_per_seq + chunk_tokens) ×` the bf16 K/V bytes per token (at most `max_seqs`
+    prompts): its ceiling, since prompt lengths are the caller's.
+  - Measured (OLMoE, four 1024-token prompts): 128 MiB staged at the peak, exactly one prompt's worth. That was most
+    of the 179 MiB all-VRAM gap; the rest is MoE workspace above the stated working-set heuristic.
 
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
