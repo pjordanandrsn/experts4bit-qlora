@@ -461,8 +461,7 @@ class _PipelinedResidency:
         # hot lane -> its resident row; cold lane -> the slot just gathered into.
         # With an EMPTY hot set every lane is cold, so the dispatch is the constant
         # slot_rows and recomputing it is pure overhead on the pure-streaming
-        # config -- measured at -0.7% (p=0.013) on OLMoE/A2000 before this guard,
-        # which is a real regression on the one config that cannot benefit.
+        # config, the one config that cannot benefit from it.
         if self.n_hot:
             torch.where(hot, self.h_row.index_select(0, self.want_buf), self.slot_rows,
                         out=self.row_idx_buf)

@@ -15,6 +15,13 @@
 > dequantize-then-`linear`; recomputation changes what is saved for backward, never what is
 > computed).
 
+> **Testbed note, 2026-10-05.** §9–§12 were measured on the RTX A2000 in the NAS (§11's test
+> host), which the project's testbed policy (standing since 2026-07-27) admits for correctness
+> and memory only. Their bit-exactness, loss and peak-memory results stand. Their latencies,
+> s/step, tok/s and the ratios between them (§9b, §11b–c, §12b–c) are the record of what that
+> shared box read; they are not speed evidence for any card, and may not band, filter or default
+> anything. §10's energy figures are on the same card and are scoped in §10's own notes.
+
 ## 0. What "the numbers" are
 
 Each config produces three scalars on a **fixed held-out set**:

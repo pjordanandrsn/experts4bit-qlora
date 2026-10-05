@@ -76,8 +76,8 @@ anything to the VRAM hot set: an early V4 run showed no difference purely becaus
 
 A hot expert is only worth holding when the transfer it avoids costs more than the resident
 path's own overhead, so the dial pays where the bus is the bottleneck and washes out where
-it is not: **+40%** on a thin-link A2000 (gpt-oss, K=4), **≈0%** on a fat-PCIe L40S (same
-model, informed K=8 ≈ pure streaming). On an A6000 with a 128-expert model the informed
+it is not: **+56% / +120%** (informed K=4 / K=8) on a bandwidth-limited RunPod A5000 host
+(gpt-oss-20b), **≈0%** on a fat-PCIe L40S (same model, informed K=8 ≈ pure streaming). On an A6000 with a 128-expert model the informed
 cells did not replicate at all and were withdrawn as evidence. Treat the numbers above as
 measured on their hosts — not as a floor to expect on a fat-link box.
 `HOT_MODE=informed bench/bench_gptoss_hybrid.py` is the calibrate-then-pin reference driver.

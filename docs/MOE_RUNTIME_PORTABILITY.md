@@ -1,8 +1,9 @@
 # How much of the Qwen training stack is a general MoE runtime?
 
 *Session `session/moe-generalize`, 2026-10-04. Code is read at e4b 0.44.0 / grouped-nf4-gemm 0.37.0 plus this branch.
-Measurements are one RTX A2000 12 GB (sm_86, the owned seat card, shared with house services). A2000 numbers are
-**within-box ratios**. They are not positions, and none of them is a 5090 or H100 reading.*
+Measurements are one RTX A2000 12 GB (sm_86, the owned seat card, shared with house services). That card is a
+correctness-only testbed: what this page takes from it is correctness, counts and memory, never a timing, and none of it
+is a 5090 or H100 reading.*
 
 Qwen3-30B-A3B's fused training step got fast through about a dozen individually measured changes (TC1 amendments 10–21,
 TC1c amendments 2–6). This page sorts each one by whether another MoE family inherits it, and records what this branch
@@ -35,7 +36,7 @@ discovery and trainable selection. Those were matched on Qwen's names or formula
 | decision | current rule | where it binds |
 |---|---|---|
 | LoRA delta route: padded / loop / grouped_mm | `auto` pads unless the padded block exceeds 2 GiB | hot-expert skew and few experts (Mixtral E=8, top-2) make `G·max(rows)` large. Note: the byte estimate uses the activations' itemsize while the block is allocated in the adapter dtype, so it undercounts 2× on fp32 adapters. Recorded now (`LORA_PAD_WASTE["last_bytes_alloc"]`); the rule is unchanged pending a full-step reading |
-| prefill M-tile | `cost` rule, `D=96` fitted at Qwen3-30B shapes on an A2000 | small expert widths (OLMoE I=1024, Granite I=512, LFM2 I=1792) |
+| prefill M-tile | `cost` rule, `D=96` fitted at Qwen3-30B shapes on an A2000 (a timing fit on the correctness-only card, so `D` is not tuned on any target card; the rule's default rests on TC1 amendment 14's RTX 5090 step) | small expert widths (OLMoE I=1024, Granite I=512, LFM2 I=1792) |
 | packed fused kernel vs dequant + `torch._grouped_mm` / per-expert dense | `GNF4_TRAIN_GEMM=auto` (grouped-nf4-gemm 0.39.0): grouped_mm on sm_90; elsewhere dense for calls with at most 16 present experts, fused otherwise | a hardware rule plus a group-count rule, read on Qwen3-30B (sm_90) and Mixtral / Qwen3 (RTX 5090, TC1 amendment 22); the crossover depends on rows per expert (tokens·k/E) |
 | activation retention | opt-in | worth it where the recomputed MoE forward is a large share of the step *and* the memory exists |
 
