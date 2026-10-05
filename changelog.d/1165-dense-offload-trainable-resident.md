@@ -7,6 +7,9 @@
   is frozen, trainable ones are **never streamed**: they stay resident, and a warning names the count and GB. If none
   is frozen (an unfrozen model), the selection is unchanged, with a warning that an optimizer cannot step the
   streamed trainable tensors. A frozen model is unchanged and silent.
+- **A trainable parameter that offload moves onto the device is moved in place** (`t.data = ...`). An optimizer
+  built before `enable_dense_offload` keeps stepping it. A re-wrapped `Parameter` had left it stepping a stale CPU
+  copy, so training silently did nothing. Frozen tensors are re-wrapped as before.
 - **Freeze for inference:** `model.requires_grad_(False)` before `enable_dense_offload`, then add adapters. README and
   `docs/CHOOSING.md` now say so beside the API.
 - **Tests** (`tests/test_dense_offload_trainable.py`) cover:
