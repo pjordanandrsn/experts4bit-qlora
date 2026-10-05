@@ -898,10 +898,10 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     # Opt-in (E4B_CHUNKED_LM_LOSS=1 or a chunk size in tokens): the training forward's causal-LM loss over token chunks, the
     # [tokens, vocab] logits never materialised (engines/chunked_lm_loss.py). Refused, with a warning, on a model whose logits
     # path it does not reproduce; that model keeps the stock loss.
-    from .chunked_lm_loss import chunked_lm_loss_requested, enable_chunked_lm_loss
+    from .chunked_lm_loss import chunked_lm_loss_min_bytes, chunked_lm_loss_requested, enable_chunked_lm_loss
     chunk = chunked_lm_loss_requested() if patched else None
     if chunk is not None:
-        enable_chunked_lm_loss(model, chunk, verbose=verbose)
+        enable_chunked_lm_loss(model, chunk, verbose=verbose, min_logits_bytes=chunked_lm_loss_min_bytes())
     return patched
 
 

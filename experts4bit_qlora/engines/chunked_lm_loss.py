@@ -39,6 +39,11 @@ an identity head). Any other change made after ``lm_head`` disables the chunked 
 re-runs stock.
 
 ``E4B_CHUNKED_LM_LOSS`` = ``1`` (chunks of :data:`DEFAULT_CHUNK` tokens) or a chunk size in tokens. Unset or 0: unchanged.
+``auto``: chunks of :data:`DEFAULT_CHUNK` tokens, but only for a training forward whose stock fp32 logits (positions x vocabulary
+x 4 bytes) would reach :data:`AUTO_MIN_LOGITS_BYTES`; a smaller one runs the stock forward untouched (``small_calls``). At the
+field recipe, where a micro-batch's logits are 0.3-0.6 GiB, chunking is a cost: 1.049 of the shipped arm's step on a host-bound
+RTX 5090 (TC1 amendment 41). On packed 4,096-token rows (2.32 GiB a row at Qwen3's vocabulary) it is what lets e4b train at all
+(amendments 39 and 40). The gate separates the two by size alone.
 ``enable_fast_train`` applies it and ``disable_fast_train`` unwinds it, like the other training-path switches; the CLI trainer
 (``python -m experts4bit_qlora.train``) applies it itself; :func:`enable_chunked_lm_loss` is the direct call.
 """
@@ -54,10 +59,12 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 __all__ = [
+    "AUTO_MIN_LOGITS_BYTES",
     "CHUNKED_LM_LOSS_STATS",
     "DEFAULT_CHUNK",
     "SUPPORTED",
     "chunked_causal_lm_loss",
+    "chunked_lm_loss_min_bytes",
     "chunked_lm_loss_refusal",
     "chunked_lm_loss_requested",
     "disable_chunked_lm_loss",
@@ -69,9 +76,17 @@ __all__ = [
 #: bench/chunked-lm-loss/receipts/lm_head_loss_a2000.json).
 DEFAULT_CHUNK = 512
 
-#: ``patched`` models, training forwards that took the chunked loss / ran stock, run-time refusals, and enable-time refusals
-#: by class name -> reason, so a training census can say the switch served the step.
-CHUNKED_LM_LOSS_STATS = {"patched": 0, "chunked_calls": 0, "stock_calls": 0, "runtime_refusals": 0, "refused": {}}
+#: ``E4B_CHUNKED_LM_LOSS=auto``'s gate: a training forward chunks when its stock fp32 logits would take at least this many bytes.
+#: 1 GiB sits between TC1's field recipe (Qwen3's Alpaca micro-batches: 0.29 GiB median, 0.64 GiB largest over a 60-step run,
+#: 0.86 GiB for the two longest rows of the 1,200) and one packed 4,096-token row (2.32 GiB). Mixtral's 32,000-token vocabulary
+#: stays under it at 4,096 tokens (0.49 GiB): its logits are not the problem there.
+AUTO_MIN_LOGITS_BYTES = 1 << 30
+
+#: ``patched`` models, training forwards that took the chunked loss / ran stock (no labels, ``logits_to_keep``, a tuple return) /
+#: ran stock under ``auto``'s size gate (``small_calls``), run-time refusals, and enable-time refusals by class name -> reason, so a
+#: training census can say the switch served the step.
+CHUNKED_LM_LOSS_STATS = {"patched": 0, "chunked_calls": 0, "stock_calls": 0, "small_calls": 0, "runtime_refusals": 0,
+                         "refused": {}}
 
 _ENV = "E4B_CHUNKED_LM_LOSS"
 
@@ -107,19 +122,25 @@ SUPPORTED = {
 
 
 def chunked_lm_loss_requested():
-    """``None`` (off) or the chunk size in tokens, from ``E4B_CHUNKED_LM_LOSS`` (``1`` / ``on`` = :data:`DEFAULT_CHUNK`)."""
+    """``None`` (off) or the chunk size in tokens, from ``E4B_CHUNKED_LM_LOSS`` (``1`` / ``on`` / ``auto`` = :data:`DEFAULT_CHUNK`)."""
     v = os.environ.get(_ENV, "").strip().lower()
     if v in ("", "0", "off", "false", "no", "none"):
         return None
-    if v in ("1", "on", "true", "yes"):
+    if v in ("1", "on", "true", "yes", "auto"):
         return DEFAULT_CHUNK
     try:
         n = int(v)
     except ValueError:
-        raise ValueError(f"{_ENV} must be 0 / 1 or a chunk size in tokens, got {v!r}") from None
+        raise ValueError(f"{_ENV} must be 0 / 1 / auto or a chunk size in tokens, got {v!r}") from None
     if n < 2:
         raise ValueError(f"{_ENV} must be 0 / 1 or a chunk size in tokens (>= 2), got {v!r}")
     return n
+
+
+def chunked_lm_loss_min_bytes():
+    """``auto``'s size gate (:data:`AUTO_MIN_LOGITS_BYTES`) when ``E4B_CHUNKED_LM_LOSS=auto``, else ``None`` (every training
+    forward chunks)."""
+    return AUTO_MIN_LOGITS_BYTES if os.environ.get(_ENV, "").strip().lower() == "auto" else None
 
 
 def _chunk_ce_sum(h, y, *, head, transform, config, ignore_index):
@@ -227,9 +248,10 @@ class _ChunkedState:
     """What a patched model carries: the chunk size, its head and transform, where ``labels`` / ``logits_to_keep`` sit among
     the forward's positional arguments, and the per-call capture of ``lm_head``'s input."""
 
-    def __init__(self, head, transform, aux_attr, chunk, labels_pos, ltk_pos):
+    def __init__(self, head, transform, aux_attr, chunk, labels_pos, ltk_pos, min_bytes=None):
         self.head, self.transform, self.aux_attr, self.chunk = head, transform, aux_attr, int(chunk)
         self.labels_pos, self.ltk_pos = labels_pos, ltk_pos
+        self.min_bytes, self.vocab = min_bytes, int(head.out_features)
         self.capture = self.probe = self.refused = None
 
 
@@ -250,6 +272,9 @@ def _chunked_forward(self, cls_forward, args, kwargs):
         return_dict = getattr(self.config, "return_dict", True)
     if labels is None or not (isinstance(ltk, int) and ltk == 0) or not return_dict:
         CHUNKED_LM_LOSS_STATS["stock_calls"] += 1
+        return cls_forward(self, *args, **kwargs)
+    if st.min_bytes is not None and labels.numel() * st.vocab * 4 < st.min_bytes:   # `auto`: the stock fp32 logits are small
+        CHUNKED_LM_LOSS_STATS["small_calls"] += 1
         return cls_forward(self, *args, **kwargs)
     if st.labels_pos is not None and len(args) > st.labels_pos:
         a2, k2 = args[:st.labels_pos] + (None,) + args[st.labels_pos + 1:], kwargs
@@ -300,17 +325,18 @@ def _make_forward(cls_forward):
     return forward
 
 
-def enable_chunked_lm_loss(model, chunk=None, verbose: bool = False) -> int:
+def enable_chunked_lm_loss(model, chunk=None, verbose: bool = False, min_logits_bytes=None) -> int:
     """Route ``model``'s training forwards (``labels`` given, gradients on) through :func:`chunked_causal_lm_loss` in chunks
-    of ``chunk`` tokens (default :data:`DEFAULT_CHUNK`). Returns 1 when patched, 0 when refused (a ``RuntimeWarning`` names
-    the reason and the model keeps its stock loss) or already patched (then only the chunk size changes)."""
+    of ``chunk`` tokens (default :data:`DEFAULT_CHUNK`). With ``min_logits_bytes`` (``auto``'s gate) a forward whose stock fp32
+    logits would take fewer bytes runs the stock forward. Returns 1 when patched, 0 when refused (a ``RuntimeWarning`` names
+    the reason and the model keeps its stock loss) or already patched (then only the chunk size and the gate change)."""
     chunk = DEFAULT_CHUNK if chunk is None else int(chunk)
     if chunk < 1:
         raise ValueError(f"chunk must be >= 1, got {chunk}")
     target = _target(model)
     st = target.__dict__.get("_e4b_chunked_lm_loss")
     if st is not None:
-        st.chunk = chunk
+        st.chunk, st.min_bytes = chunk, min_logits_bytes
         return 0
     why = chunked_lm_loss_refusal(target)
     if why is not None:
@@ -325,7 +351,7 @@ def enable_chunked_lm_loss(model, chunk=None, verbose: bool = False) -> int:
               if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)][1:]      # drop `self`
     names = [p.name for p in params]
     st = _ChunkedState(target.lm_head, transform, aux_attr, chunk, names.index("labels"),
-                       names.index("logits_to_keep") if "logits_to_keep" in names else None)
+                       names.index("logits_to_keep") if "logits_to_keep" in names else None, min_logits_bytes)
     head = st.head
     head_forward = type(head).forward
 
@@ -340,8 +366,10 @@ def enable_chunked_lm_loss(model, chunk=None, verbose: bool = False) -> int:
     target.forward = _make_forward(cls.forward).__get__(target, cls)
     CHUNKED_LM_LOSS_STATS["patched"] += 1
     if verbose:
+        gate = ("" if min_logits_bytes is None else
+                f"; only where the stock fp32 logits would reach {min_logits_bytes / 2**30:.2f} GiB, smaller ones run stock")
         print(f"[e4b.chunked_lm_loss] chunked LM loss on {cls.__name__} ({chunk}-token chunks): training forwards with labels "
-              f"never materialise the [tokens, {head.out_features}] logits")
+              f"never materialise the [tokens, {head.out_features}] logits{gate}")
     return 1
 
 

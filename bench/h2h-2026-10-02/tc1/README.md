@@ -61,6 +61,32 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
 
+## Amendment 41 (2026-10-05): at the field recipe e4b's chunked LM loss costs the shipped arm 4.9 % of its step; it stays opt-in
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 41. One RTX 5090 (`tc1-5090-89`, AMD EPYC 7B13, Vast
+machine 145701), every arm in venv-unsloth (torch 2.12.1+cu130, triton 3.7.1, transformers 5.5.0) with e4b `054cb8c` and
+grouped-nf4-gemm `ccf4de9` (0.41.0), TC1's Qwen3-30B-A3B tokens and field recipe, 60 steps, load-gated draws. `_ce0` is the default,
+`_ce1` sets `E4B_CHUNKED_LM_LOSS=1` (512-token chunks). Read: [`RESULTS-tc1-chunkab.md`](RESULTS-tc1-chunkab.md).
+
+| arm | `_ce0` s/step | `_ce1` s/step | `_ce1` / `_ce0` | peak `_ce0` → `_ce1` | prediction |
+|---|---|---|---|---|---|
+| shipped | 2.918 / 2.878 | 2.967 / 3.113 | **1.049** [1.017, 1.082] | 24.673 → 23.508 GB | P91 FALSIFIED (≤ 1.01) |
+| matched | 3.688 / 3.717 | 3.896 / 3.692 (5.4 % apart: UNSTABLE) | not read | 27.498 → 27.145 GB | P90, P92 UNTESTED |
+
+- **Engagement.** Every `_ce1` arm ran 240 chunked training forwards (one per micro-batch, 60 steps × 4) with no run-time fallback;
+  every `_ce0` arm ran none. All eight arms VALID; held-out at N moves −0.0015 (shipped) and −0.0007 (matched): P93 UNTESTED only
+  because its matched side is unstable.
+- **By amendment 41's rule `E4B_CHUNKED_LM_LOSS` stays opt-in.** P91 fell on the slow side of its bound on the shipped arm. The
+  default decision needed P90–P93 all HELD, so no re-draw of the matched pair can change it, and none is registered.
+- **The host was loaded throughout.** Machine 145701 carried other sessions' boxes; every attempt of every arm ran above the 6.0 load
+  gate (load1 medians 7.0–32.9), so each arm's retries ran out and its last attempt stands, as registered (standing attempts at
+  7.0–22.5). The cost does not come from the load alone: the least-loaded cross pair, `_ce1` at load 7.0 against `_ce0` at 8.3, still
+  reads 1.017.
+- **What it costs and buys.** At ~1,000–1,400 real tokens per step the fp32 logits the chunking avoids are small; it takes 1.17 GB off
+  the shipped arm's peak and 0.35 GB off the matched arm's, and pays for the lm_head recomputed in backward and the extra launches per
+  chunk, on a step that is host-bound. That matches #1142's 2–6 % on an RTX A2000 slice. On packed 4,096-token rows the same flag is
+  what lets e4b train at all (amendment 40); amendment 43's box reads that regime with it set explicitly.
+
 ## Amendment 40 (2026-10-05): with its chunked loss e4b trains the packed 4,096-token rows, but the box reads UNTESTED on TC1's no-loop rule
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 40. One RTX 5090 (`tc1-5090-91`, AMD EPYC 7K62, Vast
