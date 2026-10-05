@@ -43,6 +43,13 @@ class DriverPeak:
         self._stop.set()
 
 
+def _version(md, dist):
+    try:
+        return md.version(dist)
+    except md.PackageNotFoundError:          # a source checkout on PYTHONPATH (a local smoke run), not an install
+        return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
@@ -74,7 +81,7 @@ def main():
     rec = {"schema": "sv1-arm/1", "args": vars(a), "setup": setup.to_dict(), "env": env,
            "estimate": {"items": items, "unmodelled": list(fp.unmodelled), "refusals": list(fp.refusals),
                         "device_total": sum(i["bytes"] for i in items if i["where"] == "device")},
-           "versions": {d: md.version(d) for d in ("experts4bit-qlora", "grouped-nf4-gemm", "torch", "transformers")},
+           "versions": {d: _version(md, d) for d in ("experts4bit-qlora", "grouped-nf4-gemm", "torch", "transformers")},
            "gpu": torch.cuda.get_device_name(), "capability": list(torch.cuda.get_device_capability())}
     m = rec["measured"] = {}
     torch.cuda.set_device(0)
