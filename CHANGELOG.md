@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### TC1 amendment 28 registered: the double-quantized expert absmax as a default, A/B on Qwen3-30B-A3B and Mixtral-8x7B (P56–P58) (bench and tests only)
+
+- **Why.** The memory census found the expert absmax is the only static class where e4b and Unsloth differ. e4b keeps it in fp32,
+  1.81 GB on Qwen3-30B-A3B; `E4B_ABSMAX_DQ=1` stores it in 0.46 GB as Unsloth does. The switch's own cost has never been read as an A/B.
+- **Tokens `qwen3dqab` and `mixtraldqab`.** The matched arm, resident, `E4B_ABSMAX_DQ=0` against `=1`, two draws a side in ABBA order.
+- **Predictions.** P56 (Qwen3) and P57 (Mixtral): the step within [0.97, 1.03] and the peak lower by [1.25, 1.45] / [1.9, 2.3] GB.
+  P58: held-out within 0.005. All three HELD makes the switch the default for the resident fused path. The reducer scores them (two
+  new self-test cases).
+
 ### Read: TC1 amendment 25, first box — on one stack the matched set holds (P52 HELD); the speed pairs were unstable (P50, P51 UNTESTED); amendment 27 registers one re-draw
 
 - `tc1-5090-67` ($0.61, Core Ultra 9 285K): e4b's matched set in Unsloth's venv steps in 2.220 / 2.188 s, stable. Unsloth's draws were
