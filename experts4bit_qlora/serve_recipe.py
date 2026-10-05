@@ -275,13 +275,14 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                                f"a {c}-token prefill chunk's hidden states and routed expert activations + fp32 logits "
                                f"for {setup.max_seqs} sequences"))
     if setup.graphs:
-        unmodelled.append("CUDA graph memory pools for the decode buckets")
+        unmodelled.append("CUDA graph memory pools for the decode buckets (lane SV1: +60 MiB allocated on OLMoE-1B-7B, "
+                          "16 seqs, RTX 5090)")
     hybrid = topology.attention is not None and topology.attention.layers < topology.n_layers
     if str(setup.prefill_graph) != "0" and setup.graphs and setup.max_seqs > 1 and max(setup.buckets) > 1 and not hybrid:
         unmodelled.append("the first-chunk prefill graph's private pool, which the server keeps for its life when the "
                           "graph engages (E4B_PAGED_PREFILL_GRAPH=auto engages it only if that much is still free after "
-                          "capture; lane SC2b measured +3.3 GiB on Qwen3-30B-A3B int4); prefill_graph='0' bounds memory "
-                          "by this estimate")
+                          "capture; lane SV1 measured +0.24 GiB on OLMoE-1B-7B and +0.57 GiB on Qwen3-30B-A3B at NF4, "
+                          "SC2b +3.3 GiB on Qwen3-30B-A3B int4); prefill_graph='0' bounds memory by this estimate")
     if topology.attention is not None and topology.attention.layers < topology.n_layers:
         unmodelled.append(f"recurrent state of the {topology.n_layers - topology.attention.layers} non-attention layers")
     if setup.placement == "solver":
