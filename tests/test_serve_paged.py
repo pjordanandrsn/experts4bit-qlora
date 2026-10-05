@@ -782,17 +782,22 @@ def test_health_carries_the_prefill_routes():
 
 
 # ---- E4B_PAGED_PREFILL_GRAPH: the knob, and /health's prefill_graph block
-def test_prefill_graph_env_is_0_or_1_and_refuses_anything_else():
+def test_prefill_graph_env_defaults_to_auto_and_refuses_anything_else():
     from experts4bit_qlora.serve_paged import _prefill_graph_env
-    assert _prefill_graph_env("") is False and _prefill_graph_env("0") is False and _prefill_graph_env(" 1 ") is True
-    with pytest.raises(ValueError, match="expected '0' or '1'"):
+    assert _prefill_graph_env("") == "auto" and _prefill_graph_env(" AUTO ") == "auto"
+    assert _prefill_graph_env("0") == "0" and _prefill_graph_env(" 1 ") == "1"
+    with pytest.raises(ValueError, match="expected 'auto', '0' or '1'"):
         _prefill_graph_env("on")
+    assert PagedServeConfig.from_env().prefill_graph in ("auto", "0", "1")
 
 
-def test_health_reports_the_prefill_graph_off_by_default():
+def test_health_reports_a_runner_without_a_prefill_graph_as_off():
     client, engine = _client(ScriptedRunner())
     with client as c:
-        assert c.get("/health").json()["prefill_graph"] == {"status": "off", "requested": False}
+        assert c.get("/health").json()["prefill_graph"] == {"status": "off", "requested": "auto"}
+    client, engine = _client(ScriptedRunner(), prefill_graph="0")
+    with client as c:
+        assert c.get("/health").json()["prefill_graph"] == {"status": "off", "requested": "0"}
 
 
 def test_health_reports_an_engaged_prefill_graphs_counters():
@@ -800,18 +805,56 @@ def test_health_reports_an_engaged_prefill_graphs_counters():
     stats = {"status": "on", "T": 8, "replays": 3, "eager_chunks": 1,
              "eager_reasons": {"later_chunk": 1, "short_chunk": 0}}
     runner.prefill_graph_stats = lambda: dict(stats)
-    client, engine = _client(runner, prefill_graph=True)
+    client, engine = _client(runner, prefill_graph="1")
     with client as c:
-        assert c.get("/health").json()["prefill_graph"] == dict(stats, requested=True)
+        assert c.get("/health").json()["prefill_graph"] == dict(stats, requested="1")
 
 
 def test_a_refused_prefill_graph_reads_refused_with_the_reason():
     from experts4bit_qlora.serve_paged import prefill_graph_report
-    cfg = PagedServeConfig(model="tiny/moe", prefill_graph=True)
+    cfg = PagedServeConfig(model="tiny/moe", prefill_graph="1")
     why = "RuntimeError: E4B_PAGED_PREFILL_GRAPH=1 refused: device grouping is off: host grouping syncs"
     rep = prefill_graph_report(cfg, types.SimpleNamespace(parts=None, state="error", error=why))
-    assert rep == {"status": "refused", "why": why, "requested": True}
+    assert rep == {"status": "refused", "why": why, "requested": "1"}
     other = prefill_graph_report(cfg, types.SimpleNamespace(parts=None, state="error", error="OSError: no arena"))
     assert other["status"] == "error"
     assert prefill_graph_report(cfg, types.SimpleNamespace(parts=None, state="loading", error=None)) == {
-        "status": "loading", "requested": True}
+        "status": "loading", "requested": "1"}
+
+
+class _GraphRunner:
+    """Stands in for the runner's two prefill-graph calls: engages, or refuses with a reason."""
+
+    def __init__(self, refuse=None):
+        self.refuse, self.calls, self.refused = refuse, [], None
+
+    def enable_prefill_graph(self, T, *, require_headroom=False):
+        from experts4bit_qlora.engines.paged_runner import PrefillGraphRefused
+        self.calls.append((T, require_headroom))
+        if self.refuse:
+            raise PrefillGraphRefused(self.refuse)
+        return {"status": "on", "pool_mib": 1, "free_after_mib": 2}
+
+    def note_prefill_graph_refused(self, why):
+        self.refused = why
+
+
+def test_engage_auto_checks_headroom_and_records_a_refusal_instead_of_stopping():
+    from experts4bit_qlora.serve_paged import engage_prefill_graph
+    r = _GraphRunner(refuse="memory: 3300 MiB pool, 1000 MiB free")
+    engage_prefill_graph(r, PagedServeConfig(model="m", chunk_tokens=512, prefill_graph="auto"))
+    assert r.calls == [(512, True)] and r.refused == "memory: 3300 MiB pool, 1000 MiB free"
+    ok = _GraphRunner()
+    engage_prefill_graph(ok, PagedServeConfig(model="m", chunk_tokens=512, prefill_graph="auto"))
+    assert ok.calls == [(512, True)] and ok.refused is None
+
+
+def test_engage_1_refuses_at_startup_and_0_does_nothing():
+    from experts4bit_qlora.serve_paged import engage_prefill_graph
+    r = _GraphRunner(refuse="device grouping is off")
+    with pytest.raises(RuntimeError, match="E4B_PAGED_PREFILL_GRAPH=1 refused: device grouping is off"):
+        engage_prefill_graph(r, PagedServeConfig(model="m", prefill_graph="1"))
+    assert r.calls[0][1] is False                  # an explicit 1 is not held to the headroom rule
+    off = _GraphRunner()
+    engage_prefill_graph(off, PagedServeConfig(model="m", prefill_graph="0"))
+    assert off.calls == []

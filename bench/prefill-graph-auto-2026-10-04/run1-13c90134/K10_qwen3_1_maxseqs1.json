@@ -1,0 +1,5 @@
+{
+ "mode": "knob",
+ "built": false,
+ "error": "RuntimeError: E4B_PAGED_PREFILL_GRAPH=1 refused: device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"
+}

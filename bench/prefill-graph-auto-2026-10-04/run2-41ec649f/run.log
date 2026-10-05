@@ -1,0 +1,59 @@
+[2026-10-04T23:50:12Z] preflight util,mem_used,mem_total: 0, 3834, 12282
+git version 2.34.1
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+41ec649f prefill graph: measure the pool from the allocator's segments for its pool id; auto refuses an unmeasured pool
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+GUARD ok 2.8.0+cu128 5.17.0 NVIDIA RTX A2000 12GB
+[2026-10-04T23:51:22Z] arm T1: the new GPU tests, verbose
+tests/test_prefill_graph_gpu.py::test_replayed_first_chunks_prefill_exactly_as_eager PASSED [ 12%]
+tests/test_prefill_graph_gpu.py::test_without_the_copy_the_continuing_prompts_pool_is_wrong PASSED [ 25%]
+tests/test_prefill_graph_gpu.py::test_refuses_without_device_grouping PASSED [ 37%]
+tests/test_prefill_graph_gpu.py::test_the_startup_check_refuses_a_graph_that_differs_from_eager PASSED [ 50%]
+tests/test_prefill_graph_gpu.py::test_the_startup_check_refuses_when_its_prompts_cannot_tell_graphs_apart PASSED [ 62%]
+tests/test_prefill_graph_gpu.py::test_the_startup_check_refuses_a_graph_reading_a_tensor_nothing_keeps PASSED [ 75%]
+tests/test_prefill_graph_gpu.py::test_auto_stands_down_when_the_pool_leaves_too_little_memory PASSED [ 87%]
+tests/test_prefill_graph_gpu.py::test_refuses_a_forward_that_syncs PASSED [100%]
+============================== 8 passed in 11.49s ==============================
+[2026-10-04T23:51:37Z] arm T2: neighbours
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_decode_graph_buckets.py:98: the fp8 paged KV needs native e4m3 (sm_89+)
+SKIPPED [2] tests/test_decode_graph_buckets.py:116: the fp8 paged KV needs native e4m3 (sm_89+)
+SKIPPED [2] tests/test_kv_step_select.py:121: the fp8 paged KV needs native e4m3 (sm_89+)
+85 passed, 5 skipped, 1 warning in 13.44s
+[2026-10-04T23:51:53Z] tiny models + arenas
+TINY_OK /root/pg/tiny 211228160
+BAKE OK
+Writing model shards:   0%|          | 0/1 [00:00<?, ?it/s]Writing model shards: 100%|██████████| 1/1 [00:00<00:00, 15.14it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+TINY_OK /root/pg/tinyg 78190592
+BAKE OK
+[2026-10-04T23:52:33Z] arm KA_qwen3_int4_auto_default (E4B_PAGED_MODEL=/root/pg/tiny E4B_PAGED_ARENA=/root/pg/arena/nf4.arena E4B_PAGED_CALIB=/root/pg/calib.json E4B_PAGED_PLACEMENT=all-vram PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_PAGED_FUSE_QKV=1 E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto)
+RC=0
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 188 MiB, 4805 MiB free)
+KNOB {"at_build": {"status": "on", "T": 512, "replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}, "pool_mib": 188, "free_after_mib": 4805}, "stats": {"status": "on", "T": 512, "replays": 4, "eager_chunks": 2, "eager_reasons": {"later_chunk": 1, "short_chunk": 1}, "pool_mib": 188, "free_after_mib": 4805}, "all_bitwise": true}
+  {"len": 512, "first_graph": 52976, "first_eager": 52976, "pool_bitwise": true}
+  {"len": 512, "first_graph": 113435, "first_eager": 113435, "pool_bitwise": true}
+  {"len": 1024, "first_graph": 23932, "first_eager": 23932, "pool_bitwise": true}
+  {"len": 512, "first_graph": 46985, "first_eager": 46985, "pool_bitwise": true}
+  {"len": 300, "first_graph": 33511, "first_eager": 33511, "pool_bitwise": true}
+[2026-10-04T23:53:05Z] arm KA0_qwen3_auto_maxseqs1 (E4B_PAGED_MODEL=/root/pg/tiny E4B_PAGED_ARENA=/root/pg/arena/nf4.arena E4B_PAGED_CALIB=/root/pg/calib.json E4B_PAGED_PLACEMENT=all-vram PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_PAGED_FUSE_QKV=1 E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_PAGED_MAX_SEQS=1)
+RC=0
+KNOB {"at_build": {"status": "refused", "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"}, "stats": {"status": "refused", "why": "device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"}}
+[2026-10-04T23:53:37Z] arm K10_qwen3_1_maxseqs1 (E4B_PAGED_MODEL=/root/pg/tiny E4B_PAGED_ARENA=/root/pg/arena/nf4.arena E4B_PAGED_CALIB=/root/pg/calib.json E4B_PAGED_PLACEMENT=all-vram PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True E4B_SERVE_EXP_INT4=1 E4B_SERVE_ATTN_INT4=1 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_PAGED_FUSE_QKV=1 E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_PAGED_PREFILL_GRAPH=1 E4B_PAGED_MAX_SEQS=1)
+RC=0
+KNOB {"mode": "knob", "built": false, "error": "RuntimeError: E4B_PAGED_PREFILL_GRAPH=1 refused: device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"}
+KNOB {"mode": "knob", "built": false, "error": "RuntimeError: E4B_PAGED_PREFILL_GRAPH=1 refused: device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement)"}
+[2026-10-04T23:53:57Z] arm KGA_granite_nf4_auto (E4B_PAGED_MODEL=/root/pg/tinyg E4B_PAGED_ARENA=/root/pg/arenag/nf4.arena E4B_PAGED_CALIB=/root/pg/calib.json E4B_PAGED_PLACEMENT=all-vram PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto)
+RC=0
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 128 MiB, 4267 MiB free)
+KNOB {"at_build": {"status": "on", "T": 512, "replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}, "pool_mib": 128, "free_after_mib": 4267}, "stats": {"status": "on", "T": 512, "replays": 4, "eager_chunks": 2, "eager_reasons": {"later_chunk": 1, "short_chunk": 1}, "pool_mib": 128, "free_after_mib": 4267}, "all_bitwise": true}
+  {"len": 512, "first_graph": 21901, "first_eager": 21901, "pool_bitwise": true}
+  {"len": 512, "first_graph": 40215, "first_eager": 40215, "pool_bitwise": true}
+  {"len": 1024, "first_graph": 18773, "first_eager": 18773, "pool_bitwise": true}
+  {"len": 512, "first_graph": 1457, "first_eager": 1457, "pool_bitwise": true}
+  {"len": 300, "first_graph": 11125, "first_eager": 11125, "pool_bitwise": true}
+[2026-10-04T23:54:15Z] done
+PG_DONE

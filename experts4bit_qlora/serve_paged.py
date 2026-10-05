@@ -144,15 +144,24 @@ def _graphs_env(value: str, device: str, placement: str, capability=None) -> boo
     raise ValueError(f"E4B_PAGED_GRAPHS={value!r}: expected 'auto', '0' or '1'")
 
 
-def _prefill_graph_env(value: str) -> bool:
-    """``E4B_PAGED_PREFILL_GRAPH``: ``0`` (the default, also when unset or empty) prefills eagerly; ``1`` serves every
-    first chunk of exactly ``E4B_PAGED_CHUNK_TOKENS`` tokens from one CUDA graph
-    (:meth:`~.engines.paged_runner.PagedModelRunner.enable_prefill_graph`), or refuses at startup with the reason.
+def _prefill_graph_env(value: str) -> str:
+    """``E4B_PAGED_PREFILL_GRAPH``, one of three settings. Every first chunk of exactly ``E4B_PAGED_CHUNK_TOKENS``
+    tokens is served from one CUDA graph (:meth:`~.engines.paged_runner.PagedModelRunner.enable_prefill_graph`) when it
+    engages:
+
+    * ``auto`` (the default since lane SC2b, also when unset or empty) engages wherever its startup check passes and
+      the device keeps as much memory free as the graph's pool takes. Otherwise prefill stays eager, the server
+      still starts, and ``/health`` reports ``refused`` with the reason. SC2b (#846, ``bench/sc2/``, one RTX 5090,
+      Qwen3-30B-A3B int4, 16 sequences) read serial TTFT 1.30-1.65x faster with byte-identical text in both draws,
+      the capacity ceiling unchanged, and +3.3 GiB of VRAM for the graph's pool.
+    * ``1`` engages, or refuses at startup with the reason.
+    * ``0`` prefills eagerly.
+
     Anything else is refused rather than read as one of these."""
-    v = (value or "0").strip() or "0"
-    if v in ("0", "1"):
-        return v == "1"
-    raise ValueError(f"E4B_PAGED_PREFILL_GRAPH={value!r}: expected '0' or '1'")
+    v = (value or "auto").strip().lower() or "auto"
+    if v in ("auto", "0", "1"):
+        return v
+    raise ValueError(f"E4B_PAGED_PREFILL_GRAPH={value!r}: expected 'auto', '0' or '1'")
 
 
 def log(msg: str) -> None:
@@ -178,7 +187,7 @@ class PagedServeConfig:
     chunk_tokens: int = 512              # E4B_PAGED_CHUNK_TOKENS
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
-    prefill_graph: bool = False          # E4B_PAGED_PREFILL_GRAPH: 0 (default) / 1 (_prefill_graph_env)
+    prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
     buckets: tuple = DEFAULT_BUCKETS     # E4B_PAGED_BUCKETS="1,2,4,8,16"
     placement: str = "all-vram"          # E4B_PAGED_PLACEMENT: all-vram | solver
     vram_gb: float = 1.2                 # E4B_PAGED_VRAM_GB (solver budget; the harness default)
@@ -215,7 +224,7 @@ class PagedServeConfig:
             max_prefill_tokens=int(env("E4B_PAGED_MAX_PREFILL_TOKENS", "0")),
             graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
                                env("E4B_PAGED_PLACEMENT", "all-vram"), _capability(env("E4B_PAGED_DEVICE", "cuda"))),
-            prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "0")),
+            prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "auto")),
             buckets=_ints(env("E4B_PAGED_BUCKETS", "1,2,4,8,16")),
             placement=env("E4B_PAGED_PLACEMENT", "all-vram"),
             vram_gb=float(env("E4B_PAGED_VRAM_GB", "1.2")),
@@ -668,23 +677,42 @@ def prefill_routes() -> dict:
     return out
 
 
+def engage_prefill_graph(runner, cfg: PagedServeConfig) -> None:
+    """Apply ``E4B_PAGED_PREFILL_GRAPH`` to a built runner (see :func:`_prefill_graph_env`). ``1`` turns a refusal
+    into a startup error naming the reason; ``auto`` records it on the runner (prefill stays eager) and also stands
+    down on too little free memory; ``0`` does nothing."""
+    if cfg.prefill_graph not in ("1", "auto"):
+        return
+    from .engines.paged_runner import PrefillGraphRefused
+    try:
+        st = runner.enable_prefill_graph(cfg.chunk_tokens, require_headroom=(cfg.prefill_graph == "auto"))
+    except PrefillGraphRefused as e:
+        if cfg.prefill_graph == "1":
+            raise RuntimeError(f"E4B_PAGED_PREFILL_GRAPH=1 refused: {e.why}") from e
+        runner.note_prefill_graph_refused(e.why)
+        log(f"PREFILL_GRAPH auto: refused, prefill stays eager ({e.why})")
+        return
+    log(f"PREFILL_GRAPH on ({cfg.prefill_graph}): first chunks of {cfg.chunk_tokens} tokens replay one graph "
+        f"(startup check bitwise on two prompts; pool {st.get('pool_mib')} MiB, {st.get('free_after_mib')} MiB free)")
+
+
 def prefill_graph_report(cfg: PagedServeConfig, engine) -> dict:
-    """``/health``'s ``prefill_graph`` block. ``status`` is ``off`` (not requested), ``on`` (engaged: ``T``,
-    ``replays``, ``eager_chunks`` and ``eager_reasons`` follow, from
-    :meth:`~.engines.paged_runner.PagedModelRunner.prefill_graph_stats`), ``loading``, or ``refused`` (requested, and
-    the engine stopped at startup: ``why`` is the engine's error, which names the reason). ``requested`` echoes
-    ``E4B_PAGED_PREFILL_GRAPH``."""
-    runner = getattr(engine.parts, "runner", None) if engine.parts is not None else None
-    if runner is not None and hasattr(runner, "prefill_graph_stats"):
-        rep = runner.prefill_graph_stats()
-    elif not cfg.prefill_graph:
+    """``/health``'s ``prefill_graph`` block. ``status`` is ``off``, ``on`` (engaged: ``T``, ``replays``,
+    ``eager_chunks``, ``eager_reasons``, ``pool_mib`` and ``free_after_mib`` follow, from
+    :meth:`~.engines.paged_runner.PagedModelRunner.prefill_graph_stats`), ``refused`` (``why`` names the reason:
+    under ``auto`` the server runs with eager prefill; under ``1`` the engine stopped at startup), ``loading``, or
+    ``error``. ``requested`` is the setting, ``auto``, ``1`` or ``0``."""
+    if engine.parts is not None:
+        runner = getattr(engine.parts, "runner", None)
+        rep = runner.prefill_graph_stats() if hasattr(runner, "prefill_graph_stats") else {"status": "off"}
+    elif cfg.prefill_graph == "0":
         rep = {"status": "off"}
     elif engine.state == "error":
         refused = "E4B_PAGED_PREFILL_GRAPH=1 refused" in (engine.error or "")
         rep = {"status": "refused" if refused else "error", "why": engine.error}
     else:
         rep = {"status": engine.state}
-    return dict(rep, requested=bool(cfg.prefill_graph))
+    return dict(rep, requested=cfg.prefill_graph)
 
 
 def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
@@ -898,14 +926,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     runner = PagedModelRunner(model, kv, device=cfg.device)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
-    if cfg.prefill_graph:
-        from .engines.paged_runner import PrefillGraphRefused
-        try:
-            runner.enable_prefill_graph(cfg.chunk_tokens)
-        except PrefillGraphRefused as e:
-            raise RuntimeError(f"E4B_PAGED_PREFILL_GRAPH=1 refused: {e.why}") from e
-        log(f"PREFILL_GRAPH on: first chunks of {cfg.chunk_tokens} tokens replay one graph "
-            f"(startup check bitwise on two prompts)")
+    engage_prefill_graph(runner, cfg)
     sched = ContinuousScheduler(runner=runner, max_seqs=cfg.max_seqs, kv_slots=cfg.max_seqs,
                                 chunk_tokens=cfg.chunk_tokens, max_prefill_tokens_per_step=cfg.prefill_budget)
     info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),

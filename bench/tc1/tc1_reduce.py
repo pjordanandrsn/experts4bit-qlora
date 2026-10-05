@@ -549,6 +549,41 @@ def prebind_ab_why(tag, r):
     return "" if not bad else f"prebind A/B not engaged ({'; '.join(bad)}; triton {pa.get('triton')})"
 
 
+# ----------------------------------------------------------------------------- TC1 amendment 28: the double-quantized expert absmax as a default
+QDQ_FAM = "qwen3dqab"             # E4B_ABSMAX_DQ=0 (side dq0, the default) vs =1 (dq1, #1040) on the matched arm, resident, every other default
+MDQ_FAM = "mixtraldqab"           # the same on Mixtral-8x7B-Instruct at TC2's pin and field recipe
+DQ_FAMS = (QDQ_FAM, MDQ_FAM)      # scored in this order: P56 (Qwen3-30B-A3B), P57 (Mixtral), then P58 over both
+DQ_ARM = "fused_attn4_m"
+DQ_PREDS = {QDQ_FAM: ("P56", "Qwen3-30B-A3B"), MDQ_FAM: ("P57", "Mixtral-8x7B")}
+DQ_SPEED_BAND = (0.97, 1.03)      # dq1 / dq0 s/step on stable pairs
+DQ_PEAK_DROP = {QDQ_FAM: (1.25, 1.45), MDQ_FAM: (1.9, 2.3)}   # GB, median peak dq0 - dq1
+DQ_HELDOUT_MAX = 0.005            # P58: |mean held-out at N, dq1 - dq0| on each family
+FAMS += [QDQ_FAM, MDQ_FAM]
+NAMES[QDQ_FAM] = "Qwen3-30B-A3B (amendment 28: the expert absmax fp32 vs double-quantized, matched arm, resident)"
+NAMES[MDQ_FAM] = "Mixtral-8x7B-Instruct-v0.1 (amendment 28: the expert absmax fp32 vs double-quantized, matched arm, resident)"
+N_LAYERS.update({QDQ_FAM: 48, MDQ_FAM: 32})
+ATTN_CENSUS.update({QDQ_FAM: 192, MDQ_FAM: 128})
+DENSE_PINS.update({QDQ_FAM: DENSE_PINS[QDENSE_FAM], MDQ_FAM: DENSE_PINS[MDENSE_FAM]})   # read through amendment 22's pin check
+for _fam in DQ_FAMS:
+    FAM_ANCHOR[_fam] = ("e4b", f"{DQ_ARM}_dq0")
+    EXPECTED[_fam] = [("e4b", f"{DQ_ARM}_dq0"), ("e4b", f"{DQ_ARM}_dq1"), ("e4b", f"{DQ_ARM}_dq1_d2"), ("e4b", f"{DQ_ARM}_dq0_d2")]
+MATCHED |= {f"{DQ_ARM}_dq0", f"{DQ_ARM}_dq1", f"{DQ_ARM}_dq0_d2", f"{DQ_ARM}_dq1_d2"}
+for _side in ("dq0", "dq1"):
+    DRAW2[("e4b", f"{DQ_ARM}_{_side}")] = ("e4b", f"{DQ_ARM}_{_side}_d2")
+
+
+def dq_ab_why(fam, tag, r):
+    """Amendment 28's engagement predicate: a dq1 arm double-quantized the absmax of every MoE layer (absmax_dq true, absmax_dq_modules ==
+    the family's registered n_layers); a dq0 arm kept it fp32 (absmax_dq false). Empty string = engaged."""
+    r = r or {}
+    if "_dq1" in tag:
+        bad = [k for k, ok in (("absmax_dq true", r.get("absmax_dq") is True),
+                               (f"absmax_dq_modules {N_LAYERS[fam]}", r.get("absmax_dq_modules") == N_LAYERS[fam])) if not ok]
+    else:
+        bad = [] if r.get("absmax_dq") is not True else ["absmax_dq false"]
+    return "" if not bad else f"absmax A/B not engaged ({', '.join(bad)}; absmax_dq {r.get('absmax_dq')!r}, modules {r.get('absmax_dq_modules')!r})"
+
+
 def dense_ab_why(fam, tag, r):
     """Amendment 22's engagement predicate, read off the arm's `route_ab` record (grouped-nf4-gemm's nf4_route.ROUTE_STATS for the process):
     a dense1 arm ran with the route resolved to `dense` and counted dense forward AND dense dgrad calls; a dense0 arm ran `fused` and counted
@@ -1112,6 +1147,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == PREBIND_FAM and fw == "e4b":             # amendment 26: the prebound launches its tag names, engaged on both sides
         w = prebind_ab_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam in DQ_FAMS and fw == "e4b":                 # amendment 28: the expert absmax its tag names
+        w = dq_ab_why(fam, r.get("tag") or "", r)
         if w:
             why.append(w)
     if matched:                                   # R3: the matched set's own predicates (TC1-PREREG "Validity", new in this lane)
@@ -2194,6 +2233,51 @@ def score_prebindab(F):
         out.append(("P55", PREBIND_FAM, "UNTESTED", ev))
     else:
         out.append(("P55", PREBIND_FAM, "HELD", ev))
+    return out
+
+
+def score_dqab(F):
+    """TC1-PREREG amendment 28, on the qwen3dqab / mixtraldqab tokens: P56 (Qwen3-30B-A3B) and P57 (Mixtral) -- dq1 / dq0 s/step within
+    DQ_SPEED_BAND and the median peak falling by DQ_PEAK_DROP[fam], over two VALID draws a side with each side's draws within 5 %; P58 --
+    on each family |mean held-out at N, dq1 - dq0| <= DQ_HELDOUT_MAX (one reading over both: FALSIFIED when either family is read outside,
+    else UNTESTED while either is unread). Outside FALSIFIED; a missing / non-VALID / unstable side UNTESTED."""
+    if not any(fam in F for fam in DQ_FAMS):
+        return []
+    out, p58 = [], []
+    for fam in DQ_FAMS:
+        pid, name = DQ_PREDS[fam]
+        R = F.get(fam)
+        if not R:
+            out.append((pid, fam, "UNTESTED", f"{name}: no {fam} receipts in this directory"))
+            p58.append((fam, None, "no receipts"))
+            continue
+        O, N = R["draws"].get(("e4b", f"{DQ_ARM}_dq0"), {}), R["draws"].get(("e4b", f"{DQ_ARM}_dq1"), {})
+        if not (O.get("usable") and N.get("usable") and O.get("draws") == 2 and N.get("draws") == 2):
+            why = "; ".join(f"{side} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for side, d in (("dq0", O), ("dq1", N)))
+            out.append((pid, fam, "UNTESTED", f"{name}: two stable VALID draws a side are registered -- {why}"))
+            p58.append((fam, None, why))
+            continue
+        ratio_ = N["s"] / O["s"]
+        cross = [n / o for n in N["s_list"] for o in O["s_list"]]
+        drop = (O.get("peak") or 0) - (N.get("peak") or 0) if (O.get("peak") is not None and N.get("peak") is not None) else None
+        lo, hi = DQ_SPEED_BAND
+        plo, phi = DQ_PEAK_DROP[fam]
+        h0, h1 = O.get("heldout_list") or [], N.get("heldout_list") or []
+        dq = (sum(h1) / len(h1) - sum(h0) / len(h0)) if (h0 and h1 and None not in h0 + h1) else None
+        p58.append((fam, dq, f"held-out at N dq0 {[round(v, 4) for v in h0 if v is not None]} dq1 {[round(v, 4) for v in h1 if v is not None]}"))
+        ok = lo <= ratio_ <= hi and drop is not None and plo <= drop <= phi
+        out.append((pid, fam, "HELD" if ok else "FALSIFIED",
+                    f"{name}: dq1 / dq0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {[lo, hi]}; peak dq0 "
+                    f"{f(O.get('peak'), 2)} / dq1 {f(N.get('peak'), 2)} GB, drop {f(drop, 3)} vs {[plo, phi]}; s/step dq0 {O['s_list'][0]:.3f} / "
+                    f"{O['s_list'][1]:.3f} (within {100 * O['stability']:.1f}%), dq1 {N['s_list'][0]:.3f} / {N['s_list'][1]:.3f} (within "
+                    f"{100 * N['stability']:.1f}%)"))
+    ev = "; ".join(f"{fam}: " + (f"mean held-out dq1 - dq0 {d:+.4f} (|.| <= {DQ_HELDOUT_MAX}); {e}" if d is not None else e) for fam, d, e in p58)
+    if any(d is not None and abs(d) > DQ_HELDOUT_MAX for _, d, _ in p58):
+        out.append(("P58", "dqab", "FALSIFIED", ev))
+    elif any(d is None for _, d, _ in p58):
+        out.append(("P58", "dqab", "UNTESTED", ev))
+    else:
+        out.append(("P58", "dqab", "HELD", ev))
     return out
 
 
@@ -3423,6 +3507,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_prebindab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if any(fam in F for fam in DQ_FAMS):
+        out += ["\n## Predictions P56 / P57 / P58 (TC1-PREREG amendment 28: the expert absmax fp32 vs double-quantized, two stable draws a side; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_dqab(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -3803,6 +3892,28 @@ def _dense_set(fam, d0=None, d1=None, routes=("fused", "dense"), dense_fwd=(0, 1
             R[("e4b", tag)] = r
     return R
 
+
+def _dq_set(fam, d0=None, d1=None, peaks=None, flags=(False, True), modules=None, held_shift=0.0):
+    """Amendment 28: e4b against itself on one family's matched arm -- (dq0 draws, dq1 draws) s/step; `peaks` = (dq0, dq1) GB; `flags` =
+    each side's absmax_dq; `modules` overrides the dq1 side's absmax_dq_modules (default the family's n_layers); `held_shift` moves dq1."""
+    mix = fam == MDQ_FAM
+    d0 = d0 or ((3.57, 3.58) if mix else (3.90, 3.92))
+    d1 = d1 or ((3.62, 3.63) if mix else (3.95, 3.97))
+    peaks = peaks or ((31.07, 28.97) if mix else (27.16, 25.81))
+    R = {}
+    for i_side, (side, ss) in enumerate((("dq0", d0), ("dq1", d1))):
+        for i, sfx in enumerate(("", "_d2")):
+            tag = f"{DQ_ARM}_{side}{sfx}"
+            held = 1.8000 + (held_shift if side == "dq1" else 0.0)
+            r = (_tc2_receipt("mixtral", "e4b", tag, "fused", s=ss[i], heldout_n=held) if mix
+                 else _receipt("e4b", tag, "fused", s=ss[i], heldout_n=held))
+            r["absmax_dq"] = flags[i_side]
+            if flags[i_side]:
+                r["absmax_dq_modules"] = N_LAYERS[fam] if modules is None else modules
+            r["peak_vram_gb"] = peaks[i_side]
+            r["fam"] = fam
+            R[("e4b", tag)] = r
+    return R
 
 QWEN3_EXPERT_PARAMS = 48 * 128 * (1536 * 2048 + 2048 * 768)      # 28,991,029,248: Qwen3-30B-A3B's logical expert weights
 QWEN3_ABSMAX_FP32 = QWEN3_EXPERT_PARAMS // 64 * 4                 # 1,811,939,328 B
@@ -5499,6 +5610,33 @@ def selftest():
     assert PF(_prebind_set(requested=(True, False)))[PREBIND_FAM]["verdicts"][("e4b", "fused_attn4_shipped_pb1")] == "VOID"
     assert "no prebind_ab record" in prebind_ab_why("fused_attn4_m_pb1", {})
     assert PF(_prebind_set(record=False))[PREBIND_FAM]["verdicts"][("e4b", "fused_attn4_m_pb0")] == "VOID"
+    cases += 1
+    # 82. TC1 amendment 28 (qwen3dqab / mixtraldqab): Qwen3 1.013 / -1.35 GB and Mixtral 1.014 / -2.10 GB HELD, P58 HELD; each leg FALSIFIED in turn
+    QF = lambda q=None, m=None: {QDQ_FAM: reduce_family(QDQ_FAM, q if q is not None else _dq_set(QDQ_FAM), {}, 20),
+                                 MDQ_FAM: reduce_family(MDQ_FAM, m if m is not None else _dq_set(MDQ_FAM), {}, 20)}
+    QB = QF()
+    for fam in DQ_FAMS:
+        assert [(x["fw"], x["tag"]) for x in QB[fam]["rows"]] == EXPECTED[fam]
+        assert all(x["verdict"] == "VALID" for x in QB[fam]["rows"]), (fam, [(x["tag"], x["verdict"], x["why"]) for x in QB[fam]["rows"]])
+    pq = lambda **kw: {p: v for p, _, v, _ in score_dqab(QF(**kw))}
+    assert pq() == {"P56": "HELD", "P57": "HELD", "P58": "HELD"}, score_dqab(QB)
+    assert "dq1 / dq0 1.013 [" in score_dqab(QB)[0][3] and "drop 1.350 vs [1.25, 1.45]" in score_dqab(QB)[0][3], score_dqab(QB)[0][3]
+    assert pq(q=_dq_set(QDQ_FAM, d1=(4.10, 4.12))) == {"P56": "FALSIFIED", "P57": "HELD", "P58": "HELD"}          # 1.051: costs too much
+    assert pq(q=_dq_set(QDQ_FAM, peaks=(27.16, 26.66))) == {"P56": "FALSIFIED", "P57": "HELD", "P58": "HELD"}     # drop 0.50 GB
+    assert pq(m=_dq_set(MDQ_FAM, peaks=(31.07, 29.57))) == {"P56": "HELD", "P57": "FALSIFIED", "P58": "HELD"}     # drop 1.50 GB
+    assert pq(m=_dq_set(MDQ_FAM, held_shift=0.008)) == {"P56": "HELD", "P57": "HELD", "P58": "FALSIFIED"}
+    cases += 1
+    # 83. FAILING CASES: a dq1 side that kept the fp32 absmax, or double-quantized only some layers, is VOID; a missing family leaves its leg UNTESTED
+    RV = QF(q=_dq_set(QDQ_FAM, flags=(False, False)))
+    v = RV[QDQ_FAM]["verdicts"][("e4b", "fused_attn4_m_dq1")]
+    why = next(x["why"] for x in RV[QDQ_FAM]["rows"] if x["tag"] == "fused_attn4_m_dq1")
+    print("FAILING-CASE TC1-am28-engagement (reducer):", v, "--", str(why)[-120:])
+    assert v == "VOID" and "absmax_dq true" in str(why), (v, why)
+    assert pq(q=_dq_set(QDQ_FAM, flags=(False, False))) == {"P56": "UNTESTED", "P57": "HELD", "P58": "UNTESTED"}
+    assert QF(q=_dq_set(QDQ_FAM, modules=40))[QDQ_FAM]["verdicts"][("e4b", "fused_attn4_m_dq1")] == "VOID"
+    assert QF(m=_dq_set(MDQ_FAM, flags=(True, True)))[MDQ_FAM]["verdicts"][("e4b", "fused_attn4_m_dq0")] == "VOID"
+    only = {p: v for p, _, v, _ in score_dqab({QDQ_FAM: QB[QDQ_FAM]})}
+    assert only == {"P56": "HELD", "P57": "UNTESTED", "P58": "UNTESTED"}, only
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
