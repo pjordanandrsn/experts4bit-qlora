@@ -489,7 +489,7 @@ for t in (tag, "attn_only_m", "reference_attn4_m", "fused_attn4_m_offload", "ref
 PYE
 }
 # arm FAM FW TAG ARM ALARM MID REV OFFLOAD RECIPE(field|mb1|curve|anchor|t1|r64|small) TOK TOK_SHA [extra args...]: one process, one JSON, one alarm
-arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK=${10} TOK_SHA=${11}; shift 11
+arm_once(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK=${10} TOK_SHA=${11}; shift 11
   { skip $FAM || skip $FAM/$FW/$TAG; } && { say "skip $FAM/$FW/$TAG"; stubw $FAM $FW $TAG $ARM not_run "skipped by TC1_SKIP"; return 0; }
   # phase 2: the interpreter per framework; UNS_VENV=t28 (a prefix assignment on the call) selects tp4's torch-2.8 venv for an
   # Unsloth arm, else the cu130 venv. A cu130 venv the driver gate refused -> `refused` rows naming the driver; a venv that
@@ -569,6 +569,33 @@ arm(){ local FAM=$1 FW=$2 TAG=$3 ARM=$4 AL=$5 MID=$6 REV=$7 OFF=$8 RECIPE=$9 TOK
   { echo -n "$FAM/$FW/$TAG rc=$rc "; grep -aE "^CELL " logs/run_${FAM}_${FW}_$TAG.log | tail -1 | cut -c1-400; echo; } >> summary.txt
   $PY -c "import torch; torch.cuda.empty_cache()" 2>/dev/null; nvidia-smi --query-gpu=memory.used --format=csv,noheader
   rm -rf $W/adapters/* 2>/dev/null; }
+# TC1 amendment 33 (2026-10-05): load-gated draws. Every arm runs through arm_once (the body above). With TC1_LOAD_GATE set (a host load
+# average), an OK arm whose median host load1 over its own run (the second field group of gpuclk_<arm>.txt, sampled each second) exceeds the
+# gate is set aside to $W/loadvoid/ -- receipt, gpuclk and vram samples, run log, each suffixed .a<k> -- and run again, at most
+# TC1_LOAD_RETRIES (default 2) more times while the deadline allows; the last attempt stands whatever its load. Each attempt writes a
+# LOADGATE line to summary.txt. Unset (every box before this amendment): arm is arm_once.
+arm(){ local G=${TC1_LOAD_GATE:-} n=0 FAM=$1 FW=$2 TAG=$3
+  while :; do
+    arm_once "$@"
+    [ -n "$G" ] || return 0
+    local f=$W/gpuclk_${FAM}_${FW}_$TAG.txt j=$W/${FAM}_${FW}_$TAG.json
+    { [ -s "$f" ] && [ -s "$j" ]; } || return 0
+    local st med over
+    st=$(status_of $FAM $FW $TAG)
+    med=$($PY_E4B -c "import statistics, sys
+v = []
+for ln in open(sys.argv[1]):
+    try: v.append(float(ln.split('|')[1].split()[0]))
+    except Exception: pass
+print(round(statistics.median(v), 2) if v else 'nan')" "$f" 2>/dev/null || echo nan)
+    over=$($PY_E4B -c "import sys; m = sys.argv[1]; print(int(m != 'nan' and float(m) > float(sys.argv[2])))" "$med" "$G" 2>/dev/null || echo 0)
+    echo "LOADGATE $FAM/$FW/$TAG attempt $n load1_median $med gate $G status $st over $over" | tee -a summary.txt
+    [ "$st" = ok ] && [ "$over" = 1 ] && [ $n -lt ${TC1_LOAD_RETRIES:-2} ] || return 0
+    can_run 600 $FAM/$FW/$TAG/loadgate_retry || return 0
+    n=$((n + 1)); mkdir -p $W/loadvoid
+    local x; for x in $j $f $W/vram_${FAM}_${FW}_$TAG.txt logs/run_${FAM}_${FW}_$TAG.log; do [ -e "$x" ] && mv "$x" "$W/loadvoid/$(basename "$x").a$n"; done
+    echo "LOADGATE $FAM/$FW/$TAG attempt $((n - 1)) VOID (host load1 median $med > $G): re-run $n of ${TC1_LOAD_RETRIES:-2}" | tee -a summary.txt
+  done; }
 free_family(){ [ "$TC1_LOCAL_BOX" = 1 ] && { say "local snapshot kept ($1: TC1_LOCAL_SNAPSHOT is the owner's directory, never freed)"; return 0; }
   rm -rf /root/.cache/huggingface/hub/models--$2; say "freed $1 (disk: $(df -h /root | tail -1 | awk '{print $4}') free)"; }
 tokenise(){ local FAM=$1 MID=$2 REV=$3 TEMPLATE_=$4 SEQ_=$5 DATA=$6 DATA_SHA=$7 TOK=$8 EVAL_N_=${9:-$EVAL_N}

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### TC1 amendment 33 registered: load-gated draws, and the same-stack pair re-asked under them (bench and tests only)
+
+- **Why.** On multi-tenant rental hosts the host-bound training step slows when the host is busy, and the arms' own samplers show the
+  load average following the unstable draws (`tc1-5090-66`, `-68`, `-70`, `-72`). The same-stack pair (P50, P51) has gone unread on three
+  boxes.
+- **What.** `tc1_run.sh`'s `arm` now runs `arm_once` through a gate. With `TC1_LOAD_GATE` set, an OK arm whose median host load1 over its
+  own run exceeds the gate is set aside to `loadvoid/` and run again (at most `TC1_LOAD_RETRIES`). The last attempt stands. Every
+  attempt writes a `LOADGATE` line, which the reducer prints. Unset, nothing changes.
+  - `tc1_drive.sh` forwards both variables.
+  - A functional test runs the script's own `arm()` with `arm_once` stubbed: a busy draw is voided and re-run, the cap holds, an unset
+    gate is one attempt.
+- **The box.** `qwen3samestack` over 60 steps with `TC1_LOAD_GATE=6.0`, off the busy and unexplained machines. P50 and P51 bands are
+  unchanged and the reading is final.
+
 ### Default: e4b's prebound Triton launches (`E4B_TRITON_PREBIND`) are on; `=0` turns them off
 
 - **Why.** TC1 amendments 26 and 30 read the fused RMSNorm and rotary kernels' prebound launches, with grouped-nf4-gemm's

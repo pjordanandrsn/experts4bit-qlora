@@ -2281,6 +2281,21 @@ def score_dqab(F):
     return out
 
 
+def loadgate_lines(d):
+    """TC1 amendment 33: the box's LOADGATE lines (summary.txt), one per attempt -- the median host load1 over the arm's own run, the gate,
+    and the attempts the gate voided (set aside to loadvoid/ and run again). Empty when the box ran without TC1_LOAD_GATE."""
+    p = os.path.join(d or "", "summary.txt")
+    if not (d and os.path.exists(p)):
+        return []
+    ls = [ln.rstrip("\n") for ln in open(p, errors="replace") if ln.startswith("LOADGATE ")]
+    if not ls:
+        return []
+    void = sum(1 for ln in ls if " VOID " in ln)
+    return [f"\n## Load gate (TC1-PREREG amendment 33): {void} draw(s) voided for host load and run again",
+            "Each line: the arm, the attempt, the median host load1 over that attempt's run, the gate. A VOID attempt's files are in loadvoid/; "
+            "the last attempt of each arm stands whatever its load.", ""] + [f"- `{ln[len('LOADGATE '):]}`" for ln in ls]
+
+
 def prof945_table(F):
     """Amendment 12, descriptive: each profiled arm's summary (device busy fraction, device events and CPU ops per step, CPU self by family)."""
     R = F.get(PROF945_FAM)
@@ -3512,6 +3527,7 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_dqab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    out += loadgate_lines(d)
     if NB200_FAM in F:
         out += [f"\n## Prediction P14 (TC1-PREREG amendment 8: e4b shipped vs axolotl scattermoe over steps {LATE_FROM}..200, two stable draws a side; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -5637,6 +5653,16 @@ def selftest():
     assert QF(m=_dq_set(MDQ_FAM, flags=(True, True)))[MDQ_FAM]["verdicts"][("e4b", "fused_attn4_m_dq0")] == "VOID"
     only = {p: v for p, _, v, _ in score_dqab({QDQ_FAM: QB[QDQ_FAM]})}
     assert only == {"P56": "HELD", "P57": "UNTESTED", "P58": "UNTESTED"}, only
+    cases += 1
+    # 84. TC1 amendment 33: the load gate's LOADGATE lines render; none, nothing
+    gd = tempfile.mkdtemp(prefix="tc1_loadgate_selftest_")
+    open(os.path.join(gd, "summary.txt"), "w").write("BOX x\nLOADGATE qwen3samestack/e4b/fused_attn4_m attempt 0 load1_median 12.0 gate 6.0 status ok over 1\n"
+                                                      "LOADGATE qwen3samestack/e4b/fused_attn4_m attempt 0 VOID (host load1 median 12.0 > 6.0): re-run 1 of 2\n"
+                                                      "LOADGATE qwen3samestack/e4b/fused_attn4_m attempt 1 load1_median 3.1 gate 6.0 status ok over 0\n")
+    lg = loadgate_lines(gd)
+    assert lg[0].endswith("1 draw(s) voided for host load and run again") and len(lg) == 6 and "attempt 1 load1_median 3.1" in lg[-1], lg
+    open(os.path.join(gd, "summary.txt"), "w").write("BOX x\n")
+    assert loadgate_lines(gd) == [] and loadgate_lines(None) == []
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
