@@ -175,6 +175,10 @@ other cards were not measured.
 | serving, want it faster | `enable_fast(model)` | `[fast]` |
 | serving, spare VRAM to trade | `enable_pipelined_residency(model, hot_sets, k_slots=k)` | `[fast]` |
 
+Freeze the model before `enable_dense_offload` (`model.requires_grad_(False)`, then add adapters): a trainable
+parameter beside frozen ones is kept resident rather than streamed, and an unfrozen model streams its trainable
+weights with a warning that an optimizer cannot step them.
+
 An arena is baked by `grouped-nf4-gemm`, not by this package; the bake
 tools, and how to bind an arena to a model, are on
 [`docs/solutions/offload-moe-experts-to-cpu-or-nvme.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/offload-moe-experts-to-cpu-or-nvme.md).
@@ -3632,6 +3636,10 @@ not a register entry; the breakdown is in the `engines/dense_offload.py` docstri
 **Nothing is transformed**: the bytes handed to the GPU are the bytes in the
 checkpoint. The alternative way to fit a 114 GB dense side on a small card is to
 quantise it, which changes the model.
+
+Freeze first (`model.requires_grad_(False)`, then add any adapters). A trainable matrix beside frozen ones (a
+LoRA adapter) stays resident, since an optimizer cannot step a streamed parameter. An unfrozen model streams as
+before, but warns.
 
 **I am serving, not training, and want it faster.**
 `enable_fast(model)` (needs `[fast]`) routes the frozen experts through the grouped kernel
