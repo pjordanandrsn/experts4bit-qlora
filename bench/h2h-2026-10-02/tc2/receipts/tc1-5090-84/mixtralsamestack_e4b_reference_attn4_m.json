@@ -1,0 +1,14 @@
+{
+ "framework": "e4b",
+ "fam": "mixtralsamestack",
+ "arm": "reference",
+ "tag": "reference_attn4_m",
+ "status": "not_run",
+ "reason": "skipped by TC1_SKIP",
+ "steps": 60,
+ "seq": 2048,
+ "accum": 4,
+ "micro_batch": 2,
+ "written_by": "tc1_run.sh",
+ "prereg": "tc1/TC1-PREREG.md"
+}
