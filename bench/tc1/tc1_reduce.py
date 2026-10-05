@@ -553,7 +553,8 @@ SAMESTACK_SPECS[PACKED4K_FAM] = ("P84", (0.80, 1.60), "P85", (0.80, 1.00), None,
 
 def packed_why(r):
     """Amendment 39's engagement predicate, every framework: the arm read PACKED rows of exactly PACKED4K_SEQ tokens at PACKED4K_RECIPE --
-    its tokens file packed, its --seq PACKED4K_SEQ, no padded token in any step, and every step's real tokens seq x micro-batch x accum.
+    its tokens file packed, its --seq PACKED4K_SEQ, no padded token in any step, every step's real tokens seq x micro-batch x accum, and
+    TC1_FREE_OUTPUTS=1 (arm_facts.free_outputs: each micro-batch's output released before the next forward).
     The family is read against its own fixture: the field recipe's seq / micro-batch / tokens never satisfy it."""
     r = r or {}
     bad = []
@@ -569,6 +570,8 @@ def packed_why(r):
         bad.append(f"tokens per step {sorted(set(tps))[:3] or 'missing'} != {want}")
     if any(pad):
         bad.append(f"padded tokens on {sum(1 for p in pad if p)} step(s)")
+    if (r.get("arm_facts") or {}).get("free_outputs") is not True:          # TC1_FREE_OUTPUTS=1: each micro-batch's output released
+        bad.append(f"arm_facts.free_outputs {(r.get('arm_facts') or {}).get('free_outputs')!r}, not True")
     return "" if not bad else f"packed regime not engaged ({'; '.join(bad)})"
 
 
@@ -4323,6 +4326,7 @@ def _packed4k_set(e=(14.0, 14.2), t28=(15.6, 15.8), u=(19.6, 19.8), torch_v=("2.
                                      ("unsloth", "ckpt_unsloth_m" + sfx, "unsloth", u[i], None)):
             R[(fw, tag)] = _receipt(fw, tag, arm, steps=30, s=ss, heldout_n=1.8100 if fw == "unsloth" else 1.8000, seq=4096, micro_batch=1, accum=4, offload=False,
                                     tokens={"sha256": "p" * 64, "pack": True}, tokens_per_step=[16384] * 30, tokens_padded_per_step=[0] * 30,
+                                    arm_facts={"free_outputs": True},
                                     **({"env": {"box_class": "RTX 5090", "gpu": "NVIDIA GeForce RTX 5090", "torch": tv}} if tv else {}))
     R[("e4b", "reference_attn4_m")] = _stub("e4b", "reference_attn4_m", "reference", "not_run", "skipped by TC1_SKIP")
     for (fw, tag) in list(R):
@@ -6416,7 +6420,8 @@ def selftest():
     for tag, ov, frag in (("fused_attn4_m_t28", {"tokens": {"sha256": "p" * 64, "pack": False}}, "the tokens file is not packed"),
                           ("fused_attn4_m_t28", {"seq": 2048}, "seq 2048 != 4096"),
                           ("ckpt_unsloth_m", {"micro_batch": 2, "tokens_per_step": [32768] * 30}, "micro-batch 2 x accum 4 != 1 x 4"),
-                          ("fused_attn4_m_d2", {"tokens_per_step": [16200] * 30, "tokens_padded_per_step": [184] * 30}, "padded tokens on 30 step(s)")):
+                          ("fused_attn4_m_d2", {"tokens_per_step": [16200] * 30, "tokens_padded_per_step": [184] * 30}, "padded tokens on 30 step(s)"),
+                          ("fused_attn4_m", {"arm_facts": {"free_outputs": False}}, "arm_facts.free_outputs False, not True")):
         RV = KF_(_packed4k_set(over={tag: ov}))
         fwk = "unsloth" if tag.startswith("ckpt") else "e4b"
         why = next(x["why"] for x in RV[PACKED4K_FAM]["rows"] if x["tag"] == tag)

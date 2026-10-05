@@ -1242,6 +1242,10 @@ def encode_rows(tok, rows, seq, template="clinical", eos=""):
 # pools provably extend the field recipe's Alpaca text in its own order. Pool sizes: the field text averages 196.5 Qwen3 tokens per example
 # (235,852 over 1,200), so 6,000 train examples pack to ~287 rows of 4,096 (2.4x the 120 that 30 steps x micro-batch 1 x accum 4 read) and
 # 400 held-out examples to ~19 rows (2.4x the 8 the field instrument reads).
+# TC1 amendment 39 (TC1_FREE_OUTPUTS=1): release each micro-batch's model output once its loss is read. Unset, the previous micro-batch's
+# output -- full-vocabulary logits included -- stays referenced while the next forward runs and through the optimizer step, inside every
+# arm's measured peak; small at the field recipe's ~150-token rows, about 1.2 GB of bf16 logits per 4,096-token row. Every arm, every framework.
+FREE_OUTPUTS = os.environ.get("TC1_FREE_OUTPUTS", "0").strip() == "1"
 PACK_SRC_SHA256 = "bd844b8247a0f543804b6ce0882b0aaec4bbf5e8d66167df6213a0f1e4fe878b"   # tp4_alpaca.FILE_SHA256 (unsloth/alpaca-cleaned @ 0fe581eb)
 PACK_SRC_ROWS = 51760
 PACK_SEED = 3407                    # tp4_alpaca.SEED
@@ -3442,7 +3446,7 @@ def run_arm(a, load_fn, sampler=True):
         init_sha = trainable_sha(tr)
 
     mcfg = getattr(model, "config", None)
-    arm_facts = {"attn_implementation": getattr(mcfg, "_attn_implementation", None), "output_router_logits": getattr(mcfg, "output_router_logits", None),
+    arm_facts = {"free_outputs": FREE_OUTPUTS, "attn_implementation": getattr(mcfg, "_attn_implementation", None), "output_router_logits": getattr(mcfg, "output_router_logits", None),
                  "loss_class": "model.forward(input_ids, labels[, attention_mask]).loss -- the model's own loss; the harness computes none",
                  "torch_num_threads": int(torch.get_num_threads()), "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
                  "cpu_model": (env.get("host") or {}).get("cpu"), "lora_delta_dtype": LORA_DELTA_DTYPE.get(a.framework),
@@ -3553,6 +3557,9 @@ def run_arm(a, load_fn, sampler=True):
                     loss_sum += float(out.loss.detach())
                     ntok += nreal
                     npad += int(ids.numel()) - nreal
+                    if FREE_OUTPUTS:                                        # TC1 amendment 39: drop this micro-batch's output (its logits) now
+                        del out, loss                                       # -- held, it stays live through the next forward and the optimizer step
+
                 if mcen is not None:
                     mcen.mark(f"s{i + 1}.optimizer")
                 opt.step()
