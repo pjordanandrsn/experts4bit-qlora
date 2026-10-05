@@ -767,6 +767,15 @@ def prefill_graph_report(cfg: PagedServeConfig, engine) -> dict:
     return dict(rep, requested=cfg.prefill_graph)
 
 
+def kv_bookkeeping_report(cfg: PagedServeConfig, engine) -> dict:
+    """``/health``'s ``kv_bookkeeping`` block: ``requested`` (``E4B_PAGED_BULK_KV``) and, once the engine is built,
+    :meth:`~.engines.paged_runner.PagedModelRunner.kv_bookkeeping_stats` -- how many requests' prompt flushes and
+    first-decode block claims took the per-layer path and how many the bulk one."""
+    runner = getattr(engine.parts, "runner", None) if engine.parts is not None else None
+    rep = runner.kv_bookkeeping_stats() if hasattr(runner, "kv_bookkeeping_stats") else {}
+    return dict(rep, requested=cfg.bulk_kv)
+
+
 def _apply_levers(model, cfg: PagedServeConfig, tok) -> dict:
     """``bench/p42/hook/usercustomize.py::_apply_lanes``, called where the hook calls it (right after
     ``enable_hybrid_tier``), reading the same environment. A refusal raises, as the hook re-raises."""
@@ -1236,6 +1245,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
             "levers": info,
             "prefill_routes": prefill_routes(),
             "prefill_graph": prefill_graph_report(cfg, engine),
+            "kv_bookkeeping": kv_bookkeeping_report(cfg, engine),
             "eos_token_ids": sorted(parts.eos_ids) if parts is not None else None,
             "sampling": {"greedy_only": True, "logprobs": False, "stop_strings": False},
             "queue_depth": engine.queue_depth,

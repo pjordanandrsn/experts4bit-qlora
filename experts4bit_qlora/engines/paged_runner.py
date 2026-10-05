@@ -122,6 +122,8 @@ class PagedModelRunner(StepRunner):
         # independent of layers and blocks (Fp8PagedKV.reset_all_layers / append_prompt / claim_blocks). The pool, the
         # tables and the lengths it leaves are the per-layer forms'; off keeps the per-layer forms.
         self.bulk_kv = bool(bulk_kv)
+        # which path each request's bookkeeping took (/health's kv_bookkeeping: a registered lane's engagement gate)
+        self._kv_counts = {"flush_layers": 0, "flush_bulk": 0, "ready_layers": 0, "ready_bulk": 0, "ready_at_flush": 0}
         self.tracer = None           # engines.step_trace.StepTrace, set by serve_paged under E4B_PAGED_STEP_TRACE
         self.device = torch.device(device)
         self.eos_id = eos_id
@@ -212,6 +214,7 @@ class PagedModelRunner(StepRunner):
                     if self.bulk_kv:
                         self._flush_bulk(rid, slot)
                     else:
+                        self._kv_counts["flush_layers"] += 1
                         for layer in self.pool_layers:
                             staged = self.ctx.flush(layer, slot)
                             if staged is None:
@@ -250,7 +253,9 @@ class PagedModelRunner(StepRunner):
         if self._graphs is not None and slot not in self._graph_ready:
             self.kv.claim_blocks(slot, self.kv.blocks_per_seq - 1, self.pool_layers)
             self._graph_ready.add(slot)
+            self._kv_counts["ready_at_flush"] += 1
         self.kv.append_prompt(slot, self.pool_layers, ks, vs)
+        self._kv_counts["flush_bulk"] += 1
 
     @torch.no_grad()
     def run_decode(self, rids):
@@ -424,9 +429,11 @@ class PagedModelRunner(StepRunner):
         last = self.kv.blocks_per_seq - 1
         if self.bulk_kv:
             self.kv.claim_blocks(slot, last, self.pool_layers)
+            self._kv_counts["ready_bulk"] += 1
         else:
             for layer in self.pool_layers:
                 self.kv._ensure_blocks(layer, slot, last)
+            self._kv_counts["ready_layers"] += 1
         self._graph_ready.add(slot)
 
     def _run_decode_bucketed(self, rids):
@@ -689,6 +696,12 @@ class PagedModelRunner(StepRunner):
 
     def disable_prefill_graph(self) -> None:
         self._prefill_graph = None
+
+    def kv_bookkeeping_stats(self) -> dict:
+        """``bulk`` (``E4B_PAGED_BULK_KV``) and how many requests took each path: prompt flushes per layer
+        (``flush_layers``) or in bulk (``flush_bulk``); a graphed slot's block claims at its first decode, per layer
+        (``ready_layers``) or in bulk (``ready_bulk``), or already made at its flush (``ready_at_flush``)."""
+        return {"bulk": self.bulk_kv, **self._kv_counts}
 
     def free_slot(self, rid: int) -> None:
         slot = self.slot_of.pop(rid, None)

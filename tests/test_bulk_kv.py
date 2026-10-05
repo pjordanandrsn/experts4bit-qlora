@@ -266,6 +266,12 @@ def test_a_tiny_model_serves_the_same_tokens_with_bulk_bookkeeping():
     got, r1 = _serve(True)
     assert [len(t) for t in got] == MAX_NEW
     assert got == ref, f"bulk changed the decoded tokens:\n  per-layer={ref}\n  bulk={got}"
+    # the engagement counters a lane gates on: every request's flush took the configured path
+    n = len(PROMPTS)
+    assert r0.kv_bookkeeping_stats() == {"bulk": False, "flush_layers": n, "flush_bulk": 0, "ready_layers": 0,
+                                         "ready_bulk": 0, "ready_at_flush": 0}
+    assert r1.kv_bookkeeping_stats() == {"bulk": True, "flush_layers": 0, "flush_bulk": n, "ready_layers": 0,
+                                         "ready_bulk": 0, "ready_at_flush": 0}
     # every slot freed and returned: both pools end empty with full free lists
     for r in (r0, r1):
         assert not r.kv._rows and all(len(f) == r.kv._n_rows for f in r.kv._free)
@@ -283,6 +289,8 @@ def test_the_runner_claims_every_reachable_block_at_the_flush_when_graphs_are_on
             runner.run_prefill([(0, 0, len(PROMPTS[0]))])
         assert (1 in runner._graph_ready) is bulk
         runner._ensure_graph_ready(1)
+        st = runner.kv_bookkeeping_stats()
+        assert (st["ready_at_flush"], st["ready_layers"], st["ready_bulk"]) == ((1, 0, 0) if bulk else (0, 1, 0))
         out.append(_state(runner.kv))
     _assert_same_state(*out)
 
@@ -337,6 +345,7 @@ def test_the_server_writes_a_step_trace_and_skips_idle_steps(tmp_path):
         assert r.status_code == 200
         h = c.get("/health").json()
     assert h["step_trace_path"] == str(tmp_path / "steps.jsonl") and h["engine"]["bulk_kv"] is False
+    assert h["kv_bookkeeping"] == {"requested": False}          # a scripted runner keeps no KV
     rows = [json.loads(line) for line in (tmp_path / "steps.jsonl").read_text().splitlines()]
     assert len(rows) == 5                         # one prefill step (first token) + four decode steps; no idle rows
     assert rows[0]["admitted"] == 1 and rows[0]["ops"] == 1

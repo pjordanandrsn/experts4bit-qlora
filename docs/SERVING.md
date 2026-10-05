@@ -154,7 +154,9 @@ blocks:
   group bounded at 16 MiB of input per side.
 
 It leaves the same pool bytes, block tables, lengths and free lists as the per-layer path, with the same rows given to
-the same slot. `tests/test_bulk_kv.py` compares whole pools, and a tiny model decodes the same tokens either way. The
+the same slot. `/health`'s `kv_bookkeeping` block reads `requested` and, per path, how many requests' prompt flushes
+(`flush_layers`, `flush_bulk`) and first-decode block claims (`ready_layers`, `ready_bulk`, or `ready_at_flush` when
+the bulk flush already made them) the server ran. `tests/test_bulk_kv.py` compares whole pools, and a tiny model decodes the same tokens either way. The
 stall census behind it is `bench/stall-census-2026-10-05/` (exploratory: an A2000 microbenchmark and a post-hoc read of
 SC2b's traces). No request-level effect is claimed until a registered lane reads one.
 
