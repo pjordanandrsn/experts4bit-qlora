@@ -19,9 +19,10 @@ SGL = REPO / "bench" / "sc1" / "sglang" / "server.sh"
 def test_box_i_is_wired_on_box_g_s_image_and_kernel_package():
     assert 'case "$BOX" in A|B|C|D|E|F|G|H|I|J|K) ;;' in RUN and "I) box_i;; J) box_j;; K) box_k;; esac" in RUN and '[ "$BOX" = I ] && prove_i' in RUN
     assert "G|I|J) GNF4_SHA=dc8f94abfd868f149178623f6eb403dc8b892b02;; esac" in RUN
-    assert "I) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh; install_vllm; install_sglang; install_llamacpp ;;" in RUN
-    assert 'I) PROVE_NEEDS="vllm sglang llamacpp";;' in RUN
-    assert "quality=[e4b_serve e4b_nf4 vllm sglang_native sglang_marlin llamacpp llamacpp_q8]" in RUN
+    assert "I) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh; install_vllm; install_llamacpp ;;" in RUN
+    assert 'I) PROVE_NEEDS="vllm llamacpp";;' in RUN   # A5: SGLang has no KL arm, so the proof does not require it
+    assert "kl_full=[e4b_serve vllm llamacpp_q8] (A5; SGLang UNREAD by registration)" in RUN   # the rows prove_i's A5 proof reads
+    assert "install_vllm; install_llamacpp ;;   # SC1g A5" in RUN and "quality=[e4b_serve e4b_nf4 vllm sglang_native" not in RUN
     # the route record needs e4b#1129's counters: the tripwire refuses an older e4b on box I
     assert 'if os.environ["TRIP_BOX"] in ("I", "J"):' in RUN and 'getattr(hr, "ROUTE_SEEN", None)' in RUN
 

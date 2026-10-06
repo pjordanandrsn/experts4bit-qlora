@@ -1004,8 +1004,9 @@ bit-identical: per window, F, the reference NLL (decode and prefill), the NF4 fa
 So the floor F is the reference's own decode-vs-prefill arithmetic, not run-to-run noise. Box I's engines are graded
 against a fixed, repeatable function.
 
-**Next, in order.** Box I's proof first (2.0 h guard, three conv1 rows, `--prove-a5`). It prints each engine's masked
-reference mass:
+**Next, in order.** Box I's proof first (2.0 h guard, three conv1 rows, `--prove-a5`). Box I installs vLLM and llama.cpp
+only, because SGLang has no A5 arm; its PROVED line names the rows the proof read (`kl_full=[e4b_serve vllm llamacpp_q8]`).
+The proof prints each engine's masked reference mass:
 - if every engine reads zero, the reading box follows;
 - if any engine reads non-zero, a common-support rule with a mass bound is registered on the proof's numbers first.
 
