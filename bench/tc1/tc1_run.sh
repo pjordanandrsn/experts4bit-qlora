@@ -1374,6 +1374,26 @@ tc1_fieldbk_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_fb0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_fb0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_fieldauto_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 50 (2026-10-06): NF4_QLORA_PAD_BUCKETS=auto (grouped-nf4-gemm#491:
+# bucket a call only when it carries >= 16,384 routed rows) against 0 at TC1's FIELD recipe, whose calls carry at most 9,040 -- the shipped and
+# the matched arm, two draws a side in ABBA order, every arm in venv-unsloth at e4b's defaults: auto must never bucket here.
+tc1_fieldauto_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_fa0:fused e4b:fused_attn4_shipped_fa1:fused e4b:fused_attn4_m_fa0:fused e4b:fused_attn4_m_fa1:fused e4b:fused_attn4_m_fa1_d2:fused e4b:fused_attn4_m_fa0_d2:fused e4b:fused_attn4_shipped_fa1_d2:fused e4b:fused_attn4_shipped_fa0_d2:fused"
+  say "===== FIELD PAD-BUCKETS AUTO family $FAM ($MID @ $REV; NF4_QLORA_PAD_BUCKETS 0 vs auto, field recipe, venv-unsloth, amendment 50)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local OLD="NF4_QLORA_PAD_BUCKETS=0" NEW="NF4_QLORA_PAD_BUCKETS=auto"
+  can_run 600 $FAM/e4b/shipped_fa0     && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_fa0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_fa1     && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_fa1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_fa0           && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_fa0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_fa1           && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_fa1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_fa1_d2        && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_fa1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_fa0_d2        && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_fa0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_fa1_d2  && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_fa1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_fa0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_fa0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_decoded_gate -- TC1 amendment 46 (2026-10-05): the decoded A/B's FIRST step, once per box, before any of its arms. grouped-nf4-gemm's
 # compiled correctness tests for GNF4_TRAIN_GEMM=decoded run on this card, from a checkout of grouped-nf4-gemm at GNF4_SHA (the installed
 # package's commit, which the tripwire pins), in venv-e4b (the arms' venv): kernel/test_nf4_route.py's decoded, cap and dequant tests -- RD1's
@@ -1765,6 +1785,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3memc4k) tc1_memc4k_family qwen3memc4k Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 47: the memory census on packed 4,096-token rows
   qwen3padbk) tc1_padbk_family qwen3padbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 48: the LoRA delta's bucketed padding on packed rows
   qwen3fieldbk) tc1_fieldbk_family qwen3fieldbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 49: the LoRA delta's bucketed padding at the field recipe
+  qwen3fieldauto) tc1_fieldauto_family qwen3fieldauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 50: the bucket gate at the field recipe
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
   fusedsweep)  tc1_fusedsweep_family fusedsweep 2400;;   # TC1c amendment 5: a fused-kernel config replay (no model)
   qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 5400 4800;;   # TC1 amendment 8
