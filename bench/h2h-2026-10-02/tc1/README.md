@@ -123,8 +123,9 @@ grouped-nf4-gemm 0.42.0 (`b4f93f1`), packed 4,096-token rows, 40 load-gated step
   power 485–488 W against 424–434 W); the shipped arms read 97 % against 96 %. Amendment 51's host shows the same pattern larger: e4b at
   its defaults ran at 97–98 % in torch 2.12 and 75–76 % in torch 2.8. Without buckets, torch 2.8 cost amendment 43's box 9 % (0.915);
   with them, torch 2.12 gains about 10 % (amendment 48) and torch 2.8 here 1.7 % (matched). So the open question is host-side time in
-  the bucketed delta under torch 2.8 / triton 3.4, which an RTX A2000 profile can count at no rental cost. Those are cross-host
-  comparisons, so they are a lead, not a reading.
+  the bucketed delta under torch 2.8 / triton 3.4. An RTX A2000 can count that host-side work at no rental cost (launches, syncs,
+  compilations per step under each torch), but not time it: the A2000 is a correctness testbed, so any timing has to come from a rented
+  box. Those are cross-host comparisons, so they are a lead, not a reading.
 
 ## Amendment 51 (2026-10-06): at e4b's defaults the packed position is Unsloth/e4b 1.453 on one stack -- the regime amendment 39 lost
 

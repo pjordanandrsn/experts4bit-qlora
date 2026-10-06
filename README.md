@@ -87,8 +87,9 @@ These are specific workloads, with public results and controls. The table is che
 | Expert-offload training on a 12 GB card (`e4b.offload.fits-30b-class`) | Qwen3-30B-A3B: **7.16 GB** peak; Gemma-4-26B-A4B: **8.47 GB**. | measured |
 
 The speed rows use torch 2.12.1+cu130 and transformers 5.5.0. The packed result uses
-development e4b code after 0.48.0 and kernels released in 0.42.0. Its PyTorch 2.8 run was slower;
-bucketed padding's effect under 2.8 is still unmeasured (TC1 amendment 52 measures it). The offload row uses a different training setup.
+development e4b code after 0.48.0 and kernels released in 0.42.0. Its PyTorch 2.8 run was slower, and bucketed padding is
+not the cause: under 2.8 it steps 0.983× the single block with a 4.24 GB lower peak (`e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`).
+The offload row uses a different training setup.
 
 [Qwen comparison](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/RESULTS-tc1-samestack-box4.md) · [Packed 4K result](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/RESULTS-tc1-packed4k-defaults.md) · [All current results](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md)
 
