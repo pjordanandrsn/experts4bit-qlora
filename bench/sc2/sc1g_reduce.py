@@ -295,6 +295,164 @@ def a6(d: str, a5_dir: str | None = None) -> dict:
             "rows": rows, "median": med, "determinism": det, "predictions": pred, "descriptive": desc}
 
 
+def route_ids(d: str, stem: str, positions: int = 2048) -> dict:
+    """A7: one captured arm's decode expert SETS -> {"verdict": "VALID", "sets": [positions, LAYERS, A7_TOPK] sorted} or VOID
+    with the reason. Position t's ids are the 2 * LAYERS GEMV calls just before its scored row (gate_up then down, per layer);
+    every scored row must be preceded by exactly that many calls since the last, gate_up and down must serve the same set in
+    a layer, and every id must have been written and lie in [0, A7_EXPERTS)."""
+    import numpy as np
+    p = os.path.join(d, f"rid_{stem}.npz")
+    if not (os.path.exists(p) and os.path.exists(p + ".json")):
+        return {"verdict": "VOID", "why": "no route-id record (the capture never wrote, or the arm died before its exit)"}
+    meta = json.load(open(p + ".json"))
+    z = np.load(p)
+    ids, b = z["ids"].astype(np.int64), z["bounds"].astype(np.int64)
+    per = 2 * LAYERS
+    if meta.get("bad_shape") or meta.get("overflow"):
+        return {"verdict": "VOID", "why": f"capture refused calls: bad_shape {meta.get('bad_shape')}, overflow {meta.get('overflow')}"}
+    if b.size != positions:
+        return {"verdict": "VOID", "why": f"{b.size} scored rows for {positions} positions"}
+    if b[0] < per or np.any(np.diff(b) != per):
+        return {"verdict": "VOID", "why": f"a scored row not preceded by exactly {per} GEMV calls (first {int(b[0])}; a replayed graph, "
+                                          "a non-GEMV decode route, or misalignment)"}
+    if ids.ndim != 2 or ids.shape[1] != A7_TOPK or int(b[-1]) > ids.shape[0]:
+        return {"verdict": "VOID", "why": f"id buffer {tuple(ids.shape)} does not cover the last scored row ({int(b[-1])} calls)"}
+    blk = ids[b[:, None] - per + np.arange(per)[None, :]].reshape(positions, LAYERS, 2, A7_TOPK)
+    if blk.min() < 0 or blk.max() >= A7_EXPERTS:
+        return {"verdict": "VOID", "why": f"an id unwritten or outside [0, {A7_EXPERTS})"}
+    s = np.sort(blk, axis=-1)
+    if not np.array_equal(s[:, :, 0], s[:, :, 1]):
+        return {"verdict": "VOID", "why": "gate_up and down served different expert sets within a layer"}
+    if np.any(np.diff(s[:, :, 0], axis=-1) == 0):
+        return {"verdict": "VOID", "why": "an expert repeated within one top-k"}
+    return {"verdict": "VALID", "sets": s[:, :, 0], "gemv_calls": int(meta.get("gemv_calls", -1))}
+
+
+def _hyper_p(n: int, K: int, k: int, x: int) -> float:
+    """One-sided P(X >= x), X ~ Hypergeometric(population n, K successes, k draws): exact, in integers."""
+    from math import comb
+    return float(sum(comb(K, i) * comb(n - K, k - i) for i in range(x, min(k, K) + 1)) / comb(n, k)) if x <= min(k, K) else 0.0
+
+
+def flip_test(score, F, perm: int | None = None, seed: int | None = None) -> dict:
+    """The top ceil(A7_TOP * n) positions by `score` (ties: the earlier first) against all positions: the share with a flip
+    (F > 0, exact hypergeometric p) and the mean flip count (seeded permutation p)."""
+    import math
+    import numpy as np
+    perm = A7_PERM if perm is None else perm
+    seed = A7_SEED if seed is None else seed
+    n = int(F.size)
+    k = math.ceil(A7_TOP * n)
+    top = np.lexsort((np.arange(n), -np.asarray(score, dtype=np.float64)))[:k]
+    flip = F > 0
+    K, x = int(flip.sum()), int(flip[top].sum())
+    fa, ft = float(F.mean()), float(F[top].mean())
+    rng = np.random.default_rng(seed)
+    ge = sum(float(F[rng.choice(n, k, replace=False)].mean()) >= ft for _ in range(perm))
+    return {"n": n, "k": k, "share_all": K / n, "share_top": x / k, "p_share": _hyper_p(n, K, k, x), "mean_F_all": fa,
+            "mean_F_top": ft, "intensity_ratio": (ft / fa if fa > 0 else None), "p_intensity": (ge + 1) / (perm + 1),
+            "top_positions": [int(t) for t in top]}
+
+
+def a7_read(t1: dict, t3: dict) -> dict:
+    """The registered rule on the primary window. t1: (a)'s top-1 % KL positions (this box's captured (a)); t3: (b)'s own
+    top-1 % KL positions, the fragility control (positions where ANY arm is fragile would flip-enrich both). The share test
+    reads unless share_all > A7_SATURATED, where the intensity test reads instead (share_all does not depend on the KL, so
+    the switch is not a forking path). Enriched: share_top - share_all >= A7_SHARE_DELTA AND exact hypergeometric p <=
+    A7_P_MAX; or (saturated) intensity ratio >= A7_INTENSITY_RATIO AND permutation p <= A7_P_MAX. Precedence (the caller
+    applies the UNREAD gates first): FRAGILE_POSITIONS before SUPPORTS, then CONTRADICTS, then INCONCLUSIVE."""
+    sat = t1["share_all"] > A7_SATURATED
+    if sat:
+        def eff(t):
+            return (t["intensity_ratio"] or 0.0) - 1.0
+
+        def enr(t):
+            return t["intensity_ratio"] is not None and t["p_intensity"] <= A7_P_MAX and t["intensity_ratio"] >= A7_INTENSITY_RATIO
+    else:
+        def eff(t):
+            return t["share_top"] - t["share_all"]
+
+        def enr(t):
+            return t["p_share"] <= A7_P_MAX and eff(t) >= A7_SHARE_DELTA
+    if enr(t1):
+        v = "FRAGILE_POSITIONS" if eff(t3) >= 0.5 * eff(t1) else "SUPPORTS"
+    elif eff(t1) <= 0:
+        v = "CONTRADICTS"
+    else:
+        v = "INCONCLUSIVE"
+    return {"verdict": v, "test": "intensity" if sat else "share", "effect_a": eff(t1), "effect_control_b": eff(t3)}
+
+
+def a7(d: str, prior_dir: str | None = None, perm: int | None = None) -> dict:
+    """A7's reading on box J. `prior_dir` (optional): a committed A6 box's sc1g/ dir, for the descriptive cross-box check
+    (this box's captured (a) and (b) against that box's uncaptured (a) and (b), bit-identical or the max |diff|)."""
+    import numpy as np
+    R = _sc1()
+    shas, _rc, _rv, why = a5_refs(d)
+    rows = {lab: {s: kl_row_full(d, lab, s, R, shas, arms=KL7_ARMS) for s in ((A7_PRIMARY,) if lab == "e4b_base" else A7_SRCS)}
+            for lab in KL7_ARMS}
+
+    def arr(lab, s):
+        x = rows[lab].get(s) or {}
+        return np.load(os.path.join(d, f"kl_{x['stem']}.npz"))["eng_kl"] if x.get("verdict") == "VALID" else None
+
+    ids = {lab: {s: route_ids(d, KL7_ARMS[lab].format(s)) for s in A7_SRCS} for lab in ("e4b_mxpre_cap", "e4b_base_cap")}
+    bc, bu = arr("e4b_base_cap", A7_PRIMARY), arr("e4b_base", A7_PRIMARY)
+    if bc is None or bu is None:
+        ctl = {"verdict": "UNREAD", "why": f"(b) captured or uncaptured on {A7_PRIMARY} is not VALID"}
+    else:
+        ctl = {"verdict": "BIT_IDENTICAL" if np.array_equal(bc, bu) else "DIFFERS", "max_abs_diff": float(np.max(np.abs(bc - bu)))}
+    win = {}
+    for s in A7_SRCS:
+        ka, kb = arr("e4b_mxpre_cap", s), arr("e4b_base_cap", s)
+        ia, ib = ids["e4b_mxpre_cap"][s], ids["e4b_base_cap"][s]
+        bad = [f"{lab} KL {rows[lab][s]['verdict']}: {rows[lab][s].get('why')}" for lab, k in (("e4b_mxpre_cap", ka), ("e4b_base_cap", kb))
+               if k is None]
+        bad += [f"{lab} route ids VOID: {x['why']}" for lab, x in (("e4b_mxpre_cap", ia), ("e4b_base_cap", ib)) if x["verdict"] != "VALID"]
+        if bad:
+            win[s] = {"verdict": "UNREAD", "why": "; ".join(bad)}
+            continue
+        diff = np.any(ia["sets"] != ib["sets"], axis=-1)              # [P, LAYERS]: the layer's decode set differs
+        F = diff.sum(axis=1)
+        n, q = F.size, F.size // 4
+        Fl = np.convolve(F, np.ones(A7_LAG + 1, dtype=F.dtype))[:n]   # flips in [t - A7_LAG, t]
+        ex = np.maximum(ka - kb, 0.0)
+        exq = float(ex[:q].sum())
+        win[s] = {"verdict": "READ",
+                  "a_top_kl": flip_test(ka, F, perm), "excess_top": flip_test(ka - kb, F, perm), "b_top_kl": flip_test(kb, F, perm),
+                  "a_top_kl_lag": flip_test(ka, Fl, perm), "b_top_kl_lag": flip_test(kb, Fl, perm),
+                  "layer_flip_rate": [float(v) for v in diff.mean(axis=0)],
+                  "mean_F_by_quarter": [float(F[i * q:(i + 1) * q if i < 3 else n].mean()) for i in range(4)],
+                  "q1_excess_share_on_flipped": (float(ex[:q][F[:q] > 0].sum()) / exq if exq > 0 else None),
+                  "q1_flipped_share": float((F[:q] > 0).mean()),
+                  "mean_kl": {"a": float(np.mean(ka)), "b": float(np.mean(kb))}}
+    p = win.get(A7_PRIMARY, {})
+    if why:
+        reading = {"verdict": "UNREAD", "why": why}
+    elif ctl["verdict"] != "BIT_IDENTICAL":
+        reading = {"verdict": "UNREAD", "why": f"perturbation control {ctl['verdict']}: " + (ctl.get("why") or (
+            f"the capture changed the served computation (max |diff| {ctl['max_abs_diff']:.3e})"))}
+    elif p.get("verdict") != "READ":
+        reading = {"verdict": "UNREAD", "why": p.get("why")}
+    else:
+        reading = a7_read(p["a_top_kl"], p["b_top_kl"])
+    if p.get("verdict") == "READ":                                   # descriptive, never the reading: the same rule, lagged flips
+        p["lag_read_descriptive"] = a7_read(p["a_top_kl_lag"], p["b_top_kl_lag"])
+    desc = {}
+    if prior_dir:
+        for lab, pstem in (("e4b_mxpre_cap", "e4b_a6mx_served_{}"), ("e4b_base_cap", "e4b_serve_served_{}")):
+            for s in A7_SRCS:
+                a, pp = arr(lab, s), os.path.join(prior_dir, f"kl_{pstem.format(s)}.npz")
+                if a is None or not os.path.exists(pp):
+                    desc[f"{lab}:{s}"] = None
+                    continue
+                o = np.load(pp)["eng_kl"]
+                desc[f"{lab}:{s}"] = {"bit_identical": bool(np.array_equal(a, o)), "max_abs_diff": float(np.max(np.abs(a - o)))}
+    return {"instrument": {"box_r": (_rv or {}).get("verdict"), "why": why}, "rows": rows,
+            "route_ids": {lab: {s: {k: v for k, v in x.items() if k != "sets"} for s, x in by.items()} for lab, by in ids.items()},
+            "perturbation_control": ctl, "windows": win, "reading": reading, "vs_prior_box": desc or None}
+
+
 def prove_a4(d: str) -> dict:
     R = _sc1()
     refs, _rc, why = a4_refs(d)
@@ -331,6 +489,25 @@ A6_P2_SRC = "conv2"
 # with no per-position R floor these may sit at the reference's own arithmetic noise)
 A6_VLLM_A5_MEDIAN = {"conv1": 6.560716581161224e-05, "conv2": 0.0009697601892657444, "conv3": 0.00014566963101666808,
                      "conv4": 0.0005183874304494503}
+
+# A7 (SC1g-PREREG.md, amendment A7): box J, the router-flip instrument. sc1g_k8's route_ids_capture records the expert ids e4b's
+# decode GEMV serves at every layer of every scored position, for (a) KEEP_NF4=0 and (b) the baseline, both captured; (b) also
+# runs UNcaptured on conv2, the capture's perturbation control. F(t) = the number of the 24 layers whose decode top-4 SET
+# differs between (a) and (b) at position t. The maintainer's descriptive test: the share of (a)'s top-1 % KL positions with a
+# flip (F > 0) against the share among all positions; read on conv2 by the rule in a7_read, the other windows descriptive.
+KL7_ARMS = {"e4b_mxpre_cap": "e4b_a7mx_served_{}", "e4b_base_cap": "e4b_a7b_served_{}", "e4b_base": "e4b_serve_served_{}"}
+A7_SRCS = ("conv2", "conv1", "conv3", "conv4")
+A7_PRIMARY = "conv2"
+A7_TOP = 0.01                # the top ceil(1 % of n) positions by the score (ties: the earlier position first)
+A7_SHARE_DELTA = 0.20        # share test: share_top - share_all >= this, with p_share <= A7_P_MAX -> enriched
+A7_INTENSITY_RATIO = 1.5     # intensity test: mean F over the top / over all >= this, with p_intensity <= A7_P_MAX -> enriched
+A7_P_MAX = 0.01
+A7_SATURATED = 0.80          # share_all above this leaves < 0.2 of headroom: the intensity test reads instead of the share
+A7_PERM = 20000              # the intensity test's permutation draws (seeded, A7_SEED)
+A7_SEED = 0
+A7_TOPK = 4                  # gpt-oss-20b routes each token to 4 of 32 experts
+A7_LAG = 8                   # descriptive: a flip at u reaches later positions through the KV, so also flips in [t - 8, t] vs KL at t
+A7_EXPERTS = 32
 
 
 def _fin(fn, a):
@@ -527,7 +704,7 @@ def route_gate(d, stem, steps=2048):
     if stem.startswith("e4b_nf4_"):
         bad = [k for k in seen if k.startswith("mxfp4_")]
         return (not bad), (f"MXFP4 route(s) {bad} on the NF4 control" if bad else ""), seen
-    if stem.startswith("e4b_a6mx_"):                  # A6 (a): KEEP_NF4=0 served -- the prompt on the MXFP4 store, the decode on the GEMV
+    if stem.startswith(("e4b_a6mx_", "e4b_a7mx_")):   # A6/A7 (a): KEEP_NF4=0 served -- the prompt on the MXFP4 store, the decode on the GEMV
         bad = [k for k in seen if not k.startswith("mxfp4_")]
         if bad:
             return False, f"route(s) {bad}: KEEP_NF4=0 must run no nf4_* route (the prompt on the MXFP4 store)", seen
@@ -703,7 +880,7 @@ def reduce(d: str) -> dict:
             "predictions": p, "delta_vs_vllm": rep,
             "within_floor_vs_vllm": {a: {sh: within(v) for sh, v in by.items()} for a, by in rep.items()},
             "diagnostics": {"meaning": MEANING, "per_window": dg}, "served_minus_prefill": gaps, "kernel_check": kern,
-            "scored_target_roles": roles, "diag_predictions": jp, "a3_predictions": kp, "a4": a4(d), "a5": a5(d), "a6": a6(d),
+            "scored_target_roles": roles, "diag_predictions": jp, "a3_predictions": kp, "a4": a4(d), "a5": a5(d), "a6": a6(d), "a7": a7(d),
             "attn_check_1175": (json.load(open(os.path.join(d, "attn_check_5090.json")))
                                 if os.path.exists(os.path.join(d, "attn_check_5090.json")) else None),
             "control_wikitext": {"floor": {"per_window": flc, "F": Fc}, "delta_vs_vllm": ctl,
@@ -968,6 +1145,7 @@ def self_test() -> int:
     cases += _a4_self_test(tempfile)
     cases += _a5_self_test(tempfile)
     cases += _a6_self_test(tempfile)
+    cases += _a7_self_test(tempfile)
     bad = [n for n, ok in cases if not ok]
     print(f"sc1g_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
@@ -1212,6 +1390,161 @@ def _a6_self_test(tempfile) -> list:
     return cases
 
 
+def _a7_fixture(d, kl, sets, ctl_same=True, rid_override=None, P=2048):
+    """Box R's A5 receipt + A7's arms: kl {(label, src): [P] array}, sets {(label, src): [P, LAYERS, A7_TOPK] ids}; writes each
+    captured arm's rid record as the capture would (16 warm decode steps of junk ids first, then 2 * LAYERS calls per scored
+    position, gate_up then down, in a shuffled slot order). (b) uncaptured on the primary window copies (b) captured's KL
+    unless ctl_same is False. rid_override {stem: (ids, bounds, meta)} replaces one record."""
+    import numpy as np
+    good = {"e4b_mxfp4": 2e-3, "e4b_nf4": 2e-2, "vllm": 1.5e-3, "llamacpp": 3e-3, "llamacpp_q8": 2.5e-3}
+    _a5_fixture(d, good)
+    shas = json.load(open(os.path.join(d, "ref", "ref_full_shas.json")))
+    gate = {"e4b_a7mx_": {"mxfp4_gemv|le256": 2048 * 24 + 16 * 24, "mxfp4_grouped_v1|gt256": 24},
+            "e4b_a7b_": {"mxfp4_gemv|le256": 2048 * 24 + 16 * 24, "nf4_mtile_host|gt256": 24},
+            "e4b_serve_": {"mxfp4_gemv|le256": 2048 * 24 + 16 * 24, "nf4_mtile_host|gt256": 24}}
+    rng = np.random.default_rng(1)
+    kl = dict(kl)
+    kl[("e4b_base", A7_PRIMARY)] = kl[("e4b_base_cap", A7_PRIMARY)] * (1.0 if ctl_same else 1.001)
+    for (lab, s), k in kl.items():
+        st = KL7_ARMS[lab].format(s)
+        src = json.load(open(os.path.join(d, f"e4b_serve_served_{s}.json")))
+        json.dump(src, open(os.path.join(d, st + ".json"), "w"))
+        np.savez(os.path.join(d, f"kl_{st}.npz"), eng_kl=k, eng_target_lp=np.full(P, -src["mean_nll"]), eng_kl_common=k,
+                 eng_masked_mass=np.zeros(P), eng_n_masked=np.zeros(P))
+        json.dump({"calls": P, "positions": P, "ref_sha": shas[s]}, open(os.path.join(d, f"kl_{st}.npz.json"), "w"))
+        r = next(v for pre, v in gate.items() if st.startswith(pre))
+        json.dump({"pid": 1, "route_seen": r, "attn_seen": None}, open(os.path.join(d, "routes", st + ".1.json"), "w"))
+        if lab == "e4b_base":
+            continue
+        per = 2 * LAYERS
+        x = sets[(lab, s)]
+        perm = rng.permuted(np.broadcast_to(np.arange(A7_TOPK), x.shape), axis=-1)
+        y = np.take_along_axis(x, perm, axis=-1)                      # the GEMV sees the ids in router order, not sorted
+        calls = np.repeat(y, 2, axis=1).reshape(P * per, A7_TOPK)
+        warm = rng.integers(0, A7_EXPERTS, (16 * per, A7_TOPK))
+        ids = np.concatenate([warm, calls]).astype(np.int16)
+        bounds = 16 * per + per * np.arange(1, P + 1)
+        meta = {"gemv_calls": int(ids.shape[0]), "bad_shape": 0, "overflow": 0, "rows": P, "positions": P}
+        if rid_override and st in rid_override:
+            ids, bounds, meta = rid_override[st]
+        np.savez(os.path.join(d, f"rid_{st}.npz"), ids=ids, bounds=bounds)
+        json.dump(meta, open(os.path.join(d, f"rid_{st}.npz.json"), "w"))
+
+
+def _a7_sets(P, flips, seed=0):
+    """(a)'s and (b)'s sets: (b) a fixed distinct top-4 per (position, layer); (a) equal except at {position: n_layers},
+    where the first n_layers layers swap one expert for one outside the set."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    b = np.sort(np.stack([np.stack([rng.choice(A7_EXPERTS, A7_TOPK, replace=False) for _ in range(LAYERS)]) for _ in range(P)]), -1)
+    a = b.copy()
+    for t, nl in flips.items():
+        for layer in range(nl):
+            out = [e for e in range(A7_EXPERTS) if e not in a[t, layer]][0]
+            a[t, layer, 0] = out
+    return np.sort(a, -1), b
+
+
+def _a7_self_test(tempfile) -> list:
+    import numpy as np
+    cases = []
+    P = 2048
+    W = A7_SRCS
+    base_kl = np.full(P, 1e-3)
+    hot = list(range(0, 400, 20))                                # 20 of (a)'s top-21 KL positions, all in Q1
+    spread = list(range(1, P, 10))                               # ~10 % of positions flip one layer elsewhere
+    ka = base_kl.copy()
+    ka[hot + [700]] = 0.5
+    flips_sup = {t: 6 for t in hot}
+    flips_sup.update({t: 1 for t in spread if t not in hot})
+    with tempfile.TemporaryDirectory() as d:                    # flips concentrate on (a)'s top-KL positions, not (b)'s
+        a, b = _a7_sets(P, flips_sup)
+        kb = base_kl.copy()
+        kb[np.arange(1500, 1521)] = 0.3                          # (b)'s own top positions: no flips there
+        kl = {(lab, s): (ka if lab == "e4b_mxpre_cap" else kb) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W}
+        _a7_fixture(d, kl, {(lab, s): (a if lab == "e4b_mxpre_cap" else b) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W})
+        r = a7(d, perm=500)
+        w = r["windows"]["conv2"]
+        cases.append(("A7 SUPPORTS: (a)'s top-1 % KL positions flip, (b)'s do not; control bit-identical",
+                      r["reading"]["verdict"] == "SUPPORTS" and r["reading"]["test"] == "share"
+                      and r["perturbation_control"]["verdict"] == "BIT_IDENTICAL" and w["a_top_kl"]["share_top"] > 0.9
+                      and w["q1_excess_share_on_flipped"] > 0.9))
+        cases.append(("A7 flip counts: per-layer rates and quarters", abs(w["layer_flip_rate"][0] - (len(hot) + len([t for t in spread if t not in hot])) / P) < 1e-12
+                      and w["mean_F_by_quarter"][0] > w["mean_F_by_quarter"][3]))
+    with tempfile.TemporaryDirectory() as d:                    # the same flips, but (b)'s top-KL positions are the same positions
+        a, b = _a7_sets(P, flips_sup)
+        kl = {(lab, s): ka for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W}
+        _a7_fixture(d, kl, {(lab, s): (a if lab == "e4b_mxpre_cap" else b) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W})
+        r = a7(d, perm=500)
+        w = r["windows"]["conv2"]
+        sup_bars = w["a_top_kl"]["p_share"] <= A7_P_MAX and w["a_top_kl"]["share_top"] - w["a_top_kl"]["share_all"] >= A7_SHARE_DELTA
+        cases.append(("A7 precedence: T1 meets SUPPORTS's bars AND the control is >= half as enriched -> FRAGILE_POSITIONS, not SUPPORTS",
+                      sup_bars and r["reading"]["verdict"] == "FRAGILE_POSITIONS"))
+    with tempfile.TemporaryDirectory() as d:                    # flips avoid the top-KL positions entirely
+        a, b = _a7_sets(P, {t: 1 for t in spread if t not in hot and t != 700})
+        kl = {(lab, s): (ka if lab == "e4b_mxpre_cap" else base_kl) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W}
+        _a7_fixture(d, kl, {(lab, s): (a if lab == "e4b_mxpre_cap" else b) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W})
+        cases.append(("A7 CONTRADICTS when the top-KL positions flip less than average", a7(d, perm=500)["reading"]["verdict"] == "CONTRADICTS"))
+    with tempfile.TemporaryDirectory() as d:                    # saturated: every position flips; intensity concentrates on the top
+        fl = {t: 1 for t in range(P)}
+        fl.update({t: 8 for t in hot})
+        a, b = _a7_sets(P, fl)
+        kl = {(lab, s): (ka if lab == "e4b_mxpre_cap" else base_kl) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W}
+        _a7_fixture(d, kl, {(lab, s): (a if lab == "e4b_mxpre_cap" else b) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W})
+        rd = a7(d, perm=500)["reading"]
+        cases.append(("A7 saturated share -> the intensity test reads (SUPPORTS)", rd["test"] == "intensity" and rd["verdict"] == "SUPPORTS"))
+    with tempfile.TemporaryDirectory() as d:                    # the capture perturbed (b): the control differs -> UNREAD
+        a, b = _a7_sets(P, flips_sup)
+        kl = {(lab, s): (ka if lab == "e4b_mxpre_cap" else base_kl) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W}
+        _a7_fixture(d, kl, {(lab, s): (a if lab == "e4b_mxpre_cap" else b) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W},
+                    ctl_same=False)
+        r = a7(d, perm=500)
+        w = r["windows"]["conv2"]
+        cases.append(("A7 precedence: the control DIFFERS -> UNREAD (with its max |diff|) although T1 alone reads SUPPORTS",
+                      r["perturbation_control"]["verdict"] == "DIFFERS" and r["reading"]["verdict"] == "UNREAD"
+                      and "max |diff|" in r["reading"]["why"] and a7_read(w["a_top_kl"], w["b_top_kl"])["verdict"] == "SUPPORTS"))
+    with tempfile.TemporaryDirectory() as d:                    # lagged: flips 3 positions BEFORE each top-KL position, none at it
+        hot2 = list(range(40, 440, 20))
+        k2 = base_kl.copy()
+        k2[hot2 + [700]] = 0.5
+        fl = {h - 3: 6 for h in hot2}
+        fl.update({t: 1 for t in range(5, P, 50)})
+        a, b = _a7_sets(P, fl)
+        kl = {(lab, s): (k2 if lab == "e4b_mxpre_cap" else base_kl) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W}
+        _a7_fixture(d, kl, {(lab, s): (a if lab == "e4b_mxpre_cap" else b) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W})
+        r = a7(d, perm=500)
+        cases.append(("A7 lagged flips: the direct rule CONTRADICTS, the descriptive lagged read SUPPORTS (reported, not the reading)",
+                      r["reading"]["verdict"] == "CONTRADICTS" and r["windows"]["conv2"]["lag_read_descriptive"]["verdict"] == "SUPPORTS"))
+    with tempfile.TemporaryDirectory() as d:                    # capture gates: misaligned bounds, gu != dn, an unwritten id
+        a, b = _a7_sets(P, flips_sup)
+        per = 2 * LAYERS
+        good = np.repeat(np.concatenate([np.zeros((16, LAYERS, A7_TOPK), int) + np.arange(A7_TOPK), a]), 2, axis=1).reshape(-1, A7_TOPK)
+        bounds = 16 * per + per * np.arange(1, P + 1)
+        meta = {"gemv_calls": int(good.shape[0]), "bad_shape": 0, "overflow": 0}
+        skew = bounds.copy()
+        skew[100:] += 2
+        gudn = good.copy()
+        gudn[16 * per + 1] = [(v + 1) % A7_EXPERTS for v in gudn[16 * per + 1]]
+        unw = good.copy()
+        unw[-1] = -1
+        kl = {(lab, s): (ka if lab == "e4b_mxpre_cap" else base_kl) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W}
+        _a7_fixture(d, kl, {(lab, s): (a if lab == "e4b_mxpre_cap" else b) for lab in ("e4b_mxpre_cap", "e4b_base_cap") for s in W},
+                    rid_override={"e4b_a7mx_served_conv2": (good, skew, meta), "e4b_a7mx_served_conv1": (gudn, bounds, meta),
+                                  "e4b_a7mx_served_conv3": (unw, bounds, meta),
+                                  "e4b_a7mx_served_conv4": (good, bounds, dict(meta, overflow=3))})
+        r = a7(d, perm=500)
+        ri = r["route_ids"]["e4b_mxpre_cap"]
+        cases.append(("A7 capture gates: misaligned rows, gate_up != down, an unwritten id, an overflow -> VOID; primary UNREAD",
+                      all(ri[s]["verdict"] == "VOID" for s in W) and "exactly 48" in ri["conv2"]["why"]
+                      and "gate_up and down" in ri["conv1"]["why"] and "unwritten" in ri["conv3"]["why"]
+                      and "overflow" in ri["conv4"]["why"] and r["reading"]["verdict"] == "UNREAD"))
+    cases.append(("A7 hypergeometric p, exact", abs(_hyper_p(10, 5, 3, 3) - 10 / 120) < 1e-15 and _hyper_p(10, 2, 3, 3) == 0.0
+                  and abs(_hyper_p(10, 5, 3, 0) - 1.0) < 1e-15))
+    cases.append(("A7 constants as registered", (A7_TOP, A7_SHARE_DELTA, A7_INTENSITY_RATIO, A7_P_MAX, A7_SATURATED, A7_PERM, A7_SEED,
+                                                 A7_PRIMARY, A7_LAG) == (0.01, 0.20, 1.5, 0.01, 0.80, 20000, 0, "conv2", 8)))
+    return cases
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--self-test", action="store_true")
@@ -1268,6 +1601,18 @@ def main(argv=None) -> int:
         print(f"SC1G_A6_MEDIAN {json.dumps(a6r.get('median'), default=float)[:600]}")
         for g, x in (a6r.get("predictions") or {}).items():
             print(f"SC1G_A6_{g} {x['verdict']} {json.dumps({k: w for k, w in x.items() if k != 'verdict'}, default=float)[:400]}")
+    a7r = v.get("a7") or {}
+    if any(x.get("verdict") == "VALID" for by in (a7r.get("rows") or {}).values() for x in by.values()):
+        print(f"SC1G_A7_CONTROL {json.dumps(a7r.get('perturbation_control'), default=float)}")
+        for s, w in (a7r.get("windows") or {}).items():
+            if w.get("verdict") != "READ":
+                print(f"SC1G_A7_WINDOW {s} UNREAD {w.get('why')}"[:400])
+                continue
+            print(f"SC1G_A7_WINDOW {s} " + " ".join(
+                f"{t}: share {w[t]['share_top']:.3f}/{w[t]['share_all']:.3f} p={w[t]['p_share']:.2e} F {w[t]['mean_F_top']:.2f}/"
+                f"{w[t]['mean_F_all']:.2f} p={w[t]['p_intensity']:.2e};" for t in ("a_top_kl", "excess_top", "b_top_kl", "a_top_kl_lag"))
+                + (f" lag_read(descriptive)={w['lag_read_descriptive']['verdict']}" if "lag_read_descriptive" in w else ""))
+        print(f"SC1G_A7_READING {json.dumps(a7r.get('reading'), default=float)[:400]}")
     a5r = v.get("a5") or {}
     print(f"SC1G_A5_INSTRUMENT {json.dumps(a5r.get('instrument'))} gradable={a5r.get('gradable_windows')}")
     for g, x in (a5r.get("predictions") or {}).items():

@@ -24,6 +24,9 @@ SC1's sc1_prompts.py, P42's hook):
      [1, V] rows -- in the served loop (no --ppl-oracle) that is the one call per scored step -- and passes every other
      attribute (torch.Tensor included) through untouched. The reader proves the alignment: the recorded target log-probs
      must reproduce step_decomp's own mean NLL to 1e-9, and the call count must equal the steps, else the row is VOID.
+  6. (A7) SC1G_ROUTE_IDS_OUT=<path.npz> records the expert ids e4b's decode GEMV serves at every layer of every scored
+     step (route_ids_capture): gnf4's gemv_mxfp4_b32 is wrapped, its ids copied device-side into a preallocated buffer, and
+     each scored log_softmax row records the GEMV call count before it (the position alignment). Ints only, no extra sync.
 
   sc1g_k8.py k8 -- <step_decomp.py args...>        import step_decomp (beside this file) and run its main()
   sc1g_k8.py windows --model M --rev R --out DIR --suffix S [--steps 2048]
@@ -246,6 +249,70 @@ def full_capture(module, ref_path: str, ref_sha: str | None, window_file: str, o
     return st
 
 
+def route_ids_capture(module, out: str, layers: int = 24, top_k: int = 4, max_positions: int = 4096):
+    """A7: the expert ids e4b's decode GEMV serves, per scored position. gnf4's `gemv_mxfp4_b32` is wrapped, not edited (e4b
+    looks it up at call time): each call's `eids` ([top_k] int32, on the device) is copied into a preallocated device buffer
+    -- a stream-ordered device copy, no host read, no sync. `module.torch` is wrapped OVER whatever proxy is already there
+    (A5's full_capture), and each [1, V] log_softmax row -- one per scored step in the served loop -- records how many GEMV
+    calls preceded it, which is what aligns a position to its forward. One decode forward is 2 * `layers` calls (gate_up,
+    then down, per layer, in order); the scheduler's warm decode steps come before the first scored row, so position t's
+    ids are the 2 * `layers` calls just before its row. The buffer comes to the host once, at the last scored position (the
+    served loop has already synced there), with an atexit fallback. Nothing here changes what the kernels compute."""
+    import numpy as np
+    import torch
+    import mxfp4_grouped
+    g0, per = mxfp4_grouped.gemv_mxfp4_b32, 2 * layers
+    cap = (max_positions + 64) * per
+    st = {"calls": 0, "buf": None, "bad_shape": 0, "overflow": 0, "in_capture": 0, "bounds": [], "other": 0, "host": None}
+
+    def g(xq, xs, blocks, scales, eids, N, K, part=None):
+        i = st["calls"]
+        st["calls"] += 1
+        if eids.numel() != top_k:
+            st["bad_shape"] += 1
+        elif eids.is_cuda and torch.cuda.is_current_stream_capturing():
+            st["in_capture"] += 1          # a graph capture would record the copy, not run it: leave the slot unwritten (-1)
+        elif i >= cap:
+            st["overflow"] += 1
+        else:
+            if st["buf"] is None:
+                st["buf"] = torch.full((cap, top_k), -1, dtype=torch.int32, device=eids.device)
+            st["buf"][i].copy_(eids.reshape(-1), non_blocking=True)
+        return g0(xq, xs, blocks, scales, eids, N, K, part=part)
+
+    mxfp4_grouped.gemv_mxfp4_b32 = g
+    positions = None
+    if os.environ.get("SC1G_WINDOW_FILE"):
+        positions = int(json.load(open(os.environ["SC1G_WINDOW_FILE"]))["steps"])
+
+    def _host():
+        if st["host"] is None:
+            n = min(st["calls"], cap)
+            st["host"] = (np.zeros((0, top_k), np.int32) if st["buf"] is None else st["buf"][:n].to("cpu").numpy())
+        return st["host"]
+
+    def on_rows(x):
+        if x.dim() != 2 or x.shape[0] != 1:
+            st["other"] += 1
+            return
+        st["bounds"].append(st["calls"])
+        if positions is not None and len(st["bounds"]) == positions:
+            _host()
+
+    def _save():
+        np.savez(out + ".tmp.npz", ids=_host(), bounds=np.asarray(st["bounds"], dtype=np.int64))
+        os.replace(out + ".tmp.npz", out)
+        json.dump({"gemv_calls": st["calls"], "bad_shape": st["bad_shape"], "overflow": st["overflow"], "in_capture": st["in_capture"],
+                   "rows": len(st["bounds"]),
+                   "other_calls": st["other"], "positions": positions, "layers": layers, "top_k": top_k, "calls_per_step": per,
+                   "estimator": "decode GEMV expert ids per scored position (A7)"},
+                  open(out + ".json", "w"), indent=1, sort_keys=True)
+    atexit.register(_save)
+    st["save"] = _save
+    module.torch = _TorchProxy(module.torch, on_rows)
+    return st
+
+
 def k8(args) -> None:
     pin_chat_date()
     if os.environ.get("SC1G_ROUTE_OUT"):
@@ -271,6 +338,10 @@ def k8(args) -> None:
         if "--ppl-oracle" in args:
             raise SystemExit("SC1G_REF_FILE reads the SERVED loop's rows; an --ppl-oracle arm scores elsewhere -- refused")
         named_capture(step_decomp, os.environ["SC1G_REF_FILE"], os.environ.get("SC1G_REF_SHA"), os.environ["SC1G_NAMED_OUT"])
+    if os.environ.get("SC1G_ROUTE_IDS_OUT"):         # A7: AFTER the KL proxy, so its boundary rows wrap A5's
+        if "--ppl-oracle" in args:
+            raise SystemExit("SC1G_ROUTE_IDS_OUT reads the SERVED loop's decode GEMV; an --ppl-oracle arm scores elsewhere -- refused")
+        route_ids_capture(step_decomp, os.environ["SC1G_ROUTE_IDS_OUT"])
     step_decomp.main()
 
 
