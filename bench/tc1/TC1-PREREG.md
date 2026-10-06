@@ -1948,3 +1948,43 @@ or not engaged.
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), a 4 h guard, and TC1's 98 GB host floor.
 - No Unsloth venv is built for these tokens.
 - About $3 with both downloads (OLMoE about 14 GB, Qwen3-30B-A3B about 61 GB). This is in the standing no-ask tier.
+
+### Amendment 47 (2026-10-06T00:25Z, after amendments 43, 44 and 45's reads, before any box): where e4b's packed-row memory goes, against Unsloth's — the census on packed 4,096-token rows (P112, P113, P114)
+
+**Why.** On packed 4,096-token rows e4b with its chunked LM loss peaked at 32.47 GB against Unsloth's 24.86 (amendment 43), about 1.1 GB
+under the RTX 5090's capacity. `auto` (amendment 44, #1203) makes those rows e4b's default path, so that headroom is now the margin on every
+long-row run. Part of the 7.6 GB gap is known: TC1's e4b arms run the library default, the fp32 expert absmax, which amendment 23 measured
+1.35 GB above Unsloth's double-quantized one. The rest scales with tokens per micro-batch, because amendment 23's field-recipe transient gap
+was 0.43 GB. Amendment 23's largest e4b transients were grouped-nf4-gemm's padded LoRA delta, a zero-padded fp32 input block and its
+products. Those blocks grow with the hottest expert's rows, and at 4,096 tokens they reach the delta's 2 GiB pad limit (amendments 40 and
+43 saw the loop that limit triggers). grouped-nf4-gemm's opt-in compact delta (`NF4_QLORA_COMPACT_DELTA=1`) was built to shrink that
+transient. It took 0.29 GB off the field recipe's matched peak (amendment 37), where the block is small.
+
+**The box** (token `qwen3memc4k`). One RTX 5090, amendment 39's packed rows (`TC1_PACK=1`, seq 4,096, micro-batch 1 × accum 4,
+`TC1_FREE_OUTPUTS=1`), the matched set, 20 steps, one draw per arm in this order, each with the harness's memory census on
+(`--mem-census 1`), every arm in venv-unsloth:
+
+- e4b `fused_attn4_m_p4`: the library's defaults (fp32 absmax, the padded delta, the chunked LM loss as `auto`);
+- e4b `fused_attn4_m_p4_lev`: `E4B_ABSMAX_DQ=1` + `NF4_QLORA_COMPACT_DELTA=1`, e4b's two memory levers;
+- Unsloth `ckpt_unsloth_m_p4`: TC1's qwen3 Unsloth arm (grouped_mm).
+
+Validity: amendment 39's packed-row predicates. On e4b, the levers its tag names (`absmax_dq`, grouped-nf4-gemm's `gnf4_compact_delta`), and
+chunked training forwards with no fallback. The per-expert loop is a recorded route up to 5 % of a step's delta calls (amendment 43). The
+census slows the step, so no speed is read.
+
+**Predictions** (registered before the box):
+
+- **P112** (the instrument): the census attributes at least 90 % of each arm's peak to named groups, as amendment 23's P42 did.
+- **P113:** e4b's defaults peak **5.0 to 10.0 GB** above Unsloth's (peak allocated). The band was set with amendment 43's 7.6 GB, a
+  `peak_vram_gb` reading, in view.
+- **P114:** with both levers, e4b's peak is at most **3.0 GB** above Unsloth's: the absmax and the padded delta are most of the gap.
+
+**Decision rules.** This is a measurement, not a position. The read names each excess's largest class and groups at the peak.
+
+- **P114 HELD:** the levers close most of the packed gap. A registered A/B reads the compact delta's speed on packed rows, the regime
+  where it matters, and asks for a size-gated default the way amendment 44 did for the chunked loss.
+- **P114 FALSIFIED:** the read names what is left, and the next registration targets it.
+- Positions stay with the boxes that read them.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the download;
+this is in the standing no-ask tier.

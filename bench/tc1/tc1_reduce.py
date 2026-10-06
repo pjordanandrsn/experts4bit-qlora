@@ -1134,6 +1134,46 @@ ATTN_CENSUS[MEMCENSUS_FAM] = 192
 FAM_ANCHOR[MEMCENSUS_FAM] = MEMCENSUS_ARMS[0]
 EXPECTED[MEMCENSUS_FAM] = list(MEMCENSUS_ARMS)
 MATCHED |= {"fused_attn4_m_mb1_dq"}                     # fused_attn4_m_mb1 and ckpt_unsloth_m_mb1 are registered matched already
+# TC1 amendment 47: amendment 23's census on amendment 39's packed rows (4,096 real tokens, micro-batch 1 x accum 4), every arm in venv-unsloth
+MEMC4K_FAM = "qwen3memc4k"
+MEMC4K_ARMS = (("e4b", "fused_attn4_m_p4"), ("e4b", "fused_attn4_m_p4_lev"), ("unsloth", "ckpt_unsloth_m_p4"))
+MEMC4K_LABELS = {MEMC4K_ARMS[0]: "e4b defaults", MEMC4K_ARMS[1]: "e4b absmax-dq + compact delta", MEMC4K_ARMS[2]: "Unsloth"}
+P113_BAND = (5.0e9, 10.0e9)        # P113: e4b defaults' peak allocated - Unsloth's (amendment 43 read 32.47 - 24.86 GB = 7.6 GB, peak_vram_gb)
+P114_MAX = 3.0e9                   # P114: with both levers, e4b's peak allocated - Unsloth's at most this
+NO_SPEED_FAMS[MEMC4K_FAM] = "the memory census slows the step (amendment 47), so no speed is read on this token; positions stay with the boxes that read them"
+FAMS.append(MEMC4K_FAM)
+NAMES[MEMC4K_FAM] = "Qwen3-30B-A3B (amendment 47: the memory census on packed 4,096-token rows -- e4b defaults, e4b absmax-dq + compact delta, Unsloth; no speed read)"
+N_LAYERS[MEMC4K_FAM] = 48
+ATTN_CENSUS[MEMC4K_FAM] = 192
+FAM_ANCHOR[MEMC4K_FAM] = MEMC4K_ARMS[0]
+EXPECTED[MEMC4K_FAM] = list(MEMC4K_ARMS)
+MATCHED |= {"fused_attn4_m_p4", "fused_attn4_m_p4_lev", "ckpt_unsloth_m_p4"}
+PACKED_FAMS = PACKED_FAMS + (MEMC4K_FAM,)        # amendment 39's packed-row predicates, every framework
+LOOP_ROUTE_SHARE_MAX[MEMC4K_FAM] = 0.05          # amendment 43's recorded route: the per-expert loop up to 5 % of a step's delta calls
+
+
+def memc4k_why(r):
+    """Amendment 47's predicates on an OK row: torch 2.12 (venv-unsloth), a census on the receipt (an errored census is recorded, never VOID),
+    and on e4b the levers its tag names (`_lev`: absmax_dq true and grouped-nf4-gemm's compact delta "1"; defaults: neither) and the chunked
+    LM loss that lets it train the packed rows at its defaults (`auto`: chunked_calls > 0, no run-time fallback). Empty string = as registered."""
+    r = r or {}
+    bad = []
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.12"):
+        bad.append(f"env.torch {tv or 'missing'} is not 2.12*")
+    if not isinstance(r.get("mem_census"), dict):
+        bad.append("no mem_census on the receipt: the registered instrument (--mem-census 1) did not run")
+    if r.get("framework") == "e4b":
+        lev = (r.get("tag") or "").endswith("_lev")
+        cd = str(((r.get("keep_ab") or {}).get("gnf4_compact_delta")) or "")
+        if (r.get("absmax_dq") is True) != lev:
+            bad.append(f"absmax_dq {r.get('absmax_dq')!r} on {r.get('tag')}: the tag names the {'double-quantized' if lev else 'fp32'} expert absmax")
+        if cd != ("1" if lev else "0"):
+            bad.append(f"gnf4_compact_delta {cd or 'missing'!r} on {r.get('tag')}: the tag names the {'compact' if lev else 'padded'} delta")
+        c = r.get("chunked_lm_loss") or {}
+        if not (int(c.get("chunked_calls") or 0) > 0 and int(c.get("runtime_refusals") or 0) == 0):
+            bad.append(f"the chunked LM loss did not serve the packed rows (record {c})")
+    return "; ".join(bad)
 
 
 def memcensus_why(r):
@@ -1648,6 +1688,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == MEMCENSUS_FAM:                            # amendment 23: the pin, the mb1 recipe, the census on the receipt, the absmax the tag names
         w = memcensus_why(r)
+        if w:
+            why.append(w)
+    if fam == MEMC4K_FAM:                               # amendment 47: torch 2.12, the census, the levers and the chunked loss the tag names
+        w = memc4k_why(r)
         if w:
             why.append(w)
     if fam == BMMAB_FAM and fw == "e4b":               # amendment 24: the environment and adapter dtype its tag names
@@ -2533,6 +2577,51 @@ def _mc_top(mc, n=3, static=False):
     """The `n` largest live-at-peak groups of one census, static: groups excluded unless `static`."""
     gs = [g for g in (mc or {}).get("live_at_peak_top") or [] if static or not str(g.get("group", "")).startswith("static:")]
     return ", ".join(f"{g['group']} {_gb(g.get('bytes'))} GB ×{g.get('count')}" for g in gs[:n]) or "none"
+
+
+def score_memc4k(F):
+    """TC1-PREREG amendment 47, on the qwen3memc4k token (a missing or non-VALID arm, or an errored census, leaves every prediction that needs
+    it UNTESTED):
+      P112 -- attributed_fraction >= P42_MIN on every arm, each read only when its reduced window holds the run's peak;
+      P113 -- e4b defaults' peak allocated - Unsloth's inside P113_BAND;
+      P114 -- e4b with both levers (absmax-dq + compact delta): peak allocated - Unsloth's <= P114_MAX.
+    The evidence names each excess's largest class at the peak and each side's largest live groups."""
+    R = F.get(MEMC4K_FAM)
+    if not R:
+        return []
+    reads = {k: _mc_reading(R, k) for k in MEMC4K_ARMS}
+    out, legs = [], []
+    for key in MEMC4K_ARMS:
+        m, why = reads[key]
+        name = MEMC4K_LABELS[key]
+        if m is None:
+            legs.append((None, f"{name}: UNREAD -- {why}"))
+            continue
+        af, pw = m.get("attributed_fraction"), m.get("peak_window") or {}
+        if af is None or pw.get("peak_in_window") is not True:
+            legs.append((None, f"{name}: no live-at-peak reduction holding the run's peak (attributed {af}, in window {pw.get('peak_in_window')})"))
+            continue
+        legs.append((af >= P42_MIN, f"{name} {af:.4f} ({'>=' if af >= P42_MIN else '<'} {P42_MIN})"))
+    v = "FALSIFIED" if any(ok is False for ok, _ in legs) else ("HELD" if all(ok for ok, _ in legs) else "UNTESTED")
+    out.append(("P112", MEMC4K_FAM, v, "attributed fraction at the peak: " + "; ".join(e for _, e in legs)))
+    mu, wu = reads[MEMC4K_ARMS[2]]
+    pu = (mu or {}).get("peak_allocated_bytes")
+    for pid, key, test, bound in (("P113", MEMC4K_ARMS[0], lambda ex: P113_BAND[0] <= ex <= P113_BAND[1], f"[{P113_BAND[0] / 1e9}, {P113_BAND[1] / 1e9}] GB"),
+                                  ("P114", MEMC4K_ARMS[1], lambda ex: ex <= P114_MAX, f"<= {P114_MAX / 1e9} GB")):
+        me, we = reads[key]
+        pe = (me or {}).get("peak_allocated_bytes")
+        if pe is None or pu is None:
+            out.append((pid, MEMC4K_FAM, "UNTESTED", f"{MEMC4K_LABELS[key]} and Unsloth peaks are both registered -- " + ("; ".join(w for w in (we, wu) if w) or "a peak_allocated_bytes is missing")))
+            continue
+        ex = pe - pu
+        ae, au = _mc_at_peak(me), _mc_at_peak(mu)
+        diffs = sorted(((c, ae.get(c, 0) - au.get(c, 0)) for c in set(ae) | set(au)), key=lambda kv: (-kv[1], kv[0]))
+        largest = f"{diffs[0][0]} {diffs[0][1] / 1e9:+.3f} GB" if (diffs and diffs[0][1] > 0) else "none (no class is larger on e4b at the peak)"
+        out.append((pid, MEMC4K_FAM, "HELD" if test(ex) else "FALSIFIED",
+                    f"{MEMC4K_LABELS[key]} peak {_gb(pe)} - Unsloth peak {_gb(pu)} = {ex / 1e9:+.3f} GB vs {bound}; the excess's largest class at the peak: "
+                    f"{largest}; by class, e4b - Unsloth (GB): " + ", ".join(f"{c} {d / 1e9:+.3f}" for c, d in diffs)
+                    + f"; e4b's largest non-static groups: {_mc_top(me)}; Unsloth's: {_mc_top(mu)}"))
+    return out
 
 
 def score_memcensus(F):
@@ -4303,6 +4392,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_denseab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if MEMC4K_FAM in F:
+        out += ["\n## Predictions P112 / P113 / P114 (TC1-PREREG amendment 47: the memory census on packed 4,096-token rows, e4b against Unsloth; scored mechanically from the receipts)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_memc4k(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if MEMCENSUS_FAM in F:
         out += memcensus_block(F)
         out += ["\n## Predictions P41 / P42 / P43 (TC1-PREREG amendment 23: the memory census, e4b against Unsloth at micro-batch 1; scored mechanically from the receipts)",
@@ -5040,6 +5134,33 @@ def _memcensus_set(e4b_peak=26.06e9, dq_peak=24.71e9, un_peak=23.50e9, absmax=(Q
                          unsloth_backend_calls_per_step_min=ub, unsloth_backend_calls_per_step_max=ub, unsloth_grouped_mm_calls_per_step_min=GMM_FACTOR * 48 * 8,
                          unsloth_grouped_mm_calls_per_step_max=GMM_FACTOR * 48 * 8, mem_census=_mc_census(un_peak, QWEN3_ABSMAX_DQ, af=af[2], in_window=in_window[2], transient=5.0e9))
         r["fam"] = MEMCENSUS_FAM
+        r["peak_vram_gb"] = round(r["mem_census"]["peak_allocated_bytes"] / 1e9, 3)
+        R[(fw, tag)] = r
+    return R
+
+
+def _memc4k_set(peaks=(32.47e9, 27.40e9, 24.86e9), af=(0.95, 0.95, 0.93), lev=(False, True), cd=("0", "1"), chunked=160, torch="2.12.1+cu130"):
+    """Amendment 47: the census's three arms on packed rows (seq 4096, micro-batch 1 x accum 4, a packed tokens file, no padding, free outputs),
+    each VALID with its census -- `peaks` = (e4b defaults, e4b levers, Unsloth) peak allocated bytes; `lev` / `cd` = each e4b arm's recorded
+    absmax_dq and compact-delta flag; `chunked` = the e4b arms' chunked training forwards."""
+    R = {}
+    ub = {"unsloth_grouped_mm": 48 * 4, "unsloth_triton": 0, "unsloth_loop": 0, "moe_bnb4bit_backend": 48 * 4}
+    env = {"box_class": "RTX 5090", "gpu": "NVIDIA GeForce RTX 5090", "torch": torch}
+    packed = dict(steps=20, seq=4096, micro_batch=1, accum=4, offload=False, tokens={"sha256": "p" * 64, "pack": True},
+                  tokens_per_step=[16384] * 20, tokens_padded_per_step=[0] * 20, arm_facts={"free_outputs": True})
+    for i, (fw, tag) in enumerate(MEMC4K_ARMS):
+        if fw == "e4b":
+            r = _receipt("e4b", tag, "fused", s=20.0, kernel_calls_per_step_min=2 * 48 * 4, absmax_dq=lev[i], env=dict(env),
+                         mem_census=_mc_census(peaks[i], QWEN3_ABSMAX_DQ if lev[i] else QWEN3_ABSMAX_FP32, af=af[i], transient=peaks[i] - 20.0e9), **packed)
+            r["keep_ab"] = {"requested_env": None, "e4b_has_moe_keep": True, "layers_kept": 0, "gnf4_compact_delta": cd[i], "gnf4_compact_delta_env": cd[i] if lev[i] else None}
+            r["chunked_lm_loss"] = {"env": None, "e4b_has_chunked_lm_loss": True, "chunked_calls": chunked, "stock_calls": 0, "small_calls": 0, "patched": 1,
+                                    "runtime_refusals": 0, "refused": {}}
+            r["lora_loop_share"], r["lora_path_loop_steps"] = [0.02] * 20, list(range(1, 21))
+        else:
+            r = _receipt("unsloth", tag, "unsloth", s=28.0, heldout_n=1.8100, experts_forward_calls_per_step_min=48 * 4, env=dict(env),
+                         unsloth_backend_calls_per_step_min=ub, unsloth_backend_calls_per_step_max=ub, unsloth_grouped_mm_calls_per_step_min=GMM_FACTOR * 48 * 4,
+                         unsloth_grouped_mm_calls_per_step_max=GMM_FACTOR * 48 * 4, mem_census=_mc_census(peaks[2], QWEN3_ABSMAX_DQ, af=af[2], transient=4.0e9), **packed)
+        r["fam"] = MEMC4K_FAM
         r["peak_vram_gb"] = round(r["mem_census"]["peak_allocated_bytes"] / 1e9, 3)
         R[(fw, tag)] = r
     return R
@@ -7144,6 +7265,21 @@ def selftest():
     gate_only = render({}, gd)
     assert "## Predictions P107 / P108 / P109 / P110 / P111" in gate_only and "| P107 | decgate | **FALSIFIED** |" in gate_only, gate_only[-800:]
     print("FAILING-CASE A46-P107 (reducer):", score_decgate(gd)[0][3][:140])
+    cases += 1
+    # 100. TC1 amendment 47 (qwen3memc4k): the census's three packed arms VALID; P112 / P113 / P114 HELD at 7.61 / 2.54 GB; e4b defaults at
+    #      4.0 GB over Unsloth FALSIFIES P113; the levers at 4.0 GB FALSIFY P114; an attributed fraction 0.80 FALSIFIES P112; a `_lev` arm
+    #      without the compact delta is VOID (P114 then UNTESTED)
+    MC = lambda R: {MEMC4K_FAM: reduce_family(MEMC4K_FAM, R, {}, 20)}
+    RMC = MC(_memc4k_set())
+    assert [(x["fw"], x["tag"]) for x in RMC[MEMC4K_FAM]["rows"]] == EXPECTED[MEMC4K_FAM]
+    assert all(x["verdict"] == "VALID" for x in RMC[MEMC4K_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RMC[MEMC4K_FAM]["rows"]]
+    pmc = lambda **kw: {p: v for p, _, v, _ in score_memc4k(MC(_memc4k_set(**kw)))}
+    assert pmc() == {"P112": "HELD", "P113": "HELD", "P114": "HELD"}, score_memc4k(RMC)
+    assert pmc(peaks=(28.86e9, 27.40e9, 24.86e9))["P113"] == "FALSIFIED" and pmc(peaks=(32.47e9, 28.86e9, 24.86e9))["P114"] == "FALSIFIED"
+    assert pmc(af=(0.95, 0.80, 0.93))["P112"] == "FALSIFIED"
+    RV = MC(_memc4k_set(cd=("0", "0")))
+    assert RV[MEMC4K_FAM]["verdicts"][("e4b", "fused_attn4_m_p4_lev")] == "VOID" and pmc(cd=("0", "0"))["P114"] == "UNTESTED"
+    assert "P113" in render(RMC, "x") and "amendment 47" in render(RMC, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
