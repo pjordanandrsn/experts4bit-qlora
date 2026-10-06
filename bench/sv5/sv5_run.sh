@@ -5,6 +5,10 @@
 # TP_DONE.<nonce> at the end -- a refusal writes them too. Qwen3-30B-A3B on an RTX 4090, the planner's all-VRAM plan for
 # 8 x 8192 after SV4: one arena baked here, then a5_short (1,024-token prompts, the anchor) and a5_long (8,000-token prompts).
 # Nothing here creates, destroys or approves compute.
+# Exit codes (SV5-PREREG "Outcomes"). 13 and 18 keep their host meanings, the only ones the launcher reads as evidence
+# against the machine: 13 = under the disk floor, 18 = under the host-RAM floor. Everything else is the workload's:
+# 9 install / tripwire, 10 fetch, 11 fewer than two receipts, 12 the bake, 16 the a5_short anchor not finishing.
+# sv5-4090-1 ran this file before that split, when a bake failure also exited 13; it exited 0.
 set -uo pipefail
 W=/root/tc1; cd "$W" || exit 9
 NONCE=${TC1_RUN_NONCE:?}; printf '%s\n' "$NONCE" > TC1_RUN_NONCE
@@ -20,6 +24,12 @@ QWEN=Qwen/Qwen3-30B-A3B; QWEN_REV=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
 [ -s calib.json ] || { echo "CALIB MISSING" | tee -a summary.txt; finish 9; }
 FREE_GB=$(df -BG --output=avail /root 2>/dev/null | tail -1 | tr -dc 0-9)
 [ "${FREE_GB:-0}" -ge 120 ] || { echo "BOX_REFUSED disk=${FREE_GB:-?}GB < 120 GB (57 GB checkpoint + 16 GB arena + venv)" | tee -a summary.txt; finish 13; }
+# A guard, not a measured need: the bake and the load stream the checkpoint shard by shard, and sv5-4090-1's arms
+# peaked at 2.4 GB of anonymous host memory.
+MIN_RAM_GB=32
+AVAIL_GB=$(awk '/MemAvailable/ {print int($2/1048576)}' /proc/meminfo)
+CG=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max); CG_GB=$([ "$CG" = max ] && echo 99999 || echo $(( CG / 1073741824 )))
+[ "${AVAIL_GB:-0}" -ge "$MIN_RAM_GB" ] && [ "$CG_GB" -ge "$MIN_RAM_GB" ] || { echo "BOX_REFUSED ram: available ${AVAIL_GB:-?} GB, cgroup ${CG_GB} GB < $MIN_RAM_GB GB" | tee -a summary.txt; finish 18; }
 
 command -v git >/dev/null 2>&1 || perl -e 'alarm 600; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq git' > logs/apt_git.log 2>&1 \
   || { tail -3 logs/apt_git.log; echo "GIT INSTALL FAIL" | tee -a summary.txt; finish 9; }
@@ -56,7 +66,7 @@ echo "qwen3: fetched $(du -shL "$snap" | cut -f1)" | tee -a summary.txt
 say "bake qwen3"
 perl -e 'alarm 3600; exec @ARGV' python -c "from nvme_bake_nf4 import bake_nf4; bake_nf4('$snap', '$ARENAS/qwen3.nf4')" > logs/bake_qwen3.log 2>&1
 rc=$?; echo "bake qwen3 rc=$rc $(du -sh "$ARENAS/qwen3.nf4" 2>/dev/null | cut -f1) $(tail -1 logs/bake_qwen3.log | cut -c1-160)" | tee -a summary.txt
-[ $rc = 0 ] || finish 13
+[ $rc = 0 ] || { tail -5 logs/bake_qwen3.log; echo "BAKE FAIL" | tee -a summary.txt; finish 12; }
 arm(){ local tag=$1 prompt=$2
   say "arm $tag (all-VRAM, 8 x 8192, decode graphs, buckets 1,2,4,8, $prompt-token prompts)"
   perl -e 'alarm 3600; exec @ARGV' python sv4_measure.py --model $QWEN --revision $QWEN_REV --arena "$ARENAS/qwen3.nf4" --calib calib.json \
@@ -64,7 +74,7 @@ arm(){ local tag=$1 prompt=$2
       --new-tokens 32 --out "receipts/$tag.json" > "logs/arm_$tag.log" 2>&1
   local rc=$?; echo "$tag rc=$rc $(tail -1 "logs/arm_$tag.log" | cut -c1-320)" | tee -a summary.txt; return $rc; }
 # The short-prompt arm doubles as the instrument's smoke test: if it is not OK, stop before the long one.
-arm a5_short 1024 || { tail -20 logs/arm_a5_short.log; echo "ANCHOR ARM FAILED: stopping before the long-prompt arm" | tee -a summary.txt; finish 12; }
+arm a5_short 1024 || { tail -20 logs/arm_a5_short.log; echo "ANCHOR ARM FAILED: stopping before the long-prompt arm" | tee -a summary.txt; finish 16; }
 arm a5_long 8000
 n=$(ls receipts/*.json 2>/dev/null | wc -l | tr -d ' ')
 echo "SV5 done: $n arm receipts" | tee -a summary.txt
