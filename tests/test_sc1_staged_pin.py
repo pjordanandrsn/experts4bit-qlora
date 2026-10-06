@@ -147,3 +147,29 @@ def test_the_driver_refuses_without_a_box_or_with_a_bad_one(tmp_path):
     assert out.returncode == 78 and "SC1_BOX is not set" in out.stdout
     out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=_dry_env(tmp_path, SC1_BOX="Z"))   # a letter no lane will take next (H, then J, collided)
     assert out.returncode == 78 and "SC1_BOX must be A, B, C, D, E, F, G, H, I, J or K" in out.stdout    # D SC1b, E SC2, F SC2b, G SC2g, H SC2c, I SC1g, J SC1g-diag, K SC2d
+
+
+def test_the_receipt_fetch_leaves_the_staged_reference_rows_on_the_box(tmp_path):
+    """SC1g A5: pull_box's rsync filters (the mid-run pulls and the final fetch) keep box R's staged full-vocabulary rows and
+    box I's .f16 copies of them out of the receipt, and still bring the receipts back. Run with the driver's own filter list
+    against a box-shaped tree (sc1g-prove-a5-1 pulled 3.9 GB of rows into the receipt store without these)."""
+    import re
+    import shutil
+    import subprocess
+    drv = (LANE / "sc1_drive.sh").read_text()
+    body = drv[drv.index("pull_box() {"):drv.index('"root@$HOST:$W/" "$1/"; }')]
+    filt = re.findall(r"--(exclude|include) '([^']+)'", body)
+    assert ("exclude", "sc1g_ref_full/") in filt and ("exclude", "sc1g/ref_full_*.f16") in filt
+    assert shutil.which("rsync"), "rsync is needed to run the driver's filters (it is on every CI image and the mini)"
+    box, got = tmp_path / "box", tmp_path / "got"
+    for rel in ("sc1g_ref_full/ref_full_conv1.npy", "sc1g/ref_full_conv1.f16", "sc1g/kl_nll_llamacpp_q8_decode_conv1.npz",
+                "sc1g/k8_window_conv1.json", "sc1g/ref/ref_full_shas.json", "summary.txt", "work_gptoss/bake.json",
+                "work_gptoss/nf4.arena", "gguf/model.gguf", "sc1g_ref/ref_full_shas.json"):
+        (box / rel).parent.mkdir(parents=True, exist_ok=True)
+        (box / rel).write_text("x")
+    args = [a for k, v in filt for a in (f"--{k}", v)]
+    subprocess.run(["rsync", "-a", *args, f"{box}/", f"{got}/"], check=True, capture_output=True)
+    have = sorted(str(p.relative_to(got)) for p in got.rglob("*") if p.is_file())
+    assert have == ["sc1g/k8_window_conv1.json", "sc1g/kl_nll_llamacpp_q8_decode_conv1.npz", "sc1g/ref/ref_full_shas.json",
+                    "sc1g_ref/ref_full_shas.json", "summary.txt", "work_gptoss/bake.json"], have
+
