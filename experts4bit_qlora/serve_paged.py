@@ -960,7 +960,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
 
     from . import load_moe_4bit_streaming
     from .engines.fp8_paged_kv import Fp8PagedKV
-    from .engines.host_heap import release_freed_host_heap
+    from .engines.host_heap import release_cached_pinned_memory, release_freed_host_heap
     from .engines.hot_residency import target_modules
     from .engines.hybrid import enable_hybrid_tier
     from .engines.paged_attention import register
@@ -1047,6 +1047,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     # The build churns through host buffers it frees (the hybrid tier's setup tier, the stacks' one-shot reads), and
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
     # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.
+    # likewise torch's caching host allocator keeps the loader's freed pinned staging (1.09 GB after loading Qwen3-30B-A3B)
+    info["pinned_cache_released"] = release_cached_pinned_memory()
     info["host_heap_trimmed"] = release_freed_host_heap()
     log(f"ready: {json.dumps(info, default=str)}")
     return EngineParts(scheduler=sched, tokenizer=tok, eos_ids=_eos_ids(model, tok, cfg), info=info, runner=runner)
