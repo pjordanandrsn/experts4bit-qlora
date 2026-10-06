@@ -305,7 +305,8 @@ grouped-nf4-gemm's opt-in bucketed padding (`NF4_QLORA_PAD_BUCKETS=1`, grouped-n
 padded to its own widest) takes 4.29 GB off the matched arm's packed-row peak and steps it 0.893 (shipped 0.933) of the single block's
 (`e4b.train.pad-buckets.qwen3.5090.2026-10-06`, TC1 amendment 48). As `auto`, bucketing only calls of at least 16,384 routed rows
 (grouped-nf4-gemm#491), it never fires at the field recipe, whose calls carry at most 9,040 (`e4b.train.pad-buckets.auto.default-decision.5090.2026-10-06`,
-TC1 amendment 50), and it becomes grouped-nf4-gemm's default.
+TC1 amendment 50). That licenses making `auto` grouped-nf4-gemm's default, in a grouped-nf4-gemm PR and release not yet made; the
+evidence for the calls it changes is Qwen3-30B-A3B on one RTX 5090.
 **The double-quantized absmax, as an A/B** (`e4b.train.absmax-dq.mixtral.5090.2026-10-05`, TC1 amendment 28): on Mixtral-8x7B
 `E4B_ABSMAX_DQ=1` costs 2.3 % of the step (1.023) for 2.04 GB of peak (31.07 → 29.03 GB), held-out within 0.003. Qwen3-30B-A3B's pair
 was unstable on a busy host; amendment 31 read it over 60 steps on a quiet one

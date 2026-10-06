@@ -111,9 +111,10 @@ e4b's defaults, `NF4_QLORA_PAD_BUCKETS=0` against `auto` (buckets only where a c
 - **P125 HELD.** The matched peak moved −0.012 GB (27.49 / 27.51 → 27.48 / 27.49).
 - **Speed, reported, not scored.** Matched 3.175 / 3.213 s/step at `0` against 3.184 / 3.195 at `auto`; shipped 2.513 / 2.466 against
   2.446 / 2.448. This host was quiet (load1 2.1–2.3, every attempt first time), and the two sides ran the same ops.
-- **Decision, as registered.** With P123–P125 HELD and amendment 48's re-ask HELD, `auto` becomes grouped-nf4-gemm's default: packed
+- **Decision, as registered.** With P123–P125 HELD and amendment 48's re-ask HELD, amendment 50's rule licenses `auto` as grouped-nf4-gemm's default: packed
   4,096-token rows bucket (0.893 of the step on the matched arm, 4.29 GB lighter; 0.933 shipped), and the field recipe runs the single block.
-  The flip is a grouped-nf4-gemm PR citing amendments 47–50.
+  The flip is a grouped-nf4-gemm PR citing amendments 47–50, not yet made. It carries amendment 50's conditions: the evidence scope
+  (one model, one card), correctness across every expert geometry, and a release with `NF4_QLORA_PAD_BUCKETS=0` as the way back.
 
 ## Amendment 49, re-ask (2026-10-06): UNTESTED again; the census places the field recipe's delta calls at 9,040 routed rows at most
 
