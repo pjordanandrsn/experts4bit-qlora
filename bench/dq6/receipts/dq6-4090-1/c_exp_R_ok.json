@@ -1,0 +1,66 @@
+{
+ "schema": "dq4-cap/1",
+ "arm": "R",
+ "mode": "confirm",
+ "loss": "chunked",
+ "rehearsal": false,
+ "alloc_conf": "expandable_segments:True",
+ "started_at": "2026-10-06T16:14:21Z",
+ "device": "NVIDIA GeForce RTX 4090",
+ "total_bytes": 25250627584,
+ "config_overrides": {
+  "num_hidden_layers": 64
+ },
+ "env": {
+  "E4B_SHA": "1f4f639b8ca9f9f583723435ba44b995085d24d2"
+ },
+ "ladder": {
+  "start": 512,
+  "step": 512,
+  "top": 32768,
+  "steps": 2
+ },
+ "build_s": 342.2,
+ "engagement": {
+  "wrapped": 448,
+  "wrapper_kinds": [
+   "peft.tuners.lora.bnb.Linear4bit"
+  ],
+  "lora_params": 896,
+  "lora_dtypes": [
+   "torch.float32"
+  ],
+  "trainable": 134217728,
+  "gradient_checkpointing": true
+ },
+ "chunked_loss": {
+  "patched": true,
+  "chunk": 512,
+  "refused": {},
+  "warnings": []
+ },
+ "allocated_after_setup": 19748925440,
+ "rungs": [
+  {
+   "seq": 2560,
+   "ok": true,
+   "steps": [
+    {
+     "s": 5.849064914975315,
+     "loss": 12.936478614807129,
+     "finite": true
+    },
+    {
+     "s": 5.597704835992772,
+     "loss": 12.484660148620605,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 24209385472,
+   "peak_reserved": 24744296448
+  }
+ ],
+ "max_ok": 2560,
+ "first_oom": null,
+ "finished_at": "2026-10-06T16:20:15Z"
+}

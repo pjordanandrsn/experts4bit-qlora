@@ -3557,12 +3557,19 @@ Qwen3-32B architecture, 2048 tokens, LoRA r16 (bitwise identical to resident in 
 | PCIe gen 5 x16 (DQ3) | 1.0023 | 1.18 |
 | PCIe gen 4 x16 (DQ5) | 1.0050 | 1.51 |
 
-On the 32 GB card, with the chunked LM loss, the streamed model trained 2.00× the resident model's longest sequence
-(DQ4: 14336 against 7168 tokens). **Allocator
-fragmentation is the next limit:** under the default CUDA allocator the streamed run hit OOM with about 6 GiB reserved
-but unallocated, and `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (set before CUDA initialises) raised the ratio
-to 2.375×. It is a process-wide setting, so the library leaves it to you. Not measured: gen 3 or x8 links, other
-cards.
+Streaming also raises the longest sequence that trains. Same subject, chunked LM loss, micro-batch 1:
+
+| card | resident | streamed | ratio | with `expandable_segments` |
+|---|---|---|---|---|
+| RTX 5090, 32 GB (DQ4) | 7168 tokens | 14336 tokens | 2.00× | 2.375× (8192 → 19456) |
+| RTX 4090, 24 GB (DQ6) | 2048 tokens | 9728 tokens | **4.75×** | 5.20× (2560 → 13312) |
+
+The smaller the card, the larger the factor: the resident weights (14.5 GiB here) take most of a 24 GB card, while
+the streamed model keeps only two layers of them. **Allocator fragmentation is the next limit:** under the default
+CUDA allocator the streamed run hit OOM with about 6 GiB reserved but unallocated on both cards.
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (set before CUDA initialises) recovers most of it. It is a
+process-wide setting, so the library leaves it to you. Not measured: gen 3 or x8 links, other cards, real weights,
+micro-batches above 1.
 
 **I am serving, not training, and want it faster.**
 `enable_fast(model)` (needs `[fast]`) routes the frozen experts through the grouped kernel

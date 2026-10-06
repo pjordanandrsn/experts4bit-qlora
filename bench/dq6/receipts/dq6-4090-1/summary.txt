@@ -1,0 +1,18 @@
+link: NVIDIA GeForce RTX 4090, 24564, 4, 16
+VRAM_PROBE_OK 21.5 GiB in 10 blocks
+EGRESS_PROBE_OK 13.9 MB in 4.5 s = 3.12 MB/s from codeload.github.com (floor 1.0)
+dq6 tripwire OK 1f4f639b 2.8.0+cu128 NVIDIA GeForce RTX 4090
+c_def_R_ladder rc=0 DQ4 R ladder done: max_ok 2048 first_oom 2560
+c_def_S_ladder rc=0 DQ4 S ladder done: max_ok 9728 first_oom 10240
+c_def_R_ok rc=0 DQ4 R confirm done: max_ok 2048 first_oom None
+c_def_R_oom rc=0 DQ4 R confirm done: max_ok None first_oom 2560
+c_def_S_ok rc=0 DQ4 S confirm done: max_ok 9728 first_oom None
+c_def_S_oom rc=0 DQ4 S confirm done: max_ok None first_oom 10240
+c_exp_R_ladder rc=0 DQ4 R ladder done: max_ok 2560 first_oom 3072
+c_exp_S_ladder rc=0 DQ4 S ladder done: max_ok 13312 first_oom 13824
+c_exp_R_ok rc=0 DQ4 R confirm done: max_ok 2560 first_oom None
+c_exp_R_oom rc=0 DQ4 R confirm done: max_ok None first_oom 3072
+c_exp_S_ok rc=0 DQ4 S confirm done: max_ok 13312 first_oom None
+c_exp_S_oom rc=0 DQ4 S confirm done: max_ok None first_oom 13824
+SKIPPED s_def: 466 s left < 600 s needed
+DQ6 read: {'lane': 'CAP_REAL', 'c_def': 'CAP_REAL', 'c_exp': 'CAP_REAL'} {'c_def': {'L_R': 2048, 'L_S': 9728, 'G': 4.75}, 'c_exp': {'L_R': 2560, 'L_S': 13312, 'G': 5.2}}

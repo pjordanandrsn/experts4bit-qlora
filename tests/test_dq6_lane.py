@@ -115,3 +115,14 @@ def test_dq4s_reducer_is_untouched_by_dq6():
     d = DQ4 / "receipts" / "dq4-5090-2"
     r = subprocess.run([sys.executable, str(DQ4 / "dq4_reduce.py"), str(d)], capture_output=True, text=True)
     assert r.returncode == 0 and r.stdout == (d / "dq4_read.json").read_text()
+
+
+def test_the_committed_dq6_read_rederives_byte_for_byte():
+    """bench/dq6/RESULTS-dq6.md's verdict is the registered reducer's output on the committed receipts."""
+    d = DQ6 / "receipts" / "dq6-4090-1"
+    r = subprocess.run([sys.executable, str(DQ6 / "dq6_reduce.py"), str(d)], capture_output=True, text=True)
+    assert r.returncode == 0 and r.stdout == (d / "dq6_read.json").read_text()
+    read = json.loads(r.stdout)
+    assert read["verdicts"] == {"lane": "CAP_REAL", "c_def": "CAP_REAL", "c_exp": "CAP_REAL"}
+    assert (read["configs"]["c_def"]["L_R"], read["configs"]["c_def"]["L_S"]) == (2048, 9728)
+    assert read["skipped"] == ["s_def"]
