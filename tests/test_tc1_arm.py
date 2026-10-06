@@ -2243,7 +2243,7 @@ def test_phase_peaks_split_the_run_max_by_phase(monkeypatch):
     m = _load_arm_module()
     state = {"max": 0}
     fake = types.SimpleNamespace(synchronize=lambda: None, max_memory_allocated=lambda: state["max"],
-                                 reset_peak_memory_stats=lambda: state.update(max=0))
+                                 reset_peak_memory_stats=lambda: state.update(max=0), empty_cache=lambda: None)
     monkeypatch.setattr(m, "DEV", "cuda")
     monkeypatch.setattr(m.torch, "cuda", fake)
     monkeypatch.setattr(m, "_PHASE_PEAKS", None)
@@ -2251,6 +2251,7 @@ def test_phase_peaks_split_the_run_max_by_phase(monkeypatch):
     m.phase_mark("setup")
     assert m._PHASE_PEAKS is None and state["max"] == 7_000_000_000         # off: no record, no reset
     monkeypatch.setattr(m, "_PHASE_PEAKS", {})
+    monkeypatch.setattr(m, "_RUN_PEAKS", [])
     for name, peak in (("setup", 20_000_000_000), ("eval", 27_000_000_000), ("train", 24_500_000_000), ("eval", 28_200_000_000),
                        ("train", 24_900_000_000)):
         state["max"] = peak
@@ -2260,3 +2261,25 @@ def test_phase_peaks_split_the_run_max_by_phase(monkeypatch):
     assert m.peak_gb() == 28.2
     state["max"] = 29_000_000_000                                            # the open phase counts toward the run's max
     assert m.peak_gb() == 29.0
+
+
+def test_phase_peaks_keep_peak_vram_gb_to_the_phases_after_reset_peak(monkeypatch):
+    """`peak_vram_gb` means the max since reset_peak(), which run_arm calls after setup and eval0. With --phase-peaks 1, a setup or
+    eval0 peak above training must stay in peak_vram_gb_phases and OUT of peak_gb() (maintainer review of #1290)."""
+    m = _load_arm_module()
+    state = {"max": 0}
+    fake = types.SimpleNamespace(synchronize=lambda: None, max_memory_allocated=lambda: state["max"],
+                                 reset_peak_memory_stats=lambda: state.update(max=0), empty_cache=lambda: None)
+    monkeypatch.setattr(m, "DEV", "cuda")
+    monkeypatch.setattr(m.torch, "cuda", fake)
+    monkeypatch.setattr(m, "_PHASE_PEAKS", {})
+    monkeypatch.setattr(m, "_RUN_PEAKS", [])
+    for name, peak in (("setup", 31_000_000_000), ("eval", 28_000_000_000)):   # a setup peak above everything after it
+        state["max"] = peak
+        m.phase_mark(name)
+    m.reset_peak()                                                            # run_arm's reset before training
+    for name, peak in (("train", 24_900_000_000), ("eval", 28_200_000_000)):
+        state["max"] = peak
+        m.phase_mark(name)
+    assert m._PHASE_PEAKS == {"setup": 31_000_000_000, "eval": 28_200_000_000, "train": 24_900_000_000}
+    assert m.peak_gb() == 28.2                                                # not 31.0: setup stays out, as without the flag

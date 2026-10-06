@@ -611,8 +611,12 @@ def cuda_sync():
 
 #: TC1 amendment 56 (--phase-peaks 1): the run's peak allocated split by phase -- "setup" (load to the first held-out evaluation),
 #: "eval" (every held-out evaluation) and "train" (the training steps between them). Each boundary folds the allocator's max into its
-#: phase and resets it, so `peak_vram_gb` stays the run's max (the largest phase) while each phase is read on its own. None = off.
+#: phase and resets it, so each phase is read on its own. None = off.
 _PHASE_PEAKS = None
+#: The allocator maxima folded since the last reset_peak(). peak_gb() reads these, so `peak_vram_gb` keeps exactly its meaning without
+#: --phase-peaks: the max since reset_peak(). That reset falls after setup and eval0, so neither enters it. Folding every phase back in
+#: would quietly add setup and eval0 to peak_vram_gb whenever they peak higher than training (maintainer review of #1290).
+_RUN_PEAKS = None
 
 
 def phase_mark(name):
@@ -620,7 +624,10 @@ def phase_mark(name):
     if _PHASE_PEAKS is None or DEV != "cuda":
         return
     torch.cuda.synchronize()
-    _PHASE_PEAKS[name] = max(_PHASE_PEAKS.get(name, 0), int(torch.cuda.max_memory_allocated()))
+    v = int(torch.cuda.max_memory_allocated())
+    _PHASE_PEAKS[name] = max(_PHASE_PEAKS.get(name, 0), v)
+    if _RUN_PEAKS is not None:
+        _RUN_PEAKS.append(v)
     torch.cuda.reset_peak_memory_stats()
 
 
@@ -628,8 +635,8 @@ def peak_gb():
     if DEV != "cuda":
         return 0.0
     cur = int(torch.cuda.max_memory_allocated())
-    if _PHASE_PEAKS:                                   # amendment 56: the run's max is the largest phase, the current one included
-        cur = max([cur] + list(_PHASE_PEAKS.values()))
+    if _RUN_PEAKS:                                     # amendment 56: the maxima folded since reset_peak(), the open phase included
+        cur = max([cur] + _RUN_PEAKS)
     return round(cur / 1e9, 3)
 
 
@@ -637,6 +644,8 @@ def reset_peak():
     if DEV == "cuda":
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
+    if _RUN_PEAKS is not None:                         # amendment 56: phases folded before this reset stay out of peak_gb()
+        _RUN_PEAKS.clear()
 
 
 def autocast_ctx(enabled):
@@ -3414,10 +3423,10 @@ def run_arm(a, load_fn, sampler=True):
     host_ram0 = host_ram_report()                   # TC3: the cgroup peak BEFORE this arm, so a container-lifetime number is never credited to it
     lever = lever_of(a)                             # TC3: the memory lever this arm engages (None = resident), on every row it writes
     mcen = MemCensus() if getattr(a, "mem_census", 0) else None   # TC1 amendment 23: the allocator history records from here, before the load
-    global _PHASE_PEAKS
+    global _PHASE_PEAKS, _RUN_PEAKS
     if getattr(a, "phase_peaks", 0):                # TC1 amendment 56: resets the allocator's max at each phase boundary, which the census reads
         assert mcen is None, "--phase-peaks 1 resets the allocator's max at each phase, which --mem-census 1 reads: one or the other"
-        _PHASE_PEAKS = {}
+        _PHASE_PEAKS, _RUN_PEAKS = {}, []
     if mcen is not None:
         mcen.start()
     torch.manual_seed(a.seed)
