@@ -1988,3 +1988,49 @@ census slows the step, so no speed is read.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the download;
 this is in the standing no-ask tier.
+
+### Amendment 48 (2026-10-06T03:19Z, after amendment 47's read, before any box): grouped-nf4-gemm's bucketed LoRA-delta padding on packed rows (P115–P118)
+
+**Why.** Amendment 47's census put 6.10 GB of e4b's packed-row excess over Unsloth in grouped-nf4-gemm's padded LoRA delta. The delta pads
+every expert's rows to the hottest expert's count: about 380,000 padded rows against 32,768 routed rows at the down projection. The compact
+delta left the same-width block in place. grouped-nf4-gemm#490 adds `NF4_QLORA_PAD_BUCKETS=1` (opt-in). It sorts the groups by rows, cuts
+buckets in which the widest group has at most twice the narrowest's rows, and pads each bucket only to its own widest, so the padded rows are
+at most twice the real rows. Values are equal to rounding (the `bmm` shapes differ). On an RTX A2000, on the delta alone at the down
+projection's shape (fp32 adapters, 32,768 Zipf-skewed rows), it took the delta's forward-and-backward peak from 8.77 to 1.06 GiB. That is
+an engineering check on #490, not a TC1 reading.
+
+**The box** (token `qwen3padbk`). One RTX 5090, amendment 39's packed rows (`TC1_PACK=1`, seq 4,096, micro-batch 1 × accum 4,
+`TC1_FREE_OUTPUTS=1`), 40 load-gated steps (`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), every arm in venv-unsloth at e4b's defaults (the
+chunked LM loss as `auto` chunks these rows), grouped-nf4-gemm at a main that has #490:
+
+- the shipped and the matched arm, each `_pk0` (`NF4_QLORA_PAD_BUCKETS=0`, one padded block) against `_pk1` (`=1`, buckets), two draws a side
+  in ABBA order.
+
+Engagement: grouped-nf4-gemm's per-path counters on each receipt (`lean_ab.lora_path_calls`). `_pk1` arms make bucketed calls and no
+single-block padded call; `_pk0` arms the reverse. The chunked loss serves the packed rows on every arm, and `env.torch` is 2.12.*. The
+per-expert loop is a recorded route up to 5 % of a step's delta calls (amendment 43). #490 leaves `auto`'s route rule sizing the single
+block, so the same calls take the loop on both sides.
+
+**Predictions** (registered before the box), one-sided:
+
+- **P115** (matched peak): `_pk0` − `_pk1` ≥ **3.0 GB**. Buckets take at least 3 GB off the fp32 arm's peak.
+- **P116** (matched): `_pk1` / `_pk0` ≤ **1.02**.
+- **P117** (shipped): `_pk1` / `_pk0` ≤ **1.02**.
+- **P118:** on each arm, |mean held-out at N, `_pk1` − `_pk0`| ≤ **0.005**.
+
+Each needs two stable VALID draws a side. It is FALSIFIED on the wrong side of its bound and UNTESTED where a side is unstable, not VALID or
+not engaged.
+
+**Decision rules.**
+
+- **P115–P118 HELD:** buckets buy the packed regime without a speed or quality cost there. Before they can be a default, the field recipe's
+  short rows must be shown not to pay for the extra launches (a few more `bmm`s per projection on a host-bound step). A size-gated `auto`
+  (bucket only where the single block would be large) and its field-recipe A/B are the next registration, as amendment 44 did for the
+  chunked loss.
+- **P115 FALSIFIED:** buckets do not buy the packed regime's memory on a full step. They stay opt-in, and the read says where the peak went.
+- **P116 or P117 FALSIFIED:** they cost speed on packed rows. They stay opt-in, and the read names the arm.
+- **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $3 with the download;
+this is in the standing no-ask tier.
