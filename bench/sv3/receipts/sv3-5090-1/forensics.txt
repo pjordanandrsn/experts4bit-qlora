@@ -1,0 +1,5 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.178.04, 5, 16
+Model name:                              AMD Ryzen 9 7900 12-Core Processor
+MemTotal:       130952932 kB
+MemAvailable:   126523068 kB
+overlay         320G  436M  320G   1% /

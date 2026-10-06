@@ -1,0 +1,203 @@
+{
+ "schema": "sv3-arm/1",
+ "args": {
+  "model": "openai/gpt-oss-20b",
+  "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+  "arena": "/root/sv3-work-gptoss/nf4.arena",
+  "calib": "calib.json",
+  "graphs": 1,
+  "prefill_graph": "0",
+  "buckets": "1,2,4,8,16",
+  "max_seqs": 16,
+  "context": 4096,
+  "prompt_tokens": 1024,
+  "new_tokens": 32,
+  "out": "receipts/gptoss_g16.json"
+ },
+ "setup": {
+  "placement": "all-vram",
+  "max_seqs": 16,
+  "max_tokens_per_seq": 4096,
+  "chunk_tokens": 512,
+  "graphs": true,
+  "buckets": [
+   1,
+   2,
+   4,
+   8,
+   16
+  ],
+  "kv_groups": "auto",
+  "prefill_graph": "0",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64,
+  "exp_int4": false,
+  "attn_int4": false
+ },
+ "env": {
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "16",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "4096",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "1",
+  "E4B_PAGED_BUCKETS": "1,2,4,8,16",
+  "E4B_PAGED_KV_GROUPS": "auto",
+  "E4B_PAGED_PREFILL_GRAPH": "0",
+  "E4B_PAGED_VRAM_GB": "1.2",
+  "E4B_PAGED_DRAM_GB": "6.0",
+  "E4B_PAGED_HOT_ROWS": "64",
+  "E4B_SERVE_EXP_INT4": "0",
+  "E4B_SERVE_ATTN_INT4": "0",
+  "E4B_PAGED_MODEL": "openai/gpt-oss-20b",
+  "E4B_PAGED_REVISION": "6cee5e81ee83917806bbde320786a8fb61efebee",
+  "E4B_PAGED_ARENA": "/root/sv3-work-gptoss/nf4.arena",
+  "E4B_PAGED_CALIB": "calib.json",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "estimate": {
+  "items": [
+   {
+    "name": "frozen expert stacks (all VRAM)",
+    "where": "device",
+    "bytes": 10749543936,
+    "basis": "derived"
+   },
+   {
+    "name": "cold tier landing (pinned)",
+    "where": "host",
+    "bytes": 1073741824,
+    "basis": "derived"
+   },
+   {
+    "name": "setup tier (while the stacks are built)",
+    "where": "host",
+    "bytes": 896008192,
+    "basis": "derived"
+   },
+   {
+    "name": "dense weights (bf16)",
+    "where": "device",
+    "bytes": 3595648128,
+    "basis": "derived"
+   },
+   {
+    "name": "FP8 paged KV pool",
+    "where": "device",
+    "bytes": 1870334976,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill staging (bf16 K/V of prompts mid-prefill)",
+    "where": "device",
+    "bytes": 226492416,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill/decode working set",
+    "where": "device",
+    "bytes": 83648512,
+    "basis": "heuristic"
+   }
+  ],
+  "unmodelled": [
+   "CUDA graph memory pools for the decode buckets (lane SV1: +60 MiB allocated on OLMoE-1B-7B, 16 seqs, RTX 5090, NF4)",
+   "the bulk KV flush transient (E4B_PAGED_BULK_KV, on by default since SC2c/SC2d): one prompt's K/V staged for the single bulk write; lane SC2d recorded 168 MiB on gpt-oss-20b",
+   "CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)"
+  ],
+  "refusals": [],
+  "device_total": 16525667968,
+  "host_total": 1969750016
+ },
+ "versions": {
+  "experts4bit-qlora": "0.48.0",
+  "grouped-nf4-gemm": "0.41.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0"
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "measured": {
+  "host_anon_start_bytes": 479932416,
+  "load_seconds": 19.8,
+  "load_device_peak_bytes": 16339527680,
+  "load_reserved_peak_bytes": 16638803968,
+  "host_anon_after_load_bytes": 1685647360,
+  "host_anon_load_peak_bytes": 1694756864,
+  "device_peak_bytes": 16829064704,
+  "device_reserved_peak_bytes": 17649631232,
+  "driver_process_peak_bytes": 18371051520,
+  "driver_samples": 85,
+  "scheduler_steps": 63,
+  "serve_seconds": 4.7,
+  "requests_done": 16,
+  "tokens_out": 512,
+  "tokens_per_s": 109.0,
+  "host_anon_peak_bytes": 1767985152,
+  "host_anon_serving_peak_bytes": 1767985152,
+  "estimate_minus_peak_bytes": -303396736
+ },
+ "info": {
+  "moe_layers": 24,
+  "experts": 32,
+  "top_k": 4,
+  "model_type": "gpt_oss",
+  "int4_expert_layers": 0,
+  "int4_store_kinds": [],
+  "int4_attn_projections": 0,
+  "kv": {
+   "n_kv_heads": 8,
+   "head_dim": 64,
+   "k_groups": "auto",
+   "scratch_slots": 16,
+   "blocks_per_seq": 256
+  },
+  "graph_status": {
+   "1": "graph",
+   "2": "graph",
+   "4": "graph",
+   "8": "graph",
+   "16": "graph"
+  },
+  "grouping": {
+   "device_grouping": true,
+   "force_singleton_groups": false
+  },
+  "prefill_graph": "0",
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "0",
+   "E4B_SERVE_ATTN_INT4": "0"
+  },
+  "exp_int4_layers_enabled": 0,
+  "attn_int4_rtn_projections": 0,
+  "attn_int4_calib_projections": 0,
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 0,
+  "host_heap_trimmed": true
+ },
+ "graph_status": {
+  "1": "graph",
+  "2": "graph",
+  "4": "graph",
+  "8": "graph",
+  "16": "graph"
+ },
+ "prefill_graph": {
+  "status": "off"
+ },
+ "linear_state": null,
+ "expert_routes_seen": {
+  "nf4_singleton|le256": 72,
+  "nf4_k25|le256": 288,
+  "nf4_mtile_captured|gt256": 768
+ },
+ "status": "OK"
+}
