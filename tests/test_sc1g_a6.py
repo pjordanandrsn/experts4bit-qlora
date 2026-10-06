@@ -167,3 +167,35 @@ def test_the_a6_continuation_runs_only_p3_s_arms_with_the_repeat_third(tmp_path)
     body = BOX[BOX.index("\nbox_j_a6c(){"):]
     assert "i_arms_a6c" in body[:body.index("; }\n")] and "i_arms_a6\n" not in body[:body.index("; }\n")]
 
+
+
+def test_the_a6_continuation_reading_rederives_from_its_committed_receipt(tmp_path):
+    """A6's continuation (sc1g-diag-a6-2): the reducer at main on the committed sc1g/ reproduces the box's A6 section --
+    verdicts, keys, strings and flags identical, numbers to 1e-12 relative: P3 HELD (1.019 / 0.920 / 0.912 on conv1-conv3,
+    conv4's (c) dropped), P1 and P2 UNREAD by construction (no (a) arm), (b') BIT_IDENTICAL; and (b) is bit-identical to
+    A5's reading and to the first A6 box's on all four windows (two hosts, three runs)."""
+    import json
+    import sys
+
+    import numpy as np
+    sys.path.insert(0, str(REPO / "bench" / "sc2"))
+    import sc1g_reduce as red
+    B = REPO / "bench" / "h2h-2026-10-02" / "sc1g" / "receipts"
+    d = B / "sc1g-diag-a6-2" / "sc1g"
+    out = tmp_path / "rederived.json"
+    r = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc1g_reduce.py"), "--dir", str(d), "--out", str(out)],
+                       capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    got, box = json.loads(out.read_text())["a6"], json.loads((d / "verdict_sc1g_a6.json").read_text())["a6"]
+    _same(got, box)
+    pred = got["predictions"]
+    assert (pred["P1"]["verdict"], pred["P2"]["verdict"], pred["P3"]["verdict"]) == ("UNREAD", "UNREAD", "HELD")
+    assert set(pred["P3"]["ratios"]) == {"conv1", "conv2", "conv3"} and pred["P3"]["windows_ge_no_effect"] == 3
+    for s, v in (("conv1", 1.018782937413244), ("conv2", 0.92040297913168), ("conv3", 0.91181087613933)):
+        assert math.isclose(pred["P3"]["ratios"][s], v, rel_tol=1e-12), s
+    assert got["determinism"]["verdict"] == "BIT_IDENTICAL"
+    integ = red.a6(str(d), a5_dir=str(B / "sc1g-5090-a5-1" / "sc1g"))["descriptive"]["base_vs_a5_reading"]
+    assert all(integ[s]["bit_identical"] for s in ("conv1", "conv2", "conv3", "conv4")), integ
+    for s in ("conv1", "conv2", "conv3", "conv4"):
+        a = np.load(d / f"kl_e4b_serve_served_{s}.npz")["eng_kl"]
+        assert np.array_equal(a, np.load(B / "sc1g-diag-a6-1" / "sc1g" / f"kl_e4b_serve_served_{s}.npz")["eng_kl"]), s

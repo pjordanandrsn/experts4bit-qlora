@@ -1,0 +1,44 @@
+{
+ "checks": {
+  "fp16_storage": "OK",
+  "full_artifacts": "OK",
+  "k0_controls": "OK",
+  "nf4_matches_gnf4": "OK",
+  "windows_complete": "OK"
+ },
+ "dropped_checks": [
+  "coverage",
+  "calib_self",
+  "calib_nf4"
+ ],
+ "floor_F": {
+  "conv1": 0.005667747125860828,
+  "conv2": 0.0070299408990488225,
+  "conv3": 0.0018384930682801707,
+  "conv4": 0.0018534464589554664,
+  "wikitext": 0.02181549683372932
+ },
+ "fp16_storage_bad": [],
+ "fp16_storage_err_max": {
+  "conv1": 6.030587544570906e-07,
+  "conv2": 4.755078477386432e-06,
+  "conv3": 3.9005832442803867e-07,
+  "conv4": 9.199100661667903e-07,
+  "wikitext": 8.189174492134743e-07
+ },
+ "full_artifacts": {
+  "conv1": "706d668ef552b94636a6ece6361ca64ada52845f042b03b0adce69d886d17797",
+  "conv2": "c3801eb3e297964c415d5992bd886d3c5afda0048b6edbaaf66444c34cb4f3e0",
+  "conv3": "d4611048532f0aea32108646e0b2fcb85bbe1bb9db91035cfdc77058fc10a890",
+  "conv4": "c29a676b552312e5d8ed4044bfe16eb1b73658d21509792d6e6078e36720fda2",
+  "wikitext": "9b29f7bd4d5ecee2464a35748a7acfbc2c291148e0c27e53d159c496a2f0747d"
+ },
+ "gradable_windows": [
+  "conv1",
+  "conv2",
+  "conv3",
+  "conv4"
+ ],
+ "rule": "A5",
+ "verdict": "R_OK"
+}
