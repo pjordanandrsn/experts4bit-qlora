@@ -75,8 +75,9 @@ machine 145701). e4b's and Unsloth's matched arms run in venv-unsloth (e4b `ee9d
   e4b's `_om1` draws came 13.6 % apart (3.513 / 4.024 s/step), and Unsloth's `_om0` draws 5.2 % (8.416 / 8.868). The 4 h guard ended before
   e4b's last `_om0` draw ran. Every receipt ran the thread count its side names (torch's pool equal to `OMP_NUM_THREADS`: 128 or 31).
 - **Unquotable, for the record.** e4b's one `_om0` draw (3.464 s at load 4.2) was no slower than its `_om1` draws (3.513 at load 33, 4.024
-  at 54). Unsloth's sides were interchangeable (8.416 / 8.868 at 128 threads, 8.866 / 8.437 at 31). Nothing here suggests the thread count
-  is a large lever. P104's bound (at least 3 % faster) stays open.
+  at 54). Unsloth's sides were interchangeable (8.416 / 8.868 at 128 threads, 8.866 / 8.437 at 31). These are confounded by host load
+  (each side's draws ran at different loads), so they say nothing either way about the thread count. P104's bound (at least 3 %
+  faster) stays open.
 - **By amendment 45's rule** a re-ask is allowed. The harness keeps the physical cores, and no position changes.
 
 ## Amendment 44 (2026-10-05): `E4B_CHUNKED_LM_LOSS=auto` costs the field recipe nothing (0.992 / 0.999) and its gate never fired; it becomes e4b's default
