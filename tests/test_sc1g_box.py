@@ -231,7 +231,7 @@ def test_sglang_gptoss_quality_modes_demand_radix_on_one_request_and_their_moe_r
 def test_the_sc1g_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc1g_reduce.py"), "--self-test"],
                          capture_output=True, text=True, timeout=120)
-    assert out.returncode == 0 and "self-test OK (27 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (33 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_capture_keeps_the_selected_layers_gate_up_and_down_per_decode_step(tmp_path):
@@ -290,14 +290,31 @@ def test_box_j_children_inherit_neither_prefill_route_pin():
 
 # ---- A4: the fidelity instrument's engine side ------------------------------------------------------------------------
 
-def test_box_i_under_a4_runs_the_named_kl_arms_first_on_four_conversations():
-    body = BOX[BOX.index("box_i(){"):BOX.index("# ---- the proof (SC1_PROVE=1), A4")]
-    assert "SC1G_NCONV=4 i_windows || finish 19; i_ref_stage" in body and "i_arms_a4" in body
-    arms = BOX[BOX.index("i_arms_a4(){"):]
-    order = [arms.index(s) for s in ("i_e4b_named e4b_serve_served_$SRC", "i_e4b_named e4b_nf4_served_$SRC", "i_vllm_named $SRC",
-                                     "i_sgl_named $V $SRC", "i_ll_named $V $SRC", "A4DESC")]
+def test_box_i_under_a5_runs_the_full_kl_arms_first_on_four_conversations():
+    body = BOX[BOX.index("box_i(){"):BOX.index("# ---- the proof (SC1_PROVE=1), A5")]
+    assert "SC1G_NCONV=4 i_windows || finish 19; i_ref_full_stage" in body and "i_arms_a5" in body
+    arms = BOX[BOX.index("i_arms_a5(){"):]
+    order = [arms.index(s) for s in ("i_e4b_full e4b_serve_served_$SRC", "i_e4b_full e4b_nf4_served_$SRC", "i_vllm_full $SRC",
+                                     "i_ll_full $V $SRC", "A5DESC")]
     assert order == sorted(order), order
-    assert 'SC1G_A4_SRCS="conv1 conv2 conv3 conv4 wikitext"' in BOX
+    assert "i_sgl" not in arms[:arms.index("A5DESC")]          # SGLang is UNREAD under A5: no KL arm
+
+
+def test_every_full_kl_arm_refuses_without_a_registered_reference():
+    for fn in ("i_e4b_full", "i_vllm_full", "i_ll_full"):
+        assert "SHA=$(i_ref_full $SRC) || { i_nofull" in BOX[BOX.index(f"{fn}(){{"):BOX.index(f"{fn}(){{") + 500], fn
+    ref = BOX[BOX.index("i_ref_full(){"):BOX.index("i_ref_full_stage(){")]
+    assert "ref_full_shas.json" in ref and 'sha256sum "$F"' in ref and '[ "$GOT" = "$WANT" ]' in ref
+    assert "SC1G_REF_FULL_FILE=$SC1G_REF_FULL_DIR/ref_full_$SRC.npy SC1G_REF_FULL_SHA=$SHA SC1G_KL_OUT=" in BOX
+    assert "SC1_REF_FULL=$SC1G_REF_FULL_DIR/ref_full_$SRC.npy SC1_REF_FULL_SHA=$SHA SC1_KL_OUT=" in BOX
+    assert "--ref-full $W/sc1g/ref_full_$SRC.f16 --kl-out $W/sc1g/kl_$S.bin" in BOX
+
+
+def test_the_a5_proof_reads_one_full_kl_row_per_engine_path():
+    pv = BOX[BOX.index("prove_i(){"):BOX.index("# ---- box J (SC1_BOX=J)")]
+    for s in ("i_e4b_full e4b_serve_served_conv1", "i_vllm_full conv1", "i_ll_full q8 conv1", "--prove-a5",
+              "sc1g_kl.py --self-test", "i_ref_full conv1 > /dev/null || {"):
+        assert s in pv, s
 
 
 def test_every_named_arm_refuses_without_a_registered_reference():
@@ -313,13 +330,6 @@ def test_every_named_arm_refuses_without_a_registered_reference():
     assert "--named $W/sc1g/named_ids_$SRC.bin --named-out $W/sc1g/named_$S.bin --named-k 64" in BOX
 
 
-def test_the_a4_proof_reads_one_named_row_per_engine_path():
-    pv = BOX[BOX.index("prove_i(){"):BOX.index("# ---- box J (SC1_BOX=J)")]
-    for s in ("i_e4b_named e4b_serve_served_conv1", "i_vllm_named conv1", "i_sgl_named native conv1", "i_ll_named q8 conv1",
-              "--prove-a4", "sc1g_kl.py --self-test", 'i_ref conv1 > /dev/null || {'):
-        assert s in pv, s
-
-
 def test_the_named_scorer_hooks():
     sys.path.insert(0, str(REPO / "bench" / "sc1" / "vllm"))
     src = (REPO / "bench" / "sc1" / "vllm" / "sc1_vllm_common.py").read_text()
@@ -333,3 +343,8 @@ def test_the_named_scorer_hooks():
     assert ns2["served_request_ids"](7, [3, 7, 9]) == [7, 3, 9] and ns2["served_request_ids"](7) == [7]
     cpp = (REPO / "bench" / "sc1" / "llamacpp" / "nll_teacher_forced.cpp").read_text()
     assert cpp.count("named_lps(lg, n_vocab,") == 2 and '"--named-out"' in cpp and "out of vocab" in cpp
+    vn = (REPO / "bench" / "sc1" / "vllm" / "sc1_vllm_nll.py").read_text()
+    assert 'if C.env("REF_FULL") and mode == "served":\n        lp_req = "full"' in vn and "A5 never downgrades" in vn
+    assert cpp.count("kl_full_of(lg, n_vocab,") == 2 and '"--ref-full"' in cpp and "is not exactly %d x %d fp16" in cpp
+    drv = (REPO / "bench" / "sc1" / "sc1_drive.sh").read_text()
+    assert 'if [ -n "${SC1G_REF_FULL_SRC:-}" ]; then' in drv and '$SSH "mkdir -p $W/sc1g_ref_full"' in drv

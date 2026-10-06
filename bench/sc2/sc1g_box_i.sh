@@ -188,6 +188,50 @@ i_arms_a4(){ local SRC V
   gpu_free 60
   for SRC in $SC1G_A4_SRCS; do can_run 600 d_ll_$SRC && i_ll default prefill $SRC; done; gpu_free 60; }
 
+# ---- A5 (bench/sc2/SC1g-PREREG.md, amendment A5): the FULL-vocabulary KL. Box R's fp16 rows (ref_full_<src>.npy, ~0.82 GB each)
+# are staged into $SC1G_REF_FULL_DIR by sc1_drive.sh (SC1G_REF_FULL_SRC); their registered shas (ref_full_shas.json) and R's
+# r_calib / r_verdict ride the sc1g_ref component dir. A KL arm whose rows are absent or do not hash to the registered sha is
+# REFUSED. SGLang has no full-distribution path: UNREAD by registration, no KL arm.
+SC1G_REF_FULL_DIR=$W/sc1g_ref_full
+i_ref_full(){ local SRC=$1 F=$SC1G_REF_FULL_DIR/ref_full_$1.npy WANT GOT
+  [ -s "$F" ] && [ -s "$SC1G_REF_DIR/ref_full_shas.json" ] || return 1
+  WANT=$("$PY" -c "import json, sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])" "$SC1G_REF_DIR/ref_full_shas.json" "$SRC" 2>/dev/null) || return 1
+  GOT=$(sha256sum "$F" | cut -d' ' -f1); [ "$GOT" = "$WANT" ] || { line "SC1G_REF_FULL_BAD $SRC sha $GOT != registered $WANT" >&2; return 1; }
+  echo "$WANT"; }
+i_ref_full_stage(){ mkdir -p $W/sc1g/ref; cp -p $SC1G_REF_DIR/ref_full_shas.json $SC1G_REF_DIR/r_verdict.json $SC1G_REF_DIR/r_calib.json $W/sc1g/ref/ 2>/dev/null
+  line "SC1G_REF_FULL staged $(ls $SC1G_REF_FULL_DIR/ref_full_*.npy 2>/dev/null | wc -l | tr -d ' ') full-row files; R's receipt $(ls $W/sc1g/ref/r_verdict.json 2>/dev/null | wc -l | tr -d ' ')"; }
+i_nofull(){ stub $W/sc1g/$1.json "$2" "kl_full" 1 refused "no registered full-vocabulary reference for $3 (A5: no artifact, no KL)"; line "$1 REFUSED (no full reference)"; }
+i_e4b_full(){ local NAME=$1 STACK=$2 SRC=$3 SHA; SHA=$(i_ref_full $SRC) || { i_nofull $NAME e4b $SRC; return 0; }
+  i_e4b $NAME "$STACK SC1G_REF_FULL_FILE=$SC1G_REF_FULL_DIR/ref_full_$SRC.npy SC1G_REF_FULL_SHA=$SHA SC1G_KL_OUT=$W/sc1g/kl_$NAME.npz" $SRC; }
+i_vllm_full(){ local SRC=$1 SHA; SHA=$(i_ref_full $SRC) || { i_nofull nll_vllm_served_$SRC vllm $SRC; return 0; }
+  SC1G_NAMED_ENV="SC1_REF_FULL=$SC1G_REF_FULL_DIR/ref_full_$SRC.npy SC1_REF_FULL_SHA=$SHA SC1_KL_OUT=$W/sc1g/kl_nll_vllm_served_$SRC.npz" i_vllm served $SRC; }
+# llama.cpp's harness reads raw fp16 [steps x V] and writes float64 [steps x 2] (KL, target log-prob); converted on either side
+i_ll_full(){ local V=$1 SRC=$2 SHA S; S=nll_llamacpp$([ "$V" = q8 ] && echo _q8)_decode_$SRC
+  SHA=$(i_ref_full $SRC) || { i_nofull $S llamacpp $SRC; return 0; }
+  [ -s $W/sc1g/ref_full_$SRC.f16 ] || "$PY" -c "import numpy as np, sys; np.load(sys.argv[1], mmap_mode='r').astype('<f2').tofile(sys.argv[2])" \
+      $SC1G_REF_FULL_DIR/ref_full_$SRC.npy $W/sc1g/ref_full_$SRC.f16
+  SC1G_NAMED_LL="--ref-full $W/sc1g/ref_full_$SRC.f16 --kl-out $W/sc1g/kl_$S.bin" i_ll $V decode $SRC
+  [ -s $W/sc1g/kl_$S.bin ] && "$PY" -c "
+import numpy as np, sys
+a = np.fromfile(sys.argv[1], '<f8').reshape(-1, 2)
+np.savez(sys.argv[2], eng_kl=a[:, 0], eng_target_lp=a[:, 1])" $W/sc1g/kl_$S.bin $W/sc1g/kl_$S.npz; }
+# A5's arm list: the full-KL rows first (by engine, each server once), then descriptive prefill rows; the deadline drops from the end
+i_arms_a5(){ local SRC V
+  phase A5E4B "A5: e4b served, full-vocabulary KL -- MXFP4 (GEMV) then NF4, conv1-conv4 then the control"
+  i_pin_ok || { SC1G_PIN_BAD=1; line "SC1G_PIN_BAD: the e4b arms are refused"; }
+  for SRC in $SC1G_A4_SRCS; do
+    can_run 900 a5_e4b_$SRC && { i_e4b_full e4b_serve_served_$SRC "$SC1G_E4B_SERVE" $SRC; i_e4b_full e4b_nf4_served_$SRC "$SC1G_E4B_NF4" $SRC; }; done
+  gpu_free 120
+  phase A5VLLM "A5: vLLM served (Marlin W4A16, TRITON_ATTN), logprobs=-1 with LLM(max_logprobs=-1), verified full on request 0"
+  for SRC in $SC1G_A4_SRCS; do can_run 900 a5_vllm_$SRC && i_vllm_full $SRC; done; gpu_free 120
+  phase A5LL "A5: llama.cpp decode (the published GGUF; default MMQ, then MMQ_PREC=q8), the harness's --ref-full"
+  for V in default q8; do for SRC in $SC1G_A4_SRCS; do can_run 600 a5_ll_${V}_$SRC && i_ll_full $V $SRC; done; done; gpu_free 60
+  phase A5DESC "A5: descriptive prefill-shaped NLL rows (no KL; the deadline drops these first)"
+  for SRC in $SC1G_A4_SRCS; do
+    can_run 600 d_e4b_$SRC && { i_e4b e4b_serve_prefill128_$SRC "$SC1G_E4B_SERVE" $SRC --ppl-oracle eager --ppl-chunk 128
+                                i_e4b e4b_nf4_prefill128_$SRC "$SC1G_E4B_NF4" $SRC --ppl-oracle eager --ppl-chunk 128; }; done
+  gpu_free 60; }
+
 # every arm, graded windows first then the control, in the registered order; the GPU is freed between engines. The deadline
 # drops from the end: llama.cpp, then SGLang, then the control's rows go first.
 i_arms(){ local SRC ALL="$SC1G_SRCS $SC1G_CTRL"
@@ -209,31 +253,30 @@ i_arms(){ local SRC ALL="$SC1G_SRCS $SC1G_CTRL"
 # ---- the real lane
 box_i(){
   phase 0 "fetches (gpt-oss-20b, its published MXFP4 GGUF, ultrachat_200k test_sft), the NF4 bake, the windows (A4: four conversations)"
-  fetch_gptoss || finish 11; fetch_gptoss_gguf; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19; i_ref_stage
+  fetch_gptoss || finish 11; fetch_gptoss_gguf; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19; i_ref_full_stage
   quiesce arms
-  i_arms_a4
+  i_arms_a5
   phase RD "the reading"
   "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g.json 2>&1 | tail -40 | tee -a summary.txt; }
 
-# ---- the proof (SC1_PROVE=1), A4: every engine path's named-token KL row on conv1 -- e4b served (MXFP4 GEMV), vLLM served,
-# SGLang native served, llama.cpp decode at MMQ_PREC=q8 -- each VALID, its named record complete and aligned with its own NLL,
-# against box R's registered artifact. (A1's proof paths -- the capture, eager chunk 1, the kernel check -- ran on box J.)
+# ---- the proof (SC1_PROVE=1), A5: every KL-capable engine path's full-vocabulary KL row on conv1 -- e4b served (MXFP4 GEMV), vLLM
+# served (logprobs=-1, verified full), llama.cpp decode at MMQ_PREC=q8 -- each VALID, its record complete and aligned with its own
+# NLL, against box R's registered full rows. (SGLang is UNREAD under A5: no KL path to prove.)
 prove_i(){ local ok=0
   "$PY" $W/sc1g_reduce.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { rec 23; return; }
   "$PY" $W/sc1g_kl.py --self-test | tee -a summary.txt; [ "${PIPESTATUS[0]}" = 0 ] || { rec 23; return; }
   fetch_gptoss || { say "PROVE: gpt-oss fetch failed -- NOT PROVED"; rec 23; return; }
   bake_gptoss || { say "PROVE: gpt-oss bake failed -- NOT PROVED"; rec 23; return; }
   SC1G_NCONV=4 i_windows || { say "PROVE: windows failed -- NOT PROVED"; rec 23; return; }
-  i_ref_stage
-  i_ref conv1 > /dev/null || { say "PROVE: no registered reference artifact for conv1 (box R's post-run registration) -- NOT PROVED"; rec 23; return; }
+  i_ref_full_stage
+  i_ref_full conv1 > /dev/null || { say "PROVE: no registered full reference for conv1 (box R's post-run registration) -- NOT PROVED"; rec 23; return; }
   fetch_gptoss_gguf || { say "PROVE: GGUF fetch failed"; ok=1; }
   i_pin_ok || { SC1G_PIN_BAD=1; say "PROVE: the hub's main is not the pin"; ok=1; }
-  i_e4b_named e4b_serve_served_conv1 "$SC1G_E4B_SERVE" conv1; gpu_free 120
-  i_vllm_named conv1; gpu_free 120
-  if i_sgl_up native; then i_sgl_named native conv1; fi; sglang_server_stop > /dev/null 2>&1; SGL_MODE=""; gpu_free 180
-  i_ll_named q8 conv1
-  "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_prove_a4.json --prove-a4 2>&1 | tail -20 | tee -a summary.txt
-  [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: a named KL row was not VALID (arm, record, alignment or box R) -- NOT PROVED"; ok=1; }
+  i_e4b_full e4b_serve_served_conv1 "$SC1G_E4B_SERVE" conv1; gpu_free 120
+  i_vllm_full conv1; gpu_free 120
+  i_ll_full q8 conv1
+  "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_prove_a5.json --prove-a5 2>&1 | tail -20 | tee -a summary.txt
+  [ "${PIPESTATUS[0]}" = 0 ] || { say "PROVE: a full-KL row was not VALID (arm, record, alignment or box R) -- NOT PROVED"; ok=1; }
   [ $ok = 0 ] || rec 23; }
 
 # ---- box J (SC1_BOX=J), the e4b-only diagnostic box -- no comparator installs, guard <= 1 h (so no proof). A2 ran it as

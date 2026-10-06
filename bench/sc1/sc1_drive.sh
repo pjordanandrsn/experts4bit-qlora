@@ -83,6 +83,13 @@ $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook $W/samples /root/.cache/huggingfa
 $SCP $STAGE "root@$HOST:$W/" && $SCP "$HOOK" "root@$HOST:$W/hook/" || { say "stage failed: scp"; exit 20; }
 COPYFILE_DISABLE=1 tar -C "$HERE" --exclude='__pycache__' --exclude='*.pyc' --exclude='.DS_Store' -czf - $COMP_DIRS | $SSH "tar -C $W -xzf -" || { say "stage failed: comparator dirs"; exit 20; }
 $SSH "cd $W && sha256sum -c --quiet staged.sha256" || { say "stage failed: the box's bytes do not match staged.sha256"; exit 20; }
+# SC1g A5: box R's full-vocabulary reference rows (~0.82 GB per window, kept outside any repo) are staged only when asked;
+# box I sha-checks each against the registered sc1g_ref/ref_full_shas.json and refuses its KL arms on any mismatch
+if [ -n "${SC1G_REF_FULL_SRC:-}" ]; then
+  ls "$SC1G_REF_FULL_SRC"/ref_full_*.npy > /dev/null 2>&1 || { say "stage failed: no ref_full_*.npy under $SC1G_REF_FULL_SRC"; exit 20; }
+  $SSH "mkdir -p $W/sc1g_ref_full" && $SCP "$SC1G_REF_FULL_SRC"/ref_full_*.npy "root@$HOST:$W/sc1g_ref_full/" || { say "stage failed: full reference rows"; exit 20; }
+  say "staged $(ls "$SC1G_REF_FULL_SRC"/ref_full_*.npy | wc -l | tr -d ' ') full reference row files from $SC1G_REF_FULL_SRC"
+fi
 if [ -s "$HF_TOKEN_FILE" ]; then   # authenticated pulls (unauthenticated shards throttle); the token never appears in a command line
   $SCP "$HF_TOKEN_FILE" "root@$HOST:/root/.cache/huggingface/token" && $SSH "chmod 600 /root/.cache/huggingface/token" || { say "stage failed: hf token"; exit 20; }
   say "hf token staged"

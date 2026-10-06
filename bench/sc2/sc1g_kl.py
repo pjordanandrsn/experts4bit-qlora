@@ -23,6 +23,12 @@ The registered rules applied here:
     engine's residual mass spread evenly over the vocabulary it did not return (`spread`), and the bound that gives it
     the whole residual (`bound`) is reported beside it.
 
+A5 (after box R read R_NOT_OK under A4: KL65 under-read full KL by 10-25 % on these texts) moves to A4's registered
+FALLBACK, the full-vocabulary KL: R stores each window's reference log-softmax rows in fp16 (`full_rows_fp16`, -inf kept
+exact for masked entries), the engines compute KL(p_ref || p_engine) over all 201,088 tokens per position (`kl_full_rows`),
+and R measures what the fp16 storage costs against the fp64 rows on both calibration pairs (`storage_error`): it must stay
+under STORAGE_F_FRACTION x the window's floor F. A window is graded only if its own F < GRADABLE_F_MAX.
+
   sc1g_kl.py --self-test
 """
 from __future__ import annotations
@@ -208,6 +214,72 @@ def calibrate(ref_logits, test_logits, k: int = K_NAMED, chunk: int = 128) -> di
             "kl65_le_full_everywhere": bool((part_t <= full_t.clamp_min(0) + 1e-9).all())}
 
 
+# ------------------------------------------------------------------------- A5: the full-vocabulary estimator
+
+GRADABLE_F_MAX = 1e-2          # a window is graded only if its own floor F (R's decode-vs-prefill full KL) is under this
+STORAGE_F_FRACTION = 0.1       # |KL from the fp16 rows - KL from fp64| <= this x F on every gradable graded window
+
+
+def full_rows_fp16(logits, chunk: int = 128) -> np.ndarray:
+    """[P, V] logits -> fp16 log-softmax rows (computed in fp64). Every stored entry is finite, or exactly -inf where the
+    logit itself was -inf (a masked / padded vocabulary entry). NaN, or a finite logit whose log-prob underflows fp16 to
+    -inf, is refused: either would silently change the reference distribution."""
+    import torch
+    P, V = int(logits.shape[0]), int(logits.shape[1])
+    out = np.empty((P, V), np.float16)
+    for a in range(0, P, chunk):
+        b = min(P, a + chunk)
+        x = logits[a:b]
+        masked = torch.isinf(x) & (x < 0)
+        f16 = torch.log_softmax(x.to(torch.float64), -1).to(torch.float16)
+        bad = ~torch.isfinite(f16) & ~masked
+        if bool(bad.any()) or bool(torch.isnan(f16).any()) or not bool(torch.isinf(f16[masked]).all() if masked.any() else True):
+            raise FloatingPointError(f"rows {a}..{b}: an fp16 log-prob is NaN, or -inf where the logit was finite -- refusing to store")
+        out[a:b] = f16.cpu().numpy()
+    return out
+
+
+def kl_full_rows(ref_rows, eng, chunk: int = 64) -> np.ndarray:
+    """Per-position KL(p_ref || p_eng) in fp64 over the FULL vocabulary. `ref_rows` [P, V]: log-probs (fp16 rows from R,
+    renormalised on load; -inf entries carry p = 0 and stay out of the sum). `eng` [P, V]: the engine's logits or log-probs
+    (renormalised too). An engine -inf where the reference has mass is an infinite KL: raised, so the row is VOID."""
+    import torch
+    P = int(ref_rows.shape[0])
+    out = np.empty(P, np.float64)
+    dev = eng.device if torch.is_tensor(eng) else torch.device("cpu")      # computed where the engine's rows live
+    for a in range(0, P, chunk):
+        b = min(P, a + chunk)
+        rr = ref_rows[a:b]
+        r = (rr if torch.is_tensor(rr) else torch.as_tensor(np.asarray(rr))).to(device=dev, dtype=torch.float64)
+        e = torch.as_tensor(eng[a:b]).to(device=dev, dtype=torch.float64)
+        r = r - torch.logsumexp(r, -1, keepdim=True)
+        e = e - torch.logsumexp(e, -1, keepdim=True)
+        pr = r.exp()
+        term = torch.where(pr > 0, pr * (r - e), torch.zeros((), dtype=r.dtype, device=r.device))
+        if not bool(torch.isfinite(term).all()):
+            raise FloatingPointError(f"rows {a}..{b}: non-finite KL term (the engine puts -inf where the reference has mass)")
+        kl = term.sum(-1)
+        if bool((kl < -1e-9).any()):
+            raise FloatingPointError(f"rows {a}..{b}: negative full KL {float(kl.min()):.3e} -- misaligned")
+        out[a:b] = kl.clamp_min(0).cpu().numpy()
+    return out
+
+
+def storage_error(ref_logits, test_logits, chunk: int = 128) -> dict:
+    """What fp16 storage of the reference costs: mean KL(ref || test) from fp64 log-probs vs from the stored fp16 rows
+    (chunked, on the tensors' device)."""
+    import torch
+    k64, k16 = [], []
+    for a in range(0, int(ref_logits.shape[0]), chunk):
+        b = min(int(ref_logits.shape[0]), a + chunk)
+        lp64 = torch.log_softmax(ref_logits[a:b].to(torch.float64), -1)
+        lp16 = torch.as_tensor(full_rows_fp16(ref_logits[a:b])).to(lp64.device)
+        k64.append(kl_full_rows(lp64, test_logits[a:b].to(lp64.device)))
+        k16.append(kl_full_rows(lp16, test_logits[a:b].to(lp64.device)))
+    m64, m16 = float(np.mean(np.concatenate(k64))), float(np.mean(np.concatenate(k16)))
+    return {"kl_fp64_mean": m64, "kl_fp16_mean": m16, "abs_err": abs(m16 - m64)}
+
+
 def calib_verdict(ratio) -> str:
     return "UNREAD" if ratio is None else ("OK" if ratio >= CALIB_RATIO_MIN else "UNREAD")
 
@@ -268,6 +340,33 @@ def self_test() -> int:
             refused = True
         cases.append(("artifact round trip + sha refusal", ok and refused))
     cases.append(("calibration verdicts", calib_verdict(0.95) == "OK" and calib_verdict(0.85) == "UNREAD" and calib_verdict(None) == "UNREAD"))
+    # A5: full-vocabulary KL equals the direct fp64 computation; fp16 storage costs little; -inf handled exactly
+    full = kl_full_rows(torch.log_softmax(ref_logits.double(), -1).numpy(), test_logits)
+    p_ = torch.softmax(ref_logits.double(), -1)
+    direct = (p_ * (torch.log_softmax(ref_logits.double(), -1) - torch.log_softmax(test_logits.double(), -1))).sum(-1).numpy()
+    cases.append(("A5 full KL == direct fp64", np.allclose(full, direct, atol=1e-12) and abs(float(np.mean(full)) - c["kl_full_mean"]) < 1e-12))
+    se = storage_error(ref_logits, test_logits)
+    cases.append(("A5 fp16 storage error is small", se["abs_err"] < 1e-3 * max(se["kl_fp64_mean"], 1e-9) + 1e-6))
+    masked = ref_logits.clone()
+    masked[:, -5:] = float("-inf")                      # padded vocab entries
+    rows16 = full_rows_fp16(masked)
+    ok_inf = bool(np.isneginf(rows16[:, -5:]).all()) and bool(np.isfinite(rows16[:, :-5]).all())
+    kmask = kl_full_rows(rows16, test_logits)            # the masked entries carry p = 0: finite KL
+    cases.append(("A5 -inf stored exactly and kept out of the sum", ok_inf and bool(np.all(np.isfinite(kmask)))))
+    eng_bad = test_logits.clone()
+    eng_bad[:, 3] = float("-inf")                        # the engine zeroes a token the reference gives mass to
+    try:
+        kl_full_rows(torch.log_softmax(ref_logits.double(), -1).numpy(), eng_bad)
+        raised = False
+    except FloatingPointError:
+        raised = True
+    cases.append(("A5 engine -inf on reference mass is refused", raised))
+    try:
+        full_rows_fp16(torch.full((2, 8), float("nan")))
+        nan_ok = False
+    except FloatingPointError:
+        nan_ok = True
+    cases.append(("A5 NaN rows refused", nan_ok))
     bad_cases = [n for n, ok in cases if not ok]
     print(f"sc1g_kl self-test {'OK' if not bad_cases else 'FAILED ' + str(bad_cases)} ({len(cases)} cases)")
     return 0 if not bad_cases else 1
