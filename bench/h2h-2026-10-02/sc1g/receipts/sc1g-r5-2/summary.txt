@@ -1,0 +1,34 @@
+gnf4 0.41.0 @dc8f94abfd868f149178623f6eb403dc8b892b02
+torch 2.8.0+cu128 cuda 12.8
+transformers 5.16.1
+gpt-oss-20b @6cee5e81ee83917806bbde320786a8fb61efebee
+K0 all_passed
+FETCH gpt-oss-20b @6cee5e81ee83917806bbde320786a8fb61efebee
+SC1G_R windows conv1=3753e997a334 conv2=9bf650b837c4 conv3=997bc7c31f71 conv4=e8415e7aceac wikitext=506d7ca8a492
+SC1G_R reference loaded in 5 s
+R conv1: nll dec 0.88386 pre 0.86420 F 5.668e-03 fp16 err 6.03e-07 sha 706d668ef552
+R conv2: nll dec 1.82099 pre 1.84033 F 7.030e-03 fp16 err 1.48e-06 sha c3801eb3e297
+R conv3: nll dec 0.89487 pre 0.89207 F 1.838e-03 fp16 err 1.45e-07 sha d4611048532f
+R conv4: nll dec 1.58991 pre 1.58727 F 1.853e-03 fp16 err 1.06e-07 sha c29a676b5523
+R wikitext: nll dec 6.43518 pre 6.29469 F 2.182e-02 fp16 err 1.71e-07 sha 9b29f7bd4d5e
+R conv1: nf4 KL_full 1.080e-01 fp16 err 2.03e-07
+R conv2: nf4 KL_full 1.394e-01 fp16 err 4.76e-06
+R conv3: nf4 KL_full 2.115e-02 fp16 err 3.90e-07
+R conv4: nf4 KL_full 2.266e-02 fp16 err 9.20e-07
+R wikitext: nf4 KL_full 9.890e-02 fp16 err 8.19e-07
+SC1G_R_VERDICT R_OK k0_controls=OK windows_complete=OK nf4_matches_gnf4=OK full_artifacts=OK fp16_storage=OK gradable=conv1,conv2,conv3,conv4 F={"conv1": 0.005668, "conv2": 0.00703, "conv3": 0.001838, "conv4": 0.001853, "wikitext": 0.021815} fp16_err={"conv1": 6.03e-07, "conv2": 4.76e-06, "conv3": 3.9e-07, "conv4": 9.2e-07, "wikitext": 8.19e-07}
+SC1G_R_FULL conv1 sha256=706d668ef552b94636a6ece6361ca64ada52845f042b03b0adce69d886d17797 shape=[2048, 201088] bytes=823656576
+SC1G_R_FULL conv2 sha256=c3801eb3e297964c415d5992bd886d3c5afda0048b6edbaaf66444c34cb4f3e0 shape=[2048, 201088] bytes=823656576
+SC1G_R_FULL conv3 sha256=d4611048532f0aea32108646e0b2fcb85bbe1bb9db91035cfdc77058fc10a890 shape=[2048, 201088] bytes=823656576
+SC1G_R_FULL conv4 sha256=c29a676b552312e5d8ed4044bfe16eb1b73658d21509792d6e6078e36720fda2 shape=[2048, 201088] bytes=823656576
+SC1G_R_FULL wikitext sha256=9b29f7bd4d5ecee2464a35748a7acfbc2c291148e0c27e53d159c496a2f0747d shape=[2048, 201088] bytes=823656576
+SC1G_R_NLL conv1 reference_decode=0.88386 reference_prefill=0.86420 nf4_fakequant_prefill=0.7463835219867466
+SC1G_R_NLL conv2 reference_decode=1.82099 reference_prefill=1.84033 nf4_fakequant_prefill=1.7014693527722033
+SC1G_R_NLL conv3 reference_decode=0.89487 reference_prefill=0.89207 nf4_fakequant_prefill=0.9331591932689024
+SC1G_R_NLL conv4 reference_decode=1.58991 reference_prefill=1.58727 nf4_fakequant_prefill=1.5954660466079098
+SC1G_R_NLL wikitext reference_decode=6.43518 reference_prefill=6.29469 nf4_fakequant_prefill=6.411360916665513
+ARTIFACT 706d668ef552b94636a6ece6361ca64ada52845f042b03b0adce69d886d17797  full/ref_full_conv1.npy
+ARTIFACT c3801eb3e297964c415d5992bd886d3c5afda0048b6edbaaf66444c34cb4f3e0  full/ref_full_conv2.npy
+ARTIFACT d4611048532f0aea32108646e0b2fcb85bbe1bb9db91035cfdc77058fc10a890  full/ref_full_conv3.npy
+ARTIFACT c29a676b552312e5d8ed4044bfe16eb1b73658d21509792d6e6078e36720fda2  full/ref_full_conv4.npy
+ARTIFACT 9b29f7bd4d5ecee2464a35748a7acfbc2c291148e0c27e53d159c496a2f0747d  full/ref_full_wikitext.npy

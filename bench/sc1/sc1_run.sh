@@ -276,7 +276,7 @@ case "$BOX" in
   F) . $W/sc2_box_e.sh; . $W/sc2b_box_f.sh; install_sc2_client ;;   # SC2b: e4b's prefill-graph A/B, e4b only (bench/sc2)
   G) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; install_vllm; install_sglang; install_llamacpp; install_sc2_client ;;   # SC2g: gpt-oss-20b, four engines (bench/sc2)
   H) . $W/sc2_box_e.sh; . $W/sc2c_box_h.sh; install_sc2_client ;;   # SC2c: e4b's bulk-KV A/B with the step trace, e4b only (bench/sc2)
-  I) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh; install_vllm; install_sglang; install_llamacpp ;;   # SC1g: gpt-oss-20b quality, four engines (bench/sc2)
+  I) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh; install_vllm; install_llamacpp ;;   # SC1g A5: gpt-oss-20b full-vocab KL -- e4b, vLLM, llama.cpp (SGLang has no A5 arm: UNREAD by registration, not installed)
   J) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh ;;   # SC1g A2: the e4b-only diagnostic box, no comparators (bench/sc2)
   K) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc2d_box_k.sh; install_sc2_client ;;   # SC2d: the bulk-KV default's engagement reads, gpt-oss + Qwen3.6, e4b only (bench/sc2)
 esac
@@ -586,7 +586,7 @@ reduce(){ if [ -s $W/sc1_reduce.py ]; then say "reduce"; "$PY" $W/sc1_reduce.py 
 # ============================================================================ the PROVING RENTAL (SC1_PROVE=1): no bf16 Qwen3 fetch
 if [ "$PROVE" = 1 ]; then
   echo "PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite" | tee -a summary.txt
-  case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3";; C) PROVE_NEEDS="vllm exl3 sglang";; D) PROVE_NEEDS="vllm sglang llamacpp nsys";; E) PROVE_NEEDS="vllm sglang llamacpp sc2client";; F) PROVE_NEEDS="sc2client";; G) PROVE_NEEDS="vllm sglang llamacpp sc2client";; H) PROVE_NEEDS="sc2client";; I) PROVE_NEEDS="vllm sglang llamacpp";; J) PROVE_NEEDS="";; K) PROVE_NEEDS="sc2client";; esac   # = the install dispatch's sets
+  case "$BOX" in A) PROVE_NEEDS="vllm";; B) PROVE_NEEDS="vllm llamacpp exl3";; C) PROVE_NEEDS="vllm exl3 sglang";; D) PROVE_NEEDS="vllm sglang llamacpp nsys";; E) PROVE_NEEDS="vllm sglang llamacpp sc2client";; F) PROVE_NEEDS="sc2client";; G) PROVE_NEEDS="vllm sglang llamacpp sc2client";; H) PROVE_NEEDS="sc2client";; I) PROVE_NEEDS="vllm llamacpp";; J) PROVE_NEEDS="";; K) PROVE_NEEDS="sc2client";; esac   # = the install dispatch's sets
   for E in $PROVE_NEEDS; do have $E || { say "PROVE: $E did not install -- NOT PROVED"; rec 23; }; done
   quiesce prove
   if fetch granite "$GR" "$GR_REV" 900 && bake granite "$GR" 1500; then
@@ -623,7 +623,7 @@ if [ "$PROVE" = 1 ]; then
   [ "$BOX" = K ] && prove_k                                                   # SC2d: box K's flow on Granite, engaged and identical
   [ "$BOX" = E ] && prove_e                                                   # SC2: every server answers the driver, all VALID
   [ "$rc_any" = 0 ] || { say "PROVE: NOT PROVED (rc_any=$rc_any)"; finish 23; }
-  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")$([ "$BOX" = D ] && echo ' census=[toy e4b_granite_b16_graph vllm_b1_node sglang_b1_node llamacpp_b16_graph]')$([ "$BOX" = E ] && echo ' servers=[e4b_granite vllm sglang llamacpp]')$([ "$BOX" = F ] && echo ' sc2b=[routes graph_engaged identity]')$([ "$BOX" = G ] && echo ' servers=[e4b_gptoss vllm sglang llamacpp]')$([ "$BOX" = H ] && echo ' sc2c=[routes bulk_engaged identity step_trace]')$([ "$BOX" = K ] && echo ' sc2d=[prompts arch both_servers engaged determinism identity]')$([ "$BOX" = I ] && echo ' quality=[e4b_serve e4b_nf4 vllm sglang_native sglang_marlin llamacpp llamacpp_q8]')" | tee -a summary.txt
+  echo "PROVED box=$BOX installs=[$PROVE_NEEDS] smokes=[granite_b1 granite_b16]$([ "$BOX" = C ] && echo ' sglang_jit=ran')$([ "$BOX" = B ] && echo " comparators=[${PB_STEPS# }]")$([ "$BOX" = D ] && echo ' census=[toy e4b_granite_b16_graph vllm_b1_node sglang_b1_node llamacpp_b16_graph]')$([ "$BOX" = E ] && echo ' servers=[e4b_granite vllm sglang llamacpp]')$([ "$BOX" = F ] && echo ' sc2b=[routes graph_engaged identity]')$([ "$BOX" = G ] && echo ' servers=[e4b_gptoss vllm sglang llamacpp]')$([ "$BOX" = H ] && echo ' sc2c=[routes bulk_engaged identity step_trace]')$([ "$BOX" = K ] && echo ' sc2d=[prompts arch both_servers engaged determinism identity]')$([ "$BOX" = I ] && echo ' kl_full=[e4b_serve vllm llamacpp_q8] (A5; SGLang UNREAD by registration)')" | tee -a summary.txt
   : > PROVED; finish 0
 fi
 # ============================================================================ the REAL lane: common Phase 0 pieces

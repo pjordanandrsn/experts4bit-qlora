@@ -56,3 +56,36 @@ python bench/sc2/sc1g_ref.py --reverdict bench/h2h-2026-10-02/sc1g/receipts/sc1g
 
 It exits 0 only if the verdict and every check equal R's own `r_verdict.json`, and every `ref_<src>.npz` hashes to the sha R
 recorded. The artifacts are kept as receipts only: R is not OK, so they grade nothing.
+
+
+## Box R (amendment A5): the full-vocabulary reference, `R_OK`
+
+**The box.** The same class, rate and guard as A4: one H100 NVL, declared $3.50/h, guard 1.0 h. It launched from A5's merge,
+`dfc5bdaf` (#1223), with the registered rule digest `7f307c39…` and `staged-r.sha256` re-checked at that SHA.
+
+| attempt | receipt (adertha-receipts) | outcome | $ |
+|---|---|---|---|
+| `sc1g-r5-1` | `49b14848` | REFUSED at the provider: no RunPod Secure H100 NVL stock (no instance) | 0 |
+| `sc1g-r5-2` | `fde4f454` | **`R_OK`** (rc 0); Vast verified, machine 141791, $2.07/h; teardown proven | 0.826 |
+
+- **Box R's total** is now **$1.5164**: $0.6904 under A4 plus $0.826 here. The lane is at **$5.308**.
+- **The run took 22 min:** from 02:12:59Z to TP_DONE at 02:26:38Z, then about 8 min fetching the ~4.1 GB of full rows.
+
+**What is committed** follows `sc1g-r-8`'s layout: `summary.txt`, `versions.txt`, `forensics.txt`, `outer.log`, `rsync.txt`,
+`k0.json`, `logs/`, and `ref/` (`r_verdict.json`, `r_calib.json`, `SHA256SUMS`).
+
+**Where the full rows are.** They are not in git (5 × 823,656,576 bytes, fp16 `[2048, 201088]`). They are in two places,
+each re-hashed against `ref/SHA256SUMS`:
+- the controller copy: `~/sc1g-ref-full/sc1g-r5-2/` on the mini;
+- the durable copy: QNAP Pool 3, `/share/ZFS19_DATA/sc1g-ref-full/sc1g-r5-2/` (with its own `SHA256SUMS`).
+
+**What box I reads.** `bench/sc1/sc1g_ref/` holds `ref_full_shas.json` (the registered shas), plus `r_verdict.json` and
+`r_calib.json`, byte-identical to this receipt's. A test pins all three to it.
+
+**Reproduce R's verdict** (no GPU) from the committed receipt:
+
+```
+python bench/sc2/sc1g_ref.py --reverdict bench/h2h-2026-10-02/sc1g/receipts/sc1g-r5-2/ref --k0 bench/h2h-2026-10-02/sc1g/receipts/sc1g-r5-2/k0.json
+```
+
+It reads `R_OK rule=A5 ... matches_recorded=True`. The full rows are re-hashed too, when they sit in `ref/full/` beside it.

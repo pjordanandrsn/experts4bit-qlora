@@ -306,6 +306,28 @@ def test_the_a4_read_still_rederives_from_its_committed_receipt():
     assert r.returncode == 0 and "R_NOT_OK rule=A4" in r.stdout and "matches_recorded=True" in r.stdout, r.stdout + r.stderr
 
 
+def test_the_a5_read_rederives_and_the_registered_shas_are_rs():
+    """A5's box R read (sc1g-r5-2): --reverdict on the committed receipt reproduces R_OK under rule A5, and the files box I
+    stages from bench/sc1/sc1g_ref/ are R's own -- r_verdict.json and r_calib.json byte-identical to the receipt's, and
+    ref_full_shas.json equal to the shas R recorded three ways (verdict, calibration, SHA256SUMS)."""
+    import json
+    import subprocess
+    import sys
+    rd = SC2.parents[1] / "bench" / "h2h-2026-10-02" / "sc1g" / "receipts" / "sc1g-r5-2"
+    reg = SC2.parents[1] / "bench" / "sc1" / "sc1g_ref"
+    r = subprocess.run([sys.executable, str(SC2 / "sc1g_ref.py"), "--reverdict", str(rd / "ref"), "--k0", str(rd / "k0.json")],
+                       capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0 and "R_OK rule=A5" in r.stdout and "matches_recorded=True" in r.stdout, r.stdout + r.stderr
+    for f in ("r_verdict.json", "r_calib.json"):
+        assert (reg / f).read_bytes() == (rd / "ref" / f).read_bytes(), f
+    shas = json.loads((reg / "ref_full_shas.json").read_text())
+    v, cal = json.loads((rd / "ref" / "r_verdict.json").read_text()), json.loads((rd / "ref" / "r_calib.json").read_text())
+    sums = {ln.split()[1].rsplit("/", 1)[-1][len("ref_full_"):-len(".npy")]: ln.split()[0]
+            for ln in (rd / "ref" / "SHA256SUMS").read_text().splitlines() if ln.strip()}
+    assert set(shas) == {"conv1", "conv2", "conv3", "conv4", "wikitext"}
+    assert shas == v["full_artifacts"] == sums == {s: a["sha256"] for s, a in cal["full_artifacts"].items()}
+    assert v["rule"] == "A5" and v["verdict"] == "R_OK" and v["gradable_windows"] == ["conv1", "conv2", "conv3", "conv4"]
+
 def test_full_capture_reads_full_vocab_kl_and_reproduces_the_nll(tmp_path):
     """A5: the proxy computes KL(p_ref || p_e4b) over every token against R's fp16 full rows, per served step."""
     import json

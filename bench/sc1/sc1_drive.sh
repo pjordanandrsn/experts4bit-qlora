@@ -35,7 +35,7 @@ while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
     sc1_run.sh|sc1_e4b_sched.py|sc1_prompts.py|sc1_sampler.sh|sc1_reduce.py) src="$HERE/$name";;
-    vllm/*|sglang/*|llamacpp/*|exl3/*|lmdeploy/*) src="$HERE/$name";;
+    vllm/*|sglang/*|llamacpp/*|exl3/*|lmdeploy/*|sc1g_ref/*) src="$HERE/$name";;   # before sc1g_* (bench/sc2's flat files)
     hook/usercustomize.py) src="$P42/hook/usercustomize.py";;
     test_k19_row_exact_gpu.py) src="$TESTS/$name";;
     sc1b_*|kernel_classes.json) src="$SC1B/$name";;

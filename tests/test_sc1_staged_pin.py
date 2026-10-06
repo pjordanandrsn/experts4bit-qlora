@@ -89,7 +89,8 @@ def test_every_pinned_name_is_staged_by_the_driver_and_resolves_the_same_way():
     # the driver's case resolves every pinned name exactly as resolve() does
     case = driver[driver.index("while read -r want name; do"):driver.index('done < "$HERE/staged.sha256"')]
     assert "sc1_run.sh|sc1_e4b_sched.py|sc1_prompts.py|sc1_sampler.sh|sc1_reduce.py) src=\"$HERE/$name\"" in case
-    assert "vllm/*|sglang/*|llamacpp/*|exl3/*|lmdeploy/*) src=\"$HERE/$name\"" in case
+    assert "vllm/*|sglang/*|llamacpp/*|exl3/*|lmdeploy/*|sc1g_ref/*) src=\"$HERE/$name\"" in case
+    assert case.index("|sc1g_ref/*)") < case.index("|sc1g_*|")   # sc1g_ref/ resolves before bench/sc2's flat sc1g_* files
     assert 'hook/usercustomize.py) src="$P42/hook/usercustomize.py"' in case and 'test_k19_row_exact_gpu.py) src="$TESTS/$name"' in case
     assert 'sc1b_*|kernel_classes.json) src="$SC1B/$name"' in case
     assert 'sc2_*|sc2b_*|sc2g_*|sc1g_*|sc2c_*|sc2d_*) src="$SC2/$name"' in case
@@ -132,7 +133,7 @@ def test_the_driver_runs_to_its_dry_run(tmp_path):
     assert out.returncode == 0, out.stdout + out.stderr
     assert out.stdout.startswith("DRYRUN stage [sc1_run.sh sc1_e4b_sched.py sc1_prompts.py sc1_sampler.sh step_decomp.py k8_bake.py calib.json "
                                  "test_k19_row_exact_gpu.py staged.sha256 "), out.stdout
-    assert "hook/usercustomize.py dirs: vllm sglang llamacpp exl3 lmdeploy] -> root@h:/root/sc1" in out.stdout
+    assert "hook/usercustomize.py dirs: vllm sglang llamacpp exl3 lmdeploy sc1g_ref] -> root@h:/root/sc1" in out.stdout
     assert " SC1_BOX=A SC1_RUN_ID=sc1-dry SC1_RUN_NONCE=" in out.stdout and " E4B_SHA=" + "0" * 40 in out.stdout
     assert " SC1_PROVE=1 " in out.stdout and " SC1_CALIB_NSEQ=64 " in out.stdout and " SC1_PROVE_SGLANG_MODEL=org/model@deadbeef " in out.stdout
     assert " bash sc1_run.sh ; poll TP_DONE." in out.stdout and out.stdout.rstrip().endswith("fetch -> " + str(tmp_path) + "/sc1")
