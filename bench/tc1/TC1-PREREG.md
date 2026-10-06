@@ -2428,6 +2428,9 @@ live groups.
 - **P143 HELD:** the double-quantized absmax closes most of what is left. The next registration asks whether the library should default
   to it on packed rows, the way amendment 28 read its speed.
 - **Otherwise** the read names what is left, and the next registration targets it.
+- **P141 FALSIFIED on an arm** (maintainer review, before any box): the census can't account for that arm's peak, so its excess is
+  not attributed. The read reports the unattributed share, and no lever registration follows from that arm's groups until the
+  instrument is fixed and re-read.
 - Positions stay with the boxes that read them.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the
