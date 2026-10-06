@@ -1,0 +1,10 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.71.05, GPU-4317bd77-064e-9ba3-0fd2-0b70602592f7, 500.00 W, 3090 MHz
+CPU(s):                                  16
+Model name:                              Intel(R) Xeon(R) W-2145 CPU @ 3.70GHz
+MemTotal:       131573680 kB
+cgroup memory.max 129340801024
+overlay         320G  2.4M  320G   1% /
+cgroup cpu.max 1536000 100000
+cgroup cpu.cfs_quota_us/period_us absent/absent
+cgroup cpuset.cpus.effective 0-15
+affinity cpus 16 of 16
