@@ -205,7 +205,8 @@ i_e4b_full(){ local NAME=$1 STACK=$2 SRC=$3 SHA; SHA=$(i_ref_full $SRC) || { i_n
   i_e4b $NAME "$STACK SC1G_REF_FULL_FILE=$SC1G_REF_FULL_DIR/ref_full_$SRC.npy SC1G_REF_FULL_SHA=$SHA SC1G_KL_OUT=$W/sc1g/kl_$NAME.npz" $SRC; }
 i_vllm_full(){ local SRC=$1 SHA; SHA=$(i_ref_full $SRC) || { i_nofull nll_vllm_served_$SRC vllm $SRC; return 0; }
   SC1G_NAMED_ENV="SC1_REF_FULL=$SC1G_REF_FULL_DIR/ref_full_$SRC.npy SC1_REF_FULL_SHA=$SHA SC1_KL_OUT=$W/sc1g/kl_nll_vllm_served_$SRC.npz" i_vllm served $SRC; }
-# llama.cpp's harness reads raw fp16 [steps x V] and writes float64 [steps x 2] (KL, target log-prob); converted on either side
+# llama.cpp's harness reads raw fp16 [steps x V] and writes float64 [steps x 5] (KL, target log-prob, common-support KL, masked
+# reference mass, masked count; NaN = a void position); converted on either side
 i_ll_full(){ local V=$1 SRC=$2 SHA S; S=nll_llamacpp$([ "$V" = q8 ] && echo _q8)_decode_$SRC
   SHA=$(i_ref_full $SRC) || { i_nofull $S llamacpp $SRC; return 0; }
   [ -s $W/sc1g/ref_full_$SRC.f16 ] || "$PY" -c "import numpy as np, sys; np.load(sys.argv[1], mmap_mode='r').astype('<f2').tofile(sys.argv[2])" \
@@ -213,8 +214,9 @@ i_ll_full(){ local V=$1 SRC=$2 SHA S; S=nll_llamacpp$([ "$V" = q8 ] && echo _q8)
   SC1G_NAMED_LL="--ref-full $W/sc1g/ref_full_$SRC.f16 --kl-out $W/sc1g/kl_$S.bin" i_ll $V decode $SRC
   [ -s $W/sc1g/kl_$S.bin ] && "$PY" -c "
 import numpy as np, sys
-a = np.fromfile(sys.argv[1], '<f8').reshape(-1, 2)
-np.savez(sys.argv[2], eng_kl=a[:, 0], eng_target_lp=a[:, 1])" $W/sc1g/kl_$S.bin $W/sc1g/kl_$S.npz; }
+a = np.fromfile(sys.argv[1], '<f8').reshape(-1, 5)
+np.savez(sys.argv[2], eng_kl=a[:, 0], eng_target_lp=a[:, 1], eng_kl_common=a[:, 2], eng_masked_mass=a[:, 3], eng_n_masked=a[:, 4])" \
+      $W/sc1g/kl_$S.bin $W/sc1g/kl_$S.npz; }
 # A5's arm list: the full-KL rows first (by engine, each server once), then descriptive prefill rows; the deadline drops from the end
 i_arms_a5(){ local SRC V
   phase A5E4B "A5: e4b served, full-vocabulary KL -- MXFP4 (GEMV) then NF4, conv1-conv4 then the control"

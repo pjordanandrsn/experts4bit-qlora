@@ -25,7 +25,8 @@ The registered rules applied here:
 
 A5 (after box R read R_NOT_OK under A4: KL65 under-read full KL by 10-25 % on these texts) moves to A4's registered
 FALLBACK, the full-vocabulary KL: R stores each window's reference log-softmax rows in fp16 (`full_rows_fp16`, -inf kept
-exact for masked entries), the engines compute KL(p_ref || p_engine) over all 201,088 tokens per position (`kl_full_rows`),
+exact for masked entries), the engines compute KL(p_ref || p_engine) over all 201,088 tokens per position (`kl_full_support`:
+the full KL, the common-support KL, and the reference mass on any token the engine masks to -inf, never raising on it),
 and R measures what the fp16 storage costs against the fp64 rows on both calibration pairs (`storage_error`): it must stay
 under STORAGE_F_FRACTION x the window's floor F. A window is graded only if its own F < GRADABLE_F_MAX.
 
@@ -242,7 +243,8 @@ def full_rows_fp16(logits, chunk: int = 128) -> np.ndarray:
 def kl_full_rows(ref_rows, eng, chunk: int = 64) -> np.ndarray:
     """Per-position KL(p_ref || p_eng) in fp64 over the FULL vocabulary. `ref_rows` [P, V]: log-probs (fp16 rows from R,
     renormalised on load; -inf entries carry p = 0 and stay out of the sum). `eng` [P, V]: the engine's logits or log-probs
-    (renormalised too). An engine -inf where the reference has mass is an infinite KL: raised, so the row is VOID."""
+    (renormalised too). An engine -inf where the reference has mass is an infinite KL: RAISED. R's own pairs use this
+    (both sides are the reference model); the engines' call sites use `kl_full_support`, which never raises on support."""
     import torch
     P = int(ref_rows.shape[0])
     out = np.empty(P, np.float64)
@@ -262,6 +264,49 @@ def kl_full_rows(ref_rows, eng, chunk: int = 64) -> np.ndarray:
         if bool((kl < -1e-9).any()):
             raise FloatingPointError(f"rows {a}..{b}: negative full KL {float(kl.min()):.3e} -- misaligned")
         out[a:b] = kl.clamp_min(0).cpu().numpy()
+    return out
+
+
+def kl_full_support(ref_rows, eng, chunk: int = 64) -> dict:
+    """The engines' per-position read (A5, the maintainer's review of #1223): gpt-oss's 201,088-entry head carries padded or
+    unused ids that an engine may mask to -inf while R gives them tiny finite mass. Rather than raise (and crash an arm or
+    e4b's server mid-run), each position records, as fp64 numpy arrays over the rows:
+      kl          KL(p_ref || p_eng) over the full vocabulary; +inf where the engine masks a token the reference gives mass
+      kl_common   the reference restricted to the engine's support (its finite entries) and renormalised there, against
+                  the engine: the quantity a common-support rule would grade (NaN when the engine masks all reference mass)
+      masked_mass the reference mass on the engine's -inf tokens
+      n_masked    the engine's -inf count
+    Raises only on a NaN or +inf engine entry, or a negative KL beyond -1e-9 (misalignment); the call sites catch that per
+    position and record it as a void position, and keep running."""
+    import torch
+    P = int(ref_rows.shape[0])
+    out = {k: np.empty(P, np.float64) for k in ("kl", "kl_common", "masked_mass", "n_masked")}
+    dev = eng.device if torch.is_tensor(eng) else torch.device("cpu")
+    for a in range(0, P, chunk):
+        b = min(P, a + chunk)
+        rr = ref_rows[a:b]
+        r = (rr if torch.is_tensor(rr) else torch.as_tensor(np.asarray(rr))).to(device=dev, dtype=torch.float64)
+        e = torch.as_tensor(eng[a:b]).to(device=dev, dtype=torch.float64)
+        if bool(torch.isnan(e).any()) or bool(torch.isposinf(e).any()):
+            raise FloatingPointError(f"rows {a}..{b}: NaN or +inf in the engine's row")
+        r = r - torch.logsumexp(r, -1, keepdim=True)
+        e = e - torch.logsumexp(e, -1, keepdim=True)
+        masked = torch.isneginf(e)
+        pr = r.exp()
+        zero = torch.zeros((), dtype=r.dtype, device=r.device)
+        mm = torch.where(masked, pr, zero).sum(-1)
+        keep = (pr > 0) & ~masked
+        part = torch.where(keep, pr * (r - e), zero).sum(-1)
+        kl = torch.where(mm > 0, torch.full_like(part, float("inf")), part)
+        rc = r - torch.log1p(-mm.clamp(max=1.0))[:, None]                # renormalised on the engine's support
+        klc = torch.where(keep, rc.exp() * (rc - e), zero).sum(-1)
+        klc = torch.where(mm < 1.0, klc, torch.full_like(klc, float("nan")))
+        if bool(((mm == 0) & (part < -1e-9)).any()) or bool(((mm < 1.0) & (klc < -1e-9)).any()):
+            raise FloatingPointError(f"rows {a}..{b}: negative full KL -- misaligned")
+        out["kl"][a:b] = torch.where(torch.isinf(kl), kl, kl.clamp_min(0)).cpu().numpy()
+        out["kl_common"][a:b] = klc.clamp_min(0).cpu().numpy() if not bool(torch.isnan(klc).any()) else klc.cpu().numpy()
+        out["masked_mass"][a:b] = mm.cpu().numpy()
+        out["n_masked"][a:b] = masked.sum(-1).to(torch.float64).cpu().numpy()
     return out
 
 
@@ -361,6 +406,31 @@ def self_test() -> int:
     except FloatingPointError:
         raised = True
     cases.append(("A5 engine -inf on reference mass is refused", raised))
+    lp_ref = torch.log_softmax(ref_logits.double(), -1).numpy()
+    sup = kl_full_support(lp_ref, test_logits)          # no masking: the same KL, nothing masked
+    cases.append(("A5 support read == full KL when the engine masks nothing", np.allclose(sup["kl"], full, atol=1e-12)
+                  and np.allclose(sup["kl_common"], full, atol=1e-12) and not sup["masked_mass"].any() and not sup["n_masked"].any()))
+    sb = kl_full_support(lp_ref, eng_bad)               # the engine masks token 3: kl = inf, mass and common-support KL recorded
+    pr3 = np.exp(lp_ref[:, 3])
+    rc = lp_ref - np.log1p(-pr3)[:, None]
+    eb = torch.log_softmax(eng_bad.double(), -1).numpy()
+    keep = np.ones(lp_ref.shape[1], bool)
+    keep[3] = False
+    klc_direct = (np.exp(rc[:, keep]) * (rc[:, keep] - eb[:, keep])).sum(-1)
+    cases.append(("A5 engine -inf on reference mass: kl = inf, mass + common-support KL recorded, no raise",
+                  bool(np.isposinf(sb["kl"]).all()) and np.allclose(sb["masked_mass"], pr3, rtol=1e-12)
+                  and np.allclose(sb["kl_common"], klc_direct, atol=1e-12) and bool((sb["n_masked"] == 1).all())))
+    eng_pad = test_logits.clone()
+    eng_pad[:, -5:] = float("-inf")                     # the engine masks the padded ids where the reference is -inf too
+    sp = kl_full_support(rows16, eng_pad)
+    cases.append(("A5 engine masks only reference -inf ids: finite KL, zero masked mass", bool(np.all(np.isfinite(sp["kl"])))
+                  and not sp["masked_mass"].any() and bool((sp["n_masked"] == 5).all())))
+    try:
+        kl_full_support(lp_ref, torch.full_like(test_logits, float("nan")))
+        nan_eng = False
+    except FloatingPointError:
+        nan_eng = True
+    cases.append(("A5 support read raises on a NaN engine row (the call sites void that position)", nan_eng))
     try:
         full_rows_fp16(torch.full((2, 8), float("nan")))
         nan_ok = False

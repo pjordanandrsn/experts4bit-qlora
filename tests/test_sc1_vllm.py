@@ -416,6 +416,54 @@ def test_empty_logprob_container_reads_as_no_entries(mods):
     assert row2["n_entries"] == 0
 
 
+def test_served_full_kl_records_masked_mass_and_void_positions_without_crashing(mods, tmp_path, monkeypatch):
+    """SC1g A5, #1223 review: in the full-vocabulary KL path a token vLLM masks to -inf where box R's reference has mass
+    is recorded (kl = inf, the mass, the common-support KL), a position that returns fewer entries than the vocabulary is
+    a void position with its reason, and the served loop runs to the end either way."""
+    import numpy as np
+    import torch
+    monkeypatch.syspath_prepend(str(REPO / "bench" / "sc2"))
+    import sc1g_kl as KLM
+    V, P, S = 40, 8, 6
+    g = torch.Generator().manual_seed(5)
+    ids = torch.randint(0, V, (P + S + 2,), generator=g).tolist()
+    ref = KLM.full_rows_fp16(torch.randn(S, V, generator=g) * 3)
+    ref_path = tmp_path / "ref_full_conv1.npy"
+    np.save(ref_path, ref)
+    kout = tmp_path / "kl.npz"
+    for k, v in {"SC1_REF_FULL": str(ref_path), "SC1_REF_FULL_SHA": KLM.file_sha(str(ref_path)), "SC1_KL_OUT": str(kout)}.items():
+        monkeypatch.setenv(k, v)
+    eng = torch.log_softmax(torch.randn(S, V, generator=g, dtype=torch.float64) * 3, -1)
+    targets = [mods.C.served_target(ids, P, t) for t in range(S)]
+    masked_tok = next(i for i in range(V) if i != targets[2])
+    dropped_tok = next(i for i in range(V) if i != targets[4])
+
+    class _LLM:
+        calls = 0
+
+        def generate(self, prompts, sp, use_tqdm=False):
+            t = _LLM.calls
+            _LLM.calls += 1
+            lp = eng[t].clone()
+            if t == 2:
+                lp[masked_tok] = float("-inf")
+            d = {i: _LP(float(lp[i]), 1) for i in range(V) if not (t == 4 and i == dropped_tok)}
+            return [_Req([_Comp([targets[t]], [d])], num_cached_tokens=0)]
+
+    rec = {"status": "ok"}
+    mods.nll._served(rec, _LLM(), ids, P, S, "full", V, 16, str(tmp_path / "out.json"))
+    z, kf = np.load(kout), rec["kl_full"]
+    assert _LLM.calls == S and rec["full_vocab_verified"] is True
+    assert kf["void_positions"] == 1 and kf["void_first"][0]["t"] == 4 and f"returned {V - 1} entries" in kf["void_first"][0]["why"]
+    r2 = ref[2].astype(np.float64)
+    pr = np.exp(r2 - np.logaddexp.reduce(r2))
+    assert np.isposinf(z["eng_kl"][2]) and abs(z["eng_masked_mass"][2] - pr[masked_tok]) < 1e-9 and z["eng_n_masked"][2] == 1
+    assert np.isnan(z["eng_kl"][4])
+    rest = [0, 1, 3, 5]
+    want = KLM.kl_full_rows(ref[rest], eng[rest])
+    assert np.allclose(z["eng_kl"][rest], want, atol=1e-9) and not z["eng_masked_mass"][rest].any()
+
+
 # ---------------------------------------------------------------------------------------------- engagement grep
 LOG_GRAPH = """INFO 10-01 12:00:01 [auto_gptq.py:353] Using MarlinLinearKernel for AutoGPTQLinearMethod
 INFO 10-01 12:00:02 [cuda.py:478] Using FLASH_ATTN backend.

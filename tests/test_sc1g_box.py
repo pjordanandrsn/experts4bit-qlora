@@ -231,7 +231,7 @@ def test_sglang_gptoss_quality_modes_demand_radix_on_one_request_and_their_moe_r
 def test_the_sc1g_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc1g_reduce.py"), "--self-test"],
                          capture_output=True, text=True, timeout=120)
-    assert out.returncode == 0 and "self-test OK (33 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (37 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_capture_keeps_the_selected_layers_gate_up_and_down_per_decode_step(tmp_path):
@@ -345,6 +345,13 @@ def test_the_named_scorer_hooks():
     assert cpp.count("named_lps(lg, n_vocab,") == 2 and '"--named-out"' in cpp and "out of vocab" in cpp
     vn = (REPO / "bench" / "sc1" / "vllm" / "sc1_vllm_nll.py").read_text()
     assert 'if C.env("REF_FULL") and mode == "served":\n        lp_req = "full"' in vn and "A5 never downgrades" in vn
-    assert cpp.count("kl_full_of(lg, n_vocab,") == 2 and '"--ref-full"' in cpp and "is not exactly %d x %d fp16" in cpp
+    assert cpp.count("kl_row(&kl_buf[") == 2 and "constexpr size_t KLW = 5;" in cpp and '"--ref-full"' in cpp and "is not exactly %d x %d fp16" in cpp
+    # box I's converter reads the harness's five columns into the same support arrays the e4b and vLLM records carry
+    bi = (REPO / "bench" / "sc2" / "sc1g_box_i.sh").read_text()
+    assert "reshape(-1, 5)" in bi and "reshape(-1, 2)" not in bi
+    for k in ("eng_kl=a[:, 0]", "eng_target_lp=a[:, 1]", "eng_kl_common=a[:, 2]", "eng_masked_mass=a[:, 3]", "eng_n_masked=a[:, 4]"):
+        assert k in bi, k
+    for src in (vn, (REPO / "bench" / "sc2" / "sc1g_k8.py").read_text()):
+        assert "kl_full_support(" in src and "kl_full_rows(" not in src and "eng_masked_mass=" in src
     drv = (REPO / "bench" / "sc1" / "sc1_drive.sh").read_text()
     assert 'if [ -n "${SC1G_REF_FULL_SRC:-}" ]; then' in drv and '$SSH "mkdir -p $W/sc1g_ref_full"' in drv

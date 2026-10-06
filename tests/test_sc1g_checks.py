@@ -261,7 +261,7 @@ def test_egress_probe_fast_read_passes(tmp_path, egress_server):
 
 RULE_FUNCS_A5 = ("verdict_a5", "score", "load_reference", "window_ids", "fake_nf4", "fake_nf4_experts_", "gnf4_crosscheck")
 RULE_CONSTS_A5 = ("SELF_CONSISTENCY_MAX", "SRCS", "NF4_LUT", "BLOCK", "A5_GRADED", "A5_MIN_GRADABLE", "A5_DROPPED")
-RULE_SHA_A5 = "2d63276a1b57c002113d93b3dac5d38044c0d907d16e699a072079a22df7ec37"
+RULE_SHA_A5 = "7f307c39c896e456f63e99f09ce33944cd12b4cf25275ae8801b761f152469b7"
 # A4's registered rule, kept so the A4 read stays re-derivable: digest ee122b74... over A4's set at 8a1513a4 / 9dc7b59a, and
 # verdict()'s own source (the function --reverdict uses for an A4 receipt) pinned below
 A4_VERDICT_SHA = "0f521ac4d77d3a17daf342ca3cea7d20bf1f2f79b03d5c7adbffef6128c18102"
@@ -336,3 +336,41 @@ def test_full_capture_reads_full_vocab_kl_and_reproduces_the_nll(tmp_path):
     assert abs(-z["eng_target_lp"].mean() - nll / S) < 1e-9
     with pytest.raises(SystemExit):
         K8.full_capture(types.SimpleNamespace(torch=torch), str(ref_path), "0" * 64, str(win), out)
+
+
+def test_full_capture_records_masked_mass_and_void_positions_and_keeps_serving(tmp_path):
+    """A5, #1223 review: a token e4b masks to -inf where R gives mass, and a row whose read fails (NaN), must not raise
+    into the serving loop. The masked step records kl = inf, the reference mass and the common-support KL; the NaN step
+    is a void position with its reason; every later step is still read; the reader then VOIDs the row with both."""
+    import json
+    import types
+    import numpy as np
+    g = torch.Generator().manual_seed(12)
+    V, P0, S = 300, 6, 8
+    ids = torch.randint(0, V, (P0 + S + 1,), generator=g).tolist()
+    win = tmp_path / "k8_window_conv1.json"
+    win.write_text(json.dumps({"ids": ids, "prompt_len": P0, "steps": S}))
+    ref_logits = torch.randn(S, V, generator=g) * 3
+    rows = KLM.full_rows_fp16(ref_logits)
+    ref_path = tmp_path / "ref_full_conv1.npy"
+    np.save(ref_path, rows)
+    fake = types.SimpleNamespace(torch=torch)
+    out = str(tmp_path / "kl.npz")
+    st = K8.full_capture(fake, str(ref_path), KLM.file_sha(str(ref_path)), str(win), out)
+    eng = ref_logits + 0.2 * torch.randn(S, V, generator=g)
+    tok = next(i for i in range(V) if i != ids[P0 + 3])          # a non-target token the reference gives mass to
+    eng[2, tok] = float("-inf")
+    eng[5, :] = float("nan")
+    for t in range(S):                                            # the served loop: every call returns, none raises
+        fake.torch.log_softmax(eng[t:t + 1].float(), -1)
+    st["save"]()
+    z, meta = np.load(out), json.load(open(out + ".json"))
+    pr = np.exp(rows[2].astype(np.float64) - np.logaddexp.reduce(rows[2].astype(np.float64)))
+    assert meta["calls"] == S and meta["void_positions"] == 1 and meta["void_first"][0]["t"] == 5
+    assert "NaN or +inf" in meta["void_first"][0]["why"]
+    assert np.isposinf(z["eng_kl"][2]) and abs(z["eng_masked_mass"][2] - pr[tok]) < 1e-9 and z["eng_n_masked"][2] == 1
+    assert np.isfinite(z["eng_kl_common"][2]) and np.isnan(z["eng_kl"][5])
+    rest = [t for t in range(S) if t not in (2, 5)]
+    assert np.all(np.isfinite(z["eng_kl"][rest])) and not z["eng_masked_mass"][rest].any()
+    want = KLM.kl_full_rows(rows[rest], torch.log_softmax(eng[rest].float(), -1))
+    assert np.allclose(z["eng_kl"][rest], want, atol=1e-9) and np.allclose(z["eng_kl_common"][rest], want, atol=1e-9)

@@ -226,6 +226,14 @@ KL5_UNREAD = {"sglang_native": "no full-distribution path (A5, registered before
 COMPARATORS5 = ("vllm", "llamacpp", "llamacpp_q8")
 NATIVE_MXFP4_5 = ("e4b_mxfp4",) + COMPARATORS5
 PROVE_A5 = ("e4b_serve_served_conv1", "nll_vllm_served_conv1", "nll_llamacpp_q8_decode_conv1")
+SUPPORT_KEYS = ("eng_kl_common", "eng_masked_mass", "eng_n_masked")   # every engine's per-position support record (#1223 review)
+
+
+def _fin(fn, a):
+    import numpy as np
+    a = np.asarray(a, dtype=np.float64)
+    a = a[np.isfinite(a)]
+    return float(fn(a)) if a.size else None
 
 
 def a5_refs(d: str) -> tuple:
@@ -246,7 +254,10 @@ def a5_refs(d: str) -> tuple:
 def kl_row_full(d: str, label: str, src: str, R, shas: dict) -> dict:
     """One engine x window full-vocabulary KL row; VALID only when the arm is VALID, its record is complete and finite,
     e4b's proxy meta exists with one row per step, vLLM's full vocabulary verified, the recorded reference sha is the
-    registered one, and the target log-probs reproduce the arm's own mean NLL to ALIGN_TOL."""
+    registered one, no position is void, the engine masks (-inf) no token the reference gives mass, and the target
+    log-probs reproduce the arm's own mean NLL to ALIGN_TOL. Every row read carries `support` (#1223 review): the reference
+    mass on the engine's masked tokens, the masked count, the common-support KL -- what a common-support rule would grade,
+    registered on the proof's numbers if the proof finds masked mass, never on the reading's."""
     import numpy as np
     stem = KL5_ARMS[label].format(src)
     q = row(d, stem, src, R)
@@ -268,14 +279,30 @@ def kl_row_full(d: str, label: str, src: str, R, shas: dict) -> dict:
     if ref_sha and shas.get(src) and ref_sha != shas[src]:
         return {"verdict": "VOID", "why": f"KL read against reference {ref_sha[:12]}, registered {shas[src][:12]}", "stem": stem}
     z = np.load(pth)
+    if not all(k in z.files for k in SUPPORT_KEYS):
+        return {"verdict": "VOID", "why": "no support record (eng_kl_common / eng_masked_mass / eng_n_masked)", "stem": stem}
     kl, tlp = z["eng_kl"], z["eng_target_lp"]
+    mm, klc, nm = z["eng_masked_mass"], z["eng_kl_common"], z["eng_n_masked"]
+    masked = np.isfinite(mm) & (mm > 0)
+    void_n = int(np.isnan(kl).sum())
+    sup = {"positions_masked": int(masked.sum()), "masked_mass_max": _fin(np.max, mm), "masked_mass_mean": _fin(np.mean, mm),
+           "n_masked_max": _fin(np.max, nm), "kl_common_mean": _fin(np.mean, klc), "void_positions": void_n}
+    if void_n:
+        first = ((meta.get("void_first") or (rec.get("kl_full") or {}).get("void_first") or [{}]) + [{}])[0]
+        return {"verdict": "VOID", "why": f"{void_n} void positions (first: t={first.get('t')} {first.get('why')})", "stem": stem,
+                "support": sup}
+    if masked.any():
+        return {"verdict": "VOID", "why": f"the engine masks tokens carrying reference mass at {sup['positions_masked']} positions "
+                                          f"(max {sup['masked_mass_max']:.3e}): the full KL is infinite and no common-support "
+                                          f"rule is registered", "stem": stem, "support": sup}
     if not (np.all(np.isfinite(kl)) and np.all(np.isfinite(tlp))):
         return {"verdict": "VOID", "why": "KL record incomplete (non-finite entries)", "stem": stem}
     gap = abs(float(-np.mean(tlp)) - float(q["mean_nll"]))
     if gap > ALIGN_TOL:
         return {"verdict": "VOID", "why": f"target log-probs give NLL {-np.mean(tlp):.9f} vs the arm's {q['mean_nll']:.9f}", "stem": stem}
     return {"verdict": "VALID", "stem": stem, "kl_mean": float(np.mean(kl)), "kl_p50": float(np.median(kl)),
-            "kl_p95": float(np.quantile(kl, 0.95)), "positions": int(kl.size), "engine_nll": float(q["mean_nll"]), "alignment_gap": gap}
+            "kl_p95": float(np.quantile(kl, 0.95)), "positions": int(kl.size), "engine_nll": float(q["mean_nll"]), "alignment_gap": gap,
+            "support": sup}
 
 
 def a5(d: str) -> dict:
@@ -352,7 +379,11 @@ def prove_a5(d: str) -> dict:
     lab_of = {v.format("conv1"): lab for lab, v in KL5_ARMS.items()}
     out = {stem: (kl_row_full(d, lab_of[stem], "conv1", R, shas) if not why else {"verdict": "UNREAD", "why": why}) for stem in PROVE_A5}
     bad = {k: f"{v['verdict']}: {v.get('why')}" for k, v in out.items() if v["verdict"] != "VALID"}
-    return {"rows": out, "bad": bad, "proved": not bad, "box_r": why or "R_OK"}
+    # per engine, the reference mass on the tokens it masks (#1223 review): non-zero anywhere -> a common-support rule with a
+    # mass bound is registered on THESE numbers before the reading box (each row's common-support KL is already recorded)
+    support = {k: v.get("support") for k, v in out.items()}
+    need = sorted(k for k, s in support.items() if s and s.get("positions_masked"))
+    return {"rows": out, "bad": bad, "proved": not bad, "box_r": why or "R_OK", "support": support, "support_rule_needed": need}
 
 
 def _sc1():
@@ -882,8 +913,11 @@ def _a4_self_test(tempfile) -> list:
     return cases
 
 
-def _a5_fixture(d, kl, F=1e-3, nf4=0.05, verdict="R_OK", rule="A5", vllm_void=False, drop_e4b_meta=False, P=2048):
-    """Box R's A5 receipt + every full-KL arm's record: eng_kl = kl[label] (a constant per window), aligned target lps."""
+def _a5_fixture(d, kl, F=1e-3, nf4=0.05, verdict="R_OK", rule="A5", vllm_void=False, drop_e4b_meta=False, P=2048, mask=None,
+                void=None, n_masked=0.0, legacy=False):
+    """Box R's A5 receipt + every full-KL arm's record: eng_kl = kl[label] (a constant per window), aligned target lps, and
+    the support arrays. mask {(label, src): (mass, positions)}: the engine masks reference mass there (kl = inf); void
+    {(label, src): positions}: those positions' reads failed (kl NaN, a void_first reason); legacy: no support arrays."""
     import numpy as np
     _fixture(d, _base, _good_routes, rep=True)
     rd = os.path.join(d, "ref")
@@ -897,9 +931,20 @@ def _a5_fixture(d, kl, F=1e-3, nf4=0.05, verdict="R_OK", rule="A5", vllm_void=Fa
         for i, s in enumerate(srcs):
             st = stem.format(s)
             rec = _load(d, st)
-            np.savez(os.path.join(d, f"kl_{st}.npz"), eng_kl=np.full(P, kl[lab]), eng_target_lp=np.full(P, -rec["mean_nll"]))
+            k_, mm = np.full(P, kl[lab]), np.zeros(P)
+            if mask and (lab, s) in mask:
+                m, n = mask[(lab, s)]
+                mm[:n], k_[:n] = m, np.inf
+            nv = (void or {}).get((lab, s), 0)
+            k_[P - nv:] = np.nan
+            arrs = dict(eng_kl=k_, eng_target_lp=np.full(P, -rec["mean_nll"]))
+            if not legacy:
+                arrs.update(eng_kl_common=np.full(P, kl[lab]), eng_masked_mass=mm, eng_n_masked=np.full(P, n_masked))
+            np.savez(os.path.join(d, f"kl_{st}.npz"), **arrs)
+            vf = [{"t": P - nv, "why": "FloatingPointError: NaN or +inf in the engine's row"}] if nv else []
             if lab.startswith("e4b") and not (drop_e4b_meta and lab == "e4b_nf4" and s == "conv1"):
-                json.dump({"calls": P, "positions": P, "ref_sha": f"{i:064x}"}, open(os.path.join(d, f"kl_{st}.npz.json"), "w"))
+                json.dump({"calls": P, "positions": P, "ref_sha": f"{i:064x}", "void_positions": nv, "void_first": vf},
+                          open(os.path.join(d, f"kl_{st}.npz.json"), "w"))
             if lab == "vllm" and vllm_void and s == "conv2":
                 rec["kl_full"] = {"verdict": "VOID", "why": "logprobs=-1 returned 20 entries, not the vocabulary"}
                 json.dump(rec, open(os.path.join(d, st + ".json"), "w"))
@@ -936,6 +981,25 @@ def _a5_self_test(tempfile) -> list:
         _a5_fixture(d, good, vllm_void=True, drop_e4b_meta=True)
         rows = a5(d)["rows"]
         cases.append(("A5 VOID rows", rows["vllm"]["conv2"]["verdict"] == "VOID" and rows["e4b_nf4"]["conv1"]["verdict"] == "VOID"))
+    with tempfile.TemporaryDirectory() as d:          # vLLM masks reference mass on conv1 (1e-12 at 3 positions): VOID, mass reported
+        _a5_fixture(d, good, mask={("vllm", "conv1"): (1e-12, 3)})
+        row, pv = a5(d)["rows"]["vllm"]["conv1"], prove_a5(d)
+        cases.append(("A5 masked reference mass -> VOID with the mass; the proof names the support rule needed",
+                      row["verdict"] == "VOID" and row["support"]["positions_masked"] == 3 and row["support"]["masked_mass_max"] == 1e-12
+                      and not pv["proved"] and pv["support_rule_needed"] == ["nll_vllm_served_conv1"]))
+    with tempfile.TemporaryDirectory() as d:          # two of e4b's positions failed their read: VOID with the reason, run kept
+        _a5_fixture(d, good, void={("e4b_mxfp4", "conv1"): 2})
+        row = a5(d)["rows"]["e4b_mxfp4"]["conv1"]
+        cases.append(("A5 void positions -> VOID with the first reason", row["verdict"] == "VOID" and row["why"].startswith("2 void positions")
+                      and "NaN or +inf" in row["why"]))
+    with tempfile.TemporaryDirectory() as d:          # masking only ids the reference also gives no mass: VALID, the count reported
+        _a5_fixture(d, good, n_masked=5.0)
+        row, pv = a5(d)["rows"]["llamacpp_q8"]["conv1"], prove_a5(d)
+        cases.append(("A5 masking only reference -inf ids is VALID; the count is reported", row["verdict"] == "VALID"
+                      and row["support"]["n_masked_max"] == 5.0 and pv["proved"] and pv["support_rule_needed"] == []))
+    with tempfile.TemporaryDirectory() as d:          # a record without the support arrays is not read
+        _a5_fixture(d, good, legacy=True)
+        cases.append(("A5 a record without support arrays -> VOID", a5(d)["rows"]["vllm"]["conv1"]["verdict"] == "VOID"))
     return cases
 
 
@@ -958,6 +1022,11 @@ def main(argv=None) -> int:
             json.dump(v, open(a.out, "w"), indent=1, sort_keys=True, default=float)
         for k, why in v["bad"].items():
             print(f"SC1G_PROVE_A5_BAD {k}: {why}")
+        for k, s in v["support"].items():
+            print(f"SC1G_PROVE_A5_SUPPORT {k} " + (json.dumps(s, default=float) if s else "unread"))
+        if v["support_rule_needed"]:
+            print(f"SC1G_PROVE_A5_SUPPORT_RULE_NEEDED {' '.join(v['support_rule_needed'])}: these engines mask tokens carrying "
+                  f"reference mass -- register a common-support rule with a mass bound on this proof's numbers before the reading box")
         print(f"SC1G_PROVE_A5 {'OK' if v['proved'] else 'FAILED'} (box R {v['box_r']}; "
               + " ".join(f"{k}={x.get('kl_mean')}" for k, x in v["rows"].items()) + ")")
         return 0 if v["proved"] else 1

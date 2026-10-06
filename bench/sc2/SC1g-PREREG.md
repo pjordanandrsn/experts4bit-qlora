@@ -776,7 +776,7 @@ A4's box R read `R_NOT_OK` on three checks, and two causes need two different fi
   F < 1e-2 to the lane, and wikitext's 2.2e-2 sank it. A5 applies the bar **per window**: a window is graded only if its
   own F < 1e-2. Wikitext is the out-of-distribution control and is never graded.
 
-### The estimator (`bench/sc2/sc1g_kl.py`, self-tested on 17 cases)
+### The estimator (`bench/sc2/sc1g_kl.py`, self-tested on 21 cases)
 
 **What R stores.** For each window, R stores the reference's decode-shaped log-softmax over the whole vocabulary:
 - format: fp16, computed in fp64 and then cast (`full_rows_fp16`);
@@ -784,14 +784,30 @@ A4's box R read `R_NOT_OK` on three checks, and two causes need two different fi
 - each file is hashed into the receipt (`full_artifacts`: sha256, shape, dtype, bytes);
 - a masked `−inf` is stored exactly as `−inf`. A NaN, or a finite value that became `−inf` in the cast, is refused.
 
-**How an engine is read.** Each engine computes, at every scored position, KL(p_ref ‖ p_eng) in fp64 over the full vocabulary
-(`kl_full_rows`):
-- both sides are renormalised;
-- entries where p_ref = 0 stay out of the sum;
-- if the engine puts `−inf` where the reference has mass, the KL is infinite, and the computation raises;
-- a negative KL beyond −1e-9 means misalignment, and the computation raises.
+**How an engine is read.** At every scored position, each engine reads `kl_full_support` in fp64 over the full vocabulary.
+Both sides are renormalised, and entries where p_ref = 0 stay out of the sum. Each position records four values:
+- **the full KL**, KL(p_ref ‖ p_eng). It is `+inf` where the engine masks (`−inf`) a token that the reference gives mass.
+- **the common-support KL:** the reference restricted to the engine's finite support and renormalised there, against the
+  engine.
+- **the masked mass:** the reference mass on the engine's `−inf` tokens.
+- **the masked count:** how many tokens the engine sets to `−inf`.
 
-Either way the row is never VALID.
+The maintainer's review of #1223 found why this is needed: gpt-oss's 201,088-entry head carries padded or unused ids.
+- An engine may mask those ids where R gives them tiny finite mass.
+- A read that **raised** on that, as A4's `kl_full_rows` does, would crash the arm, or e4b's server mid-run.
+
+So the read never raises on masking. When a position's read does fail, the position is recorded **void** with its reason,
+and the run continues. A read fails on:
+- a NaN or `+inf` engine entry;
+- a negative KL beyond −1e-9 (misalignment);
+- a vLLM position that returned fewer entries than the vocabulary, which would otherwise read as masking.
+
+The same holds at all three call sites:
+- e4b's serving proxy;
+- vLLM's served loop;
+- the llama.cpp harness, which writes five columns per step and NaN for a void position.
+
+The C++ read was checked against the Python one on masked and unmasked rows.
 
 Only the reference side is stored in fp16. The engine side is the engine's own logits as it computes them, and the
 instrument adds no rounding to them.
@@ -833,7 +849,7 @@ the same arithmetic on a new run, and it is not assumed here. A5 needs a new box
 That run is made once; **R is not re-run under A5 to get a pass.**
 
 **The rule pin.** `test_box_r_rule_is_the_registered_one` pins the digest
-**`2d63276a1b57c002113d93b3dac5d38044c0d907d16e699a072079a22df7ec37`**. It covers:
+**`7f307c39c896e456f63e99f09ce33944cd12b4cf25275ae8801b761f152469b7`**. It covers:
 - `verdict_a5`, `score`, `load_reference`, `window_ids`, `fake_nf4`, `fake_nf4_experts_` and `gnf4_crosscheck`;
 - the constants `SELF_CONSISTENCY_MAX`, `SRCS`, `NF4_LUT`, `BLOCK`, `A5_GRADED`, `A5_MIN_GRADABLE` and `A5_DROPPED`;
 - the whole of `sc1g_kl.py`.
@@ -897,9 +913,15 @@ SGLang therefore leaves L1's comparators and L2's engines.
 
 **When a row counts.** A full-KL row is VALID only when:
 - the arm is VALID, route gates included;
-- its record is complete and finite;
+- its record is complete and finite, and carries the support arrays;
+- **no position is void;**
+- **the engine masks no token that carries reference mass** (masked mass 0 at every position). Masking ids where the
+  reference is itself `−inf` is fine; the count is reported;
 - the reference sha it recorded is the registered one;
 - its target log-probs reproduce the arm's own mean NLL to **1e-9**.
+
+Every row reports its support either way: positions masked, the max and mean masked mass, the max masked count, the
+common-support KL, and the void positions.
 
 **The proof.** Box I's proof (2.0 h guard, per A2) reads three rows on conv1, each VALID against R's registered rows
 (`sc1g_reduce.py --prove-a5`):
@@ -907,7 +929,18 @@ SGLang therefore leaves L1's comparators and L2's engines.
 - vLLM served;
 - llama.cpp q8 decode.
 
-### Predictions (registered; `sc1g_reduce.py`'s `a5`, self-tested; graded over the gradable windows only)
+**The support rule is decided on the proof, not on the data.** The proof prints, per engine, the reference mass on the
+tokens that engine masks (`SC1G_PROVE_A5_SUPPORT`).
+- **If it is zero for every engine:** A5 stands as written.
+- **If any engine masks reference mass:**
+  - that engine's rows are VOID under A5 as written, and the proof reads NOT PROVED (`SC1G_PROVE_A5_SUPPORT_RULE_NEEDED`);
+  - before the reading box, an amendment registers a **common-support rule with a mass bound**, set from the proof's
+    masked-mass numbers;
+  - every row already records its common-support KL, so the rule applies to the proof's own committed receipt without a
+    re-run;
+  - the rule never looks at the reading's data.
+
+### Predictions (registered; `sc1g_reduce.py`'s `a5`, self-tested on 37 cases with A1–A4's; graded over the gradable windows only)
 
 **When a KL is resolved.** An engine's KL on a window counts as **resolved** only when it exceeds that window's F. At or
 below F it cannot be told apart from the reference's own arithmetic order.

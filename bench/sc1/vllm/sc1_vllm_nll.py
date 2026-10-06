@@ -166,7 +166,8 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
         ref_full = np.load(ref_path, mmap_mode="r")
         if ref_full.shape[0] != S or (vocab and ref_full.shape[1] != int(vocab)):
             raise SystemExit(f"{ref_path}: shape {ref_full.shape} does not fit {S} steps x vocab {vocab} -- refused")
-        kl = {"kl": np.full(S, np.nan), "tlp": np.full(S, np.nan), "mod": sc1g_kl}
+        kl = {"kl": np.full(S, np.nan), "tlp": np.full(S, np.nan), "klc": np.full(S, np.nan), "mm": np.full(S, np.nan),
+              "nm": np.full(S, np.nan), "void": [], "mod": sc1g_kl}
     if used == "named":
         import numpy as np
         named_ids, ref_targets = C.load_named_ref(C.env("NAMED_REF", required=True), C.env("NAMED_REF_SHA"))
@@ -216,9 +217,18 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
                 continue
         if kl is not None and entries is not None and rec.get("full_vocab_verified"):
             import numpy as np
-            v64 = np.full(int(vocab), -np.inf, dtype=np.float64)
-            v64[np.asarray(entries[0], dtype=np.int64)] = np.asarray(entries[1], dtype=np.float64)
-            kl["kl"][t] = float(kl["mod"].kl_full_rows(ref_full[t:t + 1], v64[None])[0])
+            # per position, never raising (#1223 review): a token vLLM masks to -inf where R has mass is recorded (kl = inf,
+            # the mass, the common-support KL), and a position whose read fails -- or that returned fewer entries than the
+            # vocabulary, which would read as masking -- is recorded void with its reason; the run continues
+            try:
+                if len(entries[0]) != int(vocab):
+                    raise ValueError(f"returned {len(entries[0])} entries, not the vocabulary ({vocab})")
+                v64 = np.full(int(vocab), -np.inf, dtype=np.float64)
+                v64[np.asarray(entries[0], dtype=np.int64)] = np.asarray(entries[1], dtype=np.float64)
+                r = kl["mod"].kl_full_support(ref_full[t:t + 1], v64[None])
+                kl["kl"][t], kl["klc"][t], kl["mm"][t], kl["nm"][t] = (float(r[k][0]) for k in ("kl", "kl_common", "masked_mass", "n_masked"))
+            except Exception as e:  # noqa: BLE001
+                kl["void"].append({"t": t, "why": f"{e.__class__.__name__}: {e}"[:200]})
             if row["nll"] is not None:
                 kl["tlp"][t] = -row["nll"]
         if dump is not None and entries is not None:
@@ -255,9 +265,11 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
             rec["kl_full"] = {"verdict": "VOID", "why": f"logprobs=-1 returned {rec.get('first_request_entries')} entries, not the "
                                                          f"vocabulary ({vocab}): no full-vocabulary KL (A5 never downgrades)"}
         else:
-            np.savez(kout + ".tmp.npz", eng_kl=kl["kl"], eng_target_lp=kl["tlp"])
+            np.savez(kout + ".tmp.npz", eng_kl=kl["kl"], eng_target_lp=kl["tlp"], eng_kl_common=kl["klc"], eng_masked_mass=kl["mm"],
+                     eng_n_masked=kl["nm"])
             os.replace(kout + ".tmp.npz", kout)
             rec["kl_full"] = {"out": kout, "positions": S, "ref": C.env("REF_FULL"), "ref_sha": C.env("REF_FULL_SHA"),
+                              "void_positions": len(kl["void"]), "void_first": kl["void"][:20],
                               "request": "logprobs=-1, LLM(max_logprobs=-1); full vocabulary verified on request 0"}
     if named is not None:
         import numpy as np
