@@ -1,0 +1,88 @@
+{
+ "bad": {},
+ "box_r": "R_OK",
+ "proved": true,
+ "rows": {
+  "e4b_serve_served_conv1": {
+   "alignment_gap": 1.1102230246251565e-16,
+   "engine_nll": 0.904969107589033,
+   "kl_mean": 0.015170326284833668,
+   "kl_p50": 0.0004071284337785027,
+   "kl_p95": 0.048817625029162585,
+   "positions": 2048,
+   "stem": "e4b_serve_served_conv1",
+   "support": {
+    "kl_common_mean": 0.015170326284833668,
+    "masked_mass_max": 0.0,
+    "masked_mass_mean": 0.0,
+    "n_masked_max": 0.0,
+    "positions_masked": 0,
+    "void_positions": 0
+   },
+   "verdict": "VALID"
+  },
+  "nll_llamacpp_q8_decode_conv1": {
+   "alignment_gap": 1.1102230246251565e-16,
+   "engine_nll": 0.9329261345967595,
+   "kl_mean": 0.05522283268726097,
+   "kl_p50": 0.0008454503839643926,
+   "kl_p95": 0.2083826022249886,
+   "positions": 2048,
+   "stem": "nll_llamacpp_q8_decode_conv1",
+   "support": {
+    "kl_common_mean": 0.05522283268726097,
+    "masked_mass_max": 0.0,
+    "masked_mass_mean": 0.0,
+    "n_masked_max": 0.0,
+    "positions_masked": 0,
+    "void_positions": 0
+   },
+   "verdict": "VALID"
+  },
+  "nll_vllm_served_conv1": {
+   "alignment_gap": 1.1102230246251565e-16,
+   "engine_nll": 0.8316982044926075,
+   "kl_mean": 0.03315503646768125,
+   "kl_p50": 6.97895394084087e-05,
+   "kl_p95": 0.10144970366662709,
+   "positions": 2048,
+   "stem": "nll_vllm_served_conv1",
+   "support": {
+    "kl_common_mean": 0.03315503646768125,
+    "masked_mass_max": 0.0,
+    "masked_mass_mean": 0.0,
+    "n_masked_max": 0.0,
+    "positions_masked": 0,
+    "void_positions": 0
+   },
+   "verdict": "VALID"
+  }
+ },
+ "support": {
+  "e4b_serve_served_conv1": {
+   "kl_common_mean": 0.015170326284833668,
+   "masked_mass_max": 0.0,
+   "masked_mass_mean": 0.0,
+   "n_masked_max": 0.0,
+   "positions_masked": 0,
+   "void_positions": 0
+  },
+  "nll_llamacpp_q8_decode_conv1": {
+   "kl_common_mean": 0.05522283268726097,
+   "masked_mass_max": 0.0,
+   "masked_mass_mean": 0.0,
+   "n_masked_max": 0.0,
+   "positions_masked": 0,
+   "void_positions": 0
+  },
+  "nll_vllm_served_conv1": {
+   "kl_common_mean": 0.03315503646768125,
+   "masked_mass_max": 0.0,
+   "masked_mass_mean": 0.0,
+   "n_masked_max": 0.0,
+   "positions_masked": 0,
+   "void_positions": 0
+  }
+ },
+ "support_rule_needed": []
+}

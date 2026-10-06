@@ -1,0 +1,14 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1090.28it/s]
+[06:32:29]   checkpoint: ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89 (requested main, unpinned)
+[06:32:29]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[06:32:31]   quantized experts on 32/32 MoE layers (40 experts each)
+[06:32:31]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=32 experts=40
+  shard 0/32  0.0 GiB  0s
+  shard 8/32  0.4 GiB  3s
+  shard 16/32  0.8 GiB  6s
+  shard 24/32  1.2 GiB  9s
+snapshot done 1.58 GiB in 12.0s
+expert-tensor bake: L=32 E=40 (baking 40) row=1327104 stride=1327104 total=1.7 GB workers=8
+bake complete: 1280 rows (1.7 GB) in 1s
+BAKE OK
