@@ -432,3 +432,23 @@ def test_the_server_captures_only_the_buckets_its_sequences_can_use(monkeypatch)
     f = estimate_serve_footprint(topo, ServeSetup(max_seqs=1, max_tokens_per_seq=256, graphs=True))
     kv = next(i for i in f.items if i.name == "FP8 paged KV pool")
     assert kv.bytes == paged_kv_pool_bytes(3, 2, 32, batch=1, max_tokens_per_seq=256, scratch_slots=1)
+
+
+def test_multi_head_latent_attention_is_refused_before_the_pool_meets_it():
+    """DeepSeek-V2-Lite planned a feasible serve; the server built the pool head_dim (64) wide and its first prompt's
+    append refused keys of 192 and values of 128. MLA is refused by its config, in the estimate and before any weight
+    is read."""
+    from experts4bit_qlora.engines.paged_runner import kv_layout_refusal
+    cfg = tr.DeepseekV2Config(vocab_size=128, hidden_size=128, intermediate_size=256, moe_intermediate_size=64,
+                              num_hidden_layers=2, num_attention_heads=4, num_key_value_heads=4, n_routed_experts=8,
+                              num_experts_per_tok=2, n_shared_experts=1, kv_lora_rank=32, q_lora_rank=None,
+                              qk_nope_head_dim=32, qk_rope_head_dim=16, v_head_dim=32, first_k_dense_replace=1,
+                              max_position_embeddings=64)
+    why = kv_layout_refusal(cfg)
+    assert why and "keys 48 and values 32" in why
+    assert kv_layout_refusal(_qwen3()) is None
+    topo = describe_moe(cfg)
+    assert topo.paged_state_refusal == why or topo.loader_refusal
+    if not topo.loader_refusal:
+        f = estimate_serve_footprint(topo, ServeSetup(max_seqs=1, graphs=False))
+        assert f.items == () and any("multi-head latent attention" in r for r in f.refusals)
