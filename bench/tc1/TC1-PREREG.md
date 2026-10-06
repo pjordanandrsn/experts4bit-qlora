@@ -2435,3 +2435,59 @@ live groups.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the
 download.
+
+### Amendment 56 (2026-10-06T23:37Z, after amendment 55's read, before any box): the double-quantized absmax as a library default on packed rows, with each run's peak split by phase (P144–P148)
+
+**Why.** Amendment 55's census held P143. With `E4B_ABSMAX_DQ=1`, e4b's packed-row peak is 2.01 GB above Unsloth's, against 3.36 GB at the
+library's defaults. By its rule, the next registration asks whether the library should default to the double-quantized absmax on packed
+rows. The trainer (`python -m experts4bit_qlora.train`) already does, for resident training, on amendments 28 and 31's field-recipe
+readings: 1.4 % of the step for 1.34 GB on Qwen3-30B-A3B. Its speed on packed rows has not been read.
+
+The census also found something else. e4b's run peak is its held-out evaluation, where the stock LM loss holds the full fp32 logits;
+Unsloth's is a training backward. So the packed peak comparison so far set e4b's evaluation against Unsloth's training step. The census
+keeps only the snapshot that set the run's peak, so e4b's training-phase peak has never been recorded. This box records it.
+
+**The instrument** (`tc1_arm.py --phase-peaks 1`). The run's peak allocated is split into three phases:
+
+- `setup`: the load, up to the first held-out evaluation;
+- `eval`: every held-out evaluation;
+- `train`: the training steps between them.
+
+At each boundary the allocator's max is folded into its phase and reset, so each phase is read on its own and `peak_vram_gb` stays the
+run's max. The receipt field is `peak_vram_gb_phases`. The flag is refused with `--mem-census 1`, whose snapshots read that max.
+
+**The box** (token `qwen3dqpack`). One RTX 5090, packed 4,096-token rows, 40 load-gated steps, held-out at steps 0 and 40. The matched
+arm in venv-unsloth (torch 2.12), with e4b's defaults otherwise, avoiding machines 145701, 130223 and 55583. In this order:
+
+- e4b `fused_attn4_m_a0`: the fp32 expert absmax (the library's default);
+- e4b `fused_attn4_m_a1`: `E4B_ABSMAX_DQ=1`;
+- e4b `fused_attn4_m_a1_d2` and `fused_attn4_m_a0_d2`: their second draws (A B B A);
+- Unsloth `ckpt_unsloth_m_pp`: TC1's qwen3 Unsloth arm (grouped_mm), one draw.
+
+Every arm runs with `--phase-peaks 1`. Validity (`dqpack_why`): torch 2.12. On e4b it also requires the absmax the side names, every
+padded call bucketed under `auto` with its variable unset, and the chunked loss serving the rows unset. The per-expert loop is a recorded
+route (≤ 5 %). The phase record is not part of validity: without it, P147 and P148 read UNTESTED.
+
+**Predictions** (registered before the box):
+
+- **P144:** s/step `a1` / `a0` ≤ **1.02**.
+- **P145:** the run's peak (median of each side's draws) falls by at least **1.2 GB** from `a0` to `a1`.
+- **P146:** |mean held-out at N, `a1` − `a0`| ≤ **0.005**.
+- **P147:** e4b `a1`'s training-phase peak (median of its draws) is at most **1.0 GB** above Unsloth's training-phase peak.
+- **P148:** on every e4b draw the evaluation phase's peak exceeds the training phase's.
+
+**Decision rules.**
+
+- **P144, P145 and P146 HELD:** a library PR makes `enable_fast_train` compress the expert absmax by default for resident training,
+  with the trainer's guards: off under expert offload and the training arena, a model the compressor refuses keeps its fp32 absmax, and
+  `E4B_ABSMAX_DQ=0` turns it off.
+- **P144 FALSIFIED:** the library default stays fp32. STATUS gives the packed-row cost beside the trainer's default.
+- **P147 HELD:** STATUS says that on packed rows e4b's training-phase memory is within 1 GB of Unsloth's, and that the run-peak gap is
+  e4b's evaluation. The next candidate is an opt-in chunked loss for no-grad evaluation. It has to be opt-in, because such a forward
+  returns no logits and a caller computing metrics from them would break.
+- **P147 FALSIFIED:** the read gives the training-phase gap, and the next registration is a census of the training phase.
+- **P148 FALSIFIED:** amendment 55's finding does not hold on every draw, and the read says where the run peak fell instead.
+- Positions stay with the boxes that read them. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Five arms: about $2 with
+the download.

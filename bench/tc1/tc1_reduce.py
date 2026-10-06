@@ -876,6 +876,26 @@ LOOP_ROUTE_SHARE_MAX[LADDER28_FAM] = 0.05
 LADDER28_BANDS = {"P137": ("c2", 0.95), "P138": ("c1", 0.97)}   # side / c0 s/step at most this, one-sided
 LADDER28_HELDOUT_MAX = 0.005   # P139: |mean held-out at N, side - c0| on c1 and c2
 LADDER28_PEAK_RISE_MAX = 1.5   # P140: c2's matched peak at most this many GB above c0's (medians of two draws)
+# TC1 amendment 56: the double-quantized expert absmax as a library default on packed rows (speed, run peak, held-out), with each run's
+# peak split into setup / eval / train (--phase-peaks 1), against Unsloth's training-phase peak
+DQPACK_FAM = "qwen3dqpack"
+FAMS.append(DQPACK_FAM)
+NAMES[DQPACK_FAM] = "Qwen3-30B-A3B (amendment 56: e4b's matched arm with the fp32 vs the double-quantized expert absmax on packed rows, Unsloth beside; peaks by phase)"
+N_LAYERS[DQPACK_FAM] = 48
+ATTN_CENSUS[DQPACK_FAM] = 192
+DENSE_PINS[DQPACK_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[DQPACK_FAM] = ("e4b", "fused_attn4_m_a0")
+EXPECTED[DQPACK_FAM] = [("e4b", "fused_attn4_m_a0"), ("e4b", "fused_attn4_m_a1"), ("e4b", "fused_attn4_m_a1_d2"), ("e4b", "fused_attn4_m_a0_d2"),
+                        ("unsloth", "ckpt_unsloth_m_pp")]
+MATCHED |= {"fused_attn4_m_a0", "fused_attn4_m_a1", "fused_attn4_m_a0_d2", "fused_attn4_m_a1_d2", "ckpt_unsloth_m_pp"}
+for _side in ("a0", "a1"):
+    DRAW2[("e4b", f"fused_attn4_m_{_side}")] = ("e4b", f"fused_attn4_m_{_side}_d2")
+PACKED_FAMS = PACKED_FAMS + (DQPACK_FAM,)
+LOOP_ROUTE_SHARE_MAX[DQPACK_FAM] = 0.05
+DQPACK_SPEED_MAX = 1.02        # P144: s/step a1 / a0 at most this
+DQPACK_PEAK_DROP_MIN = 1.2     # P145: the run's peak falls by at least this many GB with the double-quantized absmax (medians of two draws)
+DQPACK_HELDOUT_MAX = 0.005     # P146
+DQPACK_TRAIN_GAP_MAX = 1.0     # P147: e4b a1's training-phase peak at most this many GB above Unsloth's
 # P135 / P136 divide by the TIMED step (median s/step of steps 11..N), never the profiled steps' wall: torch.profiler's per-op host overhead
 # differs between torch versions and grows with the launch count (the bucketed delta issues 115 kernels to the single block's 66), so the
 # profiled wall would push both readings toward HELD by the instrument alone. The profile's device time is CUPTI kernel durations, which the
@@ -1360,6 +1380,95 @@ def score_ladder28(F, fam=LADDER28_FAM):
         rise = D["c2"]["peak"] - D["c0"]["peak"]
         out.append(("P140", fam, "HELD" if rise <= LADDER28_PEAK_RISE_MAX else "FALSIFIED",
                     f"matched peak c0 {D['c0']['peak']:.3f} -> c2 {D['c2']['peak']:.3f} GB ({rise:+.3f} vs <= +{LADDER28_PEAK_RISE_MAX})"))
+    return out
+
+
+def dqpack_why(tag, r):
+    """Amendment 56's predicates: torch 2.12 (venv-unsloth); on e4b the expert absmax its tag names (a1: absmax_dq true; a0: false), the
+    current bucketed default serving the packed rows (NF4_QLORA_PAD_BUCKETS unset, `auto`, every padded call bucketed) and the chunked LM
+    loss serving them unset. The phase record (peak_vram_gb_phases) is not part of validity: an arm without it leaves P147 / P148
+    UNTESTED. Empty string = as registered."""
+    r = r or {}
+    bad = []
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.12"):
+        bad.append(f"env.torch {tv or 'missing'} is not 2.12*")
+    if r.get("framework") == "e4b":
+        side = prof28_side(tag)
+        if side not in ("a0", "a1"):
+            return f"amendment 56 registers no e4b side {side!r} (tag {tag})"
+        if (r.get("absmax_dq") is True) != (side == "a1"):
+            bad.append(f"absmax_dq {r.get('absmax_dq')!r} on {tag}: the side names the {'double-quantized' if side == 'a1' else 'fp32'} absmax")
+        la = r.get("lean_ab") or {}
+        calls = la.get("lora_path_calls") or {}
+        pb, pd = int(calls.get("padded_bucketed") or 0), int(calls.get("padded") or 0)
+        if not (la.get("gnf4_pad_buckets_env") in (None, "") and la.get("gnf4_pad_buckets_mode") == "auto" and pb > 0 and pd == 0):
+            bad.append(f"the bucketed default did not serve the packed rows (mode {la.get('gnf4_pad_buckets_mode')!r}, calls {calls})")
+        c = r.get("chunked_lm_loss") or {}
+        if not (c.get("env") in (None, "") and int(c.get("chunked_calls") or 0) > 0 and int(c.get("runtime_refusals") or 0) == 0):
+            bad.append(f"the chunked LM loss did not serve the packed rows unset (record {c})")
+    return "; ".join(bad)
+
+
+def _phase(r, name):
+    ph = (r or {}).get("peak_vram_gb_phases") or {}
+    return ph.get(name)
+
+
+def score_dqpack(F, fam=DQPACK_FAM):
+    """TC1-PREREG amendment 56. P144: s/step a1 / a0 (two VALID, stable draws a side) <= DQPACK_SPEED_MAX. P145: the run's peak (median of
+    each side's draws) a0 - a1 >= DQPACK_PEAK_DROP_MIN GB. P146: |mean held-out at N a1 - a0| <= DQPACK_HELDOUT_MAX. P147: e4b a1's
+    training-phase peak (median of its draws) - Unsloth's training-phase peak <= DQPACK_TRAIN_GAP_MAX GB. P148: on every VALID e4b draw
+    the evaluation phase's peak exceeds the training phase's (the run's peak is its evaluation). A missing / non-VALID / unstable side, or
+    a missing phase record, UNTESTED."""
+    R = F.get(fam)
+    if not R:
+        return []
+    A0, A1 = R["draws"].get(("e4b", "fused_attn4_m_a0"), {}), R["draws"].get(("e4b", "fused_attn4_m_a1"), {})
+    ok = lambda d: bool(d.get("usable") and d.get("draws") == 2)
+    why = "; ".join(f"{sd} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for sd, d in (("a0", A0), ("a1", A1)))
+    out = []
+    if not (ok(A0) and ok(A1)):
+        for pid in ("P144", "P145", "P146"):
+            out.append((pid, fam, "UNTESTED", f"two stable VALID draws a side are registered -- {why}"))
+    else:
+        ratio_ = A1["s"] / A0["s"]
+        cross = [x / y for x in A1["s_list"] for y in A0["s_list"]]
+        out.append(("P144", fam, "HELD" if ratio_ <= DQPACK_SPEED_MAX else "FALSIFIED",
+                    f"a1 / a0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs <= {DQPACK_SPEED_MAX}; s/step a0 "
+                    f"{' / '.join(f'{x:.3f}' for x in A0['s_list'])}, a1 {' / '.join(f'{x:.3f}' for x in A1['s_list'])}"))
+        drop = A0["peak"] - A1["peak"]
+        out.append(("P145", fam, "HELD" if drop >= DQPACK_PEAK_DROP_MIN else "FALSIFIED",
+                    f"run peak a0 {A0['peak']:.3f} -> a1 {A1['peak']:.3f} GB (drop {drop:+.3f} vs >= {DQPACK_PEAK_DROP_MIN})"))
+        h0 = [v for v in A0["heldout_list"] if v is not None]
+        h1 = [v for v in A1["heldout_list"] if v is not None]
+        if not (h0 and h1):
+            out.append(("P146", fam, "UNTESTED", "a side has no held-out at N"))
+        else:
+            dh = statistics.mean(h1) - statistics.mean(h0)
+            out.append(("P146", fam, "HELD" if abs(dh) <= DQPACK_HELDOUT_MAX else "FALSIFIED",
+                        f"mean held-out at N a0 {statistics.mean(h0):.4f}, a1 {dh:+.4f} (|.| <= {DQPACK_HELDOUT_MAX})"))
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    valid = lambda k: (rows.get(k) or {}).get("verdict") == "VALID"
+    e1 = [rows[k]["r"] for k in (("e4b", "fused_attn4_m_a1"), ("e4b", "fused_attn4_m_a1_d2")) if valid(k)]
+    uk = ("unsloth", "ckpt_unsloth_m_pp")
+    ut = _phase(rows[uk]["r"], "train") if valid(uk) else None
+    et = [_phase(r, "train") for r in e1]
+    if len(e1) != 2 or any(v is None for v in et) or ut is None:
+        out.append(("P147", fam, "UNTESTED", f"e4b a1's two VALID draws and Unsloth's VALID draw each need a training-phase peak: e4b {et}, Unsloth {ut}"))
+    else:
+        gap = statistics.median(et) - ut
+        out.append(("P147", fam, "HELD" if gap <= DQPACK_TRAIN_GAP_MAX else "FALSIFIED",
+                    f"training-phase peak e4b a1 {' / '.join(f'{v:.3f}' for v in et)} GB (median {statistics.median(et):.3f}) - Unsloth {ut:.3f} = "
+                    f"{gap:+.3f} GB vs <= +{DQPACK_TRAIN_GAP_MAX}; Unsloth's phases {(rows[uk]['r'].get('peak_vram_gb_phases'))}"))
+    ek = [k for k in EXPECTED[fam] if k[0] == "e4b" and valid(k)]
+    ph = {k[1]: (rows[k]["r"].get("peak_vram_gb_phases") or {}) for k in ek}
+    if len(ek) != 4 or any(p.get("eval") is None or p.get("train") is None for p in ph.values()):
+        out.append(("P148", fam, "UNTESTED", f"every e4b draw VALID with eval and train phase peaks is registered: {ph}"))
+    else:
+        held = all(p["eval"] > p["train"] for p in ph.values())
+        out.append(("P148", fam, "HELD" if held else "FALSIFIED",
+                    "eval vs train phase peak (GB) per e4b draw: " + "; ".join(f"{t} {p['eval']:.3f} vs {p['train']:.3f}" for t, p in ph.items())))
     return out
 
 
@@ -2227,6 +2336,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == PADBK28_FAM and fw == "e4b":             # amendment 52: the delta body its tag names, torch 2.8, the chunked loss
         w = pad_buckets_why(r.get("tag") or "", r, sides=("k0", "k1"), torch_prefix="2.8")
+        if w:
+            why.append(w)
+    if fam == DQPACK_FAM:                              # amendment 56: torch 2.12; on e4b the absmax its side names, the bucketed default, the chunked loss
+        w = dqpack_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == LADDER28_FAM and fw == "e4b":            # amendment 54: torch 2.8, the defaults, and the one change its side names
@@ -5049,6 +5162,17 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F, FIELDBK_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if DQPACK_FAM in F:
+        out += ["\n## Amendment 56: the double-quantized absmax on packed rows, peaks by phase (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
+        for x in F[DQPACK_FAM]["rows"]:
+            ph = (x.get("r") or {}).get("peak_vram_gb_phases") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f((x.get('r') or {}).get('s_per_step_median_11plus'), 3)} | "
+                       f"{f((x.get('r') or {}).get('peak_vram_gb'), 3)} | {ph.get('setup')} | {ph.get('eval')} | {ph.get('train')} |")
+        out += ["\n## Predictions P144 / P145 / P146 / P147 / P148 (TC1-PREREG amendment 56: the double-quantized absmax on packed rows, peaks by phase; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_dqpack(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if LADDER28_FAM in F:
         out += ["\n## Amendment 54: e4b's matched arm at its defaults in torch 2.8 -- the cuBLASLt cache and the bucket ladder (profiled, descriptive)",
                 "| arm | VERDICT | s/step (timed, 11..N) | peak GB | device ms/step (profiled) |", "|---|---|---|---|---|"]
@@ -5927,6 +6051,40 @@ def _memc4kb_set(peaks=(28.20e9, 26.85e9, 24.86e9), af=(0.95, 0.95, 0.93), dq=(F
                             "lora_path_calls": {"loop": 200, "padded": pad[i][1], "grouped_mm": 0, "padded_bucketed": pad[i][0]},
                             "gnf4_pad_buckets_env": None, "gnf4_pad_buckets_mode": "auto", "gnf4_pad_buckets_min_rows": 16384}
         R[(fw2, tag2)] = r
+    return R
+
+
+def _dqpack_set(s=None, peaks=None, held=None, phases=None, dq=None, u_train=24.86):
+    """Amendment 56: e4b's matched arm with the fp32 (a0) and double-quantized (a1) absmax on packed rows, two draws each, and Unsloth's
+    matched arm -- `s` side -> draws' s/step; `peaks` side -> run peak GB; `held` side -> held-out; `phases` tag -> phase dict (None drops
+    it); `dq` tag -> recorded absmax_dq; `u_train` Unsloth's training-phase peak."""
+    s = dict({"a0": (10.06, 10.08), "a1": (10.15, 10.17)}, **(s or {}))
+    peaks = dict({"a0": 28.23, "a1": 26.88}, **(peaks or {}))
+    held = dict({"a0": 1.8000, "a1": 1.8001}, **(held or {}))
+    R = {}
+    for side in ("a0", "a1"):
+        for i, sfx in enumerate(("", "_d2")):
+            tag = f"fused_attn4_m_{side}{sfx}"
+            r = _receipt("e4b", tag, "fused", steps=20, s=s[side][i], heldout_n=held[side], matched=True, seq=4096, micro_batch=1, accum=4,
+                         offload=False, tokens={"sha256": "p" * 64, "pack": True}, tokens_per_step=[16384] * 20, tokens_padded_per_step=[0] * 20,
+                         arm_facts={"free_outputs": True})
+            r["env"]["torch"] = "2.12.1+cu130"
+            r["absmax_dq"] = (dq or {}).get(tag, side == "a1")
+            r["peak_vram_gb"] = peaks[side]
+            r["lean_ab"] = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                            "lora_path_calls": {"loop": 200, "padded": 0, "grouped_mm": 0, "padded_bucketed": 31750},
+                            "gnf4_pad_buckets_env": None, "gnf4_pad_buckets_mode": "auto", "gnf4_pad_buckets_min_rows": 16384}
+            r["chunked_lm_loss"] = {"env": None, "e4b_has_chunked_lm_loss": True, "chunked_calls": 160, "stock_calls": 0, "small_calls": 0, "patched": 1,
+                                    "runtime_refusals": 0, "refused": {}}
+            r["lora_loop_share"], r["lora_path_loop_steps"] = [0.02] * 20, list(range(1, 21))
+            default_ph = {"setup": peaks[side] - 7.5, "eval": peaks[side], "train": peaks[side] - (3.4 if side == "a0" else 2.3)}
+            r["peak_vram_gb_phases"] = (phases or {}).get(tag, default_ph)
+            r["fam"] = DQPACK_FAM
+            R[("e4b", tag)] = r
+    u = dict(_memc4kb_set()[("unsloth", "ckpt_unsloth_m_p4d")], tag="ckpt_unsloth_m_pp", fam=DQPACK_FAM)
+    u.pop("mem_census", None)
+    u["peak_vram_gb_phases"] = {"setup": 19.8, "eval": 21.1, "train": u_train}
+    R[("unsloth", "ckpt_unsloth_m_pp")] = u
     return R
 
 
@@ -8192,6 +8350,24 @@ def selftest():
     assert MB(_memc4kb_set(dq=(False, False)))[MEMC4KB_FAM]["verdicts"][("e4b", "fused_attn4_m_p4d_dq")] == "VOID"
     assert MB(_memc4kb_set(cd=("1", "0")))[MEMC4KB_FAM]["verdicts"][("e4b", "fused_attn4_m_p4d")] == "VOID"
     assert "P142" in render(RMB, "x") and "amendment 55" in render(RMB, "x")
+    cases += 1
+    # 109. TC1 amendment 56 (qwen3dqpack): fp32 vs double-quantized absmax on packed rows with phase peaks -- VALID; the default fixture HOLDS
+    #      P144-P148 (1.009, a 1.35 GB drop, e4b a1's training phase 24.58 vs Unsloth's 24.86, eval above train on every draw); 1.05 FALSIFIES
+    #      P144; a 1.0 GB drop FALSIFIES P145; Unsloth's training phase 23.0 FALSIFIES P147; a draw whose train phase tops its eval FALSIFIES
+    #      P148; a dropped phase record leaves P147 UNTESTED with the arm VALID; an a1 draw with the fp32 absmax is VOID
+    DP = lambda R: {DQPACK_FAM: reduce_family(DQPACK_FAM, R, {}, 20)}
+    RDP = DP(_dqpack_set())
+    assert all(x["verdict"] == "VALID" for x in RDP[DQPACK_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RDP[DQPACK_FAM]["rows"]]
+    pdp = lambda R: {p: v for p, _, v, _ in score_dqpack(R)}
+    assert pdp(RDP) == {"P144": "HELD", "P145": "HELD", "P146": "HELD", "P147": "HELD", "P148": "HELD"}, score_dqpack(RDP)
+    assert pdp(DP(_dqpack_set(s={"a1": (10.56, 10.58)})))["P144"] == "FALSIFIED"
+    assert pdp(DP(_dqpack_set(peaks={"a1": 27.23})))["P145"] == "FALSIFIED"
+    assert pdp(DP(_dqpack_set(u_train=23.0)))["P147"] == "FALSIFIED"
+    assert pdp(DP(_dqpack_set(phases={"fused_attn4_m_a0_d2": {"setup": 20.0, "eval": 25.0, "train": 26.0}})))["P148"] == "FALSIFIED"
+    RN = DP(_dqpack_set(phases={"fused_attn4_m_a1": None}))
+    assert RN[DQPACK_FAM]["verdicts"][("e4b", "fused_attn4_m_a1")] == "VALID" and pdp(RN)["P147"] == "UNTESTED"
+    assert DP(_dqpack_set(dq={"fused_attn4_m_a1_d2": False}))[DQPACK_FAM]["verdicts"][("e4b", "fused_attn4_m_a1_d2")] == "VOID"
+    assert "P147" in render(RDP, "x") and "amendment 56" in render(RDP, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

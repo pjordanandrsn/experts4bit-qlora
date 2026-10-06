@@ -2235,3 +2235,28 @@ def test_tc1_fetches_never_carry_the_gate_checkout():
     assert "--exclude 'gnf4-src'" in ex, ex
     rsyncs = re.findall(r"^\s*(?:if ! )?rsync .*$", drive, re.MULTILINE)
     assert len(rsyncs) >= 2 and all('"${TC1_RSYNC_EXCLUDES[@]}"' in r for r in rsyncs), rsyncs
+
+
+def test_phase_peaks_split_the_run_max_by_phase(monkeypatch):
+    """TC1 amendment 56 (--phase-peaks 1): each boundary folds the allocator's max into its phase and resets it, a later phase can be
+    lower than an earlier one, and peak_gb() stays the run's max (the largest phase, the open one included). Off, nothing is recorded."""
+    m = _load_arm_module()
+    state = {"max": 0}
+    fake = types.SimpleNamespace(synchronize=lambda: None, max_memory_allocated=lambda: state["max"],
+                                 reset_peak_memory_stats=lambda: state.update(max=0))
+    monkeypatch.setattr(m, "DEV", "cuda")
+    monkeypatch.setattr(m.torch, "cuda", fake)
+    monkeypatch.setattr(m, "_PHASE_PEAKS", None)
+    state["max"] = 7_000_000_000
+    m.phase_mark("setup")
+    assert m._PHASE_PEAKS is None and state["max"] == 7_000_000_000         # off: no record, no reset
+    monkeypatch.setattr(m, "_PHASE_PEAKS", {})
+    for name, peak in (("setup", 20_000_000_000), ("eval", 27_000_000_000), ("train", 24_500_000_000), ("eval", 28_200_000_000),
+                       ("train", 24_900_000_000)):
+        state["max"] = peak
+        m.phase_mark(name)
+        assert state["max"] == 0
+    assert m._PHASE_PEAKS == {"setup": 20_000_000_000, "eval": 28_200_000_000, "train": 24_900_000_000}
+    assert m.peak_gb() == 28.2
+    state["max"] = 29_000_000_000                                            # the open phase counts toward the run's max
+    assert m.peak_gb() == 29.0
