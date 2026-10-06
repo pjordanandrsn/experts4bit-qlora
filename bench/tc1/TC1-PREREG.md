@@ -2273,10 +2273,16 @@ arm without one is VALID, and its P135 / P136 reading is UNTESTED.
 
 - **P134:** s/step `q212` / `q28` ≤ **0.92**. The environment ratio at the defaults; amendment 43 read 0.915 without buckets, amendment
   51 0.739 with them.
-- **P135:** D = wall `q28` − wall `q212`, the profiled per-step wall torch 2.8 adds (medians of two draws). The share of D that is not
-  device time, 1 − (device `q28` − device `q212`) / D, is ≥ **0.5**. D ≤ 0 leaves nothing to attribute (UNTESTED). Device time is the
-  profiler's device self time per step, summed over streams.
-- **P136:** the device busy fraction of `q28` ≤ `q28k0`'s − **0.03**.
+- **P135:** D = timed `q28` − timed `q212`, the per-step time torch 2.8 adds: the median s/step of steps 11..40 in ms, as medians of two
+  draws. The share of D that is not device time, 1 − (device `q28` − device `q212`) / D, is ≥ **0.5**. D ≤ 0 leaves nothing to attribute
+  (UNTESTED). Device time is the profiler's device self time per profiled step, summed over streams.
+- **P136:** the device busy fraction of `q28` ≤ `q28k0`'s − **0.03**. The fraction is device ms per profiled step over the TIMED ms per
+  step.
+- **Why the timed step, not the profiled wall** (maintainer review, before any box). torch.profiler adds host overhead to every op it
+  records, and that overhead differs between torch versions and grows with the launch count. The bucketed delta issues 115 kernels to
+  the single block's 66 on the A2000 count. A profiled wall would therefore push P135 and P136 toward HELD from the instrument alone.
+  The profile's device time comes from CUPTI kernel durations, which the profiler does not stretch. The profiled wall and the busy
+  fraction against it are reported beside each reading, never scored.
 
 Reported, not scored:
 

@@ -853,8 +853,12 @@ for _side in PROF28_SIDES:
 PACKED_FAMS = PACKED_FAMS + (PROF28_FAM,)
 LOOP_ROUTE_SHARE_MAX[PROF28_FAM] = 0.05
 PROF28_ENV_MAX = 0.92          # P134: s/step q212 / q28 at most this (amendment 43 read 0.915 without buckets; amendment 51 0.739 with them)
-PROF28_IDLE_SHARE_MIN = 0.5    # P135: of the profiled per-step wall torch 2.8 adds over torch 2.12, at least this share is NOT device time
-PROF28_BUSY_DROP_MIN = 0.03    # P136: in torch 2.8 the buckets lower the device busy fraction by at least this much against the single block
+PROF28_IDLE_SHARE_MIN = 0.5    # P135: of the TIMED per-step wall torch 2.8 adds over torch 2.12, at least this share is NOT device time
+PROF28_BUSY_DROP_MIN = 0.03    # P136: in torch 2.8 the buckets lower the device busy fraction (profiled device ms / TIMED ms per step) by at least this much
+# P135 / P136 divide by the TIMED step (median s/step of steps 11..N), never the profiled steps' wall: torch.profiler's per-op host overhead
+# differs between torch versions and grows with the launch count (the bucketed delta issues 115 kernels to the single block's 66), so the
+# profiled wall would push both readings toward HELD by the instrument alone. The profile's device time is CUPTI kernel durations, which the
+# profiler does not stretch; the profiled wall is reported beside it.
 # TC1 amendment 50: NF4_QLORA_PAD_BUCKETS=auto (grouped-nf4-gemm#491, a 16,384-routed-row gate) against 0 at TC1's field recipe: structure, not speed
 FIELDAUTO_FAM = "qwen3fieldauto"  # side fa0 (=0) vs fa1 (=auto), shipped and matched arms, venv-unsloth, the field recipe
 FAMS.append(FIELDAUTO_FAM)
@@ -1190,13 +1194,16 @@ def prof28_table(F, fam=PROF28_FAM):
 
 
 def _prof28_side_stats(rows, side):
-    """The two draws of one side: (all VALID and profiled, median wall ms/step, median device ms/step, median busy fraction, the rows)."""
+    """The two draws of one side: (all VALID and profiled, median PROFILED wall ms/step, median device ms/step, median profiled busy fraction,
+    the rows, median TIMED ms/step (s/step of steps 11..N x 1000), median busy fraction against the timed step (device ms / timed ms))."""
     rs = [t for t in rows if t["side"] == side]
-    ok = len(rs) == 2 and all(t["verdict"] == "VALID" and t["profiled"] and t["wall_ms_per_step"] is not None for t in rs)
+    ok = len(rs) == 2 and all(t["verdict"] == "VALID" and t["profiled"] and t["wall_ms_per_step"] is not None and t["s_per_step"] for t in rs)
     if not ok:
-        return False, None, None, None, rs
+        return False, None, None, None, rs, None, None
     med = lambda key: statistics.median([float(t[key]) for t in rs])
-    return True, med("wall_ms_per_step"), med("device_ms_per_step"), med("device_busy_fraction"), rs
+    timed = statistics.median([1000.0 * float(t["s_per_step"]) for t in rs])
+    busy_t = statistics.median([float(t["device_ms_per_step"]) / (1000.0 * float(t["s_per_step"])) for t in rs])
+    return True, med("wall_ms_per_step"), med("device_ms_per_step"), med("device_busy_fraction"), rs, timed, busy_t
 
 
 def prof28_family_deltas(F, kind="cpu", a="q212", b="q28", fam=PROF28_FAM):
@@ -1215,8 +1222,10 @@ def prof28_family_deltas(F, kind="cpu", a="q212", b="q28", fam=PROF28_FAM):
 def score_prof28(F, fam=PROF28_FAM):
     """TC1-PREREG amendment 53. P134: s/step q212 / q28 (the median over two VALID, stable draws a side) at most PROF28_ENV_MAX. P135: of the
     profiled per-step wall torch 2.8 adds (D = wall q28 - wall q212, medians over two profiled VALID draws), the share that is not device
-    time, 1 - (device q28 - device q212) / D, at least PROF28_IDLE_SHARE_MIN; D <= 0 leaves nothing to attribute (UNTESTED). P136: the
-    device busy fraction q28 at most q28k0's - PROF28_BUSY_DROP_MIN. A missing / non-VALID / unprofiled / unstable side UNTESTED."""
+    time, 1 - (device q28 - device q212) / D, at least PROF28_IDLE_SHARE_MIN; D <= 0 leaves nothing to attribute (UNTESTED). D is the TIMED
+    gap (median s/step of steps 11..N, in ms); device is the profile's device ms per profiled step. P136: the device busy fraction against the
+    timed step (device ms / timed ms) of q28 at most q28k0's - PROF28_BUSY_DROP_MIN. A missing / non-VALID / unprofiled / unstable side
+    UNTESTED. The profiled wall is reported beside each, never scored (see PROF28_IDLE_SHARE_MIN)."""
     R = F.get(fam)
     if not R:
         return []
@@ -1237,23 +1246,25 @@ def score_prof28(F, fam=PROF28_FAM):
         out.append(("P135", fam, "UNTESTED", "q212 and q28 each need two VALID draws with a profile summary: "
                     + "; ".join(f"{t['arm']} {t['verdict']} profiled {t['profiled']}" for t in a[4] + b[4])))
     else:
-        D, dd = b[1] - a[1], b[2] - a[2]
+        D, dd, Dp = b[5] - a[5], b[2] - a[2], b[1] - a[1]
         if D <= 0:
-            out.append(("P135", fam, "UNTESTED", f"no profiled gap to attribute: wall/step q28 {b[1]:.1f} ms vs q212 {a[1]:.1f} ms"))
+            out.append(("P135", fam, "UNTESTED", f"no timed gap to attribute: timed ms/step q28 {b[5]:.1f} vs q212 {a[5]:.1f} (profiled wall {b[1]:.1f} vs {a[1]:.1f})"))
         else:
             idle = 1.0 - dd / D
             top = ", ".join(f"{fm} {v:+.1f}" for fm, v in prof28_family_deltas(F, "cpu", fam=fam)[:3])
             out.append(("P135", fam, "HELD" if idle >= PROF28_IDLE_SHARE_MIN else "FALSIFIED",
-                        f"wall/step q28 {b[1]:.1f} vs q212 {a[1]:.1f} ms (D {D:+.1f}); device/step {b[2]:.1f} vs {a[2]:.1f} ms ({dd:+.1f}); "
-                        f"share not device time {idle:.3f} vs >= {PROF28_IDLE_SHARE_MIN}; largest CPU-self increases (ms/step): {top or 'none'}"))
+                        f"timed ms/step q28 {b[5]:.1f} vs q212 {a[5]:.1f} (D {D:+.1f}); device/step {b[2]:.1f} vs {a[2]:.1f} ms ({dd:+.1f}); "
+                        f"share not device time {idle:.3f} vs >= {PROF28_IDLE_SHARE_MIN}; profiled wall/step {b[1]:.1f} vs {a[1]:.1f} (gap {Dp:+.1f}, "
+                        f"reported); largest CPU-self increases (ms/step): {top or 'none'}"))
     if not (b[0] and k0[0]):
         out.append(("P136", fam, "UNTESTED", "q28 and q28k0 each need two VALID draws with a profile summary: "
                     + "; ".join(f"{t['arm']} {t['verdict']} profiled {t['profiled']}" for t in b[4] + k0[4])))
     else:
-        drop = k0[3] - b[3]
+        drop = k0[6] - b[6]
         out.append(("P136", fam, "HELD" if drop >= PROF28_BUSY_DROP_MIN else "FALSIFIED",
-                    f"device busy fraction q28 {b[3]:.3f} vs q28k0 {k0[3]:.3f} (drop {drop:+.3f} vs >= {PROF28_BUSY_DROP_MIN}); "
-                    f"wall/step {b[1]:.1f} vs {k0[1]:.1f} ms, device/step {b[2]:.1f} vs {k0[2]:.1f} ms"))
+                    f"device busy fraction (device / timed step) q28 {b[6]:.3f} vs q28k0 {k0[6]:.3f} (drop {drop:+.3f} vs >= {PROF28_BUSY_DROP_MIN}); "
+                    f"timed ms/step {b[5]:.1f} vs {k0[5]:.1f}, device/step {b[2]:.1f} vs {k0[2]:.1f} ms; against the profiled wall "
+                    f"(reported) {b[3]:.3f} vs {k0[3]:.3f}"))
     return out
 
 
@@ -7908,7 +7919,9 @@ def selftest():
     assert pq8(RQ8) == {"P134": "HELD", "P135": "HELD", "P136": "HELD"}, score_prof28(RQ8)
     assert prof28_family_deltas(RQ8, "cpu")[0][0] == "aten::bmm", prof28_family_deltas(RQ8, "cpu")
     assert pq8(Q8(_prof28_set(prof={"q28": (12000.0, 11800.0)})))["P135"] == "FALSIFIED"
-    assert pq8(Q8(_prof28_set(prof={"q28": (9900.0, 9700.0)})))["P135"] == "UNTESTED"
+    assert pq8(Q8(_prof28_set(s={"q28": (9.90, 9.95)})))["P135"] == "UNTESTED"          # no TIMED gap (the profiled wall is not scored)
+    assert pq8(Q8(_prof28_set(prof={"q28": (9900.0, 10400.0)})))["P135"] == "HELD"      # a profiled wall gap <= 0 does not decide P135
+    assert pq8(Q8(_prof28_set(prof={"q28": (14000.0, 11900.0)})))["P136"] == "FALSIFIED"  # profiler-inflated q28 wall cannot make P136 HOLD
     assert pq8(Q8(_prof28_set(s={"q28": (10.0, 10.05)})))["P134"] == "FALSIFIED"
     assert pq8(Q8(_prof28_set(prof={"q28k0": (12200.0, 10500.0)})))["P136"] == "FALSIFIED"
     RW = _prof28_set(torch={"q28": "2.12.1+cu130"})
