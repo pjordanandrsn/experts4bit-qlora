@@ -1,6 +1,8 @@
 #!/bin/bash
 # bench/dq3/dq3_run.sh -- lane DQ3, BOX side (bench/dq3/DQ3-PREREG.md, Amendments 0-3). Started by bench/tc1/tc1_drive.sh as its
-# TC1_RUNNER (TC1_EXTRA_STAGE carries this file, dq3_vram_probe.py, dq3_egress_probe.py, dq3_arm.py and dq3_reduce.py), so it speaks tc1_drive's contract: the nonce
+# TC1_RUNNER (TC1_EXTRA_STAGE carries this file, bench/dq5/dq5_link_gate.py, dq3_vram_probe.py, dq3_egress_probe.py, dq3_arm.py and
+# dq3_reduce.py; #1216: the link gate reads the WIDTH negotiated under load, and an out-of-band host is rc 19 -- not 13, which
+# adertha admits as machine evidence and would exclude a good gen-4 5090 from other lanes), so it speaks tc1_drive's contract: the nonce
 # handshake (TC1_RUN_NONCE within 30 s), summary.txt one line per step, TC1_EXIT_CODE.<nonce> / TC1_SUCCESS.<nonce> /
 # TP_DONE.<nonce> at the end -- a refusal writes them too. No checkpoint download: the subject is Qwen3-32B's architecture
 # with random NF4 weights (Amendment 1). Six arms, one process each, palindrome R S S0 S0 S R. Nothing here creates,
@@ -16,7 +18,13 @@ DQ3_GNF4_SHA=a5edec8789735bff1c0da4708ae5fc93260a1410
 
 link=$(nvidia-smi --query-gpu=name,pcie.link.gen.max,pcie.link.width.max --format=csv,noheader,nounits 2>&1 | head -1)
 echo "link: $link" | tee -a summary.txt
-case "$link" in *"RTX 5090, 5, 16") ;; *) echo "HOST REFUSED: not an RTX 5090 on PCIe gen 5 x16 ($link)" | tee -a summary.txt; finish 13;; esac
+case "$link" in *"RTX 5090, 5, 16") ;; *) echo "OUT OF BAND: not an RTX 5090 on PCIe gen 5 x16 ($link)" | tee -a summary.txt; finish 19;; esac
+# width.max is what the slot CAN negotiate (the A2000 rehearsal read 16 while running x8): gate the width actually
+# negotiated, read under a pinned copy. Out of band -> rc 19 (not machine evidence); unreadable -> rc 9.
+python dq5_link_gate.py > logs/link_gate.log 2>&1; lrc=$?
+if [ "$lrc" = 3 ]; then echo "OUT OF BAND: $(tail -1 logs/link_gate.log | cut -c1-200)" | tee -a summary.txt; finish 19
+elif [ "$lrc" != 0 ]; then tail -3 logs/link_gate.log; echo "LINK GATE ERROR rc=$lrc (not a host refusal)" | tee -a summary.txt; finish 9; fi
+tail -1 logs/link_gate.log | tee -a summary.txt
 # Host floor (rc 18, rent.py's machine evidence): the GPU must hand out the subject's memory. dq3-5090-1's host refused
 # the first 2.90 GiB allocation with 30.85 GiB free; see dq3_vram_probe.py. Before any install, with the image's torch.
 # Only the probe's OOM exit (3) names the host; any other failure (no device, no kernels for the card, an exception) is

@@ -82,15 +82,16 @@ def test_every_rule_mutant_is_killed(tmp_path):
     assert not survived, survived
 
 
-def _fake_bin(tmp_path, link, probe_rc, egress_rc=0):
+def _fake_bin(tmp_path, link, probe_rc, egress_rc=0, gate_rc=0):
     """A PATH where nvidia-smi reports ``link``, ``python dq3_vram_probe.py`` exits ``probe_rc`` and
     ``python dq3_egress_probe.py`` exits ``egress_rc``; any other python call (the install, the arms) records itself and
     fails, so reaching it is visible."""
     b = tmp_path / "bin"
-    b.mkdir()
+    b.mkdir(parents=True)
     (b / "nvidia-smi").write_text(f"#!/bin/sh\necho '{link}'\n")
     (b / "python").write_text(
         "#!/bin/sh\n"
+        f'case "$*" in *dq5_link_gate.py*) echo "LINK_GATE test"; exit {gate_rc};; esac\n'
         f'case "$*" in *dq3_vram_probe.py*) echo "VRAM_PROBE_FAIL test"; exit {probe_rc};; esac\n'
         f'case "$*" in *dq3_egress_probe.py*) echo "EGRESS_PROBE test"; exit {egress_rc};; esac\n'
         'echo "$*" >> "$DQ3_W/reached"; exit 1\n')
@@ -99,10 +100,10 @@ def _fake_bin(tmp_path, link, probe_rc, egress_rc=0):
     return b
 
 
-def _run_box(tmp_path, link, probe_rc, egress_rc=0):
+def _run_box(tmp_path, link, probe_rc, egress_rc=0, gate_rc=0):
     w = tmp_path / "w"
-    w.mkdir()
-    env = {"PATH": f"{_fake_bin(tmp_path, link, probe_rc, egress_rc)}:/usr/bin:/bin", "DQ3_W": str(w),
+    w.mkdir(parents=True)
+    env = {"PATH": f"{_fake_bin(tmp_path, link, probe_rc, egress_rc, gate_rc)}:/usr/bin:/bin", "DQ3_W": str(w),
            "TC1_RUN_NONCE": "n", "E4B_SHA": "0" * 40}
     rc = subprocess.run(["bash", str(LANE / "dq3_run.sh")], env=env, capture_output=True, text=True).returncode
     return rc, w
@@ -119,7 +120,7 @@ def test_a_host_that_refuses_the_subjects_memory_is_refused_at_18_before_any_ins
 
 def test_the_link_check_still_comes_first(tmp_path):
     rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 4, 16", probe_rc=0)
-    assert rc == 13 and not (w / "reached").exists()
+    assert rc == 19 and not (w / "reached").exists()       # out of band is 19 since #1216 (was 13)
 
 
 def test_a_host_that_passes_the_probe_goes_on_to_the_install(tmp_path):
@@ -176,3 +177,20 @@ def test_the_rehearsal_gate_asserts_the_lanes_memory_direction():
     diverged = [good[0], ("B2_S", _rehearsal_arm("S", 820, grads="x")), good[2]]
     assert any("parity" in b for b in mod.check({"B": diverged})[1])
     assert any("no finished R" in b for b in mod.check({"B": good[1:]})[1])
+
+
+def test_an_out_of_band_link_is_rc_19_not_an_admitted_code(tmp_path):
+    """#1216: a gen-4 5090 is a good host outside this lane's band; 13 is admitted as machine evidence by adertha and
+    would exclude it from other lanes' searches, so out of band is 19, before any install."""
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 4, 16", probe_rc=0)
+    assert rc == 19 and not (w / "reached").exists() and not (w / "REFUSAL").exists()
+    assert "finish 13" not in RUN
+
+
+def test_a_link_narrower_than_x16_under_load_is_out_of_band(tmp_path):
+    """#1216: width.max is what the slot CAN negotiate (the A2000 read 16 while running x8); the gate reads the width
+    negotiated under a pinned copy (bench/dq5/dq5_link_gate.py)."""
+    rc, w = _run_box(tmp_path, "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=0, gate_rc=3)
+    assert rc == 19 and not (w / "reached").exists()
+    rc, w = _run_box(tmp_path / "e", "NVIDIA GeForce RTX 5090, 5, 16", probe_rc=0, gate_rc=2)
+    assert rc == 9 and not (w / "REFUSAL").exists(), "an unreadable link is a harness error, not a host refusal"
