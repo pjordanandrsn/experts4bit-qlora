@@ -2306,3 +2306,9 @@ Reported, not scored:
 - No default changes on this box; it is a diagnostic. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. Six arms: about $2 with the download.
+
+*Note (2026-10-06, before amendment 53's box reads):* the RTX A2000 count in amendment 53's *Why* is committed with its script, as a
+diagnostic that licenses nothing: [`../h2h-2026-10-02/tc1/a2000-bucket-counts/`](../h2h-2026-10-02/tc1/a2000-bucket-counts/README.md)
+(`bench/tc1/bucket_count.py`). Its millisecond fields are not readings. One correction to the *Why*: fp32 and bf16 adapters give close
+counts, not the same ones. With buckets, fp32 runs 115.3 kernels / 113.3 launch calls per iteration and bf16 112.5–113.7 / 111.7. The
+torch-version comparison stands: identical with fp32 adapters, and equal launch calls with bf16. Nothing registered changes.
