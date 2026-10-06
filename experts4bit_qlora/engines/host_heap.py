@@ -25,3 +25,24 @@ def release_freed_host_heap() -> bool:
             _TRIM.append(None)
     fn = _TRIM[0]
     return bool(fn(0)) if fn is not None else False
+
+
+def release_cached_pinned_memory() -> bool:
+    """Hand the free blocks of torch's caching host allocator back to the driver (``torch._C._host_emptyCache``, private
+    in torch 2.8-2.11; nothing else frees them). True if it ran.
+
+    The loader stages through pinned host memory, and the allocator keeps every freed pinned block cached for the life of
+    the process. It counts as the process's shared memory (``RssShmem``), and nothing uses it again after the build.
+    Measured on Qwen3-30B-A3B (RTX A2000 host): 1.09 GB reserved and 0 B allocated after ``load_moe_4bit_streaming``,
+    1.37 GB / 4 MB after the hybrid tier. On an RTX 4090 (lane SV4) every serve held 1.1-1.3 GB of pinned memory
+    beyond the priced cold-tier landing. Blocks still allocated are untouched."""
+    try:
+        import torch
+    except ImportError:
+        return False
+    fn = getattr(torch._C, "_host_emptyCache", None)
+    if fn is None or not torch.cuda.is_available():
+        return False
+    fn()
+    return True
+
