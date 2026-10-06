@@ -1,0 +1,16 @@
+SC1g arm=e4b_a6mx_served_conv2 box=J at=2026-10-06T10:01:54Z nproc=96 cpu.max=2304000/100000 load=2.62/2.58/1.72
+ENV: E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_SERVE_EXP_INT4=1 E4B_INT4_KEEP_NF4=0 E4B_SERVE_ATTN_INT4_CALIB=0 E4B_CALIB_SOURCE=c4 GNF4_TRITON_PREBIND=1 SC1G_REF_FULL_FILE=/root/sc1/sc1g_ref_full/ref_full_conv2.npy SC1G_REF_FULL_SHA=c3801eb3e297964c415d5992bd886d3c5afda0048b6edbaaf66444c34cb4f3e0 SC1G_KL_OUT=/root/sc1/sc1g/kl_e4b_a6mx_served_conv2.npz
+GEN HOOK: lanes attached after enable_hybrid_tier in ['experts4bit_qlora.engines.hybrid']
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files: 100%|██████████| 12/12 [00:00<00:00, 822.10it/s]
+[10:02:03]   checkpoint: openai/gpt-oss-20b @ 6cee5e81ee83917806bbde320786a8fb61efebee (requested main, unpinned)
+[10:02:03]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[10:02:04]   quantized experts on 24/24 MoE layers (32 experts each)
+[10:02:04]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[10:02:06]   experts deferred to the arena: 24 module(s), 120 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[10:02:18]   hybrid tier active on 24 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files: 100%|██████████| 12/12 [00:00<00:00, 826.67it/s]
+INT4EXP enabled: 24 layers (model_type=gpt_oss)
+K8 window from file k8_window_conv2.json sha=9bf650b837c4 source=conv2
+/root/sc1/sc1g_k8.py:230: UserWarning: The given NumPy array is not writable, and PyTorch does not support non-writable tensors. This means writing to this tensor will result in undefined behavior. You may want to copy the array to protect its data or make it writable before converting it to a tensor. This type of warning will be suppressed for the rest of this program. (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:203.)
+  r = sc1g_kl.kl_full_support(real.as_tensor(np.asarray(ref[t:t + 1])), x.detach())
+K8_PPL steps=2048 nll=1.97256 ppl=7.18905 compute=f32 sha=9bf650b837c4 out=/root/sc1/sc1g/e4b_a6mx_served_conv2.json

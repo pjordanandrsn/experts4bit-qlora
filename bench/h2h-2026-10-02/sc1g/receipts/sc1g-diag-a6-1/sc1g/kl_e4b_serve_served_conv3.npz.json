@@ -1,0 +1,10 @@
+{
+ "calls": 2048,
+ "estimator": "full-vocabulary KL (A5)",
+ "other_calls": 0,
+ "positions": 2048,
+ "ref_file": "ref_full_conv3.npy",
+ "ref_sha": "d4611048532f0aea32108646e0b2fcb85bbe1bb9db91035cfdc77058fc10a890",
+ "void_first": [],
+ "void_positions": 0
+}
