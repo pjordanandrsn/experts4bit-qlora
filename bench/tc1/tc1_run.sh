@@ -134,8 +134,8 @@ echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RU
 case "$PACK" in 0|1) ;; *) say "refusing: TC1_PACK must be 0 or 1 (got '$PACK')"; echo "BOX_REFUSED pack=$PACK" >> summary.txt; finish 78;; esac
 for _f in $FAMILIES; do
   case "$_f" in
-    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
-    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
+    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k|qwen3padbk) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
+    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k, qwen3padbk)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
   esac
 done
 # ---------------------------------------------------------------- staged pieces, box class, forensics
@@ -1333,6 +1333,27 @@ tc1_chunkauto_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_ca0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_ca0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_padbk_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 48 (2026-10-06): grouped-nf4-gemm's bucketed LoRA-delta padding
+# (NF4_QLORA_PAD_BUCKETS=1, grouped-nf4-gemm#490: each bucket of groups within 2x in rows padded to its own widest, not every group to the
+# hottest) off vs on, on amendment 39's packed rows -- the shipped and the matched arm, two draws a side in ABBA order, every arm in
+# venv-unsloth at e4b's defaults (the chunked LM loss as `auto` chunks these rows).
+tc1_padbk_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_pk0:fused e4b:fused_attn4_shipped_pk1:fused e4b:fused_attn4_m_pk0:fused e4b:fused_attn4_m_pk1:fused e4b:fused_attn4_m_pk1_d2:fused e4b:fused_attn4_m_pk0_d2:fused e4b:fused_attn4_shipped_pk1_d2:fused e4b:fused_attn4_shipped_pk0_d2:fused"
+  say "===== PAD-BUCKETS A/B family $FAM ($MID @ $REV; grouped-nf4-gemm's LoRA delta one padded block vs buckets, packed rows, venv-unsloth, amendment 48)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local OLD="NF4_QLORA_PAD_BUCKETS=0" NEW="NF4_QLORA_PAD_BUCKETS=1"
+  can_run 600 $FAM/e4b/shipped_pk0     && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_pk0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_pk1     && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_pk1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/m_pk0           && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_pk0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pk1           && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_pk1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pk1_d2        && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_pk1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/m_pk0_d2        && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_pk0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH
+  can_run 600 $FAM/e4b/shipped_pk1_d2  && TC1_ARM_EXTRA_ENV="$NEW" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_pk1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  can_run 600 $FAM/e4b/shipped_pk0_d2  && TC1_ARM_EXTRA_ENV="$OLD" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_pk0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_decoded_gate -- TC1 amendment 46 (2026-10-05): the decoded A/B's FIRST step, once per box, before any of its arms. grouped-nf4-gemm's
 # compiled correctness tests for GNF4_TRAIN_GEMM=decoded run on this card, from a checkout of grouped-nf4-gemm at GNF4_SHA (the installed
 # package's commit, which the tripwire pins), in venv-e4b (the arms' venv): kernel/test_nf4_route.py's decoded, cap and dequant tests -- RD1's
@@ -1722,6 +1743,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 22 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3memcensus) tc1_memcensus_family qwen3memcensus Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 23 (fetch 5400, e4b 3600, Unsloth 3600)
   qwen3memc4k) tc1_memc4k_family qwen3memc4k Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 47: the memory census on packed 4,096-token rows
+  qwen3padbk) tc1_padbk_family qwen3padbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 48: the LoRA delta's bucketed padding on packed rows
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
   fusedsweep)  tc1_fusedsweep_family fusedsweep 2400;;   # TC1c amendment 5: a fused-kernel config replay (no model)
   qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 5400 4800;;   # TC1 amendment 8
