@@ -117,7 +117,8 @@ lane_dead() { [ "${1:-}" = "0" ] && [ "${2:-}" = "0" ] && echo dead; }   # live_
 # died under set -u (sc2g-prove-1) waited out its whole deadline. The bracket still matches the process, never this text.
 # A10: one pull for both uses (the same keep/leave rules). Keep: every receipt / log / sample csv / summary / quiesce / energy
 # json, the pack's manifest.json (payloads stay), work_*/bake.json (k8_bake.py's failure record travels; p57-5090-1 lost the only
-# text that said WHY). Leave: venvs, caches, arenas, snapshots, the llama.cpp tree and GGUFs, the pack payloads. Bounded (ssh
+# text that said WHY). Leave: venvs, caches, arenas, snapshots, the llama.cpp tree and GGUFs, the pack payloads, SC1g's staged
+# reference rows. Bounded (ssh
 # ConnectTimeout + rsync --timeout) so a dead box cannot hang the driver; the remote rsync runs at nice 19 / idle I/O so a pull
 # during a timed arm does not perturb it.
 pull_box() { local -a low=(); [ "${2:-}" = low ] && low=(--rsync-path="nice -n 19 ionice -c3 rsync" --exclude 'census/')   # mid-run pulls only; SC1b's traces come in the final fetch
@@ -125,7 +126,11 @@ pull_box() { local -a low=(); [ "${2:-}" = low ] && low=(--rsync-path="nice -n 1
   rsync -az --timeout=120 -e "ssh -o BatchMode=yes -o ConnectTimeout=20 $E4B_RENT_SSH_OPTS -p $PORT" ${low[@]+"${low[@]}"} \
     --exclude 'artifact*/payloads/' --include 'work_*/' --include 'work_*/bake.json' --exclude 'work_*/*' \
     --exclude 'venv*' --exclude '.cache' --exclude 'llama.cpp/' --exclude 'gguf/' --exclude 'sglang-cache/' \
+    --exclude 'sc1g_ref_full/' --exclude 'sc1g/ref_full_*.f16' \
     "root@$HOST:$W/" "$1/"; }
+# SC1g A5: box R's staged full-vocabulary rows (sc1g_ref_full/, ~0.82 GB per window) and box I's raw-fp16 copies of them for
+# llama.cpp (sc1g/ref_full_<src>.f16) are INPUTS registered by sha (bench/sc1/sc1g_ref/ref_full_shas.json), never receipts:
+# sc1g-prove-a5-1's fetch pulled all five back (3.9 GB into the receipt store, ~7 min of a rented box)
 # A10: an incremental pull every PULL_EVERY_S during the run, into sc1.partial/ -- sc1c-5090-1's box stopped answering at
 # 20:55Z and the single end-of-run fetch got nothing (TC2's box B was lost the same way). The partial copy becomes the
 # receipt's sc1/ only when the final fetch fails, and is labelled so.
