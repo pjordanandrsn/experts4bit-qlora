@@ -671,6 +671,21 @@ def _kv_geometry(cfg):
     return heads, dims
 
 
+def arena_layer_ids(arena: str, n_moe_layers: int) -> list:
+    """The arena's own layer ids, in order, for a model with ``n_moe_layers`` MoE modules.
+
+    A bake keys its rows by the checkpoint's layer numbers. When a model's leading layers are dense (ERNIE-4.5's
+    layer 0, DeepSeek-V2's first_k_dense_replace, LFM2's dense layers) those ids are not the MoE modules' ordinals 0..L-1.
+    Served by ordinal, the first module asked for row (0, 0), which such an arena does not have. Refuses an arena whose
+    layer count is not the model's."""
+    idx = json.loads(open(arena + ".index.json", encoding="utf-8").read())
+    ids = sorted({int(row[0]) for row in idx["rows"]})
+    if len(ids) != n_moe_layers:
+        raise RuntimeError(f"the arena {arena} holds {len(ids)} layers {ids[:4]}...; the model has {n_moe_layers} MoE "
+                           "layers -- refusing to serve one layer's experts as another's")
+    return ids
+
+
 def _bytes_per_expert(arena: str) -> int:
     idx = json.loads(open(arena + ".index.json", encoding="utf-8").read())
     bpe = 0
@@ -942,7 +957,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     from .engines.hot_residency import target_modules
     from .engines.hybrid import enable_hybrid_tier
     from .engines.paged_attention import register
-    from .engines.paged_runner import PagedModelRunner, kv_layers
+    from .engines.paged_runner import PagedModelRunner, decoder_layers, kv_layers
     from .engines.placement import solve_placement
 
     torch.manual_seed(1689)
@@ -963,8 +978,12 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
         pairs = sorted(tuple(pp) for t in ("vram", "dram", "nvme") for pp in man["tiers"][t])
         man["tiers"] = {"vram": [list(pp) for pp in pairs], "dram": [], "nvme": []}
         man["masses"] = {"vram_frac": 1.0, "dram_frac": 0.0, "nvme_frac": 0.0}
+    # the arena and the placement are keyed by the arena's layer ids; the solver numbered its layers 0..L-1
+    ids = arena_layer_ids(cfg.arena, L)
+    if ids != list(range(L)):
+        man["tiers"] = {t: [[ids[int(lay)], int(e)] for lay, e in pairs] for t, pairs in man["tiers"].items()}
     n = enable_hybrid_tier(model, cfg.arena, man, hot_rows=cfg.hot_rows, threads=0, pool=True,
-                           dispatch_diet=False, collapse_resident=True)
+                           dispatch_diet=False, collapse_resident=True, layers=ids)
     if n != L:
         raise RuntimeError(f"enable_hybrid_tier patched {n}/{L} MoE layers")
     levers = _apply_levers(model, cfg, tok)
@@ -993,7 +1012,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     hkv, hd = _kv_geometry(model.config)
     scratch = max(cfg.buckets) if cfg.graphs else 0
     # a hybrid model's linear-attention layers keep no K/V: the pool holds its attention layers only
-    kv = Fp8PagedKV(kv_layers(model, L), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
+    kv = Fp8PagedKV(kv_layers(model, decoder_layers(model.config)), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch)
     runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv)
