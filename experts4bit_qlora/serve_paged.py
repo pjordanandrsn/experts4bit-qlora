@@ -962,6 +962,15 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
 
     torch.manual_seed(1689)
     tok = AutoTokenizer.from_pretrained(cfg.model, revision=cfg.revision or None)
+    from transformers import AutoConfig
+
+    from .engines.paged_runner import kv_layout_refusal
+    try:
+        why = kv_layout_refusal(AutoConfig.from_pretrained(cfg.model, revision=cfg.revision or None))
+    except (OSError, ValueError, KeyError):           # a config only the loader reads: its own refusals stand
+        why = None
+    if why:
+        raise RuntimeError(f"serve_paged refuses {cfg.model}: {why}")   # before any weight is read
     model, _ = load_moe_4bit_streaming(cfg.model, cfg.device, torch.bfloat16, r=8, alpha=16, quant_type="nf4",
                                        arena=cfg.arena, revision=cfg.revision or None)
     model.eval()
