@@ -293,13 +293,17 @@ def _stateful_hybrids():
                                         mamba_n_groups=1, mamba_d_state=16, mamba_d_head=32, mamba_d_conv=4,
                                         max_position_embeddings=256,
                                         layer_types=["linear_attention", "attention", "linear_attention", "attention"])
-    qwen35 = tr.Qwen3_5MoeTextConfig(vocab_size=128, hidden_size=64, num_hidden_layers=4, num_attention_heads=4,
-                                     num_key_value_heads=2, head_dim=32, moe_intermediate_size=32,
-                                     shared_expert_intermediate_size=32, num_experts=4, num_experts_per_tok=2,
-                                     linear_num_key_heads=2, linear_num_value_heads=4, linear_key_head_dim=16,
-                                     linear_value_head_dim=16, linear_conv_kernel_dim=4, max_position_embeddings=256,
-                                     layer_types=["linear_attention", "full_attention"] * 2)
+    qwen35 = tr.Qwen3_5MoeConfig(text_config=dict(
+        vocab_size=128, hidden_size=64, num_hidden_layers=4, num_attention_heads=4, num_key_value_heads=2, head_dim=32,
+        moe_intermediate_size=64, shared_expert_intermediate_size=64, num_experts=4, num_experts_per_tok=2,
+        linear_num_key_heads=2, linear_num_value_heads=4, linear_key_head_dim=16, linear_value_head_dim=24,
+        linear_conv_kernel_dim=4, max_position_embeddings=256, layer_types=["linear_attention", "full_attention"] * 2))
     return {"lfm2": lfm2, "granite": granite, "qwen35": qwen35}
+
+
+def _built(cfg):
+    """The tiny model itself (a composite config's text model), for the tests that run the runner's own code."""
+    return tr.AutoModelForCausalLM.from_config(getattr(cfg, "text_config", None) or cfg).eval()
 
 
 def test_the_estimate_refuses_the_state_the_paged_runner_does_not_keep():
@@ -313,8 +317,7 @@ def test_the_estimate_refuses_the_state_the_paged_runner_does_not_keep():
     for name in ("lfm2", "granite"):
         f = estimate_serve_footprint(describe_moe(cfgs[name]), ServeSetup(max_seqs=1, graphs=False))
         assert f.items == () and any("the paged server refuses this model" in r for r in f.refusals)
-    kept = estimate_serve_footprint(describe_moe(cfgs["qwen35"]), ServeSetup(max_seqs=1, graphs=False))
-    assert not any("paged server refuses" in r for r in kept.refusals)       # (the bare text config meets the loader's)
+    assert not estimate_serve_footprint(describe_moe(cfgs["qwen35"]), ServeSetup(max_seqs=1, graphs=False)).refusals
 
 
 def test_the_refusal_is_the_runner_s_own_verdict():
@@ -324,11 +327,48 @@ def test_the_refusal_is_the_runner_s_own_verdict():
 
     from experts4bit_qlora.engines.paged_runner import layer_plan, paged_state_refusal
     for name, cfg in _stateful_hybrids().items():
-        model = tr.AutoModelForCausalLM.from_config(cfg).eval()
+        model = _built(cfg)
         refusal = paged_state_refusal(model)
         try:
-            layer_plan(model, cfg.num_hidden_layers, 2)
+            layer_plan(model, model.config.num_hidden_layers, 2)
             refused = False
         except NotImplementedError:
             refused = True
         assert refused == (refusal is not None), (name, refusal)
+
+
+def test_the_linear_state_pool_bytes_are_what_the_pool_allocates():
+    """A hybrid's per-slot linear-attention state, priced from the topology, IS what LinearStatePool holds after each
+    layer's first forward: a bf16 conv window and an fp32 recurrent state per slot (transformers keeps it in fp32)."""
+    pytest.importorskip("transformers.cache_utils", reason="needs transformers' cache_utils")
+    from transformers.cache_utils import LinearAttentionLayer
+
+    from experts4bit_qlora.engines.linear_state import LinearStatePool, _linear_classes, _OneLayerCache
+    from experts4bit_qlora.serve_recipe import linear_state_pool_bytes
+
+    cfg = _stateful_hybrids()["qwen35"]
+    topo = describe_moe(cfg)
+    assert [g[0] for g in topo.linear_state_layers] == [0, 2]
+    model = _built(cfg).to(torch.bfloat16)
+    pool = LinearStatePool(5)
+    for mod in (m for m in model.modules() if isinstance(m, _linear_classes())):
+        lal = LinearAttentionLayer()
+        try:
+            with torch.no_grad():
+                mod(torch.randn(2, 3, model.config.hidden_size, dtype=torch.bfloat16),
+                    cache_params=_OneLayerCache(mod.layer_idx, lal))
+        except RuntimeError as e:          # a CUDA-only causal_conv1d build on a CPU box
+            pytest.skip(f"the Gated DeltaNet forward cannot run here: {e}")
+        pool.store(mod.layer_idx, [0, 1], lal)
+    assert pool.nbytes() == linear_state_pool_bytes(topo.linear_state_layers, 5)
+
+
+def test_a_hybrid_serve_prices_its_state_pool_per_slot():
+    from experts4bit_qlora.serve_recipe import linear_state_pool_bytes
+    topo = describe_moe(_stateful_hybrids()["qwen35"])
+    f = estimate_serve_footprint(topo, ServeSetup(max_seqs=4, max_tokens_per_seq=256, graphs=True, buckets=(1, 2, 4)))
+    item = next(i for i in f.items if i.name == "linear-attention state pool")
+    assert item.where == "device" and item.basis == "derived"
+    assert item.bytes == linear_state_pool_bytes(topo.linear_state_layers, 4 + 4)    # seqs + graph scratch slots
+    assert not any("recurrent state" in u for u in f.unmodelled)                    # every linear layer is priced
+    assert describe_moe(_qwen3()).linear_state_layers == ()

@@ -210,6 +210,17 @@ def driven_linear_layers(model) -> tuple[list[int], list[int]]:
     return linear_layers(getattr(model, "config", None)), driven
 
 
+def state_geometry(model) -> list[tuple]:
+    """``(layer, conv_dim, conv_kernel, v_heads, head_k_dim, head_v_dim)`` for every linear-attention module this pool
+    drives, in layer order: the shapes :meth:`LinearStatePool.store` allocates per slot (a conv window
+    ``[conv_dim, conv_kernel]`` in the model's dtype and a recurrent state ``[v_heads, head_k_dim, head_v_dim]``, which
+    transformers' Gated DeltaNet keeps in fp32). It reads module attributes only, so it answers on a meta tree."""
+    classes = _linear_classes()
+    mods = [m for m in model.modules() if classes and isinstance(m, classes)]
+    return sorted((int(m.layer_idx), int(m.conv_dim), int(m.conv_kernel_size), int(m.num_v_heads), int(m.head_k_dim),
+                   int(m.head_v_dim)) for m in mods)
+
+
 def install(model, n_slots: int) -> LinearStatePool | None:
     """Wrap ``model``'s linear-attention modules to read and write a :class:`LinearStatePool` of ``n_slots`` slots
     while a paged context is bound. Returns the pool (also kept as ``model._e4b_linear_state``), or None when the

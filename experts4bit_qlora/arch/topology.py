@@ -121,6 +121,9 @@ class MoETopology:
     #: why the paged server refuses this model's state-carrying layers (``engines.paged_runner.paged_state_refusal`` on
     #: the meta tree), or ``None``
     paged_state_refusal: str | None = None
+    #: ``(layer, conv_dim, conv_kernel, v_heads, head_k_dim, head_v_dim)`` per linear-attention layer the paged server's
+    #: per-slot state pool drives (``engines.linear_state.state_geometry`` on the meta tree); empty for a non-hybrid model
+    linear_state_layers: tuple = ()
     #: where each fact came from
     provenance: dict = field(default_factory=dict)
 
@@ -270,8 +273,10 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
         prov["kv"] = "serve_paged._kv_geometry + paged_runner.kv_layers (the paged server's rules)"
     except Exception as e:  # noqa: BLE001 - an undescribable KV geometry is an answer, recorded
         prov["kv"] = f"not described: {type(e).__name__}: {e}"[:300]
+    from ..engines.linear_state import state_geometry
     from ..engines.paged_runner import paged_state_refusal
     kv_geo["paged_state_refusal"] = paged_state_refusal(tree)
+    kv_geo["linear_state_layers"] = tuple(state_geometry(tree))
     prov["paged_state_refusal"] = "engines.paged_runner.paged_state_refusal (the runner's own rules) on the meta tree"
     return MoETopology(
         **kv_geo, loader_refusal=None, convention=conv, gated=has_gate, expert_stacks=tuple(stacks), dense_numel=int(dense),
