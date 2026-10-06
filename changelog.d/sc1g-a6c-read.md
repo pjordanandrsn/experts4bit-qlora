@@ -1,4 +1,4 @@
-### SC1g A6 continuation read (#846): P3 HELD -- bf16 decode activations do not move e4b's median KL; A6 complete (bench and tests only)
+### SC1g A6 continuation read (#846): P3 HELD -- bf16 decode activations move e4b's median KL by at most 9 %; A6 complete (bench and tests only)
 
 - **The run.** `sc1g-diag-a6-2` (box J, $0.753, Vast 145701) ran the bf16-activation arms the first A6 box's deadline
   dropped.

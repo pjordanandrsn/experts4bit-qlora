@@ -1574,7 +1574,7 @@ and both arms against the first A6 box's uncaptured rows (bit-identical, or the 
 - **Cost:** about $0.6, inside the no-ask tier.
 - **Order:** this box launches after A6's continuation (`sc1g-diag-a6-2`) has landed its receipt.
 
-## A6 continuation reading (2026-10-06): P3 HELD -- bf16 decode activations do not move e4b's median KL
+## A6 continuation reading (2026-10-06): P3 HELD -- bf16 decode activations move e4b's median KL by at most 9 %
 
 **The run.** `sc1g-diag-a6-2` (adertha-receipts `2f93f90d`) ran on a Vast RTX 5090, machine 145701, from `993103b8`
 (#1256). It cost **$0.753**, and teardown is proven. The reading re-derives from the committed receipt, pinned by
