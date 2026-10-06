@@ -452,3 +452,26 @@ def test_multi_head_latent_attention_is_refused_before_the_pool_meets_it():
     if not topo.loader_refusal:
         f = estimate_serve_footprint(topo, ServeSetup(max_seqs=1, graphs=False))
         assert f.items == () and any("multi-head latent attention" in r for r in f.refusals)
+
+
+@pytest.mark.parametrize("L,H,D,T,kg", [(3, 2, 128, 4096, None), (5, 8, 128, 512, 4), (48, 4, 128, 8192, None), (2, 16, 64, 100, None)])
+def test_the_bulk_flush_bound_is_the_pool_s_own(L, H, D, T, kg):
+    """fp8_paged_kv.append_prompt_peak_bytes (pure) equals Fp8PagedKV.append_prompt_peak_bytes on a constructed pool."""
+    from experts4bit_qlora.engines.fp8_paged_kv import append_prompt_peak_bytes
+    kv = Fp8PagedKV(L, H, D, batch=1, max_tokens_per_seq=T, k_groups=kg, device="cpu")
+    assert append_prompt_peak_bytes([(H, D, kv.kgs[i]) for i in range(L)], T) == kv.append_prompt_peak_bytes(T)
+
+
+def test_the_bulk_kv_flush_is_priced_at_the_slot_s_capacity():
+    """Lane SV5: Qwen3-30B-A3B all-VRAM 8 x 8192 on an RTX 4090 ran out of memory at 8,000-token prompts with the flush
+    unpriced. The estimate now carries it at the slot's capacity, as the server's own prefill-graph headroom check does."""
+    from experts4bit_qlora.engines.fp8_paged_kv import append_prompt_peak_bytes
+    topo = describe_moe(_qwen3())                      # 3 pool layers, 2 KV heads, head_dim 32
+    on = estimate_serve_footprint(topo, ServeSetup(max_seqs=2, max_tokens_per_seq=250, graphs=False))
+    off = estimate_serve_footprint(topo, ServeSetup(max_seqs=2, max_tokens_per_seq=250, graphs=False, bulk_kv=False))
+    item = next(i for i in on.items if i.name.startswith("bulk KV flush"))
+    kv = Fp8PagedKV(3, 2, 32, batch=2, max_tokens_per_seq=250, device="cpu")
+    assert item.basis == "derived" and item.bytes == kv.append_prompt_peak_bytes(kv.blocks_per_seq * kv.bt)
+    assert on.device_bytes - off.device_bytes == item.bytes
+    assert ServeSetup(bulk_kv=False).to_env()["E4B_PAGED_BULK_KV"] == "0"
+    assert append_prompt_peak_bytes([], 100) == 0
