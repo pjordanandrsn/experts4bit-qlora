@@ -2480,7 +2480,9 @@ route (≤ 5 %). The phase record is not part of validity: without it, P147 and 
 
 - **P144, P145 and P146 HELD:** a library PR makes `enable_fast_train` compress the expert absmax by default for resident training,
   with the trainer's guards: off under expert offload and the training arena, a model the compressor refuses keeps its fp32 absmax, and
-  `E4B_ABSMAX_DQ=0` turns it off.
+  `E4B_ABSMAX_DQ=0` turns it off. That PR states the evidence scope in its changelog and STATUS (maintainer review, before any box):
+  one model, one RTX 5090, torch 2.12 / triton 3.7 (venv-unsloth). Under the field image's torch 2.8 the packed-row speed of the
+  compressed absmax is unread here, just as bucketed padding's was until amendment 52.
 - **P144 FALSIFIED:** the library default stays fp32. STATUS gives the packed-row cost beside the trainer's default.
 - **P147 HELD:** STATUS says that on packed rows e4b's training-phase memory is within 1 GB of Unsloth's, and that the run-peak gap is
   e4b's evaluation. The next candidate is an opt-in chunked loss for no-grad evaluation. It has to be opt-in, because such a forward
