@@ -183,6 +183,12 @@ Freeze the model before `enable_dense_offload` (`model.requires_grad_(False)`, t
 parameter beside frozen ones is kept resident rather than streamed, and an unfrozen model streams its trainable
 weights with a warning that an optimizer cannot step them.
 
+Training on CUDA, it copies the next layer's frozen weights while the current one computes (`train_prefetch`, on by
+default; `train_prefetch=False` opts out). On an RTX 5090 at 2048 tokens this trained bitwise identically to resident
+at 1.0023× the step time on PCIe gen 5 x16 and 1.0050× on gen 4 x16, and, with the chunked LM loss, fit 2.00× the resident sequence length
+([DQ3](bench/dq3/RESULTS-dq3.md), [DQ5](bench/dq5/RESULTS-dq5.md), [DQ4](bench/dq4/RESULTS-dq4.md)). DQ4 reached
+2.375× with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` set before CUDA starts; the library does not set it.
+
 An arena is baked by `grouped-nf4-gemm`, not by this package; the bake
 tools, and how to bind an arena to a model, are on
 [`docs/solutions/offload-moe-experts-to-cpu-or-nvme.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/offload-moe-experts-to-cpu-or-nvme.md).
@@ -3683,6 +3689,23 @@ quantise it, which changes the model.
 Freeze first (`model.requires_grad_(False)`, then add any adapters). A trainable matrix beside frozen ones (a
 LoRA adapter) stays resident, since an optimizer cannot step a streamed parameter. An unfrozen model streams as
 before, but warns.
+
+Training on CUDA streams with `train_prefetch` by default: each layer's frozen weights are copied on a side stream
+while the previous layer computes, forward and backward (checkpoint recompute included, reentrant or not), with at most
+two layers resident. `train_prefetch=False` falls back to the synchronous single-slot path. Measured on an RTX 5090,
+Qwen3-32B architecture, 2048 tokens, LoRA r16 (bitwise identical to resident in every case):
+
+| link | streamed / resident step time | synchronous / resident |
+|---|---|---|
+| PCIe gen 5 x16 (DQ3) | 1.0023 | 1.18 |
+| PCIe gen 4 x16 (DQ5) | 1.0050 | 1.51 |
+
+On the 32 GB card, with the chunked LM loss, the streamed model trained 2.00× the resident model's longest sequence
+(DQ4: 14336 against 7168 tokens). **Allocator
+fragmentation is the next limit:** under the default CUDA allocator the streamed run hit OOM with about 6 GiB reserved
+but unallocated, and `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (set before CUDA initialises) raised the ratio
+to 2.375×. It is a process-wide setting, so the library leaves it to you. Not measured: gen 3 or x8 links, other
+cards.
 
 **I am serving, not training, and want it faster.**
 `enable_fast(model)` (needs `[fast]`) routes the frozen experts through the grouped kernel
