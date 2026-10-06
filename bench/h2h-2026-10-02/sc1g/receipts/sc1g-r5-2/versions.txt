@@ -1,0 +1,4 @@
+gnf4 0.41.0 @dc8f94abfd868f149178623f6eb403dc8b892b02
+torch 2.8.0+cu128 cuda 12.8
+transformers 5.16.1
+gpt-oss-20b @6cee5e81ee83917806bbde320786a8fb61efebee

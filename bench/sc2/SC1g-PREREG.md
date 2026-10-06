@@ -967,6 +967,48 @@ below F it cannot be told apart from the reference's own arithmetic order.
 
 Each run stays under the $15 no-ask tier. The lane is at **$4.482**.
 
+## A5 box R read (2026-10-06): `R_OK`, four conv windows gradable
+
+**The run.** `sc1g-r5-2` (adertha-receipts `fde4f454`, $0.826) ran on a Vast verified H100 NVL, machine 141791, at $2.07/h,
+under the declared $3.50. It launched from A5's merge `dfc5bdaf`.
+- The rule digest `7f307c39…` and `staged-r.sha256` were re-checked at that SHA before launch.
+- `sc1g-r5-1` was refused at the provider first: no RunPod Secure stock, no instance, $0.
+- The verdict re-derives from the committed receipt (`sc1g_ref.py --reverdict`, pinned by
+  `test_the_a5_read_rederives_and_the_registered_shas_are_rs`).
+
+| check | result | measured (conv1 / conv2 / conv3 / conv4 / wikitext) | bar |
+|---|---|---|---|
+| K0 | OK | all passed on the host | |
+| windows complete | OK | all five | |
+| NF4 fake-quant matches gnf4 | OK | bit-equal | |
+| full artifacts | OK | five `[2048, 201088]` fp16 files, sha-recorded | |
+| floor F (decode vs prefill full KL) | per window | 5.67e-3 / 7.03e-3 / 1.84e-3 / 1.85e-3 / 2.18e-2 | gradable if < 1e-2 |
+| fp16 storage error (max over both pairs) | OK | 6.0e-7 / 4.8e-6 / 3.9e-7 / 9.2e-7 / 8.2e-7 | ≤ 0.1 × F on gradable windows |
+
+- **Gradable: conv1, conv2, conv3, conv4.** Wikitext is the out-of-distribution control, so it is never graded (its F is
+  2.18e-2).
+- **The fp16 storage margin** is about 150× under the bar at its tightest (conv2: 4.8e-6 against 7.0e-4).
+
+**Where the rows are.** They are registered in `bench/sc1/sc1g_ref/ref_full_shas.json`, with R's `r_verdict.json` and
+`r_calib.json`. They live outside git in two places, each re-hashed against R's `SHA256SUMS`:
+- the controller copy: `~/sc1g-ref-full/sc1g-r5-2/` on the mini;
+- the durable copy: QNAP Pool 3, `/share/ZFS19_DATA/sc1g-ref-full/sc1g-r5-2/`.
+
+**Descriptive: the reference is bit-reproducible across hosts.** Every number this run shares with A4's `sc1g-r-8` is
+bit-identical: per window, F, the reference NLL (decode and prefill), the NF4 fake-quant's NLL and its full KL, which is
+25 of 25 values. The two runs differ in:
+- the H100 NVL card;
+- the provider (RunPod, then Vast);
+- the driver (580.126.09, then 595.71.05).
+
+So the floor F is the reference's own decode-vs-prefill arithmetic, not run-to-run noise. Box I's engines are graded
+against a fixed, repeatable function.
+
+**Next, in order.** Box I's proof first (2.0 h guard, three conv1 rows, `--prove-a5`). It prints each engine's masked
+reference mass:
+- if every engine reads zero, the reading box follows;
+- if any engine reads non-zero, a common-support rule with a mass bound is registered on the proof's numbers first.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).

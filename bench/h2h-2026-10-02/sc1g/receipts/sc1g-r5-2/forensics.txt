@@ -1,0 +1,8 @@
+NVIDIA H100 NVL, 95830 MiB, 595.71.05, GPU-933e2fa5-3439-0ad5-64a1-4bfc21090903
+power.limit,clocks.max.sm 400.00 W, 1785 MHz
+Model name:                              INTEL(R) XEON(R) GOLD 6548Y+
+               total        used        free      shared  buff/cache   available
+Mem:             503           7         271           0         223         492
+overlay         320G   77M  320G   1% /
+curl /usr/bin/curl
+hf_cdn_mbps=66.3
