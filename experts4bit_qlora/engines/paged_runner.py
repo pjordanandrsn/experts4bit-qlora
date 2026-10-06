@@ -64,14 +64,30 @@ STATELESS_LAYER_TYPES = frozenset({"mlp", "moe"})
 KEPT_LAYER_TYPES = ATTENTION_LAYER_TYPES | STATELESS_LAYER_TYPES | {linear_state.LINEAR_LAYER_TYPE}
 
 
+def kv_layout_refusal(config) -> str | None:
+    """Why the FP8 paged pool cannot hold this model's K/V, or None. ``Fp8PagedKV`` keeps one head dim per layer for
+    both. Multi-head latent attention (DeepSeek-V2 / V3, Kimi: ``kv_lora_rank``) hands attention keys of
+    ``qk_nope_head_dim + qk_rope_head_dim`` and values of ``v_head_dim``, against a ``head_dim`` that is the rotary
+    width: DeepSeek-V2-Lite's are 192 and 128 against 64, and the first prompt's append refused them."""
+    c = getattr(config, "text_config", None) or config
+    if not getattr(c, "kv_lora_rank", None):
+        return None
+    k = (getattr(c, "qk_nope_head_dim", 0) or 0) + (getattr(c, "qk_rope_head_dim", 0) or 0)
+    return (f"multi-head latent attention (kv_lora_rank {c.kv_lora_rank}): keys {k} and values "
+            f"{getattr(c, 'v_head_dim', None)} wide per head, and the FP8 paged pool keeps one head dim for both")
+
+
 def paged_state_refusal(model) -> str | None:
-    """Why the paged runner refuses ``model``'s state-carrying layers, or None. These are the two rules it applies when
-    it is built:
+    """Why the paged server refuses ``model``, or None: :func:`kv_layout_refusal`, then the runner's rules for
+    state-carrying layers, which it applies when it is built:
     - :func:`layer_plan`: a layer type it keeps no state for;
     - :func:`.linear_state.install`: linear-attention layers its per-slot pool cannot drive. transformers labels
       Mamba-style layers ``linear_attention`` too, and the pool drives Gated DeltaNet only.
 
     It reads the config and module classes only, so a planner can ask on a meta tree."""
+    layout = kv_layout_refusal(getattr(model, "config", None))
+    if layout:
+        return layout
     types = linear_state.layer_types(getattr(model, "config", None))
     if not types:
         return None
