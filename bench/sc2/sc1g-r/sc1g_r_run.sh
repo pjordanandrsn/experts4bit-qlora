@@ -36,9 +36,41 @@ FREE_GB=$(df -BG --output=avail /root 2>/dev/null | tail -1 | tr -dc 0-9)
 if [ "${FREE_GB:-0}" -lt "$MIN_DISK_GB" ]; then say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (host-limited, not a result)"; echo "refused: disk" > REFUSAL; finish 13; fi
 if [ "${VRAM_MB:-0}" -lt $(( MIN_VRAM_GB * 1000 )) ]; then say "REFUSED: card holds ${VRAM_MB} MiB < ${MIN_VRAM_GB} GB -- not the registered class"; echo "refused: vram class" > REFUSAL; finish 15; fi
 say "egress pre-flight: HF CDN, 50 MB range, 20 s cap (floor ${MIN_MBPS} MB/s)"
-BPS=$(curl -sSL --max-time 20 -r 0-52428800 -o /dev/null -w '%{speed_download}' https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors 2>/dev/null || echo 0)
-MBPS=$(python3 -c "print(round(float('${BPS:-0}')/1e6,1))"); say "HF CDN ${MBPS} MB/s"; echo "hf_cdn_mbps=$MBPS" >> forensics.txt
-if python3 -c "import sys; sys.exit(0 if float('${MBPS:-0}') < float('$MIN_MBPS') else 1)"; then say "REFUSED: egress ${MBPS} MB/s < ${MIN_MBPS} (host-limited)"; echo "refused: egress" > REFUSAL; finish 14; fi
+# Python, not curl: sc1g-r-6's curl probe read 0.0 MB/s on a RunPod H100 NVL with its stderr discarded, so whether curl was
+# missing or the host could not reach the CDN is unknown. Same URL, 50 MB range, 20 s cap and floor; status, final host and
+# any error go to logs/egress.log, and curl's presence to forensics.txt. Two outcomes, never conflated: a probe that RAISES
+# before reading any byte (HTTP 403/429, TLS, DNS, an import) prints ERROR and exits rc 9 (harness/host fault, reason logged);
+# rc 14 means only "measured slow": bytes were read, under the floor (a timeout mid-read included). The SC1G_R_EGRESS_* overrides
+# exist for the tests; the box never sets them.
+echo "curl $(command -v curl || echo MISSING)" >> forensics.txt
+MBPS=$(SC1G_R_EGRESS_URL=${SC1G_R_EGRESS_URL:-https://huggingface.co/bert-base-uncased/resolve/main/model.safetensors} \
+       SC1G_R_EGRESS_TIMEOUT=${SC1G_R_EGRESS_TIMEOUT:-20} SC1G_R_EGRESS_CAP_S=${SC1G_R_EGRESS_CAP_S:-20} python3 - 2>> logs/egress.log <<'PYE'
+import os, sys, time, urllib.request
+url, cap = os.environ["SC1G_R_EGRESS_URL"], float(os.environ["SC1G_R_EGRESS_CAP_S"])
+req = urllib.request.Request(url, headers={"Range": "bytes=0-52428800", "User-Agent": "sc1g-r-egress"})
+t0, n, err = time.time(), 0, None
+try:
+    with urllib.request.urlopen(req, timeout=float(os.environ["SC1G_R_EGRESS_TIMEOUT"])) as r:
+        print(f"egress status {r.status} final {r.geturl()[:100]}", file=sys.stderr)
+        while time.time() - t0 < cap:
+            b = r.read(1 << 20)
+            if not b:
+                break
+            n += len(b)
+except Exception as e:
+    err = e
+    print(f"egress probe error after {n} bytes: {e!r}"[:400], file=sys.stderr)
+print("ERROR" if err is not None and n == 0 else round(n / max(time.time() - t0, 1e-3) / 1e6, 1))
+PYE
+)
+MBPS=${MBPS:-ERROR}; WHY=$(tail -1 logs/egress.log 2>/dev/null | cut -c1-200)
+if [ "$MBPS" = ERROR ]; then
+  say "REFUSED: the egress probe failed before reading any byte (harness/host fault, not a slow host): $WHY"
+  echo "hf_cdn_mbps=ERROR" >> forensics.txt; echo "refused: egress probe error: $WHY" > REFUSAL; finish 9; fi
+say "HF CDN ${MBPS} MB/s ($WHY)"; echo "hf_cdn_mbps=$MBPS" >> forensics.txt
+if python3 -c "import sys; sys.exit(0 if float('$MBPS') < float('$MIN_MBPS') else 1)"; then
+  say "REFUSED: egress ${MBPS} MB/s < ${MIN_MBPS} (host-limited): $WHY"
+  echo "refused: egress $MBPS MB/s" > REFUSAL; finish 14; fi
 say "install transformers 5.16.1 (+ the reference's deps) and gnf4 @$GNF4_SHA (the NF4 cross-check only)"
 perl -e 'alarm 1200; exec @ARGV' python -m pip install -q --no-input --prefer-binary "transformers==5.16.1" accelerate safetensors \
   "huggingface_hub>=0.23" numpy > logs/pip.log 2>&1 || { tail -4 logs/pip.log; say "PIP FAIL"; finish 9; }
