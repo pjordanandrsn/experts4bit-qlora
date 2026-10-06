@@ -1,0 +1,11 @@
+{
+ "k": 64,
+ "metric": "sc1g_kl KL65",
+ "positions": 2048,
+ "prompt_len": 512,
+ "reference": "gpt-oss-20b MXFP4 dequant-to-bf16 (P44)",
+ "sha256": "7c6b89d6f76782af910b0df0db9b0731c833f4ec19792bfcaa9db4988f0452d0",
+ "shape": "decode",
+ "source": "conv2",
+ "steps": 2048
+}

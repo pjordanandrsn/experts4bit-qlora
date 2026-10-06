@@ -22,6 +22,8 @@ the NF4 fake-quant's, so the flattery hypothesis's direction is read off the ref
 
   sc1g_ref.py --model openai/gpt-oss-20b --rev 6cee5e81... --windows DIR --shas SHAS.json --k0 k0.json --out DIR
   sc1g_ref.py --self-test       (CPU: a tiny random gpt-oss through the whole flow)
+  sc1g_ref.py --reverdict DIR [--k0 K0.json]   (no GPU: R's verdict re-derived from DIR's r_calib.json, the K0 receipt and
+                                               the artifacts' shas; exit 1 unless it equals DIR/r_verdict.json)
 """
 from __future__ import annotations
 
@@ -200,6 +202,23 @@ def verdict(res: dict, k0: dict | None, srcs) -> dict:
             "artifacts": res.get("artifacts", {})}
 
 
+def reverdict(d: str, k0_path: str | None = None, srcs=SRCS) -> dict:
+    """R's verdict from its committed receipt alone: the same `verdict` over r_calib.json and the K0 receipt, plus each
+    ref_<src>.npz hashing to the sha R recorded. Returns {verdict, matches_recorded, artifact_mismatch}."""
+    res = json.load(open(os.path.join(d, "r_calib.json")))
+    k0p = k0_path or next((c for c in (os.path.join(d, "k0.json"), os.path.join(d, "..", "k0.json")) if os.path.exists(c)), None)
+    k0 = json.load(open(k0p)) if k0p else None
+    v = verdict(res, k0, srcs)
+    bad = [s for s, sha in (res.get("artifacts") or {}).items()
+           if not os.path.exists(os.path.join(d, f"ref_{s}.npz")) or KL.file_sha(os.path.join(d, f"ref_{s}.npz")) != sha]
+    if bad:
+        v = dict(v, verdict="R_NOT_OK", artifact_mismatch=bad)
+    rec_p = os.path.join(d, "r_verdict.json")
+    recorded = json.load(open(rec_p)) if os.path.exists(rec_p) else None
+    return {"verdict": v, "matches_recorded": (not bad and recorded is not None and recorded.get("verdict") == v["verdict"]
+                                               and recorded.get("checks") == v["checks"]), "artifact_mismatch": bad}
+
+
 def _tiny_model():
     from transformers import GptOssConfig, GptOssForCausalLM
     cfg = GptOssConfig(vocab_size=320, hidden_size=64, intermediate_size=64, num_hidden_layers=2, num_attention_heads=4,
@@ -244,6 +263,16 @@ def self_test() -> int:
         cases.append(("no K0 receipt -> VOID, not R_OK", verdict(res, None, list(wins))["verdict"] == "R_NOT_OK"))
         bad = dict(res, windows={k: dict(x, floor_F=0.5) for k, x in res["windows"].items()})
         cases.append(("floor over 1e-2 -> UNREAD", verdict(bad, {"all_passed": True}, list(wins))["checks"]["floor_F"] == "UNREAD"))
+        # --reverdict: the committed receipt re-derives R's own verdict; a tampered artifact cannot
+        json.dump(res, open(os.path.join(d, "r_calib.json"), "w"))
+        json.dump({"all_passed": True}, open(os.path.join(d, "k0.json"), "w"))
+        json.dump(verdict(res, {"all_passed": True}, list(wins)), open(os.path.join(d, "r_verdict.json"), "w"))
+        rv = reverdict(d, None, list(wins))
+        with open(os.path.join(d, "ref_conv1.npz"), "ab") as f:
+            f.write(b"x")
+        rv2 = reverdict(d, None, list(wins))
+        cases.append(("reverdict re-derives; a tampered artifact is caught", rv["matches_recorded"] and not rv["artifact_mismatch"]
+                      and rv2["artifact_mismatch"] == ["conv1"] and not rv2["matches_recorded"]))
     bad_cases = [n for n, ok in cases if not ok]
     print(f"sc1g_ref self-test {'OK' if not bad_cases else 'FAILED ' + str(bad_cases)} ({len(cases)} cases)")
     return 0 if not bad_cases else 1
@@ -260,9 +289,18 @@ def main(argv=None) -> int:
     ap.add_argument("--srcs", default=",".join(SRCS))
     ap.add_argument("--out")
     ap.add_argument("--no-nf4-pair", action="store_true")
+    ap.add_argument("--reverdict", default="", help="DIR: re-derive R's verdict from its committed receipt (no GPU)")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
+    if a.reverdict:
+        srcs = [s for s in a.srcs.split(",") if s]
+        rv = reverdict(a.reverdict, a.k0, srcs)
+        v = rv["verdict"]
+        print(f"SC1G_R_VERDICT {v['verdict']} " + " ".join(f"{k}={x}" for k, x in v["checks"].items())
+              + f" F_max={v['floor_F_max']} self_min={v['calib_self_min']} nf4_min={v['calib_nf4_min']} cov_min={v['coverage_min']}"
+              + f" matches_recorded={rv['matches_recorded']} artifact_mismatch={rv['artifact_mismatch']}", flush=True)
+        return 0 if rv["matches_recorded"] else 1
     if not (a.windows and a.shas and a.out and a.rev):
         ap.error("--windows, --shas, --rev and --out are required")
     srcs = [s for s in a.srcs.split(",") if s]

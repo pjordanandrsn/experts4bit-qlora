@@ -1,0 +1,72 @@
+NVIDIA H100 NVL, 95830 MiB, 580.126.09, GPU-89033ced-e223-c717-7c3f-f0584345bd89
+power.limit,clocks.max.sm 310.00 W, 1785 MHz
+Model name:                           AMD EPYC 9374F 32-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:            1511          69         809          84         631        1347
+overlay         320G  123M  320G   1% /
+[2026-10-06T01:00:44Z] sc1g_r: egress pre-flight: HF CDN, 50 MB range, 20 s cap (floor 20 MB/s)
+[2026-10-06T01:00:45Z] sc1g_r: HF CDN 128.8 MB/s (egress status 206 final https://us.aws.cdn.hf.co/xet-bridge-us/621ffdc036468d709f174338/44172b48ce7a9d951000a9d76ae331b155df)
+[2026-10-06T01:00:45Z] sc1g_r: install transformers 5.16.1 (+ the reference's deps) and gnf4 @dc8f94abfd868f149178623f6eb403dc8b892b02 (the NF4 cross-check only)
+tripwire OK: torch 2.8.0+cu128 transformers 5.16.1 gnf4 0.41.0
+gnf4 0.41.0 @dc8f94abfd868f149178623f6eb403dc8b892b02
+torch 2.8.0+cu128 cuda 12.8
+transformers 5.16.1
+gpt-oss-20b @6cee5e81ee83917806bbde320786a8fb61efebee
+K0 all_passed
+[2026-10-06T01:00:59Z] sc1g_r: fetch openai/gpt-oss-20b @ 6cee5e81ee83917806bbde320786a8fb61efebee
+[2026-10-06T01:03:23Z] sc1g_r: PIN OK 6cee5e81ee83917806bbde320786a8fb61efebee
+[2026-10-06T01:03:23Z] sc1g_r: sc1g_ref.py: reference (dequant-to-bf16), five windows decode-shaped, the two calibration pairs, R's verdict
+SC1G_R windows conv1=3753e997a334 conv2=9bf650b837c4 conv3=997bc7c31f71 conv4=e8415e7aceac wikitext=506d7ca8a492
+SC1G_R reference loaded in 5 s
+R conv1: nll dec 0.88386 pre 0.86420 F 5.668e-03 self ratio 0.8272347905179668 cov 0.96120 sha 09049c1cbcbf
+R conv2: nll dec 1.82099 pre 1.84033 F 7.030e-03 self ratio 0.8410733666633398 cov 0.92901 sha 7c6b89d6f767
+R conv3: nll dec 0.89487 pre 0.89207 F 1.838e-03 self ratio 0.8817691133226014 cov 0.97773 sha 106654b4ef42
+R conv4: nll dec 1.58991 pre 1.58727 F 1.853e-03 self ratio 0.8756809310945874 cov 0.96610 sha cfdba8a2ba23
+R wikitext: nll dec 6.43518 pre 6.29469 F 2.182e-02 self ratio 0.7909060810197893 cov 0.77301 sha 2684afe9d9e4
+R conv1: nf4 KL_full 1.080e-01 ratio 0.7928678764133471
+R conv2: nf4 KL_full 1.394e-01 ratio 0.7459354361490631
+R conv3: nf4 KL_full 2.115e-02 ratio 0.9104190814908896
+R conv4: nf4 KL_full 2.266e-02 ratio 0.8858653221666216
+R wikitext: nf4 KL_full 9.890e-02 ratio 0.7846418629104372
+SC1G_R_VERDICT R_NOT_OK k0_controls=OK windows_complete=OK floor_F=UNREAD calib_self=UNREAD calib_nf4=UNREAD coverage=UNREAD nf4_matches_gnf4=OK F_max=0.02181549683372932 self_min=0.7909060810197893 nf4_min=0.7459354361490631 cov_min=0.7730052845806039
+SC1G_R_NLL conv1 reference_decode=0.88386 reference_prefill=0.86420 nf4_fakequant_prefill=0.7463835219867466
+SC1G_R_NLL conv2 reference_decode=1.82099 reference_prefill=1.84033 nf4_fakequant_prefill=1.7014693527722033
+SC1G_R_NLL conv3 reference_decode=0.89487 reference_prefill=0.89207 nf4_fakequant_prefill=0.9331591932689024
+SC1G_R_NLL conv4 reference_decode=1.58991 reference_prefill=1.58727 nf4_fakequant_prefill=1.5954660466079098
+SC1G_R_NLL wikitext reference_decode=6.43518 reference_prefill=6.29469 nf4_fakequant_prefill=6.411360916665513
+ARTIFACT 09049c1cbcbf2fcc49f549fccf2ce96710359ff6ff8b6501c97b8000930163e2  ref_conv1.npz
+ARTIFACT 7c6b89d6f76782af910b0df0db9b0731c833f4ec19792bfcaa9db4988f0452d0  ref_conv2.npz
+ARTIFACT 106654b4ef4263299cdad770c9e70363bd6253b1f26b074196640114381b0893  ref_conv3.npz
+ARTIFACT cfdba8a2ba239c76fb5579c31ef4096bfd28768fafffacea1870caff700235a1  ref_conv4.npz
+ARTIFACT 2684afe9d9e41661e6adb2a5b1961f742177b2afcb1891326ad39153704ade22  ref_wikitext.npz
+[2026-10-06T01:08:47Z] sc1g_r: ----- summary -----
+gnf4 0.41.0 @dc8f94abfd868f149178623f6eb403dc8b892b02
+torch 2.8.0+cu128 cuda 12.8
+transformers 5.16.1
+gpt-oss-20b @6cee5e81ee83917806bbde320786a8fb61efebee
+K0 all_passed
+FETCH gpt-oss-20b @6cee5e81ee83917806bbde320786a8fb61efebee
+SC1G_R windows conv1=3753e997a334 conv2=9bf650b837c4 conv3=997bc7c31f71 conv4=e8415e7aceac wikitext=506d7ca8a492
+SC1G_R reference loaded in 5 s
+R conv1: nll dec 0.88386 pre 0.86420 F 5.668e-03 self ratio 0.8272347905179668 cov 0.96120 sha 09049c1cbcbf
+R conv2: nll dec 1.82099 pre 1.84033 F 7.030e-03 self ratio 0.8410733666633398 cov 0.92901 sha 7c6b89d6f767
+R conv3: nll dec 0.89487 pre 0.89207 F 1.838e-03 self ratio 0.8817691133226014 cov 0.97773 sha 106654b4ef42
+R conv4: nll dec 1.58991 pre 1.58727 F 1.853e-03 self ratio 0.8756809310945874 cov 0.96610 sha cfdba8a2ba23
+R wikitext: nll dec 6.43518 pre 6.29469 F 2.182e-02 self ratio 0.7909060810197893 cov 0.77301 sha 2684afe9d9e4
+R conv1: nf4 KL_full 1.080e-01 ratio 0.7928678764133471
+R conv2: nf4 KL_full 1.394e-01 ratio 0.7459354361490631
+R conv3: nf4 KL_full 2.115e-02 ratio 0.9104190814908896
+R conv4: nf4 KL_full 2.266e-02 ratio 0.8858653221666216
+R wikitext: nf4 KL_full 9.890e-02 ratio 0.7846418629104372
+SC1G_R_VERDICT R_NOT_OK k0_controls=OK windows_complete=OK floor_F=UNREAD calib_self=UNREAD calib_nf4=UNREAD coverage=UNREAD nf4_matches_gnf4=OK F_max=0.02181549683372932 self_min=0.7909060810197893 nf4_min=0.7459354361490631 cov_min=0.7730052845806039
+SC1G_R_NLL conv1 reference_decode=0.88386 reference_prefill=0.86420 nf4_fakequant_prefill=0.7463835219867466
+SC1G_R_NLL conv2 reference_decode=1.82099 reference_prefill=1.84033 nf4_fakequant_prefill=1.7014693527722033
+SC1G_R_NLL conv3 reference_decode=0.89487 reference_prefill=0.89207 nf4_fakequant_prefill=0.9331591932689024
+SC1G_R_NLL conv4 reference_decode=1.58991 reference_prefill=1.58727 nf4_fakequant_prefill=1.5954660466079098
+SC1G_R_NLL wikitext reference_decode=6.43518 reference_prefill=6.29469 nf4_fakequant_prefill=6.411360916665513
+ARTIFACT 09049c1cbcbf2fcc49f549fccf2ce96710359ff6ff8b6501c97b8000930163e2  ref_conv1.npz
+ARTIFACT 7c6b89d6f76782af910b0df0db9b0731c833f4ec19792bfcaa9db4988f0452d0  ref_conv2.npz
+ARTIFACT 106654b4ef4263299cdad770c9e70363bd6253b1f26b074196640114381b0893  ref_conv3.npz
+ARTIFACT cfdba8a2ba239c76fb5579c31ef4096bfd28768fafffacea1870caff700235a1  ref_conv4.npz
+ARTIFACT 2684afe9d9e41661e6adb2a5b1961f742177b2afcb1891326ad39153704ade22  ref_wikitext.npz
+[2026-10-06T01:08:47Z] sc1g_r: TP_DONE rc=31

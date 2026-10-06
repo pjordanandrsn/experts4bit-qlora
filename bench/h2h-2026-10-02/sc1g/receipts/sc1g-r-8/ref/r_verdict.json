@@ -1,0 +1,23 @@
+{
+ "artifacts": {
+  "conv1": "09049c1cbcbf2fcc49f549fccf2ce96710359ff6ff8b6501c97b8000930163e2",
+  "conv2": "7c6b89d6f76782af910b0df0db9b0731c833f4ec19792bfcaa9db4988f0452d0",
+  "conv3": "106654b4ef4263299cdad770c9e70363bd6253b1f26b074196640114381b0893",
+  "conv4": "cfdba8a2ba239c76fb5579c31ef4096bfd28768fafffacea1870caff700235a1",
+  "wikitext": "2684afe9d9e41661e6adb2a5b1961f742177b2afcb1891326ad39153704ade22"
+ },
+ "calib_nf4_min": 0.7459354361490631,
+ "calib_self_min": 0.7909060810197893,
+ "checks": {
+  "calib_nf4": "UNREAD",
+  "calib_self": "UNREAD",
+  "coverage": "UNREAD",
+  "floor_F": "UNREAD",
+  "k0_controls": "OK",
+  "nf4_matches_gnf4": "OK",
+  "windows_complete": "OK"
+ },
+ "coverage_min": 0.7730052845806039,
+ "floor_F_max": 0.02181549683372932,
+ "verdict": "R_NOT_OK"
+}
