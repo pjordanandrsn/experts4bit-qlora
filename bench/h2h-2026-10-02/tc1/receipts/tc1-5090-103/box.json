@@ -1,0 +1,20 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-103",
+ "instance_id": "54449986",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "590.48.01",
+ "cpu": "AMD Ryzen Threadripper 3990X 64-Core Processor",
+ "nproc": 128,
+ "mem_total_kb": "263750200",
+ "cgroup_memory_max": "183335124992",
+ "disk_root": "overlay         3.6T  2.5T  949G  73% /",
+ "hostname": "c2644294b965",
+ "cgroup_cpu_max": "6143999 100000",
+ "affinity_cpus": 128,
+ "cgroup_cpuset_effective": "0-127",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}

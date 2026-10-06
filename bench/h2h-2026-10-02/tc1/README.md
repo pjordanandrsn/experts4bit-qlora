@@ -98,6 +98,26 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 49 (2026-10-06): buckets at the field recipe read UNTESTED -- the single block's own draws came 12-21 % apart
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 49. One RTX 5090 (`tc1-5090-103`, AMD Ryzen Threadripper
+3990X, a 61-CPU quota, Vast machine 55583), TC1's field recipe, e4b `9170c92` with grouped-nf4-gemm `d3e7788` (#490), venv-unsloth, e4b's
+defaults, `NF4_QLORA_PAD_BUCKETS=0` against `=1`. Read: [`RESULTS-tc1-fieldbk.md`](RESULTS-tc1-fieldbk.md).
+
+- **P119–P122 UNTESTED.** The single block's draws were unstable on both arms: matched 3.524 / 4.342 s/step (20.8 % apart), shipped 2.970 /
+  3.358 (12.3 %). The bucketed draws were stable: matched 4.218 / 4.159, shipped 3.685 / 3.709. Every arm VALID. The engagement held: 49,152
+  bucketed calls and no single-block call on the bucketed arms, the reverse on the others, no loop on either.
+- **Recorded, not read: the direction is not established.**
+  - On the shipped arm, both bucketed draws (3.685, 3.709) were slower than both single-block draws (2.970, 3.358). But they ran at load1
+    4.38 and 4.68 (the second a re-run after a VOID at 78.11), against 1.82 and 1.65.
+  - On the matched arm, the slower single-block draw (4.342, load1 3.78) was slower than both bucketed draws (4.218, 4.159). The one
+    load-matched pair, 4.159 against 3.524 at load1 1.82 each, has buckets slower.
+  - If buckets do cost the host-bound field step, it is through the host-side bucket plan and the extra launches. The re-ask is what can
+    show it.
+  - The matched peak read 27.19 GB bucketed against 27.49 / 27.51.
+- **By amendment 49's rule they stay opt-in pending a re-ask.** The re-ask will record each call's single block, its rows and bytes, so
+  a size gate can be placed between the field recipe's blocks and the packed rows' from measured sizes.
+
 ## Amendment 48, re-ask (2026-10-06): bucketed padding takes 4.29 GB off e4b's packed-row peak and makes the step 11 % faster
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 48 and its re-ask note. One RTX 5090 (`tc1-5090-102`, Intel
