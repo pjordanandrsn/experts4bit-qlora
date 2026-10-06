@@ -98,6 +98,35 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 47 (2026-10-06): on packed rows e4b's peak is 7.47 GB above Unsloth's, and 6.1 GB of it is the padded LoRA delta padding every expert to the hottest
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 47. One RTX 5090 (`tc1-5090-100`, AMD EPYC 7B13, Vast
+machine 145701), amendment 23's census (`--mem-census 1`) on amendment 39's packed rows (4,096 real tokens, micro-batch 1 × accum 4), 20
+steps, one draw per arm in venv-unsloth (e4b `dfc5bda`, grouped-nf4-gemm `a93b80c`). No speed is read. Read:
+[`RESULTS-tc1-memc4k.md`](RESULTS-tc1-memc4k.md). The first draw, `tc1-5090-99`, was refused before any rental: another run's partial
+copy of grouped-nf4-gemm's source held a `receipt.json` the store could not reconcile.
+
+| peak allocated (GB) | e4b defaults | e4b, `E4B_ABSMAX_DQ=1` + `NF4_QLORA_COMPACT_DELTA=1` | Unsloth |
+|---|---|---|---|
+| static classes (all equal but the absmax) | 24.49 | 23.14 | 23.14 |
+| expert absmax (inside the static line) | 1.812 | 0.460 | 0.460 |
+| transient (live at the peak) | **7.82** | **6.40** | 1.73 |
+| **peak** | **32.34** | **29.54** | **24.86** |
+
+- **P112 HELD.** The census attributes at least 99.94 % of each arm's peak to named groups.
+- **P113 HELD: e4b's defaults peak 7.47 GB above Unsloth's.** 1.35 GB is the fp32 expert absmax. The other 6.10 GB is transient,
+  almost all of it grouped-nf4-gemm's padded LoRA delta (`_lora_delta_padded`: 3.35 GB at its zero-padded input block, 2.47 GB at its
+  products).
+- **P114 FALSIFIED: with both levers e4b is still 4.68 GB above** (registered ≤ 3.0). The double-quantized absmax removed its 1.35 GB.
+  The compact delta took only 1.42 GB off the transient. What is left is the compact node's own forward: its zero-padded input block
+  `[G·widest, K]` (1.17 GB, `nf4_qlora.py:490`) and its padded output `[G, widest, N]` (3.11 GB, `:493`), fp32 on this matched arm.
+- **Why the block is that wide.** Both paths pad every expert's rows to the hottest expert's count (`widest`). The sizes fit the down
+  projection (K 768, N 2048) at about 380,000 padded rows against 32,768 routed rows (4,096 tokens × top-8): about **11.6× padding**.
+  The same output unpadded is about 0.27 GB. The compact delta changes what is saved for backward, not how wide the block is. At the
+  field recipe the hottest expert is far less hot, which is why amendment 23 saw 0.43 GB there.
+- **As registered, this is a measurement.** The next registration targets the padding itself. A delta that pads each expert only to
+  its own group's widest (bucketed by row count) would, if this arithmetic holds, cut the block several-fold at 4,096 tokens.
+
 ## Amendment 45 (2026-10-05): the container held to 31 CPUs ran 128 threads, but the threads A/B reads UNTESTED on the busiest host
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 45. One RTX 5090 (`tc1-5090-98`, AMD EPYC 7B13, Vast

@@ -10781,6 +10781,31 @@
         "receipts/experts4bit-qlora/2026-10-05/tc1-5090-95/tc1/"
       ],
       "notes": "Vast invoiced $2.65. Caveats: three of the six standing attempts ran above the 6.0 load gate on a shared host, both of e4b's quoted draws among them (machine 145701; standing load1 e4b 8.0 / 52.2, Unsloth 4.7 / 18.2, venv-e4b 5.7 / 3.6; the draws stayed within 0.3 % and 0.7 %), and amendment 43's bands were set with amendment 40's 1.43 in view, so this is a replication, not a blind test."
+    },
+    {
+      "id": "e4b.train.memory-census.packed-4k.qwen3.5090.2026-10-06",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 47 (#835), one rented RTX 5090 (tc1-5090-100, AMD EPYC 7B13): the CUDA allocator census (--mem-census 1) on packed rows of 4,096 real tokens (micro-batch 1 x accum 4), Qwen3-30B-A3B's matched set (fp32 adapters), one draw per arm in venv-unsloth (torch 2.12.1+cu130). At least 99.94 % of every peak attributed (P112 HELD). Peak allocated: e4b library defaults 32.337 GB, e4b with E4B_ABSMAX_DQ=1 + NF4_QLORA_COMPACT_DELTA=1 29.544 GB, Unsloth 2026.9.14 24.864 GB. e4b's defaults sit 7.473 GB above Unsloth (P113 HELD, band [5, 10]): 1.352 GB the fp32 expert absmax, 6.095 GB transient -- grouped-nf4-gemm's padded LoRA delta (_lora_delta_padded: 3.35 GB at the zero-padded input block, 2.47 GB at its products). With both levers e4b is still 4.680 GB above (P114 FALSIFIED, registered <= 3.0): the compact node's own zero-padded input block (1.17 GB) and padded output (3.11 GB). Every expert is padded to the hottest expert's rows: about 380,000 padded rows against 32,768 routed rows at the down projection (about 11.6x). Every static class other than the absmax is byte-for-byte equal between the frameworks. No speed is read.",
+      "value": 7.473,
+      "unit": "GB, e4b defaults' peak allocated minus Unsloth's, packed 4,096-token rows (the census's peak window)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-100: instance 54415375, AMD EPYC 7B13, Vast machine 145701); e4b @ dfc5bda + grouped-nf4-gemm @ a93b80c (0.41.0) in venv-unsloth, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3memc4k (TC1 amendment 47): amendment 39's packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), 20 steps, --mem-census 1, the per-expert loop a recorded route; validity and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-memc4k.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-100/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1-5090-100/tc1/"
+      ],
+      "notes": "Vast invoiced $1.05."
     }
   ]
 }
