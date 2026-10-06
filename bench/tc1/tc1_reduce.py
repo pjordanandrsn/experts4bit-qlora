@@ -1108,7 +1108,8 @@ def score_fieldauto(F, fam=FIELDAUTO_FAM):
 
 
 def pad_buckets_why(tag, r, sides=("pk0", "pk1"), need_chunked=True, torch_prefix="2.12"):
-    """Amendment 48's engagement predicate: the arm ran torch 2.12 (venv-unsloth); grouped-nf4-gemm's per-path counters
+    """Amendments 48 / 52's engagement predicate: the arm ran the torch its family names (torch_prefix: 2.12 = venv-unsloth for
+    amendment 48, 2.8 = venv-e4b for amendment 52); grouped-nf4-gemm's per-path counters
     (lean_ab.lora_path_calls) show the delta body its tag names -- pk1: bucketed calls and no single-block padded call; pk0: single-block
     padded calls and no bucketed call; and the chunked LM loss served the packed rows (e4b's default `auto`). Empty string = engaged."""
     r = r or {}

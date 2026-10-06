@@ -2221,8 +2221,12 @@ Engagement: as amendment 48, with `env.torch` 2.8.*.
 
 - **P130–P133 HELD:** buckets cost torch 2.8 nothing on packed rows. P127's gap lies elsewhere, and the read says where to look next.
 - **P130 or P131 FALSIFIED:** buckets cost torch 2.8 on packed rows. grouped-nf4-gemm's `auto` default then needs a gate on that
-  environment or a fix. The read names the arm, and the next registration is the gate or the fix.
-- **P132 or P133 FALSIFIED:** the read names it; the torch-2.12 default is not touched by a torch-2.8 reading alone.
+  environment or a fix. The read names the arm, and the next registration is the gate or the fix. Until that registration reads, the
+  read itself adds one line to e4b's `docs/STATUS.md` and grouped-nf4-gemm's `docs/STATUS.md`: packed-row training under torch 2.8
+  should set `NF4_QLORA_PAD_BUCKETS=0`, with the measured ratio. That line is docs only, and the default does not change on it.
+- **P132 or P133 FALSIFIED:** the read names it; the torch-2.12 default is not touched by a torch-2.8 reading alone. A P133 miss is
+  a numerics question, not a speed one, so the next step is a $0 correctness check of the bucketed delta under torch 2.8 / triton 3.4
+  on the A2000, before any rented box.
 - **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. About $1.5 with the download; this is in the
