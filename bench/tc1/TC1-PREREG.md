@@ -2034,3 +2034,9 @@ not engaged.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $3 with the download;
 this is in the standing no-ask tier.
+
+**The re-ask** (2026-10-06T05:14Z, after the first box's read, before it runs). The first box, `tc1-5090-101`, read every `_pk1` arm VOID. The
+arm's `lora_loop_share` divided the loop's calls by the sum of loop, padded and grouped_mm calls, and grouped-nf4-gemm#490's `padded_bucketed`
+calls were not in that sum, so the loop read 1.000 where it served 1.5 % of calls. `tc1_arm.py` now sums every `lora_path_*` counter. The
+re-ask is the same box (token, arms, order, steps, gate, predictions and decision rules unchanged) on the fixed arm, on a host other than
+130223.
