@@ -111,8 +111,9 @@ grouped-nf4-gemm `d3e7788` (#490), packed 4,096-token rows, venv-unsloth, e4b's 
 
 - **All four HELD.** Held-out at N moves −0.0004 (matched) and +0.0000 (shipped) (P118). The host was quiet: every attempt ran first time,
   at load1 1.3–1.4.
-- **Engagement as recorded.** Every bucketed arm made 31,758–31,822 bucketed calls and no single-block call, and the reverse on the other
-  side. The per-expert loop took 1.6–2.6 % of a step's calls on both sides, as `auto`'s rule still sizes the single block.
+- **Engagement as recorded** (`lean_ab.lora_path_calls`, whole run). Every bucketed arm made 31,755–31,822 bucketed calls and no
+  single-block call, and the reverse on the other side. The per-expert loop took 0.8–2.9 % of a step's calls on both sides, peaking at
+  2.6–2.9 % (amendment 43's 5 % rule reads the peak); over the whole run it was 1.3–1.6 %. `auto`'s rule still sizes the single block.
 - **It is faster, not only lighter.** At 4,096 tokens the single block computes and moves about 11× the routed rows; the buckets at most
   2×. The fp32 arm gains most: its block is twice the bytes. The shipped arm's peak does not move: with bf16 adapters its peak is set
   elsewhere in the step.
