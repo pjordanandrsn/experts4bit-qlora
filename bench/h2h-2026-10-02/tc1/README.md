@@ -98,6 +98,36 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 54 (2026-10-06): neither remedy moves the step on a host where torch 2.8 is not host-bound (P137, P138 FALSIFIED); the ladder does remove `bmm`'s per-shape host cost
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 54. One RTX 5090 (`tc1-5090-111`, AMD Ryzen Threadripper
+PRO 7965WX, a 23-CPU quota, Vast machine 151831). e4b `aeb5bd6`, grouped-nf4-gemm `71847e5` (#498, the ladder), packed 4,096-token rows,
+40 load-gated steps, every attempt first time at load1 3.2–4.6. It ran e4b's matched arm in venv-e4b (torch 2.8.0, triton 3.4.0) at its
+defaults, profiled on steps 3–5. Read: [`RESULTS-tc1-ladder28.md`](RESULTS-tc1-ladder28.md).
+
+| side | s/step, timed (two draws) | peak | device ms per step | `aten::bmm` CPU self time per call | nvidia-smi median util |
+|---|---|---|---|---|---|
+| `c0`: the defaults | 10.507 / 10.492 | 28.18 GB | 10,402 / 10,410 | ~145 / ~150 µs | 98 % |
+| `c1`: `CUBLASLT_HEURISTICS_CACHE_CAPACITY=262144` | 10.477 / 10.446 | 28.18 GB | 10,403 / 10,451 | ~136 / ~139 µs | 98 % |
+| `c2`: `NF4_QLORA_PAD_BUCKETS_LADDER=1` | 10.584 / 10.632 | 28.50 / 28.53 GB | 10,583 / 10,646 | ~14 / ~17 µs | 99 % |
+
+- **P137 FALSIFIED: the ladder steps 1.010** [1.007, 1.013] of the defaults' time (registered ≤ 0.95).
+- **P138 FALSIFIED: the bigger cuBLASLt cache steps 0.996** [0.994, 0.999] (registered ≤ 0.97).
+- **P139 HELD:** held-out at N moves −0.0002 (`c1`) and −0.0001 (`c2`). **P140 HELD:** the ladder's matched peak rises 0.335 GB (≤ 1.5).
+- **This host was not host-bound at the defaults, so neither remedy had host time to recover.** `c0`'s device time is 99 % of its timed
+  step, and nvidia-smi reads 98 %. The same configuration with the same code read 12.55 s on amendment 53's host, a Threadripper PRO
+  3955WX with a 15-CPU quota: 0.850 of the step was device time there. Here it is 10.50 s. Device time differs by 2.5 % between the two,
+  so nearly all of the difference is host idle. These are cross-host comparisons, reported, not scored. Torch 2.8's extra time at e4b's
+  defaults on packed rows depends on the host.
+- **The ladder does what it was built for**, reported, not scored. It cuts `aten::bmm`'s CPU self time per call about tenfold, from ~145–150 µs
+  to ~14–17 µs, over the same ~26,700 calls a step. On this GPU-bound host the saved time reappears as waiting: `cudaMemcpyAsync` self time
+  rises 3.3 s per profiled step. That fits amendment 24's per-new-shape cost and amendment 53's caution that self time counts waits on a
+  full queue. The ladder's extra padding costs about 2 % of device time, which is the 1.010.
+- **By amendment 54's rule** (P137 and P138 both FALSIFIED), the next candidate is fewer, wider buckets. The rule assumed a falsification
+  would mean shape novelty is not the in-training cost. The profile says the opposite: the per-shape cost is real, and this host had no host
+  bottleneck for it to matter. So the next registration takes the registered candidate and gates validity on the defaults being host-bound,
+  so that either remedy can be read where the cost exists. No default changed; the ladder stays opt-in.
+
 ## Amendment 53 (2026-10-06): 60 % of torch 2.8's extra time at e4b's defaults is not device time, most visibly in the bucketed delta's batched matmuls; 40 % is grouped-nf4-gemm's own kernels
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 53. One RTX 5090 (`tc1-5090-110`, AMD Ryzen Threadripper
