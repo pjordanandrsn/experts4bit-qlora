@@ -97,6 +97,14 @@ def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_
     return n_layers * rows * (k_row + v_row) + tables
 
 
+def linear_state_pool_bytes(layers, n_slots: int, conv_bytes: int = 2) -> int:
+    """Device bytes ``engines.linear_state.LinearStatePool`` holds for ``n_slots`` slots once every linear-attention layer
+    has run: per layer a conv window ``[n_slots, conv_dim, conv_kernel]`` in the model's dtype (``conv_bytes``; bf16 when
+    serving) and a recurrent state ``[n_slots, v_heads, head_k_dim, head_v_dim]`` in fp32. ``layers`` is
+    ``MoETopology.linear_state_layers``."""
+    return sum(int(n_slots) * (cd * k * conv_bytes + vh * hk * hv * 4) for _layer, cd, k, vh, hk, hv in layers)
+
+
 #: grouped-nf4-gemm's arena bakes align every row to this many bytes (``nvme_arena`` / ``nvme_bake_nf4`` default)
 ARENA_ALIGN = 4096
 
@@ -382,6 +390,14 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     items.append(FootprintItem("FP8 paged KV pool", "device", kv, "derived",
                                f"{topology.kv_layers} layers x ({setup.max_seqs} seqs x {setup.max_tokens_per_seq} tokens"
                                f" + {scratch} graph scratch slots), fp8 payload + fp32 scales (Fp8PagedKV's arithmetic)"))
+    if topology.linear_state_layers:
+        slots = setup.max_seqs + scratch
+        items.append(FootprintItem("linear-attention state pool", "device",
+                                   linear_state_pool_bytes(topology.linear_state_layers, slots), "derived",
+                                   f"{len(topology.linear_state_layers)} linear-attention layers x {slots} slots "
+                                   f"({setup.max_seqs} seqs + {scratch} graph scratch slots): a bf16 conv window and an "
+                                   "fp32 recurrent state per slot (engines.linear_state.LinearStatePool, allocated at "
+                                   "each layer's first prompt chunk)"))
     staged = prefill_staging_tokens(setup)
     items.append(FootprintItem("prefill staging (bf16 K/V of prompts mid-prefill)", "device",
                                staged * staging_bytes_per_token(topology), "derived",
@@ -428,8 +444,10 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                           "graph engages (E4B_PAGED_PREFILL_GRAPH=auto engages it only if that much is still free after "
                           "capture; lane SV1 measured +0.24 GiB on OLMoE-1B-7B and +0.57 GiB on Qwen3-30B-A3B at NF4, "
                           "SC2b +3.3 GiB on Qwen3-30B-A3B int4); prefill_graph='0' bounds memory by this estimate")
-    if topology.attention is not None and topology.attention.layers < topology.n_layers:
-        unmodelled.append(f"recurrent state of the {topology.n_layers - topology.attention.layers} non-attention layers")
+    if topology.attention is not None and topology.attention.layers < topology.n_layers \
+            and len(topology.linear_state_layers) < topology.n_layers - topology.attention.layers:
+        unmodelled.append(f"recurrent state of the {topology.n_layers - topology.attention.layers} non-attention layers "
+                          f"({len(topology.linear_state_layers)} priced as the linear-attention state pool)")
     if setup.placement == "solver":
         unmodelled.append("the CPU tier's compute buffers")
     if setup.exp_int4:
