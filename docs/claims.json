@@ -10856,6 +10856,31 @@
         "receipts/experts4bit-qlora/2026-10-06/tc1-5090-107/tc1/"
       ],
       "notes": "Vast invoiced $0.79."
+    },
+    {
+      "id": "e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 51 (#835), one rented RTX 5090 (tc1-5090-108, Intel Xeon W-2145): Qwen3-30B-A3B on packed rows of exactly 4,096 real tokens (micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), both frameworks on torch 2.12.1+cu130 / transformers 5.5.0, matched set, 40 load-gated steps (every attempt first time). e4b AT ITS DEFAULTS, nothing set: the chunked LM loss (auto, #1203) and grouped-nf4-gemm's bucketed padding (auto, grouped-nf4-gemm#492, the default from grouped-nf4-gemm 0.42.0) engaged by themselves (160 chunked forwards; every padded call bucketed). e4b 10.070 / 10.050 s/step against Unsloth 2026.9.14's 14.619 / 14.609: Unsloth/e4b 1.453 [1.451, 1.455] (P126 HELD, band [1.25, 1.80]); every e4b arm resident (P128 HELD); e4b peak 28.23 GB against Unsloth's 24.86 (P129 HELD, <= 29.5). Held-out at N e4b 0.9544, Unsloth 0.9543. In the field image's environment (torch 2.8.0, triton 3.4) the same e4b stepped 13.606 / 13.636: environment ratio 0.739, outside the registered [0.84, 0.98] (P127 FALSIFIED; bucketed padding's speed is measured under torch 2.12 only, so its effect under torch 2.8 is unmeasured). Supersedes the out-of-memory row ...packed-4k as the default-settings packed reading.",
+      "value": 1.453,
+      "unit": "ratio s/step, Unsloth over e4b at e4b's defaults, Qwen3-30B-A3B matched arms on packed 4,096-token rows, one stack (medians of steps 11..40 over two draws each); cross-draw interval [1.451, 1.455]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-108: instance 54484674, Intel Xeon W-2145, Vast machine 36546); e4b @ 7c4bdd7 + grouped-nf4-gemm @ 1cea661 (#492; its package source is byte-identical to the 0.42.0 release, which adds only the version and docs) in venv-unsloth, torch 2.12.1+cu130, triton 3.7.1; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3samestack4kd (TC1 amendment 51): amendment 43's packed same-stack box with nothing set (no TC1_E4B_ENV), TC1_PACK=1, TC1_SEQ=4096, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the per-expert loop a recorded route (<= 5 %); validity (packed_defaults_why: both defaults engaged unset) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-packed4k-defaults.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-108/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1-5090-108/tc1/"
+      ],
+      "notes": "Vast invoiced $1.09."
     }
   ]
 }

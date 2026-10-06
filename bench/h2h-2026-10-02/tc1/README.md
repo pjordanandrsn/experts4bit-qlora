@@ -98,6 +98,34 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 51 (2026-10-06): at e4b's defaults the packed position is Unsloth/e4b 1.453 on one stack -- the regime amendment 39 lost
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 51. One RTX 5090 (`tc1-5090-108`, Intel Xeon W-2145, a
+15-CPU quota, Vast machine 36546), amendment 43's packed same-stack box with nothing set. e4b `7c4bdd7`, grouped-nf4-gemm `1cea661` (#492),
+Unsloth 2026.9.14, packed 4,096-token rows, 40 load-gated steps, every attempt first time at load1 1.3–1.5. Read:
+[`RESULTS-tc1-packed4k-defaults.md`](RESULTS-tc1-packed4k-defaults.md).
+
+| arm | s/step (two draws) | peak |
+|---|---|---|
+| e4b `fused_attn4_m`, venv-unsloth, defaults | 10.070 / 10.050 | 28.23 GB |
+| e4b `fused_attn4_m_t28`, venv-e4b (the field image: torch 2.8.0, triton 3.4), defaults | 13.606 / 13.636 | 28.18 GB |
+| Unsloth 2026.9.14 `ckpt_unsloth_m` | 14.619 / 14.609 | 24.86 GB |
+
+- **P126 HELD: Unsloth/e4b on one stack 1.453** [1.451, 1.455] (band [1.25, 1.80]). **P128 HELD**: every e4b arm trained resident.
+  **P129 HELD**: e4b's matched peak 28.23 GB (≤ 29.5). Held-out at N: e4b 0.9544, Unsloth 0.9543.
+- **Both defaults engaged by themselves**, as validity required. Each e4b arm made 160 chunked forwards with `E4B_CHUNKED_LM_LOSS` unset.
+  grouped-nf4-gemm resolved `auto` with the variable unset, and bucketed every padded call (about 31,750 a run). The per-expert loop took
+  about 1.5 % of calls.
+- **By amendment 51's rule** 1.453 is Qwen3-30B-A3B's packed 4,096-token position at e4b's defaults
+  (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults`). It supersedes amendment 39's out-of-memory row as the default-settings
+  reading; that row stays as the record of the code before #1203 and #492. Amendment 43's labelled 1.278 stays as the reading with the
+  chunked loss set by hand and no buckets.
+- **P127 FALSIFIED: the environment ratio is 0.739** (registered [0.84, 0.98]). In the field image's torch 2.8 / triton 3.4, e4b steps
+  13.62 s against 10.06 in torch 2.12. Amendment 43 read the same ratio at 0.915 with the chunked loss and no buckets. Across the two boxes
+  (different hosts, so only suggestive), e4b in torch 2.12 went from 11.20 to 10.06 s and e4b in torch 2.8 from 12.24 to 13.62 s. That
+  points at bucketed padding being slower under torch 2.8. Amendment 48 and 50 read the buckets in venv-unsloth (torch 2.12) only, and the
+  default applies to every torch. That is the next registration.
+
 ## Amendment 50 (2026-10-06): under `auto` the field recipe never buckets; `auto` becomes grouped-nf4-gemm's default
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 50. One RTX 5090 (`tc1-5090-107`, AMD Ryzen Threadripper

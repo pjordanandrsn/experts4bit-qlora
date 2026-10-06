@@ -1,0 +1,35 @@
+FIXTURE field: template=alpaca steps=40 seq=4096 micro_batch=1 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=40 eval_n=8 autocast=0 matched_seed=3407 pack=1
+BOX A families: qwen3samestack4kd; e4b 7c4bdd7494f6c90312cf0f6ca39ca939bc89d983 gnf4 1cea66140e7547025a33c0147e6e51160b9f0651; run tc1-5090-108 instance 54484674 deadline 1791305522; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=8 (physical cores) box_class=RTX 5090
+CPU allotment 16 (cgroup quota capped by affinity; physical cores 8)
+DRIVER 595.71.05 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3samestack4kd staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3samestack4kd alpaca sha=d2a501eba57d4566c1c468bf0a5671ae8bfea2ad9b46bff9e287392d7cb7aa1f eval_n=8 train_only_sha=d9d5ffddd93e40d825a58a75f36fc836a44689ccebe7b1016327efc2f5ff1b1e pack=1 seq=4096
+qwen3samestack4kd/e4b/fused_attn4_m PROLOGUE {"phase_seconds": {"preamble": 4.004, "load_weights": 20.171, "verify": 0.001, "attn4": 5.78, "lora": 0.024, "enable": 0.169, "tokenizer": 0.543, "census": 4.127, "frozen_probe": 0.119, "trainable_sha": 4.948, "counters": 0.0, "c1_before": 95.273, "eval0": 12.391, "optimizer": 0.235}, "phase_budget_s": 1260.0, "prologue_s": 149.753, "prologue_unattributed_s": 1.968}
+qwen3samestack4kd/e4b/fused_attn4_m rc=0 CELL OK {"framework": "e4b", "fam": "qwen3samestack4kd", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload":
+
+LOADGATE qwen3samestack4kd/e4b/fused_attn4_m attempt 0 load1_median 1.28 gate 6.0 status ok over 0
+qwen3samestack4kd/unsloth/ckpt_unsloth_m PROLOGUE {"phase_seconds": {"preamble": 2.323, "snapshot": 0.0, "load_weights": 26.145, "census": 4.192, "frozen_probe": 0.137, "trainable_sha": 4.994, "counters": 0.093, "c1_before": 86.854, "eval0": 21.147, "optimizer": 0.366}, "phase_budget_s": 1890.0, "prologue_s": 155.521, "prologue_unattributed_s": 9.27}
+qwen3samestack4kd/unsloth/ckpt_unsloth_m rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3samestack4kd", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m", "status": "ok", "steps": 40, "seq": 409
+
+LOADGATE qwen3samestack4kd/unsloth/ckpt_unsloth_m attempt 0 load1_median 1.29 gate 6.0 status ok over 0
+qwen3samestack4kd/e4b/reference_attn4_m STUB not_run: skipped by TC1_SKIP
+qwen3samestack4kd/e4b/fused_attn4_m_t28 PROLOGUE {"phase_seconds": {"preamble": 4.17, "load_weights": 22.858, "verify": 0.001, "attn4": 5.701, "lora": 0.047, "enable": 0.172, "tokenizer": 0.464, "census": 4.246, "frozen_probe": 0.142, "trainable_sha": 4.991, "counters": 0.0, "c1_before": 95.519, "eval0": 17.374, "optimizer": 0.191}, "phase_budget_s": 1260.0, "prologue_s": 157.027, "prologue_unattributed_s": 1.152}
+qwen3samestack4kd/e4b/fused_attn4_m_t28 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3samestack4kd", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_t28", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offlo
+
+LOADGATE qwen3samestack4kd/e4b/fused_attn4_m_t28 attempt 0 load1_median 1.31 gate 6.0 status ok over 0
+qwen3samestack4kd/e4b/fused_attn4_m_t28_d2 PROLOGUE {"phase_seconds": {"preamble": 4.169, "load_weights": 22.949, "verify": 0.001, "attn4": 5.657, "lora": 0.02, "enable": 0.137, "tokenizer": 0.458, "census": 4.284, "frozen_probe": 0.119, "trainable_sha": 6.171, "counters": 0.0, "c1_before": 96.11, "eval0": 9.483, "optimizer": 0.192}, "phase_budget_s": 1260.0, "prologue_s": 150.884, "prologue_unattributed_s": 1.135}
+qwen3samestack4kd/e4b/fused_attn4_m_t28_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3samestack4kd", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_t28_d2", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "of
+
+LOADGATE qwen3samestack4kd/e4b/fused_attn4_m_t28_d2 attempt 0 load1_median 1.5 gate 6.0 status ok over 0
+qwen3samestack4kd/unsloth/ckpt_unsloth_m_d2 PROLOGUE {"phase_seconds": {"preamble": 2.31, "snapshot": 0.0, "load_weights": 26.027, "census": 4.186, "frozen_probe": 0.136, "trainable_sha": 4.996, "counters": 0.085, "c1_before": 87.001, "eval0": 13.079, "optimizer": 0.331}, "phase_budget_s": 1890.0, "prologue_s": 147.413, "prologue_unattributed_s": 9.262}
+qwen3samestack4kd/unsloth/ckpt_unsloth_m_d2 rc=0 CELL OK {"framework": "unsloth", "fam": "qwen3samestack4kd", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": "/root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "arm": "unsloth", "tag": "ckpt_unsloth_m_d2", "status": "ok", "steps": 40, "seq": 
+
+LOADGATE qwen3samestack4kd/unsloth/ckpt_unsloth_m_d2 attempt 0 load1_median 1.33 gate 6.0 status ok over 0
+qwen3samestack4kd/e4b/fused_attn4_m_d2 PROLOGUE {"phase_seconds": {"preamble": 3.901, "load_weights": 20.508, "verify": 0.001, "attn4": 5.853, "lora": 0.023, "enable": 0.174, "tokenizer": 0.557, "census": 4.193, "frozen_probe": 0.125, "trainable_sha": 4.98, "counters": 0.0, "c1_before": 96.399, "eval0": 6.96, "optimizer": 0.236}, "phase_budget_s": 1260.0, "prologue_s": 145.848, "prologue_unattributed_s": 1.94}
+qwen3samestack4kd/e4b/fused_attn4_m_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3samestack4kd", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_d2", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offloa
+
+LOADGATE qwen3samestack4kd/e4b/fused_attn4_m_d2 attempt 0 load1_median 1.3 gate 6.0 status ok over 0
+QWEN3SAMESTACK4KD DONE
