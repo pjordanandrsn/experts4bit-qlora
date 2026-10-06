@@ -207,6 +207,12 @@ above its 6.0 load gate on a shared host, so the decision stands but the 4.9 % i
 only where a forward's fp32 logits would reach 1 GiB. At the field recipe, on a quiet host, its gate never fired and the step ran 0.992
 (shipped) / 0.999 (matched) of the stock loss's (`e4b.train.chunked-lm-loss.auto.default-decision.5090.2026-10-05`, TC1 amendment 44), so
 amendment 44's rule makes `auto` e4b's default, which it is since #1203: unset means `auto`, and `0` keeps the stock loss.
+**At e4b's defaults the packed regime is now an e4b win** (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults`, TC1
+amendment 51). With the chunked loss and grouped-nf4-gemm's bucketed padding both `auto` (#1203, grouped-nf4-gemm#492), and nothing set, e4b
+trains the packed rows resident at 28.23 GB and steps them at 10.06 s against Unsloth's 14.61 on one stack: Unsloth/e4b **1.453** [1.451,
+1.455]. That supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
+same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). That is under
+investigation.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against
 native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
 native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.

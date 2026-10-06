@@ -1,0 +1,14 @@
+{
+ "framework": "e4b",
+ "fam": "qwen3samestack4kd",
+ "arm": "reference",
+ "tag": "reference_attn4_m",
+ "status": "not_run",
+ "reason": "skipped by TC1_SKIP",
+ "steps": 40,
+ "seq": 4096,
+ "accum": 4,
+ "micro_batch": 1,
+ "written_by": "tc1_run.sh",
+ "prereg": "tc1/TC1-PREREG.md"
+}
