@@ -3564,9 +3564,10 @@ Streaming also raises the longest sequence that trains. Same subject, chunked LM
 | RTX 5090, 32 GB (DQ4) | 7168 tokens | 14336 tokens | 2.00× | 2.375× (8192 → 19456) |
 | RTX 4090, 24 GB (DQ6) | 2048 tokens | 9728 tokens | **4.75×** | 5.20× (2560 → 13312) |
 
-The smaller the card, the larger the factor: the resident weights (14.5 GiB here) take most of a 24 GB card, while
-the streamed model keeps only two layers of them. **Allocator fragmentation is the next limit:** under the default
-CUDA allocator the streamed run hit OOM with about 6 GiB reserved but unallocated on both cards.
+The factor is larger on the smaller card: the resident weights (14.5 GiB here) take most of a 24 GB card, while
+the streamed model keeps only two layers of them. Two cards are measured; this is not a fitted law.
+**Allocator fragmentation is the next limit:** under the default CUDA allocator the streamed run's longest fitting
+sequence left 5.69 GiB (4090) and 6.22 GiB (5090) reserved but unallocated.
 `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (set before CUDA initialises) recovers most of it. It is a
 process-wide setting, so the library leaves it to you. Not measured: gen 3 or x8 links, other cards, real weights,
 micro-batches above 1.
