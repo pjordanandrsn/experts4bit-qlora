@@ -6,6 +6,6 @@
   - OLMoE decoded/fused is **1.005** [0.979, 1.031], against a registered ≤ 0.95 (P108 FALSIFIED);
   - Qwen3-30B-A3B is **1.066** [1.050, 1.081] (P109 HELD);
   - held-out and peak are unchanged on both (P110, P111).
-- **What it means.** RD1's per-call win does not reach the training step, so grouped-nf4-gemm's `auto` is unchanged and
-  `GNF4_TRAIN_GEMM=decoded` stays opt-in.
+- **What it means.** RD1's per-call win shows no measurable gain on the training step: the interval cannot exclude about 2 %, and it
+  excludes the registered 5 %. So grouped-nf4-gemm's `auto` is unchanged and `GNF4_TRAIN_GEMM=decoded` stays opt-in.
 - **Records:** rows `e4b.train.decoded-route.{olmoe,qwen3}.5090.2026-10-06`, the README section, the STATUS sentence and the receipts.

@@ -61,7 +61,7 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
 
-## Amendment 46 (2026-10-06): grouped-nf4-gemm's decoded route saves no step time on OLMoE (1.005) and costs Qwen3-30B-A3B 6.6 %; `auto` stays as it is
+## Amendment 46 (2026-10-06): grouped-nf4-gemm's decoded route shows no measurable step-time saving on OLMoE (1.005 [0.979, 1.031]) and costs Qwen3-30B-A3B 6.6 %; `auto` stays as it is
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 46, after lane RD1's per-call read
 ([`../../moegen/rd1/RESULTS-rd1.md`](../../moegen/rd1/RESULTS-rd1.md)).
@@ -85,7 +85,8 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - Each `_dec0` arm counted none.
 - **Decision, as registered: P108 FALSIFIED.** grouped-nf4-gemm's `auto` does not change, and `GNF4_TRAIN_GEMM=decoded` stays opt-in.
 - **An observation, not a registered line.** RD1's per-call win on OLMoE's expert shapes (0.79 × the fused kernels at 512 skewed rows)
-  does not reach the step. Whatever the expert GEMMs save there sits inside the draws' own spread: `_dec1`'s two draws are 3.9 % apart.
+  shows no measurable gain on the step: the interval [0.979, 1.031] cannot exclude a saving of about 2 %, nor a loss of 3 %, and
+  `_dec1`'s two draws are 3.9 % apart. It does exclude the registered 5 % gain.
   On Qwen3-30B-A3B the step's cost (1.066) sits at the low end of RD1's per-call loss at 512 rows (1.05 skewed, 1.35 uniform). Nothing here
   measures where the step's time goes, so why the per-call win is lost stays open.
 - **Attempts.**
