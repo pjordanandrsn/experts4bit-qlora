@@ -3806,7 +3806,11 @@ def run_arm(a, load_fn, sampler=True):
         lean_ab = {"gnf4_lean_delta": ("1" if _lean_on else "0") if _lean_on is not None else None,
                    "gnf4_lean_delta_env": os.environ.get("NF4_QLORA_LEAN_DELTA"),
                    "gnf4_has_lean_delta": _lean_on is not None,
-                   "lora_path_calls": {k: int(v) for k, v in (getattr(_nq, "LORA_PATH_STATS", None) or {}).items()} if _nq is not None else {}}
+                   "lora_path_calls": {k: int(v) for k, v in (getattr(_nq, "LORA_PATH_STATS", None) or {}).items()} if _nq is not None else {},
+                   # TC1 amendment 50: the bucketed-padding mode grouped-nf4-gemm resolved (#490 / #491) and auto's row gate, beside the env value
+                   "gnf4_pad_buckets_mode": (_nq._pad_buckets_mode() if (_nq is not None and hasattr(_nq, "_pad_buckets_mode")) else None),
+                   "gnf4_pad_buckets_min_rows": (_nq._pad_buckets_min_rows() if (_nq is not None and hasattr(_nq, "_pad_buckets_min_rows")) else None),
+                   "gnf4_pad_buckets_env": os.environ.get("NF4_QLORA_PAD_BUCKETS")}
     tile_ab = None                                     # TC1 amendment 14 (#945): which prefill M-tile rule this e4b arm ran, and what it launched
     if a.framework == "e4b":
         try:

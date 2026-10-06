@@ -2088,3 +2088,59 @@ block's draws were 12-21 % apart. The re-ask is the same box (token, arms, order
 another host, with one instrument added on every arm, both sides alike: `TC1_PAD_CENSUS=1`. It records each grouped-LoRA delta call's single
 padded block (rows and bytes, per projection) from host facts, at a few microseconds of host arithmetic per call. Those sizes are what a
 size-gated `auto` would be placed between, if P119 or P120 falls on the slow side.
+
+### Amendment 50 (2026-10-06T10:45Z, after amendment 49's re-ask read, before any box): bucketed padding as `auto` — its default decision (P123–P125)
+
+**Why.** Amendment 48's re-ask read grouped-nf4-gemm's bucketed padding on packed 4,096-token rows: 0.893 of the single block's step on
+the matched arm, 4.29 GB off its peak, 0.933 on the shipped arm, all HELD. Amendment 49 and its re-ask could not settle its speed at TC1's
+field recipe: the single block's own draws came 8–21 % apart on two hosts. The re-ask's census (49,152 delta calls per arm) measured every
+field call at 9,040 routed rows at most (median 3,968). Routed rows are a call's tokens × top-k, a property of the batch's shape, not of the
+router: TC1's largest field micro-batch is 1,130 positions (× 8 = 9,040). Every packed call carries 4,096 × 8 = 32,768.
+grouped-nf4-gemm#491 adds `NF4_QLORA_PAD_BUCKETS=auto`, which buckets a call only when it carries at least 16,384 routed rows. Under it the
+field recipe runs the single block op for op (#491's tests pin a call under the gate as the single block bit for bit), and packed rows run
+the buckets amendment 48 measured. This box reads the field side's structure.
+
+**The box** (token `qwen3fieldauto`). Amendment 49's box with `auto` in place of `1`. One RTX 5090, TC1's qwen3 tokens and field recipe, 60
+load-gated steps, every arm in venv-unsloth at e4b's defaults, grouped-nf4-gemm at a main that has #491, avoiding machines 145701, 130223 and
+55583:
+
+- the shipped and the matched arm, each `_fa0` (`NF4_QLORA_PAD_BUCKETS=0`) against `_fa1` (`=auto`), two draws a side in ABBA order.
+
+Engagement: each receipt records the bucket mode grouped-nf4-gemm resolved (`gnf4_pad_buckets_mode`, `auto` on `_fa1` with its row gate,
+`0` on `_fa0`; the arm adds this record) and the per-path counters. The single-block path serves the delta on every arm; `env.torch` 2.12.*.
+
+**Predictions** (registered before the box). They read structure and values from the VALID receipts, with no draw-stability requirement:
+
+- **P123** (the gate): every `_fa1` arm makes 0 bucketed calls and as many single-block calls as its arm's `_fa0` receipt. FALSIFIED iff a
+  VALID `_fa1` arm bucketed a call; HELD iff all four are VALID and do neither.
+- **P124:** on each arm, |mean held-out at N, `_fa1` − `_fa0`| ≤ **0.005**.
+- **P125** (matched peak): the median of `_fa1`'s two peaks − the median of `_fa0`'s ≤ **+0.05 GB**.
+
+**Speed is reported, not scored.** Under P123 both sides run the same delta ops; `_fa1` adds one integer comparison per call. Amendment 49's
+two boxes showed this baseline's own draws 8–21 % apart at the field recipe, so a speed band here would read the baseline's noise, not the
+gate. The read reports both sides' medians.
+
+**Decision rules.**
+
+- **P123–P125 HELD, with amendment 48's re-ask HELD:** `auto` becomes grouped-nf4-gemm's default (`NF4_QLORA_PAD_BUCKETS` unset means
+  `auto`; `0` keeps the single block everywhere; `1` buckets every call), in one grouped-nf4-gemm PR citing amendments 47, 48, 49 and 50.
+- **P123 FALSIFIED:** the gate fired at the field recipe, which the shapes say it cannot. `auto` stays opt-in, and the read finds the call.
+- **P124 or P125 FALSIFIED:** `auto` stays opt-in, and the read names the arm.
+- **Any UNTESTED, none FALSIFIED:** `auto` stays opt-in pending a re-ask.
+
+**What this box can and cannot show** (maintainer, 2026-10-06T10:48Z, before the box).
+- The shapes and #491's tests make P123–P125 close to certain, so these are an **integration check**, not a test of an
+  uncertain hypothesis. What it can catch: `auto` not reaching grouped-nf4-gemm in the real training loop (hence the
+  resolved-mode record), a field call larger than the census saw, or a peak or held-out change the shapes don't predict.
+- The default flip changes behaviour only on calls of **≥ 16,384 routed rows**. The evidence for those calls is
+  amendment 48's: one model (Qwen3-30B-A3B, top-8), packed 4,096-token rows, one RTX 5090. A recipe of another model
+  that crosses the gate flips on grouped-nf4-gemm's correctness tests alone. For example, gpt-oss at 4,096 tokens ×
+  top-4 is exactly 16,384, and the gate's `>=` fires there.
+- So the default-flip PR carries #1250's conditions: the changelog states that evidence scope; the bucketed path's
+  correctness tests cover every expert geometry grouped-nf4-gemm ships for; and the flip lands in a release, with
+  `NF4_QLORA_PAD_BUCKETS=0` documented as the way back.
+- **Order.** This registration merges after the amendment 49 re-ask read (#1258) and grouped-nf4-gemm#491 are on main;
+  it rests on both.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the download;
+this is in the standing no-ask tier.

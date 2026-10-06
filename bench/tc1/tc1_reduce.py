@@ -786,6 +786,22 @@ COMPACT_SPECS[PADBK_FAM] = ("P115", (3.0, 99.0), (("P116", "matched", "fused_att
                             "P118", ("pk0", "pk1"))   # amendment 48, one-sided: the matched peak falls by >= 3.0 GB, no slower than 1.02
 PACKED_FAMS = PACKED_FAMS + (PADBK_FAM,)          # amendment 39's packed-row predicates
 LOOP_ROUTE_SHARE_MAX[PADBK_FAM] = 0.05            # amendment 43's recorded route
+# TC1 amendment 50: NF4_QLORA_PAD_BUCKETS=auto (grouped-nf4-gemm#491, a 16,384-routed-row gate) against 0 at TC1's field recipe: structure, not speed
+FIELDAUTO_FAM = "qwen3fieldauto"  # side fa0 (=0) vs fa1 (=auto), shipped and matched arms, venv-unsloth, the field recipe
+FAMS.append(FIELDAUTO_FAM)
+NAMES[FIELDAUTO_FAM] = "Qwen3-30B-A3B (amendment 50: NF4_QLORA_PAD_BUCKETS 0 vs auto at the field recipe, venv-unsloth; the gate must not fire)"
+N_LAYERS[FIELDAUTO_FAM] = 48
+ATTN_CENSUS[FIELDAUTO_FAM] = 192
+DENSE_PINS[FIELDAUTO_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[FIELDAUTO_FAM] = ("e4b", "fused_attn4_m_fa0")
+EXPECTED[FIELDAUTO_FAM] = [("e4b", "fused_attn4_shipped_fa0"), ("e4b", "fused_attn4_shipped_fa1"), ("e4b", "fused_attn4_m_fa0"), ("e4b", "fused_attn4_m_fa1"),
+                           ("e4b", "fused_attn4_m_fa1_d2"), ("e4b", "fused_attn4_m_fa0_d2"), ("e4b", "fused_attn4_shipped_fa1_d2"), ("e4b", "fused_attn4_shipped_fa0_d2")]
+MATCHED |= {"fused_attn4_m_fa0", "fused_attn4_m_fa1", "fused_attn4_m_fa0_d2", "fused_attn4_m_fa1_d2"}
+for _t in ("fused_attn4_m", "fused_attn4_shipped"):
+    for _side in ("fa0", "fa1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+FIELDAUTO_HELDOUT_MAX = 0.005      # P124
+FIELDAUTO_PEAK_MAX = 0.05          # P125: matched peak fa1 - fa0, GB
 # TC1 amendment 49: the same A/B at TC1's field recipe (not packed: TC1's no-loop rule applies as written)
 FIELDBK_FAM = "qwen3fieldbk"      # NF4_QLORA_PAD_BUCKETS=0 (side fb0) vs =1 (fb1), shipped and matched arms, venv-unsloth, the field recipe
 FAMS.append(FIELDBK_FAM)
@@ -965,6 +981,81 @@ def decoded_ab_why(tag, r):
                   ("dense_fwd 0", (st.get("dense_fwd") or 0) == 0)]
     bad = [k for k, ok in checks if not ok]
     return "" if not bad else f"decoded-route A/B not engaged ({', '.join(bad)}; record {ra})"
+
+
+def fieldauto_why(tag, r):
+    """Amendment 50's engagement predicate: torch 2.12 (venv-unsloth), grouped-nf4-gemm's per-path counters present with the padded path
+    serving the delta (padded calls > 0), and the bucket mode grouped-nf4-gemm resolved is the one the tag names (fa1: "auto" with its row
+    gate recorded; fa0: "0"). Whether auto bucketed anything is P123's to score. Empty string = engaged."""
+    r = r or {}
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.12"):
+        return f"bucket-gate A/B not engaged (env.torch {tv or 'missing'} is not 2.12*)"
+    la = r.get("lean_ab") or {}
+    calls = la.get("lora_path_calls") or {}
+    if not calls:
+        return "no lean_ab.lora_path_calls on the receipt: which delta body ran cannot be verified"
+    if int(calls.get("padded") or 0) <= 0:
+        return f"bucket-gate A/B not engaged (no single-block padded call; record {calls})"
+    want = "auto" if "_fa1" in tag else "0"
+    mode = la.get("gnf4_pad_buckets_mode")
+    if mode != want:
+        return f"bucket-gate A/B not engaged (gnf4_pad_buckets_mode {mode!r}, the tag names {want!r})"
+    if want == "auto" and not la.get("gnf4_pad_buckets_min_rows"):
+        return "bucket-gate A/B not engaged (auto's row gate not recorded)"
+    return ""
+
+
+def score_fieldauto(F, fam=FIELDAUTO_FAM):
+    """TC1-PREREG amendment 50, from the VALID receipts directly (no draw-stability requirement: P123-P125 read structure and values, not
+    speed): P123 -- every VALID fa1 arm made 0 bucketed calls and as many single-block calls as its arm's fa0 receipts (HELD iff all four fa1
+    arms are VALID and do; FALSIFIED iff any VALID fa1 arm bucketed a call); P124 -- on each arm |mean held-out at N, fa1 - fa0| <=
+    FIELDAUTO_HELDOUT_MAX; P125 -- the matched arm's median peak fa1 - fa0 <= FIELDAUTO_PEAK_MAX GB. Speed is reported, not scored."""
+    R = F.get(fam)
+    if not R:
+        return []
+    rows = {x["tag"]: x for x in R["rows"] if x["fw"] == "e4b"}
+    def valid(t):
+        x = rows.get(t)
+        return (x.get("r") or {}) if (x and x.get("verdict") == "VALID") else None
+    out, ev, bad, miss = [], [], [], []
+    for t in ("fused_attn4_shipped", "fused_attn4_m"):
+        p0 = [((valid(f"{t}_fa0{d}") or {}).get("lean_ab") or {}).get("lora_path_calls", {}).get("padded") for d in ("", "_d2")]
+        for d in ("", "_d2"):
+            r = valid(f"{t}_fa1{d}")
+            if r is None:
+                miss.append(f"{t}_fa1{d}")
+                continue
+            c = (r.get("lean_ab") or {}).get("lora_path_calls") or {}
+            pb, pd = int(c.get("padded_bucketed") or 0), int(c.get("padded") or 0)
+            ev.append(f"`{t}_fa1{d}` bucketed {pb} / single {pd} (fa0 single {p0})")
+            if pb > 0 or (p0[0] is not None and pd != p0[0]):
+                bad.append(f"{t}_fa1{d}")
+    v = "FALSIFIED" if bad else ("UNTESTED" if miss else "HELD")
+    out.append(("P123", fam, v, "auto never buckets at the field recipe: " + "; ".join(ev) + (f"; not VALID: {', '.join(miss)}" if miss else "")))
+    held, hev = [], []
+    for t in ("fused_attn4_m", "fused_attn4_shipped"):
+        h = {side: [heldout_at_N(valid(f"{t}_{side}{d}")) if valid(f"{t}_{side}{d}") is not None else None for d in ("", "_d2")] for side in ("fa0", "fa1")}
+        if any(v_ is None for v_ in h["fa0"] + h["fa1"]):
+            held.append(None)
+            hev.append(f"{t}: held-out unread {h}")
+            continue
+        dq = sum(h["fa1"]) / 2 - sum(h["fa0"]) / 2
+        held.append(dq)
+        hev.append(f"{t}: mean held-out fa1 - fa0 {dq:+.4f} (fa0 {[round(x, 4) for x in h['fa0']]}, fa1 {[round(x, 4) for x in h['fa1']]})")
+    v = "FALSIFIED" if any(d is not None and abs(d) > FIELDAUTO_HELDOUT_MAX for d in held) else ("UNTESTED" if any(d is None for d in held) else "HELD")
+    out.append(("P124", fam, v, "; ".join(hev)))
+    pk = {side: sorted(x for x in ((valid(f"fused_attn4_m_{side}{d}") or {}).get("peak_vram_gb") for d in ("", "_d2")) if x is not None) for side in ("fa0", "fa1")}
+    if len(pk["fa0"]) == 2 and len(pk["fa1"]) == 2:
+        dp = sum(pk["fa1"]) / 2 - sum(pk["fa0"]) / 2
+        out.append(("P125", fam, "HELD" if dp <= FIELDAUTO_PEAK_MAX else "FALSIFIED", f"matched peak fa0 {pk['fa0']} / fa1 {pk['fa1']} GB, fa1 - fa0 {dp:+.3f} vs <= {FIELDAUTO_PEAK_MAX}"))
+    else:
+        out.append(("P125", fam, "UNTESTED", f"matched peaks are both registered on two VALID draws a side -- {pk}"))
+    sp = []
+    for t in ("fused_attn4_m", "fused_attn4_shipped"):
+        sp.append(f"{t}: " + ", ".join(f"{side} {[((valid(f'{t}_{side}{d}') or {}).get('s_per_step_median_11plus')) for d in ('', '_d2')]}" for side in ("fa0", "fa1")) + " s/step")
+    out.append(("speed (reported, not scored)", fam, "—", "; ".join(sp)))
+    return out
 
 
 def pad_buckets_why(tag, r, sides=("pk0", "pk1"), need_chunked=True):
@@ -1771,6 +1862,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == PADBK_FAM and fw == "e4b":               # amendment 48: the delta body its tag names, torch 2.12, the chunked loss
         w = pad_buckets_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == FIELDAUTO_FAM and fw == "e4b":           # amendment 50: the bucket mode its tag names, the padded path served, torch 2.12
+        w = fieldauto_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == FIELDBK_FAM and fw == "e4b":             # amendment 49: the delta body its tag names, torch 2.12
@@ -4540,6 +4635,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_ompab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if FIELDAUTO_FAM in F:
+        out += ["\n## Predictions P123 / P124 / P125 (TC1-PREREG amendment 50: NF4_QLORA_PAD_BUCKETS 0 vs auto at the field recipe; structure and values, speed reported; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_fieldauto(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if FIELDBK_FAM in F:
         out += ["\n## Predictions P119 / P120 / P121 / P122 (TC1-PREREG amendment 49: the LoRA delta one padded block vs buckets at the field recipe; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -5101,6 +5201,28 @@ def _fieldbk_set(match=((3.50, 3.52), (3.51, 3.53)), ship=((2.90, 2.92), (2.91, 
                 r["lean_ab"] = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
                                 "lora_path_calls": {"loop": 0, "padded": pd, "grouped_mm": 0, "padded_bucketed": pb}}
                 r["fam"] = FIELDBK_FAM
+                R[("e4b", tag)] = r
+    return R
+
+def _fieldauto_set(fa1_bucketed=0, peaks=(27.50, 27.50), held_shift=0.0, mode1="auto", calls=49152):
+    """Amendment 50: e4b against itself at the field recipe, fa0 (=0) vs fa1 (=auto) -- `fa1_bucketed` = bucketed calls each fa1 arm made;
+    `peaks` = the matched arm's (fa0, fa1) GB; `mode1` = the mode the fa1 arms recorded. The draws are deliberately unstable (8 % apart) on
+    the fa0 side: P123-P125 do not need stable speed."""
+    R = {}
+    for t, matched in (("fused_attn4_shipped", False), ("fused_attn4_m", True)):
+        for i_side, side in enumerate(("fa0", "fa1")):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                s_ = (3.0, 3.25)[i] if side == "fa0" else 3.1
+                r = _receipt("e4b", tag, "fused", s=s_, heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if side == "fa1" else 0.0), matched=matched)
+                r["peak_vram_gb"] = peaks[i_side] - (0.0 if matched else 2.0)
+                r["env"]["torch"] = "2.12.1+cu130"
+                pb = fa1_bucketed if side == "fa1" else 0
+                r["lean_ab"] = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                                "lora_path_calls": {"loop": 0, "padded": calls - pb, "grouped_mm": 0, "padded_bucketed": pb},
+                                "gnf4_pad_buckets_mode": mode1 if side == "fa1" else "0", "gnf4_pad_buckets_min_rows": 16384 if side == "fa1" else 16384,
+                                "gnf4_pad_buckets_env": "auto" if side == "fa1" else "0"}
+                r["fam"] = FIELDAUTO_FAM
                 R[("e4b", tag)] = r
     return R
 
@@ -7427,6 +7549,19 @@ def selftest():
     RV = FB(_fieldbk_set(fb1_calls=(0, 9000)))
     assert RV[FIELDBK_FAM]["verdicts"][("e4b", "fused_attn4_m_fb1")] == "VOID"
     assert "P119" in render(RFB, "x") and "amendment 49" in render(RFB, "x")
+    cases += 1
+    # 103. TC1 amendment 50 (qwen3fieldauto): every arm VALID; P123 / P124 / P125 HELD although the fa0 draws are 8 % apart; a bucketed call
+    #      under auto FALSIFIES P123; held-out moved 0.01 FALSIFIES P124; +0.10 GB FALSIFIES P125; an fa1 arm that resolved "0" is VOID
+    FA = lambda R: {FIELDAUTO_FAM: reduce_family(FIELDAUTO_FAM, R, {}, 20)}
+    RFA = FA(_fieldauto_set())
+    assert [(x["fw"], x["tag"]) for x in RFA[FIELDAUTO_FAM]["rows"]] == EXPECTED[FIELDAUTO_FAM]
+    assert all(x["verdict"] == "VALID" for x in RFA[FIELDAUTO_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RFA[FIELDAUTO_FAM]["rows"]]
+    pfa = lambda **kw: {p: v for p, _, v, _ in score_fieldauto(FA(_fieldauto_set(**kw))) if p.startswith("P")}
+    assert pfa() == {"P123": "HELD", "P124": "HELD", "P125": "HELD"}, score_fieldauto(RFA)
+    assert pfa(fa1_bucketed=12)["P123"] == "FALSIFIED" and pfa(held_shift=0.01)["P124"] == "FALSIFIED" and pfa(peaks=(27.50, 27.60))["P125"] == "FALSIFIED"
+    RV = FA(_fieldauto_set(mode1="0"))
+    assert RV[FIELDAUTO_FAM]["verdicts"][("e4b", "fused_attn4_m_fa1")] == "VOID" and pfa(mode1="0")["P123"] == "UNTESTED"
+    assert "P123" in render(RFA, "x") and "amendment 50" in render(RFA, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
