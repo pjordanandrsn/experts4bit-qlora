@@ -14,6 +14,6 @@
   on CUDA the exact per-step prefetch counts. The default on a CUDA chain, the opt-out, and a model split across CPU and
   CUDA, where only the CUDA chain is scheduled and the report shows it.
 - **Memory note, documented and not defaulted.** DQ4's streamed arm reached 2.375× instead of 2.00× with
-  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`: under the default allocator it hit OOM with about 6 GiB reserved
-  but unallocated. That setting is the caller's (it must be set before CUDA initialises), so nothing in the engine sets
-  it.
+  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`: under the default allocator the longest fitting sequence left
+  6.22 GiB reserved but unallocated. That setting is the caller's (it must be set before CUDA initialises), so
+  nothing in the engine sets it.

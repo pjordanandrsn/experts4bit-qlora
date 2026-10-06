@@ -744,8 +744,9 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
 
     Memory: DQ4 (``bench/dq4/RESULTS-dq4.md``) read the streamed arm's longest trainable sequence (chunked LM loss)
     at 2.00x the resident one under the default CUDA allocator, and 2.375x with
-    ``PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True``: the default allocator hit OOM with about 6 GiB reserved but
-    unallocated. That setting is the caller's (it must be set before CUDA initialises); nothing here sets it.
+    ``PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True``: under the default allocator the longest fitting sequence left
+    6.22 GiB reserved but unallocated (5.69 GiB on DQ6's 24 GB RTX 4090, ``bench/dq6/RESULTS-dq6.md``). That setting
+    is the caller's (it must be set before CUDA initialises); nothing here sets it.
 
     Use it when the dense (non-expert) side of the model is what does not fit: every decoder
     layer's dense weights are pinned on the host and streamed per layer. Returns the list of
