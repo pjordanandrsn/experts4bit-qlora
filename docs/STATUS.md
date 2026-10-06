@@ -217,8 +217,9 @@ not that cost (`e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`, TC1 amendm
 (matched) and 0.939 (shipped) of the single block's step, with the matched peak 4.24 GB lower, so the default stands in both measured
 environments (torch 2.12 and torch 2.8). Where torch 2.8's time goes, profiled
 (`e4b.train.env-gap.torch28.profile.qwen3.5090.2026-10-06`, TC1 amendment 53, another host): at the defaults it steps 0.790 as fast as
-torch 2.12. Of the 2.63 s it adds per step, 60 % is host time inside the bucketed delta's batched matmuls: `aten::bmm` makes the same
-~26,750 calls a step in both torches and takes about three times the host time per call in torch 2.8. The rest is device time in
+torch 2.12. Of the 2.63 s it adds per step, 60 % is not device time, and the profile's largest host-side increase is in the bucketed
+delta's batched matmuls: `aten::bmm` makes the same ~26,750 calls a step in both torches and takes about three times the CPU self time per
+call in torch 2.8. That is an upper bound on its host work, since self time also counts waits on a full launch queue. The rest is device time in
 grouped-nf4-gemm's own Triton kernels (forward +22 %, data gradient +52 %, buckets or not). The next registration is a shape-stable bucket
 ladder in grouped-nf4-gemm. `NF4_QLORA_PAD_BUCKETS=0` restores the single block.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against

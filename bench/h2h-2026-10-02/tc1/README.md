@@ -98,7 +98,7 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
-## Amendment 53 (2026-10-06): torch 2.8's extra time at e4b's defaults is 60 % host-side, in the bucketed delta's batched matmuls, and 40 % grouped-nf4-gemm's own kernels
+## Amendment 53 (2026-10-06): 60 % of torch 2.8's extra time at e4b's defaults is not device time, most visibly in the bucketed delta's batched matmuls; 40 % is grouped-nf4-gemm's own kernels
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 53. One RTX 5090 (`tc1-5090-110`, AMD Ryzen Threadripper
 PRO 3955WX, a 15-CPU quota, Vast machine 26157). e4b `3c8793f`, grouped-nf4-gemm 0.42.0 (`427a771`), packed 4,096-token rows, 40 load-gated
@@ -123,7 +123,11 @@ three environments. Read: [`RESULTS-tc1-prof28.md`](RESULTS-tc1-prof28.md).
   86 µs in torch 2.12 and about 268 µs in torch 2.8. Profiled times carry the profiler's overhead in both torches, so they are reported,
   not scored. Launch time barely moved (`cudaLaunchKernel` 525 against 558 ms per profiled step, over 79,786 and 89,567 calls). cuBLAS
   picks the same kernel for the fp32 products in both (`cutlass_80_simt_sgemm_64x64_8x5_tn_align1`, about 8,270 a step). So the added
-  host time is inside the batched-matmul call, not in launching its kernel.
+  host time is inside the batched-matmul call, not in launching its kernel. One caution on the size of it (maintainer review): CPU self
+  time also counts any wait on a full CUDA launch queue. The single block's 3,012 `aten::bmm` calls read about 1.4 ms of self time each
+  in torch 2.8 while its device is 96.5 % busy, which is mostly back-pressure, not host work. So 268 µs per call is an upper bound on the
+  bmm's host work in `q28`, and P135's 59.7 % (not device time) is the measured share. Profiled per-family totals can rank the host
+  families; they cannot price them.
 - **The device time is grouped-nf4-gemm's own Triton kernels**, and it does not depend on the buckets. Torch 2.8's device time grows by
   1,061 ms per step, 989 of them in `fused_kernel`:
   - `_gemm_nf4_grouped` takes 1,995 ms per step in `q212` and 2,439 in `q28`;
