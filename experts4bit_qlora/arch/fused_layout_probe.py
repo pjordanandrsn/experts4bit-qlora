@@ -134,6 +134,7 @@ def _toy_config(**overrides) -> types.SimpleNamespace:
         ffn_hidden_size=_I, num_experts_per_tok=1, moe_top_k=1,
         hidden_act="silu", hidden_activation="gelu_pytorch_tanh",
         activation_function="silu", swiglu_limit=7.0,
+        swiglu_alpha=1.702,  # transformers >= 5.19's GptOssExperts reads it from the config (was hard-coded)
         # transformers >= 5 dispatches expert forwards through ExpertsInterface;
         # "eager" selects the model's own forward, which is what we are measuring.
         _experts_implementation="eager",
