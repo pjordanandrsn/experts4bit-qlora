@@ -125,7 +125,11 @@ def _materialize_computed_buffers(model: torch.nn.Module, device) -> list[str]:
             raise GlimmerKeymapError(
                 f"{name}.inv_freq is on meta and the module exposes no rope "
                 f"initializer to rebuild it from")
-        fresh, attn_scale = init_fn(cfg, device)
+        # `device` by keyword: transformers <= 5.18 takes it as the second parameter; 5.19 dropped it from
+        # compute_default_rope_parameters (config, **kwargs) and returns a CPU tensor, hence the .to() (as moe_load, #1280).
+        fresh, attn_scale = init_fn(cfg, device=device)
+        if device is not None:
+            fresh = fresh.to(device)
         mod.register_buffer("inv_freq", fresh, persistent=False)
         if getattr(mod, "original_inv_freq", None) is not None:
             mod.register_buffer("original_inv_freq", fresh.clone(), persistent=False)
