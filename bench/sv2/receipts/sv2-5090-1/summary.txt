@@ -1,0 +1,8 @@
+sv2 tripwire OK 0.48.0 0.41.0 2.8.0+cu128 NVIDIA GeForce RTX 5090 (12, 0) malloc_trim: True
+qwen3: fetched 57G
+bake qwen3 rc=0 16G nf4 bake complete: 6144 rows (16.3 GB) in 133s
+q_nf4 rc=0 OK est 21.786 GiB peak 21.612 load 21.362 driver 22.619 | host anon load-peak 3.21 after 3.21 serving 3.34 GB | int4 layers 0 attn 0 | prefill_graph off
+q_exp rc=0 OK est 21.839 GiB peak 21.664 load 21.415 driver 22.656 | host anon load-peak 6.68 after 1.68 serving 1.86 GB | int4 layers 48 attn 0 | prefill_graph off
+q_both rc=0 OK est 22.410 GiB peak 22.236 load 20.299 driver 23.252 | host anon load-peak 6.80 after 1.72 serving 1.90 GB | int4 layers 48 attn 192 | prefill_graph off
+q_exp_prefill rc=0 OK est 21.839 GiB peak 22.222 load 22.222 driver 23.398 | host anon load-peak 7.71 after 1.88 serving 1.90 GB | int4 layers 48 attn 0 | prefill_graph on
+SV2 done: 4 arm receipts
