@@ -1,0 +1,201 @@
+{
+ "schema": "sv3-arm/1",
+ "args": {
+  "model": "Qwen/Qwen3.6-35B-A3B",
+  "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+  "arena": "/root/sv3-work-qwen36/nf4.arena",
+  "calib": "calib.json",
+  "graphs": 0,
+  "prefill_graph": "0",
+  "buckets": "1,2,4,8,16",
+  "max_seqs": 16,
+  "context": 4096,
+  "prompt_tokens": 1024,
+  "new_tokens": 32,
+  "out": "receipts/q36_e16.json"
+ },
+ "setup": {
+  "placement": "all-vram",
+  "max_seqs": 16,
+  "max_tokens_per_seq": 4096,
+  "chunk_tokens": 512,
+  "graphs": false,
+  "buckets": [
+   1,
+   2,
+   4,
+   8,
+   16
+  ],
+  "kv_groups": "auto",
+  "prefill_graph": "0",
+  "vram_gb": 1.2,
+  "dram_gb": 6.0,
+  "hot_rows": 64,
+  "exp_int4": false,
+  "attn_int4": false
+ },
+ "env": {
+  "E4B_PAGED_PLACEMENT": "all-vram",
+  "E4B_PAGED_MAX_SEQS": "16",
+  "E4B_PAGED_MAX_TOKENS_PER_SEQ": "4096",
+  "E4B_PAGED_CHUNK_TOKENS": "512",
+  "E4B_PAGED_GRAPHS": "0",
+  "E4B_PAGED_BUCKETS": "1,2,4,8,16",
+  "E4B_PAGED_KV_GROUPS": "auto",
+  "E4B_PAGED_PREFILL_GRAPH": "0",
+  "E4B_PAGED_VRAM_GB": "1.2",
+  "E4B_PAGED_DRAM_GB": "6.0",
+  "E4B_PAGED_HOT_ROWS": "64",
+  "E4B_SERVE_EXP_INT4": "0",
+  "E4B_SERVE_ATTN_INT4": "0",
+  "E4B_PAGED_MODEL": "Qwen/Qwen3.6-35B-A3B",
+  "E4B_PAGED_REVISION": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+  "E4B_PAGED_ARENA": "/root/sv3-work-qwen36/nf4.arena",
+  "E4B_PAGED_CALIB": "calib.json",
+  "E4B_PAGED_TORCH_THREADS": "8"
+ },
+ "estimate": {
+  "items": [
+   {
+    "name": "frozen expert stacks (all VRAM)",
+    "where": "device",
+    "bytes": 18119395840,
+    "basis": "derived"
+   },
+   {
+    "name": "cold tier landing (pinned)",
+    "where": "host",
+    "bytes": 134217728,
+    "basis": "derived"
+   },
+   {
+    "name": "setup tier (while the stacks are built)",
+    "where": "host",
+    "bytes": 113246208,
+    "basis": "derived"
+   },
+   {
+    "name": "dense weights (bf16)",
+    "where": "device",
+    "bytes": 4896711936,
+    "basis": "derived"
+   },
+   {
+    "name": "FP8 paged KV pool",
+    "where": "device",
+    "bytes": 718439040,
+    "basis": "derived"
+   },
+   {
+    "name": "linear-attention state pool",
+    "where": "device",
+    "bytes": 1038090240,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill staging (bf16 K/V of prompts mid-prefill)",
+    "where": "device",
+    "bytes": 94371840,
+    "basis": "derived"
+   },
+   {
+    "name": "prefill/decode working set",
+    "where": "device",
+    "bytes": 62029824,
+    "basis": "heuristic"
+   }
+  ],
+  "unmodelled": [
+   "the bulk KV flush transient (E4B_PAGED_BULK_KV, on by default since SC2c/SC2d): one prompt's K/V staged for the single bulk write; lane SC2d recorded 168 MiB on gpt-oss-20b",
+   "CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)"
+  ],
+  "refusals": [],
+  "device_total": 24929038720,
+  "host_total": 247463936
+ },
+ "versions": {
+  "experts4bit-qlora": "0.48.0",
+  "grouped-nf4-gemm": "0.41.0",
+  "torch": "2.8.0+cu128",
+  "transformers": "5.18.0"
+ },
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "capability": [
+  12,
+  0
+ ],
+ "measured": {
+  "host_anon_start_bytes": 509833216,
+  "load_seconds": 42.7,
+  "load_device_peak_bytes": 23735772160,
+  "load_reserved_peak_bytes": 23737663488,
+  "host_anon_after_load_bytes": 765792256,
+  "host_anon_load_peak_bytes": 1985253376,
+  "device_peak_bytes": 25134193152,
+  "device_reserved_peak_bytes": 25235030016,
+  "driver_process_peak_bytes": 25857884160,
+  "driver_samples": 210,
+  "scheduler_steps": 63,
+  "serve_seconds": 14.73,
+  "requests_done": 16,
+  "tokens_out": 512,
+  "tokens_per_s": 34.8,
+  "host_anon_peak_bytes": 1985253376,
+  "host_anon_serving_peak_bytes": 1890570240,
+  "estimate_minus_peak_bytes": -205154432
+ },
+ "info": {
+  "moe_layers": 40,
+  "experts": 256,
+  "top_k": 8,
+  "model_type": "qwen3_5_moe_text",
+  "int4_expert_layers": 0,
+  "int4_store_kinds": [],
+  "int4_attn_projections": 0,
+  "kv": {
+   "n_kv_heads": 2,
+   "head_dim": 256,
+   "k_groups": "auto",
+   "scratch_slots": 0,
+   "blocks_per_seq": 256
+  },
+  "grouping": {
+   "device_grouping": false,
+   "force_singleton_groups": false
+  },
+  "prefill_graph": "0",
+  "levers_env": {
+   "E4B_SERVE_EXP_INT4": "0",
+   "E4B_SERVE_ATTN_INT4": "0"
+  },
+  "exp_int4_layers_enabled": 0,
+  "attn_int4_rtn_projections": 0,
+  "attn_int4_calib_projections": 0,
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 0,
+  "host_heap_trimmed": true
+ },
+ "graph_status": {},
+ "prefill_graph": {
+  "status": "off"
+ },
+ "linear_state": {
+  "nbytes": 1038090240,
+  "priced_bytes": 1038090240,
+  "n_slots": 16,
+  "layers": 30,
+  "equal": true
+ },
+ "expert_routes_seen": {
+  "nf4_mtile_host|gt256": 1280,
+  "nf4_singleton|le256": 160,
+  "nf4_mtile_host|le256": 2280
+ },
+ "status": "OK"
+}

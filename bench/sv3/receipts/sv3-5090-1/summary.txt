@@ -1,0 +1,11 @@
+sv3 tripwire OK 0.48.0 0.41.0 2.8.0+cu128 NVIDIA GeForce RTX 5090 (12, 0)
+qwen36: fetched 67G
+bake qwen36 rc=0 {'status': 'OK', 'layers': 40, 'experts': 256, 'load_s': 26.7, 'bake_s': 12.0, 'err': None}
+q36_e16 rc=0 OK est 23.217 GiB peak 23.408 load 22.106 driver 24.082 | host anon load-peak 1.99 after 0.77 serving 1.89 GB | int4 layers 0 | linear state {'nbytes': 1038090240, 'priced_bytes': 1038090240, 'n_slots': 16, 'layers': 30, 'equal': True} | graphs []
+q36_g16 rc=0 OK est 24.187 GiB peak 24.423 load 24.226 driver 25.568 | host anon load-peak 2.05 after 2.01 serving 2.14 GB | int4 layers 0 | linear state {'nbytes': 2076180480, 'priced_bytes': 2076180480, 'n_slots': 32, 'layers': 30, 'equal': True} | graphs ['graph']
+q36_g1_default rc=0 OK est 22.629 GiB peak 22.893 load 22.696 driver 24.219 | host anon load-peak 1.87 after 1.85 serving 1.93 GB | int4 layers 0 | linear state {'nbytes': 1102970880, 'priced_bytes': 1102970880, 'n_slots': 17, 'layers': 30, 'equal': True} | graphs ['eager: AcceleratorError: CUDA error: operation failed due to a previous e
+q36_g1_capped rc=0 OK est 21.720 GiB peak 21.948 load 21.630 driver 22.732 | host anon load-peak 1.80 after 1.80 serving 1.91 GB | int4 layers 0 | linear state {'nbytes': 129761280, 'priced_bytes': 129761280, 'n_slots': 2, 'layers': 30, 'equal': True} | graphs ['graph']
+gptoss: fetched 13G
+bake gptoss rc=0 {'status': 'OK', 'layers': 24, 'experts': 32, 'load_s': 177.2, 'bake_s': 9.9, 'err': None}
+gptoss_g16 rc=0 OK est 15.391 GiB peak 15.673 load 15.217 driver 17.109 | host anon load-peak 1.69 after 1.69 serving 1.77 GB | int4 layers 0 | linear state None | graphs ['graph']
+SV3 done: 5 arm receipts
