@@ -9636,6 +9636,56 @@
       "notes": "Vast invoiced $0.45."
     },
     {
+      "id": "e4b.train.decoded-route.olmoe.5090.2026-10-06",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "allenai/OLMoE-1B-7B-0924-Instruct @ 7f1c97f440f0",
+      "claim": "TC1 amendment 46 (#1049), one rented RTX 5090 (tc1dec-5090-4, AMD EPYC 7713): grouped-nf4-gemm's decoded training route (GNF4_TRAIN_GEMM=decoded, gnf4#487: per chunk of present groups, dequant_groups + one grouped bf16 GEMM launch, 256 MiB cap) against its fused kernels on OLMoE-1B-7B's matched arm: decoded/fused 1.005 [0.979, 1.031] (1.040 / 1.026 -> 1.018 / 1.058 s/step), held-out +0.0021, peak unchanged. P108 FALSIFIED (registered <= 0.95 on the median and every cross-draw ratio): lane RD1's per-call win (0.79x the fused kernels at 512 skewed rows) does not reach the step, so grouped-nf4-gemm's auto does not take the route and it stays opt-in. The box's first step, grouped-nf4-gemm's compiled tests for the route on the 5090, passed (P107 HELD).",
+      "value": 1.005,
+      "unit": "ratio s/step, decoded / fused (medians of steps 11..60 over two draws each; < 1 = decoded faster); cross-draw interval [0.979, 1.031]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1dec-5090-4: instance 54403153, AMD EPYC 7713, Vast machine 55913); e4b @ ac3adf9 + grouped-nf4-gemm @ aaefbf8 (#487's merge) in venv-e4b, torch 2.8.0+cu128, triton 3.4.0",
+      "conditions": "bench/tc1 token olmoedecab (TC1 amendment 46): OLMoE-1B-7B-0924-Instruct at TC2's pin through tc1_prepare (TC1's field recipe: alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407), the matched arm, _dec0 (GNF4_TRAIN_GEMM=fused) / _dec1 (=decoded) two draws each in ABBA order, 60 steps, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2 (every arm first attempt, load1 1.9-3.1); the decoded gate first (decgate.json)",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-decoded.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1dec-5090-4/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1dec-5090-4/tc1/"
+      ],
+      "notes": "Vast invoiced $1.07 for the box (both families; $0.52 of it the 80 GB download)."
+    },
+    {
+      "id": "e4b.train.decoded-route.qwen3.5090.2026-10-06",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 46 (#1049), the same box (tc1dec-5090-4): grouped-nf4-gemm's decoded training route against its fused kernels on Qwen3-30B-A3B's matched arm, whose field calls sit below lane RD1's 48-rows-per-expert line: decoded/fused 1.066 [1.050, 1.081] (3.682 / 3.647 -> 3.943 / 3.868 s/step), held-out -0.0015, peak unchanged. P109 HELD (registered [0.97, 1.25]); it does not drive the decision, which P108 (OLMoE) FALSIFIED: auto unchanged.",
+      "value": 1.066,
+      "unit": "ratio s/step, decoded / fused (medians of steps 11..60 over two draws each; > 1 = decoded slower); cross-draw interval [1.050, 1.081]",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1dec-5090-4: instance 54403153, AMD EPYC 7713, Vast machine 55913); e4b @ ac3adf9 + grouped-nf4-gemm @ aaefbf8 (#487's merge) in venv-e4b, torch 2.8.0+cu128, triton 3.4.0",
+      "conditions": "bench/tc1 token qwen3decab (TC1 amendment 46): TC1's Qwen3 tokens and field recipe (alpaca, seq 2048, micro-batch 2 x accum 4, r 16 / alpha 16, lr 2e-4, AdamW-8bit, seed 3407), the matched arm, _dec0 (GNF4_TRAIN_GEMM=fused) / _dec1 (=decoded) two draws each in ABBA order, 60 steps, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2 (every arm first attempt, load1 1.9-3.1)",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-decoded.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1dec-5090-4/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1dec-5090-4/tc1/"
+      ],
+      "notes": "One box with the OLMoE row; see its note for the invoice."
+    },
+    {
       "id": "e4b.train.memory-census.qwen3.5090.2026-10-04",
       "package": "experts4bit-qlora",
       "area": "train",
