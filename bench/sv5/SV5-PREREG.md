@@ -28,6 +28,15 @@ with its results known: `a5_short` 21.734 GiB against 22.150; `a5_long` out of m
 23.52 GiB card. The exit-code changes are in `sv5_run.sh` for any later run. `sv5-4090-1` ran the earlier mapping,
 where a bake failure exited 13. It exited 0, so no code was misused.
 
+**What this file licenses** (maintainer, 2026-10-06T05:40Z). It licenses nothing from `sv5-4090-1`.
+- Its rule and consequences were written with the results known, so that box's readings are exploratory. A read PR
+  may record them through `sv5_reduce.py`, and it licenses no change in this package or in the planner.
+- The rule pins this estimate's total (23,783,815,168 bytes at `fd70f75b`). #1247 has since priced the bulk KV flush
+  and changed that total, so a later box under this file would read VOID. A consequence needs a new registration,
+  merged before its box, with the estimate at its launch SHA.
+- The one change this package made after the box, #1247, was reviewed on its code, not licensed by this read.
+- loggetta `6024451` is loggetta's own decision. This file does not license it.
+
 ## Premise
 
 The plan under test is loggetta's (the planner's) output at `35597dd`, from receipts SV1–SV4. The planner takes slack
@@ -83,7 +92,7 @@ The plan's total is 22.74 GiB; the card reports 23.99 GiB.
   An arm failing integrity is ALARM. An out-of-memory error in `a5_long` is Z1's reading, not an ALARM.
 - **Recorded, not registered:** tok/s (one draw each), host memory, slack.
 
-## Consequences (written after the data; see the dated note)
+## Consequences (written after the data: they apply to no box; see "What this file licenses")
 
 What each reading changes in the planner's plan, its slack, or this package's estimate items:
 
