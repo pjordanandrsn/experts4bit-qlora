@@ -278,3 +278,57 @@ def test_int4_levers_are_refused_where_the_server_refuses_them():
                                          num_key_value_heads=1, head_dim=80, vocab_size=192, max_position_embeddings=64))
     assert any("multiple of 32" in r for r in estimate_serve_footprint(odd, ServeSetup(attn_int4=True)).refusals)
     assert not estimate_serve_footprint(odd, ServeSetup(exp_int4=True)).refusals
+
+
+def _stateful_hybrids():
+    """Tiny configs, one per verdict: LFM2's conv layers (a type the runner keeps no state for), granite-4.0-h's Mamba
+    layers (labelled linear_attention, which the per-slot pool cannot drive), Qwen3.5's Gated DeltaNet (kept)."""
+    lfm2 = tr.Lfm2MoeConfig(vocab_size=128, hidden_size=64, intermediate_size=128, moe_intermediate_size=32,
+                            num_hidden_layers=4, num_attention_heads=4, num_key_value_heads=2, num_dense_layers=1,
+                            num_experts=4, num_experts_per_tok=2, max_position_embeddings=256,
+                            layer_types=["conv", "full_attention", "conv", "full_attention"])
+    granite = tr.GraniteMoeHybridConfig(vocab_size=128, hidden_size=64, intermediate_size=128, num_hidden_layers=4,
+                                        num_attention_heads=4, num_key_value_heads=2, num_local_experts=4,
+                                        num_experts_per_tok=2, shared_intermediate_size=64, mamba_n_heads=4,
+                                        mamba_n_groups=1, mamba_d_state=16, mamba_d_head=32, mamba_d_conv=4,
+                                        max_position_embeddings=256,
+                                        layer_types=["linear_attention", "attention", "linear_attention", "attention"])
+    qwen35 = tr.Qwen3_5MoeTextConfig(vocab_size=128, hidden_size=64, num_hidden_layers=4, num_attention_heads=4,
+                                     num_key_value_heads=2, head_dim=32, moe_intermediate_size=32,
+                                     shared_expert_intermediate_size=32, num_experts=4, num_experts_per_tok=2,
+                                     linear_num_key_heads=2, linear_num_value_heads=4, linear_key_head_dim=16,
+                                     linear_value_head_dim=16, linear_conv_kernel_dim=4, max_position_embeddings=256,
+                                     layer_types=["linear_attention", "full_attention"] * 2)
+    return {"lfm2": lfm2, "granite": granite, "qwen35": qwen35}
+
+
+def test_the_estimate_refuses_the_state_the_paged_runner_does_not_keep():
+    """LFM2-8B-A1B and granite-4.0-h-tiny planned as feasible serves; serve_paged refuses both when it builds the
+    runner. The topology now carries the runner's own verdict, and the estimate refuses with it."""
+    cfgs = _stateful_hybrids()
+    verdict = {name: describe_moe(cfg).paged_state_refusal for name, cfg in cfgs.items()}
+    assert "['conv']" in verdict["lfm2"]
+    assert "Gated DeltaNet only" in verdict["granite"]
+    assert verdict["qwen35"] is None and describe_moe(_qwen3()).paged_state_refusal is None
+    for name in ("lfm2", "granite"):
+        f = estimate_serve_footprint(describe_moe(cfgs[name]), ServeSetup(max_seqs=1, graphs=False))
+        assert f.items == () and any("the paged server refuses this model" in r for r in f.refusals)
+    kept = estimate_serve_footprint(describe_moe(cfgs["qwen35"]), ServeSetup(max_seqs=1, graphs=False))
+    assert not any("paged server refuses" in r for r in kept.refusals)       # (the bare text config meets the loader's)
+
+
+def test_the_refusal_is_the_runner_s_own_verdict():
+    """Built for real (tiny, CPU), each model is refused by the runner's layer plan exactly when the verdict says so."""
+    pytest.importorskip("transformers.cache_utils", reason="needs transformers' cache_utils")
+    from transformers.cache_utils import LinearAttentionLayer  # noqa: F401  (the pool's state carrier, >= 5.13)
+
+    from experts4bit_qlora.engines.paged_runner import layer_plan, paged_state_refusal
+    for name, cfg in _stateful_hybrids().items():
+        model = tr.AutoModelForCausalLM.from_config(cfg).eval()
+        refusal = paged_state_refusal(model)
+        try:
+            layer_plan(model, cfg.num_hidden_layers, 2)
+            refused = False
+        except NotImplementedError:
+            refused = True
+        assert refused == (refusal is not None), (name, refusal)

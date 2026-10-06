@@ -261,6 +261,8 @@ def serve_setup_refusals(topology, setup: ServeSetup) -> tuple:
         return (f"the loader refuses this model: {topology.loader_refusal}",)
     if not topology.expert_stacks:
         out.append("no fused expert stack at the loader's expert path")
+    if topology.paged_state_refusal:
+        out.append(f"the paged server refuses this model: {topology.paged_state_refusal}")
     if setup.placement not in ("all-vram", "solver"):
         out.append(f"placement must be 'all-vram' or 'solver', got {setup.placement!r}")
     if setup.placement == "solver":
