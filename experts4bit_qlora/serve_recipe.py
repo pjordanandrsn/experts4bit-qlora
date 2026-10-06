@@ -109,17 +109,31 @@ def linear_state_pool_bytes(layers, n_slots: int, conv_bytes: int = 2) -> int:
 ARENA_ALIGN = 4096
 
 
-def solver_tiers(n_layers: int, n_experts: int, bytes_per_expert: int, vram_gb: float, dram_gb: float) -> dict:
-    """Expert rows per tier under ``placement="solver"``, from :func:`~.engines.placement.solve_placement` itself.
-
-    ``build_engine`` passes no routing profile, so every expert weighs the same and the solver's greedy fills VRAM, then
-    DRAM, then NVMe; the bandwidths it is given decide nothing here, so unit overrides stand in for a calibration."""
+@functools.lru_cache(maxsize=64)
+def _solver_manifest(n_layers: int, n_experts: int, bytes_per_expert: int, vram_gb: float, dram_gb: float) -> dict:
+    """:func:`~.engines.placement.solve_placement` as ``build_engine`` calls it, with no routing profile: every expert
+    weighs the same and the solver's greedy fills VRAM, then DRAM, then NVMe; the bandwidths it is given decide nothing
+    here, so unit overrides stand in for a calibration."""
     from .engines.placement import solve_placement
 
-    man = solve_placement(n_layers=n_layers, n_experts=n_experts, bytes_per_expert=bytes_per_expert,
-                          vram_budget_bytes=int(vram_gb * 2**30), dram_budget_bytes=int(dram_gb * 2**30),
-                          calibration={}, profile_path=None, b_vram_override=1.0, b_dram_override=1.0, batch=1)
+    return solve_placement(n_layers=n_layers, n_experts=n_experts, bytes_per_expert=bytes_per_expert,
+                           vram_budget_bytes=int(vram_gb * 2**30), dram_budget_bytes=int(dram_gb * 2**30),
+                           calibration={}, profile_path=None, b_vram_override=1.0, b_dram_override=1.0, batch=1)
+
+
+def solver_tiers(n_layers: int, n_experts: int, bytes_per_expert: int, vram_gb: float, dram_gb: float) -> dict:
+    """Expert rows per tier under ``placement="solver"``, from :func:`~.engines.placement.solve_placement` itself."""
+    man = _solver_manifest(n_layers, n_experts, bytes_per_expert, float(vram_gb), float(dram_gb))
     return {t: len(v) for t, v in man["tiers"].items()}
+
+
+def dram_rows_per_layer(n_layers: int, n_experts: int, bytes_per_expert: int, vram_gb: float, dram_gb: float) -> int:
+    """The most DRAM-tier experts any one layer holds under the solver's placement. Without a routing profile the
+    solver fills whole layers in order, so this is usually every expert of a layer."""
+    from collections import Counter
+
+    man = _solver_manifest(n_layers, n_experts, bytes_per_expert, float(vram_gb), float(dram_gb))
+    return max(Counter(int(layer) for layer, _e in man["tiers"]["dram"]).values(), default=0)
 
 
 def bytes_per_expert(stack, qsetup=None) -> int:
@@ -356,6 +370,21 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                                        f"the routed NVMe experts of one layer call, streamed to the GPU and run there "
                                        f"(hot_residency._cold_contrib): at most {need} rows x {bpe} B, the same bound as "
                                        "min_hot_rows; transient, so this is its ceiling"))
+        dram_max = dram_rows_per_layer(n_layers, n_experts, bpe, setup.vram_gb, setup.dram_gb)
+        if dram_max:
+            per_expert = topology.expert_stacks[0].numel // n_experts
+            upload = per_expert // 2 + 2 * (per_expert // 64)            # NF4 nibbles + absmax cast to bf16
+            rows = (topology.top_k or n_experts) * setup.chunk_tokens
+            routed = min(dram_max, rows)
+            dram_gpu = routed * upload + rows * topology.hidden_size * (2 + 4 + 4)
+            cold = need * bpe if need else 0
+            if dram_gpu > cold:
+                items.append(FootprintItem(
+                    "DRAM experts run on the GPU at prefill (one layer call)", "device", dram_gpu - cold, "derived",
+                    f"a prefill chunk computes the DRAM tier's routed experts on the GPU "
+                    f"(hybrid._dram_on_gpu): up to {routed} experts x {upload} B (NF4 + bf16 absmax) and the chunk's "
+                    f"{rows} routed rows (bf16 input, two fp32 outputs); transient, priced by its excess over the cold "
+                    f"rows' stack, since a layer call streams one or the other"))
         if setup.hot_rows < need:
             return Footprint(items=(), refusals=(
                 f"hot_rows {setup.hot_rows} is below the {need} a cold layer can route in one step (top_k x "
