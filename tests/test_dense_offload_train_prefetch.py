@@ -1,11 +1,13 @@
-"""DQ3 (bench/dq3/DQ3-PREREG.md): the opt-in overlapped TRAINING prefetch of ``enable_dense_offload(train_prefetch=True)``.
+"""DQ3 (bench/dq3/DQ3-PREREG.md): the overlapped TRAINING prefetch of ``enable_dense_offload``'s ``train_prefetch``
+(default: on for CUDA device chains, off elsewhere; ``False`` opts out).
 
 The contract is the one ``test_dense_offload.py`` sets for inference, extended to training:
 
-1. **Off is byte-identical.** With ``train_prefetch=False`` no schedule, side stream or event is built, and training
-   gives exactly what it gave before.
-2. **Bitwise parity.** With it on, losses and gradients are ``torch.equal`` to an un-offloaded run, under gradient
-   checkpointing and without it.
+1. **Off is byte-identical.** With ``train_prefetch=False`` (or the default on a non-CUDA device) no schedule, side
+   stream or event is built, and training gives exactly what it gave before.
+2. **Bitwise parity.** With it on, losses and gradients are ``torch.equal`` to an un-offloaded run: without
+   checkpointing, under non-reentrant checkpointing, and under reentrant checkpointing (whose first forward runs under
+   ``no_grad`` with the model in ``train()``).
 3. **Bounded residency.** Two layers at most (the one in use + one scheduled neighbour), at every use.
 4. **The schedule.** Forward prefetches i+1, backward i-1; the exact counts are pinned on a 4-layer model.
 5. **The fence.** A copy into a block compute is still reading would corrupt weights silently; ``record_stream`` at bind
@@ -39,14 +41,14 @@ class Block(nn.Module):
 
 
 class Toy(nn.Module):
-    def __init__(self, n=NL, ckpt=True):
+    def __init__(self, n=NL, ckpt=True):          # ckpt: False, True (non-reentrant) or "reentrant"
         super().__init__()
         self.layers = nn.ModuleList(Block() for _ in range(n))
         self.ckpt = ckpt
 
     def forward(self, x):
         for lay in self.layers:
-            x = checkpoint(lay, x, use_reentrant=False) if self.ckpt else lay(x)
+            x = checkpoint(lay, x, use_reentrant=(self.ckpt == "reentrant")) if self.ckpt else lay(x)
         return x
 
 
@@ -144,15 +146,16 @@ def test_schedule_rejects_an_index_outside_the_chain():
 
 
 # ------------------------------------------------------------------ off path -------
-def test_off_builds_no_schedule_stream_or_event(monkeypatch):
-    """train_prefetch=False (the default) must not construct the DQ3 machinery at all."""
+@pytest.mark.parametrize("kw", [{"train_prefetch": False}, {}], ids=["explicit-off", "default-on-cpu"])
+def test_off_builds_no_schedule_stream_or_event(monkeypatch, kw):
+    """train_prefetch=False, and the default on a non-CUDA device, must not construct the DQ3 machinery at all."""
     def boom(*a, **k):
         raise AssertionError("the off path reached the train-prefetch machinery")
 
     monkeypatch.setattr(do, "_prefetch_stream", boom)
     monkeypatch.setattr(do._TrainPrefetch, "__init__", boom)
     m = _model("cpu")
-    hs = enable_dense_offload(m, "cpu", pin=False, prefetch=False)
+    hs = enable_dense_offload(m, "cpu", pin=False, prefetch=False, **kw)
     assert all(h._train is None and h._train_idx is None for h in hs)
     assert dense_offload_report(hs)["train_prefetch"] is None
     _steps(m, "cpu", steps=2)
@@ -161,7 +164,7 @@ def test_off_builds_no_schedule_stream_or_event(monkeypatch):
 def test_off_training_matches_no_offload_exactly():
     ref = _steps(_model("cpu"), "cpu")
     m = _model("cpu")
-    enable_dense_offload(m, "cpu", pin=False, prefetch=False)
+    enable_dense_offload(m, "cpu", pin=False, prefetch=False, train_prefetch=False)
     _assert_equal_runs(ref, _steps(m, "cpu"))
 
 
@@ -173,7 +176,7 @@ def test_a_second_enable_with_train_prefetch_false_turns_it_off():
 
 
 # --------------------------------------------------------------- on, CPU (CI) -----
-@pytest.mark.parametrize("ckpt", [True, False])
+@pytest.mark.parametrize("ckpt", [True, "reentrant", False])
 def test_on_cpu_is_bitwise_identical_and_bounded(ckpt):
     ref = _steps(_model("cpu", ckpt=ckpt), "cpu")
     m = _model("cpu", ckpt=ckpt)
@@ -182,13 +185,15 @@ def test_on_cpu_is_bitwise_identical_and_bounded(ckpt):
     c = dense_offload_report(hs)["train_prefetch"]["cpu"]
     assert c["hwm_resident"] <= 2, c
     assert c["unscheduled"] == 0, c
+    # per layer per step: the forward, then (checkpointed) the recompute, then the backward pre-hook
+    assert c["uses"] == (3 if ckpt else 2) * NL * 3, c
     # on CPU nothing is copied ahead: every target is staged when used
     assert c["fwd_prefetch_issued"] == c["bwd_prefetch_issued"] == 0, c
 
 
 # --------------------------------------------------------------- on, CUDA ---------
 @cuda
-@pytest.mark.parametrize("ckpt", [True, False])
+@pytest.mark.parametrize("ckpt", [True, "reentrant", False])
 def test_on_cuda_is_bitwise_identical(ckpt):
     ref = _steps(_model("cuda", ckpt=ckpt), "cuda")
     m = _model("cuda", ckpt=ckpt)
@@ -197,11 +202,12 @@ def test_on_cuda_is_bitwise_identical(ckpt):
 
 
 @cuda
-def test_on_cuda_counts_match_the_schedule_exactly():
-    """4 layers, checkpointed, 3 steps. Step 1 starts cold (layer 0 blocking, 3 forward prefetches); every later step
+@pytest.mark.parametrize("ckpt", [True, "reentrant"])
+def test_on_cuda_counts_match_the_schedule_exactly(ckpt):
+    """4 layers, checkpointed (non-reentrant, and reentrant: same use order, first forward under no_grad), 3 steps. Step 1 starts cold (layer 0 blocking, 3 forward prefetches); every later step
     issues 2 x (n - 2) = 4 prefetches (2 forward, 2 backward) and blocks on none -- the turnaround and the step boundary
     are resident hits. The backward's prefetches are what a forward-only schedule would lack."""
-    m = _model("cuda")
+    m = _model("cuda", ckpt=ckpt)
     hs = enable_dense_offload(m, "cuda", pin=True, prefetch=False, train_prefetch=True)
     _steps(m, "cuda", steps=1)
     c1 = dict(dense_offload_report(hs)["train_prefetch"]["cuda"])
@@ -216,6 +222,36 @@ def test_on_cuda_counts_match_the_schedule_exactly():
     consumed = sum(c3[f"{p}_{k}"] for p in ("fwd", "bwd") for k in ("overlapped", "waited"))
     assert consumed == issued, c3
     assert c3["hwm_resident"] <= 2 and c3["unscheduled"] == 0, c3
+
+
+@cuda
+def test_the_default_is_on_for_a_cuda_chain_and_false_opts_out():
+    """The default since DQ3/DQ5: a CUDA chain gets the schedule without asking, and trains bitwise identically with it;
+    ``train_prefetch=False`` is the opt-out."""
+    ref = _steps(_model("cuda"), "cuda")
+    m = _model("cuda")
+    hs = enable_dense_offload(m, "cuda", pin=True, prefetch=False)
+    assert all(h._train is not None for h in hs)
+    _assert_equal_runs(ref, _steps(m, "cuda"))
+    c = dense_offload_report(hs)["train_prefetch"]["cuda"]
+    assert c["fwd_prefetch_issued"] > 0 and c["unscheduled"] == 0 and c["hwm_resident"] <= 2, c
+    hs = enable_dense_offload(m, "cuda", pin=True, prefetch=False, train_prefetch=False)
+    assert all(h._train is None for h in hs) and dense_offload_report(hs)["train_prefetch"] is None
+
+
+@cuda
+def test_the_default_schedules_only_the_cuda_chain_of_a_split_model():
+    """device=None resolves per layer: with layers split across CPU and CUDA, the default schedules the CUDA chain and
+    leaves the CPU chain on the synchronous path; the report shows the CUDA chain even though layer 0 is on the CPU."""
+    m = _model("cpu")
+    for lay in m.layers[2:]:
+        lay.to("cuda")
+    hs = enable_dense_offload(m, None, pin=False, prefetch=False)
+    assert [h._train is not None for h in hs] == [False, False, True, True]
+    assert [h._train_idx for h in hs[2:]] == [0, 1]
+    assert list(dense_offload_report(hs)["train_prefetch"]) == [str(hs[2].device)]
+    hs = enable_dense_offload(m, None, pin=False, prefetch=False, train_prefetch=True)
+    assert all(h._train is not None for h in hs), "True forces the schedule on every chain"
 
 
 def _race(mutant: bool) -> bool:

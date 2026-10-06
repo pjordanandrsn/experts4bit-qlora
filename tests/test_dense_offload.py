@@ -204,7 +204,8 @@ def test_two_resident_at_most_and_zero_after():
 
 
 @cuda
-def test_grad_enabled_forward_stays_resident_for_backward():
+@pytest.mark.parametrize("train_prefetch", [False, None], ids=["sync", "default"])
+def test_grad_enabled_forward_stays_resident_for_backward(train_prefetch):
     """Evicting after a grad-enabled forward would hand autograd 0-element
     placeholders — it fails with a shape mismatch far from the cause. So under grad
     the weights stay staged: no saving, but correct. Gradients must also match an
@@ -218,7 +219,7 @@ def test_grad_enabled_forward_stays_resident_for_backward():
 
     m = _model("cuda")
     m.train()
-    enable_dense_offload(m, "cuda", pin=True)
+    enable_dense_offload(m, "cuda", pin=True, train_prefetch=train_prefetch)
     m(x).sum().backward()          # must not raise
     got = {n: p.grad for n, p in m.named_parameters() if p.grad is not None}
     assert set(got) == set(want), (set(got) ^ set(want))
