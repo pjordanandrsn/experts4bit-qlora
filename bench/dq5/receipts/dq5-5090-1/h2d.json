@@ -1,0 +1,11 @@
+{
+ "schema": "dq5-h2d/1",
+ "device": "NVIDIA GeForce RTX 5090",
+ "link_max": "4, 16",
+ "link_idle_current": "1, 16",
+ "b2b_64mb_gbs": 22.462706095946483,
+ "link_loaded_current": "4, 16",
+ "single_64mb_gbs": 21.713802541424574,
+ "single_layer_gbs": 20.935770488902655,
+ "link_eff_single_over_b2b": 0.9666601365248217
+}
