@@ -29,7 +29,7 @@ def test_on_glibc_the_trim_is_found(monkeypatch):
 
 def test_the_server_build_hands_its_freed_heap_back():
     """build_engine trims once it is built and reports it (``host_heap_trimmed`` in its info): measured, the build
-    leaves 0.34 GB (OLMoE-1B-7B) to ~1.5 GB (Qwen3-30B-A3B, a 48-core host) of freed heap resident otherwise."""
+    leaves 0.34 GB (OLMoE-1B-7B, RTX A2000 host) of freed heap resident otherwise."""
     import inspect
 
     pytest.importorskip("torch")

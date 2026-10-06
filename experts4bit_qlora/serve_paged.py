@@ -1011,7 +1011,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info.update(fusions)
     # The build churns through host buffers it frees (the hybrid tier's setup tier, the stacks' one-shot reads), and
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
-    # (RTX A2000 host) and ~1.5 GB on Qwen3-30B-A3B (a 48-core host, lane SV2). The loader alone leaves ~4 MB.
+    # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.
     info["host_heap_trimmed"] = release_freed_host_heap()
     log(f"ready: {json.dumps(info, default=str)}")
     return EngineParts(scheduler=sched, tokenizer=tok, eos_ids=_eos_ids(model, tok, cfg), info=info, runner=runner)

@@ -8,5 +8,5 @@
   - anonymous host memory after the build fell from 0.90 GB to 0.56 GB;
   - a second trim afterwards returns nothing;
   - the loader alone leaves ~4 MB, so the build is where the trim belongs.
-- On Qwen3-30B-A3B (lane SV2, a 48-core host) the NF4 build held 3.21 GB after load. The int4 builds, whose levers
-  already trimmed (#1182), held 1.68 GB.
+- What the trim returns on a 30B build was not measured here: lane SV2's NF4-vs-int4 after-load difference on
+  Qwen3-30B-A3B mixes the trim with the levers' other changes, so it is not this quantity.
