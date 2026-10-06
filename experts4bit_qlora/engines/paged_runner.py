@@ -59,6 +59,30 @@ class PrefillGraphRefused(ValueError):
 #: ``config.layer_types`` values whose layers own K/V in the paged pool, and values that carry no per-sequence state
 ATTENTION_LAYER_TYPES = frozenset({"full_attention", "sliding_attention", "attention"})
 STATELESS_LAYER_TYPES = frozenset({"mlp", "moe"})
+#: every layer type the runner can serve: attention (K/V in the paged pool), stateless, and linear attention (per-slot
+#: state in :mod:`.linear_state`)
+KEPT_LAYER_TYPES = ATTENTION_LAYER_TYPES | STATELESS_LAYER_TYPES | {linear_state.LINEAR_LAYER_TYPE}
+
+
+def paged_state_refusal(model) -> str | None:
+    """Why the paged runner refuses ``model``'s state-carrying layers, or None. These are the two rules it applies when
+    it is built:
+    - :func:`layer_plan`: a layer type it keeps no state for;
+    - :func:`.linear_state.install`: linear-attention layers its per-slot pool cannot drive. transformers labels
+      Mamba-style layers ``linear_attention`` too, and the pool drives Gated DeltaNet only.
+
+    It reads the config and module classes only, so a planner can ask on a meta tree."""
+    types = linear_state.layer_types(getattr(model, "config", None))
+    if not types:
+        return None
+    unknown = sorted(set(types) - KEPT_LAYER_TYPES)
+    if unknown:
+        return f"layer types {unknown} carry state the paged runner does not keep"
+    want, driven = linear_state.driven_linear_layers(model)
+    if want and want != driven:
+        return (f"config.layer_types names linear-attention layers {want}, but the per-slot state pool drives "
+                f"{driven} (Gated DeltaNet only); the others would run without their state")
+    return None
 
 
 def layer_plan(model, n_layers: int, n_slots: int):
@@ -70,8 +94,7 @@ def layer_plan(model, n_layers: int, n_slots: int):
     types = linear_state.layer_types(getattr(model, "config", None))
     if not types:
         return list(range(n_layers)), None
-    known = ATTENTION_LAYER_TYPES | STATELESS_LAYER_TYPES | {linear_state.LINEAR_LAYER_TYPE}
-    unknown = sorted(set(types) - known)
+    unknown = sorted(set(types) - KEPT_LAYER_TYPES)
     if unknown:
         raise NotImplementedError(f"layer types {unknown} carry state the paged runner does not keep; refusing")
     attn = [i for i, t in enumerate(types) if t in ATTENTION_LAYER_TYPES]

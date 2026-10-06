@@ -201,6 +201,15 @@ def _bucket_selector(ctx):
     return sel
 
 
+def driven_linear_layers(model) -> tuple[list[int], list[int]]:
+    """``(the linear layers config.layer_types names, the ones this pool can drive)`` for ``model``. :func:`install`
+    refuses a model unless the two agree. It reads the config and module classes only, so it answers on a meta tree
+    too (the serve estimate asks there)."""
+    classes = _linear_classes()
+    driven = sorted(int(m.layer_idx) for m in model.modules() if classes and isinstance(m, classes))
+    return linear_layers(getattr(model, "config", None)), driven
+
+
 def install(model, n_slots: int) -> LinearStatePool | None:
     """Wrap ``model``'s linear-attention modules to read and write a :class:`LinearStatePool` of ``n_slots`` slots
     while a paged context is bound. Returns the pool (also kept as ``model._e4b_linear_state``), or None when the

@@ -118,6 +118,9 @@ class MoETopology:
     #: ``(out_features, in_features)`` of every projection the serving int4-attention swap would store on the int4-b32
     #: grid (``engines.int4_attn.attention_linears``, the swap's own rule), in module order
     int4_attention_linears: tuple = ()
+    #: why the paged server refuses this model's state-carrying layers (``engines.paged_runner.paged_state_refusal`` on
+    #: the meta tree), or ``None``
+    paged_state_refusal: str | None = None
     #: where each fact came from
     provenance: dict = field(default_factory=dict)
 
@@ -267,6 +270,9 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
         prov["kv"] = "serve_paged._kv_geometry + paged_runner.kv_layers (the paged server's rules)"
     except Exception as e:  # noqa: BLE001 - an undescribable KV geometry is an answer, recorded
         prov["kv"] = f"not described: {type(e).__name__}: {e}"[:300]
+    from ..engines.paged_runner import paged_state_refusal
+    kv_geo["paged_state_refusal"] = paged_state_refusal(tree)
+    prov["paged_state_refusal"] = "engines.paged_runner.paged_state_refusal (the runner's own rules) on the meta tree"
     return MoETopology(
         **kv_geo, loader_refusal=None, convention=conv, gated=has_gate, expert_stacks=tuple(stacks), dense_numel=int(dense),
         embedding_numel=int(emb.weight.numel()) if emb is not None else 0,
