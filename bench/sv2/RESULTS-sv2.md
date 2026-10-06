@@ -64,3 +64,27 @@ CUDA context and allocator slack, so it is read against the allocator peak.
   - int4: K19 for both, and the singleton GEMV for single rows.
 - **Load:** 54 s for NF4, 165–182 s with the repack (the whole bf16 checkpoint read and repacked).
 - **CUDA context:** 0.72–0.74 GiB. **Allocator slack:** 1.2–2.0%.
+
+## Maintainer note (2026-10-06, after the merge; nothing above is changed)
+
+How this box came to run, from #1208's events and the launch receipt
+(`receipts/experts4bit-qlora/2026-10-05/sv2-5090-1/receipt.json` in the receipt store):
+
+| time (UTC) | event |
+|---|---|
+| 2026-10-05 22:37:51 | #1208 (the registration) opened, labelled, auto-merge on |
+| 22:38:58 | maintainer review asked for three pre-data changes: registered consequences per reading, a reducer with a self-test, exit 13 for the disk floor only; auto-merge disabled, label removed |
+| **22:39:55** | **`sv2-5090-1` launched**, from a registration that was not on main |
+| 23:05:27 | box finished, $0.45 |
+| 23:38:39 | #1208 merged directly at the reviewed head, none of the three changes made |
+| 2026-10-06 00:15:18 | this read (#1210) merged directly over its review's four conditions |
+
+**What follows.** V1–V6's expectations were public before the data (#1208 at 22:37:51Z), so the readings are not post-hoc.
+But no consequence was registered for any reading, and no reducer existed before the data, so:
+- this read **licenses no change** to `estimate_serve_footprint`, the int4 repack's host price or the trims; any change it
+  suggests needs its own registration and box (#1211, the build-time trim, stands on its own A2000 measurement, not on this read);
+- the V table above was computed by hand from the committed receipts; it has no registered reducer behind it;
+- V3 is scored against the number as registered ("+571 MiB ± 64"): 585.2 MiB is inside it, as it is inside the corrected
+  +585 MiB;
+- `sv2_run.sh` still maps a bake failure to exit 13, which adertha admits as machine evidence; do not reuse the runner
+  until a bake failure has its own non-machine code.
