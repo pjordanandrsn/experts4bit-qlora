@@ -1574,6 +1574,71 @@ and both arms against the first A6 box's uncaptured rows (bit-identical, or the 
 - **Cost:** about $0.6, inside the no-ask tier.
 - **Order:** this box launches after A6's continuation (`sc1g-diag-a6-2`) has landed its receipt.
 
+## A6 continuation reading (2026-10-06): P3 HELD -- bf16 decode activations do not move e4b's median KL
+
+**The run.** `sc1g-diag-a6-2` (adertha-receipts `2f93f90d`) ran on a Vast RTX 5090, machine 145701, from `993103b8`
+(#1256). It cost **$0.753**, and teardown is proven. The reading re-derives from the committed receipt, pinned by
+`test_the_a6_continuation_reading_rederives_from_its_committed_receipt`.
+- **Arms run:** 8 of 9. That is (b), (c) and (b') on conv1; (b) and (c) on conv2 and conv3; and (b) on conv4.
+- **Dropped: conv4's (c).** `can_run 600` needs the arm's 600 s plus a 600 s reserve, 1,200 s in all, and 1,102 s were
+  left at 11:31:35Z. "host-limited" in the skip line is the message's label, not a provider limit.
+
+**Determinism and integrity.**
+- (b') is **BIT_IDENTICAL** to (b) on conv1.
+- (b) is **bit-identical** to A5's reading (machine 145701) and to A6-1's (machine 152440) on all four windows, with a
+  max |diff| of 0.0.
+- e4b's served rows have now reproduced across three runs on two hosts.
+
+**P3: HELD.** median(c) / median(b) is **1.019** on conv1, **0.920** on conv2 and **0.912** on conv3. All three are
+≥ 0.9, and A6's rule holds at ≥ 3 windows. conv4 is unread, because its (c) did not run.
+- **The registered consequence:** the decode GEMV's int8 activations are cleared at the median. The remaining excess is
+  neither the prompt route (P1 PARTIAL) nor the decode activations.
+- **The margin is thin** on conv2 and conv3, at 0.92 and 0.91 against the 0.9 bar. bf16 activations take 8–9 % off
+  those medians. HELD is the rule's reading, not "no effect at all".
+- **P1 and P2** read UNREAD by construction, because the box has no (a) arm. They stand from `sc1g-diag-a6-1` (PARTIAL,
+  FALSIFIED), and the UNREAD lines are not readings.
+
+**Per-arm times** (the maintainer's request), from each arm's log, with the host's 1-minute load average at its start.
+
+| arm | window | minutes | host load at start |
+|---|---|---|---|
+| (b) | conv1 | 3.55 | 28.0 |
+| (c) | conv1 | 4.23 | 33.2 |
+| (b') | conv1 | 5.23 | 17.2 |
+| (b) | conv2 | 2.62 | 13.1 |
+| (c) | conv2 | 1.97 | 22.3 |
+| (b) | conv3 | 2.10 | 10.2 |
+| (c) | conv3 | 1.97 | 18.0 |
+| (b) | conv4 | 2.10 | 24.3 |
+
+- **The load average is host-wide.** The 256-thread host is shared, and the box's cgroup is capped at 30.7 cores. On
+  A6-1's host (152440), the arms started at load 1–4 and took about 2.2 min each.
+- **GPU busy does not separate the hosts.** It reads 4–14 % on both. A7's registration called this host "host-bound"
+  from that GPU reading alone. The better description is a shared host whose neighbours were busy during the first three
+  arms.
+- **Speed cannot bias the values.** (b) is bit-identical across both hosts, and P3 compares (c) with (b) within this
+  one host.
+
+**Descriptive, not graded.**
+
+| window | reference NLL | (b) NLL | (c) NLL | (b) mean KL | (c) mean KL | (b) median | (c) median |
+|---|---|---|---|---|---|---|---|
+| conv1 | 0.8839 | 0.9050 | 0.8738 | 0.0152 | 0.0339 | 4.07e-4 | 4.15e-4 |
+| conv2 | 1.8210 | 1.7471 | 1.7486 | 0.0430 | 0.0377 | 3.76e-3 | 3.46e-3 |
+| conv3 | 0.8949 | 0.9133 | 0.9085 | 0.0060 | 0.0053 | 9.44e-4 | 8.60e-4 |
+| conv4 | 1.5899 | 1.5876 | — | 0.0090 | — | 1.85e-3 | — |
+
+- **On conv1, bf16 activations change the tail, not the middle.** The median stays put (× 1.02) while the mean more than
+  doubles (0.015 → 0.034). So the change sits on a few positions. That is the tail behaviour A5 saw, and the kind of
+  position A7's router-flip instrument examines.
+- **NLL:** (c) is closer to the reference than (b) on conv1 and conv3, and level with it on conv2.
+
+**Cost and next.**
+- This run: $0.753. **The lane is at $10.135.**
+- **A6 is complete.** P1 PARTIAL, P2 FALSIFIED, P3 HELD. The NF4-prefilled prompt carries a quarter to two fifths of
+  e4b's median excess, and the decode activations carry none of it at the median.
+- **The conv2 lead is with A7:** `sc1g-diag-a7-1`, launched 2026-10-06T11:35:05Z from `f008f6d7` (#1261).
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).

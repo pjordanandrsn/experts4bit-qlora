@@ -1,0 +1,2696 @@
+{
+ "a3_predictions": {
+  "across_windows": {
+   "K2_pooled": {
+    "verdict": "UNREAD",
+    "why": "0 windows < 3"
+   },
+   "K5_every_window": {
+    "verdict": "UNREAD",
+    "why": "0 windows < 3"
+   },
+   "per_window": {},
+   "windows_read": []
+  },
+  "conv1": {
+   "K1": {
+    "verdict": "UNREAD"
+   },
+   "K2": {
+    "verdict": "UNREAD"
+   },
+   "K3": {
+    "verdict": "UNREAD"
+   },
+   "K4": {
+    "verdict": "UNREAD"
+   },
+   "K5": {
+    "verdict": "UNREAD"
+   }
+  },
+  "conv2_replication": {
+   "K1": {
+    "verdict": "UNREAD"
+   },
+   "K2": {
+    "verdict": "UNREAD"
+   },
+   "K3": {
+    "verdict": "UNREAD"
+   },
+   "K5": {
+    "verdict": "UNREAD"
+   }
+  }
+ },
+ "a4": {
+  "descriptive": {
+   "floor_F": {
+    "conv1": null,
+    "conv2": null,
+    "conv3": null,
+    "conv4": null,
+    "wikitext": null
+   },
+   "note": "NLL is descriptive under A4; the KL65 rank is what A4 reads",
+   "per_window": {
+    "e4b_mxfp4": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    },
+    "e4b_nf4": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    },
+    "llamacpp": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    },
+    "llamacpp_q8": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    },
+    "sglang_marlin": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    },
+    "sglang_native": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    },
+    "vllm": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    }
+   },
+   "pooled_rank": [],
+   "reference_nll": {
+    "conv1": null,
+    "conv2": null,
+    "conv3": null,
+    "conv4": null,
+    "wikitext": null
+   }
+  },
+  "instrument": {
+   "box_r": "NOT_OK",
+   "why": "box R's receipt is not staged (FileNotFoundError)"
+  },
+  "predictions": {
+   "K-A": {
+    "verdict": "UNREAD",
+    "why": "box R's receipt is not staged (FileNotFoundError)"
+   },
+   "L1": {
+    "verdict": "UNREAD",
+    "why": "box R's receipt is not staged (FileNotFoundError)"
+   },
+   "L2": {
+    "verdict": "UNREAD",
+    "why": "box R's receipt is not staged (FileNotFoundError)"
+   }
+  },
+  "rows": {
+   "e4b_mxfp4": {
+    "conv1": {
+     "stem": "e4b_serve_served_conv1",
+     "verdict": "UNREAD",
+     "why": "no registered reference artifact"
+    },
+    "conv2": {
+     "stem": "e4b_serve_served_conv2",
+     "verdict": "UNREAD",
+     "why": "no registered reference artifact"
+    },
+    "conv3": {
+     "stem": "e4b_serve_served_conv3",
+     "verdict": "UNREAD",
+     "why": "no registered reference artifact"
+    },
+    "conv4": {
+     "stem": "e4b_serve_served_conv4",
+     "verdict": "UNREAD",
+     "why": "no registered reference artifact"
+    },
+    "wikitext": {
+     "stem": "e4b_serve_served_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "e4b_nf4": {
+    "conv1": {
+     "stem": "e4b_nf4_served_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "e4b_nf4_served_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "e4b_nf4_served_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "e4b_nf4_served_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "e4b_nf4_served_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "llamacpp": {
+    "conv1": {
+     "stem": "nll_llamacpp_decode_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "nll_llamacpp_decode_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "nll_llamacpp_decode_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "nll_llamacpp_decode_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "nll_llamacpp_decode_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "llamacpp_q8": {
+    "conv1": {
+     "stem": "nll_llamacpp_q8_decode_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "nll_llamacpp_q8_decode_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "nll_llamacpp_q8_decode_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "nll_llamacpp_q8_decode_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "nll_llamacpp_q8_decode_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "sglang_marlin": {
+    "conv1": {
+     "stem": "nll_sglang_marlin_served_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "nll_sglang_marlin_served_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "nll_sglang_marlin_served_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "nll_sglang_marlin_served_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "nll_sglang_marlin_served_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "sglang_native": {
+    "conv1": {
+     "stem": "nll_sglang_native_served_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "nll_sglang_native_served_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "nll_sglang_native_served_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "nll_sglang_native_served_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "nll_sglang_native_served_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "vllm": {
+    "conv1": {
+     "stem": "nll_vllm_served_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "nll_vllm_served_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "nll_vllm_served_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "nll_vllm_served_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "nll_vllm_served_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   }
+  }
+ },
+ "a5": {
+  "descriptive": {
+   "note": "NLL descriptive; wikitext is the out-of-distribution control, never graded",
+   "per_window": {
+    "e4b_mxfp4": {
+     "conv1": {
+      "kl": 0.015170326284833668,
+      "nll": 0.904969107589033,
+      "within_F": false
+     },
+     "conv2": {
+      "kl": 0.043036478241562925,
+      "nll": 1.7470534697364497,
+      "within_F": false
+     },
+     "conv3": {
+      "kl": 0.006042136638867919,
+      "nll": 0.9133304555617014,
+      "within_F": false
+     },
+     "conv4": {
+      "kl": 0.009033306535876546,
+      "nll": 1.5875469333210739,
+      "within_F": false
+     },
+     "wikitext": null
+    },
+    "e4b_nf4": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    },
+    "llamacpp": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    },
+    "llamacpp_q8": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    },
+    "vllm": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null,
+     "wikitext": null
+    }
+   }
+  },
+  "floor_F": {
+   "conv1": 0.005667747125860828,
+   "conv2": 0.0070299408990488225,
+   "conv3": 0.0018384930682801707,
+   "conv4": 0.0018534464589554664,
+   "wikitext": 0.02181549683372932
+  },
+  "gradable_windows": [
+   "conv1",
+   "conv2",
+   "conv3",
+   "conv4"
+  ],
+  "instrument": {
+   "box_r": "R_OK",
+   "rule": "A5",
+   "why": null
+  },
+  "nf4_requant_kl": {
+   "conv1": 0.10803657568282007,
+   "conv2": 0.13941981408624543,
+   "conv3": 0.02115054983904624,
+   "conv4": 0.022660159161343542,
+   "wikitext": 0.09890449784820704
+  },
+  "predictions": {
+   "K-A": {
+    "verdict": "UNREAD",
+    "why": "0 windows < 3",
+    "windows": {}
+   },
+   "L1": {
+    "verdict": "UNREAD",
+    "why": "0 windows < 3 with e4b and a resolved comparator",
+    "windows": []
+   },
+   "L2": {
+    "at_or_above": [],
+    "engines": {
+     "e4b_mxfp4": {
+      "below": true,
+      "nf4_scale": 0.07281677469236382,
+      "pooled": 0.018320561925285264,
+      "windows": [
+       "conv1",
+       "conv2",
+       "conv3",
+       "conv4"
+      ]
+     }
+    },
+    "verdict": "HOLDS"
+   }
+  },
+  "rows": {
+   "e4b_mxfp4": {
+    "conv1": {
+     "alignment_gap": 1.1102230246251565e-16,
+     "engine_nll": 0.904969107589033,
+     "kl_mean": 0.015170326284833668,
+     "kl_p50": 0.0004071284337785027,
+     "kl_p95": 0.048817625029162585,
+     "positions": 2048,
+     "stem": "e4b_serve_served_conv1",
+     "support": {
+      "kl_common_mean": 0.015170326284833668,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "conv2": {
+     "alignment_gap": 0.0,
+     "engine_nll": 1.7470534697364497,
+     "kl_mean": 0.043036478241562925,
+     "kl_p50": 0.003757537697916499,
+     "kl_p95": 0.14209261917036167,
+     "positions": 2048,
+     "stem": "e4b_serve_served_conv2",
+     "support": {
+      "kl_common_mean": 0.043036478241562925,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "conv3": {
+     "alignment_gap": 0.0,
+     "engine_nll": 0.9133304555617014,
+     "kl_mean": 0.006042136638867919,
+     "kl_p50": 0.0009437076634189116,
+     "kl_p95": 0.018080965751728392,
+     "positions": 2048,
+     "stem": "e4b_serve_served_conv3",
+     "support": {
+      "kl_common_mean": 0.006042136638867919,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "conv4": {
+     "alignment_gap": 0.0,
+     "engine_nll": 1.5875469333210739,
+     "kl_mean": 0.009033306535876546,
+     "kl_p50": 0.0018525068422486153,
+     "kl_p95": 0.016207061836206738,
+     "positions": 2048,
+     "stem": "e4b_serve_served_conv4",
+     "support": {
+      "kl_common_mean": 0.009033306535876546,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "wikitext": {
+     "stem": "e4b_serve_served_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "e4b_nf4": {
+    "conv1": {
+     "stem": "e4b_nf4_served_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "e4b_nf4_served_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "e4b_nf4_served_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "e4b_nf4_served_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "e4b_nf4_served_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "llamacpp": {
+    "conv1": {
+     "stem": "nll_llamacpp_decode_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "nll_llamacpp_decode_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "nll_llamacpp_decode_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "nll_llamacpp_decode_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "nll_llamacpp_decode_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "llamacpp_q8": {
+    "conv1": {
+     "stem": "nll_llamacpp_q8_decode_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "nll_llamacpp_q8_decode_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "nll_llamacpp_q8_decode_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "nll_llamacpp_q8_decode_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "nll_llamacpp_q8_decode_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "sglang_marlin": {
+    "conv1": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    },
+    "conv2": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    },
+    "conv3": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    },
+    "conv4": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    },
+    "wikitext": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    }
+   },
+   "sglang_native": {
+    "conv1": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    },
+    "conv2": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    },
+    "conv3": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    },
+    "conv4": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    },
+    "wikitext": {
+     "verdict": "UNREAD",
+     "why": "no full-distribution path (A5, registered before data)"
+    }
+   },
+   "vllm": {
+    "conv1": {
+     "stem": "nll_vllm_served_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "nll_vllm_served_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "nll_vllm_served_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "nll_vllm_served_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "wikitext": {
+     "stem": "nll_vllm_served_wikitext",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   }
+  }
+ },
+ "a6": {
+  "descriptive": {
+   "mean": {
+    "e4b_base": {
+     "conv1": 0.015170326284833668,
+     "conv2": 0.043036478241562925,
+     "conv3": 0.006042136638867919,
+     "conv4": 0.009033306535876546
+    },
+    "e4b_gemv0": {
+     "conv1": 0.03387961785130216,
+     "conv2": 0.03771369682202089,
+     "conv3": 0.005255752575519527,
+     "conv4": null
+    },
+    "e4b_mxpre": {
+     "conv1": null,
+     "conv2": null,
+     "conv3": null,
+     "conv4": null
+    },
+    "e4b_rep": {
+     "conv1": 0.015170326284833668
+    }
+   },
+   "mxpre_within_2x_vllm_a5_median": {
+    "conv1": null,
+    "conv2": null,
+    "conv3": null,
+    "conv4": null
+   },
+   "note": "descriptive: vLLM's A5 median may itself sit at the reference's arithmetic noise (no per-position R floor)"
+  },
+  "determinism": {
+   "max_abs_diff": 0.0,
+   "median_rel_change": 0.0,
+   "verdict": "BIT_IDENTICAL"
+  },
+  "instrument": {
+   "box_r": "R_OK",
+   "rule": "A5",
+   "why": null
+  },
+  "median": {
+   "e4b_base": {
+    "conv1": 0.0004071284337785027,
+    "conv2": 0.003757537697916499,
+    "conv3": 0.0009437076634189116,
+    "conv4": 0.0018525068422486153
+   },
+   "e4b_gemv0": {
+    "conv1": 0.0004147755016693163,
+    "conv2": 0.0034584488913619402,
+    "conv3": 0.0008604829114013977,
+    "conv4": null
+   },
+   "e4b_mxpre": {
+    "conv1": null,
+    "conv2": null,
+    "conv3": null,
+    "conv4": null
+   },
+   "e4b_rep": {
+    "conv1": 0.0004071284337785027
+   }
+  },
+  "predictions": {
+   "P1": {
+    "ratios": {},
+    "verdict": "UNREAD",
+    "why": "0 windows < 3"
+   },
+   "P2": {
+    "verdict": "UNREAD",
+    "why": "conv2: (a) or (b) not VALID"
+   },
+   "P3": {
+    "ratios": {
+     "conv1": 1.018782937413244,
+     "conv2": 0.92040297913168,
+     "conv3": 0.91181087613933
+    },
+    "verdict": "HELD",
+    "windows_ge_no_effect": 3,
+    "windows_le_held": 0
+   }
+  },
+  "rows": {
+   "e4b_base": {
+    "conv1": {
+     "alignment_gap": 1.1102230246251565e-16,
+     "engine_nll": 0.904969107589033,
+     "kl_mean": 0.015170326284833668,
+     "kl_p50": 0.0004071284337785027,
+     "kl_p95": 0.048817625029162585,
+     "positions": 2048,
+     "stem": "e4b_serve_served_conv1",
+     "support": {
+      "kl_common_mean": 0.015170326284833668,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "conv2": {
+     "alignment_gap": 0.0,
+     "engine_nll": 1.7470534697364497,
+     "kl_mean": 0.043036478241562925,
+     "kl_p50": 0.003757537697916499,
+     "kl_p95": 0.14209261917036167,
+     "positions": 2048,
+     "stem": "e4b_serve_served_conv2",
+     "support": {
+      "kl_common_mean": 0.043036478241562925,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "conv3": {
+     "alignment_gap": 0.0,
+     "engine_nll": 0.9133304555617014,
+     "kl_mean": 0.006042136638867919,
+     "kl_p50": 0.0009437076634189116,
+     "kl_p95": 0.018080965751728392,
+     "positions": 2048,
+     "stem": "e4b_serve_served_conv3",
+     "support": {
+      "kl_common_mean": 0.006042136638867919,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "conv4": {
+     "alignment_gap": 0.0,
+     "engine_nll": 1.5875469333210739,
+     "kl_mean": 0.009033306535876546,
+     "kl_p50": 0.0018525068422486153,
+     "kl_p95": 0.016207061836206738,
+     "positions": 2048,
+     "stem": "e4b_serve_served_conv4",
+     "support": {
+      "kl_common_mean": 0.009033306535876546,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    }
+   },
+   "e4b_gemv0": {
+    "conv1": {
+     "alignment_gap": 0.0,
+     "engine_nll": 0.8737452531567984,
+     "kl_mean": 0.03387961785130216,
+     "kl_p50": 0.0004147755016693163,
+     "kl_p95": 0.1376495474220625,
+     "positions": 2048,
+     "stem": "e4b_a6g0_served_conv1",
+     "support": {
+      "kl_common_mean": 0.03387961785130216,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "conv2": {
+     "alignment_gap": 0.0,
+     "engine_nll": 1.7486183286758725,
+     "kl_mean": 0.03771369682202089,
+     "kl_p50": 0.0034584488913619402,
+     "kl_p95": 0.12005354694769162,
+     "positions": 2048,
+     "stem": "e4b_a6g0_served_conv2",
+     "support": {
+      "kl_common_mean": 0.03771369682202089,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "conv3": {
+     "alignment_gap": 1.1102230246251565e-16,
+     "engine_nll": 0.9084532805247636,
+     "kl_mean": 0.005255752575519527,
+     "kl_p50": 0.0008604829114013977,
+     "kl_p95": 0.015314577836103786,
+     "positions": 2048,
+     "stem": "e4b_a6g0_served_conv3",
+     "support": {
+      "kl_common_mean": 0.005255752575519527,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    },
+    "conv4": {
+     "stem": "e4b_a6g0_served_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "e4b_mxpre": {
+    "conv1": {
+     "stem": "e4b_a6mx_served_conv1",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv2": {
+     "stem": "e4b_a6mx_served_conv2",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv3": {
+     "stem": "e4b_a6mx_served_conv3",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    },
+    "conv4": {
+     "stem": "e4b_a6mx_served_conv4",
+     "verdict": "UNREAD",
+     "why": "arm NOT_RUN: missing"
+    }
+   },
+   "e4b_rep": {
+    "conv1": {
+     "alignment_gap": 1.1102230246251565e-16,
+     "engine_nll": 0.904969107589033,
+     "kl_mean": 0.015170326284833668,
+     "kl_p50": 0.0004071284337785027,
+     "kl_p95": 0.048817625029162585,
+     "positions": 2048,
+     "stem": "e4b_a6rep_served_conv1",
+     "support": {
+      "kl_common_mean": 0.015170326284833668,
+      "masked_mass_max": 0.0,
+      "masked_mass_mean": 0.0,
+      "n_masked_max": 0.0,
+      "positions_masked": 0,
+      "void_positions": 0
+     },
+     "verdict": "VALID"
+    }
+   }
+  }
+ },
+ "arith": {
+  "e4b_nf4": "NF4 experts everywhere (the control)",
+  "e4b_serve": "served: MXFP4 GEMV on int8 activations (W4A8), paged fp8 decode attention; prefill: kept-NF4 host M-tile, transformers' eager attention",
+  "e4b_serve_p64": "the floor's second order (chunk 64)",
+  "llamacpp": "published GGUF (attention Q8_0); MMVQ W4A8 decode, MMQ W4A4 prefill",
+  "llamacpp_q8": "published GGUF (attention Q8_0); GGML_CUDA_MMQ_PREC=q8: W4A8 prefill",
+  "sglang_marlin": "Marlin W4A16; triton attention",
+  "sglang_native": "flashinfer_mxfp4 (cutlass_sm120, W4A8 with MXFP8 activations); triton attention",
+  "vllm": "Marlin W4A16; TRITON_ATTN"
+ },
+ "attn_check_1175": null,
+ "control_wikitext": {
+  "delta_vs_vllm": {
+   "e4b_nf4": {
+    "prefill": {
+     "wikitext": null
+    },
+    "served": {
+     "wikitext": null
+    }
+   },
+   "e4b_serve": {
+    "prefill": {
+     "wikitext": null
+    },
+    "served": {
+     "wikitext": null
+    }
+   },
+   "llamacpp": {
+    "prefill": {
+     "wikitext": null
+    },
+    "served": {
+     "wikitext": null
+    }
+   },
+   "llamacpp_q8": {
+    "prefill": {
+     "wikitext": null
+    },
+    "served": {
+     "wikitext": null
+    }
+   },
+   "sglang_marlin": {
+    "prefill": {
+     "wikitext": null
+    },
+    "served": {
+     "wikitext": null
+    }
+   },
+   "sglang_native": {
+    "prefill": {
+     "wikitext": null
+    },
+    "served": {
+     "wikitext": null
+    }
+   }
+  },
+  "floor": {
+   "F": null,
+   "per_window": {
+    "wikitext": null
+   }
+  },
+  "note": "descriptive: out of distribution for gpt-oss (the proof read ppl ~560)"
+ },
+ "delta_vs_vllm": {
+  "e4b_nf4": {
+   "prefill": {
+    "conv1": null,
+    "conv2": null
+   },
+   "served": {
+    "conv1": null,
+    "conv2": null
+   }
+  },
+  "e4b_serve": {
+   "prefill": {
+    "conv1": null,
+    "conv2": null
+   },
+   "served": {
+    "conv1": null,
+    "conv2": null
+   }
+  },
+  "llamacpp": {
+   "prefill": {
+    "conv1": null,
+    "conv2": null
+   },
+   "served": {
+    "conv1": null,
+    "conv2": null
+   }
+  },
+  "llamacpp_q8": {
+   "prefill": {
+    "conv1": null,
+    "conv2": null
+   },
+   "served": {
+    "conv1": null,
+    "conv2": null
+   }
+  },
+  "sglang_marlin": {
+   "prefill": {
+    "conv1": null,
+    "conv2": null
+   },
+   "served": {
+    "conv1": null,
+    "conv2": null
+   }
+  },
+  "sglang_native": {
+   "prefill": {
+    "conv1": null,
+    "conv2": null
+   },
+   "served": {
+    "conv1": null,
+    "conv2": null
+   }
+  }
+ },
+ "diag_predictions": {
+  "conv1": {
+   "J1": {
+    "verdict": "UNREAD"
+   },
+   "J2": {
+    "verdict": "UNREAD"
+   },
+   "J3": {
+    "verdict": "UNREAD"
+   },
+   "J4": {
+    "verdict": "UNREAD"
+   },
+   "J5": {
+    "verdict": "UNREAD"
+   },
+   "J6": {
+    "verdict": "UNREAD"
+   }
+  },
+  "conv2_replication": {
+   "J1": {
+    "verdict": "UNREAD"
+   },
+   "J2": {
+    "verdict": "UNREAD"
+   },
+   "J3": {
+    "verdict": "UNREAD"
+   },
+   "J4": {
+    "verdict": "UNREAD"
+   },
+   "J5": {
+    "verdict": "UNREAD"
+   },
+   "J6": {
+    "verdict": "UNREAD"
+   }
+  }
+ },
+ "diagnostic_rows": {
+  "e4b_mxpre_prefill128": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_mxpre_prefill128_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_mxpre_prefill128_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_mxpre_prefill128_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_mxpre_prefill128_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_nf4_chunk1": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_chunk1_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_chunk1_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_chunk1_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_chunk1_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_nf4_fqk": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqk_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqk_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqk_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqk_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_nf4_fqkv": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqkv_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqkv_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqkv_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqkv_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_nf4_fqkv16": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqkv16_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqkv16_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqkv16_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqkv16_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_nf4_fqv": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqv_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqv_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqv_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_fqv_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_nf4_full": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_full_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_full_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_full_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_nf4_full_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_serve_chunk1": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_chunk1_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_chunk1_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_chunk1_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_chunk1_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_serve_kvg16": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_kvg16_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_kvg16_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_kvg16_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_kvg16_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_serve_kvg4": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_kvg4_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_kvg4_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_kvg4_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_kvg4_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_serve_nofold": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_nofold_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_nofold_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_nofold_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_nofold_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_serve_pdl0": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_pdl0_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_pdl0_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_pdl0_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_pdl0_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  },
+  "e4b_serve_v1": {
+   "conv1": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_v1_conv1",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv2": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_v1_conv2",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv3": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_v1_conv3",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   },
+   "conv4": {
+    "hist": null,
+    "label": "",
+    "mean_nll": null,
+    "ppl": null,
+    "stem": "e4b_serve_v1_conv4",
+    "top1": null,
+    "verdict": "NOT_RUN",
+    "why": "missing"
+   }
+  }
+ },
+ "diagnostics": {
+  "meaning": {
+   "chunk1_vs_prefill": "attention held (transformers' eager), the expert route switched from T == 1 to the prefill M-tile",
+   "chunk1_vs_served": "the T == 1 expert route held, attention switched from paged fp8-KV decode to transformers' eager attention with a bf16 cache: the share of the served-vs-prefill gap the paged path carries",
+   "nofold": "moving vs served => a fold (E4B_FUSE_*) bug in the served T == 1 path",
+   "pdl0": "moving vs served => an ordering (PDL) bug in the served T == 1 path"
+  },
+  "per_window": {
+   "conv1": {
+    "mxfp4": {
+     "chunk1_minus_prefill": null,
+     "served_minus_chunk1": null,
+     "served_minus_prefill": null
+    },
+    "nf4": {
+     "chunk1_minus_prefill": null,
+     "served_minus_chunk1": null,
+     "served_minus_prefill": null
+    },
+    "nofold_minus_served": null,
+    "pdl0_minus_served": null,
+    "share_of_served_gap_closed_by_chunk1": {
+     "mxfp4": null,
+     "nf4": null
+    }
+   },
+   "conv2": {
+    "mxfp4": {
+     "chunk1_minus_prefill": null,
+     "served_minus_chunk1": null,
+     "served_minus_prefill": null
+    },
+    "nf4": {
+     "chunk1_minus_prefill": null,
+     "served_minus_chunk1": null,
+     "served_minus_prefill": null
+    },
+    "nofold_minus_served": null,
+    "pdl0_minus_served": null,
+    "share_of_served_gap_closed_by_chunk1": {
+     "mxfp4": null,
+     "nf4": null
+    }
+   }
+  }
+ },
+ "floor": {
+  "F": null,
+  "per_window": {
+   "conv1": null,
+   "conv2": null
+  }
+ },
+ "kernel_check": {},
+ "predictions": {
+  "G1": {
+   "delta": {
+    "conv1": null,
+    "conv2": null
+   },
+   "floor": null,
+   "verdict": "UNREAD"
+  },
+  "G2": {
+   "verdict": "UNREAD"
+  },
+  "G3": {
+   "delta": {
+    "conv1": null,
+    "conv2": null
+   },
+   "floor": null,
+   "verdict": "UNREAD"
+  },
+  "G4": {
+   "floor": null,
+   "matched_arm_disagreement": {
+    "prefill": {
+     "conv1": null,
+     "conv2": null
+    },
+    "served": {
+     "conv1": null,
+     "conv2": null
+    }
+   },
+   "verdict": "UNREAD"
+  },
+  "G5": {
+   "not_valid": {
+    "e4b_nf4/prefill/conv1": "NOT_RUN",
+    "e4b_nf4/prefill/conv2": "NOT_RUN",
+    "e4b_nf4/served/conv1": "NOT_RUN",
+    "e4b_nf4/served/conv2": "NOT_RUN",
+    "e4b_serve/prefill/conv1": "NOT_RUN",
+    "e4b_serve/prefill/conv2": "NOT_RUN",
+    "e4b_serve_p64/prefill/conv1": "NOT_RUN",
+    "e4b_serve_p64/prefill/conv2": "NOT_RUN",
+    "llamacpp/prefill/conv1": "NOT_RUN",
+    "llamacpp/prefill/conv2": "NOT_RUN",
+    "llamacpp/served/conv1": "NOT_RUN",
+    "llamacpp/served/conv2": "NOT_RUN",
+    "llamacpp_q8/prefill/conv1": "NOT_RUN",
+    "llamacpp_q8/prefill/conv2": "NOT_RUN",
+    "llamacpp_q8/served/conv1": "NOT_RUN",
+    "llamacpp_q8/served/conv2": "NOT_RUN",
+    "sglang_marlin/prefill/conv1": "NOT_RUN",
+    "sglang_marlin/prefill/conv2": "NOT_RUN",
+    "sglang_marlin/served/conv1": "NOT_RUN",
+    "sglang_marlin/served/conv2": "NOT_RUN",
+    "sglang_native/prefill/conv1": "NOT_RUN",
+    "sglang_native/prefill/conv2": "NOT_RUN",
+    "sglang_native/served/conv1": "NOT_RUN",
+    "sglang_native/served/conv2": "NOT_RUN",
+    "vllm/prefill/conv1": "NOT_RUN",
+    "vllm/prefill/conv2": "NOT_RUN",
+    "vllm/served/conv1": "NOT_RUN",
+    "vllm/served/conv2": "NOT_RUN"
+   },
+   "verdict": "REFUTED"
+  },
+  "G6": {
+   "verdict": "UNREAD",
+   "why": "no kernel check receipt"
+  }
+ },
+ "rows": {
+  "e4b_nf4": {
+   "prefill": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_prefill128_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_prefill128_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_prefill128_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_prefill128_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_prefill128_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   },
+   "served": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_served_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_served_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_served_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_served_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_nf4_served_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   }
+  },
+  "e4b_serve": {
+   "prefill": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill128_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill128_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill128_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill128_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill128_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   },
+   "served": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": 0.904969107589033,
+     "ppl": 2.4718555603001433,
+     "route_seen": {
+      "mxfp4_gemv|le256": 49200,
+      "nf4_mtile_host|gt256": 96
+     },
+     "stem": "e4b_serve_served_conv1",
+     "top1": null,
+     "verdict": "VALID",
+     "why": ""
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": 1.7470534697364497,
+     "ppl": 5.7376715213956455,
+     "route_seen": {
+      "mxfp4_gemv|le256": 49200,
+      "nf4_mtile_host|gt256": 96
+     },
+     "stem": "e4b_serve_served_conv2",
+     "top1": null,
+     "verdict": "VALID",
+     "why": ""
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": 0.9133304555617014,
+     "ppl": 2.4926102524626685,
+     "route_seen": {
+      "mxfp4_gemv|le256": 49200,
+      "nf4_mtile_host|gt256": 96
+     },
+     "stem": "e4b_serve_served_conv3",
+     "top1": null,
+     "verdict": "VALID",
+     "why": ""
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": 1.5875469333210739,
+     "ppl": 4.891734447414916,
+     "route_seen": {
+      "mxfp4_gemv|le256": 49200,
+      "nf4_mtile_host|gt256": 96
+     },
+     "stem": "e4b_serve_served_conv4",
+     "top1": null,
+     "verdict": "VALID",
+     "why": ""
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_served_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   }
+  },
+  "e4b_serve_p64": {
+   "prefill": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill64_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill64_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill64_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill64_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "e4b_serve_prefill64_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   }
+  },
+  "llamacpp": {
+   "prefill": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_prefill_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_prefill_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_prefill_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_prefill_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_prefill_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   },
+   "served": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_decode_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_decode_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_decode_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_decode_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_decode_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   }
+  },
+  "llamacpp_q8": {
+   "prefill": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_prefill_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_prefill_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_prefill_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_prefill_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_prefill_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   },
+   "served": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_decode_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_decode_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_decode_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_decode_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "mmq_prec_env": null,
+     "ppl": null,
+     "stem": "nll_llamacpp_q8_decode_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   }
+  },
+  "sglang_marlin": {
+   "prefill": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_prefill_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_prefill_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_prefill_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_prefill_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_prefill_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   },
+   "served": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_served_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_served_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_served_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_served_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_marlin_served_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   }
+  },
+  "sglang_native": {
+   "prefill": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_prefill_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_prefill_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_prefill_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_prefill_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_prefill_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   },
+   "served": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_served_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_served_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_served_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_served_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_sglang_native_served_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   }
+  },
+  "vllm": {
+   "prefill": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_prefill_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_prefill_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_prefill_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_prefill_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_prefill_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   },
+   "served": {
+    "conv1": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_served_conv1",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv2": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_served_conv2",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv3": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_served_conv3",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "conv4": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_served_conv4",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    },
+    "wikitext": {
+     "hist": null,
+     "label": "",
+     "mean_nll": null,
+     "ppl": null,
+     "stem": "nll_vllm_served_wikitext",
+     "top1": null,
+     "verdict": "NOT_RUN",
+     "why": "missing"
+    }
+   }
+  }
+ },
+ "scored_target_roles": {
+  "conv1": {
+   "assistant": 0.9668,
+   "markup": 0.0098,
+   "user": 0.0234
+  },
+  "conv2": {
+   "assistant": 0.9009,
+   "markup": 0.0146,
+   "user": 0.0845
+  }
+ },
+ "served_minus_prefill": {
+  "e4b_nf4": {
+   "conv1": null,
+   "conv2": null,
+   "wikitext": null
+  },
+  "e4b_serve": {
+   "conv1": null,
+   "conv2": null,
+   "wikitext": null
+  },
+  "llamacpp": {
+   "conv1": null,
+   "conv2": null,
+   "wikitext": null
+  },
+  "llamacpp_q8": {
+   "conv1": null,
+   "conv2": null,
+   "wikitext": null
+  },
+  "sglang_marlin": {
+   "conv1": null,
+   "conv2": null,
+   "wikitext": null
+  },
+  "sglang_native": {
+   "conv1": null,
+   "conv2": null,
+   "wikitext": null
+  },
+  "vllm": {
+   "conv1": null,
+   "conv2": null,
+   "wikitext": null
+  }
+ },
+ "within_floor_vs_vllm": {
+  "e4b_nf4": {
+   "prefill": null,
+   "served": null
+  },
+  "e4b_serve": {
+   "prefill": null,
+   "served": null
+  },
+  "llamacpp": {
+   "prefill": null,
+   "served": null
+  },
+  "llamacpp_q8": {
+   "prefill": null,
+   "served": null
+  },
+  "sglang_marlin": {
+   "prefill": null,
+   "served": null
+  },
+  "sglang_native": {
+   "prefill": null,
+   "served": null
+  }
+ }
+}

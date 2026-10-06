@@ -117,14 +117,16 @@ python bench/sc2/sc1g_reduce.py --dir bench/h2h-2026-10-02/sc1g/receipts/sc1g-50
 It reproduces the box's `verdict_sc1g.json` A5 section: every verdict, key and flag identical, every number to 1e-12 relative
 (CI's Linux numpy rounds three pooled means one ULP from the box's).
 
-## Box J (amendment A6): the prompt route, P1 PARTIAL, P2 FALSIFIED, P3 UNREAD
+## Box J (amendment A6): the prompt route, P1 PARTIAL, P2 FALSIFIED, P3 HELD
 
 | run | receipt (adertha-receipts) | outcome | $ |
 |---|---|---|---|
 | `sc1g-diag-a6-1` | `04e7678f` | A6 reading: P1 PARTIAL, P2 FALSIFIED, P3 UNREAD (the deadline dropped the (c) arms and conv4's (a)); Vast 152440, from `1825cf02` (#1254) | 0.532 |
+| `sc1g-diag-a6-2` | `2f93f90d` | A6 continuation: **P3 HELD** ((c)/(b) median 1.019 / 0.920 / 0.912 on conv1–conv3; conv4's (c) dropped by `can_run`'s reserve); (b) bit-identical to A5's and A6-1's; Vast 145701, from `993103b8` (#1256) | 0.753 |
 
 The committed layout is the diag runs': `summary.txt`, `versions.txt`, `box.json`, `forensics.txt`, `logs/` and `sc1g/`.
 
-**Reproduce** (no GPU): `python bench/sc2/sc1g_reduce.py --dir bench/h2h-2026-10-02/sc1g/receipts/sc1g-diag-a6-1/sc1g`.
-Every verdict is identical, and every number agrees to 1e-12 relative (pinned by `test_the_a6_reading_rederives_from_its_committed_receipt`).
+**Reproduce** (no GPU): `python bench/sc2/sc1g_reduce.py --dir bench/h2h-2026-10-02/sc1g/receipts/sc1g-diag-a6-1/sc1g`, and
+the same with `sc1g-diag-a6-2`. Every verdict is identical, and every number agrees to 1e-12 relative (pinned by
+`test_the_a6_reading_rederives_from_its_committed_receipt` and `test_the_a6_continuation_reading_rederives_from_its_committed_receipt`).
 
