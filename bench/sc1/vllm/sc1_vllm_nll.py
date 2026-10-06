@@ -203,7 +203,11 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
         walls.append(time.perf_counter() - tq)
         row, entries = C.served_row(o, len(prompt), target)
         if t == 0 and used == "full":
-            full_ok = bool(vocab) and row["n_entries"] == int(vocab)
+            if kl is not None:   # SC1g A5: verified by COVERAGE of the vocabulary, not by a count (see full_vocab_cover)
+                full_ok, cover = full_vocab_cover(entries, vocab)
+                rec["first_request_cover"] = cover
+            else:                # SC1's own arms: unchanged
+                full_ok = bool(vocab) and row["n_entries"] == int(vocab)
             rec["full_vocab_verified"] = full_ok
             rec["first_request_entries"] = row["n_entries"]
             if not full_ok and lp_req == "auto":
@@ -221,8 +225,9 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
             # the mass, the common-support KL), and a position whose read fails -- or that returned fewer entries than the
             # vocabulary, which would read as masking -- is recorded void with its reason; the run continues
             try:
-                if len(entries[0]) != int(vocab):
-                    raise ValueError(f"returned {len(entries[0])} entries, not the vocabulary ({vocab})")
+                ok, cover = full_vocab_cover(entries, vocab)
+                if not ok:
+                    raise ValueError(f"the vocabulary is not covered: {cover}")
                 v64 = np.full(int(vocab), -np.inf, dtype=np.float64)
                 v64[np.asarray(entries[0], dtype=np.int64)] = np.asarray(entries[1], dtype=np.float64)
                 r = kl["mod"].kl_full_support(ref_full[t:t + 1], v64[None])
@@ -262,8 +267,9 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
         import numpy as np
         kout = C.env("KL_OUT", required=True)
         if not rec.get("full_vocab_verified"):
-            rec["kl_full"] = {"verdict": "VOID", "why": f"logprobs=-1 returned {rec.get('first_request_entries')} entries, not the "
-                                                         f"vocabulary ({vocab}): no full-vocabulary KL (A5 never downgrades)"}
+            rec["kl_full"] = {"verdict": "VOID", "why": f"logprobs=-1 on request 0 does not cover the vocabulary ({vocab}): "
+                                                         f"{rec.get('first_request_cover') or str(rec.get('first_request_entries')) + ' entries'}: "
+                                                         f"no full-vocabulary KL (A5 never downgrades)"}
         else:
             np.savez(kout + ".tmp.npz", eng_kl=kl["kl"], eng_target_lp=kl["tlp"], eng_kl_common=kl["klc"], eng_masked_mass=kl["mm"],
                      eng_n_masked=kl["nm"])
@@ -287,6 +293,37 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
     if rec["status"] == "ok" and rec.get("verdict") == "VOID":
         rec["status"] = "void"
         rec["void_reason"] = f"{rec.get('void_rows')} rows had no logprob for the true token (never approximated)"
+
+
+def full_vocab_cover(entries, vocab):
+    """SC1g A5: does one position's logprobs=-1 output cover the whole vocabulary? -> (ok, why). vLLM v0.30.0's V2 model
+    runner returns the generated token FIRST and then every vocabulary token ranked: vllm/v1/worker/gpu/sample/logprob.py
+    compute_topk_scores, `cat((sampled_token_ids, topk_indices))`, both scored by one gather on the same row -- vocab + 1
+    entries with the generated token twice (sc1g-prove-a5-6: 201089 for 201088). Covered when the distinct ids are exactly
+    0..vocab-1 and, for vocab + 1 entries, the one repeated id's first copy is entry 0 (the generated token's slot) and both
+    copies carry the identical log-prob. Anything else is not covered: the row is never approximated."""
+    import numpy as np
+    if not vocab or not entries:
+        return False, "no entries"
+    V = int(vocab)
+    ids = np.asarray(entries[0], dtype=np.int64)
+    lps = np.asarray(entries[1], dtype=np.float64)
+    if ids.size not in (V, V + 1) or lps.size != ids.size:
+        return False, f"{ids.size} entries for a vocabulary of {V}"
+    if int(ids.min()) < 0 or int(ids.max()) >= V:
+        return False, "ids outside the vocabulary"
+    uniq, counts = np.unique(ids, return_counts=True)
+    if uniq.size != V:
+        return False, f"{uniq.size} distinct ids for a vocabulary of {V}"
+    if ids.size == V:
+        return True, f"exact: {V} entries"
+    dup = int(uniq[counts > 1][0])
+    at = np.nonzero(ids == dup)[0]
+    if at[0] != 0:
+        return False, f"the repeated id {dup} is not the generated token's slot (first copy at entry {int(at[0])})"
+    if not lps[at[0]] == lps[at[1]]:
+        return False, f"the repeated id {dup} carries two log-probs ({lps[at[0]]!r}, {lps[at[1]]!r})"
+    return True, f"vocab + 1: the generated token {dup} at entries 0 and {int(at[1])}, identical log-prob"
 
 
 def _drop_dump(rec, dump, path, why):

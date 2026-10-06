@@ -897,7 +897,10 @@ wikitext.
    record, or a row count other than one per step, makes the row VOID.
 2. **vLLM served (Marlin W4A16, TRITON_ATTN).**
    - **The flag:** `SamplingParams(logprobs=-1)` with **`LLM(max_logprobs=-1)`**, set whenever `SC1_REF_FULL` is set.
-   - **Verification:** the first request must return one entry per vocabulary token.
+   - **Verification:** the first request must cover the whole vocabulary (`full_vocab_cover`), and so must every
+     position. Covered means every id 0..V−1 is present. vLLM 0.30.0's V2 runner returns the generated token first
+     and then every token, so V + 1 entries are accepted only when the one repeated id is entry 0 and both copies
+     carry the identical log-prob (amended before the reading, after `sc1g-prove-a5-6`; see the proof record below).
    - **Failure:** if that does not hold, the KL row is **VOID**. A5 never falls back to top-K or named tokens.
 3. **llama.cpp decode** (the published GGUF; default MMQ, then `MMQ_PREC=q8`). The harness reads R's rows as raw fp16
    (`--ref-full`) and writes (KL, target log-prob) per step (`--kl-out`). A size mismatch is refused (rc 3).
@@ -1009,6 +1012,41 @@ only, because SGLang has no A5 arm; its PROVED line names the rows the proof rea
 The proof prints each engine's masked reference mass:
 - if every engine reads zero, the reading box follows;
 - if any engine reads non-zero, a common-support rule with a mass bound is registered on the proof's numbers first.
+
+## A5 box I proof record (2026-10-06): two of three rows VALID, no masked reference mass; vLLM's verification fixed
+
+Box I's proof reads three conv1 rows (`--prove-a5`). These are the attempts, each launched from a merged SHA after the
+pre-launch re-checks and the store probe:
+
+| attempt | receipt (adertha-receipts) | outcome | $ |
+|---|---|---|---|
+| `sc1g-prove-a5-1` | `9db5ce6f` | disk 317 < 320: the lane's staged rows; fetch pulled them back → #1231. `host_evidence: false` | 0.241 |
+| `sc1g-prove-a5-2` | `419c000e` | disk 317 < 320 again: the launcher orders a fixed 320 GB disk → #1235. `host_evidence: false` | 0.107 |
+| `sc1g-prove-a5-3` | `4987fd57` | NOT_RUN: Vast 152169 never accepted the ssh key (host evidence) | 0.026 |
+| `sc1g-prove-a5-4` | `81b7b16e` | the disk floor passed (317 + 4 staged); driver 570 < R580 on Vast 40093 (host evidence) | 0.058 |
+| `sc1g-prove-a5-5` | `584188ca` | REFUSED at $0: an rc-18 receipt cited in the wrong exclusion class | 0 |
+| `sc1g-prove-a5-6` | `24ca184e` | **ran: NOT PROVED (rc 23)**. e4b served and llama.cpp q8 VALID; vLLM VOID on the verification below | 0.598 |
+
+**The support numbers, which are what the support rule is decided on.** In `sc1g-prove-a5-6`, both e4b served and
+llama.cpp q8 decode read, on all 2,048 positions:
+- masked reference mass 0;
+- masked count 0;
+- no void positions.
+
+So **no common-support rule is registered for e4b or llama.cpp**. vLLM's support is unread. The proof's KL values are not
+recorded here: they grade nothing, and the reading box measures conv1–conv4 itself.
+
+**The instrument defect.** vLLM returned 201,089 entries for the 201,088-token vocabulary. That is not a gap: vLLM
+0.30.0's V2 model runner builds `cat((sampled_token_ids, topk_indices))` in `vllm/v1/worker/gpu/sample/logprob.py`
+(`compute_topk_scores`), so the generated token comes first and then every token, scored by one gather. A count check
+calls that VOID, although every token is present.
+- The check is now `full_vocab_cover`: every id present, and for V + 1 entries the single repeat must be entry 0 with an
+  identical log-prob. Anything else is still VOID, with no downgrade.
+- It applies at request 0 and at every position, on A5's path only. SC1's own arms keep their count check.
+- **The rule is unchanged** (A5 reads the full vocabulary or nothing). Only the test of "full" was wrong.
+
+**Next.** The proof re-runs, and must read all three rows VALID. vLLM's masked mass then decides whether it needs the
+common-support rule.
 
 ## Out of scope
 

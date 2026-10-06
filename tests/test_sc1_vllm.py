@@ -454,7 +454,7 @@ def test_served_full_kl_records_masked_mass_and_void_positions_without_crashing(
     mods.nll._served(rec, _LLM(), ids, P, S, "full", V, 16, str(tmp_path / "out.json"))
     z, kf = np.load(kout), rec["kl_full"]
     assert _LLM.calls == S and rec["full_vocab_verified"] is True
-    assert kf["void_positions"] == 1 and kf["void_first"][0]["t"] == 4 and f"returned {V - 1} entries" in kf["void_first"][0]["why"]
+    assert kf["void_positions"] == 1 and kf["void_first"][0]["t"] == 4 and f"{V - 1} entries for a vocabulary of {V}" in kf["void_first"][0]["why"]
     r2 = ref[2].astype(np.float64)
     pr = np.exp(r2 - np.logaddexp.reduce(r2))
     assert np.isposinf(z["eng_kl"][2]) and abs(z["eng_masked_mass"][2] - pr[masked_tok]) < 1e-9 and z["eng_n_masked"][2] == 1
@@ -562,3 +562,68 @@ def test_batched_token_budget_fits_seqs_times_len(mods):
         assert src.index("C.check_budget(kw)") < src.index("llm = LLM(**kw)"), drv.__file__
     assert "C.capped_batched_tokens(" in pathlib.Path(mods.nll.__file__).read_text()
     assert "C.capped_batched_tokens(" in pathlib.Path(mods.ttft.__file__).read_text()
+
+
+def test_full_vocab_cover_accepts_vllm_s_sampled_token_repeat_and_nothing_else(mods):
+    """SC1g A5 (sc1g-prove-a5-6: 201089 entries for 201088): vLLM 0.30.0's V2 runner returns the generated token first and
+    then every vocabulary token, so a covered position is V entries, or V + 1 with the generated token (entry 0) repeated
+    at the identical log-prob. Every other shape is not covered."""
+    cov = mods.nll.full_vocab_cover
+    V = 6
+    lp = [-1.0, -2.0, -3.0, -4.0, -5.0, -6.0]
+    assert cov((list(range(V)), lp), V)[0]                                            # exact
+    assert cov(([3] + list(range(V)), [lp[3]] + lp), V)[0]                            # V + 1, generated token 3 first
+    assert not cov(([3] + list(range(V)), [lp[3] + 1e-6] + lp), V)[0]                 # the repeat disagrees
+    assert not cov((list(range(V)) + [3], lp + [lp[3]]), V)[0]                        # the repeat is not entry 0
+    assert not cov(([3, 3] + list(range(1, V)), [lp[3], lp[3]] + lp[1:]), V)[0]       # V entries, id 0 missing
+    assert not cov(([3, 4] + list(range(V)), [lp[3], lp[4]] + lp), V)[0]             # V + 2
+    assert not cov(([V] + list(range(V)), [-9.0] + lp), V)[0]                         # an id outside the vocabulary
+    assert not cov(None, V)[0] and not cov((list(range(V)), lp), 0)[0]
+
+
+def test_served_full_kl_reads_vllm_s_vocab_plus_one_shape(mods, tmp_path, monkeypatch):
+    """The shape vLLM 0.30.0 actually returns for logprobs=-1 (generated token, then the whole vocabulary, flat container):
+    request 0 verifies, every position reads the full KL exactly; a position whose repeat disagrees is void, not read."""
+    import numpy as np
+    import torch
+    monkeypatch.syspath_prepend(str(REPO / "bench" / "sc2"))
+    import sc1g_kl as KLM
+    V, P, S = 40, 8, 5
+    g = torch.Generator().manual_seed(7)
+    ids = torch.randint(0, V, (P + S + 2,), generator=g).tolist()
+    ref = KLM.full_rows_fp16(torch.randn(S, V, generator=g) * 3)
+    ref_path = tmp_path / "ref_full_conv1.npy"
+    np.save(ref_path, ref)
+    kout = tmp_path / "kl.npz"
+    for k, v in {"SC1_REF_FULL": str(ref_path), "SC1_REF_FULL_SHA": KLM.file_sha(str(ref_path)), "SC1_KL_OUT": str(kout)}.items():
+        monkeypatch.setenv(k, v)
+    eng = torch.log_softmax(torch.randn(S, V, generator=g, dtype=torch.float64) * 3, -1)
+    targets = [mods.C.served_target(ids, P, t) for t in range(S)]
+
+    class _LLM:
+        calls = 0
+
+        def generate(self, prompts, sp, use_tqdm=False):
+            t = _LLM.calls
+            _LLM.calls += 1
+            gen = int(torch.argmax(eng[t]))
+            flat = _Flat()
+            flat.start_indices.append(0)
+            first = float(eng[t, gen]) + (1e-3 if t == 3 else 0.0)        # position 3: the repeat disagrees
+            flat.token_ids += [gen] + list(range(V))
+            flat.logprobs += [first] + [float(x) for x in eng[t]]
+            flat.ranks += [1] + list(range(1, V + 1))
+            flat.end_indices.append(len(flat.token_ids))
+            return [_Req([_Comp([gen], flat)], num_cached_tokens=0)]
+
+    rec = {"status": "ok"}
+    mods.nll._served(rec, _LLM(), ids, P, S, "full", V, 16, str(tmp_path / "out.json"))
+    z, kf = np.load(kout), rec["kl_full"]
+    assert _LLM.calls == S and rec["full_vocab_verified"] is True and rec["first_request_entries"] == V + 1
+    assert rec["first_request_cover"].startswith("vocab + 1: the generated token")
+    assert kf["void_positions"] == 1 and kf["void_first"][0]["t"] == 3 and "two log-probs" in kf["void_first"][0]["why"]
+    rest = [0, 1, 2, 4]
+    assert np.allclose(z["eng_kl"][rest], KLM.kl_full_rows(ref[rest], eng[rest]), atol=1e-9) and np.isnan(z["eng_kl"][3])
+    assert not z["eng_masked_mass"][rest].any()
+    assert all(abs(z["eng_target_lp"][t] - float(eng[t, targets[t]])) < 1e-12 for t in rest)
+
