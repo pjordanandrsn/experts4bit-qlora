@@ -2379,3 +2379,56 @@ utilisation medians.
 - No default changes on this box. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. Six arms: about $2 with the download.
+
+### Amendment 55 (2026-10-06T22:11Z, after amendment 54's read, before any box): amendment 47's packed-row memory census at the current defaults (P141–P143)
+
+**Why.** At e4b's defaults on packed 4,096-token rows the matched arm peaks at 28.23 GB against Unsloth's 24.86 (amendment 51, a
+`peak_vram_gb` reading): 3.37 GB more. Amendment 47's census read the gap before bucketed padding, at +7.47 GB of peak allocated. It
+found 1.35 GB in the fp32 expert absmax and 6.10 GB in transients, almost all grouped-nf4-gemm's padded LoRA delta (the input block and
+its products). Buckets took 4.29 GB off the matched peak (amendment 48), and became grouped-nf4-gemm's default (#492). What is left of
+the gap has not been attributed. Neither lever amendment 47 read can be reused as it stood:
+
+- the compact delta is a single-block body, and with buckets on, the buckets win, so it no longer applies;
+- the double-quantized expert absmax (`E4B_ABSMAX_DQ=1`) is the trainer's default (`python -m experts4bit_qlora.train`) but not the
+  library's, which TC1's arms run.
+
+This box names the remaining excess before any lever is built for it.
+
+**The box** (token `qwen3memc4kb`). Amendment 47's box at the current code. One RTX 5090, packed rows (`TC1_PACK=1`, seq 4,096,
+micro-batch 1 × accum 4, `TC1_FREE_OUTPUTS=1`), the matched set, 20 steps. One draw per arm, in this order, each with the memory census
+on (`--mem-census 1`), every arm in venv-unsloth:
+
+- e4b `fused_attn4_m_p4d`: the library's defaults. That is the fp32 absmax, bucketed padding `auto`, and the chunked LM loss `auto`.
+- e4b `fused_attn4_m_p4d_dq`: the same with `E4B_ABSMAX_DQ=1`.
+- Unsloth `ckpt_unsloth_m_p4d`: TC1's qwen3 Unsloth arm (grouped_mm).
+
+Validity (`memc4kb_why`) applies amendment 39's packed-row predicates and amendment 47's census and torch checks. On e4b it also
+requires:
+
+- the absmax the tag names;
+- the delta not compact;
+- every padded call bucketed under `auto` with its variable unset;
+- the chunked loss serving the rows unset.
+
+The per-expert loop is a recorded route (≤ 5 %). No speed is read.
+
+**Predictions** (registered before the box):
+
+- **P141** (the instrument): the census attributes at least 90 % of each arm's peak to named groups.
+- **P142:** e4b's defaults peak **2.0 to 5.0 GB** above Unsloth's (peak allocated). The band was set with amendment 51's 3.37 GB, a
+  `peak_vram_gb` reading, in view.
+- **P143:** with the double-quantized absmax, e4b's peak is at most **2.5 GB** above Unsloth's.
+
+**Decision rules.** This is a measurement, not a position. The read names the excess's largest class at the peak and e4b's largest
+live groups.
+
+- **If the bucketed delta's blocks are the largest remaining excess**, the next registration is a compact bucketed delta in
+  grouped-nf4-gemm. That delta would save each bucket's input rather than its padded block. It is read on packed rows for peak and
+  speed.
+- **P143 HELD:** the double-quantized absmax closes most of what is left. The next registration asks whether the library should default
+  to it on packed rows, the way amendment 28 read its speed.
+- **Otherwise** the read names what is left, and the next registration targets it.
+- Positions stay with the boxes that read them.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the
+download.
