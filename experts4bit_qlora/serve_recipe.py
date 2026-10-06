@@ -76,6 +76,16 @@ class ServeSetup:
                 **({"E4B_INT4_KEEP_NF4": "0"} if self.exp_int4 else {})}
 
 
+def usable_buckets(max_seqs: int, buckets) -> tuple:
+    """The decode-graph buckets a server of ``max_seqs`` sequences can use: those below ``max_seqs``, then ``max_seqs``
+    itself, capped at the largest given (a wider step runs in chunks of it). A decode step never carries more rows than
+    sequences and the runner pads a step to the next bucket, so a bucket above ``max_seqs`` never runs. It still costs a
+    graph and, as the largest, the scratch slots: a full slot of a hybrid model's linear-attention state each. Lane SV3
+    measured worse: on Qwen3.6-35B-A3B served for one sequence, buckets 2-16 failed to capture."""
+    keep = {int(b) for b in buckets if int(b) < max_seqs}
+    return tuple(sorted(keep | {min(int(max_seqs), max(int(b) for b in buckets))}))
+
+
 def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_tokens_per_seq: int,
                         k_groups=None, scratch_slots: int = 0) -> int:
     """Device bytes ``Fp8PagedKV(n_layers, n_kv_heads, head_dim, batch=..., ...)`` allocates for its K and V row pools
@@ -412,7 +422,7 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                                    "preallocated at the swap" + ("" if exact else
                                                                  " (split counts at their ceilings: grouped-nf4-gemm's "
                                                                  "int4 kernels not importable)")))
-    scratch = max(setup.buckets) if setup.graphs else 0
+    scratch = max(usable_buckets(setup.max_seqs, setup.buckets)) if setup.graphs else 0      # what the server captures
     kv = paged_kv_pool_bytes(topology.kv_layers, topology.kv_heads, topology.kv_head_dims, batch=setup.max_seqs,
                              max_tokens_per_seq=setup.max_tokens_per_seq,
                              k_groups=None if setup.kv_groups == "auto" else int(setup.kv_groups), scratch_slots=scratch)

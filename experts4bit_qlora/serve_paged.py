@@ -282,6 +282,13 @@ class PagedServeConfig:
             raise ValueError("E4B_PAGED_MAX_PREFILL_TOKENS must be >= 0 (0 = chunk_tokens)")
         if not self.buckets or min(self.buckets) < 1:
             raise ValueError(f"E4B_PAGED_BUCKETS must be positive ints, got {self.buckets}")
+        from .serve_recipe import usable_buckets
+        usable = usable_buckets(self.max_seqs, self.buckets)
+        if tuple(self.buckets) != usable:
+            # a bucket above max_seqs never runs; it costs a graph and scratch slots, and on a hybrid model served for
+            # one sequence it failed to capture (lane SV3)
+            log(f"buckets {list(self.buckets)} -> {list(usable)}: none above max_seqs={self.max_seqs}")
+            self.buckets = usable
         if self.placement not in ("all-vram", "solver"):
             raise ValueError(f"E4B_PAGED_PLACEMENT must be all-vram or solver, got {self.placement!r}")
         if self.kv_groups != "auto":
