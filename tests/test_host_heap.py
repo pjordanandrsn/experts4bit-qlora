@@ -25,3 +25,16 @@ def test_on_glibc_the_trim_is_found(monkeypatch):
     monkeypatch.setattr(host_heap, "_TRIM", [])
     host_heap.release_freed_host_heap()
     assert host_heap._TRIM[0] is not None
+
+
+def test_the_server_build_hands_its_freed_heap_back():
+    """build_engine trims once it is built and reports it (``host_heap_trimmed`` in its info): measured, the build
+    leaves 0.34 GB (OLMoE-1B-7B) to ~1.5 GB (Qwen3-30B-A3B, a 48-core host) of freed heap resident otherwise."""
+    import inspect
+
+    pytest.importorskip("torch")
+    from experts4bit_qlora import serve_paged
+
+    src = inspect.getsource(serve_paged.build_engine)
+    trim, ready = src.find("release_freed_host_heap()"), src.find('log(f"ready:')
+    assert 0 < trim < ready and '"host_heap_trimmed"' in src
