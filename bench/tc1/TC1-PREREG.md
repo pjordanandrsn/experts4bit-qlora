@@ -2183,5 +2183,13 @@ P126 and P127 need two stable VALID draws a side, as amendment 25 reads them.
   default-settings reading.
 - **P129** is a memory reading beside the position; it moves no default.
 
+**Which defaults, exactly** (maintainer, 2026-10-06T12:31Z, before the box).
+- The box measures e4b at its defaults with grouped-nf4-gemm at a **main** carrying #492. Until grouped-nf4-gemm releases #492 and
+  experts4bit-qlora's floor moves to that release, a user installing e4b does not get bucketed padding by default.
+- So the row names the grouped-nf4-gemm commit (or release) the box ran, and its claim says "with grouped-nf4-gemm <version>".
+- STATUS presents it as the default-settings position only once e4b's floor carries the release with #492. Until then it reads "at
+  e4b's defaults with grouped-nf4-gemm main <sha>, unreleased".
+- The box launches after grouped-nf4-gemm#492 merges. Your waiter checks that.
+
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2 with the download;
 this is in the standing no-ask tier.
