@@ -1563,8 +1563,14 @@ and both arms against the first A6 box's uncaptured rows (bit-identical, or the 
 
 ### Cost and order
 
-- **Time:** 9 arms at about 2.1 min, plus about 24 min of setup (including the 8-minute row staging), comes to about
-  43 min, inside the 1.0 h guard. The capture adds about 100,000 small device copies per arm, under a second.
+- **Time depends on the host.** Arms took about 2.2 min each on Vast 152440 (`sc1g-diag-a6-1`). On
+  `sc1g-diag-a6-2`'s host they took 3.2–5.4 min, with the GPU only 4–14 % busy, so that host was host-bound. Setup takes
+  19–24 min.
+  - On a fast host, all 9 arms fit (about 43 min).
+  - On a slow one, `can_run`'s 600 s reserve drops the last arms, conv4 first.
+  - The conv2 primary (arms 1–3) always runs first, so a deadline can cost only descriptive windows, never the reading.
+  - A window that loses one arm of its pair reads UNREAD descriptively.
+  - The capture adds about 100,000 small device copies per arm, under a second.
 - **Cost:** about $0.6, inside the no-ask tier.
 - **Order:** this box launches after A6's continuation (`sc1g-diag-a6-2`) has landed its receipt.
 
