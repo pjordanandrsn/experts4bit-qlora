@@ -330,8 +330,9 @@ def test_the_a5_read_rederives_and_the_registered_shas_are_rs():
 
 def test_the_a5_reading_rederives_from_its_committed_receipt(tmp_path):
     """A5's reading (sc1g-5090-a5-1): the reducer at main, run on the committed sc1g/ directory, reproduces the box's own
-    verdict_sc1g.json A5 section exactly -- K-A REFUTED (conv4 2.5x < 3x), L1 HOLDS (1.85x), L2 HOLDS -- with every KL row
-    VALID and zero masked reference mass."""
+    verdict_sc1g.json A5 section -- every verdict, key, string and flag identical, every number to 1e-12 relative --
+    K-A REFUTED (conv4 2.5x < 3x), L1 HOLDS (1.85x), L2 HOLDS, with every KL row VALID and zero masked reference mass.
+    Not `==` on floats: CI's Linux numpy rounds three pooled means one ULP from the box's (0.07281677469236382 vs ...383)."""
     import json
     import subprocess
     import sys
@@ -341,7 +342,22 @@ def test_the_a5_reading_rederives_from_its_committed_receipt(tmp_path):
                        capture_output=True, text=True, timeout=600)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
     got, box = json.loads(out.read_text())["a5"], json.loads((d / "verdict_sc1g.json").read_text())["a5"]
-    assert got == box
+    def same(a, b, path="a5"):
+        """Identical structure, keys, strings, bools and None; floats within 1e-12 relative (an ULP across platforms)."""
+        if isinstance(a, dict) and isinstance(b, dict):
+            assert a.keys() == b.keys(), (path, sorted(set(a) ^ set(b)))
+            for k in a:
+                same(a[k], b[k], f"{path}.{k}")
+        elif isinstance(a, list) and isinstance(b, list):
+            assert len(a) == len(b), (path, len(a), len(b))
+            for i, (x, y) in enumerate(zip(a, b)):
+                same(x, y, f"{path}[{i}]")
+        elif isinstance(a, float) or isinstance(b, float):
+            assert isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool) and not isinstance(b, bool), (path, a, b)
+            assert a == b or abs(a - b) <= 1e-12 * max(abs(a), abs(b)), (path, a, b)
+        else:
+            assert a == b, (path, a, b)
+    same(got, box)
     pred = got["predictions"]
     assert (pred["K-A"]["verdict"], pred["L1"]["verdict"], pred["L2"]["verdict"]) == ("REFUTED", "HOLDS", "HOLDS")
     assert got["instrument"] == {"box_r": "R_OK", "rule": "A5", "why": None}

@@ -114,4 +114,5 @@ registered by sha; they are not here (see box R above).
 python bench/sc2/sc1g_reduce.py --dir bench/h2h-2026-10-02/sc1g/receipts/sc1g-5090-a5-1/sc1g
 ```
 
-It reproduces the box's `verdict_sc1g.json` A5 section exactly.
+It reproduces the box's `verdict_sc1g.json` A5 section: every verdict, key and flag identical, every number to 1e-12 relative
+(CI's Linux numpy rounds three pooled means one ULP from the box's).

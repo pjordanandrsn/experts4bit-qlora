@@ -1057,7 +1057,7 @@ proof. It cost **$1.557**, ran for 90 minutes against its 2.5 h guard, and teard
 the proof's commit, behind a gate requiring the PROVED proof receipt at that commit.
 - Every KL row is VALID: no void positions, and zero masked reference mass on every row.
 - SGLang is UNREAD by registration.
-- The reading re-derives from the committed receipt: `sc1g_reduce.py --dir` reproduces the box's A5 section exactly (pinned
+- The reading re-derives from the committed receipt: `sc1g_reduce.py --dir` reproduces the box's A5 section, every verdict identical and every number to 1e-12 relative (pinned
   by `test_the_a5_reading_rederives_from_its_committed_receipt`).
 
 **The rows.** Full-vocabulary KL in nats against box R's reference, per scored position, mean over 2,048 positions.
