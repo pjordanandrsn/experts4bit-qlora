@@ -1639,6 +1639,86 @@ and both arms against the first A6 box's uncaptured rows (bit-identical, or the 
   e4b's median excess, and the decode activations carry none of it at the median.
 - **The conv2 lead is with A7:** `sc1g-diag-a7-1`, launched 2026-10-06T11:35:05Z from `f008f6d7` (#1261).
 
+## A7 box J reading (2026-10-06): FRAGILE_POSITIONS -- e4b's worst positions are router-flip positions in both arms, so the rule cannot attribute (a)'s excess to them
+
+**The run.** `sc1g-diag-a7-4` (adertha-receipts `42e404dd`) ran on a Vast RTX 5090, machine 145701, from `f008f6d7`
+(#1261). It cost **$0.701**, and teardown is proven. All 9 arms ran, each in 2.05–2.43 min. The reading re-derives from
+the committed receipt, pinned by `test_the_a7_reading_rederives_from_its_committed_receipt`.
+
+**Launch history** (receipts committed, my rows only):
+- `sc1g-diag-a7-1` was NOT_RUN at $0.007. Vast 151350 authenticated, then the pre-flight's disk check timed out in the
+  SSH banner exchange. That is machine evidence, and since adertha#183 it is a *pair* class: one such failure does not
+  exclude a machine.
+- `sc1g-diag-a7-2` and `sc1g-diag-a7-3` were REFUSED at $0 by my own exclusion entry. The first passed a bare run id,
+  not a receipt path. The second passed a pre-flight class `rent.py` did not then admit.
+
+**The gates.**
+- **The perturbation control is BIT_IDENTICAL** (max |diff| 0.0). The capture did not change the served computation.
+- **All 8 route-id records are VALID:** exactly 48 calls per position, gate_up equal to down, every id written and in
+  range.
+- **Captured against uncaptured.** The captured (a) and (b) rows are bit-identical to `sc1g-diag-a6-1`'s uncaptured rows
+  on all 7 windows that box ran.
+- **A built-in alignment check.** Layer 0's flip rate is **exactly 0** on all four windows. Layer 0's router reads the
+  teacher-forced token after an attention over keys and values that no MoE has touched, so (a) and (b) must agree there.
+  A capture misaligned by one layer would not read 0.
+
+### The reading, by the registered rule
+
+On conv2, share_all is 0.706. That is below 0.8, so the share test reads.
+- **T1**, (a)'s top-1 % KL positions: **21 of 21 flip** (p = 6.4e-4). The effect is +0.294, so T1 is enriched.
+- **T3**, (b)'s own top-1 % KL positions: **also 21 of 21**, with the same +0.294 effect. That is at least half of T1's,
+  so by precedence the reading is **FRAGILE_POSITIONS**, not SUPPORTS.
+
+| window | share_all | T1 share (p) | T3 share (p) | T2 share | mean F: T1 / T3 / all | T1 ∩ T3 |
+|---|---|---|---|---|---|---|
+| **conv2** | 0.706 | **1.000** (6.4e-4) | **1.000** (6.4e-4) | 1.000 | 8.38 / 7.81 / 2.70 | **3 / 21** |
+| conv1 | 0.818 | 0.952 (0.082) | 1.000 (0.014) | 0.952 | 5.62 / 5.38 / 2.53 | 12 / 21 |
+| conv3 | 0.684 | 0.905 (0.019) | 0.905 (0.019) | 0.952 | 3.71 / 3.62 / 1.62 | 14 / 21 |
+| conv4 | 0.593 | 0.952 (2.5e-4) | 0.952 (2.5e-4) | 0.952 | 5.33 / 5.67 / 1.24 | 13 / 21 |
+
+conv1, conv3 and conv4 are descriptive. On conv1, share_all is 0.818, above 0.8, so the intensity test would read
+there.
+
+**The registered consequence of FRAGILE_POSITIONS:** router-flip attribution is set aside, and the next registration is
+decided on the descriptive numbers.
+
+### Descriptive, not graded
+
+- **conv2's routing divergence sits in the first quarter of decode, where (a)'s excess is.** The mean flip count per
+  position by quarter is **5.80 / 2.35 / 1.38 / 1.29**. 100 % of Q1's excess mass sits on flipped positions, but 97.5 % of
+  Q1's positions flip at all, so that share does not discriminate.
+- **The flip rate rises with depth:** 0 at layer 0, 0.6 % at layer 1, and 22–25 % at layers 20–23 (conv2).
+- **(a)'s worst positions and (b)'s are mostly different positions.** They share 3 of 21 on conv2 and 12–14 elsewhere,
+  yet each set is (nearly) fully flipped.
+- **The lagged read saturates.** share_all over [t − 8, t] is ≥ 0.995, so it is uninformative as registered.
+
+### What it means: the control's design limit, found by the data (post-data, flagged as such)
+
+- F(t) compares (a) against (b), not each arm against the reference. Suppose a position's KL is high in an arm because
+  *that arm's* routing left the reference's there. Then that arm's top positions are (a)-versus-(b) flip positions, and
+  so are the other arm's, at *different* positions.
+- That is what conv2 shows: both sets fully flipped, overlapping on 3 of 21.
+- So FRAGILE_POSITIONS cannot separate two stories: positions that are fragile for both arms, and each arm's tail sitting
+  where its own routing departed from the reference. The control was built for the first, and it cannot see the second.
+- The low overlap leans toward the second story. That is not graded.
+- **What would separate them:** the *reference's* decode routing per position. Each arm's top-KL positions could then be
+  tested against its own routing departures from the reference. step_decomp already records a router's top-k per
+  position (`--ppl-route record`, oracle path) and replays it into the served arm (`--ppl-route replay`), which would
+  also make a causal test possible. Both are candidates for the next registration, which is not made here.
+
+### A correction to the A6 continuation reading's timing paragraph
+
+`sc1g-diag-a7-4` ran on the **same host** as `sc1g-diag-a6-2` (machine 145701), at a host-wide load of 13–55, and every
+arm took 2.05–2.43 min. So the "busy neighbours" explanation that reading gave for `sc1g-diag-a6-2`'s slow conv1 arms
+(3.6–5.2 min, at load 17–33) does not hold, and their cause is **unknown**. The values are unaffected either way, since
+the rows are bit-identical across runs.
+
+### Cost and next
+
+- A7: $0.701 + $0.007 (a7-1) + $0 + $0 = **$0.708**. **The lane is at $10.843.**
+- **Next:** the reference's per-position routing, decided on these numbers as A7 registered. Its design is in the
+  paragraph above.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).

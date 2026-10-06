@@ -130,3 +130,18 @@ The committed layout is the diag runs': `summary.txt`, `versions.txt`, `box.json
 the same with `sc1g-diag-a6-2`. Every verdict is identical, and every number agrees to 1e-12 relative (pinned by
 `test_the_a6_reading_rederives_from_its_committed_receipt` and `test_the_a6_continuation_reading_rederives_from_its_committed_receipt`).
 
+## Box J (amendment A7): the router-flip instrument, FRAGILE_POSITIONS
+
+| run | receipt (adertha-receipts) | outcome | $ |
+|---|---|---|---|
+| `sc1g-diag-a7-1` | `b655ab99` | NOT_RUN: pre-flight SSH banner timeout on Vast 151350 during the disk check (machine evidence; a pair class since adertha#183) | 0.007 |
+| `sc1g-diag-a7-2` | `2889ce90` | REFUSED: the exclusion was passed as a run id, not a receipt path (self-inflicted; no instance) | 0 |
+| `sc1g-diag-a7-3` | `74a00b5f` | REFUSED: that pre-flight was not yet a class `rent.py` admits for exclusion (no instance) | 0 |
+| `sc1g-diag-a7-4` | `42e404dd` | A7 reading: **FRAGILE_POSITIONS**. conv2's (a)-top and (b)-top 1 % KL positions are both 21/21 flipped against 0.706 (p 6.4e-4); the perturbation control is BIT_IDENTICAL; Vast 145701, from `f008f6d7` (#1261) | 0.701 |
+
+`sc1g/rid_*.npz` (1.6 MB each) are the capture's per-call expert ids, kept byte-identical because the reading
+re-derives from them.
+
+**Reproduce** (no GPU): `python bench/sc2/sc1g_reduce.py --dir bench/h2h-2026-10-02/sc1g/receipts/sc1g-diag-a7-4/sc1g`.
+Pinned by `test_the_a7_reading_rederives_from_its_committed_receipt`.
+

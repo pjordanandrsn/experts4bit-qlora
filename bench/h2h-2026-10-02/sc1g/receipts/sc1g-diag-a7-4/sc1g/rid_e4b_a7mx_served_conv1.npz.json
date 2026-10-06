@@ -1,0 +1,13 @@
+{
+ "bad_shape": 0,
+ "calls_per_step": 48,
+ "estimator": "decode GEMV expert ids per scored position (A7)",
+ "gemv_calls": 98400,
+ "in_capture": 0,
+ "layers": 24,
+ "other_calls": 0,
+ "overflow": 0,
+ "positions": 2048,
+ "rows": 2048,
+ "top_k": 4
+}
