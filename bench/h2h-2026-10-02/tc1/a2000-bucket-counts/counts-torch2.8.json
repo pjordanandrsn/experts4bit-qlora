@@ -1,0 +1,322 @@
+{
+ "torch": "2.8.0+cu128",
+ "triton": "3.4.0",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "allow_tf32": false,
+ "zipf_s": 0.6,
+ "lora_path": "padded",
+ "rows": [
+  {
+   "adapters": "float32",
+   "buckets": "0",
+   "host_ms_med": 2.38,
+   "gpu_ms_med": 188.535,
+   "kernels_per_iter": 66.0,
+   "launch_calls_per_iter": 64.0,
+   "sync_like_per_iter": 0.3333333333333333,
+   "malloc_free_per_iter": 0.0,
+   "paths": {
+    "loop": 0,
+    "padded": 132,
+    "grouped_mm": 0,
+    "padded_bucketed": 0
+   },
+   "top_self_cpu_ms_per_iter": [
+    [
+     "cudaDeviceSynchronize",
+     185.003,
+     0
+    ],
+    [
+     "aten::arange",
+     0.846,
+     4
+    ],
+    [
+     "cudaLaunchKernel",
+     0.6,
+     64
+    ],
+    [
+     "aten::bmm",
+     0.34,
+     12
+    ],
+    [
+     "Activity Buffer Request",
+     0.243,
+     0
+    ],
+    [
+     "aten::index_select",
+     0.217,
+     9
+    ],
+    [
+     "aten::repeat_interleave",
+     0.199,
+     2
+    ],
+    [
+     "_GatherRowsBackward",
+     0.15,
+     6
+    ],
+    [
+     "aten::index_copy_",
+     0.133,
+     8
+    ],
+    [
+     "aten::gather",
+     0.125,
+     9
+    ],
+    [
+     "_GatherRows",
+     0.122,
+     6
+    ],
+    [
+     "aten::empty",
+     0.12,
+     20
+    ]
+   ]
+  },
+  {
+   "adapters": "float32",
+   "buckets": "1",
+   "host_ms_med": 4.555,
+   "gpu_ms_med": 72.01,
+   "kernels_per_iter": 115.33333333333333,
+   "launch_calls_per_iter": 113.33333333333333,
+   "sync_like_per_iter": 0.3333333333333333,
+   "malloc_free_per_iter": 0.0,
+   "paths": {
+    "loop": 0,
+    "padded": 0,
+    "grouped_mm": 0,
+    "padded_bucketed": 132
+   },
+   "top_self_cpu_ms_per_iter": [
+    [
+     "cudaDeviceSynchronize",
+     64.529,
+     0
+    ],
+    [
+     "aten::bmm",
+     0.832,
+     52
+    ],
+    [
+     "cudaLaunchKernel",
+     0.713,
+     112
+    ],
+    [
+     "Activity Buffer Request",
+     0.179,
+     0
+    ],
+    [
+     "aten::transpose",
+     0.149,
+     69
+    ],
+    [
+     "autograd::engine::evaluate_function: BmmBackward0",
+     0.141,
+     17
+    ],
+    [
+     "_GatherRowsBackward",
+     0.114,
+     6
+    ],
+    [
+     "aten::cat",
+     0.105,
+     8
+    ],
+    [
+     "aten::index_select",
+     0.097,
+     9
+    ],
+    [
+     "BmmBackward0",
+     0.095,
+     17
+    ],
+    [
+     "aten::as_strided",
+     0.092,
+     153
+    ],
+    [
+     "aten::index_copy_",
+     0.091,
+     8
+    ]
+   ]
+  },
+  {
+   "adapters": "bfloat16",
+   "buckets": "0",
+   "host_ms_med": 2.51,
+   "gpu_ms_med": 72.832,
+   "kernels_per_iter": 65.16666666666667,
+   "launch_calls_per_iter": 64.0,
+   "sync_like_per_iter": 0.3333333333333333,
+   "malloc_free_per_iter": 0.0,
+   "paths": {
+    "loop": 0,
+    "padded": 132,
+    "grouped_mm": 0,
+    "padded_bucketed": 0
+   },
+   "top_self_cpu_ms_per_iter": [
+    [
+     "cudaDeviceSynchronize",
+     69.545,
+     0
+    ],
+    [
+     "cudaLaunchKernel",
+     0.348,
+     52
+    ],
+    [
+     "aten::bmm",
+     0.256,
+     12
+    ],
+    [
+     "Activity Buffer Request",
+     0.196,
+     0
+    ],
+    [
+     "_GatherRowsBackward",
+     0.098,
+     6
+    ],
+    [
+     "aten::index_select",
+     0.096,
+     9
+    ],
+    [
+     "aten::index_copy_",
+     0.092,
+     8
+    ],
+    [
+     "aten::empty",
+     0.084,
+     20
+    ],
+    [
+     "aten::gather",
+     0.084,
+     9
+    ],
+    [
+     "_GatherRows",
+     0.079,
+     6
+    ],
+    [
+     "cuLaunchKernel",
+     0.074,
+     12
+    ],
+    [
+     "aten::fill_",
+     0.052,
+     10
+    ]
+   ]
+  },
+  {
+   "adapters": "bfloat16",
+   "buckets": "1",
+   "host_ms_med": 5.416,
+   "gpu_ms_med": 32.811,
+   "kernels_per_iter": 112.5,
+   "launch_calls_per_iter": 111.66666666666667,
+   "sync_like_per_iter": 0.3333333333333333,
+   "malloc_free_per_iter": 0.0,
+   "paths": {
+    "loop": 0,
+    "padded": 0,
+    "grouped_mm": 0,
+    "padded_bucketed": 132
+   },
+   "top_self_cpu_ms_per_iter": [
+    [
+     "cudaDeviceSynchronize",
+     26.869,
+     0
+    ],
+    [
+     "aten::bmm",
+     1.187,
+     52
+    ],
+    [
+     "cudaLaunchKernel",
+     0.572,
+     64
+    ],
+    [
+     "cuLaunchKernel",
+     0.323,
+     47
+    ],
+    [
+     "Activity Buffer Request",
+     0.209,
+     0
+    ],
+    [
+     "aten::transpose",
+     0.19,
+     69
+    ],
+    [
+     "autograd::engine::evaluate_function: BmmBackward0",
+     0.18,
+     17
+    ],
+    [
+     "_GatherRowsBackward",
+     0.154,
+     6
+    ],
+    [
+     "aten::cat",
+     0.136,
+     8
+    ],
+    [
+     "BmmBackward0",
+     0.128,
+     17
+    ],
+    [
+     "aten::index_copy_",
+     0.116,
+     8
+    ],
+    [
+     "aten::as_strided",
+     0.114,
+     153
+    ]
+   ]
+  }
+ ]
+}
