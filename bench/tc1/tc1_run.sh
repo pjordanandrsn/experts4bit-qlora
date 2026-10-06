@@ -1364,7 +1364,9 @@ tc1_decoded_gate(){
        --junitxml=$W/logs/decgate_decision.xml) > logs/decgate_decision.log 2>&1
     echo "decgate decision rc=$?" >> logs/decgate_rc.txt
   fi
-  TC1_W="$W" DECGATE_REASON="$REASON" GNF4_SHA="$GNF4_SHA" DECGATE_K="$DECGATE_K" DECGATE_REQUIRED="$DECGATE_REQUIRED" $PY_E4B - <<'PYG' 2>&1 | tee -a summary.txt
+  local HEAD_AT; HEAD_AT=$(git -C $SRC rev-parse HEAD 2>/dev/null)
+  TC1_W="$W" DECGATE_REASON="$REASON" GNF4_SHA="$GNF4_SHA" DECGATE_K="$DECGATE_K" DECGATE_REQUIRED="$DECGATE_REQUIRED" DECGATE_HEAD="$HEAD_AT" \
+    $PY_E4B - <<'PYG' 2>&1 | tee -a summary.txt
 import json, os, re, xml.etree.ElementTree as ET
 W = os.environ["TC1_W"]
 reason = os.environ.get("DECGATE_REASON") or ""
@@ -1397,12 +1399,16 @@ try:
     gpu, tv, trv = torch.cuda.get_device_name(), torch.__version__, triton.__version__
 except Exception as e:
     gpu = tv = trv = f"unavailable: {type(e).__name__}"
-rec = {"ran": ran, "passed": passed, "gnf4_sha": os.environ.get("GNF4_SHA"), "gpu": gpu, "torch": tv, "triton": trv, "runs": runs, "reason": reason or None}
+rec = {"ran": ran, "passed": passed, "gnf4_sha": os.environ.get("GNF4_SHA"), "checkout_head": os.environ.get("DECGATE_HEAD") or None, "gpu": gpu,
+       "torch": tv, "triton": trv, "runs": runs, "reason": reason or None}
 json.dump(rec, open(os.path.join(W, "decgate.json"), "w"), indent=1)
 print(f"DECODED GATE {'PASSED' if passed else 'NOT PASSED'} on {gpu} (torch {tv}, triton {trv}): "
       + ("; ".join(f"{r['name']} rc {r['rc']}: {r['tests']} tests, {r['failures']} failed, {r['errors']} errors, {r['skipped']} skipped"
                    + (f", required tests not passed: {r['missing']}" if r["missing"] else "") for r in runs) or reason))
 PYG
+  # the checkout is not evidence (decgate.json, logs/decgate_* are): gone before any arm, so no partial pull or fetch carries its files --
+  # its docs/receipts-ab/receipt.json once failed adertha's reconciler for every launch on the account (tc1dec-5090-4, 2026-10-06)
+  rm -rf $SRC
   grep -q '"passed": true' $W/decgate.json 2>/dev/null && return 0
   say "BOX REFUSED: the decoded route's correctness gate did not pass on this card ($W/decgate.json) -- no arm runs"
   echo "BOX_REFUSED decoded-gate" | tee -a summary.txt

@@ -113,7 +113,10 @@ tc1_lane_dead() {  # live_now live_prev  -> "dead" when both are a definite 0
 # died with its disk, because receipts were fetched once, at the end. Each time the box's summary line changes (an arm
 # finished), copy what exists into $RUN_DIR/tc1.partial. Best-effort and bounded (rsync's own I/O timeout): a failure
 # here is said and never stops the poll. The final fetch below falls back to this copy and removes it when it succeeds.
-TC1_RSYNC_EXCLUDES=(--exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' --exclude 'unsloth_compiled_cache' --exclude 'hf-cache')
+# gnf4-src: TC1 amendment 46's gate checkout (tc1_run.sh deletes it after the gate). Never fetch it: a source tree is not evidence, and its
+# docs/receipts-ab/receipt.json, pulled into a live run's tc1.partial/, failed adertha's reconciler and refused every launch on the account
+# (tc1dec-5090-4, 2026-10-06).
+TC1_RSYNC_EXCLUDES=(--exclude 'venv*' --exclude '.cache' --exclude 'adapters' --exclude 'data/alpaca_data_cleaned.json' --exclude 'unsloth_compiled_cache' --exclude 'hf-cache' --exclude 'gnf4-src')
 tc1_partial_fetch() {  # dest_dir -> rc of rsync; never exits the caller
   mkdir -p "$1" || return 1
   rsync -az --timeout=120 -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -o ConnectTimeout=30 -p $PORT" "${TC1_RSYNC_EXCLUDES[@]}" "root@$HOST:$W/" "$1/" >/dev/null 2>&1

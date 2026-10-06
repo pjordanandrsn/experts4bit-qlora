@@ -2168,8 +2168,10 @@ def test_dense_route_takes_device_sizes_and_ids(): raise AssertionError("not sel
 EOF
   [ -n "$DECGATE_FAKE_NO_ROUTE" ] && printf 'def test_dequant_groups_is_bit_equal_to_dequant_ref(): pass\n' > "$d/kernel/test_nf4_route.py"
   printf 'def test_decoded_is_taken_only_when_asked_for(): pass\ndef test_auto(): pass\n' > "$d/kernel/test_nf4_route_decision.py"
+  mkdir -p "$d/docs/receipts-ab" && echo '{}' > "$d/docs/receipts-ab/receipt.json"     # gnf4's own docs carry a receipt.json
   exit 0
 fi
+case " $* " in *" rev-parse HEAD "*) [ -d "$2/.git" ] || [ -d "$2/kernel" ] || exit 128; echo ffffffffffffffffffffffffffffffffffffffff;; esac
 exit 0
 '''
 
@@ -2196,6 +2198,11 @@ def test_tc1_amendment_46_decoded_gate_refuses_the_box_before_any_arm(tmp_path, 
                        env={**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}", **env})
     rec = json.loads((W / "decgate.json").read_text())
     summ = (W / "summary.txt").read_text()
+    # the checkout is gone before any arm on every path (its nested receipt.json once refused every launch on the account), and the
+    # record names the commit it was at
+    assert not (W / "gnf4-src").exists(), case
+    assert not list(W.rglob("receipt.json")), list(W.rglob("receipt.json"))
+    assert rec["checkout_head"] == ("f" * 40 if case != "no_clone" else None), rec
     assert r.returncode == want_rc, (case, r.returncode, r.stdout[-800:], r.stderr[-800:])
     if want_rc == 0:
         assert rec["passed"] is True and rec["ran"] is True and "GATE-DONE" in r.stdout and "BOX_REFUSED" not in summ
@@ -2218,3 +2225,13 @@ def test_tc1_amendment_46_decoded_gate_refuses_the_box_before_any_arm(tmp_path, 
         sys.path.pop(0)
     want_p107 = {"pass": "HELD", "fail": "FALSIFIED", "no_route": "UNTESTED", "no_clone": "UNTESTED"}[case]
     assert R.score_decgate(str(W))[0][2] == want_p107, R.score_decgate(str(W))
+
+
+def test_tc1_fetches_never_carry_the_gate_checkout():
+    """TC1 amendment 46's gate checkout (gnf4-src) is excluded from the partial pulls and the final fetch alike: both rsyncs take
+    TC1_RSYNC_EXCLUDES."""
+    drive = DRIVE_SH.read_text()
+    ex = re.search(r"^TC1_RSYNC_EXCLUDES=\((.*)\)$", drive, re.MULTILINE).group(1)
+    assert "--exclude 'gnf4-src'" in ex, ex
+    rsyncs = re.findall(r"^\s*(?:if ! )?rsync .*$", drive, re.MULTILINE)
+    assert len(rsyncs) >= 2 and all('"${TC1_RSYNC_EXCLUDES[@]}"' in r for r in rsyncs), rsyncs
