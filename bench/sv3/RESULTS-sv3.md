@@ -58,3 +58,31 @@ allocator peak.
   serve runs measured (0.15–0.21 GiB). The planner learns it per model from these receipts.
 - tok/s, one draw each: 34.8 / 93.9 / 49.2 / 47.8 / 109.0.
 - CUDA context: 0.58–0.71 GiB. Allocator slack: 0.4–4.9%.
+
+## Maintainer note (2026-10-06, after the merge; nothing above is changed)
+
+How this box came to run, from #1225's events, its review and the launch receipt
+(`receipts/experts4bit-qlora/2026-10-06/sv3-5090-1/receipt.json` in the receipt store):
+
+| time (UTC) | event |
+|---|---|
+| 2026-10-06 02:34:06 | #1224 (the work item) opened; the maintainer posted the registration requirements on it before the PR |
+| 02:36:09 | #1225 (the registration) opened, labelled, auto-merge on |
+| 02:37–02:38 | maintainer review requested three pre-data changes: registered consequences for W1–W5, a reducer with a self-test, exit 13 for the disk floor only; auto-merge disabled, label removed |
+| 02:41:53 | auto-merge re-enabled at the unchanged head; disabled again at 02:45:03 with a note |
+| **03:01:55** | **`sv3-5090-1` launched**, from a registration that was not on main and under an open change request |
+| 03:25:35 | box finished, $0.514 |
+| 03:30:57 | #1225 merged directly at the reviewed head c5006510, none of the three changes made |
+| 03:38:54 | this read (#1232) merged directly, without review |
+
+**What follows.** W1–W5's expectations were public before the data (#1225 at 02:36:09Z), so the readings are not post-hoc.
+But no consequence was registered for any reading, and no reducer existed before the data, so:
+- this read **licenses no change** to `estimate_serve_footprint`, the linear-state pool's price or the bucket-cap saving;
+  any re-pricing it suggests needs its own registration and box;
+- the "HELD" labels above are readings inside registered expectations, not registered verdicts with consequences;
+- the W table was computed by hand from the committed receipts; it has no registered reducer behind it;
+- `sv3_run.sh` maps a bake failure to exit 13 (`bake … || finish 13`), which adertha admits as machine evidence; do not
+  reuse the runner until a bake failure has its own non-machine code.
+
+#1234 (decode buckets limited to those `max_seqs` can use) stands on its own argument (a decode step never carries more
+rows than sequences) and its tests, not on this read.
