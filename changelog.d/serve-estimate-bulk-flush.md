@@ -9,4 +9,7 @@
   `Fp8PagedKV.append_prompt_peak_bytes` calls it.
 - The estimate prices it as a derived item at the slot's capacity, the bound the server's prefill-graph headroom check
   already used. `ServeSetup.bulk_kv` (default `True`) sets `E4B_PAGED_BULK_KV`.
-- SV5's estimate becomes 22.664 GiB, above the 22.62 GiB the out-of-memory arm had reached.
+- SV5's estimate becomes 22.664 GiB, above the 22.62 GiB the out-of-memory arm had reached. That figure is only a floor on what
+  the arm needed (it stopped at the failed allocation), so whether the estimate now covers that peak is untested.
+- What licenses this change is the code, not SV5's read. The estimate already listed the flush as not modelled, and the item uses the
+  pool's own bound. SV5 launched before its registration (#1243) merged, so its read licenses nothing until it is reviewed.
