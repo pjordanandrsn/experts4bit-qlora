@@ -98,6 +98,25 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 49, re-ask (2026-10-06): UNTESTED again; the census places the field recipe's delta calls at 9,040 routed rows at most
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 49 and its re-ask note. One RTX 5090 (`tc1-5090-106`,
+Intel Xeon Platinum 8347C, no CPU quota, Vast machine 36544), the first box's design with `TC1_PAD_CENSUS=1` on every arm, e4b `3556f46`,
+grouped-nf4-gemm `d3e7788`. Two earlier draws failed on the provider's side: one host stuck `loading`, one network error ($0.03). Read:
+[`RESULTS-tc1-fieldbk2.md`](RESULTS-tc1-fieldbk2.md).
+
+- **P119–P122 UNTESTED again.** As on the first box, the single block's draws were unstable: matched 5.359 / 6.129 s/step (13.4 % apart),
+  shipped 4.575 / 4.222 (8.0 %). The bucketed draws were stable: matched 5.997 / 6.205, shipped 5.717 / 5.567. The host was quiet (load1
+  1.7–3.0, every attempt first time).
+- **Recorded, not read.** On both boxes the bucketed shipped arm was slower than either single-block draw; the matched arm's bucketed draws
+  fell inside the single block's spread here.
+- **What the census measured** (49,152 delta calls per arm, the same on both sides). Each call carried 3,968 routed rows at the median and
+  **9,040 at most**. Its single block was 20,520 rows at the median, 60,495 at p99 and about 104,000 at most. On the fp32 matched arm that is
+  0.29 / 0.87 / 1.49 GB at the gate_up projection. On packed 4,096-token rows every call carries exactly 32,768 routed rows (4,096 × top-8).
+- **So** a gate on routed rows at 16,384 would never fire at the field recipe and always fire on packed rows, with nearly 2× margin each
+  way. Under it the field recipe runs today's single block by construction, and the field speed question this amendment could not settle
+  does not arise. That gate is the next registration, as amendment 48 anticipated.
+
 ## Amendment 49 (2026-10-06): buckets at the field recipe read UNTESTED -- the single block's own draws came 12-21 % apart
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 49. One RTX 5090 (`tc1-5090-103`, AMD Ryzen Threadripper
