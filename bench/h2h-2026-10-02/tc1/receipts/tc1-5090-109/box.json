@@ -1,0 +1,20 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-109",
+ "instance_id": "54497288",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "580.126.09",
+ "cpu": "AMD EPYC 7713 64-Core Processor",
+ "nproc": 128,
+ "mem_total_kb": "527972068",
+ "cgroup_memory_max": "",
+ "disk_root": "overlay         320G   22M  320G   1% /",
+ "hostname": "e694370ae73b",
+ "cgroup_cpu_max": "",
+ "affinity_cpus": 128,
+ "cgroup_cpuset_effective": "",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}

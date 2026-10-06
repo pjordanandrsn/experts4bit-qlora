@@ -10881,6 +10881,31 @@
         "receipts/experts4bit-qlora/2026-10-06/tc1-5090-108/tc1/"
       ],
       "notes": "Vast invoiced $1.09."
+    },
+    {
+      "id": "e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 52 (#835), one rented RTX 5090 (tc1-5090-109, AMD EPYC 7713): grouped-nf4-gemm's bucketed LoRA-delta padding (NF4_QLORA_PAD_BUCKETS=1) against the single padded block (=0), on packed rows of 4,096 real tokens (micro-batch 1 x accum 4), e4b at its defaults otherwise in the field image's venv-e4b (torch 2.8.0+cu128, triton 3.4.0), 40 load-gated steps. Matched arm (fp32 adapters): 0.983 [0.974, 0.993] of the single block's step (P130 HELD, <= 1.02), peak 32.417 -> 28.178 GB (P132 HELD, a drop of 4.239 GB); shipped arm (bf16 adapters): 0.939 [0.929, 0.949] (P131 HELD, <= 1.02), peak unchanged at 26.92 GB; held-out at N within 0.0002 (P133 HELD). So bucketed padding is not the cost behind amendment 51's torch-2.8 environment ratio (0.739), and grouped-nf4-gemm's auto default stands in torch 2.8. Reported, not scored: median GPU utilisation over the training window was 87 % on both matched _k1 draws against 97 % on both _k0 draws.",
+      "value": 0.983,
+      "unit": "ratio s/step, NF4_QLORA_PAD_BUCKETS=1 over the single padded block, Qwen3-30B-A3B matched arm on packed 4,096-token rows in torch 2.8 (medians of steps 11..40 over two draws each); cross-draw interval [0.974, 0.993]; shipped 0.939; matched peak -4.239 GB",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-109: instance 54497288, AMD EPYC 7713, no CPU quota, Vast machine 55913); e4b @ a41c857 + grouped-nf4-gemm 0.42.0 @ b4f93f1 in venv-e4b, torch 2.8.0+cu128, triton 3.4.0, transformers 5.18.0",
+      "conditions": "bench/tc1 token qwen3padbk28 (TC1 amendment 52): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), shipped and matched arms, _k0 / _k1 two draws each in ABBA order, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2 (one standing attempt above the gate: matched _k0 second draw, load1 7.11, within 0.6 % of its pair), the per-expert loop a recorded route; validity, engagement and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-padbk28.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-109/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1-5090-109/tc1/"
+      ],
+      "notes": "Vast invoiced $2.35."
     }
   ]
 }

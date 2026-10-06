@@ -212,9 +212,11 @@ amendment 51). With the chunked loss and grouped-nf4-gemm's bucketed padding bot
 grouped-nf4-gemm 0.42.0; an older grouped-nf4-gemm keeps the single block), and nothing set, e4b
 trains the packed rows resident at 28.23 GB and steps them at 10.06 s against Unsloth's 14.61 on one stack: Unsloth/e4b **1.453** [1.451,
 1.455]. That supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
-same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). That is under
-investigation. Bucketed padding's speed was measured under torch 2.12 only (amendments 48 and 50), so under torch 2.8 its effect is
-unmeasured. `NF4_QLORA_PAD_BUCKETS=0` restores the single block.
+same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are
+not that cost (`e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`, TC1 amendment 52): in torch 2.8 on packed rows they step 0.983
+(matched) and 0.939 (shipped) of the single block's step, with the matched peak 4.24 GB lower, so the default stands in every torch. In
+torch 2.8 they leave the GPU idle more of the step, though (median utilisation 87 % against 97 %), so the gap is under investigation as
+host-side time. `NF4_QLORA_PAD_BUCKETS=0` restores the single block.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against
 native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
 native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.

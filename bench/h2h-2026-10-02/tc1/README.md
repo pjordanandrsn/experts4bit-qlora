@@ -98,6 +98,34 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 52 (2026-10-06): bucketed padding costs torch 2.8 nothing on packed rows; P127's gap lies elsewhere
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 52. One RTX 5090 (`tc1-5090-109`, AMD EPYC 7713, no CPU
+quota, Vast machine 55913), amendment 48's packed box in the field image's venv-e4b (torch 2.8.0+cu128, triton 3.4.0). e4b `a41c857`,
+grouped-nf4-gemm 0.42.0 (`b4f93f1`), packed 4,096-token rows, 40 load-gated steps, e4b's defaults otherwise (the chunked loss `auto`),
+`NF4_QLORA_PAD_BUCKETS=0` (`_k0`) against `=1` (`_k1`), two draws a side in ABBA order. Read:
+[`RESULTS-tc1-padbk28.md`](RESULTS-tc1-padbk28.md).
+
+| arm | `_k0` s/step (two draws) | `_k1` s/step (two draws) | `_k1` / `_k0` | peak `_k0` → `_k1` |
+|---|---|---|---|---|
+| matched (fp32 adapters) | 12.219 / 12.287 | 12.129 / 11.971 | **0.983** [0.974, 0.993] | 32.42 → 28.18 GB |
+| shipped (bf16 adapters) | 9.598 / 9.760 | 9.071 / 9.106 | **0.939** [0.929, 0.949] | 26.92 → 26.92 GB |
+
+- **P130 HELD** (matched ≤ 1.02) and **P131 HELD** (shipped ≤ 1.02): under torch 2.8 the buckets are no slower than the single block on
+  packed rows. **P132 HELD**: the matched peak drops 4.239 GB (≥ 3.0). **P133 HELD**: held-out at N moves −0.0002 (matched) and +0.0002
+  (shipped). Every arm VALID; the `_k1` arms bucketed every padded call (about 31,750 a run), the `_k0` arms none.
+- **By amendment 52's rule** grouped-nf4-gemm's `auto` default stands for torch 2.8 too, and P127's environment ratio (0.739, amendment 51)
+  is not the buckets' cost.
+- **Load.** Five attempts ran above the 6.0 gate and were run again; one standing attempt is above it (matched `_k0` second draw, load1
+  7.11 on its last retry). Its draw is within 0.6 % of its pair.
+- **Where to look next (reported, not scored).** The GPU traces show the buckets saving GPU work under torch 2.8 and giving most of it back
+  as idle time. Over each arm's training window the median GPU utilisation was 97 % on both `_k0` arms and 87 % on both `_k1` arms (median
+  power 485–488 W against 424–434 W); the shipped arms read 97 % against 96 %. Amendment 51's host shows the same pattern larger: e4b at
+  its defaults ran at 97–98 % in torch 2.12 and 75–76 % in torch 2.8. Without buckets, torch 2.8 cost amendment 43's box 9 % (0.915);
+  with them, torch 2.12 gains about 10 % (amendment 48) and torch 2.8 here 1.7 % (matched). So the open question is host-side time in
+  the bucketed delta under torch 2.8 / triton 3.4, which an RTX A2000 profile can count at no rental cost. Those are cross-host
+  comparisons, so they are a lead, not a reading.
+
 ## Amendment 51 (2026-10-06): at e4b's defaults the packed position is Unsloth/e4b 1.453 on one stack -- the regime amendment 39 lost
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 51. One RTX 5090 (`tc1-5090-108`, Intel Xeon W-2145, a
