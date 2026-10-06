@@ -1,0 +1,8 @@
+NVIDIA H100 NVL, 95830 MiB, 580.126.09, GPU-89033ced-e223-c717-7c3f-f0584345bd89
+power.limit,clocks.max.sm 310.00 W, 1785 MHz
+Model name:                           AMD EPYC 9374F 32-Core Processor
+               total        used        free      shared  buff/cache   available
+Mem:            1511          69         809          84         631        1347
+overlay         320G  123M  320G   1% /
+curl MISSING
+hf_cdn_mbps=128.8

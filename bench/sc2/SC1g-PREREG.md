@@ -714,6 +714,50 @@ vLLM, SGLang native and llama.cpp q8, each VALID against R's artifact (`sc1g_red
 
 Each run stays under the $15 no-ask tier. The lane is at **$3.792**.
 
+## A4 box R read (2026-10-06): `R_NOT_OK`, so A4's KL grading is UNREAD
+
+**The run.** `sc1g-r-8` (adertha-receipts `2c49f7d5`, $0.5556; runpod:secure H100 NVL; from `9dc7b59a`) ran to its verdict.
+The registered rule is unchanged from `8a1513a4`: digest `ee122b74…`, `test_box_r_rule_is_the_registered_one`. The verdict
+re-derives from the committed receipt (`sc1g_ref.py --reverdict`, see the receipts README, which lists every attempt, r-1 to
+r-8; box R total $0.6904). By the registration, **R is not re-run to get a pass**.
+
+| check | result | measured (conv1 / conv2 / conv3 / conv4 / wikitext) | bar |
+|---|---|---|---|
+| K0 | OK | all passed on the host | |
+| windows complete | OK | all five | |
+| NF4 fake-quant matches gnf4 | OK | bit-equal, 1,536 matrices | |
+| coverage (reference top-64 mass) | **UNREAD** | 0.961 / 0.929 / 0.978 / 0.966 / 0.773 | 0.99 |
+| calib self (KL65 / KL_full) | **UNREAD** | 0.827 / 0.841 / 0.882 / 0.876 / 0.791 | 0.90 |
+| calib nf4 (KL65 / KL_full) | **UNREAD** | 0.793 / 0.746 / 0.910 / 0.886 / 0.785 | 0.90 |
+| floor F (decode vs prefill full KL) | **UNREAD** | 5.7e-3 / 7.0e-3 / 1.8e-3 / 1.9e-3 / 2.18e-2 | 1e-2 |
+
+**Why, per check:**
+- **Coverage and the calibrations.** On these texts gpt-oss's next-token distributions keep 2–7 % of their mass outside the
+  top 64, and 10–25 % of the KL lives there. The gate did its job: KL65 would have under-read by that much.
+- **The floor.** At 2,560-token windows the reference's own decode-vs-prefill KL (F) is 6–7e-3 on conv1 and conv2. P44 read
+  5e-4 at 320 tokens. That is above the ~2e-3 expected of an engine, so even a full-vocabulary KL cannot separate engines below
+  about F there. On wikitext, the out-of-distribution control, F is 2.2e-2.
+- **The same windows are sensitive to everything.** The NF4 fake-quant's full KL is large on conv1 and conv2 (0.108, 0.139)
+  and small on conv3 and conv4 (0.021, 0.023, P44's scale).
+
+**Descriptive, as registered: the true model's NLL beside e4b's served rows.** This supports A3's hypothesis; it does not
+settle it.
+
+| window | reference (decode) | e4b MXFP4 served | e4b NF4 served | e4b GEMV=0 served | NF4 fake-quant of the reference (prefill) vs the reference (prefill) |
+|---|---|---|---|---|---|
+| conv1 | 0.884 | 0.905 | 0.736 | 0.874 | 0.746 vs 0.864: **−0.118**, at full KL 0.108 |
+| conv2 | 1.821 | 1.747 | 1.650 | 1.749 | 1.702 vs 1.840: **−0.139**, at full KL 0.139 |
+| conv3 | 0.895 | 0.913 | 0.946 | — | 0.933 vs 0.892: +0.041, at full KL 0.021 |
+| conv4 | 1.590 | — | — | — | 1.595 vs 1.587: +0.008, at full KL 0.023 |
+
+- **The evidence.** The reference's own NF4 requantisation reads BELOW the true model's NLL exactly where its full KL is
+  largest. A less faithful copy scoring a lower NLL is flattery, not fidelity. e4b's NF4 served rows sit below the reference
+  on the same windows.
+- **MXFP4 served** sits within about 0.02 of the reference on conv1 and conv3. Its −0.074 on conv2 is **unexplained**.
+
+**Next.** Amendment A5 is to be registered before anything runs. It moves to A4's registered full-vocabulary fallback and
+makes the floor a per-window gradability rule.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).

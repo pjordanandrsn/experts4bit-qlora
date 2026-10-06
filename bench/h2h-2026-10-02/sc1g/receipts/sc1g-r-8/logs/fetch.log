@@ -1,0 +1,4 @@
+Fetching 13 files:   0%|          | 0/13 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 13 files:  38%|███▊      | 5/13 [00:00<00:00, 36.49it/s]Fetching 13 files:  46%|████▌     | 6/13 [00:20<00:00, 36.49it/s]Fetching 13 files:  54%|█████▍    | 7/13 [01:44<01:53, 18.91s/it]Fetching 13 files:  77%|███████▋  | 10/13 [01:44<00:31, 10.65s/it]Fetching 13 files:  92%|█████████▏| 12/13 [02:00<00:10, 10.65s/it]Fetching 13 files: 100%|██████████| 13/13 [02:23<00:00, 11.61s/it]Fetching 13 files: 100%|██████████| 13/13 [02:23<00:00, 11.05s/it]
+staged in 2.4 min at /root/.cache/huggingface/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee
+STAGED 6cee5e81ee83917806bbde320786a8fb61efebee

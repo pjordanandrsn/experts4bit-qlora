@@ -1,0 +1,134 @@
+{
+ "artifacts": {
+  "conv1": "09049c1cbcbf2fcc49f549fccf2ce96710359ff6ff8b6501c97b8000930163e2",
+  "conv2": "7c6b89d6f76782af910b0df0db9b0731c833f4ec19792bfcaa9db4988f0452d0",
+  "conv3": "106654b4ef4263299cdad770c9e70363bd6253b1f26b074196640114381b0893",
+  "conv4": "cfdba8a2ba239c76fb5579c31ef4096bfd28768fafffacea1870caff700235a1",
+  "wikitext": "2684afe9d9e41661e6adb2a5b1961f742177b2afcb1891326ad39153704ade22"
+ },
+ "nf4": {
+  "gnf4_crosscheck": {
+   "available": true,
+   "equal": true,
+   "max_abs_diff": 0.0
+  },
+  "matrices": 1536
+ },
+ "windows": {
+  "conv1": {
+   "calib_nf4": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.08565873033660741,
+    "kl_full_mean": 0.10803657568282007,
+    "positions": 2048,
+    "ratio": 0.7928678764133471
+   },
+   "calib_self": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.00468855760637029,
+    "kl_full_mean": 0.005667747125860828,
+    "positions": 2048,
+    "ratio": 0.8272347905179668
+   },
+   "coverage_ref_top64": 0.9611994259465438,
+   "decode_s": 61.3,
+   "floor_F": 0.005667747125860828,
+   "nf4_fakequant_nll_prefill": 0.7463835219867466,
+   "positions": 2048,
+   "reference_nll_decode": 0.8838570160959243,
+   "reference_nll_prefill": 0.8642017687860187
+  },
+  "conv2": {
+   "calib_nf4": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.10399817982824477,
+    "kl_full_mean": 0.13941981408624543,
+    "positions": 2048,
+    "ratio": 0.7459354361490631
+   },
+   "calib_self": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.005912696059407299,
+    "kl_full_mean": 0.0070299408990488225,
+    "positions": 2048,
+    "ratio": 0.8410733666633398
+   },
+   "coverage_ref_top64": 0.9290053535778101,
+   "decode_s": 60.0,
+   "floor_F": 0.0070299408990488225,
+   "nf4_fakequant_nll_prefill": 1.7014693527722033,
+   "positions": 2048,
+   "reference_nll_decode": 1.820991010089502,
+   "reference_nll_prefill": 1.8403343888743093
+  },
+  "conv3": {
+   "calib_nf4": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.01925586415749176,
+    "kl_full_mean": 0.02115054983904624,
+    "positions": 2048,
+    "ratio": 0.9104190814908896
+   },
+   "calib_self": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.0016211264026671551,
+    "kl_full_mean": 0.0018384930682801707,
+    "positions": 2048,
+    "ratio": 0.8817691133226014
+   },
+   "coverage_ref_top64": 0.9777270050279596,
+   "decode_s": 59.9,
+   "floor_F": 0.0018384930682801707,
+   "nf4_fakequant_nll_prefill": 0.9331591932689024,
+   "positions": 2048,
+   "reference_nll_decode": 0.894867798380721,
+   "reference_nll_prefill": 0.8920741230035591
+  },
+  "conv4": {
+   "calib_nf4": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.02007384919581052,
+    "kl_full_mean": 0.022660159161343542,
+    "positions": 2048,
+    "ratio": 0.8858653221666216
+   },
+   "calib_self": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.001623027720912089,
+    "kl_full_mean": 0.0018534464589554664,
+    "positions": 2048,
+    "ratio": 0.8756809310945874
+   },
+   "coverage_ref_top64": 0.9661024620139969,
+   "decode_s": 60.4,
+   "floor_F": 0.0018534464589554664,
+   "nf4_fakequant_nll_prefill": 1.5954660466079098,
+   "positions": 2048,
+   "reference_nll_decode": 1.589908586712943,
+   "reference_nll_prefill": 1.587270176058794
+  },
+  "wikitext": {
+   "calib_nf4": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.0776046094418385,
+    "kl_full_mean": 0.09890449784820704,
+    "positions": 2048,
+    "ratio": 0.7846418629104372
+   },
+   "calib_self": {
+    "kl65_le_full_everywhere": true,
+    "kl65_mean": 0.017254009106264477,
+    "kl_full_mean": 0.02181549683372932,
+    "positions": 2048,
+    "ratio": 0.7909060810197893
+   },
+   "coverage_ref_top64": 0.7730052845806039,
+   "decode_s": 59.9,
+   "floor_F": 0.02181549683372932,
+   "nf4_fakequant_nll_prefill": 6.411360916665513,
+   "positions": 2048,
+   "reference_nll_decode": 6.43518063420284,
+   "reference_nll_prefill": 6.294687859137288
+  }
+ }
+}

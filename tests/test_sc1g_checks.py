@@ -257,3 +257,34 @@ def test_egress_probe_timeout_mid_read_is_measured_slow_rc14(tmp_path, egress_se
 def test_egress_probe_fast_read_passes(tmp_path, egress_server):
     rc, out, log, refusal = _run_egress(tmp_path, egress_server + "/fast", 0.001)
     assert rc == 0 and "PASSED" in out and not refusal and "egress status 206" in log
+
+
+RULE_FUNCS = ("verdict", "score", "load_reference", "window_ids", "fake_nf4", "fake_nf4_experts_", "gnf4_crosscheck")
+RULE_CONSTS = ("SELF_CONSISTENCY_MAX", "SRCS", "NF4_LUT", "BLOCK")
+RULE_SHA_AT_8A1513A4 = "ee122b74adb8160d14ca4d61f43a873b1a7275604c7d074cadb8cb64a3245168"
+
+
+def _rule_digest(ref_src: str, kl_src: str) -> str:
+    """Box R's registered rule as one digest: the sources of every function its verdict depends on, the constants by
+    repr of their literal values, and sc1g_kl.py whole."""
+    import ast
+    import hashlib
+    tree = ast.parse(ref_src)
+    fn = {n.name: ast.get_source_segment(ref_src, n) for n in tree.body if isinstance(n, ast.FunctionDef)}
+    cs = {t.id: repr(ast.literal_eval(n.value)) for n in tree.body if isinstance(n, ast.Assign) for t in n.targets
+          if isinstance(t, ast.Name) and t.id in RULE_CONSTS}
+    assert all(f in fn for f in RULE_FUNCS) and all(c in cs for c in RULE_CONSTS)
+    parts = [fn[f] for f in RULE_FUNCS] + [f"{c} = {cs[c]}" for c in RULE_CONSTS] + [kl_src]
+    return hashlib.sha256("\n\x00\n".join(parts).encode()).hexdigest()
+
+
+def test_box_r_rule_is_the_registered_one():
+    """--reverdict proves the registered rule only if box R's whole rule is the code registered at #1198's merge
+    (8a1513a4): verdict() and everything it reads -- score, the loader, the window check, the NF4 fake-quant and its gnf4
+    cross-check, the four constants, and sc1g_kl.py."""
+    ref_src, kl_src = (SC2 / "sc1g_ref.py").read_text(), (SC2 / "sc1g_kl.py").read_text()
+    assert _rule_digest(ref_src, kl_src) == RULE_SHA_AT_8A1513A4
+    # the pin is not vacuous: a constant, a function body, or the estimator moving each changes the digest
+    assert _rule_digest(ref_src.replace("SELF_CONSISTENCY_MAX = 1e-2", "SELF_CONSISTENCY_MAX = 1e-1"), kl_src) != RULE_SHA_AT_8A1513A4
+    assert _rule_digest(ref_src.replace('min(cv) >= KL.COVERAGE_MIN', 'min(cv) >= 0.5'), kl_src) != RULE_SHA_AT_8A1513A4
+    assert _rule_digest(ref_src, kl_src.replace("CALIB_RATIO_MIN = 0.90", "CALIB_RATIO_MIN = 0.80")) != RULE_SHA_AT_8A1513A4
