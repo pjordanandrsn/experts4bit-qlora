@@ -758,6 +758,182 @@ settle it.
 **Next.** Amendment A5 is to be registered before anything runs. It moves to A4's registered full-vocabulary fallback and
 makes the floor a per-window gradability rule.
 
+## Amendment A5 (2026-10-06): the full-vocabulary KL, graded per window above its own floor
+
+Registered before box R re-runs and before any box I reading. It applies the full-vocab fallback that A4 registered for exactly
+this case. The maintainer reviewed the design on #1222's merge: fp16 storage checked on both pairs, per-window drops with a
+bound for an unresolved denominator, an `R_NO_GRADABLE` outcome, the digest pinned beside A4's, a Pool 3 copy, and the vLLM
+flag stated.
+
+### Why
+
+A4's box R read `R_NOT_OK` on three checks, and two causes need two different fixes:
+
+- **Coverage and the two calibrations are moot under a full-vocabulary KL.** They measured what the 64-token partition lost.
+  Over all 201,088 tokens nothing is lost, so the estimator is the quantity itself and not a lower bound. Coverage,
+  `calib_self` and `calib_nf4` are **dropped by name** (`A5_DROPPED`) and stay in R's receipt as descriptive.
+- **The floor is not moot.** No estimator separates engines below the reference's own decode-vs-prefill KL. A4 applied
+  F < 1e-2 to the lane, and wikitext's 2.2e-2 sank it. A5 applies the bar **per window**: a window is graded only if its
+  own F < 1e-2. Wikitext is the out-of-distribution control and is never graded.
+
+### The estimator (`bench/sc2/sc1g_kl.py`, self-tested on 17 cases)
+
+**What R stores.** For each window, R stores the reference's decode-shaped log-softmax over the whole vocabulary:
+- format: fp16, computed in fp64 and then cast (`full_rows_fp16`);
+- shape: `[2048, 201088]` per window, about 0.82 GB, written as `ref_full_<src>.npy`;
+- each file is hashed into the receipt (`full_artifacts`: sha256, shape, dtype, bytes);
+- a masked `−inf` is stored exactly as `−inf`. A NaN, or a finite value that became `−inf` in the cast, is refused.
+
+**How an engine is read.** Each engine computes, at every scored position, KL(p_ref ‖ p_eng) in fp64 over the full vocabulary
+(`kl_full_rows`):
+- both sides are renormalised;
+- entries where p_ref = 0 stay out of the sum;
+- if the engine puts `−inf` where the reference has mass, the KL is infinite, and the computation raises;
+- a negative KL beyond −1e-9 means misalignment, and the computation raises.
+
+Either way the row is never VALID.
+
+Only the reference side is stored in fp16. The engine side is the engine's own logits as it computes them, and the
+instrument adds no rounding to them.
+
+**The fp16 storage check.** It runs on R, on both of R's pairs, because both full distributions exist only there. For each
+window and each pair, `storage_error` computes:
+- the mean KL from the fp64 reference rows;
+- the mean KL from the same rows after the fp16 cast.
+
+The registered check: |KL_fp16 − KL_fp64| ≤ **0.1 × F** (`STORAGE_F_FRACTION`) on every gradable graded window, taking the
+max over the two pairs. A window that fails makes the check VOID, and R reads `R_NOT_OK`. Rounding the reference to fp16
+must cost at most a tenth of the floor that the window is graded above.
+
+### Box R under A5 (`sc1g_ref.verdict_a5`; inputs, model, fetch and windows unchanged from A4)
+
+**What R does.** The same flow as A4, except:
+- it writes the full rows plus their shas;
+- it measures the storage error on both pairs;
+- it no longer writes the KL65 named-token artifacts.
+
+**Validity checks, each OK / VOID:**
+- K0;
+- the windows complete;
+- the NF4 fake-quant matching gnf4 (OK only when gnf4 imports AND matches bit for bit);
+- the full artifacts written and hashed for every window;
+- `fp16_storage`.
+
+**Gradability.** Gradable = the graded windows (conv1–conv4) whose own F < **1e-2** (`GRADABLE_F_MAX`).
+
+**Outcomes:**
+- **`R_NOT_OK`:** a validity check is not OK. Box I does not run.
+- **`R_NO_GRADABLE`:** the checks are OK, but fewer than **3** graded windows are gradable (`A5_MIN_GRADABLE`). This is a
+  cost gate, not a failure of the instrument: K-A, L1 and L2 each need ≥ 3 windows, so box I would buy nothing. Box I is
+  not launched. `sc1g_ref.py` exits 2 and `sc1g_r_run.sh` finishes with rc 32.
+- **`R_OK`:** otherwise. The verdict lists the gradable windows, F per window and the storage error per window.
+
+A4's measured F (conv1 5.7e-3, conv2 7.0e-3, conv3 1.8e-3, conv4 1.9e-3) would make all four conv windows gradable. That is
+the same arithmetic on a new run, and it is not assumed here. A5 needs a new box R run because A4's never wrote full rows.
+That run is made once; **R is not re-run under A5 to get a pass.**
+
+**The rule pin.** `test_box_r_rule_is_the_registered_one` pins the digest
+**`2d63276a1b57c002113d93b3dac5d38044c0d907d16e699a072079a22df7ec37`**. It covers:
+- `verdict_a5`, `score`, `load_reference`, `window_ids`, `fake_nf4`, `fake_nf4_experts_` and `gnf4_crosscheck`;
+- the constants `SELF_CONSISTENCY_MAX`, `SRCS`, `NF4_LUT`, `BLOCK`, `A5_GRADED`, `A5_MIN_GRADABLE` and `A5_DROPPED`;
+- the whole of `sc1g_kl.py`.
+
+The test's mutations show that changing `A5_MIN_GRADABLE`, `STORAGE_F_FRACTION` or `GRADABLE_F_MAX` changes the digest.
+
+A4's digest **`ee122b74…`** covered `score()`, which A5 changes, so it cannot stay a live pin. A4's rule is pinned instead in
+two ways:
+- its `verdict()` function's own sha, **`0f521ac4d77d3a17daf342ca3cea7d20bf1f2f79b03d5c7adbffef6128c18102`**, unchanged;
+- `test_the_a4_read_still_rederives_from_its_committed_receipt`: `--reverdict` on `sc1g-r-8` still reads `R_NOT_OK rule=A4`
+  with `matches_recorded=True`.
+
+`--reverdict` dispatches on the receipt's `rule`, so each read re-derives under its own rule. For A5 it also re-hashes the
+full rows when they are present.
+
+### Where the full rows live
+
+The rows (~4.1 GB for five windows) stay outside every repository:
+
+1. **R's driver** fetches `ref/full/` separately from the receipt, to `$SC1G_REF_FULL_STORE/<run id>/` on the controller
+   (default `~/sc1g-ref-full`). It prints a `FULL_FETCHED` sha line per file. The receipt itself carries only
+   `ref/SHA256SUMS` and the shas in `r_calib.json`.
+2. **The durable copy** goes to the QNAP's **Pool 3** (HDD bulk), at `/share/ZFS19_DATA/sc1g-ref-full/<run id>/`, with its
+   `SHA256SUMS`. It is re-hashed after the copy and must match R's receipt. The path and shas are recorded in the
+   registration PR.
+3. **Box I** gets the rows staged from the controller copy (`sc1_drive.sh`, `SC1G_REF_FULL_SRC`) into `$W/sc1g_ref_full`.
+   Every KL arm re-hashes its window's file against the registered sha (`i_ref_full`) and is REFUSED on any mismatch.
+
+### After R: the sha registration
+
+If R reads `R_OK`, a short PR commits:
+- `bench/sc1/sc1g_ref/ref_full_shas.json`, `r_verdict.json` and `r_calib.json` (the rows themselves are not committed);
+- R's receipt;
+- the attempts list.
+
+`sc1g_ref` is in the SC staging lists (`sc1_drive.sh`, `make_pin.sh`, `test_sc1_staged_pin.py`), so box I gets them at
+`$W/sc1g_ref`. The reading is UNREAD unless those files say rule A5 and `R_OK` (`a5_refs`).
+
+### Box I under A5 (supersedes A4's arm list)
+
+**Arms, in priority order** (the deadline drops from the end). Each engine starts once, and each runs conv1–conv4 and then
+wikitext.
+
+1. **e4b served, MXFP4 (GEMV) then NF4.** `sc1g_k8.py`'s `full_capture` reads step_decomp's own served rows. A missing meta
+   record, or a row count other than one per step, makes the row VOID.
+2. **vLLM served (Marlin W4A16, TRITON_ATTN).**
+   - **The flag:** `SamplingParams(logprobs=-1)` with **`LLM(max_logprobs=-1)`**, set whenever `SC1_REF_FULL` is set.
+   - **Verification:** the first request must return one entry per vocabulary token.
+   - **Failure:** if that does not hold, the KL row is **VOID**. A5 never falls back to top-K or named tokens.
+3. **llama.cpp decode** (the published GGUF; default MMQ, then `MMQ_PREC=q8`). The harness reads R's rows as raw fp16
+   (`--ref-full`) and writes (KL, target log-prob) per step (`--kl-out`). A size mismatch is refused (rc 3).
+4. **The descriptive prefill-shaped NLL rows**, with no KL.
+
+**SGLang native and Marlin are UNREAD by registration.** They have no KL arm, for two reasons:
+- SGLang's API returns top-K (`top_logprobs_num`) and named-token (`token_ids_logprob`) log-probs. Asking it to name
+  every token would mean 2,048 × 201,088 ≈ 4.1 × 10⁸ log-probs per window as JSON, and no full-distribution path was
+  built or proved for it;
+- A4 registered that SGLang reads UNREAD under the full-vocab fallback.
+
+SGLang therefore leaves L1's comparators and L2's engines.
+
+**When a row counts.** A full-KL row is VALID only when:
+- the arm is VALID, route gates included;
+- its record is complete and finite;
+- the reference sha it recorded is the registered one;
+- its target log-probs reproduce the arm's own mean NLL to **1e-9**.
+
+**The proof.** Box I's proof (2.0 h guard, per A2) reads three rows on conv1, each VALID against R's registered rows
+(`sc1g_reduce.py --prove-a5`):
+- e4b MXFP4 served;
+- vLLM served;
+- llama.cpp q8 decode.
+
+### Predictions (registered; `sc1g_reduce.py`'s `a5`, self-tested; graded over the gradable windows only)
+
+**When a KL is resolved.** An engine's KL on a window counts as **resolved** only when it exceeds that window's F. At or
+below F it cannot be told apart from the reference's own arithmetic order.
+
+| # | prediction | the floor rule |
+|---|---|---|
+| K-A | e4b NF4 served KL ≥ **3×** e4b MXFP4 served KL on every counted window | NF4 unresolved, so the window is **dropped**. MXFP4 unresolved (with NF4 resolved), so **F is used as MXFP4's upper bound** in the denominator, which makes the test conservative |
+| L1 | e4b MXFP4 served pooled KL ≤ **2×** the best comparator's (vLLM, llama.cpp default, llama.cpp q8) | a window whose best comparator is unresolved is **dropped**. An unresolved e4b takes **F as its upper bound** |
+| L2 | every native-MXFP4 engine (e4b MXFP4, vLLM, both llama.cpp) reads pooled KL **below R's NF4-requant pooled full KL** | pooled per engine over the windows where both that engine and the NF4 pair are resolved |
+
+- Each prediction needs **≥ 3** counted windows, or it is UNREAD.
+- All of them are UNREAD unless R read `R_OK` under A5 and every row matched its registered sha.
+- **Descriptive:** the per-window KL table, each row's within-F flag, NLL beside each row, and wikitext's rows as the
+  control.
+
+### Cost and order
+
+1. This registration.
+2. Box R under A5: H100 NVL at the declared $3.50/h, guard 1.0 h. A4's run took ~10 min. Under A5 it adds the
+   full-row write, two storage passes and the ~4.1 GB fetch.
+3. The Pool 3 copy and the sha registration.
+4. Box I's proof: 2.0 h guard, ≈ $1.7, plus staging ~4.1 GB of rows to the box.
+5. Box I's reading.
+
+Each run stays under the $15 no-ask tier. The lane is at **$4.482**.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).
