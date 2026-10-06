@@ -414,3 +414,21 @@ def test_the_dram_tier_s_prefill_on_the_gpu_is_priced_by_its_excess_over_the_col
     allv = estimate_serve_footprint(topo, ServeSetup(placement="solver", max_seqs=1, graphs=False, vram_gb=1.0,
                                                      dram_gb=0.0, hot_rows=8))
     assert not any(i.name.startswith("DRAM experts run on the GPU") for i in allv.items)
+
+
+def test_the_server_captures_only_the_buckets_its_sequences_can_use(monkeypatch):
+    """A bucket above max_seqs never runs; on Qwen3.6 served for one sequence, buckets 2-16 failed to capture (lane
+    SV3). The server keeps the buckets it can use, and the estimate sizes the scratch slots by the same rule."""
+    from experts4bit_qlora.serve_paged import PagedServeConfig
+    from experts4bit_qlora.serve_recipe import usable_buckets
+    assert usable_buckets(1, (1, 2, 4, 8, 16)) == (1,)
+    assert usable_buckets(12, (1, 2, 4, 8, 16)) == (1, 2, 4, 8, 12)
+    assert usable_buckets(32, (1, 2, 4, 8, 16)) == (1, 2, 4, 8, 16)
+    monkeypatch.setenv("E4B_PAGED_DEVICE", "cpu")
+    for k, v in ServeSetup(max_seqs=1).to_env().items():
+        monkeypatch.setenv(k, v)
+    assert tuple(PagedServeConfig.from_env().buckets) == (1,)
+    topo = describe_moe(_qwen3())
+    f = estimate_serve_footprint(topo, ServeSetup(max_seqs=1, max_tokens_per_seq=256, graphs=True))
+    kv = next(i for i in f.items if i.name == "FP8 paged KV pool")
+    assert kv.bytes == paged_kv_pool_bytes(3, 2, 32, batch=1, max_tokens_per_seq=256, scratch_slots=1)
