@@ -388,3 +388,29 @@ def test_a_model_with_leading_dense_layers_keeps_kv_for_every_layer():
     f = estimate_serve_footprint(topo, ServeSetup(max_seqs=1, max_tokens_per_seq=256, graphs=False))
     kv = next(i for i in f.items if i.name == "FP8 paged KV pool")
     assert kv.bytes == paged_kv_pool_bytes(3, 2, 32, batch=1, max_tokens_per_seq=256)
+
+
+def test_the_dram_tier_s_prefill_on_the_gpu_is_priced_by_its_excess_over_the_cold_stack():
+    """hybrid._dram_on_gpu computes a prefill chunk's routed DRAM experts on the GPU: their NF4 bytes with absmax cast
+    to bf16, and the chunk's routed rows (bf16 in, two fp32 outs). Measured on ERNIE-4.5-21B-A3B (RTX A2000, no NVMe
+    rows): 457.5 MiB live at the generation peak, 64 experts x 5.98 MiB + 75 MiB, exactly this arithmetic."""
+    from experts4bit_qlora.serve_recipe import dram_rows_per_layer
+    topo = describe_moe(_qwen3())                      # 3 layers x 8 experts, top-2, H=128
+    st0, bpe = topo.expert_stacks[0], bytes_per_expert(topo.expert_stacks[0])
+    setup = ServeSetup(placement="solver", max_seqs=1, graphs=False, vram_gb=5 * bpe / 2**30, dram_gb=7 * bpe / 2**30,
+                       hot_rows=8)
+    dram_max = dram_rows_per_layer(3, 8, bpe, setup.vram_gb, setup.dram_gb)
+    assert 0 < dram_max <= 8
+    per_expert = st0.numel // 8
+    rows = 2 * setup.chunk_tokens
+    dram_gpu = min(dram_max, rows) * (per_expert // 2 + 2 * (per_expert // 64)) + rows * 128 * 10
+    f = estimate_serve_footprint(topo, setup)
+    by = {i.name: i for i in f.items}
+    cold = by["cold rows' device stack (one layer call)"].bytes
+    item = by["DRAM experts run on the GPU at prefill (one layer call)"]
+    assert item.where == "device" and item.basis == "derived" and item.bytes == dram_gpu - cold
+    # every expert in VRAM, or nothing in DRAM: no item
+    assert dram_rows_per_layer(3, 8, bpe, 1.0, 0.0) == 0
+    allv = estimate_serve_footprint(topo, ServeSetup(placement="solver", max_seqs=1, graphs=False, vram_gb=1.0,
+                                                     dram_gb=0.0, hot_rows=8))
+    assert not any(i.name.startswith("DRAM experts run on the GPU") for i in allv.items)
