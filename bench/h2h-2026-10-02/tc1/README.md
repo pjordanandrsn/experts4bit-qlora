@@ -98,6 +98,21 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 49 (2026-10-06): buckets at the field recipe read UNTESTED -- the single block's own draws came 12-21 % apart
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 49. One RTX 5090 (`tc1-5090-103`, AMD Ryzen Threadripper
+3990X, a 61-CPU quota, Vast machine 55583), TC1's field recipe, e4b `9170c92` with grouped-nf4-gemm `d3e7788` (#490), venv-unsloth, e4b's
+defaults, `NF4_QLORA_PAD_BUCKETS=0` against `=1`. Read: [`RESULTS-tc1-fieldbk.md`](RESULTS-tc1-fieldbk.md).
+
+- **P119–P122 UNTESTED.** The single block's draws were unstable on both arms: matched 3.524 / 4.342 s/step (20.8 % apart), shipped 2.970 /
+  3.358 (12.3 %). The bucketed draws were stable: matched 4.218 / 4.159, shipped 3.685 / 3.709. Every arm VALID. The engagement held: 49,152
+  bucketed calls and no single-block call on the bucketed arms, the reverse on the others, no loop on either.
+- **Recorded, not read.** Every bucketed draw was slower than every single-block draw on its arm, the least-loaded pairs included (matched
+  4.159 at load1 1.82 against 3.524 at 1.82). If that holds, buckets cost the host-bound field step: each bucketed call builds its bucket plan
+  on the host and launches a few more kernels. The matched peak read 27.19 GB bucketed against 27.49 / 27.51.
+- **By amendment 49's rule they stay opt-in pending a re-ask.** The re-ask will record each call's single block, its rows and bytes, so
+  a size gate can be placed between the field recipe's blocks and the packed rows' from measured sizes.
+
 ## Amendment 48, re-ask (2026-10-06): bucketed padding takes 4.29 GB off e4b's packed-row peak and makes the step 11 % faster
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 48 and its re-ask note. One RTX 5090 (`tc1-5090-102`, Intel
