@@ -113,7 +113,12 @@ echo "loadavg $(cat /proc/loadavg)" | tee -a forensics.txt; free -g | head -2 | 
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
 case "$GPU_NAME" in *"$GPU_CLASS"*) ;; *) say "REFUSED: card is '$GPU_NAME', the lane registers the RTX $GPU_CLASS class"; echo "refused: class $GPU_NAME" > REFUSAL; finish 15;; esac
 FREE_GB=$(df -BG --output=avail $W 2>/dev/null | tail -1 | tr -dc 0-9)
-[ "${FREE_GB:-0}" -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free < ${MIN_DISK_GB} GB (bf16 checkpoint, NF4 arena, comparator checkpoints, venvs)"; echo "refused: disk ${FREE_GB:-?} GB" > REFUSAL; finish 13; }
+# the lane's OWN staged inputs count toward the floor: the launcher orders a fixed 320 GB disk, so bytes the controller put
+# here before this check (SC1g A5's full-vocabulary reference rows, ~4 GB) would otherwise refuse every box on the lane's
+# account, not the host's (sc1g-prove-a5-1 and -2: 317 GB free + 3.8 GB staged on a healthy host). The floor is unchanged.
+STAGED_GB=$([ -d $W/sc1g_ref_full ] && du -s -BG $W/sc1g_ref_full 2>/dev/null | cut -f1 | tr -dc 0-9); STAGED_GB=${STAGED_GB:-0}
+[ "$STAGED_GB" -gt 0 ] && echo "disk: ${FREE_GB:-?} GB free + ${STAGED_GB} GB the lane staged (sc1g_ref_full/) counted toward the ${MIN_DISK_GB} GB floor" | tee -a summary.txt
+[ $(( ${FREE_GB:-0} + STAGED_GB )) -ge "$MIN_DISK_GB" ] || { say "REFUSED: ${FREE_GB:-?} GB free + ${STAGED_GB} GB staged < ${MIN_DISK_GB} GB (bf16 checkpoint, NF4 arena, comparator checkpoints, venvs)"; echo "refused: disk ${FREE_GB:-?} GB (+${STAGED_GB} staged)" > REFUSAL; finish 13; }
 DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 | tr -d ' '); DRV_MAJOR=${DRV%%.*}
 [ -n "$DRV_MAJOR" ] && [ "$DRV_MAJOR" -ge "$MIN_DRIVER" ] 2>/dev/null || { say "REFUSED: driver '${DRV:-unreadable}' < R${MIN_DRIVER} (the CUDA 13 wheels of vLLM 0.30.0 / SGLang 0.5.20)"; echo "refused: driver ${DRV:-unreadable}" > REFUSAL; finish 18; }
 HOST_VENDOR=$(lscpu | awk -F: '/^Vendor ID/{gsub(/ /, "", $2); print $2; exit}'); echo "cpu_vendor $HOST_VENDOR" | tee -a forensics.txt
