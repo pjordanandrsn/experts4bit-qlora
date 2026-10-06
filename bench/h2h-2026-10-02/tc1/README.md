@@ -107,9 +107,11 @@ machine 130223), packed 4,096-token rows, e4b `087e045` with grouped-nf4-gemm `d
 - **Every `_pk1` arm reads VOID, so P115–P118 are UNTESTED.** The reducer applied amendment 43's rule, a per-expert loop above 5 % of a step's
   delta calls, and the bucketed arms recorded `lora_loop_share` 1.000 on every step.
 - **That share is an instrument bug, not the route.** `tc1_arm.py` divided the loop's calls by the sum of loop, padded and grouped_mm calls.
-  grouped-nf4-gemm#490's new `padded_bucketed` counter was not in that sum. On the matched `_pk1` arm the counters read 494 loop calls
-  against 31,762 bucketed calls, a 1.5 % share. The `_pk0` arms read 1.6–2.6 % with the same rule. The fix counts every `lora_path_*`
-  counter (`_lora_loop_share`, with a self-test case for this receipt's numbers).
+  grouped-nf4-gemm#490's new `padded_bucketed` counter was not in that sum. Over the matched `_pk1` arm's whole run
+  (`lean_ab.lora_path_calls`, warm-up included) the counters read 494 loop calls against 31,762 bucketed calls, a 1.5 % share. Amendment
+  43's rule reads the largest per-step share. Recomputed from `kernel_calls_all` with every counter, that is 2.6–2.9 % on the `_pk1` arms
+  and on the `_pk0` arms, which the old sum already covered. Every arm is under the 5 % line. The fix counts every `lora_path_*` counter
+  (`_lora_loop_share`, with a self-test case for this receipt's numbers).
 - **The VOID arms' speeds and peaks are not read here.** The `_pk0` arms were VALID on a quiet host: load1 1.1–1.3, every attempt first
   time.
 - **Next, as registered** (any UNTESTED, none FALSIFIED: a re-ask is allowed). The same box runs again on the fixed arm. That is recorded in
