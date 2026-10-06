@@ -1,0 +1,31 @@
+/root/tc1/dq4_cap.py:117: UserWarning: dense offload: kept 192 trainable tensor(s) resident (0.31 GB) instead of streaming them -- an optimizer cannot step a streamed parameter. For inference, freeze the model first: model.requires_grad_(False)
+  handles = enable_dense_offload(pm, pin=True, prefetch=False, train_prefetch=True)
+[transformers] `use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+DQ4 S expandable_segments:True seq 512: ok peak 6.53 / reserved 9.48 GiB
+DQ4 S expandable_segments:True seq 1024: ok peak 6.87 / reserved 9.90 GiB
+DQ4 S expandable_segments:True seq 1536: ok peak 7.27 / reserved 10.61 GiB
+DQ4 S expandable_segments:True seq 2048: ok peak 7.84 / reserved 11.00 GiB
+DQ4 S expandable_segments:True seq 2560: ok peak 8.47 / reserved 11.99 GiB
+DQ4 S expandable_segments:True seq 3072: ok peak 9.10 / reserved 12.83 GiB
+DQ4 S expandable_segments:True seq 3584: ok peak 9.72 / reserved 13.23 GiB
+DQ4 S expandable_segments:True seq 4096: ok peak 10.35 / reserved 14.05 GiB
+DQ4 S expandable_segments:True seq 4608: ok peak 10.98 / reserved 14.79 GiB
+DQ4 S expandable_segments:True seq 5120: ok peak 11.61 / reserved 15.55 GiB
+DQ4 S expandable_segments:True seq 5632: ok peak 12.24 / reserved 16.04 GiB
+DQ4 S expandable_segments:True seq 6144: ok peak 12.86 / reserved 16.61 GiB
+DQ4 S expandable_segments:True seq 6656: ok peak 13.49 / reserved 17.40 GiB
+DQ4 S expandable_segments:True seq 7168: ok peak 14.12 / reserved 17.96 GiB
+DQ4 S expandable_segments:True seq 7680: ok peak 14.75 / reserved 18.69 GiB
+DQ4 S expandable_segments:True seq 8192: ok peak 15.37 / reserved 19.60 GiB
+DQ4 S expandable_segments:True seq 8704: ok peak 16.00 / reserved 20.51 GiB
+DQ4 S expandable_segments:True seq 9216: ok peak 16.63 / reserved 20.63 GiB
+DQ4 S expandable_segments:True seq 9728: ok peak 17.26 / reserved 21.70 GiB
+DQ4 S expandable_segments:True seq 10240: ok peak 17.88 / reserved 22.31 GiB
+DQ4 S expandable_segments:True seq 10752: ok peak 18.51 / reserved 22.99 GiB
+DQ4 S expandable_segments:True seq 11264: ok peak 19.14 / reserved 22.99 GiB
+DQ4 S expandable_segments:True seq 11776: ok peak 19.77 / reserved 22.99 GiB
+DQ4 S expandable_segments:True seq 12288: ok peak 20.39 / reserved 22.99 GiB
+DQ4 S expandable_segments:True seq 12800: ok peak 21.02 / reserved 22.99 GiB
+DQ4 S expandable_segments:True seq 13312: ok peak 21.65 / reserved 22.99 GiB
+DQ4 S expandable_segments:True seq 13824: OOM peak 20.96 / reserved 22.68 GiB
+DQ4 S ladder done: max_ok 13312 first_oom 13824

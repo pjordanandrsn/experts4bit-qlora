@@ -1,0 +1,128 @@
+{
+ "schema": "dq4-cap/1",
+ "arm": "R",
+ "mode": "ladder",
+ "loss": "chunked",
+ "rehearsal": false,
+ "alloc_conf": "default",
+ "started_at": "2026-10-06T14:58:42Z",
+ "device": "NVIDIA GeForce RTX 4090",
+ "total_bytes": 25250627584,
+ "config_overrides": {
+  "num_hidden_layers": 64
+ },
+ "env": {
+  "E4B_SHA": "1f4f639b8ca9f9f583723435ba44b995085d24d2"
+ },
+ "ladder": {
+  "start": 512,
+  "step": 512,
+  "top": 32768,
+  "steps": 2
+ },
+ "build_s": 340.6,
+ "engagement": {
+  "wrapped": 448,
+  "wrapper_kinds": [
+   "peft.tuners.lora.bnb.Linear4bit"
+  ],
+  "lora_params": 896,
+  "lora_dtypes": [
+   "torch.float32"
+  ],
+  "trainable": 134217728,
+  "gradient_checkpointing": true
+ },
+ "chunked_loss": {
+  "patched": true,
+  "chunk": 512,
+  "refused": {},
+  "warnings": []
+ },
+ "allocated_after_setup": 19792637952,
+ "rungs": [
+  {
+   "seq": 512,
+   "ok": true,
+   "steps": [
+    {
+     "s": 1.7348089930019341,
+     "loss": 12.901498794555664,
+     "finite": true
+    },
+    {
+     "s": 1.1984887119906489,
+     "loss": 11.99081039428711,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 22180528640,
+   "peak_reserved": 23089643520
+  },
+  {
+   "seq": 1024,
+   "ok": true,
+   "steps": [
+    {
+     "s": 2.2078005419753026,
+     "loss": 12.956934928894043,
+     "finite": true
+    },
+    {
+     "s": 2.208378993003862,
+     "loss": 12.600773811340332,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 22543418368,
+   "peak_reserved": 23871881216
+  },
+  {
+   "seq": 1536,
+   "ok": true,
+   "steps": [
+    {
+     "s": 3.260516759008169,
+     "loss": 12.999302864074707,
+     "finite": true
+    },
+    {
+     "s": 3.263718427013373,
+     "loss": 12.789172172546387,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 22979086336,
+   "peak_reserved": 24238882816
+  },
+  {
+   "seq": 2048,
+   "ok": true,
+   "steps": [
+    {
+     "s": 4.4072139599884395,
+     "loss": 12.88419246673584,
+     "finite": true
+    },
+    {
+     "s": 4.434173561981879,
+     "loss": 12.73331356048584,
+     "finite": true
+    }
+   ],
+   "peak_alloc": 23592335360,
+   "peak_reserved": 24744296448
+  },
+  {
+   "seq": 2560,
+   "ok": false,
+   "steps": [],
+   "error": "CUDA out of memory. Tried to allocate 298.00 MiB. GPU 0 has a total capacity of 23.52 GiB of which 189.75 MiB is free. Process 1594989 has 23.32 GiB memory in use. Of the allocated memory 21.68 GiB is allocated by PyTorch, and 1.18 GiB is reserved by PyTorch but unallocated. If reserved but unalloca",
+   "peak_alloc": 23466693120,
+   "peak_reserved": 24668798976
+  }
+ ],
+ "max_ok": 2048,
+ "first_oom": 2560,
+ "finished_at": "2026-10-06T15:04:49Z"
+}

@@ -1,0 +1,7 @@
+[transformers] `use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.
+DQ4 R default seq 512: ok peak 20.66 / reserved 21.50 GiB
+DQ4 R default seq 1024: ok peak 21.00 / reserved 22.23 GiB
+DQ4 R default seq 1536: ok peak 21.40 / reserved 22.57 GiB
+DQ4 R default seq 2048: ok peak 21.97 / reserved 23.04 GiB
+DQ4 R default seq 2560: OOM peak 21.86 / reserved 22.97 GiB
+DQ4 R ladder done: max_ok 2048 first_oom 2560
