@@ -1264,6 +1264,71 @@ The lane is at **$8.850**.
   if L1 needs resolving.
 - A box R re-run that keeps per-position floor arrays.
 
+## A6 box J reading (2026-10-06): P1 PARTIAL, P2 FALSIFIED, P3 UNREAD
+
+**The run.** `sc1g-diag-a6-1` (adertha-receipts `04e7678f`) ran on a Vast RTX 5090, machine 152440, from `1825cf02`
+(#1254). It cost **$0.532**, teardown is proven, and the reading re-derives from the committed receipt (pinned by
+`test_the_a6_reading_rederives_from_its_committed_receipt`).
+- **Arms run:** (b) on all four windows, (a) on conv1–conv3, and (b') on conv1.
+- **Dropped by the deadline:** (a) on conv4, and all four (c) arms.
+- **Why:** the 1.0 h guard's setup took about 24 minutes. That is the instance boot, an **8-minute staging of the 4 GB of
+  reference rows**, and Phase 0. Our 45–50 minute estimate missed it.
+
+**Determinism and integrity.**
+- (b') is **BIT_IDENTICAL** to (b).
+- (b) is **bit-identical to A5's reading** on all four windows (max |diff| 0.0), on a different host (152440 against
+  145701). e4b's served rows reproduce across these two hosts.
+
+### The predictions, by the registered rules
+
+**P1: PARTIAL.** median(a) / median(b) is **0.70** on conv1, **0.76** on conv2 and **0.58** on conv3; conv4 is unread.
+No window is ≤ 0.5 and none is ≥ 0.9.
+- The NF4-prefilled prompt carries part of e4b's median excess, about a quarter to two fifths, but not most of it.
+- (a)'s medians (2.9e-4, 2.8e-3, 5.5e-4) still sit about 3–4× above vLLM's A5 medians. None is within the 2× descriptive
+  bar, which is itself subject to the noise caveat.
+
+**P2: FALSIFIED.** (a)'s conv2 first-half / second-half median ratio is **5.79**, against (b)'s 3.24 on this box.
+Moving the prompt onto MXFP4 *increased* conv2's front-loading. So the front-loading is not the NF4 prompt route.
+
+**P3: UNREAD.** No (c) arm ran.
+
+**Registered consequences:**
+- P1 PARTIAL means no change to the KEEP_NF4 default, and no serve A/B is licensed.
+- The remainder goes to the decode path, and P3 decides the next registration. **P3 is unread**, so the decode path is
+  untested.
+
+### Descriptive, not graded: the MXFP4 prompt route on conv2
+
+The means by quarter of the window:
+
+| window | arm | Q1 | Q2 | Q3 | Q4 | whole window |
+|---|---|---|---|---|---|---|
+| conv2 | (b) | 0.0731 | 0.0570 | 0.0212 | 0.0209 | 0.0430 |
+| conv2 | (a) | **0.2517** | 0.0680 | 0.0224 | 0.0109 | **0.0882** |
+| conv1 | (b) | | | | | 0.0152 |
+| conv1 | (a) | | | | | 0.0109 |
+| conv3 | (b) | | | | | 0.0060 |
+| conv3 | (a) | | | | | 0.0044 |
+
+- With the prompt on MXFP4, the mean KL falls on conv1 and conv3.
+- On conv2 it **doubles**, entirely in the first quarter of decode. The later quarters improve.
+- (a)'s conv2 NLL rises from 1.747 to **1.973**, against the reference's 1.821.
+
+So on conv2, the decode steps nearest the prompt depart *further* from the reference when the prompt's MoE runs on the
+MXFP4 store's large-row kernel (`mxfp4_grouped_v1|gt256`) than when it runs on the kept NF4 (`nf4_mtile_host`).
+
+**This is a lead on e4b's MXFP4 large-row prefill path, on one window. It is not graded here.** The default stays
+KEEP_NF4=1, which on conv2 is the closer of the two.
+
+### Cost and next
+
+- This run: $0.532. **The lane is at $9.382.**
+- **Next** (separate registrations, not here):
+  1. P3 still needs reading, per A6's registered consequence. That means (b) and (c) on conv1–conv4 within one box. At
+     about 2.1 min per arm, that fits a 1.0 h box J.
+  2. The conv2 lead is a correctness question about the MXFP4 grouped v1 kernel at more than 256 rows. It is a candidate
+     for a $0 kernel check against a dequantise-then-matmul reference before any rented run.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).
