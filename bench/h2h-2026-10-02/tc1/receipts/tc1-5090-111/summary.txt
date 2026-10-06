@@ -1,0 +1,34 @@
+FIXTURE field: template=alpaca steps=40 seq=4096 micro_batch=1 accum=4 r=16 alpha=16 lr=2e-4 wd=0.001 warmup=5 sched=linear optim=adamw_8bit seed=3407 eval_every=40 eval_n=8 autocast=0 matched_seed=3407 pack=1
+BOX A families: qwen3ladder28; e4b aeb5bd62ed9b018c2ca1c9bbb1906e8f131d2b3b gnf4 71847e5fc1ab17af083bcf5d9992793f1ffd573c; run tc1-5090-111 instance 54537794 deadline 1791332752; prereg tc1/TC1-PREREG.md
+OMP_NUM_THREADS=24 (physical cores) box_class=RTX 5090
+CPU allotment 24 (cgroup quota capped by affinity; physical cores 24)
+DRIVER 595.91.07 cu130_ok=1
+AMENDMENT-CLASS (P38 amendment 2): torchao removed from unsloth-t28 after the tripwire failed on ScalingType
+DATASET alpaca sha=5324987afa4042556953026289e8dbdbe8a936b32832ed9e603b9192b706a2fb
+PIN OK qwen3ladder28 staged=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 == pin; refs/main written from the pin (P38 amendment 2 / e4b#404)
+TOKENS qwen3ladder28 alpaca sha=d2a501eba57d4566c1c468bf0a5671ae8bfea2ad9b46bff9e287392d7cb7aa1f eval_n=8 train_only_sha=d9d5ffddd93e40d825a58a75f36fc836a44689ccebe7b1016327efc2f5ff1b1e pack=1 seq=4096
+qwen3ladder28/e4b/fused_attn4_m_c0 PROLOGUE {"phase_seconds": {"preamble": 4.353, "load_weights": 37.246, "verify": 0.003, "attn4": 4.223, "lora": 0.028, "enable": 0.14, "tokenizer": 0.413, "census": 1.882, "frozen_probe": 0.047, "trainable_sha": 1.298, "counters": 0.0, "c1_before": 42.053, "eval0": 10.858, "optimizer": 0.159}, "phase_budget_s": 1260.0, "prologue_s": 103.655, "prologue_unattributed_s": 0.953}
+qwen3ladder28/e4b/fused_attn4_m_c0 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3ladder28", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_c0", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": 
+
+LOADGATE qwen3ladder28/e4b/fused_attn4_m_c0 attempt 0 load1_median 4.56 gate 6.0 status ok over 0
+qwen3ladder28/e4b/fused_attn4_m_c1 PROLOGUE {"phase_seconds": {"preamble": 3.209, "load_weights": 13.274, "verify": 0.0, "attn4": 3.86, "lora": 0.011, "enable": 0.077, "tokenizer": 0.332, "census": 1.731, "frozen_probe": 0.043, "trainable_sha": 2.322, "counters": 0.0, "c1_before": 42.023, "eval0": 6.408, "optimizer": 0.154}, "phase_budget_s": 1260.0, "prologue_s": 74.23, "prologue_unattributed_s": 0.785}
+qwen3ladder28/e4b/fused_attn4_m_c1 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3ladder28", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_c1", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": 
+
+LOADGATE qwen3ladder28/e4b/fused_attn4_m_c1 attempt 0 load1_median 3.81 gate 6.0 status ok over 0
+qwen3ladder28/e4b/fused_attn4_m_c2 PROLOGUE {"phase_seconds": {"preamble": 3.24, "load_weights": 13.204, "verify": 0.001, "attn4": 3.763, "lora": 0.012, "enable": 0.077, "tokenizer": 0.314, "census": 1.732, "frozen_probe": 0.041, "trainable_sha": 2.179, "counters": 0.0, "c1_before": 42.573, "eval0": 6.448, "optimizer": 0.174}, "phase_budget_s": 1260.0, "prologue_s": 74.558, "prologue_unattributed_s": 0.8}
+qwen3ladder28/e4b/fused_attn4_m_c2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3ladder28", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_c2", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload": 
+
+LOADGATE qwen3ladder28/e4b/fused_attn4_m_c2 attempt 0 load1_median 3.55 gate 6.0 status ok over 0
+qwen3ladder28/e4b/fused_attn4_m_c2_d2 PROLOGUE {"phase_seconds": {"preamble": 3.208, "load_weights": 12.889, "verify": 0.0, "attn4": 3.758, "lora": 0.012, "enable": 0.078, "tokenizer": 0.338, "census": 1.746, "frozen_probe": 0.04, "trainable_sha": 1.259, "counters": 0.0, "c1_before": 42.911, "eval0": 6.411, "optimizer": 0.153}, "phase_budget_s": 1260.0, "prologue_s": 73.579, "prologue_unattributed_s": 0.776}
+qwen3ladder28/e4b/fused_attn4_m_c2_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3ladder28", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_c2_d2", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload
+
+LOADGATE qwen3ladder28/e4b/fused_attn4_m_c2_d2 attempt 0 load1_median 3.18 gate 6.0 status ok over 0
+qwen3ladder28/e4b/fused_attn4_m_c1_d2 PROLOGUE {"phase_seconds": {"preamble": 3.219, "load_weights": 13.143, "verify": 0.0, "attn4": 3.971, "lora": 0.014, "enable": 0.081, "tokenizer": 0.325, "census": 1.809, "frozen_probe": 0.041, "trainable_sha": 2.317, "counters": 0.0, "c1_before": 42.34, "eval0": 6.38, "optimizer": 0.156}, "phase_budget_s": 1260.0, "prologue_s": 74.566, "prologue_unattributed_s": 0.77}
+qwen3ladder28/e4b/fused_attn4_m_c1_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3ladder28", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_c1_d2", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload
+
+LOADGATE qwen3ladder28/e4b/fused_attn4_m_c1_d2 attempt 0 load1_median 3.73 gate 6.0 status ok over 0
+qwen3ladder28/e4b/fused_attn4_m_c0_d2 PROLOGUE {"phase_seconds": {"preamble": 3.181, "load_weights": 12.95, "verify": 0.0, "attn4": 3.776, "lora": 0.011, "enable": 0.076, "tokenizer": 0.32, "census": 1.742, "frozen_probe": 0.041, "trainable_sha": 1.269, "counters": 0.0, "c1_before": 42.97, "eval0": 6.349, "optimizer": 0.154}, "phase_budget_s": 1260.0, "prologue_s": 73.629, "prologue_unattributed_s": 0.789}
+qwen3ladder28/e4b/fused_attn4_m_c0_d2 rc=0 CELL OK {"framework": "e4b", "fam": "qwen3ladder28", "model": "Qwen/Qwen3-30B-A3B", "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", "model_type": "qwen3_moe", "n_layers": 48, "snapshot_dir": null, "arm": "fused", "tag": "fused_attn4_m_c0_d2", "status": "ok", "steps": 40, "seq": 4096, "accum": 4, "micro_batch": 1, "autocast": false, "r": 16, "alpha": 16, "lr": 0.0002, "seed": 3407, "offload
+
+LOADGATE qwen3ladder28/e4b/fused_attn4_m_c0_d2 attempt 0 load1_median 4.52 gate 6.0 status ok over 0
+QWEN3LADDER28 DONE
