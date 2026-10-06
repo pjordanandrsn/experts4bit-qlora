@@ -372,3 +372,19 @@ def test_a_hybrid_serve_prices_its_state_pool_per_slot():
     assert item.bytes == linear_state_pool_bytes(topo.linear_state_layers, 4 + 4)    # seqs + graph scratch slots
     assert not any("recurrent state" in u for u in f.unmodelled)                    # every linear layer is priced
     assert describe_moe(_qwen3()).linear_state_layers == ()
+
+
+def test_a_model_with_leading_dense_layers_keeps_kv_for_every_layer():
+    """ERNIE-4.5's layer 0 is dense but has attention: the paged KV pool (and so the estimate) sizes for every decoder
+    layer, not for the MoE layers. Sized by its 27 MoE layers, ERNIE's pool indexed past its end at layer 27."""
+    cfg = tr.Qwen3MoeConfig(hidden_size=128, intermediate_size=256, moe_intermediate_size=64, num_experts=8,
+                            num_experts_per_tok=2, num_hidden_layers=3, num_attention_heads=4, num_key_value_heads=2,
+                            head_dim=32, vocab_size=192, max_position_embeddings=64, mlp_only_layers=[0])
+    topo = describe_moe(cfg)
+    assert len(topo.expert_stacks) == 2 and topo.kv_layers == 3
+    from experts4bit_qlora.engines.paged_runner import decoder_layers, kv_layers
+    model = tr.AutoModelForCausalLM.from_config(cfg)
+    assert kv_layers(model, decoder_layers(model.config)) == 3
+    f = estimate_serve_footprint(topo, ServeSetup(max_seqs=1, max_tokens_per_seq=256, graphs=False))
+    kv = next(i for i in f.items if i.name == "FP8 paged KV pool")
+    assert kv.bytes == paged_kv_pool_bytes(3, 2, 32, batch=1, max_tokens_per_seq=256)

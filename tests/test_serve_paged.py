@@ -858,3 +858,20 @@ def test_engage_1_refuses_at_startup_and_0_does_nothing():
     off = _GraphRunner()
     engage_prefill_graph(off, PagedServeConfig(model="m", prefill_graph="0"))
     assert off.calls == []
+
+
+def _arena_index(tmp_path, layers, experts=2):
+    arena = str(tmp_path / "x.arena")
+    rows = [[lay, e, (i * experts + e) * 4096] for i, lay in enumerate(layers) for e in range(experts)]
+    with open(arena + ".index.json", "w") as f:
+        json.dump({"rows": rows, "segments": []}, f)
+    return arena
+
+
+def test_an_arena_is_served_by_its_own_layer_ids(tmp_path):
+    """ERNIE-4.5's layer 0 is dense: its bake keys rows 1..27, and serving by MoE ordinal asked for row (0, 0)."""
+    from experts4bit_qlora.serve_paged import arena_layer_ids
+    assert arena_layer_ids(_arena_index(tmp_path, [0, 1, 2]), 3) == [0, 1, 2]
+    assert arena_layer_ids(_arena_index(tmp_path, [3, 1, 2]), 3) == [1, 2, 3]
+    with pytest.raises(RuntimeError, match="refusing to serve one layer's experts as another's"):
+        arena_layer_ids(_arena_index(tmp_path, [1, 2]), 3)

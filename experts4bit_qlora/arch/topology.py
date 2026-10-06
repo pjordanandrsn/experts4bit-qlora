@@ -107,7 +107,7 @@ class MoETopology:
     lm_head_numel: int = 0
     attention: AttentionProjections | None = None
     #: the paged KV pool's geometry, by the paged server's own rules (``serve_paged._kv_geometry`` and
-    #: ``paged_runner.kv_layers`` over the MoE-layer count, as ``serve_paged.build_engine`` calls them): KV heads and
+    #: ``paged_runner.kv_layers`` over ``decoder_layers``, as ``serve_paged.build_engine`` calls them): KV heads and
     #: head dim (scalars, or per-layer lists for per-layer configs) and the number of pool layers. ``None`` if undescribable.
     kv_heads: object = None
     kv_head_dims: object = None
@@ -263,14 +263,14 @@ def describe_moe(model, *, revision=None, trust_remote_code=False) -> MoETopolog
     prov["int4_attention_linears"] = "engines.int4_attn.attention_linears (the serving swap's rule) on the meta tree"
     kv_geo = {}
     try:
-        from ..engines.paged_runner import kv_layers
+        from ..engines.paged_runner import decoder_layers, kv_layers
         from ..serve_paged import _kv_geometry
 
         heads, dims = _kv_geometry(config)                 # it reads text_config first, as build_engine does
         kv_geo = {"kv_heads": tuple(heads) if isinstance(heads, list) else int(heads),
                   "kv_head_dims": tuple(dims) if isinstance(dims, list) else int(dims),
-                  "kv_layers": int(kv_layers(tree, len(stacks)))}
-        prov["kv"] = "serve_paged._kv_geometry + paged_runner.kv_layers (the paged server's rules)"
+                  "kv_layers": int(kv_layers(tree, decoder_layers(tree.config)))}
+        prov["kv"] = "serve_paged._kv_geometry + paged_runner.kv_layers over decoder_layers (the paged server's rules)"
     except Exception as e:  # noqa: BLE001 - an undescribable KV geometry is an answer, recorded
         prov["kv"] = f"not described: {type(e).__name__}: {e}"[:300]
     from ..engines.linear_state import state_geometry

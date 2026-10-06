@@ -102,6 +102,15 @@ def layer_plan(model, n_layers: int, n_slots: int):
     return attn, pool
 
 
+def decoder_layers(config) -> int:
+    """The decoder's layer count (a composite's text config). It is the paged KV pool's layer count unless
+    ``config.layer_types`` says some layers keep no K/V. It is NOT the MoE layer count: a model whose leading layers
+    are dense (ERNIE-4.5's layer 0, DeepSeek-V2's first_k_dense_replace) still has attention in them, and a pool sized
+    by its MoE layers indexed past its end at the first dense layer's append."""
+    c = getattr(config, "text_config", None) or config
+    return int(c.num_hidden_layers)
+
+
 def kv_layers(model, n_layers: int) -> int:
     """How many layers a paged KV pool needs for ``model``: its attention layers when ``config.layer_types`` names
     them (a hybrid model's linear layers keep no K/V), else ``n_layers``."""
