@@ -121,7 +121,7 @@ class _DenseOffload:
         self.ready_event = None
         self._prefetch_next = None
         self._staged_dev = None
-        self._train = None          # DQ3 opt-in schedule (enable_dense_offload(train_prefetch=True)); None = off
+        self._train = None          # DQ3 training schedule (enable_dense_offload's train_prefetch); None = off
         self._train_idx = None
         # (module, attr, is_param, home) — home is a pinned CPU tensor holding the
         # EXACT loaded bytes.
@@ -428,8 +428,9 @@ class _DenseOffload:
 
 
 # ------------------------------------------------------------ train prefetch --
-# DQ3 (experts4bit-qlora#1083, bench/dq3/DESIGN-dq3.md): an OPT-IN, overlapped training path. Off by default; with
-# ``enable_dense_offload(..., train_prefetch=False)`` none of what follows is constructed or reached.
+# DQ3 (experts4bit-qlora#1083, bench/dq3/DESIGN-dq3.md): the overlapped training path. On by default for CUDA chains
+# since DQ3/DQ5 (#1188, #1218); with ``enable_dense_offload(..., train_prefetch=False)`` none of what follows is
+# constructed or reached.
 #
 # Under non-reentrant gradient checkpointing a training step uses the layers in the order 0..L-1 (forward), then
 # L-1..0 (backward: each layer's recompute, and its full-backward pre-hook, which may repeat the same index). Without
@@ -700,7 +701,7 @@ def _layer_device(layer) -> "torch.device":
 def enable_dense_offload(model, device=None, *, pin: bool = True,
                          min_bytes: int = MIN_BYTES, prefetch: bool = True,
                          source=None, key_prefix: str = "", verify: bool = False,
-                         log=None, train_prefetch: bool = False) -> list:
+                         log=None, train_prefetch: bool | None = None) -> list:
     """Pin every decoder layer's dense weights on the host and stream them per layer.
 
     Returns the handles, also stashed on each layer as ``_dense_offload``. Pair with
@@ -731,11 +732,21 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     on ``ctx`` until backward, which made offloaded training save nothing (bnb
     behaviour, worked around locally; not reported upstream).
 
-    ``train_prefetch=True`` (opt-in, default off; lane DQ3, ``bench/dq3/``) replaces that for a model in ``train()``
-    mode: each training use of a layer keeps it and ONE scheduled neighbour resident and copies the neighbour on the
-    prefetch stream while the layer computes -- forward i+1, backward (checkpoint recompute or backward pre-hook) i-1
-    (:func:`train_schedule`). Bitwise-identical results are the contract; the per-device counters are in
-    :func:`dense_offload_report` under ``train_prefetch``.
+    ``train_prefetch`` (lane DQ3, ``bench/dq3/``) replaces that for a model in ``train()`` mode: each training use of
+    a layer keeps it and ONE scheduled neighbour resident and copies the neighbour on the prefetch stream while the
+    layer computes -- forward i+1, backward (checkpoint recompute or backward pre-hook) i-1 (:func:`train_schedule`).
+    Bitwise-identical results are the contract; the per-device counters are in :func:`dense_offload_report` under
+    ``train_prefetch``. The default, ``None``, turns it on for every CUDA device chain and off elsewhere (on a non-CUDA
+    device nothing is copied ahead, so it would only add bookkeeping). ``True`` forces it on every chain, ``False``
+    keeps the synchronous single-slot path. On by default since DQ3 and DQ5: on an RTX 5090 at 2048 tokens it trained
+    bitwise identically at 1.0023x the resident step time on PCIe gen 5 x16 and 1.0050x on gen 4 x16, against 1.18x
+    and 1.51x synchronous (``bench/dq3/RESULTS-dq3.md``, ``bench/dq5/RESULTS-dq5.md``).
+
+    Memory: DQ4 (``bench/dq4/RESULTS-dq4.md``) read the streamed arm's longest trainable sequence (chunked LM loss)
+    at 2.00x the resident one under the default CUDA allocator, and 2.375x with
+    ``PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True``: the default allocator hit OOM with about 6 GiB reserved but
+    unallocated. That setting is the caller's (it must be set before CUDA initialises); nothing here sets it.
+
     Use it when the dense (non-expert) side of the model is what does not fit: every decoder
     layer's dense weights are pinned on the host and streamed per layer. Returns the list of
     handles (assert it is non-empty). Composes with the expert residency engines. See
@@ -779,14 +790,14 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
                 # *initial* reentrant-checkpoint forward, not inference.
                 inference = not torch.is_grad_enabled() and not module.training
                 if _h._train is not None and module.training:
-                    _h._train.use(_h)          # DQ3 opt-in: scheduled, overlapped
+                    _h._train.use(_h)          # DQ3 train_prefetch: scheduled, overlapped
                 elif _h._prefetch_next is not None and inference:
                     _h.stage_for_inference()
                 else:
                     _h.stage()
 
             def _post(module, args, output, _h=h):
-                # Under the DQ3 opt-in a training forward does NOT evict: residency is
+                # Under DQ3's train_prefetch a training forward does NOT evict: residency is
                 # bounded by the schedule (this layer + one target), and evicting here
                 # would throw away the layer the backward's recompute starts with.
                 if _h._train is not None and module.training:
@@ -823,11 +834,13 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
         h._prefetch_next = None
         h._train = None
         h._train_idx = None
-    if train_prefetch:
+    if train_prefetch is not False:
         by_dev_t: dict = {}
         for h in handles:
             by_dev_t.setdefault(h.device, []).append(h)
-        for chain in by_dev_t.values():
+        for dev, chain in by_dev_t.items():
+            if train_prefetch is None and torch.device(dev).type != "cuda":
+                continue                   # default: CUDA chains only (nothing is copied ahead elsewhere)
             sched = _TrainPrefetch(chain)
             for idx, h in enumerate(chain):
                 h._train = sched
@@ -919,11 +932,11 @@ def dense_offload_report(handles) -> dict:
         # them at a PCIe rate said 5.7 s/token for a Kimi K3 run that measured 91.8.
         "seconds_per_token_at_19GBs": round(host / 19e9, 3),
         "disk_bytes_per_token": disk,
-        # DQ3 opt-in counters, per device chain; None when train_prefetch is off.
+        # DQ3 counters, per device chain; None when train_prefetch is off (False, or the default on a non-CUDA device).
         # offloaded bnb Linear4bit projections whose grad-mode matmul is late-bound (0 = stock bnb, e.g. a source mismatch)
         "late_bound_4bit": sum(1 for h in handles for mod, _a, _p, _hm in h.slots
                                if getattr(mod, "_dense_offload_late_bound", False)),
-        "train_prefetch": (None if not handles or handles[0]._train is None else
+        "train_prefetch": (None if not any(h._train is not None for h in handles) else
                            {str(dev): dict(sched.counts) for dev, sched in
                             {h.device: h._train for h in handles if h._train is not None}.items()}),
     }
