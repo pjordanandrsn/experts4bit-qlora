@@ -2,7 +2,7 @@
 
 Pre-registration: [DQ6-PREREG.md](DQ6-PREREG.md) (DQ4's capacity read on a 24 GB RTX 4090). Work item: #1083.
 
-**Scope:** one RTX 4090 with 24 GB (Vast instance 54498479; AMD EPYC 7742; PCIe gen 4 x16; driver 580.95.05), e4b
+**Scope:** one RTX 4090 with 24 GB (Vast machine 51610, instance 54498479; AMD EPYC 7742; PCIe gen 4 x16; driver 580.95.05), e4b
 `1f4f639b`, adertha `7566b18a`, DQ3's subject and DQ4's recipe.
 
 ## Verdict — `dq6-4090-1`, 2026-10-06: **CAP_REAL**, G = **4.75** (graded configuration c_def)
@@ -22,7 +22,9 @@ With the frozen NF4 weights streamed (`train_prefetch` plus #1183's late-bound b
   [9728 / 2560, 10240 / 2048] = **[3.80, 5.00]**. The verdict does not depend on the rung step.
 - **Every confirmation agreed:** all four fresh processes in each configuration matched their ladders. No configuration
   was VOID, FUNCTION_FAIL or NOISY.
-- **Step time is unchanged:** T(S)/T(R) = **0.993** at 2048 tokens, the largest common rung (descriptive).
+- **Step time is unchanged at the registered rung:** T(S)/T(R) = **0.993** at 2048 tokens, the largest common rung
+  (descriptive). It holds within about 1 % from 1024 tokens up. At 512 tokens, where a layer's compute is shortest, S
+  was slower: 1.13× (c_def) and 1.21× (c_exp).
 - **Losses agree to within run-to-run nondeterminism, not bitwise.** At every rung both arms passed, R's and S's
   losses differ by at most about 2e-3 (12.95693 against 12.95857 at 1024 tokens). R differs from *itself* by the same
   amount between c_def and c_exp (12.95693 against 12.95832), because DQ4's harness does not run deterministic
@@ -35,8 +37,9 @@ With the frozen NF4 weights streamed (`train_prefetch` plus #1183's late-bound b
 - R: 18.43 GiB, against DQ4's 18.42;
 - S: 3.90 GiB, against 3.89.
 
-A 4090 leaves torch about 23.0 GiB to reserve. Resident training therefore has about 4.6 GiB for activations, and
-streamed training has about 19.1 GiB.
+A 4090 leaves torch about 23.0 GiB to reserve. Resident training therefore has about 4.6 GiB left for gradients,
+optimizer state and activations, and streamed training has about 19.1 GiB. (`allocated_after_setup` is read before
+the optimizer exists. The LoRA gradients and AdamW state take about 1.5 GiB of either figure.)
 
 ## Secondary configuration: `expandable_segments:True` (c_exp)
 
@@ -64,13 +67,15 @@ All predictions were seeded from DQ4's rented-5090 receipts only.
 | s_def | R 512 or VOID; S ~4608 | — | skipped for time |
 | T(S)/T(R) | [1.0, 1.3] | 0.993 / 0.990 | **0.7–1.0 % below the band's floor**: S was not slower. A descriptive miss. For scale, R's fresh confirmation at 2048 read 4.73 / 4.47 s, against its ladder's 4.41 / 4.43 s |
 
-**Where the model of the boundary was off: R, by one rung.** The prediction made two assumptions.
+**Where the model of the boundary was off: one rung high in three of four arms.** c_def R (1536 → 2048), c_def S
+(9216 → 9728) and c_exp R (2048 → 2560) each landed one rung above central; c_exp S landed on it. For R, the
+prediction made two assumptions.
 1. **Usable memory.** It assumed about 23.25 GiB usable: the card's 23.99 GiB less the 0.73 GiB the 5090 never let
    torch reserve. In fact torch reports this card's total as **23.52 GiB** (25,250,627,584 B). Both arms reserved up
    to **22.99–23.04 GiB**, about 0.48 GiB below that total, so the usable budget was about 0.2 GiB *smaller* than
    assumed.
 2. **R's stranded memory at its boundary.** It assumed 1.46–2.50 GiB, from DQ4. R's reserved minus allocated at L\* was
-   only **1.07 GiB** (default) and 0.49 GiB (expandable), so R reached one rung further than central.
+   only **1.07 GiB** (default) and 0.50 GiB (expandable), so R reached one rung further than central.
 
 **S's stranded memory reproduced DQ4's.** Under the default allocator, S's peak reserved sits at 17.7 GiB from the very
 first rung (17.73 at 512 tokens, against 6.57 allocated). That is the same pattern as DQ4's 5090, which read 17.65 at
@@ -84,10 +89,10 @@ it: 1.34 GiB at L\*, and L\*_S rises from 9728 to 13312.
 | box | RTX 4090, 24,564 MiB (`nvidia-smi`), PCIe gen 4 x16 (recorded, not gated), 450 W, driver 580.95.05; AMD EPYC 7742 |
 | host gates | card gate `NVIDIA GeForce RTX 4090, 24564, 4, 16` in band; VRAM probe OK at 21.5 GiB; egress 3.12 MB/s |
 | software | torch 2.8.0+cu128, bitsandbytes 0.50.2, transformers 5.18.0, peft 0.21.2, grouped-nf4-gemm `a5edec87` (pinned by the runner); tripwire: e4b `1f4f639b` |
-| staged files | all eight box files (`dq6_run.sh`, `dq6_vram_probe.py`, `dq6_reduce.py`, `dq4_cap.py`, `dq4_reduce.py`, `dq3_arm.py`, `dq3_vram_probe.py`, `dq3_egress_probe.py`) match `1f4f639b` by sha256 |
-| pre-launch gate | A2000 at `1f4f639b`, all four PASS: runner rc 19; probe rc 3; rehearsal L\*_S 6656 > L\*_R 5120, `late_bound_4bit` 56; reducer self-test and 12 lane tests |
-| cost | **$0.802**, against the registered ≤ $1.20 (the launcher's estimate of $2.30 includes a download allowance); teardown proven (`teardown-proof.json`) |
-| evidence | [`receipts/dq6-4090-1/`](receipts/dq6-4090-1/) (`SHA256SUMS`); launcher receipt and ledger row in the receipt store, commit `c28182c8` |
+| staged files | all eight box files (`dq6_run.sh`, `dq6_vram_probe.py`, `dq6_reduce.py`, `dq4_cap.py`, `dq4_reduce.py`, `dq3_arm.py`, `dq3_vram_probe.py`, `dq3_egress_probe.py`) match `1f4f639b` by sha256. Checked against the copies the launcher fetched back; the tripwire on the box records the e4b commit |
+| pre-launch gate | A2000 at `1f4f639b`, all four PASS: runner rc 19; probe rc 3; rehearsal L\*_S 6656 > L\*_R 5120, `late_bound_4bit` 56; reducer self-test and 12 lane tests. Its summary is committed as `prelaunch-a2000-1f4f639b.txt` |
+| cost | **$0.802**, against the registered ≤ $1.20. Billed at $0.362/h (`vast_dph_total`) over 6,489 s, plus disk and egress. The launcher's estimate of $2.30 includes a 100 GB download allowance. Teardown proven (`teardown-proof.json`) |
+| evidence | [`receipts/dq6-4090-1/`](receipts/dq6-4090-1/) (`SHA256SUMS`). The launcher receipt (adertha `7566b18a`, lane commit `1f4f639b`) and its ledger row are in the adertha-agents receipt store, branch `cdo/state-2026-09-06-1720`, commit `c28182c8` |
 
 ## Not shown
 

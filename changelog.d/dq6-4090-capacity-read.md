@@ -7,8 +7,8 @@
   streamed model keeps two layers of them, so the factor more than doubles.
 - **How it checks out:**
   - every fresh confirmation agreed with its ladder;
-  - R − S allocated is 14.08 GiB at every common rung, which is the weights less two layers;
-  - step time is unchanged (T(S)/T(R) 0.993).
+  - R − S allocated is 14.07–14.08 GiB at every common rung, which is the weights less two layers;
+  - step time is unchanged at the registered rung (T(S)/T(R) 0.993 at 2048 tokens).
 - **What is new in the tree:**
   - `bench/dq6/RESULTS-dq6.md`;
   - the receipts, re-derived byte for byte by a new lane test;
