@@ -154,6 +154,27 @@ def _kernel_takes(fn, *names) -> bool:
         _KERNEL_KW_CACHE[key] = hit
     return hit
 
+def append_prompt_peak_bytes(layer_geometry, T: int) -> int:
+    """An upper bound on the device memory :meth:`Fp8PagedKV.append_prompt` (the bulk KV flush) allocates for a ``T``-token
+    prompt, beyond its inputs, over layers of ``(kv_heads, head_dim, k_groups)``. Per geometry group, the largest bounded
+    group's stacks and quantize temporaries (7 x its bf16 input per side), plus every layer's quantized bytes, which are
+    held until the writes. A pure function so a planner can price the flush before building a pool."""
+    T = int(T)
+    layer_geometry = list(layer_geometry)
+    if T <= 0 or not layer_geometry:
+        return 0
+    groups: dict = {}
+    for geo in layer_geometry:
+        groups[tuple(int(x) for x in geo)] = groups.get(tuple(int(x) for x in geo), 0) + 1
+    peak_group, held = 0, 0
+    for (H, D, kg), n in groups.items():
+        per = max(1, BULK_GROUP_BYTES // max(1, T * H * D * 2))
+        g = min(per, n)
+        peak_group = max(peak_group, 7 * g * T * H * D * 2)
+        held += n * T * (2 * H * D + H * kg * 4 + H * 4)      # K and V payload + their scales
+    return peak_group + held
+
+
 def _auto_k_groups(head_dim: int, width: int = 32) -> int:
     """Key scale groups that keep ``width``-wide scales at this head_dim,
     capped by what the INSTALLED kernel unrolls. Capability-conditional
@@ -802,23 +823,10 @@ class Fp8PagedKV:
 
     def append_prompt_peak_bytes(self, T: int, layers=None) -> int:
         """An upper bound on the device memory :meth:`append_prompt` allocates for a ``T``-token prompt, beyond its
-        inputs: per geometry group, the largest bounded group's stacks and quantize temporaries (7 x its bf16 input per
-        side), plus every layer's quantized bytes, which are held until the writes. ``T`` at the slot's capacity gives
-        the bound for any prompt."""
+        inputs: :func:`append_prompt_peak_bytes` over these layers' geometry. ``T`` at the slot's capacity gives the bound
+        for any prompt."""
         layers = list(range(self.L)) if layers is None else list(layers)
-        T = int(T)
-        if T <= 0 or not layers:
-            return 0
-        groups: dict = {}
-        for layer in layers:
-            groups.setdefault((self.Hs[layer], self.Ds[layer], self.kgs[layer]), []).append(layer)
-        peak_group, held = 0, 0
-        for (H, D, kg), lays in groups.items():
-            per = max(1, BULK_GROUP_BYTES // max(1, T * H * D * 2))
-            g = min(per, len(lays))
-            peak_group = max(peak_group, 7 * g * T * H * D * 2)
-            held += len(lays) * T * (2 * H * D + H * kg * 4 + H * 4)      # K and V payload + their scales
-        return peak_group + held
+        return append_prompt_peak_bytes([(self.Hs[i], self.Ds[i], self.kgs[i]) for i in layers], T)
 
     def free_blocks(self, layer: int = 0) -> int:
         return len(self._free[layer])

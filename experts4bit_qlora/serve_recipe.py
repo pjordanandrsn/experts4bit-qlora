@@ -59,6 +59,8 @@ class ServeSetup:
     exp_int4: bool = False
     #: E4B_SERVE_ATTN_INT4: store the attention projections on the int4-b32 grid (round-to-nearest)
     attn_int4: bool = False
+    #: E4B_PAGED_BULK_KV: a prompt's K/V is flushed into the FP8 pool in one bulk write (the server's default)
+    bulk_kv: bool = True
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -73,6 +75,7 @@ class ServeSetup:
                 "E4B_PAGED_VRAM_GB": repr(float(self.vram_gb)), "E4B_PAGED_DRAM_GB": repr(float(self.dram_gb)),
                 "E4B_PAGED_HOT_ROWS": str(int(self.hot_rows)),
                 "E4B_SERVE_EXP_INT4": "1" if self.exp_int4 else "0", "E4B_SERVE_ATTN_INT4": "1" if self.attn_int4 else "0",
+                "E4B_PAGED_BULK_KV": "1" if self.bulk_kv else "0",
                 **({"E4B_INT4_KEEP_NF4": "0"} if self.exp_int4 else {})}
 
 
@@ -437,6 +440,21 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                                    f"({setup.max_seqs} seqs + {scratch} graph scratch slots): a bf16 conv window and an "
                                    "fp32 recurrent state per slot (engines.linear_state.LinearStatePool, allocated at "
                                    "each layer's first prompt chunk)"))
+    if setup.bulk_kv:
+        from .engines.fp8_paged_kv import _auto_k_groups, append_prompt_peak_bytes
+        n = topology.kv_layers
+        hs = topology.kv_heads if hasattr(topology.kv_heads, "__len__") else [topology.kv_heads] * n
+        ds = topology.kv_head_dims if hasattr(topology.kv_head_dims, "__len__") else [topology.kv_head_dims] * n
+        geo = [(int(h), int(d), _auto_k_groups(int(d)) if setup.kv_groups == "auto" else int(setup.kv_groups))
+               for h, d in zip(list(hs)[:n], list(ds)[:n])]
+        cap = -(-setup.max_tokens_per_seq // BLOCK_TOKENS) * BLOCK_TOKENS
+        items.append(FootprintItem("bulk KV flush (one prompt's K/V quantized and written at once)", "device",
+                                   append_prompt_peak_bytes(geo, cap), "derived",
+                                   f"E4B_PAGED_BULK_KV (the server's default): a finished prompt's K/V for every pool "
+                                   f"layer is quantized and held until one bulk write "
+                                   f"(fp8_paged_kv.append_prompt_peak_bytes at the slot's {cap} tokens); transient, "
+                                   f"priced at its ceiling. Lane SV5: unpriced, an 8 x 8192 plan on 24 GB ran out of "
+                                   f"memory at 8,000-token prompts"))
     staged = prefill_staging_tokens(setup)
     items.append(FootprintItem("prefill staging (bf16 K/V of prompts mid-prefill)", "device",
                                staged * staging_bytes_per_token(topology), "derived",
@@ -492,7 +510,5 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     if setup.exp_int4:
         unmodelled.append("the source checkpoint on local disk: the int4 repack reads its safetensors (snapshot_download), "
                           "never the arena")
-    unmodelled.append("the bulk KV flush transient (E4B_PAGED_BULK_KV, on by default since SC2c/SC2d): one prompt's K/V "
-                      "staged for the single bulk write; lane SC2d recorded 168 MiB on gpt-oss-20b")
     unmodelled.append("CUDA context, cuBLAS/Triton workspaces and allocator fragmentation (the caller's to add)")
     return Footprint(items=tuple(items), unmodelled=tuple(unmodelled))
