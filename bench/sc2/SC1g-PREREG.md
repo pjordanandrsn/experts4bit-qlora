@@ -1370,6 +1370,55 @@ at about 2.1 min each is about 19 min, so about 43 min in total, inside the 1.0 
 
 **Cost.** About $0.6, inside the no-ask tier. The lane is at **$9.382**.
 
+## A6's conv2 lead: the MXFP4 prompt kernel check (2026-10-06, $0, A2000): IN_LINE, at its bf16 floor
+
+**The question (the maintainer's).** A6's descriptive conv2 table puts (a)'s first-quarter excess on the decode steps
+nearest a prompt whose MoE ran on `mxfp4_grouped_v1|gt256`. Is that kernel's error out of line with the other expert
+paths' at more than 256 rows? This is a correctness check only; it reads no timing.
+
+**What e4b runs there.** With the MXFP4 store and `KEEP_NF4=0`, `hot_residency._fused_over_stack` calls
+`gemm_mxfp4_grouped(x, blocks, scales, sizes=[1] * M, eids)`. Every size is 1, so gnf4 (`dc8f94ab`) takes its per-row
+`_gemv_mxfp4_grouped` branch: an exact e2m1 × e8m0 decode, fp32 accumulation, and one bf16 rounding at the store. It is not
+the tiled kernel.
+
+**The check.** `sc1g_mxfp4_prefill_check.py`, run by `sc1g-a2000/sc1g-a6mx-a2000.sh` on the QNAP's RTX A2000 (sm_86,
+torch 2.8.0); results in `sc1g-a2000/a6mx_*`.
+- **Weights:** gpt-oss-20b's released MXFP4 experts, layers 0, 11 and 23, gate_up and down, through e4b's store layout.
+  The shard shas are in the JSON.
+- **Activations:** synthetic and heavy-tailed bf16 (Student-t with 4 degrees of freedom, 8 channels × 20), routed
+  Zipf-skewed over the 32 experts, at M = 16, 256 and 2048.
+- **References:** every path is measured against its own fp64 dequantise-then-matmul reference.
+
+| path | mean relative error, 18 shapes | bit-equal to the exact result rounded to bf16 |
+|---|---|---|
+| the bf16 output floor | 1.398–1.415e-3 | (by definition) |
+| **grouped_v1** (e4b's `KEEP_NF4=0` prompt) | **1.398–1.415e-3** | **99.991–100 %** (≥ 99.9955 % at M = 2048) |
+| grouped_tile | 1.398–1.415e-3 | 99.985–99.998 % |
+| nf4_mtile (against its NF4 reference) | 1.440–1.449e-3 | — |
+| bf16 cuBLAS | 1.398–1.666e-3 | — |
+| mxfp4_gemv (the decode route, int8 activations) | 0.929–1.133e-2 | 15.8–18.6 % |
+
+- **IN_LINE.** grouped_v1's worst mean error at > 256 rows is 1.410e-3, against the other paths' worst of 1.133e-2.
+  OUT_OF_LINE needed more than 2×.
+- **AT_FLOOR.** Its worst ratio to its own bf16 floor is × 1.000. It computes the correctly rounded result except where
+  fp32 accumulation order lands across a bf16 rounding boundary.
+- **The positive control.** With the reference decoding the high nibble first (layer 0), every MXFP4 kernel path moves to
+  × 1003.7 of the floor and 0.09 % bit-equal. That reads ABOVE_FLOOR, and the arm exits 1 as required. bf16 cuBLAS and the
+  NF4 path stay at the floor, because their references are built from the same decode.
+  - The relative verdict alone cannot see this control: every MXFP4 path moves together.
+  - So the floor gate was added, and both arms re-run, before the committed run.
+
+**Reading.**
+- **The MXFP4 prompt kernel is not defective on sm_86.** A6's conv2 lead is not a kernel-arithmetic error at > 256 rows.
+  What differs between (a) and (b) is which weights the prompt reads (MXFP4 or the NF4 re-quantisation), not how accurately
+  the kernel reads them.
+- **Caveat:** the kernel is Triton, compiled per architecture. This certifies sm_86, not the 5090's sm_120, though the
+  per-row branch has no architecture-dependent split.
+- **Descriptive:** the decode GEMV's int8 activations cost about 7× the bf16 floor per output. That is consistent with A3's
+  0.70 % on captured activations. P3 (the continuation, `sc1g-diag-a6-2`) grades whether it matters at the KL median.
+- **Next (the maintainer's):** the router-flip explanation. It needs routing data, not more KL, so it is registered as its
+  own instrument (A7).
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).

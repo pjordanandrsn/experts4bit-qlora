@@ -1,0 +1,33 @@
+[2026-10-06T10:59:03Z] sc1g-a6mx: runtime nvidia-runtime
+[2026-10-06T10:59:04Z] sc1g-a6mx: pre-flight gpu util,free MiB: 0,10850
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+torch 2.8.0+cu128 triton 3.4.0 NVIDIA RTX A2000 12GB
+[2026-10-06T10:59:24Z] sc1g-a6mx: arm X: layers 0, 11, 23; gate_up and down; M = 16 / 256 / 2048
+SC1G_MXFP4_PREFILL layer=0 gate_up M=16 floor_bf16_output=2.47e-03/1.41e-03 grouped_v1=2.47e-03/1.41e-03 grouped_tile=2.47e-03/1.41e-03 mxfp4_gemv=1.08e-02/9.66e-03 nf4_mtile=2.72e-03/1.45e-03 bf16_mm=2.47e-03/1.41e-03
+SC1G_MXFP4_PREFILL layer=0 gate_up M=256 floor_bf16_output=2.58e-03/1.41e-03 grouped_v1=2.58e-03/1.41e-03 grouped_tile=2.58e-03/1.41e-03 mxfp4_gemv=1.15e-02/1.06e-02 nf4_mtile=1.88e-03/1.45e-03 bf16_mm=2.58e-03/1.60e-03
+SC1G_MXFP4_PREFILL layer=0 gate_up M=2048 floor_bf16_output=1.92e-03/1.41e-03 grouped_v1=1.92e-03/1.41e-03 grouped_tile=1.92e-03/1.41e-03 mxfp4_gemv=1.52e-02/1.09e-02 nf4_mtile=2.75e-03/1.45e-03 bf16_mm=2.77e-03/1.52e-03
+SC1G_MXFP4_PREFILL layer=0 down M=16 floor_bf16_output=2.74e-03/1.40e-03 grouped_v1=2.74e-03/1.40e-03 grouped_tile=2.74e-03/1.40e-03 mxfp4_gemv=9.84e-03/9.99e-03 nf4_mtile=2.50e-03/1.44e-03 bf16_mm=2.74e-03/1.40e-03
+SC1G_MXFP4_PREFILL layer=0 down M=256 floor_bf16_output=1.92e-03/1.41e-03 grouped_v1=1.92e-03/1.41e-03 grouped_tile=1.92e-03/1.41e-03 mxfp4_gemv=1.50e-02/1.04e-02 nf4_mtile=2.25e-03/1.44e-03 bf16_mm=1.92e-03/1.41e-03
+SC1G_MXFP4_PREFILL layer=0 down M=2048 floor_bf16_output=2.52e-03/1.41e-03 grouped_v1=2.52e-03/1.41e-03 grouped_tile=2.52e-03/1.41e-03 mxfp4_gemv=1.73e-02/1.03e-02 nf4_mtile=2.46e-03/1.45e-03 bf16_mm=3.73e-03/1.67e-03
+SC1G_MXFP4_PREFILL layer=11 gate_up M=16 floor_bf16_output=2.14e-03/1.41e-03 grouped_v1=2.14e-03/1.41e-03 grouped_tile=2.14e-03/1.41e-03 mxfp4_gemv=1.79e-02/1.11e-02 nf4_mtile=2.41e-03/1.45e-03 bf16_mm=2.14e-03/1.41e-03
+SC1G_MXFP4_PREFILL layer=11 gate_up M=256 floor_bf16_output=1.93e-03/1.41e-03 grouped_v1=1.93e-03/1.41e-03 grouped_tile=1.93e-03/1.41e-03 mxfp4_gemv=1.03e-02/1.02e-02 nf4_mtile=2.23e-03/1.44e-03 bf16_mm=2.09e-03/1.62e-03
+SC1G_MXFP4_PREFILL layer=11 gate_up M=2048 floor_bf16_output=2.59e-03/1.41e-03 grouped_v1=2.59e-03/1.41e-03 grouped_tile=2.59e-03/1.41e-03 mxfp4_gemv=6.11e-03/1.03e-02 nf4_mtile=8.58e-04/1.45e-03 bf16_mm=2.59e-03/1.58e-03
+SC1G_MXFP4_PREFILL layer=11 down M=16 floor_bf16_output=2.11e-03/1.41e-03 grouped_v1=2.11e-03/1.41e-03 grouped_tile=2.11e-03/1.41e-03 mxfp4_gemv=1.41e-02/1.06e-02 nf4_mtile=1.94e-03/1.44e-03 bf16_mm=2.11e-03/1.41e-03
+SC1G_MXFP4_PREFILL layer=11 down M=256 floor_bf16_output=2.06e-03/1.41e-03 grouped_v1=2.06e-03/1.41e-03 grouped_tile=2.06e-03/1.41e-03 mxfp4_gemv=1.75e-02/1.00e-02 nf4_mtile=2.17e-03/1.45e-03 bf16_mm=2.06e-03/1.41e-03
+SC1G_MXFP4_PREFILL layer=11 down M=2048 floor_bf16_output=3.57e-03/1.41e-03 grouped_v1=3.57e-03/1.41e-03 grouped_tile=3.57e-03/1.41e-03 mxfp4_gemv=1.18e-02/1.04e-02 nf4_mtile=1.78e-03/1.45e-03 bf16_mm=3.57e-03/1.61e-03
+SC1G_MXFP4_PREFILL layer=23 gate_up M=16 floor_bf16_output=1.94e-03/1.42e-03 grouped_v1=1.94e-03/1.42e-03 grouped_tile=1.94e-03/1.42e-03 mxfp4_gemv=9.51e-03/1.13e-02 nf4_mtile=2.77e-03/1.45e-03 bf16_mm=1.94e-03/1.42e-03
+SC1G_MXFP4_PREFILL layer=23 gate_up M=256 floor_bf16_output=1.97e-03/1.41e-03 grouped_v1=1.97e-03/1.41e-03 grouped_tile=1.97e-03/1.41e-03 mxfp4_gemv=1.13e-02/1.00e-02 nf4_mtile=1.50e-03/1.45e-03 bf16_mm=1.97e-03/1.48e-03
+SC1G_MXFP4_PREFILL layer=23 gate_up M=2048 floor_bf16_output=1.77e-03/1.41e-03 grouped_v1=1.77e-03/1.41e-03 grouped_tile=1.77e-03/1.41e-03 mxfp4_gemv=1.00e-02/9.29e-03 nf4_mtile=1.76e-03/1.44e-03 bf16_mm=5.53e-03/1.65e-03
+SC1G_MXFP4_PREFILL layer=23 down M=16 floor_bf16_output=2.90e-03/1.41e-03 grouped_v1=2.90e-03/1.41e-03 grouped_tile=2.90e-03/1.41e-03 mxfp4_gemv=1.56e-02/1.03e-02 nf4_mtile=2.69e-03/1.44e-03 bf16_mm=2.90e-03/1.41e-03
+SC1G_MXFP4_PREFILL layer=23 down M=256 floor_bf16_output=1.48e-03/1.41e-03 grouped_v1=1.48e-03/1.41e-03 grouped_tile=1.48e-03/1.41e-03 mxfp4_gemv=5.01e-03/1.04e-02 nf4_mtile=1.83e-03/1.44e-03 bf16_mm=1.48e-03/1.41e-03
+SC1G_MXFP4_PREFILL layer=23 down M=2048 floor_bf16_output=1.78e-03/1.41e-03 grouped_v1=1.78e-03/1.41e-03 grouped_tile=1.78e-03/1.41e-03 mxfp4_gemv=9.21e-03/1.01e-02 nf4_mtile=3.12e-03/1.45e-03 bf16_mm=2.99e-03/1.60e-03
+SC1G_MXFP4_PREFILL_CHECK IN_LINE floor=AT_FLOOR mutate=False grouped_v1|gt256 mean_rel max 1.410e-03 vs other paths max 1.133e-02; over its floor max x1.000; bit-equal to the floor min 0.999955
+[2026-10-06T11:03:58Z] sc1g-a6mx: arm XM (mutation): the reference decodes the high nibble first, layer 0 -- must exit 1
+SC1G_MXFP4_PREFILL layer=0 gate_up M=16 floor_bf16_output=3.16e-03/1.40e-03 grouped_v1=1.32e+00/1.41e+00 grouped_tile=1.32e+00/1.41e+00 mxfp4_gemv=1.32e+00/1.41e+00 nf4_mtile=2.72e-03/1.45e-03 bf16_mm=3.16e-03/1.40e-03
+SC1G_MXFP4_PREFILL layer=0 gate_up M=256 floor_bf16_output=2.40e-03/1.41e-03 grouped_v1=1.16e+00/1.38e+00 grouped_tile=1.16e+00/1.38e+00 mxfp4_gemv=1.16e+00/1.38e+00 nf4_mtile=1.88e-03/1.45e-03 bf16_mm=2.40e-03/1.62e-03
+SC1G_MXFP4_PREFILL layer=0 gate_up M=2048 floor_bf16_output=2.62e-03/1.41e-03 grouped_v1=1.12e+00/1.36e+00 grouped_tile=1.12e+00/1.36e+00 mxfp4_gemv=1.13e+00/1.36e+00 nf4_mtile=2.75e-03/1.45e-03 bf16_mm=4.93e-03/1.53e-03
+SC1G_MXFP4_PREFILL layer=0 down M=16 floor_bf16_output=2.01e-03/1.41e-03 grouped_v1=1.56e+00/1.40e+00 grouped_tile=1.56e+00/1.40e+00 mxfp4_gemv=1.56e+00/1.40e+00 nf4_mtile=2.50e-03/1.44e-03 bf16_mm=2.01e-03/1.41e-03
+SC1G_MXFP4_PREFILL layer=0 down M=256 floor_bf16_output=1.76e-03/1.40e-03 grouped_v1=1.14e+00/1.40e+00 grouped_tile=1.14e+00/1.40e+00 mxfp4_gemv=1.14e+00/1.40e+00 nf4_mtile=2.25e-03/1.44e-03 bf16_mm=1.76e-03/1.40e-03
+SC1G_MXFP4_PREFILL layer=0 down M=2048 floor_bf16_output=2.28e-03/1.41e-03 grouped_v1=1.19e+00/1.41e+00 grouped_tile=1.19e+00/1.41e+00 mxfp4_gemv=1.19e+00/1.41e+00 nf4_mtile=2.46e-03/1.45e-03 bf16_mm=2.28e-03/1.67e-03
+SC1G_MXFP4_PREFILL_CHECK IN_LINE floor=ABOVE_FLOOR mutate=True grouped_v1|gt256 mean_rel max 1.414e+00 vs other paths max 1.414e+00; over its floor max x1003.701; bit-equal to the floor min 0.000874
+SC1G_A6MX_DONE armX=0 armXM=1 (X must be 0, XM must be 1)
