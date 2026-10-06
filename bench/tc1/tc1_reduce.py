@@ -855,6 +855,27 @@ LOOP_ROUTE_SHARE_MAX[PROF28_FAM] = 0.05
 PROF28_ENV_MAX = 0.92          # P134: s/step q212 / q28 at most this (amendment 43 read 0.915 without buckets; amendment 51 0.739 with them)
 PROF28_IDLE_SHARE_MIN = 0.5    # P135: of the TIMED per-step wall torch 2.8 adds over torch 2.12, at least this share is NOT device time
 PROF28_BUSY_DROP_MIN = 0.03    # P136: in torch 2.8 the buckets lower the device busy fraction (profiled device ms / TIMED ms per step) by at least this much
+# TC1 amendment 54: two remedies for amendment 53's host time, on the matched arm in torch 2.8 at e4b's defaults on packed rows --
+# c0 the defaults, c1 cuBLASLt's heuristics cache at LADDER28_CACHE entries, c2 grouped-nf4-gemm's bucket ladder (#498)
+LADDER28_FAM = "qwen3ladder28"
+FAMS.append(LADDER28_FAM)
+NAMES[LADDER28_FAM] = "Qwen3-30B-A3B (amendment 54: e4b's matched arm at its defaults in torch 2.8 on packed rows -- the defaults, cuBLASLt's heuristics cache raised, grouped-nf4-gemm's bucket ladder)"
+N_LAYERS[LADDER28_FAM] = 48
+ATTN_CENSUS[LADDER28_FAM] = 192
+DENSE_PINS[LADDER28_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[LADDER28_FAM] = ("e4b", "fused_attn4_m_c0")
+LADDER28_SIDES = ("c0", "c1", "c2")
+LADDER28_CACHE = "262144"      # c1's CUBLASLT_HEURISTICS_CACHE_CAPACITY (cuBLASLt's default is 8,192)
+EXPECTED[LADDER28_FAM] = [("e4b", "fused_attn4_m_c0"), ("e4b", "fused_attn4_m_c1"), ("e4b", "fused_attn4_m_c2"),
+                          ("e4b", "fused_attn4_m_c2_d2"), ("e4b", "fused_attn4_m_c1_d2"), ("e4b", "fused_attn4_m_c0_d2")]
+MATCHED |= {f"fused_attn4_m_{_side}{_sfx}" for _side in LADDER28_SIDES for _sfx in ("", "_d2")}
+for _side in LADDER28_SIDES:
+    DRAW2[("e4b", f"fused_attn4_m_{_side}")] = ("e4b", f"fused_attn4_m_{_side}_d2")
+PACKED_FAMS = PACKED_FAMS + (LADDER28_FAM,)
+LOOP_ROUTE_SHARE_MAX[LADDER28_FAM] = 0.05
+LADDER28_BANDS = {"P137": ("c2", 0.95), "P138": ("c1", 0.97)}   # side / c0 s/step at most this, one-sided
+LADDER28_HELDOUT_MAX = 0.005   # P139: |mean held-out at N, side - c0| on c1 and c2
+LADDER28_PEAK_RISE_MAX = 1.5   # P140: c2's matched peak at most this many GB above c0's (medians of two draws)
 # P135 / P136 divide by the TIMED step (median s/step of steps 11..N), never the profiled steps' wall: torch.profiler's per-op host overhead
 # differs between torch versions and grows with the launch count (the bucketed delta issues 115 kernels to the single block's 66), so the
 # profiled wall would push both readings toward HELD by the instrument alone. The profile's device time is CUPTI kernel durations, which the
@@ -1265,6 +1286,80 @@ def score_prof28(F, fam=PROF28_FAM):
                     f"device busy fraction (device / timed step) q28 {b[6]:.3f} vs q28k0 {k0[6]:.3f} (drop {drop:+.3f} vs >= {PROF28_BUSY_DROP_MIN}); "
                     f"timed ms/step {b[5]:.1f} vs {k0[5]:.1f}, device/step {b[2]:.1f} vs {k0[2]:.1f} ms; against the profiled wall "
                     f"(reported) {b[3]:.3f} vs {k0[3]:.3f}"))
+    return out
+
+
+def ladder28_why(tag, r):
+    """Amendment 54's engagement predicate: torch 2.8 (venv-e4b); e4b's defaults otherwise -- NF4_QLORA_PAD_BUCKETS unset and resolved
+    `auto`, every padded call bucketed, the chunked LM loss serving the packed rows unset; and the one change the side names, and no
+    other. c0: neither the ladder nor the cache set. c1: CUBLASLT_HEURISTICS_CACHE_CAPACITY = LADDER28_CACHE, the ladder off. c2:
+    grouped-nf4-gemm has the ladder and resolved it on (NF4_QLORA_PAD_BUCKETS_LADDER=1), the cache unset. Empty string = engaged."""
+    r = r or {}
+    side = prof28_side(tag)
+    if side not in LADDER28_SIDES:
+        return f"amendment 54 registers no side {side!r} (tag {tag})"
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.8"):
+        return f"amendment 54 side {side} not engaged (env.torch {tv or 'missing'} is not 2.8*)"
+    la = r.get("lean_ab") or {}
+    calls = la.get("lora_path_calls") or {}
+    if not calls:
+        return "no lean_ab.lora_path_calls on the receipt: which delta body ran cannot be verified"
+    pb, pd = int(calls.get("padded_bucketed") or 0), int(calls.get("padded") or 0)
+    c = r.get("chunked_lm_loss") or {}
+    lad, cache = la.get("gnf4_pad_ladder"), la.get("cublaslt_heuristics_cache_capacity_env")
+    checks = [("NF4_QLORA_PAD_BUCKETS unset", la.get("gnf4_pad_buckets_env") in (None, "")), ("resolved auto", la.get("gnf4_pad_buckets_mode") == "auto"),
+              ("every padded call bucketed", pb > 0 and pd == 0), ("E4B_CHUNKED_LM_LOSS unset", c.get("env") in (None, "")),
+              ("chunked forwards > 0", int(c.get("chunked_calls") or 0) > 0), ("chunked runtime_refusals 0", int(c.get("runtime_refusals") or 0) == 0)]
+    if side == "c2":
+        checks += [("grouped-nf4-gemm has the ladder", la.get("gnf4_has_pad_ladder") is True), ("ladder on", lad is True),
+                   ("NF4_QLORA_PAD_BUCKETS_LADDER=1", str(la.get("gnf4_pad_ladder_env")) == "1"), ("cuBLASLt cache unset", cache in (None, ""))]
+    else:
+        checks += [("ladder off", lad in (None, False)), ("NF4_QLORA_PAD_BUCKETS_LADDER unset", la.get("gnf4_pad_ladder_env") in (None, ""))]
+        checks += [("cuBLASLt cache " + (LADDER28_CACHE if side == "c1" else "unset"),
+                    str(cache) == LADDER28_CACHE if side == "c1" else cache in (None, ""))]
+    bad = [k for k, ok in checks if not ok]
+    return "" if not bad else (f"amendment 54 side {side} not engaged ({', '.join(bad)}; pad {calls}, mode {la.get('gnf4_pad_buckets_mode')!r}, "
+                               f"ladder {lad!r} env {la.get('gnf4_pad_ladder_env')!r}, cache {cache!r}; chunked {c})")
+
+
+def score_ladder28(F, fam=LADDER28_FAM):
+    """TC1-PREREG amendment 54. P137 / P138: s/step c2 / c0 and c1 / c0 (medians over two VALID, stable draws a side) at most their
+    LADDER28_BANDS ceiling. P139: |mean held-out at N, side - c0| <= LADDER28_HELDOUT_MAX on c1 and on c2. P140: c2's peak (median of
+    its draws) at most c0's + LADDER28_PEAK_RISE_MAX GB. A missing / non-VALID / unstable side UNTESTED."""
+    R = F.get(fam)
+    if not R:
+        return []
+    D = {sd: R["draws"].get(("e4b", f"fused_attn4_m_{sd}"), {}) for sd in LADDER28_SIDES}
+    ok = lambda sd: bool(D[sd].get("usable") and D[sd].get("draws") == 2)
+    why = lambda *sds: "; ".join(f"{sd} {D[sd].get('verdict') or 'missing'}: {D[sd].get('why') or ''}".strip() for sd in sds)
+    out = []
+    for pid, (sd, ceil_) in LADDER28_BANDS.items():
+        if not (ok("c0") and ok(sd)):
+            out.append((pid, fam, "UNTESTED", f"two stable VALID draws a side are registered -- {why('c0', sd)}"))
+            continue
+        ratio_ = D[sd]["s"] / D["c0"]["s"]
+        cross = [x / y for x in D[sd]["s_list"] for y in D["c0"]["s_list"]]
+        out.append((pid, fam, "HELD" if ratio_ <= ceil_ else "FALSIFIED",
+                    f"{sd} / c0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs <= {ceil_}; "
+                    f"s/step c0 {' / '.join(f'{x:.3f}' for x in D['c0']['s_list'])}, {sd} {' / '.join(f'{x:.3f}' for x in D[sd]['s_list'])}"))
+    if not (ok("c0") and ok("c1") and ok("c2")):
+        out.append(("P139", fam, "UNTESTED", f"two VALID draws on every side are registered -- {why('c0', 'c1', 'c2')}"))
+    else:
+        mh = {sd: statistics.mean([v for v in D[sd]["heldout_list"] if v is not None]) if any(v is not None for v in D[sd]["heldout_list"]) else None
+              for sd in LADDER28_SIDES}
+        if any(v is None for v in mh.values()):
+            out.append(("P139", fam, "UNTESTED", f"a side has no held-out at N: {mh}"))
+        else:
+            dd = {sd: mh[sd] - mh["c0"] for sd in ("c1", "c2")}
+            out.append(("P139", fam, "HELD" if all(abs(v) <= LADDER28_HELDOUT_MAX for v in dd.values()) else "FALSIFIED",
+                        f"mean held-out at N c0 {mh['c0']:.4f}; c1 {dd['c1']:+.4f}, c2 {dd['c2']:+.4f} (|.| <= {LADDER28_HELDOUT_MAX})"))
+    if not (ok("c0") and ok("c2")) or D["c0"].get("peak") is None or D["c2"].get("peak") is None:
+        out.append(("P140", fam, "UNTESTED", f"c0 and c2 each need two VALID draws with a peak -- {why('c0', 'c2')}"))
+    else:
+        rise = D["c2"]["peak"] - D["c0"]["peak"]
+        out.append(("P140", fam, "HELD" if rise <= LADDER28_PEAK_RISE_MAX else "FALSIFIED",
+                    f"matched peak c0 {D['c0']['peak']:.3f} -> c2 {D['c2']['peak']:.3f} GB ({rise:+.3f} vs <= +{LADDER28_PEAK_RISE_MAX})"))
     return out
 
 
@@ -2077,6 +2172,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == PADBK28_FAM and fw == "e4b":             # amendment 52: the delta body its tag names, torch 2.8, the chunked loss
         w = pad_buckets_why(r.get("tag") or "", r, sides=("k0", "k1"), torch_prefix="2.8")
+        if w:
+            why.append(w)
+    if fam == LADDER28_FAM and fw == "e4b":            # amendment 54: torch 2.8, the defaults, and the one change its side names
+        w = ladder28_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == PROF28_FAM and fw == "e4b":              # amendment 53: the torch and the bucket mode its side names, the chunked loss
@@ -4887,6 +4986,21 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F, FIELDBK_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if LADDER28_FAM in F:
+        out += ["\n## Amendment 54: e4b's matched arm at its defaults in torch 2.8 -- the cuBLASLt cache and the bucket ladder (profiled, descriptive)",
+                "| arm | VERDICT | s/step (timed, 11..N) | peak GB | device ms/step (profiled) |", "|---|---|---|---|---|"]
+        for t in prof28_table(F, LADDER28_FAM):
+            r_ = next((x["r"] for x in F[LADDER28_FAM]["rows"] if x["tag"] == t["arm"]), None) or {}
+            out.append(f"| {t['arm']} | {t['verdict']} | {f(t['s_per_step'], 3)} | {f(r_.get('peak_vram_gb'), 2)} | {t['device_ms_per_step']} |")
+        for a_, b_ in (("c0", "c1"), ("c0", "c2")):
+            dl = prof28_family_deltas(F, "cpu", a_, b_, fam=LADDER28_FAM)
+            if dl:
+                out.append(f"- cpu ms per profiled step by family, {b_} - {a_} (median of two draws, largest change first): "
+                           + ", ".join(f"{fm} {v:+.1f}" for fm, v in sorted(dl, key=lambda x: -abs(x[1]))[:6]))
+        out += ["\n## Predictions P137 / P138 / P139 / P140 (TC1-PREREG amendment 54: the cuBLASLt cache and the bucket ladder in torch 2.8; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_ladder28(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if PROF28_FAM in F:
         out += ["\n## Amendment 53: e4b's matched arm at its defaults, profiled -- torch 2.12 vs torch 2.8 (descriptive)",
                 "| arm | VERDICT | s/step (timed, 11..N) | profiled | wall ms/step (profiled) | device ms/step | device busy | device events/step | CPU ops/step |",
@@ -5479,6 +5593,37 @@ def _prof28_set(s=None, prof=None, torch=None, calls=None, envs=None, profiled=T
                 "cpu_self_by_family_fraction": {"aten::bmm": 0.3 if side == "q28" else 0.2, "cudaLaunchKernel": 0.4, "other": 0.3 if side == "q28" else 0.4},
                 "device_by_family_fraction": {"gemm": 0.5, "triton": 0.5}}
             r["fam"] = PROF28_FAM
+            R[("e4b", tag)] = r
+    return R
+
+def _ladder28_set(s=None, peaks=None, held=None, la=None, torch="2.8.0+cu128"):
+    """Amendment 54: e4b's matched arm on packed rows in torch 2.8 -- `s` side -> (draw 1, draw 2) s/step; `peaks` side -> GB; `held`
+    side -> held-out at N; `la` side -> lean_ab overrides. Default: c0 12.55, c1 12.50, c2 11.00 s/step (P137 HELD, P138 FALSIFIED)."""
+    s = dict({"c0": (12.55, 12.53), "c1": (12.50, 12.52), "c2": (11.00, 11.02)}, **(s or {}))
+    peaks = dict({"c0": 28.18, "c1": 28.18, "c2": 28.90}, **(peaks or {}))
+    held = dict({"c0": 0.9544, "c1": 0.9544, "c2": 0.9543}, **(held or {}))
+    base = {"c0": {}, "c1": {"cublaslt_heuristics_cache_capacity_env": "262144"},
+            "c2": {"gnf4_pad_ladder": True, "gnf4_pad_ladder_env": "1"}}
+    R = {}
+    for side in ("c0", "c1", "c2"):
+        for i, sfx in enumerate(("", "_d2")):
+            tag = f"fused_attn4_m_{side}{sfx}"
+            r = _receipt("e4b", tag, "fused", steps=30, s=s[side][i], heldout_n=held[side], matched=True, seq=4096, micro_batch=1, accum=4,
+                         offload=False, tokens={"sha256": "p" * 64, "pack": True}, tokens_per_step=[16384] * 30, tokens_padded_per_step=[0] * 30,
+                         arm_facts={"free_outputs": True})
+            r["env"]["torch"] = torch
+            r["peak_vram_gb"] = peaks[side]
+            lab = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                   "lora_path_calls": {"loop": 200, "padded": 0, "grouped_mm": 0, "padded_bucketed": 31750},
+                   "gnf4_pad_buckets_env": None, "gnf4_pad_buckets_mode": "auto", "gnf4_pad_buckets_min_rows": 16384,
+                   "gnf4_has_pad_ladder": True, "gnf4_pad_ladder": False, "gnf4_pad_ladder_env": None, "cublaslt_heuristics_cache_capacity_env": None}
+            lab.update(base[side]); lab.update((la or {}).get(side, {}))
+            r["lean_ab"] = lab
+            r["chunked_lm_loss"] = {"env": None, "e4b_has_chunked_lm_loss": True, "chunked_calls": 160, "stock_calls": 0, "small_calls": 0, "patched": 1,
+                                    "runtime_refusals": 0, "refused": {}}
+            r["lora_loop_share"], r["lora_path_loop_steps"] = [0.02] * 30, list(range(1, 31))
+            r["profile"] = None
+            r["fam"] = LADDER28_FAM
             R[("e4b", tag)] = r
     return R
 
@@ -7934,6 +8079,24 @@ def selftest():
     assert all(x["verdict"] == "VALID" for x in RU[PROF28_FAM]["rows"])
     assert pq8(RU) == {"P134": "HELD", "P135": "UNTESTED", "P136": "UNTESTED"}, score_prof28(RU)
     assert "P135" in render(RQ8, "x") and "amendment 53" in render(RQ8, "x")
+    cases += 1
+    # 107. TC1 amendment 54 (qwen3ladder28): defaults vs the cuBLASLt cache vs the bucket ladder in torch 2.8 -- VALID; the default fixture
+    #      HOLDS P137 / P139 / P140 and FALSIFIES P138; the ladder side without the ladder, the cache side without the cache, a torch-2.12
+    #      receipt and a ladder left on at c0 are each VOID; a 2.0 GB peak rise FALSIFIES P140; a 0.01 held-out move FALSIFIES P139
+    L8 = lambda R: {LADDER28_FAM: reduce_family(LADDER28_FAM, R, {}, 30)}
+    RL8 = L8(_ladder28_set())
+    assert all(x["verdict"] == "VALID" for x in RL8[LADDER28_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RL8[LADDER28_FAM]["rows"]]
+    pl8 = lambda R: {p: v for p, _, v, _ in score_ladder28(R)}
+    assert pl8(RL8) == {"P137": "HELD", "P138": "FALSIFIED", "P139": "HELD", "P140": "HELD"}, score_ladder28(RL8)
+    assert pl8(L8(_ladder28_set(s={"c1": (12.0, 12.02)})))["P138"] == "HELD"
+    assert pl8(L8(_ladder28_set(peaks={"c2": 30.2})))["P140"] == "FALSIFIED"
+    assert pl8(L8(_ladder28_set(held={"c2": 0.9644})))["P139"] == "FALSIFIED"
+    for bad, key in (({"c2": {"gnf4_pad_ladder": False}}, "fused_attn4_m_c2"), ({"c1": {"cublaslt_heuristics_cache_capacity_env": None}}, "fused_attn4_m_c1"),
+                     ({"c0": {"gnf4_pad_ladder": True, "gnf4_pad_ladder_env": "1"}}, "fused_attn4_m_c0"),
+                     ({"c2": {"cublaslt_heuristics_cache_capacity_env": "262144"}}, "fused_attn4_m_c2")):
+        assert L8(_ladder28_set(la=bad))[LADDER28_FAM]["verdicts"][("e4b", key)] == "VOID", bad
+    assert L8(_ladder28_set(torch="2.12.1+cu130"))[LADDER28_FAM]["verdicts"][("e4b", "fused_attn4_m_c0")] == "VOID"
+    assert "P137" in render(RL8, "x") and "amendment 54" in render(RL8, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

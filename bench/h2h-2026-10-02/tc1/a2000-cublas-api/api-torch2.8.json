@@ -1,0 +1,77 @@
+{
+ "rows": [
+  {
+   "dtype": "fp32",
+   "pattern": "repeat",
+   "cublas_per_bmm": {
+    "cublasSetWorkspace_v2": 1.0,
+    "cublasSgemmStridedBatched": 1.0,
+    "cublasSetStream_v2": 1.0,
+    "cublasSetMathMode": 1.0,
+    "cublasGetMathMode": 1.0
+   },
+   "cublaslt_per_bmm": {
+    "cublasLtSSSMatmul": 1.0,
+    "cublasLtSSSMatmulAlgoGetHeuristic": 1.0,
+    "heuristicResults=0": 1.0
+   },
+   "cublas_lines_n40": 206,
+   "cublaslt_lines_n40": 124
+  },
+  {
+   "dtype": "fp32",
+   "pattern": "fresh",
+   "cublas_per_bmm": {
+    "cublasSetWorkspace_v2": 1.0,
+    "cublasSgemmStridedBatched": 1.0,
+    "cublasSetStream_v2": 1.0,
+    "cublasSetMathMode": 1.0,
+    "cublasGetMathMode": 1.0
+   },
+   "cublaslt_per_bmm": {
+    "cublasLtSSSMatmul": 1.0,
+    "cublasLtSSSMatmulAlgoGetHeuristic": 1.0,
+    "heuristicResults=0": 1.0
+   },
+   "cublas_lines_n40": 206,
+   "cublaslt_lines_n40": 124
+  },
+  {
+   "dtype": "bf16",
+   "pattern": "repeat",
+   "cublas_per_bmm": {
+    "cublasSetWorkspace_v2": 1.0,
+    "cublasSetStream_v2": 1.0,
+    "cublasSetMathMode": 1.0,
+    "cublasGetMathMode": 2.0,
+    "cublasGemmStridedBatchedEx": 1.0
+   },
+   "cublaslt_per_bmm": {
+    "cublasLtTSTMatmulAlgoGetHeuristic": 1.0,
+    "cublasLtTSTMatmul": 1.0,
+    "heuristicResults=21": 1.0
+   },
+   "cublas_lines_n40": 247,
+   "cublaslt_lines_n40": 124
+  },
+  {
+   "dtype": "bf16",
+   "pattern": "fresh",
+   "cublas_per_bmm": {
+    "cublasSetWorkspace_v2": 1.0,
+    "cublasSetStream_v2": 1.0,
+    "cublasSetMathMode": 1.0,
+    "cublasGetMathMode": 2.0,
+    "cublasGemmStridedBatchedEx": 1.0
+   },
+   "cublaslt_per_bmm": {
+    "cublasLtTSTMatmulAlgoGetHeuristic": 1.0,
+    "cublasLtTSTMatmul": 1.0,
+    "heuristicResults=21": 1.0
+   },
+   "cublas_lines_n40": 247,
+   "cublaslt_lines_n40": 124
+  }
+ ],
+ "torch": "2.8.0+cu128"
+}

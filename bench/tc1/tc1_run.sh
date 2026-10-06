@@ -134,8 +134,8 @@ echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RU
 case "$PACK" in 0|1) ;; *) say "refusing: TC1_PACK must be 0 or 1 (got '$PACK')"; echo "BOX_REFUSED pack=$PACK" >> summary.txt; finish 78;; esac
 for _f in $FAMILIES; do
   case "$_f" in
-    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k|qwen3padbk|qwen3samestack4kd|qwen3padbk28|qwen3prof28) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
-    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k, qwen3padbk, qwen3samestack4kd, qwen3padbk28, qwen3prof28)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
+    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k|qwen3padbk|qwen3samestack4kd|qwen3padbk28|qwen3prof28|qwen3ladder28) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
+    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k, qwen3padbk, qwen3samestack4kd, qwen3padbk28, qwen3prof28, qwen3ladder28)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
   esac
 done
 # ---------------------------------------------------------------- staged pieces, box class, forensics
@@ -1393,6 +1393,25 @@ tc1_prof28_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/m_q212_d2     && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_q212 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_ladder28_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 54 (2026-10-06): amendment 53 put 60 % of torch 2.8's extra time at
+# e4b's defaults in host time inside the bucketed delta's batched matmuls. Two remedies against the defaults, on the matched arm in venv-e4b
+# (torch 2.8) on packed rows, with the profile instrument: c0 the defaults; c1 cuBLASLt's heuristics cache raised to 262,144 entries (no
+# code change); c2 grouped-nf4-gemm's bucket ladder (NF4_QLORA_PAD_BUCKETS_LADDER=1, #498). Two draws each in A B C C B A order.
+tc1_ladder28_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_c0:fused e4b:fused_attn4_m_c1:fused e4b:fused_attn4_m_c2:fused e4b:fused_attn4_m_c2_d2:fused e4b:fused_attn4_m_c1_d2:fused e4b:fused_attn4_m_c0_d2:fused"
+  say "===== LADDER (torch 2.8) family $FAM ($MID @ $REV; e4b's matched arm at its defaults vs the cuBLASLt cache vs the bucket ladder, packed rows, venv-e4b, amendment 54)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local PROF="--profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM"
+  local C1="CUBLASLT_HEURISTICS_CACHE_CAPACITY=262144" C2="NF4_QLORA_PAD_BUCKETS_LADDER=1"
+  can_run 600 $FAM/e4b/m_c0                              && arm   $FAM e4b fused_attn4_m_c0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_c1    && TC1_ARM_EXTRA_ENV="$C1" arm   $FAM e4b fused_attn4_m_c1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_c2    && TC1_ARM_EXTRA_ENV="$C2" arm   $FAM e4b fused_attn4_m_c2 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_c2_d2 && TC1_ARM_EXTRA_ENV="$C2" draw2 $FAM e4b fused_attn4_m_c2 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_c1_d2 && TC1_ARM_EXTRA_ENV="$C1" draw2 $FAM e4b fused_attn4_m_c1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_c0_d2                           && draw2 $FAM e4b fused_attn4_m_c0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_fieldbk_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 49 (2026-10-06): grouped-nf4-gemm's bucketed LoRA-delta padding
 # (NF4_QLORA_PAD_BUCKETS=1, grouped-nf4-gemm#490) off vs on at TC1's FIELD recipe (amendment 48 read it on packed rows) -- the shipped and the
 # matched arm, two draws a side in ABBA order, every arm in venv-unsloth at e4b's defaults: whether the short rows pay for the extra launches.
@@ -1826,6 +1845,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3padbk) tc1_padbk_family qwen3padbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 48: the LoRA delta's bucketed padding on packed rows
   qwen3padbk28) tc1_padbk28_family qwen3padbk28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 52: amendment 48's bucketing A/B in venv-e4b (torch 2.8)
   qwen3prof28) tc1_prof28_family qwen3prof28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 53: the matched arm profiled in torch 2.12 and 2.8 at e4b's defaults
+  qwen3ladder28) tc1_ladder28_family qwen3ladder28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 54: defaults vs the cuBLASLt cache vs the bucket ladder, torch 2.8
   qwen3fieldbk) tc1_fieldbk_family qwen3fieldbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 49: the LoRA delta's bucketed padding at the field recipe
   qwen3fieldauto) tc1_fieldauto_family qwen3fieldauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 50: the bucket gate at the field recipe
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
