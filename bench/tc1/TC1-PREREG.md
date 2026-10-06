@@ -2082,3 +2082,9 @@ or not engaged.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2.5 with the download;
 this is in the standing no-ask tier.
+
+**The re-ask** (2026-10-06T08:48Z, after the first box's read, before it runs). The first box, `tc1-5090-103`, read P119-P122 UNTESTED: the single
+block's draws were 12-21 % apart. The re-ask is the same box (token, arms, order, steps, gate, predictions and decision rules unchanged) on
+another host, with one instrument added on every arm, both sides alike: `TC1_PAD_CENSUS=1`. It records each grouped-LoRA delta call's single
+padded block (rows and bytes, per projection) from host facts, at a few microseconds of host arithmetic per call. Those sizes are what a
+size-gated `auto` would be placed between, if P119 or P120 falls on the slow side.

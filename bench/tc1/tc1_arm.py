@@ -1470,8 +1470,48 @@ class Counters:
                 return _orig(*a, **k)
             nf4_qlora.fused_grouped_lora = w
             self._restore.append((nf4_qlora, "fused_grouped_lora", orig))
+            if os.environ.get("TC1_PAD_CENSUS", "0").strip() == "1" and hasattr(nf4_qlora, "lora_delta_grouped"):
+                # TC1 amendment 49's re-ask: every grouped-LoRA delta call's SINGLE padded block, from host facts only (the `sizes` list,
+                # the operands' shapes and dtypes) -- no device read. fused_grouped_lora reaches lora_delta_grouped through the module
+                # global, so this wrapper sees every call; a few microseconds of host arithmetic per call, the same on both sides of an A/B.
+                orig_d = nf4_qlora.lora_delta_grouped
+                rec = self.pad_census = []
+
+                def wd(a_cat, lora_A, lora_B, sizes, expert_ids, scaling=1.0, _orig=orig_d, _rec=rec):
+                    rows = [int(x) for x in sizes if int(x) > 0]
+                    if rows:
+                        _rec.append((int(a_cat.shape[1]), int(lora_B.shape[1]), len(rows), max(rows), sum(rows),
+                                     max(a_cat.element_size(), lora_A.element_size())))
+                    return _orig(a_cat, lora_A, lora_B, sizes, expert_ids, scaling)
+                nf4_qlora.lora_delta_grouped = wd
+                self._restore.append((nf4_qlora, "lora_delta_grouped", orig_d))
         except ImportError:
             pass
+
+    def pad_census_summary(self):
+        """The single padded block of every grouped-LoRA delta call this arm made (TC1_PAD_CENSUS=1), per projection input width K:
+        quantiles of the block's rows (G x widest), of the routed rows, of its bytes in the allocation dtype ((K + N) x itemsize per row,
+        as grouped-nf4-gemm's LORA_PAD_WASTE["last_bytes_alloc"] counts them) and the share of calls at or above each candidate size.
+        None when the census was off."""
+        rec = getattr(self, "pad_census", None)
+        if rec is None:
+            return None
+
+        def q(v, f):
+            return v[min(len(v) - 1, int(f * len(v)))] if v else None
+        out = {"calls": len(rec), "by_K": {}}
+        for K in sorted({r[0] for r in rec}):
+            sub = [r for r in rec if r[0] == K]
+            single = sorted(g * w for _, _, g, w, _, _ in sub)
+            real = sorted(t for _, _, _, _, t, _ in sub)
+            nbytes = sorted(g * w * (k + n) * it for k, n, g, w, _, it in sub)
+            out["by_K"][str(K)] = {
+                "calls": len(sub), "N": sub[0][1],
+                "single_rows": {p: q(single, f) for p, f in (("p50", 0.5), ("p90", 0.9), ("p99", 0.99), ("max", 1.0))},
+                "routed_rows": {p: q(real, f) for p, f in (("p50", 0.5), ("max", 1.0))},
+                "single_bytes_alloc": {p: q(nbytes, f) for p, f in (("p50", 0.5), ("p90", 0.9), ("p99", 0.99), ("max", 1.0))},
+                "share_at_or_above_gib": {str(g): round(sum(b >= g * 2 ** 30 for b in nbytes) / len(nbytes), 4) for g in (0.25, 0.5, 1, 2, 4)}}
+        return out
 
     def install_experts_hooks(self, model):
         """T11: module-level engagement -- one forward call per experts module per micro-batch (the HF arm's counter, and
@@ -3748,6 +3788,7 @@ def run_arm(a, load_fn, sampler=True):
                    "e4b_has_group_by_expert": _has_gbe, "gnf4_has_ring": bool(_ng is not None and hasattr(_ng, "_PinnedRing")),
                    "ring_staged": int(sum(r.staged for r in _rings)), "ring_waits": int(sum(r.waits for r in _rings))}
     lean_ab = None                                     # TC1 amendment 13 (#945): which padded LoRA-delta body this e4b arm ran
+    pad_census = None                                  # TC1 amendment 49's re-ask: every delta call's single padded block (TC1_PAD_CENSUS=1)
     if a.framework == "e4b":
         try:
             import nf4_qlora as _nq
@@ -3761,6 +3802,7 @@ def run_arm(a, load_fn, sampler=True):
                 _lean_on = None
         # the ACTUAL state (gnf4#440 makes the trimmed body the default; unset = on there); the env value rides beside it, and the
         # process's per-path call counts say whether the padded path -- the only one the switch touches -- served the delta at all
+        pad_census = counter.pad_census_summary() if counter is not None else None   # TC1 amendment 49's re-ask (TC1_PAD_CENSUS=1)
         lean_ab = {"gnf4_lean_delta": ("1" if _lean_on else "0") if _lean_on is not None else None,
                    "gnf4_lean_delta_env": os.environ.get("NF4_QLORA_LEAN_DELTA"),
                    "gnf4_has_lean_delta": _lean_on is not None,
@@ -3913,6 +3955,7 @@ def run_arm(a, load_fn, sampler=True):
         "arm_facts": arm_facts, "dynamo_counters": dyn, "microbatch_padded_len": mb_padded_len,                        # [F6/F9/F16/F19/F20]
         "sync_ab": sync_ab,                                                                                              # TC1 amendment 10 (#945)
         "lean_ab": lean_ab,                                                                                              # TC1 amendment 13 (#945)
+        "pad_census": pad_census,                                                                                        # TC1 amendment 49's re-ask
         "tile_ab": tile_ab,                                                                                              # TC1 amendment 14 (#945)
         "rms_ab": rms_ab,                                                                                                # TC1 amendment 15 (#945)
         "prebind_ab": prebind_ab,                                                                                        # TC1 amendment 26
@@ -4668,6 +4711,13 @@ def _selftest_phase3(a, d, rec, R, M, N, e_fu, hfr):
     # TC1 amendment 48 (tc1-5090-101): a counter the share's sum did not name -- grouped-nf4-gemm#490's padded_bucketed -- read a 1.5 % loop as 100 %
     _bk = [{"lora_path_loop": 494, "lora_path_padded": 0, "lora_path_grouped_mm": 0, "lora_path_padded_bucketed": 31762}]
     assert _lora_loop_share(_bk) == [round(494 / (494 + 31762), 4)] and _lora_loop_share([{"lora_path_loop": 0, "lora_path_padded": 0}]) == [None], _lora_loop_share(_bk)
+    # TC1 amendment 49's re-ask: the single-block census summary, per projection width, from the calls it recorded
+    _c = Counters()
+    assert _c.pad_census_summary() is None
+    _c.pad_census = [(2048, 1536, 128, 600, 8000, 4), (2048, 1536, 128, 300, 8000, 4), (768, 2048, 100, 400, 8000, 4)]
+    _pc = _c.pad_census_summary()
+    assert _pc["calls"] == 3 and _pc["by_K"]["2048"]["single_rows"]["max"] == 128 * 600 and _pc["by_K"]["768"]["N"] == 2048, _pc
+    assert _pc["by_K"]["2048"]["single_bytes_alloc"]["max"] == 128 * 600 * (2048 + 1536) * 4 and _pc["by_K"]["2048"]["share_at_or_above_gib"]["1"] == 0.5, _pc
     print(f"FAILING-CASE A: fused arm whose kernel took the per-expert loop: lora_path_loop_steps={lp['lora_path_loop_steps']} lora_loop_share[0]={lp['lora_loop_share'][0]} (the reducer VOIDs it, naming the steps)", flush=True)
     out["A"] = {"loop_steps_ok_arm": e_fu["lora_path_loop_steps"], "loop_steps_bad_arm": lp["lora_path_loop_steps"][:3]}
     a.model = "selftest/tiny"
