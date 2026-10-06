@@ -2312,3 +2312,70 @@ diagnostic that licenses nothing: [`../h2h-2026-10-02/tc1/a2000-bucket-counts/`]
 (`bench/tc1/bucket_count.py`). Its millisecond fields are not readings. One correction to the *Why*: fp32 and bf16 adapters give close
 counts, not the same ones. With buckets, fp32 runs 115.3 kernels / 113.3 launch calls per iteration and bf16 112.5–113.7 / 111.7. The
 torch-version comparison stands: identical with fp32 adapters, and equal launch calls with bf16. Nothing registered changes.
+
+### Amendment 54 (2026-10-06T20:04Z, after amendment 53's read, before any box): two remedies for torch 2.8's host time at e4b's defaults (P137–P140)
+
+**Why.** Amendment 53 read e4b's matched arm at its defaults on packed rows at 0.790 of its torch-2.12 speed in torch 2.8. 59.7 % of the
+added 2.63 s per step is not device time, and the CPU family that grew most is the batched matmul. `aten::bmm` makes the same ~26,750
+calls a step in both torches, about 23,750 of them added by the buckets. Profiled, it takes about 268 µs of self time per call
+in torch 2.8 against 86 µs in torch 2.12. Two earlier readings bear on why:
+
+- **Amendment 24** (RTX 5090, a replay with no model): an fp32 `bmm` costs 119 µs of host time on a shape the process has not used,
+  against 38 µs on a repeated one, under torch 2.8 and 2.12 alike. The router gives nearly every bucket a new shape: the bucket's group
+  count and width both move from call to call.
+- **A diagnostic count on an RTX A2000** (cuBLAS 12.8, sm_86, counts only;
+  [`../h2h-2026-10-02/tc1/a2000-cublas-api/`](../h2h-2026-10-02/tc1/a2000-cublas-api/README.md)): every fp32 `bmm` asks cuBLASLt's
+  heuristic for an algorithm, gets 0 back, and falls back. A bf16 call gets 21. That is the same for repeated and new shapes.
+
+Torch 2.12 ships cuBLAS 13 (cu130), torch 2.8 cuBLAS 12.8 (cu128). In training, torch 2.12's 86 µs is below the replay's 119 µs for a new
+shape, so torch 2.12 is not paying the new-shape cost on every call, and torch 2.8 pays more than it. (268 µs is profiled CPU self time,
+which also counts waits on a full launch queue, so it is an upper bound on host work and this comparison is a lead.) One reading of that: cuBLASLt's
+heuristics cache (8,192 entries by default) holds the step's shapes under cuBLAS 13 and thrashes under 12.8. This box puts two remedies
+against the defaults, one per reading, without settling the mechanism first:
+
+- `c1`: `CUBLASLT_HEURISTICS_CACHE_CAPACITY=262144`, a bigger cache, no code change;
+- `c2`: grouped-nf4-gemm's bucket ladder (`NF4_QLORA_PAD_BUCKETS_LADDER=1`, grouped-nf4-gemm#498). It rounds each bucket's width and
+  group count up to quarter-octave rungs, so shapes repeat: over 40 Zipf(1) routings of 4,096 tokens, 227 distinct bucket shapes
+  become 41.
+
+**The box** (token `qwen3ladder28`). One RTX 5090, packed 4,096-token rows, 40 load-gated steps. The matched arm (fp32 adapters, matched
+init) in venv-e4b (torch 2.8), e4b's defaults otherwise, avoiding machines 145701, 130223 and 55583. Three sides, two draws each, in
+A B C C B A order:
+
+- `c0`: the defaults;
+- `c1`: the cuBLASLt cache raised to 262,144 entries;
+- `c2`: the ladder.
+
+Every arm carries amendment 12's profile instrument (steps 3–5, outside the timed steps 11..40), so the read can report `aten::bmm`'s
+host time per call on each side.
+
+Engagement (`ladder28_why`): torch 2.8; buckets `auto` with every padded call bucketed; the chunked loss serving the rows unset; and the
+one change the side names, and no other. `c0` sets neither, `c1` only the cache, `c2` only the ladder, resolved on, by a
+grouped-nf4-gemm that has it. The receipt records both settings (`lean_ab`).
+
+**Predictions** (registered before the box), one-sided:
+
+- **P137:** s/step `c2` / `c0` ≤ **0.95**.
+- **P138:** s/step `c1` / `c0` ≤ **0.97**.
+- **P139:** on `c1` and `c2`, |mean held-out at N − `c0`'s| ≤ **0.005**.
+- **P140:** `c2`'s matched peak ≤ `c0`'s + **1.5 GB** (medians of two draws). The ladder pads at most 1.56× the buckets' rows.
+
+Reported, not scored: each side's `aten::bmm` self time per profiled call and the CPU family deltas against `c0`, and the nvidia-smi
+utilisation medians.
+
+**Decision rules.**
+
+- **P137, P139 and P140 HELD:** the ladder recovers torch 2.8's host time. The next registration is its default decision, read in torch
+  2.12 and on the shipped arm, on packed rows and at the field recipe.
+- **P138 HELD with P139:** the bigger cache recovers it with no code change. e4b's STATUS and grouped-nf4-gemm's STATUS each gain one line
+  for torch 2.8 users, with the measured ratio, and the next registration asks whether e4b should set it for them.
+- **P137 and P138 both FALSIFIED:** shape novelty is not the in-training cost. The read reports both sides' `aten::bmm` time per call,
+  and the next candidate is fewer, wider buckets: fewer calls rather than repeated shapes.
+- **P140 FALSIFIED with P137 HELD:** the ladder's speed costs memory. The read reports both, and its default question waits for the
+  memory to be read on the shipped arm.
+- **P139 FALSIFIED on `c2`** (maintainer review, before any box): the ladder pads with zero groups and should not move training at all, so
+  a held-out shift is a defect signal, not a trade-off. Before any default question, a $0 correctness check of the laddered delta against
+  the unladdered one comes first: values and gradients, under torch 2.8 / triton 3.4 on the RTX A2000.
+- No default changes on this box. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. Six arms: about $2 with the download.

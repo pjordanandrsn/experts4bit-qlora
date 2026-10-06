@@ -3810,7 +3810,12 @@ def run_arm(a, load_fn, sampler=True):
                    # TC1 amendment 50: the bucketed-padding mode grouped-nf4-gemm resolved (#490 / #491) and auto's row gate, beside the env value
                    "gnf4_pad_buckets_mode": (_nq._pad_buckets_mode() if (_nq is not None and hasattr(_nq, "_pad_buckets_mode")) else None),
                    "gnf4_pad_buckets_min_rows": (_nq._pad_buckets_min_rows() if (_nq is not None and hasattr(_nq, "_pad_buckets_min_rows")) else None),
-                   "gnf4_pad_buckets_env": os.environ.get("NF4_QLORA_PAD_BUCKETS")}
+                   "gnf4_pad_buckets_env": os.environ.get("NF4_QLORA_PAD_BUCKETS"),
+                   # TC1 amendment 54: grouped-nf4-gemm's opt-in bucket ladder (#498) and cuBLASLt's heuristics-cache capacity, as set
+                   "gnf4_has_pad_ladder": bool(_nq is not None and hasattr(_nq, "_ladder_up")),
+                   "gnf4_pad_ladder": (_nq._pad_ladder_enabled() if (_nq is not None and hasattr(_nq, "_pad_ladder_enabled")) else None),
+                   "gnf4_pad_ladder_env": os.environ.get("NF4_QLORA_PAD_BUCKETS_LADDER"),
+                   "cublaslt_heuristics_cache_capacity_env": os.environ.get("CUBLASLT_HEURISTICS_CACHE_CAPACITY")}
     tile_ab = None                                     # TC1 amendment 14 (#945): which prefill M-tile rule this e4b arm ran, and what it launched
     if a.framework == "e4b":
         try:
