@@ -1,0 +1,44 @@
+{
+ "verdict": "READ",
+ "integrity": {
+  "a5_short": {
+   "state": "CLEAN"
+  },
+  "a5_long": {
+   "state": "CLEAN"
+  }
+ },
+ "readings": {
+  "Z4": {
+   "reading": "HELD",
+   "detail": {
+    "peak_bytes": 23336225280,
+    "rel": -0.018819095457915047,
+    "bound": "peak"
+   }
+  },
+  "Z1": {
+   "reading": "MISSED",
+   "detail": {
+    "status": "OOM",
+    "error": "CUDA out of memory. Tried to allocate 32.00 MiB. GPU 0 has a total capacity of 23.52 GiB of which 9.75 MiB is free. Including non-PyTorch memory, this process has 23.50 GiB memory in use. Of the alloc"
+   }
+  },
+  "Z2": {
+   "reading": "MISSED",
+   "detail": {
+    "floor_bytes": 25266487296,
+    "plan_bytes": 24416889078,
+    "bound": "lower"
+   }
+  },
+  "Z3": {
+   "reading": "NO_READING",
+   "detail": {
+    "floor_bytes": 24289382236,
+    "rel": 0.021256769127613095,
+    "bound": "lower"
+   }
+  }
+ }
+}
