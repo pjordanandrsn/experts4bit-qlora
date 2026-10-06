@@ -7,7 +7,7 @@
 # (8,000-token prompts), both on VRAM 12.631 / DRAM 15.187 GiB, hot_rows 1, eager decode.
 # Nothing here creates, destroys or approves compute.
 # Exit codes (SV6-PREREG "Outcomes"). 13 and 18 keep their host meanings, the only ones the launcher reads as evidence
-# against the machine: 13 = under the disk floor, 18 = under the host-RAM floor. Everything else is the workload's:
+# against the machine: 13 = under the disk floor, 18 = under the host-RAM or driver floor. Everything else is the workload's:
 # 9 install / tripwire, 10 fetch, 11 fewer than two receipts, 12 the bake, 16 the b6_short anchor not finishing.
 set -uo pipefail
 W=/root/tc1; cd "$W" || exit 9
@@ -30,6 +30,14 @@ MIN_RAM_GB=32
 AVAIL_GB=$(awk '/MemAvailable/ {print int($2/1048576)}' /proc/meminfo)
 CG=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max); CG_GB=$([ "$CG" = max ] && echo 99999 || echo $(( CG / 1073741824 )))
 [ "${AVAIL_GB:-0}" -ge "$MIN_RAM_GB" ] && [ "$CG_GB" -ge "$MIN_RAM_GB" ] || { echo "BOX_REFUSED ram: available ${AVAIL_GB:-?} GB, cgroup ${CG_GB} GB < $MIN_RAM_GB GB" | tee -a summary.txt; finish 18; }
+# Amendment 1: a registered driver floor. The image's torch 2.8+cu128 needs NVIDIA driver >= 570 on a GeForce card, which
+# has no CUDA forward compatibility: sv6-4090-2 (Vast machine 29956, driver 535.146.02) failed CUDA init with error 804.
+# The driver is a property of the host, so 18, checked before anything is installed.
+MIN_DRIVER_MAJOR=570
+DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')
+# An unreadable driver is not evidence about the host (nvidia-smi missing or failing can be the image), so it is 9, not 18.
+case "${DRV%%.*}" in ''|*[!0-9]*) echo "DRIVER UNREADABLE (${DRV:-empty})" | tee -a summary.txt; finish 9;; esac
+[ "${DRV%%.*}" -ge "$MIN_DRIVER_MAJOR" ] || { echo "BOX_REFUSED driver ${DRV} < $MIN_DRIVER_MAJOR (torch cu128 on a GeForce card)" | tee -a summary.txt; finish 18; }
 
 command -v git >/dev/null 2>&1 || perl -e 'alarm 600; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq git' > logs/apt_git.log 2>&1 \
   || { tail -3 logs/apt_git.log; echo "GIT INSTALL FAIL" | tee -a summary.txt; finish 9; }

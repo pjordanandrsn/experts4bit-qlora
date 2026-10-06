@@ -165,13 +165,34 @@ The read PR carries a Reproduce line that runs this reducer from main on the com
 - **Success:** two arm receipts with integrity clean; Y1–Y6 read. A miss is a result.
 - **Exit codes.** 13 and 18 are host evidence; every other code is the workload's.
   - 13: under 120 GB of disk (host);
-  - 18: under 32 GB of available or cgroup host RAM (host);
+  - 18: under 32 GB of available or cgroup host RAM, or an NVIDIA driver older than 570 (host; the driver floor is
+    amendment 1's);
   - 9: install, tripwire, or the registered estimate total moved;
   - 10: fetch;
   - 11: fewer than two receipts (an OOM in `b6_long` still writes its receipt, status OOM);
   - 12: the bake;
   - 16: the `b6_short` anchor not finishing.
 - **Receipt:** committed with its ledger row only, pushed over SSH, and `@{u}` re-synced before the read.
+
+## Amendment 1 (2026-10-06, before any SV6 data): a driver floor
+
+**Two attempts, no data.** Both ran from `09d7fd2e` (this registration's merge) and landed on the same Vast host, machine
+29956. It runs driver 535.146.02 (`cuda_max_good` 12.2) and is the cheapest verified RTX 4090 offer.
+- `sv6-4090-1`: NOT_RUN at $0.023. The launcher's pre-flight measured the HF CDN at 19.0 MB/s, under its 20 MB/s floor.
+- `sv6-4090-2`: HARNESS_ERROR at $0.029. The pre-flight passed. torch 2.8+cu128 could not initialise CUDA (error 804:
+  forward compatibility attempted on a GeForce card), so the tripwire exited 9 before any fetch.
+
+Neither reached the model, the bake or an arm. Both receipts are in the store (`c96b57d5`, `1857f9a8`).
+
+**The change.** `sv6_run.sh` refuses a host whose NVIDIA driver is older than 570, the minimum for the image's CUDA 12.8
+runtime on a GeForce card. It checks this before anything is installed and exits 18, the host-floor code (adertha-agents'
+`rent.py`: "18 -- a lane's registered host floor (RAM, driver, CPU vendor)"). A later launch may then cite that refusal
+in `exclude_vast_lane_receipts`. The offer search does not filter `cuda_max_good` against the image, so without the
+floor the lane would keep re-buying machine 29956 and exit 9, which the launcher cannot hold against a machine.
+
+**Unchanged:** the question, arms, readings, consequences, the reducer and its pinned numbers, and the other exit codes.
+The next box launches from this amendment's merge SHA, and only if `estimate_serve_footprint` still gives
+21,985,437,184 bytes for the registered setup there.
 
 ## Cost
 

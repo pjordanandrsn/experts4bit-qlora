@@ -22,13 +22,14 @@ def test_reducer_self_test_passes():
 
 
 def test_runner_uses_host_codes_only_for_host_floors():
-    """13 is the disk floor and 18 the RAM floor; no other refusal or failure takes 13, 14, 17 or 18."""
+    """13 is the disk floor and 18 the RAM and driver floors (amendment 1); no other refusal or failure takes 13, 14, 17
+    or 18."""
     run = (SV6 / "sv6_run.sh").read_text()
     codes = re.findall(r"finish (\d+)", run)
     lines = {c: [ln for ln in run.splitlines() if f"finish {c}" in ln] for c in set(codes)}
     assert set(codes) <= {"0", "9", "10", "11", "12", "13", "16", "18"}, codes
     assert len(lines["13"]) == 1 and "disk" in lines["13"][0]
-    assert len(lines["18"]) == 1 and "ram" in lines["18"][0].lower()
+    assert len(lines["18"]) == 2 and ["ram" in lines["18"][0].lower(), "driver" in lines["18"][1]] == [True, True]
     assert "BAKE FAIL" in lines["12"][0]
 
 
