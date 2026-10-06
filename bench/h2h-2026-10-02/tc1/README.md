@@ -98,6 +98,27 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 48, re-ask (2026-10-06): bucketed padding takes 4.29 GB off e4b's packed-row peak and makes the step 11 % faster
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 48 and its re-ask note. One RTX 5090 (`tc1-5090-102`, Intel
+Xeon W-2145, Vast machine 36546), the first box's design on the fixed arm (`_lora_loop_share` counts every path), e4b `0afa032` with
+grouped-nf4-gemm `d3e7788` (#490), packed 4,096-token rows, venv-unsloth, e4b's defaults. Read: [`RESULTS-tc1-padbk2.md`](RESULTS-tc1-padbk2.md).
+
+| arm | one block s/step | buckets s/step | buckets / one block | peak one block → buckets | prediction |
+|---|---|---|---|---|---|
+| matched (fp32 adapters) | 11.306 / 11.338 | 10.112 / 10.118 | **0.893** [0.892, 0.895] | 32.52 → **28.23 GB** | P115 HELD (drop ≥ 3.0); P116 HELD (≤ 1.02) |
+| shipped (bf16 adapters) | 8.742 / 8.748 | 8.166 / 8.154 | **0.933** [0.932, 0.934] | 26.97 → 26.97 GB | P117 HELD (≤ 1.02) |
+
+- **All four HELD.** Held-out at N moves −0.0004 (matched) and +0.0000 (shipped) (P118). The host was quiet: every attempt ran first time,
+  at load1 1.3–1.4.
+- **Engagement as recorded.** Every bucketed arm made 31,758–31,822 bucketed calls and no single-block call, and the reverse on the other
+  side. The per-expert loop took 1.6–2.6 % of a step's calls on both sides, as `auto`'s rule still sizes the single block.
+- **It is faster, not only lighter.** At 4,096 tokens the single block computes and moves about 11× the routed rows; the buckets at most
+  2×. The fp32 arm gains most: its block is twice the bytes. The shipped arm's peak does not move: with bf16 adapters its peak is set
+  elsewhere in the step.
+- **Decision, as registered.** Buckets buy the packed regime with no speed or quality cost there. Before they can be a default, the field
+  recipe's short rows must be shown not to pay for the extra launches. That is the next registration.
+
 ## Amendment 48, first box (2026-10-06): UNTESTED -- the arm's loop share did not count grouped-nf4-gemm's new bucketed calls
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 48. One RTX 5090 (`tc1-5090-101`, AMD Ryzen 9 7950X, Vast

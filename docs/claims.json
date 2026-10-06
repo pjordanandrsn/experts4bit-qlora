@@ -10806,6 +10806,31 @@
         "receipts/experts4bit-qlora/2026-10-06/tc1-5090-100/tc1/"
       ],
       "notes": "Vast invoiced $1.05."
+    },
+    {
+      "id": "e4b.train.pad-buckets.qwen3.5090.2026-10-06",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 48's re-ask (#835), one rented RTX 5090 (tc1-5090-102, Intel Xeon W-2145): grouped-nf4-gemm's bucketed LoRA-delta padding (NF4_QLORA_PAD_BUCKETS=1, grouped-nf4-gemm#490: groups within 2x in rows bucketed, each bucket padded to its own widest) against the single padded block, on packed rows of 4,096 real tokens (micro-batch 1 x accum 4), e4b at its defaults in venv-unsloth (torch 2.12.1+cu130), 40 load-gated steps (every attempt first time). Matched arm (fp32 adapters): 0.893 [0.892, 0.895] of the single block's step (P116 HELD), peak 32.520 -> 28.228 GB (P115 HELD, a drop of 4.292 GB); shipped arm (bf16 adapters): 0.933 [0.932, 0.934] (P117 HELD), peak unchanged at 26.97 GB; held-out within 0.0004 (P118 HELD). The first box (tc1-5090-101) read UNTESTED on the arm's loop-share bug (fixed in #1246). Opt-in until a field-recipe A/B.",
+      "value": 0.893,
+      "unit": "ratio s/step, NF4_QLORA_PAD_BUCKETS=1 over the single padded block, Qwen3-30B-A3B matched arm on packed 4,096-token rows (medians of steps 11..40 over two draws each); cross-draw interval [0.892, 0.895]; shipped 0.933; matched peak -4.292 GB",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-102: instance 54437423, Intel Xeon W-2145, Vast machine 36546); e4b @ 0afa032 + grouped-nf4-gemm @ d3e7788 (0.41.0 + #490) in venv-unsloth, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3padbk (TC1 amendment 48 and its re-ask note): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), shipped and matched arms, pk0 / pk1 two draws each in ABBA order, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the per-expert loop a recorded route; validity, engagement and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-padbk2.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-102/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1-5090-102/tc1/"
+      ],
+      "notes": "Vast invoiced $1.20."
     }
   ]
 }
