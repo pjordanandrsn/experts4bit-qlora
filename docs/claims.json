@@ -10831,6 +10831,31 @@
         "receipts/experts4bit-qlora/2026-10-06/tc1-5090-102/tc1/"
       ],
       "notes": "Vast invoiced $1.20."
+    },
+    {
+      "id": "e4b.train.pad-buckets.auto.default-decision.5090.2026-10-06",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 50 (#835), one rented RTX 5090 (tc1-5090-107, AMD Ryzen Threadripper PRO 3955WX): NF4_QLORA_PAD_BUCKETS=auto (grouped-nf4-gemm#491: bucket a grouped-LoRA delta call only when it carries at least 16,384 routed rows) against 0 at TC1's field recipe, e4b in venv-unsloth (torch 2.12.1+cu130), 60 load-gated steps (every attempt first time). The gate never fired: every auto arm resolved auto with its 16,384-row gate and ran its 49,152 delta calls on the single block, as many as the 0 arms (P123 HELD). Held-out within 0.0022 (P124 HELD); matched peak -0.012 GB (P125 HELD). Speed reported, not scored: matched 3.175 / 3.213 s/step at 0, 3.184 / 3.195 at auto; shipped 2.513 / 2.466 and 2.446 / 2.448. With amendment 48's re-ask HELD (packed rows: 0.893 matched, -4.29 GB; 0.933 shipped), amendment 50's rule licenses auto as grouped-nf4-gemm's default; the flip is a grouped-nf4-gemm PR and release not yet made, and the evidence for the calls it changes is Qwen3-30B-A3B on one RTX 5090.",
+      "value": 0,
+      "unit": "bucketed grouped-LoRA delta calls under NF4_QLORA_PAD_BUCKETS=auto at TC1's field recipe (of 49,152 per arm, on every auto arm)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-107: instance 54473350, AMD Ryzen Threadripper PRO 3955WX, Vast machine 26157); e4b @ 9d3732a + grouped-nf4-gemm @ 706d84f (#491) in venv-unsloth, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3fieldauto (TC1 amendment 50): TC1's Qwen3 tokens and field recipe (seq 2048, micro-batch 2 x accum 4), shipped and matched arms, fa0 / fa1 two draws each in ABBA order, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2; the resolved bucket mode from tc1_arm's lean_ab record; scoring by bench/tc1/tc1_reduce.py (score_fieldauto)",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-fieldauto.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-107/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1-5090-107/tc1/"
+      ],
+      "notes": "Vast invoiced $0.79."
     }
   ]
 }
