@@ -1,4 +1,4 @@
-### `serve_paged` serves models whose first layers are dense (ERNIE-4.5, DeepSeek-V2)
+### `serve_paged` serves models whose first layers are dense (ERNIE-4.5; DeepSeek-V2's dense-first layout too, but its MLA attention is refused, #1233)
 
 ERNIE-4.5-21B-A3B (layer 0 dense, MoE in layers 1–27) failed twice in `build_engine`.
 - **The arena's layer ids.**
