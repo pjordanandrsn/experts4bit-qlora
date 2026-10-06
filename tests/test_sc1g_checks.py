@@ -434,3 +434,35 @@ def test_full_capture_records_masked_mass_and_void_positions_and_keeps_serving(t
     assert np.all(np.isfinite(z["eng_kl"][rest])) and not z["eng_masked_mass"][rest].any()
     want = KLM.kl_full_rows(rows[rest], torch.log_softmax(eng[rest].float(), -1))
     assert np.allclose(z["eng_kl"][rest], want, atol=1e-9) and np.allclose(z["eng_kl_common"][rest], want, atol=1e-9)
+
+
+def test_the_mxfp4_prompt_kernel_check_rederives_from_its_committed_results():
+    """A6's conv2 lead, the $0 A2000 check (bench/sc2/sc1g-a2000/a6mx_*): both verdicts re-derive from the per-shape numbers
+    by the script's own rule -- IN_LINE + AT_FLOOR on the real run, ABOVE_FLOOR on the nibble-order mutation (which the
+    relative verdict alone cannot see) -- floats at 1e-12 relative, verdicts exactly."""
+    import json
+    import math
+
+    def rederive(r):
+        gt, others, ratio, eq = [], [], [], []
+        for lr in r["layers"].values():
+            for pr in lr.values():
+                for mk, x in pr.items():
+                    if not mk.startswith("M"):
+                        continue
+                    if int(mk[1:]) > 256:
+                        gt.append(x["grouped_v1"]["mean_rel"])
+                        ratio.append(x["grouped_v1"]["mean_rel"] / x["floor_bf16_output"]["mean_rel"])
+                        eq.append(x["grouped_v1"]["eq_floor"])
+                    others.append(max(x[p]["mean_rel"] for p in ("grouped_tile", "mxfp4_gemv", "nf4_mtile", "bf16_mm")))
+        return ("OUT_OF_LINE" if max(gt) > 2.0 * max(others) else "IN_LINE", "ABOVE_FLOOR" if max(ratio) > 1.5 else "AT_FLOOR",
+                max(gt), max(others), max(ratio), min(eq))
+
+    for name, want in (("a6mx_a2000_check.json", ("IN_LINE", "AT_FLOOR")), ("a6mx_a2000_check_mutate.json", ("IN_LINE", "ABOVE_FLOOR"))):
+        r = json.load(open(SC2 / "sc1g-a2000" / name))
+        v, fv, g, o, ra, e = rederive(r)
+        assert (v, fv) == want == (r["verdict"], r["floor_verdict"]), (name, v, fv)
+        for got, key in ((g, "grouped_v1_gt256_mean_rel_max"), (o, "other_paths_mean_rel_max"), (ra, "grouped_v1_gt256_floor_ratio_max"),
+                         (e, "grouped_v1_gt256_eq_floor_min")):
+            assert math.isclose(got, r[key], rel_tol=1e-12), (name, key)
+        assert r["device"]["cc"] == [8, 6] and r["mutate"] == name.endswith("_mutate.json")
