@@ -3721,8 +3721,7 @@ def run_arm(a, load_fn, sampler=True):
     lora_path_present = bool(kcalls) and all(c.get("lora_path_loop") is not None for c in kcalls)
     lora_loop_share, lora_path_loop_steps = None, None
     if lora_path_present:
-        tot = [c.get("lora_path_loop", 0) + c.get("lora_path_padded", 0) + c.get("lora_path_grouped_mm", 0) for c in kcalls]
-        lora_loop_share = [round(c.get("lora_path_loop", 0) / t, 4) if t else None for c, t in zip(kcalls, tot)]
+        lora_loop_share = _lora_loop_share(kcalls)
         lora_path_loop_steps = [i + 1 for i, c in enumerate(kcalls) if c.get("lora_path_loop", 0)]
     sync_ab = None                                     # TC1 amendment 10 (#945): which grouping / index-transfer path this e4b arm ran
     if a.framework == "e4b":
@@ -4224,6 +4223,17 @@ class _TinyLM(nn.Module):
         open(os.path.join(d, "adapter_config.json"), "w").write("{}")
 
 
+def _lora_loop_share(kcalls):
+    """[F1] per step, the per-expert loop's share of ALL the grouped-LoRA delta's calls: loop / the sum of every `lora_path_*` counter
+    grouped-nf4-gemm keeps. TC1 amendment 48's box read every bucketed arm at share 1.000 because the sum named only loop, padded and
+    grouped_mm, and grouped-nf4-gemm#490's `padded_bucketed` calls -- 98 % of that arm's -- fell outside it (tc1-5090-101)."""
+    out = []
+    for c in kcalls:
+        t = sum(int(v or 0) for k, v in c.items() if k.startswith("lora_path_"))
+        out.append(round(c.get("lora_path_loop", 0) / t, 4) if t else None)
+    return out
+
+
 def _install_fake_modules():
     nf4 = types.ModuleType("nf4_qlora")
     nf4.LORA_PATH_STATS = {"loop": 0, "padded": 0, "grouped_mm": 0}        # [F1] the P46 per-path counters the real kernel keeps (v0.34.0 line 41)
@@ -4655,6 +4665,9 @@ def _selftest_phase3(a, d, rec, R, M, N, e_fu, hfr):
     a.framework, a.arm, a.tag, a.attn_4bit, a.expect_trainable, a.lora_init, a.adapter_dtype = "e4b", "fused", "fused_attn4_loop", 1, None, "native", "fp32"
     lp = run_arm(a, _selftest_load_e4b, sampler=False)
     assert lp["lora_path_loop_steps"] == list(range(1, a.steps + 1)) and all(v == 1.0 for v in lp["lora_loop_share"]), (lp["lora_path_loop_steps"], lp["lora_loop_share"])
+    # TC1 amendment 48 (tc1-5090-101): a counter the share's sum did not name -- grouped-nf4-gemm#490's padded_bucketed -- read a 1.5 % loop as 100 %
+    _bk = [{"lora_path_loop": 494, "lora_path_padded": 0, "lora_path_grouped_mm": 0, "lora_path_padded_bucketed": 31762}]
+    assert _lora_loop_share(_bk) == [round(494 / (494 + 31762), 4)] and _lora_loop_share([{"lora_path_loop": 0, "lora_path_padded": 0}]) == [None], _lora_loop_share(_bk)
     print(f"FAILING-CASE A: fused arm whose kernel took the per-expert loop: lora_path_loop_steps={lp['lora_path_loop_steps']} lora_loop_share[0]={lp['lora_loop_share'][0]} (the reducer VOIDs it, naming the steps)", flush=True)
     out["A"] = {"loop_steps_ok_arm": e_fu["lora_path_loop_steps"], "loop_steps_bad_arm": lp["lora_path_loop_steps"][:3]}
     a.model = "selftest/tiny"
