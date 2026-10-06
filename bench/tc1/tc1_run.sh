@@ -134,8 +134,8 @@ echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RU
 case "$PACK" in 0|1) ;; *) say "refusing: TC1_PACK must be 0 or 1 (got '$PACK')"; echo "BOX_REFUSED pack=$PACK" >> summary.txt; finish 78;; esac
 for _f in $FAMILIES; do
   case "$_f" in
-    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k|qwen3padbk|qwen3samestack4kd|qwen3padbk28) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
-    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k, qwen3padbk, qwen3samestack4kd, qwen3padbk28)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
+    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k|qwen3padbk|qwen3samestack4kd|qwen3padbk28|qwen3prof28) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
+    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k, qwen3padbk, qwen3samestack4kd, qwen3padbk28, qwen3prof28)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
   esac
 done
 # ---------------------------------------------------------------- staged pieces, box class, forensics
@@ -1373,6 +1373,26 @@ tc1_padbk28_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
   can_run 600 $FAM/e4b/shipped_k0_d2  && TC1_ARM_EXTRA_ENV="$OLD" draw2 $FAM e4b fused_attn4_shipped_k0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_prof28_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 53 (2026-10-06): where the field image's torch 2.8 spends its extra time
+# on packed rows at e4b's defaults. The TC1 profile instrument (3 warm + 3 profiled steps, before the timed window's steps 11..N) on the
+# matched arm in venv-unsloth (torch 2.12) and venv-e4b (torch 2.8), both at their defaults (buckets `auto`), and in venv-e4b with the
+# single block (NF4_QLORA_PAD_BUCKETS=0) beside; two draws each in A B C C B A order. No per-micro-batch timing: its syncs would drain the
+# queue the profile is measuring.
+tc1_prof28_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_m_q212:fused e4b:fused_attn4_m_q28:fused e4b:fused_attn4_m_q28k0:fused e4b:fused_attn4_m_q28k0_d2:fused e4b:fused_attn4_m_q28_d2:fused e4b:fused_attn4_m_q212_d2:fused"
+  say "===== PROFILE (torch 2.12 vs 2.8) family $FAM ($MID @ $REV; e4b's matched arm at its defaults, packed rows, the profile instrument, amendment 53)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local PROF="--profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM"
+  local K0="NF4_QLORA_PAD_BUCKETS=0"
+  can_run 600 $FAM/e4b/m_q212        && E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_q212 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_q28                          && arm   $FAM e4b fused_attn4_m_q28 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_q28k0       && TC1_ARM_EXTRA_ENV="$K0" arm   $FAM e4b fused_attn4_m_q28k0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_q28k0_d2    && TC1_ARM_EXTRA_ENV="$K0" draw2 $FAM e4b fused_attn4_m_q28k0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_q28_d2                       && draw2 $FAM e4b fused_attn4_m_q28 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  can_run 600 $FAM/e4b/m_q212_d2     && E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_q212 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PROF
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_fieldbk_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 49 (2026-10-06): grouped-nf4-gemm's bucketed LoRA-delta padding
 # (NF4_QLORA_PAD_BUCKETS=1, grouped-nf4-gemm#490) off vs on at TC1's FIELD recipe (amendment 48 read it on packed rows) -- the shipped and the
 # matched arm, two draws a side in ABBA order, every arm in venv-unsloth at e4b's defaults: whether the short rows pay for the extra launches.
@@ -1805,6 +1825,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3memc4k) tc1_memc4k_family qwen3memc4k Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 47: the memory census on packed 4,096-token rows
   qwen3padbk) tc1_padbk_family qwen3padbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 48: the LoRA delta's bucketed padding on packed rows
   qwen3padbk28) tc1_padbk28_family qwen3padbk28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 52: amendment 48's bucketing A/B in venv-e4b (torch 2.8)
+  qwen3prof28) tc1_prof28_family qwen3prof28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 53: the matched arm profiled in torch 2.12 and 2.8 at e4b's defaults
   qwen3fieldbk) tc1_fieldbk_family qwen3fieldbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 49: the LoRA delta's bucketed padding at the field recipe
   qwen3fieldauto) tc1_fieldauto_family qwen3fieldauto Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 50: the bucket gate at the field recipe
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)

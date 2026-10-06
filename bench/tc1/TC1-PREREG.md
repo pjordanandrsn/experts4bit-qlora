@@ -2231,3 +2231,72 @@ Engagement: as amendment 48, with `env.torch` 2.8.*.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. About $1.5 with the download; this is in the
 standing no-ask tier.
+
+### Amendment 53 (2026-10-06T17:47Z, after amendment 52's read, before any box): where torch 2.8's extra time goes at e4b's defaults on packed rows (P134–P136)
+
+**Why.** Amendment 51 read e4b at its defaults on packed rows at 0.739 of its torch-2.12 step in the field image's torch 2.8 (P127
+FALSIFIED). Amendment 52 then showed that bucketed padding is not that cost. In torch 2.8 the buckets step 0.983 (matched) and 0.939
+(shipped) of the single block's step. Its GPU traces, reported and not scored, point elsewhere. Over each arm's training window the
+median nvidia-smi utilisation was:
+
+- matched arm: 97 % on the single block, 87 % with buckets;
+- shipped arm: 97 % and 96 %;
+- amendment 48's torch-2.12 arms: 96–98 % with buckets, on both arms and both hosts;
+- amendment 51's host, e4b at its defaults: 97–98 % in torch 2.12, 75–76 % in torch 2.8.
+
+A diagnostic count on an RTX A2000 (sm_86; it counts, it does not time) found:
+
+- the bucketed delta issuing the same kernels under torch 2.8 and torch 2.11: 115 per forward and backward of both projections, against
+  the single block's 66;
+- no added synchronisation and no cudaMalloc / cudaFree;
+- the same counts with fp32 and bf16 adapters.
+
+So the idle time is not an extra launch, sync or allocation that sm_86 shows. This box asks the 5090 where torch 2.8's added time goes.
+
+**The box** (token `qwen3prof28`). One RTX 5090, packed 4,096-token rows, 40 load-gated steps. The matched arm (fp32 adapters, matched
+init) with e4b's defaults otherwise, avoiding machines 145701, 130223 and 55583. Three sides, two draws each, in A B C C B A order:
+
+- `q212`: venv-unsloth (torch 2.12), buckets `auto`;
+- `q28`: venv-e4b (torch 2.8), buckets `auto`;
+- `q28k0`: venv-e4b, `NF4_QLORA_PAD_BUCKETS=0` (the single block).
+
+Every arm carries amendment 12's profile instrument: three warm steps, then steps 3–5 under torch.profiler with CPU and CUDA activity.
+The timed s/step stays the median of steps 11..40, so the profiled steps sit outside it. There is no per-micro-batch timing, since its
+syncs would drain the queue the profile reads.
+
+Engagement (`prof28_why`): the torch the side names. `q212` / `q28` must have `NF4_QLORA_PAD_BUCKETS` unset, resolved `auto`, and every
+padded call bucketed. `q28k0` must have it set to 0, resolved 0, with single-block calls and none bucketed. The chunked LM loss must serve
+the packed rows with its variable unset. The per-expert loop is a recorded route (≤ 5 %). The profile summary is not part of validity: an
+arm without one is VALID, and its P135 / P136 reading is UNTESTED.
+
+**Predictions** (registered before the box):
+
+- **P134:** s/step `q212` / `q28` ≤ **0.92**. The environment ratio at the defaults; amendment 43 read 0.915 without buckets, amendment
+  51 0.739 with them.
+- **P135:** D = wall `q28` − wall `q212`, the profiled per-step wall torch 2.8 adds (medians of two draws). The share of D that is not
+  device time, 1 − (device `q28` − device `q212`) / D, is ≥ **0.5**. D ≤ 0 leaves nothing to attribute (UNTESTED). Device time is the
+  profiler's device self time per step, summed over streams.
+- **P136:** the device busy fraction of `q28` ≤ `q28k0`'s − **0.03**.
+
+Reported, not scored:
+
+- per arm, the CPU self ms per profiled step by op family, and the device ms by family;
+- the family deltas `q28` − `q212` and `q28` − `q28k0`, largest increase first (`prof28_family_deltas`);
+- the nvidia-smi utilisation medians.
+
+**Decision rules.**
+
+- **P135 HELD:** the added time is host-side. The read names the CPU op family whose self time grows most from `q212` to `q28`, and the
+  next registration targets it. If that is the batched matmul's host path (`aten::bmm` and its launches), the candidate is a
+  shape-stable bucket ladder in grouped-nf4-gemm, read on packed rows in both torches. The ladder rounds bucket widths up to a fixed set,
+  so repeated calls see repeated shapes.
+- **P135 FALSIFIED:** the added time is device time. The read names the device family that grows most, and the next registration targets
+  it. Candidates are triton 3.4's code for grouped-nf4-gemm's kernels against triton 3.7's, and the fp32 batched GEMMs of cuBLAS in cu128
+  against cu130.
+- **P134 FALSIFIED:** on this host, torch 2.8 at the defaults is no further behind than amendment 43's ratio without buckets. Amendment
+  51's 0.739 is then host-dependent, and STATUS says so beside it. P135 and P136 are still read.
+- **P136 FALSIFIED:** under the profiler the buckets do not lower torch 2.8's device busy share. Amendment 52's nvidia-smi reading stays
+  an observation, and the read says which instrument disagrees.
+- No default changes on this box; it is a diagnostic. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. Six arms: about $2 with the download.

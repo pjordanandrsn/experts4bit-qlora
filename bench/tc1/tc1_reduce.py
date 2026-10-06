@@ -835,6 +835,26 @@ COMPACT_SPECS[PADBK28_FAM] = ("P132", (3.0, 99.0), (("P130", "matched", "fused_a
                               "P133", ("k0", "k1"))   # amendment 52, one-sided: as amendment 48, in torch 2.8
 PACKED_FAMS = PACKED_FAMS + (PADBK28_FAM,)
 LOOP_ROUTE_SHARE_MAX[PADBK28_FAM] = 0.05
+# TC1 amendment 53: where the field image's torch 2.8 spends its extra time at e4b's defaults on packed rows -- the profile instrument on the
+# matched arm in torch 2.12 (q212, buckets auto) and torch 2.8 (q28, buckets auto; q28k0, NF4_QLORA_PAD_BUCKETS=0), two draws each
+PROF28_FAM = "qwen3prof28"
+FAMS.append(PROF28_FAM)
+NAMES[PROF28_FAM] = "Qwen3-30B-A3B (amendment 53: e4b's matched arm at its defaults on packed rows, profiled -- torch 2.12 and torch 2.8, and torch 2.8 with the single block)"
+N_LAYERS[PROF28_FAM] = 48
+ATTN_CENSUS[PROF28_FAM] = 192
+DENSE_PINS[PROF28_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[PROF28_FAM] = ("e4b", "fused_attn4_m_q212")
+PROF28_SIDES = {"q212": ("2.12", "auto"), "q28": ("2.8", "auto"), "q28k0": ("2.8", "0")}   # side -> (torch prefix, the bucket mode it must resolve)
+EXPECTED[PROF28_FAM] = [("e4b", "fused_attn4_m_q212"), ("e4b", "fused_attn4_m_q28"), ("e4b", "fused_attn4_m_q28k0"),
+                        ("e4b", "fused_attn4_m_q28k0_d2"), ("e4b", "fused_attn4_m_q28_d2"), ("e4b", "fused_attn4_m_q212_d2")]
+MATCHED |= {f"fused_attn4_m_{_side}{_sfx}" for _side in PROF28_SIDES for _sfx in ("", "_d2")}
+for _side in PROF28_SIDES:
+    DRAW2[("e4b", f"fused_attn4_m_{_side}")] = ("e4b", f"fused_attn4_m_{_side}_d2")
+PACKED_FAMS = PACKED_FAMS + (PROF28_FAM,)
+LOOP_ROUTE_SHARE_MAX[PROF28_FAM] = 0.05
+PROF28_ENV_MAX = 0.92          # P134: s/step q212 / q28 at most this (amendment 43 read 0.915 without buckets; amendment 51 0.739 with them)
+PROF28_IDLE_SHARE_MIN = 0.5    # P135: of the profiled per-step wall torch 2.8 adds over torch 2.12, at least this share is NOT device time
+PROF28_BUSY_DROP_MIN = 0.03    # P136: in torch 2.8 the buckets lower the device busy fraction by at least this much against the single block
 # TC1 amendment 50: NF4_QLORA_PAD_BUCKETS=auto (grouped-nf4-gemm#491, a 16,384-routed-row gate) against 0 at TC1's field recipe: structure, not speed
 FIELDAUTO_FAM = "qwen3fieldauto"  # side fa0 (=0) vs fa1 (=auto), shipped and matched arms, venv-unsloth, the field recipe
 FAMS.append(FIELDAUTO_FAM)
@@ -1104,6 +1124,136 @@ def score_fieldauto(F, fam=FIELDAUTO_FAM):
     for t in ("fused_attn4_m", "fused_attn4_shipped"):
         sp.append(f"{t}: " + ", ".join(f"{side} {[((valid(f'{t}_{side}{d}') or {}).get('s_per_step_median_11plus')) for d in ('', '_d2')]}" for side in ("fa0", "fa1")) + " s/step")
     out.append(("speed (reported, not scored)", fam, "—", "; ".join(sp)))
+    return out
+
+
+def prof28_side(tag):
+    """Amendment 53: the side a qwen3prof28 tag names (fused_attn4_m_<side>[_d2]), or '' for a tag outside the family."""
+    t = tag[len("fused_attn4_m_"):] if tag.startswith("fused_attn4_m_") else ""
+    return t[:-3] if t.endswith("_d2") else t
+
+
+def prof28_why(tag, r):
+    """Amendment 53's engagement predicate: the arm ran the torch its side names (q212: 2.12 = venv-unsloth; q28 / q28k0: 2.8 = venv-e4b);
+    grouped-nf4-gemm resolved the bucket mode the side names (q212 / q28: NF4_QLORA_PAD_BUCKETS unset and `auto`, every padded call
+    bucketed; q28k0: set to 0, single-block padded calls and no bucketed call); and the chunked LM loss served the packed rows as e4b's
+    default (E4B_CHUNKED_LM_LOSS unset). The profile summary is not part of validity: an arm without one is VALID and its P135 / P136
+    reading UNTESTED. Empty string = engaged."""
+    r = r or {}
+    side = prof28_side(tag)
+    if side not in PROF28_SIDES:
+        return f"amendment 53 registers no side {side!r} (tag {tag})"
+    tp, mode = PROF28_SIDES[side]
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith(tp):
+        return f"amendment 53 side {side} not engaged (env.torch {tv or 'missing'} is not {tp}*)"
+    la = r.get("lean_ab") or {}
+    calls = la.get("lora_path_calls") or {}
+    if not calls:
+        return "no lean_ab.lora_path_calls on the receipt: which delta body ran cannot be verified"
+    pb, pd = int(calls.get("padded_bucketed") or 0), int(calls.get("padded") or 0)
+    env = la.get("gnf4_pad_buckets_env")
+    bad = []
+    if mode == "auto":
+        bad += [k for k, ok in (("NF4_QLORA_PAD_BUCKETS unset", env in (None, "")), ("resolved auto", la.get("gnf4_pad_buckets_mode") == "auto"),
+                                ("every padded call bucketed", pb > 0 and pd == 0)) if not ok]
+    else:
+        bad += [k for k, ok in (("NF4_QLORA_PAD_BUCKETS=0", str(env) == "0"), ("resolved 0", str(la.get("gnf4_pad_buckets_mode")) == "0"),
+                                ("single-block calls, none bucketed", pd > 0 and pb == 0)) if not ok]
+    c = r.get("chunked_lm_loss") or {}
+    bad += [k for k, ok in (("E4B_CHUNKED_LM_LOSS unset", c.get("env") in (None, "")), ("chunked forwards > 0", int(c.get("chunked_calls") or 0) > 0),
+                            ("chunked runtime_refusals 0", int(c.get("runtime_refusals") or 0) == 0)) if not ok]
+    return "" if not bad else (f"amendment 53 side {side} not engaged ({', '.join(bad)}; pad {calls}, mode {la.get('gnf4_pad_buckets_mode')!r}, "
+                               f"env {env!r}; chunked {c})")
+
+
+def prof28_table(F, fam=PROF28_FAM):
+    """Amendment 53, descriptive: per arm the timed s/step and the profile summary (steps profiled, wall and device ms per profiled step,
+    device busy fraction, device events and CPU ops per step, CPU self ms per step by op family, device ms per step by family)."""
+    R = F.get(fam)
+    if not R:
+        return []
+    out = []
+    for k in EXPECTED[fam]:
+        r = next((x["r"] for x in R["rows"] if (x["fw"], x["tag"]) == k), None) or {}
+        pr = r.get("profile") or {}
+        n = int(pr.get("profiled_steps") or 0)
+        cpu = float(pr.get("cpu_self_ms") or 0.0) / n if n else None
+        dev = float(pr.get("device_ms") or 0.0) / n if n else None
+        out.append({"arm": k[1], "side": prof28_side(k[1]), "verdict": R["verdicts"].get(k, "missing"), "s_per_step": r.get("s_per_step_median_11plus"),
+                    "profiled": bool(n), "wall_ms_per_step": pr.get("wall_ms_per_step"), "device_ms_per_step": None if dev is None else round(dev, 1),
+                    "device_busy_fraction": pr.get("device_busy_fraction"), "device_events_per_step": pr.get("device_events_per_step"),
+                    "cpu_ops_per_step": pr.get("cpu_ops_per_step"),
+                    "cpu_ms_by_family": {fm: round(v * cpu, 1) for fm, v in (pr.get("cpu_self_by_family_fraction") or {}).items()} if cpu is not None else {},
+                    "device_ms_by_family": {fm: round(v * dev, 1) for fm, v in (pr.get("device_by_family_fraction") or {}).items()} if dev is not None else {}})
+    return out
+
+
+def _prof28_side_stats(rows, side):
+    """The two draws of one side: (all VALID and profiled, median wall ms/step, median device ms/step, median busy fraction, the rows)."""
+    rs = [t for t in rows if t["side"] == side]
+    ok = len(rs) == 2 and all(t["verdict"] == "VALID" and t["profiled"] and t["wall_ms_per_step"] is not None for t in rs)
+    if not ok:
+        return False, None, None, None, rs
+    med = lambda key: statistics.median([float(t[key]) for t in rs])
+    return True, med("wall_ms_per_step"), med("device_ms_per_step"), med("device_busy_fraction"), rs
+
+
+def prof28_family_deltas(F, kind="cpu", a="q212", b="q28", fam=PROF28_FAM):
+    """Amendment 53's named family: per op family, the median over two draws of side b's ms per profiled step minus side a's (kind cpu:
+    CPU self ms by family; device: device ms by family), largest increase first. Empty when either side lacks two profiled VALID draws."""
+    rows = prof28_table(F, fam)
+    key = "cpu_ms_by_family" if kind == "cpu" else "device_ms_by_family"
+    sa, sb = _prof28_side_stats(rows, a), _prof28_side_stats(rows, b)
+    if not (sa[0] and sb[0]):
+        return []
+    fams = sorted({fm for t in sa[4] + sb[4] for fm in t[key]})
+    med = lambda rs, fm: statistics.median([float(t[key].get(fm, 0.0)) for t in rs])
+    return sorted(((fm, round(med(sb[4], fm) - med(sa[4], fm), 1)) for fm in fams), key=lambda x: -x[1])
+
+
+def score_prof28(F, fam=PROF28_FAM):
+    """TC1-PREREG amendment 53. P134: s/step q212 / q28 (the median over two VALID, stable draws a side) at most PROF28_ENV_MAX. P135: of the
+    profiled per-step wall torch 2.8 adds (D = wall q28 - wall q212, medians over two profiled VALID draws), the share that is not device
+    time, 1 - (device q28 - device q212) / D, at least PROF28_IDLE_SHARE_MIN; D <= 0 leaves nothing to attribute (UNTESTED). P136: the
+    device busy fraction q28 at most q28k0's - PROF28_BUSY_DROP_MIN. A missing / non-VALID / unprofiled / unstable side UNTESTED."""
+    R = F.get(fam)
+    if not R:
+        return []
+    out = []
+    A, B = R["draws"].get(("e4b", "fused_attn4_m_q212"), {}), R["draws"].get(("e4b", "fused_attn4_m_q28"), {})
+    if not (A.get("usable") and B.get("usable") and A.get("draws") == 2 and B.get("draws") == 2):
+        why = "; ".join(f"{sd} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for sd, d in (("q212", A), ("q28", B)))
+        out.append(("P134", fam, "UNTESTED", f"two stable VALID draws a side are registered -- {why}"))
+    else:
+        ratio_ = A["s"] / B["s"]
+        cross = [a / b for a in A["s_list"] for b in B["s_list"]]
+        out.append(("P134", fam, "HELD" if ratio_ <= PROF28_ENV_MAX else "FALSIFIED",
+                    f"environment ratio q212 / q28 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs <= {PROF28_ENV_MAX}; "
+                    f"s/step q212 {' / '.join(f'{x:.3f}' for x in A['s_list'])}, q28 {' / '.join(f'{x:.3f}' for x in B['s_list'])}"))
+    rows = prof28_table(F, fam)
+    a, b, k0 = (_prof28_side_stats(rows, sd) for sd in ("q212", "q28", "q28k0"))
+    if not (a[0] and b[0]):
+        out.append(("P135", fam, "UNTESTED", "q212 and q28 each need two VALID draws with a profile summary: "
+                    + "; ".join(f"{t['arm']} {t['verdict']} profiled {t['profiled']}" for t in a[4] + b[4])))
+    else:
+        D, dd = b[1] - a[1], b[2] - a[2]
+        if D <= 0:
+            out.append(("P135", fam, "UNTESTED", f"no profiled gap to attribute: wall/step q28 {b[1]:.1f} ms vs q212 {a[1]:.1f} ms"))
+        else:
+            idle = 1.0 - dd / D
+            top = ", ".join(f"{fm} {v:+.1f}" for fm, v in prof28_family_deltas(F, "cpu", fam=fam)[:3])
+            out.append(("P135", fam, "HELD" if idle >= PROF28_IDLE_SHARE_MIN else "FALSIFIED",
+                        f"wall/step q28 {b[1]:.1f} vs q212 {a[1]:.1f} ms (D {D:+.1f}); device/step {b[2]:.1f} vs {a[2]:.1f} ms ({dd:+.1f}); "
+                        f"share not device time {idle:.3f} vs >= {PROF28_IDLE_SHARE_MIN}; largest CPU-self increases (ms/step): {top or 'none'}"))
+    if not (b[0] and k0[0]):
+        out.append(("P136", fam, "UNTESTED", "q28 and q28k0 each need two VALID draws with a profile summary: "
+                    + "; ".join(f"{t['arm']} {t['verdict']} profiled {t['profiled']}" for t in b[4] + k0[4])))
+    else:
+        drop = k0[3] - b[3]
+        out.append(("P136", fam, "HELD" if drop >= PROF28_BUSY_DROP_MIN else "FALSIFIED",
+                    f"device busy fraction q28 {b[3]:.3f} vs q28k0 {k0[3]:.3f} (drop {drop:+.3f} vs >= {PROF28_BUSY_DROP_MIN}); "
+                    f"wall/step {b[1]:.1f} vs {k0[1]:.1f} ms, device/step {b[2]:.1f} vs {k0[2]:.1f} ms"))
     return out
 
 
@@ -1916,6 +2066,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == PADBK28_FAM and fw == "e4b":             # amendment 52: the delta body its tag names, torch 2.8, the chunked loss
         w = pad_buckets_why(r.get("tag") or "", r, sides=("k0", "k1"), torch_prefix="2.8")
+        if w:
+            why.append(w)
+    if fam == PROF28_FAM and fw == "e4b":              # amendment 53: the torch and the bucket mode its side names, the chunked loss
+        w = prof28_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == FIELDAUTO_FAM and fw == "e4b":           # amendment 50: the bucket mode its tag names, the padded path served, torch 2.12
@@ -4722,6 +4876,23 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F, FIELDBK_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PROF28_FAM in F:
+        out += ["\n## Amendment 53: e4b's matched arm at its defaults, profiled -- torch 2.12 vs torch 2.8 (descriptive)",
+                "| arm | VERDICT | s/step (timed, 11..N) | profiled | wall ms/step (profiled) | device ms/step | device busy | device events/step | CPU ops/step |",
+                "|---|---|---|---|---|---|---|---|---|"]
+        for t in prof28_table(F):
+            out.append(f"| {t['arm']} | {t['verdict']} | {f(t['s_per_step'], 3)} | {t['profiled']} | {t['wall_ms_per_step']} | {t['device_ms_per_step']} | "
+                       f"{t['device_busy_fraction']} | {t['device_events_per_step']} | {t['cpu_ops_per_step']} |")
+        for kind in ("cpu", "device"):
+            for a_, b_ in (("q212", "q28"), ("q28k0", "q28")):
+                dl = prof28_family_deltas(F, kind, a_, b_)
+                if dl:
+                    out.append(f"- {kind} ms per profiled step by family, {b_} - {a_} (median of two draws, largest increase first): "
+                               + ", ".join(f"{fm} {v:+.1f}" for fm, v in dl[:8]))
+        out += ["\n## Predictions P134 / P135 / P136 (TC1-PREREG amendment 53: where torch 2.8's extra time goes at e4b's defaults on packed rows; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_prof28(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if PADBK28_FAM in F:
         out += ["\n## Predictions P130 / P131 / P132 / P133 (TC1-PREREG amendment 52: the LoRA delta one padded block vs buckets on packed rows in torch 2.8; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -5265,6 +5436,39 @@ def _padbk_set(match=((11.20, 11.22), (11.05, 11.07)), ship=((10.50, 10.52), (10
                 r["lora_loop_share"], r["lora_path_loop_steps"] = [0.02] * 30, list(range(1, 31))
                 r["fam"] = PADBK_FAM
                 R[("e4b", tag)] = r
+    return R
+
+def _prof28_set(s=None, prof=None, torch=None, calls=None, envs=None, profiled=True):
+    """Amendment 53: e4b's matched arm on packed rows, profiled -- `s` side -> (draw 1, draw 2) s/step; `prof` side -> (wall, device) ms per
+    profiled step; `torch` side -> env.torch; `calls` side -> (padded_bucketed, padded); `envs` side -> (NF4_QLORA_PAD_BUCKETS env, mode)."""
+    s = dict({"q212": (10.00, 10.05), "q28": (12.00, 12.05), "q28k0": (12.20, 12.25)}, **(s or {}))
+    prof = dict({"q212": (10000.0, 9800.0), "q28": (12000.0, 10400.0), "q28k0": (12200.0, 11900.0)}, **(prof or {}))
+    torch = dict({"q212": "2.12.1+cu130", "q28": "2.8.0+cu128", "q28k0": "2.8.0+cu128"}, **(torch or {}))
+    calls = dict({"q212": (31750, 0), "q28": (31750, 0), "q28k0": (0, 31750)}, **(calls or {}))
+    envs = dict({"q212": (None, "auto"), "q28": (None, "auto"), "q28k0": ("0", "0")}, **(envs or {}))
+    R = {}
+    for side in ("q212", "q28", "q28k0"):
+        for i, sfx in enumerate(("", "_d2")):
+            tag = f"fused_attn4_m_{side}{sfx}"
+            r = _receipt("e4b", tag, "fused", steps=30, s=s[side][i], heldout_n=1.8000, matched=True, seq=4096, micro_batch=1, accum=4, offload=False,
+                         tokens={"sha256": "p" * 64, "pack": True}, tokens_per_step=[16384] * 30, tokens_padded_per_step=[0] * 30,
+                         arm_facts={"free_outputs": True})
+            r["env"]["torch"] = torch[side]
+            pb, pd = calls[side]
+            r["lean_ab"] = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                            "lora_path_calls": {"loop": 200, "padded": pd, "grouped_mm": 0, "padded_bucketed": pb},
+                            "gnf4_pad_buckets_env": envs[side][0], "gnf4_pad_buckets_mode": envs[side][1], "gnf4_pad_buckets_min_rows": 16384}
+            r["chunked_lm_loss"] = {"env": None, "e4b_has_chunked_lm_loss": True, "chunked_calls": 160, "stock_calls": 0, "small_calls": 0, "patched": 1,
+                                    "runtime_refusals": 0, "refused": {}}
+            r["lora_loop_share"], r["lora_path_loop_steps"] = [0.02] * 30, list(range(1, 31))
+            w, dv = prof[side]
+            r["profile"] = None if not profiled else {
+                "profiled_steps": 3, "wall_ms": 3 * w, "wall_ms_per_step": w, "device_ms": 3 * dv, "device_busy_fraction": round(dv / w, 4),
+                "device_events_per_step": 20000, "cpu_ops_per_step": 90000, "cpu_self_ms": 3 * 0.6 * w,
+                "cpu_self_by_family_fraction": {"aten::bmm": 0.3 if side == "q28" else 0.2, "cudaLaunchKernel": 0.4, "other": 0.3 if side == "q28" else 0.4},
+                "device_by_family_fraction": {"gemm": 0.5, "triton": 0.5}}
+            r["fam"] = PROF28_FAM
+            R[("e4b", tag)] = r
     return R
 
 def _fieldbk_set(match=((3.50, 3.52), (3.51, 3.53)), ship=((2.90, 2.92), (2.91, 2.93)), peaks=(27.50, 27.40), held_shift=0.0, fb1_calls=(9000, 0),
@@ -7693,6 +7897,30 @@ def selftest():
     RW[("e4b", "fused_attn4_m_k1")]["env"] = dict(RW[("e4b", "fused_attn4_m_k1")]["env"], torch="2.12.1+cu130")
     assert K8(RW)[PADBK28_FAM]["verdicts"][("e4b", "fused_attn4_m_k1")] == "VOID"
     assert "P130" in render(RK8, "x") and "amendment 52" in render(RK8, "x")
+    cases += 1
+    # 106. TC1 amendment 53 (qwen3prof28): the matched arm profiled in torch 2.12 and 2.8 -- VALID, P134-P136 HELD on the default fixture;
+    #      torch 2.8's added wall all device time FALSIFIES P135; a torch-2.12 receipt on a q28 side and a bucketed q28k0 are VOID; an
+    #      unprofiled box leaves P135 / P136 UNTESTED with every arm VALID; equal steps FALSIFY P134
+    Q8 = lambda R: {PROF28_FAM: reduce_family(PROF28_FAM, R, {}, 30)}
+    RQ8 = Q8(_prof28_set())
+    assert all(x["verdict"] == "VALID" for x in RQ8[PROF28_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RQ8[PROF28_FAM]["rows"]]
+    pq8 = lambda R: {p: v for p, _, v, _ in score_prof28(R)}
+    assert pq8(RQ8) == {"P134": "HELD", "P135": "HELD", "P136": "HELD"}, score_prof28(RQ8)
+    assert prof28_family_deltas(RQ8, "cpu")[0][0] == "aten::bmm", prof28_family_deltas(RQ8, "cpu")
+    assert pq8(Q8(_prof28_set(prof={"q28": (12000.0, 11800.0)})))["P135"] == "FALSIFIED"
+    assert pq8(Q8(_prof28_set(prof={"q28": (9900.0, 9700.0)})))["P135"] == "UNTESTED"
+    assert pq8(Q8(_prof28_set(s={"q28": (10.0, 10.05)})))["P134"] == "FALSIFIED"
+    assert pq8(Q8(_prof28_set(prof={"q28k0": (12200.0, 10500.0)})))["P136"] == "FALSIFIED"
+    RW = _prof28_set(torch={"q28": "2.12.1+cu130"})
+    assert Q8(RW)[PROF28_FAM]["verdicts"][("e4b", "fused_attn4_m_q28")] == "VOID"
+    RW = _prof28_set(calls={"q28k0": (31750, 0)})
+    assert Q8(RW)[PROF28_FAM]["verdicts"][("e4b", "fused_attn4_m_q28k0")] == "VOID"
+    RW = _prof28_set(envs={"q28": ("1", "1")})
+    assert Q8(RW)[PROF28_FAM]["verdicts"][("e4b", "fused_attn4_m_q28")] == "VOID"
+    RU = Q8(_prof28_set(profiled=False))
+    assert all(x["verdict"] == "VALID" for x in RU[PROF28_FAM]["rows"])
+    assert pq8(RU) == {"P134": "HELD", "P135": "UNTESTED", "P136": "UNTESTED"}, score_prof28(RU)
+    assert "P135" in render(RQ8, "x") and "amendment 53" in render(RQ8, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
