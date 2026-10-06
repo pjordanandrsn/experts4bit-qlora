@@ -343,10 +343,23 @@ i_arms_a6(){ local SRC
   phase A6C "A6: (c) bf16 activations on the decode (E4B_MXFP4_GEMV=0), per window"
   for SRC in $SC1G_A6_SRCS; do can_run 600 a6c_$SRC && i_e4b_full e4b_a6g0_served_$SRC "$SC1G_E4B_SERVE E4B_MXFP4_GEMV=0" $SRC; done
   gpu_free 60; }
-box_j(){
+# A6's continuation (SC1g-PREREG.md, "A6 continuation"): sc1g-diag-a6-1's deadline dropped every (c) arm, so P3 was not read. The
+# same rules, only the arms P3 needs: (b) and (c) per window, with (b') on conv1 third so a missing repeat cannot make P3 UNREAD
+# again. 9 arms x ~2.1 min + ~24 min setup (8 of it staging box R's rows) ~ 43 min, inside the 1.0 h guard.
+i_arms_a6c(){ local SRC
+  phase A6CONT "A6 continuation: (b) baseline served and (c) E4B_MXFP4_GEMV=0 per window; (b') the conv1 repeat third"
+  i_pin_ok || { SC1G_PIN_BAD=1; line "SC1G_PIN_BAD: the e4b arms are refused"; }
+  can_run 600 a6b_conv1 && i_e4b_full e4b_serve_served_conv1 "$SC1G_E4B_SERVE" conv1
+  can_run 600 a6c_conv1 && i_e4b_full e4b_a6g0_served_conv1 "$SC1G_E4B_SERVE E4B_MXFP4_GEMV=0" conv1
+  can_run 600 a6rep && i_e4b_full e4b_a6rep_served_conv1 "$SC1G_E4B_SERVE" conv1
+  for SRC in conv2 conv3 conv4; do
+    can_run 600 a6b_$SRC && i_e4b_full e4b_serve_served_$SRC "$SC1G_E4B_SERVE" $SRC
+    can_run 600 a6c_$SRC && i_e4b_full e4b_a6g0_served_$SRC "$SC1G_E4B_SERVE E4B_MXFP4_GEMV=0" $SRC; done
+  gpu_free 60; }
+box_j(){   # box J runs A6's continuation (the first A6 box, sc1g-diag-a6-1, ran i_arms_a6)
   phase 0 "fetches (gpt-oss-20b, ultrachat_200k test_sft), the NF4 bake, the windows (no GGUF, no comparators); box R's full rows"
   fetch_gptoss || finish 11; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19; i_ref_full_stage
   quiesce arms
-  i_arms_a6
+  i_arms_a6c
   phase RD "the A6 reading (within the box: (a) and (c) against (b); (b') the determinism guard)"
   "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_a6.json 2>&1 | tail -40 | tee -a summary.txt; }

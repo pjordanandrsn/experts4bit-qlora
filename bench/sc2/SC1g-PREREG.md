@@ -1329,6 +1329,47 @@ KEEP_NF4=1, which on conv2 is the closer of the two.
   2. The conv2 lead is a correctness question about the MXFP4 grouped v1 kernel at more than 256 rows. It is a candidate
      for a $0 kernel check against a dequantise-then-matmul reference before any rented run.
 
+## A6 continuation (2026-10-06): P3, the arms the deadline dropped
+
+Registered before any continuation data. This adds **no new hypothesis**. It runs only the arms A6's first box could not
+reach, so that **P3** is read as A6 registered it. The predictions, bars, noise gate, engagement gates, statistic,
+caveats and consequences are A6's, unchanged; the reducer (`sc1g_reduce.py`'s `a6`) is unchanged.
+
+**Why.** `sc1g-diag-a6-1`'s 1.0 h deadline dropped every (c) arm, so P3 read UNREAD. A6's registered consequence of P1
+PARTIAL sends the remainder to the decode path, with P3 deciding the next registration. So P3 is owed.
+
+**The box: box J, the same instrument.** Box R's registered rows are re-hashed per arm, each arm runs in its own
+process, and the guard is 1.0 h. `box_j` now runs `i_arms_a6c`; the first box's `i_arms_a6` stays in the script for the
+record.
+
+**The arms, in this order:**
+1. conv1: (b) baseline served.
+2. conv1: (c) `E4B_MXFP4_GEMV=0`.
+3. conv1: (b') the repeat.
+4. conv2–conv4: (b), then (c), per window.
+
+That is 9 arms. (b') runs third, so a missing repeat cannot make P3 UNREAD again: A6's noise gate makes P1 and P3
+UNREAD when the repeat is missing.
+
+**Timing, from the first box's real numbers.** Setup took about 24 min, 8 of it staging box R's 4 GB of rows. Nine arms
+at about 2.1 min each is about 19 min, so about 43 min in total, inside the 1.0 h guard.
+
+**What reads.**
+- **P3**, by A6's rule: median(c) / median(b) is HELD if ≥ 0.9 on ≥ 3 of 4 windows, FALSIFIED if ≤ 0.5 on ≥ 3 of 4, and
+  PARTIAL otherwise. It is subject to the (b') ≥ 10% noise gate.
+- **P1 and P2 stand from `sc1g-diag-a6-1`** (PARTIAL and FALSIFIED). The continuation has no (a) arm, so its own P1 and P2
+  lines read UNREAD by construction. **They are not readings.**
+- **Descriptive:** (b) against A5's reading and against the first A6 box: bit-identical, or the max |diff|.
+
+**Consequences: A6's, unchanged.**
+- P3 FALSIFIED: the decode GEMV's int8 activations become the lead suspect, and a kernel-level registration on activation
+  precision follows.
+- P3 HELD: the activations are cleared at the median, and the remaining excess is neither the prompt route nor the
+  decode activations.
+- P3 PARTIAL: recorded, and the next registration is decided on its numbers.
+
+**Cost.** About $0.6, inside the no-ask tier. The lane is at **$9.382**.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).
