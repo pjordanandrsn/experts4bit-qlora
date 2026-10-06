@@ -1,0 +1,44 @@
+name: maintainer-hold
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
+
+# Fails while the PR carries the `hold` label; passes otherwise. `maintainer-hold` is a REQUIRED check on main, and
+# main's protection has enforce_admins on, so a held PR cannot merge by any route -- not auto-merge, not a direct
+# `gh pr merge`, not an admin merge -- until the label comes off (or the protection rule itself is edited).
+#
+# Added 2026-10-06 at Jordan's direction. Removing `ready-to-merge` and disabling auto-merge did not hold a PR: once its
+# label-gated CI had run green on the head, a direct merge still went through. Four PRs were merged that way over open
+# maintainer change requests in one evening (#1225, #1232, #1239, #1240). Every actor here is the same GitHub account,
+# so GitHub's review requirement cannot express "not until reviewed"; a label-driven required check can.
+#
+# How to use it: the maintainer adds `hold` with the change request and removes it when the request is met. The check
+# re-runs on every label change and every push, so the latest run always reflects the current labels.
+
+permissions:
+  contents: read
+
+jobs:
+  maintainer-hold:
+    runs-on: ubuntu-latest
+    steps:
+      - name: self-test -- a check that cannot fail is not a check
+        run: |
+          set -euo pipefail
+          held() { jq -e '[.pull_request.labels[]?.name] | any(.[]; . == "hold")' "$1" > /dev/null; }
+          printf '{"pull_request":{"labels":[{"name":"ready-to-merge"},{"name":"hold"}]}}' > /tmp/held.json
+          printf '{"pull_request":{"labels":[{"name":"ready-to-merge"},{"name":"holding-pattern"}]}}' > /tmp/clear.json
+          held /tmp/held.json || { echo "::error::positive control failed: a PR labelled hold read as not held"; exit 1; }
+          if held /tmp/clear.json; then echo "::error::negative control failed: 'holding-pattern' read as hold"; exit 1; fi
+          echo "controls: hold -> held; holding-pattern -> clear"
+
+      - name: refuse while the PR is held
+        run: |
+          set -euo pipefail
+          labels=$(jq -r '[.pull_request.labels[]?.name] | join(", ")' "$GITHUB_EVENT_PATH")
+          echo "labels: ${labels:-none}"
+          if jq -e '[.pull_request.labels[]?.name] | any(.[]; . == "hold")' "$GITHUB_EVENT_PATH" > /dev/null; then
+            echo "::error::this PR carries the 'hold' label: a maintainer change request is open. It cannot merge until the label is removed."
+            exit 1
+          fi
+          echo "not held"
