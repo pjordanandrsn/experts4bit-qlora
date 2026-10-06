@@ -98,6 +98,23 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 50 (2026-10-06): under `auto` the field recipe never buckets; `auto` becomes grouped-nf4-gemm's default
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 50. One RTX 5090 (`tc1-5090-107`, AMD Ryzen Threadripper
+PRO 3955WX, a 15-CPU quota, Vast machine 26157), TC1's field recipe, e4b `9d3732a` with grouped-nf4-gemm `706d84f` (#491), venv-unsloth,
+e4b's defaults, `NF4_QLORA_PAD_BUCKETS=0` against `auto` (buckets only where a call carries at least 16,384 routed rows). Read:
+[`RESULTS-tc1-fieldauto.md`](RESULTS-tc1-fieldauto.md).
+
+- **P123 HELD: the gate never fired.** Every `auto` arm resolved `auto` with its 16,384-row gate, and ran its 49,152 delta calls on the
+  single block, exactly as many as the `0` arms, with no bucketed call.
+- **P124 HELD.** Held-out at N moved +0.0022 (matched) and +0.0002 (shipped).
+- **P125 HELD.** The matched peak moved −0.012 GB (27.49 / 27.51 → 27.48 / 27.49).
+- **Speed, reported, not scored.** Matched 3.175 / 3.213 s/step at `0` against 3.184 / 3.195 at `auto`; shipped 2.513 / 2.466 against
+  2.446 / 2.448. This host was quiet (load1 2.1–2.3, every attempt first time), and the two sides ran the same ops.
+- **Decision, as registered.** With P123–P125 HELD and amendment 48's re-ask HELD, `auto` becomes grouped-nf4-gemm's default: packed
+  4,096-token rows bucket (0.893 of the step on the matched arm, 4.29 GB lighter; 0.933 shipped), and the field recipe runs the single block.
+  The flip is a grouped-nf4-gemm PR citing amendments 47–50.
+
 ## Amendment 49, re-ask (2026-10-06): UNTESTED again; the census places the field recipe's delta calls at 9,040 routed rows at most
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 49 and its re-ask note. One RTX 5090 (`tc1-5090-106`,
