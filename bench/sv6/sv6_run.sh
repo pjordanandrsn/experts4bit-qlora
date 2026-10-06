@@ -35,7 +35,9 @@ CG=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max); CG_GB=$([ "$CG" = m
 # The driver is a property of the host, so 18, checked before anything is installed.
 MIN_DRIVER_MAJOR=570
 DRV=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')
-[ "${DRV%%.*}" -ge "$MIN_DRIVER_MAJOR" ] 2>/dev/null || { echo "BOX_REFUSED driver ${DRV:-unknown} < $MIN_DRIVER_MAJOR (torch cu128 on a GeForce card)" | tee -a summary.txt; finish 18; }
+# An unreadable driver is not evidence about the host (nvidia-smi missing or failing can be the image), so it is 9, not 18.
+case "${DRV%%.*}" in ''|*[!0-9]*) echo "DRIVER UNREADABLE (${DRV:-empty})" | tee -a summary.txt; finish 9;; esac
+[ "${DRV%%.*}" -ge "$MIN_DRIVER_MAJOR" ] || { echo "BOX_REFUSED driver ${DRV} < $MIN_DRIVER_MAJOR (torch cu128 on a GeForce card)" | tee -a summary.txt; finish 18; }
 
 command -v git >/dev/null 2>&1 || perl -e 'alarm 600; exec @ARGV' sh -c 'apt-get update -qq && apt-get install -y -qq git' > logs/apt_git.log 2>&1 \
   || { tail -3 logs/apt_git.log; echo "GIT INSTALL FAIL" | tee -a summary.txt; finish 9; }
