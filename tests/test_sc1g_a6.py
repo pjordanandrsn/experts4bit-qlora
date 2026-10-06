@@ -17,7 +17,7 @@ def test_box_j_runs_a6_within_the_box_in_priority_order():
     """box_j is A6's flow: fetches, the bake, four windows, box R's rows staged, then the arms -- conv1's (b), (a), (b') first,
     then (b) + (a) on conv2-conv4, then (c) -- and the A6 reading. No comparator, no GGUF, no proof (guard <= 1 h)."""
     assert "J) box_j;; K) box_k;; esac" in RUN and 'J) PROVE_NEEDS="";;' in RUN
-    body = BOX[BOX.index("\nbox_j(){"):]
+    body = BOX[BOX.index("\nbox_j_a6c(){"):]                 # A6's continuation box, kept for the record (box J now runs A7)
     body = body[:body.index("; }\n") + 4]
     assert "install_" not in body and "fetch_gptoss_gguf" not in body
     assert "SC1G_NCONV=4 i_windows || finish 19; i_ref_full_stage" in body and "i_arms_a6c" in body   # the continuation (A6's first box ran i_arms_a6)
@@ -90,7 +90,7 @@ def test_a6_arms_are_refused_without_box_r_rows(tmp_path):
 
 
 def test_box_j_stages_the_rows_runs_the_arms_then_the_a6_reading(tmp_path):
-    calls = _drive(tmp_path, "box_j")
+    calls = _drive(tmp_path, "box_j_a6c")
     stage = calls.index("STAGE")
     arms = [i for i, ln in enumerate(calls) if ln.startswith("ARM ")]
     reduce_ = [i for i, ln in enumerate(calls) if ln.startswith("PY ") and "verdict_sc1g_a6.json" in ln]
@@ -154,7 +154,7 @@ def test_the_a6_reading_rederives_from_its_committed_receipt(tmp_path):
 
 def test_the_a6_continuation_runs_only_p3_s_arms_with_the_repeat_third(tmp_path):
     """A6's continuation (the first box's deadline dropped every (c) arm): 9 arms -- conv1's (b), (c), (b'), then (b) + (c) on
-    conv2-conv4 -- under the same rules; no (a) arm (P1 and P2 stand from sc1g-diag-a6-1); box J now runs it."""
+    conv2-conv4 -- under the same rules; no (a) arm (P1 and P2 stand from sc1g-diag-a6-1); box_j_a6c ran it (sc1g-diag-a6-2)."""
     got = [ln for ln in _drive(tmp_path, "i_arms_a6c") if ln.startswith("ARM ")]
     names = [g.split("|")[0][4:] for g in got]
     want = (["e4b_serve_served_conv1", "e4b_a6g0_served_conv1", "e4b_a6rep_served_conv1"]
@@ -164,6 +164,6 @@ def test_the_a6_continuation_runs_only_p3_s_arms_with_the_repeat_third(tmp_path)
         name, stack, src = g[4:].split("|")
         assert f"SC1G_REF_FULL_FILE={tmp_path}/sc1g_ref_full/ref_full_{src}.npy" in stack and f"SC1G_KL_OUT={tmp_path}/sc1g/kl_{name}.npz" in stack
         assert ("E4B_MXFP4_GEMV=0" in stack) == name.startswith("e4b_a6g0_") and "E4B_INT4_KEEP_NF4=0" not in stack
-    body = BOX[BOX.index("\nbox_j(){"):]
+    body = BOX[BOX.index("\nbox_j_a6c(){"):]
     assert "i_arms_a6c" in body[:body.index("; }\n")] and "i_arms_a6\n" not in body[:body.index("; }\n")]
 

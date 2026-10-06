@@ -1419,6 +1419,161 @@ torch 2.8.0); results in `sc1g-a2000/a6mx_*`.
 - **Next (the maintainer's):** the router-flip explanation. It needs routing data, not more KL, so it is registered as its
   own instrument (A7).
 
+## Amendment A7 (2026-10-06): the router-flip instrument -- do (a)'s worst positions sit where its decode routing left (b)'s?
+
+Registered before any A7 data. **A descriptive instrument, not a graded hypothesis**: it licenses no change to e4b and
+decides only the next registration.
+
+### Why
+
+- **The lead.** In A6's first box, putting the prompt's MoE on MXFP4 (arm (a), `KEEP_NF4=0`) doubled conv2's mean KL,
+  all of it in the first quarter of decode (0.2517 against (b)'s 0.0731), while the later quarters improved.
+- **The kernel is cleared.** The $0 A2000 check (#1260) found `mxfp4_grouped_v1|gt256` at its bf16 floor and bit-equal to
+  the correctly rounded result for ≥ 99.9955 % of outputs. So the difference between (a) and (b) is which weights the
+  prompt reads, not how accurately they are read.
+- **The maintainer's explanation.** A different prompt KV moves the decode hidden states slightly, and wherever gpt-oss's
+  router sits near a tie, its top-4 set flips. A flipped set sends that token through different experts. That is a
+  discrete jump, and it would put large KL on a few positions ("single-seed MoE parity is a lottery").
+- **What the explanation predicts:** conv2's first-quarter excess in (a) sits on the positions whose decode top-k expert
+  set differs from (b)'s. Testing that needs routing data, not more KL.
+
+### The instrument (`sc1g_k8.py`'s `route_ids_capture`, `SC1G_ROUTE_IDS_OUT`)
+
+- **The capture point.** gnf4's `gemv_mxfp4_b32` serves every decode row in both arms (A6's engagement gate requires
+  ≥ steps × 24 `mxfp4_gemv|le256`). It is wrapped, not edited, the same way A1's capture wraps it, and e4b looks it up at
+  call time.
+- **No new sync.** Each call's `eids` (the 4 expert ids, on the device) is copied into a preallocated device buffer. The
+  host never reads it per call. The buffer comes to the host once, at the last scored position, where the served loop has
+  already synchronised.
+- **Position alignment.** A proxy over A5's `log_softmax` proxy records, at each scored row, how many GEMV calls preceded
+  it. One decode forward is 48 calls (24 layers × gate_up, then down). Position t's ids are therefore the 48 calls just
+  before its row, and the scheduler's 16 warm decode steps fall before position 0.
+- **Ints only.** Nothing the kernels compute changes.
+
+**The gates.** An arm's route ids are VOID unless all of these hold:
+- every scored row is preceded by exactly 48 calls since the last one (a replayed graph or a non-GEMV decode row breaks
+  this);
+- gate_up and down carry the same set in every layer;
+- every id was written and lies in [0, 32);
+- no call overflowed the buffer or carried other than 4 ids.
+
+The KL rows keep A5's gates and A6's engagement gates: (a) must run no `nf4_*` route and some `mxfp4_*|gt256`; (b) runs
+the GEMV plus the prompt's kept NF4.
+
+### Box J under A7 (`i_arms_a7`; A6's continuation box kept as `box_j_a6c`)
+
+The same box: e4b only, box R's registered rows re-hashed per arm, each arm its own process, the 1.0 h guard. 9 arms, in
+this order:
+1. conv2 (a) captured.
+2. conv2 (b) captured.
+3. conv2 (b) **uncaptured**: the perturbation control.
+4. conv1, conv3, conv4: (a) captured, then (b) captured. These are descriptive.
+
+The control comes third, so the primary window's read cannot be dropped by the deadline.
+
+**The perturbation control.** The capture must leave the served computation unchanged. (b) captured and uncaptured on
+conv2 must be **bit-identical** per-position KL. Otherwise the reading is **UNREAD**, and the reason records the max |diff|
+so an UNREAD says how far the capture moved the run. e4b's served rows have been bit-identical across hosts and repeats
+(A5, A6), so the bar is exact.
+
+### The statistic and the rule (`sc1g_reduce.py`'s `a7`; constants pinned by the self-test)
+
+**Per position.** F(t) is the number of the 24 layers whose decode top-4 **set** (sorted, not ordered) differs between
+(a) and (b). A position flips when F(t) > 0.
+
+**The top set.** The top ⌈1 % × n⌉ positions by a score: 21 of 2048, with ties going to the earlier position. Every
+score is **this box's own** captured row, never an A6 box's. A6 was bit-identical across hosts, but ranking in-box removes
+the question. The top set is taken three ways:
+- **T1, the maintainer's test:** (a)'s per-position full KL.
+- **T3, the fragility control:** (b)'s own full KL. Near-tie positions might be fragile in *any* arm, so they could be both
+  high-KL and flip-prone without the flips causing (a)'s excess.
+- **T2, descriptive:** the excess, (a)'s KL minus (b)'s.
+
+**Two tests on each top set:**
+- **share:** share_top, the fraction of the top positions that flip, against share_all, with the exact one-sided
+  hypergeometric p: P(X ≥ the observed count), X ~ Hypergeometric(n, the flipped count, 21).
+- **intensity:** mean F over the top positions against mean F over all, with a seeded permutation p: (the count of 20,000
+  random 21-position draws whose mean F ≥ the observed, + 1) / 20,001, seed 0.
+
+**The rule, on conv2 (T1 against T3):**
+- **The share test reads, unless share_all > 0.8.** Above that, the +0.2 bar is out of reach, so the intensity test reads
+  instead. share_all does not depend on the KL, so this switch is not a forking path.
+- **Enriched, in both units, each with its α:**
+  - share test: share_top − share_all ≥ **0.20** AND exact hypergeometric p ≤ **0.01**;
+  - intensity test (saturated only): mean-F ratio ≥ **1.5** AND permutation p ≤ **0.01**.
+- **The effect** that the control compares against is share_top − share_all under the share test, and ratio − 1 under the
+  intensity test.
+- **Outcomes, in order of precedence:**
+  1. **UNREAD:** a gate fails (box R's reference, a KL row, either arm's route ids, or the perturbation control). This
+     holds even if T1 alone would read SUPPORTS.
+  2. **FRAGILE_POSITIONS:** T1 is enriched, but T3's effect is at least half of T1's. It is checked before SUPPORTS. The
+     flips mark positions fragile in both arms, and A7 cannot attribute (a)'s excess to them.
+  3. **SUPPORTS:** T1 is enriched, and T3's effect is less than half of T1's.
+  4. **CONTRADICTS:** T1's effect is ≤ 0. The top positions flip no more than the average.
+  5. **INCONCLUSIVE:** anything else.
+
+The self-test pins each outcome, plus the two precedence cases: both SUPPORTS conditions holding while the control is as
+enriched, and a failed control under a T1 that alone would SUPPORT.
+
+**Power.** 21 positions is a small sample. These are the minimum counts of the 21 that must flip for p ≤ 0.01, computed by
+the reducer's `_hyper_p` at n = 2048:
+
+| share_all | 0.1 | 0.2 | 0.3 | 0.5 | 0.8 |
+|---|---|---|---|---|---|
+| flips needed | 7 | 10 | 12 | 17 | 21 |
+
+A modest real enrichment can read INCONCLUSIVE, and that outcome is a statement about power, not a null. Above 0.8 the
+share test cannot clear its bars at all, which is why the intensity test takes over there. The bars (0.20,
+1.5, 0.01, 0.8) are guesses, flagged as such. They are set before data and are not tuned after it.
+
+**The lag (descriptive, never the reading).** A flip at position u changes the KV that every later position reads, so its
+effect can land after u. The rule above reads the direct effect only (a flip at t against the KL at t). A7 therefore also
+reports the same rule on lagged flips, Fₗ(t) = the flips in [t − 8, t] (`A7_LAG = 8`, registered here), for T1 and T3.
+- A CONTRADICTS on the direct rule with an enriched lagged read is recorded as exactly that. It is not taken to mean the
+  explanation was ruled out.
+- The self-test pins such a case.
+
+**Descriptive, every window:** T1, T2 and T3 in full, and T1 and T3 lagged; per-layer flip rates; mean F by quarter; on Q1, the share of (a)'s
+excess mass (the positive part of (a) − (b)) carried by flipped positions, against the flipped share of Q1's positions;
+and both arms against the first A6 box's uncaptured rows (bit-identical, or the max |diff|).
+
+### What it cannot see
+
+- **Correlation, not cause.** A different prompt KV moves the hidden states everywhere, and both the flips and the KL are
+  downstream of that. SUPPORTS says the excess sits where the routing left (b)'s, not that the flips cause it.
+- **The causal test is a separate registration:** replay (b)'s decode routing into (a). step_decomp has a router replay
+  hook (`--ppl-route replay`).
+- **Flips are measured against (b), not against the reference.** The reference's own routing is not captured; box R's rows
+  carry logits only.
+- **The ids are e4b's local expert indices.** With every expert resident, the global-to-local map is one fixed bijection
+  in both arms, so set comparisons are unaffected.
+- **Decode only.** The prompt's routing differs by construction (the arms differ there), and it is not compared.
+
+### Consequences (registered before data)
+
+- **SUPPORTS:** the next registration is the causal replay: does (a)'s conv2 Q1 excess vanish when (b)'s decode routing is
+  replayed into it?
+- **FRAGILE_POSITIONS:** the excess lives on positions fragile in both arms. Router-flip attribution is set aside, and the
+  next registration is decided on the descriptive numbers.
+- **CONTRADICTS:**
+  - If the lagged read is also not enriched, the router-flip explanation is set aside for conv2, and the prompt-KV path
+    (the attention reading the NF4-versus-MXFP4 prompt's keys and values) becomes the lead.
+  - If the lagged read *is* enriched, the next registration grades the lagged form before router flips are set aside.
+- **INCONCLUSIVE:** recorded. A second seed or window is considered before anything else.
+
+### Cost and order
+
+- **Time depends on the host.** Arms took about 2.2 min each on Vast 152440 (`sc1g-diag-a6-1`). On
+  `sc1g-diag-a6-2`'s host they took 3.2–5.4 min, with the GPU only 4–14 % busy, so that host was host-bound. Setup takes
+  19–24 min.
+  - On a fast host, all 9 arms fit (about 43 min).
+  - On a slow one, `can_run`'s 600 s reserve drops the last arms, conv4 first.
+  - The conv2 primary (arms 1–3) always runs first, so a deadline can cost only descriptive windows, never the reading.
+  - A window that loses one arm of its pair reads UNREAD descriptively.
+  - The capture adds about 100,000 small device copies per arm, under a second.
+- **Cost:** about $0.6, inside the no-ask tier.
+- **Order:** this box launches after A6's continuation (`sc1g-diag-a6-2`) has landed its receipt.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).

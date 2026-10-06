@@ -291,7 +291,7 @@ prove_i(){ local ok=0
 # ~0.1 effect -- then the controls (kvg4, folds-off, PDL=0) and conv2's K1 pair. Every comparison is within this box except K4's
 # repeat of box J.
 i_j(){ local TAG=$1; shift; can_run 600 "$TAG" && i_e4b "$@"; }
-box_j_a3(){   # A3's box J (sc1g-diag-2), kept for the record; box J runs A6 below
+box_j_a3(){   # A3's box J (sc1g-diag-2), kept for the record; box J runs the latest amendment below
   phase 0 "fetches (gpt-oss-20b, ultrachat_200k test_sft), the NF4 bake, the windows (no GGUF, no comparators)"
   fetch_gptoss || finish 11; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19
   quiesce arms
@@ -356,10 +356,29 @@ i_arms_a6c(){ local SRC
     can_run 600 a6b_$SRC && i_e4b_full e4b_serve_served_$SRC "$SC1G_E4B_SERVE" $SRC
     can_run 600 a6c_$SRC && i_e4b_full e4b_a6g0_served_$SRC "$SC1G_E4B_SERVE E4B_MXFP4_GEMV=0" $SRC; done
   gpu_free 60; }
-box_j(){   # box J runs A6's continuation (the first A6 box, sc1g-diag-a6-1, ran i_arms_a6)
+box_j_a6c(){   # A6's continuation box J (sc1g-diag-a6-2), kept for the record; box J runs A7 below
   phase 0 "fetches (gpt-oss-20b, ultrachat_200k test_sft), the NF4 bake, the windows (no GGUF, no comparators); box R's full rows"
   fetch_gptoss || finish 11; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19; i_ref_full_stage
   quiesce arms
   i_arms_a6c
   phase RD "the A6 reading (within the box: (a) and (c) against (b); (b') the determinism guard)"
   "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_a6.json 2>&1 | tail -40 | tee -a summary.txt; }
+# A7 (SC1g-PREREG.md): the router-flip instrument. (a) KEEP_NF4=0 and (b) the baseline, each with SC1G_ROUTE_IDS_OUT (the decode
+# GEMV's expert ids per scored position, sc1g_k8's route_ids_capture), under A5's full-KL instrument; conv2 first, and on conv2
+# (b) also UNcaptured -- the perturbation control (the capture must leave the served rows bit-identical). Then conv1, conv3,
+# conv4, descriptive. 9 arms, each its own process.
+i_arms_a7(){ local SRC
+  phase A7 "A7: decode expert ids per position for (a) KEEP_NF4=0 and (b) baseline, conv2 first with (b) uncaptured as the control"
+  i_pin_ok || { SC1G_PIN_BAD=1; line "SC1G_PIN_BAD: the e4b arms are refused"; }
+  for SRC in conv2 conv1 conv3 conv4; do
+    can_run 600 a7a_$SRC && i_e4b_full e4b_a7mx_served_$SRC "$SC1G_E4B_MXPRE SC1G_ROUTE_IDS_OUT=$W/sc1g/rid_e4b_a7mx_served_$SRC.npz" $SRC
+    can_run 600 a7b_$SRC && i_e4b_full e4b_a7b_served_$SRC "$SC1G_E4B_SERVE SC1G_ROUTE_IDS_OUT=$W/sc1g/rid_e4b_a7b_served_$SRC.npz" $SRC
+    if [ "$SRC" = conv2 ]; then can_run 600 a7ctl && i_e4b_full e4b_serve_served_conv2 "$SC1G_E4B_SERVE" conv2; fi; done
+  gpu_free 60; }
+box_j(){   # box J runs A7 (A6's continuation box, sc1g-diag-a6-2, ran box_j_a6c)
+  phase 0 "fetches (gpt-oss-20b, ultrachat_200k test_sft), the NF4 bake, the windows (no GGUF, no comparators); box R's full rows"
+  fetch_gptoss || finish 11; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19; i_ref_full_stage
+  quiesce arms
+  i_arms_a7
+  phase RD "the A7 reading (within the box: (a)'s and (b)'s decode expert sets per position; the capture's perturbation control)"
+  "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_a7.json 2>&1 | tail -40 | tee -a summary.txt; }
