@@ -177,9 +177,83 @@ def test_box_r_staging_pin_matches_its_sources():
 
 def test_box_r_egress_probe_is_python_and_says_why():
     """sc1g-r-6 read 0.0 MB/s with curl's stderr discarded, so the cause was unknowable. The probe is Python (no curl
-    dependency), logs its status / final host / error to logs/egress.log, and a refusal carries that line."""
+    dependency), logs its status / final host / error to logs/egress.log, and every refusal carries that line."""
     run = (SC2 / "sc1g-r" / "sc1g_r_run.sh").read_text()
-    probe = run[run.index('echo "curl $(command -v curl'):run.index('echo "refused: egress')]
+    probe = run[run.index('echo "curl $(command -v curl'):run.index('echo "refused: egress $MBPS MB/s" > REFUSAL; finish 14; fi')]
     assert "curl -s" not in probe and "urllib.request" in probe and "2>> logs/egress.log" in probe
-    assert '"Range": "bytes=0-52428800"' in probe and "timeout=20" in probe
-    assert 'REFUSED: egress ${MBPS} MB/s < ${MIN_MBPS} (host-limited): $(tail -1 logs/egress.log' in probe
+    assert '"Range": "bytes=0-52428800"' in probe and "SC1G_R_EGRESS_TIMEOUT:-20" in probe and "SC1G_R_EGRESS_CAP_S:-20" in probe
+    assert "bert-base-uncased/resolve/main/model.safetensors" in probe
+
+
+def _egress_segment():
+    run = (SC2 / "sc1g-r" / "sc1g_r_run.sh").read_text()
+    end = 'echo "refused: egress $MBPS MB/s" > REFUSAL; finish 14; fi'
+    return run[run.index('echo "curl $(command -v curl'):run.index(end) + len(end)]
+
+
+@pytest.fixture(scope="module")
+def egress_server():
+    """A local server: /403 refuses, /stall sends 1 MiB then hangs, /fast sends 2 MiB."""
+    import http.server
+    import threading
+    import time
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            if self.path == "/403":
+                self.send_error(403, "Forbidden")
+                return
+            self.send_response(206)
+            self.send_header("Content-Length", str(2 << 20))
+            self.end_headers()
+            self.wfile.write(b"x" * (1 << 20))
+            self.wfile.flush()
+            if self.path == "/stall":
+                time.sleep(4)
+                return
+            self.wfile.write(b"x" * (1 << 20))
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    th = threading.Thread(target=srv.serve_forever, daemon=True)
+    th.start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}"
+    srv.shutdown()
+
+
+def _run_egress(tmp_path, url, min_mbps, timeout=1, cap=20):
+    import subprocess
+    seg = tmp_path / "seg.sh"
+    seg.write_text(_egress_segment())
+    (tmp_path / "logs").mkdir(exist_ok=True)
+    script = ('say(){ echo "SAY $*"; }; finish(){ echo "FINISH $1"; exit $1; }; '
+              f'MIN_MBPS={min_mbps}; SC1G_R_EGRESS_URL={url}; SC1G_R_EGRESS_TIMEOUT={timeout}; SC1G_R_EGRESS_CAP_S={cap}; '
+              '. ./seg.sh; echo PASSED')
+    r = subprocess.run(["bash", "-c", script], cwd=tmp_path, capture_output=True, text=True, timeout=60)
+    log = (tmp_path / "logs" / "egress.log").read_text() if (tmp_path / "logs" / "egress.log").exists() else ""
+    refusal = (tmp_path / "REFUSAL").read_text() if (tmp_path / "REFUSAL").exists() else ""
+    return r.returncode, r.stdout, log, refusal
+
+
+def test_egress_probe_raising_before_any_byte_is_rc9_not_a_slow_host(tmp_path, egress_server):
+    rc, out, log, refusal = _run_egress(tmp_path, egress_server + "/403", 20)
+    assert rc == 9 and "FINISH 9" in out and "HTTPError" in log and "egress probe error" in refusal
+    assert "hf_cdn_mbps=ERROR" in (tmp_path / "forensics.txt").read_text()
+
+
+def test_egress_probe_unreachable_host_is_rc9(tmp_path):
+    rc, out, log, refusal = _run_egress(tmp_path, "http://127.0.0.1:9/x", 20)
+    assert rc == 9 and "URLError" in log and "failed before reading any byte" in out
+
+
+def test_egress_probe_timeout_mid_read_is_measured_slow_rc14(tmp_path, egress_server):
+    rc, out, log, refusal = _run_egress(tmp_path, egress_server + "/stall", 100000, timeout=1)
+    assert rc == 14 and "FINISH 14" in out and "egress probe error after 1048576 bytes" in log
+    assert refusal.startswith("refused: egress ") and "error" not in refusal
+
+
+def test_egress_probe_fast_read_passes(tmp_path, egress_server):
+    rc, out, log, refusal = _run_egress(tmp_path, egress_server + "/fast", 0.001)
+    assert rc == 0 and "PASSED" in out and not refusal and "egress status 206" in log

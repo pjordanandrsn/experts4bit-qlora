@@ -9,4 +9,8 @@
   - It logs the HTTP status, the final CDN host and any error to `logs/egress.log`.
   - It records curl's presence in `forensics.txt`.
   - A refusal line carries the probe's own message.
+  - **Two outcomes, never conflated:**
+    - a probe that raises before reading any byte (HTTP 403/429, TLS, DNS, an import) exits **rc 9** with the reason logged;
+    - **rc 14** means only "measured slow": bytes were read and the rate is under the floor, a timeout mid-read included.
+  - Each path is tested against a local server.
 - **Pin.** R's staging pin is regenerated. The registered rule (`sc1g_ref.py`, `sc1g_kl.py`) is untouched.
