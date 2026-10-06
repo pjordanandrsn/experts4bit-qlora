@@ -1,0 +1,7 @@
+e4b 0.48.0 @f008f6d72a5a58ce742277025af2c2d4af3e0e85
+gnf4 0.41.0 @dc8f94abfd868f149178623f6eb403dc8b892b02
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)

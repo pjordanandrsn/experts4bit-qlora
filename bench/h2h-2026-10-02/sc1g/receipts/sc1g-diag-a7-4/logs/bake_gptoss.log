@@ -1,0 +1,14 @@
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files:  83%|████████▎ | 10/12 [00:00<00:00, 34.82it/s]Fetching 12 files:  92%|█████████▏| 11/12 [00:20<00:00, 34.82it/s]Fetching 12 files: 100%|██████████| 12/12 [04:44<00:00, 31.65s/it]Fetching 12 files: 100%|██████████| 12/12 [04:44<00:00, 23.75s/it]
+[12:00:35]   checkpoint: openai/gpt-oss-20b @ 6cee5e81ee83917806bbde320786a8fb61efebee (requested main, unpinned)
+[12:00:35]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[12:00:35]   NOTE: 'gpt_oss' experts are built BARE (GptOssExperts4bit, no ExpertsLoRA): r/alpha do not apply to the expert stacks. The generic adapter cannot represent this epilogue (biases + clamped GLU; ExpertsLoRA refuses it structurally); expert LoRA for this family is grouped-nf4-gemm's mxfp4_qlora.ExpertsMxfp4LoRA (docs/solutions/mxfp4-moe-training-and-residency.md).
+[12:00:42]   quantized experts on 24/24 MoE layers (32 experts each)
+[12:00:42]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+layers=24 experts=32
+  shard 0/24  0.4 GiB  2s
+  shard 8/24  3.8 GiB  8s
+  shard 16/24  7.1 GiB  14s
+snapshot done 10.01 GiB in 21.1s
+expert-tensor bake: L=24 E=32 (baking 32) row=13996800 stride=14000128 total=10.8 GB workers=8
+bake complete: 768 rows (10.8 GB) in 8s
+BAKE OK

@@ -150,3 +150,32 @@ def test_route_ids_refuses_a_record_whose_positions_are_not_48_calls_apart(tmp_p
     st["save"]()
     r = R.route_ids(str(tmp_path), "x", positions=3)
     assert r["verdict"] == "VOID" and "exactly 48" in r["why"]
+
+
+def test_the_a7_reading_rederives_from_its_committed_receipt(tmp_path):
+    """A7's box J reading (sc1g-diag-a7-4): the reducer at main on the committed sc1g/ reproduces the box's A7 section --
+    verdicts, keys, strings and flags identical, numbers to 1e-12 relative: FRAGILE_POSITIONS on conv2 by the share test
+    (both top sets 21/21 flipped against 0.706), the perturbation control BIT_IDENTICAL, every capture VALID; layer 0's
+    flip rate exactly 0 on every window (no MoE precedes it, so (a) and (b) must agree); and the captured rows
+    bit-identical to the first A6 box's uncaptured ones."""
+    import subprocess
+
+    from test_sc1g_a6 import _same
+    R = _mod("sc1g_reduce")
+    REPO = SC2.parents[1]
+    d = REPO / "bench" / "h2h-2026-10-02" / "sc1g" / "receipts" / "sc1g-diag-a7-4" / "sc1g"
+    out = tmp_path / "rederived.json"
+    r = subprocess.run([sys.executable, str(SC2 / "sc1g_reduce.py"), "--dir", str(d), "--out", str(out)],
+                       capture_output=True, text=True, timeout=900)
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    got, box = json.loads(out.read_text())["a7"], json.loads((d / "verdict_sc1g_a7.json").read_text())["a7"]
+    _same(got, box, "a7")
+    assert got["reading"]["verdict"] == "FRAGILE_POSITIONS" and got["reading"]["test"] == "share"
+    assert got["perturbation_control"] == {"verdict": "BIT_IDENTICAL", "max_abs_diff": 0.0}
+    assert all(x["verdict"] == "VALID" for by in got["route_ids"].values() for x in by.values())
+    w = got["windows"]["conv2"]
+    assert (w["a_top_kl"]["share_top"], w["b_top_kl"]["share_top"]) == (1.0, 1.0)
+    assert all(got["windows"][s]["layer_flip_rate"][0] == 0.0 for s in ("conv1", "conv2", "conv3", "conv4"))
+    prior = R.a7(str(d), prior_dir=str(d.parents[1] / "sc1g-diag-a6-1" / "sc1g"), perm=10)["vs_prior_box"]
+    ran = {k: v for k, v in prior.items() if v is not None}
+    assert len(ran) == 7 and all(v["bit_identical"] for v in ran.values()), prior
