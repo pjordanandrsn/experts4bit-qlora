@@ -2144,3 +2144,44 @@ gate. The read reports both sides' medians.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the download;
 this is in the standing no-ask tier.
+
+### Amendment 51 (2026-10-06T12:29Z, after amendment 50's read, before any box): the packed 4,096-token position on one stack at e4b's defaults (P126–P129)
+
+**Why.** On packed 4,096-token rows the register holds two Qwen3-30B-A3B readings. Amendment 39's: e4b at its then-defaults ran out of
+memory at step 1, an e4b loss. Amendment 43's: a labelled 1.278 with `E4B_CHUNKED_LM_LOSS=1` set by hand. Since then two defaults changed by
+registered rule. The chunked LM loss runs as `auto` (amendment 44, #1203), and on these rows every forward chunks. grouped-nf4-gemm's
+bucketed padding runs as `auto` (amendment 50, grouped-nf4-gemm#492), and on these rows every delta call buckets. Amendment 48 read buckets
+at 0.893 of the single block's step and 4.29 GB lighter. Nothing now needs to be set for e4b to train these rows. This box reads the
+position at e4b's defaults.
+
+**The box** (token `qwen3samestack4kd`). Amendment 43's box with nothing set (no `TC1_E4B_ENV`). One RTX 5090, amendment 39's packed rows
+(`TC1_PACK=1`, seq 4,096, micro-batch 1 × accum 4, `TC1_FREE_OUTPUTS=1`), 40 load-gated steps, TC1 amendment 25's same-stack arms: e4b's
+matched arm in venv-unsloth and in venv-e4b (`_t28`), Unsloth's matched arm, two draws each, e4b's reference skipped, e4b and
+grouped-nf4-gemm at mains that have #1203 and #492, avoiding machines 145701, 130223 and 55583.
+
+Engagement on every e4b arm: both defaults served the rows by themselves. The chunked loss ran with `E4B_CHUNKED_LM_LOSS` unset (chunked
+forwards, no fallback). Bucketed padding ran with `NF4_QLORA_PAD_BUCKETS` unset, grouped-nf4-gemm resolved `auto`, and every padded call
+was bucketed. The per-expert loop is a recorded route up to 5 % of a step's calls (amendment 43).
+
+**Predictions** (registered before the box). The bands were set with amendment 43's 1.278 and 0.915 and amendment 48's 0.893 and 28.23 GB
+in view; the registration says so.
+
+- **P126:** Unsloth/e4b on one stack in **[1.25, 1.80]**.
+- **P127:** e4b's environment ratio (venv-unsloth / venv-e4b) in **[0.84, 0.98]**.
+- **P128:** every e4b arm that ran completed resident (no OOM).
+- **P129:** e4b's matched arm (venv-unsloth) peaks at most **29.5 GB** (the median of its two draws).
+
+P126 and P127 need two stable VALID draws a side, as amendment 25 reads them.
+
+**Decision rules.**
+
+- **P126 read with both pairs stable and P128 HELD, whichever side it favours:** the ratio is recorded as Qwen3-30B-A3B's packed
+  4,096-token position at e4b's defaults (`e4b.train.h2h.unsloth.qwen3.5090.<date>.packed-4k-defaults`). It supersedes amendment 39's
+  out-of-memory row as the default-settings reading. That row stays as the record of the code before #1203 and #492. Amendment 43's labelled
+  row stays as the reading with the chunked loss set by hand and no buckets.
+- **P128 FALSIFIED:** e4b at its defaults does not fit these rows on this host. The read says where, and amendment 39's row stays the
+  default-settings reading.
+- **P129** is a memory reading beside the position; it moves no default.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2 with the download;
+this is in the standing no-ask tier.
