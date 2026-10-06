@@ -356,3 +356,38 @@ def test_the_named_scorer_hooks():
         assert "kl_full_support(" in src and "kl_full_rows(" not in src and "eng_masked_mass=" in src
     drv = (REPO / "bench" / "sc1" / "sc1_drive.sh").read_text()
     assert 'if [ -n "${SC1G_REF_FULL_SRC:-}" ]; then' in drv and '$SSH "mkdir -p $W/sc1g_ref_full"' in drv
+
+
+@pytest.mark.parametrize("free,staged,want_rc,note", [
+    (317, 4, 0, "disk: 317 GB free + 4 GB the lane staged"),   # sc1g-prove-a5-1/-2's healthy host, now admitted
+    (317, None, 13, "refused: disk 317 GB (+0 staged)"),         # the same free space with nothing staged is still refused
+    (320, None, 0, None),                                        # the floor itself, unchanged
+    (300, 4, 13, "refused: disk 300 GB (+4 staged)"),            # staged bytes never rescue a genuinely small disk
+])
+def test_the_disk_floor_counts_only_the_lane_s_own_staged_inputs(tmp_path, free, staged, want_rc, note):
+    """SC1g A5: the launcher orders a fixed 320 GB disk, so the box's floor counts the reference rows the controller staged
+    (sc1g_ref_full/) toward MIN_DISK_GB instead of refusing a healthy host on the lane's account. The block is run as
+    sc1_run.sh has it, with df/du faked on PATH."""
+    import subprocess
+    blk = RUN[RUN.index("FREE_GB=$(df -BG --output=avail $W"):]
+    blk = blk[:blk.index("finish 13; }") + len("finish 13; }")]
+    assert "MIN_DISK_GB" in blk and "STAGED_GB" in blk and blk.count("finish 13") == 1
+    w, fake = tmp_path / "w", tmp_path / "bin"
+    w.mkdir()
+    fake.mkdir()
+    (fake / "df").write_text(f"#!/bin/sh\necho ' Avail'\necho ' {free}G'\n")
+    (fake / "du").write_text(f"#!/bin/sh\nprintf '{staged or 0}G\\t%s\\n' \"$4\"\n")
+    for f in ("df", "du"):
+        (fake / f).chmod(0o755)
+    if staged is not None:
+        (w / "sc1g_ref_full").mkdir()
+    script = (f"set -uo pipefail\nW={w}\nMIN_DISK_GB=320\ncd {w}\n"
+              "say(){ echo \"say: $*\"; }\nfinish(){ echo \"finish $1\"; exit $1; }\n" + blk + "\necho passed\n")
+    r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env={"PATH": f"{fake}:/usr/bin:/bin"})
+    assert r.returncode == want_rc, r.stdout + r.stderr
+    got = ((w / "summary.txt").read_text() if (w / "summary.txt").exists() else "") + ((w / "REFUSAL").read_text() if (w / "REFUSAL").exists() else "")
+    if note:
+        assert note in got, got
+    if want_rc == 0:
+        assert "passed" in r.stdout and not (w / "REFUSAL").exists()
+
