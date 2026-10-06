@@ -2040,3 +2040,45 @@ arm's `lora_loop_share` divided the loop's calls by the sum of loop, padded and 
 calls were not in that sum, so the loop read 1.000 where it served 1.5 % of calls. `tc1_arm.py` now sums every `lora_path_*` counter. The
 re-ask is the same box (token, arms, order, steps, gate, predictions and decision rules unchanged) on the fixed arm, on a host other than
 130223.
+
+### Amendment 49 (2026-10-06T07:21Z, after amendment 48's re-ask read, before any box): grouped-nf4-gemm's bucketed padding at the field recipe (P119–P122)
+
+**Why.** Amendment 48's re-ask (#1249) read `NF4_QLORA_PAD_BUCKETS=1` on packed 4,096-token rows with all four predictions HELD. The matched
+arm stepped 0.893 of the single padded block's time with its peak 4.29 GB lower, and the shipped arm stepped 0.933. Its decision rule left
+one question before a default: whether TC1's field recipe pays for the extra `bmm` launches buckets add (a few per projection), on a step
+that is host-bound at about 1,000–1,400 real tokens. That rule anticipated a size-gated `auto` and its field-recipe A/B. This registration
+asks the simpler question first: whether buckets cost the field recipe anything at all, applied everywhere. If they do not, a gate buys
+nothing, and the default needs none. If they do, the gate is registered next as amendment 48 anticipated.
+
+**The box** (token `qwen3fieldbk`). Amendment 41's box design with buckets in place of the chunked loss. One RTX 5090, TC1's qwen3 tokens and
+field recipe (seq 2,048, micro-batch 2 × accum 4), 60 load-gated steps (`TC1_LOAD_GATE=6.0`, `TC1_LOAD_RETRIES=2`), every arm in
+venv-unsloth at e4b's defaults, grouped-nf4-gemm at a main that has #490, avoiding machine 145701:
+
+- the shipped and the matched arm, each `_fb0` (`NF4_QLORA_PAD_BUCKETS=0`) against `_fb1` (`=1`), two draws a side in ABBA order.
+
+Engagement: grouped-nf4-gemm's per-path counters on each receipt. `_fb1` arms make bucketed calls and no single-block padded call; `_fb0`
+arms the reverse. `env.torch` is 2.12.*. TC1's no-loop rule applies as written: the field recipe never takes the loop.
+
+**Predictions** (registered before the box), one-sided:
+
+- **P119** (matched): `_fb1` / `_fb0` ≤ **1.01**.
+- **P120** (shipped): `_fb1` / `_fb0` ≤ **1.01**.
+- **P121** (matched peak): `_fb1` − `_fb0` ≤ **+0.05 GB**.
+- **P122:** on each arm, |mean held-out at N, `_fb1` − `_fb0`| ≤ **0.005**.
+
+Each needs two stable VALID draws a side, is FALSIFIED on the wrong side of its bound, and is UNTESTED where a side is unstable, not VALID
+or not engaged.
+
+**Decision rules.**
+
+- **P119–P122 HELD, with amendment 48's re-ask HELD:** bucketed padding becomes grouped-nf4-gemm's default (`NF4_QLORA_PAD_BUCKETS` unset
+  means buckets; `0` keeps the single block), in one grouped-nf4-gemm PR citing amendments 47, 48 and 49. e4b picks it up through its
+  grouped-nf4-gemm floor.
+- **P119 or P120 FALSIFIED:** buckets cost the field recipe. They stay opt-in, and a size-gated `auto` (buckets only where the single
+  block would be large) and its field-recipe A/B are registered next, as amendment 48 anticipated.
+- **P121 or P122 FALSIFIED:** they stay opt-in, and the read names the arm.
+- **Any UNTESTED, none FALSIFIED:** they stay opt-in pending a re-ask.
+- No position against another framework is read here.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2.5 with the download;
+this is in the standing no-ask tier.
