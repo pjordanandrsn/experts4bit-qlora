@@ -1,0 +1,13 @@
+{
+ "k8": "ppl",
+ "attn_path": "eager-chunk128-oracle",
+ "steps": 2048,
+ "mean_nll": 6.1550754606723785,
+ "ppl": 471.1024475097656,
+ "prompt_len": 512,
+ "prompt_offset": 0,
+ "ppl_source": "wikitext",
+ "tokens_scored": 2048,
+ "text_sha": "506d7ca8a4920052167eb3e70de444e776d06e2a84cfc5b76d1977d94df9920c",
+ "wall_s": 1.2
+}

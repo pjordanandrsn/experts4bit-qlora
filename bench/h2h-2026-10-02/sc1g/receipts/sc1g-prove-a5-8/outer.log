@@ -1,0 +1,65 @@
+KNOBS box=I e4b=5d79452091d2e1abcb73772d4ff05c239e8db87f gnf4=dc8f94abfd868f149178623f6eb403dc8b892b02 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=1
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.84, GPU-ca0541dc-05ed-7dae-ea2e-9c6872809767, 12.0, 1, 16, 4, 16
+power.limit,clocks.max.sm 575.00 W, 3090 MHz
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 7B13 64-Core Processor
+nproc 256
+cgroup cpu.max 3071999 100000  memory.max 730283900928
+loadavg 7.64 9.35 9.72 2/5856 607
+               total        used        free      shared  buff/cache   available
+Mem:            2003         759         641          10         624        1244
+overlay         320G  3.9G  317G   2% /
+Build cuda_13.0.r13.0/compiler.36424714_0
+PRETTY_NAME="Ubuntu 24.04.4 LTS"
+Python 3.12.3
+disk: 317 GB free + 4 GB the lane staged (sc1g_ref_full/) counted toward the 320 GB floor
+cpu_vendor AuthenticAMD
+ram_gb 2003 (oracle floor 98)
+[2026-10-06T06:20:09Z] sc1: apt: python3-venv / python-is-python3 / git / cmake / curl / build-essential (missing on this image)
+[2026-10-06T06:20:20Z] sc1: install e4b @5d79452091d2e1abcb73772d4ff05c239e8db87f + gnf4 @dc8f94abfd868f149178623f6eb403dc8b892b02 (venv-e4b --system-site-packages; P58 pins transformers 5.16.1 / bitsandbytes 0.50.1)
+ROUTE_DEFAULT E4B_INT4_GROUPED_SMALLM=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_INT4_LEAN_GLUE=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_MXFP4_GROUPED_SMALLM=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_NF4_GROUPED_SMALLM=auto (every e4b arm pins it via ROUTEENV)
+ROUTE_DEFAULT E4B_INT4_PREFILL=auto -> k19, E4B_PAGED_PREFILL_ATTN unset -> flash (box F runs main's defaults)
+ROUTE_SEEN present (e4b#1129): box I's route records can be read
+tripwire OK (e4b): 0.48.0 gnf4 0.41.0 torch 2.8.0+cu128 K19/K23 defaults auto, K25 0, serve_paged + stop_ids present
+e4b 0.48.0 @5d79452091d2e1abcb73772d4ff05c239e8db87f
+gnf4 0.41.0 @dc8f94abfd868f149178623f6eb403dc8b892b02
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[2026-10-06T06:22:58Z] sc1: install vllm (bench/sc1/vllm/install.sh)
+[install-vllm 06:26:35] vllm==0.30.0 ready in /root/sc1/venv-vllm
+[2026-10-06T06:26:35Z] sc1: build llama.cpp @552f18f912a32ea86edf82e2b76431cb7131538d (CUDA 120a-real) + the NLL harness
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+PROVE -- the proving rental: pre-flight passed; installs + tripwires above; the e4b paged engine end to end on Granite
+QUIESCE prove quiesced=yes waited=0s busy_procs=0 load1=17.12 nproc=256 cpu.max=3071999/100000 at=2026-10-06T06:30:17Z
+[2026-10-06T06:30:17Z] sc1: fetch ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89
+[2026-10-06T06:32:22Z] sc1: bake NF4 arena (granite)
+[2026-10-06T06:32:47Z] sc1: smoke smoke_granite_b1 (build_engine B=1 fuse_qkv=0 model=ibm-granite/granite-3.1-3b-a800m-instruct alarm=1200)
+[2026-10-06T06:33:10Z] sc1: smoke smoke_granite_b16 (build_engine B=16 fuse_qkv=0 model=ibm-granite/granite-3.1-3b-a800m-instruct alarm=1200)
+sc1g_reduce self-test OK (37 cases)
+sc1g_kl self-test OK (21 cases)
+[2026-10-06T06:33:45Z] sc1: fetch openai/gpt-oss-20b @ 6cee5e81ee83917806bbde320786a8fb61efebee (no original/, metal/)
+[2026-10-06T06:35:54Z] sc1: bake NF4 arena (gptoss)
+[2026-10-06T06:39:15Z] sc1: SC1g windows (gpt-oss tokenizer, chat template, date 2026-10-05)
+[2026-10-06T06:39:15Z] sc1: fetch HuggingFaceH4/ultrachat_200k/data/test_sft-00000-of-00001-f7dfac4afe5b93f4.parquet @ 8049631c405ae6576f93f445c6b8166f76f5505a
+WINDOW src=wikitext text_sha=506d7ca8a4920052167eb3e70de444e776d06e2a84cfc5b76d1977d94df9920c n_ids=2561 prompt_len=512 steps=2048 chat_date=2026-10-05
+WINDOW src=conv1 text_sha=3753e997a334a19edcce9d01f601f04b6e8dda48df9394aeb4a2872b2858c55d dataset_index=25 conversation_tokens=3019 messages=6 scored_target_roles={"assistant": 0.9668, "markup": 0.0098, "user": 0.0234}
+WINDOW src=conv2 text_sha=9bf650b837c437d031770a133a2823023f542693ed0c07e1c259bf2d70635466 dataset_index=108 conversation_tokens=2712 messages=8 scored_target_roles={"assistant": 0.9009, "markup": 0.0146, "user": 0.0845}
+WINDOW src=conv3 text_sha=997bc7c31f715251d7c3db3af6f6bc474e2cb2c5ec098c79f8c2d73894b7493a dataset_index=111 conversation_tokens=3318 messages=8 scored_target_roles={"assistant": 0.9346, "markup": 0.0146, "user": 0.0508}
+WINDOW src=conv4 text_sha=e8415e7aceac3108b36506c91cdb1f336922ac59b2d359324ae6085fce4406c2 dataset_index=121 conversation_tokens=2949 messages=8 scored_target_roles={"assistant": 0.8931, "markup": 0.0146, "user": 0.0923}
+[2026-10-06T06:39:35Z] sc1: fetch ggml-org/gpt-oss-20b-GGUF/gpt-oss-20b-MXFP4.gguf @ ef9b12f2ff56c69cf32153a02784e7a3c88bf524
+SC1G_MAIN 6cee5e81ee83917806bbde320786a8fb61efebee
+[2026-10-06T06:44:03Z] sc1: arm e4b_serve_served_conv1 (conv1  alarm=2400)
+[2026-10-06T06:46:09Z] sc1: arm nll_vllm_served_conv1 (nll served conv1 alarm=2400)
+[2026-10-06T06:52:17Z] sc1: arm nll_llamacpp_q8_decode_conv1 (nll decode conv1 alarm=2400)
+SC1G_PROVE_A5_SUPPORT e4b_serve_served_conv1 {"positions_masked": 0, "masked_mass_max": 0.0, "masked_mass_mean": 0.0, "n_masked_max": 0.0, "kl_common_mean": 0.015170326284833668, "void_positions": 0}
+SC1G_PROVE_A5_SUPPORT nll_vllm_served_conv1 {"positions_masked": 0, "masked_mass_max": 0.0, "masked_mass_mean": 0.0, "n_masked_max": 0.0, "kl_common_mean": 0.03315503646768125, "void_positions": 0}
+SC1G_PROVE_A5_SUPPORT nll_llamacpp_q8_decode_conv1 {"positions_masked": 0, "masked_mass_max": 0.0, "masked_mass_mean": 0.0, "n_masked_max": 0.0, "kl_common_mean": 0.05522283268726097, "void_positions": 0}
+SC1G_PROVE_A5 OK (box R R_OK; e4b_serve_served_conv1=0.015170326284833668 nll_vllm_served_conv1=0.03315503646768125 nll_llamacpp_q8_decode_conv1=0.05522283268726097)
+PROVED box=I installs=[vllm llamacpp] smokes=[granite_b1 granite_b16] kl_full=[e4b_serve vllm llamacpp_q8] (A5; SGLang UNREAD by registration)
+[2026-10-06T06:53:01Z] sc1: TP_DONE rc=0
