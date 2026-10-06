@@ -1,0 +1,9 @@
+Generating test split:   0%|          | 0/4358 [00:00<?, ? examples/s]Generating test split: 100%|██████████| 4358/4358 [00:00<00:00, 289610.66 examples/s]
+Generating train split:   0%|          | 0/36718 [00:00<?, ? examples/s]Generating train split: 100%|██████████| 36718/36718 [00:00<00:00, 719484.86 examples/s]
+Generating validation split:   0%|          | 0/3760 [00:00<?, ? examples/s]Generating validation split: 100%|██████████| 3760/3760 [00:00<00:00, 456615.41 examples/s]
+K8 chat window: 80-token template prefix, corpus as the assistant reply (suffix='<|channel|>final<|message|>')
+WINDOW src=wikitext text_sha=506d7ca8a4920052167eb3e70de444e776d06e2a84cfc5b76d1977d94df9920c n_ids=2561 prompt_len=512 steps=2048 chat_date=2026-10-05
+WINDOW src=conv1 text_sha=3753e997a334a19edcce9d01f601f04b6e8dda48df9394aeb4a2872b2858c55d dataset_index=25 conversation_tokens=3019 messages=6 scored_target_roles={"assistant": 0.9668, "markup": 0.0098, "user": 0.0234}
+WINDOW src=conv2 text_sha=9bf650b837c437d031770a133a2823023f542693ed0c07e1c259bf2d70635466 dataset_index=108 conversation_tokens=2712 messages=8 scored_target_roles={"assistant": 0.9009, "markup": 0.0146, "user": 0.0845}
+WINDOW src=conv3 text_sha=997bc7c31f715251d7c3db3af6f6bc474e2cb2c5ec098c79f8c2d73894b7493a dataset_index=111 conversation_tokens=3318 messages=8 scored_target_roles={"assistant": 0.9346, "markup": 0.0146, "user": 0.0508}
+WINDOW src=conv4 text_sha=e8415e7aceac3108b36506c91cdb1f336922ac59b2d359324ae6085fce4406c2 dataset_index=121 conversation_tokens=2949 messages=8 scored_target_roles={"assistant": 0.8931, "markup": 0.0146, "user": 0.0923}

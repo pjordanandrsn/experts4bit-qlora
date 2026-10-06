@@ -328,6 +328,28 @@ def test_the_a5_read_rederives_and_the_registered_shas_are_rs():
     assert shas == v["full_artifacts"] == sums == {s: a["sha256"] for s, a in cal["full_artifacts"].items()}
     assert v["rule"] == "A5" and v["verdict"] == "R_OK" and v["gradable_windows"] == ["conv1", "conv2", "conv3", "conv4"]
 
+def test_the_a5_reading_rederives_from_its_committed_receipt(tmp_path):
+    """A5's reading (sc1g-5090-a5-1): the reducer at main, run on the committed sc1g/ directory, reproduces the box's own
+    verdict_sc1g.json A5 section exactly -- K-A REFUTED (conv4 2.5x < 3x), L1 HOLDS (1.85x), L2 HOLDS -- with every KL row
+    VALID and zero masked reference mass."""
+    import json
+    import subprocess
+    import sys
+    d = SC2.parents[1] / "bench" / "h2h-2026-10-02" / "sc1g" / "receipts" / "sc1g-5090-a5-1" / "sc1g"
+    out = tmp_path / "rederived.json"
+    r = subprocess.run([sys.executable, str(SC2 / "sc1g_reduce.py"), "--dir", str(d), "--out", str(out)],
+                       capture_output=True, text=True, timeout=600)
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    got, box = json.loads(out.read_text())["a5"], json.loads((d / "verdict_sc1g.json").read_text())["a5"]
+    assert got == box
+    pred = got["predictions"]
+    assert (pred["K-A"]["verdict"], pred["L1"]["verdict"], pred["L2"]["verdict"]) == ("REFUTED", "HOLDS", "HOLDS")
+    assert got["instrument"] == {"box_r": "R_OK", "rule": "A5", "why": None}
+    for lab in ("e4b_mxfp4", "e4b_nf4", "vllm", "llamacpp", "llamacpp_q8"):
+        for s in ("conv1", "conv2", "conv3", "conv4", "wikitext"):
+            row = got["rows"][lab][s]
+            assert row["verdict"] == "VALID" and row["support"]["positions_masked"] == 0, (lab, s, row.get("why"))
+
 def test_full_capture_reads_full_vocab_kl_and_reproduces_the_nll(tmp_path):
     """A5: the proxy computes KL(p_ref || p_e4b) over every token against R's fp16 full rows, per served step."""
     import json

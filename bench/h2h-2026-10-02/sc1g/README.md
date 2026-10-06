@@ -89,3 +89,29 @@ python bench/sc2/sc1g_ref.py --reverdict bench/h2h-2026-10-02/sc1g/receipts/sc1g
 ```
 
 It reads `R_OK rule=A5 ... matches_recorded=True`. The full rows are re-hashed too, when they sit in `ref/full/` beside it.
+
+
+## Box I (amendment A5): the proof and the reading, K-A REFUTED, L1 HOLDS, L2 HOLDS
+
+Both runs are from `5d794520` (#1248), on Vast RTX 5090 machine 145701, from the adertha controller at `5037a602`
+(adertha#182: each receipt records `environment.prereg_on_main` and `lane_commit_sha`).
+
+| run | receipt (adertha-receipts) | outcome | $ |
+|---|---|---|---|
+| `sc1g-prove-a5-8` | `e0b46a90` | PROVED: e4b served, vLLM served and llama.cpp q8 conv1 rows VALID; zero masked reference mass on all three | 0.955 |
+| `sc1g-5090-a5-1` | `1ac9c0ff` | the reading: K-A REFUTED, L1 HOLDS, L2 HOLDS (`SC1G_A5_*` in `summary.txt`) | 1.557 |
+
+Box I's earlier proof attempts (`-a5-1` to `-a5-7`) and their causes are listed in the PREREG's "A5 box I proof record".
+
+**What is committed** follows the diag runs' layout: `summary.txt`, `versions.txt`, `box.json`, `forensics.txt`, `logs/`
+and `sc1g/`. `sc1g/` holds every arm's receipt, the KL records (`kl_*.npz` with their `.json` meta, and llama.cpp's raw
+`kl_*.bin`), the windows, the route records and the reducer's verdict. The full-vocabulary reference rows are inputs
+registered by sha; they are not here (see box R above).
+
+**Reproduce the reading** (no GPU) from this directory with the reducer at main:
+
+```
+python bench/sc2/sc1g_reduce.py --dir bench/h2h-2026-10-02/sc1g/receipts/sc1g-5090-a5-1/sc1g
+```
+
+It reproduces the box's `verdict_sc1g.json` A5 section exactly.

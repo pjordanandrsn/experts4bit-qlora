@@ -1026,6 +1026,8 @@ pre-launch re-checks and the store probe:
 | `sc1g-prove-a5-4` | `81b7b16e` | the disk floor passed (317 + 4 staged); driver 570 < R580 on Vast 40093 (host evidence) | 0.058 |
 | `sc1g-prove-a5-5` | `584188ca` | REFUSED at $0: an rc-18 receipt cited in the wrong exclusion class | 0 |
 | `sc1g-prove-a5-6` | `24ca184e` | **ran: NOT PROVED (rc 23)**. e4b served and llama.cpp q8 VALID; vLLM VOID on the verification below | 0.598 |
+| `sc1g-prove-a5-7` | none written | REFUSED[97] at $0, before `rent.py`: `pod-launch.sh` read `ADERTHA_REPO` (default `adertha-main`), not the checkout the kit had changed into | 0 |
+| `sc1g-prove-a5-8` | `e0b46a90` | **PROVED**: all three rows VALID, zero masked reference mass on each; from `5d794520` (#1248), Vast 145701 | 0.955 |
 
 **The support numbers, which are what the support rule is decided on.** In `sc1g-prove-a5-6`, both e4b served and
 llama.cpp q8 decode read, on all 2,048 positions:
@@ -1047,6 +1049,95 @@ calls that VOID, although every token is present.
 
 **Next.** The proof re-runs, and must read all three rows VALID. vLLM's masked mass then decides whether it needs the
 common-support rule.
+
+## A5 box I reading (2026-10-06): K-A REFUTED, L1 HOLDS, L2 HOLDS
+
+**The run.** `sc1g-5090-a5-1` (adertha-receipts `1ac9c0ff`) ran on a Vast RTX 5090, machine 145701, the same host as the
+proof. It cost **$1.557**, ran for 90 minutes against its 2.5 h guard, and teardown is proven. It launched from `5d794520`,
+the proof's commit, behind a gate requiring the PROVED proof receipt at that commit.
+- Every KL row is VALID: no void positions, and zero masked reference mass on every row.
+- SGLang is UNREAD by registration.
+- The reading re-derives from the committed receipt: `sc1g_reduce.py --dir` reproduces the box's A5 section exactly (pinned
+  by `test_the_a5_reading_rederives_from_its_committed_receipt`).
+
+**The rows.** Full-vocabulary KL in nats against box R's reference, per scored position, mean over 2,048 positions.
+
+| engine | conv1 | conv2 | conv3 | conv4 | wikitext (control, never graded) |
+|---|---|---|---|---|---|
+| e4b MXFP4 served | 0.0152 | 0.0430 | 0.0060 | 0.0090 | 0.0673 |
+| e4b NF4 served | 0.1645 | 0.2004 | 0.0240 | 0.0226 | 0.1134 |
+| vLLM served | 0.0250 | 0.0085 | 0.0018 (within F) | 0.0028 | 0.0334 |
+| llama.cpp decode, default | 0.0881 | 0.0961 | 0.0082 | 0.0171 | 0.3008 |
+| llama.cpp decode, q8 | 0.0552 | 0.0321 | 0.0057 | 0.0190 | 0.1163 |
+| floor F (box R) | 0.0057 | 0.0070 | 0.0018 | 0.0019 | 0.0218 |
+| R's NF4 fake-quant (full KL) | 0.1080 | 0.1394 | 0.0212 | 0.0227 | 0.0989 |
+
+### The predictions, by the registered rules (`sc1g_reduce.py`'s `a5`)
+
+**K-A: REFUTED.** NF4 is above 3× MXFP4 on three windows but not the fourth, and the prediction requires every counted window:
+
+| window | NF4 / MXFP4 |
+|---|---|
+| conv1 | 10.8× |
+| conv2 | 4.7× |
+| conv3 | 4.0× |
+| conv4 | **2.5×** |
+
+No bound was used, because every MXFP4 row is resolved. The basis was P44's 11.6× on 200 short prompts. On these
+2,560-token chat windows, e4b's served MXFP4 KL is itself 0.006–0.043, which is 3–23× P44's 0.0019 for MXFP4. That
+compresses the ratio.
+
+**L1: HOLDS.** e4b MXFP4 pooled **0.0224** is **1.85×** the best comparator, vLLM at 0.0121, against the bar of 2×.
+- Counted windows: conv1, conv2 and conv4. conv3 is dropped, because vLLM, the best comparator there, is within F.
+- Per window, e4b is the closer engine on conv1 (0.0152 against vLLM's 0.0250). On conv2 it is 5.1× vLLM (0.0430 against
+  0.0085), and on conv4 3.2× (0.0090 against 0.0028).
+
+**L2: HOLDS.** Every native-MXFP4 engine's pooled KL is below R's NF4-requant pooled KL, over the windows where both are resolved:
+
+| engine | pooled KL | NF4 scale | windows |
+|---|---|---|---|
+| e4b MXFP4 | 0.0183 | 0.0728 | conv1–conv4 |
+| vLLM | 0.0121 | 0.0900 | conv1, conv2, conv4 |
+| llama.cpp default | 0.0524 | 0.0728 | conv1–conv4 |
+| llama.cpp q8 | 0.0280 | 0.0728 | conv1–conv4 |
+
+### Descriptive, not graded
+
+**vLLM's served output is not deterministic run to run, even on one host.** On conv1 on Vast 145701, vLLM read:
+
+| run | KL | NLL |
+|---|---|---|
+| the proof `-a5-8` | 0.0332 | 0.8317 |
+| the reading | 0.0250 | 0.8575 |
+| `-a5-6`, another host | n/a | 0.8520 |
+
+Both of these runs relabelled the same 127 of 2,047 rows as prefill-shaped. e4b's and llama.cpp q8's conv1 rows are
+**bit-identical** between the proof and the reading.
+
+L1's margin is 0.0027 on one window, and vLLM's conv1 alone moved by 0.0082 between two runs. **L1 holds on the registered
+draw, but a single vLLM draw cannot carry a sub-0.003 margin.** Any reading of vLLM against e4b at that resolution needs
+repeated draws.
+
+**NLL flattery is confirmed by the KL.** On conv1 and conv2, e4b NF4 reads the lowest NLL of any engine (0.736 and 1.650,
+against the reference's 0.884 and 1.821), and the largest KL (0.164 and 0.200). This is A3's hypothesis, which A4's read
+supported from the reference side; it now has its grading.
+- On conv3 and conv4, e4b NF4 served sits at R's own NF4 fake-quant cost: 0.0240 against 0.0212, and 0.0226 against 0.0227.
+- On conv1 and conv2 it is about 1.5× that cost.
+
+**e4b MXFP4's conv2 departure is real.** Its KL there, 0.043, is 6× its own floor and 5× vLLM's. This is where A4's
+unexplained −0.074 NLL lives. **Open:** it is the one window where e4b's MXFP4 served path is far from the reference while
+vLLM is close.
+
+**llama.cpp's q8 activations** halve the default's KL on conv1 and conv2. They do not do so on conv4.
+
+### Cost
+
+| item | $ |
+|---|---|
+| this reading | 1.557 |
+| box I's proofs (eight attempts) | 1.985 |
+| box R under A5 | 0.826 |
+| **the lane** | **8.850** |
 
 ## Out of scope
 

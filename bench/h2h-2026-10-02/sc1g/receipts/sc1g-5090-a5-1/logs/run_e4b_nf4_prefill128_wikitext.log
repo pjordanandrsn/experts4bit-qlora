@@ -1,0 +1,12 @@
+SC1g arm=e4b_nf4_prefill128_wikitext box=I at=2026-10-06T08:38:56Z nproc=256 cpu.max=3071999/100000 load=18.96/27.43/29.20
+ENV: E4B_INT4_GROUPED_SMALLM=auto E4B_INT4_LEAN_GLUE=auto E4B_NF4_GROUPED_SMALLM=0 E4B_MXFP4_GROUPED_SMALLM=auto E4B_FUSE_T1_GLUE=1 E4B_FUSE_T1_GLUE_R2=1 E4B_FUSE_ROUTER_EPI=1 E4B_SERVE_EXP_INT4=0 E4B_SERVE_ATTN_INT4_CALIB=0 GNF4_TRITON_PREBIND=1
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Fetching 12 files: 100%|██████████| 12/12 [00:00<00:00, 1580.82it/s]
+[08:39:04]   checkpoint: openai/gpt-oss-20b @ 6cee5e81ee83917806bbde320786a8fb61efebee (requested main, unpinned)
+[08:39:04]   fusing + quantizing experts (up to 24x32) to nf4 (streaming)...
+[08:39:04]   quantized experts on 24/24 MoE layers (32 experts each)
+[08:39:04]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[08:39:06]   experts deferred to the arena: 24 module(s), 120 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[08:39:07]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[08:39:17]   hybrid tier active on 24 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+K8 window from file k8_window_wikitext.json sha=506d7ca8a492 source=wikitext
+K8_PPL steps=2048 nll=6.15508 ppl=471.10245 compute=eager-chunk128-oracle sha=506d7ca8a492 out=/root/sc1/sc1g/e4b_nf4_prefill128_wikitext.json

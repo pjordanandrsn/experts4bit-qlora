@@ -1,0 +1,84 @@
+KNOBS box=I e4b=5d79452091d2e1abcb73772d4ff05c239e8db87f gnf4=dc8f94abfd868f149178623f6eb403dc8b892b02 model=Qwen/Qwen3-30B-A3B rev=ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gptq=9b534e4318b7ebc3c961a839f13eb18b1833f441 gpu_class=5090 min_disk_gb=320 min_driver=580 cpu_vendor=AuthenticAMD calib_nseq=128 quiesce_s=900 prove=0
+disk: 317 GB free + 4 GB the lane staged (sc1g_ref_full/) counted toward the 320 GB floor
+e4b 0.48.0 @5d79452091d2e1abcb73772d4ff05c239e8db87f
+gnf4 0.41.0 @dc8f94abfd868f149178623f6eb403dc8b892b02
+torch(e4b) 2.8.0+cu128 cuda 12.8
+triton(e4b) 3.4.0
+transformers 5.16.1
+bitsandbytes 0.50.1
+cc (12, 0)
+[install-vllm 07:16:03] vllm==0.30.0 ready in /root/sc1/venv-vllm
+llamacpp version: 0.5.0-dev (build 1, commit 552f18f)
+PHASE 0 fetches (gpt-oss-20b, its published MXFP4 GGUF, ultrachat_200k test_sft), the NF4 bake, the windows (A4: four conversations) at=2026-10-06T07:19:44Z nproc=256 cpu.max=3071999/100000 load=27.56/29.30/23.77
+FETCH gptoss openai/gpt-oss-20b@6cee5e81ee83917806bbde320786a8fb61efebee /root/.cache/huggingface/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee
+FETCH gguf gpt-oss-20b-MXFP4.gguf 27cd6c432c7672cb
+BAKE gptoss BAKE OK
+FETCH ultrachat HuggingFaceH4/ultrachat_200k@8049631c405ae6576f93f445c6b8166f76f5505a /root/.cache/huggingface/hub/datasets--HuggingFaceH4--ultrachat_200k/snapshots/8049631c405ae6576f93f445c6b8166f76f5505a/data/test_sft-00000-of-00001-f7dfac4afe5b93f4.parquet
+WINDOW src=wikitext text_sha=506d7ca8a4920052167eb3e70de444e776d06e2a84cfc5b76d1977d94df9920c n_ids=2561 prompt_len=512 steps=2048 chat_date=2026-10-05
+WINDOW src=conv1 text_sha=3753e997a334a19edcce9d01f601f04b6e8dda48df9394aeb4a2872b2858c55d dataset_index=25 conversation_tokens=3019 messages=6 scored_target_roles={"assistant": 0.9668, "markup": 0.0098, "user": 0.0234}
+WINDOW src=conv2 text_sha=9bf650b837c437d031770a133a2823023f542693ed0c07e1c259bf2d70635466 dataset_index=108 conversation_tokens=2712 messages=8 scored_target_roles={"assistant": 0.9009, "markup": 0.0146, "user": 0.0845}
+WINDOW src=conv3 text_sha=997bc7c31f715251d7c3db3af6f6bc474e2cb2c5ec098c79f8c2d73894b7493a dataset_index=111 conversation_tokens=3318 messages=8 scored_target_roles={"assistant": 0.9346, "markup": 0.0146, "user": 0.0508}
+WINDOW src=conv4 text_sha=e8415e7aceac3108b36506c91cdb1f336922ac59b2d359324ae6085fce4406c2 dataset_index=121 conversation_tokens=2949 messages=8 scored_target_roles={"assistant": 0.8931, "markup": 0.0146, "user": 0.0923}
+SC1G_REF_FULL staged 5 full-row files; R's receipt 1
+QUIESCE arms quiesced=yes waited=0s busy_procs=0 load1=10.57 nproc=256 cpu.max=3071999/100000 at=2026-10-06T07:42:54Z
+PHASE A5E4B A5: e4b served, full-vocabulary KL -- MXFP4 (GEMV) then NF4, conv1-conv4 then the control at=2026-10-06T07:42:54Z nproc=256 cpu.max=3071999/100000 load=10.57/14.80/19.91
+SC1G_MAIN 6cee5e81ee83917806bbde320786a8fb61efebee
+e4b_serve_served_conv1 src=conv1 rc=0 K8_PPL steps=2048 nll=0.90497 ppl=2.47186 compute=f32 sha=3753e997a334 out=/root/sc1/sc1g/e4b_serve_served_conv1.json
+e4b_nf4_served_conv1 src=conv1 rc=0 K8_PPL steps=2048 nll=0.73620 ppl=2.08799 compute=f32 sha=3753e997a334 out=/root/sc1/sc1g/e4b_nf4_served_conv1.json
+e4b_serve_served_conv2 src=conv2 rc=0 K8_PPL steps=2048 nll=1.74705 ppl=5.73767 compute=f32 sha=9bf650b837c4 out=/root/sc1/sc1g/e4b_serve_served_conv2.json
+e4b_nf4_served_conv2 src=conv2 rc=0 K8_PPL steps=2048 nll=1.64969 ppl=5.20538 compute=f32 sha=9bf650b837c4 out=/root/sc1/sc1g/e4b_nf4_served_conv2.json
+e4b_serve_served_conv3 src=conv3 rc=0 K8_PPL steps=2048 nll=0.91333 ppl=2.49261 compute=f32 sha=997bc7c31f71 out=/root/sc1/sc1g/e4b_serve_served_conv3.json
+e4b_nf4_served_conv3 src=conv3 rc=0 K8_PPL steps=2048 nll=0.94626 ppl=2.57606 compute=f32 sha=997bc7c31f71 out=/root/sc1/sc1g/e4b_nf4_served_conv3.json
+e4b_serve_served_conv4 src=conv4 rc=0 K8_PPL steps=2048 nll=1.58755 ppl=4.89173 compute=f32 sha=e8415e7aceac out=/root/sc1/sc1g/e4b_serve_served_conv4.json
+e4b_nf4_served_conv4 src=conv4 rc=0 K8_PPL steps=2048 nll=1.58376 ppl=4.87324 compute=f32 sha=e8415e7aceac out=/root/sc1/sc1g/e4b_nf4_served_conv4.json
+e4b_serve_served_wikitext src=wikitext rc=0 K8_PPL steps=2048 nll=6.67426 ppl=791.75990 compute=f32 sha=506d7ca8a492 out=/root/sc1/sc1g/e4b_serve_served_wikitext.json
+e4b_nf4_served_wikitext src=wikitext rc=0 K8_PPL steps=2048 nll=6.43737 ppl=624.76259 compute=f32 sha=506d7ca8a492 out=/root/sc1/sc1g/e4b_nf4_served_wikitext.json
+PHASE A5VLLM A5: vLLM served (Marlin W4A16, TRITON_ATTN), logprobs=-1 with LLM(max_logprobs=-1), verified full on request 0 at=2026-10-06T08:02:58Z nproc=256 cpu.max=3071999/100000 load=15.30/22.53/23.49
+nll_vllm_served_conv1 mode=served src=conv1 rc=0 SC1VLLMNLL {"mode": "served", "mode_label": "prefill-shaped (no cache hit) on 127/2047 rows", "mean_nll": 0.8575548835343492, "ppl": 2.357389549018364, "steps": 2048, "tokens_scored": 2048, "top1_agre
+nll_vllm_served_conv2 mode=served src=conv2 rc=0 SC1VLLMNLL {"mode": "served", "mode_label": "prefill-shaped (no cache hit) on 127/2047 rows", "mean_nll": 1.8122159936387865, "ppl": 6.124003159025485, "steps": 2048, "tokens_scored": 2048, "top1_agre
+nll_vllm_served_conv3 mode=served src=conv3 rc=0 SC1VLLMNLL {"mode": "served", "mode_label": "prefill-shaped (no cache hit) on 127/2047 rows", "mean_nll": 0.8911631507816442, "ppl": 2.437963722153525, "steps": 2048, "tokens_scored": 2048, "top1_agre
+nll_vllm_served_conv4 mode=served src=conv4 rc=0 SC1VLLMNLL {"mode": "served", "mode_label": "prefill-shaped (no cache hit) on 127/2047 rows", "mean_nll": 1.5882424413216976, "ppl": 4.895137871277087, "steps": 2048, "tokens_scored": 2048, "top1_agre
+nll_vllm_served_wikitext mode=served src=wikitext rc=0 SC1VLLMNLL {"mode": "served", "mode_label": "prefill-shaped (no cache hit) on 127/2047 rows", "mean_nll": 6.317227011290129, "ppl": 554.0345288727231, "steps": 2048, "tokens_scored": 2048, "top1_agree
+PHASE A5LL A5: llama.cpp decode (the published GGUF; default MMQ, then MMQ_PREC=q8), the harness's --ref-full at=2026-10-06T08:26:30Z nproc=256 cpu.max=3071999/100000 load=29.03/30.86/30.84
+nll_llamacpp_decode_conv1 mode=decode src=conv1 rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=1.093474 ppl=2.98462 top1=0.7881 sha=3753e997a334 tok_s=82.80 out=/root/sc1/sc1g/nll_llamacpp_decode_conv1.json
+nll_llamacpp_decode_conv2 mode=decode src=conv2 rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=1.994374 ppl=7.34761 top1=0.5811 sha=9bf650b837c4 tok_s=82.12 out=/root/sc1/sc1g/nll_llamacpp_decode_conv2.json
+nll_llamacpp_decode_conv3 mode=decode src=conv3 rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=0.910300 ppl=2.48507 top1=0.7812 sha=997bc7c31f71 tok_s=81.62 out=/root/sc1/sc1g/nll_llamacpp_decode_conv3.json
+nll_llamacpp_decode_conv4 mode=decode src=conv4 rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=1.608939 ppl=4.99751 top1=0.6001 sha=e8415e7aceac tok_s=78.90 out=/root/sc1/sc1g/nll_llamacpp_decode_conv4.json
+nll_llamacpp_decode_wikitext mode=decode src=wikitext rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=8.005120 ppl=2996.25847 top1=0.0269 sha=506d7ca8a492 tok_s=82.17 out=/root/sc1/sc1g/nll_llamacpp_decode_wikitext.json
+nll_llamacpp_q8_decode_conv1 mode=decode src=conv1 rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=0.932926 ppl=2.54194 top1=0.8013 sha=3753e997a334 tok_s=84.22 out=/root/sc1/sc1g/nll_llamacpp_q8_decode_conv1.json
+nll_llamacpp_q8_decode_conv2 mode=decode src=conv2 rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=1.876771 ppl=6.53238 top1=0.5962 sha=9bf650b837c4 tok_s=80.21 out=/root/sc1/sc1g/nll_llamacpp_q8_decode_conv2.json
+nll_llamacpp_q8_decode_conv3 mode=decode src=conv3 rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=0.898208 ppl=2.45520 top1=0.7822 sha=997bc7c31f71 tok_s=81.82 out=/root/sc1/sc1g/nll_llamacpp_q8_decode_conv3.json
+nll_llamacpp_q8_decode_conv4 mode=decode src=conv4 rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=1.553476 ppl=4.72788 top1=0.6050 sha=e8415e7aceac tok_s=85.86 out=/root/sc1/sc1g/nll_llamacpp_q8_decode_conv4.json
+nll_llamacpp_q8_decode_wikitext mode=decode src=wikitext rc=0 SC1_LLAMACPP_NLL mode=decode steps=2048 prompt_len=512 nll=7.089655 ppl=1199.49337 top1=0.0527 sha=506d7ca8a492 tok_s=83.51 out=/root/sc1/sc1g/nll_llamacpp_q8_decode_wikitext.json
+PHASE A5DESC A5: descriptive prefill-shaped NLL rows (no KL; the deadline drops these first) at=2026-10-06T08:34:50Z nproc=256 cpu.max=3071999/100000 load=32.38/30.02/29.98
+e4b_serve_prefill128_conv1 src=conv1 rc=0 K8_PPL steps=2048 nll=0.73058 ppl=2.07629 compute=eager-chunk128-oracle sha=3753e997a334 out=/root/sc1/sc1g/e4b_serve_prefill128_conv1.json
+e4b_nf4_prefill128_conv1 src=conv1 rc=0 K8_PPL steps=2048 nll=0.73058 ppl=2.07629 compute=eager-chunk128-oracle sha=3753e997a334 out=/root/sc1/sc1g/e4b_nf4_prefill128_conv1.json
+e4b_serve_prefill128_conv2 src=conv2 rc=0 K8_PPL steps=2048 nll=1.69667 ppl=5.45575 compute=eager-chunk128-oracle sha=9bf650b837c4 out=/root/sc1/sc1g/e4b_serve_prefill128_conv2.json
+e4b_nf4_prefill128_conv2 src=conv2 rc=0 K8_PPL steps=2048 nll=1.69667 ppl=5.45575 compute=eager-chunk128-oracle sha=9bf650b837c4 out=/root/sc1/sc1g/e4b_nf4_prefill128_conv2.json
+e4b_serve_prefill128_conv3 src=conv3 rc=0 K8_PPL steps=2048 nll=0.93146 ppl=2.53821 compute=eager-chunk128-oracle sha=997bc7c31f71 out=/root/sc1/sc1g/e4b_serve_prefill128_conv3.json
+e4b_nf4_prefill128_conv3 src=conv3 rc=0 K8_PPL steps=2048 nll=0.93146 ppl=2.53821 compute=eager-chunk128-oracle sha=997bc7c31f71 out=/root/sc1/sc1g/e4b_nf4_prefill128_conv3.json
+e4b_serve_prefill128_conv4 src=conv4 rc=0 K8_PPL steps=2048 nll=1.59853 ppl=4.94577 compute=eager-chunk128-oracle sha=e8415e7aceac out=/root/sc1/sc1g/e4b_serve_prefill128_conv4.json
+e4b_nf4_prefill128_conv4 src=conv4 rc=0 K8_PPL steps=2048 nll=1.59853 ppl=4.94577 compute=eager-chunk128-oracle sha=e8415e7aceac out=/root/sc1/sc1g/e4b_nf4_prefill128_conv4.json
+e4b_serve_prefill128_wikitext src=wikitext rc=0 K8_PPL steps=2048 nll=6.15508 ppl=471.10245 compute=eager-chunk128-oracle sha=506d7ca8a492 out=/root/sc1/sc1g/e4b_serve_prefill128_wikitext.json
+e4b_nf4_prefill128_wikitext src=wikitext rc=0 K8_PPL steps=2048 nll=6.15508 ppl=471.10245 compute=eager-chunk128-oracle sha=506d7ca8a492 out=/root/sc1/sc1g/e4b_nf4_prefill128_wikitext.json
+PHASE RD the reading at=2026-10-06T08:39:22Z nproc=256 cpu.max=3071999/100000 load=32.74/30.01/30.00
+SC1G_G1 UNREAD {"delta": {"conv1": 0.047414, "conv2": -0.065163}, "floor": null}
+SC1G_G2 REFUTED {"prefill_minus_served": {"conv1": -0.174388, "conv2": -0.050383}}
+SC1G_G3 UNREAD {"delta": {"conv1": null, "conv2": null}, "floor": null}
+SC1G_G4 UNREAD {"matched_arm_disagreement": {"prefill": {"conv1": null, "conv2": null}, "served": {"conv1": null, "conv2": null}}, "floor": null}
+SC1G_G5 REFUTED {}
+SC1G_G6 UNREAD {"why": "no kernel check receipt"}
+SC1G_FLOOR {"per_window": {"conv1": null, "conv2": null}, "F": null}
+SC1G_DIAG {"conv1": {"pdl0_minus_served": null, "nofold_minus_served": null, "mxfp4": {"served_minus_prefill": 0.174388, "served_minus_chunk1": null, "chunk1_minus_prefill": null}, "nf4": {"served_minus_prefill": 0.005622, "served_minus_chunk1": null, "chunk1_minus_prefill": null}, "share_of_served_gap_closed_by_chunk1": {"mxfp4": null, "nf4": null}}, "conv2": {"pdl0_minus_served": null, "nofold_minus_served": null, "mxfp4": {"served_minus_prefill": 0.050383, "served_minus_chunk1": null, "chunk1_minus_prefill": null}, "nf4": {"served_minus_prefill": -0.046978, "served_minus_chunk1": null, "chunk1_minus_
+SC1G_A3 conv1 {"K1": {"verdict": "UNREAD"}, "K2": {"verdict": "UNREAD"}, "K3": {"verdict": "UNREAD"}, "K4": {"verdict": "UNREAD"}, "K5": {"verdict": "HOLDS", "mxfp4_minus_nf4_served": 0.168766}}
+SC1G_A3 conv2_replication {"K1": {"verdict": "UNREAD"}, "K2": {"verdict": "UNREAD"}, "K3": {"verdict": "UNREAD"}, "K5": {"verdict": "REFUTED", "mxfp4_minus_nf4_served": 0.097361}}
+SC1G_A3 across_windows {"windows_read": ["conv1", "conv2", "conv3", "conv4"], "per_window": {"conv1": {"mxfp4_minus_nf4_served": 0.168766, "v1_minus_nf4_served": null}, "conv2": {"mxfp4_minus_nf4_served": 0.097361, "v1_minus_nf4_served": null}, "conv3": {"mxfp4_minus_nf4_served": -0.032932, "v1_minus_nf4_served": null}, "conv4": {"mxfp4_minus_nf4_served": 0.003788, "v1_minus_nf4_served": null}}, "K5_every_window": {"verdict": "REFUTED", "min_gap": -0.032932, "mean_gap": 0.059246}, "K2_pooled": {"verdict": "UNREAD", "why": "0 windows < 3"}}
+SC1G_A5_INSTRUMENT {"box_r": "R_OK", "rule": "A5", "why": null} gradable=['conv1', 'conv2', 'conv3', 'conv4']
+SC1G_A5_K-A REFUTED {"windows": {"conv1": {"nf4": 0.16447893161439398, "mxfp4_or_bound": 0.015170326284833668, "bound_used": false, "holds": true}, "conv2": {"nf4": 0.20039112055910663, "mxfp4_or_bound": 0.043036478241562925, "bound_used": false, "holds": true}, "conv3": {"nf4": 0.02396345144015466, "mxfp4_or_bound": 0.006042136638867919, "bound_used": false, "holds": true}, "conv4": {"nf4": 0.022580981940162073, "mx
+SC1G_A5_L1 HOLDS {"e4b_pooled": 0.022413370354091047, "best_comparator": "vllm", "best_pooled": 0.012107700765840864, "windows": ["conv1", "conv2", "conv4"]}
+SC1G_A5_L2 HOLDS {"engines": {"e4b_mxfp4": {"pooled": 0.018320561925285264, "nf4_scale": 0.07281677469236382, "below": true, "windows": ["conv1", "conv2", "conv3", "conv4"]}, "vllm": {"pooled": 0.012107700765840864, "nf4_scale": 0.09003884964346968, "below": true, "windows": ["conv1", "conv2", "conv4"]}, "llamacpp": {"pooled": 0.05236939895831888, "nf4_scale": 0.07281677469236382, "below": true, "windows": ["conv1
+SC1G_A4_INSTRUMENT {"box_r": "NOT_OK", "why": "box R's receipt is not staged (FileNotFoundError)"}
+SC1G_A4_K-A UNREAD {"why": "box R's receipt is not staged (FileNotFoundError)"}
+SC1G_A4_L1 UNREAD {"why": "box R's receipt is not staged (FileNotFoundError)"}
+SC1G_A4_L2 UNREAD {"why": "box R's receipt is not staged (FileNotFoundError)"}
+SC1G_A4_RANK []
