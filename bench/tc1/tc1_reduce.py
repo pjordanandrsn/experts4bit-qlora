@@ -786,6 +786,22 @@ COMPACT_SPECS[PADBK_FAM] = ("P115", (3.0, 99.0), (("P116", "matched", "fused_att
                             "P118", ("pk0", "pk1"))   # amendment 48, one-sided: the matched peak falls by >= 3.0 GB, no slower than 1.02
 PACKED_FAMS = PACKED_FAMS + (PADBK_FAM,)          # amendment 39's packed-row predicates
 LOOP_ROUTE_SHARE_MAX[PADBK_FAM] = 0.05            # amendment 43's recorded route
+# TC1 amendment 49: the same A/B at TC1's field recipe (not packed: TC1's no-loop rule applies as written)
+FIELDBK_FAM = "qwen3fieldbk"      # NF4_QLORA_PAD_BUCKETS=0 (side fb0) vs =1 (fb1), shipped and matched arms, venv-unsloth, the field recipe
+FAMS.append(FIELDBK_FAM)
+NAMES[FIELDBK_FAM] = "Qwen3-30B-A3B (amendment 49: grouped-nf4-gemm's LoRA delta one padded block vs buckets at the field recipe, venv-unsloth)"
+N_LAYERS[FIELDBK_FAM] = 48
+ATTN_CENSUS[FIELDBK_FAM] = 192
+DENSE_PINS[FIELDBK_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[FIELDBK_FAM] = ("e4b", "fused_attn4_m_fb0")
+EXPECTED[FIELDBK_FAM] = [("e4b", "fused_attn4_shipped_fb0"), ("e4b", "fused_attn4_shipped_fb1"), ("e4b", "fused_attn4_m_fb0"), ("e4b", "fused_attn4_m_fb1"),
+                         ("e4b", "fused_attn4_m_fb1_d2"), ("e4b", "fused_attn4_m_fb0_d2"), ("e4b", "fused_attn4_shipped_fb1_d2"), ("e4b", "fused_attn4_shipped_fb0_d2")]
+MATCHED |= {"fused_attn4_m_fb0", "fused_attn4_m_fb1", "fused_attn4_m_fb0_d2", "fused_attn4_m_fb1_d2"}
+for _t in ("fused_attn4_m", "fused_attn4_shipped"):
+    for _side in ("fb0", "fb1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+COMPACT_SPECS[FIELDBK_FAM] = ("P121", (-0.05, 99.0), (("P119", "matched", "fused_attn4_m"), ("P120", "shipped", "fused_attn4_shipped")), (0.0, 1.01),
+                              "P122", ("fb0", "fb1"))   # amendment 49, one-sided: no slower than 1.01, the matched peak not above the default's + 0.05 GB
 # TC1 amendment 45: OMP_NUM_THREADS at the host's physical cores (om0, every box so far) vs at the container's CPU allotment (om1), e4b's matched
 # arm and Unsloth's, both in venv-unsloth
 OMPAB_FAM = "qwen3ompab"
@@ -951,7 +967,7 @@ def decoded_ab_why(tag, r):
     return "" if not bad else f"decoded-route A/B not engaged ({', '.join(bad)}; record {ra})"
 
 
-def pad_buckets_why(tag, r):
+def pad_buckets_why(tag, r, sides=("pk0", "pk1"), need_chunked=True):
     """Amendment 48's engagement predicate: the arm ran torch 2.12 (venv-unsloth); grouped-nf4-gemm's per-path counters
     (lean_ab.lora_path_calls) show the delta body its tag names -- pk1: bucketed calls and no single-block padded call; pk0: single-block
     padded calls and no bucketed call; and the chunked LM loss served the packed rows (e4b's default `auto`). Empty string = engaged."""
@@ -963,10 +979,13 @@ def pad_buckets_why(tag, r):
     if not calls:
         return "no lean_ab.lora_path_calls on the receipt: which delta body ran cannot be verified"
     pb, pd = int(calls.get("padded_bucketed") or 0), int(calls.get("padded") or 0)
-    if "_pk1" in tag and not (pb > 0 and pd == 0):
-        return f"pad-buckets A/B not engaged (pk1 side: padded_bucketed {pb}, padded {pd}; record {calls})"
-    if "_pk0" in tag and not (pd > 0 and pb == 0):
-        return f"pad-buckets A/B not engaged (pk0 side: padded {pd}, padded_bucketed {pb}; record {calls})"
+    off, on = sides
+    if f"_{on}" in tag and not (pb > 0 and pd == 0):
+        return f"pad-buckets A/B not engaged ({on} side: padded_bucketed {pb}, padded {pd}; record {calls})"
+    if f"_{off}" in tag and not (pd > 0 and pb == 0):
+        return f"pad-buckets A/B not engaged ({off} side: padded {pd}, padded_bucketed {pb}; record {calls})"
+    if not need_chunked:                               # amendment 49: the field recipe's short rows run the stock loss under `auto`
+        return ""
     c = r.get("chunked_lm_loss") or {}
     if not (int(c.get("chunked_calls") or 0) > 0 and int(c.get("runtime_refusals") or 0) == 0):
         return f"the chunked LM loss did not serve the packed rows (record {c})"
@@ -1754,6 +1773,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = pad_buckets_why(r.get("tag") or "", r)
         if w:
             why.append(w)
+    if fam == FIELDBK_FAM and fw == "e4b":             # amendment 49: the delta body its tag names, torch 2.12
+        w = pad_buckets_why(r.get("tag") or "", r, sides=("fb0", "fb1"), need_chunked=False)
+        if w:
+            why.append(w)
     if fam == CHUNKAUTO_FAM and fw == "e4b":           # amendment 44: the auto side's record, the default side unpatched, torch 2.12
         w = chunk_auto_why(r.get("tag") or "", r)
         if w:
@@ -1770,7 +1793,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = prebind_ab_why(r.get("tag") or "", r, fam)
         if w:
             why.append(w)
-    if fam in COMPACT_SPECS and fam not in (CHUNKAB_FAM, CHUNKAUTO_FAM, PADBK_FAM) and fw == "e4b":   # amendments 36-38: the padded LoRA delta its tag names (41 / 44 / 48 share the scorer only)
+    if fam in COMPACT_SPECS and fam not in (CHUNKAB_FAM, CHUNKAUTO_FAM, PADBK_FAM, FIELDBK_FAM) and fw == "e4b":   # amendments 36-38: the padded LoRA delta its tag names (41 / 44 / 48 / 49 share the scorer only)
         w = compact_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
@@ -4517,6 +4540,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_ompab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if FIELDBK_FAM in F:
+        out += ["\n## Predictions P119 / P120 / P121 / P122 (TC1-PREREG amendment 49: the LoRA delta one padded block vs buckets at the field recipe; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_compactab(F, FIELDBK_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if PADBK_FAM in F:
         out += ["\n## Predictions P115 / P116 / P117 / P118 (TC1-PREREG amendment 48: the LoRA delta one padded block vs buckets on packed rows; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -5054,6 +5082,25 @@ def _padbk_set(match=((11.20, 11.22), (11.05, 11.07)), ship=((10.50, 10.52), (10
                                         "runtime_refusals": 0, "refused": {}}
                 r["lora_loop_share"], r["lora_path_loop_steps"] = [0.02] * 30, list(range(1, 31))
                 r["fam"] = PADBK_FAM
+                R[("e4b", tag)] = r
+    return R
+
+def _fieldbk_set(match=((3.50, 3.52), (3.51, 3.53)), ship=((2.90, 2.92), (2.91, 2.93)), peaks=(27.50, 27.40), held_shift=0.0, fb1_calls=(9000, 0),
+                 fb0_calls=(0, 9000), torch="2.12.1+cu130"):
+    """Amendment 49: e4b against itself at the field recipe -- each pair as (fb0 draws, fb1 draws) s/step; `peaks` = the matched arm's (fb0, fb1)
+    GB (the shipped arm's sit 2 GB lower); `fb1_calls` / `fb0_calls` = each side's (padded_bucketed, padded) counters, no loop."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for i_side, (side, ss) in enumerate((("fb0", old), ("fb1", new))):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000) + (held_shift if side == "fb1" else 0.0), matched=matched)
+                r["peak_vram_gb"] = peaks[i_side] - (0.0 if matched else 2.0)
+                r["env"]["torch"] = torch
+                pb, pd = fb1_calls if side == "fb1" else fb0_calls
+                r["lean_ab"] = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                                "lora_path_calls": {"loop": 0, "padded": pd, "grouped_mm": 0, "padded_bucketed": pb}}
+                r["fam"] = FIELDBK_FAM
                 R[("e4b", tag)] = r
     return R
 
@@ -7367,6 +7414,19 @@ def selftest():
         RV = PK(_padbk_set(**kw))
         assert RV[PADBK_FAM]["verdicts"][("e4b", tag)] == "VOID", (kw, [(x["tag"], x["why"]) for x in RV[PADBK_FAM]["rows"] if x["tag"] == tag])
     assert "P115" in render(RPK, "x") and "amendment 48" in render(RPK, "x")
+    cases += 1
+    # 102. TC1 amendment 49 (qwen3fieldbk): the field-recipe A/B VALID; P119 / P120 / P121 / P122 HELD; 1.02 on the matched pair FALSIFIES P119; a
+    #      +0.10 GB matched peak FALSIFIES P121; an fb1 arm that ran the single block is VOID; no chunked loss is required here
+    FB = lambda R: {FIELDBK_FAM: reduce_family(FIELDBK_FAM, R, {}, 20)}
+    RFB = FB(_fieldbk_set())
+    assert [(x["fw"], x["tag"]) for x in RFB[FIELDBK_FAM]["rows"]] == EXPECTED[FIELDBK_FAM]
+    assert all(x["verdict"] == "VALID" for x in RFB[FIELDBK_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RFB[FIELDBK_FAM]["rows"]]
+    pfb = lambda **kw: {p: v for p, _, v, _ in score_compactab(FB(_fieldbk_set(**kw)), FIELDBK_FAM)}
+    assert pfb() == {"P119": "HELD", "P120": "HELD", "P121": "HELD", "P122": "HELD"}, score_compactab(RFB, FIELDBK_FAM)
+    assert pfb(match=((3.50, 3.52), (3.57, 3.59)))["P119"] == "FALSIFIED" and pfb(peaks=(27.50, 27.60))["P121"] == "FALSIFIED"
+    RV = FB(_fieldbk_set(fb1_calls=(0, 9000)))
+    assert RV[FIELDBK_FAM]["verdicts"][("e4b", "fused_attn4_m_fb1")] == "VOID"
+    assert "P119" in render(RFB, "x") and "amendment 49" in render(RFB, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
