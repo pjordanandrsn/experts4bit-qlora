@@ -61,6 +61,43 @@ loss; about $0.14, no receipt); every one is a receipt or a guard record in the 
 [`RESULTS-tc1-combined.md`](RESULTS-tc1-combined.md) (the four boxes in one pass, the amendment-3 reducer) and
 [`RESULTS-tc1b-vs-tc1.md`](RESULTS-tc1b-vs-tc1.md) (TC1b read against the matched box with `--tc1-dir`).
 
+## Amendment 46 (2026-10-06): grouped-nf4-gemm's decoded route shows no measurable step-time saving on OLMoE (1.005 [0.979, 1.031]) and costs Qwen3-30B-A3B 6.6 %; `auto` stays as it is
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 46, after lane RD1's per-call read
+([`../../moegen/rd1/RESULTS-rd1.md`](../../moegen/rd1/RESULTS-rd1.md)).
+- **The box:** one RTX 5090 (`tc1dec-5090-4`, AMD EPYC 7713, Vast machine 55913).
+- **Software:** venv-e4b (torch 2.8.0+cu128, triton 3.4.0, RD1's software), with e4b `ac3adf9` and grouped-nf4-gemm `aaefbf8` (#487's merge).
+- **Steps:** 60 load-gated steps on a quiet host. Every arm ran on its first attempt, at load1 medians of 1.9–3.1.
+- **Arms:** `_dec0` is the fused kernels (`GNF4_TRAIN_GEMM=fused`); `_dec1` is the decoded route (`=decoded`, 256 MiB cap).
+- **Read:** [`RESULTS-tc1-decoded.md`](RESULTS-tc1-decoded.md).
+
+| family | `_dec0` s/step | `_dec1` s/step | `_dec1` / `_dec0` | peak `_dec0` → `_dec1` | prediction |
+|---|---|---|---|---|---|
+| OLMoE-1B-7B (`olmoedecab`) | 1.040 / 1.026 | 1.018 / 1.058 | **1.005** [0.979, 1.031] | 7.67 → 7.67 GB | P108 **FALSIFIED** (≤ 0.95 on the median and every cross-draw ratio) |
+| Qwen3-30B-A3B (`qwen3decab`) | 3.682 / 3.647 | 3.943 / 3.868 | **1.066** [1.050, 1.081] | 27.45 → 27.45 GB | P109 HELD ([0.97, 1.25]) |
+
+- **P107 HELD: the gate ran first and passed on this card.** grouped-nf4-gemm's compiled tests for the route at `aaefbf8` ran 24 + 38
+  tests with no failure, error or skip, and every required test passed (`receipts/tc1dec-5090-4/decgate.json`).
+- **P110 HELD:** held-out at N moved +0.0021 (OLMoE) and −0.0015 (Qwen3-30B-A3B).
+- **P111 HELD:** the matched peaks are unchanged.
+- **Engagement.** Every arm is VALID.
+  - Each `_dec1` arm counted decoded forward and dgrad calls, and no dense ones: OLMoE 16,384 / 7,680, Qwen3-30B-A3B 49,152 / 23,040.
+  - Each `_dec0` arm counted none.
+- **Decision, as registered: P108 FALSIFIED.** grouped-nf4-gemm's `auto` does not change, and `GNF4_TRAIN_GEMM=decoded` stays opt-in.
+- **An observation, not a registered line.** RD1's per-call win on OLMoE's expert shapes (0.79 × the fused kernels at 512 skewed rows)
+  shows no measurable gain on the step: the interval [0.979, 1.031] cannot exclude a saving of about 2 %, nor a loss of 3 %, and
+  `_dec1`'s two draws are 3.9 % apart. It does exclude the registered 5 % gain.
+  On Qwen3-30B-A3B the step's cost (1.066) sits at the low end of RD1's per-call loss at 512 rows (1.05 skewed, 1.35 uniform). Nothing here
+  measures where the step's time goes, so why the per-call win is lost stays open.
+- **Attempts.**
+  - `tc1dec-5090-1` and `-2` were refused at $0 by the receipt store, with no box.
+    - `-1`: SV2's receipt commit was unpushed because the mini's GitHub https credentials had failed.
+    - `-2`: this lane's own commit was briefly unpushed.
+  - `-3` was NOT_RUN ($0.007): a Vast API SSL timeout in pre-flight.
+  - `-4` is the reading: $1.07 invoiced, of which $0.52 was the 80 GB download.
+  - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
+    checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
+
 ## Amendment 45 (2026-10-05): the container held to 31 CPUs ran 128 threads, but the threads A/B reads UNTESTED on the busiest host
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 45. One RTX 5090 (`tc1-5090-98`, AMD EPYC 7B13, Vast

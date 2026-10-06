@@ -1,0 +1,29 @@
+{
+ "ran": true,
+ "passed": true,
+ "gnf4_sha": "aaefbf8d1a20d22a18114b0a2091ffd5235777cf",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "torch": "2.8.0+cu128",
+ "triton": "3.4.0",
+ "runs": [
+  {
+   "name": "test_nf4_route.py -k \"decoded or cap_bounds or dequant_groups\"",
+   "rc": 0,
+   "tests": 24,
+   "failures": 0,
+   "errors": 0,
+   "skipped": 0,
+   "missing": []
+  },
+  {
+   "name": "test_nf4_route_decision.py",
+   "rc": 0,
+   "tests": 38,
+   "failures": 0,
+   "errors": 0,
+   "skipped": 0,
+   "missing": []
+  }
+ ],
+ "reason": null
+}
