@@ -45,3 +45,31 @@ GiB unless marked. "Estimate" is `estimate_serve_footprint`'s device total, read
   and third.
 - **tok/s**, one draw each: 2.8 / 6.8 / 3.1.
 - **CUDA context:** 0.46–0.50 GiB.
+
+## Maintainer note (2026-10-06, after the merge; nothing above is changed)
+
+How this box came to run, from #1239's and #1240's events, their reviews and the launch receipt
+(`receipts/experts4bit-qlora/2026-10-06/sv4-4090-1/receipt.json` in the receipt store):
+
+| time (UTC) | event |
+|---|---|
+| 04:02:28 | #1236 (the work item) opened; the maintainer posted the registration requirements on it |
+| 04:04:01 | #1239 (the registration) opened, labelled, auto-merge on |
+| **04:05:42** | **`sv4-4090-1` launched**, from a registration that was not on main, before review |
+| ~04:06 | maintainer review requested three pre-data changes: registered consequences for X1–X5, a reducer, exit codes (bake → not 13; RAM → 18) |
+| 04:07:19 | auto-merge re-enabled at the unchanged head; disabled 04:08:07 |
+| 04:25:06 | box finished, $0.153 |
+| 04:27:01 | its receipt committed on the mini and never pushed; it blocked every lane's launches until another session pushed it |
+| 04:29:09 | #1239 merged directly at the reviewed head, none of the changes made |
+| 04:28:46 | this read (#1240) opened with auto-merge on; the maintainer held it for this timeline |
+| 04:55:41 | #1240 merged directly, without the timeline |
+
+**What follows.** X1–X5's expectations were public before the data (#1239 at 04:04:01Z), so the readings are not post-hoc.
+But no consequence was registered and no reducer existed before the data, so:
+- this read **licenses no change** to the estimate, the planner's slack or its tier rule; any change it suggests needs its
+  own registration and box. X5's 1.9 GB of pinned memory against a 512 MiB landing is a finding (#1241 measures and fixes its
+  source on its own A2000 probe), not a re-price;
+- "HELD" above means "inside the registered expectation", not a registered verdict with a consequence;
+- the X table has no registered reducer behind it;
+- `sv4_run.sh` maps a bake failure to exit 13 and a RAM floor to 13 (adertha's host-floor code is 18); do not reuse the
+  runner until both are fixed.
