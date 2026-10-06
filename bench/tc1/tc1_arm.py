@@ -609,14 +609,43 @@ def cuda_sync():
         torch.cuda.synchronize()
 
 
+#: TC1 amendment 56 (--phase-peaks 1): the run's peak allocated split by phase -- "setup" (load to the first held-out evaluation),
+#: "eval" (every held-out evaluation) and "train" (the training steps between them). Each boundary folds the allocator's max into its
+#: phase and resets it, so each phase is read on its own. None = off.
+_PHASE_PEAKS = None
+#: The allocator maxima folded since the last reset_peak(). peak_gb() reads these, so `peak_vram_gb` keeps exactly its meaning without
+#: --phase-peaks: the max since reset_peak(). That reset falls after setup and eval0, so neither enters it. Folding every phase back in
+#: would quietly add setup and eval0 to peak_vram_gb whenever they peak higher than training (maintainer review of #1290).
+_RUN_PEAKS = None
+
+
+def phase_mark(name):
+    """Fold the allocator's max since the last mark into phase `name`'s peak and reset it (no-op unless --phase-peaks 1 on CUDA)."""
+    if _PHASE_PEAKS is None or DEV != "cuda":
+        return
+    torch.cuda.synchronize()
+    v = int(torch.cuda.max_memory_allocated())
+    _PHASE_PEAKS[name] = max(_PHASE_PEAKS.get(name, 0), v)
+    if _RUN_PEAKS is not None:
+        _RUN_PEAKS.append(v)
+    torch.cuda.reset_peak_memory_stats()
+
+
 def peak_gb():
-    return round(torch.cuda.max_memory_allocated() / 1e9, 3) if DEV == "cuda" else 0.0
+    if DEV != "cuda":
+        return 0.0
+    cur = int(torch.cuda.max_memory_allocated())
+    if _RUN_PEAKS:                                     # amendment 56: the maxima folded since reset_peak(), the open phase included
+        cur = max([cur] + _RUN_PEAKS)
+    return round(cur / 1e9, 3)
 
 
 def reset_peak():
     if DEV == "cuda":
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
+    if _RUN_PEAKS is not None:                         # amendment 56: phases folded before this reset stay out of peak_gb()
+        _RUN_PEAKS.clear()
 
 
 def autocast_ctx(enabled):
@@ -3394,6 +3423,10 @@ def run_arm(a, load_fn, sampler=True):
     host_ram0 = host_ram_report()                   # TC3: the cgroup peak BEFORE this arm, so a container-lifetime number is never credited to it
     lever = lever_of(a)                             # TC3: the memory lever this arm engages (None = resident), on every row it writes
     mcen = MemCensus() if getattr(a, "mem_census", 0) else None   # TC1 amendment 23: the allocator history records from here, before the load
+    global _PHASE_PEAKS, _RUN_PEAKS
+    if getattr(a, "phase_peaks", 0):                # TC1 amendment 56: resets the allocator's max at each phase boundary, which the census reads
+        assert mcen is None, "--phase-peaks 1 resets the allocator's max at each phase, which --mem-census 1 reads: one or the other"
+        _PHASE_PEAKS, _RUN_PEAKS = {}, []
     if mcen is not None:
         mcen.start()
     torch.manual_seed(a.seed)
@@ -3509,8 +3542,10 @@ def run_arm(a, load_fn, sampler=True):
         c1_ctl = c1_control(model, h_before)        # [F14] a real byte of a real tensor's COPY, the same hasher
         assert c1_ctl["detects"], f"C1 positive control did not fire -- the check cannot fail ({c1_ctl})"
 
+    phase_mark("setup")                             # amendment 56: load to here is "setup"
     with PH("eval0"):                               # #548: also the first forward -- any JIT / autotune on the forward path lands here
         ev0, rows0 = eval_loss(model, ev, fwd_kwargs, a.autocast)
+    phase_mark("eval")
     curve = [{"step": 0, "heldout_loss": round(ev0, 5), "train_wall_s": 0.0, "row_losses": rows0}]
     _opt_phase = PH("optimizer")                    # #548
     _opt_phase.__enter__()
@@ -3636,7 +3671,9 @@ def run_arm(a, load_fn, sampler=True):
                 if steps_done % a.eval_every == 0:
                     if mcen is not None:
                         mcen.mark(f"s{steps_done}.eval")
+                    phase_mark("train")                 # amendment 56: the steps since the last evaluation
                     e, rows_e = eval_loss(model, ev, fwd_kwargs, a.autocast)
+                    phase_mark("eval")
                     if mcen is not None:
                         mcen.checkpoint(f"s{steps_done}.eval", model, opt)
                     curve.append({"step": steps_done, "heldout_loss": round(e, 5), "train_wall_s": round(train_wall, 2), "row_losses": rows_e})
@@ -3664,12 +3701,14 @@ def run_arm(a, load_fn, sampler=True):
         raise
     counter.uninstall()
     mem_census = mcen.finish(model, opt) if mcen is not None else None      # TC1 amendment 23: after training; never raises
+    phase_mark("train")                             # amendment 56: the steps after the last in-loop evaluation
     peak = peak_gb()
     host_ram = host_ram_report(host_ram0)           # TC3: every arm records host_ram_high_water_gb (max over the arm of the process RSS and the cgroup peak when it rose) and the host total
 
     if curve[-1]["step"] != steps_done:
         with PH("eval_final"):                      # #548
             e, rows_e = eval_loss(model, ev, fwd_kwargs, a.autocast)
+        phase_mark("eval")
         curve.append({"step": steps_done, "heldout_loss": round(e, 5), "train_wall_s": round(train_wall, 2), "row_losses": rows_e})
     ev1 = curve[-1]["heldout_loss"]
     with PH("c1_after"):                            # #548: the SECOND full pass over the frozen expert bytes
@@ -3984,6 +4023,7 @@ def run_arm(a, load_fn, sampler=True):
         "sampler": bool(sampler), "joules_per_step": round(net_w * (train_wall / a.steps), 2) if net_w else None,
         "adapter": adapter, "losses": losses,
         "profile": profile_summary, "profile_steps": int(a.profile_steps), "profile_warm": int(a.profile_warm),
+        "peak_vram_gb_phases": ({k: round(v / 1e9, 3) for k, v in _PHASE_PEAKS.items()} if _PHASE_PEAKS is not None else None),   # TC1 amendment 56
         "note": getattr(a, "note", None),                                                                                  # TC1b: --note, verbatim
     }
     write_json(receipt_path(a), cell)
@@ -5565,6 +5605,9 @@ def main():
                          f"(ring of {MEM_CENSUS_MAX_ENTRIES:,} events, {MEM_CENSUS_STACKS} stacks), snapshotted and reduced ON THE BOX whenever the run's max "
                          "allocated grows; the static census by class at the end of setup and of training; receipt `mem_census` (an exception in "
                          "the census is recorded as mem_census.error and the arm goes on). It slows the step: no speed is read from such an arm")
+    ap.add_argument("--phase-peaks", type=int, default=0,
+                    help="TC1 amendment 56: 1 = record the peak allocated per phase (setup / eval / train) in `peak_vram_gb_phases`, resetting the "
+                         "allocator's max at each boundary; `peak_vram_gb` stays the run's max. Refused with --mem-census 1")
     ap.add_argument("--grad-ckpt", choices=["unsloth", "hf"], default="unsloth", help="Unsloth: use_gradient_checkpointing mode (U1)")
     ap.add_argument("--unsloth-loader", choices=["FastLanguageModel", "FastModel"], default="FastLanguageModel", help="T4: P38's loader; FastModel is an amendment")
     ap.add_argument("--expect-trainable", type=int, default=None, help="T6: the family's e4b trainable count; a mismatch is recorded")
