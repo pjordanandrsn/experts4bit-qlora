@@ -173,3 +173,13 @@ def test_box_r_staging_pin_matches_its_sources():
     assert sum(n.startswith("windows/") for n in names) == 5
     run = (rdir / "sc1g_r_run.sh").read_text()
     assert "sha256sum -c staged-r.sha256" in run and "kl_fidelity.py --controls" in run and '"verdict": "R_OK"' in run
+
+
+def test_box_r_egress_probe_is_python_and_says_why():
+    """sc1g-r-6 read 0.0 MB/s with curl's stderr discarded, so the cause was unknowable. The probe is Python (no curl
+    dependency), logs its status / final host / error to logs/egress.log, and a refusal carries that line."""
+    run = (SC2 / "sc1g-r" / "sc1g_r_run.sh").read_text()
+    probe = run[run.index('echo "curl $(command -v curl'):run.index('echo "refused: egress')]
+    assert "curl -s" not in probe and "urllib.request" in probe and "2>> logs/egress.log" in probe
+    assert '"Range": "bytes=0-52428800"' in probe and "timeout=20" in probe
+    assert 'REFUSED: egress ${MBPS} MB/s < ${MIN_MBPS} (host-limited): $(tail -1 logs/egress.log' in probe
