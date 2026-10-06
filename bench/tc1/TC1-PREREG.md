@@ -2193,3 +2193,37 @@ P126 and P127 need two stable VALID draws a side, as amendment 25 reads them.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $2 with the download;
 this is in the standing no-ask tier.
+
+### Amendment 52 (2026-10-06T14:27Z, after amendment 51's read, before any box): bucketed padding on packed rows in the field image's torch 2.8 (P130–P133)
+
+**Why.** Amendment 51 read e4b at its defaults on packed rows at 10.06 s/step in venv-unsloth (torch 2.12.1, triton 3.7.1), and at 13.62
+in the field image's venv-e4b (torch 2.8.0, triton 3.4). That is an environment ratio of 0.739; P127 was FALSIFIED against [0.84, 0.98].
+Amendment 43 read the same ratio at 0.915 with the chunked loss and no buckets. Between the two boxes e4b in torch 2.12 got faster and e4b
+in torch 2.8 slower. They ran on different hosts, so that comparison is a lead, not a reading. Bucketed padding (grouped-nf4-gemm#490,
+`auto` by default since #492) is what changed. Amendments 48 and 50 read it in torch 2.12 only, and the default applies to every torch.
+
+**The box** (token `qwen3padbk28`). Amendment 48's box in venv-e4b. One RTX 5090, packed 4,096-token rows, 40 load-gated steps, e4b's
+defaults otherwise (the chunked loss `auto`), grouped-nf4-gemm at the box's pin, avoiding machines 145701, 130223 and 55583:
+
+- the shipped and the matched arm, each `_k0` (`NF4_QLORA_PAD_BUCKETS=0`) against `_k1` (`=1`), two draws a side in ABBA order, every arm in
+  venv-e4b.
+
+Engagement: as amendment 48, with `env.torch` 2.8.*.
+
+**Predictions** (registered before the box), one-sided, as amendment 48 registered them:
+
+- **P130** (matched): `_k1` / `_k0` ≤ **1.02**.
+- **P131** (shipped): `_k1` / `_k0` ≤ **1.02**.
+- **P132** (matched peak): `_k0` − `_k1` ≥ **3.0 GB**.
+- **P133:** on each arm, |mean held-out at N, `_k1` − `_k0`| ≤ **0.005**.
+
+**Decision rules.**
+
+- **P130–P133 HELD:** buckets cost torch 2.8 nothing on packed rows. P127's gap lies elsewhere, and the read says where to look next.
+- **P130 or P131 FALSIFIED:** buckets cost torch 2.8 on packed rows. grouped-nf4-gemm's `auto` default then needs a gate on that
+  environment or a fix. The read names the arm, and the next registration is the gate or the fix.
+- **P132 or P133 FALSIFIED:** the read names it; the torch-2.12 default is not touched by a torch-2.8 reading alone.
+- **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. About $1.5 with the download; this is in the
+standing no-ask tier.
