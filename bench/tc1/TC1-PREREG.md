@@ -2328,7 +2328,8 @@ in torch 2.8 against 86 µs in torch 2.12. Two earlier readings bear on why:
   heuristic for an algorithm, gets 0 back, and falls back. A bf16 call gets 21. That is the same for repeated and new shapes.
 
 Torch 2.12 ships cuBLAS 13 (cu130), torch 2.8 cuBLAS 12.8 (cu128). In training, torch 2.12's 86 µs is below the replay's 119 µs for a new
-shape, so torch 2.12 is not paying the new-shape cost on every call, and torch 2.8 pays more than it. One reading of that: cuBLASLt's
+shape, so torch 2.12 is not paying the new-shape cost on every call, and torch 2.8 pays more than it. (268 µs is profiled CPU self time,
+which also counts waits on a full launch queue, so it is an upper bound on host work and this comparison is a lead.) One reading of that: cuBLASLt's
 heuristics cache (8,192 entries by default) holds the step's shapes under cuBLAS 13 and thrashes under 12.8. This box puts two remedies
 against the defaults, one per reading, without settling the mechanism first:
 
@@ -2372,6 +2373,9 @@ utilisation medians.
   and the next candidate is fewer, wider buckets: fewer calls rather than repeated shapes.
 - **P140 FALSIFIED with P137 HELD:** the ladder's speed costs memory. The read reports both, and its default question waits for the
   memory to be read on the shipped arm.
+- **P139 FALSIFIED on `c2`** (maintainer review, before any box): the ladder pads with zero groups and should not move training at all, so
+  a held-out shift is a defect signal, not a trade-off. Before any default question, a $0 correctness check of the laddered delta against
+  the unladdered one comes first: values and gradients, under torch 2.8 / triton 3.4 on the RTX A2000.
 - No default changes on this box. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. Six arms: about $2 with the download.
