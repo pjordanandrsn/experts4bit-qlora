@@ -583,6 +583,37 @@ LOOP_ROUTE_SHARE_MAX = {PACKED4KCE2_FAM: 0.05}   # a fused arm's per-expert LoRA
 PACKED_FAMS = (PACKED4K_FAM, PACKED4KCE_FAM, PACKED4KCE2_FAM)
 CHUNKED_FAMS = (PACKED4KCE_FAM, PACKED4KCE2_FAM)
 PACKED_FIT_ID = {PACKED4K_FAM: "P86", PACKED4KCE_FAM: "P89", PACKED4KCE2_FAM: "P98"}   # every e4b arm that ran completed resident
+# TC1 amendment 51: amendment 43's box at e4b's DEFAULTS -- nothing set: the chunked LM loss as `auto` (#1203) and grouped-nf4-gemm's bucketed
+# padding as `auto` (grouped-nf4-gemm#492) both engage on these rows by themselves
+PACKED4KD_FAM = "qwen3samestack4kd"
+FAMS.append(PACKED4KD_FAM)
+NAMES[PACKED4KD_FAM] = "Qwen3-30B-A3B (amendment 51: the packed 4,096-token regime on one stack at e4b's defaults -- chunked loss and bucketed padding both auto)"
+N_LAYERS[PACKED4KD_FAM] = 48
+ATTN_CENSUS[PACKED4KD_FAM] = 192
+DENSE_PINS[PACKED4KD_FAM] = DENSE_PINS[QDENSE_FAM]
+EXPECTED[PACKED4KD_FAM] = list(EXPECTED[SAMESTACK_FAM])
+SAMESTACK_SPECS[PACKED4KD_FAM] = ("P126", (1.25, 1.80), "P127", (0.84, 0.98), None, None, "amendments 43 / 48: 1.278 chunked without buckets; buckets 0.893 of the step")
+LOOP_ROUTE_SHARE_MAX[PACKED4KD_FAM] = 0.05
+PACKED_FAMS = PACKED_FAMS + (PACKED4KD_FAM,)
+PACKED_FIT_ID[PACKED4KD_FAM] = "P128"
+PACKED4KD_PEAK_MAX = 29.5          # P129: e4b's matched arm (venv-unsloth) peak, GB, median of its two draws (amendment 48's bucketed arm read 28.23)
+
+
+def packed_defaults_why(r):
+    """Amendment 51's engagement predicate for an e4b arm: nothing set, and both defaults served the packed rows by themselves -- the
+    chunked LM loss (E4B_CHUNKED_LM_LOSS unset, chunked training forwards > 0, no run-time fallback) and grouped-nf4-gemm's bucketed padding
+    (NF4_QLORA_PAD_BUCKETS unset, resolved `auto`, every padded call bucketed: padded_bucketed > 0, padded == 0). Empty string = engaged."""
+    r = r or {}
+    c = r.get("chunked_lm_loss") or {}
+    la = r.get("lean_ab") or {}
+    calls = la.get("lora_path_calls") or {}
+    bad = [k for k, ok in (("E4B_CHUNKED_LM_LOSS unset", c.get("env") in (None, "")),
+                           ("chunked forwards > 0", int(c.get("chunked_calls") or 0) > 0),
+                           ("chunked runtime_refusals 0", int(c.get("runtime_refusals") or 0) == 0),
+                           ("NF4_QLORA_PAD_BUCKETS unset", la.get("gnf4_pad_buckets_env") in (None, "")),
+                           ("pad buckets resolved auto", la.get("gnf4_pad_buckets_mode") == "auto"),
+                           ("every padded call bucketed", int(calls.get("padded_bucketed") or 0) > 0 and int(calls.get("padded") or 0) == 0)) if not ok]
+    return "" if not bad else f"e4b's defaults not engaged on the packed rows ({', '.join(bad)}; chunked {c}; pad {calls}, mode {la.get('gnf4_pad_buckets_mode')!r})"
 
 
 def chunked_lm_loss_why(r):
@@ -1880,6 +1911,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = ompab_why(r)
         if w:
             why.append(w)
+    if fam == PACKED4KD_FAM and fw == "e4b" and r.get("status") == "ok":   # amendment 51: both defaults engaged by themselves
+        w = packed_defaults_why(r)
+        if w:
+            why.append(w)
     if fam in CHUNKED_FAMS and fw == "e4b":            # amendments 40 / 43: the chunked LM loss on every e4b arm
         w = chunked_lm_loss_why(r)
         if w:
@@ -3101,6 +3136,20 @@ def score_samestack(F, fam=SAMESTACK_FAM):
     else:
         out.append((pid_set, fam, "HELD" if all(v in ok_read for v in reads.values()) and par == "PASS" else "FALSIFIED", ev))
     return out
+
+
+def score_packed4kd_peak(F, fam=PACKED4KD_FAM):
+    """TC1-PREREG amendment 51's P129: e4b's matched arm (venv-unsloth) peak, the median of its two VALID draws, at most PACKED4KD_PEAK_MAX GB;
+    UNTESTED when a draw is not VALID."""
+    R = F.get(fam)
+    if not R:
+        return []
+    pk = [((x.get("r") or {}).get("peak_vram_gb")) for x in R["rows"] if x["fw"] == "e4b" and x["tag"] in ("fused_attn4_m", "fused_attn4_m_d2") and x["verdict"] == "VALID"]
+    pk = [v for v in pk if v is not None]
+    if len(pk) != 2:
+        return [("P129", fam, "UNTESTED", f"e4b's matched arm needs two VALID draws with a peak -- {pk}")]
+    m = sum(pk) / 2
+    return [("P129", fam, "HELD" if m <= PACKED4KD_PEAK_MAX else "FALSIFIED", f"e4b matched peak {sorted(pk)} GB, median {m:.3f} vs <= {PACKED4KD_PEAK_MAX}")]
 
 
 def score_packed4k(F, fam=PACKED4K_FAM):
@@ -4590,6 +4639,11 @@ def render(F, d):
         out += ["\n## Predictions P27 / P28 / P29 (TC1C-PREREG amendment 9: the H100 position with both frameworks on one stack; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_samestack(F, SAMESTACK_H100_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PACKED4KD_FAM in F:
+        out += ["\n## Predictions P126 / P127 / P128 / P129 (TC1-PREREG amendment 51: the packed 4,096-token regime on one stack at e4b's defaults; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_packed4k(F, PACKED4KD_FAM) + score_packed4kd_peak(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if PACKED4KCE2_FAM in F:
         out += ["\n## Predictions P96 / P97 / P98 (TC1-PREREG amendment 43: the packed 4,096-token regime on one stack, e4b with its chunked LM loss, the LoRA loop a recorded route; scored mechanically)",
@@ -7562,6 +7616,34 @@ def selftest():
     RV = FA(_fieldauto_set(mode1="0"))
     assert RV[FIELDAUTO_FAM]["verdicts"][("e4b", "fused_attn4_m_fa1")] == "VOID" and pfa(mode1="0")["P123"] == "UNTESTED"
     assert "P123" in render(RFA, "x") and "amendment 50" in render(RFA, "x")
+    cases += 1
+    # 104. TC1 amendment 51 (qwen3samestack4kd): the packed same-stack set at e4b's defaults -- both defaults engaged by themselves; P126 /
+    #      P127 / P128 / P129 HELD at 1.42 / 0.92 / resident / 28.2 GB; a set chunked loss or an unbucketed call VOIDs the arm; 30 GB FALSIFIES P129
+    def _pkd(**kw):
+        peak = kw.pop("peak", 28.2)
+        R = _packed4k_set(fam=PACKED4KD_FAM, e=(10.05, 10.10), t28=(10.95, 11.0), u=(14.30, 14.35), loop_share=0.02, **kw)
+        for (fw, tag), r in R.items():
+            if fw == "e4b" and r.get("status") == "ok":
+                r["chunked_lm_loss"] = {"env": None, "e4b_has_chunked_lm_loss": True, "chunked_calls": 120, "stock_calls": 0, "small_calls": 0, "patched": 1,
+                                        "runtime_refusals": 0, "refused": {}}
+                r["lean_ab"] = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                                "lora_path_calls": {"loop": 100, "padded": 0, "grouped_mm": 0, "padded_bucketed": 9000},
+                                "gnf4_pad_buckets_mode": "auto", "gnf4_pad_buckets_min_rows": 16384, "gnf4_pad_buckets_env": None}
+                if tag in ("fused_attn4_m", "fused_attn4_m_d2"):
+                    r["peak_vram_gb"] = peak
+        return R
+    PD = lambda R: {PACKED4KD_FAM: reduce_family(PACKED4KD_FAM, R, {}, 30)}
+    RPD = PD(_pkd())
+    assert all(x["verdict"] in ("VALID", "NOT_RUN") for x in RPD[PACKED4KD_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RPD[PACKED4KD_FAM]["rows"]]
+    ppd = lambda R: {p: v for p, _, v, _ in score_packed4k(R, PACKED4KD_FAM) + score_packed4kd_peak(R)}
+    assert ppd(RPD) == {"P126": "HELD", "P127": "HELD", "P128": "HELD", "P129": "HELD"}, score_packed4k(RPD, PACKED4KD_FAM) + score_packed4kd_peak(RPD)
+    assert ppd(PD(_pkd(peak=30.0)))["P129"] == "FALSIFIED"
+    RX = _pkd()
+    RX[("e4b", "fused_attn4_m")]["chunked_lm_loss"]["env"] = "1"
+    RX[("e4b", "fused_attn4_m_d2")]["lean_ab"]["lora_path_calls"]["padded"] = 50
+    RXV = PD(RX)
+    assert RXV[PACKED4KD_FAM]["verdicts"][("e4b", "fused_attn4_m")] == "VOID" and RXV[PACKED4KD_FAM]["verdicts"][("e4b", "fused_attn4_m_d2")] == "VOID"
+    assert "P126" in render(RPD, "x") and "amendment 51" in render(RPD, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
