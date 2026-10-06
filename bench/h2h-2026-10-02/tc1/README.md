@@ -98,6 +98,52 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 53 (2026-10-06): 60 % of torch 2.8's extra time at e4b's defaults is not device time, most visibly in the bucketed delta's batched matmuls; 40 % is grouped-nf4-gemm's own kernels
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 53. One RTX 5090 (`tc1-5090-110`, AMD Ryzen Threadripper
+PRO 3955WX, a 15-CPU quota, Vast machine 26157). e4b `3c8793f`, grouped-nf4-gemm 0.42.0 (`427a771`), packed 4,096-token rows, 40 load-gated
+steps, every attempt first time at load1 1.9–2.2. It ran e4b's matched arm at its defaults with the profile instrument (steps 3–5) in
+three environments. Read: [`RESULTS-tc1-prof28.md`](RESULTS-tc1-prof28.md).
+
+| side | s/step, timed (two draws) | device ms per step (CUPTI) | device / timed step | nvidia-smi median util |
+|---|---|---|---|---|
+| `q212`: venv-unsloth (torch 2.12.1, triton 3.7.1), buckets `auto` | 9.924 / 9.914 | 9,616 / 9,597 | 0.969 | 96 % |
+| `q28`: venv-e4b (torch 2.8.0, triton 3.4.0), buckets `auto` | 12.562 / 12.535 | 10,669 / 10,665 | 0.850 | 82 % |
+| `q28k0`: venv-e4b, single block | 12.337 / 12.375 | 11,920 / 11,927 | 0.965 | 98 % |
+
+- **P134 HELD: environment ratio 0.790** [0.789, 0.792] (≤ 0.92). On this host torch 2.8 at e4b's defaults steps 2.63 s slower than torch
+  2.12. That is less than amendment 51's 0.739, more than amendment 43's 0.915 without buckets.
+- **P135 HELD: 59.7 % of that gap is not device time** (≥ 0.5). Torch 2.8 adds 2,630 ms per timed step and 1,061 ms of device time. So
+  1,569 ms is the host's, with the device waiting on it.
+- **P136 HELD:** in torch 2.8 the buckets lower the device's share of the step from 0.965 (single block) to 0.850 (drop 0.115 ≥ 0.03).
+  They also take 1,256 ms of device time off the step, and the host gives most of it back.
+- **The host time is `aten::bmm`.** The profiler's CPU self time by family puts `matmul` first by a wide margin: +4,817 ms per profiled
+  step from `q212` to `q28`, against +22 for the next family. Within it, `aten::bmm` makes the same number of calls in both torches, about
+  26,750 per step. The single block makes 3,012, so the buckets' per-bucket products add about 23,750. Its self time per call is about
+  86 µs in torch 2.12 and about 268 µs in torch 2.8. Profiled times carry the profiler's overhead in both torches, so they are reported,
+  not scored. Launch time barely moved (`cudaLaunchKernel` 525 against 558 ms per profiled step, over 79,786 and 89,567 calls). cuBLAS
+  picks the same kernel for the fp32 products in both (`cutlass_80_simt_sgemm_64x64_8x5_tn_align1`, about 8,270 a step). So the added
+  host time is inside the batched-matmul call, not in launching its kernel. One caution on the size of it (maintainer review): CPU self
+  time also counts any wait on a full CUDA launch queue. The single block's 3,012 `aten::bmm` calls read about 1.4 ms of self time each
+  in torch 2.8 while its device is 96.5 % busy, which is mostly back-pressure, not host work. So 268 µs per call is an upper bound on the
+  bmm's host work in `q28`, and P135's 59.7 % (not device time) is the measured share. Profiled per-family totals can rank the host
+  families; they cannot price them.
+- **The device time is grouped-nf4-gemm's own Triton kernels**, and it does not depend on the buckets. Torch 2.8's device time grows by
+  1,061 ms per step, 989 of them in `fused_kernel`:
+  - `_gemm_nf4_grouped` takes 1,995 ms per step in `q212` and 2,439 in `q28`;
+  - `_dgrad_nf4_grouped` takes 1,038 and 1,582;
+  - with the single block in torch 2.8 they read the same, 2,445 and 1,584.
+
+  The environments differ in torch and triton together, so this box does not split the two. Triton's code generation is the candidate.
+  Amendment 32 read triton 3.7.1 alone in venv-e4b at the field recipe, where the step is host-bound: 0.992 matched and 0.971 shipped.
+- **Against amendment 52**, reported, not scored. On a different host, `q28` steps 12.55 s against amendment 52's bucketed matched arm
+  at 12.05, and `q28k0` 12.36 against its single block at 12.25. The nvidia-smi medians repeat amendment 52's pattern: 82 % against 98 %
+  here, 87 % against 97 % there.
+- **By amendment 53's rule** the next registration targets the CPU family that grew most: the bucketed delta's batched matmuls. The
+  registered candidate is a shape-stable bucket ladder in grouped-nf4-gemm. Bucket widths would be rounded up to a fixed set, so repeated
+  calls give the batched matmul repeated shapes. It would be read on packed rows in both torches. The device-side 40 % is a second lead:
+  amendment 32's triton A/B, on packed rows. No default changed on this box.
+
 ## Amendment 52 (2026-10-06): bucketed padding costs torch 2.8 nothing on packed rows; P127's gap lies elsewhere
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 52. One RTX 5090 (`tc1-5090-109`, AMD EPYC 7713, no CPU

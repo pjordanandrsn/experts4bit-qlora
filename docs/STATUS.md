@@ -215,9 +215,13 @@ trains the packed rows resident at 28.23 GB and steps them at 10.06 s against Un
 same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are
 not that cost (`e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`, TC1 amendment 52): in torch 2.8 on packed rows they step 0.983
 (matched) and 0.939 (shipped) of the single block's step, with the matched peak 4.24 GB lower, so the default stands in both measured
-environments (torch 2.12 and torch 2.8). In
-torch 2.8 they leave the GPU idle more of the step, though (median utilisation 87 % against 97 %), so the gap is under investigation as
-host-side time. `NF4_QLORA_PAD_BUCKETS=0` restores the single block.
+environments (torch 2.12 and torch 2.8). Where torch 2.8's time goes, profiled
+(`e4b.train.env-gap.torch28.profile.qwen3.5090.2026-10-06`, TC1 amendment 53, another host): at the defaults it steps 0.790 as fast as
+torch 2.12. Of the 2.63 s it adds per step, 60 % is not device time, and the profile's largest host-side increase is in the bucketed
+delta's batched matmuls: `aten::bmm` makes the same ~26,750 calls a step in both torches and takes about three times the CPU self time per
+call in torch 2.8. That is an upper bound on its host work, since self time also counts waits on a full launch queue. The rest is device time in
+grouped-nf4-gemm's own Triton kernels (forward +22 %, data gradient +52 %, buckets or not). The next registration is a shape-stable bucket
+ladder in grouped-nf4-gemm. `NF4_QLORA_PAD_BUCKETS=0` restores the single block.
 The 2026-10-02 figures above stand for the code before #945. **Native-best against
 native-best on one box** (`.native-vs-native`, TC1 amendments 5-7): Unsloth's
 native-best / e4b as shipped **1.794 [1.790, 1.797]**, e4b faster per step.

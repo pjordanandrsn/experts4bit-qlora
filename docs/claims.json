@@ -10906,6 +10906,31 @@
         "receipts/experts4bit-qlora/2026-10-06/tc1-5090-109/tc1/"
       ],
       "notes": "Vast invoiced $2.35."
+    },
+    {
+      "id": "e4b.train.env-gap.torch28.profile.qwen3.5090.2026-10-06",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 53 (#835), one rented RTX 5090 (tc1-5090-110, AMD Ryzen Threadripper PRO 3955WX): e4b's matched arm (fp32 adapters, matched init) at its defaults on packed rows of 4,096 real tokens (micro-batch 1 x accum 4), 40 load-gated steps (every attempt first time), with the TC1 profile instrument on steps 3-5, in three environments, two draws each: venv-unsloth (torch 2.12.1, triton 3.7.1) and venv-e4b (torch 2.8.0, triton 3.4.0) with bucketed padding auto, and venv-e4b with the single block. Timed s/step 9.924 / 9.914 (torch 2.12) against 12.562 / 12.535 (torch 2.8): environment ratio 0.790 [0.789, 0.792] (P134 HELD, <= 0.92). Of the 2,630 ms per step torch 2.8 adds, 1,061 ms is device time (CUPTI), so 59.7 % is not (P135 HELD, >= 0.5). In torch 2.8 the buckets lower the device's share of the timed step from 0.965 to 0.850 (P136 HELD, a drop >= 0.03). Reported, not scored: the CPU family that grows most is matmul (+4,817 ms per profiled step, the next +22); aten::bmm makes ~26,750 calls a step in both torches (the single block 3,012), at about 86 us of self time per call in torch 2.12 and 268 us in torch 2.8, cuBLAS choosing the same fp32 kernel in both. Of the device time, 989 ms is grouped-nf4-gemm's Triton kernels (_gemm_nf4_grouped 1,995 -> 2,439 ms per step, _dgrad_nf4_grouped 1,038 -> 1,582), the same with the single block; torch and triton change together here, so the box does not split them.",
+      "value": 0.79,
+      "unit": "ratio s/step, e4b matched arm at its defaults, torch 2.12 over torch 2.8, packed 4,096-token rows (medians of steps 11..40 over two draws each); cross-draw interval [0.789, 0.792]; 59.7 % of the gap not device time",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-110: instance 54522186, AMD Ryzen Threadripper PRO 3955WX, a 15-CPU quota, Vast machine 26157); e4b @ 3c8793f + grouped-nf4-gemm 0.42.0 @ 427a771 in venv-unsloth (torch 2.12.1+cu130, triton 3.7.1) and venv-e4b (torch 2.8.0+cu128, triton 3.4.0)",
+      "conditions": "bench/tc1 token qwen3prof28 (TC1 amendment 53): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), the matched arm, sides q212 / q28 / q28k0 two draws each in A B C C B A order, --profile-steps 3 --profile-warm 3 (no per-micro-batch timing), TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, the per-expert loop a recorded route; validity (prof28_why), P135 / P136 against the timed step, and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-prof28.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-110/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1-5090-110/tc1/"
+      ],
+      "notes": "Vast invoiced $1.30."
     }
   ]
 }
