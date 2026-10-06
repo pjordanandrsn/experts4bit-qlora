@@ -20,9 +20,9 @@ def test_box_j_runs_a6_within_the_box_in_priority_order():
     body = BOX[BOX.index("\nbox_j(){"):]
     body = body[:body.index("; }\n") + 4]
     assert "install_" not in body and "fetch_gptoss_gguf" not in body
-    assert "SC1G_NCONV=4 i_windows || finish 19; i_ref_full_stage" in body and "i_arms_a6" in body
+    assert "SC1G_NCONV=4 i_windows || finish 19; i_ref_full_stage" in body and "i_arms_a6c" in body   # the continuation (A6's first box ran i_arms_a6)
     assert "--out $W/sc1g/verdict_sc1g_a6.json" in body
-    arms = BOX[BOX.index("i_arms_a6(){"):BOX.index("\nbox_j(){")]
+    arms = BOX[BOX.index("i_arms_a6(){"):BOX.index("i_arms_a6c(){")]
     order = [arms.index(s) for s in ("i_e4b_full e4b_serve_served_conv1 ", "i_e4b_full e4b_a6mx_served_conv1 ",
                                      "i_e4b_full e4b_a6rep_served_conv1 ", "for SRC in conv2 conv3 conv4",
                                      "i_e4b_full e4b_a6g0_served_$SRC")]
@@ -38,7 +38,7 @@ def test_arm_a_changes_exactly_one_variable_from_the_baseline():
         return set(line.split('"')[1].split())
     serve, mxpre = val("SC1G_E4B_SERVE"), val("SC1G_E4B_MXPRE")
     assert serve ^ mxpre == {"E4B_INT4_KEEP_NF4=1", "E4B_INT4_KEEP_NF4=0"}
-    arms = BOX[BOX.index("i_arms_a6(){"):BOX.index("\nbox_j(){")]
+    arms = BOX[BOX.index("i_arms_a6(){"):BOX.index("i_arms_a6c(){")]
     assert '"$SC1G_E4B_MXPRE"' in arms and '"$SC1G_E4B_SERVE E4B_MXFP4_GEMV=0"' in arms
 
 
@@ -150,4 +150,20 @@ def test_the_a6_reading_rederives_from_its_committed_receipt(tmp_path):
     assert got["determinism"]["verdict"] == "BIT_IDENTICAL"
     integ = red.a6(str(d), a5_dir=str(B / "sc1g-5090-a5-1" / "sc1g"))["descriptive"]["base_vs_a5_reading"]
     assert all(integ[s]["bit_identical"] for s in ("conv1", "conv2", "conv3", "conv4")), integ
+
+
+def test_the_a6_continuation_runs_only_p3_s_arms_with_the_repeat_third(tmp_path):
+    """A6's continuation (the first box's deadline dropped every (c) arm): 9 arms -- conv1's (b), (c), (b'), then (b) + (c) on
+    conv2-conv4 -- under the same rules; no (a) arm (P1 and P2 stand from sc1g-diag-a6-1); box J now runs it."""
+    got = [ln for ln in _drive(tmp_path, "i_arms_a6c") if ln.startswith("ARM ")]
+    names = [g.split("|")[0][4:] for g in got]
+    want = (["e4b_serve_served_conv1", "e4b_a6g0_served_conv1", "e4b_a6rep_served_conv1"]
+            + [n for s in ("conv2", "conv3", "conv4") for n in (f"e4b_serve_served_{s}", f"e4b_a6g0_served_{s}")])
+    assert names == want, names
+    for g in got:
+        name, stack, src = g[4:].split("|")
+        assert f"SC1G_REF_FULL_FILE={tmp_path}/sc1g_ref_full/ref_full_{src}.npy" in stack and f"SC1G_KL_OUT={tmp_path}/sc1g/kl_{name}.npz" in stack
+        assert ("E4B_MXFP4_GEMV=0" in stack) == name.startswith("e4b_a6g0_") and "E4B_INT4_KEEP_NF4=0" not in stack
+    body = BOX[BOX.index("\nbox_j(){"):]
+    assert "i_arms_a6c" in body[:body.index("; }\n")] and "i_arms_a6\n" not in body[:body.index("; }\n")]
 
