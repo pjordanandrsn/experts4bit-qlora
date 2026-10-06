@@ -1,4 +1,4 @@
-### Read: TC1 amendment 46 — grouped-nf4-gemm's decoded route saves no step time on OLMoE (1.005) and costs Qwen3-30B-A3B 6.6 % (P108 FALSIFIED); `auto` stays as it is
+### Read: TC1 amendment 46 — grouped-nf4-gemm's decoded route shows no measurable step-time saving on OLMoE (1.005 [0.979, 1.031]) and costs Qwen3-30B-A3B 6.6 % (P108 FALSIFIED); `auto` stays as it is
 
 - **The box:** `tc1dec-5090-4`, $1.07, an AMD EPYC 7713 host.
 - **The gate passed first.** grouped-nf4-gemm's compiled tests for the route ran on the 5090 before any arm, and passed (P107).
