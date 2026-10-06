@@ -88,7 +88,7 @@ These are specific workloads, with public results and controls. The table is che
 
 The speed rows use torch 2.12.1+cu130 and transformers 5.5.0. The packed result uses
 development e4b code after 0.48.0 and kernels released in 0.42.0. Its PyTorch 2.8 run was slower;
-the bucketed-padding speed benefit on 2.8 is still unmeasured. The offload row uses a different training setup.
+bucketed padding's effect under 2.8 is still unmeasured (TC1 amendment 52 measures it). The offload row uses a different training setup.
 
 [Qwen comparison](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/RESULTS-tc1-samestack-box4.md) · [Packed 4K result](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/RESULTS-tc1-packed4k-defaults.md) · [All current results](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md)
 
@@ -96,7 +96,8 @@ the bucketed-padding speed benefit on 2.8 is still unmeasured. The offload row u
 
 - **Long training rows:** chunked language-model loss now turns on automatically when the full logits would be large.
 - **Dense-weight offload:** CUDA training now prefetches the next layer by default; `train_prefetch=False` opts out.
-- **Packed training:** the newer kernel release buckets similar-sized expert groups to reduce padding.
+- **Packed training:** grouped-nf4-gemm 0.42.0 pads the LoRA delta's expert groups in size buckets on large calls
+  (at least 16,384 routed rows, such as packed 4,096-token rows); `NF4_QLORA_PAD_BUCKETS=0` restores the single block.
 
 These development changes are described in the [changelog fragments](https://github.com/pjordanandrsn/experts4bit-qlora/tree/main/changelog.d). The release block above identifies the installable runtime version.
 
@@ -106,7 +107,7 @@ These development changes are described in the [changelog fragments](https://git
 - **Memory:** CPU/NVMe offload trades transfer time and host storage for GPU memory. Measure your workload.
 - **Speed:** 4-bit saves weight memory; it is not automatically faster or more energy-efficient than bf16 when both fit.
 - **Serving:** vLLM was faster in the measured Qwen decode comparison. This runtime focuses on fitting and controlling low-bit MoEs; see the [serving results](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/SERVING-THROUGHPUT.md).
-- **Platforms:** CUDA execution is the tested path. Dense models, ROCm, macOS and Windows GPU execution are outside this package's scope.
+- **Platforms:** CUDA execution is the tested path. ROCm, macOS, Windows and other non-CUDA GPU execution are outside this package's scope.
 
 ## Documentation and machine-readable data
 
