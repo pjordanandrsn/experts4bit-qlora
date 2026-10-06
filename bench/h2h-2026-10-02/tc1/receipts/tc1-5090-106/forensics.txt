@@ -1,0 +1,9 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.58.03, GPU-9728d444-d85e-e57f-e278-db8027f309be, 400.00 W, 3210 MHz
+CPU(s):                                  72
+Model name:                              Intel(R) Xeon(R) Platinum 8347C CPU @ 2.10GHz
+MemTotal:       263547312 kB
+overlay         320G   53M  320G   1% /
+cgroup cpu.max absent
+cgroup cpu.cfs_quota_us/period_us 3456000/100000
+cgroup cpuset.cpus.effective absent
+affinity cpus 72 of 72

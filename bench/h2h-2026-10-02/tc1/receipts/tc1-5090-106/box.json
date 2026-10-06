@@ -1,0 +1,20 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-106",
+ "instance_id": "54460139",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "595.58.03",
+ "cpu": "Intel(R) Xeon(R) Platinum 8347C CPU @ 2.10GHz",
+ "nproc": 72,
+ "mem_total_kb": "263547312",
+ "cgroup_memory_max": "",
+ "disk_root": "overlay         320G   53M  320G   1% /",
+ "hostname": "75e93dc939ca",
+ "cgroup_cpu_max": "",
+ "affinity_cpus": 72,
+ "cgroup_cpuset_effective": "",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}
