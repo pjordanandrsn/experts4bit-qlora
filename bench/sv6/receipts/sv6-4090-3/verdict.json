@@ -1,0 +1,74 @@
+{
+ "verdict": "READ",
+ "integrity": {
+  "b6_short": {
+   "state": "CLEAN"
+  },
+  "b6_long": {
+   "state": "CLEAN"
+  }
+ },
+ "readings": {
+  "Y4": {
+   "reading": "MISSED",
+   "detail": {
+    "peak_bytes": 20581943296,
+    "rel": -0.06383743367274952,
+    "bound": "peak",
+    "side": "below"
+   }
+  },
+  "Y5": {
+   "reading": "HELD",
+   "detail": {
+    "registered": {
+     "vram": 5109,
+     "dram": 1035,
+     "nvme": 0
+    },
+    "b6_short": {
+     "vram": 5109,
+     "dram": 1035,
+     "nvme": 0
+    },
+    "b6_long": {
+     "vram": 5109,
+     "dram": 1035,
+     "nvme": 0
+    }
+   }
+  },
+  "Y1": {
+   "reading": "HELD",
+   "detail": {
+    "driver_peak_bytes": 22932357120,
+    "card_total_bytes": 25757220864
+   }
+  },
+  "Y2": {
+   "reading": "HELD",
+   "detail": {
+    "driver_peak_bytes": 22932357120,
+    "plan_bytes": 23990209701,
+    "bound": "peak"
+   }
+  },
+  "Y3": {
+   "reading": "HELD",
+   "detail": {
+    "peak_bytes": 21631543296,
+    "rel": -0.01609674099442282,
+    "bound": "peak"
+   }
+  },
+  "Y6": {
+   "reading": "HELD",
+   "detail": {
+    "delta_bytes": 1049600000,
+    "predicted_bytes": 1052688384,
+    "rel": -0.0029338064777202355,
+    "bound": "peak"
+   }
+  }
+ }
+}
