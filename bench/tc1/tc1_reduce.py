@@ -817,6 +817,24 @@ COMPACT_SPECS[PADBK_FAM] = ("P115", (3.0, 99.0), (("P116", "matched", "fused_att
                             "P118", ("pk0", "pk1"))   # amendment 48, one-sided: the matched peak falls by >= 3.0 GB, no slower than 1.02
 PACKED_FAMS = PACKED_FAMS + (PADBK_FAM,)          # amendment 39's packed-row predicates
 LOOP_ROUTE_SHARE_MAX[PADBK_FAM] = 0.05            # amendment 43's recorded route
+# TC1 amendment 52: amendment 48's A/B in the field image's environment (venv-e4b: torch 2.8.0+cu128, triton 3.4)
+PADBK28_FAM = "qwen3padbk28"
+FAMS.append(PADBK28_FAM)
+NAMES[PADBK28_FAM] = "Qwen3-30B-A3B (amendment 52: grouped-nf4-gemm's LoRA delta one padded block vs buckets on packed rows, venv-e4b / torch 2.8)"
+N_LAYERS[PADBK28_FAM] = 48
+ATTN_CENSUS[PADBK28_FAM] = 192
+DENSE_PINS[PADBK28_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[PADBK28_FAM] = ("e4b", "fused_attn4_m_k0")
+EXPECTED[PADBK28_FAM] = [("e4b", "fused_attn4_shipped_k0"), ("e4b", "fused_attn4_shipped_k1"), ("e4b", "fused_attn4_m_k0"), ("e4b", "fused_attn4_m_k1"),
+                         ("e4b", "fused_attn4_m_k1_d2"), ("e4b", "fused_attn4_m_k0_d2"), ("e4b", "fused_attn4_shipped_k1_d2"), ("e4b", "fused_attn4_shipped_k0_d2")]
+MATCHED |= {"fused_attn4_m_k0", "fused_attn4_m_k1", "fused_attn4_m_k0_d2", "fused_attn4_m_k1_d2"}
+for _t in ("fused_attn4_m", "fused_attn4_shipped"):
+    for _side in ("k0", "k1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+COMPACT_SPECS[PADBK28_FAM] = ("P132", (3.0, 99.0), (("P130", "matched", "fused_attn4_m"), ("P131", "shipped", "fused_attn4_shipped")), (0.0, 1.02),
+                              "P133", ("k0", "k1"))   # amendment 52, one-sided: as amendment 48, in torch 2.8
+PACKED_FAMS = PACKED_FAMS + (PADBK28_FAM,)
+LOOP_ROUTE_SHARE_MAX[PADBK28_FAM] = 0.05
 # TC1 amendment 50: NF4_QLORA_PAD_BUCKETS=auto (grouped-nf4-gemm#491, a 16,384-routed-row gate) against 0 at TC1's field recipe: structure, not speed
 FIELDAUTO_FAM = "qwen3fieldauto"  # side fa0 (=0) vs fa1 (=auto), shipped and matched arms, venv-unsloth, the field recipe
 FAMS.append(FIELDAUTO_FAM)
@@ -1089,14 +1107,15 @@ def score_fieldauto(F, fam=FIELDAUTO_FAM):
     return out
 
 
-def pad_buckets_why(tag, r, sides=("pk0", "pk1"), need_chunked=True):
-    """Amendment 48's engagement predicate: the arm ran torch 2.12 (venv-unsloth); grouped-nf4-gemm's per-path counters
+def pad_buckets_why(tag, r, sides=("pk0", "pk1"), need_chunked=True, torch_prefix="2.12"):
+    """Amendments 48 / 52's engagement predicate: the arm ran the torch its family names (torch_prefix: 2.12 = venv-unsloth for
+    amendment 48, 2.8 = venv-e4b for amendment 52); grouped-nf4-gemm's per-path counters
     (lean_ab.lora_path_calls) show the delta body its tag names -- pk1: bucketed calls and no single-block padded call; pk0: single-block
     padded calls and no bucketed call; and the chunked LM loss served the packed rows (e4b's default `auto`). Empty string = engaged."""
     r = r or {}
     tv = str((r.get("env") or {}).get("torch") or "")
-    if not tv.startswith("2.12"):
-        return f"pad-buckets A/B not engaged (env.torch {tv or 'missing'} is not 2.12*)"
+    if not tv.startswith(torch_prefix):
+        return f"pad-buckets A/B not engaged (env.torch {tv or 'missing'} is not {torch_prefix}*)"
     calls = ((r.get("lean_ab") or {}).get("lora_path_calls")) or {}
     if not calls:
         return "no lean_ab.lora_path_calls on the receipt: which delta body ran cannot be verified"
@@ -1895,6 +1914,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = pad_buckets_why(r.get("tag") or "", r)
         if w:
             why.append(w)
+    if fam == PADBK28_FAM and fw == "e4b":             # amendment 52: the delta body its tag names, torch 2.8, the chunked loss
+        w = pad_buckets_why(r.get("tag") or "", r, sides=("k0", "k1"), torch_prefix="2.8")
+        if w:
+            why.append(w)
     if fam == FIELDAUTO_FAM and fw == "e4b":           # amendment 50: the bucket mode its tag names, the padded path served, torch 2.12
         w = fieldauto_why(r.get("tag") or "", r)
         if w:
@@ -1923,7 +1946,7 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
         w = prebind_ab_why(r.get("tag") or "", r, fam)
         if w:
             why.append(w)
-    if fam in COMPACT_SPECS and fam not in (CHUNKAB_FAM, CHUNKAUTO_FAM, PADBK_FAM, FIELDBK_FAM) and fw == "e4b":   # amendments 36-38: the padded LoRA delta its tag names (41 / 44 / 48 / 49 share the scorer only)
+    if fam in COMPACT_SPECS and fam not in (CHUNKAB_FAM, CHUNKAUTO_FAM, PADBK_FAM, FIELDBK_FAM, PADBK28_FAM) and fw == "e4b":   # amendments 36-38: the padded LoRA delta its tag names (41 / 44 / 48 / 49 share the scorer only)
         w = compact_ab_why(r.get("tag") or "", r)
         if w:
             why.append(w)
@@ -4698,6 +4721,11 @@ def render(F, d):
         out += ["\n## Predictions P119 / P120 / P121 / P122 (TC1-PREREG amendment 49: the LoRA delta one padded block vs buckets at the field recipe; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F, FIELDBK_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if PADBK28_FAM in F:
+        out += ["\n## Predictions P130 / P131 / P132 / P133 (TC1-PREREG amendment 52: the LoRA delta one padded block vs buckets on packed rows in torch 2.8; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_compactab(F, PADBK28_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if PADBK_FAM in F:
         out += ["\n## Predictions P115 / P116 / P117 / P118 (TC1-PREREG amendment 48: the LoRA delta one padded block vs buckets on packed rows; scored mechanically)",
@@ -7644,6 +7672,27 @@ def selftest():
     RXV = PD(RX)
     assert RXV[PACKED4KD_FAM]["verdicts"][("e4b", "fused_attn4_m")] == "VOID" and RXV[PACKED4KD_FAM]["verdicts"][("e4b", "fused_attn4_m_d2")] == "VOID"
     assert "P126" in render(RPD, "x") and "amendment 51" in render(RPD, "x")
+    cases += 1
+    # 105. TC1 amendment 52 (qwen3padbk28): amendment 48's fixture in torch 2.8 -- VALID and HELD; a torch-2.12 receipt is VOID here; 1.10 on the
+    #      matched pair FALSIFIES P130
+    def _pk28(**kw):
+        R = _padbk_set(torch="2.8.0+cu128", **kw)
+        out = {}
+        for (fw, tag), r in R.items():
+            t2 = tag.replace("_pk0", "_k0").replace("_pk1", "_k1")
+            r = dict(r, tag=t2, fam=PADBK28_FAM)
+            out[(fw, t2)] = r
+        return out
+    K8 = lambda R: {PADBK28_FAM: reduce_family(PADBK28_FAM, R, {}, 30)}
+    RK8 = K8(_pk28())
+    assert all(x["verdict"] == "VALID" for x in RK8[PADBK28_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RK8[PADBK28_FAM]["rows"]]
+    pk8 = lambda R: {p: v for p, _, v, _ in score_compactab(R, PADBK28_FAM)}
+    assert pk8(RK8) == {"P132": "HELD", "P130": "HELD", "P131": "HELD", "P133": "HELD"}, score_compactab(RK8, PADBK28_FAM)
+    assert pk8(K8(_pk28(match=((11.20, 11.22), (12.32, 12.34)))))["P130"] == "FALSIFIED"
+    RW = _pk28()
+    RW[("e4b", "fused_attn4_m_k1")]["env"] = dict(RW[("e4b", "fused_attn4_m_k1")]["env"], torch="2.12.1+cu130")
+    assert K8(RW)[PADBK28_FAM]["verdicts"][("e4b", "fused_attn4_m_k1")] == "VOID"
+    assert "P130" in render(RK8, "x") and "amendment 52" in render(RK8, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
