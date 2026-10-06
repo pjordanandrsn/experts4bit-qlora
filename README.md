@@ -174,6 +174,12 @@ Freeze the model before `enable_dense_offload` (`model.requires_grad_(False)`, t
 parameter beside frozen ones is kept resident rather than streamed, and an unfrozen model streams its trainable
 weights with a warning that an optimizer cannot step them.
 
+Training on CUDA, it copies the next layer's frozen weights while the current one computes (`train_prefetch`, on by
+default; `train_prefetch=False` opts out). On an RTX 5090 at 2048 tokens this trained bitwise identically to resident
+at 1.0023× the step time on PCIe gen 5 x16 and 1.0050× on gen 4 x16, and, with the chunked LM loss, fit 2.00× the resident sequence length
+([DQ3](bench/dq3/RESULTS-dq3.md), [DQ5](bench/dq5/RESULTS-dq5.md), [DQ4](bench/dq4/RESULTS-dq4.md)). DQ4 reached
+2.375× with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` set before CUDA starts; the library does not set it.
+
 An arena is baked by `grouped-nf4-gemm`, not by this package; the bake
 tools, and how to bind an arena to a model, are on
 [`docs/solutions/offload-moe-experts-to-cpu-or-nvme.md`](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/solutions/offload-moe-experts-to-cpu-or-nvme.md).

@@ -742,10 +742,11 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
     bitwise identically at 1.0023x the resident step time on PCIe gen 5 x16 and 1.0050x on gen 4 x16, against 1.18x
     and 1.51x synchronous (``bench/dq3/RESULTS-dq3.md``, ``bench/dq5/RESULTS-dq5.md``).
 
-    Memory: DQ4 (``bench/dq4/RESULTS-dq4.md``) read the streamed arm's longest trainable sequence at 2.00x the resident
-    one under the default CUDA allocator, and 2.375x with ``PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True``: the
-    default allocator hit OOM with about 6 GiB reserved but unallocated. That setting is the caller's (it must be set
-    before CUDA initialises); nothing here sets it.
+    Memory: DQ4 (``bench/dq4/RESULTS-dq4.md``) read the streamed arm's longest trainable sequence (chunked LM loss)
+    at 2.00x the resident one under the default CUDA allocator, and 2.375x with
+    ``PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True``: the default allocator hit OOM with about 6 GiB reserved but
+    unallocated. That setting is the caller's (it must be set before CUDA initialises); nothing here sets it.
+
     Use it when the dense (non-expert) side of the model is what does not fit: every decoder
     layer's dense weights are pinned on the host and streamed per layer. Returns the list of
     handles (assert it is non-empty). Composes with the expert residency engines. See

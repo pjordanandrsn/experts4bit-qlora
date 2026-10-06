@@ -136,6 +136,23 @@ Freeze first (`model.requires_grad_(False)`, then add any adapters). A trainable
 LoRA adapter) stays resident, since an optimizer cannot step a streamed parameter. An unfrozen model streams as
 before, but warns.
 
+Training on CUDA streams with `train_prefetch` by default: each layer's frozen weights are copied on a side stream
+while the previous layer computes, forward and backward (checkpoint recompute included, reentrant or not), with at most
+two layers resident. `train_prefetch=False` falls back to the synchronous single-slot path. Measured on an RTX 5090,
+Qwen3-32B architecture, 2048 tokens, LoRA r16 (bitwise identical to resident in every case):
+
+| link | streamed / resident step time | synchronous / resident |
+|---|---|---|
+| PCIe gen 5 x16 (DQ3) | 1.0023 | 1.18 |
+| PCIe gen 4 x16 (DQ5) | 1.0050 | 1.51 |
+
+On the 32 GB card, with the chunked LM loss, the streamed model trained 2.00× the resident model's longest sequence
+(DQ4: 14336 against 7168 tokens). **Allocator
+fragmentation is the next limit:** under the default CUDA allocator the streamed run hit OOM with about 6 GiB reserved
+but unallocated, and `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` (set before CUDA initialises) raised the ratio
+to 2.375×. It is a process-wide setting, so the library leaves it to you. Not measured: gen 3 or x8 links, other
+cards.
+
 **I am serving, not training, and want it faster.**
 `enable_fast(model)` (needs `[fast]`) routes the frozen experts through the grouped kernel
 (eval, `no_grad`) instead of the per-expert loop. Inference only; for training use
