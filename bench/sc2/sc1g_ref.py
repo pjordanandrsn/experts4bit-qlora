@@ -183,6 +183,101 @@ def score(model, srcs, windows, out_dir, dev, nf4_pair=True, log=print) -> dict:
     return res
 
 
+# ---- A8: the reference's per-position decode routing (box R, SC1G_R_MODE=route) ---------------------------------------
+class RouteRecorder:
+    """Forward hooks on every decoder layer's router -- the first submodule whose class name ends in ``TopKRouter``
+    (step_decomp's `_router_modules` rule, narrowed to the router class). Each call's (scores, indices) are appended in call
+    order per layer, on the host: the single integer tensor is the indices, and the one float tensor of the same shape is
+    the scores (`_router_out_positions`' rule; gpt-oss at transformers 5.16.1 returns (logits [T, E], scores [T, k],
+    indices [T, k])). The reference box is not timed, so the per-call host copy costs nothing that matters."""
+
+    def __init__(self, model):
+        self.routers = []
+        for i, layer in enumerate(model.model.layers):
+            r = next((m for _n, m in layer.named_modules() if type(m).__name__.endswith("TopKRouter")), None)
+            if r is None:
+                raise RuntimeError(f"layer {i}: no *TopKRouter submodule -- refusing to record")
+            self.routers.append(r)
+        self.rec = {i: {"idx": [], "w": []} for i in range(len(self.routers))}
+        self.handles = []
+
+    def _hook(self, i):
+        def hook(_m, _inp, out):
+            ints = [t for t in out if torch.is_tensor(t) and not t.is_floating_point()] if isinstance(out, tuple) else []
+            if len(ints) != 1:
+                raise RuntimeError(f"layer {i}: router output carries {len(ints)} integer tensors, not 1 -- refusing")
+            idx = ints[0]
+            ws = [t for t in out if torch.is_tensor(t) and t.is_floating_point() and tuple(t.shape) == tuple(idx.shape)]
+            if len(ws) != 1:
+                raise RuntimeError(f"layer {i}: no single float tensor shaped like the indices -- refusing")
+            self.rec[i]["idx"].append(idx.detach().to("cpu", torch.int64))
+            self.rec[i]["w"].append(ws[0].detach().float().cpu())
+        return hook
+
+    def __enter__(self):
+        self.handles = [r.register_forward_hook(self._hook(i)) for i, r in enumerate(self.routers)]
+        return self
+
+    def __exit__(self, *exc):
+        for h in self.handles:
+            h.remove()
+        self.handles = []
+        return False
+
+    def calls(self) -> dict:
+        return {i: len(v["idx"]) for i, v in self.rec.items()}
+
+    def layers(self) -> dict:
+        return {i: {"idx": torch.cat(v["idx"]), "w": torch.cat(v["w"])} for i, v in self.rec.items() if v["idx"]}
+
+
+def npy_sha(arr: np.ndarray) -> str:
+    """sha256 of the bytes `np.save` writes for `arr` -- the registered rows' sha is `file_sha` of exactly such a file."""
+    import io
+    buf = io.BytesIO()
+    np.save(buf, arr)
+    return hashlib.sha256(buf.getvalue()).hexdigest()
+
+
+def route_only(model, srcs, windows, text_shas: dict, ref_shas: dict, out_dir: str, dev, model_id="", rev="", log=print) -> dict:
+    """A8: per window, the decode-shaped teacher-forced forward box R's rows come from (one token per forward from position
+    0), with every router recorded. Writes route_ref_<src>.pt in step_decomp's `_route_save` format ({"layers": {l: {"idx",
+    "w"}}, "meta"}), which its `--ppl-route replay` reads, and route_verdict.json. Provenance: the recomputed rows' sha
+    against the registered one (bit-identical or not), their per-position top-1 token (gated offline against
+    bench/sc1/sc1g_ref/ref_argmax.json), and the decode NLL. The rows themselves are not written."""
+    os.makedirs(out_dir, exist_ok=True)
+    res = {"rule": "A8", "windows": {}}
+    for src in srcs:
+        ids, P, S = windows[src]
+        x = ids[:P + S].to(dev)
+        tg = ids[P + 1:P + S + 1].numpy()
+        t0 = time.time()
+        with RouteRecorder(model) as rr:
+            dec = decode_teacher_forced_logits(model, x)[P:P + S]
+        calls, lay = rr.calls(), rr.layers()
+        rows = KL.full_rows_fp16(dec)
+        rsha = npy_sha(rows)
+        k = int(next(iter(lay.values()))["idx"].shape[1]) if lay else 0
+        ok = bool(lay) and all(c == P + S for c in calls.values()) and all(
+            tuple(v["idx"].shape) == (P + S, k) and tuple(v["w"].shape) == (P + S, k) for v in lay.values())
+        meta = {"text_sha": text_shas[src], "prompt_len": int(P), "steps": int(S), "model": model_id, "rev": rev,
+                "rows_sha256": rsha, "registered_rows_sha256": ref_shas.get(src),
+                "source": "box R (A8): the bf16-dequant reference's decode-shaped routing, one row per absolute position"}
+        path = os.path.join(out_dir, f"route_ref_{src}.pt")
+        torch.save({"layers": lay, "meta": meta}, path)
+        res["windows"][src] = {"route_file": os.path.basename(path), "route_sha256": KL.file_sha(path), "router_calls": calls,
+                               "calls_ok": ok, "top_k": k, "prompt_len": int(P), "positions": int(S), "rows_sha256": rsha,
+                               "registered_rows_sha256": ref_shas.get(src), "rows_bit_identical": rsha == ref_shas.get(src),
+                               "argmax": rows.argmax(axis=1).astype(np.int64).tolist(),
+                               "reference_nll_decode": nll_of(KL.reference_rows(dec, tg)), "decode_s": round(time.time() - t0, 1)}
+        log(f"R8 {src}: routers {len(calls)} x {sorted(set(calls.values()))} calls (want {P + S}) ok={ok} rows {rsha[:12]} "
+            f"bit_identical={rsha == ref_shas.get(src)} nll {res['windows'][src]['reference_nll_decode']:.5f}")
+        del dec, rows
+    res["verdict"] = "ROUTES_OK" if res["windows"] and all(w["calls_ok"] for w in res["windows"].values()) else "ROUTES_BAD"
+    json.dump(res, open(os.path.join(out_dir, "route_verdict.json"), "w"), indent=1, sort_keys=True)
+    return res
+
+
 def verdict(res: dict, k0: dict | None, srcs) -> dict:
     """R's own gate: per check OK / UNREAD / VOID; R_OK only when every check is OK."""
     w = res["windows"]
@@ -298,6 +393,25 @@ def self_test() -> int:
         cases.append(("A5 full rows: [20, 320] fp16, sha recorded", rows.shape == (20, 320) and rows.dtype == np.float16
                       and KL.file_sha(fp) == fa["sha256"] and res["rule"] == "A5"))
         cases.append(("decode vs prefill floor is tiny on fp32 CPU", res["windows"]["conv1"]["floor_F"] < 1e-6))
+        # A8: the routing record on the same forward -- one row per absolute position per router, step_decomp's format,
+        # and the recomputed rows hash to the artifact score() wrote (CPU fp32 is deterministic), so provenance reads exact
+        m2 = _tiny_model()
+        rr = route_only(m2, ["conv1"], wins, {"conv1": "ab" * 32}, {"conv1": fa["sha256"]}, os.path.join(d, "route"), "cpu",
+                        log=lambda *_: None)
+        w8 = rr["windows"]["conv1"]
+        rec = torch.load(os.path.join(d, "route", "route_ref_conv1.pt"), map_location="cpu")
+        lay = rec["layers"]
+        cases.append(("A8 route record: every router called P+S times, rows [P+S, k] in step_decomp's format",
+                      rr["verdict"] == "ROUTES_OK" and w8["calls_ok"] and set(w8["router_calls"].values()) == {32}
+                      and sorted(lay) == [0, 1] and tuple(lay[0]["idx"].shape) == (32, 2) and lay[0]["idx"].dtype == torch.int64
+                      and lay[0]["w"].dtype == torch.float32 and rec["meta"]["text_sha"] == "ab" * 32 and rec["meta"]["prompt_len"] == 12))
+        cases.append(("A8 provenance: the recomputed rows hash to score()'s artifact; argmax per position recorded",
+                      w8["rows_bit_identical"] and len(w8["argmax"]) == 20 and w8["argmax"] == rows.astype(np.float64).argmax(1).tolist()))
+        # the record's indices are the router's own top-k: re-running the router on its recorded inputs is not needed --
+        # each row's ids are distinct and in range, and the weights sum to 1 (gpt-oss: softmax over the selected k)
+        cases.append(("A8 record rows are valid top-k selections", bool((lay[1]["idx"] >= 0).all() and (lay[1]["idx"] < 4).all())
+                      and all(len(set(r)) == 2 for r in lay[1]["idx"].tolist())
+                      and float((lay[1]["w"].sum(1) - 1).abs().max()) < 1e-5))
         changed = any(not torch.equal(n_before[n], p) for n, p in m.named_parameters() if "experts" in n)
         cases.append(("nf4 pass changed the experts", changed and res["nf4"]["matrices"] == 2 * 2 * 4))
         w1 = res["windows"]["conv1"]
@@ -348,6 +462,8 @@ def main(argv=None) -> int:
     ap.add_argument("--out")
     ap.add_argument("--no-nf4-pair", action="store_true")
     ap.add_argument("--reverdict", default="", help="DIR: re-derive R's verdict from its committed receipt (no GPU)")
+    ap.add_argument("--route-only", action="store_true", help="A8: the decode forward with every router recorded; no prefill, no NF4")
+    ap.add_argument("--ref-shas", help="A8: bench/sc1/sc1g_ref/ref_full_shas.json -- the registered rows' shas (provenance)")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
@@ -371,6 +487,16 @@ def main(argv=None) -> int:
     t0 = time.time()
     model = load_reference(a.model, a.rev, "cuda")
     print(f"SC1G_R reference loaded in {time.time() - t0:.0f} s", flush=True)
+    if a.route_only:
+        if not a.ref_shas:
+            ap.error("--route-only needs --ref-shas")
+        rr = route_only(model, srcs, wins, shas, json.load(open(a.ref_shas)), a.out, "cuda", model_id=a.model, rev=a.rev,
+                        log=lambda s_: print(s_, flush=True))
+        for s_, w in rr["windows"].items():
+            print(f"SC1G_R8_ROUTE {s_} calls_ok={w['calls_ok']} route_sha256={w['route_sha256']} rows_bit_identical="
+                  f"{w['rows_bit_identical']} nll_decode={w['reference_nll_decode']:.6f}", flush=True)
+        print(f"SC1G_R8_VERDICT {rr['verdict']}", flush=True)
+        return 0 if rr["verdict"] == "ROUTES_OK" else 1
     res = score(model, srcs, wins, a.out, "cuda", nf4_pair=not a.no_nf4_pair, log=lambda s: print(s, flush=True))
     v = verdict_a5(res, k0, srcs)
     json.dump(res, open(os.path.join(a.out, "r_calib.json"), "w"), indent=1, sort_keys=True)

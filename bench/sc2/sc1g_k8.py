@@ -27,6 +27,9 @@ SC1's sc1_prompts.py, P42's hook):
   6. (A7) SC1G_ROUTE_IDS_OUT=<path.npz> records the expert ids e4b's decode GEMV serves at every layer of every scored
      step (route_ids_capture): gnf4's gemv_mxfp4_b32 is wrapped, its ids copied device-side into a preallocated buffer, and
      each scored log_softmax row records the GEMV call count before it (the position alignment). Ints only, no extra sync.
+  7. (A8) SC1G_ROUTE_SELF_OUT=<path.pt> records the served arm's own decode routing (scores + indices, per layer, per scored
+     position) in step_decomp's `_route_save` format, through a pass-through replay of an empty record (route_self_record):
+     the input of the identity replay. A replay arm itself is step_decomp's own `--ppl-route replay --ppl-route-file F`.
 
   sc1g_k8.py k8 -- <step_decomp.py args...>        import step_decomp (beside this file) and run its main()
   sc1g_k8.py windows --model M --rev R --out DIR --suffix S [--steps 2048]
@@ -313,6 +316,61 @@ def route_ids_capture(module, out: str, layers: int = 24, top_k: int = 4, max_po
     return st
 
 
+def route_self_record(module, out: str, window_file: str) -> tuple:
+    """A8: the served arm's OWN decode routing, recorded in step_decomp's `_route_save` format -- the input of the identity
+    replay (replaying it must leave the arm bit-identical, or the replay mechanism itself perturbs the run). step_decomp
+    installs router hooks only when replaying, and only around the scored loop, so the arm replays an EMPTY record (every
+    call passes through untouched: `rec is None` -> passed) and `step_decomp._route_hook` is wrapped -- looked up at install
+    time by `_route_install` -- to copy each call's (scores, indices) device-side first. An empty record sets no layer's
+    `consumed` counter, so the recorder keeps its own: the j-th call of a layer is scored position j, row prompt_len + j.
+    Rows below prompt_len are -1 / 0 (never consumed: replay starts at the prompt boundary). Written at exit. Returns
+    (state, the empty record's path, which the caller passes as --ppl-route-file)."""
+    import torch
+    rec = json.load(open(window_file))
+    P, S = int(rec["prompt_len"]), int(rec["steps"])
+    empty = out + ".empty.pt"
+    torch.save({"layers": {}, "meta": {"text_sha": rec["text_sha"], "prompt_len": P, "steps": S,
+                                       "source": "empty: the self-record arm's pass-through replay (A8)"}}, empty)
+    st = {"rows": {}, "bad": [], "P": P, "S": S}
+    h0 = module._route_hook
+
+    def factory(layer):
+        inner = h0(layer)
+
+        def hook(m, inp, out_):
+            pos = module._router_out_positions(out_)
+            if pos is None:
+                st["bad"].append(f"layer {layer}: no (weights, index) pair")
+            else:
+                w, idx = out_[pos[0]], out_[pos[1]]
+                if idx.shape[0] != 1:
+                    st["bad"].append(f"layer {layer}: a {idx.shape[0]}-row router call inside the scored loop")
+                st["rows"].setdefault(layer, []).append((w.detach().clone(), idx.detach().clone()))
+            return inner(m, inp, out_)
+        return hook
+
+    module._route_hook = factory
+
+    def _save():
+        lay, counts = {}, {}
+        for layer, rows in sorted(st["rows"].items()):
+            counts[int(layer)] = len(rows)
+            k = int(rows[0][1].shape[-1])
+            idx = torch.full((P + S, k), -1, dtype=torch.int64)
+            w = torch.zeros((P + S, k), dtype=torch.float32)
+            for j, (wj, ij) in enumerate(rows[:S]):
+                idx[P + j] = ij.reshape(-1).to("cpu", torch.int64)
+                w[P + j] = wj.reshape(-1).float().cpu()
+            lay[int(layer)] = {"idx": idx, "w": w}
+        torch.save({"layers": lay, "meta": {"text_sha": rec["text_sha"], "prompt_len": P, "steps": S, "calls": counts,
+                                            "bad": st["bad"][:20], "source": "self-record (A8): the served arm's own decode routing"}},
+                   out + ".tmp")
+        os.replace(out + ".tmp", out)
+    atexit.register(_save)
+    st["save"] = _save
+    return st, empty
+
+
 def k8(args) -> None:
     pin_chat_date()
     if os.environ.get("SC1G_ROUTE_OUT"):
@@ -338,6 +396,12 @@ def k8(args) -> None:
         if "--ppl-oracle" in args:
             raise SystemExit("SC1G_REF_FILE reads the SERVED loop's rows; an --ppl-oracle arm scores elsewhere -- refused")
         named_capture(step_decomp, os.environ["SC1G_REF_FILE"], os.environ.get("SC1G_REF_SHA"), os.environ["SC1G_NAMED_OUT"])
+    if os.environ.get("SC1G_ROUTE_SELF_OUT"):        # A8: the identity replay's input (a pass-through replay, recorded)
+        if "--ppl-route" in args or "--ppl-oracle" in args:
+            raise SystemExit("SC1G_ROUTE_SELF_OUT records the SERVED loop's own routing through an empty replay -- "
+                             "an arm that already routes (or scores on the oracle) is refused")
+        _st, empty = route_self_record(step_decomp, os.environ["SC1G_ROUTE_SELF_OUT"], os.environ["SC1G_WINDOW_FILE"])
+        sys.argv += ["--ppl-route", "replay", "--ppl-route-file", empty]
     if os.environ.get("SC1G_ROUTE_IDS_OUT"):         # A7: AFTER the KL proxy, so its boundary rows wrap A5's
         if "--ppl-oracle" in args:
             raise SystemExit("SC1G_ROUTE_IDS_OUT reads the SERVED loop's decode GEMV; an --ppl-oracle arm scores elsewhere -- refused")
