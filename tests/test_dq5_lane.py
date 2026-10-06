@@ -20,14 +20,13 @@ def test_the_runner_is_dq3s_but_for_the_link_gate_and_the_h2d_probe():
     expected = expected.replace('W=${DQ3_W:-/root/tc1}; cd "$W" || exit 9   # DQ3_W: tests only',
                                 'W=${DQ5_W:-/root/tc1}; cd "$W" || exit 9   # DQ5_W: tests only')
     expected = expected.replace('dq3: $*"', 'dq5: $*"')
-    expected = expected.replace(
-        'case "$link" in *"RTX 5090, 5, 16") ;; *) echo "HOST REFUSED: not an RTX 5090 on PCIe gen 5 x16 ($link)" | tee -a summary.txt; finish 13;; esac',
+    expected = expected.replace(                         # since #1216 both carry the same gate; only the generation differs
+        'case "$link" in *"RTX 5090, 5, 16") ;; *) echo "OUT OF BAND: not an RTX 5090 on PCIe gen 5 x16 ($link)" | tee -a summary.txt; finish 19;; esac',
         'case "$link" in *"RTX 5090, 4, 16") ;; *) echo "OUT OF BAND: not an RTX 5090 on PCIe gen 4 x16 ($link)" | tee -a summary.txt; finish 19;; esac')
     got = _body(RUN)
     probe = got[got.index("# Descriptive only:"):got.index("\ncommand -v git")]
+    assert got.replace(probe, "") == expected, "dq5_run.sh drifted from dq3_run.sh beyond the registered differences"
     gate = got[got.index("# width.max is what the slot CAN negotiate"):got.index("# Host floor")]
-    assert got.replace(probe, "").replace(gate, "") == expected, \
-        "dq5_run.sh drifted from dq3_run.sh beyond the registered differences"
     assert "python dq5_link_gate.py" in gate and 'finish 19' in gate and 'finish 9' in gate
     assert "dq5_h2d_probe.py receipts/h2d.json" in probe and "not a refusal" in probe and "finish" not in probe
     for s in ("for arm in R S S0 S0 S R; do", "dq3_arm.py", "dq3_reduce.py", "pcie.link.gen.max,pcie.link.width.max"):
