@@ -282,6 +282,10 @@ them on the current cuts; the next paragraph is what it found.
 time into `torch.mm`. Against the fused kernels it reads 0.651 on Mixtral-8x7B (few large experts) and 2.947 on Qwen3-30B-A3B
 (many experts, a launch-bound step), with held-out unchanged. Off sm_90, grouped-nf4-gemm's `auto` takes it for calls with at most
 16 present groups.
+**And its decoded route** (`e4b.train.decoded-route.*.5090.2026-10-06`, TC1 amendment 46): `dequant_groups` and one grouped bf16 GEMM
+launch per chunk of groups. Lane RD1 read it 0.79 × the fused kernels per call on OLMoE's expert shapes, but on the full step it reads
+1.005 on OLMoE-1B-7B and 1.066 on Qwen3-30B-A3B, with held-out unchanged. So `auto` does not take it, and `GNF4_TRAIN_GEMM=decoded`
+stays opt-in.
 **Where the memory goes** (`e4b.train.memory-census.qwen3.5090.2026-10-04`, TC1 amendment 23): a census of the CUDA allocator
 on Qwen3-30B-A3B at micro-batch 1 finds every static class byte-for-byte the same in e4b and Unsloth except the expert absmax.
 e4b keeps it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 GB, as Unsloth does. With that switch e4b peaks
