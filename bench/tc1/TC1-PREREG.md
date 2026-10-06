@@ -2128,5 +2128,19 @@ gate. The read reports both sides' medians.
 - **P124 or P125 FALSIFIED:** `auto` stays opt-in, and the read names the arm.
 - **Any UNTESTED, none FALSIFIED:** `auto` stays opt-in pending a re-ask.
 
+**What this box can and cannot show** (maintainer, 2026-10-06T10:48Z, before the box).
+- The shapes and #491's tests make P123–P125 close to certain, so these are an **integration check**, not a test of an
+  uncertain hypothesis. What it can catch: `auto` not reaching grouped-nf4-gemm in the real training loop (hence the
+  resolved-mode record), a field call larger than the census saw, or a peak or held-out change the shapes don't predict.
+- The default flip changes behaviour only on calls of **≥ 16,384 routed rows**. The evidence for those calls is
+  amendment 48's: one model (Qwen3-30B-A3B, top-8), packed 4,096-token rows, one RTX 5090. A recipe of another model
+  that crosses the gate flips on grouped-nf4-gemm's correctness tests alone. For example, gpt-oss at 4,096 tokens ×
+  top-4 is exactly 16,384, and the gate's `>=` fires there.
+- So the default-flip PR carries #1250's conditions: the changelog states that evidence scope; the bucketed path's
+  correctness tests cover every expert geometry grouped-nf4-gemm ships for; and the flip lands in a release, with
+  `NF4_QLORA_PAD_BUCKETS=0` documented as the way back.
+- **Order.** This registration merges after the amendment 49 re-ask read (#1258) and grouped-nf4-gemm#491 are on main;
+  it rests on both.
+
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the download;
 this is in the standing no-ask tier.
