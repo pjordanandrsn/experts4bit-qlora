@@ -83,7 +83,7 @@ These are specific workloads, with public results and controls. The table is che
 | :--- | :--- | :--- |
 | Qwen3-30B-A3B QLoRA · RTX 5090 · matched work, same software stack (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack`) | **2.352×** training speed vs Unsloth; **3.494 vs 8.218 s/step**. Comparable held-out loss. Unsloth used **3.22 GB less peak VRAM**. | measured |
 | Same comparison on a second RTX 5090 host (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack-host2`) | **2.468×** training speed vs Unsloth. | measured |
-| Packed 4,096-token Qwen3 training · RTX 5090 · current defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults`) | **1.453×** training speed vs Unsloth; **28.23 vs 24.86 GB** peak. Held-out loss **0.9544 vs 0.9543**. | measured |
+| Packed 4,096-token Qwen3 training · RTX 5090 · current defaults (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults`) | **1.453×** training speed vs Unsloth; **28.23 vs 24.86 GB** peak; that **+3.364 GB** is e4b's held-out evaluation, not a training step (`e4b.train.memory.packed-4k-census.5090.2026-10-06`). Held-out loss **0.9544 vs 0.9543**. | measured |
 | Expert-offload training on a 12 GB card (`e4b.offload.fits-30b-class`) | Qwen3-30B-A3B: **7.16 GB** peak; Gemma-4-26B-A4B: **8.47 GB**. | measured |
 
 The speed rows use torch 2.12.1+cu130 and transformers 5.5.0. The packed result uses
