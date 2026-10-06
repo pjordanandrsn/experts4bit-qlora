@@ -98,6 +98,33 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 55 (2026-10-06): on packed rows e4b's run peak is its held-out evaluation, not its training step; with the double-quantized absmax the gap to Unsloth is 2.01 GB (P141–P143 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 55. One RTX 5090 (`tc1-5090-112`, AMD EPYC 7K62, a 23-CPU
+quota, Vast machine 152440). e4b `dde06a9`, grouped-nf4-gemm `71847e5`, Unsloth 2026.9.14, every arm in venv-unsloth (torch 2.12.1).
+Amendment 47's census box at the current defaults: packed 4,096-token rows, 20 steps, one draw per arm, `--mem-census 1`. Read:
+[`RESULTS-tc1-memc4kb.md`](RESULTS-tc1-memc4kb.md).
+
+| arm | peak allocated | where the peak falls | expert absmax at the peak | largest non-static groups at the peak |
+|---|---|---|---|---|
+| e4b defaults | 28.23 GB | `s20.eval`, the held-out evaluation after step 20 | 1.81 GB (fp32) | the stock LM loss: `ForCausalLMLoss` 2.49 GB (the fp32 logits), `cross_entropy` 2.49 GB, the head's bf16 output 1.28 GB |
+| e4b, `E4B_ABSMAX_DQ=1` | 26.88 GB | `s20.eval` | 0.46 GB | the same three |
+| Unsloth | 24.86 GB | `s2.mb2.backward`, a training step | 0.46 GB | `nf4_dequant_triton` 0.81 GB, autograd 0.29 GB |
+
+- **P141 HELD:** the census attributes 100 % of each arm's peak. **P142 HELD:** e4b's defaults peak 3.364 GB above Unsloth's (band
+  [2.0, 5.0]). **P143 HELD:** with the double-quantized absmax the gap is 2.013 GB (≤ 2.5).
+- **The bucketed delta is not the remaining excess.** By class at the peak, e4b − Unsloth is transient +4.58 GB and expert absmax
+  +1.35 GB, offset by adapter gradients −2.57 GB. Unsloth's peak falls in a backward pass, where the gradients are live; e4b's falls in
+  the evaluation after them. grouped-nf4-gemm's groups hold under 0.001 GB at e4b's peak.
+- **Why e4b peaks in evaluation.** e4b's chunked LM loss takes training forwards only. A `torch.no_grad` evaluation runs the stock
+  forward on purpose: the held-out loss stays the stock path's bit for bit, and a caller that reads the logits still gets them. On a
+  4,096-token row that stock forward holds the fp32 logits, cross-entropy's working copy and the bf16 head output at once: about 6.26
+  GB on top of the static 21.99 GB. So the 28.23 GB packed-defaults peak (amendment 51) is e4b's evaluation, set against Unsloth's
+  training step. This census keeps only the snapshot that set the run's peak, so e4b's training-phase peak is not recorded here.
+- **By amendment 55's rule** (P143 HELD), the next registration asks whether the library should default to the double-quantized absmax
+  on packed rows, reading its speed there the way amendment 28 read it at the field recipe. The same box should record each arm's
+  training-phase and evaluation peaks separately, so the packed memory comparison can be made phase for phase.
+
 ## Amendment 54 (2026-10-06): neither remedy moves the step on a host where torch 2.8 is not host-bound (P137, P138 FALSIFIED); the ladder does remove `bmm`'s per-shape host cost
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 54. One RTX 5090 (`tc1-5090-111`, AMD Ryzen Threadripper

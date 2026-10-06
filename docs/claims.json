@@ -10956,6 +10956,31 @@
         "receipts/experts4bit-qlora/2026-10-06/tc1-5090-111/tc1/"
       ],
       "notes": "Vast invoiced $1.41."
+    },
+    {
+      "id": "e4b.train.memory.packed-4k-census.5090.2026-10-06",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 55 (#835), one rented RTX 5090 (tc1-5090-112, AMD EPYC 7K62): amendment 47's memory census (--mem-census 1) on packed rows of 4,096 real tokens at the current defaults (bucketed padding auto, the chunked LM loss auto), the matched set, 20 steps, one draw per arm, every arm in venv-unsloth (torch 2.12.1). Peak allocated: e4b defaults 28.228 GB, e4b with E4B_ABSMAX_DQ=1 26.877 GB, Unsloth 2026.9.14 24.864 GB; 100 % of each peak attributed (P141 HELD); e4b defaults - Unsloth +3.364 GB (P142 HELD, band [2.0, 5.0]); with the double-quantized absmax +2.013 GB (P143 HELD, <= 2.5). e4b's peak falls in the held-out evaluation after step 20 (s20.eval), where the stock LM loss holds the fp32 logits (2.49 GB), cross-entropy's working copy (2.49 GB) and the bf16 head output (1.28 GB); Unsloth's falls in a training backward (s2.mb2.backward) with its 2.57 GB of adapter gradients live. grouped-nf4-gemm's groups hold under 0.001 GB at e4b's peak. e4b's training-phase peak is not recorded by this census.",
+      "value": 3.364,
+      "unit": "GB, peak allocated, e4b defaults minus Unsloth, Qwen3-30B-A3B matched set on packed 4,096-token rows (one draw per arm); with E4B_ABSMAX_DQ=1 2.013",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-112: instance 54549887, AMD EPYC 7K62, a 23-CPU quota, Vast machine 152440); e4b @ dde06a9 + grouped-nf4-gemm @ 71847e5, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3memc4kb (TC1 amendment 55): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), 20 steps, held-out at 0 and 20, --mem-census 1, arms e4b fused_attn4_m_p4d / fused_attn4_m_p4d_dq and Unsloth ckpt_unsloth_m_p4d (grouped_mm); validity (memc4kb_why) and scoring by bench/tc1/tc1_reduce.py; no speed read",
+      "measured_on": "2026-10-06",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-memc4kb.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-112/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1-5090-112/tc1/"
+      ],
+      "notes": "Vast invoiced $0.89."
     }
   ]
 }
