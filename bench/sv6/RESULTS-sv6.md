@@ -30,7 +30,7 @@ GiB. The card lists 24,564 MiB.
 **Readings** (`sv6_reduce.py`, verdict `READ`, integrity clean in both arms):
 - **Y1 (the plan fits): HELD.** The planner's tier plan served 8 × 8,000-token prompts with no out-of-memory error. The
   driver peak was 21.357 GiB, under the card's total.
-- **Y2 (the plan bounds the process): HELD.** 22,932,357,120 B against the plan's 23,990,209,701: 0.986 GiB under.
+- **Y2 (the plan bounds the process): HELD.** 22,932,357,120 B against the plan's 23,990,209,701: 0.985 GiB under (1,057,852,581 B).
 - **Y3 (the estimate, long prompts): HELD**, −1.6%.
 - **Y4 (the estimate, short prompts): MISSED, below**, −6.4%. The registration named it the reading most likely to fall
   below the band. At 1,024-token prompts:
