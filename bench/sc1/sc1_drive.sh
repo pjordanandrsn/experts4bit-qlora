@@ -25,7 +25,7 @@ SC1B="$REPO/bench/sc1b"; for f in sc1b_census.py sc1b_e4b_census.py sc1b_vllm_ce
 SC2="$REPO/bench/sc2"; for f in sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py; do STAGE="$STAGE $SC2/$f"; done
 P98="$REPO/bench/p98"; STAGE="$STAGE $P98/p98_bake.py"   # SC2d (box K): P98's Qwen3.6 arena bake, staged flat on every box
 HOOK="$P42/hook/usercustomize.py"
-COMP_DIRS=""; for d in vllm sglang llamacpp exl3 lmdeploy; do [ -d "$HERE/$d" ] && COMP_DIRS="$COMP_DIRS $d"; done
+COMP_DIRS=""; for d in vllm sglang llamacpp exl3 lmdeploy sc1g_ref; do [ -d "$HERE/$d" ] && COMP_DIRS="$COMP_DIRS $d"; done
 for f in $STAGE $HOOK; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 case " $COMP_DIRS " in *" vllm "*) ;; *) say "refusing: bench/sc1/vllm/ is missing (every box needs the vLLM anchor)"; exit 78;; esac
 # staged.sha256 names the files as the BOX sees them; resolve each name to its source (the same case as make_pin.sh and
@@ -83,6 +83,13 @@ $SSH "rm -rf -- $W && mkdir -p $W/logs $W/hook $W/samples /root/.cache/huggingfa
 $SCP $STAGE "root@$HOST:$W/" && $SCP "$HOOK" "root@$HOST:$W/hook/" || { say "stage failed: scp"; exit 20; }
 COPYFILE_DISABLE=1 tar -C "$HERE" --exclude='__pycache__' --exclude='*.pyc' --exclude='.DS_Store' -czf - $COMP_DIRS | $SSH "tar -C $W -xzf -" || { say "stage failed: comparator dirs"; exit 20; }
 $SSH "cd $W && sha256sum -c --quiet staged.sha256" || { say "stage failed: the box's bytes do not match staged.sha256"; exit 20; }
+# SC1g A5: box R's full-vocabulary reference rows (~0.82 GB per window, kept outside any repo) are staged only when asked;
+# box I sha-checks each against the registered sc1g_ref/ref_full_shas.json and refuses its KL arms on any mismatch
+if [ -n "${SC1G_REF_FULL_SRC:-}" ]; then
+  ls "$SC1G_REF_FULL_SRC"/ref_full_*.npy > /dev/null 2>&1 || { say "stage failed: no ref_full_*.npy under $SC1G_REF_FULL_SRC"; exit 20; }
+  $SSH "mkdir -p $W/sc1g_ref_full" && $SCP "$SC1G_REF_FULL_SRC"/ref_full_*.npy "root@$HOST:$W/sc1g_ref_full/" || { say "stage failed: full reference rows"; exit 20; }
+  say "staged $(ls "$SC1G_REF_FULL_SRC"/ref_full_*.npy | wc -l | tr -d ' ') full reference row files from $SC1G_REF_FULL_SRC"
+fi
 if [ -s "$HF_TOKEN_FILE" ]; then   # authenticated pulls (unauthenticated shards throttle); the token never appears in a command line
   $SCP "$HF_TOKEN_FILE" "root@$HOST:/root/.cache/huggingface/token" && $SSH "chmod 600 /root/.cache/huggingface/token" || { say "stage failed: hf token"; exit 20; }
   say "hf token staged"

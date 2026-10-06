@@ -106,7 +106,9 @@ perl -e "alarm $(arm_alarm); exec @ARGV" python -u $W/sc1g_ref.py --model openai
     --shas $W/window_shas.json --k0 $W/k0.json --out $W/ref > logs/sc1g_ref.log 2>&1; rc=$?
 grep -aE "^(SC1G_R|R )" logs/sc1g_ref.log | tee -a summary.txt
 [ -s $W/ref/r_verdict.json ] || { tail -5 logs/sc1g_ref.log; say "NO VERDICT (rc=$rc)"; finish 30; }
-(cd $W/ref && sha256sum ref_*.npz) | tee $W/ref/SHA256SUMS | sed "s/^/ARTIFACT /" | tee -a summary.txt
+(cd $W/ref && sha256sum full/ref_full_*.npy) | tee $W/ref/SHA256SUMS | sed "s/^/ARTIFACT /" | tee -a summary.txt
 say "----- summary -----"; cat summary.txt
 [ $rc = 0 ] && grep -q '"verdict": "R_OK"' $W/ref/r_verdict.json && finish 0
+# A5: valid but under 3 gradable graded windows is its own outcome (a cost gate: box I is not launched), not R_NOT_OK
+grep -q '"verdict": "R_NO_GRADABLE"' $W/ref/r_verdict.json && finish 32
 finish 31

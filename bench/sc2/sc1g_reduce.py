@@ -218,6 +218,174 @@ def prove_a4(d: str) -> dict:
     return {"rows": out, "bad": bad, "proved": not bad, "box_r": why or "R_OK"}
 
 
+# ---- A5: the full-vocabulary KL reading ---------------------------------------------------------------------------------
+KL5_ARMS = {"e4b_mxfp4": "e4b_serve_served_{}", "e4b_nf4": "e4b_nf4_served_{}", "vllm": "nll_vllm_served_{}",
+            "llamacpp": "nll_llamacpp_decode_{}", "llamacpp_q8": "nll_llamacpp_q8_decode_{}"}
+KL5_UNREAD = {"sglang_native": "no full-distribution path (A5, registered before data)",
+              "sglang_marlin": "no full-distribution path (A5, registered before data)"}
+COMPARATORS5 = ("vllm", "llamacpp", "llamacpp_q8")
+NATIVE_MXFP4_5 = ("e4b_mxfp4",) + COMPARATORS5
+PROVE_A5 = ("e4b_serve_served_conv1", "nll_vllm_served_conv1", "nll_llamacpp_q8_decode_conv1")
+SUPPORT_KEYS = ("eng_kl_common", "eng_masked_mass", "eng_n_masked")   # every engine's per-position support record (#1223 review)
+
+
+def _fin(fn, a):
+    import numpy as np
+    a = np.asarray(a, dtype=np.float64)
+    a = a[np.isfinite(a)]
+    return float(fn(a)) if a.size else None
+
+
+def a5_refs(d: str) -> tuple:
+    """Box R's A5 receipt as staged into `<d>/ref`: (registered full shas, R's calibration, R's verdict, why-not). The whole
+    A5 reading is UNREAD unless R read R_OK under rule A5."""
+    rd = os.path.join(d, "ref")
+    try:
+        shas = json.load(open(os.path.join(rd, "ref_full_shas.json")))
+        rv = json.load(open(os.path.join(rd, "r_verdict.json")))
+        rc = json.load(open(os.path.join(rd, "r_calib.json")))
+    except (OSError, ValueError) as e:
+        return {}, None, None, f"box R's A5 receipt is not staged ({e.__class__.__name__})"
+    if rv.get("rule") != "A5" or rv.get("verdict") != "R_OK":
+        return shas, rc, rv, f"box R read {rv.get('verdict')} under rule {rv.get('rule', 'A4')}"
+    return shas, rc, rv, None
+
+
+def kl_row_full(d: str, label: str, src: str, R, shas: dict) -> dict:
+    """One engine x window full-vocabulary KL row; VALID only when the arm is VALID, its record is complete and finite,
+    e4b's proxy meta exists with one row per step, vLLM's full vocabulary verified, the recorded reference sha is the
+    registered one, no position is void, the engine masks (-inf) no token the reference gives mass, and the target
+    log-probs reproduce the arm's own mean NLL to ALIGN_TOL. Every row read carries `support` (#1223 review): the reference
+    mass on the engine's masked tokens, the masked count, the common-support KL -- what a common-support rule would grade,
+    registered on the proof's numbers if the proof finds masked mass, never on the reading's."""
+    import numpy as np
+    stem = KL5_ARMS[label].format(src)
+    q = row(d, stem, src, R)
+    if q["verdict"] != "VALID":
+        return {"verdict": "UNREAD", "why": f"arm {q['verdict']}: {q.get('why')}", "stem": stem}
+    pth = os.path.join(d, f"kl_{stem}.npz")
+    rec = _load(d, stem) or {}
+    if (rec.get("kl_full") or {}).get("verdict") == "VOID":
+        return {"verdict": "VOID", "why": rec["kl_full"]["why"], "stem": stem}
+    if not os.path.exists(pth):
+        return {"verdict": "UNREAD", "why": "no KL record", "stem": stem}
+    meta = json.load(open(pth + ".json")) if os.path.exists(pth + ".json") else {}
+    if label.startswith("e4b"):
+        if not meta:
+            return {"verdict": "VOID", "why": "no capture meta record (sc1g_k8's proxy did not write its .json)", "stem": stem}
+        if meta.get("calls") != meta.get("positions"):
+            return {"verdict": "VOID", "why": f"{meta.get('calls')} rows for {meta.get('positions')} positions", "stem": stem}
+    ref_sha = meta.get("ref_sha") or (rec.get("kl_full") or {}).get("ref_sha")
+    if ref_sha and shas.get(src) and ref_sha != shas[src]:
+        return {"verdict": "VOID", "why": f"KL read against reference {ref_sha[:12]}, registered {shas[src][:12]}", "stem": stem}
+    z = np.load(pth)
+    if not all(k in z.files for k in SUPPORT_KEYS):
+        return {"verdict": "VOID", "why": "no support record (eng_kl_common / eng_masked_mass / eng_n_masked)", "stem": stem}
+    kl, tlp = z["eng_kl"], z["eng_target_lp"]
+    mm, klc, nm = z["eng_masked_mass"], z["eng_kl_common"], z["eng_n_masked"]
+    masked = np.isfinite(mm) & (mm > 0)
+    void_n = int(np.isnan(kl).sum())
+    sup = {"positions_masked": int(masked.sum()), "masked_mass_max": _fin(np.max, mm), "masked_mass_mean": _fin(np.mean, mm),
+           "n_masked_max": _fin(np.max, nm), "kl_common_mean": _fin(np.mean, klc), "void_positions": void_n}
+    if void_n:
+        first = ((meta.get("void_first") or (rec.get("kl_full") or {}).get("void_first") or [{}]) + [{}])[0]
+        return {"verdict": "VOID", "why": f"{void_n} void positions (first: t={first.get('t')} {first.get('why')})", "stem": stem,
+                "support": sup}
+    if masked.any():
+        return {"verdict": "VOID", "why": f"the engine masks tokens carrying reference mass at {sup['positions_masked']} positions "
+                                          f"(max {sup['masked_mass_max']:.3e}): the full KL is infinite and no common-support "
+                                          f"rule is registered", "stem": stem, "support": sup}
+    if not (np.all(np.isfinite(kl)) and np.all(np.isfinite(tlp))):
+        return {"verdict": "VOID", "why": "KL record incomplete (non-finite entries)", "stem": stem}
+    gap = abs(float(-np.mean(tlp)) - float(q["mean_nll"]))
+    if gap > ALIGN_TOL:
+        return {"verdict": "VOID", "why": f"target log-probs give NLL {-np.mean(tlp):.9f} vs the arm's {q['mean_nll']:.9f}", "stem": stem}
+    return {"verdict": "VALID", "stem": stem, "kl_mean": float(np.mean(kl)), "kl_p50": float(np.median(kl)),
+            "kl_p95": float(np.quantile(kl, 0.95)), "positions": int(kl.size), "engine_nll": float(q["mean_nll"]), "alignment_gap": gap,
+            "support": sup}
+
+
+def a5(d: str) -> dict:
+    """A5's reading: the R gate, every full-KL row, per-window gradability (graded only if R's floor F < 1e-2; any engine
+    KL within its window's F is unresolved), and K-A / L1 / L2 with the registered floor rules."""
+    R = _sc1()
+    shas, rc, rv, why = a5_refs(d)
+    rows = {lab: {s: kl_row_full(d, lab, s, R, shas) for s in A4_SRCS + A4_CTRL} for lab in KL5_ARMS}
+    for lab, reason in KL5_UNREAD.items():
+        rows[lab] = {s: {"verdict": "UNREAD", "why": reason} for s in A4_SRCS + A4_CTRL}
+    F = {s: (rc or {}).get("windows", {}).get(s, {}).get("floor_F") for s in A4_SRCS + A4_CTRL}
+    nf4 = {s: (rc or {}).get("windows", {}).get(s, {}).get("calib_nf4", {}).get("kl_full_mean") for s in A4_SRCS + A4_CTRL}
+    gradable = [s for s in A4_SRCS if F.get(s) is not None and F[s] < 1e-2]
+
+    def k(lab, s):
+        x = rows[lab][s]
+        return x["kl_mean"] if x["verdict"] == "VALID" else None
+
+    def resolved(v, s):
+        return v is not None and v > F[s]
+
+    pred = {}
+    if why:
+        pred = {g: {"verdict": "UNREAD", "why": why} for g in ("K-A", "L1", "L2")}
+    else:
+        # K-A: NF4 >= 3x MXFP4 per window; NF4 unresolved -> drop; MXFP4 unresolved (NF4 resolved) -> F as its upper bound
+        ka = {}
+        for s in gradable:
+            m, n = k("e4b_mxfp4", s), k("e4b_nf4", s)
+            if m is None or n is None or not resolved(n, s):
+                continue
+            den = m if resolved(m, s) else F[s]
+            ka[s] = {"nf4": n, "mxfp4_or_bound": den, "bound_used": not resolved(m, s), "holds": n >= KA_RATIO * den}
+        pred["K-A"] = ({"verdict": "UNREAD", "why": f"{len(ka)} windows < {A4_MIN_WINDOWS}", "windows": ka} if len(ka) < A4_MIN_WINDOWS else
+                       {"verdict": "HOLDS" if all(x["holds"] for x in ka.values()) else "REFUTED", "windows": ka})
+        # L1: windows whose best comparator is unresolved are dropped; an unresolved e4b takes F as its upper bound
+        kept = []
+        for s in gradable:
+            comps = [k(c, s) for c in COMPARATORS5 if k(c, s) is not None]
+            if k("e4b_mxfp4", s) is None or not comps or not resolved(min(comps), s):
+                continue
+            kept.append(s)
+        if len(kept) < A4_MIN_WINDOWS:
+            pred["L1"] = {"verdict": "UNREAD", "why": f"{len(kept)} windows < {A4_MIN_WINDOWS} with e4b and a resolved comparator", "windows": kept}
+        else:
+            e4b_eff = sum(max(k("e4b_mxfp4", s), F[s]) if not resolved(k("e4b_mxfp4", s), s) else k("e4b_mxfp4", s) for s in kept) / len(kept)
+            comp = {c: sum(k(c, s) for s in kept) / len(kept) for c in COMPARATORS5 if all(k(c, s) is not None for s in kept)}
+            best = min(comp, key=comp.get) if comp else None
+            pred["L1"] = ({"verdict": "UNREAD", "why": "no comparator VALID on every kept window"} if best is None else
+                          {"verdict": "HOLDS" if e4b_eff <= L1_RATIO * comp[best] else "REFUTED", "e4b_pooled": e4b_eff,
+                           "best_comparator": best, "best_pooled": comp[best], "windows": kept})
+        # L2: each native-MXFP4 engine's pooled KL < R's NF4-requant pooled KL, over windows where both are resolved
+        l2 = {}
+        for lab in NATIVE_MXFP4_5:
+            ws = [s for s in gradable if resolved(k(lab, s), s) and resolved(nf4.get(s), s)]
+            if len(ws) >= A4_MIN_WINDOWS:
+                e, sc = sum(k(lab, s) for s in ws) / len(ws), sum(nf4[s] for s in ws) / len(ws)
+                l2[lab] = {"pooled": e, "nf4_scale": sc, "below": e < sc, "windows": ws}
+        pred["L2"] = ({"verdict": "UNREAD", "why": "no engine resolved on >= 3 windows"} if not l2 else
+                      {"verdict": "HOLDS" if all(x["below"] for x in l2.values()) else "REFUTED", "engines": l2,
+                       "at_or_above": sorted(lab for lab, x in l2.items() if not x["below"])})
+    table = {lab: {s: (None if rows[lab][s]["verdict"] != "VALID" else
+                       {"kl": rows[lab][s]["kl_mean"], "nll": rows[lab][s].get("engine_nll"),
+                        "within_F": (F[s] is not None and rows[lab][s]["kl_mean"] <= F[s])}) for s in A4_SRCS + A4_CTRL}
+             for lab in KL5_ARMS}
+    return {"instrument": {"box_r": (rv or {}).get("verdict"), "rule": (rv or {}).get("rule"), "why": why}, "rows": rows,
+            "gradable_windows": gradable, "floor_F": F, "nf4_requant_kl": nf4, "predictions": pred,
+            "descriptive": {"per_window": table, "note": "NLL descriptive; wikitext is the out-of-distribution control, never graded"}}
+
+
+def prove_a5(d: str) -> dict:
+    R = _sc1()
+    shas, _rc, _rv, why = a5_refs(d)
+    lab_of = {v.format("conv1"): lab for lab, v in KL5_ARMS.items()}
+    out = {stem: (kl_row_full(d, lab_of[stem], "conv1", R, shas) if not why else {"verdict": "UNREAD", "why": why}) for stem in PROVE_A5}
+    bad = {k: f"{v['verdict']}: {v.get('why')}" for k, v in out.items() if v["verdict"] != "VALID"}
+    # per engine, the reference mass on the tokens it masks (#1223 review): non-zero anywhere -> a common-support rule with a
+    # mass bound is registered on THESE numbers before the reading box (each row's common-support KL is already recorded)
+    support = {k: v.get("support") for k, v in out.items()}
+    need = sorted(k for k, s in support.items() if s and s.get("positions_masked"))
+    return {"rows": out, "bad": bad, "proved": not bad, "box_r": why or "R_OK", "support": support, "support_rule_needed": need}
+
+
 def _sc1():
     for p in (os.path.join(HERE, "sc1_reduce.py"), os.path.join(HERE, "..", "sc1", "sc1_reduce.py")):
         if os.path.exists(p):
@@ -410,7 +578,7 @@ def reduce(d: str) -> dict:
             "predictions": p, "delta_vs_vllm": rep,
             "within_floor_vs_vllm": {a: {sh: within(v) for sh, v in by.items()} for a, by in rep.items()},
             "diagnostics": {"meaning": MEANING, "per_window": dg}, "served_minus_prefill": gaps, "kernel_check": kern,
-            "scored_target_roles": roles, "diag_predictions": jp, "a3_predictions": kp, "a4": a4(d),
+            "scored_target_roles": roles, "diag_predictions": jp, "a3_predictions": kp, "a4": a4(d), "a5": a5(d),
             "attn_check_1175": (json.load(open(os.path.join(d, "attn_check_5090.json")))
                                 if os.path.exists(os.path.join(d, "attn_check_5090.json")) else None),
             "control_wikitext": {"floor": {"per_window": flc, "F": Fc}, "delta_vs_vllm": ctl,
@@ -673,6 +841,7 @@ def self_test() -> int:
         v = reduce(d)["diagnostic_rows"]
         cases.append(("A3 gates", v["e4b_mxpre_prefill128"]["conv1"]["verdict"] == "VOID" and v["e4b_serve_v1"]["conv1"]["verdict"] == "VOID"))
     cases += _a4_self_test(tempfile)
+    cases += _a5_self_test(tempfile)
     bad = [n for n, ok in cases if not ok]
     print(f"sc1g_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
@@ -744,6 +913,96 @@ def _a4_self_test(tempfile) -> list:
     return cases
 
 
+def _a5_fixture(d, kl, F=1e-3, nf4=0.05, verdict="R_OK", rule="A5", vllm_void=False, drop_e4b_meta=False, P=2048, mask=None,
+                void=None, n_masked=0.0, legacy=False):
+    """Box R's A5 receipt + every full-KL arm's record: eng_kl = kl[label] (a constant per window), aligned target lps, and
+    the support arrays. mask {(label, src): (mass, positions)}: the engine masks reference mass there (kl = inf); void
+    {(label, src): positions}: those positions' reads failed (kl NaN, a void_first reason); legacy: no support arrays."""
+    import numpy as np
+    _fixture(d, _base, _good_routes, rep=True)
+    rd = os.path.join(d, "ref")
+    os.makedirs(rd, exist_ok=True)
+    srcs = A4_SRCS + A4_CTRL
+    json.dump({s: f"{i:064x}" for i, s in enumerate(srcs)}, open(os.path.join(rd, "ref_full_shas.json"), "w"))
+    json.dump({"rule": rule, "verdict": verdict, "checks": {}}, open(os.path.join(rd, "r_verdict.json"), "w"))
+    json.dump({"rule": "A5", "windows": {s: {"floor_F": F, "calib_nf4": {"kl_full_mean": nf4}} for s in srcs}},
+              open(os.path.join(rd, "r_calib.json"), "w"))
+    for lab, stem in KL5_ARMS.items():
+        for i, s in enumerate(srcs):
+            st = stem.format(s)
+            rec = _load(d, st)
+            k_, mm = np.full(P, kl[lab]), np.zeros(P)
+            if mask and (lab, s) in mask:
+                m, n = mask[(lab, s)]
+                mm[:n], k_[:n] = m, np.inf
+            nv = (void or {}).get((lab, s), 0)
+            k_[P - nv:] = np.nan
+            arrs = dict(eng_kl=k_, eng_target_lp=np.full(P, -rec["mean_nll"]))
+            if not legacy:
+                arrs.update(eng_kl_common=np.full(P, kl[lab]), eng_masked_mass=mm, eng_n_masked=np.full(P, n_masked))
+            np.savez(os.path.join(d, f"kl_{st}.npz"), **arrs)
+            vf = [{"t": P - nv, "why": "FloatingPointError: NaN or +inf in the engine's row"}] if nv else []
+            if lab.startswith("e4b") and not (drop_e4b_meta and lab == "e4b_nf4" and s == "conv1"):
+                json.dump({"calls": P, "positions": P, "ref_sha": f"{i:064x}", "void_positions": nv, "void_first": vf},
+                          open(os.path.join(d, f"kl_{st}.npz.json"), "w"))
+            if lab == "vllm" and vllm_void and s == "conv2":
+                rec["kl_full"] = {"verdict": "VOID", "why": "logprobs=-1 returned 20 entries, not the vocabulary"}
+                json.dump(rec, open(os.path.join(d, st + ".json"), "w"))
+
+
+def _a5_self_test(tempfile) -> list:
+    cases = []
+    good = {"e4b_mxfp4": 2e-3, "e4b_nf4": 2e-2, "vllm": 1.5e-3, "llamacpp": 3e-3, "llamacpp_q8": 2.5e-3}
+    with tempfile.TemporaryDirectory() as d:
+        _a5_fixture(d, good)
+        r = a5(d)
+        pr = r["predictions"]
+        cases.append(("A5 reads", r["gradable_windows"] == list(A4_SRCS) and pr["K-A"]["verdict"] == "HOLDS"
+                      and pr["L1"]["verdict"] == "HOLDS" and pr["L1"]["best_comparator"] == "vllm" and pr["L2"]["verdict"] == "HOLDS"
+                      and r["rows"]["sglang_native"]["conv1"]["verdict"] == "UNREAD"))
+        cases.append(("A5 proof", prove_a5(d)["proved"]))
+    with tempfile.TemporaryDirectory() as d:          # MXFP4 within F: F stands in as its upper bound, NF4 must clear 3F
+        _a5_fixture(d, dict(good, e4b_mxfp4=2e-3, e4b_nf4=2e-2), F=3e-3)
+        ka = a5(d)["predictions"]["K-A"]
+        _a5_fixture(d, dict(good, e4b_mxfp4=2e-3, e4b_nf4=8e-3), F=3e-3)
+        ka2 = a5(d)["predictions"]["K-A"]
+        cases.append(("A5 K-A bound", ka["verdict"] == "HOLDS" and all(x["bound_used"] for x in ka["windows"].values())
+                      and ka2["verdict"] == "REFUTED"))
+    with tempfile.TemporaryDirectory() as d:          # the best comparator within F on every window: L1 has nothing to read
+        _a5_fixture(d, dict(good, vllm=2e-3), F=3e-3)
+        cases.append(("A5 L1 drops unresolved comparators", a5(d)["predictions"]["L1"]["verdict"] == "UNREAD"))
+    with tempfile.TemporaryDirectory() as d:          # box R not OK, or not an A5 receipt: the whole reading is UNREAD
+        _a5_fixture(d, good, verdict="R_NO_GRADABLE")
+        un1 = all(x["verdict"] == "UNREAD" for x in a5(d)["predictions"].values())
+        _a5_fixture(d, good, rule="A4")
+        un2 = all(x["verdict"] == "UNREAD" for x in a5(d)["predictions"].values())
+        cases.append(("A5 needs R_OK under A5", un1 and un2))
+    with tempfile.TemporaryDirectory() as d:          # vLLM's full vocabulary did not verify -> VOID; e4b without its meta -> VOID
+        _a5_fixture(d, good, vllm_void=True, drop_e4b_meta=True)
+        rows = a5(d)["rows"]
+        cases.append(("A5 VOID rows", rows["vllm"]["conv2"]["verdict"] == "VOID" and rows["e4b_nf4"]["conv1"]["verdict"] == "VOID"))
+    with tempfile.TemporaryDirectory() as d:          # vLLM masks reference mass on conv1 (1e-12 at 3 positions): VOID, mass reported
+        _a5_fixture(d, good, mask={("vllm", "conv1"): (1e-12, 3)})
+        row, pv = a5(d)["rows"]["vllm"]["conv1"], prove_a5(d)
+        cases.append(("A5 masked reference mass -> VOID with the mass; the proof names the support rule needed",
+                      row["verdict"] == "VOID" and row["support"]["positions_masked"] == 3 and row["support"]["masked_mass_max"] == 1e-12
+                      and not pv["proved"] and pv["support_rule_needed"] == ["nll_vllm_served_conv1"]))
+    with tempfile.TemporaryDirectory() as d:          # two of e4b's positions failed their read: VOID with the reason, run kept
+        _a5_fixture(d, good, void={("e4b_mxfp4", "conv1"): 2})
+        row = a5(d)["rows"]["e4b_mxfp4"]["conv1"]
+        cases.append(("A5 void positions -> VOID with the first reason", row["verdict"] == "VOID" and row["why"].startswith("2 void positions")
+                      and "NaN or +inf" in row["why"]))
+    with tempfile.TemporaryDirectory() as d:          # masking only ids the reference also gives no mass: VALID, the count reported
+        _a5_fixture(d, good, n_masked=5.0)
+        row, pv = a5(d)["rows"]["llamacpp_q8"]["conv1"], prove_a5(d)
+        cases.append(("A5 masking only reference -inf ids is VALID; the count is reported", row["verdict"] == "VALID"
+                      and row["support"]["n_masked_max"] == 5.0 and pv["proved"] and pv["support_rule_needed"] == []))
+    with tempfile.TemporaryDirectory() as d:          # a record without the support arrays is not read
+        _a5_fixture(d, good, legacy=True)
+        cases.append(("A5 a record without support arrays -> VOID", a5(d)["rows"]["vllm"]["conv1"]["verdict"] == "VOID"))
+    return cases
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--self-test", action="store_true")
@@ -751,11 +1010,26 @@ def main(argv=None) -> int:
     ap.add_argument("--out")
     ap.add_argument("--prove", action="store_true")
     ap.add_argument("--prove-a4", action="store_true", help="A4's proof: one named KL row per engine path on conv1")
+    ap.add_argument("--prove-a5", action="store_true", help="A5's proof: one full-KL row per KL-capable engine path on conv1")
     a = ap.parse_args(argv)
     if a.self_test:
         return self_test()
     if not a.dir:
         ap.error("--dir is required")
+    if a.prove_a5:
+        v = prove_a5(a.dir)
+        if a.out:
+            json.dump(v, open(a.out, "w"), indent=1, sort_keys=True, default=float)
+        for k, why in v["bad"].items():
+            print(f"SC1G_PROVE_A5_BAD {k}: {why}")
+        for k, s in v["support"].items():
+            print(f"SC1G_PROVE_A5_SUPPORT {k} " + (json.dumps(s, default=float) if s else "unread"))
+        if v["support_rule_needed"]:
+            print(f"SC1G_PROVE_A5_SUPPORT_RULE_NEEDED {' '.join(v['support_rule_needed'])}: these engines mask tokens carrying "
+                  f"reference mass -- register a common-support rule with a mass bound on this proof's numbers before the reading box")
+        print(f"SC1G_PROVE_A5 {'OK' if v['proved'] else 'FAILED'} (box R {v['box_r']}; "
+              + " ".join(f"{k}={x.get('kl_mean')}" for k, x in v["rows"].items()) + ")")
+        return 0 if v["proved"] else 1
     if a.prove_a4:
         v = prove_a4(a.dir)
         if a.out:
@@ -779,6 +1053,10 @@ def main(argv=None) -> int:
     print(f"SC1G_DIAG {json.dumps(v['diagnostics']['per_window'])[:600]}")
     for w, ks in v["a3_predictions"].items():           # A3's K1-K5 per window, and the across-window reads
         print(f"SC1G_A3 {w} {json.dumps(ks)[:900]}")
+    a5r = v.get("a5") or {}
+    print(f"SC1G_A5_INSTRUMENT {json.dumps(a5r.get('instrument'))} gradable={a5r.get('gradable_windows')}")
+    for g, x in (a5r.get("predictions") or {}).items():
+        print(f"SC1G_A5_{g} {x['verdict']} {json.dumps({k: w for k, w in x.items() if k != 'verdict'}, default=float)[:400]}")
     a4r = v.get("a4") or {}
     print(f"SC1G_A4_INSTRUMENT {json.dumps(a4r.get('instrument'))}")
     for g, x in (a4r.get("predictions") or {}).items():

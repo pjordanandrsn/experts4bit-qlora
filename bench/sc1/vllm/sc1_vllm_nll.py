@@ -62,6 +62,8 @@ def main():
     lp_req = C.env("NLL_LOGPROBS", "auto")
     if C.env("NAMED_REF") and mode == "served":
         lp_req = "named"                    # SC1g A4: the reference's 64 named tokens per position + the target
+    if C.env("REF_FULL") and mode == "served":
+        lp_req = "full"                     # SC1g A5: logprobs=-1 with LLM(max_logprobs=-1), verified full on request 0, NO downgrade
     assert lp_req in ("auto", "full", "token_ids", "named") or lp_req.startswith("topk:"), f"bad SC1_NLL_LOGPROBS {lp_req!r}"
 
     base_arm = "fp8kv" if kv == "fp8" else ("eager" if C.env("NLL_EAGER", "0") == "1" else "graph_r1")
@@ -150,6 +152,22 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
     used = "full" if lp_req in ("auto", "full") else lp_req
     downgrade = None
     named_ids = named = None
+    kl = None
+    if C.env("REF_FULL"):
+        import numpy as np
+        _here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        import sc1g_kl
+        ref_path = C.env("REF_FULL", required=True)
+        want = C.env("REF_FULL_SHA")
+        if want and sc1g_kl.file_sha(ref_path) != want:
+            raise SystemExit(f"{ref_path}: sha differs from the registered {want[:16]} -- refusing the reference")
+        ref_full = np.load(ref_path, mmap_mode="r")
+        if ref_full.shape[0] != S or (vocab and ref_full.shape[1] != int(vocab)):
+            raise SystemExit(f"{ref_path}: shape {ref_full.shape} does not fit {S} steps x vocab {vocab} -- refused")
+        kl = {"kl": np.full(S, np.nan), "tlp": np.full(S, np.nan), "klc": np.full(S, np.nan), "mm": np.full(S, np.nan),
+              "nm": np.full(S, np.nan), "void": [], "mod": sc1g_kl}
     if used == "named":
         import numpy as np
         named_ids, ref_targets = C.load_named_ref(C.env("NAMED_REF", required=True), C.env("NAMED_REF_SHA"))
@@ -197,6 +215,22 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
                 rec["downgrade_reissued_row0"] = True
                 dump = _drop_dump(rec, dump, dump_path, "full-vocab mode did not verify")
                 continue
+        if kl is not None and entries is not None and rec.get("full_vocab_verified"):
+            import numpy as np
+            # per position, never raising (#1223 review): a token vLLM masks to -inf where R has mass is recorded (kl = inf,
+            # the mass, the common-support KL), and a position whose read fails -- or that returned fewer entries than the
+            # vocabulary, which would read as masking -- is recorded void with its reason; the run continues
+            try:
+                if len(entries[0]) != int(vocab):
+                    raise ValueError(f"returned {len(entries[0])} entries, not the vocabulary ({vocab})")
+                v64 = np.full(int(vocab), -np.inf, dtype=np.float64)
+                v64[np.asarray(entries[0], dtype=np.int64)] = np.asarray(entries[1], dtype=np.float64)
+                r = kl["mod"].kl_full_support(ref_full[t:t + 1], v64[None])
+                kl["kl"][t], kl["klc"][t], kl["mm"][t], kl["nm"][t] = (float(r[k][0]) for k in ("kl", "kl_common", "masked_mass", "n_masked"))
+            except Exception as e:  # noqa: BLE001
+                kl["void"].append({"t": t, "why": f"{e.__class__.__name__}: {e}"[:200]})
+            if row["nll"] is not None:
+                kl["tlp"][t] = -row["nll"]
         if dump is not None and entries is not None:
             import numpy as np
             vec = np.full(int(vocab), -np.inf, dtype=np.float32)
@@ -224,6 +258,19 @@ def _served(rec, llm, ids, P, S, lp_req, vocab, block, out_path):
     rec["index_derivation"] = (f"request t: prompt = ids[:{P + 1}+t], the generated position's distribution gives "
                                f"log p(ids[{P + 1}+t] | ids[:{P + 1}+t]) == K8's cont[t+1]; t in 0..{S - 1}; the engine's greedy "
                                f"token is discarded (teacher forcing by construction) and compared for top-1 agreement")
+    if kl is not None:
+        import numpy as np
+        kout = C.env("KL_OUT", required=True)
+        if not rec.get("full_vocab_verified"):
+            rec["kl_full"] = {"verdict": "VOID", "why": f"logprobs=-1 returned {rec.get('first_request_entries')} entries, not the "
+                                                         f"vocabulary ({vocab}): no full-vocabulary KL (A5 never downgrades)"}
+        else:
+            np.savez(kout + ".tmp.npz", eng_kl=kl["kl"], eng_target_lp=kl["tlp"], eng_kl_common=kl["klc"], eng_masked_mass=kl["mm"],
+                     eng_n_masked=kl["nm"])
+            os.replace(kout + ".tmp.npz", kout)
+            rec["kl_full"] = {"out": kout, "positions": S, "ref": C.env("REF_FULL"), "ref_sha": C.env("REF_FULL_SHA"),
+                              "void_positions": len(kl["void"]), "void_first": kl["void"][:20],
+                              "request": "logprobs=-1, LLM(max_logprobs=-1); full vocabulary verified on request 0"}
     if named is not None:
         import numpy as np
         nout = C.env("NAMED_OUT", required=True)

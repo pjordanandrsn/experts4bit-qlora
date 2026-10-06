@@ -137,8 +137,8 @@ def nll_of(rows):
 
 def score(model, srcs, windows, out_dir, dev, nf4_pair=True, log=print) -> dict:
     """The whole R flow on an already-loaded reference `model`. `windows`: {src: (ids, prompt_len, steps)}."""
-    os.makedirs(out_dir, exist_ok=True)
-    res = {"windows": {}, "artifacts": {}}
+    os.makedirs(os.path.join(out_dir, "full"), exist_ok=True)
+    res = {"rule": "A5", "windows": {}, "full_artifacts": {}}
     prefill_keep = {}
     for src in srcs:
         ids, P, S = windows[src]
@@ -147,21 +147,23 @@ def score(model, srcs, windows, out_dir, dev, nf4_pair=True, log=print) -> dict:
         t0 = time.time()
         dec = decode_teacher_forced_logits(model, x)[P:P + S]
         t_dec = time.time() - t0
-        rows = KL.reference_rows(dec, tg)
-        sha = KL.save_artifact(os.path.join(out_dir, f"ref_{src}.npz"), rows,
-                               {"source": src, "prompt_len": P, "steps": S, "shape": "decode", "k": KL.K_NAMED,
-                                "reference": "gpt-oss-20b MXFP4 dequant-to-bf16 (P44)", "metric": "sc1g_kl KL65"})
-        res["artifacts"][src] = sha
+        rows = KL.reference_rows(dec, tg)                    # for the reference NLL (descriptive); not stored under A5
+        fpath = os.path.join(out_dir, "full", f"ref_full_{src}.npy")
+        np.save(fpath, KL.full_rows_fp16(dec))               # A5: the full-vocabulary fp16 log-softmax rows [S, V]
+        res["full_artifacts"][src] = {"sha256": KL.file_sha(fpath), "shape": [int(S), int(dec.shape[1])], "dtype": "float16",
+                                      "bytes": os.path.getsize(fpath)}
         pre = teacher_forced_logits(model, x)[P:P + S]
         c_self = KL.calibrate(dec, pre)
+        se_self = KL.storage_error(dec, pre)
         pre_rows = KL.reference_rows(pre, tg)
         res["windows"][src] = {"positions": int(S), "decode_s": round(t_dec, 1), "reference_nll_decode": nll_of(rows),
                                "reference_nll_prefill": nll_of(pre_rows),
                                "coverage_ref_top64": 1.0 - float(np.mean(np.maximum(rows["rest"], 0.0))),
-                               "calib_self": c_self, "floor_F": c_self["kl_full_mean"]}
+                               "calib_self": c_self, "floor_F": c_self["kl_full_mean"], "storage_self": se_self,
+                               "fp16_storage_err_max": se_self["abs_err"]}
         prefill_keep[src] = pre.to("cpu")
         log(f"R {src}: nll dec {nll_of(rows):.5f} pre {nll_of(pre_rows):.5f} F {c_self['kl_full_mean']:.3e} "
-            f"self ratio {c_self['ratio']} cov {res['windows'][src]['coverage_ref_top64']:.5f} sha {sha[:12]}")
+            f"fp16 err {se_self['abs_err']:.2e} sha {res['full_artifacts'][src]['sha256'][:12]}")
         del dec, pre
     if nf4_pair:
         res["nf4"] = fake_nf4_experts_(model)
@@ -171,9 +173,12 @@ def score(model, srcs, windows, out_dir, dev, nf4_pair=True, log=print) -> dict:
             q = teacher_forced_logits(model, x)[P:P + S]
             base = prefill_keep[src].to(q.device)
             c_nf4 = KL.calibrate(base, q)
+            se_nf4 = KL.storage_error(base, q)
             res["windows"][src]["calib_nf4"] = c_nf4
+            res["windows"][src]["storage_nf4"] = se_nf4
+            res["windows"][src]["fp16_storage_err_max"] = max(res["windows"][src]["fp16_storage_err_max"], se_nf4["abs_err"])
             res["windows"][src]["nf4_fakequant_nll_prefill"] = nll_of(KL.reference_rows(q, ids[P + 1:P + S + 1].numpy()))
-            log(f"R {src}: nf4 KL_full {c_nf4['kl_full_mean']:.3e} ratio {c_nf4['ratio']}")
+            log(f"R {src}: nf4 KL_full {c_nf4['kl_full_mean']:.3e} fp16 err {se_nf4['abs_err']:.2e}")
             del q, base
     return res
 
@@ -202,21 +207,60 @@ def verdict(res: dict, k0: dict | None, srcs) -> dict:
             "artifacts": res.get("artifacts", {})}
 
 
+A5_GRADED = ("conv1", "conv2", "conv3", "conv4")   # wikitext is the reported out-of-distribution control, never graded
+A5_MIN_GRADABLE = 3
+A5_DROPPED = ("coverage", "calib_self", "calib_nf4")   # A4's KL65 checks, moot when the estimator is the full KL
+
+
+def verdict_a5(res: dict, k0: dict | None, srcs, graded=A5_GRADED, min_gradable: int = A5_MIN_GRADABLE) -> dict:
+    """A5's gate for box R. Validity checks (OK / VOID): K0, the windows complete, the NF4 fake-quant matching gnf4 (OK only
+    when gnf4 imported AND matched), the full-vocabulary artifacts written and hashed, and the fp16 storage error under
+    STORAGE_F_FRACTION x F on every GRADABLE graded window. A window is gradable when its own floor F < GRADABLE_F_MAX.
+    Outcomes: R_NOT_OK (a check not OK), R_NO_GRADABLE (valid, but under `min_gradable` gradable graded windows: a cost
+    gate, box I is not launched), R_OK. A4's KL65 checks are dropped by name (A5_DROPPED)."""
+    w = res.get("windows", {})
+    chk = {"k0_controls": "OK" if k0 and k0.get("all_passed") else "VOID",
+           "windows_complete": "OK" if all(s in w for s in srcs) else "VOID"}
+    xc = (res.get("nf4") or {}).get("gnf4_crosscheck") or {}
+    chk["nf4_matches_gnf4"] = "OK" if (xc.get("available") and xc.get("equal")) else "VOID"
+    fa = res.get("full_artifacts") or {}
+    chk["full_artifacts"] = "OK" if all(s in fa and fa[s].get("sha256") for s in srcs) else "VOID"
+    F = {s: w[s]["floor_F"] for s in srcs if s in w and "floor_F" in w[s]}
+    gradable = [s for s in graded if s in F and F[s] < KL.GRADABLE_F_MAX]
+    bad = [s for s in gradable if not (w[s].get("fp16_storage_err_max", float("inf")) <= KL.STORAGE_F_FRACTION * F[s])]
+    chk["fp16_storage"] = "OK" if not bad else "VOID"
+    ok = all(v == "OK" for v in chk.values())
+    v = "R_NOT_OK" if not ok else ("R_NO_GRADABLE" if len(gradable) < min_gradable else "R_OK")
+    return {"rule": "A5", "verdict": v, "checks": chk, "gradable_windows": gradable, "floor_F": F, "fp16_storage_bad": bad,
+            "fp16_storage_err_max": {s: w[s].get("fp16_storage_err_max") for s in F},
+            "full_artifacts": {s: fa[s]["sha256"] for s in fa}, "dropped_checks": list(A5_DROPPED)}
+
+
 def reverdict(d: str, k0_path: str | None = None, srcs=SRCS) -> dict:
     """R's verdict from its committed receipt alone: the same `verdict` over r_calib.json and the K0 receipt, plus each
     ref_<src>.npz hashing to the sha R recorded. Returns {verdict, matches_recorded, artifact_mismatch}."""
     res = json.load(open(os.path.join(d, "r_calib.json")))
     k0p = k0_path or next((c for c in (os.path.join(d, "k0.json"), os.path.join(d, "..", "k0.json")) if os.path.exists(c)), None)
     k0 = json.load(open(k0p)) if k0p else None
-    v = verdict(res, k0, srcs)
-    bad = [s for s, sha in (res.get("artifacts") or {}).items()
-           if not os.path.exists(os.path.join(d, f"ref_{s}.npz")) or KL.file_sha(os.path.join(d, f"ref_{s}.npz")) != sha]
+    if res.get("rule") == "A5":
+        v = verdict_a5(res, k0, srcs)
+        full = os.path.join(d, "full")
+        present = os.path.isdir(full)
+        bad = [s for s, a in (res.get("full_artifacts") or {}).items()
+               if present and (not os.path.exists(os.path.join(full, f"ref_full_{s}.npy"))
+                               or KL.file_sha(os.path.join(full, f"ref_full_{s}.npy")) != a["sha256"])]
+    else:
+        v = verdict(res, k0, srcs)
+        present = True
+        bad = [s for s, sha in (res.get("artifacts") or {}).items()
+               if not os.path.exists(os.path.join(d, f"ref_{s}.npz")) or KL.file_sha(os.path.join(d, f"ref_{s}.npz")) != sha]
     if bad:
         v = dict(v, verdict="R_NOT_OK", artifact_mismatch=bad)
     rec_p = os.path.join(d, "r_verdict.json")
     recorded = json.load(open(rec_p)) if os.path.exists(rec_p) else None
     return {"verdict": v, "matches_recorded": (not bad and recorded is not None and recorded.get("verdict") == v["verdict"]
-                                               and recorded.get("checks") == v["checks"]), "artifact_mismatch": bad}
+                                               and recorded.get("checks") == v["checks"]), "artifact_mismatch": bad,
+            "artifacts_checked": present}
 
 
 def _tiny_model():
@@ -248,31 +292,45 @@ def self_test() -> int:
         wins[s] = (ids, 12, 20)
     with tempfile.TemporaryDirectory() as d:
         res = score(m, list(wins), wins, d, "cpu", nf4_pair=True, log=lambda *_: None)
-        art = KL.load_artifact(os.path.join(d, "ref_conv1.npz"), res["artifacts"]["conv1"])
-        cases.append(("artifact: 20 positions x 64", art["ids"].shape == (20, 64)))
+        fa = res["full_artifacts"]["conv1"]
+        fp = os.path.join(d, "full", "ref_full_conv1.npy")
+        rows = np.load(fp)
+        cases.append(("A5 full rows: [20, 320] fp16, sha recorded", rows.shape == (20, 320) and rows.dtype == np.float16
+                      and KL.file_sha(fp) == fa["sha256"] and res["rule"] == "A5"))
         cases.append(("decode vs prefill floor is tiny on fp32 CPU", res["windows"]["conv1"]["floor_F"] < 1e-6))
         changed = any(not torch.equal(n_before[n], p) for n, p in m.named_parameters() if "experts" in n)
         cases.append(("nf4 pass changed the experts", changed and res["nf4"]["matrices"] == 2 * 2 * 4))
-        nf = res["windows"]["conv1"]["calib_nf4"]
-        cases.append(("nf4 pair: KL65 <= full, ratio in (0, 1]", nf["kl65_le_full_everywhere"] and 0 < nf["ratio"] <= 1 + 1e-9))
-        v = verdict(res, {"all_passed": True}, list(wins))
-        cases.append(("verdict vocabulary", set(v["checks"].values()) <= {"OK", "UNREAD", "VOID"}))
-        unver = dict(res, nf4={"matrices": 1, "gnf4_crosscheck": {"available": False, "why": "ImportError"}})
-        cases.append(("gnf4 unavailable -> VOID, not R_OK", verdict(unver, {"all_passed": True}, list(wins))["checks"]["nf4_matches_gnf4"] == "VOID"
-                      and verdict(unver, {"all_passed": True}, list(wins))["verdict"] == "R_NOT_OK"))
-        cases.append(("no K0 receipt -> VOID, not R_OK", verdict(res, None, list(wins))["verdict"] == "R_NOT_OK"))
-        bad = dict(res, windows={k: dict(x, floor_F=0.5) for k, x in res["windows"].items()})
-        cases.append(("floor over 1e-2 -> UNREAD", verdict(bad, {"all_passed": True}, list(wins))["checks"]["floor_F"] == "UNREAD"))
-        # --reverdict: the committed receipt re-derives R's own verdict; a tampered artifact cannot
+        w1 = res["windows"]["conv1"]
+        cases.append(("A5 fp16 storage error measured on both pairs", "storage_self" in w1 and "storage_nf4" in w1
+                      and w1["fp16_storage_err_max"] == max(w1["storage_self"]["abs_err"], w1["storage_nf4"]["abs_err"])))
+        # verdict_a5 on a result whose gnf4 cross-check is forced (CI may lack triton), floors set per case
+        ok_x = dict(res, nf4={"matrices": 16, "gnf4_crosscheck": {"available": True, "equal": True, "max_abs_diff": 0.0}})
+        def with_F(r, F, err=0.0):
+            return dict(r, windows={k: dict(x, floor_F=F, fp16_storage_err_max=err) for k, x in r["windows"].items()})
+        k0 = {"all_passed": True}
+        v_ok = verdict_a5(with_F(ok_x, 5e-3), k0, list(wins), graded=("conv1",), min_gradable=1)
+        cases.append(("A5 R_OK; dropped checks named", v_ok["verdict"] == "R_OK" and v_ok["gradable_windows"] == ["conv1"]
+                      and v_ok["dropped_checks"] == ["coverage", "calib_self", "calib_nf4"]))
+        v_ng = verdict_a5(with_F(ok_x, 2e-2), k0, list(wins), graded=("conv1",), min_gradable=1)
+        cases.append(("A5 F over the bar -> R_NO_GRADABLE (cost gate), checks still OK", v_ng["verdict"] == "R_NO_GRADABLE"
+                      and set(v_ng["checks"].values()) == {"OK"}))
+        v_st = verdict_a5(with_F(ok_x, 5e-3, err=6e-4), k0, list(wins), graded=("conv1",), min_gradable=1)
+        cases.append(("A5 fp16 storage error > 0.1 F -> VOID, R_NOT_OK", v_st["checks"]["fp16_storage"] == "VOID" and v_st["verdict"] == "R_NOT_OK"))
+        unver = dict(with_F(ok_x, 5e-3), nf4={"matrices": 1, "gnf4_crosscheck": {"available": False, "why": "ImportError"}})
+        cases.append(("A5 gnf4 unavailable -> VOID", verdict_a5(unver, k0, list(wins), graded=("conv1",), min_gradable=1)["checks"]["nf4_matches_gnf4"] == "VOID"))
+        cases.append(("A5 no K0 receipt -> R_NOT_OK", verdict_a5(with_F(ok_x, 5e-3), None, list(wins), graded=("conv1",), min_gradable=1)["verdict"] == "R_NOT_OK"))
+        cases.append(("A5 missing full artifact -> VOID", verdict_a5(dict(with_F(ok_x, 5e-3), full_artifacts={}), k0, list(wins),
+                                                                      graded=("conv1",), min_gradable=1)["checks"]["full_artifacts"] == "VOID"))
+        # --reverdict on an A5 receipt (rule-dispatched): re-derives; a tampered full artifact is caught when present
         json.dump(res, open(os.path.join(d, "r_calib.json"), "w"))
-        json.dump({"all_passed": True}, open(os.path.join(d, "k0.json"), "w"))
-        json.dump(verdict(res, {"all_passed": True}, list(wins)), open(os.path.join(d, "r_verdict.json"), "w"))
+        json.dump(k0, open(os.path.join(d, "k0.json"), "w"))
+        json.dump(verdict_a5(res, k0, list(wins)), open(os.path.join(d, "r_verdict.json"), "w"))
         rv = reverdict(d, None, list(wins))
-        with open(os.path.join(d, "ref_conv1.npz"), "ab") as f:
+        with open(fp, "ab") as f:
             f.write(b"x")
         rv2 = reverdict(d, None, list(wins))
-        cases.append(("reverdict re-derives; a tampered artifact is caught", rv["matches_recorded"] and not rv["artifact_mismatch"]
-                      and rv2["artifact_mismatch"] == ["conv1"] and not rv2["matches_recorded"]))
+        cases.append(("A5 reverdict re-derives; a tampered full artifact is caught", rv["matches_recorded"] and rv["artifacts_checked"]
+                      and not rv["artifact_mismatch"] and rv2["artifact_mismatch"] == ["conv1"] and not rv2["matches_recorded"]))
     bad_cases = [n for n, ok in cases if not ok]
     print(f"sc1g_ref self-test {'OK' if not bad_cases else 'FAILED ' + str(bad_cases)} ({len(cases)} cases)")
     return 0 if not bad_cases else 1
@@ -297,8 +355,10 @@ def main(argv=None) -> int:
         srcs = [s for s in a.srcs.split(",") if s]
         rv = reverdict(a.reverdict, a.k0, srcs)
         v = rv["verdict"]
-        print(f"SC1G_R_VERDICT {v['verdict']} " + " ".join(f"{k}={x}" for k, x in v["checks"].items())
-              + f" F_max={v['floor_F_max']} self_min={v['calib_self_min']} nf4_min={v['calib_nf4_min']} cov_min={v['coverage_min']}"
+        extra = (f" gradable={','.join(v['gradable_windows'])} F={json.dumps(v['floor_F'])}" if v.get("rule") == "A5" else
+                 f" F_max={v['floor_F_max']} self_min={v['calib_self_min']} nf4_min={v['calib_nf4_min']} cov_min={v['coverage_min']}")
+        print(f"SC1G_R_VERDICT {v['verdict']} rule={v.get('rule', 'A4')} " + " ".join(f"{k}={x}" for k, x in v["checks"].items())
+              + extra
               + f" matches_recorded={rv['matches_recorded']} artifact_mismatch={rv['artifact_mismatch']}", flush=True)
         return 0 if rv["matches_recorded"] else 1
     if not (a.windows and a.shas and a.out and a.rev):
@@ -312,16 +372,19 @@ def main(argv=None) -> int:
     model = load_reference(a.model, a.rev, "cuda")
     print(f"SC1G_R reference loaded in {time.time() - t0:.0f} s", flush=True)
     res = score(model, srcs, wins, a.out, "cuda", nf4_pair=not a.no_nf4_pair, log=lambda s: print(s, flush=True))
-    v = verdict(res, k0, srcs)
+    v = verdict_a5(res, k0, srcs)
     json.dump(res, open(os.path.join(a.out, "r_calib.json"), "w"), indent=1, sort_keys=True)
     json.dump(v, open(os.path.join(a.out, "r_verdict.json"), "w"), indent=1, sort_keys=True)
     print(f"SC1G_R_VERDICT {v['verdict']} " + " ".join(f"{k}={x}" for k, x in v["checks"].items())
-          + f" F_max={v['floor_F_max']} self_min={v['calib_self_min']} nf4_min={v['calib_nf4_min']} cov_min={v['coverage_min']}", flush=True)
+          + f" gradable={','.join(v['gradable_windows'])} F={json.dumps({k: round(x, 6) for k, x in v['floor_F'].items()})}"
+          + f" fp16_err={json.dumps({k: (None if x is None else float(f'{x:.3g}')) for k, x in v['fp16_storage_err_max'].items()})}", flush=True)
+    for s, a_ in res.get("full_artifacts", {}).items():
+        print(f"SC1G_R_FULL {s} sha256={a_['sha256']} shape={a_['shape']} bytes={a_['bytes']}", flush=True)
     for s in srcs:
         x = res["windows"][s]
         print(f"SC1G_R_NLL {s} reference_decode={x['reference_nll_decode']:.5f} reference_prefill={x['reference_nll_prefill']:.5f} "
               f"nf4_fakequant_prefill={x.get('nf4_fakequant_nll_prefill')}", flush=True)
-    return 0 if v["verdict"] == "R_OK" else 1
+    return {"R_OK": 0, "R_NO_GRADABLE": 2}.get(v["verdict"], 1)
 
 
 if __name__ == "__main__":

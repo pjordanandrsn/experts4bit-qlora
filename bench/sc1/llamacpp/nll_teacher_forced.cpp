@@ -23,6 +23,13 @@
 // position, sc1g_kl.py's artifact) writes --named-out <bin> (float64 little-endian [steps x (k+1)]: the log-probs of those
 // ids at that position, then the target's), from the same float logits and the same max-shifted log-sum-exp as the NLL.
 //
+// SC1g A5: --ref-full <bin> (raw fp16 little-endian [steps x n_vocab]: box R's full-vocabulary reference log-probs) writes
+// --kl-out <bin> (float64 [steps x 5]) per scored position, in double, the reference renormalised over its finite entries
+// (-inf entries carry no mass): KL(p_ref || p_llama) over every token (+inf where llama masks a token the reference gives
+// mass), the target's log-prob (= -its NLL term, so the reader can prove the record aligns with this receipt's mean NLL),
+// the KL with the reference restricted to llama's finite support, the reference mass on llama's -inf tokens, and llama's
+// -inf count. A NaN or +inf logit makes the position void (NaN) rather than failing the run.
+//
 // Needs the tokens file to hold at least prompt_len+steps+1 ids (refuses, exit 3). No dependency outside the pinned
 // llama.cpp tree: llama.h + ggml headers + the vendored nlohmann/json; SHA-256 is implemented here.
 //
@@ -192,6 +199,7 @@ struct Args {
     bool quiet = false;
     std::string named, named_out;   // SC1g A4: named token ids in, their log-probs out
     int named_k = 64;
+    std::string ref_full, kl_out;   // SC1g A5: full-vocabulary reference rows in, per-position KL out
 };
 
 void usage(const char * argv0) {
@@ -227,6 +235,8 @@ Args parse_args(int argc, char ** argv) {
         else if (k == "--named")        { a.named = need(i); }
         else if (k == "--named-out")    { a.named_out = need(i); }
         else if (k == "--named-k")      { a.named_k = std::atoi(need(i)); }
+        else if (k == "--ref-full")     { a.ref_full = need(i); }
+        else if (k == "--kl-out")       { a.kl_out = need(i); }
         else if (k == "-h" || k == "--help") { usage(argv[0]); std::exit(0); }
         else { std::fprintf(stderr, "unknown argument %s\n", argv[i]); usage(argv[0]); std::exit(2); }
     }
@@ -236,6 +246,7 @@ Args parse_args(int argc, char ** argv) {
     if (a.type_kv != "f16" && a.type_kv != "f32" && a.type_kv != "bf16" && a.type_kv != "q8_0") { std::fprintf(stderr, "--type-kv must be f16|f32|bf16|q8_0\n"); std::exit(2); }
     if (a.prompt_len < 1 || a.steps < 1) { std::fprintf(stderr, "--prompt-len and --steps must be >= 1\n"); std::exit(2); }
     if (a.named.empty() != a.named_out.empty() || a.named_k < 1) { std::fprintf(stderr, "--named and --named-out go together; --named-k >= 1\n"); std::exit(2); }
+    if (a.ref_full.empty() != a.kl_out.empty()) { std::fprintf(stderr, "--ref-full and --kl-out go together\n"); std::exit(2); }
     return a;
 }
 
@@ -259,6 +270,60 @@ void named_lps(const float * lg, int n_vocab, const int32_t * idx, int k, int ta
     const double lse = (double) m + std::log(s);
     for (int j = 0; j < k; j++) { out[j] = (double) lg[idx[j]] - lse; }
     out[k] = (double) lg[target] - lse;
+}
+
+// SC1g A5: the full-vocabulary read at one position, in double, never failing the run (#1223 review). Writes out[0] =
+// KL(p_ref || p_llama) (+inf where llama masks a token the reference gives mass), out[1] = the KL of the reference
+// restricted to llama's finite support and renormalised there, out[2] = the reference mass on llama's -inf tokens,
+// out[3] = llama's -inf count. A NaN or +inf logit leaves all four NaN: a void position, which the reader reports.
+void kl_full_of(const float * lg, int n_vocab, const ggml_fp16_t * ref, double * out) {
+    float m = -INFINITY;
+    for (int i = 0; i < n_vocab; i++) {
+        if (std::isnan(lg[i]) || (std::isinf(lg[i]) && lg[i] > 0)) { out[0] = out[1] = out[2] = out[3] = NAN; return; }
+        if (lg[i] > m) { m = lg[i]; }
+    }
+    if (!std::isfinite(m)) { out[0] = out[1] = out[2] = out[3] = NAN; return; }
+    double s = 0.0;
+    for (int i = 0; i < n_vocab; i++) { s += std::exp((double) lg[i] - (double) m); }
+    const double lse_e = (double) m + std::log(s);
+    double mr = -INFINITY;
+    for (int i = 0; i < n_vocab; i++) { const double r = ggml_fp16_to_fp32(ref[i]); if (std::isfinite(r) && r > mr) { mr = r; } }
+    double sr = 0.0;
+    for (int i = 0; i < n_vocab; i++) { const double r = ggml_fp16_to_fp32(ref[i]); if (std::isfinite(r)) { sr += std::exp(r - mr); } }
+    const double lse_r = mr + std::log(sr);
+    double kl = 0.0, mm = 0.0, nm = 0.0;
+    for (int i = 0; i < n_vocab; i++) {
+        const bool masked = std::isinf(lg[i]);
+        if (masked) { nm += 1.0; }
+        const double r = ggml_fp16_to_fp32(ref[i]);
+        if (!std::isfinite(r)) { continue; }
+        const double lr = r - lse_r;
+        if (masked) { mm += std::exp(lr); continue; }
+        kl += std::exp(lr) * (lr - ((double) lg[i] - lse_e));
+    }
+    double klc = NAN;
+    if (mm < 1.0) {
+        const double c = std::log1p(-mm);
+        klc = 0.0;
+        for (int i = 0; i < n_vocab; i++) {
+            const double r = ggml_fp16_to_fp32(ref[i]);
+            if (!std::isfinite(r) || std::isinf(lg[i])) { continue; }
+            const double lr = r - lse_r - c;
+            klc += std::exp(lr) * (lr - ((double) lg[i] - lse_e));
+        }
+    }
+    out[0] = mm > 0.0 ? INFINITY : kl;
+    out[1] = klc;
+    out[2] = mm;
+    out[3] = nm;
+}
+
+// one row of the --kl-out record: [KL, target log-prob, common-support KL, masked mass, masked count]
+constexpr size_t KLW = 5;
+void kl_row(double * row, const float * lg, int n_vocab, const ggml_fp16_t * ref, double nll_t) {
+    double o[4];
+    kl_full_of(lg, n_vocab, ref, o);
+    row[0] = o[0]; row[1] = -nll_t; row[2] = o[1]; row[3] = o[2]; row[4] = o[3];
 }
 
 double now_s() {
@@ -373,6 +438,19 @@ int main(int argc, char ** argv) {
         named_buf.assign((size_t) a.steps * (K + 1), 0.0);
     }
 
+    // SC1g A5: the full reference rows, read and size-checked before any decode
+    std::vector<ggml_fp16_t> ref_rows;
+    std::vector<double> kl_buf;
+    if (!a.ref_full.empty()) {
+        std::ifstream rf(a.ref_full, std::ios::binary);
+        ref_rows.resize((size_t) a.steps * n_vocab);
+        if (!rf.read(reinterpret_cast<char *>(ref_rows.data()), (std::streamsize) (ref_rows.size() * sizeof(ggml_fp16_t))) || rf.peek() != EOF) {
+            std::fprintf(stderr, "--ref-full %s is not exactly %d x %d fp16 (the model's vocabulary)\n", a.ref_full.c_str(), a.steps, n_vocab);
+            llama_free(ctx); llama_model_free(model); sha_thread.join(); return 3;
+        }
+        kl_buf.assign((size_t) a.steps * KLW, 0.0);
+    }
+
     if (a.mode == "decode") {
         llama_batch b = llama_batch_init(a.prompt_len, 0, 1);
         for (int i = 0; i < a.prompt_len; i++) {
@@ -395,9 +473,11 @@ int main(int argc, char ** argv) {
             const float * lg = llama_get_logits_ith(ctx, -1);
             int am = 0;
             const int target = ids[a.prompt_len + t + 1];
-            nll += nll_of(lg, n_vocab, target, &am);
+            const double nll_t = nll_of(lg, n_vocab, target, &am);
+            nll += nll_t;
             top1 += (am == target);
             if (!named_ids.empty()) { named_lps(lg, n_vocab, &named_ids[(size_t) t * K], K, target, &named_buf[(size_t) t * (K + 1)]); }
+            if (!ref_rows.empty()) { kl_row(&kl_buf[(size_t) t * KLW], lg, n_vocab, &ref_rows[(size_t) t * n_vocab], nll_t); }
         }
         loop_s = now_s() - t1;
     } else {
@@ -417,12 +497,15 @@ int main(int argc, char ** argv) {
             if (!lg) { std::fprintf(stderr, "no logits for batch index %d\n", i); llama_batch_free(b); llama_free(ctx); llama_model_free(model); sha_thread.join(); return 5; }
             int am = 0;
             const int target = ids[i + 1];
-            nll += nll_of(lg, n_vocab, target, &am);
+            const double nll_t = nll_of(lg, n_vocab, target, &am);
+            nll += nll_t;
             top1 += (am == target);
             if (!named_ids.empty()) {
                 const int t = i - a.prompt_len;
                 named_lps(lg, n_vocab, &named_ids[(size_t) t * K], K, target, &named_buf[(size_t) t * (K + 1)]);
             }
+            if (!ref_rows.empty()) { kl_row(&kl_buf[(size_t) (i - a.prompt_len) * KLW], lg, n_vocab,
+                                            &ref_rows[(size_t) (i - a.prompt_len) * n_vocab], nll_t); }
         }
         loop_s = now_s() - t1;     // the scoring pass only; the forward is prefill_s
         llama_batch_free(b);
@@ -447,6 +530,14 @@ int main(int argc, char ** argv) {
     out["ids_in_file"] = ids.size();
     out["ids_used"] = need;
     out["targets"] = json{{"first_index", a.prompt_len + 1}, {"last_index", a.prompt_len + a.steps}};
+    if (!ref_rows.empty()) {
+        std::ofstream kf(a.kl_out, std::ios::binary);
+        kf.write(reinterpret_cast<const char *>(kl_buf.data()), (std::streamsize) (kl_buf.size() * sizeof(double)));
+        out["kl_full"] = json{{"in", a.ref_full}, {"out", a.kl_out}, {"ok", (bool) kf},
+                              {"layout", "float64 [steps x 5]: KL(p_ref || p_llama) over the full vocabulary (+inf where llama masks reference mass), "
+                                         "the target's log-prob, the common-support KL, the reference mass on llama's -inf tokens, "
+                                         "llama's -inf count (NaN in columns 0/2/3/4 = a void position)"}};
+    }
     if (!named_ids.empty()) {
         std::ofstream of(a.named_out, std::ios::binary);
         of.write(reinterpret_cast<const char *>(named_buf.data()), (std::streamsize) (named_buf.size() * sizeof(double)));

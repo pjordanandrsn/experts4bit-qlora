@@ -43,9 +43,16 @@ while :; do
   sleep "$POLL"
 done
 rm -rf "$RUN_DIR/sc1g_r" && mkdir -p "$RUN_DIR/sc1g_r" || { say "fetch failed: local dir"; exit 22; }
-rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude '.cache' --exclude '__pycache__' "root@$HOST:$W/" "$RUN_DIR/sc1g_r/" || {
-  say "rsync fetch failed -- falling back to a recursive copy over the same ssh options (the box may lack rsync)"
-  $SCP -r "root@$HOST:$W/." "$RUN_DIR/sc1g_r/" || { say "fetch failed: rsync and scp"; exit 22; }; }
+# A5: the full-vocabulary rows (ref/full/, ~0.82 GB per window) never enter the git receipt store: the receipt fetch excludes
+# them and they go to $FULL_STORE/<run id>/ on the controller (outside any repo); their shas are in the receipt's r_calib.json
+FULL_STORE=${SC1G_REF_FULL_STORE:-$HOME/sc1g-ref-full}
+rsync -az -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" --exclude '.cache' --exclude '__pycache__' --exclude 'ref/full' "root@$HOST:$W/" "$RUN_DIR/sc1g_r/" || {
+  say "rsync fetch failed -- falling back to tar over the same ssh options (the box may lack rsync)"
+  $SSH "tar -C $W --exclude=./ref/full --exclude=./.cache -cf - ." | tar -C "$RUN_DIR/sc1g_r" -xf - || { say "fetch failed: rsync and tar"; exit 22; }; }
+mkdir -p "$FULL_STORE/$RUN_ID" || { say "fetch failed: full-row store dir"; exit 22; }
+rsync -a -e "ssh -o BatchMode=yes $E4B_RENT_SSH_OPTS -p $PORT" "root@$HOST:$W/ref/full/" "$FULL_STORE/$RUN_ID/" 2>/dev/null ||
+  $SSH "tar -C $W/ref/full -cf - ." | tar -C "$FULL_STORE/$RUN_ID" -xf - || say "full rows not fetched (absent if R stopped before writing them)"
+(cd "$FULL_STORE/$RUN_ID" 2>/dev/null && (sha256sum ref_full_*.npy 2>/dev/null || shasum -a 256 ref_full_*.npy 2>/dev/null)) | sed "s/^/FULL_FETCHED /"
 say "fetched $(ls "$RUN_DIR/sc1g_r" | wc -l | tr -d ' ') entries"
 [ "$(cat "$RUN_DIR/sc1g_r/SC1G_R_RUN_NONCE" 2>/dev/null)" = "$NONCE" ] || { say "stale or foreign nonce in fetched artifacts"; exit 24; }
 [ -f "$RUN_DIR/sc1g_r/TP_DONE.$NONCE" ] || { say "lane did not finish (no TP_DONE for this run)"; exit 23; }

@@ -194,6 +194,58 @@ def named_capture(module, ref_path: str, ref_sha: str | None, out: str):
     return st
 
 
+def full_capture(module, ref_path: str, ref_sha: str | None, window_file: str, out: str):
+    """A5: the same proxy, reading box R's FULL-vocabulary fp16 rows (ref_full_<src>.npy, memory-mapped, refused unless its
+    sha is `ref_sha`): at each served step, `sc1g_kl.kl_full_support` over every token, in fp64 on the row's device (the
+    full KL, the common-support KL, the reference mass on any token e4b masks to -inf, the masked count), and the target's
+    log-prob (targets from the arm's own window file). A position whose read raises (a NaN row, misalignment) is recorded
+    as void with its reason and the run continues: the serving loop is never crashed by the instrument. Written to `out`
+    at exit."""
+    import numpy as np
+    sys.path.insert(0, HERE)
+    import sc1g_kl
+    if ref_sha and sc1g_kl.file_sha(ref_path) != ref_sha:
+        raise SystemExit(f"{ref_path}: sha differs from the registered {ref_sha[:16]} -- refusing the reference")
+    ref = np.load(ref_path, mmap_mode="r")
+    rec = json.load(open(window_file))
+    P0, S = int(rec["prompt_len"]), int(rec["steps"])
+    targets = [int(x) for x in rec["ids"][P0 + 1:P0 + S + 1]]
+    if ref.shape[0] != S:
+        raise SystemExit(f"{ref_path}: {ref.shape[0]} rows for a {S}-step window -- refused")
+    st = {"calls": 0, "other": 0, "kl": np.full(S, np.nan), "tlp": np.full(S, np.nan), "klc": np.full(S, np.nan),
+          "mm": np.full(S, np.nan), "nm": np.full(S, np.nan), "void": []}
+    real = module.torch
+
+    def on_rows(x):
+        if x.dim() != 2 or x.shape[0] != 1:
+            st["other"] += 1
+            return
+        t = st["calls"]
+        st["calls"] += 1
+        if t >= S:
+            return
+        if x.shape[1] != ref.shape[1]:
+            raise SystemExit(f"e4b row has {x.shape[1]} logits, the reference {ref.shape[1]} -- refused")
+        try:
+            r = sc1g_kl.kl_full_support(real.as_tensor(np.asarray(ref[t:t + 1])), x.detach())
+            st["kl"][t], st["klc"][t], st["mm"][t], st["nm"][t] = (float(r[k][0]) for k in ("kl", "kl_common", "masked_mass", "n_masked"))
+        except Exception as e:  # noqa: BLE001 -- recorded per position; the served loop keeps running
+            st["void"].append({"t": t, "why": f"{e.__class__.__name__}: {e}"[:200]})
+        st["tlp"][t] = float(x[0, targets[t]])
+
+    def _save():
+        np.savez(out + ".tmp.npz", eng_kl=st["kl"], eng_target_lp=st["tlp"], eng_kl_common=st["klc"], eng_masked_mass=st["mm"],
+                 eng_n_masked=st["nm"])
+        os.replace(out + ".tmp.npz", out)
+        json.dump({"calls": st["calls"], "other_calls": st["other"], "positions": S, "ref_file": os.path.basename(ref_path),
+                   "ref_sha": ref_sha, "estimator": "full-vocabulary KL (A5)", "void_positions": len(st["void"]),
+                   "void_first": st["void"][:20]}, open(out + ".json", "w"), indent=1, sort_keys=True)
+    atexit.register(_save)
+    st["save"] = _save
+    module.torch = _TorchProxy(real, on_rows)
+    return st
+
+
 def k8(args) -> None:
     pin_chat_date()
     if os.environ.get("SC1G_ROUTE_OUT"):
@@ -206,7 +258,14 @@ def k8(args) -> None:
     import step_decomp
     if os.environ.get("SC1G_WINDOW_FILE"):
         step_decomp._k8_window = window_from_file(os.environ["SC1G_WINDOW_FILE"])
-    if os.environ.get("SC1G_REF_FILE"):
+    if os.environ.get("SC1G_REF_FULL_FILE"):
+        if not (os.environ.get("SC1G_KL_OUT") and os.environ.get("SC1G_WINDOW_FILE")):
+            raise SystemExit("SC1G_REF_FULL_FILE needs SC1G_KL_OUT and SC1G_WINDOW_FILE")
+        if "--ppl-oracle" in args:
+            raise SystemExit("SC1G_REF_FULL_FILE reads the SERVED loop's rows; an --ppl-oracle arm scores elsewhere -- refused")
+        full_capture(step_decomp, os.environ["SC1G_REF_FULL_FILE"], os.environ.get("SC1G_REF_FULL_SHA"),
+                     os.environ["SC1G_WINDOW_FILE"], os.environ["SC1G_KL_OUT"])
+    elif os.environ.get("SC1G_REF_FILE"):
         if not os.environ.get("SC1G_NAMED_OUT"):
             raise SystemExit("SC1G_REF_FILE needs SC1G_NAMED_OUT")
         if "--ppl-oracle" in args:

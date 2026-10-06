@@ -16,7 +16,7 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "sc1"
 PIN = LANE / "staged.sha256"
 OWN = ("sc1_run.sh", "sc1_e4b_sched.py", "sc1_prompts.py", "sc1_sampler.sh")
-COMP_DIRS = ("vllm", "sglang", "llamacpp", "exl3", "lmdeploy")
+COMP_DIRS = ("vllm", "sglang", "llamacpp", "exl3", "lmdeploy", "sc1g_ref")   # sc1g_ref: SC1g box R's registered artifacts (A5), once the sha-registration PR lands
 SC1B = tuple("sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh".split())                         # bench/sc1b, staged flat on every box
 SC2 = tuple("sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py".split())                                                                                            # bench/sc2, staged flat on every box
 P39 = ("step_decomp.py", "k8_bake.py", "calib.json")
@@ -85,7 +85,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_resolves_the_same_way():
     assert "$HERE/sc1_reduce.py" in driver and '[ -s "$HERE/sc1_reduce.py" ] && STAGE=' in driver
     for var in ("$P39/step_decomp.py", "$P39/k8_bake.py", "$P39/calib.json", "$TESTS/test_k19_row_exact_gpu.py", "$P42/hook/usercustomize.py"):
         assert var in driver, var
-    assert "for d in vllm sglang llamacpp exl3 lmdeploy; do" in driver and "COPYFILE_DISABLE=1 tar -C \"$HERE\"" in driver
+    assert "for d in vllm sglang llamacpp exl3 lmdeploy sc1g_ref; do" in driver and "COPYFILE_DISABLE=1 tar -C \"$HERE\"" in driver
     # the driver's case resolves every pinned name exactly as resolve() does
     case = driver[driver.index("while read -r want name; do"):driver.index('done < "$HERE/staged.sha256"')]
     assert "sc1_run.sh|sc1_e4b_sched.py|sc1_prompts.py|sc1_sampler.sh|sc1_reduce.py) src=\"$HERE/$name\"" in case

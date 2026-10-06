@@ -259,12 +259,15 @@ def test_egress_probe_fast_read_passes(tmp_path, egress_server):
     assert rc == 0 and "PASSED" in out and not refusal and "egress status 206" in log
 
 
-RULE_FUNCS = ("verdict", "score", "load_reference", "window_ids", "fake_nf4", "fake_nf4_experts_", "gnf4_crosscheck")
-RULE_CONSTS = ("SELF_CONSISTENCY_MAX", "SRCS", "NF4_LUT", "BLOCK")
-RULE_SHA_AT_8A1513A4 = "ee122b74adb8160d14ca4d61f43a873b1a7275604c7d074cadb8cb64a3245168"
+RULE_FUNCS_A5 = ("verdict_a5", "score", "load_reference", "window_ids", "fake_nf4", "fake_nf4_experts_", "gnf4_crosscheck")
+RULE_CONSTS_A5 = ("SELF_CONSISTENCY_MAX", "SRCS", "NF4_LUT", "BLOCK", "A5_GRADED", "A5_MIN_GRADABLE", "A5_DROPPED")
+RULE_SHA_A5 = "7f307c39c896e456f63e99f09ce33944cd12b4cf25275ae8801b761f152469b7"
+# A4's registered rule, kept so the A4 read stays re-derivable: digest ee122b74... over A4's set at 8a1513a4 / 9dc7b59a, and
+# verdict()'s own source (the function --reverdict uses for an A4 receipt) pinned below
+A4_VERDICT_SHA = "0f521ac4d77d3a17daf342ca3cea7d20bf1f2f79b03d5c7adbffef6128c18102"
 
 
-def _rule_digest(ref_src: str, kl_src: str) -> str:
+def _rule_digest(ref_src: str, kl_src: str, funcs=RULE_FUNCS_A5, consts=RULE_CONSTS_A5) -> str:
     """Box R's registered rule as one digest: the sources of every function its verdict depends on, the constants by
     repr of their literal values, and sc1g_kl.py whole."""
     import ast
@@ -272,19 +275,102 @@ def _rule_digest(ref_src: str, kl_src: str) -> str:
     tree = ast.parse(ref_src)
     fn = {n.name: ast.get_source_segment(ref_src, n) for n in tree.body if isinstance(n, ast.FunctionDef)}
     cs = {t.id: repr(ast.literal_eval(n.value)) for n in tree.body if isinstance(n, ast.Assign) for t in n.targets
-          if isinstance(t, ast.Name) and t.id in RULE_CONSTS}
-    assert all(f in fn for f in RULE_FUNCS) and all(c in cs for c in RULE_CONSTS)
-    parts = [fn[f] for f in RULE_FUNCS] + [f"{c} = {cs[c]}" for c in RULE_CONSTS] + [kl_src]
+          if isinstance(t, ast.Name) and t.id in consts}
+    assert all(f in fn for f in funcs) and all(c in cs for c in consts)
+    parts = [fn[f] for f in funcs] + [f"{c} = {cs[c]}" for c in consts] + [kl_src]
     return hashlib.sha256("\n\x00\n".join(parts).encode()).hexdigest()
 
 
 def test_box_r_rule_is_the_registered_one():
-    """--reverdict proves the registered rule only if box R's whole rule is the code registered at #1198's merge
-    (8a1513a4): verdict() and everything it reads -- score, the loader, the window check, the NF4 fake-quant and its gnf4
-    cross-check, the four constants, and sc1g_kl.py."""
+    """A5's registered rule for box R: verdict_a5 and everything it and the scoring read, the constants, sc1g_kl.py."""
     ref_src, kl_src = (SC2 / "sc1g_ref.py").read_text(), (SC2 / "sc1g_kl.py").read_text()
-    assert _rule_digest(ref_src, kl_src) == RULE_SHA_AT_8A1513A4
-    # the pin is not vacuous: a constant, a function body, or the estimator moving each changes the digest
-    assert _rule_digest(ref_src.replace("SELF_CONSISTENCY_MAX = 1e-2", "SELF_CONSISTENCY_MAX = 1e-1"), kl_src) != RULE_SHA_AT_8A1513A4
-    assert _rule_digest(ref_src.replace('min(cv) >= KL.COVERAGE_MIN', 'min(cv) >= 0.5'), kl_src) != RULE_SHA_AT_8A1513A4
-    assert _rule_digest(ref_src, kl_src.replace("CALIB_RATIO_MIN = 0.90", "CALIB_RATIO_MIN = 0.80")) != RULE_SHA_AT_8A1513A4
+    assert _rule_digest(ref_src, kl_src) == RULE_SHA_A5
+    assert _rule_digest(ref_src.replace("A5_MIN_GRADABLE = 3", "A5_MIN_GRADABLE = 2"), kl_src) != RULE_SHA_A5
+    assert _rule_digest(ref_src, kl_src.replace("STORAGE_F_FRACTION = 0.1", "STORAGE_F_FRACTION = 0.2")) != RULE_SHA_A5
+    assert _rule_digest(ref_src, kl_src.replace("GRADABLE_F_MAX = 1e-2", "GRADABLE_F_MAX = 2e-2")) != RULE_SHA_A5
+
+
+def test_the_a4_read_still_rederives_from_its_committed_receipt():
+    """A5 changed the rule, not A4's: verdict() is byte-identical to A4's, and --reverdict on sc1g-r-8's committed receipt
+    reproduces R_NOT_OK exactly."""
+    import ast
+    import hashlib
+    import subprocess
+    import sys
+    src = (SC2 / "sc1g_ref.py").read_text()
+    fn = {n.name: ast.get_source_segment(src, n) for n in ast.parse(src).body if isinstance(n, ast.FunctionDef)}
+    assert hashlib.sha256(fn["verdict"].encode()).hexdigest() == A4_VERDICT_SHA
+    rd = SC2.parents[1] / "bench" / "h2h-2026-10-02" / "sc1g" / "receipts" / "sc1g-r-8"
+    r = subprocess.run([sys.executable, str(SC2 / "sc1g_ref.py"), "--reverdict", str(rd / "ref"), "--k0", str(rd / "k0.json")],
+                       capture_output=True, text=True, timeout=300)
+    assert r.returncode == 0 and "R_NOT_OK rule=A4" in r.stdout and "matches_recorded=True" in r.stdout, r.stdout + r.stderr
+
+
+def test_full_capture_reads_full_vocab_kl_and_reproduces_the_nll(tmp_path):
+    """A5: the proxy computes KL(p_ref || p_e4b) over every token against R's fp16 full rows, per served step."""
+    import json
+    import types
+    import numpy as np
+    g = torch.Generator().manual_seed(11)
+    V, P0, S = 300, 6, 10
+    ids = torch.randint(0, V, (P0 + S + 1,), generator=g).tolist()
+    win = tmp_path / "k8_window_conv1.json"
+    win.write_text(json.dumps({"ids": ids, "prompt_len": P0, "steps": S}))
+    ref_logits = torch.randn(S, V, generator=g) * 3
+    rows = KLM.full_rows_fp16(ref_logits)
+    ref_path = tmp_path / "ref_full_conv1.npy"
+    np.save(ref_path, rows)
+    sha = KLM.file_sha(str(ref_path))
+    fake = types.SimpleNamespace(torch=torch)
+    out = str(tmp_path / "kl.npz")
+    st = K8.full_capture(fake, str(ref_path), sha, str(win), out)
+    eng = ref_logits + 0.2 * torch.randn(S, V, generator=g)
+    nll = 0.0
+    for t in range(S):
+        nll += -fake.torch.log_softmax(eng[t:t + 1].float(), -1)[0, ids[P0 + 1 + t]].item()
+    st["save"]()
+    z = np.load(out)
+    meta = json.load(open(out + ".json"))
+    want = KLM.kl_full_rows(rows, torch.log_softmax(eng.float(), -1))
+    assert meta["calls"] == S and np.allclose(z["eng_kl"], want, atol=1e-9)
+    assert abs(-z["eng_target_lp"].mean() - nll / S) < 1e-9
+    with pytest.raises(SystemExit):
+        K8.full_capture(types.SimpleNamespace(torch=torch), str(ref_path), "0" * 64, str(win), out)
+
+
+def test_full_capture_records_masked_mass_and_void_positions_and_keeps_serving(tmp_path):
+    """A5, #1223 review: a token e4b masks to -inf where R gives mass, and a row whose read fails (NaN), must not raise
+    into the serving loop. The masked step records kl = inf, the reference mass and the common-support KL; the NaN step
+    is a void position with its reason; every later step is still read; the reader then VOIDs the row with both."""
+    import json
+    import types
+    import numpy as np
+    g = torch.Generator().manual_seed(12)
+    V, P0, S = 300, 6, 8
+    ids = torch.randint(0, V, (P0 + S + 1,), generator=g).tolist()
+    win = tmp_path / "k8_window_conv1.json"
+    win.write_text(json.dumps({"ids": ids, "prompt_len": P0, "steps": S}))
+    ref_logits = torch.randn(S, V, generator=g) * 3
+    rows = KLM.full_rows_fp16(ref_logits)
+    ref_path = tmp_path / "ref_full_conv1.npy"
+    np.save(ref_path, rows)
+    fake = types.SimpleNamespace(torch=torch)
+    out = str(tmp_path / "kl.npz")
+    st = K8.full_capture(fake, str(ref_path), KLM.file_sha(str(ref_path)), str(win), out)
+    eng = ref_logits + 0.2 * torch.randn(S, V, generator=g)
+    tok = next(i for i in range(V) if i != ids[P0 + 3])          # a non-target token the reference gives mass to
+    eng[2, tok] = float("-inf")
+    eng[5, :] = float("nan")
+    for t in range(S):                                            # the served loop: every call returns, none raises
+        fake.torch.log_softmax(eng[t:t + 1].float(), -1)
+    st["save"]()
+    z, meta = np.load(out), json.load(open(out + ".json"))
+    pr = np.exp(rows[2].astype(np.float64) - np.logaddexp.reduce(rows[2].astype(np.float64)))
+    assert meta["calls"] == S and meta["void_positions"] == 1 and meta["void_first"][0]["t"] == 5
+    assert "NaN or +inf" in meta["void_first"][0]["why"]
+    assert np.isposinf(z["eng_kl"][2]) and abs(z["eng_masked_mass"][2] - pr[tok]) < 1e-9 and z["eng_n_masked"][2] == 1
+    assert np.isfinite(z["eng_kl_common"][2]) and np.isnan(z["eng_kl"][5])
+    rest = [t for t in range(S) if t not in (2, 5)]
+    assert np.all(np.isfinite(z["eng_kl"][rest])) and not z["eng_masked_mass"][rest].any()
+    want = KLM.kl_full_rows(rows[rest], torch.log_softmax(eng[rest].float(), -1))
+    assert np.allclose(z["eng_kl"][rest], want, atol=1e-9) and np.allclose(z["eng_kl_common"][rest], want, atol=1e-9)
