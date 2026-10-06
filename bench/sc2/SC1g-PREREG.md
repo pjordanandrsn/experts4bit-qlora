@@ -1139,6 +1139,131 @@ vLLM is close.
 | box R under A5 | 0.826 |
 | **the lane** | **8.850** |
 
+## Amendment A6 (2026-10-06): box J under A5's instrument, the prompt route graded within the box by the median
+
+Registered before any A6 data. The maintainer reviewed the design and required six changes, all of which are in this text:
+- comparisons within the box;
+- a statement about the median's floor;
+- three-way outcomes;
+- a bar for P2;
+- consequences registered before data;
+- a proof of the new wiring.
+
+**A5 is unchanged and was graded as registered** (K-A REFUTED, L1 HOLDS, L2 HOLDS).
+
+### Why
+
+The observations below were **found after A5's data, at $0, from the committed per-position records** (`kl_*.npz` of
+`sc1g-5090-a5-1` and `sc1g-prove-a5-8`). They motivate A6; fresh data tests them.
+- **A5's mean is tail-dominated.** The top 1% of positions carry 38–59% of each window's KL, and medians sit 10–40× below
+  the means.
+- **At the median, e4b MXFP4 served is 4–6× further from the reference than vLLM on all four windows.**
+
+  | window | e4b median | vLLM median |
+  |---|---|---|
+  | conv1 | 0.00041 | 0.00007 |
+  | conv2 | 0.0038 | 0.00097 |
+  | conv3 | 0.00094 | 0.00015 |
+  | conv4 | 0.0019 | 0.00052 |
+
+  e4b is further at 81–90% of positions. That includes conv1, where A5's mean ranks e4b first: vLLM's conv1 mean is a
+  first-quarter burst, which is also where its run-to-run change lives.
+- **conv2's e4b excess is front-loaded**, at the median as well as the mean: the first half's median against the second
+  half's is 0.00721 against 0.00223, so 3.24×. It shrinks with context, which argues against fp8-KV accumulation.
+- **The mechanism this tests.** e4b's served stack keeps NF4 for large row counts (`E4B_INT4_KEEP_NF4=1`). The route
+  record shows the 512-token prompt's MoE on `nf4_mtile_host|gt256` and only the decode on `mxfp4_gemv|le256`. vLLM and
+  box R both process the prompt with the checkpoint's MXFP4 weights. So e4b's prompt KV carries NF4's requantisation
+  error, which is 2.5–11× MXFP4's in A5's rows, and every decode step attends to it.
+- **Not the attention.** The arm log loads attention in bf16, and there is no attention-INT4 line.
+
+### The statistic, and what it cannot see
+
+- **Primary:** the per-window **median** of per-position full KL (`kl_full_support`, the same estimator as A5).
+- **Descriptive:** the mean.
+- **No floor for the median.** Box R kept per-window **means** only, so there is no per-position floor and the median has
+  none. R's mean floors (0.0057, 0.0070, 0.0018, 0.0019) sit **above** e4b's medians (4e-4 to 4e-3) and vLLM's (7e-5 to
+  1e-3), so these medians may lie near the reference's own arithmetic noise. Consequences:
+  - **"Resolved" for A6 means distinguishable within the box.** The noise that counts is e4b's own run-to-run, measured by
+    (b') below.
+  - **P1's ratio stays meaningful**, because 0.5 is reachable even if (a) bottoms out at the noise. But P1 **cannot tell
+    an (a) at noise level from an (a) at vLLM's level**.
+  - **The "within 2× of vLLM's A5 median" bar may compare against a noise-level number.** It is descriptive, labelled as
+    such, and so is the exploratory "4–6×" above.
+  - **A real median floor would take a box R re-run** that keeps per-position floor arrays. Not registered here.
+
+### Box J under A6 (`sc1g_box_i.sh`: `box_j` with `i_arms_a6`; A3's box J kept as `box_j_a3`)
+
+- **The box.** e4b only: no comparator, no GGUF. RTX 5090 class at the declared $0.75/h, guard **1.0 h**.
+- **Inputs.** Box R's registered rows (`sc1g-r5-2`), staged from the controller copy and re-hashed per arm (`i_ref_full`).
+  Four windows (conv1–conv4).
+- **Engine path.** The served rows go through `sc1g_k8.py`'s full capture, the same path box I's proof proved.
+
+**The arms.** Each runs in **its own process**, so no compiled or KV state carries over. The order is: conv1's (b), (a),
+(b'), then (b) + (a) on conv2–conv4, then (c). The deadline drops from the end.
+
+| arm | stem | stack | engagement rule (otherwise the row is not read) |
+|---|---|---|---|
+| (b) baseline served | `e4b_serve_served_<src>` | `SC1G_E4B_SERVE` | A5's served gate |
+| (a) the prompt on MXFP4 too | `e4b_a6mx_served_<src>` | `SC1G_E4B_MXPRE`: the served stack with `E4B_INT4_KEEP_NF4=0` and nothing else changed | **zero `nf4_*` routes**; `mxfp4_gemv\|le256` ≥ steps × 24; at least one `mxfp4_*\|gt256` (the prompt on the MXFP4 store) |
+| (b') determinism repeat | `e4b_a6rep_served_conv1` | `SC1G_E4B_SERVE` | A5's served gate |
+| (c) bf16 activations on the decode | `e4b_a6g0_served_<src>` | `SC1G_E4B_SERVE E4B_MXFP4_GEMV=0` | **no `mxfp4_gemv` route**; `mxfp4_grouped_v1\|le256` ≥ steps × 24; the prompt on `nf4_mtile_host` |
+
+**Within-box determinism.** (b') against (b) on conv1 reads either BIT_IDENTICAL, or DIFFERS with the median's relative
+change. If the median moved by **≥ 10%** (`A6_REP_NOISE_MAX`), or the repeat is missing, P1 and P3 read **UNREAD**: noise
+of that size is comparable to the bars.
+
+**The proof of the new wiring.** The maintainer's review called box J's A5 helpers new wiring on a different box. Box J's
+guard is ≤ 1 h, so the proof is local and costs $0:
+- `tests/test_sc1g_a6.py` sources the real box script, stubs only the engine calls, and drives `i_arms_a6` and `box_j`.
+  It checks 13 arms in the registered order, each its own call carrying R's re-hashed row file, its sha and its own KL
+  record, with KEEP_NF4 and GEMV set only where registered. It also checks that every arm is refused when R's rows are
+  absent, and that the A6 reading runs last.
+- `sc1g_reduce.py --self-test` covers A6's reading on synthetic rows: HELD, FALSIFIED and PARTIAL on each prediction, the
+  noisy-repeat UNREAD, and every engagement gate's refusal (45 cases).
+
+### Predictions (registered; `sc1g_reduce.py`'s `a6`; every ratio is within the box, against (b))
+
+| # | prediction | outcomes |
+|---|---|---|
+| P1 | The NF4-prefilled prompt carries most of e4b's excess at the median: median(a) / median(b) | **HELD** if ≤ **0.5** on ≥ 3 of 4 windows; **FALSIFIED** if ≥ **0.9** on ≥ 3 of 4; **PARTIAL** otherwise. The 0.5 is a **guess, flagged as such**: the exploratory numbers say that if the prompt route were the whole story, (a) would fall to about 0.2–0.25× of (b). |
+| P2 | (a) removes conv2's front-loading: (a)'s conv2 first-half / second-half median ratio | **HELD** if ≤ **1.5**; **FALSIFIED** if ≥ 0.9 × (b)'s own ratio on this box; **PARTIAL** otherwise. UNREAD if (b)'s own ratio on this box is ≤ 1.5 (nothing to remove). |
+| P3 | The decode GEMV's int8 activations contribute little at the median: median(c) / median(b) | **HELD** if ≥ **0.9** on ≥ 3 of 4; **FALSIFIED** if ≤ **0.5** on ≥ 3 of 4; **PARTIAL** otherwise. Basis: A3, where the int8 activations contributed little in NLL terms. |
+
+**Descriptive, not graded:**
+- median(a) against 2× vLLM's A5 median per window. The pinned values are 6.56e-05, 9.70e-04, 1.46e-04 and 5.18e-04,
+  recomputed from the committed npz by a test. This is subject to the noise caveat above.
+- the means.
+- **(b) against A5's reading**, as an integrity check: bit-identical, or the max |diff| per window. Bit-identity held on
+  one host, 145701; another host's driver or cuBLAS heuristics can change bits.
+
+### Consequences (registered before data)
+
+- **P1 HELD: no change to the KEEP_NF4 default on fidelity alone.** KEEP_NF4=1 exists for prefill speed. HELD licenses a
+  registered serve A/B on a rented card (not the A2000, which is correctness only) that prices KEEP_NF4=0's prefill cost.
+  The default moves only on that A/B.
+- **P1 PARTIAL:** recorded, with no default change. The remainder goes to the decode path, and P3 decides the next
+  registration.
+- **P1 FALSIFIED:** the prompt route is cleared. The open conv2 and median gap moves to the decode path, and P3 decides
+  the next registration.
+- **P3 FALSIFIED:** the GEMV's int8 activations become the lead suspect, and a kernel-level registration on activation
+  precision follows.
+- **P3 HELD:** the activations are cleared at the median.
+- **P2:** informs where any remaining excess sits. It has no default consequence of its own.
+
+### Cost and order
+
+1. This registration.
+2. Box J under A6: one run, from this registration's merge, after the pre-launch checks and the store probe. About $1,
+   inside the no-ask tier.
+3. The reading.
+
+The lane is at **$8.850**.
+
+**Not registered here:**
+- Repeated vLLM draws per window, with the draw spread as vLLM's own floor. That belongs to a later box I amendment, only
+  if L1 needs resolving.
+- A box R re-run that keeps per-position floor arrays.
+
 ## Out of scope
 
 - Distance to bf16 (P44, P90).

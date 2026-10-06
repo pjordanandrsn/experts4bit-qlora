@@ -232,7 +232,7 @@ def test_sglang_gptoss_quality_modes_demand_radix_on_one_request_and_their_moe_r
 def test_the_sc1g_reducer_self_test_passes():
     out = subprocess.run([sys.executable, str(REPO / "bench" / "sc2" / "sc1g_reduce.py"), "--self-test"],
                          capture_output=True, text=True, timeout=120)
-    assert out.returncode == 0 and "self-test OK (37 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "self-test OK (45 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_capture_keeps_the_selected_layers_gate_up_and_down_per_decode_step(tmp_path):
@@ -268,7 +268,7 @@ def test_box_j_is_the_e4b_only_diagnostic_box_with_its_decisive_arms_first():
     rows, e4b#1175's attention check, the K2/K5 triple on conv2-conv4, then the controls -- and builds four conversations."""
     assert "  J) . $W/sc2_box_e.sh; . $W/sc2g_box_g.sh; . $W/sc1g_box_i.sh ;;" in RUN
     assert 'J) PROVE_NEEDS="";;' in RUN and "J) box_j;; K) box_k;; esac" in RUN and "G|I|J) GNF4_SHA=" in RUN
-    body = BOX[BOX.index("box_j(){"):]
+    body = BOX[BOX.index("box_j_a3(){"):BOX.index("i_arms_a6(){")]   # A3's box J, kept for the record (box J now runs A6)
     assert "install_" not in body and "fetch_gptoss_gguf" not in body
     order = [body.index(s) for s in ("e4b_serve_v1_conv1 ", "e4b_mxpre_prefill128_conv1 ", "e4b_nf4_prefill128_conv1 ",
                                      "e4b_serve_served_conv1 ", "e4b_nf4_served_conv1 ", "sc1g_attn_check.py",

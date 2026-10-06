@@ -291,7 +291,7 @@ prove_i(){ local ok=0
 # ~0.1 effect -- then the controls (kvg4, folds-off, PDL=0) and conv2's K1 pair. Every comparison is within this box except K4's
 # repeat of box J.
 i_j(){ local TAG=$1; shift; can_run 600 "$TAG" && i_e4b "$@"; }
-box_j(){
+box_j_a3(){   # A3's box J (sc1g-diag-2), kept for the record; box J runs A6 below
   phase 0 "fetches (gpt-oss-20b, ultrachat_200k test_sft), the NF4 bake, the windows (no GGUF, no comparators)"
   fetch_gptoss || finish 11; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19
   quiesce arms
@@ -321,3 +321,32 @@ box_j(){
   gpu_free 60
   phase RD "the diagnostic reading (comparator rows absent by design: G1-G5 read UNREAD here; K1-K5 are read)"
   "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_diag.json 2>&1 | tail -40 | tee -a summary.txt; }
+
+
+# ---- box J under A6 (bench/sc2/SC1g-PREREG.md, amendment A6): e4b only, A5's instrument -- box R's registered full rows,
+# staged by sc1_drive.sh (SC1G_REF_FULL_SRC) and re-hashed per arm by i_ref_full -- graded WITHIN the box by the per-window
+# MEDIAN of per-position full KL. (b) baseline served; (a) the 512-token prompt on the MXFP4 store too (SC1G_E4B_MXPRE:
+# the served stack with E4B_INT4_KEEP_NF4=0 and nothing else changed); (c) bf16 activations on the decode (E4B_MXFP4_GEMV=0);
+# (b') a repeat of (b) on conv1 (within-box determinism). Every arm is its own process (i_e4b's perl exec of a fresh python),
+# so no compiled or KV state carries over. Priority: conv1's (b), (a), (b') first, then (b) + (a) on conv2-conv4 (P1 and P2
+# need both), then (c). The deadline drops from the end.
+SC1G_A6_SRCS="conv1 conv2 conv3 conv4"
+i_arms_a6(){ local SRC
+  phase A6BA "A6: (b) baseline served, (a) the prompt on MXFP4 (KEEP_NF4=0), (b') the conv1 repeat -- full-vocabulary KL"
+  i_pin_ok || { SC1G_PIN_BAD=1; line "SC1G_PIN_BAD: the e4b arms are refused"; }
+  can_run 600 a6b_conv1 && i_e4b_full e4b_serve_served_conv1 "$SC1G_E4B_SERVE" conv1
+  can_run 600 a6a_conv1 && i_e4b_full e4b_a6mx_served_conv1 "$SC1G_E4B_MXPRE" conv1
+  can_run 600 a6rep && i_e4b_full e4b_a6rep_served_conv1 "$SC1G_E4B_SERVE" conv1
+  for SRC in conv2 conv3 conv4; do
+    can_run 600 a6b_$SRC && i_e4b_full e4b_serve_served_$SRC "$SC1G_E4B_SERVE" $SRC
+    can_run 600 a6a_$SRC && i_e4b_full e4b_a6mx_served_$SRC "$SC1G_E4B_MXPRE" $SRC; done
+  phase A6C "A6: (c) bf16 activations on the decode (E4B_MXFP4_GEMV=0), per window"
+  for SRC in $SC1G_A6_SRCS; do can_run 600 a6c_$SRC && i_e4b_full e4b_a6g0_served_$SRC "$SC1G_E4B_SERVE E4B_MXFP4_GEMV=0" $SRC; done
+  gpu_free 60; }
+box_j(){
+  phase 0 "fetches (gpt-oss-20b, ultrachat_200k test_sft), the NF4 bake, the windows (no GGUF, no comparators); box R's full rows"
+  fetch_gptoss || finish 11; bake_gptoss || finish 12; SC1G_NCONV=4 i_windows || finish 19; i_ref_full_stage
+  quiesce arms
+  i_arms_a6
+  phase RD "the A6 reading (within the box: (a) and (c) against (b); (b') the determinism guard)"
+  "$PY" $W/sc1g_reduce.py --dir $W/sc1g --out $W/sc1g/verdict_sc1g_a6.json 2>&1 | tail -40 | tee -a summary.txt; }

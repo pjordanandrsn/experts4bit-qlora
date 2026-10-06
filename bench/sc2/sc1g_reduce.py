@@ -209,6 +209,92 @@ def a4(d: str) -> dict:
                             "note": "NLL is descriptive under A4; the KL65 rank is what A4 reads"}}
 
 
+def a6(d: str, a5_dir: str | None = None) -> dict:
+    """A6's reading on box J: the per-window MEDIAN of per-position full KL for (b) baseline served, (a) KEEP_NF4=0 served,
+    (c) E4B_MXFP4_GEMV=0 served, and (b') a fresh-process repeat of (b) on conv1; P1 / P2 / P3 with three-way outcomes,
+    all WITHIN the box. `a5_dir` (optional): the committed A5 reading's sc1g/ dir, for the (b)-vs-A5 integrity check."""
+    import numpy as np
+    R = _sc1()
+    shas, _rc, _rv, why = a5_refs(d)
+    rows = {lab: {s: kl_row_full(d, lab, s, R, shas, arms=KL6_ARMS) for s in (("conv1",) if lab == "e4b_rep" else A6_SRCS)}
+            for lab in KL6_ARMS}
+
+    def arr(lab, s):
+        x = rows[lab].get(s) or {}
+        return np.load(os.path.join(d, f"kl_{x['stem']}.npz"))["eng_kl"] if x.get("verdict") == "VALID" else None
+
+    med = {lab: {s: (None if arr(lab, s) is None else float(np.median(arr(lab, s)))) for s in rows[lab]} for lab in rows}
+
+    def halves(lab, s):
+        a = arr(lab, s)
+        if a is None:
+            return None
+        h = a.size // 2
+        lo = float(np.median(a[h:]))
+        return float(np.median(a[:h])) / lo if lo > 0 else None
+
+    # within-box determinism: (b') against (b) on conv1
+    b0, r0 = arr("e4b_base", "conv1"), arr("e4b_rep", "conv1")
+    if b0 is None or r0 is None:
+        det = {"verdict": "UNREAD", "why": "the repeat (b') or the baseline (b) on conv1 is not VALID"}
+    else:
+        dm = abs(float(np.median(r0)) / float(np.median(b0)) - 1.0)
+        det = {"verdict": "BIT_IDENTICAL" if np.array_equal(b0, r0) else "DIFFERS", "median_rel_change": dm,
+               "max_abs_diff": float(np.max(np.abs(b0 - r0)))}
+    noisy = det["verdict"] == "UNREAD" or det.get("median_rel_change", 0.0) >= A6_REP_NOISE_MAX
+
+    def ratios(lab):
+        return {s: med[lab][s] / med["e4b_base"][s] for s in A6_SRCS
+                if med[lab].get(s) is not None and med["e4b_base"].get(s) and med["e4b_base"][s] > 0}
+
+    def three_way(r, low_is_held):
+        if len(r) < A6_MIN:
+            return {"verdict": "UNREAD", "why": f"{len(r)} windows < {A6_MIN}", "ratios": r}
+        lo = sum(v <= A6_HELD_MAX for v in r.values())
+        hi = sum(v >= A6_NO_EFFECT_MIN for v in r.values())
+        if low_is_held:
+            v = "HELD" if lo >= A6_MIN else ("FALSIFIED" if hi >= A6_MIN else "PARTIAL")
+        else:
+            v = "HELD" if hi >= A6_MIN else ("FALSIFIED" if lo >= A6_MIN else "PARTIAL")
+        return {"verdict": v, "ratios": r, "windows_le_held": lo, "windows_ge_no_effect": hi}
+
+    pred = {}
+    gate = why or ("within-box determinism: " + (det.get("why") or f"(b') moved the conv1 median by {det['median_rel_change']:.3f} "
+                                                                    f">= {A6_REP_NOISE_MAX}") if noisy else None)
+    if gate:
+        pred["P1"] = {"verdict": "UNREAD", "why": gate}
+        pred["P3"] = {"verdict": "UNREAD", "why": gate}
+    else:
+        pred["P1"] = three_way(ratios("e4b_mxpre"), low_is_held=True)
+        pred["P3"] = three_way(ratios("e4b_gemv0"), low_is_held=False)
+    hb, ha = halves("e4b_base", A6_P2_SRC), halves("e4b_mxpre", A6_P2_SRC)
+    if why or hb is None or ha is None:
+        pred["P2"] = {"verdict": "UNREAD", "why": why or f"{A6_P2_SRC}: (a) or (b) not VALID"}
+    elif hb <= A6_P2_HELD_MAX:
+        pred["P2"] = {"verdict": "UNREAD", "why": f"(b)'s own {A6_P2_SRC} halves ratio {hb:.3f} <= {A6_P2_HELD_MAX}: nothing to remove",
+                      "base_halves": hb, "mxpre_halves": ha}
+    else:
+        v = "HELD" if ha <= A6_P2_HELD_MAX else ("FALSIFIED" if ha >= A6_NO_EFFECT_MIN * hb else "PARTIAL")
+        pred["P2"] = {"verdict": v, "base_halves": hb, "mxpre_halves": ha}
+    desc = {"mxpre_within_2x_vllm_a5_median": {s: (None if med["e4b_mxpre"].get(s) is None else med["e4b_mxpre"][s] <= 2 * A6_VLLM_A5_MEDIAN[s])
+                                               for s in A6_SRCS},
+            "note": "descriptive: vLLM's A5 median may itself sit at the reference's arithmetic noise (no per-position R floor)",
+            "mean": {lab: {s: (None if arr(lab, s) is None else float(np.mean(arr(lab, s)))) for s in rows[lab]} for lab in rows}}
+    if a5_dir:
+        integ = {}
+        for s in A6_SRCS:
+            b = arr("e4b_base", s)
+            p5 = os.path.join(a5_dir, f"kl_e4b_serve_served_{s}.npz")
+            if b is None or not os.path.exists(p5):
+                integ[s] = None
+                continue
+            a = np.load(p5)["eng_kl"]
+            integ[s] = {"bit_identical": bool(np.array_equal(a, b)), "max_abs_diff": float(np.max(np.abs(a - b)))}
+        desc["base_vs_a5_reading"] = integ
+    return {"instrument": {"box_r": (_rv or {}).get("verdict"), "rule": (_rv or {}).get("rule"), "why": why},
+            "rows": rows, "median": med, "determinism": det, "predictions": pred, "descriptive": desc}
+
+
 def prove_a4(d: str) -> dict:
     R = _sc1()
     refs, _rc, why = a4_refs(d)
@@ -227,6 +313,24 @@ COMPARATORS5 = ("vllm", "llamacpp", "llamacpp_q8")
 NATIVE_MXFP4_5 = ("e4b_mxfp4",) + COMPARATORS5
 PROVE_A5 = ("e4b_serve_served_conv1", "nll_vllm_served_conv1", "nll_llamacpp_q8_decode_conv1")
 SUPPORT_KEYS = ("eng_kl_common", "eng_masked_mass", "eng_n_masked")   # every engine's per-position support record (#1223 review)
+
+# A6 (SC1g-PREREG.md, amendment A6): box J, e4b only, under A5's instrument (box R's registered full rows). The statistic is
+# the per-window MEDIAN of per-position full KL (A5's mean is tail-dominated; found after A5's data, $0, from the committed
+# npz). Every comparison is WITHIN the box: (a) the prompt on MXFP4 too (KEEP_NF4=0) and (c) bf16 activations on the decode
+# (E4B_MXFP4_GEMV=0), each against (b) the baseline served row; (b') repeats (b) on conv1 in a fresh process.
+KL6_ARMS = {"e4b_base": "e4b_serve_served_{}", "e4b_mxpre": "e4b_a6mx_served_{}", "e4b_gemv0": "e4b_a6g0_served_{}",
+            "e4b_rep": "e4b_a6rep_served_{}"}
+A6_SRCS = ("conv1", "conv2", "conv3", "conv4")
+A6_HELD_MAX = 0.5            # P1: median(a)/median(b) <= this on >= A6_MIN windows -> HELD (a guess, flagged as such)
+A6_NO_EFFECT_MIN = 0.9       # ... >= this on >= A6_MIN windows -> FALSIFIED (P1) / HELD (P3: activations contribute little)
+A6_MIN = 3
+A6_REP_NOISE_MAX = 0.10      # (b') vs (b) median moved by >= 10 % -> within-box noise comparable to the bars: P1/P3 UNREAD
+A6_P2_HELD_MAX = 1.5         # P2: (a)'s conv2 first-half / second-half median ratio <= this -> HELD
+A6_P2_SRC = "conv2"
+# vLLM's A5 per-window medians, pinned from sc1g-5090-a5-1's committed kl_nll_vllm_served_<src>.npz (descriptive bar only;
+# with no per-position R floor these may sit at the reference's own arithmetic noise)
+A6_VLLM_A5_MEDIAN = {"conv1": 6.560716581161224e-05, "conv2": 0.0009697601892657444, "conv3": 0.00014566963101666808,
+                     "conv4": 0.0005183874304494503}
 
 
 def _fin(fn, a):
@@ -251,7 +355,7 @@ def a5_refs(d: str) -> tuple:
     return shas, rc, rv, None
 
 
-def kl_row_full(d: str, label: str, src: str, R, shas: dict) -> dict:
+def kl_row_full(d: str, label: str, src: str, R, shas: dict, arms: dict = KL5_ARMS) -> dict:
     """One engine x window full-vocabulary KL row; VALID only when the arm is VALID, its record is complete and finite,
     e4b's proxy meta exists with one row per step, vLLM's full vocabulary verified, the recorded reference sha is the
     registered one, no position is void, the engine masks (-inf) no token the reference gives mass, and the target
@@ -259,7 +363,7 @@ def kl_row_full(d: str, label: str, src: str, R, shas: dict) -> dict:
     mass on the engine's masked tokens, the masked count, the common-support KL -- what a common-support rule would grade,
     registered on the proof's numbers if the proof finds masked mass, never on the reading's."""
     import numpy as np
-    stem = KL5_ARMS[label].format(src)
+    stem = arms[label].format(src)
     q = row(d, stem, src, R)
     if q["verdict"] != "VALID":
         return {"verdict": "UNREAD", "why": f"arm {q['verdict']}: {q.get('why')}", "stem": stem}
@@ -423,6 +527,27 @@ def route_gate(d, stem, steps=2048):
     if stem.startswith("e4b_nf4_"):
         bad = [k for k in seen if k.startswith("mxfp4_")]
         return (not bad), (f"MXFP4 route(s) {bad} on the NF4 control" if bad else ""), seen
+    if stem.startswith("e4b_a6mx_"):                  # A6 (a): KEEP_NF4=0 served -- the prompt on the MXFP4 store, the decode on the GEMV
+        bad = [k for k in seen if not k.startswith("mxfp4_")]
+        if bad:
+            return False, f"route(s) {bad}: KEEP_NF4=0 must run no nf4_* route (the prompt on the MXFP4 store)", seen
+        n = seen.get("mxfp4_gemv|le256", 0)
+        if n < steps * LAYERS:
+            return False, f"mxfp4_gemv|le256 {n} < {steps} steps x {LAYERS} layers", seen
+        if not any(k.endswith("|gt256") for k in seen):
+            return False, "no mxfp4_*|gt256 route: the prompt did not run on the MXFP4 store", seen
+        return True, "", seen
+    if stem.startswith("e4b_a6g0_"):                  # A6 (c): E4B_MXFP4_GEMV=0 served -- the decode on grouped v1 (bf16), the prompt on NF4
+        gemv = [k for k in seen if k.startswith("mxfp4_gemv")]
+        other = [k for k in seen if not (k.startswith("mxfp4_grouped_v1|le256") or k.startswith("nf4_mtile_host|"))]
+        n = seen.get("mxfp4_grouped_v1|le256", 0)
+        if gemv or other:
+            return False, f"routes {sorted(seen)}: GEMV=0 must run no mxfp4_gemv route, only grouped v1 (decode) + the prompt's NF4", seen
+        if n < steps * LAYERS:
+            return False, f"mxfp4_grouped_v1|le256 {n} < {steps} steps x {LAYERS} layers", seen
+        if not any(k.startswith("nf4_mtile_host|") for k in seen):
+            return False, "no nf4_mtile_host route: the prompt did not run on the kept NF4", seen
+        return True, "", seen
     if stem.startswith("e4b_mxpre_"):                 # A3: NF4 emptied -> every row on the MXFP4 store's grouped v1 kernel
         other = [k for k in seen if not k.startswith("mxfp4_grouped_v1|")]
         if other or "mxfp4_grouped_v1|gt256" not in seen:
@@ -578,7 +703,7 @@ def reduce(d: str) -> dict:
             "predictions": p, "delta_vs_vllm": rep,
             "within_floor_vs_vllm": {a: {sh: within(v) for sh, v in by.items()} for a, by in rep.items()},
             "diagnostics": {"meaning": MEANING, "per_window": dg}, "served_minus_prefill": gaps, "kernel_check": kern,
-            "scored_target_roles": roles, "diag_predictions": jp, "a3_predictions": kp, "a4": a4(d), "a5": a5(d),
+            "scored_target_roles": roles, "diag_predictions": jp, "a3_predictions": kp, "a4": a4(d), "a5": a5(d), "a6": a6(d),
             "attn_check_1175": (json.load(open(os.path.join(d, "attn_check_5090.json")))
                                 if os.path.exists(os.path.join(d, "attn_check_5090.json")) else None),
             "control_wikitext": {"floor": {"per_window": flc, "F": Fc}, "delta_vs_vllm": ctl,
@@ -842,6 +967,7 @@ def self_test() -> int:
         cases.append(("A3 gates", v["e4b_mxpre_prefill128"]["conv1"]["verdict"] == "VOID" and v["e4b_serve_v1"]["conv1"]["verdict"] == "VOID"))
     cases += _a4_self_test(tempfile)
     cases += _a5_self_test(tempfile)
+    cases += _a6_self_test(tempfile)
     bad = [n for n, ok in cases if not ok]
     print(f"sc1g_reduce self-test {'OK' if not bad else 'FAILED ' + str(bad)} ({len(cases)} cases)")
     return 0 if not bad else 1
@@ -1003,6 +1129,89 @@ def _a5_self_test(tempfile) -> list:
     return cases
 
 
+def _a6_fixture(d, base, mx, g0, rep=1.0, halves=None, routes=None, P=2048):
+    """Box R's A5 receipt + A6's four arms: per window a KL array with the given median (constant, or two halves for P2),
+    aligned target lps, the support arrays, e4b meta, and engagement routes (override per stem with `routes`)."""
+    import numpy as np
+    good = {"e4b_mxfp4": 2e-3, "e4b_nf4": 2e-2, "vllm": 1.5e-3, "llamacpp": 3e-3, "llamacpp_q8": 2.5e-3}
+    _a5_fixture(d, good)
+    shas = json.load(open(os.path.join(d, "ref", "ref_full_shas.json")))
+    gate = {"e4b_a6mx_": {"mxfp4_gemv|le256": 2048 * 24 + 16 * 24, "mxfp4_grouped_v1|gt256": 24},
+            "e4b_a6g0_": {"mxfp4_grouped_v1|le256": 2048 * 24 + 16 * 24, "nf4_mtile_host|gt256": 24},
+            "e4b_a6rep_": {"mxfp4_gemv|le256": 2048 * 24 + 16 * 24, "nf4_mtile_host|gt256": 24},
+            "e4b_serve_": {"mxfp4_gemv|le256": 2048 * 24 + 16 * 24, "nf4_mtile_host|gt256": 24}}
+
+    def arr(m, s, lab):
+        if halves and (lab, s) in halves:
+            h1, h2 = halves[(lab, s)]
+            return np.concatenate([np.full(P // 2, h1), np.full(P - P // 2, h2)])
+        return np.full(P, m)
+    vals = {"e4b_base": base, "e4b_mxpre": mx, "e4b_gemv0": g0, "e4b_rep": {"conv1": base["conv1"] * rep}}
+    for lab, stem in KL6_ARMS.items():
+        for s, m in vals[lab].items():
+            st = stem.format(s)
+            src = json.load(open(os.path.join(d, f"e4b_serve_served_{s}.json")))
+            json.dump(src, open(os.path.join(d, st + ".json"), "w"))
+            k = arr(m, s, lab)
+            np.savez(os.path.join(d, f"kl_{st}.npz"), eng_kl=k, eng_target_lp=np.full(P, -src["mean_nll"]), eng_kl_common=k,
+                     eng_masked_mass=np.zeros(P), eng_n_masked=np.zeros(P))
+            json.dump({"calls": P, "positions": P, "ref_sha": shas[s]}, open(os.path.join(d, f"kl_{st}.npz.json"), "w"))
+            r = (routes or {}).get(st) or next(v for pre, v in gate.items() if st.startswith(pre))
+            json.dump({"pid": 1, "route_seen": r, "attn_seen": None}, open(os.path.join(d, "routes", st + ".1.json"), "w"))
+
+
+def _a6_self_test(tempfile) -> list:
+    import numpy as np
+    cases = []
+    W = ("conv1", "conv2", "conv3", "conv4")
+    base = {s: 4e-3 for s in W}
+    hv = {("e4b_base", "conv2"): (6e-3, 2e-3), ("e4b_mxpre", "conv2"): (1.2e-3, 1.0e-3)}
+    with tempfile.TemporaryDirectory() as d:           # the prompt route is the whole story; activations contribute nothing
+        _a6_fixture(d, base, {s: 1e-3 for s in W}, dict(base), halves=hv)
+        r = a6(d, a5_dir=d)
+        pr = r["predictions"]
+        cases.append(("A6 P1 HELD, P3 HELD, P2 HELD; (b') bit-identical", pr["P1"]["verdict"] == "HELD" and pr["P3"]["verdict"] == "HELD"
+                      and pr["P2"]["verdict"] == "HELD" and r["determinism"]["verdict"] == "BIT_IDENTICAL"))
+        cases.append(("A6 integrity vs an A5 dir: bit-identical", all(x and x["bit_identical"] for x in r["descriptive"]["base_vs_a5_reading"].values())))
+    with tempfile.TemporaryDirectory() as d:           # the prompt route explains nothing; the activations carry most of it
+        _a6_fixture(d, base, {s: 3.8e-3 for s in W}, {s: 1.2e-3 for s in W},
+                    halves={("e4b_base", "conv2"): (6e-3, 2e-3), ("e4b_mxpre", "conv2"): (5.7e-3, 1.9e-3)})
+        pr = a6(d)["predictions"]
+        cases.append(("A6 P1 FALSIFIED, P3 FALSIFIED, P2 FALSIFIED", pr["P1"]["verdict"] == "FALSIFIED"
+                      and pr["P3"]["verdict"] == "FALSIFIED" and pr["P2"]["verdict"] == "FALSIFIED"))
+    with tempfile.TemporaryDirectory() as d:           # in between on both
+        _a6_fixture(d, base, dict(zip(W, (1.2e-3, 2.8e-3, 2.8e-3, 3.8e-3))), dict(zip(W, (2.8e-3, 2.8e-3, 3.8e-3, 1.2e-3))))
+        pr = a6(d)["predictions"]
+        cases.append(("A6 PARTIAL on P1 and P3", pr["P1"]["verdict"] == "PARTIAL" and pr["P3"]["verdict"] == "PARTIAL"))
+    with tempfile.TemporaryDirectory() as d:           # the repeat moved the median by 20 %: within-box noise -> UNREAD
+        _a6_fixture(d, base, {s: 1e-3 for s in W}, dict(base), rep=1.2)
+        r = a6(d)
+        cases.append(("A6 noisy repeat -> P1/P3 UNREAD", r["determinism"]["verdict"] == "DIFFERS"
+                      and r["predictions"]["P1"]["verdict"] == "UNREAD" and r["predictions"]["P3"]["verdict"] == "UNREAD"))
+    with tempfile.TemporaryDirectory() as d:           # engagement: (a) touched NF4 on two windows, (c) touched the GEMV on two
+        bad = {"e4b_a6mx_served_conv1": {"mxfp4_gemv|le256": 49536, "nf4_mtile_host|gt256": 24},
+               "e4b_a6mx_served_conv2": {"mxfp4_gemv|le256": 49536, "mxfp4_grouped_v1|gt256": 24, "nf4_singleton|le256": 1},
+               "e4b_a6g0_served_conv1": {"mxfp4_grouped_v1|le256": 49536, "mxfp4_gemv|le256": 5, "nf4_mtile_host|gt256": 24},
+               "e4b_a6g0_served_conv2": {"mxfp4_grouped_v1|le256": 100, "nf4_mtile_host|gt256": 24}}
+        _a6_fixture(d, base, {s: 1e-3 for s in W}, dict(base), routes=bad)
+        r = a6(d)
+        rows = r["rows"]
+        gated = all(rows[lab][s]["verdict"] != "VALID" and "route gate" in str(rows[lab][s].get("why"))
+                    for lab in ("e4b_mxpre", "e4b_gemv0") for s in ("conv1", "conv2"))
+        cases.append(("A6 gates refuse (a) on any nf4_* route and (c) on any GEMV / too few grouped rows; then < 3 windows -> UNREAD",
+                      gated and r["predictions"]["P1"]["verdict"] == "UNREAD" and r["predictions"]["P3"]["verdict"] == "UNREAD"))
+    with tempfile.TemporaryDirectory() as d:           # (a) whose prompt never reached the MXFP4 store; (b) not front-loaded
+        _a6_fixture(d, base, {s: 1e-3 for s in W}, dict(base), routes={"e4b_a6mx_served_conv3": {"mxfp4_gemv|le256": 49536}})
+        r = a6(d)
+        x = r["rows"]["e4b_mxpre"]["conv3"]
+        cases.append(("A6 (a) without a gt256 MXFP4 route is refused; P2 UNREAD when (b) is not front-loaded",
+                      x["verdict"] != "VALID" and "gt256" in str(x.get("why")) and r["predictions"]["P2"]["verdict"] == "UNREAD"))
+    cases.append(("A6 constants as registered", (A6_HELD_MAX, A6_NO_EFFECT_MIN, A6_MIN, A6_REP_NOISE_MAX, A6_P2_HELD_MAX) == (0.5, 0.9, 3, 0.10, 1.5)
+                  and set(A6_VLLM_A5_MEDIAN) == set(W)))
+    _ = np
+    return cases
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--self-test", action="store_true")
@@ -1053,6 +1262,12 @@ def main(argv=None) -> int:
     print(f"SC1G_DIAG {json.dumps(v['diagnostics']['per_window'])[:600]}")
     for w, ks in v["a3_predictions"].items():           # A3's K1-K5 per window, and the across-window reads
         print(f"SC1G_A3 {w} {json.dumps(ks)[:900]}")
+    a6r = v.get("a6") or {}
+    if any(x.get("verdict") == "VALID" for lab in ("e4b_mxpre", "e4b_gemv0", "e4b_rep") for x in (a6r.get("rows") or {}).get(lab, {}).values()):
+        print(f"SC1G_A6_DETERMINISM {json.dumps(a6r.get('determinism'), default=float)}")
+        print(f"SC1G_A6_MEDIAN {json.dumps(a6r.get('median'), default=float)[:600]}")
+        for g, x in (a6r.get("predictions") or {}).items():
+            print(f"SC1G_A6_{g} {x['verdict']} {json.dumps({k: w for k, w in x.items() if k != 'verdict'}, default=float)[:400]}")
     a5r = v.get("a5") or {}
     print(f"SC1G_A5_INSTRUMENT {json.dumps(a5r.get('instrument'))} gradable={a5r.get('gradable_windows')}")
     for g, x in (a5r.get("predictions") or {}).items():
