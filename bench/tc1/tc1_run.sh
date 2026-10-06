@@ -134,8 +134,8 @@ echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RU
 case "$PACK" in 0|1) ;; *) say "refusing: TC1_PACK must be 0 or 1 (got '$PACK')"; echo "BOX_REFUSED pack=$PACK" >> summary.txt; finish 78;; esac
 for _f in $FAMILIES; do
   case "$_f" in
-    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
-    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
+    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
+    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
   esac
 done
 # ---------------------------------------------------------------- staged pieces, box class, forensics
@@ -1146,6 +1146,23 @@ tc1_memcensus_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/unsloth/m_mb1 && arm $FAM unsloth ckpt_unsloth_m_mb1 unsloth $UAL "$MID" $REV 0 mb1 $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $CEN
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_memc4k_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 47 (2026-10-06): amendment 23's memory census on amendment 39's packed
+# rows (4,096 real tokens, micro-batch 1 x accum 4, TC1_PACK=1), where e4b peaked 7.6 GB above Unsloth (amendment 43). One draw per arm, IN THIS
+# ORDER, each with tc1_arm.py's census on (--mem-census 1), every arm in venv-unsloth: e4b fused_attn4_m_p4 (the library's defaults: the fp32
+# expert absmax, the padded LoRA delta, the chunked LM loss as `auto`), e4b fused_attn4_m_p4_lev (E4B_ABSMAX_DQ=1 + NF4_QLORA_COMPACT_DELTA=1:
+# e4b's two memory levers), Unsloth ckpt_unsloth_m_p4 (TC1's qwen3 Unsloth arm, grouped_mm). No speed is read: the census slows the step.
+tc1_memc4k_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
+  local ALL="e4b:fused_attn4_m_p4:fused e4b:fused_attn4_m_p4_lev:fused unsloth:ckpt_unsloth_m_p4:unsloth"
+  say "===== PACKED MEMORY CENSUS family $FAM ($MID @ $REV; e4b defaults, e4b absmax-dq + compact delta, Unsloth; packed 4,096-token rows; --mem-census 1; amendment 47)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
+  local CEN="--mem-census 1"
+  can_run 600 $FAM/e4b/m_p4      && E4B_VENV=t212 arm $FAM e4b fused_attn4_m_p4 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/e4b/m_p4_lev  && TC1_ARM_EXTRA_ENV="E4B_ABSMAX_DQ=1 NF4_QLORA_COMPACT_DELTA=1" E4B_VENV=t212 arm $FAM e4b fused_attn4_m_p4_lev fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $CEN
+  can_run 600 $FAM/unsloth/m_p4  && arm $FAM unsloth ckpt_unsloth_m_p4 unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $CEN
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_bmmab_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 24 (2026-10-04): the RTX 5090's fp32 bmm host cost. First a replay, no model:
 # bmm_bench.py (staged with routecalls-qwen3.json by TC1_EXTRA_STAGE) under venv-e4b (torch 2.8.0+cu128) and, when TC1's t212 install held,
 # venv-unsloth (torch 2.12.1+cu130) -> BMMBENCH-t28.json / BMMBENCH-t212.json. Then the training A/B on TC1's qwen3 tokens and recipe: the
@@ -1698,6 +1715,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3envsplit) tc1_envsplit_family qwen3envsplit Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 34: transformers vs torch+triton
   mixtraldenseab) tc1_mixtral_denseab_family mixtraldenseab mistralai/Mixtral-8x7B-Instruct-v0.1 eba92302a2861cdc0098cc54bc9f17cb2c47eb61 7200 3600;;   # TC1 amendment 22 (TC2's mixtral pin, fetch 7200, e4b 3600)
   qwen3memcensus) tc1_memcensus_family qwen3memcensus Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600 3600;;   # TC1 amendment 23 (fetch 5400, e4b 3600, Unsloth 3600)
+  qwen3memc4k) tc1_memc4k_family qwen3memc4k Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 47: the memory census on packed 4,096-token rows
   routebench)  tc1_routebench_family routebench 1800;;   # TC1c amendment 3: a kernel-route replay (no model)
   fusedsweep)  tc1_fusedsweep_family fusedsweep 2400;;   # TC1c amendment 5: a fused-kernel config replay (no model)
   qwen3nativebest200) tc1_nativebest200_family qwen3nativebest200 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 4800 5400 4800;;   # TC1 amendment 8
