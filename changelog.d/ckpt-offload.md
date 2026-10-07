@@ -10,3 +10,6 @@
 - Gradients equal Hugging Face's default checkpointing exactly on CPU, including with a frozen embedding. e4b's fused ExpertsLoRA path
   under the offloaded checkpoint matches the plain path exactly on CUDA (RTX A2000). The copies are synchronous: what they cost a
   training step is for a TC1 box to read, so it stays opt-in.
+- **Untested with `enable_dense_offload`** (maintainer review): the dense-weight offload's train-prefetch schedule is documented for the
+  non-reentrant checkpoint's layer order, and this switches checkpointed layers to the reentrant one. The layer order should match
+  (forward 0..L-1, then each recompute L-1..0), but no test runs the two together. Read that pairing before relying on it.

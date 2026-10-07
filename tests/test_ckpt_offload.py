@@ -121,11 +121,11 @@ def test_fused_experts_under_the_offloaded_checkpoint():
     from quant_guard import require_quantize
     require_quantize("cuda")
     from experts4bit_qlora import Experts4bit, ExpertsLoRA, enable_fast_train
-    E, H, I, K, T = 8, 256, 128, 2, 64
+    E, H, inter, K, T = 8, 256, 128, 2, 64
 
     def build():
         torch.manual_seed(0)
-        base = Experts4bit.from_float((torch.randn(E, 2 * I, H) * 0.1).cuda(), (torch.randn(E, H, I) * 0.1).cuda(),
+        base = Experts4bit.from_float((torch.randn(E, 2 * inter, H) * 0.1).cuda(), (torch.randn(E, H, inter) * 0.1).cuda(),
                                       quant_type="nf4", compute_dtype=torch.bfloat16)
         mod = ExpertsLoRA(base, r=8, alpha=16, dtype=torch.float32).cuda()
         with torch.no_grad():
@@ -147,7 +147,8 @@ def test_fused_experts_under_the_offloaded_checkpoint():
     gx0, g0 = run(build(), False)
     gx1, g1 = run(build(), True)
     assert g0.keys() == g1.keys() and g0
-    rel = lambda a, b: ((a.float() - b.float()).norm() / b.float().norm().clamp_min(1e-12)).item()
+    def rel(a, b):
+        return ((a.float() - b.float()).norm() / b.float().norm().clamp_min(1e-12)).item()
     errs = {"dx": rel(gx1, gx0), **{n: rel(g1[n], g0[n]) for n in g0}}
     print("\n" + "  ".join(f"{k}={v:.1e}" for k, v in errs.items()))
     assert all(v < 1e-2 for v in errs.values()), errs
