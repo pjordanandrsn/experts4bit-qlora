@@ -2669,3 +2669,50 @@ The run peak against Unsloth's is reported, not scored.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Five packed arms (amendment
 58's box cost $0.82): about $1–2 with the download.
+
+### Amendment 61 (2026-10-07T06:48Z, after amendment 58's read, before any box): the routed-expert combine over row chunks on packed rows (P166–P169), and a CUDA host floor
+
+**Why.** Amendment 57's census put the routed-expert combine's backward among the groups above Unsloth's training peak on packed rows.
+#1296 trimmed one fp32 copy from it. #1304 runs the combine's row-wise fp32 work (the forward's scatter and weight multiply, the
+backward's weight-gradient sum and down-gradient scale) over row chunks of about 32 MiB once the whole `[tokens*k, hidden]` image would
+reach 128 MiB, at least 16 rows a chunk. On an RTX A2000 at the packed shape it is byte-identical (forward and both gradients
+`torch.equal`, 1,024- to 32,768-row chunks), and the combine backward's peak fell from 0.805 to 0.269 GB, the forward's transient from
+768 to 320 MiB. It is on by default above the gate, so this box reads a shipped default: what it does to the training peak and the step.
+
+**The box** (token `qwen3combck`). One RTX 5090, packed 4,096-token rows, 40 load-gated steps, held-out at 0 and 40 (amendment 58's
+command). e4b's matched arm in venv-unsloth with `E4B_CKPT_OFFLOAD=1` and its defaults otherwise. Avoiding machines 145701, 130223 and
+55583. In this order:
+- e4b `fused_attn4_m_c0`: `E4B_COMBINE_CHUNK=0` (the whole-tensor combine);
+- e4b `fused_attn4_m_c1`: the default (row chunks);
+- their second draws, `_c1_d2` then `_c0_d2` (A B B A);
+- Unsloth `ckpt_unsloth_m_cc`: one draw.
+
+Every arm runs with `--phase-peaks 1`. Validity (`combck_why`) requires amendment 58's predicates for its `o1` side, plus the combine
+the side names. `c1` records the variable unset with chunked forwards and backwards (the receipt's new `combine_chunk`); `c0` records `0`
+with none.
+
+**Predictions** (registered before the box):
+- **P166:** the training-phase peak (median of each side's draws) falls by at least **0.3 GB** from `c0` to `c1`.
+- **P167:** s/step `c1` / `c0` ≤ **1.02**, amendment 48's packed-row bar. The chunks add launches: 8 a call at this shape.
+- **P168:** |step-0 held-out `c1` − `c0`| ≤ **0.0001** on each draw pair, and |mean held-out at N| ≤ **0.005**. The combine is
+  byte-identical, so a larger step-0 difference is a defect signal.
+- **P169:** `c1`'s training-phase peak is at most **0.7 GB** above Unsloth's. Amendment 58 read +0.983 with the offload alone.
+
+**Decision rules.**
+- **P166, P167 and P168 HELD:** the default stands, and STATUS gives the packed-row training gap with it.
+- **P167 FALSIFIED:** the chunks cost the step too much. A small library PR turns the chunking OFF by default (`E4B_COMBINE_CHUNK=1`
+  opts in) until a re-ask holds (maintainer review, before any box): #1304 ships it on before any step reading, and a measured
+  slowdown should not stay on by default. The next step raises the chunk size (fewer launches), and the box is re-asked.
+- **P168 FALSIFIED:** a $0 A2000 check of the full combine at this shape comes first.
+- **P166 FALSIFIED:** the read says what holds the training peak instead.
+- **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+
+**A CUDA host floor (harness).** `tc1-5090-119` drew machine 34887 (driver 595.58). It passed the driver gate, then the image's torch
+raised CUDA error 803 ("system has unsupported display driver / cuda driver combination"). Every venv inherits that torch, so the e4b
+tripwire failed with rc 9, a harness code that names no machine, and the next draw could land on it again. `tc1_run.sh` now probes the
+image's torch right after the driver gate. When torch imports but cannot use the GPU, the box refuses with code 18 (`BOX_REFUSED
+cuda=unusable`), a registered host floor beside amendment 1's driver floor, so the receipt names the machine for exclusion. An image
+without an importable torch is not refused there: that is the image, not the host. Nothing in any fixture, arm, predicate or band changes.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Five packed arms: about
+$1–2 with the download.

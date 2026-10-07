@@ -3958,6 +3958,16 @@ def run_arm(a, load_fn, sampler=True):
                                "eval_chunked_calls": int(_cst.get("eval_chunked_calls", 0)), "eval_stock_calls": int(_cst.get("eval_stock_calls", 0))}
         except Exception:
             chunked_lm_loss = {"env": os.environ.get("E4B_CHUNKED_LM_LOSS"), "e4b_has_chunked_lm_loss": False}
+    combine_chunk = None                               # TC1 amendment 61: the routed-expert combine over row chunks (E4B_COMBINE_CHUNK): how often
+    if a.framework == "e4b":
+        try:
+            from experts4bit_qlora.engines import fast as _fst
+            _cc = getattr(_fst, "COMBINE_STATS", None)
+            combine_chunk = {"env": os.environ.get("E4B_COMBINE_CHUNK"), "e4b_has_combine_chunk": _cc is not None,
+                             "chunked_fwd": int((_cc or {}).get("chunked_fwd", 0)), "chunked_bwd": int((_cc or {}).get("chunked_bwd", 0)),
+                             "min_bytes": getattr(_fst, "COMBINE_CHUNK_MIN_BYTES", None), "chunk_bytes": getattr(_fst, "COMBINE_CHUNK_BYTES", None)}
+        except Exception:
+            combine_chunk = {"env": os.environ.get("E4B_COMBINE_CHUNK"), "e4b_has_combine_chunk": False}
     route_ab = None                                    # TC1c amendment 4: which training GEMM route grouped-nf4-gemm took (GNF4_TRAIN_GEMM), and how often
     if a.framework == "e4b":
         try:
@@ -4036,6 +4046,7 @@ def run_arm(a, load_fn, sampler=True):
         "prebind_ab": prebind_ab,                                                                                        # TC1 amendment 26
         "reuse_ab": reuse_ab,                                                                                            # TC1 amendment 20 (#945)
         "chunked_lm_loss": chunked_lm_loss,                                                                              # TC1 amendment 40
+        "combine_chunk": combine_chunk,                                                                                  # TC1 amendment 61
         "keep_ab": keep_ab,                                                                                              # TC1 amendment 21 (#945)
         "route_ab": route_ab,                                                                                            # TC1c amendment 4
         **({"mem_census": mem_census} if mcen is not None else {}),                                                    # TC1 amendment 23 (only with --mem-census 1)
