@@ -1,37 +1,43 @@
-"""Keep each checkpointed decoder layer's input in pinned host memory instead of on the GPU (opt-in).
+"""e4b's checkpoint for decoder layers: PyTorch's reentrant checkpoint by default, optionally with its inputs in pinned host memory.
 
-Under gradient checkpointing every decoder layer keeps one tensor across the step: its input hidden states, so that backward can
-re-run the layer. On Qwen3-30B-A3B's packed 4,096-token rows that is 47 tensors of 16.8 MB, 0.79 GB of e4b's training peak, and
-the largest single group TC1 amendment 57's census found above Unsloth's (whose own checkpointing keeps no such group on the GPU;
-``e4b.train.memory.packed-4k-train-census.5090.2026-10-07``).
+``E4B_CKPT_OFFLOAD`` (under ``enable_fast_train``):
+- unset (the default since TC1 amendment 64) or ``reentrant``: every checkpointed decoder layer runs PyTorch's REENTRANT checkpoint
+  (:func:`reentrant_checkpoint`), its input left on the GPU;
+- ``1``: the same checkpoint inside ``torch.autograd.graph.save_on_cpu(pin_memory=True)`` (:func:`offloaded_checkpoint`), so each
+  layer's input lives in pinned host memory between forward and backward -- a memory lever, opt-in;
+- ``0``: Hugging Face's own (non-reentrant) checkpoint, unchanged -- the way back.
 
-How: each checkpointed layer runs PyTorch's REENTRANT checkpoint inside ``torch.autograd.graph.save_on_cpu(pin_memory=True)``.
-The reentrant checkpoint runs the layer under ``no_grad`` and saves exactly its tensor inputs with ``save_for_backward``, so the
-host-memory hook moves those inputs -- and nothing else -- to pinned host RAM in forward and brings them back for the recompute in
-backward. (Hugging Face's default non-reentrant checkpoint holds the input by reference rather than as a saved tensor, so no
-saved-tensor hook can reach it.) A reentrant checkpoint only produces gradients for what is inside the layer when its input
-requires grad, so this also calls the model's ``enable_input_require_grads()``, as PEFT does for reentrant checkpointing; that
-changes no value. The copies are synchronous: a device-to-host copy per layer in forward and host-to-device in backward. What
-that costs a step is for a TC1 box to read.
+Why the reentrant checkpoint is the default (Qwen3-30B-A3B on one RTX 5090, torch 2.12 and 2.8, two recipes; TC1 amendments 58, 59 and
+62-64): it runs the layer's first forward under ``no_grad`` and saves only its tensor inputs, where Hugging Face's non-reentrant
+checkpoint builds the layer's autograd graph in forward. Its step against Hugging Face's checkpoint:
+- the field recipe, shipped arm: 0.900 in torch 2.12 (``e4b.train.ckpt-flavour.field.5090.2026-10-07``) and 0.838 in torch 2.8 on a
+  host-bound box (``e4b.train.ckpt-flavour.default.5090.2026-10-07``);
+- packed 4,096-token rows, matched arm: 0.980 (same register row).
+It leaves the training peak where Hugging Face's checkpoint has it (identical on packed rows and at the field recipe), and held-out
+stayed within 0.004 everywhere.
 
-``E4B_CKPT_OFFLOAD=1`` (unset / ``0``: unchanged, Hugging Face's checkpointing). It is NOT a default yet: TC1 amendment 59's rule
-requires a torch 2.8 read on a host-bound box first (TC1 amendment 63), and amendment 62 to say which half of the switch made the
-field recipe's step faster. ``enable_fast_train`` applies it after its other switches; layers that ``E4B_MOE_KEEP_LAYERS`` took out
-of whole-layer checkpointing are left alone (they keep their activations by design). A model without gradient checkpointing enabled
-is left unchanged, with a warning when the variable was set. Ready for when the default flips (:data:`CKPT_OFFLOAD_DEFAULT`): a
-default-path request leaves alone a model whose decoder layers carry ``enable_dense_offload``'s handles, because dense offload's
-train-prefetch schedule is untested with this checkpoint (an explicit ``E4B_CKPT_OFFLOAD=1`` pairs them, and ``enable_dense_offload``
-warns when it finds offloaded checkpoints), and it stays silent without checkpointing. The CLI trainer keeps its own checkpointing.
+The offload (``1``) saves memory for a cost. Each layer's input stays off the GPU between forward and backward: on packed rows 47 x
+16.8 MB, 0.74 GB of the training peak, for 1.023 of the reentrant checkpoint's step. At the field recipe it saves 0.17-0.22 GB for
+1.02-1.04. The copies are synchronous: a device-to-host copy per layer in forward, host-to-device in backward.
 
-``E4B_CKPT_OFFLOAD=reentrant`` (a diagnostic, never a default) routes the same layers through the reentrant checkpoint WITHOUT the
-host-memory hook: their inputs stay on the GPU. It separates the two halves of this switch -- the checkpoint flavour and the copies
--- for TC1 amendment 62, which asks which of them made the field recipe's step faster.
+What the reentrant checkpoint changes for a caller:
+- it does not support ``torch.autograd.grad`` or ``backward(inputs=...)`` through the checkpointed layers;
+- a layer gets gradients for its contents only when its input requires grad, so this calls the model's
+  ``enable_input_require_grads()``, as PEFT does for reentrant checkpointing. That changes no value; ``disable_checkpoint_offload``
+  leaves the hook in place.
+``E4B_CKPT_OFFLOAD=0`` restores Hugging Face's checkpoint.
 
-The evidence so far, Qwen3-30B-A3B on one RTX 5090 in torch 2.12, the matched and shipped arms:
-- packed 4,096-token rows (TC1 amendment 58, ``e4b.train.ckpt-offload.packed-4k.5090.2026-10-07``): the training-phase peak 0.739 GB
-  lower at 1.003 of the step, held-out +0.0002;
-- TC1's field recipe (amendment 59, ``e4b.train.ckpt-offload.field.5090.2026-10-07``): 0.948 (matched) and 0.916 (shipped) of the
-  step, the matched training-phase peak 0.171 GB lower, held-out within 0.003.
+It applies to the layers checkpointed when it runs. Calling ``gradient_checkpointing_enable()`` afterwards puts Hugging Face's
+checkpoint back on every layer, and Hugging Face's ``Trainer`` (TRL's too) does exactly that inside ``train()`` when its arguments say
+``gradient_checkpointing=True``. To keep e4b's checkpoint there, enable checkpointing on the model before ``enable_fast_train`` and
+leave the trainer's ``gradient_checkpointing`` off, as the guide's loop does; calling ``enable_fast_train`` (or this function) again
+after a re-enable routes the layers again.
+
+Where it is not applied: layers that ``E4B_MOE_KEEP_LAYERS`` took out of whole-layer checkpointing keep their activations by design. A
+model without gradient checkpointing is left unchanged (silently by default, with a warning when the variable was set). By default, a
+model whose decoder layers carry ``enable_dense_offload``'s handles is left alone too, because dense offload's train-prefetch schedule
+is untested with this checkpoint. An explicit ``1`` or ``reentrant`` pairs them, and ``enable_dense_offload`` warns when it finds
+these checkpoints. The CLI trainer (``python -m experts4bit_qlora.train``) keeps its own checkpointing.
 """
 from __future__ import annotations
 
@@ -39,9 +45,8 @@ import os
 
 CKPT_OFFLOAD_STATS = {"layers": 0, "skipped": None}
 
-#: What unset ``E4B_CKPT_OFFLOAD`` means. Off until TC1 amendment 59's rule is met (amendments 62 and 63 read); the default flip is
-#: then this one line, in a library PR that cites the reads.
-CKPT_OFFLOAD_DEFAULT = False
+#: What unset ``E4B_CKPT_OFFLOAD`` means: ``"reentrant"`` since TC1 amendment 64 (``None`` would be Hugging Face's checkpoint).
+CKPT_DEFAULT_MODE = "reentrant"
 
 _ON, _OFF, _REENTRANT = ("1", "on", "true", "yes"), ("0", "off", "false", "no"), "reentrant"
 
@@ -54,9 +59,10 @@ def _setting() -> str:
 
 
 def checkpoint_offload_requested() -> bool:
-    """``E4B_CKPT_OFFLOAD``: ``1`` on, ``reentrant`` the reentrant checkpoint alone, ``0`` off, unset :data:`CKPT_OFFLOAD_DEFAULT` (off)."""
+    """Whether ``enable_fast_train`` routes the checkpointed layers at all: ``1`` / ``reentrant`` yes, ``0`` no, unset when
+    :data:`CKPT_DEFAULT_MODE` is set (the reentrant checkpoint, since TC1 amendment 64)."""
     v = _setting()
-    return (v in _ON or v == _REENTRANT) if v else CKPT_OFFLOAD_DEFAULT
+    return (v in _ON or v == _REENTRANT) if v else CKPT_DEFAULT_MODE is not None
 
 
 def checkpoint_offload_explicit() -> bool:
@@ -67,8 +73,11 @@ def checkpoint_offload_explicit() -> bool:
 
 
 def checkpoint_offload_mode() -> str:
-    """``"reentrant"`` under ``E4B_CKPT_OFFLOAD=reentrant``, else ``"offload"``."""
-    return _REENTRANT if _setting() == _REENTRANT else "offload"
+    """``"offload"`` under ``E4B_CKPT_OFFLOAD=1``, ``"reentrant"`` under ``=reentrant`` or unset (:data:`CKPT_DEFAULT_MODE`)."""
+    v = _setting()
+    if v in _ON:
+        return "offload"
+    return _REENTRANT if v == _REENTRANT else (CKPT_DEFAULT_MODE or "offload")
 
 
 def offloaded_checkpoint(fn, *args, **kwargs):
@@ -116,11 +125,16 @@ def enable_checkpoint_offload(model, verbose: bool = False, explicit: bool = Tru
                       "Call model.gradient_checkpointing_enable() first.", RuntimeWarning, stacklevel=2)
         return 0
     n = 0
+    want = reentrant_checkpoint if mode == _REENTRANT else offloaded_checkpoint
     for m in layers:
-        if getattr(m, "_e4b_ckpt_offload_ref", None) is not None:
+        cur = m._gradient_checkpointing_func
+        if cur is want:
             continue
-        m._e4b_ckpt_offload_ref = m._gradient_checkpointing_func
-        m._gradient_checkpointing_func = reentrant_checkpoint if mode == _REENTRANT else offloaded_checkpoint
+        # A layer routed before whose checkpoint was replaced since -- Hugging Face's Trainer calls gradient_checkpointing_enable()
+        # again inside train() -- keeps the replacement as the function disable restores; one already on the other mode keeps its ref.
+        if cur not in (reentrant_checkpoint, offloaded_checkpoint) or getattr(m, "_e4b_ckpt_offload_ref", None) is None:
+            m._e4b_ckpt_offload_ref = cur
+        m._gradient_checkpointing_func = want
         n += 1
     if n and hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()

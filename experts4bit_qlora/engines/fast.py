@@ -981,8 +981,8 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False, absmax_
     if chunk is not None:
         enable_chunked_lm_loss(model, chunk, verbose=verbose, min_logits_bytes=chunked_lm_loss_min_bytes(),
                                quiet_refusal=chunked_lm_loss_by_default())
-    # Opt-in (E4B_CKPT_OFFLOAD=1, or =reentrant for the diagnostic): every checkpointed decoder layer keeps its input in pinned host
-    # memory (engines/ckpt_offload.py). Unset follows CKPT_OFFLOAD_DEFAULT (off until TC1 amendments 62 and 63 read).
+    # E4B_CKPT_OFFLOAD (engines/ckpt_offload.py): unset = the reentrant checkpoint for every checkpointed decoder layer (TC1
+    # amendment 64), 1 = the same with its inputs in pinned host memory, 0 = Hugging Face's checkpoint.
     from .ckpt_offload import (checkpoint_offload_explicit, checkpoint_offload_mode, checkpoint_offload_requested,
                                enable_checkpoint_offload)
     if patched and checkpoint_offload_requested():

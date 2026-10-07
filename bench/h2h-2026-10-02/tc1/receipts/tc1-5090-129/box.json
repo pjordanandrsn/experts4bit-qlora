@@ -1,0 +1,20 @@
+{
+ "box": "A",
+ "run_id": "tc1-5090-129",
+ "instance_id": "54652024",
+ "gpu": "NVIDIA GeForce RTX 5090",
+ "driver": "595.84",
+ "cpu": "AMD Ryzen 9 5900XT 16-Core Processor",
+ "nproc": 32,
+ "mem_total_kb": "131821072",
+ "cgroup_memory_max": "129584070656",
+ "disk_root": "overlay         320G  2.6M  320G   1% /",
+ "hostname": "9362116443ff",
+ "cgroup_cpu_max": "3072000 100000",
+ "affinity_cpus": 32,
+ "cgroup_cpuset_effective": "0-31",
+ "registered_gpu_class": "5090",
+ "prereg": "tc1/TC1-PREREG.md",
+ "local_box": null,
+ "local_snapshot": null
+}

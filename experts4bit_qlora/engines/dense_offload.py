@@ -765,7 +765,7 @@ def enable_dense_offload(model, device=None, *, pin: bool = True,
         for _n, layer in layers for mod in layer.modules() if not _is_expert_module(mod)
         for p in mod._parameters.values() if p is not None and not p.is_meta)
     if any(getattr(layer, "_e4b_ckpt_offload_ref", None) is not None for _n, layer in layers):
-        warnings.warn("[e4b.dense_offload] these decoder layers already keep their checkpoint inputs in host memory "
+        warnings.warn("[e4b.dense_offload] these decoder layers already run e4b's reentrant checkpoint "
                       "(E4B_CKPT_OFFLOAD under enable_fast_train). Dense offload's "
                       "train-prefetch schedule is untested with that reentrant checkpoint: set E4B_CKPT_OFFLOAD=0 before "
                       "enable_fast_train, or call engines.ckpt_offload.disable_checkpoint_offload(model) first.",

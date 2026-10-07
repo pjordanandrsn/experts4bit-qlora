@@ -1365,3 +1365,41 @@ every attempt first time at load1 1.0–1.3. Read: [`RESULTS-tc1-ckptoff28.md`](
 - **By amendment 63's rule** (all four HELD, and amendment 62 puts the speed-up on the reentrant checkpoint alone), this PR registers
   the reentrant checkpoint's own default read (amendment 64) instead of flipping the offload.
 
+## Amendment 64 (2026-10-07): the reentrant checkpoint becomes e4b's default checkpoint (P178, P179, P181–P183 HELD; P180 FALSIFIED)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 64 (with the premise gate on P182 and the library-PR
+notes added in review). Two RTX 5090 boxes, each running Hugging Face's checkpoint (`r0`), the reentrant checkpoint alone (`rr`) and the
+reentrant checkpoint with its inputs in host memory (`r1`), two draws a side, grouped-nf4-gemm `0e6bff3`; e4b `2b8c1d4` (packed) and
+`434db5f` (field), both carrying amendment 64 as merged.
+
+**Packed rows, torch 2.12** (`tc1-5090-129`: AMD Ryzen 9 5900XT, a 30-CPU quota, Vast machine 94700; the matched arm, 40 load-gated
+steps, every attempt first time at load1 1.2–1.3). Read: [`RESULTS-tc1-ckptre64-packed.md`](RESULTS-tc1-ckptre64-packed.md).
+
+| side | s/step (two draws) | training-phase peak | held-out at N (mean) |
+|---|---|---|---|
+| `r0` Hugging Face's | 9.617 / 9.615 | 26.58 GB | 0.95417 |
+| `rr` reentrant alone | 9.421 / 9.430 | 26.58 GB | 0.95453 |
+| `r1` reentrant + host memory | 9.645 / 9.637 | 25.84 GB | 0.95434 |
+
+**Field recipe, torch 2.8** (`tc1-5090-128`: AMD EPYC 7K62, a 23-CPU quota, Vast machine 152440; the shipped arm, every arm profiled,
+60 load-gated steps, three draws voided for host load and re-run; the last attempt of `r1_d2` stands at load1 10.1). Read:
+[`RESULTS-tc1-ckptre64-field28.md`](RESULTS-tc1-ckptre64-field28.md).
+
+| side | s/step (two draws) | training-phase peak | held-out at N (mean) |
+|---|---|---|---|
+| `r0` Hugging Face's | 3.811 / 3.899 | 23.27 GB | 0.75757 |
+| `rr` reentrant alone | 3.247 / 3.215 | 23.27 GB | 0.75492 |
+| `r1` reentrant + host memory | 3.353 / 3.356 | 23.05 GB | 0.75372 |
+
+- **P178 HELD:** packed rows, `rr` / `r0` **0.980** [0.980, 0.981] (≤ 1.01).
+- **P179 HELD:** the reentrant checkpoint leaves the training peak where it was: 26.581 GB on both sides.
+- **P180 FALSIFIED:** on packed rows the copies cost **1.023** [1.022, 1.024] of the reentrant step (registered ≤ 1.01). Against
+  Hugging Face's checkpoint the offload still steps 1.003, as amendment 58 read: the reentrant checkpoint's own gain hides the copies.
+- **P181 HELD:** held-out within 0.0004 on packed rows.
+- **P182 HELD, premise met:** at the field recipe in torch 2.8 `rr` / `r0` **0.838** [0.825, 0.852] (≤ 1.00). `r0`'s device busy
+  fraction against its timed step is 0.404 (premise ≤ 0.9), so this host is deeply host-bound.
+- **P183 HELD:** held-out within 0.0039.
+- **By amendment 64's rule** (P178, P179, P181–P183 HELD), the reentrant checkpoint becomes e4b's default checkpoint under
+  `enable_fast_train`. The offload stays an opt-in memory lever, and because P180 is FALSIFIED, STATUS gives its trade (0.74 GB for
+  1.023 of the reentrant step) instead of recommending it.
+
