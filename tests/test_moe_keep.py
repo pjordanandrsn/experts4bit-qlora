@@ -132,3 +132,49 @@ def test_keep_is_structural_across_hybrid_families(family, want):
     for n in ref:
         assert torch.equal(ref[n], got[n]), n
     assert moe_keep.release_moe_activations(m) == want
+
+
+def _old_backward(g, down, w, order, tokens, k):
+    """The combine's backward before the memory change, kept as the oracle for its peak (and its bytes)."""
+    hidden = down.shape[1]
+    gbuf = g.to(torch.float32).unsqueeze(1).expand(tokens, k, hidden).reshape(tokens * k, hidden)
+    gprod = gbuf[order]
+    gdown = (gprod * w[:, None]).to(down.dtype)
+    gw = (gprod * down.to(torch.float32)).sum(1, keepdim=True).squeeze(1)
+    return gdown, gw
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="the allocator's peak is a CUDA statistic")
+def test_combine_backward_peak_drops_and_bytes_hold():
+    """At a packed row's shape (4,096 tokens, top-8, hidden 2,048) the backward no longer keeps the expanded fp32 image of the
+    gradient or a second fp32 product alive: its peak falls by at least one [tokens*k, hidden] fp32 buffer, with both gradients
+    torch.equal to the old backward's."""
+    tokens, k, hidden = 4096, 8, 2048
+    gen = torch.Generator().manual_seed(0)
+    order = torch.randperm(tokens * k, generator=gen).cuda()
+    down = torch.randn(tokens * k, hidden, generator=gen).to(torch.bfloat16).cuda()
+    w = torch.rand(tokens * k, generator=gen).cuda()
+    g = torch.randn(tokens, hidden, generator=gen).to(torch.bfloat16).cuda()
+    buf = tokens * k * hidden * 4
+
+    def peak(fn):
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        base = torch.cuda.memory_allocated()
+        torch.cuda.reset_peak_memory_stats()
+        out = fn()
+        torch.cuda.synchronize()
+        return out, torch.cuda.max_memory_allocated() - base
+
+    (od, ow), old_peak = peak(lambda: _old_backward(g, down, w, order, tokens, k))
+    del od, ow
+
+    class Ctx:
+        saved_tensors = (down, w, order)
+        needs_input_grad = (True, True)
+    Ctx.tokens, Ctx.k = tokens, k
+    (nd, nw, *_), new_peak = peak(lambda: _ScatterCombine.backward(Ctx, g))
+    ref_d, ref_w = _old_backward(g, down, w, order, tokens, k)
+    print(f"\ncombine backward peak {old_peak / 1e9:.3f} GB -> {new_peak / 1e9:.3f} GB")
+    assert torch.equal(nd, ref_d) and torch.equal(nw, ref_w)
+    assert new_peak <= old_peak - buf, (old_peak, new_peak)
