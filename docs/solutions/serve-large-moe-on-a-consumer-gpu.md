@@ -36,7 +36,7 @@ Single-stream decode is bandwidth-bound: each token reads the routed experts plu
 | router epilogue | `engines.router_epilogue.fuse_router_epilogue` | `E4B_FUSE_ROUTER_EPI=1` |
 | paged fp8 KV cache | `engines.fp8_paged_kv` + `engines.paged_attention` | — |
 
-The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv`, by the in-tree harness `bench/hybrid-g9/step_decomp.py` (which produced the receipts), and by `python -m experts4bit_qlora.serve_paged`, which also reads `E4B_PAGED_FUSE_QKV` and the int4 levers (`E4B_SERVE_EXP_INT4`, `E4B_SERVE_ATTN_INT4`, and the rest) under the same names as the bench lanes' `usercustomize` hook. A set lever that patches nothing refuses at startup, and `/health` reports what each one patched ([`../SERVING.md`](../SERVING.md)). The FastAPI shim (`serve.py`) and the `infer` CLI read none of them. In code, the int4 expert store's entry point is `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`.
+`python -m experts4bit_qlora.serve_paged` reads these flags and the int4 levers (`E4B_SERVE_EXP_INT4`, …), and `/health` shows what each one patched ([`../SERVING.md`](../SERVING.md)). The FastAPI shim and `infer` read none of them. In code, call `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`.
 
 ## Install
 

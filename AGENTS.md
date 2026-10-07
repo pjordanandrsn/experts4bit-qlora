@@ -180,6 +180,11 @@ host-bound: absolutes do not travel between hosts, ratios do.
   when a bundled document changed.
 - Receipts and code ship in separate pull requests. A pull request too large to
   review in one read is a finding, not a pass.
+- Docs favour brevity and readability over exhaustive exactness. Say what a
+  reader needs in plain sentences; give a number once, with its claim id, and
+  leave conditions and caveats to the register and the bench README. A
+  correction replaces the wrong sentence rather than adding a qualifier.
+  Pre-registrations are contracts and stay exact.
 - Documents carrying an OpenTimestamps footer are never edited in place: a
   sibling file with errata, never the original.
 - Nothing is filed upstream without the maintainer's explicit say-so: no issues,
