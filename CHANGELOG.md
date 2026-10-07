@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.48.1 — 2026-10-07 — compatibility with transformers 5.19.0 (a fix-only patch; nothing else changes)
+
+**0.48.1.** transformers 5.19.0 (2026-10-06) changed `<Model>RotaryEmbedding.compute_default_rope_parameters` to
+`(config, **kwargs)`. 0.48.0 passed `device` positionally when rebuilding a meta `inv_freq`, so a fresh install,
+which resolves transformers 5.19, failed a streaming load of Qwen3-MoE and similar models with `TypeError`. This patch
+carries only the two fixes from `main` (#1280, #1283). No default, route or dependency changes. Every training
+default that changed on `main` since 0.48.0 ships in 0.49.0, not here.
+
+#### Compatibility: transformers 5.19.0 (released 2026-10-06)
+
+- **The meta-tensor rope rebuild** (`arch/moe_load.py`). transformers 5.19 changed
+  `<Model>RotaryEmbedding.compute_default_rope_parameters` to `(config, **kwargs)`, so the positional `device` argument
+  raised `TypeError`. The rebuild did not run, which broke streaming loads of a model whose `inv_freq` was still on
+  meta, such as Qwen3-MoE. It now passes `device=` by keyword, which every version accepts, and moves the result onto
+  the device, because 5.19 returns a CPU tensor.
+- **The fused-layout probe's toy config** (`arch/fused_layout_probe.py`) now carries `swiglu_alpha=1.702`. 5.19's
+  `GptOssExperts` reads the value from the config where earlier versions hard-coded it. The value equals e4b's
+  `GPTOSS_ALPHA`.
+- **Tests.** `tests/test_moe_load.py` and `tests/test_fused_layout_probe.py`: 39 passed on transformers 5.17.0 and on
+  5.19.0. Before the fix, 6 failed on 5.19.0, the same 6 that failed e4b's CI after 5.19.0 was published.
+
+#### Compatibility: transformers 5.19.0 in the Glimmer loader too, with a test both loaders share
+
+- **`arch/glimmer_load.py`** carried the same `compute_default_rope_parameters(cfg, device)` call that #1280 fixed in
+  `arch/moe_load.py`. Under transformers 5.19 it raised `TypeError` when rebuilding a meta `inv_freq`. It now passes
+  `device=` by keyword and moves the result to the device.
+- **`tests/test_rope_rebuild_compat.py`** builds a Qwen3-MoE rotary under `torch.device("meta")` and requires each
+  loader's rebuild to return the constructor's own CPU bytes. On transformers 5.19.0, the glimmer case fails without
+  this fix and passes with it. Both cases pass on 5.17.0. `test_glimmer_load.py` could not show this, because its
+  checkpoint-backed cases skip in CI.
+
 ## 0.48.0 — 2026-10-05 — two training defaults licensed by TC1 (prebound Triton launches, 0.973-0.980 of the step; the CLI trainer's double-quantized expert absmax, 1.34-2.04 GB less peak); Qwen3.6 supported for fast training; on one stack e4b trains Qwen3-30B-A3B 2.352x as fast as Unsloth (TC1 amendment 33); CI on grouped-nf4-gemm 0.41.0
 
 **0.48.0.** Two training defaults change, each by a rule registered and read in lane TC1 (#835).
