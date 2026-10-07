@@ -1021,6 +1021,7 @@ CKPTRE4K_MEM_BAND = 0.05       # P179: packed rows, |training-phase peak rr - r0
 CKPTRE4K_R1_MAX = 1.01         # P180: packed rows, s/step r1 / rr at most this
 CKPTRE64_HELDOUT_MAX = 0.005   # P181 (packed) / P183 (torch 2.8): the largest |mean held-out at N| difference between two sides
 CKPTRE28_RR_MAX = 1.00         # P182: torch 2.8 field recipe, s/step rr / r0 at most this
+CKPTRE28_BUSY_MAX = 0.9        # P182's premise gate (amendment 63's): r0's device busy fraction against its timed step at most this, else UNTESTED
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -2088,7 +2089,9 @@ def _ckptre_heldout(R, arm, pid, fam):
 def score_ckptre64(F):
     """TC1-PREREG amendment 64. Packed rows (qwen3ckptre4k, matched arm, torch 2.12): P178 s/step rr / r0 <= CKPTRE4K_RR_MAX; P179 |training-
     phase peak rr - r0| (medians of each side's draws) <= CKPTRE4K_MEM_BAND GB; P180 r1 / rr <= CKPTRE4K_R1_MAX; P181 held-out. Field recipe in
-    torch 2.8 (qwen3ckptre28, shipped arm): P182 rr / r0 <= CKPTRE28_RR_MAX; P183 held-out. Two VALID, stable draws a side; else UNTESTED."""
+    torch 2.8 (qwen3ckptre28, shipped arm): P182 rr / r0 <= CKPTRE28_RR_MAX, read only when r0 is host-bound (the median over its draws of
+    device ms per profiled step / timed ms per step <= CKPTRE28_BUSY_MAX, else UNTESTED); P183 held-out. Two VALID, stable draws a side;
+    else UNTESTED."""
     out = []
     R = F.get(CKPTRE4K_FAM)
     if R:
@@ -2112,7 +2115,18 @@ def score_ckptre64(F):
     R = F.get(CKPTRE28_FAM)
     if R:
         arm, fam = CKPTRE64[CKPTRE28_FAM]["arm"], CKPTRE28_FAM
-        out.append(_ckptre_ratio(_ckptre_draws(R, arm), "rr", "r0", "P182", fam, lambda x: x <= CKPTRE28_RR_MAX, f"<= {CKPTRE28_RR_MAX}"))
+        p182 = _ckptre_ratio(_ckptre_draws(R, arm), "rr", "r0", "P182", fam, lambda x: x <= CKPTRE28_RR_MAX, f"<= {CKPTRE28_RR_MAX}")
+        if p182[2] != "UNTESTED":
+            rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+            busy = [_busy_vs_timed((rows.get(("e4b", t)) or {}).get("r")) for t in (f"{arm}_r0", f"{arm}_r0_d2")]
+            if None in busy:
+                p182 = ("P182", fam, "UNTESTED", f"the premise needs both r0 draws profiled (busy {busy})")
+            else:
+                b = statistics.median(busy)
+                ev = p182[3] + f"; r0 device busy vs the timed step {b:.3f} (premise <= {CKPTRE28_BUSY_MAX})"
+                p182 = (("P182", fam, "UNTESTED", ev + " -- the host is not host-bound, so the read the rule asks for is not this one")
+                        if b > CKPTRE28_BUSY_MAX else (p182[0], p182[1], p182[2], ev))
+        out.append(p182)
         out.append(_ckptre_heldout(R, arm, "P183", fam))
     return out
 
@@ -3033,6 +3047,8 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
     if fam in CKPTRE64 and fw == "e4b":               # amendment 64: amendment 62's sides on packed rows (2.12) or the field recipe in torch 2.8
         _sp = CKPTRE64[fam]
         w = ckptre_why(r.get("tag") or "", r, packed=_sp["packed"], torch_prefix=_sp["torch"])
+        if not w and fam == CKPTRE28_FAM and not int(((r.get("profile") or {}).get("profiled_steps")) or 0):
+            w = "no profile on the receipt: amendment 64 profiles every torch 2.8 arm (P182's premise gate reads it)"
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -7031,9 +7047,10 @@ def _ckptoff28_set(match=((3.40, 3.42), (3.30, 3.32)), ship=((2.80, 2.82), (2.62
     return R
 
 
-def _ckptre64_set(fam, s=None, train=None, held=None):
+def _ckptre64_set(fam, s=None, train=None, held=None, busy=0.7, profile=True):
     """Amendment 64: amendment 62's three sides for `fam` (packed rows on the matched arm, or the field recipe in torch 2.8 on the shipped
-    arm) -- `s` side -> draws' s/step; `train` side -> training-phase peak GB; `held` tag -> held-out at N."""
+    arm) -- `s` side -> draws' s/step; `train` side -> training-phase peak GB; `held` tag -> held-out at N; on the torch 2.8 family `busy`
+    is r0's device fraction of the timed step and `profile=False` drops every arm's profile."""
     sp = CKPTRE64[fam]
     arm = sp["arm"]
     if sp["packed"]:
@@ -7056,6 +7073,10 @@ def _ckptre64_set(fam, s=None, train=None, held=None):
             n, env, fn_ = CKPTRE_SIDE[side]
             r["ckpt_offload_layers"], r["ckpt_offload_env"], r["ckpt_offload_funcs"] = n, env, [fn_] if fn_ else []
             r["peak_vram_gb_phases"] = {"setup": 21.86, "eval": 22.5, "train": train[side]}
+            if not sp["packed"]:
+                b = busy if side == "r0" else 0.6
+                r["profile"] = ({"profiled_steps": 3, "device_ms": 3 * b * 1000.0 * s[side][i], "wall_ms_per_step": 1000.0 * s[side][i]}
+                                if profile else None)
             R[("e4b", tag)] = r
     return R
 
@@ -9463,6 +9484,14 @@ def selftest():
     bad[("e4b", "fused_attn4_shipped_r1")]["env"]["torch"] = "2.12.1+cu130"
     assert reduce_family(CKPTRE28_FAM, bad, {}, 20)["verdicts"][("e4b", "fused_attn4_shipped_r1")] == "VOID"
     assert "P183" in render(both, "x") and "amendment 64" in render(both, "x")
+    cases += 1
+    # 118. amendment 64's P182 premise gate (amendment 63's): r0 GPU-bound (busy 0.95) -> P182 UNTESTED even when rr is slower; a torch 2.8
+    #      arm with no profile is VOID; the packed family needs no profile
+    assert p64(C64(CKPTRE28_FAM, busy=0.95))["P182"] == "UNTESTED"
+    assert p64(C64(CKPTRE28_FAM, busy=0.95, s={"rr": (2.04, 2.05)}))["P182"] == "UNTESTED"
+    assert "premise" in [ev for p, _, _, ev in score_ckptre64(C64(CKPTRE28_FAM)) if p == "P182"][0]
+    assert all(v == "VOID" for v in C64(CKPTRE28_FAM, profile=False)[CKPTRE28_FAM]["verdicts"].values())
+    assert all(x["verdict"] == "VALID" for x in C64(CKPTRE4K_FAM, profile=False)[CKPTRE4K_FAM]["rows"])
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

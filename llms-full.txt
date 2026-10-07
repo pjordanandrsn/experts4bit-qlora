@@ -2306,7 +2306,7 @@ field recipe the offload stepped 0.948 (matched) and 0.916 (shipped) of the defa
 under `enable_fast_train` (`0` off). The offload stays opt-in: amendment 59's rule asks for a torch 2.8 read on a host-bound box first
 (TC1 amendment 63). Both are now read. The field speed-up is the checkpoint flavour: the reentrant checkpoint alone steps 0.900 of
 Hugging Face's on the shipped arm, and the host-memory copies cost 1.019 on top (`e4b.train.ckpt-flavour.field.5090.2026-10-07`, TC1
-amendment 62). In torch 2.8 on a host-bound box the offload still never slows the step, 0.994 (matched) and 0.985 (shipped), and takes
+amendment 62). In torch 2.8 on a host-bound box the offload does not slow the step, 0.994 (matched) and 0.985 (shipped), and takes
 0.18 GB off the matched training peak (`e4b.train.ckpt-offload.field-torch28.5090.2026-10-07`, TC1 amendment 63). By amendment 63's rule
 the next read is the reentrant checkpoint's own default case (TC1 amendment 64). The routed-expert combine
 over row chunks (#1304, the default above a 128 MiB image) steps 0.978 of the whole-tensor combine on packed rows but leaves the training

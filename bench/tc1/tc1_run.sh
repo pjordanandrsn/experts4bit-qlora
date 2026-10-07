@@ -1580,7 +1580,7 @@ tc1_ckptoff28_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
 # tc1_ckptre64_family FAM MID REV FETCH_AL E4B_AL REGIME -- TC1 amendment 64 (2026-10-07): amendment 62's three checkpoints -- Hugging Face's
 # (r0, E4B_CKPT_OFFLOAD=0), the reentrant checkpoint alone (rr, =reentrant), the reentrant checkpoint with host-memory inputs (r1, =1) -- where
 # amendment 62 did not read them. REGIME packed4k: the matched arm on packed rows in venv-unsloth (torch 2.12); field28: the shipped arm at the
-# field recipe in venv-e4b (torch 2.8). Two draws a side (r0 rr r1 r1 rr r0), --phase-peaks 1.
+# field recipe in venv-e4b (torch 2.8), every arm profiled for P182's premise gate. Two draws a side (r0 rr r1 r1 rr r0), --phase-peaks 1.
 tc1_ckptre64_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 REGIME=$6
   local T ARGS VENV
   if [ "$REGIME" = packed4k ]; then T=fused_attn4_m; ARGS="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"; VENV=t212
@@ -1589,6 +1589,8 @@ tc1_ckptre64_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 REGIME=$6
   say "===== CHECKPOINT FLAVOUR ($REGIME) family $FAM ($MID @ $REV; E4B_CKPT_OFFLOAD 0 vs reentrant vs 1, ${VENV:-venv-e4b}, amendment 64)"
   local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
   local PP="--phase-peaks 1" R0="E4B_CKPT_OFFLOAD=0" RR="E4B_CKPT_OFFLOAD=reentrant" R1="E4B_CKPT_OFFLOAD=1"
+  # field28 profiles every arm (amendment 63's steps, before the timed window): P182's premise gate reads r0's device busy fraction
+  [ "$REGIME" = field28 ] && PP="$PP --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM"
   can_run 600 $FAM/e4b/${T}_r0     && TC1_ARM_EXTRA_ENV="$R0" E4B_VENV=$VENV arm   $FAM e4b ${T}_r0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $ARGS $PP
   can_run 600 $FAM/e4b/${T}_rr     && TC1_ARM_EXTRA_ENV="$RR" E4B_VENV=$VENV arm   $FAM e4b ${T}_rr fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $ARGS $PP
   can_run 600 $FAM/e4b/${T}_r1     && TC1_ARM_EXTRA_ENV="$R1" E4B_VENV=$VENV arm   $FAM e4b ${T}_r1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $ARGS $PP

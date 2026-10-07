@@ -8,4 +8,5 @@
   `e4b.train.ckpt-offload.field-torch28.5090.2026-10-07`.
 - **Amendment 64** registered: tokens `qwen3ckptre4k` (packed rows, torch 2.12, matched arm) and `qwen3ckptre28` (field recipe, torch 2.8,
   shipped arm) read the three checkpoints where amendment 62 did not: P178-P183, toward the reentrant checkpoint as e4b's default
-  checkpoint. The reducer adds the families and `score_ckptre64` (self-test 129).
+  checkpoint. The reducer adds the families and `score_ckptre64` (self-test 130). Added in review: every torch 2.8 arm is profiled and P182 is read only
+  on a host-bound box (amendment 63's premise gate).

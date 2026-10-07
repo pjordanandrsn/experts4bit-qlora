@@ -2820,7 +2820,13 @@ registration reads the reentrant checkpoint's own default case before any defaul
 
 The two boxes:
 - token `qwen3ckptre4k`: the matched arm on packed 4,096-token rows in venv-unsloth (torch 2.12), amendment 58's command;
-- token `qwen3ckptre28`: the shipped arm at the field recipe in venv-e4b (torch 2.8), amendment 63's command without the profile.
+- token `qwen3ckptre28`: the shipped arm at the field recipe in venv-e4b (torch 2.8), amendment 63's command, every arm profiled.
+
+**The premise gate on P182** (added in review, before any box, as amendment 63's): amendment 62 did not say whether the reentrant
+checkpoint's 0.900 is device time or host time, and on a GPU-bound box a host-time difference reads about 1.00 either way. So P182 is read
+only when the `r0` side's device busy fraction against its timed step (the median over its two draws of device ms per profiled step /
+timed ms per step, amendment 53's busy_t) is at most **0.9**; above that P182 is UNTESTED, not HELD or FALSIFIED. A `qwen3ckptre28` arm
+without a profile is VOID.
 
 Validity is `ckptre_why` in each regime's form (packed: every padded call bucketed, the chunked loss serving; field: neither) plus the
 checkpoint function the side names.
@@ -2845,7 +2851,11 @@ At the field recipe in torch 2.8:
 - **P178 or P182 FALSIFIED:** the reentrant checkpoint is not a universal default. The read names the regime where it costs, and a
   regime-gated default is registered next.
 - **P179 FALSIFIED:** the read says what the flavour changed in memory before any default.
+- **P182 UNTESTED for the premise:** a re-ask, on a host the launcher's records show host-bound in torch 2.8 (amendments 53 and 63's).
 - **P181 or P183 FALSIFIED:** a $0 A2000 gradient check of the three checkpoints comes first.
+- **The library PR, whatever the speed reads** (added in review): its changelog says that a reentrant checkpoint does not support
+  `torch.autograd.grad` or `backward(inputs=...)`, and that it now calls the model's `enable_input_require_grads()` by default; it names
+  `E4B_CKPT_OFFLOAD=0` as the way back.
 
-**Budget.** Two RTX 5090s at the policy rate ($0.85/h), 4 h guards, TC1's 98 GB host floor. Six packed arms and six field-recipe arms: about
-$3.5 with the downloads.
+**Budget.** Two RTX 5090s at the policy rate ($0.85/h), 4 h guards, TC1's 98 GB host floor. Six packed arms and six profiled field-recipe
+arms: about $3.5 with the downloads.
