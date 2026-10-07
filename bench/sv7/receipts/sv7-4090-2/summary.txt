@@ -1,0 +1,6 @@
+sv7 tripwire OK 0.48.0 0.41.0 2.8.0+cu128 NVIDIA GeForce RTX 4090 (8, 9) malloc_trim: True
+qwen3: fetched 57G
+bake qwen3 rc=0 16G nf4 bake complete: 6144 rows (16.3 GB) in 170s
+b7_short rc=0 OK est 20.987 GiB peak 19.681 load 19.248 driver 20.527 | host anon load-peak 6.41 after 2.87 serving 3.99 GB | int4 layers 0 | tiers {'vram': 5316, 'dram': 828, 'nvme': 0} shmem 1.14 GB | graphs []
+b7_long rc=0 OK est 20.987 GiB peak 20.657 load 19.248 driver 21.916 | host anon load-peak 4.55 after 2.87 serving 7.20 GB | int4 layers 0 | tiers {'vram': 5316, 'dram': 828, 'nvme': 0} shmem 1.14 GB | graphs []
+SV7 done: 2 arm receipts

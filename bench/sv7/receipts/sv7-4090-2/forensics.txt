@@ -1,0 +1,5 @@
+NVIDIA GeForce RTX 4090, 24564 MiB, 595.84, 3, 16
+Model name:                              Intel(R) Core(TM) i9-10900X CPU @ 3.70GHz
+MemTotal:       131578676 kB
+MemAvailable:   127698832 kB
+overlay         320G  390M  320G   1% /
