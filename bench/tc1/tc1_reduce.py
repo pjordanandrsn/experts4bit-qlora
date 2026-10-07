@@ -1047,6 +1047,28 @@ CBK_HELDOUT_MAX = 0.005        # P192: |mean held-out at N, k1 - k0|, each arm
 CBK_GAP_MAX = 1.0              # P193: the matched k1 training-phase peak at most this many GB above Unsloth's
 CBK_DEVICE_MAX = 1.01          # P194 (maintainer, pre-data): device ms per profiled step k1 / k0 (medians of each side's draws), each arm, at most
                                # this -- the node trades host work for device work, so a host-bound box's s/step can hide its cost (P190 / P191)
+# TC1 amendment 67: the packed-row position at the new defaults (the reentrant checkpoint, the combine over row chunks, the chunked held-out
+# loss, grouped-nf4-gemm's compact bucketed delta) -- e4b's matched arm (pd), the same with E4B_CKPT_OFFLOAD=1 (po), Unsloth's matched arm (pv)
+POS67_FAM = "qwen3pos67"
+FAMS.append(POS67_FAM)
+NAMES[POS67_FAM] = "Qwen3-30B-A3B (amendment 67: the packed-row position at the new defaults -- e4b defaults, e4b with the offload, Unsloth; two draws each; peaks by phase)"
+N_LAYERS[POS67_FAM] = 48
+ATTN_CENSUS[POS67_FAM] = 192
+DENSE_PINS[POS67_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[POS67_FAM] = ("e4b", "fused_attn4_m_pd")
+EXPECTED[POS67_FAM] = [("e4b", "fused_attn4_m_pd"), ("unsloth", "ckpt_unsloth_m_pv"), ("e4b", "fused_attn4_m_po"), ("e4b", "fused_attn4_m_po_d2"),
+                       ("unsloth", "ckpt_unsloth_m_pv_d2"), ("e4b", "fused_attn4_m_pd_d2")]
+MATCHED |= {"fused_attn4_m_pd", "fused_attn4_m_po", "fused_attn4_m_pd_d2", "fused_attn4_m_po_d2", "ckpt_unsloth_m_pv", "ckpt_unsloth_m_pv_d2"}
+DRAW2[("e4b", "fused_attn4_m_pd")] = ("e4b", "fused_attn4_m_pd_d2")
+DRAW2[("e4b", "fused_attn4_m_po")] = ("e4b", "fused_attn4_m_po_d2")
+DRAW2[("unsloth", "ckpt_unsloth_m_pv")] = ("unsloth", "ckpt_unsloth_m_pv_d2")
+PACKED_FAMS = PACKED_FAMS + (POS67_FAM,)
+LOOP_ROUTE_SHARE_MAX[POS67_FAM] = 0.05
+POS67_SPEED_BAND = (1.15, 1.45)  # P195: Unsloth / e4b s/step at the defaults (amendment 66's box read 11.542 / 8.971 = 1.287)
+POS67_GAP_PD_MAX = 1.2           # P196: e4b defaults' training-phase peak - Unsloth's at most this many GB (amendment 66: +1.044)
+POS67_GAP_PO_MAX = 0.5           # P197: with the offload, at most this many GB
+POS67_OFF_COST_MAX = 1.03        # P198: s/step po / pd at most this (amendment 64: the copies 1.023 of the reentrant step)
+POS67_HELDOUT_MAX = 0.01         # P199: |mean held-out at N, e4b defaults - Unsloth|
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -2285,6 +2307,86 @@ def score_cbk(F, fam=CBK_FAM):
     return out
 
 
+def pos67_why(tag, r):
+    """Amendment 67's predicates: torch 2.12; on e4b every new default as recorded -- the double-quantized absmax, every padded call
+    bucketed, the chunked loss and the chunked held-out loss serving the rows, the combine over row chunks, grouped-nf4-gemm's compact
+    bucketed delta -- and the checkpoint the tag names (`pd` the default reentrant checkpoint with E4B_CKPT_OFFLOAD unset, `po` all 48 layers
+    on offloaded_checkpoint with it set to 1). Empty string = as registered."""
+    r = r or {}
+    bad = []
+    tv = str((r.get("env") or {}).get("torch") or "")
+    if not tv.startswith("2.12"):
+        bad.append(f"env.torch {tv or 'missing'} is not 2.12*")
+    if r.get("framework") != "e4b":
+        return "; ".join(bad)
+    side = "po" if "_po" in (tag or "") else ("pd" if "_pd" in (tag or "") else None)
+    if side is None:
+        return f"amendment 67 registers no e4b side for tag {tag}"
+    if r.get("absmax_dq") is not True:
+        bad.append(f"absmax_dq {r.get('absmax_dq')!r}: e4b's default is the double-quantized absmax")
+    la = r.get("lean_ab") or {}
+    calls = la.get("lora_path_calls") or {}
+    if not (la.get("gnf4_pad_buckets_env") in (None, "") and la.get("gnf4_pad_buckets_mode") == "auto"
+            and int(calls.get("padded_bucketed") or 0) > 0 and int(calls.get("padded") or 0) == 0):
+        bad.append(f"the bucketed default did not serve the packed rows (calls {calls})")
+    c = r.get("chunked_lm_loss") or {}
+    if not (c.get("env") in (None, "") and int(c.get("chunked_calls") or 0) > 0 and int(c.get("runtime_refusals") or 0) == 0
+            and c.get("eval_env") in (None, "") and int(c.get("eval_chunked_calls") or 0) > 0):
+        bad.append(f"the chunked training and held-out losses did not both serve the rows unset (record {c})")
+    cc = r.get("combine_chunk") or {}
+    if not (cc.get("env") in (None, "") and int(cc.get("chunked_fwd") or 0) > 0 and int(cc.get("chunked_bwd") or 0) > 0):
+        bad.append(f"the combine did not run over row chunks at its default (record {cc})")
+    cb = r.get("compact_buckets") or {}
+    if not (cb.get("env") in (None, "") and cb.get("gnf4_has_compact_buckets") and int(cb.get("calls") or 0) > 0):
+        bad.append(f"grouped-nf4-gemm's compact bucketed delta did not serve the rows at its default (record {cb})")
+    want = (48, "1", ["offloaded_checkpoint"]) if side == "po" else (48, None, ["reentrant_checkpoint"])
+    got = (r.get("ckpt_offload_layers"), r.get("ckpt_offload_env") or None, r.get("ckpt_offload_funcs"))
+    if got != want:
+        bad.append(f"checkpoint {got!r}: {tag} names {want!r}")
+    return "; ".join(bad)
+
+
+def score_pos67(F, fam=POS67_FAM):
+    """TC1-PREREG amendment 67. P195: s/step Unsloth / e4b defaults (two VALID, stable draws each) inside POS67_SPEED_BAND. P196 / P197: the
+    training-phase peak (medians) of e4b defaults / e4b with the offload - Unsloth's <= POS67_GAP_PD_MAX / POS67_GAP_PO_MAX GB. P198: s/step
+    po / pd <= POS67_OFF_COST_MAX. P199: |mean held-out at N, e4b defaults - Unsloth| <= POS67_HELDOUT_MAX. Missing / non-VALID / unstable:
+    UNTESTED."""
+    R = F.get(fam)
+    if not R:
+        return []
+    D = {"pd": R["draws"].get(("e4b", "fused_attn4_m_pd"), {}), "po": R["draws"].get(("e4b", "fused_attn4_m_po"), {}),
+         "pv": R["draws"].get(("unsloth", "ckpt_unsloth_m_pv"), {})}
+    out = [_ckptre_ratio(D, "pv", "pd", "P195", fam, lambda x: POS67_SPEED_BAND[0] <= x <= POS67_SPEED_BAND[1],
+                         f"in [{POS67_SPEED_BAND[0]}, {POS67_SPEED_BAND[1]}]")]
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    def tp(fw, tag):
+        ks = [(fw, tag), (fw, tag + "_d2")]
+        v = [_phase(rows[k]["r"], "train") if (rows.get(k) or {}).get("verdict") == "VALID" else None for k in ks]
+        return (statistics.median(v) if all(x is not None for x in v) else None), v
+    tu, vu = tp("unsloth", "ckpt_unsloth_m_pv")
+    for pid, tag, cap in (("P196", "fused_attn4_m_pd", POS67_GAP_PD_MAX), ("P197", "fused_attn4_m_po", POS67_GAP_PO_MAX)):
+        te, ve = tp("e4b", tag)
+        if te is None or tu is None:
+            out.append((pid, fam, "UNTESTED", f"training-phase peaks on two VALID draws each are registered: {tag} {ve}, Unsloth {vu}"))
+        else:
+            gap = te - tu
+            out.append((pid, fam, "HELD" if gap <= cap else "FALSIFIED",
+                        f"{tag} training-phase peak {te:.3f} vs Unsloth {tu:.3f} GB (gap {gap:+.3f} vs <= {cap})"))
+    out.append(_ckptre_ratio(D, "po", "pd", "P198", fam, lambda x: x <= POS67_OFF_COST_MAX, f"<= {POS67_OFF_COST_MAX}"))
+    def held(fw, tag):
+        ks = [(fw, tag), (fw, tag + "_d2")]
+        hs = [((rows.get(k) or {}).get("r") or {}).get("eval_loss_final") for k in ks]
+        ok = None not in hs and all((rows.get(k) or {}).get("verdict") == "VALID" for k in ks)
+        return statistics.mean(hs) if ok else None
+    he, hu = held("e4b", "fused_attn4_m_pd"), held("unsloth", "ckpt_unsloth_m_pv")
+    if he is None or hu is None:
+        out.append(("P199", fam, "UNTESTED", f"held-out at N on two VALID draws each is registered: e4b {he}, Unsloth {hu}"))
+    else:
+        out.append(("P199", fam, "HELD" if abs(he - hu) <= POS67_HELDOUT_MAX else "FALSIFIED",
+                    f"mean held-out at N e4b defaults {he:.5f}, Unsloth {hu:.5f} (diff {he - hu:+.5f} vs |.| <= {POS67_HELDOUT_MAX})"))
+    return out
+
+
 def pad_buckets_why(tag, r, sides=("pk0", "pk1"), need_chunked=True, torch_prefix="2.12"):
     """Amendments 48 / 52's engagement predicate: the arm ran the torch its family names (torch_prefix: 2.12 = venv-unsloth for
     amendment 48, 2.8 = venv-e4b for amendment 52); grouped-nf4-gemm's per-path counters
@@ -3250,6 +3352,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == CBK_FAM:                                 # amendment 66: e4b's packed defaults plus the bucketed delta its side names
         w = cbk_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == POS67_FAM:                               # amendment 67: every new default as recorded, and the checkpoint the tag names
+        w = pos67_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -6195,6 +6301,18 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_cbk(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if POS67_FAM in F:
+        out += ["\n## Amendment 67: the packed-row position at the new defaults, peaks by phase (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | run peak GB | train | eval | held-out N |", "|---|---|---|---|---|---|---|"]
+        for x in F[POS67_FAM]["rows"]:
+            r = x.get("r") or {}
+            ph = r.get("peak_vram_gb_phases") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(r.get('peak_vram_gb'), 3)} | "
+                       f"{ph.get('train')} | {ph.get('eval')} | {r.get('eval_loss_final')} |")
+        out += ["\n## Predictions P195-P199 (TC1-PREREG amendment 67: the packed-row position at the new defaults; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_pos67(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFFF_FAM in F:
         out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
@@ -7374,6 +7492,35 @@ def _cbk_set(s=None, train=None, step0=None, cb=None, u_train=24.86, dev=None, p
     u.update(tag="ckpt_unsloth_m_kk", fam=CBK_FAM, eval_loss_step0=1.2871, eval_loss_final=0.9542,
              peak_vram_gb_phases={"setup": 21.14, "eval": 21.85, "train": u_train})
     R[("unsloth", "ckpt_unsloth_m_kk")] = u
+    return R
+
+
+def _pos67_set(s=None, train=None, held=None, rec=None):
+    """Amendment 67: e4b defaults (pd), e4b with the offload (po), Unsloth (pv), two draws each on packed rows -- `s` side -> draws' s/step;
+    `train` side -> training-phase peak GB; `held` side -> held-out at N; `rec` tag -> a record override (key -> value)."""
+    s = dict({"pd": (8.97, 8.98), "po": (9.18, 9.19), "pv": (11.54, 11.56)}, **(s or {}))
+    train = dict({"pd": 25.91, "po": 25.17, "pv": 24.86}, **(train or {}))
+    held = dict({"pd": 0.9541, "po": 0.9542, "pv": 0.9545}, **(held or {}))
+    base = _dqpack_set()
+    m_src, u_src = base[("e4b", "fused_attn4_m_a0")], next(v for (fw, _), v in base.items() if fw != "e4b")
+    R = {}
+    for side in ("pd", "po", "pv"):
+        for i, sfx in enumerate(("", "_d2")):
+            fw = "unsloth" if side == "pv" else "e4b"
+            tag = (f"ckpt_unsloth_m_pv{sfx}" if fw == "unsloth" else f"fused_attn4_m_{side}{sfx}")
+            r = json.loads(json.dumps(u_src if fw == "unsloth" else m_src))
+            r.update(tag=tag, fam=POS67_FAM, s_per_step_median_11plus=s[side][i], eval_loss_final=held[side],
+                     peak_vram_gb_phases={"setup": 21.86, "eval": 22.5, "train": train[side]})
+            if fw == "e4b":
+                off = side == "po"
+                r.update(absmax_dq=True, ckpt_offload_layers=48, ckpt_offload_env="1" if off else None,
+                         ckpt_offload_funcs=["offloaded_checkpoint" if off else "reentrant_checkpoint"],
+                         combine_chunk={"env": None, "e4b_has_combine_chunk": True, "chunked_fwd": 16128, "chunked_bwd": 7680},
+                         compact_buckets={"env": None, "gnf4_has_compact_buckets": True, "calls": 31764})
+                r["chunked_lm_loss"] = dict(r["chunked_lm_loss"], eval_env=None, eval_chunked_calls=16, eval_stock_calls=0)
+                for k, v in ((rec or {}).get(tag) or {}).items():
+                    r[k] = v
+            R[(fw, tag)] = r
     return R
 
 
@@ -9827,6 +9974,22 @@ def selftest():
     on0 = {"env": "1", "gnf4_has_compact_buckets": True, "calls": 0}
     assert CK(_cbk_set(cb={"fused_attn4_shipped_k0": on0}))[CBK_FAM]["verdicts"][("e4b", "fused_attn4_shipped_k0")] == "VOID"
     assert "P194" in render(RCK, "x") and "amendment 66" in render(RCK, "x")
+    cases += 1
+    # 120. TC1 amendment 67 (qwen3pos67): the packed-row position at the new defaults -- VALID; P195-P199 HELD on the default fixture (1.287,
+    #      +1.05 / +0.31 GB, 1.024, held-out within 0.0004); 1.10 FALSIFIES P195; +1.3 FALSIFIES P196; a pd draw without the compact delta,
+    #      or on Hugging Face's checkpoint, is VOID
+    PS = lambda R: {POS67_FAM: reduce_family(POS67_FAM, R, {}, 20)}
+    RPS = PS(_pos67_set())
+    assert all(x["verdict"] == "VALID" for x in RPS[POS67_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RPS[POS67_FAM]["rows"]]
+    pps = lambda R: {p: v for p, _, v, _ in score_pos67(R)}
+    assert pps(RPS) == {p: "HELD" for p in ("P195", "P196", "P197", "P198", "P199")}, score_pos67(RPS)
+    assert pps(PS(_pos67_set(s={"pv": (9.87, 9.88)})))["P195"] == "FALSIFIED"
+    assert pps(PS(_pos67_set(train={"pd": 26.20})))["P196"] == "FALSIFIED"
+    nocb = {"compact_buckets": {"env": None, "gnf4_has_compact_buckets": True, "calls": 0}}
+    assert PS(_pos67_set(rec={"fused_attn4_m_pd": nocb}))[POS67_FAM]["verdicts"][("e4b", "fused_attn4_m_pd")] == "VOID"
+    hf = {"ckpt_offload_layers": 0, "ckpt_offload_funcs": []}
+    assert PS(_pos67_set(rec={"fused_attn4_m_pd_d2": hf}))[POS67_FAM]["verdicts"][("e4b", "fused_attn4_m_pd_d2")] == "VOID"
+    assert "P199" in render(RPS, "x") and "amendment 67" in render(RPS, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

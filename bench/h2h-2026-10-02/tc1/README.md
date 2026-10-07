@@ -1428,3 +1428,25 @@ inside the census window, one draw per arm. Read: [`RESULTS-tc1-memc4kr.md`](RES
   same bytes in one autograd node, which holds 1.8 MiB from forward to backward where the autograd body holds 188 MiB (RTX A2000,
   fp32 adapters). Amendment 66 registers its A/B.
 
+## Amendment 66 (2026-10-07): grouped-nf4-gemm's compact bucketed delta takes 0.65 GB off the packed-row training peak and steps faster (P189–P192, P194 HELD; P193 FALSIFIED narrowly)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 66, with every arm profiled and P194 added in review.
+One RTX 5090 (`tc1-5090-133`, Intel Core i9-14900K, a 30-CPU quota, Vast machine 139369), after two draws whose SSH never came up during
+a Vast proxy blip (`-131`, `-132`). e4b `82ec6f1`, grouped-nf4-gemm `ab1a342` (#505), Unsloth 2026.9.14, every arm in venv-unsloth (torch
+2.12.1). Packed 4,096-token rows, 40 load-gated steps, every attempt first time at load1 1.1–1.3. Read: [`RESULTS-tc1-cbk.md`](RESULTS-tc1-cbk.md).
+
+| arm | s/step `k0` → `k1` (two draws) | training peak `k0` → `k1` | device ms / profiled step `k0` → `k1` | held-out step 0 / N |
+|---|---|---|---|---|
+| matched | 9.230 / 9.229 → 8.972 / 8.970 | 26.56 → **25.91 GB** | 9129 / 9159 → 8893 / 8901 | identical / −0.00013 |
+| shipped | 7.320 / 7.313 → 7.146 / 7.149 | 23.01 → 22.66 GB | 7189 / 7203 → 7037 / 7040 | identical / −0.00002 |
+| Unsloth (one draw) | 11.542 | 24.86 GB | 10152 | 1.28707 / 0.95449 |
+
+- **P189 HELD:** the matched training peak falls **0.654 GB** (≥ 0.5).
+- **P190 / P191 HELD:** `k1` / `k0` **0.972** (matched) and **0.977** (shipped): the node is faster as well as leaner. The host was GPU-bound
+  (`k0` device busy 0.99 / 0.98 of the timed step).
+- **P192 HELD:** step-0 held-out identical on every draw pair; held-out at N within 0.00013.
+- **P194 HELD:** device time per profiled step 0.973 (matched) and 0.978 (shipped): less device work, not more.
+- **P193 FALSIFIED, narrowly:** the matched `k1` training peak is **1.044 GB** above Unsloth's (registered ≤ 1.0).
+- **By amendment 66's rule** (P189–P192 and P194 HELD), the node becomes grouped-nf4-gemm's default (grouped-nf4-gemm#508). Reported,
+  not scored: on this host e4b's matched arm at the defaults steps 8.97 s against Unsloth's 11.54.
+
