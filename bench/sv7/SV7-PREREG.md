@@ -163,6 +163,36 @@ The read PR carries a Reproduce line that runs this reducer from main on the com
   - 16: the `b7_short` anchor not finishing.
 - **Receipt:** committed with its ledger row only, pushed over SSH, and `@{u}` re-synced before the read.
 
+## Amendment 1 (2026-10-07, after `sv7-4090-1`): the driver sampler's PID match
+
+**`sv7-4090-1`** ran from `7431a8ed` (this registration's merge) on Vast instance 54619847, machine 51613, driver
+580.95.05. It finished OK at $0.611 with both arms clean. Through `sv7_reduce.py`, verdict `READ`:
+- **V1, V2: NO_READING.** Neither arm recorded a driver peak (`driver_samples` 0). `bench/sv4/sv4_measure.py` finds its
+  own row in `nvidia-smi --query-compute-apps` by PID, and this host's container listed host-namespace PIDs, so no row
+  matched. SV4–SV6's hosts listed container PIDs.
+- **V3: HELD.** Reserved minus allocated was 419,756,032 / 865,356,800 B against the borrowed 919,447,283 B.
+- **V4: HELD**, −1.6% (allocator 22,180,246,528 B).
+- **V5: HELD**, exactly 5,316 / 828 / 0.
+
+These readings stand as read, and the read PR reports them. As registered, the NO_READINGs change nothing, and the
+receipts are not licensed for the planner: only V2 HELD licenses them.
+
+**The change.** `sv4_measure.py` gains `driver_sample(smi_out, pid)`:
+- the row with this process's PID wins (`pid`);
+- when none matches and exactly one compute process is listed, that one is taken (`sole-process`), because an arm's box
+  runs one CUDA process;
+- two or more unmatched rows are not guessed (`no-match`);
+- the receipt's `driver_match` counts the samples by how they matched.
+
+`tests/test_sv4_measure_sampler.py` pins the cases.
+
+**Unchanged:** the question, arms, readings, consequences, the reducer and its pinned numbers, and the exit codes.
+
+**The next box** (`sv7-4090-2`) launches from this amendment's merge SHA, only if `estimate_serve_footprint` still gives
+22,534,858,240 bytes for the registered setup there. Since `7431a8ed`, main changed training engines only (#1298, #1302,
+#1304, #1307). Its read reports both runs through the reducer. A V1 or V2 reading from `sv7-4090-2` counts only if its
+receipt's `driver_match` shows its samples matched (`pid` or `sole-process`).
+
 ## Cost
 
 Estimate: about 1 h on one RTX 4090 at the declared $0.60/h: a ~57 GB download, one ~16 GB bake and two builds. SV6's

@@ -24,12 +24,32 @@ def _anon() -> int:
     return _rss("RssAnon")
 
 
+def driver_sample(smi_out: str, pid: str):
+    """One ``nvidia-smi --query-compute-apps=pid,used_memory`` sample: ``(bytes, how)`` for this process, or
+    ``(None, why)``. The row whose PID is this process's wins (``pid``). A container can list host-namespace PIDs, which
+    never match (lane SV7's ``sv7-4090-1``, driver 580.95.05: zero samples in both arms). So when no row matches and
+    exactly one compute process is listed, that one is taken (``sole-process``): an arm's box runs one CUDA process.
+    Two or more unmatched rows are not guessed (``no-match``); no rows is ``no-rows``."""
+    rows = []
+    for line in smi_out.splitlines():
+        p, _, mib = line.partition(",")
+        if mib.strip().isdigit():
+            rows.append((p.strip(), int(mib.strip()) << 20))
+    for p, b in rows:
+        if p == pid:
+            return b, "pid"
+    if len(rows) == 1:
+        return rows[0][1], "sole-process"
+    return None, "no-match" if rows else "no-rows"
+
+
 class Peaks:
     """Peak driver-reported device memory of this process, and its anonymous host RSS (overall and since the last
     :meth:`mark`), sampled every 0.25 s."""
 
     def __init__(self):
         self.peak = self.samples = self.anon_peak = self.phase_anon_peak = self.shmem_peak = 0
+        self.match = {}                     # driver samples by how they matched (driver_sample)
         self._stop = threading.Event()
         self._smi = shutil.which("nvidia-smi")
         self._t = threading.Thread(target=self._run, daemon=True)
@@ -41,10 +61,10 @@ class Peaks:
                 try:
                     out = subprocess.run([self._smi, "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
                                          capture_output=True, text=True, timeout=10).stdout
-                    for line in out.splitlines():
-                        p, _, mib = line.partition(",")
-                        if p.strip() == pid and mib.strip().isdigit():
-                            self.peak, self.samples = max(self.peak, int(mib) << 20), self.samples + 1
+                    got, how = driver_sample(out, pid)
+                    self.match[how] = self.match.get(how, 0) + 1
+                    if got is not None:
+                        self.peak, self.samples = max(self.peak, got), self.samples + 1
                 except Exception:  # noqa: BLE001 - a missed sample is a missed sample
                     pass
             a = _anon()
@@ -141,7 +161,8 @@ def main():
             dt = time.time() - t1
         done = len(parts.scheduler.done)
         m.update(device_peak_bytes=torch.cuda.max_memory_allocated(), device_reserved_peak_bytes=torch.cuda.max_memory_reserved(),
-                 driver_process_peak_bytes=pk.peak or None, driver_samples=pk.samples, scheduler_steps=steps,
+                 driver_process_peak_bytes=pk.peak or None, driver_samples=pk.samples, driver_match=dict(pk.match),
+                 scheduler_steps=steps,
                  serve_seconds=round(dt, 2), requests_done=done, tokens_out=done * a.new_tokens,
                  tokens_per_s=round(done * a.new_tokens / dt, 1) if dt else None,
                  host_anon_peak_bytes=pk.anon_peak, host_anon_serving_peak_bytes=pk.phase_anon_peak,
