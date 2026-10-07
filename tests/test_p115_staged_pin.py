@@ -177,7 +177,12 @@ def test_every_time_left_check_fits_its_own_guard():
 
 def test_lane_failures_avoid_the_machine_exclusion_codes():
     codes = {int(c) for c in re.findall(r"(?:finish|return) (\d+)", RUN)}
-    assert codes & {13, 14, 17, 18} == {13}, codes
+    # 13 for the disk floor and 18 for the CUDA host floor (a GPU the image's torch cannot use, TC1 amendment 61's class), and
+    # nothing else that excludes a machine: 14 and 17 are the launcher's. 18 appears once, in the no-cuda branch, so no other
+    # lane failure can name the machine (p115-5090-1 read HARNESS_ERROR on a CUDA-unusable host at rc 10).
+    assert codes & {13, 14, 17, 18} == {13, 18}, codes
+    eighteen = [line for line in RUN.splitlines() if "finish 18" in line]
+    assert len(eighteen) == 1 and "cuda unusable" in eighteen[0], eighteen
     assert {16, 25, 27} <= codes
 
 
