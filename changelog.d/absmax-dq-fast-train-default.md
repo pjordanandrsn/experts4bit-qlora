@@ -13,6 +13,13 @@
   `enable_fast_train(model, absmax_dq=False)`. `E4B_ABSMAX_DQ=1` or `absmax_dq=True` makes a refusal an error. The compression is lossy
   and stays after `disable_fast_train`.
 - The refusal those engines give a compressed model now names the default and the way to keep fp32.
+- **Behaviour change for programmatic callers** (maintainer review): call order now matters.
+  - Attaching an offload, batched, residency or NVMe engine BEFORE `enable_fast_train` (as the guides do) is unchanged. The compressor
+    refuses that stack, and the fp32 absmax stays.
+  - Calling `enable_fast_train` FIRST now compresses the absmax, and the engine attached afterwards refuses the model. Attach the
+    engine first, or pass `absmax_dq=False`.
+- **TC1 and other benches:** an arm run "at e4b's defaults" now includes the compressed absmax. An arm meant to read the fp32 absmax
+  must set `E4B_ABSMAX_DQ=0`. The receipts record the state as it is, so an arm that silently got the default is visible.
 - The test suite pins the default off in-process (`tests/conftest.py`), so tests written against the fp32 absmax keep their meaning.
   `tests/test_absmax_dq.py` tests the default itself.
 - TC1 receipts now record the absmax as it is (`absmax_dq`), the arm's flag (`absmax_dq_flag`) and the default's record
