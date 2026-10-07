@@ -199,7 +199,7 @@ output on Qwen3.6-35B-A3B and gpt-oss-20b ([SC2d](../bench/h2h-2026-10-02/sc2d/R
 
 Its cost is a few `perf_counter` calls and up to six CUDA events a step.
 
-Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
+Engine knobs: `E4B_PAGED_MAX_SEQS` (`auto`, below; batch width = KV slots), `E4B_PAGED_MAX_TOKENS_PER_SEQ` (4096;
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
 (512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS` (`auto`, the default:
 bucketed CUDA-graph decode on scratch slots on a CUDA device of sm_89 or newer at `all-vram`; `0` eager, `1` forced) +
@@ -210,7 +210,30 @@ out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_PAGED_
 as above. `GET /stats` returns the scheduler's `stats()` (TTFT p50/p99 **from arrival**, queue wait,
 per-stream rate) and the runner's graph statistics.
 
-**Slots above 16 (`E4B_PAGED_MAX_SEQS` > 16; opt-in, unread for speed).** The default bucket list stops at 16, so a
+**Slots: `E4B_PAGED_MAX_SEQS=auto` by default (lane SC2e, #846; `16` restores the old default).** When the engine
+builds, before any weight is read, `auto` takes the widest width lane SC2e read that the serve estimate fits in the
+device's free memory (`serve_recipe.choose_max_seqs`):
+- **Widths.** 64 or 16 on the default bucket list; 64, 32 or 16 with `E4B_PAGED_BUCKETS=auto`. 32 slots on the default
+  list run every wide step as two chained 16-row replays; SC2e did not read that, so the default list never takes it.
+- **The fit.** `estimate_serve_footprint`'s device total for the width (weights, KV pool and scratch slots, a hybrid's
+  per-slot linear-attention state, the bulk KV flush's ceiling), plus a reserve for the first-chunk prefill graph's pool
+  (`chunk_tokens x hidden_size x layers x 16 B`: 0.75 GiB on Qwen3-30B-A3B, above the 0.42–0.57 GiB measured), plus
+  1 GiB, must fit the free memory. On SC2e's box the estimate sat 2.0–2.3 GiB under the memory used at ready, which
+  includes the CUDA context the free-memory reading already excludes.
+- **What it picks for Qwen3-30B-A3B int4.** On an RTX 5090: 64 at 2,048 tokens a slot; 16 at the default 4,096 (64
+  needs ~34 GiB; with `E4B_PAGED_BUCKETS=auto`, 32). On a 24 GB card: 16. Without a CUDA device, under the solver
+  placement, or when nothing fits: 16, as before.
+- **What SC2e read** (Qwen3-30B-A3B int4, one RTX 5090, 512-token prompts, 2,048 tokens a slot): 64 slots on the default
+  list held the SLO to 8 req/s against 4 at 16 slots, and 64 with `E4B_PAGED_BUCKETS=auto` to 12. Serial TTFT and TPOT
+  were within 1 % and serial output byte-identical. Other models, prompt lengths and cards are unread for speed.
+- `/health` reports `engine.max_seqs` (the width serving), `engine.max_seqs_requested` and
+  `engine.max_seqs_resolution` (every candidate's arithmetic and the reason).
+
+`E4B_PAGED_BUCKETS=auto` stays opt-in: wide decode steps change the bf16 arithmetic (under load SC2e's wide-bucket arms
+agreed with 16 slots' text on 0.01–0.12 of requests, against 0.46–0.74 for 64 slots on the default list), so it waits
+on a teacher-forced read at buckets 32 and 64.
+
+**Slots above 16 and their buckets.** The default bucket list stops at 16, so a
 decode step over 16 rows runs as consecutive 16-row replays with a host sync after each, and the server logs that at
 startup. `E4B_PAGED_BUCKETS=auto` captures every power of two below `max_seqs` and then `max_seqs` itself (32 ->
 `1,2,4,8,16,32`), so the widest step is one replay; up to 16 sequences it reads exactly the default list. Costs to
@@ -224,8 +247,8 @@ weigh before raising either knob:
 - **Graphs.** One more captured graph per bucket; its pool is not priced (`estimate_serve_footprint` says so).
 
 `/health` reports `engine.buckets_requested`, `engine.graph_stats` (per bucket: replays, eager steps, rows, padding
-rows) and `levers.kv.pool_mib`, and the step trace counts `dec_pieces` (replays per decode step). Lane SC2e (#846)
-registers the speed reading.
+rows) and `levers.kv.pool_mib`, and the step trace counts `dec_pieces` (replays per decode step). Lane SC2e's read is
+`bench/h2h-2026-10-02/sc2e/README.md`.
 
 **Decode graphs (#770; lanes P109, P110).** `serve_paged` captures bucketed decode graphs by default
 (`E4B_PAGED_GRAPHS=auto`: on a CUDA device at `all-vram`, eager elsewhere; `0` keeps eager decode). This is the path
