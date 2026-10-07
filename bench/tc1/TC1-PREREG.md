@@ -2571,6 +2571,9 @@ every padded call bucketed, the chunked loss serving the rows. It also requires 
 - **P154 FALSIFIED with P153 HELD:** the saving costs too much as written. The next step makes the copies asynchronous (a side stream
   and an event), and the box is re-asked.
 - **P153 FALSIFIED:** the read says what the training peak held instead.
+- **P155 FALSIFIED** (maintainer review, before any box): the offloaded checkpoint's gradients equal the in-GPU checkpoint's exactly
+  (#1298's tests), so a held-out shift is a defect signal, not a trade-off. Before any further registration, a $0 correctness check of
+  the offloaded path against the plain one comes first, at the packed-row shape on the RTX A2000.
 - **P157 HELD:** STATUS says that with it, e4b's packed-row training memory is within 1 GB of Unsloth's.
 - No default changes on this box. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
 
