@@ -9,7 +9,7 @@ What is pinned, on tiny configs of every family in ``SUPPORTED`` (CPU, plus CUDA
 * bf16 and CPU autocast stay within a bf16 rounding of the stock gradients;
 * the switch off is the stock path byte for byte: at ``0``, nothing is patched; ``torch.no_grad`` forwards and generation run the
   stock forward even when patched; ``disable_chunked_lm_loss`` restores it exactly;
-* ``E4B_CHUNKED_EVAL_LOSS=1`` (opt-in): a no-grad forward with labels at or above the eval gate returns the stock logits bit for bit
+* ``E4B_CHUNKED_EVAL_LOSS`` (on by default since TC1 amendment 60, ``0`` off): a no-grad forward with labels at or above the eval gate returns the stock logits bit for bit
   and the stock loss to fp32 rounding on every family (aux loss on, ``num_items_in_batch``, ``shift_labels``, all ignored); under
   the gate, unasked, ``logits_to_keep``, a tuple return or no labels it is the stock forward exactly; a forward with gradients on
   is the training path; :func:`chunked_lm_loss_from_logits` matches ``ForCausalLMLoss`` at chunk sizes that do not divide;
@@ -481,11 +481,11 @@ def test_chunked_lm_loss_from_logits_against_hf(dev, chunk):
 
 
 def test_eval_env_parsing_and_enable_reads_it(monkeypatch):
-    for v, want in (("", False), ("0", False), ("off", False), ("1", True), (" ON ", True)):
+    for v, want in (("", True), ("0", False), ("off", False), ("1", True), (" ON ", True)):
         monkeypatch.setenv("E4B_CHUNKED_EVAL_LOSS", v)
         assert C.chunked_eval_loss_requested() is want, v
     monkeypatch.delenv("E4B_CHUNKED_EVAL_LOSS")
-    assert C.chunked_eval_loss_requested() is False         # opt-in
+    assert C.chunked_eval_loss_requested() is True          # the default since TC1 amendment 60
     monkeypatch.setenv("E4B_CHUNKED_EVAL_LOSS", "auto")
     with pytest.raises(ValueError):
         C.chunked_eval_loss_requested()

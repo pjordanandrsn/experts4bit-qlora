@@ -182,3 +182,4 @@ def _absmax_dq_default_off_in_tests(monkeypatch):
     except Exception:                                    # a machine without torch: nothing to pin
         return
     monkeypatch.setattr(fast, "ABSMAX_DQ_DEFAULT", False)
+

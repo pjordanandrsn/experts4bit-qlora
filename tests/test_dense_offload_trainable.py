@@ -189,3 +189,18 @@ def test_the_report_counts_no_late_bound_projections_without_bnb_modules():
     from experts4bit_qlora.engines.dense_offload import dense_offload_report
     hs, _msgs = _offload(_toy("base+one"))
     assert dense_offload_report(hs)["late_bound_4bit"] == 0
+
+
+def test_dense_offload_warns_over_offloaded_checkpoints():
+    """Checkpoint inputs in host memory (E4B_CKPT_OFFLOAD, enable_fast_train's default since TC1 amendment 59) under dense offload is an
+    untested pairing: enabling dense offload over layers that carry the offloaded checkpoint warns and names the way out."""
+    m = _toy("base+one")
+    m.layers[0]._e4b_ckpt_offload_ref = object()
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        enable_dense_offload(m, "cpu", pin=False, prefetch=False)
+    assert any("E4B_CKPT_OFFLOAD=0" in str(x.message) for x in w), [str(x.message) for x in w]
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        enable_dense_offload(_toy("base+one"), "cpu", pin=False, prefetch=False)
+    assert not any("E4B_CKPT_OFFLOAD" in str(x.message) for x in w)

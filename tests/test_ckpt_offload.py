@@ -77,9 +77,35 @@ def test_no_checkpointing_is_left_alone_with_a_warning():
 
 
 def test_env_switch(monkeypatch):
-    for v, want in (("", False), ("0", False), ("1", True)):
+    assert ckpt_offload.CKPT_OFFLOAD_DEFAULT is False                       # opt-in until TC1 amendments 62 and 63 read
+    monkeypatch.delenv("E4B_CKPT_OFFLOAD", raising=False)
+    assert ckpt_offload.checkpoint_offload_requested() is False
+    monkeypatch.setattr(ckpt_offload, "CKPT_OFFLOAD_DEFAULT", True)        # the mechanism a later default flip will use
+    for v, want, explicit in (("", True, False), ("0", False, False), ("off", False, False), ("1", True, True), (" ON ", True, True)):
         monkeypatch.setenv("E4B_CKPT_OFFLOAD", v)
-        assert ckpt_offload.checkpoint_offload_requested() is want
+        assert ckpt_offload.checkpoint_offload_requested() is want, v
+        assert ckpt_offload.checkpoint_offload_explicit() is explicit, v
+    monkeypatch.setenv("E4B_CKPT_OFFLOAD", "auto")
+    with pytest.raises(ValueError):
+        ckpt_offload.checkpoint_offload_requested()
+
+
+def test_default_path_skips_dense_offload_and_stays_quiet():
+    """The default (explicit=False) leaves a model whose layers carry dense offload's handles alone and says why; an explicit
+    request pairs them. Without checkpointing, the default is silent where an explicit request warns."""
+    m = _tiny()
+    for lay in m.model.layers:
+        lay._dense_offload = object()
+    assert ckpt_offload.enable_checkpoint_offload(m, explicit=False) == 0
+    assert "dense offload" in ckpt_offload.CKPT_OFFLOAD_STATS["skipped"]
+    assert not any(getattr(lay, "_e4b_ckpt_offload_ref", None) for lay in m.model.layers)
+    assert ckpt_offload.enable_checkpoint_offload(m, explicit=True) == len(m.model.layers)
+    m = _tiny()
+    m.gradient_checkpointing_disable()
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        assert ckpt_offload.enable_checkpoint_offload(m, explicit=False) == 0
+    assert not w
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="device memory is a CUDA statistic")
@@ -170,13 +196,46 @@ def test_enable_fast_train_applies_it_from_the_environment(monkeypatch):
                                       has_gate=True, quant_type="nf4", compute_dtype=torch.float32)
         m.model.e4b_probe_stack = ExpertsLoRA(base, r=4, alpha=8)
         return m
-    monkeypatch.delenv("E4B_CKPT_OFFLOAD", raising=False)
+    monkeypatch.setenv("E4B_CKPT_OFFLOAD", "0")
     m = model()
     assert enable_fast_train(m) >= 1
     assert not any(getattr(lay, "_e4b_ckpt_offload_ref", None) for lay in m.model.layers)
+    monkeypatch.delenv("E4B_CKPT_OFFLOAD", raising=False)                   # unset: the shipped default, off
+    m = model()
+    assert enable_fast_train(m) >= 1
+    assert not any(getattr(lay, "_e4b_ckpt_offload_ref", None) for lay in m.model.layers)
+    monkeypatch.setattr(ckpt_offload, "CKPT_OFFLOAD_DEFAULT", True)        # the mechanism a later default flip will use
+    m = model()
+    assert enable_fast_train(m) >= 1
+    assert all(lay._gradient_checkpointing_func is ckpt_offload.offloaded_checkpoint for lay in m.model.layers)
+    disable_fast_train(m)
+    monkeypatch.setattr(ckpt_offload, "CKPT_OFFLOAD_DEFAULT", False)
     monkeypatch.setenv("E4B_CKPT_OFFLOAD", "1")
     m = model()
     assert enable_fast_train(m) >= 1
     assert all(lay._gradient_checkpointing_func is ckpt_offload.offloaded_checkpoint for lay in m.model.layers)
     disable_fast_train(m)
     assert not any(getattr(lay, "_e4b_ckpt_offload_ref", None) for lay in m.model.layers)
+
+
+def test_reentrant_mode_keeps_inputs_on_the_device_and_the_same_gradients(monkeypatch):
+    """E4B_CKPT_OFFLOAD=reentrant (TC1 amendment 62's diagnostic) routes the layers through the reentrant checkpoint without the
+    host-memory hook: the same gradients as the default checkpointing, and the env parses as an explicit request."""
+    monkeypatch.setenv("E4B_CKPT_OFFLOAD", "reentrant")
+    assert ckpt_offload.checkpoint_offload_requested() and ckpt_offload.checkpoint_offload_explicit()
+    assert ckpt_offload.checkpoint_offload_mode() == "reentrant"
+    monkeypatch.setenv("E4B_CKPT_OFFLOAD", "1")
+    assert ckpt_offload.checkpoint_offload_mode() == "offload"
+    ref, m = _tiny(), _tiny()
+    assert ckpt_offload.enable_checkpoint_offload(m, mode="reentrant") == len(m.model.layers)
+    assert all(lay._gradient_checkpointing_func is ckpt_offload.reentrant_checkpoint for lay in m.model.layers)
+    ids = torch.randint(0, 100, (2, 16), generator=torch.Generator().manual_seed(1))
+    for mod in (ref, m):
+        mod.train()
+        mod(input_ids=ids, labels=ids).loss.backward()
+    gr = {n: p.grad for n, p in ref.named_parameters() if p.grad is not None}
+    gm = {n: p.grad for n, p in m.named_parameters() if p.grad is not None}
+    assert gr.keys() <= gm.keys()
+    for n in gr:
+        assert torch.equal(gr[n], gm[n]), n
+
