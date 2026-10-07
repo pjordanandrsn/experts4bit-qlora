@@ -947,3 +947,80 @@ def dense_offload_report(handles) -> dict:
                            {str(dev): dict(sched.counts) for dev, sched in
                             {h.device: h._train for h in handles if h._train is not None}.items()}),
     }
+
+
+def offload_plan(layers, *, pin: bool = True, train_prefetch: bool = True, min_bytes: int = MIN_BYTES,
+                 skip_trainable: bool | None = None) -> dict:
+    """What :func:`enable_dense_offload` would stream, pin and keep on the device for ``layers``, priced without building it.
+
+    ``layers``: one entry per decoder layer, each a sequence of ``(nbytes, ndim, trainable)`` or ``(nbytes, ndim, trainable,
+    is_param)`` for every parameter and buffer the layer holds outside expert modules -- the tensors a handle walks (``is_param``
+    defaults to True; pass False for a buffer). The selection is the handle's: a tensor streams when it is at least 2-D and
+    ``min_bytes``, unless it is a trainable parameter and ``skip_trainable`` holds. ``skip_trainable=None`` decides it as
+    :func:`enable_dense_offload` does, over the whole model: True iff some streamable PARAMETER is frozen (a frozen buffer does
+    not count, so pass ``is_param=False`` for buffers or a full fine-tune beside a large buffer is priced wrong).
+
+    Returns bytes:
+
+    * ``streamed``: the host homes, the tensors' exact bytes;
+    * ``host_reserved``: what pinning them reserves -- each pinned request rounds up to a power of two (PyTorch's caching host
+      allocator, grouped-nf4-gemm#71: ``recipe._pinned_cost``), 1.1355x on Qwen3-32B's NF4 layers as DQ3 measured; equal to
+      ``streamed`` with ``pin=False``;
+    * ``resident_slots``: device memory for the layers staged at once -- two under ``train_prefetch`` (the layer in use and
+      its scheduled neighbour), one on the synchronous path -- times the largest layer's streamed bytes;
+    * ``stays_on_device``: tensors never streamed (1-D, under ``min_bytes``, or trainable beside frozen ones);
+    * ``link_per_microbatch``: host-to-device bytes per micro-batch, every streamed layer copied for its forward and again
+      for its backward (an upper bound: DQ3 counted 62 + 62 copies over 64 layers, the boundary layers staying staged);
+    * ``largest_layer``, and ``layers`` (the count).
+
+    Quantization state that lives outside parameters and buffers (a bitsandbytes ``Params4bit``'s ``quant_state``) is not
+    walked by a handle and stays on the device; price it with the weights it belongs to.
+    """
+    from ..recipe import _pinned_cost
+
+    tensors = [[(e[0], e[1], e[2], e[3] if len(e) > 3 else True) for e in layer] for layer in layers]
+
+    def streamable(n, d):
+        return d >= 2 and n >= min_bytes
+
+    if skip_trainable is None:
+        skip_trainable = any(streamable(n, d) and not tr and param for layer in tensors for n, d, tr, param in layer)
+    per_layer, reserved, stays = [], 0, 0
+    for layer in tensors:
+        s = 0
+        for n, d, tr, _param in layer:
+            if streamable(n, d) and not (skip_trainable and tr):
+                s += int(n)
+                reserved += _pinned_cost(n) if pin else int(n)
+            else:
+                stays += int(n)
+        per_layer.append(s)
+    largest = max(per_layer, default=0)
+    return {"layers": len(per_layer), "streamed": sum(per_layer), "host_reserved": reserved,
+            "resident_slots": (2 if train_prefetch else 1) * largest, "stays_on_device": stays,
+            "link_per_microbatch": 2 * sum(per_layer), "largest_layer": largest}
+
+
+def late_bound_4bit_refusal() -> str | None:
+    """Why offloaded training of bitsandbytes ``Linear4bit`` layers would free no VRAM here, or None when it frees what
+    :func:`offload_plan` prices.
+
+    An evicted ``Linear4bit`` weight is released only through the late-bound backward (:class:`_LateBoundMatMul4Bit`), which
+    mirrors four bitsandbytes 0.50.2 sources pinned by sha256 (``_BNB_MIRRORED_SOURCES``). With any of them different,
+    :func:`enable_dense_offload` keeps stock bitsandbytes, whose autograd holds every layer's packed weight from its forward to
+    its backward (DQ3: dq3-5090-3's streamed arm ran out of memory above the resident one)."""
+    try:
+        mismatched = _bnb_mirror_mismatches()
+    except ImportError as e:
+        return f"bitsandbytes is not importable ({e})"
+    if not mismatched:
+        return None
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        have = version("bitsandbytes")
+    except PackageNotFoundError:
+        have = "?"
+    return (f"bitsandbytes {have} differs from the 0.50.2 sources the late-bound backward mirrors "
+            f"({', '.join(mismatched)}): offloaded Linear4bit weights stay referenced from forward to backward, so "
+            "streaming them frees no VRAM in training")

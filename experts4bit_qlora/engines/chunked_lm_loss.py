@@ -121,6 +121,26 @@ _ENV = "E4B_CHUNKED_LM_LOSS"
 _EVAL_ENV = "E4B_CHUNKED_EVAL_LOSS"
 
 
+#: bytes per (supervised token, vocabulary entry) of one chunk's workspace at its backward peak: the bf16 logits, their fp32
+#: upcast and the fp32 gradient. A stated formula -- the coefficient ``recipe.estimate_qlora_footprint`` charges full logits --
+#: not a measurement.
+CHUNK_BYTES_PER_LOGIT = 10
+
+
+def chunked_loss_bytes(supervised_tokens: int, vocab: int, hidden: int = 0, chunk: int = DEFAULT_CHUNK,
+                       hidden_bytes: int = 2) -> int:
+    """Device workspace :func:`chunked_causal_lm_loss` adds for one micro-batch with ``supervised_tokens`` labelled positions
+    (every position for a full-sequence loss; fewer under a loss mask, whose ignored rows never reach the head).
+
+    One chunk's logits at a time -- ``min(supervised_tokens, chunk) x vocab x`` :data:`CHUNK_BYTES_PER_LOGIT` -- plus, when
+    ``hidden`` is given, the gathered supervised hidden rows (``supervised_tokens x hidden x hidden_bytes``), which the loss
+    copies out of the hidden states before chunking. Compare a stock forward: ``tokens x vocab x`` the same coefficient."""
+    if chunk < 1:
+        raise ValueError(f"chunk must be >= 1, got {chunk}")
+    n = max(0, int(supervised_tokens))
+    return min(n, int(chunk)) * int(vocab) * CHUNK_BYTES_PER_LOGIT + n * int(hidden) * int(hidden_bytes)
+
+
 def _identity(logits, config):
     return logits
 
