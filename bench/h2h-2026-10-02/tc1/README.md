@@ -1321,3 +1321,47 @@ load-gated steps, every attempt first time at load1 1.1–1.2, peaks split by ph
 - **By amendment 61's rule** the default stands (it is faster and value-identical), and what holds the training peak is the next census's
   question. The evaluation peak here is 26.88 GB because this box ran before `E4B_CHUNKED_EVAL_LOSS` became the default.
 
+## Amendment 62 (2026-10-07): the field recipe's speed-up is the reentrant checkpoint, not the host-memory copies (P170–P173 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 62. One RTX 5090 (`tc1-5090-127`, AMD EPYC 9655, a
+46-CPU quota, Vast machine 150337), after two draws that never ran: `-123` was stuck loading on machine 142281, and `-126` failed the
+pre-flight on HF bandwidth (13.8 MB/s on machine 34887). e4b `53b3fb3`, grouped-nf4-gemm `0e6bff3`, every arm in venv-unsloth (torch
+2.12.1). The shipped arm at TC1's field recipe, 60 load-gated steps, every attempt first time at load1 1.0–2.2. Read:
+[`RESULTS-tc1-ckptre.md`](RESULTS-tc1-ckptre.md).
+
+| side | checkpoint | s/step (two draws) | training-phase peak | held-out at N (mean) |
+|---|---|---|---|---|
+| `r0` | Hugging Face's (`E4B_CKPT_OFFLOAD=0`) | 1.773 / 1.756 | 23.32 GB | 0.75562 |
+| `rr` | reentrant alone (`=reentrant`) | 1.579 / 1.598 | 23.32 GB | 0.75633 |
+| `r1` | reentrant + inputs in host memory (`=1`) | 1.618 / 1.619 | 23.10 GB | 0.75665 |
+
+- **P170 HELD:** `rr` / `r0` **0.900** [0.891, 0.910] (≤ 0.96). The reentrant checkpoint alone carries the speed-up.
+- **P171 HELD:** `r1` / `rr` **1.019** [1.012, 1.025] (in [0.98, 1.02], near its upper edge). The copies cost about 2 % of the step.
+- **P172 HELD:** `r1` / `r0` **0.917** [0.912, 0.922] (≤ 0.96), on a second host: amendment 59 read 0.916.
+- **P173 HELD:** held-out within 0.0011 across the three sides.
+- Only the copies move memory (23.32 → 23.10 GB). The flavour alone leaves the peak where Hugging Face's checkpoint has it.
+- **By amendment 62's rule**, STATUS gives the speed-up to the checkpoint flavour. Amendment 63's rule sends the default question to the
+  reentrant checkpoint's own read (amendment 64).
+
+## Amendment 63 (2026-10-07): in torch 2.8 on a host-bound box the offload never slows the field recipe, and still takes 0.18 GB off (P174–P177 HELD)
+
+Pre-registration: amendment 63. One RTX 5090 (`tc1-5090-125`, AMD Ryzen 9 9950X, a 30-CPU quota, Vast machine 153193, the same machine
+as amendment 59's box). The first draw, `-124`, was refused at the new CUDA host floor (code 18): its image's torch could not use the GPU
+under driver 610.57. e4b `53b3fb3`, grouped-nf4-gemm `0e6bff3`, every arm in venv-e4b (torch 2.8.0), profiled, 60 load-gated steps,
+every attempt first time at load1 1.0–1.3. Read: [`RESULTS-tc1-ckptoff28.md`](RESULTS-tc1-ckptoff28.md).
+
+| arm | s/step `g0` (two draws) | s/step `g1` | ratio | `g0` device busy vs timed step | training peak `g0` → `g1` |
+|---|---|---|---|---|---|
+| matched | 2.474 / 2.470 | 2.457 / 2.458 | **0.994** | 0.775 | 26.10 → 25.92 GB |
+| shipped | 1.947 / 1.945 | 1.916 / 1.919 | **0.985** | 0.795 | 23.27 → 23.05 GB |
+
+- **The premise held:** both `g0` arms are host-bound (device busy ≤ 0.9), so the speed readings count.
+- **P174 HELD:** matched **0.994** [0.993, 0.995] (≤ 1.01).
+- **P175 HELD:** shipped **0.985** [0.984, 0.987].
+- **P176 HELD:** held-out at N −0.0010 (matched) and +0.0004 (shipped).
+- **P177 HELD:** the matched training peak falls **0.181 GB** (≥ 0.10).
+- Reported, not divided: on this same machine in torch 2.12, amendment 59 read 0.948 and 0.916. The gain is the reentrant checkpoint's
+  (amendment 62), and it is smaller in torch 2.8.
+- **By amendment 63's rule** (all four HELD, and amendment 62 puts the speed-up on the reentrant checkpoint alone), this PR registers
+  the reentrant checkpoint's own default read (amendment 64) instead of flipping the offload.
+
