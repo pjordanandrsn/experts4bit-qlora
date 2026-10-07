@@ -10156,6 +10156,64 @@
       "notes": "Pre-registered in #1029; the switches are grouped-nf4-gemm#448 and #453; follows K28 (LEVER) and P112 (closed VOID twice: its accounting, then a prefill-jittered slope). All eight predictions held, written after P112 run 1's arms. Uncapped PDL costs the 16-row step 8.947 -> 9.127 ms; the cap leaves it at 8.937. Lane cost $0.4710."
     },
     {
+      "id": "e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P115 (Phases A and B), one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs), the registered B=1 fused stack -- fused q/k/v (E4B_PAGED_FUSE_QKV) and the three glue folds (E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI), engaged at 48 / 193 / [48, 48] / 48 -- decodes one request 1.4289x (min over two ABBA pairs; geomean 1.4296) as fast as the unfused default (94.15 -> 134.53 tok/s, step 10.62 -> 7.43 ms) and 16 concurrent requests 1.2298x (geomean 1.2305; 701 -> 863 tok/s), within P110's teacher-forced quality bar on wikitext and c4val1 (row e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07). DEFAULT_AUTO; the default moves only after Phase C (Amendment 2).",
+      "value": 1.4289,
+      "unit": "decode tok/s ratio, fused stack over the unfused default, one request (W1; min over two ABBA pairs)",
+      "hardware": "RTX 5090 (sm_120, driver 610.57.04, 32607 MiB), one rented Vast.ai host (instance 54698460, machine 13828, AMD engineering-sample CPU 100-000000897-03, 64 threads, 251 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @598c0013 (0.48.0 + P115's registration #1314, the auto semantics #1315 and Amendment 1 #1317) + grouped-nf4-gemm @b4f93f1 (v0.42.0); torch 2.8.0+cu128, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; premise test_decode_graph_buckets.py + test_kv_step_select.py + test_fused_glue_decode_graphs_gpu.py 14 passed on the card; the default graph serve_paged server (graphs auto, max_seqs 16, buckets 1-16, all-vram, bulk KV, step select); four ABBA arms (F0a F1a F1b F0b) differing only in E4B_PAGED_FUSE_QKV + E4B_FUSE_T1_GLUE + E4B_FUSE_T1_GLUE_R2 + E4B_FUSE_ROUTER_EPI (unset vs 1), W16 = 16 wikitext 512-token prompts at once, W1 = one, 32/160 new tokens, 3 timed reps; verdict by bench/p115/p115_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p115/RESULTS-p115.md",
+        "bench/p115/PREREG-p115.md",
+        "bench/p115/p115_reduce.py",
+        "bench/p115/p115_box.py",
+        "bench/p115/receipts/p115-5090-8/verdict.json",
+        "bench/p115/receipts/p115-5090-8/arm_F1a.json",
+        "bench/p115/receipts/p115-5090-8/arm_F0a.json",
+        "bench/p115/receipts/p115-5090-8/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/p115-5090-8/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-07/p115-prove-2/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1314 (P115, e4b#1313). Predictions held for engagement, determinism, g1's band [1.25, 1.60], self-pairs, quality and the verdict; missed for F1's absolute W1 step (7.43 ms against 5.8-7.2: this host's default step was 10.62 ms, not P111's 9.05) and for g16 (1.2298, above [1.03, 1.20]). Phases A+B cost $0.952 over ten launcher runs; draws 1-7 failed before any lane work."
+    },
+    {
+      "id": "e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P115 (Phase B), one RTX 5090: the registered B=1 fused stack on the default serve_paged server (Qwen3-30B-A3B NF4) scores within P110's teacher-forced quality bar against the server's own arithmetic. Wikitext-2 (48 windows x 128 positions): ON bias +0.00098 nats (SE 0.0021; bar B_floor + 0.01 = 0.0117), spread 0.0120 (bar 0.0277), K8 perplexity 8.9710 -> 8.9798 (+0.0088, budget 0.05), argmax agreement 0.961. c4val1: ON bias -0.00256 nats (SE 0.0031; bar 0.0119), spread 0.0142, K8 16.403 -> 16.361 (-0.042, reported, not gated). The neutral half-batch and prefill-chunk draws moved the NLL by -0.0013 / +0.0017 (wikitext) and -0.0006 / -0.0019 (c4val1); the halved attention scale (the mutant) moved it +1.05 / +0.77.",
+      "value": 0.00098,
+      "unit": "nats, mean per-window NLL difference ON - R on wikitext-2 (48 windows x 128 teacher-forced positions)",
+      "hardware": "RTX 5090 (sm_120, driver 610.57.04, 32607 MiB), one rented Vast.ai host (instance 54698460, machine 13828, AMD engineering-sample CPU 100-000000897-03, 64 threads, 251 GiB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @598c0013 (0.48.0 + P115's registration #1314, the auto semantics #1315 and Amendment 1 #1317) + grouped-nf4-gemm @b4f93f1 (v0.42.0); torch 2.8.0+cu128, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; premise test_decode_graph_buckets.py + test_kv_step_select.py + test_fused_glue_decode_graphs_gpu.py 14 passed on the card; the default graph serve_paged server (graphs auto, max_seqs 16, buckets 1-16, all-vram, bulk KV, step select); the quality phase: two processes on the default server built eager, R scored with its half/chunk floors and the scale mutant, ON scored against R's saved fp32 log-probs; speed: four ABBA arms (F0a F1a F1b F0b) differing only in E4B_PAGED_FUSE_QKV + E4B_FUSE_T1_GLUE + E4B_FUSE_T1_GLUE_R2 + E4B_FUSE_ROUTER_EPI (unset vs 1), W16 = 16 wikitext 512-token prompts at once, W1 = one, 32/160 new tokens, 3 timed reps; verdict by bench/p115/p115_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p115/RESULTS-p115.md",
+        "bench/p115/PREREG-p115.md",
+        "bench/p115/p115_reduce.py",
+        "bench/p115/p115_quality.py",
+        "bench/p115/receipts/p115-5090-8/verdict.json",
+        "bench/p115/receipts/p115-5090-8/quality_off.json",
+        "bench/p115/receipts/p115-5090-8/quality_on.json",
+        "bench/p115/receipts/p115-5090-8/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/p115-5090-8/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-07/p115-prove-2/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1314. Every quality prediction (Q6) held: biases inside +-0.004 / +-0.006, spreads <= 0.015, |dK8| 0.0088 / 0.042, floors B <= 0.003 and S <= 0.015, mutant > +0.3. R repeated bit for bit on both texts. Read on Qwen3-30B-A3B only: other families get their own reads in Phase C (Amendment 2)."
+    },
+    {
       "package": "experts4bit-qlora",
       "area": "train",
       "model": "allenai/OLMoE-1B-7B-0924-Instruct @7f1c97f4",
