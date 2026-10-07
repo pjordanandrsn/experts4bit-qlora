@@ -245,3 +245,15 @@ Fetched to the run directory's `p115/` and committed to `bench/p115/receipts/<ru
 - `SHA256SUMS`.
 
 The reference log-probs (`work/ref`) stay on the box. `RESULTS-p115.md` is written from those files.
+
+## Amendment 1 (2026-10-07T18:02Z, after `p115-5090-1` refused before any reading, before any reading box ran)
+
+**STOP-1's dud-box refusal becomes the registered host floor.** `p115-5090-1` drew Vast machine 34887, whose image torch
+could not use the GPU. The runner exited 10 ("DUD BOX"), a code that names no machine, so the launcher recorded
+HARNESS_ERROR and a relaunch could buy the same host. That is the machine TC1's `tc1-5090-119` hit, which led TC1 to
+amendment 61. `p115_run.sh` now probes as TC1 does:
+- torch imports but cannot use the GPU: exit **18**, with a REFUSAL line, so the launcher names the machine;
+- torch does not import (the image's fault): still 10.
+
+Nothing else changes: no rule, prediction or budget. `tests/test_p115_staged_pin.py` pins one 18, and only in that
+branch.

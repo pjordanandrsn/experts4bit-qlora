@@ -68,7 +68,30 @@ for f in p115_box.py p115_reduce.py p115_quality.py p109_box.py p110_box.py p108
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p115/staged.sha256"; finish 9; }
 # ---- refusals before anything is installed or fetched: the card class, the disk, the host RAM
-python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null || { say "DUD BOX"; finish 10; }
+# A GPU the image's torch cannot use is the REGISTERED HOST FLOOR (rent.py's class 18), as TC1 amendment 61 made it: exit 18 with
+# a REFUSAL line, so the launcher names the machine and a relaunch cannot buy it again. Exit 10 named no machine:
+# p115-5090-1 and tc1-5090-119 both drew Vast machine 34887 (CUDA error 803) and read HARNESS_ERROR. A torch that will not
+# import is the image's fault, not the host's, so it stays 10.
+CUDA_PROBE=$(python - <<'PYC' 2>/dev/null | tail -1
+import sys
+try:
+    import torch
+except Exception as e:
+    print(f"no-torch {type(e).__name__}"); sys.exit(0)
+try:
+    ok = torch.cuda.is_available() and torch.cuda.device_count() > 0
+except Exception:
+    ok = False
+print("ok" if ok else f"no-cuda torch {torch.__version__}")
+PYC
+)
+echo "CUDA_PROBE ${CUDA_PROBE:-none}" | tee -a summary.txt
+case "$CUDA_PROBE" in
+  ok) ;;
+  no-cuda*) say "REFUSED: torch cannot use the GPU on this host (${CUDA_PROBE}) -- registered host floor"
+            echo "refused: cuda unusable (${CUDA_PROBE})" > REFUSAL; echo "BOX_REFUSED cuda=unusable" >> summary.txt; finish 18;;
+  *) say "DUD BOX (${CUDA_PROBE:-no probe output})"; finish 10;;
+esac
 nvidia-smi --query-gpu=name,memory.total,driver_version,uuid,compute_cap --format=csv,noheader | tee forensics.txt
 lscpu | grep -E "Model name|^Vendor ID|^CPU\(s\)" | tee -a forensics.txt; free -g | head -2 | tee -a forensics.txt; df -h $W | tail -1 | tee -a forensics.txt
 GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
