@@ -3952,7 +3952,10 @@ def run_arm(a, load_fn, sampler=True):
             chunked_lm_loss = {"env": os.environ.get("E4B_CHUNKED_LM_LOSS"), "e4b_has_chunked_lm_loss": True,
                                "chunked_calls": int(_cst.get("chunked_calls", 0)), "stock_calls": int(_cst.get("stock_calls", 0)),
                                "small_calls": int(_cst.get("small_calls", 0)), "patched": int(_cst.get("patched", 0)),
-                               "runtime_refusals": int(_cst.get("runtime_refusals", 0)), "refused": dict(_cst.get("refused") or {})}
+                               "runtime_refusals": int(_cst.get("runtime_refusals", 0)), "refused": dict(_cst.get("refused") or {}),
+                               # E4B_CHUNKED_EVAL_LOSS (opt-in): held-out forwards whose loss came from the logits in chunks / ran stock
+                               "eval_env": os.environ.get("E4B_CHUNKED_EVAL_LOSS"),
+                               "eval_chunked_calls": int(_cst.get("eval_chunked_calls", 0)), "eval_stock_calls": int(_cst.get("eval_stock_calls", 0))}
         except Exception:
             chunked_lm_loss = {"env": os.environ.get("E4B_CHUNKED_LM_LOSS"), "e4b_has_chunked_lm_loss": False}
     route_ab = None                                    # TC1c amendment 4: which training GEMM route grouped-nf4-gemm took (GNF4_TRAIN_GEMM), and how often

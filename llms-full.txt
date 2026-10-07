@@ -3497,6 +3497,12 @@ to fp32 rounding. The same gradients, up to cuBLAS's shape-dependent bf16 reduct
 Granite-MoE and -Hybrid, LFM2-MoE and Nemotron-H causal LMs. Anything else keeps the stock loss: silently under the default, with a
 warning when the variable is set. Only training forwards with
 labels take it: evaluation under `torch.no_grad` and generation stay stock, and `.logits` is `None` on the forwards that do.
+Evaluation can then be the run's peak. A `torch.no_grad` forward with labels on one 4,096-token Qwen3 row holds the bf16 logits, an
+fp32 copy and its log-softmax: 4.64 GiB above the logits on an RTX A2000. That made the held-out evaluation e4b's run peak on TC1's
+packed rows (amendment 58). Opt in with `E4B_CHUNKED_EVAL_LOSS=1`: such a forward, where its fp32 logits would reach 1 GiB, runs
+without labels, returns the stock logits unchanged, and takes the loss from them in 512-token fp32 chunks. That is 0.58 GiB above the
+logits, with the same loss in both A2000 shapes measured
+(`bench/chunked-lm-loss/receipts/eval_loss_peak_a2000.json`). Only the fp32 summation order can differ.
 Why the gate: on short rows chunking is a cost, not a saving. At TC1's field recipe (Alpaca rows, 0.3–0.6 GiB of logits per
 micro-batch) `1` cost a host-bound RTX 5090 4.9 % of the shipped arm's step (TC1 amendment 41), while `auto` never fired there and
 stepped 0.992–0.999 of the stock loss (amendment 44). A packed 4,096-token Qwen3 row is 2.32 GiB and chunks, and trains resident on a

@@ -9,6 +9,10 @@ What is pinned, on tiny configs of every family in ``SUPPORTED`` (CPU, plus CUDA
 * bf16 and CPU autocast stay within a bf16 rounding of the stock gradients;
 * the switch off is the stock path byte for byte: at ``0``, nothing is patched; ``torch.no_grad`` forwards and generation run the
   stock forward even when patched; ``disable_chunked_lm_loss`` restores it exactly;
+* ``E4B_CHUNKED_EVAL_LOSS=1`` (opt-in): a no-grad forward with labels at or above the eval gate returns the stock logits bit for bit
+  and the stock loss to fp32 rounding on every family (aux loss on, ``num_items_in_batch``, ``shift_labels``, all ignored); under
+  the gate, unasked, ``logits_to_keep``, a tuple return or no labels it is the stock forward exactly; a forward with gradients on
+  is the training path; :func:`chunked_lm_loss_from_logits` matches ``ForCausalLMLoss`` at chunk sizes that do not divide;
 * refusals: a class outside the table, a replaced ``loss_function``, a hooked head; and the run-time probe catches a change made
   after ``lm_head`` the table does not describe, re-running that call stock;
 * ``auto``'s size gate: a forward under it is the stock forward exactly, one at it chunks, and the 1 GiB gate separates the TC1
@@ -381,6 +385,115 @@ def test_no_grad_eval_and_generation_run_stock_when_patched():
     assert out.logits is not None and out.loss is None
     out = m(input_ids=ids, labels=labels, return_dict=False)
     assert isinstance(out, tuple) and torch.is_tensor(out[1])
+
+
+# ------------------------------------------------------------------------------------- held-out evaluation (opt-in, gated) --
+
+def _eval_pair(family, monkeypatch, gate=0, eval_loss=True, **kw):
+    """The stock model and a patched one with the eval switch as given and the eval gate at ``gate`` bytes."""
+    monkeypatch.setattr(C, "EVAL_MIN_LOGITS_BYTES", gate)
+    ref, m = _model(family), _model(family)
+    assert C.enable_chunked_lm_loss(m, 7, eval_loss=eval_loss) == 1
+    ref.eval()
+    m.eval()
+    return ref, m
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+def test_eval_loss_from_logits_matches_stock_and_keeps_the_logits(family, monkeypatch):
+    """E4B_CHUNKED_EVAL_LOSS=1 above the gate: the logits are the stock forward's bit for bit, the loss is the stock loss to fp32
+    rounding (router auxiliary loss on), and the call is counted."""
+    ids, labels, att = _batch("cpu")
+    kw = {} if family in NO_AUX else {"output_router_logits": True}
+    ref, m = _eval_pair(family, monkeypatch)
+    n0 = C.CHUNKED_LM_LOSS_STATS["eval_chunked_calls"]
+    with torch.no_grad():
+        a = ref(input_ids=ids, labels=labels, attention_mask=att, **kw)
+        b = m(input_ids=ids, labels=labels, attention_mask=att, **kw)
+    assert torch.equal(a.logits, b.logits)
+    _assert_loss_close(a.loss, b.loss)
+    if family not in NO_AUX:
+        assert torch.equal(a.aux_loss, b.aux_loss)
+    assert C.CHUNKED_LM_LOSS_STATS["eval_chunked_calls"] == n0 + 1
+
+
+def test_eval_loss_off_under_the_gate_or_unasked_is_stock_bit_for_bit(monkeypatch):
+    ids, labels, att = _batch("cpu")
+    for gate, ev, counter in ((0, False, None), (1 << 40, True, "eval_stock_calls")):
+        ref, m = _eval_pair("qwen3_moe", monkeypatch, gate=gate, eval_loss=ev)
+        before = dict(C.CHUNKED_LM_LOSS_STATS)
+        with torch.no_grad():
+            a = ref(input_ids=ids, labels=labels, attention_mask=att)
+            b = m(input_ids=ids, labels=labels, attention_mask=att)
+        assert torch.equal(a.loss, b.loss) and torch.equal(a.logits, b.logits), (gate, ev)
+        assert C.CHUNKED_LM_LOSS_STATS["eval_chunked_calls"] == before["eval_chunked_calls"]
+        if counter:
+            assert C.CHUNKED_LM_LOSS_STATS[counter] == before[counter] + 1
+    ref, m = _eval_pair("qwen3_moe", monkeypatch)            # on, at the gate: a tuple return and logits_to_keep stay stock
+    with torch.no_grad():
+        a = ref(input_ids=ids, labels=labels, attention_mask=att, return_dict=False)
+        b = m(input_ids=ids, labels=labels, attention_mask=att, return_dict=False)
+        assert isinstance(b, tuple) and torch.equal(a[0], b[0]) and torch.equal(a[1], b[1])
+        for model in (ref, m):                                  # stock's own shape error with labels, raised by both
+            with pytest.raises(ValueError):
+                model(input_ids=ids, labels=labels, attention_mask=att, logits_to_keep=3)
+        a, b = ref(input_ids=ids), m(input_ids=ids)             # no labels: stock, no loss
+        assert b.loss is None and torch.equal(a.logits, b.logits)
+
+
+def test_eval_loss_with_gradients_on_is_the_training_path(monkeypatch):
+    """The eval switch never touches a forward with gradients enabled: that is the training path (logits None)."""
+    ids, labels, att = _batch("cpu")
+    _ref, m = _eval_pair("qwen3_moe", monkeypatch)
+    m.train()
+    out = m(input_ids=ids, labels=labels, attention_mask=att)
+    assert out.logits is None and out.loss.requires_grad
+
+
+def test_eval_loss_semantics_num_items_shift_labels_all_ignored(monkeypatch):
+    ids, labels, att = _batch("cpu")
+    ref, m = _eval_pair("qwen3_moe", monkeypatch)
+    shifted = torch.nn.functional.pad(labels, (0, 1), value=-100)[..., 1:].contiguous()
+    with torch.no_grad():
+        for kw in ({"num_items_in_batch": torch.tensor(29)}, {"num_items_in_batch": 31}, {"shift_labels": shifted}):
+            a = ref(input_ids=ids, labels=labels, attention_mask=att, **kw)
+            b = m(input_ids=ids, labels=labels, attention_mask=att, **kw)
+            _assert_loss_close(a.loss, b.loss)
+            assert torch.equal(a.logits, b.logits)
+        none = torch.full_like(labels, -100)
+        a = ref(input_ids=ids, labels=none, attention_mask=att)
+        b = m(input_ids=ids, labels=none, attention_mask=att)
+        assert math.isnan(float(a.loss)) and math.isnan(float(b.loss))
+
+
+@pytest.mark.parametrize("dev", DEVICES)
+@pytest.mark.parametrize("chunk", [1, 5, 16, 46, 47, 4096])
+def test_chunked_lm_loss_from_logits_against_hf(dev, chunk):
+    from transformers.loss.loss_utils import ForCausalLMLoss
+    g = torch.Generator().manual_seed(11)
+    logits = (torch.randn(2, 24, V, generator=g) * 3).to(dev).to(torch.bfloat16)
+    _ids, labels, _att = _batch(dev)
+    want = ForCausalLMLoss(logits, labels, V)
+    got = C.chunked_lm_loss_from_logits(logits, labels, chunk=chunk)
+    _assert_loss_close(want, got)
+    with pytest.raises(ValueError):
+        C.chunked_lm_loss_from_logits(logits, labels[:, :5], chunk=chunk)
+
+
+def test_eval_env_parsing_and_enable_reads_it(monkeypatch):
+    for v, want in (("", False), ("0", False), ("off", False), ("1", True), (" ON ", True)):
+        monkeypatch.setenv("E4B_CHUNKED_EVAL_LOSS", v)
+        assert C.chunked_eval_loss_requested() is want, v
+    monkeypatch.delenv("E4B_CHUNKED_EVAL_LOSS")
+    assert C.chunked_eval_loss_requested() is False         # opt-in
+    monkeypatch.setenv("E4B_CHUNKED_EVAL_LOSS", "auto")
+    with pytest.raises(ValueError):
+        C.chunked_eval_loss_requested()
+    monkeypatch.setenv("E4B_CHUNKED_EVAL_LOSS", "1")
+    m = _model("qwen3")
+    assert C.enable_chunked_lm_loss(m, 7) == 1 and m._e4b_chunked_lm_loss.eval_loss is True
+    monkeypatch.setenv("E4B_CHUNKED_EVAL_LOSS", "0")
+    assert C.enable_chunked_lm_loss(m, 7) == 0 and m._e4b_chunked_lm_loss.eval_loss is False   # re-enable updates it
 
 
 def test_positional_labels_are_found():

@@ -1,0 +1,43 @@
+{
+ "torch": "2.8.0+cu128",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "vocab": 151936,
+ "rows": [
+  {
+   "tokens": 2048,
+   "logits_gib": 0.57958984375,
+   "stock": {
+    "loss": 13.945829391479492,
+    "peak_above_logits_gib": 2.318
+   },
+   "chunked512": {
+    "loss": 13.945829391479492,
+    "peak_above_logits_gib": 0.58
+   },
+   "chunked1024": {
+    "loss": 13.945829391479492,
+    "peak_above_logits_gib": 1.159
+   },
+   "chunked512_minus_stock": 0.0,
+   "ulps_fp32": 0.0
+  },
+  {
+   "tokens": 4096,
+   "logits_gib": 1.1591796875,
+   "stock": {
+    "loss": 13.960336685180664,
+    "peak_above_logits_gib": 4.637
+   },
+   "chunked512": {
+    "loss": 13.960336685180664,
+    "peak_above_logits_gib": 0.58
+   },
+   "chunked1024": {
+    "loss": 13.960336685180664,
+    "peak_above_logits_gib": 1.159
+   },
+   "chunked512_minus_stock": 0.0,
+   "ulps_fp32": 0.0
+  }
+ ]
+}
