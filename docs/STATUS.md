@@ -211,10 +211,10 @@ amendment 44's rule makes `auto` e4b's default, which it is since #1203: unset m
 amendment 51). With the chunked loss and grouped-nf4-gemm's bucketed padding both `auto` (#1203, grouped-nf4-gemm#492, released in
 grouped-nf4-gemm 0.42.0; an older grouped-nf4-gemm keeps the single block), and nothing set, e4b
 trains the packed rows resident at 28.23 GB and steps them at 10.06 s against Unsloth's 14.61 on one stack: Unsloth/e4b **1.453** [1.451,
-1.455]. That 28.23 GB is e4b's held-out evaluation, not its training step (`e4b.train.memory.packed-4k-census.5090.2026-10-06`, TC1
-amendment 55). The chunked loss takes training forwards only, so a no-grad evaluation on a 4,096-token row holds the stock loss's fp32
-logits (about 6.3 GB with its working copies). Unsloth's 24.86 GB peak is a training backward. With the double-quantized expert absmax
-(`E4B_ABSMAX_DQ=1`) e4b's run peak is 26.88 GB. That supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
+1.455]. That 28.23 GB is reached in e4b's held-out evaluation (`e4b.train.memory.packed-4k-census.5090.2026-10-06`, TC1 amendment 55), but its
+training steps peak almost as high, at 28.14 GB (`e4b.train.absmax-dq.packed-4k.5090.2026-10-07`, TC1 amendment 56). The double-quantized
+expert absmax (`E4B_ABSMAX_DQ=1`) takes 1.35 GB off for 0.2 % of the step (1.002). With it, e4b's training phase peaks at 26.79 GB
+against Unsloth's 24.86: 1.92 GB more, which a training-phase census is next to attribute. That supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
 same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are
 not that cost (`e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`, TC1 amendment 52): in torch 2.8 on packed rows they step 0.983
 (matched) and 0.939 (shipped) of the single block's step, with the matched peak 4.24 GB lower, so the default stands in both measured
