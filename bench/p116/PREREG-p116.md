@@ -159,8 +159,9 @@ positions. Its incumbent is the scalar GEMV. A VOID from the reducer fails the p
 - **Proof:** one RTX 5090, **guard 0.75 h**, about $0.7 at the launcher's policy rate.
 - **Reading:** one RTX 5090, **guard 1.5 h**, `--download-gb 61`, about $1.95 at the policy rate. Expected about 55 minutes:
   install and premise 5, fetch 6–10, bake 2, prompts 1, four arms about 12, quality about 30.
-- **Lane ceiling $3.00, hard stop $4.00.** That is the owner's per-lane cap for this program: the proof, the reading and one
-  rerun. A launch goes ahead only while the lane's actual spend plus that run's launcher estimate is ≤ $4.00.
+- **Lane ceiling $3.00, hard stop $4.00**, covering the proof, the reading and one rerun. A launch goes ahead only while
+  the lane's actual spend plus that run's launcher estimate is ≤ $4.00. Every run sits inside the owner's standing
+  no-ask tier for a single run under $15; anything over $15 needs the maintainer lane's approval first.
 - **STOP-1:** the refusals run before any install: CUDA unusable 18 (the host floor), dud box 10, card class 15, disk
   < 150 GB 13, host RAM < 60 GiB 16, premise 25.
 - **STOP-2:** every time-left check fits inside its guard, enforced by `tests/test_p116_staged_pin.py`.
