@@ -9,8 +9,7 @@
 > through a **recompute-in-backward** autograd Function, which delivers §9c's activation-memory
 > property (backward holds only the packed bytes, never the dequantized expert) on **any** released
 > bitsandbytes and every storage scheme, at §9b's small backward re-dequant cost. `matmul_4bit` is
-> left in two places: the probe-gated `no_grad` decode GEMV (§12a), and dense offload's late-bound
-> training projection, which is pinned to bitsandbytes 0.50.2's sources ([BITSANDBYTES.md](BITSANDBYTES.md)). The
+> left in the decode GEMV (§12a) and dense offload's training projection ([BITSANDBYTES.md](BITSANDBYTES.md)). The
 > ablation eval numbers (§1–§8) are unaffected — those runs went through `ExpertsLoRA`'s dequantize
 > forward, and the recompute Function computes the *identical* forward (it **is**
 > dequantize-then-`linear`; recomputation changes what is saved for backward, never what is
@@ -245,7 +244,7 @@ servers, Home Assistant, DNS, seven dev-agent containers *sharing this same A200
 load average ~45), so the ceiling and per-layer figures are a floor under realistic contention, not a
 quiet-rig best case.
 
-Even in 4-bit, the experts are the bulk of a fused-MoE's weights, and for the real targets they alone exceed a 12 GB card: Qwen3-30B-A3B ≈ **15 GB** of 4-bit experts, Gemma-4-26B-A4B ≈ **13 GB**. `OFFLOAD_EXPERTS=1` keeps each `Experts4bit` base's packed weights + absmax in **pinned CPU RAM** and streams one layer's experts to the GPU just-in-time (forward pre-hook on `ExpertsLoRA`), evicting after. Gradient checkpointing recomputes each layer's forward in backward (the reentrant checkpoint under `enable_fast_train`'s default, Hugging Face's non-reentrant one with `E4B_CKPT_OFFLOAD=0`), so the pre-hook re-stages for the recompute. When that recompute reaches the evict post-hook (always under the reentrant checkpoint, and on Gemma-4 under the non-reentrant one), the post-hook sees it is inside a backward and does **not** evict. So a **single-resident-slot** — staging a layer first evicts the previously-staged one — is what keeps **only one layer's experts GPU-resident at a time, in forward and backward alike.** Mechanism and correctness argument: [`experts4bit_qlora/engines/offload.py`](../experts4bit_qlora/engines/offload.py).
+Even in 4-bit, the experts are the bulk of a fused-MoE's weights, and for the real targets they alone exceed a 12 GB card: Qwen3-30B-A3B ≈ **15 GB** of 4-bit experts, Gemma-4-26B-A4B ≈ **13 GB**. `OFFLOAD_EXPERTS=1` keeps each `Experts4bit` base's packed weights + absmax in **pinned CPU RAM** and streams one layer's experts to the GPU just-in-time (forward pre-hook on `ExpertsLoRA`), evicting after. Gradient checkpointing (either kind) recomputes each layer's forward in backward, so the pre-hook re-stages the experts. The evict post-hook does nothing inside a backward, so a **single-resident-slot** — staging a layer first evicts the previously-staged one — is what keeps **only one layer's experts GPU-resident at a time, in forward and backward alike.** Mechanism and correctness argument: [`experts4bit_qlora/engines/offload.py`](../experts4bit_qlora/engines/offload.py).
 
 ### a. Correctness — offload changes tensor *location*, not math (the load-bearing claim)
 
@@ -585,9 +584,8 @@ top-4, Qwen3-30B is 128 top-8 — and on the text.
 **How to measure it, per model, before quoting a delta:** score the same
 window through two paths that are both correct but arithmetically
 different (chunk 64 against chunk 128, or chunked against one full
-forward) and take the disagreement as the floor, with the router-flip rate and the KL split alongside. The probe
-that produced the floors below was a scratch script and is not in this repository; this section is the public
-record of its method (the register says the same, `e4b.parity.moe-routing-flip-floor`'s notes).
+forward) and take the disagreement as the floor. The probe that measured the floors below was never committed;
+this section describes its method.
 
 **Measured floors.**
 

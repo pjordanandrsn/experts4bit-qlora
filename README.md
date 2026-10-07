@@ -83,15 +83,14 @@ These are specific workloads, with public results and controls. The table is che
 | :--- | :--- | :--- |
 | Qwen3-30B-A3B QLoRA · RTX 5090 · matched work, same software stack (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack`) | **2.352×** training speed vs Unsloth; **3.494 vs 8.218 s/step**. Comparable held-out loss. Unsloth used **3.22 GB less peak VRAM**. | measured |
 | Same comparison on a second RTX 5090 host (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.same-stack-host2`) | **2.468×** training speed vs Unsloth. | measured |
-| Packed 4,096-token Qwen3 training · RTX 5090 · the defaults of 2026-10-06, before 0.49.0's (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults`) | **1.453×** training speed vs Unsloth; **28.23 vs 24.86 GB** peak. Held-out loss **0.9544 vs 0.9543**. | measured |
+| Packed 4,096-token Qwen3 training · RTX 5090 · defaults as of 2026-10-06 (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-06.packed-4k-defaults`) | **1.453×** training speed vs Unsloth; **28.23 vs 24.86 GB** peak. Held-out loss **0.9544 vs 0.9543**. | measured |
 | Expert-offload training on a 12 GB card (`e4b.offload.fits-30b-class`) | Qwen3-30B-A3B: **7.16 GB** peak; Gemma-4-26B-A4B: **8.47 GB**. | measured |
 
 The speed rows use torch 2.12.1+cu130 and transformers 5.5.0. The packed result uses
 development e4b code after 0.48.0 and kernels released in 0.42.0. Its PyTorch 2.8 run was slower, and bucketed padding is
 not the cause: under 2.8 it steps 0.983× the single block with a 4.24 GB lower peak (`e4b.train.pad-buckets.torch28.qwen3.5090.2026-10-06`).
-Four training defaults changed after that run (the reentrant checkpoint, the compressed expert absmax, the chunked held-out
-loss, the combine over row chunks). At those defaults e4b's packed-row training phase peaks 26.58 GB against Unsloth's 24.86
-(`e4b.train.memory.packed-4k-train-census-defaults.5090.2026-10-07`, one census draw each). No speed row has been re-measured at them.
+Four training defaults changed after that run. At the new defaults e4b's packed-row training peaks at 26.58 GB, Unsloth's at
+24.86 (`e4b.train.memory.packed-4k-train-census-defaults.5090.2026-10-07`). Speed has not been re-measured at them.
 The offload row uses a different training setup.
 
 [Qwen comparison](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/RESULTS-tc1-samestack-box4.md) · [Packed 4K result](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/bench/h2h-2026-10-02/tc1/RESULTS-tc1-packed4k-defaults.md) · [All current results](https://github.com/pjordanandrsn/experts4bit-qlora/blob/main/docs/STATUS.md)

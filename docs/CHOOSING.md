@@ -88,10 +88,9 @@ still positive, so read a batched training result only with `batched_fallback_st
 experts live in pinned CPU RAM and stream one layer at a time. This is what makes
 a 30B-class MoE QLoRA-trainable on a 12 GB card (`e4b.offload.fits-30b-class`:
 Qwen3-30B-A3B peaks at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both of which OOM
-without offload). Requires gradient checkpointing, which the shipped trainer
-always enables (reentrant under `enable_fast_train`'s default, Hugging Face's
-non-reentrant one with `E4B_CKPT_OFFLOAD=0`; offload is tested under both); the
-unsupported non-checkpointed combination fails loudly rather than mis-training.
+without offload). Requires gradient checkpointing (either kind), which the
+shipped trainer always enables; without it, training fails loudly rather than
+mis-training.
 
 **The experts do not fit in host RAM either — and I am serving.**
 `enable_nvme_residency(...)` — serves the cold expert tail from an NVMe arena

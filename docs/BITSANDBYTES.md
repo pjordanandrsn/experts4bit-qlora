@@ -18,13 +18,10 @@ except ImportError:
     from ._vendor.experts import Experts4bit, ExpertsNbit  # vendored fallback (stock bnb)
 ```
 
-The expert side of training does not depend on the bitsandbytes version: the recompute-in-backward
-projection delivers the activation-memory win on any release. `bnb.matmul_4bit` is used in two
-places. The inference decode GEMV is probe-gated per configuration and passes on stock 0.49.x. Dense
-offload's training projection (`engines/dense_offload.py`, `_LateBoundMatMul4Bit`) runs `bnb.matmul_4bit`
-in a Function that reads the frozen `Linear4bit`'s packed weight when its backward runs. It mirrors four
-bitsandbytes 0.50.2 sources, pinned by the sha256 of their source text. On any mismatch it keeps stock
-bitsandbytes with a warning: still correct, but dense-offloaded training then saves no VRAM. When #1965 lands upstream: bump the `bitsandbytes` floor and delete `_vendor/` — no API
+Expert training works on any bitsandbytes release. `bnb.matmul_4bit` is used in two places: the
+probe-gated decode GEMV, and dense offload's training projection. The projection is pinned to
+bitsandbytes 0.50.2's source. On another version it falls back to stock bitsandbytes, still correct
+but saving no VRAM. When #1965 lands upstream: bump the `bitsandbytes` floor and delete `_vendor/` — no API
 change.
 
 ### Prior art

@@ -1,0 +1,10 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.159.03, GPU-52e4b878-eb23-2510-d156-22ab3d0b38e3, 600.00 W, 3135 MHz
+CPU(s):                                  32
+Model name:                              Intel(R) Core(TM) i9-14900K
+MemTotal:       129221160 kB
+cgroup memory.max 127028690944
+overlay         320G  2.6M  320G   1% /
+cgroup cpu.max 3072000 100000
+cgroup cpu.cfs_quota_us/period_us absent/absent
+cgroup cpuset.cpus.effective 0-31
+affinity cpus 32 of 32
