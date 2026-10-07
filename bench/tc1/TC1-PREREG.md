@@ -2700,8 +2700,9 @@ with none.
 
 **Decision rules.**
 - **P166, P167 and P168 HELD:** the default stands, and STATUS gives the packed-row training gap with it.
-- **P167 FALSIFIED:** the chunks cost the step too much. The next step raises the chunk size (fewer launches) and the box is re-asked.
-  Until then, `E4B_COMBINE_CHUNK=0` is the documented way out.
+- **P167 FALSIFIED:** the chunks cost the step too much. A small library PR turns the chunking OFF by default (`E4B_COMBINE_CHUNK=1`
+  opts in) until a re-ask holds (maintainer review, before any box): #1304 ships it on before any step reading, and a measured
+  slowdown should not stay on by default. The next step raises the chunk size (fewer launches), and the box is re-asked.
 - **P168 FALSIFIED:** a $0 A2000 check of the full combine at this shape comes first.
 - **P166 FALSIFIED:** the read says what holds the training peak instead.
 - **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
