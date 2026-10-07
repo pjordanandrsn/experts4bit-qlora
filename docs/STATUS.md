@@ -220,6 +220,13 @@ TC1 amendment 57) finds all of it transient. e4b's largest transient groups at t
 - 0.79 GB of checkpoint activations kept on the GPU (Unsloth's own checkpointing holds no such group on the GPU);
 - 1.07 GB of fp32 temporaries in e4b's routed-expert combine backward;
 - 0.90 GB in grouped-nf4-gemm's bucketed delta block.
+Two changes since (`e4b.train.ckpt-offload.packed-4k.5090.2026-10-07`, TC1 amendment 58):
+- the combine backward's leaner temporaries (#1296) took 0.20 GB off that training peak;
+- the opt-in `E4B_CKPT_OFFLOAD=1` keeps the checkpoint inputs in pinned host memory and takes another 0.74 GB off, for 1.003 of the
+  step (held-out within 0.0002).
+
+With both, e4b's packed-row training phase peaks at 25.85 GB, 0.98 GB above Unsloth's. Its run peak is then the held-out evaluation's
+26.88 GB.
 
 The packed-row reading above supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
 same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are

@@ -1,0 +1,10 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 580.178.04, GPU-eecf00ca-44b0-935f-8716-cfefee62dc4e, 575.00 W, 3135 MHz
+CPU(s):                                  24
+Model name:                              AMD Ryzen 9 7900 12-Core Processor
+MemTotal:       130952932 kB
+cgroup memory.max 128730529792
+overlay         320G  2.5M  320G   1% /
+cgroup cpu.max 2304000 100000
+cgroup cpu.cfs_quota_us/period_us absent/absent
+cgroup cpuset.cpus.effective 0-23
+affinity cpus 24 of 24
