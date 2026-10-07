@@ -936,6 +936,27 @@ LOOP_ROUTE_SHARE_MAX[EVALCE_FAM] = 0.05
 EVALCE_DROP_MIN = 3.5          # P162: the evaluation-phase peak falls by at least this many GB (median of each side's draws)
 EVALCE_STEP0_MAX = 0.0001      # P164: |step-0 held-out e1 - e0| per draw pair (am58's four e4b draws read 1.28851 alike)
 EVALCE_HELDOUT_MAX = 0.005     # P165: |mean held-out at N e1 - e0|
+# TC1 amendment 61: the routed-expert combine over row chunks (#1304, the default above a 128 MiB image) off (c0, E4B_COMBINE_CHUNK=0) vs
+# on (c1, unset) on packed rows, e4b's matched arm with E4B_CKPT_OFFLOAD=1, two draws a side, Unsloth's matched arm beside; peaks by phase
+COMBCK_FAM = "qwen3combck"
+FAMS.append(COMBCK_FAM)
+NAMES[COMBCK_FAM] = "Qwen3-30B-A3B (amendment 61: the routed-expert combine whole vs over row chunks on packed rows, e4b with checkpoint inputs in host memory, Unsloth beside; peaks by phase)"
+N_LAYERS[COMBCK_FAM] = 48
+ATTN_CENSUS[COMBCK_FAM] = 192
+DENSE_PINS[COMBCK_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[COMBCK_FAM] = ("e4b", "fused_attn4_m_c0")
+EXPECTED[COMBCK_FAM] = [("e4b", "fused_attn4_m_c0"), ("e4b", "fused_attn4_m_c1"), ("e4b", "fused_attn4_m_c1_d2"), ("e4b", "fused_attn4_m_c0_d2"),
+                        ("unsloth", "ckpt_unsloth_m_cc")]
+MATCHED |= {"fused_attn4_m_c0", "fused_attn4_m_c1", "fused_attn4_m_c0_d2", "fused_attn4_m_c1_d2", "ckpt_unsloth_m_cc"}
+for _side in ("c0", "c1"):
+    DRAW2[("e4b", f"fused_attn4_m_{_side}")] = ("e4b", f"fused_attn4_m_{_side}_d2")
+PACKED_FAMS = PACKED_FAMS + (COMBCK_FAM,)
+LOOP_ROUTE_SHARE_MAX[COMBCK_FAM] = 0.05
+COMBCK_DROP_MIN = 0.3          # P166: the training-phase peak falls by at least this many GB (median of each side's draws)
+COMBCK_SPEED_MAX = 1.02        # P167: s/step c1 / c0 at most this (amendment 48's packed-row bar)
+COMBCK_STEP0_MAX = 0.0001      # P168: |step-0 held-out c1 - c0| per draw pair
+COMBCK_HELDOUT_MAX = 0.005     # P168: |mean held-out at N, c1 - c0|
+COMBCK_GAP_MAX = 0.7           # P169: c1's training-phase peak at most this many GB above Unsloth's
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -1745,6 +1766,92 @@ def score_evalce(F, fam=EVALCE_FAM):
         d = statistics.mean(h1) - statistics.mean(h0)
         out.append(("P165", fam, "HELD" if abs(d) <= EVALCE_HELDOUT_MAX else "FALSIFIED",
                     f"mean held-out at N e0 {statistics.mean(h0):.5f}, e1 {statistics.mean(h1):.5f} (diff {d:+.5f} vs |.| <= {EVALCE_HELDOUT_MAX})"))
+    return out
+
+
+def combck_side(tag):
+    """Amendment 61: c0 / c1 of a qwen3combck e4b tag (fused_attn4_m_<side>[_d2]), or None."""
+    m = re.match(r"^fused_attn4_m_(c[01])(?:_d2)?$", tag or "")
+    return m.group(1) if m else None
+
+
+def combck_why(tag, r):
+    """Amendment 61's predicates: amendment 58's for its o1 side (torch 2.12; on e4b the double-quantized absmax, every padded call
+    bucketed, the chunked loss serving training, all 48 layers offloaded with E4B_CKPT_OFFLOAD=1), plus the combine the side names: c1
+    E4B_COMBINE_CHUNK unset with chunked forwards and backwards recorded, c0 set to 0 with none. Empty string = as registered."""
+    r = r or {}
+    if r.get("framework") != "e4b":
+        return ckptoff_why(tag, r)
+    side = combck_side(tag)
+    if side is None:
+        return f"amendment 61 registers no e4b side for tag {tag}"
+    bad = [w for w in [ckptoff_why("fused_attn4_m_o1", r)] if w]
+    c = r.get("combine_chunk") or {}
+    env, fw_, bw_ = c.get("env"), int(c.get("chunked_fwd") or 0), int(c.get("chunked_bwd") or 0)
+    if side == "c1" and not (c.get("e4b_has_combine_chunk") and env in (None, "") and fw_ > 0 and bw_ > 0):
+        bad.append(f"the combine did not run over row chunks at its default (record {c})")
+    if side == "c0" and not (str(env) == "0" and fw_ == 0 and bw_ == 0):
+        bad.append(f"E4B_COMBINE_CHUNK={env!r} with {fw_} / {bw_} chunked forwards / backwards: side c0 names 0 and none (record {c})")
+    return "; ".join(bad)
+
+
+def score_combck(F, fam=COMBCK_FAM):
+    """TC1-PREREG amendment 61. P166: the training-phase peak (median of each side's draws) c0 - c1 >= COMBCK_DROP_MIN GB. P167: s/step
+    c1 / c0 (two VALID, stable draws a side) <= COMBCK_SPEED_MAX. P168: |step-0 held-out c1 - c0| <= COMBCK_STEP0_MAX on each draw pair
+    and |mean held-out at N, c1 - c0| <= COMBCK_HELDOUT_MAX. P169: c1's training-phase peak (median) - Unsloth's <= COMBCK_GAP_MAX GB.
+    A missing / non-VALID / unstable side, or a missing phase record, UNTESTED."""
+    R = F.get(fam)
+    if not R:
+        return []
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    def got(side):
+        ks = [("e4b", f"fused_attn4_m_{side}"), ("e4b", f"fused_attn4_m_{side}_d2")]
+        rs = [(rows.get(k) or {}) for k in ks]
+        return (all(x.get("verdict") == "VALID" for x in rs), [x.get("r") or {} for x in rs],
+                ", ".join(f"{k[1]} {(rows.get(k) or {}).get('verdict') or 'missing'}" for k in ks))
+    ok0, r0, w0 = got("c0")
+    ok1, r1, w1 = got("c1")
+    if not (ok0 and ok1):
+        why = f"two VALID draws a side are registered: {w0}; {w1}"
+        return [(p, fam, "UNTESTED", why) for p in ("P166", "P167", "P168", "P169")]
+    out = []
+    t0, t1 = [_phase(x, "train") for x in r0], [_phase(x, "train") for x in r1]
+    if None in t0 or None in t1:
+        out.append(("P166", fam, "UNTESTED", f"every e4b draw needs a training-phase peak: c0 {t0}, c1 {t1}"))
+    else:
+        d = statistics.median(t0) - statistics.median(t1)
+        out.append(("P166", fam, "HELD" if d >= COMBCK_DROP_MIN else "FALSIFIED",
+                    f"training-phase peak c0 {statistics.median(t0):.3f} -> c1 {statistics.median(t1):.3f} GB (drop {d:+.3f} vs >= {COMBCK_DROP_MIN})"))
+    A0 = R["draws"].get(("e4b", "fused_attn4_m_c0"), {})
+    A1 = R["draws"].get(("e4b", "fused_attn4_m_c1"), {})
+    if not (A0.get("usable") and A1.get("usable") and A0.get("draws") == 2 and A1.get("draws") == 2):
+        why = "; ".join(f"{sd} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for sd, d in (("c0", A0), ("c1", A1)))
+        out.append(("P167", fam, "UNTESTED", f"two stable VALID draws a side are registered -- {why}"))
+    else:
+        ratio_ = A1["s"] / A0["s"]
+        cross = [x / y for x in A1["s_list"] for y in A0["s_list"]]
+        out.append(("P167", fam, "HELD" if ratio_ <= COMBCK_SPEED_MAX else "FALSIFIED",
+                    f"c1 / c0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs <= {COMBCK_SPEED_MAX}; s/step c0 "
+                    f"{' / '.join(f'{x:.3f}' for x in A0['s_list'])}, c1 {' / '.join(f'{x:.3f}' for x in A1['s_list'])}"))
+    s0 = [(a.get("eval_loss_step0"), b.get("eval_loss_step0")) for a, b in zip(r0, r1)]
+    h0, h1 = [x.get("eval_loss_final") for x in r0], [x.get("eval_loss_final") for x in r1]
+    if any(a is None or b is None for a, b in s0) or None in h0 or None in h1:
+        out.append(("P168", fam, "UNTESTED", f"held-out missing: step 0 {s0}, N c0 {h0} c1 {h1}"))
+    else:
+        ds = [b - a for a, b in s0]
+        dn = statistics.mean(h1) - statistics.mean(h0)
+        ok = all(abs(x) <= COMBCK_STEP0_MAX for x in ds) and abs(dn) <= COMBCK_HELDOUT_MAX
+        out.append(("P168", fam, "HELD" if ok else "FALSIFIED",
+                    "step-0 held-out c1 - c0 per draw pair " + ", ".join(f"{x:+.5f}" for x in ds) + f" (|.| <= {COMBCK_STEP0_MAX}); mean held-out "
+                    f"at N c1 - c0 {dn:+.5f} (|.| <= {COMBCK_HELDOUT_MAX})"))
+    U = rows.get(("unsloth", "ckpt_unsloth_m_cc")) or {}
+    tu = _phase(U.get("r") or {}, "train") if U.get("verdict") == "VALID" else None
+    if tu is None or None in t1:
+        out.append(("P169", fam, "UNTESTED", f"Unsloth's training-phase peak ({U.get('verdict') or 'missing'}) and c1's are both needed"))
+    else:
+        gap = statistics.median(t1) - tu
+        out.append(("P169", fam, "HELD" if gap <= COMBCK_GAP_MAX else "FALSIFIED",
+                    f"c1 training-phase peak {statistics.median(t1):.3f} vs Unsloth {tu:.3f} GB (gap {gap:+.3f} vs <= {COMBCK_GAP_MAX})"))
     return out
 
 
@@ -2644,6 +2751,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == EVALCE_FAM:                              # amendment 60: amendment 58's o1 predicates plus the eval switch its side names
         w = evalce_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == COMBCK_FAM:                              # amendment 61: amendment 58's o1 predicates plus the combine its side names
+        w = combck_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -5502,6 +5613,20 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_evalce(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if COMBCK_FAM in F:
+        out += ["\n## Amendment 61: the routed-expert combine whole vs over row chunks on packed rows, peaks by phase (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train | held-out step 0 | held-out N | chunked fwd / bwd |",
+                "|---|---|---|---|---|---|---|---|---|---|"]
+        for x in F[COMBCK_FAM]["rows"]:
+            r = x.get("r") or {}
+            ph, cc = r.get("peak_vram_gb_phases") or {}, r.get("combine_chunk") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(r.get('peak_vram_gb'), 3)} | "
+                       f"{ph.get('setup')} | {ph.get('eval')} | {ph.get('train')} | {r.get('eval_loss_step0')} | {r.get('eval_loss_final')} | "
+                       f"{cc.get('chunked_fwd')} / {cc.get('chunked_bwd')} |")
+        out += ["\n## Predictions P166 / P167 / P168 / P169 (TC1-PREREG amendment 61: the combine over row chunks; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_combck(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFFF_FAM in F:
         out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
@@ -6528,6 +6653,28 @@ def _evalce_set(evals=None, train=25.85, step0=None, held=None, calls=None, envs
             out[(fw, t2)] = dict(r, tag=t2, fam=EVALCE_FAM, chunked_lm_loss=c,
                                  eval_loss_step0=(step0 or {}).get(t2, 1.28851), eval_loss_final=(held or {}).get(t2, 0.9542),
                                  peak_vram_gb_phases={"setup": 21.86, "eval": evals[side], "train": train})
+    return out
+
+
+def _combck_set(s=None, train=None, step0=None, held=None, rec=None, u_train=24.86):
+    """Amendment 61: e4b's matched arm (E4B_CKPT_OFFLOAD=1) with the combine whole (c0, E4B_COMBINE_CHUNK=0) / over row chunks (c1) on
+    packed rows, two draws each, and Unsloth's -- `s` side -> draws' s/step; `train` side -> training-phase peak GB; `step0` / `held` tag
+    -> held-out at 0 / N; `rec` tag -> the combine_chunk record."""
+    s = dict({"c0": (9.70, 9.72), "c1": (9.74, 9.76)}, **(s or {}))
+    train = dict({"c0": 25.85, "c1": 25.40}, **(train or {}))
+    R = _ckptoff_set(s={"o0": s["c0"], "o1": s["c1"]}, train={"o0": 26.59, "o1": 25.85}, u_train=u_train)
+    out = {}
+    for (fw, tag), r in R.items():
+        if fw != "e4b":
+            out[("unsloth", "ckpt_unsloth_m_cc")] = dict(r, tag="ckpt_unsloth_m_cc", fam=COMBCK_FAM, eval_loss_step0=1.2871, eval_loss_final=0.9542)
+            continue
+        side = "c0" if "_o0" in tag else "c1"
+        t2 = tag.replace("_o0", "_c0").replace("_o1", "_c1")
+        c = {"env": "0" if side == "c0" else None, "e4b_has_combine_chunk": True, "chunked_fwd": 0 if side == "c0" else 576,
+             "chunked_bwd": 0 if side == "c0" else 192, "min_bytes": 128 << 20, "chunk_bytes": 32 << 20}
+        out[(fw, t2)] = dict(r, tag=t2, fam=COMBCK_FAM, ckpt_offload_layers=48, ckpt_offload_env="1",
+                             combine_chunk=(rec or {}).get(t2, c), eval_loss_step0=(step0 or {}).get(t2, 1.28851),
+                             eval_loss_final=(held or {}).get(t2, 0.9542), peak_vram_gb_phases={"setup": 21.86, "eval": 26.88, "train": train[side]})
     return out
 
 
@@ -8867,6 +9014,24 @@ def selftest():
     assert EC(_evalce_set(envs={"fused_attn4_m_e0_d2": "1"}))[EVALCE_FAM]["verdicts"][("e4b", "fused_attn4_m_e0_d2")] == "VOID"
     assert pec(EC(_evalce_set(calls={"fused_attn4_m_e1": 0})))["P162"] == "UNTESTED"
     assert "P165" in render(REC, "x") and "amendment 60" in render(REC, "x")
+    cases += 1
+    # 114. TC1 amendment 61 (qwen3combck): the combine over row chunks -- VALID; P166-P169 HELD on the default fixture (25.85 -> 25.40,
+    #      1.004, held-out alike, +0.54 over Unsloth); a 0.2 GB drop FALSIFIES P166; 1.03 FALSIFIES P167; a step-0 shift FALSIFIES P168;
+    #      +0.8 over Unsloth FALSIFIES P169; c1 without chunked calls, or c0 with them, is VOID
+    CB = lambda R: {COMBCK_FAM: reduce_family(COMBCK_FAM, R, {}, 20)}
+    RCB = CB(_combck_set())
+    assert all(x["verdict"] == "VALID" for x in RCB[COMBCK_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RCB[COMBCK_FAM]["rows"]]
+    pcb = lambda R: {p: v for p, _, v, _ in score_combck(R)}
+    assert pcb(RCB) == {"P166": "HELD", "P167": "HELD", "P168": "HELD", "P169": "HELD"}, score_combck(RCB)
+    assert pcb(CB(_combck_set(train={"c1": 25.65})))["P166"] == "FALSIFIED"
+    assert pcb(CB(_combck_set(s={"c1": (10.00, 10.02)})))["P167"] == "FALSIFIED"
+    assert pcb(CB(_combck_set(step0={"fused_attn4_m_c1": 1.28881})))["P168"] == "FALSIFIED"
+    assert pcb(CB(_combck_set(u_train=24.60)))["P169"] == "FALSIFIED"
+    bad1 = {"env": None, "e4b_has_combine_chunk": True, "chunked_fwd": 0, "chunked_bwd": 0}
+    assert CB(_combck_set(rec={"fused_attn4_m_c1_d2": bad1}))[COMBCK_FAM]["verdicts"][("e4b", "fused_attn4_m_c1_d2")] == "VOID"
+    bad0 = {"env": "0", "e4b_has_combine_chunk": True, "chunked_fwd": 4, "chunked_bwd": 0}
+    assert CB(_combck_set(rec={"fused_attn4_m_c0": bad0}))[COMBCK_FAM]["verdicts"][("e4b", "fused_attn4_m_c0")] == "VOID"
+    assert "P169" in render(RCB, "x") and "amendment 61" in render(RCB, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
