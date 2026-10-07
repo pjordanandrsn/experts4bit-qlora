@@ -104,7 +104,13 @@ family a fold does not match, `1` still refuses a vacuous enable, `0` the escape
 - **Builds per model:** OFF (`0` on all four), ON (`auto` on all four), and EXPLICIT (`1` on all four), which must raise.
 - **Passes:** 16 prompts × 32 tokens through `p109_box.run_pass`; OFF twice.
 - **Gates:** SERVED; ENGAGED (the ON census equals the prediction below; OFF all zero); EXPLICIT_RAISE; DETERMINISM
-  (OFF ≡ OFF). IDENTITY ON against OFF is reported, not gated.
+  (OFF ≡ OFF); **SANE** (added in review, before any box). IDENTITY ON against OFF is reported, not gated.
+- **SANE.** `auto` changes these families' bf16 arithmetic, and the engagement counts alone cannot see a fold that matches
+  a family's structure but computes the wrong thing (#726's class). Phase B's instrument (`p115_quality.py`) therefore
+  scores ON against OFF on each Phase C model at reduced size: 12 wikitext windows of 512 prompt tokens and 128
+  teacher-forced positions, no floor arms. SANE holds iff |mean d_ON| ≤ **0.02 nats** and the argmax agreement with OFF
+  is ≥ 0.95. This is a gross-error gate, not a quality reading: a broken rotary or norm fold moves the NLL by tenths of a
+  nat. If the instrument cannot build a model, the amendment says so, and that model fails SANE (so FLIP_HELD).
 - **Predictions:** gpt-oss-20b `0 / 49 / [24, 0] / 24` (its attention carries `sinks`, so the rotary fold refuses);
   Qwen3.6-35B-A3B `0 / 0 / [0, 0] / 40` (its norms are centered `(1 + w)` and fail the probe; its router is the
   softmax-top-k-renormalise kind); EXPLICIT raises "matched no attention module" on both.
@@ -169,6 +175,12 @@ both texts' K8 perplexities.
   `e4b.serve.p115.fused-stack-speed.qwen3.5090.<date>` (g1), `e4b.serve.p115.fused-stack-quality.qwen3.5090.<date>`
   (wikitext ON bias; c4val1 in the claim text), and Phase C's engagement row. **Scope:** speed and quality read on
   Qwen3-30B-A3B NF4; other families engage by structure (Phase C's counts) without a quality reading of their own.
+  The default PR's changelog and `docs/SERVING.md` list, per family, what was read (added in review):
+  - Qwen3-30B-A3B: speed and quality;
+  - gpt-oss-20b and Qwen3.6-35B-A3B: engagement and the SANE gate;
+  - every other family a fold engages on by structure: nothing.
+
+  The list also names `0` on each knob as the way back.
 - **DEFAULT_AUTO, then Phase C FLIP_HELD:** a family-scoped default only under a new registration.
 - **SLOWER or QUALITY_FAIL:** the knobs stay opt-in; the ratios and biases are recorded; QUALITY_FAIL names a follow-up
   lane with one knob per arm.
