@@ -2526,6 +2526,8 @@ training peak, and the next registration targets the largest e4b-only group, whi
 
 - **P152 FALSIFIED:** the census did not read the training phase. The read says where the peak fell, and the box is re-asked with that
   phase excluded.
+- **P149 FALSIFIED on an arm** (maintainer review, before any box), as amendment 55: that arm's excess is not attributed. The read
+  reports the unattributed share, and no lever registration follows from its groups until the instrument is fixed and re-read.
 - Positions stay with the boxes that read them. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the
