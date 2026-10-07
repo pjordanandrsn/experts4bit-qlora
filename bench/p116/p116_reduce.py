@@ -13,7 +13,8 @@ The rule, first rung that applies:
                  on Granite); the quality records fail Phase B's integrity checks at one window per pass (window counts,
                  decode attention calls, bucket-1 eager steps, no replays, glue-kernel and q/k/v calls equal between R
                  and ON, the same dispatch rule); or the scale mutant passes the quality bar (the gate cannot fail).
-  NOISY          a self-pair (B0b/B0a, B1b/B1a) outside [0.96, 1.04] on either workload.
+  NOISY          a self-pair (B0b/B0a, B1b/B1a) outside [0.96, 1.04] at W16, or outside [0.985, 1.015] at W1 (half the
+                 W1 gain bar, so instrument drift cannot pass as the 1.03 gain; added in review).
   FUNCTION_FAIL  B0b != B0a or B1b != B1a on any row, workload or length; timed reps of one arm digest differently.
                  (B1 != B0 is expected -- another reduction order -- and reported.)
   QUALITY_FAIL   on either text bias_ON > B_floor + 0.01 or spread_ON > 2 * max(S_floor, 0.005), the floor drawn from
@@ -38,6 +39,7 @@ import p115_reduce as pb  # noqa: E402  (Phase B's statistics, staged at its reg
 TAGS = ("B0a", "B1a", "B1b", "B0b")
 BUCKETS = (1, 2, 4, 8, 16)
 SELF_LO, SELF_HI = 0.96, 1.04
+SELF_W1_LO, SELF_W1_HI = 0.985, 1.015   # W1's self-pairs: half the 1.03 gain bar (P111 read 0.997-1.002); added in review
 GAIN_MIN_W1, GAIN_MIN_W16 = 1.03, 0.99
 TOL, SPREAD_X, SPREAD_MIN, K8_BUDGET, K8_GATED = pb.TOL, pb.SPREAD_X, pb.SPREAD_MIN, pb.K8_BUDGET, pb.K8_GATED
 TEXTS = pb.TEXTS
@@ -189,7 +191,7 @@ def quality_read(off: dict, on: dict) -> dict:
 
 def reduce(arms: dict, off: dict | None, on: dict | None, e4b_sha: str, *, proof=False) -> dict:
     out = {"lane": "P116", "proof": proof, "verdict": None, "reasons": [],
-           "bars": {"self_pair": [SELF_LO, SELF_HI], "gain_min_w1": GAIN_MIN_W1, "gain_min_w16": GAIN_MIN_W16,
+           "bars": {"self_pair": [SELF_LO, SELF_HI], "self_pair_w1": [SELF_W1_LO, SELF_W1_HI], "gain_min_w1": GAIN_MIN_W1, "gain_min_w16": GAIN_MIN_W16,
                     "tol": TOL, "spread_x": SPREAD_X, "spread_min": SPREAD_MIN, "k8_budget": K8_BUDGET,
                     "k8_gated": list(K8_GATED), "floors": list(FLOORS)}}
     missing = [t for t in TAGS if t not in arms or arms[t].get("status") != "ok"]
@@ -233,7 +235,8 @@ def reduce(arms: dict, off: dict | None, on: dict | None, e4b_sha: str, *, proof
             for n, ds in arms[t]["workloads"][w]["rep_digests"].items():
                 if len(set(ds)) != 1:
                     fn.append(f"{t} {w} at {n} tokens: timed reps differ")
-    noisy = [f"{k} = {v:.4f}" for k, v in selfp.items() if not SELF_LO <= v <= SELF_HI]
+    band = lambda k: (SELF_W1_LO, SELF_W1_HI) if k.endswith(" W1") else (SELF_LO, SELF_HI)  # noqa: E731
+    noisy = [f"{k} = {v:.4f} (band {band(k)})" for k, v in selfp.items() if not band(k)[0] <= v <= band(k)[1]]
     qfail = []
     for t in TEXTS:
         s = q[t]["stats"]["ON"]
@@ -332,6 +335,8 @@ def self_test() -> int:
         ("slower at W1", v(arms(B1a={"r1": 111.0}, B1b={"r1": 111.0})) == "SLOWER"),
         ("W16 regression", v(arms(B1a={"r16": 780.0}, B1b={"r16": 780.0})) == "SLOWER"),
         ("noisy", v(arms(B0b={"r1": 100.0})) == "NOISY"),
+        ("W1 drift inside the old band is NOISY", v(arms(B0b={"r1": 112.5})) == "NOISY"),
+        ("W16 drift inside its band is not", v(arms(B0b={"r16": 820.0}, B1b={"r16": 821.0})) == "DEFAULT_ON"),
         ("function fail", v(arms(B1b={"toks": other})) == "FUNCTION_FAIL"),
         ("reps differ", v(arms(B0a={"rep_ok": False})) == "FUNCTION_FAIL"),
         ("B1 != B0 is reported, not failed", v(arms(B1a={"toks": other}, B1b={"toks": other})) == "DEFAULT_ON"),

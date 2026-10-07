@@ -81,7 +81,7 @@ and c4val1), **24 windows each** of 512 prompt tokens and 128 teacher-forced pos
 - the glue-kernel and q/k/v call counts are equal between each R pass and its ON pass;
 - the dispatch rule above holds on each phase's measurement.
 
-## The rule (`bench/p116/p116_reduce.py`, self-tested on 24 cases)
+## The rule (`bench/p116/p116_reduce.py`, self-tested on 26 cases)
 
 First rung that applies:
 1. **VOID:**
@@ -93,7 +93,9 @@ First rung that applies:
    - the engagement rule fails, on a speed arm or a quality phase;
    - the quality integrity fails;
    - the scale mutant passes the quality bar.
-2. **NOISY:** a self-pair, B0b/B0a or B1b/B1a, falls outside [0.96, 1.04] on either workload.
+2. **NOISY:** a self-pair, B0b/B0a or B1b/B1a, falls outside [0.96, 1.04] at W16, or outside **[0.985, 1.015] at W1**
+   (added in review, before any box: the W1 gain bar is 1.03, so a ±4 % band would let instrument drift pass as the gain;
+   half the bar keeps it out. P111's self-pairs read 0.997–1.002, and Q5 predicts [0.98, 1.02]).
 3. **FUNCTION_FAIL:** B0b ≠ B0a or B1b ≠ B1a on any row, workload or length, or one arm's timed reps digest differently.
    B1 ≠ B0 is expected at W1, from another reduction order, and is reported.
 4. **QUALITY_FAIL:** either text fails P110's bias or spread bar, or wikitext's K8.

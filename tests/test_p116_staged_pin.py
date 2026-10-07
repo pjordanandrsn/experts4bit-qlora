@@ -88,7 +88,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 def test_the_self_tests_pass():
     out = subprocess.run([sys.executable, str(LANE / "p116_reduce.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
-    assert out.returncode == 0 and "p116_reduce self-test OK (24 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "p116_reduce self-test OK (26 cases)" in out.stdout, out.stdout + out.stderr
     out = subprocess.run([sys.executable, str(LANE / "p116_box.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
     assert out.returncode == 0 and "p116_box self-test OK (14/14 cases)" in out.stdout, out.stdout + out.stderr
@@ -97,6 +97,7 @@ def test_the_self_tests_pass():
 def test_the_rule_is_the_registered_rule():
     assert 'TAGS = ("B0a", "B1a", "B1b", "B0b")' in REDUCE
     assert "SELF_LO, SELF_HI = 0.96, 1.04" in REDUCE and "GAIN_MIN_W1, GAIN_MIN_W16 = 1.03, 0.99" in REDUCE
+    assert "SELF_W1_LO, SELF_W1_HI = 0.985, 1.015" in REDUCE and "[0.985, 1.015] at W1" in PREREG
     assert 'FLOORS = ("chunk",)' in REDUCE and 'OFF_ARMS = ("R", "rep", "chunk", "mutant_scale")' in REDUCE
     assert "TOL, SPREAD_X, SPREAD_MIN, K8_BUDGET, K8_GATED = pb.TOL, pb.SPREAD_X, pb.SPREAD_MIN, pb.K8_BUDGET, pb.K8_GATED" in REDUCE
     pb_src = (REPO / "bench" / "p115" / "p115_reduce.py").read_text()
