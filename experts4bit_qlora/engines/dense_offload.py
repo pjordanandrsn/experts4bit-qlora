@@ -953,10 +953,12 @@ def offload_plan(layers, *, pin: bool = True, train_prefetch: bool = True, min_b
                  skip_trainable: bool | None = None) -> dict:
     """What :func:`enable_dense_offload` would stream, pin and keep on the device for ``layers``, priced without building it.
 
-    ``layers``: one entry per decoder layer, each a sequence of ``(nbytes, ndim, trainable)`` for every parameter and buffer
-    the layer holds outside expert modules -- the tensors a handle walks. The selection is the handle's: a tensor streams when
-    it is at least 2-D and ``min_bytes``, unless it is a trainable parameter and ``skip_trainable`` holds. ``skip_trainable=None``
-    decides it as :func:`enable_dense_offload` does, over the whole model: True iff some streamable tensor is frozen.
+    ``layers``: one entry per decoder layer, each a sequence of ``(nbytes, ndim, trainable)`` or ``(nbytes, ndim, trainable,
+    is_param)`` for every parameter and buffer the layer holds outside expert modules -- the tensors a handle walks (``is_param``
+    defaults to True; pass False for a buffer). The selection is the handle's: a tensor streams when it is at least 2-D and
+    ``min_bytes``, unless it is a trainable parameter and ``skip_trainable`` holds. ``skip_trainable=None`` decides it as
+    :func:`enable_dense_offload` does, over the whole model: True iff some streamable PARAMETER is frozen (a frozen buffer does
+    not count, so pass ``is_param=False`` for buffers or a full fine-tune beside a large buffer is priced wrong).
 
     Returns bytes:
 
@@ -976,17 +978,17 @@ def offload_plan(layers, *, pin: bool = True, train_prefetch: bool = True, min_b
     """
     from ..recipe import _pinned_cost
 
-    tensors = [list(layer) for layer in layers]
+    tensors = [[(e[0], e[1], e[2], e[3] if len(e) > 3 else True) for e in layer] for layer in layers]
 
     def streamable(n, d):
         return d >= 2 and n >= min_bytes
 
     if skip_trainable is None:
-        skip_trainable = any(streamable(n, d) and not tr for layer in tensors for n, d, tr in layer)
+        skip_trainable = any(streamable(n, d) and not tr and param for layer in tensors for n, d, tr, param in layer)
     per_layer, reserved, stays = [], 0, 0
     for layer in tensors:
         s = 0
-        for n, d, tr in layer:
+        for n, d, tr, _param in layer:
             if streamable(n, d) and not (skip_trainable and tr):
                 s += int(n)
                 reserved += _pinned_cost(n) if pin else int(n)

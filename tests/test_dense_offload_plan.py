@@ -23,10 +23,10 @@ def _clean_class_state():
 
 
 def _walk(m):
-    """Every parameter and buffer of each decoder layer, as a handle walks them: (nbytes, ndim, trainable)."""
+    """Every parameter and buffer of each decoder layer, as a handle walks them: (nbytes, ndim, trainable, is_param)."""
     out = []
     for lay in m.layers:
-        out.append([(t.numel() * t.element_size(), t.dim(), bool(getattr(t, "requires_grad", False)) and is_param)
+        out.append([(t.numel() * t.element_size(), t.dim(), bool(getattr(t, "requires_grad", False)) and is_param, is_param)
                     for _n, mod in lay.named_modules()
                     for store, is_param in ((mod._parameters, True), (mod._buffers, False))
                     for t in store.values() if t is not None])
@@ -43,8 +43,23 @@ def test_the_plan_streams_exactly_what_a_real_handle_streams(freeze):
     assert planned["streamed"] == sum(h.bytes for h in handles) == sum(h.host_bytes for h in handles)
     assert planned["largest_layer"] == max(h.bytes for h in handles)
     assert planned["host_reserved"] == planned["streamed"]                 # nothing pinned
-    total = sum(n for layer in walked for n, _d, _t in layer)
+    total = sum(e[0] for layer in walked for e in layer)
     assert planned["stays_on_device"] == total - planned["streamed"]
+
+
+def test_a_frozen_buffer_does_not_keep_trainable_weights_on_the_device():
+    # enable_dense_offload decides skip_trainable over PARAMETERS only. A fully trainable model with a large 2-D buffer streams
+    # its trainable weights; the plan must say the same when buffers are marked (is_param False), and the 3-tuple form, which
+    # cannot tell a buffer from a frozen parameter, is the case the marker exists for.
+    m = _toy("none")
+    for lay in m.layers:
+        lay.register_buffer("table", torch.zeros(512, 512))                 # 1 MiB fp32, 2-D: streamable, never trainable
+    walked = _walk(m)
+    planned = offload_plan(walked, pin=False, train_prefetch=False)
+    unmarked = offload_plan([[e[:3] for e in layer] for layer in walked], pin=False, train_prefetch=False)
+    handles, _warnings = _offload(m)
+    assert planned["streamed"] == sum(h.bytes for h in handles)
+    assert unmarked["streamed"] < planned["streamed"]                     # without the marker the trainable weights "stay"
 
 
 def test_pinned_rounding_reproduces_dq3s_host_reservation_at_qwen3_32b():
