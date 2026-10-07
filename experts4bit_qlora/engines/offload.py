@@ -200,7 +200,9 @@ def _is_pinned(t: torch.Tensor) -> bool:
 # Probed once: ``-1`` outside a backward, a task id >= 0 inside one (including inside a
 # gradient-checkpoint recompute, which the autograd engine drives). Private API, so it is probed
 # rather than assumed; if a build lacks it, ``_in_backward`` reports False and eviction reverts to
-# the unconditional pre-fix behaviour rather than crashing.
+# the unconditional pre-fix behaviour. Under a reentrant checkpoint (``enable_fast_train``'s default) the
+# recompute always reaches the post-hook, so that build would evict every layer mid-backward and
+# ``_FrozenLinearRecomputeBackward`` would raise its pointed error: loud, never a wrong gradient.
 _GRAPH_TASK_ID = getattr(torch._C, "_current_graph_task_id", None)
 if _GRAPH_TASK_ID is not None:
     try:

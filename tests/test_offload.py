@@ -106,12 +106,15 @@ def test_non_checkpointed_offload_backward_fails_loudly():
         out.sum().backward()
 
 
-def test_offload_survives_gradient_checkpoint_recompute():
-    """The load-bearing correctness invariant: under ``use_reentrant=False`` checkpointing the layer
+@pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
+def test_offload_survives_gradient_checkpoint_recompute(reentrant):
+    """The load-bearing correctness invariant: under gradient checkpointing (either kind) the layer
     forward is recomputed in backward, so the pre-hook must RE-STAGE the evicted experts for the
     recompute. The pre-hook fires twice (initial forward + recompute); gradients match a non-offloaded,
     non-checkpointed reference — which is only possible if the experts were correctly re-staged for the
-    recompute (an evicted 0-element base would crash or mis-grad).
+    recompute (an evicted 0-element base would crash or mis-grad). ``reentrant`` covers both checkpoints:
+    ``enable_fast_train`` makes the reentrant one the default (TC1 amendment 64), and expert-offloaded models
+    are not exempt from it (only dense offload is).
 
     NB: the evict *post*-hook fires only ~once, not twice — PyTorch stops the recompute early once the
     saved tensors are regenerated, so it returns (and runs the post-hook) only on the initial pass.
@@ -135,7 +138,7 @@ def test_offload_survives_gradient_checkpoint_recompute():
     lora.register_forward_pre_hook(lambda m, a: pre_calls.__setitem__("n", pre_calls["n"] + 1))
     lora.zero_grad(set_to_none=True)
     hs_off = hs.clone().requires_grad_(True)
-    out = checkpoint(lambda a, b, c: lora(a, b, c), hs_off, idx, w, use_reentrant=False)
+    out = checkpoint(lambda a, b, c: lora(a, b, c), hs_off, idx, w, use_reentrant=reentrant)
     out.sum().backward()
 
     assert pre_calls["n"] == 2  # experts re-staged for the backward recompute, not just the forward
@@ -143,7 +146,8 @@ def test_offload_survives_gradient_checkpoint_recompute():
     assert torch.allclose(hs_off.grad, ref_grad_hs, atol=1e-5, rtol=1e-5)
 
 
-def test_offload_single_layer_residency_through_checkpointed_backward():
+@pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
+def test_offload_single_layer_residency_through_checkpointed_backward(reentrant):
     """The memory invariant the whole feature rests on: at most ONE layer's experts are GPU-resident
     at a time — through backward too. Because the evict post-hook does not fire on the early-stopped
     recompute, this is enforced by the single-resident-slot (staging a layer evicts the prior one).
@@ -159,7 +163,7 @@ def test_offload_single_layer_residency_through_checkpointed_backward():
     hs, idx, w = _inputs()
     cur = hs.clone().requires_grad_(True)
     for lo in layers:  # each layer is its own checkpointed region, like a transformers decoder stack
-        cur = checkpoint(lambda a, b, c, m=lo: m(a, b, c), cur, idx, w, use_reentrant=False)
+        cur = checkpoint(lambda a, b, c, m=lo: m(a, b, c), cur, idx, w, use_reentrant=reentrant)
     cur.sum().backward()
 
     assert sum(h.staged for h in handles) <= 1  # single-slot held through backward (else 3 = leak)
@@ -265,7 +269,8 @@ def test_offload_model_experts_walks_all_experts_lora():
         m1(hs, idx, w)
 
 
-def test_post_hook_does_not_evict_when_the_recompute_runs_past_the_module():
+@pytest.mark.parametrize("reentrant", [False, True], ids=["nonreentrant", "reentrant"])
+def test_post_hook_does_not_evict_when_the_recompute_runs_past_the_module(reentrant):
     """A gradient-checkpoint recompute that reaches the post-hook must NOT un-stage the layer.
 
     This module used to assume PyTorch always stops a ``use_reentrant=False`` recompute early --
@@ -276,7 +281,8 @@ def test_post_hook_does_not_evict_when_the_recompute_runs_past_the_module():
 
     Pinned here with **no model architecture involved**: the region below uses the experts output
     twice, so the recompute must run past the module and fire the post-hook. Before the fix that
-    eviction landed mid-backward and ``_FrozenLinearRecomputeBackward`` raised.
+    eviction landed mid-backward and ``_FrozenLinearRecomputeBackward`` raised. A reentrant checkpoint (the
+    ``enable_fast_train`` default) always recomputes the whole region, so it reaches the post-hook on every layer.
     """
     from torch.utils.checkpoint import checkpoint
 
@@ -292,7 +298,7 @@ def test_post_hook_does_not_evict_when_the_recompute_runs_past_the_module():
         out = m(x, idx, w)
         return out * out.sum()  # second use: the recompute cannot stop before the module
 
-    y = checkpoint(region, hs, use_reentrant=False)
+    y = checkpoint(region, hs, use_reentrant=reentrant)
     assert fired == [False], f"initial forward should not look like a backward: {fired}"
     y.sum().backward()  # raised "read an offload-evicted expert" before the fix
 
