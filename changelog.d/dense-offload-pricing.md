@@ -2,9 +2,10 @@
 
 - **`engines.dense_offload.offload_plan(layers, *, pin, train_prefetch, min_bytes, skip_trainable)`** prices what
   `enable_dense_offload` would do without building it:
-  - **Input:** per decoder layer, the `(nbytes, ndim, trainable)` of every tensor a handle walks.
+  - **Input:** per decoder layer, the `(nbytes, ndim, trainable[, is_param])` of every tensor a handle walks. Mark
+    buffers `is_param=False`; it defaults to True.
   - **Selection:** the handle's own rule: 2-D tensors of at least `min_bytes` stream, and trainable ones beside frozen
-    ones stay on the device.
+    parameters stay on the device. A frozen buffer does not keep them, as in `enable_dense_offload`.
   - **Outputs:**
     - the streamed bytes;
     - the pinned host reservation, with each request rounded to a power of two;
