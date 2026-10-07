@@ -2901,3 +2901,42 @@ Validity (`memc4kr_why`): amendment 55's predicates for the defaults, plus the c
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Three census arms of 20
 steps: about $1.2 with the download.
+
+### Amendment 66 (2026-10-07T20:14Z, after amendment 65's read, before any box): grouped-nf4-gemm's compact bucketed delta on packed rows (P189–P193)
+
+**Why.** Amendment 65's census put the rest of e4b's packed-row gap to Unsloth in transient memory, and its largest part in
+grouped-nf4-gemm's bucketed LoRA delta. With the offload, sites `nf4_qlora.py` 672, 673 and 679 held about 1.70 GB at the training peak,
+against Unsloth's whole transient of 1.73 GB. grouped-nf4-gemm#505 adds `NF4_QLORA_COMPACT_BUCKETS=1`, the bucketed delta as one
+autograd node. Its output and every gradient are `torch.equal` to the autograd body's (CPU and RTX A2000). It holds 1.8 MiB from forward
+to backward where the autograd body holds 188 MiB, and its backward peak is 357 MiB against 433 (A2000, fp32 adapters). The single-block
+compact delta stayed opt-in because it trades host work for device work (amendment 38). This node replaces many autograd nodes per
+bucket and rebuilds the block once in backward, so its step cost is for this box to read.
+
+**The box** (token `qwen3cbk`). One RTX 5090, packed 4,096-token rows, 40 load-gated steps, held-out at 0 and 40 (amendment 58's
+command). Every arm runs in venv-unsloth (torch 2.12) at e4b's defaults (the reentrant checkpoint, the double-quantized absmax, buckets
+`auto`, the chunked loss, the combine over row chunks) with `--phase-peaks 1`, avoiding machines 145701, 130223 and 55583. In order:
+- the shipped arm `fused_attn4_shipped_k0` (`NF4_QLORA_COMPACT_BUCKETS=0`) then `_k1` (`=1`);
+- the matched arm `fused_attn4_m_k0` then `_k1`;
+- the second draws `m_k1_d2`, `m_k0_d2`, `shipped_k1_d2`, `shipped_k0_d2`;
+- Unsloth `ckpt_unsloth_m_kk` (one draw).
+
+Validity (`cbk_why`) requires torch 2.12 and e4b's packed defaults as recorded: the absmax compressed, every padded call bucketed, the
+chunked loss serving the rows, and the reentrant checkpoint on all 48 layers with `E4B_CKPT_OFFLOAD` unset. It also requires the delta
+the side names, from the receipt's new `compact_buckets`: `k1` with compact calls recorded, `k0` with none.
+
+**Predictions** (two VALID, stable draws a side):
+- **P189:** the matched training-phase peak (median of the draws) falls by at least **0.5 GB** from `k0` to `k1`.
+- **P190 / P191:** `k1` / `k0` ≤ **1.01** on the matched / shipped arm.
+- **P192:** on each arm, step-0 held-out within **0.0001** per draw pair and held-out at N within **0.005**. The node is the same bytes,
+  so a larger step-0 difference is a defect signal.
+- **P193:** the matched `k1` training-phase peak is at most **1.0 GB** above Unsloth's. At these defaults it is +1.72 without the node.
+
+**Decision rules.**
+- **P189–P192 HELD:** `NF4_QLORA_COMPACT_BUCKETS` becomes grouped-nf4-gemm's default (unset = on, `0` off), in a grouped-nf4-gemm PR
+  that cites this read and states its scope (one model, RTX 5090, torch 2.12, packed rows; the field recipe never buckets under `auto`).
+- **P190 or P191 FALSIFIED:** it stays opt-in, as a memory lever with its measured cost.
+- **P189 FALSIFIED:** the read says what holds the peak with the node on.
+- **P192 FALSIFIED:** a $0 A2000 check of the node at the packed shape comes first.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Eight packed e4b arms and one
+Unsloth arm: about $2 with the download.

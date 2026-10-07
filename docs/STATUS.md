@@ -245,7 +245,12 @@ checkpointed when it runs: a `Trainer` with `gradient_checkpointing=True` re-ena
 packed rows its copies cost 1.023 of the reentrant step for 0.74 GB (amendment 64's P180, registered at most 1.01, FALSIFIED). The routed-expert combine
 over row chunks (#1304, the default above a 128 MiB image) steps 0.978 of the whole-tensor combine on packed rows but leaves the training
 peak where it was, -0.009 GB (`e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07`, TC1 amendment 61): at the defaults e4b's
-packed-row training phase still peaks 0.98 GB above Unsloth's, and what holds that peak is the next census's question.
+packed-row training phase still peaks 0.98 GB above Unsloth's. A census at the new defaults says why
+(`e4b.train.memory.packed-4k-train-census-defaults.5090.2026-10-07`, TC1 amendment 65). The static memory is now identical on both
+sides, so the whole gap is transient: +1.69 GB at e4b's defaults and +0.95 GB with the offload. With the offload, the largest transients
+at the peak are grouped-nf4-gemm's bucketed LoRA delta (`nf4_qlora.py` 672, 673 and 679, about 1.70 GB), against Unsloth's whole
+transient of 1.73 GB. grouped-nf4-gemm's opt-in `NF4_QLORA_COMPACT_BUCKETS=1` (grouped-nf4-gemm#505) computes that delta as one
+autograd node with the same bytes, and TC1 amendment 66 reads it on packed rows.
 
 The packed-row reading above supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
 same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are
