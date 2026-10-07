@@ -1045,6 +1045,8 @@ CBK_SPEED_MAX = 1.01           # P190 (matched) / P191 (shipped): s/step k1 / k0
 CBK_STEP0_MAX = 0.0001         # P192: |step-0 held-out k1 - k0| per draw pair, each arm
 CBK_HELDOUT_MAX = 0.005        # P192: |mean held-out at N, k1 - k0|, each arm
 CBK_GAP_MAX = 1.0              # P193: the matched k1 training-phase peak at most this many GB above Unsloth's
+CBK_DEVICE_MAX = 1.01          # P194 (maintainer, pre-data): device ms per profiled step k1 / k0 (medians of each side's draws), each arm, at most
+                               # this -- the node trades host work for device work, so a host-bound box's s/step can hide its cost (P190 / P191)
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -2193,7 +2195,16 @@ def cbk_why(tag, r):
         bad.append(f"the compact bucketed delta did not serve k1 (record {cb})")
     if side == "k0" and not (env == "0" and n == 0):
         bad.append(f"NF4_QLORA_COMPACT_BUCKETS={env!r} with {n} compact calls: k0 names 0 and none (record {cb})")
+    if not _cbk_device_ms(r):
+        bad.append("no profile on the receipt: amendment 66 profiles every arm (P194 reads e4b's device time)")
     return "; ".join(bad)
+
+
+def _cbk_device_ms(r):
+    """Amendment 66's P194 quantity: device ms per profiled step, or None without a profile."""
+    pr = (r or {}).get("profile") or {}
+    n = int(pr.get("profiled_steps") or 0)
+    return float(pr["device_ms"]) / n if n and pr.get("device_ms") is not None else None
 
 
 def score_cbk(F, fam=CBK_FAM):
@@ -2222,7 +2233,9 @@ def score_cbk(F, fam=CBK_FAM):
                     f"matched training-phase peak k0 {statistics.median(t0):.3f} -> k1 {statistics.median(t1):.3f} GB (drop {d:+.3f} vs >= {CBK_DROP_MIN})"))
     for pid, arm in (("P190", "m"), ("P191", "shipped")):
         D = {sd: R["draws"].get(("e4b", f"fused_attn4_{arm}_{sd}"), {}) for sd in ("k0", "k1")}
-        out.append(_ckptre_ratio(D, "k1", "k0", pid, fam, lambda x: x <= CBK_SPEED_MAX, f"<= {CBK_SPEED_MAX}"))
+        p = _ckptre_ratio(D, "k1", "k0", pid, fam, lambda x: x <= CBK_SPEED_MAX, f"<= {CBK_SPEED_MAX}")
+        b = [_busy_vs_timed(x) for x in side_rows(arm, "k0")[1]]
+        out.append(p if None in b else p[:3] + (p[3] + f"; k0 device busy vs the timed step {statistics.median(b):.3f} (descriptive)",))
     legs, bad = [], False
     for arm in ("m", "shipped"):
         o0, r0 = side_rows(arm, "k0")
@@ -2252,6 +2265,23 @@ def score_cbk(F, fam=CBK_FAM):
         gap = statistics.median(t1) - tu
         out.append(("P193", fam, "HELD" if gap <= CBK_GAP_MAX else "FALSIFIED",
                     f"matched k1 training-phase peak {statistics.median(t1):.3f} vs Unsloth {tu:.3f} GB (gap {gap:+.3f} vs <= {CBK_GAP_MAX})"))
+    legs, bad = [], False                              # P194: the device time the node adds, which a host-bound box's s/step can hide
+    for arm in ("m", "shipped"):
+        dv = {}
+        for sd in ("k0", "k1"):
+            ok, rs = side_rows(arm, sd)
+            ms = [_cbk_device_ms(x) for x in rs] if ok else [None]
+            dv[sd] = None if None in ms else ms
+        if dv["k0"] is None or dv["k1"] is None:
+            legs.append(f"{arm}: two VALID profiled draws a side are registered")
+            bad = None if bad is not True else True
+            continue
+        x = statistics.median(dv["k1"]) / statistics.median(dv["k0"])
+        bad = True if x > CBK_DEVICE_MAX else bad
+        legs.append(f"{arm}: k1 / k0 {x:.3f} (device ms per profiled step k0 " + " / ".join(f"{v:.1f}" for v in dv["k0"])
+                    + ", k1 " + " / ".join(f"{v:.1f}" for v in dv["k1"]) + ")")
+    v = "FALSIFIED" if bad is True else ("UNTESTED" if bad is None else "HELD")
+    out.append(("P194", fam, v, "; ".join(legs) + f" (each arm <= {CBK_DEVICE_MAX})"))
     return out
 
 
@@ -6153,15 +6183,15 @@ def render(F, d):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CBK_FAM in F:
         out += ["\n## Amendment 66: grouped-nf4-gemm's bucketed delta as autograd ops vs one compact node on packed rows, peaks by phase (descriptive)",
-                "| arm | VERDICT | s/step (11..N) | run peak GB | train | eval | held-out step 0 | held-out N | compact calls |",
-                "|---|---|---|---|---|---|---|---|---|"]
+                "| arm | VERDICT | s/step (11..N) | run peak GB | train | eval | held-out step 0 | held-out N | compact calls | device ms/profiled step |",
+                "|---|---|---|---|---|---|---|---|---|---|"]
         for x in F[CBK_FAM]["rows"]:
             r = x.get("r") or {}
             ph = r.get("peak_vram_gb_phases") or {}
             out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(r.get('peak_vram_gb'), 3)} | "
                        f"{ph.get('train')} | {ph.get('eval')} | {r.get('eval_loss_step0')} | {r.get('eval_loss_final')} | "
-                       f"{(r.get('compact_buckets') or {}).get('calls')} |")
-        out += ["\n## Predictions P189-P193 (TC1-PREREG amendment 66: the compact bucketed delta on packed rows; scored mechanically)",
+                       f"{(r.get('compact_buckets') or {}).get('calls')} | {f(_cbk_device_ms(r), 1)} |")
+        out += ["\n## Predictions P189-P194 (TC1-PREREG amendment 66: the compact bucketed delta on packed rows; scored mechanically)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_cbk(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
@@ -7312,10 +7342,11 @@ def _memc4kr_set(peaks=(26.58e9, 25.84e9, 24.86e9), top_site="site:nf4_qlora.py:
     return R
 
 
-def _cbk_set(s=None, train=None, step0=None, cb=None, u_train=24.86):
+def _cbk_set(s=None, train=None, step0=None, cb=None, u_train=24.86, dev=None, profile=True):
     """Amendment 66: the shipped and matched arms on packed rows at e4b's defaults with NF4_QLORA_COMPACT_BUCKETS 0 (k0) / 1 (k1), two
     draws each, and Unsloth's -- `s` (arm, side) -> draws' s/step; `train` side -> the matched training-phase peak GB; `step0` tag -> step-0
-    held-out; `cb` tag -> the compact_buckets record."""
+    held-out; `cb` tag -> the compact_buckets record; `dev` (arm, side) -> device fraction of the timed step (default 0.95); `profile=False`
+    drops every arm's profile."""
     s = {("m", "k0"): (9.62, 9.61), ("m", "k1"): (9.60, 9.61), ("shipped", "k0"): (7.40, 7.41), ("shipped", "k1"): (7.38, 7.40)} | (s or {})
     train = dict({"k0": 26.58, "k1": 25.70}, **(train or {}))
     base = _dqpack_set()
@@ -7332,6 +7363,9 @@ def _cbk_set(s=None, train=None, step0=None, cb=None, u_train=24.86):
                          compact_buckets=(cb or {}).get(tag, {"env": "1" if side == "k1" else "0", "gnf4_has_compact_buckets": True,
                                                              "calls": 384 if side == "k1" else 0}),
                          peak_vram_gb_phases={"setup": 21.86, "eval": 22.5, "train": train[side] - (0.0 if arm == "m" else 2.0)})
+                fr = (dev or {}).get((arm, side), 0.95)
+                r["profile"] = ({"profiled_steps": 3, "device_ms": 3 * fr * 1000.0 * s[(arm, side)][i], "wall_ms_per_step": 1000.0 * s[(arm, side)][i]}
+                                if profile else None)
                 if arm == "shipped":
                     r["arm_facts"] = dict(r.get("arm_facts") or {}, adapter_dtype="native")
                     r["matched"] = False
@@ -9775,12 +9809,16 @@ def selftest():
     cases += 1
     # 119. TC1 amendment 66 (qwen3cbk): the compact bucketed delta on packed rows -- VALID; P189-P193 HELD on the default fixture (26.58 ->
     #      25.70, 0.998 / 0.998, held-out alike, +0.84 over Unsloth); a 0.3 GB drop FALSIFIES P189; 1.03 on the shipped arm FALSIFIES P191;
-    #      a k1 draw with no compact call, or k0 with the flag on, is VOID
+    #      a k1 draw with no compact call, or k0 with the flag on, is VOID; P194 (device ms per profiled step k1 / k0) HELD on the default fixture
+    #      and FALSIFIED when a host-bound box hides +5 % device time behind an unchanged s/step (P190 still HELD); an arm with no profile is VOID
     CK = lambda R: {CBK_FAM: reduce_family(CBK_FAM, R, {}, 20)}
     RCK = CK(_cbk_set())
     assert all(x["verdict"] == "VALID" for x in RCK[CBK_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RCK[CBK_FAM]["rows"]]
     pck = lambda R: {p: v for p, _, v, _ in score_cbk(R)}
-    assert pck(RCK) == {p: "HELD" for p in ("P189", "P190", "P191", "P192", "P193")}, score_cbk(RCK)
+    assert pck(RCK) == {p: "HELD" for p in ("P189", "P190", "P191", "P192", "P193", "P194")}, score_cbk(RCK)
+    hid = pck(CK(_cbk_set(dev={("m", "k0"): 0.80, ("m", "k1"): 0.84})))
+    assert hid["P190"] == "HELD" and hid["P194"] == "FALSIFIED", hid
+    assert all(v == "VOID" for (fw, _), v in CK(_cbk_set(profile=False))[CBK_FAM]["verdicts"].items() if fw == "e4b")
     assert pck(CK(_cbk_set(train={"k1": 26.28})))["P189"] == "FALSIFIED"
     assert pck(CK(_cbk_set(s={("shipped", "k1"): (7.62, 7.63)})))["P191"] == "FALSIFIED"
     assert pck(CK(_cbk_set(step0={"fused_attn4_shipped_k1_d2": 1.28891})))["P192"] == "FALSIFIED"
@@ -9788,7 +9826,7 @@ def selftest():
     assert CK(_cbk_set(cb={"fused_attn4_m_k1": nocall}))[CBK_FAM]["verdicts"][("e4b", "fused_attn4_m_k1")] == "VOID"
     on0 = {"env": "1", "gnf4_has_compact_buckets": True, "calls": 0}
     assert CK(_cbk_set(cb={"fused_attn4_shipped_k0": on0}))[CBK_FAM]["verdicts"][("e4b", "fused_attn4_shipped_k0")] == "VOID"
-    assert "P193" in render(RCK, "x") and "amendment 66" in render(RCK, "x")
+    assert "P194" in render(RCK, "x") and "amendment 66" in render(RCK, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

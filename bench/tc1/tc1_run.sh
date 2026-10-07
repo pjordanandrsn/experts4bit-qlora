@@ -1511,7 +1511,8 @@ tc1_memc4kr_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   free_family $FAM ${MID//\//--}; }
 # tc1_cbk_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 66 (2026-10-07): grouped-nf4-gemm's bucketed LoRA delta as autograd ops (k0,
 # NF4_QLORA_COMPACT_BUCKETS=0) vs one compact node (k1, =1, grouped-nf4-gemm#505) on packed rows at e4b's defaults -- the shipped and the matched
-# arm, two draws a side in ABBA order, then Unsloth's matched arm (one draw); every arm in venv-unsloth with --phase-peaks 1.
+# arm, two draws a side in ABBA order, then Unsloth's matched arm (one draw); every arm in venv-unsloth with --phase-peaks 1 and the profile
+# instrument (steps 4-6, before the timed window; P194 reads e4b's device ms per profiled step).
 tc1_cbk_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   local ALL="e4b:fused_attn4_shipped_k0:fused e4b:fused_attn4_shipped_k1:fused e4b:fused_attn4_m_k0:fused e4b:fused_attn4_m_k1:fused e4b:fused_attn4_m_k1_d2:fused e4b:fused_attn4_m_k0_d2:fused e4b:fused_attn4_shipped_k1_d2:fused e4b:fused_attn4_shipped_k0_d2:fused unsloth:ckpt_unsloth_m_kk:unsloth"
   say "===== COMPACT BUCKETED DELTA family $FAM ($MID @ $REV; NF4_QLORA_COMPACT_BUCKETS 0 vs 1, packed rows, e4b defaults, Unsloth; --phase-peaks 1; amendment 66)"
@@ -1519,7 +1520,7 @@ tc1_cbk_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
   local NATIVE="--adapter-dtype native --lora-init native"
   local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
-  local PP="--phase-peaks 1" K0="NF4_QLORA_COMPACT_BUCKETS=0" K1="NF4_QLORA_COMPACT_BUCKETS=1"
+  local PP="--phase-peaks 1 --profile-steps $PROFILE_STEPS --profile-warm $PROFILE_WARM" K0="NF4_QLORA_COMPACT_BUCKETS=0" K1="NF4_QLORA_COMPACT_BUCKETS=1"
   can_run 600 $FAM/e4b/shipped_k0     && TC1_ARM_EXTRA_ENV="$K0" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_k0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
   can_run 600 $FAM/e4b/shipped_k1     && TC1_ARM_EXTRA_ENV="$K1" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_k1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
   can_run 600 $FAM/e4b/m_k0           && TC1_ARM_EXTRA_ENV="$K0" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_k0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
