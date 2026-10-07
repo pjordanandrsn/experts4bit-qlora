@@ -40,8 +40,7 @@ per-expert-loop forward, quantization blocks that never cross an expert boundary
 recompute-in-backward projection so training holds no dequantized-expert activations.
 
 **Is not:** grouped-GEMM (per-expert loop only, intentionally), a Transformers-wide quantization
-walker, double quantization of the codes (only the expert absmax is double-quantized, by `enable_fast_train`
-and the trainer by default; `E4B_ABSMAX_DQ=0` keeps it fp32), multi-GPU/FSDP, or a speed play — on a card that already fits the
+walker, double quantization of the codes (only the absmax is, by default), multi-GPU/FSDP, or a speed play — on a card that already fits the
 model it is strictly a memory trade (see the energy scope note in
 [METHODOLOGY.md §10](METHODOLOGY.md) and [BITSANDBYTES.md](BITSANDBYTES.md); register
 `e4b.train.energy-honest.5090.2026-10-05`, one RTX 5090, medians of three passes).

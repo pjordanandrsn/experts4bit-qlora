@@ -213,7 +213,7 @@ grouped-nf4-gemm 0.42.0; an older grouped-nf4-gemm keeps the single block), and 
 trains the packed rows resident at 28.23 GB and steps them at 10.06 s against Unsloth's 14.61 on one stack: Unsloth/e4b **1.453** [1.451,
 1.455]. That 28.23 GB is reached in e4b's held-out evaluation (`e4b.train.memory.packed-4k-census.5090.2026-10-06`, TC1 amendment 55), but its
 training steps peak almost as high, at 28.14 GB (`e4b.train.absmax-dq.packed-4k.5090.2026-10-07`, TC1 amendment 56). The double-quantized
-expert absmax (`E4B_ABSMAX_DQ=1` then; the default since, `E4B_ABSMAX_DQ=0` turns it off) takes 1.35 GB off for 0.2 % of the step (1.002). With it, e4b's training phase peaks at 26.79 GB
+expert absmax (`E4B_ABSMAX_DQ=1`, now the default) takes 1.35 GB off for 0.2 % of the step (1.002). With it, e4b's training phase peaks at 26.79 GB
 against Unsloth's 24.86: 1.92 GB more. A census of the training phase (`e4b.train.memory.packed-4k-train-census.5090.2026-10-07`,
 TC1 amendment 57) finds all of it transient. e4b's largest transient groups at that peak are listed below. They add up to more than
 1.92 GB because Unsloth's peak carries transients of its own, so they are e4b's largest groups, not a breakdown of the excess:
@@ -348,7 +348,7 @@ launch per chunk of groups. Lane RD1 read it 0.79 × the fused kernels per call 
 stays opt-in.
 **Where the memory goes** (`e4b.train.memory-census.qwen3.5090.2026-10-04`, TC1 amendment 23): a census of the CUDA allocator
 on Qwen3-30B-A3B at micro-batch 1 finds every static class byte-for-byte the same in e4b and Unsloth except the expert absmax.
-e4b then kept it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 GB, as Unsloth does (the default since, below). With that switch e4b peaked
+e4b then kept it in fp32 (1.81 GB); `E4B_ABSMAX_DQ=1`, now the default, stores it in 0.46 GB, as Unsloth does. With that switch e4b peaked
 0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults then
 the gap was 1.78 GB. grouped-nf4-gemm's opt-in compact delta (`NF4_QLORA_COMPACT_DELTA=1`) was meant to shrink that transient; on one
 stack it did not (`e4b.train.compact-delta.qwen3.5090.2026-10-05`, TC1 amendment 36): the matched peak rose 0.23 GB, while the step ran
@@ -1330,10 +1330,9 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   - **Where it comes from.** The graph step is within 4–10% of P80's at every
     row count. The eager step is host-bound and 2.15–2.34× slower on this
     Zen 2 host than on P80's Zen 5 one, so the ratio does not travel.
-  - **Still open.** It stays opt-in. The HTTP shim and `infer` then used
-    transformers' `generate`, not `PagedModelRunner` (`serve_paged`, added
-    since, serves through it). It is not measured on other families or under
-    arrivals. P82 (next item) re-measured the int4
+  - **Still open.** It stays opt-in. The HTTP shim and `infer` used
+    `generate`; `serve_paged`, added later, uses the paged runner. It is not
+    measured on other families or under arrivals. P82 (next item) re-measured the int4
     stack.
 - **On the int4 serving recipe, the graph path decodes exactly as the eager
   runner and is 12× faster on a host-bound host** (lane P82, `bench/p82/`,
@@ -1353,9 +1352,8 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     count, so it is host cost. The graphs take 13.6 ms at 16 rows and 4.4 ms
     at one. The ratio does not travel to another host. A `PagedModelRunner`
     caller on this stack that does not enable graphs leaves most of the
-    throughput unused. The package's serving entry points then used
-    transformers' `generate`, not the paged runner; `serve_paged` now runs it,
-    with eager decode by default (P109, above).
+    throughput unused. `serve_paged`, added later, runs the paged runner,
+    eager by default (P109).
   - **#674: answered.** The licensed int4 recipe's fp32 K8 moved from
     6.36709 to 6.36396 because of one change, gnf4#413 (the fused fp8 KV
     append's rounding). P70's build with that append off reads 6.36396 bit

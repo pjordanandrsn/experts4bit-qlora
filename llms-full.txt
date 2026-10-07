@@ -263,7 +263,7 @@ The [capability register](../capabilities.json) and its `training_support` recor
 | Model | Task | Entry point | Status and evidence |
 |---|---|---|---|
 | gpt-oss | Load a frozen NF4 re-quantisation | `load_moe_4bit_streaming`, then `verify_moe_4bit` | Supported load; experts are bare, without `ExpertsLoRA`. This is not expert training. |
-| gpt-oss | Native MXFP4 serving in the paged engine | `engines.int4_experts.enable_serve_experts_int4` | Native-byte store, licensed by fidelity: 0.0019 nats/token KL from the dequantized reference of the same bytes (P44, `e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`); not a downstream-quality result. |
+| gpt-oss | Native MXFP4 serving in the paged engine | `engines.int4_experts.enable_serve_experts_int4` | Native-byte store; matches its own dequantized reference (`e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`). |
 | gpt-oss | Bind the native-byte NVMe serving engine | `enable_mxfp4_nvme_residency` | **REFUSED** for bias-carrying modules; the generic epilogue is not faithful to this model. |
 | gpt-oss | Train experts against an NVMe arena | `arena_train=True`, `enable_nvme_train_residency` | **REFUSED. No supported arena-training route.** See `training_support.gpt_oss.nvme_train`. |
 | gpt-oss | Train native MXFP4 experts outside the arena route | grouped-nf4-gemm's `mxfp4_qlora.ExpertsMxfp4LoRA` | **Experimental, unlicensed.** The tp1 run has a canary and provenance check, but no parity pair. |
@@ -340,7 +340,7 @@ assert n > 0
 
 ## Limitations
 
-- A uniform int4 grid cannot serve MXFP4 experts. For gpt-oss, `enable_serve_experts_int4` never re-quantises onto the int4 grid; it installs the **native MXFP4 store** served through `mxfp4_grouped`'s decode GEMV. That store is opt-in and single-stream-oriented (batched rows fall back to NF4 when the stacks are kept via `E4B_INT4_KEEP_NF4=1`), and its quality is licensed as **fidelity to the shipped bytes**, not downstream quality. P44 read it 0.0019 nats/token (KL, full vocabulary) from dequant-to-bf16 of the same MXFP4 bytes, top-1 agreement 0.981, against 0.0222 for an NF4 requant control (`e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`). gpt-oss raw-text perplexity still cannot rank an exact arm against a noisy one, so no perplexity result is claimed ([`../STATUS.md`](../STATUS.md)).
+- A uniform int4 grid cannot serve MXFP4 experts. For gpt-oss, `enable_serve_experts_int4` never re-quantises onto the int4 grid; it installs the **native MXFP4 store** served through `mxfp4_grouped`'s decode GEMV. That store is opt-in and single-stream-oriented (batched rows fall back to NF4 when the stacks are kept via `E4B_INT4_KEEP_NF4=1`), and its quality claim is fidelity to the shipped bytes (0.0019 nats/token from their dequantized form, `e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`), not downstream quality.
 - `enable_fast` skips MXFP4-arena modules on purpose; their forward is wired by `nvme_experts`.
 - `enable_mxfp4_nvme_residency` refuses `ExpertsLoRA`-wrapped modules: under the arena loader the base buffers are on `meta`, and binding would discard the adapter. Serve from the arena or train against it, not both on one load.
 - Trainable LoRA over gpt-oss's biased, clamped experts needs a gpt-oss-aware adapter; that is a separate change (`arch/gptoss.py`).
@@ -412,7 +412,7 @@ n_experts = getattr(cfg, "num_local_experts", None) or cfg.num_experts   # the l
 n = enable_nvme_train_residency(model, ARENA, hot_rows=n_experts)        # floor: at least num_experts
 assert n > 0
 model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})  # checkpointing is required
-n_fast = enable_fast_train(model, dgrad=True)   # after the engine; makes the checkpoint reentrant (E4B_CKPT_OFFLOAD=0 keeps the one above)
+n_fast = enable_fast_train(model, dgrad=True)   # after the engine
 assert n_fast > 0
 ```
 
@@ -425,7 +425,7 @@ Serving a native-MXFP4 arena (DeepSeek-V4) is the other side of the seam — [`m
 ## Supported scope
 
 - Families in the register for this path: Qwen3-MoE, Gemma-4 and OLMoE (host-RAM ceiling receipts, `e4b.offload.arena-vs-host-ram`) and DeepSeek-V4-Flash (native MXFP4, `e4b.serve.deepseek-v4`). gpt-oss has no native-MXFP4 arena route here: `enable_mxfp4_nvme_residency` refuses its bias-carrying modules, and it has no arena-training route ([`mxfp4-moe-training-and-residency.md`](mxfp4-moe-training-and-residency.md)).
-- Training through either tier needs gradient checkpointing; the recompute re-stages each layer for its own backward. `enable_fast_train` makes that checkpoint reentrant by default (`E4B_CKPT_OFFLOAD=0` keeps Hugging Face's). Host-RAM expert offload is tested under both checkpoints (`tests/test_offload.py`). The NVMe training tier has no checkpointed test in either mode; its `assert_rows_staged` guard raises instead of reading a row the recompute did not stage. Attach the offload or NVMe engine before `enable_fast_train`, which compresses the expert absmax, a format those engines refuse.
+- Training through either tier needs gradient checkpointing (either kind). Attach the engine before `enable_fast_train`: it compresses the expert absmax, which the engines can't read.
 - Arena formats: NF4 quantize-at-bake (four segments per expert row) and native MXFP4 relocation (six segments, fused on read). The manifest's `bake_mode` records which provenance claim the arena supports.
 - Environment: Linux, NVIDIA CUDA sm_80 or newer, grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), Triton (Linux-only), local NVMe or a fast block device, pinned host RAM for the hot tier; CI tests Python 3.11.
 
@@ -533,7 +533,7 @@ model, config = load_moe_4bit_streaming(
 )
 verify_moe_4bit(model, strict=True)
 model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})  # checkpointing is required with offload
-n = enable_fast_train(model, dgrad=True)   # makes the checkpoint reentrant by default (E4B_CKPT_OFFLOAD=0 keeps the one above)
+n = enable_fast_train(model, dgrad=True)
 assert n > 0, "still on the per-expert loop: grouped-nf4-gemm missing?"
 
 # Match the trainer's expert-only parameter selection; freeze attention,
@@ -737,7 +737,7 @@ Or from the CLI: `MODEL=Qwen/Qwen3-30B-A3B OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 py
 ## Supported scope
 
 - Families: those of the loader ([`bitsandbytes-moe-load-in-4bit-still-ooms.md`](bitsandbytes-moe-load-in-4bit-still-ooms.md)). Offload identity is tested on nf4 / int8 / bf16; fp4 / fp8 / fp16 ride the same code path ([`../STORAGE-MODES.md`](../STORAGE-MODES.md)).
-- Offload training requires gradient checkpointing, of either kind; the shipped trainer always enables it. Under the `grouped_nf4` kernel, `enable_fast_train` makes it the reentrant checkpoint by default (`E4B_CKPT_OFFLOAD=0` keeps Hugging Face's non-reentrant one); expert offload is tested under both (`tests/test_offload.py`). Attach offload or NVMe engines before `enable_fast_train`, whose compressed expert absmax those engines refuse.
+- Offload training requires gradient checkpointing (either kind); the shipped trainer always enables it. Attach offload or NVMe engines before `enable_fast_train`.
 - Environment: Linux, NVIDIA CUDA, torch>=2.2, bitsandbytes>=0.43, transformers>=5.0; CI tests Python 3.11. Residency engines need grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), with Triton (Linux-only) on an sm_80-or-newer GPU.
 
 ## Limitations
@@ -810,7 +810,7 @@ Single-stream decode is bandwidth-bound: each token reads the routed experts plu
 | router epilogue | `engines.router_epilogue.fuse_router_epilogue` | `E4B_FUSE_ROUTER_EPI=1` |
 | paged fp8 KV cache | `engines.fp8_paged_kv` + `engines.paged_attention` | — |
 
-The three fusion flags are consulted by `engines.qkv_fuse.fuse_qkv`, by the in-tree harness `bench/hybrid-g9/step_decomp.py` (which produced the receipts), and by `python -m experts4bit_qlora.serve_paged`, which also reads `E4B_PAGED_FUSE_QKV` and the int4 levers (`E4B_SERVE_EXP_INT4`, `E4B_SERVE_ATTN_INT4`, and the rest) under the same names as the bench lanes' `usercustomize` hook. A set lever that patches nothing refuses at startup, and `/health` reports what each one patched ([`../SERVING.md`](../SERVING.md)). The FastAPI shim (`serve.py`) and the `infer` CLI read none of them. In code, the int4 expert store's entry point is `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`.
+`python -m experts4bit_qlora.serve_paged` reads these flags and the int4 levers (`E4B_SERVE_EXP_INT4`, …), and `/health` shows what each one patched ([`../SERVING.md`](../SERVING.md)). The FastAPI shim and `infer` read none of them. In code, call `engines.int4_experts.enable_serve_experts_int4(model, source_dir)`.
 
 ## Install
 
@@ -2285,7 +2285,7 @@ grouped-nf4-gemm 0.42.0; an older grouped-nf4-gemm keeps the single block), and 
 trains the packed rows resident at 28.23 GB and steps them at 10.06 s against Unsloth's 14.61 on one stack: Unsloth/e4b **1.453** [1.451,
 1.455]. That 28.23 GB is reached in e4b's held-out evaluation (`e4b.train.memory.packed-4k-census.5090.2026-10-06`, TC1 amendment 55), but its
 training steps peak almost as high, at 28.14 GB (`e4b.train.absmax-dq.packed-4k.5090.2026-10-07`, TC1 amendment 56). The double-quantized
-expert absmax (`E4B_ABSMAX_DQ=1` then; the default since, `E4B_ABSMAX_DQ=0` turns it off) takes 1.35 GB off for 0.2 % of the step (1.002). With it, e4b's training phase peaks at 26.79 GB
+expert absmax (`E4B_ABSMAX_DQ=1`, now the default) takes 1.35 GB off for 0.2 % of the step (1.002). With it, e4b's training phase peaks at 26.79 GB
 against Unsloth's 24.86: 1.92 GB more. A census of the training phase (`e4b.train.memory.packed-4k-train-census.5090.2026-10-07`,
 TC1 amendment 57) finds all of it transient. e4b's largest transient groups at that peak are listed below. They add up to more than
 1.92 GB because Unsloth's peak carries transients of its own, so they are e4b's largest groups, not a breakdown of the excess:
@@ -2420,7 +2420,7 @@ launch per chunk of groups. Lane RD1 read it 0.79 × the fused kernels per call 
 stays opt-in.
 **Where the memory goes** (`e4b.train.memory-census.qwen3.5090.2026-10-04`, TC1 amendment 23): a census of the CUDA allocator
 on Qwen3-30B-A3B at micro-batch 1 finds every static class byte-for-byte the same in e4b and Unsloth except the expert absmax.
-e4b then kept it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 GB, as Unsloth does (the default since, below). With that switch e4b peaked
+e4b then kept it in fp32 (1.81 GB); `E4B_ABSMAX_DQ=1`, now the default, stores it in 0.46 GB, as Unsloth does. With that switch e4b peaked
 0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults then
 the gap was 1.78 GB. grouped-nf4-gemm's opt-in compact delta (`NF4_QLORA_COMPACT_DELTA=1`) was meant to shrink that transient; on one
 stack it did not (`e4b.train.compact-delta.qwen3.5090.2026-10-05`, TC1 amendment 36): the matched peak rose 0.23 GB, while the step ran
@@ -3402,10 +3402,9 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   - **Where it comes from.** The graph step is within 4–10% of P80's at every
     row count. The eager step is host-bound and 2.15–2.34× slower on this
     Zen 2 host than on P80's Zen 5 one, so the ratio does not travel.
-  - **Still open.** It stays opt-in. The HTTP shim and `infer` then used
-    transformers' `generate`, not `PagedModelRunner` (`serve_paged`, added
-    since, serves through it). It is not measured on other families or under
-    arrivals. P82 (next item) re-measured the int4
+  - **Still open.** It stays opt-in. The HTTP shim and `infer` used
+    `generate`; `serve_paged`, added later, uses the paged runner. It is not
+    measured on other families or under arrivals. P82 (next item) re-measured the int4
     stack.
 - **On the int4 serving recipe, the graph path decodes exactly as the eager
   runner and is 12× faster on a host-bound host** (lane P82, `bench/p82/`,
@@ -3425,9 +3424,8 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     count, so it is host cost. The graphs take 13.6 ms at 16 rows and 4.4 ms
     at one. The ratio does not travel to another host. A `PagedModelRunner`
     caller on this stack that does not enable graphs leaves most of the
-    throughput unused. The package's serving entry points then used
-    transformers' `generate`, not the paged runner; `serve_paged` now runs it,
-    with eager decode by default (P109, above).
+    throughput unused. `serve_paged`, added later, runs the paged runner,
+    eager by default (P109).
   - **#674: answered.** The licensed int4 recipe's fp32 K8 moved from
     6.36709 to 6.36396 because of one change, gnf4#413 (the fused fp8 KV
     append's rounding). P70's build with that append off reads 6.36396 bit
@@ -3558,10 +3556,9 @@ still positive, so read a batched training result only with `batched_fallback_st
 experts live in pinned CPU RAM and stream one layer at a time. This is what makes
 a 30B-class MoE QLoRA-trainable on a 12 GB card (`e4b.offload.fits-30b-class`:
 Qwen3-30B-A3B peaks at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both of which OOM
-without offload). Requires gradient checkpointing, which the shipped trainer
-always enables (reentrant under `enable_fast_train`'s default, Hugging Face's
-non-reentrant one with `E4B_CKPT_OFFLOAD=0`; offload is tested under both); the
-unsupported non-checkpointed combination fails loudly rather than mis-training.
+without offload). Requires gradient checkpointing (either kind), which the
+shipped trainer always enables; without it, training fails loudly rather than
+mis-training.
 
 **The experts do not fit in host RAM either — and I am serving.**
 `enable_nvme_residency(...)` — serves the cold expert tail from an NVMe arena
@@ -3857,6 +3854,11 @@ host-bound: absolutes do not travel between hosts, ratios do.
   when a bundled document changed.
 - Receipts and code ship in separate pull requests. A pull request too large to
   review in one read is a finding, not a pass.
+- Docs favour brevity and readability over exhaustive exactness. Say what a
+  reader needs in plain sentences; give a number once, with its claim id, and
+  leave conditions and caveats to the register and the bench README. A
+  correction replaces the wrong sentence rather than adding a qualifier.
+  Pre-registrations are contracts and stay exact.
 - Documents carrying an OpenTimestamps footer are never edited in place: a
   sibling file with errata, never the original.
 - Nothing is filed upstream without the maintainer's explicit say-so: no issues,

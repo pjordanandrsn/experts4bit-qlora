@@ -70,7 +70,7 @@ model, config = load_moe_4bit_streaming(
 )
 verify_moe_4bit(model, strict=True)
 model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})  # checkpointing is required with offload
-n = enable_fast_train(model, dgrad=True)   # makes the checkpoint reentrant by default (E4B_CKPT_OFFLOAD=0 keeps the one above)
+n = enable_fast_train(model, dgrad=True)
 assert n > 0, "still on the per-expert loop: grouped-nf4-gemm missing?"
 
 # Match the trainer's expert-only parameter selection; freeze attention,

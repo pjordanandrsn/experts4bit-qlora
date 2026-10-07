@@ -183,12 +183,9 @@ returned. Under the first-chunk prefill graph the forward's working set sits in 
 is additive: the graph's `auto` headroom check counts the bound at the slot's capacity when bulk is on, and
 `/health`'s `prefill_graph.bulk_flush_mib` reports it. `tests/test_bulk_kv.py` compares whole pools, and a tiny model decodes the same tokens either way. The
 stall census behind it is `bench/stall-census-2026-10-05/` (exploratory: launch counts and bitwise parity on the A2000,
-a correctness testbed, and a post-hoc read of SC2b's traces). Lane SC2c then read the request-level effect and licensed the
-default ([`bench/h2h-2026-10-02/sc2c/README.md`](../bench/h2h-2026-10-02/sc2c/README.md); Qwen3-30B-A3B int4, `serve_paged`,
-one uncapped RTX 5090, 512-token prompts, two draws). Serial TTFT fell 3.78× and 3.74×, and the capacity ceiling rose from 2 to
-4 req/s, with every streamed response byte-identical. Lane SC2d read engagement and identical output on a hybrid model
-(Qwen3.6-35B-A3B) and on gpt-oss-20b ([`bench/h2h-2026-10-02/sc2d/README.md`](../bench/h2h-2026-10-02/sc2d/README.md);
-correctness only). Both reads live in their lane READMEs; `docs/claims.json` has no row for them, and speed elsewhere is unread.
+a correctness testbed, and a post-hoc read of SC2b's traces). On Qwen3-30B-A3B, lane SC2c measured serial TTFT 3.8× faster and
+capacity up from 2 to 4 req/s, with identical output ([SC2c](../bench/h2h-2026-10-02/sc2c/README.md)). SC2d confirmed identical
+output on Qwen3.6-35B-A3B and gpt-oss-20b ([SC2d](../bench/h2h-2026-10-02/sc2d/README.md)). Neither has a register row yet.
 
 **Per-step trace (`E4B_PAGED_STEP_TRACE=<path>`).** One JSON line per engine step (`engines/step_trace.py`):
 - what the step carried: prefill chunks and tokens, prefill-graph replays, decode rows and bucket, slots decoding for
