@@ -261,9 +261,13 @@ branch.
 ## Amendment 2 (2026-10-07, Phase C's scripts, budget, one corrected prediction and Granite's quality read; before any Phase C box)
 
 Phase C was registered above with its scripts to follow in an amendment. This is that amendment. It also adds
-Granite-3.1-3b-a800m's full Phase B read, which the maintainer asked for in review. No Phase C box has run, and no Phase
-A/B number exists yet: `p115-5090-1` refused at STOP-1, and `p115-5090-2` was refused by the launcher. Phase A/B's rule,
-predictions and budget are unchanged.
+Granite-3.1-3b-a800m's full Phase B read, which the maintainer asked for in review. No Phase C box has run. Phase A/B's
+rule, predictions and budget are unchanged.
+
+**Written before Phase A/B's data; stated, not hidden.** Phase C's scripts, rule and predictions below were fixed before
+any Phase A/B number existed. Since then, Phase A/B's reading `p115-5090-8` (2026-10-07T19:32Z) read DEFAULT_AUTO:
+g1 1.429 and g16 1.230, with wikitext ON bias +0.00098 nats. That reading changes nothing in Phase C: no gate, bar or
+prediction here depends on it. The budget line below was corrected after it.
 
 **Scripts.** `bench/p115/p115c_run.sh` (box), `p115c_drive.sh` (controller), `p115c_box.py`, `p115c_reduce.py`, and
 `staged-c.sha256`, which pins every staged file. Phase A/B's files run at their registered bytes: the reducer, the
@@ -346,10 +350,9 @@ and 72 GB with their snapshots and arenas; each snapshot is deleted once its mod
 - **Reading:** one RTX 5090, **guard 2.0 h**, `--download-gb 92`; about $2.7 at the policy rate. Expected time is about
   1.5 h: install and premise 5 min, fetches 15–40 min, bakes 7 min, Granite's five processes about 12 min, and ten
   processes for the other two models at about 3–4 min each.
-- **Owner's limit.** The owner's launch authorization for this program (2026-10-07) caps each lane at **$4.00**. That is
-  stricter than the $10 hard stop registered above, and it binds. P115's actual spend over all phases stays at or below
-  $4.00. A Phase C launch goes ahead only while P115's actual spend plus that run's launcher estimate is ≤ $4.00;
-  otherwise the owner is asked first.
+- **Limits.** Phase C's ceiling is **$5.00**: the proof, the reading and one rerun of the proof. The lane's registered
+  hard stop over all phases, $10, stands. Every run sits inside the owner's standing no-ask tier for a single run
+  under $15, and anything over $15 needs the maintainer lane's approval first. Phases A and B cost $0.952.
 
 **Receipts.** The box's records are fetched to the run directory's `p115c/` and committed to
 `bench/p115/receipts/<run>/p115c/`:

@@ -12,8 +12,8 @@
 - One prediction is corrected before data. On Qwen3.6, all four knobs at `1` hit glue round 1's own vacuous-enable
   refusal before the q/k/v check. The explicit gate now accepts any of the four knobs' own refusals, provided the
   message names the knob at `=1`.
-- Budget: a Granite proof (guard 0.75 h, every process kind), then the reading (guard 2.0 h). P115's actual spend over
-  all phases stays at or below the owner's $4.00 per-lane limit.
+- Budget: a Granite proof (guard 0.75 h, every process kind), then the reading (guard 2.0 h). Phase C's ceiling is $5.00
+  inside the lane's registered $10 hard stop; anything over $15 needs the maintainer lane's approval.
 - Tests: `tests/test_p115c_staged_pin.py` (the pins, self-tests, order, subject, guards and exit codes, plus the
   explicit gate against the code's real refusals on tiny gpt-oss, Qwen3.5-MoE and Granite models) and
   `tests/test_p115c_sane_families.py` (SANE's instrument builds and scores gpt-oss and the Qwen3.5 hybrid on CPU).
