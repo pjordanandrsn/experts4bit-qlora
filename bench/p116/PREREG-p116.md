@@ -24,8 +24,10 @@ device grouping, the captured M-tile GEMM, which the switch does not touch.
   window per pass.
 
 **What the step can gain.** SV2's census put the served NF4 expert GEMV at 2.469 ms of the graphed Qwen3 B=1 step. K33's
-pair saves about 1.8 ms of kernel time per step with PDL as served. P111's default server decoded W1 at 9.05 ms per
-token.
+pair saves about 1.86 ms of kernel time per step (2.818 − 0.961), or about 1.8 ms with PDL as served. K6b measured how
+much of a kernel win reaches the served step: about 0.55. That puts roughly 1 ms on P111's 9.05 ms W1 step, about ×0.89,
+so g1 near 1.12 (the maintainer's basis in the K33 read's review). Q3's band spans a transfer between about 0.35 and
+0.9.
 
 ## The subject
 
