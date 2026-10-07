@@ -1,0 +1,61 @@
+{
+ "device": "cuda",
+ "torch": "2.8.0+cu128",
+ "gpu": "NVIDIA RTX A2000 12GB",
+ "shape": {
+  "tokens": 4096,
+  "k": 8,
+  "hidden": 2048
+ },
+ "rows": [
+  {
+   "chunk_rows": 1024,
+   "fwd_equal": true,
+   "gw_equal": true,
+   "gdown_equal": true,
+   "fwd_peak_mib": 304.0,
+   "bwd_peak_mib": 184.1,
+   "gw_max_abs_diff": 0.0
+  },
+  {
+   "chunk_rows": 4096,
+   "fwd_equal": true,
+   "gw_equal": true,
+   "gdown_equal": true,
+   "fwd_peak_mib": 320.0,
+   "bwd_peak_mib": 256.1,
+   "gw_max_abs_diff": 0.0
+  },
+  {
+   "chunk_rows": 8192,
+   "fwd_equal": true,
+   "gw_equal": true,
+   "gdown_equal": true,
+   "fwd_peak_mib": 384.0,
+   "bwd_peak_mib": 352.1,
+   "gw_max_abs_diff": 0.0
+  },
+  {
+   "chunk_rows": 16384,
+   "fwd_equal": true,
+   "gw_equal": true,
+   "gdown_equal": true,
+   "fwd_peak_mib": 512.0,
+   "bwd_peak_mib": 544.1,
+   "gw_max_abs_diff": 0.0
+  },
+  {
+   "chunk_rows": 32768,
+   "fwd_equal": true,
+   "gw_equal": true,
+   "gdown_equal": true,
+   "fwd_peak_mib": 768.0,
+   "bwd_peak_mib": 928.1,
+   "gw_max_abs_diff": 0.0
+  }
+ ],
+ "whole": {
+  "fwd_peak_mib": 768.0,
+  "bwd_peak_mib": 768.0
+ }
+}
