@@ -168,3 +168,17 @@ def _never_rent_in_tests(monkeypatch):
     # inherits it, and a provider refuses on it whatever the child's own environment says (#460).
     monkeypatch.setenv("E4B_NO_LIVE", "1")
     yield
+
+
+
+@pytest.fixture(autouse=True)
+def _absmax_dq_default_off_in_tests(monkeypatch):
+    """``enable_fast_train`` compresses the frozen expert absmax by default since TC1 amendment 56. The suite's other tests
+    compare fused and reference paths, or copies made before patching, against the fp32 absmax they always read, so the
+    default is pinned off here, in-process (nothing reaches a subprocess's environment); ``test_absmax_dq.py`` turns it back
+    on where it tests the default."""
+    try:
+        import experts4bit_qlora.engines.fast as fast
+    except Exception:                                    # a machine without torch: nothing to pin
+        return
+    monkeypatch.setattr(fast, "ABSMAX_DQ_DEFAULT", False)

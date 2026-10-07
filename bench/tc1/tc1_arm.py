@@ -619,6 +619,24 @@ _PHASE_PEAKS = None
 _RUN_PEAKS = None
 
 
+def _absmax_compressed(model):
+    """Whether any expert stack's absmax is stored double-quantized right now (the flag's compression or enable_fast_train's)."""
+    try:
+        from experts4bit_qlora.absmax_dq import is_absmax_compressed
+        return any(is_absmax_compressed(m) for m in model.modules())
+    except Exception:
+        return False
+
+
+def _fast_train_absmax_record():
+    """enable_fast_train's absmax record for this process (TC1 amendment 56's default), or None on an e4b without it."""
+    try:
+        from experts4bit_qlora.engines.fast import FAST_TRAIN_STATS
+        return FAST_TRAIN_STATS.get("absmax_dq")
+    except Exception:
+        return None
+
+
 def phase_mark(name):
     """Fold the allocator's max since the last mark into phase `name`'s peak and reset it (no-op unless --phase-peaks 1 on CUDA)."""
     if _PHASE_PEAKS is None or DEV != "cuda":
@@ -3955,7 +3973,10 @@ def run_arm(a, load_fn, sampler=True):
         "optimizer": optimizer_str, "lr_per_step": [round(v, 8) for v in lr_per_step], "template": template,
         "grad_ckpt": x["ckpt_mode"], "attn_4bit": bool(a.attn_4bit), "n_attn4": n_attn4,
         "frozen_4bit": bool(getattr(a, "frozen_4bit", 0)), "n_frozen4": x.get("n_frozen4", 0), "attn4_probe": x.get("attn4_probe"),
-        "absmax_dq": bool(getattr(a, "absmax_dq", 0)),                                                                    # ABSMAX-DQ
+        # ABSMAX-DQ: the absmax as it IS -- the arm's flag, or enable_fast_train's default (TC1 amendment 56, E4B_ABSMAX_DQ=0 keeps fp32)
+        "absmax_dq": bool(getattr(a, "absmax_dq", 0)) or _absmax_compressed(model),
+        "absmax_dq_flag": bool(getattr(a, "absmax_dq", 0)),
+        "absmax_dq_fast_train": _fast_train_absmax_record(),
         **({"absmax_dq_modules": x["absmax_dq"]["modules"], "absmax_bytes_before": x["absmax_dq"]["bytes_before"],
             "absmax_bytes_after": x["absmax_dq"]["bytes_after"], "absmax_bytes_ratio": x["absmax_dq"]["ratio"]} if x.get("absmax_dq") else {}),
         "structural_expected_n_attn4": x.get("structural_expected_n_attn4"), "detector_version": x.get("detector_version"),

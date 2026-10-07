@@ -333,7 +333,11 @@ evidence for the calls it changes is Qwen3-30B-A3B on one RTX 5090.
 `E4B_ABSMAX_DQ=1` costs 2.3 % of the step (1.023) for 2.04 GB of peak (31.07 → 29.03 GB), held-out within 0.003. Qwen3-30B-A3B's pair
 was unstable on a busy host; amendment 31 read it over 60 steps on a quiet one
 (`e4b.train.absmax-dq.qwen3.5090.2026-10-05`): 1.014 for 1.34 GB, held-out within 0.003. All three predictions held, so the
-double-quantized absmax becomes the default for resident training (`E4B_ABSMAX_DQ=0` turns it off).
+double-quantized absmax becomes the default for resident training (`E4B_ABSMAX_DQ=0` turns it off). Since TC1 amendment 56 (`e4b.train.absmax-dq.packed-4k.5090.2026-10-07`)
+it is also `enable_fast_train`'s default in the library, with the trainer's guards: 1.002 of the step for 1.35 GB on packed 4,096-token rows,
+held-out within 0.0002. The evidence for the library default is one model (Qwen3-30B-A3B) on one RTX 5090 in torch 2.12 / triton 3.7;
+its packed-row speed in the field image's torch 2.8 is unread. `E4B_ABSMAX_DQ=0`, or `enable_fast_train(model, absmax_dq=False)`, keeps
+the fp32 absmax, which the expert-offload, batched, residency and NVMe engines need.
 **Prebound Triton launches, as an A/B** (`e4b.train.prebind.qwen3.5090.2026-10-05`, TC1 amendments 26 and 30): with both prebind
 flags on, Qwen3-30B-A3B's training step is 0.973 of the flags-off step on the matched arm and 0.980 [0.957, 1.003] on the shipped arm
 (60 steps), with held-out within 0.002 and bit-identical kernels. All three predictions held, so `E4B_TRITON_PREBIND` and
