@@ -917,6 +917,24 @@ CKPTOFF_SPEED_MAX = 1.05       # P154: s/step o1 / o0 at most this
 CKPTOFF_HELDOUT_MAX = 0.005    # P155
 CKPTOFF_GAP_O0_MAX = 1.7       # P156: o0's training-phase peak at most this many GB above Unsloth's (amendment 57: +1.92 before #1296)
 CKPTOFF_GAP_O1_MAX = 1.0       # P157: o1's training-phase peak at most this many GB above Unsloth's
+# TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
+# (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
+CKPTOFFF_FAM = "qwen3ckptofff"
+FAMS.append(CKPTOFFF_FAM)
+NAMES[CKPTOFFF_FAM] = "Qwen3-30B-A3B (amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, shipped and matched arms; peaks by phase)"
+N_LAYERS[CKPTOFFF_FAM] = 48
+ATTN_CENSUS[CKPTOFFF_FAM] = 192
+DENSE_PINS[CKPTOFFF_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[CKPTOFFF_FAM] = ("e4b", "fused_attn4_m_f0")
+EXPECTED[CKPTOFFF_FAM] = [("e4b", "fused_attn4_shipped_f0"), ("e4b", "fused_attn4_shipped_f1"), ("e4b", "fused_attn4_m_f0"), ("e4b", "fused_attn4_m_f1"),
+                          ("e4b", "fused_attn4_m_f1_d2"), ("e4b", "fused_attn4_m_f0_d2"), ("e4b", "fused_attn4_shipped_f1_d2"), ("e4b", "fused_attn4_shipped_f0_d2")]
+MATCHED |= {"fused_attn4_m_f0", "fused_attn4_m_f1", "fused_attn4_m_f0_d2", "fused_attn4_m_f1_d2"}
+for _t in ("fused_attn4_m", "fused_attn4_shipped"):
+    for _side in ("f0", "f1"):
+        DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
+CKPTOFFF_SPEED_MAX = 1.01      # P158 (matched) / P159 (shipped): s/step f1 / f0 at most this (amendment 49's bar for a field default)
+CKPTOFFF_HELDOUT_MAX = 0.005   # P160: on each arm
+CKPTOFFF_DROP_MIN = 0.10       # P161: the matched arm's training-phase peak falls by at least this many GB
 # P135 / P136 divide by the TIMED step (median s/step of steps 11..N), never the profiled steps' wall: torch.profiler's per-op host overhead
 # differs between torch versions and grows with the launch count (the bucketed delta issues 115 kernels to the single block's 66), so the
 # profiled wall would push both readings toward HELD by the instrument alone. The profile's device time is CUPTI kernel durations, which the
@@ -1493,10 +1511,11 @@ def score_dqpack(F, fam=DQPACK_FAM):
     return out
 
 
-def ckptoff_why(tag, r):
+def ckptoff_why(tag, r, packed=True):
     """Amendment 58's predicates: torch 2.12 (venv-unsloth); on e4b, its defaults (the double-quantized absmax as it is, every padded
     call bucketed under `auto`, the chunked loss unset) and the checkpoint the side names: o1 E4B_CKPT_OFFLOAD=1 with every decoder
-    layer routed through it (48), o0 set to 0 with none. Empty string = as registered."""
+    layer routed through it (48), o0 set to 0 with none. packed=False is amendment 59's field-recipe form: there `auto` leaves both stock, so
+    every padded call goes through the single block and no loss call is chunked. Empty string = as registered."""
     r = r or {}
     bad = []
     tv = str((r.get("env") or {}).get("torch") or "")
@@ -1511,11 +1530,14 @@ def ckptoff_why(tag, r):
         la = r.get("lean_ab") or {}
         calls = la.get("lora_path_calls") or {}
         pb, pd = int(calls.get("padded_bucketed") or 0), int(calls.get("padded") or 0)
-        if not (la.get("gnf4_pad_buckets_env") in (None, "") and la.get("gnf4_pad_buckets_mode") == "auto" and pb > 0 and pd == 0):
-            bad.append(f"the bucketed default did not serve the packed rows (mode {la.get('gnf4_pad_buckets_mode')!r}, calls {calls})")
+        # packed rows: `auto` buckets every padded call and chunks the loss; the field recipe: `auto` leaves both stock (amendments 44, 50)
+        served = (pb > 0 and pd == 0) if packed else (pd > 0 and pb == 0)
+        if not (la.get("gnf4_pad_buckets_env") in (None, "") and la.get("gnf4_pad_buckets_mode") == "auto" and served):
+            bad.append(f"grouped-nf4-gemm's `auto` padding did not serve these rows as registered (mode {la.get('gnf4_pad_buckets_mode')!r}, calls {calls})")
         c = r.get("chunked_lm_loss") or {}
-        if not (c.get("env") in (None, "") and int(c.get("chunked_calls") or 0) > 0 and int(c.get("runtime_refusals") or 0) == 0):
-            bad.append(f"the chunked LM loss did not serve the packed rows unset (record {c})")
+        chunked_ok = (int(c.get("chunked_calls") or 0) > 0) if packed else (int(c.get("chunked_calls") or 0) == 0)
+        if not (c.get("env") in (None, "") and chunked_ok and int(c.get("runtime_refusals") or 0) == 0):
+            bad.append(f"the chunked LM loss (`auto`, unset) did not behave as registered for these rows (record {c})")
         n, env = r.get("ckpt_offload_layers"), str(r.get("ckpt_offload_env"))
         want = (48, "1") if side == "o1" else (0, "0")
         if (n, env) != want:
@@ -1575,6 +1597,58 @@ def score_ckptoff(F, fam=CKPTOFF_FAM):
             gap = t - ut
             out.append((pid, fam, "HELD" if gap <= lim else "FALSIFIED",
                         f"training-phase peak e4b {name} {t:.3f} - Unsloth {ut:.3f} = {gap:+.3f} GB vs <= +{lim}"))
+    return out
+
+
+def ckptofff_side(tag):
+    """Amendment 59: (arm, side) of a qwen3ckptofff tag, e.g. ("m", "f1") for fused_attn4_m_f1_d2."""
+    m = re.match(r"^fused_attn4_(m|shipped)_(f[01])(?:_d2)?$", tag or "")
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def score_ckptofff(F, fam=CKPTOFFF_FAM):
+    """TC1-PREREG amendment 59. P158 (matched) / P159 (shipped): s/step f1 / f0 (two VALID, stable draws a side) <= CKPTOFFF_SPEED_MAX.
+    P160: on each arm |mean held-out at N, f1 - f0| <= CKPTOFFF_HELDOUT_MAX. P161: the matched arm's training-phase peak (median of its
+    draws) f0 - f1 >= CKPTOFFF_DROP_MIN GB. A missing / non-VALID / unstable side, or a missing phase record, UNTESTED."""
+    R = F.get(fam)
+    if not R:
+        return []
+    out, p160 = [], []
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    valid = lambda k: (rows.get(k) or {}).get("verdict") == "VALID"
+    for pid, arm in (("P158", "m"), ("P159", "shipped")):
+        A0 = R["draws"].get(("e4b", f"fused_attn4_{arm}_f0"), {})
+        A1 = R["draws"].get(("e4b", f"fused_attn4_{arm}_f1"), {})
+        if not (A0.get("usable") and A1.get("usable") and A0.get("draws") == 2 and A1.get("draws") == 2):
+            why = "; ".join(f"{sd} {d.get('verdict') or 'missing'}: {d.get('why') or ''}".strip() for sd, d in (("f0", A0), ("f1", A1)))
+            out.append((pid, fam, "UNTESTED", f"{arm}: two stable VALID draws a side are registered -- {why}"))
+            p160.append((arm, None, why))
+            continue
+        ratio_ = A1["s"] / A0["s"]
+        cross = [x / y for x in A1["s_list"] for y in A0["s_list"]]
+        out.append((pid, fam, "HELD" if ratio_ <= CKPTOFFF_SPEED_MAX else "FALSIFIED",
+                    f"{arm}: f1 / f0 {ratio_:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs <= {CKPTOFFF_SPEED_MAX}; s/step f0 "
+                    f"{' / '.join(f'{x:.3f}' for x in A0['s_list'])}, f1 {' / '.join(f'{x:.3f}' for x in A1['s_list'])}"))
+        h0 = [v for v in A0["heldout_list"] if v is not None]
+        h1 = [v for v in A1["heldout_list"] if v is not None]
+        p160.append((arm, (statistics.mean(h1) - statistics.mean(h0)) if (h0 and h1) else None, "no held-out at N" if not (h0 and h1) else ""))
+    if any(d is None for _, d, _ in p160):
+        out.append(("P160", fam, "UNTESTED", "; ".join(f"{a}: {w}" for a, d, w in p160 if d is None)))
+    else:
+        out.append(("P160", fam, "HELD" if all(abs(d) <= CKPTOFFF_HELDOUT_MAX for _, d, _ in p160) else "FALSIFIED",
+                    "mean held-out at N f1 - f0: " + ", ".join(f"{a} {d:+.4f}" for a, d, _ in p160) + f" (|.| <= {CKPTOFFF_HELDOUT_MAX})"))
+    def tp(side):
+        ks = [("e4b", f"fused_attn4_m_{side}"), ("e4b", f"fused_attn4_m_{side}_d2")]
+        v = [_phase(rows[k]["r"], "train") if valid(k) else None for k in ks]
+        return (statistics.median(v) if all(x is not None for x in v) else None), v
+    t0, v0 = tp("f0")
+    t1, v1 = tp("f1")
+    if t0 is None or t1 is None:
+        out.append(("P161", fam, "UNTESTED", f"the matched arm's draws need a training-phase peak: f0 {v0}, f1 {v1}"))
+    else:
+        drop = t0 - t1
+        out.append(("P161", fam, "HELD" if drop >= CKPTOFFF_DROP_MIN else "FALSIFIED",
+                    f"matched training-phase peak f0 {t0:.3f} -> f1 {t1:.3f} GB (drop {drop:+.3f} vs >= {CKPTOFFF_DROP_MIN})"))
     return out
 
 
@@ -2465,6 +2539,11 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == PADBK28_FAM and fw == "e4b":             # amendment 52: the delta body its tag names, torch 2.8, the chunked loss
         w = pad_buckets_why(r.get("tag") or "", r, sides=("k0", "k1"), torch_prefix="2.8")
+        if w:
+            why.append(w)
+    if fam == CKPTOFFF_FAM and fw == "e4b":            # amendment 59: amendment 58's predicates at the field recipe (auto leaves loss and padding stock)
+        _arm, _side = ckptofff_side(r.get("tag") or "")
+        w = ckptoff_why(f"fused_attn4_m_{_side.replace('f', 'o')}" if _side else (r.get("tag") or ""), r, packed=False)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -5309,6 +5388,17 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F, FIELDBK_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if CKPTOFFF_FAM in F:
+        out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
+        for x in F[CKPTOFFF_FAM]["rows"]:
+            ph = (x.get("r") or {}).get("peak_vram_gb_phases") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f((x.get('r') or {}).get('s_per_step_median_11plus'), 3)} | "
+                       f"{f((x.get('r') or {}).get('peak_vram_gb'), 3)} | {ph.get('setup')} | {ph.get('eval')} | {ph.get('train')} |")
+        out += ["\n## Predictions P158 / P159 / P160 / P161 (TC1-PREREG amendment 59: checkpoint inputs in pinned host memory at the field recipe; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_ckptofff(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFF_FAM in F:
         out += ["\n## Amendment 58: checkpoint inputs on the GPU vs in pinned host memory on packed rows, peaks by phase (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
@@ -6278,6 +6368,30 @@ def _ckptoff_set(s=None, train=None, held=None, layers=None, u_train=24.86):
                  peak_vram_gb_phases={"setup": 20.5, "eval": train[side] + 0.05, "train": train[side]})
         out[(fw, t2)] = r
     return out
+
+
+def _ckptofff_set(match=((3.20, 3.22), (3.22, 3.24)), ship=((2.50, 2.52), (2.51, 2.53)), train=(24.40, 24.25), layers=None):
+    """Amendment 59: the field recipe, shipped and matched arms, E4B_CKPT_OFFLOAD 0 (f0) / 1 (f1), two draws each -- each pair as (f0
+    draws, f1 draws) s/step; `train` = the matched arm's (f0, f1) training-phase peak GB; `layers` tag -> recorded offloaded layers."""
+    R = {}
+    for t, (old, new), matched in (("fused_attn4_shipped", ship, False), ("fused_attn4_m", match, True)):
+        for i_side, (side, ss) in enumerate((("f0", old), ("f1", new))):
+            for i, sfx in enumerate(("", "_d2")):
+                tag = f"{t}_{side}{sfx}"
+                r = _receipt("e4b", tag, "fused", s=ss[i], heldout_n=(1.7800 if not matched else 1.8000), matched=matched)
+                r["env"]["torch"] = "2.12.1+cu130"
+                r["absmax_dq"] = True
+                r["lean_ab"] = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                                "lora_path_calls": {"loop": 0, "padded": 9216, "grouped_mm": 0, "padded_bucketed": 0},
+                                "gnf4_pad_buckets_env": None, "gnf4_pad_buckets_mode": "auto", "gnf4_pad_buckets_min_rows": 16384}
+                r["chunked_lm_loss"] = {"env": None, "e4b_has_chunked_lm_loss": True, "chunked_calls": 0, "stock_calls": 0, "small_calls": 80,
+                                        "patched": 1, "runtime_refusals": 0, "refused": {}}
+                r["ckpt_offload_layers"] = (layers or {}).get(tag, 48 if side == "f1" else 0)
+                r["ckpt_offload_env"] = "1" if side == "f1" else "0"
+                r["peak_vram_gb_phases"] = {"setup": 20.5, "eval": 22.0, "train": train[i_side] - (0.0 if matched else 1.5)}
+                r["fam"] = CKPTOFFF_FAM
+                R[("e4b", tag)] = r
+    return R
 
 
 def _rms_set(ship=((5.00, 5.05), (4.60, 4.62)), match=((5.30, 5.33), (5.00, 5.02)), held_shift=0.0, patched=192, calls=1536):
@@ -8585,6 +8699,21 @@ def selftest():
     assert pco(CO(_ckptoff_set(s={"o1": (10.87, 10.89)})))["P154"] == "FALSIFIED"
     assert CO(_ckptoff_set(layers={"fused_attn4_m_o1_d2": 0}))[CKPTOFF_FAM]["verdicts"][("e4b", "fused_attn4_m_o1_d2")] == "VOID"
     assert "P157" in render(RCO, "x") and "amendment 58" in render(RCO, "x")
+    cases += 1
+    # 112. TC1 amendment 59 (qwen3ckptofff): the switch at the field recipe -- VALID; P158-P161 HELD on the default fixture (1.006 / 1.004,
+    #      0.15 GB); 1.022 on the matched pair FALSIFIES P158; a packed-style record (chunked calls) is VOID here; an f1 draw with no layer
+    #      routed is VOID
+    CF = lambda R: {CKPTOFFF_FAM: reduce_family(CKPTOFFF_FAM, R, {}, 20)}
+    RCF = CF(_ckptofff_set())
+    assert all(x["verdict"] == "VALID" for x in RCF[CKPTOFFF_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RCF[CKPTOFFF_FAM]["rows"]]
+    pcf = lambda R: {p: v for p, _, v, _ in score_ckptofff(R)}
+    assert pcf(RCF) == {"P158": "HELD", "P159": "HELD", "P160": "HELD", "P161": "HELD"}, score_ckptofff(RCF)
+    assert pcf(CF(_ckptofff_set(match=((3.20, 3.22), (3.27, 3.29)))))["P158"] == "FALSIFIED"
+    RX = _ckptofff_set()
+    RX[("e4b", "fused_attn4_m_f1")]["chunked_lm_loss"] = dict(RX[("e4b", "fused_attn4_m_f1")]["chunked_lm_loss"], chunked_calls=80)
+    assert CF(RX)[CKPTOFFF_FAM]["verdicts"][("e4b", "fused_attn4_m_f1")] == "VOID"
+    assert CF(_ckptofff_set(layers={"fused_attn4_shipped_f1_d2": 0}))[CKPTOFFF_FAM]["verdicts"][("e4b", "fused_attn4_shipped_f1_d2")] == "VOID"
+    assert "P161" in render(RCF, "x") and "amendment 59" in render(RCF, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
