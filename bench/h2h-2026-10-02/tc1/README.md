@@ -98,6 +98,34 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 57 (2026-10-07): e4b's 1.92 GB training-phase excess on packed rows is checkpoint activations kept on the GPU, the combine backward's fp32 temporaries and the bucketed delta's block (P149–P152 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 57. One RTX 5090 (`tc1-5090-114`, AMD EPYC 7713, Vast
+machine 55913). e4b `c07ea7f`, grouped-nf4-gemm `0e6bff3`, Unsloth 2026.9.14, every arm in venv-unsloth (torch 2.12.1). This is amendment
+47's census on packed 4,096-token rows with no evaluation inside the census window. Read: [`RESULTS-tc1-memc4kt.md`](RESULTS-tc1-memc4kt.md).
+
+| arm | training-phase peak | where | e4b − Unsloth at the peak, by class |
+|---|---|---|---|
+| e4b, `E4B_ABSMAX_DQ=0` | 28.14 GB | `s17.mb3.backward` | transient +1.92, expert absmax +1.35 |
+| e4b, `E4B_ABSMAX_DQ=1` | 26.79 GB | `s10.mb3.backward` | transient +1.91 |
+| Unsloth (`--grad-ckpt unsloth`) | 24.86 GB | `s2.mb2.backward` | — |
+
+- **P149 HELD:** 100 % of each peak is attributed. **P150 HELD:** e4b fp32 is 3.274 GB above Unsloth (band [2.0, 4.5]). **P151 HELD:** e4b
+  with the double-quantized absmax is 1.922 GB above (≤ 2.5). **P152 HELD:** every census peak falls in a training backward. The peaks
+  equal amendment 56's phase peaks to the MB.
+- **What the 1.91 GB is.** Every static class matches Unsloth's at the peak, so the excess is all transient. e4b's largest non-static groups
+  are:
+  - **checkpoint activations, 0.789 GB:** `modeling_qwen3_moe.py:352`, each decoder layer's output (`residual + hidden_states`), 47 blocks
+    of 16.8 MB, i.e. the inputs that non-reentrant checkpointing saves for the next layer. e4b runs Hugging Face's checkpointing; TC1's
+    Unsloth arm runs Unsloth's own (`unsloth`), and its census holds no such group.
+  - **the routed-expert combine's backward, 1.07 GB across three lines:** `engines/fast.py:429`, `:430` and `:435`. These are fp32
+    copies of the incoming gradient expanded to `[tokens × top-k, hidden]` (268 MB each), its reordered copy, and the weight-gradient
+    product. This is e4b's own code and the largest single function.
+  - **grouped-nf4-gemm's bucketed delta, 0.90 GB:** `nf4_qlora.py:672`, `:673`, the zero-padded fp32 input block and its products.
+- **By amendment 57's rule** the next registration targets the largest e4b-only group, the checkpoint activations. The combine backward is
+  larger as a function and is e4b's own; it materialises two fp32 copies where one indexed read would do. Both are candidates for the next
+  box.
+
 ## Amendment 56 (2026-10-07): the double-quantized absmax costs packed rows 0.2 % for 1.35 GB; e4b's training phase peaks 1.92 GB above Unsloth's with it (P144–P146, P148 HELD; P147 FALSIFIED)
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 56. One RTX 5090 (`tc1-5090-113`, AMD EPYC 7713, a 61-CPU
