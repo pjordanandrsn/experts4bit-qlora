@@ -1,7 +1,7 @@
 # P115 — does the registered B=1 fused stack (`E4B_PAGED_FUSE_QKV=1` + `E4B_FUSE_T1_GLUE=1` + `E4B_FUSE_T1_GLUE_R2=1` + `E4B_FUSE_ROUTER_EPI=1`) decode the default `serve_paged` server faster, at no measurable quality cost? On one RTX 5090 (registered 2026-10-07, before any run)
 
 Issue: experts4bit-qlora#1313 (the B1 work item: single-stream decode on the default NF4 server). Lane number claimed by
-`prereg/p115` (pushed PREREG_CLAIM_TIME). Follows P109–P111 (the default graph server) and P54 / P58 / P88 (the fused
+`prereg/p115` (pushed 2026-10-07T17:01:04Z). Follows P109–P111 (the default graph server) and P54 / P58 / P88 (the fused
 stack on the int4 route).
 
 ## Why this lane
