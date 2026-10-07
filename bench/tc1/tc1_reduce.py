@@ -1732,9 +1732,28 @@ EXPECTED[MEMC4KB_FAM] = list(MEMC4KB_ARMS)
 MATCHED |= {t for _, t in MEMC4KB_ARMS}
 PACKED_FAMS = PACKED_FAMS + (MEMC4KB_FAM,)
 LOOP_ROUTE_SHARE_MAX[MEMC4KB_FAM] = 0.05
+# TC1 amendment 57: the census of the TRAINING phase on packed rows -- in-loop evaluation off (TC1_EVAL_EVERY above N), so the run's peak is a
+# training step's (the final held-out evaluation runs after the census closes); e4b fp32 absmax, e4b double-quantized, Unsloth
+MEMC4KT_FAM = "qwen3memc4kt"
+MEMC4KT_ARMS = (("e4b", "fused_attn4_m_p4t"), ("e4b", "fused_attn4_m_p4t_dq"), ("unsloth", "ckpt_unsloth_m_p4t"))
+MEMC4KT_LABELS = {MEMC4KT_ARMS[0]: "e4b fp32 absmax", MEMC4KT_ARMS[1]: "e4b absmax-dq", MEMC4KT_ARMS[2]: "Unsloth"}
+P150_BAND = (2.0e9, 4.5e9)         # P150: e4b fp32's training peak - Unsloth's (amendment 56's phase peaks: 28.14 - 24.86 = 3.28 GB)
+P151_MAX = 2.5e9                   # P151: e4b absmax-dq's training peak - Unsloth's at most this (amendment 56: +1.92 GB)
+NO_SPEED_FAMS[MEMC4KT_FAM] = "the memory census slows the step (amendment 57, as amendment 47), so no speed is read on this token"
+FAMS.append(MEMC4KT_FAM)
+NAMES[MEMC4KT_FAM] = "Qwen3-30B-A3B (amendment 57: the memory census of the training phase on packed 4,096-token rows -- e4b fp32 absmax, e4b absmax-dq, Unsloth; no speed read)"
+N_LAYERS[MEMC4KT_FAM] = 48
+ATTN_CENSUS[MEMC4KT_FAM] = 192
+FAM_ANCHOR[MEMC4KT_FAM] = MEMC4KT_ARMS[0]
+EXPECTED[MEMC4KT_FAM] = list(MEMC4KT_ARMS)
+MATCHED |= {t for _, t in MEMC4KT_ARMS}
+PACKED_FAMS = PACKED_FAMS + (MEMC4KT_FAM,)
+LOOP_ROUTE_SHARE_MAX[MEMC4KT_FAM] = 0.05
 # The census scorer's per-family registration: arms (defaults, lever, Unsloth), labels, the instrument id, the gap id and band, the lever id and ceiling
 MEMC_SPECS = {MEMC4K_FAM: {"arms": MEMC4K_ARMS, "labels": MEMC4K_LABELS, "attr": "P112", "gap": ("P113", P113_BAND), "lev": ("P114", P114_MAX), "am": 47},
-              MEMC4KB_FAM: {"arms": MEMC4KB_ARMS, "labels": MEMC4KB_LABELS, "attr": "P141", "gap": ("P142", P142_BAND), "lev": ("P143", P143_MAX), "am": 55}}
+              MEMC4KB_FAM: {"arms": MEMC4KB_ARMS, "labels": MEMC4KB_LABELS, "attr": "P141", "gap": ("P142", P142_BAND), "lev": ("P143", P143_MAX), "am": 55},
+              MEMC4KT_FAM: {"arms": MEMC4KT_ARMS, "labels": MEMC4KT_LABELS, "attr": "P149", "gap": ("P150", P150_BAND), "lev": ("P151", P151_MAX), "am": 57,
+                            "train_phase": "P152"}}
 
 
 def memc4kb_why(r):
@@ -2304,6 +2323,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == MEMCENSUS_FAM:                            # amendment 23: the pin, the mb1 recipe, the census on the receipt, the absmax the tag names
         w = memcensus_why(r)
+        if w:
+            why.append(w)
+    if fam == MEMC4KT_FAM:                              # amendment 57: amendment 55's predicates (the absmax its tag names: `_dq` or fp32)
+        w = memc4kb_why(r)
         if w:
             why.append(w)
     if fam == MEMC4KB_FAM:                              # amendment 55: torch 2.12, the census, the absmax its tag names, the bucketed default
@@ -3276,7 +3299,16 @@ def score_memc4k(F, fam=MEMC4K_FAM):
                     f"{LABELS[key]} peak {_gb(pe)} - Unsloth peak {_gb(pu)} = {ex / 1e9:+.3f} GB vs {bound}; the excess's largest class at the peak: "
                     f"{largest}; by class, e4b - Unsloth (GB): " + ", ".join(f"{c} {d / 1e9:+.3f}" for c, d in diffs)
                     + f"; e4b's largest non-static groups: {_mc_top(me)}; Unsloth's: {_mc_top(mu)}"))
+    if spec.get("train_phase"):                           # amendment 57: every arm's census peak is a training step's
+        ph = {LABELS[k]: ((reads[k][0] or {}).get("peak_window") or {}).get("peak_phase") for k in ARMS}
+        if any(reads[k][0] is None or v is None for k, v in zip(ARMS, ph.values())):
+            out.append((spec["train_phase"], fam, "UNTESTED", f"every arm's census needs a peak phase: {ph}"))
+        else:
+            train = {n: (str(v).startswith("s") and ".eval" not in str(v)) for n, v in ph.items()}
+            out.append((spec["train_phase"], fam, "HELD" if all(train.values()) else "FALSIFIED",
+                        "census peak phase per arm: " + "; ".join(f"{n} {v}" for n, v in ph.items())))
     return out
+
 
 
 def score_memcensus(F):
@@ -5061,6 +5093,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_denseab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if MEMC4KT_FAM in F:
+        out += ["\n## Predictions P149 / P150 / P151 / P152 (TC1-PREREG amendment 57: the census of the training phase on packed rows, e4b against Unsloth; scored mechanically from the receipts)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_memc4k(F, MEMC4KT_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if MEMC4KB_FAM in F:
         out += ["\n## Predictions P141 / P142 / P143 (TC1-PREREG amendment 55: amendment 47's census at the current defaults, e4b against Unsloth; scored mechanically from the receipts)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -6085,6 +6122,18 @@ def _dqpack_set(s=None, peaks=None, held=None, phases=None, dq=None, u_train=24.
     u.pop("mem_census", None)
     u["peak_vram_gb_phases"] = {"setup": 19.8, "eval": 21.1, "train": u_train}
     R[("unsloth", "ckpt_unsloth_m_pp")] = u
+    return R
+
+
+def _memc4kt_set(peaks=(28.10e9, 26.75e9, 24.86e9), phases=("s2.mb5.backward", "s2.mb5.backward", "s2.mb5.backward"), **kw):
+    """Amendment 57: amendment 55's census arms re-tagged for the training-phase census -- `peaks` = (e4b fp32, e4b dq, Unsloth)
+    peak allocated bytes; `phases` = each arm's census peak phase."""
+    src = _memc4kb_set(peaks=peaks, **kw)
+    R = {}
+    for i, ((fw, tag), (fw2, tag2)) in enumerate(zip(MEMC4KB_ARMS, MEMC4KT_ARMS)):
+        r = dict(src[(fw, tag)], tag=tag2, fam=MEMC4KT_FAM)
+        r["mem_census"] = dict(r["mem_census"], peak_window=dict(r["mem_census"]["peak_window"], peak_phase=phases[i]))
+        R[(fw2, tag2)] = r
     return R
 
 
@@ -8368,6 +8417,18 @@ def selftest():
     assert RN[DQPACK_FAM]["verdicts"][("e4b", "fused_attn4_m_a1")] == "VALID" and pdp(RN)["P147"] == "UNTESTED"
     assert DP(_dqpack_set(dq={"fused_attn4_m_a1_d2": False}))[DQPACK_FAM]["verdicts"][("e4b", "fused_attn4_m_a1_d2")] == "VOID"
     assert "P147" in render(RDP, "x") and "amendment 56" in render(RDP, "x")
+    cases += 1
+    # 110. TC1 amendment 57 (qwen3memc4kt): the training-phase census -- VALID; P149 / P150 / P151 / P152 HELD at 3.24 / 1.89 GB with every
+    #      peak in a backward; a peak in an evaluation FALSIFIES P152; 5.0 GB FALSIFIES P150; the dq arm at 2.9 GB FALSIFIES P151
+    MT = lambda R: {MEMC4KT_FAM: reduce_family(MEMC4KT_FAM, R, {}, 20)}
+    RMT = MT(_memc4kt_set())
+    assert all(x["verdict"] == "VALID" for x in RMT[MEMC4KT_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RMT[MEMC4KT_FAM]["rows"]]
+    pmt = lambda **kw: {p: v for p, _, v, _ in score_memc4k(MT(_memc4kt_set(**kw)), MEMC4KT_FAM)}
+    assert pmt() == {"P149": "HELD", "P150": "HELD", "P151": "HELD", "P152": "HELD"}, score_memc4k(RMT, MEMC4KT_FAM)
+    assert pmt(phases=("s20.eval", "s2.mb5.backward", "s2.mb5.backward"))["P152"] == "FALSIFIED"
+    assert pmt(peaks=(29.86e9, 26.75e9, 24.86e9))["P150"] == "FALSIFIED" and pmt(peaks=(28.10e9, 27.76e9, 24.86e9))["P151"] == "FALSIFIED"
+    assert {p: v for p, _, v, _ in score_memc4k(MC(_memc4k_set()))} == {"P112": "HELD", "P113": "HELD", "P114": "HELD"}   # amendment 47: no phase prediction
+    assert "P152" in render(RMT, "x") and "amendment 57" in render(RMT, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

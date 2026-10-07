@@ -2493,3 +2493,40 @@ route (≤ 5 %). The phase record is not part of validity: without it, P147 and 
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Five arms: about $2 with
 the download.
+
+### Amendment 57 (2026-10-07T01:36Z, after amendment 56's read, before any box): the memory census of the training phase on packed rows (P149–P152)
+
+**Why.** Amendment 56 split each run's peak by phase. On packed 4,096-token rows, with the double-quantized absmax, e4b's training phase
+peaks at 26.79 GB against Unsloth's 24.86: +1.92 GB (P147 FALSIFIED). By its rule, the next registration is a census of the training
+phase. Amendment 55's census could not attribute it, because its snapshot was taken at the run's peak, which was the held-out evaluation
+after step 20, 0.09 GB above training.
+
+**The box** (token `qwen3memc4kt`). Amendment 47's census box (packed rows, `TC1_FREE_OUTPUTS=1`, the matched set, 20 steps, one draw
+per arm, `--mem-census 1`, every arm in venv-unsloth), with `TC1_EVAL_EVERY` above `TC1_STEPS`. No evaluation then runs inside the
+census window: the step-0 evaluation comes before training, with no optimizer state, and the final one after the census closes. The
+family refuses to run otherwise. In this order:
+
+- e4b `fused_attn4_m_p4t`: `E4B_ABSMAX_DQ=0`, the fp32 expert absmax;
+- e4b `fused_attn4_m_p4t_dq`: `E4B_ABSMAX_DQ=1`;
+- Unsloth `ckpt_unsloth_m_p4t`: TC1's qwen3 Unsloth arm (grouped_mm).
+
+The absmax is set explicitly on both e4b arms, so the box reads the same whatever the library default is when it runs. Validity:
+amendment 55's `memc4kb_why` (the absmax the tag names, the bucketed default, the chunked loss unset, the census present). No speed is
+read.
+
+**Predictions** (registered before the box):
+
+- **P149:** the census attributes at least 90 % of each arm's peak.
+- **P150:** e4b fp32's peak allocated is **2.0 to 4.5 GB** above Unsloth's, set with amendment 56's 3.28 GB (phase peaks) in view.
+- **P151:** e4b absmax-dq's peak is at most **2.5 GB** above Unsloth's (amendment 56: +1.92).
+- **P152:** every arm's census peak falls in a training step (a phase `s<N>.mb<M>.forward|backward|optimizer`, never an evaluation).
+
+**Decision rules.** This is a measurement, not a position. The read names the excess's largest class and e4b's largest live groups at the
+training peak, and the next registration targets the largest e4b-only group, whichever it is.
+
+- **P152 FALSIFIED:** the census did not read the training phase. The read says where the peak fell, and the box is re-asked with that
+  phase excluded.
+- Positions stay with the boxes that read them. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the
+download.
