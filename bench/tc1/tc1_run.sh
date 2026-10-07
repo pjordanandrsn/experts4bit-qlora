@@ -1540,6 +1540,23 @@ tc1_combck_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/unsloth/m_cc  && arm $FAM unsloth ckpt_unsloth_m_cc unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $PP
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_ckptre_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 62 (2026-10-07): why amendment 59's field-recipe step got faster. The shipped
+# arm at TC1's field recipe with Hugging Face's checkpoint (r0, E4B_CKPT_OFFLOAD=0), the reentrant checkpoint alone (rr, =reentrant) and the
+# reentrant checkpoint with its inputs in pinned host memory (r1, =1); two draws a side (r0 rr r1 r1 rr r0), every arm in venv-unsloth.
+tc1_ckptre_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5
+  local ALL="e4b:fused_attn4_shipped_r0:fused e4b:fused_attn4_shipped_rr:fused e4b:fused_attn4_shipped_r1:fused e4b:fused_attn4_shipped_r1_d2:fused e4b:fused_attn4_shipped_rr_d2:fused e4b:fused_attn4_shipped_r0_d2:fused"
+  say "===== FIELD CHECKPOINT FLAVOUR family $FAM ($MID @ $REV; shipped arm, E4B_CKPT_OFFLOAD 0 vs reentrant vs 1, field recipe, venv-unsloth, amendment 62)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local NATIVE="--adapter-dtype native --lora-init native"
+  local PP="--phase-peaks 1" R0="E4B_CKPT_OFFLOAD=0" RR="E4B_CKPT_OFFLOAD=reentrant" R1="E4B_CKPT_OFFLOAD=1"
+  can_run 600 $FAM/e4b/shipped_r0     && TC1_ARM_EXTRA_ENV="$R0" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_r0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_rr     && TC1_ARM_EXTRA_ENV="$RR" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_rr fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_r1     && TC1_ARM_EXTRA_ENV="$R1" E4B_VENV=t212 arm   $FAM e4b fused_attn4_shipped_r1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_r1_d2  && TC1_ARM_EXTRA_ENV="$R1" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_r1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_rr_d2  && TC1_ARM_EXTRA_ENV="$RR" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_rr fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  can_run 600 $FAM/e4b/shipped_r0_d2  && TC1_ARM_EXTRA_ENV="$R0" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_shipped_r0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $NATIVE $PP
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_ckptofff_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 59 (2026-10-07): amendment 58's switch (E4B_CKPT_OFFLOAD=1, checkpoint
 # inputs in pinned host memory) off (f0) vs on (f1) at TC1's FIELD recipe, where each layer's input is a few hundred tokens -- the shipped and the
 # matched arm, two draws a side in ABBA order, every arm in venv-unsloth at e4b's defaults otherwise with --phase-peaks 1: the read before any default.
@@ -1997,6 +2014,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3evalce) tc1_evalce_family qwen3evalce Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 60: the held-out loss from the logits in chunks, packed rows
   qwen3combck) tc1_combck_family qwen3combck Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 61: the combine whole vs over row chunks, packed rows
   qwen3ckptofff) tc1_ckptofff_family qwen3ckptofff Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 59: checkpoint inputs in pinned host memory, off vs on, field recipe
+  qwen3ckptre) tc1_ckptre_family qwen3ckptre Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 62: the field speed-up's cause -- checkpoint flavour vs the copies
   qwen3padbk) tc1_padbk_family qwen3padbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 48: the LoRA delta's bucketed padding on packed rows
   qwen3padbk28) tc1_padbk28_family qwen3padbk28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 52: amendment 48's bucketing A/B in venv-e4b (torch 2.8)
   qwen3prof28) tc1_prof28_family qwen3prof28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 53: the matched arm profiled in torch 2.12 and 2.8 at e4b's defaults

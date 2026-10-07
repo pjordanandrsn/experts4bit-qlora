@@ -3993,6 +3993,9 @@ def run_arm(a, load_fn, sampler=True):
         # TC1 amendment 58: decoder layers whose checkpoint keeps its input in pinned host memory (E4B_CKPT_OFFLOAD=1, engines/ckpt_offload.py)
         "ckpt_offload_layers": sum(1 for m in model.modules() if getattr(m, "_e4b_ckpt_offload_ref", None) is not None),
         "ckpt_offload_env": os.environ.get("E4B_CKPT_OFFLOAD"),
+        # TC1 amendment 62: which checkpoint those layers run -- "offload" (reentrant + pinned host memory) or "reentrant" (inputs on the GPU)
+        "ckpt_offload_funcs": sorted({getattr(getattr(m, "_gradient_checkpointing_func", None), "__name__", "?") for m in model.modules()
+                                      if getattr(m, "_e4b_ckpt_offload_ref", None) is not None}),
         **({"absmax_dq_modules": x["absmax_dq"]["modules"], "absmax_bytes_before": x["absmax_dq"]["bytes_before"],
             "absmax_bytes_after": x["absmax_dq"]["bytes_after"], "absmax_bytes_ratio": x["absmax_dq"]["ratio"]} if x.get("absmax_dq") else {}),
         "structural_expected_n_attn4": x.get("structural_expected_n_attn4"), "detector_version": x.get("detector_version"),

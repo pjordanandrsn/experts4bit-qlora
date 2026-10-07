@@ -1276,3 +1276,47 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
 - **By amendment 60's rule** (all four HELD), `E4B_CHUNKED_EVAL_LOSS` becomes on by default in a library PR that states its scope (one
   model, one RTX 5090, torch 2.12) and that held-out values compared across the flip are not byte-identical above the gate, bounded by
   P164 and P165 here. Reported, not scored: on this host e4b stepped 10.20 s against Unsloth's 12.54 at these settings.
+
+## Amendment 59 (2026-10-07): checkpoint inputs in host memory make the field recipe's step faster, 0.948 (matched) and 0.916 (shipped), and take 0.17 GB off its training peak (P158–P161 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 59. One RTX 5090 (`tc1-5090-120`, AMD Ryzen 9 9950X, a
+30-CPU quota, Vast machine 153193), after two failed draws (`-116`: pre-flight HF bandwidth 13.0 MB/s; `-119`: the image's torch could not
+use the GPU, CUDA error 803, which amendment 61 made a host floor). e4b `655f626`, grouped-nf4-gemm `0e6bff3`, every arm in venv-unsloth
+(torch 2.12.1). TC1's field recipe, 60 load-gated steps, every attempt first time at load1 0.9–1.8, peaks split by phase. e4b at its
+defaults otherwise, with `E4B_CKPT_OFFLOAD` 0 (`f0`) or 1 (`f1`: all 48 decoder layers routed). Read: [`RESULTS-tc1-ckptofff.md`](RESULTS-tc1-ckptofff.md).
+
+| arm | s/step `f0` (two draws) | s/step `f1` | training-phase peak `f0` → `f1` | held-out at N `f0` / `f1` (means) |
+|---|---|---|---|---|
+| matched | 2.150 / 2.147 | 2.040 / 2.032 | 26.14 → 25.97 GB | 0.75671 / 0.75686 |
+| shipped | 1.713 / 1.686 | 1.554 / 1.558 | 23.32 → 23.10 GB | 0.75703 / 0.75417 |
+
+- **P158 HELD:** matched `f1` / `f0` **0.948** [0.945, 0.951] (registered ≤ 1.01, amendment 49's bar for a field default).
+- **P159 HELD:** shipped **0.916** [0.907, 0.924].
+- **P160 HELD:** held-out at N moves +0.0001 (matched) and -0.0029 (shipped) (≤ 0.005). Step-0 held-out is 1.95917 on every arm.
+- **P161 HELD:** the matched training-phase peak falls **0.171 GB** (≥ 0.10); the shipped arm's falls 0.217 GB.
+- The registered risk was the opposite: that synchronous copies would cost the short rows. Instead the step got faster, which the
+  amendment did not predict. Amendment 62 asks why (the reentrant checkpoint alone against the copies) before any explanation is offered.
+- **By amendment 59's rule** (all four HELD), `E4B_CKPT_OFFLOAD` becomes e4b's default under `enable_fast_train`, with a scope statement:
+  one model, one RTX 5090, torch 2.12, the field recipe and packed rows.
+
+## Amendment 61 (2026-10-07): the combine over row chunks steps 0.978 of the whole-tensor combine on packed rows, but leaves the training peak where it was (P167, P168 HELD; P166, P169 FALSIFIED)
+
+Pre-registration: amendment 61. One RTX 5090 (`tc1-5090-122`, AMD EPYC 9655, a 46-CPU quota, Vast machine 150333). e4b `faf65ae`
+(with #1304), grouped-nf4-gemm `0e6bff3`, Unsloth 2026.9.14, every arm in venv-unsloth (torch 2.12.1). Packed 4,096-token rows, 40
+load-gated steps, every attempt first time at load1 1.1–1.2, peaks split by phase. e4b with `E4B_CKPT_OFFLOAD=1` and `E4B_COMBINE_CHUNK`
+0 (`c0`) or the default (`c1`: 16,128 chunked forwards and 7,680 chunked backwards a run). Read: [`RESULTS-tc1-combck.md`](RESULTS-tc1-combck.md).
+
+| arm | s/step (two draws) | training-phase peak | evaluation peak | held-out step 0 / N |
+|---|---|---|---|---|
+| e4b `c0` | 10.036 / 10.028 | 25.85 / 25.86 GB | 26.88 GB | 1.28851 / 0.95397, 0.95407 |
+| e4b `c1` | 9.805 / 9.813 | 25.84 / 25.84 GB | 26.88 GB | 1.28851 / 0.95421, 0.95450 |
+| Unsloth (one draw) | 11.651 | 24.86 GB | 21.85 GB | 1.28707 / 0.95444 |
+
+- **P166 FALSIFIED:** the training-phase peak falls only **0.009 GB** (registered ≥ 0.3). The combine's own transient fell (the
+  A2000 read 0.805 → 0.269 GB for its backward), but with the checkpoint inputs in host memory something else holds the step's peak.
+- **P167 HELD, and faster:** `c1` / `c0` **0.978** [0.977, 0.979] (≤ 1.02): the chunks save 2.2 % of the step.
+- **P168 HELD:** step-0 held-out identical on both draw pairs; held-out at N +0.00034.
+- **P169 FALSIFIED:** e4b's training phase still peaks **0.979 GB** above Unsloth's (registered ≤ 0.7).
+- **By amendment 61's rule** the default stands (it is faster and value-identical), and what holds the training peak is the next census's
+  question. The evaluation peak here is 26.88 GB because this box ran before `E4B_CHUNKED_EVAL_LOSS` became the default.
+

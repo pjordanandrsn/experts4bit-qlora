@@ -11081,6 +11081,56 @@
         "receipts/experts4bit-qlora/2026-10-07/tc1-5090-121/tc1/"
       ],
       "notes": "Vast invoiced $1.46."
+    },
+    {
+      "id": "e4b.train.ckpt-offload.field.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 59 (#835), one rented RTX 5090 (tc1-5090-120, AMD Ryzen 9 9950X): e4b's shipped and matched arms at TC1's field recipe (seq 2048, micro-batch 2 x accum 4) in venv-unsloth (torch 2.12.1) at e4b's defaults otherwise, E4B_CKPT_OFFLOAD 0 against 1 (every decoder layer's checkpoint input in pinned host memory through the reentrant checkpoint, #1298), two draws a side in ABBA order, 60 load-gated steps (every attempt first time), peaks split by phase. The step is faster with it: matched 0.948 [0.945, 0.951] (P158 HELD, <= 1.01), shipped 0.916 [0.907, 0.924] (P159 HELD); held-out at N +0.0001 / -0.0029 (P160 HELD, <= 0.005); the matched training-phase peak falls 26.143 -> 25.973 GB (P161 HELD, >= 0.10 GB), the shipped arm's 23.321 -> 23.104. The registered risk was a slowdown; why the step got faster is TC1 amendment 62's question.",
+      "value": 0.916,
+      "unit": "ratio s/step, E4B_CKPT_OFFLOAD=1 over 0, Qwen3-30B-A3B shipped arm at the field recipe (medians of steps 11..60 over two draws each); matched arm 0.948; matched training-phase peak -0.171 GB",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-120: instance 54597943, AMD Ryzen 9 9950X, a 30-CPU quota, Vast machine 153193); e4b @ 655f626 + grouped-nf4-gemm @ 0e6bff3, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3ckptofff (TC1 amendment 59): the field recipe, held-out every 20 over 8 rows, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_f0 / _f1 and fused_attn4_m_f0 / _f1 (+ _d2), --phase-peaks 1; validity (ckptoff_why's field form: every padded call through the single block, no chunked loss call, 48 layers routed on f1, none on f0) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-ckptofff.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-120/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-120/tc1/"
+      ],
+      "notes": "Vast invoiced $1.37; two earlier draws for the same box were not run (tc1-5090-116, $0.06, pre-flight bandwidth; tc1-5090-119, $0.02, CUDA error 803)."
+    },
+    {
+      "id": "e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 61 (#835), one rented RTX 5090 (tc1-5090-122, AMD EPYC 9655): e4b's matched arm on packed rows of 4,096 real tokens in venv-unsloth (torch 2.12.1) with E4B_CKPT_OFFLOAD=1 and its defaults otherwise, E4B_COMBINE_CHUNK=0 against the default (the routed-expert combine's fp32 work over row chunks above a 128 MiB image, #1304), two draws each in ABBA order, Unsloth 2026.9.14's matched arm beside, 40 load-gated steps (every attempt first time), peaks split by phase. The chunks step 0.978 [0.977, 0.979] of the whole-tensor combine (P167 HELD, <= 1.02) with held-out unchanged (step 0 identical, N +0.00034; P168 HELD), but the training-phase peak falls only 25.852 -> 25.843 GB (P166 FALSIFIED, >= 0.3 GB), leaving e4b +0.979 GB over Unsloth's 24.864 GB training peak (P169 FALSIFIED, <= 0.7).",
+      "value": 0.978,
+      "unit": "ratio s/step, the default row-chunked combine over E4B_COMBINE_CHUNK=0, e4b matched arm on packed 4,096-token rows (medians of two draws each); training-phase peak -0.009 GB; e4b +0.979 GB over Unsloth's training-phase peak",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-122: instance 54601318, AMD EPYC 9655, a 46-CPU quota, Vast machine 150333); e4b @ faf65ae + grouped-nf4-gemm @ 0e6bff3, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3combck (TC1 amendment 61): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), held-out at 0 and 40 over 8 rows, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_m_c0 / _c1 (+ _d2) with E4B_CKPT_OFFLOAD=1 and Unsloth ckpt_unsloth_m_cc (grouped_mm), --phase-peaks 1; validity (combck_why: chunked forwards and backwards recorded on c1, none on c0) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-combck.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-122/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-122/tc1/"
+      ],
+      "notes": "Vast invoiced $1.40."
     }
   ]
 }

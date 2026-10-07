@@ -957,6 +957,24 @@ COMBCK_SPEED_MAX = 1.02        # P167: s/step c1 / c0 at most this (amendment 48
 COMBCK_STEP0_MAX = 0.0001      # P168: |step-0 held-out c1 - c0| per draw pair
 COMBCK_HELDOUT_MAX = 0.005     # P168: |mean held-out at N, c1 - c0|
 COMBCK_GAP_MAX = 0.7           # P169: c1's training-phase peak at most this many GB above Unsloth's
+# TC1 amendment 62: why amendment 59's field-recipe step got faster -- the shipped arm with Hugging Face's checkpoint (r0, E4B_CKPT_OFFLOAD=0),
+# the reentrant checkpoint alone (rr, =reentrant) and the reentrant checkpoint with the inputs in host memory (r1, =1), two draws a side
+CKPTRE_FAM = "qwen3ckptre"
+FAMS.append(CKPTRE_FAM)
+NAMES[CKPTRE_FAM] = "Qwen3-30B-A3B (amendment 62: the shipped arm at the field recipe with Hugging Face's checkpoint, the reentrant checkpoint alone, and the reentrant checkpoint with its inputs in host memory)"
+N_LAYERS[CKPTRE_FAM] = 48
+ATTN_CENSUS[CKPTRE_FAM] = 192
+DENSE_PINS[CKPTRE_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[CKPTRE_FAM] = ("e4b", "fused_attn4_shipped_r0")
+EXPECTED[CKPTRE_FAM] = [("e4b", "fused_attn4_shipped_r0"), ("e4b", "fused_attn4_shipped_rr"), ("e4b", "fused_attn4_shipped_r1"),
+                        ("e4b", "fused_attn4_shipped_r1_d2"), ("e4b", "fused_attn4_shipped_rr_d2"), ("e4b", "fused_attn4_shipped_r0_d2")]
+for _side in ("r0", "rr", "r1"):
+    DRAW2[("e4b", f"fused_attn4_shipped_{_side}")] = ("e4b", f"fused_attn4_shipped_{_side}_d2")
+CKPTRE_RR_MAX = 0.96           # P170: s/step rr / r0 at most this (the reentrant checkpoint alone carries the speed-up)
+CKPTRE_R1_RR_BAND = (0.98, 1.02)   # P171: s/step r1 / rr inside this (the copies neither help nor hurt by more than 2 %)
+CKPTRE_R1_MAX = 0.96           # P172: s/step r1 / r0 at most this (amendment 59's 0.916 replicates on another host)
+CKPTRE_HELDOUT_MAX = 0.005     # P173: the largest |mean held-out at N| difference between any two sides
+CKPTRE_SIDE = {"r0": (0, "0", None), "rr": (48, "reentrant", "reentrant_checkpoint"), "r1": (48, "1", "offloaded_checkpoint")}
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -1852,6 +1870,71 @@ def score_combck(F, fam=COMBCK_FAM):
         gap = statistics.median(t1) - tu
         out.append(("P169", fam, "HELD" if gap <= COMBCK_GAP_MAX else "FALSIFIED",
                     f"c1 training-phase peak {statistics.median(t1):.3f} vs Unsloth {tu:.3f} GB (gap {gap:+.3f} vs <= {COMBCK_GAP_MAX})"))
+    return out
+
+
+def ckptre_side(tag):
+    """Amendment 62: r0 / rr / r1 of a qwen3ckptre tag (fused_attn4_shipped_<side>[_d2]), or None."""
+    m = re.match(r"^fused_attn4_shipped_(r0|rr|r1)(?:_d2)?$", tag or "")
+    return m.group(1) if m else None
+
+
+def ckptre_why(tag, r):
+    """Amendment 62's predicates: amendment 59's field-recipe form (torch 2.12, the double-quantized absmax, every padded call through the
+    single block, no chunked loss call) and the checkpoint the side names -- r0 E4B_CKPT_OFFLOAD=0 with no layer routed; rr `reentrant`
+    with all 48 layers on reentrant_checkpoint; r1 `1` with all 48 on offloaded_checkpoint. Empty string = as registered."""
+    r = r or {}
+    side = ckptre_side(tag)
+    if side is None:
+        return f"amendment 62 registers no side for tag {tag}"
+    probe = dict(r)
+    n, env, fn_ = CKPTRE_SIDE[side]
+    probe["ckpt_offload_env"] = "1" if side != "r0" else "0"      # ckptoff_why checks the env against its o0/o1 vocabulary
+    bad = [w for w in [ckptoff_why("fused_attn4_m_o1" if side != "r0" else "fused_attn4_m_o0", probe, packed=False)] if w]
+    got_n, got_env = r.get("ckpt_offload_layers"), str(r.get("ckpt_offload_env"))
+    funcs = r.get("ckpt_offload_funcs")
+    if (got_n, got_env) != (n, env) or (fn_ is not None and funcs != [fn_]):
+        bad.append(f"checkpoint {got_n!r} layers, E4B_CKPT_OFFLOAD={got_env!r}, functions {funcs!r}: side {side} names {n} layers with "
+                   f"{env!r}" + (f" on {fn_}" if fn_ else ""))
+    return "; ".join(dict.fromkeys(bad))
+
+
+def score_ckptre(F, fam=CKPTRE_FAM):
+    """TC1-PREREG amendment 62. Two VALID, stable draws a side. P170: s/step rr / r0 <= CKPTRE_RR_MAX. P171: r1 / rr inside CKPTRE_R1_RR_BAND.
+    P172: r1 / r0 <= CKPTRE_R1_MAX. P173: the largest |mean held-out at N| difference between two sides <= CKPTRE_HELDOUT_MAX. A missing /
+    non-VALID / unstable side, UNTESTED."""
+    R = F.get(fam)
+    if not R:
+        return []
+    D = {sd: R["draws"].get(("e4b", f"fused_attn4_shipped_{sd}"), {}) for sd in ("r0", "rr", "r1")}
+    def ok(sd):
+        d = D[sd]
+        return d.get("usable") and d.get("draws") == 2
+    def ratio(a, b, pid, test, bound):
+        if not (ok(a) and ok(b)):
+            why = "; ".join(f"{sd} {D[sd].get('verdict') or 'missing'}: {D[sd].get('why') or ''}".strip() for sd in (a, b) if not ok(sd))
+            return (pid, fam, "UNTESTED", f"{a} / {b}: two stable VALID draws a side are registered -- {why}")
+        x = D[a]["s"] / D[b]["s"]
+        cross = [p / q for p in D[a]["s_list"] for q in D[b]["s_list"]]
+        return (pid, fam, "HELD" if test(x) else "FALSIFIED",
+                f"{a} / {b} {x:.3f} [{min(cross):.3f}, {max(cross):.3f} over 4 cross-draw ratios] vs {bound}; s/step {a} "
+                f"{' / '.join(f'{v:.3f}' for v in D[a]['s_list'])}, {b} {' / '.join(f'{v:.3f}' for v in D[b]['s_list'])}")
+    out = [ratio("rr", "r0", "P170", lambda x: x <= CKPTRE_RR_MAX, f"<= {CKPTRE_RR_MAX}"),
+           ratio("r1", "rr", "P171", lambda x: CKPTRE_R1_RR_BAND[0] <= x <= CKPTRE_R1_RR_BAND[1], f"in [{CKPTRE_R1_RR_BAND[0]}, {CKPTRE_R1_RR_BAND[1]}]"),
+           ratio("r1", "r0", "P172", lambda x: x <= CKPTRE_R1_MAX, f"<= {CKPTRE_R1_MAX}")]
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    means = {}
+    for sd in ("r0", "rr", "r1"):
+        hs = [((rows.get(("e4b", t)) or {}).get("r") or {}).get("eval_loss_final") for t in (f"fused_attn4_shipped_{sd}", f"fused_attn4_shipped_{sd}_d2")]
+        vs = [(rows.get(("e4b", t)) or {}).get("verdict") for t in (f"fused_attn4_shipped_{sd}", f"fused_attn4_shipped_{sd}_d2")]
+        if None not in hs and all(v == "VALID" for v in vs):
+            means[sd] = statistics.mean(hs)
+    if len(means) < 3:
+        out.append(("P173", fam, "UNTESTED", f"held-out at N on two VALID draws of every side is registered: {sorted(means)}"))
+    else:
+        worst = max(abs(means[a] - means[b]) for a in means for b in means)
+        out.append(("P173", fam, "HELD" if worst <= CKPTRE_HELDOUT_MAX else "FALSIFIED",
+                    "mean held-out at N " + ", ".join(f"{sd} {v:.5f}" for sd, v in means.items()) + f"; largest difference {worst:.5f} (<= {CKPTRE_HELDOUT_MAX})"))
     return out
 
 
@@ -2755,6 +2838,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == COMBCK_FAM:                              # amendment 61: amendment 58's o1 predicates plus the combine its side names
         w = combck_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == CKPTRE_FAM and fw == "e4b":              # amendment 62: amendment 59's field form plus the checkpoint function its side names
+        w = ckptre_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -5627,6 +5714,17 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_combck(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if CKPTRE_FAM in F:
+        out += ["\n## Amendment 62: the shipped arm at the field recipe -- Hugging Face's checkpoint, the reentrant checkpoint alone, and with its inputs in host memory (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | run peak GB | train | held-out N | checkpoint |", "|---|---|---|---|---|---|---|"]
+        for x in F[CKPTRE_FAM]["rows"]:
+            r = x.get("r") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(r.get('peak_vram_gb'), 3)} | "
+                       f"{(r.get('peak_vram_gb_phases') or {}).get('train')} | {r.get('eval_loss_final')} | {r.get('ckpt_offload_env')} {r.get('ckpt_offload_funcs')} |")
+        out += ["\n## Predictions P170 / P171 / P172 / P173 (TC1-PREREG amendment 62: what made the field recipe's step faster; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_ckptre(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFFF_FAM in F:
         out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
@@ -6676,6 +6774,30 @@ def _combck_set(s=None, train=None, step0=None, held=None, rec=None, u_train=24.
                              combine_chunk=(rec or {}).get(t2, c), eval_loss_step0=(step0 or {}).get(t2, 1.28851),
                              eval_loss_final=(held or {}).get(t2, 0.9542), peak_vram_gb_phases={"setup": 21.86, "eval": 26.88, "train": train[side]})
     return out
+
+
+def _ckptre_set(s=None, held=None, funcs=None):
+    """Amendment 62: the shipped arm at the field recipe, r0 / rr / r1, two draws each -- `s` side -> draws' s/step; `held` tag -> held-out
+    at N; `funcs` tag -> the recorded checkpoint functions."""
+    s = dict({"r0": (1.700, 1.690), "rr": (1.570, 1.560), "r1": (1.555, 1.560)}, **(s or {}))
+    R = {}
+    for side in ("r0", "rr", "r1"):
+        for i, sfx in enumerate(("", "_d2")):
+            tag = f"fused_attn4_shipped_{side}{sfx}"
+            r = _receipt("e4b", tag, "fused", s=s[side][i], heldout_n=(held or {}).get(tag, 1.7800), matched=False)
+            r["env"]["torch"] = "2.12.1+cu130"
+            r["absmax_dq"] = True
+            r["lean_ab"] = {"gnf4_lean_delta": "1", "gnf4_lean_delta_env": None, "gnf4_has_lean_delta": True,
+                            "lora_path_calls": {"loop": 0, "padded": 49152, "grouped_mm": 0, "padded_bucketed": 0},
+                            "gnf4_pad_buckets_env": None, "gnf4_pad_buckets_mode": "auto", "gnf4_pad_buckets_min_rows": 16384}
+            r["chunked_lm_loss"] = {"env": None, "e4b_has_chunked_lm_loss": True, "chunked_calls": 0, "stock_calls": 0, "small_calls": 240,
+                                    "patched": 1, "runtime_refusals": 0, "refused": {}}
+            n, env, fn_ = CKPTRE_SIDE[side]
+            r["ckpt_offload_layers"], r["ckpt_offload_env"] = n, env
+            r["ckpt_offload_funcs"] = (funcs or {}).get(tag, [fn_] if fn_ else [])
+            r["fam"] = CKPTRE_FAM
+            R[("e4b", tag)] = r
+    return R
 
 
 def _rms_set(ship=((5.00, 5.05), (4.60, 4.62)), match=((5.30, 5.33), (5.00, 5.02)), held_shift=0.0, patched=192, calls=1536):
@@ -9032,6 +9154,19 @@ def selftest():
     bad0 = {"env": "0", "e4b_has_combine_chunk": True, "chunked_fwd": 4, "chunked_bwd": 0}
     assert CB(_combck_set(rec={"fused_attn4_m_c0": bad0}))[COMBCK_FAM]["verdicts"][("e4b", "fused_attn4_m_c0")] == "VOID"
     assert "P169" in render(RCB, "x") and "amendment 61" in render(RCB, "x")
+    cases += 1
+    # 115. TC1 amendment 62 (qwen3ckptre): the field speed-up's cause -- VALID; P170-P173 HELD on the default fixture (rr / r0 0.925,
+    #      r1 / rr 0.997, r1 / r0 0.922); rr as slow as r0 FALSIFIES P170 and P171; an rr draw on the offloaded function is VOID
+    CR = lambda R: {CKPTRE_FAM: reduce_family(CKPTRE_FAM, R, {}, 20)}
+    RCR = CR(_ckptre_set())
+    assert all(x["verdict"] == "VALID" for x in RCR[CKPTRE_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RCR[CKPTRE_FAM]["rows"]]
+    pcr = lambda R: {p: v for p, _, v, _ in score_ckptre(R)}
+    assert pcr(RCR) == {"P170": "HELD", "P171": "HELD", "P172": "HELD", "P173": "HELD"}, score_ckptre(RCR)
+    slow = pcr(CR(_ckptre_set(s={"rr": (1.700, 1.695)})))
+    assert slow["P170"] == "FALSIFIED" and slow["P171"] == "FALSIFIED" and slow["P172"] == "HELD", slow
+    assert CR(_ckptre_set(funcs={"fused_attn4_shipped_rr": ["offloaded_checkpoint"]}))[CKPTRE_FAM]["verdicts"][("e4b", "fused_attn4_shipped_rr")] == "VOID"
+    assert pcr(CR(_ckptre_set(held={"fused_attn4_shipped_r1": 1.7900, "fused_attn4_shipped_r1_d2": 1.7900})))["P173"] == "FALSIFIED"
+    assert "P173" in render(RCR, "x") and "amendment 62" in render(RCR, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

@@ -29,7 +29,8 @@ Everything else -- generation, a ``torch.no_grad`` evaluation, ``return_dict=Fal
 held-out loss is the stock path's bit for bit. A forward that takes it returns the model's own output class with ``.loss`` set
 and ``.logits`` None: nothing on e4b's training path or the TC1 harness reads the logits of a training forward.
 
-Held-out evaluation, opt-in (``E4B_CHUNKED_EVAL_LOSS=1``; unset / ``0``: the stock forward, as above). A ``torch.no_grad`` forward
+Held-out evaluation, on by default since TC1 amendment 60 (``E4B_CHUNKED_EVAL_LOSS`` unset or ``1``; ``0``: the stock forward, as above).
+A ``torch.no_grad`` forward
 that passes ``labels`` -- an evaluation loop's -- builds the full logits AND Hugging Face's loss upcasts them to fp32 and takes the
 log-softmax of the copy: on one packed 4,096-token row at Qwen3's vocabulary that is 1.16 GiB of bf16 logits plus 2 x 2.32 GiB of
 fp32. On TC1's packed rows that evaluation is e4b's run peak: 26.88 GB against a training-phase peak of 26.59 (25.85 with
@@ -39,7 +40,11 @@ usual -- and the loss is then computed from those logits in fp32 chunks of the c
 with the router auxiliary loss added as the forward adds it. Nothing but the loss's fp32 summation order differs, and only above the
 gate. Under the gate, without labels, with ``logits_to_keep``, a tuple return, or a model the table refused, the forward is the
 stock one. The eval path rides on the training patch: ``E4B_CHUNKED_LM_LOSS=0`` patches nothing, so evaluation is stock whatever
-this variable says.
+this variable says. TC1 amendment 60 read it on Qwen3-30B-A3B's packed rows on one RTX 5090 in torch 2.12
+(``e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07``): the evaluation-phase peak fell 26.88 -> 22.50 GB, below the 25.85 GB
+training phase, with step-0 held-out identical and held-out at N within 0.00005. A held-out loss above the gate therefore differs
+from the stock one by fp32 summation order only; one compared across this default (before / after, or against ``0``) is not
+byte-identical there. Under the gate -- TC1's field-recipe evaluation rows peak at 411 tokens, 0.23 GiB -- nothing changes.
 
 Which models: the Hugging Face causal-LM classes in :data:`SUPPORTED`. The post-``lm_head`` code of each was read in
 transformers' source, and each is test-pinned against the stock loss and gradients on a tiny config. Anything else is REFUSED (a
@@ -100,13 +105,13 @@ DEFAULT_CHUNK = 512
 #: stays under it at 4,096 tokens (0.49 GiB): its logits are not the problem there.
 AUTO_MIN_LOGITS_BYTES = 1 << 30
 
-#: ``E4B_CHUNKED_EVAL_LOSS=1``'s gate: a no-grad forward with labels computes its loss from the logits in chunks when its stock
+#: ``E4B_CHUNKED_EVAL_LOSS``'s gate: a no-grad forward with labels computes its loss from the logits in chunks when its stock
 #: fp32 logits would take at least this many bytes (the training gate's value: TC1's field-recipe evaluation rows stay stock).
 EVAL_MIN_LOGITS_BYTES = AUTO_MIN_LOGITS_BYTES
 
 #: ``patched`` models, training forwards that took the chunked loss / ran stock (no labels, ``logits_to_keep``, a tuple return) /
 #: ran stock under ``auto``'s size gate (``small_calls``), run-time refusals, and enable-time refusals by class name -> reason, so a
-#: training census can say the switch served the step. With ``E4B_CHUNKED_EVAL_LOSS=1``: no-grad forwards with labels whose loss
+#: training census can say the switch served the step. With the eval switch on (the default): no-grad forwards with labels whose loss
 #: was computed from the logits in chunks (``eval_chunked_calls``) / that ran stock (``eval_stock_calls``: under the gate,
 #: ``logits_to_keep``, a tuple return).
 CHUNKED_LM_LOSS_STATS = {"patched": 0, "chunked_calls": 0, "stock_calls": 0, "small_calls": 0, "runtime_refusals": 0,
@@ -177,11 +182,12 @@ def chunked_lm_loss_by_default():
 
 
 def chunked_eval_loss_requested():
-    """``E4B_CHUNKED_EVAL_LOSS``: ``1`` / ``on`` True, unset / ``0`` / ``off`` False (the default: evaluation runs stock)."""
+    """``E4B_CHUNKED_EVAL_LOSS``: unset / ``1`` / ``on`` True (the default since TC1 amendment 60), ``0`` / ``off`` False (evaluation
+    runs stock)."""
     v = os.environ.get(_EVAL_ENV, "").strip().lower()
-    if v in ("", "0", "off", "false", "no"):
+    if v in ("0", "off", "false", "no"):
         return False
-    if v in ("1", "on", "true", "yes"):
+    if v in ("", "1", "on", "true", "yes"):
         return True
     raise ValueError(f"{_EVAL_ENV} must be 0 or 1, got {v!r}")
 
@@ -394,7 +400,7 @@ def _chunked_forward(self, cls_forward, args, kwargs):
 
 
 def _eval_forward(self, st, cls_forward, args, kwargs):
-    """A no-grad forward: the stock one, unless ``E4B_CHUNKED_EVAL_LOSS=1`` was set when the model was patched and the forward
+    """A no-grad forward: the stock one, unless the eval switch was on (the default) when the model was patched and the forward
     passes ``labels`` whose stock fp32 logits reach :data:`EVAL_MIN_LOGITS_BYTES`. Then it runs without ``labels`` (the logits
     are the stock forward's) and the loss comes from :func:`chunked_lm_loss_from_logits`, plus the router auxiliary loss."""
     labels = _arg(args, kwargs, st.labels_pos, "labels")
@@ -481,7 +487,7 @@ def enable_chunked_lm_loss(model, chunk=None, verbose: bool = False, min_logits_
         print(f"[e4b.chunked_lm_loss] chunked LM loss on {cls.__name__} ({chunk}-token chunks): training forwards with labels "
               f"never materialise the [tokens, {head.out_features}] logits{gate}")
         if eval_loss:
-            print(f"[e4b.chunked_lm_loss] E4B_CHUNKED_EVAL_LOSS=1: no-grad forwards with labels whose fp32 logits reach "
+            print(f"[e4b.chunked_lm_loss] held-out loss (E4B_CHUNKED_EVAL_LOSS, default on): no-grad forwards with labels whose fp32 logits reach "
                   f"{EVAL_MIN_LOGITS_BYTES / 2**30:.2f} GiB take their loss from the logits in {chunk}-token chunks")
     return 1
 

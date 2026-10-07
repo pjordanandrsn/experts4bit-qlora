@@ -2298,10 +2298,15 @@ Two changes since (`e4b.train.ckpt-offload.packed-4k.5090.2026-10-07`, TC1 amend
 
 With both, e4b's packed-row training phase peaks at 25.85 GB, 0.98 GB above Unsloth's. Its run peak is then the held-out evaluation's
 26.88 GB.
-The opt-in `E4B_CHUNKED_EVAL_LOSS=1` (#1302) takes that evaluation's loss from the logits in fp32 chunks: the evaluation-phase peak
-falls from 26.88 to 22.50 GB. With it and `E4B_CKPT_OFFLOAD=1`, both opt-in, the run peak is the training phase's 25.85 GB, 0.99 GB
-above Unsloth's 24.86. Held-out is unchanged
-(identical at step 0, +0.00005 at N; `e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07`, TC1 amendment 60).
+`E4B_CHUNKED_EVAL_LOSS` (#1302) takes that evaluation's loss from the logits in fp32 chunks: the evaluation-phase peak falls from 26.88
+to 22.50 GB, so with it and `E4B_CKPT_OFFLOAD` the run peak is the training phase's 25.85 GB, 0.99 GB above Unsloth's 24.86. Held-out is
+unchanged (identical at step 0, +0.00005 at N; `e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07`, TC1 amendment 60). At TC1's
+field recipe the offload stepped 0.948 (matched) and 0.916 (shipped) of the default and took 0.17 GB off the matched training peak
+(`e4b.train.ckpt-offload.field.5090.2026-10-07`, TC1 amendment 59). By amendments 59 and 60's rules both switches are e4b's defaults
+under `enable_fast_train` (unset = on, `0` off); why the field step got faster is TC1 amendment 62's question. The routed-expert combine
+over row chunks (#1304, the default above a 128 MiB image) steps 0.978 of the whole-tensor combine on packed rows but leaves the training
+peak where it was, -0.009 GB (`e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07`, TC1 amendment 61): at the defaults e4b's
+packed-row training phase still peaks 0.98 GB above Unsloth's, and what holds that peak is the next census's question.
 
 The packed-row reading above supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
 same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are
@@ -3503,10 +3508,12 @@ warning when the variable is set. Only training forwards with
 labels take it: evaluation under `torch.no_grad` and generation stay stock, and `.logits` is `None` on the forwards that do.
 Evaluation can then be the run's peak. A `torch.no_grad` forward with labels on one 4,096-token Qwen3 row holds the bf16 logits, an
 fp32 copy and its log-softmax: 4.64 GiB above the logits on an RTX A2000. That made the held-out evaluation e4b's run peak on TC1's
-packed rows (amendment 58). Opt in with `E4B_CHUNKED_EVAL_LOSS=1`: such a forward, where its fp32 logits would reach 1 GiB, runs
-without labels, returns the stock logits unchanged, and takes the loss from them in 512-token fp32 chunks. That is 0.58 GiB above the
-logits, with the same loss in both A2000 shapes measured
-(`bench/chunked-lm-loss/receipts/eval_loss_peak_a2000.json`). Only the fp32 summation order can differ.
+packed rows (amendment 58). So by default (`E4B_CHUNKED_EVAL_LOSS`, since TC1 amendment 60; `0` turns it off) such a forward, where
+its fp32 logits would reach 1 GiB, runs without labels, returns the stock logits unchanged, and takes the loss from them in 512-token
+fp32 chunks: 0.58 GiB above the logits on the A2000, and on an RTX 5090 an evaluation-phase peak of 22.50 GB instead of 26.88, below the
+training phase (`e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07`; Qwen3-30B-A3B, torch 2.12). Only the fp32 summation order of
+the loss can differ, so a held-out loss above the gate compared across the default is not byte-identical (amendment 60: identical at
+step 0, within 0.00005 at the end). Shorter rows are untouched.
 Why the gate: on short rows chunking is a cost, not a saving. At TC1's field recipe (Alpaca rows, 0.3–0.6 GiB of logits per
 micro-batch) `1` cost a host-bound RTX 5090 4.9 % of the shipped arm's step (TC1 amendment 41), while `auto` never fired there and
 stepped 0.992–0.999 of the stock loss (amendment 44). A packed 4,096-token Qwen3 row is 2.32 GiB and chunks, and trains resident on a
@@ -4243,6 +4250,8 @@ Active claims (projection of docs/claims.json; the file is authoritative and car
 - e4b.train.memory.packed-4k-train-census.5090.2026-10-07 [measured]: TC1 amendment 57 (#835), one rented RTX 5090 (tc1-5090-114, AMD EPYC 7713): the memory census (--mem-census 1) of the TRAINING phase on packed rows of 4,096 real tokens -- TC1_EVAL_EVERY above TC1_STEPS, so no evaluation inside the census window -- the matched set, 20 steps, one draw per arm, every arm in venv-unsloth (torch 2.12.1). Training-phase peak allocated: e4b E4B_ABSMAX_DQ=0 28.138 GB, e4b E4B_ABSMAX_DQ=1 26.786 GB, Unsloth 2026.9.14 24.864 GB; 100 % attributed (P149 HELD); e4b fp32 +3.274 GB (P150 HELD, [2.0, 4.5]); e4b dq +1.922 GB (P151 HELD, <= 2.5); every census peak in a training backward (P152 HELD). At the dq arm's peak every static class equals Unsloth's; the +1.91 GB is transient. e4b's largest non-static groups: each decoder layer's output saved by non-reentrant checkpointing (modeling_qwen3_moe.py:352, 47 x 16.8 MB = 0.789 GB; Unsloth runs its own checkpointing and holds no such group), e4b's routed-expert combine backward (engines/fast.py:429/430/435, fp32 [tokens x top-k, hidden] copies, 1.07 GB in all) and grouped-nf4-gemm's bucketed delta block (nf4_qlora.py:672/673, 0.90 GB).
 - e4b.train.ckpt-offload.packed-4k.5090.2026-10-07 [measured]: TC1 amendment 58 (#835), one rented RTX 5090 (tc1-5090-115, AMD Ryzen 9 7900): e4b's matched arm on packed rows of 4,096 real tokens in venv-unsloth (torch 2.12.1) at its defaults (double-quantized absmax, bucketed padding auto, chunked LM loss), E4B_CKPT_OFFLOAD 0 against 1 (every decoder layer's checkpoint input in pinned host memory, #1298), two draws each in ABBA order, Unsloth 2026.9.14's matched arm beside, every arm with its peak split by phase, 40 load-gated steps (every attempt first time). The training-phase peak falls 26.587 -> 25.848 GB (P153 HELD, >= 0.6 GB) at 1.003 [1.000, 1.006] of the step (P154 HELD, <= 1.05), held-out at N +0.0002 (P155 HELD). Against Unsloth's 24.864 GB training-phase peak: e4b without the offload +1.723 GB (P156 FALSIFIED, <= 1.7; the combine-backward change #1296 took 0.20 GB off the training peak against amendments 56/57), with it +0.983 GB (P157 HELD, <= 1.0). With the offload, e4b's run peak is its held-out evaluation, 26.877 GB.
 - e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07 [measured]: TC1 amendment 60 (#835), one rented RTX 5090 (tc1-5090-121, AMD EPYC 9755): e4b's matched arm on packed rows of 4,096 real tokens in venv-unsloth (torch 2.12.1) with E4B_CKPT_OFFLOAD=1 and its defaults otherwise, E4B_CHUNKED_EVAL_LOSS 0 against 1 (a no-grad forward with labels takes its loss from the stock logits in 512-token fp32 chunks, #1302), two draws each in ABBA order, Unsloth 2026.9.14's matched arm beside, every arm with its peak split by phase, 40 load-gated steps (every attempt first time). The evaluation-phase peak falls 26.877 -> 22.504 GB on both draws (P162 HELD, >= 3.5 GB), below the training-phase peak of 25.851 / 25.852 GB (P163 HELD), so e4b's run peak becomes the training phase's 25.85 GB, 0.99 GB above Unsloth's 24.864. Step-0 held-out is identical on both draw pairs (P164 HELD, <= 0.0001) and mean held-out at N moves +0.00005 (P165 HELD, <= 0.005).
+- e4b.train.ckpt-offload.field.5090.2026-10-07 [measured]: TC1 amendment 59 (#835), one rented RTX 5090 (tc1-5090-120, AMD Ryzen 9 9950X): e4b's shipped and matched arms at TC1's field recipe (seq 2048, micro-batch 2 x accum 4) in venv-unsloth (torch 2.12.1) at e4b's defaults otherwise, E4B_CKPT_OFFLOAD 0 against 1 (every decoder layer's checkpoint input in pinned host memory through the reentrant checkpoint, #1298), two draws a side in ABBA order, 60 load-gated steps (every attempt first time), peaks split by phase. The step is faster with it: matched 0.948 [0.945, 0.951] (P158 HELD, <= 1.01), shipped 0.916 [0.907, 0.924] (P159 HELD); held-out at N +0.0001 / -0.0029 (P160 HELD, <= 0.005); the matched training-phase peak falls 26.143 -> 25.973 GB (P161 HELD, >= 0.10 GB), the shipped arm's 23.321 -> 23.104. The registered risk was a slowdown; why the step got faster is TC1 amendment 62's question.
+- e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07 [measured]: TC1 amendment 61 (#835), one rented RTX 5090 (tc1-5090-122, AMD EPYC 9655): e4b's matched arm on packed rows of 4,096 real tokens in venv-unsloth (torch 2.12.1) with E4B_CKPT_OFFLOAD=1 and its defaults otherwise, E4B_COMBINE_CHUNK=0 against the default (the routed-expert combine's fp32 work over row chunks above a 128 MiB image, #1304), two draws each in ABBA order, Unsloth 2026.9.14's matched arm beside, 40 load-gated steps (every attempt first time), peaks split by phase. The chunks step 0.978 [0.977, 0.979] of the whole-tensor combine (P167 HELD, <= 1.02) with held-out unchanged (step 0 identical, N +0.00034; P168 HELD), but the training-phase peak falls only 25.852 -> 25.843 GB (P166 FALSIFIED, >= 0.3 GB), leaving e4b +0.979 GB over Unsloth's 24.864 GB training peak (P169 FALSIFIED, <= 0.7).
 
 Open items (no evidence either way):
 
@@ -4250,4 +4259,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 lines).
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(398 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(400 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
