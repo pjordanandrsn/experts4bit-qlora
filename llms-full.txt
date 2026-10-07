@@ -2299,11 +2299,12 @@ Two changes since (`e4b.train.ckpt-offload.packed-4k.5090.2026-10-07`, TC1 amend
 With both, e4b's packed-row training phase peaks at 25.85 GB, 0.98 GB above Unsloth's. Its run peak is then the held-out evaluation's
 26.88 GB.
 `E4B_CHUNKED_EVAL_LOSS` (#1302) takes that evaluation's loss from the logits in fp32 chunks: the evaluation-phase peak falls from 26.88
-to 22.50 GB, so with it and `E4B_CKPT_OFFLOAD` the run peak is the training phase's 25.85 GB, 0.99 GB above Unsloth's 24.86. Held-out is
+to 22.50 GB, so with it and the opt-in `E4B_CKPT_OFFLOAD=1` the run peak is the training phase's 25.85 GB, 0.99 GB above Unsloth's 24.86. Held-out is
 unchanged (identical at step 0, +0.00005 at N; `e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07`, TC1 amendment 60). At TC1's
 field recipe the offload stepped 0.948 (matched) and 0.916 (shipped) of the default and took 0.17 GB off the matched training peak
-(`e4b.train.ckpt-offload.field.5090.2026-10-07`, TC1 amendment 59). By amendments 59 and 60's rules both switches are e4b's defaults
-under `enable_fast_train` (unset = on, `0` off); why the field step got faster is TC1 amendment 62's question. The routed-expert combine
+(`e4b.train.ckpt-offload.field.5090.2026-10-07`, TC1 amendment 59). By amendment 60's rule the chunked held-out loss is e4b's default
+under `enable_fast_train` (`0` off). The offload stays opt-in: amendment 59's rule asks for a torch 2.8 read on a host-bound box first
+(TC1 amendment 63), and why the field step got faster is TC1 amendment 62's question. The routed-expert combine
 over row chunks (#1304, the default above a 128 MiB image) steps 0.978 of the whole-tensor combine on packed rows but leaves the training
 peak where it was, -0.009 GB (`e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07`, TC1 amendment 61): at the defaults e4b's
 packed-row training phase still peaks 0.98 GB above Unsloth's, and what holds that peak is the next census's question.

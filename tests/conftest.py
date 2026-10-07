@@ -183,14 +183,3 @@ def _absmax_dq_default_off_in_tests(monkeypatch):
         return
     monkeypatch.setattr(fast, "ABSMAX_DQ_DEFAULT", False)
 
-
-@pytest.fixture(autouse=True)
-def _ckpt_offload_default_off_in_tests(monkeypatch):
-    """``enable_fast_train`` keeps checkpoint inputs in host memory by default since TC1 amendment 59. The suite's other tests
-    check checkpointing, hooks and gradients against Hugging Face's own checkpoint, so the default is pinned off here,
-    in-process; ``test_ckpt_offload.py`` turns it back on where it tests the default."""
-    try:
-        import experts4bit_qlora.engines.ckpt_offload as co
-    except Exception:
-        return
-    monkeypatch.setattr(co, "CKPT_OFFLOAD_DEFAULT", False)

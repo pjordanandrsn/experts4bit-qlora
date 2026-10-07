@@ -14,18 +14,20 @@ requires grad, so this also calls the model's ``enable_input_require_grads()``, 
 changes no value. The copies are synchronous: a device-to-host copy per layer in forward and host-to-device in backward. What
 that costs a step is for a TC1 box to read.
 
-``E4B_CKPT_OFFLOAD``: on by default under ``enable_fast_train`` since TC1 amendment 59 (unset or ``1``; ``0`` keeps the inputs on
-the GPU). ``enable_fast_train`` applies it after its other switches; layers that ``E4B_MOE_KEEP_LAYERS`` took out of whole-layer
-checkpointing are left alone (they keep their activations by design). A model without gradient checkpointing enabled is left
-unchanged, with a warning only when the variable was set. The default also leaves alone a model whose decoder layers carry
-``enable_dense_offload``'s handles: dense offload's train-prefetch schedule is untested with this checkpoint, so only an explicit
-``E4B_CKPT_OFFLOAD=1`` pairs them. The CLI trainer (``python -m experts4bit_qlora.train``) keeps its own checkpointing and is unchanged.
+``E4B_CKPT_OFFLOAD=1`` (unset / ``0``: unchanged, Hugging Face's checkpointing). It is NOT a default yet: TC1 amendment 59's rule
+requires a torch 2.8 read on a host-bound box first (TC1 amendment 63), and amendment 62 to say which half of the switch made the
+field recipe's step faster. ``enable_fast_train`` applies it after its other switches; layers that ``E4B_MOE_KEEP_LAYERS`` took out
+of whole-layer checkpointing are left alone (they keep their activations by design). A model without gradient checkpointing enabled
+is left unchanged, with a warning when the variable was set. Ready for when the default flips (:data:`CKPT_OFFLOAD_DEFAULT`): a
+default-path request leaves alone a model whose decoder layers carry ``enable_dense_offload``'s handles, because dense offload's
+train-prefetch schedule is untested with this checkpoint (an explicit ``E4B_CKPT_OFFLOAD=1`` pairs them, and ``enable_dense_offload``
+warns when it finds offloaded checkpoints), and it stays silent without checkpointing. The CLI trainer keeps its own checkpointing.
 
 ``E4B_CKPT_OFFLOAD=reentrant`` (a diagnostic, never a default) routes the same layers through the reentrant checkpoint WITHOUT the
 host-memory hook: their inputs stay on the GPU. It separates the two halves of this switch -- the checkpoint flavour and the copies
 -- for TC1 amendment 62, which asks which of them made the field recipe's step faster.
 
-The evidence for the default, Qwen3-30B-A3B on one RTX 5090 in torch 2.12, the matched and shipped arms:
+The evidence so far, Qwen3-30B-A3B on one RTX 5090 in torch 2.12, the matched and shipped arms:
 - packed 4,096-token rows (TC1 amendment 58, ``e4b.train.ckpt-offload.packed-4k.5090.2026-10-07``): the training-phase peak 0.739 GB
   lower at 1.003 of the step, held-out +0.0002;
 - TC1's field recipe (amendment 59, ``e4b.train.ckpt-offload.field.5090.2026-10-07``): 0.948 (matched) and 0.916 (shipped) of the
@@ -37,8 +39,9 @@ import os
 
 CKPT_OFFLOAD_STATS = {"layers": 0, "skipped": None}
 
-#: Unset ``E4B_CKPT_OFFLOAD`` means on (TC1 amendment 59's rule). The test suite pins this False in-process (tests/conftest.py).
-CKPT_OFFLOAD_DEFAULT = True
+#: What unset ``E4B_CKPT_OFFLOAD`` means. Off until TC1 amendment 59's rule is met (amendments 62 and 63 read); the default flip is
+#: then this one line, in a library PR that cites the reads.
+CKPT_OFFLOAD_DEFAULT = False
 
 _ON, _OFF, _REENTRANT = ("1", "on", "true", "yes"), ("0", "off", "false", "no"), "reentrant"
 
@@ -51,7 +54,7 @@ def _setting() -> str:
 
 
 def checkpoint_offload_requested() -> bool:
-    """``E4B_CKPT_OFFLOAD``: ``1`` on, ``reentrant`` the reentrant checkpoint alone, ``0`` off, unset :data:`CKPT_OFFLOAD_DEFAULT` (on)."""
+    """``E4B_CKPT_OFFLOAD``: ``1`` on, ``reentrant`` the reentrant checkpoint alone, ``0`` off, unset :data:`CKPT_OFFLOAD_DEFAULT` (off)."""
     v = _setting()
     return (v in _ON or v == _REENTRANT) if v else CKPT_OFFLOAD_DEFAULT
 

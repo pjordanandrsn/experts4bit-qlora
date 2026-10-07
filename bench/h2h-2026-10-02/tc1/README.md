@@ -1296,8 +1296,9 @@ defaults otherwise, with `E4B_CKPT_OFFLOAD` 0 (`f0`) or 1 (`f1`: all 48 decoder 
 - **P161 HELD:** the matched training-phase peak falls **0.171 GB** (≥ 0.10); the shipped arm's falls 0.217 GB.
 - The registered risk was the opposite: that synchronous copies would cost the short rows. Instead the step got faster, which the
   amendment did not predict. Amendment 62 asks why (the reentrant checkpoint alone against the copies) before any explanation is offered.
-- **By amendment 59's rule** (all four HELD), `E4B_CKPT_OFFLOAD` becomes e4b's default under `enable_fast_train`, with a scope statement:
-  one model, one RTX 5090, torch 2.12, the field recipe and packed rows.
+- **By amendment 59's rule** (all four HELD), one more read comes before any default: the same A/B in the field image's torch 2.8 on a
+  host-bound box (amendment 63). The default flip then follows in a library PR that cites amendments 58, 59 and 63, once amendment 62
+  has said which half of the switch carries the speed-up.
 
 ## Amendment 61 (2026-10-07): the combine over row chunks steps 0.978 of the whole-tensor combine on packed rows, but leaves the training peak where it was (P167, P168 HELD; P166, P169 FALSIFIED)
 

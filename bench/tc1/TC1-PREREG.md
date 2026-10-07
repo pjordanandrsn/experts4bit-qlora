@@ -2762,3 +2762,42 @@ single block, no chunked loss call. It also requires the checkpoint the side nam
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Six field-recipe arms:
 about $1.5 with the download.
+
+### Amendment 63 (2026-10-07T10:03Z, after amendment 59's read, before any box): the offload at the field recipe in torch 2.8 (P174–P177)
+
+**Why.** Amendment 59's rule (maintainer review, before its box) asks for one more read before `E4B_CKPT_OFFLOAD` can become e4b's
+default. Amendments 58 and 59 read torch 2.12 only. The default would also apply to the field image's torch 2.8, where amendments 53–54
+found the step host-bound on some hosts, which is where synchronous host copies would cost the most. This is that read, with the premise
+gate the rule names. A flip pushed earlier was withdrawn in review for exactly this reason.
+
+**The box** (token `qwen3ckptoff28`). One RTX 5090 at TC1's field recipe (seq 2048, micro-batch 2 × accum 4, 60 load-gated steps,
+held-out every 20). Every arm runs in venv-e4b (torch 2.8) at e4b's defaults otherwise, with `--phase-peaks 1` and amendment 53's profile
+instrument (`--profile-steps 3 --profile-warm 3`, outside the timed steps). Avoiding machines 145701, 130223 and 55583. In amendment 59's
+order:
+- the shipped arm `fused_attn4_shipped_g0` (`E4B_CKPT_OFFLOAD=0`) then `_g1` (`=1`);
+- the matched arm `fused_attn4_m_g0` then `_g1`;
+- the second draws `m_g1_d2`, `m_g0_d2`, `shipped_g1_d2`, `shipped_g0_d2`.
+
+Validity requires amendment 59's field-recipe predicates in torch 2.8 (`ckptoff_why` with `torch_prefix="2.8"`) and a profile on every arm.
+
+**The premise gate** (the rule's words): on each arm, the `g0` side's device busy fraction against its timed step must be at most **0.9**
+(the median over its two draws of device ms per profiled step / timed ms per step, amendment 53's busy_t). If it is above that, the host
+is not host-bound, and that arm's speed reading is UNTESTED, not HELD.
+
+**Predictions** (two VALID, stable draws a side):
+- **P174:** the matched arm's `g1` / `g0` ≤ **1.01**, gated on the matched `g0`.
+- **P175:** the shipped arm's `g1` / `g0` ≤ **1.01**, gated on the shipped `g0`.
+- **P176:** on each arm, |mean held-out at N, `g1` − `g0`| ≤ **0.005**.
+- **P177:** the matched training-phase peak (median of the draws) falls by at least **0.10 GB**.
+
+**Decision rules.**
+- **All four HELD:** the offload's default flip follows in a library PR that cites amendments 58, 59 and 63 and states their scope (one
+  model, RTX 5090, both torches), after amendment 62 has said which half of the switch carries amendment 59's speed-up. If amendment 62
+  puts it on the reentrant checkpoint alone, that PR registers the reentrant default's own read instead.
+- **P174 or P175 FALSIFIED, with P176 HELD:** the copies cost a host-bound torch 2.8 step. The next step is the size gate amendment 59
+  names (`E4B_CKPT_OFFLOAD=auto`), or asynchronous copies, before any default.
+- **P174 or P175 UNTESTED for the premise:** a re-ask, on a host the launcher's records show host-bound in torch 2.8 (amendment 53's).
+- **P176 FALSIFIED:** a $0 A2000 gradient check under torch 2.8 comes first.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. Eight profiled field-recipe arms in venv-e4b:
+about $2 with the download.
