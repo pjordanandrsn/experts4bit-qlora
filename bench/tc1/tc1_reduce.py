@@ -4048,8 +4048,16 @@ def score_memc4k(F, fam=MEMC4K_FAM):
         pid, idx, site = spec["top_group"]
         m, w = reads[ARMS[idx]]
         gs = [g for g in ((m or {}).get("live_at_peak_top") or []) if not str(g.get("group", "")).startswith("static:")]
+        pw = (m or {}).get("peak_window") or {}
+        phase, af = pw.get("peak_phase"), (m or {}).get("attributed_fraction")
+        trained = str(phase).startswith("s") and ".eval" not in str(phase)
         if m is None or not gs:
             out.append((pid, fam, "UNTESTED", f"{LABELS[ARMS[idx]]}: no non-static group at the peak -- {w or 'live_at_peak_top empty'}"))
+        elif pw.get("peak_in_window") is not True or not trained or af is None or af < P42_MIN:
+            # added in review, before any box: the group at the peak aims a lever only when that arm's own census holds a
+            # training-step peak (P187's leg) with at least P42_MIN of it attributed (P184's leg)
+            out.append((pid, fam, "UNTESTED", f"{LABELS[ARMS[idx]]}: its census does not hold an attributed training-step peak (phase {phase}, "
+                                              f"in window {pw.get('peak_in_window')}, attributed {af}; needs a training step and >= {P42_MIN})"))
         else:
             top = gs[0]
             out.append((pid, fam, "HELD" if site in str(top.get("group")) else "FALSIFIED",
@@ -9583,6 +9591,11 @@ def selftest():
     assert pmr(RMR) == {"P184": "HELD", "P185": "HELD", "P186": "HELD", "P187": "HELD", "P188": "HELD"}, score_memc4k(RMR, MEMC4KR_FAM)
     assert pmr(MR(_memc4kr_set(top_site="site:transformers/models/qwen3_moe/modeling_qwen3_moe.py:352 forward")))["P188"] == "FALSIFIED"
     assert pmr(MR(_memc4kr_set(peaks=(27.20e9, 25.84e9, 24.86e9))))["P185"] == "FALSIFIED"
+    for k_, v_ in (("peak_phase", "s20.eval"), ("attributed_fraction", 0.80)):      # P188 needs the offload arm's own P187 / P184 legs
+        bad = _memc4kr_set()
+        tgt = bad[("e4b", "fused_attn4_m_p4r_off")]["mem_census"]
+        (tgt.setdefault("peak_window", {}) if k_ == "peak_phase" else tgt)[k_] = v_
+        assert pmr(MR(bad))["P188"] == "UNTESTED", (k_, score_memc4k(MR(bad), MEMC4KR_FAM))
     hf = MR(_memc4kr_set(ckpt={"fused_attn4_m_p4r": (0, None, [])}))
     assert hf[MEMC4KR_FAM]["verdicts"][("e4b", "fused_attn4_m_p4r")] == "VOID"
     assert "P188" in render(RMR, "x") and "amendment 65" in render(RMR, "x")

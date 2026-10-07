@@ -2895,6 +2895,9 @@ Validity (`memc4kr_why`): amendment 55's predicates for the defaults, plus the c
 - **P188 FALSIFIED:** the next lever targets the group the census names instead.
 - **P184 FALSIFIED:** the census does not explain enough of the peak to aim a lever; the instrument is read before anything else.
 - **P185 or P186 out of band:** the read states the gap as measured on this box; nothing is decided on it alone.
+- **P188 is read only on an attributed training-step peak** (added in review, before any box): the offload arm's own census must
+  hold its peak in a training step (its P187 leg) with at least 90 % of it attributed (its P184 leg); otherwise P188 is UNTESTED and
+  no lever is aimed from it.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Three census arms of 20
 steps: about $1.2 with the download.
