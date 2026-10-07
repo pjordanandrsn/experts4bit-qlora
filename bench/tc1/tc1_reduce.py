@@ -918,6 +918,7 @@ CKPTOFF_HELDOUT_MAX = 0.005    # P155
 CKPTOFF_GAP_O0_MAX = 1.7       # P156: o0's training-phase peak at most this many GB above Unsloth's (amendment 57: +1.92 before #1296)
 CKPTOFF_GAP_O1_MAX = 1.0       # P157: o1's training-phase peak at most this many GB above Unsloth's
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
+# (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
 FAMS.append(CKPTOFFF_FAM)
 NAMES[CKPTOFFF_FAM] = "Qwen3-30B-A3B (amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, shipped and matched arms; peaks by phase)"
@@ -931,7 +932,6 @@ MATCHED |= {"fused_attn4_m_f0", "fused_attn4_m_f1", "fused_attn4_m_f0_d2", "fuse
 for _t in ("fused_attn4_m", "fused_attn4_shipped"):
     for _side in ("f0", "f1"):
         DRAW2[("e4b", f"{_t}_{_side}")] = ("e4b", f"{_t}_{_side}_d2")
-LOOP_ROUTE_SHARE_MAX[CKPTOFFF_FAM] = 0.05
 CKPTOFFF_SPEED_MAX = 1.01      # P158 (matched) / P159 (shipped): s/step f1 / f0 at most this (amendment 49's bar for a field default)
 CKPTOFFF_HELDOUT_MAX = 0.005   # P160: on each arm
 CKPTOFFF_DROP_MIN = 0.10       # P161: the matched arm's training-phase peak falls by at least this many GB
@@ -1514,7 +1514,8 @@ def score_dqpack(F, fam=DQPACK_FAM):
 def ckptoff_why(tag, r, packed=True):
     """Amendment 58's predicates: torch 2.12 (venv-unsloth); on e4b, its defaults (the double-quantized absmax as it is, every padded
     call bucketed under `auto`, the chunked loss unset) and the checkpoint the side names: o1 E4B_CKPT_OFFLOAD=1 with every decoder
-    layer routed through it (48), o0 set to 0 with none. Empty string = as registered."""
+    layer routed through it (48), o0 set to 0 with none. packed=False is amendment 59's field-recipe form: there `auto` leaves both stock, so
+    every padded call goes through the single block and no loss call is chunked. Empty string = as registered."""
     r = r or {}
     bad = []
     tv = str((r.get("env") or {}).get("torch") or "")
