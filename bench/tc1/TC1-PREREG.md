@@ -2659,6 +2659,9 @@ The run peak against Unsloth's is reported, not scored.
 **Decision rules.**
 - **All four HELD:** `E4B_CHUNKED_EVAL_LOSS` becomes on by default (unset = on above the gate, `0` off), in a library PR that cites this
   read. At TC1's field recipe the evaluation rows stay under the 1 GiB gate, so the field recipe's held-out is unchanged by construction.
+  That PR states its scope (maintainer review, before any box): one model, one RTX 5090, torch 2.12. Its changelog also says that,
+  above the gate, a user's held-out loss can move at the scale of fp32 summation order, bounded by this box's P164 and P165 readings,
+  so evaluations compared across the flip are not byte-identical.
 - **P164 or P165 FALSIFIED:** the loss differs by more than rounding, a defect signal. A $0 check of the full evaluation forward against
   stock on the RTX A2000 comes before any further registration.
 - **P162 or P163 FALSIFIED:** the read says what holds the evaluation phase instead, and the switch stays opt-in.
