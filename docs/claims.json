@@ -11234,6 +11234,31 @@
         "receipts/experts4bit-qlora/2026-10-07/tc1-5090-130/tc1/"
       ],
       "notes": "Vast invoiced $1.26."
+    },
+    {
+      "id": "e4b.train.compact-buckets.packed-4k.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 66 (#835), one rented RTX 5090 (tc1-5090-133, Intel Core i9-14900K): e4b's shipped and matched arms on packed rows of 4,096 real tokens in venv-unsloth (torch 2.12.1) at e4b's defaults, grouped-nf4-gemm's NF4_QLORA_COMPACT_BUCKETS 0 against 1 (the bucketed LoRA delta as autograd ops vs one compact autograd node with the same bytes, grouped-nf4-gemm#505), two draws a side in ABBA order, every arm profiled, Unsloth 2026.9.14's matched arm beside, 40 load-gated steps (every attempt first time). The matched training-phase peak falls 26.562 -> 25.909 GB (P189 HELD, >= 0.5 GB); the step falls to 0.972 (matched, P190 HELD) and 0.977 (shipped, P191 HELD) of the autograd body's, with device time per profiled step 0.973 / 0.978 (P194 HELD, <= 1.01) on a GPU-bound host (device busy 0.99); held-out identical at step 0 and within 0.00013 at N (P192 HELD). The matched k1 training peak is 1.044 GB above Unsloth's 24.864 (P193 FALSIFIED, <= 1.0).",
+      "value": 0.654,
+      "unit": "GB, training-phase peak allocated, e4b matched arm on packed 4,096-token rows, NF4_QLORA_COMPACT_BUCKETS=0 minus =1 (medians of two draws); step ratios 0.972 (matched) / 0.977 (shipped)",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-133: instance 54714145, Intel Core i9-14900K, a 30-CPU quota, Vast machine 139369); e4b @ 82ec6f1 + grouped-nf4-gemm @ ab1a342, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3cbk (TC1 amendment 66): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), held-out at 0 and 40, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_k0 / _k1 and fused_attn4_m_k0 / _k1 (+ _d2) and Unsloth ckpt_unsloth_m_kk (grouped_mm), --phase-peaks 1 and the profile instrument on every arm; validity (cbk_why: e4b's packed defaults, the reentrant checkpoint, compact calls on k1 and none on k0) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-cbk.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-133/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-133/tc1/"
+      ],
+      "notes": "Vast invoiced $1.58; two earlier draws never ran (tc1-5090-131 / -132, $0.04 each, SSH during a Vast proxy blip)."
     }
   ]
 }

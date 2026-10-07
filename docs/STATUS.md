@@ -250,7 +250,12 @@ packed-row training phase still peaks 0.98 GB above Unsloth's. A census at the n
 sides, so the whole gap is transient: +1.69 GB at e4b's defaults and +0.95 GB with the offload. With the offload, the largest transients
 at the peak are grouped-nf4-gemm's bucketed LoRA delta (`nf4_qlora.py` 672, 673 and 679, about 1.70 GB), against Unsloth's whole
 transient of 1.73 GB. grouped-nf4-gemm's opt-in `NF4_QLORA_COMPACT_BUCKETS=1` (grouped-nf4-gemm#505) computes that delta as one
-autograd node with the same bytes, and TC1 amendment 66 reads it on packed rows.
+autograd node with the same bytes, and TC1 amendment 66 read it on packed rows
+(`e4b.train.compact-buckets.packed-4k.5090.2026-10-07`). The matched training peak fell 0.654 GB, and both arms stepped faster: 0.972
+(matched) and 0.977 (shipped), with less device time per step. Held-out was unchanged. So it is grouped-nf4-gemm's default
+(grouped-nf4-gemm#508). At these defaults e4b's matched training phase peaks 25.91 GB, 1.04 GB above Unsloth's 24.86 (P193, registered
+at most 1.0, FALSIFIED narrowly), and steps 8.97 s against Unsloth's 11.54 on that host. TC1 amendment 67 reads the new default-settings
+position.
 
 The packed-row reading above supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
 same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are

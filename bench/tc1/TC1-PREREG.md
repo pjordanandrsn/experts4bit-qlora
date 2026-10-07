@@ -2950,3 +2950,45 @@ the device needs its device cost read directly.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Eight packed e4b arms and one
 Unsloth arm: about $2 with the download.
+
+### Amendment 67 (2026-10-07T23:04Z, after amendment 66's read, before any box): the packed-row position at the new defaults (P195–P199)
+
+**Why.** Five defaults changed since amendment 51 read the default-settings packed position:
+- the double-quantized absmax (#1292);
+- the reentrant checkpoint (#1311);
+- the combine over row chunks (#1304);
+- the chunked held-out loss (#1307);
+- grouped-nf4-gemm's compact bucketed delta (grouped-nf4-gemm#508).
+
+Amendment 66's box read e4b's matched arm at these defaults at 8.97 s/step, against Unsloth's 11.54 (one Unsloth draw), with a training
+peak 1.04 GB above Unsloth's. This box reads the position the way a quotable position is read: two draws a side, plus the opt-in offload
+as the memory lever.
+
+**The box** (token `qwen3pos67`). One RTX 5090, packed 4,096-token rows, 40 load-gated steps, held-out at 0 and 40 (amendment 58's
+command), every arm in venv-unsloth (torch 2.12) with `--phase-peaks 1`, avoiding machines 145701, 130223 and 55583. In order:
+- e4b `fused_attn4_m_pd` (the defaults);
+- Unsloth `ckpt_unsloth_m_pv`;
+- e4b `fused_attn4_m_po` (`E4B_CKPT_OFFLOAD=1`) and its second draw;
+- Unsloth's second draw;
+- e4b `pd`'s second draw.
+
+Validity (`pos67_why`): torch 2.12, and on e4b every new default as recorded. That means the double-quantized absmax, every padded call
+bucketed, the chunked training and held-out losses, the combine over row chunks, and the compact bucketed delta. It also requires the
+checkpoint the tag names: `pd` the default reentrant checkpoint, `po` the offloaded one on all 48 layers.
+
+**Predictions** (two VALID, stable draws a side):
+- **P195:** s/step Unsloth / e4b defaults in **[1.15, 1.45]**. Amendment 66's single Unsloth draw read 1.287.
+- **P196:** e4b defaults' training-phase peak at most **1.2 GB** above Unsloth's.
+- **P197:** with the offload, at most **0.5 GB** above.
+- **P198:** the offload costs at most **1.03** of the defaults' step. Amendment 64 read the copies at 1.023 of the reentrant step.
+- **P199:** |mean held-out at N, e4b defaults − Unsloth| ≤ **0.01**.
+
+**Decision rules.**
+- **P195 HELD:** STATUS quotes Unsloth/e4b at the defaults as the packed-row position on one stack. It replaces amendment 51's, with this
+  box's host and scope.
+- **P196 / P197:** STATUS states the memory position as measured: at the defaults, and with the offload as the lever.
+- **P195 FALSIFIED:** the read states the measured ratio and says which default moved it, before any position is quoted.
+- **P199 FALSIFIED:** the arms' quality is compared before any position is quoted.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Four e4b arms and two Unsloth
+arms: about $1.5 with the download.
