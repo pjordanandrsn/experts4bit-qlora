@@ -917,6 +917,25 @@ CKPTOFF_SPEED_MAX = 1.05       # P154: s/step o1 / o0 at most this
 CKPTOFF_HELDOUT_MAX = 0.005    # P155
 CKPTOFF_GAP_O0_MAX = 1.7       # P156: o0's training-phase peak at most this many GB above Unsloth's (amendment 57: +1.92 before #1296)
 CKPTOFF_GAP_O1_MAX = 1.0       # P157: o1's training-phase peak at most this many GB above Unsloth's
+# TC1 amendment 60: E4B_CHUNKED_EVAL_LOSS=1 (#1302: a no-grad forward with labels takes its loss from the logits in fp32 chunks) off (e0) vs
+# on (e1) on packed rows, e4b's matched arm with E4B_CKPT_OFFLOAD=1, two draws a side, Unsloth's matched arm beside; peaks by phase
+EVALCE_FAM = "qwen3evalce"
+FAMS.append(EVALCE_FAM)
+NAMES[EVALCE_FAM] = "Qwen3-30B-A3B (amendment 60: the held-out loss stock vs from the logits in chunks on packed rows, e4b with checkpoint inputs in host memory, Unsloth beside; peaks by phase)"
+N_LAYERS[EVALCE_FAM] = 48
+ATTN_CENSUS[EVALCE_FAM] = 192
+DENSE_PINS[EVALCE_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[EVALCE_FAM] = ("e4b", "fused_attn4_m_e0")
+EXPECTED[EVALCE_FAM] = [("e4b", "fused_attn4_m_e0"), ("e4b", "fused_attn4_m_e1"), ("e4b", "fused_attn4_m_e1_d2"), ("e4b", "fused_attn4_m_e0_d2"),
+                        ("unsloth", "ckpt_unsloth_m_ee")]
+MATCHED |= {"fused_attn4_m_e0", "fused_attn4_m_e1", "fused_attn4_m_e0_d2", "fused_attn4_m_e1_d2", "ckpt_unsloth_m_ee"}
+for _side in ("e0", "e1"):
+    DRAW2[("e4b", f"fused_attn4_m_{_side}")] = ("e4b", f"fused_attn4_m_{_side}_d2")
+PACKED_FAMS = PACKED_FAMS + (EVALCE_FAM,)
+LOOP_ROUTE_SHARE_MAX[EVALCE_FAM] = 0.05
+EVALCE_DROP_MIN = 3.5          # P162: the evaluation-phase peak falls by at least this many GB (median of each side's draws)
+EVALCE_STEP0_MAX = 0.0001      # P164: |step-0 held-out e1 - e0| per draw pair (am58's four e4b draws read 1.28851 alike)
+EVALCE_HELDOUT_MAX = 0.005     # P165: |mean held-out at N e1 - e0|
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -1649,6 +1668,83 @@ def score_ckptofff(F, fam=CKPTOFFF_FAM):
         drop = t0 - t1
         out.append(("P161", fam, "HELD" if drop >= CKPTOFFF_DROP_MIN else "FALSIFIED",
                     f"matched training-phase peak f0 {t0:.3f} -> f1 {t1:.3f} GB (drop {drop:+.3f} vs >= {CKPTOFFF_DROP_MIN})"))
+    return out
+
+
+def evalce_side(tag):
+    """Amendment 60: e0 / e1 of a qwen3evalce e4b tag (fused_attn4_m_<side>[_d2]), or None."""
+    m = re.match(r"^fused_attn4_m_(e[01])(?:_d2)?$", tag or "")
+    return m.group(1) if m else None
+
+
+def evalce_why(tag, r):
+    """Amendment 60's predicates: amendment 58's for its o1 side (torch 2.12; on e4b the double-quantized absmax, every padded call
+    bucketed, the chunked loss serving training, all 48 layers offloaded with E4B_CKPT_OFFLOAD=1), plus the eval switch the side names:
+    e1 E4B_CHUNKED_EVAL_LOSS=1 with at least one held-out forward through it, e0 set to 0 with none. Empty string = as registered."""
+    r = r or {}
+    if r.get("framework") != "e4b":
+        return ckptoff_why(tag, r)
+    side = evalce_side(tag)
+    if side is None:
+        return f"amendment 60 registers no e4b side for tag {tag}"
+    bad = [w for w in [ckptoff_why("fused_attn4_m_o1", r)] if w]
+    c = r.get("chunked_lm_loss") or {}
+    env, n = str(c.get("eval_env")), int(c.get("eval_chunked_calls") or 0)
+    want_env = "1" if side == "e1" else "0"
+    if env != want_env or (n > 0) != (side == "e1"):
+        bad.append(f"E4B_CHUNKED_EVAL_LOSS={env!r} with {n} held-out forward(s) through it: side {side} names {want_env}"
+                   + (" and at least one" if side == "e1" else " and none"))
+    return "; ".join(bad)
+
+
+def score_evalce(F, fam=EVALCE_FAM):
+    """TC1-PREREG amendment 60. P162: the evaluation-phase peak (median of each side's draws) e0 - e1 >= EVALCE_DROP_MIN GB. P163: on
+    every e1 draw the evaluation-phase peak is below the training-phase peak (the run peak is training's). P164: |step-0 held-out e1 -
+    e0| <= EVALCE_STEP0_MAX on each draw pair (e1 / e0, e1_d2 / e0_d2). P165: |mean held-out at N, e1 - e0| <= EVALCE_HELDOUT_MAX. A
+    missing / non-VALID draw or a missing phase record, UNTESTED."""
+    R = F.get(fam)
+    if not R:
+        return []
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    def got(side):
+        ks = [("e4b", f"fused_attn4_m_{side}"), ("e4b", f"fused_attn4_m_{side}_d2")]
+        rs = [(rows.get(k) or {}) for k in ks]
+        ok = all(x.get("verdict") == "VALID" for x in rs)
+        return ok, [x.get("r") or {} for x in rs], ", ".join(f"{k[1]} {(rows.get(k) or {}).get('verdict') or 'missing'}" for k in ks)
+    ok0, r0, w0 = got("e0")
+    ok1, r1, w1 = got("e1")
+    out = []
+    if not (ok0 and ok1):
+        why = f"two VALID draws a side are registered: {w0}; {w1}"
+        return [(p, fam, "UNTESTED", why) for p in ("P162", "P163", "P164", "P165")]
+    ev0, ev1 = [_phase(x, "eval") for x in r0], [_phase(x, "eval") for x in r1]
+    tr1 = [_phase(x, "train") for x in r1]
+    if None in ev0 or None in ev1:
+        out.append(("P162", fam, "UNTESTED", f"every e4b draw needs an evaluation-phase peak: e0 {ev0}, e1 {ev1}"))
+    else:
+        d = statistics.median(ev0) - statistics.median(ev1)
+        out.append(("P162", fam, "HELD" if d >= EVALCE_DROP_MIN else "FALSIFIED",
+                    f"evaluation-phase peak e0 {statistics.median(ev0):.3f} -> e1 {statistics.median(ev1):.3f} GB (drop {d:+.3f} vs >= {EVALCE_DROP_MIN})"))
+    if None in ev1 or None in tr1:
+        out.append(("P163", fam, "UNTESTED", f"every e1 draw needs eval and train phase peaks: eval {ev1}, train {tr1}"))
+    else:
+        out.append(("P163", fam, "HELD" if all(e < t for e, t in zip(ev1, tr1)) else "FALSIFIED",
+                    "e1 evaluation vs training phase peak: " + "; ".join(f"{e:.3f} vs {t:.3f}" for e, t in zip(ev1, tr1))))
+    s0 = [(a.get("eval_loss_step0"), b.get("eval_loss_step0")) for a, b in zip(r0, r1)]
+    if any(a is None or b is None for a, b in s0):
+        out.append(("P164", fam, "UNTESTED", f"step-0 held-out missing: {s0}"))
+    else:
+        ds = [b - a for a, b in s0]
+        out.append(("P164", fam, "HELD" if all(abs(x) <= EVALCE_STEP0_MAX for x in ds) else "FALSIFIED",
+                    "step-0 held-out e1 - e0 per draw pair: " + ", ".join(f"{x:+.5f}" for x in ds) + f" (|.| <= {EVALCE_STEP0_MAX})"))
+    h0 = [x.get("eval_loss_final") for x in r0]
+    h1 = [x.get("eval_loss_final") for x in r1]
+    if None in h0 or None in h1:
+        out.append(("P165", fam, "UNTESTED", f"held-out at N missing: e0 {h0}, e1 {h1}"))
+    else:
+        d = statistics.mean(h1) - statistics.mean(h0)
+        out.append(("P165", fam, "HELD" if abs(d) <= EVALCE_HELDOUT_MAX else "FALSIFIED",
+                    f"mean held-out at N e0 {statistics.mean(h0):.5f}, e1 {statistics.mean(h1):.5f} (diff {d:+.5f} vs |.| <= {EVALCE_HELDOUT_MAX})"))
     return out
 
 
@@ -2544,6 +2640,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
     if fam == CKPTOFFF_FAM and fw == "e4b":            # amendment 59: amendment 58's predicates at the field recipe (auto leaves loss and padding stock)
         _arm, _side = ckptofff_side(r.get("tag") or "")
         w = ckptoff_why(f"fused_attn4_m_{_side.replace('f', 'o')}" if _side else (r.get("tag") or ""), r, packed=False)
+        if w:
+            why.append(w)
+    if fam == EVALCE_FAM:                              # amendment 60: amendment 58's o1 predicates plus the eval switch its side names
+        w = evalce_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -5388,6 +5488,20 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_compactab(F, FIELDBK_FAM):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if EVALCE_FAM in F:
+        out += ["\n## Amendment 60: the held-out loss stock vs from the logits in chunks on packed rows, peaks by phase (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train | held-out step 0 | held-out N | eval forwards chunked |",
+                "|---|---|---|---|---|---|---|---|---|---|"]
+        for x in F[EVALCE_FAM]["rows"]:
+            r = x.get("r") or {}
+            ph = r.get("peak_vram_gb_phases") or {}
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(r.get('peak_vram_gb'), 3)} | "
+                       f"{ph.get('setup')} | {ph.get('eval')} | {ph.get('train')} | {r.get('eval_loss_step0')} | {r.get('eval_loss_final')} | "
+                       f"{(r.get('chunked_lm_loss') or {}).get('eval_chunked_calls')} |")
+        out += ["\n## Predictions P162 / P163 / P164 / P165 (TC1-PREREG amendment 60: the held-out loss from the logits in chunks; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_evalce(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFFF_FAM in F:
         out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
@@ -6392,6 +6506,29 @@ def _ckptofff_set(match=((3.20, 3.22), (3.22, 3.24)), ship=((2.50, 2.52), (2.51,
                 r["fam"] = CKPTOFFF_FAM
                 R[("e4b", tag)] = r
     return R
+
+
+def _evalce_set(evals=None, train=25.85, step0=None, held=None, calls=None, envs=None):
+    """Amendment 60: e4b's matched arm (E4B_CKPT_OFFLOAD=1) with E4B_CHUNKED_EVAL_LOSS 0 (e0) / 1 (e1) on packed rows, two draws each, and
+    Unsloth's -- `evals` side -> evaluation-phase peak GB; `step0` / `held` tag -> held-out at 0 / N; `calls` / `envs` tag -> the eval
+    switch's recorded calls / env."""
+    evals = dict({"e0": 26.88, "e1": 22.52}, **(evals or {}))
+    R = _ckptoff_set(train={"o1": train})
+    out = {}
+    for (fw, tag), r in R.items():
+        if fw != "e4b":
+            out[("unsloth", "ckpt_unsloth_m_ee")] = dict(r, tag="ckpt_unsloth_m_ee", fam=EVALCE_FAM, eval_loss_step0=1.2871, eval_loss_final=0.9542)
+            continue
+        if "_o1" not in tag:
+            continue
+        for side in ("e0", "e1"):
+            t2 = tag.replace("_o1", "_" + side)
+            c = dict(r["chunked_lm_loss"], eval_env=(envs or {}).get(t2, "1" if side == "e1" else "0"),
+                     eval_chunked_calls=(calls or {}).get(t2, 4 if side == "e1" else 0), eval_stock_calls=0)
+            out[(fw, t2)] = dict(r, tag=t2, fam=EVALCE_FAM, chunked_lm_loss=c,
+                                 eval_loss_step0=(step0 or {}).get(t2, 1.28851), eval_loss_final=(held or {}).get(t2, 0.9542),
+                                 peak_vram_gb_phases={"setup": 21.86, "eval": evals[side], "train": train})
+    return out
 
 
 def _rms_set(ship=((5.00, 5.05), (4.60, 4.62)), match=((5.30, 5.33), (5.00, 5.02)), held_shift=0.0, patched=192, calls=1536):
@@ -8714,6 +8851,22 @@ def selftest():
     assert CF(RX)[CKPTOFFF_FAM]["verdicts"][("e4b", "fused_attn4_m_f1")] == "VOID"
     assert CF(_ckptofff_set(layers={"fused_attn4_shipped_f1_d2": 0}))[CKPTOFFF_FAM]["verdicts"][("e4b", "fused_attn4_shipped_f1_d2")] == "VOID"
     assert "P161" in render(RCF, "x") and "amendment 59" in render(RCF, "x")
+    cases += 1
+    # 113. TC1 amendment 60 (qwen3evalce): the held-out loss from the logits in chunks -- VALID; P162-P165 HELD on the default fixture (eval
+    #      26.88 -> 22.52, below the 25.85 training peak, step 0 alike); a 3.0 GB drop FALSIFIES P162; an e1 eval peak above training
+    #      FALSIFIES P163; a 0.0003 step-0 shift FALSIFIES P164; an e1 draw with no chunked eval forward, or e0 with the switch on, is VOID
+    EC = lambda R: {EVALCE_FAM: reduce_family(EVALCE_FAM, R, {}, 20)}
+    REC = EC(_evalce_set())
+    assert all(x["verdict"] == "VALID" for x in REC[EVALCE_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in REC[EVALCE_FAM]["rows"]]
+    pec = lambda R: {p: v for p, _, v, _ in score_evalce(R)}
+    assert pec(REC) == {"P162": "HELD", "P163": "HELD", "P164": "HELD", "P165": "HELD"}, score_evalce(REC)
+    assert pec(EC(_evalce_set(evals={"e1": 23.88})))["P162"] == "FALSIFIED"
+    assert pec(EC(_evalce_set(evals={"e1": 26.0})))["P163"] == "FALSIFIED"
+    assert pec(EC(_evalce_set(step0={"fused_attn4_m_e1_d2": 1.28881})))["P164"] == "FALSIFIED"
+    assert EC(_evalce_set(calls={"fused_attn4_m_e1": 0}))[EVALCE_FAM]["verdicts"][("e4b", "fused_attn4_m_e1")] == "VOID"
+    assert EC(_evalce_set(envs={"fused_attn4_m_e0_d2": "1"}))[EVALCE_FAM]["verdicts"][("e4b", "fused_attn4_m_e0_d2")] == "VOID"
+    assert pec(EC(_evalce_set(calls={"fused_attn4_m_e1": 0})))["P162"] == "UNTESTED"
+    assert "P165" in render(REC, "x") and "amendment 60" in render(REC, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases

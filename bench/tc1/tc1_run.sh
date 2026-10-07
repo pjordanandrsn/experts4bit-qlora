@@ -134,8 +134,8 @@ echo "BOX $TC1_BOX families: $FAMILIES; e4b $E4B_SHA gnf4 $GNF4_SHA; run $TC1_RU
 case "$PACK" in 0|1) ;; *) say "refusing: TC1_PACK must be 0 or 1 (got '$PACK')"; echo "BOX_REFUSED pack=$PACK" >> summary.txt; finish 78;; esac
 for _f in $FAMILIES; do
   case "$_f" in
-    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k|qwen3padbk|qwen3samestack4kd|qwen3padbk28|qwen3prof28|qwen3ladder28|qwen3memc4kb|qwen3dqpack|qwen3memc4kt|qwen3ckptoff) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
-    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k, qwen3padbk, qwen3samestack4kd, qwen3padbk28, qwen3prof28, qwen3ladder28, qwen3memc4kb, qwen3dqpack, qwen3memc4kt, qwen3ckptoff)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
+    qwen3samestack4k|qwen3samestack4kce|qwen3samestack4kce2|qwen3memc4k|qwen3padbk|qwen3samestack4kd|qwen3padbk28|qwen3prof28|qwen3ladder28|qwen3memc4kb|qwen3dqpack|qwen3memc4kt|qwen3ckptoff|qwen3evalce) { [ "$PACK" = 1 ] && [ "$SEQ" = 4096 ]; } || { say "refusing: $_f is the packed 4,096-token regime -- it runs with TC1_PACK=1 TC1_SEQ=4096 (got pack=$PACK seq=$SEQ)"; echo "BOX_REFUSED $_f pack=$PACK seq=$SEQ" >> summary.txt; finish 78; };;
+    *) [ "$PACK" = 0 ] || { say "refusing: TC1_PACK=1 packs every family on the box and $_f is a field-recipe token (packed-regime tokens: qwen3samestack4k, qwen3samestack4kce, qwen3samestack4kce2, qwen3memc4k, qwen3padbk, qwen3samestack4kd, qwen3padbk28, qwen3prof28, qwen3ladder28, qwen3memc4kb, qwen3dqpack, qwen3memc4kt, qwen3ckptoff, qwen3evalce)"; echo "BOX_REFUSED $_f pack=$PACK" >> summary.txt; finish 78; };;
   esac
 done
 # ---------------------------------------------------------------- staged pieces, box class, forensics
@@ -1482,6 +1482,23 @@ tc1_ckptoff_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
   can_run 600 $FAM/unsloth/m_oo  && arm $FAM unsloth ckpt_unsloth_m_oo unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $PP
   echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
   free_family $FAM ${MID//\//--}; }
+# tc1_evalce_family FAM MID REV FETCH_AL E4B_AL UNS_AL -- TC1 amendment 60 (2026-10-07): the held-out loss stock (e0) vs from the logits in
+# fp32 chunks (E4B_CHUNKED_EVAL_LOSS=1, e1) on packed rows -- e4b's matched arm with E4B_CKPT_OFFLOAD=1 and its defaults otherwise, two draws a
+# side in ABBA order, then Unsloth's matched arm (one draw); every arm in venv-unsloth with --phase-peaks 1.
+tc1_evalce_family(){ local FAM=$1 MID=$2 REV=$3 FAL=$4 EAL=$5 UAL=$6
+  local ALL="e4b:fused_attn4_m_e0:fused e4b:fused_attn4_m_e1:fused e4b:fused_attn4_m_e1_d2:fused e4b:fused_attn4_m_e0_d2:fused unsloth:ckpt_unsloth_m_ee:unsloth"
+  say "===== CHUNKED EVAL LOSS family $FAM ($MID @ $REV; e4b E4B_CHUNKED_EVAL_LOSS 0 vs 1 with E4B_CKPT_OFFLOAD=1, Unsloth; packed rows; --phase-peaks 1; amendment 60)"
+  local TOK TS; tc1_prepare $FAM "$MID" $REV $FAL "$ALL" || return 0
+  local MATCH="--adapter-dtype fp32 --lora-init matched:$MATCHED_SEED"
+  local UNS="--grad-ckpt unsloth --unsloth-targets $UT7"
+  local PP="--phase-peaks 1" OFF="E4B_CKPT_OFFLOAD=1 E4B_CHUNKED_EVAL_LOSS=0" ON="E4B_CKPT_OFFLOAD=1 E4B_CHUNKED_EVAL_LOSS=1"
+  can_run 600 $FAM/e4b/m_e0      && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_e0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_e1      && TC1_ARM_EXTRA_ENV="$ON"  E4B_VENV=t212 arm   $FAM e4b fused_attn4_m_e1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_e1_d2   && TC1_ARM_EXTRA_ENV="$ON"  E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_e1 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/e4b/m_e0_d2   && TC1_ARM_EXTRA_ENV="$OFF" E4B_VENV=t212 draw2 $FAM e4b fused_attn4_m_e0 fused $EAL "$MID" $REV 0 field $TOK $TS --attn-4bit 1 $MATCH $PP
+  can_run 600 $FAM/unsloth/m_ee  && arm $FAM unsloth ckpt_unsloth_m_ee unsloth $UAL "$MID" $REV 0 field $TOK $TS $UNS --unsloth-moe-backend grouped_mm $MATCH $PP
+  echo "$(echo $FAM | tr a-z A-Z) DONE" | tee -a summary.txt
+  free_family $FAM ${MID//\//--}; }
 # tc1_ckptofff_family FAM MID REV FETCH_AL E4B_AL -- TC1 amendment 59 (2026-10-07): amendment 58's switch (E4B_CKPT_OFFLOAD=1, checkpoint
 # inputs in pinned host memory) off (f0) vs on (f1) at TC1's FIELD recipe, where each layer's input is a few hundred tokens -- the shipped and the
 # matched arm, two draws a side in ABBA order, every arm in venv-unsloth at e4b's defaults otherwise with --phase-peaks 1: the read before any default.
@@ -1936,6 +1953,7 @@ for FAM in $FAMILIES; do case "$FAM" in
   qwen3memc4kt) tc1_memc4kt_family qwen3memc4kt Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 57: the census of the training phase on packed rows
   qwen3dqpack) tc1_dqpack_family qwen3dqpack Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 56: the double-quantized absmax on packed rows, phase peaks
   qwen3ckptoff) tc1_ckptoff_family qwen3ckptoff Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 58: checkpoint inputs in pinned host memory, off vs on, packed rows
+  qwen3evalce) tc1_evalce_family qwen3evalce Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 5400 5400;;   # TC1 amendment 60: the held-out loss from the logits in chunks, packed rows
   qwen3ckptofff) tc1_ckptofff_family qwen3ckptofff Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 59: checkpoint inputs in pinned host memory, off vs on, field recipe
   qwen3padbk) tc1_padbk_family qwen3padbk Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 48: the LoRA delta's bucketed padding on packed rows
   qwen3padbk28) tc1_padbk28_family qwen3padbk28 Qwen/Qwen3-30B-A3B ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 5400 3600;;   # TC1 amendment 52: amendment 48's bucketing A/B in venv-e4b (torch 2.8)
