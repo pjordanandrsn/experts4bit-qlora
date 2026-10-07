@@ -3968,6 +3968,15 @@ def run_arm(a, load_fn, sampler=True):
                              "min_bytes": getattr(_fst, "COMBINE_CHUNK_MIN_BYTES", None), "chunk_bytes": getattr(_fst, "COMBINE_CHUNK_BYTES", None)}
         except Exception:
             combine_chunk = {"env": os.environ.get("E4B_COMBINE_CHUNK"), "e4b_has_combine_chunk": False}
+    compact_buckets = None                             # TC1 amendment 66: grouped-nf4-gemm's compact bucketed delta (NF4_QLORA_COMPACT_BUCKETS): how often
+    if a.framework == "e4b":
+        try:
+            import nf4_qlora as _nqc
+            _cb = getattr(_nqc, "COMPACT_BUCKETS_STATS", None)
+            compact_buckets = {"env": os.environ.get("NF4_QLORA_COMPACT_BUCKETS"), "gnf4_has_compact_buckets": _cb is not None,
+                               "calls": int((_cb or {}).get("calls", 0))}
+        except Exception:
+            compact_buckets = {"env": os.environ.get("NF4_QLORA_COMPACT_BUCKETS"), "gnf4_has_compact_buckets": False}
     route_ab = None                                    # TC1c amendment 4: which training GEMM route grouped-nf4-gemm took (GNF4_TRAIN_GEMM), and how often
     if a.framework == "e4b":
         try:
@@ -4050,6 +4059,7 @@ def run_arm(a, load_fn, sampler=True):
         "reuse_ab": reuse_ab,                                                                                            # TC1 amendment 20 (#945)
         "chunked_lm_loss": chunked_lm_loss,                                                                              # TC1 amendment 40
         "combine_chunk": combine_chunk,                                                                                  # TC1 amendment 61
+        "compact_buckets": compact_buckets,                                                                              # TC1 amendment 66
         "keep_ab": keep_ab,                                                                                              # TC1 amendment 21 (#945)
         "route_ab": route_ab,                                                                                            # TC1c amendment 4
         **({"mem_census": mem_census} if mcen is not None else {}),                                                    # TC1 amendment 23 (only with --mem-census 1)

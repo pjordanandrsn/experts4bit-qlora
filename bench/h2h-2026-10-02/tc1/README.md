@@ -1403,3 +1403,28 @@ steps, every attempt first time at load1 1.2–1.3). Read: [`RESULTS-tc1-ckptre6
   `enable_fast_train`. The offload stays an opt-in memory lever, and because P180 is FALSIFIED, STATUS gives its trade (0.74 GB for
   1.023 of the reentrant step) instead of recommending it.
 
+## Amendment 65 (2026-10-07): at the new defaults e4b's packed-row gap to Unsloth is all transient, and grouped-nf4-gemm's bucketed delta holds it (P184–P188 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 65. One RTX 5090 (`tc1-5090-130`, AMD Ryzen 9 9950X, a
+30-CPU quota, Vast machine 153193). e4b `e4c8842` (the reentrant checkpoint by default), grouped-nf4-gemm `0e6bff3`, Unsloth 2026.9.14,
+every arm in venv-unsloth (torch 2.12.1). Amendment 57's training-phase census on packed 4,096-token rows: 20 steps, no evaluation
+inside the census window, one draw per arm. Read: [`RESULTS-tc1-memc4kr.md`](RESULTS-tc1-memc4kr.md).
+
+| arm | training peak | peak phase | largest non-static groups at the peak |
+|---|---|---|---|
+| e4b defaults (reentrant checkpoint) | 26.581 GB | s12.mb2.backward | checkpoint inputs 0.772 GB; `nf4_qlora.py:672` 0.534; `:679` 0.395 |
+| e4b with `E4B_CKPT_OFFLOAD=1` | 25.826 GB | s2.mb3.backward | `nf4_qlora.py:672` 0.541 GB; `:679` 0.399 + 0.393; `:673` 0.369 |
+| Unsloth | 24.864 GB | s2.mb2.backward | NF4 dequant 0.805 GB; autograd backward 0.287; grouped mm 0.134 |
+
+- **P184 HELD:** the census attributes 100 % of each arm's peak (≥ 90 %).
+- **P185 HELD:** e4b's defaults peak **+1.717 GB** over Unsloth (in [1.3, 2.1]), +1.685 GB of it transient.
+- **P186 HELD:** with the offload, **+0.962 GB** (≤ 1.2), +0.949 GB of it transient.
+- **P187 HELD:** every peak falls in a training step's backward.
+- **P188 HELD:** on the offload arm the largest non-static group at the peak is grouped-nf4-gemm's bucketed delta (`nf4_qlora.py:672`,
+  0.541 GB). Its four sites hold about 1.70 GB together, against Unsloth's whole transient of 1.73 GB.
+- **Every static class is now equal on both sides,** the expert absmax included (0.46 GB). The gap is e4b's transient working memory, not
+  what it keeps.
+- **By amendment 65's rule** (P188 HELD), the next lever is the delta block. grouped-nf4-gemm#505 adds `NF4_QLORA_COMPACT_BUCKETS=1`, the
+  same bytes in one autograd node, which holds 1.8 MiB from forward to backward where the autograd body holds 188 MiB (RTX A2000,
+  fp32 adapters). Amendment 66 registers its A/B.
+
