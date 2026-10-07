@@ -196,3 +196,28 @@ The run directory's `p116/` is fetched and committed to `bench/p116/receipts/<ru
 
 The reference log-probs (`work/ref`), the arena and the gnf4 source clone stay on the box. `RESULTS-p116.md` is written
 from those files.
+
+## Amendment 1 (2026-10-07T23:45Z, after `p116-5090-1` VOIDed on a defect in the reducer; its speed and quality numbers not read)
+
+**What happened.** `p116-5090-1` ($0.853, adertha-receipts `683ea367`) ran end to end as registered:
+- the premise passed, 27 + 18;
+- the four arms ran;
+- both quality phases ran at **24 windows per text**, the number this page registers.
+
+The reducer VOIDed it: "arm R has 24 windows, expected 48". `p116_reduce.WINDOWS` still carried P115's 48 for Qwen3. The
+proof did not catch it, because Granite's 12 matched. The self-test did not catch it either, because it built its fakes
+from the same table.
+
+**The correction.**
+- `WINDOWS[Qwen3]` is set to **24**, the number this page and the runner register.
+- No rule, bar, prediction, size or budget changes.
+- `tests/test_p116_staged_pin.py` now checks the reducer's table against the runner's registered defaults, for the reading
+  and the proof.
+
+**The reading.** The registered response to a VOID is one rerun inside the ceiling. That rerun is **`p116-5090-2`**, from a
+main commit that carries this amendment. A rerun before the fix would VOID the same way, so the fix comes first.
+- **`p116-5090-1`:** the executing agent has not read its arm or quality numbers. Its records will be reduced by the
+  corrected reducer and reported in the results as a second draw, labelled as such. It is not the reading, and no rule
+  looks at it.
+- **Spend:** $1.064 so far (the proof $0.211, `p116-5090-1` $0.853) of the $3.00 ceiling. The rerun is about $0.85 at
+  today's rates (the launcher's estimate is $1.95), inside it.

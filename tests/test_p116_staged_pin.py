@@ -112,6 +112,21 @@ def test_the_rule_is_the_registered_rule():
     assert "1.03" in PREREG and "0.99" in PREREG
 
 
+def test_the_reducer_expects_the_windows_the_runner_runs():
+    """Amendment 1: the reducer's per-text window count must be the runner's registered default, reading and proof.
+    p116-5090-1 VOIDed because the reducer still carried P115's 48 while the runner (and the PREREG) ran 24."""
+    sys.path[:0] = [str(LANE), str(REPO / "bench" / "p115")]
+    try:
+        import p116_reduce as r
+    finally:
+        del sys.path[:2]
+    prove = RUN[RUN.index('if [ "$PROVE" = 1 ]; then'):RUN.index("else\n")]
+    reading = RUN[RUN.index("else\n"):RUN.index("fi\nGPU_CLASS=")]
+    assert f"WINDOWS_DEF={r.WINDOWS[r.QWEN]};" in reading and r.WINDOWS[r.QWEN] == 24, r.WINDOWS
+    assert f"WINDOWS_DEF={r.WINDOWS[r.GRAN]};" in prove and r.WINDOWS[r.GRAN] == 12, r.WINDOWS
+    assert "**24 windows each**" in PREREG
+
+
 def test_the_plans_are_k33s_selected_plans():
     sys.path[:0] = [str(LANE), str(REPO / "bench" / "p109")]
     try:
