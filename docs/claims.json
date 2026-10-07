@@ -11006,6 +11006,31 @@
         "receipts/experts4bit-qlora/2026-10-06/tc1-5090-113/tc1/"
       ],
       "notes": "Vast invoiced $1.05."
+    },
+    {
+      "id": "e4b.train.memory.packed-4k-train-census.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 57 (#835), one rented RTX 5090 (tc1-5090-114, AMD EPYC 7713): the memory census (--mem-census 1) of the TRAINING phase on packed rows of 4,096 real tokens -- TC1_EVAL_EVERY above TC1_STEPS, so no evaluation inside the census window -- the matched set, 20 steps, one draw per arm, every arm in venv-unsloth (torch 2.12.1). Training-phase peak allocated: e4b E4B_ABSMAX_DQ=0 28.138 GB, e4b E4B_ABSMAX_DQ=1 26.786 GB, Unsloth 2026.9.14 24.864 GB; 100 % attributed (P149 HELD); e4b fp32 +3.274 GB (P150 HELD, [2.0, 4.5]); e4b dq +1.922 GB (P151 HELD, <= 2.5); every census peak in a training backward (P152 HELD). At the dq arm's peak every static class equals Unsloth's; the +1.91 GB is transient. e4b's largest non-static groups: each decoder layer's output saved by non-reentrant checkpointing (modeling_qwen3_moe.py:352, 47 x 16.8 MB = 0.789 GB; Unsloth runs its own checkpointing and holds no such group), e4b's routed-expert combine backward (engines/fast.py:429/430/435, fp32 [tokens x top-k, hidden] copies, 1.07 GB in all) and grouped-nf4-gemm's bucketed delta block (nf4_qlora.py:672/673, 0.90 GB).",
+      "value": 1.922,
+      "unit": "GB, training-phase peak allocated, e4b with E4B_ABSMAX_DQ=1 minus Unsloth, Qwen3-30B-A3B matched set on packed 4,096-token rows (one draw per arm); e4b fp32 +3.274",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-114: instance 54569322, AMD EPYC 7713, Vast machine 55913); e4b @ c07ea7f + grouped-nf4-gemm @ 0e6bff3, torch 2.12.1+cu130; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3memc4kt (TC1 amendment 57): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), TC1_STEPS=20, TC1_EVAL_EVERY=1000, --mem-census 1, arms e4b fused_attn4_m_p4t (E4B_ABSMAX_DQ=0) / fused_attn4_m_p4t_dq (=1) and Unsloth ckpt_unsloth_m_p4t (grouped_mm, --grad-ckpt unsloth); validity (memc4kb_why) and scoring by bench/tc1/tc1_reduce.py; no speed read",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-memc4kt.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-114/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-114/tc1/"
+      ],
+      "notes": "Vast invoiced $1.08."
     }
   ]
 }
