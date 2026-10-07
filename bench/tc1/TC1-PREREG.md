@@ -2532,3 +2532,47 @@ training peak, and the next registration targets the largest e4b-only group, whi
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 3 h guard, TC1's 98 GB host floor, venv-unsloth built. About $1.5 with the
 download.
+
+### Amendment 58 (2026-10-07T04:36Z, after amendment 57's read, before any box): checkpoint inputs in pinned host memory on packed rows (P153–P157)
+
+**Why.** Amendment 57's census put e4b's 1.91 GB training-phase excess over Unsloth (packed rows, double-quantized absmax) in three
+places:
+- each checkpointed decoder layer's input kept on the GPU, 47 × 16.8 MB = 0.79 GB, the largest single group;
+- the routed-expert combine's backward, 1.07 GB;
+- grouped-nf4-gemm's bucketed delta block, 0.90 GB.
+
+By its rule, the next registration targets the first. `E4B_CKPT_OFFLOAD=1` (#1298) keeps those inputs in pinned host memory: the reentrant
+checkpoint inside `save_on_cpu`. Its gradients equal the default checkpointing's exactly on CPU, and on CUDA through e4b's fused experts.
+Separately, #1296 cut the combine backward's temporaries by 0.40 GB with the same bytes, measured on its own on an RTX A2000. Both are on
+main for this box, so the read also says what the combine change did to the training peak.
+
+**The box** (token `qwen3ckptoff`). One RTX 5090, packed 4,096-token rows, 40 load-gated steps, held-out at 0 and 40. The matched arm in
+venv-unsloth (torch 2.12), at e4b's defaults otherwise: the double-quantized absmax, buckets `auto`, the chunked loss `auto`. Avoiding
+machines 145701, 130223 and 55583. In this order:
+- e4b `fused_attn4_m_o0`: `E4B_CKPT_OFFLOAD=0`;
+- e4b `fused_attn4_m_o1`: `E4B_CKPT_OFFLOAD=1`;
+- their second draws, `_o1_d2` then `_o0_d2` (A B B A);
+- Unsloth `ckpt_unsloth_m_oo`: one draw.
+
+Every arm runs with `--phase-peaks 1`. Validity (`ckptoff_why`) requires torch 2.12 and e4b's defaults as recorded: the absmax compressed,
+every padded call bucketed, the chunked loss serving the rows. It also requires the checkpoint the side names: `o1` routes all 48 layers
+(the receipt's `ckpt_offload_layers`), `o0` routes none.
+
+**Predictions** (registered before the box):
+- **P153:** e4b's training-phase peak (median of the draws) falls by at least **0.6 GB** from `o0` to `o1`.
+- **P154:** s/step `o1` / `o0` ≤ **1.05**. The copies are synchronous, one per layer each way.
+- **P155:** |mean held-out at N, `o1` − `o0`| ≤ **0.005**.
+- **P156:** `o0`'s training-phase peak is at most **1.7 GB** above Unsloth's. Amendment 57 read +1.92 before #1296.
+- **P157:** `o1`'s training-phase peak is at most **1.0 GB** above Unsloth's.
+
+**Decision rules.**
+- **P153, P154 and P155 HELD:** the next registration reads it at TC1's field recipe, where each layer's input is smaller and the copies
+  cost relatively more, before any default.
+- **P154 FALSIFIED with P153 HELD:** the saving costs too much as written. The next step makes the copies asynchronous (a side stream
+  and an event), and the box is re-asked.
+- **P153 FALSIFIED:** the read says what the training peak held instead.
+- **P157 HELD:** STATUS says that with it, e4b's packed-row training memory is within 1 GB of Unsloth's.
+- No default changes on this box. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Five arms: about $2 with
+the download.

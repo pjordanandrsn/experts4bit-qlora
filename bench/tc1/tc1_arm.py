@@ -3977,6 +3977,9 @@ def run_arm(a, load_fn, sampler=True):
         "absmax_dq": bool(getattr(a, "absmax_dq", 0)) or _absmax_compressed(model),
         "absmax_dq_flag": bool(getattr(a, "absmax_dq", 0)),
         "absmax_dq_fast_train": _fast_train_absmax_record(),
+        # TC1 amendment 58: decoder layers whose checkpoint keeps its input in pinned host memory (E4B_CKPT_OFFLOAD=1, engines/ckpt_offload.py)
+        "ckpt_offload_layers": sum(1 for m in model.modules() if getattr(m, "_e4b_ckpt_offload_ref", None) is not None),
+        "ckpt_offload_env": os.environ.get("E4B_CKPT_OFFLOAD"),
         **({"absmax_dq_modules": x["absmax_dq"]["modules"], "absmax_bytes_before": x["absmax_dq"]["bytes_before"],
             "absmax_bytes_after": x["absmax_dq"]["bytes_after"], "absmax_bytes_ratio": x["absmax_dq"]["ratio"]} if x.get("absmax_dq") else {}),
         "structural_expected_n_attn4": x.get("structural_expected_n_attn4"), "detector_version": x.get("detector_version"),
