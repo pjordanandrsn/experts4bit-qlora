@@ -227,6 +227,10 @@ Two changes since (`e4b.train.ckpt-offload.packed-4k.5090.2026-10-07`, TC1 amend
 
 With both, e4b's packed-row training phase peaks at 25.85 GB, 0.98 GB above Unsloth's. Its run peak is then the held-out evaluation's
 26.88 GB.
+The opt-in `E4B_CHUNKED_EVAL_LOSS=1` (#1302) takes that evaluation's loss from the logits in fp32 chunks: the evaluation-phase peak
+falls from 26.88 to 22.50 GB. With it and `E4B_CKPT_OFFLOAD=1`, both opt-in, the run peak is the training phase's 25.85 GB, 0.99 GB
+above Unsloth's 24.86. Held-out is unchanged
+(identical at step 0, +0.00005 at N; `e4b.train.chunked-eval-loss.packed-4k.5090.2026-10-07`, TC1 amendment 60).
 
 The packed-row reading above supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
 same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are

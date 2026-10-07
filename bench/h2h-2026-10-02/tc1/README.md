@@ -1250,3 +1250,29 @@ No position on any other family (lane TC2) or under a memory budget (lane TC3) �
 position on this family (it does not train it at its pins, above). No cross-box ratio. **The H100 NVL reading is the opposite sign** — Unsloth/e4b 0.621, Unsloth faster — see
 [`../tc1c/README.md`](../tc1c/README.md): the position above is a 5090 position, where both paths are launch-bound and Unsloth's grouped
 GEMM is not one launch per call.
+
+## Amendment 60 (2026-10-07): the held-out loss from the logits in chunks takes 4.37 GB off e4b's packed-row evaluation peak, and the run peak becomes the training phase's (P162–P165 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 60. One RTX 5090 (`tc1-5090-121`, AMD EPYC 9755, a
+46-CPU quota, Vast machine 114283). e4b `5f35306` (with #1302), grouped-nf4-gemm `0e6bff3`, Unsloth 2026.9.14, every arm in venv-unsloth
+(torch 2.12.1). Packed 4,096-token rows, 40 load-gated steps, held-out at 0 and 40 over 8 rows, every attempt first time at load1
+1.1–1.3, peaks split by phase. e4b ran with `E4B_CKPT_OFFLOAD=1` and its defaults otherwise, with `E4B_CHUNKED_EVAL_LOSS` 0 (`e0`) or 1
+(`e1`: all 16 held-out forwards through it). Read: [`RESULTS-tc1-evalce.md`](RESULTS-tc1-evalce.md).
+
+| arm | s/step (two draws) | training-phase peak | evaluation peak | run peak | held-out step 0 / N |
+|---|---|---|---|---|---|
+| e4b `e0` | 10.194 / 10.200 | 25.85 GB | 26.88 GB | 26.88 GB | 1.28851 / 0.95449, 0.95395 |
+| e4b `e1` | 10.203 / 10.188 | 25.85 GB | 22.50 GB | 25.85 GB | 1.28851 / 0.95443, 0.95411 |
+| Unsloth (one draw) | 12.543 | 24.86 GB | 21.85 GB | 24.86 GB | 1.28707 / 0.95405 |
+
+- **P162 HELD:** the evaluation-phase peak falls **4.373 GB** (≥ 3.5), 26.877 → 22.504 GB on both draws. The RTX A2000 had measured
+  4.36 GB of the loss's own transient at this shape.
+- **P163 HELD:** with the switch on, every draw's evaluation peak (22.50 GB) sits below its training peak (25.85), so e4b's run peak is
+  the training phase's.
+- **P164 HELD:** step-0 held-out is identical on both draw pairs (1.28851).
+- **P165 HELD:** mean held-out at N moves +0.00005 (≤ 0.005).
+- With it, e4b's run peak on packed rows is **25.85 GB, 0.99 GB above Unsloth's 24.86**. The training phase is untouched: 25.85 GB on
+  every e4b draw.
+- **By amendment 60's rule** (all four HELD), `E4B_CHUNKED_EVAL_LOSS` becomes on by default in a library PR that states its scope (one
+  model, one RTX 5090, torch 2.12) and that held-out values compared across the flip are not byte-identical above the gate, bounded by
+  P164 and P165 here. Reported, not scored: on this host e4b stepped 10.20 s against Unsloth's 12.54 at these settings.
