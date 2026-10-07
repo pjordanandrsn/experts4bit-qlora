@@ -14,8 +14,10 @@
     exactly as before.
 - **The library:**
   - `glue_fuse.fold_mode()` is the shared parser.
-  - `fuse_t1_glue`, `fuse_t1_glue_r2` and `fuse_router_epilogue` take `mode=` and `report=`; without `mode` they read
-    their environment variable, as before.
+  - `fuse_t1_glue`, `fuse_t1_glue_r2` and `fuse_router_epilogue` take `mode=` and `report=`. Without `mode` they still
+    read their environment variable, but through the same parser. For a direct caller (a bench harness or your own
+    code), `auto` there now applies the fold where licensed, where any value but `1` used to read as off. A value other
+    than `auto`, `0` or `1` now raises when the fold is called.
   - `fuse_qkv` takes `fold_modes=` and `fold_reports=`.
 - **Why now.** Lane P115 (#1314) registers the read that would make `auto` `serve_paged`'s default for the registered
   B=1 fused stack; its Phase C reads this code on gpt-oss-20b and Qwen3.6-35B-A3B. No default moves here.
