@@ -2607,7 +2607,12 @@ layers (`ckpt_offload_layers`), `f0` routes none.
 - **P161:** the matched arm's training-phase peak (median of the draws) falls by at least **0.10 GB** from `f0` to `f1`.
 
 **Decision rules.**
-- **All four HELD:** offloading becomes e4b's default (`E4B_CKPT_OFFLOAD` unset = on, `=0` off), in a library PR that cites both reads.
+- **All four HELD:** before offloading becomes e4b's default (`E4B_CKPT_OFFLOAD` unset = on, `=0` off), one more read is required
+  (maintainer review, before any box). This box and amendment 58 read torch 2.12 only. The default would also apply to the field
+  image's torch 2.8, where amendments 53-54 found the step host-bound on some hosts, which is the regime where synchronous host copies
+  cost the most. So the next registration reads `f0` against `f1` at the field recipe in venv-e4b (torch 2.8), with a premise gate: the
+  `f0` arm's device busy fraction against its timed step must be at most 0.9, or the speed reading is UNTESTED, not HELD. The default
+  flip then follows in a library PR that cites all three reads and states their scope: one model, RTX 5090, both torches.
 - **P158 or P159 FALSIFIED, with P160 HELD:** the copies cost the short rows too much. The next step is a size gate,
   `E4B_CKPT_OFFLOAD=auto`: offload only a micro-batch above a token threshold, as the chunked loss and the bucketing do. Its own field read
   (auto never engages here) comes before it becomes the default.
