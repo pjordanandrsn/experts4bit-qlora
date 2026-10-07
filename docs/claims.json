@@ -11181,6 +11181,34 @@
         "receipts/experts4bit-qlora/2026-10-07/tc1-5090-125/tc1/"
       ],
       "notes": "Vast invoiced $1.48; the first draw (tc1-5090-124, $0.02) was refused at the CUDA host floor (code 18, driver 610.57)."
+    },
+    {
+      "id": "e4b.train.ckpt-flavour.default.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 64 (#835), two rented RTX 5090s: Hugging Face's checkpoint (E4B_CKPT_OFFLOAD=0), PyTorch's reentrant checkpoint alone (=reentrant) and the reentrant checkpoint with its inputs in pinned host memory (=1), two draws a side. Packed 4,096-token rows in torch 2.12.1, e4b's matched arm (tc1-5090-129, AMD Ryzen 9 5900XT): the reentrant checkpoint steps 0.980 [0.980, 0.981] of Hugging Face's (P178 HELD, <= 1.01) with the same training-phase peak, 26.581 GB (P179 HELD), held-out within 0.0004 (P181 HELD); the copies cost 1.023 [1.022, 1.024] of the reentrant step for a 0.74 GB lower peak (P180 FALSIFIED, <= 1.01). TC1's field recipe in torch 2.8.0, e4b's shipped arm, every arm profiled (tc1-5090-128, AMD EPYC 7K62, Hugging Face's checkpoint host-bound at device busy 0.404): the reentrant checkpoint steps 0.838 [0.825, 0.852] (P182 HELD, <= 1.00, premise met), held-out within 0.0039 (P183 HELD). By the amendment's rule the reentrant checkpoint becomes e4b's default checkpoint under enable_fast_train; the offload stays opt-in.",
+      "value": 0.838,
+      "unit": "ratio s/step, the reentrant checkpoint over Hugging Face's checkpoint, Qwen3-30B-A3B shipped arm at the field recipe in torch 2.8 (medians of steps 11..60 over two draws each); packed rows (matched arm, torch 2.12) 0.980; the offload's copies 1.023 of the reentrant step on packed rows",
+      "hardware": "RTX 5090 (sm_120), two rented Vast.ai verified/secure hosts (tc1-5090-129: instance 54652024, AMD Ryzen 9 5900XT, a 30-CPU quota, Vast machine 94700, torch 2.12.1+cu130; tc1-5090-128: instance 54640352, AMD EPYC 7K62, a 23-CPU quota, Vast machine 152440, torch 2.8.0+cu128); e4b @ 2b8c1d4 (packed) / 434db5f (field) + grouped-nf4-gemm @ 0e6bff3",
+      "conditions": "bench/tc1 tokens qwen3ckptre4k (packed rows: TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, 40 load-gated steps) and qwen3ckptre28 (the field recipe in venv-e4b, 60 load-gated steps, --profile-steps 3 --profile-warm 3) (TC1 amendment 64): fused_attn4_m_* / fused_attn4_shipped_* r0 / rr / r1 (+ _d2), --phase-peaks 1; validity (ckptre_why in each regime's form, the checkpoint function each side names), P182's premise gate (r0 device busy vs the timed step <= 0.9) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-ckptre64-packed.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-ckptre64-field28.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-129/RESULTS-tc1.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-128/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-129/tc1/",
+        "receipts/experts4bit-qlora/2026-10-07/tc1-5090-128/tc1/"
+      ],
+      "notes": "Vast invoiced $1.00 (packed) and $1.47 (field, torch 2.8)."
     }
   ]
 }

@@ -77,14 +77,17 @@ def test_no_checkpointing_is_left_alone_with_a_warning():
 
 
 def test_env_switch(monkeypatch):
-    assert ckpt_offload.CKPT_OFFLOAD_DEFAULT is False                       # opt-in until TC1 amendments 62 and 63 read
-    monkeypatch.delenv("E4B_CKPT_OFFLOAD", raising=False)
-    assert ckpt_offload.checkpoint_offload_requested() is False
-    monkeypatch.setattr(ckpt_offload, "CKPT_OFFLOAD_DEFAULT", True)        # the mechanism a later default flip will use
-    for v, want, explicit in (("", True, False), ("0", False, False), ("off", False, False), ("1", True, True), (" ON ", True, True)):
+    assert ckpt_offload.CKPT_DEFAULT_MODE == "reentrant"                    # the default checkpoint since TC1 amendment 64
+    for v, want, explicit, mode in (("", True, False, "reentrant"), ("0", False, False, None), ("off", False, False, None),
+                                    ("reentrant", True, True, "reentrant"), ("1", True, True, "offload"), (" ON ", True, True, "offload")):
         monkeypatch.setenv("E4B_CKPT_OFFLOAD", v)
         assert ckpt_offload.checkpoint_offload_requested() is want, v
         assert ckpt_offload.checkpoint_offload_explicit() is explicit, v
+        if want:
+            assert ckpt_offload.checkpoint_offload_mode() == mode, v
+    monkeypatch.setattr(ckpt_offload, "CKPT_DEFAULT_MODE", None)           # None: unset would mean Hugging Face's checkpoint
+    monkeypatch.setenv("E4B_CKPT_OFFLOAD", "")
+    assert ckpt_offload.checkpoint_offload_requested() is False
     monkeypatch.setenv("E4B_CKPT_OFFLOAD", "auto")
     with pytest.raises(ValueError):
         ckpt_offload.checkpoint_offload_requested()
@@ -200,16 +203,12 @@ def test_enable_fast_train_applies_it_from_the_environment(monkeypatch):
     m = model()
     assert enable_fast_train(m) >= 1
     assert not any(getattr(lay, "_e4b_ckpt_offload_ref", None) for lay in m.model.layers)
-    monkeypatch.delenv("E4B_CKPT_OFFLOAD", raising=False)                   # unset: the shipped default, off
+    monkeypatch.delenv("E4B_CKPT_OFFLOAD", raising=False)                   # unset: the default, the reentrant checkpoint
     m = model()
     assert enable_fast_train(m) >= 1
-    assert not any(getattr(lay, "_e4b_ckpt_offload_ref", None) for lay in m.model.layers)
-    monkeypatch.setattr(ckpt_offload, "CKPT_OFFLOAD_DEFAULT", True)        # the mechanism a later default flip will use
-    m = model()
-    assert enable_fast_train(m) >= 1
-    assert all(lay._gradient_checkpointing_func is ckpt_offload.offloaded_checkpoint for lay in m.model.layers)
+    assert all(lay._gradient_checkpointing_func is ckpt_offload.reentrant_checkpoint for lay in m.model.layers)
     disable_fast_train(m)
-    monkeypatch.setattr(ckpt_offload, "CKPT_OFFLOAD_DEFAULT", False)
+    assert not any(getattr(lay, "_e4b_ckpt_offload_ref", None) for lay in m.model.layers)
     monkeypatch.setenv("E4B_CKPT_OFFLOAD", "1")
     m = model()
     assert enable_fast_train(m) >= 1
