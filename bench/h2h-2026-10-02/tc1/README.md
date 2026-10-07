@@ -98,6 +98,33 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 58 (2026-10-07): checkpoint inputs in host memory take 0.74 GB off e4b's packed-row training peak for 0.3 % of the step; with them e4b trains within 1 GB of Unsloth (P153–P155, P157 HELD; P156 FALSIFIED)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 58. One RTX 5090 (`tc1-5090-115`, AMD Ryzen 9 7900, a
+23-CPU quota, Vast machine 152169). e4b `666b775` (with #1296 and #1298), grouped-nf4-gemm `0e6bff3`, Unsloth 2026.9.14, every arm in
+venv-unsloth (torch 2.12.1). Packed 4,096-token rows, 40 load-gated steps, every attempt first time at load1 1.2–1.3, peaks split by phase.
+e4b ran at its defaults (the double-quantized absmax, buckets `auto`, the chunked loss), with `E4B_CKPT_OFFLOAD` 0 (`o0`) or 1 (`o1`:
+all 48 decoder layers routed). Read: [`RESULTS-tc1-ckptoff.md`](RESULTS-tc1-ckptoff.md).
+
+| arm | s/step (two draws) | training-phase peak | evaluation peak | run peak |
+|---|---|---|---|---|
+| e4b `o0` | 9.697 / 9.652 | 26.59 GB | 26.88 | 26.88 GB |
+| e4b `o1` | 9.708 / 9.700 | 25.84 / 25.85 GB | 26.88 | 26.88 GB |
+| Unsloth (one draw) | 11.300 | 24.86 GB | 21.85 | 24.86 GB |
+
+- **P153 HELD:** the training-phase peak falls **0.739 GB** (≥ 0.6). That is about the 0.79 GB of checkpoint inputs amendment 57 found.
+- **P154 HELD:** `o1` / `o0` **1.003** [1.000, 1.006] (≤ 1.05). The synchronous copies cost 0.3 % of the step here.
+- **P155 HELD:** held-out at N moves +0.0002.
+- **P156 FALSIFIED, narrowly:** without the offload, e4b's training phase peaks 1.723 GB above Unsloth's (registered ≤ 1.7). #1296's
+  combine-backward change took 0.20 GB off the training peak (26.79 → 26.59 GB against amendments 56 and 57, other hosts). On its own the
+  backward's peak had fallen 0.40 GB, so only part of that saving lands at the step's peak.
+- **P157 HELD, narrowly:** with the offload, e4b's training phase peaks **0.983 GB** above Unsloth's (≤ 1.0).
+- **The run peak is the evaluation again.** With the training phase down to 25.85 GB, e4b's run peak is its held-out evaluation's 26.88 GB,
+  which the chunked loss does not cover by design (amendment 55).
+- **By amendment 58's rule** (P153–P155 HELD) the next registration reads the offload at TC1's field recipe, where each layer's input is
+  smaller and the copies cost relatively more, before any default. Reported, not scored: on this host e4b stepped 9.68 s against Unsloth's
+  11.30 at these settings.
+
 ## Amendment 57 (2026-10-07): e4b's 1.92 GB training-phase excess on packed rows is checkpoint activations kept on the GPU, the combine backward's fp32 temporaries and the bucketed delta's block (P149–P152 HELD)
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 57. One RTX 5090 (`tc1-5090-114`, AMD EPYC 7713, Vast
