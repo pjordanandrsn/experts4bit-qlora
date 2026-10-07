@@ -10,7 +10,7 @@ The [capability register](../capabilities.json) and its `training_support` recor
 | Model | Task | Entry point | Status and evidence |
 |---|---|---|---|
 | gpt-oss | Load a frozen NF4 re-quantisation | `load_moe_4bit_streaming`, then `verify_moe_4bit` | Supported load; experts are bare, without `ExpertsLoRA`. This is not expert training. |
-| gpt-oss | Native MXFP4 serving in the paged engine | `engines.int4_experts.enable_serve_experts_int4` | Native-byte store; the quality gate remains open, so speed is not a licensed quality result. |
+| gpt-oss | Native MXFP4 serving in the paged engine | `engines.int4_experts.enable_serve_experts_int4` | Native-byte store, licensed by fidelity: 0.0019 nats/token KL from the dequantized reference of the same bytes (P44, `e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`); not a downstream-quality result. |
 | gpt-oss | Bind the native-byte NVMe serving engine | `enable_mxfp4_nvme_residency` | **REFUSED** for bias-carrying modules; the generic epilogue is not faithful to this model. |
 | gpt-oss | Train experts against an NVMe arena | `arena_train=True`, `enable_nvme_train_residency` | **REFUSED. No supported arena-training route.** See `training_support.gpt_oss.nvme_train`. |
 | gpt-oss | Train native MXFP4 experts outside the arena route | grouped-nf4-gemm's `mxfp4_qlora.ExpertsMxfp4LoRA` | **Experimental, unlicensed.** The tp1 run has a canary and provenance check, but no parity pair. |
@@ -87,7 +87,7 @@ assert n > 0
 
 ## Limitations
 
-- A uniform int4 grid cannot serve MXFP4 experts. For gpt-oss, `enable_serve_experts_int4` never re-quantises onto the int4 grid; it installs the **native MXFP4 store** served through `mxfp4_grouped`'s decode GEMV. That store is opt-in and single-stream-oriented (batched rows fall back to NF4 when the stacks are kept via `E4B_INT4_KEEP_NF4=1`), and its speed is quoted with the **quality gate open**: gpt-oss raw-text perplexity cannot rank an exact arm against a noisy one, and the pre-registered KL gate is falsified ([`../STATUS.md`](../STATUS.md)).
+- A uniform int4 grid cannot serve MXFP4 experts. For gpt-oss, `enable_serve_experts_int4` never re-quantises onto the int4 grid; it installs the **native MXFP4 store** served through `mxfp4_grouped`'s decode GEMV. That store is opt-in and single-stream-oriented (batched rows fall back to NF4 when the stacks are kept via `E4B_INT4_KEEP_NF4=1`), and its quality is licensed as **fidelity to the shipped bytes**, not downstream quality. P44 read it 0.0019 nats/token (KL, full vocabulary) from dequant-to-bf16 of the same MXFP4 bytes, top-1 agreement 0.981, against 0.0222 for an NF4 requant control (`e4b.serve.p44.gptoss.store-r12.kl-vs-bf16.2026-09-19`). gpt-oss raw-text perplexity still cannot rank an exact arm against a noisy one, so no perplexity result is claimed ([`../STATUS.md`](../STATUS.md)).
 - `enable_fast` skips MXFP4-arena modules on purpose; their forward is wired by `nvme_experts`.
 - `enable_mxfp4_nvme_residency` refuses `ExpertsLoRA`-wrapped modules: under the arena loader the base buffers are on `meta`, and binding would discard the adapter. Serve from the arena or train against it, not both on one load.
 - Trainable LoRA over gpt-oss's biased, clamped experts needs a gpt-oss-aware adapter; that is a separate change (`arch/gptoss.py`).

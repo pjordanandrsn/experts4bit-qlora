@@ -44,8 +44,8 @@ verify_moe_4bit(model, strict=True)
 n_experts = getattr(cfg, "num_local_experts", None) or cfg.num_experts   # the loader's own rule
 n = enable_nvme_train_residency(model, ARENA, hot_rows=n_experts)        # floor: at least num_experts
 assert n > 0
-model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})  # required
-n_fast = enable_fast_train(model, dgrad=True)
+model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})  # checkpointing is required
+n_fast = enable_fast_train(model, dgrad=True)   # after the engine; makes the checkpoint reentrant (E4B_CKPT_OFFLOAD=0 keeps the one above)
 assert n_fast > 0
 ```
 
@@ -58,6 +58,7 @@ Serving a native-MXFP4 arena (DeepSeek-V4) is the other side of the seam — [`m
 ## Supported scope
 
 - Families in the register for this path: Qwen3-MoE, Gemma-4 and OLMoE (host-RAM ceiling receipts, `e4b.offload.arena-vs-host-ram`) and DeepSeek-V4-Flash (native MXFP4, `e4b.serve.deepseek-v4`). gpt-oss has no native-MXFP4 arena route here: `enable_mxfp4_nvme_residency` refuses its bias-carrying modules, and it has no arena-training route ([`mxfp4-moe-training-and-residency.md`](mxfp4-moe-training-and-residency.md)).
+- Training through either tier needs gradient checkpointing; the recompute re-stages each layer for its own backward. `enable_fast_train` makes that checkpoint reentrant by default (`E4B_CKPT_OFFLOAD=0` keeps Hugging Face's). Host-RAM expert offload is tested under both checkpoints (`tests/test_offload.py`). The NVMe training tier has no checkpointed test in either mode; its `assert_rows_staged` guard raises instead of reading a row the recompute did not stage. Attach the offload or NVMe engine before `enable_fast_train`, which compresses the expert absmax, a format those engines refuse.
 - Arena formats: NF4 quantize-at-bake (four segments per expert row) and native MXFP4 relocation (six segments, fused on read). The manifest's `bake_mode` records which provenance claim the arena supports.
 - Environment: Linux, NVIDIA CUDA sm_80 or newer, grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), Triton (Linux-only), local NVMe or a fast block device, pinned host RAM for the hot tier; CI tests Python 3.11.
 

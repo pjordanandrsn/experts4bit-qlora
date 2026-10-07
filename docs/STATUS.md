@@ -213,7 +213,7 @@ grouped-nf4-gemm 0.42.0; an older grouped-nf4-gemm keeps the single block), and 
 trains the packed rows resident at 28.23 GB and steps them at 10.06 s against Unsloth's 14.61 on one stack: Unsloth/e4b **1.453** [1.451,
 1.455]. That 28.23 GB is reached in e4b's held-out evaluation (`e4b.train.memory.packed-4k-census.5090.2026-10-06`, TC1 amendment 55), but its
 training steps peak almost as high, at 28.14 GB (`e4b.train.absmax-dq.packed-4k.5090.2026-10-07`, TC1 amendment 56). The double-quantized
-expert absmax (`E4B_ABSMAX_DQ=1`) takes 1.35 GB off for 0.2 % of the step (1.002). With it, e4b's training phase peaks at 26.79 GB
+expert absmax (`E4B_ABSMAX_DQ=1` then; the default since, `E4B_ABSMAX_DQ=0` turns it off) takes 1.35 GB off for 0.2 % of the step (1.002). With it, e4b's training phase peaks at 26.79 GB
 against Unsloth's 24.86: 1.92 GB more. A census of the training phase (`e4b.train.memory.packed-4k-train-census.5090.2026-10-07`,
 TC1 amendment 57) finds all of it transient. e4b's largest transient groups at that peak are listed below. They add up to more than
 1.92 GB because Unsloth's peak carries transients of its own, so they are e4b's largest groups, not a breakdown of the excess:
@@ -348,9 +348,9 @@ launch per chunk of groups. Lane RD1 read it 0.79 × the fused kernels per call 
 stays opt-in.
 **Where the memory goes** (`e4b.train.memory-census.qwen3.5090.2026-10-04`, TC1 amendment 23): a census of the CUDA allocator
 on Qwen3-30B-A3B at micro-batch 1 finds every static class byte-for-byte the same in e4b and Unsloth except the expert absmax.
-e4b keeps it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 GB, as Unsloth does. With that switch e4b peaks
-0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults
-the gap is 1.78 GB. grouped-nf4-gemm's opt-in compact delta (`NF4_QLORA_COMPACT_DELTA=1`) was meant to shrink that transient; on one
+e4b then kept it in fp32 by default (1.81 GB); `E4B_ABSMAX_DQ=1` stores it in 0.46 GB, as Unsloth does (the default since, below). With that switch e4b peaked
+0.43 GB above Unsloth (24.68 vs 24.24 GB), all of it transient, mostly grouped-nf4-gemm's padded LoRA delta; at e4b's defaults then
+the gap was 1.78 GB. grouped-nf4-gemm's opt-in compact delta (`NF4_QLORA_COMPACT_DELTA=1`) was meant to shrink that transient; on one
 stack it did not (`e4b.train.compact-delta.qwen3.5090.2026-10-05`, TC1 amendment 36): the matched peak rose 0.23 GB, while the step ran
 0.969 (matched) and 0.970 (shipped) of the default's. It stays opt-in. With grouped-nf4-gemm#473's backward (each intermediate released
 at its last use) a second host read the matched peak 0.288 GB lower and the step 0.967 (matched) / 0.948 (shipped)
@@ -360,7 +360,7 @@ opt-in until a registration whose bands allow that reading. A third, faster host
 and wins only where the step is host-bound. Its peak saving held (−0.31 GB on Qwen3's fp32 arm).
 **On packed 4,096-token rows the gap is 7.47 GB** (`e4b.train.memory-census.packed-4k.qwen3.5090.2026-10-06`, TC1 amendment 47): 1.35 GB
 the fp32 absmax and 6.10 GB grouped-nf4-gemm's padded LoRA delta, which pads every expert to the hottest expert's rows (about 11.6× the
-routed rows at 4,096 tokens). With `E4B_ABSMAX_DQ=1` and the compact delta, e4b is still 4.68 GB above Unsloth (29.54 vs 24.86 GB).
+routed rows at 4,096 tokens). With `E4B_ABSMAX_DQ=1` and the compact delta, e4b was still 4.68 GB above Unsloth (29.54 vs 24.86 GB).
 grouped-nf4-gemm's opt-in bucketed padding (`NF4_QLORA_PAD_BUCKETS=1`, grouped-nf4-gemm#490: each bucket of similar-sized experts
 padded to its own widest) takes 4.29 GB off the matched arm's packed-row peak and steps it 0.893 (shipped 0.933) of the single block's
 (`e4b.train.pad-buckets.qwen3.5090.2026-10-06`, TC1 amendment 48). As `auto`, bucketing only calls of at least 16,384 routed rows
@@ -502,7 +502,7 @@ the pre-registration verbatim as its `P40-PREREG.md`; register
 `….arm.<framework>.<arm>`, plus position, `.quality-n60`, `.footprint`,
 `.coverage` and `.e4b-internal-parity` rows, which carry the numbers).
 P38's fixture exactly, tokenised once per family; e4b at the cut a user
-installs today — 0.35.1 + grouped-nf4-gemm 0.30.2 from PyPI, NF4 attention
+installed then — 0.35.1 + grouped-nf4-gemm 0.30.2 from PyPI, NF4 attention
 via `TRAIN_ATTN_4BIT` — against Unsloth 2026.9.2 in its own venv.
 **Positions exist on two families; on the other four the statuses are the
 result.** Qwen3-30B-A3B: s/step ratio Unsloth/e4b **1.457** (e4b faster per
@@ -1330,9 +1330,10 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
   - **Where it comes from.** The graph step is within 4–10% of P80's at every
     row count. The eager step is host-bound and 2.15–2.34× slower on this
     Zen 2 host than on P80's Zen 5 one, so the ratio does not travel.
-  - **Still open.** It stays opt-in. The HTTP shim and `infer` use
-    transformers' `generate`, not `PagedModelRunner`. It is not measured on
-    other families or under arrivals. P82 (next item) re-measured the int4
+  - **Still open.** It stays opt-in. The HTTP shim and `infer` then used
+    transformers' `generate`, not `PagedModelRunner` (`serve_paged`, added
+    since, serves through it). It is not measured on other families or under
+    arrivals. P82 (next item) re-measured the int4
     stack.
 - **On the int4 serving recipe, the graph path decodes exactly as the eager
   runner and is 12× faster on a host-bound host** (lane P82, `bench/p82/`,
@@ -1352,8 +1353,9 @@ and bo6's). All 50 arms ran with no alarm, refusal or traceback.
     count, so it is host cost. The graphs take 13.6 ms at 16 rows and 4.4 ms
     at one. The ratio does not travel to another host. A `PagedModelRunner`
     caller on this stack that does not enable graphs leaves most of the
-    throughput unused. The package's serving entry points use transformers'
-    `generate`, not the paged runner.
+    throughput unused. The package's serving entry points then used
+    transformers' `generate`, not the paged runner; `serve_paged` now runs it,
+    with eager decode by default (P109, above).
   - **#674: answered.** The licensed int4 recipe's fp32 K8 moved from
     6.36709 to 6.36396 because of one change, gnf4#413 (the fused fp8 KV
     append's rounding). P70's build with that append off reads 6.36396 bit
