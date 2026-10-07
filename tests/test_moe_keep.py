@@ -34,6 +34,65 @@ def test_scatter_combine_node_is_bit_identical(dev, tokens, k, hidden, down_dtyp
     assert torch.equal(d1.grad, d2.grad) and torch.equal(w1.grad, w2.grad)
 
 
+def _combine_case(dev, tokens, k, hidden, down_dtype, out_dtype, seed):
+    g = torch.Generator().manual_seed(seed)
+    order = torch.randperm(tokens * k, generator=g).to(dev)
+    down0 = torch.randn(tokens * k, hidden, generator=g).to(down_dtype).to(dev)
+    w0 = torch.rand(tokens * k, generator=g).to(dev)
+    gout = torch.randn(tokens, hidden, generator=g).to(out_dtype).to(dev)
+    return order, down0, w0, gout
+
+
+def _combine_run(order, down0, w0, gout, tokens, k, out_dtype, grads=(True, True)):
+    d, w = down0.clone().requires_grad_(grads[0]), w0.clone().requires_grad_(grads[1])
+    out = _ScatterCombine.apply(d, w, order, tokens, k, out_dtype)
+    (out.float() * gout.float()).sum().backward()
+    return out, d.grad, w.grad
+
+
+@pytest.mark.parametrize("dev", DEVICES)
+@pytest.mark.parametrize("tokens,k,hidden,chunk_rows", [(190, 8, 128, 7), (190, 8, 128, 100), (33, 4, 96, 32), (64, 8, 64, 512), (5, 2, 32, 1),
+                                                     (517, 8, 160, 37)])
+@pytest.mark.parametrize("down_dtype,out_dtype", [(torch.bfloat16, torch.bfloat16), (torch.bfloat16, torch.float32)])
+def test_combine_row_chunks_are_byte_identical(dev, tokens, k, hidden, chunk_rows, down_dtype, out_dtype, monkeypatch):
+    """Row chunks (forced on with the gate at 0 and a chunk size that does not divide the rows; a size under 16 rows is raised to
+    16) give the forward, both gradients and the inference combine the same bytes as the whole-tensor path (E4B_COMBINE_CHUNK=0);
+    each gradient alone too. On CUDA this pins the >= 16-row rule: a 7-row chunk at width 128 changed the weight gradient's bytes."""
+    from experts4bit_qlora.engines import fast
+    case = _combine_case(dev, tokens, k, hidden, down_dtype, out_dtype, tokens + chunk_rows)
+    order, down0, w0, gout = case
+    monkeypatch.setenv("E4B_COMBINE_CHUNK", "0")
+    whole = [_combine_run(*case, tokens, k, out_dtype, gr) for gr in ((True, True), (True, False), (False, True))]
+    inf_whole = _scatter_combine(down0, w0, order, None, tokens, k, hidden, dev, out_dtype)
+    monkeypatch.delenv("E4B_COMBINE_CHUNK")
+    monkeypatch.setattr(fast, "COMBINE_CHUNK_MIN_BYTES", 0)
+    monkeypatch.setattr(fast, "COMBINE_CHUNK_BYTES", chunk_rows * hidden * 4)
+    n0 = dict(fast.COMBINE_STATS)
+    chunked = [_combine_run(*case, tokens, k, out_dtype, gr) for gr in ((True, True), (True, False), (False, True))]
+    inf_chunked = _scatter_combine(down0, w0, order, None, tokens, k, hidden, dev, out_dtype)
+    for a, b in zip(whole, chunked):
+        for x, y in zip(a, b):
+            assert (x is None and y is None) or torch.equal(x, y)
+    assert torch.equal(inf_whole, inf_chunked)
+    split = tokens * k >= 2 * max(16, chunk_rows)
+    assert fast.COMBINE_STATS["chunked_fwd"] - n0["chunked_fwd"] == (4 if split else 0)      # 3 training forwards + 1 inference
+    assert fast.COMBINE_STATS["chunked_bwd"] - n0["chunked_bwd"] == (3 if split else 0)
+
+
+def test_combine_chunk_gate_and_switch(monkeypatch):
+    from experts4bit_qlora.engines import fast
+    monkeypatch.delenv("E4B_COMBINE_CHUNK", raising=False)
+    assert fast._combine_chunk_rows(4096 * 8, 2048) == 4096                 # packed Qwen3 row: 256 MiB image, 32 MiB chunks
+    assert fast._combine_chunk_rows(1100 * 8, 2048) is None                  # TC1's field recipe: ~69 MiB, under the 128 MiB gate
+    assert fast._combine_chunk_rows(4096 * 2, 4096) == 2048                 # Mixtral top-2 at 4,096 tokens: 128 MiB, at the gate
+    assert fast._combine_chunk_rows(4096 * 2 - 1, 4096) is None
+    assert fast._row_chunks(32768, 4096)[-1] == (28672, 32768) and len(fast._row_chunks(32768, 4096)) == 8
+    assert fast._row_chunks(32800, 4096)[-1] == (28672, 32800)               # the 32-row tail joins the last chunk
+    assert all(e - s >= 4096 for s, e in fast._row_chunks(40959, 4096))
+    monkeypatch.setenv("E4B_COMBINE_CHUNK", "0")
+    assert fast._combine_chunk_rows(4096 * 8, 2048) is None
+
+
 def test_env_parsing(monkeypatch):
     for v, want in (("", None), ("0", None), ("off", None), ("all", "all"), ("ALL", "all"), ("12", 12)):
         monkeypatch.setenv("E4B_MOE_KEEP_LAYERS", v)

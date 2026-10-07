@@ -382,6 +382,52 @@ class _PermGather(torch.autograd.Function):
         return gs.view(ctx.shape), None
 
 
+#: The combine's fp32 ``[tokens*k, hidden]`` work runs over row chunks of about this many bytes once the whole image would reach
+#: :data:`COMBINE_CHUNK_MIN_BYTES`: every operation in it is row-wise (the scatter's assignment, the weight multiply, the weight
+#: gradient's per-row sum, the down gradient's scale), so the chunks give the same bytes as the whole tensor -- measured
+#: ``torch.equal`` on an RTX A2000 and on CPU at Qwen3-30B-A3B's packed row (4,096 tokens x top-8, hidden 2048), forward and both
+#: gradients, at 1,024 to 32,768-row chunks. There the forward's transient fell from 768 to 320 MiB and the backward's from 768
+#: to 256 MiB at 4,096-row chunks (bench/combine-chunk/receipts/combine_chunk_a2000.json). Below the gate (TC1's field recipe,
+#: about 70 MiB) the whole-tensor path runs as before. ``E4B_COMBINE_CHUNK=0`` turns chunking off.
+#: Why every chunk keeps at least :data:`COMBINE_CHUNK_MIN_ROWS` rows (a short tail joins the chunk before it): the weight gradient's
+#: per-row sum is a CUDA reduction whose thread layout per row -- hence its summation order -- comes from the row count only below
+#: 16 rows (ATen's Reduce.cuh: ``block_height = min(rows_pow2, 16)`` and then ``block_width = min(width_pow2, 512 / block_height)``;
+#: with 16 or more rows every row is reduced by the same 32-lane layout whatever the GPU, for widths from 128 to 32,767). A 7-row
+#: chunk at width 128 did change it on the A2000; 16-row chunks at width 2048 did not.
+COMBINE_CHUNK_BYTES = 32 << 20
+COMBINE_CHUNK_MIN_ROWS = 16
+COMBINE_CHUNK_MIN_BYTES = 128 << 20
+#: Combine calls that ran over row chunks (forward: the scatter; backward: the two gradients), for a training census.
+COMBINE_STATS = {"chunked_fwd": 0, "chunked_bwd": 0}
+
+
+def _combine_chunk_rows(rows: int, hidden: int):
+    """Rows per chunk for a ``[rows, hidden]`` fp32 combine image, or None for the whole-tensor path (under the gate, or
+    ``E4B_COMBINE_CHUNK=0``)."""
+    full = rows * hidden * 4
+    if full < COMBINE_CHUNK_MIN_BYTES or os.environ.get("E4B_COMBINE_CHUNK", "").strip() == "0":
+        return None
+    c = max(COMBINE_CHUNK_MIN_ROWS, COMBINE_CHUNK_BYTES // (hidden * 4))
+    return c if rows >= 2 * c else None
+
+
+def _row_chunks(rows: int, c: int):
+    """``(start, end)`` row ranges of ``c`` rows; the last absorbs the remainder, so every chunk has ``c`` to ``2c - 1`` rows."""
+    n = rows // c
+    return [(i * c, rows if i == n - 1 else (i + 1) * c) for i in range(n)]
+
+
+def _scatter_fill(buf, down, w, order):
+    """``buf[order] = down.to(float32) * w[:, None]``, over row chunks when the image is large (same bytes)."""
+    c = _combine_chunk_rows(down.shape[0], down.shape[1])
+    if c is None:
+        buf[order] = down.to(torch.float32) * w[:, None]
+        return
+    COMBINE_STATS["chunked_fwd"] += 1
+    for s, e in _row_chunks(down.shape[0], c):
+        buf[order[s:e]] = down[s:e].to(torch.float32) * w[s:e, None]
+
+
 def _scatter_combine(down, w, order, token_rows, tokens, k, hidden, device, out_dtype):
     """Weighted combine of the expert-sorted rows back into token order.
 
@@ -399,7 +445,7 @@ def _scatter_combine(down, w, order, token_rows, tokens, k, hidden, device, out_
     negligible.
     """
     buf = torch.zeros(tokens * k, hidden, dtype=torch.float32, device=device)
-    buf[order] = down.to(torch.float32) * w[:, None]
+    _scatter_fill(buf, down, w, order)
     return buf.view(tokens, k, hidden).sum(1).to(out_dtype)
 
 
@@ -417,7 +463,7 @@ class _ScatterCombine(torch.autograd.Function):
     def forward(ctx, down, w, order, tokens, k, out_dtype):
         hidden = down.shape[1]
         buf = torch.zeros(tokens * k, hidden, dtype=torch.float32, device=down.device)
-        buf[order] = down.to(torch.float32) * w[:, None]
+        _scatter_fill(buf, down, w, order)
         ctx.save_for_backward(down, w, order)
         ctx.tokens, ctx.k = tokens, k
         return buf.view(tokens, k, hidden).sum(1).to(out_dtype)
@@ -432,12 +478,28 @@ class _ScatterCombine(torch.autograd.Function):
         # scales gprod in place, so neither keeps a second fp32 product alive. Same values, same reduction: the same bytes
         # as autograd's composite (tests/test_moe_keep.py). TC1 amendment 57 read these temporaries at 1.07 GB of e4b's
         # packed-row training peak (engines/fast.py, Qwen3-30B-A3B, 4,096 tokens, top-8).
-        gprod = g.to(torch.float32)[torch.div(order, k, rounding_mode="floor")]
-        gdown = gw = None
-        if ctx.needs_input_grad[1]:
-            gw = (gprod * down.to(torch.float32)).sum(1, keepdim=True).squeeze(1)
-        if ctx.needs_input_grad[0]:
-            gdown = gprod.mul_(w[:, None]).to(down.dtype)
+        need_down, need_w = ctx.needs_input_grad[0], ctx.needs_input_grad[1]
+        c = _combine_chunk_rows(down.shape[0], down.shape[1])
+        if c is None:
+            gprod = g.to(torch.float32)[torch.div(order, k, rounding_mode="floor")]
+            gdown = gw = None
+            if need_w:
+                gw = (gprod * down.to(torch.float32)).sum(1, keepdim=True).squeeze(1)
+            if need_down:
+                gdown = gprod.mul_(w[:, None]).to(down.dtype)
+            return gdown, gw, None, None, None, None
+        # Large images: the same row-wise operations over row chunks of the preallocated outputs (same bytes; see
+        # COMBINE_CHUNK_BYTES), so only one chunk's fp32 product and copies are alive at a time.
+        COMBINE_STATS["chunked_bwd"] += 1
+        g32 = g.to(torch.float32)
+        gw = torch.empty(down.shape[0], dtype=torch.float32, device=down.device) if need_w else None
+        gdown = torch.empty_like(down) if need_down else None
+        for s, e in _row_chunks(down.shape[0], c):
+            gp = g32[torch.div(order[s:e], k, rounding_mode="floor")]
+            if need_w:
+                gw[s:e] = (gp * down[s:e].to(torch.float32)).sum(1, keepdim=True).squeeze(1)
+            if need_down:
+                gdown[s:e] = gp.mul_(w[s:e, None]).to(down.dtype)
         return gdown, gw, None, None, None, None
 
 
