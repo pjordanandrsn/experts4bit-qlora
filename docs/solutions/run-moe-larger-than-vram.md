@@ -87,7 +87,7 @@ Or from the CLI: `MODEL=Qwen/Qwen3-30B-A3B OFFLOAD_EXPERTS=1 BENCH_TOKENS=128 py
 ## Supported scope
 
 - Families: those of the loader ([`bitsandbytes-moe-load-in-4bit-still-ooms.md`](bitsandbytes-moe-load-in-4bit-still-ooms.md)). Offload identity is tested on nf4 / int8 / bf16; fp4 / fp8 / fp16 ride the same code path ([`../STORAGE-MODES.md`](../STORAGE-MODES.md)).
-- Offload training requires gradient checkpointing (`use_reentrant=False`); the shipped trainer always enables it.
+- Offload training requires gradient checkpointing, of either kind; the shipped trainer always enables it. Under the `grouped_nf4` kernel, `enable_fast_train` makes it the reentrant checkpoint by default (`E4B_CKPT_OFFLOAD=0` keeps Hugging Face's non-reentrant one); expert offload is tested under both (`tests/test_offload.py`). Attach offload or NVMe engines before `enable_fast_train`, whose compressed expert absmax those engines refuse.
 - Environment: Linux, NVIDIA CUDA, torch>=2.2, bitsandbytes>=0.43, transformers>=5.0; CI tests Python 3.11. Residency engines need grouped-nf4-gemm at the `fast` extra's floor in `pyproject.toml` (grouped-nf4-gemm >= 0.30.0 at this commit; validated by CI), with Triton (Linux-only) on an sm_80-or-newer GPU.
 
 ## Limitations

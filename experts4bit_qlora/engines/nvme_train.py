@@ -78,8 +78,8 @@ Usage::
                                          arena_train=True)
     n = enable_nvme_train_residency(model, arena_path, hot_rows=20_000)
     model.gradient_checkpointing_enable(
-        gradient_checkpointing_kwargs={"use_reentrant": False})   # required
-    enable_fast_train(model)          # unchanged by any of this
+        gradient_checkpointing_kwargs={"use_reentrant": False})   # required (either kind)
+    enable_fast_train(model)          # after the engine; makes the checkpoint reentrant by default
 """
 from __future__ import annotations
 

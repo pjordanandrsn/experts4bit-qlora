@@ -48,10 +48,10 @@ forward's fp32 logits would reach 1 GiB (`E4B_CHUNKED_LM_LOSS=auto`, the default
 `experts4bit_qlora.engines.chunked_lm_loss.enable_chunked_lm_loss(model)` directly. Hugging Face's causal-LM loss materialises the
 `[tokens, vocab]` logits, upcasts them to fp32 and keeps the fp32 log-probabilities for backward. At Qwen3's 151,936-token vocabulary
 and 4,096 tokens that is 8.1 GiB for the head and loss alone. This computes the same loss over chunks, recomputing each chunk's logits
-in backward: 0.9 GiB at 512-token chunks, for one extra head matmul and cross-entropy forward per chunk in backward (CHANGELOG, Unreleased). The same loss
+in backward: 0.9 GiB at 512-token chunks, for one extra head matmul and cross-entropy forward per chunk in backward (the chunked LM loss entries in CHANGELOG). The same loss
 to fp32 rounding. The same gradients, up to cuBLAS's shape-dependent bf16 reduction (`torch.equal` with
-`allow_bf16_reduced_precision_reduction` off). It covers the Qwen3-MoE, Qwen3.5/3.6-MoE, Mixtral, OLMoE, gpt-oss, ERNIE-4.5-MoE,
-Granite-MoE and -Hybrid, LFM2-MoE and Nemotron-H causal LMs. Anything else keeps the stock loss: silently under the default, with a
+`allow_bf16_reduced_precision_reduction` off). It covers the dense Qwen3, Qwen3-MoE, Qwen3.5/3.6-MoE, Mixtral, OLMoE, gpt-oss,
+ERNIE-4.5-MoE, Granite-MoE, -MoE-Shared and -Hybrid, LFM2-MoE and Nemotron-H causal LMs. Anything else keeps the stock loss: silently under the default, with a
 warning when the variable is set. Only training forwards with
 labels take it: evaluation under `torch.no_grad` and generation stay stock, and `.logits` is `None` on the forwards that do.
 Evaluation can then be the run's peak. A `torch.no_grad` forward with labels on one 4,096-token Qwen3 row holds the bf16 logits, an
@@ -88,8 +88,9 @@ still positive, so read a batched training result only with `batched_fallback_st
 experts live in pinned CPU RAM and stream one layer at a time. This is what makes
 a 30B-class MoE QLoRA-trainable on a 12 GB card (`e4b.offload.fits-30b-class`:
 Qwen3-30B-A3B peaks at 7.16 GB and Gemma-4-26B-A4B at 8.47 GB, both of which OOM
-without offload). Requires gradient checkpointing
-(`use_reentrant=False`), which the shipped trainer always enables; the
+without offload). Requires gradient checkpointing, which the shipped trainer
+always enables (reentrant under `enable_fast_train`'s default, Hugging Face's
+non-reentrant one with `E4B_CKPT_OFFLOAD=0`; offload is tested under both); the
 unsupported non-checkpointed combination fails loudly rather than mis-training.
 
 **The experts do not fit in host RAM either — and I am serving.**

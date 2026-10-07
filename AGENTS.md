@@ -156,7 +156,7 @@ Releases are cut from `main` by the maintainer ([`docs/RELEASE_NOTES_GUIDE.md`](
 ## 9. Platform caveats
 
 Linux + CUDA is the tested environment; CI runs Python 3.11 (pyproject's
-`>=3.9` floor is not exercised). The kernels need Triton on sm_80+; the
+`>=3.10` floor is not exercised). The kernels need Triton on sm_80+; the
 fp8 paged kernel's f32 compute modes fail on triton 3.4 (fp8 modes are the
 default). Gemma-4 fails to load on some rented hosts (#344) and has no
 quality instrument at 512-token resolution (#359); gpt-oss's raw-text

@@ -1,4 +1,5 @@
-"""Double-quantized ("nested") storage for the frozen expert absmax (the CLI trainer's default for resident training).
+"""Double-quantized ("nested") storage for the frozen expert absmax (the default for resident training, in the CLI trainer and in
+``enable_fast_train``; ``E4B_ABSMAX_DQ=0`` turns it off).
 
 An :class:`~experts4bit_qlora.ExpertsNbit` NF4 stack keeps one fp32 absmax per 64 weights,
 ``gate_up_absmax`` / ``down_absmax`` of shape ``[E, N*K/64]``. On a resident training run that is
