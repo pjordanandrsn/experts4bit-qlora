@@ -425,14 +425,19 @@ class _ScatterCombine(torch.autograd.Function):
     @staticmethod
     def backward(ctx, g):
         down, w, order = ctx.saved_tensors
-        tokens, k, hidden = ctx.tokens, ctx.k, down.shape[1]
-        gbuf = g.to(torch.float32).unsqueeze(1).expand(tokens, k, hidden).reshape(tokens * k, hidden)
-        gprod = gbuf[order]
+        k = ctx.k
+        # The composite's expand + reshape + index makes row i of the incoming gradient's [tokens*k, hidden] fp32 image
+        # g[order[i] // k]; reading it by that index copies the same fp32 values without materialising the expanded image
+        # first (one [tokens*k, hidden] fp32 buffer less). The weight gradient runs before the down gradient, which then
+        # scales gprod in place, so neither keeps a second fp32 product alive. Same values, same reduction: the same bytes
+        # as autograd's composite (tests/test_moe_keep.py). TC1 amendment 57 read these temporaries at 1.07 GB of e4b's
+        # packed-row training peak (engines/fast.py, Qwen3-30B-A3B, 4,096 tokens, top-8).
+        gprod = g.to(torch.float32)[torch.div(order, k, rounding_mode="floor")]
         gdown = gw = None
-        if ctx.needs_input_grad[0]:
-            gdown = (gprod * w[:, None]).to(down.dtype)
         if ctx.needs_input_grad[1]:
             gw = (gprod * down.to(torch.float32)).sum(1, keepdim=True).squeeze(1)
+        if ctx.needs_input_grad[0]:
+            gdown = gprod.mul_(w[:, None]).to(down.dtype)
         return gdown, gw, None, None, None, None
 
 
