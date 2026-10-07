@@ -1,0 +1,66 @@
+{
+ "verdict": "READ",
+ "integrity": {
+  "b7_short": {
+   "state": "CLEAN"
+  },
+  "b7_long": {
+   "state": "CLEAN"
+  }
+ },
+ "readings": {
+  "V3": {
+   "reading": "HELD",
+   "detail": {
+    "reserve_bytes": 919447283,
+    "reserved_minus_allocated_bytes": {
+     "b7_short": 419756032,
+     "b7_long": 863259648
+    }
+   }
+  },
+  "V5": {
+   "reading": "HELD",
+   "detail": {
+    "registered": {
+     "vram": 5316,
+     "dram": 828,
+     "nvme": 0
+    },
+    "b7_short": {
+     "vram": 5316,
+     "dram": 828,
+     "nvme": 0
+    },
+    "b7_long": {
+     "vram": 5316,
+     "dram": 828,
+     "nvme": 0
+    }
+   }
+  },
+  "V1": {
+   "reading": "HELD",
+   "detail": {
+    "driver_peak_bytes": 23532142592,
+    "card_total_bytes": 25757220864
+   }
+  },
+  "V2": {
+   "reading": "HELD",
+   "detail": {
+    "driver_peak_bytes": 23532142592,
+    "plan_bytes": 23991176435,
+    "bound": "peak"
+   }
+  },
+  "V4": {
+   "reading": "HELD",
+   "detail": {
+    "peak_bytes": 22180246528,
+    "rel": -0.015736141236094126,
+    "bound": "peak"
+   }
+  }
+ }
+}
