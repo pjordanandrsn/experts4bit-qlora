@@ -16,7 +16,7 @@ RUN = (REPO / "bench" / "sc1" / "sc1_run.sh").read_text()
 def test_box_j_runs_a6_within_the_box_in_priority_order():
     """box_j is A6's flow: fetches, the bake, four windows, box R's rows staged, then the arms -- conv1's (b), (a), (b') first,
     then (b) + (a) on conv2-conv4, then (c) -- and the A6 reading. No comparator, no GGUF, no proof (guard <= 1 h)."""
-    assert "J) box_j;; K) box_k;; esac" in RUN and 'J) PROVE_NEEDS="";;' in RUN
+    assert "J) box_j;; K) box_k;; L) box_l;; esac" in RUN and 'J) PROVE_NEEDS="";;' in RUN
     body = BOX[BOX.index("\nbox_j_a6c(){"):]                 # A6's continuation box, kept for the record (box J now runs A7)
     body = body[:body.index("; }\n") + 4]
     assert "install_" not in body and "fetch_gptoss_gguf" not in body

@@ -18,7 +18,7 @@ PIN = LANE / "staged.sha256"
 OWN = ("sc1_run.sh", "sc1_e4b_sched.py", "sc1_prompts.py", "sc1_sampler.sh")
 COMP_DIRS = ("vllm", "sglang", "llamacpp", "exl3", "lmdeploy", "sc1g_ref")   # sc1g_ref: SC1g box R's registered artifacts (A5), once the sha-registration PR lands
 SC1B = tuple("sc1b_census.py sc1b_e4b_census.py sc1b_vllm_census.py sc1b_serve_census.py sc1b_toy.py kernel_classes.json sc1b_box_d.sh".split())                         # bench/sc1b, staged flat on every box
-SC2 = tuple("sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py".split())                                                                                            # bench/sc2, staged flat on every box
+SC2 = tuple("sc2_driver.py sc2_prompts.py sc2_reduce.py sc2_box_e.sh sc2_identity.py sc2b_box_f.sh sc2b_reduce.py sc2_trace.py sc2g_box_g.sh sc2g_reduce.py sc1g_box_i.sh sc1g_reduce.py sc1g_k8.py sc1g_gemv_check.py sc1g_attn_check.py sc1g_kl.py sc2c_box_h.sh sc2c_reduce.py sc2c_census.py sc2d_box_k.sh sc2d_reduce.py sc2e_box_l.sh sc2e_reduce.py sc2e_census.py sc2e_basis.py".split())                                                                                            # bench/sc2, staged flat on every box
 P39 = ("step_decomp.py", "k8_bake.py", "calib.json")
 P98 = ("p98_bake.py",)                                     # bench/p98: P98's Qwen3.6 arena bake, staged flat (SC2d, box K)
 
@@ -93,7 +93,7 @@ def test_every_pinned_name_is_staged_by_the_driver_and_resolves_the_same_way():
     assert case.index("|sc1g_ref/*)") < case.index("|sc1g_*|")   # sc1g_ref/ resolves before bench/sc2's flat sc1g_* files
     assert 'hook/usercustomize.py) src="$P42/hook/usercustomize.py"' in case and 'test_k19_row_exact_gpu.py) src="$TESTS/$name"' in case
     assert 'sc1b_*|kernel_classes.json) src="$SC1B/$name"' in case
-    assert 'sc2_*|sc2b_*|sc2g_*|sc1g_*|sc2c_*|sc2d_*) src="$SC2/$name"' in case
+    assert 'sc2_*|sc2b_*|sc2g_*|sc1g_*|sc2c_*|sc2d_*|sc2e_*) src="$SC2/$name"' in case
     assert 'p98_bake.py) src="$P98/$name"' in case
     assert '*) src="$P39/$name"' in case
     # the box checks the same file with sha256sum -c (strict: a pinned file missing on the box is a stop)
@@ -146,7 +146,7 @@ def test_the_driver_refuses_without_a_box_or_with_a_bad_one(tmp_path):
     out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=env)
     assert out.returncode == 78 and "SC1_BOX is not set" in out.stdout
     out = subprocess.run(["bash", str(LANE / "sc1_drive.sh")], capture_output=True, text=True, env=_dry_env(tmp_path, SC1_BOX="Z"))   # a letter no lane will take next (H, then J, collided)
-    assert out.returncode == 78 and "SC1_BOX must be A, B, C, D, E, F, G, H, I, J or K" in out.stdout    # D SC1b, E SC2, F SC2b, G SC2g, H SC2c, I SC1g, J SC1g-diag, K SC2d
+    assert out.returncode == 78 and "SC1_BOX must be A, B, C, D, E, F, G, H, I, J, K or L" in out.stdout    # D SC1b, E SC2, F SC2b, G SC2g, H SC2c, I SC1g, J SC1g-diag, K SC2d, L SC2e
 
 
 def test_the_receipt_fetch_leaves_the_staged_reference_rows_on_the_box(tmp_path):
