@@ -3,12 +3,13 @@
 `bench/p115/p115c_drive.sh` refuses to run when a staged file's sha256 differs from `bench/p115/staged-c.sha256`; this test
 runs the same comparison in CI. It also runs the box's and the reducer's self-tests and pins the amendment's shape
 (bench/p115/PREREG-p115.md, Amendment 2):
-- P115's quality box, P109's, P110's, P108's and P97's boxes, P39's bake and calibration, and the GPU premise tests at
-  Phase A/B's registered bytes; P98's bake at P98's;
-- the order: refusals, install and tripwire, the self-tests, the premise on the card (48 cases), then per model, gpt-oss
-  first: fetch, bake, prompts, serve off / on / explicit, SANE off / on; then the reducer;
+- Phase B's reducer and quality box, P109's, P110's, P108's and P97's boxes, P39's bake and calibration, and the GPU
+  premise tests at Phase A/B's registered bytes; P98's bake at P98's;
+- the order: refusals, install and tripwire, the self-tests, the premise on the card (48 cases), then per model, Granite
+  first: fetch, bake, prompts, serve off / on / explicit, then SANE off / on (gpt-oss, Qwen3.6) or Phase B's quality off /
+  on at Phase B's size (Granite); then the reducer;
 - the subject: the default server, gpt-oss on SC2g's e4b path, only the four fusion knobs differing between arms, SANE
-  built eager;
+  and quality built eager;
 - the rule's constants and predictions as the pre-registration states them, the explicit control's refusal pattern
   against the code's own refusals, every time-left check inside its guard, and the exit codes.
 """
@@ -29,6 +30,7 @@ SOURCES = {
     "p115c_run.sh": LANE / "p115c_run.sh",
     "p115c_box.py": LANE / "p115c_box.py",
     "p115c_reduce.py": LANE / "p115c_reduce.py",
+    "p115_reduce.py": LANE / "p115_reduce.py",
     "p115_quality.py": LANE / "p115_quality.py",
     "p109_box.py": REPO / "bench" / "p109" / "p109_box.py",
     "p110_box.py": REPO / "bench" / "p110" / "p110_box.py",
@@ -77,7 +79,7 @@ def test_borrowed_files_run_at_their_registered_bytes():
     mine = dict((n, w) for w, n in _entries())
     ab = dict((n, w) for w, n in _entries(LANE / "staged.sha256"))
     p98 = dict((n, w) for w, n in _entries(REPO / "bench" / "p98" / "staged.sha256"))
-    for name in ("p115_quality.py", "p109_box.py", "p110_box.py", "p108_box.py", "p97_box.py", "k8_bake.py", "calib.json",
+    for name in ("p115_reduce.py", "p115_quality.py", "p109_box.py", "p110_box.py", "p108_box.py", "p97_box.py", "k8_bake.py", "calib.json",
                  "test_decode_graph_buckets.py", "test_kv_step_select.py", "test_fused_glue_decode_graphs_gpu.py"):
         assert mine[name] == ab[name], f"{name} is not at Phase A/B's bytes"
     assert mine["p98_bake.py"] == p98["p98_bake.py"], "p98_bake.py is not at P98's bytes"
@@ -98,17 +100,20 @@ def test_the_self_tests_pass():
     base = {"PATH": "/usr/bin:/bin", **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}   # Windows needs it
     out = subprocess.run([sys.executable, str(LANE / "p115c_reduce.py"), "--self-test"], capture_output=True, text=True,
                          env=base)
-    assert out.returncode == 0 and "p115c_reduce self-test OK (16 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "p115c_reduce self-test OK (27 cases)" in out.stdout, out.stdout + out.stderr
     env = {"PYTHONPATH": str(REPO / "bench" / "p109"), **base}
     out = subprocess.run([sys.executable, str(LANE / "p115c_box.py"), "--self-test"], capture_output=True, text=True, env=env)
-    assert out.returncode == 0 and "p115c_box self-test OK (8/8 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "p115c_box self-test OK (9/9 cases)" in out.stdout, out.stdout + out.stderr
 
 
 def test_the_rule_is_the_registered_rule():
     r = _load(LANE / "p115c_reduce.py", "p115c_reduce_pin")
     assert (r.SANE_WINDOWS, r.SANE_BIAS, r.SANE_ARGMAX) == (12, 0.02, 0.95)
     assert "12 wikitext windows" in PREREG and "0.02 nats" in PREREG and "≥ 0.95" in PREREG
-    assert r.READING == ("gptoss", "qw36") and r.PROOF == ("granite",)
+    assert r.READING == ("granite", "gptoss", "qw36") and r.FLIP_MODELS == ("gptoss", "qw36") and r.PROOF == ("granite",)
+    assert r.SANE_MODELS == {False: ("gptoss", "qw36"), True: ("granite",)} and r.QUALITY_MODELS == ("granite",)
+    assert r.QUALITY_WINDOWS == {False: 48, True: 12} and r.pb.K8_GATED == ("wikitext",) and r.pb.K8_BUDGET == 0.05
+    assert (r.pb.TOL, r.pb.SPREAD_X, r.pb.SPREAD_MIN) == (0.01, 2.0, 0.005), "Granite's read is Phase B's rule unchanged"
 
     def text(c):
         return f"{c['fuse_qkv_n']} / {c['fuse_t1_glue_n']} / [{c['fuse_t1_glue_r2_n'][0]}, {c['fuse_t1_glue_r2_n'][1]}] / " \
@@ -128,17 +133,18 @@ def _kernels():
     return fm
 
 
-@pytest.mark.parametrize("family", ["gpt_oss", "qwen3_5_moe"])
+@pytest.mark.parametrize("family", ["gpt_oss", "qwen3_5_moe", "granite"])
 def test_the_explicit_control_reads_the_codes_own_refusal(monkeypatch, family):
-    """All four knobs at 1 must refuse on both Phase C families, and the refusal must be one EXPLICIT_RE accepts:
-    gpt-oss refuses the q/k/v fusion; the Qwen3.5 hybrid's glue round 1 refuses first (Amendment 2's correction)."""
+    """All four knobs at 1 must refuse on every Phase C family, and the refusal must be one EXPLICIT_RE accepts:
+    gpt-oss and Granite refuse the q/k/v fusion; the Qwen3.5 hybrid's glue round 1 refuses first (Amendment 2's
+    correction)."""
     torch = pytest.importorskip("torch")  # noqa: F841
     fm = _kernels()
     r = _load(LANE / "p115c_reduce.py", "p115c_reduce_pin2")
     from experts4bit_qlora.serve_paged import FUSION_KNOBS, PagedServeConfig, _apply_fusions
     monkeypatch.setitem(sys.modules, "int4_b32", fm._kernels())
     try:
-        model = fm._gpt_oss() if family == "gpt_oss" else fm._qwen3_5_moe(4)
+        model = {"gpt_oss": fm._gpt_oss, "qwen3_5_moe": lambda: fm._qwen3_5_moe(4), "granite": lambda: fm._granite(2)}[family]()
     except pytest.skip.Exception:
         raise
     except Exception as e:                                   # as test_fusion_modes: a config this transformers cannot build
@@ -146,7 +152,7 @@ def test_the_explicit_control_reads_the_codes_own_refusal(monkeypatch, family):
     with pytest.raises(RuntimeError) as ei:
         _apply_fusions(model, PagedServeConfig(fuse_qkv=True, fusion_modes={k: "1" for k in FUSION_KNOBS}))
     assert r.EXPLICIT_RE.search(str(ei.value)), str(ei.value)
-    want = "E4B_PAGED_FUSE_QKV=1" if family == "gpt_oss" else "E4B_FUSE_T1_GLUE=1"
+    want = "E4B_FUSE_T1_GLUE=1" if family == "qwen3_5_moe" else "E4B_PAGED_FUSE_QKV=1"
     assert str(ei.value).startswith(want), str(ei.value)
 
 
@@ -164,11 +170,14 @@ def test_the_order_puts_every_refusal_before_the_fetch():
              "python - <<'PYT'", "p115c_reduce.py --self-test", "p115c_box.py --self-test", "p115_quality.py --self-test",
              "python -m pytest test_decode_graph_buckets.py", 'echo "premise ok"', "for M in $TAGS; do",
              'say "fetch $M $MODEL @ $REV"', "python $W/p98_bake.py", "python $W/k8_bake.py",
-             "p115c_box.py --prompts-only", "for STEP in serve:off serve:on serve:explicit sane:off sane:on; do",
+             "p115c_box.py --prompts-only", 'STEPS="serve:off serve:on serve:explicit sane:off sane:on"',
+             'STEPS="serve:off serve:on serve:explicit quality:off quality:on"', "for STEP in $STEPS; do",
              "python $W/p115c_reduce.py --dir $W --out $W/verdict_c.json"]
     at = [RUN.index(s) for s in order]
     assert at == sorted(at), list(zip(order, at))
-    assert 'TAGS="gptoss qw36"' in RUN and 'TAGS="granite"' in RUN, "gpt-oss first: a Qwen3.6 failure leaves its read"
+    assert 'TAGS="granite gptoss qw36"' in RUN and 'TAGS="granite"' in RUN, "cheapest first; a later failure leaves earlier reads"
+    assert ('[ "$M" = granite ] && [ "$PROVE" = 1 ] && STEPS="serve:off serve:on serve:explicit sane:off sane:on quality:off '
+            'quality:on"') in RUN, "the proof runs every process kind"
     trip = RUN[RUN.index("python - <<'PYT'"):RUN.index("PYT\ncat versions.txt")]
     assert 'serve_paged._fusion_env("E4B_FUSE_T1_GLUE", "") == "0"' in trip, "the knobs are opt-in at the launch commit"
     assert 'serve_paged._graphs_env("", "cuda", "all-vram") is True' in trip
@@ -183,7 +192,8 @@ def test_the_subject_is_the_default_server_and_only_the_knobs_differ():
         assert re.search(rf"\b{knob}\b", unset), knob
     assert 'KN="E4B_PAGED_FUSE_QKV=$VAL E4B_FUSE_T1_GLUE=$VAL E4B_FUSE_T1_GLUE_R2=$VAL E4B_FUSE_ROUTER_EPI=$VAL"' in RUN
     assert 'VAL=0; [ "$ARM" = on ] && VAL=auto; [ "$ARM" = explicit ] && VAL=1' in RUN
-    assert 'GR=""; [ "$MODE" = sane ] && GR="E4B_PAGED_GRAPHS=0"' in RUN
+    assert 'GR=""; [ "$MODE" != serve ] && GR="E4B_PAGED_GRAPHS=0"' in RUN
+    assert 'WIN=$WINDOWS; REF=$W/work_$M/ref; [ "$MODE" = quality ] && { WIN=$QWINDOWS; REF=$W/work_$M/qref; }' in RUN
     sc2g = re.search(r'SC2G_E4B_ENV="([^"]+)"', (REPO / "bench" / "sc2" / "sc2g_box_g.sh").read_text()).group(1)
     assert f'gptoss) echo "{sc2g}";;' in RUN, "gpt-oss is served on SC2g's e4b path"
     assert ("ENGINE_ENV=\"E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work_$M/nf4.arena "
@@ -192,7 +202,16 @@ def test_the_subject_is_the_default_server_and_only_the_knobs_differ():
     assert "if cfg.graphs or cfg.placement != \"all-vram\":" in BOX, "SANE is the default server built eager"
     assert "counters = q.KernelCounters().install()" in BOX
     assert BOX.index("q.KernelCounters().install()") < BOX.index("parts = build_engine(cfg)\n    model = parts.runner.model")
-    assert "NEW_DEF=32; WINDOWS_DEF=12; CONT_DEF=128" in RUN and "NEW_DEF=8; WINDOWS_DEF=12; CONT_DEF=32" in RUN
+    assert "NEW_DEF=32; WINDOWS_DEF=12; QWINDOWS_DEF=48; CONT_DEF=128" in RUN
+    assert "NEW_DEF=8; WINDOWS_DEF=12; QWINDOWS_DEF=12; CONT_DEF=32" in RUN
+    # Granite's quality read runs at Phase B's size: the box's defaults are the quality box's
+    q = (LANE / "p115_quality.py").read_text()
+    for arg, default in (("--group", "12"), ("--prompt", "512"), ("--chunk", "512"), ("--floor-chunk", "256")):
+        assert f'ap.add_argument("{arg}", type=int, default={default})' in q, arg
+        assert f'p.add_argument("{arg}", type=int, default={default})' in BOX, arg
+    assert "rec = q.measure_phase(model, windows, phase=arm, prompt=a.prompt, cont=a.cont, chunk=a.chunk,\n" \
+           "                          floor_chunk=a.floor_chunk, group=a.group" in BOX
+    assert "windows = {t: q.LOADERS[t](parts.tokenizer, a.windows, a.prompt, a.cont) for t in q.TEXTS}" in BOX
 
 
 def test_every_time_left_check_fits_its_own_guard():

@@ -1,22 +1,22 @@
 #!/bin/bash
 # bench/p115/p115c_drive.sh -- lane P115 Phase C, CONTROLLER side: the launcher's --command (bench/p115/PREREG-p115.md,
 # Amendment 2; e4b#1313). Derived from bench/p115/p115_drive.sh by named substitutions: it stages Phase C's runner,
-# reducer and box, P115's quality box, P109's box (which Phase C's box imports), P110's, P108's and P97's boxes (which the
-# quality box imports), P39's NF4 bake and host calibration, P98's revision-pinned bake, and the premise tests -- all
-# referenced, never copied -- starts the lane detached under a fresh nonce; polls TP_DONE.<nonce> with the tp4-style
-# heartbeat/liveness check; fetches receipts -- never a checkpoint, an arena or the reference log-probs. Nothing here
-# creates, destroys or approves compute.
+# reducer and box, Phase B's reducer (whose rule Granite's read uses) and quality box, P109's box (which Phase C's box
+# imports), P110's, P108's and P97's boxes (which the quality box imports), P39's NF4 bake and host calibration, P98's
+# revision-pinned bake, and the premise tests -- all referenced, never copied -- starts the lane detached under a fresh
+# nonce; polls TP_DONE.<nonce> with the tp4-style heartbeat/liveness check; fetches receipts -- never a checkpoint, an
+# arena or the reference log-probs. Nothing here creates, destroys or approves compute.
 set -uo pipefail
 say(){ echo "[$(date -u +%FT%TZ)] [p115c_drive] $*"; }
 for v in E4B_RENT_SSH_HOST E4B_RENT_SSH_PORT E4B_RENT_SSH_OPTS E4B_RENT_RUN_DIR E4B_RENT_RUN_ID E4B_RENT_DEADLINE_EPOCH E4B_RENT_INSTANCE_ID; do
   [ -n "${!v:-}" ] || { say "refusing: $v is not set -- run as rent.py --command after a live pre-flight"; exit 78; }
 done
 HERE=$(cd "$(dirname "$0")" && pwd); REPO=$(cd "$HERE/../.." && pwd)
-# Phase C's staging: its runner, reducer and box, P115's quality box, P109's, P110's, P108's and P97's boxes, P39's
+# Phase C's staging: its runner, reducer and box, Phase B's reducer and quality box, P109's, P110's, P108's and P97's boxes, P39's
 # k8_bake.py and calib.json, P98's p98_bake.py, and the premise tests from tests/.
 # staged-c.sha256 pins every one by the name the box sees.
 TESTS="$REPO/tests"; P39="$REPO/bench/p39"; P98="$REPO/bench/p98"; P109="$REPO/bench/p109"; P110="$REPO/bench/p110"; P108="$REPO/bench/p108"; P97="$REPO/bench/p97"
-STAGE="$HERE/p115c_run.sh $HERE/p115c_reduce.py $HERE/p115c_box.py $HERE/p115_quality.py $P109/p109_box.py $P110/p110_box.py $P108/p108_box.py $P97/p97_box.py $P39/k8_bake.py $P39/calib.json $P98/p98_bake.py $TESTS/test_decode_graph_buckets.py $TESTS/test_kv_step_select.py $TESTS/test_fused_glue_decode_graphs_gpu.py $TESTS/test_fusion_modes.py $HERE/staged-c.sha256"
+STAGE="$HERE/p115c_run.sh $HERE/p115c_reduce.py $HERE/p115c_box.py $HERE/p115_reduce.py $HERE/p115_quality.py $P109/p109_box.py $P110/p110_box.py $P108/p108_box.py $P97/p97_box.py $P39/k8_bake.py $P39/calib.json $P98/p98_bake.py $TESTS/test_decode_graph_buckets.py $TESTS/test_kv_step_select.py $TESTS/test_fused_glue_decode_graphs_gpu.py $TESTS/test_fusion_modes.py $HERE/staged-c.sha256"
 for f in $STAGE; do [ -s "$f" ] || { say "refusing: staged piece missing: $f"; exit 78; }; done
 # staged-c.sha256 names the files as the BOX will see them; resolve each name to its source and compare hashes
 # (the same case as tests/test_p115c_staged_pin.py, which runs this check in CI where it costs nothing).
@@ -24,7 +24,7 @@ sha_of(){ (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d" " -f1; }
 while read -r want name; do
   case "$want" in \#*|"") continue;; esac
   case "$name" in
-    p115c_run.sh|p115c_reduce.py|p115c_box.py|p115_quality.py) src="$HERE/$name";;
+    p115c_run.sh|p115c_reduce.py|p115c_box.py|p115_reduce.py|p115_quality.py) src="$HERE/$name";;
     p109_box.py) src="$P109/$name";;
     p110_box.py) src="$P110/$name";;
     p108_box.py) src="$P108/$name";;

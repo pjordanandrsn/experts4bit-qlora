@@ -5,18 +5,20 @@
 # proof passed).
 #
 # Does `auto` on the four fusion knobs engage by structure on gpt-oss-20b and Qwen3.6-35B-A3B, refuse what `1` refuses,
-# and compute nothing grossly wrong? On ONE RTX 5090, per model, in order gpt-oss then Qwen3.6 (a Qwen3.6 fetch or bake
-# failure still leaves gpt-oss's read): fetch, NF4 arena bake, P109's prompts in the model's tokenizer, then five
-# processes of p115c_box.py -- serve off (twice through the prompts), serve on (auto), serve explicit (1; must refuse),
-# SANE off (R saved) and SANE on (scored against R) -- and p115c_reduce.py.
+# and compute nothing grossly wrong -- and does Granite-3.1-3b-a800m pass Phase B's full quality read under it? On ONE
+# RTX 5090, per model, in order Granite (cheapest), gpt-oss, Qwen3.6 (a later model's fetch or bake failure still leaves
+# the earlier reads): fetch, NF4 arena bake, P109's prompts in the model's tokenizer, then fresh processes of
+# p115c_box.py -- serve off (twice through the prompts), serve on (auto), serve explicit (1; must refuse); then for
+# gpt-oss and Qwen3.6 SANE off (R saved) and SANE on (scored against R), for Granite Phase B's quality off and on at
+# Phase B's size (both texts, 48 windows each) -- and p115c_reduce.py.
 #   premise  on THIS card, before anything is fetched: tests/test_decode_graph_buckets.py, test_kv_step_select.py,
 #            test_fused_glue_decode_graphs_gpu.py and test_fusion_modes.py, 48 passed, none skipped (rc 25)
 #
 # Refusals: CUDA unusable 18 (Amendment 1's host floor; a torch that will not import stays 10), card class 15, disk 13,
 # host RAM 16. Only 13 and 18 name the machine for the launcher's next draw.
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
-# P115C_GPU_CLASS P115C_MIN_DISK_GB P115C_MIN_RAM_GB P115C_REHEARSAL P115C_NEW P115C_WINDOWS P115C_CONT.
-# P115C_PROVE=1 is the PROVING RUN: the same steps on ibm-granite/granite-3.1-3b-a800m-instruct alone.
+# P115C_GPU_CLASS P115C_MIN_DISK_GB P115C_MIN_RAM_GB P115C_REHEARSAL P115C_NEW P115C_WINDOWS P115C_QWINDOWS P115C_CONT.
+# P115C_PROVE=1 is the PROVING RUN: Granite alone, every process kind (serve, SANE and quality), at short lengths.
 set -uo pipefail
 W=/root/p115c; mkdir -p $W/logs; cd $W || exit 78
 say(){ echo "[$(date -u +%FT%TZ)] p115c: $*"; }
@@ -29,14 +31,15 @@ case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78
 GNF4_SHA=b4f93f1c62d1e3436ed45bec8ccd608c90433737   # grouped-nf4-gemm v0.42.0, Phase A/B's pin; a registered constant
 PROVE=${P115C_PROVE:-0}
 if [ "$PROVE" = 1 ]; then
-  TAGS="granite"; NEW_DEF=8; WINDOWS_DEF=12; CONT_DEF=32
+  TAGS="granite"; NEW_DEF=8; WINDOWS_DEF=12; QWINDOWS_DEF=12; CONT_DEF=32
   NEED_FETCH=300; NEED_BAKE=300; NEED_PROC=240
 else
-  TAGS="gptoss qw36"; NEW_DEF=32; WINDOWS_DEF=12; CONT_DEF=128
+  TAGS="granite gptoss qw36"; NEW_DEF=32; WINDOWS_DEF=12; QWINDOWS_DEF=48; CONT_DEF=128
   NEED_FETCH=1500; NEED_BAKE=900; NEED_PROC=600
 fi
 GPU_CLASS=${P115C_GPU_CLASS:-5090}; MIN_DISK_GB=${P115C_MIN_DISK_GB:-200}; MIN_RAM_GB=${P115C_MIN_RAM_GB:-60}
 REHEARSAL=${P115C_REHEARSAL:-0}; NEW=${P115C_NEW:-$NEW_DEF}; WINDOWS=${P115C_WINDOWS:-$WINDOWS_DEF}; CONT=${P115C_CONT:-$CONT_DEF}
+QWINDOWS=${P115C_QWINDOWS:-$QWINDOWS_DEF}
 export HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false
 unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_SERVE_ATTN_INT4 E4B_FUSE_T1_GLUE E4B_FUSE_T1_GLUE_R2 \
       E4B_FUSE_ROUTER_EPI E4B_INT4_KEEP_NF4 E4B_INT4_GROUPED_SMALLM E4B_INT4_LEAN_GLUE E4B_INT4_DECODE_A16 E4B_ROUTER_EPI_CAST \
@@ -47,13 +50,13 @@ unset E4B_SERVE_EXP_INT4 E4B_SERVE_EXP_INT4_CALIB E4B_SERVE_ATTN_INT4_CALIB E4B_
       E4B_KV_STEP_SELECT E4B_PAGED_BULK_KV E4B_PAGED_PREFILL_GRAPH E4B_FUSE_SWIGLU E4B_FUSE_COMBINE GNF4_PDL GNF4_PDL_MAX_ROWS \
       GNF4_GEMV_DOTPAD GNF4_DECODE_PLAN GNF4_GEMV_SPLITK GNF4_GEMV_BW GNF4_TRITON_PREBIND
 : > summary.txt; echo "$P115C_INSTANCE_ID" > INSTANCE_ID
-echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA models=$TAGS gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB prove=$PROVE new=$NEW windows=$WINDOWS cont=$CONT" | tee -a summary.txt
+echo "KNOBS e4b=$E4B_SHA gnf4=$GNF4_SHA models=$TAGS gpu_class=$GPU_CLASS min_disk_gb=$MIN_DISK_GB min_ram_gb=$MIN_RAM_GB prove=$PROVE new=$NEW windows=$WINDOWS qwindows=$QWINDOWS cont=$CONT" | tee -a summary.txt
 if [ "$REHEARSAL" != 0 ] || [ "$GPU_CLASS" != 5090 ] || [ "$MIN_DISK_GB" != 200 ] || [ "$MIN_RAM_GB" != 60 ] \
-   || [ "$NEW" != "$NEW_DEF" ] || [ "$WINDOWS" != "$WINDOWS_DEF" ] || [ "$CONT" != "$CONT_DEF" ]; then
+   || [ "$NEW" != "$NEW_DEF" ] || [ "$WINDOWS" != "$WINDOWS_DEF" ] || [ "$QWINDOWS" != "$QWINDOWS_DEF" ] || [ "$CONT" != "$CONT_DEF" ]; then
   echo "REHEARSAL -- NOT a reading: a knob is off its registered default (see KNOBS)" | tee -a summary.txt; : > REHEARSAL
 fi
 # ---- staged pieces, byte-for-byte
-for f in p115c_box.py p115c_reduce.py p115_quality.py p109_box.py p110_box.py p108_box.py p97_box.py k8_bake.py p98_bake.py \
+for f in p115c_box.py p115c_reduce.py p115_reduce.py p115_quality.py p109_box.py p110_box.py p108_box.py p97_box.py k8_bake.py p98_bake.py \
          calib.json test_decode_graph_buckets.py test_kv_step_select.py test_fused_glue_decode_graphs_gpu.py test_fusion_modes.py staged-c.sha256; do
   [ -s $W/$f ] || { say "STAGE MISSING: $f"; finish 9; }; done
 (cd $W && sha256sum -c staged-c.sha256 >/dev/null) || { say "STAGED FILES DIFFER FROM bench/p115/staged-c.sha256"; finish 9; }
@@ -167,21 +170,25 @@ for M in $TAGS; do
   perl -e "alarm 1200; exec @ARGV" python $W/p115c_box.py --prompts-only --model "$MODEL" --revision "$REV" --out $W/prompts_$M.json > logs/prompts_$M.log 2>&1 \
     || { tail -4 logs/prompts_$M.log; harness "prompts failed"; continue; }
   ENGINE_ENV="E4B_PAGED_MODEL=$MODEL E4B_PAGED_REVISION=$REV E4B_PAGED_ARENA=$W/work_$M/nf4.arena E4B_PAGED_CALIB=$W/calib.json $(model_env $M)"
-  for STEP in serve:off serve:on serve:explicit sane:off sane:on; do
+  STEPS="serve:off serve:on serve:explicit sane:off sane:on"             # gpt-oss, Qwen3.6
+  [ "$M" = granite ] && STEPS="serve:off serve:on serve:explicit quality:off quality:on"   # Granite: Phase B's full read
+  [ "$M" = granite ] && [ "$PROVE" = 1 ] && STEPS="serve:off serve:on serve:explicit sane:off sane:on quality:off quality:on"
+  for STEP in $STEPS; do
     MODE=${STEP%%:*}; ARM=${STEP#*:}; VAL=0; [ "$ARM" = on ] && VAL=auto; [ "$ARM" = explicit ] && VAL=1
     KN="E4B_PAGED_FUSE_QKV=$VAL E4B_FUSE_T1_GLUE=$VAL E4B_FUSE_T1_GLUE_R2=$VAL E4B_FUSE_ROUTER_EPI=$VAL"
-    GR=""; [ "$MODE" = sane ] && GR="E4B_PAGED_GRAPHS=0"
+    GR=""; [ "$MODE" != serve ] && GR="E4B_PAGED_GRAPHS=0"            # SANE and quality build the default server eager
+    WIN=$WINDOWS; REF=$W/work_$M/ref; [ "$MODE" = quality ] && { WIN=$QWINDOWS; REF=$W/work_$M/qref; }
     can_run $NEED_PROC "$M $MODE $ARM" || { say "skipped $M $MODE $ARM (deadline)"; continue; }
     AL=$(step_alarm 2400); say "$M $MODE $ARM (alarm=$AL)"
     # shellcheck disable=SC2086  # assignment lists by design
     env PYTHONPATH= $ENGINE_ENV $KN $GR P115C_ARM=$ARM E4B_SHA=$E4B_SHA GNF4_SHA=$GNF4_SHA \
       perl -e "alarm $AL; exec @ARGV" python $W/p115c_box.py --mode $MODE --model-tag $M --prompts $W/prompts_$M.json \
-        --out $W/${MODE}_${M}_${ARM}.json --ref-dir $W/work_$M/ref --new $NEW --windows $WINDOWS --cont $CONT > logs/${MODE}_${M}_${ARM}.log 2>&1
+        --out $W/${MODE}_${M}_${ARM}.json --ref-dir $REF --new $NEW --windows $WIN --cont $CONT > logs/${MODE}_${M}_${ARM}.log 2>&1
     rc=$?
-    { echo -n "$M $MODE $ARM rc=$rc "; grep -aE "^P115C_(SERVE|SANE)" logs/${MODE}_${M}_${ARM}.log | tail -1 | cut -c1-500; echo; } | tee -a summary.txt
+    { echo -n "$M $MODE $ARM rc=$rc "; grep -aE "^P115C_(SERVE|SANE|QUALITY)" logs/${MODE}_${M}_${ARM}.log | tail -1 | cut -c1-500; echo; } | tee -a summary.txt
     [ "$rc" = 0 ] || tail -4 logs/${MODE}_${M}_${ARM}.log | cut -c1-300 | tee -a summary.txt
   done
-  rm -rf $W/work_$M/nf4snap                                # the snapshot is not needed after the bake (disk)
+  rm -rf $W/work_$M/nf4snap                                # the snapshot is not needed after the model's processes (disk)
 done
 PF=""; [ "$PROVE" = 1 ] && PF="--proof"
 say "reduce"; python $W/p115c_reduce.py --dir $W --out $W/verdict_c.json --e4b-sha $E4B_SHA --new $NEW $PF 2>&1 | tee -a summary.txt

@@ -1,9 +1,10 @@
 # Names as the BOX sees them after staging (/root/p115c). The box runs `sha256sum -c` on this file; p115c_drive.sh and
 # tests/test_p115c_staged_pin.py resolve each name to its source (bench/p115, bench/p109, bench/p110, bench/p108, bench/p97,
 # bench/p39, bench/p98, tests) and compare.
-b1c92768e8f79181444255e9379d98769ae589a2a0095786c4522cec4b6f7252  p115c_run.sh
-bc3ccff018251fef4432b9a620d5eec59c34a8eed6e1b6b19737d17679d74947  p115c_box.py
-3c9e3ca8de740145437d5beb6f149c0fa59821a9ee6934ac0b994e31e68a9169  p115c_reduce.py
+c6d0bc2387722e25d6480c7a1d2254fb23ce9f11a843d32cb52015edde69ebb7  p115c_run.sh
+b73eda4b7689ad2dcbc752f563d8c95e52ca3952b88e12ed25e59e73225c5905  p115c_box.py
+72f83749d2057ed7c91c5ccb02c36e5dfb711d7ffb4a5ec24920304ded149de7  p115c_reduce.py
+2eaf5692c7bf32c674cdfdab710be91d018d6c44cd14a4554e9bb00f16745339  p115_reduce.py
 f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
 02d82d88259c169060f78e47c219e7dfd82d146dd80e0c7c3b0e3acdfca252cf  p110_box.py

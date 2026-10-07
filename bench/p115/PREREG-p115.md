@@ -258,73 +258,103 @@ amendment 61. `p115_run.sh` now probes as TC1 does:
 Nothing else changes: no rule, prediction or budget. `tests/test_p115_staged_pin.py` pins one 18, and only in that
 branch.
 
-## Amendment 2 (2026-10-07, Phase C's scripts, budget and one corrected prediction; before any Phase C box)
+## Amendment 2 (2026-10-07, Phase C's scripts, budget, one corrected prediction and Granite's quality read; before any Phase C box)
 
-Phase C was registered above with its scripts to follow in an amendment. This is that amendment. No Phase C box has
-run, and no Phase A/B number exists yet: `p115-5090-1` refused at STOP-1, and `p115-5090-2` was refused by the launcher.
-Phase A/B's rule, predictions and budget are unchanged.
+Phase C was registered above with its scripts to follow in an amendment. This is that amendment. It also adds
+Granite-3.1-3b-a800m's full Phase B read, which the maintainer asked for in review. No Phase C box has run, and no Phase
+A/B number exists yet: `p115-5090-1` refused at STOP-1, and `p115-5090-2` was refused by the launcher. Phase A/B's rule,
+predictions and budget are unchanged.
 
 **Scripts.** `bench/p115/p115c_run.sh` (box), `p115c_drive.sh` (controller), `p115c_box.py`, `p115c_reduce.py`, and
-`staged-c.sha256`, which pins every staged file. Phase A/B's files run at their registered bytes: the quality box,
-P109's, P110's, P108's and P97's boxes, P39's bake and calibration, and the GPU premise tests. P98's `p98_bake.py` runs
-at P98's bytes. `tests/test_p115c_staged_pin.py` checks all of it in CI.
+`staged-c.sha256`, which pins every staged file. Phase A/B's files run at their registered bytes: the reducer, the
+quality box, P109's, P110's, P108's and P97's boxes, P39's bake and calibration, and the GPU premise tests. P98's
+`p98_bake.py` runs at P98's bytes. `tests/test_p115c_staged_pin.py` checks all of it in CI.
 
-**One box, per model, gpt-oss first** (so a Qwen3.6 fetch or bake failure still leaves gpt-oss's read):
+**One box, three models, in order Granite, gpt-oss, Qwen3.6.** Granite is the cheapest. A later model's fetch or bake
+failure still leaves the earlier reads. Per model:
 1. Fetch at the pinned revision. gpt-oss skips `original/` and `metal/`, as SC2g did.
-2. Bake the NF4 arena. gpt-oss uses P39's `k8_bake.py` from the pinned snapshot; Qwen3.6 uses P98's `p98_bake.py`.
+2. Bake the NF4 arena. Granite and gpt-oss use P39's `k8_bake.py` from the pinned snapshot; Qwen3.6 uses P98's
+   `p98_bake.py`.
 3. Build P109's 16 wikitext prompts in the model's own tokenizer.
-4. Run five processes of `p115c_box.py`. Each builds the shipped default server with `PagedServeConfig.from_env()` +
+4. Run fresh processes of `p115c_box.py`. Each builds the shipped default server with `PagedServeConfig.from_env()` +
    `build_engine`, and only the four knobs differ:
    - **serve off** (all `0`): the census, then 16 prompts × 32 tokens, twice;
    - **serve on** (all `auto`): the census, then the prompts once;
    - **serve explicit** (all `1`): `build_engine` must refuse, and the refusal is the record;
-   - **SANE off** and **SANE on**: below.
+   - gpt-oss and Qwen3.6: **SANE off** and **SANE on**, below;
+   - Granite: **quality off** and **quality on**, below.
 5. Run `p115c_reduce.py` over the records.
 
-gpt-oss is served on SC2g's e4b path (`SC2G_E4B_ENV`: native MXFP4 decode, NF4 prefill). Qwen3.6 is served on the
-server's defaults.
+gpt-oss is served on SC2g's e4b path (`SC2G_E4B_ENV`: native MXFP4 decode, NF4 prefill). Granite and Qwen3.6 are served
+on the server's defaults.
 
-**SANE, as implemented.** The default server is built eager (`E4B_PAGED_GRAPHS=0`), all-vram. Phase B's instrument,
-`p115_quality.measure_phase`, runs at reduced size: 12 wikitext windows, 512 prompt tokens, 128 teacher-forced
-positions, one group of 12, P110's padded bucket arithmetic. The off process scores R and saves its fp32 log-probs. The
-on process scores ON against them. SANE holds iff |mean d_ON| ≤ 0.02 nats and mean argmax agreement ≥ 0.95, as
-registered. Neither family has been through this instrument before, so `tests/test_p115c_sane_families.py` runs both
-phases on tiny gpt-oss and Qwen3.5-MoE hybrid models on CPU. That check confirms the instrument builds, steps every
-window and writes records the reducer reads. Its stand-in attention drops the sinks, so its scores are not the real
-kernel's.
+**SANE, as implemented (gpt-oss, Qwen3.6).** The default server is built eager (`E4B_PAGED_GRAPHS=0`), all-vram. Phase
+B's instrument, `p115_quality.measure_phase`, runs at reduced size: 12 wikitext windows, 512 prompt tokens, 128
+teacher-forced positions, one group of 12, P110's padded bucket arithmetic. The off process scores R and saves its fp32
+log-probs. The on process scores ON against them. SANE holds iff |mean d_ON| ≤ 0.02 nats and mean argmax agreement
+≥ 0.95, as registered. Neither family has been through this instrument before, so `tests/test_p115c_sane_families.py`
+runs both phases on tiny gpt-oss and Qwen3.5-MoE hybrid models on CPU. That check confirms the instrument builds, steps
+every window and writes records the reducer reads. Its stand-in attention drops the sinks, so its scores are not the
+real kernel's.
+
+**Granite's quality read (added in review).** `auto` changes Granite's arithmetic: the folds engage at
+`0 / 65 / [32, 32] / 32`. SANE's 0.02-nat bar cannot settle a cost of the size the proof hinted at (below), so Granite
+gets Phase B's full read instead of SANE:
+- **Instrument:** Phase B's, at Phase B's size. The default server is built eager under `0` (off) and `auto` (on). Both
+  texts, 48 windows each in groups of 12, 512 prompt tokens and 128 teacher-forced positions. The off process scores R,
+  the `rep`, `half` and `chunk` floors and `mutant_scale`; the on process scores ON. The glue-kernel call counters are
+  installed before `build_engine`, and the per-forward `qkv_proj` counter runs too. The records are `p115_quality.py`'s.
+- **Rule:** Phase B's, unchanged, read with `p115_reduce.py`'s own functions:
+  - VOID on any integrity fault: the census, the window counts, or any pass's engagement (decode attention calls, bucket
+    stats, the per-step kernel calls of `per_step("granite", 32)`). VOID also if the mutant passes the bar.
+  - On both texts, bias_ON ≤ B_floor + 0.01 and spread_ON ≤ 2 × max(S_floor, 0.005).
+  - On wikitext, |K8 Δppl| ≤ 0.05. c4val1's K8 is reported, not gated.
+- **Verdict:** Granite gets its own, which does not enter FLIP_LICENSED / FLIP_HELD. **GRANITE_LICENSED** iff Granite
+  passes SERVED, ENGAGED, EXPLICIT_RAISE, DETERMINISM and the quality rule. **GRANITE_HELD** otherwise. **VOID** when its
+  harness failed or its records fail the integrity checks.
+- **Consequence:** the flip PR's `auto` allowlist takes Granite only on GRANITE_LICENSED.
+- **What was seen before this amendment (stated, not hidden).** The Granite proof `p115-prove-2` read 12 windows × 32
+  positions per text. It is not a reading. c4val1's ON bias was +0.0151 nats (bar 0.0184, SE 0.0054), with K8 +0.18
+  ppl. Wikitext's was −0.0009 nats, with K8 −0.0075.
+- **Prediction:** census and per-step counts exact. Wikitext ON bias within ±0.004 nats and |K8 Δ| ≤ 0.03. c4val1 ON
+  bias between 0.000 and +0.015 nats; the proof's hint is not evidence. GRANITE_LICENSED about 60 %.
 
 **One corrected prediction (found before data, in `tests/test_fusion_modes.py`, #1315).** With all four knobs at `1`,
 glue round 1's own refusal fires on Qwen3.6 before the q/k/v check is reached. The centered norms fail its probe:
 "E4B_FUSE_T1_GLUE=1 patched no RMSNorm modules … refusing a vacuous enable". The registered message, "matched no
-attention module", therefore holds for gpt-oss only. EXPLICIT_RAISE accepts any of the four knobs' own vacuous-enable
-refusals, provided the message names the knob at `=1` (`EXPLICIT_RE`). The same phrase raised by another feature, such
-as the int4 expert plan or the int4 attention, does not pass the gate.
+attention module", therefore holds for gpt-oss and Granite only. EXPLICIT_RAISE accepts any of the four knobs' own
+vacuous-enable refusals, provided the message names the knob at `=1` (`EXPLICIT_RE`). The same phrase raised by another
+feature, such as the int4 expert plan or the int4 attention, does not pass the gate.
 
 **Premise.** On the card, before anything is fetched: Phase A/B's 14 GPU tests plus `tests/test_fusion_modes.py`'s 34,
 **48 passed**, none skipped (rc 25).
 
-**Proof** (`p115c-prove-<n>`). The whole box runs on Granite-3.1-3b-a800m alone, with 8 new tokens and 12 windows × 32
-positions. Expected census `0 / 65 / [32, 32] / 32`; the explicit arm refuses the q/k/v fusion. A VOID from the reducer
-fails the proof (rc 27). The proof's verdict is not a reading.
+**Proof** (`p115c-prove-<n>`). Granite alone runs every process kind: serve ×3, SANE ×2 and quality ×2. It uses 8 new
+tokens, and 12 windows × 32 positions for SANE and for quality. Expected census `0 / 65 / [32, 32] / 32`; the explicit
+arm refuses the q/k/v fusion. A VOID from the reducer fails the proof (rc 27), and so do quality records that fail the
+integrity checks. The proof's verdict is not a reading.
 
-**Refusals (STOP-1).** CUDA unusable 18 (Amendment 1's host floor), card class 15, disk < 200 GB 13 (two checkpoints of
-13 and 72 GB, their snapshots and arenas; each snapshot is deleted once its model's processes finish), host RAM < 60 GiB 16, premise 25.
+**Refusals (STOP-1).** CUDA unusable 18 (Amendment 1's host floor), card class 15, disk < 200 GB 13 (checkpoints of 6, 13
+and 72 GB with their snapshots and arenas; each snapshot is deleted once its model's processes finish), host RAM
+< 60 GiB 16, premise 25.
 
 **STOP-2.** Every step checks the time left. Reading: fetch 1500 s, bake 900 s, each process 600 s. Proof: 300 s,
 300 s and 240 s. Each check leaves 600 s for the fetch-back and fits inside its guard.
 
 **Budget.**
 - **Proof:** one RTX 5090, **guard 0.75 h**, `--download-gb 7`; about $0.7 at the launcher's policy rate.
-- **Reading:** one RTX 5090, **guard 2.0 h**, `--download-gb 90`; about $2.7 at the policy rate. Expected time is about
-  1.3 h: install and premise 5 min, fetches 15–40 min, bakes 5 min, ten processes at about 3–4 min each.
+- **Reading:** one RTX 5090, **guard 2.0 h**, `--download-gb 92`; about $2.7 at the policy rate. Expected time is about
+  1.5 h: install and premise 5 min, fetches 15–40 min, bakes 7 min, Granite's five processes about 12 min, and ten
+  processes for the other two models at about 3–4 min each.
 - **Owner's limit.** The owner's launch authorization for this program (2026-10-07) caps each lane at **$4.00**. That is
   stricter than the $10 hard stop registered above, and it binds. P115's actual spend over all phases stays at or below
   $4.00. A Phase C launch goes ahead only while P115's actual spend plus that run's launcher estimate is ≤ $4.00;
-  otherwise the owner is asked first. P115's spend before this amendment is $0.216.
+  otherwise the owner is asked first.
 
 **Receipts.** The box's records are fetched to the run directory's `p115c/` and committed to
 `bench/p115/receipts/<run>/p115c/`:
-- `serve_<m>_{off,on,explicit}.json`, `sane_<m>_{off,on}.json`, and `harness_<m>.json` where one was written;
+- `serve_<m>_{off,on,explicit}.json`, `sane_<m>_{off,on}.json`, `quality_granite_{off,on}.json`, and `harness_<m>.json`
+  where one was written;
 - `verdict_c.json`, `summary.txt`, `forensics.txt`, `versions.txt`, `prompts_<m>.json`, `logs/`, `work_<m>/bake.json`.
 
-The arenas, the snapshots and SANE's reference log-probs stay on the box.
+The arenas, the snapshots and the reference log-probs (SANE's and Granite's) stay on the box.

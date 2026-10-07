@@ -13,11 +13,18 @@ One process per (model, build), each building the shipped default server with ``
   eager (graphs off), Phase B's instrument (``p115_quality.measure_phase``) at reduced size: ``--windows`` wikitext
   windows of 512 prompt tokens and ``--cont`` teacher-forced positions, R (the graph server's arithmetic) under ``off``,
   ON under ``on`` against R's saved log-probs.
+- ``quality`` mode (Amendment 2, Granite's full Phase B read, asked for in review), arm ``off`` or ``on``: Phase B's
+  instrument at Phase B's registered size and arms -- both texts, ``--windows`` windows each in groups of 12, R with the
+  ``rep``/``half``/``chunk`` floors and ``mutant_scale`` under ``off``, ON under ``on`` -- with the glue-kernel call
+  counters installed before ``build_engine`` and the per-forward ``qkv_proj`` counter. The record is
+  ``p115_quality.py``'s, so Phase B's rule reads it unchanged; only the knobs differ (``0`` / ``auto``, Phase C's
+  subject, where Phase B set ``1``).
 
 The prompts are P109's wikitext rows in the model's own tokenizer (``p109_box.prompts_main``).
 
     python p115c_box.py --mode serve --prompts prompts.json --out serve_off.json --model-tag gptoss  (arm from P115C_ARM)
     python p115c_box.py --mode sane --out sane_off.json --ref-dir work/ref_gptoss --model-tag gptoss
+    python p115c_box.py --mode quality --out quality_granite_off.json --ref-dir work/qref --model-tag granite --windows 48
     python p115c_box.py --prompts-only --model ID --revision SHA --out prompts.json
     python p115c_box.py --self-test
 """
@@ -34,6 +41,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import p109_box  # noqa: E402  (staged at P109's registered bytes: prompts, run_pass, digest, _mem)
 
 ARMS = ("off", "on", "explicit")
+MODES = ("serve", "sane", "quality")
 KNOBS = ("E4B_PAGED_FUSE_QKV", "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
 ARM_VALUE = {"off": "0", "on": "auto", "explicit": "1"}
 CENSUS_KEYS = ("fuse_qkv_n", "fuse_t1_glue_n", "fuse_t1_glue_r2_n", "fuse_router_epilogue_n")
@@ -122,12 +130,47 @@ def sane_main(a, arm) -> int:
     return 0
 
 
+def quality_main(a, arm) -> int:
+    import torch
+    import transformers
+
+    import p115_quality as q
+    from experts4bit_qlora.serve_paged import PagedServeConfig, build_engine
+    cfg = PagedServeConfig.from_env()
+    if cfg.graphs or cfg.placement != "all-vram":
+        raise SystemExit(f"REFUSED: the quality read builds the default server eager at all-vram (graphs={cfg.graphs})")
+    counters = q.KernelCounters().install()                          # BEFORE build_engine, as Phase B
+    t0 = time.time()
+    parts = build_engine(cfg)
+    model = parts.runner.model
+    model.eval()
+    load_s = time.time() - t0
+    fwd = q.ForwardCounter(model)
+    windows = {t: q.LOADERS[t](parts.tokenizer, a.windows, a.prompt, a.cont) for t in q.TEXTS}
+    rec = q.measure_phase(model, windows, phase=arm, prompt=a.prompt, cont=a.cont, chunk=a.chunk,
+                          floor_chunk=a.floor_chunk, group=a.group, device=cfg.device, ref_dir=a.ref_dir,
+                          counters=counters, fwd=fwd)
+    census = {k: parts.info.get(k) for k in CENSUS_KEYS + ("moe_layers", "experts", "top_k", "model_type", "graph_status",
+                                                           "grouping")}
+    rec = {"mode": "quality", "arm": arm, "model_tag": a.model_tag, "model": cfg.model, "revision": cfg.revision,
+           "e4b_sha": os.environ.get("E4B_SHA"), "gnf4_sha": os.environ.get("GNF4_SHA"),
+           "prove": os.environ.get("P115C_PROVE", "0") == "1", "transformers": transformers.__version__,
+           "load_s": round(load_s, 1), "fusion_modes": dict(cfg.fusion_modes),
+           "fuse_qkv": bool(census.get("fuse_qkv_n")),                 # engaged, not requested: auto requests it everywhere
+           "census": census, **rec, "gpu": torch.cuda.get_device_name(0),
+           "max_mem_gb": round(torch.cuda.max_memory_allocated() / 2**30, 2), "status": "ok"}
+    json.dump(rec, open(a.out, "w"), indent=1, default=str)
+    print(f"P115C_QUALITY {a.model_tag}/{arm} windows={rec['windows']} census={ {k: census[k] for k in CENSUS_KEYS} } "
+          f"load {load_s:.0f}s mem {rec['max_mem_gb']} GB {rec['seconds']} s", flush=True)
+    return 0
+
+
 def self_test() -> int:
     on = {k: "auto" for k in KNOBS}
     ok = [ARMS == ("off", "on", "explicit"), arm_env_ok("on", on)[0], not arm_env_ok("off", on)[0],
           arm_env_ok("off", {k: "0" for k in KNOBS})[0], arm_env_ok("explicit", {k: "1" for k in KNOBS})[0],
           not arm_env_ok("on", {**on, "E4B_FUSE_ROUTER_EPI": "1"})[0], not arm_env_ok("x", on)[0],
-          p109_box.self_test() == 0]
+          MODES == ("serve", "sane", "quality"), p109_box.self_test() == 0]
     print(f"p115c_box self-test {'OK' if all(ok) else 'FAILED'} ({sum(ok)}/{len(ok)} cases)")
     return 0 if all(ok) else 1
 
@@ -136,7 +179,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--self-test", action="store_true")
     p.add_argument("--prompts-only", action="store_true")
-    p.add_argument("--mode", choices=("serve", "sane"))
+    p.add_argument("--mode", choices=MODES)
     p.add_argument("--model")
     p.add_argument("--revision", default="")
     p.add_argument("--model-tag", default="")
@@ -148,6 +191,8 @@ def main(argv=None) -> int:
     p.add_argument("--prompt", type=int, default=512)
     p.add_argument("--cont", type=int, default=128)
     p.add_argument("--chunk", type=int, default=512)
+    p.add_argument("--floor-chunk", type=int, default=256)                # Phase B's (p115_quality.py's default)
+    p.add_argument("--group", type=int, default=12)
     a = p.parse_args(argv)
     if a.self_test:
         return self_test()
@@ -157,9 +202,9 @@ def main(argv=None) -> int:
     ok, why = arm_env_ok(arm, os.environ)
     if not ok:
         raise SystemExit(f"REFUSED: {why}")
-    if a.mode == "sane" and arm == "explicit":
-        raise SystemExit("REFUSED: SANE has no explicit arm")
-    return serve_main(a, arm) if a.mode == "serve" else sane_main(a, arm)
+    if a.mode in ("sane", "quality") and arm == "explicit":
+        raise SystemExit(f"REFUSED: {a.mode} has no explicit arm")
+    return {"serve": serve_main, "sane": sane_main, "quality": quality_main}[a.mode](a, arm)
 
 
 if __name__ == "__main__":
