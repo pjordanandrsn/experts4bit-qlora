@@ -19,6 +19,8 @@ import re
 import subprocess
 import sys
 
+import pytest
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 LANE = REPO / "bench" / "p116"
 PIN = LANE / "staged.sha256"
@@ -148,6 +150,9 @@ def test_the_order_puts_every_refusal_before_the_fetch():
 
 
 def test_the_premise_files_collect_18_cases():
+    # test_gemv_bw_served_gpu.py skips at collection without grouped-nf4-gemm (its module-level importorskip), so the
+    # count is only meaningful where the kernel package is installed: CI and the box (the maintainer's Mac has neither)
+    pytest.importorskip("nf4_grouped", reason="the premise count needs grouped-nf4-gemm installed")
     out = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider",
                           *[str(REPO / "tests" / f) for f in PREMISE]], capture_output=True, text=True, cwd=REPO)
     assert re.search(r"\b18 tests? collected\b", out.stdout), out.stdout[-600:] + out.stderr[-600:]
