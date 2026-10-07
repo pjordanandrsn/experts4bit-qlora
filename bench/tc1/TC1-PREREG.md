@@ -2859,3 +2859,42 @@ At the field recipe in torch 2.8:
 
 **Budget.** Two RTX 5090s at the policy rate ($0.85/h), 4 h guards, TC1's 98 GB host floor. Six packed arms and six profiled field-recipe
 arms: about $3.5 with the downloads.
+
+### Amendment 65 (2026-10-07T18:44Z, after amendment 64's read, before any box): the training-phase census at the new defaults (P184–P188)
+
+**Why.** Since amendment 57's census, three things moved e4b's packed-row training step:
+- the combine runs over row chunks (#1304), 2 % faster, but its peak moved only −0.009 GB (amendment 61);
+- the reentrant checkpoint is the default (#1311), 0.980 of the step with an identical peak (amendment 64);
+- the offload (`E4B_CKPT_OFFLOAD=1`) takes 0.74 GB off for 1.023 of the reentrant step.
+
+At the defaults e4b's training phase still peaks about 1.72 GB above Unsloth's 24.86 GB, and 0.98 GB above it with the offload.
+Amendment 57's census predates all three. In its absmax-dq arm, past the checkpoint inputs (0.79 GB) and the combine's backward
+(0.54 GB), the next e4b-only group at the peak was grouped-nf4-gemm's bucketed LoRA delta (`nf4_qlora.py:672 _lora_delta_bucketed`,
+0.53 GB). Whether that now holds the gap decides the next lever.
+
+**The box** (token `qwen3memc4kr`). One RTX 5090, packed 4,096-token rows, 20 steps, `TC1_EVAL_EVERY` above `TC1_STEPS` (amendment
+57's command: the final held-out evaluation runs after the census closes), every arm in venv-unsloth (torch 2.12) with `--mem-census 1`,
+one draw each, no speed read:
+- e4b `fused_attn4_m_p4r`: e4b's defaults (the reentrant checkpoint, the double-quantized absmax, buckets `auto`, the chunked loss);
+- e4b `fused_attn4_m_p4r_off`: the same with `E4B_CKPT_OFFLOAD=1`;
+- Unsloth `ckpt_unsloth_m_p4r`.
+
+Validity (`memc4kr_why`): amendment 55's predicates for the defaults, plus the checkpoint the tag names. `p4r` has all 48 layers on
+`reentrant_checkpoint` with the variable unset; `p4r_off` has all 48 on `offloaded_checkpoint` with it set to 1.
+
+**Predictions:**
+- **P184:** at least 90 % of each arm's peak attributed (amendment 47's instrument bar).
+- **P185:** e4b defaults' training-phase peak − Unsloth's in **[1.3, 2.1] GB**.
+- **P186:** with the offload, e4b's peak − Unsloth's ≤ **1.2 GB**.
+- **P187:** every census peak falls in a training step.
+- **P188:** on the offload arm, the largest non-static group live at the peak is a grouped-nf4-gemm LoRA-delta site (`nf4_qlora.py`).
+
+**Decision rules.**
+- **P188 HELD:** the next lever is the bucketed delta's block. Candidates include computing the delta into its output in place, or
+  over bucket chunks, in grouped-nf4-gemm. It is registered with its own A/B.
+- **P188 FALSIFIED:** the next lever targets the group the census names instead.
+- **P184 FALSIFIED:** the census does not explain enough of the peak to aim a lever; the instrument is read before anything else.
+- **P185 or P186 out of band:** the read states the gap as measured on this box; nothing is decided on it alone.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Three census arms of 20
+steps: about $1.2 with the download.

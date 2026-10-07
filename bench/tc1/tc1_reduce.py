@@ -2408,11 +2408,50 @@ EXPECTED[MEMC4KT_FAM] = list(MEMC4KT_ARMS)
 MATCHED |= {t for _, t in MEMC4KT_ARMS}
 PACKED_FAMS = PACKED_FAMS + (MEMC4KT_FAM,)
 LOOP_ROUTE_SHARE_MAX[MEMC4KT_FAM] = 0.05
+# TC1 amendment 65: the training-phase census at the new defaults (the reentrant checkpoint, the combine over row chunks, the chunked held-out
+# loss): e4b defaults, e4b with E4B_CKPT_OFFLOAD=1, Unsloth -- what holds e4b's packed-row training peak now
+MEMC4KR_FAM = "qwen3memc4kr"
+MEMC4KR_ARMS = (("e4b", "fused_attn4_m_p4r"), ("e4b", "fused_attn4_m_p4r_off"), ("unsloth", "ckpt_unsloth_m_p4r"))
+MEMC4KR_LABELS = {MEMC4KR_ARMS[0]: "e4b defaults", MEMC4KR_ARMS[1]: "e4b offload", MEMC4KR_ARMS[2]: "Unsloth"}
+P185_BAND = (1.3e9, 2.1e9)         # P185: e4b defaults' training peak - Unsloth's (amendment 64: 26.58 - 24.86 = 1.72 GB, other boxes)
+P186_MAX = 1.2e9                   # P186: with the offload, e4b's training peak - Unsloth's at most this (amendment 61: +0.979)
+P188_SITE = "nf4_qlora.py"         # P188: the offload arm's largest non-static group at the peak is grouped-nf4-gemm's LoRA delta (a site in it)
+NO_SPEED_FAMS[MEMC4KR_FAM] = "the memory census slows the step (amendment 65, as amendment 47), so no speed is read on this token"
+FAMS.append(MEMC4KR_FAM)
+NAMES[MEMC4KR_FAM] = "Qwen3-30B-A3B (amendment 65: the training-phase census on packed rows at the new defaults -- e4b defaults, e4b offload, Unsloth; no speed read)"
+N_LAYERS[MEMC4KR_FAM] = 48
+ATTN_CENSUS[MEMC4KR_FAM] = 192
+FAM_ANCHOR[MEMC4KR_FAM] = MEMC4KR_ARMS[0]
+EXPECTED[MEMC4KR_FAM] = list(MEMC4KR_ARMS)
+MATCHED |= {t for _, t in MEMC4KR_ARMS}
+PACKED_FAMS = PACKED_FAMS + (MEMC4KR_FAM,)
+LOOP_ROUTE_SHARE_MAX[MEMC4KR_FAM] = 0.05
 # The census scorer's per-family registration: arms (defaults, lever, Unsloth), labels, the instrument id, the gap id and band, the lever id and ceiling
 MEMC_SPECS = {MEMC4K_FAM: {"arms": MEMC4K_ARMS, "labels": MEMC4K_LABELS, "attr": "P112", "gap": ("P113", P113_BAND), "lev": ("P114", P114_MAX), "am": 47},
               MEMC4KB_FAM: {"arms": MEMC4KB_ARMS, "labels": MEMC4KB_LABELS, "attr": "P141", "gap": ("P142", P142_BAND), "lev": ("P143", P143_MAX), "am": 55},
               MEMC4KT_FAM: {"arms": MEMC4KT_ARMS, "labels": MEMC4KT_LABELS, "attr": "P149", "gap": ("P150", P150_BAND), "lev": ("P151", P151_MAX), "am": 57,
-                            "train_phase": "P152"}}
+                            "train_phase": "P152"},
+              MEMC4KR_FAM: {"arms": MEMC4KR_ARMS, "labels": MEMC4KR_LABELS, "attr": "P184", "gap": ("P185", P185_BAND), "lev": ("P186", P186_MAX), "am": 65,
+                            "train_phase": "P187", "top_group": ("P188", 1, P188_SITE)}}
+
+
+def memc4kr_why(r):
+    """Amendment 65's predicates on an OK row: torch 2.12 and a census on the receipt; on e4b the current defaults (the double-quantized absmax,
+    the delta not compact, every padded call bucketed, the chunked loss serving the rows) and the checkpoint the tag names -- `p4r` the default
+    reentrant checkpoint (E4B_CKPT_OFFLOAD unset, all 48 layers on reentrant_checkpoint), `p4r_off` E4B_CKPT_OFFLOAD=1 (all 48 on
+    offloaded_checkpoint). Empty string = as registered."""
+    r = r or {}
+    probe = dict(r)
+    if r.get("framework") == "e4b":
+        probe["tag"] = (r.get("tag") or "") + "_dq"                     # memc4kb_why's absmax check reads the tag; these arms are dq by default
+    bad = [w for w in [memc4kb_why(probe)] if w]
+    if r.get("framework") == "e4b":
+        off = (r.get("tag") or "").endswith("_off")
+        want = (48, "1", ["offloaded_checkpoint"]) if off else (48, None, ["reentrant_checkpoint"])
+        got = (r.get("ckpt_offload_layers"), r.get("ckpt_offload_env"), r.get("ckpt_offload_funcs"))
+        if got[0] != want[0] or got[2] != want[2] or (got[1] or None) != want[1]:
+            bad.append(f"checkpoint {got!r}: {r.get('tag')} names {want!r}")
+    return "; ".join(bad)
 
 
 def memc4kb_why(r):
@@ -2982,6 +3021,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == MEMCENSUS_FAM:                            # amendment 23: the pin, the mb1 recipe, the census on the receipt, the absmax the tag names
         w = memcensus_why(r)
+        if w:
+            why.append(w)
+    if fam == MEMC4KR_FAM:                              # amendment 65: the current defaults and the checkpoint its tag names
+        w = memc4kr_why(r)
         if w:
             why.append(w)
     if fam == MEMC4KT_FAM:                              # amendment 57: amendment 55's predicates (the absmax its tag names: `_dq` or fp32)
@@ -4001,6 +4044,17 @@ def score_memc4k(F, fam=MEMC4K_FAM):
             train = {n: (str(v).startswith("s") and ".eval" not in str(v)) for n, v in ph.items()}
             out.append((spec["train_phase"], fam, "HELD" if all(train.values()) else "FALSIFIED",
                         "census peak phase per arm: " + "; ".join(f"{n} {v}" for n, v in ph.items())))
+    if spec.get("top_group"):                             # amendment 65: which site holds the most non-static bytes at one arm's peak
+        pid, idx, site = spec["top_group"]
+        m, w = reads[ARMS[idx]]
+        gs = [g for g in ((m or {}).get("live_at_peak_top") or []) if not str(g.get("group", "")).startswith("static:")]
+        if m is None or not gs:
+            out.append((pid, fam, "UNTESTED", f"{LABELS[ARMS[idx]]}: no non-static group at the peak -- {w or 'live_at_peak_top empty'}"))
+        else:
+            top = gs[0]
+            out.append((pid, fam, "HELD" if site in str(top.get("group")) else "FALSIFIED",
+                        f"{LABELS[ARMS[idx]]}'s largest non-static group at the peak: {top.get('group')} {_gb(top.get('bytes'))} GB x{top.get('count')} "
+                        f"(registered: a site in {site}); next: {_mc_top(m, n=4)}"))
     return out
 
 
@@ -5787,6 +5841,11 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_denseab(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if MEMC4KR_FAM in F:
+        out += ["\n## Predictions P184-P188 (TC1-PREREG amendment 65: the training-phase census at the new defaults, e4b against Unsloth; scored mechanically from the receipts)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_memc4k(F, MEMC4KR_FAM):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if MEMC4KT_FAM in F:
         out += ["\n## Predictions P149 / P150 / P151 / P152 (TC1-PREREG amendment 57: the census of the training phase on packed rows, e4b against Unsloth; scored mechanically from the receipts)",
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
@@ -7078,6 +7137,28 @@ def _ckptre64_set(fam, s=None, train=None, held=None, busy=0.7, profile=True):
                 r["profile"] = ({"profiled_steps": 3, "device_ms": 3 * b * 1000.0 * s[side][i], "wall_ms_per_step": 1000.0 * s[side][i]}
                                 if profile else None)
             R[("e4b", tag)] = r
+    return R
+
+
+def _memc4kr_set(peaks=(26.58e9, 25.84e9, 24.86e9), top_site="site:nf4_qlora.py:672 _lora_delta_bucketed", ckpt=None):
+    """Amendment 65: the training-phase census at the new defaults -- `peaks` = (e4b defaults, e4b offload, Unsloth) peak allocated bytes;
+    `top_site` the offload arm's largest non-static group; `ckpt` tag -> (layers, env, funcs) override."""
+    src = _memc4kt_set(peaks=peaks)
+    R = {}
+    for (fw, tag), (fw2, tag2) in zip(MEMC4KT_ARMS, MEMC4KR_ARMS):
+        r = json.loads(json.dumps(src[(fw, tag)]))
+        r.update(tag=tag2, fam=MEMC4KR_FAM)
+        if fw2 == "e4b":
+            r["absmax_dq"] = True
+            off = tag2.endswith("_off")
+            n, env, fn_ = (ckpt or {}).get(tag2, (48, "1" if off else None, ["offloaded_checkpoint" if off else "reentrant_checkpoint"]))
+            r["ckpt_offload_layers"], r["ckpt_offload_env"], r["ckpt_offload_funcs"] = n, env, fn_
+            if off:
+                mc = r["mem_census"]
+                tops = [g for g in mc["live_at_peak_top"] if str(g["group"]).startswith("static:")]
+                mc["live_at_peak_top"] = tops + [{"group": top_site, "bytes": 530_000_000, "count": 2},
+                                                 {"group": "site:experts4bit_qlora/engines/fast.py:470 backward", "bytes": 270_000_000, "count": 2}]
+        R[(fw2, tag2)] = r
     return R
 
 
@@ -9492,6 +9573,19 @@ def selftest():
     assert "premise" in [ev for p, _, _, ev in score_ckptre64(C64(CKPTRE28_FAM)) if p == "P182"][0]
     assert all(v == "VOID" for v in C64(CKPTRE28_FAM, profile=False)[CKPTRE28_FAM]["verdicts"].values())
     assert all(x["verdict"] == "VALID" for x in C64(CKPTRE4K_FAM, profile=False)[CKPTRE4K_FAM]["rows"])
+    cases += 1
+    # 118. TC1 amendment 65 (qwen3memc4kr): the training-phase census at the new defaults -- VALID; P184-P188 HELD on the default fixture
+    #      (+1.72 / +0.98 GB, the delta block on top); another site on top FALSIFIES P188; a defaults arm on Hugging Face's checkpoint is VOID
+    MR = lambda R: {MEMC4KR_FAM: reduce_family(MEMC4KR_FAM, R, {}, 20)}
+    RMR = MR(_memc4kr_set())
+    assert all(x["verdict"] == "VALID" for x in RMR[MEMC4KR_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RMR[MEMC4KR_FAM]["rows"]]
+    pmr = lambda R: {p: v for p, _, v, _ in score_memc4k(R, MEMC4KR_FAM)}
+    assert pmr(RMR) == {"P184": "HELD", "P185": "HELD", "P186": "HELD", "P187": "HELD", "P188": "HELD"}, score_memc4k(RMR, MEMC4KR_FAM)
+    assert pmr(MR(_memc4kr_set(top_site="site:transformers/models/qwen3_moe/modeling_qwen3_moe.py:352 forward")))["P188"] == "FALSIFIED"
+    assert pmr(MR(_memc4kr_set(peaks=(27.20e9, 25.84e9, 24.86e9))))["P185"] == "FALSIFIED"
+    hf = MR(_memc4kr_set(ckpt={"fused_attn4_m_p4r": (0, None, [])}))
+    assert hf[MEMC4KR_FAM]["verdicts"][("e4b", "fused_attn4_m_p4r")] == "VOID"
+    assert "P188" in render(RMR, "x") and "amendment 65" in render(RMR, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
