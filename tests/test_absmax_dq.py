@@ -523,3 +523,90 @@ def test_trainer_default_keeps_the_fp32_absmax_where_the_compressor_refuses():
         apply_absmax_dq(passthrough, required=True)
     wrapped = _Model([_lora(seed=1), _lora(seed=2)])
     assert apply_absmax_dq(wrapped, required=False) == 2 and all(is_absmax_compressed(m) for m in _bases(wrapped))
+
+
+# ----------------------------------------------------------------------------- enable_fast_train's default (TC1 amendment 56)
+@pytest.mark.parametrize("env,explicit,want", [
+    ({}, None, (True, False)), ({"E4B_ABSMAX_DQ": "0"}, None, (False, False)), ({"E4B_ABSMAX_DQ": "1"}, None, (True, True)),
+    ({"OFFLOAD_EXPERTS": "1"}, None, (False, False)), ({"TRAIN_ARENA": "/x"}, None, (False, False)),
+    ({"E4B_ABSMAX_DQ": "1", "OFFLOAD_EXPERTS": "1"}, None, (True, True)),
+    ({"E4B_ABSMAX_DQ": "0"}, True, (True, True)), ({}, False, (False, False))])
+def test_fast_train_absmax_policy(monkeypatch, env, explicit, want):
+    """Unset: on, except under expert offload or the training arena (the trainer's guards); 0 off; 1 required; an explicit
+    argument wins over the environment."""
+    import experts4bit_qlora.engines.fast as fast
+    from experts4bit_qlora.engines.fast import absmax_dq_policy
+    monkeypatch.setattr(fast, "ABSMAX_DQ_DEFAULT", True)                 # the production default (conftest pins it off)
+    for k in ("E4B_ABSMAX_DQ", "OFFLOAD_EXPERTS", "TRAIN_ARENA"):
+        monkeypatch.delenv(k, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    assert absmax_dq_policy(explicit) == want
+
+
+def test_fast_train_default_compresses_a_resident_model(monkeypatch):
+    from experts4bit_qlora.engines.fast import _default_absmax_dq
+    import experts4bit_qlora.engines.fast as fast
+    monkeypatch.setattr(fast, "ABSMAX_DQ_DEFAULT", True)
+    monkeypatch.delenv("E4B_ABSMAX_DQ", raising=False)
+    mod = _lora()
+    rec = _default_absmax_dq(mod, None, patched=1, verbose=False)
+    assert rec == {"compressed": 1, "requested": True, "required": False, "kept_fp32": None}
+    assert is_absmax_compressed(mod.base)
+    assert _default_absmax_dq(mod, None, patched=1, verbose=False)["compressed"] == 0     # idempotent: the trainer may have done it
+
+
+def test_fast_train_default_off_keeps_fp32(monkeypatch):
+    from experts4bit_qlora.engines.fast import _default_absmax_dq
+    import experts4bit_qlora.engines.fast as fast
+    monkeypatch.setattr(fast, "ABSMAX_DQ_DEFAULT", True)
+    monkeypatch.setenv("E4B_ABSMAX_DQ", "0")
+    mod = _lora()
+    assert _default_absmax_dq(mod, None, patched=1, verbose=False)["kept_fp32"] == "off"
+    assert not is_absmax_compressed(mod.base)
+    monkeypatch.delenv("E4B_ABSMAX_DQ")
+    assert _default_absmax_dq(mod, None, patched=0, verbose=False)["kept_fp32"] == "nothing patched"
+    assert not is_absmax_compressed(mod.base)
+
+
+def test_fast_train_default_keeps_fp32_where_the_compressor_refuses(monkeypatch):
+    """A refusal leaves the model unchanged and is recorded under the default; required, it raises."""
+    from experts4bit_qlora.engines.fast import _default_absmax_dq
+    import experts4bit_qlora.engines.fast as fast
+    monkeypatch.setattr(fast, "ABSMAX_DQ_DEFAULT", True)
+    monkeypatch.delenv("E4B_ABSMAX_DQ", raising=False)
+    mod = _lora()
+    mod.base.gate_up_absmax = torch.empty(0, device=DEVICE)          # an offload-evicted placeholder: the compressor refuses
+    rec = _default_absmax_dq(mod, None, patched=1, verbose=False)
+    assert rec["compressed"] == 0 and "evicted" in rec["kept_fp32"]
+    assert not is_absmax_compressed(mod.base)
+    with pytest.raises(ValueError, match="evicted"):
+        _default_absmax_dq(mod, True, patched=1, verbose=False)
+
+
+def test_fast_train_required_with_nothing_to_compress_raises(monkeypatch):
+    from experts4bit_qlora.engines.fast import _default_absmax_dq
+    import experts4bit_qlora.engines.fast as fast
+    monkeypatch.setattr(fast, "ABSMAX_DQ_DEFAULT", True)
+    monkeypatch.delenv("E4B_ABSMAX_DQ", raising=False)
+    m = nn.Sequential(nn.Linear(4, 4))
+    assert _default_absmax_dq(m, None, patched=1, verbose=False)["kept_fp32"] == "no expert stack to compress"
+    with pytest.raises(ValueError, match="no expert absmax could be compressed"):
+        _default_absmax_dq(m, True, patched=1, verbose=False)
+
+
+@CUDA
+def test_fast_train_compresses_by_default(monkeypatch):
+    """The default end to end: enable_fast_train patches, then compresses, and records it."""
+    pytest.importorskip("nf4_qlora", reason="needs grouped-nf4-gemm >= 0.2.4")
+    from experts4bit_qlora import enable_fast_train
+    from experts4bit_qlora.engines.fast import FAST_TRAIN_STATS
+    import experts4bit_qlora.engines.fast as fast
+    monkeypatch.setattr(fast, "ABSMAX_DQ_DEFAULT", True)
+    monkeypatch.delenv("E4B_ABSMAX_DQ", raising=False)
+    mod = _lora(8, 256, 128, device="cuda", compute_dtype=torch.bfloat16).train()
+    assert enable_fast_train(mod) == 1
+    assert is_absmax_compressed(mod.base) and FAST_TRAIN_STATS["absmax_dq"]["compressed"] == 1
+    args = _inputs(256, 8, n_tok=32, dtype=torch.bfloat16)
+    o, dx, g = _fwd_bwd(mod, *args)
+    assert torch.isfinite(o).all() and torch.isfinite(dx).all()

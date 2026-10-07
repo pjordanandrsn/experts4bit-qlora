@@ -1481,7 +1481,7 @@ def test_tc1_amendment_22_dense_route_tokens():
     assert out[:2] == ["route=dense dq=1 box=1", "route=fused dq= box="], out
     src = (REPO / "bench" / "tc1" / "tc1_arm.py").read_text()
     assert '"route_ab": route_ab,' in src and '"stats": {k: int(v) for k, v in _rstats.items()}' in src
-    assert '"absmax_dq": bool(getattr(a, "absmax_dq", 0)),' in src
+    assert '"absmax_dq": bool(getattr(a, "absmax_dq", 0)) or _absmax_compressed(model),' in src
 
 
 def test_tc1_amendment_12_profile_token():

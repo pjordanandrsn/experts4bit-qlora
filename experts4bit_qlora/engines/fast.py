@@ -150,7 +150,7 @@ def recurrent_kernel_fallbacks(model) -> list:
 
 #: What ``enable_fast_train`` did, for an engagement census: modules patched, and every skipped module's reason. A fast arm whose
 #: ``skipped`` is non-empty ran PART of its experts on the reference path and must not be read as the fused path.
-FAST_TRAIN_STATS = {"patched": 0, "skipped": {}, "recurrent_fallbacks": []}
+FAST_TRAIN_STATS = {"patched": 0, "skipped": {}, "recurrent_fallbacks": [], "absmax_dq": None}   # absmax_dq: the last call's record
 
 
 def _refuse_under_capture(hidden_states) -> None:
@@ -748,7 +748,7 @@ def fused_experts_train_forward(lora_mod, hidden_states, top_k_index, top_k_weig
     return _ScatterCombine.apply(down, w, order, tokens, k, input_dtype)
 
 
-def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
+def enable_fast_train(model, verbose: bool = False, dgrad: bool = False, absmax_dq=None) -> int:
     """Route ``ExpertsLoRA`` TRAINING through the fused grouped kernel.
 
     ``enable_fast`` patches the frozen base and is inference-only. This patches
@@ -782,9 +782,17 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     Needs a CUDA device with Triton on sm_80+ (Linux). See
     ``docs/solutions/qlora-fused-moe-experts.md``.
 
-    Composes with ``compress_expert_absmax_`` (``E4B_ABSMAX_DQ=1``), before or after it: the
-    patched forward reads the absmax through ``expert_absmax_fp32``, which expands a
-    double-quantized one to fp32 for the one layer the kernel is about to run.
+    It also stores the frozen expert absmax double-quantized (``compress_expert_absmax_``) BY DEFAULT for
+    resident training, as the CLI trainer does: TC1 amendments 28 / 31 (field recipe) and 56 (packed 4,096-token
+    rows: 1.002 of the fp32 absmax's step for 1.35 GB on Qwen3-30B-A3B, held-out within 0.0002; one RTX 5090,
+    torch 2.12 / triton 3.7 -- its packed-row speed under torch 2.8 is unread). The patched forward reads the absmax
+    through ``expert_absmax_fp32``, which expands a double-quantized one to fp32 for the one layer the kernel is
+    about to run. ``absmax_dq`` (or ``E4B_ABSMAX_DQ`` when it is None): ``False`` / ``0`` keeps the fp32 absmax,
+    ``True`` / ``1`` requires the compression (a refusal raises ``ValueError``); unset compresses only when this
+    call patched something, and not under ``OFFLOAD_EXPERTS=1`` or ``TRAIN_ARENA`` (the trainer's guards: those
+    paths read the fp32 absmax by name). A model the compressor refuses -- expert offload, arena or 8-bit storage, a
+    stack another engine patched -- keeps its fp32 absmax, and ``FAST_TRAIN_STATS["absmax_dq"]`` says why. The
+    compression is lossy and stays after ``disable_fast_train``; to keep fp32, pass ``absmax_dq=False`` here.
 
     It also routes the model's training forward through the chunked causal-LM loss
     (``engines/chunked_lm_loss.py``) where the fp32 logits would reach 1 GiB -- ``E4B_CHUNKED_LM_LOSS``
@@ -906,7 +914,55 @@ def enable_fast_train(model, verbose: bool = False, dgrad: bool = False) -> int:
     if chunk is not None:
         enable_chunked_lm_loss(model, chunk, verbose=verbose, min_logits_bytes=chunked_lm_loss_min_bytes(),
                                quiet_refusal=chunked_lm_loss_by_default())
+    # On by default since TC1 amendment 56 (E4B_ABSMAX_DQ=0 turns it off): the frozen expert absmax double-quantized.
+    FAST_TRAIN_STATS["absmax_dq"] = _default_absmax_dq(model, absmax_dq, patched, verbose)
     return patched
+
+
+#: The unset-``E4B_ABSMAX_DQ`` default for ``enable_fast_train`` (TC1 amendment 56). The test suite pins it False (tests/conftest.py) so
+#: tests written against the fp32 absmax keep reading it; tests/test_absmax_dq.py sets it back where it reads the default.
+ABSMAX_DQ_DEFAULT = True
+
+
+def absmax_dq_policy(explicit=None):
+    """``(compress, required)`` for ``enable_fast_train``: an explicit True / False wins; otherwise ``E4B_ABSMAX_DQ``: ``1``
+    required, ``0`` off, unset on -- except under ``OFFLOAD_EXPERTS=1`` or ``TRAIN_ARENA``, whose paths read the fp32 absmax by
+    name (the CLI trainer's guards, experts4bit_qlora/train.py)."""
+    if explicit is not None:
+        return bool(explicit), bool(explicit)
+    v = os.environ.get("E4B_ABSMAX_DQ", "").strip()
+    if v == "1":
+        return True, True
+    if v == "0":
+        return False, False
+    guarded = os.environ.get("OFFLOAD_EXPERTS", "0") == "1" or bool(os.environ.get("TRAIN_ARENA"))
+    return ABSMAX_DQ_DEFAULT and not guarded, False
+
+
+def _default_absmax_dq(model, explicit, patched, verbose):
+    """Compress the expert absmax per ``absmax_dq_policy``; returns the record FAST_TRAIN_STATS keeps."""
+    compress, required = absmax_dq_policy(explicit)
+    if not compress or (not patched and not required):
+        return {"compressed": 0, "requested": compress, "required": required,
+                "kept_fp32": "off" if not compress else "nothing patched"}
+    from experts4bit_qlora.absmax_dq import compress_expert_absmax_
+    try:
+        n = compress_expert_absmax_(model)
+    except ValueError as e:
+        if required:
+            raise
+        if verbose:
+            print(f"[e4b.fast] kept the fp32 expert absmax: {e}")
+        return {"compressed": 0, "requested": True, "required": False, "kept_fp32": str(e)[:300]}
+    if n == 0:
+        from experts4bit_qlora.absmax_dq import is_absmax_compressed
+        if not any(is_absmax_compressed(m) for m in model.modules()):
+            if required:
+                raise ValueError("enable_fast_train: E4B_ABSMAX_DQ=1 / absmax_dq=True, but no expert absmax could be compressed")
+            return {"compressed": 0, "requested": True, "required": False, "kept_fp32": "no expert stack to compress"}
+    if verbose and n:
+        print(f"[e4b.fast] expert absmax double-quantized on {n} stack(s) (E4B_ABSMAX_DQ=0 keeps fp32)")
+    return {"compressed": n, "requested": True, "required": required, "kept_fp32": None}
 
 
 def disable_fast_train(model) -> int:

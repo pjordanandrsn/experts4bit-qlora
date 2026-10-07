@@ -39,7 +39,9 @@ The switch: ``compress_expert_absmax_(model)`` in code. ``python -m experts4bit_
 default for resident training (after load, before training; off under ``OFFLOAD_EXPERTS=1`` / ``TRAIN_ARENA``;
 a model the compressor refuses keeps its fp32 absmax), since TC1 amendments 28 / 31 read 1.4 % of the step for
 1.34 GB on Qwen3-30B-A3B and 2.3 % for 2.04 GB on Mixtral-8x7B; ``E4B_ABSMAX_DQ=0`` turns it off and ``=1``
-requires it (refused with ``OFFLOAD_EXPERTS=1``). The TC1 harness's ``--absmax-dq`` stays explicit.
+requires it (refused with ``OFFLOAD_EXPERTS=1``). ``enable_fast_train`` applies the same default since TC1
+amendment 56 (packed 4,096-token rows: 1.002 of the step for 1.35 GB, torch 2.12 on one RTX 5090), with the
+same guards and switch, plus ``absmax_dq=False`` / ``True`` in code. The TC1 harness's ``--absmax-dq`` stays explicit.
 """
 from __future__ import annotations
 
@@ -65,11 +67,12 @@ def absmax_dq_requested() -> bool:
 
 
 def _refusal(entry: str) -> str:
-    return (f"{entry}: this expert stack's absmax is stored double-quantized (compress_expert_absmax_, "
-            f"switched on by {ENV_SWITCH}=1), and {entry} reads the fp32 absmax buffer, which no longer exists. "
-            "Only the resident training paths read the compressed form -- enable_fast_train's fused forward "
-            "and the ExpertsLoRA reference loop, through experts4bit_qlora.expert_absmax_fp32. Run without "
-            f"{ENV_SWITCH}=1 (do not call compress_expert_absmax_) to use {entry}.")
+    return (f"{entry}: this expert stack's absmax is stored double-quantized (compress_expert_absmax_: "
+            f"enable_fast_train's and the CLI trainer's default for resident training, or {ENV_SWITCH}=1), and {entry} "
+            "reads the fp32 absmax buffer, which no longer exists. Only the resident training paths read the compressed "
+            "form -- enable_fast_train's fused forward and the ExpertsLoRA reference loop, through "
+            f"experts4bit_qlora.expert_absmax_fp32. To use {entry}, keep the fp32 absmax: set {ENV_SWITCH}=0 before "
+            "enable_fast_train (or pass absmax_dq=False to it) and do not call compress_expert_absmax_.")
 
 
 class _CompressedAbsmaxGuard:
@@ -282,7 +285,8 @@ def _compress_one(mod) -> None:
 
 
 def compress_expert_absmax_(model) -> int:
-    """Store every ExpertsLoRA-wrapped NF4 expert stack's absmax double-quantized, in place (the CLI trainer's default).
+    """Store every ExpertsLoRA-wrapped NF4 expert stack's absmax double-quantized, in place (the CLI trainer's and
+    ``enable_fast_train``'s default).
 
     When to use it: resident QLoRA training where the fp32 absmax is the margin between fitting and not
     (one fp32 per 64 weights: ~2.8 GB on Mixtral-8x7B, ~1.8 GB on Qwen3-30B-A3B). It stores bitsandbytes'
