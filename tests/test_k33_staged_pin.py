@@ -1,0 +1,66 @@
+"""The k33 lane's staged-file pin must match the repo (the e4b#642 check, mirrored for K33).
+
+`bench/k33/k33_drive.sh` refuses to run when the runner's sha256 differs from `bench/k33/staged.sha256`. That guard runs
+on the CONTROLLER after a box is rented; this test runs the same comparison in CI, where it costs nothing.
+
+It also pins the runner's shape: the refusals come before the install; the tripwire proves the installed gnf4 carries
+the GNF4_GEMV_BW route (``_gemv_nf4_bw``, the prmt32 decode, the ``bw_*`` tally keys, an empty ``_BW_SHAPES``) and that
+prmt32 is the decode on the card; the premise (the kernel's contract, test_nf4_gemv_bw.py compiled: 27 passed, none
+skipped) comes before the bench; the bench is the gnf4 clone's at GNF4_SHA; every GNF4 decode knob starts unset; no
+model is fetched; and the lane's failure codes avoid the launcher's machine-exclusion codes (the disk floor's 13
+aside).
+"""
+import hashlib
+import pathlib
+import re
+import subprocess
+
+REPO = pathlib.Path(__file__).resolve().parents[1]
+LANE = REPO / "bench" / "k33"
+RUN = (LANE / "k33_run.sh").read_text()
+
+
+def _entries():
+    for line in (LANE / "staged.sha256").read_text().splitlines():
+        if line.strip() and not line.lstrip().startswith("#"):
+            want, name = line.split(None, 1)
+            yield want, name.strip()
+
+
+def test_the_runner_matches_its_pin():
+    entries = list(_entries())
+    assert [n for _w, n in entries] == ["k33_run.sh"]
+    got = hashlib.sha256((LANE / "k33_run.sh").read_bytes()).hexdigest()
+    assert got == entries[0][0], f"k33_run.sh changed without re-pinning ({got[:12]}); the next k33 launch refuses ON A RENTED BOX"
+
+
+def test_the_runner_shape():
+    install = RUN.index('say "install gnf4 @')
+    assert RUN.index("finish 15;") < install and RUN.index("finish 13;") < install
+    trip = RUN.index("python - <<'PYT'")
+    premise = RUN.index("python -m pytest test_nf4_gemv_bw.py")
+    bench = RUN.index("python $W/k33_bench.py $W/k33.json")
+    assert install < trip < premise < bench
+    assert "finish 23; }" in RUN[premise:bench]
+    assert 'grep -q "27 passed" && ! echo "$LASTL" | grep -q skipped' in RUN[premise:bench]
+    body = RUN[trip:premise]
+    assert 'ng._BW_SHAPES == frozenset()' in body and 'ng._bw_decode("cuda") == "prmt32"' in body
+    assert '"prmt.b32" in inspect.getsource(ng._nf4_prmt32.fn)' in body and 'commit_id") == os.environ["WANT_GNF4"]' in body
+    unset = RUN[RUN.index("unset GNF4_GEMV_BW"):RUN.index(": > summary.txt")]
+    for knob in ("GNF4_GEMV_BW", "GNF4_GEMV_BW_DECODE", "GNF4_GEMV_BW_PLAN", "GNF4_GEMV_DOTPAD", "GNF4_PDL", "TRITON_INTERPRET"):
+        assert knob in unset, knob
+    assert "cp $W/src/kernel/k33_bench.py $W/" in RUN
+    assert "snapshot_download" not in RUN and "step_decomp" not in RUN                 # no model
+
+
+def test_lane_failures_avoid_the_machine_exclusion_codes():
+    codes = {int(c) for c in re.findall(r"(?:finish|return) (\d+)", RUN)}
+    assert codes & {13, 14, 17, 18} == {13}, codes
+
+
+def test_the_driver_runs_to_its_dry_run(tmp_path):
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", "HOME": str(tmp_path), "E4B_RENT_SSH_HOST": "h",
+           "E4B_RENT_SSH_PORT": "1", "E4B_RENT_SSH_OPTS": "-o UserKnownHostsFile=/run/known_hosts", "E4B_RENT_RUN_DIR": str(tmp_path), "E4B_RENT_RUN_ID": "k33-dry", "E4B_RENT_DEADLINE_EPOCH": "1",
+           "E4B_RENT_INSTANCE_ID": "0", "E4B_SHA": "0" * 40, "GNF4_SHA": "1" * 40, "K33_DRIVE_DRYRUN": "1"}
+    out = subprocess.run(["bash", str(LANE / "k33_drive.sh")], capture_output=True, text=True, env=env)
+    assert out.returncode == 0 and out.stdout.startswith("DRYRUN stage -> root@h:/root/k33"), out.stdout + out.stderr
