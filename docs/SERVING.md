@@ -202,12 +202,29 @@ Engine knobs: `E4B_PAGED_MAX_SEQS` (16; batch width = KV slots), `E4B_PAGED_MAX_
 prompt + output per sequence -- a request past it is a 400, never clamped), `E4B_PAGED_CHUNK_TOKENS`
 (512), `E4B_PAGED_MAX_PREFILL_TOKENS` (per-step budget; default = chunk), `E4B_PAGED_GRAPHS` (`auto`, the default:
 bucketed CUDA-graph decode on scratch slots on a CUDA device of sm_89 or newer at `all-vram`; `0` eager, `1` forced) +
-`E4B_PAGED_BUCKETS` (`1,2,4,8,16`), `E4B_PAGED_TRACE=<path>`
+`E4B_PAGED_BUCKETS` (`1,2,4,8,16`, trimmed to `max_seqs`; `auto` follows `max_seqs`, below), `E4B_PAGED_TRACE=<path>`
 (one JSON line per finished request: arrival, admitted_at, first_token_at, finished_at, prompt_len,
 out_len, finish_reason -- server-side TTFT/ITL beside the client's), `E4B_PAGED_STEP_TRACE=<path>` and
 `E4B_PAGED_BULK_KV` (above), `E4B_HOST` / `E4B_PORT` / `E4B_TOKEN`
 as above. `GET /stats` returns the scheduler's `stats()` (TTFT p50/p99 **from arrival**, queue wait,
 per-stream rate) and the runner's graph statistics.
+
+**Slots above 16 (`E4B_PAGED_MAX_SEQS` > 16; opt-in, unread for speed).** The default bucket list stops at 16, so a
+decode step over 16 rows runs as consecutive 16-row replays with a host sync after each, and the server logs that at
+startup. `E4B_PAGED_BUCKETS=auto` captures every power of two below `max_seqs` and then `max_seqs` itself (32 ->
+`1,2,4,8,16,32`), so the widest step is one replay; up to 16 sequences it reads exactly the default list. Costs to
+weigh before raising either knob:
+- **KV pool.** Each slot holds `max_tokens_per_seq` of FP8 KV: 103.5 MiB per slot at 2,048 tokens on Qwen3-30B-A3B
+  (`serve_recipe.paged_kv_pool_bytes`), so 16 / 32 / 64 slots hold 1.63 / 3.26 / 6.52 GiB, twice that at 4,096
+  tokens. A scratch slot is one KV block, but on a hybrid model it is a full slot of linear-attention state.
+- **Routes.** Decode rows above 16 take the paths prefill chunks take today: `Int4Linear` above 16 rows runs cuBLAS on
+  its cached bf16 weight, more than 256 routed expert rows (bucket 64 at top-k 8) build the chained tile table, and
+  the T=1 folds stop at 64 rows (the server logs a bucket above 64).
+- **Graphs.** One more captured graph per bucket; its pool is not priced (`estimate_serve_footprint` says so).
+
+`/health` reports `engine.buckets_requested`, `engine.graph_stats` (per bucket: replays, eager steps, rows, padding
+rows) and `levers.kv.pool_mib`, and the step trace counts `dec_pieces` (replays per decode step). Lane SC2e (#846)
+registers the speed reading.
 
 **Decode graphs (#770; lanes P109, P110).** `serve_paged` captures bucketed decode graphs by default
 (`E4B_PAGED_GRAPHS=auto`: on a CUDA device at `all-vram`, eager elsewhere; `0` keeps eager decode). This is the path

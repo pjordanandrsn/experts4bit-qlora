@@ -29,6 +29,8 @@ from .recipe import Footprint, FootprintItem, QLoRASetup, _module_bytes, _stack_
 
 BLOCK_TOKENS = 16          # experts4bit_qlora.engines.fp8_paged_kv.BLOCK_TOKENS (asserted equal in the tests)
 DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
+#: ``E4B_PAGED_BUCKETS=auto`` / ``ServeSetup(buckets="auto")``: the buckets follow ``max_seqs`` (:func:`default_buckets`)
+BUCKETS_AUTO = "auto"
 
 
 @dataclass(frozen=True)
@@ -44,7 +46,9 @@ class ServeSetup:
     chunk_tokens: int = 512
     #: E4B_PAGED_GRAPHS: bucketed decode graphs add ``max(buckets)`` scratch KV slots
     graphs: bool = True
-    buckets: tuple = DEFAULT_BUCKETS
+    #: E4B_PAGED_BUCKETS: a tuple (trimmed to the sequences by :func:`usable_buckets`, as the server does) or ``"auto"``
+    #: (:func:`default_buckets`: up to ``max_seqs`` itself). :attr:`decode_buckets` is what the server captures
+    buckets: object = DEFAULT_BUCKETS
     #: E4B_PAGED_KV_GROUPS: "auto" or an int
     kv_groups: object = "auto"
     #: E4B_PAGED_PREFILL_GRAPH: "auto" (the server's default), "1" or "0". Its graph's private pool is not priced
@@ -65,12 +69,18 @@ class ServeSetup:
     def to_dict(self) -> dict:
         return asdict(self)
 
+    @property
+    def decode_buckets(self) -> tuple:
+        """The decode-graph buckets ``serve_paged`` captures for this setup (``PagedServeConfig.validate``'s rule)."""
+        return resolve_buckets(self.buckets, self.max_seqs)
+
     def to_env(self) -> dict:
         """The ``serve_paged`` environment that builds this setup (``PagedServeConfig.from_env`` reads it back)."""
         return {"E4B_PAGED_PLACEMENT": self.placement, "E4B_PAGED_MAX_SEQS": str(self.max_seqs),
                 "E4B_PAGED_MAX_TOKENS_PER_SEQ": str(self.max_tokens_per_seq),
                 "E4B_PAGED_CHUNK_TOKENS": str(self.chunk_tokens), "E4B_PAGED_GRAPHS": "1" if self.graphs else "0",
-                "E4B_PAGED_BUCKETS": ",".join(str(int(b)) for b in self.buckets),
+                "E4B_PAGED_BUCKETS": (BUCKETS_AUTO if _is_auto(self.buckets)
+                                      else ",".join(str(int(b)) for b in self.buckets)),
                 "E4B_PAGED_KV_GROUPS": str(self.kv_groups), "E4B_PAGED_PREFILL_GRAPH": str(self.prefill_graph),
                 "E4B_PAGED_VRAM_GB": repr(float(self.vram_gb)), "E4B_PAGED_DRAM_GB": repr(float(self.dram_gb)),
                 "E4B_PAGED_HOT_ROWS": str(int(self.hot_rows)),
@@ -87,6 +97,35 @@ def usable_buckets(max_seqs: int, buckets) -> tuple:
     measured worse: on Qwen3.6-35B-A3B served for one sequence, buckets 2-16 failed to capture."""
     keep = {int(b) for b in buckets if int(b) < max_seqs}
     return tuple(sorted(keep | {min(int(max_seqs), max(int(b) for b in buckets))}))
+
+
+def default_buckets(max_seqs: int) -> tuple:
+    """The buckets ``E4B_PAGED_BUCKETS=auto`` captures: every power of two below ``max_seqs``, then ``max_seqs`` itself,
+    so the widest decode step is ONE graph replay. Up to 16 sequences this is exactly what the default list
+    ``1,2,4,8,16`` leaves after :func:`usable_buckets`. Above 16 the default list caps the widest bucket at 16, and a
+    step over 16 rows runs as consecutive 16-row replays with a host sync after each; ``auto`` captures the wide bucket
+    instead (``max_seqs`` 32 -> ``1,2,4,8,16,32``). Each bucket costs a captured graph and the largest sizes the
+    scratch slots: one KV block each, and on a hybrid model a full slot of linear-attention state each."""
+    m = int(max_seqs)
+    if m < 1:
+        raise ValueError(f"max_seqs must be >= 1, got {max_seqs}")
+    return tuple(1 << i for i in range(m.bit_length()) if (1 << i) < m) + (m,)
+
+
+def _is_auto(buckets) -> bool:
+    return isinstance(buckets, str) and buckets.strip().lower() == BUCKETS_AUTO
+
+
+def resolve_buckets(buckets, max_seqs: int) -> tuple:
+    """``buckets`` as the server resolves it: ``"auto"`` -> :func:`default_buckets`; a sequence of ints (or their
+    comma-separated string) -> :func:`usable_buckets`."""
+    if _is_auto(buckets):
+        return default_buckets(max_seqs)
+    if isinstance(buckets, str):
+        buckets = tuple(int(x) for x in buckets.split(",") if x.strip())
+    if not buckets or min(int(b) for b in buckets) < 1:
+        raise ValueError(f"buckets must be positive ints or 'auto', got {buckets!r}")
+    return usable_buckets(max_seqs, buckets)
 
 
 def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_tokens_per_seq: int,
@@ -301,7 +340,7 @@ def serve_setup_refusals(topology, setup: ServeSetup) -> tuple:
     if setup.placement not in ("all-vram", "solver"):
         out.append(f"placement must be 'all-vram' or 'solver', got {setup.placement!r}")
     if setup.placement == "solver":
-        if setup.graphs and setup.max_seqs > 1 and max(setup.buckets) > 1:
+        if setup.graphs and setup.max_seqs > 1 and max(setup.decode_buckets) > 1:
             out.append("batched decode graphs bind to the all-vram placement (serve_paged refuses them with the solver); "
                        "plan graphs=False")
         if topology.expert_bias_tensors:
@@ -425,7 +464,7 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
                                    "preallocated at the swap" + ("" if exact else
                                                                  " (split counts at their ceilings: grouped-nf4-gemm's "
                                                                  "int4 kernels not importable)")))
-    scratch = max(usable_buckets(setup.max_seqs, setup.buckets)) if setup.graphs else 0      # what the server captures
+    scratch = max(setup.decode_buckets) if setup.graphs else 0      # what the server captures
     kv = paged_kv_pool_bytes(topology.kv_layers, topology.kv_heads, topology.kv_head_dims, batch=setup.max_seqs,
                              max_tokens_per_seq=setup.max_tokens_per_seq,
                              k_groups=None if setup.kv_groups == "auto" else int(setup.kv_groups), scratch_slots=scratch)
@@ -494,9 +533,10 @@ def estimate_serve_footprint(topology, setup: ServeSetup) -> Footprint:
     if setup.graphs:
         unmodelled.append("CUDA graph memory pools for the decode buckets (lane SV1: +60 MiB allocated on OLMoE-1B-7B, "
                           "16 seqs, RTX 5090, NF4" + ("; the int4 store's batched decode allocates its split-K partials "
-                                                      "through these pools, unmeasured)" if setup.exp_int4 else ")"))
+                                                      "through these pools, unmeasured" if setup.exp_int4 else "")
+                          + ("; buckets above 16 rows are unmeasured" if max(setup.decode_buckets) > 16 else "") + ")")
     hybrid = topology.attention is not None and topology.attention.layers < topology.n_layers
-    if str(setup.prefill_graph) != "0" and setup.graphs and setup.max_seqs > 1 and max(setup.buckets) > 1 and not hybrid:
+    if str(setup.prefill_graph) != "0" and setup.graphs and setup.max_seqs > 1 and max(setup.decode_buckets) > 1 and not hybrid:
         unmodelled.append("the first-chunk prefill graph's private pool, which the server keeps for its life when the "
                           "graph engages (E4B_PAGED_PREFILL_GRAPH=auto engages it only if that much is still free after "
                           "capture; lane SV1 measured +0.24 GiB on OLMoE-1B-7B and +0.57 GiB on Qwen3-30B-A3B at NF4, "

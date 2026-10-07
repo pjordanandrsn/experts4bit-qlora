@@ -475,3 +475,45 @@ def test_the_bulk_kv_flush_is_priced_at_the_slot_s_capacity():
     assert on.device_bytes - off.device_bytes == item.bytes
     assert ServeSetup(bulk_kv=False).to_env()["E4B_PAGED_BULK_KV"] == "0"
     assert append_prompt_peak_bytes([], 100) == 0
+
+
+def test_auto_buckets_end_at_max_seqs_and_match_the_default_list_up_to_16():
+    """``E4B_PAGED_BUCKETS=auto``: every power of two below ``max_seqs``, then ``max_seqs``. Up to 16 sequences it
+    reads exactly what the default list leaves after the trim, so ``auto`` changes nothing there."""
+    from experts4bit_qlora.serve_recipe import DEFAULT_BUCKETS, default_buckets, resolve_buckets, usable_buckets
+    for m in range(1, 17):
+        assert default_buckets(m) == usable_buckets(m, DEFAULT_BUCKETS)
+    assert default_buckets(24) == (1, 2, 4, 8, 16, 24)
+    assert default_buckets(32) == (1, 2, 4, 8, 16, 32)
+    assert default_buckets(64) == (1, 2, 4, 8, 16, 32, 64)
+    assert resolve_buckets("auto", 32) == resolve_buckets(" AUTO ", 32) == default_buckets(32)
+    assert resolve_buckets("1,2,4,8,16", 32) == (1, 2, 4, 8, 16)          # a list is trimmed, never widened
+    assert resolve_buckets((1, 2, 4, 8, 16), 12) == (1, 2, 4, 8, 12)
+    for bad in ("fast", (), (0, 1)):
+        with pytest.raises(ValueError):
+            resolve_buckets(bad, 4)
+    with pytest.raises(ValueError):
+        default_buckets(0)
+
+
+def test_auto_buckets_round_trip_and_the_estimate_prices_the_wide_bucket(monkeypatch):
+    from experts4bit_qlora.serve_paged import PagedServeConfig
+    monkeypatch.setenv("E4B_PAGED_DEVICE", "cpu")      # host-independent: no GPU facts enter from_env
+    st = ServeSetup(max_seqs=32, buckets="auto")
+    assert st.to_env()["E4B_PAGED_BUCKETS"] == "auto" and st.decode_buckets == (1, 2, 4, 8, 16, 32)
+    for k, v in st.to_env().items():
+        monkeypatch.setenv(k, v)
+    assert tuple(PagedServeConfig.from_env().buckets) == st.decode_buckets
+    assert ServeSetup(max_seqs=32).decode_buckets == (1, 2, 4, 8, 16)     # the default list: today's server
+    topo = describe_moe(_qwen3())
+    kw = dict(max_seqs=32, max_tokens_per_seq=256, graphs=True)
+
+    def kv(setup):
+        return next(i for i in estimate_serve_footprint(topo, setup).items if i.name == "FP8 paged KV pool").bytes
+
+    assert kv(ServeSetup(buckets="auto", **kw)) == paged_kv_pool_bytes(3, 2, 32, batch=32, max_tokens_per_seq=256,
+                                                                        scratch_slots=32)
+    assert kv(ServeSetup(**kw)) == paged_kv_pool_bytes(3, 2, 32, batch=32, max_tokens_per_seq=256, scratch_slots=16)
+    wide = estimate_serve_footprint(topo, ServeSetup(buckets="auto", **kw)).unmodelled
+    assert any("buckets above 16 rows are unmeasured" in u for u in wide)
+    assert not any("above 16 rows" in u for u in estimate_serve_footprint(topo, ServeSetup(**kw)).unmodelled)
