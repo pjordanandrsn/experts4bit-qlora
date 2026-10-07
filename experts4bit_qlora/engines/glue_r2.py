@@ -37,11 +37,10 @@ Engagement is census PRESENCE of ``_rmsnorm_resid_rows`` and
 from __future__ import annotations
 
 import inspect
-import os
 
 import torch
 
-from .glue_fuse import _is_rmsnorm, _norm_eps, _probe_matches
+from .glue_fuse import _is_rmsnorm, _norm_eps, _note, _probe_matches, fold_mode
 
 __all__ = ["fuse_t1_glue_r2"]
 
@@ -102,6 +101,11 @@ def _layer_scale(mod):
     return m
 
 
+class _KernelGap(RuntimeError):
+    """A structure this fold licenses, on a kernel cut that lacks what its patch needs. Under ``1`` it is raised as the
+    refusal it always was; under ``auto`` the module is left unpatched and counted."""
+
+
 def _kernel_has_scaled_fold(int4_b32) -> bool:
     fn = getattr(int4_b32, "rmsnorm_resid_rows", None)
     add = getattr(int4_b32, "scaled_resid_add_rows", None)
@@ -128,7 +132,7 @@ def _patch_layer_scaled(mod, scale, int4_b32) -> bool:
         return False
     scaled = scale != 1.0
     if scaled and not _kernel_has_scaled_fold(int4_b32):
-        raise RuntimeError(
+        raise _KernelGap(
             "E4B_FUSE_T1_GLUE_R2=1 on a residual-scaled layer body "
             f"({type(mod).__name__}, residual_multiplier={scale}) needs "
             "the kernel side's scaled residual fold "
@@ -450,7 +454,7 @@ def _patch_attention_rope_only(mod, int4_b32) -> bool:
         return False
     rope_heads = getattr(int4_b32, "rope_heads", None)
     if rope_heads is None:
-        raise RuntimeError(
+        raise _KernelGap(
             "E4B_FUSE_T1_GLUE_R2=1 on a norm-less attention "
             f"({type(mod).__name__}) needs the kernel side's rope_heads "
             "(grouped-nf4-gemm >= 0.28); install the matching cut or "
@@ -510,36 +514,49 @@ def _patch_attention_rope_only(mod, int4_b32) -> bool:
     return True
 
 
-def fuse_t1_glue_r2(model) -> tuple[int, int]:
+def fuse_t1_glue_r2(model, mode: str | None = None, report: dict | None = None) -> tuple[int, int]:
     """Apply the round-2 decode folds. Returns ``(layers, attentions)``.
 
-    Refuses a vacuous enable: an arm that asks for the fusion must get
-    it or an error, never a quiet no-op."""
-    if os.environ.get("E4B_FUSE_T1_GLUE_R2", "0") != "1":
+    ``mode`` (:func:`~.glue_fuse.fold_mode`; ``None`` reads ``E4B_FUSE_T1_GLUE_R2``): under ``1`` it refuses a
+    vacuous enable or a kernel cut that lacks what a matched structure needs -- an arm that asks for the fusion must
+    get it or an error, never a quiet no-op. Under ``auto`` those modules stay unpatched and ``report`` (a dict, when
+    given) counts them."""
+    mode = fold_mode("E4B_FUSE_T1_GLUE_R2", mode)
+    _note(report, mode=mode)
+    if mode == "0":
         return (0, 0)
     try:
         import int4_b32  # the module object is needed for the capability probe
         from int4_b32 import rmsnorm_resid_rows, rope_norm_heads
     except ImportError as e:
+        if mode == "auto":
+            _note(report, skipped=f"no kernel: {e}")
+            return (0, 0)
         raise RuntimeError(
             "E4B_FUSE_T1_GLUE_R2=1 needs the kernel side's "
             "rmsnorm_resid_rows/rope_norm_heads; install the matching "
             "cut or unset the flag") from e
 
-    layers = attns = 0
+    layers = attns = gaps = 0
     for mod in model.modules():
         name = type(mod).__name__
-        if name.endswith("DecoderLayer"):
-            scale = _layer_scale(mod)
-            if scale is None:
-                layers += bool(_patch_layer(mod, rmsnorm_resid_rows))
-            else:
-                layers += bool(_patch_layer_scaled(mod, scale, int4_b32))
-        elif name.endswith("Attention"):
-            attns += bool(_patch_attention(mod, rope_norm_heads)
-                          or _patch_attention_unfused(mod, rope_norm_heads)
-                          or _patch_attention_rope_only(mod, int4_b32))
-    if layers == 0 and attns == 0:
+        try:
+            if name.endswith("DecoderLayer"):
+                scale = _layer_scale(mod)
+                if scale is None:
+                    layers += bool(_patch_layer(mod, rmsnorm_resid_rows))
+                else:
+                    layers += bool(_patch_layer_scaled(mod, scale, int4_b32))
+            elif name.endswith("Attention"):
+                attns += bool(_patch_attention(mod, rope_norm_heads)
+                              or _patch_attention_unfused(mod, rope_norm_heads)
+                              or _patch_attention_rope_only(mod, int4_b32))
+        except _KernelGap:
+            if mode == "1":
+                raise
+            gaps += 1                       # auto: this module keeps its own forward
+    _note(report, patched=[layers, attns], kernel_gaps=gaps)
+    if layers == 0 and attns == 0 and mode == "1":
         raise RuntimeError(
             "E4B_FUSE_T1_GLUE_R2=1 patched nothing (no structurally "
             "matched decoder layer or fused attention passed the "

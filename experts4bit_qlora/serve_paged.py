@@ -37,7 +37,10 @@ P109, captures them on a CUDA device at the all-resident placement; with more th
 lane's sync-free device grouping is switched on, as ``_bv3_stage`` does) -> the scheduler. A
 lever that is set and patches nothing RAISES at startup (the lanes' ``_lever_check`` rule); the
 census -- how many modules each lever patched -- is reported at ``GET /health`` so a reader can
-tell which stack answered.
+tell which stack answered. The four fusion knobs (``E4B_PAGED_FUSE_QKV`` and the three folds) each
+also take ``auto`` (:func:`_fusion_env`): apply where the module structure and the installed kernels
+license it, patch nothing -- without raising -- where they do not; ``1`` keeps the refusal. All four
+default to ``0``; ``/health`` reports the modes and what each fold skipped.
 
 **Semantics (stated, not silently approximated).** Greedy only: ``temperature`` must be 0 or
 absent (the runner argmaxes; a nonzero temperature is a 400, never ignored). ``max_tokens`` is
@@ -124,6 +127,8 @@ LEVER_ENV = ("E4B_SERVE_EXP_INT4", "E4B_SERVE_EXP_INT4_CALIB", "E4B_SERVE_ATTN_I
              "E4B_INT4_ASSIGNMENT", "E4B_CALIB_LAYERS_PER_PASS", "E4B_INT4_KEEP_NF4",
              "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI", "E4B_FUSED_KV_APPEND")
 FUSION_ENV = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")
+FUSE_QKV_ENV = "E4B_PAGED_FUSE_QKV"
+FUSION_KNOBS = (FUSE_QKV_ENV,) + FUSION_ENV
 
 
 def _capability(device: str):
@@ -186,6 +191,22 @@ def _bulk_kv_env(value: str) -> bool:
     raise ValueError(f"E4B_PAGED_BULK_KV={value!r}: expected '0' or '1'")
 
 
+def _fusion_env(name: str, value: str) -> str:
+    """One fusion knob (``E4B_PAGED_FUSE_QKV``, ``E4B_FUSE_T1_GLUE``, ``E4B_FUSE_T1_GLUE_R2``, ``E4B_FUSE_ROUTER_EPI``),
+    one of three settings (:func:`~.engines.glue_fuse.fold_mode`):
+
+    * ``0`` (the default, also when unset or empty) leaves the model's own modules;
+    * ``1`` applies the fusion and refuses at startup if it patches nothing or the installed kernels lack it (the
+      lanes' rule; the registered B=1 fused stack is all four at ``1``, P54 / P58 / P88);
+    * ``auto`` applies it where the module structure and the installed kernels license it and patches nothing,
+      without raising, where they do not -- another family, an older kernel cut. ``/health`` says what it skipped.
+
+    Anything else is refused rather than read as one of these."""
+    from .engines.glue_fuse import fold_mode
+
+    return fold_mode(name, value or "")
+
+
 def log(msg: str) -> None:
     print(f"[serve_paged] {msg}", flush=True)
 
@@ -216,7 +237,9 @@ class PagedServeConfig:
     dram_gb: float = 6.0                 # E4B_PAGED_DRAM_GB
     hot_rows: int = 64                   # E4B_PAGED_HOT_ROWS
     kv_groups: str = "auto"              # E4B_PAGED_KV_GROUPS: auto | <int>
-    fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV=1 (fuse_qkv applies the env-gated folds itself)
+    fuse_qkv: bool = False               # E4B_PAGED_FUSE_QKV not 0 (fuse_qkv applies the env-gated folds itself)
+    fusion_modes: dict = field(default_factory=dict)   # FUSION_KNOBS -> auto | 0 | 1 (_fusion_env); a knob not named
+                                                       # keeps its old reading: fuse_qkv, or the fold's own env var
     torch_threads: int = 8               # E4B_PAGED_TORCH_THREADS
     max_tokens_cap: int = 0              # E4B_PAGED_MAX_TOKENS: 0 -> max_tokens_per_seq - 1 (refuses, never clamps)
     max_queue: int = 0                   # E4B_PAGED_MAX_QUEUE: in-flight cap, 0 = unbounded
@@ -236,6 +259,7 @@ class PagedServeConfig:
         def _ints(s):
             return tuple(int(x) for x in s.split(",") if x.strip())
 
+        modes = {k: _fusion_env(k, env(k, "")) for k in FUSION_KNOBS}
         cfg = cls(
             model=env("E4B_PAGED_MODEL", ""),
             arena=env("E4B_PAGED_ARENA", ""),
@@ -255,7 +279,8 @@ class PagedServeConfig:
             dram_gb=float(env("E4B_PAGED_DRAM_GB", "6.0")),
             hot_rows=int(env("E4B_PAGED_HOT_ROWS", "64")),
             kv_groups=env("E4B_PAGED_KV_GROUPS", "auto"),
-            fuse_qkv=env("E4B_PAGED_FUSE_QKV", "0") == "1",
+            fuse_qkv=modes[FUSE_QKV_ENV] != "0",
+            fusion_modes=modes,
             torch_threads=int(env("E4B_PAGED_TORCH_THREADS", "8")),
             max_tokens_cap=int(env("E4B_PAGED_MAX_TOKENS", "0")),
             max_queue=int(env("E4B_PAGED_MAX_QUEUE", "0")),
@@ -863,19 +888,39 @@ def _count(v):
     return [int(x) for x in v] if isinstance(v, (tuple, list)) else int(v)
 
 
-def _apply_fusions(model, cfg: PagedServeConfig) -> dict:
+def _apply_fusions(model, cfg: PagedServeConfig, report: dict | None = None) -> dict:
     """One assembly point, as the harness: ``qkv_fuse.fuse_qkv`` imports and calls ``fuse_t1_glue``,
     ``fuse_t1_glue_r2`` and ``fuse_router_epilogue`` itself after fusing (so the env flags are live on the
     fused path -- the registered B=1 stack is ``--fuse-qkv`` WITH the fold flags set); the unfused branch
     calls the three directly. The census carries what each fold RETURNED, never a literal 0: in the fused
     branch the fold functions are wrapped on their modules for the duration of the call -- ``fuse_qkv``
-    imports them inside its body, so the wrapper is what it calls -- and restored afterwards."""
+    imports them inside its body, so the wrapper is what it calls -- and restored afterwards.
+
+    Modes come from ``cfg.fusion_modes`` (``auto`` / ``0`` / ``1``, :func:`_fusion_env`). A knob it does not name keeps
+    its old reading -- ``cfg.fuse_qkv`` for the q/k/v fusion, the fold's own environment variable for a fold -- and is
+    called exactly as before, so a config built without modes behaves as it always did. Fused q/k/v at ``1`` refuses a
+    model with no Qwen3-MoE attention; at ``auto`` it fuses what matches and the folds run either way. ``report`` (a
+    dict, when given) receives the resolved modes and each fold's report."""
     from .engines import glue_fuse, glue_r2, router_epilogue
-    set_folds = [k for k in FUSION_ENV if os.environ.get(k, "0") == "1"]
+    modes = dict(cfg.fusion_modes or {})
+    qkv_mode = modes.get(FUSE_QKV_ENV) or ("1" if cfg.fuse_qkv else "0")
+    fold_modes = {k: modes.get(k) for k in FUSION_ENV}
+    fold_reports = {} if report is not None else None
+    resolved = {k: glue_fuse.fold_mode(k, fold_modes[k]) for k in FUSION_ENV}
+    set_folds = [k for k in FUSION_ENV if resolved[k] != "0"]
     folds = ((glue_fuse, "fuse_t1_glue", "fuse_t1_glue_n"),
              (glue_r2, "fuse_t1_glue_r2", "fuse_t1_glue_r2_n"),
              (router_epilogue, "fuse_router_epilogue", "fuse_router_epilogue_n"))
-    if cfg.fuse_qkv:
+
+    def _fold_kw(name):
+        kw = {}
+        if fold_modes[name] is not None:
+            kw["mode"] = fold_modes[name]
+        if fold_reports is not None:
+            kw["report"] = fold_reports.setdefault(name, {})
+        return kw
+
+    if qkv_mode != "0":
         from .engines.qkv_fuse import fuse_qkv
         captured: dict = {}
         saved = []
@@ -889,12 +934,17 @@ def _apply_fusions(model, cfg: PagedServeConfig) -> dict:
 
             saved.append((mod, fname, orig))
             setattr(mod, fname, _recording)
+        qkv_kw = {}
+        if any(v is not None for v in fold_modes.values()):
+            qkv_kw["fold_modes"] = fold_modes
+        if fold_reports is not None:
+            qkv_kw["fold_reports"] = fold_reports
         try:
-            n = fuse_qkv(model)
+            n = fuse_qkv(model, **qkv_kw)
         finally:
             for mod, fname, orig in saved:
                 setattr(mod, fname, orig)
-        if n == 0:
+        if n == 0 and qkv_mode == "1":
             raise RuntimeError("E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion")
         missing = [key for _, _, key in folds if key not in captured]
         if missing:
@@ -903,8 +953,11 @@ def _apply_fusions(model, cfg: PagedServeConfig) -> dict:
                 "point, so this census cannot be reported -- update _apply_fusions rather than guessing")
         out = {"fuse_qkv_n": int(n), **{key: _count(captured[key]) for _, _, key in folds}}
     else:
-        out = {"fuse_qkv_n": 0, **{key: _count(getattr(mod, fname)(model)) for mod, fname, key in folds}}
-    log(f"fusions (fold flags set: {set_folds or 'none'}): {out}")
+        out = {"fuse_qkv_n": 0, **{key: _count(getattr(mod, fname)(model, **_fold_kw(env_name)))
+                                   for (mod, fname, key), env_name in zip(folds, FUSION_ENV)}}
+    if report is not None:
+        report.update(modes={FUSE_QKV_ENV: qkv_mode, **resolved}, folds=fold_reports)
+    log(f"fusions (q/k/v {qkv_mode}; folds set: {set_folds or 'none'}): {out}")
     return out
 
 
@@ -1006,7 +1059,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     for m in mods:
         m._hot_residency.arm_amortization(False)          # --amort off: the production shape
     register(model)
-    fusions = _apply_fusions(model, cfg)
+    fusion_report: dict = {}
+    fusions = _apply_fusions(model, cfg, report=fusion_report)
 
     # proof of execution, the lanes' census (serve_stack.build_served_model) + their refusal rule
     try:
@@ -1044,6 +1098,8 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
             "graph_status": graph_status, "grouping": grouping, "prefill_graph": cfg.prefill_graph, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
     info.update(levers)
     info.update(fusions)
+    info["fusion_modes"] = fusion_report.get("modes")
+    info["fusion_report"] = fusion_report.get("folds")
     # The build churns through host buffers it frees (the hybrid tier's setup tier, the stacks' one-shot reads), and
     # glibc keeps freed blocks under its mmap threshold resident for the life of the server: 0.34 GB on OLMoE-1B-7B
     # (RTX A2000 host, the one place it was measured). The loader alone leaves ~4 MB.

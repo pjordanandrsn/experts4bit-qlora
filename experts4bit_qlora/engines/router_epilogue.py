@@ -271,14 +271,23 @@ def _kernel_supports_select_on_logits(router_epilogue) -> bool:
         return False
 
 
-def fuse_router_epilogue(model) -> int:
+def fuse_router_epilogue(model, mode: str | None = None, report: dict | None = None) -> int:
     """Patch every structurally-matched, probe-licensed router.
-    Returns the count; refuses a vacuous enable."""
-    if os.environ.get("E4B_FUSE_ROUTER_EPI", "0") != "1":
+
+    Returns the count. ``mode`` (:func:`~.glue_fuse.fold_mode`; ``None`` reads ``E4B_FUSE_ROUTER_EPI``): ``1``
+    refuses a missing kernel or a vacuous enable; ``auto`` returns 0 there instead and says why in ``report`` (a dict,
+    when given)."""
+    from .glue_fuse import _note, fold_mode
+    mode = fold_mode("E4B_FUSE_ROUTER_EPI", mode)
+    _note(report, mode=mode)
+    if mode == "0":
         return 0
     try:
         from int4_b32 import router_epilogue
     except ImportError as e:
+        if mode == "auto":
+            _note(report, skipped=f"no kernel: {e}")
+            return 0
         raise RuntimeError(
             "E4B_FUSE_ROUTER_EPI=1 needs the kernel side's "
             "router_epilogue; install the matching cut or unset the flag"
@@ -345,7 +354,8 @@ def fuse_router_epilogue(model) -> int:
                 return _assemble(_pos, logits if _raw else first, w, idx)
         mod.forward = _fwd
         n += 1
-    if n == 0:
+    _note(report, patched=n, failed_probe=skipped, no_kernel_mode=no_kernel_mode)
+    if n == 0 and mode == "1":
         raise RuntimeError(
             f"E4B_FUSE_ROUTER_EPI=1 patched no routers ({skipped} "
             "structurally matched but failed the semantic probe"
