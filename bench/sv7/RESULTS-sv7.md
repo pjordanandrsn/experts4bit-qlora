@@ -34,7 +34,7 @@ were byte-identical across the two boxes.
 
 | reading | `sv7-4090-1` | `sv7-4090-2` |
 |---|---|---|
-| V1 the plan fits | NO_READING (no driver samples) | **HELD**: no OOM; 21.916 GiB under the card |
+| V1 the plan fits | NO_READING (no driver samples) | **HELD**: no OOM; driver peak 21.916 GiB against the card's 23.988 GiB |
 | V2 the plan bounds the process | NO_READING | **HELD**: 23,532,142,592 B against the plan's 23,991,176,435 (0.43 GiB under) |
 | V3 the borrowed reserve | **HELD**: 865,356,800 B ≤ 919,447,283 | **HELD**: 863,259,648 B ≤ 919,447,283 |
 | V4 the estimate, long prompts | **HELD**, −1.6% | **HELD**, −1.6% |

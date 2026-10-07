@@ -6,7 +6,7 @@
   - Lane total $1.019 (`bench/sv7/RESULTS-sv7.md`). Both runs' receipts and verdicts are committed and byte-identical to
     the store's.
 - **Readings** (`sv7-4090-2`, through `bench/sv7/sv7_reduce.py`), all HELD:
-  - V1: no OOM at 8 × 8,000-token prompts;
+  - V1: no OOM at 8 × 8,000-token prompts, and the driver peak is under the card (21.916 of 23.988 GiB);
   - V2: driver peak 21.916 GiB against the 22.344 GiB plan;
   - V3: reserved minus allocated 823 MiB against the borrowed 877 MiB, in both runs;
   - V4: −1.6%;
