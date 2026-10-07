@@ -2579,3 +2579,42 @@ every padded call bucketed, the chunked loss serving the rows. It also requires 
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Five arms: about $2 with
 the download.
+
+### Amendment 59 (2026-10-07T06:07Z, after amendment 58's read, before any box): checkpoint inputs in pinned host memory at the field recipe (P158–P161)
+
+**Why.** Amendment 58's box read `E4B_CKPT_OFFLOAD=1` on packed rows. P153, P154 and P155 HELD: the training-phase peak fell 0.739 GB
+at 1.003× the step, and held-out moved +0.0002. By its rule, this registration reads the switch at TC1's field recipe before any default.
+There each layer's input is a few hundred tokens, so the copies are small, but there are as many of them a step and the step is shorter.
+The field box this reads against (amendment 50's, box 107) padded its micro-batches to 67–565 tokens, median 260. So the 47 inputs kept
+across a step at the longest micro-batch are 2 × 565 × 2,048 × 2 bytes = 4.6 MB each, about 0.22 GB, against 16.8 MB on packed rows.
+
+**The box** (token `qwen3ckptofff`). One RTX 5090 at TC1's field recipe: Qwen3-30B-A3B, seq 2048, micro-batch 2 × accum 4, 60
+load-gated steps, held-out every 20. Every arm in venv-unsloth (torch 2.12), at e4b's defaults otherwise: the double-quantized absmax,
+buckets `auto`, the chunked loss `auto` (both stay stock at this recipe, amendments 44 and 50). Avoiding machines 145701, 130223 and
+55583. In this order:
+- e4b `fused_attn4_shipped_f0` then `_f1`: the shipped arm, `E4B_CKPT_OFFLOAD=0` then `=1`;
+- e4b `fused_attn4_m_f0` then `_f1`: the matched arm, the same pair;
+- their second draws, `m_f1_d2`, `m_f0_d2`, `shipped_f1_d2`, `shipped_f0_d2` (A B B A on each arm).
+
+Every arm runs with `--phase-peaks 1`. Validity (`ckptoff_why`, its field-recipe form) requires torch 2.12, the absmax compressed, every
+padded call through the single block with none bucketed, no chunked loss call, and the checkpoint the side names: `f1` routes all 48
+layers (`ckpt_offload_layers`), `f0` routes none.
+
+**Predictions** (registered before the box):
+- **P158:** the matched arm's s/step `f1` / `f0` ≤ **1.01**, amendment 49's bar for a default at this recipe.
+- **P159:** the shipped arm's s/step `f1` / `f0` ≤ **1.01**.
+- **P160:** on each arm, |mean held-out at N, `f1` − `f0`| ≤ **0.005**.
+- **P161:** the matched arm's training-phase peak (median of the draws) falls by at least **0.10 GB** from `f0` to `f1`.
+
+**Decision rules.**
+- **All four HELD:** offloading becomes e4b's default (`E4B_CKPT_OFFLOAD` unset = on, `=0` off), in a library PR that cites both reads.
+- **P158 or P159 FALSIFIED, with P160 HELD:** the copies cost the short rows too much. The next step is a size gate,
+  `E4B_CKPT_OFFLOAD=auto`: offload only a micro-batch above a token threshold, as the chunked loss and the bucketing do. Its own field read
+  (auto never engages here) comes before it becomes the default.
+- **P161 FALSIFIED, the rest HELD:** the field recipe's training peak is not set while the inputs are alive. The read says what holds it,
+  and the size gate above is the next step.
+- **P160 FALSIFIED:** as amendment 58: a $0 correctness check of the offloaded path against the plain one on the RTX A2000 comes first.
+- No default changes on this box. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed on another host.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Eight field-recipe arms:
+about $2 with the download.
