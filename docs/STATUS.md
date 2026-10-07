@@ -233,7 +233,11 @@ unchanged (identical at step 0, +0.00005 at N; `e4b.train.chunked-eval-loss.pack
 field recipe the offload stepped 0.948 (matched) and 0.916 (shipped) of the default and took 0.17 GB off the matched training peak
 (`e4b.train.ckpt-offload.field.5090.2026-10-07`, TC1 amendment 59). By amendment 60's rule the chunked held-out loss is e4b's default
 under `enable_fast_train` (`0` off). The offload stays opt-in: amendment 59's rule asks for a torch 2.8 read on a host-bound box first
-(TC1 amendment 63), and why the field step got faster is TC1 amendment 62's question. The routed-expert combine
+(TC1 amendment 63). Both are now read. The field speed-up is the checkpoint flavour: the reentrant checkpoint alone steps 0.900 of
+Hugging Face's on the shipped arm, and the host-memory copies cost 1.019 on top (`e4b.train.ckpt-flavour.field.5090.2026-10-07`, TC1
+amendment 62). In torch 2.8 on a host-bound box the offload still never slows the step, 0.994 (matched) and 0.985 (shipped), and takes
+0.18 GB off the matched training peak (`e4b.train.ckpt-offload.field-torch28.5090.2026-10-07`, TC1 amendment 63). By amendment 63's rule
+the next read is the reentrant checkpoint's own default case (TC1 amendment 64). The routed-expert combine
 over row chunks (#1304, the default above a 128 MiB image) steps 0.978 of the whole-tensor combine on packed rows but leaves the training
 peak where it was, -0.009 GB (`e4b.train.combine-row-chunks.packed-4k.5090.2026-10-07`, TC1 amendment 61): at the defaults e4b's
 packed-row training phase still peaks 0.98 GB above Unsloth's, and what holds that peak is the next census's question.

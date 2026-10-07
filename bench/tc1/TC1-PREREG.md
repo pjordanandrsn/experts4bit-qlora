@@ -2801,3 +2801,51 @@ is not host-bound, and that arm's speed reading is UNTESTED, not HELD.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor. Eight profiled field-recipe arms in venv-e4b:
 about $2 with the download.
+
+### Amendment 64 (2026-10-07T12:06Z, after amendments 62 and 63 were read, before any box): the reentrant checkpoint as e4b's default checkpoint (P178–P183)
+
+**Why.** Amendment 62's read put amendment 59's field-recipe speed-up on the checkpoint flavour. The reentrant checkpoint alone stepped
+**0.900** of Hugging Face's, and adding the host-memory inputs cost 1.019 on top (shipped arm, torch 2.12, `tc1-5090-127`). Amendment
+63 then read the offload in torch 2.8 at the field recipe on a host-bound box: all four HELD, with a much smaller gain (0.994 matched,
+0.985 shipped, `tc1-5090-125`). By amendment 63's rule, because amendment 62 put the speed-up on the reentrant checkpoint alone, this
+registration reads the reentrant checkpoint's own default case before any default changes. Neither regime here has been read for it:
+- packed rows, where amendment 58 found the offload costing 1.003 and saving 0.74 GB;
+- the field recipe in torch 2.8.
+
+**The boxes.** Two RTX 5090 boxes, each running amendment 62's three sides with two draws a side (`r0 rr r1 r1 rr r0`) and
+`--phase-peaks 1`, avoiding machines 145701, 130223 and 55583. The sides are:
+- `r0`: `E4B_CKPT_OFFLOAD=0`, Hugging Face's checkpoint;
+- `rr`: `=reentrant`, the reentrant checkpoint alone;
+- `r1`: `=1`, the reentrant checkpoint with its inputs in host memory.
+
+The two boxes:
+- token `qwen3ckptre4k`: the matched arm on packed 4,096-token rows in venv-unsloth (torch 2.12), amendment 58's command;
+- token `qwen3ckptre28`: the shipped arm at the field recipe in venv-e4b (torch 2.8), amendment 63's command without the profile.
+
+Validity is `ckptre_why` in each regime's form (packed: every padded call bucketed, the chunked loss serving; field: neither) plus the
+checkpoint function the side names.
+
+**Predictions** (two VALID, stable draws a side). On packed rows:
+- **P178:** `rr` / `r0` ≤ **1.01**.
+- **P179:** |training-phase peak `rr` − `r0`| ≤ **0.05 GB**: the flavour alone does not move memory (at the field recipe it read
+  23.321 GB on both).
+- **P180:** `r1` / `rr` ≤ **1.01**: the copies cost at most 1 % on long rows.
+- **P181:** the largest |mean held-out at N| difference between two sides ≤ **0.005**.
+
+At the field recipe in torch 2.8:
+- **P182:** `rr` / `r0` ≤ **1.00**.
+- **P183:** held-out as P181.
+
+**Decision rules.**
+- **P178, P179, P181, P182 and P183 HELD:** the reentrant checkpoint becomes e4b's default checkpoint under `enable_fast_train` (unset =
+  reentrant, `1` adds the host-memory inputs, `0` Hugging Face's), in a library PR that cites amendments 58, 59 and 62–64 and states
+  their scope (one model, RTX 5090, torch 2.12 and 2.8). It keeps the guards built for the offload (a dense-offloaded model is left
+  alone; silent without checkpointing). The offload itself stays an opt-in memory lever.
+- **P180 also HELD:** STATUS recommends `E4B_CKPT_OFFLOAD=1` for long rows (0.74 GB for at most 1 %).
+- **P178 or P182 FALSIFIED:** the reentrant checkpoint is not a universal default. The read names the regime where it costs, and a
+  regime-gated default is registered next.
+- **P179 FALSIFIED:** the read says what the flavour changed in memory before any default.
+- **P181 or P183 FALSIFIED:** a $0 A2000 gradient check of the three checkpoints comes first.
+
+**Budget.** Two RTX 5090s at the policy rate ($0.85/h), 4 h guards, TC1's 98 GB host floor. Six packed arms and six field-recipe arms: about
+$3.5 with the downloads.

@@ -1,0 +1,10 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 595.91.07, GPU-eadc6e4d-d333-c7cd-3507-68ed3bc9a766, 575.00 W, 3105 MHz
+CPU(s):                                  32
+Model name:                              AMD Ryzen 9 9950X 16-Core Processor
+MemTotal:       129453600 kB
+cgroup memory.max 127257280512
+overlay         320G  2.6M  320G   1% /
+cgroup cpu.max 3071999 100000
+cgroup cpu.cfs_quota_us/period_us absent/absent
+cgroup cpuset.cpus.effective 0-31
+affinity cpus 32 of 32
