@@ -84,7 +84,7 @@ def _fused_forward(self, hidden_states, position_embeddings,
     return attn_output, attn_weights
 
 
-def fuse_qkv(model) -> int:
+def fuse_qkv(model, *, fold_modes: dict | None = None, fold_reports: dict | None = None) -> int:
     """Fuse every Qwen3MoeAttention's q/k/v projections in place.
 
     Returns the number of modules fused. REFUSES (raises) on a biased
@@ -92,6 +92,13 @@ def fuse_qkv(model) -> int:
     producing an unfused model the caller believes is fused -- the arm
     that requests fusion must get fusion or an error, never a quiet
     no-op ("green about other code").
+
+    Then applies the three env-gated decode folds. ``fold_modes`` maps
+    their knob names (``E4B_FUSE_T1_GLUE``, ``E4B_FUSE_T1_GLUE_R2``,
+    ``E4B_FUSE_ROUTER_EPI``) to a mode (``auto`` / ``0`` / ``1``,
+    :func:`~.glue_fuse.fold_mode`); a knob it does not name reads its own
+    environment variable, as before. ``fold_reports`` (a dict, when given)
+    receives each fold's report under its knob name.
     """
     fused = 0
     for mod in model.modules():
@@ -141,12 +148,19 @@ def fuse_qkv(model) -> int:
     # env-gated decode fusions ride the same serve assembly point so the
     # documented flags are LIVE on the advertised path (review finding:
     # an env var only read by a function nothing calls is dead)
+    def _kw(name):
+        kw = {}
+        if fold_modes and fold_modes.get(name) is not None:
+            kw["mode"] = fold_modes[name]
+        if fold_reports is not None:
+            kw["report"] = fold_reports.setdefault(name, {})
+        return kw
     from .glue_fuse import fuse_t1_glue
-    fuse_t1_glue(model)
+    fuse_t1_glue(model, **_kw("E4B_FUSE_T1_GLUE"))
     # round 2 rides the same point and runs AFTER the attention fusion
     # above, whose qkv_proj it requires (it replaces that forward)
     from .glue_r2 import fuse_t1_glue_r2
-    fuse_t1_glue_r2(model)
+    fuse_t1_glue_r2(model, **_kw("E4B_FUSE_T1_GLUE_R2"))
     from .router_epilogue import fuse_router_epilogue
-    fuse_router_epilogue(model)
+    fuse_router_epilogue(model, **_kw("E4B_FUSE_ROUTER_EPI"))
     return fused

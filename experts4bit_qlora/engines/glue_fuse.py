@@ -117,16 +117,49 @@ def _probe_variant(mod, eps: float):
     return None if best is None else best[1]
 
 
-def fuse_t1_glue(model) -> int:
+FOLD_MODES = ("auto", "0", "1")
+
+
+def fold_mode(name: str, value: str | None = None) -> str:
+    """One decode-fusion knob's mode (``E4B_FUSE_T1_GLUE``, ``E4B_FUSE_T1_GLUE_R2``, ``E4B_FUSE_ROUTER_EPI``,
+    ``E4B_PAGED_FUSE_QKV``):
+
+    * ``0`` -- off (also unset or empty: the library's default);
+    * ``1`` -- apply, and refuse a missing kernel or a vacuous enable (the lanes' rule);
+    * ``auto`` -- apply where the module structure and the installed kernels license it, and patch nothing,
+      without raising, where they do not (another family, an older kernel cut). ``serve_paged`` is the caller that
+      passes it.
+
+    ``value`` overrides the environment (``serve_paged`` passes its parsed config). Anything else is refused rather
+    than read as one of these."""
+    raw = os.environ.get(name, "") if value is None else value
+    v = (raw or "").strip().lower() or "0"
+    if v in FOLD_MODES:
+        return v
+    raise ValueError(f"{name}={raw!r}: expected 'auto', '0' or '1'")
+
+
+def _note(report, **kw) -> None:
+    if report is not None:
+        report.update(kw)
+
+
+def fuse_t1_glue(model, mode: str | None = None, report: dict | None = None) -> int:
     """Patch every structurally-matched RMSNorm for fused decode calls.
 
-    Returns the number of norms patched; refuses loudly on a missing
-    kernel or a zero-match enable."""
-    if os.environ.get("E4B_FUSE_T1_GLUE", "0") != "1":
+    Returns the number of norms patched. ``mode`` (:func:`fold_mode`; ``None`` reads ``E4B_FUSE_T1_GLUE``): ``1``
+    refuses loudly on a missing kernel or a zero-match enable; ``auto`` returns 0 there instead and says why in
+    ``report`` (a dict, when given)."""
+    mode = fold_mode("E4B_FUSE_T1_GLUE", mode)
+    _note(report, mode=mode)
+    if mode == "0":
         return 0
     try:
         from int4_b32 import rmsnorm_rows
     except ImportError as e:
+        if mode == "auto":
+            _note(report, skipped=f"no kernel: {e}")
+            return 0
         raise RuntimeError(
             "E4B_FUSE_T1_GLUE=1 needs the kernel side's rmsnorm_rows; "
             "install the matching cut or unset the flag") from e
@@ -154,7 +187,8 @@ def fuse_t1_glue(model) -> int:
 
         mod.forward = _fwd
         n += 1
-    if n == 0:
+    _note(report, patched=n, failed_probe=skipped)
+    if n == 0 and mode == "1":
         raise RuntimeError(
             f"E4B_FUSE_T1_GLUE=1 patched no RMSNorm modules "
             f"({skipped} name-matched but failed the semantic probe) -- "
