@@ -98,6 +98,33 @@ Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendmen
   - While `-4` ran, its gate checkout's nested `receipt.json` reached the receipt store and refused other launches. #1220 keeps the
     checkout off every fetch, and adertha#178 makes the reconciler read only `<date>/<run>/receipt.json`.
 
+## Amendment 56 (2026-10-07): the double-quantized absmax costs packed rows 0.2 % for 1.35 GB; e4b's training phase peaks 1.92 GB above Unsloth's with it (P144–P146, P148 HELD; P147 FALSIFIED)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 56. One RTX 5090 (`tc1-5090-113`, AMD EPYC 7713, a 61-CPU
+quota, Vast machine 19317). e4b `52acaa3`, grouped-nf4-gemm `0e6bff3`, Unsloth 2026.9.14, every arm in venv-unsloth (torch 2.12.1, triton
+3.7.1). Packed 4,096-token rows, 40 load-gated steps, every attempt first time at load1 1.3–1.4. Each arm's peak was split by phase
+(`--phase-peaks 1`). Read: [`RESULTS-tc1-dqpack.md`](RESULTS-tc1-dqpack.md).
+
+| arm | s/step (two draws) | run peak | setup | evaluation | training |
+|---|---|---|---|---|---|
+| e4b, fp32 expert absmax (`a0`, the library default) | 10.513 / 10.526 | 28.23 GB | 21.86 | 28.23 | 28.14 |
+| e4b, `E4B_ABSMAX_DQ=1` (`a1`) | 10.530 / 10.543 | 26.88 GB | 21.86 | 26.88 | 26.78 / 26.79 |
+| Unsloth `ckpt_unsloth_m_pp` (one draw) | 14.085 | 24.86 GB | 21.14 | 21.85 | 24.86 |
+
+- **P144 HELD:** the double-quantized absmax steps **1.002** [1.000, 1.003] of the fp32 absmax's time (≤ 1.02). **P145 HELD:** the run
+  peak falls 1.351 GB (≥ 1.2). **P146 HELD:** held-out at N moves +0.0002.
+- **P147 FALSIFIED:** with the double-quantized absmax, e4b's training-phase peak is **26.79 GB against Unsloth's 24.86: +1.92 GB**
+  (registered ≤ +1.0).
+- **P148 HELD, narrowly:** on every e4b draw the evaluation phase peaks above the training phase, but only by about 0.09 GB (28.23 against
+  28.14 with the fp32 absmax).
+- **This corrects how amendment 55 was read.** e4b's run peak is its evaluation, as the census found, but its training steps reach almost
+  the same height. The packed-row gap to Unsloth lives in training, not in the evaluation's logits. Unsloth's own evaluation peaks at
+  21.85 GB, 0.71 GB over its setup.
+- **By amendment 56's rules:**
+  - P144–P146 HELD: a library PR makes `enable_fast_train` compress the expert absmax by default for resident training, with the
+    trainer's guards and the stated evidence scope (one model, one RTX 5090, torch 2.12 / triton 3.7; the field image's torch 2.8 is unread).
+  - P147 FALSIFIED: the next registration is a census of the training phase, to name the 1.92 GB.
+
 ## Amendment 55 (2026-10-06): on packed rows e4b's run peak is its held-out evaluation, not its training step; with the double-quantized absmax the gap to Unsloth is 2.01 GB (P141–P143 HELD)
 
 Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 55. One RTX 5090 (`tc1-5090-112`, AMD EPYC 7K62, a 23-CPU
@@ -120,7 +147,7 @@ Amendment 47's census box at the current defaults: packed 4,096-token rows, 20 s
   forward on purpose: the held-out loss stays the stock path's bit for bit, and a caller that reads the logits still gets them. On a
   4,096-token row that stock forward holds the fp32 logits, cross-entropy's working copy and the bf16 head output at once: about 6.26
   GB on top of the static 21.99 GB. So the 28.23 GB packed-defaults peak (amendment 51) is e4b's evaluation, set against Unsloth's
-  training step. This census keeps only the snapshot that set the run's peak, so e4b's training-phase peak is not recorded here.
+  training step. This census keeps only the snapshot that set the run's peak, so e4b's training-phase peak is not recorded here. (Amendment 56 recorded it: 28.14 GB, about 0.09 GB below the evaluation. The gap is in training.)
 - **By amendment 55's rule** (P143 HELD), the next registration asks whether the library should default to the double-quantized absmax
   on packed rows, reading its speed there the way amendment 28 read it at the field recipe. The same box should record each arm's
   training-phase and evaluation peaks separately, so the packed memory comparison can be made phase for phase.

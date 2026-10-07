@@ -10981,6 +10981,31 @@
         "receipts/experts4bit-qlora/2026-10-06/tc1-5090-112/tc1/"
       ],
       "notes": "Vast invoiced $0.89."
+    },
+    {
+      "id": "e4b.train.absmax-dq.packed-4k.5090.2026-10-07",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 56 (#835), one rented RTX 5090 (tc1-5090-113, AMD EPYC 7713): e4b's matched arm on packed rows of 4,096 real tokens in venv-unsloth (torch 2.12.1, triton 3.7.1), 40 load-gated steps (every attempt first time), the fp32 expert absmax (the library default) against E4B_ABSMAX_DQ=1, two draws each in ABBA order, Unsloth 2026.9.14's matched arm beside (one draw), every arm with its peak split by phase (--phase-peaks 1). The double-quantized absmax steps 1.002 [1.000, 1.003] of the fp32 absmax's time (P144 HELD, <= 1.02), lowers the run peak from 28.228 to 26.877 GB (P145 HELD, >= 1.2 GB) and moves held-out at N +0.0002 (P146 HELD). By phase (setup / evaluation / training): e4b fp32 21.86 / 28.23 / 28.14 GB, e4b dq 21.86 / 26.88 / 26.79, Unsloth 21.14 / 21.85 / 24.86. e4b's training-phase peak with the double-quantized absmax is 1.922 GB above Unsloth's (P147 FALSIFIED, <= +1.0); its evaluation peak exceeds its training peak on every draw, by about 0.09 GB (P148 HELD).",
+      "value": 1.002,
+      "unit": "ratio s/step, E4B_ABSMAX_DQ=1 over the fp32 expert absmax, Qwen3-30B-A3B matched arm on packed 4,096-token rows (medians of steps 11..40 over two draws each); cross-draw interval [1.000, 1.003]; run peak -1.351 GB; training-phase peak +1.922 GB over Unsloth's",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-113: instance 54558732, AMD EPYC 7713, a 61-CPU quota, Vast machine 19317); e4b @ 52acaa3 + grouped-nf4-gemm @ 0e6bff3 in venv-unsloth, torch 2.12.1+cu130, triton 3.7.1; Unsloth 2026.9.14",
+      "conditions": "bench/tc1 token qwen3dqpack (TC1 amendment 56): packed rows (TC1_PACK=1, seq 4096, micro-batch 1 x accum 4, TC1_FREE_OUTPUTS=1), held-out at 0 and 40, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_m_a0 / _a1 (+ _d2) and Unsloth ckpt_unsloth_m_pp (grouped_mm), --phase-peaks 1; validity (dqpack_why) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-07",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-dqpack.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-113/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-06/tc1-5090-113/tc1/"
+      ],
+      "notes": "Vast invoiced $1.05."
     }
   ]
 }
