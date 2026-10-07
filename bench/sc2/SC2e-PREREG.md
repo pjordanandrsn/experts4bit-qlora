@@ -5,7 +5,11 @@ for maintainer review.
 
 **The code under test** is #1319 ("serve_paged: `E4B_PAGED_BUCKETS=auto` captures decode buckets up to
 `max_seqs`"), once merged. Its merge commit and `experts4bit_qlora/` tree hash are
-recorded here before the proof; the box runs this registration's merge commit, and the launch chain records both. It
+recorded here before the proof; the box runs this registration's merge commit, and the launch chain records both.
+**Recorded at review** (read from the objects, not recalled): #1319 merged as
+`a99b857e2c547f05926ec6fcc603203c49eb60be` (GitHub `mergedAt` 2026-10-07T18:37:46Z); `experts4bit_qlora/` tree at that
+commit `4d96736cb34dc0d8077969907cf3c27fa0be66ce`. The box's tripwire should find that tree at the launch commit unless
+a later package change lands first, in which case the launch commit's tree is recorded beside it. It
 brings:
 - `E4B_PAGED_BUCKETS=auto` (`serve_recipe.default_buckets`): every power of two below `max_seqs`, then `max_seqs`;
   opt-in, equal to the default list up to 16;
