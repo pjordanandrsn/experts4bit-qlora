@@ -582,6 +582,74 @@ def test_config_from_env_and_defaults(monkeypatch):
         PagedServeConfig.from_env()
 
 
+
+@pytest.mark.parametrize("max_seqs,value,buckets,requested", [
+    ("16", None, (1, 2, 4, 8, 16), "default"),
+    ("32", None, (1, 2, 4, 8, 16), "default"),              # unchanged: a 32-row step runs as two 16-row replays
+    ("8", "", (1, 2, 4, 8), "default"),
+    ("32", "auto", (1, 2, 4, 8, 16, 32), "auto"),
+    ("12", "AUTO", (1, 2, 4, 8, 12), "AUTO"),
+    ("64", "auto", (1, 2, 4, 8, 16, 32, 64), "auto"),
+    ("32", "1,2,4,8,16,32,64", (1, 2, 4, 8, 16, 32), "1,2,4,8,16,32,64"),
+])
+def test_buckets_default_to_the_list_and_auto_follows_max_seqs(monkeypatch, max_seqs, value, buckets, requested):
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)   # host-independent: no GPU facts
+    monkeypatch.setenv("E4B_PAGED_GRAPHS", "1")
+    monkeypatch.setenv("E4B_PAGED_MAX_SEQS", max_seqs)
+    if value is None:
+        monkeypatch.delenv("E4B_PAGED_BUCKETS", raising=False)
+    else:
+        monkeypatch.setenv("E4B_PAGED_BUCKETS", value)
+    cfg = PagedServeConfig.from_env()
+    assert tuple(cfg.buckets) == buckets and cfg.buckets_requested == requested
+
+
+@pytest.mark.parametrize("value", ["fast", "1,x", "0,1"])
+def test_buckets_refuse_what_they_cannot_read(monkeypatch, value):
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)
+    monkeypatch.setenv("E4B_PAGED_BUCKETS", value)
+    with pytest.raises(ValueError, match="E4B_PAGED_BUCKETS"):
+        PagedServeConfig.from_env()
+
+
+def test_a_server_wider_than_its_largest_bucket_says_so(monkeypatch, capsys):
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)
+    monkeypatch.setenv("E4B_PAGED_GRAPHS", "1")
+    monkeypatch.setenv("E4B_PAGED_MAX_SEQS", "32")
+    monkeypatch.delenv("E4B_PAGED_BUCKETS", raising=False)
+    PagedServeConfig.from_env()
+    assert "consecutive 16-row replays" in capsys.readouterr().out
+    monkeypatch.setenv("E4B_PAGED_BUCKETS", "auto")
+    PagedServeConfig.from_env()
+    assert "consecutive" not in capsys.readouterr().out
+
+
+def test_health_reports_the_buckets_asked_for_and_each_buckets_replays():
+    runner = ScriptedRunner()
+    runner.graph_stats = {1: {"replays": 5, "eager_steps": 0, "rows": 5, "pad_rows": 0},
+                          4: {"replays": 2, "eager_steps": 0, "rows": 7, "pad_rows": 1}}
+    client, engine = _client(runner, buckets=(1, 2, 4), buckets_requested="auto")
+    with client as c:
+        e = c.get("/health").json()["engine"]
+        assert e["buckets"] == [1, 2, 4] and e["buckets_requested"] == "auto"
+        assert e["graph_stats"] == {"1": runner.graph_stats[1], "4": runner.graph_stats[4]}
+    client, engine = _client(ScriptedRunner())
+    with client as c:
+        e = c.get("/health").json()["engine"]
+        assert e["graph_stats"] is None and e["buckets_requested"] == "default"
+
+
+def test_the_kv_pool_size_health_reports_is_the_pool_built():
+    pytest.importorskip("row_pool")
+    pytest.importorskip("fp8_kv")
+    from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
+    from experts4bit_qlora.serve_paged import _kv_pool_mib
+    kv = Fp8PagedKV(2, 4, 128, batch=8, max_tokens_per_seq=1024, device="cpu", scratch_slots=8)
+    allocated = sum(t.numel() * t.element_size() for t in (kv.kp.dev, kv.vp.dev, kv._bt_all, kv.seq_lens))
+    assert _kv_pool_mib(kv, PagedServeConfig(max_tokens_per_seq=1024)) == round(allocated / 2**20, 1) > 1
+    assert _kv_pool_mib(object(), PagedServeConfig()) is None          # a stand-in pool: reported as unknown
+
+
 # ---------------------------------------------------------------- fusions --
 
 FOLD_FLAGS = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")

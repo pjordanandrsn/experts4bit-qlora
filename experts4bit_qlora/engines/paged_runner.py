@@ -500,6 +500,7 @@ class PagedModelRunner(StepRunner):
             slots = [self.slot_of[r] for r in chunk]
             if tr is not None:
                 tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
+                tr.count("dec_pieces")             # > 1: the step ran as consecutive replays of the largest bucket
             for s_ in slots:
                 self._ensure_graph_ready(s_)
             if tr is not None:

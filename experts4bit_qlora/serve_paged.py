@@ -178,6 +178,24 @@ def _prefill_graph_env(value: str) -> str:
     raise ValueError(f"E4B_PAGED_PREFILL_GRAPH={value!r}: expected 'auto', '0' or '1'")
 
 
+def _buckets_env(value: str):
+    """``E4B_PAGED_BUCKETS``: a comma-separated list of decode-graph buckets (``1,2,4,8,16``, the default, also when
+    unset or empty), trimmed to what ``max_seqs`` sequences can use (:func:`~.serve_recipe.usable_buckets`), or
+    ``auto``: every power of two below ``max_seqs``, then ``max_seqs`` itself (:func:`~.serve_recipe.default_buckets`).
+    Up to 16 sequences the two read the same buckets. Above 16 the default list runs a wider decode step as consecutive
+    16-row replays with a host sync after each, and ``auto`` captures one graph that covers it. ``auto`` is opt-in until
+    a lane reads it. Anything else is refused rather than guessed."""
+    v = (value or "").strip()
+    if not v:
+        return DEFAULT_BUCKETS
+    if v.lower() == "auto":
+        return "auto"
+    try:
+        return tuple(int(x) for x in v.split(",") if x.strip())
+    except ValueError:
+        raise ValueError(f"E4B_PAGED_BUCKETS={value!r}: expected 'auto' or comma-separated positive ints") from None
+
+
 def _bulk_kv_env(value: str) -> bool:
     """``E4B_PAGED_BULK_KV``: ``1`` runs a request's KV bookkeeping in bulk (:class:`~.engines.paged_runner.PagedModelRunner`
     ``bulk_kv``): the slot reset at admission and at finish, the prompt's flush into the FP8 pool, and, with decode
@@ -231,7 +249,8 @@ class PagedServeConfig:
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
-    buckets: tuple = DEFAULT_BUCKETS     # E4B_PAGED_BUCKETS="1,2,4,8,16"
+    buckets: tuple = DEFAULT_BUCKETS     # E4B_PAGED_BUCKETS="1,2,4,8,16" or "auto" (validate resolves; _buckets_env)
+    buckets_requested: str = "default"   # E4B_PAGED_BUCKETS as given ("default" when unset or empty); /health reports it
     placement: str = "all-vram"          # E4B_PAGED_PLACEMENT: all-vram | solver
     vram_gb: float = 1.2                 # E4B_PAGED_VRAM_GB (solver budget; the harness default)
     dram_gb: float = 6.0                 # E4B_PAGED_DRAM_GB
@@ -273,7 +292,8 @@ class PagedServeConfig:
             graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
                                env("E4B_PAGED_PLACEMENT", "all-vram"), _capability(env("E4B_PAGED_DEVICE", "cuda"))),
             prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "auto")),
-            buckets=_ints(env("E4B_PAGED_BUCKETS", "1,2,4,8,16")),
+            buckets=_buckets_env(env("E4B_PAGED_BUCKETS", "")),
+            buckets_requested=(env("E4B_PAGED_BUCKETS", "") or "").strip() or "default",
             placement=env("E4B_PAGED_PLACEMENT", "all-vram"),
             vram_gb=float(env("E4B_PAGED_VRAM_GB", "1.2")),
             dram_gb=float(env("E4B_PAGED_DRAM_GB", "6.0")),
@@ -305,15 +325,25 @@ class PagedServeConfig:
             raise ValueError("E4B_PAGED_CHUNK_TOKENS must be >= 1")
         if self.max_prefill_tokens < 0:
             raise ValueError("E4B_PAGED_MAX_PREFILL_TOKENS must be >= 0 (0 = chunk_tokens)")
+        from .serve_recipe import default_buckets, usable_buckets
+        if isinstance(self.buckets, str):
+            if self.buckets.strip().lower() != "auto":
+                raise ValueError(f"E4B_PAGED_BUCKETS={self.buckets!r}: expected 'auto' or comma-separated positive ints")
+            self.buckets = default_buckets(self.max_seqs)
         if not self.buckets or min(self.buckets) < 1:
             raise ValueError(f"E4B_PAGED_BUCKETS must be positive ints, got {self.buckets}")
-        from .serve_recipe import usable_buckets
         usable = usable_buckets(self.max_seqs, self.buckets)
         if tuple(self.buckets) != usable:
             # a bucket above max_seqs never runs; it costs a graph and scratch slots, and on a hybrid model served for
             # one sequence it failed to capture (lane SV3)
             log(f"buckets {list(self.buckets)} -> {list(usable)}: none above max_seqs={self.max_seqs}")
             self.buckets = usable
+        if self.graphs and self.max_seqs > max(self.buckets):
+            log(f"decode steps above {max(self.buckets)} rows run as consecutive {max(self.buckets)}-row replays "
+                f"(max_seqs={self.max_seqs}); E4B_PAGED_BUCKETS=auto captures buckets up to max_seqs")
+        if self.graphs and max(self.buckets) > 64:
+            # glue_fuse / glue_r2 / router_epilogue fold only up to 64 rows: wider decode steps run the unfused glue
+            log(f"bucket {max(self.buckets)}: decode rows above 64 leave the T=1 folds; nothing has read them there")
         if self.placement not in ("all-vram", "solver"):
             raise ValueError(f"E4B_PAGED_PLACEMENT must be all-vram or solver, got {self.placement!r}")
         if self.kv_groups != "auto":
@@ -998,6 +1028,20 @@ def _batched_graph_grouping(cfg: PagedServeConfig) -> dict:
     return {"device_grouping": bool(_hr.DEVICE_GROUPING[0]), "force_singleton_groups": bool(_hr.FORCE_SINGLETON_GROUPS[0])}
 
 
+def _kv_pool_mib(kv, cfg: PagedServeConfig):
+    """MiB the FP8 paged KV pool holds: ``serve_recipe.paged_kv_pool_bytes`` on the geometry the pool was built with
+    (the tests assert that arithmetic equals a constructed pool's), so ``/health`` names what a ``max_seqs`` costs."""
+    from .serve_recipe import paged_kv_pool_bytes
+
+    try:
+        b = paged_kv_pool_bytes(kv.L, kv.Hs, kv.Ds, batch=kv.B, max_tokens_per_seq=cfg.max_tokens_per_seq,
+                                k_groups=None if cfg.kv_groups == "auto" else int(cfg.kv_groups),
+                                scratch_slots=kv.n_scratch)
+    except (AttributeError, ImportError, TypeError, ValueError):
+        return None
+    return round(b / 2**20, 1)
+
+
 def build_engine(cfg: PagedServeConfig) -> EngineParts:
     """The harness's construction, in its order (see the module docstring). GPU only."""
     cfg.validate()
@@ -1094,7 +1138,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     info = {"moe_layers": L, "experts": E, "top_k": k, "model_type": getattr(model.config, "model_type", None),
             "int4_expert_layers": int4_layers, "int4_store_kinds": kinds, "int4_attn_projections": int4_attn,
             "kv": {"n_kv_heads": hkv, "head_dim": hd, "k_groups": cfg.kv_groups, "scratch_slots": scratch,
-                   "blocks_per_seq": getattr(kv, "blocks_per_seq", None)},
+                   "blocks_per_seq": getattr(kv, "blocks_per_seq", None), "pool_mib": _kv_pool_mib(kv, cfg)},
             "graph_status": graph_status, "grouping": grouping, "prefill_graph": cfg.prefill_graph, "levers_env": {k_: env(k_) for k_ in LEVER_ENV if env(k_) is not None}}
     info.update(levers)
     info.update(fusions)
@@ -1113,6 +1157,13 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
 # ---------------------------------------------------------------------------
 # HTTP
 # ---------------------------------------------------------------------------
+
+
+def _graph_stats(parts):
+    """Per decode bucket, what the runner did with it (``replays``, ``eager_steps``, ``rows``, ``pad_rows``): a copy of
+    ``PagedModelRunner.graph_stats``, None for a runner without decode graphs. ``/stats`` carries the same."""
+    gs = getattr(getattr(parts, "runner", None), "graph_stats", None)
+    return {str(k): dict(v) for k, v in gs.items()} if isinstance(gs, dict) else None
 
 
 def _sse(obj) -> str:
@@ -1347,7 +1398,8 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
             "engine": {
                 "max_seqs": cfg.max_seqs, "kv_slots": cfg.max_seqs, "max_tokens_per_seq": cfg.max_tokens_per_seq,
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
-                "graphs": cfg.graphs, "buckets": list(cfg.buckets), "graph_status": info.pop("graph_status", None),
+                "graphs": cfg.graphs, "buckets": list(cfg.buckets), "buckets_requested": cfg.buckets_requested,
+                "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
                 "placement": cfg.placement, "fuse_qkv": cfg.fuse_qkv, "max_tokens_limit": cfg.max_tokens_limit,
                 "max_queue": cfg.max_queue or None, "bulk_kv": cfg.bulk_kv,
             },
