@@ -2623,3 +2623,49 @@ layers (`ckpt_offload_layers`), `f0` routes none.
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Eight field-recipe arms:
 about $2 with the download.
+
+### Amendment 60 (2026-10-07T06:29Z, after amendment 58's read, before any box): the held-out loss from the logits in chunks on packed rows (P162–P165)
+
+**Why.** Amendment 58's read left e4b's packed-row run peak in its held-out evaluation: 26.877 GB on every e4b draw, above the training
+phase's 26.59 GB (25.85 GB with `E4B_CKPT_OFFLOAD=1`). Unsloth's evaluation phase peaked at 21.85 GB. A `torch.no_grad` forward with labels
+runs Hugging Face's loss, which upcasts the whole logits to fp32 and takes the log-softmax of the copy. On an RTX A2000 at Qwen3's
+vocabulary and 4,096 tokens that is 4.637 GiB above the bf16 logits. `E4B_CHUNKED_EVAL_LOSS=1` (#1302, opt-in) runs such a forward without
+labels, returns the stock logits and takes the loss from them in 512-token fp32 chunks. That is 0.580 GiB above the logits, with the loss
+bit-identical at 2,048 and 4,096 tokens there (`bench/chunked-lm-loss/receipts/eval_loss_peak_a2000.json`). This box reads it in the run.
+
+**The box** (token `qwen3evalce`). One RTX 5090, packed 4,096-token rows, 40 load-gated steps, held-out at 0 and 40 (amendment 58's
+command). e4b's matched arm in venv-unsloth with `E4B_CKPT_OFFLOAD=1` and its defaults otherwise: the double-quantized absmax, buckets
+`auto`, the chunked training loss `auto`. Avoiding machines 145701, 130223 and 55583. In this order:
+- e4b `fused_attn4_m_e0`: `E4B_CHUNKED_EVAL_LOSS=0`;
+- e4b `fused_attn4_m_e1`: `E4B_CHUNKED_EVAL_LOSS=1`;
+- their second draws, `_e1_d2` then `_e0_d2` (A B B A);
+- Unsloth `ckpt_unsloth_m_ee`: one draw.
+
+Every arm runs with `--phase-peaks 1`. Validity (`evalce_why`) requires amendment 58's predicates for its `o1` side: torch 2.12, the
+absmax compressed, every padded call bucketed, the chunked training loss serving the rows, all 48 layers offloaded. It also requires
+the eval switch the side names: `e1` records `E4B_CHUNKED_EVAL_LOSS=1` with at least one held-out forward through it, and `e0` records
+`0` with none.
+
+**Predictions** (registered before the box):
+- **P162:** the evaluation-phase peak (median of each side's draws) falls by at least **3.5 GB** from `e0` to `e1`. The A2000 measured
+  4.06 GiB (4.36 GB) of the loss's own transient.
+- **P163:** on every `e1` draw the evaluation-phase peak is below the training-phase peak, so the run peak is training's.
+- **P164:** |step-0 held-out `e1` − `e0`| ≤ **0.0001** on each draw pair (`e1` / `e0`, `e1_d2` / `e0_d2`). Amendment 58's four e4b
+  draws read 1.28851 alike at step 0, so a larger difference is the loss, not the run.
+- **P165:** |mean held-out at N, `e1` − `e0`| ≤ **0.005**.
+
+The run peak against Unsloth's is reported, not scored.
+
+**Decision rules.**
+- **All four HELD:** `E4B_CHUNKED_EVAL_LOSS` becomes on by default (unset = on above the gate, `0` off), in a library PR that cites this
+  read. At TC1's field recipe the evaluation rows stay under the 1 GiB gate, so the field recipe's held-out is unchanged by construction.
+  That PR states its scope (maintainer review, before any box): one model, one RTX 5090, torch 2.12. Its changelog also says that,
+  above the gate, a user's held-out loss can move at the scale of fp32 summation order, bounded by this box's P164 and P165 readings,
+  so evaluations compared across the flip are not byte-identical.
+- **P164 or P165 FALSIFIED:** the loss differs by more than rounding, a defect signal. A $0 check of the full evaluation forward against
+  stock on the RTX A2000 comes before any further registration.
+- **P162 or P163 FALSIFIED:** the read says what holds the evaluation phase instead, and the switch stays opt-in.
+- No default changes on this box. **Any UNTESTED, none FALSIFIED:** a re-ask is allowed.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Five packed arms (amendment
+58's box cost $0.82): about $1–2 with the download.
