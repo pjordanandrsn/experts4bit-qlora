@@ -27,6 +27,12 @@ What the reentrant checkpoint changes for a caller:
   leaves the hook in place.
 ``E4B_CKPT_OFFLOAD=0`` restores Hugging Face's checkpoint.
 
+It applies to the layers checkpointed when it runs. Calling ``gradient_checkpointing_enable()`` afterwards puts Hugging Face's
+checkpoint back on every layer, and Hugging Face's ``Trainer`` (TRL's too) does exactly that inside ``train()`` when its arguments say
+``gradient_checkpointing=True``. To keep e4b's checkpoint there, enable checkpointing on the model before ``enable_fast_train`` and
+leave the trainer's ``gradient_checkpointing`` off, as the guide's loop does; calling ``enable_fast_train`` (or this function) again
+after a re-enable routes the layers again.
+
 Where it is not applied: layers that ``E4B_MOE_KEEP_LAYERS`` took out of whole-layer checkpointing keep their activations by design. A
 model without gradient checkpointing is left unchanged (silently by default, with a warning when the variable was set). By default, a
 model whose decoder layers carry ``enable_dense_offload``'s handles is left alone too, because dense offload's train-prefetch schedule
@@ -119,11 +125,16 @@ def enable_checkpoint_offload(model, verbose: bool = False, explicit: bool = Tru
                       "Call model.gradient_checkpointing_enable() first.", RuntimeWarning, stacklevel=2)
         return 0
     n = 0
+    want = reentrant_checkpoint if mode == _REENTRANT else offloaded_checkpoint
     for m in layers:
-        if getattr(m, "_e4b_ckpt_offload_ref", None) is not None:
+        cur = m._gradient_checkpointing_func
+        if cur is want:
             continue
-        m._e4b_ckpt_offload_ref = m._gradient_checkpointing_func
-        m._gradient_checkpointing_func = reentrant_checkpoint if mode == _REENTRANT else offloaded_checkpoint
+        # A layer routed before whose checkpoint was replaced since -- Hugging Face's Trainer calls gradient_checkpointing_enable()
+        # again inside train() -- keeps the replacement as the function disable restores; one already on the other mode keeps its ref.
+        if cur not in (reentrant_checkpoint, offloaded_checkpoint) or getattr(m, "_e4b_ckpt_offload_ref", None) is None:
+            m._e4b_ckpt_offload_ref = cur
+        m._gradient_checkpointing_func = want
         n += 1
     if n and hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()

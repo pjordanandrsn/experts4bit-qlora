@@ -67,6 +67,23 @@ def test_disable_restores_and_enable_is_idempotent():
     assert [lay._gradient_checkpointing_func for lay in m.model.layers] == before
 
 
+def test_a_trainer_re_enable_replaces_the_route_and_enable_routes_again():
+    # Hugging Face's Trainer calls gradient_checkpointing_enable() inside train() when its arguments ask for checkpointing: that puts
+    # Hugging Face's checkpoint back on every layer. Routing again must work (a stale ref made it a silent 0), and disable must
+    # restore the re-enabled function, not the first one.
+    m = _tiny()
+    assert ckpt_offload.enable_checkpoint_offload(m, explicit=False, mode="reentrant") == 3
+    m.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    hf = [lay._gradient_checkpointing_func for lay in m.model.layers]
+    assert not any(f in (ckpt_offload.reentrant_checkpoint, ckpt_offload.offloaded_checkpoint) for f in hf)
+    assert ckpt_offload.enable_checkpoint_offload(m, explicit=False, mode="reentrant") == 3
+    assert all(lay._gradient_checkpointing_func is ckpt_offload.reentrant_checkpoint for lay in m.model.layers)
+    assert ckpt_offload.enable_checkpoint_offload(m, mode="offload") == 3            # an explicit switch of mode re-routes too
+    assert all(lay._gradient_checkpointing_func is ckpt_offload.offloaded_checkpoint for lay in m.model.layers)
+    assert ckpt_offload.disable_checkpoint_offload(m) == 3
+    assert [lay._gradient_checkpointing_func for lay in m.model.layers] == hf
+
+
 def test_no_checkpointing_is_left_alone_with_a_warning():
     m = _tiny()
     m.gradient_checkpointing_disable()
