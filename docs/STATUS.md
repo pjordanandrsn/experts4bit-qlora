@@ -199,11 +199,7 @@ Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362). `0`
 
 **Other opt-ins.** `E4B_PAGED_DECODE_LOOKAHEAD=1` recovers the whole host gap between decode steps, but the gap is
 small: 1.0198× at one request, SLOWER against its 1.02 bar. `E4B_PAGED_LAST_LOGITS=1` projects only the final prompt
-position through the LM head (#1337). `E4B_INT4_WIDE_TILES=1` builds the tile table above 256 routed rows in one
-launch. On Qwen3-30B-A3B int4 the one-piece table made the 64-row step 1.44× slower (P120). grouped-nf4-gemm #519's
-chunked table makes it 4.3 % faster (P122, DEFAULT_ON); the default flip, scoped to the table size read, is its own PR.
-`e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`, `e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08`,
-`e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08`.
+position through the LM head (#1337). `e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08`.
 
 **Qwen3-30B-A3B's licensed int4 stack** (calibrated int4 experts and attention, folds, router epilogue) passes the K8
 gate on both texts loaded by fingerprint (expert pack `sha256:0c9955a9…`; wikitext −0.05275, c4val1 −0.06622 ppl). On
@@ -266,6 +262,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | programmatic dependent launch, capped at 8 rows | grouped-nf4-gemm | `GNF4_PDL=0` | `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` |
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07` |
 | grouped small-M routes above T == 1 (K19, K23, K21, K25; K25 read on Granite, OLMoE and Qwen3's W16 step) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`, `e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08` |
+| the one-launch tile table above 256 routed rows, up to the size read (`next_pow2(E) × next_pow2(R) ≤ 128 × 512`; takes effect with a grouped-nf4-gemm release carrying #519's chunked table; the one-piece table read 1.44× slower) | serving | `E4B_INT4_WIDE_TILES=0` | `e4b.serve.p122.wide-tiles-chunked.qwen3-int4.5090.2026-10-08`, `e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07` |
 
