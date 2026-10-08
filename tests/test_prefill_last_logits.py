@@ -150,28 +150,45 @@ def test_capture_control_flow_uses_the_mode_for_every_warmup_and_capture(monkeyp
     assert runner.ctx.mode == "decode" and not runner.ctx.staging
 
 
-def test_real_qwen_head_projects_one_row_while_the_decoder_processes_the_prompt():
+@pytest.mark.parametrize("family", ["qwen3", "qwen3_moe"])
+@pytest.mark.parametrize("length", [5, 16])
+def test_real_qwen_final_row_matches_full_head_at_pinned_tolerance(family, length):
+    """CPU float32 function check: rtol=1e-5, atol=1e-6, not a served quality bar.
+
+    Compare the runner's kept row with the final row, and ensure the first row
+    would fail. Both dense and MoE decoders must still process every position.
+    """
     transformers = pytest.importorskip("transformers")
     from transformers.models.qwen3.modeling_qwen3 import Qwen3ForCausalLM
+    from transformers.models.qwen3_moe.modeling_qwen3_moe import Qwen3MoeForCausalLM
 
     torch.manual_seed(41)
-    config = transformers.Qwen3Config(hidden_size=32, intermediate_size=64, num_hidden_layers=2,
-                                      num_attention_heads=2, num_key_value_heads=1, head_dim=16,
-                                      vocab_size=128, max_position_embeddings=64)
-    model = Qwen3ForCausalLM(config).eval()
-    ids = torch.randint(0, config.vocab_size, (1, 16))
+    settings = dict(hidden_size=32, intermediate_size=64, num_hidden_layers=2, num_attention_heads=2,
+                    num_key_value_heads=1, vocab_size=128, max_position_embeddings=64)
+    if family == "qwen3":
+        config = transformers.Qwen3Config(**settings, head_dim=16)
+        model = Qwen3ForCausalLM(config).eval()
+    else:
+        config = transformers.Qwen3MoeConfig(**settings, moe_intermediate_size=64,
+                                             num_experts=4, num_experts_per_tok=2)
+        model = Qwen3MoeForCausalLM(config).eval()
+    ids = torch.randint(0, config.vocab_size, (1, length))
+    positions = torch.arange(length)[None]
+    kv = SimpleNamespace(L=2, B=1, scratch=())
+    full_runner = PagedModelRunner(model, kv, device="cpu")
+    last_runner = PagedModelRunner(model, kv, device="cpu", last_logits=True)
     head_shapes, layer_shapes = [], []
     head = model.lm_head.register_forward_pre_hook(lambda _m, args: head_shapes.append(tuple(args[0].shape)))
     layer = model.model.layers[0].register_forward_pre_hook(lambda _m, args: layer_shapes.append(tuple(args[0].shape)))
     try:
-        with torch.no_grad():
-            full = model(input_ids=ids, use_cache=False).logits
-            last = model(input_ids=ids, use_cache=False, **_last_logits_kwargs(model, True)).logits
+        full = full_runner._prefill_forward(ids, positions).logits
+        last = last_runner._prefill_forward(ids, positions).logits
     finally:
         head.remove()
         layer.remove()
-    assert head_shapes == [(1, 16, 32), (1, 1, 32)]
-    assert layer_shapes == [(1, 16, 32), (1, 16, 32)]
+    assert head_shapes == [(1, length, 32), (1, 1, 32)]
+    assert layer_shapes == [(1, length, 32), (1, length, 32)]
     assert last.shape == (1, 1, 128)
     torch.testing.assert_close(last, full[:, -1:], rtol=1e-5, atol=1e-6)
+    assert not torch.allclose(full[:, :1], full[:, -1:], rtol=1e-5, atol=1e-6)
     assert torch.equal(last.argmax(-1), full[:, -1:].argmax(-1))
