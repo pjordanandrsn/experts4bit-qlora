@@ -211,3 +211,45 @@ proof launches from a commit that contains #1398, #1395 and this amendment.
 
 **Re-pinned before any box ran:** `p123_box.py`, `p123_run.sh` and `p123_reduce.py` in `staged-p123.sha256`. The
 borrowed files are unchanged.
+
+## Amendment 2 (2026-10-08, after `p123-prove-1`; the class map names `torch.cat`; before `p123-prove-2`)
+
+**What happened.** `p123-prove-1` VOIDed (rc 27, $0.189; adertha-receipts `d41435c4`) on one reason:
+`census_b1: CLASS_MAP_INCOMPLETE`.
+- **The gate:** the B = 1 census left 0.022 of the step unnamed, against SC1b's 2 % gate (`G_MAP`).
+- **The kernels:** both unnamed kernels were `torch.cat`'s: `CatArrayBatchedCopy` (64 per step, two per layer on
+  Granite's 32 layers: the unfused attention's `rotate_half` on q and k) and `CatArrayBatchedCopy_alignedK_contig`
+  (one per step).
+- **Everything else read as registered.**
+  - Amendment 1's router census licensed **32 of 32** routers (`explicit`, `failed_probe` 0). That is #1398's 5090
+    regression check, passed.
+  - The premise passed (19), and both speed arms, nsys and all four captures ran.
+  - The B = 16 census classified fully.
+
+**Why.** v1 inherits SC1b's v0 rules verbatim, and v0 lists `cat` (and `copy`) under `input_prep` and `norm_elem`. But
+SC1b's `_hit` is a case-sensitive substring test, and Nsight names the kernel `CatArrayBatchedCopy`. Its demangled name
+is `at::native::...::CatArrayBatchedCopy_alignedK_contig<...>`, with no lowercase `cat` either. The A2000 inventory
+behind v1 had the kernel; the map was checked against the NF4 expert names only.
+
+**The correction (the maintainer's ACK, on the bus 2026-10-08T23:28Z): a map-only change.**
+- **The map, v1.1.** `kernel_classes_nf4.json` names `CatArrayBatchedCopy` beside `cat` in the `input_prep` and
+  `norm_elem` rules. Their order and their `in_graph` split are unchanged, so a cat out of the graph is `input_prep`,
+  one in a layer is `norm_elem`, as v0 intended.
+- **Unchanged:** `sc1b_census.py`, still at SC1b's bytes, and every other rule, anchor, rung, constant, prediction and
+  budget.
+- **The name inventory, committed.** `bench/p123/inventory_names.json` holds names and counts only. It carries the
+  A2000 inventory of the default decode step (device grouping, B = 1 and 16) and the names `p123-prove-1`'s census
+  saw, with SC1b's classes.
+- **The pin test, new:**
+  - The map names every kernel of the A2000 inventory by `_hit`, except CUPTI memcpy / memset records (SC1b's
+    `memcpy` term).
+  - Every name `p123-prove-1` saw carries a class, except torch.cat's two, which the map now names.
+  - A synthetic SC1b census with two `CatArrayBatchedCopy` kernels in a layer classifies them `norm_elem`, with
+    residual 0.
+  - Both new tests fail against v1's map.
+- **Re-pinned before `p123-prove-2`:** `kernel_classes_nf4.json` in `staged-p123.sha256`.
+
+**What this does not change.** The Qwen3 router census of 48 comes only from the reading, which still VOIDs on any
+census short of 48. The proof's verdict is still not a reading. `p123-prove-2` launches from this amendment's merge
+under the same relay, and the reading waits for PROVED and the maintainer's look at the proof's receipts. Lane spend:
+$0.189 of the $3.00 ceiling.
