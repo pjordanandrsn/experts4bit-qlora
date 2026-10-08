@@ -1577,3 +1577,24 @@ arm's host time sits in:
 
 That is what remains on the matched arm with the ladder too. The per-new-shape cost is cuBLAS's fp32 batched product's, so amendment 71
 reads `NF4_QLORA_SINGLE_LADDER=auto` (grouped-nf4-gemm#514), the ladder exactly when the adapters are fp32, as the candidate default.
+
+## Amendment 71 (2026-10-08): `auto` engages only on fp32 adapters and holds its mechanism; the step times went unread on a loaded host (P217–P219 HELD; P215, P216 UNTESTED)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 71. One RTX 5090 (`tc1-5090-139`, AMD EPYC 7763, a 61-CPU
+quota, Vast machine 150670). e4b `d0ae243`, grouped-nf4-gemm `3ce2ecd` (#514), venv-unsloth (torch 2.12.1), every arm profiled, $2.75.
+Read: [`RESULTS-tc1-slauto.md`](RESULTS-tc1-slauto.md), re-derived byte for byte from the receipts with main's reducer.
+
+| arm | s/step `l0` → `la` (two draws) | `aten::bmm` CPU / call | device ms / profiled step | peak |
+|---|---|---|---|---|
+| matched (fp32 adapters) | 3.463 / 3.718 → 3.033 / 3.024 | 175 → 21.1 µs | 1705 → 1778 | 26.15 → 26.50 GB |
+| shipped (bf16 adapters) | 2.991 / 3.289 → 2.983 / 3.279 | 24.4 / 30.2 → 24.4 / 28.9 µs | 1329 → 1332 | 23.32 → 23.32 GB |
+
+- **P217 HELD:** `bmm` CPU time per call 0.120 of `l0`'s on the matched arm.
+- **P218 HELD:** device time 1.043 (matched) and 1.002 (shipped).
+- **P219 HELD:** step-0 held-out identical; N within 0.0015.
+- **P215, P216 UNTESTED.** The host's load rose through the box. Seven draws were voided for load1 over 6.0, and the last attempts of
+  three second draws stood at load1 13.0–14.1. Three arms' two draws then differed by 7.1–9.5 %, over the 5 % rule.
+
+The ladder engaged only where `auto` says it should (49,152 laddered calls on each matched `la` draw, none on the shipped arm). Paired by
+draw, the shipped arm's `la / l0` is 0.997 in both, and the matched arm's 0.876 and 0.813, but the rule quotes only stable draws. By the
+rule `auto` stays opt-in; amendment 72 reads the same box on a third host.
