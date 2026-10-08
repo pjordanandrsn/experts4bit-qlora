@@ -159,10 +159,10 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
   `e4b.train.moe-keep.qwen3.5090.2026-10-04`
 - `GNF4_TRAIN_GEMM=decoded`: 1.066 of the fused kernels' step on Qwen3, so `auto` does not take it.
   `e4b.train.decoded-route.qwen3.5090.2026-10-06`
-- `NF4_QLORA_SINGLE_LADDER=1` (grouped-nf4-gemm): 0.797 of the step with fp32 adapters on a host-bound box,
-  1.015 with bf16 adapters (the shipped arm). `e4b.train.single-ladder.field.5090.2026-10-08`
-  Its `auto` (the ladder only with fp32 adapters) held its mechanism on a second host, but the step time went unread
-  there: the host was loaded. `e4b.train.single-ladder-auto.field.5090.2026-10-08`
+- `NF4_QLORA_SINGLE_LADDER` (grouped-nf4-gemm): its `auto`, the ladder only with fp32 adapters, becomes the default.
+  With fp32 adapters it stepped 0.797 of the time on a host-bound box and 1.031 on a GPU-bound one (registered bound
+  1.05). With bf16 adapters, the shipped arm, it does not engage (1.002). `e4b.train.single-ladder.field.5090.2026-10-08`,
+  `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
@@ -300,8 +300,7 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Registered, not yet read:** TC1 amendment 72 (amendment 71's `auto` box again, on a third host). The head-to-head
-  campaigns stay open: training #835, serving #846, single-stream decode #1313.
+- **Open campaigns:** training #835, serving #846, single-stream decode #1313.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.
