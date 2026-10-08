@@ -51,12 +51,13 @@ than `load_moe_4bit_streaming`. `e4b.offload.kimi-k3.full-depth.a2000.five-runs.
 `e4b.parity.kimi-k3.reproducible-on-gnf4-0.33.6.a2000.2026-09-29`
 ([results](../bench/kimi-k3-a2000/RESULTS-kimi-k3-a2000.md)).
 
-**Dense execution stays gated after a failed out-of-sample reading.** DQ7 of Loggetta's dense executor is VOID: 14 of
-16 arms ran, and the planner refused the Qwen3-32B resident anchor at 4096 tokens before loading. On the arms that
-ran, the allocator estimate held on Qwen3-14B but fell below the measured peak on Llama-3.1-8B at 2048 and 4096 tokens,
-resident and streamed. Every streamed plan's device total was below the measured driver peak, by up to 2.40 GB
-(driver/plan up to 1.196), so the inferred 20 % reserve doesn't cover streamed placement. No calibration or DQ8 draw
-follows. `e4b.train.dense-executor.dq7.5090.2026-10-08` ([results](../bench/dq7/RESULTS-dq7.md)).
+**Dense execution remains in development.** DQ7's out-of-sample reading is VOID; no reserve calibration or 24 GB
+boundary has passed. DQ9 completed sixteen known-subject diagnostics with the corrected full-logit workspace:
+allocator estimates were above measured peaks, but all ten streamed full-device estimates remained below sampled
+driver use, by up to 1.14 GB. One setup clear released 32 MiB on one arm and changed no training peak, so it provides
+no training-memory remedy. DQ9 licenses neither capacity nor calibration; the opt-in and enforced streamed margin
+remain. `e4b.train.dense-executor.dq9.5090.2026-10-08` ([diagnostic record](../bench/dq9/receipts/dq9-5090-2/README.md));
+`e4b.train.dense-executor.dq7.5090.2026-10-08` ([original VOID reading](../bench/dq7/RESULTS-dq7.md)).
 
 ### Training against other frameworks
 
