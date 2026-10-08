@@ -11540,6 +11540,31 @@
         "receipts/experts4bit-qlora/2026-10-08/tc1-5090-137/tc1/"
       ],
       "notes": "Vast invoiced $2.12."
+    },
+    {
+      "id": "e4b.train.single-ladder.field.5090.2026-10-08",
+      "package": "experts4bit-qlora",
+      "area": "train",
+      "model": "Qwen/Qwen3-30B-A3B @ ad44e777bcd1",
+      "claim": "TC1 amendment 70 (#835), one rented RTX 5090 (tc1-5090-138, AMD EPYC 7K62, Vast machine 152440): grouped-nf4-gemm's opt-in single-block ladder (NF4_QLORA_SINGLE_LADDER=1, grouped-nf4-gemm#513) against the single padded block at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch 2.12.1), the shipped (bf16 adapters) and the matched (fp32 adapters) arm, two draws a side in ABBA order, every arm profiled. On this host-bound box (the matched l0's GPU busy 0.417 of its step) the matched arm steps 0.797 [0.789, 0.806] of its time (P210 HELD, <= 0.97): aten::bmm's CPU self time per call falls from 305.4 to 24.5 us (P212 HELD, <= 0.5x), device time rises 4.1 % (P213 HELD, <= 1.05) and the training peak 0.33 GB (26.16 to 26.50). The shipped arm steps 1.015 [1.006, 1.025] (P211 FALSIFIED, <= 0.97): its bmm already took about 28 us a call. Held-out unchanged (P214 HELD). By the rule the flag stays opt-in.",
+      "value": 0.797,
+      "unit": "ratio, s/step NF4_QLORA_SINGLE_LADDER=1 / =0, e4b matched arm (fp32 adapters) at TC1's field recipe (medians of two draws); shipped arm (bf16 adapters) 1.015",
+      "hardware": "RTX 5090 (sm_120), one rented Vast.ai verified/secure host (tc1-5090-138: instance 54853789, AMD EPYC 7K62, a 23-CPU quota, Vast machine 152440); e4b @ 822884d + grouped-nf4-gemm @ f8b4a0a, torch 2.12.1+cu130",
+      "conditions": "bench/tc1 token qwen3sladder (TC1 amendment 70): TC1's tokens and field recipe, TC1_STEPS=60, TC1_LOAD_GATE=6.0 / TC1_LOAD_RETRIES=2, e4b fused_attn4_shipped_l0 / _l1 and fused_attn4_m_l0 / _l1 (+ _d2), --phase-peaks 1 and the profile instrument on every arm; validity (sladder_why: e4b's field defaults, the single padded block serving every call, laddered calls on l1 and none on l0) and scoring by bench/tc1/tc1_reduce.py",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/h2h-2026-10-02/tc1/README.md",
+        "bench/h2h-2026-10-02/tc1/RESULTS-tc1-sladder.md",
+        "bench/h2h-2026-10-02/tc1/receipts/tc1-5090-138/RESULTS-tc1.md",
+        "bench/tc1/TC1-PREREG.md",
+        "bench/tc1/tc1_reduce.py"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/tc1-5090-138/tc1/"
+      ],
+      "notes": "Vast invoiced $1.73; one shipped l1 draw was voided twice for host load and its last attempt stands."
     }
   ]
 }

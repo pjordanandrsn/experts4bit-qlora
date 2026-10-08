@@ -2270,6 +2270,12 @@ AMD EPYC 7713.** The wall ratio depends on the host. Unsloth runs 14× e4b's CPU
 against e4b's 0.49, so a slower host stretches Unsloth's step more. The GPU-time ratio is what remains as host overhead goes to zero.
 Held-out at N agrees within 0.0012. e4b peaks 1.89 GB higher (26.16 against 24.27 GB). The 2.352 and 2.468 above are the earlier wall
 readings, before the reentrant checkpoint.
+**e4b's own host time at the field recipe.** grouped-nf4-gemm's opt-in single-block ladder (`NF4_QLORA_SINGLE_LADDER=1`,
+grouped-nf4-gemm#513) puts the padded LoRA block's batched products on repeating shapes
+(`e4b.train.single-ladder.field.5090.2026-10-08`, TC1 amendment 70). On a host-bound box it stepped e4b's matched arm, with fp32 adapters,
+**0.797** of its time. `aten::bmm`'s CPU time per call fell from 305 µs to 24.5 µs, for 4.1 % more device time and 0.33 GB more peak. With
+bf16 adapters (the shipped arm) it stepped 1.015: that `bmm` was already cheap. It stays opt-in. TC1 amendment 71 reads `auto`, which takes
+the ladder exactly when the adapters are fp32, as the candidate default.
 **Those positions read short rows.** The field recipe's Alpaca rows carry about 1,000–1,400 real tokens per step. On packed rows of
 4,096 real tokens (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k`, TC1 amendment 39) e4b at its defaults runs out of memory at
 step 1, allocating the fp32 copy of the full-vocabulary logits (2.32 GiB), while Unsloth trains the same rows at 24.86 GB: an e4b loss
@@ -4351,6 +4357,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07 [measured]: TC1 amendment 67 (#835), one rented RTX 5090 (tc1-5090-135, AMD EPYC 7K62, Vast machine 152440): e4b's matched arm on packed rows of 4,096 real tokens in venv-unsloth (torch 2.12.1) at all the new defaults (the double-quantized absmax, the reentrant checkpoint, the combine over row chunks, the chunked held-out loss …
 - e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio [measured]: TC1 amendment 68 (#835), one rented RTX 5090 (tc1-5090-136, an AMD engineering-sample CPU, Vast machine 13828): e4b's matched arm at its defaults against Unsloth 2026.9.14's matched arm on packed rows of 4,096 real tokens, both in venv-unsloth (torch 2.12.1), two draws each in ABBA order, every arm profiled, 40 …
 - e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio [measured]: TC1 amendment 69 (#835), one rented RTX 5090 (tc1-5090-137, AMD EPYC 7713, Vast machine 55913): TC1's field recipe (alpaca, seq 2048, micro-batch 2 x accum 4) over 60 load-gated steps with both frameworks on one stack (venv-unsloth, torch 2.12.1), e4b's matched arm at every current default against Unsloth 2026.9.14's …
+- e4b.train.single-ladder.field.5090.2026-10-08 [measured]: TC1 amendment 70 (#835), one rented RTX 5090 (tc1-5090-138, AMD EPYC 7K62, Vast machine 152440): grouped-nf4-gemm's opt-in single-block ladder (NF4_QLORA_SINGLE_LADDER=1, grouped-nf4-gemm#513) against the single padded block at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch …
 
 Open items (no evidence either way):
 
@@ -4358,4 +4365,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(415 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(416 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

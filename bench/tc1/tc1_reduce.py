@@ -1127,6 +1127,28 @@ SLADDER_BMM_CPU_MAX = 0.5         # P212: aten::bmm CPU self ms per call l1 / l0
 SLADDER_DEVICE_MAX = 1.05         # P213: device ms per profiled step l1 / l0, each arm, at most this (the padding adds device work)
 SLADDER_STEP0_MAX = 0.0005        # P214: |step-0 held-out l1 - l0| per draw pair, each arm (rounding: the bmm shapes differ)
 SLADDER_HELDOUT_MAX = 0.005       # P214: |mean held-out at N, l1 - l0|, each arm
+# TC1 amendment 71: NF4_QLORA_SINGLE_LADDER 0 (l0) vs auto (la: the ladder exactly when the adapters are fp32, grouped-nf4-gemm#514) at the field
+# recipe, the shipped (bf16 adapters) and the matched (fp32 adapters) arm, two draws a side in ABBA order, every arm profiled; a second host
+SLAUTO_FAM = "qwen3slauto"
+FAMS.append(SLAUTO_FAM)
+NAMES[SLAUTO_FAM] = "Qwen3-30B-A3B (amendment 71: NF4_QLORA_SINGLE_LADDER 0 vs auto at the field recipe, shipped and matched arms; profiled)"
+N_LAYERS[SLAUTO_FAM] = 48
+ATTN_CENSUS[SLAUTO_FAM] = 192
+DENSE_PINS[SLAUTO_FAM] = DENSE_PINS[QDENSE_FAM]
+FAM_ANCHOR[SLAUTO_FAM] = ("e4b", "fused_attn4_m_l0")
+EXPECTED[SLAUTO_FAM] = [("e4b", "fused_attn4_shipped_l0"), ("e4b", "fused_attn4_shipped_la"), ("e4b", "fused_attn4_m_l0"), ("e4b", "fused_attn4_m_la"),
+                        ("e4b", "fused_attn4_m_la_d2"), ("e4b", "fused_attn4_m_l0_d2"), ("e4b", "fused_attn4_shipped_la_d2"), ("e4b", "fused_attn4_shipped_l0_d2")]
+MATCHED |= {"fused_attn4_m_la", "fused_attn4_m_la_d2"}
+for _t in ("fused_attn4_m", "fused_attn4_shipped"):
+    DRAW2[("e4b", f"{_t}_la")] = ("e4b", f"{_t}_la_d2")
+SLAUTO_HOST_BOUND_MAX = 0.85      # P215's branch: the matched l0's busy_t (median of its draws) at most this reads as a host-bound box
+SLAUTO_M_HOST_MAX = 0.97          # P215 on a host-bound box: matched s/step la / l0 at most this
+SLAUTO_M_GPU_MAX = 1.05           # P215 on a GPU-bound box: matched s/step la / l0 at most this (the padding's device cost, amendment 70: +4.1 %)
+SLAUTO_SHIPPED_BAND = (0.98, 1.02)  # P216: shipped s/step la / l0 inside this (auto does not engage on bf16 adapters: the same ops)
+SLAUTO_BMM_CPU_MAX = 0.5          # P217: aten::bmm CPU self per call la / l0, matched arm, at most this
+SLAUTO_M_DEVICE_MAX = 1.06        # P218: matched device ms per profiled step la / l0 at most this; shipped inside SLAUTO_SHIPPED_BAND
+SLAUTO_STEP0_MAX = 0.0005         # P219: |step-0 held-out la - l0| per draw pair, each arm
+SLAUTO_HELDOUT_MAX = 0.005        # P219: |mean held-out at N, la - l0|, each arm
 # TC1 amendment 59: the same switch at TC1's field recipe (seq 2048, micro-batch 2), the shipped and the matched arm, before any default
 # (not packed: TC1's no-loop rule applies as written, as on amendments 49 and 50)
 CKPTOFFF_FAM = "qwen3ckptofff"
@@ -2520,6 +2542,99 @@ def sladder_why(tag, r):
     return "; ".join(bad)
 
 
+def slauto_side(tag):
+    """Amendment 71: (arm, side) of a qwen3slauto e4b tag, e.g. ("m", "la") for fused_attn4_m_la_d2."""
+    m = re.match(r"^fused_attn4_(m|shipped)_(l0|la)(?:_d2)?$", tag or "")
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def slauto_why(tag, r):
+    """Amendment 71's predicates: amendment 70's (torch 2.12, e4b's field defaults, the single padded block serving every call, a profile with
+    aten::bmm's row) and the setting the side names: l0 NF4_QLORA_SINGLE_LADDER=0 with no laddered call; la =auto with laddered calls on the
+    matched arm (fp32 adapters) and none on the shipped arm (bf16 adapters). Empty string = as registered."""
+    arm, side = slauto_side(tag)
+    if side is None:
+        return f"amendment 71 registers no e4b side for tag {tag}"
+    r = r or {}
+    base = sladder_why(f"fused_attn4_{arm}_l0", dict(r, single_ladder={"env": "0", "calls": 0}))   # amendment 70's predicates, ladder aside
+    bad = [base] if base else []
+    sl = r.get("single_ladder") or {}
+    env, n = str(sl.get("env")), int(sl.get("calls") or 0)
+    if side == "l0" and not (env == "0" and n == 0):
+        bad.append(f"NF4_QLORA_SINGLE_LADDER={env!r} with {n} laddered calls: l0 names 0 and none (record {sl})")
+    if side == "la":
+        want = (lambda k: k > 0) if arm == "m" else (lambda k: k == 0)
+        if not (sl.get("gnf4_has_single_ladder") and env == "auto" and want(n)):
+            bad.append(f"NF4_QLORA_SINGLE_LADDER=auto with {n} laddered calls on the {arm} arm: auto engages on fp32 adapters only (record {sl})")
+    return "; ".join(bad)
+
+
+def score_slauto(F, fam=SLAUTO_FAM):
+    """TC1-PREREG amendment 71 (two VALID draws a side, medians). P215: matched s/step la / l0 <= SLAUTO_M_HOST_MAX when the matched l0's busy_t
+    <= SLAUTO_HOST_BOUND_MAX, else <= SLAUTO_M_GPU_MAX. P216: shipped s/step la / l0 inside SLAUTO_SHIPPED_BAND. P217: aten::bmm CPU self per
+    call la / l0 <= SLAUTO_BMM_CPU_MAX, matched. P218: device ms per profiled step la / l0 <= SLAUTO_M_DEVICE_MAX matched, inside
+    SLAUTO_SHIPPED_BAND shipped. P219: each arm's step-0 held-out within SLAUTO_STEP0_MAX per pair, N within SLAUTO_HELDOUT_MAX."""
+    R = F.get(fam)
+    if not R:
+        return []
+    rows = {(x["fw"], x["tag"]): x for x in R["rows"]}
+    def side_rows(arm, sd):
+        rs = [(rows.get(("e4b", f"fused_attn4_{arm}_{sd}{sfx}")) or {}) for sfx in ("", "_d2")]
+        return all(x.get("verdict") == "VALID" for x in rs), [x.get("r") or {} for x in rs]
+    def med(arm, sd, fn):
+        ok, rs = side_rows(arm, sd)
+        v = [fn(x) for x in rs] if ok else [None]
+        return None if None in v else statistics.median(v)
+    busy = med("m", "l0", _busy_vs_timed)
+    out = []
+    D = {sd: R["draws"].get(("e4b", f"fused_attn4_m_{sd}"), {}) for sd in ("l0", "la")}
+    if busy is None:
+        out.append(("P215", fam, "UNTESTED", "the branch needs the matched l0's two profiled VALID draws"))
+    else:
+        cap = SLAUTO_M_HOST_MAX if busy <= SLAUTO_HOST_BOUND_MAX else SLAUTO_M_GPU_MAX
+        kind = "host-bound" if busy <= SLAUTO_HOST_BOUND_MAX else "GPU-bound"
+        p = _ckptre_ratio(D, "la", "l0", "P215", fam, lambda x: x <= cap, f"<= {cap}")
+        out.append(p[:3] + (p[3] + f"; matched l0 busy_t {busy:.3f}: a {kind} box",))
+    D = {sd: R["draws"].get(("e4b", f"fused_attn4_shipped_{sd}"), {}) for sd in ("l0", "la")}
+    lo, hi = SLAUTO_SHIPPED_BAND
+    out.append(_ckptre_ratio(D, "la", "l0", "P216", fam, lambda x: lo <= x <= hi, f"in [{lo}, {hi}]"))
+    b0, b1 = med("m", "l0", _bmm_cpu_per_call), med("m", "la", _bmm_cpu_per_call)
+    if b0 is None or b1 is None:
+        out.append(("P217", fam, "UNTESTED", "two VALID profiled draws a side with aten::bmm's row are registered (matched arm)"))
+    else:
+        out.append(("P217", fam, "HELD" if b1 / b0 <= SLAUTO_BMM_CPU_MAX else "FALSIFIED",
+                    f"aten::bmm CPU self per call {1000 * b0:.1f} -> {1000 * b1:.1f} us = {b1 / b0:.3f} vs <= {SLAUTO_BMM_CPU_MAX} (matched)"))
+    legs, bad = [], False
+    for arm, test, bound in (("m", lambda x: x <= SLAUTO_M_DEVICE_MAX, f"<= {SLAUTO_M_DEVICE_MAX}"),
+                             ("shipped", lambda x: lo <= x <= hi, f"in [{lo}, {hi}]")):
+        d0, d1 = med(arm, "l0", _cbk_device_ms), med(arm, "la", _cbk_device_ms)
+        if d0 is None or d1 is None:
+            legs.append(f"{arm}: two VALID profiled draws a side are registered")
+            bad = None if bad is not True else True
+            continue
+        bad = True if not test(d1 / d0) else bad
+        legs.append(f"{arm}: {d0:.1f} -> {d1:.1f} ms = {d1 / d0:.3f} ({bound})")
+    out.append(("P218", fam, "FALSIFIED" if bad is True else ("UNTESTED" if bad is None else "HELD"),
+                "device ms per profiled step la / l0: " + "; ".join(legs)))
+    legs, bad = [], False
+    for arm in ("m", "shipped"):
+        o0, r0 = side_rows(arm, "l0")
+        o1, r1 = side_rows(arm, "la")
+        s0 = [(a.get("eval_loss_step0"), b.get("eval_loss_step0")) for a, b in zip(r0, r1)]
+        h0, h1 = [x.get("eval_loss_final") for x in r0], [x.get("eval_loss_final") for x in r1]
+        if not (o0 and o1) or any(a is None or b is None for a, b in s0) or None in h0 + h1:
+            legs.append(f"{arm}: two VALID draws a side with held-out are registered")
+            bad = None if bad is not True else True
+            continue
+        ds = [b - a for a, b in s0]
+        dn = statistics.mean(h1) - statistics.mean(h0)
+        bad = True if not (all(abs(x) <= SLAUTO_STEP0_MAX for x in ds) and abs(dn) <= SLAUTO_HELDOUT_MAX) else bad
+        legs.append(f"{arm}: step 0 " + ", ".join(f"{x:+.5f}" for x in ds) + f"; N {dn:+.5f}")
+    out.append(("P219", fam, "FALSIFIED" if bad is True else ("UNTESTED" if bad is None else "HELD"),
+                "; ".join(legs) + f" (step 0 |.| <= {SLAUTO_STEP0_MAX}, N |.| <= {SLAUTO_HELDOUT_MAX})"))
+    return out
+
+
 def score_sladder(F, fam=SLADDER_FAM):
     """TC1-PREREG amendment 70 (two VALID draws a side, medians). P210 (matched) / P211 (shipped): s/step l1 / l0 <= SLADDER_SPEED_MAX, read
     only when the matched l0's busy_t <= SLADDER_PREMISE_BUSY_MAX (a host-bound box), else UNTESTED. P212: aten::bmm CPU self ms per call
@@ -3664,6 +3779,10 @@ def validity(fam, r, tokens_sha, e4b_trainable, n_steps, matched=False, ref_step
             why.append(w)
     if fam == SLADDER_FAM:                             # amendment 70: e4b's field defaults, the single block, the ladder its side names, a profile
         w = sladder_why(r.get("tag") or "", r)
+        if w:
+            why.append(w)
+    if fam == SLAUTO_FAM:                              # amendment 71: amendment 70's predicates and the setting its side names
+        w = slauto_why(r.get("tag") or "", r)
         if w:
             why.append(w)
     if fam == CKPTOFF_FAM:                             # amendment 58: torch 2.12; on e4b its defaults and the checkpoint its side names
@@ -6663,6 +6782,20 @@ def render(F, d):
                 "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
         for pid, fam, v, ev in score_sladder(F):
             out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
+    if SLAUTO_FAM in F:
+        out += ["\n## Amendment 71: NF4_QLORA_SINGLE_LADDER 0 vs auto at the field recipe (descriptive)",
+                "| arm | VERDICT | s/step (11..N) | device ms / profiled step | busy_t | aten::bmm CPU us / call | laddered calls | peak GB | held-out 0 / N |",
+                "|---|---|---|---|---|---|---|---|---|"]
+        for x in F[SLAUTO_FAM]["rows"]:
+            r = x.get("r") or {}
+            b = _bmm_cpu_per_call(r)
+            out.append(f"| {x['fw']}/{x['tag']} | {x['verdict']} | {f(r.get('s_per_step_median_11plus'), 3)} | {f(_cbk_device_ms(r), 1)} | "
+                       f"{f(_busy_vs_timed(r), 3)} | {f(None if b is None else 1000 * b, 1)} | {(r.get('single_ladder') or {}).get('calls')} | "
+                       f"{f(r.get('peak_vram_gb'), 3)} | {r.get('eval_loss_step0')} / {r.get('eval_loss_final')} |")
+        out += ["\n## Predictions P215-P219 (TC1-PREREG amendment 71: NF4_QLORA_SINGLE_LADDER=auto at the field recipe; scored mechanically)",
+                "| prediction | family | verdict | evidence |", "|---|---|---|---|"]
+        for pid, fam, v, ev in score_slauto(F):
+            out.append(f"| {pid} | {fam} | **{v}** | {ev} |")
     if CKPTOFFF_FAM in F:
         out += ["\n## Amendment 59: checkpoint inputs on the GPU vs in pinned host memory at the field recipe, peaks by phase (descriptive)",
                 "| arm | VERDICT | s/step (11..N) | run peak GB | setup | eval | train |", "|---|---|---|---|---|---|---|"]
@@ -7953,6 +8086,27 @@ def _sladder_set(s=None, dev=None, bmm=None, step0=None, sl=None, profile=True):
                     r["arm_facts"] = dict(r.get("arm_facts") or {}, adapter_dtype="native")
                     r["matched"] = False
                 R[("e4b", tag)] = r
+    return R
+
+
+def _slauto_set(s=None, dev=None, sl=None):
+    """Amendment 71: amendment 70's fixture with l1 renamed la (NF4_QLORA_SINGLE_LADDER=auto): laddered calls on the matched arm, none on the
+    shipped arm, whose la side runs the l0 side's ops -- `s` / `dev` as _sladder_set's, `sl` tag -> the single_ladder record."""
+    s = {("shipped", "l1"): (2.91, 2.90)} | (s or {})
+    dev = {("shipped", "l1"): 1452.0} | (dev or {})
+    base = _sladder_set(s=s, dev=dev)
+    R = {}
+    for (fw, tag), r in base.items():
+        arm, side = sladder_side(tag)
+        nt = tag.replace("_l1", "_la")
+        r = dict(r, tag=nt, fam=SLAUTO_FAM)
+        if side == "l1":
+            r["single_ladder"] = {"env": "auto", "gnf4_has_single_ladder": True, "calls": 1536 if arm == "m" else 0}
+            if arm == "shipped":
+                r["profile"] = dict(r["profile"], top_cpu=[{"name": "aten::bmm", "count": 9228, "self_cpu_ms": 9228 * 28.0 / 1000.0}])
+        if sl and nt in sl:
+            r["single_ladder"] = sl[nt]
+        R[(fw, nt)] = r
     return R
 
 
@@ -10477,6 +10631,21 @@ def selftest():
     bk[("e4b", "fused_attn4_shipped_l0")]["lean_ab"]["lora_path_calls"]["padded_bucketed"] = 12
     assert SL(bk)[SLADDER_FAM]["verdicts"][("e4b", "fused_attn4_shipped_l0")] == "VOID"
     assert "P212" in render(RSL, "x") and "amendment 70" in render(RSL, "x")
+    cases += 1
+    # 124. TC1 amendment 71 (qwen3slauto): NF4_QLORA_SINGLE_LADDER 0 vs auto -- VALID; P215-P219 HELD on a host-bound fixture (matched 0.89,
+    #      shipped unchanged); a GPU-bound box reads P215 against 1.05; auto engaging on the shipped (bf16) arm is VOID; shipped +4 % FALSIFIES P216
+    SA = lambda R: {SLAUTO_FAM: reduce_family(SLAUTO_FAM, R, {}, 20)}
+    RSA = SA(_slauto_set())
+    assert all(x["verdict"] == "VALID" for x in RSA[SLAUTO_FAM]["rows"]), [(x["tag"], x["verdict"], x["why"]) for x in RSA[SLAUTO_FAM]["rows"]]
+    psa = lambda R: {p: v for p, _, v, _ in score_slauto(R)}
+    assert psa(RSA) == {p: "HELD" for p in ("P215", "P216", "P217", "P218", "P219")}, score_slauto(RSA)
+    gb = _slauto_set(s={("m", "l1"): (3.55, 3.56)}, dev={("m", "l0"): 3320.0, ("m", "l1"): 3450.0})
+    ev = {p: e for p, _, _, e in score_slauto(SA(gb))}
+    assert psa(SA(gb))["P215"] == "HELD" and "GPU-bound" in ev["P215"] and "<= 1.05" in ev["P215"], score_slauto(SA(gb))
+    eng = {"fused_attn4_shipped_la": {"env": "auto", "gnf4_has_single_ladder": True, "calls": 1536}}
+    assert SA(_slauto_set(sl=eng))[SLAUTO_FAM]["verdicts"][("e4b", "fused_attn4_shipped_la")] == "VOID"
+    assert psa(SA(_slauto_set(s={("shipped", "l1"): (3.02, 3.03)})))["P216"] == "FALSIFIED"
+    assert "P219" in render(RSA, "x") and "amendment 71" in render(RSA, "x")
     cases += 1
     print(f"REDUCE SELFTEST OK cases={cases} dir={d}")
     return cases
