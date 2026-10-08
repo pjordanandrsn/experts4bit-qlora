@@ -21,7 +21,7 @@ def load(name):
     return mod
 
 
-for name in ("ra_env", "ra_stage", "ra_reduce", "ra_normalize", "ra_process", "ra_training", "ra_quality", "ra_fallback", "ra_serving"):
+for name in ("ra_env", "ra_stage", "ra_reduce", "ra_normalize", "ra_process", "ra_training", "ra_quality", "ra_fallback", "ra_routes", "ra_serving"):
     load(name)
 capacity = load("ra_capacity")
 server_wrapper = load("ra_capacity_server")
