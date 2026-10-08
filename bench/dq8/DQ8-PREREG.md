@@ -2,6 +2,8 @@
 
 Registration proposal; no compute or measurement in this change. References #1083, DQ7 (PR1359) and
 Loggetta D7 (PR22). DQ8 supplies the independent 24 GB-card reading required before the dense executor opt-in is removed.
+Launch only after DQ7 reads NEVER_UNDER with its anchor reproduced or ATTRIBUTED; otherwise return to review
+with DQ7's cause. A different DQ7 verdict authorizes no DQ8 draw under this registration.
 
 Use the exact synthetic public-config subjects and per-tensor seed policy from DQ7. These are architecture-only
 checkpoints, not pretrained models; no loss or quality claim. Pin the merged DQ7 e4b harness, Loggetta merge
