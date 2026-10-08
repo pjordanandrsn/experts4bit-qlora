@@ -213,16 +213,16 @@ per-stream rate) and the runner's graph statistics.
 **Slots: `E4B_PAGED_MAX_SEQS=auto` by default (lane SC2e, #846; `16` restores the old default).** When the engine
 builds, before any weight is read, `auto` takes the widest width lane SC2e read that the serve estimate fits in the
 device's free memory (`serve_recipe.choose_max_seqs`):
-- **Widths.** 64 or 16 on the default bucket list; 64, 32 or 16 with `E4B_PAGED_BUCKETS=auto`. 32 slots on the default
-  list run every wide step as two chained 16-row replays; SC2e did not read that, so the default list never takes it.
+- **Widths.** 64, 32 or 16 with the default buckets (`auto`, below). 64 or 16 with an explicit list such as
+  `1,2,4,8,16`: 32 slots on that list chain every wide step as two 16-row replays, which SC2e did not read.
 - **The fit.** `estimate_serve_footprint`'s device total for the width (weights, KV pool and scratch slots, a hybrid's
   per-slot linear-attention state, the bulk KV flush's ceiling), plus a reserve for the first-chunk prefill graph's pool
   (`chunk_tokens x hidden_size x layers x 16 B`: 0.75 GiB on Qwen3-30B-A3B, above the 0.42–0.57 GiB measured), plus
   1.5 GiB, must fit the free memory. On SC2e's box the server used 2.0–2.3 GiB more than the estimate at ready. About
   0.5 GiB of that is the CUDA context, already outside the free memory; the reserve and the margin cover the rest.
-- **What it picks for Qwen3-30B-A3B int4.** On an RTX 5090: 64 at 2,048 tokens a slot; 16 at the default 4,096 (64
-  needs ~35 GiB; with `E4B_PAGED_BUCKETS=auto`, 32). On a 24 GB card: 16. Without a CUDA device, under the solver
-  placement, or when nothing fits: 16, as before.
+- **What it picks for Qwen3-30B-A3B int4.** On an RTX 5090: 64 at 2,048 tokens a slot; 32 at the default 4,096 (64
+  needs ~35 GiB). On a 24 GB card: 16. Without a CUDA device, under the solver placement, or when nothing fits: 16, as
+  before.
 - **What SC2e read** (Qwen3-30B-A3B int4, one RTX 5090, 512-token prompts, 2,048 tokens a slot): 64 slots on the default
   list held the SLO to 8 req/s against 4 at 16 slots, and 64 with `E4B_PAGED_BUCKETS=auto` to 12. Serial TTFT and TPOT
   were within 1 % and serial output byte-identical. Measured on Qwen3-30B-A3B int4 on an RTX 5090; other models get
@@ -233,14 +233,21 @@ device's free memory (`serve_recipe.choose_max_seqs`):
 - `/health` reports `engine.max_seqs` (the width serving), `engine.max_seqs_requested` and
   `engine.max_seqs_resolution` (every candidate's arithmetic and the reason).
 
-`E4B_PAGED_BUCKETS=auto` stays opt-in: wide decode steps change the bf16 arithmetic (under load SC2e's wide-bucket arms
-agreed with 16 slots' text on 0.01–0.12 of requests), so it waits on a teacher-forced read at buckets 32 and 64.
+**Buckets: `E4B_PAGED_BUCKETS=auto` by default (lanes SC2e and P117, #846; `1,2,4,8,16` restores the old list).**
+`auto` captures every power of two below `max_seqs` and then `max_seqs` itself (32 -> `1,2,4,8,16,32`), so the widest
+decode step is one graph replay. Up to 16 sequences it reads exactly the old list.
+- **Speed.** SC2e's 64-slot server held the SLO to 12 req/s with `auto` and to 8 on the old list, whose 64-row step
+  runs as four 16-row replays with a host sync after each (36.5 ms against one 18.4 ms replay).
+- **Quality.** P117 ([`bench/p117/RESULTS-p117.md`](../bench/p117/RESULTS-p117.md)) read AT_PARITY. Teacher-forced, one
+  64-row piece reads −0.0032 nats against four 16-row pieces (`e4b.serve.p117.wide-bucket-quality.qwen3.5090.2026-10-08`),
+  inside the 16-row arithmetic's own neutral perturbations; 32-row pieces and padded 64-row steps pass too.
+- **Outputs under load** change more often with wide steps: SC2e's wide-bucket servers produced the 16-slot server's
+  text on 0.01–0.12 of requests, at no measured quality cost.
+- **Scope.** Measured on Qwen3-30B-A3B int4 on an RTX 5090; other models get the wide buckets on the strength of this
+  read, not their own.
 
-**Slots above 16 and their buckets.** The default bucket list stops at 16, so a
-decode step over 16 rows runs as consecutive 16-row replays with a host sync after each, and the server logs that at
-startup. `E4B_PAGED_BUCKETS=auto` captures every power of two below `max_seqs` and then `max_seqs` itself (32 ->
-`1,2,4,8,16,32`), so the widest step is one replay; up to 16 sequences it reads exactly the default list. Costs to
-weigh before raising either knob:
+**Slots above 16: costs.** An explicit list that stops at 16 runs a decode step over 16 rows as consecutive 16-row
+replays and logs that at startup. Costs to weigh before raising either knob:
 - **KV pool.** Each slot holds `max_tokens_per_seq` of FP8 KV: 103.5 MiB per slot at 2,048 tokens on Qwen3-30B-A3B
   (`serve_recipe.paged_kv_pool_bytes`), so 16 / 32 / 64 slots hold 1.63 / 3.26 / 6.52 GiB, twice that at 4,096
   tokens. A scratch slot is one KV block, but on a hybrid model it is a full slot of linear-attention state.

@@ -181,8 +181,8 @@ def _prefill_graph_env(value: str) -> str:
 def _max_seqs_env(value: str) -> int:
     """``E4B_PAGED_MAX_SEQS``: ``auto`` (the default since lane SC2e, also when unset or empty) or a positive int.
     ``auto`` is resolved when the engine builds (:func:`resolve_max_seqs`): the widest width lane SC2e read that the
-    serve estimate fits in the device's free memory (64 or 16 on the default bucket list; 64, 32 or 16 with
-    ``E4B_PAGED_BUCKETS=auto``). Until then the config carries 16. ``16`` restores the old default;
+    serve estimate fits in the device's free memory (64, 32 or 16 with the default ``E4B_PAGED_BUCKETS=auto``; 64 or 16
+    with an explicit list such as ``1,2,4,8,16``). Until then the config carries 16. ``16`` restores the old default;
     anything else is refused rather than guessed."""
     v = (value or "").strip().lower() or "auto"
     if v == "auto":
@@ -233,15 +233,16 @@ def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
 
 
 def _buckets_env(value: str):
-    """``E4B_PAGED_BUCKETS``: a comma-separated list of decode-graph buckets (``1,2,4,8,16``, the default, also when
-    unset or empty), trimmed to what ``max_seqs`` sequences can use (:func:`~.serve_recipe.usable_buckets`), or
-    ``auto``: every power of two below ``max_seqs``, then ``max_seqs`` itself (:func:`~.serve_recipe.default_buckets`).
-    Up to 16 sequences the two read the same buckets. Above 16 the default list runs a wider decode step as consecutive
-    16-row replays with a host sync after each, and ``auto`` captures one graph that covers it. ``auto`` is opt-in until
-    a lane reads it. Anything else is refused rather than guessed."""
+    """``E4B_PAGED_BUCKETS``: ``auto`` (the default since lane P117, also when unset or empty): every power of two
+    below ``max_seqs``, then ``max_seqs`` itself (:func:`~.serve_recipe.default_buckets`), so the widest decode step is
+    one graph replay. Or a comma-separated list, trimmed to what ``max_seqs`` sequences can use
+    (:func:`~.serve_recipe.usable_buckets`); ``1,2,4,8,16`` restores the old default, which runs a step above 16 rows
+    as consecutive 16-row replays. Up to 16 sequences the two read the same buckets. Lane SC2e (#846) read the speed
+    (64 slots: 12 req/s with ``auto``, 8 on the list) and lane P117 the quality (AT_PARITY at buckets 32 and 64), on
+    Qwen3-30B-A3B int4 on an RTX 5090. Anything else is refused rather than guessed."""
     v = (value or "").strip()
     if not v:
-        return DEFAULT_BUCKETS
+        return "auto"
     if v.lower() == "auto":
         return "auto"
     try:
@@ -305,7 +306,7 @@ class PagedServeConfig:
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
-    buckets: tuple = DEFAULT_BUCKETS     # E4B_PAGED_BUCKETS="1,2,4,8,16" or "auto" (validate resolves; _buckets_env)
+    buckets: tuple = DEFAULT_BUCKETS     # in code: the list unless "auto" is passed; from_env: "auto" when unset (_buckets_env)
     buckets_requested: str = "default"   # E4B_PAGED_BUCKETS as given ("default" when unset or empty); /health reports it
     placement: str = "all-vram"          # E4B_PAGED_PLACEMENT: all-vram | solver
     vram_gb: float = 1.2                 # E4B_PAGED_VRAM_GB (solver budget; the harness default)
