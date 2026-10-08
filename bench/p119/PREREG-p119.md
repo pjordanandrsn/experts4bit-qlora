@@ -120,7 +120,13 @@ other than VOID or NO_READING. The proof's tables are not a reading.
 
 ## What this lane cannot say
 
-- Nothing about speed: the profiled walls are not speeds, and host gaps are SC2e's to read.
+- Nothing about speed: the profiled walls are not speeds, and host gaps are SC2e's to read. Eager device times are not
+  captured-step times or request TTFT: equal tokens and K/V establish the same kernels at the same shapes, not equal
+  timing or launch behaviour under capture.
+- Nothing about the graphs' private memory pools: no graph is captured here, so they are reported as unavailable. The
+  box's `max_mem_gb` is the process peak, a different quantity.
+- Nothing about a prefill's cost to the decodes riding its step, or about served TTFT under load: the TTFT lane's
+  registration carries both (bus, 2026-10-08T08:06Z).
 - Nothing about quality: the TTFT lane reads last-logits quality on its own box.
 - Nothing about other models, cards, prompt lengths or chunk sizes.
 - Nothing about which change would help most: it names candidates, and each fix is its own registered lane.
