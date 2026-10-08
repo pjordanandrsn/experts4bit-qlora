@@ -1,0 +1,16 @@
+{
+ "lane": "P115 Phase D",
+ "proof": true,
+ "verdict": "VOID",
+ "reasons": [
+  "D0a W1: dispatched {'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0}; registered the scalar GEMV and no bw_* (Granite's shapes are not in _BW_SHAPES)",
+  "D1a W1: dispatched {'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0}; registered the scalar GEMV and no bw_* (Granite's shapes are not in _BW_SHAPES)",
+  "D1b W1: dispatched {'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0}; registered the scalar GEMV and no bw_* (Granite's shapes are not in _BW_SHAPES)",
+  "D0b W1: dispatched {'dotpad': 0, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0}; registered the scalar GEMV and no bw_* (Granite's shapes are not in _BW_SHAPES)"
+ ],
+ "bars": {
+  "sane_bias": 0.02,
+  "sane_argmax": 0.95,
+  "sane_windows": 12
+ }
+}

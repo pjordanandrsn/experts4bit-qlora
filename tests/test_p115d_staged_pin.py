@@ -8,9 +8,11 @@ test runs the same comparison in CI. It also runs the box's and the reducer's se
   the prompts, the four speed arms, the two SANE phases (skipped when a speed arm failed) and the reducer;
 - the subject: the default graph server at 16 slots with grouped-nf4-gemm 0.43.0's bandwidth GEMV at its default, only
   the four fusion knobs differing (0 / auto); SANE at one window per pass (T == 1);
-- the rule's constants against the runner and the PREREG, every time-left check inside its own guard, the exit codes.
+- the rule's constants against the runner and the PREREG, every time-left check inside its own guard, the exit codes;
+- the reducer against the records the box actually writes (p115d-prove-2's, Amendment 4), not only its own fakes.
 """
 import hashlib
+import json
 import os
 import pathlib
 import re
@@ -96,10 +98,38 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 def test_the_self_tests_pass():
     out = subprocess.run([sys.executable, str(LANE / "p115d_reduce.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
-    assert out.returncode == 0 and "p115d_reduce self-test OK (23 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "p115d_reduce self-test OK (28 cases)" in out.stdout, out.stdout + out.stderr
     out = subprocess.run([sys.executable, str(LANE / "p115d_box.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
     assert out.returncode == 0 and "p115d_box self-test OK (12/12 cases)" in out.stdout, out.stdout + out.stderr
+
+
+PROVE2 = LANE / "receipts" / "p115d-prove-2"
+
+
+def test_the_reducer_reads_the_records_the_box_writes():
+    """p115d-prove-2 VOIDed because the reducer read W1's own GEMV tally, which graph replays never increment (Amendment
+    4). Its real records must now reduce on the registered rule, and the self-test's fake arm must carry the
+    record's keys, so the fakes cannot drift from the box again (P116's VOID lesson)."""
+    r = _import("p115d_reduce", LANE)
+    for line in (PROVE2 / "SHA256SUMS").read_text().splitlines():
+        want, name = line.split(None, 1)
+        assert hashlib.sha256((PROVE2 / name.lstrip("*")).read_bytes()).hexdigest() == want, name
+
+    def load(name):
+        return json.loads((PROVE2 / name).read_text())
+    arms = {t: load(f"arm_{t}.json") for t in r.TAGS}
+    assert load("verdict_d.json")["verdict"] == "VOID"                                  # as it read on the box
+    assert all(not any(a["workloads"]["W1"]["dispatch"].values()) for a in arms.values())  # graphs: W1 dispatches nothing
+    v = r.reduce(arms, load("sane_off.json"), load("sane_on.json"), "88040546233311baa33236e667b9063289fd0b9b",
+                 proof=True)
+    assert v["verdict"] == "COMBINED_SANE", v["reasons"]
+    fake, real = r._fake_arm("D1a", 1.0, 1.0, [[1, 2]] * 16, model=r.GRAN), arms["D1a"]
+    assert set(fake) <= set(real), set(fake) - set(real)
+    assert set(fake["workloads"]["W1"]) <= set(real["workloads"]["W1"])
+    assert set(fake["workloads"]["W1"]["dispatch"]) == set(real["workloads"]["W1"]["dispatch"])
+    assert set(fake["dispatch_build"]) <= set(real["dispatch_build"]) and set(fake["graph_stats"]) == set(real["graph_stats"])
+    assert set(fake["graph_stats"]["1"]) == set(real["graph_stats"]["1"])
 
 
 def test_the_rule_is_the_registered_rule():
