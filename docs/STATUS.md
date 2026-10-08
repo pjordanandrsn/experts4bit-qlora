@@ -258,9 +258,13 @@ at most 1.0, FALSIFIED narrowly), and steps 8.97 s against Unsloth's 11.54 on th
 position (`e4b.train.memory.packed-4k-position-defaults.5090.2026-10-07`). Memory: e4b's training phase peaks 25.90 GB, 1.04 GB above
 Unsloth's 24.86, and 0.30 GB above with `E4B_CKPT_OFFLOAD=1`, which costs 4 % of the step on that host. Speed: Unsloth / e4b read 1.773,
 outside the registered [1.15, 1.45]. No e4b default moved it. That box ran on a Vast machine where Unsloth's packed step is 16.0–16.3 s
-on three boxes, against 11.1–11.7 s on four other machines, with e4b at 9.04 s. So the ratio there is the host's. Amendment 66's profile
-points to a cause: Unsloth runs about 7× e4b's CPU ops per step, and its GPU is busy for less of its step. TC1 amendment 68 profiles both
-frameworks to test that before any packed speed position replaces amendment 51's.
+on three boxes, against 11.1–11.7 s on four other machines, with e4b at 9.04 s.
+**The packed-row position is a device-time ratio** (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`, TC1
+amendment 68, every arm profiled): Unsloth spends **1.160×** e4b's GPU time per step, against 1.141 on amendment 66's host. Unsloth also
+runs 7.09× e4b's CPU ops per step, and its GPU is busy for 0.78 of its step against e4b's 0.99. So its wall time depends on the host far
+more than e4b's does. The wall-clock ratio by host: 1.287 (Intel Core i9-14900K, amendment 66, one Unsloth draw), 1.472 (an AMD
+engineering-sample CPU, amendment 68) and 1.773 (an AMD EPYC 7K62, amendment 67). Amendment 67's 1.773 has no measured cause: no Unsloth arm
+was profiled on that machine. Amendment 68's test of it read on a card slower for both frameworks, which tested the card, not the host.
 
 The packed-row reading above supersedes amendment 39's out-of-memory row as the default-settings reading. In the field image's environment (torch 2.8) the
 same e4b steps 13.62 s: an environment ratio of 0.739, which amendment 51 had registered in [0.84, 0.98] (FALSIFIED). The buckets are

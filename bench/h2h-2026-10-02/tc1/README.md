@@ -1500,3 +1500,24 @@ Token `qwen3pos68`: e4b's defaults and Unsloth, two draws each in ABBA order, ev
 - **P204:** held-out within 0.01.
 
 If P200–P202 hold, STATUS quotes the device-time ratio as the packed position, with the wall-clock ratio per measured host beside it.
+
+## Amendment 68 (2026-10-08): the packed-row position is a device-time ratio, 1.160 (P200–P202, P204 HELD; P203 FALSIFIED)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 68. One RTX 5090 (`tc1-5090-136`, an AMD engineering-sample
+CPU, a 30.7-CPU quota, Vast machine 13828). e4b `0b29952`, grouped-nf4-gemm `8944aa8`, Unsloth 2026.9.14, every arm in venv-unsloth (torch
+2.12.1) and profiled. Packed 4,096-token rows, 40 load-gated steps, every attempt first time. Read: [`RESULTS-tc1-pos68.md`](RESULTS-tc1-pos68.md).
+
+| arm | s/step (two draws) | device ms / profiled step | GPU busy share of the step | CPU ops / step |
+|---|---|---|---|---|
+| e4b defaults | 10.108 / 10.114 | 10029 / 10057 | 0.992 / 0.994 | 1.08 M |
+| Unsloth | 14.891 / 14.880 | 11650 / 11649 | 0.782 / 0.783 | 7.66 M |
+
+- **P200 HELD:** Unsloth / e4b device time **1.160**, against 1.141 on amendment 66's host.
+- **P201 HELD:** Unsloth's GPU is busy 0.21 less of its step.
+- **P202 HELD:** 7.09× e4b's CPU ops per step.
+- **P204 HELD:** held-out within 0.0001.
+- **P203 FALSIFIED as registered:** Unsloth's device time was 14.7 % above amendment 66's (bound 8 %). e4b's rose 12.9 % on the same card,
+  so the card was slower for both and the ratio held. An absolute time carried from another box tests the card, not the host. Amendment 67's
+  1.773 is quoted as that host's wall ratio, with no measured cause.
+
+Wall ratio on this host: 1.472. The quotable packed position is the device ratio, with the wall ratio per host beside it.

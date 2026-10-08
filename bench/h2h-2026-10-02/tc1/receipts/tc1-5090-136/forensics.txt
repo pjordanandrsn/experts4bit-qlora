@@ -1,0 +1,10 @@
+NVIDIA GeForce RTX 5090, 32607 MiB, 610.57.04, GPU-324c4806-62cd-d0b9-3803-0139fa529d9c, 575.00 W, 3090 MHz
+CPU(s):                                  64
+Model name:                              AMD Eng Sample: 100-000000897-03
+MemTotal:       263621836 kB
+cgroup memory.max 183247044608
+overlay         320G   36M  320G   1% /
+cgroup cpu.max 3071999 100000
+cgroup cpu.cfs_quota_us/period_us absent/absent
+cgroup cpuset.cpus.effective 0-63
+affinity cpus 64 of 64
