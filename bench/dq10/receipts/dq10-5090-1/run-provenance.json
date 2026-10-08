@@ -1,0 +1,44 @@
+{
+  "experiment_id": "dq10-5090-1",
+  "work_id": "experts4bit-qlora#1397",
+  "status": "HARNESS_ERROR",
+  "result": "fail",
+  "complete": true,
+  "started_at": "2026-10-08T23:04:20Z",
+  "finished_at": "2026-10-08T23:12:43Z",
+  "instance_id": "54926784",
+  "cost_usd": {
+    "actual": 0.097,
+    "estimated": 2.8
+  },
+  "teardown_proof": {
+    "at": "2026-10-08T23:12:43Z",
+    "complete": true,
+    "evidence": "{\"destroy\": {\"at\": \"2026-10-08T23:12:42Z\", \"http\": 200, \"instance_id\": \"54926784\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": [\"54927731\"]}",
+    "instance_id": "54926784",
+    "method": "vast-destroy",
+    "reason": "completion"
+  },
+  "schema": "dq10-host-refusal/1",
+  "controller_commit": "5959328d21f6f606ecd67b4943219bab5fd99df8",
+  "launcher_commit": "a59bd1f86ab365ca0d192cfab41e50fcaf4c2771",
+  "guard_armed_at": "2026-10-08T23:04:22Z",
+  "source_receipt_sha256": "24b74f533f0df89a87fd2efdca00578735f8b60608ec49a2ad15948fd960be97",
+  "invoice": {
+    "download": 0.0,
+    "download_gb": 0.01,
+    "gpu": 0.081,
+    "lines": 4,
+    "read_at": "2026-10-08T23:12:43Z",
+    "storage": 0.016,
+    "upload": 0.0
+  },
+  "lane_exit_code": 14,
+  "scientific_reading_count": 0,
+  "proof_count": 0,
+  "capacity_licensed": false,
+  "default_change_eligible": false,
+  "observation_import_licensed": false,
+  "opt_in_removal_licensed": false,
+  "reason": "GitHub codeload egress 0.33 MB/s below registered 1 MB/s floor; refused before install"
+}
