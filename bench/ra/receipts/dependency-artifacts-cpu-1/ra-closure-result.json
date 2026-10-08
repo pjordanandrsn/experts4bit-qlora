@@ -1,0 +1,1341 @@
+{
+  "common_archive_lock_sha256": "cea342c6695a98a5063c25dc58a714c6cfe78f316d5fa1e79ebfc93531dc4bf9",
+  "distributions": {
+    "accelerate": {
+      "extras": [],
+      "version": "1.15.0"
+    },
+    "aiohappyeyeballs": {
+      "extras": [],
+      "version": "2.7.1"
+    },
+    "aiohttp": {
+      "extras": [],
+      "version": "3.14.4"
+    },
+    "aiosignal": {
+      "extras": [],
+      "version": "1.4.0"
+    },
+    "annotated-doc": {
+      "extras": [],
+      "version": "0.0.5"
+    },
+    "annotated-types": {
+      "extras": [],
+      "version": "0.8.0"
+    },
+    "anyio": {
+      "extras": [],
+      "version": "4.15.1"
+    },
+    "attrs": {
+      "extras": [],
+      "version": "26.1.0"
+    },
+    "bitsandbytes": {
+      "extras": [],
+      "version": "0.50.2"
+    },
+    "certifi": {
+      "extras": [],
+      "version": "2026.7.22"
+    },
+    "click": {
+      "extras": [],
+      "version": "8.5.0"
+    },
+    "datasets": {
+      "extras": [],
+      "version": "5.1.0"
+    },
+    "dill": {
+      "extras": [],
+      "version": "0.4.1"
+    },
+    "experts4bit-qlora": {
+      "extras": [
+        "fast",
+        "serve",
+        "train"
+      ],
+      "version": "0.50.0"
+    },
+    "fastapi": {
+      "extras": [],
+      "version": "0.143.0"
+    },
+    "filelock": {
+      "extras": [],
+      "version": "4.0.12"
+    },
+    "frozenlist": {
+      "extras": [],
+      "version": "1.8.0"
+    },
+    "fsspec": {
+      "extras": [
+        "http"
+      ],
+      "version": "2026.7.0"
+    },
+    "grouped-nf4-gemm": {
+      "extras": [],
+      "version": "0.43.0"
+    },
+    "h11": {
+      "extras": [],
+      "version": "0.16.0"
+    },
+    "hf-xet": {
+      "extras": [],
+      "version": "1.7.0"
+    },
+    "httpcore": {
+      "extras": [],
+      "version": "1.0.9"
+    },
+    "httpx": {
+      "extras": [],
+      "version": "0.28.1"
+    },
+    "huggingface-hub": {
+      "extras": [],
+      "version": "1.33.0"
+    },
+    "idna": {
+      "extras": [],
+      "version": "3.20"
+    },
+    "iniconfig": {
+      "extras": [],
+      "version": "2.3.1"
+    },
+    "jinja2": {
+      "extras": [],
+      "version": "3.1.6"
+    },
+    "jsonschema": {
+      "extras": [],
+      "version": "4.26.0"
+    },
+    "jsonschema-specifications": {
+      "extras": [],
+      "version": "2025.9.1"
+    },
+    "markdown-it-py": {
+      "extras": [],
+      "version": "4.2.0"
+    },
+    "markupsafe": {
+      "extras": [],
+      "version": "3.0.4"
+    },
+    "mdurl": {
+      "extras": [],
+      "version": "0.1.2"
+    },
+    "mpmath": {
+      "extras": [],
+      "version": "1.3.0"
+    },
+    "multidict": {
+      "extras": [],
+      "version": "6.9.1"
+    },
+    "multiprocess": {
+      "extras": [],
+      "version": "0.70.19"
+    },
+    "networkx": {
+      "extras": [],
+      "version": "3.6.1"
+    },
+    "numpy": {
+      "extras": [],
+      "version": "2.4.6"
+    },
+    "nvidia-cublas-cu12": {
+      "extras": [],
+      "version": "12.8.4.1"
+    },
+    "nvidia-cuda-cupti-cu12": {
+      "extras": [],
+      "version": "12.8.90"
+    },
+    "nvidia-cuda-nvrtc-cu12": {
+      "extras": [],
+      "version": "12.8.93"
+    },
+    "nvidia-cuda-runtime-cu12": {
+      "extras": [],
+      "version": "12.8.90"
+    },
+    "nvidia-cudnn-cu12": {
+      "extras": [],
+      "version": "9.10.2.21"
+    },
+    "nvidia-cufft-cu12": {
+      "extras": [],
+      "version": "11.3.3.83"
+    },
+    "nvidia-cufile-cu12": {
+      "extras": [],
+      "version": "1.13.1.3"
+    },
+    "nvidia-curand-cu12": {
+      "extras": [],
+      "version": "10.3.9.90"
+    },
+    "nvidia-cusolver-cu12": {
+      "extras": [],
+      "version": "11.7.3.90"
+    },
+    "nvidia-cusparse-cu12": {
+      "extras": [],
+      "version": "12.5.8.93"
+    },
+    "nvidia-cusparselt-cu12": {
+      "extras": [],
+      "version": "0.7.1"
+    },
+    "nvidia-nccl-cu12": {
+      "extras": [],
+      "version": "2.27.3"
+    },
+    "nvidia-nvjitlink-cu12": {
+      "extras": [],
+      "version": "12.8.93"
+    },
+    "nvidia-nvtx-cu12": {
+      "extras": [],
+      "version": "12.8.90"
+    },
+    "opentelemetry-api": {
+      "extras": [],
+      "version": "1.45.1"
+    },
+    "packaging": {
+      "extras": [],
+      "version": "26.3"
+    },
+    "pandas": {
+      "extras": [],
+      "version": "3.0.6"
+    },
+    "peft": {
+      "extras": [],
+      "version": "0.21.2"
+    },
+    "pip": {
+      "extras": [],
+      "version": "26.2.1"
+    },
+    "pluggy": {
+      "extras": [],
+      "version": "1.6.0"
+    },
+    "propcache": {
+      "extras": [],
+      "version": "0.5.4"
+    },
+    "psutil": {
+      "extras": [],
+      "version": "7.2.2"
+    },
+    "pyarrow": {
+      "extras": [],
+      "version": "25.0.1"
+    },
+    "pydantic": {
+      "extras": [],
+      "version": "2.14.0"
+    },
+    "pydantic-core": {
+      "extras": [],
+      "version": "2.50.0"
+    },
+    "pygments": {
+      "extras": [],
+      "version": "2.21.0"
+    },
+    "pytest": {
+      "extras": [],
+      "version": "9.1.1"
+    },
+    "python-dateutil": {
+      "extras": [],
+      "version": "2.9.0.post0"
+    },
+    "pyyaml": {
+      "extras": [],
+      "version": "6.0.3"
+    },
+    "referencing": {
+      "extras": [],
+      "version": "0.37.0"
+    },
+    "regex": {
+      "extras": [],
+      "version": "2026.9.29"
+    },
+    "rich": {
+      "extras": [],
+      "version": "15.0.0"
+    },
+    "rpds-py": {
+      "extras": [],
+      "version": "2026.9.1"
+    },
+    "safetensors": {
+      "extras": [],
+      "version": "0.8.0"
+    },
+    "setuptools": {
+      "extras": [],
+      "version": "84.0.0"
+    },
+    "shellingham": {
+      "extras": [],
+      "version": "1.5.4"
+    },
+    "six": {
+      "extras": [],
+      "version": "1.17.0"
+    },
+    "starlette": {
+      "extras": [],
+      "version": "1.7.0"
+    },
+    "sympy": {
+      "extras": [],
+      "version": "1.14.0"
+    },
+    "tokenizers": {
+      "extras": [],
+      "version": "0.23.2"
+    },
+    "torch": {
+      "extras": [],
+      "version": "2.8.0+cu128"
+    },
+    "tqdm": {
+      "extras": [],
+      "version": "4.70.1"
+    },
+    "transformers": {
+      "extras": [],
+      "version": "5.18.0"
+    },
+    "triton": {
+      "extras": [],
+      "version": "3.4.0"
+    },
+    "typer": {
+      "extras": [],
+      "version": "0.27.3"
+    },
+    "typing-extensions": {
+      "extras": [],
+      "version": "4.16.0"
+    },
+    "typing-inspection": {
+      "extras": [],
+      "version": "0.4.4"
+    },
+    "uvicorn": {
+      "extras": [],
+      "version": "0.54.0"
+    },
+    "xxhash": {
+      "extras": [],
+      "version": "4.0.1"
+    },
+    "yarl": {
+      "extras": [],
+      "version": "1.25.1"
+    }
+  },
+  "edges": [
+    [
+      "ROOT",
+      "aiohttp",
+      "aiohttp"
+    ],
+    [
+      "ROOT",
+      "bitsandbytes",
+      "bitsandbytes==0.50.2"
+    ],
+    [
+      "ROOT",
+      "experts4bit-qlora",
+      "experts4bit-qlora[fast,serve,train]==0.50.0"
+    ],
+    [
+      "ROOT",
+      "grouped-nf4-gemm",
+      "grouped-nf4-gemm==0.43.0"
+    ],
+    [
+      "ROOT",
+      "httpx",
+      "httpx"
+    ],
+    [
+      "ROOT",
+      "jsonschema",
+      "jsonschema"
+    ],
+    [
+      "ROOT",
+      "peft",
+      "peft==0.21.2"
+    ],
+    [
+      "ROOT",
+      "pip",
+      "pip==26.2.1"
+    ],
+    [
+      "ROOT",
+      "psutil",
+      "psutil"
+    ],
+    [
+      "ROOT",
+      "pytest",
+      "pytest"
+    ],
+    [
+      "ROOT",
+      "torch",
+      "torch==2.8.0+cu128"
+    ],
+    [
+      "ROOT",
+      "transformers",
+      "transformers==5.18.0"
+    ],
+    [
+      "ROOT",
+      "triton",
+      "triton==3.4.0"
+    ],
+    [
+      "ROOT",
+      "uvicorn",
+      "uvicorn==0.54.0"
+    ],
+    [
+      "accelerate",
+      "huggingface-hub",
+      "huggingface_hub>=0.21.0"
+    ],
+    [
+      "accelerate",
+      "numpy",
+      "numpy>=1.17"
+    ],
+    [
+      "accelerate",
+      "packaging",
+      "packaging>=20.0"
+    ],
+    [
+      "accelerate",
+      "psutil",
+      "psutil"
+    ],
+    [
+      "accelerate",
+      "pyyaml",
+      "pyyaml"
+    ],
+    [
+      "accelerate",
+      "safetensors",
+      "safetensors>=0.4.3"
+    ],
+    [
+      "accelerate",
+      "torch",
+      "torch>=2.0.0"
+    ],
+    [
+      "aiohttp",
+      "aiohappyeyeballs",
+      "aiohappyeyeballs>=2.5.0"
+    ],
+    [
+      "aiohttp",
+      "aiosignal",
+      "aiosignal>=1.4.0"
+    ],
+    [
+      "aiohttp",
+      "attrs",
+      "attrs>=17.3.0"
+    ],
+    [
+      "aiohttp",
+      "frozenlist",
+      "frozenlist>=1.1.1"
+    ],
+    [
+      "aiohttp",
+      "multidict",
+      "multidict<7.0,>=4.5"
+    ],
+    [
+      "aiohttp",
+      "propcache",
+      "propcache>=0.2.0"
+    ],
+    [
+      "aiohttp",
+      "typing-extensions",
+      "typing_extensions>=4.4; python_version < \"3.13\""
+    ],
+    [
+      "aiohttp",
+      "yarl",
+      "yarl<2.0,>=1.25.1"
+    ],
+    [
+      "aiosignal",
+      "frozenlist",
+      "frozenlist>=1.1.0"
+    ],
+    [
+      "aiosignal",
+      "typing-extensions",
+      "typing-extensions>=4.2; python_version < \"3.13\""
+    ],
+    [
+      "anyio",
+      "idna",
+      "idna>=2.8"
+    ],
+    [
+      "anyio",
+      "typing-extensions",
+      "typing_extensions>=4.16.0; python_version < \"3.15\""
+    ],
+    [
+      "bitsandbytes",
+      "numpy",
+      "numpy>=1.17"
+    ],
+    [
+      "bitsandbytes",
+      "packaging",
+      "packaging>=20.9"
+    ],
+    [
+      "bitsandbytes",
+      "torch",
+      "torch<3,>=2.4"
+    ],
+    [
+      "datasets",
+      "dill",
+      "dill<0.4.2,>=0.3.0"
+    ],
+    [
+      "datasets",
+      "filelock",
+      "filelock"
+    ],
+    [
+      "datasets",
+      "fsspec",
+      "fsspec[http]<=2026.7.0,>=2023.1.0"
+    ],
+    [
+      "datasets",
+      "huggingface-hub",
+      "huggingface-hub<3.0,>=1.31.0"
+    ],
+    [
+      "datasets",
+      "multiprocess",
+      "multiprocess<0.70.20"
+    ],
+    [
+      "datasets",
+      "numpy",
+      "numpy>=1.17"
+    ],
+    [
+      "datasets",
+      "packaging",
+      "packaging"
+    ],
+    [
+      "datasets",
+      "pandas",
+      "pandas"
+    ],
+    [
+      "datasets",
+      "pyarrow",
+      "pyarrow>=24.0.0"
+    ],
+    [
+      "datasets",
+      "pyyaml",
+      "pyyaml>=5.1"
+    ],
+    [
+      "datasets",
+      "tqdm",
+      "tqdm>=4.66.3"
+    ],
+    [
+      "datasets",
+      "xxhash",
+      "xxhash"
+    ],
+    [
+      "experts4bit-qlora",
+      "accelerate",
+      "accelerate>=0.30; extra == \"serve\""
+    ],
+    [
+      "experts4bit-qlora",
+      "accelerate",
+      "accelerate>=0.30; extra == \"train\""
+    ],
+    [
+      "experts4bit-qlora",
+      "bitsandbytes",
+      "bitsandbytes>=0.43"
+    ],
+    [
+      "experts4bit-qlora",
+      "datasets",
+      "datasets>=2.14; extra == \"train\""
+    ],
+    [
+      "experts4bit-qlora",
+      "fastapi",
+      "fastapi>=0.110; extra == \"serve\""
+    ],
+    [
+      "experts4bit-qlora",
+      "grouped-nf4-gemm",
+      "grouped-nf4-gemm>=0.30.0; extra == \"fast\""
+    ],
+    [
+      "experts4bit-qlora",
+      "huggingface-hub",
+      "huggingface_hub>=0.23; extra == \"serve\""
+    ],
+    [
+      "experts4bit-qlora",
+      "huggingface-hub",
+      "huggingface_hub>=0.23; extra == \"train\""
+    ],
+    [
+      "experts4bit-qlora",
+      "pydantic",
+      "pydantic>=2; extra == \"serve\""
+    ],
+    [
+      "experts4bit-qlora",
+      "safetensors",
+      "safetensors>=0.4; extra == \"serve\""
+    ],
+    [
+      "experts4bit-qlora",
+      "safetensors",
+      "safetensors>=0.4; extra == \"train\""
+    ],
+    [
+      "experts4bit-qlora",
+      "torch",
+      "torch>=2.2"
+    ],
+    [
+      "experts4bit-qlora",
+      "transformers",
+      "transformers>=5.0; extra == \"serve\""
+    ],
+    [
+      "experts4bit-qlora",
+      "transformers",
+      "transformers>=5.0; extra == \"train\""
+    ],
+    [
+      "experts4bit-qlora",
+      "uvicorn",
+      "uvicorn>=0.29; extra == \"serve\""
+    ],
+    [
+      "fastapi",
+      "annotated-doc",
+      "annotated-doc>=0.0.2"
+    ],
+    [
+      "fastapi",
+      "opentelemetry-api",
+      "opentelemetry-api>=1.44.0"
+    ],
+    [
+      "fastapi",
+      "pydantic",
+      "pydantic>=2.9.0"
+    ],
+    [
+      "fastapi",
+      "starlette",
+      "starlette>=0.46.0"
+    ],
+    [
+      "fastapi",
+      "typing-extensions",
+      "typing-extensions>=4.8.0"
+    ],
+    [
+      "fastapi",
+      "typing-inspection",
+      "typing-inspection>=0.4.2"
+    ],
+    [
+      "fsspec",
+      "aiohttp",
+      "aiohttp!=4.0.0a0,!=4.0.0a1; extra == \"http\""
+    ],
+    [
+      "grouped-nf4-gemm",
+      "numpy",
+      "numpy"
+    ],
+    [
+      "grouped-nf4-gemm",
+      "torch",
+      "torch>=2.8.0.dev0"
+    ],
+    [
+      "grouped-nf4-gemm",
+      "triton",
+      "triton>=3.4; platform_system == \"Linux\""
+    ],
+    [
+      "httpcore",
+      "certifi",
+      "certifi"
+    ],
+    [
+      "httpcore",
+      "h11",
+      "h11>=0.16"
+    ],
+    [
+      "httpx",
+      "anyio",
+      "anyio"
+    ],
+    [
+      "httpx",
+      "certifi",
+      "certifi"
+    ],
+    [
+      "httpx",
+      "httpcore",
+      "httpcore==1.*"
+    ],
+    [
+      "httpx",
+      "idna",
+      "idna"
+    ],
+    [
+      "huggingface-hub",
+      "click",
+      "click<9.0.0,>=8.4.2"
+    ],
+    [
+      "huggingface-hub",
+      "filelock",
+      "filelock>=3.10.0"
+    ],
+    [
+      "huggingface-hub",
+      "fsspec",
+      "fsspec>=2023.5.0"
+    ],
+    [
+      "huggingface-hub",
+      "hf-xet",
+      "hf-xet<2.0.0,>=1.6.0; platform_machine == \"x86_64\" or platform_machine == \"amd64\" or platform_machine == \"AMD64\" or platform_machine == \"arm64\" or platform_machine == \"aarch64\""
+    ],
+    [
+      "huggingface-hub",
+      "httpx",
+      "httpx<1,>=0.23.0"
+    ],
+    [
+      "huggingface-hub",
+      "packaging",
+      "packaging>=20.9"
+    ],
+    [
+      "huggingface-hub",
+      "pyyaml",
+      "pyyaml>=5.1"
+    ],
+    [
+      "huggingface-hub",
+      "tqdm",
+      "tqdm>=4.42.1"
+    ],
+    [
+      "huggingface-hub",
+      "typing-extensions",
+      "typing-extensions>=4.1.0"
+    ],
+    [
+      "jinja2",
+      "markupsafe",
+      "MarkupSafe>=2.0"
+    ],
+    [
+      "jsonschema",
+      "attrs",
+      "attrs>=22.2.0"
+    ],
+    [
+      "jsonschema",
+      "jsonschema-specifications",
+      "jsonschema-specifications>=2023.03.6"
+    ],
+    [
+      "jsonschema",
+      "referencing",
+      "referencing>=0.28.4"
+    ],
+    [
+      "jsonschema",
+      "rpds-py",
+      "rpds-py>=0.25.0"
+    ],
+    [
+      "jsonschema-specifications",
+      "referencing",
+      "referencing>=0.31.0"
+    ],
+    [
+      "markdown-it-py",
+      "mdurl",
+      "mdurl~=0.1"
+    ],
+    [
+      "multiprocess",
+      "dill",
+      "dill>=0.4.1"
+    ],
+    [
+      "nvidia-cudnn-cu12",
+      "nvidia-cublas-cu12",
+      "nvidia-cublas-cu12"
+    ],
+    [
+      "nvidia-cufft-cu12",
+      "nvidia-nvjitlink-cu12",
+      "nvidia-nvjitlink-cu12"
+    ],
+    [
+      "nvidia-cusolver-cu12",
+      "nvidia-cublas-cu12",
+      "nvidia-cublas-cu12"
+    ],
+    [
+      "nvidia-cusolver-cu12",
+      "nvidia-cusparse-cu12",
+      "nvidia-cusparse-cu12"
+    ],
+    [
+      "nvidia-cusolver-cu12",
+      "nvidia-nvjitlink-cu12",
+      "nvidia-nvjitlink-cu12"
+    ],
+    [
+      "nvidia-cusparse-cu12",
+      "nvidia-nvjitlink-cu12",
+      "nvidia-nvjitlink-cu12"
+    ],
+    [
+      "opentelemetry-api",
+      "typing-extensions",
+      "typing-extensions>=4.5.0"
+    ],
+    [
+      "pandas",
+      "numpy",
+      "numpy>=1.26.0; python_version < \"3.14\""
+    ],
+    [
+      "pandas",
+      "python-dateutil",
+      "python-dateutil>=2.8.2"
+    ],
+    [
+      "peft",
+      "accelerate",
+      "accelerate>=0.21.0"
+    ],
+    [
+      "peft",
+      "huggingface-hub",
+      "huggingface_hub>=0.25.0"
+    ],
+    [
+      "peft",
+      "numpy",
+      "numpy>=1.17"
+    ],
+    [
+      "peft",
+      "packaging",
+      "packaging>=20.0"
+    ],
+    [
+      "peft",
+      "psutil",
+      "psutil"
+    ],
+    [
+      "peft",
+      "pyyaml",
+      "pyyaml"
+    ],
+    [
+      "peft",
+      "safetensors",
+      "safetensors"
+    ],
+    [
+      "peft",
+      "torch",
+      "torch>=1.13.0"
+    ],
+    [
+      "peft",
+      "tqdm",
+      "tqdm"
+    ],
+    [
+      "peft",
+      "transformers",
+      "transformers"
+    ],
+    [
+      "pydantic",
+      "annotated-types",
+      "annotated-types>=0.6.0"
+    ],
+    [
+      "pydantic",
+      "pydantic-core",
+      "pydantic-core==2.50.0"
+    ],
+    [
+      "pydantic",
+      "typing-extensions",
+      "typing-extensions>=4.16.0"
+    ],
+    [
+      "pydantic",
+      "typing-inspection",
+      "typing-inspection>=0.4.4"
+    ],
+    [
+      "pydantic-core",
+      "typing-extensions",
+      "typing-extensions>=4.16.0"
+    ],
+    [
+      "pytest",
+      "iniconfig",
+      "iniconfig>=1.0.1"
+    ],
+    [
+      "pytest",
+      "packaging",
+      "packaging>=22"
+    ],
+    [
+      "pytest",
+      "pluggy",
+      "pluggy<2,>=1.5"
+    ],
+    [
+      "pytest",
+      "pygments",
+      "pygments>=2.7.2"
+    ],
+    [
+      "python-dateutil",
+      "six",
+      "six>=1.5"
+    ],
+    [
+      "referencing",
+      "attrs",
+      "attrs>=22.2.0"
+    ],
+    [
+      "referencing",
+      "rpds-py",
+      "rpds-py>=0.7.0"
+    ],
+    [
+      "referencing",
+      "typing-extensions",
+      "typing-extensions>=4.4.0; python_version < \"3.13\""
+    ],
+    [
+      "rich",
+      "markdown-it-py",
+      "markdown-it-py>=2.2.0"
+    ],
+    [
+      "rich",
+      "pygments",
+      "pygments<3.0.0,>=2.13.0"
+    ],
+    [
+      "starlette",
+      "anyio",
+      "anyio<5,>=4.0.0"
+    ],
+    [
+      "starlette",
+      "typing-extensions",
+      "typing-extensions>=4.10.0; python_version < \"3.13\""
+    ],
+    [
+      "sympy",
+      "mpmath",
+      "mpmath<1.4,>=1.1.0"
+    ],
+    [
+      "tokenizers",
+      "huggingface-hub",
+      "huggingface-hub<2.0,>=0.16.4"
+    ],
+    [
+      "torch",
+      "filelock",
+      "filelock"
+    ],
+    [
+      "torch",
+      "fsspec",
+      "fsspec"
+    ],
+    [
+      "torch",
+      "jinja2",
+      "jinja2"
+    ],
+    [
+      "torch",
+      "networkx",
+      "networkx"
+    ],
+    [
+      "torch",
+      "nvidia-cublas-cu12",
+      "nvidia-cublas-cu12==12.8.4.1; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-cuda-cupti-cu12",
+      "nvidia-cuda-cupti-cu12==12.8.90; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-cuda-nvrtc-cu12",
+      "nvidia-cuda-nvrtc-cu12==12.8.93; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-cuda-runtime-cu12",
+      "nvidia-cuda-runtime-cu12==12.8.90; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-cudnn-cu12",
+      "nvidia-cudnn-cu12==9.10.2.21; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-cufft-cu12",
+      "nvidia-cufft-cu12==11.3.3.83; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-cufile-cu12",
+      "nvidia-cufile-cu12==1.13.1.3; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-curand-cu12",
+      "nvidia-curand-cu12==10.3.9.90; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-cusolver-cu12",
+      "nvidia-cusolver-cu12==11.7.3.90; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-cusparse-cu12",
+      "nvidia-cusparse-cu12==12.5.8.93; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-cusparselt-cu12",
+      "nvidia-cusparselt-cu12==0.7.1; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-nccl-cu12",
+      "nvidia-nccl-cu12==2.27.3; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-nvjitlink-cu12",
+      "nvidia-nvjitlink-cu12==12.8.93; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "nvidia-nvtx-cu12",
+      "nvidia-nvtx-cu12==12.8.90; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "sympy",
+      "sympy>=1.13.3"
+    ],
+    [
+      "torch",
+      "triton",
+      "triton==3.4.0; platform_system == \"Linux\" and platform_machine == \"x86_64\""
+    ],
+    [
+      "torch",
+      "typing-extensions",
+      "typing-extensions>=4.10.0"
+    ],
+    [
+      "transformers",
+      "huggingface-hub",
+      "huggingface-hub<3.0,>=1.31.0"
+    ],
+    [
+      "transformers",
+      "numpy",
+      "numpy>=1.17"
+    ],
+    [
+      "transformers",
+      "packaging",
+      "packaging>=20.0"
+    ],
+    [
+      "transformers",
+      "pyyaml",
+      "pyyaml>=5.1"
+    ],
+    [
+      "transformers",
+      "regex",
+      "regex>=2025.10.22"
+    ],
+    [
+      "transformers",
+      "safetensors",
+      "safetensors>=0.8.0"
+    ],
+    [
+      "transformers",
+      "tokenizers",
+      "tokenizers<0.24.0,>=0.23.1"
+    ],
+    [
+      "transformers",
+      "tqdm",
+      "tqdm>=4.60"
+    ],
+    [
+      "transformers",
+      "typer",
+      "typer"
+    ],
+    [
+      "triton",
+      "setuptools",
+      "setuptools>=40.8.0"
+    ],
+    [
+      "typer",
+      "annotated-doc",
+      "annotated-doc>=0.0.2"
+    ],
+    [
+      "typer",
+      "rich",
+      "rich>=13.8.0"
+    ],
+    [
+      "typer",
+      "shellingham",
+      "shellingham>=1.3.0"
+    ],
+    [
+      "typing-inspection",
+      "typing-extensions",
+      "typing-extensions>=4.15.0"
+    ],
+    [
+      "uvicorn",
+      "click",
+      "click>=7.0"
+    ],
+    [
+      "uvicorn",
+      "h11",
+      "h11>=0.8"
+    ],
+    [
+      "yarl",
+      "idna",
+      "idna>=2.0"
+    ],
+    [
+      "yarl",
+      "multidict",
+      "multidict>=4.0"
+    ],
+    [
+      "yarl",
+      "propcache",
+      "propcache>=0.2.1"
+    ]
+  ],
+  "image_sha256": "de86fb4ae7a3aba2bfe671d8e6a9b2d79ba5f0c874e34a4084f9bb5ca0212732",
+  "lock_sha256": "8d30a01ac09a606a35c0ddc256f1d675889e1f117bfe631381fae4fc03c4cc4d",
+  "marker_environment": {
+    "implementation_name": "cpython",
+    "implementation_version": "3.11.13",
+    "os_name": "posix",
+    "platform_machine": "x86_64",
+    "platform_python_implementation": "CPython",
+    "platform_release": "",
+    "platform_system": "Linux",
+    "platform_version": "",
+    "python_full_version": "3.11.13",
+    "python_version": "3.11",
+    "sys_platform": "linux"
+  },
+  "metadata_sha256": {
+    "accelerate": "64e744885238d853870093f1d4526eb93ac6ae8a5420a2b3f864fe5d16189d37",
+    "aiohappyeyeballs": "e68d1bf48aec9dcc2767343dedec25e12860085cba180e10bc3d3bdd031602ba",
+    "aiohttp": "6bc7e563128bafdaca180d9b1a94f8ec864219d54692096442a4a73893599a3f",
+    "aiosignal": "09247ef1da8bc696728d47130e702e4307f6f7d101d6c485bff9f3a71ce7008d",
+    "annotated-doc": "8c24d70c5d9153d22123353a906042fd7603df2d15c2196290b0f8a962558c46",
+    "annotated-types": "614985b278f601b8ef863f82783b991cc3ada4b89f592eb71c7c48c5f2ef2298",
+    "anyio": "043aecb571af7189e8a6c528f5d8e32545f1b2cdfaaf761d51e6d5b67ea3ca81",
+    "attrs": "4cd40e690f23bf37cbcad34efd6758e062df1df07c86833f7e3ce95bf1fa38cc",
+    "bitsandbytes": "8a2550ec644cfc9da9ebc19f83d97ffb34f4cba6373c0e336d71aa2acc169ea7",
+    "certifi": "ef5af1638fbb23676ac3c5777dfcfc2cd9c348fe4172ed5ba3d277655b248090",
+    "click": "e87bce0bd194de70dfb8e708e0a6b0483009f25611804eaf87bfeb63e6c20501",
+    "datasets": "ef2ebf6efe7f711710e1856c169834f397ff29f11b2687577d093637eb9bfad4",
+    "dill": "040d6c84eddf29c8c14dc2aef214962a919803f557243824dd4f8aa3b49e3868",
+    "experts4bit-qlora": "f1aa94873b7cd591c67bc7099db0e906989b6970302ec3e8a23df0a169410144",
+    "fastapi": "1bfa2ecf35ea529d68e56c195c5a4cee7864335d24bcc4a76cf40d7a71edc6e9",
+    "filelock": "13cef4f5394eede99fa578d493e22e063e9aa007d90b7145c18c21cb2ea0102a",
+    "frozenlist": "946c22dc9f7e2c76f2d698f00a4306dbe49a820e2b3f1a0e22fe5286cbec35f1",
+    "fsspec": "88b1657585de14e3bb82aa5278aa9595b30aa4ca74ead073d8950615c808099d",
+    "grouped-nf4-gemm": "47084065cb3d2a0d836a56ea9bf9bc0a9b0d4ffc2d94ee1d1c9dd3600d2915c9",
+    "h11": "28f326098ac09fcba79b8f180f96087c841fe2456215cb7b872a9c7d5cd19d64",
+    "hf-xet": "05975b1239f188bb418539f178ef68a693ea6824f20c30583a02eea94faf650a",
+    "httpcore": "fe2d4fda6199128978779e0cf27f3c045c531863fcdd987eacc74f3a18d41c21",
+    "httpx": "febb9b0f8f3e80d57c8199c304f35c4336e8581d1d18d7983c92766b82793b25",
+    "huggingface-hub": "bee565776d66f486d224f74024b656a69ed42e2639d80b18811fca4365adc42e",
+    "idna": "dbd8c14c1e4ca1e0c9824a6dbc7cbbf78884f38eb52d91148cd3025f671e4b85",
+    "iniconfig": "47c2c35d936f5c649d8074c6464719a42966a67b5cebad01e3e5784cf090cfb6",
+    "jinja2": "68c5548fb67c4132a13898d9b31ec50c6bea2abdd915d921f214355c3a6499c8",
+    "jsonschema": "05b189866ca98a96da3934bf6b83687ced3ff85325273b77e16b705f6d8b26d2",
+    "jsonschema-specifications": "35abd41757f32b4ea24756920ded47b70173d77cbc052a5a6d3ab583b2e8d89d",
+    "markdown-it-py": "72c36ff516755443b1ecb61e17b2567a990230b49a504b0eb0c42d5f82448a9c",
+    "markupsafe": "66767d76388ece15d49d50dafb655891ef5d868715e7128e7f7d737a70b353c4",
+    "mdurl": "b53b29d48f499367053fda3c81e7ce27d2558380ebbf83e66023b02eb7ddd25d",
+    "mpmath": "44b66ea444b9c0d19ae94815d356bf047ae6b680c19268b5c265687cd6a81406",
+    "multidict": "b52756a8e05f6cf5e429cb0133ea395f252aee4a30b748506dd354a5ad2d4af2",
+    "multiprocess": "24146d46d724ce041d187426babb43dc5a6a4cd5d1acad0d7fc0d12693376fa5",
+    "networkx": "aca5d94a97d1f70f301d033addb635f6e66be8973a00aba4127637eed2ef316a",
+    "numpy": "b082c52ccbe3b880bae177c35171b52ed6c947f3ad71e3762f2723f60a411de0",
+    "nvidia-cublas-cu12": "310556f1c2c31ec517d4b049eaf12374081d1c52c8ef4d8eceab2aaf1edff2df",
+    "nvidia-cuda-cupti-cu12": "6df7fa2fcdfa046eb952f3f8c172f524b2e19a654ec037da3dbb32e93d9671d1",
+    "nvidia-cuda-nvrtc-cu12": "376458a22054b4a36e110dfab570df4bc658c037a2fb47184bdc4dff7ab90d23",
+    "nvidia-cuda-runtime-cu12": "00431338ea983d4be2f46f9fd29cec2fd9bfa39553933ca59fd37192e7d0f82f",
+    "nvidia-cudnn-cu12": "7dc7ea3541119ddea15ed9a68e9f01e4a160b164607abad22f9dec54e2937266",
+    "nvidia-cufft-cu12": "ed11d2273b98e3897dc87ae88fcd7a0661b8a4c96529b93a5d22799fd4898de5",
+    "nvidia-cufile-cu12": "df713a26389a8052d17fee3c1521563e060b24a037983b3889fff54f906ef288",
+    "nvidia-curand-cu12": "7d4df14884c3de2ec922c546d995cee62f9a0e5225b3eaf2d8951520212cbf6f",
+    "nvidia-cusolver-cu12": "1f06a55dc8f2aef9eb20f018044bfa7731124698ba7b435d11c250c62eaf4dc3",
+    "nvidia-cusparse-cu12": "e83b3bf81e6a2c1dc4d4ddcd73b283a88e6f7f9d20385d280ec030dbf5384f22",
+    "nvidia-cusparselt-cu12": "b264cea6951b70b52a3fd2ffaa88f9109eaf379633aa8d6e0832ecc92ddf6fba",
+    "nvidia-nccl-cu12": "87ee999c55a3181761f4b7758a385539776b0cba3cda4fd0f8bff4da26c6e355",
+    "nvidia-nvjitlink-cu12": "776feab012c1f3efce8918975dc08aa01793aa33832d87b377caa0448cad4435",
+    "nvidia-nvtx-cu12": "c63c23e04e8cf04143721ff718cba87a2ae5630a50451b77f8357a0d26133cf1",
+    "opentelemetry-api": "5bc71e90cb421be92a43bf5ad5b0f25dccfa2a24ddceaa2877779879962a4c9e",
+    "packaging": "70fdb89fc4d4a9a043bf7372b8972bcc883fddff34ab55e9cf80d73875384763",
+    "pandas": "c2e8c472e1f49c30b7b00dc1cde8b8ed384b1b6d85b4d5ffe163e800e71dbc61",
+    "peft": "57ace1298996b6c641c067d01d418a3c8528f819cf415509cce6f8a2b1f2ba69",
+    "pip": "3a561005822841f2c45f442f6c7a7505172c8c376c9fe274d876c8ac912968cb",
+    "pluggy": "7438c35ee25a095eb7416f84b461c2d74425c5e734ad54c3912453c65244e01c",
+    "propcache": "6ed3bac0ad43050ceaf8bd09878ba3d673c94c4da0d4498f903f86c36cc6fb57",
+    "psutil": "525f8ba78523cf7bc3759d62a105e7c57fd679ea702402b9449fb0746aa0217f",
+    "pyarrow": "12ed8d0988a6f7153fec923ee47b7fc1d6134463a86b1b89fa36f24c250163ff",
+    "pydantic": "11c8967cbcd622677943be38b48a3931cc524250acd9d8c7a6386408099c4cf9",
+    "pydantic-core": "d7f01d1f3be82b075af78fe6152a69edbb7708e4c56118b7c937641283516cbf",
+    "pygments": "1dde075570136774c706bf0009183a793fe0ee262e4a5590cc6eff8453eedd43",
+    "pytest": "c5d032518012789cabc870d46589aca3aeda36cf9fa4399ee88bda3d10438451",
+    "python-dateutil": "a9d436da322be808332f98d88325998e87cb693a678a9969feb4cfad729a6e93",
+    "pyyaml": "03c3b415ed38d09faedc49360e930769b40c58f68585e6de00e2e4916a858d34",
+    "referencing": "c93b00e6ab1524fd60848376604c189a114374776475c25a31d57be47b29de6a",
+    "regex": "33859377dbf8dd38ee3de73fd97faebf4a63d50576e3cc1a9dfe44df08b0936a",
+    "rich": "fad34fc603fac4481bf81f8dd629492fc302c0ec31909c86644751512afb2e3b",
+    "rpds-py": "5d72dca2e387c8d2b4180b68ee87c15b64751e059100a6db58891ec9995445c3",
+    "safetensors": "645be7b8d55e91534f991d144dc9e279581ea8dbea1a8c5b0be14e529d01e345",
+    "setuptools": "3ef2975718dd31cabdd5829455e9b868ca14dbf79ed8fed2de0af4e87347006e",
+    "shellingham": "183d80220a37493262795739dd357cc5bb3f49bd390cc9198d5180e5451a07fa",
+    "six": "562042078c2752549f6d8a7c86dbc5dd708088a7be6d80672ec7b07100b72468",
+    "starlette": "f7870fc19ab7c2e364887057340b9fb47e9bda74d24b06c58ca399494abfe019",
+    "sympy": "b756c2fbfd5be05ac5bdb0ebca61f55618f30f633ed92d88a5687429313a7595",
+    "tokenizers": "d2d200c0d0c48895b2c3b02cdd8c06c26dea8f9be38ef193e9b4dd5a566c89be",
+    "torch": "aad6db3dd1aeb1e9a59ab1143a372adba214646e6e8eb91c9e594d25b34c858c",
+    "tqdm": "a5da70b966afea3a759716041bad7187f2ece02c22348cf9e7c0a512bbf15f57",
+    "transformers": "57734df2ecec997748d02c3453dc3e7fe7117acbb72bf98faa5ae3c26b261456",
+    "triton": "8496b57becd6f0fe732bf81570330383f25e2bc572a54bdec45671a23e1db189",
+    "typer": "fc2cbb86c4fd175326b63427e9a3fa13e79364d7333a945414d9c6ac80c0f0e4",
+    "typing-extensions": "b05084ca1d50879865178d9fff9fabeab61bdfb1f361bfbde95421ffc8f9be46",
+    "typing-inspection": "bad3d9e6342ef6750cf5128ec942327b8bebdce0b6e4d6f67cb15b27ae5118da",
+    "uvicorn": "9399e5ddda3d26e842d6fb5420c38b0857aac568d53badbdc224b3a21339efa8",
+    "xxhash": "c09b864a32b9501a18e6c0e88cf5ee34c8ff304475c59e6d825812f136f3cb38",
+    "yarl": "fd6baa258a11c4d7e7008272a69180d4d34aa04a6a5afda36ac5e55aa0aa4f41"
+  },
+  "packaging_wheel_sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+  "proves_dependency_closure": true,
+  "proves_gpu_engagement": false,
+  "proves_installation": false,
+  "proves_release_source_binding": false,
+  "schema": 1
+}
