@@ -5,10 +5,11 @@ Descriptive only: no gate, licence, default or claim.
 SC2e (``bench/h2h-2026-10-02/sc2e``) read 64 slots with buckets up to 64 at 12 req/s on Qwen3-30B-A3B int4, one RTX
 5090: a 64-row decode step runs in 18.4 ms (16.0 on the device), and a 512-token prefill forward takes ~40 ms. The
 capacity model on SC2e's costs says prefill and the decode step together set the next ceiling. Nobody has attributed
-either by kernel on this stack. This box does, on the eager twins of the served graphs: P109 read each decode bucket's
-replay bit-identical to its padded eager step (P117's G64 confirmed the tokens at 64 rows), and the first-chunk prefill
-graph captures the same forward, so the eager steps run the same kernels at the same shapes. ``torch.profiler`` (CUDA
-activities) attributes their device time per kernel, as P102 and P107 did for prefill.
+either by kernel on this stack. This box does, on the eager twins of the served graphs: each decode bucket's graph is
+captured from its padded eager step and the first-chunk prefill graph from the eager forward -- the same code path at
+the same shapes (P109's bit-identical outputs establish numerical equivalence, not identical kernels). ``torch.profiler``
+(CUDA activities) attributes the eager steps' device time per kernel, as P102 and P107 did for prefill; the captured
+kernels stay unprofiled.
 
 Brackets, each on a fresh ``Fp8PagedKV`` and ``PagedModelRunner`` over SC2e's int4 model (device grouping on, as the
 graph server runs it):

@@ -28,10 +28,12 @@ duplicate profiling. Derived from P117 (`bench/p117/PREREG-p117.md`) by named su
 - built eager with one slot of 768 tokens and no prefill graph: the box's brackets build their own pools;
 - the NF4 arena baked on the box by P39's `k8_bake.py`.
 
-**The eager twins.** P109 read each decode bucket's graph replay bit-identical to its padded eager step; P117's G64
-confirmed the tokens at 64 rows. The first-chunk prefill graph captures the same forward. So the eager steps run the
-same kernels at the same shapes, and `torch.profiler` (CUDA activities) attributes their device time per kernel, as
-P102 and P107 did. Host gaps and graph launch are not what this lane reads: SC2e read those.
+**The eager twins.** Each decode bucket's graph is captured from its padded eager step, and the first-chunk prefill
+graph from the eager forward: the same code path at the same shapes. That shared route, and the shapes the box
+records, are what let the eager steps stand for the served ones; P109's bit-identical outputs (P117's G64 at 64 rows)
+establish numerical equivalence, not identical kernels. `torch.profiler` (CUDA activities) attributes the eager steps'
+device time per kernel, as P102 and P107 did. The captured kernels stay unprofiled here, and host gaps and graph
+launch are SC2e's to read.
 
 **Brackets** (`bench/p119/p119_box.py`; each on a fresh `Fp8PagedKV` and `PagedModelRunner`, device grouping on and
 bulk KV bookkeeping as the server runs them; windows from wikitext-2-raw test as P117 takes them, 512 prompt tokens):
@@ -121,8 +123,8 @@ other than VOID or NO_READING. The proof's tables are not a reading.
 ## What this lane cannot say
 
 - Nothing about speed: the profiled walls are not speeds, and host gaps are SC2e's to read. Eager device times are not
-  captured-step times or request TTFT: equal tokens and K/V establish the same kernels at the same shapes, not equal
-  timing or launch behaviour under capture.
+  captured-step times or request TTFT. The eager attribution rests on the shared implementation route and the
+  recorded shapes; it says nothing about timing or launch behaviour under capture.
 - Nothing about the graphs' private memory pools: no graph is captured here, so they are reported as unavailable. The
   box's `max_mem_gb` is the process peak, a different quantity.
 - Nothing about a prefill's cost to the decodes riding its step, or about served TTFT under load: the TTFT lane's
