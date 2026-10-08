@@ -242,7 +242,11 @@ def test_portable_ast_ignores_display_and_empty_optional_fields(monkeypatch):
     tree.type_params = []
     assert fallback.ast_digest(tree) == expected
     tree.type_params = [ast.Name(id="T", ctx=ast.Load())]
-    assert fallback.ast_digest(tree) != expected
+    if "type_params" in ast.FunctionDef._fields:
+        assert fallback.ast_digest(tree) != expected
+    else:
+        # Python <=3.11: attached attributes are not parsed AST fields.
+        assert fallback.ast_digest(tree) == expected
     tree.type_params = []
     tree.body[0].value.right.value = 2
     assert fallback.ast_digest(tree) != expected
