@@ -1,0 +1,57 @@
+{
+ "lane": "P115 Phase D",
+ "proof": false,
+ "verdict": "COMBINED_SANE",
+ "reasons": [
+  "SANE bias +0.00541 nats, argmax 0.9674, KL 0.01100; reported: g1 1.5902, g16 1.1644"
+ ],
+ "bars": {
+  "sane_bias": 0.02,
+  "sane_argmax": 0.95,
+  "sane_windows": 12
+ },
+ "speed": {
+  "decode_tok_s": {
+   "D0a": {
+    "W16": 771.84,
+    "W1": 135.48
+   },
+   "D1a": {
+    "W16": 898.74,
+    "W1": 215.44
+   },
+   "D1b": {
+    "W16": 899.7,
+    "W1": 215.19
+   },
+   "D0b": {
+    "W16": 770.34,
+    "W1": 134.8
+   }
+  },
+  "g1": 1.5902,
+  "g16": 1.1644,
+  "geomean": {
+   "W16": 1.1662,
+   "W1": 1.5933
+  },
+  "self_pairs": {
+   "D0b/D0a W16": 0.9981,
+   "D0b/D0a W1": 0.995,
+   "D1b/D1a W16": 1.0011,
+   "D1b/D1a W1": 0.9988
+  },
+  "d1_vs_d0_rows_identical": {
+   "W16@32": 9,
+   "W16@160": 1,
+   "W1@32": 1,
+   "W1@160": 1
+  }
+ },
+ "sane": {
+  "bias": 0.005405,
+  "argmax_agree": 0.967448,
+  "mean_kl": 0.010998,
+  "n": 12
+ }
+}

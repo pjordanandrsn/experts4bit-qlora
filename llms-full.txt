@@ -2257,10 +2257,12 @@ together; serial output is unchanged. `e4b.serve.sc2e.64-slots-buckets-auto.qwen
 16 unchanged, within P110's quality bar; it is grouped-nf4-gemm's default from 0.43.0 at Qwen3's NF4 expert shapes on
 GPUs with 160 or more SMs. `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`.
 
-**The B=1 fused stack is faster and stays opt-in.** Fused q/k/v plus three glue folds decode one request 1.4289× and 16
-requests 1.2298× as fast on Qwen3-30B-A3B NF4, within P110's bar. P115 Phase C held the default flip: Granite passes,
-but gpt-oss-20b fails the argmax gate (0.924 against 0.95). The four knobs stay `0`; a family-scoped `auto` needs a new
-registration. `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
+**The B=1 fused stack passes its combined read on Qwen3-MoE.** On top of grouped-nf4-gemm 0.43.0's bandwidth GEMV,
+fused q/k/v plus three glue folds decode one request 1.5902× and 16 requests 1.1644× as fast on Qwen3-30B-A3B NF4, and
+P115 Phase D's SANE read at T == 1 passes (bias +0.00541 nats, argmax agreement 0.9674). The knobs stay `0` until the
+family-scoped default (#1361) lands, for Qwen3-MoE only: gpt-oss-20b failed Phase C's argmax gate (0.924 against 0.95),
+and Qwen3.5/3.6-MoE and Granite-MoE wait for lane FAM's reads at T == 1 (#1362).
+`e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-quality.qwen3.5090.2026-10-07`,
 `e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`,
 `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08` ([P115](../bench/p115/RESULTS-p115.md)).
@@ -3164,6 +3166,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08 [measured]: Lane P120, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the folds, fused q/k/v), building the tile table above 256 routed rows in one launch (E4B_INT4_WIDE_TILES=1, grouped-nf4-gemm's cumsum rank) makes the captured 64-row decode step 1.44x slower (17.55 -> 25.31 ms), with …
 - e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08 [measured]: Lane P115 Phase C, one RTX 5090: auto on the four B=1 fusion knobs (E4B_PAGED_FUSE_QKV, E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI) at serve_paged's build engages by structure exactly as predicted: gpt-oss-20b 0 / 49 / [24, 0] / 24 (its attention carries sinks, so the rotary-only fold refuses …
 - e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08 [measured]: Lane P115 Phase C (Granite's full read, Amendment 2), one RTX 5090: the B=1 fusion knobs at auto on Granite-3.1-3b-a800m (engaged 0 / 65 / [32, 32] / 32; the q/k/v fusion refuses) score within P110's teacher-forced quality bar against the unfused server, with Phase B's instrument at Phase B's size. …
+- e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08 [measured]: Lane P115 Phase D, one RTX 5090: on the default serve_paged graph server (Qwen3-30B-A3B NF4, 16 slots, buckets 1-16 captured) with grouped-nf4-gemm 0.43.0's bandwidth decode GEMV at its default, the B=1 fused stack (the four fusion knobs at auto: fused q/k/v, the round-1 and round-2 glue folds and the router epilogue …
 - e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08 [measured]: Lane P118, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs, 16 slots, grouped-nf4-gemm 0.43.0's bandwidth GEMV), the decode lookahead (E4B_PAGED_DECODE_LOOKAHEAD=1: each decode step issued before the previous one is read back, its ids gathered on the device) decodes one …
 - e4b.train.parity.mg1.olmoe.reference.2026-10-04 [measured]: [OK · REF] Training parity lane MG1 (one RTX 5090 behind tp1's train anchor): the reference per-expert-loop arm of allenai/OLMoE-1B-7B-0924-Instruct loads and verifies 16/16 MoE layers and trains 60 steps on the clinical text with the frozen 4-bit stack bit-identical (C1: 3,623,878,656 bytes hashed, 0 empties …
 - e4b.train.parity.mg1.olmoe.fused.2026-10-04 [measured]: [OK · PASS] Training parity lane MG1: enable_fast_train(model, dgrad=True) on allenai/OLMoE-1B-7B-0924-Instruct PASSES tp1's registered loss-parity criteria against its reference arm on the same box -- |delta final train loss| 0.00890 and median step-wise |delta| 0.01104 against the 0.05 band -- with 16/16 layers …
@@ -3223,4 +3226,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(420 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(421 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
