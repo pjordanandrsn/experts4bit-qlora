@@ -1,0 +1,45 @@
+{
+ "lane": "P116",
+ "proof": false,
+ "verdict": "VOID",
+ "reasons": [
+  "quality_off wikitext: arm R has 24 windows, expected 48",
+  "quality_off wikitext R: 24 passes, expected 48",
+  "quality_off wikitext: arm chunk has 24 windows, expected 48",
+  "quality_off wikitext chunk: 24 passes, expected 48",
+  "quality_off wikitext: arm mutant_scale has 24 windows, expected 48",
+  "quality_off wikitext mutant_scale: 24 passes, expected 48",
+  "quality_on wikitext: arm ON has 24 windows, expected 48",
+  "quality_on wikitext ON: 24 passes, expected 48",
+  "quality_off c4val1: arm R has 24 windows, expected 48",
+  "quality_off c4val1 R: 24 passes, expected 48",
+  "quality_off c4val1: arm chunk has 24 windows, expected 48",
+  "quality_off c4val1 chunk: 24 passes, expected 48",
+  "quality_off c4val1: arm mutant_scale has 24 windows, expected 48",
+  "quality_off c4val1 mutant_scale: 24 passes, expected 48",
+  "quality_on c4val1: arm ON has 24 windows, expected 48",
+  "quality_on c4val1 ON: 24 passes, expected 48"
+ ],
+ "bars": {
+  "self_pair": [
+   0.96,
+   1.04
+  ],
+  "self_pair_w1": [
+   0.985,
+   1.015
+  ],
+  "gain_min_w1": 1.03,
+  "gain_min_w16": 0.99,
+  "tol": 0.01,
+  "spread_x": 2.0,
+  "spread_min": 0.005,
+  "k8_budget": 0.05,
+  "k8_gated": [
+   "wikitext"
+  ],
+  "floors": [
+   "chunk"
+  ]
+ }
+}

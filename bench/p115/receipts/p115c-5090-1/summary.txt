@@ -1,0 +1,55 @@
+KNOBS e4b=32e1eaf67db4f530419399c36e1e79b2ce0a7736 gnf4=b4f93f1c62d1e3436ed45bec8ccd608c90433737 models=granite gptoss qw36 gpu_class=5090 min_disk_gb=200 min_ram_gb=60 prove=0 new=32 windows=12 qwindows=48 cont=128
+CUDA_PROBE ok
+e4b 0.48.0 @32e1eaf67db4f530419399c36e1e79b2ce0a7736
+gnf4 0.42.0 @b4f93f1c62d1e3436ed45bec8ccd608c90433737
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+cc (12, 0)
+p115c_reduce self-test OK (27 cases)
+p109_box self-test OK (5/5 cases)
+p115c_box self-test OK (9/9 cases)
+p115_quality self-test OK (11/11 cases)
+premise run rc=0: 48 passed in 14.74s
+premise ok
+FETCH granite ibm-granite/granite-3.1-3b-a800m-instruct@a02780686e08a03fe0d2679a293b5c74a90efa89 /root/.cache/huggingface/hub/models--ibm-granite--granite-3.1-3b-a800m-instruct/snapshots/a02780686e08a03fe0d2679a293b5c74a90efa89
+granite BAKE OK
+granite serve off rc=0 P115C_SERVE granite/off census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} graphs={'1': 'graph', '2': 'graph', '4': 'graph', '8': 'graph', '16': 'graph'} passes=2
+
+granite serve on rc=0 P115C_SERVE granite/on census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 65, 'fuse_t1_glue_r2_n': [32, 32], 'fuse_router_epilogue_n': 32} graphs={'1': 'graph', '2': 'graph', '4': 'graph', '8': 'graph', '16': 'graph'} passes=1
+
+granite serve explicit rc=0 P115C_SERVE granite/explicit raised RuntimeError: E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion
+
+granite quality off rc=0 P115C_QUALITY granite/off windows={'wikitext': 48, 'c4val1': 48} census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} load 4s mem 4.89 GB 359.1 s
+
+granite quality on rc=0 P115C_QUALITY granite/on windows={'wikitext': 48, 'c4val1': 48} census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 65, 'fuse_t1_glue_r2_n': [32, 32], 'fuse_router_epilogue_n': 32} load 5s mem 4.89 GB 70.0 s
+
+FETCH gptoss openai/gpt-oss-20b@6cee5e81ee83917806bbde320786a8fb61efebee /root/.cache/huggingface/hub/models--openai--gpt-oss-20b/snapshots/6cee5e81ee83917806bbde320786a8fb61efebee
+gptoss BAKE OK
+gptoss serve off rc=0 P115C_SERVE gptoss/off census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} graphs={'1': 'graph', '2': 'graph', '4': 'graph', '8': 'graph', '16': 'graph'} passes=2
+
+gptoss serve on rc=0 P115C_SERVE gptoss/on census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 49, 'fuse_t1_glue_r2_n': [24, 0], 'fuse_router_epilogue_n': 24} graphs={'1': 'graph', '2': 'graph', '4': 'graph', '8': 'graph', '16': 'graph'} passes=1
+
+gptoss serve explicit rc=0 P115C_SERVE gptoss/explicit raised RuntimeError: E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion
+
+gptoss sane off rc=0 P115C_SANE gptoss/off windows={'wikitext': 12} census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} 11.7 s
+
+gptoss sane on rc=0 P115C_SANE gptoss/on windows={'wikitext': 12} census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 49, 'fuse_t1_glue_r2_n': [24, 0], 'fuse_router_epilogue_n': 24} 11.1 s
+
+FETCH qw36 Qwen/Qwen3.6-35B-A3B@995ad96eacd98c81ed38be0c5b274b04031597b0 /root/.cache/huggingface/hub/models--Qwen--Qwen3.6-35B-A3B/snapshots/995ad96eacd98c81ed38be0c5b274b04031597b0
+qw36 BAKE OK
+qw36 serve off rc=0 P115C_SERVE qw36/off census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} graphs={'1': 'graph', '2': 'graph', '4': 'graph', '8': 'graph', '16': 'graph'} passes=2
+
+qw36 serve on rc=0 P115C_SERVE qw36/on census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 40} graphs={'1': 'graph', '2': 'graph', '4': 'graph', '8': 'graph', '16': 'graph'} passes=1
+
+qw36 serve explicit rc=0 P115C_SERVE qw36/explicit raised RuntimeError: E4B_FUSE_T1_GLUE=1 patched no RMSNorm modules (101 name-matched but failed the semantic probe) -- refusing a vacuous enable
+
+qw36 sane off rc=0 P115C_SANE qw36/off windows={'wikitext': 12} census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} 20.6 s
+
+qw36 sane on rc=0 P115C_SANE qw36/on windows={'wikitext': 12} census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 40} 20.9 s
+
+P115C_VERDICT FLIP_HELD ["gptoss: SANE -- stats {'bias': 0.002163713381984659, 'argmax_agree': 0.923828125, 'mean_kl': 0.02990817611013578, 'n': 12}"]
+P115C_GRANITE GRANITE_LICENSED ["wikitext ON bias -0.00268 (bar 0.01204), K8 -0.0171", "c4val1 ON bias +0.00355 (bar 0.01400), K8 +0.0417"]
+  gptoss: gates {"SERVED": true, "ENGAGED": true, "EXPLICIT_RAISE": true, "DETERMINISM": true, "SANE": false} sane {"bias": 0.002163713381984659, "argmax_agree": 0.923828125, "mean_kl": 0.02990817611013578, "n": 12} identity {"rows_identical": 2, "rows": 16}
+  qw36: gates {"SERVED": true, "ENGAGED": true, "EXPLICIT_RAISE": true, "DETERMINISM": true, "SANE": true} sane {"bias": 0.0004347381648699411, "argmax_agree": 0.9954427083333334, "mean_kl": 0.0005201265231458511, "n": 12} identity {"rows_identical": 16, "rows": 16}
+  granite: gates {"SERVED": true, "ENGAGED": true, "EXPLICIT_RAISE": true, "DETERMINISM": true, "QUALITY": true} sane null identity {"rows_identical": 3, "rows": 16}

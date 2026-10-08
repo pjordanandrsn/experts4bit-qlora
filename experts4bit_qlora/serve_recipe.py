@@ -128,6 +128,72 @@ def resolve_buckets(buckets, max_seqs: int) -> tuple:
     return usable_buckets(max_seqs, buckets)
 
 
+#: ``E4B_PAGED_MAX_SEQS=auto`` (:func:`choose_max_seqs`): the widths it tries, widest first, and the device memory it
+#: leaves free beyond the estimate. Lane SC2e (#846, ``bench/h2h-2026-10-02/sc2e``) read each width it licenses: on the
+#: default bucket list only 64 (s64c: ceiling 8 against 16 slots' 4). 32 slots on the default list run a wide step as
+#: two chained 16-row replays; SC2e did not read that, and ``serve_capacity`` puts it below the knee at 8 req/s
+#: (0.84 / 0.69), so the default list offers 64 or 16. With ``E4B_PAGED_BUCKETS=auto`` (opt-in) 32 was read too (s32a).
+MAX_SEQS_AUTO_WIDTHS = (64, 16)
+MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS = (64, 32, 16)
+MAX_SEQS_AUTO_MARGIN_BYTES = 3 << 29   # 1.5 GiB (the arithmetic is in choose_max_seqs's docstring)
+#: The first-chunk prefill graph's private pool is not in the estimate (the server measures it at capture). The
+#: chooser reserves ``chunk_tokens x hidden_size x n_layers x`` this many bytes for it: an upper bound on every pool
+#: measured at 512 tokens (lane SV1: 0.24 GiB on OLMoE-1B-7B and 0.57 GiB on Qwen3-30B-A3B at NF4; lane SC2e: 0.42 GiB
+#: on Qwen3-30B-A3B int4), which it prices at 0.25 and 0.75 GiB.
+PREFILL_GRAPH_RESERVE_BYTES = 16
+
+
+def prefill_graph_reserve_bytes(topology, setup: "ServeSetup") -> int:
+    """What :func:`choose_max_seqs` holds back for the first-chunk prefill graph's pool (see
+    :data:`PREFILL_GRAPH_RESERVE_BYTES`); 0 where the graph cannot engage (the conditions the estimate names it under)."""
+    hybrid = topology.attention is not None and topology.attention.layers < topology.n_layers
+    if str(setup.prefill_graph) == "0" or not setup.graphs or setup.max_seqs <= 1 or max(setup.decode_buckets) <= 1 \
+            or hybrid:
+        return 0
+    return int(setup.chunk_tokens) * int(topology.hidden_size) * int(topology.n_layers) * PREFILL_GRAPH_RESERVE_BYTES
+
+
+def choose_max_seqs(topology, setup: "ServeSetup", free_bytes, *, widths=MAX_SEQS_AUTO_WIDTHS,
+                    margin_bytes: int = MAX_SEQS_AUTO_MARGIN_BYTES) -> dict:
+    """``E4B_PAGED_MAX_SEQS=auto``: the widest of ``widths`` whose :func:`estimate_serve_footprint` device total, plus
+    the prefill graph's reserve (:func:`prefill_graph_reserve_bytes`) and ``margin_bytes``, fits ``free_bytes`` (the
+    device's free memory before any weight is loaded); 16, today's default, when none fits, when the free memory is
+    unknown (no CUDA device) or under the solver placement, whose tiers take their own budgets. The estimate's device
+    total already carries the KV pool and graph scratch slots, a hybrid's per-slot linear-attention state and the bulk
+    KV flush's ceiling, so each width is priced whole. Returns the choice with every candidate's arithmetic, for
+    ``/health``.
+
+    The margin's arithmetic: lane SC2e measured Qwen3-30B-A3B int4 on an RTX 5090 at 2,048 tokens a slot using
+    1.96-2.28 GiB more than this estimate at ready (the CUDA context, the prefill graph's pool, allocator reserve), and
+    no more under load. ``free_bytes`` is read after the context exists (~0.5 GiB), so up to ~1.8 GiB of that gap is
+    left to cover. The reserve (0.75 GiB on that model) plus the 1.5 GiB margin cover 2.25 GiB, so a width whose need
+    lands just under the free memory is refused rather than run out of memory at load."""
+    floor = min(int(w) for w in widths)
+    out = {"max_seqs": floor, "free_bytes": None if free_bytes is None else int(free_bytes),
+           "margin_bytes": int(margin_bytes), "candidates": []}
+    if free_bytes is None:
+        return dict(out, why=f"free device memory unknown (no CUDA device): {floor}")
+    if setup.placement != "all-vram":
+        return dict(out, why=f"auto sizes the all-vram server; placement {setup.placement!r} keeps {floor}")
+    for w in sorted({int(x) for x in widths}, reverse=True):
+        s = replace(setup, max_seqs=w)
+        fp = estimate_serve_footprint(topology, s)
+        if fp.refusals:
+            out["candidates"].append({"max_seqs": w, "refused": list(fp.refusals)})
+            continue
+        reserve = prefill_graph_reserve_bytes(topology, s)
+        need = fp.device_bytes + reserve + int(margin_bytes)
+        out["candidates"].append({"max_seqs": w, "estimate_bytes": fp.device_bytes, "prefill_graph_reserve_bytes": reserve,
+                                  "need_bytes": need, "fits": need <= int(free_bytes)})
+    pick = next((c["max_seqs"] for c in out["candidates"] if c.get("fits")), None)
+    if pick is None:
+        return dict(out, why=f"no width fits {int(free_bytes)} B free with the reserve and margin: {floor}, today's "
+                             "default (which may itself not fit, as before)")
+    return dict(out, max_seqs=pick, why=f"the widest of {sorted({int(x) for x in widths}, reverse=True)} that fits "
+                                        f"{int(free_bytes)} B free with the prefill-graph reserve and "
+                                        f"{int(margin_bytes)} B to spare")
+
+
 def paged_kv_pool_bytes(n_layers: int, n_kv_heads, head_dim, *, batch: int, max_tokens_per_seq: int,
                         k_groups=None, scratch_slots: int = 0) -> int:
     """Device bytes ``Fp8PagedKV(n_layers, n_kv_heads, head_dim, batch=..., ...)`` allocates for its K and V row pools

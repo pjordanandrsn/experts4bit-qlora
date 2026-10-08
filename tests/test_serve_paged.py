@@ -650,6 +650,78 @@ def test_the_kv_pool_size_health_reports_is_the_pool_built():
     assert _kv_pool_mib(object(), PagedServeConfig()) is None          # a stand-in pool: reported as unknown
 
 
+
+@pytest.mark.parametrize("value,max_seqs,requested", [(None, 16, "auto"), ("", 16, "auto"), ("AUTO", 16, "auto"),
+                                                      ("16", 16, "16"), ("64", 64, "64")])
+def test_max_seqs_defaults_to_auto_and_16_is_the_way_back(monkeypatch, value, max_seqs, requested):
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)
+    if value is None:
+        monkeypatch.delenv("E4B_PAGED_MAX_SEQS", raising=False)
+    else:
+        monkeypatch.setenv("E4B_PAGED_MAX_SEQS", value)
+    cfg = PagedServeConfig.from_env()
+    assert cfg.max_seqs == max_seqs and cfg.max_seqs_requested == requested
+
+
+@pytest.mark.parametrize("value", ["0", "-4", "many"])
+def test_max_seqs_refuses_what_it_cannot_read(monkeypatch, value):
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)
+    monkeypatch.setenv("E4B_PAGED_MAX_SEQS", value)
+    with pytest.raises(ValueError, match="E4B_PAGED_MAX_SEQS"):
+        PagedServeConfig.from_env()
+
+
+@pytest.mark.parametrize("buckets_env,widths,want", [(None, (64, 16), (1, 2, 4, 8, 16)),
+                                                     ("auto", (64, 32, 16), (1, 2, 4, 8, 16, 32, 64))])
+def test_resolve_max_seqs_sets_the_width_then_its_buckets(monkeypatch, buckets_env, widths, want):
+    from experts4bit_qlora import serve_recipe
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)
+    monkeypatch.setenv("E4B_PAGED_GRAPHS", "1")
+    monkeypatch.delenv("E4B_PAGED_MAX_SEQS", raising=False)
+    if buckets_env is None:
+        monkeypatch.delenv("E4B_PAGED_BUCKETS", raising=False)
+    else:
+        monkeypatch.setenv("E4B_PAGED_BUCKETS", buckets_env)
+    seen = {}
+
+    def fake_choose(topo, setup, free, *, widths):
+        seen.update(widths=tuple(widths), free=free, tokens=setup.max_tokens_per_seq)
+        return {"max_seqs": 64, "free_bytes": free, "candidates": [], "why": "test"}
+    monkeypatch.setattr(serve_recipe, "choose_max_seqs", fake_choose)
+    monkeypatch.setattr("experts4bit_qlora.arch.topology.describe_moe", lambda c: object())
+    cfg = PagedServeConfig.from_env()
+    res = serve_paged_mod.resolve_max_seqs(cfg, object(), 123)
+    assert seen == {"widths": widths, "free": 123, "tokens": cfg.max_tokens_per_seq}
+    assert cfg.max_seqs == 64 and tuple(cfg.buckets) == want and cfg.max_seqs_resolution == res
+
+
+def test_resolve_max_seqs_leaves_an_explicit_width_and_falls_back_to_16(monkeypatch):
+    monkeypatch.setattr(serve_paged_mod, "_capability", lambda device: None)
+    monkeypatch.setenv("E4B_PAGED_MAX_SEQS", "32")
+    cfg = PagedServeConfig.from_env()
+    assert serve_paged_mod.resolve_max_seqs(cfg, object(), 1 << 40) == {} and cfg.max_seqs == 32
+    monkeypatch.delenv("E4B_PAGED_MAX_SEQS")
+    cfg = PagedServeConfig.from_env()
+
+    def boom(c):
+        raise KeyError("no moe")
+    monkeypatch.setattr("experts4bit_qlora.arch.topology.describe_moe", boom)
+    res = serve_paged_mod.resolve_max_seqs(cfg, object(), 1 << 40)
+    assert cfg.max_seqs == 16 and "could not be described" in res["why"]
+
+
+def test_health_reports_the_width_asked_for_and_how_auto_resolved():
+    client, engine = _client(ScriptedRunner(), max_seqs_requested="auto",
+                             max_seqs_resolution={"max_seqs": 4, "why": "test", "candidates": []})
+    with client as c:
+        e = c.get("/health").json()["engine"]
+        assert e["max_seqs_requested"] == "auto" and e["max_seqs_resolution"]["why"] == "test" and e["max_seqs"] == 4
+    client, engine = _client(ScriptedRunner())
+    with client as c:
+        e = c.get("/health").json()["engine"]
+        assert e["max_seqs_requested"] == "16" and e["max_seqs_resolution"] is None
+
+
 # ---------------------------------------------------------------- fusions --
 
 FOLD_FLAGS = ("E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")

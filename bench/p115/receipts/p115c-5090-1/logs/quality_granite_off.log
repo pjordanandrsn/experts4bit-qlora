@@ -1,0 +1,21 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1068.54it/s]
+[03:50:30]   checkpoint: ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89 (requested a02780686e08a03fe0d2679a293b5c74a90efa89)
+[03:50:30]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[03:50:30]   quantized experts on 32/32 MoE layers (40 experts each)
+[03:50:30]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[03:50:30]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[03:50:31]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[03:50:32]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 32, "experts": 40, "top_k": 8, "model_type": "granitemoe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 8, "head_dim": 64, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256, "pool_mib": 2368.5}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {"E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "0"}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9287 examples [00:00, 51271.98 examples/s]Generating v split: 18275 examples [00:00, 45689.78 examples/s]Generating v split: 27432 examples [00:00, 45413.67 examples/s]Generating v split: 36604 examples [00:00, 47964.79 examples/s]Generating v split: 45576 examples [00:00, 48679.87 examples/s]Generating v split: 45576 examples [00:00, 47925.61 examples/s]
+P115_QGROUP off wikitext group 1 of 4 done at 55 s, 4.43 GiB allocated
+P115_QGROUP off wikitext group 2 of 4 done at 97 s, 4.43 GiB allocated
+P115_QGROUP off wikitext group 3 of 4 done at 139 s, 4.43 GiB allocated
+P115_QGROUP off wikitext group 4 of 4 done at 180 s, 4.43 GiB allocated
+P115_QGROUP off c4val1 group 1 of 4 done at 230 s, 4.43 GiB allocated
+P115_QGROUP off c4val1 group 2 of 4 done at 272 s, 4.43 GiB allocated
+P115_QGROUP off c4val1 group 3 of 4 done at 315 s, 4.43 GiB allocated
+P115_QGROUP off c4val1 group 4 of 4 done at 359 s, 4.43 GiB allocated
+P115C_QUALITY granite/off windows={'wikitext': 48, 'c4val1': 48} census={'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0} load 4s mem 4.89 GB 359.1 s
