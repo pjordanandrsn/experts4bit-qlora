@@ -31,7 +31,7 @@ both repositories and validated by `scripts/check_system_manifest.py`.
 |---|---|
 | `experts4bit_qlora/` | the package: `loader.py` (streaming quantising loader), `lora.py`, `verify.py`, `k8_gate.py` (the registered quality gate), `arch/` (per-family conventions and load plans), `engines/` (fast, batched, offload, dense_offload, hot/pipelined/nvme residency, paged serving, int4 lanes, capture), `formats/`, `_vendor/experts.py` (vendored bitsandbytes class) |
 | `tests/` | CPU-runnable suites (`pytest tests/ -q`); GPU-only tests skip with a reason |
-| `docs/` | `STATUS.md`, `claims.json` + `claims-schema.md`, `capabilities.json`, `system-manifest.json`, `change-impact.json`, `discovery-queries.json`, `CHOOSING.md`, `SOLUTIONS.md` + `solutions/`, `INDEX.md` (which documents are current), anchored research records |
+| `docs/` | `STATUS.md` (+ `STATUS-RECORD.md`, its frozen dated narrative), `claims.json` + `claims-schema.md`, `capabilities.json`, `system-manifest.json`, `change-impact.json`, `discovery-queries.json`, `CHOOSING.md`, `SOLUTIONS.md` + `solutions/`, `INDEX.md` (which documents are current), anchored research records |
 | `bench/` | harnesses and receipts (`bench/hybrid-g9/step_decomp.py` is the serving lane harness) |
 | `scripts/`, `tools/` | the checks in section 6, wheel smoke, link checker, analysis tools |
 | `audits/` | falsification work |
@@ -41,7 +41,9 @@ both repositories and validated by `scripts/check_system_manifest.py`.
 - **Numbers: `docs/claims.json` wins** over CHANGELOG prose, README
   sentences and release notes; a `retired` or `superseded` claim is never
   repeated as current and never deleted.
-- **Position: `docs/STATUS.md` wins**; it is edited when the position moves.
+- **Position: `docs/STATUS.md` wins.** When a position moves, replace its entry: the new position in a few lines
+  with its claim id, the detail in the lane's RESULTS file. `docs/STATUS-RECORD.md` is the frozen dated narrative
+  to 0.50.0 and is not appended to.
 - **Historical and anchored records are never rewritten.** `docs/INDEX.md`
   says which documents are current; a sibling `.ots` or an
   `<!-- ots-attestation-footer -->` line means corrections go in a sibling file.
