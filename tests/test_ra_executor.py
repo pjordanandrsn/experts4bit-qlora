@@ -55,7 +55,8 @@ def raw_fixture(tag):
     for label, n in (("warm", 4), ("burst", 68), ("end", 188)):
         raw[f"capacity_health_{label}"] = {
             "status": "ready", "error": None, "queue_depth": 0,
-            "engine": {"buckets": [1, 2, 4, 8, 16], "graphs": True, "chunk_tokens": 512, "max_tokens_limit": 2048,
+            "engine": {"buckets": [1, 2, 4, 8, 16], "graphs": True, "chunk_tokens": 512,
+                       "max_tokens_per_seq": 2048, "max_tokens_limit": 2047,
                        "graph_status": {str(b): "graph" for b in (1, 2, 4, 8, 16)},
                        "graph_stats": {"16": {"replays": n, "eager_steps": 0}}},
             "prefill_graph": {"status": "on", "T": 512, "replays": n, "eager_chunks": 0},

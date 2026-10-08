@@ -36,6 +36,10 @@ training/decode samples and quality scores. Feature/import telemetry still
 needs independent collection by the executor; equality with caller-provided
 metadata is not GPU engagement evidence.
 
+The capacity context check reads `/health.engine.max_tokens_per_seq` (2048).
+`max_tokens_limit` is the separate request cap and defaults to 2047 for that
+context; RA leaves that speed-independent cap at its release default.
+
 Remaining before proof clearance: real process wrappers and feature-counter
 mapping; wheel/import and input byte verification; exact fixture environment
 allowlist; ABBA supervisor; collected on-card premise tests with no skips;

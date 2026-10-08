@@ -65,7 +65,7 @@ def capacity_health(raw):
                 "capacity resolved buckets changed")
         require(engine["graphs"] is True and set(engine["graph_status"]) == {str(b) for b in buckets} and
                 all(v == "graph" for v in engine["graph_status"].values()), "capacity graphs not captured")
-        require(engine["chunk_tokens"] == 512 and engine["max_tokens_limit"] == 2048, "capacity context/chunk")
+        require(engine["chunk_tokens"] == 512 and engine["max_tokens_per_seq"] == 2048, "capacity context/chunk")
         require(pg["status"] == "on" and pg["T"] == 512 and pg["replays"] == admitted and pg["eager_chunks"] == 0,
                 f"{label} prefill counts/fallback")
         require(kv["requested"] is True and kv["bulk"] is True and kv["flush_layers"] == kv["ready_layers"] ==
