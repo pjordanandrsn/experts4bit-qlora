@@ -110,6 +110,12 @@ def fuse_qkv(model, *, fold_modes: dict | None = None, fold_reports: dict | None
                 raise RuntimeError(
                     f"Qwen3MoeAttention missing {attr!r}: transformers "
                     "layout drifted; refusing to half-fuse")
+        # the fused forward applies Qwen3-MoE's rotate-half rotary: the module's own must be the same function
+        from .glue_r2 import rotary_is_rotate_half
+        if not rotary_is_rotate_half(mod, int(mod.head_dim)):
+            raise RuntimeError(
+                "Qwen3MoeAttention's own apply_rotary_pos_emb is not rotate-half, which the fused forward "
+                "applies: transformers layout drifted; refusing to fuse")
         parts = (mod.q_proj, mod.k_proj, mod.v_proj)
         if any(p.bias is not None for p in parts):
             raise RuntimeError("biased q/k/v projections: the fused "
