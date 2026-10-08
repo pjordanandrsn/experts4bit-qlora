@@ -159,8 +159,9 @@ positions. Its incumbent is the scalar GEMV. A VOID from the reducer fails the p
 - **Proof:** one RTX 5090, **guard 0.75 h**, about $0.7 at the launcher's policy rate.
 - **Reading:** one RTX 5090, **guard 1.5 h**, `--download-gb 61`, about $1.95 at the policy rate. Expected about 55 minutes:
   install and premise 5, fetch 6–10, bake 2, prompts 1, four arms about 12, quality about 30.
-- **Lane ceiling $3.00, hard stop $4.00.** That is the owner's per-lane cap for this program: the proof, the reading and one
-  rerun. A launch goes ahead only while the lane's actual spend plus that run's launcher estimate is ≤ $4.00.
+- **Lane ceiling $3.00, hard stop $4.00**, covering the proof, the reading and one rerun. A launch goes ahead only while
+  the lane's actual spend plus that run's launcher estimate is ≤ $4.00. Every run sits inside the owner's standing
+  no-ask tier for a single run under $15; anything over $15 needs the maintainer lane's approval first.
 - **STOP-1:** the refusals run before any install: CUDA unusable 18 (the host floor), dud box 10, card class 15, disk
   < 150 GB 13, host RAM < 60 GiB 16, premise 25.
 - **STOP-2:** every time-left check fits inside its guard, enforced by `tests/test_p116_staged_pin.py`.
@@ -195,3 +196,28 @@ The run directory's `p116/` is fetched and committed to `bench/p116/receipts/<ru
 
 The reference log-probs (`work/ref`), the arena and the gnf4 source clone stay on the box. `RESULTS-p116.md` is written
 from those files.
+
+## Amendment 1 (2026-10-07T23:45Z, after `p116-5090-1` VOIDed on a defect in the reducer; its speed and quality numbers not read)
+
+**What happened.** `p116-5090-1` ($0.853, adertha-receipts `683ea367`) ran end to end as registered:
+- the premise passed, 27 + 18;
+- the four arms ran;
+- both quality phases ran at **24 windows per text**, the number this page registers.
+
+The reducer VOIDed it: "arm R has 24 windows, expected 48". `p116_reduce.WINDOWS` still carried P115's 48 for Qwen3. The
+proof did not catch it, because Granite's 12 matched. The self-test did not catch it either, because it built its fakes
+from the same table.
+
+**The correction.**
+- `WINDOWS[Qwen3]` is set to **24**, the number this page and the runner register.
+- No rule, bar, prediction, size or budget changes.
+- `tests/test_p116_staged_pin.py` now checks the reducer's table against the runner's registered defaults, for the reading
+  and the proof.
+
+**The reading.** The registered response to a VOID is one rerun inside the ceiling. That rerun is **`p116-5090-2`**, from a
+main commit that carries this amendment. A rerun before the fix would VOID the same way, so the fix comes first.
+- **`p116-5090-1`:** the executing agent has not read its arm or quality numbers. Its records will be reduced by the
+  corrected reducer and reported in the results as a second draw, labelled as such. It is not the reading, and no rule
+  looks at it.
+- **Spend:** $1.064 so far (the proof $0.211, `p116-5090-1` $0.853) of the $3.00 ceiling. The rerun is about $0.85 at
+  today's rates (the launcher's estimate is $1.95), inside it.

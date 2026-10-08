@@ -47,7 +47,8 @@ GNF4_SHA = "5a60c37dbd0756040052b603c9b0ee680f06d444"     # grouped-nf4-gemm wit
 QWEN, GRAN = "Qwen/Qwen3-30B-A3B", "ibm-granite/granite-3.1-3b-a800m-instruct"
 REVS = {QWEN: "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", GRAN: "a02780686e08a03fe0d2679a293b5c74a90efa89"}
 LAYERS = {QWEN: 48, GRAN: 32}
-WINDOWS = {QWEN: 48, GRAN: 12}
+WINDOWS = {QWEN: 24, GRAN: 12}    # per text, as PREREG-p116 registers (24 at T == 1 on Qwen3; 12 in the proof). Was 48,
+                                  # copied from P115's table: Amendment 1 (p116-5090-1 VOIDed on it)
 INCUMBENT = {QWEN: "dotpad", GRAN: "scalar"}             # today's single-row route at each family's shapes (>= 160 SMs)
 OFF_ARMS = ("R", "rep", "chunk", "mutant_scale")
 FLOORS = ("chunk",)

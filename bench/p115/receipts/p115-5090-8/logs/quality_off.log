@@ -1,0 +1,21 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 2253.74it/s]
+[19:21:36]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[19:21:36]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[19:21:36]   quantized experts on 48/48 MoE layers (128 experts each)
+[19:21:36]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[19:21:37]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[19:21:57]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "0"}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9287 examples [00:00, 60448.55 examples/s]Generating v split: 18275 examples [00:00, 58824.80 examples/s]Generating v split: 27432 examples [00:00, 54475.69 examples/s]Generating v split: 36604 examples [00:00, 58774.77 examples/s]Generating v split: 45576 examples [00:00, 58713.89 examples/s]Generating v split: 45576 examples [00:00, 58222.14 examples/s]
+P115_QGROUP off wikitext group 1 of 4 done at 67 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 2 of 4 done at 121 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 3 of 4 done at 175 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 4 of 4 done at 229 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 1 of 4 done at 295 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 2 of 4 done at 350 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 3 of 4 done at 404 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 4 of 4 done at 458 s, 21.31 GiB allocated
+P115_QUALITY off: wikitext/rep bias +0.00000 | wikitext/half bias -0.00127 | wikitext/chunk bias +0.00170 | wikitext/mutant_scale bias +1.05362 | c4val1/rep bias +0.00000 | c4val1/half bias -0.00055 | c4val1/chunk bias -0.00192 | c4val1/mutant_scale bias +0.77478 | census {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0, 'moe_layers': 48, 'experts': 128, 'top_k': 8, 'model_type': 'qwen3_moe', 'graph_status': None, 'grouping': {'device_grouping': False, 'force_singleton_groups': False}} | load 24s | mem 22.05 GB | 457.9 s

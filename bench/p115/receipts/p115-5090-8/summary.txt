@@ -1,0 +1,41 @@
+KNOBS e4b=598c0013d10b2db6b65198470fb52e4e774d7d06 gnf4=b4f93f1c62d1e3436ed45bec8ccd608c90433737 model=Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 gpu_class=5090 min_disk_gb=150 min_ram_gb=60 prove=0 short=32 long=160 reps=3 windows=48 cont=128
+CUDA_PROBE ok
+e4b 0.48.0 @598c0013d10b2db6b65198470fb52e4e774d7d06
+gnf4 0.42.0 @b4f93f1c62d1e3436ed45bec8ccd608c90433737
+torch 2.8.0+cu128
+triton 3.4.0
+transformers 5.17.0
+bitsandbytes 0.50.2
+cc (12, 0)
+p115_reduce self-test OK (27 cases)
+p109_box self-test OK (5/5 cases)
+p115_box self-test OK (12/12 cases)
+p115_quality self-test OK (11/11 cases)
+premise run rc=0: 14 passed in 11.99s
+premise ok
+FETCH Qwen/Qwen3-30B-A3B@ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 /root/.cache/huggingface/hub/models--Qwen--Qwen3-30B-A3B/snapshots/ad44e777bcd18fa416d9da3bd8f70d33ebb85d39
+BAKE OK
+P109_PROMPTS rows=16 prompt=512 sha256=21a7e8bd76fa91ceca41a4e9bd6b3a530978815da6a9a6c2372c3e88d357c709
+arm F0a rc=0 P115_ARM {"arm": "F0", "tag": "F0a", "fuse_qkv": false, "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "load_s": 39.57, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 701.1, "W1": 94.15}
+
+arm F1a rc=0 P115_ARM {"arm": "F1", "tag": "F1a", "fuse_qkv": true, "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "load_s": 31.45, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 863.17, "W1": 134.53}
+
+arm F1b rc=0 P115_ARM {"arm": "F1", "tag": "F1b", "fuse_qkv": true, "fusions": {"fuse_qkv_n": 48, "fuse_t1_glue_n": 193, "fuse_t1_glue_r2_n": [48, 48], "fuse_router_epilogue_n": 48}, "load_s": 28.53, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 863.44, "W1": 134.65}
+
+arm F0b rc=0 P115_ARM {"arm": "F0", "tag": "F0b", "fuse_qkv": false, "fusions": {"fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0}, "load_s": 28.58, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 702.1, "W1": 94.14}
+
+quality off rc=0 P115_QUALITY off: wikitext/rep bias +0.00000 | wikitext/half bias -0.00127 | wikitext/chunk bias +0.00170 | wikitext/mutant_scale bias +1.05362 | c4val1/rep bias +0.00000 | c4val1/half bias -0.00055 | c4val1/chunk bias -0.00192 | c4val1/mutant_scale bias +0.77478 | census {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0, 'moe_layers': 48, 'experts': 128, 'top_k': 8, 'model_type': 'qwen3_moe', 'graph_status': None, 'grouping': {'device_grouping': False, 'force_singleton_groups': False}} | load 24s | mem 22.05 GB | 457.9 s
+
+quality on rc=0 P115_QUALITY on: scored against the saved R | census {'fuse_qkv_n': 48, 'fuse_t1_glue_n': 193, 'fuse_t1_glue_r2_n': [48, 48], 'fuse_router_epilogue_n': 48, 'moe_layers': 48, 'experts': 128, 'top_k': 8, 'model_type': 'qwen3_moe', 'graph_status': None, 'grouping': {'device_grouping': False, 'force_singleton_groups': False}} | load 24s | mem 22.26 GB | 81.2 s
+
+P115_VERDICT DEFAULT_AUTO ["g1 = 1.4289, g16 = 1.2298 (geomean 1.4296 / 1.2305); wikitext ON bias +0.00098 (bar 0.01170), K8 +0.0088; c4val1 ON bias -0.00256 (bar 0.01192), K8 -0.0420"]
+  g1: 1.4289
+  g16: 1.2298
+  geomean: {"W16": 1.2305, "W1": 1.4296}
+  pair_ratios: {"W16": [1.2312, 1.2298], "W1": [1.4289, 1.4303]}
+  self_pairs: {"F0b/F0a W16": 1.0014, "F0b/F0a W1": 0.9999, "F1b/F1a W16": 1.0003, "F1b/F1a W1": 1.0009}
+  decode_tok_s: {"F0a": {"W16": 701.1, "W1": 94.15}, "F1a": {"W16": 863.17, "W1": 134.53}, "F1b": {"W16": 863.44, "W1": 134.65}, "F0b": {"W16": 702.1, "W1": 94.14}}
+  ms_per_step: {"F0a": {"W16": 22.8214, "W1": 10.6217}, "F1a": {"W16": 18.5364, "W1": 7.4332}, "F1b": {"W16": 18.5306, "W1": 7.4269}, "F0b": {"W16": 22.7888, "W1": 10.6229}}
+  f1_vs_f0_tokens: {"W16@32": {"rows_identical": 9, "rows": 16, "first_divergence": [null, null, null, 30, null, 16, null, 8, 3, 7, 7, null, null, 20, null, null]}, "W16@160": {"rows_identical": 1, "rows": 16, "first_divergence": [null, 51, 54, 30, 97, 16, 43, 8, 3, 7, 7, 32, 58, 20, 34, 45]}, "W1@32": {"rows_identical": 1, "rows": 1, "first_divergence": [null]}, "W1@160": {"rows_identical": 1, "rows": 1, "first_divergence": [null]}}
+  quality wikitext: floor {"draws": ["half", "chunk"], "B_floor": 0.0016993502064782163, "S_floor": 0.013859671357214448} ON {"n": 48, "bias": 0.0009808719782083881, "spread": 0.011985972699354355, "se": 0.0021234833589352975, "max_abs": 0.031696123711803637, "mean_kl": 0.010178927959950344, "argmax_agree": 0.9607747395833334} K8 {"ppl_R": 8.971009676999138, "ppl_ON": 8.979813405967215, "delta": 0.008803728968077351, "gated": true, "passes": true}
+  quality c4val1: floor {"draws": ["half", "chunk"], "B_floor": 0.0019153690997680735, "S_floor": 0.013524499545773755} ON {"n": 48, "bias": -0.002563612210403826, "spread": 0.014200930190851288, "se": 0.0030878090987476515, "max_abs": 0.101883305147775, "mean_kl": 0.008652446146789899, "argmax_agree": 0.9544270833333334} K8 {"ppl_R": 16.403072761121262, "ppl_ON": 16.361075498850767, "delta": -0.041997262270495384, "gated": false, "passes": true}
