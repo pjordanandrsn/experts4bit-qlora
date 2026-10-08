@@ -1,0 +1,1 @@
+# P119 — a descriptive census of the 64-slot server's steps: per-kernel device time of SC2e's decode steps at 16, 32 and 64 rows and of the 512-token prefill (#846). Registration follows; lane number claimed by this branch.
