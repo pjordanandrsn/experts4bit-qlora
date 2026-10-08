@@ -215,15 +215,41 @@ def _reference_for(mod, kind, spec, x):
     return _ref_topk_softmax(_topk_softmax_logits(mod, x, spec["bias"] is not None), spec["k"])
 
 
+def _probe_rows(hidden: int, w: torch.Tensor) -> torch.Tensor:
+    """The probe's input: four fixed random rows in the weight's dtype and device."""
+    g = torch.Generator(device="cpu").manual_seed(4242)
+    return torch.randn(4, hidden, generator=g).to(w.device, w.dtype)
+
+
+def _decisive_rows(logits: torch.Tensor, k: int) -> torch.Tensor:
+    """Rows whose k-th and (k+1)-th largest selection logits are more than two ulps of the logits' dtype apart,
+    relative to the k-th. A row inside that is a near tie: the same function, rounded another way, can select the
+    other expert, so it says nothing about which function the module computes (#1372's intermittent probe failure)."""
+    s = logits.float()
+    if k >= s.shape[-1]:
+        return torch.ones(s.shape[0], dtype=torch.bool, device=s.device)
+    top = torch.topk(s, k + 1, dim=-1).values
+    eps = 2 * torch.finfo(logits.dtype).eps * top[:, k - 1].abs().clamp(min=1.0)
+    return (top[:, k - 1] - top[:, k]) > eps
+
+
+def _by_expert(idx: torch.Tensor, w: torch.Tensor):
+    """Each row's (expert, weight) pairs ordered by expert: the routing, whatever the slot order."""
+    order = torch.argsort(idx, dim=-1)
+    return torch.gather(idx, -1, order), torch.gather(w.float(), -1, order)
+
+
 def _probe_matches(mod, kind, spec) -> bool:
     """Run the module's own forward and require it to agree with the
     kind's reference -- both the selected expert SET and the weights.
     A name match cannot tell a softmax-then-topk router from a
     topk-then-softmax one, and mis-routing is not a rounding error.
+    The set and the weights are compared on the DECISIVE rows only
+    (:func:`_decisive_rows`), per expert rather than per slot; a router
+    with non-finite logits on the probe, or no decisive row, is refused.
     Records where the module puts (first, weights, index) in its tuple."""
-    g = torch.Generator(device="cpu").manual_seed(4242)
     w = mod.proj.weight if kind == "gemma4" else mod.weight
-    x = torch.randn(4, spec["hidden"], generator=g).to(w.device, w.dtype)
+    x = _probe_rows(spec["hidden"], w)
     try:
         with torch.no_grad():
             out = mod(x)
@@ -244,12 +270,19 @@ def _probe_matches(mod, kind, spec) -> bool:
         else:
             pre = _gemma4_pre(mod, x) if kind == "gemma4" else x
             raw = torch.nn.functional.linear(pre, w)
-    if got_i.shape != ref_i.shape or not torch.equal(got_i.cpu(), ref_i.cpu()):
+    if got_i.shape != ref_i.shape or got_w.shape != ref_w.shape or not torch.isfinite(raw.float()).all():
+        return False
+    keep = _decisive_rows(raw, spec["k"]).cpu()
+    if not bool(keep.any()):
+        return False                # every probe row is a near tie: nothing licenses the module
+    gi, gw = _by_expert(got_i.cpu()[keep], got_w.cpu()[keep])
+    ri, rw = _by_expert(ref_i.cpu()[keep], ref_w.cpu()[keep])
+    if not torch.equal(gi, ri):
         return False
     # 2**-8 is bf16's half-ulp: a module that rounds the fp32 k-softmax to
     # bf16 (gpt-oss's softmax in the logits' dtype, GraniteMoe's type_as) sits
     # inside it by construction, once the logits are formed as it forms them.
-    if not torch.allclose(got_w.float().cpu(), ref_w.float().cpu(), rtol=2 ** -8, atol=2 ** -12):
+    if not torch.allclose(gw, rw, rtol=2 ** -8, atol=2 ** -12):
         return False
     # Whether upstream hands its weights back in the logits' dtype (Qwen3-MoE, gpt-oss: bf16 on a bf16 model) or keeps
     # fp32 (Mixtral): the fused path may cast only in the first case, since a cast must reproduce upstream's function.
