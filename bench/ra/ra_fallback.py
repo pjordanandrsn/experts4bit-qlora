@@ -29,6 +29,10 @@ def canonical_ast(value):
     if isinstance(value, ast.AST):
         fields = {k: canonical_ast(v) for k, v in ast.iter_fields(value)
                   if not (k == "type_params" and not v)}
+        # Python <=3.11 omits this field from _fields. A supplied nonempty
+        # generic-parameter mutant must not silently disappear on that runtime.
+        if "type_params" not in fields and getattr(value, "type_params", None):
+            fields["type_params"] = canonical_ast(value.type_params)
         return {"node": type(value).__name__, "fields": fields}
     if isinstance(value, list):
         return [canonical_ast(v) for v in value]
