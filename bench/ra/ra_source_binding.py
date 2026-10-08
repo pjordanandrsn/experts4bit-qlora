@@ -40,8 +40,12 @@ def git(repo, *args, data=None):
 def source_tree(repo, commit):
     require(isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40}", commit), "full commit pin required")
     require(git(repo, "rev-parse", commit + "^{commit}").decode().strip() == commit, "commit identity")
+    raw = object_bytes(repo, {"commit": (commit, "commit")})["commit"]
+    root = re.match(rb"tree ([0-9a-f]{40})\n", raw)
+    require(root is not None, "commit tree field")
+    trees = {"": (root[1].decode(), "tree")}
     tree = {}
-    for row in git(repo, "ls-tree", "-r", "-z", commit).split(b"\0"):
+    for row in git(repo, "ls-tree", "-r", "-t", "-z", commit).split(b"\0"):
         if not row:
             continue
         header, path = row.split(b"\t", 1)
@@ -50,29 +54,40 @@ def source_tree(repo, commit):
         require(rel not in tree and PurePosixPath(rel).as_posix() == rel and
                 not rel.startswith("/") and ".." not in PurePosixPath(rel).parts and "\\" not in rel,
                 "unsafe/duplicate source path")
-        tree[rel] = (mode, kind, oid)
+        if kind == "tree":
+            require(rel not in trees, "duplicate source tree")
+            trees[rel] = (oid, kind)
+        else:
+            tree[rel] = (mode, kind, oid)
+    object_bytes(repo, trees)
     return tree
 
 
-def blobs(repo, tree, paths):
-    paths = sorted(set(paths))
-    for path in paths:
-        require(path in tree and tree[path][0] in ("100644", "100755") and tree[path][1] == "blob",
-                "missing/nonregular Git source: " + path)
-    data = git(repo, "cat-file", "--batch", data="".join(tree[p][2] + "\n" for p in paths).encode())
+def object_bytes(repo, objects):
+    paths = sorted(objects)
+    data = git(repo, "cat-file", "--batch", data="".join(objects[p][0] + "\n" for p in paths).encode())
     result, offset = {}, 0
     for path in paths:
         end = data.index(b"\n", offset)
         oid, kind, size = data[offset:end].decode().split()
         size = int(size)
-        require(oid == tree[path][2] and kind == "blob", "Git object response")
+        require((oid, kind) == objects[path], "Git object response")
         start = end + 1
         result[path] = data[start:start + size]
         require(len(result[path]) == size and data[start + size:start + size + 1] == b"\n",
                 "Git object length")
+        require(hashlib.sha1(kind.encode() + b" " + str(size).encode() + b"\0" + result[path]).hexdigest() == oid,
+                "Git object content address")
         offset = start + size + 1
     require(offset == len(data), "surplus Git object response")
     return result
+
+
+def blobs(repo, tree, paths):
+    for path in set(paths):
+        require(path in tree and tree[path][0] in ("100644", "100755") and tree[path][1] == "blob",
+                "missing/nonregular Git source: " + path)
+    return object_bytes(repo, {p: (tree[p][2], "blob") for p in paths})
 
 
 def runtime_mapping(project, tree):

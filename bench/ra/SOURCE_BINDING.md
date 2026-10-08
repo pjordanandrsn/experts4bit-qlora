@@ -6,7 +6,8 @@ with an absolute `repo`, full reviewed `commit`, `version`, and retained
 `wheel` (`path`, `sha256`). One release of each project is required.
 
 The gate reads Git objects at the pinned commits, with replacement objects
-disabled. It derives the complete runtime file mapping from the committed
+disabled, and recomputes the commit, all tree and selected blob identifiers from
+their bytes. It derives the complete runtime file mapping from the committed
 static setuptools configuration and compares every mapped byte with the
 archive. Missing, extra or substituted runtime files refuse, including package
 data and gnf4's native C sources. Source symlinks refuse. Dirty worktrees do not

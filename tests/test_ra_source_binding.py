@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import zipfile
+import zlib
 from pathlib import Path
 
 import pytest
@@ -196,6 +197,32 @@ def test_worktree_and_git_replace_do_not_change_pinned_objects(tmp_path):
     target.write_text("# dirty worktree differs again\n")
     result = invoke(tmp_path, manifest)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("kind", ["commit", "tree", "blob"])
+def test_object_filenames_cannot_mask_corrupt_content(tmp_path, kind):
+    manifest = setup(tmp_path)
+    row = manifest["releases"][0]
+    repo = Path(row["repo"])
+    if kind == "commit":
+        oid = row["commit"]
+    elif kind == "tree":
+        oid = git(repo, "rev-parse", row["commit"] + ":experts4bit_qlora")
+    else:
+        oid = git(repo, "rev-parse", row["commit"] + ":experts4bit_qlora/nested/engine.py")
+    path = repo / ".git/objects" / oid[:2] / oid[2:]
+    data = zlib.decompress(path.read_bytes())
+    if kind == "commit":
+        data = data.replace(b"RA CPU fixture", b"AA CPU fixture")
+    elif kind == "tree":
+        data = data.replace(b"100644", b"100755")
+    else:
+        data = data.replace(b"synthetic", b"different")
+    path.chmod(0o644)  # Only this owned temporary Git object's mutation fixture.
+    path.write_bytes(zlib.compress(data))
+    result = invoke(tmp_path, manifest)
+    assert result.returncode != 0, kind
+    assert not (tmp_path / "result.json").exists()
 
 
 @pytest.mark.parametrize("mutation", ["native_c", "missing_c", "missing_flat", "duplicate_flat", "package_dir",
