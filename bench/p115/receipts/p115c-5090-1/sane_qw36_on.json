@@ -1,0 +1,207 @@
+{
+ "mode": "sane",
+ "arm": "on",
+ "model_tag": "qw36",
+ "model": "Qwen/Qwen3.6-35B-A3B",
+ "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+ "e4b_sha": "32e1eaf67db4f530419399c36e1e79b2ce0a7736",
+ "gnf4_sha": "b4f93f1c62d1e3436ed45bec8ccd608c90433737",
+ "transformers": "5.17.0",
+ "load_s": 64.8,
+ "census": {
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 40
+ },
+ "fusion_modes": {
+  "E4B_PAGED_FUSE_QKV": "auto",
+  "E4B_FUSE_T1_GLUE": "auto",
+  "E4B_FUSE_T1_GLUE_R2": "auto",
+  "E4B_FUSE_ROUTER_EPI": "auto"
+ },
+ "phase": "on",
+ "arms": [
+  "ON"
+ ],
+ "windows": {
+  "wikitext": 12
+ },
+ "windows_sha256": {
+  "wikitext": "6d7f327fa006ab9825646a3a0f08cb8497f4c30b9b00c12b6f5ab14903ab91f5"
+ },
+ "group": 12,
+ "prompt": 512,
+ "cont": 128,
+ "chunk": 512,
+ "floor_chunk": 512,
+ "layers": 40,
+ "ref_kw": {
+  "device_grouping": true,
+  "padded": true
+ },
+ "rep_identical": {},
+ "counters_wrapped": [
+  "rmsnorm_rows",
+  "rmsnorm_resid_rows",
+  "scaled_resid_add_rows",
+  "rope_norm_heads",
+  "rope_heads",
+  "router_epilogue"
+ ],
+ "qkv_modules": 0,
+ "rehearsal": {
+  "stand_in_attention": false
+ },
+ "per_window": {
+  "wikitext": {
+   "ON": [
+    {
+     "window": 0,
+     "nll": 1.8991579090061634,
+     "argmax_agree": 1.0,
+     "kl": 0.0
+    },
+    {
+     "window": 1,
+     "nll": 2.675413675447089,
+     "argmax_agree": 0.984375,
+     "kl": 0.0006645595756129552
+    },
+    {
+     "window": 2,
+     "nll": 2.046692468599474,
+     "argmax_agree": 1.0,
+     "kl": 1.1114287190139294e-05
+    },
+    {
+     "window": 3,
+     "nll": 1.1550718017650468,
+     "argmax_agree": 0.9921875,
+     "kl": 0.0003353657814968436
+    },
+    {
+     "window": 4,
+     "nll": 1.8840684960672434,
+     "argmax_agree": 1.0,
+     "kl": 0.0
+    },
+    {
+     "window": 5,
+     "nll": 1.6598021754829517,
+     "argmax_agree": 1.0,
+     "kl": 0.0
+    },
+    {
+     "window": 6,
+     "nll": 1.4512564974650104,
+     "argmax_agree": 1.0,
+     "kl": 0.0
+    },
+    {
+     "window": 7,
+     "nll": 1.6020674534840964,
+     "argmax_agree": 1.0,
+     "kl": 0.0
+    },
+    {
+     "window": 8,
+     "nll": 2.5591638085134036,
+     "argmax_agree": 0.96875,
+     "kl": 0.005230478633450275
+    },
+    {
+     "window": 9,
+     "nll": 2.2080794245739526,
+     "argmax_agree": 1.0,
+     "kl": 0.0
+    },
+    {
+     "window": 10,
+     "nll": 2.128957703210034,
+     "argmax_agree": 1.0,
+     "kl": 0.0
+    },
+    {
+     "window": 11,
+     "nll": 1.9639877821543905,
+     "argmax_agree": 1.0,
+     "kl": 0.0
+    }
+   ]
+  }
+ },
+ "engagement": {
+  "wikitext": {
+   "ON": [
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 101.4,
+     "decode_calls": 1270,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 1524,
+       "pad_rows": 508
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 0,
+      "rmsnorm_resid_rows": 0,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 0,
+      "router_epilogue": 5120
+     },
+     "forwards": 140,
+     "qkv_calls": 0
+    }
+   ]
+  }
+ },
+ "seconds": 20.9,
+ "max_mem_gb": 24.38,
+ "status": "ok"
+}

@@ -1,0 +1,25 @@
+{
+ "mode": "serve",
+ "arm": "explicit",
+ "model_tag": "gptoss",
+ "e4b_sha": "32e1eaf67db4f530419399c36e1e79b2ce0a7736",
+ "gnf4_sha": "b4f93f1c62d1e3436ed45bec8ccd608c90433737",
+ "torch": "2.8.0+cu128",
+ "status": "raised",
+ "model": "openai/gpt-oss-20b",
+ "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+ "fusion_modes": {
+  "E4B_PAGED_FUSE_QKV": "1",
+  "E4B_FUSE_T1_GLUE": "1",
+  "E4B_FUSE_T1_GLUE_R2": "1",
+  "E4B_FUSE_ROUTER_EPI": "1"
+ },
+ "graphs": true,
+ "max_seqs": 16,
+ "placement": "all-vram",
+ "raised": true,
+ "exc_type": "RuntimeError",
+ "exc_message": "E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion",
+ "load_s": 18.63,
+ "traceback": "Traceback (most recent call last):\n  File \"/root/p115c/p115c_box.py\", line 69, in serve_main\n    parts = build_engine(cfg)\n            ^^^^^^^^^^^^^^^^^\n  File \"/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/serve_paged.py\", line 1107, in build_engine\n    fusions = _apply_fusions(model, cfg, report=fusion_report)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/conda/lib/python3.11/site-packages/experts4bit_qlora/serve_paged.py\", line 978, in _apply_fusions\n    raise RuntimeError(\"E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion\")\nRuntimeError: E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion\n"
+}
