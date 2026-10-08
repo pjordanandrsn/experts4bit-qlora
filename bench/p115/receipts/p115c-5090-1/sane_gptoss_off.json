@@ -1,0 +1,195 @@
+{
+ "mode": "sane",
+ "arm": "off",
+ "model_tag": "gptoss",
+ "model": "openai/gpt-oss-20b",
+ "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+ "e4b_sha": "32e1eaf67db4f530419399c36e1e79b2ce0a7736",
+ "gnf4_sha": "b4f93f1c62d1e3436ed45bec8ccd608c90433737",
+ "transformers": "5.17.0",
+ "load_s": 36.5,
+ "census": {
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 0
+ },
+ "fusion_modes": {
+  "E4B_PAGED_FUSE_QKV": "0",
+  "E4B_FUSE_T1_GLUE": "0",
+  "E4B_FUSE_T1_GLUE_R2": "0",
+  "E4B_FUSE_ROUTER_EPI": "0"
+ },
+ "phase": "off",
+ "arms": [
+  "R"
+ ],
+ "windows": {
+  "wikitext": 12
+ },
+ "windows_sha256": {
+  "wikitext": "e42a23c1d8a0d2b07b0f74a906191f45bde1b237446f3575b72a2c181894ddee"
+ },
+ "group": 12,
+ "prompt": 512,
+ "cont": 128,
+ "chunk": 512,
+ "floor_chunk": 512,
+ "layers": 24,
+ "ref_kw": {
+  "device_grouping": true,
+  "padded": true
+ },
+ "rep_identical": {},
+ "counters_wrapped": [
+  "rmsnorm_rows",
+  "rmsnorm_resid_rows",
+  "scaled_resid_add_rows",
+  "rope_norm_heads",
+  "rope_heads",
+  "router_epilogue"
+ ],
+ "qkv_modules": 0,
+ "rehearsal": {
+  "stand_in_attention": false
+ },
+ "per_window": {
+  "wikitext": {
+   "R": [
+    {
+     "window": 0,
+     "nll": 4.85589175473433,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 1,
+     "nll": 5.12772463017609,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 2,
+     "nll": 5.6892735552974045,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 3,
+     "nll": 3.3413439448559075,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 4,
+     "nll": 2.476247312337364,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 5,
+     "nll": 6.277513723354787,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 6,
+     "nll": 4.90426790600759,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 7,
+     "nll": 4.982215798750985,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 8,
+     "nll": 5.282145712786587,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 9,
+     "nll": 4.97733581405555,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 10,
+     "nll": 5.230602570962219,
+     "argmax_agree": 1.0
+    },
+    {
+     "window": 11,
+     "nll": 4.956763558901002,
+     "argmax_agree": 1.0
+    }
+   ]
+  }
+ },
+ "engagement": {
+  "wikitext": {
+   "R": [
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 54.09,
+     "decode_calls": 3048,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 1524,
+       "pad_rows": 508
+      }
+     },
+     "kernels": {
+      "rmsnorm_rows": 0,
+      "rmsnorm_resid_rows": 0,
+      "scaled_resid_add_rows": 0,
+      "rope_norm_heads": 0,
+      "rope_heads": 0,
+      "router_epilogue": 0
+     },
+     "forwards": 139,
+     "qkv_calls": 0
+    }
+   ]
+  }
+ },
+ "seconds": 11.7,
+ "max_mem_gb": 25.22,
+ "status": "ok"
+}

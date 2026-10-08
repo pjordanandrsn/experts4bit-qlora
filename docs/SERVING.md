@@ -187,6 +187,14 @@ a correctness testbed, and a post-hoc read of SC2b's traces). On Qwen3-30B-A3B, 
 capacity up from 2 to 4 req/s, with identical output ([SC2c](../bench/h2h-2026-10-02/sc2c/README.md)). SC2d confirmed identical
 output on Qwen3.6-35B-A3B and gpt-oss-20b ([SC2d](../bench/h2h-2026-10-02/sc2d/README.md)). Neither has a register row yet.
 
+**Final-position logits (`E4B_PAGED_LAST_LOGITS=1`, opt-in).** The prefill forward asks the model's LM head for one
+position while every prompt token still traverses the decoder and populates K/V. Eager chunks, first-chunk graph
+capture and its startup check use the same mode. A forward without an explicit `logits_to_keep` or
+`num_logits_to_keep` keyword refuses at startup; a model that returns multiple positions despite the request
+refuses on forward. `/health.last_logits` reports the mode, keyword and prefill forward count (including capture
+and warmup; replays are counted separately). The default is `0`: the head's GEMM shape changes, so this needs a
+served-prefill quality and speed read before a default change. Decode is unchanged.
+
 **Per-step trace (`E4B_PAGED_STEP_TRACE=<path>`).** One JSON line per engine step (`engines/step_trace.py`):
 - what the step carried: prefill chunks and tokens, prefill-graph replays, decode rows and bucket, slots decoding for
   the first time, admissions, active and queued requests;

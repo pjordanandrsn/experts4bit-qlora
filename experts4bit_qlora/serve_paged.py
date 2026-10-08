@@ -158,6 +158,18 @@ def _graphs_env(value: str, device: str, placement: str, capability=None) -> boo
     raise ValueError(f"E4B_PAGED_GRAPHS={value!r}: expected 'auto', '0' or '1'")
 
 
+def _last_logits_env(value: str) -> bool:
+    """``E4B_PAGED_LAST_LOGITS``: opt-in final-position prefill logits (0/1).
+
+    Off until a served-prefill quality read licenses the LM-head shape change.
+    Forced on requires an explicit supported model.forward keyword at startup.
+    """
+    v = (value or "0").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"E4B_PAGED_LAST_LOGITS={value!r}: expected '0' or '1'")
+    return v == "1"
+
+
 def _prefill_graph_env(value: str) -> str:
     """``E4B_PAGED_PREFILL_GRAPH``, one of three settings. Every first chunk of exactly ``E4B_PAGED_CHUNK_TOKENS``
     tokens is served from one CUDA graph (:meth:`~.engines.paged_runner.PagedModelRunner.enable_prefill_graph`) when it
@@ -306,6 +318,7 @@ class PagedServeConfig:
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
+    last_logits: bool = False            # E4B_PAGED_LAST_LOGITS: opt-in prefill head at one position
     buckets: tuple = DEFAULT_BUCKETS     # in code: the list unless "auto" is passed; from_env: "auto" when unset (_buckets_env)
     buckets_requested: str = "default"   # E4B_PAGED_BUCKETS as given ("default" when unset or empty); /health reports it
     placement: str = "all-vram"          # E4B_PAGED_PLACEMENT: all-vram | solver
@@ -350,6 +363,7 @@ class PagedServeConfig:
             graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
                                env("E4B_PAGED_PLACEMENT", "all-vram"), _capability(env("E4B_PAGED_DEVICE", "cuda"))),
             prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "auto")),
+            last_logits=_last_logits_env(env("E4B_PAGED_LAST_LOGITS", "0")),
             buckets=_buckets_env(env("E4B_PAGED_BUCKETS", "")),
             buckets_requested=(env("E4B_PAGED_BUCKETS", "") or "").strip() or "default",
             placement=env("E4B_PAGED_PLACEMENT", "all-vram"),
@@ -1193,7 +1207,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     kv = Fp8PagedKV(kv_layers(model, decoder_layers(model.config)), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch)
-    runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv)
+    runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     engage_prefill_graph(runner, cfg)
@@ -1471,6 +1485,10 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
             "levers": info,
             "prefill_routes": prefill_routes(),
             "prefill_graph": prefill_graph_report(cfg, engine),
+            "last_logits": dict(
+                engine.parts.runner.last_logits_stats()
+                if engine.parts is not None and hasattr(engine.parts.runner, "last_logits_stats")
+                else {"status": "off" if not cfg.last_logits else engine.state}, requested=cfg.last_logits),
             "kv_bookkeeping": kv_bookkeeping_report(cfg, engine),
             "eos_token_ids": sorted(parts.eos_ids) if parts is not None else None,
             "sampling": {"greedy_only": True, "logprobs": False, "stop_strings": False},

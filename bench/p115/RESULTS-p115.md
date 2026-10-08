@@ -1,4 +1,4 @@
-# P115 — results (Phases A and B): **DEFAULT_AUTO**. The registered B=1 fused stack decodes the default `serve_paged` server 1.43× as fast with one request and 1.23× with 16, at no measurable quality cost (Qwen3-30B-A3B NF4, one RTX 5090)
+# P115 — results: Phases A and B **DEFAULT_AUTO** (the registered B=1 fused stack decodes the default `serve_paged` server 1.43× as fast with one request and 1.23× with 16, at no measurable quality cost; Qwen3-30B-A3B NF4); Phase C **FLIP_HELD** (gpt-oss-20b fails the SANE gate on argmax agreement), with Granite **GRANITE_LICENSED**. One RTX 5090
 
 Registration: `bench/p115/PREREG-p115.md` (#1314, `98f919de`; Amendment 1 in #1317, `598c0013`). The `auto` semantics:
 #1315. Issue: #1313.
@@ -113,3 +113,103 @@ launcher, and none of them is a reading.
 
 The launcher's receipts and ledger rows are in the receipt store. This reading's is adertha-receipts `fc99e88f`, and
 `p115-prove-2`'s is `47eac5a4`.
+
+## Phase C (`p115c-5090-1`): **FLIP_HELD**; Granite **GRANITE_LICENSED**
+
+Registration: Amendment 2 (#1318, `32e1eaf6`), Phase C's scripts, the SANE implementation and Granite's full read. The
+proof `p115c-prove-1` passed first.
+
+Code under test:
+- e4b 0.48.0 at `32e1eaf6` (Amendment 2 merged);
+- grouped-nf4-gemm 0.42.0 at `b4f93f1`, Phase A/B's pin, which isolates the fusion knobs from #509 / #508 in 0.43.0;
+- torch 2.8.0+cu128, triton 3.4.0, transformers 5.17.0;
+- `openai/gpt-oss-20b` at `6cee5e8` (SC2g's e4b path), `Qwen/Qwen3.6-35B-A3B` at `995ad96` (P98's arena) and
+  `ibm-granite/granite-3.1-3b-a800m-instruct` at `a027806`, each baked on the box.
+
+**Verdicts by `p115c_reduce.py`:**
+- the flip verdict over gpt-oss-20b and Qwen3.6-35B-A3B is **`FLIP_HELD`**;
+- Granite's own verdict, which does not enter the flip verdict, is **`GRANITE_LICENSED`**.
+
+| model | census under `auto` (q/k/v / glue / r2 / router) | `=1` raised | SANE (12 windows × 128 positions) | ON ≡ OFF rows (reported) | gates |
+|---|---|---|---|---|---|
+| gpt-oss-20b | 0 / 49 / [24, 0] / 24 | "E4B_PAGED_FUSE_QKV=1 matched no attention module" | bias **+0.0022** nats, argmax agreement **0.924**, mean KL 0.030 | 2 / 16 | SERVED, ENGAGED, EXPLICIT_RAISE, DETERMINISM pass; **SANE fails** (argmax < 0.95) |
+| Qwen3.6-35B-A3B | 0 / 0 / [0, 0] / 40 (101 RMSNorms name-matched and failed the semantic probe) | "E4B_FUSE_T1_GLUE=1 patched no RMSNorm modules" | bias +0.0004, argmax 0.995, mean KL 0.0005 | 16 / 16 | all pass |
+| Granite-3.1-3b-a800m | 0 / 65 / [32, 32] / 32 | "E4B_PAGED_FUSE_QKV=1 matched no attention module" | n/a: Phase B's read instead (below) | 3 / 16 | all pass; QUALITY pass |
+
+OFF's census was all zero on every model. Every OFF and ON serve build captured every bucket (1–16), and every `=1` build raised before serving, as registered.
+
+**Granite's quality read** used Phase B's instrument at Phase B's size: 48 windows × 128 positions per text, with the
+floor drawn from `half` and `chunk`.
+
+| text | ON bias (bar) | ON spread (bar) | K8 perplexity | argmax agreement | floor B / S | mutant |
+|---|---|---|---|---|---|---|
+| wikitext-2 | −0.00268 nats (0.01204) | 0.0111 (0.0203) | 6.4027 → 6.3856 (−0.0171, gated, budget 0.05) | 0.963 | 0.0020 / 0.0102 | +2.84 nats (fails the bar, as it must) |
+| c4val1 | +0.00355 (0.01400) | 0.0119 (0.0253) | 11.7045 → 11.7462 (+0.0417, reported, not gated) | 0.960 | 0.0040 / 0.0127 | +1.97 nats (fails the bar) |
+
+### The reading (`p115c-5090-1`)
+
+**Host:** one RTX 5090 (sm_120, driver 595.84) on an AMD EPYC 7B13 host (256 threads, ~2 TB RAM), 320 GB free. It was
+Vast instance 54770431 ("verified-secure"). **Cost:** $1.345, about 44 minutes from start to teardown.
+
+**Timeline (the box's own log, UTC):**
+- the premise passed by 03:48 (48 passed, none skipped);
+- Granite: fetch 03:49, three serve builds 03:50–03:51, quality OFF 359 s, quality ON 70 s, by 03:58;
+- gpt-oss-20b: fetch and bake by 04:02, serve and SANE builds 04:02–04:08;
+- Qwen3.6-35B-A3B: fetch by 04:20, bake 04:22, serve and SANE builds 04:23–04:27;
+- TP_DONE at 04:27:48.
+
+### Against the predictions
+
+| prediction | result |
+|---|---|
+| census gpt-oss `0 / 49 / [24, 0] / 24`, Qwen3.6 `0 / 0 / [0, 0] / 40`, Granite `0 / 65 / [32, 32] / 32` | **exact**, all three |
+| EXPLICIT raises a knob's own vacuous-enable refusal (Amendment 2's correction: Qwen3.6 refuses the RMSNorm fold before the q/k/v fusion is reached) | **as corrected**: gpt-oss and Granite refuse the q/k/v fusion, Qwen3.6 the RMSNorm fold |
+| FLIP_LICENSED (the launch's stated expectation) | **missed**: gpt-oss's argmax agreement was 0.924 |
+| Granite: wikitext ON bias within ±0.004 nats and \|ΔK8\| ≤ 0.03; c4val1 bias in [0.000, +0.015]; GRANITE_LICENSED about 60 % | **all hold**: −0.00268, 0.0171, +0.00355 |
+| reading about 1.5 h, about $2.7 | 44 minutes, $1.345 |
+
+**Reading the gpt-oss failure (context, not a rule).**
+- On gpt-oss the folds left the mean NLL almost where it was (+0.0022 nats against a 0.02 gate). They moved the
+  top-1 token on 7.6 % of teacher-forced positions, and the mean KL is 0.030. On Granite the same three folds read
+  0.963 / 0.008, about the same as that model's neutral perturbations: half batch 0.962, prefill chunk 0.962.
+- SANE draws no neutral floor of its own, so this run cannot say whether 0.924 is gpt-oss's own sensitivity to any
+  bf16 reordering or one fold's arithmetic. The rule does not ask; it held the flip.
+
+### The registered consequence (FLIP_HELD)
+
+- The four knobs **stay `0` by default**. As registered, any default now is "a family-scoped default only under a new
+  registration".
+- The families with a registered passing read under `auto` are:
+  - Qwen3-30B-A3B: speed and quality, Phases A and B;
+  - Qwen3.6-35B-A3B: Phase C's gates including SANE; only the router epilogue engages, and it was token-identical;
+  - Granite-3.1-3b-a800m: GRANITE_LICENSED.
+- **gpt-oss-20b has none.**
+- This is the maintainer's allowlist ("under `auto`, a fold applies only on a family with a registered reading").
+  The new registration that makes it a default also carries the combined read the maintainer asked for in #1318's
+  review: one SANE pair on Qwen3-30B-A3B at the 0.43.0 kernels, fusion `0` against `auto`, the bandwidth GEMV (P116)
+  at its default.
+- **gpt-oss** gets a follow-up before any default reaches it: one knob per arm, with a neutral floor drawn on gpt-oss
+  itself.
+
+This read registers two rows:
+- `e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`: engagement and SANE under `auto` on the two
+  families, FLIP_HELD. Its value is gpt-oss's argmax agreement, 0.924.
+- `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08`: Granite's wikitext ON bias, with c4val1 and the K8s in
+  the claim text.
+
+### What Phase C took
+
+| run | status | cost | note |
+|---|---|---:|---|
+| `p115c-prove-1` | OK, PROVED | $0.158 | Granite end to end at proof sizes; premise passed; its verdict (not a reading) FLIP_LICENSED |
+| `p115c-5090-1` | **OK, FLIP_HELD; GRANITE_LICENSED** | $1.345 | the reading |
+
+**Phase C cost $1.503**, inside its $5.00 ceiling. **P115 has cost $2.455** over all phases, against its $10 hard stop.
+
+**Receipts** are in `receipts/p115c-5090-1/`, with `SHA256SUMS`:
+- the nine serve records, the four SANE records, `quality_granite_off.json`, `quality_granite_on.json`, `verdict_c.json`;
+- `summary.txt`, `forensics.txt`, `versions.txt`, the three prompt files and the three bakes;
+- the logs and the teardown proof.
+
+The launcher's receipts and ledger rows are in the receipt store. The reading's is adertha-receipts `58f25d67`, and the
+proof's is `07b05b78`.
