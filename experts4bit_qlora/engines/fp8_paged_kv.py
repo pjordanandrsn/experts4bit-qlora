@@ -1044,12 +1044,17 @@ class Fp8PagedKV:
         self._g_sel = None
         self._g_step = None
 
-    def graph_bucket_load(self, st: dict, slots) -> None:
+    def graph_bucket_load(self, st: dict, slots, staging=None) -> None:
         """Write this step's slot ids into the bucket's device tensors
         (one pinned H2D copy, async) and zero the scratch slots' lengths,
         so a padding row always writes and reads its scratch slot's first
-        position and never walks off its single block."""
-        host = st["host"]
+        position and never walks off its single block.
+
+        ``staging``: a host int64 buffer of ``st["b"]`` entries to copy through instead of the bucket's own. The
+        bucket's buffer is safe only while every step syncs before the next load (the synchronous decode path); a
+        caller that loads the next step with this one still queued (the runner's decode lookahead) passes a buffer no
+        queued copy still reads."""
+        host = st["host"] if staging is None else staging
         host.copy_(torch.as_tensor(list(slots), dtype=torch.int64))
         st["slot_l"].copy_(host, non_blocking=True)
         st["slot_idx"].copy_(st["slot_l"])

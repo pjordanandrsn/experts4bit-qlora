@@ -224,6 +224,7 @@ class PagedModelRunner(StepRunner):
         self._prefill_graph = None   # see enable_prefill_graph
         self._pg_refused = None      # why an `auto` prefill graph stood down (see note_prefill_graph_refused)
         self._pg_stats = {"replays": 0, "eager_chunks": 0, "eager_reasons": {"later_chunk": 0, "short_chunk": 0}}
+        self._la = None              # decode lookahead state (issue_decode / collect_decode), built at first use
 
     # ------------------------------------------------------------ intake --
     def bind(self, rid: int, slot: int, prompt) -> None:
@@ -233,6 +234,9 @@ class PagedModelRunner(StepRunner):
         self.slot_of[rid] = slot
         self.pos_of[rid] = 0
         self.tokens[rid] = list(prompt)
+        if self._la is not None:                    # the slot's device token is the previous tenant's
+            self._la["dev_len"].pop(slot, None)
+            self._la["dev_tok"].pop(slot, None)
         self._reset(slot)            # a recycled slot carries no history
         if self.linear_state is not None:
             self.linear_state.reset(slot)
@@ -356,6 +360,8 @@ class PagedModelRunner(StepRunner):
     def run_decode(self, rids):
         if not rids:
             return {}
+        if self._la is not None and any(r["open"] for r in self._la["ring"]):
+            raise RuntimeError("run_decode while a lookahead decode step is queued: collect_decode it first")
         if self._graphs is not None:
             return self._run_decode_bucketed(rids)
         tr = self.tracer
@@ -420,6 +426,7 @@ class PagedModelRunner(StepRunner):
             self._warm_linear_state(scratch[0])
             self.linear_state.frozen = True
         kv.graph_mode_init(seq=scratch[0], upto_tokens=kv.bt)
+        self._la = None
         self._buckets = buckets
         self._bufs, self._graphs, self.graph_status = {}, {}, {}
         self.graph_stats = {b: {"replays": 0, "eager_steps": 0, "rows": 0, "pad_rows": 0}
@@ -475,6 +482,9 @@ class PagedModelRunner(StepRunner):
                                "unallocated")
 
     def disable_decode_graphs(self) -> None:
+        if self._la is not None and any(r["open"] for r in self._la["ring"]):
+            raise RuntimeError("disable_decode_graphs while a lookahead decode step is queued")
+        self._la = None
         self._graphs = None
         self.kv.graph_bucket_unbind()
 
@@ -593,6 +603,174 @@ class PagedModelRunner(StepRunner):
         ctrl = getattr(self, "slot_controller", None)
         if ctrl is not None:
             ctrl.on_decode_step()
+        return got
+
+    # ------------------------------------------------ decode lookahead (P118) --
+    # run_decode reads a step's tokens back before it returns, so the GPU idles while the host mirrors them, the
+    # scheduler emits and retires, and the next step is planned and its inputs copied in. The two entry points below
+    # split that step for the serving scheduler (ContinuousScheduler(lookahead=True), E4B_PAGED_DECODE_LOOKAHEAD):
+    # issue_decode enqueues a step without waiting, its input ids gathered on the device from a table of each slot's
+    # newest token (which the previous issue wrote), and collect_decode reads a queued step's tokens back through a
+    # pinned buffer and an event. Issuing step t+1 before collecting step t keeps a step queued while the host works.
+    # The device inputs are run_decode's (same ids, positions, slots and padding), so the tokens are too.
+    # run_decode keeps its contract and refuses while a lookahead step is queued.
+
+    def _lookahead_state(self) -> dict:
+        la = self._la
+        if la is None:
+            if self._graphs is None:
+                raise RuntimeError("the decode lookahead needs bucketed decode graphs (enable_decode_graphs)")
+            kv, dev = self.kv, self.device
+            cuda = dev.type == "cuda"
+            rows = int(kv.B) + self._buckets[-1]     # every piece of one step, padded, at disjoint offsets
+
+            def host(n):
+                t = torch.zeros(n, dtype=torch.long)
+                return t.pin_memory() if cuda else t
+
+            la = self._la = {
+                # each slot's newest token on the device; the scratch slots' entries stay 0, the padding rows' ids
+                "tok": torch.zeros(int(kv.B) + len(kv.scratch), dtype=torch.long, device=dev),
+                # slot -> the request's token count with the token in "tok" counted, and that token's value once
+                # collected (its host shadow): with nothing in flight, a row whose count or newest token differs from
+                # these was edited on the host and is resynced from it
+                "dev_len": {},
+                "dev_tok": {},
+                "inflight": {},      # rid -> steps issued and not yet collected
+                # host staging for two queued steps: slot ids, positions, tokens read back; reused only once collected
+                "ring": [{"slots": host(rows), "pos": host(rows), "out": host(rows), "event": None, "open": False}
+                         for _ in range(2)],
+                "next": 0, "cuda": cuda,
+            }
+        return la
+
+    @torch.no_grad()
+    def issue_decode(self, rids) -> dict:
+        """Enqueue one decode step for ``rids`` and return without waiting for it; :meth:`collect_decode` reads its
+        tokens. A row's input is its newest token, which may still be in flight: its position counts the queued steps
+        and its id is gathered on the device. A row whose newest token is known only on the host (its first decode, or
+        after a host edit of ``tokens`` with nothing queued: appended, or its last token rewritten in place) is written
+        into the device table first. With a step queued for the row, an edit that changes its length is refused and
+        an in-place rewrite cannot be seen (it is not supported). At most two steps may be queued. ``tokens``, ``pos_of`` and the KV host mirrors advance when a step is collected, as
+        :meth:`run_decode` advances them."""
+        if not rids:
+            raise ValueError("issue_decode: no rows")
+        if getattr(self, "slot_controller", None) is not None:
+            raise RuntimeError("the decode lookahead does not run with a slot controller: it acts between decode "
+                               "forwards, and under the lookahead one is always queued")
+        la = self._lookahead_state()
+        ring = la["ring"][la["next"]]
+        if ring["open"]:
+            raise RuntimeError("issue_decode: two decode steps are already queued; collect_decode the older one first")
+        kv, tr = self.kv, self.tracer
+        tok, dev_len, inflight = la["tok"], la["dev_len"], la["inflight"]
+        for r in rids:                         # refuse before anything is queued
+            k = inflight.get(r, 0)
+            s_ = self.slot_of[r]
+            if k and dev_len.get(s_) != len(self.tokens[r]) + k:
+                raise RuntimeError(f"rid {r} has a decode step in flight but slot {s_}'s device token is not its "
+                                   f"newest (tokens edited while a step was queued?)")
+        if ring["event"] is not None:
+            ring["event"].synchronize()        # collected already, so its copies have run: this never waits
+        pieces, off = [], 0
+        for chunk in chunk_rows(rids, self._buckets[-1]):
+            n = len(chunk)
+            b = bucket_for(n, self._buckets)
+            buf = self._bufs[b]
+            st = buf["st"]
+            slots = [self.slot_of[r] for r in chunk]
+            if tr is not None:
+                tr.count("first_decodes", sum(1 for s_ in slots if s_ not in self._graph_ready))
+                tr.count("dec_pieces")
+            for s_ in slots:
+                self._ensure_graph_ready(s_)
+            if tr is not None:
+                tr.mark("dec_ready")
+            pad = b - n
+            pos = []
+            for r, s_ in zip(chunk, slots):
+                k = inflight.get(r, 0)
+                have = len(self.tokens[r]) + k      # the row's tokens once its queued steps land
+                newest = self.tokens[r][-1]
+                if dev_len.get(s_) != have or (not k and la["dev_tok"].get(s_) != newest):
+                    tok.narrow(0, s_, 1).fill_(newest)       # known on the host only (k == 0, checked above)
+                    dev_len[s_] = have
+                    la["dev_tok"][s_] = newest
+                pos.append(self.pos_of[r] - 1 + k)
+            ph = ring["pos"][off:off + b]
+            ph.copy_(torch.as_tensor(pos + [0] * pad, dtype=torch.long))
+            kv.graph_bucket_load(st, slots + kv.scratch[:pad], staging=ring["slots"][off:off + b])
+            torch.index_select(tok, 0, st["slot_l"], out=buf["ids"].view(b))
+            buf["pos"].copy_(ph.view(b, 1), non_blocking=True)
+            if tr is not None:
+                tr.mark("dec_prep", event=True)
+            g = self._graphs[b]
+            stats = self.graph_stats[b]
+            if g is not None:
+                g.replay()
+                stats["replays"] += 1
+            else:
+                self._bind(b, slots + kv.scratch[:pad])
+                prev = set_context(self.ctx)
+                try:
+                    self._padded_step(b)
+                finally:
+                    set_context(prev)
+                    kv.graph_bucket_unbind()
+                stats["eager_steps"] += 1
+            kv.graph_bucket_publish(st)
+            tok.index_copy_(0, st["slot_l"][:n], buf["tok"][:n])     # the next step's ids, never via the host
+            ring["out"][off:off + n].copy_(buf["tok"][:n], non_blocking=True)
+            stats["rows"] += n
+            stats["pad_rows"] += pad
+            for r, s_ in zip(chunk, slots):
+                inflight[r] = inflight.get(r, 0) + 1
+                dev_len[s_] = len(self.tokens[r]) + inflight[r]
+            if tr is not None:
+                tr.count("decode_rows", n)
+                tr.note(bucket=b, lookahead=1)
+                tr.mark("dec_issue", event=True)
+            pieces.append((list(chunk), slots, off, n))
+            off += b
+        if la["cuda"]:
+            ev = torch.cuda.Event()
+            ev.record()
+            ring["event"] = ev
+        ring["open"] = True
+        la["next"] ^= 1
+        return {"ring": ring, "pieces": pieces}
+
+    def collect_decode(self, handle) -> dict:
+        """Wait for a step :meth:`issue_decode` queued and return ``{rid: token}``, advancing ``tokens``, ``pos_of`` and
+        the KV host mirrors as :meth:`run_decode` does. Steps are collected in the order they were issued."""
+        ring = handle["ring"]
+        if self._la is None or not ring["open"]:
+            raise RuntimeError("collect_decode: this step was already collected")
+        older = self._la["ring"][self._la["next"]]
+        if older is not ring and older["open"]:
+            raise RuntimeError("collect_decode: an older queued step must be collected first")
+        tr = self.tracer
+        if ring["event"] is not None:
+            ring["event"].synchronize()
+        if tr is not None:
+            tr.mark("dec_sync")
+        kv, inflight, got = self.kv, self._la["inflight"], {}
+        for chunk, slots, off, n in handle["pieces"]:
+            for rid, slot, t in zip(chunk, slots, ring["out"][off:off + n].tolist()):
+                left = inflight[rid] - 1
+                if left:
+                    inflight[rid] = left
+                else:
+                    del inflight[rid]
+                got[rid] = int(t)
+                self.tokens[rid].append(int(t))
+                self.pos_of[rid] += 1
+                self._la["dev_tok"][slot] = int(t)  # the device table's value once nothing newer is queued
+                for layer in self.pool_layers:
+                    kv._seen[layer][slot] += 1     # the host mirror of the device append
+        ring["open"] = False
+        if tr is not None:
+            tr.mark("dec_mirror")
         return got
 
     # ------------------------------------------ first-chunk prefill graph --
@@ -814,6 +992,11 @@ class PagedModelRunner(StepRunner):
         return {"bulk": self.bulk_kv, **self._kv_counts}
 
     def free_slot(self, rid: int) -> None:
+        if self._la is not None:
+            if self._la["inflight"].get(rid):
+                raise RuntimeError(f"free_slot: rid {rid} has a decode step in flight; collect it first")
+            self._la["dev_len"].pop(self.slot_of.get(rid), None)
+            self._la["dev_tok"].pop(self.slot_of.get(rid), None)
         slot = self.slot_of.pop(rid, None)
         if self._graphs is not None:
             self._graph_ready.discard(slot)

@@ -195,6 +195,17 @@ refuses on forward. `/health.last_logits` reports the mode, keyword and prefill 
 and warmup; replays are counted separately). The default is `0`: the head's GEMM shape changes, so this needs a
 served-prefill quality and speed read before a default change. Decode is unchanged.
 
+**Decode lookahead (`E4B_PAGED_DECODE_LOOKAHEAD=1`; opt-in, unread for speed until lane P118).** A decode step reads
+its tokens back before the step ends, so the GPU idles while the host emits them, retires finished requests, plans
+the next step and copies its inputs in. With the switch on, the scheduler issues the next decode step first and reads
+the previous one back after (`PagedModelRunner.issue_decode` / `collect_decode`). A step's input ids are gathered on
+the device from each slot's newest token, so no token waits on the host.
+- Tokens and finish reasons are the synchronous path's, and no sequence is issued past `max_tokens`.
+- A request that stops on a stop id has had one more step computed and discarded (`GET /stats`'
+  `lookahead_discarded`). It frees its slot once that step is read back. A request waiting for that slot is admitted
+  when the synchronous path would admit it.
+- It needs decode graphs (refused at startup otherwise). `/health` reports `engine.decode_lookahead`.
+
 **Per-step trace (`E4B_PAGED_STEP_TRACE=<path>`).** One JSON line per engine step (`engines/step_trace.py`):
 - what the step carried: prefill chunks and tokens, prefill-graph replays, decode rows and bucket, slots decoding for
   the first time, admissions, active and queued requests;
