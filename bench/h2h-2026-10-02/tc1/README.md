@@ -1598,3 +1598,25 @@ Read: [`RESULTS-tc1-slauto.md`](RESULTS-tc1-slauto.md), re-derived byte for byte
 The ladder engaged only where `auto` says it should (49,152 laddered calls on each matched `la` draw, none on the shipped arm). Paired by
 draw, the shipped arm's `la / l0` is 0.997 in both, and the matched arm's 0.876 and 0.813, but the rule quotes only stable draws. By the
 rule `auto` stays opt-in; amendment 72 reads the same box on a third host.
+
+## Amendment 72 (2026-10-08): on a GPU-bound third host `auto` holds every prediction, so it becomes grouped-nf4-gemm's default (P215–P219 HELD; P220, P221 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 72: amendment 71's box unchanged. One RTX 5090
+(`tc1-5090-141`, AMD Ryzen 9 9950X3D, Vast machine 18967). e4b `9629874`, grouped-nf4-gemm `3ce2ecd` (pinned, amendment 71's),
+venv-unsloth (torch 2.12.1), every arm profiled, $0.80. No draw was voided for host load (load1 about 1.1–1.2). Read:
+[`RESULTS-tc1-slauto-h3.md`](RESULTS-tc1-slauto-h3.md), re-derived byte for byte from the receipts with main's reducer.
+
+| arm | s/step `l0` → `la` (two draws) | `aten::bmm` CPU / call | device ms / profiled step | peak |
+|---|---|---|---|---|
+| matched (fp32 adapters) | 2.041 / 2.047 → 2.110 / 2.105 | 96 → 8.8 µs | 1806 → 1906 | 26.15 → 26.50 GB |
+| shipped (bf16 adapters) | 1.594 / 1.596 → 1.599 / 1.598 | 10.2 → 10.2 µs | 1408 → 1407 | 23.32 → 23.32 GB |
+
+- **P215 HELD (P220):** matched `la / l0` **1.031** on a GPU-bound box (the matched `l0`'s GPU busy 0.884), against 1.05.
+- **P216 HELD (P221):** shipped **1.002**.
+- **P217 HELD:** `bmm` CPU time per call 0.092 of the unladdered.
+- **P218 HELD:** device time 1.055 (matched) and 0.999 (shipped).
+- **P219 HELD:** step-0 held-out identical; N within 0.0003.
+
+The ladder's 5.5 % of device time is not hidden on a GPU-bound box, and the fp32 arm pays about 3 % for it. On amendment 70's
+host-bound box the same switch saved 20 %. By amendment 72's rule (P220, P221 and P219 held), `auto` becomes grouped-nf4-gemm's
+default. It never engages for bf16 adapters, e4b's default.
