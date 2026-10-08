@@ -1,0 +1,103 @@
+{
+  "schema": "dense-loss-liveness/1",
+  "status": "PASS",
+  "device": "cpu",
+  "scope": "Frozen bf16 head and exact transformers ForCausalLMLoss; no full model, timing or capacity claim.",
+  "versions": {
+    "torch": "2.8.0+cu128",
+    "transformers": "5.18.0"
+  },
+  "source_sha256": {
+    "loss_utils.py": "83db16b24ce5c3a0642097624aa9a0ae7eb72445c41d8b4d5059a129862fdbbe",
+    "dense-loss-census.py": "fb7d2acefaba8b63418d9e724d68d543b6a4d7ad299ac1a4daafea2f80bae2cd"
+  },
+  "tensor_names": [
+    "NLL backward output / log-softmax incoming gradient",
+    "saved log-softmax forward output",
+    "log-softmax backward output / logits gradient"
+  ],
+  "rows": [
+    {
+      "seq": 8,
+      "vocab": 1024,
+      "baseline_allocated": null,
+      "peak_allocated": null,
+      "priced_full_logits_bytes": 81920,
+      "backward_live_tensor_bytes": 98304,
+      "unpriced_named_tensor_bytes": 16384,
+      "backward": {
+        "operator": "aten._log_softmax_backward_data.default",
+        "live_tensors": [
+          {
+            "shape": [
+              8,
+              1024
+            ],
+            "dtype": "torch.float32",
+            "bytes": 32768
+          },
+          {
+            "shape": [
+              8,
+              1024
+            ],
+            "dtype": "torch.float32",
+            "bytes": 32768
+          },
+          {
+            "shape": [
+              8,
+              1024
+            ],
+            "dtype": "torch.float32",
+            "bytes": 32768
+          }
+        ],
+        "live_bytes": 98304,
+        "allocator_before": null,
+        "allocator_after": null
+      }
+    },
+    {
+      "seq": 16,
+      "vocab": 1024,
+      "baseline_allocated": null,
+      "peak_allocated": null,
+      "priced_full_logits_bytes": 163840,
+      "backward_live_tensor_bytes": 196608,
+      "unpriced_named_tensor_bytes": 32768,
+      "backward": {
+        "operator": "aten._log_softmax_backward_data.default",
+        "live_tensors": [
+          {
+            "shape": [
+              16,
+              1024
+            ],
+            "dtype": "torch.float32",
+            "bytes": 65536
+          },
+          {
+            "shape": [
+              16,
+              1024
+            ],
+            "dtype": "torch.float32",
+            "bytes": 65536
+          },
+          {
+            "shape": [
+              16,
+              1024
+            ],
+            "dtype": "torch.float32",
+            "bytes": 65536
+          }
+        ],
+        "live_bytes": 196608,
+        "allocator_before": null,
+        "allocator_after": null
+      }
+    }
+  ]
+}

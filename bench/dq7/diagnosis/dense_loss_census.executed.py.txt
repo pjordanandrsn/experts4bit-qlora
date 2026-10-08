@@ -1,0 +1,86 @@
+"""Post-DQ7 named-term diagnosis; actual ForCausalLMLoss operator liveness, no fitted constants."""
+import argparse
+import hashlib
+import importlib.metadata as md
+import inspect
+import json
+from pathlib import Path
+
+import torch
+from torch.utils._python_dispatch import TorchDispatchMode
+from transformers.loss.loss_utils import ForCausalLMLoss
+from transformers.modeling_outputs import CausalLMOutputWithPast
+
+
+def describe(t):
+    return {'shape': list(t.shape), 'dtype': str(t.dtype), 'bytes': t.untyped_storage().nbytes(),
+            'pointer': t.untyped_storage().data_ptr()}
+
+
+class Census(TorchDispatchMode):
+    def __init__(self, device):
+        self.device, self.rows = device, []
+
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        kwargs = kwargs or {}
+        before = torch.cuda.memory_allocated() if self.device == 'cuda' else None
+        out = func(*args, **kwargs)
+        if '_log_softmax_backward_data' in str(func):
+            tensors = [args[0], args[1], out]
+            shapes = [describe(t) for t in tensors]
+            assert len({t['pointer'] for t in shapes}) == 3, 'expected three distinct storages'
+            for s in shapes: s.pop('pointer')
+            self.rows.append({'operator': str(func), 'live_tensors': shapes,
+                              'live_bytes': sum(s['bytes'] for s in shapes),
+                              'allocator_before': before,
+                              'allocator_after': torch.cuda.memory_allocated() if self.device == 'cuda' else None})
+        return out
+
+
+def run(device, seq, vocab):
+    torch.manual_seed(731)
+    weight = torch.randn(vocab, 64, device=device, dtype=torch.bfloat16)
+    hidden = torch.randn(1, seq, 64, device=device, dtype=torch.bfloat16, requires_grad=True)
+    labels = torch.arange(seq, device=device).unsqueeze(0) % vocab
+    if device == 'cuda':
+        torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats()
+    baseline = torch.cuda.memory_allocated() if device == 'cuda' else None
+    def forward():
+        logits = torch.nn.functional.linear(hidden, weight)
+        return CausalLMOutputWithPast(logits=logits,
+            loss=ForCausalLMLoss(logits, labels, vocab_size=vocab))
+    with Census(device) as census:
+        # Match the shared executor: only .loss survives the forward expression.
+        loss = forward().loss
+        loss.backward()
+    assert torch.isfinite(loss) and torch.isfinite(hidden.grad).all()
+    assert len(census.rows) == 1
+    row = census.rows[0]
+    assert all(t['dtype'] == 'torch.float32' and t['bytes'] == seq*vocab*4 for t in row['live_tensors'])
+    assert row['live_bytes'] == seq*vocab*12
+    return {'seq': seq, 'vocab': vocab, 'baseline_allocated': baseline,
+            'peak_allocated': torch.cuda.max_memory_allocated() if device == 'cuda' else None,
+            'priced_full_logits_bytes': seq*vocab*10, 'backward_live_tensor_bytes': row['live_bytes'],
+            'unpriced_named_tensor_bytes': seq*vocab*2, 'backward': row}
+
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    p.add_argument('--device', choices=('cpu','cuda'), default='cpu')
+    p.add_argument('--out', required=True)
+    a = p.parse_args()
+    rows = [run(a.device, seq, 128256 if a.device == 'cuda' else 1024)
+            for seq in ((512, 1024) if a.device == 'cuda' else (8, 16))]
+    source = Path(inspect.getfile(ForCausalLMLoss))
+    report = {'schema': 'dense-loss-liveness/1', 'status': 'PASS', 'device': a.device,
+              'scope': 'Frozen bf16 head and exact transformers ForCausalLMLoss; no full model, timing or capacity claim.',
+              'versions': {n:md.version(n) for n in ('torch','transformers')},
+              'source_sha256': {source.name:hashlib.sha256(source.read_bytes()).hexdigest(),
+                                Path(__file__).name:hashlib.sha256(Path(__file__).read_bytes()).hexdigest()},
+              'tensor_names': ['NLL backward output / log-softmax incoming gradient',
+                               'saved log-softmax forward output', 'log-softmax backward output / logits gradient'],
+              'rows': rows}
+    with open(a.out, 'x') as f: json.dump(report, f, indent=2);f.write('\n')
+    print(json.dumps({'status': report['status'], 'device': a.device,
+                      'backward_bytes_per_logit': 12, 'out': a.out}))
