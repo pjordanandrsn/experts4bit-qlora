@@ -46,7 +46,7 @@ SELF_W1_LO, SELF_W1_HI = 0.99, 1.01     # W1's self-pairs: half the 1.02 gain ba
 GAIN_MIN_W1, GAIN_MIN_W16 = 1.02, 0.99
 OVERLAP_MIN = 0.9                        # L1: share of its collects at each workload with a newer step queued behind
 GAP_MIN_MS = 0.2                         # the premise: L0's traced W1 host gap (ms per decode step) to hide
-GNF4_SHA = "b4f93f1c62d1e3436ed45bec8ccd608c90433737"     # grouped-nf4-gemm 0.42.0: e4b CI's pin at registration
+GNF4_SHA = "6ee2e10408161a9d3c874975c9191a7f2957e6f4"     # grouped-nf4-gemm 0.43.0: e4b CI's pin at registration
 QWEN, GRAN = "Qwen/Qwen3-30B-A3B", "ibm-granite/granite-3.1-3b-a800m-instruct"
 REVS = {QWEN: "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", GRAN: "a02780686e08a03fe0d2679a293b5c74a90efa89"}
 

@@ -102,10 +102,10 @@ def test_the_rule_is_the_registered_rule():
     assert "**UNTESTED (premise unmet):** L0's traced W1 host gap is **< 0.2 ms**" in PREREG
     assert "[0.96, 1.04] at W16" in PREREG and "[0.99, 1.01] at W1" in PREREG
     assert "**< 1.02**" in PREREG and "**< 0.99**" in PREREG and "at least **90 %**" in PREREG
-    assert f"GNF4_SHA={r.GNF4_SHA}" in RUN and r.GNF4_SHA == "b4f93f1c62d1e3436ed45bec8ccd608c90433737"
-    ci = (REPO / ".github" / "workflows" / "ci.yml").read_text()
-    # registered as e4b CI's pin; when CI moves, an amendment moves this (PREREG), and this test says so
-    assert f"grouped-nf4-gemm.git@{r.GNF4_SHA}" in ci, "e4b CI's grouped-nf4-gemm pin moved: amend PREREG-p118 first"
+    # the registered constant (0.43.0, CI's pin when this page was registered); the box installs it itself, so CI's pin
+    # moving later is not a change to the lane's rule (the coupling P115's pin test dropped in #1341)
+    assert f"GNF4_SHA={r.GNF4_SHA}" in RUN and r.GNF4_SHA == "6ee2e10408161a9d3c874975c9191a7f2957e6f4"
+    assert "**`6ee2e10`** (0.43.0" in PREREG
     for model, rev in r.REVS.items():
         assert rev in RUN, model
     b = _import("p118_box", LANE, REPO / "bench" / "p109")
@@ -126,7 +126,7 @@ def test_the_order_puts_every_refusal_before_the_fetch():
     assert 'serve_paged._lookahead_env("") is False and serve_paged._lookahead_env("1") is True' in trip
     assert '"lookahead=cfg.decode_lookahead" in inspect.getsource(serve_paged.build_engine)' in trip
     assert 'getattr(PagedModelRunner, "issue_decode", None)' in trip and "StepTrace" in trip
-    assert 'md.version("grouped-nf4-gemm") == "0.42.0"' in trip and 'transformers.__version__ == "5.17.0"' in trip
+    assert 'md.version("grouped-nf4-gemm") == "0.43.0"' in trip and 'transformers.__version__ == "5.17.0"' in trip
 
 
 def test_the_premise_collects_the_registered_counts():

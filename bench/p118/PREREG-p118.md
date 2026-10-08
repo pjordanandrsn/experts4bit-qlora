@@ -33,8 +33,11 @@ The shipped default server at the launch commit:
   not move the subject.
 
 It runs Qwen3-30B-A3B @ `ad44e777bcd1…`, with the NF4 arena baked on the box by P39's `k8_bake.py`. grouped-nf4-gemm
-is at **`b4f93f1`** (0.42.0, e4b CI's pin at registration; a registered constant in `p118_run.sh` and the reducer), with
-transformers 5.17.0 and the image's torch.
+is at **`6ee2e10`** (0.43.0, e4b CI's pin at registration since e4b 0.49.0; a registered constant in `p118_run.sh` and the
+reducer), with transformers 5.17.0 and the image's torch.
+- 0.43.0 carries P116's consequence: `GNF4_GEMV_BW=auto` is grouped-nf4-gemm's default, so at Qwen3-30B-A3B's two
+  expert shapes the subject decodes through the bandwidth GEMV. The registration moved here from 0.42.0 before it merged,
+  when CI's pin moved (this page's own rule).
 - Whatever the launch commit's defaults are, they are recorded per arm (`fusions`, `fusion_modes`, `levers_env`,
   `grouping`) and must agree across the arms.
 - **If e4b CI's grouped-nf4-gemm pin moves before the run, an amendment moves this pin with it, before any box.**
@@ -103,7 +106,7 @@ First rung that applies:
 |---|---|
 | Q1 | engagement exact: L1 overlaps ≥ 99 % of its collects at W1 and ≥ 90 % at W16, discards nothing; L0 makes no lookahead call; every bucket captured in every arm |
 | Q2 | the four arms decode identical tokens on every row, workload and length; identical bucket statistics |
-| Q3 | L0's traced W1 host gap **0.25–0.60 ms** per decode step; **g1 ∈ [1.02, 1.09]**. The L0 W1 step is 7–10.5 ms, depending on the launch commit's fusion default (P116's B0 read 10.22 ms; P115 read the fused stack 1.43× at W1) |
+| Q3 | L0's traced W1 host gap **0.25–0.60 ms** per decode step; **g1 ∈ [1.02, 1.10]**. The L0 W1 step is 6–8.5 ms: P116's bandwidth GEMV (now the default) read 8.22 ms, and a family-scoped fused-stack default, if it lands before the launch, takes it lower (P115 read the stack 1.43× at W1 on its own) |
 | Q4 | **g16 ∈ [1.00, 1.04]**: the gap is a smaller share of a 16-row step, but 16 rows' host mirrors make it larger |
 | Q5 | self-pairs within [0.995, 1.005] at W1 and [0.98, 1.02] at W16 |
 | Q6 | at W1 the period L1 saved is 0.7–1.1× L0's host gap (the lookahead adds two small gathers and a 1-row D2H a step) |

@@ -34,7 +34,7 @@ trap 'finish 130' INT TERM
 for v in P118_RUN_ID P118_DEADLINE_EPOCH P118_INSTANCE_ID E4B_SHA; do [ -n "${!v:-}" ] || { say "refusing: $v unset"; finish 78; }; done
 case "$E4B_SHA" in *[!0-9a-f]*|"") say "refusing: E4B_SHA is not hex"; finish 78;; esac
 [ ${#E4B_SHA} -eq 40 ] || { say "refusing: E4B_SHA is not a 40-char sha"; finish 78; }
-GNF4_SHA=b4f93f1c62d1e3436ed45bec8ccd608c90433737   # grouped-nf4-gemm 0.42.0: e4b CI's pin at registration; a registered constant
+GNF4_SHA=6ee2e10408161a9d3c874975c9191a7f2957e6f4   # grouped-nf4-gemm 0.43.0: e4b CI's pin at registration (0.49.0); a registered constant
 PROVE=${P118_PROVE:-0}
 if [ "$PROVE" = 1 ]; then
   MODEL=ibm-granite/granite-3.1-3b-a800m-instruct; REV=a02780686e08a03fe0d2679a293b5c74a90efa89   # P94's pin (SC1's proof model)
@@ -117,7 +117,7 @@ d = json.loads(md.distribution("experts4bit-qlora").read_text("direct_url.json")
 assert d.get("vcs_info", {}).get("commit_id") == os.environ["WANT_E4B"], f"installed e4b is not the launch commit: {d}"
 dg = json.loads(md.distribution("grouped-nf4-gemm").read_text("direct_url.json") or "{}")
 assert dg.get("vcs_info", {}).get("commit_id") == os.environ["WANT_GNF4"], f"installed gnf4 is not the pinned commit: {dg}"
-assert md.version("grouped-nf4-gemm") == "0.42.0", md.version("grouped-nf4-gemm")
+assert md.version("grouped-nf4-gemm") == "0.43.0", md.version("grouped-nf4-gemm")
 import transformers
 assert transformers.__version__ == "5.17.0", transformers.__version__
 from experts4bit_qlora import serve_paged

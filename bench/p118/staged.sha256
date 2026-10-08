@@ -1,8 +1,8 @@
 # Names as the BOX sees them after staging (/root/p118). The box runs `sha256sum -c` on this file; p118_drive.sh and
 # tests/test_p118_staged_pin.py resolve each name to its source (bench/p118, bench/p109, bench/p39, tests) and compare.
-16bc0ddf9fa61eaa6a06a72ca1c5bd1a966e7e71296581a2e93ae67f72b42a50  p118_run.sh
+06d4abfbf0d973e2ab20b01ca0313742e67cad6b3ab5e9e77355e07c4dfc8c01  p118_run.sh
 7a3704d53c6999626d2ff5c28c6df8f222e35e68729264ce940ec257dd24ef53  p118_box.py
-abd40d0da8ac1f71a11a29a1d0433be500d7648ef22a3926c97a6bff02166518  p118_reduce.py
+51d87f34564113c61266ea39d388260581fd2efd281021a84c1d8b12948b1cb4  p118_reduce.py
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
 e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
 15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
