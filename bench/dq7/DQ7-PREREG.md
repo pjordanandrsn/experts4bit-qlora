@@ -122,8 +122,9 @@ dense's own receipts, held-out checks and the unchanged DQ4 bracket floor; a mis
 
 ## Budget, launch and prelaunch checks
 
-One verified-secure rented RTX5090 at declared $0.85/h, guard2h, estimate≤$1.70 before recorded storage charges.
-Request 200 GB storage, normal ≥98 GB host RAM, gen5/x16; use the existing guarded pod-launch and receipt store.
+One verified-secure rented RTX5090 at declared $0.85/h, guard2h, estimate≤$1.70 including the ordered storage.
+Use the existing guarded provider's 320 GB disk order, normal ≥98 GB host RAM, gen5/x16, pod-launch and receipt store.
+The hourly ceiling binds GPU plus that ordered disk; the `--storage` option is receipt metadata, not a disk-order override.
 The provider's actual quoted total must fit the confirmed single-run no-ask ceiling; no bypass of policy or ledger.
 The experiment will not start until registration review and prelaunch correctness are complete. Teardown proof,
 receipt/ledger commit and immutable evidence publication are required, even on a failed lane.
