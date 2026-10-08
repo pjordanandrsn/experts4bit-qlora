@@ -62,9 +62,18 @@ A peak-stat reset does not free cached allocations. These receipts therefore can
 streamed driver deficit is loader cache versus training fragmentation. The load-cache hypothesis is plausible and
 remains unmeasured. It is not absorbed into a reserve fit.
 
+The historical DQ4 source, `dq4_cap.py`, explicitly calls `gc.collect()` and `torch.cuda.empty_cache()` after setup
+and again before every rung. DQ7's shared executor only resets peak statistics before training. This is a concrete
+cache-hygiene difference in the harnesses. It does not quantify the missing DQ7 load-reserved counters, nor does it
+explain the allocator anchor residual by itself: cached reservation is separate from live allocator bytes.
+
 Before a reread, register phase allocated/reserved/current/peak counters at loader completion, setup completion,
 optimizer creation, forward/loss, backward, clip and optimizer update, plus loader-cache bytes. A matched baseline
 and `empty_cache` intervention after loading/setup must use separate fresh processes, identical tensor/config/row
 hashes, and validate unchanged loss/gradients/update/export and stream engagement. Keep the old receipts, name any
 cache intervention, and select an anchor rung whose **actual plan including headroom** fits. The Qwen3-32B resident
 4096 anchor cannot be silently forced through by dropping admission headroom.
+
+Phase telemetry in a new instrument must read host-side allocator counters without adding CUDA synchronization.
+New sync boundaries can change outstanding prefetch lifetimes and thereby change the peak being diagnosed.
+The existing shared-loop synchronization points remain part of the baseline and intervention equally.
