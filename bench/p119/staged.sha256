@@ -1,0 +1,11 @@
+# Names as the BOX sees them after staging (/root/p119). The box runs `sha256sum -c` on this file; p119_drive.sh and
+# tests/test_p119_staged_pin.py resolve each name to its source (bench/p119, bench/p117, bench/p108, bench/p97, bench/p39, tests).
+67bc2eae8a183d81484c47aa0750cf8f2321962f28a27b9923346479e859ff46  p119_run.sh
+167950bfaa48bd68efae5624d0f5abf309186233e83fd766b8e32d36d4450e71  p119_box.py
+13d2e0c6ce62265d00492a7a759ff1180cc910104bad95d8d5740f3a2e70e2df  p119_reduce.py
+f93a38c21a08ee49e0ef68a2d1e513852b2b94d04ad3e8e5ddd99508037c0049  p117_box.py
+b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b  p108_box.py
+608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31  p97_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py

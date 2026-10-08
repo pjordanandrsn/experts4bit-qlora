@@ -10333,6 +10333,35 @@
       "notes": "Pre-registered in Amendment 2 (#1318), at the maintainer's request in review. Every registered expectation held: wikitext bias within +-0.004 with |dK8| <= 0.03, c4val1 bias between 0.000 and +0.015. Granite's verdict does not enter the flip verdict (FLIP_HELD, row e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08)."
     },
     {
+      "id": "e4b.serve.p118.decode-lookahead.qwen3.5090.2026-10-08",
+      "package": "experts4bit-qlora",
+      "area": "serve",
+      "model": "Qwen/Qwen3-30B-A3B",
+      "claim": "Lane P118, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs, 16 slots, grouped-nf4-gemm 0.43.0's bandwidth GEMV), the decode lookahead (E4B_PAGED_DECODE_LOOKAHEAD=1: each decode step issued before the previous one is read back, its ids gathered on the device) decodes one request 1.0198x (min over two ABBA pairs; geomean 1.0201) as fast as the default (140.0 -> 142.8 tok/s, step 7.14 -> 7.00 ms) and 16 requests 1.0085x, with identical tokens and bucket statistics in every arm. The step trace shows why the gain is small: the host gap between decode steps is 0.207 ms at one request (0.283 ms at 16), and the lookahead recovers all of it (L1's step period equals L0's device time; saved 1.06x / 1.05x the gap). SLOWER against the registered 1.02 bar: the switch stays opt-in.",
+      "value": 1.0198,
+      "unit": "decode tok/s ratio, E4B_PAGED_DECODE_LOOKAHEAD=1 over the default, one request (W1; min over two ABBA pairs)",
+      "hardware": "RTX 5090 (sm_120, driver 595.84, 575 W, 32607 MiB, 170 SMs), one rented Vast.ai host (instance 54804559, AMD EPYC 7B13, 256 threads, ~2 TB RAM), image pytorch/pytorch:2.8.0-cuda12.8-cudnn9-devel",
+      "conditions": "e4b @971c2043 (0.49.0 + P118's registration #1340, the switch #1339) + grouped-nf4-gemm @6ee2e10 (v0.43.0); torch 2.8.0+cu128, transformers 5.17.0; Qwen/Qwen3-30B-A3B @ad44e77, NF4 arena baked on the box; premise 16 + 18 passed on the card; the default graph server (buckets 1-16 captured, device grouping, the fusion knobs at 0) with E4B_PAGED_MAX_SEQS=16 named; P109's W16 / W1 workloads at 32 and 160 new tokens, 1 warm + 3 timed passes, decode-only slopes; arms L0a L1a L1b L0b in fresh processes; one traced pass per workload after the timed ones (engines/step_trace.py)",
+      "measured_on": "2026-10-08",
+      "status": "measured",
+      "tier": "measured",
+      "evidence": [
+        "bench/p118/RESULTS-p118.md",
+        "bench/p118/PREREG-p118.md",
+        "bench/p118/p118_reduce.py",
+        "bench/p118/p118_box.py",
+        "bench/p118/receipts/p118-5090-2/verdict.json",
+        "bench/p118/receipts/p118-5090-2/arm_L0a.json",
+        "bench/p118/receipts/p118-5090-2/arm_L1a.json",
+        "bench/p118/receipts/p118-5090-2/SHA256SUMS"
+      ],
+      "evidence_private": [
+        "receipts/experts4bit-qlora/2026-10-08/p118-5090-2/ (receipt.json, teardown-proof.json)",
+        "receipts/experts4bit-qlora/2026-10-08/p118-prove-1/ (receipt.json, the proving run)"
+      ],
+      "notes": "Pre-registered in #1340 (the premise rung added in review, before data). The premise held (0.207 ms >= 0.2) and so did Q2, Q4, Q5, Q6 and Q8. Q3 missed: the gap was under its 0.25-0.60 ms band and g1 just under its [1.02, 1.10] band. Q1 missed narrowly at W1 (98.9 % overlapped against 99 %, from the drain steps of the short passes). Not read: the HTTP server's own host work, slower host CPUs, buckets above 16, other families."
+    },
+    {
       "package": "experts4bit-qlora",
       "area": "train",
       "model": "allenai/OLMoE-1B-7B-0924-Instruct @7f1c97f4",
