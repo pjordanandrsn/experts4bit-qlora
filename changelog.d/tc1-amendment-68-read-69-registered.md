@@ -6,5 +6,6 @@
   its absolute device-time bound read a card slower for both frameworks. Register row
   `e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.packed-4k-device-ratio`.
 - **Amendment 69** registered: token `qwen3pos69` re-reads the field recipe's same-stack position (2.352, before the reentrant checkpoint)
-  at the new defaults, every arm profiled, with every bound a ratio within the box (P205-P209). The reducer adds the family, `pos69_why` and
+  at the new defaults, every arm profiled, with every bound a ratio within the box (P205-P209). If Unsloth loses more of its step to the host (P208), STATUS quotes
+  the GPU-time ratio; otherwise the wall ratio. The reducer adds the family, `pos69_why` and
   `score_pos69` (self-test 135).

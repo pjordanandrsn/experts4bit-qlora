@@ -3074,10 +3074,12 @@ time carried from another box tests the card.
   loses more of its step to the host.
 - **P209:** |mean held-out at N, e4b − Unsloth| ≤ **0.01**.
 
-**Decision rules.**
-- **P205, P207 and P208 HELD:** STATUS replaces "the Qwen3-30B-A3B position to quote" with the field device-time ratio. Beside it go this
-  box's wall ratio, with its host named, and the earlier wall readings (2.352, 2.468) as history.
-- **P205 FALSIFIED:** STATUS quotes this box's wall ratio with its host, as the 2.352 was quoted.
+**Decision rules** (amended in review, before any box). What the quantity measures chooses it, not whether P205's band was right.
+- **P207 and P208 HELD** (Unsloth loses more of its step to the host): STATUS replaces "the Qwen3-30B-A3B position to quote" with the field
+  device-time ratio, named as what it is: "Unsloth spends N× e4b's GPU time per step; wall-clock M× on <host>". The earlier wall readings
+  (2.352, 2.468) stay as history. P205 is scored as a prediction only.
+- **P208 HELD, P207 FALSIFIED:** the same quote. The read says the host share is not explained by CPU op count.
+- **P208 FALSIFIED** (wall ≈ device): STATUS quotes this box's wall ratio, which is then not host-sensitive.
 - **P206 alone FALSIFIED:** the wall ratio is reported as this host's. It does not block the quote.
 - **P209 FALSIFIED:** quality is compared before any position is quoted.
 
