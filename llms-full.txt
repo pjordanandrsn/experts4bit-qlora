@@ -2238,10 +2238,10 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
   `e4b.train.moe-keep.qwen3.5090.2026-10-04`
 - `GNF4_TRAIN_GEMM=decoded`: 1.066 of the fused kernels' step on Qwen3, so `auto` does not take it.
   `e4b.train.decoded-route.qwen3.5090.2026-10-06`
-- `NF4_QLORA_SINGLE_LADDER=1` (grouped-nf4-gemm): 0.797 of the step with fp32 adapters on a host-bound box,
-  1.015 with bf16 adapters (the shipped arm). `e4b.train.single-ladder.field.5090.2026-10-08`
-  Its `auto` (the ladder only with fp32 adapters) held its mechanism on a second host, but the step time went unread
-  there: the host was loaded. `e4b.train.single-ladder-auto.field.5090.2026-10-08`
+- `NF4_QLORA_SINGLE_LADDER` (grouped-nf4-gemm): its `auto`, the ladder only with fp32 adapters, becomes the default.
+  With fp32 adapters it stepped 0.797 of the time on a host-bound box and 1.031 on a GPU-bound one (registered bound
+  1.05). With bf16 adapters, the shipped arm, it does not engage (1.002). `e4b.train.single-ladder.field.5090.2026-10-08`,
+  `e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
@@ -2380,8 +2380,7 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Registered, not yet read:** TC1 amendment 72 (amendment 71's `auto` box again, on a third host). The head-to-head
-  campaigns stay open: training #835, serving #846, single-stream decode #1313.
+- **Open campaigns:** training #835, serving #846, single-stream decode #1313.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.
@@ -3234,6 +3233,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.dense-executor.dq7.5090.2026-10-08 [measured]: DQ7 of Loggetta dense execution is VOID: fourteen of sixteen architecture-only arms complete; the Qwen3-32B resident 4096 anchor is refused before load; Llama allocator estimates understate both placements at 2048 and 4096 tokens …
 - e4b.train.single-ladder-auto.field.5090.2026-10-08 [measured]: TC1 amendment 71 (#835), one rented RTX 5090 (tc1-5090-139, AMD EPYC 7763, Vast machine 150670): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto (grouped-nf4-gemm#514, the single-block ladder exactly when the adapters are fp32) against 0 at TC1's field recipe over 60 load-gated steps, e4b at its defaults in …
 - e4b.train.dense-executor.dq9.5090.2026-10-08 [measured]: DQ9 is COMPLETE_DIAGNOSTIC on sixteen known-subject arms: all eight paired training peaks are unchanged by one setup cache clear; all allocator estimates are above measured peaks, but all ten streamed full-device estimates remain below sampled driver use, by at most 1135096620 bytes.
+- e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08 [measured]: TC1 amendment 72 (#835), amendment 71's box unchanged on a third host (tc1-5090-141, AMD Ryzen 9 9950X3D, Vast machine 18967, GPU-bound: the matched l0's GPU busy 0.884 of its step, no draw voided for host load): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto against 0 at TC1's field recipe over 60 load-gated steps …
 
 Open items (no evidence either way):
 
@@ -3241,4 +3241,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(425 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(426 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

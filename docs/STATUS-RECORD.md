@@ -206,6 +206,9 @@ On a second host (`e4b.train.single-ladder-auto.field.5090.2026-10-08`) `auto` e
 fell from 175 µs to 21 µs, device time rose 4.3 % there and 0.2 % on the bf16 arm, and held-out was unchanged. The step times went
 unread: the host's load rose through the box and the two draws of three arms differed by more than 5 %. `auto` stays opt-in until
 TC1 amendment 72 reads them on a third host.
+On that third host (`e4b.train.single-ladder-auto.gpu-bound.5090.2026-10-08`, GPU-bound, no load voids) the fp32 arm stepped 1.031
+with `auto`, inside the registered 1.05, and the bf16 arm 1.002. `bmm`'s CPU time per call fell to 0.092 of `l0`'s, device time rose
+5.5 % on the fp32 arm, and held-out was unchanged. By the rule, `auto` becomes grouped-nf4-gemm's default.
 **Those positions read short rows.** The field recipe's Alpaca rows carry about 1,000–1,400 real tokens per step. On packed rows of
 4,096 real tokens (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k`, TC1 amendment 39) e4b at its defaults runs out of memory at
 step 1, allocating the fp32 copy of the full-vocabulary logits (2.32 GiB), while Unsloth trains the same rows at 24.86 GB: an e4b loss
