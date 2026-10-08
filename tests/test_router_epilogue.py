@@ -732,3 +732,78 @@ def test_a_router_with_non_finite_logits_is_refused():
     with torch.no_grad():
         gate.weight[3, 0] = float("inf")
     assert not any(re_mod._probe_matches(gate, kind, spec) for kind, spec in re_mod._structural(gate))
+
+
+# ------------------------------- the license is the router's, not the card's (fam-prove-1, the #1385 follow-up) --
+# On a rented 5090, Granite's router fold licensed 27 of 32 routers where the A2000 licensed 32: near ties were judged
+# on the device's bf16 logits over 4 rows. Decisive rows are now judged on fp32 CPU logits over 64 rows.
+
+def _card_rounding(seed):
+    """Another card's GEMM rounding: every bf16 linear output moved by up to half a bf16 ulp, as a function of its
+    shape and the card (seed), so the module's forward and the reference see the same perturbed logits, as one card
+    would."""
+    real = F.linear
+
+    def linear(x, w, b=None):
+        y = real(x, w, b)
+        if y.dtype != torch.bfloat16:
+            return y                                   # fp32 (the CPU reference) is the router's, not the card's
+        g = torch.Generator().manual_seed(seed * 1_000_003 + y.numel())
+        u = torch.rand(y.shape, generator=g).to(y.device) * 2 - 1
+        return (y.float() * (1 + u * 2 ** -9)).to(torch.bfloat16)
+    return linear
+
+
+def _routers():
+    yield "qwen3_moe", _real_router("qwen3_moe", "Qwen3MoeConfig", "Qwen3MoeTopKRouter", num_experts=E,
+                                    num_experts_per_tok=K, norm_topk_prob=True)
+    yield "mixtral", _real_router("mixtral", "MixtralConfig", "MixtralTopKRouter", num_local_experts=E,
+                                  num_experts_per_tok=K)
+    torch.manual_seed(21)
+    yield "gpt_oss_like", GptOssLikeRouter().to(torch.bfloat16)
+
+
+def test_the_license_does_not_change_under_another_cards_bf16_rounding(monkeypatch):
+    """The decision's input is the router's, not the card's: the logits that judge which rows are decisive are fp32 on
+    the CPU and bitwise the same under every card's rounding, and the router is licensed on every card."""
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    real_decisive = re_mod._decisive_rows
+    for name, gate in _routers():
+        decisions, judged = set(), []
+
+        def capture(logits, k, rounding=None):
+            judged.append(logits.detach().clone())
+            return real_decisive(logits, k, rounding=rounding)
+        for seed in range(6):
+            monkeypatch.setattr(torch.nn.functional, "linear", _card_rounding(seed))
+            monkeypatch.setattr(re_mod, "_decisive_rows", capture)
+            decisions.add(tuple(kind for kind, spec in re_mod._structural(gate)
+                                if re_mod._probe_matches(gate, kind, spec)))
+            monkeypatch.undo()
+        assert len(decisions) == 1 and next(iter(decisions)), (name, decisions)     # licensed, on every card
+        assert judged and all(t.dtype == torch.float32 and t.device.type == "cpu" for t in judged), name
+        first = judged[:len(judged) // 6]
+        for i in range(1, 6):
+            again = judged[i * len(first):(i + 1) * len(first)]
+            moved = [not torch.equal(a, b) for a, b in zip(first, again)]
+            assert not any(moved), (name, "the judged logits moved with the card")
+
+
+def test_a_router_with_large_logits_keeps_decisive_rows_and_is_licensed():
+    """Granite's scale: logits large enough that a bf16 near tie at the k boundary is common. Four rows could all be
+    near ties (and the router refused); 64 keep plenty that are not."""
+    from experts4bit_qlora.engines import router_epilogue as re_mod
+    assert re_mod.PROBE_ROWS == 64
+    torch.manual_seed(22)
+    gate = GraniteLikeRouter()
+    with torch.no_grad():
+        gate.weight.mul_(16.0)
+    gate = gate.to(torch.bfloat16)
+    cands = re_mod._structural(gate)
+    ok = [(kind, spec) for kind, spec in cands if re_mod._probe_matches(gate, kind, spec)]
+    assert ok, "refused"
+    kind, spec = ok[0]
+    x = re_mod._probe_rows(spec["hidden"], gate.weight)
+    fp32 = re_mod._selection_logits_fp32(gate, kind, spec, x)
+    keep = re_mod._decisive_rows(fp32, spec["k"], rounding=torch.bfloat16)
+    assert len(keep) == 64 and 16 <= int(keep.sum()) < 64, int(keep.sum())

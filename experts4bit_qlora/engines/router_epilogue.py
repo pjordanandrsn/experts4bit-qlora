@@ -215,22 +215,40 @@ def _reference_for(mod, kind, spec, x):
     return _ref_topk_softmax(_topk_softmax_logits(mod, x, spec["bias"] is not None), spec["k"])
 
 
+PROBE_ROWS = 64
+
+
 def _probe_rows(hidden: int, w: torch.Tensor) -> torch.Tensor:
-    """The probe's input: four fixed random rows in the weight's dtype and device."""
+    """The probe's input: PROBE_ROWS fixed random rows in the weight's dtype and device. 64, not 4: a router must keep
+    decisive rows whatever its logits' scale (fam-prove-1 refused 5 of Granite's 32 routers with 4)."""
     g = torch.Generator(device="cpu").manual_seed(4242)
-    return torch.randn(4, hidden, generator=g).to(w.device, w.dtype)
+    return torch.randn(PROBE_ROWS, hidden, generator=g).to(w.device, w.dtype)
 
 
-def _decisive_rows(logits: torch.Tensor, k: int) -> torch.Tensor:
-    """Rows whose k-th and (k+1)-th largest selection logits are more than two ulps of the logits' dtype apart,
-    relative to the k-th. A row inside that is a near tie: the same function, rounded another way, can select the
-    other expert, so it says nothing about which function the module computes (#1372's intermittent probe failure)."""
+def _decisive_rows(logits: torch.Tensor, k: int, rounding: torch.dtype | None = None) -> torch.Tensor:
+    """Rows whose k-th and (k+1)-th largest selection logits are more than two ulps of ``rounding`` apart (the dtype
+    the module rounds its logits to; default the logits' own), relative to the k-th. A row inside that is a near tie:
+    the same function, rounded another way, can select the other expert, so it says nothing about which function the
+    module computes (#1372's intermittent probe failure). Judged on fp32 reference logits computed on the CPU
+    (:func:`_selection_logits_fp32`), the decision does not depend on the card's rounding (fam-prove-1)."""
     s = logits.float()
     if k >= s.shape[-1]:
         return torch.ones(s.shape[0], dtype=torch.bool, device=s.device)
     top = torch.topk(s, k + 1, dim=-1).values
-    eps = 2 * torch.finfo(logits.dtype).eps * top[:, k - 1].abs().clamp(min=1.0)
+    eps = 2 * torch.finfo(rounding or logits.dtype).eps * top[:, k - 1].abs().clamp(min=1.0)
     return (top[:, k - 1] - top[:, k]) > eps
+
+
+def _selection_logits_fp32(mod, kind, spec, x) -> torch.Tensor:
+    """The kind's selection logits in fp32 on the CPU: the same projection (with the select-on-logits kind's bias, and
+    Gemma-4's pre-norm as the module forms it), free of the device GEMM's rounding and of TF32, so which probe rows are
+    decisive is a property of the router, not of the card."""
+    if kind == "gemma4":
+        pre, w, b = _gemma4_pre(mod, x).float().cpu(), mod.proj.weight.float().cpu(), None
+    else:
+        pre, w = x.float().cpu(), mod.weight.float().cpu()
+        b = mod.bias.float().cpu() if kind == "topk_softmax" and spec.get("bias") is not None else None
+    return torch.nn.functional.linear(pre, w, b)
 
 
 def _by_expert(idx: torch.Tensor, w: torch.Tensor):
@@ -245,7 +263,8 @@ def _probe_matches(mod, kind, spec) -> bool:
     A name match cannot tell a softmax-then-topk router from a
     topk-then-softmax one, and mis-routing is not a rounding error.
     The set and the weights are compared on the DECISIVE rows only
-    (:func:`_decisive_rows`), per expert rather than per slot; a router
+    (:func:`_decisive_rows`, judged on fp32 CPU logits so the decision is
+    the router's, not the card's), per expert rather than per slot; a router
     with non-finite logits on the probe, or no decisive row, is refused.
     Records where the module puts (first, weights, index) in its tuple."""
     w = mod.proj.weight if kind == "gemma4" else mod.weight
@@ -272,7 +291,8 @@ def _probe_matches(mod, kind, spec) -> bool:
             raw = torch.nn.functional.linear(pre, w)
     if got_i.shape != ref_i.shape or got_w.shape != ref_w.shape or not torch.isfinite(raw.float()).all():
         return False
-    keep = _decisive_rows(raw, spec["k"]).cpu()
+    with torch.no_grad():
+        keep = _decisive_rows(_selection_logits_fp32(mod, kind, spec, x), spec["k"], rounding=raw.dtype)
     if not bool(keep.any()):
         return False                # every probe row is a near tie: nothing licenses the module
     gi, gw = _by_expert(got_i.cpu()[keep], got_w.cpu()[keep])
