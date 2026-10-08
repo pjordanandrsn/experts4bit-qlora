@@ -1,0 +1,18 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1094.12it/s]
+[22:36:36]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[22:36:36]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[22:36:36]   quantized experts on 48/48 MoE layers (128 experts each)
+[22:36:36]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[22:36:38]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[22:37:05]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+DECODE_GRAPH bucket=1 captured
+DECODE_GRAPH bucket=2 captured
+DECODE_GRAPH bucket=4 captured
+DECODE_GRAPH bucket=8 captured
+DECODE_GRAPH bucket=16 captured
+[serve_paged] PREFILL_GRAPH on (auto): first chunks of 512 tokens replay one graph (startup check bitwise on two prompts; pool 212 MiB, 8360 MiB free)
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 16, "blocks_per_seq": 256, "pool_mib": 3326.4}, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "grouping": {"device_grouping": true, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "0"}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+P116_W B1/B1a W16 B=16 decode_tok_s=815.36 median=815.34 walls={'32': [2.79215, 2.79258, 2.79328], '160': [5.30442, 5.30391, 5.30459]}
+P116_W B1/B1a W1 B=1 decode_tok_s=143.55 median=143.55 walls={'32': [0.34233, 0.34224, 0.34228], '160': [1.2339, 1.2341, 1.23398]}
+P116_ARM {"arm": "B1", "tag": "B1a", "dispatch_build": {"dotpad": 0, "dotpad_splitk": 0, "scalar": 0, "scalar_splitk": 0, "bw_tree": 0, "bw_prmt32": 288, "bw_splitk": 0}, "load_s": 39.72, "graph_status": {"1": "graph", "2": "graph", "4": "graph", "8": "graph", "16": "graph"}, "W16": 815.36, "W1": 143.55}
