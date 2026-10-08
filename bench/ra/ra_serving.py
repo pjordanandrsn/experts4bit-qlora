@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 import ra_env
+import ra_fallback
 import ra_quality
 import ra_stage
 
@@ -24,17 +25,23 @@ def delta(after, before):
     return {k: after[k] - before.get(k, 0) for k in after}
 
 
-def feature(mode, patched, calls, *, scope):
+def feature(mode, patched, calls, *, scope, fallback_calls=None):
     if mode not in ("0", "1", "auto") or type(patched) is not int or patched < 0 or type(calls) is not int or calls < 0:
         raise ValueError("unresolved feature/counter")
     state = "off" if mode == "0" else "on" if patched else "inapplicable"
-    if (mode == "1" and not patched) or (state == "on" and not calls) or (state != "on" and calls):
+    if (mode == "0" and patched) or (mode == "1" and not patched) or (state == "on" and not calls) or (state != "on" and calls):
         raise ValueError("vacuous or contradictory feature engagement")
-    return {"mode": state, "patched": patched, "calls": calls, "fallback_calls": 0, "calls_scope": scope}
+    if fallback_calls is not None and (type(fallback_calls) is not int or fallback_calls < 0):
+        raise ValueError("unresolved fallback counter")
+    return {"mode": state, "patched": patched, "calls": calls, "fallback_calls": fallback_calls,
+            "fallback_coverage": "OBSERVED" if fallback_calls is not None else "UNVERIFIED", "calls_scope": scope}
 
 
-def fusion_features(info, kernels, qkv_calls, *, scope):
+def fusion_features(info, kernels, qkv_calls, *, scope, fallback, defaults):
+    ra_fallback.check_fold_reports(info)
     modes = info["fusion_modes"]
+    if modes != defaults["fusion_modes"]:
+        raise ValueError("assembly modes differ from independent release defaults")
     layers, attention = info["fuse_t1_glue_r2_n"]
     fields = {
         "qkv": ("E4B_PAGED_FUSE_QKV", info["fuse_qkv_n"], qkv_calls),
@@ -43,8 +50,15 @@ def fusion_features(info, kernels, qkv_calls, *, scope):
         "rope_glue": ("E4B_FUSE_T1_GLUE_R2", attention, kernels["rope_norm_heads"] + kernels["rope_heads"]),
         "router_epilogue": ("E4B_FUSE_ROUTER_EPI", info["fuse_router_epilogue_n"], kernels["router_epilogue"]),
     }
-    return {name: feature(modes[key], int(patched), int(calls), scope=scope)
+    return {name: feature(modes[key], patched, calls, scope=scope,
+                          fallback_calls=fallback.get(name, {}).get("fallback_calls"))
             for name, (key, patched, calls) in fields.items()}
+
+
+def glue_census(info):
+    layers, attention = info["fuse_t1_glue_r2_n"]
+    return {"rms_glue": info["fuse_t1_glue_n"], "residual_glue": layers, "rope_glue": attention,
+            "router_epilogue": info["fuse_router_epilogue_n"]}
 
 
 def build_instrumented(server, instrument, cfg):
@@ -56,7 +70,9 @@ def build_instrumented(server, instrument, cfg):
     @functools.wraps(original)
     def folds(model, *args, **kwargs):
         result = original(model, *args, **kwargs)
-        forwards.append(instrument.ForwardCounter(model))
+        forward = instrument.ForwardCounter(model)
+        forward.ra_glue = ra_fallback.GlueObserver().install(model)
+        forwards.append(forward)
         return result
 
     server._apply_fusions = folds
@@ -76,6 +92,7 @@ def decode(spec, helper, instrument, server, torch, nf4):
             helper.digest(rows) != pf["prompts_sha256"]:
         raise ValueError("decode prompt bytes/shape")
     cfg = server.PagedServeConfig.from_env()
+    defaults = ra_fallback.resolved_defaults(server, cfg)
     start_dispatch = nf4.dispatch_counts()
     start = time.perf_counter()
     parts, counters, fwd = build_instrumented(server, instrument, cfg)
@@ -107,17 +124,23 @@ def decode(spec, helper, instrument, server, torch, nf4):
     record["dispatch_total"] = delta(nf4.dispatch_counts(), start_dispatch)
     record["fusions"] = {k: copy.deepcopy(parts.info[k]) for k in instrument.CENSUS_KEYS}
     record["fusion_modes"] = copy.deepcopy(parts.info["fusion_modes"])
-    record["features"] = fusion_features(parts.info, record["kernels"], fwd.qkv_calls, scope="build-capture+warm+timed")
+    record["resolved_defaults"] = defaults
+    record["glue_modules"] = fwd.ra_glue.snapshot()
+    record["fallback_evidence"] = fwd.ra_glue.evidence(glue_census(parts.info))
+    record["features"] = fusion_features(parts.info, record["kernels"], fwd.qkv_calls, scope="build-capture+warm+timed",
+                                          fallback=record["fallback_evidence"], defaults=defaults)
     calls = sum(record["dispatch_total"].values())
     if calls <= 0 or (cfg.graphs and record["graph_stats"].get("1", {}).get("replays", 0) <= 0):
         raise ValueError("W1 GEMV capture/replay not engaged")
     record["features"]["decode_gemv"] = feature("auto", parts.info["moe_layers"], calls,
                                                   scope="build-capture+warm+timed")
+    record["proves_gpu_engagement"] = False
     return record
 
 
 def quality(spec, instrument, server, torch, nf4):
     cfg = server.PagedServeConfig.from_env()
+    defaults = ra_fallback.resolved_defaults(server, cfg)
     if cfg.graphs:
         raise ValueError("quality requires named eager fixture")
     parts, counters, fwd = build_instrumented(server, instrument, cfg)
@@ -131,8 +154,10 @@ def quality(spec, instrument, server, torch, nf4):
     @functools.wraps(original)
     def observed_pass(*args, **kwargs):
         before = nf4.dispatch_counts()
+        glue_before = fwd.ra_glue.snapshot()
         result, engagement = original(*args, **kwargs)
         engagement["gemv_dispatch"] = delta(nf4.dispatch_counts(), before)
+        engagement["fallback_evidence"] = fwd.ra_glue.evidence(glue_census(parts.info), glue_before)
         return result, engagement
 
     instrument.p110_box.paged_pass = observed_pass
@@ -143,7 +168,8 @@ def quality(spec, instrument, server, torch, nf4):
     finally:
         instrument.p110_box.paged_pass = original
     for engagement in record["engagement"]["wikitext"]["R"]:
-        engagement["features"] = fusion_features(parts.info, engagement["kernels"], engagement["qkv_calls"], scope="R-pass")
+        engagement["features"] = fusion_features(parts.info, engagement["kernels"], engagement["qkv_calls"], scope="R-pass",
+                                                       fallback=engagement["fallback_evidence"], defaults=defaults)
         calls = sum(engagement["gemv_dispatch"].values())
         if spec["group"] == 1 and calls <= 0:
             raise ValueError("group-1 GEMV did not dispatch")
@@ -151,7 +177,8 @@ def quality(spec, instrument, server, torch, nf4):
             raise ValueError("group-12 unexpectedly dispatched singleton GEMV")
         engagement["features"]["decode_gemv"] = feature("auto", parts.info["moe_layers"] if spec["group"] == 1 else 0,
                                                            calls, scope="R-pass")
-    record.update(status="ok", model=cfg.model, revision=cfg.revision,
+    record.update(status="ok", model=cfg.model, revision=cfg.revision, resolved_defaults=defaults,
+                  glue_modules=fwd.ra_glue.snapshot(), proves_gpu_engagement=False,
                   fusions={k: copy.deepcopy(parts.info[k]) for k in instrument.CENSUS_KEYS},
                   fusion_modes=copy.deepcopy(parts.info["fusion_modes"]))
     return record

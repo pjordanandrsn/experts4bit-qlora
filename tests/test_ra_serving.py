@@ -20,6 +20,7 @@ def load(name):
 env = load("ra_env")
 load("ra_stage")
 load("ra_quality")
+load("ra_fallback")
 serving = load("ra_serving")
 
 
@@ -47,7 +48,7 @@ def test_fixtures_cannot_force_decode_graphs_or_change_quality_mode():
     assert env.validate("capacity", {"E4B_PAGED_MAX_TOKENS_PER_SEQ": "2048", "E4B_PAGED_CHUNK_TOKENS": "512"})
 
 
-@pytest.mark.parametrize("mode,patched,calls", [("auto", 1, 0), ("1", 0, 0), ("0", 0, 1), ("auto", 0, 1)])
+@pytest.mark.parametrize("mode,patched,calls", [("auto", 1, 0), ("1", 0, 0), ("0", 0, 1), ("auto", 0, 1), ("0", 1, 0)])
 def test_feature_census_and_calls_cannot_disagree(mode, patched, calls):
     with pytest.raises(ValueError, match="engagement"):
         serving.feature(mode, patched, calls, scope="synthetic")
@@ -58,19 +59,21 @@ def test_auto_unmatched_family_is_explicitly_inapplicable():
 
 
 def fake_build(*, fail=False):
-    counter = types.SimpleNamespace(snapshot=lambda: {"rmsnorm_rows": 1, "rmsnorm_resid_rows": 1,
-                                                      "rope_norm_heads": 1, "rope_heads": 0, "router_epilogue": 1})
+    counter = types.SimpleNamespace(snapshot=lambda: {"rmsnorm_rows": 0, "rmsnorm_resid_rows": 0,
+                                                      "rope_norm_heads": 0, "rope_heads": 0, "router_epilogue": 0})
     instrument = types.SimpleNamespace(KernelCounters=lambda: types.SimpleNamespace(install=lambda: counter),
                                        CENSUS_KEYS=("fuse_qkv_n", "fuse_t1_glue_n", "fuse_t1_glue_r2_n", "fuse_router_epilogue_n"))
 
     def forward(model):
         model.observed = True
-        return types.SimpleNamespace(qkv_calls=1, snapshot=lambda: {"forwards": 1, "qkv_calls": 1})
+        return types.SimpleNamespace(qkv_calls=0, snapshot=lambda: {"forwards": 1, "qkv_calls": 0})
 
     instrument.ForwardCounter = forward
     modes = {k: "auto" for k in ("E4B_PAGED_FUSE_QKV", "E4B_FUSE_T1_GLUE", "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")}
-    info = {"fusion_modes": modes, "fuse_qkv_n": 1, "fuse_t1_glue_n": 1, "fuse_t1_glue_r2_n": [1, 1],
-            "fuse_router_epilogue_n": 1, "moe_layers": 1, "graph_status": {1: "graph", 16: "graph"}}
+    info = {"fusion_modes": modes, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0],
+            "fuse_router_epilogue_n": 0, "moe_layers": 1, "graph_status": {1: "graph", 16: "graph"}}
+    info["fusion_report"] = {k: {"mode": "auto", "patched": [0, 0] if k == "E4B_FUSE_T1_GLUE_R2" else 0}
+                             for k in modes if k != "E4B_PAGED_FUSE_QKV"}
     parts = types.SimpleNamespace(info=info, runner=types.SimpleNamespace(
         graph_stats={1: {"replays": 0, "eager_steps": 0}, 16: {"replays": 0, "eager_steps": 0}}))
     server = types.SimpleNamespace(_apply_fusions=lambda model, cfg: None)
@@ -78,7 +81,7 @@ def fake_build(*, fail=False):
     nf4 = types.SimpleNamespace(dispatch_counts=lambda: dict(state), state=state)
 
     def build(cfg):
-        model = types.SimpleNamespace(observed=False, eval=lambda: None)
+        model = types.SimpleNamespace(observed=False, eval=lambda: None, named_modules=lambda: [])
         server._apply_fusions(model, cfg)
         assert model.observed  # Hooks must exist before the simulated graph capture.
         if fail:
@@ -105,6 +108,7 @@ def test_real_decode_wrapper_preserves_helper_samples_and_capture_scope(tmp_path
 
     server, instrument, parts, nf4 = fake_build()
     cfg = types.SimpleNamespace(model="synthetic", revision="synthetic", graphs=True, buckets=(1, 16), token="synthetic-secret")
+    cfg.fusion_modes = parts.info["fusion_modes"]
     server.PagedServeConfig = types.SimpleNamespace(from_env=lambda: cfg)
     rows = [[i] * 512 for i in range(16)]
     digest = lambda x: hashlib.sha256(json.dumps(x, separators=(",", ":")).encode()).hexdigest()  # noqa: E731
@@ -133,16 +137,17 @@ def test_real_decode_wrapper_preserves_helper_samples_and_capture_scope(tmp_path
 def test_quality_wrapper_records_per_pass_dispatch_and_restores_hooks(tmp_path, group):
     import json
 
-    server, instrument, _, nf4 = fake_build()
+    server, instrument, parts, nf4 = fake_build()
     cfg = types.SimpleNamespace(model="synthetic", revision="synthetic", graphs=False, device="cuda")
+    cfg.fusion_modes = parts.info["fusion_modes"]
     server.PagedServeConfig = types.SimpleNamespace(from_env=lambda: cfg)
     instrument.p108_box = types.SimpleNamespace(_score=lambda lp, tokens: (lp, tokens))
 
     def paged_pass(model, ws, prompt, cont, chunk, device, **kwargs):
         nf4.state["scalar"] += int(len(ws) == 1)
-        return [[2.] * cont for _ in ws], {"kernels": {"rmsnorm_rows": 1, "rmsnorm_resid_rows": 1,
-                                                     "rope_norm_heads": 1, "rope_heads": 0, "router_epilogue": 1},
-                                          "qkv_calls": 1}
+        return [[2.] * cont for _ in ws], {"kernels": {"rmsnorm_rows": 0, "rmsnorm_resid_rows": 0,
+                                                     "rope_norm_heads": 0, "rope_heads": 0, "router_epilogue": 0},
+                                          "qkv_calls": 0}
 
     instrument.p110_box = types.SimpleNamespace(paged_pass=paged_pass)
 
@@ -169,3 +174,20 @@ def test_quality_wrapper_records_per_pass_dispatch_and_restores_hooks(tmp_path, 
     assert all(e["features"]["decode_gemv"]["mode"] == ("on" if group == 1 else "inapplicable") for e in passes)
     assert result["per_window"]["wikitext"]["R"][11]["argmax_ids"] == [11] * 32
     assert instrument.p110_box.paged_pass is paged_pass and instrument.p108_box._score is original_score
+
+
+def test_unmeasured_fallback_is_explicitly_unknown():
+    f = serving.feature("auto", 1, 2, scope="synthetic")
+    assert f["fallback_calls"] is None and f["fallback_coverage"] == "UNVERIFIED"
+    assert serving.feature("auto", 1, 2, scope="synthetic", fallback_calls=1)["fallback_calls"] == 1
+    with pytest.raises(ValueError, match="fallback"):
+        serving.feature("auto", 1, 2, scope="synthetic", fallback_calls=True)
+
+
+@pytest.mark.parametrize("fallback_calls", [None, 1])
+def test_registered_reducer_refuses_unknown_or_observed_fallback(fallback_calls):
+    reducer = load("ra_reduce")
+    rec = {"features": {"decode_gemv": serving.feature("auto", 1, 2, scope="synthetic",
+                                                        fallback_calls=fallback_calls)}}
+    with pytest.raises(reducer.Invalid, match="fallback"):
+        reducer.features(rec)

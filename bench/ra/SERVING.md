@@ -21,6 +21,16 @@ pass and requires singleton GEMV at group 1, no singleton dispatch at group 12.
 It retains the helper's attention/bucket evidence and score-preserving argmax
 capture. Temporary assembly/pass/score hooks restore after failures.
 
+`ra_fallback.py` reconstructs defaults before assembly, reconciles observed
+glue forward coverage with native census and rejects auto kernel gaps. Nine baseline 0.50.0 bodies plus the two main router cast variants carry
+source commits in the adapter registry. They bind complete native forward bodies; changed
+bodies require a reviewed adapter. Private clones observe retained-original
+calls without changing installed function defaults. Small-row fallbacks and
+large-row prefill fallbacks are separate, with per-pass and per-module counts.
+This observes Python eager/capture execution, not replayed graph internals.
+QKV and GEMV fallback coverage remains `UNVERIFIED` with a null count; the
+wrapper cannot produce release clearance from an assumed zero.
+
 `ra_env.py` constructs a fresh process environment with separate release caches
 and rejects extra flags in direct wrapper invocations. Serving fixtures may set
 only model/revision, arena/calibration, CUDA/all-vram placement and common thread
@@ -29,7 +39,8 @@ count. Quality additionally names graphs=0. Capacity additionally names context
 No speed, route, bucket, slot or fusion flag is allowed. Removed key names are
 recordable; inherited values and credential variables are not copied into logs.
 
-These wrappers are not on-card evidence. Remaining work includes training and
+These wrappers are not on-card evidence. CPU controls use native glue bodies
+with CPU kernel stand-ins, not real GPU kernels. Remaining work includes training and
 capacity wrappers, complete independently verified feature/fallback coverage,
 wheel/input provenance, ABBA supervision, collected no-skip premise tests and
 reviewed launch/receipt-retrieval/teardown gates. No proof clearance requested.
