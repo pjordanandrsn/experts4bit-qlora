@@ -67,6 +67,22 @@ def gemv_faults(name, model, d) -> list:
     return []
 
 
+def w1_faults(t, model, r) -> list:
+    """W1's GEMV engagement, read where the dispatch happens (Amendment 4). On the default graph server a W1 step
+    replays the bucket-1 graph captured at the build; a replay never reaches grouped-nf4-gemm's Python dispatcher, so
+    W1's own tally reads zero by construction (p115d-prove-2 VOIDed on exactly that). The engagement is the CAPTURE
+    tally (``dispatch_build``, the build that captured this arm's bucket graphs), bound to those graphs by the arm's
+    replay record: W1's bucket-1 steps must have replayed. An eager bucket-1 step dispatches, so W1's own tally must
+    then pass too."""
+    gs1 = (r.get("graph_stats") or {}).get("1") or {}
+    out = gemv_faults(f"{t} W1 capture", model, r.get("dispatch_build"))
+    if not gs1.get("replays"):
+        out.append(f"{t} W1: bucket 1 never replayed ({gs1}); the capture tally is not what W1 ran")
+    if gs1.get("eager_steps") or any((r["workloads"]["W1"].get("dispatch") or {}).values()):
+        out += gemv_faults(f"{t} W1 eager", model, r["workloads"]["W1"].get("dispatch"))
+    return out
+
+
 def record_faults(name, r, e4b_sha, want_model, arm) -> list:
     out = []
     if r.get("e4b_sha") != e4b_sha:
@@ -104,7 +120,7 @@ def reduce(arms: dict, off: dict | None, on: dict | None, e4b_sha: str, *, proof
         g = r.get("graph_status") or {}
         if [g.get(str(b)) for b in BUCKETS] != ["graph"] * len(BUCKETS):
             void.append(f"{t}: graph_status {g}")
-        void += gemv_faults(f"{t} W1", model, r["workloads"]["W1"].get("dispatch"))
+        void += w1_faults(t, model, r)
         if any(_rate(r, w) is None for w in WORKLOADS):
             void.append(f"{t}: a decode slope is void")
     if len({r.get("prompts_sha256") for r in arms.values()}) != 1:
@@ -165,22 +181,29 @@ def reduce(arms: dict, off: dict | None, on: dict | None, e4b_sha: str, *, proof
 E = "a" * 40
 
 
-def _fake_arm(tag, r16, r1, toks, *, model=QWEN, e4b=E, census=None, modes=None, graphs=None, w1_dispatch=None,
-              rep_ok=True):
+def _fake_arm(tag, r16, r1, toks, *, model=QWEN, e4b=E, census=None, modes=None, graphs=None, tally=None,
+              eager=None, replays=68, rep_ok=True):
+    """An arm as p115d_box writes it on the graph server: the tally lands at the build (graph capture), the runs replay
+    and dispatch nothing, so each workload's own tally is zero and the total is the build's (p115d-prove-2's records).
+    ``tally`` is the capture's; ``eager`` puts bucket-1 eager steps and their dispatches into W1."""
     arm = tag[:2]
-    dw1 = w1_dispatch or ({"bw_prmt32": 96, "dotpad": 0} if model == QWEN else {"scalar": 64, "bw_prmt32": 0})
+    d = tally or ({"bw_prmt32": 192, "dotpad": 0} if model == QWEN else {"scalar": 192, "bw_prmt32": 0})
+    zero = {k: 0 for k in ("dotpad", "dotpad_splitk", "scalar", "scalar_splitk") + BW}
     w = {}
     for name, rate in (("W16", r16), ("W1", r1)):
         b = 16 if name == "W16" else 1
         w[name] = {"batch": b, "decode_tok_s": rate, "tokens": {"32": toks[:b], "160": toks[:b]},
-                   "dispatch": dw1 if name == "W1" else {},
+                   "dispatch": {**zero, **(eager or {})} if name == "W1" else dict(zero),
                    "rep_digests": {"32": ["x", "x", "x" if rep_ok else "y"], "160": ["z"] * 3}}
+    stats = {str(b): {"replays": replays if b == 1 else 44, "eager_steps": 0, "rows": 0, "pad_rows": 0} for b in BUCKETS}
+    stats["1"]["eager_steps"] = 4 if eager else 0
     return {"arm": arm, "tag": tag, "status": "ok", "e4b_sha": e4b, "gnf4_sha": GNF4_SHA, "model": model,
             "revision": REVS[model], "graph_status": graphs or {str(b): "graph" for b in BUCKETS},
             "fusions": census or (ZERO if arm == "D0" else PREDICTED[model]),
             "fusion_modes": modes or {k: MODES[arm] for k in ("E4B_PAGED_FUSE_QKV", "E4B_FUSE_T1_GLUE",
                                                               "E4B_FUSE_T1_GLUE_R2", "E4B_FUSE_ROUTER_EPI")},
-            "prompts_sha256": "p", "short": 32, "long": 160, "reps": 3, "workloads": w}
+            "prompts_sha256": "p", "short": 32, "long": 160, "reps": 3, "workloads": w,
+            "graph_stats": stats, "dispatch_build": dict(d), "dispatch_total": {**d, **(eager or {})}}
 
 
 def _fake_sane(arm, *, model=QWEN, bias=0.001, agree=0.97, n=SANE_WINDOWS, group=1, dispatch=None):
@@ -216,8 +239,16 @@ def self_test() -> int:
         ("D1 != D0 is reported", v(arms(D1a={"toks": other}, D1b={"toks": other})) == "COMBINED_SANE"),
         ("D1b != D1a", v(arms(D1b={"toks": other})) == "FUNCTION_FAIL"),
         ("reps differ", v(arms(D0a={"rep_ok": False})) == "FUNCTION_FAIL"),
-        ("the bandwidth GEMV did not run at W1", v(arms(D1a={"w1_dispatch": {"dotpad": 96}})) == "VOID"),
-        ("dot-pad beside it", v(arms(D0b={"w1_dispatch": {"bw_prmt32": 90, "dotpad": 6}})) == "VOID"),
+        ("replay: W1's measure tally 0, the capture shows bw_prmt32",
+         all(not any(a["workloads"]["W1"]["dispatch"].values()) and a["dispatch_build"]["bw_prmt32"] > 0
+             for a in arms().values()) and v(arms()) == "COMBINED_SANE"),
+        ("the capture shows dot-pad", v(arms(D1a={"tally": {"dotpad": 96}})) == "VOID"),
+        ("the capture shows dot-pad beside bw_prmt32", v(arms(D0b={"tally": {"bw_prmt32": 90, "dotpad": 6}})) == "VOID"),
+        ("no capture tally at all", v({t: {k: x for k, x in a.items() if k != "dispatch_build"}
+                                       for t, a in arms().items()}) == "VOID"),
+        ("bucket 1 never replayed (the capture is not what W1 ran)", v(arms(D1b={"replays": 0})) == "VOID"),
+        ("an eager W1 step on bw_prmt32 passes", v(arms(D1a={"eager": {"bw_prmt32": 12}})) == "COMBINED_SANE"),
+        ("an eager W1 step on dot-pad", v(arms(D1a={"eager": {"dotpad": 12}})) == "VOID"),
         ("SANE without the GEMV", v(arms(), n=_fake_sane("D1", dispatch={"dotpad": 9000})) == "VOID"),
         ("SANE at T > 1", v(arms(), o=_fake_sane("D0", group=12)) == "VOID"),
         ("SANE short", v(arms(), n=_fake_sane("D1", n=11)) == "VOID"),
@@ -231,7 +262,7 @@ def self_test() -> int:
         ("g1 is reported", reduce(arms(), off, on, E)["speed"]["g1"] == round(min(160 / 120, 159 / 121), 4)),
         ("proof on Granite (scalar, no bw)", reduce(arms(model=GRAN), _fake_sane("D0", model=GRAN),
                                                     _fake_sane("D1", model=GRAN), E, proof=True)["verdict"] == "COMBINED_SANE"),
-        ("proof with bw on Granite is VOID", reduce(arms(model=GRAN, D1a={"w1_dispatch": {"bw_prmt32": 64}}),
+        ("proof with bw on Granite is VOID", reduce(arms(model=GRAN, D1a={"tally": {"bw_prmt32": 64}}),
                                                      _fake_sane("D0", model=GRAN), _fake_sane("D1", model=GRAN), E,
                                                      proof=True)["verdict"] == "VOID"),
         ("the reading's records on a proof", reduce(arms(), off, on, E, proof=True)["verdict"] == "VOID"),

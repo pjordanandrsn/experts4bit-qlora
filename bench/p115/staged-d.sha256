@@ -3,7 +3,10 @@
 # bench/p97, bench/p39, tests) and compare.
 8320de5f83e01964ccba2357ea69270d9a83112d9c2a4bee87f0bd79f4d632a0  p115d_run.sh
 e120a7391135f59715e89f48349381b1f73efa7402f77064cbcd5ca5bce290eb  p115d_box.py
-0f593378e653dfe1fc7d087e7b683a724f2d204d9f035cc991528baa68faf438  p115d_reduce.py
+# Re-pinned 2026-10-08 (PREREG-p115.md Amendment 4): the reducer reads W1's GEMV engagement at the capture, bound to
+# the arm's replayed bucket-1 graphs; p115d-prove-2 VOIDed on W1's own tally, which graph replays never increment (this name
+# was 0f593378e653dfe1fc7d087e7b683a724f2d204d9f035cc991528baa68faf438).
+d4533c08fd8daaa8e49b8129e7b15df2612e798b991c06ca01e1a0ac3b622668  p115d_reduce.py
 f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
 b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
 02d82d88259c169060f78e47c219e7dfd82d146dd80e0c7c3b0e3acdfca252cf  p110_box.py

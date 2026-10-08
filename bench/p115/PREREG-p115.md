@@ -510,3 +510,49 @@ proof (rc 27). Its verdict is not a reading.
 - `logs/` (added with `git add -f`) and `SHA256SUMS`.
 
 The reference log-probs and the arena stay on the box.
+
+## Amendment 4 (2026-10-08, after `p115d-prove-2`; W1's GEMV engagement read at the capture; before any further Phase D box)
+
+**What happened.** `p115d-prove-2` VOIDed (rc 27, $0.076; adertha-receipts `6938da3a`). Every speed arm's W1 GEMV tally
+read zero, and nothing else in the rule failed.
+
+**Why.** The speed arms run the default graph server. Every W1 step replays the bucket-1 graph captured at the build,
+and a replay never reaches grouped-nf4-gemm's Python dispatcher, so W1's own tally is zero by construction. The box
+records it as designed: the tally after the build, and after each workload. The reducer read the wrong one. Its
+self-test's fake arm carried a W1 tally that the box cannot write, so the 23 cases never saw it.
+
+**The correction (the maintainer's, on the bus 2026-10-08T19:07Z).** The engagement requirement stays; it is read where
+the dispatch happens.
+- **At the capture:** the speed arm's GEMV check reads `dispatch_build`, the tally across the build that captured this
+  arm's bucket graphs.
+- **Bound to this arm's graphs:** the arm's `graph_stats` must show bucket 1 replayed. A capture that W1 never replayed
+  does not count.
+- **An eager W1 step** dispatches, so when bucket 1 took eager steps, W1's own tally must pass too.
+- **Unchanged:** the requirement itself. On the reading, `bw_prmt32` and no dot-pad; on the proof's Granite, the scalar
+  GEMV and no `bw_*`. Every bucket captured, as before.
+- **Unchanged:** SANE, which runs eager and keeps its measurement tally; and every other rung, constant and prediction.
+
+**Self-test: 28 cases.** The fake arm now writes the box's record shape: each workload's own tally zero, the capture
+tally and `graph_stats` as the box writes them. New cases:
+- replay with W1's measure tally at 0 and the capture showing `bw_prmt32`: passes;
+- the capture showing dot-pad, alone or beside `bw_prmt32`: VOID;
+- no capture tally: VOID;
+- bucket 1 never replayed: VOID;
+- an eager W1 step on `bw_prmt32` passes, and on dot-pad is VOID.
+
+**Evidence.**
+- The corrected reducer reads `p115d-prove-2`'s records as COMBINED_SANE on the proof. That is the proof's verdict, not
+  a reading. The records are committed in `bench/p115/receipts/p115d-prove-2/`.
+- `tests/test_p115d_staged_pin.py` reduces those records and checks the fake arm's keys against them, so the fakes
+  cannot drift from the box again (P116's VOID lesson).
+- `staged-d.sha256` re-pins `p115d_reduce.py` with a dated note. No other staged file changes.
+
+**Reported, not ruled (a proof).** The proof's Granite at T == 1 reads SANE bias −0.01387 nats and argmax agreement
+0.9661, inside the gate. Phase C's proof read Granite at −0.0009 and 0.969 with 12 windows per pass.
+
+**Next.**
+1. `p115d-prove-3` at this amendment's merge commit, since the reducer changed and the proof proves the harness again.
+2. Then the reading.
+
+Phase D has spent $0.138 of its $4.00 ceiling (`p115d-prove-1` NOT_RUN on a box whose SSH never came up, $0.062; and
+`p115d-prove-2`, $0.076).
