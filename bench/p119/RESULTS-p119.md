@@ -77,11 +77,13 @@ bake until 15:00:39Z; the box (load 159 s with the int4 repack, brackets 54 s); 
 | Q7: LM head ≥ 1.5 ms at 512 rows and ≤ 0.3 ms at 1 row; ON saves ≥ 1 ms | **no**: the head is 1.36 ms in the forward and ON saves 0.94 ms |
 | Q8: the box ≤ 15 minutes | **yes** (3.5 min) |
 
-**The standalone head bracket undercounted.** The profiler captured 0.4 of its 5 calls at every row count, so its
-`head_ms` (0.53 ms at 512 rows, 0.15 at 1 row) are low by 2.5×. Per captured call it reads 1.33 ms at 512 rows and
-0.38 ms at 1 row. That matches the head's kernel inside the prefill forward (1.36 ms) and the bandwidth floor for
+**The standalone head bracket undercounted.** The profiler recorded 2 of the 5 calls at every row count (0.4 per
+requested call), so its `head_ms` (0.53 ms at 512 rows, 0.15 at 1 row) divide two calls' time by five. Per recorded
+call it reads 1.33 ms at 512 rows and 0.38 ms at 1 row: an estimate from the recorded calls, not a recovery of the
+unrecorded ones. It agrees with the head's kernel inside the prefill forward (1.36 ms) and with the bandwidth floor for
 reading its 622 MB weight once. Q7 misses on either reading. The decode and prefill brackets record whole calls per
-step (48, 144, 193 per layer-pattern) and match SC2e's served device time, so they are complete.
+step at the multiples their layers imply (48, 144, 193), and `d64` agrees with SC2e's served device time; that is
+consistent with complete capture, not proof of it.
 
 **The frozen classes behaved as registered on the reading.** On the NF4 proof, `_gemm_nf4_grouped` fell into dense
 GEMM; the raw kernel tables in `box.json` carry every name either way.
@@ -108,9 +110,8 @@ Each is its own registration.
 **The lane cost $1.029**, inside its $3.00 ceiling.
 
 **Receipts** are in `receipts/p119-5090-1/`, with `SHA256SUMS`: `box.json` (every bracket's per-kernel table),
-`verdict.json`, `summary.txt`, `forensics.txt`, `versions.txt`, `bake.json`, the logs and the teardown proof. The
-launcher's receipts and ledger rows are in the receipt store: adertha-receipts `617202d` (`p119-prove-1`), `575d59e`
-(`p119-prove-2`) and `7547d9d` (`p119-5090-1`).
+`verdict.json`, `summary.txt`, `forensics.txt`, `versions.txt`, `bake.json`, the logs and the teardown proof. These
+committed copies are the public record of the reading.
 
 **Re-derive:**
 ```bash
