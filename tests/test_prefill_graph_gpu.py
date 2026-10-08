@@ -39,12 +39,12 @@ def _model():
     return model
 
 
-def _runner(model):
+def _runner(model, *, last_logits=False):
     from experts4bit_qlora.engines.fp8_paged_kv import Fp8PagedKV
     from experts4bit_qlora.engines.paged_runner import PagedModelRunner
     cfg = model.config
     kv = Fp8PagedKV(cfg.num_hidden_layers, cfg.num_key_value_heads, cfg.head_dim, batch=4, max_tokens_per_seq=64)
-    return PagedModelRunner(model, kv)
+    return PagedModelRunner(model, kv, last_logits=last_logits)
 
 
 def _prompts():
@@ -75,10 +75,11 @@ def grouping(monkeypatch):
 
 
 @needs_cuda
-def test_replayed_first_chunks_prefill_exactly_as_eager(grouping):
+@pytest.mark.parametrize("last_logits", [False, True])
+def test_replayed_first_chunks_prefill_exactly_as_eager(grouping, last_logits):
     model, prompts = _model(), _prompts()
-    eager_first, eager_pool = _drive(_runner(model), prompts)
-    r = _runner(model)
+    eager_first, eager_pool = _drive(_runner(model, last_logits=last_logits), prompts)
+    r = _runner(model, last_logits=last_logits)
     st = r.enable_prefill_graph(T)
     assert {k: st[k] for k in ("status", "T", "replays", "eager_chunks", "eager_reasons")} == {
         "status": "on", "T": T, "replays": 0, "eager_chunks": 0,

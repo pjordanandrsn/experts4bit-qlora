@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "experts4bit-qlora"
-version = "0.48.0"
+version = "0.49.0"
 description = "Fine-tune and serve large Mixture-of-Experts models on one GPU, with 4-bit experts in GPU memory, RAM or SSD."
 readme = "README.md"
 requires-python = ">=3.10"

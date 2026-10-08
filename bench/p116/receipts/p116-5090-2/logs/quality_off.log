@@ -1,0 +1,61 @@
+Fetching 23 files:   0%|          | 0/23 [00:00<?, ?it/s]Fetching 23 files: 100%|██████████| 23/23 [00:00<00:00, 1889.92it/s]
+[00:03:20]   checkpoint: Qwen/Qwen3-30B-A3B @ ad44e777bcd18fa416d9da3bd8f70d33ebb85d39 (requested ad44e777bcd18fa416d9da3bd8f70d33ebb85d39)
+[00:03:20]   fusing + quantizing experts (up to 48x128) to nf4 (streaming)...
+[00:03:20]   quantized experts on 48/48 MoE layers (128 experts each)
+[00:03:20]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[00:03:22]   experts deferred to the arena: 48 module(s), 240 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[00:03:48]   hybrid tier active on 48 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+[serve_paged] fusions (q/k/v 0; folds set: none): {'fuse_qkv_n': 0, 'fuse_t1_glue_n': 0, 'fuse_t1_glue_r2_n': [0, 0], 'fuse_router_epilogue_n': 0}
+[serve_paged] PREFILL_GRAPH auto: refused, prefill stays eager (device grouping is off: host grouping syncs inside the forward (serve_paged turns it on with decode graphs at max_seqs > 1 on the all-vram placement))
+[serve_paged] ready: {"moe_layers": 48, "experts": 128, "top_k": 8, "model_type": "qwen3_moe", "int4_expert_layers": 0, "int4_store_kinds": [], "int4_attn_projections": 0, "kv": {"n_kv_heads": 4, "head_dim": 128, "k_groups": "auto", "scratch_slots": 0, "blocks_per_seq": 256, "pool_mib": 3312.8}, "graph_status": null, "grouping": {"device_grouping": false, "force_singleton_groups": false}, "prefill_graph": "auto", "levers_env": {}, "exp_int4_layers_enabled": 0, "attn_int4_rtn_projections": 0, "attn_int4_calib_projections": 0, "fuse_qkv_n": 0, "fuse_t1_glue_n": 0, "fuse_t1_glue_r2_n": [0, 0], "fuse_router_epilogue_n": 0, "fusion_modes": {"E4B_PAGED_FUSE_QKV": "0", "E4B_FUSE_T1_GLUE": "0", "E4B_FUSE_T1_GLUE_R2": "0", "E4B_FUSE_ROUTER_EPI": "0"}, "fusion_report": {"E4B_FUSE_T1_GLUE": {"mode": "0"}, "E4B_FUSE_T1_GLUE_R2": {"mode": "0"}, "E4B_FUSE_ROUTER_EPI": {"mode": "0"}}, "pinned_cache_released": true, "host_heap_trimmed": true}
+[transformers] Token indices sequence length is longer than the specified maximum sequence length for this model (298938 > 131072). Running this sequence through the model will result in indexing errors
+Generating v split: 0 examples [00:00, ? examples/s]Generating v split: 9287 examples [00:00, 54851.48 examples/s]Generating v split: 18275 examples [00:00, 54950.79 examples/s]Generating v split: 27432 examples [00:00, 55786.61 examples/s]Generating v split: 36604 examples [00:00, 54451.80 examples/s]Generating v split: 45576 examples [00:00, 53775.77 examples/s]Generating v split: 45576 examples [00:00, 54303.17 examples/s]
+P115_QGROUP off wikitext group 1 of 24 done at 44 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 2 of 24 done at 74 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 3 of 24 done at 104 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 4 of 24 done at 134 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 5 of 24 done at 164 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 6 of 24 done at 194 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 7 of 24 done at 225 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 8 of 24 done at 255 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 9 of 24 done at 287 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 10 of 24 done at 317 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 11 of 24 done at 348 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 12 of 24 done at 379 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 13 of 24 done at 412 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 14 of 24 done at 444 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 15 of 24 done at 474 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 16 of 24 done at 508 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 17 of 24 done at 540 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 18 of 24 done at 571 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 19 of 24 done at 601 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 20 of 24 done at 632 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 21 of 24 done at 663 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 22 of 24 done at 694 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 23 of 24 done at 725 s, 21.31 GiB allocated
+P115_QGROUP off wikitext group 24 of 24 done at 756 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 1 of 24 done at 797 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 2 of 24 done at 828 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 3 of 24 done at 859 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 4 of 24 done at 890 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 5 of 24 done at 921 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 6 of 24 done at 952 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 7 of 24 done at 984 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 8 of 24 done at 1015 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 9 of 24 done at 1046 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 10 of 24 done at 1077 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 11 of 24 done at 1108 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 12 of 24 done at 1139 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 13 of 24 done at 1170 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 14 of 24 done at 1201 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 15 of 24 done at 1231 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 16 of 24 done at 1262 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 17 of 24 done at 1293 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 18 of 24 done at 1324 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 19 of 24 done at 1355 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 20 of 24 done at 1386 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 21 of 24 done at 1417 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 22 of 24 done at 1448 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 23 of 24 done at 1478 s, 21.31 GiB allocated
+P115_QGROUP off c4val1 group 24 of 24 done at 1509 s, 21.31 GiB allocated
+P116_QUALITY B0 windows={'wikitext': 24, 'c4val1': 24} dispatch={'dotpad': 1780032, 'dotpad_splitk': 0, 'scalar': 0, 'scalar_splitk': 0, 'bw_tree': 0, 'bw_prmt32': 0, 'bw_splitk': 0} load 31s mem 21.55 GB 1509.2 s

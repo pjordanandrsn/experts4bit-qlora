@@ -1,0 +1,10 @@
+# Names as the BOX sees them after staging (/root/p117). The box runs `sha256sum -c` on this file; p117_drive.sh and
+# tests/test_p117_staged_pin.py resolve each name to its source (bench/p117, bench/p108, bench/p97, bench/p39, tests).
+a2f8ae6721ab2d0d9c4957451e83f4f021674898c111ce46bbfba7b735b318f6  p117_run.sh
+f93a38c21a08ee49e0ef68a2d1e513852b2b94d04ad3e8e5ddd99508037c0049  p117_box.py
+55f9d0723f2c1d6291fc40df5e6e2c0b1267306e07dd7bbd65e4a573e46540fb  p117_reduce.py
+b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b  p108_box.py
+608c1a20136393495ebb482afc58a24880e053a2caab6152fa3eb87183063a31  p97_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py

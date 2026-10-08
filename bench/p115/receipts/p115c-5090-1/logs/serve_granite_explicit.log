@@ -1,0 +1,9 @@
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files: 100%|██████████| 11/11 [00:00<00:00, 1290.48it/s]
+[03:50:20]   checkpoint: ibm-granite/granite-3.1-3b-a800m-instruct @ a02780686e08a03fe0d2679a293b5c74a90efa89 (requested a02780686e08a03fe0d2679a293b5c74a90efa89)
+[03:50:20]   fusing + quantizing experts (up to 32x40) to nf4 (streaming)...
+[03:50:20]   quantized experts on 32/32 MoE layers (40 experts each)
+[03:50:20]   loading non-expert weights (attention/embeddings/router/norms/dense-mlp)...
+[03:50:20]   experts deferred to the arena: 32 module(s), 160 unmaterialized buffer(s) — call nvme_experts.enable_nvme_residency() before running this model
+[03:50:21]   hybrid: 2 NUMA nodes — run under `numactl --interleave=all` until node-local allocation lands (see the Phase-2 metal receipt)
+[03:50:22]   hybrid tier active on 32 module(s): vram/dram/nvme masses 1.00/0.00/0.00
+P115C_SERVE granite/explicit raised RuntimeError: E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion

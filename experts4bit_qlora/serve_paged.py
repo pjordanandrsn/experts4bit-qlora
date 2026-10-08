@@ -164,6 +164,18 @@ def _graphs_env(value: str, device: str, placement: str, capability=None) -> boo
     raise ValueError(f"E4B_PAGED_GRAPHS={value!r}: expected 'auto', '0' or '1'")
 
 
+def _last_logits_env(value: str) -> bool:
+    """``E4B_PAGED_LAST_LOGITS``: opt-in final-position prefill logits (0/1).
+
+    Off until a served-prefill quality read licenses the LM-head shape change.
+    Forced on requires an explicit supported model.forward keyword at startup.
+    """
+    v = (value or "0").strip() or "0"
+    if v not in ("0", "1"):
+        raise ValueError(f"E4B_PAGED_LAST_LOGITS={value!r}: expected '0' or '1'")
+    return v == "1"
+
+
 def _prefill_graph_env(value: str) -> str:
     """``E4B_PAGED_PREFILL_GRAPH``, one of three settings. Every first chunk of exactly ``E4B_PAGED_CHUNK_TOKENS``
     tokens is served from one CUDA graph (:meth:`~.engines.paged_runner.PagedModelRunner.enable_prefill_graph`) when it
@@ -182,6 +194,60 @@ def _prefill_graph_env(value: str) -> str:
     if v in ("auto", "0", "1"):
         return v
     raise ValueError(f"E4B_PAGED_PREFILL_GRAPH={value!r}: expected 'auto', '0' or '1'")
+
+
+def _max_seqs_env(value: str) -> int:
+    """``E4B_PAGED_MAX_SEQS``: ``auto`` (the default since lane SC2e, also when unset or empty) or a positive int.
+    ``auto`` is resolved when the engine builds (:func:`resolve_max_seqs`): the widest width lane SC2e read that the
+    serve estimate fits in the device's free memory (64 or 16 on the default bucket list; 64, 32 or 16 with
+    ``E4B_PAGED_BUCKETS=auto``). Until then the config carries 16. ``16`` restores the old default;
+    anything else is refused rather than guessed."""
+    v = (value or "").strip().lower() or "auto"
+    if v == "auto":
+        return 16
+    try:
+        n = int(v)
+    except ValueError:
+        raise ValueError(f"E4B_PAGED_MAX_SEQS={value!r}: expected 'auto' or a positive int") from None
+    if n < 1:
+        raise ValueError("E4B_PAGED_MAX_SEQS must be >= 1")
+    return n
+
+
+def resolve_max_seqs(cfg: "PagedServeConfig", model_config, free_bytes) -> dict:
+    """``E4B_PAGED_MAX_SEQS=auto``: set ``cfg.max_seqs`` by :func:`~.serve_recipe.choose_max_seqs` on the model's own
+    topology and the device's free memory (measured before any weight is loaded), then re-derive the decode buckets
+    for that width from ``E4B_PAGED_BUCKETS`` as given. An explicit width is left alone. Returns the record /health
+    reports. Lane SC2e (#846) licensed it: on Qwen3-30B-A3B int4, one RTX 5090, 512-token prompts and 2,048 tokens a
+    slot, 64 slots on the default bucket list held the SLO to 8 req/s against 4 at 16 slots, with identical serial
+    output."""
+    if str(cfg.max_seqs_requested).strip().lower() != "auto":
+        return {}
+    from .serve_recipe import MAX_SEQS_AUTO_WIDTHS, MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS, ServeSetup, choose_max_seqs
+    env = os.environ.get
+    try:
+        from .arch.topology import describe_moe
+        topo = describe_moe(model_config)
+    except Exception as e:                                 # a config describe_moe cannot read: today's default
+        res = {"max_seqs": 16, "free_bytes": free_bytes, "candidates": [],
+               "why": f"the model's topology could not be described ({type(e).__name__}: {str(e)[:160]}): 16"}
+    else:
+        req = cfg.buckets_requested if cfg.buckets_requested != "default" else ""
+        b = _buckets_env(req)
+        setup = ServeSetup(placement=cfg.placement, max_seqs=16, max_tokens_per_seq=cfg.max_tokens_per_seq,
+                           chunk_tokens=cfg.chunk_tokens, graphs=cfg.graphs, buckets=b, kv_groups=cfg.kv_groups,
+                           prefill_graph=cfg.prefill_graph, vram_gb=cfg.vram_gb, dram_gb=cfg.dram_gb,
+                           hot_rows=cfg.hot_rows, bulk_kv=cfg.bulk_kv,
+                           exp_int4="1" in (env("E4B_SERVE_EXP_INT4", "0"), env("E4B_SERVE_EXP_INT4_CALIB", "0")),
+                           attn_int4="1" in (env("E4B_SERVE_ATTN_INT4", "0"), env("E4B_SERVE_ATTN_INT4_CALIB", "0")))
+        widths = MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS if str(b).strip().lower() == "auto" else MAX_SEQS_AUTO_WIDTHS
+        res = choose_max_seqs(topo, setup, free_bytes, widths=widths)
+    cfg.max_seqs = int(res["max_seqs"])
+    cfg.buckets = _buckets_env(cfg.buckets_requested if cfg.buckets_requested != "default" else "")
+    cfg.validate()
+    cfg.max_seqs_resolution = res
+    log(f"E4B_PAGED_MAX_SEQS=auto -> {cfg.max_seqs} ({res.get('why')}); buckets {list(cfg.buckets)}")
+    return res
 
 
 def _buckets_env(value: str):
@@ -260,12 +326,15 @@ class PagedServeConfig:
     calib: str = ""                      # E4B_PAGED_CALIB (placement calibration JSON; the solver refuses to guess)
     revision: str = ""                   # E4B_PAGED_REVISION
     served_names: tuple = ()             # E4B_PAGED_SERVED_NAME: extra names accepted in `model` (comma-separated)
-    max_seqs: int = 16                   # E4B_PAGED_MAX_SEQS: batch width == KV slots
+    max_seqs: int = 16                   # E4B_PAGED_MAX_SEQS: batch width == KV slots ("auto": resolve_max_seqs)
+    max_seqs_requested: str = "16"       # E4B_PAGED_MAX_SEQS as given; from_env's default is "auto" (lane SC2e)
+    max_seqs_resolution: dict = field(default_factory=dict)   # resolve_max_seqs's record, for /health
     max_tokens_per_seq: int = 4096       # E4B_PAGED_MAX_TOKENS_PER_SEQ: prompt + output per sequence
     chunk_tokens: int = 512              # E4B_PAGED_CHUNK_TOKENS
     max_prefill_tokens: int = 0          # E4B_PAGED_MAX_PREFILL_TOKENS: per-step budget; 0 -> chunk_tokens
     graphs: bool = False                 # E4B_PAGED_GRAPHS: from_env resolves auto (the default) / 1 / 0 (_graphs_env)
     prefill_graph: str = "auto"          # E4B_PAGED_PREFILL_GRAPH: auto (default) / 1 / 0 (_prefill_graph_env)
+    last_logits: bool = False            # E4B_PAGED_LAST_LOGITS: opt-in prefill head at one position
     buckets: tuple = DEFAULT_BUCKETS     # E4B_PAGED_BUCKETS="1,2,4,8,16" or "auto" (validate resolves; _buckets_env)
     buckets_requested: str = "default"   # E4B_PAGED_BUCKETS as given ("default" when unset or empty); /health reports it
     placement: str = "all-vram"          # E4B_PAGED_PLACEMENT: all-vram | solver
@@ -303,13 +372,15 @@ class PagedServeConfig:
             calib=env("E4B_PAGED_CALIB", ""),
             revision=env("E4B_PAGED_REVISION", ""),
             served_names=tuple(x.strip() for x in env("E4B_PAGED_SERVED_NAME", "").split(",") if x.strip()),
-            max_seqs=int(env("E4B_PAGED_MAX_SEQS", "16")),
+            max_seqs=_max_seqs_env(env("E4B_PAGED_MAX_SEQS", "")),
+            max_seqs_requested=(env("E4B_PAGED_MAX_SEQS", "") or "").strip().lower() or "auto",
             max_tokens_per_seq=int(env("E4B_PAGED_MAX_TOKENS_PER_SEQ", "4096")),
             chunk_tokens=int(env("E4B_PAGED_CHUNK_TOKENS", "512")),
             max_prefill_tokens=int(env("E4B_PAGED_MAX_PREFILL_TOKENS", "0")),
             graphs=_graphs_env(env("E4B_PAGED_GRAPHS", "auto"), env("E4B_PAGED_DEVICE", "cuda"),
                                env("E4B_PAGED_PLACEMENT", "all-vram"), _capability(env("E4B_PAGED_DEVICE", "cuda"))),
             prefill_graph=_prefill_graph_env(env("E4B_PAGED_PREFILL_GRAPH", "auto")),
+            last_logits=_last_logits_env(env("E4B_PAGED_LAST_LOGITS", "0")),
             buckets=_buckets_env(env("E4B_PAGED_BUCKETS", "")),
             buckets_requested=(env("E4B_PAGED_BUCKETS", "") or "").strip() or "default",
             placement=env("E4B_PAGED_PLACEMENT", "all-vram"),
@@ -1092,11 +1163,17 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
 
     from .engines.paged_runner import kv_layout_refusal
     try:
-        why = kv_layout_refusal(AutoConfig.from_pretrained(cfg.model, revision=cfg.revision or None))
+        model_config = AutoConfig.from_pretrained(cfg.model, revision=cfg.revision or None)
+        why = kv_layout_refusal(model_config)
     except (OSError, ValueError, KeyError):           # a config only the loader reads: its own refusals stand
-        why = None
+        model_config, why = None, None
     if why:
         raise RuntimeError(f"serve_paged refuses {cfg.model}: {why}")   # before any weight is read
+    if str(cfg.max_seqs_requested).strip().lower() == "auto":
+        # sized before any weight is read: the estimate's device total includes the weights
+        free = (torch.cuda.mem_get_info(torch.device(cfg.device))[0]
+                if str(cfg.device).startswith("cuda") and torch.cuda.is_available() else None)
+        resolve_max_seqs(cfg, model_config, free)
     model, _ = load_moe_4bit_streaming(cfg.model, cfg.device, torch.bfloat16, r=8, alpha=16, quant_type="nf4",
                                        arena=cfg.arena, revision=cfg.revision or None)
     model.eval()
@@ -1151,7 +1228,7 @@ def build_engine(cfg: PagedServeConfig) -> EngineParts:
     kv = Fp8PagedKV(kv_layers(model, decoder_layers(model.config)), hkv, hd, batch=cfg.max_seqs, max_tokens_per_seq=cfg.max_tokens_per_seq,
                     k_groups=(None if cfg.kv_groups == "auto" else int(cfg.kv_groups)),
                     batched_append=True, device=cfg.device, scratch_slots=scratch)
-    runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv)
+    runner = PagedModelRunner(model, kv, device=cfg.device, bulk_kv=cfg.bulk_kv, last_logits=cfg.last_logits)
     grouping = _batched_graph_grouping(cfg)          # before capture: the batched lane's sync-free grouping
     graph_status = runner.enable_decode_graphs(cfg.buckets) if cfg.graphs else None
     engage_prefill_graph(runner, cfg)
@@ -1420,6 +1497,7 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
             "served_model_names": list(cfg.model_names),
             "engine": {
                 "max_seqs": cfg.max_seqs, "kv_slots": cfg.max_seqs, "max_tokens_per_seq": cfg.max_tokens_per_seq,
+                "max_seqs_requested": cfg.max_seqs_requested, "max_seqs_resolution": cfg.max_seqs_resolution or None,
                 "chunk_tokens": cfg.chunk_tokens, "max_prefill_tokens_per_step": cfg.prefill_budget,
                 "graphs": cfg.graphs, "buckets": list(cfg.buckets), "buckets_requested": cfg.buckets_requested,
                 "graph_status": info.pop("graph_status", None), "graph_stats": _graph_stats(parts),
@@ -1430,6 +1508,10 @@ def create_app(cfg: Optional[PagedServeConfig] = None, engine: Optional[PagedEng
             "levers": info,
             "prefill_routes": prefill_routes(),
             "prefill_graph": prefill_graph_report(cfg, engine),
+            "last_logits": dict(
+                engine.parts.runner.last_logits_stats()
+                if engine.parts is not None and hasattr(engine.parts.runner, "last_logits_stats")
+                else {"status": "off" if not cfg.last_logits else engine.state}, requested=cfg.last_logits),
             "kv_bookkeeping": kv_bookkeeping_report(cfg, engine),
             "eos_token_ids": sorted(parts.eos_ids) if parts is not None else None,
             "sampling": {"greedy_only": True, "logprobs": False, "stop_strings": False},
@@ -1545,7 +1627,8 @@ def main() -> None:
         raise SystemExit("E4B_PAGED_MODEL is required (plus E4B_PAGED_ARENA and E4B_PAGED_CALIB)")
     exposure = "localhost" if cfg.host in ("127.0.0.1", "localhost", "::1") else f"LAN ({cfg.host})"
     log(f"listening on {cfg.host}:{cfg.port} [{exposure}, {'token-gated' if cfg.token else 'no auth'}] "
-        f"max_seqs={cfg.max_seqs} max_tokens_per_seq={cfg.max_tokens_per_seq} chunk={cfg.chunk_tokens} "
+        f"max_seqs={cfg.max_seqs if cfg.max_seqs_requested != 'auto' else 'auto (resolved when the engine builds)'} "
+        f"max_tokens_per_seq={cfg.max_tokens_per_seq} chunk={cfg.chunk_tokens} "
         f"graphs={int(cfg.graphs)} buckets={list(cfg.buckets)} placement={cfg.placement}; "
         f"the engine builds on its own thread -- /health reports 'loading' until it is ready")
     uvicorn.run(create_app(cfg), host=cfg.host, port=cfg.port, log_level="info")

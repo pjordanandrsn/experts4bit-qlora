@@ -38,12 +38,13 @@ host sync in the prefill forward under device grouping.
 """
 from __future__ import annotations
 
+import inspect
+
 import torch
 
 from . import linear_state
 from .paged_attention import PagedAttentionContext, set_context
 from .scheduler import StepRunner
-
 
 DEFAULT_BUCKETS = (1, 2, 4, 8, 16)
 
@@ -160,10 +161,37 @@ def chunk_rows(rids, max_bucket: int):
     return [rids[i:i + max_bucket] for i in range(0, len(rids), max_bucket)]
 
 
+def _last_logits_kwargs(model, enabled: bool) -> dict:
+    """An explicitly supported last-position LM-head keyword, or refuse.
+
+    A catch-all **kwargs is not evidence that a model implements the operation.
+    This only changes the head's row count: every prompt token still traverses
+    the decoder and stages its K/V. The different GEMM shape needs a quality read.
+    """
+    if not enabled:
+        return {}
+    try:
+        params = inspect.signature(model.forward).parameters
+    except (TypeError, ValueError) as exc:
+        raise ValueError("last-logits prefill requires an inspectable model.forward") from exc
+    for key in ("logits_to_keep", "num_logits_to_keep"):
+        param = params.get(key)
+        if param is not None and param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                                                inspect.Parameter.KEYWORD_ONLY):
+            return {key: 1}
+    raise ValueError("last-logits prefill requires an explicit logits_to_keep or num_logits_to_keep keyword")
+
+
 class PagedModelRunner(StepRunner):
     def __init__(self, model, kv, *, device="cuda", eos_id: int | None = None,
-                 gpu_only_prefill: bool = True, bulk_kv: bool = False):
+                 gpu_only_prefill: bool = True, bulk_kv: bool = False, last_logits: bool = False):
+        """``last_logits`` is opt-in: prefill requests only the final position's
+        logits, with an explicit model keyword or a refusal. Decode is unchanged.
+        Eager prefill, graph capture and the graph's startup oracle share the mode.
+        """
         self.model = model
+        self._last_logits_kwargs = _last_logits_kwargs(model, last_logits)
+        self._prefill_forward_calls = 0
         self.kv = kv
         # E4B_PAGED_BULK_KV (serve_paged): a request's KV bookkeeping -- the slot reset at bind and free, the prompt's
         # flush into the pool, and (with decode graphs) the claim of every block the slot can reach -- in a launch count
@@ -226,6 +254,23 @@ class PagedModelRunner(StepRunner):
 
     # -------------------------------------------------------- StepRunner --
     @torch.no_grad()
+    def _prefill_forward(self, ids, positions):
+        out = self.model(input_ids=ids, position_ids=positions, use_cache=False, **self._last_logits_kwargs)
+        if self._last_logits_kwargs and out.logits.shape[-2] != 1:
+            raise RuntimeError("last-logits prefill requested one position but the model returned "
+                               f"{out.logits.shape[-2]}")
+        self._prefill_forward_calls += 1
+        return out
+
+    def last_logits_stats(self) -> dict:
+        """The prefill LM-head mode; forward counts include warmup/capture,
+        while graph replay counts remain in :meth:`prefill_graph_stats`.
+        """
+        return {"status": "on" if self._last_logits_kwargs else "off",
+                "keyword": next(iter(self._last_logits_kwargs), None),
+                "prefill_forward_calls": self._prefill_forward_calls}
+
+    @torch.no_grad()
     def run_prefill(self, chunks):
         first: dict[int, int] = {}
         self._mode(True)
@@ -251,8 +296,7 @@ class PagedModelRunner(StepRunner):
                     pos = torch.arange(start, start + take, device=self.device)
                     prev = set_context(self.ctx)
                     try:
-                        out = self.model(input_ids=ids[None],
-                                         position_ids=pos[None], use_cache=False)
+                        out = self._prefill_forward(ids[None], pos[None])
                     finally:
                         set_context(prev)
                     logits = out.logits
@@ -827,14 +871,14 @@ class PagedModelRunner(StepRunner):
                 with torch.cuda.stream(side):
                     for _ in range(max(1, warmup)):
                         ctx.drop(self._PG_KEY)
-                        self.model(input_ids=ids, position_ids=pos, use_cache=False)
+                        self._prefill_forward(ids, pos)
                 torch.cuda.current_stream(dev).wait_stream(side)
                 torch.cuda.synchronize(dev)
                 ctx.drop(self._PG_KEY)
                 g = torch.cuda.CUDAGraph()
                 try:
                     with torch.cuda.graph(g):
-                        out = self.model(input_ids=ids, position_ids=pos, use_cache=False)
+                        out = self._prefill_forward(ids, pos)
                 except Exception as e:  # noqa: BLE001 -- any capture failure is a refusal, with its reason
                     raise PrefillGraphRefused(f"the {T}-token prefill forward did not capture "
                                               f"({type(e).__name__}: {str(e)[:300]})") from e
@@ -878,8 +922,7 @@ class PagedModelRunner(StepRunner):
             with torch.no_grad():
                 for p in prompts:
                     ctx.drop(self._PG_KEY)
-                    o = self.model(input_ids=p.to(dev), position_ids=torch.arange(pg["T"], device=dev)[None],
-                                   use_cache=False)
+                    o = self._prefill_forward(p.to(dev), torch.arange(pg["T"], device=dev)[None])
                     refs.append((o.logits.clone(),
                                  {lay: (k.clone(), v.clone()) for lay, (k, v) in self._staged_under_key().items()}))
         finally:

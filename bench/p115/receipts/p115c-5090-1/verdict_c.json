@@ -1,0 +1,300 @@
+{
+ "lane": "P115 Phase C",
+ "proof": false,
+ "models": {
+  "gptoss": {
+   "gates": {
+    "SERVED": true,
+    "ENGAGED": true,
+    "EXPLICIT_RAISE": true,
+    "DETERMINISM": true,
+    "SANE": false
+   },
+   "why": {
+    "SANE": "stats {'bias': 0.002163713381984659, 'argmax_agree': 0.923828125, 'mean_kl': 0.02990817611013578, 'n': 12}"
+   },
+   "sane": {
+    "bias": 0.002163713381984659,
+    "argmax_agree": 0.923828125,
+    "mean_kl": 0.02990817611013578,
+    "n": 12
+   },
+   "identity": {
+    "rows_identical": 2,
+    "rows": 16
+   },
+   "fusion_report": {
+    "E4B_FUSE_T1_GLUE": {
+     "mode": "auto",
+     "patched": 49,
+     "failed_probe": 0
+    },
+    "E4B_FUSE_T1_GLUE_R2": {
+     "mode": "auto",
+     "patched": [
+      24,
+      0
+     ],
+     "kernel_gaps": 0
+    },
+    "E4B_FUSE_ROUTER_EPI": {
+     "mode": "auto",
+     "patched": 24,
+     "failed_probe": 0,
+     "no_kernel_mode": 0
+    }
+   },
+   "explicit_message": "E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion"
+  },
+  "qw36": {
+   "gates": {
+    "SERVED": true,
+    "ENGAGED": true,
+    "EXPLICIT_RAISE": true,
+    "DETERMINISM": true,
+    "SANE": true
+   },
+   "why": {},
+   "sane": {
+    "bias": 0.0004347381648699411,
+    "argmax_agree": 0.9954427083333334,
+    "mean_kl": 0.0005201265231458511,
+    "n": 12
+   },
+   "identity": {
+    "rows_identical": 16,
+    "rows": 16
+   },
+   "fusion_report": {
+    "E4B_FUSE_T1_GLUE": {
+     "mode": "auto",
+     "patched": 0,
+     "failed_probe": 101
+    },
+    "E4B_FUSE_T1_GLUE_R2": {
+     "mode": "auto",
+     "patched": [
+      0,
+      0
+     ],
+     "kernel_gaps": 0
+    },
+    "E4B_FUSE_ROUTER_EPI": {
+     "mode": "auto",
+     "patched": 40,
+     "failed_probe": 0,
+     "no_kernel_mode": 0
+    }
+   },
+   "explicit_message": "E4B_FUSE_T1_GLUE=1 patched no RMSNorm modules (101 name-matched but failed the semantic probe) -- refusing a vacuous enable"
+  },
+  "granite": {
+   "gates": {
+    "SERVED": true,
+    "ENGAGED": true,
+    "EXPLICIT_RAISE": true,
+    "DETERMINISM": true,
+    "QUALITY": true
+   },
+   "why": {},
+   "sane": null,
+   "identity": {
+    "rows_identical": 3,
+    "rows": 16
+   },
+   "fusion_report": {
+    "E4B_FUSE_T1_GLUE": {
+     "mode": "auto",
+     "patched": 65,
+     "failed_probe": 0
+    },
+    "E4B_FUSE_T1_GLUE_R2": {
+     "mode": "auto",
+     "patched": [
+      32,
+      32
+     ],
+     "kernel_gaps": 0
+    },
+    "E4B_FUSE_ROUTER_EPI": {
+     "mode": "auto",
+     "patched": 32,
+     "failed_probe": 0,
+     "no_kernel_mode": 0
+    }
+   },
+   "explicit_message": "E4B_PAGED_FUSE_QKV=1 matched no attention module -- refusing a vacuous fusion",
+   "quality": {
+    "verdict": "QUALITY_PASS",
+    "reasons": [
+     "wikitext ON bias -0.00268 (bar 0.01204), K8 -0.0171",
+     "c4val1 ON bias +0.00355 (bar 0.01400), K8 +0.0417"
+    ],
+    "read": {
+     "wikitext": {
+      "stats": {
+       "rep": {
+        "n": 12,
+        "bias": 0.0,
+        "spread": 0.0,
+        "se": 0.0,
+        "max_abs": 0.0,
+        "mean_kl": 0.0,
+        "argmax_agree": 1.0
+       },
+       "half": {
+        "n": 48,
+        "bias": -0.002036206414203795,
+        "spread": 0.00905743533971969,
+        "se": 0.0016492223201185824,
+        "max_abs": 0.026760545878612874,
+        "mean_kl": 0.007462867236439764,
+        "argmax_agree": 0.9615885416666666
+       },
+       "chunk": {
+        "n": 48,
+        "bias": -1.0872153802243822e-05,
+        "spread": 0.010168773771613219,
+        "se": 0.0020193703810291235,
+        "max_abs": 0.04737878435570764,
+        "mean_kl": 0.008815250164675117,
+        "argmax_agree": 0.9617513020833334
+       },
+       "mutant_scale": {
+        "n": 48,
+        "bias": 2.8423474896888146,
+        "spread": 2.8423474896888146,
+        "se": 0.05796028327768746,
+        "max_abs": 3.9793996724121996,
+        "mean_kl": 2.9770133380699897,
+        "argmax_agree": 0.3037109375
+       },
+       "ON": {
+        "n": 48,
+        "bias": -0.002676384223838609,
+        "spread": 0.011119403118615331,
+        "se": 0.002063382101560312,
+        "max_abs": 0.0413659911253248,
+        "mean_kl": 0.007993391894231209,
+        "argmax_agree": 0.9627278645833334
+       }
+      },
+      "floor": {
+       "draws": [
+        "half",
+        "chunk"
+       ],
+       "B_floor": 0.002036206414203795,
+       "S_floor": 0.010168773771613219
+      },
+      "bias_bar": 0.012036206414203795,
+      "spread_bar": 0.020337547543226437,
+      "mutant_passes": false,
+      "on_passes": true,
+      "k8": {
+       "ppl_R": 6.402717990901516,
+       "ppl_ON": 6.385604768475457,
+       "delta": -0.01711322242605906,
+       "gated": true,
+       "passes": true
+      }
+     },
+     "c4val1": {
+      "stats": {
+       "rep": {
+        "n": 12,
+        "bias": 0.0,
+        "spread": 0.0,
+        "se": 0.0,
+        "max_abs": 0.0,
+        "mean_kl": 0.0,
+        "argmax_agree": 1.0
+       },
+       "half": {
+        "n": 48,
+        "bias": 0.0029309823171602967,
+        "spread": 0.012651146884592615,
+        "se": 0.0023925151056609353,
+        "max_abs": 0.05217409123906691,
+        "mean_kl": 0.008064464292037188,
+        "argmax_agree": 0.95556640625
+       },
+       "chunk": {
+        "n": 48,
+        "bias": 0.0040033247896333985,
+        "spread": 0.011700820326646738,
+        "se": 0.0019230131040832005,
+        "max_abs": 0.02800321250219895,
+        "mean_kl": 0.008968712915857827,
+        "argmax_agree": 0.9527994791666666
+       },
+       "mutant_scale": {
+        "n": 48,
+        "bias": 1.9702199495688486,
+        "spread": 1.9702199495688486,
+        "se": 0.08063083277288753,
+        "max_abs": 3.0852247507889814,
+        "mean_kl": 2.2656315530028857,
+        "argmax_agree": 0.3857421875
+       },
+       "ON": {
+        "n": 48,
+        "bias": 0.003554579538004532,
+        "spread": 0.0118625187997737,
+        "se": 0.002286353381650325,
+        "max_abs": 0.04839070584785077,
+        "mean_kl": 0.008279560779283199,
+        "argmax_agree": 0.9597981770833334
+       }
+      },
+      "floor": {
+       "draws": [
+        "half",
+        "chunk"
+       ],
+       "B_floor": 0.0040033247896333985,
+       "S_floor": 0.012651146884592615
+      },
+      "bias_bar": 0.014003324789633398,
+      "spread_bar": 0.02530229376918523,
+      "mutant_passes": false,
+      "on_passes": true,
+      "k8": {
+       "ppl_R": 11.704520437703186,
+       "ppl_ON": 11.746199117760566,
+       "delta": 0.04167868005738029,
+       "gated": false,
+       "passes": true
+      }
+     }
+    }
+   }
+  }
+ },
+ "verdict": "FLIP_HELD",
+ "reasons": [
+  "gptoss: SANE -- stats {'bias': 0.002163713381984659, 'argmax_agree': 0.923828125, 'mean_kl': 0.02990817611013578, 'n': 12}"
+ ],
+ "granite": {
+  "verdict": "GRANITE_LICENSED",
+  "reasons": [
+   "wikitext ON bias -0.00268 (bar 0.01204), K8 -0.0171",
+   "c4val1 ON bias +0.00355 (bar 0.01400), K8 +0.0417"
+  ]
+ },
+ "bars": {
+  "sane_bias": 0.02,
+  "sane_argmax": 0.95,
+  "sane_windows": 12,
+  "quality": {
+   "tol": 0.01,
+   "spread_x": 2.0,
+   "spread_min": 0.005,
+   "k8_budget": 0.05,
+   "k8_gated": [
+    "wikitext"
+   ],
+   "windows": 48
+  }
+ }
+}
