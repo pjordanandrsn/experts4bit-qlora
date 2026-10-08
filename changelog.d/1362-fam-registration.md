@@ -10,7 +10,8 @@
   - **Floor:** each family's own neutral draws: prefill chunking, half-batch grouping, and one KV split
     (`n_split=1`).
   - **Gate:** relative to the floor's worst draw, with a backstop (|bias| ≤ 0.02 nats, agreement ≥ 0.90).
-  - **Mutants:** P108's scale mutant must fail. A graded × 0.98 mutant that passes makes the read UNRESOLVED.
+  - **Mutants:** P108's scale mutant must fail. A graded × 0.90 mutant that passes makes the read UNRESOLVED; a PASS is
+    a null read of that size (no effect as large as a 10 % softmax-temperature change).
 - **Readings.** gpt-oss-20b one knob per arm (and all `auto`) on the default server, plus an anchor cell at Phase C's
   SC2g setting; Granite and Qwen3.6 all `auto`.
 - **Rule.** VOID → UNRESOLVED → FAIL → **PASS**, which licenses a separate allowlist PR.

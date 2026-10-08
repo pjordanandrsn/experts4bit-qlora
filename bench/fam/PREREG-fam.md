@@ -52,8 +52,8 @@ fp32 log-probs, teacher-forced; the true token's NLL, the argmax, KL against R.
 | half | OFF | floor, shape 12 only: the group decoded as two halves of 6, each padded to bucket 8 (batch grouping) |
 | split1 | OFF | floor: every decode attention forced to one KV split, `n_split=1` (decode summation order) |
 | mutant_scale | OFF | P108's mutant, decode softmax scale × 0.5: gross; the gate must fail it |
-| mut098 | OFF | the graded mutant, softmax scale × 0.98: the gate's resolution test |
-| mut095, mut090 | OFF | × 0.95 and × 0.90 on set A only: the resolution ladder, reported |
+| mut090 | OFF | the graded mutant, softmax scale × 0.90: the gate's resolution test, on every set |
+| mut095, mut098 | OFF | × 0.95 and × 0.98 on set A only: the ladder, reported, never gated |
 | ON | ON_* | the config's knobs; scored against the cell's R |
 
 `split1` and the graded mutants wrap `Fp8PagedKV.attention` below P108's counting wrapper, outside every staged file.
@@ -79,12 +79,19 @@ did not repeat R. A draw bit-identical to R on every window is not a draw; the r
 
 The gated cells are both texts at both shapes on the default server. An arm passes the family iff it passes all four.
 
-**Resolution.** `mut098` is scored as an arm in every gated cell.
-- If it **passes** the gate in any gated cell, the instrument lacks resolution at that size on that family. The verdict
-  is UNRESOLVED, and **no gate is licensed for that family**, whatever ON scored.
-- `mut095` and `mut090` (set A, both texts and shapes) report the size the instrument does resolve, for the amendment an
-  UNRESOLVED read would need.
+**Resolution.** `mut090` is scored as an arm in every gated cell, on the box's own card.
+- If it **passes** the gate in any gated cell, the instrument cannot resolve a 10 % softmax-temperature change on that
+  family. The verdict is UNRESOLVED, and **no gate is licensed for that family**, whatever ON scored.
+- A PASS is therefore a null read of stated size: **no effect on that family as large as a 10 % change of the decode
+  softmax temperature.** For scale, Phase C's gpt-oss folds read KL 0.030 and argmax agreement 0.924 against R. The
+  seat A2000's × 0.90 on Granite read KL 0.021–0.024 and agreement 0.924–0.939 (below). So an effect the size of the one
+  that held gpt-oss is inside what this gate sees.
+- `mut095` and `mut098` (set A, both texts and shapes) report finer sizes, never gated.
 - `mutant_scale` must fail every cell, or the read is VOID: the gate cannot fail.
+- **Why × 0.90 and not × 0.98** (changed in review, before any box): on the A2000 run below, × 0.98 sat inside Granite's
+  own floor on all four cells. A gate whose resolution test sits inside the reorder floor can never resolve anything;
+  × 0.90 failed all four. The A2000 calibrated the choice; it does not stand in for the box, where × 0.90 must fail
+  again on each family.
 
 ## The readings (FAM2a)
 
@@ -120,7 +127,7 @@ question Phase C could not: knob or gate. It licenses nothing.
 levers), the census, the fusion modes, grouped-nf4-gemm's NF4 dispatch tally per cell, peak memory, and every pass's
 engagement.
 
-## The rule (`bench/fam/fam_reduce.py`, self-tested on 40 cases)
+## The rule (`bench/fam/fam_reduce.py`, self-tested on 42 cases)
 
 The verdict for each (family, ON config) is the first of these that applies.
 
@@ -143,7 +150,7 @@ The verdict for each (family, ON config) is the first of these that applies.
    - no peak memory;
    - a (text, shape) with no floor draw;
    - `mutant_scale` passing the gate in any cell.
-2. **UNRESOLVED.** `mut098` passes the gate in any gated cell.
+2. **UNRESOLVED.** `mut090` passes the gate in any gated cell.
 3. **FAIL.** ON fails the gate in any gated cell.
 4. **PASS** otherwise.
 
@@ -155,7 +162,7 @@ The verdict for each (family, ON config) is the first of these that applies.
 | F2 | `split1` is not bit-identical to R in any cell on the real kernel |
 | F3 | gpt-oss's floor is wider than Qwen3's and Granite's: A_f at (wikitext, 12) in [0.88, 0.94] |
 | F4 | the anchor: Phase C's 0.924 lies within gpt-oss's own SC2g floor (≥ A_f − 0.005), about 60 % |
-| F5 | `mut098` fails the gate on every family (the instrument resolves × 0.98), about 65 %; `mut090` fails everywhere, about 95 % |
+| F5 | `mut090` fails the gate in every gated cell on every family, about 85 % (gpt-oss's wider floor is the risk); `mut098` passes everywhere it runs, about 80 % |
 | F6 | Granite ON_auto PASS, about 70 %: Phase C's T == 12 read passed, and the proof's T == 1 bias of −0.0139 was at proof scale |
 | F7 | Qwen3.6 ON_auto PASS, about 85 %: only the router epilogue engages, and it was token-identical in Phase C |
 | F8 | gpt-oss: ON_epi PASS about 75 %; ON_glue and ON_r2 PASS about 65 % each; ON_auto PASS about 55 % |
@@ -168,14 +175,8 @@ The verdict for each (family, ON config) is the first of these that applies.
   needs. For gpt-oss, each knob licenses alone; ON_auto licenses all three together.
 - **FAIL:** the knob or knobs stay off on that family by default. The gate statistic that failed, and the cell, are
   named in RESULTS-fam.md.
-- **UNRESOLVED:** no gate is licensed for that family. Before any default, an amendment re-reads it with more windows,
-  and the window count is fixed here, from the ladder:
-  - per set: 12 × ⌈(δ / 0.02)²⌉, where δ = 1 − the ladder rung closest to 1 that failed;
-  - δ = 0.05 (× 0.95 failed) gives 84 windows; δ = 0.10 (only × 0.90 failed) gives 300;
-  - this assumes the mutant's effect grows linearly with its deviation and the standard error falls as one over the
-    square root of the windows;
-  - if neither rung fails, or the count does not fit the lane ceiling, no gate is licensed for that family under this
-    design.
+- **UNRESOLVED:** × 0.90 sat inside that family's own floor, so no gate is licensed for it under this design. Any
+  amendment gates on × 0.80 at the same windows. That rung is fixed here, so it is not chosen after the data.
 - **VOID:** no consequence; one rerun inside the ceiling, then an amendment.
 - **The anchor** changes no default. It is quoted beside the gpt-oss verdicts so 0.924 is read against its own floor.
 
@@ -218,13 +219,33 @@ verdict is not a reading. The reducer's tables are scaled to the proof's positio
 
 ## What was seen before this page (stated, not hidden)
 
-- **No FAM data exists.** Every number above is cited from P115's and P101's receipts and the register.
+- **No FAM reading exists.** Every number above is cited from P115's and P101's receipts and the register, except the
+  A2000 correctness run below.
 - **Locally (CPU):** `tests/test_fam_box.py` runs one family end to end on a tiny gpt-oss in bf16 (stand-in attention
   and glue kernels, R unpadded): every cell, arm and config; then the reducer's integrity checks on those records with
   the tiny model's constants, with no VOID. It also checks the census and per-step table above on tiny gpt-oss,
   Granite and Qwen3.5-MoE models.
-- **On the seat A2000 (sm_86; correctness only, no timing):** pending. The A2000 run is in progress; this item is
-  written from its records before the PR leaves draft.
+- **On the seat A2000 (sm_86; correctness only, no timing), Granite-3.1-3b at the pin above.** This was the instrument
+  end to end on real weights. Granite's NF4 arena was baked on the card at 2026-10-08T20:28:57Z. OFF ran
+  20:30:54Z–21:06:51Z and ON_auto 21:08:10Z–21:14:34Z (clock-read from the logs and the record files).
+  - **Setup:** grouped-nf4-gemm 0.43.0 at the pin; set A only, both texts and both shapes, 128 positions. R is unpadded
+    (`device_grouping` only), because the padded bucket path needs the fused fp8 KV append (sm_89+). At shape 1 that is
+    the same arithmetic. Granite's attention computes f32 on the 5090 too (head_dim 64).
+  - **Integrity:** the reducer's checks pass on both records, with Granite's registered census
+    (`0 / 65 / [32, 32] / 32`) and per-step counts.
+  - **Floor draws:** `split1` is a floor draw on the real kernel in every cell; `rep` repeated R bit for bit.
+  - **Expert route:** T == 1 ran grouped-nf4-gemm's scalar NF4 GEMV (Granite's shapes are in neither GEMV table).
+  - **Peak:** 4.91 GiB.
+  - **Floor** (worst draw over `chunk`, `half` and `split1`): agreement 0.956–0.962, |bias| ≤ 0.0053 nats, KL ≤ 0.0089.
+    That is P115's 5090 Granite floor (0.953–0.962).
+  - **Mutants:**
+    - `mutant_scale` fails by 1.80–2.71 nats.
+    - **× 0.98 sat inside the floor on all four cells** (agreement 0.956–0.968, KL 0.0075–0.0094).
+    - × 0.95 passed wikitext and failed c4val1.
+    - × 0.90 failed all four (agreement 0.924–0.939, bias 0.012–0.023, KL 0.021–0.024).
+    - This is why the review moved the gating rung from × 0.98 to × 0.90 (Resolution, above).
+  - **ON_auto:** inside the gate on all four cells (bias −0.0053 to +0.0041, agreement 0.964–0.971, KL 0.0071–0.0078).
+    This is not a reading: A2000, one set, unpadded R. The box's read decides.
 
 ## What this lane cannot say
 

@@ -18,8 +18,8 @@ Cells. Every (text, shape, set) is one cell with its own reference:
 - the floor: ``chunk`` (prompts prefilled in 256-token chunks), ``half`` (shape 12 only: two halves of 6, each padded
   to bucket 8), ``split1`` (every decode attention forced to ONE KV split, ``n_split=1``: the same sums in another
   order);
-- the mutants: ``mutant_scale`` (P108's: decode softmax scale x0.5, gross) and the graded ``mut098`` (x0.98); the ladder
-  ``mut095`` / ``mut090`` on set A only (reported resolution).
+- the mutants: ``mutant_scale`` (P108's: decode softmax scale x0.5, gross) and the graded ``mut090`` (x0.90, the
+  gate's resolution test); the ladder ``mut095`` / ``mut098`` on set A only (reported).
 ``--config ON_*`` scores ``ON`` against the cell's saved R.
 
 ``split1`` and the graded mutants wrap the decode attention (``Fp8PagedKV.attention``, and P108's stand-in on CPU)
@@ -59,8 +59,9 @@ TEXTS = ("wikitext", "c4val1")
 SHAPES = (1, 12)
 SETS = {"A": (0, 12), "B": (12, 24), "C": (24, 36)}
 FLOOR_ARMS = ("rep", "chunk", "half", "split1")
-GRADED = {"mut098": 0.98, "mut095": 0.95, "mut090": 0.90}
-LADDER_SETS = ("A",)                                  # mut095 / mut090 run on set A only
+GRADED = {"mut090": 0.90, "mut095": 0.95, "mut098": 0.98}
+GATING_MUTANT = "mut090"                              # must fail every gated cell (PREREG "Resolution")
+LADDER_SETS = ("A",)                                  # the ladder, mut095 / mut098, runs on set A only
 CENSUS_KEYS = ("fuse_qkv_n", "fuse_t1_glue_n", "fuse_t1_glue_r2_n", "fuse_router_epilogue_n")
 STORE_KEYS = ("int4_expert_layers", "int4_store_kinds", "levers_env", "grouping", "model_type", "moe_layers", "top_k")
 
@@ -91,7 +92,7 @@ def off_arms(shape: int) -> tuple:
 
 def extra_arms(set_: str) -> tuple:
     """The arms scored against the saved R under a wrapper, in the OFF process."""
-    return ("split1", "mut098") + (("mut095", "mut090") if set_ in LADDER_SETS else ())
+    return ("split1", GATING_MUTANT) + (("mut095", "mut098") if set_ in LADDER_SETS else ())
 
 
 class AttnWrap(contextlib.AbstractContextManager):
@@ -255,10 +256,10 @@ def self_test() -> int:
           not env_ok("ON_x", "default", on)[0], not env_ok("OFF", "nf4", dict(_OFF))[0],
           off_arms(1) == ("R", "rep", "chunk", "mutant_scale"),
           off_arms(12) == ("R", "rep", "chunk", "half", "mutant_scale"),
-          extra_arms("A") == ("split1", "mut098", "mut095", "mut090"), extra_arms("B") == ("split1", "mut098"),
+          extra_arms("A") == ("split1", "mut090", "mut095", "mut098"), extra_arms("B") == ("split1", "mut090"),
           [SETS[k] for k in "ABC"] == [(0, 12), (12, 24), (24, 36)], cell_key("wikitext", 1, "A") == "wikitext|1|A",
           arm_wrap("split1").n_split == 1 and arm_wrap("split1").factor is None,
-          arm_wrap("mut098").factor == 0.98 and arm_wrap("mut098").n_split is None]
+          arm_wrap("mut090").factor == 0.90 and arm_wrap("mut090").n_split is None, GATING_MUTANT == "mut090"]
     try:
         arm_wrap("R")
         ok.append(False)

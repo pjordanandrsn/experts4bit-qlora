@@ -2,8 +2,8 @@
 # tests/test_fam_staged_pin.py resolve each name to its source (bench/fam, bench/p115, bench/p110, bench/p108, bench/p97,
 # bench/p39, bench/p98, tests) and compare.
 61e5a3ca222bc9a66fc37ae64894178dfcba94b4b9266064378c5993d8132264  fam_run.sh
-882dee5bf04f0a9645b35b05512ec4d6b3bdf802eae4688c26eb14c70eaddb65  fam_box.py
-f803ca10aad430201b0b84d169c9b54b0ace16a94e8a874ea86b15f677d65e57  fam_reduce.py
+84bfa7ac1126100724e0de7cfb0a00ec5b37592767e8a31a6654eb98c188e669  fam_box.py
+a34f70dea48af6cc5b9825a875c58a3d5369e699e74e29bc30b4262ccd5dd249  fam_reduce.py
 f1500a26404284fbb14cce214c548d73b3889e9db5ef1faf5ef63bf74449b574  p115_quality.py
 02d82d88259c169060f78e47c219e7dfd82d146dd80e0c7c3b0e3acdfca252cf  p110_box.py
 b57dff71cba30d9c649bae05df28f8c5376de9f7ac7ae5759157e57475b83e4b  p108_box.py

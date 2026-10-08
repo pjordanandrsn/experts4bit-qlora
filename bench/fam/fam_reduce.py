@@ -8,7 +8,8 @@ one verdict per (family, ON config): the first rung that applies.
    count (OFF passes call no glue kernel); a wrapped arm whose wrapper did not touch every decode attention call; the
    expert store not the path's (the default path: no int4 / MXFP4 store); no peak memory; a cell with no floor draw
    (every floor arm bit-identical to R); ``mutant_scale`` passing the gate in any cell (the gate cannot fail).
-2. UNRESOLVED -- the graded mutant ``mut098`` passes the gate in any gated cell: the instrument lacks resolution at that
+2. UNRESOLVED -- the graded mutant ``mut090`` (softmax scale x0.90) passes the gate in any gated cell: the instrument lacks
+   resolution at that
    size, and no gate is licensed for the family.
 3. FAIL -- the ON config fails the gate in any gated cell.
 4. PASS -- otherwise.
@@ -268,9 +269,9 @@ def reduce_family(fam, recs, e4b_sha, proof=False):
         why.append(f"mutant_scale passes the gate in {[k for k, v in scale.items() if v['pass']]}: the gate cannot fail")
     if why:
         return {"verdict": {c: "VOID" for c in configs if c != "OFF"}, "why": why, "report": report}
-    graded = judge(off, "mut098", cells, fl)
-    report["mut098"] = graded
-    report["ladder"] = {arm: judge(off, arm, [c for c in cells if c.endswith("|A")], fl) for arm in ("mut095", "mut090")}
+    graded = judge(off, fam_box.GATING_MUTANT, cells, fl)
+    report[fam_box.GATING_MUTANT] = graded
+    report["ladder"] = {arm: judge(off, arm, [c for c in cells if c.endswith("|A")], fl) for arm in ("mut095", "mut098")}
     unresolved = [k for k, v in graded.items() if v["pass"]]
     verdict = {}
     for config in configs:
@@ -283,7 +284,7 @@ def reduce_family(fam, recs, e4b_sha, proof=False):
         else:
             verdict[config] = "PASS" if all(v["pass"] for v in j.values()) else "FAIL"
     if unresolved:
-        why.append(f"mut098 passes the gate in {unresolved}: no gate licensed for {fam}")
+        why.append(f"{fam_box.GATING_MUTANT} passes the gate in {unresolved}: no gate licensed for {fam}")
     return {"verdict": verdict, "why": why, "report": report}
 
 
@@ -332,8 +333,8 @@ def reduce_all(recs, e4b_sha, proof=False):
 
 # ------------------------------------------------------------------------------------------------- self-test --
 
-def _synthetic(fam, config, *, floor_d=0.002, floor_agree=0.95, on_d=0.0, on_agree=0.97, mut098_d=0.05,
-               mut098_agree=0.80, scale_d=1.0, e4b="E", seed=0, cont=CONT):
+def _synthetic(fam, config, *, floor_d=0.002, floor_agree=0.95, on_d=0.0, on_agree=0.97, graded_d=0.05,
+               graded_agree=0.80, scale_d=1.0, e4b="E", seed=0, cont=CONT):
     """A record that passes every integrity check; the arms' scores are set by the arguments."""
     import random
     rng = random.Random(seed)
@@ -371,9 +372,9 @@ def _synthetic(fam, config, *, floor_d=0.002, floor_agree=0.95, on_d=0.0, on_agr
                             "engagement": {t: {a: eng(1 if a == "rep" else npass, a, s) for a in arms}}}
                     extra = {}
                     for arm in fam_box.extra_arms(name):
-                        d, ag = (floor_d / 2, floor_agree + 0.01) if arm == "split1" else (mut098_d, mut098_agree)
-                        if arm in ("mut095", "mut090"):
-                            d, ag = mut098_d * 3, mut098_agree - 0.05
+                        d, ag = (floor_d / 2, floor_agree + 0.01) if arm == "split1" else (graded_d, graded_agree)
+                        if arm in ("mut095", "mut098"):                       # the ladder: smaller than the gating rung
+                            d, ag = graded_d / 3, min(1.0, graded_agree + 0.05)
                         e = eng(npass, arm, s)
                         extra[arm] = {"record": {**sub, "per_window": {t: {arm: rows(12, d, ag, 0.01)}},
                                                  "engagement": {t: {arm: e}}},
@@ -425,8 +426,21 @@ def self_test() -> int:
     case("a wide floor still meets the backstop", "gptoss", r, "FAIL")
     r = _fam_recs("gptoss", floor_agree=0.88, on_agree=0.885)
     case("argmax under the 0.90 backstop fails", "gptoss", r, "FAIL")
-    r = _fam_recs("gptoss", mut098_d=0.001, mut098_agree=0.96)
-    case("a passing graded mutant is UNRESOLVED", "gptoss", r, "UNRESOLVED")
+    r = _fam_recs("gptoss", graded_d=0.001, graded_agree=0.96)
+    case("a passing graded mutant (x0.90) is UNRESOLVED", "gptoss", r, "UNRESOLVED")
+    r = _fam_recs("gptoss")
+    for cell, c in r["OFF"]["cells"].items():
+        if cell.startswith("wikitext|1|"):                                # x0.90 inside the floor in one cell only
+            for x in c["extra"]["mut090"]["record"]["per_window"]["wikitext"]["mut090"]:
+                x.update(nll=2.001, argmax_agree=0.96)                   # R's NLL is 2.0 on every window
+    case("x0.90 passing in one gated cell is enough for UNRESOLVED", "gptoss", r, "UNRESOLVED")
+    r = _fam_recs("gptoss")
+    for cell, c in r["OFF"]["cells"].items():
+        if cell.endswith("|A"):                                           # the ladder passing changes nothing
+            for arm in ("mut095", "mut098"):
+                for x in c["extra"][arm]["record"]["per_window"][cell.split("|")[0]][arm]:
+                    x.update(argmax_agree=0.97)
+    case("a passing ladder rung (x0.95, x0.98) is reported, not gated", "gptoss", r, "PASS")
     r = _fam_recs("gptoss", scale_d=0.001)
     for c in r["OFF"]["cells"].values():
         for t, arms in c["base"]["per_window"].items():
