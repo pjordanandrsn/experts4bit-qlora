@@ -135,7 +135,7 @@ def resolve_buckets(buckets, max_seqs: int) -> tuple:
 #: (0.84 / 0.69), so the default list offers 64 or 16. With ``E4B_PAGED_BUCKETS=auto`` (opt-in) 32 was read too (s32a).
 MAX_SEQS_AUTO_WIDTHS = (64, 16)
 MAX_SEQS_AUTO_WIDTHS_AUTO_BUCKETS = (64, 32, 16)
-MAX_SEQS_AUTO_MARGIN_BYTES = 1 << 30
+MAX_SEQS_AUTO_MARGIN_BYTES = 3 << 29   # 1.5 GiB (the arithmetic is in choose_max_seqs's docstring)
 #: The first-chunk prefill graph's private pool is not in the estimate (the server measures it at capture). The
 #: chooser reserves ``chunk_tokens x hidden_size x n_layers x`` this many bytes for it: an upper bound on every pool
 #: measured at 512 tokens (lane SV1: 0.24 GiB on OLMoE-1B-7B and 0.57 GiB on Qwen3-30B-A3B at NF4; lane SC2e: 0.42 GiB
@@ -163,9 +163,11 @@ def choose_max_seqs(topology, setup: "ServeSetup", free_bytes, *, widths=MAX_SEQ
     KV flush's ceiling, so each width is priced whole. Returns the choice with every candidate's arithmetic, for
     ``/health``.
 
-    Lane SC2e measured Qwen3-30B-A3B int4 on an RTX 5090 at 2,048 tokens a slot 1.96-2.28 GiB above this estimate at
-    ready (CUDA context, the prefill graph's pool, allocator reserve), and no higher under load; the reserve and the
-    margin cover all but the context, which ``free_bytes`` already excludes."""
+    The margin's arithmetic: lane SC2e measured Qwen3-30B-A3B int4 on an RTX 5090 at 2,048 tokens a slot using
+    1.96-2.28 GiB more than this estimate at ready (the CUDA context, the prefill graph's pool, allocator reserve), and
+    no more under load. ``free_bytes`` is read after the context exists (~0.5 GiB), so up to ~1.8 GiB of that gap is
+    left to cover. The reserve (0.75 GiB on that model) plus the 1.5 GiB margin cover 2.25 GiB, so a width whose need
+    lands just under the free memory is refused rather than run out of memory at load."""
     floor = min(int(w) for w in widths)
     out = {"max_seqs": floor, "free_bytes": None if free_bytes is None else int(free_bytes),
            "margin_bytes": int(margin_bytes), "candidates": []}

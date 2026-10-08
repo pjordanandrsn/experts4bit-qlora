@@ -88,9 +88,25 @@ def test_auto_takes_64_slots_where_sc2e_read_them_and_the_estimate_fits():
     r = choose_max_seqs(topo, ServeSetup(max_tokens_per_seq=2048, exp_int4=True, attn_int4=True), FREE_5090)
     assert r["max_seqs"] == 64 and MAX_SEQS_AUTO_WIDTHS == (64, 16)
     assert [c["max_seqs"] for c in r["candidates"]] == [64, 16] and r["candidates"][0]["fits"]
-    # each width is priced whole: estimate (weights, pool, scratch, bulk flush) + the prefill-graph reserve + 1 GiB
+    # each width is priced whole: estimate (weights, pool, scratch, bulk flush) + the prefill-graph reserve + 1.5 GiB
     c = r["candidates"][0]
-    assert c["need_bytes"] == c["estimate_bytes"] + c["prefill_graph_reserve_bytes"] + GIB
+    assert c["need_bytes"] == c["estimate_bytes"] + c["prefill_graph_reserve_bytes"] + 3 * GIB // 2
+    assert FREE_5090 - c["need_bytes"] > 3 * GIB                  # the measured case keeps ~3 GiB beyond the margin
+
+
+def test_auto_refuses_a_width_whose_need_lands_just_under_the_free_memory():
+    """The margin is what stops `auto` picking a width that would run out of memory at load (the #1334 review): with
+    the estimate plus the reserve 1 MiB under the free memory, 64 is refused and 16 taken; 64 needs the full margin."""
+    from experts4bit_qlora.serve_recipe import MAX_SEQS_AUTO_MARGIN_BYTES, ServeSetup, choose_max_seqs
+    assert MAX_SEQS_AUTO_MARGIN_BYTES == 3 * GIB // 2
+    topo = _qwen3_30b()
+    st = ServeSetup(max_tokens_per_seq=2048, exp_int4=True, attn_int4=True)
+    c64 = choose_max_seqs(topo, st, FREE_5090)["candidates"][0]
+    bare = c64["estimate_bytes"] + c64["prefill_graph_reserve_bytes"]           # the need before the margin
+    eps = 1 << 20
+    assert choose_max_seqs(topo, st, bare + eps)["max_seqs"] == 16              # need == free - eps: refused
+    assert choose_max_seqs(topo, st, bare + MAX_SEQS_AUTO_MARGIN_BYTES - 1)["max_seqs"] == 16
+    assert choose_max_seqs(topo, st, bare + MAX_SEQS_AUTO_MARGIN_BYTES)["max_seqs"] == 64
 
 
 def test_auto_never_takes_64_at_4096_tokens_a_slot_on_a_32_gb_card():

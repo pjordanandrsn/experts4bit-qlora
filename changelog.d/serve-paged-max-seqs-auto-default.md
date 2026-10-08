@@ -10,17 +10,17 @@
     on the default bucket list; 64, 32 or 16 with `E4B_PAGED_BUCKETS=auto`. An integer keeps its meaning.
   - The fit (`serve_recipe.choose_max_seqs`): the estimate's device total for the width, a reserve for the prefill
     graph's pool (`prefill_graph_reserve_bytes`: `chunk_tokens x hidden_size x layers x 16 B`, above every pool
-    measured), and 1 GiB must fit. No CUDA device, the solver placement, or nothing fitting: 16.
+    measured), and 1.5 GiB must fit. No CUDA device, the solver placement, or nothing fitting: 16.
   - `/health` gains `engine.max_seqs_requested` and `engine.max_seqs_resolution`.
 - **What it picks for Qwen3-30B-A3B int4.** 64 on an RTX 5090 at 2,048 tokens a slot; 16 at the default 4,096; 16 on a
   24 GB card.
 - **The way back.** `E4B_PAGED_MAX_SEQS=16`.
-- **Outputs under load.** Serial output is byte-identical. Under load a request's greedy text depends on the
-  requests it is batched with; wider batches change it more often (`docs/SERVING.md`).
+- **Outputs under load.** Serial output is byte-identical. Under load, output text differs from unbatched output;
+  that comes from batching, not slots, but more slots mean more batching (`docs/SERVING.md`).
 - **Not changed.** The bucket list (`E4B_PAGED_BUCKETS=auto` stays opt-in until a teacher-forced read at buckets 32 and
-  64), the estimate itself, routes and kernels. Speed is read on one model, one card, 512-token prompts and 2,048
-  tokens a slot.
+  64), the estimate itself, routes and kernels. Measured on Qwen3-30B-A3B int4 on an RTX 5090; other models get the
+  widest width the estimate fits, not separately measured.
 - **Tests.** The chooser on Qwen3-30B-A3B's shape: 64 on a 5090 at 2,048 tokens, never 64 at 4,096, 16 on a 24 GB
-  card; a hybrid's per-slot state in the price and no prefill-graph reserve; 16 without a CUDA device or under the
+  card, 16 when 64's need lands within the margin of the free memory; a hybrid's per-slot state in the price and no prefill-graph reserve; 16 without a CUDA device or under the
   solver; the reserve against every measured pool. The env parser, the resolution's buckets, its fallback, and
   `/health`.

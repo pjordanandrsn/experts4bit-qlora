@@ -218,17 +218,18 @@ device's free memory (`serve_recipe.choose_max_seqs`):
 - **The fit.** `estimate_serve_footprint`'s device total for the width (weights, KV pool and scratch slots, a hybrid's
   per-slot linear-attention state, the bulk KV flush's ceiling), plus a reserve for the first-chunk prefill graph's pool
   (`chunk_tokens x hidden_size x layers x 16 B`: 0.75 GiB on Qwen3-30B-A3B, above the 0.42–0.57 GiB measured), plus
-  1 GiB, must fit the free memory. On SC2e's box the estimate sat 2.0–2.3 GiB under the memory used at ready, which
-  includes the CUDA context the free-memory reading already excludes.
+  1.5 GiB, must fit the free memory. On SC2e's box the server used 2.0–2.3 GiB more than the estimate at ready. About
+  0.5 GiB of that is the CUDA context, already outside the free memory; the reserve and the margin cover the rest.
 - **What it picks for Qwen3-30B-A3B int4.** On an RTX 5090: 64 at 2,048 tokens a slot; 16 at the default 4,096 (64
-  needs ~34 GiB; with `E4B_PAGED_BUCKETS=auto`, 32). On a 24 GB card: 16. Without a CUDA device, under the solver
+  needs ~35 GiB; with `E4B_PAGED_BUCKETS=auto`, 32). On a 24 GB card: 16. Without a CUDA device, under the solver
   placement, or when nothing fits: 16, as before.
 - **What SC2e read** (Qwen3-30B-A3B int4, one RTX 5090, 512-token prompts, 2,048 tokens a slot): 64 slots on the default
   list held the SLO to 8 req/s against 4 at 16 slots, and 64 with `E4B_PAGED_BUCKETS=auto` to 12. Serial TTFT and TPOT
-  were within 1 % and serial output byte-identical. Other models, prompt lengths and cards are unread for speed.
-- **Outputs under load.** A request's greedy text depends on the requests it shares a decode step with, at 16 slots as
-  at 64. Under load, SC2e's 64-slot server produced the 16-slot server's text on 0.46–0.74 of requests. Compare
-  outputs across loads with that in mind.
+  were within 1 % and serial output byte-identical. Measured on Qwen3-30B-A3B int4 on an RTX 5090; other models get
+  the widest width the estimate fits, not separately measured.
+- **Outputs under load.** Under load, output text differs from unbatched output: SC2e's 64-slot server produced the
+  16-slot server's text on 0.46–0.74 of requests. That comes from batching, not slots, but more slots mean more
+  batching.
 - `/health` reports `engine.max_seqs` (the width serving), `engine.max_seqs_requested` and
   `engine.max_seqs_resolution` (every candidate's arithmetic and the reason).
 
