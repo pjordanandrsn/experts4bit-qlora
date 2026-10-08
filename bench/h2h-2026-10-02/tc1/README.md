@@ -1450,3 +1450,53 @@ a Vast proxy blip (`-131`, `-132`). e4b `82ec6f1`, grouped-nf4-gemm `ab1a342` (#
 - **By amendment 66's rule** (P189–P192 and P194 HELD), the node becomes grouped-nf4-gemm's default (grouped-nf4-gemm#508). Reported,
   not scored: on this host e4b's matched arm at the defaults steps 8.97 s against Unsloth's 11.54.
 
+
+## Amendment 67 (2026-10-07): at the new defaults, Unsloth / e4b reads 1.773 on packed rows, all of it on the host (P195 FALSIFIED, high); e4b's memory within 1.04 GB / 0.30 GB of Unsloth's (P196, P197 HELD)
+
+Pre-registration: [`../../tc1/TC1-PREREG.md`](../../tc1/TC1-PREREG.md), amendment 67. One RTX 5090 (`tc1-5090-135`, AMD EPYC 7K62, a
+23-CPU quota, Vast machine 152440), after one draw refused at pre-flight for Hugging Face bandwidth (`-134`, 13.0 MB/s, $0.08). e4b
+`08ff61c`, grouped-nf4-gemm `9953bab` (#508, the compact bucketed delta on by default), Unsloth 2026.9.14, every arm in venv-unsloth (torch
+2.12.1). Packed 4,096-token rows, 40 load-gated steps; one draw (`pd_d2`) was voided at load1 12.85 and run again. Read:
+[`RESULTS-tc1-pos67.md`](RESULTS-tc1-pos67.md).
+
+| arm | s/step (two draws) | training peak (two draws) | held-out at N |
+|---|---|---|---|
+| e4b defaults (`pd`) | 9.052 / 9.025 | 25.91 / 25.89 GB | 0.95432 / 0.95448 |
+| e4b, `E4B_CKPT_OFFLOAD=1` (`po`) | 9.404 / 9.415 | 25.16 / 25.17 GB | 0.95437 / 0.95415 |
+| Unsloth (`pv`) | 16.014 / 16.036 | 24.86 / 24.86 GB | 0.95401 / 0.95436 |
+
+- **P195 FALSIFIED, high:** Unsloth / e4b **1.773** [1.769, 1.777] against a registered [1.15, 1.45].
+- **P196 HELD:** e4b's defaults peak **1.040 GB** above Unsloth's training phase (≤ 1.2).
+- **P197 HELD:** with the offload, **0.303 GB** above (≤ 0.5).
+- **P198 FALSIFIED:** the offload costs **1.041** of the step (≤ 1.03). Amendment 64 read 1.023 on a Ryzen 9 5900XT. It stays opt-in.
+- **P199 HELD:** mean held-out at N 0.95440 (e4b) against 0.95419 (Unsloth).
+
+**What moved the ratio** (P195's rule). No e4b default did: e4b stepped 9.04 s here against 8.97 s on amendment 66's i9-14900K. Unsloth
+stepped 16.03 s against 11.54 there. Unsloth's packed step by machine, every VALID draw on file:
+
+| box | Vast machine | CPU | Unsloth s/step |
+|---|---|---|---|
+| `tc1-5090-91` | 152440 | AMD EPYC 7K62 | 16.027 / 16.030 |
+| `tc1-5090-112` | 152440 | AMD EPYC 7K62 | 16.296 |
+| `tc1-5090-135` | 152440 | AMD EPYC 7K62 | 16.014 / 16.036 |
+| `tc1-5090-115` | 152169 | AMD Ryzen 9 7900 | 11.300 |
+| `tc1-5090-122` | 150333 | AMD EPYC 9655 | 11.651 |
+| `tc1-5090-130` | 153193 | AMD Ryzen 9 9950X | 11.144 |
+| `tc1-5090-133` | 139369 | Intel Core i9-14900K | 11.542 |
+
+On machine 152440 e4b's matched arm went 11.20 s (`-91`) to 10.41 s (`-112`, its defaults then) to 9.04 s, while Unsloth's stayed at
+16.0–16.3 s. The 1.773 is that machine's. Amendment 66's profile suggests why: per profiled step Unsloth ran 7.66 M CPU ops and 759 k
+device events against e4b's 1.08 M and 161 k. Its device time was 0.880 of its timed step, against e4b's 0.992. No Unsloth arm on machine
+152440 has been profiled, so the host explanation is a hypothesis. Amendment 68 tests it. No packed speed position is quoted from this box.
+
+## Amendment 68 registered: the packed-row position profiled
+
+Token `qwen3pos68`: e4b's defaults and Unsloth, two draws each in ABBA order, every arm profiled, on whichever host the launcher picks.
+- **P200:** device ms per profiled step, Unsloth / e4b, in [1.06, 1.24]. Amendment 66's box read 1.141.
+- **P201:** e4b's device share of the timed step exceeds Unsloth's by at least 0.08.
+- **P202:** Unsloth runs at least 5× e4b's CPU ops per step.
+- **P203:** read only on a slow host for Unsloth (its step at least 14.0 s). There, Unsloth's device share is at most 0.75 and its device
+  time within 8 % of amendment 66's.
+- **P204:** held-out within 0.01.
+
+If P200–P202 hold, STATUS quotes the device-time ratio as the packed position, with the wall-clock ratio per measured host beside it.

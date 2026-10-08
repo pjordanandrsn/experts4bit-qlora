@@ -2992,3 +2992,57 @@ checkpoint the tag names: `pd` the default reentrant checkpoint, `po` the offloa
 
 **Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Four e4b arms and two Unsloth
 arms: about $1.5 with the download.
+
+### Amendment 68 (2026-10-08T01:21Z, after amendment 67's read, before any box): the packed-row position profiled (P200–P204)
+
+**Why.** Amendment 67 (`tc1-5090-135`) read Unsloth / e4b at the new defaults at **1.773** against a registered [1.15, 1.45] (P195
+FALSIFIED). By its rule, the read names what moved the ratio. No e4b default did:
+- e4b stepped 9.04 s, against 8.97 s on amendment 66's box.
+- Unsloth stepped 16.03 s, against 11.54 s there.
+
+The box ran on Vast machine 152440 (AMD EPYC 7K62), which also ran `tc1-5090-91` and `tc1-5090-112`. Unsloth's packed step was
+16.03, 16.30 and 16.03 s on those three boxes. On four other machines it was 11.14–11.65 s (`tc1-5090-115`, `-122`, `-130`, `-133`).
+On the same machine, e4b's matched arm went 11.20 (box 91) → 10.41 (box 112, its defaults then) → 9.04 s as defaults landed.
+
+Amendment 66's profile (`tc1-5090-133`, i9-14900K) gives a mechanism. Per profiled step, Unsloth ran 7.66 M CPU ops and 759 k device
+events, against e4b's 1.08 M and 161 k. Its device time was 0.880 of its timed step, against e4b's 0.992. A step carrying about 7× the
+host work should lengthen on a host with slower cores while its GPU work stays put. That is untested on machine 152440 itself, because no
+Unsloth arm there was profiled. This box reads the position with both frameworks profiled, so the GPU-side ratio is separated from the host.
+
+**The box** (token `qwen3pos68`). Amendment 67's packed command and arms, without the offload arm: e4b `fused_attn4_m_pd` (the
+defaults) and Unsloth `ckpt_unsloth_m_pv`, two draws each in ABBA order (pd pv pv pd). Every arm is profiled
+(`--profile-steps 3 --profile-warm 3`) with `--phase-peaks 1`. One RTX 5090, venv-unsloth (torch 2.12), 40 load-gated steps,
+avoiding machines 145701, 130223 and 55583. No machine is chosen: the launcher's ranking picks the host.
+
+Validity (`pos68_why`): amendment 67's predicates on `pd`, plus a profile with CPU ops on every arm, Unsloth's included.
+
+`busy_t` is device ms per profiled step divided by the timed s/step (steps 11..N), as in amendment 53.
+
+**Predictions** (two VALID profiled draws a side, medians):
+- **P200:** device ms per profiled step, Unsloth / e4b defaults, in **[1.06, 1.24]**. Amendment 66's box read 10152 / 8897 = 1.141. The
+  GPU-side ratio should not depend on the host.
+- **P201:** e4b's `busy_t` exceeds Unsloth's by at least **0.08**. Amendment 66's box read 0.992 against 0.880.
+- **P202:** Unsloth's CPU ops per profiled step are at least **5×** e4b's. Amendment 66's box read 7.07×.
+- **P203** (read only if Unsloth's s/step is at least **14.0**, a slow host for Unsloth as on machine 152440): Unsloth's `busy_t` is at
+  most **0.75**, and its device ms per profiled step is within **8 %** of amendment 66's 10152. Below 14.0 s, P203 is UNTESTED.
+- **P204:** |mean held-out at N, e4b defaults − Unsloth| ≤ **0.01**.
+
+The s/step ratio is descriptive and quoted with its host.
+
+**Decision rules.**
+- **P200, P201 and P202 all HELD:**
+  - STATUS quotes the packed-row position as the device-time ratio, Unsloth's GPU work per step over e4b's, with no host attached.
+  - Beside it, STATUS gives the wall-clock ratio per measured host: 1.287 on the i9-14900K (amendment 66, one Unsloth draw), 1.773 on
+    machine 152440 (amendment 67), and this box's.
+  - STATUS says Unsloth's packed step carries several times e4b's host work, so its wall time depends on the host.
+- **P203 HELD:** STATUS attributes amendment 67's ratio to host time.
+- **P203 FALSIFIED:** the read says Unsloth's GPU work itself grew on the slow host, and the host explanation is withdrawn.
+- **P200 FALSIFIED:** the device ratio is host-dependent too. STATUS quotes per-host ratios only.
+- **P201 or P202 FALSIFIED:** the read says the host-work explanation does not hold, and amendment 67's ratio stays unexplained.
+- **P204 FALSIFIED:** quality is compared before any position is quoted.
+
+Amendment 67's memory reads stand (P196 and P197 HELD). P198 (the offload at 1.041 of the step against ≤ 1.03) is not re-read: the offload
+stays opt-in.
+
+**Budget.** One RTX 5090 at the policy rate ($0.85/h), 4 h guard, TC1's 98 GB host floor, venv-unsloth built. Two e4b arms and two
+Unsloth arms, all profiled: about $1.2 with the download.
