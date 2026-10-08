@@ -2239,6 +2239,8 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
   `e4b.train.decoded-route.qwen3.5090.2026-10-06`
 - `NF4_QLORA_SINGLE_LADDER=1` (grouped-nf4-gemm): 0.797 of the step with fp32 adapters on a host-bound box,
   1.015 with bf16 adapters (the shipped arm). `e4b.train.single-ladder.field.5090.2026-10-08`
+  Its `auto` (the ladder only with fp32 adapters) held its mechanism on a second host, but the step time went unread
+  there: the host was loaded. `e4b.train.single-ladder-auto.field.5090.2026-10-08`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
@@ -2340,7 +2342,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | one KV-table selection per step | decode graphs | `E4B_KV_STEP_SELECT=0` | `e4b.serve.p111.kv-step-select.qwen3.5090.2026-10-04` |
 | programmatic dependent launch, capped at 8 rows | grouped-nf4-gemm | `GNF4_PDL=0` | `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` |
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07` |
-| grouped small-M routes above T == 1 (K19, K23, K21, K25; K25 read on Granite and OLMoE, unread on Qwen3, which it serves at W16) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02` |
+| grouped small-M routes above T == 1 (K19, K23, K21, K25; K25 read on Granite, OLMoE and Qwen3's W16 step) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`, `e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07` |
 
@@ -2376,8 +2378,8 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Registered, not yet read:** TC1 amendment 71 (the single-block ladder's `auto`, which takes it only for fp32 adapters). The head-to-head campaigns stay open: training #835, serving #846,
-  single-stream decode #1313.
+- **Registered, not yet read:** TC1 amendment 72 (amendment 71's `auto` box again, on a third host). The head-to-head
+  campaigns stay open: training #835, serving #846, single-stream decode #1313.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.
@@ -3171,6 +3173,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.serve.sc2e.64-slots-default-buckets.qwen3.5090.2026-10-07 [measured]: Lane SC2e, one RTX 5090: e4b serve_paged on Qwen3-30B-A3B int4 with 64 slots on the 1-16 decode-graph buckets (a wider step chains 16-row replays) meets the SLO (TTFT <= 1.0 s and TPOT <= 100 ms for >= 0.95 of requests in both Poisson draws) up to 8 req/s, twice the 16-slot server's 4, with serial output byte-identical …
 - e4b.serve.sc2e.64-slots-buckets-auto.qwen3.5090.2026-10-07 [measured]: Lane SC2e, one RTX 5090: e4b serve_paged on Qwen3-30B-A3B int4 with 64 slots and decode-graph buckets up to 64 (E4B_PAGED_BUCKETS=auto) meets the SLO (TTFT <= 1.0 s and TPOT <= 100 ms for >= 0.95 of requests in both Poisson draws) up to 12 req/s (1.000 / 0.967), three times the 16-slot server's 4, with serial output …
 - e4b.serve.p120.wide-tiles.qwen3-int4.5090.2026-10-08 [measured]: Lane P120, one RTX 5090: on SC2e's served stack (Qwen3-30B-A3B int4 experts and int4 RTN attention, the folds, fused q/k/v), building the tile table above 256 routed rows in one launch (E4B_INT4_WIDE_TILES=1, grouped-nf4-gemm's cumsum rank) makes the captured 64-row decode step 1.44x slower (17.55 -> 25.31 ms), with …
+- e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08 [measured]: Lane P121, one RTX 5090: on the default serve_paged server (Qwen3-30B-A3B NF4, bucketed decode graphs, 16 slots), K25 (E4B_NF4_GROUPED_SMALLM=auto, the default since P96) decodes the served W16 step 1.57x as fast as the NF4 M-tile it replaces (E4B_NF4_GROUPED_SMALLM=0): 491 -> 771 tok/s, 32.6 -> 20.7 ms a step, with W1 …
 - e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08 [measured]: Lane P115 Phase C, one RTX 5090: auto on the four B=1 fusion knobs (E4B_PAGED_FUSE_QKV, E4B_FUSE_T1_GLUE, E4B_FUSE_T1_GLUE_R2, E4B_FUSE_ROUTER_EPI) at serve_paged's build engages by structure exactly as predicted: gpt-oss-20b 0 / 49 / [24, 0] / 24 (its attention carries sinks, so the rotary-only fold refuses …
 - e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08 [measured]: Lane P115 Phase C (Granite's full read, Amendment 2), one RTX 5090: the B=1 fusion knobs at auto on Granite-3.1-3b-a800m (engaged 0 / 65 / [32, 32] / 32; the q/k/v fusion refuses) score within P110's teacher-forced quality bar against the unfused server, with Phase B's instrument at Phase B's size. …
 - e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08 [measured]: Lane P115 Phase D, one RTX 5090: on the default serve_paged graph server (Qwen3-30B-A3B NF4, 16 slots, buckets 1-16 captured) with grouped-nf4-gemm 0.43.0's bandwidth decode GEMV at its default, the B=1 fused stack (the four fusion knobs at auto: fused q/k/v, the round-1 and round-2 glue folds and the router epilogue …
@@ -3226,6 +3229,7 @@ Active claims (projection of docs/claims.json, each quoted up to 320 characters;
 - e4b.train.h2h.unsloth.qwen3.5090.2026-10-08.field-device-ratio [measured]: TC1 amendment 69 (#835), one rented RTX 5090 (tc1-5090-137, AMD EPYC 7713, Vast machine 55913): TC1's field recipe (alpaca, seq 2048, micro-batch 2 x accum 4) over 60 load-gated steps with both frameworks on one stack (venv-unsloth, torch 2.12.1), e4b's matched arm at every current default against Unsloth 2026.9.14's …
 - e4b.train.single-ladder.field.5090.2026-10-08 [measured]: TC1 amendment 70 (#835), one rented RTX 5090 (tc1-5090-138, AMD EPYC 7K62, Vast machine 152440): grouped-nf4-gemm's opt-in single-block ladder (NF4_QLORA_SINGLE_LADDER=1, grouped-nf4-gemm#513) against the single padded block at TC1's field recipe over 60 load-gated steps, e4b at its defaults in venv-unsloth (torch …
 - e4b.train.dense-executor.dq7.5090.2026-10-08 [measured]: DQ7 of Loggetta dense execution is VOID: fourteen of sixteen architecture-only arms complete; the Qwen3-32B resident 4096 anchor is refused before load; Llama allocator estimates understate both placements at 2048 and 4096 tokens …
+- e4b.train.single-ladder-auto.field.5090.2026-10-08 [measured]: TC1 amendment 71 (#835), one rented RTX 5090 (tc1-5090-139, AMD EPYC 7763, Vast machine 150670): grouped-nf4-gemm's NF4_QLORA_SINGLE_LADDER=auto (grouped-nf4-gemm#514, the single-block ladder exactly when the adapters are fp32) against 0 at TC1's field recipe over 60 load-gated steps, e4b at its defaults in …
 
 Open items (no evidence either way):
 
@@ -3233,4 +3237,4 @@ Open items (no evidence either way):
 - e4b.open.tr2-repro-gap [open]: OPEN: no shipped tool bakes the arena. TRAIN_ARENA takes a path to a pre-baked arena, is undocumented in train.py --help, and nvme_arena.bake_expert_tensors only RELOCATES pre-quantised tensors, so reproducing the TR2 training receipt from published artifacts requires writing a quantise-and-emit step yourself (~60 …
 - e4b.open.int8-offload-confounded [open]: OPEN/DOWNGRADED: 'int8-offload posts the best training eval' is confounded. The audit found an evaluator offset (0.0026-0.0054) the same order as the placement gaps being claimed (0.0015-0.0108), and the bundle's consolidated CSV mislabels host for 6 of 12 repeat jobs.
 
-(421 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)
+(423 active claims listed, 3 open, 0 projected; retired and superseded claims are omitted on purpose.)

@@ -1,0 +1,17 @@
+dq3_egress_probe.py: OK
+dq3_vram_probe.py: OK
+llama31_8b.json: OK
+qwen3_14b.json: OK
+qwen3_32b.json: OK
+dq7_arm.py: OK
+dq7_subject.py: OK
+dq9_admission.py: OK
+dq9_arm.py: OK
+sha256sum: dq9_drive.sh: No such file or directory
+dq9_drive.sh: FAILED open or read
+dq9_phase.py: OK
+dq9_proof.py: OK
+dq9_reduce.py: OK
+dq9_run.sh: OK
+runtime.json: OK
+sha256sum: WARNING: 1 listed file could not be read

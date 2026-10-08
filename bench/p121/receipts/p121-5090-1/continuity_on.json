@@ -1,0 +1,882 @@
+{
+ "mode": "quality",
+ "arm": "Ct",
+ "e4b_sha": "e96e4be2eadca3427ad867ce83c744ce1b33988f",
+ "gnf4_sha": "56f90e3555b089cdc8fb508e42ea0d2c069ce8e5",
+ "model": "Qwen/Qwen3-30B-A3B",
+ "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+ "knobs": {
+  "E4B_NF4_GROUPED_SMALLM": "1",
+  "E4B_PAGED_FUSE_QKV": null,
+  "E4B_FUSE_T1_GLUE": null,
+  "E4B_FUSE_T1_GLUE_R2": null,
+  "E4B_FUSE_ROUTER_EPI": null,
+  "GNF4_GEMV_BW": null,
+  "GNF4_GEMV_BW_PLAN": null,
+  "GNF4_GEMV_BW_DECODE": null,
+  "E4B_NF4_T1_DEVICE_GROUPING": "0",
+  "E4B_INT4_LEAN_GLUE": null
+ },
+ "torch": "2.8.0+cu128",
+ "load_s": 28.77,
+ "fusions": {
+  "fuse_qkv_n": 0,
+  "fuse_t1_glue_n": 0,
+  "fuse_t1_glue_r2_n": [
+   0,
+   0
+  ],
+  "fuse_router_epilogue_n": 0
+ },
+ "model_type": "qwen3_moe",
+ "moe_layers": 48,
+ "top_k": 8,
+ "graph_status": null,
+ "grouping": {
+  "device_grouping": false,
+  "force_singleton_groups": false
+ },
+ "max_seqs": 16,
+ "buckets": [
+  1,
+  2,
+  4,
+  8,
+  16
+ ],
+ "prove": false,
+ "transformers": "5.17.0",
+ "routes_wrapped": [
+  "nf4_smallm.gemm_nf4_grouped_smallm",
+  "nf4_grouped.gemm_4bit_grouped_captured"
+ ],
+ "route_measure": {
+  "k25": 146304,
+  "mtile_small": 0,
+  "mtile_large": 1152
+ },
+ "phase": "on",
+ "arms": [
+  "ON"
+ ],
+ "windows": {
+  "wikitext": 12
+ },
+ "windows_sha256": {
+  "wikitext": "4c56f0bc6f19975189270f16a05d825e1c19357499e171e7f22e49fdbd8d83d9"
+ },
+ "group": 1,
+ "prompt": 512,
+ "cont": 128,
+ "chunk": 512,
+ "floor_chunk": 256,
+ "layers": 48,
+ "ref_kw": {
+  "device_grouping": true,
+  "padded": true
+ },
+ "rep_identical": {},
+ "counters_wrapped": [
+  "nf4_smallm.gemm_nf4_grouped_smallm",
+  "nf4_grouped.gemm_4bit_grouped_captured"
+ ],
+ "qkv_modules": 0,
+ "rehearsal": {
+  "stand_in_attention": false
+ },
+ "per_window": {
+  "wikitext": {
+   "ON": [
+    {
+     "window": 0,
+     "nll": 2.269789293969154,
+     "argmax_agree": 0.9921875,
+     "kl": 0.007916163362074735
+    },
+    {
+     "window": 1,
+     "nll": 2.8250698642679737,
+     "argmax_agree": 0.953125,
+     "kl": 0.007349365727848925
+    },
+    {
+     "window": 2,
+     "nll": 1.8561425983155688,
+     "argmax_agree": 0.96875,
+     "kl": 0.010345243371259638
+    },
+    {
+     "window": 3,
+     "nll": 1.9849254086333366,
+     "argmax_agree": 0.96875,
+     "kl": 0.007142202012933141
+    },
+    {
+     "window": 4,
+     "nll": 2.6372463070099057,
+     "argmax_agree": 0.953125,
+     "kl": 0.011498870196384708
+    },
+    {
+     "window": 5,
+     "nll": 1.7741275837911648,
+     "argmax_agree": 0.96875,
+     "kl": 0.0060290797570659305
+    },
+    {
+     "window": 6,
+     "nll": 1.9982471723876454,
+     "argmax_agree": 0.96875,
+     "kl": 0.005465406959797461
+    },
+    {
+     "window": 7,
+     "nll": 2.2725191929739283,
+     "argmax_agree": 0.9609375,
+     "kl": 0.010279742048509424
+    },
+    {
+     "window": 8,
+     "nll": 2.6435346504596424,
+     "argmax_agree": 0.96875,
+     "kl": 0.011101179159046182
+    },
+    {
+     "window": 9,
+     "nll": 1.8901669421282463,
+     "argmax_agree": 0.96875,
+     "kl": 0.015969061344657212
+    },
+    {
+     "window": 10,
+     "nll": 2.287963139262636,
+     "argmax_agree": 0.9453125,
+     "kl": 0.00953114014701456
+    },
+    {
+     "window": 11,
+     "nll": 1.5942857847114107,
+     "argmax_agree": 0.96875,
+     "kl": 0.005623249410188824
+    }
+   ]
+  }
+ },
+ "engagement": {
+  "wikitext": {
+   "ON": [
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 89.5,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 86.15,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 89.28,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 90.78,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 90.0,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 89.79,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 89.77,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 89.69,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 93.56,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 91.14,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 89.08,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    },
+    {
+     "device_grouping": true,
+     "padded": true,
+     "halves": false,
+     "reverse": false,
+     "graph_status": {
+      "1": "eager: capture=False",
+      "2": "eager: capture=False",
+      "4": "eager: capture=False",
+      "8": "eager: capture=False",
+      "16": "eager: capture=False"
+     },
+     "step_ms": 87.01,
+     "decode_calls": 6096,
+     "grouping_flags_in_pass": {
+      "device_grouping": true,
+      "force_singleton_groups": false
+     },
+     "graph_stats": {
+      "1": {
+       "replays": 0,
+       "eager_steps": 127,
+       "rows": 127,
+       "pad_rows": 0
+      },
+      "2": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "4": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "8": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      },
+      "16": {
+       "replays": 0,
+       "eager_steps": 0,
+       "rows": 0,
+       "pad_rows": 0
+      }
+     },
+     "kernels": {
+      "k25": 12192,
+      "mtile_small": 0,
+      "mtile_large": 96
+     },
+     "forwards": 128,
+     "qkv_calls": 0
+    }
+   ]
+  }
+ },
+ "seconds": 147.7,
+ "peak_build": {
+  "max_allocated": 22863462400,
+  "max_reserved": 22865248256,
+  "allocated": 22863462400,
+  "reserved": 22865248256
+ },
+ "peak": {
+  "max_allocated": 23132519424,
+  "max_reserved": 23156752384,
+  "allocated": 22875177984,
+  "reserved": 22902996992
+ },
+ "max_mem_gb": 21.54,
+ "status": "ok"
+}

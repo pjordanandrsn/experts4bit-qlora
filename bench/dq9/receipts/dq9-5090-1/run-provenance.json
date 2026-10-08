@@ -1,0 +1,40 @@
+{
+  "experiment_id": "dq9-5090-1",
+  "work_id": "experts4bit-qlora#1382",
+  "status": "HARNESS_ERROR",
+  "result": "fail",
+  "complete": true,
+  "started_at": "2026-10-08T20:55:45Z",
+  "finished_at": "2026-10-08T21:00:16Z",
+  "instance_id": "54910954",
+  "cost_usd": {
+    "actual": 0.058,
+    "estimated": 2.8
+  },
+  "notes": "command exited 9",
+  "teardown_proof": {
+    "at": "2026-10-08T21:00:16Z",
+    "complete": true,
+    "evidence": "{\"destroy\": {\"at\": \"2026-10-08T21:00:15Z\", \"http\": 200, \"instance_id\": \"54910954\", \"method\": \"vast-destroy\"}, \"instance_absent\": true, \"list_after\": [\"54893119\", \"54908429\"]}",
+    "instance_id": "54910954",
+    "method": "vast-destroy",
+    "reason": "completion"
+  },
+  "schema": "dq9-run-provenance/1",
+  "controller_commit": "2ee0e35cda67f222fb5e03c71219f3c72178723e",
+  "launcher_commit": "97733a14caaf6af7a247f10f386b95e72e0b2a2c",
+  "guard_armed_at": "2026-10-08T20:55:48Z",
+  "invoice": {
+    "download": 0.004,
+    "download_gb": 0.647,
+    "gpu": 0.046,
+    "lines": 4,
+    "read_at": "2026-10-08T21:00:16Z",
+    "storage": 0.008,
+    "upload": 0.0
+  },
+  "source_receipt_sha256": "f797dc2198d1485d35ecf1dff77eefae2f736c046cf7343a84c21464167b4d49",
+  "proof_count": 0,
+  "reading_count": 0,
+  "license": false
+}

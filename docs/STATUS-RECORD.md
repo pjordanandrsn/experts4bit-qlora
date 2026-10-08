@@ -202,6 +202,10 @@ grouped-nf4-gemm#513) puts the padded LoRA block's batched products on repeating
 **0.797** of its time. `aten::bmm`'s CPU time per call fell from 305 µs to 24.5 µs, for 4.1 % more device time and 0.33 GB more peak. With
 bf16 adapters (the shipped arm) it stepped 1.015: that `bmm` was already cheap. It stays opt-in. TC1 amendment 71 reads `auto`, which takes
 the ladder exactly when the adapters are fp32, as the candidate default.
+On a second host (`e4b.train.single-ladder-auto.field.5090.2026-10-08`) `auto` engaged only on the fp32 arm. `bmm`'s CPU time per call
+fell from 175 µs to 21 µs, device time rose 4.3 % there and 0.2 % on the bf16 arm, and held-out was unchanged. The step times went
+unread: the host's load rose through the box and the two draws of three arms differed by more than 5 %. `auto` stays opt-in until
+TC1 amendment 72 reads them on a third host.
 **Those positions read short rows.** The field recipe's Alpaca rows carry about 1,000–1,400 real tokens per step. On packed rows of
 4,096 real tokens (`e4b.train.h2h.unsloth.qwen3.5090.2026-10-05.packed-4k`, TC1 amendment 39) e4b at its defaults runs out of memory at
 step 1, allocating the fp32 copy of the full-vocabulary logits (2.32 GiB), while Unsloth trains the same rows at 24.86 GB: an e4b loss

@@ -161,6 +161,8 @@ host reuse) each stepped the field recipe at 0.847–0.968 of the code before, h
   `e4b.train.decoded-route.qwen3.5090.2026-10-06`
 - `NF4_QLORA_SINGLE_LADDER=1` (grouped-nf4-gemm): 0.797 of the step with fp32 adapters on a host-bound box,
   1.015 with bf16 adapters (the shipped arm). `e4b.train.single-ladder.field.5090.2026-10-08`
+  Its `auto` (the ladder only with fp32 adapters) held its mechanism on a second host, but the step time went unread
+  there: the host was loaded. `e4b.train.single-ladder-auto.field.5090.2026-10-08`
 
 **Energy: on a card that already fits the model, 4-bit costs energy.** `bnb.matmul_4bit` costs 1.748× native bf16's
 J/op at decode, 1.601× at prefill and 1.965× in training. The fused 4-bit MoE forward's J/token at batch 4096 is 0.063
@@ -262,7 +264,7 @@ controls. `e4b.parity.granite.paged-vs-own-attention`, `e4b.parity.gptoss.paged-
 | one KV-table selection per step | decode graphs | `E4B_KV_STEP_SELECT=0` | `e4b.serve.p111.kv-step-select.qwen3.5090.2026-10-04` |
 | programmatic dependent launch, capped at 8 rows | grouped-nf4-gemm | `GNF4_PDL=0` | `e4b.serve.p113.gnf4-pdl-capped.qwen3-int4.5090.2026-10-04` |
 | bandwidth-targeted NF4 decode GEMV | grouped-nf4-gemm | `GNF4_GEMV_BW=0` | `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07` |
-| grouped small-M routes above T == 1 (K19, K23, K21, K25; K25 read on Granite and OLMoE, unread on Qwen3, which it serves at W16) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02` |
+| grouped small-M routes above T == 1 (K19, K23, K21, K25; K25 read on Granite, OLMoE and Qwen3's W16 step) | serving | `E4B_INT4_GROUPED_SMALLM=0`, `E4B_INT4_LEAN_GLUE=0`, `E4B_MXFP4_GROUPED_SMALLM=0`, `E4B_NF4_GROUPED_SMALLM=0` | `e4b.serve.p88.qwen3.int4.k19-b16.5090.2026-10-01`, `e4b.serve.p89.qwen3.int4.k23-lean-glue-b16.5090.2026-10-01`, `e4b.serve.p90.gptoss.mxfp4.k21-b16.5090.2026-10-01`, `e4b.serve.p96.nf4-families.k25-windowed-k8.5090.2026-10-02`, `e4b.serve.p121.k25-w16.qwen3.5090.2026-10-08` |
 | router weights cast to bf16 at ≤ 64 rows (`softmax_topk`) | fused router epilogue | `E4B_ROUTER_EPI_CAST=0` | `e4b.serve.p70.qwen3.b1.router-weight-cast.5090.2026-09-25` |
 | B=1 fused stack (fused q/k/v and three glue folds) on Qwen3-MoE | `serve_paged` | `E4B_PAGED_FUSE_QKV=0`, `E4B_FUSE_T1_GLUE=0`, `E4B_FUSE_T1_GLUE_R2=0`, `E4B_FUSE_ROUTER_EPI=0` | `e4b.serve.p115.fused-stack-combined.qwen3.5090.2026-10-08`, `e4b.serve.p115.fused-stack-speed.qwen3.5090.2026-10-07` |
 
@@ -298,8 +300,8 @@ Superseded and retired readings are not repeated here. The register keeps each w
   built a different one is unexplained, and no open issue carries it.
 - **Open register rows:** reproducing the TR2 training receipt from published artifacts (`e4b.open.tr2-repro-gap`);
   int8-offload's best training eval, confounded by an evaluator offset (`e4b.open.int8-offload-confounded`).
-- **Registered, not yet read:** TC1 amendment 71 (the single-block ladder's `auto`, which takes it only for fp32 adapters). The head-to-head campaigns stay open: training #835, serving #846,
-  single-stream decode #1313.
+- **Registered, not yet read:** TC1 amendment 72 (amendment 71's `auto` box again, on a third host). The head-to-head
+  campaigns stay open: training #835, serving #846, single-stream decode #1313.
 - **Older documents' debts:** `POST_AUDIT_WORK_QUEUE.md` (Q1–Q4), `TRAIN_PLACEMENT_CERTIFICATE.md` (a scoped S10),
   `LAYOUT_FACTS.md` (training determinism UNKNOWN), and `support_matrix.md`'s footer hash, which no longer matches its
   bytes and is recorded, not fixed, because the file is anchored.
