@@ -1,0 +1,37 @@
+[2026-10-08T19:07:08Z] dq7: install pinned Loggetta 1dd862f73433b5d9fdd42d835dac7504726574ae and e4b 4ca5a3494e746b9aaa812270e03f4d0c1ec050a9
+DQ7 software tripwire PASS {'loggetta_sha': '1dd862f73433b5d9fdd42d835dac7504726574ae', 'gnf4_sha': '6ee2e10408161a9d3c874975c9191a7f2957e6f4', 'torch': '2.8.0+cu128', 'bitsandbytes': '0.50.2', 'transformers': '5.18.0', 'peft': '0.21.2'}
+[2026-10-08T19:08:13Z] dq7: synthetic tiny checkpoint and deterministic CUDA proof
+[2026-10-08T19:08:21Z] dq7: proof PASS; capacity reading begins
+[2026-10-08T19:08:21Z] dq7: build architecture-only checkpoint qwen3_14b
+[2026-10-08T19:12:38Z] dq7: read-qwen3_14b-device-512
+[2026-10-08T19:12:50Z] dq7: read-qwen3_14b-device-512 completed
+[2026-10-08T19:12:50Z] dq7: read-qwen3_14b-stream-512
+[2026-10-08T19:13:06Z] dq7: read-qwen3_14b-stream-512 completed
+[2026-10-08T19:13:06Z] dq7: read-qwen3_14b-device-2048
+[2026-10-08T19:13:19Z] dq7: read-qwen3_14b-device-2048 completed
+[2026-10-08T19:13:19Z] dq7: read-qwen3_14b-stream-2048
+[2026-10-08T19:13:37Z] dq7: read-qwen3_14b-stream-2048 completed
+[2026-10-08T19:13:37Z] dq7: read-qwen3_14b-device-4096
+[2026-10-08T19:13:53Z] dq7: read-qwen3_14b-device-4096 completed
+[2026-10-08T19:13:53Z] dq7: read-qwen3_14b-stream-4096
+[2026-10-08T19:14:13Z] dq7: read-qwen3_14b-stream-4096 completed
+[2026-10-08T19:14:13Z] dq7: build architecture-only checkpoint llama31_8b
+[2026-10-08T19:16:35Z] dq7: read-llama31_8b-device-512
+[2026-10-08T19:16:44Z] dq7: read-llama31_8b-device-512 completed
+[2026-10-08T19:16:44Z] dq7: read-llama31_8b-stream-512
+[2026-10-08T19:16:55Z] dq7: read-llama31_8b-stream-512 completed
+[2026-10-08T19:16:55Z] dq7: read-llama31_8b-device-2048
+[2026-10-08T19:17:06Z] dq7: read-llama31_8b-device-2048 completed
+[2026-10-08T19:17:06Z] dq7: read-llama31_8b-stream-2048
+[2026-10-08T19:17:19Z] dq7: read-llama31_8b-stream-2048 completed
+[2026-10-08T19:17:19Z] dq7: read-llama31_8b-device-4096
+[2026-10-08T19:17:31Z] dq7: read-llama31_8b-device-4096 completed
+[2026-10-08T19:17:31Z] dq7: read-llama31_8b-stream-4096
+[2026-10-08T19:17:45Z] dq7: read-llama31_8b-stream-4096 completed
+[2026-10-08T19:17:45Z] dq7: build architecture-only checkpoint qwen3_32b
+[2026-10-08T19:27:14Z] dq7: read-qwen3_32b-device-2048
+[2026-10-08T19:27:57Z] dq7: read-qwen3_32b-device-2048 completed
+[2026-10-08T19:27:57Z] dq7: read-qwen3_32b-stream-2048
+[2026-10-08T19:28:33Z] dq7: read-qwen3_32b-stream-2048 completed
+[2026-10-08T19:28:33Z] dq7: read-qwen3_32b-device-4096
+[2026-10-08T19:28:39Z] dq7: INCOMPLETE: read-qwen3_32b-device-4096
