@@ -69,6 +69,7 @@ def test_imported_boxes_and_the_premise_tests_run_at_their_registered_bytes():
     assert "def test_at_most_16_rows_is_k16s_launch_bit_for_bit" in k16 and "def test_up_to_64_rows_matches" in k16
     wide = (REPO / "tests" / "test_int4_attn_wide.py").read_text()
     assert "def test_two_modules_of_one_width_in_one_graph_replay_to_their_references" in wide
+    assert "def test_two_graphs_on_the_route_replay_in_either_order" in wide
     assert 'pytest.importorskip("test_int4_attn")' in wide                       # why test_int4_attn.py is staged
 
 
@@ -143,7 +144,7 @@ def test_the_order_puts_every_refusal_before_the_fetch():
     assert at == sorted(at), list(zip(order, at))
     assert 'grep -q "7 passed" && ! echo "$LASTL" | grep -q skipped' in RUN
     assert 'grep -q "25 passed" && ! echo "$LASTK" | grep -q skipped' in RUN
-    assert 'grep -q "10 passed" && ! echo "$LASTW" | grep -q skipped' in RUN
+    assert 'grep -q "11 passed" && ! echo "$LASTW" | grep -q skipped' in RUN
     trip = RUN[RUN.index("python - <<'PYT'"):RUN.index("PYT\ncat versions.txt")]
     assert '"block_m" in inspect.signature(int4_smallm.gemm_int4_b32_smallm).parameters' in trip
     assert "int4_smallm.SMALLM_ROWS_MAX == 64" in trip

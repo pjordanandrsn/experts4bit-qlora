@@ -1,11 +1,12 @@
 # P124 — does the int4 small-M GEMM for the attention projections above 16 rows (`E4B_ATTN_INT4_WIDE=1`) make SC2e's 64- and 32-row decode steps faster without costing teacher-forced quality? One RTX 5090 (registered 2026-10-08, before any run)
 
 Issue: experts4bit-qlora#846 (the serving campaign; the owner's no-ask tier for a single run under $15). Lane number
-claimed by `prereg/p124` (pushed 2026-10-08T23:43:41Z). Follows P119 (#1353), P120 (#1374) and P122 (#1393). The maintainer's GO for this lever
-(bus, 2026-10-08T22:57Z) set its conditions: in-box ratios only, peak memory, the GPU busy fraction, and the quality
-bar with a mutant. The code under test:
+claimed by `prereg/p124` (pushed 2026-10-08T23:43:41Z). Follows P119 (#1353), P120 (#1374) and P122 (#1393). The
+maintainer's GO for this lever (bus, 2026-10-08T22:57Z) set its conditions: in-box ratios only, peak memory, the GPU
+busy fraction, and the quality bar with a mutant. The code under test:
 - grouped-nf4-gemm #522: `gemm_int4_b32_smallm(..., block_m=)`, a 32- or 64-row tile above 16 rows;
-- e4b #1410: `E4B_ATTN_INT4_WIDE`, opt-in, which routes 17–64 rows to it through a workspace shared per stream.
+- e4b #1410: `E4B_ATTN_INT4_WIDE`, opt-in, which routes 17–64 rows to it through one workspace per width, built
+  zeroed when the module is constructed.
 
 The box is new (`bench/p124/p124_box.py`). It imports P119's decode bracket and P117's teacher-forced pass at their
 registered bytes; runner and driver are derived from P122's.
@@ -127,7 +128,7 @@ Medians are taken by sorting and floats summed with `math.fsum`, so the verdict 
 | Q6 | every same-setting pair agrees within 0.5 % | the 1.5 % noise bound is three times the noise | the bar sits near the noise; longer arms next time |
 | Q7 | ON64's and ON32's bias each in [−0.003, +0.003] nats | the route's bf16 order is as neutral as P117's wide buckets | the bar decides; a miss that still passes says the floor carries it |
 | Q8 | both mutants' bias ≥ +0.3 nats | the gate can fail, and the route is the one scored | the instrument has lost sensitivity; RESULTS says so before any claim |
-| Q9 | ON − OFF peak allocated memory at 64 rows within ±64 MiB | the shared workspace (about 7 MB a stream) is the route's only memory | a larger cost is named before any default |
+| Q9 | ON − OFF peak allocated memory at 64 rows within ±64 MiB | the shared workspace (about 7 MB) is the route's only memory | a larger cost is named before any default |
 
 ## Consequence, registered now
 
@@ -175,8 +176,9 @@ the proof's model; its numbers are not a reading.
   - `tests/test_decode_graph_buckets.py`, 7 passed;
   - grouped-nf4-gemm's `kernel/test_int4_smallm_interp.py` at the pinned commit (staged as a byte copy), compiled with
     `TRITON_INTERPRET=0`, 25 passed;
-  - `tests/test_int4_attn_wide.py`, 10 passed. Its two CUDA tests capture two projections of one width in one graph,
-    sharing the route's workspace, and replay them to their eager bits.
+  - `tests/test_int4_attn_wide.py`, 11 passed. Its two CUDA tests share the route's workspace: two projections of one
+    width captured in one graph replay to their eager bits, and two graphs on the route (32 rows, then 64) replay to
+    theirs with the second replayed first.
 - **STOP-2:** every time-left check is a per-mode variable that fits its own guard (enforced by
   `tests/test_p124_staged_pin.py`).
 - **STOP-3:** a VOID is not retried inside the same launch.

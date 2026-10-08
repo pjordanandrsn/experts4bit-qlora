@@ -12,8 +12,8 @@
 # P117's teacher-forced passes with the route off (the reference and the floor) and on (the subjects), two mutants and a
 # captured function check; p124_reduce.py applies the registered rule.
 #   premise  on THIS card, before anything is fetched: tests/test_decode_graph_buckets.py, 7 passed; grouped-nf4-gemm's
-#            K16 tests compiled for this card (TRITON_INTERPRET=0), 25 passed; tests/test_int4_attn_wide.py, 10 passed
-#            (its two CUDA tests: one graph sharing the route's workspace); none skipped
+#            K16 tests compiled for this card (TRITON_INTERPRET=0), 25 passed; tests/test_int4_attn_wide.py, 11 passed
+#            (its two CUDA tests: graphs sharing the route's workspace, replayed in either order); none skipped
 #   order    install + tripwire; reducer self-test; premise; fetch; NF4 arena bake; the box; reduce
 #
 # Knobs (recorded in summary.txt; any value off its registered default marks the run a REHEARSAL, NOT a reading):
@@ -149,7 +149,7 @@ rc3=$?; LASTW=$(tail -1 logs/premise_wide.log)
 { echo -n "premise run rc=$rc: "; echo "$LASTL"; echo -n "premise k16 rc=$rc2: "; echo "$LASTK"; echo -n "premise wide rc=$rc3: "; echo "$LASTW"; } | tee -a summary.txt
 if [ "$rc" = 0 ] && echo "$LASTL" | grep -q "7 passed" && ! echo "$LASTL" | grep -q skipped \
    && [ "$rc2" = 0 ] && echo "$LASTK" | grep -q "25 passed" && ! echo "$LASTK" | grep -q skipped \
-   && [ "$rc3" = 0 ] && echo "$LASTW" | grep -q "10 passed" && ! echo "$LASTW" | grep -q skipped; then
+   && [ "$rc3" = 0 ] && echo "$LASTW" | grep -q "11 passed" && ! echo "$LASTW" | grep -q skipped; then
   echo "premise ok" | tee -a summary.txt
 else
   echo "premise failed" | tee -a summary.txt; say "PREMISE FAILED on this card"; echo "premise failed rc=$rc k16 rc=$rc2 wide rc=$rc3" > REFUSAL; finish 25
