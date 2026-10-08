@@ -9,13 +9,19 @@ The rule, first rung that applies:
                  captured; the arms read different prompts, lengths or fusion censuses; a void slope; ENGAGEMENT off: L1
                  must run the lookahead scheduler, collect every step it issued, have a newer step queued behind at least
                  OVERLAP_MIN of its collects at each workload, and discard nothing (no stop ids); L0 must run the
-                 synchronous scheduler and never call the lookahead entry points.
+                 synchronous scheduler and never call the lookahead entry points; either L0 arm's traced W1 pass lacks
+                 a host gap (the premise below cannot be read).
   NOISY          a self-pair (L0b/L0a, L1b/L1a) outside [0.96, 1.04] at W16, or outside [0.99, 1.01] at W1 (half the W1
                  gain bar, so instrument drift cannot pass as the gain).
   FUNCTION_FAIL  any two arms decode different tokens on any row, workload or length (the lookahead feeds each step the
                  synchronous step's inputs, so L1 == L0 is the contract, not a hope); timed reps of one arm digest
                  differently; the arms' bucket statistics differ (the same rows in the same buckets, step for step).
-  SLOWER         g1 = min(L1a/L0a, L1b/L0b) at W1 < 1.02, or g16 (the same at W16) < 0.99.
+  UNTESTED       the premise is unmet: L0's traced W1 host gap (the mean of L0a's and L0b's median step_ms - device
+                 time) is under GAP_MIN_MS. The lookahead hides host time, so on a host with no gap to hide the
+                 question is the host's, not the switch's: re-ask on a host with one (added in the maintainer's review,
+                 before data; TC1 amendment 63's lesson). It precedes SLOWER and DEFAULT_ON alike.
+  SLOWER         g1 = min(L1a/L0a, L1b/L0b) at W1 < 1.02, or g16 (the same at W16) < 0.99: the gap was there and the
+                 lookahead did not recover it.
   DEFAULT_ON     otherwise.
 
 Reported, not ruled: each arm's traced decode steps (the step period, and in L0 the device time and the host gap), and the
@@ -39,6 +45,7 @@ SELF_LO, SELF_HI = 0.96, 1.04
 SELF_W1_LO, SELF_W1_HI = 0.99, 1.01     # W1's self-pairs: half the 1.02 gain bar (P111's read 0.997-1.002)
 GAIN_MIN_W1, GAIN_MIN_W16 = 1.02, 0.99
 OVERLAP_MIN = 0.9                        # L1: share of its collects at each workload with a newer step queued behind
+GAP_MIN_MS = 0.2                         # the premise: L0's traced W1 host gap (ms per decode step) to hide
 GNF4_SHA = "b4f93f1c62d1e3436ed45bec8ccd608c90433737"     # grouped-nf4-gemm 0.42.0: e4b CI's pin at registration
 QWEN, GRAN = "Qwen/Qwen3-30B-A3B", "ibm-granite/granite-3.1-3b-a800m-instruct"
 REVS = {QWEN: "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39", GRAN: "a02780686e08a03fe0d2679a293b5c74a90efa89"}
@@ -123,15 +130,20 @@ def mechanism(arms: dict) -> dict:
 def reduce(arms: dict, e4b_sha: str, *, proof=False) -> dict:
     out = {"lane": "P118", "proof": proof, "verdict": None, "reasons": [],
            "bars": {"self_pair": [SELF_LO, SELF_HI], "self_pair_w1": [SELF_W1_LO, SELF_W1_HI],
-                    "gain_min_w1": GAIN_MIN_W1, "gain_min_w16": GAIN_MIN_W16, "overlap_min": OVERLAP_MIN}}
+                    "gain_min_w1": GAIN_MIN_W1, "gain_min_w16": GAIN_MIN_W16, "overlap_min": OVERLAP_MIN,
+                    "gap_min_ms": GAP_MIN_MS}}
     missing = [t for t in TAGS if t not in arms or arms[t].get("status") != "ok"]
     if missing:
         out.update(verdict="VOID", reasons=[f"record(s) missing or not ok: {missing}"])
         return out
     void = speed_faults(arms, e4b_sha, proof)
+    gaps = [((arms[t].get("trace") or {}).get("W1") or {}).get("host_gap_ms_p50") for t in ("L0a", "L0b")]
+    if any(not isinstance(g, (int, float)) for g in gaps):
+        void.append(f"the premise cannot be read: L0's traced W1 host gap is {gaps}")
     if void:
         out.update(verdict="VOID", reasons=void)
         return out
+    out["l0_w1_host_gap_ms"] = round(sum(gaps) / 2, 4)
     L0a, L1a, L1b, L0b = (arms[t] for t in TAGS)
     short, long_ = L0a["short"], L0a["long"]
     rates = {t: {w: _rate(arms[t], w) for w in WORKLOADS} for t in TAGS}
@@ -165,6 +177,10 @@ def reduce(arms: dict, e4b_sha: str, *, proof=False) -> dict:
         out.update(verdict="NOISY", reasons=noisy)
     elif fn:
         out.update(verdict="FUNCTION_FAIL", reasons=fn)
+    elif out["l0_w1_host_gap_ms"] < GAP_MIN_MS:
+        out.update(verdict="UNTESTED", reasons=[
+            f"premise unmet: L0's traced W1 host gap {out['l0_w1_host_gap_ms']} ms < {GAP_MIN_MS} ms (re-ask on a host "
+            f"with a gap); g1 = {out['g1']}, g16 = {out['g16']} reported"])
     elif out["g1"] < GAIN_MIN_W1 or out["g16"] < GAIN_MIN_W16:
         out.update(verdict="SLOWER", reasons=[f"g1 = {out['g1']} (bar {GAIN_MIN_W1}), g16 = {out['g16']} (bar {GAIN_MIN_W16})"])
     else:
@@ -214,6 +230,9 @@ def self_test() -> int:
             out[t] = _fake_arm(t, kw.pop("r16", r16), kw.pop("r1", r1), kw.pop("toks", toks), **kw)
         return out
     v = lambda a, **kw: reduce(a, E, **kw)["verdict"]  # noqa: E731
+
+    def gap(ms):
+        return {n: {"step_ms_p50": 8.0 + ms, "device_ms_p50": 8.0, "host_gap_ms_p50": ms} for n in WORKLOADS}
     low = {w: {"issues": 1000, "collects": 1000, "overlapped": 500} for w in WORKLOADS}
     unbalanced = {w: {"issues": 1000, "collects": 999, "overlapped": 990} for w in WORKLOADS}
     cases = [
@@ -239,9 +258,17 @@ def self_test() -> int:
         ("missing arm", reduce({k: x for k, x in arms().items() if k != "L1b"}, E)["verdict"] == "VOID"),
         ("the mechanism is reported", reduce(arms(), E)["mechanism"]["saved_vs_gap"]["W1"]
          == {"l0_host_gap_ms": 0.6, "l0_device_ms": 8.0, "period_saved_ms": 0.6, "saved_over_gap": 1.0}),
-        ("a missing trace is reported, not ruled", (lambda r: r["verdict"] == "DEFAULT_ON"
-                                                   and r["mechanism"]["saved_vs_gap"]["W1"] == "trace incomplete")(
-            reduce(arms(L0a={"trace": {}}), E))),
+        ("a missing L1 trace is reported, not ruled", (lambda r: r["verdict"] == "DEFAULT_ON"
+                                                      and r["mechanism"]["saved_vs_gap"]["W1"] == "trace incomplete")(
+            reduce(arms(L1a={"trace": {}}), E))),
+        ("a missing L0 W1 trace leaves the premise unread", v(arms(L0a={"trace": {}})) == "VOID"),
+        ("no host gap to hide is UNTESTED, not SLOWER", v(arms(L1a={"r1": 111.0}, L1b={"r1": 111.0}, L0a={"trace": gap(0.15)},
+                                                            L0b={"trace": gap(0.17)})) == "UNTESTED"),
+        ("a gain without a gap is UNTESTED too", v(arms(L0a={"trace": gap(0.1)}, L0b={"trace": gap(0.1)})) == "UNTESTED"),
+        ("a gap the lookahead did not recover is SLOWER", v(arms(L1a={"r1": 111.0}, L1b={"r1": 111.0},
+                                                              L0a={"trace": gap(0.25)}, L0b={"trace": gap(0.21)})) == "SLOWER"),
+        ("the premise is the mean of the two L0 gaps", reduce(arms(L0a={"trace": gap(0.15)}, L0b={"trace": gap(0.26)}), E)
+         ["verdict"] == "DEFAULT_ON"),
         ("proof", reduce({t: _fake_arm(t, 300.0, 50.0 if t[:2] == "L0" else 52.0, toks, model=GRAN) for t in TAGS},
                          E, proof=True)["verdict"] == "DEFAULT_ON"),
         ("proof on qwen is void", reduce(arms(), E, proof=True)["verdict"] == "VOID"),

@@ -5,9 +5,10 @@
   - **Arms:** four ABBA arms differing only in `E4B_PAGED_DECODE_LOOKAHEAD` (#1339), over P109's W16 and W1 workloads.
   - **Engagement:** counted on the runner's `issue_decode` / `collect_decode`; L1 must overlap at least 90 % of its
     collects.
-  - **Mechanism (reported):** a traced pass per workload, after the timed ones, prices the host gap the lookahead
-    removes.
+  - **Mechanism:** a traced pass per workload, after the timed ones, prices the host gap the lookahead removes. L0's
+    W1 gap is the rule's premise; the rest is reported.
 - **Rule.** VOID → NOISY (W1 self-pairs outside [0.99, 1.01]) → FUNCTION_FAIL (any token or bucket difference between
-  arms) → SLOWER (g1 < 1.02 or g16 < 0.99) → DEFAULT_ON.
+  arms) → UNTESTED (premise unmet: L0's traced W1 host gap under 0.2 ms, so there is nothing to hide; added in review)
+  → SLOWER (g1 < 1.02 or g16 < 0.99) → DEFAULT_ON.
 - **Budget.** Proof on Granite-3.1-3b-a800m (guard 0.75 h), reading guard 1.25 h. Lane ceiling $2.50, hard stop $3.00.
 - **Not measured yet.** No box runs before this page merges, after #1339 and the P117 reading (#1335).

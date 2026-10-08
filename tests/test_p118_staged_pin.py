@@ -87,18 +87,19 @@ def test_every_pinned_name_is_staged_by_the_driver_and_checked_by_the_runner():
 def test_the_self_tests_pass():
     out = subprocess.run([sys.executable, str(LANE / "p118_reduce.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
-    assert out.returncode == 0 and "p118_reduce self-test OK (23 cases)" in out.stdout, out.stdout + out.stderr
+    assert out.returncode == 0 and "p118_reduce self-test OK (28 cases)" in out.stdout, out.stdout + out.stderr
     out = subprocess.run([sys.executable, str(LANE / "p118_box.py"), "--self-test"], capture_output=True, text=True,
                          env=_env())
     assert out.returncode == 0 and "p118_box self-test OK (12/12 cases)" in out.stdout, out.stdout + out.stderr
-    assert "self-tested on 23 cases" in PREREG and "self-test (12 cases)" in PREREG
+    assert "self-tested on 28 cases" in PREREG and "self-test (12 cases)" in PREREG
 
 
 def test_the_rule_is_the_registered_rule():
     r = _import("p118_reduce", LANE)
     assert r.TAGS == ("L0a", "L1a", "L1b", "L0b") and r.WORKLOADS == ("W16", "W1")
     assert (r.SELF_LO, r.SELF_HI, r.SELF_W1_LO, r.SELF_W1_HI) == (0.96, 1.04, 0.99, 1.01)
-    assert (r.GAIN_MIN_W1, r.GAIN_MIN_W16, r.OVERLAP_MIN) == (1.02, 0.99, 0.9)
+    assert (r.GAIN_MIN_W1, r.GAIN_MIN_W16, r.OVERLAP_MIN, r.GAP_MIN_MS) == (1.02, 0.99, 0.9, 0.2)
+    assert "**UNTESTED (premise unmet):** L0's traced W1 host gap is **< 0.2 ms**" in PREREG
     assert "[0.96, 1.04] at W16" in PREREG and "[0.99, 1.01] at W1" in PREREG
     assert "**< 1.02**" in PREREG and "**< 0.99**" in PREREG and "at least **90 %**" in PREREG
     assert f"GNF4_SHA={r.GNF4_SHA}" in RUN and r.GNF4_SHA == "b4f93f1c62d1e3436ed45bec8ccd608c90433737"

@@ -59,16 +59,17 @@ step already queued behind them (the overlap).
   - At W1 and 160 tokens, 158 of a pass's 159 collects should overlap; only the last step drains.
 - L0 runs the synchronous scheduler and never calls the entry points.
 
-**The mechanism, reported, never ruled.** After its timed passes, each arm runs one more pass per workload at 160 tokens
+**The mechanism.** After its timed passes, each arm runs one more pass per workload at 160 tokens
 under the step tracer (`engines/step_trace.py`), stepped as the server's engine loop steps it. Over the decode-only
 steps:
 - **L0:** the GPU is idle at `dec_prep`, so a step's device time is `gpu.dec_issue - gpu.dec_prep` and the rest of
   `step_ms` is the **host gap**.
 - **L1:** the step period should fall to about L0's device time.
 
-The reducer reports, per workload, L0's host gap beside the period L1 saved. The traces travel as receipts.
+L0's W1 host gap is the rule's premise (rung 4 below). Everything else here is reported, not ruled: per workload,
+L0's host gap beside the period L1 saved. The traces travel as receipts.
 
-## The rule (`bench/p118/p118_reduce.py`, self-tested on 23 cases)
+## The rule (`bench/p118/p118_reduce.py`, self-tested on 28 cases)
 
 First rung that applies:
 1. **VOID:**
@@ -77,15 +78,24 @@ First rung that applies:
    - a bucket was not captured;
    - the arms differ in prompts, lengths or fusion census;
    - a slope is void;
-   - the engagement rule fails.
+   - the engagement rule fails;
+   - either L0 arm's traced W1 pass lacks a host gap, so the premise below cannot be read.
 2. **NOISY:** a self-pair, L0b/L0a or L1b/L1a, falls outside [0.96, 1.04] at W16, or outside **[0.99, 1.01] at W1**.
    That is half the W1 gain bar, so instrument drift cannot pass as the gain. P111's self-pairs read 0.997–1.002.
 3. **FUNCTION_FAIL:**
    - any two arms decode different tokens on any row, workload or length (L1 ≡ L0 is the contract);
    - one arm's timed reps digest differently;
    - the arms' bucket statistics (`graph_stats` over the timed passes) differ.
-4. **SLOWER:** g1 = min(L1a/L0a, L1b/L0b) at W1 **< 1.02**, or g16 at W16 **< 0.99**.
-5. **DEFAULT_ON:** otherwise.
+4. **UNTESTED (premise unmet):** L0's traced W1 host gap is **< 0.2 ms** per decode step. The gap is the mean of
+   L0a's and L0b's median `step_ms − (gpu.dec_issue − gpu.dec_prep)` over the decode-only steps.
+   - The lookahead hides host time, so on a host with no gap to hide, a slow or flat reading would be the host's answer
+     and not the switch's. Re-ask on a host with a gap.
+   - The rung precedes both SLOWER and DEFAULT_ON: a "gain" with no gap behind it is not the switch's either.
+   - Added in the maintainer's review of #1340, before any data (TC1 amendment 63's lesson: a host-time remedy read on a
+     box that is not host-bound reads FALSIFIED for the wrong reason).
+5. **SLOWER:** g1 = min(L1a/L0a, L1b/L0b) at W1 **< 1.02**, or g16 at W16 **< 0.99**. The gap was there and the
+   lookahead did not recover it.
+6. **DEFAULT_ON:** otherwise.
 
 ## Predictions (written before any data)
 
@@ -97,7 +107,7 @@ First rung that applies:
 | Q4 | **g16 ∈ [1.00, 1.04]**: the gap is a smaller share of a 16-row step, but 16 rows' host mirrors make it larger |
 | Q5 | self-pairs within [0.995, 1.005] at W1 and [0.98, 1.02] at W16 |
 | Q6 | at W1 the period L1 saved is 0.7–1.1× L0's host gap (the lookahead adds two small gathers and a 1-row D2H a step) |
-| Q7 | DEFAULT_ON about 60 %, SLOWER about 30 % (a host gap under 0.2 ms), the rest VOID or NOISY |
+| Q7 | DEFAULT_ON about 60 %, UNTESTED about 20 % (a host gap under 0.2 ms), SLOWER about 10 %, the rest VOID or NOISY |
 | Q8 | each arm ≤ 4 min including its traced passes; peak memory as P116's speed arms (≤ 23 GiB) |
 
 ## Consequence, registered now
@@ -111,8 +121,10 @@ First rung that applies:
   - **Scope:** read on Qwen3-30B-A3B NF4 at 1 and 16 requests with buckets up to 16. The int4 route and other families
     run the same runner path, but this lane does not read them. Buckets above 16 (P117's) are not read either. The
     flip PR says so.
-- **SLOWER:** the switch stays opt-in. The ratios and the trace are recorded; the trace says whether the gap was
-  smaller than predicted or the saving did not reach it.
+- **UNTESTED:** the switch stays opt-in, and nothing is concluded about it. The question is re-asked on a host whose
+  traced gap meets the premise, under an amendment that names that host class.
+- **SLOWER:** the switch stays opt-in. The ratios and the trace are recorded; the trace shows how much of the gap the
+  saving reached.
 - **FUNCTION_FAIL:** a correctness defect in the lookahead. The switch stays off and the defect is found first.
 - **NOISY or VOID:** no consequence. One rerun inside the ceiling, then an amendment.
 
@@ -160,7 +172,7 @@ fails the proof (rc 27). Its verdict is not a reading.
 - **No P118 data exists.** No served run has ever set `E4B_PAGED_DECODE_LOOKAHEAD=1`, and no step trace of the default
   NF4 server's decode has been taken.
 - **SC1b's int4 numbers** are quoted above from its receipts.
-- **Locally (CPU):** the box's self-test (12 cases) and the reducer's (23) pass. `tests/test_p118_staged_pin.py` passes.
+- **Locally (CPU):** the box's self-test (12 cases) and the reducer's (28) pass. `tests/test_p118_staged_pin.py` passes.
   `tests/test_decode_lookahead.py` passes (14). `tests/test_decode_lookahead_gpu.py` skips without sm_89+.
 - **On the RTX A2000** (sm_86, the NAS card; correctness only under #1133, no timing taken), with #1339's code:
   `tests/test_decode_lookahead.py` 15 passed on the CPU and CUDA cases, and the CUDA runner cases passed in 5 of 5
