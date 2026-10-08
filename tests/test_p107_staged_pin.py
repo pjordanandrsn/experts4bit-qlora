@@ -110,8 +110,8 @@ def test_the_arm_is_one_engine_and_the_registered_ab():
 
 def test_the_scorer_is_the_served_prefill_and_leaves_no_state():
     """The quality instrument runs the paged PREFILL path the runner's run_prefill runs (its mode switch, context and
-    forward), scores 2,048 positions, and drops the staging instead of flushing it into the pool. Its numbers are
-    tests/test_p107_served_prefill_scorer.py's."""
+    default full-logits forward), scores 2,048 positions, and drops the staging instead of flushing it into the pool.
+    Its numbers are tests/test_p107_served_prefill_scorer.py's. Last-logits is a separate opt-in, outside P107's read."""
     score = BOX[BOX.index("def served_prefill_nll("):BOX.index("def _ab() -> int:")]
     for s in ("mode(True)", 'ctx.mode, ctx.slots = "prefill", [slot]', "prev = set_context(ctx)",
               "model(input_ids=x[None], position_ids=pos[None], use_cache=False)", "set_context(prev)",
@@ -124,9 +124,12 @@ def test_the_scorer_is_the_served_prefill_and_leaves_no_state():
     runner = (REPO / "experts4bit_qlora" / "engines" / "paged_runner.py").read_text()
     pre = runner[runner.index("    def run_prefill(self, chunks):"):runner.index("    def run_decode(self, rids):")]
     for s in ("self._mode(True)", 'self.ctx.mode = "prefill"', "self.ctx.slots = [slot]",
-              "self.model(input_ids=ids[None],", "position_ids=pos[None], use_cache=False)",
+              "self._prefill_forward(ids[None], pos[None])",
               'self.ctx.mode = "decode"', "self._mode(False)"):
         assert s in pre, s                                                    # the path the scorer mirrors
+    forward = runner[runner.index("    def _prefill_forward("):runner.index("    def last_logits_stats(")]
+    assert "self.model(input_ids=ids, position_ids=positions, use_cache=False, **self._last_logits_kwargs)" in forward
+    assert "last_logits: bool = False" in runner                              # P107's full-logits default stays
 
 
 def test_the_order_the_premise_and_the_tripwire():

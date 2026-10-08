@@ -1,0 +1,12 @@
+# Names as the BOX sees them after staging (/root/p118). The box runs `sha256sum -c` on this file; p118_drive.sh and
+# tests/test_p118_staged_pin.py resolve each name to its source (bench/p118, bench/p109, bench/p39, tests) and compare.
+06d4abfbf0d973e2ab20b01ca0313742e67cad6b3ab5e9e77355e07c4dfc8c01  p118_run.sh
+7a3704d53c6999626d2ff5c28c6df8f222e35e68729264ce940ec257dd24ef53  p118_box.py
+51d87f34564113c61266ea39d388260581fd2efd281021a84c1d8b12948b1cb4  p118_reduce.py
+b53f94192b4040b6451ceb18f8cd4e3e5629a6e40c4885b40600fcc4205d8248  p109_box.py
+e8b8bd21cefe9f2e62c2ad491210a18ca19ba502b55d23dd480009959284b35e  k8_bake.py
+15b79a103958dac240f35d46c2b86efecc100d5d683db925f6158099d007ecc2  calib.json
+f53952c1a26b06e8a8f61dcfdbd511acad0b0507cae58cb1bbfca7f3c8f4313a  test_decode_graph_buckets.py
+0af027ec93837f2b0cd150a77c7692386ac33eb59d553727c40fe784c6c273de  test_kv_step_select.py
+2d0643216f63419b58e2edd458757185c0498198e8820b4d601f5ea60a4a5750  test_decode_lookahead.py
+2f24e30b1eb6db61770d4f20c053d18ab133473a340768c286a76c460984040b  test_decode_lookahead_gpu.py

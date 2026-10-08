@@ -97,13 +97,16 @@ class Request:
 class StepPlan:
     """What one engine step should execute. ``prefill`` carries
     (rid, start, length) chunk descriptors; ``decode`` carries rids that
-    need exactly one token each."""
+    need exactly one token each. Under the decode lookahead ``decode`` is
+    the step ISSUED and ``collected`` the rids whose previously issued
+    step's tokens were read back (and emitted, unless already finished)."""
     prefill: list[tuple[int, int, int]] = field(default_factory=list)
     decode: list[int] = field(default_factory=list)
+    collected: list[int] = field(default_factory=list)
 
     @property
     def is_empty(self) -> bool:
-        return not self.prefill and not self.decode
+        return not self.prefill and not self.decode and not self.collected
 
     @property
     def prefill_tokens(self) -> int:
@@ -130,6 +133,10 @@ class StepRunner(Protocol):
     def free_slot(self, rid: int) -> None:
         """Release a finished sequence's KV."""
 
+    # Optional, for ContinuousScheduler(lookahead=True):
+    # issue_decode(rids) -> handle   enqueue one token for each rid, without waiting
+    # collect_decode(handle) -> {rid: token}   wait for that step; steps are collected in issue order
+
 
 class ContinuousScheduler:
     """Admit/evict per step; no wait-for-slowest.
@@ -138,12 +145,25 @@ class ContinuousScheduler:
     batch-width choice, the second is physical KV capacity. Admission
     checks BOTH, because admitting past KV capacity is how a scheduler
     turns a queue delay into a mid-generation eviction.
+
+    ``lookahead=True`` (``E4B_PAGED_DECODE_LOOKAHEAD``, lane P118) runs decode
+    through the runner's ``issue_decode`` / ``collect_decode``: each step issues
+    the next decode step and then collects the one issued before it, so the
+    GPU has a step queued while the host emits, retires and plans. A
+    sequence is not issued past ``max_new_tokens``; one that stops on a stop
+    id has had one more step issued, whose token is discarded
+    (``lookahead_discarded``), and its slot is freed once that step is
+    collected. When requests wait for a slot and the queued step carries a
+    sequence that ends with it, that step is collected before planning, so
+    admission is the synchronous path's. Sequences, tokens and finish
+    reasons are the synchronous path's; a sequence that stops on a stop id
+    frees its slot one step later.
     """
 
     def __init__(self, *, runner: StepRunner, max_seqs: int = 8,
                  kv_slots: int | None = None, chunk_tokens: int = 512,
                  max_prefill_tokens_per_step: int | None = None,
-                 clock=time.monotonic):
+                 clock=time.monotonic, lookahead: bool = False):
         if max_seqs < 1:
             raise ValueError("max_seqs must be >= 1")
         if chunk_tokens < 1:
@@ -172,6 +192,14 @@ class ContinuousScheduler:
         self.prefill_tokens = 0
         # optional per-step timeline (engines.step_trace.StepTrace; serve_paged's E4B_PAGED_STEP_TRACE)
         self.tracer = None
+        self.lookahead = bool(lookahead)
+        if self.lookahead and not (callable(getattr(runner, "issue_decode", None))
+                                   and callable(getattr(runner, "collect_decode", None))):
+            raise ValueError("lookahead needs a runner with issue_decode and collect_decode")
+        self._pending = None                    # lookahead: the issued, uncollected decode step
+        self._pending_rids: frozenset = frozenset()
+        self._inflight: dict[int, int] = {}     # rid -> tokens issued, not yet collected
+        self.lookahead_discarded = 0            # tokens collected for a sequence that had already finished
 
     # ------------------------------------------------------------ intake --
     def add_request(self, prompt: Sequence[int], max_new_tokens: int = 16,
@@ -256,6 +284,8 @@ class ContinuousScheduler:
         """Run exactly one engine step. Returns the plan that executed
         (empty plan = nothing was ready, which the caller may treat as
         idle rather than as an error)."""
+        if self.lookahead:
+            return self._step_lookahead()
         tr = self.tracer
         queued = len(self.queue)
         plan = self.plan()
@@ -293,6 +323,87 @@ class ContinuousScheduler:
             tr.mark("retire")
         return plan
 
+    def _step_lookahead(self) -> StepPlan:
+        """:meth:`step` under the decode lookahead: prefill as usual, issue
+        the next decode step, then collect the previous one."""
+        tr = self.tracer
+        queued = len(self.queue)
+        early = []
+        if (self._pending is not None and self.queue
+                and not (len(self.active) < self.max_seqs and self._free_slots)
+                and any(self._ends_with_pending(self.active[r]) for r in self._pending_rids)):
+            # a request waits for a slot that the queued step's last token frees: collect it before admitting
+            early = self._collect_pending()
+            self._retire()
+        plan = self.plan()
+        plan.collected = early
+        # a sequence whose issued steps already reach its length is not issued again; it waits for them
+        plan.decode = [rid for rid in plan.decode
+                       if len(self.active[rid].out) + self._inflight.get(rid, 0)
+                       < self.active[rid].max_new_tokens]
+        if plan.is_empty and self._pending is None:
+            return plan
+        self.steps += 1
+        if tr is not None:
+            tr.mark("plan")
+            tr.note(admitted=queued - len(self.queue), active=len(self.active), queued=len(self.queue))
+
+        if plan.prefill:
+            first = self.runner.run_prefill(plan.prefill)
+            self.prefill_tokens += plan.prefill_tokens
+            for rid, start, take in plan.prefill:
+                req = self.active[rid]
+                req.prompt_pos = start + take
+                if req.prompt_pos >= req.prompt_len:
+                    tok = first.get(rid)
+                    if tok is None:
+                        raise RuntimeError(
+                            f"runner completed prompt for rid {rid} without "
+                            f"returning its first token")
+                    self._emit(req, tok)
+            if tr is not None:
+                tr.mark("pf_emit")
+        issued = self.runner.issue_decode(plan.decode) if plan.decode else None
+        for rid in plan.decode:
+            self._inflight[rid] = self._inflight.get(rid, 0) + 1
+        if self._pending is not None:
+            plan.collected = self._collect_pending()
+        self._pending = issued
+        self._pending_rids = frozenset(plan.decode) if issued is not None else frozenset()
+        self._retire()
+        if tr is not None:
+            tr.mark("retire")
+        return plan
+
+    def _ends_with_pending(self, req: Request) -> bool:
+        """Whether the queued decode step is the last ``req`` needs: it has
+        finished already, or that step's token reaches its length."""
+        return (req.phase is Phase.DONE
+                or len(req.out) + self._inflight.get(req.rid, 0) >= req.max_new_tokens)
+
+    def _collect_pending(self) -> list[int]:
+        """Read the queued decode step back and emit its tokens (a sequence
+        that finished meanwhile has its token discarded). The caller retires
+        what finished."""
+        got = self.runner.collect_decode(self._pending)
+        self._pending, self._pending_rids = None, frozenset()
+        for rid, tok in got.items():
+            left = self._inflight[rid] - 1
+            if left:
+                self._inflight[rid] = left
+            else:
+                del self._inflight[rid]
+            req = self.active[rid]
+            if req.phase is Phase.DECODE:
+                self._emit(req, tok)
+                if req.phase is Phase.DONE:
+                    req.finished_at = self.clock()
+            else:
+                self.lookahead_discarded += 1
+        if self.tracer is not None:
+            self.tracer.mark("dec_emit")
+        return list(got)
+
     def _emit(self, req: Request, token: int) -> None:
         if req.first_token_at is None:
             req.first_token_at = self.clock()
@@ -311,9 +422,12 @@ class ContinuousScheduler:
             req.phase = Phase.DECODE
 
     def _retire(self) -> None:
-        for rid in [r for r, q in self.active.items() if q.phase is Phase.DONE]:
+        # under the lookahead a finished sequence keeps its slot while an issued step still carries it
+        for rid in [r for r, q in self.active.items()
+                    if q.phase is Phase.DONE and r not in self._pending_rids]:
             req = self.active.pop(rid)
-            req.finished_at = self.clock()
+            if req.finished_at is None:
+                req.finished_at = self.clock()
             self.runner.free_slot(rid)
             self._free_slots.append(req.slot)
             req.slot = None
@@ -361,4 +475,5 @@ class ContinuousScheduler:
             "per_stream_tok_s_mean": (sum(per_stream) / len(per_stream)
                                       if per_stream else None),
             "kv_slots_free": len(self._free_slots),
+            **({"lookahead_discarded": self.lookahead_discarded} if self.lookahead else {}),
         }

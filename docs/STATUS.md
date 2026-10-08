@@ -667,6 +667,13 @@ rented RTX 5090; **measured** — [`bench/p115/RESULTS-p115.md`](../bench/p115/R
 - **Default:** still opt-in. DEFAULT_AUTO licenses `auto`, but the flip waits for Phase C's reads on gpt-oss-20b,
   Qwen3.6-35B-A3B and Granite (PREREG Amendment 2) and then applies only to families with a registered reading.
 
+**Phase C holds the flip; Granite is licensed** (lane P115 Phase C, 2026-10-08, one rented RTX 5090; **measured** —
+[`bench/p115/RESULTS-p115.md`](../bench/p115/RESULTS-p115.md),
+`e4b.serve.p115.fused-stack-engagement.gptoss-qwen36.5090.2026-10-08`, `e4b.serve.p115.fused-stack-quality.granite.5090.2026-10-08`).
+- **`auto`** engages as predicted on gpt-oss-20b, Qwen3.6-35B-A3B and Granite. SANE: Qwen3.6 passes; gpt-oss-20b fails
+  on argmax agreement (0.924 < 0.95; bias +0.0022 nats), so FLIP_HELD. Granite passes P110's bar: GRANITE_LICENSED.
+- **Default:** the four knobs stay `0`; a family-scoped `auto` needs a new registration.
+
 **grouped-nf4-gemm K33's NF4 decode GEMV decodes 1.24× as fast with one request** (lane P116, 2026-10-07, one rented
 RTX 5090; **measured** — [`bench/p116/RESULTS-p116.md`](../bench/p116/RESULTS-p116.md),
 `e4b.serve.p116.gemv-bw.qwen3.5090.2026-10-07`).

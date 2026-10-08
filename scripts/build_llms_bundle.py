@@ -15,7 +15,11 @@ section per matching file.
 The claims projection lists every claim with an ACTIVE status under its own
 ``[status]`` (measured-private ones flagged "receipt private"), then ``open``
 claims under "Open items" and ``projected`` ones under "Projections";
-retired and superseded claims are omitted on purpose. A README
+retired and superseded claims are omitted on purpose. Each line quotes the
+claim's opening, up to ``CLAIM_CHARS``, ending at a sentence where one fits:
+the bundle routes a reader to a claim, and docs/claims.json carries the rest.
+Full texts grew the bundle by about 600 bytes per read and pushed it past its
+size cap twice in a week. A README
 ``until_marker`` that is not found is a failure, not the whole file.
 
     python scripts/build_llms_bundle.py            # write llms-full.txt
@@ -26,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -40,18 +45,35 @@ def _readme_opening(text: str, marker: str, path: str) -> str:
     return text[:i].rstrip() + "\n"
 
 
+#: a projected claim quotes at most this many characters of its text (docs/claims.json is authoritative)
+CLAIM_CHARS = 320
+
+
+def _claim_opening(text: str, limit: int = CLAIM_CHARS) -> str:
+    """The claim's opening on one line: whole if it fits, else cut at the last sentence end (``.`` or ``;`` before a
+    space; a decimal point never matches) past a third of ``limit``, else at the last word, and marked `` …``."""
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    head = text[:limit + 1]
+    ends = [m.end() for m in re.finditer(r"[.;](?=\s)", head) if m.end() >= limit // 3]
+    end = ends[-1] if ends else (head.rfind(" ") if head.rfind(" ") > 0 else limit)
+    return text[:end].rstrip(" ,;:") + " …"
+
+
 def _claims_projection(root: Path, claims_path: str) -> str:
     claims, _vocab = load_claims(root, claims_path)
 
     def line(c: dict) -> str:
         st = c["status"]
         flag = " (receipt private)" if st == "measured-private" else ""
-        return f"- {c['id']} [{st}]{flag}: {c.get('claim', '').strip()}"
+        return f"- {c['id']} [{st}]{flag}: {_claim_opening(c.get('claim', ''))}"
 
     active = [c for c in claims if c["status"] in ACTIVE_STATUSES]
     open_items = [c for c in claims if c["status"] == "open"]
     projected = [c for c in claims if c["status"] == "projected"]
-    lines = ["Active claims (projection of docs/claims.json; the file is authoritative and carries evidence paths):", ""]
+    lines = [f"Active claims (projection of docs/claims.json, each quoted up to {CLAIM_CHARS} characters; the file is "
+             "authoritative and carries the full text and evidence paths):", ""]
     lines += [line(c) for c in active]
     if open_items:
         lines += ["", "Open items (no evidence either way):", ""]
